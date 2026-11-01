@@ -5,6 +5,9 @@
 //   POST /api/decks/:id/images         (same body) → { images: [image], stopped? }
 //   POST /api/decks/:id/images/upload  multipart: file, use, card?, alt?, shows_person?, consent? → { image }
 //   GET  /api/decks/:id/images         the venture's kept images → { images }
+//   GET  /api/decks/:id/images/plan    D903 §10, read by D1604's one-click (#3716): whether this Worker
+//        can draw, the deck's one art direction, and the cards an illustration helps
+//        → { capability, direction, cards: [{ index, card, description, style, palette, use }] }
 //   POST /api/decks/images/:uid/keep   { use?, overlay?, ink?, alt? } → { image }
 //   POST /api/decks/images/:uid/discard
 // A real person (422 `real_person`), a figure and a chart are refused before
@@ -20,6 +23,7 @@ export const deckImagesApi = {
   quote: (deckId, body) => post(`/decks/${enc(deckId)}/images/quote`, body),
   generate: (deckId, body, headers) => post(`/decks/${enc(deckId)}/images`, body, headers),
   list: (deckId) => request(`/decks/${enc(deckId)}/images`),
+  plan: (deckId) => request(`/decks/${enc(deckId)}/images/plan`),
   keep: (uid, body) => post(`/decks/images/${enc(uid)}/keep`, body),
   discard: (uid) => post(`/decks/images/${enc(uid)}/discard`),
   /** `fields`: { use, card?, alt?, shows_person?, consent? }; the file goes as multipart. */

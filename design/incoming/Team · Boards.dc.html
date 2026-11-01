@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e9e7ee}
+a{color:#7c3aed;text-decoration:none}
+a:hover{color:#6d28d9;text-decoration:underline}
+</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:72px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1040px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:#6b6577">Axal VC · Company settings › Team</span>
+<h1 style="margin:0;font-size:42px;font-weight:800;letter-spacing:-0.03em">Team: people and AI agents</h1>
+<p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">Who works on a company or project, how people are invited, and how AI agents are added in defined roles, governed by a rule book. Agents propose; people decide. People are circles; agents are rounded squares with the spark and an “AI agent” pill.</p>
+</header>
+<section id="hero" style="display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;gap:12px"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">TM1a</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">Team page in the full shell · Ask panel closed</h2></div>
+<div style="width:1440px;border-radius:14px;overflow:hidden;border:1px solid #dedbe5;box-shadow:0 20px 50px rgba(24,24,27,.10)"><dc-import name="Team Page" v="tm1a" hint-size="1440px,1240px"></dc-import></div>
+</section>
+<div style="display:flex;flex-wrap:wrap;gap:72px 64px;align-items:flex-start;max-width:2944px">
+<sc-for list="{{ boards }}" as="b" hint-placeholder-count="26">
+<section id="{{ b.id }}" style="display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">{{ b.id }}</span><h2 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-0.02em">{{ b.t }}</h2></div>
+<sc-if value="{{ b.noteOn }}" hint-placeholder-val="{{ false }}"><p style="margin:0;max-width:1440px;font-size:13px;line-height:1.5;color:#3f3a47">{{ b.note }}</p></sc-if>
+<div style="display:flex;gap:32px;align-items:flex-start;flex-wrap:wrap">
+<sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+<div style="display:flex;flex-direction:column;gap:8px">
+<sc-if value="{{ f.capOn }}" hint-placeholder-val="{{ false }}"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">{{ f.cap }}</span></sc-if>
+<div style="{{ f.wst }}"><dc-import name="Team Page" v="{{ f.v }}" hint-size="1440px,1100px"></dc-import></div>
+</div>
+</sc-for>
+</div>
+</section>
+</sc-for>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const fr = (v, w, h, cap) => ({ v, cap: cap || '', capOn: !!cap, wst: 'width:' + w + 'px;min-height:' + h + 'px;border-radius:' + (w === 390 ? 28 : 14) + 'px;overflow:hidden;border:1px solid ' + (/-d$/.test(v) ? '#374151' : '#dedbe5') + ';box-shadow:0 20px 50px rgba(24,24,27,.10)' });
+    const B = (id, t, frames, note) => ({ id, t, frames, note: note || '', noteOn: !!note });
+    const boards = [
+      B('TMA', 'Ask · button states (addendum)', [fr('tma', 1180, 1020)], 'One “Ask” button with the Eadwyn eye icon, beside the purple primary and clearly secondary to it. It opens the Ask panel out of the AIRail; there is no separate proposals sheet. Before a run: “Holds up to $[…] · you pay what it uses”.'),
+      B('TM1b', 'Team page · project', [fr('tm1b', 1440, 1120)], 'A project in a company: the sidebar shows Company settings › Projects › [Atlas Pilot] › Team. Add to team is open: Person or AI agent. Invitations show where they came from, and the Lab team gate shows when it applies.'),
+      B('TM1c', 'Empty · only you, no agents', [fr('tm1c', 1440, 860)]),
+      B('TM1d', 'Loading', [fr('tm1d', 1440, 820)], 'The primary stays disabled until the team is read.'),
+      B('TM1e', 'Company Team · agents across its projects', [fr('tm1e', 1440, 1700)], 'Sidebar: Company settings › Team. The scope filter groups project agents under their project name. Billing is a link to Account › Billing, not part of the block.'),
+      B('TM1f', 'A project inside a company', [fr('tm1f', 1440, 1320)], 'Sidebar: Company settings › Projects › [Atlas Pilot] › Team. Company editors with access are a separate muted group, never mixed into the project roles.'),
+      B('TM1g', 'A standalone project', [fr('tm1g', 1440, 980, 'Project settings › Team'), fr('tm1g2', 1440, 900, 'Project settings › General · Move under a company')], 'A standalone project is not a legal entity, so there is no Legal entry anywhere.'),
+      B('TM1h', 'Moving a project out of a company', [fr('tm1h', 1040, 480)]),
+      B('TM1i', 'Phone · the drawer’s bottom block', [fr('tm1i1', 390, 844, 'In a company'), fr('tm1i2', 390, 844, 'In a standalone project')]),
+      B('TM2a', 'Invite a person · company', [fr('tm2a', 1440, 1240, 'The Sheet'), fr('tm2as', 1440, 1260, 'After sending')], 'A field trigger sits on the message only, never on an email address.'),
+      B('TM2b', 'Invite a person · project', [fr('tm2b', 1440, 1240)], 'Linking an existing account searches by name only. Emails stay hidden until the person accepts. A field trigger sits on the message only.'),
+      B('TM2c', 'Invitation states · People card', [fr('tm2c', 1100, 760)]),
+      B('TM3a', 'Add an AI agent · step 1, pick a role', [fr('tm3a', 1440, 1520)], 'A role already held here is disabled: one agent per role.'),
+      B('TM3b', 'Add an AI agent · step 2, pick the agent', [fr('tm3b', 1440, 1240)], 'Only models offered on the plan are listed. Write tools never appear, and there is no “MCP agent” model source.'),
+      B('TM3c', 'Add an AI agent · step 3, review and add', [fr('tm3c', 1440, 1240)], 'Each agent gets a first name and a surname. It keeps the AI agent mark everywhere it appears.'),
+      B('TM4a', 'Roles and rule books', [fr('tm4a', 1440, 1120)], 'Custom roles are not in v1.'),
+      B('TM4b', 'A rule book', [fr('tm4b', 1440, 1760, 'CFO · v3 · changes from the default shown'), fr('tm4b2', 1100, 300, 'General counsel (assistant) variant'), fr('tm4b3', 1440, 1760, 'Ask open from the rule book: Sources, then Preview')], 'Form intent from Ask. Blank sections carry a field trigger; a value placed by Accept shows “Not saved” until Save.'),
+      B('TM4c', 'Rule book save refused', [fr('tm4c', 1440, 1760)]),
+      B('TM5a', 'An agent’s profile', [fr('tm5a', 1440, 1240)]),
+      B('TM5b', 'Pause and Remove confirms', [fr('tm5b', 1040, 440)]),
+      B('TM6a', 'Agents at work in a module · Raise › Use of funds', [fr('tm6a', 1440, 1040)], 'The Ask panel opens out of the AIRail, below the top bar and above the footer, and the content narrows beside it. Proposals are inline cards in the conversation. Agent proposals wait, so Ask carries the “[3] waiting” chip.'),
+      B('TM6b', '“Assign this task to…”', [fr('tm6b', 820, 560)]),
+      B('TM6c', 'Working here · who works on this page', [fr('tm6c', 1440, 1040)], 'Opened from “Working here” in a module header, in the Sheet docked beside the AIRail. It shows who works on this page, people and named AI agents, who each one is, and what each is working on.'),
+      B('TM7a', 'Approvals', [fr('tm7a', 1440, 1060)], 'The proposals waiting on this page are cards in the Ask panel. The tab keeps the history; whether it also lists open proposals is an owner call.'),
+      B('TM7b', 'A proposal in detail', [fr('tm7b', 1440, 1060, 'Waiting for a decision'), fr('tm7b2', 1440, 1060, 'A second decide')]),
+      B('TM8a', 'Settings', [fr('tm8a', 1440, 1500)], 'No company AI budget is drawn.'),
+      B('TM9a', 'People states', [fr('tm9a1', 900, 520, 'Invitation expired'), fr('tm9a2', 520, 900, 'Already a member'), fr('tm9a3', 1100, 640, 'No editor rights'), fr('tm9a4', 1100, 700, 'A company editor who is not a project member'), fr('tm9a5', 900, 420, 'A Co-founder on a company-governed setting')], 'Seat limits are not drawn until the owner sets them.'),
+      B('TM9b', 'Agent states', [fr('tm9b1', 1100, 620, 'Paused, with each reason'), fr('tm9b2', 640, 300, 'Runs refused by the rule book')], 'Paused pills are amber with brown text, never red.'),
+      B('TM9c', 'Page states', [fr('tm9c1', 1440, 1040, 'One block could not be read'), fr('tm9c2', 1440, 1040, 'Out of AI tokens'), fr('tm9c3', 1440, 1060, 'AI paused'), fr('tm9c4', 1440, 960, 'Locked by plan'), fr('tm9c5', 1440, 1180, 'Read-only HQ access'), fr('tm9c6', 1440, 640, 'Permission refused'), fr('tm9c7', 1440, 1800, 'AI off on this page')]),
+      B('TM9d', 'Phone · 390', [fr('tm9d1', 390, 844, 'Team page'), fr('tm9d2', 390, 844, 'Add agent · step 2'), fr('tm9d3', 390, 844, 'Ask as a bottom sheet')]),
+      B('TM9e', 'Tablet · 768', [fr('tm9e', 768, 1180)], 'The sidebar collapses to icons, and the Ask panel overlays only the content area.'),
+      B('TM9f', 'Dark', [fr('tm1a-d', 1440, 1240, 'TM1a'), fr('tm3b-d', 1440, 1240, 'TM3b'), fr('tm6a-d', 1440, 1040, 'TM6a'), fr('tm7a-d', 1440, 1060, 'TM7a')])
+    ];
+    return { boards };
+  }
+}
+</script>
+</body></html>

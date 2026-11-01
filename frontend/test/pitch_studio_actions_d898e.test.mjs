@@ -2,13 +2,14 @@
  * D898 group E (#2676) — the old template builder's four actions, each now a
  * studio action (the owner's call, 2026-10-27), and the builder retired.
  *
- *   1. Fill from project is on the Decks tab's current deck, for a writer only
- *      (its run and its landing are `founder_deck_forms_d778.test.mjs`).
+ *   1. D1604 (#3716): no Fill control on the Decks tab. The deck's Ask
+ *      proposes and nothing is filled without Accept (owner rule: Ask, never
+ *      Fill); `FillFromProject` stays in StudioActions, unmounted.
  *   2. New deck's Start from marks the recommended template and says why; a
  *      stage nobody recorded is never shown as one.
  *   3. A Spin-Out deck shows its readiness from the preview read; any other
  *      deck draws nothing and reads nothing. The `draft` flag decides.
- *   4. Branding shows the plan, the footer and the watermark; a Studio plan
+ *   4. Branding (D1604: the home's ⋯ › Brand kit) shows the plan, the footer and the watermark; a Studio plan
  *      changes the watermark behind a dialog that says what it changes, and
  *      the save names the venture so the Worker writes its ledger line.
  *
@@ -48,12 +49,15 @@ const decks = (r, readOnly = false) => renderToStaticMarkup(h(MemoryRouter, null
  * 1. Fill from project, on the Decks tab
  * ------------------------------------------------------------------ */
 
-test('Fill from project is on the current deck for a writer, never for a reader, and only once the deck is read', () => {
-  // Mutation checked: drop `!readOnly &&` → an admin is offered the fill.
-  assert.match(decks(reads()), /data-testid="pitch-studio-fill"/);
-  assert.doesNotMatch(decks(reads(), true), /data-testid="pitch-studio-fill"/, 'an admin reads and changes nothing (PD21)');
-  assert.doesNotMatch(decks(reads({ deck: { status: 'loading', data: null } })), /data-testid="pitch-studio-fill"/);
-  assert.doesNotMatch(decks(reads({ deck: { status: 'error', data: null } })), /data-testid="pitch-studio-fill"/);
+test('D1604: no Fill control on the Decks tab, for a writer or a reader; the fill\'s own rules stay', () => {
+  // Owner rule: the button is Ask, never Fill, and nothing is saved without Accept.
+  for (const html of [decks(reads()), decks(reads(), true), decks(reads({ deck: ok(SPINOUT) }))]) {
+    assert.doesNotMatch(html, /data-testid="pitch-studio-fill"/);
+    assert.doesNotMatch(html, />[^<]*\bFill\b[^<]*</, 'no Fill label on the home');
+  }
+  const home = read('src/pages/raise/pitch/StudioHome.jsx');
+  assert.doesNotMatch(home, /FillFromProject|api\.deckAutofill\(/, 'the home mounts no fill');
+  assert.doesNotMatch(read('src/pages/raise/pitch/PitchStudio.jsx'), /FillFromProject/);
   // Its proposal opens at New deck's step 4, on this venture.
   assert.equal(proposalHref('/raise/pitch/new', '?project_id=7', 55), '/raise/pitch/new?project_id=7&proposal=55');
   assert.equal(proposalHref('/raise/pitch/new', '', 55), '/raise/pitch/new?proposal=55');
@@ -212,11 +216,16 @@ test('a Studio plan saves the watermark only after its dialog, naming the ventur
   assert.equal(writes.length, 1);
 });
 
-test('the client names the venture on the save; the studio mounts both cards beside the deck', () => {
+test('the client names the venture on the save; readiness sits on the home, Branding behind its ⋯ › Brand kit', () => {
   const api = read('src/lib/api.js');
   assert.match(api, /deckSetWatermark: \(url, projectId\) => request\('\/decks\/brand\/watermark', \{ method: 'PUT', body: JSON\.stringify\(\{ watermark_url: url, \.\.\.\(projectId \? \{ project_id: projectId \} : \{\}\) \}\) \}\)/);
   const html = decks(reads());
-  assert.match(html, /data-testid="pitch-studio-branding"/);
+  // D1604 (#3716, pd1): Branding moved into ⋯ › Brand kit (`BrandKitSheet` mounts the same card).
+  assert.doesNotMatch(html, /data-testid="pitch-studio-branding"/);
+  const home = read('src/pages/raise/pitch/StudioHome.jsx');
+  assert.match(home, /\{ id: 'brand', label: 'Brand kit' \}/);
+  assert.match(home, /<BrandKitSheet projectId=\{projectId\}/);
+  assert.match(read('src/pages/raise/pitch/DeckSheets.jsx'), /<BrandingCard projectId=\{projectId\} readOnly=\{readOnly\} \/>/);
   assert.doesNotMatch(html, /data-testid="pitch-studio-readiness"/, 'not a Spin-Out deck');
   assert.match(decks(reads({ deck: ok(SPINOUT) })), /data-testid="pitch-studio-readiness"/);
 });
