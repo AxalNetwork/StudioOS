@@ -56,9 +56,9 @@ const deck = { id: 40, version: 4, created_at: '2026-10-21 09:00:00' };
 test('the dialog\'s defaults are the canvas\'s: 14 days, Download and Forwarding off, the NDA on, figures and sources in', () => {
   assert.equal(DEFAULT_SHARE.expires, 14);
   assert.deepEqual([DEFAULT_SHARE.allowDownload, DEFAULT_SHARE.allowForwarding, DEFAULT_SHARE.ndaRequired], [false, false, true]);
-  assert.deepEqual(DEFAULT_INCLUDE, { figures: true, sources: true, notes: false, bands: false });
+  assert.deepEqual(DEFAULT_INCLUDE, { figures: true, sources: true, notes: false, bands: false, cap_table: false, team_photos: false });
   assert.deepEqual(EXPIRIES.map((x) => x.id), [7, 14, 30, null]);
-  assert.deepEqual(INCLUDE_ROWS.map((r) => r.label), ['Figures with chips', 'Sources appendix', 'Speaker notes', 'Scorecard and Product-market fit bands']);
+  assert.deepEqual(INCLUDE_ROWS.map((r) => r.label), ['Figures with chips', 'Sources appendix', 'Speaker notes', 'Scorecard and Product-market fit bands', 'Cap-table totals', 'Team photos']);
   assert.ok(!INCLUDE_ROWS.some((r) => /bank|account|score\b|quote/i.test(r.key)), 'what is never shared has no switch');
 });
 
@@ -80,7 +80,7 @@ test('one body for the one writer: a prospect or a typed name, never both', () =
   const prospect = shareBody({ ...DEFAULT_SHARE, investor: '5', viewLimit: '3' }, deck);
   assert.deepEqual(prospect, {
     deck_id: 40, expires_days: 14, view_limit: 3, allow_download: false, allow_forwarding: false, nda_required: true,
-    include: { figures: true, sources: true, notes: false, bands: false }, prospect_id: 5,
+    include: { figures: true, sources: true, notes: false, bands: false, cap_table: false, team_photos: false }, prospect_id: 5,
   });
   const typed = shareBody({ ...DEFAULT_SHARE, investor: TYPED, label: ' Fund Z ', expires: null, ndaRequired: false }, deck);
   assert.equal(typed.investor_label, 'Fund Z');
@@ -109,7 +109,7 @@ test('the dialog draws the canvas\'s rows, the frozen version, and what is never
   const html = draw(h(ShareDialog, { projectId: 7, deck, onClose() {} }));
   const t = renderedText(html);
   assert.match(html, /data-testid="pitch-share-dialog"/);
-  for (const id of ['investor', 'expires-7', 'expires-14', 'expires-30', 'expires-never', 'limit', 'download', 'forwarding', 'nda', 'include-figures', 'include-sources', 'include-notes', 'include-bands', 'frozen', 'what', 'create']) {
+  for (const id of ['investor', 'expires-7', 'expires-14', 'expires-30', 'expires-never', 'limit', 'download', 'forwarding', 'nda', 'include-figures', 'include-sources', 'include-notes', 'include-bands', 'include-cap_table', 'include-team_photos', 'frozen', 'what', 'create']) {
     assert.match(html, new RegExp(`data-testid="pitch-share-${id}"`), id);
   }
   assert.match(html, /role="radio" aria-checked="true"[^>]*data-testid="pitch-share-expires-14"/);
@@ -168,7 +168,7 @@ test('Create link writes once through the one writer, and shows the link once', 
     assert.equal(writes[0][1], 7);
     assert.deepEqual(writes[0][2], {
       deck_id: 40, expires_days: 14, view_limit: 2, allow_download: false, allow_forwarding: false, nda_required: true,
-      include: { figures: true, sources: true, notes: false, bands: true }, prospect_id: 6,
+      include: { figures: true, sources: true, notes: false, bands: true, cap_table: false, team_photos: false }, prospect_id: 6,
     });
     assert.equal(m.created.length, 1, 'the caller refreshes its links');
     assert.ok(m.by('pitch-share-made'));

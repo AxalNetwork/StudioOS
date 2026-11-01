@@ -298,6 +298,10 @@ export { assignCardUids, cardIndexOf, cardUidAt, cardRefOf } from './cardUids';
 /** D1500: the bytes a card takes stored. */
 export const cardBytes = (card: unknown): number => new TextEncoder().encode(JSON.stringify(card ?? null)).length;
 
+/** D1507: an element id (`elementModels.ELEMENTS`) and a gate reference (a session uid, a logo key). */
+const ELEMENT_ID = /^[a-z][a-z_]{0,39}$/;
+const GATE_REF = /^[A-Za-z0-9_.:-]{1,80}$/;
+
 /** One block's own fields, by kind; null when the kind is unknown. */
 function blockBody(kind: BlockKind, v: any, url: UrlGuard, ground = '#ffffff'): Record<string, unknown> | null {
   switch (kind) {
@@ -367,6 +371,11 @@ export function sanitizeBlocks(input: unknown, url: UrlGuard, ground = '#ffffff'
     // A chart binds per series and a table per cell; neither carries a block binding.
     const bd = kind === 'chart' || kind === 'table' ? null : bindingOf(v.binding);
     if (bd) block.binding = bd;
+    // D1507 (#3758): the element a block was placed as, and what its share gate checks: a quote's
+    // interview session and a logo's key. Each is a fact for the Worker to look up, never a permission by itself.
+    if (typeof v.element === 'string' && ELEMENT_ID.test(v.element)) block.element = v.element;
+    if (typeof v.session_uid === 'string' && GATE_REF.test(v.session_uid)) block.session_uid = v.session_uid;
+    if (typeof v.logo_key === 'string' && GATE_REF.test(v.logo_key)) block.logo_key = v.logo_key;
     out.push(block);
   }
   return out;

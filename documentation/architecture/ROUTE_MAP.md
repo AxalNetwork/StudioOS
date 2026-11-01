@@ -2188,6 +2188,12 @@ No new route. What changes on existing routes:
 - **Images:** `deck_images.ts` adds `POST /api/decks/:id/images/import` (`{ url, use?, card?, alt?, shows_person?, consent? }`), which copies an external image in through `services/decks/imageFetch.ts`. Upload, import and drawn images are stripped of metadata, measured from the header (413 `image_too_large` over 50 MP) and stored once per venture: a repeat upload answers 200 with `duplicate: true` (migration 718, `sha256`).
 - **Export browser:** `services/browserRun.ts` `renderUrl` passes `allowRequestPattern`: the page's own origin, Google Fonts, `data:` and `blob:`.
 
+### Deck v2 A14: share scoping for every Grid element (D1507, #3758)
+
+- **No new route.** The share read (`decks.ts` `GET /api/decks/share/:token`) and the investor's grant read (`deck_grants.ts`) send every block through `services/decks/shareInclude.ts` `blockKept`, with the venture's recorded quote consents read by `shareGatesFor`.
+- **Gates:** by the block's element (`ELEMENT_GATES`, every id of `elementModels.ELEMENTS`) or else its kind (`BLOCK_KIND_GATES`). Figures need `include.figures`; the team grid and bios `include.team_photos`; the cap table `include.cap_table`, then totals only; an interview quote its session's recorded consent; a logo wall or a HubSpot logo a recorded permission (none is recorded yet). Bank slots and internal scores never go out.
+- **Share dialog:** `frontend/src/pages/raise/pitch/shareModel.js` adds two include rows, "Cap-table totals" and "Team photos", both off. `POST /api/decks/:id/share` accepts `include.cap_table` and `include.team_photos`.
+
 ### Learning on the Calendar: a member's own learning plan (#3959, Worker half)
 
 - **Worker:** `routes/learning_plan.ts` at `/api/learning/plan` (mounted before `learning.ts`): `GET /?from=&to=` (at most 92 days; each item with its `occurrences`, `href`, `available`, `status` and `done_recorded_by`), `POST /`, `PATCH /:uid`, `DELETE /:uid`, `POST /:uid/done`. Service `services/learningPlan.ts`; migration 758 (`learning_plan_items`, `learning_plan_reminders`).
