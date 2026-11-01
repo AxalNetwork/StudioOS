@@ -14,7 +14,8 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import type { User } from '../types';
-import { requireAuth } from '../auth';
+import { getCurrentUser, requireAuth } from '../auth';
+import { EVENT_COVER, coverAsk, coverRunOptions, drawCover, quoteCover, readCover } from '../services/coverDraws';
 import { logAdminAction } from '../services/adminAudit';
 import { agendaLocation, registrationEligibility, registrationRulesFromStore, AudienceSegmentsUnreadable } from '../services/eventOrganiser';
 import { notify } from '../services/notify';
@@ -1558,5 +1559,61 @@ export async function registerPrincipal(
     checkin_code: code,
   }, 201);
 }
+
+// ── #3935 (D1478 task 1, EV2): the drawn cover ─────────────────────────────
+// The host (or an admin) describes a cover; Eadwyn quotes the draw and its three
+// checks in one figure, draws on the job's model, checks the image, and stores
+// it under the event. The answer fills the editor's cover field; the host's own
+// Save (`PATCH /:id`) writes it. Nothing here writes the event. No rail page
+// carries a host's event editor yet, so the runs carry no rail context.
+const coverPrefix = (id: number) => `events/${id}/covers/`;
+
+async function coverGate(c: any): Promise<{ id: number; user: User } | Response> {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  if (!canManage(event, u)) return c.json({ error: 'forbidden' }, 403);
+  return { id, user: u };
+}
+
+events.post('/:id/cover/quote', async (c) => {
+  const g = await coverGate(c);
+  if (g instanceof Response) return g;
+  const ask = coverAsk(await c.req.json().catch(() => ({})));
+  if (!ask.ok) return refuse(c, ask.status, { code: ask.code, message: ask.message });
+  const q = await quoteCover(c.env, coverRunOptions(EVENT_COVER, Number(g.user.id) || 0, ask.prompt));
+  if (!q.ok) return refuse(c, q.status, { code: q.code, message: q.message });
+  return c.json(q);
+});
+
+events.post('/:id/cover/draw', async (c) => {
+  const g = await coverGate(c);
+  if (g instanceof Response) return g;
+  const ask = coverAsk(await c.req.json().catch(() => ({})));
+  if (!ask.ok) return refuse(c, ask.status, { code: ask.code, message: ask.message });
+  const opts = coverRunOptions(EVENT_COVER, Number(g.user.id) || 0, ask.prompt);
+  const r = await drawCover(c.env, opts, coverPrefix(g.id));
+  if (!r.ok) return refuse(c, r.status, { code: r.code, message: r.message });
+  return c.json({ ...r, key: undefined, url: new URL(`/api/events/${g.id}/cover/${r.filename}`, c.req.url).toString() });
+});
+
+// The stored cover: anyone who may see the event (a published one, to anyone).
+events.get('/:id/cover/:filename', async (c) => {
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  const published = event.status === 'published' && (event.visibility === 'unlisted' || (event.visibility === 'public' && Number(event.admin_published) === 1));
+  if (!published) {
+    const u = await getCurrentUser(c).catch(() => null);
+    if (!u || !(await canViewEvent(c.env, event, u))) return c.json({ error: 'not_found' }, 404);
+  }
+  const cover = await readCover(c.env, coverPrefix(id), String(c.req.param('filename') || ''));
+  if (!cover) return c.json({ error: 'not_found' }, 404);
+  return new Response(cover.body, { headers: { 'content-type': cover.mime, 'cache-control': published ? 'public, max-age=86400' : 'private, no-store', 'x-content-type-options': 'nosniff' } });
+});
 
 export default events;

@@ -21,6 +21,7 @@ const read = (p) => readFileSync(p, 'utf8');
 const PITCH = 'frontend/src/pages/raise/pitch';
 const HELPERS = new Set(['NOT_ON', 'SURFACES', 'SWAPPED', 'unavailable', 'through', 'shown', 'availability']);
 import { deckGridApi } from '../src/lib/api/deckGrid.js';
+import { deckStageApi } from '../src/lib/api/deckStage.js';
 import { deckRemixApi } from '../src/lib/api/deckRemix.js';
 import { deckCheckApi } from '../src/lib/api/deckCheck.js';
 
@@ -28,7 +29,7 @@ test('every adapter method answers unavailable, with the reason and the issue th
   const methods = Object.keys(adapter).filter((k) => !HELPERS.has(k));
   assert.deepEqual(methods.sort(), Object.keys(adapter.SURFACES).sort(), 'a method with no SURFACES row, or a row with no method');
   assert.ok(methods.length >= 40);
-  assert.deepEqual([...adapter.SWAPPED], ['grid', 'remix', 'consistency'], 'D1499 (#3749), D1553 (#3800) and D1555 (#3802): the rows whose reads are on main');
+  assert.deepEqual([...adapter.SWAPPED], ['grid', 'stagePlan', 'remix', 'consistency'], 'D1499 (#3749), D1522 (#3774), D1553 (#3800) and D1555 (#3802): the rows whose reads are on main');
   for (const name of methods.filter((n) => !adapter.SWAPPED.includes(n))) {
     const answer = await adapter[name]('synthetic-deck', { synthetic: true });
     assert.deepEqual(answer, { available: false, reason: NOT_ON, issue: adapter.SURFACES[name].issue }, name);
@@ -55,6 +56,21 @@ test('D1499 (#3749): grid is swapped — it answers through deckGridApi.grid, an
   } finally { deckGridApi.grid = real; }
   assert.equal(adapter.availability('grid'), null, 'a swapped row greys nothing');
   assert.equal(adapter.SURFACES.grid.issue, 3749, 'the row stays, so the plan’s table reads whole');
+});
+
+test('D1522 (#3774): stagePlan is swapped — it answers through deckStageApi.stagePlan with the stage and investor type asked', async () => {
+  const real = deckStageApi.stagePlan;
+  const asked = [];
+  try {
+    deckStageApi.stagePlan = async (id, opts) => { asked.push([id, opts]); return { deck_id: 7, stage: 'seed', order: [], warnings: [] }; };
+    assert.deepEqual(await adapter.stagePlan(7, { stage: 'seed' }), { available: true, value: { deck_id: 7, stage: 'seed', order: [], warnings: [] } });
+    assert.deepEqual(asked, [[7, { stage: 'seed' }]]);
+    deckStageApi.stagePlan = async () => { throw Object.assign(new Error('nope'), { status: 404 }); };
+    assert.deepEqual(await adapter.stagePlan(7), { available: false, reason: NOT_ON, issue: 3774 }, 'a route that answers 404 is still off');
+    deckStageApi.stagePlan = async () => { throw Object.assign(new Error('The deck could not be read.'), { status: 500 }); };
+    assert.equal((await adapter.stagePlan(7)).unreadable, true, 'anything else is unreadable, never an empty plan');
+  } finally { deckStageApi.stagePlan = real; }
+  assert.equal(adapter.availability('stagePlan'), null, 'the Stage chips and the menu row are no longer Coming later');
 });
 
 test('D1553 (#3800): remix is swapped — it posts the card on screen (and a block to remove) through deckRemixApi.remix', async () => {
@@ -105,20 +121,23 @@ test('the adapter keys each surface to the plan’s issue (§6.2)', () => {
 test('the seam reaches no network, and no client method exists for a route that is not on main', () => {
   const src = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
   assert.doesNotMatch(src, /request\(|fetch\(|XMLHttpRequest/);
-  // A swapped row's client is the only `lib/api` the seam may import (D1499's `deckGrid.js`, D1553's `deckRemix.js`, D1555's `deckCheck.js`).
-  assert.deepEqual([...src.matchAll(/from '([^']*lib\/api[^']*)'/g)].map((x) => x[1]), ['../../../lib/api/deckGrid.js', '../../../lib/api/deckRemix.js', '../../../lib/api/deckCheck.js']);
+  // A swapped row's client is the only `lib/api` the seam may import (D1499's `deckGrid.js`, D1522's `deckStage.js`, D1553's `deckRemix.js`, D1555's `deckCheck.js`).
+  assert.deepEqual([...src.matchAll(/from '([^']*lib\/api[^']*)'/g)].map((x) => x[1]), ['../../../lib/api/deckGrid.js', '../../../lib/api/deckStage.js', '../../../lib/api/deckRemix.js', '../../../lib/api/deckCheck.js']);
   assert.doesNotMatch(codeOnly(read(`${PITCH}/deckV2Model.js`)), /request\(|fetch\(|lib\/api|from 'react'/);
   const client = [read('frontend/src/lib/api.js'), ...readdirSync('frontend/src/lib/api').filter((f) => f.endsWith('.js')).map((f) => read(`frontend/src/lib/api/${f}`))].join('\n');
   // #3749 part 1 merged as #3925: Grid has a real read route and client (main's check, kept by the merge).
   assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_grid.ts')), /deckGrid\.get\(['"]\/:id\{\[0-9\]\+\}\/grid['"]/);
   assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckGrid\)/);
+  // D1522 (#3774): the stage plan has its route and client too.
+  assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_stage.ts')), /deckStage\.get\(['"]\/:id\{\[0-9\]\+\}\/stage-plan['"]/);
+  assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckStage\)/);
   // D1553 (#3800): Remix has its route and client.
   assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_remix.ts')), /deckRemix\.post\(['"]\/:id\{\[0-9\]\+\}\/remix['"]/);
   assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckRemix\)/);
-  for (const path of ['/areas', '/stage-plan', '/figures', '/element-models', '/draft', '/areas/instruct']) {
+  for (const path of ['/areas', '/figures', '/element-models', '/draft', '/areas/instruct']) {
     assert.ok(!new RegExp(`['"\`]/decks/[^'"\`\\n]*${path.replace(/[$/{]/g, (c) => `\\${c}`)}`).test(client), `a client path for ${path} before its route is on main`);
   }
-  assert.ok(!readdirSync('frontend/src/lib/api').some((f) => /^deck(Draft|Areas|Instruct|Stage|Figures|ElementModels)\.js$/.test(f)));
+  assert.ok(!readdirSync('frontend/src/lib/api').some((f) => /^deck(Draft|Areas|Instruct|Figures|ElementModels)\.js$/.test(f)));
 });
 
 test('an unavailable answer is never printed as a zero, "$0.00" or "none"', async () => {
