@@ -11,7 +11,8 @@
  * They are kept as side-by-side pairs (no shared interface) so each
  * provider's quirks stay legible.
  */
-import { complianceDueEvents, complianceState, type ComplianceFacts } from './calendar/sourceReaders';
+import { cohortDateEvents, complianceDueEvents, complianceState, dealClosingEvents, interviewCallEvents, type ComplianceFacts } from './calendar/sourceReaders';
+import { pageOnlyKinds } from './calendar/registry';
 import type { Env, User } from '../types';
 import { getSQL } from '../db';
 import { isSuperAdmin } from '../auth';
@@ -432,7 +433,7 @@ export async function fetchMicrosoftUserinfo(accessToken: string): Promise<any> 
 // ===========================================================================
 export interface CalendarEvent {
   id: string;
-  kind: 'ic_meeting' | 'founder_checkin' | 'advisor_booking' | 'partner_office_hour' | 'calendly_event' | 'expert_booking' | 'event_ticket' | 'event_hosted' | 'investor_meeting' | 'compliance_due' | 'learning';
+  kind: 'ic_meeting' | 'founder_checkin' | 'advisor_booking' | 'partner_office_hour' | 'calendly_event' | 'expert_booking' | 'event_ticket' | 'event_hosted' | 'investor_meeting' | 'compliance_due' | 'interview_call' | 'cohort_date' | 'deal_closing' | 'manual' | 'learning';
   source_id: number;
   source_uid: string;
   title: string;
@@ -826,6 +827,28 @@ async function directEvents(env: Env, userId: number,
 }
 
 /**
+ * D1484 (#3977): the events a member adds with "New event". `POST
+ * /calendar/events` writes them to `calendar_events` with `kind = 'other'`
+ * (and `source = 'manual'` unless the caller named another); nothing read them
+ * until now. The caller's own rows only, bound; never Calendly's rows.
+ */
+async function manualEvents(env: Env, userId: number, fromIso: string, toIso: string): Promise<CalendarEvent[]> {
+  const res = await env.DB.prepare(
+    `SELECT id, uid, title, start_at, end_at, status, location_kind, location_uri, notes FROM calendar_events
+      WHERE kind = 'other' AND user_id = ? AND source <> 'calendly' AND start_at >= ? AND start_at <= ?
+      ORDER BY start_at, id`,
+  ).bind(userId, fromIso, toIso).all<{
+    id: number; uid: string; title: string | null; start_at: string; end_at: string | null; status: string | null;
+    location_kind: string | null; location_uri: string | null; notes: string | null;
+  }>();
+  return (res.results || []).map((r) => ({
+    id: `manual:${r.id}`, kind: 'manual' as const, source_id: Number(r.id), source_uid: r.uid,
+    title: r.title || 'Event', start_at: r.start_at, end_at: r.end_at || r.start_at, status: r.status || 'scheduled',
+    location_kind: r.location_kind, location_uri: r.location_uri, organizer_email: null, attendees: [], notes: r.notes, project_id: null,
+  }));
+}
+
+/**
  * EVERY KIND THIS PRODUCT CAN PUT ON A CALENDAR, in one place.
  *
  * The default set below used to be a five-element array literal that had to be
@@ -867,6 +890,12 @@ const READERS: Readonly<Record<CalendarEvent['kind'], CalendarReader>> = {
   compliance_due: async (env, userId, from, to, opts) => (await complianceDueEvents(env, userId, from, to, {
     withDone: !!opts?.withCancelled, companyId: opts?.companyId,
   })) as CalendarEvent[],
+  // D1484 (#3977): D1208's three personal readers, page only, the owner's rows alone.
+  interview_call: async (env, userId, from, to) => (await interviewCallEvents(env, userId, from, to)) as CalendarEvent[],
+  cohort_date: async (env, userId, from, to) => (await cohortDateEvents(env, userId, from, to)) as CalendarEvent[],
+  deal_closing: async (env, userId, from, to) => (await dealClosingEvents(env, userId, from, to)) as CalendarEvent[],
+  // D1484: what "New event" writes (`POST /calendar/events`, kind 'other'), page only.
+  manual: manualEvents,
   // #3959: the "Learning" source — the member's own plan occurrences and the webinars they registered for.
   learning: async (env, userId, from, to) => (await (await import('./learningPlan')).learningEvents(env, userId, from, to)) as CalendarEvent[],
 };
@@ -879,8 +908,9 @@ export const KNOWN_KINDS = Object.keys(READERS) as readonly CalendarEvent['kind'
  * and the Google and Outlook payloads do not write; `fetchUserEvents` leaves
  * these out, so a feed never holds one by accident.
  */
-// #3959: Learning is page-only until its feed and provider copy are designed (an occurrence id is not a row id).
-export const PAGE_ONLY_KINDS: readonly CalendarEvent['kind'][] = ['compliance_due', 'learning'];
+// #3959: Learning is page-only until its feed and provider copy are designed (an occurrence id is not a row id);
+// the registry says so (`page_only`), as it does for every kind.
+export const PAGE_ONLY_KINDS: readonly CalendarEvent['kind'][] = pageOnlyKinds();
 export const FEED_KINDS = KNOWN_KINDS.filter((k) => !PAGE_ONLY_KINDS.includes(k));
 
 /** Whether one source answered, so a page can say which of the eight did not. */
@@ -943,6 +973,8 @@ export async function fetchUserEventsWithSources(
 
 /** Private external meetings and wellbeing sessions never enter a staff scope. */
 export const SCOPED_EXCLUDED_KINDS = ['calendly_event', 'expert_booking'] as const;
+/** D1484: read for their owner alone; a staff scope has no reader for them, so it does not list them. */
+export const PERSONAL_ONLY_KINDS = ['interview_call', 'cohort_date', 'deal_closing', 'manual'] as const;
 export const SCOPED_SOURCE_LIMIT = 1000;
 export function validScopeWindow(from: string, to: string): boolean {
   const start = Date.parse(from), end = Date.parse(to);
@@ -1097,7 +1129,9 @@ export async function fetchCalendarScope(
   const branch = branchOf(env);
   if (actor.role !== 'admin' || (scope === 'all' && (branch || !isSuperAdmin(actor)))) throw new Error('Forbidden');
   if (!validScopeWindow(fromIso,toIso)) throw new Error('Invalid calendar scope window');
-  const wanted = KNOWN_KINDS.filter(kind => !SCOPED_EXCLUDED_KINDS.some(privateKind => privateKind === kind) && (!kinds?.length || kinds.includes(kind)));
+  // D1484: the personal page-only readers have no staff projection; they never enter a scope.
+  const wanted = KNOWN_KINDS.filter(kind => !SCOPED_EXCLUDED_KINDS.some(privateKind => privateKind === kind)
+    && !(PERSONAL_ONLY_KINDS as readonly string[]).includes(kind) && (!kinds?.length || kinds.includes(kind)));
   const unavailable = (error: 'unreadable' | 'not_configured', reason: string) => ({
     events: [], sources: wanted.map(kind => ({ kind, ok: false, error })),
     coverage: { complete: false, error, reason, studios: [] },
