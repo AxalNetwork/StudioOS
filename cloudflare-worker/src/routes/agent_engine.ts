@@ -48,6 +48,7 @@ import { goalByUid, goalDto, goalWrite, goalsOf, insertGoal, updateGoal, type Re
 import {
   TASK_STATUSES, depsOf, insertTask, isReady, setDeps, statusWrite, taskByUid, taskCosts, taskWrite, tasksOf, updateTask, type TaskRow,
 } from '../services/agents/tasks';
+import { workBoardRoutes } from './work_board';
 
 type C = Context<{ Bindings: Env }>;
 
@@ -55,6 +56,9 @@ export const agentEngineEnabled = (env: Env) =>
   typeof env.AGENT_ENGINE === 'string' && env.AGENT_ENGINE !== '' && env.AGENT_ENGINE !== 'off' && env.TEAM_AGENTS_ENABLED === 'true';
 
 const router = new Hono<{ Bindings: Env }>();
+// D1614 W1 (#3969): a project's Work board, its moves and its task fields, ahead of E1's
+// handlers. Project scope only; a company task falls through to E1 unchanged.
+router.route('/', workBoardRoutes(agentEngineEnabled));
 
 const say = (c: C, r: Refusal) => refuse(c, r.status, { code: r.code, message: r.message });
 const off = (c: C) => c.json({ error: 'agent_engine_off' }, 404);

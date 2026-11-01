@@ -1,0 +1,25 @@
+{
+  "$id": "deckRemix",
+  "title": "POST /api/decks/:id/remix (D1553, #3800)",
+  "description": "The reply the deck v2 adapter's `remix` method passes through: the card's current structure, the card, and its layout options (`services/decks/remix.ts`). D1511 (#3762).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["deck_id", "current", "card", "options"],
+  "properties": {
+    "deck_id": { "type": "integer", "minimum": 1 },
+    "current": { "type": "string" },
+    "card": { "type": "object" },
+    "options": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["structure", "label", "line", "card"],
+        "properties": {
+          "structure": { "type": "string" },
+          "label": { "type": "string" },
+          "line": { "type": "string" },
+          "card": { "type": "object" }
+        }
+      }
+    }
+  }
+}

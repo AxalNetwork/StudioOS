@@ -18,6 +18,7 @@ is automatic. The routes are `cloudflare-worker/src/routes/team_agents.ts`, moun
 | `tasks.ts` | D1529: a scope's tasks, for a person, an agent within its rule book, or no one; dependencies within one scope and without a cycle; ready derived; cost `{ available: false }` until E3. |
 | `planner.ts` | D1530 (#3848, E4 of #3742): the goal planner. `parsePlan` (at most 20 items; an unknown module or role drops its item with a note; a loop is `plan_invalid`), `planQuote` and `draftPlan` (the CEO agent through `agentRun`, else the manager's Eadwyn, on `propose:goal-plan`), and `acceptPlan` (claims the proposal once, then writes every task, event and dependency in one `DB.batch`). `agent_planner_d1530.test.ts` covers it. |
 | `templates.ts` | D1530: one role template per catalogue role (model tier, suggested cap, duties), the wizard's stage mapping, `suggestRoles` (rule-based, no model) and `monthEstimate` (unknown, never 0). |
+| `workBoard.ts` | D1614 W1 (#3969): project board fields and cards over `scope_tasks` (migration 762), transactional moves with actor events, close reasons, per-project numbering, scoped dependency checks (E1's cycle walk; 409 `task_blocked`) and the `unblocked` notice. E3's run store is read through the `WorkRunReader` seam, "no recorded runs" until #3847 supplies one. |
 
 **The rule for adding here.** `catalogue.ts` and `rulebook.ts` stay pure: no
 binding, no fetch. A read of the database goes in `teams.ts`, and a gate is

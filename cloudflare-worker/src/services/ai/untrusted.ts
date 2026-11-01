@@ -46,8 +46,12 @@ export function untrustedBlock(kind: UntrustedKind, text: unknown, id: string = 
 export const withUntrustedRule = (system: string) => (system.includes(UNTRUSTED_RULE) ? system : `${system} ${UNTRUSTED_RULE}`);
 
 /** Whether a prompt holds a block of this kind (the tests' and the run path's check). */
-export const isFramed = (prompt: unknown, kind: UntrustedKind) =>
-  typeof prompt === 'string' && new RegExp(`^BEGIN_${UNTRUSTED_KINDS[kind]}_UNTRUSTED_[0-9a-f]{32}$`, 'm').test(prompt);
+export function isFramed(prompt: unknown, kind: UntrustedKind): boolean {
+  if (typeof prompt !== 'string') return false;
+  const head = `BEGIN_${UNTRUSTED_KINDS[kind]}_UNTRUSTED_`;
+  // A line check, not a pattern built at run time: the line is the prefix and a 32-hex nonce.
+  return prompt.split('\n').some((l) => l.startsWith(head) && /^[0-9a-f]{32}$/.test(l.slice(head.length)));
+}
 
 // ─────────────────────────────────────────────────────────── links in answers
 
