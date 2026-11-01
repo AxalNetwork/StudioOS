@@ -132,6 +132,28 @@ test('the routes: a member lists and decides their own, and another member gets 
   assert.equal(ok.body.proposal.status, 'discarded');
 });
 
+// 4b ──────────────────────────────────────────────────────────────────────────
+test('D1496 part 3 (#3843): the member path is unchanged, and an agent\'s proposal shows on it only to its sponsor', async () => {
+  // Mutations checked: listRail/getRail unbound from user_id (an agent's proposal listed to anyone) → the OTHER asserts fail;
+  // the member path writing decided_by_user_id → the NULL assert fails (its row's owner decided it).
+  const w = world();
+  // Migration 712's two columns on this table (its other tables are not this test's).
+  w.f.db.exec('ALTER TABLE ai_rail_proposals ADD COLUMN agent_id INTEGER; ALTER TABLE ai_rail_proposals ADD COLUMN decided_by_user_id INTEGER;');
+  const agents = await proposeRail(w.env, { ...base, agentId: 42 });
+  const mine = await proposeRail(w.env, base);
+  // The sponsor (the row's owner) sees both on the member route; anyone else sees neither, and cannot decide.
+  assert.deepEqual((await call(w, MEMBER, 'GET', '/api/ai/rail/proposals?option=draft:thing')).body.proposals.map((x: any) => x.uid), [mine.uid, agents.uid]);
+  assert.deepEqual((await call(w, OTHER, 'GET', '/api/ai/rail/proposals?option=draft:thing')).body.proposals, []);
+  assert.equal(await getRail(w.env, OTHER, agents.uid), null);
+  assert.equal((await call(w, OTHER, 'POST', `/api/ai/rail/proposals/${agents.uid}/decide`, { decision: 'accept' })).status, 409);
+  const ok = await call(w, MEMBER, 'POST', `/api/ai/rail/proposals/${mine.uid}/decide`, { decision: 'accept' });
+  assert.deepEqual([ok.status, ok.body.proposal.status], [200, 'accepted']);
+  assert.deepEqual(Object.keys(ok.body.proposal).sort(), ['created_at', 'decided_at', 'decided_payload', 'kind', 'model', 'payload', 'rail_option', 'rail_page', 'record_ref', 'status', 'uid', 'usage_log_id'], 'the answer is the shape it had');
+  const row = w.f.db.prepare('SELECT decided_by_user_id AS d, agent_id AS a FROM ai_rail_proposals WHERE uid = ?').get(mine.uid) as any;
+  assert.deepEqual([row.d, row.a], [null, null]);
+  assert.equal((w.f.db.prepare('SELECT agent_id AS a FROM ai_rail_proposals WHERE uid = ?').get(agents.uid) as any).a, 42);
+});
+
 // 5 ───────────────────────────────────────────────────────────────────────────
 test('H20 draft:publication-summary: the summary is a proposal naming its run; the publication starts empty', async () => {
   // Mutations checked: the AI summary written into summary_text again; the proposal stored without its usage row; the old option key.
