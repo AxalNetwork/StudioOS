@@ -11,8 +11,10 @@ import { SourceChip } from './SourcesBoards';
 import { ChangedNotice, FigureCard } from './FigureCard';
 import { faceOf, isFigure, itemsByKey, staleFigures } from './figuresModel';
 import {
-  KEYS_LINE, STAGE_HINT, areaTitle, areasOf, cellAt, keyStep, liveFocus, marquee, moveTo, nudge, pick, selectable, spanOf,
+  KEYS_LINE, STAGE_HINT, areaTitle, areasOf, cellAt, dividerDelta, dividerReadout, dividersOf, keyStep, liveFocus, marquee,
+  moveDivider, moveTo, nudge, pick, selectable, spanOf,
 } from './gridSelection';
+import { minSizeProblem, moveOverflow, overLine, overflowOf } from './structureModel';
 
 /**
  * D1604 (#3716, pd0, pd3, pd3b, pd11) — the card on The Grid, the editor's
@@ -49,9 +51,31 @@ import {
  * a figure's store has moved on, the card says so with Refresh from records
  * (`onRefresh`). None of it is drawn on Present, share or print.
  *
- * Nothing here writes: a move is the editor's `onMove`, a refresh its
- * `onRefresh`, each held until a version is saved like every other edit.
+ * Dividers (D1513, #3765, pd12): where two blocks meet edge to edge, a violet
+ * divider (role separator) moves the edge between them by whole cells, both
+ * blocks resized in one edit (`onCard`). Arrow keys move it one cell; a
+ * pointer drags it, snapped to cells, with the readout "7 | 5 → 6 | 6".
+ * A move that would break a block's minimum ("A chart needs at least 4 × 3
+ * cells.") or overlap another block (`placementProblem`) is refused with its
+ * sentence and changes nothing. When a text block then holds fewer words than
+ * it has, the stage says "N words over" with Move overflow to notes, one edit.
+ *
+ * Nothing here writes: a move is the editor's `onMove`, a divider or an
+ * overflow its `onCard`, a refresh its `onRefresh`, each held until a version
+ * is saved like every other edit.
  */
+/** Where a divider's handle sits: the two cells either side of it, over the rows (or columns) both blocks share. */
+export function dividerBox(card, div) {
+  const a = (card?.blocks || []).find((x) => String(x.id) === div.a)?.grid;
+  const b = (card?.blocks || []).find((x) => String(x.id) === div.b)?.grid;
+  if (!a || !b) return null;
+  return div.axis === 'v'
+    ? { c1: a.c2, c2: b.c1, r1: Math.max(a.r1, b.r1), r2: Math.min(a.r2, b.r2) }
+    : { c1: Math.max(a.c1, b.c1), c2: Math.min(a.c2, b.c2), r1: a.r2, r2: b.r1 };
+}
+
+const DIVIDER_KEYS = Object.freeze({ v: { ArrowLeft: -1, ArrowRight: 1 }, h: { ArrowUp: -1, ArrowDown: 1 } });
+
 
 const MUTED = 'text-[12.5px] leading-[1.45] text-axal-muted dark:text-gray-400';
 const MONO = 'font-mono text-[10.5px] text-axal-muted dark:text-gray-400';
@@ -127,7 +151,7 @@ export function CardChrome({ chrome, pageLabel = null, colours, logo = null }) {
 export default function GridStage({
   card, index, model, colours, ink, theme, kit, charts, readOnly = false,
   selection, focus, onSelection, onMove, onAsk, askOff = null, askLine = null, items = [], onRefresh = null,
-  pageLabel = null,
+  pageLabel = null, onCard = null,
 }) {
   const aspect = aspectOf(theme?.aspect);
   const areas = useMemo(() => areasOf(card, model), [card, model]);
@@ -144,6 +168,10 @@ export default function GridStage({
   const [ghost, setGhost] = useState(null);
   const [refused, setRefused] = useState(null);
   const [box, setBox] = useState(null);
+  // Dividers: the one being dragged ({ id, delta, error }), the last readout or refusal, and a text block's overflow.
+  const [sliding, setSliding] = useState(null);
+  const [divLine, setDivLine] = useState(null);
+  const [overflow, setOverflow] = useState(null);
   const faceRef = useRef(null);
   const layer = useRef(null);
   const buttons = useRef(new Map());
@@ -158,7 +186,8 @@ export default function GridStage({
   const live = liveFocus(areas, focus);
   const stop = live ?? first;
 
-  useEffect(() => { setRefused(null); setGhost(null); }, [index]);
+  useEffect(() => { setRefused(null); setGhost(null); setSliding(null); setDivLine(null); setOverflow(null); }, [index]);
+  const dividers = useMemo(() => (areas && onCard && !readOnly ? dividersOf(card) : []), [areas, card, onCard, readOnly]);
   // The DOM focus follows the keyboard on the stage; a focus the card changed
   // under (a block now covers the focused range) never pulls it from a field.
   useEffect(() => {
@@ -259,6 +288,53 @@ export default function GridStage({
     if (!r.same) onMove?.(id, r.grid);
   };
 
+  // A divider moved by `delta` cells: one edit through `onCard`, then the overflow the smaller block now has.
+  const slide = (div, delta) => {
+    const r = moveDivider(card, div, delta, model, minSizeProblem);
+    if (r.error) { setDivLine({ error: true, text: r.error }); return; }
+    if (r.same) return;
+    setDivLine({ error: false, text: dividerReadout(card, div, delta) });
+    const over = overflowOf(r.card, div.a, aspect) || overflowOf(r.card, div.b, aspect);
+    setOverflow(over ? { id: over.id, words: over.words } : null);
+    onCard?.(r.card);
+  };
+  const divKeys = (e, div) => {
+    const step = DIVIDER_KEYS[div.axis][e.key];
+    if (!step) return;
+    e.preventDefault?.();
+    e.stopPropagation?.();
+    slide(div, step);
+  };
+  const divAt = (e, div) => {
+    const at = cellAt(e?.clientX, e?.clientY, rect(), model, { aspect });
+    return at ? dividerDelta(div, div.axis === 'v' ? at.c : at.r) : null;
+  };
+  const divDown = (e, div) => {
+    if (e?.button > 0) return;
+    e.stopPropagation?.();
+    try { e.currentTarget?.setPointerCapture?.(e.pointerId); } catch { /* the drag still works without capture */ }
+    setSliding({ id: div.id, delta: 0, error: null });
+  };
+  const divMove = (e, div) => {
+    if (sliding?.id !== div.id) return;
+    const delta = divAt(e, div);
+    if (delta == null || delta === sliding.delta) return;
+    const r = moveDivider(card, div, delta, model, minSizeProblem);
+    setSliding({ id: div.id, delta, error: r.error || null });
+  };
+  const divUp = (div) => {
+    const s = sliding;
+    setSliding(null);
+    if (s?.id !== div.id || !s.delta) return;
+    slide(div, s.delta);
+  };
+  const moveOver = () => {
+    if (!overflow) return;
+    const r = moveOverflow(card, overflow.id, aspect);
+    setOverflow(null);
+    if (!r.same) { setDivLine(null); onCard?.(r.card); }
+  };
+
   const one = chosen.length === 1 ? chosen[0] : null;
   const many = chosen.length > 1;
   const askButton = (n, testId) => (
@@ -345,6 +421,36 @@ export default function GridStage({
             })}
           </div>
         ) : <FieldedCard card={card} index={index} colours={colours} />}
+        {dividers.map((d) => {
+          const at = dividerBox(card, d);
+          if (!at) return null;
+          const v = d.axis === 'v';
+          const act = sliding?.id === d.id ? sliding : null;
+          const readout = dividerReadout(card, d, act?.delta || 0);
+          const a = (card.blocks || []).find((x) => String(x.id) === d.a);
+          const b = (card.blocks || []).find((x) => String(x.id) === d.b);
+          const size = v ? a.grid.c2 - a.grid.c1 + 1 : a.grid.r2 - a.grid.r1 + 1;
+          const total = size + (v ? b.grid.c2 - b.grid.c1 + 1 : b.grid.r2 - b.grid.r1 + 1);
+          return (
+            <span key={d.id} className="pointer-events-none z-10" style={placeOf(at, aspect)}>
+              <span role="separator" tabIndex={0} aria-orientation={v ? 'vertical' : 'horizontal'}
+                aria-label={`Divider between ${areaLabel(a.grid)} and ${areaLabel(b.grid)}`}
+                aria-valuenow={size} aria-valuemin={1} aria-valuemax={total - 1} aria-valuetext={readout}
+                onKeyDown={(e) => divKeys(e, d)}
+                onPointerDown={(e) => divDown(e, d)} onPointerMove={(e) => divMove(e, d)}
+                onPointerUp={() => divUp(d)} onPointerCancel={() => setSliding(null)}
+                className={`group pointer-events-auto absolute flex items-center justify-center outline-none ${v ? 'left-1/2 top-0 h-full w-6 -translate-x-1/2 cursor-col-resize' : 'left-0 top-1/2 h-6 w-full -translate-y-1/2 cursor-row-resize'}`}
+                data-testid={`pitch-editor-divider-${d.id}`}>
+                <span aria-hidden="true" className={`rounded-full ${act?.error ? 'bg-gray-400' : 'bg-violet-500'} ${act ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100'} ${v ? 'h-full w-[3px]' : 'h-[3px] w-full'}`} />
+                {act ? (
+                  <span className="absolute whitespace-nowrap rounded-full bg-violet-600 px-2 py-0.5 font-mono text-[10px] text-white" data-testid="pitch-editor-divider-readout">
+                    {act.error || readout}
+                  </span>
+                ) : null}
+              </span>
+            </span>
+          );
+        })}
         <CardChrome chrome={chromeOf(theme)} pageLabel={pageLabel} colours={colours} logo={kit?.data?.kit?.logo_url || null} />
         {box || ghost ? (
           <div className={`pointer-events-none ${LAYER}`} aria-hidden="true" data-testid="pitch-editor-drag-layer">
@@ -360,6 +466,14 @@ export default function GridStage({
       </div>
 
       {refused ? <span className={MUTED} role="status" data-testid="pitch-editor-drop-refused">{refused}</span> : null}
+      {divLine ? <span className={divLine.error ? MUTED : MONO} role="status" data-testid={divLine.error ? 'pitch-editor-divider-refused' : 'pitch-editor-divider-line'}>{divLine.text}</span> : null}
+      {overflow && !readOnly ? (
+        <span className={`${MUTED} flex flex-wrap items-center gap-2`} role="status" data-testid="pitch-editor-overflow">
+          <span>{overLine(overflow.words)}</span> ·
+          <button type="button" className="min-h-[36px] font-bold underline" onClick={moveOver} data-testid="pitch-editor-overflow-move">Move overflow to notes</button>
+          <span className={MONO}>One edit</span>
+        </span>
+      ) : null}
       {(() => {
         const at = (areas || []).find((x) => x.id === hover) || one;
         return at?.kind === 'block' && isFigure(at.block) ? <FigureCard block={at.block} items={items} charts={charts} /> : null;
