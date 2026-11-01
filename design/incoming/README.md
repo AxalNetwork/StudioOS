@@ -129,6 +129,33 @@ points at `/axal-mark.png`. No other value was edited.
 burn-up, item and run sheets and the compliance agenda and task sheet, behind
 `frontend/src/pages/work/workAdapter.js`, which is off until #3969–#3972 and #3976.
 Two files arrived and none left this folder.
+## Landed 2026-11-01 — The Ask panel (#3706)
+
+The owner's artifacts `6228BkjTtjxMY7C5mmMZRu` (the page, `Ask Panel Page.dc.html`)
+and `5xbqiAp2WTW3iK6JL1pGFs` (the board grid, `Ask Panel · Boards.dc.html`) were
+decoded by `scripts/read-canvas.mjs`. The grid imports the page and frames it
+as fourteen groups:
+- **AK1**, the Ask button's eight states, with their accessible names;
+- **AK2 to AK8**, the docked panel on Validate, Build, Raise, Grow, Network,
+  Research and Calendar, each with its suggested chips and proposal cards;
+- **AK9**, Studio, which keeps its own chat and has no Ask;
+- **AK10**, the Investor, Advisor and Operating Partner sections;
+- **AK11**, the admin consoles, where Ask stands alone;
+- **AK12**, the widths (1024 overlays the content only; 390 is a bottom sheet
+  at 92%);
+- **AK13**, the states (nothing to propose, running, an error, out of AI
+  tokens, AI paused, a support session with no Ask);
+- **AK14**, dark.
+
+**One edit, named.** The Axal VC mark (the export's
+`uploads/axal-logo-200x200.png`) points at `/axal-mark.png`. No other value was
+edited.
+
+**Grade: UPGRADE (D1443; the board-to-page map is D1444).** The panel and the
+connected Ask are built (`frontend/src/ui/AskPanel.jsx`, `frontend/src/ui/AskButton.jsx`'s `PageAsk`),
+mounted by `WorkerRail` for every licence. The pre-run quote and the
+"N waiting" count wait on the Worker part, D1442, and are off in
+`frontend/src/ui/askPanelAdapter.js`. Two files arrived and none left this folder.
 
 ## Landed 2026-11-01 — Profile zone headers (#3700)
 
