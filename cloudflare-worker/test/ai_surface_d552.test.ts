@@ -180,6 +180,7 @@ const FORWARDED: Record<string, string[]> = {
   'routes/eadwyn.ts': ['page'],                 // the rail's composer, the same app path (D652)
   'routes/research.ts': ['page'],               // the zone draft's app path (D404, D510)
   'services/advisor/guardrails.ts': ['surface'], // classifyInput's required parameter
+  'services/agents/agentRun.ts': ['c.surface'],  // D1496 part 2: the agent's module app path (moduleSurface), both the quote and the run
 };
 
 /** Every call site's fixed name, by file — the table D552.md lists. */

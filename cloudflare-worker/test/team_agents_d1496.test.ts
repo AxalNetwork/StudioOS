@@ -22,7 +22,9 @@ import { SignJWT } from 'jose';
 import { Hono } from 'hono';
 import { makeD1 } from './_d1_sqlite.mjs';
 import { addColumnsFrom, stripForeignKeys, tableFromBaseline } from './_baseline.mjs';
-import { AI_LOG_SCHEMA } from './_ai_budget_fixture.mjs';
+import { AI_BUDGET_MIGRATION, AI_LOG_SCHEMA } from './_ai_budget_fixture.mjs';
+import { withGuard } from './_guard_stub.mjs';
+import { __resetForTest, holdOperation } from '../src/services/aiRouter.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import teamAgents from '../src/routes/team_agents.ts';
 import { ALWAYS_ASKS_FLOOR, MODULES, ROLES, optionsIn, roleOf } from '../src/services/agents/catalogue.ts';
@@ -303,4 +305,227 @@ test('no answer carries an email: roles, list, profile, add, patch', async () =>
   const roles = (await call(w, MEMBER, 'GET', '/roles')).body.roles;
   assert.equal(roles.length, 11);
   assert.deepEqual(roles.find((r: any) => r.key === 'cfo').works_in[0], { key: 'use-of-funds', label: 'Use of funds' });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Part 2 (#3842): the agent run path, the per-agent cap and agent_id on usage.
+// The real run(): its hold, its guard (stubbed safe), its usage rows; only the
+// model is a stub. The sponsor is the company editor on a paid plan.
+// ═════════════════════════════════════════════════════════════════════════════
+
+const RUN_MODEL = '@cf/openai/gpt-oss-120b';
+const RUN_BODY = { module: 'use-of-funds', option: 'draft:raise/use-of-funds-runway', record: 'project:7', prompt: 'How long is our cash horizon?' };
+
+function runWorld(answer: (model: string, input: any) => any = () => ({ response: 'Eighteen months.', usage: { prompt_tokens: 40, completion_tokens: 10 } })) {
+  __resetForTest();
+  const w = world();
+  w.db.exec(AI_BUDGET_MIGRATION + sql('migrations/465_ai_rail_preferences.sql') + sql('migrations/510_member_ai_pauses.sql')
+    + sql('migrations/525_ai_reservation_idempotency.sql') + sql('migrations/632_ai_hold_context.sql'));
+  w.db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('founder:growth',0,0,1)").run();
+  w.db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(?,50000000)').run(EDITOR);
+  const calls: string[] = [];
+  w.env.AI = withGuard({ run: async (model: string, input: any) => { calls.push(model); return answer(model, input); } });
+  return { ...w, calls };
+}
+type RW = ReturnType<typeof runWorld>;
+async function addCfo(w: RW, cap = CAP) {
+  const r = await call(w, EDITOR, 'POST', `${CO}/agents`, cfo({ model_id: RUN_MODEL, monthly_cap_microusd: cap }));
+  assert.equal(r.status, 201, r.text);
+  return r.body.agent.uid as string;
+}
+const agentRow = (w: RW, uid: string) => w.db.prepare('SELECT * FROM team_agents WHERE uid = ?').get(uid) as any;
+const eventsOf = (w: RW, uid: string) => w.db.prepare('SELECT e.* FROM team_agent_events e JOIN team_agents a ON a.id = e.agent_id WHERE a.uid = ? ORDER BY e.id').all(uid) as any[];
+const charge = (w: RW, agentId: number, micro: number | null) => w.db.prepare(
+  "INSERT INTO ai_usage_logs (user_id, task, model, charged_microusd, agent_id) VALUES (?, 'rail_numbers', ?, ?, ?)",
+).run(EDITOR, RUN_MODEL, micro, agentId);
+
+// 9 ───────────────────────────────────────────────────────────────────────────
+test('a sponsor runs their CFO: one proposal with agent_id under the sponsor, usage rows with agent_id, a run event, the hold named agent.cfo', async () => {
+  // Mutations checked: recordUsage without agent_id → the usage asserts fail; proposeRail without agent_id →
+  // the proposal assert fails; the hold named ai.<task> → the operation assert fails.
+  const w = runWorld();
+  try {
+    const uid = await addCfo(w);
+    const r = await call(w, EDITOR, 'POST', `/agents/${uid}/run`, RUN_BODY);
+    assert.equal(r.status, 200, r.text);
+    assert.deepEqual(w.calls.filter((m) => m !== '@cf/meta/llama-guard-3-8b'), [RUN_MODEL], 'the agent\'s own model ran, once');
+    const a = agentRow(w, uid);
+    const rows = w.db.prepare('SELECT * FROM ai_usage_logs ORDER BY id').all() as any[];
+    assert.ok(rows.length >= 1);
+    for (const row of rows) {
+      assert.equal(row.agent_id, a.id, `usage row ${row.id} (${row.task}) names the agent`);
+      assert.equal(row.user_id, EDITOR, 'charged to the sponsor');
+    }
+    const run = rows.find((x) => x.task === 'rail_numbers');
+    assert.equal(run.rail_page, 'Founder · Raise · Use of funds');
+    assert.equal(run.rail_option, 'draft:raise/use-of-funds-runway');
+    assert.equal(run.record_ref, 'project:7');
+    assert.equal(run.surface, '/raise/use-of-funds', 'D552: the module\'s own page');
+    const p = w.db.prepare('SELECT * FROM ai_rail_proposals').get() as any;
+    assert.equal(p.agent_id, a.id);
+    assert.equal(p.user_id, EDITOR, 'the proposal is the sponsor\'s row');
+    assert.equal(p.status, 'proposed');
+    assert.equal(p.usage_log_id, run.id);
+    assert.equal(r.body.proposal.uid, p.uid);
+    assert.deepEqual(r.body.charged, { available: true, value_microusd: rows.reduce((s, x) => s + x.charged_microusd, 0) });
+    const hold = w.db.prepare('SELECT operation, surface FROM ai_budget_reservations').get() as any;
+    assert.deepEqual({ ...hold }, { operation: 'agent.cfo', surface: 'ai' });
+    const ev = eventsOf(w, uid).find((e) => e.kind === 'run');
+    assert.equal(ev.usage_log_id, run.id);
+    assert.equal(ev.proposal_uid, p.uid);
+    assert.equal(ev.actor_user_id, EDITOR);
+    assert.ok(!String(ev.detail_json).includes('horizon'), 'the prompt is never written to an event');
+    // The profile fills month_spend and the run event from these writes.
+    const prof = await call(w, EDITOR, 'GET', `/agents/${uid}`);
+    assert.deepEqual(prof.body.month_spend, r.body.charged);
+    assert.equal(prof.body.events[0].kind, 'run');
+    assert.equal(prof.body.events[0].proposal_uid, p.uid);
+    noPrivateKeys(r.text); noPrivateKeys(prof.text);
+  } finally { w.db.close(); }
+});
+
+// 10 ──────────────────────────────────────────────────────────────────────────
+test('only the sponsor runs it; a module outside works_in and an option outside may_propose are refused, with a refused event and no model call', async () => {
+  // Mutations checked: the works_in check dropped → module_not_allowed fails; the may_propose check dropped →
+  // option_not_allowed fails; the sponsor test dropped → the not_sponsor assert fails.
+  const w = runWorld();
+  try {
+    const uid = await addCfo(w);
+    const other = await call(w, FREE_EDITOR, 'POST', `/agents/${uid}/run`, RUN_BODY);
+    assert.equal(other.status, 403); assert.equal(other.body.error, 'not_sponsor');
+    assert.equal((await call(w, STRANGER, 'POST', `/agents/${uid}/run`, RUN_BODY)).status, 404, 'outside the team it does not exist');
+    const mod = await call(w, EDITOR, 'POST', `/agents/${uid}/run`, { ...RUN_BODY, module: 'distribution' });
+    assert.equal(mod.status, 403); assert.equal(mod.body.error, 'module_not_allowed');
+    const opt = await call(w, EDITOR, 'POST', `/agents/${uid}/run`, { ...RUN_BODY, option: 'draft:update' });
+    assert.equal(opt.status, 403); assert.equal(opt.body.error, 'option_not_allowed');
+    // An option the module offers that the rule book does not list.
+    const unlisted = await call(w, EDITOR, 'POST', `/agents/${uid}/run`, { ...RUN_BODY, option: 'form:uof-milestone-wording' });
+    assert.equal(unlisted.status, 403); assert.equal(unlisted.body.error, 'option_not_allowed');
+    // An option the rule book lists, but in a module that does not offer it.
+    const elsewhere = await call(w, EDITOR, 'POST', `/agents/${uid}/run`, { ...RUN_BODY, module: 'cap-table' });
+    assert.equal(elsewhere.status, 403); assert.equal(elsewhere.body.error, 'option_not_allowed');
+    assert.equal((await call(w, EDITOR, 'POST', `/agents/${uid}/run`, { ...RUN_BODY, prompt: '  ' })).body.error, 'invalid_prompt');
+    assert.deepEqual(w.calls, [], 'nothing ran, not even the guard');
+    assert.equal(w.db.prepare('SELECT COUNT(*) AS n FROM ai_usage_logs').get().n, 0);
+    assert.deepEqual(eventsOf(w, uid).filter((e) => e.kind === 'refused').map((e) => JSON.parse(e.detail_json).code),
+      ['module_not_allowed', 'option_not_allowed', 'option_not_allowed', 'option_not_allowed', 'invalid_prompt']);
+    // A paused agent.
+    await call(w, EDITOR, 'PATCH', `/agents/${uid}`, { status: 'paused' });
+    const paused = await call(w, EDITOR, 'POST', `/agents/${uid}/run`, RUN_BODY);
+    assert.equal(paused.status, 403); assert.equal(paused.body.error, 'agent_paused');
+  } finally { w.db.close(); }
+});
+
+// 11 ──────────────────────────────────────────────────────────────────────────
+test('the cap: one micro-dollar under runs; exactly at the cap is 402 agent_cap_reached and pauses it with cap; a failed spend read refuses', async () => {
+  // Mutations checked: `>=` turned `>` → the at-the-cap run is let through; the spend read as
+  // COALESCE(SUM(...), 0) with unrecorded rows ignored → the unreadable case runs.
+  const w = runWorld();
+  try {
+    const uid = await addCfo(w, 1_000_000);
+    const a = agentRow(w, uid);
+    charge(w, a.id, 999_999);
+    const under = await call(w, EDITOR, 'GET', `/agents/${uid}/run/quote?module=use-of-funds&option=draft:raise/use-of-funds-runway`);
+    assert.equal(under.status, 200, under.text);
+    w.db.prepare('UPDATE ai_usage_logs SET charged_microusd = 1000000 WHERE agent_id = ?').run(a.id);
+    const at = await call(w, EDITOR, 'POST', `/agents/${uid}/run`, RUN_BODY);
+    assert.equal(at.status, 402); assert.equal(at.body.error, 'agent_cap_reached');
+    assert.equal(agentRow(w, uid).status, 'paused'); assert.equal(agentRow(w, uid).paused_reason, 'cap');
+    assert.ok(eventsOf(w, uid).some((e) => e.kind === 'paused' && JSON.parse(e.detail_json).reason === 'cap'));
+    assert.deepEqual(w.calls, []);
+    // Resumed with a higher cap, but a charge that is not recorded: the spend is unknown, so it does not run.
+    await call(w, EDITOR, 'PATCH', `/agents/${uid}`, { status: 'active', monthly_cap_microusd: 5_000_000 });
+    charge(w, a.id, null);
+    const unknown = await call(w, EDITOR, 'POST', `/agents/${uid}/run`, RUN_BODY);
+    assert.equal(unknown.status, 503); assert.equal(unknown.body.error, 'agent_spend_unreadable');
+    assert.equal(agentRow(w, uid).status, 'active', 'an unreadable spend refuses the run; it does not pause the agent');
+    // A read that throws refuses too.
+    w.db.prepare('DELETE FROM ai_usage_logs WHERE charged_microusd IS NULL').run();
+    const prepare = w.env.DB.prepare.bind(w.env.DB);
+    w.env.DB.prepare = (q: string) => { if (/FROM ai_usage_logs WHERE agent_id/.test(q)) throw new Error('D1 down'); return prepare(q); };
+    const threw = await call(w, EDITOR, 'POST', `/agents/${uid}/run`, RUN_BODY);
+    assert.equal(threw.body.error, 'agent_spend_unreadable');
+    assert.deepEqual(w.calls, []);
+  } finally { w.db.close(); }
+});
+
+// 12 ──────────────────────────────────────────────────────────────────────────
+test('a sponsor who left the company: the run is 403 sponsor_lost_access and the agent is paused sponsor_left', async () => {
+  // Mutation checked: the sponsor's manage gate removed → the run goes ahead and the asserts fail.
+  const w = runWorld();
+  try {
+    const uid = await addCfo(w);
+    w.db.prepare('DELETE FROM user_company_links WHERE user_id = ?').run(EDITOR);
+    const r = await call(w, EDITOR, 'POST', `/agents/${uid}/run`, RUN_BODY);
+    // Outside the team, the agent is not theirs to see: the route says so before the run's own gate.
+    assert.equal(r.status, 404);
+    // Still a member, no longer an editor: the run's own gate pauses it.
+    w.db.prepare("INSERT INTO user_company_links (uid, user_id, company_id, role_in_company) VALUES ('l9', ?, 1, 'Member')").run(EDITOR);
+    const demoted = await call(w, EDITOR, 'POST', `/agents/${uid}/run`, RUN_BODY);
+    assert.equal(demoted.status, 403); assert.equal(demoted.body.error, 'sponsor_lost_access');
+    assert.equal(agentRow(w, uid).status, 'paused'); assert.equal(agentRow(w, uid).paused_reason, 'sponsor_left');
+    const ev = eventsOf(w, uid);
+    assert.ok(ev.some((e) => e.kind === 'paused' && JSON.parse(e.detail_json).reason === 'sponsor_left'));
+    assert.ok(ev.some((e) => e.kind === 'refused' && JSON.parse(e.detail_json).code === 'sponsor_lost_access'));
+    assert.deepEqual(w.calls, []);
+  } finally { w.db.close(); }
+});
+
+// 13 ──────────────────────────────────────────────────────────────────────────
+test('run() refusals pass through in their own words; the quote is an upper bound, and available: false when it cannot be read', async () => {
+  const w = runWorld();
+  try {
+    const uid = await addCfo(w);
+    const q = await call(w, EDITOR, 'GET', `/agents/${uid}/run/quote?module=use-of-funds&option=draft:raise/use-of-funds-runway`);
+    assert.equal(q.status, 200, q.text);
+    assert.equal(q.body.quote.available, true);
+    assert.ok(Number.isSafeInteger(q.body.quote.value_microusd) && q.body.quote.value_microusd > 0);
+    assert.equal(w.db.prepare('SELECT COUNT(*) AS n FROM ai_budget_reservations').get().n, 0, 'a quote holds nothing');
+    // The sponsor turned AI assistance off on the module's page: run()'s own refusal and words.
+    w.db.prepare("INSERT INTO ai_rail_preferences(uid,user_id,section,task,mode) VALUES('off',?,'founder · raise · use of funds','','manual')").run(EDITOR);
+    const off = await call(w, EDITOR, 'POST', `/agents/${uid}/run`, RUN_BODY);
+    assert.equal(off.status, 403); assert.equal(off.body.error, 'assist_off');
+    assert.equal(off.body.message, 'AI assistance is off on this page.');
+    assert.ok(eventsOf(w, uid).some((e) => e.kind === 'refused' && JSON.parse(e.detail_json).code === 'assist_off'));
+    w.db.prepare("DELETE FROM ai_rail_preferences").run();
+    // The price cannot be worked out (the sponsor's multiplier is unreadable): available false, never 0.
+    w.env.AI_BILLING = 'charged';
+    const prepare = w.env.DB.prepare.bind(w.env.DB);
+    // Armed once the run's checks read the rule book, so signing in still reads the caller.
+    let armed = false;
+    w.env.DB.prepare = (q: string) => {
+      if (/FROM team_rulebooks/.test(q)) armed = true;
+      if (armed && q === 'SELECT * FROM users WHERE id = ?') throw new Error('down');
+      return prepare(q);
+    };
+    const broken = await call(w, EDITOR, 'GET', `/agents/${uid}/run/quote?module=use-of-funds&option=draft:raise/use-of-funds-runway`);
+    assert.equal(broken.status, 200, broken.text);
+    assert.deepEqual(broken.body.quote, { available: false });
+  } finally { w.db.close(); }
+});
+
+// 14 ──────────────────────────────────────────────────────────────────────────
+test('roles lists the models an agent may run on, and plan_locked agrees with the add route', async () => {
+  const w = world();
+  try {
+    const paid = (await call(w, EDITOR, 'GET', '/roles')).body.models as any[];
+    assert.ok(paid.length > 3);
+    const llama = paid.find((m) => m.id === MODEL);
+    assert.deepEqual(llama, { id: MODEL, label: 'llama-3.3-70b-instruct-fp8-fast', kind: 'Text Generation', beta: false, plan_locked: false });
+    assert.ok(!paid.some((m) => m.id === '@cf/black-forest-labs/flux-1-schnell'), 'only text models');
+    for (const m of paid) {
+      const r = await call(w, EDITOR, 'POST', `${CO}/agents`, { ...cfo({ model_id: m.id }), role_key: 'cto' });
+      assert.equal(r.status === 201, !m.plan_locked, `${m.id}: listed ${m.plan_locked ? 'locked' : 'open'}, added ${r.status}`);
+      if (r.status === 201) await call(w, EDITOR, 'DELETE', `/agents/${r.body.agent.uid}`);
+    }
+    // A free plan sees every model locked.
+    assert.ok(((await call(w, FREE_EDITOR, 'GET', '/roles')).body.models as any[]).every((m) => m.plan_locked));
+  } finally { w.db.close(); }
+});
+
+test('holdOperation: an agent run is agent.<role> on the ai surface; anything else is ai.<task>', () => {
+  assert.equal(holdOperation({ task: 'rail_numbers', agentId: 4, agentRole: 'cfo' }), 'agent.cfo');
+  assert.equal(holdOperation({ task: 'rail_numbers' }), 'ai.rail_numbers');
+  assert.equal(holdOperation({ task: 'rail_numbers', agentId: 4, agentRole: 'Bad Role!' }), 'ai.rail_numbers');
+  assert.equal(holdOperation({ task: 'rail_numbers', agentId: 0, agentRole: 'cfo' }), 'ai.rail_numbers');
 });

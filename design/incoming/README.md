@@ -111,6 +111,50 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-11-01 — Team › Agents › Skills (#3945)
+
+The owner's two artifacts for #3945's consolidated prompt (boards SK0–SK9),
+decoded by `scripts/read-canvas.mjs`:
+- `Agent Skills Page.dc.html` is the page, one frame per `v` value (`sk0` to
+  `sk9b`, `ph1`, `ph2`, `tab`; a `-d` suffix is dark);
+- `Agent Skills · Boards.dc.html` is the board grid "Skills for AI agents",
+  SK0 to SK9 (10 sections, 18 frames). It imports the page by name.
+
+**One edit, named.** The Axal VC mark (the export's
+`uploads/axal-logo-200x200.png`) points at `/axal-mark.png`, as in the earlier
+Team and Pitch intakes. No other value was edited.
+
+**Grade: NEW (D1612).** Skills is a new tab of the Team page (D1497), between
+People and agents and Roles and rule books, plus a Skills and Values card on
+the agent profile, a Skills step in Add an AI agent, and Team coverage on
+People and agents. Every read and write goes through
+`frontend/src/pages/team/agentsAdapter.js` and stays unavailable until A1
+(#3951) and A2 (#3956) land their routes.
+## Landed 2026-11-01 — Calendar: AI agent sessions (#3723)
+
+The owner's artifacts `Bj7uoUqbMzkksEDU1XdUYK` (the page) and
+`HQTr1DAQrsQx3Eb6eagVQn` (the board grid) were re-exported for #3723 and
+decoded by `scripts/read-canvas.mjs`. They replace the pair that landed
+2026-10-25 under #2420 (below), which they contain unchanged. What they add:
+- board **CAL1b**, Ask beside New;
+- the field triggers "Ask Eadwyn to fill …";
+- the Eadwyn spine;
+- the addendum **"A sixth source family: AI agents"**: AG8 (Schedule an AI
+  agent, and its drag-on-a-slot form), AG9 and AG9D (agent blocks on the week
+  and the day), AG10 and AG10B (the session sheet and the meeting brief), AG11
+  and AG11P (the states, and the phone), and AG9-D and AG10-D (dark).
+
+**One edit, named.** The Axal VC mark (the export's
+`uploads/axal-logo-200x200.png`) points at `/axal-mark.png`. No other value was
+edited.
+
+**Grade: UPGRADE (D1613).** The agent sessions are built behind
+`frontend/src/pages/calendarAgentsAdapter.js`, which is off until #3957's
+routes land. The rail's source legend now names modules, not tables. The Ask
+button is mounted the way Team mounts it: it draws nothing until #3706's Ask
+panel exists. Two files were replaced and none left, so the folder counts above
+do not move.
+
 ## Landed 2026-10-31 — Pitch deck studio v2 (#3716)
 
 The owner's two exports for #3716's v2 prompt arrived unpacked (the page's and

@@ -2,6 +2,7 @@ import React from 'react';
 import { NOT_RECORDED, blockLabel, tileValue } from './editorModel';
 import { SOURCE_NOT_RECORDED, chartLabel, objectPosition, sourceOf } from './presentExportModel';
 import { faceOf, projectionOf } from './figuresModel';
+import { aspectOf, placeOf } from './gridModel';
 
 export { gridBlocks } from './presentExportModel';
 
@@ -113,26 +114,29 @@ export function BlockView({ block: b, colours, live = false, sources = false, si
 }
 
 /**
- * The grid itself, inside a 16:9 face the caller draws. `onSelect` makes each
- * block a button (the editor); without it each block is a plain cell.
+ * The grid itself, inside a 16:9 or 4:3 face the caller draws (`aspect`, the
+ * theme's). D1499 (#3749): every block is placed with `gridModel.placeOf`,
+ * `boxOf` as a share of the slide, so the editor, Present and print draw the
+ * same boxes at any size; there is no CSS gap or padding, on screen or in
+ * print. `onSelect` makes each block a button (the editor); without it each
+ * block is a plain cell.
  */
-export function BlockGrid({ blocks, colours, live = false, sources = false, size = 'card', selected = null, onSelect = null, testId = 'deck-blocks', renderChart = null }) {
-  const gap = size === 'print' ? 'gap-6 p-[3%]' : 'gap-2 p-[3%]';
+export function BlockGrid({ blocks, colours, live = false, sources = false, size = 'card', selected = null, onSelect = null, testId = 'deck-blocks', renderChart = null, aspect = '16:9' }) {
   return (
-    <div className={`absolute inset-0 grid ${gap}`} style={{ gridTemplateColumns: 'repeat(12, minmax(0, 1fr))', gridTemplateRows: 'repeat(6, minmax(0, 1fr))' }} data-testid={testId}>
+    <div className="absolute inset-0" data-aspect={aspectOf(aspect)} data-testid={testId}>
       {blocks.map((b) => {
-        const at = { gridColumn: `${b.grid.c1} / ${b.grid.c2 + 1}`, gridRow: `${b.grid.r1} / ${b.grid.r2 + 1}` };
+        const at = placeOf(b.grid, aspect);
         const inner = <BlockView block={b} colours={colours} live={live} sources={sources} size={size} renderChart={renderChart} />;
         if (onSelect) {
           return (
             <button type="button" key={b.id}
-              className={`relative min-h-0 min-w-0 overflow-hidden rounded-[8px] p-1.5 text-left ${selected === b.id ? 'outline outline-2 outline-violet-500' : 'outline outline-1 outline-dashed outline-black/10'}`}
+              className={`min-h-0 min-w-0 overflow-hidden rounded-[8px] p-1.5 text-left ${selected === b.id ? 'outline outline-2 outline-violet-500' : 'outline outline-1 outline-dashed outline-black/10'}`}
               style={at} onClick={() => onSelect(b.id)} aria-label={blockLabel(b)} data-testid={`pitch-editor-block-${b.id}`}>
               {inner}
             </button>
           );
         }
-        return <div key={b.id} className="relative min-h-0 min-w-0 overflow-hidden p-1" style={at} data-testid={`deck-block-${b.id}`}>{inner}</div>;
+        return <div key={b.id} className="min-h-0 min-w-0 overflow-hidden p-1" style={at} data-testid={`deck-block-${b.id}`}>{inner}</div>;
       })}
     </div>
   );
