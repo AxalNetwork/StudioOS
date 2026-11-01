@@ -19,6 +19,7 @@ async function mount(room, file = {}, onChanged = () => {}) {
   const find = id => nodes(host).find(n => props(n)['data-testid'] === id);
   const text = n => n?.nodeType === 3 ? n.textContent : n?.childNodes?.length ? n.childNodes.map(text).join('') : n?.textContent || '';
   return { has: id => !!find(id), text: () => text(host), prop: (id, key) => props(find(id))[key],
+    async update(nextFile) { await act(async () => root.render(React.createElement(DataRoomDeckSource, { room, file: { uid: 'f/a', ...nextFile }, projectUid: 'p/a', onChanged }))); },
     async do(id, action = 'onClick') { const n = find(id); assert.ok(n, id); await act(async () => props(n)[action]()); },
     async close() { await act(async () => root.unmount()); restore(); } };
 }
@@ -29,6 +30,19 @@ test('owner opts in only on an available route; cofounder cannot change it, extr
   const co = await mount({ role: 'cofounder', deck_sources_available: true }, { deck_source: true, extraction: { state: 'done' } });
   try { assert.equal(co.prop('dataroom-deck-source-toggle', 'disabled'), true); assert.ok(co.text().includes('Document · Sourced')); } finally { await co.close(); }
   assert.deepEqual(['queued', 'done', 'no_values', 'unreadable'].map(extractionLabel), ['Queued for extraction', 'Document · Sourced', 'No supported values found', 'Extraction unreadable — try again']);
+});
+
+test('polling stops as soon as the server reports a recoverable unreadable extraction', async () => {
+  const real = { set: globalThis.setInterval, clear: globalThis.clearInterval }, timers = [], cleared = [];
+  globalThis.setInterval = (fn, delay) => { timers.push({ fn, delay }); return 42; };
+  globalThis.clearInterval = id => cleared.push(id);
+  const ui = await mount({ role: 'owner', deck_sources_available: true }, { deck_source: true, extraction: { state: 'queued' } });
+  try {
+    assert.equal(timers.length, 1); assert.equal(timers[0].delay, 5000);
+    await ui.update({ deck_source: true, extraction: { state: 'unreadable' } });
+    assert.deepEqual(cleared, [42]); assert.equal(timers.length, 1);
+    assert.ok(ui.text().includes('Try extraction again'));
+  } finally { await ui.close(); globalThis.setInterval = real.set; globalThis.clearInterval = real.clear; }
 });
 
 test('typed quote remains in the dialog, holds are shown before confirmation, and only confirmed quote is resent', async () => {

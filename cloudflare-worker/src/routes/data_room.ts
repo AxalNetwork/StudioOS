@@ -979,7 +979,7 @@ r.put('/:projectUid/files/:uid/deck-source', async (c) => {
     if (!body.enabled) {
       await c.env.DB.batch([
         c.env.DB.prepare(`UPDATE data_room_files SET deck_source = 0, deck_source_token = NULL, deck_extract_state = NULL,
-          deck_extract_started_at = NULL, deck_source_as_of = NULL, deck_source_user_id = NULL, deck_source_quote = NULL WHERE id = ? AND project_id = ?`).bind(file.id, room.project.id),
+          deck_extract_started_at = NULL, deck_extract_queued_at = NULL, deck_source_as_of = NULL, deck_source_user_id = NULL, deck_source_quote = NULL WHERE id = ? AND project_id = ?`).bind(file.id, room.project.id),
         c.env.DB.prepare('DELETE FROM dataroom_deck_values WHERE project_id = ? AND file_uid = ?').bind(room.project.id, file.uid),
       ]);
     } else {

@@ -207,6 +207,7 @@ test('replacing and making a version current invalidate and enqueue atomically; 
 });
 
 test('code readers reject ambiguous, missing and formula-only values and never turn a missing value into zero', () => {
+  assert.deepEqual(valuesFromRows(csvRows('Metric,2026,2027\nRevenue,1000000,1200000\nNotes,2028'), null).map(v => v.value), [1200000], 'a date in a note cannot change the selected forecast column');
   assert.deepEqual(valuesFromRows(csvRows('Revenue 2027,"1,200,000"\nHeadcount,2027'), null).map(v => v.value), [1200000, 2027]);
   assert.deepEqual(valuesFromRows(csvRows('Revenue,\nHeadcount,=HYPERLINK("https://example.test")\nSigned contracts,0'), null).map(v => v.value), [0]);
   assert.deepEqual(valuesFromRows(csvRows('Revenue,1,2\nSigned contracts,3\nSigned contracts,4'), null), []);
@@ -256,4 +257,72 @@ test('a Word page beyond the input ceiling cannot become a citation', async () =
     assert.ok(!f.calls[0].input.messages.find((m: any) => m.role === 'user').content.includes('Revenue: 1200000'));
     assert.deepEqual(f.values(), []);
   } finally { f.db.close(); }
+});
+
+test('the character ceiling drops a partial numeric row instead of citing a truncated figure', async () => {
+  const f = await fixture('docx', '[{"slot":"dataroom.revenue_plan","value":120,"unit":"usd","page":1}]');
+  try {
+    f.objects.set('data-room/p-room/current', office({
+      'word/document.xml': `<w:document><w:body><w:p>${'x'.repeat(15981)}\nRevenue:1200000</w:p></w:body></w:document>`,
+      'docProps/app.xml': '<Properties><Pages>1</Pages></Properties>',
+    }));
+    const q = await f.request(); await f.request(1, { enabled: true, confirm_quote: q.body.quote.confirm_quote });
+    await extractDataroomFile(f.env, f.payload());
+    assert.equal(f.calls.length, 1); assert.deepEqual(f.values(), []);
+    assert.ok(!f.calls[0].input.messages.find((m: any) => m.role === 'user').content.includes('Revenue:120'));
+  } finally { f.db.close(); }
+});
+
+test('a never-started or abandoned job becomes recoverable, stops polling and cannot run late', async () => {
+  const f = await fixture();
+  try {
+    await f.request(); const old = f.payload();
+    const file = (await sourceFile(f.env, 7, 'file-a'))!;
+    assert.equal(sourceState({ ...file, deck_extract_queued_at: new Date(Date.now() - 31 * 60_000).toISOString() }).extraction.state, 'unreadable');
+    assert.equal(sourceState({ ...file, deck_extract_started_at: new Date(Date.now() - 6 * 60_000).toISOString() }).extraction.state, 'unreadable');
+    assert.equal(sourceState(file).extraction.state, 'queued');
+    f.db.prepare('UPDATE data_room_files SET deck_extract_queued_at = ? WHERE id = 11').run(new Date(Date.now() - 31 * 60_000).toISOString());
+    const room = await f.request(1, {}, 'room', 'GET');
+    assert.equal(room.body.files[0].extraction.state, 'unreadable');
+    await extractDataroomFile(f.env, old);
+    assert.deepEqual([f.reads, f.values()], [[], []]);
+    assert.equal((await sourceFile(f.env, 7, 'file-a'))!.deck_extract_state, 'unreadable');
+    await f.request(); assert.notEqual(f.payload().token, old.token);
+    await extractDataroomFile(f.env, f.payload());
+    assert.equal((await sourceFile(f.env, 7, 'file-a'))!.deck_extract_state, 'done');
+  } finally { f.db.close(); }
+});
+
+test('a replacement by a cofounder stays within the owner-approved ceiling and never changes the payer', async () => {
+  const f = await fixture('pdf');
+  try {
+    const q = await f.request(); await f.request(1, { enabled: true, confirm_quote: q.body.quote.confirm_quote });
+    await extractDataroomFile(f.env, f.payload());
+    await replaceDataRoomFile(f.env, { project: { id: 7, uid: 'p-room' }, userId: 3, fileId: 11, bytes: f.objects.get('data-room/p-room/current')!, contentType: 'application/pdf' });
+    await extractDataroomFile(f.env, f.payload());
+    const logs = f.db.prepare("SELECT user_id,charged_microusd FROM ai_usage_logs WHERE task = 'rail_synth'").all() as any[];
+    assert.equal(logs.length, 2); assert.ok(logs.every(r => r.user_id === 1 && r.charged_microusd <= q.body.quote.hold_microusd));
+    await replaceDataRoomFile(f.env, { project: { id: 7, uid: 'p-room' }, userId: 3, fileId: 11, bytes: f.objects.get('data-room/p-room/current')!, contentType: 'application/pdf' });
+    const approval = JSON.parse((await sourceFile(f.env, 7, 'file-a'))!.deck_source_quote!); approval.hold_microusd = 0;
+    f.db.prepare('UPDATE data_room_files SET deck_source_quote = ? WHERE id = 11').run(JSON.stringify(approval));
+    const reads = f.reads.length; await extractDataroomFile(f.env, f.payload());
+    assert.equal(f.reads.length, reads); assert.equal(f.calls.length, 2);
+    assert.equal((await sourceFile(f.env, 7, 'file-a'))!.deck_extract_state, 'unreadable');
+  } finally { f.db.close(); }
+});
+
+test('migration cascades file/project values and clears an erased approver without blocking account deletion', () => {
+  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: true });
+  try {
+    db.exec('CREATE TABLE users(id INTEGER PRIMARY KEY); CREATE TABLE projects(id INTEGER PRIMARY KEY); CREATE TABLE data_room_files(uid TEXT UNIQUE, project_id INTEGER);');
+    db.exec(readFileSync(new URL('migrations/753_dataroom_deck_values.sql', root), 'utf8'));
+    db.exec("INSERT INTO users VALUES(1); INSERT INTO projects VALUES(7); INSERT INTO data_room_files(uid,project_id,deck_source_user_id) VALUES('file-a',7,1);");
+    const put = () => db.exec("INSERT INTO dataroom_deck_values(project_id,file_uid,file_version,slot,value,unit,page,as_of,extracted_by) VALUES(7,'file-a',1,'dataroom.revenue_plan',1200000,'usd',1,'2026-10-25','code')");
+    put(); db.exec('DELETE FROM users WHERE id = 1');
+    assert.equal((db.prepare("SELECT deck_source_user_id FROM data_room_files WHERE uid = 'file-a'").get() as any).deck_source_user_id, null);
+    db.exec("DELETE FROM data_room_files WHERE uid = 'file-a'");
+    assert.equal((db.prepare('SELECT COUNT(*) n FROM dataroom_deck_values').get() as any).n, 0);
+    db.exec("INSERT INTO data_room_files(uid,project_id) VALUES('file-a',7)"); put(); db.exec('DELETE FROM projects WHERE id = 7');
+    assert.equal((db.prepare('SELECT COUNT(*) n FROM dataroom_deck_values').get() as any).n, 0);
+  } finally { db.close(); }
 });

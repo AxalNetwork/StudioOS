@@ -4,13 +4,13 @@ import type { Env } from '../../types';
 import { quoteRun, run, type RunOptions } from '../aiRouter';
 import { AI_SURFACE } from '../aiSurfaces';
 import { untrustedBlock, withUntrustedRule, unrecordedLinks } from '../ai/untrusted';
-import { checkedDocumentValues, csvRows, DATAROOM_SLOTS, DOCUMENT_TEXT_MAX, docxPages, valuesFromRows, xlsxValues, type DocumentPage, type DocumentValue } from './dataroomFormats';
+import { checkedDocumentValues, clipDocumentText, csvRows, DATAROOM_SLOTS, DOCUMENT_TEXT_MAX, docxPages, valuesFromRows, xlsxValues, type DocumentPage, type DocumentValue } from './dataroomFormats';
 
 export type SourceFile = {
   id: number; uid: string; project_id: number; r2_key: string; name: string; content_type: string | null;
   deck_source: number; deck_source_revision: number; deck_source_token: string | null;
   deck_extract_state: 'queued' | 'done' | 'no_values' | 'unreadable' | null;
-  deck_extract_started_at: string | null; deck_source_as_of: string | null;
+  deck_extract_started_at: string | null; deck_extract_queued_at: string | null; deck_source_as_of: string | null;
   deck_source_user_id: number | null; deck_source_quote: string | null;
 };
 type ApprovedQuote = { model: string; hold_microusd: number };
@@ -39,8 +39,9 @@ export async function sourceFile(env: Env, projectId: number, uid: string): Prom
   return env.DB.prepare('SELECT * FROM data_room_files WHERE uid = ? AND project_id = ?').bind(uid, projectId).first<SourceFile>();
 }
 export function sourceState(file: SourceFile) {
-  const abandoned = file.deck_extract_state === 'queued' && file.deck_extract_started_at != null
-    && Date.now() - Date.parse(file.deck_extract_started_at) > 300_000;
+  const since = file.deck_extract_started_at ?? file.deck_extract_queued_at;
+  const abandoned = file.deck_extract_state === 'queued' && since != null
+    && Date.now() - Date.parse(since) > (file.deck_extract_started_at ? 300_000 : 1_800_000);
   return { uid: file.uid, deck_source: !!file.deck_source, extraction: { state: abandoned ? 'unreadable' : file.deck_extract_state ?? 'no_values', as_of: file.deck_source_as_of } };
 }
 function boundedPages(pages: DocumentPage[]): DocumentPage[] {
@@ -48,8 +49,10 @@ function boundedPages(pages: DocumentPage[]): DocumentPage[] {
   for (const p of pages) {
     const overhead = `PAGE ${p.page}\n`.length + (out.length ? 1 : 0);
     if (remaining <= overhead) break;
-    const text = p.text.slice(0, remaining - overhead);
+    const clipped = p.text.length > remaining - overhead;
+    const text = clipDocumentText(p.text, remaining - overhead);
     out.push({ page: p.page, text }); remaining -= overhead + text.length;
+    if (clipped) break;
   }
   return out;
 }
@@ -63,7 +66,7 @@ function options(file: SourceFile, userId: number, pages: DocumentPage[], model?
     messages: [{ role: 'user', content: untrustedBlock('data_room_document', text) }],
   };
 }
-const ceilingOptions = (file: SourceFile, userId: number, model?: string) => options(file, userId, [{ page: 1, text: 'x'.repeat(DOCUMENT_TEXT_MAX) }], model);
+const ceilingOptions = (file: SourceFile, userId: number, model?: string) => options(file, userId, [{ page: 1, text: 'x'.repeat(DOCUMENT_TEXT_MAX - 'PAGE 1\n'.length) }], model);
 async function digest(text: string) {
   return [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))].map(n => n.toString(16).padStart(2, '0')).join('');
 }
@@ -81,9 +84,9 @@ export async function enableSource(env: Env, file: SourceFile, userId: number, q
   const payload = JSON.stringify({ project_id: file.project_id, file_uid: file.uid, token });
   const result = await env.DB.batch([
     env.DB.prepare(`UPDATE data_room_files SET deck_source = 1, deck_source_token = ?, deck_extract_state = 'queued',
-       deck_extract_started_at = NULL, deck_source_as_of = NULL, deck_source_user_id = ?, deck_source_quote = ?
+       deck_extract_started_at = NULL, deck_source_as_of = NULL, deck_source_user_id = ?, deck_source_quote = ?, deck_extract_queued_at = ?
        WHERE id = ? AND project_id = ? AND r2_key = ? AND deck_source_revision = ?`)
-      .bind(token, userId, quote ? JSON.stringify(quote) : null, file.id, file.project_id, file.r2_key, file.deck_source_revision),
+      .bind(token, userId, quote ? JSON.stringify(quote) : null, new Date().toISOString(), file.id, file.project_id, file.r2_key, file.deck_source_revision),
     env.DB.prepare(`DELETE FROM dataroom_deck_values WHERE file_uid = ? AND project_id = ?
       AND EXISTS (SELECT 1 FROM data_room_files WHERE id = ? AND deck_source_token = ?)`)
       .bind(file.uid, file.project_id, file.id, token),
@@ -100,9 +103,10 @@ export function resetSourceStatements(env: Env, fileId: number, projectId: numbe
   return [
     env.DB.prepare(`UPDATE data_room_files SET deck_source_revision = deck_source_revision + 1, deck_source_token = CASE WHEN deck_source = 1 THEN ? ELSE NULL END,
       deck_extract_state = CASE WHEN deck_source = 1 THEN 'queued' ELSE NULL END,
-      deck_extract_started_at = NULL, deck_source_as_of = NULL WHERE id = ? AND project_id = ? AND r2_key = ?
+      deck_extract_started_at = NULL, deck_source_as_of = NULL, deck_extract_queued_at = CASE WHEN deck_source = 1 THEN ? ELSE NULL END
+      WHERE id = ? AND project_id = ? AND r2_key = ?
       AND (? IS NULL OR deck_source_token = ?)`)
-      .bind(token, fileId, projectId, currentKey, expectedToken, expectedToken),
+      .bind(token, new Date().toISOString(), fileId, projectId, currentKey, expectedToken, expectedToken),
     env.DB.prepare(`DELETE FROM dataroom_deck_values WHERE project_id = ? AND file_uid IN
       (SELECT uid FROM data_room_files WHERE id = ? AND project_id = ? AND r2_key = ? AND (deck_source_token = ? OR deck_source = 0))`)
       .bind(projectId, fileId, projectId, currentKey, token),
@@ -122,8 +126,10 @@ async function documentPages(env: Env, bytes: Uint8Array, kind: 'pdf' | 'docx'):
   for (let i = 0; i < document.getPageCount() && remaining > 0; i++) {
     const single = await PDFDocument.create(); single.addPage((await single.copyPages(document, [i]))[0]);
     const result = await converter.toMarkdown([{ name: 'document.pdf', blob: new Blob([await single.save()], { type: 'application/pdf' }) }]);
-    const text = String((Array.isArray(result) ? result[0]?.data : result.data) ?? '').slice(0, remaining);
+    const converted = String((Array.isArray(result) ? result[0]?.data : result.data) ?? '');
+    const text = clipDocumentText(converted, remaining);
     pages.push({ page: i + 1, text }); remaining -= text.length;
+    if (converted.length > text.length) break;
   }
   return pages;
 }
@@ -133,11 +139,16 @@ export async function extractDataroomFile(env: Env, payload: { project_id?: unkn
   if (!Number.isSafeInteger(payload.project_id) || typeof payload.file_uid !== 'string' || typeof payload.token !== 'string') return;
   const file = await sourceFile(env, Number(payload.project_id), payload.file_uid);
   if (!file?.deck_source || file.deck_source_token !== payload.token || file.deck_extract_state !== 'queued') return;
-  const claim = await env.DB.prepare(`UPDATE data_room_files SET deck_extract_started_at = ?
-    WHERE id = ? AND deck_source_token = ? AND deck_source = 1 AND deck_extract_state = 'queued' AND deck_extract_started_at IS NULL`)
-    .bind(new Date().toISOString(), file.id, payload.token).run();
-  if (Number(claim.meta?.changes ?? 0) !== 1) return;
+  if (sourceState(file).extraction.state === 'unreadable') {
+    await env.DB.prepare(`UPDATE data_room_files SET deck_extract_state = 'unreadable', deck_source_token = NULL
+      WHERE id = ? AND deck_source_token = ? AND deck_extract_state = 'queued'`).bind(file.id, payload.token).run();
+    return; // A late delivery cannot buy a run after the displayed deadline.
+  }
   try {
+    const claim = await env.DB.prepare(`UPDATE data_room_files SET deck_extract_started_at = ?
+      WHERE id = ? AND deck_source_token = ? AND deck_source = 1 AND deck_extract_state = 'queued' AND deck_extract_started_at IS NULL`)
+      .bind(new Date().toISOString(), file.id, payload.token).run();
+    if (Number(claim.meta?.changes ?? 0) !== 1) return;
     const project = await env.DB.prepare(`SELECT p.uid FROM projects p JOIN users u ON u.founder_id = p.founder_id
       WHERE p.id = ? AND p.deleted_at IS NULL AND u.id = ? AND u.role = 'founder' AND u.is_active = 1`)
       .bind(file.project_id, file.deck_source_user_id).first<{ uid: string }>();
@@ -169,7 +180,7 @@ export async function extractDataroomFile(env: Env, payload: { project_id?: unkn
         const opts = options(file, file.deck_source_user_id!, pages, approval!.model);
         const q = await quoteRun(env, opts);
         if (!q.ok || q.hold_microusd > approval!.hold_microusd) throw new Error('quote_changed');
-        const result = await run(env, { ...opts, surface: AI_SURFACE.raiseDataRoom });
+        const result = await run(env, { ...opts, rail: opts.rail, surface: AI_SURFACE.raiseDataRoom });
         if (!result.ok) throw new Error('extraction_unreadable');
         const output = result.output ?? '';
         values = unrecordedLinks(output, pages.map(p => p.text)).length ? [] : checkedDocumentValues(output, pages);

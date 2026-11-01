@@ -6,6 +6,10 @@ export const DATAROOM_SLOTS = ['dataroom.revenue_plan', 'dataroom.headcount_plan
 export type DocumentSlot = typeof DATAROOM_SLOTS[number];
 export type DocumentValue = { slot: DocumentSlot; value: number; unit: 'usd' | 'count'; page: number | null };
 export type DocumentPage = { page: number; text: string };
+/** Dropping a partial row must never turn a clipped 1200000 into a cited 120. */
+export function clipDocumentText(text: string, limit: number): string {
+  return text.length <= limit ? text : text.slice(0, Math.max(0, text.lastIndexOf('\n', limit)));
+}
 const LABELS: Record<DocumentSlot, string[]> = {
   'dataroom.revenue_plan': ['revenue', 'revenue plan', 'planned revenue', 'projected revenue', 'forecast revenue', 'revenue forecast', 'annual revenue'],
   'dataroom.headcount_plan': ['headcount', 'headcount plan', 'planned headcount', 'projected headcount', 'employees', 'planned employees'],
@@ -14,6 +18,7 @@ const LABELS: Record<DocumentSlot, string[]> = {
 const unit = (slot: DocumentSlot) => slot === 'dataroom.revenue_plan' ? 'usd' as const : 'count' as const;
 const label = (s: string) => s.toLowerCase().trim().replace(/[_-]/g, ' ').replace(/\s+(?:usd|20\d{2})\s*$/g, '').replace(/[:\s]+$/, '').replace(/\s+/g, ' ');
 const slotOf = (s: string) => DATAROOM_SLOTS.find(k => LABELS[k].includes(label(s)));
+const YEAR_HEADERS = new Set(['', 'metric', 'measure', 'item', 'line item', 'plan', 'year', 'financials', 'forecast', 'projection']);
 function numeric(raw: unknown, slot: DocumentSlot): number | null {
   if (typeof raw === 'string') {
     const s = raw.trim();
@@ -45,7 +50,7 @@ export function csvRows(text: string): string[][] {
 export function valuesFromRows(rows: (string | number | null)[][], page: number | null, numericOnly = false): DocumentValue[] {
   const found = new Map<DocumentSlot, DocumentValue>(); const conflicts = new Set<DocumentSlot>();
   let period = -1, year = 0;
-  for (const row of rows.slice(0, 10).filter(r => typeof r[0] !== 'string' || !slotOf(r[0]))) for (let i = 1; i < row.length; i++) {
+  for (const row of rows.slice(0, 10).filter(r => YEAR_HEADERS.has(label(String(r[0] ?? ''))))) for (let i = 1; i < row.length; i++) {
     if (/^20\d{2}$/.test(String(row[i])) && Number(row[i]) > year) { year = Number(row[i]); period = i; }
   }
   for (const row of rows) {
@@ -129,10 +134,10 @@ export function docxPages(bytes: Uint8Array): DocumentPage[] {
   const recorded = Number(/<Pages>(\d+)<\/Pages>/.exec(parts.text('docProps/app.xml'))?.[1] ?? 0);
   if (pages.length === 1 && recorded !== 1) return [];
   if (pages.length > 40 || (recorded && recorded !== pages.length)) return [];
-  return pages.map((p, i) => ({ page: i + 1, text: xml(p
+  return pages.map((p, i) => ({ page: i + 1, text: clipDocumentText(xml(p
     .replace(/<w:tr\b[^>]*>([\s\S]*?)<\/w:tr>/g, (_row, cells: string) =>
       [...cells.matchAll(/<w:tc\b[^>]*>([\s\S]*?)<\/w:tc>/g)].map(c => xml(c[1]).replace(/\s+/g, ' ').trim()).join('\t') + '\n')
-    .replace(/<\/w:p>/g, '\n')).slice(0, DOCUMENT_TEXT_MAX) }));
+    .replace(/<\/w:p>/g, '\n')), DOCUMENT_TEXT_MAX) }));
 }
 
 /** Model proposals must cite an actual, labelled numeric row on that page. */

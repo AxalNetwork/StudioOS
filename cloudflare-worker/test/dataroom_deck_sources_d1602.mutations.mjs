@@ -44,7 +44,27 @@ export async function load(url,context,next) {
  }
  return next(url,context);
 }`);
-writeFileSync(register, `import {register} from 'node:module';register(${JSON.stringify(pathToFileURL(hook).href)},import.meta.url);`);
+writeFileSync(register, `
+import fs from 'node:fs';
+import {register,syncBuiltinESMExports} from 'node:module';
+const m=JSON.parse(process.env.D1602_MUTANT || 'null');
+// SQL is read as data rather than imported. Alter that read in this isolated
+// process, with the same unchanged on-disk source as module mutations.
+if(m?.file.endsWith('.sql')) {
+ const original=fs.readFileSync;
+ fs.readFileSync=function(p,...args) {
+  const value=original.call(this,p,...args);
+  if(!String(p).endsWith('/'+m.file))return value;
+  let text=String(value);
+  for(const [from,to] of m.edits) {
+   if(!text.includes(from))throw new Error('mutation_target_absent');
+   text=text.replaceAll(from,to);
+  }
+  return typeof value==='string'?text:Buffer.from(text);
+ };
+ syncBuiltinESMExports();
+}
+register(${JSON.stringify(pathToFileURL(hook).href)},import.meta.url);`);
 
 // A variant removes a real safety/control branch; a failing assertion must
 // reject it. Syntax/import failures do not count as killed mutations.
@@ -59,7 +79,7 @@ const variants = [
   {"name":"delete-without-fks","file":"cloudflare-worker/src/routes/data_room.ts","edits":[["DELETE FROM dataroom_deck_values WHERE project_id = ? AND file_uid IN","DELETE FROM dataroom_deck_values WHERE 0 AND project_id = ? AND file_uid IN"]],"pattern":"replacing and making"},
   {"name":"job-single-claim","file":"cloudflare-worker/src/services/decks/dataroomExtract.ts","edits":[["AND deck_extract_started_at IS NULL`)","`)"]],"pattern":"PDF requires"},
   {"name":"job-project-prefix","file":"cloudflare-worker/src/services/decks/dataroomExtract.ts","edits":[[" || !file.r2_key.startsWith(`data-room/${project.uid}/`)",""]],"pattern":"cited PDF values"},
-  {"name":"metered-run","file":"cloudflare-worker/src/services/decks/dataroomExtract.ts","edits":[["const result = await run(env, { ...opts, surface: AI_SURFACE.raiseDataRoom });","const result = { ok: true, output: '[]' };"]],"pattern":"PDF requires"},
+  {"name":"metered-run","file":"cloudflare-worker/src/services/decks/dataroomExtract.ts","edits":[["const result = await run(env, { ...opts, rail: opts.rail, surface: AI_SURFACE.raiseDataRoom });","const result = { ok: true, output: '[]' };"]],"pattern":"PDF requires"},
   {"name":"typed-citation","file":"cloudflare-worker/src/services/decks/dataroomFormats.ts","edits":[["if (!valuesFromRows(evidence, page).some(v => v.slot === slot && v.value === value)) continue;","if (false) continue;"]],"pattern":"injected document"},
   {"name":"typed-page","file":"cloudflare-worker/src/services/decks/dataroomFormats.ts","edits":[["pages.find(p => p.page === page)","pages[0]"]],"pattern":"injected document"},
   {"name":"typed-unit","file":"cloudflare-worker/src/services/decks/dataroomFormats.ts","edits":[[" || u !== unit(slot)",""]],"pattern":"XLSX reads"},
@@ -83,7 +103,16 @@ const variants = [
   {"name":"losing-swap-guard","file":"cloudflare-worker/src/services/decks/dataroomExtract.ts","edits":[["AND (? IS NULL OR deck_source_token = ?)","AND (? IS NULL OR ? IS NOT NULL)"]],"pattern":"replacing and making"},
   {"name":"truncated-page-citation","file":"cloudflare-worker/src/services/decks/dataroomExtract.ts","edits":[["const pages = boundedPages(await documentPages(env, bytes, kind));","const pages = await documentPages(env, bytes, kind);"]],"pattern":"Word page beyond"},
   {"name":"founder-billing","file":"cloudflare-worker/src/services/decks/dataroomExtract.ts","edits":[["const opts = options(file, file.deck_source_user_id!, pages, approval!.model);","const opts = options(file, 2, pages, approval!.model);"]],"pattern":"PDF requires"},
-  {"name":"upload-day","file":"cloudflare-worker/src/services/decks/dataroomExtract.ts","edits":[["const asOf = object.uploaded.toISOString().slice(0, 10);","const asOf = '2026-11-01';"]],"pattern":"CSV is code"}
+  {"name":"upload-day","file":"cloudflare-worker/src/services/decks/dataroomExtract.ts","edits":[["const asOf = object.uploaded.toISOString().slice(0, 10);","const asOf = '2026-11-01';"]],"pattern":"CSV is code"},
+  {"name":"queue-deadline","file":"cloudflare-worker/src/services/decks/dataroomExtract.ts","edits":[["&& Date.now() - Date.parse(since) > (file.deck_extract_started_at ? 300_000 : 1_800_000)","&& false"]],"pattern":"never-started"},
+  {"name":"late-job-refusal","file":"cloudflare-worker/src/services/decks/dataroomExtract.ts","edits":[["if (sourceState(file).extraction.state === 'unreadable') {","if (false) {"]],"pattern":"never-started"},
+  {"name":"ceiling-before-read","file":"cloudflare-worker/src/services/decks/dataroomExtract.ts","edits":[["q.hold_microusd > approval.hold_microusd","false"]],"pattern":"replacement by a cofounder"},
+  {"name":"approver-erasure","file":"cloudflare-worker/sql/migrations/753_dataroom_deck_values.sql","edits":[["REFERENCES users(id) ON DELETE SET NULL","REFERENCES users(id)"]],"pattern":"migration cascades"},
+  {"name":"file-cascade","file":"cloudflare-worker/sql/migrations/753_dataroom_deck_values.sql","edits":[["REFERENCES data_room_files(uid) ON DELETE CASCADE","REFERENCES data_room_files(uid)"]],"pattern":"migration cascades"},
+  {"name":"project-cascade","file":"cloudflare-worker/sql/migrations/753_dataroom_deck_values.sql","edits":[["REFERENCES projects(id) ON DELETE CASCADE","REFERENCES projects(id)"]],"pattern":"migration cascades"},
+  {"name":"stop-polling","file":"frontend/src/pages/raise/dataroom/DataRoomDeckSource.jsx","edits":[["file.extraction?.state !== 'queued'","false"]],"pattern":"polling stops"},
+  {"name":"partial-numeric-row","file":"cloudflare-worker/src/services/decks/dataroomFormats.ts","edits":[["return text.length <= limit ? text : text.slice(0, Math.max(0, text.lastIndexOf('\\n', limit)));","return text.slice(0, limit);"]],"pattern":"character ceiling"},
+  {"name":"fixed-year-header","file":"cloudflare-worker/src/services/decks/dataroomFormats.ts","edits":[["YEAR_HEADERS.has(label(String(r[0] ?? '')))","true"]],"pattern":"code readers"}
 ];
 
 async function run(kind, variant = null) {
@@ -102,7 +131,7 @@ async function run(kind, variant = null) {
 
 try {
   const only = process.argv.find(v => v.startsWith('--case='))?.slice(7);
-  const selected = only ? variants.filter(v => v.name === only) : variants;
+  const selected = only ? variants.filter(v => only.split(',').includes(v.name)) : variants;
   if (!selected.length) throw new Error('No such mutation');
   for (const v of selected) for (const [from] of v.edits) {
     if (!readFileSync(resolve(root, v.file), 'utf8').includes(from)) throw new Error(`Stale mutation: ${v.name}`);

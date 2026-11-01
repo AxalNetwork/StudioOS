@@ -4,8 +4,9 @@ ALTER TABLE data_room_files ADD COLUMN deck_source_revision INTEGER NOT NULL DEF
 ALTER TABLE data_room_files ADD COLUMN deck_source_token TEXT;
 ALTER TABLE data_room_files ADD COLUMN deck_extract_state TEXT CHECK (deck_extract_state IN ('queued','done','no_values','unreadable'));
 ALTER TABLE data_room_files ADD COLUMN deck_extract_started_at TEXT;
+ALTER TABLE data_room_files ADD COLUMN deck_extract_queued_at TEXT;
 ALTER TABLE data_room_files ADD COLUMN deck_source_as_of TEXT;
-ALTER TABLE data_room_files ADD COLUMN deck_source_user_id INTEGER REFERENCES users(id);
+ALTER TABLE data_room_files ADD COLUMN deck_source_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
 ALTER TABLE data_room_files ADD COLUMN deck_source_quote TEXT;
 
 CREATE TABLE IF NOT EXISTS dataroom_deck_values (
