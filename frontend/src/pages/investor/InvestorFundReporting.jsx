@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, FileBarChart, RefreshCw } from 'lucide-react';
 import { WorkerRail } from '../../ui';
-import ZoneNav from '../../workspaces/ZoneNav';
-import { bucketForPath } from '../../workspaces/shellConfig';
+import ZoneHeader from '../../workspaces/ZoneHeader';
+import { ZonePrimaryScope } from '../../workspaces/ZoneActions';
 import { api } from '../../lib/api';
 import './investorFundLanding.css';
 import './investorFundReporting.css';
@@ -60,8 +60,9 @@ export default function InvestorFundReporting() {
   const latest = state.rows[0];
   const deliveryKnown = state.rows.some((row) => row.delivery_count != null || row.delivered_count != null || row.delivery_status);
 
-  return <div className="i6-fund if4-shell"><main className="i6-main if4-main" data-testid="investor-fund-reporting"><header className="i6-header"><div><div className="i6-breadcrumb">Fund <span>‹</span> <b>Reporting</b></div><h1><FileBarChart size={19} /> LP reporting</h1><p>Pack builder, archive and per-LP delivery status.</p></div><button type="button" className="if4-refresh" onClick={refresh} disabled={state.loading} aria-label="Refresh reporting archive"><RefreshCw size={14} className={state.loading ? 'if4-spin' : ''} /></button></header>
-    <ZoneNav bucket={bucketForPath('investor', '/funds')} role="investor" activeSlug="reporting" className="my-3" />
+  return <ZonePrimaryScope><div className="i6-fund if4-shell"><main className="i6-main if4-main" data-testid="investor-fund-reporting">
+    <ZoneHeader family="i6" bucketPath="/funds" activeSlug="reporting" crumb="Reporting" title={<><FileBarChart size={19} /> LP reporting</>} intro="Pack builder, archive and per-LP delivery status."
+      refresh={<button type="button" className="if4-refresh" onClick={refresh} disabled={state.loading} aria-label="Refresh reporting archive"><RefreshCw size={14} className={state.loading ? 'if4-spin' : ''} /></button>} />
     <FundPicker funds={managed.funds} fund={managed.fund} onSelect={managed.select} />
     {/* Four real predicates over the same `visible` memo as before — this row
         moved into the canvas's shape and nothing about what it selects changed.
@@ -92,7 +93,7 @@ export default function InvestorFundReporting() {
     unavailable={[
         ['Pack authoring', 'Nothing is drafted, published or delivered from this page.'],
       ]}
-  /></div>;
+  /></div></ZonePrimaryScope>;
 }
 
 function Stat({ label, value, note }) { return <article className="if4-stat"><span>{label}</span><b>{value == null ? 'Unavailable' : value}</b><small>{note}</small></article>; }

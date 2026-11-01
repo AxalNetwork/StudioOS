@@ -432,7 +432,7 @@ export async function fetchMicrosoftUserinfo(accessToken: string): Promise<any> 
 // ===========================================================================
 export interface CalendarEvent {
   id: string;
-  kind: 'ic_meeting' | 'founder_checkin' | 'advisor_booking' | 'partner_office_hour' | 'calendly_event' | 'expert_booking' | 'event_ticket' | 'event_hosted' | 'investor_meeting' | 'compliance_due';
+  kind: 'ic_meeting' | 'founder_checkin' | 'advisor_booking' | 'partner_office_hour' | 'calendly_event' | 'expert_booking' | 'event_ticket' | 'event_hosted' | 'investor_meeting' | 'compliance_due' | 'learning';
   source_id: number;
   source_uid: string;
   title: string;
@@ -867,6 +867,8 @@ const READERS: Readonly<Record<CalendarEvent['kind'], CalendarReader>> = {
   compliance_due: async (env, userId, from, to, opts) => (await complianceDueEvents(env, userId, from, to, {
     withDone: !!opts?.withCancelled, companyId: opts?.companyId,
   })) as CalendarEvent[],
+  // #3959: the "Learning" source — the member's own plan occurrences and the webinars they registered for.
+  learning: async (env, userId, from, to) => (await (await import('./learningPlan')).learningEvents(env, userId, from, to)) as CalendarEvent[],
 };
 
 export const KNOWN_KINDS = Object.keys(READERS) as readonly CalendarEvent['kind'][];
@@ -877,7 +879,8 @@ export const KNOWN_KINDS = Object.keys(READERS) as readonly CalendarEvent['kind'
  * and the Google and Outlook payloads do not write; `fetchUserEvents` leaves
  * these out, so a feed never holds one by accident.
  */
-export const PAGE_ONLY_KINDS: readonly CalendarEvent['kind'][] = ['compliance_due'];
+// #3959: Learning is page-only until its feed and provider copy are designed (an occurrence id is not a row id).
+export const PAGE_ONLY_KINDS: readonly CalendarEvent['kind'][] = ['compliance_due', 'learning'];
 export const FEED_KINDS = KNOWN_KINDS.filter((k) => !PAGE_ONLY_KINDS.includes(k));
 
 /** Whether one source answered, so a page can say which of the eight did not. */

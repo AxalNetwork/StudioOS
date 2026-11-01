@@ -45,7 +45,7 @@ test('the week is Monday to Sunday; the month is the calendar month; the agenda 
 });
 
 test('every kind the page reads is in exactly one family; Deadlines holds the Compliance layer (D1384)', () => {
-  assert.deepEqual(FAMILIES.map((f) => f.label), ['Events', 'Meetings', 'Sessions', 'Deadlines', 'From other calendars']);
+  assert.deepEqual(FAMILIES.map((f) => f.label), ['Events', 'Meetings', 'Sessions', 'Deadlines', 'Learning', 'From other calendars']);
   assert.deepEqual([...FAMILIES.flatMap((f) => f.kinds)].sort(), [...PAGE_KINDS].sort());
   assert.equal(familyOf('event_ticket'), 'events');
   assert.equal(familyOf('calendly_event'), 'other');

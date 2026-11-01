@@ -35,6 +35,7 @@
   --k-event_ticket: #4d7c0f; --k-event_hosted: #0369a1;
   --k-investor_meeting: #047857;
   --k-compliance_due: #57534e;
+  --k-learning: #4338ca;
   background: var(--cal-shell);
   color: var(--cal-ink);
   min-height: 100%;
@@ -64,6 +65,7 @@
   --k-event_ticket: #bef264; --k-event_hosted: #7dd3fc;
   --k-investor_meeting: #6ee7b7;
   --k-compliance_due: #d6d3d1;
+  --k-learning: #a5b4fc;
 }
 
 .cal-mono { font-family:var(--font-mono); font-variant-numeric: tabular-nums; }
@@ -116,6 +118,8 @@
 .cal-dot[data-kind='investor_meeting'] { background: var(--k-investor_meeting); border-radius: 50% 0 50% 50%; }
 /* D1384: the Compliance layer, a deadline flag. */
 .cal-dot[data-kind='compliance_due'] { background: var(--k-compliance_due); border-radius: 0 50% 50% 0; }
+/* #3959: the Learning source (its own boards are LRN1–LRN3 and CAL12). */
+.cal-dot[data-kind='learning'] { background: var(--k-learning); }
 
 /* ── body: agenda beside the 328px rail ───────────────────────────────── */
 .cal-body { display: flex; align-items: stretch; }
@@ -156,6 +160,7 @@
 .cal-ev { display: flex; flex-direction: column; gap: 3px; padding: 8px 9px; border-radius: 8px; background: var(--cal-ev); border: 1px solid var(--cal-ev-line); text-align: left; }
 .cal-ev[data-kind='ic_meeting'] { box-shadow: inset 3px 0 0 var(--k-ic_meeting); }
 .cal-ev[data-kind='compliance_due'] { box-shadow: inset 3px 0 0 var(--k-compliance_due); }
+.cal-ev[data-kind='learning'] { box-shadow: inset 3px 0 0 var(--k-learning); }
 .cal-nr[data-state='overdue'] { color: var(--cal-err-ink); font-weight: 700; }
 .cal-nr[data-state='done'] { color: var(--cal-ok-ink); }
 .cal-ev[data-cancelled='true'] { opacity: .6; }

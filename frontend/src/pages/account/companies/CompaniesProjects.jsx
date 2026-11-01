@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { api, getActiveCompanyId } from '../../../lib/api';
 import { accountCompaniesApi } from '../../../lib/api/accountCompanies.js';
 import { isSuperAdminUser } from '../../../lib/shellRole';
@@ -7,39 +7,46 @@ import { useAuth } from '../../../hooks/useAuthSync';
 import { useActiveCompany } from '../../../contexts/ActiveCompanyContext';
 import { useCompanySwitch } from '../../../ui/CompanySwitcher';
 import { HeaderTab, Unreadable, actionPrimary, usePhoneWidth } from '../../../ui';
-import { ConfirmDialog, NewCompanyDialog } from './CompaniesDialogs';
-import CompanyLightbox from './CompanyLightbox';
+import { useMenu } from '../../team/teamUi.jsx';
+import { ConfirmDialog } from './CompaniesDialogs';
 import { CompaniesMovedNotice } from './CompaniesMoved';
 import VentureLightbox from './VentureLightbox';
+import PortfolioOverview from './PortfolioOverview.jsx';
+import CompanyPage from './CompanyPage.jsx';
+import ProjectPage from './ProjectPage.jsx';
+import { NewCompanySheet, NewProjectSheet } from './CreateSheets.jsx';
+import * as portfolio from './portfolioAdapter.js';
 import {
-  ACTIVE_HERE, ACTIVE_LINE, ADMIN_LINE, ADVISOR_LINE, EXPLORER_LINE, LINE, SHARED_LINE, TAB_LABELS, TITLE,
-  answerCopy, canCreate, companiesTabFor, companyCards, companyPathFor, companyUidFor, engagementRows, filterCards, filterVentures, fundGroups,
-  invitationRows, profileOf, projectGroups, tabCount, tabsFor, SETTINGS_PATH, companySettingsPathFor,
+  ACTIVE_LINE, ADMIN_LINE, ADVISOR_LINE, EXPLORER_LINE, INVESTOR_LINK, LINE, RENAME_NOTICE, RENAME_STORE, SHARED_LINE, TAB_LABELS, TITLE,
+  answerCopy, canCreate, companiesTabFor, companyCards, companyUidFor, engagementRows, filterVentures, fundGroups,
+  invitationRows, portfolioProjectFor, portfolioSections, profileOf, projectGroups, switcherPaths, tabCount, tabsFor, SETTINGS_PATH,
 } from './companiesModel';
 
 /**
- * D1134 (#2422), completed by D1138 (#3018) — Account › Companies and
- * projects, built to the owner's canvas (CMP1, CMP3, CMP5, CMP9–CMP18).
+ * D1134 (#2422), completed by D1138 (#3018) — Account › Portfolio (D1413,
+ * #3696: "Companies and projects" until the owner named it), built to the
+ * owner's canvases (CMP1–CMP18, then PF1–PF8).
  *
  * Each tab is its own address (`/account/portfolio`, `/projects`, `/funds`,
  * `/engagements`, `/invitations`); which ones a member sees is their
  * profile's (`tabsFor`). Each read is its own block: one that fails reads
- * Unreadable with Try again and never blanks another. The writes here are
- * New company and answering an invitation addressed to you, each in an
- * in-page dialog that says what it changes.
+ * "could not be read" with Try again and never blanks another.
  *
- * D1139 (#3019): `/account/portfolio/<uid>` opens that company's lightbox
- * (CMP2) over the Companies tab, and a venture's Open its lightbox (CMP4);
- * the lifecycle dialogs (CMP6–CMP8) open from them.
+ * D1413 (#3696):
+ *   - the Companies tab is the Portfolio overview (`PortfolioOverview`, PF1):
+ *     companies with their projects nested, standalone projects, seats;
+ *   - "New ▾" opens New company or New project (`CreateSheets`, PF4);
+ *   - `/account/portfolio/<uid>` is the company's page (`CompanyPage`, PF2),
+ *     which replaced D1139's lightbox and hosts its dialogs (owner Q3);
+ *   - `/account/portfolio/projects/<id>` is the project's page (`ProjectPage`, PF3);
+ *   - an investor's Portfolio links to their holdings at `/portfolio` (owner Q1).
  */
 
 const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
 const INK = 'text-axal-ink dark:text-gray-100';
 const MUTED = 'text-axal-muted dark:text-gray-400';
-const EYE = 'text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 const PILL = 'inline-flex w-fit items-center rounded-full border px-2 py-0.5 text-[10.5px] font-bold';
 const NEUTRAL = `${PILL} border-axal-hairline text-axal-muted dark:border-gray-700 dark:text-gray-400`;
-const VIOLET = `${PILL} border-violet-300 bg-axal-lavender text-axal-violet dark:border-violet-700 dark:bg-violet-950/50 dark:text-violet-300`;
 const LINK = 'font-semibold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300 dark:hover:text-violet-200';
 const BTN = 'inline-flex min-h-[36px] items-center justify-center rounded-[9px] border border-axal-hairline bg-white px-3 text-[12.5px] font-bold text-axal-ink hover:border-axal-violet disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 const NOTE = 'm-0 flex flex-wrap items-center justify-between gap-2 rounded-[10px] bg-axal-lavender px-3 py-2.5 text-[13px] font-semibold text-axal-ink dark:bg-violet-950/40 dark:text-gray-100';
@@ -60,6 +67,8 @@ function useRead(load, enabled, tick) {
 }
 
 const readCompanies = () => accountCompaniesApi.companies();
+// D1415 part 2, through the seam: the addresses the slug chips draw. A failed read draws no chip.
+const readSwitcher = () => portfolio.switcher().then((out) => (out.available ? out.value : Promise.reject(new Error(out.reason))));
 const readProjects = () => accountCompaniesApi.projects();
 const readInvitations = () => accountCompaniesApi.invitations();
 const readFunds = () => api.fundsList();
@@ -90,108 +99,6 @@ function Failed({ what, claim, retry, testId }) {
 }
 
 const Note = ({ children, testId }) => <p className={NOTE} data-testid={testId}>{children}</p>;
-
-// ---------------------------------------------------------------- Companies (CMP1, CMP9, CMP10, CMP13)
-
-function CompanyCard({ c, profile, funds, phone }) {
-  const pills = (
-    <span className="flex flex-wrap items-center gap-1.5">
-      {c.active ? <span className={VIOLET} data-testid="company-active">{ACTIVE_HERE}</span> : null}
-      <span className={NEUTRAL}>{c.primary ? 'Primary admin' : c.role}{c.authority ? ` · ${c.authority}` : ''}</span>
-    </span>
-  );
-  return (
-    <section className={`${CARD} flex flex-col gap-2.5 px-4 py-3.5 ${c.active ? 'border-violet-300 ring-[3px] ring-axal-lavender dark:border-violet-700 dark:ring-violet-950/50' : ''}`} data-testid="company-card">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="flex min-w-0 flex-col gap-1">
-          <h3 className={`m-0 text-[16px] font-extrabold tracking-[-.01em] ${INK}`}>{c.name}</h3>
-          {pills}
-          <span className={`text-[12px] ${MUTED}`}>{[c.stage, c.title].filter(Boolean).join(' · ') || 'Stage not recorded'}</span>
-        </div>
-        <span className="flex items-center gap-3">
-          {c.active && !phone ? <Link className={LINK} to={companySettingsPathFor(c.uid)}>Company Settings</Link> : null}
-          <Link className={BTN} to={companyPathFor(c.uid)} data-testid={`company-open-${c.uid}`}>Open</Link>
-        </span>
-      </div>
-      <dl className="m-0 grid gap-2 sm:grid-cols-[110px_minmax(0,1fr)]">
-        <dt className={EYE}>Members</dt>
-        <dd className={`m-0 text-[12.5px] font-semibold ${INK}`} data-testid="company-members">{c.members}{c.invitations ? ` · ${c.invitations}` : ''}</dd>
-        <dt className={EYE}>Cycles</dt>
-        <dd className={`m-0 text-[12.5px] ${INK}`}>{c.cycles}<span className={`block text-[12px] ${MUTED}`}>Last opened: {c.lastOpened}</span></dd>
-        {profile === 'partner' ? (
-          <>
-            <dt className={EYE}>In this firm</dt>
-            <dd className={`m-0 flex flex-wrap gap-1.5 text-[12px] ${INK}`} data-testid="company-firm-counts">
-              {[['engagements', 'engagement', 'engagements'], ['quotes', 'quote', 'quotes'], ['offers', 'offer', 'offers']].map(([k, one, many]) => (
-                <span key={k} className={VIOLET}>{c.counts[k] == null ? `${many}: could not be read` : `${c.counts[k]} ${c.counts[k] === 1 ? one : many}`}</span>
-              ))}
-            </dd>
-          </>
-        ) : profile === 'investor' ? (
-          <>
-            <dt className={EYE}>Funds</dt>
-            <dd className={`m-0 text-[12.5px] ${INK}`} data-testid="company-funds">
-              {funds ? (funds.length ? funds.map((f) => (
-                <span key={f.id} className="block">{f.name} · {f.line} · {f.canManage
-                  ? <Link className={LINK} to="/funds">Manage</Link>
-                  : <span className={MUTED}>{c.active ? 'You do not manage this fund' : 'Switch to this firm to manage'}</span>}</span>
-              )) : 'No fund run by this firm') : (c.counts.funds == null ? 'Funds: could not be read' : `${c.counts.funds} fund${c.counts.funds === 1 ? '' : 's'}`)}
-            </dd>
-          </>
-        ) : (
-          <>
-            <dt className={EYE}>Ventures</dt>
-            <dd className={`m-0 text-[12.5px] ${INK}`} data-testid="company-ventures">{c.counts.projects == null ? 'Ventures: could not be read' : `${c.counts.projects} venture${c.counts.projects === 1 ? '' : 's'}`}</dd>
-          </>
-        )}
-      </dl>
-    </section>
-  );
-}
-
-function CompaniesTab({ read, retry, profile, cards, funds, phone, onNew }) {
-  const [q, setQ] = useState('');
-  const [role, setRole] = useState('');
-  if (read.status === 'loading' && !read.data) return <><Skeleton testId="companies-loading" /><Skeleton /><Skeleton /></>;
-  if (read.status === 'error') {
-    return (
-      <div className={`${CARD} flex flex-col gap-2 px-4 py-3`} data-testid="companies-unreadable">
-        <Unreadable what="Your companies" claim="That is not the same as having none." onRetry={retry} />
-        <p className={`m-0 text-[12px] ${MUTED}`}>The company switcher in the sidebar reads Unavailable until this reads.</p>
-      </div>
-    );
-  }
-  if (!cards.length) {
-    if (profile === 'hq') return <Empty title="You belong to no company." note="HQ work does not need one." testId="companies-none" />;
-    return (
-      <Empty title="You don’t belong to a company yet." note="A company keeps your ventures, deals and team together. Create one, or accept an invitation." testId="companies-none">
-        <span className="flex flex-wrap justify-center gap-2">
-          {canCreate(profile) ? <button type="button" className={actionPrimary} onClick={onNew} data-testid="companies-none-new">New company</button> : null}
-          <Link className={BTN} to="/account/portfolio/invitations">See invitations</Link>
-        </span>
-      </Empty>
-    );
-  }
-  const roles = [...new Set(cards.map((c) => c.role))];
-  const shown = filterCards(cards, { q, role });
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap gap-2">
-        <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search companies" aria-label="Search companies" className={`${FIELD} min-w-[200px] flex-1`} data-testid="companies-search" />
-        <select value={role} onChange={(e) => setRole(e.target.value)} aria-label="Role" className={FIELD} data-testid="companies-role">
-          <option value="">Every role</option>
-          {roles.map((r) => <option key={r} value={r}>{r}</option>)}
-        </select>
-        <span className={`self-center text-[12px] ${MUTED}`}>Sort: active first</span>
-      </div>
-      {shown.length ? (
-        <div className="grid gap-3 lg:grid-cols-2">
-          {shown.map((c) => <CompanyCard key={c.uid} c={c} profile={profile} phone={phone} funds={funds ? (funds.find((g) => g.key === c.uid)?.rows || []) : null} />)}
-        </div>
-      ) : <p className={`m-0 text-[13px] ${MUTED}`} data-testid="companies-none-match">No company matches. Clear the search or pick another role.</p>}
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------- Projects (CMP3)
 
@@ -335,16 +242,65 @@ function EngagementsTab({ read, retry }) {
 
 // ---------------------------------------------------------------- the pane
 
+/** PF1's one-time notice: drawn until dismissed on this device; a throwing store still draws and dismisses it for this visit. */
+function RenameNotice() {
+  const [gone, setGone] = useState(() => { try { return globalThis.localStorage?.getItem(RENAME_STORE) === '1'; } catch { return false; } });
+  if (gone) return null;
+  const dismiss = () => { setGone(true); try { globalThis.localStorage?.setItem(RENAME_STORE, '1'); } catch { /* dismissed for this visit */ } };
+  return (
+    <p role="status" className={NOTE} data-testid="portfolio-renamed">
+      <span><span aria-hidden="true">ⓘ </span>{RENAME_NOTICE}</span>
+      <button type="button" className={LINK} onClick={dismiss} data-testid="portfolio-renamed-dismiss">Dismiss</button>
+    </p>
+  );
+}
+
+/** PF1m: "New ▾", a menu of Company and Project. */
+function NewMenu({ onPick, phone }) {
+  const { open, setOpen, trigger, menu } = useMenu();
+  const pick = (kind) => { setOpen(false); onPick(kind); };
+  return (
+    <span className="relative">
+      <button ref={trigger} type="button" className={`${actionPrimary} ${phone ? 'w-full' : ''}`} aria-haspopup="menu" aria-expanded={open}
+        onClick={() => setOpen(!open)} data-testid="portfolio-new">New ▾</button>
+      {open ? (
+        <span ref={menu} role="menu" className="absolute right-0 top-full z-20 mt-1 flex w-[280px] flex-col rounded-axal-lg border border-axal-hairline bg-white p-1.5 shadow-lg dark:border-gray-700 dark:bg-gray-900" data-testid="portfolio-new-menu">
+          <button type="button" role="menuitem" className="flex flex-col items-start rounded-axal-md px-3 py-2 text-left hover:bg-axal-lavender dark:hover:bg-violet-900/30" onClick={() => pick('company')} data-testid="portfolio-new-company">
+            <b className={`text-[13.5px] ${INK}`}>Company</b><span className={`text-[12px] ${MUTED}`}>A legal entity</span>
+          </button>
+          <button type="button" role="menuitem" className="flex flex-col items-start rounded-axal-md px-3 py-2 text-left hover:bg-axal-lavender dark:hover:bg-violet-900/30" onClick={() => pick('project')} data-testid="portfolio-new-project">
+            <b className={`text-[13.5px] ${INK}`}>Project</b><span className={`text-[12px] ${MUTED}`}>Start before you incorporate, or inside a company</span>
+          </button>
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/** A partner's firm counts or an investor's funds under a card, as D1138 drew them. */
+function cardExtra(profile, card, fundsByFirm) {
+  if (!card) return null;
+  if (profile === 'partner') {
+    return ['engagements', 'quotes', 'offers'].map((k) => (card.counts[k] == null ? `${k}: could not be read` : `${card.counts[k]} ${k}`)).join(' · ');
+  }
+  if (profile === 'investor') {
+    const funds = fundsByFirm ? fundsByFirm.find((g) => g.key === card.uid)?.rows : null;
+    if (funds == null) return card.counts.funds == null ? 'Funds: could not be read' : `${card.counts.funds} fund${card.counts.funds === 1 ? '' : 's'}`;
+    return funds.length ? `Funds: ${funds.map((f) => f.name).join(', ')}` : 'No fund run by this firm';
+  }
+  return null;
+}
+
 export default function CompaniesProjects({ role, entityRecords = null }) {
   const loc = useLocation();
   const phone = usePhoneWidth();
   const auth = useAuth();
   const { company: active, setCompanies, companies: known } = useActiveCompany();
   const { create, switchTo, leave } = useCompanySwitch();
-  const navigate = useNavigate();
   const meId = auth?.user?.id ?? null;
-  // D1139 — a company uid in the address opens its lightbox over Companies.
+  // D1413 — a company uid in the address is its page (PF2); a project id is its page (PF3).
   const openUid = companyUidFor(loc.pathname);
+  const openProject = portfolioProjectFor(loc.pathname);
   const profile = profileOf(role, isSuperAdminUser(auth?.user));
   const visible = tabsFor(profile);
   const asked = companiesTabFor(loc.pathname);
@@ -354,12 +310,13 @@ export default function CompaniesProjects({ role, entityRecords = null }) {
   const [tick, setTick] = useState(0);
   const retry = useCallback(() => setTick((n) => n + 1), []);
   const companies = useRead(readCompanies, true, tick);
-  const projects = useRead(readProjects, visible.includes('projects') || !!openUid, tick);
+  const projects = useRead(readProjects, true, tick);
+  const switcher = useRead(readSwitcher, true, tick);
   const invitations = useRead(readInvitations, true, tick);
   const funds = useRead(readFunds, visible.includes('funds'), tick);
   const engagements = useRead(readEngagements, visible.includes('engagements'), tick);
   const [answering, setAnswering] = useState(null);
-  const [adding, setAdding] = useState(false);
+  const [creating, setCreating] = useState(null);
   const [done, setDone] = useState('');
 
   // The active company is this device's: the switcher's, else the stored id matched to the membership list.
@@ -367,6 +324,7 @@ export default function CompaniesProjects({ role, entityRecords = null }) {
   const cards = useMemo(() => (companies.status === 'ready' ? companyCards(companies.data, { activeUid, known }) : []), [companies, activeUid, known]);
   const fundsByFirm = useMemo(() => (funds.status === 'ready' ? fundGroups(funds.data, cards) : []), [funds, cards]);
   const invites = invitations.status === 'ready' ? invitationRows(invitations.data).rows.length : null;
+  const paths = useMemo(() => switcherPaths(switcher.status === 'ready' ? switcher.data : null), [switcher]);
 
   const counts = {
     companies: tabCount(companies, companies.status === 'ready' ? cards.length : null),
@@ -377,22 +335,71 @@ export default function CompaniesProjects({ role, entityRecords = null }) {
   };
 
   const refreshSwitcher = () => api.listMyCompanies().then((rows) => { if (Array.isArray(rows)) setCompanies(rows); }).catch(() => {});
-  const changed = (msg, { switcher = false } = {}) => { setDone(msg); if (switcher) refreshSwitcher(); retry(); };
+  const changed = (msg, { switcher: sw = false } = {}) => { if (msg) setDone(msg); if (sw) refreshSwitcher(); retry(); };
   const answer = (row, kind) => {
     if (kind === 'decline') return accountCompaniesApi.declineProjectInvitation(row.id);
     return row.kind === 'company' ? accountCompaniesApi.acceptCompanyInvitation(row.id) : accountCompaniesApi.acceptProjectInvitation(row.id);
   };
+  const onNew = (kind, company = null) => setCreating({ kind, company });
+  // PF5: the switcher's "Create project" lands here with `?new=project` and opens the sheet once.
+  const wanted = new URLSearchParams(loc.search).get('new');
+  useEffect(() => {
+    if ((wanted === 'project' || wanted === 'company') && canCreate(profile)) setCreating({ kind: wanted, company: null });
+  }, [wanted]); // eslint-disable-line react-hooks/exhaustive-deps
+  const card = openUid && companies.status === 'ready'
+    ? portfolioSections(companies.data, null, { activeUid, switcher: switcher.status === 'ready' ? switcher.data : null }).companies.find((c) => c.uid === openUid) || null
+    : null;
+
+  const sheets = (
+    <>
+      {creating?.kind === 'company' ? (
+        <NewCompanySheet create={create} companies={companies.status === 'ready' ? companies.data?.companies : known} onClose={() => setCreating(null)}
+          onDone={(c, failed) => {
+            setCreating(null);
+            setDone(`${c?.company_name || 'The company'} is created and active on this device.${failed?.length ? ` ${failed.join('. ')}.` : ''}`);
+            retry();
+          }} />
+      ) : null}
+      {creating?.kind === 'project' ? (
+        <NewProjectSheet companies={known || []} company={creating.company} onClose={() => setCreating(null)}
+          onDone={(p, co) => { setCreating(null); setDone(`${p?.name || 'The project'} is created${co ? ` in ${co.company_name}` : ' as a standalone project'}.`); retry(); }} />
+      ) : null}
+    </>
+  );
+
+  // PF2 and PF3 are pages of their own: no tabs, "‹ Portfolio" leads back.
+  if (openProject) {
+    return (
+      <div className="flex min-w-0 flex-col gap-4" data-testid="companies-projects">
+        <ProjectPage id={openProject} projects={projects.status === 'ready' ? projects.data : null}
+          summary={companies.status === 'ready' ? companies.data : null} paths={paths} />
+        {sheets}
+      </div>
+    );
+  }
+  if (openUid) {
+    return (
+      <div className="flex min-w-0 flex-col gap-4" data-testid="companies-projects">
+        {done ? <p role="status" className={`m-0 rounded-[9px] bg-axal-ground px-3 py-2 text-[12.5px] ${INK} dark:bg-gray-800`} data-testid="companies-done">{done}</p> : null}
+        <CompanyPage uid={openUid} card={card} projects={projects.status === 'ready' ? projects.data : null}
+          projectsLoading={projects.status === 'loading' || projects.status === 'idle'} meId={meId} profile={profile}
+          active={activeUid === openUid} row={(known || []).find((c) => c.uid === openUid) || null}
+          switchTo={switchTo} leave={leave} onChanged={changed} onNew={onNew} />
+        {sheets}
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="companies-projects">
+      <RenameNotice />
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-1">
           <h2 className={`m-0 text-[18px] font-extrabold tracking-[-.015em] ${INK}`}>{TITLE}</h2>
           <p className={`m-0 text-[12.5px] ${MUTED}`}>{LINE}</p>
+          {profile === 'investor' ? <Link className={`w-fit text-[12.5px] ${LINK}`} to={INVESTOR_LINK.to} data-testid="portfolio-investor-link">{INVESTOR_LINK.label}</Link> : null}
         </div>
-        {canCreate(profile) ? (
-          <button type="button" className={`${actionPrimary} ${phone ? 'w-full' : ''}`} onClick={() => setAdding(true)} data-testid="companies-new">New company</button>
-        ) : null}
+        {canCreate(profile) ? <NewMenu onPick={(k) => onNew(k)} phone={phone} /> : null}
       </header>
 
       <CompaniesMovedNotice />
@@ -413,8 +420,8 @@ export default function CompaniesProjects({ role, entityRecords = null }) {
           {profile === 'admin' || profile === 'hq' ? (
             <Note testId="companies-admin-note">{ADMIN_LINE} <Link className={LINK} to={profile === 'hq' ? '/admin/licences' : '/admin/my-licence'}>Open Licences</Link></Note>
           ) : cards.length ? <Note testId="companies-active-note">{ACTIVE_LINE}</Note> : null}
-          <CompaniesTab read={companies} retry={retry} profile={profile} cards={cards} phone={phone}
-            funds={profile === 'investor' && funds.status === 'ready' ? fundsByFirm : null} onNew={() => setAdding(true)} />
+          <PortfolioOverview companies={companies} projects={projects} switcher={switcher} activeUid={activeUid} profile={profile}
+            onNew={onNew} retry={retry} extraFor={(uid) => cardExtra(profile, cards.find((c) => c.uid === uid), profile === 'investor' && funds.status === 'ready' ? fundsByFirm : null)} />
           {cards.length ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="companies-shared">{SHARED_LINE}</p> : null}
           {/* D1140 (#3020, CMP19b): "Your companies", with each company's entity record, moved here from Profile and identity. */}
           {entityRecords && profile !== 'explorer' && profile !== 'admin' && profile !== 'hq' ? <div data-testid="companies-entity-records">{entityRecords}</div> : null}
@@ -440,21 +447,11 @@ export default function CompaniesProjects({ role, entityRecords = null }) {
             }} />
         );
       })() : null}
-      {openUid && !venture ? (
-        <CompanyLightbox uid={openUid} card={cards.find((c) => c.uid === openUid) || null}
-          projects={projects.status === 'ready' ? projects.data : null} meId={meId}
-          active={activeUid === openUid} row={(known || []).find((c) => c.uid === openUid) || null}
-          switchTo={switchTo} leave={leave} onChanged={changed} onOpenVenture={setVenture}
-          onClose={() => navigate('/account/portfolio')} />
-      ) : null}
       {venture ? (
         <VentureLightbox venture={venture} companies={cards} meId={meId}
           onClose={() => setVenture(null)} onChanged={changed} />
       ) : null}
-      {adding ? (
-        <NewCompanyDialog create={create} companies={companies.status === 'ready' ? companies.data?.companies : known} onClose={() => setAdding(false)}
-          onDone={(c) => { setDone(`${c?.company_name || 'The company'} is created and active on this device.`); setAdding(false); retry(); }} />
-      ) : null}
+      {sheets}
     </div>
   );
 }
