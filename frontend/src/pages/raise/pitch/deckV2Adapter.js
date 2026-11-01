@@ -73,7 +73,6 @@ export const SURFACES = Object.freeze({
   brandLocks: { issue: 3819, what: 'Brand kit locks' },
   pptxImport: { issue: 3809, what: 'Start from a .pptx template' },
   investorLinks: { issue: 3812, what: 'One link per investor, consent and watermark preview' },
-  stock: { issue: 3813, what: 'Stock photos' },
   comments: { issue: 3817, what: 'Comments with mentions' },
   slideAnalytics: { issue: 3820, what: 'Per-slide investor analytics' },
   presence: { issue: 3824, what: 'Who else is editing, and Suggest mode' },
@@ -151,7 +150,6 @@ export const deckActions = off('deckActions');
 export const brandLocks = off('brandLocks');
 export const pptxImport = off('pptxImport');
 export const investorLinks = off('investorLinks');
-export const stock = off('stock');
 export const comments = off('comments');
 export const slideAnalytics = off('slideAnalytics');
 export const presence = off('presence');

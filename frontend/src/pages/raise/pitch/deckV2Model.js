@@ -108,7 +108,7 @@ export const ELEMENT_GROUPS = Object.freeze([
     { id: 'team_grid', label: 'Team grid', free: true },
     { id: 'use_of_funds', label: 'Use of funds', ...A('ventureElements', 3781) },
     { id: 'round_terms', label: 'Round terms', ...A('ventureElements', 3781) },
-    { id: 'interview_quote', label: 'Interview quote', pending: true, ...A('ventureElements', 3781) },
+    { id: 'interview_quote', label: 'Interview quote', ...A('ventureElements', 3781) },
     { id: 'cap_table', label: 'Cap-table summary', ...A('ventureElements', 3781) },
   ] },
   { id: 'media', label: 'Media & links', items: [
@@ -118,9 +118,6 @@ export const ELEMENT_GROUPS = Object.freeze([
     { id: 'recorded_video', label: 'Recorded video', ...A('media', 3788) },
     { id: 'button', label: 'Button', ...A('media', 3788) },
     { id: 'embeds', label: 'Embeds', ...A('media', 3788) },
-  ] },
-  { id: 'stock', label: 'Stock', items: [
-    { id: 'stock_photo', label: 'Stock photo', pending: true, ...A('stock', 3813) },
   ] },
 ]);
 

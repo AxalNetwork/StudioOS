@@ -259,7 +259,7 @@ test('a refused area stops the rest; an empty area\'s words come later; adapter 
     await n.press(node(n, `${row}-element`));
     assert.equal(n.pr(node(n, `${row}-picker`)).role, 'listbox');
     assert.equal(n.pr(node(n, `${row}-pick-icons`))['aria-disabled'], true);
-    assert.match(n.text(node(n, `${row}-pick-stock_photo`)), /\(pending owner\)/);
+    assert.match(n.text(node(n, `${row}-pick-remove_bg`)), /\(pending owner\)/);
     await n.press(node(n, `${row}-pick-icons`));
     assert.match(n.text(node(n, `${row}-element`)), /Table from records/, 'a Coming later element is not picked');
     await n.press(node(n, `${row}-pick-body`));

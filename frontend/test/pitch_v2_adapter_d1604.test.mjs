@@ -43,7 +43,7 @@ test('the adapter keys each surface to the plan’s issue (§6.2)', () => {
     stagePlan: 3774, figures: 3775, deckUsage: 3776, arrange: 3777, imageEdit: 3778, elementsLibrary: 3779,
     diagrams: 3780, ventureElements: 3781, templates: 3782, myTemplates: 3782, saveAsTemplate: 3782, typedTables: 3787,
     media: 3788, presets: 3796, orgLocks: 3786, critique: 3799, remix: 3800, consistency: 3802, deckActions: 3808,
-    brandLocks: 3819, pptxImport: 3809, investorLinks: 3812, stock: 3813, comments: 3817, slideAnalytics: 3820,
+    brandLocks: 3819, pptxImport: 3809, investorLinks: 3812, comments: 3817, slideAnalytics: 3820,
     presence: 3824, cardStatus: 3826, rehearse: 3827, walkthrough: 3837, retryFailed: 3879, unseenBatches: 3879,
     markSeen: 3879, setDeckSource: 3881,
   };
@@ -86,7 +86,7 @@ test('through() is the swap: a value, a route that is still off, or unreadable, 
 });
 
 test('the element picker: 8 groups, each item on main or on the seam, and the three owner marks', () => {
-  assert.deepEqual(ELEMENT_GROUPS.map((g) => g.label), ['Text', 'Images', 'Graphics', 'Data', 'Diagrams', 'Venture records', 'Media & links', 'Stock']);
+  assert.deepEqual(ELEMENT_GROUPS.map((g) => g.label), ['Text', 'Images', 'Graphics', 'Data', 'Diagrams', 'Venture records', 'Media & links']);
   const options = new Set(FOUNDER_OPTIONS.map((o) => o.key));
   for (const el of ELEMENTS) {
     if (el.adapter) {
@@ -101,11 +101,11 @@ test('the element picker: 8 groups, each item on main or on the seam, and the th
   }
   // Model choice lives in the AIRail: an element names its rail option, never a model.
   assert.ok(ELEMENTS.every((el) => !('model' in el)));
-  assert.deepEqual(ELEMENTS.filter((e) => e.pending).map((e) => e.id), ['remove_bg', 'interview_quote', 'stock_photo']);
+  assert.deepEqual(ELEMENTS.filter((e) => e.pending).map((e) => e.id), ['remove_bg']);
   assert.equal(PEND, '(pending owner)');
   const on = new Set(ELEMENTS.filter(elementOnMain).map((e) => e.id));
   for (const id of ['title', 'body', 'bullets', 'chart', 'table', 'timeline', 'metric', 'photo', 'upload', 'video', 'team_grid']) assert.ok(on.has(id), id);
-  for (const id of ['use_of_funds', 'round_terms', 'flow', 'funnel', 'icons', 'stock_photo']) assert.ok(!on.has(id), id);
+  for (const id of ['use_of_funds', 'round_terms', 'flow', 'funnel', 'icons']) assert.ok(!on.has(id), id);
 });
 
 test('area labels and the hold line', () => {
