@@ -45,6 +45,18 @@ test('polling stops as soon as the server reports a recoverable unreadable extra
   } finally { await ui.close(); globalThis.setInterval = real.set; globalThis.clearInterval = real.clear; }
 });
 
+test('a collaborator update asks the owner to confirm extraction, with no spending control for a cofounder', async () => {
+  const file = { deck_source: true, extraction: { state: 'unreadable', reason: 'owner_confirmation_required' } };
+  const owner = await mount({ role: 'owner', deck_sources_available: true }, file);
+  try {
+    assert.ok(owner.text().includes('Owner confirmation needed')); assert.ok(owner.text().includes('Confirm extraction'));
+    await owner.do('dataroom-deck-source-retry');
+    assert.ok(owner.has('dataroom-deck-source-dialog')); assert.ok(owner.text().includes('updates by cofounders need the owner'));
+  } finally { await owner.close(); }
+  const co = await mount({ role: 'cofounder', deck_sources_available: true }, file);
+  try { assert.equal(co.has('dataroom-deck-source-retry'), false); assert.equal(co.prop('dataroom-deck-source-toggle', 'disabled'), true); } finally { await co.close(); }
+});
+
 test('typed quote remains in the dialog, holds are shown before confirmation, and only confirmed quote is resent', async () => {
   const real = dataRoomApi.setDeckSource; const calls = []; let changed = 0;
   dataRoomApi.setDeckSource = async (...args) => { calls.push(args); if (calls.length === 1) throw Object.assign(new Error('quote'), { status: 402, data: { quote: { hold_microusd: 1234, confirm_quote: 'confirmed' } } }); return { deck_source: true, extraction: { state: 'queued' } }; };

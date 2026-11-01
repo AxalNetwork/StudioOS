@@ -955,7 +955,7 @@ export async function replaceDataRoomFile(
     env.DB.prepare(
       `UPDATE data_room_files SET r2_key = ?, content_type = ?, size_bytes = ?, uploaded_by_user_id = ?, updated_at = ? WHERE id = ? AND project_id = ?`,
     ).bind(key, contentType, a.bytes.byteLength, a.userId, nowIso(), file.id, project.id),
-    ...(deckReady ? resetSourceStatements(env, file.id, project.id, key) : []),
+    ...(deckReady ? resetSourceStatements(env, file.id, project.id, key, null, a.userId) : []),
   ]);
   await logCycleWrite(env, { projectId: project.id, userId: a.userId, cycle: 'raise', module: 'data-room',
     entityId: file.id, action: 'file_replaced', summary: `File replaced; version ${version} kept` });
@@ -1193,7 +1193,7 @@ r.post('/:projectUid/files/:uid/versions/:n/current', async (c) => {
           WHERE id = ? AND r2_key = ?
             AND EXISTS (SELECT 1 FROM data_room_files WHERE id = ? AND r2_key = ?)`,
       ).bind(file.r2_key, file.content_type, file.size_bytes, file.uploaded_by_user_id, at, version.id, version.r2_key, file.id, version.r2_key),
-      ...(deckReady ? resetSourceStatements(c.env, file.id, project.id, version.r2_key, swapToken) : []),
+      ...(deckReady ? resetSourceStatements(c.env, file.id, project.id, version.r2_key, swapToken, Number(user.id)) : []),
     ]);
     if (!(toFile as any).meta?.changes || !(toVersion as any).meta?.changes) {
       return c.json({ detail: 'The file changed while this was saved. Read it again and retry.', code: 'version_conflict' }, 409);

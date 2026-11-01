@@ -187,7 +187,7 @@ test('replacing and making a version current invalidate and enqueue atomically; 
   try {
     await f.request(); const old = f.payload(); await extractDataroomFile(f.env, old);
     const before = f.values();
-    await f.env.DB.batch(resetSourceStatements(f.env, 11, 7, 'data-room/p-room/current', 'a-different-swap'));
+    await f.env.DB.batch(resetSourceStatements(f.env, 11, 7, 'data-room/p-room/current', 'a-different-swap', 1));
     assert.deepEqual(f.values(), before, 'a losing swap cannot invalidate the winning revision');
     assert.equal((await sourceFile(f.env, 7, 'file-a'))!.deck_source_revision, 1);
     await replaceDataRoomFile(f.env, { project: { id: 7, uid: 'p-room' }, userId: 1, fileId: 11, bytes: new TextEncoder().encode('Revenue,2400000'), contentType: 'text/csv' });
@@ -293,22 +293,44 @@ test('a never-started or abandoned job becomes recoverable, stops polling and ca
   } finally { f.db.close(); }
 });
 
-test('a replacement by a cofounder stays within the owner-approved ceiling and never changes the payer', async () => {
+test('collaborator document changes require fresh owner confirmation; code-only updates stay automatic', async () => {
   const f = await fixture('pdf');
   try {
     const q = await f.request(); await f.request(1, { enabled: true, confirm_quote: q.body.quote.confirm_quote });
     await extractDataroomFile(f.env, f.payload());
+    const before = f.reads.length;
     await replaceDataRoomFile(f.env, { project: { id: 7, uid: 'p-room' }, userId: 3, fileId: 11, bytes: f.objects.get('data-room/p-room/current')!, contentType: 'application/pdf' });
+    assert.equal(sourceState((await sourceFile(f.env, 7, 'file-a'))!).extraction.reason, 'owner_confirmation_required');
+    await extractDataroomFile(f.env, f.payload());
+    assert.equal(f.calls.length, 1); assert.equal(f.reads.length, before);
+    assert.equal((await f.request(3)).status, 403);
+    assert.equal((await f.request(1, { enabled: true, confirm_quote: q.body.quote.confirm_quote })).status, 402, 'the previous revision approval cannot approve a collaborator update');
+    const fresh = await f.request(); assert.equal(fresh.status, 402);
+    await f.request(1, { enabled: true, confirm_quote: fresh.body.quote.confirm_quote });
     await extractDataroomFile(f.env, f.payload());
     const logs = f.db.prepare("SELECT user_id,charged_microusd FROM ai_usage_logs WHERE task = 'rail_synth'").all() as any[];
-    assert.equal(logs.length, 2); assert.ok(logs.every(r => r.user_id === 1 && r.charged_microusd <= q.body.quote.hold_microusd));
-    await replaceDataRoomFile(f.env, { project: { id: 7, uid: 'p-room' }, userId: 3, fileId: 11, bytes: f.objects.get('data-room/p-room/current')!, contentType: 'application/pdf' });
+    assert.equal(logs.length, 2); assert.ok(logs.every(r => r.user_id === 1 && r.charged_microusd <= fresh.body.quote.hold_microusd));
+    const swapped = await f.request(3, {}, '/versions/1/current', 'POST'); assert.equal(swapped.status, 200);
+    const swapReads = f.reads.length; await extractDataroomFile(f.env, f.payload());
+    assert.equal(f.calls.length, 2); assert.equal(f.reads.length, swapReads);
+    assert.equal(sourceState((await sourceFile(f.env, 7, 'file-a'))!).extraction.reason, 'owner_confirmation_required');
+    const again = await f.request(); await f.request(1, { enabled: true, confirm_quote: again.body.quote.confirm_quote });
+    await extractDataroomFile(f.env, f.payload()); assert.equal(f.calls.length, 3);
+    // An owner's own update may use the approved model, but never a higher price.
+    await replaceDataRoomFile(f.env, { project: { id: 7, uid: 'p-room' }, userId: 1, fileId: 11, bytes: f.objects.get('data-room/p-room/current')!, contentType: 'application/pdf' });
     const approval = JSON.parse((await sourceFile(f.env, 7, 'file-a'))!.deck_source_quote!); approval.hold_microusd = 0;
     f.db.prepare('UPDATE data_room_files SET deck_source_quote = ? WHERE id = 11').run(JSON.stringify(approval));
     const reads = f.reads.length; await extractDataroomFile(f.env, f.payload());
-    assert.equal(f.reads.length, reads); assert.equal(f.calls.length, 2);
+    assert.equal(f.reads.length, reads); assert.equal(f.calls.length, 3);
     assert.equal((await sourceFile(f.env, 7, 'file-a'))!.deck_extract_state, 'unreadable');
   } finally { f.db.close(); }
+  const csv = await fixture();
+  try {
+    await csv.request();
+    await replaceDataRoomFile(csv.env, { project: { id: 7, uid: 'p-room' }, userId: 3, fileId: 11, bytes: new TextEncoder().encode('Revenue,2400000'), contentType: 'text/csv' });
+    await extractDataroomFile(csv.env, csv.payload());
+    assert.equal((csv.values()[0] as any).value, 2400000); assert.equal(csv.calls.length, 0);
+  } finally { csv.db.close(); }
 });
 
 test('migration cascades file/project values and clears an erased approver without blocking account deletion', () => {
@@ -349,6 +371,22 @@ test('unsupported XML declarations fail before a typed model run', async () => {
     const q = await f.request(); await f.request(1, { enabled: true, confirm_quote: q.body.quote.confirm_quote });
     await extractDataroomFile(f.env, f.payload());
     assert.equal(f.calls.length, 0); assert.deepEqual(f.values(), []);
+    assert.equal((await sourceFile(f.env, 7, 'file-a'))!.deck_extract_state, 'unreadable');
+    const logged = f.db.prepare("SELECT message,details FROM error_logs WHERE source = 'dataroomExtract'").get() as any;
+    assert.equal(logged.message, 'Data-room extraction failed');
+    assert.deepEqual(JSON.parse(logged.details), { code: 'unsupported_xml_declaration', project_id: 7, file_uid: 'file-a', revision: 1, job_id: null });
+  } finally { f.db.close(); }
+});
+
+test('unexpected failure diagnostics contain only a safe class and job identifiers', async () => {
+  const f = await fixture();
+  try {
+    await f.request();
+    f.env.FILES.get = async () => { throw new Error('private document text must stay private'); };
+    await extractDataroomFile(f.env, f.payload(), 42);
+    const rows = f.db.prepare("SELECT details FROM error_logs WHERE source = 'dataroomExtract'").all() as any[];
+    assert.equal(rows.length, 1);
+    assert.deepEqual(JSON.parse(rows[0].details), { code: 'extraction_failed', project_id: 7, file_uid: 'file-a', revision: 1, job_id: 42 });
     assert.equal((await sourceFile(f.env, 7, 'file-a'))!.deck_extract_state, 'unreadable');
   } finally { f.db.close(); }
 });

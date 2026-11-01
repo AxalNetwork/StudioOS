@@ -42,7 +42,11 @@ export function sourceState(file: SourceFile) {
   const since = file.deck_extract_started_at ?? file.deck_extract_queued_at;
   const abandoned = file.deck_extract_state === 'queued' && since != null
     && Date.now() - Date.parse(since) > (file.deck_extract_started_at ? 300_000 : 1_800_000);
-  return { uid: file.uid, deck_source: !!file.deck_source, extraction: { state: abandoned ? 'unreadable' : file.deck_extract_state ?? 'no_values', as_of: file.deck_source_as_of } };
+  const needsOwner = !!file.deck_source && typedFile(file) && !file.deck_source_quote;
+  return { uid: file.uid, deck_source: !!file.deck_source, extraction: {
+    state: abandoned || needsOwner ? 'unreadable' : file.deck_extract_state ?? 'no_values', as_of: file.deck_source_as_of,
+    ...(needsOwner ? { reason: 'owner_confirmation_required' } : {}),
+  } };
 }
 function boundedPages(pages: DocumentPage[]): DocumentPage[] {
   const out: DocumentPage[] = []; let remaining = DOCUMENT_TEXT_MAX;
@@ -98,15 +102,16 @@ export async function enableSource(env: Env, file: SourceFile, userId: number, q
 }
 
 /** Include these statements in the content-change batch, before it commits. */
-export function resetSourceStatements(env: Env, fileId: number, projectId: number, currentKey: string, expectedToken: string | null = null) {
+export function resetSourceStatements(env: Env, fileId: number, projectId: number, currentKey: string, expectedToken: string | null, changedBy: number) {
   const token = crypto.randomUUID();
   return [
     env.DB.prepare(`UPDATE data_room_files SET deck_source_revision = deck_source_revision + 1, deck_source_token = CASE WHEN deck_source = 1 THEN ? ELSE NULL END,
       deck_extract_state = CASE WHEN deck_source = 1 THEN 'queued' ELSE NULL END,
-      deck_extract_started_at = NULL, deck_source_as_of = NULL, deck_extract_queued_at = CASE WHEN deck_source = 1 THEN ? ELSE NULL END
+      deck_extract_started_at = NULL, deck_source_as_of = NULL, deck_extract_queued_at = CASE WHEN deck_source = 1 THEN ? ELSE NULL END,
+      deck_source_quote = CASE WHEN deck_source_user_id = ? THEN deck_source_quote ELSE NULL END
       WHERE id = ? AND project_id = ? AND r2_key = ?
       AND (? IS NULL OR deck_source_token = ?)`)
-      .bind(token, new Date().toISOString(), fileId, projectId, currentKey, expectedToken, expectedToken),
+      .bind(token, new Date().toISOString(), changedBy, fileId, projectId, currentKey, expectedToken, expectedToken),
     env.DB.prepare(`DELETE FROM dataroom_deck_values WHERE project_id = ? AND file_uid IN
       (SELECT uid FROM data_room_files WHERE id = ? AND project_id = ? AND r2_key = ? AND (deck_source_token = ? OR deck_source = 0))`)
       .bind(projectId, fileId, projectId, currentKey, token),
@@ -135,7 +140,7 @@ async function documentPages(env: Env, bytes: Uint8Array, kind: 'pdf' | 'docx'):
 }
 
 /** Nothing is charged twice on a retry; a deliberate retry gets a new token. */
-export async function extractDataroomFile(env: Env, payload: { project_id?: unknown; file_uid?: unknown; token?: unknown }) {
+export async function extractDataroomFile(env: Env, payload: { project_id?: unknown; file_uid?: unknown; token?: unknown }, jobId: number | null = null) {
   if (!Number.isSafeInteger(payload.project_id) || typeof payload.file_uid !== 'string' || typeof payload.token !== 'string') return;
   const file = await sourceFile(env, Number(payload.project_id), payload.file_uid);
   if (!file?.deck_source || file.deck_source_token !== payload.token || file.deck_extract_state !== 'queued') return;
@@ -196,9 +201,15 @@ export async function extractDataroomFile(env: Env, payload: { project_id?: unkn
       env.DB.prepare(`UPDATE data_room_files SET deck_extract_state = ?, deck_source_as_of = ? WHERE id = ? AND project_id = ? AND deck_source = 1 AND deck_source_token = ?`)
         .bind(values.length ? 'done' : 'no_values', asOf, file.id, file.project_id, payload.token),
     ]);
-  } catch {
+  } catch (error) {
     // Never log file text, model output, figures, filenames or document errors.
     await env.DB.prepare(`UPDATE data_room_files SET deck_extract_state = 'unreadable' WHERE id = ? AND project_id = ? AND deck_source_token = ? AND deck_source = 1`)
       .bind(file.id, file.project_id, payload.token).run();
+    const codes = ['unsupported_file', 'quote_required', 'quote_changed', 'document_unreadable', 'document_too_large', 'invalid_office_file', 'invalid_csv', 'unsupported_xml_declaration', 'document_conversion_unavailable', 'extraction_unreadable'] as const;
+    const code = codes.find(c => error instanceof Error && c === error.message) ?? 'extraction_failed';
+    try {
+      await env.DB.prepare(`INSERT INTO error_logs (level,source,message,details) VALUES ('WARN','dataroomExtract','Data-room extraction failed',?)`)
+        .bind(JSON.stringify({ code, project_id: file.project_id, file_uid: file.uid, revision: file.deck_source_revision, job_id: jobId })).run();
+    } catch { /* A logging outage must not buy an automatic paid retry. */ }
   }
 }
