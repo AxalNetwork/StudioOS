@@ -185,6 +185,8 @@ export async function extractDataroomFile(env: Env, payload: { project_id?: unkn
         const opts = options(file, file.deck_source_user_id!, pages, approval!.model);
         const q = await quoteRun(env, opts);
         if (!q.ok || q.hold_microusd > approval!.hold_microusd) throw new Error('quote_changed');
+        // Conversion and quoting may outlive the claim's deadline. Never start a paid run after it.
+        if (sourceState(current).extraction.state === 'unreadable') throw new Error('extraction_unreadable');
         const result = await run(env, { ...opts, rail: opts.rail, surface: AI_SURFACE.raiseDataRoom });
         if (!result.ok) throw new Error('extraction_unreadable');
         const output = result.output ?? '';

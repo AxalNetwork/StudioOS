@@ -422,3 +422,23 @@ test('unexpected failure diagnostics contain only a safe class and job identifie
     assert.equal((await sourceFile(f.env, 7, 'file-a'))!.deck_extract_state, 'unreadable');
   } finally { f.db.close(); }
 });
+
+
+test('a conversion crossing the claim deadline cannot start a paid run; a live claim still can', async () => {
+  for (const expired of [false, true]) {
+    const f = await fixture('pdf');
+    try {
+      const quote = await f.request();
+      await f.request(1, { enabled: true, confirm_quote: quote.body.quote.confirm_quote });
+      f.env.AI.toMarkdown = async () => {
+        f.db.prepare('UPDATE data_room_files SET deck_extract_started_at = ? WHERE id = 11')
+          .run(new Date(Date.now() - (expired ? 6 : 4) * 60_000).toISOString());
+        return [{ data: 'No supported figures here.' }];
+      };
+      await extractDataroomFile(f.env, f.payload());
+      const file = (await sourceFile(f.env, 7, 'file-a'))!;
+      const usage = f.db.prepare("SELECT COUNT(*) AS n FROM ai_usage_logs WHERE task = 'rail_synth'").get()!.n;
+      assert.deepEqual([f.calls.length, file.deck_extract_state, usage], expired ? [0, 'unreadable', 0] : [1, 'no_values', 1]);
+    } finally { f.db.close(); }
+  }
+});
