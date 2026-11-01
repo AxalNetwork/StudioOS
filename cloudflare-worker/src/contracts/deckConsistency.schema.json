@@ -1,7 +1,8 @@
 {
   "$id": "deckConsistency",
   "title": "GET /api/decks/:id/check → consistency (D1555, #3802)",
-  "description": "What the deck v2 adapter's `consistency` method passes through: the `consistency` key of the deck check's reply (`routes/deck_check.ts`, `services/deckConsistency.ts`), or null for a reader who is not the founder. The free rules, no model and no write. No `type`, so null holds. D1511 (#3762).",
+  "description": "What the deck v2 adapter's `consistency` method passes through: the `consistency` key of the deck check's reply (`routes/deck_check.ts`, `services/deckConsistency.ts`), or null for a reader who is not the founder. The free rules, no model and no write. An explicit nullable object refuses other primitive replies. D1511 (#3762).",
+  "type": ["object", "null"],
   "additionalProperties": false,
   "required": ["state", "findings"],
   "properties": {
@@ -15,7 +16,7 @@
           "key": { "type": "string" },
           "rule": { "enum": ["one_value", "use_of_funds", "runway", "round", "forecast"] },
           "message": { "type": "string" },
-          "cards": { "type": "array", "items": { "type": "integer", "minimum": 0 } }
+          "cards": { "type": "array", "items": { "type": "integer", "minimum": 1 } }
         }
       }
     }

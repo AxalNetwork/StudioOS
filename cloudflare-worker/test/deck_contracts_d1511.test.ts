@@ -10,9 +10,6 @@
  *   3. Every `deckV2Adapter.js` method swapped to `through(…)` has a contract,
  *      and every contract names a swapped method, so an adapter swap changes
  *      no screen.
- *   4. `GET /api/decks/:id/typed-values` (D1538) and the deck check's
- *      `consistency` key (D1555), the two swaps that merged beside this file,
- *      match their contracts.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/deck_contracts_d1511.test.ts
@@ -25,8 +22,9 @@ import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import deckGrid from '../src/routes/deck_grid.ts';
-import deckTypedValues from '../src/routes/deck_typed_values.ts';
+import deckCheck from '../src/routes/deck_check.ts';
 import { deckConsistency } from '../src/services/deckConsistency.ts';
+import deckTypedValues from '../src/routes/deck_typed_values.ts';
 import { CONTRACTS as NAMED } from '../src/contracts/index.ts';
 import { contractErrors } from '../src/contracts/validate.ts';
 import { LAYOUTS } from '../src/services/decks/slideModel.ts';
@@ -55,6 +53,10 @@ test('1. the validator checks types, required fields, closed objects, items, enu
   assert.deepEqual(contractErrors(s, { a: 4, b: ['k', 'l', 'm'] }), ['$.a: must be at most 3', '$.b: holds at most 2 items']);
   assert.deepEqual(contractErrors(s, { a: 0, b: ['k'] }), ['$.a: must be at least 1']);
   assert.deepEqual(contractErrors({ type: 'number' }, 3), [], 'an integer is a number');
+  assert.deepEqual(contractErrors({ type: ['number', 'string'] }, 3), [], 'an integer is also a union number');
+  assert.deepEqual(contractErrors({ type: ['object', 'null'], required: ['a'] }, null), [], 'nullable objects accept null');
+  assert.deepEqual(contractErrors({ type: ['object', 'null'], required: ['a'] }, {}), ['$: missing a'], 'nullable objects still check their fields');
+  assert.deepEqual(contractErrors({ type: ['number', 'string'] }, false), ['$: must be number or string, is boolean']);
   assert.deepEqual(contractErrors({ pattern: '^a' }, 'a'), ['$: the schema uses pattern, which the validator does not check']);
   assert.deepEqual(contractErrors({ $ref: '#/$defs/none' }, 1), ['$: unknown $ref #/$defs/none']);
 });
@@ -88,9 +90,9 @@ function world() {
   add.run(2, 2, 'v2 deck', JSON.stringify(v2), 0, JSON.stringify({ kind: 'brand', aspect: '4:3' }));
   return db;
 }
-async function get(db: DatabaseSync, path: string) {
-  const app = new Hono<any>().route('/api/decks', deckGrid);
-  const token = await new SignJWT({ user_id: 10, role: 'founder' }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+async function get(db: DatabaseSync, path: string, userId = 10) {
+  const app = new Hono<any>().route('/api/decks', deckGrid).route('/api/decks', deckCheck).route('/api/decks', deckTypedValues);
+  const token = await new SignJWT({ user_id: userId, role: 'founder' }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
   const res = await withThrownResponses(() => app.request(path, { headers: { Authorization: `Bearer ${token}` } }, { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any));
   return { status: res.status, body: await res.json() as any };
 }
@@ -117,6 +119,42 @@ test('2. the grid route\'s reply matches its contract, for a deck saved before v
 });
 
 // ── 3. The adapter's swapped methods ─────────────────────────────────────
+
+test('typedTables contract matches real numeric, text, named and missing-author replies', async () => {
+  const db = world();
+  try {
+    db.exec("INSERT INTO deck_typed_values (project_id, deck_id, key, label, value_num, value_text, unit, typed_by) VALUES (1, 1, 'arr', 'ARR', 2.5, NULL, 'usd', 10), (1, 1, 'note', 'Note', NULL, 'Pending', 'text', NULL)");
+    const r = await get(db, '/api/decks/1/typed-values');
+    assert.equal(r.status, 200);
+    assert.deepEqual(contractErrors(CONTRACTS.typedTables.schema, r.body), []);
+    const row = r.body.values[0];
+    for (const bad of [{ ...row, value: false }, { ...row, grade: 'Observed' }, { ...row, typed_by: { id: '10', name: null } }, { ...row, typed_by: false }, { ...row, typed_by: { id: 10, name: false } }, { ...row, unit: 'other' }]) {
+      assert.notDeepEqual(contractErrors(CONTRACTS.typedTables.schema, { ...r.body, values: [bad] }), [], 'invalid typed figures fail');
+    }
+    const { typed_at: _at, ...missingTime } = row;
+    assert.notDeepEqual(contractErrors(CONTRACTS.typedTables.schema, { ...r.body, values: [missingTime] }), []);
+  } finally { db.close(); }
+});
+
+test('consistency contract matches the actual check field and keeps findings typed', async () => {
+  const db = world();
+  try {
+    const slides = [{ blocks: [{ kind: 'text', text: 'ARR $1m' }] }, { blocks: [{ kind: 'text', text: 'ARR $2m' }] }];
+    db.prepare('UPDATE pitch_decks SET slides = ? WHERE id = 1').run(JSON.stringify(slides));
+    const r = await get(db, '/api/decks/1/check');
+    assert.equal(r.status, 200);
+    assert.equal(r.body.consistency.findings.length, 1, 'a nonempty route response is checked');
+    assert.deepEqual(contractErrors(CONTRACTS.consistency.schema, r.body.consistency), []);
+    db.exec("INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (11, 'founder', 'Synthetic member', 'member@example.test', 1, 1002); INSERT INTO project_members (project_id, user_id, role, status) VALUES (1, 11, 'advisor', 'accepted')");
+    const member = await get(db, '/api/decks/1/check', 11);
+    assert.equal(member.status, 200);
+    assert.equal(member.body.consistency, null, 'the non-owner reply carries no findings');
+    assert.deepEqual(contractErrors(CONTRACTS.consistency.schema, member.body.consistency), [], 'the real non-owner reply matches');
+    for (const bad of [false, { ...r.body.consistency, state: 'other' }, { ...r.body.consistency, findings: [{ key: 'x', rule: 'other', message: 'x', cards: [1] }] }, { ...r.body.consistency, findings: [{ key: 'x', rule: 'one_value', message: 'x', cards: [0] }] }]) {
+      assert.notDeepEqual(contractErrors(CONTRACTS.consistency.schema, bad), [], 'invalid consistency findings fail');
+    }
+  } finally { db.close(); }
+});
 
 test('3. every adapter method swapped to through() has a contract, and every contract is a swapped method', () => {
   const src = readFileSync(resolve(process.cwd(), 'frontend/src/pages/raise/pitch/deckV2Adapter.js'), 'utf8');
