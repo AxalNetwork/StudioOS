@@ -16,3 +16,13 @@ test('LP investor workspace renders without an AI rail for investors', async () 
     }
   } finally { renderer.close(); }
 });
+
+test('D1424 (#3700): the LP workspace and /account have no header Ask, even once the Ask panel serves investors', async () => {
+  const { headerAskGate } = await import('../src/workspaces/ProfileHeaderAsk.jsx');
+  for (const pathname of ['/spinout-lab/investor-workspace', '/account', '/account/security-privacy']) {
+    const gate = headerAskGate({ role: 'investor', pathname, panel: { available: true } });
+    assert.equal(gate.show, false, `${pathname} draws Ask`);
+    assert.equal(gate.reason, 'no_rail');
+  }
+  assert.equal(headerAskGate({ role: 'investor', pathname: '/funds/calls', panel: { available: true } }).show, true);
+});

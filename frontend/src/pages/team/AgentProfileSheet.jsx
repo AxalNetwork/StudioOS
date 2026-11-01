@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Lightbox, Pill, Sheet, Unrecorded } from '../../ui';
 import { AgentPill, AgentTile } from './AgentMark.jsx';
 import * as agents from './agentsAdapter.js';
+import AgentSkillsCard from './AgentSkillsCard.jsx';
 import { BTN_DANGER, BTN_PRIMARY, BTN_SECONDARY, FIELD, HonestBlock, MONO, MUTED } from './teamUi.jsx';
 import { day } from '../account/companies/companiesModel.js';
 import { agentName, budgetLine, dayTime, eventWords, pauseWords } from './teamModel.js';
@@ -21,6 +22,9 @@ import { agentName, budgetLine, dayTime, eventWords, pauseWords } from './teamMo
  * The visible title is the agent's name; its accessible name adds the role
  * (", CFO agent"). The name fields are read-only for anyone who cannot manage
  * the agent; for a manager they save through "Save name", never silently.
+ *
+ * D1612 (#3952, SK4): below the profile, its Skills and Values
+ * (`AgentSkillsCard`, A2 #3956 through the adapter).
  */
 
 const PROPOSAL_KEYS = [['proposed', 'Proposed'], ['accepted', 'Accepted'], ['edited', 'Edited'], ['discarded', 'Discarded'], ['withdrawn', 'Withdrawn']];
@@ -192,7 +196,12 @@ export default function AgentProfileSheet({ uid, canManage, editCap = false, onC
         ) : null}>
         {!block ? <p className={`m-0 px-5 py-5 ${MUTED}`}>Reading…</p>
           : !block.available ? <div className="px-5 py-5"><HonestBlock>{block.unreadable ? 'This agent could not be read.' : block.reason}{block.refused ? '' : ' That is not the same as having none.'}</HonestBlock></div>
-            : <AgentProfile data={block.value} canManage={manage} onSaveName={saveName} />}
+            : (
+              <>
+                <AgentProfile data={block.value} canManage={manage} onSaveName={saveName} />
+                <div className="px-5 pb-5"><AgentSkillsCard agent={{ uid: a?.uid || uid, role_key: a?.role_key, role_name: role, scope: a?.scope || null }} canManage={manage} /></div>
+              </>
+            )}
       </Sheet>
       {confirm === 'pause' ? (
         <Confirm testId="agent-pause-confirm" title={a?.status === 'paused' ? `Resume ${name}, the ${a?.role_name} agent?` : `Pause ${name}, the ${a?.role_name} agent?`}

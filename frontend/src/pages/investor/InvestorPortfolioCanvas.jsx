@@ -4,10 +4,12 @@ import { Activity, ArrowUpRight, Inbox, RefreshCw, TrendingDown, TrendingUp, Use
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import ZoneNav from '../../workspaces/ZoneNav';
+import { ZoneHeaderTools } from '../../workspaces/ZoneHeader';
 import AlsoIn from '../../workspaces/AlsoIn';
 import { bucketForPath } from '../../workspaces/shellConfig';
 import './investorPortfolioCanvas.css';
 import { titleCase } from '../../lib/absence';
+import { ACCOUNT_LINK } from '../account/companies/companiesModel.js';
 
 const money = (value) => {
   if (value == null) return '—';
@@ -97,8 +99,11 @@ export default function InvestorPortfolioCanvas() {
         <div>
           <h1>Know how my investments are doing</h1>
           <p>Your direct book — positions, founder-maintained records, and the work around each investment.</p>
+          {/* D1413 (#3696 Q1): the same companies can sit in your account's Portfolio; each links to the other. */}
+          <Link to={ACCOUNT_LINK.to} className="i4-primary-link" data-testid="link-account-portfolio">{ACCOUNT_LINK.label}</Link>
         </div>
-        <button type="button" className="i4-icon-button" onClick={load} data-testid="button-refresh-investor-portfolio" aria-label="Refresh direct book"><RefreshCw size={15} /></button>
+        {/* D1424 (#3700): the root has no primary; Ask stays gated (ProfileHeaderAsk). */}
+        <ZoneHeaderTools role="investor"><button type="button" className="i4-icon-button" onClick={load} data-testid="button-refresh-investor-portfolio" aria-label="Refresh direct book"><RefreshCw size={15} /></button></ZoneHeaderTools>
       </header>
 
       {/* This row used to be hand-rolled, and its "Positions" pill linked

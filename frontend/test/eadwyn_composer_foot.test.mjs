@@ -57,12 +57,11 @@ test('the phone frame takes the measured height and its composer stands at the f
   const composer = PHONE_FRAME.match(/<div className="([^"]*)" data-testid="eadwyn-phone-composer">/);
   assert.ok(composer, 'the composer row is not drawn');
   assert.match(composer[1], /\bmt-auto\b/);
-  // Pinned on a long thread. bottom-0: <main> already pads by the tab bar and a
-  // sticky row is held inside that padding, so the bar's height here again
-  // floated the composer 56px above the bar (measured in Chromium at 390x844).
-  assert.match(composer[1], /\bsticky bottom-0\b/);
+  // D1419 (#3698, owner answer A): no longer pinned. The founder's strip,
+  // profile card and modules follow the chat on a phone, and they would scroll
+  // under a pinned composer; it stands at the frame's foot instead.
+  assert.doesNotMatch(composer[1], /\bsticky\b/);
   assert.doesNotMatch(composer[1], /mobile-tabbar-h/, 'the tab bar counted twice');
-  assert.match(readFileSync('frontend/src/components/mobileTabBar.css', 'utf8'), /\[data-app-scroll\] \{\s*padding-bottom: var\(--mobile-tabbar-h\);/, 'the clearance bottom-0 relies on');
   // The composer is the frame's last row in the conversation tab, so mt-auto puts it at the foot.
   const conversation = PHONE_FRAME.slice(PHONE_FRAME.indexOf("panelTab === 'conversation'"), PHONE_FRAME.indexOf(") : panelTab === 'tasks'"));
   assert.match(conversation, /data-testid="eadwyn-phone-composer">[\s\S]*?<\/div>\s*<\/>\s*$/, 'a row after the composer');

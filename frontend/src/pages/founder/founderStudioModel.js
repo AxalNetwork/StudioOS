@@ -7,10 +7,14 @@
  * when it failed, and its payload otherwise.
  *
  * WHAT HAS NO STORE IS SAID, NEVER DRAWN. The canvas's "Holding progress"
- * blockers, "What this adds up to", the per-module percent, each activity's
- * "feeds" line and each action's "unlocks" order have nothing recorded behind
- * them (#1168's step-1 table). Those zones say so with the reason; none is
- * drawn as zero or as nothing.
+ * blockers, "What this adds up to", the per-module percent and each action's
+ * "unlocks" order have nothing recorded behind them (#1168's step-1 table).
+ * Those zones say so with the reason; none is drawn as zero or as nothing.
+ *
+ * D1419 (#3698): "Do these next" and "Activity across the platform" left the
+ * page, and the activity read with them. `actionsOf` stays: its first open
+ * item is what "Continue where you left off" links. The zones are Studio
+ * modules now (`pages/studio/tiles/founderTiles.jsx`).
  */
 import { WEEK_DEFS, TOOL_INFO, milestoneKeySet } from '../SpinoutLabWorkspace';
 
@@ -55,7 +59,8 @@ export function labDay(lab) {
 // ---- header ------------------------------------------------------------------
 
 export function headerOf({ user, project, lab }) {
-  const name = user?.name || user?.email?.split('@')[0] || 'Founder';
+  // People appear by name, never by email (D1419).
+  const name = user?.name || 'Founder';
   const labRead = readState(lab);
   let phase = null;
   if (labRead === READY) {
@@ -214,7 +219,7 @@ function allFeatures() {
   return WEEK_DEFS.flatMap((w) => w.features);
 }
 
-// ---- do these next -----------------------------------------------------------
+// ---- continue where you left off ---------------------------------------------
 
 export function actionsOf({ lifecycle, project }) {
   if (readState(project) === READY && !project) {
@@ -240,34 +245,11 @@ export function questionsOf({ advisor, queue }) {
   return { state: READY, answered, open: total === null || answered === null ? null : Math.max(0, total - answered), items: open };
 }
 
-// ---- activity -----------------------------------------------------------------
+// ---- labels -------------------------------------------------------------------
 
-export const ACTIVITY_DAYS = 7;
-
-export function activityOf({ activity, now = Date.now() }) {
-  const s = joint(activity);
-  if (s.state !== READY) return s;
-  const rows = Array.isArray(activity?.items) ? activity.items : Array.isArray(activity?.logs) ? activity.logs : [];
-  const since = now - ACTIVITY_DAYS * 86_400_000;
-  const items = rows
-    .map((r) => ({ at: Date.parse(String(r.created_at || '').replace(' ', 'T') + (/[zZ]|[+-]\d\d:?\d\d$/.test(String(r.created_at || '')) ? '' : 'Z')), r }))
-    .filter((x) => Number.isFinite(x.at) && x.at >= since && x.at <= now + 60_000)
-    .slice(0, 8)
-    .map(({ at, r }) => ({ when: whenOf(at, now), what: humanise(r.action), detail: typeof r.details === 'string' && r.details && !r.details.startsWith('{') ? r.details : null }));
-  if (!items.length) return { state: EMPTY };
-  return { state: READY, items };
-}
-
-function whenOf(at, now) {
-  const days = Math.floor((startOfDay(now) - startOfDay(at)) / 86_400_000);
-  if (days <= 0) return 'Today';
-  if (days === 1) return 'Yesterday';
-  return `${days} days`;
-}
-function startOfDay(ms) { const d = new Date(ms); d.setHours(0, 0, 0, 0); return d.getTime(); }
 const humanise = (s) => { const t = String(s || '').replace(/[_.:-]+/g, ' ').trim(); return t ? t.charAt(0).toUpperCase() + t.slice(1) : 'Activity'; };
 
-// ---- module map ---------------------------------------------------------------
+// ---- Lab tools (was the Module map zone) -----------------------------------------
 
 export function modulesOf({ lab }) {
   const s = joint(lab);

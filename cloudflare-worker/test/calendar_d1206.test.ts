@@ -20,7 +20,9 @@ function fixture() {
   db.exec(readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8'));
   for (const name of ['235_calendar_events_kind.sql', '277_user_recovery_state.sql', '603_calendar_feed_tokens.sql', '256_branch_local_copies.sql', '258_licence_deployments.sql', '463_raise_record_stores.sql', '607_raise_money_cents.sql', '610_calendar_feed_scope_sync_errors.sql',
     // D1384: compliance_events' owner_name, which the Compliance source reads.
-    '443_grow_stores.sql']) {
+    '443_grow_stores.sql',
+    // #3959: the Learning source reads the member's plan.
+    '388_learning_core.sql', '389_learning_programs.sql', '390_learning_exercises_exams.sql', '391_learning_webinars.sql', '758_learning_plan.sql']) {
     db.exec(readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8'));
   }
   for (const [id, role] of [[1,'admin'],[2,'founder'],[3,'advisor'],[4,'investor'],[5,'investor']] as const) {

@@ -215,3 +215,9 @@ f9bac90fc12defb775b0759aaf8824dcdc470cac:cloudflare-worker/test/calendar_complia
 # commit renames it, so no later commit carries it. Pin only the published
 # finding, as D334's entry does.
 7ca0659e7a6d0260d3f9fec882ffcc3f6c173413:cloudflare-worker/test/untrusted_framing_d1506.test.ts:generic-api-key:195
+# #3740 part 2a: the fill test's first commit named its synthetic JWT signing
+# string `SECRET`; gitleaks' generic-api-key rule read it as a key. It signs the
+# test's own tokens against an in-memory database and was never a credential.
+# The next commit renames it, so no later commit carries it. Pin only the
+# published finding, as D334's entry does.
+61035d4540e13c69f5357e00bf8375a69fe2f1e7:cloudflare-worker/test/fill_founder_part2a_3740.test.ts:generic-api-key:23

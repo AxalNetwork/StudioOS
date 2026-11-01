@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import {
-  CalendarDays, ChevronRight, CircleDollarSign, Clock3, Eye,
-  RefreshCw, ShieldCheck, Sparkles, Store, Users,
-} from 'lucide-react';
+import { Eye, RefreshCw, ShieldCheck, Sparkles } from 'lucide-react';
 import { api } from '../../lib/api';
+import StudioModules from '../studio/StudioModules';
+import { CustomiseButton, StudioFixedLock } from '../studio/StudioParts';
+import { PURPOSE, TILE } from '../studio/studioLayoutModel';
+import { useStudioLayout } from '../studio/useStudioLayout';
 import StudioInterview from '../../components/advisor/StudioInterview';
 import ProfileFitSection from '../../components/profile/ProfileFitSection';
 import { AWAITING_DECISION, isBookableSlot, slotMinutes, slotView } from './advisory/kit';
@@ -38,7 +38,8 @@ function minutesLabel(row) {
 const unavailable = (message = 'Unavailable in this environment') => ({ state: 'unavailable', message });
 const loading = { state: 'loading' };
 const ready = (data) => ({ state: 'ready', data });
-const failed = (error) => ({ state: 'unavailable', message: error?.message || 'Unavailable in this environment' });
+// A read that FAILED, told apart from one that answered "not available" (D1419: the tile says could not be read).
+const failed = (error) => ({ state: 'unavailable', failed: true, message: error?.message || 'Unavailable in this environment' });
 const firstName = (value) => String(value || '').trim().split(/\s+/)[0] || 'there';
 const asItems = (value) => Array.isArray(value) ? value : (Array.isArray(value?.items) ? value.items : []);
 
@@ -55,30 +56,13 @@ function Status({ children, tone = 'neutral' }) {
   return <span className={`advisor-status advisor-status--${tone}`} data-testid={`status-${String(children).toLowerCase().replace(/\s+/g, '-')}`}>{children}</span>;
 }
 
-function Module({ title, action, to, children, testid, className = '', disabled = false }) {
-  return (
-    <section className={`advisor-module ${className}`} data-testid={testid}>
-      <header className="advisor-module__header">
-        <h2>{title}</h2>
-        {to && (disabled
-          ? <span className="advisor-disabled-link" data-testid={`link-${testid}`}>{action || 'Open'} <ShieldCheck size={12} /></span>
-          : <Link to={to} data-testid={`link-${testid}`}>{action || 'Open'} <ChevronRight size={13} /></Link>)}
-      </header>
-      {children}
-    </section>
-  );
-}
-
-function Pending({ lines = 2 }) {
-  return <div className="advisor-skeleton" aria-label="Loading">{Array.from({ length: lines }).map((_, i) => <i key={i} style={{ width: `${82 - i * 18}%` }} />)}</div>;
-}
-
 function StateNote({ text, icon: Icon = ShieldCheck }) {
   return <div className="advisor-state-note"><Icon size={16} /><span>{text}</span></div>;
 }
 
 function bookingIdentity(booking) {
-  return booking.client_name || booking.founder_name || booking.user_name || booking.name || booking.client_email || booking.founder_email || 'Client identity not recorded';
+  // A person by name, never by email (D1419): the address is a key, not a label.
+  return booking.client_name || booking.founder_name || booking.user_name || booking.name || 'Client identity not recorded';
 }
 
 export default function AdvisorStudioHome({
@@ -192,54 +176,75 @@ export default function AdvisorStudioHome({
     }).sort((a, b) => new Date(slotView(a).startsAt) - new Date(slotView(b).startsAt));
   }, [slots]);
 
+  const studio = useStudioLayout({ profile: 'advisor', viewer: user, readOnly: previewing });
+  const withheld = { state: TILE.WITHHELD };
+  const tiles = previewing ? Object.fromEntries(['today', 'storefront', 'engagements', 'consented_proof', 'earnings'].map((k) => [k, withheld])) : {
+    today: calendar.state === 'loading' || bookings.state === 'loading' ? { state: TILE.LOADING }
+      : (calendar.state === 'unavailable' && bookings.state === 'unavailable') ? { state: TILE.UNREADABLE, onRetry: load }
+        : (todayItems.length === 0 && todayOpenSlots.length === 0) ? { state: TILE.EMPTY, empty: 'No sessions or open slots are scheduled for today.', href: '/calendar', openLabel: 'Open calendar' }
+          : {
+            state: TILE.READY,
+            href: '/calendar',
+            openLabel: 'Open calendar',
+            body: (
+              <div className="advisor-list">
+                {todayItems.map((item, index) => <div className="advisor-row" key={item.id || index}><div><strong>{item.topic || item.title || 'Advisor session'}</strong><span>{formatWhen(itemStart(item))}{minutesLabel(item)}</span></div><Status tone={item.status === 'confirmed' ? 'good' : 'neutral'}>{item.status || 'Scheduled'}</Status></div>)}
+                {todayOpenSlots.slice(0, 2).map((slot) => <div className="advisor-row advisor-row--open" key={slot.id}><div><strong>Open slot</strong><span>{formatWhen(slotView(slot).startsAt)}{minutesLabel(slot)} · date-specific</span></div><Status>Open</Status></div>)}
+              </div>
+            ),
+          },
+    storefront: advisor.state === 'loading' ? { state: TILE.LOADING }
+      : advisor.failed ? { state: TILE.UNREADABLE, onRetry: load }
+        : !profile ? { state: TILE.NOT_RECORDED, reason: advisor.message || 'Storefront details are not available.', href: '/expertise/profile', openLabel: 'Open storefront' }
+          : { state: TILE.READY, href: '/expertise/profile', openLabel: 'Open storefront', body: <div className="advisor-keyvalues">{storefrontRows.map(([label, value, tone]) => <div key={label}><span>{label}</span><Status tone={tone}>{value}</Status></div>)}<div><span>Visibility</span><b>{profile.status || 'Not recorded'}</b></div></div> },
+    engagements: bookings.state === 'loading' ? { state: TILE.LOADING }
+      : bookings.state === 'unavailable' ? { state: TILE.UNREADABLE, onRetry: load }
+        : !engagements.length ? { state: TILE.EMPTY, empty: 'Engagements appear once someone books a session with you.', href: '/advisor/advisory/engagements', openLabel: 'Open clients' }
+          : {
+            state: TILE.READY,
+            note: `${engagements.filter((c) => c.upcoming).length} active`,
+            href: '/advisor/advisory/engagements',
+            openLabel: 'Open clients',
+            body: <div className="advisor-list">{engagements.slice(0, 3).map((client) => <div className="advisor-row" key={client.key}><div><strong>{client.name}</strong><span>{client.total} session{client.total === 1 ? '' : 's'} · {client.completed} held{client.upcoming ? ` · ${client.upcoming} upcoming` : ''}</span></div><Status tone={client.upcoming ? 'good' : 'neutral'}>{client.upcoming ? 'Active' : 'History'}</Status></div>)}</div>,
+          },
+    consented_proof: { state: TILE.EMPTY, empty: 'Consented client outcomes are unavailable because no authoritative proof source is connected yet. Self-reported metrics are never shown as proof.', href: '/advisor/advisory/clients', openLabel: 'Open clients' },
+    earnings: payouts.state === 'loading' || commissions.state === 'loading' ? { state: TILE.LOADING }
+      : (payouts.failed || commissions.failed) ? { state: TILE.UNREADABLE, onRetry: load }
+        : isDevPayoutShim ? { state: TILE.NOT_RECORDED, reason: 'Advisor earnings are not recorded in the local development service.' }
+          : (payouts.state === 'unavailable' || commissions.state === 'unavailable') ? { state: TILE.NOT_RECORDED, reason: payouts.state === 'unavailable' ? payouts.message : commissions.message }
+            : { state: TILE.READY, href: '/wellbeing/expert-dashboard', openLabel: 'Open payout settings', body: <div className="advisor-keyvalues"><div><span>Available balance</span><b>{earnings.balance}</b></div><div><span>Lifetime paid</span><b>{earnings.paid}</b></div><div><span>Payout account</span><b>{profile?.stripe_account_status || profile?.stripe?.account_status || 'Not recorded'}</b></div></div> },
+  };
+  const dim = studio.editing ? 'sm-dim' : '';
+
   // Owner request: Advisor Studio keeps its interview and modules without a side rail.
   return (
-    <main className="advisor-studio" data-testid="advisor-studio-home">
-      {previewing && <div className="advisor-preview" data-testid="status-advisor-preview"><Eye size={15} /> Advisor role preview. Practice data and actions are withheld.</div>}
+    <main className="advisor-studio sm-tokens" data-testid="advisor-studio-home">
+      {previewing && <div className="advisor-preview" role="status" data-testid="status-advisor-preview"><Eye size={15} /> Advisor role preview. Practice data and actions are withheld.</div>}
       {dashboardUnavailable && !previewing && <div className="advisor-warning"><span>{dashboardUnavailable}</span>{onRetryDashboard && <button type="button" onClick={onRetryDashboard} data-testid="button-retry-dashboard"><RefreshCw size={13} /> Retry</button>}</div>}
 
       <header className="advisor-studio__masthead">
         <div>
           <div className="advisor-studio__title"><h1>Studio</h1><Status tone="violet">Advisor</Status><span>Good to see you, {firstName(profile?.name || user?.name)}.</span></div>
+          <p className="mt-1 text-[13px] text-axal-muted dark:text-gray-400">{PURPOSE.advisor}</p>
         </div>
-        <time>{new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric' }).format(new Date())}</time>
+        <div className="flex items-center gap-3">
+          <time>{new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric' }).format(new Date())}</time>
+          <CustomiseButton studio={studio} primary />
+        </div>
       </header>
 
-      <section className="advisor-assistant-shell" data-testid="module-eadwyn">
+      <section className={`advisor-assistant-shell ${dim}`} data-testid="module-eadwyn">
         {previewing ? <div className="advisor-complete-row"><div className="advisor-assistant-mark"><Sparkles size={18} /></div><div><strong>Eadwyn</strong><span>Advisor interview is unavailable in role preview.</span></div><Status>Preview only</Status></div>
           : advisorAssistantAvailable ? <StudioInterview persona="advisor" disablePersistedFullscreen onAvailabilityChange={setAdvisorAssistantAvailable} /> : <StateNote text="Eadwyn is unavailable in this environment. Your practice data remains available below." />}
       </section>
 
-      {!previewing && <ProfileFitSection compact studio audience="advisor" className="advisor-fit-section" />}
-      {previewing && <section className="advisor-preview-fit" data-testid="module-assessment"><Sparkles size={18} /><div><strong>Assessment profile</strong><p>Skills, values, and archetype are withheld in this visual role preview.</p></div></section>}
-
-      <div className="advisor-practice-grid">
-        <Module title="Today" action="Open calendar" to="/calendar" testid="module-today" className="advisor-module--today" disabled={previewing}>
-          {calendar.state === 'loading' || bookings.state === 'loading' ? <Pending lines={3} /> : (calendar.state === 'unavailable' && bookings.state === 'unavailable') ? <StateNote text="Today’s schedule could not be loaded." icon={CalendarDays} /> : (
-            <div className="advisor-list">
-              {todayItems.map((item, index) => <div className="advisor-row" key={item.id || index}><div><strong>{item.topic || item.title || 'Advisor session'}</strong><span>{formatWhen(itemStart(item))}{minutesLabel(item)}</span></div><Status tone={item.status === 'confirmed' ? 'good' : 'neutral'}>{item.status || 'Scheduled'}</Status></div>)}
-               {todayOpenSlots.slice(0, 2).map((slot) => <div className="advisor-row advisor-row--open" key={slot.id}><div><strong>Open slot</strong><span>{formatWhen(slotView(slot).startsAt)}{minutesLabel(slot)} · date-specific</span></div><Status>Open</Status></div>)}
-               {todayItems.length === 0 && todayOpenSlots.length === 0 && <StateNote text="No sessions or open slots are scheduled for today." icon={Clock3} />}
-            </div>
-          )}
-        </Module>
-
-        <Module title="Storefront" action="Open storefront" to="/expertise/profile" testid="module-storefront" disabled={previewing}>
-          {advisor.state === 'loading' ? <Pending /> : profile ? <div className="advisor-keyvalues">{storefrontRows.map(([label, value, tone]) => <div key={label}><span>{label}</span><Status tone={tone}>{value}</Status></div>)}<div><span>Visibility</span><b>{profile.status || 'Not recorded'}</b></div></div> : <StateNote text={advisor.message || 'Storefront details are not available.'} icon={Store} />}
-        </Module>
-
-        <Module title="Engagements" action="Open clients" to="/advisor/advisory/engagements" testid="module-engagements" disabled={previewing}>
-          {bookings.state === 'loading' ? <Pending /> : bookings.state === 'unavailable' ? <StateNote text={bookings.message} icon={Users} /> : engagements.length ? <div className="advisor-list">{engagements.slice(0, 3).map((client) => <div className="advisor-row" key={client.key}><div><strong>{client.name}</strong><span>{client.total} session{client.total === 1 ? '' : 's'} · {client.completed} held{client.upcoming ? ` · ${client.upcoming} upcoming` : ''}</span></div><Status tone={client.upcoming ? 'good' : 'neutral'}>{client.upcoming ? 'Active' : 'History'}</Status></div>)}</div> : <StateNote text="Engagements appear once someone books a session with you." icon={Users} />}
-        </Module>
-
-        <Module title="Consented proof" action="Open clients" to="/advisor/advisory/clients" testid="module-consented-proof" className="advisor-module--proof" disabled={previewing}>
-          <StateNote text="Consented client outcomes are unavailable because no authoritative proof source is connected yet. Self-reported metrics are never shown as proof." icon={ShieldCheck} />
-        </Module>
-
-        <Module title="Earnings" action="Open payout settings" to="/wellbeing/expert-dashboard" testid="module-earnings" disabled={previewing}>
-          {payouts.state === 'loading' || commissions.state === 'loading' ? <Pending /> : payouts.state === 'unavailable' || commissions.state === 'unavailable' || isDevPayoutShim ? <StateNote text={isDevPayoutShim ? 'Advisor earnings are not recorded in the local development service.' : (payouts.state === 'unavailable' ? payouts.message : commissions.message)} icon={CircleDollarSign} /> : <div className="advisor-keyvalues"><div><span>Available balance</span><b>{earnings.balance}</b></div><div><span>Lifetime paid</span><b>{earnings.paid}</b></div><div><span>Payout account</span><b>{profile?.stripe_account_status || profile?.stripe?.account_status || 'Not recorded'}</b></div></div>}
-        </Module>
+      <div className={`sm-fixed ${dim}`} data-testid="section-advisor-profile">
+        <StudioFixedLock />
+        {!previewing && <ProfileFitSection compact studio audience="advisor" className="advisor-fit-section" />}
+        {previewing && <section className="advisor-preview-fit" data-testid="module-assessment"><Sparkles size={18} /><div><strong>Assessment profile</strong><p>Skills, values, and archetype are withheld in this visual role preview.</p></div></section>}
       </div>
+
+      <StudioModules studio={studio} tiles={tiles} withheld={previewing} />
     </main>
   );
 }

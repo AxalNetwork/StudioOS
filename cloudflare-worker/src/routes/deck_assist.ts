@@ -188,7 +188,7 @@ deckAssist.post('/:id/cards/:card/assist', async (c) => {
     answer = { block: made.block, title: made.title };
   } else {
     const after = wordingOf(res.output, p.action === 'headline' ? 120 : TEXT_MAX);
-    const problem = wordingProblem(p.action as TextAction, p.text, after, p.language);
+    const problem = wordingProblem(p.action as TextAction, p.text, after);
     if (problem) return refuse(c, 422, { code: 'figure_in_output', message: `${problem} It was charged for the run.`, extra: { cost } });
     payload = { deck_id: p.deckId, card: p.card, action: p.action, before: p.text, after };
     answer = { before: p.text, after };

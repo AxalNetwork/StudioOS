@@ -117,7 +117,7 @@ async function refusedAsk(c: any, ask: ImageAsk, projectId: number): Promise<Res
 /** One image's run, as one options object, so the quote and the run read the same input. */
 function runOptions(c: any, user: User, deck: Deck, ask: ImageAsk, colours: string[]): RunOptions {
   const rail = { ...railFor(c, { page: IMAGE_PAGE, option: IMAGE_OPTION }, `deck:${deck.deckId}`), option: IMAGE_OPTION };
-  return { task: 'deck_image', userId: Number(user.id) || 0, text: promptOf(ask, colours).slice(0, 2048), draw: {}, surface: AI_SURFACE.raisePitch, rail };
+  return { task: 'deck_image', drawJob: 'DK4', userId: Number(user.id) || 0, text: promptOf(ask, colours).slice(0, 2048), draw: {}, surface: AI_SURFACE.raisePitch, rail };
 }
 
 const coloursOf = (body: any): string[] => (Array.isArray(body?.colours) ? body.colours : []).filter((x: unknown): x is string => typeof x === 'string' && HEX.test(x)).slice(0, 4);

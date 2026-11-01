@@ -14,7 +14,7 @@ import type { Env } from '../../types';
 import type { CalendarEvent } from '../calendar';
 
 /** The canvas's five families (D1205's `FAMILIES`), by kind. */
-export type ItemFamily = 'events' | 'meetings' | 'sessions' | 'deadlines' | 'other';
+export type ItemFamily = 'events' | 'meetings' | 'sessions' | 'deadlines' | 'learning' | 'other';
 export const FAMILY_OF: Readonly<Record<CalendarEvent['kind'], ItemFamily>> = {
   event_ticket: 'events',
   event_hosted: 'events',
@@ -27,6 +27,8 @@ export const FAMILY_OF: Readonly<Record<CalendarEvent['kind'], ItemFamily>> = {
   calendly_event: 'other',
   // D1384: the Compliance layer.
   compliance_due: 'deadlines',
+  // #3959: the member's own learning plan.
+  learning: 'learning',
 };
 
 /** The kinds `POST /calendar/push/:kind/:source_id` copies to Google or Outlook. */
@@ -45,6 +47,7 @@ export const ROLE_WORDS: Readonly<Record<string, string>> = {
   hosting: 'Host',
   from_calendly: 'From Calendly',
   venture_deadline: 'Your venture’s deadline',
+  learning_plan: 'Your learning plan',
 };
 
 /** The role a kind's reader does not set, because there is only one. */
@@ -55,6 +58,7 @@ const ROLE_BY_KIND: Partial<Record<CalendarEvent['kind'], string>> = {
   investor_meeting: 'organiser',
   calendly_event: 'from_calendly',
   compliance_due: 'venture_deadline',
+  learning: 'learning_plan',
 };
 
 export interface CalendarItem extends Omit<CalendarEvent, 'my_role' | 'advisor_uid'> {
@@ -84,6 +88,8 @@ export function hrefOf(ev: CalendarEvent): string | null {
     case 'event_ticket': return ev.event_id ? `/my/events/ticket/${ev.event_id}` : null;
     case 'event_hosted': return ev.event_id ? `/my/events/hosting/${ev.event_id}` : null;
     case 'investor_meeting': return '/raise/capital-relationships';
+    // #3959: the Learning page the plan item names (its course, lesson, video, webinar, exercise or exam).
+    case 'learning': return typeof ev.url === 'string' && ev.url.startsWith('/learning') ? ev.url : '/learning';
     default: return null;
   }
 }

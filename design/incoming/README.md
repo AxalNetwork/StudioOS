@@ -111,6 +111,99 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-11-01 — Profile zone headers (#3700)
+
+The owner's two exports for #3700 arrived unpacked (the page's and the grid's
+bundles, read as data only), were rebuilt into their bundled form, and were
+decoded by `scripts/read-canvas.mjs`:
+- `Zone Headers Page.dc.html` is the page, one component drawn per board
+  through its `v` prop (`hero`, `ph0` to `ph22c-d`; a `-d` suffix is dark);
+- `Zone Headers · Boards.dc.html` is the board grid: Page and PH0 to PH22. It
+  imports the page by name; its captions and notes are inline in its `B(...)`
+  calls (it has no `RENAME` or `NOTES` map).
+
+**Two edits, named.** The Axal VC mark (`uploads/axal-logo-200x200.png`) points
+at `/axal-mark.png` and the Eadwyn mark (`eadwyn-ai.png`) at `/eadwyn-ai.png`;
+the bundles carried neither image. No other value was edited.
+
+**Grade: UPGRADE for both (D1424).** Every Investor, Advisor and Operating
+Partner zone header draws one filled primary from a live action in the
+licence's accent, or none. Where the canvas departs from `main` (zone order,
+page-type badges, Research › Companies, the IC memo's three preview fields),
+`main` wins, as D1424 §5 lists. The header Ask, its panel and its "N waiting"
+chip wait on #3706 (D1443, D1442), so both files stay here. No file moved, so
+no count changed.
+
+## Landed 2026-11-01 — Studio modularity (#3698)
+
+The owner's two exports for #3698 arrived unpacked (the page's and the grid's
+bundles, read as data only), were rebuilt into their bundled form, and were
+decoded by `scripts/read-canvas.mjs`:
+- `Studio Modularity Page.dc.html` is the page, one component drawn per board
+  through its `v` prop (`sm0` to `sm6-d`);
+- `Studio Modularity · Boards.dc.html` is the board grid "Studio modularity":
+  SM0 to SM15. It imports the page by name, and its `RENAME` and `NOTES`
+  overrides are the final titles and notes (frame `sm10f` is filtered out).
+
+**Two edits, named.** The Axal VC mark (`uploads/axal-logo-200x200.png`) points
+at `/axal-mark.png` and the Eadwyn mark (`eadwyn-ai.png`) at `/eadwyn-ai.png`;
+the bundles carried neither image. No other value was edited.
+
+**Grade: UPGRADE for both (D1419).** `/studio` draws the module grid on all
+four Studios over the Worker's `/api/studio` (D1421, D1418, D1594). Eadwyn's
+layout proposals (SM9, SM10, SM13c) wait behind
+`frontend/src/pages/studio/studioProposalsAdapter.js` (#3864), so both files
+stay here. No file moved, so no count changed.
+
+## Landed 2026-11-01 — Portfolio and Incorporate (#3696)
+
+The owner's three artifacts for #3696 (`389dc42b`, the Portfolio grid;
+`588b23d8`, the Portfolio page; `76568bc4`, the Incorporate grid with its page
+inside) were read as data only:
+- `Portfolio Account Page.dc.html` is the page, one component drawn per board
+  through its `v` prop (25 values, `pf1` to `pf2-d`), decoded by
+  `scripts/read-canvas.mjs`;
+- `Portfolio · Boards.dc.html` is the board grid "Portfolio": PF1 to PF8, with
+  PF6m and PF7. It imports the page by name;
+- `Incorporate Flow Page.dc.html` is the Incorporate page (`inc1` to `inc6d`),
+  copied from the grid's bundle, where it arrived unpacked. It still carries
+  dead Team canvas code no frame calls; it was not edited out;
+- `Incorporate · Boards.dc.html` is the grid "Incorporate": INC1 to INC7, with
+  INC5p. It imports the page by name.
+
+**Two edits, named.** In both pages the Axal VC mark (`uploads/axal-logo-200x200.png`)
+points at `/axal-mark.png`, and in the Incorporate page the Eadwyn mark
+(`eadwyn-ai.png`) at `/eadwyn-ai.png`; the bundles carried neither image. The
+grids' runtime references were rewritten to the shared support script by
+`read-canvas.mjs`. No other value was edited.
+
+**Grade: UPGRADE for both (D1413, D1414).** Portfolio is built on
+`/account/portfolio` with the Worker's D1136, D1412, D1415, D1591, D1592 and
+D1593 routes; Incorporate on `/incorporate` with `legal.ts`. What waits on a
+route draws its unavailable state through
+`frontend/src/pages/account/companies/portfolioAdapter.js` (#3932) and
+`frontend/src/pages/incorporate/incorporateAdapter.js` (#3855, #3706). All four
+files stay here: some bodies are outstanding. No file moved, so no count
+changed.
+## Landed 2026-11-01 — Team › Agents › Skills (#3945)
+
+The owner's two artifacts for #3945's consolidated prompt (boards SK0–SK9),
+decoded by `scripts/read-canvas.mjs`:
+- `Agent Skills Page.dc.html` is the page, one frame per `v` value (`sk0` to
+  `sk9b`, `ph1`, `ph2`, `tab`; a `-d` suffix is dark);
+- `Agent Skills · Boards.dc.html` is the board grid "Skills for AI agents",
+  SK0 to SK9 (10 sections, 18 frames). It imports the page by name.
+
+**One edit, named.** The Axal VC mark (the export's
+`uploads/axal-logo-200x200.png`) points at `/axal-mark.png`, as in the earlier
+Team and Pitch intakes. No other value was edited.
+
+**Grade: NEW (D1612).** Skills is a new tab of the Team page (D1497), between
+People and agents and Roles and rule books, plus a Skills and Values card on
+the agent profile, a Skills step in Add an AI agent, and Team coverage on
+People and agents. Every read and write goes through
+`frontend/src/pages/team/agentsAdapter.js` and stays unavailable until A1
+(#3951) and A2 (#3956) land their routes.
 ## Landed 2026-11-01 — Calendar: AI agent sessions (#3723)
 
 The owner's artifacts `Bj7uoUqbMzkksEDU1XdUYK` (the page) and

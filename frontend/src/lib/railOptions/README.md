@@ -18,6 +18,8 @@ the canvas's fourteen task `kind`s, its `handler` (`form`, `upload`, `draft`,
 | `admin.js` | Admin, the 39 boards S1–S39 with their routes and rails (D774, #2100); the three Spin-Out Lab boards have none (D317), and say so in `noRail`. No control on them runs a model, so it has no option row; `ADMIN_QUIET_CONTROLS` names the uploads and the report and why. Its parity test is `frontend/test/rail_options_admin_d774.test.mjs`. |
 | `index.js` | `railOptionFor(pageKey, { file, control })` (D772, #2098): the key and label a zone several profiles share names on the member's page, read from the four member inventories above. Its tests are in `frontend/test/rail_pages_investor_d772.test.mjs`. |
 
+**Ask chips** (D1596, D1420): `ADVISOR_ASK_CHIPS` in `advisor.js`, and `FOUNDER_ASK_CHIPS`, `INVESTOR_ASK_CHIPS` and `PARTNER_ASK_CHIPS` in `founder.js`, `investor.js` and `partner.js`, are chips in the Ask panel, not rail actions: the AIRail holds only model choice and consumption (the owner, 2026-10-31). So they stay out of each profile's option list and its parity test. `scripts/build-rail-matrix.mjs` lists them so `GET /api/ai/rail?page=` offers them: a no-model chip (`sessions:block`) with no models, and a model chip (`studio:layout`, "Arrange my Studio for this stage", on each /studio rail key) with its kind's models and its own pick. S1 draws them.
+
 ## Rules
 
 - **The list follows the code.** Each profile's test reads the files its

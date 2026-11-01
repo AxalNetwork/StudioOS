@@ -8001,6 +8001,84 @@
    "more": []
   },
   {
+   "pageKey": "Founder · Studio",
+   "optionKey": "studio:layout",
+   "optionLabel": "Arrange my Studio for this stage",
+   "kind": "plan",
+   "handler": "form",
+   "routeTask": "rail_plan",
+   "models": [
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Default",
+     "line": "Plans, lists and next steps"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-20b",
+     "role": "Alternative",
+     "line": "Steady structured output"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Trade-offs and dependencies"
+    }
+   ],
+   "more": []
+  },
+  {
+   "pageKey": "Investor · Home",
+   "optionKey": "studio:layout",
+   "optionLabel": "Arrange my Studio for this stage",
+   "kind": "plan",
+   "handler": "form",
+   "routeTask": "rail_plan",
+   "models": [
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Default",
+     "line": "Plans, lists and next steps"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-20b",
+     "role": "Alternative",
+     "line": "Steady structured output"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Trade-offs and dependencies"
+    }
+   ],
+   "more": []
+  },
+  {
+   "pageKey": "Operating Partner · Home",
+   "optionKey": "studio:layout",
+   "optionLabel": "Arrange my Studio for this stage",
+   "kind": "plan",
+   "handler": "form",
+   "routeTask": "rail_plan",
+   "models": [
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Default",
+     "line": "Plans, lists and next steps"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-20b",
+     "role": "Alternative",
+     "line": "Steady structured output"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Trade-offs and dependencies"
+    }
+   ],
+   "more": []
+  },
+  {
    "pageKey": "Super Admin · Content · Publications",
    "optionKey": "draft:publication-summary",
    "optionLabel": "Draft with AI",

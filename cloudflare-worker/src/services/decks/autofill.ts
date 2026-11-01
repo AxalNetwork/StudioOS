@@ -11,7 +11,7 @@
  *
  * The render layer (HTML/PPTX) chooses how to display each kind.
  */
-import { strangersIn, untrustedBlock, withUntrustedRule } from '../ai/untrusted';
+import { unrecordedLinks, untrustedBlock, withUntrustedRule } from '../ai/untrusted';
 import type { Env } from '../../types';
 import type { DeckMethodSpec, DeckSlideField } from './methods';
 import { formatUseOfFundsText } from '../../util/useOfFunds';
@@ -195,7 +195,7 @@ export interface DeckFillRun { userId: number; projectId: number; railOption?: s
 export function batchFillPrompt(ctx: Record<string, unknown>, hints: string[], aiHint: string): string {
   return `You are a senior VC associate drafting a pitch deck. Style: ${aiHint}.
 Startup data (the founder's records, framed):
-${untrustedBlock('record_fact', ctx)}
+${untrustedBlock('record_text', JSON.stringify(ctx))}
 
 For EACH hint below produce one of:
 - A short headline (≤8 words) — for *_headline keys
@@ -213,7 +213,8 @@ export function batchFillParse(output: unknown, ctx: Record<string, unknown>): R
   const parsed = parseJsonLoose<Record<string, any>>(String(output ?? ''));
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
   const out: Record<string, any> = {};
-  for (const [k, v] of Object.entries(parsed)) if (!strangersIn(v, [ctx]).length) out[k] = v;
+  const held = [JSON.stringify(ctx)];
+  for (const [k, v] of Object.entries(parsed)) if (!unrecordedLinks(JSON.stringify(v), held).length) out[k] = v;
   return out;
 }
 

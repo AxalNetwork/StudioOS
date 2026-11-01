@@ -21,6 +21,8 @@ import AgentsCard from './AgentsCard.jsx';
 import AddAgentSheet from './AddAgentSheet.jsx';
 import AgentProfileSheet from './AgentProfileSheet.jsx';
 import RulebooksTab from './RulebooksTab.jsx';
+import SkillsTab from './SkillsTab.jsx';
+import TeamCoverageCard from './TeamCoverageCard.jsx';
 import ApprovalsTab from './ApprovalsTab.jsx';
 import TeamSettingsTab from './TeamSettingsTab.jsx';
 import * as agents from './agentsAdapter.js';
@@ -69,7 +71,7 @@ function NotAMember({ name }) {
     <div className="mx-auto flex max-w-md flex-col items-center gap-3 rounded-axal-lg border border-axal-hairline bg-white px-6 py-10 text-center dark:border-gray-700 dark:bg-gray-900" data-testid="team-not-member">
       <h1 className="m-0 text-[18px] font-extrabold text-axal-ink dark:text-gray-100">{name ? `You're not a member of ${name}.` : 'You can’t see this team.'}</h1>
       <p className={`m-0 ${MUTED}`}>Ask one of its editors to invite you.</p>
-      <Link to="/account/companies" className={BTN_TEXT}>Back to my companies</Link>
+      <Link to="/account/portfolio" className={BTN_TEXT}>Back to Portfolio</Link>
     </div>
   );
 }
@@ -366,9 +368,11 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
           <AgentsCard block={agentsBlock} loading={!agentsBlock} kind={kind} companyName={name}
             canAdd={!!agentsBlock?.value?.can_manage && !planLocked} planLocked={planLocked} onAdd={() => setSheet({ kind: 'agent' })}
             onOpen={(row) => setSheet({ kind: 'profile', uid: row.uid })} onRetry={loadAgents} />
+          <TeamCoverageCard kind={kind} id={id} />
           {kind === 'company' && ['founder', 'admin'].includes(me().role) ? <p className={`m-0 ${MUTED}`}>{ROSTER_LINE} <Link to="/build/team" className={BTN_TEXT}>Open Build › Team</Link></p> : null}
         </>
       ) : null}
+      {tab === 'skills' ? <SkillsTab scope={scope} rolesBlock={rolesBlock} agentsBlock={agentsBlock} onAddAgent={!planLocked && agentsBlock?.value?.can_manage ? () => setSheet({ kind: 'agent' }) : null} /> : null}
       {tab === 'roles' ? <RulebooksTab scope={scope} canManage={!!agentsBlock?.value?.can_manage} agentsBlock={agentsBlock} /> : null}
       {tab === 'approvals' ? <ApprovalsTab scope={scope} /> : null}
       {tab === 'settings' ? (
