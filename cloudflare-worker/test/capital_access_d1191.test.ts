@@ -393,6 +393,7 @@ test('D1191: a failed secondary staff audit preserves the mandatory founder audi
     const result=await f.request('/api/cycles/raise/capital-relationships/support-read?project=101',30,'POST',{reason:'Fixture secondary audit reason'});
     assert.equal(result.status,200);assert.equal(result.data.items.length,1);assert.ok(f.privateReads().length>0);
     assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM activity_logs WHERE user_id=1 AND action=?').get(CAPITAL_SUPPORT_ACTION)?.n,1);
-    assert.deepEqual(logs,[]);assert.doesNotMatch(JSON.stringify(result.data),/Synthetic private/);
+    // D1465 (#4022): the founder's notification runs `notify`, whose realtime broadcast warns when the test env has no DO binding. That line carries nothing private.
+    assert.deepEqual(logs.filter((l)=>!String(l[0]).startsWith('[realtime] DO namespace missing')),[]);assert.doesNotMatch(JSON.stringify(result.data),/Synthetic private/);
   }finally{console.warn=originalWarn;console.error=originalError;f.close();}
 });
