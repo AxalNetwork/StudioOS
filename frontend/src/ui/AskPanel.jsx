@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { useEscapeClose } from '../components/useEscapeClose';
 import { askPanelAdapter } from './askPanelAdapter.js';
+import { setAskSlot, useAskPanel } from './eadwynPanel.js';
 import {
   ASK_FOOT, ASK_RUNNING, ASK_SUGGESTED, ASK_PLACEHOLDER, acceptAllLabel, canSend, chargeLine, costLine,
   panelChips, proposalCard, refusalState, stateBlock,
@@ -33,6 +34,7 @@ import './askPanel.css';
 const CHIP_ROUTES = Object.fromEntries([...FOUNDER_ASK_CHIPS, ...ADVISOR_ASK_CHIPS].map((c) => [c.key, c.route]));
 
 export default function AskPanel({ page, label, crumb, options = [], aiOn = true, layout = 'dock', onClose }) {
+  const intent = useAskPanel().intent;
   const [convUid, setConvUid] = useState(null);
   const [messages, setMessages] = useState([]);
   const [cards, setCards] = useState([]);
@@ -163,6 +165,8 @@ export default function AskPanel({ page, label, crumb, options = [], aiOn = true
       </header>
 
       <div className="ead-ask-body">
+        {/* D1443 part 4 (#3992): a page's own task (a form's Sources and Preview, a module's row proposals) is drawn here, by its host's AskIntent. */}
+        {intent ? <div ref={setAskSlot} className="ead-ask-intent" data-testid="ask-panel-intent" /> : null}
         {chips.length > 0 && (
           <div className="ead-ask-chips" data-testid="ask-panel-chips">
             <span className="ead-ask-eyebrow">{ASK_SUGGESTED}</span>

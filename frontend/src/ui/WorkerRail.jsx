@@ -913,7 +913,7 @@ export default function WorkerRail({
     {portalReady && askPanel && !askDocked && createPortal(
       <>
         {askAt === 'sheet' && <button type="button" className="ead-ask-scrim" aria-label="Close Eadwyn" onClick={() => askPanelEvent({ type: 'scrim' })} />}
-        <div className="ead-ask-layer" data-layout={askAt}>{askPanel}</div>
+        <div className="ead-ask-layer" data-layout={askAt} data-sheet-keep="">{askPanel}</div>
       </>,
       document.body,
     )}
