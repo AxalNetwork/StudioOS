@@ -38,6 +38,7 @@
  */
 import type { Env } from '../../types';
 import { run as aiRun } from '../aiRouter';
+import { AI_SURFACE } from '../aiSurfaces';
 
 export const QUOTE_INDEX = 'axal-deck-quotes';
 export const QUOTE_EMBED_MODEL = '@cf/baai/bge-m3';
@@ -142,17 +143,18 @@ async function unquotableLineIds(env: Env, projectId: number): Promise<number[]>
 }
 
 /** The router's module tasks with the catalogue's ids; the member's own run, logged at cost. */
-export function defaultDeps(env: Env, userId: number): QuoteDeps {
-  const surface = '/raise/pitch';
+export function defaultDeps(env: Env, userId: number, projectId: number): QuoteDeps {
+  // D765: a member's press, so each run carries its rail context (page, option, record).
+  const rail = { page: AI_SURFACE.raisePitch, option: 'deck_quotes', record: `project:${projectId}` };
   return {
     index: (env.DECK_QUOTES as unknown as QuoteIndex | undefined) ?? null,
     async embed(text) {
-      const out = await aiRun(env, { task: 'module_embed' as any, model: QUOTE_EMBED_MODEL, userId, text, surface });
+      const out = await aiRun(env, { task: 'module_embed' as any, model: QUOTE_EMBED_MODEL, userId, text, surface: AI_SURFACE.raisePitch, rail });
       const v = out.ok ? out.embedding : null;
       return Array.isArray(v) && v.length === QUOTE_DIMENSIONS ? v : null;
     },
     async rerank(query, contexts) {
-      const out = await aiRun(env, { task: 'module_rerank' as any, model: QUOTE_RERANK_MODEL, userId, surface, rerank: { query, contexts } });
+      const out = await aiRun(env, { task: 'module_rerank' as any, model: QUOTE_RERANK_MODEL, userId, surface: AI_SURFACE.raisePitch, rail, rerank: { query, contexts } });
       return out.ok && Array.isArray(out.ranking) ? out.ranking : null;
     },
   };

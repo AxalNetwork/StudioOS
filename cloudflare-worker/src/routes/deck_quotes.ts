@@ -53,7 +53,7 @@ deckQuotes.post('/quotes/search', async (c) => {
   const limit = Math.min(Math.max(Number.isSafeInteger(Number(body?.limit)) ? Number(body.limit) : 5, 1), 10);
   const got = await owned(c, user, projectId, false);
   if ('refused' in got) return got.refused;
-  const quotes = await retrieveQuotes(c.env, projectId, query, defaultDeps(c.env, user.id), limit);
+  const quotes = await retrieveQuotes(c.env, projectId, query, defaultDeps(c.env, user.id, projectId), limit);
   return c.json({ project_id: projectId, quotes });
 });
 
@@ -64,7 +64,7 @@ deckQuotes.post('/quotes/index', async (c) => {
   if (!projectId) return refuse(c, 400, { code: 'project_id_required', message: 'Say which venture\'s interviews to index.' });
   const got = await owned(c, user, projectId, true);
   if ('refused' in got) return got.refused;
-  const index = await indexProjectQuotes(c.env, projectId, defaultDeps(c.env, user.id));
+  const index = await indexProjectQuotes(c.env, projectId, defaultDeps(c.env, user.id, projectId));
   return c.json({ project_id: projectId, index });
 });
 
