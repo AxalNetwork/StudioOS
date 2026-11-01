@@ -102,8 +102,8 @@ export function narrativeFormAccess(projectId, user) {
  *
  * D1463: the banner counts down to the grant's `expires_at` each minute; at
  * zero the reads are read again, so the gate returns with RR06's line. The
- * venture header reads `venture` from the reads (G2, #3713 part 2) when the
- * Worker sends it, and draws no founder line until then.
+ * venture header reads `venture` from the reads (G2, D1465). End access now
+ * (G1, D1465) ends the read early and re-reads, so the gate returns.
  */
 export function NarrativeAdminGate({ projectId, onOpened, back = null, children }) {
   const [tick, setTick] = useState(0);
@@ -112,6 +112,10 @@ export function NarrativeAdminGate({ projectId, onOpened, back = null, children 
   const opened = useCallback(() => { setLapsed(null); setTick((n) => n + 1); onOpened?.(); }, [onOpened]);
   const mine = reads.mine;
   const expire = useCallback(() => { setLapsed(mine?.expires_at || null); setTick((n) => n + 1); }, [mine?.expires_at]);
+  // D1465 (G1): End access now ends the caller's own read on the Worker, then
+  // the reads are read again, so the gate returns. A refusal stays on the
+  // banner (its "could not be ended" line) and the read stands.
+  const end = useCallback(async () => { await narrativeApi.narrativeEndRead(projectId); setLapsed(null); setTick((n) => n + 1); }, [projectId]);
   if (!projectId) return children;
   if (reads.status === 'loading' && !mine) return <div className="h-24 w-full animate-pulse rounded-xl bg-axal-ground dark:bg-gray-800" aria-hidden="true" data-testid="narrative-reason-loading" />;
   if (reads.status === 'error') return <Unreadable what="The read log" claim="The narrative stays closed until it can be checked." onRetry={() => setTick((n) => n + 1)} />;
@@ -123,7 +127,7 @@ export function NarrativeAdminGate({ projectId, onOpened, back = null, children 
   }
   return (
     <div className="flex min-w-0 flex-col gap-3" data-testid="narrative-admin">
-      <AccessBanner reason={mine.reason} viewer={reads.viewer} endsAt={mine.expires_at} onExpire={expire} testId="narrative-access" />
+      <AccessBanner reason={mine.reason} viewer={reads.viewer} endsAt={mine.expires_at} onExpire={expire} onEnd={end} testId="narrative-access" />
       <ReadOnlyBanner read={mine} viewer={reads.viewer} />
       {children}
     </div>

@@ -1,0 +1,12 @@
+{
+  "$id": "deckWithdrawInvestorLink",
+  "title": "POST /api/decks/:id/investor-links/:shareId/withdraw (D1565, #3812)",
+  "description": "The reply the deck v2 adapter's `withdrawInvestorLink` method passes through: ok and the withdrawn link, or null when it no longer reads (`routes/deck_investor_links.ts`). D1511 (#3762).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ok", "link"],
+  "properties": {
+    "ok": { "const": true },
+    "link": { "required": ["id"], "properties": { "id": { "type": "integer", "minimum": 1 } } }
+  }
+}

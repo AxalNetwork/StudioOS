@@ -584,7 +584,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
           onClose={() => setSheet(null)} />
       ) : null}
       {sheet === 'check' && base.deck?.id ? (
-        <CheckSheet deck={base.deck} projectId={project?.id} readOnly={readOnly} dirty={dirty} onReplaced={saved} onClose={() => setSheet(null)} />
+        <CheckSheet deck={base.deck} projectId={project?.id} readOnly={readOnly} dirty={dirty} onReplaced={saved}
+          onGoToCard={(i) => { if (i >= 0 && i < cards.length) { choose(i); setSheet(null); } }} onClose={() => setSheet(null)} />
       ) : null}
 
       {dialog?.kind === 'save' ? (

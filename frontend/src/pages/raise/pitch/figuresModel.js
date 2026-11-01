@@ -40,7 +40,9 @@ export const OPEN_RECORD = 'Open the record ›';
 export const PROJECTION = 'Projection';
 export const PROJECTED = 'Projected';
 export const PROJECTION_NOTE = 'Forward-looking: a projection from your financial model, not a result.';
-export const TYPED_LINE = 'Typed on the card, no record backs it.';
+/** pd24: a figure typed rather than read from a store is graded Stated; its chip, and its hover line, with who typed it when that is known. */
+export const STATED_CHIP = '✎ Stated';
+export const TYPED_LINE = (name = null) => `${String(name ?? '').trim() ? `Typed by ${String(name).trim()}` : 'Typed on the card'} · not linked to a record`;
 export const GONE_LINE = 'Its store no longer holds this figure. The card keeps what it shows until you change it.';
 
 const AREAS = { validate: 'Validate', build: 'Build', raise: 'Raise', grow: 'Grow', team: 'Team', scoring: 'Scoring' };
@@ -203,7 +205,7 @@ export function projectionOf(block, today = new Date().toISOString().slice(0, 10
  *   link     "Open the record ›" to the module, when the store names it
  *   missing  "Not recorded", with "Add in … ›"; null for a tile whose
  *            face holds a typed value no record backs, which reads
- *            TYPED_LINE instead (#3775's Stated and Uncited badges will
+ *            TYPED_LINE (pd24: "Typed by [name] · not linked to a record") instead (#3775's Stated and Uncited badges will
  *            grade it)
  *   changed  the line, and `was → now` for a tile
  *   projection
@@ -215,7 +217,7 @@ export function figureCard(block, items, charts = null, today) {
   const figures = bindingsIn(block);
   if (block?.kind === 'metric' && !figures.length) {
     const typed = Boolean(str(block.value));
-    return { title: str(block.label) || 'Figure', lines: typed ? [TYPED_LINE] : [], missing: typed ? null : { text: NOT_RECORDED, link: null }, changed: [], projection: null };
+    return { title: str(block.label) || 'Figure', lines: typed ? [TYPED_LINE(block.typed_by?.name)] : [], missing: typed ? null : { text: NOT_RECORDED, link: null }, changed: [], projection: null };
   }
   if (!figures.length && !projection) return null;
   const lines = [];
