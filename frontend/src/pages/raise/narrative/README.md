@@ -8,7 +8,7 @@ The founder's Investor narrative tool at `/raise/investor-narrative` (D906,
 | File | What it is |
 |---|---|
 | `NarrativeTool.jsx` | The tool's tab bar (`NarrativeTabBar`), drawn under the module page's header on Home, and its tab pages (`NarrativeTabPage`): Story, Positioning, Check and Versions with Compare. |
-| `NarrativeAdmin.jsx` | D914 (#2698): an admin's reason gate and the NAR13 read-only banner, the notes thread, the founder's "Who read this narrative", and the NAR14a and NAR14b panels. |
+| `NarrativeAdmin.jsx` | D914 (#2698): an admin's reason gate and the NAR13 read-only banner, the notes thread, the founder's "Who read this narrative", and the NAR14a and NAR14b panels. D1463 (#3713): the gate is `../../../ui/ReasonGate.jsx` in grant mode (8 hours, 3–200 characters), under `AccessBanner`'s countdown; the founder's list shows each read's span and is on Home too. |
 | `narrativeModel.js` | Pure: the addresses, the tabs, the words, and every derivation from the reads (the saved versions, one version's words and its consistency check, two versions side by side, the positioning rows; D909's tiles, Needs you, footer, based-on and Read by lines, and New version's "Creates v[n] for …" line). |
 | `StoryTab.jsx` | Story (D910, NAR2): the sections rail, the writing surface, the audience note, Insert a figure (NAR3) and Save version, over D908's stores and PITCH's source registry. D1114 adds "Ask Eadwyn ▾" (Draft this section, Shorten, Plain words), AI off (NAR17b), out of tokens (NAR17c), bound figures inside the sentence, and `?insert=` from Home's From Mercury. |
 | `StoryComponents.jsx` | NAR21: the bound-figure chip, the claim pills, the section dots, the source chips and the grade ramp, light and dark. |
