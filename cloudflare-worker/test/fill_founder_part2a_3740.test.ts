@@ -20,7 +20,7 @@ import { EXISTING_READS } from '../src/services/fills/formRun.ts';
 import { UNDO_WRITES } from '../src/services/fills/keep.ts';
 import { FILL_FIELDS as SPA_FIELDS } from '../../frontend/src/lib/fillFields.js';
 
-const SECRET = 'synthetic-fill-part2a-3740-'.repeat(3);
+const JWT_SECRET = 'synthetic-part2a-3740-only-not-a-real-credential'.repeat(2);
 test.after(() => removeMigratedDatabases());
 
 const ROADMAP = 'Founder · Build · Product roadmap';
@@ -48,14 +48,14 @@ function fixture(run: Run = answer({ fields: [] })) {
     INSERT INTO raise_prospects(id,uid,project_id,name,notes) VALUES (91,'p-1',701,'Northwind Seed',NULL),(92,'p-2',702,'Their fund',NULL);
     INSERT INTO job_postings(id,slug,title,project_id) VALUES (95,'role-1','Founding engineer',701),(96,'role-2','Their role',702);
   `);
-  const env: any = { JWT_SECRET: SECRET, ENVIRONMENT: 'development', DB: d1Over(db) };
+  const env: any = { JWT_SECRET: JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) };
   const app = new Hono<any>();
   app.onError((e: any, c: any) => c.json({ detail: e.message }, 500));
   app.route('/api/ai/rail', railRunRoutes({ run, quote: freeQuote }));
   app.route('/api/fills', fills);
   const call = async (who: number, method: string, path: string, body?: unknown) => {
     const u = db.prepare('SELECT role FROM users WHERE id = ?').get(who) as any;
-    const jwt = await new SignJWT({ user_id: who, role: u.role }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(SECRET));
+    const jwt = await new SignJWT({ user_id: who, role: u.role }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
     const r = await app.request(path, { method, headers: { Authorization: `Bearer ${jwt}`, 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) }, env);
     const text = await r.text();
     return { status: r.status, type: r.headers.get('content-type') || '', text, body: (() => { try { return JSON.parse(text); } catch { return null; } })() };
