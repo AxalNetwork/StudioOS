@@ -24,7 +24,7 @@ import GridStage from './GridStage';
 import BlockTools, { SpeakerNotes } from './BlockTools';
 import ShareDialog from './ShareDialog';
 import ExportDialog from './ExportDialog';
-import { BackgroundSheet, BrandKitSheet, CheckSheet, SizeSheet, SourcesSheet, StructureSheet, ThemeSheet, VersionsSheet } from './DeckSheets';
+import { BackgroundSheet, BrandKitSheet, CheckSheet, RemixSheet, SizeSheet, SourcesSheet, StructureSheet, ThemeSheet, VersionsSheet } from './DeckSheets';
 import { EDITOR_WAITING, aiOffState, placeTextEdit, saveChip } from './deckV2Model';
 import { AiOffBanner } from './DeckAsk';
 import { areaTitle, areasOf, askTarget, liveFocus } from './gridSelection';
@@ -34,10 +34,12 @@ import { PitchMovedNotice } from './PitchWorkspaceMoved';
 import { refreshCard } from './figuresModel';
 import { deckRail } from './deckRailGroups';
 import { presentHref } from './presentExportModel';
+import { aspectOf, withAspect } from './gridModel';
+import { reflowCards } from './deckReflow';
 import {
   ADDABLE_KINDS, KIND_LABELS, MODEL_FAILED, NOTES_PLACEHOLDER, NO_CARDS,
   NOT_RECORDED, PHONE_NOTE, READ_FAILED, THEME_LABELS,
-  addBlock, applyLayout, applyToAll, blockLabel, cardColours, cardTitle, cardsOf, changesOf, firstFree,
+  addBlock, applyLayout, applyToAll, blockLabel, cardColours, cardTitle, cardsOf, changesOf, firstFree, isDarkTheme,
   moveCard, placementProblem, removeBlock, saveState, standardSizes, staleCards, updateBlock, withFieldBlocks,
 } from './editorModel';
 
@@ -333,7 +335,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   const kitData = kit.status === 'ok' ? kit.data?.kit ?? null : null;
   const colours = cardColours(theme, kitData);
   // D903: a background's overlay is in the brand ink, never the dark theme's light text colour.
-  const ink = theme?.kind === 'neutral_dark' ? undefined : colours.ink;
+  const ink = isDarkTheme(theme?.kind) ? undefined : colours.ink;
   const items = sources.data?.items || [];
   const [images, setImages] = useState([]);
   const loadImages = useCallback(() => {
@@ -399,6 +401,24 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   }, [placeRef, readOnly, model]);
   const move = (from, to) => { setCards((cs) => moveCard(cs, from, to)); setSel(to); setPickState(NO_PICK); };
 
+  // D1554 (#3801): ⋯ › Slide size reflows the draft; what no longer fits moves
+  // to each card's notes (`deckReflow.js`). One Undo, while the sheet is open,
+  // puts the cards and the size back as they were.
+  const [sizeUndo, setSizeUndo] = useState(null);
+  const changeSize = (aspect) => {
+    if (aspectOf(theme?.aspect) === aspect) return;
+    const r = reflowCards(cards, aspect);
+    setSizeUndo(r.count ? { cards, theme, count: r.count } : null);
+    setCards(r.cards);
+    setTheme(withAspect(theme, aspect));
+  };
+  const undoSize = () => {
+    if (!sizeUndo) return;
+    setCards(sizeUndo.cards);
+    setTheme(sizeUndo.theme);
+    setSizeUndo(null);
+  };
+
   const saved = (fresh) => {
     const d = fresh?.deck || fresh;
     const b = { deck: d, cards: cardsOf(d), theme: d.theme ?? null, audience: d.audience ?? null };
@@ -436,7 +456,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     if (id === 'duplicate') { if (!readOnly) duplicate(sel); return; }
     if (id === 'appendix') { if (!readOnly) toggleAppendix(sel); return; }
     if (id === 'notes') { navigate(`/raise/pitch/notes${ventureQuery(project?.id)}`); return; }
-    if (['theme', 'size', 'brand', 'sources', 'versions', 'check', 'structure', 'background'].includes(id)) setSheet(id);
+    // D1553 (#3800): ⋯ › This card › Remix this slide, the only way in (pd13).
+    if (['theme', 'size', 'brand', 'sources', 'versions', 'check', 'structure', 'background', 'remix'].includes(id)) setSheet(id);
   };
   if (actionRef) actionRef.current = act;
   const cardAction = (id, i) => {
@@ -520,7 +541,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
         <ThemeSheet model={model} theme={theme} audience={audience} kit={kit} readOnly={readOnly}
           onTheme={setTheme} onAudience={setAudience} onApplyAll={() => setDialog({ kind: 'apply-all' })} onClose={() => setSheet(null)} />
       ) : null}
-      {sheet === 'size' ? <SizeSheet theme={theme} readOnly={readOnly} onTheme={setTheme} onClose={() => setSheet(null)} /> : null}
+      {sheet === 'size' ? <SizeSheet theme={theme} readOnly={readOnly} onSize={changeSize} moved={sizeUndo?.count ?? 0} onUndo={undoSize}
+        onClose={() => { setSizeUndo(null); setSheet(null); }} /> : null}
       {sheet === 'structure' && card ? (
         <StructureSheet model={model} card={card} index={sel} readOnly={readOnly} onLayout={(layout) => setDialog({ kind: 'layout', layout })} onClose={() => setSheet(null)} />
       ) : null}
@@ -541,6 +563,18 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
           <SlideEvidence projectId={project?.id} version={base.deck.version} slide={sel + 1} readOnly={readOnly}
             onAddSources={(lines) => { const c = sourcesCard(model, lines); setCards((cs) => [...cs, c]); setSel(cards.length); setPickState(NO_PICK); setSheet(null); }} />
         </SourcesSheet>
+      ) : null}
+      {sheet === 'remix' && card && base.deck?.id ? (
+        <RemixSheet deckId={base.deck.id} card={card} index={sel} readOnly={readOnly}
+          onApply={(next) => {
+            // One edit, one undo step: Undo puts the card back as it was, unless something changed it since.
+            const i = sel;
+            const was = cardsNow.current[i];
+            setCards((cs) => cs.map((x, j) => (j === i && x === was ? next : x)));
+            setPickState(NO_PICK);
+            return () => setCards((cs) => cs.map((x, j) => (j === i && x === next ? was : x)));
+          }}
+          onClose={() => setSheet(null)} />
       ) : null}
       {sheet === 'check' && base.deck?.id ? (
         <CheckSheet deck={base.deck} projectId={project?.id} readOnly={readOnly} dirty={dirty} onReplaced={saved} onClose={() => setSheet(null)} />

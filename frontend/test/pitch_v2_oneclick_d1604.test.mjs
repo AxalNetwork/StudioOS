@@ -106,10 +106,10 @@ test('the theme is part of the proposal: the version\'s, else the brand kit\'s, 
   assert.equal(themeToWrite({ kind: 'neutral_light' }, null), null, 'a version with no theme already draws Neutral light');
   // Change offers "From your brand kit" only when there is a kit behind it, or the version is Brand already.
   // Mutation checked: offer every kind → brand appears with no kit and this fails.
-  assert.deepEqual(themeChoices({ status: 'ok', data: { kit: { palette: {} } } }, null), ['brand', 'neutral_light', 'neutral_dark']);
-  assert.deepEqual(themeChoices({ status: 'ok', data: { kit: null } }, null), ['neutral_light', 'neutral_dark']);
-  assert.deepEqual(themeChoices({ status: 'error', data: null }, null), ['neutral_light', 'neutral_dark']);
-  assert.deepEqual(themeChoices({ status: 'error', data: null }, { kind: 'brand' }), ['brand', 'neutral_light', 'neutral_dark']);
+  assert.deepEqual(themeChoices({ status: 'ok', data: { kit: { palette: {} } } }, null), ['brand', 'neutral_light', 'neutral_dark', 'sand', 'ocean', 'forest']);
+  assert.deepEqual(themeChoices({ status: 'ok', data: { kit: null } }, null), ['neutral_light', 'neutral_dark', 'sand', 'ocean', 'forest']);
+  assert.deepEqual(themeChoices({ status: 'error', data: null }, null), ['neutral_light', 'neutral_dark', 'sand', 'ocean', 'forest']);
+  assert.deepEqual(themeChoices({ status: 'error', data: null }, { kind: 'brand' }), ['brand', 'neutral_light', 'neutral_dark', 'sand', 'ocean', 'forest']);
 });
 
 test('#3877 freshness, the build line and the images plan read as drawn; a partial price is never a price', () => {
@@ -283,7 +283,7 @@ test('the review: the version\'s own theme is kept and nothing more is written; 
   try {
     assert.match(m.text(m.by('pitch-review-theme')), /^Theme: Neutral dark · as on your current version/);
     const options = m.all().filter((n) => n.tagName === 'OPTION').map((n) => m.pr(n).value);
-    assert.deepEqual(options, ['neutral_light', 'neutral_dark'], 'no brand kit, so no brand theme is offered');
+    assert.deepEqual(options, ['neutral_light', 'neutral_dark', 'sand', 'ocean', 'forest'], 'no brand kit, so no brand theme is offered');
     assert.equal(m.text(m.by('pitch-review-accept-line')), ACCEPT_LINE, 'no theme to write: one version');
     await m.tick(m.by('pitch-review-tick-2'));
     assert.match(m.text(m.by('pitch-review-ready')), /^Ready to present: 3 cards\.$/);

@@ -13,7 +13,7 @@ its `ZONE` map.
 | `OpportunitiesZone.jsx` | PR1 · Opportunities | `/practice/opportunities` | FEED | `advisor_bookings` |
 | `EngagementsZone.jsx` | PR2 · Engagements | `/practice/engagements` | WORK BOARD | `advisor_engagements` (migration 238) |
 | `DeliveryZone.jsx` | PR3 · Delivery | `/practice/delivery` | COLLECTION | `advisor_deliverables` + `advisor_deliverable_versions` (migration 239) |
-| `SessionsZone.jsx` | PR4 · Sessions | `/practice/sessions` | FEED | availability rules, session types, booking links (migration 240) + `advisor_bookings` amounts (205) |
+| `SessionsZone.jsx` | PR4 · Sessions | `/practice/sessions` | FEED | availability rules, session types, booking links (migration 240) + `advisor_bookings` amounts (205). Its emerald header primary "Block a date range" opens the page's own Block form (D1424, replacing D1596's three prompts) |
 | `EarningsZone.jsx` | **D4** · Earnings | `/practice/earnings` | LEDGER | the take rate, payout account, payouts and per-line cut (241) + the period note (242) + `advisor_bookings` amounts (205) + `advisor_engagements` retainers (238) |
 
 **THE OPS CANVAS'S FOUR PRACTICE SCREENS ARE SECTIONS OF THESE ZONES, NOT

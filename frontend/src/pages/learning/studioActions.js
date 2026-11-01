@@ -280,3 +280,7 @@ export async function moveLesson(module, lessonUid, step) {
 export async function deleteLesson(lessonUid) {
   return (await adminLearningApi.deleteLesson(lessonUid)).course;
 }
+
+/** #3935 (LE8): a saved course's drawn cover: one quote for the draw and its checks, then the draw. The builder's form keeps the URL until Save. */
+export const courseCoverQuote = (uid, prompt) => adminLearningApi.courseCoverQuote(uid, prompt);
+export const courseCoverDraw = (uid, prompt) => adminLearningApi.courseCoverDraw(uid, prompt);

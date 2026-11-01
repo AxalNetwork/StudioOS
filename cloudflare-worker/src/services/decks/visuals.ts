@@ -27,7 +27,7 @@ import { CATALOGUE } from '../ai/catalogue';
 import { IMAGE_MODEL, IMAGE_MODEL_LABEL, PALETTES, STYLES, type Style } from './images';
 import type { Series } from './chartSeries';
 import type { Diagram } from './diagramModel';
-import { themeTokens, type BrandKit } from './designSystem';
+import { isDarkTheme, themeTokens, type BrandKit } from './designSystem';
 import { snapshotHash } from './sources';
 
 const all = async <T>(env: Env, sql: string, ...binds: unknown[]) => ((await env.DB.prepare(sql).bind(...binds).all<T>()).results || []) as T[];
@@ -130,14 +130,52 @@ export async function recordDiagrams(env: Env, projectId: number): Promise<{ dia
 // ───────────────────────────────────────────────────────────── charts
 
 /**
- * How a bound series reads best: a trend of four points or more is a line,
- * fewer is columns, and a weekly count is columns (each week is its own
- * total). Null when it cannot be drawn honestly (unrecorded, or one point).
+ * D1517 (#3769, dk-auto AUTO-3) — the chart a figure's SHAPE earns, as one
+ * rules table. Code reads the shape from the records (how many points, whether
+ * the parts make a whole, whether it is a funnel); a model never picks.
+ *
+ *   time        ≥ 4 points → line; ≤ 3 points → columns
+ *   parts       parts of one whole → percent_bar (a stacked bar)
+ *   categories  categories compared → ranked_bars (horizontal bars)
+ *   market      TAM, SAM, SOM → nested_bars (drawn as circles once #3787 lands)
+ *   single      one value → metric_tiles (a big number)
+ *   funnel      stages that narrow → funnel
+ *
+ * A projection keeps its type and is drawn dashed, labelled "Projected".
+ * Every type is one of `slideModel.ts` CHART_TYPES.
+ */
+export type ChartShape = { kind: 'time' | 'parts' | 'categories' | 'market' | 'single' | 'funnel'; points: number; projected?: boolean };
+export type ChartRule = { type: 'line' | 'columns' | 'percent_bar' | 'ranked_bars' | 'nested_bars' | 'metric_tiles' | 'funnel'; rule: string; dashed: boolean; label: string | null };
+
+export const CHART_RULES: ReadonlyArray<{ rule: string; when: (s: ChartShape) => boolean; type: ChartRule['type'] }> = Object.freeze([
+  { rule: 'time series of four points or more', when: (s) => s.kind === 'time' && s.points >= 4, type: 'line' },
+  { rule: 'time series of two or three points', when: (s) => s.kind === 'time' && s.points >= 2 && s.points <= 3, type: 'columns' },
+  { rule: 'parts of a whole', when: (s) => s.kind === 'parts' && s.points >= 2, type: 'percent_bar' },
+  { rule: 'categories compared', when: (s) => s.kind === 'categories' && s.points >= 2, type: 'ranked_bars' },
+  { rule: 'TAM, SAM and SOM', when: (s) => s.kind === 'market' && s.points === 3, type: 'nested_bars' },
+  { rule: 'one value', when: (s) => s.points === 1, type: 'metric_tiles' },
+  { rule: 'funnel stages', when: (s) => s.kind === 'funnel' && s.points >= 2, type: 'funnel' },
+]);
+
+/** The chart a shape earns, or null when no rule draws it honestly. */
+export function chartRuleFor(shape: ChartShape | null | undefined): ChartRule | null {
+  if (!shape || !Number.isInteger(shape.points) || shape.points < 1) return null;
+  const hit = CHART_RULES.find((r) => r.when(shape));
+  if (!hit) return null;
+  const projected = shape.projected === true && hit.type !== 'metric_tiles';
+  return { type: hit.type, rule: hit.rule, dashed: projected, label: projected ? 'Projected' : null };
+}
+
+/**
+ * How a bound series reads best, by the rules table: a trend of four points
+ * or more is a line, fewer is columns, and a weekly count is columns (each
+ * week is its own total). Null when it cannot be drawn honestly (unrecorded,
+ * or one point).
  */
 export function chartTypeFor(s: Pick<Series, 'state' | 'points' | 'cadence' | 'unit'> | null | undefined): 'line' | 'columns' | null {
   if (!s || s.state !== 'recorded' || !Array.isArray(s.points) || s.points.length < 2) return null;
   if (s.cadence === 'weekly' && s.unit === 'count') return 'columns';
-  return s.points.length >= 4 ? 'line' : 'columns';
+  return chartRuleFor({ kind: 'time', points: s.points.length })?.type === 'line' ? 'line' : 'columns';
 }
 
 // ───────────────────────────────────────────────────────────── artwork
@@ -163,7 +201,7 @@ export function imageCapability(env: Pick<Env, 'AI'> | null | undefined, catalog
  */
 export function artDirection(themeKind: unknown, kit: BrandKit | null = null): { style: Style; palette: typeof PALETTES[number]; colours: string[]; suffix: string } {
   const { tokens } = themeTokens(themeKind, kit);
-  const style: Style = tokens.kind === 'neutral_dark' ? 'isometric' : 'flat';
+  const style: Style = isDarkTheme(tokens.kind) ? 'isometric' : 'flat';
   const palette = tokens.kind === 'brand' ? 'brand' : 'neutral';
   const colours = [tokens.colours.accent, tokens.chart[1], tokens.colours.ground];
   return {
@@ -175,6 +213,10 @@ export function artDirection(themeKind: unknown, kit: BrandKit | null = null): {
 /** The cards an illustration helps, by role: words-only cards that read as a wall of text without one. */
 export const ART_CARDS = ['title', 'solution', 'product', 'why_now'] as const;
 
+/** D1517 (#3769): a card's image blocks with no picture yet; any of them may take art, whatever the card's role. */
+const emptyImageBlocks = (s: any): string[] => (Array.isArray(s?.blocks) ? s.blocks : [])
+  .filter((b: any) => b?.kind === 'image' && !b.image_url).map((b: any) => String(b.id ?? ''));
+
 /**
  * Which cards of a deck could take an illustration, with the description a
  * founder starts from (the card's own words, never a figure) and the deck's
@@ -183,12 +225,14 @@ export const ART_CARDS = ['title', 'solution', 'product', 'why_now'] as const;
  */
 export function imagePlan(slides: any[], themeKind: unknown, kit: BrandKit | null, capability: ImageCapability) {
   const direction = artDirection(themeKind, kit);
-  const cards = (Array.isArray(slides) ? slides : []).map((s, index) => ({ s, index }))
-    .filter(({ s }) => (ART_CARDS as readonly string[]).includes(String(s?.spec_id ?? '').replace(/^new:/, '')))
-    .filter(({ s }) => !(s.blocks || []).some((b: any) => b.kind === 'image' && b.image_url))
-    .map(({ s, index }) => {
+  // An empty image area on any card may take art (D1517); a words-only card of ART_CARDS may take one too.
+  const cards = (Array.isArray(slides) ? slides : []).map((s, index) => ({ s, index, areas: emptyImageBlocks(s) }))
+    .filter(({ s, areas }) => areas.length > 0
+      || ((ART_CARDS as readonly string[]).includes(String(s?.spec_id ?? '').replace(/^new:/, ''))
+        && !(s.blocks || []).some((b: any) => b.kind === 'image' && b.image_url)))
+    .map(({ s, index, areas }) => {
       const heading = (s.blocks || []).find((b: any) => b.kind === 'text' && b.style === 'heading')?.text || s.title || '';
-      return { index, card: String(s.spec_id).replace(/^new:/, ''), description: `An illustration for: ${String(heading).replace(/[\d%$€£¥]/g, '').trim()}`.slice(0, 400), style: direction.style, palette: direction.palette, use: 'card' as const };
+      return { index, card: String(s.spec_id ?? '').replace(/^new:/, ''), areas, description: `An illustration for: ${String(heading).replace(/[\d%$€£¥]/g, '').trim()}`.slice(0, 400), style: direction.style, palette: direction.palette, use: 'card' as const };
     });
   return { capability, direction, cards: capability.available ? cards : [] };
 }

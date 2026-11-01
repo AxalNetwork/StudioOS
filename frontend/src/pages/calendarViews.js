@@ -47,10 +47,12 @@ export function windowFor(view, now = new Date()) {
 
 /** The canvas's five families, each with the kinds the Worker reads today. */
 export const FAMILIES = Object.freeze([
-  { key: 'events', label: 'Events', kinds: ['event_ticket', 'event_hosted'] },
-  { key: 'meetings', label: 'Meetings', kinds: ['ic_meeting', 'founder_checkin', 'investor_meeting'] },
+  { key: 'events', label: 'Events', kinds: ['event_ticket', 'event_hosted', 'manual'] },
+  { key: 'meetings', label: 'Meetings', kinds: ['ic_meeting', 'founder_checkin', 'investor_meeting', 'interview_call'] },
   { key: 'sessions', label: 'Sessions', kinds: ['advisor_booking', 'partner_office_hour', 'expert_booking'] },
-  { key: 'deadlines', label: 'Deadlines', kinds: ['compliance_due'] },
+  { key: 'deadlines', label: 'Deadlines', kinds: ['compliance_due', 'cohort_date', 'deal_closing'] },
+  // #3959: the member's own learning plan and registered webinars (its boards are LRN1–LRN3, CAL12).
+  { key: 'learning', label: 'Learning', kinds: ['learning'] },
   { key: 'other', label: 'From other calendars', kinds: ['calendly_event'] },
 ]);
 

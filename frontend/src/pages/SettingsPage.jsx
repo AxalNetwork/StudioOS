@@ -35,7 +35,7 @@ import UsageSection from './account/UsageOverview';
 import CompaniesProjects from './account/companies/CompaniesProjects';
 import { ProfileMovedNotice } from './account/companies/CompaniesMoved';
 import { companyPathFor } from './account/companies/companiesModel';
-import { companiesTabFor, companyUidFor } from './account/companies/companiesModel';
+import { companiesTabFor, companyUidFor, portfolioProjectFor } from './account/companies/companiesModel';
 import CostPage from './account/CostPage';
 // D807 (#2246) — `/account/usage/limits`, Usage's Limits page.
 import LimitsPage from './account/LimitsPage';
@@ -243,7 +243,8 @@ const ActivityPage = lazy(() => import('./ActivityPage'));
 const SECTIONS = [
   { id: 'account', label: 'Profile and identity' },
   // D1134 (#2422) — Companies and projects, second, as the owner asked ("below Profile and identity").
-  { id: 'companies', label: 'Companies and projects' },
+  // D1413 (#3696 Q1): the section is "Portfolio" for every profile, at /account/portfolio.
+  { id: 'companies', label: 'Portfolio' },
   { id: 'notifications', label: 'Notifications' },
   { id: 'security-privacy', label: 'Sign-in and security' },
   { id: 'billing', label: 'Billing and orders' },
@@ -285,8 +286,10 @@ export default function SettingsPage() {
   const builderView = active === 'builder' ? builderViewFor(location.pathname) : null;
   // D1138 — Companies and projects' tabs are addresses of their own; the canonicalising effect keeps them.
   const companiesTab = active === 'companies' ? companiesTabFor(location.pathname) : null;
-  // D1139 — `/account/portfolio/<uid>` (D1415 part 4) is that company's lightbox, kept by the same effect.
+  // D1139 — `/account/portfolio/<uid>` (D1415 part 4) is that company's page (D1413, PF2), kept by the same effect.
   const companyUid = active === 'companies' ? companyUidFor(location.pathname) : null;
+  // D1413 (#3696, PF3) — `/account/portfolio/projects/<id>` is that project's page.
+  const projectId = active === 'companies' ? portfolioProjectFor(location.pathname) : null;
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -316,7 +319,7 @@ export default function SettingsPage() {
   // account recovery. A canonicalising hop must not eat the part of the link
   // that said why it was sent.
   useEffect(() => {
-    const want = accountPathFor({ section: active, phone, key: connectorKey, usagePage, companiesTab, companyUid, builderView });
+    const want = accountPathFor({ section: active, phone, key: connectorKey, usagePage, companiesTab, companyUid, projectId, builderView });
     if (location.pathname !== want && /^\/(?:account|settings)\b/.test(location.pathname)) {
       navigate({ pathname: want, search: location.search, hash: location.hash }, { replace: true, state: location.state });
     }

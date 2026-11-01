@@ -1,9 +1,10 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
-import { RailFrame, Unrecorded, Unreadable, WorkerRail } from '../../ui';
+import { Unrecorded, Unreadable } from '../../ui';
 import ZoneDraft from '../../workspaces/ZoneDraft';
-import { NO_PARTNER_PROFILE, NoFirmAttached } from './PartnerFirmProfileCard';
+import { TILE } from '../studio/studioLayoutModel';
+import { NO_PARTNER_PROFILE } from './PartnerFirmProfileCard';
 
 /**
  * Partner Studio's body — "Where does the firm stand today?" (D394).
@@ -37,8 +38,14 @@ import { NO_PARTNER_PROFILE, NoFirmAttached } from './PartnerFirmProfileCard';
  *
  * NOT DRAWN, AND SAID SO: an inbound seam ("From Halverton · 2h ago") — no
  * message store feeds this page; "proposal opened 3×" — `opened_at` is the
- * client's to set and nothing sets it; the ask bar — asking Eadwyn lives in the
- * rail, and this page carries no second ask box.
+ * client's to set and nothing sets it.
+ *
+ * D1419 (#3698) — THE THREE MODULES. The tiles, the operating brief (kept,
+ * owner answer J) and the feed are the partner Studio's modules `firm_tiles`,
+ * `operating_brief` and `firm_feed`, drawn in the member's layout by
+ * `PartnerStudioHome` (`partnerTiles`). The question heading and the
+ * WorkerRail are gone: Studio has no AIRail (owner answer G), and the AIRail
+ * holds only models and consumption, so nothing here says asking lives there.
  *
  * PREVIEW AND UNLINKED. An admin previewing the partner role sees every read
  * withheld (the same rule `PartnerStudioHome` follows). A sign-in with no firm
@@ -177,106 +184,103 @@ function Tile({ tile, onRetry }) {
   );
 }
 
-/** The page as it draws, from load states — no requests except the brief band's own. */
-export function PartnerHomeP2View({ state, onRetry }) {
-  if (state.status === 'unlinked') return <NoFirmAttached />;
-  if (state.status === 'preview') {
-    return (
-      <p className="text-sm text-axal-muted" data-testid="partner-home-preview">
-        The firm&apos;s record is withheld in role preview: nothing on Partner Studio is read while you preview it.
-      </p>
-    );
-  }
-  if (state.status === 'loading') return <p className="text-sm text-axal-muted">Reading the firm&apos;s record…</p>;
-  const reads = state.reads || {};
+/** The five firm tiles, from the three reads. */
+export function FirmTiles({ reads, onRetry }) {
   const tiles = homeTiles(reads);
-  const feed = homeFeed(reads);
-  const by = Object.fromEntries(tiles.map((t) => [t.key, t]));
-  const sub = [
-    by.due.value != null ? `${by.due.value} milestone${by.due.value === 1 ? '' : 's'} due this week` : null,
-    by.risk.value != null ? `${by.risk.value} at risk` : null,
-    by.capacity.value != null ? `${by.capacity.value} over capacity` : null,
-  ].filter(Boolean).join(' · ');
   return (
-    <RailFrame
-      rail={(
-        <WorkerRail
-          workspace="Partner Studio"
-          role="partner"
-          stance="Read across the firm's record"
-          note="Every tile and line reads the Delivery and Pipeline records. The brief is composed only on your click, states what the record shows, and moves nothing."
-          coverage={[
-            'Engagements, at risk and due this week — Delivery · Board',
-            'Recurring and renewals — Pipeline · Retainers',
-            'Over capacity — Delivery · Capacity, against a cap the firm stated',
-          ]}
-          unavailable={[
-            ['Client messages', 'No inbound message record feeds this page.'],
-            ['Proposal opens', 'Opening is the client’s to record, and nothing records it.'],
-          ]}
-        />
-      )}
-      data-testid="partner-home-p2"
-    >
-      <div className="min-w-0 space-y-4">
-        <div>
-          <h1 className="text-[24px] font-extrabold tracking-tight">Where does the firm stand today?</h1>
-          <p className="mt-1 text-[13px] text-axal-muted">{sub || 'Nothing is counted yet: the reads below say why.'}</p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2.5 md:grid-cols-5">
-          {tiles.map((t) => <Tile key={t.key} tile={t} onRetry={onRetry} />)}
-        </div>
-
-        <ZoneDraft
-          surface="home/brief"
-          railOption="draft:operating-brief"
-          label="Proposal · operating brief"
-          accept="Accept as today's brief"
-          run="Compose today's brief"
-          empty="Composed on your click from this firm's own record — what falls due, what is at risk and why, who is over a stated cap. Nothing is composed on load."
-          nothingToDraft="This firm has no engagement on record yet, so there is nothing to brief on."
-        />
-
-        <section data-testid="partner-home-feed">
-          <div className="mb-2 flex items-baseline justify-between">
-            <span className="text-sm font-extrabold tracking-tight">Today</span>
-            <span className="text-[11px] text-axal-faint">Every line carries its receipt</span>
-          </div>
-          {feed.length === 0 ? (
-            <p className="text-[12.5px] text-axal-muted">Nothing is at risk, due this week, over a stated cap or renewing soon.</p>
-          ) : (
-            <ul className="space-y-2">
-              {feed.map((f) => (
-                <li key={f.key} className={`flex items-start justify-between gap-4 rounded-r-[10px] border border-l-[3px] border-axal-hairline bg-white p-3 dark:border-gray-800 dark:bg-gray-900 ${TONE[f.tone] || TONE.plain}`}>
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[13px] font-bold">{f.title}</span>
-                      {f.grant && (
-                        <span className="rounded-full border border-axal-hairline px-2 py-0.5 text-[10px] text-axal-muted" data-testid="home-grant-chip">{f.grant}</span>
-                      )}
-                    </div>
-                    {f.body && <div className="mt-1 text-[11.5px] text-axal-muted">{f.body}</div>}
-                    <div className="mt-1 text-[10.5px] text-axal-faint">{f.receipt}</div>
-                  </div>
-                  <Link to={f.to} className="shrink-0 text-[12px] font-semibold text-amber-700 underline">{f.action}</Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        <p className="text-[11px] leading-relaxed text-axal-faint" data-testid="partner-home-limits">
-          Not on this page: messages from a client (no inbound record feeds it), whether a proposal was
-          opened (the client&apos;s to record, and nothing records it), and an ask box — asking Eadwyn lives
-          in the rail.
-        </p>
-      </div>
-    </RailFrame>
+    <div className="grid grid-cols-2 gap-2.5 md:grid-cols-5" data-testid="partner-home-tiles">
+      {tiles.map((t) => <Tile key={t.key} tile={t} onRetry={onRetry} />)}
+    </div>
   );
 }
 
-export default function PartnerHomeP2({ previewing = false }) {
+/** The operating brief: the `home/brief` draft surface, composed on a click and never on mount. */
+export function OperatingBrief() {
+  return (
+    <ZoneDraft
+      surface="home/brief"
+      railOption="draft:operating-brief"
+      label="Proposal · operating brief"
+      accept="Accept as today's brief"
+      run="Compose today's brief"
+      empty="Composed on your click from this firm's own record — what falls due, what is at risk and why, who is over a stated cap. Nothing is composed on load."
+      nothingToDraft="This firm has no engagement on record yet, so there is nothing to brief on."
+    />
+  );
+}
+
+/** The feed: each line with its receipt and where to act on it. */
+export function FirmFeed({ reads }) {
+  const feed = homeFeed(reads);
+  return (
+    <section data-testid="partner-home-feed">
+      <p className="mb-2 text-[11px] text-axal-faint">Every line carries its receipt</p>
+      {feed.length === 0 ? (
+        <p className="text-[12.5px] text-axal-muted">Nothing is at risk, due this week, over a stated cap or renewing soon.</p>
+      ) : (
+        <ul className="space-y-2">
+          {feed.map((f) => (
+            <li key={f.key} className={`flex items-start justify-between gap-4 rounded-r-[10px] border border-l-[3px] border-axal-hairline bg-white p-3 dark:border-gray-800 dark:bg-gray-900 ${TONE[f.tone] || TONE.plain}`}>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[13px] font-bold">{f.title}</span>
+                  {f.grant && (
+                    <span className="rounded-full border border-axal-hairline px-2 py-0.5 text-[10px] text-axal-muted" data-testid="home-grant-chip">{f.grant}</span>
+                  )}
+                </div>
+                {f.body && <div className="mt-1 text-[11.5px] text-axal-muted">{f.body}</div>}
+                <div className="mt-1 text-[10.5px] text-axal-faint">{f.receipt}</div>
+              </div>
+              <Link to={f.to} className="shrink-0 text-[12px] font-semibold text-amber-700 underline dark:text-amber-300">{f.action}</Link>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="mt-3 text-[11px] leading-relaxed text-axal-faint" data-testid="partner-home-limits">
+        Not on this page: messages from a client (no inbound record feeds it) and whether a proposal was
+        opened (the client&apos;s to record, and nothing records it).
+      </p>
+    </section>
+  );
+}
+
+export const UNLINKED_REASON = 'No partner profile is attached to this sign-in, so the firm’s record is not read.';
+
+/**
+ * The partner Studio's three module specs from the page's load state. A
+ * preview withholds them (SM11); an unlinked sign-in has no firm record, so
+ * the two firm modules are Not recorded with that reason, never five zeros.
+ */
+export function partnerTiles(state, onRetry) {
+  if (state.status === 'preview') {
+    const w = { state: TILE.WITHHELD };
+    return { firm_tiles: w, operating_brief: w, firm_feed: w };
+  }
+  if (state.status === 'loading') {
+    const l = { state: TILE.LOADING };
+    return { firm_tiles: l, operating_brief: { state: TILE.READY, body: <OperatingBrief /> }, firm_feed: l };
+  }
+  if (state.status === 'unlinked') {
+    const nr = { state: TILE.NOT_RECORDED, reason: UNLINKED_REASON, href: '/account', openLabel: 'Partner settings' };
+    return { firm_tiles: nr, operating_brief: nr, firm_feed: nr };
+  }
+  const reads = state.reads || {};
+  const tiles = homeTiles(reads);
+  const by = Object.fromEntries(tiles.map((t) => [t.key, t]));
+  const note = [
+    by.due.value != null ? `${by.due.value} due this week` : null,
+    by.risk.value != null ? `${by.risk.value} at risk` : null,
+  ].filter(Boolean).join(' · ') || null;
+  const none = !reads.board && !reads.retainers && !reads.capacity;
+  return {
+    firm_tiles: none ? { state: TILE.UNREADABLE, onRetry } : { state: TILE.READY, note, href: '/delivery/board', openLabel: 'Open Delivery', body: <FirmTiles reads={reads} onRetry={onRetry} /> },
+    operating_brief: { state: TILE.READY, body: <OperatingBrief /> },
+    firm_feed: none ? { state: TILE.UNREADABLE, onRetry } : { state: TILE.READY, href: '/delivery/health', openLabel: 'Open the feed', body: <FirmFeed reads={reads} /> },
+  };
+}
+
+/** The firm's three reads, once, for the tiles and the feed. No request in a preview. */
+export function usePartnerHome(previewing = false) {
   const [state, setState] = useState({ status: 'loading' });
 
   const load = useCallback(async () => {
@@ -303,5 +307,5 @@ export default function PartnerHomeP2({ previewing = false }) {
   }, [previewing]);
   useEffect(() => { load(); }, [load]);
 
-  return <PartnerHomeP2View state={state} onRetry={load} />;
+  return { state, load };
 }

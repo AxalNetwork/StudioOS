@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e9e7ee}
+a{color:#7c3aed;text-decoration:none}
+a:hover{color:#6d28d9;text-decoration:underline}
+</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:72px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1040px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:#6b6577">Axal VC · /incorporate</span>
+<h1 style="margin:0;font-size:42px;font-weight:800;letter-spacing:-0.03em">Incorporate</h1>
+<p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">A guided flow that turns a project, or nothing yet, into a company. The company lands in Portfolio, linked to its project. Ask sits in each step’s head; field triggers appear only on blank fields Eadwyn may fill.</p>
+</header>
+<sc-for list="{{ boards }}" as="b" hint-placeholder-count="8">
+<section id="{{ b.id }}" style="display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">{{ b.id }}</span><h2 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-0.02em">{{ b.t }}</h2></div>
+<sc-if value="{{ b.noteOn }}" hint-placeholder-val="{{ false }}"><p style="margin:0;max-width:1440px;font-size:13px;line-height:1.5;color:#3f3a47">{{ b.note }}</p></sc-if>
+<div style="display:flex;gap:32px;align-items:flex-start;flex-wrap:wrap;max-width:2944px">
+<sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+<div style="display:flex;flex-direction:column;gap:8px">
+<sc-if value="{{ f.capOn }}" hint-placeholder-val="{{ false }}"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">{{ f.cap }}</span></sc-if>
+<div style="{{ f.wst }}"><dc-import name="Incorporate Flow Page" v="{{ f.v }}" hint-size="1440px,1000px"></dc-import></div>
+</div>
+</sc-for>
+</div>
+</section>
+</sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const fr = (v, w, cap) => ({ v, cap: cap || '', capOn: !!cap, wst: 'width:' + w + 'px;border-radius:' + (w === 390 ? 28 : 14) + 'px;overflow:hidden;border:1px solid ' + (/-d$/.test(v) ? '#374151' : '#dedbe5') + ';box-shadow:0 20px 50px rgba(24,24,27,.10)' });
+    const B = (id, t, frames, note) => ({ id, t, frames, note: note || '', noteOn: !!note });
+    const boards = [
+      B('INC1', 'Start', [fr('inc1', 1440)], 'Pick an existing project to incorporate, or start fresh. Entity types are compared in plain words, with price and timeline.'),
+      B('INC2', 'Steps with a progress rail', [fr('inc2a', 1440, 'Company details · Ask in the form head, triggers on the registered agent and address'), fr('inc2b', 1440, 'Review your answers')], 'No trigger on the legal name the member types, on identity numbers or on signatures.'),
+      B('INC3', 'Payment and filing', [fr('inc3a', 1440, 'Order summary'), fr('inc3b', 1440, 'Status timeline: submitted, filed, EIN, bank')]),
+      B('INC4', 'Done', [fr('inc4', 1440)], 'The company is created in Portfolio and linked to the project, with Open company and the next steps: bank, cap table, 83(b) deadline.'),
+      B('INC5', 'States', [fr('inc5a', 1440, 'Save and come back'), fr('inc5b', 1440, 'Payment refused by the provider'), fr('inc5c', 900, 'Filing status · crop'), fr('inc5d', 1440, 'One block could not be read'), fr('inc5e', 1440, 'Locked by plan'), fr('inc5f', 1440, 'No permission: not your project'), fr('inc5g', 1440, 'Read-only HQ access')]),
+      B('INC5p', 'Phone 390 and tablet 768', [fr('inc5h1', 390, 'Compare jurisdictions'), fr('inc5h2', 390, 'Company details'), fr('inc5h3', 390, 'Status'), fr('inc5i', 768, 'Tablet · compare jurisdictions')]),
+      B('INC6', 'Ask', [fr('inc6d', 1180, 'Button states, with accessible names'), fr('inc6a', 1440, 'Cost before a run: a hold, you pay what it uses'), fr('inc6b', 1440, 'Out of AI tokens'), fr('inc6c', 1440, 'AI paused')], 'Waiting shows an amber “[2] waiting” chip; with AI off the mark turns grey and Ask fills only from the member’s own sources.'),
+      B('INC7', 'Dark', [fr('inc1-d', 1440, 'Start'), fr('inc3b-d', 1440, 'Status timeline')])
+    ];
+    return { boards };
+  }
+}
+</script>
+</body></html>

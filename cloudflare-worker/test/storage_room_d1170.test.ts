@@ -226,13 +226,27 @@ const SITES: Array<[string, string, string]> = [
   // D1094: a Drive file copied into the data room is the member's, weighed before it lands.
   ['services/google/raise.ts', 'async function copyFile', 'await env.FILES.put(key, bytes'],
   // D903: a deck image is the member's file. Room is checked before either write; the bytes are not in the usage total yet.
-  ['routes/deck_images.ts', "deckImages.post('/:id/images', async", 'await c.env.FILES!.put(key, r.image.bytes'],
-  ['routes/deck_images.ts', "deckImages.post('/:id/images/upload'", 'await c.env.FILES.put(key, bytes'],
-  // D1506: an outside image a deck names, copied into the venture's storage at save or export; room is checked first.
+  // D1506 (#3757): the drawn image is stripped of its metadata before it lands (`drawn`).
+  ['routes/deck_images.ts', "deckImages.post('/:id/images', async", 'await c.env.FILES!.put(key, drawn'],
+  // D1506: upload and import (an external image copied in) both land through `landImage`.
+  ['routes/deck_images.ts', 'async function landImage', 'await c.env.FILES.put(key, bytes'],
+  // D1506: save/export-time copies also check room before storage.
   ['services/decks/imageCopy.ts', 'export async function copyExternalImages', 'await env.FILES.put(key, img.bytes'],
   ['routes/founder_validate_sessions.ts', 'async function openOn', 'const insert = env.DB.prepare('],
   ['services/interviewIntake.ts', 'export async function openSession', 'const [inserted] = await env.DB.batch(['],
 ];
+
+test('D1506: the deck image upload and import both land through landImage, the guarded writer', () => {
+  const s = src('routes/deck_images.ts');
+  for (const handler of ["deckImages.post('/:id/images/upload'", "deckImages.post('/:id/images/import'"]) {
+    const h = s.indexOf(handler);
+    assert.ok(h >= 0, handler);
+    const next = s.indexOf('deckImages.', h + handler.length);
+    const body = s.slice(h, next > h ? next : undefined);
+    assert.match(body, /landImage\(/, `${handler} lands through landImage`);
+    assert.doesNotMatch(body, /FILES!?\.put\(/, `${handler} writes only through landImage`);
+  }
+});
 
 test('every member upload calls the guard before its write', () => {
   for (const [file, handler, write] of SITES) {
@@ -276,6 +290,7 @@ const NOT_MEMBER_UPLOADS: Record<string, string> = {
   'services/articleCovers.ts': 'HQ article covers',
   'services/backup.ts': 'platform backups',
   'services/mercury/investorFeeds.ts': 'a GP\'s Mercury statements: fund documents, never counted',
+  'services/coverDraws.ts': 'a drawn event or course cover (#3935): generated, not uploaded, and not a measured D1169 store',
   'services/meetingBotDiagnose.ts': 'an HQ owner\'s bot diagnostic record and screenshot (#3708), never counted',
 };
 

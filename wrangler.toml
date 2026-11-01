@@ -165,6 +165,8 @@ fallthrough = true
 [vars]
 # D1496 (#3840): team agents (/api/teams). Off until the owner turns them on.
 TEAM_AGENTS_ENABLED = "false"
+# D1529 (#3845, #3742 E1): the agent engine's goals and tasks (/api/teams). "off" until the owner turns it on; needs TEAM_AGENTS_ENABLED too.
+AGENT_ENGINE = "off"
 # D886 B9: meeting bot rollout; B1 enforces Super-Admin-only canary.
 MEETING_BOT = "canary"
 # Task #5 — canonical-host flip complete. APP_URL / PUBLIC_BASE_URL
@@ -584,6 +586,8 @@ custom_domain  = true
 [env.production.vars]
 # D1496 (#3840): team agents (/api/teams). Mirrored from [vars]; off until the owner turns them on.
 TEAM_AGENTS_ENABLED = "false"
+# D1529 (#3845): the agent engine. Mirrored from [vars]; "off" until the owner turns it on.
+AGENT_ENGINE = "off"
 # D886 B9: vars do not inherit into named environments.
 MEETING_BOT = "canary"
 # Task #5 — canonical-host flip. APP_URL/PUBLIC_BASE_URL now point at

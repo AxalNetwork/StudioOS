@@ -13,7 +13,7 @@
  *     each redirect checked, and copied in when a deck is saved; one that
  *     cannot be copied refuses the save, naming it;
  *   · the export browser may load the page's own origin, the web fonts and
- *     data: URLs only.
+ *     data: and blob: URLs only.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/untrusted_uploads_d1506.test.ts
  */
@@ -184,18 +184,20 @@ test('our own stored image URLs are left alone; every other image a slide names 
 
 // ─────────────────────────────────────────────────────────── the export browser
 
-test('the export browser may load the page\'s origin, the web fonts and data: URLs only', async () => {
+test('the export browser may load the page\'s origin, the web fonts and inline data/blob URLs only', async () => {
   const pats = exportAllowPatterns('https://axal.vc/deck/print-export/tok?print_mode=pdf')!;
   const re = pats.map((p) => new RegExp(p.slice(1, p.lastIndexOf('/'))));
   const allowed = (u: string) => re.some((r) => r.test(u));
-  for (const u of ['https://axal.vc/api/decks/images/x/file', 'https://fonts.googleapis.com/css2?family=Inter', 'https://fonts.gstatic.com/s/inter.woff2', 'data:image/png;base64,AA']) assert.ok(allowed(u), u);
+  for (const u of ['https://axal.vc/api/decks/images/x/file', 'https://fonts.googleapis.com/css2?family=Inter', 'https://fonts.gstatic.com/s/inter.woff2', 'data:image/png;base64,AA', 'blob:https://axal.vc/synthetic']) assert.ok(allowed(u), u);
   for (const u of ['https://img.example.test/a.png', 'https://axal.vc.evil.example/x', 'http://axal.vc/x', 'https://evil.example/https://axal.vc/', 'https://169.254.169.254/latest']) assert.equal(allowed(u), false, u);
-  assert.equal(exportAllowPatterns('not a url'), null);
+  assert.deepEqual(exportAllowPatterns('not a url'), ['/^data:/', '/^blob:/']);
   const asked: any[] = [];
   const binding = { quickAction: async (_a: string, o: any) => { asked.push(o); return new Response(new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31]), { status: 200 }); } };
   const r = await renderUrl({ BROWSER: binding } as any, 'pdf', { url: 'https://axal.vc/deck/print-export/tok' }, { kind: 'pdf', maxBytes: 100, backoffMs: 0 });
   assert.ok(r.ok);
   assert.deepEqual(asked[0].allowRequestPattern, pats, 'every render carries the allow-list');
+  await renderUrl({ BROWSER: binding } as any, 'pdf', { url: 'https://axal.vc/deck/print-export/tok', allowRequestPattern: ['/.*/'] }, { kind: 'pdf', maxBytes: 100, backoffMs: 0 });
+  assert.deepEqual(asked[1].allowRequestPattern, pats, 'caller options cannot broaden the server allow-list');
 });
 
 // ─────────────────────────────────────────────────────────── the routes

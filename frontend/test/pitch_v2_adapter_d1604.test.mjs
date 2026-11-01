@@ -21,12 +21,21 @@ const read = (p) => readFileSync(p, 'utf8');
 const PITCH = 'frontend/src/pages/raise/pitch';
 const HELPERS = new Set(['NOT_ON', 'SURFACES', 'SWAPPED', 'unavailable', 'through', 'shown', 'availability']);
 import { deckGridApi } from '../src/lib/api/deckGrid.js';
+import { deckStageApi } from '../src/lib/api/deckStage.js';
+import { deckRemixApi } from '../src/lib/api/deckRemix.js';
 
 test('every adapter method answers unavailable, with the reason and the issue that brings its route', async () => {
   const methods = Object.keys(adapter).filter((k) => !HELPERS.has(k));
   assert.deepEqual(methods.sort(), Object.keys(adapter.SURFACES).sort(), 'a method with no SURFACES row, or a row with no method');
   assert.ok(methods.length >= 40);
-  assert.deepEqual([...adapter.SWAPPED], ['grid'], 'D1499 (#3749): the one row whose route is on main');
+  // D1499 (#3749) swapped grid, D1522 (#3774) stagePlan, D1553 (#3800) remix; D1565 (#3812) the investor links. A swapped
+  // surface's body calls its client through().
+  assert.deepEqual([...adapter.SWAPPED], ['grid', 'stagePlan', 'remix', 'investorLinks', 'withdrawInvestorLink'], 'the rows whose route is on main');
+  const seam = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
+  for (const name of ['investorLinks', 'withdrawInvestorLink']) {
+    assert.match(seam, new RegExp(`export const ${name} = [^\\n]*through\\(\\(\\) => deckInvestorLinksApi\\.${name}\\(`), `${name} is wired to its client`);
+    assert.equal(adapter.availability(name), null, `${name} is on`);
+  }
   for (const name of methods.filter((n) => !adapter.SWAPPED.includes(n))) {
     const answer = await adapter[name]('synthetic-deck', { synthetic: true });
     assert.deepEqual(answer, { available: false, reason: NOT_ON, issue: adapter.SURFACES[name].issue }, name);
@@ -55,18 +64,49 @@ test('D1499 (#3749): grid is swapped — it answers through deckGridApi.grid, an
   assert.equal(adapter.SURFACES.grid.issue, 3749, 'the row stays, so the plan’s table reads whole');
 });
 
+test('D1522 (#3774): stagePlan is swapped — it answers through deckStageApi.stagePlan with the stage and investor type asked', async () => {
+  const real = deckStageApi.stagePlan;
+  const asked = [];
+  try {
+    deckStageApi.stagePlan = async (id, opts) => { asked.push([id, opts]); return { deck_id: 7, stage: 'seed', order: [], warnings: [] }; };
+    assert.deepEqual(await adapter.stagePlan(7, { stage: 'seed' }), { available: true, value: { deck_id: 7, stage: 'seed', order: [], warnings: [] } });
+    assert.deepEqual(asked, [[7, { stage: 'seed' }]]);
+    deckStageApi.stagePlan = async () => { throw Object.assign(new Error('nope'), { status: 404 }); };
+    assert.deepEqual(await adapter.stagePlan(7), { available: false, reason: NOT_ON, issue: 3774 }, 'a route that answers 404 is still off');
+    deckStageApi.stagePlan = async () => { throw Object.assign(new Error('The deck could not be read.'), { status: 500 }); };
+    assert.equal((await adapter.stagePlan(7)).unreadable, true, 'anything else is unreadable, never an empty plan');
+  } finally { deckStageApi.stagePlan = real; }
+  assert.equal(adapter.availability('stagePlan'), null, 'the Stage chips and the menu row are no longer Coming later');
+});
+
+test('D1553 (#3800): remix is swapped — it posts the card on screen (and a block to remove) through deckRemixApi.remix', async () => {
+  const real = deckRemixApi.remix;
+  const asked = [];
+  try {
+    deckRemixApi.remix = async (id, card, opts) => { asked.push([id, card, opts]); return { deck_id: 7, current: 'custom', card, options: [] }; };
+    const card = { blocks: [{ id: 'b1' }] };
+    assert.deepEqual(await adapter.remix(7, card, { remove: 'b1' }), { available: true, value: { deck_id: 7, current: 'custom', card, options: [] } });
+    assert.deepEqual(asked, [[7, card, { remove: 'b1' }]]);
+    deckRemixApi.remix = async () => { throw Object.assign(new Error('nope'), { status: 404 }); };
+    assert.deepEqual(await adapter.remix(7, card), { available: false, reason: NOT_ON, issue: 3800 });
+  } finally { deckRemixApi.remix = real; }
+  assert.equal(adapter.availability('remix'), null, 'its menu row is no longer Coming later');
+});
+
 test('the adapter keys each surface to the plan’s issue (§6.2)', () => {
   const want = {
     grid: 3749, saveCard: 3751, discardDraft: 3751, batch: 3753, cancelBatch: 3753, elementModels: 3754,
-    areasQuote: 3764, areasGenerate: 3764, history: 3767, narrativeOutline: 3768, themesV2: 3769, instruct: 3773,
+    areasQuote: 3764, areasGenerate: 3764, history: 3767, narrativeOutline: 3768, instruct: 3773,
     stagePlan: 3774, figures: 3775, deckUsage: 3776, arrange: 3777, imageEdit: 3778, elementsLibrary: 3779,
     diagrams: 3780, ventureElements: 3781, templates: 3782, myTemplates: 3782, saveAsTemplate: 3782, typedTables: 3787,
     media: 3788, presets: 3796, orgLocks: 3786, critique: 3799, remix: 3800, consistency: 3802, deckActions: 3808,
-    brandLocks: 3819, pptxImport: 3809, investorLinks: 3812, comments: 3817, slideAnalytics: 3820,
+    brandLocks: 3819, pptxImport: 3809, investorLinks: 3812, withdrawInvestorLink: 3812, comments: 3817, slideAnalytics: 3820,
     presence: 3824, cardStatus: 3826, rehearse: 3827, walkthrough: 3837, retryFailed: 3879, unseenBatches: 3879,
     markSeen: 3879, setDeckSource: 3881,
   };
   // #3882 merged as D1603: the .odp export left the seam for its real client (pitch_v2_states_d1604).
+  // #3769 merged as D1517: the six themes arrive through GET /api/decks/model, so `themesV2` left the seam.
+  assert.equal('themesV2' in adapter, false, 'the six themes need no adapter method');
   assert.equal('exportOdp' in adapter, false, 'a surface whose route is on main is not in the adapter');
   assert.deepEqual(Object.fromEntries(Object.entries(adapter.SURFACES).map(([k, v]) => [k, v.issue])), want);
   for (const [k, v] of Object.entries(adapter.SURFACES)) assert.ok(typeof v.what === 'string' && v.what.length > 8, k);
@@ -75,17 +115,24 @@ test('the adapter keys each surface to the plan’s issue (§6.2)', () => {
 test('the seam reaches no network, and no client method exists for a route that is not on main', () => {
   const src = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
   assert.doesNotMatch(src, /request\(|fetch\(|XMLHttpRequest/);
-  // A swapped row's client is the only `lib/api` the seam may import (D1499's `deckGrid.js`).
-  assert.deepEqual([...src.matchAll(/from '([^']*lib\/api[^']*)'/g)].map((x) => x[1]), ['../../../lib/api/deckGrid.js']);
+  // A swapped row's client is the only `lib/api` the seam may import (D1499's `deckGrid.js`, D1522's `deckStage.js`, D1553's `deckRemix.js`, D1565's `deckInvestorLinks.js`).
+  assert.deepEqual([...src.matchAll(/from '([^']*lib\/api[^']*)'/g)].map((x) => x[1]).sort(), ['../../../lib/api/deckGrid.js', '../../../lib/api/deckInvestorLinks.js', '../../../lib/api/deckRemix.js', '../../../lib/api/deckStage.js']);
+  assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckInvestorLinks\)/);
   assert.doesNotMatch(codeOnly(read(`${PITCH}/deckV2Model.js`)), /request\(|fetch\(|lib\/api|from 'react'/);
   const client = [read('frontend/src/lib/api.js'), ...readdirSync('frontend/src/lib/api').filter((f) => f.endsWith('.js')).map((f) => read(`frontend/src/lib/api/${f}`))].join('\n');
   // #3749 part 1 merged as #3925: Grid has a real read route and client (main's check, kept by the merge).
   assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_grid.ts')), /deckGrid\.get\(['"]\/:id\{\[0-9\]\+\}\/grid['"]/);
   assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckGrid\)/);
-  for (const path of ['/areas', '/stage-plan', '/figures', '/element-models', '/remix', '/draft', '/areas/instruct']) {
+  // D1522 (#3774): the stage plan has its route and client too.
+  assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_stage.ts')), /deckStage\.get\(['"]\/:id\{\[0-9\]\+\}\/stage-plan['"]/);
+  assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckStage\)/);
+  // D1553 (#3800): Remix has its route and client.
+  assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_remix.ts')), /deckRemix\.post\(['"]\/:id\{\[0-9\]\+\}\/remix['"]/);
+  assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckRemix\)/);
+  for (const path of ['/areas', '/figures', '/element-models', '/draft', '/areas/instruct']) {
     assert.ok(!new RegExp(`['"\`]/decks/[^'"\`\\n]*${path.replace(/[$/{]/g, (c) => `\\${c}`)}`).test(client), `a client path for ${path} before its route is on main`);
   }
-  assert.ok(!readdirSync('frontend/src/lib/api').some((f) => /^deck(Draft|Areas|Instruct|Stage|Figures|ElementModels)\.js$/.test(f)));
+  assert.ok(!readdirSync('frontend/src/lib/api').some((f) => /^deck(Draft|Areas|Instruct|Figures|ElementModels)\.js$/.test(f)));
 });
 
 test('an unavailable answer is never printed as a zero, "$0.00" or "none"', async () => {

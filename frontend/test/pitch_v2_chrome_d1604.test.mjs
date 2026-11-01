@@ -54,7 +54,7 @@ test('⋯: three sections; adapter items are Coming later with the adapter\'s re
   for (const id of ['theme', 'size', 'brand', 'sources', 'versions', 'save_named', 'structure', 'duplicate', 'appendix', 'background', 'check']) {
     assert.ok(all.find((i) => i.id === id && !i.adapter), `${id} is wired on main`);
   }
-  for (const [id, adapter] of [['stage', 'stagePlan'], ['reorder', 'deckActions'], ['remix', 'remix'], ['hide', 'media'], ['section', 'media'], ['replace_images', 'deckActions'], ['critique', 'critique']]) {
+  for (const [id, adapter] of [['stage', 'deckActions'], ['reorder', 'deckActions'], ['remix', 'remix'], ['hide', 'media'], ['section', 'media'], ['replace_images', 'deckActions'], ['critique', 'critique']]) {
     assert.equal(all.find((i) => i.id === id).adapter, adapter, id);
   }
   assert.equal(MORE_MENU[0].items.findIndex((i) => i.id === 'reorder') >= 0, true, 'Reorder for stage sits under This deck');

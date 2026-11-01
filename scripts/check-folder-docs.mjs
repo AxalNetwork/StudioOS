@@ -46,6 +46,7 @@ const ROOT = resolve(process.cwd());
 // it then demands is the point.
 const DOCUMENTED = new Map([
   ['cloudflare-worker/src/services/ai', 'shared model capabilities, shapes, prices and module connections'],
+  ['cloudflare-worker/src/services/agents', 'team agents (D1496): the catalogue, rule books, goals, tasks, the queue and the run'],
   ['cloudflare-worker/src/services/agents/skills', 'the Axal starter skill library (#3953, D1612): one SKILL.md per skill'],
   ['cloudflare-worker/src/services/agents/skills/cases', 'one golden evaluation case per starter skill, for part D (#3954)'],
   ['frontend/src',                    'the SPA root — what each subtree is for'],
@@ -121,6 +122,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/account/builder',      'Account › Builder (D1315): MCP and services (D1331), API keys (D1317), API usage and Activity (D1320)'],
   ['frontend/src/pages/account/companies',    'Companies and projects: the pane, its lightboxes and dialogs, and the moved settings (D1134, D1140)'],
   ['frontend/src/pages/team',                 'Team (D1497): people and AI agents by scope, the agents seam, and Project settings › General'],
+  ['frontend/src/pages/studio',               'Studio modularity (D1419): the module grid every /studio draws, Customise, the module map, and the layout-proposals seam'],
   ['frontend/src/pages/cycles',               'the four cycle overviews and module pages, from the shared cycle read (D661)'],
   ['frontend/src/pages/cycles/evidence',      'Raise evidence (D1261, D1266, D1267): the founder\'s view, its drawers, the module parts and the deck chips'],
   ['frontend/src/pages/closing',              'the closing room and the admin Closings desk, one closing, its paper, routes and activity (D1213, D1219)'],

@@ -15,13 +15,14 @@ test('the section is second in Account, at /account/portfolio, with its phone in
   const page = read('frontend/src/pages/SettingsPage.jsx');
   const block = page.slice(page.indexOf('const SECTIONS = ['), page.indexOf('];', page.indexOf('const SECTIONS = [')));
   const labels = [...block.matchAll(/label: '([^']+)'/g)].map((m) => m[1]);
-  assert.deepEqual(labels.slice(0, 2), ['Profile and identity', 'Companies and projects']);
+  // D1413 (#3696 Q1): the section is "Portfolio".
+  assert.deepEqual(labels.slice(0, 2), ['Profile and identity', 'Portfolio']);
   // D1140 (#3020) passes "Your companies" (the KYB entity records) in as entityRecords.
   // The account's signing entity sits beside its companies (owner, 2026-10-28).
   assert.ok(page.includes("{safeActive === 'companies' && <CompaniesProjects role={role} entityRecords={<><YourCompaniesSection flash={flash} /><CorporateEntityCard flash={flash} /></>} />}"));
   assert.equal(PATH_TO_SECTION.companies, 'companies');
   const rows = accountIndexGroups({ role: 'founder' })[0].rows.map((r) => [r.title, r.to]);
-  assert.deepEqual(rows.slice(0, 2), [['Profile and identity', '/account/profile'], ['Companies and projects', '/account/portfolio']]);
+  assert.deepEqual(rows.slice(0, 2), [['Profile and identity', '/account/profile'], ['Portfolio', '/account/portfolio']]);
 });
 
 test('the canvas and decision are in', () => {

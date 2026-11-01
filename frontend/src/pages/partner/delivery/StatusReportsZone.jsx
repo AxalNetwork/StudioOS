@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import {
@@ -155,8 +155,15 @@ const EMPTY_DRAFT = {
   blocked_note: null,
 };
 
-function Composer({ engagements, busy, onSaved, onError, note }) {
+function Composer({ engagements, busy, onSaved, onError, note, focusTick = 0 }) {
   const [engagementId, setEngagementId] = useState('');
+  // D1424 (#3700): the header's "New report" lands the cursor on Engagement.
+  const engagementRef = useRef(null);
+  useEffect(() => {
+    if (!focusTick) return;
+    engagementRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    engagementRef.current?.focus?.({ preventScroll: true });
+  }, [focusTick]);
   const [period, setPeriod] = useState(() => {
     const d = new Date();
     return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
@@ -210,7 +217,7 @@ function Composer({ engagements, busy, onSaved, onError, note }) {
     <div className="rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
       <div className="grid gap-3 md:grid-cols-3">
         <Field label="Engagement">
-          <select className={inputClass} value={engagementId}
+          <select ref={engagementRef} className={inputClass} value={engagementId} data-testid="status-report-engagement"
             onChange={(e) => { setEngagementId(e.target.value); setComposed(false); }}>
             <option value="">Choose one</option>
             {engagements.map((e) => (
@@ -349,6 +356,7 @@ export default function PartnerStatusReportsZone() {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
   const [composing, setComposing] = useState(false);
+  const [focusTick, setFocusTick] = useState(0);
 
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: '' }));
@@ -419,7 +427,15 @@ export default function PartnerStatusReportsZone() {
     return items;
   })();
 
-  const rowActions = partnerZoneActions('delivery/status-reports', { view: { header: ['Period', 'Founder', 'State', 'Shipped', 'Next up'], rows: visible, cells: (r) => [r.period, r.founder_name, r.state, r.shipped, r.next_up] } });
+  // D1424 (#3700, PH14s): the zone's primary opens the Composer and focuses
+  // it. With no live engagement there is nothing to report on, so it is
+  // disabled with that reason rather than opening an empty form.
+  const newReport = {
+    onClick: () => { setComposing(true); setFocusTick((n) => n + 1); },
+    disabled: engagements.length === 0,
+    title: engagements.length === 0 ? 'No engagement is live, so there is nothing to report on.' : undefined,
+  };
+  const rowActions = partnerZoneActions('delivery/status-reports', { handlers: { newReport }, view: { header: ['Period', 'Founder', 'State', 'Shipped', 'Next up'], rows: visible, cells: (r) => [r.period, r.founder_name, r.state, r.shipped, r.next_up] } });
 
   // NOT AN EARLY RETURN ANY MORE. This was
   //   `if (isNoPartnerProfile(state.error)) return <UnlinkedZone … />;`
@@ -580,6 +596,7 @@ export default function PartnerStatusReportsZone() {
         {composing && (
           <Composer
             engagements={engagements}
+            focusTick={focusTick}
             busy={busy}
             note={note}
             onSaved={async () => {

@@ -62,6 +62,8 @@ export function eadwynPanelEvent(event) {
   if (event?.type === 'open') {
     if (!state.available) return;
     const label = typeof event.label === 'string' ? event.label.trim() : '';
+    // D1443: one Eadwyn surface at a time — the rail's phone panel closes Ask.
+    askPanelEvent({ type: 'close' });
     set({ ...state, open: true, label });
     return;
   }
@@ -117,10 +119,84 @@ export function useEadwynTrigger() {
   return available;
 }
 
+/*
+ * D1443 (#3706, canvas AK) — THE ASK PANEL, the same module's second slice.
+ *
+ * Ask opens one Eadwyn panel that slides out of the AIRail's left edge, between
+ * the app header and the footer (`ui/AskPanel.jsx`). It serves EVERY licence on
+ * a page with a rail (S1's question E, answered by the canvas's AK10 to AK12),
+ * not only founders as D698's phone panel does; a support session and an
+ * Explorer are never served (AK13), and the Worker refuses them too (D1442).
+ *
+ * `available` is true while a `WorkerRail` that serves its viewer is mounted;
+ * the rail also hands over its page key and its label, which the panel names.
+ * The closers are D698's, plus `'sheet'` (a D1317 detail sheet opening) and
+ * `'unavailable'` (the last serving rail unmounting). Opening Ask closes the
+ * rail's phone panel, and opening that panel closes Ask: one surface at a time.
+ */
+const ASK_CLOSERS = new Set(['close', 'escape', 'route', 'sheet', 'scrim', 'unavailable']);
+const ASK_CLOSED = { open: false, available: false, page: null, label: '' };
+let ask = { ...ASK_CLOSED };
+let askRails = 0;
+const askListeners = new Set();
+
+function setAsk(next) {
+  if (next.open === ask.open && next.available === ask.available && next.page === ask.page && next.label === ask.label) return;
+  ask = next;
+  for (const l of askListeners) l();
+}
+
+function subscribeAsk(listener) {
+  askListeners.add(listener);
+  return () => { askListeners.delete(listener); };
+}
+
+/** `{ type: 'open', label? }` and the closers. Nothing opens Ask for a viewer it does not serve. */
+export function askPanelEvent(event) {
+  if (event?.type === 'open') {
+    if (!ask.available) return;
+    const label = typeof event.label === 'string' && event.label.trim() ? event.label.trim() : ask.label;
+    if (state.open) set({ ...state, open: false });
+    setAsk({ ...ask, open: true, label });
+    return;
+  }
+  if (ask.open && ASK_CLOSERS.has(event?.type)) setAsk({ ...ask, open: false });
+}
+
+export const openAskPanel = (label) => askPanelEvent({ type: 'open', label });
+export const closeAskPanel = () => askPanelEvent({ type: 'close' });
+
+/** `{ open, available, page, label }`. Closed and unavailable on the server. */
+export function useAskPanel() {
+  return useSyncExternalStore(subscribeAsk, () => ask, () => ASK_CLOSED);
+}
+
+/**
+ * The rail says whether Ask serves its viewer on this page, for as long as it
+ * is mounted. Only `WorkerRail` calls this.
+ */
+export function useAskRail(serves, page, label) {
+  useEffect(() => {
+    if (!serves) return undefined;
+    askRails += 1;
+    setAsk({ ...ask, available: true, page: page || null, label: label || '' });
+    return () => {
+      askRails -= 1;
+      if (askRails <= 0) {
+        askRails = 0;
+        setAsk({ ...ASK_CLOSED });
+      }
+    };
+  }, [serves, page, label]);
+}
+
 /** Test seam: forget every rail, trigger and listener. Never called by the app. */
 export function __resetEadwynPanelForTest() {
   state = { ...CLOSED };
   served = 0;
   triggers = 0;
   listeners.clear();
+  ask = { ...ASK_CLOSED };
+  askRails = 0;
+  askListeners.clear();
 }

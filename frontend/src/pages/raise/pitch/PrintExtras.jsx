@@ -2,6 +2,7 @@ import React from 'react';
 import { BlockGrid } from './BlockGrid';
 import { SLIDE_SIZES, aspectOf } from './gridModel';
 import { EMPTY_CARD, NO_NOTES, cardOf } from './presentExportModel';
+import CardCompliance from './CardCompliance';
 
 /**
  * D1112 (#2992) — what the headless print page (`/deck/print-export/:token`)
@@ -10,7 +11,8 @@ import { EMPTY_CARD, NO_NOTES, cardOf } from './presentExportModel';
  * each part is exactly one 1920 × 1080 page (`data-slide-frame`).
  *
  *   StudioPrintCard  a card the editor laid out on D898's grid, from its
- *                    blocks; else a fielded card, as Present draws it.
+ *                    blocks; else a fielded card, as Present draws it. D1546:
+ *                    with its compliance chrome (`CardCompliance`).
  *   NotesPages       the speaker notes, six cards a page, after the cards
  *                    (the PDF only: PowerPoint carries them as speaker notes).
  *   SourcesPage      the Sources appendix the Worker sends with the version
@@ -33,13 +35,14 @@ export const SOURCES_NOT_SENT = 'The Sources appendix did not come with this ver
 /** Does this slide belong to the studio (D897's fields, D898's blocks) rather than a template? */
 export const isStudioSlide = (s) => (Array.isArray(s?.blocks) && s.blocks.length > 0) || (Array.isArray(s?.fields) && s.fields.length > 0);
 
-export function StudioPrintCard({ slide, index, aspect = '16:9' }) {
+export function StudioPrintCard({ slide, index, aspect = '16:9', chrome = null }) {
   const card = cardOf(slide, index);
   if (card.blocks.length) {
     // D1499: the page is the slide itself, 1920 × 1080 or 1440 × 1080, so `boxOf`'s boxes print at their own pixels.
     return (
       <div data-slide-frame="" style={{ ...PAGE, width: SLIDE_SIZES[aspectOf(aspect)].width }} data-testid={`print-card-${index}`} data-layout="grid">
         <BlockGrid blocks={card.blocks} colours={COLOURS} live size="print" aspect={aspect} testId={`print-blocks-${index}`} />
+        <CardCompliance chrome={chrome} size="print" testId={`print-compliance-${index}`} />
       </div>
     );
   }
@@ -61,6 +64,7 @@ export function StudioPrintCard({ slide, index, aspect = '16:9' }) {
       ) : null}
       {card.image ? <img src={card.image} alt={card.title} style={{ maxHeight: '45%', alignSelf: 'flex-start', objectFit: 'contain', borderRadius: 12 }} /> : null}
       {card.empty ? <p style={{ margin: 0, fontSize: 30, color: '#64748b' }}>{EMPTY_CARD}</p> : null}
+      <CardCompliance chrome={chrome} size="print" testId={`print-compliance-${index}`} />
     </div>
   );
 }
