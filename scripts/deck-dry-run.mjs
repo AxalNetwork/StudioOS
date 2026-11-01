@@ -38,7 +38,7 @@ import { fileURLToPath } from 'node:url';
 
 /** The frontend models import extensionless paths: the deck loader resolves them, as it does for the tests. */
 let models = null;
-async function loadModels() {
+export async function loadModels() {
   if (models) return models;
   try { register(new URL('../frontend/test/_deck-loader-hook.mjs', import.meta.url)); } catch { /* already registered */ }
   const [present, editor, reflow, gridModel, absence] = await Promise.all([

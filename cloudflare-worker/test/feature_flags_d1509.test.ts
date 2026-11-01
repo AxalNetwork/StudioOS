@@ -323,7 +323,7 @@ function dumpOf(decks: Array<{ id: number; slides: unknown[] }>): string {
 }
 
 test('the dry run lists zero unexplained differences on the three sample ventures, keeps no copy, and names no word of a deck', async () => {
-  // Mutation checked: the conversion dropping a field (a paragraph left out of fieldBlocks) → words_lost on every venture.
+  // Mutation checked: the conversion dropping a field (a paragraph left out of fieldBlocks) → words_lost on the legacy deck.
   const { dryRun } = await import('../../scripts/deck-dry-run.mjs');
   const ventures = { full: fullRecords(), sparse: sparseRecords(), conflicting: conflictingRecords() } as Record<string, any>;
   const decks = Object.values(ventures).map((rec, i) => {
@@ -349,4 +349,11 @@ test('the dry run lists zero unexplained differences on the three sample venture
   ] }] }]));
   assert.deepEqual(bad.unexplained.map((u: any) => [u.deck, u.card, u.kind]), [[5, 1, 'overlap'], [5, 1, 'overlap']]);
   assert.ok(existsSync(new URL('../../scripts/deck-dry-run.mjs', import.meta.url)));
+  // A conversion that left words behind is listed, never passed as explained.
+  // Mutation checked: the words_lost line dropped from compareCard → this fails.
+  const { compareCard, loadModels } = await import('../../scripts/deck-dry-run.mjs');
+  const real = await loadModels();
+  const lossy = { ...real, editor: { ...real.editor, withFieldBlocks: (c: any) => ({ card: { ...c, blocks: [{ id: 'f1', kind: 'text', style: 'heading', text: c.title, grid: { c1: 1, c2: 12, r1: 1, r2: 1 } }] } }) } };
+  const legacy = decks.find((d) => d.id === 9)!.slides[0];
+  assert.deepEqual(compareCard(lossy, legacy, 0).unexplained.map((u: any) => u.kind), ['words_lost']);
 });

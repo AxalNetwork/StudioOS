@@ -368,3 +368,23 @@ test('the review: a theme write is one more version, and the saved line names bo
     assert.match(SAVED_THEMED_LINE(4, 5), /v4 holds the same cards in the earlier theme/);
   } finally { await m.close(); }
 });
+
+test('D1509 (#3760): grid_generate off — Build is greyed "Not switched on yet." before it is pressed, and nothing is quoted', async () => {
+  // Mutation checked: Build left enabled while the context says grid_generate: false → the disabled assert fails.
+  const m = await mount(h(OneClickBuild, { projectId: 1, q: '?project_id=1', as: 'section' }), {
+    'newDeck.context': async () => ({ ...CTX, grid_generate: false }),
+    'newDeck.quote': async () => ({ ai: true, hold_microusd: 6000 }),
+  }, '/raise/pitch?project_id=1');
+  try {
+    assert.equal(m.pr(m.by('pitch-studio-fast-build')).disabled, true);
+    assert.equal(m.text(m.by('pitch-studio-fast-off')), 'Not switched on yet.');
+    assert.equal(m.named('newDeck.quote').length, 0, 'no quote for a press that cannot run');
+  } finally { await m.close(); }
+});
+
+test('D1509: an element HQ switched off is greyed in the lightbox picker with the Worker\'s sentence, and the arrows pass it', () => {
+  const src = codeOnly(read(`${PITCH}/AreaLightbox.jsx`));
+  assert.match(src, /const isOn = \(el\) => elementOnMain\(el\) && !off\?\.has\(el\.id\);/);
+  assert.match(src, /filter\(\(e\) => e\?\.switched_on === false\)/);
+  assert.match(src, /off\?\.has\(el\.id\) \? NOT_ON/);
+});
