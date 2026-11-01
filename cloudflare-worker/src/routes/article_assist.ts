@@ -54,6 +54,7 @@ import {
 import { isValidArticleImageName } from '../services/newsRender';
 import { decideRail, getRail, proposeRail } from '../services/railProposals';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
+import { forgetArticleStorage } from '../services/storageUsage';
 import { railFor, refuseRun } from '../util/railContext';
 import { refuse } from '../util/refusal';
 import { loadOwned } from './articles';
@@ -172,7 +173,7 @@ function imageRunOptions(c: any, user: User, id: number, ask: ArticleImageAsk): 
   return { task: 'article_image', userId: Number(user.id) || 0, text: imagePromptOf(ask).slice(0, 2048), draw: {}, surface: AI_SURFACE.articles, rail };
 }
 
-type Priced = { id: number; ask: ArticleImageAsk; opts: RunOptions; per: number; total: number };
+type Priced = { id: number; authorId: number; ask: ArticleImageAsk; opts: RunOptions; per: number; total: number };
 
 /**
  * The checked image press and its price, or the response that refuses it,
@@ -191,7 +192,8 @@ async function pricedImage(c: any, user: User): Promise<Priced | { refused: Resp
   const opts = imageRunOptions(c, user, gate.id, read.ask);
   const q = await quoteRun(c.env, opts);
   if (!q.ok) return { quoteRefusal: { refusal: q.refusal, error: q.error } };
-  return { id: gate.id, ask: read.ask, opts, per: q.hold_microusd, total: q.hold_microusd * read.ask.count };
+  // D1411: an article's images count to its author's storage plan, whoever presses.
+  return { id: gate.id, authorId: Number(gate.article.author_user_id) || 0, ask: read.ask, opts, per: q.hold_microusd, total: q.hold_microusd * read.ask.count };
 }
 
 articleAssist.post('/:id/images/quote', async (c) => {
@@ -214,11 +216,12 @@ articleAssist.post('/:id/images/generate', async (c) => {
     return refuseRun(c, p.quoteRefusal) ?? refuse(c, 503, { code: 'model_unavailable', message: 'The image model is not available. Nothing was run.' });
   }
   const userId = Number(user.id) || 0;
-  // Before any hold: the balance for every image asked for, then room on the presser's storage plan.
+  // Before any hold: the presser's balance for every image asked for, then room
+  // on the author's storage plan (D1411: the bytes live in the author's article).
   const short = await balanceRefusal(c.env, userId, p.total);
   if (short) return refuse(c, 402, { code: short.code, message: short.message });
   let ticket;
-  try { ticket = await assertStorageRoom(c.env, { userId }, IMAGE_BYTES_ESTIMATE * p.ask.count, user); }
+  try { ticket = await assertStorageRoom(c.env, { userId: p.authorId }, IMAGE_BYTES_ESTIMATE * p.ask.count, user); }
   catch (e) { if (e instanceof Response) return e; throw e; }
 
   const images: any[] = [];
@@ -243,6 +246,7 @@ articleAssist.post('/:id/images/generate', async (c) => {
       stopped = { code: 'image_unsaved', message: 'Eadwyn drew the image, but it could not be stored. It was charged for the run; try again in a moment.' };
       break;
     }
+    forgetArticleStorage(p.id);
     const url = articleImageUrl(c.req.url, p.id, filename);
     const payload = { filename, url, width: r.image.width ?? null, height: r.image.height ?? null, style: p.ask.style, aspect: p.ask.aspect, alt: '' };
     let proposal;
@@ -284,6 +288,7 @@ articleAssist.post('/:id/images/:uid/discard', async (c) => {
   let deleted = false;
   if (!inUse && c.env.FILES) {
     try { await c.env.FILES.delete(`articles/${gate.id}/${filename}`); deleted = true; } catch { deleted = false; }
+    forgetArticleStorage(gate.id);
   }
   return c.json({ ok: true, uid, deleted });
 });

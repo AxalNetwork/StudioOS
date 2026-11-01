@@ -1,3 +1,4 @@
+import { posthogFigure } from './posthog/raise';
 import { readableRoomFiles, mercuryRunway, mercuryFacts, verifiedMonthlyRevenue, selectedCheckSources } from './raiseEvidence';
 /**
  * D663 — the Raise cycle's reads: four figures, seven cards, seven record
@@ -158,7 +159,7 @@ export function readinessHistory(scores: ScoreRow[]): Array<{ day: string; score
 }
 
 /** One input a computed check read: what it counted, and whether that input is met (D691 decision 8). */
-export type ReadRow = { a: string; b: string; c: 'Counted' | 'Partial' | 'Missing' | 'Unreadable'; tone: 'ok' | 'amb' | 'bad' | 'muted'; note?: string; next?: { text: string; href: string } };
+export type ReadRow = { a: string; b: string; c: 'Counted' | 'Partial' | 'Missing' | 'Unreadable' | 'Shown'; tone: 'ok' | 'amb' | 'bad' | 'muted'; note?: string; next?: { text: string; href: string } };
 export type ComputedScore = { compared_count?: number; key: ReadinessKey; score: number | null; evidence: 'measured' | 'stated' | 'pattern' | null; missing: string | null; reads: ReadRow[] };
 const met = (ok: boolean, partial = false): Pick<ReadRow, 'c' | 'tone'> => (ok ? { c: 'Counted', tone: 'ok' } : partial ? { c: 'Partial', tone: 'amb' } : { c: 'Missing', tone: 'muted' });
 /** Display current or previously stored source labels without storage identifiers. */
@@ -316,6 +317,11 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
   const measuredRevenue = revenueRows.some(r => r.cents > 0 && r.verification === 'verified' && revenueSource(r).startsWith('Connector'));
   const measured = measuredRevenue || metricRows.some(r => r.measured && r.fresh && r.value > 0);
   const documented = revenueRows.some(r => r.cents > 0 && r.verification === 'supported' && (r.has_document || r.source === 'mercury'));
+  const posthogLines = (await Promise.all((['active_users', 'retention'] as const).map(async (role) => {
+    const f = await posthogFigure(env, projectId, role);
+    const label = role === 'active_users' ? 'Active users' : 'Retention';
+    return f ? { a: `${label} · From PostHog`, b: `${f.unit === 'pct' ? `${Math.round(f.value * 10) / 10}%` : Math.round(f.value).toLocaleString('en-US')} · ${f.name} · as of ${f.as_of}`, c: 'Shown' as const, tone: 'muted' as const, note: 'Shown beside the score; it does not change it.' } : null;
+  }))).filter((x): x is NonNullable<typeof x> => x !== null);
   const traction = measured || revenueRows.some(r => r.cents > 0) || metricRows.some(r => r.fresh && r.value > 0) || fieldOf(p?.revenue) || fieldOf(p?.mrr) || fieldOf(p?.paying_customers);
   out.push({
     key: 'traction', score: traction ? 10 : 0, evidence: measured ? 'measured' : documented ? 'pattern' : 'stated', missing: traction ? null : 'Log revenue or update your proof fields.',
@@ -326,6 +332,8 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
       { a: 'Revenue (stated)', b: num(p?.revenue) != null ? `${usd(Number(p!.revenue))} · Typed · Founder's figure` : 'not recorded', ...met(fieldOf(p?.revenue), num(p?.revenue) != null) },
       { a: 'MRR (stated)', b: num(p?.mrr) != null ? `${usd(Number(p!.mrr))} · Typed · Founder's figure` : 'not recorded', ...met(fieldOf(p?.mrr), num(p?.mrr) != null) },
       { a: 'Paying customers (stated)', b: num(p?.paying_customers) != null ? `${Math.round(Number(p!.paying_customers))} · Typed · Founder's figure` : 'not recorded', ...met(fieldOf(p?.paying_customers), num(p?.paying_customers) != null) },
+      // D1607 (#2409 decision E, a): PostHog's figures are read lines only; `traction` above never counts them.
+      ...posthogLines,
     ],
   });
   out.push(await teamReadiness(env, projectId));
@@ -349,7 +357,12 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
       reads: [{ a: 'Narrative versions', b: 'none saved', ...met(false) }],
     });
   } else {
-    const { stated, metrics, compared } = await checkInputs(env, projectId, v);
+    const inputs = await checkInputs(env, projectId, v);
+    // D1607: the score compares its four figures only; PostHog's active users never move it (decision E, a).
+    const scored = new Set<FigureKey>(NARRATIVE_CHECK_FIGURES);
+    const stated = inputs.stated.filter((s) => scored.has(s.figure));
+    const metrics = inputs.metrics;
+    const compared = stated.filter((s) => Number.isFinite(s.value) && Number.isFinite(metrics[s.figure]?.value)).length;
     // Re-score compares the current evidence itself; an empty or stale stored
     // mismatch list is not proof that a version agrees with today's figures.
     const mismatches = consistencyCheck(stated, metrics).length;
@@ -520,19 +533,22 @@ export const VERSION_MARKER_KEY = '_version';
 export const FIGURES = [
   'mrr', 'arr', 'paying_customers', 'revenue', 'revenue_growth', 'net_burn', 'runway', 'churn', 'cac',
   'interviews', 'lois', 'waitlist', 'pilots', 'headcount', 'raise',
+  // D1607 (#3731): active users, which the narrative check reads from the founder's PostHog.
+  'active_users',
 ] as const;
 export type FigureKey = (typeof FIGURES)[number];
+/** The figures readiness' narrative score compares. D1607: `active_users` is checked and shown, never scored (#2409 decision E, a). */
 export const NARRATIVE_CHECK_FIGURES = ['mrr', 'paying_customers', 'raise', 'revenue'] as const satisfies readonly FigureKey[];
 export const FIGURE_LABEL: Record<FigureKey, string> = {
   mrr: 'MRR', arr: 'ARR', paying_customers: 'Paying customers', revenue: 'Monthly revenue', revenue_growth: 'Revenue growth',
   net_burn: 'Net burn', runway: 'Runway', churn: 'Churn', cac: 'CAC', interviews: 'Customer interviews', lois: 'Letters of intent',
-  waitlist: 'Waitlist sign-ups', pilots: 'Pilots', headcount: 'Headcount', raise: 'The raise',
+  waitlist: 'Waitlist sign-ups', pilots: 'Pilots', headcount: 'Headcount', raise: 'The raise', active_users: 'Active users',
 };
 /** What a figure counts: dollars, a percentage, months, or a whole number. */
 export const FIGURE_UNIT: Record<FigureKey, 'money' | 'percent' | 'months' | 'count'> = {
   mrr: 'money', arr: 'money', paying_customers: 'count', revenue: 'money', revenue_growth: 'percent', net_burn: 'money',
   runway: 'months', churn: 'percent', cac: 'money', interviews: 'count', lois: 'count', waitlist: 'count', pilots: 'count',
-  headcount: 'count', raise: 'money',
+  headcount: 'count', raise: 'money', active_users: 'count',
 };
 
 export type Stated = { figure: FigureKey; value: number; source: string };
@@ -579,6 +595,8 @@ export function parseStatedFigures(fieldKey: string, text: string): Stated[] {
     ['lois', [new RegExp(`${COUNT}\\s+(?:signed\\s+)?(?:letters? of intent|LOIs?)\\b`, 'i')], false],
     ['waitlist', [new RegExp(`${COUNT}\\s+(?:people\\s+)?(?:on\\s+(?:the|our)\\s+waitlist|waitlist sign-?ups)`, 'i'), new RegExp(`waitlist of\\s+${COUNT}`, 'i')], false],
     ['pilots', [new RegExp(`${COUNT}\\s+(?:paid\\s+|active\\s+|signed\\s+)?pilots?\\b`, 'i')], false],
+    // D1607: "1,240 weekly active users", "MAU of 3,000"; the words beside the number, never a bare number.
+    ['active_users', [new RegExp(`${COUNT}\\s+(?:weekly\\s+|monthly\\s+|daily\\s+)?active users`, 'i'), new RegExp(`(?:WAU|MAU|DAU)\\s*(?:of|is|at|:|=)\\s*${COUNT}`, 'i')], false],
     ['headcount', [new RegExp(`team of\\s+${COUNT}`, 'i'), new RegExp(`headcount\\s*(?:of|is|:|=)?\\s*${COUNT}`, 'i'), new RegExp(`${COUNT}\\s+(?:full-time\\s+)?(?:employees|team members)`, 'i')], false],
   ];
   for (const [figure, patterns, money] of more) {
@@ -658,6 +676,9 @@ async function narrativeMetrics(env: Env, projectId: number) {
     `SELECT target_amount FROM raise_rounds WHERE project_id = ? AND status = 'active' AND target_amount IS NOT NULL LIMIT 1`,
   ).bind(projectId).first<{ target_amount: number }>();
   if (round) metrics.raise = { value: Number(round.target_amount), source: 'Pipeline · active round target' };
+  // D1607 (#3731): active users from the founder's PostHog, the metric they said measures them.
+  const users = await posthogFigure(env, projectId, 'active_users');
+  if (users) metrics.active_users = { value: users.value, source: users.source };
   const verified = await verifiedMonthlyRevenue(env, projectId);
   if (verified) {
     const sources = (await revenueProofs(env, projectId)).filter(r => r.verification === 'verified').map(revenueSource);

@@ -38,6 +38,7 @@ import { d1Over } from './_d1_sqlite.mjs';
 import { withGuard } from './_guard_stub.mjs';
 import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
+import { forgetArticleStorage } from '../src/services/storageUsage.ts';
 
 const root = new URL('../sql/', import.meta.url);
 const baseline = readFileSync(new URL('schema_baseline.sql', root), 'utf8');
@@ -65,6 +66,7 @@ function answerFor(prompt: string): string {
 
 async function fixture(answer: (prompt: string) => string = answerFor, { imageFailsAt = 0 } = {}) {
   __resetForTest();
+  for (const id of [5, 6, 7]) forgetArticleStorage(id); // D1411: no list cached from an earlier case
   const file = join(scratch, `case-${++n}.sqlite`);
   copyFileSync(seedPath, file);
   const db = new DatabaseSync(file, { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
@@ -96,7 +98,14 @@ async function fixture(answer: (prompt: string) => string = answerFor, { imageFa
     },
   });
   const r2 = new Map<string, Uint8Array>();
+  /** D1411: a stored size that is not the bytes kept here, to fill a plan. */
+  const sizes = new Map<string, number>();
   const FILES = {
+    list: async ({ prefix = '' }: { prefix?: string } = {}) => ({
+      objects: [...new Set([...r2.keys(), ...sizes.keys()])].filter((k) => k.startsWith(prefix))
+        .map((key) => ({ key, size: sizes.get(key) ?? r2.get(key)!.byteLength, uploaded: new Date('2026-10-30T10:00:00Z') })),
+      truncated: false,
+    }),
     put: async (key: string, bytes: Uint8Array) => { r2.set(key, new Uint8Array(bytes)); },
     get: async (key: string) => {
       if (!r2.has(key)) return null;
@@ -115,7 +124,7 @@ async function fixture(answer: (prompt: string) => string = answerFor, { imageFa
   const proposals = () => db.prepare('SELECT uid, user_id, rail_page, rail_option, record_ref, kind, status, payload_json, usage_log_id FROM ai_rail_proposals ORDER BY id').all() as any[];
   const article = (id = 5) => db.prepare('SELECT title, subtitle, body_markdown, excerpt, seo_title, status FROM articles WHERE id = ?').get(id) as any;
   const holds = () => (db.prepare('SELECT COUNT(*) AS n FROM ai_budget_reservations').get() as any).n as number;
-  return { db, env, app, calls, r2, runs, proposals, article, holds, close };
+  return { db, env, app, calls, r2, sizes, runs, proposals, article, holds, close };
 }
 type F = Awaited<ReturnType<typeof fixture>>;
 
@@ -523,3 +532,21 @@ test('the cover from an image is a copy: a second cover never deletes the body i
   } finally { f.close(); }
 });
 
+test('D1411: an article\'s images count to its author\'s plan; a full plan refuses the next generation with 413 before any run', async () => {
+  const f = await fixture();
+  try {
+    // The author's articles already fill a plan of any size we sell.
+    f.sizes.set('articles/5/cover-00000000-0000-0000-0000-000000000000.png', 2 ** 50);
+    const full = await call(f, 2, GENERATE, ASK);
+    assert.equal(full.status, 413, JSON.stringify(full.body));
+    assert.deepEqual([full.body.error, full.body.counts_to], ['storage_full', 'you']);
+    assert.equal(f.calls.length, 0, 'nothing ran');
+    assert.equal(f.runs().length, 0);
+    // Another member's articles never weigh on this one: the investor's own article.
+    const theirs = await call(f, 4, '/api/articles/7/images/generate', { ...ASK, count: 1 });
+    assert.equal(theirs.status, 200, JSON.stringify(theirs.body));
+    // Staff pressing on the author's article pass, as every staff write does (D1170); the bytes are the author's.
+    const staff = await call(f, 1, GENERATE, { ...ASK, count: 1 });
+    assert.equal(staff.status, 200, JSON.stringify(staff.body));
+  } finally { f.close(); }
+});

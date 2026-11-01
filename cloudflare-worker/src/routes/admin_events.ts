@@ -12,6 +12,7 @@
  * admin_published=1, which is what the public feed predicate requires.
  */
 import { scheduleCalendarCancellation } from './_eventCalendar';
+import { onEventApproved, onEventCancelled, onEventUnpublished } from '../services/eventSyndication/hooks';
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAdmin, requireBranchNotSuspended } from '../auth';
@@ -284,6 +285,8 @@ adminEvents.post('/:id/approve', async (c) => {
   if (!approved) return c.json({ error: 'not_waiting' }, 409);
   await writeAudit(c.env, { adminId: a.id, adminEmail: a.email, action: 'event_approved', eventId: id });
   const fresh = await loadEvent(c.env, id);
+  // D1490: the channels ticked for this event post now. A failure here never fails the approval.
+  await onEventApproved(c.env, fresh);
   if (event.host_user_id) {
     await notify(c.env, {
       userId: event.host_user_id, type: 'event_approved', category: 'events',
@@ -356,6 +359,7 @@ adminEvents.post('/:id/unpublish', async (c) => {
   ).bind(id).first();
   if (!unpublished) return c.json({ error: 'not_published' }, 409);
   await writeAudit(c.env, { adminId: a.id, adminEmail: a.email, action: 'event_unpublished', eventId: id });
+  await onEventUnpublished(c.env, id); // D1490: posted listings are withdrawn
   if (event.host_user_id) {
     await notify(c.env, {
       userId: event.host_user_id, type: 'event_unpublished', category: 'events',
@@ -413,6 +417,7 @@ adminEvents.post('/:id/cancel', async (c) => {
   if (!cancelled) return c.json({ error: 'already_cancelled' }, 409);
   await writeAudit(c.env, { adminId: a.id, adminEmail: a.email, action: 'event_cancelled', eventId: id });
   await scheduleCalendarCancellation(c, 'event', id);
+  await onEventCancelled(c.env, id); // D1490: posted listings are cancelled on their channel
   // Notify seated registrants (best-effort).
   const seated = await c.env.DB.prepare(
     `SELECT DISTINCT user_id FROM event_registrations

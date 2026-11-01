@@ -9,7 +9,7 @@ later part of #3733, made once the record is checked against a live sign-in.
 
 | File | What it is |
 |---|---|
-| `reads.ts` | The typed reads, and the only file that opens a Linear MCP session: `listIssues`, `getIssue`, `listComments`, `listProjects`, `getProject` and `listTeams`, one per tool on the record's allowlist. `linearReadsFor` opens them for a member's row, refreshing first when the token is about to expire. |
+| `reads.ts` | The typed reads, and the only file that opens a Linear MCP session: `listIssues`, `getIssue`, `listComments`, `listProjects`, `getProject` and `listTeams`, one per tool on the record's allowlist, plus D1601's `listCompleted` (one page of completed issues as ids and completion dates only, for the deck's shipping counts). `linearReadsFor` opens them for a member's row, refreshing first when the token is about to expire. |
 
 ## Rules
 

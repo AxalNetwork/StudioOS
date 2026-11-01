@@ -275,11 +275,24 @@ test('dark mode: every light surface in the boards carries its dark pair', () =>
 });
 
 test('PD2: the current-deck card mounts the coverage meter from the sources read, and the studio line is the canvas\u2019s', () => {
-  const studio = read('frontend/src/pages/raise/pitch/PitchStudio.jsx');
-  const card = studio.slice(studio.indexOf('function CurrentDeck('), studio.indexOf('function Versions('));
-  assert.ok(card.length > 0, 'CurrentDeck is found');
-  assert.match(card, /const sources = useDeckSources\(project\?\.id\);/);
+  // D1604 (#3716, pd1): the home's deck card; one sources read feeds it and Data ready.
+  const studio = read('frontend/src/pages/raise/pitch/StudioHome.jsx');
+  const card = studio.slice(studio.indexOf('function DeckCard('), studio.indexOf('function StartFrom('));
+  assert.ok(card.length > 0, 'DeckCard is found');
+  assert.match(studio, /const sources = useDeckSources\(projectId\);/);
   assert.match(card, /<CoverageMeter coverage=\{sources\.data\?\.coverage\} status=\{sources\.status\} size="M" onRetry=\{sources\.retry\} \/>/);
+  assert.match(studio, /<DataReady sources=\{sources\} \/>/);
   assert.match(studio, /import \{ CoverageMeter, useDeckSources \} from '\.\/SourcesBoards';/);
   assert.match(read('frontend/src/pages/raise/pitch/pitchStudioModel.js'), /export const LINE = 'Build your deck from what StudioOS already knows\. Every figure shows its source\.';/);
+});
+
+test('D1604 (#3716): the editor mounts the Sources panel from ⋯ › Sources and coverage, with the slide’s evidence', () => {
+  const editor = read('frontend/src/pages/raise/pitch/PitchEditor.jsx');
+  const at = editor.indexOf("{sheet === 'sources' ? (");
+  assert.ok(at > 0, 'a ⋯ sheet, not a right-panel tab');
+  const sheet = editor.slice(at, editor.indexOf('</SourcesSheet>', at));
+  assert.match(sheet, /<SourcesPanel items=\{items\} status=\{sources\.status\} onRetry=\{sources\.retry\} stale=\{staleMap\} \/>/);
+  assert.match(sheet, /<SlideEvidence /);
+  assert.doesNotMatch(editor, /\['sources', 'Sources'\]/, 'no Sources tab');
+  assert.match(read('frontend/src/pages/raise/pitch/deckV2Model.js'), /\{ id: 'sources', label: 'Sources and coverage' \}/);
 });

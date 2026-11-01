@@ -31,6 +31,10 @@ const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const ADMIN = 1, FOUNDER = 10;
 const BASELINE = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
 const MIG411 = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/411_incorporation_packet_and_filing.sql'), 'utf8');
+// D1415 Part 3 (#3855): the filing links or creates the company, so the company tables are here too.
+const MIG597 = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/597_company_archive_and_events.sql'), 'utf8');
+const MIG685 = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/685_company_legal_record_and_slugs.sql'), 'utf8');
+const MIG749 = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/749_company_registered_agent_and_mailing.sql'), 'utf8');
 function ddl(name: string): string {
   const at = `\n${BASELINE}`.indexOf(`\nCREATE TABLE ${name} (`);
   assert.ok(at >= 0, `${name} is no longer defined in schema_baseline.sql`);
@@ -39,8 +43,11 @@ function ddl(name: string): string {
 
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  for (const t of ['users', 'projects', 'documents', 'incorporations', 'activity_logs']) db.exec(ddl(t));
+  for (const t of ['users', 'projects', 'documents', 'incorporations', 'activity_logs', 'company_profiles', 'user_company_links']) db.exec(ddl(t));
   db.exec(MIG411);
+  db.exec(MIG597);
+  db.exec(MIG685);
+  db.exec(MIG749);
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');
   u.run(ADMIN, 'admin', 'Hq Admin', 'hq@axal.example', null);
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001);
@@ -127,7 +134,8 @@ test('"Filed with the state" needs a ready packet and a real date, not future an
   assert.equal(o.filed_on, '2026-09-01', 'the payment day itself is a valid filing day');
   assert.equal(o.filed_by, ADMIN);
   assert.ok(o.filed_recorded_at);
-  assert.deepEqual(JSON.parse(logs(db, 'incorporation_filed')[0].details), { incorporation_id: 7, filed_on: '2026-09-01' });
+  // D1415 Part 3: the log names the company by its uid only — no name, no address.
+  assert.deepEqual(JSON.parse(logs(db, 'incorporation_filed')[0].details), { incorporation_id: 7, filed_on: '2026-09-01', company_uid: ok.body.company.uid });
   assert.equal((await filed(db, 7, '2026-09-02')).status, 409, 'a second filing was accepted');
   assert.equal(row(db, 7).filed_on, '2026-09-01');
 });
@@ -209,4 +217,165 @@ test('a step that loses a race to another admin changes nothing and answers 409'
     assert.deepEqual(out2, { ok: false, status: 409, error: 'packet_not_ready' });
     assert.equal(row(db2, 7).filed_on, '2026-09-05', 'the losing step overwrote the winner\'s date');
   } finally { console.warn = w; }
+});
+
+// ── D1415 Part 3 (#3855): filing links or creates the company ───────────────
+
+const company = (db: any, uid: string) => db.prepare('SELECT * FROM company_profiles WHERE uid = ?').get(uid) as any;
+const count = (db: any, sql: string, ...a: unknown[]) => Number((db.prepare(sql).get(...a) as any).n);
+/** Order 7 with its registered agent, its packet ready. */
+async function readyWithAgent(db: any) {
+  db.prepare("UPDATE incorporations SET registered_agent_name = 'Made-up Agents LLC', registered_agent_address = '1 Agent Way, Dover DE 19901' WHERE id = 7").run();
+  await packet(db, 7, 51);
+}
+/** An env whose DB records every write and every batch, to prove the filing's writes are one batch. */
+function recording(db: any) {
+  const inner = d1Over(db);
+  const log = { batches: 0, outside: [] as string[] };
+  const DB = {
+    ...inner,
+    prepare(sql: string) {
+      const st = inner.prepare(sql);
+      const wrap = (s: any): any => ({
+        ...s,
+        bind: (...a: unknown[]) => wrap(s.bind(...a)),
+        run: () => { if (/^\s*(INSERT|UPDATE|DELETE)/i.test(sql)) log.outside.push(sql.trim().slice(0, 40)); return s.run(); },
+        first: (...a: unknown[]) => s.first(...a), all: (...a: unknown[]) => s.all(...a), raw: s,
+      });
+      return wrap(st);
+    },
+    batch: (stmts: any[]) => { log.batches++; return inner.batch(stmts.map((s) => s.raw ?? s)); },
+  };
+  return { env: { JWT_SECRET, ENVIRONMENT: 'development', DB } as any, log };
+}
+
+test('filing a venture with no company creates it, makes the owner its primary admin and moves the venture in, in one batch', async () => {
+  // Mutations checked: the project UPDATE run outside the batch; the company_id IS NULL guard dropped (a second call creates a second company).
+  const db = fixture();
+  await readyWithAgent(db);
+  const { env, log } = recording(db);
+  const out = await markFiled(env, 7, '2026-09-03', ADMIN);
+  assert.equal(out.ok, true, JSON.stringify(out));
+  assert.equal(log.batches, 1, 'one batch');
+  assert.deepEqual(log.outside, [], 'no write outside it');
+  const c = (out as any).company;
+  assert.equal(c.created, true);
+  assert.deepEqual(c.filled, ['legal_name', 'legal_form', 'jurisdiction', 'incorporation_date', 'registered_agent_name', 'registered_address']);
+  const co = company(db, c.uid);
+  assert.deepEqual([co.company_name, co.legal_name, co.jurisdiction, co.legal_form, co.incorporation_date, co.registered_agent_name, co.slug],
+    ['Acme, Inc.', 'Acme, Inc.', 'US-DE', 'c_corp', '2026-09-03', 'Made-up Agents LLC', 'acme-inc']);
+  const link = db.prepare('SELECT user_id, role_in_company, is_primary_admin FROM user_company_links WHERE company_id = ?').all(co.id).map((x: any) => ({ ...x }));
+  assert.deepEqual(link, [{ user_id: FOUNDER, role_in_company: 'Admin', is_primary_admin: 1 }], 'the venture\'s owner account is the primary admin');
+  assert.equal((db.prepare('SELECT company_id FROM projects WHERE id = 1').get() as any).company_id, co.id, 'the venture is in it');
+  const events = db.prepare('SELECT kind, project_id, target_user_id, before_json, after_json FROM company_membership_events WHERE company_id = ? ORDER BY id').all(co.id).map((x: any) => ({ ...x }));
+  assert.deepEqual(events.map((e: any) => e.kind), ['join', 'project_move']);
+  assert.equal(events[0].target_user_id, FOUNDER);
+  assert.deepEqual([events[1].project_id, JSON.parse(events[1].before_json), JSON.parse(events[1].after_json)], [1, { company_id: null }, { company_id: co.id }]);
+  const loc = db.prepare("SELECT kind, line1, country, closed_on FROM company_locations WHERE company_id = ?").all(co.id).map((x: any) => ({ ...x }));
+  assert.deepEqual(loc, [{ kind: 'registered', line1: '1 Agent Way, Dover DE 19901', country: 'US', closed_on: null }]);
+  assert.equal((db.prepare('SELECT company_id FROM incorporations WHERE id = 7').get() as any).company_id, co.id);
+
+  // A repeat: 409, and no second company, link, location or event.
+  const again = await filed(db, 7, '2026-09-03');
+  assert.equal(again.status, 409);
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM company_profiles'), 1);
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM user_company_links'), 1);
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM company_locations'), 1);
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM company_membership_events'), 2);
+});
+
+test('the guard alone holds: a filed order that is not linked yet is linked once, and a second batch adds nothing', async () => {
+  // Two admins whose batches both pass the status read: the second batch's SET_FILED changes nothing, and every
+  // company statement is guarded on "filed and not yet linked", so the second batch writes no company either.
+  const db = fixture();
+  await readyWithAgent(db);
+  const { filingCompanyStatements } = await import('../src/services/incorporationCompany.ts');
+  const env = { DB: d1Over(db) } as any;
+  const facts = db.prepare('SELECT id, project_id, company_name, jurisdiction_id, registered_agent_name, registered_agent_address FROM incorporations WHERE id = 7').get();
+  const a = await filingCompanyStatements(env, facts as any, '2026-09-03', ADMIN);
+  const b = await filingCompanyStatements(env, facts as any, '2026-09-03', ADMIN);
+  db.prepare("UPDATE incorporations SET status = 'filed', filed_on = '2026-09-03' WHERE id = 7").run();
+  await env.DB.batch(a.statements);
+  await env.DB.batch(b.statements);
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM company_profiles'), 1, 'one company');
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM user_company_links'), 1);
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM company_locations'), 1);
+  assert.equal(count(db, "SELECT COUNT(*) AS n FROM company_membership_events WHERE kind = 'project_move'"), 1);
+});
+
+test('a venture already in a company: only empty fields are filled, an open registered address is kept, and the order is linked', async () => {
+  // Mutations checked: a set legal field overwritten; a set agent overwritten; the open-registered check skipped.
+  const db = fixture();
+  db.exec(`INSERT INTO company_profiles (id, uid, company_name, legal_name, jurisdiction, registered_agent_name, created_at, updated_at)
+           VALUES (40, 'co-acme', 'Acme', 'Acme Holdings Inc.', NULL, 'Existing Agent Co', '2026-01-01', '2026-01-01');
+           INSERT INTO company_locations (uid, company_id, kind, line1, country, created_by) VALUES ('loc-reg', 40, 'registered', '9 Kept Street', 'US', ${ADMIN});
+           UPDATE projects SET company_id = 40 WHERE id = 1;`);
+  await readyWithAgent(db);
+  const out = await filed(db, 7, '2026-09-03');
+  assert.equal(out.status, 200, JSON.stringify(out.body));
+  assert.deepEqual(out.body.company, { uid: 'co-acme', created: false, filled: ['legal_form', 'jurisdiction', 'incorporation_date'] });
+  const co = company(db, 'co-acme');
+  assert.deepEqual([co.legal_name, co.legal_form, co.jurisdiction, co.incorporation_date, co.registered_agent_name],
+    ['Acme Holdings Inc.', 'c_corp', 'US-DE', '2026-09-03', 'Existing Agent Co'], 'what was set stays; only NULLs are filled');
+  assert.deepEqual(db.prepare('SELECT uid, line1 FROM company_locations WHERE company_id = 40').all().map((x: any) => ({ ...x })),
+    [{ uid: 'loc-reg', line1: '9 Kept Street' }], 'the open registered address is kept; none added');
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM company_profiles'), 1, 'no new company');
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM user_company_links'), 0, 'no link written for a company that exists');
+  assert.equal((db.prepare('SELECT company_id FROM incorporations WHERE id = 7').get() as any).company_id, 40);
+
+  // An archived company is linked only.
+  const db2 = fixture();
+  db2.exec(`INSERT INTO company_profiles (id, uid, company_name, archived_at, created_at, updated_at) VALUES (41, 'co-old', 'Old', '2026-05-01', '2026-01-01', '2026-01-01');
+            UPDATE projects SET company_id = 41 WHERE id = 1;`);
+  await readyWithAgent(db2);
+  const arch = await filed(db2, 7, '2026-09-03');
+  assert.deepEqual(arch.body.company, { uid: 'co-old', created: false, filled: [], reason: 'archived' });
+  const old = company(db2, 'co-old');
+  assert.deepEqual([old.legal_name, old.jurisdiction, old.registered_agent_name], [null, null, null], 'nothing filled on an archived company');
+  assert.equal(count(db2, 'SELECT COUNT(*) AS n FROM company_locations'), 0);
+  assert.equal((db2.prepare('SELECT company_id FROM incorporations WHERE id = 7').get() as any).company_id, 41);
+});
+
+test('a venture with no owner account is filed and no company is written; a slug clash takes -2', async () => {
+  const db = fixture();
+  db.prepare("INSERT INTO incorporations (id, user_id, project_id, jurisdiction_id, company_name, amount_cents, status, paid_at) VALUES (9, ?, 2, 'uk_ltd', 'Beta Ltd', 5000, 'paid', '2026-09-01 10:00:00')").run(FOUNDER);
+  await packet(db, 9, 52);
+  const out = await filed(db, 9, '2026-09-02');
+  assert.equal(out.status, 200);
+  assert.deepEqual(out.body.company, { created: false, reason: 'no_owner_account' });
+  assert.equal((db.prepare('SELECT status, company_id FROM incorporations WHERE id = 9').get() as any).status, 'filed');
+  assert.equal(count(db, 'SELECT COUNT(*) AS n FROM company_profiles'), 0);
+
+  const db2 = fixture();
+  db2.exec("INSERT INTO company_profiles (id, uid, company_name, slug, created_at, updated_at) VALUES (50, 'co-other', 'Another Acme', 'acme-inc', '2026-01-01', '2026-01-01')");
+  await readyWithAgent(db2);
+  const two = await filed(db2, 7, '2026-09-03');
+  assert.equal(company(db2, two.body.company.uid).slug, 'acme-inc-2');
+});
+
+test('the order reads carry the company the filing linked, never the venture\'s company now', async () => {
+  // Mutation checked: company_uid derived from projects.company_id.
+  const db = fixture();
+  await readyWithAgent(db);
+  const before = await call(db, FOUNDER, 'GET', '/legal/incorporate/status?id=7');
+  assert.equal(before.body.company_uid, null, 'null until linked');
+  assert.equal((await call(db, FOUNDER, 'GET', '/legal/incorporate/orders')).body.orders.find((o: any) => o.id === 7).company_uid, null);
+  const out = await filed(db, 7, '2026-09-03');
+  const uid = out.body.company.uid;
+  assert.equal((await call(db, FOUNDER, 'GET', '/legal/incorporate/status?id=7')).body.company_uid, uid);
+  // The venture moves to another company later; the order still names its own.
+  db.exec("INSERT INTO company_profiles (id, uid, company_name, created_at, updated_at) VALUES (60, 'co-later', 'Later', '2026-01-01', '2026-01-01'); UPDATE projects SET company_id = 60 WHERE id = 1;");
+  assert.equal((await call(db, FOUNDER, 'GET', '/legal/incorporate/status?id=7')).body.company_uid, uid);
+  assert.equal((await call(db, FOUNDER, 'GET', '/legal/incorporate/orders')).body.orders.find((o: any) => o.id === 7).company_uid, uid);
+});
+
+test('a venture with a slug keeps its old address when the filing moves it into its new company', async () => {
+  // Mutation checked: the move's retireSlug left out of projectMoveStatements.
+  const db = fixture();
+  db.prepare("UPDATE projects SET slug = 'acme' WHERE id = 1").run();
+  await readyWithAgent(db);
+  const out = await filed(db, 7, '2026-09-03');
+  assert.equal(out.status, 200, JSON.stringify(out.body));
+  const hist = db.prepare("SELECT kind, scope_company_id, slug, target_id FROM slug_history WHERE kind = 'project'").all().map((x: any) => ({ ...x }));
+  assert.deepEqual(hist, [{ kind: 'project', scope_company_id: null, slug: 'acme', target_id: 1 }], 'the standalone address is retired, so it still resolves');
 });
