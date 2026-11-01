@@ -148,7 +148,7 @@ test('without a record, every slot is Not recorded with the module that fills it
     assert.match(it.href, new RegExp(`^(/(validate|build|raise|grow)/[a-z-]+\\?project=${P}|/account/connectors/(posthog|hubspot|linear))$`), it.source_key);
     assert.ok(it.module.includes(' › '), it.source_key);
   }
-  assert.deepEqual(body.coverage, { slots: SLOT_KEYS.length, filled: 0, by_grade: { Measured: 0, Reviewed: 0, Sourced: 0, Stated: 0 }, not_recorded: SLOT_KEYS.length, unreadable: 0 });
+  assert.deepEqual(body.coverage, { slots: SLOT_KEYS.length, filled: 0, by_grade: { Measured: 0, Reviewed: 0, Sourced: 0, Stated: 0, Projected: 0 }, not_recorded: SLOT_KEYS.length, unreadable: 0 });
 });
 
 test('with a record, each adapter reads its value, date, source and grade', async () => {
@@ -261,7 +261,7 @@ test('coverage counts only record-filled slots, by grade', async () => {
   const db = fixture(); seed(db);
   const { body } = await call(db, FOUNDER, 'GET', `/api/decks/sources?project_id=${P}`);
   const recorded = (body.items as SourceItem[]).filter((i) => i.state === 'recorded');
-  const tally = { Measured: 0, Reviewed: 0, Sourced: 0, Stated: 0 } as Record<string, number>;
+  const tally = { Measured: 0, Reviewed: 0, Sourced: 0, Stated: 0, Projected: 0 } as Record<string, number>;
   for (const i of recorded) tally[i.grade] += 1;
   assert.equal(body.coverage.filled, recorded.length);
   assert.deepEqual(body.coverage.by_grade, tally);

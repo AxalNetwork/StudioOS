@@ -122,7 +122,7 @@ test('the list of columns a Sheet may never write is read from Stripe\'s and Mer
 });
 
 test('google_sheets is a connected source: a typed snapshot cannot claim it', () => {
-  assert.deepEqual([...CONNECTED_METRIC_SOURCES], ['stripe', 'mercury', 'google_sheets']);
+  assert.deepEqual([...CONNECTED_METRIC_SOURCES], ['stripe', 'mercury', 'google_sheets', 'posthog'], 'D1609: PostHog joins; it writes no project_metrics row');
   assert.equal(isConnectedSource(' Google_Sheets '), true);
   const route = src('routes/progress.ts');
   assert.match(route, /if \(isConnectedSource\(body\?\.source\)\) \{\s*return c\.json\(\{ detail: \{ code: 'source_reserved'/);

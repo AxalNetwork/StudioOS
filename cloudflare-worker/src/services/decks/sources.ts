@@ -40,6 +40,7 @@ import { claimsOf, loadHypotheses, loadInterviews } from '../cycleValidate';
 import { getPainGroupsView, loadPainGroupModel } from '../painGroups';
 import { FUND_SECTIONS, parseAllocation } from '../raiseCycle';
 import { citableFigures } from '../mercury/raiseFeeds';
+import { PROJECTION_FOOTNOTE, PROJECTION_LABEL, RECORD_SOURCES } from './recordSources';
 import { projectEnabled } from '../../integrations/companyScope';
 import type { IntegrationRow } from '../../integrations/registry';
 import { posthogDeckFacts, posthogDeckLink, type PosthogDeckFact, type PosthogDeckFactKey } from '../posthog/deckFacts';
@@ -47,9 +48,9 @@ import { linearReadsFor, type LinearReads } from '../linear/reads';
 import { hubspotPipelineCounts, type HubspotFetch } from './hubspotCounts';
 
 export type SourceLabel = 'Connector' | 'Document' | 'Recorded' | 'Signed' | 'Typed';
-export type Grade = 'Measured' | 'Reviewed' | 'Sourced' | 'Stated' | 'Not recorded';
-/** The four grades a recorded value can carry, strongest first. */
-export const GRADES = ['Measured', 'Reviewed', 'Sourced', 'Stated'] as const;
+export type Grade = 'Measured' | 'Reviewed' | 'Sourced' | 'Stated' | 'Projected' | 'Not recorded';
+/** The grades a recorded value can carry, strongest first. D1520: Projected is a forecast's, and only a forecast's. */
+export const GRADES = ['Measured', 'Reviewed', 'Sourced', 'Stated', 'Projected'] as const;
 
 /** Where a value came from, as the store tells it. */
 export type Origin =
@@ -62,7 +63,7 @@ export type Origin =
   | 'typed';            // the founder typed it, with no source
 
 /** #2434's "Sources a card binds to" table, in one function the parts share. */
-export function sourceAndGrade(origin: Origin): { source: SourceLabel; grade: Exclude<Grade, 'Not recorded'> } {
+export function sourceAndGrade(origin: Origin): { source: SourceLabel; grade: Exclude<Grade, 'Not recorded' | 'Projected'> } {
   switch (origin) {
     case 'connector': return { source: 'Connector', grade: 'Measured' };
     case 'platform_count': return { source: 'Recorded', grade: 'Measured' };
@@ -102,6 +103,8 @@ export type SourceItem = {
   state: SlotState;
   /** Scoring rows: shown only when the founder includes them. */
   optional?: boolean;
+  /** D1520: a forecast's label and footnote, on every recorded slot of a projection adapter. Never dropped. */
+  projection?: { label: string; footnote: string };
 };
 
 export type SourceCtx = {
@@ -115,12 +118,14 @@ export type SourceCtx = {
   connectors?: { fetcher?: HubspotFetch; deadlineMs?: number };
 };
 
-type Slot = { key: string; label: string; unit: Unit; optional?: boolean };
-type Read = { value: number | string | null; of?: number | null; as_of?: string | null; origin: Origin; record_ref?: string | null };
-type Adapter = {
+export type Slot = { key: string; label: string; unit: Unit; optional?: boolean };
+export type Read = { value: number | string | null; of?: number | null; as_of?: string | null; origin: Origin; record_ref?: string | null };
+export type Adapter = {
   id: string;
   area: Area;
   module: string;
+  /** D1520: a forecast. Every slot it fills is graded Projected and carries the Projection label, whatever origin it reports. */
+  projection?: boolean;
   href: (pid: number) => string;
   slots: Slot[];
   /** Reads every slot it owns; a slot it leaves out is not recorded. */
@@ -578,6 +583,8 @@ export const DECK_SOURCES: Adapter[] = [
   round, capTable, useOfFunds, narrative,
   revenue, mercury, updates, product, pipeline,
   team, scoring,
+  // D1520 (#3772): market size, the competition table, round terms, use of funds by section, the projection, the narrative's words.
+  ...RECORD_SOURCES,
 ];
 
 /** A short, stable hash of what a binding saw: same value, same date, same record. */
@@ -597,7 +604,7 @@ export type Coverage = {
 
 /** Counts only record-filled slots; a withheld slot is not a slot for this reader. */
 export function coverageOf(items: SourceItem[]): Coverage {
-  const by_grade = { Measured: 0, Reviewed: 0, Sourced: 0, Stated: 0 };
+  const by_grade = { Measured: 0, Reviewed: 0, Sourced: 0, Stated: 0, Projected: 0 };
   let not_recorded = 0;
   let unreadable = 0;
   for (const it of items) {
@@ -626,11 +633,15 @@ export async function readSources(ctx: SourceCtx, opts: { includeScoring?: boole
         items.push({ ...base, value: null, as_of: null, grade: 'Not recorded', source: null, record_ref: null, snapshot_hash: null, state });
         continue;
       }
-      const { source, grade } = sourceAndGrade(r.origin);
+      const mapped = sourceAndGrade(r.origin);
+      const source = mapped.source;
+      // D1520: a projection is Projected whatever its origin says; it can never pass for Measured.
+      const grade: Grade = a.projection ? 'Projected' : mapped.grade;
       const record_ref = r.record_ref ?? null;
       const as_of = r.as_of ?? null;
       items.push({
         ...base, value: r.value, ...(r.of != null ? { of: r.of } : {}), as_of, grade, source, record_ref,
+        ...(a.projection ? { projection: { label: PROJECTION_LABEL, footnote: PROJECTION_FOOTNOTE } } : {}),
         snapshot_hash: await snapshotHash(s.key, record_ref, [r.value, r.of ?? null], as_of), state: 'recorded',
       });
     }
