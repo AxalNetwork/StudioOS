@@ -165,12 +165,34 @@ const srcFiles = () => {
 /** A file's code without its comments. */
 const codeOf = (f: string) => readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
+// Read whole DNS-shaped tokens, then compare parsed hostnames at label boundaries.
+// The guard also covers a bare hostname constant, not only a complete URL.
+const hostsIn = (text: string) => (text.match(/\b[a-z0-9-]+(?:\.[a-z0-9-]+)+\b/gi) ?? [])
+  .flatMap(host => {
+    try { return [new URL(`https://${host}`).hostname]; }
+    catch { return []; } // Dotted code expressions and version numbers are not hosts.
+  });
+const underHost = (host: string, root: string) => host === root || host.endsWith(`.${root}`);
+
+test('2. hostname guards recognize the host and its subdomains without matching lookalikes', () => {
+  for (const host of ['cloudflare.com', 'api.cloudflare.com', 'CLOUDFLARE.COM']) {
+    assert.equal(hostsIn(`https://${host}/fixture`).some(value => underHost(value, 'cloudflare.com')), true);
+  }
+  for (const host of ['notcloudflare.com', 'cloudflare.com.example.invalid', 'cloudflare-com.example.invalid']) {
+    assert.equal(hostsIn(`https://${host}/fixture`).some(value => underHost(value, 'cloudflare.com')), false);
+  }
+  assert.deepEqual(hostsIn('999.999.999'), []);
+  assert.equal(hostsIn('const endpointHost = "mcp.cloudflare.com";').some(host => underHost(host, 'mcp.cloudflare.com')), true);
+  assert.equal(hostsIn('https://observability.mcp.cloudflare.com/mcp').some(host => underHost(host, 'mcp.cloudflare.com')), true);
+  assert.equal(hostsIn('https://mcp.cloudflare.com.example.invalid/mcp').some(host => underHost(host, 'mcp.cloudflare.com')), false);
+});
+
 test('2. no MCP record for Cloudflare, no Code Mode URL in the code, and only the REST base', () => {
   assert.equal(Object.hasOwn(MCP_PROVIDERS, 'cloudflare'), false);
   for (const [key, rec] of Object.entries(MCP_PROVIDERS)) {
-    assert.equal(JSON.stringify(rec).includes('cloudflare.com'), false, `${key} names no Cloudflare host`);
+    assert.equal(hostsIn(JSON.stringify(rec)).some(host => underHost(host, 'cloudflare.com')), false, `${key} names no Cloudflare host`);
   }
-  for (const f of srcFiles()) assert.equal(/mcp\.cloudflare\.com/.test(codeOf(f)), false, `${f} calls no Cloudflare MCP server`);
+  for (const f of srcFiles()) assert.equal(hostsIn(codeOf(f)).some(host => underHost(host, 'mcp.cloudflare.com')), false, `${f} calls no Cloudflare MCP server`);
   assert.equal(CLOUDFLARE_API, 'https://api.cloudflare.com/client/v4');
   assert.equal(/\bexecute\(/.test(codeOf('cloudflare-worker/src/services/cloudflare/api.ts')), false);
 });
