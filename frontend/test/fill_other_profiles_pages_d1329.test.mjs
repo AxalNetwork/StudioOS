@@ -279,3 +279,29 @@ test('#3740: editing an agenda item reads with record, not parent; adding one re
     assert.doesNotMatch(url, /record=/);
   } finally { await add.unmount(); }
 });
+
+test('D1424 (#3700): the in-form Ask stays on all six forms, and the header Ask is gated off and never "Fill"', async () => {
+  // The working Ask is the form's own: D1329's three and D1595's three.
+  const mounts = [
+    ['pages/ICDecisionPage.jsx', /scope: SCOPED_FORMS\.icMemo/],
+    ['pages/advisor/expertise/ServicesZone.jsx', /scope: SCOPED_FORMS\.service/],
+    ['pages/partner/delivery/StatusReportsZone.jsx', /<FillFormBar fill=\{fill\} \/>/],
+    ['pages/investor/InvestorPortfolioValueAdd.jsx', /scope: SCOPED_FORMS\.support/],
+    ['pages/ServiceCatalogPage.jsx', /scope: SCOPED_FORMS\.offering/],
+    ['pages/PerksPage.jsx', /scope: SCOPED_FORMS\.perk/],
+  ];
+  for (const [file, re] of mounts) {
+    const src = read(file);
+    assert.match(src, re, `${file} lost its scoped Ask`);
+    assert.match(src, /<FillFormBar fill=\{fill\} \/>/, `${file} lost its form bar`);
+  }
+  for (const k of ['support', 'offering', 'perk']) assert.ok(SCOPED_FORMS[k], `${k} is not a scoped form`);
+  assert.match(NOT_FILLED_HERE.offering[0], /^Price/);
+  assert.match(NOT_FILLED_HERE.perk[0], /Value, credits, cap and conditions/);
+  // The header Ask: drawn by the shared button, shut until #3706's panel.
+  const { headerAskGate } = await import('../src/workspaces/ProfileHeaderAsk.jsx');
+  assert.equal(headerAskGate({ role: 'investor', pathname: '/deals/commit' }).reason, 'ask_panel_unbuilt');
+  // Code only: the docblock says Never "Fill" in words.
+  const { codeOnly } = await import('./_codeOnly.mjs');
+  assert.doesNotMatch(codeOnly(read('workspaces/ProfileHeaderAsk.jsx')), /'Fill|"Fill|>Fill/);
+});

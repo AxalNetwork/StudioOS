@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { WorkerRail, Unreadable } from '../../ui';
-import ZoneNav from '../../workspaces/ZoneNav';
-import { bucketForPath } from '../../workspaces/shellConfig';
+import ZoneHeader from '../../workspaces/ZoneHeader';
+import { ZonePrimaryScope } from '../../workspaces/ZoneActions';
 import { api } from '../../lib/api';
 import './investorFundLanding.css';
 import './investorFundCalls.css';
@@ -177,10 +177,9 @@ export default function InvestorFundCalls() {
     summary.paid_before_receipts_cents > 0 ? `${money(summary.paid_before_receipts_cents)} marked paid before receipts were recorded` : null,
   ].filter(Boolean).join(' · ');
 
-  return <div className="i6-fund if2-shell"><main className="i6-main if2-main" data-testid="investor-fund-calls">
-    <header className="i6-header"><div><div className="i6-breadcrumb">Fund <span>‹</span> <b>Calls</b></div><h1>Capital calls</h1><p>Schedule builder, letters, wire tracking and delinquency.</p></div>
-      <button className="i6-refresh" type="button" onClick={refresh} disabled={busy} aria-label="Refresh the call ledger"><RefreshCw size={14} className={busy ? 'i6-spin' : ''} /></button></header>
-    <ZoneNav bucket={bucketForPath('investor', '/funds')} role="investor" activeSlug="calls" className="my-3" />
+  return <ZonePrimaryScope><div className="i6-fund if2-shell"><main className="i6-main if2-main" data-testid="investor-fund-calls">
+    <ZoneHeader family="i6" bucketPath="/funds" activeSlug="calls" crumb="Calls" title="Capital calls" intro="Schedule builder, letters, wire tracking and delinquency."
+      refresh={<button className="i6-refresh" type="button" onClick={refresh} disabled={busy} aria-label="Refresh the call ledger"><RefreshCw size={14} className={busy ? 'i6-spin' : ''} /></button>} />
     <FundPicker funds={managed.funds} fund={fund} onSelect={managed.select} />
     <ZoneToolbar role="investor" className="mb-3"
       filters={investorZoneFilters('funds/calls', { value: filter, onChange: setFilter })}
@@ -256,7 +255,7 @@ export default function InvestorFundCalls() {
       ['Reminder delivery', 'Eadwyn drafts a reminder for one LP’s line, and nothing here sends it. Log as sent records the subject and the date on the comms log, never the message.'],
       ['Notice delivery', 'Each LP with a platform account gets an in-app notice when a call is issued; no letter is sent and no delivery is tracked.'],
     ]}
-  /></div>;
+  /></div></ZonePrimaryScope>;
 }
 
 function residualSentence(call) {

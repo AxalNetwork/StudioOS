@@ -46,6 +46,7 @@ import type { IntegrationRow } from '../../integrations/registry';
 import { posthogDeckFacts, posthogDeckLink, type PosthogDeckFact, type PosthogDeckFactKey } from '../posthog/deckFacts';
 import { linearReadsFor, type LinearReads } from '../linear/reads';
 import { hubspotPipelineCounts, type HubspotFetch } from './hubspotCounts';
+import { CONTENT_CALENDAR_TABLE, contentCountFrom } from '../growWriters';
 
 export type SourceLabel = 'Connector' | 'Document' | 'Recorded' | 'Signed' | 'Typed';
 export type Grade = 'Measured' | 'Reviewed' | 'Sourced' | 'Stated' | 'Projected' | 'Not recorded';
@@ -60,6 +61,8 @@ export type Origin =
   | 'logged_by_hand'    // an interview the founder logged by hand
   | 'file'              // typed, with a file behind it
   | 'counsel_approved'  // set or approved by someone other than the founder
+  | 'linked_document'   // D1567: a Notion page, Google Doc or Form answer read through its connector
+  | 'linked_typed'      // D1567: a row or cell the founder typed in Notion or a Google Sheet
   | 'typed';            // the founder typed it, with no source
 
 /** #2434's "Sources a card binds to" table, in one function the parts share. */
@@ -71,6 +74,10 @@ export function sourceAndGrade(origin: Origin): { source: SourceLabel; grade: Ex
     case 'logged_by_hand': return { source: 'Recorded', grade: 'Sourced' };
     case 'file': return { source: 'Document', grade: 'Sourced' };
     case 'counsel_approved': return { source: 'Document', grade: 'Reviewed' };
+    // D1567 (#3814): what a document suite holds was written by a person, so it
+    // is never Measured, even though a connector carried it here.
+    case 'linked_document': return { source: 'Document', grade: 'Sourced' };
+    case 'linked_typed': return { source: 'Typed', grade: 'Stated' };
     default: return { source: 'Typed', grade: 'Stated' };
   }
 }
@@ -118,7 +125,11 @@ export type SourceCtx = {
   connectors?: { fetcher?: HubspotFetch; deadlineMs?: number };
 };
 
-export type Slot = { key: string; label: string; unit: Unit; optional?: boolean };
+/**
+ * `area`, `module` and `href` override the adapter's own, for a connector whose
+ * slots are filled from several modules' "From Notion" or "From Google" (D1567).
+ */
+export type Slot = { key: string; label: string; unit: Unit; optional?: boolean; area?: Area; module?: string; href?: (pid: number) => string };
 export type Read = { value: number | string | null; of?: number | null; as_of?: string | null; origin: Origin; record_ref?: string | null };
 export type Adapter = {
   id: string;
@@ -149,10 +160,13 @@ const interviews: Adapter = {
   id: 'interviews', area: 'validate', module: 'Validate › Customer research', href: q('/validate/customer-research'),
   slots: [{ key: 'validate.interviews', label: 'Interviews', unit: 'count' }, { key: 'validate.strong_fit', label: 'Strong fit', unit: 'count' }],
   async read({ env, projectId }) {
-    // Held means a conversation that happened (cycleValidate `isHeld`).
+    // Held means a conversation that happened (cycleValidate `isHeld`). A
+    // session imported from a Notion page or a Google Doc is notes someone
+    // wrote, not a recording, so it does not make the count Measured (D1567).
     const rows = await all<{ id: number; icp_fit: string | null; held: string | null; recorded: number }>(env,
       `SELECT i.id, i.icp_fit, COALESCE(substr(i.done_at, 1, 10), substr(i.interview_date, 1, 10), substr(i.created_at, 1, 10)) AS held,
-              EXISTS (SELECT 1 FROM interview_sessions s WHERE s.interview_id = i.id AND s.status <> 'draft') AS recorded
+              EXISTS (SELECT 1 FROM interview_sessions s WHERE s.interview_id = i.id AND s.status <> 'draft'
+                        AND COALESCE(s.submitted_via, '') NOT IN ('notion', 'google_docs')) AS recorded
          FROM discovery_interviews i WHERE i.project_id = ? AND (i.stage IS NULL OR i.stage = 'done')`, projectId);
     if (!rows.length) return {};
     // A count is only as strong as its weakest member: one hand-logged interview makes it Sourced.
@@ -565,6 +579,74 @@ const team: Adapter = {
   },
 };
 
+// ─────────────────────────────────────────────────────────────── Notion and Google (D1567)
+//
+// Owner decision J = B (2026-11-01): Notion and Google sources ship in Phase D.
+// Neither adapter calls Notion or Google. Each reads what the founder's own
+// connection already landed in this venture's stores (D1085–D1095), by the
+// origin those writers stamp, so a deck can bind it with its date. A page, a
+// Doc or a Form answer is Sourced; a database row or a Sheet cell the founder
+// typed is Stated. Neither is ever Measured: a person wrote it, and the
+// connector only carried it. A slot with nothing landed is `not_recorded`.
+
+const linkedCount = async (env: Env, sql: string, ...binds: unknown[]) => {
+  const r = await first<{ n: number; at: string | null }>(env, sql, ...binds);
+  return Number(r?.n) ? { n: Number(r!.n), at: day(r!.at) } : null;
+};
+
+const notionSource: Adapter = {
+  id: 'notion', area: 'validate', module: 'Validate › Customer research', href: q('/validate/customer-research'),
+  slots: [
+    { key: 'validate.notion_interviews', label: 'Interviews from Notion pages', unit: 'count' },
+    { key: 'validate.notion_research', label: 'Research pages from Notion', unit: 'count', module: 'Validate › Market intelligence', href: q('/validate/market-intelligence') },
+    { key: 'build.notion_design_notes', label: 'Design notes from Notion', unit: 'count', area: 'build', module: 'Build › Solution design', href: q('/build/solution-design') },
+    { key: 'grow.notion_content', label: 'Content planned in Notion', unit: 'count', area: 'grow', module: 'Grow › Distribution', href: q('/grow/distribution') },
+  ],
+  async read({ env, projectId }) {
+    const out: Record<string, Read> = {};
+    const iv = await linkedCount(env,
+      `SELECT COUNT(*) AS n, MAX(created_at) AS at FROM interview_sessions WHERE project_id = ? AND submitted_via = 'notion' AND status <> 'draft'`, projectId);
+    if (iv) out['validate.notion_interviews'] = { value: iv.n, as_of: iv.at, origin: 'linked_document', record_ref: `interview_sessions:notion:${iv.n}` };
+    const rs = await linkedCount(env, `SELECT COUNT(*) AS n, MAX(created_at) AS at FROM market_sources WHERE project_id = ? AND kind = 'notion'`, projectId);
+    if (rs) out['validate.notion_research'] = { value: rs.n, as_of: rs.at, origin: 'linked_document', record_ref: `market_sources:notion:${rs.n}` };
+    const dn = await linkedCount(env,
+      `SELECT COUNT(*) AS n, MAX(created_at) AS at FROM solution_design_notes WHERE project_id = ? AND source_path LIKE 'notion/%'`, projectId);
+    if (dn) out['build.notion_design_notes'] = { value: dn.n, as_of: dn.at, origin: 'linked_document', record_ref: `solution_design_notes:notion:${dn.n}` };
+    // The content calendar is read through its writer (growWriters), the only module that names its table.
+    const ct = await contentCountFrom(env, projectId, 'notion');
+    if (ct.n) out['grow.notion_content'] = { value: ct.n, as_of: day(ct.at), origin: 'linked_typed', record_ref: `${CONTENT_CALENDAR_TABLE}:notion:${ct.n}` };
+    return out;
+  },
+};
+
+const googleSource: Adapter = {
+  id: 'google', area: 'validate', module: 'Validate › Customer research', href: q('/validate/customer-research'),
+  slots: [
+    { key: 'validate.google_doc_interviews', label: 'Interviews from Google Docs', unit: 'count' },
+    { key: 'validate.google_forms', label: 'Google Forms responses confirmed', unit: 'count', module: 'Validate › Demand signals', href: q('/validate/demand-signals') },
+    { key: 'build.google_design_notes', label: 'Spec docs from Google Docs', unit: 'count', area: 'build', module: 'Build › Solution design', href: q('/build/solution-design') },
+    { key: 'grow.google_sheets_days', label: 'Metric days from Google Sheets', unit: 'count', area: 'grow', module: 'Grow › Revenue and traction', href: q('/grow/revenue-and-traction') },
+  ],
+  async read({ env, projectId }) {
+    const out: Record<string, Read> = {};
+    const iv = await linkedCount(env,
+      `SELECT COUNT(*) AS n, MAX(created_at) AS at FROM interview_sessions WHERE project_id = ? AND submitted_via = 'google_docs' AND status <> 'draft'`, projectId);
+    if (iv) out['validate.google_doc_interviews'] = { value: iv.n, as_of: iv.at, origin: 'linked_document', record_ref: `interview_sessions:google_docs:${iv.n}` };
+    // Confirmed or counted only, as `demand` reads: a response still "to confirm" is not demand yet.
+    const fm = await linkedCount(env,
+      `SELECT COUNT(*) AS n, MAX(COALESCE(signal_date, updated_at)) AS at FROM demand_signals
+        WHERE project_id = ? AND source_kind = 'google_forms' AND status IN ('confirmed', 'counted')`, projectId);
+    if (fm) out['validate.google_forms'] = { value: fm.n, as_of: fm.at, origin: 'linked_document', record_ref: `demand_signals:google_forms:${fm.n}` };
+    const dn = await linkedCount(env,
+      `SELECT COUNT(*) AS n, MAX(created_at) AS at FROM solution_design_notes WHERE project_id = ? AND source_path LIKE 'google_docs/%'`, projectId);
+    if (dn) out['build.google_design_notes'] = { value: dn.n, as_of: dn.at, origin: 'linked_document', record_ref: `solution_design_notes:google_docs:${dn.n}` };
+    const sh = await linkedCount(env,
+      `SELECT COUNT(*) AS n, MAX(snapshot_date) AS at FROM project_metrics WHERE project_id = ? AND source = 'google_sheets'`, projectId);
+    if (sh) out['grow.google_sheets_days'] = { value: sh.n, as_of: sh.at, origin: 'linked_typed', record_ref: `project_metrics:google_sheets:${sh.n}` };
+    return out;
+  },
+};
+
 // ─────────────────────────────────────────────────────────────── Scoring
 
 const scoring: Adapter = {
@@ -582,7 +664,7 @@ export const DECK_SOURCES: Adapter[] = [
   mustHaves, roadmap, github, shipping,
   round, capTable, useOfFunds, narrative,
   revenue, mercury, updates, product, pipeline,
-  team, scoring,
+  team, notionSource, googleSource, scoring,
   // D1520 (#3772): market size, the competition table, round terms, use of funds by section, the projection, the narrative's words.
   ...RECORD_SOURCES,
 ];
@@ -626,7 +708,7 @@ export async function readSources(ctx: SourceCtx, opts: { includeScoring?: boole
     let got: Partial<Record<string, Read | 'withheld'>> | null;
     try { got = await a.read(ctx); } catch { got = null; }
     for (const s of slots) {
-      const base = { source_key: s.key, area: a.area, module: a.module, label: s.label, unit: s.unit, href: a.href(ctx.projectId), ...(s.optional ? { optional: true } : {}) };
+      const base = { source_key: s.key, area: s.area ?? a.area, module: s.module ?? a.module, label: s.label, unit: s.unit, href: (s.href ?? a.href)(ctx.projectId), ...(s.optional ? { optional: true } : {}) };
       const r = got?.[s.key];
       if (r === 'withheld' || r == null || r.value == null) {
         const state: SlotState = got == null ? 'unreadable' : r === 'withheld' ? 'withheld' : 'not_recorded';

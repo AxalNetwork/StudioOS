@@ -103,13 +103,9 @@ export default function ProjectDetail() {
     } catch (e) { showToast({ kind: 'error', msg: e.message }); }
   };
 
-  const incorporate = async () => {
-    try {
-      const res = await api.incorporateProject(id);
-      showToast({ kind: 'success', msg: res.message || 'Incorporation requested' });
-      load();
-    } catch (e) { showToast({ kind: 'error', msg: e.message }); }
-  };
+  // D1414 (#3696): Incorporate is a flow of its own, prefilled with this project. The old
+  // `POST /api/legal/incorporate` had no Worker route, so this button only ever failed.
+  const incorporate = () => navigate(`/incorporate?project=${encodeURIComponent(id)}`);
 
   const spinout = async () => {
     try {

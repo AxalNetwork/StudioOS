@@ -58,30 +58,20 @@ test('every Expertise zone the shell declares is either backed or honestly empty
   // `author_user_id NOT NULL` and a `views` counter incremented on every
   // published read (`routes/articles.ts:320`). Two of that card's three claims
   // were already false when it was written; the zone was a wiring job.
-  assert.deepEqual(backed, ['profile', 'services', 'proof', 'thinking'],
-    'the three zones migrations 202-204 gave a store, plus thinking over articles');
+  // `visibility` joined them with D1424 (#3700), over D1597's read of the
+  // advisor's own booking links and writing. It needed no migration either:
+  // owner answer H declined a view counter, so profile views are drawn "Not
+  // recorded" on the zone, in the Worker's own sentence.
+  assert.deepEqual(backed, ['profile', 'services', 'proof', 'thinking', 'visibility'],
+    'every Expertise zone has a page now');
 
-  // ONE CARD LEFT, and it opens the shared no-store map.
-// The no-store copy moved out of `AdvisorBucketRoutes.jsx` into
-// `workspaces/noStoreCopy.js`, so the bucket BOARD and the zone CARD read one
-// object and cannot state different reasons. The invariants below are
-// unchanged; only the file the set is parsed from moved.
-  const noStore = read('frontend/src/workspaces/noStoreCopy.js');
-  const copyStart = noStore.indexOf('const ADVISOR_EXPERTISE_COPY = {\n  visibility:');
-  assert.ok(copyStart > -1, 'the Expertise no-store map must still start with visibility');
-  const expertiseCopy = noStore.slice(copyStart, noStore.indexOf('\n};', copyStart));
-  assert.ok(expertiseCopy.length > 0, 'the slice must not invert');
-  for (const z of zones.filter((x) => !backed.includes(x))) {
-    assert.ok(expertiseCopy.includes(`  ${z}: {`),
-      `${z} has no store and must say which one is missing`);
-  }
-  // And the reverse: a card for a zone that now HAS a body would tell an
-  // advisor a working feature is missing. That is the failure this bucket has
-  // now hit three times — Sessions, Earnings, and Thinking.
-  for (const z of backed) {
-    assert.ok(!expertiseCopy.includes(`    ${z}: {`),
-      `${z} has a body now; a card in front of it is a false claim`);
-  }
+  // NO CARD LEFT, so the shared no-store map is empty — and a card for a zone
+  // that HAS a body would tell an advisor a working feature is missing. That
+  // is the failure this bucket has now hit four times: Sessions, Earnings,
+  // Thinking, and Visibility.
+  const noStore = codeOnly(read('frontend/src/workspaces/noStoreCopy.js'));
+  assert.match(noStore, /export const ADVISOR_EXPERTISE_COPY = \{\};/, 'a no-store card is back in front of a zone with a page');
+  for (const z of zones) assert.ok(backed.includes(z), `${z} has neither a page nor a card`);
 });
 
 test('every Practice zone is served — none is left claiming a store that exists', () => {
@@ -127,14 +117,17 @@ test('every Practice zone is served — none is left claiming a store that exist
   assert.doesNotMatch(bucketRoutes, /no session price, paid booking or payout record/);
 });
 
-test('the one unbacked zone names the store that is absent, not a vague "coming soon"', () => {
-  // The whole value of the empty card is that it is specific. "Not built yet"
-  // is indistinguishable from a bug; "no impression counter anywhere in the
-  // product" is a fact a reader can check.
-  // In `workspaces/noStoreCopy.js` since the bucket board landed, so the board
-  // section and the zone card state one reason rather than two that can drift.
-  assert.match(read('frontend/src/workspaces/noStoreCopy.js'),
-    /no impression or profile-view counter anywhere in the product/);
+test('Visibility states what is not recorded on the zone itself, in the Worker\'s words', () => {
+  // The old card said "no impression or profile-view counter anywhere in the
+  // product". That is still true, and D1597's read says so in `views_note`;
+  // the zone draws it under "Profile views", "Not recorded", never a 0. The
+  // card itself is gone: requests per link and opens are recorded.
+  const zone = codeOnly(read('frontend/src/pages/advisor/expertise/VisibilityZone.jsx'));
+  assert.match(zone, /api\.getMyAdvisorVisibility\(VISIBILITY_DAYS\)/);
+  assert.match(zone, /Profile views<\/div>\s*<div className="mt-1\.5"><Unrecorded \/><\/div>\s*<div[^>]*>\{data\?\.views_note\}/,
+    'profile views must be Not recorded with the Worker\'s sentence');
+  assert.doesNotMatch(read('frontend/src/workspaces/noStoreCopy.js'), /no impression or profile-view counter anywhere in the product/,
+    'the card that zone replaced is back');
   assert.doesNotMatch(bucketRoutes, /no impression or profile-view counter anywhere in the product/,
     'the reason has one home; a second copy here could soften without the board changing');
 

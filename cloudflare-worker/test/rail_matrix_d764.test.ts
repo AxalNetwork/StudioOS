@@ -27,7 +27,7 @@ import {
   OUT, VOICE_BANNED, buildMatrix, loadRegisteredOptions, optionPageKey, readPricing, render, rowProblems,
 } from '../../scripts/build-rail-matrix.mjs';
 import { CANVAS_RAIL_KINDS, PRICE_USD_PER_1M_TOKENS, PRICE_USD_PER_AUDIO_MINUTE, RAIL_KINDS, ROUTE } from '../src/services/aiRouter.ts';
-import { RAIL_KIND_JOBS, jobStep, offerable } from '../src/services/ai/modelUseCases.ts';
+import { LEGAL_HOLD, RAIL_KIND_JOBS, jobStep, offerable } from '../src/services/ai/modelUseCases.ts';
 import { MODEL_NAMES, TASK_LABELS } from '../src/services/aiCatalog.ts';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
@@ -652,8 +652,11 @@ test('an image option lists the draw models only, FLUX.1 Schnell first, and no p
     const ids = [...o.models, ...(o.more ?? [])].map((m) => m.id);
     assert.equal(ids[0], '@cf/black-forest-labs/flux-1-schnell', `${o.optionKey}: Schnell is the Default`);
     assert.equal(o.models[0].role, 'Default');
-    assert.deepEqual([...ids].sort(), [...DRAW].sort(), `${o.optionKey}: exactly the draw models`);
-    assert.deepEqual([...ids].sort(), [...(ROUTE[o.routeTask as keyof typeof ROUTE].alternates ?? [])].sort(), `${o.optionKey}: the list is its job's alternates`);
+    // #3935 (owner answer D (a)): exactly the draw models Legal has not held, FLUX.1 Schnell and FLUX.2 Klein 4B,
+    // each one its route can run.
+    assert.deepEqual([...ids].sort(), DRAW.filter((id) => !LEGAL_HOLD.has(id)).sort(), `${o.optionKey}: exactly the draw models Legal has cleared`);
+    const alternates = ROUTE[o.routeTask as keyof typeof ROUTE].alternates ?? [];
+    assert.ok(ids.every((id) => alternates.includes(id)), `${o.optionKey}: every listed model is one its route runs`);
   }
   assert.ok(!ROWS.some((r) => r.kind === 'image'), 'image is an option kind only');
   assert.ok(!(RAIL_KINDS as readonly string[]).includes('image'), 'RAIL_KINDS stays the canvas kinds');

@@ -256,7 +256,7 @@ test('Ask for consent runs, and its old reason described a page that exists', ()
   const ops = entriesIn(actions, "'offers/proof': [");
   assert.deepEqual(ops.map((e) => e.match(/label: '([^']+)'/)[1]), canvasOps,
     'the ops row is no longer the artboard’s three labels in its order');
-  assert.match(ops[0], /\{ label: 'Ask for consent', kind: 'handler', handler: 'askConsent' \}/,
+  assert.match(ops[0], /\{ label: 'Ask for consent', kind: 'handler', handler: 'askConsent', primary: true \}/,
     'Ask for consent is no longer performed by the page');
   assert.match(ops[2], /\{ label: 'Export', kind: 'export' \}/, 'the export has stopped running');
   // The surface the retired reason said did not exist.

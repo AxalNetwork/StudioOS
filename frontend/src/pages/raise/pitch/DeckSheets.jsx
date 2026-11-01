@@ -9,6 +9,7 @@ import { APPLY } from './deckV2Model';
 import { AUDIENCE_LABELS, KIT_FAILED, NOT_RECORDED, NO_KIT, THEME_LABELS } from './editorModel';
 import { SLIDE_SIZES, aspectOf, withAspect } from './gridModel';
 import { remix as remixAdapter, shown } from './deckV2Adapter';
+import { movedNotice } from './deckReflow';
 
 /**
  * D1604 (#3716, pd13) — the sheets the editor's ⋯ opens, each one v1 surface
@@ -89,7 +90,12 @@ export function ThemeSheet({ model, theme, audience, kit, readOnly, onTheme, onA
 /** The two slide sizes, in the words the sheet shows. */
 export const SIZE_LABELS = Object.freeze({ '16:9': 'Widescreen 16:9', '4:3': 'Standard 4:3' });
 
-export function SizeSheet({ theme, readOnly, onTheme, onClose }) {
+/**
+ * D1554 (#3801): choosing a size runs the reflow on the draft (`onSize`); what
+ * no longer fits moves to the speaker notes, and pd3c's amber notice says how
+ * many blocks moved, with one Undo back to the cards and size before.
+ */
+export function SizeSheet({ theme, readOnly, onSize, moved, onUndo, onClose }) {
   const now = aspectOf(theme?.aspect);
   return (
     <Frame title="Slide size" testId="pitch-sheet-size" onClose={onClose}>
@@ -97,7 +103,7 @@ export function SizeSheet({ theme, readOnly, onTheme, onClose }) {
         {Object.keys(SLIDE_SIZES).map((k) => (
           <label key={k} className={`flex min-h-[44px] cursor-pointer items-center gap-2 rounded-[9px] border px-3 text-[12.5px] ${now === k ? 'border-axal-violet dark:border-violet-500' : 'border-axal-hairline dark:border-gray-700'} ${INK}`}>
             <input type="radio" name="slide-size" checked={now === k} disabled={readOnly}
-              onChange={() => onTheme(withAspect(theme, k))} data-testid={`pitch-size-${k.replace(':', 'x')}`} />
+              onChange={() => onSize(k)} data-testid={`pitch-size-${k.replace(':', 'x')}`} />
             <span className="flex flex-col">
               <span className="font-bold">{SIZE_LABELS[k]}</span>
               <span className={MUTED}>{SLIDE_SIZES[k].width} × {SLIDE_SIZES[k].height}</span>
@@ -105,7 +111,13 @@ export function SizeSheet({ theme, readOnly, onTheme, onClose }) {
           </label>
         ))}
       </div>
-      <span className={MUTED}>Every card keeps its 12 × 6 grid and its margins, so each block keeps its cells; only the columns narrow.</span>
+      {moved ? (
+        <div role="status" className="flex items-center gap-2 rounded-[9px] border border-amber-300 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200" data-testid="pitch-size-moved">
+          <span className="flex-1">{movedNotice(moved)}</span>
+          <button type="button" className="min-h-[44px] font-bold underline" onClick={onUndo} data-testid="pitch-size-undo">Undo</button>
+        </div>
+      ) : null}
+      <span className={MUTED}>Every card keeps its 12 × 6 grid and its margins, so each block keeps its cells; only the columns narrow. Words that no longer fit move to the card&apos;s speaker notes.</span>
       <span className={MUTED}>{HELD}</span>
     </Frame>
   );

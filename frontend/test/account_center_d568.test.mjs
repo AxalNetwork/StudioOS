@@ -559,8 +559,8 @@ test('SettingsPage lists the canvas sections in its order, and mounts each secti
   const labels = [...block.matchAll(/label: '([^']+)'/g)].map((m) => m[1]);
   // D642 (#1435) — the Usage canvas's acNav puts Usage after Billing and orders.
   // D651 (#1463) — the Connectors canvas puts Connectors after Usage.
-  // D1134 (#2422) — Companies and projects, second, below Profile and identity.
-  assert.deepEqual(labels.slice(0, 9), ['Profile and identity', 'Companies and projects', 'Notifications', 'Sign-in and security', 'Billing and orders', 'Usage', 'Connectors', 'Following', 'Builder']);
+  // D1134 (#2422) — the companies section, second, below Profile and identity; D1413 (#3696 Q1) named it Portfolio.
+  assert.deepEqual(labels.slice(0, 9), ['Profile and identity', 'Portfolio', 'Notifications', 'Sign-in and security', 'Billing and orders', 'Usage', 'Connectors', 'Following', 'Builder']);
   // D1315 (#2418): Developer is Builder, for every profile.
   assert.match(block, /\{ id: 'builder', label: 'Builder' \}/);
   for (const id of ['onboarding', 'appearance', 'activity']) {
