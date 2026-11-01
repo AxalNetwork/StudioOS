@@ -86,8 +86,9 @@ async function call(f: F, who: number, method: string, path: string, json?: unkn
 }
 /** Recorded words for every card the run's message names: a headline and one sentence, no figure. */
 function recordedWords(_model: string, _input: unknown, prompt: string) {
-  const m = prompt.match(/Cards: (\[.*\])\./s);
-  const cards = m ? JSON.parse(m[1]) : [];
+  // D1506 (#3757): the build message frames its cards as record_text (BEGIN_RECORD_TEXT_UNTRUSTED_<nonce> … END_…).
+  const m = prompt.match(/Cards:\nBEGIN_RECORD_TEXT_UNTRUSTED_([0-9a-f]+)\n(\[[\s\S]*?\])\nEND_RECORD_TEXT_UNTRUSTED_\1/);
+  const cards = m ? JSON.parse(m[2]) : [];
   return { cards: cards.map((c: any) => ({ n: c.n, headline: `${c.title} for finance teams`, body: 'Finance teams asked for it.' })) };
 }
 
