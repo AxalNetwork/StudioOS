@@ -30,6 +30,7 @@
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/ai_router_shapes_d761.test.mjs
  */
+// D1478 §3937: the chat samples run `onboarding_chat` (the 70B, then the 8B), since `paraphrase` now runs the 8B first.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -73,7 +74,7 @@ test.afterEach(() => { shapes.setModelFactsSource(null); __resetForTest(); });
 
 test('text: the chat request the stub receives, and the units the attempt reports, cached input included', async () => {
   const ai = makeAI(() => ok('Plain answer.', { prompt_tokens: 40, completion_tokens: 6, prompt_tokens_details: { cached_tokens: 32 } }));
-  const r = await run(envWith(ai), { task: 'paraphrase', userId: 0, messages: ask });
+  const r = await run(envWith(ai), { task: 'onboarding_chat', userId: 0, messages: ask });
   assert.equal(r.ok, true);
   assert.equal(r.output, 'Plain answer.');
   assert.deepEqual(ai.calls[0].payload, { messages: ask, max_tokens: 512 });
@@ -85,7 +86,7 @@ test('text: the chat request the stub receives, and the units the attempt report
 
 test('text: a provider that reports no usage is counted from the text the Worker holds, and no cached count is invented', async () => {
   const ai = makeAI(() => ({ response: 'Twelve chars' }));
-  const r = await run(envWith(ai), { task: 'paraphrase', userId: 0, messages: ask });
+  const r = await run(envWith(ai), { task: 'onboarding_chat', userId: 0, messages: ask });
   assert.deepEqual(r.units, { tokens_in: Math.ceil('What changed this week?'.length / 4), tokens_out: 3 });
   assert.ok(!('tokens_cached' in r.units));
 });
@@ -149,7 +150,7 @@ async function timedRun(t, opts, hangOn, advance) {
 }
 
 test('a chat attempt times out at 8 s and falls back; 7.9 s is not yet a timeout', async (t) => {
-  const { r, ai } = await timedRun(t, { task: 'paraphrase', userId: 0, messages: ask }, MID, [7_999, 1]);
+  const { r, ai } = await timedRun(t, { task: 'onboarding_chat', userId: 0, messages: ask }, MID, [7_999, 1]);
   assert.equal(r.ok, true);
   assert.equal(r.output, 'from the fallback');
   assert.deepEqual(ai.calls.map((c) => c.model), [MID, SMALL]);
@@ -162,7 +163,7 @@ test('a reasoning attempt is not cut at 8 s; it times out at 30 s and falls back
   const early = await (async () => {
     t.mock.timers.enable({ apis: ['setTimeout'] });
     const ai = makeAI((model) => (model === MID ? new Promise(() => {}) : ok('fallback')));
-    const pending = run(envWith(ai), { task: 'paraphrase', userId: 0, messages: ask });
+    const pending = run(envWith(ai), { task: 'onboarding_chat', userId: 0, messages: ask });
     await flush(); t.mock.timers.tick(8_000); await flush();
     const calledAt8 = ai.calls.length;
     t.mock.timers.tick(22_000); await flush();
@@ -180,7 +181,7 @@ test('a streamed run gets the same limit for its first chunk, and falls back whe
   const silent = () => new ReadableStream({ pull() { return new Promise(() => {}); }, cancel() { cancelled = true; } });
   const talks = () => new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode('data: {"response":"hi"}\n\n')); c.close(); } });
   const ai = makeAI((model) => (model === MID ? silent() : talks()));
-  const pending = run(envWith(ai), { task: 'paraphrase', userId: 0, messages: ask, stream: true });
+  const pending = run(envWith(ai), { task: 'onboarding_chat', userId: 0, messages: ask, stream: true });
   await flush(); t.mock.timers.tick(8_000); await flush();
   const r = await pending;
   assert.equal(r.ok, true);
@@ -198,7 +199,7 @@ test('a paid-only model\'s 429 and its 403 with code 5035 move down the chain, r
   shapes.setModelFactsSource((m) => (m === MID ? { kind: 'text', context_window: null, paid_only: true } : null));
   for (const [message, status, code] of [['429 Too Many Requests', 429, null], ['5035: This model requires a paid plan', 403, 5035]]) {
     const ai = makeAI((model) => (model === MID ? failWith(message, status) : ok('from the 8b')));
-    const r = await run(envWith(ai), { task: 'paraphrase', userId: 0, messages: ask });
+    const r = await run(envWith(ai), { task: 'onboarding_chat', userId: 0, messages: ask });
     assert.equal(r.ok, true, message);
     assert.equal(r.output, 'from the 8b');
     assert.deepEqual(ai.calls.map((c) => c.model), [MID, SMALL]);
@@ -217,14 +218,14 @@ test('a context overflow skips the model without calling it; an unknown window a
   shapes.setModelFactsSource((m) => (m === MID ? { kind: 'text', context_window: 100, paid_only: false } : null));
   const ai = makeAI(() => ok('from the 8b'));
   const long = [{ role: 'user', content: 'x'.repeat(4 * 200) }];
-  const r = await run(envWith(ai), { task: 'paraphrase', userId: 0, messages: long });
+  const r = await run(envWith(ai), { task: 'onboarding_chat', userId: 0, messages: long });
   assert.equal(r.ok, true);
   assert.deepEqual(ai.calls.map((c) => c.model), [SMALL], 'the 70b was never called');
   assert.deepEqual(r.attempts[0], { model: MID, ok: false, called: false, status: 413, code: null });
   assert.equal(shapes.fitsContext({ kind: 'text', context_window: null, paid_only: false }, 10 ** 9, 512), true);
   assert.equal(shapes.fitsContext({ kind: 'text', context_window: 1000, paid_only: false }, 488, 512), true);
   assert.equal(shapes.fitsContext({ kind: 'text', context_window: 1000, paid_only: false }, 489, 512), false);
-  const short = await run(envWith(makeAI(() => ok())), { task: 'paraphrase', userId: 0, messages: ask });
+  const short = await run(envWith(makeAI(() => ok())), { task: 'onboarding_chat', userId: 0, messages: ask });
   assert.equal(short.attempts[0].model, MID, 'a short input still runs on the 70b');
 });
 
@@ -232,13 +233,13 @@ test('a context overflow skips the model without calling it; an unknown window a
 
 test('x-session-affinity is the user id and the page key, never an email or a name', async () => {
   const ai = makeAI(() => ok());
-  await run(envWith(ai), { task: 'paraphrase', userId: 42, messages: ask, surface: '/validate/customer-research/' });
+  await run(envWith(ai), { task: 'onboarding_chat', userId: 42, messages: ask, surface: '/validate/customer-research/' });
   assert.deepEqual(ai.calls[0].options, { extraHeaders: { 'x-session-affinity': 'u42:/validate/customer-research' } });
   const noPage = makeAI(() => ok());
-  await run(envWith(noPage), { task: 'paraphrase', userId: 42, messages: ask });
-  assert.deepEqual(noPage.calls[0].options, { extraHeaders: { 'x-session-affinity': 'u42:paraphrase' } }, 'the task is the page key when none is given');
+  await run(envWith(noPage), { task: 'onboarding_chat', userId: 42, messages: ask });
+  assert.deepEqual(noPage.calls[0].options, { extraHeaders: { 'x-session-affinity': 'u42:onboarding_chat' } }, 'the task is the page key when none is given');
   const system = makeAI(() => ok());
-  await run(envWith(system), { task: 'paraphrase', userId: 0, messages: ask });
+  await run(envWith(system), { task: 'onboarding_chat', userId: 0, messages: ask });
   assert.equal(system.calls[0].options, undefined, 'no member, no affinity');
   assert.equal(shapes.sessionAffinity(42, 'founder@example.test'), null, 'an email is never a page key');
   assert.equal(shapes.sessionAffinity(42, 'Ada Lovelace'), null, 'a name is never a page key');
@@ -268,7 +269,7 @@ test('vision: the images ride on the last user message as content parts, and the
   shapes.setModelFactsSource(visionFacts);
   const ai = makeAI(() => ok('A whiteboard with three columns.', { prompt_tokens: 600, completion_tokens: 8 }));
   const msgs = [{ role: 'user', content: 'Earlier.' }, { role: 'assistant', content: 'Yes.' }, { role: 'user', content: 'What is on this board?' }];
-  const r = await run(envWith(ai), { task: 'paraphrase', userId: 0, messages: msgs, images: [PNG, JPEG] });
+  const r = await run(envWith(ai), { task: 'onboarding_chat', userId: 0, messages: msgs, images: [PNG, JPEG] });
   assert.equal(r.ok, true);
   assert.equal(r.output, 'A whiteboard with three columns.');
   assert.deepEqual(ai.calls[0].payload.messages, [
@@ -282,7 +283,7 @@ test('vision: the images ride on the last user message as content parts, and the
 test('vision: a text-only model is skipped without a call, so no model answers as if there were no image', async () => {
   // Mutation checked: the canServe skip removed (the 70b is called and answers blind).
   const ai = makeAI(() => ok('I see nothing.'));
-  const r = await run(envWith(ai), { task: 'paraphrase', userId: 0, messages: ask, images: [PNG] });
+  const r = await run(envWith(ai), { task: 'onboarding_chat', userId: 0, messages: ask, images: [PNG] });
   assert.equal(r.ok, false);
   assert.equal(r.refusal, 'all_models_failed');
   assert.equal(ai.calls.length, 0, 'no model was called');
@@ -305,7 +306,7 @@ test('vision: only data URIs of the four image types, at most 4, each at most 4 
     [[PNG, PNG, PNG, PNG, PNG], /at most 4 images/], [[big], /at most 4 MB/],
   ]) {
     const ai = makeAI(() => ok());
-    const r = await run(envWith(ai), { task: 'paraphrase', userId: 0, messages: ask, images });
+    const r = await run(envWith(ai), { task: 'onboarding_chat', userId: 0, messages: ask, images });
     assert.equal(r.refusal, 'invalid_input', String(images[0]).slice(0, 30));
     assert.match(r.error, why);
     assert.equal(ai.calls.length, 0);
@@ -324,7 +325,7 @@ test('rerank: query and contexts in, the stub\'s scores out, best first by each 
   shapes.setModelFactsSource(rerankFacts);
   const ai = makeAI(() => ({ response: [{ id: 0, score: 0.2 }, { id: 2, score: 0.9 }, { id: 1, score: 0.5 }, { id: 7, score: 1 }] }));
   const rr = { query: 'Who pays today?', contexts: ['Interns', 'The ops lead', 'The CFO'], topK: 3 };
-  const r = await run(envWith(ai), { task: 'paraphrase', userId: 0, rerank: rr });
+  const r = await run(envWith(ai), { task: 'onboarding_chat', userId: 0, rerank: rr });
   assert.equal(r.ok, true);
   assert.deepEqual(ai.calls[0].payload, { query: 'Who pays today?', contexts: [{ text: 'Interns' }, { text: 'The ops lead' }, { text: 'The CFO' }], top_k: 3 });
   assert.deepEqual(r.ranking, [{ index: 2, score: 0.9 }, { index: 1, score: 0.5 }, { index: 0, score: 0.2 }]);
@@ -338,14 +339,14 @@ test('rerank: query and contexts in, the stub\'s scores out, best first by each 
 test('rerank: a chat model is skipped uncalled; an empty query or context is refused before any call', async () => {
   // Mutation checked: rerankRefusal accepting an empty context.
   const ai = makeAI(() => ok());
-  const r = await run(envWith(ai), { task: 'paraphrase', userId: 0, rerank: { query: 'q', contexts: ['a'] } });
+  const r = await run(envWith(ai), { task: 'onboarding_chat', userId: 0, rerank: { query: 'q', contexts: ['a'] } });
   assert.equal(r.refusal, 'all_models_failed');
   assert.equal(ai.calls.length, 0);
   for (const bad of [{ query: ' ', contexts: ['a'] }, { query: 'q', contexts: [] }, { query: 'q', contexts: ['a', ''] }, { query: 'q', contexts: ['a'], topK: 0 }]) {
-    const r2 = await run(envWith(makeAI(() => ok())), { task: 'paraphrase', userId: 0, rerank: bad });
+    const r2 = await run(envWith(makeAI(() => ok())), { task: 'onboarding_chat', userId: 0, rerank: bad });
     assert.equal(r2.refusal, 'invalid_input', JSON.stringify(bad));
   }
-  const both = await run(envWith(makeAI(() => ok())), { task: 'paraphrase', userId: 0, rerank: { query: 'q', contexts: ['a'] }, images: [PNG] });
+  const both = await run(envWith(makeAI(() => ok())), { task: 'onboarding_chat', userId: 0, rerank: { query: 'q', contexts: ['a'] }, images: [PNG] });
   assert.equal(both.refusal, 'invalid_input', 'one ask per run');
 });
 
@@ -365,14 +366,14 @@ test('translation: m2m100\'s shape, codes only, and its units both ways', async 
   // Mutations checked: source_lang sent when absent; a language name accepted.
   shapes.setModelFactsSource(translationFacts);
   const ai = makeAI(() => ({ translated_text: 'Qui paie aujourd\'hui ?' }));
-  const r = await run(envWith(ai), { task: 'paraphrase', userId: 0, text: 'Who pays today?', translate: { targetLang: 'fr' } });
+  const r = await run(envWith(ai), { task: 'onboarding_chat', userId: 0, text: 'Who pays today?', translate: { targetLang: 'fr' } });
   assert.equal(r.ok, true);
   assert.equal(r.output, 'Qui paie aujourd\'hui ?');
   assert.deepEqual(ai.calls[0].payload, { text: 'Who pays today?', target_lang: 'fr' });
   assert.deepEqual(r.units, { tokens_in: Math.ceil(15 / 4), tokens_out: Math.ceil('Qui paie aujourd\'hui ?'.length / 4) });
   assert.deepEqual(shapes.translateRequest('x', { sourceLang: 'en', targetLang: 'pt-BR' }), { text: 'x', source_lang: 'en', target_lang: 'pt-BR' });
   for (const t of [{ targetLang: 'french' }, { targetLang: 'fr', sourceLang: 'english' }, {}]) {
-    const bad = await run(envWith(makeAI(() => ok())), { task: 'paraphrase', userId: 0, text: 'x', translate: t });
+    const bad = await run(envWith(makeAI(() => ok())), { task: 'onboarding_chat', userId: 0, text: 'x', translate: t });
     assert.equal(bad.refusal, 'invalid_input', JSON.stringify(t));
   }
   shapes.setModelFactsSource(null);

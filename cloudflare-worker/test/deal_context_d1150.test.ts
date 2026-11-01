@@ -21,6 +21,7 @@ function world() {
   db.exec(m.slice(start,end).replace('mercury_personal_matches_490','mercury_personal_matches'));
   db.exec(migration); db.exec(migration); // re-runnable, no historical rows
   db.exec(readFileSync('cloudflare-worker/sql/migrations/597_company_archive_and_events.sql','utf8')); // D1137: resolveActiveCompany reads archived_at
+  db.exec(readFileSync('cloudflare-worker/sql/migrations/745_deck_grants.sql','utf8')); // D1587: whats-new reads the caller's deck grant
   db.exec(`INSERT INTO users(id,name,email,role,is_active) VALUES (1,'One','one@example.test','investor',1),(2,'Two','two@example.test','investor',1),(3,'Three','three@example.test','investor',1),(4,'Admin','admin@example.test','admin',1),(5,'Founder','founder@example.test','founder',1);
     INSERT INTO projects(id,name) VALUES(7,'Fixture'); INSERT INTO deals(id,project_id,status) VALUES(9,7,'active'),(10,7,'active');
     INSERT INTO company_profiles(id,uid,company_name) VALUES(11,'firm-a','Firm A'),(22,'firm-b','Firm B');
@@ -154,7 +155,7 @@ test('new route guards do not wrap a sibling router on the existing deal mount',
 test('an unshared private deck is excluded even when its timestamp is missing',async()=>{
   const {db,call}=world();try{
     await call(1,'whats-new');db.exec("INSERT INTO pitch_decks(project_id,slides,created_at) VALUES(7,'PRIVATE',NULL)");
-    const r=await call(1,'whats-new');assert.equal(r.status,200);assert.ok(r.body.changes.every((c:any)=>c.type!=='deck'));assert.match(r.body.unavailable[0].reason,/share-token/);assert.deepEqual((await call(1,'whats-new')).body.changes,[]);
+    const r=await call(1,'whats-new');assert.equal(r.status,200);assert.ok(r.body.changes.every((c:any)=>c.type!=='deck'));assert.match(r.body.unavailable[0].reason,/has not granted you a deck version/);assert.deepEqual((await call(1,'whats-new')).body.changes,[]);
   }finally{db.close();}
 });
 

@@ -199,10 +199,10 @@ export const FOUNDER_OPTIONS = [
     at: [['frontend/src/pages/raise/narrative/StoryTab.jsx', 'narrativeApi.draftObjection(']],
   },
   // The pitch deck's two template fills. D898 group E (#2676): the template
-  // builder retired; Fill from project is on the studio's Decks tab, and a
+  // builder retired; Ask Eadwyn to draft from project (#3930: was "Fill from project") is on the studio's Decks tab, and a
   // template is started from New deck.
   {
-    page: 'Founder · Raise · Pitch deck', key: 'form:deck', route: '/raise/pitch', label: 'Fill from project', kind: 'write', handler: 'form',
+    page: 'Founder · Raise · Pitch deck', key: 'form:deck', route: '/raise/pitch', label: 'Ask Eadwyn to draft from project', kind: 'write', handler: 'form',
     at: [[STUDIO_ACTIONS, 'api.deckAutofill(']],
   },
   {
