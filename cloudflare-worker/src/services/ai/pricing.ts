@@ -107,9 +107,21 @@ function decString(d: Dec): string {
  * figure for that unit.
  */
 export function unitPrice(model: string, unit: PriceUnit): string | null {
+  const dollars = DOLLAR_PRICED[model]?.includes(unit) ? modelById(model)?.prices?.[unit] : null;
+  if (dollars != null) return dollars;
   const raw = modelById(model)?.neurons?.[unit];
   return raw == null ? null : decString(mul(dec(raw), dec(USD_PER_NEURON)));
 }
+
+/**
+ * #3936 (owner answer F (b)): a model and unit billed at the catalogue's DOLLAR
+ * figure, not its neurons × `USD_PER_NEURON`. smart-turn-v2's model page prints
+ * $0.00033795 a minute but 0.51 neurons, which would bill $0.00000561, sixty
+ * times less; the owner chose the dollar figure.
+ */
+export const DOLLAR_PRICED: Readonly<Record<string, readonly PriceUnit[]>> = Object.freeze({
+  '@cf/pipecat-ai/smart-turn-v2': ['audio_minutes'],
+});
 
 /**
  * Cloudflare's cost for a run, in USD, exactly. `tokens_in` is the provider's
@@ -130,6 +142,8 @@ function costUsd(model: string, units: RunUnits): Dec {
     let n = count;
     if (unit === 'tokens_cached') { if (!cachedRate) continue; n = cached; }
     if (unit === 'tokens_in') n = count - cached;
+    const dollars = DOLLAR_PRICED[model]?.includes(unit) ? m?.prices?.[unit] : null;
+    if (dollars != null) { total = add(total, div(mul(dec(dollars), decOf(n)), UNIT_SCALE[unit])); continue; }
     const raw = neurons[unit];
     if (raw == null) throw new Error(`model_unpriced: ${model} has no ${unit} price`);
     total = add(total, div(mul(mul(dec(raw), dec(USD_PER_NEURON)), decOf(n)), UNIT_SCALE[unit]));

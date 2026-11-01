@@ -263,7 +263,8 @@ deckNew.post('/new/quote', async (c) => {
     // D897 §9: a card's regeneration is one row's build run, so its price is that run's.
     const rows = step === 'card' ? picked.rows.slice(Number.isInteger(body?.index) ? body.index : 0, (Number.isInteger(body?.index) ? body.index : 0) + 1) : picked.rows;
     if (!rows.length) return c.json({ error: 'index must be a card position in the outline' }, 400);
-    opts = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows, items, ventureName: await ventureName(c.env, projectId), exclude: new Set(excluded) }), rows.length);
+    // D1517: the quote reads the same message the run sends, budgets included.
+    opts = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows, items, ventureName: await ventureName(c.env, projectId), exclude: new Set(excluded), visuals: await visualsFor(c.env, projectId) }), rows.length);
   }
   const q = await quoteRun(c.env, opts);
   if (q.ok) return c.json({ step, ai: true, hold_microusd: q.hold_microusd, model: q.model });
@@ -432,7 +433,8 @@ deckNew.post('/generate', async (c) => {
   const items = await sourcesFor(c, user, got.project, projectId);
   const name = await ventureName(c.env, projectId);
   const userId = Number(user.id) || 0;
-  const ask = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows, items, ventureName: name, exclude }), rows.length);
+  const visuals = await visualsFor(c.env, projectId);
+  const ask = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows, items, ventureName: name, exclude, visuals }), rows.length);
   const res = await run(c.env, { ...ask, surface: AI_SURFACE.raisePitch, rail: ask.rail });
   let wording: Wording[] = rows.map(() => ({ headline: null, body: null }));
   let dropped = 0;
@@ -454,7 +456,7 @@ deckNew.post('/generate', async (c) => {
     reason = 'Eadwyn could not answer. The figures are from your records; the cards carry their titles. Nothing was charged.';
   }
 
-  const built = buildCards(rows, items, wording, name, exclude, await visualsFor(c.env, projectId));
+  const built = buildCards(rows, items, wording, name, exclude, visuals);
   if (built.problems.length) return c.json({ error: 'cards_unsound', problems: built.problems }, 500);
   // D897 §9: a card the founder already kept stays as kept when its row is the same card; the rest are rebuilt.
   const kept = (proposal?.kept ?? []).filter((i: number) => proposal.slides[i]?.spec_id === built.slides[i]?.spec_id);
@@ -518,7 +520,8 @@ deckNew.post('/proposals/:id/regenerate-card', async (c) => {
   const items = await sourcesFor(c, user, got.project, projectId);
   const name = await ventureName(c.env, projectId);
   const inputs = { audience: (o?.audience ?? FAST_PATH_AUDIENCE) as Audience, prompt: String(o?.prompt ?? '') };
-  const ask = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows: [rowOf], items, ventureName: name, exclude }), 1);
+  const visuals = await visualsFor(c.env, projectId);
+  const ask = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows: [rowOf], items, ventureName: name, exclude, visuals }), 1);
   const res = await run(c.env, { ...ask, surface: AI_SURFACE.raisePitch, rail: ask.rail });
   let words: Wording = { headline: null, body: null };
   let reason: string | null = null;
@@ -536,7 +539,7 @@ deckNew.post('/proposals/:id/regenerate-card', async (c) => {
     if (stop) return stop;
     reason = 'Eadwyn could not answer. The card was rebuilt from your records with its title. Nothing was charged.';
   }
-  const card = cardOf(rowOf, items, words, name, exclude, await visualsFor(c.env, projectId));
+  const card = cardOf(rowOf, items, words, name, exclude, visuals);
   const next = sanitizeSlides(slides.map((s, i) => (i === index ? card : s)));
   await c.env.DB.prepare('UPDATE pitch_deck_proposals SET slides = ? WHERE id = ?').bind(JSON.stringify(next), row.id).run();
   await auditDeckWrite(c, user, projectId, 'deck_card_regenerated', `Card ${index + 1} of the proposal regenerated`);

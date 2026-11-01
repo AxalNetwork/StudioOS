@@ -66,6 +66,7 @@ function fixture() {
   addColumnsFrom(db, stripForeignKeys(sqlOf('463_raise_record_stores.sql')), 'pitch_deck_share_tokens');
   db.exec(sqlOf('549_deck_share_nullable_view_limit.sql')); // D895: NULL is no view cap
   db.exec(sqlOf('567_deck_share_nda_include.sql')); // after 549's rebuild, as production runs them
+  addColumnsFrom(db, stripForeignKeys(sqlOf('738_deck_variants_and_investor_links.sql')), 'pitch_deck_share_tokens'); // D1565: the variant and the recipient watermark
   db.exec(/CREATE TABLE IF NOT EXISTS deck_view_slides \([\s\S]*?\n\);/.exec(sqlOf('442_raise_cycle_stores.sql'))![0]);
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)');
   u.run(ADMIN, 'admin', 'Ada Admin', 'ada@example.test');

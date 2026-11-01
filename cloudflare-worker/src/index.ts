@@ -258,6 +258,8 @@ import deckRemix from './routes/deck_remix';
 import deckNew from './routes/deck_new';
 import deckAssist from './routes/deck_assist';
 import deckImages from './routes/deck_images';
+// D1565 (#3812): one link per investor, and tailored variants.
+import deckInvestorLinks from './routes/deck_investor_links';
 // D1589 (#3836): a venture's stage norms, the benchmarks a deck critic may cite.
 import deckStageNorms from './routes/deck_stage_norms';
 // D1556 (#3803): a venture's consented interview quotes, ranked for a deck.
@@ -463,6 +465,8 @@ import connectorsHealth from './routes/connectors_health';
 import connectorsCustomRoutes from './routes/connectors_custom';
 import agentEngineRoutes from './routes/agent_engine';
 import teamAgentsRoutes from './routes/team_agents';
+// D1612 (#3951): the agent skill library, beside team agents.
+import teamSkillsRoutes from './routes/team_skills';
 import cartaInvestorRoutes from './routes/carta_investor';
 import mercuryInvestorRoutes from './routes/mercury_investor';
 import adminBankAccounts from './routes/admin_bank_accounts';
@@ -1389,6 +1393,8 @@ app.route('/api/decks', deckNew);
 app.route('/api/decks', deckAssist);
 // D903 (#2682): card and background images (`/:id/images…`, `/images/:uid/…`), before `decks` so `GET /:id` cannot answer `/images/…`.
 app.route('/api/decks', deckImages);
+// D1565 (#3812): `/:id/investor-links…` and `/:id/variants`, before `decks` so its `/:id` routes cannot answer them.
+app.route('/api/decks', deckInvestorLinks);
 // D1589 (#3836): `/stage-norms`, before `decks` so `GET /:id` cannot answer it.
 app.route('/api/decks', deckStageNorms);
 // D1556 (#3803): `/quotes/search` and `/quotes/index`, before `decks` so `/:id` routes cannot answer them.
@@ -1698,6 +1704,8 @@ app.route('/api', companyRoutes);
 // Before team_agents, whose `*` middleware would otherwise answer for these paths; each handler checks its own flag.
 app.route('/api/teams', agentEngineRoutes);
 app.route('/api/teams', teamAgentsRoutes);
+// D1612 (#3951): `/skills…` and `/agents/:uid/skills`, behind the same TEAM_AGENTS_ENABLED switch.
+app.route('/api/teams', teamSkillsRoutes);
 app.route('/api/needs', needsRoutes);
 app.route('/api/quotes', quotesRouter);
 app.route('/api/engagements', engagementsRouter);

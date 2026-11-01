@@ -24,6 +24,7 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 
 | Folder | What lives there |
 | --- | --- |
+| `work/` | D1614 (#3968): a project's Work (`/projects/:id/work`: board, backlog, burn-up, the item and run sheets) and a company's compliance tasks (`/account/companies/:uid/settings/compliance`). Every read goes through `work/workAdapter.js`, off until #3969–#3972 and #3976. Start at `work/README.md`. |
 | `incorporate/` | D1414 (#3696, INC1–INC7): Incorporate, the six-step flow that turns one of your own projects (or a new one) into a company: goals, compare, company details, review, pay & file (the catalog quote and the status timeline), done. `IncorporatePage.jsx` re-exports it. What is not on main yet comes through `incorporate/incorporateAdapter.js` (#3855's `company_uid`, #3706's Ask panel). Start at `incorporate/README.md`. |
 | `team/` | D1497 (#3727): Team, the people and AI agents working on a company or a project (TM1a–TM9f), and Project settings › General. People and invitations are wired; agents, rule books and approvals come through `team/agentsAdapter.js`, the one seam #3840–#3844 swap. Start at `team/README.md`. |
 | `trust/` | D1078: the member Trust Center’s requirement counts, explanations, detail sheet (D1317) and data controls at `/trust/me`. |
