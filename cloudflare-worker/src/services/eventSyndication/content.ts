@@ -45,8 +45,15 @@ export async function contentHash(event: Record<string, any>): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+/** The origin without its trailing slashes; a loop, not a regex, so no input can make it slow. */
+export function trimSlashes(s: string): string {
+  let end = s.length;
+  while (end > 0 && s.charCodeAt(end - 1) === 47) end -= 1;
+  return s.slice(0, end);
+}
+
 /** Every listing links back to the event's page, tagged with its channel. */
 export function listingLink(base: string | undefined, slug: string, channel: string): string {
-  const origin = (base && /^https:\/\//.test(base) ? base : 'https://axal.vc').replace(/\/+$/, '');
+  const origin = trimSlashes(base && base.startsWith('https://') ? base : 'https://axal.vc');
   return `${origin}/events/${encodeURIComponent(slug)}?utm_source=${encodeURIComponent(channel)}&utm_medium=event_syndication`;
 }

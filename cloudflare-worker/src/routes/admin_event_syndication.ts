@@ -26,6 +26,7 @@ import { encryptChannelCredentials } from '../integrations/secrets';
 import { CHANNEL_KEYS, ChannelError, isChannelKey, syndicationChannel } from '../services/eventSyndication/channels';
 import { DEFAULT_SETTINGS, parseSettings, readSettings, SETTINGS_KEY } from '../services/eventSyndication/eligibility';
 import { logSyndication } from '../services/eventSyndication/jobs';
+import { trimSlashes } from '../services/eventSyndication/content';
 
 const adminEventSyndication = new Hono<{ Bindings: Env }>();
 
@@ -93,7 +94,7 @@ async function hmac(env: Env, data: string): Promise<string> {
   return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 const stateKey = (nonce: string) => `event-syndication:state:${nonce}`;
-const redirectUriFor = (env: Env, channel: string) => `${(env.APP_URL || 'https://axal.vc').replace(/\/+$/, '')}/api/admin/event-syndication/oauth/${channel}/callback`;
+const redirectUriFor = (env: Env, channel: string) => `${trimSlashes(env.APP_URL || 'https://axal.vc')}/api/admin/event-syndication/oauth/${channel}/callback`;
 const PAGE = '/admin/platform/event-syndication';
 
 adminEventSyndication.post('/channels/:channel/connect', async (c) => {

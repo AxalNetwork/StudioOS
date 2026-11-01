@@ -21,7 +21,7 @@ import eventSyndication, { REGISTRATIONS_NOT_RECORDED } from '../src/routes/even
 import adminEventSyndication from '../src/routes/admin_event_syndication.ts';
 import { ChannelError, clearSyndicationChannelsForTest, SYNDICATION_CHANNELS } from '../src/services/eventSyndication/channels.ts';
 import { DEFAULT_SETTINGS, eligibility, SKIP } from '../src/services/eventSyndication/eligibility.ts';
-import { contentHash } from '../src/services/eventSyndication/content.ts';
+import { contentHash, listingLink, trimSlashes } from '../src/services/eventSyndication/content.ts';
 import { markSyndicationDead, runSyndicationJob } from '../src/services/eventSyndication/jobs.ts';
 import { encryptChannelCredentials } from '../src/integrations/secrets.ts';
 
@@ -425,4 +425,12 @@ test('no `.publish(` under services/eventSyndication; no source file registers a
   }
   const hq = readFileSync(join(root, 'routes/admin_event_syndication.ts'), 'utf8');
   for (const sql of hq.match(/SELECT[\s\S]*?FROM event_channel_accounts/g) ?? []) assert.doesNotMatch(sql, /credentials_enc|a\.\*|SELECT \*/, 'a read never selects credentials');
+});
+
+test('the link back: https origin only, trailing slashes trimmed without a regex, fast on a long run of slashes', () => {
+  assert.equal(listingLink('https://axal.vc///', 'a b', 'luma'), 'https://axal.vc/events/a%20b?utm_source=luma&utm_medium=event_syndication');
+  assert.equal(listingLink('http://evil.example', 'x', 'luma').startsWith('https://axal.vc/events/x'), true, 'a non-https base falls back');
+  const started = Date.now();
+  assert.equal(trimSlashes('https://a' + '/'.repeat(200_000)), 'https://a');
+  assert.ok(Date.now() - started < 200, 'linear');
 });
