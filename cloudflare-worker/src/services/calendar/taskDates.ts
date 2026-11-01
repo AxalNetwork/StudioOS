@@ -36,10 +36,9 @@ function results(value: { results?: Row[] }): Row[] {
   return value.results;
 }
 
-/** The member, active and not leaving. Every reader joins it first. */
-const MEMBER = 'JOIN users u ON u.id = ? AND u.is_active = 1 AND u.deletion_requested_at IS NULL';
-/** The day falls in [from, to): its whole day overlaps the window. */
-const IN_WINDOW = (day: string) => `${day} IS NOT NULL AND julianday(${day}, '+1 day') > julianday(?) AND julianday(${day}) < julianday(?)`;
+// Every reader joins the member (active, not leaving) first, and keeps a due day
+// whose whole day overlaps [from, to). The SQL is written out in full: the
+// guard (check-sql-prepare) reads every statement as one literal.
 
 const titled = (title: unknown, fallback: string) => String(title ?? '').trim() || fallback;
 
@@ -49,10 +48,10 @@ export async function workflowTaskEvents(env: Env, userId: number, from: string,
     `SELECT t.id, t.title, date(t.due_date) AS day
        FROM workflow_tasks t
        JOIN workflows w ON w.id = t.workflow_id
-       ${MEMBER}
+       JOIN users u ON u.id = ? AND u.is_active = 1 AND u.deletion_requested_at IS NULL
       WHERE t.assignee_user_id = u.id
         AND lower(COALESCE(t.status, 'todo')) NOT IN ('done', 'cancelled')
-        AND ${IN_WINDOW('date(t.due_date)')}
+        AND date(t.due_date) IS NOT NULL AND julianday(date(t.due_date), '+1 day') > julianday(?) AND julianday(date(t.due_date)) < julianday(?)
       ORDER BY day, t.id`,
   ).bind(userId, from, to).all<Row>());
   return rows.map((r) => dayItem('workflow_task', Number(r.id), `workflow-task-${r.id}`, `Due · ${titled(r.title, 'Workflow task')}`, r.day));
@@ -64,10 +63,10 @@ export async function mvpTaskEvents(env: Env, userId: number, from: string, to: 
     `SELECT t.id, t.title, date(t.due_date) AS day, p.id AS project_id
        FROM mvp_tasks t
        JOIN projects p ON p.id = t.deal_id AND p.deleted_at IS NULL
-       ${MEMBER}
+       JOIN users u ON u.id = ? AND u.is_active = 1 AND u.deletion_requested_at IS NULL
       WHERE t.assigned_to = u.id
         AND lower(COALESCE(t.status, 'todo')) NOT IN ('done', 'cancelled', 'archived')
-        AND ${IN_WINDOW('date(t.due_date)')}
+        AND date(t.due_date) IS NOT NULL AND julianday(date(t.due_date), '+1 day') > julianday(?) AND julianday(date(t.due_date)) < julianday(?)
       ORDER BY day, t.id`,
   ).bind(userId, from, to).all<Row>());
   return rows.map((r) => ({
@@ -83,10 +82,10 @@ export async function contactTaskEvents(env: Env, userId: number, from: string, 
        FROM contact_tasks t
        JOIN contacts c ON c.id = t.contact_id
        JOIN projects p ON p.id = c.project_id AND p.deleted_at IS NULL
-       ${MEMBER}
+       JOIN users u ON u.id = ? AND u.is_active = 1 AND u.deletion_requested_at IS NULL
       WHERE u.founder_id IS NOT NULL AND p.founder_id = u.founder_id
         AND COALESCE(t.done, 0) = 0
-        AND ${IN_WINDOW('date(t.due_date)')}
+        AND date(t.due_date) IS NOT NULL AND julianday(date(t.due_date), '+1 day') > julianday(?) AND julianday(date(t.due_date)) < julianday(?)
       ORDER BY day, t.id`,
   ).bind(userId, from, to).all<Row>());
   return rows.map((r) => ({
@@ -101,11 +100,11 @@ export async function engagementMilestoneEvents(env: Env, userId: number, from: 
     `SELECT m.id, m.uid, m.title, date(m.due_at) AS day, e.project_id
        FROM engagement_milestones m
        JOIN engagements e ON e.id = m.engagement_id
-       ${MEMBER}
+       JOIN users u ON u.id = ? AND u.is_active = 1 AND u.deletion_requested_at IS NULL
       WHERE u.partner_id IS NOT NULL AND e.partner_id = u.partner_id
         AND m.completed_at IS NULL
         AND e.cancelled_at IS NULL AND lower(COALESCE(e.status, '')) <> 'cancelled'
-        AND ${IN_WINDOW('date(m.due_at)')}
+        AND date(m.due_at) IS NOT NULL AND julianday(date(m.due_at), '+1 day') > julianday(?) AND julianday(date(m.due_at)) < julianday(?)
       ORDER BY day, m.id`,
   ).bind(userId, from, to).all<Row>());
   return rows.map((r) => dayItem('engagement_milestone', Number(r.id), String(r.uid), `Milestone · ${titled(r.title, 'Engagement milestone')}`, r.day));
