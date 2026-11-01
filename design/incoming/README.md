@@ -137,8 +137,8 @@ grids' runtime references were rewritten to the shared support script by
 `/account/portfolio` with the Worker's D1136, D1412, D1415, D1591, D1592 and
 D1593 routes; Incorporate on `/incorporate` with `legal.ts`. What waits on a
 route draws its unavailable state through
-`frontend/src/pages/account/companies/portfolioAdapter.js` (#3932); Incorporate's
-screens follow under D1414. All four
+`frontend/src/pages/account/companies/portfolioAdapter.js` (#3932) and
+`frontend/src/pages/incorporate/incorporateAdapter.js` (#3855, #3706). All four
 files stay here: some bodies are outstanding. No file moved, so no count
 changed.
 
