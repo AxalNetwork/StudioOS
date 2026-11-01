@@ -2180,3 +2180,13 @@ No new route. What changes on existing routes:
 - **Calendar:** the `learning` kind in the source registry (`services/calendar.ts`, family "Learning"), page-only like `compliance_due`: plan occurrences and registered webinars, each linked to its Learning page. Program due dates are not included: no program records one.
 - **Reminders:** the 5-minute cron's `sendPlanReminders`, through `notify()` (category `calendar`).
 - **Client:** `lib/api/learningPlan.js` (`learningPlanApi`). **Pages wait on design:** "Add to my plan", `/learning/plan` and the Calendar's Learning actions wait on LRN1–LRN3 and CAL12 (#3723, `needs-design`).
+
+### Work W1: a project's board on the task store (D1614 §6, #3969)
+
+- **Worker:** `routes/work_board.ts`, mounted by `agent_engine.ts` under `/api/teams`, with the engine's gates:
+  - `GET /:scope/:id/work/board?filter=` returns the columns with their counts and estimate sums, and the cards with their assignee (person or agent), last run and cost.
+  - Project `POST /:scope/:id/tasks`, `GET`/`PATCH /tasks/:uid`, `PATCH /tasks/:uid/move` (column and position) and `PUT /tasks/:uid/deps`.
+- **Scope:** project only. A company board is 404, and company tasks keep E1's routes.
+- **Schema and rules:** migration 762. 409 `task_blocked` names the blockers; an `unblocked` event notifies the assignees.
+- **Frontend:** none here. #3973 (W5) wires `pages/work/workAdapter.js`.
+

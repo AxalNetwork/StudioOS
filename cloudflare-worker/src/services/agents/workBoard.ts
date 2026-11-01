@@ -73,7 +73,8 @@ export async function workPermission(env: Env, t: WorkTask, actor: WorkActor, fi
 }
 
 type BoardWrite = Partial<WorkTask> & TaskWrite;
-const FIELDS = new Set(['title','detail','body','type','parent_task_id','goal_uid','module','option','kind','assignee','priority','due_at',
+// context_project_id is E1's: its own rule refuses it on a project task (project_not_in_company).
+const FIELDS = new Set(['title','detail','body','type','parent_task_id','goal_uid','module','option','context_project_id','kind','assignee','priority','due_at',
   'status','blocked_reason','source_kind','source_ref','board_column','column','estimate_points','position','labels','labels_json','close_reason','duplicate_of','state']);
 async function linked(env: Env, current: ScopeRow, value: unknown, field: string) {
   if (value === null) return null;

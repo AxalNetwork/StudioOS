@@ -2,11 +2,13 @@
 // assigns the production migration. No external providers or production rows.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
 import { Hono } from 'hono';
 import { makeD1 } from './_d1_sqlite.mjs';
-import { addColumnsFrom, stripForeignKeys, tableFromBaseline } from './_baseline.mjs';
+import { addColumnsFrom, splitStatements, stripForeignKeys, tableFromBaseline } from './_baseline.mjs';
+import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 import { AI_LOG_SCHEMA } from './_ai_budget_fixture.mjs';
 import engine, { agentEngineEnabled } from '../src/routes/agent_engine.ts';
 import teamAgents from '../src/routes/team_agents.ts';
@@ -34,12 +36,22 @@ const runReader: WorkRunReader = async (env,taskIds) => {
     .bind(JSON.stringify(taskIds)).all();
   return new Map((rows.results??[]).map((r:any)=>[r.task_id,r]));
 };
+/** The schema every migration before 762 builds, so 762 meets real legacy rows (the deploy's order). */
+function builtBefore762(): DatabaseSync {
+  const db=new DatabaseSync(':memory:',{enableDoubleQuotedStringLiterals:true});
+  db.exec(baseline);
+  const dir=new URL('../sql/migrations/',import.meta.url);
+  for(const f of readdirSync(dir).filter((x)=>x.endsWith('.sql')).sort(compareMigrations).filter((x)=>migrationNumber(x)>BASELINE_CUTOFF&&migrationNumber(x)<762)){
+    for(const stmt of splitStatements(readFileSync(new URL(f,dir),'utf8'))){ try{db.exec(stmt);}catch{/* already on the baseline */} }
+  }
+  return db;
+}
 function world() {
   const {DB,db}=makeD1(['users','company_profiles','user_company_links','projects','roadmap_okrs'].map(t=>stripForeignKeys(tableFromBaseline(baseline,t))).join('\n')+AI_LOG_SCHEMA+sql('migrations/506_ai_rail_proposals.sql'));
   addColumnsFrom(db,sql('migrations/597_company_archive_and_events.sql'),'company_profiles');
   db.exec(sql('migrations/712_team_agents.sql'));
   db.exec(stripForeignKeys(sql('migrations/727_scope_goals_and_tasks.sql')));
-  db.exec(readFileSync(new URL('./fixtures/work_board_3969.sql',import.meta.url),'utf8'));
+  db.exec(sql('migrations/762_scope_task_work_board.sql'));
   db.exec(`CREATE TABLE project_members (id INTEGER PRIMARY KEY,project_id INTEGER,user_id INTEGER,role TEXT,status TEXT,created_at TEXT,updated_at TEXT)`);
   for(const [id,name,role,founder] of [[OWNER,'Pat Owner','founder',100],[MEMBER,'Max Member','founder',101],[OTHER,'Ali Other','founder',102],[STRANGER,'Sam Stranger','founder',103]])
     db.prepare("INSERT INTO users (id,uid,email,name,role,founder_id,subscription_tier,subscription_status) VALUES (?,?,?,?,?,?,'growth','active')").run(id,`u-${id}`,`fixture-${id}@example.test`,name,role,founder);
@@ -268,12 +280,12 @@ test('recorded last run status/cost and genuine empty counts; a read failure is 
 });
 
 test('prepared migration preserves legacy tasks, event ids, deleted-id high water, indexes and foreign keys on the full migrated schema',()=>{
-  const db=migratedDatabase();try{
+  const db=builtBefore762();try{
     db.exec("INSERT INTO projects (id,uid,name) VALUES (700,'fixture-project','Fixture Project')");
     db.exec("INSERT INTO scope_tasks (id,uid,scope_kind,project_id,title,status) VALUES (1,'legacy-one','project',700,'Legacy completed','done'),(2,'legacy-two','project',700,'Legacy open','open')");
     db.exec("INSERT INTO scope_task_events (id,task_id,kind) VALUES (5,1,'created'),(100,2,'created'); DELETE FROM scope_task_events WHERE id=100;");
     db.exec('PRAGMA foreign_keys=ON');
-    db.exec(readFileSync(new URL('./fixtures/work_board_3969.sql',import.meta.url),'utf8'));
+    db.exec(sql('migrations/762_scope_task_work_board.sql'));
     assert.deepEqual(db.prepare('SELECT title,status,task_number,estimate_points,board_column FROM scope_tasks ORDER BY id').all().map((r:any)=>({...r})),[
       {title:'Legacy completed',status:'done',task_number:1,estimate_points:null,board_column:null},
       {title:'Legacy open',status:'open',task_number:2,estimate_points:null,board_column:null},
@@ -292,5 +304,26 @@ test('a recorded manual block remains visible independently of dependency blocke
     assert.deepEqual([a.blocked,a.blocked_reason,a.ready],[true,'Waiting for a signature',false]);
     const moved=await call(w,OWNER,'PATCH',`/tasks/${a.uid}/move`,{column:'ready'});
     assert.deepEqual([moved.status,moved.body.task.status,moved.body.task.blocked_reason],[200,'open',null]);
+  }finally{w.db.close();}
+});
+
+test('the engine mounts the board itself, and E1 offers an agent only Ready-column work (the readiness hook)',async()=>{
+  // Mutation checked: dropping the mount from agent_engine.ts 404s the board through `engine` alone;
+  // dropping the board_column clause from isReady marks a backlog task ready.
+  const w=world();try{
+    const only=new Hono();only.route('/api/teams',engine);
+    const token=await new SignJWT({user_id:OWNER}).setProtectedHeader({alg:'HS256'}).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(secret));
+    const viaEngine=(m:string,p:string,b?:unknown)=>only.request(`/api/teams${p}`,{method:m,headers:{'content-type':'application/json',Authorization:`Bearer ${token}`},body:b===undefined?undefined:JSON.stringify(b)},w.env);
+    assert.equal((await viaEngine('GET','/project/7/work/board')).status,200,'the board answers through agent_engine alone');
+    const backlog=await create(w,{title:'Someday',board_column:'backlog'});
+    const ready=await create(w,{title:'Now',board_column:'ready'});
+    const list=await (await viaEngine('GET','/project/7/tasks')).json() as any;
+    const by=Object.fromEntries((list.tasks??[]).map((t:any)=>[t.uid,t.ready]));
+    assert.equal(by[backlog.uid],false,'a backlog task is not ready for an agent');
+    assert.equal(by[ready.uid],true,'a Ready-column task with no blockers is');
+    // A company task (no board column) keeps E1's rule.
+    const co=await (await viaEngine('POST','/company/co-one/tasks',{title:'Company work'})).json() as any;
+    const coList=await (await viaEngine('GET','/company/co-one/tasks')).json() as any;
+    assert.equal(coList.tasks.find((t:any)=>t.uid===co.task.uid).ready,true);
   }finally{w.db.close();}
 });

@@ -1,5 +1,16 @@
--- Prepared W1 schema. Migration number is awaiting S1 on #3969.
--- Extends E1's task store; old company rows keep nullable board fields.
+-- D1614 W1 (#3969): Work's project board on E1's task store (727).
+-- scope_tasks gains the common task columns S1 assigned to W1 (#3969,
+-- comment 6562550224): a per-project task_number, a Markdown body, a type,
+-- parent_task_id, the board column (kept consistent with status by a CHECK),
+-- estimate_points, position within a column, bounded labels_json, and the
+-- close reason (completed, not planned, duplicate + duplicate_of). The board
+-- is project-only: a company row keeps every board field null. Milestones and
+-- normalized labels are #3993's later migration.
+-- scope_task_events widens its kind vocabulary ('moved', 'unblocked',
+-- 'dependency_incomplete') by a table rebuild that keeps every id and the
+-- AUTOINCREMENT high-water mark. Existing project rows get task numbers in id
+-- order; nothing else is back-filled. Additive otherwise; no transaction
+-- statements (D1 rejects them).
 ALTER TABLE scope_tasks ADD COLUMN board_column TEXT CHECK (board_column IS NULL OR (scope_kind = 'project' AND ((board_column IN ('triage','backlog','ready') AND status IN ('open','blocked')) OR (board_column = 'in_progress' AND status = 'in_progress') OR (board_column = 'in_review' AND status = 'waiting_decision') OR (board_column = 'done' AND status IN ('done','cancelled')))));
 ALTER TABLE scope_tasks ADD COLUMN estimate_points REAL CHECK (estimate_points IS NULL OR (estimate_points >= 0 AND estimate_points <= 1000000));
 ALTER TABLE scope_tasks ADD COLUMN position REAL NOT NULL DEFAULT 0 CHECK (position >= 0 AND position <= 1000000000000);

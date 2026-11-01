@@ -16,7 +16,7 @@ is automatic. The routes are `cloudflare-worker/src/routes/team_agents.ts`, moun
 | `agentTools.ts` | Part 5 (#3844): the sponsor's approved read tools (D852). `checkGrants` (the sponsor's own connected server, approved and pinned read tools only), `grantsView` (the profile's tools with their server and status), `cleanReads` (granted, at most five) and `readTools` (each through `callCustomTool` in `meteredCall`, cut to 8 KB, wrapped by `toolResultsForModel`; a gone or drifted server answers `disconnected`). |
 | `goals.ts` | D1529 (#3845, E1 of #3742): a scope's goals. A project goal rolls up only to its own company's goal and links only its own OKR. Also `sumCosts`, which never sums an unknown as 0. |
 | `tasks.ts` | D1529: a scope's tasks, for a person, an agent within its rule book, or no one; dependencies within one scope and without a cycle; ready derived; cost `{ available: false }` until E3. |
-| `workBoard.ts` | D1614 W1 (#3969), prepared pending migration allocation: project board fields and cards over `scope_tasks`, transactional moves and actor events, scoped dependency checks and completion notices. Its router is mounted only in the regression fixture until the shared-file coordination clears. |
+| `workBoard.ts` | D1614 W1 (#3969): project board fields and cards over `scope_tasks` (migration 762), transactional moves with actor events, close reasons, per-project numbering, scoped dependency checks (E1's cycle walk; 409 `task_blocked`) and the `unblocked` notice. E3's run store is read through the `WorkRunReader` seam, "no recorded runs" until #3847 supplies one. |
 
 **The rule for adding here.** `catalogue.ts` and `rulebook.ts` stay pure: no
 binding, no fetch. A read of the database goes in `teams.ts`, and a gate is
