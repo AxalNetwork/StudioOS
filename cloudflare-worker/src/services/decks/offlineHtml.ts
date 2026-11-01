@@ -35,6 +35,7 @@
  */
 import { LEGAL_FACES, bytesToBase64 } from '../legalPaperCss';
 import { DECK_SOURCES, bindingsOf } from './sources';
+import { cellText } from './slideModel';
 
 export const NOT_RECORDED = 'Not recorded';
 export const NO_NOTES = 'No notes on this card.';
@@ -189,6 +190,14 @@ function block(b: any, images: OfflineDeck['images']): string {
       return `<p class="btn">${b.kind === 'audio' ? '▶ ' : ''}${label}</p>${addr(b.url)}`;
     }
     case 'graphic': return `<p class="nr">Graphic · ${text(b.graphic || 'none chosen')}</p>`;
+    // D1538: a typed table, one row per line; the file asks for nothing, so it is text.
+    case 'table': {
+      const rows = (Array.isArray(b.rows) ? b.rows : []).map((row: any[], i: number) => {
+        const tag = i === 0 && b.header !== false ? 'th' : 'td';
+        return `<tr>${(Array.isArray(row) ? row : []).map((cell) => `<${tag}>${text(cellText(cell))}</${tag}>`).join('')}</tr>`;
+      });
+      return rows.length ? `<table class="typed">${rows.join('')}</table>` : '';
+    }
     default: return '';
   }
 }
@@ -311,6 +320,7 @@ const CSS = [
   "h3{margin:0;font:700 clamp(18px,2.6vw,32px)/1.2 'Space Grotesk','Public Sans',sans-serif}",
   ".tile{display:flex;flex-direction:column;gap:2px;border:1px solid #e5e7eb;border-radius:9px;padding:10px;height:100%;box-sizing:border-box}.tile span{font-size:12px;color:#475569}.tile b{font-size:clamp(16px,2vw,26px)}.tile b.nr{font-size:14px;font-weight:600}",
   ".chart{border:1px solid #e5e7eb;border-radius:9px;padding:10px;height:100%;box-sizing:border-box}.chart li{font-size:13px}",
+  "table.typed{border-collapse:collapse;width:100%;font-size:13px}table.typed th,table.typed td{border:1px solid #e5e7eb;padding:4px 6px;text-align:left}table.typed th{background:#f8fafc}",
   ".btn{display:inline-block;background:#6d28d9;color:#fff;border-radius:8px;padding:6px 12px;font-weight:700;font-size:14px}.addr{font-size:12px;color:#475569;word-break:break-all}",
   ".sources{display:flex;flex-direction:column;gap:6px;margin:0}.sources dd{font-weight:400;font-size:13px}",
   ".notes{margin-top:10px;background:#111827;color:#e5e7eb;border-radius:10px;padding:12px 14px}.notes .eye{color:#c4b5fd}.notes .nr{color:#9ca3af}",

@@ -34,6 +34,7 @@ import type { Env } from '../types';
 import { agrees, fmtFigure, FIGURE_LABEL, FIGURE_UNIT, narrativeSectionWords, parseStatedFigures, VERSION_MARKER_KEY, type FigureKey } from './raiseCycle';
 import { EVIDENCE_RULES, type EvidenceSourceLabel } from './raiseEvidenceSources';
 import { FUND_SECTIONS, parseUseOfFundsValue } from '../util/useOfFunds';
+import { cellText } from './decks/slideModel';
 
 export const CLAIM_STATES = ['backed', 'founders_figure', 'mismatch', 'not_backed'] as const;
 export type ClaimState = (typeof CLAIM_STATES)[number];
@@ -263,8 +264,47 @@ export const deck = (env: Env, projectId: number, items: PinnedItem[], kinds: Ma
   const slides: unknown = JSON.parse(String(d.slides));
   if (!Array.isArray(slides)) throw new Error('deck_unreadable');
   const version = deckVersion(d);
-  return { version, claims: slides.flatMap((s, i) => statedClaims('deck', version, `slide:${i + 1}`, slideText(s).join('\n'), items, kinds)) };
+  const claims = slides.flatMap((s, i) => statedClaims('deck', version, `slide:${i + 1}`, cardText(s).join('\n'), items, kinds));
+  // D1538 (#3787): the figures typed for the deck are stated too, each checked under its own key.
+  for (const t of await typedFigures(env, projectId)) claims.push(...statedClaims('deck', version, `typed:${t.key}`, figureLines(t.label, t.value).join('\n'), items, kinds));
+  return { version, claims };
 });
+
+/**
+ * D1538: a label and its figure in both orders the stated-figure patterns
+ * read ("MRR: $12,000" and "$12,000 MRR"; "42 paying customers"), so a typed
+ * number is checked whichever way its row puts it.
+ */
+export function figureLines(label: string, value: string): string[] {
+  const l = String(label ?? '').trim();
+  const v = String(value ?? '').trim();
+  return l && v ? [`${l}: ${v}`, `${v} ${l}`] : [];
+}
+
+/** D1538: a card's words, with each table row read as its label and figures rather than as loose cells. */
+export function cardText(s: any): string[] {
+  if (!s || typeof s !== 'object' || Array.isArray(s) || !Array.isArray(s.blocks)) return slideText(s);
+  const { blocks, ...rest } = s;
+  return [...slideText(rest), ...blocks.flatMap((b: any) => {
+    if (b?.kind !== 'table') return slideText(b);
+    return (Array.isArray(b.rows) ? b.rows : []).flatMap((row: any[]) => {
+      const cells = (Array.isArray(row) ? row : []).map(cellText).map((c) => c.trim()).filter(Boolean);
+      return cells.length >= 2 ? figureLines(cells[0], cells.slice(1).join(' ')) : cells;
+    });
+  })];
+}
+
+/** D1538: the venture's typed figures as words: dollars with "$", a percent with "%", months as "n months". */
+async function typedFigures(env: Env, projectId: number): Promise<Array<{ key: string; label: string; value: string }>> {
+  const r = await env.DB.prepare('SELECT key, label, value_num, value_text, unit FROM deck_typed_values WHERE project_id = ? ORDER BY key LIMIT 200')
+    .bind(projectId).all<{ key: string; label: string; value_num: number | null; value_text: string | null; unit: string }>();
+  return (r.results || []).map((t) => {
+    const n = t.value_num;
+    const value = n == null ? String(t.value_text ?? '')
+      : t.unit === 'usd' ? `$${n.toLocaleString('en-US')}` : t.unit === 'percent' ? `${n}%` : t.unit === 'months' ? `${n} months` : n.toLocaleString('en-US');
+    return { key: t.key, label: t.label, value };
+  });
+}
 /** A deck version's `surface_version`: `v<n>`. */
 export const deckVersion = (d: { version: number | null }) => `v${Number(d.version) || 1}`;
 

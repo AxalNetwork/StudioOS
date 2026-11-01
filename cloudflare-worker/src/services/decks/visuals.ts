@@ -129,13 +129,45 @@ export async function recordDiagrams(env: Env, projectId: number): Promise<{ dia
 
 // ───────────────────────────────────────────────────────────── charts
 
+/** "2026-10" from a point's x ("2026-10", "2026-10-07"), or null: the frontend's `projectionOf` rule. */
+const monthOf = (x: unknown) => (typeof x === 'string' && /^\d{4}-\d{2}/.test(x) ? x.slice(0, 7) : null);
+
 /**
- * How a bound series reads best: a trend of four points or more is a line,
- * fewer is columns, and a weekly count is columns (each week is its own
- * total). Null when it cannot be drawn honestly (unrecorded, or one point).
+ * D1538 (#3787): TAM, SAM and SOM as a market, when the points are exactly
+ * those three, each positive, with SOM ≤ SAM ≤ TAM. Null otherwise: a market
+ * whose parts do not nest is not drawn as circles.
  */
-export function chartTypeFor(s: Pick<Series, 'state' | 'points' | 'cadence' | 'unit'> | null | undefined): 'line' | 'columns' | null {
-  if (!s || s.state !== 'recorded' || !Array.isArray(s.points) || s.points.length < 2) return null;
+export function marketShape(points: unknown): { tam: number; sam: number; som: number } | null {
+  if (!Array.isArray(points) || points.length !== 3) return null;
+  const by = new Map<string, number>();
+  for (const p of points as any[]) {
+    const k = typeof p?.x === 'string' ? p.x.trim().toUpperCase() : '';
+    if (!['TAM', 'SAM', 'SOM'].includes(k) || by.has(k) || typeof p?.y !== 'number' || !Number.isFinite(p.y) || p.y <= 0) return null;
+    by.set(k, p.y);
+  }
+  const tam = by.get('TAM')!, sam = by.get('SAM')!, som = by.get('SOM')!;
+  return som <= sam && sam <= tam ? { tam, sam, som } : null;
+}
+
+export type ChartPick = 'line' | 'columns' | 'market_circles' | 'projection';
+
+/**
+ * How a series reads best, from its shape alone, with no user edit (the
+ * one-click path, D1538 / dk-auto gap c):
+ *   - TAM, SAM and SOM that nest are market circles;
+ *   - a series with a month after today's is a projection, drawn dashed
+ *     past today with the "Projection" label and its footnote, so a zero-edit
+ *     deck never shows a forecast as a result;
+ *   - otherwise a trend of four points or more is a line, fewer is columns,
+ *     and a weekly count is columns (each week is its own total).
+ * Null when it cannot be drawn honestly (unrecorded, or one point).
+ */
+export function chartTypeFor(s: Pick<Series, 'state' | 'points' | 'cadence' | 'unit'> | null | undefined, today = new Date().toISOString().slice(0, 10)): ChartPick | null {
+  if (!s || s.state !== 'recorded' || !Array.isArray(s.points)) return null;
+  if (marketShape(s.points)) return 'market_circles';
+  if (s.points.length < 2) return null;
+  const now = monthOf(today);
+  if (now && s.points.some((p) => { const m = monthOf(p?.x); return m != null && m > now; })) return 'projection';
   if (s.cadence === 'weekly' && s.unit === 'count') return 'columns';
   return s.points.length >= 4 ? 'line' : 'columns';
 }
