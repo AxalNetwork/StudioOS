@@ -108,6 +108,59 @@ jobs:
       - run: npm run test:drift
 
   # -------------------------------------------------------------------------
+  # D1511 (#3762): the Pitch deck editor's visual regression and axe suites
+  # (frontend/tests/visual/). The fake AI binding, the contract schemas and
+  # the property tests run inside `test:drift` above; these need a browser.
+  #
+  # PINNED CONTAINER. The baselines under tests/visual/__screenshots__/ were
+  # drawn by Chromium build 1194 (141.0.7390.37) on Ubuntu 24.04, the browser
+  # the Playwright 1.56.1 image ships, so the job runs in that image and points
+  # the runner (@playwright/test from frontend/package-lock.json) at that
+  # browser. Fonts are the suite's own files (tests/visual/fonts/), served in
+  # place of Google Fonts; every other request off 127.0.0.1 is aborted. To
+  # redraw a baseline, run the same command with --update-snapshots in this
+  # image and review every PNG in the PR.
+  # -------------------------------------------------------------------------
+  visual:
+    name: editor visual regression and axe
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      image: mcr.microsoft.com/playwright:v1.56.1-noble
+      options: --user 1001
+    env:
+      PW_CHROMIUM_PATH: /ms-playwright/chromium-1194/chrome-linux/chrome
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: The pinned browser is the one the baselines were drawn with
+        run: test -x "$PW_CHROMIUM_PATH" && "$PW_CHROMIUM_PATH" --version | grep -F '141.0.7390.37'
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+      - name: Install worker deps
+        working-directory: cloudflare-worker
+        run: npm ci
+      - name: Install root deps
+        run: npm ci
+      - name: Build the SPA
+        run: npm run build
+      - name: Visual regression and axe on the editor
+        working-directory: frontend
+        run: npx --no-install playwright test -c tests/visual/playwright.config.mjs
+      - name: Keep the report and the diffs
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: editor-visual-report
+          path: |
+            frontend/tests/visual/playwright-report
+            frontend/tests/visual/test-results
+          retention-days: 14
+
+  # -------------------------------------------------------------------------
   # API ↔ Worker drift smoke test (T1). Static analysis: every /api/* path
   # called from frontend/src/lib/api.js MUST be mounted on the production
   # worker, OR be allowlisted with a tracking task id.

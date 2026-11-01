@@ -108,7 +108,7 @@ aside.fwr > .fwr-body { padding: 0; border-top: 0; }
   --d698-ink: #18181b;
   --d698-text: #4a4553;
   --d698-muted: #615c6e;
-  --d698-faint: #7d7889;
+  --d698-faint: #716c7e; /* D1511: was #7d7889, 4.27:1 on white; axe (serious) needs 4.5:1 */
   --d698-sep: #c9c6d2;
   --d698-line: #ececf1;
   --d698-ground: #f4f3f7;

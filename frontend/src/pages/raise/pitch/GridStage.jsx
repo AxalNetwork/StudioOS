@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Grid3x3 } from 'lucide-react';
 import { BlockView } from './BlockGrid';
 import { ChartBlock } from './ChartTools';
@@ -157,6 +157,7 @@ export default function GridStage({
   const first = (areas || []).find((x) => selectable(x).ok)?.id ?? null;
   const live = liveFocus(areas, focus);
   const stop = live ?? first;
+  const uid = useId();
 
   useEffect(() => { setRefused(null); setGhost(null); }, [index]);
   // The DOM focus follows the keyboard on the stage; a focus the card changed
@@ -316,11 +317,22 @@ export default function GridStage({
               const tab = stop === a.id ? 0 : -1;
               const at = placeOf(a.grid, aspect);
               const block = a.kind === 'block';
+              // D1511: the name always holds the visible words (WCAG 2.5.3; axe
+              // label-content-name-mismatch). A text or figure block is named by its own words
+              // and described by the area's title (a hidden span beside it); any other area is
+              // named by that title and then its own content, so an area with no words still
+              // has a name.
+              const nameId = `${uid}-name-${a.id}`;
+              const selfId = `${uid}-area-${a.id}`;
+              const worded = block && (a.block?.kind === 'text' || a.block?.kind === 'metric');
               return (
-                <button type="button" key={a.id}
+                <React.Fragment key={a.id}>
+                <span id={nameId} className="sr-only" data-testid={`pitch-editor-area-name-${a.id}`}>{areaTitle(a, i, areas.length)}</span>
+                <button type="button" id={selfId}
                   ref={(n) => { if (n) buttons.current.set(a.id, n); else buttons.current.delete(a.id); }}
                   tabIndex={tab}
-                  aria-label={areaTitle(a, i, areas.length)}
+                  aria-labelledby={worded ? undefined : `${nameId} ${selfId}`}
+                  aria-describedby={worded ? nameId : undefined}
                   aria-pressed={on}
                   aria-disabled={ok.ok ? undefined : true}
                   title={ok.ok ? undefined : ok.why}
@@ -341,6 +353,7 @@ export default function GridStage({
                     ? <BlockView block={a.block} colours={colours} renderFace={face} renderChart={(b) => <ChartBlock block={b} charts={charts} colours={colours} />} />
                     : on ? <span className="font-mono text-[10px]" style={{ color: colours.muted }}>Empty · {areaLabel(a.grid)}</span> : null}
                 </button>
+                </React.Fragment>
               );
             })}
           </div>

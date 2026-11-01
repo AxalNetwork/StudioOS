@@ -206,7 +206,13 @@ test('nothing selected: the hint, and no block tools, no Ask chip, no SELBAR', a
     assert.ok(!m.by('pitch-editor-selbar'));
     assert.equal(asks(m).length, 0);
     assert.ok(m.text().includes(KEYS_LINE));
-    assert.equal(m.pr(m.by('pitch-editor-block-b2'))['aria-label'], 'Area 2 of 5 · c1–7 × r2–6 · Body');
+    // D1511: a text block is named by its own words and described by the area's title, a hidden span beside it (WCAG 2.5.3).
+    const b2 = m.pr(m.by('pitch-editor-block-b2'));
+    const title = m.pr(m.by('pitch-editor-area-name-b2'));
+    assert.equal(b2['aria-label'], undefined);
+    assert.equal(b2['aria-labelledby'], undefined);
+    assert.equal(b2['aria-describedby'], title.id);
+    assert.equal(m.text(m.by('pitch-editor-area-name-b2')), 'Area 2 of 5 · c1–7 × r2–6 · Body');
   } finally { await m.close(); }
 });
 

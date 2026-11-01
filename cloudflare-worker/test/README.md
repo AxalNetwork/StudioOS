@@ -63,6 +63,11 @@ an assertion that bans a shape fails on the comment explaining why that shape is
 gone, and the argument list of `fetch(url, { headers: { … } })` does not end at
 the first `)`.
 
+`_recorded_ai.mjs` (D1511 part 2) answers a whole one-click build from recordings
+(`fixtures/fake_ai_recordings.json`, venture `fixtures/oneClickVenture.ts`), so the visual-regression
+server (`frontend/tests/visual/server.ts`) draws the accepted deck with no model; `recorded_ai_d1511.test.ts`
+holds it to the one-click bar and runs the seven injected failures through it.
+
 D1119: `admin_programs_d954.test.ts` also checks part 4's six audit actions,
 claim window/kind counts, strategic requests, successful zeroes and independent
 failed reads against the migrated SQLite schema.
