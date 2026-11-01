@@ -123,6 +123,10 @@ test('the model chip is the AIRail\'s pick, read-only, and says where it is set'
   assert.equal(modelChip(rail), 'Synthetic B · $0.002 per variant · set in the AIRail');
   assert.equal(modelChip({ ...rail, pick: null }), 'Synthetic A · $0.001 per variant · set in the AIRail', 'the row\'s first when nothing is picked');
   assert.equal(modelChip(null), 'Model set in the AIRail', 'a failed read names no model');
+  // D1511: `GET /api/ai/rail` answers each model's unit prices as an object; the chip prints them as the AIRail does.
+  const real = { models: [{ id: 'c', name: 'Synthetic C', price: { cost: { tokens_in: 0.29, tokens_out: 2.25 }, billed: { tokens_in: 0.58, tokens_out: 4.5 } } }], pick: 'c', billing: 'billed' };
+  assert.doesNotMatch(modelChip(real), /object Object/);
+  assert.match(modelChip(real), /^Synthetic C · \$0\.58.* · set in the AIRail$/);
 });
 
 test('several areas run in sequence until #3764: the adapter is asked first; variants 2 and 3 are off', () => {

@@ -20,7 +20,7 @@
  * Pure: no binding. `frontend/src/pages/raise/pitch/deckReflow.js` mirrors it
  * for the editor's draft, with a parity test (`deck_reflow_d1554.test.ts`).
  */
-import { fitProblems, metricValueChars, textCapacity, typeRoleOf } from './designSystem';
+import { fitProblems, fitText, metricValueChars, textCapacity, typeRoleOf } from './designSystem';
 import { NOTES_MAX, type Grid } from './slideModel';
 import { ASPECTS, STRUCTURES, aspectOf, boxOfAt, type Aspect } from './structures';
 
@@ -60,9 +60,13 @@ export function reflowSlides(slides: unknown, toIn: unknown, fromIn: unknown = '
       if (!g) { blocks.push(b); continue; }
       if (b.kind === 'text') {
         const text = String(b.text ?? '');
-        const cap = textCapacity(g, typeRoleOf(b.style, s.layout ?? null), to).chars;
-        if (text.length <= cap) { blocks.push(b); continue; }
-        const kept = fitWords(text, cap);
+        const role = typeRoleOf(b.style, s.layout ?? null);
+        const cap = textCapacity(g, role, to).chars;
+        // D1511: kept text must also pass D1517's wrapped fit (`fitText`), the check `fitProblems` makes;
+        // a word-wrapped line can hold fewer characters than the count, so drop words until it fits.
+        if (text.length <= cap && fitText(g, role, text, to).fits) { blocks.push(b); continue; }
+        let kept = fitWords(text, cap);
+        while (kept && !fitText(g, role, kept, to).fits) kept = fitWords(kept, kept.length - 1);
         const rest = text.slice(kept.length).trim();
         if (kept) {
           blocks.push({ ...b, text: kept });
