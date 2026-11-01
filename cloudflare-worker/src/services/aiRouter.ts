@@ -1219,13 +1219,11 @@ const agentIdOf = (v: unknown): number | null => (Number.isSafeInteger(v) && (v 
 export async function recordUsage(env: Env, who: UsageWho, usage: UsageMeta, refusal: RefusalReason | null, charge: RunCharge = NOTHING_CHARGED): Promise<number | null> {
   await ensureLogSchema(env);
   const charged = charge.charged == null ? null : Math.max(0, Math.round(charge.charged));
-  // `surface` stays the last column bound before migration 712's `agent_id` (D1496 part 2:
-  // the agent a run was for, NULL on every member's own run).
-  const insert = () => env.DB.prepare(
-    `INSERT INTO ai_usage_logs (user_id, task, model, latency_ms, prompt_tokens, completion_tokens, est_cost_usd, safety_score, fallback_used, cached, refusal,
-       charged_microusd, reservation_uid, rail_page, rail_option, record_ref, units_json, guard_for, surface, agent_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(
+  // `surface` stays the last column bound, as it was before migration 493. D1496 part 2: an
+  // agent's run has its own statement naming migration 712's `agent_id`; a member's own run keeps
+  // the statement it always had. Both are literal, so the schema guards read them.
+  const agentId = agentIdOf(who.agentId);
+  const values = [
     who.userId,
     usage.task,
     usage.model,
@@ -1245,7 +1243,18 @@ export async function recordUsage(env: Env, who: UsageWho, usage: UsageMeta, ref
     charge.units ? JSON.stringify(charge.units) : null,
     charge.guardFor ?? null,
     normaliseSurface(who.surface),
-    agentIdOf(who.agentId),
+  ];
+  const insert = () => (agentId
+    ? env.DB.prepare(
+      `INSERT INTO ai_usage_logs (user_id, task, model, latency_ms, prompt_tokens, completion_tokens, est_cost_usd, safety_score, fallback_used, cached, refusal,
+         charged_microusd, reservation_uid, rail_page, rail_option, record_ref, units_json, guard_for, surface, agent_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(...values, agentId)
+    : env.DB.prepare(
+      `INSERT INTO ai_usage_logs (user_id, task, model, latency_ms, prompt_tokens, completion_tokens, est_cost_usd, safety_score, fallback_used, cached, refusal,
+         charged_microusd, reservation_uid, rail_page, rail_option, record_ref, units_json, guard_for, surface)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(...values)
   ).run();
   // The row's id, which a guard row names in `guard_for` (D763); null when it could not be written.
   const idOf = (r: unknown): number | null => {
