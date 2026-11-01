@@ -2039,6 +2039,20 @@ D1176 (#3103): Worker `/api/cycles/raise/use-of-funds` now serves GET `/plan`, s
 
 `POST /api/billing/stripe/webhook` verifies the signature and its 300-second timestamp tolerance before D1. Authenticated event ids are recorded in migration 691's receipt table. Completed duplicates acknowledge without dispatch; wrong-mode events acknowledge without dispatch; concurrent unfinished delivery gets 409 and a failed handler gets 503 so Stripe can retry. Only a successful handler completes its owned receipt. Both existing customer portal sessions return to `/account/billing`. D1434's owner-run cutover and S12's screens are separate.
 
+### Agent engine E1: goals, tasks and dependencies (D1529, #3845)
+
+Worker routes in `routes/agent_engine.ts`, mounted at `/api/teams` before `team_agents.ts`, backed by `services/agents/goals.ts`, `services/agents/tasks.ts` and migration 727 (`scope_goals`, `scope_tasks`, `scope_task_deps`, `scope_task_events`; `task_id` and `run_key` on `ai_rail_proposals`). The client is `lib/api/agentEngine.js` (`agentEngineApi`). No page yet: S1's canvas integrates it (TM6b, TM6c, later TM10–TM11). Every route is 404 `agent_engine_off` unless `AGENT_ENGINE` is set and not `"off"` (it is `"off"` in both `wrangler.toml` blocks) and `TEAM_AGENTS_ENABLED` is `"true"`. The gates are D1496's read and manage. `cost` is `{ available: false }` until E3, never 0.
+
+| Route | Gate | What it does |
+| --- | --- | --- |
+| `GET /api/teams/:scope/:id/goals` | read | `{ goals: [{ uid, title, why, metric, target_date, stage, parent: { uid, title } \| null, okr_id, status, priority, progress: { done, total }, cost }] }`. `parent` is null while the project is outside the parent's company. 403, 404. |
+| `POST /api/teams/:scope/:id/goals` | manage | Takes `{ title, why?, metric?, target_date?, stage?, parent_goal_uid?, okr_id?, priority? }`; 201 `{ goal }`. 400 `invalid_goal`; 422 `parent_not_in_company` / `okr_not_in_project`. |
+| `PATCH /api/teams/goals/:uid` | manage | The same fields and `status` (`open`, `achieved`, `dropped`); `{ goal }`. |
+| `GET /api/teams/:scope/:id/tasks?goal=&assignee=person\|agent\|none&status=&module=` | read | `{ tasks: [{ uid, title, detail, module, option, kind, goal, assignee: { kind, person?, agent? }, context_project, status, blocked_reason, ready, depends_on: [uid], priority, due_at, attempts, cost }] }`. `ready` is derived. 400 `invalid_filter`. |
+| `POST /api/teams/:scope/:id/tasks` | manage | Takes `{ title, detail?, goal_uid?, module?, option?, kind?, context_project_id?, assignee?: { kind, uid? }, priority?, due_at?, source_kind?, source_ref? }`; 201 `{ task }`. 409 `agent_not_live`; 422 `module_not_allowed` / `option_not_allowed` / `assignee_not_member` / `project_not_in_company` / `goal_not_in_scope`. |
+| `PATCH /api/teams/tasks/:uid` | manage; a person assignee may send `status` and `blocked_reason` only | `{ task }`, with the same refusals. 403 `not_manager`. |
+| `PUT /api/teams/tasks/:uid/deps` | manage | Takes `{ depends_on: [uid] }` (at most 50); `{ task }`. 422 `dependency_cycle` / `cross_scope` / `too_many_dependencies`. |
+
 ### Team agents part 1: the registry and the rule books (D1496, #3840)
 
 Worker routes in `routes/team_agents.ts`, mounted at `/api/teams`, backed by `services/agents/catalogue.ts`, `services/agents/rulebook.ts` and migration 712 (`team_agents`, `team_rulebooks`, `team_agent_events`; `agent_id` and `decided_by_user_id` on `ai_rail_proposals`, `agent_id` on `ai_usage_logs`). The client is `lib/api/teamAgents.js` (`teamAgentsApi`). No page yet: S1's Team page integrates it (#3727 part 6). Every route is 404 `team_agents_off` unless `TEAM_AGENTS_ENABLED` is `"true"` (off in both `wrangler.toml` blocks). `:scope` is `company` (its uid) or `project` (its id). Read: a company's `user_company_links` row, or `canAccessProject`. Manage: the company's `canEdit`, or `isProjectManager`. A person is `{ uid, name }`, never an email or a numeric id. Part 2 (#3842) adds the run below, through `services/agents/agentRun.ts` (the gates, the rule book and the spend are `services/agents/teams.ts`'s); part 3 adds the queue.

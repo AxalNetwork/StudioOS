@@ -454,6 +454,7 @@ import fillsRoutes from './routes/fills';
 import connectorMcpOauthRoutes from './routes/connector_mcp_oauth';
 import connectorsHealth from './routes/connectors_health';
 import connectorsCustomRoutes from './routes/connectors_custom';
+import agentEngineRoutes from './routes/agent_engine';
 import teamAgentsRoutes from './routes/team_agents';
 import cartaInvestorRoutes from './routes/carta_investor';
 import mercuryInvestorRoutes from './routes/mercury_investor';
@@ -1676,6 +1677,9 @@ app.route('/api', companyLegal);
 app.route('/api', companyDocuments);
 app.route('/api', companyRoutes);
 // D1496 (#3840): team agents, their rule books and their audit; 404 `team_agents_off` until TEAM_AGENTS_ENABLED is "true".
+// D1529 (#3845, #3742 E1): goals, tasks and dependencies; 404 `agent_engine_off` until AGENT_ENGINE is on.
+// Before team_agents, whose `*` middleware would otherwise answer for these paths; each handler checks its own flag.
+app.route('/api/teams', agentEngineRoutes);
 app.route('/api/teams', teamAgentsRoutes);
 app.route('/api/needs', needsRoutes);
 app.route('/api/quotes', quotesRouter);
