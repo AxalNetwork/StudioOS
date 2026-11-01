@@ -2094,6 +2094,21 @@ No migration and no decision of its own: it fills TM2's gaps on the existing tab
 | `GET /api/account/people/search?q=&company=<uid>\|&project=<id>` | signed in | `{ people: [{ uid, name, avatar_url, shared: [{ kind: 'company' \| 'connection', name }] }] }`, at most 10, by name, only people reachable from the caller, never the caller. `company` or `project` names the team being built: the caller must belong to it (403 `not_member`) and its members are left out. `avatar_url` is null (users record none). 400 `query_too_short` (under 2 letters) / `query_too_long`. Rate bucket `people_search`, 30 a minute, fail-closed. |
 | `GET /api/company/:uid` · `GET /api/projects/:id/members` | as before | `members[]` carries `email` on the caller's own row only; another member's row has no `email` key (the canvas: "Never show another member's email"). Invitation addresses to editors are unchanged (owner question T3 is open). Company Settings › Members prints no address on another member's row. |
 
+### The stage plan (D1522, #3774)
+
+`routes/deck_stage.ts`, mounted at `/api/decks` beside `deck_grid.ts`. Rules in `services/narrative/arcs.ts`, records read by `services/decks/stagePlan.ts` (also called by the one-click run). Client: `lib/api/deckStage.js` (`deckStageApi.stagePlan`), read through `deckV2Adapter.stagePlan` (a `SWAPPED` row).
+
+| Route | Who | What it answers |
+| --- | --- | --- |
+| `GET /api/decks/:id/stage-plan?stage=&investor_type=` | whoever may read the deck (`projectOwned`) | `{ deck_id, version, stage, stage_label, stage_source: asked \| audience \| venture \| default, investor_type, order: [{ card, title, why, weight, required, in_deck, proof: recorded \| missing \| unchecked }], warnings: [{ card, code: missing_card \| missing_proof \| unchecked_proof, message, action }], extra, sources, evidence, objections: { state, unanswered } }`. 400 for a stage or investor type not on the lists; 403; 404. No model, no charge, no write. |
+### Remix (D1553, #3800)
+
+`routes/deck_remix.ts`, mounted at `/api/decks` beside `deck_grid.ts`. Rules in `services/decks/remix.ts` (also called by the one-click run for AUTO-4's drop). Client: `lib/api/deckRemix.js` (`deckRemixApi.remix`), read through `deckV2Adapter.remix` (a `SWAPPED` row); the pd5 sheet is `RemixSheet` in `DeckSheets.jsx`, opened from ⋯ › This card › Remix this slide only.
+
+| Route | Who | What it answers |
+| --- | --- | --- |
+| `POST /api/decks/:id/remix` `{ card, remove? }` | whoever may read the deck (`projectOwned`) | `{ deck_id, current, card, options: [{ structure, label, line, card }] }`: at most four layouts, each holding every block of the card unchanged; with `remove`, `card` is the card after the reflow. 400 for no card, a card with no blocks, or a block not on the card; 403; 404. No model, no hold, no charge (works with AI paused); writes nothing. |
+
 ### The Grid v2 (D1499, #3749)
 
 `routes/deck_grid.ts`, mounted at `/api/decks` beside `deck_check.ts`. Geometry and catalogue in `services/decks/structures.ts`, mirrored (geometry only) in `frontend/src/pages/raise/pitch/gridModel.js`. Client: `lib/api/deckGrid.js` (`deckGridApi.grid`), read through `deckV2Adapter.grid` (part 2, the one `SWAPPED` row of the seam). The editor's stage (`GridStage.jsx`), Present and the print page (`BlockGrid.jsx`) place every area with `gridModel.placeOf`, so they draw this route's boxes; ⋯ › Slide size writes `theme.aspect` with the next version save, so no route is added for it.
@@ -2115,6 +2130,13 @@ Saves: `PUT`/`POST` of a version keep `card.structure` (one of the 17, or `custo
 | `DELETE /api/decks/:id/typed-values/:key` | as `PUT` | `{ deleted: true }`; 404 `not_found` when nothing is typed under the key. |
 
 The slide model gains a `table` block (≤ 8 columns × 12 rows; each cell `{ text }`, `{ binding }` or `{ check }`) and the `market_circles` and `projection` chart types. `GET /api/decks/model` keeps `chart_types` at the library's 12 tiles and adds `typed_chart_types`. Every Worker export (HTML, PPTX, .odp) writes a table's rows; the editor, Present and print draw it and the two charts through `BlockGrid.jsx`. The evidence check reads each table row and each typed figure as a stated claim (`raiseClaims.cardText`, `typed:<key>`).
+### Deck v2 A13: untrusted input framing and upload hardening (D1506, #3757)
+
+- **No page changes.** The canvas draws no screen for this (pd2, pd19 and pd20 send the text it frames).
+- **Framing:** `services/ai/untrusted.ts`. Every text written outside our code reaches a model inside `BEGIN_<KIND>_<nonce>` / `END_<KIND>_<nonce>`. That covers New deck's founder note and facts (record facts, connected tools' rows, documents: `deck_new.ts`), the card tools' text, instruction and labels (`deck_assist.ts`), Fill from project's records (`decks.ts` autofill), competitor web pages and interview transcripts. A link or email address no record holds is dropped from the answer.
+- **Figure guard:** `\p{Nd}` digits in every script, plus number words in the card's language.
+- **Images:** `deck_images.ts` adds `POST /api/decks/:id/images/import` (`{ url, use?, card?, alt?, shows_person?, consent? }`), which copies an external image in through `services/decks/imageFetch.ts`. Upload, import and drawn images are stripped of metadata, measured from the header (413 `image_too_large` over 50 MP) and stored once per venture: a repeat upload answers 200 with `duplicate: true` (migration 718, `sha256`).
+- **Export browser:** `services/browserRun.ts` `renderUrl` passes `allowRequestPattern`: the page's own origin, Google Fonts, `data:` and `blob:`.
 
 ### Learning on the Calendar: a member's own learning plan (#3959, Worker half)
 
