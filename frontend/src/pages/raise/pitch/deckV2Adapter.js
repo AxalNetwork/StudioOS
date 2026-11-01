@@ -31,6 +31,8 @@
  * (`deckGridApi.grid`, `deckStageApi.stagePlan`, `deckRemixApi.remix`,
  * `deckInvestorLinksApi`).
  * `elementModels` (D1503, #3754) answers through `deckElementModelsApi.read`.
+ * And `consistency` (D1555, #3802): the free rules ride the deck check's own
+ * reply, so it answers through `deckCheckApi.read`.
  *
  * Fields on routes that exist (`context.inferred` and `context.freshness`
  * from #3877; the PostHog, HubSpot and Linear source rows from #3880) need
@@ -43,6 +45,7 @@ import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks.js';
 import { deckGridApi } from '../../../lib/api/deckGrid.js';
 import { deckStageApi } from '../../../lib/api/deckStage.js';
 import { deckRemixApi } from '../../../lib/api/deckRemix.js';
+import { deckCheckApi } from '../../../lib/api/deckCheck.js';
 import { deckElementModelsApi } from '../../../lib/api/deckElementModels.js';
 
 export { NOT_ON };
@@ -104,7 +107,7 @@ export const SURFACES = Object.freeze({
 const off = (name) => async () => unavailable(SURFACES[name].issue);
 
 /** The rows whose route is on main: each answers through its real client, never unavailable by default. */
-export const SWAPPED = Object.freeze(['grid', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'setDeckSource']);
+export const SWAPPED = Object.freeze(['grid', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'setDeckSource', 'consistency']);
 
 /**
  * A client call, as a surface reads it, for the day a method is swapped:
@@ -167,7 +170,12 @@ export const orgLocks = off('orgLocks');
 export const critique = off('critique');
 /** D1553 (#3800): four layouts for one card, and the remove-a-block reflow; free, so it answers with AI paused. */
 export const remix = (deckId, card, opts) => through(() => deckRemixApi.remix(deckId, card, opts), SURFACES.remix.issue);
-export const consistency = off('consistency');
+/**
+ * D1555 (#3802): the free consistency rules, in the deck check's own reply (no route of their own).
+ * `{ state, findings: [{ key, rule, message, cards }] }`, or null for a reader who is not the founder.
+ * The Wording half stays with #3808 C13.
+ */
+export const consistency = (deckId) => through(() => deckCheckApi.read(deckId).then((r) => r?.consistency ?? null), SURFACES.consistency.issue);
 export const deckActions = off('deckActions');
 export const brandLocks = off('brandLocks');
 export const pptxImport = off('pptxImport');

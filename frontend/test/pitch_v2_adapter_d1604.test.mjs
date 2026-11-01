@@ -23,6 +23,7 @@ const HELPERS = new Set(['NOT_ON', 'SURFACES', 'SWAPPED', 'unavailable', 'throug
 import { deckGridApi } from '../src/lib/api/deckGrid.js';
 import { deckStageApi } from '../src/lib/api/deckStage.js';
 import { deckRemixApi } from '../src/lib/api/deckRemix.js';
+import { deckCheckApi } from '../src/lib/api/deckCheck.js';
 import { deckElementModelsApi } from '../src/lib/api/deckElementModels.js';
 
 test('every adapter method answers unavailable, with the reason and the issue that brings its route', async () => {
@@ -30,8 +31,8 @@ test('every adapter method answers unavailable, with the reason and the issue th
   assert.deepEqual(methods.sort(), Object.keys(adapter.SURFACES).sort(), 'a method with no SURFACES row, or a row with no method');
   assert.ok(methods.length >= 40);
   // D1499 (#3749) swapped grid, D1522 (#3774) stagePlan, D1553 (#3800) remix, D1503 (#3754) elementModels; D1565 (#3812)
-  // the investor links. A swapped surface's body calls its client through().
-  assert.deepEqual([...adapter.SWAPPED], ['grid', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'setDeckSource'], 'the rows whose routes are on main');
+  // the investor links; #3881 setDeckSource tags a data-room file; D1555 (#3802) consistency rides the check read. A swapped surface's body calls its client through().
+  assert.deepEqual([...adapter.SWAPPED], ['grid', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'setDeckSource', 'consistency'], 'the rows whose routes are on main');
   const seam = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
   for (const name of ['investorLinks', 'withdrawInvestorLink']) {
     assert.match(seam, new RegExp(`export const ${name} = [^\\n]*through\\(\\(\\) => deckInvestorLinksApi\\.${name}\\(`), `${name} is wired to its client`);
@@ -109,6 +110,20 @@ test('D1553 (#3800): remix is swapped — it posts the card on screen (and a blo
   assert.equal(adapter.availability('remix'), null, 'its menu row is no longer Coming later');
 });
 
+test('D1555 (#3802): consistency is swapped — the check read\'s `consistency`, null for a reader, unreadable on a failure', async () => {
+  const real = deckCheckApi.read;
+  try {
+    const found = { state: 'ok', findings: [{ key: 'use_of_funds:raise', rule: 'use_of_funds', message: 'Use of funds $1.8M does not match the raise $2M.', cards: [1, 2] }] };
+    deckCheckApi.read = async (id) => ({ deck_id: id, consistency: found });
+    assert.deepEqual(await adapter.consistency(7), { available: true, value: found });
+    deckCheckApi.read = async () => ({ deck_id: 7 });
+    assert.deepEqual(await adapter.consistency(7), { available: true, value: null }, 'a reader who is not the founder');
+    deckCheckApi.read = async () => { throw Object.assign(new Error('The check could not be read.'), { status: 500 }); };
+    assert.equal((await adapter.consistency(7)).unreadable, true);
+  } finally { deckCheckApi.read = real; }
+  assert.equal(adapter.availability('consistency'), null);
+});
+
 test('the adapter keys each surface to the plan’s issue (§6.2)', () => {
   const want = {
     grid: 3749, saveCard: 3751, discardDraft: 3751, batch: 3753, cancelBatch: 3753, elementModels: 3754,
@@ -131,8 +146,8 @@ test('the adapter keys each surface to the plan’s issue (§6.2)', () => {
 test('the seam reaches no network, and no client method exists for a route that is not on main', () => {
   const src = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
   assert.doesNotMatch(src, /request\(|fetch\(|XMLHttpRequest/);
-  // A swapped row's client is the only `lib/api` the seam may import (D1499's `deckGrid.js`, D1522's `deckStage.js`, D1553's `deckRemix.js`, D1503's `deckElementModels.js`, D1565's `deckInvestorLinks.js`).
-  assert.deepEqual([...src.matchAll(/from '([^']*lib\/api[^']*)'/g)].map((x) => x[1]).sort(), ['../../../lib/api/dataRoom.js', '../../../lib/api/deckElementModels.js', '../../../lib/api/deckGrid.js', '../../../lib/api/deckInvestorLinks.js', '../../../lib/api/deckRemix.js', '../../../lib/api/deckStage.js']);
+  // A swapped row's client is the only `lib/api` the seam may import (D1499's `deckGrid.js`, D1522's `deckStage.js`, D1553's `deckRemix.js`, D1503's `deckElementModels.js`, D1565's `deckInvestorLinks.js`, #3881's `dataRoom.js`, D1555's `deckCheck.js`).
+  assert.deepEqual([...src.matchAll(/from '([^']*lib\/api[^']*)'/g)].map((x) => x[1]).sort(), ['../../../lib/api/dataRoom.js', '../../../lib/api/deckCheck.js', '../../../lib/api/deckElementModels.js', '../../../lib/api/deckGrid.js', '../../../lib/api/deckInvestorLinks.js', '../../../lib/api/deckRemix.js', '../../../lib/api/deckStage.js']);
   assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckInvestorLinks\)/);
   assert.doesNotMatch(codeOnly(read(`${PITCH}/deckV2Model.js`)), /request\(|fetch\(|lib\/api|from 'react'/);
   const client = [read('frontend/src/lib/api.js'), ...readdirSync('frontend/src/lib/api').filter((f) => f.endsWith('.js')).map((f) => read(`frontend/src/lib/api/${f}`))].join('\n');
