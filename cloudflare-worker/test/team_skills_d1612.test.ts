@@ -15,7 +15,7 @@
 //   7. A pasted SKILL.md lands as a draft and round-trips; an unreadable one is refused.
 //
 // Real SQLite: the baseline's tables, 089 (the taxonomy), 199 (Super Admin),
-// 597, 712 and 757.
+// 597, 712 and 759.
 //
 //   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
 //     --test cloudflare-worker/test/team_skills_d1612.test.ts
@@ -47,7 +47,7 @@ function world() {
   db.exec(sql('migrations/199_super_admin.sql'));
   db.exec(sql('migrations/089_skills_values_taxonomy.sql'));
   db.exec(sql('migrations/712_team_agents.sql'));
-  db.exec(sql('migrations/757_agent_skills.sql'));
+  db.exec(sql('migrations/759_agent_skills.sql'));
   const user = db.prepare("INSERT INTO users (id, uid, email, name, role, founder_id, subscription_tier, subscription_status) VALUES (?, ?, ?, ?, ?, ?, 'growth', 'active')");
   user.run(SUPER, 'u-super', 'super@example.test', 'Sue Super', 'admin', null);
   user.run(ADMIN, 'u-admin', 'admin@example.test', 'Ada Admin', 'admin', null);

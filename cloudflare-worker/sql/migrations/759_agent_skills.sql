@@ -1,4 +1,4 @@
--- 757 — D1612 (#3951, part A of #3945): the agent skill library.
+-- 759 — D1612 (#3951, part A of #3945): the agent skill library.
 --
 -- A skill is a named, versioned recipe for one or more agent roles: what it
 -- does, its steps, the taxonomy skills it covers (the /studio taxonomy of

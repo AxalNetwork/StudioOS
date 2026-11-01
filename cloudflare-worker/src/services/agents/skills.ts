@@ -3,7 +3,7 @@
  * SKILL.md, whether an agent may be given it, and the agent's skills radar.
  *
  * Pure: no binding. `routes/team_skills.ts` reads and writes the tables
- * (migration 757) and calls these.
+ * (migration 759) and calls these.
  *
  * ONE TAXONOMY (owner, 2026-11-01). A skill's tags are `skills.slug` rows of
  * the /studio taxonomy (migrations 089/090) with a seniority level, and an
