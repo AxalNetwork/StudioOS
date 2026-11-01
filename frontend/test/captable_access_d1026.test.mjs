@@ -103,6 +103,7 @@ async function mounted(url, handle, routes) {
     async click(id, i = 0) { const n = byId(id)[i]; assert.ok(n, `no ${id}`); assert.ok(!props(n).disabled, `${id} is disabled`); await act(async () => props(n).onClick?.({ preventDefault() {} })); await flush(); },
     disabled: (id, i = 0) => !!props(byId(id)[i] || {}).disabled,
     async change(id, value, i = 0) { const n = byId(id)[i]; assert.ok(n, `no ${id}`); await act(async () => props(n).onChange?.({ target: { value, checked: value, type: typeof value === 'boolean' ? 'checkbox' : 'text', files: value?.files } })); await flush(); },
+    async submit(id, i = 0) { const n = byId(id)[i]; assert.ok(n, `no ${id}`); await act(async () => props(n).onSubmit?.({ preventDefault() {} })); await flush(); },
     async close() { await act(async () => root.unmount()); Object.assign(globalThis, previous); restore(); },
   };
 }
@@ -321,13 +322,21 @@ test('CT18: an Admin opens for support with a reason the founder sees; the Super
     assert.equal(admin.count('captable-read-view-summary'), 1);
     assert.match(admin.textOf('captable-read-line'), /group summary/);
     await admin.click('captable-support-open');
-    await admin.change('captable-support-reason', 'short');
-    assert.match(admin.textOf('captable-support-problem'), /at least 10/);
-    await admin.change('captable-support-reason', 'Founder asked us to check the pool');
-    await admin.click('captable-support-dialog-go');
+    // D1463 (RR10a): the shared gate replaces the dialog, and nothing of the table is drawn behind it.
+    assert.equal(admin.count('captable-support'), 1);
+    assert.equal(admin.count('captable-read-view-summary'), 0, 'the table is not drawn while the reason is asked');
+    assert.match(admin.textOf('captable-support'), /This opens once; each open asks again\./);
+    await admin.change('captable-support-input', 'short');
+    assert.match(admin.textOf('captable-support-hint'), /at least 10/);
+    assert.equal(admin.disabled('captable-support-open'), true);
+    await admin.change('captable-support-input', 'Founder asked us to check the pool');
+    assert.match(admin.textOf('captable-support-count'), /^34 \/ 500$/);
+    await admin.submit('captable-support');
     assert.deepEqual(admin.requests.find((r) => r.url.includes('/support')).body, { reason: 'Founder asked us to check the pool' });
     assert.equal(admin.count('captable-read-view-full'), 1);
     assert.match(admin.textOf('captable-support-line'), /‘Founder asked us to check the pool’\. The founder sees why/);
+    assert.match(admin.textOf('captable-support-banner-line'), /^Read only · Studio admin access for Founder asked us to check the pool$/, 'per open: no countdown');
+    assert.equal(admin.count('captable-support-banner-end'), 0, 'a per-open read has no End access');
     assert.equal(admin.count('captable-support-open'), 0, 'opened once');
   } finally { await admin.close(); }
   const hq = await readPage((url) => {

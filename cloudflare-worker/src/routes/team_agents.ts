@@ -11,7 +11,11 @@
  *   GET    /:scope/:id/rulebooks/:role         default, effective, versions, diff, floor
  *   PUT    /:scope/:id/rulebooks/:role         a new version, within the floor (manage)
  *   GET    /agents/:uid/run/quote?module=&option=  what a run would hold (the sponsor)
- *   POST   /agents/:uid/run                    run it: a proposal, charged to the sponsor (part 2, #3842)
+ *   POST   /agents/:uid/run                    run it: a proposal, charged to the sponsor (part 2, #3842); `tool_reads` (part 5)
+ *   GET    /tools                              the caller's own approved read tools, to grant an agent (part 5, #3844)
+ *   GET    /:scope/:id/queue?role=&module=&option=&status=&cursor=&include=projects   the approvals queue (part 3, #3843)
+ *   GET    /queue/:proposalUid                 one proposal and what the agent read for it
+ *   POST   /queue/:proposalUid/decide          accept, edit or discard it once (manage, or the sponsor)
  *
  * `:scope` is `company` (by uid) or `project` (by numeric id). Every route is
  * 404 `team_agents_off` unless `TEAM_AGENTS_ENABLED` is "true".
@@ -28,8 +32,13 @@
  * unrecorded, never 0 (the page says "Not recorded").
  *
  * Part 2 (#3842) adds the run: only the sponsor runs an agent, through
- * `services/agents/agentRun.ts`, which every refusal comes from. Part 3 adds
- * the queue.
+ * `services/agents/agentRun.ts`, which every refusal comes from. Part 3
+ * (#3843) adds the queue, through `services/agents/queue.ts`: a scope's
+ * agents' proposals, decided once by its manager or the agent's sponsor
+ * through the same `decideRailAs` the member route uses, with
+ * `decided_by_user_id` and a `proposal_decided` event.
+ * Part 5 (#3844, owner Q3 = A) adds the sponsor's approved read tools
+ * (D852), through `services/agents/agentTools.ts`.
  */
 import { Hono } from 'hono';
 import type { Context } from 'hono';
@@ -41,7 +50,13 @@ import { modelRefusal } from '../services/aiRouter';
 import { CATALOGUE } from '../services/ai/catalogue';
 import { MODEL_CONNECTIONS } from '../services/ai/moduleConnections';
 import { agentQuote, agentRun, type AgentRefusal } from '../services/agents/agentRun';
+import { checkGrants, grantsView } from '../services/agents/agentTools';
+import { configOf, customMcpEnabled, grantableTools } from '../integrations/customMcp';
+import type { IntegrationRow } from '../integrations/registry';
 import { isAdmin, mapError, newUid } from './_t13t14t15_helpers';
+import { neverFillMessage } from '../services/fills/neverFill';
+import { NeverFillRefusal, type RailDecision, type RailProposalStatus } from '../services/railProposals';
+import { QUEUE_STATUSES, queueCount, queueDecide, queueItem, queueList, type QueueRefusal } from '../services/agents/queue';
 import { ALWAYS_ASKS_FLOOR, MODULES, ROLES, moduleOf, optionsIn, roleOf } from '../services/agents/catalogue';
 import { checkRules, diffRules } from '../services/agents/rulebook';
 import {
@@ -91,14 +106,6 @@ async function personOf(env: Env, userId: number | null): Promise<{ uid: string;
   return u ? { uid: u.uid, name: u.name } : null;
 }
 
-export function toolsOf(json: string): { integration_uid: string; tool: string }[] {
-  try {
-    const v = JSON.parse(json);
-    return Array.isArray(v) ? v.filter((t) => t && typeof t.integration_uid === 'string' && typeof t.tool === 'string')
-      .map((t) => ({ integration_uid: t.integration_uid, tool: t.tool })) : [];
-  } catch { return []; }
-}
-
 async function agentDto(env: Env, a: AgentRow) {
   const project = a.scope_kind === 'project'
     ? await env.DB.prepare('SELECT id, name FROM projects WHERE id = ?').bind(a.project_id).first<{ id: number; name: string }>()
@@ -110,7 +117,8 @@ async function agentDto(env: Env, a: AgentRow) {
     first_name: a.first_name,
     last_name: a.last_name,
     model_id: a.model_id,
-    tools: toolsOf(a.tool_grants_json),
+    // Part 5: each granted tool with its server's name and whether it can be read now.
+    tools: await grantsView(env, a),
     sponsor: await personOf(env, a.sponsor_user_id),
     status: a.status,
     paused_reason: a.paused_reason,
@@ -171,6 +179,30 @@ router.get('/roles', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+// ── Tools (part 5) ──────────────────────────────────────────────────────────
+
+/** The caller's own approved read tools (D852), for the Add-agent sheet. Descriptions are not stored with an approval, so they are null. */
+router.get('/tools', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (!customMcpEnabled(c.env)) return say(c, 404, 'custom_mcp_off', 'Connected MCP servers are not switched on.');
+    if (!planOk(user)) return say(c, 403, 'plan_required', 'Agents come with a paid Founder plan.');
+    // A failed read is an error, never "no servers".
+    const rows = (await c.env.DB.prepare("SELECT * FROM integrations WHERE user_id = ? AND provider_key LIKE 'custom:%' ORDER BY id")
+      .bind(user.id).all<IntegrationRow>()).results ?? [];
+    const servers = rows.filter((r) => configOf(r)).map((r) => {
+      const offer = grantableTools(r);
+      return {
+        integration_uid: r.provider_key.slice('custom:'.length),
+        name: r.display_name || 'Your MCP server',
+        status: offer.connected ? 'connected' as const : 'disconnected' as const,
+        tools: offer.tools.map((name) => ({ name, description: null })),
+      };
+    });
+    return c.json({ servers });
+  } catch (e) { return mapError(c, e); }
+});
+
 // ── The run (part 2) ────────────────────────────────────────────────────────
 
 /** The agent, when the caller is its sponsor: only the sponsor runs it, paid from their tokens (owner Q2 = B). */
@@ -204,10 +236,62 @@ router.post('/agents/:uid/run', async (c) => {
     if (record === undefined) return say(c, 400, 'invalid_record', 'The record is a reference such as project:7.');
     const r = await agentRun(c.env, {
       agent: got.agent, module: typeof b.module === 'string' ? b.module : '', option: typeof b.option === 'string' ? b.option : '',
-      record, prompt: b.prompt,
+      record, prompt: b.prompt, toolReads: b.tool_reads,
     });
     if (!r.ok) return answer(c, r);
     return c.json({ proposal: r.proposal, charged: r.charged });
+  } catch (e) { return mapError(c, e); }
+});
+
+// ── The queue (part 3) ──────────────────────────────────────────────────────
+
+const DECISIONS: readonly RailDecision[] = ['accept', 'edit', 'discard'];
+const queueAnswer = (c: C, r: QueueRefusal) => say(c, r.status, r.code, r.message, r.extra);
+
+router.get('/:scope/:id/queue', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
+    if (!s) return notFound(c);
+    if (!(await canRead(c.env, s, user))) return say(c, 403, 'not_member', 'Only the team can see its approvals.');
+    const status = c.req.query('status') || 'proposed';
+    if (!QUEUE_STATUSES.includes(status as RailProposalStatus)) return say(c, 400, 'invalid_status', 'Choose proposed, accepted, edited, discarded or withdrawn.');
+    const rawCursor = c.req.query('cursor');
+    if (rawCursor && !/^[1-9][0-9]{0,15}$/.test(rawCursor)) return say(c, 400, 'invalid_cursor', 'That page marker is not one this list gave.');
+    // TM1e: a company's editors may also see the projects inside it (the owner's authority rule).
+    const includeProjects = s.kind === 'company' && c.req.query('include') === 'projects' && await canManage(c.env, s, user);
+    const filter = {
+      role: c.req.query('role') || null, module: c.req.query('module') || null, option: c.req.query('option') || null,
+      status: status as RailProposalStatus, cursor: rawCursor ? Number(rawCursor) : null, includeProjects,
+    };
+    const page = await queueList(c.env, s, filter);
+    return c.json({ items: page.items, counts: { proposed: await queueCount(c.env, s, filter) }, next_cursor: page.next_cursor });
+  } catch (e) { return mapError(c, e); }
+});
+
+router.get('/queue/:proposalUid', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const r = await queueItem(c.env, user, c.req.param('proposalUid'));
+    return r.ok ? c.json({ item: r.item, inputs: r.inputs }) : queueAnswer(c, r);
+  } catch (e) { return mapError(c, e); }
+});
+
+router.post('/queue/:proposalUid/decide', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const b = await readBody(c);
+    const decision = String(b?.decision || '') as RailDecision;
+    if (!DECISIONS.includes(decision)) return say(c, 400, 'invalid_decision', 'Accept, edit or discard it.');
+    const payload = b?.payload && typeof b.payload === 'object' && !Array.isArray(b.payload) ? b.payload : null;
+    if (decision === 'edit' && !payload) return say(c, 400, 'payload_required', 'Send your edited version.');
+    try {
+      const r = await queueDecide(c.env, user, c.req.param('proposalUid'), decision, payload);
+      return r.ok ? c.json({ item: r.item }) : queueAnswer(c, r);
+    } catch (e) {
+      if (e instanceof NeverFillRefusal) return say(c, 422, 'never_fill', neverFillMessage(e.field), { field: e.field, discarded: e.discarded });
+      throw e;
+    }
   } catch (e) { return mapError(c, e); }
 });
 
@@ -373,18 +457,17 @@ router.post('/:scope/:id/agents', async (c) => {
     if (typeof b.model_id !== 'string' || !b.model_id || modelRefusal(c.env, b.model_id)) {
       return say(c, 422, 'model_not_offered', 'That model is not offered. Choose one from the list.');
     }
-    // Part 5 checks each grant against the sponsor's D852 approvals; until then any grant is refused (fail closed).
-    if (b.tool_grants !== undefined && !(Array.isArray(b.tool_grants) && b.tool_grants.length === 0)) {
-      return say(c, 422, 'tool_not_approved', 'Connected tools cannot be given to an agent yet.');
-    }
+    // Part 5: each grant is the sponsor's (the caller's) own connected server, an approved, pinned read tool.
+    const granted = await checkGrants(c.env, user.id, b.tool_grants);
+    if (!granted.ok) return answer(c, granted);
     const [companyId, projectId] = scopeCols(s);
     const uid = newUid();
     try {
       await c.env.DB.prepare(
         `INSERT INTO team_agents (uid, scope_kind, company_id, project_id, role_key, first_name, last_name, model_id,
            tool_grants_json, sponsor_user_id, monthly_cap_microusd, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?)`,
-      ).bind(uid, s.kind, companyId, projectId, role.key, first.value, last.value, b.model_id, user.id, b.monthly_cap_microusd, user.id).run();
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(uid, s.kind, companyId, projectId, role.key, first.value, last.value, b.model_id, JSON.stringify(granted.grants), user.id, b.monthly_cap_microusd, user.id).run();
     } catch (e: any) {
       if (/UNIQUE/i.test(String(e?.message))) return say(c, 409, 'role_taken', 'This team already has an agent in that role.');
       throw e;

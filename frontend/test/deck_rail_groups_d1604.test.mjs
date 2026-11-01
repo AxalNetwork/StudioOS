@@ -3,8 +3,11 @@
  * and consumption only.
  *
  *   · every option key `deckRailGroups.js` names is a Pitch deck option in
- *     `lib/railOptions/founder.js`; a group with none reads unavailable from
- *     the adapter (#3754); Safety is the guard, never picked;
+ *     `lib/railOptions/founder.js`; D1503 (#3754): on a deck, every element
+ *     group reads and picks through `GET/PUT /api/decks/:id/element-models`
+ *     (the adapter's `elementModels`), and on a page with no deck one with
+ *     no option says models are picked per deck; Safety is the guard, never
+ *     picked;
  *   · "Held now" is read from `GET /api/ai-budget/holds`, and the deck's
  *     estimate and spend (#3776) are not drawn while the adapter says they
  *     are off, never as $0.00; the presets are "Coming later" (#3796);
@@ -33,8 +36,8 @@ import { api } from '../src/lib/api.js';
 import { aiBudgetApi } from '../src/lib/api/aiBudget.js';
 import { railPrefsApi } from '../src/lib/api/railPrefs.js';
 import { FOUNDER_OPTIONS } from '../src/lib/railOptions/founder.js';
-import { DECK_RAIL_GROUPS, DECK_RAIL_PAGE, PRESETS, deckRail, heldNow, usedBy } from '../src/pages/raise/pitch/deckRailGroups.js';
-import { SURFACES } from '../src/pages/raise/pitch/deckV2Adapter.js';
+import { DECK_RAIL_GROUPS, DECK_RAIL_PAGE, PRESETS, deckRail, groupAnswer, heldNow, railItems, usedBy } from '../src/pages/raise/pitch/deckRailGroups.js';
+import { deckElementModelsApi } from '../src/lib/api/deckElementModels.js';
 
 const h = React.createElement;
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
@@ -43,16 +46,21 @@ const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
  * The pure data
  * ------------------------------------------------------------------ */
 
-test('every option a group names is a Pitch deck option on main; a group with none waits on #3754; Safety is never picked', () => {
+test('every option a group names is a Pitch deck option on main; on a deck every element group reads #3754\'s routes; Safety is never picked', () => {
   const deckKeys = new Set(FOUNDER_OPTIONS.filter((o) => o.page === DECK_RAIL_PAGE).map((o) => o.key));
   assert.ok(deckKeys.size > 5, 'the founder options are read');
-  for (const g of DECK_RAIL_GROUPS) {
-    for (const k of g.options) assert.ok(deckKeys.has(k), `${g.id}: ${k} is not a Pitch deck rail option`);
-    if (!g.options.length && !g.safety) {
-      assert.equal(g.unavailable?.issue, 3754, `${g.id} waits on per-element routing`);
-      assert.equal(g.unavailable.issue, SURFACES.elementModels.issue);
-    }
+  for (const g of DECK_RAIL_GROUPS) for (const k of g.options) assert.ok(deckKeys.has(k), `${g.id}: ${k} is not a Pitch deck rail option`);
+  assert.deepEqual(DECK_RAIL_GROUPS.filter((g) => g.elements).map((g) => g.id), ['text', 'images', 'graphics', 'data', 'diagrams', 'venture']);
+  // On a deck: no element group is greyed, and each reads and picks through the per-element routes.
+  for (const g of railItems(31)) {
+    if (!g.elements) continue;
+    assert.equal(g.unavailable, undefined, `${g.id} is not greyed on a deck`);
+    assert.equal(typeof g.read, 'function'); assert.equal(typeof g.pick, 'function');
   }
+  // With no deck (New deck, Templates), a group with no option says models are picked per deck; the rest keep their options.
+  const none = Object.fromEntries(railItems(null).map((g) => [g.id, g]));
+  for (const id of ['graphics', 'diagrams', 'venture']) assert.match(none[id].unavailable.reason, /picked per deck/);
+  assert.equal(none.text.read, undefined); assert.equal(none.text.unavailable, undefined);
   assert.deepEqual(DECK_RAIL_GROUPS.map((g) => g.label), ['Text', 'Images', 'Graphics', 'Data', 'Diagrams', 'Venture records', 'Vision and checks', 'Safety']);
   assert.deepEqual(DECK_RAIL_GROUPS.find((g) => g.id === 'images').options, ['deck:image']);
   assert.deepEqual(DECK_RAIL_GROUPS.find((g) => g.id === 'data').options, ['deck:chart', 'deck:table', 'deck:timeline']);
@@ -60,6 +68,22 @@ test('every option a group names is a Pitch deck option on main; a group with no
   assert.equal(usedBy(['text']), 'Title, Kicker, Body, Bullets…');
   assert.equal(usedBy(['nothing']), null);
   assert.deepEqual([...PRESETS.options], ['Fast', 'Balanced', 'Best', 'Custom']);
+});
+
+test('groupAnswer: a group\'s block from the per-element reply, in the rail\'s shape; off or unreadable is thrown, never empty', () => {
+  // Mutation checked: groupAnswer reading `more` as `models` → the models assert fails.
+  const value = { billing: 'cost', groups: [
+    { group: 'text', suggested: [{ id: M('a') }, { id: M('b') }], more: [{ id: M('c') }], pick: M('b'), resolved: { model: M('b'), source: 'deck_group', locked: false, notice: null } },
+    { group: 'graphics', elements: [], suggested: [], more: [], pick: null, resolved: null, free: 'No model · free' },
+  ] };
+  const text = groupAnswer({ available: true, value }, 'text');
+  assert.deepEqual(text.models.map((m) => m.id), [M('a'), M('b')]);
+  assert.deepEqual(text.more.map((m) => m.id), [M('c')]);
+  assert.equal(text.pick, M('b'));
+  assert.equal(groupAnswer({ available: true, value }, 'graphics').free, 'No model · free');
+  assert.throws(() => groupAnswer({ available: false, reason: 'Not switched on yet.', issue: 3754 }, 'text'), (e) => e.status === 404);
+  assert.throws(() => groupAnswer({ available: false, unreadable: true, reason: 'x', issue: 3754 }, 'text'), (e) => e.status === 500);
+  assert.throws(() => groupAnswer({ available: true, value }, 'venture'), (e) => e.status === 404);
 });
 
 test('Held now is the holds read summed; a reply that is not a list is not $0.00', () => {
@@ -93,13 +117,24 @@ const BUDGET = {
   balance_microusd: 4200000, day_reserved_microusd: 0, month_reserved_microusd: 30000, topup_reserved_microusd: 0, held_for_review: [],
 };
 
-async function mount(el, { holds = { holds: [{ included_microusd: 60000, topup_microusd: 0 }, { included_microusd: 0, topup_microusd: 0 }] }, pick = () => Promise.resolve({ ok: true }) } = {}) {
+/** A synthetic per-element reply: every element group with four suggestions (the rail draws three), Graphics free. */
+const ELEMENTS_REPLY = () => ({
+  deck_id: 31, billing: 'cost',
+  groups: ['text', 'images', 'graphics', 'data', 'diagrams', 'venture'].map((g) => (g === 'graphics'
+    ? { group: g, elements: [], suggested: [], more: [], pick: null, resolved: null, free: 'No model · free' }
+    : { group: g, suggested: [1, 2, 3, 4].map((n) => ({ id: M(`${g}-${n}`), name: `Synthetic ${g} ${n}`, role: n === 1 ? 'Default' : 'Alternative', line: '', price: { cost: {}, billed: {} } })), more: [], pick: null, resolved: { model: M(`${g}-1`), source: 'default', locked: false, notice: null } })),
+});
+
+async function mount(el, { holds = { holds: [{ included_microusd: 60000, topup_microusd: 0 }, { included_microusd: 0, topup_microusd: 0 }] }, pick = () => Promise.resolve({ ok: true }), elementPick = () => Promise.resolve({ ok: true }) } = {}) {
   __resetEadwynPanelForTest(); __resetAssistModeForTest(); __resetRailPrefsSyncForTest();
   const restore = installDocument();
   const real = { ...api, ...{} };
   const realBudget = { ...aiBudgetApi };
   const realPrefs = { ...railPrefsApi };
-  const calls = { page: [], pick: [] };
+  const realElements = { ...deckElementModelsApi };
+  const calls = { page: [], pick: [], elements: [], elementPick: [] };
+  deckElementModelsApi.read = async (id) => { calls.elements.push(id); return ELEMENTS_REPLY(); };
+  deckElementModelsApi.pick = (id, body) => { calls.elementPick.push([id, body]); return elementPick(body); };
   api.myAiSpend = async () => ({ recorded: true, month: { spend_usd: 1, calls: 1 }, by_task: [] });
   aiBudgetApi.mine = async () => BUDGET;
   aiBudgetApi.topUp = async () => ({ configured: true, state: 'ready', product: { price_id: 'price_Synthetic', currency: 'usd', unit_amount: 1000 } });
@@ -125,7 +160,7 @@ async function mount(el, { holds = { holds: [{ included_microusd: 60000, topup_m
     async click(id) { const n = by(id); if (!n) throw new Error(`Missing ${id}`); await act(async () => { await pr(n).onClick?.({ preventDefault() {} }); }); await settle(); },
     async unmount() {
       await act(async () => root.unmount()); restore();
-      Object.assign(api, real); Object.assign(aiBudgetApi, realBudget); Object.assign(railPrefsApi, realPrefs);
+      Object.assign(api, real); Object.assign(aiBudgetApi, realBudget); Object.assign(railPrefsApi, realPrefs); Object.assign(deckElementModelsApi, realElements);
       __resetEadwynPanelForTest(); __resetAssistModeForTest(); __resetRailPrefsSyncForTest();
     },
   };
@@ -137,7 +172,8 @@ test('with groups: one block per group, no model read until a group opens, at mo
     for (const g of DECK_RAIL_GROUPS) assert.ok(m.by(`worker-rail-group-${g.id}`), `${g.id} is drawn`);
     assert.ok(!m.by('text-worker-rail-model-note'), 'the page\'s one block is not drawn beside the groups');
     assert.deepEqual(m.calls.page.filter(([, o]) => o), [], 'no group\'s models are read before it is opened');
-    assert.equal(m.text(m.by('text-worker-rail-group-off-graphics')), 'Not set up yet');
+    assert.deepEqual(m.calls.elements, [], 'nor the per-element reply');
+    assert.ok(!m.by('text-worker-rail-group-off-graphics'), 'on a deck no element group is greyed');
     assert.match(m.text(m.by('worker-rail-group-safety')), /Required Always on\. Not pickable\./);
     assert.match(m.text(m.by('worker-rail-presets')), /Fast Balanced Best Custom Coming later/);
     assert.equal(m.pr(m.by('text-worker-rail-preset-fast'))['aria-disabled'], 'true');
@@ -148,17 +184,38 @@ test('with groups: one block per group, no model read until a group opens, at mo
     // A closed group points aria-controls at nothing: its body is not in the page.
     assert.equal(m.pr(m.by('button-worker-rail-group-text'))['aria-controls'], undefined, 'a collapsed group names no body');
     await m.click('button-worker-rail-group-text');
-    assert.deepEqual(m.calls.page.filter(([, o]) => o), [[DECK_RAIL_PAGE, 'deck:rewrite']], 'the lead option, once opened');
+    assert.deepEqual(m.calls.elements, [31], 'the deck\'s per-element reply, once opened');
+    assert.deepEqual(m.calls.page.filter(([, o]) => o), [], 'no rail option list is read on a deck');
     const controls = m.pr(m.by('button-worker-rail-group-text'))['aria-controls'];
     assert.ok(controls && m.nodes().some((n) => m.pr(n).id === controls), 'an open group names the body it shows');
     const cards = m.nodes().filter((n) => /^card-worker-rail-group-text-/.test(String(m.pr(n)['data-testid'] || '')));
     assert.equal(cards.length, 3, 'Suggested shows at most three models');
     assert.match(m.text(m.by('worker-rail-group-text')), /Used by: Title, Kicker, Body, Bullets…/);
+    await m.click('button-worker-rail-group-graphics');
+    assert.equal(m.text(m.by('text-worker-rail-group-free-graphics')), 'No model · free', 'the Worker\'s words for a group that runs none');
   } finally { await m.unmount(); }
 });
 
-test('with groups: a pick is stored for every option of the group; one that refuses keeps its own and the block says so', async () => {
+test('on a deck a pick is the deck\'s group pick (PUT …/element-models); one the Worker refuses is undone and says why', async () => {
+  // Mutation checked: RailGroup ignoring `group.pick` (storing per option) → the elementPick assert fails.
   const m = await mount(h(WorkerRail, { workspace: 'Raise', groups: deckRail(31) }), {
+    elementPick: (body) => (body.key === 'group:images' ? Promise.reject(Object.assign(new Error('Set by Axal VC HQ. This model cannot be changed here.'), { status: 403 })) : Promise.resolve({ ok: true })),
+  });
+  try {
+    await m.click('button-worker-rail-group-data');
+    await m.click('card-worker-rail-group-data-model-data-2');
+    assert.deepEqual(m.calls.elementPick, [[31, { scope: 'deck', key: 'group:data', model: M('data-2') }]]);
+    assert.deepEqual(m.calls.pick, [], 'no rail option pick on a deck');
+    assert.equal(m.calls.elements.length, 2, 'the reply is read again after the pick');
+    await m.click('button-worker-rail-group-images');
+    await m.click('card-worker-rail-group-images-model-images-2');
+    assert.equal(m.text(m.by('text-worker-rail-group-refused-images')), 'Set by Axal VC HQ. This model cannot be changed here.');
+    assert.equal(m.pr(m.by('card-worker-rail-group-images-model-images-2'))['aria-checked'], false, 'the refused pick is undone');
+  } finally { await m.unmount(); }
+});
+
+test('with no deck: a pick is stored for every option of the group; one that refuses keeps its own and the block says so', async () => {
+  const m = await mount(h(WorkerRail, { workspace: 'Raise', groups: deckRail(null) }), {
     pick: (option) => (option === 'deck:timeline' ? Promise.reject(Object.assign(new Error('model_not_offered'), { status: 400 })) : Promise.resolve({ ok: true })),
   });
   try {

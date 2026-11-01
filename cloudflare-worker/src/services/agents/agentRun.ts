@@ -27,6 +27,12 @@
  *  7. a `run` event (with `usage_log_id` and `proposal_uid`) or a `refused` one,
  *     both by the sponsor; a pause is the system's (no actor).
  *
+ * Part 5 (#3844): between steps 4 and 5, the reads the sponsor named
+ * (`toolReads`) run through `agentTools.ts`: only granted tools, at most five,
+ * each metered and cut to 8 KB, the results in the prompt only inside the
+ * untrusted-data wrapper. A granted server that is gone or drifted pauses the
+ * agent `tool_disconnected` and the run is 409 `tool_disconnected`.
+ *
  * RUN IDENTITY (#3846, #3742 E2). A run has a uid (`runUid`; a fresh one when
  * the caller names none). Its key is `agent:<run uid>`: the proposal's
  * `run_key` (unique) and, with `:run`, the hold's idempotency key, so a step
@@ -41,7 +47,7 @@
  * assigned to this agent (422 `task_not_assigned`) and is written on the
  * proposal.
  *
- * Tool reads are part 5; this part calls no tool. Neither the prompt nor the
+ * The tool reads are named by the same run uid. Neither the prompt nor the
  * output is logged, thrown or written to an event.
  */
 import type { Env, User } from '../../types';
@@ -50,6 +56,7 @@ import { railOptionsOn, type RailOptionRow } from '../ai/railMatrix';
 import { proposeRail, railByRunKey, type RailProposal } from '../railProposals';
 import { moduleOf, optionsIn, roleOf, type ModuleDef, type Rules } from './catalogue';
 import { canManage, effectiveBook, logEvent, monthSpend, scopeOfAgent, type AgentRow, type Scope, type Spend } from './teams';
+import { cleanReads, grantsOf, readTools, type ToolDeps } from './agentTools';
 
 export const PROMPT_MAX = 8000;
 const CYCLE_PAGE = { validate: 'Founder · Validate', build: 'Founder · Build', raise: 'Founder · Raise', grow: 'Founder · Grow' } as const;
@@ -60,6 +67,10 @@ export type AgentRunInput = {
   option: string;
   record?: string | null;
   prompt: string;
+  /** Part 5: the reads the sponsor named, `[{ integration_uid, tool, arguments? }]`; untrusted until `cleanReads`. */
+  toolReads?: unknown;
+  /** Tests only: the tool call and the meter. */
+  toolDeps?: ToolDeps;
   /** #3846: the task this run works on; it must be assigned to this agent. */
   taskId?: number | null;
   /** #3846: the run's uid, the same on every retry of one step. Absent, the run gets a fresh one. */
@@ -121,7 +132,7 @@ async function sponsorOf(env: Env, a: AgentRow): Promise<User | null> {
   return env.DB.prepare('SELECT * FROM users WHERE id = ? AND is_active = 1').bind(a.sponsor_user_id).first<User>();
 }
 
-async function pause(env: Env, a: AgentRow, reason: 'cap' | 'sponsor_left') {
+async function pause(env: Env, a: AgentRow, reason: 'cap' | 'sponsor_left' | 'tool_disconnected') {
   if (a.status !== 'active') return;
   await env.DB.prepare(
     "UPDATE team_agents SET status = 'paused', paused_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'active'",
@@ -134,7 +145,7 @@ async function refused(env: Env, a: AgentRow, r: AgentRefusal, module: string, o
   return r;
 }
 
-/** The system prompt: the role and its rule book, never the scope's records (part 5 reads those). */
+/** The system prompt: the role and its rule book, never the scope's records; part 5's tool reads go in the user message, as data. */
 function systemPrompt(a: AgentRow, rules: Rules, s: Scope, moduleLabel: string): string {
   const role = roleOf(a.role_key);
   const name = [a.first_name, a.last_name].filter(Boolean).join(' ');
@@ -214,7 +225,7 @@ export async function agentQuote(env: Env, input: Omit<AgentRunInput, 'prompt'> 
 }
 
 /** The usage row's charge with its guard rows', or unknown when any is unrecorded. */
-async function chargedFor(env: Env, usageLogId: number | null): Promise<Spend> {
+export async function chargedFor(env: Env, usageLogId: number | null): Promise<Spend> {
   if (!usageLogId) return { available: false };
   try {
     const row = await env.DB.prepare(
@@ -251,6 +262,17 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
   if (bad) return refused(env, a, bad, input.module, input.option);
   const c = await check(env, input);
   if (!c.ok) return a.status === 'removed' || c.code === 'not_found' ? c : refused(env, a, c, input.module, input.option);
+  // Part 5: the named reads, through granted tools only, before the model sees anything.
+  const shaped = cleanReads(input.toolReads, grantsOf(a.tool_grants_json));
+  if (!shaped.ok) return refused(env, a, shaped, input.module, input.option);
+  const read = await readTools(env, a, shaped.reads, runUid, input.toolDeps);
+  if ('disconnected' in read) {
+    await pause(env, a, 'tool_disconnected');
+    return refused(env, a, no(409, 'tool_disconnected', `${read.disconnected.name} is disconnected or one of its tools changed, so this agent is paused. Reconnect it, then resume the agent.`,
+      { server: read.disconnected }), input.module, input.option);
+  }
+  if (!read.ok) return refused(env, a, read, input.module, input.option);
+  if (read.block) c.opts.messages = [{ role: 'user', content: `${input.prompt}\n\n${read.block}` }];
   const r = await run(env, { ...c.opts, rail: c.rail, surface: c.surface, idempotencyKey: holdKeyOf(runKey), executionId: runUid });
   if (!r.ok && r.refusal === 'step_replayed') {
     // The hold was taken by an earlier attempt. Its proposal may have landed in the meantime.
@@ -281,6 +303,8 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
   } catch {
     return refused(env, a, no(500, 'proposal_not_saved', 'The agent ran, but its proposal could not be saved.'), input.module, input.option);
   }
-  await logEvent(env, a.id, a.sponsor_user_id, 'run', { module: input.module, option: input.option }, { usageLogId, proposalUid: proposal.uid });
+  // The tools read are named, never their arguments or results.
+  const tools = shaped.reads.map((t) => ({ integration_uid: t.integration_uid, tool: t.tool }));
+  await logEvent(env, a.id, a.sponsor_user_id, 'run', { module: input.module, option: input.option, ...(tools.length ? { tool_reads: tools } : {}) }, { usageLogId, proposalUid: proposal.uid });
   return { ok: true, proposal, charged: await chargedFor(env, usageLogId), usageLogId, runKey, replayed: false };
 }

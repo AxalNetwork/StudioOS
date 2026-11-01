@@ -20,8 +20,10 @@
  * only the matching body with `through(() => teamAgentsApi.<method>(…))`:
  *
  *   #3842 (part 2)  runQuote · runAgent
- *   #3843 (part 3)  queue · queueItem · decide
- *   #3844 (part 5)  toolChoices
+ *   #3843 (part 3)  queue · queueItem · decide (the route and `teamAgentsApi` landed;
+ *                   S1 swaps these bodies and maps `Item` onto the board)
+ *   #3844 (part 5)  toolChoices (the route and `teamAgentsApi.toolChoices` landed;
+ *                   S1 swaps this body)
  *
  * HOW #3840'S REFUSALS ARE DRAWN (`through`):
  *   404 `team_agents_off`        unavailable: the switched-off state
