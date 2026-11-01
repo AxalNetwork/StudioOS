@@ -75,7 +75,7 @@ export function stripComments(src) {
 }
 
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-/** An id as a whole token: `llama-3.1-8b-instruct` must not match `llama-3.1-8b-instruct-fp8`. */
+/** An id matches only whole: a retired id must not match a current id that starts with it (the 8B and its fp8 build). */
 const idPattern = (id) => new RegExp(`${esc(id)}(?![\\w.-])`);
 const lineOf = (text, index) => text.slice(0, index).split('\n').length;
 const asList = (v) => (v == null || v === '' ? [] : Array.isArray(v) ? v.filter((x) => x != null && x !== '') : [v]);
