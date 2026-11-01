@@ -7,17 +7,16 @@
 import { request } from '../api.js';
 
 const enc = encodeURIComponent;
-const json = (method, body) => ({ method, body: JSON.stringify(body) });
 
 export const posthogApi = {
   projects: (uid) => request(`/connectors/${enc(uid)}/posthog-projects`),
   /** { project_id, posthog_project_id } links one venture; `posthog_project_id: null` unlinks it. */
-  setProject: (uid, projectId, posthogProjectId) => request(`/connectors/${enc(uid)}/posthog-projects`, json('PUT', { project_id: projectId, posthog_project_id: posthogProjectId })),
+  setProject: (uid, projectId, posthogProjectId) => request(`/connectors/${enc(uid)}/posthog-projects`, { method: 'PUT', body: JSON.stringify({ project_id: projectId, posthog_project_id: posthogProjectId }) }),
   insights: (uid, projectId, q = '') => request(`/connectors/${enc(uid)}/posthog-insights?project=${enc(projectId)}${q ? `&q=${enc(q)}` : ''}`),
   fromPosthog: (section, projectId, module) => request(`/cycles/${enc(section)}/posthog?project=${enc(projectId)}&module=${enc(module)}`),
-  track: (section, projectId, module, insightShortId, role) => request(`/cycles/${enc(section)}/posthog/tracked`, json('POST', { project: projectId, module, insight_short_id: insightShortId, role })),
+  track: (section, projectId, module, insightShortId, role) => request(`/cycles/${enc(section)}/posthog/tracked`, { method: 'POST', body: JSON.stringify({ project: projectId, module, insight_short_id: insightShortId, role }) }),
   untrack: (section, projectId, uid) => request(`/cycles/${enc(section)}/posthog/tracked/${enc(uid)}?project=${enc(projectId)}`, { method: 'DELETE' }),
   deleteFact: (section, projectId, id) => request(`/cycles/${enc(section)}/posthog/facts/${enc(id)}?project=${enc(projectId)}`, { method: 'DELETE' }),
-  accept: (section, projectId, id, extra = {}) => request(`/cycles/${enc(section)}/posthog/proposals/${enc(id)}/accept`, json('POST', { ...extra, project: projectId })),
-  dismiss: (section, projectId, id) => request(`/cycles/${enc(section)}/posthog/proposals/${enc(id)}/dismiss`, json('POST', { project: projectId })),
+  accept: (section, projectId, id, extra = {}) => request(`/cycles/${enc(section)}/posthog/proposals/${enc(id)}/accept`, { method: 'POST', body: JSON.stringify({ ...extra, project: projectId }) }),
+  dismiss: (section, projectId, id) => request(`/cycles/${enc(section)}/posthog/proposals/${enc(id)}/dismiss`, { method: 'POST', body: JSON.stringify({ project: projectId }) }),
 };
