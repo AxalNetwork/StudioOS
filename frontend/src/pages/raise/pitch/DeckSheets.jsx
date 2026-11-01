@@ -8,7 +8,8 @@ import { Versions, useDeckChecks } from './DeckVersions';
 import { comparePair } from './compareModel';
 import { APPLY } from './deckV2Model';
 import { AUDIENCE_LABELS, KIT_FAILED, NOT_RECORDED, NO_KIT, THEME_LABELS } from './editorModel';
-import { SLIDE_SIZES, aspectOf, withAspect } from './gridModel';
+import { SLIDE_SIZES, STRUCTURES, aspectOf, placeOf, withAspect } from './gridModel';
+import { applyStructure, movedLine, recommendedLine } from './structureModel';
 import { remix as remixAdapter, shown } from './deckV2Adapter';
 import { movedNotice } from './deckReflow';
 
@@ -130,9 +131,52 @@ export function SizeSheet({ theme, readOnly, onSize, moved, onUndo, onClose }) {
   );
 }
 
-export function StructureSheet({ model, card, index, readOnly, onLayout, onClose }) {
+/** One structure's tile: its areas drawn on a mini slide, its name and its use (pd10). */
+function StructureTile({ s, current, disabled, onPick, onPreview }) {
+  const seed = recommendedLine(s);
+  return (
+    <button type="button" disabled={disabled} aria-pressed={current}
+      onClick={() => onPick(s)} onMouseEnter={() => onPreview(s)} onFocus={() => onPreview(s)}
+      className={`flex flex-col items-stretch gap-1 rounded-[9px] border p-1.5 text-left ${current ? 'border-axal-violet bg-axal-lavender dark:border-violet-500 dark:bg-violet-950/40' : 'border-axal-hairline hover:bg-axal-ground dark:border-gray-700 dark:hover:bg-gray-800'} ${INK}`}
+      data-testid={`pitch-structure-${s.id}`}>
+      <span className="relative block aspect-[16/9] w-full rounded-[4px] bg-axal-ground dark:bg-gray-800" aria-hidden="true">
+        {s.background === 'image' ? <span className="absolute inset-0 rounded-[4px] bg-violet-200/50 dark:bg-violet-900/40" /> : null}
+        {s.areas.map((a) => <span key={a.id} className="rounded-[2px] border border-axal-violet/40 bg-white/80 dark:border-violet-500/50 dark:bg-gray-900/80" style={placeOf(a)} />)}
+      </span>
+      <span className="text-[11.5px] font-bold leading-tight">{s.label}</span>
+      <span className="text-[10.5px] leading-tight text-axal-muted dark:text-gray-400">{s.use}</span>
+      {seed ? <span className="text-[10px] font-bold uppercase tracking-[.05em] text-axal-violet dark:text-violet-300">{seed}</span> : null}
+    </button>
+  );
+}
+
+/**
+ * ⋯ › This card › Structure. D1513 (#3765, pd10): the 17 structures, each
+ * with its mini, name and use, and "Recommended for Seed" where the plan says
+ * so. Hovering or focusing one says what would move ("[1] block moves to the
+ * notes"); choosing it applies it as one edit (`applyStructure`). The 12
+ * presets that fill a card kind by kind stay below, behind their own dialog.
+ */
+export function StructureSheet({ model, card, index, readOnly, onLayout, onStructure, onClose }) {
+  const [preview, setPreview] = useState(null);
+  const result = preview && card ? applyStructure(card, preview) : null;
+  const pick = (s) => {
+    const r = applyStructure(card, s);
+    if (!r.error) onStructure?.(r);
+  };
   return (
     <Frame title={`Structure · card ${index + 1}`} testId="pitch-sheet-structure" onClose={onClose}>
+      <span className={EYE}>Structures</span>
+      <span className={MUTED}>A structure divides the card into areas. The card&apos;s blocks take them in reading order; anything with no area moves to the speaker notes, never away.</span>
+      <div className="grid grid-cols-3 gap-1.5 max-sm:grid-cols-2" role="group" aria-label="Structures">
+        {STRUCTURES.map((s) => (
+          <StructureTile key={s.id} s={s} current={card?.structure === s.id} disabled={readOnly || !card} onPick={pick} onPreview={setPreview} />
+        ))}
+      </div>
+      <span className={MUTED} role="status" aria-live="polite" data-testid="pitch-structure-preview">
+        {result ? (result.error ? result.error : `${preview.label}: ${movedLine(result.count)}${result.count ? ` (${result.moved.map((m) => m.kind).join(', ')})` : ''}.`) : 'Point at a structure to see what moves.'}
+      </span>
+      <span className={EYE}>Presets</span>
       <span className={MUTED}>The layouts on The Grid. The card&apos;s words move with them, kind by kind; a dialog names anything that has no place.</span>
       <div className="grid grid-cols-3 gap-1.5">
         {model.layouts.map((l) => (
