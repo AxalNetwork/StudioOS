@@ -53,6 +53,8 @@ test('IV-D1: the header row draws primary, Ask, Email, the rest, then ⋯, in th
   assert.ok(at('email-action') < at('record-header-edit-details'));
   assert.ok(at('record-header-edit-details') < at('record-header-more'));
   assert.doesNotMatch(out, />Delete</, 'Delete is behind ⋯ until it is opened');
+  assert.match(out, /class="[^"]*bg-axal-violet text-white[^"]*"[^>]*data-testid="record-header-open-recording"/, 'the primary is the violet button');
+  assert.doesNotMatch(out, /class="[^"]*bg-axal-violet[^"]*"[^>]*data-testid="record-header-edit-details"/, 'the others are not');
   assert.match(out, /aria-haspopup="menu"/);
   assert.match(out, /aria-label="More actions"/);
 });

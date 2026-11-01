@@ -133,4 +133,5 @@ test('REC2, REC5: the session page wires one panel, hides the bot card\'s red li
   assert.match(page, /Nothing was charged for this session\./);
   assert.match(page, /onClick=\{runAgain\}|onRetry=\{runAgain\}/);
   assert.match(page, /api\.process\(session\.id\)/);
+  assert.match(page, /const failure = life && !recordingOther \?/, '#1588: no Try again while this tab records another session');
 });

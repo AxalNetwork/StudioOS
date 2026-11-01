@@ -110,7 +110,7 @@ export function RecordActions({ actions = [], ...handlers }) {
  * one action replaces the reason. A key the record did not declare draws nothing.
  */
 export function RecordFacts({ facts = [], declarations = new Map(), handlers = {} }) {
-  const actionOf = (fact) => (fact.value == null && typeof fact.action === 'string' ? rowAction(fact.action, declarations) : null);
+  const actionOf = (fact) => ((fact.value ?? null) === null && typeof fact.action === 'string' ? rowAction(fact.action, declarations) : null);
   if (useRecordPhone()) {
     return <PhoneGroup testid="record-facts" label="At a glance" rows={facts.map((fact, index) => {
       if ((fact.value ?? null) !== null) return { key: index, title: fact.label, value: text(fact.value) };

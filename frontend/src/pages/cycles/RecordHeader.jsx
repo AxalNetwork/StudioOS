@@ -43,7 +43,8 @@ export function HeaderAction({ action, handlers = {}, tone = 'default', classNam
   if (kind === 'link' || kind === 'mailto') {
     return <a href={action.href} className={cls} role={role} data-testid={testid} onClick={(event) => {
       onDone?.();
-      if (handlers.onLink && kind === 'link' && isPlainClick(event)) { event.preventDefault(); handlers.onLink(action); }
+      // As D696's row: a link or a mailto goes through the record's onLink on a plain click, so the parent decides.
+      if (handlers.onLink && isPlainClick(event)) { event.preventDefault(); handlers.onLink(action); }
     }}>{action.label}</a>;
   }
   const run = kind === 'form' ? handlers.onForm : kind === 'write' ? handlers.onWrite : handlers.onClient;

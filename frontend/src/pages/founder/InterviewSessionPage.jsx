@@ -477,7 +477,8 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
   const bot = botSession && botRead && !botRead.unreadable ? (botRead.bot ?? null) : null;
   const showLife = botSession ? botRead !== undefined : (imported || recordingOther || !!data.processing?.stage);
   const life = showLife ? lifecycle({ bot: botSession && botRead?.bot !== null ? (bot || { status: 'unreadable' }) : null, session, processing: data.processing }) : null;
-  const failure = life ? failureView(life, { botFailure: bot ? botView({ bot }).failure : null, processingError: data.processing?.error || null }) : null;
+  // #1588: while this tab records another session, the page only shows the stage (`processing-here`); it starts nothing here.
+  const failure = life && !recordingOther ? failureView(life, { botFailure: bot ? botView({ bot }).failure : null, processingError: data.processing?.error || null }) : null;
   const interviewId = interview?.id ?? session.interview_id ?? null;
   const retryHref = interviewId != null ? `/validate/record?interview=${encodeURIComponent(interviewId)}&project_id=${encodeURIComponent(session.project_id)}` : null;
   const runAgain = async () => {
