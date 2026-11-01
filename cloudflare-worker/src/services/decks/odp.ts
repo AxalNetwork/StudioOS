@@ -32,6 +32,7 @@ import { buildZip, xmlEsc, type ZipEntry } from './pptx';
 import { boxOf, SLIDE } from './designSystem';
 import { IMAGE_MISSING, NOT_RECORDED, NO_NOTES, chartLabel, type ImageKind } from './offlineHtml';
 import type { ChartShot, PlacedImage } from './pptxEditable';
+import { tableLines } from './slideModel';
 
 export const ODP_MIMETYPE = 'application/vnd.oasis.opendocument.presentation';
 /** The page, at 16:9. */
@@ -108,6 +109,11 @@ export function blockParas(b: any): Para[] | null {
       return [para('M', String(b.label || 'Metric').toUpperCase()), v ? para('V', v) : para('N', NOT_RECORDED)];
     }
     case 'graphic': return [para('M', `Graphic · ${b.graphic || 'none chosen'}`)];
+    // D1538: a typed table, one row per line; the header row as a label.
+    case 'table': {
+      const lines = tableLines(b);
+      return lines.length ? lines.map((l, i) => para(i === 0 && b.header !== false ? 'M' : 'B', l)) : null;
+    }
     case 'video': return [para('B', `▶ ${b.title || (b.provider === 'vimeo' ? 'Vimeo video' : 'YouTube video')}`), para('S', String(b.url || ''))];
     case 'audio':
     case 'link': return [para('B', b.label || (b.kind === 'audio' ? 'Audio clip' : 'Open')), para('S', String(b.url || ''))];

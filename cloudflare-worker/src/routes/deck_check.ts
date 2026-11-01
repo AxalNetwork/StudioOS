@@ -12,6 +12,11 @@
  *        → { deck_id, version, outcome, checked_at, counts, figures, claims }
  *        D1264's check on THIS version, written to `raise_claims`
  *        (`surface = 'deck'`), with Stale from the version's bindings.
+ *   Both check replies carry `consistency` (D1555, #3802): `{ state, findings:
+ *        [{ key, rule, message, cards }] }`, the deck's own figures card
+ *        against card (`services/deckConsistency.ts`). Free: no model, no
+ *        charge, nothing written, so it answers with AI off. Its findings
+ *        quote figures, so a reader who is not the founder gets `null`.
  *   POST /api/decks/:id/claims/:uid/use-record     (the venture's founder)
  *        { record_value } → { deck }
  *        "Use Stripe's figure": the stated number replaced by the record's,
@@ -33,7 +38,7 @@ import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activ
 import { isSupportSession } from '../integrations/providers/mercury';
 import { raiseEvidenceContext, RaiseEvidenceError } from '../services/raiseEvidence';
 import { checkDeckVersion, deck, deckVersion, pinnedItems, signalKinds, type DeckRow } from '../services/raiseClaims';
-import { deckCheckSummaries, deckCheckView, staleClaims, storedDeckClaims, swapInSlide } from '../services/deckCheck';
+import { deckCheckSummaries, deckCheckView, deckConsistency, staleClaims, storedDeckClaims, swapInSlide } from '../services/deckCheck';
 import { bindingsOf, compareBindings, readSources } from '../services/decks/sources';
 import { isSeriesKey } from '../services/decks/chartSeries';
 import { FIGURE_LABEL, type FigureKey } from '../services/raiseCycle';
@@ -105,6 +110,9 @@ deckCheck.get('/:id{[0-9]+}/check', async (c) => {
   return c.json({
     deck_id: row.id, version, checked: !!check || stored.length > 0, checked_at: check?.checked_at ?? stored.map((s) => s.checked_at).filter(Boolean).sort().at(-1) ?? null,
     can_check: who.founder, ...deckCheckView(stored, { founder: who.founder, stale: new Set() }),
+    // D1555: the free consistency rules, on this version's own slides; no model, no write. Its
+    // findings quote the deck's figures, so like the claims' figures (D900) they are the founder's.
+    consistency: who.founder ? deckConsistency(parsed(row)) : null,
   });
 });
 
@@ -131,7 +139,7 @@ deckCheck.post('/:id{[0-9]+}/check', async (c) => {
   const slides = parsed(row);
   const stale = await staleFor(c, user, project, row, slides);
   const stored = await storedDeckClaims(c.env, projectId, version);
-  return c.json({ deck_id: row.id, version, outcome: 'recorded', checked: true, checked_at: at, can_check: true, ...deckCheckView(stored, { founder: true, stale, computed: result.claims }) });
+  return c.json({ deck_id: row.id, version, outcome: 'recorded', checked: true, checked_at: at, can_check: true, ...deckCheckView(stored, { founder: true, stale, computed: result.claims }), consistency: deckConsistency(slides) });
 });
 
 deckCheck.post('/:id{[0-9]+}/claims/:uid/use-record', async (c) => {

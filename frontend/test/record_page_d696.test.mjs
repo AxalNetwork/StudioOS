@@ -92,7 +92,9 @@ function assertLayout(module) {
   for (const word of ['Curated', 'Needs evidence', 'Not recorded', 'No urgency score has been recorded.', 'Attach a quote', 'Add theme', 'No evidence attached.', 'Nothing recorded here yet.', 'Harbour segment created', '15 Oct 2026', 'Show all']) assert.ok(out.includes(word), word);
   assert.equal((out.match(/tracking-\[0.09em\]/g) || []).length, 4);
   assert.match(out, />0<\/div>/);
-  for (const cls of ['bg-axal-violet', 'text-red-700', 'dark:text-red-300', 'dark:bg-gray-900', '@[760px]/cycle:grid-cols-4', '@[760px]/cycle:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]', 'grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_auto]', 'scroll-mt-4']) assert.ok(out.includes(cls), cls);
+  // D1454 (#3710, IV-D1): a danger action sits behind ⋯ in the header row, drawn red once ⋯ opens (assertClicks).
+  assert.match(out, /aria-haspopup="menu"/);
+  for (const cls of ['bg-axal-violet', 'dark:bg-gray-900', '@[760px]/cycle:grid-cols-4', '@[760px]/cycle:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]', 'grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_auto]', 'scroll-mt-4']) assert.ok(out.includes(cls), cls);
   for (const id of ['quotes', 'activity']) assert.ok(out.includes('id="rec-validate-problem-discovery-' + id + '"'));
   for (const forbidden of ['Unsafe URL', 'External URL', 'Missing URL', 'Never send me', 'Never display this next step', 'role="dialog"']) assert.ok(!out.includes(forbidden), forbidden);
   const r = fixture(); r.activity_total = 1;
@@ -113,7 +115,8 @@ test('canvas layout, real activity, missing facts, omissions and empty states re
     ["{text(row.a)}</span>", "{'Template event'}</span>"],
     ['rows={activity ?? record.activity}', 'rows={record.activity}'],
     ['@[760px]/cycle:grid-cols-4', 'grid-cols-4'],
-    ['bg-axal-violet text-white', 'bg-white text-white'],
+    // D1454: the primary's violet is the header's (interview_record_d1454 pins it); here, the record must hand its actions to the header row.
+    ['actions={record.actions} handlers={handlers}', 'actions={[]} handlers={handlers}'],
     ['scroll-mt-4', 'scroll-mt-0'],
   ], true);
 });
@@ -148,7 +151,11 @@ async function assertClicks(module) {
     onShowAll: () => seen.push(['activity']),
   }));
   try {
-    await m.click('Edit'); await m.click('Delete'); await m.click('Export persona');
+    await m.click('Edit'); await m.click('⋯');
+    const del = m.nodes().find((node) => node.tagName === 'BUTTON' && m.props(node)?.children === 'Delete');
+    assert.ok(del, 'Delete is in ⋯'); assert.match(m.props(del).className, /text-red-700/); assert.match(m.props(del).className, /dark:text-red-300/);
+    assert.equal(m.props(del).role, 'menuitem');
+    await m.click('Delete'); await m.click('Export persona');
     await m.click('Attach a quote'); await m.click('Add theme'); await m.click('Show all');
     const buttons = m.nodes().filter((node) => node.tagName === 'BUTTON' && m.props(node)?.children === 'Open minutes');
     assert.equal(buttons.length, 3, 'top action plus two real row actions');
