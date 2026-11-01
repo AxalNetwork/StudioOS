@@ -109,6 +109,19 @@ const listOf = (body: unknown, ...keys: string[]): unknown[] => {
   for (const k of keys) if (Array.isArray(root?.[k])) return root![k] as unknown[];
   return [];
 };
+const CURSOR_RE = /^[A-Za-z0-9+/=_-]{1,200}$/;
+/**
+ * Where a list answer says the next page is: its cursor, and whether it said
+ * there is no more. An answer that says neither leaves `done` to the caller.
+ */
+const pageOf = (body: unknown): { next: string | null; last: boolean | null } => {
+  const o = obj(body);
+  const info = obj(o?.pageInfo);
+  const has = info?.hasNextPage ?? o?.hasNextPage;
+  if (has === false) return { next: null, last: true };
+  const c = info?.endCursor ?? o?.cursor ?? o?.nextCursor ?? o?.endCursor;
+  return { next: typeof c === 'string' && CURSOR_RE.test(c) ? c : null, last: null };
+};
 const limitOf = (v: unknown): number => (Number.isSafeInteger(v) && (v as number) > 0 ? Math.min(v as number, MAX_LIST) : MAX_LIST);
 
 export interface LinearIssue {
@@ -126,6 +139,9 @@ export interface LinearIssueDetail extends LinearIssue { description: string | n
 export interface LinearComment { id: string; body: string | null; author: string | null; created_at: string | null }
 export interface LinearProject { id: string; name: string | null; state: string | null; progress: number | null; target_date: string | null; url: string | null }
 export interface LinearTeam { id: string; key: string | null; name: string | null }
+/** D1601 (#3880): a completed issue as a deck counts it: its id and when it was completed, nothing else. */
+export interface LinearCompleted { id: string; completed_at: string | null }
+export interface LinearCompletedPage { issues: LinearCompleted[]; next: string | null; done: boolean }
 
 function issueOf(v: unknown): LinearIssue | null {
   const o = obj(v);
@@ -171,6 +187,14 @@ export interface LinearReads {
   getProject(id: string): Promise<LinearProject>;
   /** The teams the grant can see. */
   listTeams(): Promise<LinearTeam[]>;
+  /**
+   * D1601 (#3880): one page of issues completed and updated within the last
+   * `days`, as ids and completion dates only: no title, assignee or text is
+   * kept. `next` is the cursor of the following page. `done` is true only
+   * when the answer said it was the last page, or came back short of the cap
+   * with no cursor; a full page with no cursor is not done.
+   */
+  listCompleted(opts: { days: number; cursor?: string | null }): Promise<LinearCompletedPage>;
 }
 
 /** The session's failures in this file's words; a body is never carried. */
@@ -250,6 +274,22 @@ export async function openLinearReads(access: McpAccess): Promise<LinearReads> {
         if (!o || !id) return null;
         return { id, key: typeof o.key === 'string' && TEAM_KEY_RE.test(o.key) ? o.key : null, name: str(o.name, 120) };
       }).filter((t): t is LinearTeam => t !== null).slice(0, MAX_LIST);
+    },
+
+    async listCompleted({ days, cursor }) {
+      const span = Number.isSafeInteger(days) && days > 0 && days <= 366 ? days : 90;
+      if (cursor != null && !(typeof cursor === 'string' && CURSOR_RE.test(cursor))) throw new LinearReadError('bad_id');
+      const after = cursor ?? null;
+      // UNVERIFIED (D1601.md): `state` takes a state type and `updatedAt` an ISO-8601 duration.
+      const body = await call('list_issues', { state: 'completed', updatedAt: `-P${span}D`, includeArchived: true, limit: MAX_LIST, ...(after ? { cursor: after } : {}) });
+      const rows = listOf(body, 'issues', 'nodes', 'results');
+      const issues = rows.map((v) => {
+        const o = obj(v);
+        const id = idOf(o?.id);
+        return o && id ? { id, completed_at: stamp(o.completedAt ?? o.completed_at) } : null;
+      }).filter((i): i is LinearCompleted => i !== null).slice(0, MAX_LIST);
+      const page = pageOf(body);
+      return { issues, next: page.next, done: page.last ?? (!page.next && rows.length < MAX_LIST) };
     },
   };
 }

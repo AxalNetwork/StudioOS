@@ -36,6 +36,7 @@ import authRecover from './routes/auth_recover';
 // /api/auth (magic link + TOTP); never the only path in. See
 // routes/auth_google.ts for the linking precedence and step-up rules.
 import authGoogle from './routes/auth_google';
+import { SOCIAL_CARD_GLOBS, serveSocialCard } from './services/socialCards';
 import authPasskey from './routes/auth_passkey';
 import { recoveryCoolOff } from './middleware/recoveryCoolOff';
 import scoring from './routes/scoring';
@@ -248,6 +249,7 @@ import deckNotes from './routes/deck_notes';
 import deckReview from './routes/deck_review';
 import deckSources from './routes/deck_sources';
 import deckCheck from './routes/deck_check';
+import deckGrid from './routes/deck_grid';
 import deckNew from './routes/deck_new';
 import deckAssist from './routes/deck_assist';
 import deckImages from './routes/deck_images';
@@ -402,6 +404,8 @@ import publicRoutes from './routes/public';
 import eventsRoutes from './routes/events';
 import eventsPublicRoutes from './routes/events_public';
 import adminEventsRoutes from './routes/admin_events';
+import adminEventSyndicationRoutes from './routes/admin_event_syndication';
+import eventSyndicationRoutes from './routes/event_syndication';
 // Task #68 — Public Job Board (Worker on D1): founder /api/jobs, public feed +
 // apply on /api/public/jobs*, admin review queue on /api/admin/jobs.
 import jobsRoutes from './routes/jobs';
@@ -441,7 +445,7 @@ import mercuryAttestationRoutes from './routes/mercury_attestations';
 import mercuryOauthRoutes from './routes/mercury_oauth';
 // D1086 (#2951): a founder's picked Notion sources, and the sync that lands them.
 import notionRoutes, { notionCycleRoutes } from './routes/notion';
-import posthogRoutes from './routes/posthog';
+import posthogRoutes, { posthogCycleRoutes } from './routes/posthog';
 // D1325 (#3486): the Fill with Eadwyn sheet's read.
 import fillsRoutes from './routes/fills';
 import connectorMcpOauthRoutes from './routes/connector_mcp_oauth';
@@ -1146,6 +1150,8 @@ app.route('/api/venture-scores', ventureScoreModels);
 // Task #39 — Event engine admin (§8.3). Mount BEFORE the catch-all /api/admin
 // so /api/admin/events/* resolves here, not in the generic admin router.
 app.route('/api/admin/events', adminEventsRoutes);
+// D1490 — HQ › Platform › Event syndication; before the /api/admin catch-all.
+app.route('/api/admin/event-syndication', adminEventSyndicationRoutes);
 // Task #68 — Job Board admin review queue. Mount BEFORE the catch-all
 // /api/admin so /api/admin/jobs/* resolves here, not in the generic admin router.
 app.route('/api/admin/jobs', adminJobsRoutes);
@@ -1356,6 +1362,8 @@ app.route('/api/decks', deckNotes);
 app.route('/api/decks', deckReview);
 // D900 (#2679): `/checks`, `/:id/check` and `/:id/claims/:uid/use-record`, before `decks` so `GET /:id` cannot answer `/checks`.
 app.route('/api/decks', deckCheck);
+// D1499 (#3749): The Grid of one deck version — geometry, the 17 structures and each card's areas.
+app.route('/api/decks', deckGrid);
 // D896: `/sources` and `/:id/refresh`, before `decks` so its `GET /:id` cannot answer `/sources`.
 app.route('/api/decks', deckSources);
 // D897: New deck (`/new/context`, `/new/quote`, `/outline`, `/generate`, `/proposals/:id/keep-slides`), before `decks` for the same reason.
@@ -1383,6 +1391,8 @@ app.route('/api/research', researchSectors);
 // D664 (#1477): the Grow cycle's overview, module reads and store writes.
 // D1086 (#2951): each section's Notion sync, ahead of the cycle routers so `/:section/notion` is never read as a module.
 app.route('/api/cycles', notionCycleRoutes);
+// D1609 (#3731): each module's From PostHog, ahead of the cycle routers for the same reason.
+app.route('/api/cycles', posthogCycleRoutes);
 app.route('/api/cycles/grow', cycleGrow);
 app.route('/api/research', research);
 // D642 — usage is keyed on the caller, across all their companies.
@@ -1456,6 +1466,8 @@ app.route('/api/dashboard', dashboard);
 // D1421 (#3699): the Studio's module catalogue and the member's saved layout.
 app.route('/api/studio', studioLayout);
 // Task #39 — Event engine authed routes (§8.1).
+// D1490 — one event's syndication (`/:id/syndication…`), before events.ts.
+app.route('/api/events', eventSyndicationRoutes);
 app.route('/api/events', eventsRoutes);
 // Task #68 — Job Board founder routes (post/manage roles, read applicants).
 app.route('/api/jobs', jobsRoutes);
@@ -2015,6 +2027,14 @@ export default {
         }
         return assetRes;
       }
+    }
+    // D1439 (#3914): a shared record link previews as itself. Before Hono, so
+    // the SPA shell never takes the Worker's nonce CSP or `no-referrer`; the
+    // shell's own headers come from `SHELL_HEADERS`. Only the prefixes in
+    // `SOCIAL_CARD_GLOBS` reach here (both `run_worker_first` lists).
+    if (env.ASSETS && SOCIAL_CARD_GLOBS.some((g) => pathname.startsWith(g.slice(0, -1)))) {
+      const card = await serveSocialCard(request, env);
+      if (card) return card;
     }
     // Static asset fallback and public page rendering need neither JWT secrets
     // nor role-schema repairs. With an apex-wide route, running those D1

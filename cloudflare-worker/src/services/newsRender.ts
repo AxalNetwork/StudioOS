@@ -223,7 +223,8 @@ export async function snapshotRevision(
   env: Env,
   articleId: number,
   savedBy: number,
-  reason: 'submit' | 'request_changes' | 'reject' | 'publish' | 'manual',
+  // D1406 — `autosave`: the editor's PUT, at most one per 15 minutes of edits.
+  reason: 'submit' | 'request_changes' | 'reject' | 'publish' | 'manual' | 'autosave',
 ): Promise<void> {
   try {
     const row: any = await env.DB.prepare(

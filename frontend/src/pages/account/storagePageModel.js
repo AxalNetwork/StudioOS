@@ -286,6 +286,7 @@ export const AREA_PLACE = Object.freeze({
   grow_minutes: ['Grow', '/grow'],
   brand_files: ['your account', '/account'],
   csv_imports: ['your imports', null],
+  articles: ['your articles', '/articles/draft'],
 });
 
 function day(iso) {
