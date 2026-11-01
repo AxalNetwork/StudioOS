@@ -295,7 +295,8 @@ test('Accept: a batch that fails creates no task and frees the plan to accept ag
 });
 
 test('the wizard: the stage’s roles, a company’s, an open task’s module; Already on the team; no model and nothing written', async () => {
-  // Mutation checked: the stage mapping for raise without investor_relations → the deepEqual.
+  // Mutations checked: the stage mapping for raise without investor_relations → the deepEqual; the route
+  // counting done tasks, or ignoring open ones → the company read.
   assert.deepEqual(suggestRoles({ scopeKind: 'project', stage: 'raise', openTaskModules: [] }).map((s) => s.role_key), ['cfo', 'investor_relations', 'general_counsel']);
   assert.deepEqual(suggestRoles({ scopeKind: 'project', stage: 'build', openTaskModules: [] }).map((s) => s.role_key), ['cto', 'cpo', 'coo']);
   assert.deepEqual(suggestRoles({ scopeKind: 'project', stage: 'idea', openTaskModules: [] }).map((s) => s.role_key), ['research_analyst', 'cpo']);
@@ -318,6 +319,14 @@ test('the wizard: the stage’s roles, a company’s, an open task’s module; A
     assert.ok(r.body.suggestions.every((s: any) => s.est_month_microusd.available === false || s.est_month_microusd.value > 0), 'never a 0 for unknown');
     assert.equal((w.db.prepare('SELECT COUNT(*) AS n FROM team_agents').get() as any).n, before, 'the read creates nothing');
     assert.equal((await call(w, ADVISOR, 'GET', `/project/${ALONE}/suggested-team`)).status, 403, 'manage only');
+    // Through the route: a company's open task in Data room adds Investor relations; a done one adds nothing.
+    await task(w, { title: 'Fill the data room', module: 'data-room' });
+    const done = await task(w, { title: 'Ship the site', module: 'distribution' });
+    assert.equal((await call(w, EDITOR, 'PATCH', `/tasks/${done.uid}`, { status: 'done' })).status, 200);
+    const co = await call(w, EDITOR, 'GET', `${CO}/suggested-team`);
+    assert.equal(co.status, 200, co.text);
+    assert.deepEqual(co.body.suggestions.map((s: any) => s.role_key), ['ceo', 'cfo', 'general_counsel', 'investor_relations']);
+    assert.match(co.body.suggestions[3].why, /Data room/);
   } finally { w.db.close(); }
 });
 
