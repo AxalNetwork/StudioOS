@@ -25,6 +25,7 @@ import {
 import { getPainGroupsView, loadPainGroupModel, normPhrase, resolvePhrase, safeParseStrings, severityLevel, type PainGroupModel } from '../painGroups';
 import { linkCandidatesToDirectory } from '../competitorDirectoryLink';
 import { KPI_LABEL, evidenceFor } from '../validateEvidence';
+import { logCycleWrite } from '../cycleActivity';
 import { setInterviewIcpFit } from '../../routes/_founder_validate_writes';
 import { deleteInterview, updateInterviewDetails } from '../interviewWriters';
 import {
@@ -449,7 +450,7 @@ async function interviewChannel(ctx: RecordContext, session: Any | null): Promis
   const channels: Record<string, string> = { in_person: 'In person', zoom: 'Zoom', google_meet: 'Google Meet', teams: 'Teams', whatsapp: 'WhatsApp', telegram: 'Telegram', text: 'Pasted' };
   const word = (key: unknown) => typeof key === 'string' && Object.hasOwn(channels, key) ? channels[key] : null;
   if (session.submitted_via === 'meeting_bot') {
-    const bot = await ctx.env.DB.prepare('SELECT platform FROM meeting_bots WHERE session_id = ? ORDER BY created_at DESC LIMIT 1')
+    const bot = await ctx.env.DB.prepare('SELECT platform FROM meeting_bots WHERE session_id = ? ORDER BY created_at DESC, uid DESC LIMIT 1')
       .bind(session.id).first<{ platform: string }>();
     return bot ? word(bot.platform) : null;
   }
@@ -710,6 +711,8 @@ const customerResearch: ModuleSpec = {
           throw new Response(JSON.stringify({ detail: 'icp_fit must be strong, partial or none' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
         }
         await setInterviewIcpFit(c.env, interviewId, fit);
+        await logCycleWrite(c.env, { projectId: c.projectId, userId: userId(c), cycle: 'validate', module: 'customer-research',
+          entityId: interviewId, action: 'interview_evidence_updated', summary: `Interview ${interviewId} evidence updated` });
         return { ok: true };
       },
     });

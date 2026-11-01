@@ -643,6 +643,8 @@ test('D1456 channels and capture labels use the latest recorded source, never in
     assert.equal(r.body.pills[0].text,label);
     assert.equal(r.body.facts[0].value,'Imported from Eadwyn AI');
   }
+  db.exec("INSERT INTO meeting_bots(uid,user_id,project_id,session_id,platform,meeting_url_enc,status,scheduled_at,limit_minutes,cost_per_minute_microusd,rate_per_minute_microusd,created_at) VALUES ('zz-synthetic-tie',10,1,4,'zoom','synthetic','failed',0,30,1,2,3)");
+  assert.equal((await real(db,10,'GET',rec('customer-research','1'))).body.pills[0].text,'Zoom','equal timestamps use the same uid tie-breaker as sessionBot');
   db.exec('DELETE FROM meeting_bots');
   const unknown = await real(db,10,'GET',rec('customer-research','1'));
   assert.equal(unknown.body.pills.some((p:any)=>['Zoom','Google Meet','Teams'].includes(p.text)),false);
@@ -682,6 +684,11 @@ test('D1456 judge-fit uses the existing writer gate and refuses invalid fits and
     assert.equal(r.status,['strong','partial','none'].includes(icp_fit as string)?200:400);
     assert.equal(db.prepare('SELECT icp_fit FROM discovery_interviews WHERE id=2').get()!.icp_fit,r.status===200?icp_fit:null);
   }
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE action='interview_evidence_updated'").get()!.n,3,'only successful writes log activity');
+  db.exec('UPDATE discovery_interviews SET icp_fit=NULL WHERE id=2');
+  assert.equal((await real(db,30,'POST',path,{icp_fit:'partial'})).status,200);
+  const actor=db.prepare("SELECT user_id,project_id,entity_id,actor FROM activity_logs WHERE action='interview_evidence_updated' ORDER BY id DESC LIMIT 1").get();
+  assert.deepEqual({...actor},{user_id:30,project_id:1,entity_id:'2',actor:'user:30'});
 });
 
 test('D1456 pending findings are primary only for the latest session, without another primary recording action', async () => {
