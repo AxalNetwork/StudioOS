@@ -253,6 +253,7 @@ import deckReview from './routes/deck_review';
 import deckSources from './routes/deck_sources';
 import deckCheck from './routes/deck_check';
 import deckGrid from './routes/deck_grid';
+import deckStage from './routes/deck_stage';
 import deckRemix from './routes/deck_remix';
 import deckNew from './routes/deck_new';
 import deckAssist from './routes/deck_assist';
@@ -1376,6 +1377,8 @@ app.route('/api/decks', deckReview);
 app.route('/api/decks', deckCheck);
 // D1499 (#3749): The Grid of one deck version — geometry, the 17 structures and each card's areas.
 app.route('/api/decks', deckGrid);
+// D1522 (#3774): the deck's stage plan — order, why lines and missing-proof warnings.
+app.route('/api/decks', deckStage);
 // D1553 (#3800): Remix — four layouts for one card and the remove-a-block reflow; no model, no charge.
 app.route('/api/decks', deckRemix);
 // D896: `/sources` and `/:id/refresh`, before `decks` so its `GET /:id` cannot answer `/sources`.
