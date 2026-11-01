@@ -30,6 +30,8 @@ import {
   canSeeLearning, enrolledSql, LEARNING_LEVELS, PROGRESS_KINDS,
 } from '../services/learningAccess';
 import { streamUrl } from '../services/learningVideo';
+import { COURSE_UID, courseCoverPrefix, readCover } from '../services/coverDraws';
+import { getCurrentUser } from '../auth';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -384,6 +386,23 @@ r.get('/me', async (c) => {
     in_progress: list.filter((x) => x.status === 'started'),
     completed: list.filter((x) => x.status === 'completed'),
   });
+});
+
+// #3935 (LE8): a course's drawn cover. A published course's cover is public; a
+// draft's is the Super Admin's only (they drew it in the Studio).
+r.get('/courses/:uid/cover/:filename', async (c) => {
+  const uid = String(c.req.param('uid') || '');
+  if (!COURSE_UID.test(uid)) return c.json({ error: 'not_found' }, 404);
+  const course = await c.env.DB.prepare('SELECT status FROM learning_courses WHERE uid = ?').bind(uid).first<{ status: string }>();
+  if (!course) return c.json({ error: 'not_found' }, 404);
+  const published = course.status === 'published';
+  if (!published) {
+    const u = await getCurrentUser(c).catch(() => null);
+    if (!u || !isSuperAdmin(u)) return c.json({ error: 'not_found' }, 404);
+  }
+  const cover = await readCover(c.env, courseCoverPrefix(uid), String(c.req.param('filename') || ''));
+  if (!cover) return c.json({ error: 'not_found' }, 404);
+  return new Response(cover.body, { headers: { 'content-type': cover.mime, 'cache-control': published ? 'public, max-age=86400' : 'private, no-store', 'x-content-type-options': 'nosniff' } });
 });
 
 export default r;

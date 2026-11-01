@@ -288,6 +288,7 @@ const NOT_MEMBER_UPLOADS: Record<string, string> = {
   'services/articleCovers.ts': 'HQ article covers',
   'services/backup.ts': 'platform backups',
   'services/mercury/investorFeeds.ts': 'a GP\'s Mercury statements: fund documents, never counted',
+  'services/coverDraws.ts': 'a drawn event or course cover (#3935): generated, not uploaded, and not a measured D1169 store',
   'services/meetingBotDiagnose.ts': 'an HQ owner\'s bot diagnostic record and screenshot (#3708), never counted',
 };
 

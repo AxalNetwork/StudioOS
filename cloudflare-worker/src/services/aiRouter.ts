@@ -103,6 +103,8 @@ export type TaskClass =
   // D1409 (#3695): an article's images, on the same model as the deck's, so
   // usage logs name articles and not decks.
   | 'article_image'
+  | 'event_cover'
+  | 'course_cover'
   // D1341 (#3549): Eadwyn's email draft from the member's ticked records.
   | 'mail_draft'
   // D1420 (#3864): Eadwyn's layout proposals for /studio (`studio:layout`).
@@ -937,6 +939,9 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   deck_image:   { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-1-schnell', alternates: DRAW_MODELS },
   // D1409 (#3695): an article's images, on the same model as the deck's.
   article_image: { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-1-schnell' },
+  // #3935: the event cover (EV2) and the course cover (LE8); the job picks the model (`drawChoice`).
+  event_cover:  { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-1-schnell', alternates: RAIL_DRAW_MODELS },
+  course_cover: { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-1-schnell', alternates: RAIL_DRAW_MODELS },
   // D1478 §3937 fix 5 (MI1): a snippet paraphrase is a short rewrite, so the 8B fp8 answers it and the 70B is its fallback.
   paraphrase:   { provider: 'workers-ai', model: SMALL_LLAMA, fallbackChain: [MID_LLAMA] },
   // D765: `ai-workers/` jobs, which called the deprecated 8B directly, unlogged.
