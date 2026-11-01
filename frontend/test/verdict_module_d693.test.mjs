@@ -389,7 +389,8 @@ test('22: verdictApi holds record alone, a POST to the mounted decisions route, 
   const api = read('src/lib/api.js');
   const block = api.slice(api.indexOf('// api-modules:begin'), api.indexOf('// api-modules:end'));
   // D1256 and D1259: ventureScoreModels.js and ventureScores.js sort between useOfFunds.js and verdict.js.
-  assert.match(block, /export \* from '\.\/api\/usage\.js';\nexport \* from '\.\/api\/useOfFunds\.js';\nexport \* from '\.\/api\/ventureScoreModels\.js';\nexport \* from '\.\/api\/ventureScores\.js';\nexport \* from '\.\/api\/verdict\.js';\n$/);
+  // D1614 §7 (#3970): work.js sorts after verdict.js, and ends the block.
+  assert.match(block, /export \* from '\.\/api\/usage\.js';\nexport \* from '\.\/api\/useOfFunds\.js';\nexport \* from '\.\/api\/ventureScoreModels\.js';\nexport \* from '\.\/api\/ventureScores\.js';\nexport \* from '\.\/api\/verdict\.js';\nexport \* from '\.\/api\/work\.js';\n$/);
   const sent = [];
   const mod = await sourceModule(mutate(src, "import { request } from '../api.js';", 'const request = (...a) => { globalThis.__d693Sent.push(a); return Promise.resolve({ ok: true }); };'), 'lib/api/verdict.js');
   globalThis.__d693Sent = sent;
