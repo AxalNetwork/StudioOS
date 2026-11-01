@@ -24,6 +24,7 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 
 | Folder | What lives there |
 | --- | --- |
+| `work/` | D1614 (#3968): a project's Work (`/projects/:id/work`: board, backlog, burn-up, the item and run sheets) and a company's compliance tasks (`/account/companies/:uid/settings/compliance`). Every read goes through `work/workAdapter.js`, off until #3969–#3972 and #3976. Start at `work/README.md`. |
 | `team/` | D1497 (#3727): Team, the people and AI agents working on a company or a project (TM1a–TM9f), and Project settings › General. People and invitations are wired; agents, rule books and approvals come through `team/agentsAdapter.js`, the one seam #3840–#3844 swap. Start at `team/README.md`. |
 | `trust/` | D1078: the member Trust Center’s requirement counts, explanations, detail sheet (D1317) and data controls at `/trust/me`. |
 | `site/` | The public site's pages from the owner's website canvas (D673–D680): each renders in `SitePage` (`frontend/src/components/site/SitePage.jsx`) and draws only live data or the owner's copy. |

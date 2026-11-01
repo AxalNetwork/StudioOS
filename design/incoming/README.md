@@ -111,6 +111,25 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-11-01 — Work and company compliance (#3968)
+
+The owner's artifacts `6snU4LwGECSELCgYtneiB3` (the page, `Work Compliance Page.dc.html`)
+and `XJd9TTJgzjdasWvuJv6ArV` (the board grid, `Work Compliance · Boards.dc.html`)
+were decoded by `scripts/read-canvas.mjs`. They draw **WK0 to WK8** (a project's
+Work: entry points, board, backlog, burn-up, item sheet, run detail, activity
+feed, workload, states) and **CO1 to CO5** (a company's compliance tasks: the
+company card, the agenda, the task sheet with "Create work in a project…", the
+Calendar, states). They follow the consolidated prompts, not S1's Prompt 1 v3
+(tasks as GitHub Issues), which waits for its own canvas (the owner, 2026-11-01).
+
+**One edit, named.** The Axal mark (the export's `uploads/axal-logo-200x200.png`)
+points at `/axal-mark.png`. No other value was edited.
+
+**Grade: UPGRADE (D1614).** `frontend/src/pages/work/` draws the board, backlog,
+burn-up, item and run sheets and the compliance agenda and task sheet, behind
+`frontend/src/pages/work/workAdapter.js`, which is off until #3969–#3972 and #3976.
+Two files arrived and none left this folder.
+
 ## Landed 2026-11-01 — Team › Agents › Skills (#3945)
 
 The owner's two artifacts for #3945's consolidated prompt (boards SK0–SK9),
