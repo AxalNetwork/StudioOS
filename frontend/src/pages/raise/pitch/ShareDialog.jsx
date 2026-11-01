@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { cyclesWrite } from '../../../lib/api/cycles';
 import { reportError } from '../../../lib/log';
 import { Lightbox } from '../../../ui';
+import InvestorLinksTable from './InvestorLinksTable.jsx';
 import {
   DEFAULT_SHARE, EXPIRIES, INCLUDE_ROWS, NDA_SWITCH, NEVER_SHARED, NO_LIMIT, SHARE_CTA, SHARE_TITLE, SHOWN_ONCE, TYPED,
   frozenLine, shareBody, shareFailure, shareProblem, shareUrl, whatShareDoes,
@@ -98,6 +99,8 @@ export default function ShareDialog({ projectId, deck, onClose, onCreated }) {
         </div>
       )}
     >
+      {/* D1565 (#3812, pd35): this version's links, one row per investor, above the new one. */}
+      <div className="mb-3"><InvestorLinksTable deck={deck} refreshKey={made ? 1 : 0} /></div>
       {made ? (
         <div className="flex flex-col gap-3" data-testid="pitch-share-made">
           {url ? (
@@ -120,6 +123,8 @@ export default function ShareDialog({ projectId, deck, onClose, onCreated }) {
               <input className={FIELD} value={state.label} onChange={(e) => set({ label: e.target.value })} placeholder="The investor's name" maxLength={200} data-testid="pitch-share-label" />
             ) : null}
             {prospects.status === 'error' ? <span className={MUTED}>Your prospects could not be read. Type a name instead.</span> : null}
+            {/* D1565: the recipient watermark the link will carry on every card. */}
+            {investorName ? <span className={MUTED} data-testid="pitch-share-watermark">Watermark: Prepared for {investorName}</span> : null}
           </div>
           <div className="flex flex-col gap-1.5">
             <span className={EYE}>Expires</span>
