@@ -352,6 +352,8 @@ export interface Env {
   CUSTOM_MCP_ENABLED?: string;
   /** D1496 (#3840): `true` turns on team agents (`/api/teams`); anything else answers 404 `team_agents_off`. */
   TEAM_AGENTS_ENABLED?: string;
+  /** D1529 (#3845, #3742 E1): anything but `off` (with TEAM_AGENTS_ENABLED) turns on goals and tasks; `off` answers 404 `agent_engine_off`. */
+  AGENT_ENGINE?: string;
   KEK_R2?: string;
   // Symmetric secret used by `services/cryptoBox.ts` for wellbeing data.
   // Kept distinct from KEK_PII so a key rotation on PII columns never
@@ -461,6 +463,10 @@ export interface Env {
   // Optional so unit-test envs without the binding still type-check; the
   // search service no-ops gracefully when undefined.
   VECTORIZE?: VectorizeIndex;
+  // D1556 (#3803): `axal-deck-quotes` (bge-m3, 1024 dimensions). Not in wrangler.toml
+  // until the owner approves its monthly cost (decision L); absent, quote
+  // retrieval answers "not switched on yet".
+  DECK_QUOTES?: VectorizeIndex;
   // Task #13 — Workers Analytics Engine binding (`studioos_requests` dataset).
   // observability middleware writes one data point per HTTP request so the
   // Admin Analytics → Technical sub-tab can serve true edge-level traffic

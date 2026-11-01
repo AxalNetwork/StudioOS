@@ -13,6 +13,7 @@
 import type { Env } from '../types';
 import { run as aiRun, type RailContext } from './aiRouter';
 import { AI_SURFACE } from './aiSurfaces';
+import { untrustedBlock, withUntrustedRule, withoutUnrecordedLinks } from './ai/untrusted';
 
 export const DECK_SECTIONS: Array<{ key: string; label: string; keywords: string[] }> = [
   { key: 'problem', label: 'Problem', keywords: ['problem', 'pain', 'challenge', 'broken', 'struggle', 'today founders', 'status quo'] },
@@ -167,14 +168,35 @@ export function mapSectionsHeuristic(chunks: DeckChunk[]): DeckSection[] {
 /** D765's page and option for a review run whose route names none (D778 part 7: the routes name their own). */
 const REVIEW_RAIL: RailContext = { page: 'raise', option: 'review:pitch-deck' };
 
-export async function mapSections(env: Env, userId: number, markdown: string, chunks: DeckChunk[], rail: RailContext = REVIEW_RAIL): Promise<DeckSection[]> {
-  const heuristic = mapSectionsHeuristic(chunks);
-  const system =
+/** D1506: the section-mapping run's prompt: the uploaded deck as one untrusted block. */
+export function sectionsPrompt(markdown: string): { system: string; user: string; deck: string } {
+  const system = withUntrustedRule(
     'You organize raw pitch-deck text into standard sections. Respond ONLY with JSON: {"sections": [{"key": string, "content": string}]}. ' +
     'Use ONLY these keys: ' +
     DECK_SECTIONS.map((s) => s.key).join(', ') +
-    '. Put verbatim/lightly-cleaned deck content under each. Leave a section content empty if the deck does not cover it. Do not invent facts.';
-  const user = `Raw deck text (markdown):\n${markdown.slice(0, 16_000)}`;
+    '. Put verbatim/lightly-cleaned deck content under each. Leave a section content empty if the deck does not cover it. Do not invent facts.');
+  // D1506: the uploaded deck is untrusted data; a link or email the deck does not hold never comes back.
+  const deck = markdown.slice(0, 16_000);
+  const user = `Raw deck text (markdown):\n${untrustedBlock('deck_import', deck)}`;
+  return { system, user, deck };
+}
+
+/** The sections a mapping answer gives, links and emails the deck does not hold taken out; null when it gives none. */
+export function sectionsFromModel(output: unknown, deck: string, heuristic: DeckSection[]): DeckSection[] | null {
+  const parsed = parseJsonLoose<{ sections: Array<{ key: string; content: string }> }>(typeof output === 'string' ? output : '');
+  if (!parsed?.sections?.length) return null;
+  const byKey = new Map(parsed.sections.map((s) => [s.key, withoutUnrecordedLinks(String(s?.content || ''), [deck])]));
+  return DECK_SECTIONS.map((s) => ({
+    key: s.key,
+    label: s.label,
+    // Prefer AI content; fall back to heuristic bucket when AI left it blank.
+    content: (byKey.get(s.key) || heuristic.find((h) => h.key === s.key)?.content || '').trim(),
+  }));
+}
+
+export async function mapSections(env: Env, userId: number, markdown: string, chunks: DeckChunk[], rail: RailContext = REVIEW_RAIL): Promise<DeckSection[]> {
+  const heuristic = mapSectionsHeuristic(chunks);
+  const { system, user, deck } = sectionsPrompt(markdown);
   try {
     const res = await aiRun(env, {
       task: 'dd_synthesis',
@@ -187,20 +209,29 @@ export async function mapSections(env: Env, userId: number, markdown: string, ch
       maxTokens: 1800,
       temperature: 0.2,
     });
-    const parsed = parseJsonLoose<{ sections: Array<{ key: string; content: string }> }>(res.output);
-    if (parsed?.sections?.length) {
-      const byKey = new Map(parsed.sections.map((s) => [s.key, String(s.content || '')]));
-      return DECK_SECTIONS.map((s) => ({
-        key: s.key,
-        label: s.label,
-        // Prefer AI content; fall back to heuristic bucket when AI left it blank.
-        content: (byKey.get(s.key) || heuristic.find((h) => h.key === s.key)?.content || '').trim(),
-      }));
-    }
+    const mapped = sectionsFromModel(res.output, deck, heuristic);
+    if (mapped) return mapped;
   } catch {
     /* fall through to heuristic */
   }
   return heuristic;
+}
+
+/** D1506: a review's every string with the links and emails the deck and context do not hold taken out. */
+export function scrubReview(review: DeckReview, records: readonly unknown[]): DeckReview {
+  const clean = (v: string) => withoutUnrecordedLinks(v, records);
+  return {
+    ...review,
+    summary: clean(review.summary),
+    strengths: review.strengths.map(clean),
+    weaknesses: review.weaknesses.map(clean),
+    missing_sections: review.missing_sections.map(clean),
+    red_flags: review.red_flags.map(clean),
+    section_suggestions: review.section_suggestions.map((x) => ({ ...x, suggestion: clean(x.suggestion) })),
+    priority_fixes: review.priority_fixes.map(clean),
+    improved_wording: review.improved_wording.map((x) => ({ ...x, after: clean(x.after) })),
+    fix_first: clean(review.fix_first),
+  };
 }
 
 export function normalizeReview(ai: Partial<DeckReview> | null, sections: DeckSection[]): DeckReview {
@@ -238,16 +269,27 @@ export function normalizeReview(ai: Partial<DeckReview> | null, sections: DeckSe
  * Generate an honest, investor-grade review from the mapped sections.
  * Deterministic fallback when the model refuses/times out.
  */
-export async function generateReview(env: Env, userId: number, sections: DeckSection[], context?: { startup?: string }, rail: RailContext = REVIEW_RAIL): Promise<DeckReview> {
+/** D1506: the review run's prompt: the deck's sections as one untrusted block. */
+export function reviewPrompt(sections: DeckSection[], context?: { startup?: string }): { system: string; user: string; deckText: string } {
   const filled = sections.filter((s) => s.content.trim());
   const deckText = filled.map((s) => `## ${s.label}\n${s.content}`).join('\n\n').slice(0, 16_000);
-  const system =
+  const system = withUntrustedRule(
     'You are a blunt but constructive seed-stage VC reviewing a founder\'s pitch deck. Be candid, specific, and useful — no fluff, no flattery, never rude. ' +
     'Respond ONLY with JSON matching this shape: {"overall_score": number (0-100), "summary": string, "strengths": string[], "weaknesses": string[], "missing_sections": string[], "red_flags": string[], "section_suggestions": [{"section": string, "suggestion": string}], "priority_fixes": string[], "improved_wording": [{"section": string, "before": string, "after": string}], "fix_first": string}. ' +
-    'Ground every point in the deck text. Score harshly but fairly.';
-  const user = [context?.startup ? `Startup context: ${context.startup}` : '', 'Pitch deck sections:', deckText || '(deck text is empty)', '', 'Return the review JSON now.']
+    'Ground every point in the deck text. Score harshly but fairly.');
+  const user = [context?.startup ? `Startup context: ${context.startup}` : '', 'Pitch deck sections:', deckText ? untrustedBlock('deck_import', deckText) : '(deck text is empty)', '', 'Return the review JSON now.']
     .filter(Boolean)
     .join('\n');
+  return { system, user, deckText };
+}
+
+/** The review a model's answer gives, every string scrubbed of links the deck and context do not hold. */
+export function reviewFromModel(output: unknown, sections: DeckSection[], deckText: string, context?: { startup?: string }): DeckReview {
+  return scrubReview(normalizeReview(parseJsonLoose<Partial<DeckReview>>(typeof output === 'string' ? output : ''), sections), [deckText, context?.startup]);
+}
+
+export async function generateReview(env: Env, userId: number, sections: DeckSection[], context?: { startup?: string }, rail: RailContext = REVIEW_RAIL): Promise<DeckReview> {
+  const { system, user, deckText } = reviewPrompt(sections, context);
   try {
     const res = await aiRun(env, {
       task: 'dd_synthesis',
@@ -261,8 +303,7 @@ export async function generateReview(env: Env, userId: number, sections: DeckSec
       temperature: 0.5,
     });
     if (res.ok && res.output) {
-      const parsed = parseJsonLoose<Partial<DeckReview>>(res.output);
-      return normalizeReview(parsed, sections);
+      return reviewFromModel(res.output, sections, deckText, context);
     }
   } catch {
     /* fall through */

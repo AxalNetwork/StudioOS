@@ -105,3 +105,21 @@ test('the five zone slugs are the five routes the canvas names', () => {
     );
   }
 });
+
+test('D1424 (#3700): each advisor zone header fills the primary D1424 names, or none', async () => {
+  // Opportunities, Engagements, Delivery, the five Cohorts zones, Profile,
+  // Proof and Visibility have no live first step.
+  const { ADVISOR_ZONE_ACTIONS } = await import('../src/workspaces/advisorZoneActions.js');
+  const primaries = Object.fromEntries(Object.entries(ADVISOR_ZONE_ACTIONS)
+    .map(([zone, rows]) => [zone, rows.filter((r) => r.primary).map((r) => r.label)])
+    .filter(([, labels]) => labels.length));
+  assert.deepEqual(primaries, {
+    'expertise/services': ['New service'],
+    'expertise/thinking': ['New piece'],
+    'practice/sessions': ['Block a date range'],
+    'practice/earnings': ['Download 1099 summary'],
+  });
+  const service = ADVISOR_ZONE_ACTIONS['expertise/services'].find((r) => r.label === 'New service');
+  assert.deepEqual(service, { label: 'New service', kind: 'handler', handler: 'focusAddForm', primary: true },
+    'New service is the handler that focuses the Add form, not a note');
+});

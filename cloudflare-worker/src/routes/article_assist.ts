@@ -41,10 +41,10 @@
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, selectJwt } from '../auth';
-import { quoteRun, run, type RunOptions } from '../services/aiRouter';
+import { quoteRun, run, type DrawReceipt, type RunOptions } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import {
-  EXTENSION, IMAGE_BYTES_ESTIMATE, IMAGE_MODEL, IMAGE_MODEL_LABEL, MIMES, REAL_PERSON_MESSAGE, balanceRefusal, personIn, sniffMime,
+  EXTENSION, IMAGE_BYTES_ESTIMATE, IMAGE_MODEL, MIMES, REAL_PERSON_MESSAGE, balanceRefusal, imageModelLabel, personIn, sniffMime,
 } from '../services/aiImages';
 import { ensureNewsSchema } from '../services/newsSchema';
 import {
@@ -170,10 +170,10 @@ async function authorNames(env: Env, article: any): Promise<string[]> {
 
 function imageRunOptions(c: any, user: User, id: number, ask: ArticleImageAsk): RunOptions {
   const rail = { ...railFor(c, { page: articlePage(user.role), option: ARTICLE_IMAGE_OPTION }, articleRecord(id)), option: ARTICLE_IMAGE_OPTION };
-  return { task: 'article_image', userId: Number(user.id) || 0, text: imagePromptOf(ask).slice(0, 2048), draw: {}, surface: AI_SURFACE.articles, rail };
+  return { task: 'article_image', drawJob: 'AR4', userId: Number(user.id) || 0, text: imagePromptOf(ask).slice(0, 2048), draw: {}, surface: AI_SURFACE.articles, rail };
 }
 
-type Priced = { id: number; authorId: number; ask: ArticleImageAsk; opts: RunOptions; per: number; total: number };
+type Priced = { id: number; authorId: number; ask: ArticleImageAsk; opts: RunOptions; per: number; total: number; model: string; draw: DrawReceipt | null };
 
 /**
  * The checked image press and its price, or the response that refuses it,
@@ -193,7 +193,7 @@ async function pricedImage(c: any, user: User): Promise<Priced | { refused: Resp
   const q = await quoteRun(c.env, opts);
   if (!q.ok) return { quoteRefusal: { refusal: q.refusal, error: q.error } };
   // D1411: an article's images count to its author's storage plan, whoever presses.
-  return { id: gate.id, authorId: Number(gate.article.author_user_id) || 0, ask: read.ask, opts, per: q.hold_microusd, total: q.hold_microusd * read.ask.count };
+  return { id: gate.id, authorId: Number(gate.article.author_user_id) || 0, ask: read.ask, opts, per: q.hold_microusd, total: q.hold_microusd * read.ask.count, model: q.model, draw: q.draw ?? null };
 }
 
 articleAssist.post('/:id/images/quote', async (c) => {
@@ -203,7 +203,8 @@ articleAssist.post('/:id/images/quote', async (c) => {
   if ('quoteRefusal' in p) return c.json({ ai: false, reason: p.quoteRefusal.refusal ?? 'model_unavailable', message: p.quoteRefusal.error ?? 'The image model is not available.' });
   const short = await balanceRefusal(c.env, Number(user.id), p.total);
   return c.json({
-    ai: true, model: IMAGE_MODEL, model_label: IMAGE_MODEL_LABEL, per_image_microusd: p.per, count: p.ask.count, total_microusd: p.total,
+    // #3935: the model AR4 will run (its Default or its fallback), and why, never a fixed id.
+    ai: true, model: p.model, model_label: imageModelLabel(p.model), draw: p.draw, per_image_microusd: p.per, count: p.ask.count, total_microusd: p.total,
     balance: short ? { ok: false, code: short.code, message: short.message } : { ok: true },
   });
 });

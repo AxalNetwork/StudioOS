@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e9e7ee}
+a{color:#7c3aed;text-decoration:none}
+a:hover{color:#6d28d9;text-decoration:underline}
+</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:72px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1040px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:#6b6577">Axal VC · Investor, Advisor and Operating Partner workspaces</span>
+<h1 style="margin:0;font-size:42px;font-weight:800;letter-spacing:-0.03em">Zone headers</h1>
+<p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">Every zone gets the founder’s header: crumb, title with its page-type badge, purpose line, one primary only where its first step works today, then Ask. The primary takes the licence accent (pending owner): investor indigo, advisor emerald, partner amber-brown.</p>
+</header>
+<sc-for list="{{ boards }}" as="b" hint-placeholder-count="24">
+<section id="{{ b.id }}" style="display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">{{ b.id }}</span><h2 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-0.02em">{{ b.t }}</h2></div>
+<sc-if value="{{ b.noteOn }}" hint-placeholder-val="{{ false }}"><p style="margin:0;max-width:1440px;font-size:13px;line-height:1.5;color:#3f3a47">{{ b.note }}</p></sc-if>
+<div style="display:flex;gap:32px;align-items:flex-start;flex-wrap:wrap;max-width:2944px">
+<sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+<div style="display:flex;flex-direction:column;gap:8px">
+<sc-if value="{{ f.capOn }}" hint-placeholder-val="{{ false }}"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">{{ f.cap }}</span></sc-if>
+<div style="{{ f.wst }}"><dc-import name="Zone Headers Page" v="{{ f.v }}" hint-size="1440px,900px"></dc-import></div>
+</div>
+</sc-for>
+</div>
+</section>
+</sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const fr = (v, w, cap) => ({ v, cap: cap || '', capOn: !!cap, wst: 'width:' + w + 'px;border-radius:' + (w === 390 ? 28 : 14) + 'px;overflow:hidden;border:1px solid ' + (/-d$/.test(v) ? '#374151' : '#dedbe5') + ';box-shadow:0 20px 50px rgba(24,24,27,.10)' });
+    const B = (id, t, frames, note) => ({ id, t, frames, note: note || '', noteOn: !!note });
+    const boards = [
+      B('Page', 'Investor › Deals › Closing · Ask panel open', [fr('hero', 1440)], 'Ask carries “3 waiting” while proposals wait. The panel slides out of the AIRail’s left edge, between header and footer, and the page narrows beside it.'),
+      B('PH0', 'The header, one component', [fr('ph0', 1440, 'Anatomy, four variants, primary states'), fr('ph0m', 390, '390px')]),
+      B('PH1', 'Deals · Deal flow', [fr('ph1a', 1440, 'Empty · Set your thesis'), fr('ph1b', 1440, 'Filled · no primary')], 'No Add a deal: an investor cannot log an off-platform deal today (pending owner).'),
+      B('PH2', 'Deals › Screening', [fr('ph2a', 1440, 'Empty'), fr('ph2b', 1440, 'Filled')]),
+      B('PH3', 'Deals › Commit', [fr('ph3a', 1440, 'Empty'), fr('ph3b', 1440, 'Filled')]),
+      B('PH4', 'Deals › Closing', [fr('ph4a', 1440, 'Filled'), fr('ph4b', 1440, 'Empty')]),
+      B('PH5', 'Portfolio · Positions, Reports, Value-add', [fr('ph5', 1180)], 'Field triggers on composition fields only, marked “after Worker support”. Until then Ask opens the panel with typed questions only.'),
+      B('PH6', 'Fund · LPs, Calls, Accounting, Reporting (Institutional only)', [fr('ph6', 1180, 'Zones'), fr('ph6l', 1440, 'Locked by plan')]),
+      B('PH7', 'Research › Ask and Network', [fr('ph7', 1180)]),
+      B('PH8', 'Investor Home · thesis band (pending owner)', [fr('ph8', 1180)]),
+      B('PH9', 'Practice · five zones', [fr('ph9', 1180)]),
+      B('PH10', 'Cohorts · five zones, read only', [fr('ph10', 1180)]),
+      B('PH11', 'Expertise · five zones', [fr('ph11s', 1440, 'Services · Ask with the form intent'), fr('ph11', 1180, 'Thinking, Profile, Proof, Visibility')], 'Ask fills Title and What it covers only. Price is never filled; Duration is not a fill field.'),
+      B('PH12', 'The colour check (pending owner)', [fr('ph12', 1180)]),
+      B('PH13', 'Pipeline · five zones', [fr('ph13', 1180)]),
+      B('PH14', 'Delivery · five zones', [fr('ph14s', 1440, 'Status reports · the report as a form'), fr('ph14', 1180, 'Board, Deliverables, Capacity, Health'), fr('ph14d', 1440, 'An engagement opens the right Sheet')], 'Done this week and Next week come from the engagement record at no charge. Blockers is not a fill field.'),
+      B('PH15', 'Offers · six zones', [fr('ph15', 1180)]),
+      B('PH16', 'What each profile is missing', [fr('ph16', 1440)]),
+      B('PH17', 'The Ask panel on each profile', [fr('ph17', 1440)]),
+      B('PH18', 'States', [fr('ph18', 1440)]),
+      B('PH19', 'Access states', [fr('ph19a', 1440, 'Read-only HQ access'), fr('ph19b', 1440, 'Support session'), fr('ph19c', 1440, 'Permission refused'), fr('ph19d', 1440, 'Explorer'), fr('ph19e', 1440, 'No-rail page · Advisor Home')]),
+      B('PH20', 'Phone · 390', [fr('ph20a', 390, 'Deals › Closing'), fr('ph20b', 390, 'Status reports · Ask sheet'), fr('ph20c', 390, 'No primary · Ask alone')]),
+      B('PH21', 'Tablet · 768', [fr('ph21', 768)], 'The Ask panel overlays the content only, with no scrim; the sidebar is collapsed.'),
+      B('PH22', 'Dark', [fr('ph22a-d', 1440, 'PH4'), fr('ph22b-d', 1440, 'PH9 Sessions'), fr('ph22c-d', 1440, 'PH14 Status reports')])
+    ];
+    return { boards };
+  }
+}
+</script>
+</body></html>

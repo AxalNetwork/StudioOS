@@ -935,12 +935,11 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
               phone
             />
             {belowThread}
-            {/* Last row with mt-auto: at the frame's foot (useFootFill) on a short
-                thread, pinned on a long one. bottom-0, not the tab bar's height:
-                a sticky row is held inside the scroll's padding, and the shell's
-                <main> already pads by the bar (mobileTabBar.css), so the bar's
-                height again left a 56px gap above it. */}
-            <div className="sticky bottom-0 z-10 mt-auto bg-white dark:bg-gray-950" data-testid="eadwyn-phone-composer">
+            {/* Last row with mt-auto: at the frame's foot (useFootFill). Not
+                pinned (D1419, #3698 owner answer A): the founder's strip,
+                profile card and modules follow the chat on a phone, and they
+                would scroll under a pinned composer. */}
+            <div className="mt-auto bg-white dark:bg-gray-950" data-testid="eadwyn-phone-composer">
               {question && (
                 <CurrentQuestion
                   q={question}

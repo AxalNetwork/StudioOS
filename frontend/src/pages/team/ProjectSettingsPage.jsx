@@ -9,7 +9,7 @@ import { reportError } from '../../lib/log';
 import { useActiveCompany } from '../../contexts/ActiveCompanyContext';
 import { projectCompany, projectsOfCompany, scopeFor, usePublishScope } from '../../lib/settingsScope.js';
 import { ActionDialog } from '../account/companies/LifecycleDialogs.jsx';
-import { day, lifecycleRefusal, stageWord } from '../account/companies/companiesModel.js';
+import { day, incorporatePath, lifecycleRefusal, stageWord } from '../account/companies/companiesModel.js';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, EYEBROW, MUTED, TeamCard } from './teamUi.jsx';
 import { initials, moveOutCopy, moveTarget, moveUnderLines } from './teamModel.js';
 
@@ -32,7 +32,7 @@ import { initials, moveOutCopy, moveTarget, moveUnderLines } from './teamModel.j
  * `data-scope` is "loading", and the sidebar is not told a scope.
  */
 
-function MoveUnderSheet({ project, companies, onClose, onDone }) {
+export function MoveUnderSheet({ project, companies, onClose, onDone }) {
   const options = (companies || []).map(moveTarget);
   const [pick, setPick] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -129,7 +129,13 @@ export default function ProjectSettingsPage() {
         {!ready ? <p className={MUTED} data-testid="project-settings-company-reading">Reading…</p> : scope.kind === 'project' ? (
           <>
             <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100" data-testid="project-settings-standalone">{name} is a standalone project. It is not a legal entity, and it governs itself. Its Owner manages its team and agents.</p>
-            {state.manage ? <button type="button" className={`mt-3 ${BTN_SECONDARY}`} onClick={() => setOpen('under')} data-testid="move-under-open">Move under a company</button> : null}
+            {/* D1413 (#3696, PF6b): Make it a company opens Incorporate with this project (D1414); or move it under one you belong to. */}
+            {state.manage ? (
+              <span className="mt-3 flex flex-wrap gap-2">
+                <Link to={incorporatePath(id)} className={BTN_PRIMARY} data-testid="project-settings-incorporate">Make it a company</Link>
+                <button type="button" className={BTN_SECONDARY} onClick={() => setOpen('under')} data-testid="move-under-open">Move under a company</button>
+              </span>
+            ) : null}
           </>
         ) : scope.kind === 'company_project' ? (
           <>

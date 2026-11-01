@@ -517,10 +517,17 @@ export type Choice = { id: string; line: string };
  * row's run can execute a model (its shape); `offerable` drops what no rail
  * lists. A fixed step suggests its one model and lists nothing more.
  */
+/** #3935: every model a job's selector can show (its own models, then its kind's), before the offer filters: what a press may accept. */
+export const jobChoices = (job: UseJob): string[] => [...new Set([job.default, job.alternative, job.deeper, job.fallback, ...job.more,
+  ...USE_KINDS[job.kind].models.filter((id) => !SCOPED_MODELS.has(id))].filter((id): id is string => !!id))];
+
 export function selectorFor(job: UseJob, fits: (id: string) => boolean): { models: Card[]; more: Choice[] } {
   const ok = (id: string | null): id is string => !!id && fits(id) && offerable(id);
   const roles = ['Default', 'Alternative', 'Deeper'];
   const picked = [job.default, job.alternative, job.deeper].filter(ok).filter((id, i, a) => a.indexOf(id) === i);
+  // #3935: when none of the three can be offered (Legal holds them all, as GR3's Lucid and Phoenix), the
+  // job's fallback is what runs, so it is the row's Default rather than an empty row.
+  if (!picked.length && ok(job.fallback)) picked.push(job.fallback);
   const models = picked.map((id, i) => ({ id, role: roles[i], line: MODEL_LINES[id] ?? '' }));
   if (job.fixed) return { models: models.slice(0, 1), more: [] };
   const rest = [...job.more, ...USE_KINDS[job.kind].models.filter((id) => !SCOPED_MODELS.has(id))].filter(ok).filter((id, i, a) => a.indexOf(id) === i && !picked.includes(id));
