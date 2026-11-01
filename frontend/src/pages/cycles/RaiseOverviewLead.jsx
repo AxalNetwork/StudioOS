@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom';
-import { AskButtonView } from '../../ui/AskButton.jsx';
-import { openEadwynPanel, useEadwynTrigger } from '../../ui/eadwynPanel.js';
+import { PageAsk } from '../../ui/AskButton.jsx';
 import { nextHref } from './cycleModel';
 
 /**
@@ -155,7 +154,6 @@ export default function RaiseLead({ data, search = '', onRetry }) {
  * sees it, and the overview itself uses no AI.
  */
 export function RaiseAsk() {
-  const available = useEadwynTrigger();
-  if (!available) return null;
-  return <AskButtonView onClick={() => openEadwynPanel('Raise · Overview')} testId="raise-ask" />;
+  // D1443 (#3706): Ask opens the Ask panel for every viewer a rail serves.
+  return <PageAsk label="Raise · Overview" testId="raise-ask" />;
 }

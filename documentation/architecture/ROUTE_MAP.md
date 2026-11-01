@@ -2051,6 +2051,20 @@ D1176 (#3103): Worker `/api/cycles/raise/use-of-funds` now serves GET `/plan`, s
 
 `POST /api/billing/stripe/webhook` verifies the signature and its 300-second timestamp tolerance before D1. Authenticated event ids are recorded in migration 691's receipt table. Completed duplicates acknowledge without dispatch; wrong-mode events acknowledge without dispatch; concurrent unfinished delivery gets 409 and a failed handler gets 503 so Stripe can retry. Only a successful handler completes its owned receipt. Both existing customer portal sessions return to `/account/billing`. D1434's owner-run cutover and S12's screens are separate.
 
+### Agent engine E1: goals, tasks and dependencies (D1529, #3845)
+
+Worker routes in `routes/agent_engine.ts`, mounted at `/api/teams` before `team_agents.ts`, backed by `services/agents/goals.ts`, `services/agents/tasks.ts` and migration 727 (`scope_goals`, `scope_tasks`, `scope_task_deps`, `scope_task_events`; `task_id` and `run_key` on `ai_rail_proposals`). The client is `lib/api/agentEngine.js` (`agentEngineApi`). No page yet: S1's canvas integrates it (TM6b, TM6c, later TM10–TM11). Every route is 404 `agent_engine_off` unless `AGENT_ENGINE` is set and not `"off"` (it is `"off"` in both `wrangler.toml` blocks) and `TEAM_AGENTS_ENABLED` is `"true"`. The gates are D1496's read and manage. `cost` is `{ available: false }` until E3, never 0.
+
+| Route | Gate | What it does |
+| --- | --- | --- |
+| `GET /api/teams/:scope/:id/goals` | read | `{ goals: [{ uid, title, why, metric, target_date, stage, parent: { uid, title } \| null, okr_id, status, priority, progress: { done, total }, cost }] }`. `parent` is null while the project is outside the parent's company. 403, 404. |
+| `POST /api/teams/:scope/:id/goals` | manage | Takes `{ title, why?, metric?, target_date?, stage?, parent_goal_uid?, okr_id?, priority? }`; 201 `{ goal }`. 400 `invalid_goal`; 422 `parent_not_in_company` / `okr_not_in_project`. |
+| `PATCH /api/teams/goals/:uid` | manage | The same fields and `status` (`open`, `achieved`, `dropped`); `{ goal }`. |
+| `GET /api/teams/:scope/:id/tasks?goal=&assignee=person\|agent\|none&status=&module=` | read | `{ tasks: [{ uid, title, detail, module, option, kind, goal, assignee: { kind, person?, agent? }, context_project, status, blocked_reason, ready, depends_on: [uid], priority, due_at, attempts, cost }] }`. `ready` is derived. 400 `invalid_filter`. |
+| `POST /api/teams/:scope/:id/tasks` | manage | Takes `{ title, detail?, goal_uid?, module?, option?, kind?, context_project_id?, assignee?: { kind, uid? }, priority?, due_at?, source_kind?, source_ref? }`; 201 `{ task }`. 409 `agent_not_live`; 422 `module_not_allowed` / `option_not_allowed` / `assignee_not_member` / `project_not_in_company` / `goal_not_in_scope`. |
+| `PATCH /api/teams/tasks/:uid` | manage; a person assignee may send `status` and `blocked_reason` only | `{ task }`, with the same refusals. 403 `not_manager`. |
+| `PUT /api/teams/tasks/:uid/deps` | manage | Takes `{ depends_on: [uid] }` (at most 50); `{ task }`. 422 `dependency_cycle` / `cross_scope` / `too_many_dependencies`. |
+
 ### Team agents part 1: the registry and the rule books (D1496, #3840)
 
 Worker routes in `routes/team_agents.ts`, mounted at `/api/teams`, backed by `services/agents/catalogue.ts`, `services/agents/rulebook.ts` and migration 712 (`team_agents`, `team_rulebooks`, `team_agent_events`; `agent_id` and `decided_by_user_id` on `ai_rail_proposals`, `agent_id` on `ai_usage_logs`). The client is `lib/api/teamAgents.js` (`teamAgentsApi`). No page yet: S1's Team page integrates it (#3727 part 6). Every route is 404 `team_agents_off` unless `TEAM_AGENTS_ENABLED` is `"true"` (off in both `wrangler.toml` blocks). `:scope` is `company` (its uid) or `project` (its id). Read: a company's `user_company_links` row, or `canAccessProject`. Manage: the company's `canEdit`, or `isProjectManager`. A person is `{ uid, name }`, never an email or a numeric id. Part 2 (#3842) adds the run below, through `services/agents/agentRun.ts` (the gates, the rule book and the spend are `services/agents/teams.ts`'s); part 3 adds the queue.
@@ -2080,15 +2094,38 @@ No migration and no decision of its own: it fills TM2's gaps on the existing tab
 | `GET /api/account/people/search?q=&company=<uid>\|&project=<id>` | signed in | `{ people: [{ uid, name, avatar_url, shared: [{ kind: 'company' \| 'connection', name }] }] }`, at most 10, by name, only people reachable from the caller, never the caller. `company` or `project` names the team being built: the caller must belong to it (403 `not_member`) and its members are left out. `avatar_url` is null (users record none). 400 `query_too_short` (under 2 letters) / `query_too_long`. Rate bucket `people_search`, 30 a minute, fail-closed. |
 | `GET /api/company/:uid` · `GET /api/projects/:id/members` | as before | `members[]` carries `email` on the caller's own row only; another member's row has no `email` key (the canvas: "Never show another member's email"). Invitation addresses to editors are unchanged (owner question T3 is open). Company Settings › Members prints no address on another member's row. |
 
+### The stage plan (D1522, #3774)
+
+`routes/deck_stage.ts`, mounted at `/api/decks` beside `deck_grid.ts`. Rules in `services/narrative/arcs.ts`, records read by `services/decks/stagePlan.ts` (also called by the one-click run). Client: `lib/api/deckStage.js` (`deckStageApi.stagePlan`), read through `deckV2Adapter.stagePlan` (a `SWAPPED` row).
+
+| Route | Who | What it answers |
+| --- | --- | --- |
+| `GET /api/decks/:id/stage-plan?stage=&investor_type=` | whoever may read the deck (`projectOwned`) | `{ deck_id, version, stage, stage_label, stage_source: asked \| audience \| venture \| default, investor_type, order: [{ card, title, why, weight, required, in_deck, proof: recorded \| missing \| unchecked }], warnings: [{ card, code: missing_card \| missing_proof \| unchecked_proof, message, action }], extra, sources, evidence, objections: { state, unanswered } }`. 400 for a stage or investor type not on the lists; 403; 404. No model, no charge, no write. |
+### Remix (D1553, #3800)
+
+`routes/deck_remix.ts`, mounted at `/api/decks` beside `deck_grid.ts`. Rules in `services/decks/remix.ts` (also called by the one-click run for AUTO-4's drop). Client: `lib/api/deckRemix.js` (`deckRemixApi.remix`), read through `deckV2Adapter.remix` (a `SWAPPED` row); the pd5 sheet is `RemixSheet` in `DeckSheets.jsx`, opened from ⋯ › This card › Remix this slide only.
+
+| Route | Who | What it answers |
+| --- | --- | --- |
+| `POST /api/decks/:id/remix` `{ card, remove? }` | whoever may read the deck (`projectOwned`) | `{ deck_id, current, card, options: [{ structure, label, line, card }] }`: at most four layouts, each holding every block of the card unchanged; with `remove`, `card` is the card after the reflow. 400 for no card, a card with no blocks, or a block not on the card; 403; 404. No model, no hold, no charge (works with AI paused); writes nothing. |
+
 ### The Grid v2 (D1499, #3749)
 
 `routes/deck_grid.ts`, mounted at `/api/decks` beside `deck_check.ts`. Geometry and catalogue in `services/decks/structures.ts`, mirrored (geometry only) in `frontend/src/pages/raise/pitch/gridModel.js`. Client: `lib/api/deckGrid.js` (`deckGridApi.grid`), read through `deckV2Adapter.grid` (part 2, the one `SWAPPED` row of the seam). The editor's stage (`GridStage.jsx`), Present and the print page (`BlockGrid.jsx`) place every area with `gridModel.placeOf`, so they draw this route's boxes; ⋯ › Slide size writes `theme.aspect` with the next version save, so no route is added for it.
 
 | Route | Who | What it answers |
 | --- | --- | --- |
-| `GET /api/decks/:id/grid` | whoever may read the deck (`projectOwned`) | `{ deck_id, version, aspect: '16:9' \| '4:3', slide, frame, cell, baseline: 8, grid: { cols: 12, rows: 6 }, structures: [17 × { id, label, use, areas, background?, recommended? }], cards: [{ index, structure, derived, areas: [{ id, c1, c2, r1, r2, order, inset, align, role?, box }] }] }`. A card saved before v2 reads `structure: 'custom', derived: true`, its areas derived from its blocks. Every `box` is `boxOfAt(area, aspect)` in slide pixels. 403 / 404. |
+| `GET /api/decks/:id/grid` | whoever may read the deck (`projectOwned`) | `{ deck_id, version, aspect: '16:9' \| '4:3', slide, frame, cell, baseline: 8, grid: { cols: 12, rows: 6 }, structures: [17 × { id, label, use, areas, background?, recommended? }], cards: [{ index, structure, derived, areas: [{ id, c1, c2, r1, r2, order, inset, align, role?, box }] }] }`. A card saved before v2 reads `structure: 'custom', derived: true`, its areas derived from its blocks. Every `box` is `boxOfAt(area, aspect)` in slide pixels. D1554 (#3801): `?aspect=16:9\|4:3` adds `reflow: { from, to, count, moved: [{ card, block, kind: 'trimmed' \| 'removed', text }] }`, which is what a switch to that aspect would move from the saved version into the speaker notes (`services/decks/reflow.ts`), and `reflow_map` (each structure's areas at both aspects). Any other aspect is 400 `invalid_aspect`. 403 / 404. |
 
 Saves: `PUT`/`POST` of a version keep `card.structure` (one of the 17, or `custom`) and `card.areas` (≤ 12, whole cells, no overlap) and refuse a bad one with its sentence (`modelProblems`); `theme.aspect` keeps `4:3`, and 16:9 is the default left out.
+
+### Deck v2 A13: untrusted input framing and upload hardening (D1506, #3757)
+
+- **No page changes.** The canvas draws no screen for this (pd2, pd19 and pd20 send the text it frames).
+- **Framing:** `services/ai/untrusted.ts`. Every text written outside our code reaches a model inside `BEGIN_<KIND>_<nonce>` / `END_<KIND>_<nonce>`. That covers New deck's founder note and facts (record facts, connected tools' rows, documents: `deck_new.ts`), the card tools' text, instruction and labels (`deck_assist.ts`), Fill from project's records (`decks.ts` autofill), competitor web pages and interview transcripts. A link or email address no record holds is dropped from the answer.
+- **Figure guard:** `\p{Nd}` digits in every script, plus number words in the card's language.
+- **Images:** `deck_images.ts` adds `POST /api/decks/:id/images/import` (`{ url, use?, card?, alt?, shows_person?, consent? }`), which copies an external image in through `services/decks/imageFetch.ts`. Upload, import and drawn images are stripped of metadata, measured from the header (413 `image_too_large` over 50 MP) and stored once per venture: a repeat upload answers 200 with `duplicate: true` (migration 718, `sha256`).
+- **Export browser:** `services/browserRun.ts` `renderUrl` passes `allowRequestPattern`: the page's own origin, Google Fonts, `data:` and `blob:`.
 
 ### Learning on the Calendar: a member's own learning plan (#3959, Worker half)
 

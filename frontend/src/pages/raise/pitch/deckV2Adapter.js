@@ -23,9 +23,13 @@
  * file no longer lists it.
  *
  * Swapped here (`SWAPPED`): `grid`, whose route `GET /api/decks/:id/grid`
- * merged as D1499 part 1 (#3749). It keeps its row, so the plan's table still
- * reads whole, and answers through `deckGridApi.grid`. D1565 (#3812):
- * `investorLinks` and `withdrawInvestorLink`, through `deckInvestorLinksApi`.
+ * merged as D1499 part 1 (#3749), `stagePlan`, whose route
+ * `GET /api/decks/:id/stage-plan` is D1522 (#3774), `remix`, whose route
+ * `POST /api/decks/:id/remix` is D1553 (#3800), and D1565's (#3812)
+ * `investorLinks` and `withdrawInvestorLink`. Each keeps its row, so the
+ * plan's table still reads whole, and answers through its client
+ * (`deckGridApi.grid`, `deckStageApi.stagePlan`, `deckRemixApi.remix`,
+ * `deckInvestorLinksApi`).
  *
  * Fields on routes that exist (`context.inferred` and `context.freshness`
  * from #3877; the PostHog, HubSpot and Linear source rows from #3880) need
@@ -35,6 +39,8 @@
 import { LATER, NOT_ON } from './deckV2Model.js';
 import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks.js';
 import { deckGridApi } from '../../../lib/api/deckGrid.js';
+import { deckStageApi } from '../../../lib/api/deckStage.js';
+import { deckRemixApi } from '../../../lib/api/deckRemix.js';
 
 export { NOT_ON };
 
@@ -96,7 +102,7 @@ export const SURFACES = Object.freeze({
 const off = (name) => async () => unavailable(SURFACES[name].issue);
 
 /** The rows whose route is on main: each answers through its real client, never unavailable by default. */
-export const SWAPPED = Object.freeze(['grid', 'investorLinks', 'withdrawInvestorLink']);
+export const SWAPPED = Object.freeze(['grid', 'stagePlan', 'remix', 'investorLinks', 'withdrawInvestorLink']);
 
 /**
  * A client call, as a surface reads it, for the day a method is swapped:
@@ -140,7 +146,8 @@ export const history = off('history');
 export const narrativeOutline = off('narrativeOutline');
 export const themesV2 = off('themesV2');
 export const instruct = off('instruct');
-export const stagePlan = off('stagePlan');
+/** D1522 (#3774): the deck's stage plan — the order for its stage, a why line per card, and missing-proof warnings. */
+export const stagePlan = (deckId, opts) => through(() => deckStageApi.stagePlan(deckId, opts), SURFACES.stagePlan.issue);
 export const figures = off('figures');
 export const deckUsage = off('deckUsage');
 export const arrange = off('arrange');
@@ -156,7 +163,8 @@ export const media = off('media');
 export const presets = off('presets');
 export const orgLocks = off('orgLocks');
 export const critique = off('critique');
-export const remix = off('remix');
+/** D1553 (#3800): four layouts for one card, and the remove-a-block reflow; free, so it answers with AI paused. */
+export const remix = (deckId, card, opts) => through(() => deckRemixApi.remix(deckId, card, opts), SURFACES.remix.issue);
 export const consistency = off('consistency');
 export const deckActions = off('deckActions');
 export const brandLocks = off('brandLocks');

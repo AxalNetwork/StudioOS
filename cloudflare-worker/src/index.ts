@@ -253,6 +253,8 @@ import deckReview from './routes/deck_review';
 import deckSources from './routes/deck_sources';
 import deckCheck from './routes/deck_check';
 import deckGrid from './routes/deck_grid';
+import deckStage from './routes/deck_stage';
+import deckRemix from './routes/deck_remix';
 import deckNew from './routes/deck_new';
 import deckAssist from './routes/deck_assist';
 import deckImages from './routes/deck_images';
@@ -461,6 +463,7 @@ import fillsRoutes from './routes/fills';
 import connectorMcpOauthRoutes from './routes/connector_mcp_oauth';
 import connectorsHealth from './routes/connectors_health';
 import connectorsCustomRoutes from './routes/connectors_custom';
+import agentEngineRoutes from './routes/agent_engine';
 import teamAgentsRoutes from './routes/team_agents';
 import cartaInvestorRoutes from './routes/carta_investor';
 import mercuryInvestorRoutes from './routes/mercury_investor';
@@ -1376,6 +1379,10 @@ app.route('/api/decks', deckReview);
 app.route('/api/decks', deckCheck);
 // D1499 (#3749): The Grid of one deck version — geometry, the 17 structures and each card's areas.
 app.route('/api/decks', deckGrid);
+// D1522 (#3774): the deck's stage plan — order, why lines and missing-proof warnings.
+app.route('/api/decks', deckStage);
+// D1553 (#3800): Remix — four layouts for one card and the remove-a-block reflow; no model, no charge.
+app.route('/api/decks', deckRemix);
 // D896: `/sources` and `/:id/refresh`, before `decks` so its `GET /:id` cannot answer `/sources`.
 app.route('/api/decks', deckSources);
 // D897: New deck (`/new/context`, `/new/quote`, `/outline`, `/generate`, `/proposals/:id/keep-slides`), before `decks` for the same reason.
@@ -1691,6 +1698,9 @@ app.route('/api', companyLegal);
 app.route('/api', companyDocuments);
 app.route('/api', companyRoutes);
 // D1496 (#3840): team agents, their rule books and their audit; 404 `team_agents_off` until TEAM_AGENTS_ENABLED is "true".
+// D1529 (#3845, #3742 E1): goals, tasks and dependencies; 404 `agent_engine_off` until AGENT_ENGINE is on.
+// Before team_agents, whose `*` middleware would otherwise answer for these paths; each handler checks its own flag.
+app.route('/api/teams', agentEngineRoutes);
 app.route('/api/teams', teamAgentsRoutes);
 app.route('/api/needs', needsRoutes);
 app.route('/api/quotes', quotesRouter);
