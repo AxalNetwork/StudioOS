@@ -71,6 +71,8 @@ export const TASK_LABELS: Record<TaskClass, string> = {
   deck_image: 'Draw a deck image',
   article_image: 'Draw an article image',
   mail_draft: 'Draft an email',
+  // D1420 (#3864).
+  studio_layout: 'Arrange your Studio',
   // D764 (#2089) — the rail's kinds of work, in the canvas's words.
   rail_chat: 'Chat on a page',
   rail_synth: 'Group notes into themes',
@@ -86,6 +88,14 @@ export const TASK_LABELS: Record<TaskClass, string> = {
   rail_legal: 'Read terms and filings',
   rail_multi: 'Read sources in any language',
   rail_search: 'Answer from your documents',
+  // #3934: the use-case plan's seven new kinds.
+  rail_draw: 'Draw an image',
+  rail_edit_image: 'Edit an image',
+  rail_voice_turn: 'Voice reply',
+  rail_agent: 'Agent turn',
+  rail_decide: 'Decide',
+  rail_sentiment: 'Read sentiment',
+  rail_translate: 'Translate',
 };
 
 /**

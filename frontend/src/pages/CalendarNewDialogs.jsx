@@ -37,6 +37,7 @@ export function NewMenu({ role, onPick }) {
           ) : (
             <button key={it.key} type="button" role="menuitem" className={OPTION} onClick={() => { setOpen(false); onPick(it.key); }} data-testid={`cal-new-${it.key}`}>
               <span className={`font-semibold ${INK}`}>{it.label}</span>
+              {it.sub ? <span className={`text-[11.5px] ${MUTED}`}>{it.sub}</span> : null}
             </button>
           ))}
           <span className={`px-2.5 pt-1 text-[11px] ${MUTED}`}>Items that leave the page carry ↗.</span>

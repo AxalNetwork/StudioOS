@@ -95,6 +95,8 @@ export interface ProposeInput {
   payload: Record<string, unknown>;
   model?: string | null;
   usageLogId?: number | null;
+  /** D1496 part 2 (#3842): the team agent that made it (`ai_rail_proposals.agent_id`, migration 712); the row stays the sponsor's. */
+  agentId?: number | null;
 }
 
 /**
@@ -106,6 +108,7 @@ export function proposeRefusal(input: ProposeInput): string | null {
   if (!railPageKey(input.page)) return 'not a rail page';
   if (!railOptionKey(input.option)) return 'not a rail option';
   if (input.record != null && !railRecordKey(input.record)) return 'not a record';
+  if (input.agentId != null && !(Number.isSafeInteger(input.agentId) && input.agentId > 0)) return 'not an agent';
   if (!RAIL_PROPOSAL_KINDS.includes(input.kind)) return 'not a kind';
   if (!input.payload || typeof input.payload !== 'object' || Array.isArray(input.payload)) return 'no payload';
   if (JSON.stringify(input.payload).length > MAX_PAYLOAD_CHARS) return 'payload too long';
@@ -119,15 +122,25 @@ export async function proposeRail(env: Env, input: ProposeInput): Promise<RailPr
   const why = proposeRefusal(input);
   if (why) throw new Error(`ai_rail_proposals: ${why}`);
   const uid = crypto.randomUUID();
-  await env.DB.prepare(
-    `INSERT INTO ai_rail_proposals
-       (uid, user_id, rail_page, rail_option, record_ref, kind, payload_json, model, usage_log_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(
+  const values = [
     uid, input.userId, railPageKey(input.page), railOptionKey(input.option),
     input.record != null ? railRecordKey(input.record) : null, input.kind,
     JSON.stringify(input.payload), input.model ?? null, input.usageLogId ?? null,
-  ).run();
+  ];
+  // D1496 part 2: an agent's proposal names its agent; a member's own keeps the statement it had.
+  if (input.agentId != null) {
+    await env.DB.prepare(
+      `INSERT INTO ai_rail_proposals
+         (uid, user_id, rail_page, rail_option, record_ref, kind, payload_json, model, usage_log_id, agent_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(...values, input.agentId).run();
+  } else {
+    await env.DB.prepare(
+      `INSERT INTO ai_rail_proposals
+         (uid, user_id, rail_page, rail_option, record_ref, kind, payload_json, model, usage_log_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(...values).run();
+  }
   const row = await getRail(env, input.userId, uid);
   if (!row) throw new Error('ai_rail_proposals: the row could not be read back');
   return row;

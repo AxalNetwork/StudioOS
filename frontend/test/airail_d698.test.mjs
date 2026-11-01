@@ -387,11 +387,16 @@ test('11 · without fills: the switch is drawn, AI is on, and no "no switch" lin
 
 test('All models is the new canvas\'s ten groups, and its ids are the router\'s', () => {
   const data = JSON.parse(read('design/incoming/airail-every-page-data/canvas.json'));
-  // The canvas's names in its order; two router models it does not name close Conversation and writing.
-  const EXTRAS = ['Llama 3.2 3B', 'Llama 3.1 8B Fast'];
+  // The canvas's names in its order; router models it does not name close their group:
+  // two in Conversation and writing, and (#3934's decide, sentiment and voice-turn kinds) three in Reasoning and one in Voice.
+  const EXTRAS_BY_GROUP = { 'Conversation and writing': ['Llama 3.2 3B', 'Llama 3.1 8B Fast'], Reasoning: ['Clef', 'Clef Flash', 'DistilBERT SST-2'], Voice: ['PhoneLLM Mini'] };
+  const EXTRAS = Object.values(EXTRAS_BY_GROUP).flat();
   assert.deepEqual(ALL_MODELS.map(([g, rows]) => [g, rows.map(([n]) => n).filter((n) => !EXTRAS.includes(n))]),
     data.all_models.map((g) => [g.group, g.models]));
-  assert.deepEqual(ALL_MODELS[0][1].slice(-2).map(([n]) => n), EXTRAS);
+  for (const [g, names] of Object.entries(EXTRAS_BY_GROUP)) {
+    const rows = ALL_MODELS.find(([name]) => name === g)[1];
+    assert.deepEqual(rows.slice(-names.length).map(([n]) => n), names, `${g}'s extras close the group`);
+  }
   // Every id ROUTE can send work to is a row, the retired 8B aside, and no row names a model ROUTE does not run.
   const src = read('cloudflare-worker/src/services/aiRouter.ts');
   const consts = new Map([...src.matchAll(/const ([A-Z_]+)\s*=\s*'(@cf\/[^']+)'/g)].map((m) => [m[1], m[2]]));
@@ -504,7 +509,8 @@ test('15 · all models: the canvas\'s groups in order, only the non-empty ones, 
   const v = railView({ reading: { loading: false, data: answer }, page: answer.page });
   const titles = v.groups.map((g) => g.title);
   // D857: Languages has rows now, m2m100 and IndicTrans2 being translate_segment's models.
-  assert.deepEqual(titles, ['Conversation and writing', 'Reasoning', 'Code', 'Reading images and files', 'Search and ranking', 'Languages', 'Speech to text', 'Images', 'Safety']);
+  // #3934: Voice has one, PhoneLLM Mini, the voice-turn kind's model.
+  assert.deepEqual(titles, ['Conversation and writing', 'Reasoning', 'Code', 'Reading images and files', 'Search and ranking', 'Languages', 'Speech to text', 'Voice', 'Images', 'Safety']);
   const chips = v.groups.flatMap((g) => g.chips);
   const guard = chips.filter((c) => c.id === GUARD);
   assert.equal(guard.length, 1, 'Llama Guard is not listed once, under Safety');

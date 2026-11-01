@@ -461,6 +461,10 @@ export interface Env {
   // Optional so unit-test envs without the binding still type-check; the
   // search service no-ops gracefully when undefined.
   VECTORIZE?: VectorizeIndex;
+  // D1556 (#3803): `axal-deck-quotes` (bge-m3, 1024 dimensions). Not in wrangler.toml
+  // until the owner approves its monthly cost (decision L); absent, quote
+  // retrieval answers "not switched on yet".
+  DECK_QUOTES?: VectorizeIndex;
   // Task #13 — Workers Analytics Engine binding (`studioos_requests` dataset).
   // observability middleware writes one data point per HTTP request so the
   // Admin Analytics → Technical sub-tab can serve true edge-level traffic

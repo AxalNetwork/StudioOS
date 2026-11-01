@@ -258,6 +258,10 @@ import deckAssist from './routes/deck_assist';
 import deckImages from './routes/deck_images';
 // D1565 (#3812): one link per investor, and tailored variants.
 import deckInvestorLinks from './routes/deck_investor_links';
+// D1589 (#3836): a venture's stage norms, the benchmarks a deck critic may cite.
+import deckStageNorms from './routes/deck_stage_norms';
+// D1556 (#3803): a venture's consented interview quotes, ranked for a deck.
+import deckQuotes from './routes/deck_quotes';
 import notificationsRoutes from './routes/notifications';
 import votesRoutes from './routes/votes';
 import linkedinRoutes from './routes/linkedin';
@@ -1381,6 +1385,10 @@ app.route('/api/decks', deckAssist);
 app.route('/api/decks', deckImages);
 // D1565 (#3812): `/:id/investor-links…` and `/:id/variants`, before `decks` so its `/:id` routes cannot answer them.
 app.route('/api/decks', deckInvestorLinks);
+// D1589 (#3836): `/stage-norms`, before `decks` so `GET /:id` cannot answer it.
+app.route('/api/decks', deckStageNorms);
+// D1556 (#3803): `/quotes/search` and `/quotes/index`, before `decks` so `/:id` routes cannot answer them.
+app.route('/api/decks', deckQuotes);
 app.route('/api/decks', decks);
 // Competitor Analysis (in-house crawl + Workers AI synthesis) and Pitch Deck
 // Reviewer (document conversion + investor-style review). Both are

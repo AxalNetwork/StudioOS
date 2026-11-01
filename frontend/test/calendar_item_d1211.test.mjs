@@ -118,10 +118,12 @@ test('the drawer\'s address, its words and its rules', () => {
   assert.deepEqual(refusalOf({ status: 402, message: 'tier' }), { plan: true, text: IC_PLAN });
   assert.equal(refusalOf({ status: 409, message: 'Google is not connected.' }).text, 'Google is not connected.');
 
-  assert.deepEqual(newMenu('investor').map((x) => x.key), ['ic', 'checkin', 'event']);
+  assert.deepEqual(newMenu('investor').map((x) => x.key), ['ic', 'checkin', 'event', 'agent']);
   // D1384: Compliance deadline joins for a founder (and an admin), in the page.
-  assert.deepEqual(newMenu('founder').map((x) => x.key), ['checkin', 'compliance', 'interview', 'advisor', 'event']);
-  assert.deepEqual(newMenu('advisor').map((x) => x.key), ['checkin', 'event']);
+  assert.deepEqual(newMenu('founder').map((x) => x.key), ['checkin', 'compliance', 'interview', 'advisor', 'event', 'agent']);
+  assert.deepEqual(newMenu('advisor').map((x) => x.key), ['checkin', 'event', 'agent']);
+  // D1613 (#3723, CAL8): Schedule an AI agent is last for every role, with the canvas's sub-line.
+  assert.deepEqual(newMenu('founder').at(-1), { key: 'agent', label: 'Schedule an AI agent', sub: 'Its work waits in Approvals' });
   assert.ok(newMenu('founder').filter((x) => x.to).every((x) => x.label.endsWith('↗') && x.sub), 'items that leave the page carry ↗ and say where');
 
   assert.equal(noChangeLine(GONE), 'No actions on a cancelled meeting.');
@@ -412,7 +414,7 @@ test('CAL8 A: the New menu by role, items that leave the page carrying ↗', asy
   const ui = await mount(h(NewMenu, { role: 'investor', onPick: (k) => picked.push(k) }), []);
   try {
     await ui.press(ui.by('cal-new'));
-    assert.match(ui.say(ui.by('cal-new-menu')), /IC meeting Check-in Event ↗ Opens New event Items that leave the page carry ↗\./);
+    assert.match(ui.say(ui.by('cal-new-menu')), /IC meeting Check-in Event ↗ Opens New event Schedule an AI agent Its work waits in Approvals Items that leave the page carry ↗\./);
     await ui.press(ui.by('cal-new-ic'));
     assert.deepEqual(picked, ['ic']);
     assert.equal(ui.by('cal-new-menu'), undefined, 'the menu closes');

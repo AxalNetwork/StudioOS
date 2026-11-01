@@ -52,6 +52,61 @@ export function cellAtPoint(px, py, aspect = '16:9') {
   return { c, r };
 }
 
+/**
+ * A grid range placed on a slide face of any rendered size: `boxOf`'s box as a
+ * share of the slide, so `left`, `top`, `width` and `height` are exactly the
+ * 1920 × 1080 (or 1440 × 1080) stage's boxes scaled by `stageScale`, while
+ * the type inside keeps the size its surface sets. Percentages, unrounded, so
+ * a face of any width lands within 1 px of `boxOf × scale`.
+ */
+export function placeOf(g, aspect = '16:9') {
+  const s = SLIDE_SIZES[aspectOf(aspect)];
+  const cell = cellAt(aspect);
+  const x = FRAME.marginX + (g.c1 - 1) * (cell.width + FRAME.gutter);
+  const y = FRAME.marginTop + (g.r1 - 1) * (cell.height + FRAME.gutter);
+  const w = (g.c2 - g.c1 + 1) * cell.width + (g.c2 - g.c1) * FRAME.gutter;
+  const h = (g.r2 - g.r1 + 1) * cell.height + (g.r2 - g.r1) * FRAME.gutter;
+  const pc = (v, of) => `${(v / of) * 100}%`;
+  return { position: 'absolute', left: pc(x, s.width), top: pc(y, s.height), width: pc(w, s.width), height: pc(h, s.height) };
+}
+
+/** The safe area (inside the margins), placed the same way. */
+export function frameOf(aspect = '16:9') {
+  return placeOf({ c1: 1, c2: GRID.cols, r1: 1, r2: GRID.rows }, aspect);
+}
+
+/** The baseline's step as a share of the slide's height (8 px of 1080). */
+export const baselineShare = (aspect = '16:9') => BASELINE / SLIDE_SIZES[aspectOf(aspect)].height;
+
+/** A face's CSS aspect ratio: '16 / 9' or '4 / 3'. */
+export const ratioOf = (aspect = '16:9') => (aspectOf(aspect) === '4:3' ? '4 / 3' : '16 / 9');
+
+/**
+ * The cell nearest a point on the slide, for a pointer: like `cellAtPoint`,
+ * but a point in a gutter belongs to the nearer track and one in a margin to
+ * the edge track, so a drag never loses its cell between two of them.
+ */
+export function nearestCell(px, py, aspect = '16:9') {
+  const cell = cellAt(aspect);
+  const track = (at, start, size, n) => {
+    const pitch = size + FRAME.gutter;
+    return Math.min(n, Math.max(1, Math.floor((at - start + FRAME.gutter / 2) / pitch) + 1));
+  };
+  return { c: track(px, FRAME.marginX, cell.width, GRID.cols), r: track(py, FRAME.marginTop, cell.height, GRID.rows) };
+}
+
+/**
+ * A theme with its slide size: 4:3 is written, 16:9 (the default) is left out,
+ * and the brand theme with nothing else set stays `null`, the Worker's
+ * `sanitizeTheme` rule, so a deck that never changed size saves as it did.
+ */
+export function withAspect(theme, aspect) {
+  const { aspect: _drop, ...rest } = theme || {};
+  if (aspectOf(aspect) === '4:3') return { kind: 'brand', background: null, ...rest, aspect: '4:3' };
+  if (!theme) return null;
+  return rest.kind === 'brand' && !rest.background && Object.keys(rest).every((k) => k === 'kind' || k === 'background') ? null : rest;
+}
+
 /** How much a fixed slide stage scales to fit a box of `width` × `height` CSS pixels. */
 export function stageScale(width, height, aspect = '16:9') {
   const s = SLIDE_SIZES[aspectOf(aspect)];
