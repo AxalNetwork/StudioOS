@@ -11,6 +11,7 @@ and is not kept in sync.
 | `historical/` | Legacy one-off schema scripts, kept for archaeology only. Nothing builds from them. |
 | `migrations/713_pitch_decks_unique_version.sql` | #3748: preserve and renumber duplicate deck versions, choose one current row per project, and enforce unique versions/current rows. |
 
+| `migrations/728_agent_engine.sql` | D1528 (#3847, E3 of #3742): the agent engine's six tables (runs, duties, handoffs, memory notes, custom roles, scope settings). All new tables, re-runnable; the runtime that uses them follows. |
 | `migrations/760_interview_processing_failed_stage.sql` | D1456 (#4014): nullable, constrained failed processing step; existing migration ledger prevents replay. |
 
 ## Adding a change
