@@ -1827,7 +1827,7 @@ export function buildAxalSpinoutDemoDaySlides(data: SpinoutDemoDayData): Array<R
 }
 
 /**
- * Task #8 — per-slide coverage map for the "Fill from project" grid the
+ * Task #8 — per-slide coverage map for the "Fill from project" (now "Ask Eadwyn to draft from project", #3930) grid the
  * old builder drew (retired by D898 group E; the fill still returns it). 11 cells in the canonical slide order; each cell
  * records (a) the source table(s) it reads, (b) whether the slide will
  * populate vs. needs founder input, and (c) a short count_label the UI
