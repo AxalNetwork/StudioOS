@@ -2082,7 +2082,7 @@ Saves: `PUT`/`POST` of a version keep `card.structure` (one of the 17, or `custo
 
 ### Element model routing (D1503, #3754)
 
-`routes/deck_element_models.ts`, mounted at `/api/decks` beside `deck_grid.ts`, before `decks`. The routes are in `services/decks/elementModels.ts` (pure: `ELEMENTS`, `ELEMENT_ROUTES`, `resolveElementModel`, `OUTPUT_RULES`, `sizeFor`, `estimateDeck`, `expected_ms`). Each element's models come from its #3721 job in `services/ai/modelUseCases.ts` over `catalogue.ts`. Picks are kept in `deck_model_picks` (migration 717). Client: `lib/api/deckElementModels.js`, read through `deckV2Adapter.elementModels` (a `SWAPPED` row). The pitch pages' AIRail groups read it on a deck (`deckRailGroups.js`).
+`routes/deck_element_models.ts`, mounted at `/api/decks` beside `deck_grid.ts`, before `decks`. The routes are in `services/decks/elementModels.ts` (pure: `ELEMENTS`, `ELEMENT_ROUTES`, `resolveElementModel`, `sizeFor`, `estimateDeck`, `expected_ms`; `OUTPUT_RULES` in `elementOutputRules.ts`). Each element's models come from its #3721 job in `services/ai/modelUseCases.ts` over `catalogue.ts`. Picks are kept in `deck_model_picks` (migration 717). Client: `lib/api/deckElementModels.js`, read through `deckV2Adapter.elementModels` (a `SWAPPED` row). The pitch pages' AIRail groups read it on a deck (`deckRailGroups.js`).
 
 | Route | Who | What it answers |
 | --- | --- | --- |

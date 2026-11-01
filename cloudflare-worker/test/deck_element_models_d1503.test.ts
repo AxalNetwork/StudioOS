@@ -29,9 +29,10 @@ import { DECK_ELEMENT_JOBS, JOBS, USE_KINDS } from '../src/services/ai/modelUseC
 import { billedMicro } from '../src/services/ai/pricing.ts';
 import { canRun, railOptionsOn, resolveRailOption, rowOffers } from '../src/services/ai/railMatrix.ts';
 import {
-  ELEMENTS, ELEMENT_ROUTES, FREE_LINE, LEVELS, OUTPUT_RULES, ROUTED_ELEMENTS, choicesFor, estimateDeck, expected_ms, gridOptionRows,
-  inputRefusal, lockFor, outputProblems, resolveElementModel, sizeFor, type PickRow,
+  ELEMENTS, ELEMENT_ROUTES, FREE_LINE, LEVELS, ROUTED_ELEMENTS, choicesFor, estimateDeck, expected_ms, gridOptionRows,
+  lockFor, resolveElementModel, sizeFor, type PickRow,
 } from '../src/services/decks/elementModels.ts';
+import { OUTPUT_RULES, inputRefusal, outputProblems } from '../src/services/decks/elementOutputRules.ts';
 import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withGuard, GUARD_MODEL } from './_guard_stub.mjs';
@@ -52,7 +53,7 @@ const ids = (element: string) => { const c = choicesFor(element); return [...c.s
 
 test('one catalogue: no @cf/ id literal in the element routing, and every model it names is a catalogue model in #3721\'s plan', () => {
   // Mutation checked: a hard-coded '@cf/…' default in elementModels.ts → the literal assert fails.
-  for (const f of ['../src/services/decks/elementModels.ts', '../src/routes/deck_element_models.ts']) {
+  for (const f of ['../src/services/decks/elementModels.ts', '../src/services/decks/elementOutputRules.ts', '../src/routes/deck_element_models.ts']) {
     assert.equal(/@cf\//.test(read(f)), false, `${f} names a model itself`);
   }
   const inPlan = new Set(JOBS.flatMap((j) => [j.default, j.alternative, j.deeper, ...j.more].filter(Boolean) as string[]));
