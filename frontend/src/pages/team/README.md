@@ -21,6 +21,15 @@ board → file map and what waits for which issue are in
   lands one adds its method to teamAgents.js with the route and replaces only
   the matching one-line body. No screen changes. Never add a client method
   for a route that does not exist.
+- **Skills (D1612, #3952) go through the same seam.** `SkillsTab.jsx` (the
+  roles, then a role's directory), `SkillDetailSheet.jsx` (a skill's page and
+  "Assign to agents…"), `SkillEditorSheet.jsx` (Write, or Paste a SKILL.md),
+  `AgentSkillsCard.jsx` (the agent's skills, its `SkillRadar` and "Add
+  skills") and the Skills step in `AddAgentSheet.jsx` call
+  `agentsAdapter.js`'s skill functions, wired to #3951's `teamSkillsApi`
+  (`../../lib/api/teamSkills.js`) through `throughSkill`. Their rules are in
+  `skillsModel.js`. A radar axis no skill tags is "Not recorded" and left out
+  of the chart, never a 0.
 - **An agent is never drawn as a person.** People are circles
   (`PersonAvatar`); agents are rounded squares with the spark (`AgentTile`)
   and, wherever an agent is named, the "AI agent" pill (`AgentIdentity`). All

@@ -4,6 +4,7 @@ import { AgentTile, PersonAvatar } from './AgentMark.jsx';
 import * as agents from './agentsAdapter.js';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, FIELD, HonestBlock, MUTED, PendingOwner } from './teamUi.jsx';
 import { HOLD_LINE, RULEBOOK_SECTIONS, WHO_PAYS, heldLabel, initials, money } from './teamModel.js';
+import { SKILLS_UNREAD, assignHint } from './skillsModel.js';
 
 /**
  * D1497 (#3727, TM3a–TM3c, TM9d2) — "Add an AI agent", a Sheet at 640 with
@@ -51,7 +52,7 @@ function RuleRow({ label, text }) {
   );
 }
 
-const STEPS = ['Role', 'Agent', 'Review'];
+const STEPS = ['Role', 'Agent', 'Skills', 'Review'];
 
 function Stepper({ at }) {
   return (
@@ -65,7 +66,7 @@ function Stepper({ at }) {
   );
 }
 
-export default function AddAgentSheet({ scope, roles, models, held = [], me, onClose, onAdded, onEditRulebook }) {
+export default function AddAgentSheet({ scope, companyUid = null, roles, models, held = [], me, onClose, onAdded, onEditRulebook }) {
   const [step, setStep] = useState(0);
   const [role, setRole] = useState(null);
   const [model, setModel] = useState(null);
@@ -76,16 +77,36 @@ export default function AddAgentSheet({ scope, roles, models, held = [], me, onC
   const [useTools, setUseTools] = useState(true);
   const [granted, setGranted] = useState(() => new Set());
   const [refusal, setRefusal] = useState('');
+  // D1612 (#3952, SK6): the role's skills, pre-selected when the agent's tools cover them.
+  const [library, setLibrary] = useState(null);
+  const [skillPick, setSkillPick] = useState(() => new Set());
   useEffect(() => { let alive = true; agents.toolChoices().then((b) => { if (alive) setTools(b); }); return () => { alive = false; }; }, []);
   const picked = (roles || []).find((r) => r.key === role);
   const pickedModel = (models || []).find((m) => m.id === model);
   const capOk = Number(cap) > 0;
   const nameOk = [first, last].every((s) => s.trim().length <= 40);
-  const ready = step === 0 ? !!picked : step === 1 ? !!pickedModel : capOk && nameOk;
-  const titles = ['Pick a role', 'Pick the agent', 'Review and add'];
+  const ready = step === 0 ? !!picked : step === 1 ? !!pickedModel : step === 2 ? true : capOk && nameOk;
+  const titles = ['Pick a role', 'Pick the agent', 'Pick its skills', 'Review and add'];
   const servers = tools?.available && Array.isArray(tools.value?.servers) ? tools.value.servers : [];
   const grants = useTools ? servers.flatMap((sv) => (sv.tools || []).filter((t) => granted.has(grantKey(sv.integration_uid, t.name))).map((t) => ({ integration_uid: sv.integration_uid, tool: t.name }))) : [];
   const grantedLines = servers.map((sv) => ({ name: sv.name, tools: grants.filter((g) => g.integration_uid === sv.integration_uid).map((g) => g.tool) })).filter((x) => x.tools.length);
+  const roleSkills = library?.available ? [...(library.value?.hq || []), ...(library.value?.company?.skills || [])].filter((sk) => sk.version && sk.status !== 'retired') : [];
+  const draftAgent = { role_key: role, role_name: picked?.name, tools: grants };
+  useEffect(() => {
+    if (step !== 2 || !role) return undefined;
+    let alive = true;
+    setLibrary(null);
+    agents.skillLibrary({ company: companyUid || undefined, role, sort: 'popular' }).then((b) => {
+      if (!alive) return;
+      setLibrary(b);
+      const list = b?.available ? [...(b.value?.hq || []), ...(b.value?.company?.skills || [])] : [];
+      setSkillPick(new Set(list.filter((sk) => sk.version && sk.status !== 'retired' && !assignHint(sk, { role_key: role, tools: grants })).map((sk) => sk.uid)));
+    });
+    return () => { alive = false; };
+    // The grants are read when the step opens; changing them means going Back.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, role, companyUid]);
+  const pickSkill = (uid) => setSkillPick((p) => { const n = new Set(p); if (n.has(uid)) n.delete(uid); else n.add(uid); return n; });
   const tick = (uid, tool) => setGranted((s) => { const n = new Set(s); const k = grantKey(uid, tool); if (n.has(k)) n.delete(k); else n.add(k); return n; });
   const add = async () => {
     setRefusal('');
@@ -96,14 +117,17 @@ export default function AddAgentSheet({ scope, roles, models, held = [], me, onC
       monthly_cap_microusd: Math.round(Number(cap) * 1e6),
     });
     if (!out.available) { setRefusal(out.reason); return; }
+    const chosen = [...skillPick].filter((uid) => roleSkills.some((sk) => sk.uid === uid));
+    const newUid = out.value?.agent?.uid;
+    if (newUid && chosen.length) await agents.setAgentSkills(newUid, chosen.map((uid) => ({ uid })));
     onAdded?.(out.value);
   };
   return (
-    <Sheet title="Add an AI agent" sub={`Step ${step + 1} of 3 · ${titles[step]}`} width={640} onClose={onClose} testId="add-agent-sheet"
+    <Sheet title="Add an AI agent" sub={`Step ${step + 1} of 4 · ${titles[step]}`} width={640} onClose={onClose} testId="add-agent-sheet"
       footer={(
         <div className="flex justify-end gap-2">
           <button type="button" className={BTN_SECONDARY} onClick={step ? () => setStep(step - 1) : onClose}>{step ? 'Back' : 'Cancel'}</button>
-          <button type="button" className={BTN_PRIMARY} disabled={!ready} onClick={step < 2 ? () => setStep(step + 1) : add} data-testid="add-agent-next">{step < 2 ? 'Next' : 'Add agent'}</button>
+          <button type="button" className={BTN_PRIMARY} disabled={!ready} onClick={step < 3 ? () => setStep(step + 1) : add} data-testid="add-agent-next">{step < 3 ? 'Next' : 'Add agent'}</button>
         </div>
       )}>
       <div className="flex flex-col gap-4 px-5 py-5">
@@ -190,6 +214,27 @@ export default function AddAgentSheet({ scope, roles, models, held = [], me, onC
           </>
         ) : null}
         {step === 2 ? (
+          <div className="flex flex-col gap-2" data-testid="add-agent-skills">
+            <p className={`m-0 ${MUTED}`}>{picked ? `The ${picked.name} role's skills. Those its tools cover are chosen; change them here or later on its profile.` : ''}</p>
+            {!library ? <p className={`m-0 ${MUTED}`}>Reading…</p>
+              : !library.available ? <HonestBlock>{library.unreadable ? `${SKILLS_UNREAD}. You can add skills later from its profile.` : library.reason}</HonestBlock>
+                : !roleSkills.length ? <HonestBlock>No published skill belongs to this role yet. You can add skills later from its profile.</HonestBlock>
+                  : roleSkills.map((sk) => {
+                    const why = assignHint(sk, draftAgent);
+                    return (
+                      <label key={sk.uid} className={`flex items-start gap-2 rounded-axal-md border border-axal-hairline p-2.5 dark:border-gray-700 ${why ? 'opacity-60' : ''}`} data-testid={`add-agent-skill-${sk.uid}`}>
+                        <input type="checkbox" disabled={!!why} checked={skillPick.has(sk.uid)} onChange={() => pickSkill(sk.uid)} className="mt-1 accent-violet-600" />
+                        <span className="min-w-0 flex-1">
+                          <b className="block text-[13px] text-axal-ink dark:text-gray-100">{sk.name} <span className="font-mono text-[11px] text-axal-muted">v{sk.version}</span></b>
+                          <span className={MUTED}>{sk.purpose}</span>
+                          {why ? <span className={`block ${MUTED}`}>{why}</span> : null}
+                        </span>
+                      </label>
+                    );
+                  })}
+          </div>
+        ) : null}
+        {step === 3 ? (
           <>
             <div className="grid grid-cols-2 gap-2">
               <label className="flex flex-col gap-1"><span className={MUTED}>First name</span><input className={FIELD} value={first} onChange={(e) => setFirst(e.target.value)} maxLength={40} data-testid="add-agent-first" /></label>
@@ -204,6 +249,8 @@ export default function AddAgentSheet({ scope, roles, models, held = [], me, onC
               <dd className="m-0 text-axal-ink dark:text-gray-100" data-testid="add-agent-review-tools">
                 {grantedLines.length ? grantedLines.map((g) => <span key={g.name} className="block">{g.name} · {g.tools.join(', ')} · read-only</span>) : 'None'}
               </dd>
+              <dt className={MUTED}>Skills</dt>
+              <dd className="m-0 text-axal-ink dark:text-gray-100" data-testid="add-agent-review-skills">{roleSkills.filter((sk) => skillPick.has(sk.uid)).map((sk) => sk.name).join(', ') || 'None yet'}</dd>
             </dl>
             <div className="flex flex-col gap-1.5">
               <span className="text-[13px] font-bold text-axal-ink dark:text-gray-100">Rule book</span>

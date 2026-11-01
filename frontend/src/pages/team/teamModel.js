@@ -34,6 +34,8 @@ export { NOT_RECORDED };
 export const TABS = [
   { key: 'people', label: 'People and agents' },
   { key: 'roles', label: 'Roles and rule books' },
+  // D1612 (#3952): the agent skill library, beside Rule books and Approvals.
+  { key: 'skills', label: 'Skills' },
   { key: 'approvals', label: 'Approvals' },
   { key: 'settings', label: 'Settings' },
 ];

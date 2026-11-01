@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Lightbox, Pill, Sheet, Unrecorded } from '../../ui';
 import { AgentPill, AgentTile } from './AgentMark.jsx';
 import * as agents from './agentsAdapter.js';
+import AgentSkillsCard from './AgentSkillsCard.jsx';
 import { BTN_DANGER, BTN_PRIMARY, BTN_SECONDARY, FIELD, HonestBlock, MONO, MUTED } from './teamUi.jsx';
 import { day } from '../account/companies/companiesModel.js';
 import { agentName, budgetLine, dayTime, eventWords, pauseWords } from './teamModel.js';
@@ -155,7 +156,7 @@ function CapEditor({ name, role, current, refusal, onCancel, onSave }) {
   );
 }
 
-export default function AgentProfileSheet({ uid, canManage, editCap = false, onClose, onChanged }) {
+export default function AgentProfileSheet({ uid, companyUid = null, canManage, editCap = false, onClose, onChanged }) {
   const [block, setBlock] = useState(null);
   const [confirm, setConfirm] = useState(editCap ? 'cap' : null);
   const [refusal, setRefusal] = useState('');
@@ -192,7 +193,7 @@ export default function AgentProfileSheet({ uid, canManage, editCap = false, onC
         ) : null}>
         {!block ? <p className={`m-0 px-5 py-5 ${MUTED}`}>Reading…</p>
           : !block.available ? <div className="px-5 py-5"><HonestBlock>{block.unreadable ? 'This agent could not be read.' : block.reason}{block.refused ? '' : ' That is not the same as having none.'}</HonestBlock></div>
-            : <AgentProfile data={block.value} canManage={manage} onSaveName={saveName} />}
+            : <><AgentProfile data={block.value} canManage={manage} onSaveName={saveName} /><AgentSkillsCard agent={a} companyUid={companyUid} /></>}
       </Sheet>
       {confirm === 'pause' ? (
         <Confirm testId="agent-pause-confirm" title={a?.status === 'paused' ? `Resume ${name}, the ${a?.role_name} agent?` : `Pause ${name}, the ${a?.role_name} agent?`}

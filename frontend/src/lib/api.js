@@ -163,6 +163,7 @@ export * from './api/shareUpdate.js';
 export * from './api/slugs.js';
 export * from './api/studioLayout.js';
 export * from './api/teamAgents.js';
+export * from './api/teamSkills.js';
 export * from './api/teams.js';
 export * from './api/ticketReviews.js';
 export * from './api/tokenPacks.js';

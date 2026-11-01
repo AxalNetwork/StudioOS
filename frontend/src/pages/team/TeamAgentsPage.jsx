@@ -22,6 +22,7 @@ import AddAgentSheet from './AddAgentSheet.jsx';
 import AgentProfileSheet from './AgentProfileSheet.jsx';
 import RulebooksTab from './RulebooksTab.jsx';
 import ApprovalsTab from './ApprovalsTab.jsx';
+import SkillsTab from './SkillsTab.jsx';
 import TeamSettingsTab from './TeamSettingsTab.jsx';
 import * as agents from './agentsAdapter.js';
 import { BTN_PRIMARY, BTN_TEXT, EYEBROW, FIELD, MUTED, useMenu } from './teamUi.jsx';
@@ -371,6 +372,7 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
       ) : null}
       {tab === 'roles' ? <RulebooksTab scope={scope} canManage={!!agentsBlock?.value?.can_manage} agentsBlock={agentsBlock} /> : null}
       {tab === 'approvals' ? <ApprovalsTab scope={scope} /> : null}
+      {tab === 'skills' ? <SkillsTab scope={scope} teamAgents={agentList} /> : null}
       {tab === 'settings' ? (
         <TeamSettingsTab scope={scope} agentsBlock={agentsBlock} canManage={canEdit}
           onEditCap={(a) => setSheet({ kind: 'profile', uid: a.uid, edit: 'cap' })}
@@ -379,11 +381,11 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
 
       {sheet?.kind === 'invite' ? <InviteSheet kind={kind} target={target} pending={invitations?.ok ? invitations.list : null} onClose={() => setSheet(null)} onDone={(out) => { if (out?.invitations?.[0]?.uid) setFresh(out.invitations[0].uid); invited(out); }} /> : null}
       {sheet?.kind === 'agent' && rolesBlock?.available ? (
-        <AddAgentSheet scope={scope} roles={rolesBlock.value?.roles} models={rolesBlock.value?.models} held={agentList.map((a) => a.role_key)}
+        <AddAgentSheet scope={scope} companyUid={kind === 'company' ? id : null} roles={rolesBlock.value?.roles} models={rolesBlock.value?.models} held={agentList.map((a) => a.role_key)}
           me={{ name: me().name }} onClose={() => setSheet(null)} onAdded={() => { setSheet(null); loadAgents(); }}
           onEditRulebook={(key) => { setSheet(null); navigate(`${pathname}?tab=roles&role=${encodeURIComponent(key)}`); }} />
       ) : null}
-      {sheet?.kind === 'profile' ? <AgentProfileSheet uid={sheet.uid} editCap={sheet.edit === 'cap'} canManage={!!agentsBlock?.value?.can_manage} onClose={() => setSheet(null)} onChanged={() => { setSheet(null); loadAgents(); }} /> : null}
+      {sheet?.kind === 'profile' ? <AgentProfileSheet uid={sheet.uid} companyUid={kind === 'company' ? id : null} editCap={sheet.edit === 'cap'} canManage={!!agentsBlock?.value?.can_manage} onClose={() => setSheet(null)} onChanged={() => { setSheet(null); loadAgents(); }} /> : null}
       {dialog && dialogs[dialog.kind] ? dialogs[dialog.kind](dialog.p, () => setDialog(null), () => { setDialog(null); reload(); }) : null}
     </div>
   );

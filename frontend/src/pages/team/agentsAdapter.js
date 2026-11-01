@@ -15,6 +15,14 @@
  * those routes answers 404 `team_agents_off` while `TEAM_AGENTS_ENABLED` is
  * off, which `through` draws as "AI agents aren’t switched on yet."
  *
+ * WIRED (#3951, D1612, part A): the skill library — `skillLibrary`, `skill`,
+ * `createSkill`, `updateSkill`, `publishSkill`, `assignSkill`, `agentSkills`
+ * and `setAgentSkills` call `teamSkillsApi` (`frontend/src/lib/api/teamSkills.js`,
+ * routes in `cloudflare-worker/src/routes/team_skills.ts`) through
+ * `throughSkill`: the switched-off state as above, and every other refusal in
+ * the Worker's own sentence, with the per-skill or per-agent `refusals` of a
+ * 409 `skill_not_attachable` passed on.
+ *
  * STILL UNAVAILABLE, one-line bodies until their routes land. Each builder
  * adds the method to `teamAgents.js` in the same PR as the route and replaces
  * only the matching body with `through(() => teamAgentsApi.<method>(…))`:
@@ -45,6 +53,8 @@
  * `lib/api/teams.js` (`teamsApi`) and the screens call it directly.
  */
 import { teamAgentsApi } from '../../lib/api/teamAgents.js';
+import { teamSkillsApi } from '../../lib/api/teamSkills.js';
+import { api } from '../../lib/api.js';
 import { FLOOR, RULEBOOK_SECTIONS, refusalWords } from './teamModel.js';
 
 export const AGENTS_OFF_REASON = 'AI agents aren’t switched on yet.';
@@ -115,6 +125,48 @@ export const removeAgent = (uid) => through(() => teamAgentsApi.removeAgent(uid)
 export const rulebook = (scope, id, role) => through(() => teamAgentsApi.rulebook(scope, id, role));
 /** `PUT /api/teams/:scope/:id/rulebooks/:role` `{ rules }` → `{ effective, version }`. */
 export const saveRulebook = (scope, id, role, rules) => through(() => teamAgentsApi.saveRulebook(scope, id, role, rules), { rules });
+
+// ---------------------------------------------------------------- #3951 skills: wired
+
+/**
+ * A skill route's answer, as the page draws it. The skill routes write their
+ * refusals as sentences (D278), so a refusal is the Worker's own words; a
+ * 409 `skill_not_attachable` keeps its `refusals` so a sheet can grey each
+ * agent or skill with its reason.
+ */
+export async function throughSkill(call) {
+  try {
+    return { available: true, value: await call() };
+  } catch (e) {
+    const status = e?.status ?? e?.response?.status ?? null;
+    const code = e?.code || e?.data?.code || e?.data?.error || null;
+    if (status === 404 && code === 'team_agents_off') return unavailable();
+    if (status && status >= 400 && status < 500 && code) {
+      const refusals = Array.isArray(e?.data?.refusals) ? e.data.refusals : undefined;
+      return { available: false, refused: true, code, reason: e?.message || refusalWords(''), ...(refusals ? { refusals } : {}) };
+    }
+    return { available: false, unreadable: true, reason: 'could not be read' };
+  }
+}
+
+/** `GET /api/skills/taxonomy` → `{ categories: [{ slug, label, skills: [{ slug, label }] }] }`: the /studio taxonomy a skill is tagged with. */
+export const skillTaxonomy = () => throughSkill(() => api.skills.getTaxonomy());
+/** `GET /api/teams/skills?company=&role=&category=&q=&sort=` → `{ roles, hq, company, can_write_hq }`. */
+export const skillLibrary = (opts = {}) => throughSkill(() => teamSkillsApi.skillLibrary(opts));
+/** `GET /api/teams/skills/:uid` → `{ skill, versions, agents }`. */
+export const skill = (uid) => throughSkill(() => teamSkillsApi.skill(uid));
+/** `POST /api/teams/skills` → 201 `{ skill }`, a draft. */
+export const createSkill = (body) => throughSkill(() => teamSkillsApi.createSkill(body));
+/** `PATCH /api/teams/skills/:uid` → `{ skill }`. */
+export const updateSkill = (uid, patch) => throughSkill(() => teamSkillsApi.updateSkill(uid, patch));
+/** `POST /api/teams/skills/:uid/publish` → `{ skill }` at its new version. */
+export const publishSkill = (uid) => throughSkill(() => teamSkillsApi.publishSkill(uid));
+/** `POST /api/teams/skills/:uid/assign` `{ agents }` → `{ added, already, used_by }`; all or nothing. */
+export const assignSkill = (uid, agentUids) => throughSkill(() => teamSkillsApi.assignSkill(uid, agentUids));
+/** `GET /api/teams/agents/:uid/skills` → `{ agent, skills, radar, can_manage }`. */
+export const agentSkills = (uid) => throughSkill(() => teamSkillsApi.agentSkills(uid));
+/** `PUT /api/teams/agents/:uid/skills` `{ skills }` → the same as `agentSkills`. */
+export const setAgentSkills = (uid, skills) => throughSkill(() => teamSkillsApi.setAgentSkills(uid, skills));
 
 // ---------------------------------------------------------------- #3842 part 2
 
