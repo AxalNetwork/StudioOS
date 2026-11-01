@@ -20,7 +20,12 @@ const read = (f) => readFileSync(resolve(process.cwd(), f), 'utf8');
 const html = (el, entry = '/raise') => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [entry] }, el));
 const text = (s) => s.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&amp;/g, '&').replace(/\s+/g, ' ');
 const figuresOf = (n) => Array.from({ length: n }, (_, i) => figure(`f${i}`, `Figure ${i}`, 10 + i, 'count'));
-const gridClass = (out, id) => out.match(new RegExp(`class="([^"]+)" data-testid="${id}"`))?.[1] || '';
+const gridClass = (out, id) => {
+  const end = out.indexOf(`" data-testid="${id}"`);
+  const start = end < 0 ? -1 : out.lastIndexOf('class="', end);
+  const cls = start < 0 ? '' : out.slice(start + 'class="'.length, end);
+  return cls.includes('"') ? '' : cls;
+};
 
 test('RO00, RO09: the figure row has one column per figure up to its width, never an empty track', () => {
   assert.deepEqual(Object.keys(FIGURE_COLS), ['1', '2', '3', '4', '5', '6']);
@@ -196,5 +201,5 @@ test('the Raise Overview canvases are on disk, unedited intake', () => {
   assert.ok(read('design/incoming/Raise Overview Page.dc.html').length > 50000);
   const boards = read('design/incoming/Raise Overview · Boards.dc.html');
   assert.match(boards, /dc-import name="Raise Overview Page"/);
-  for (const id of ['RO01', 'RO05', 'RO09', 'RO14', 'RO18']) assert.match(boards, new RegExp(`B\\('${id}'`), id);
+  for (const id of ['RO01', 'RO05', 'RO09', 'RO14', 'RO18']) assert.ok(boards.includes(`B('${id}'`), id);
 });
