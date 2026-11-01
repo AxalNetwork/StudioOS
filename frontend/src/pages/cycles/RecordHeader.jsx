@@ -29,7 +29,7 @@ export const useRecordHeader = () => useContext(Slots);
 
 const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-1.5 whitespace-nowrap rounded-[9px] border px-3.5 text-[12.5px] font-bold max-lg:min-h-[44px]';
 export const HEADER_BUTTON = {
-  primary: `${BTN} border-axal-violet bg-axal-violet text-white hover:bg-axal-violet-deep dark:border-violet-500 dark:bg-violet-600`,
+  primary: `${BTN} border-axal-violet bg-axal-violet text-white hover:bg-axal-violet-deep dark:border-violet-500 dark:bg-violet-600 dark:hover:bg-violet-700`,
   default: `${BTN} border-axal-hairline bg-white text-axal-ink hover:border-axal-violet dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100`,
 };
 const ITEM = 'flex min-h-[44px] w-full items-center px-3 text-left text-[13px] font-semibold hover:bg-axal-ground dark:hover:bg-gray-800';
