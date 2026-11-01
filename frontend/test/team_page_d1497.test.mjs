@@ -373,7 +373,7 @@ const COMPANY_ROUTE = '/account/companies/:uid/settings/team';
 test('company Team: people and invitations on the routes that exist; agents unavailable; Resend and Revoke wired', async () => {
   const v = await mount('/account/companies/nw1/settings/team', COMPANY_ROUTE, h(TeamAgentsPage, { form: 'company' }));
   try {
-    assert.deepEqual(v.keys().filter((k) => k.startsWith('GET ')).sort(), ['GET /api/account/projects', 'GET /api/company/nw1', 'GET /api/company/nw1/invitations', 'GET /api/company/team-vocabulary', 'GET /api/teams/company/nw1/agents', 'GET /api/teams/roles']);
+    assert.deepEqual(v.keys().filter((k) => k.startsWith('GET ')).sort(), ['GET /api/account/projects', 'GET /api/company/nw1', 'GET /api/company/nw1/invitations', 'GET /api/company/team-vocabulary', 'GET /api/teams/company/nw1/agents', 'GET /api/teams/company/nw1/coverage', 'GET /api/teams/roles'], 'D1612 A2 (#3956): the coverage card reads its route');
     const text = v.text();
     assert.match(text, /Company settings/);
     assert.match(text, /The people and AI agents working on \[Northwind Labs\]\. Agents propose; people decide\./);
