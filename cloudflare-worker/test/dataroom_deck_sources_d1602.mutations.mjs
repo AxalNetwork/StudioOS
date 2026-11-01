@@ -112,7 +112,13 @@ const variants = [
   {"name":"project-cascade","file":"cloudflare-worker/sql/migrations/753_dataroom_deck_values.sql","edits":[["REFERENCES projects(id) ON DELETE CASCADE","REFERENCES projects(id)"]],"pattern":"migration cascades"},
   {"name":"stop-polling","file":"frontend/src/pages/raise/dataroom/DataRoomDeckSource.jsx","edits":[["file.extraction?.state !== 'queued'","false"]],"pattern":"polling stops"},
   {"name":"partial-numeric-row","file":"cloudflare-worker/src/services/decks/dataroomFormats.ts","edits":[["return text.length <= limit ? text : text.slice(0, Math.max(0, text.lastIndexOf('\\n', limit)));","return text.slice(0, limit);"]],"pattern":"character ceiling"},
-  {"name":"fixed-year-header","file":"cloudflare-worker/src/services/decks/dataroomFormats.ts","edits":[["YEAR_HEADERS.has(label(String(r[0] ?? '')))","true"]],"pattern":"code readers"}
+  {"name":"fixed-year-header","file":"cloudflare-worker/src/services/decks/dataroomFormats.ts","edits":[["YEAR_HEADERS.has(label(String(r[0] ?? '')))","true"]],"pattern":"code readers"},
+  {"name":"csv-eof-flush","file":"cloudflare-worker/src/services/decks/dataroomFormats.ts","edits":[["if (cell || row.length) { row.push(cell.trim()); if (row.some(Boolean)) rows.push(row); }","if (false) { row.push(cell.trim()); if (row.some(Boolean)) rows.push(row); }"]],"pattern":"CSV flushes"},
+  {"name":"xml-comment-cells","file":"cloudflare-worker/src/services/decks/dataroomFormats.ts","edits":[["at = end + 3; continue;\n    }\n    if (s.startsWith('<![CDATA['","text += keepMarkup ? s.slice(open, end + 3) : ''; at = end + 3; continue;\n    }\n    if (s.startsWith('<![CDATA['"]],"pattern":"CSV flushes"},
+  {"name":"xml-cdata-text","file":"cloudflare-worker/src/services/decks/dataroomFormats.ts","edits":[["text += xmlEscape(s.slice(open + 9, end));","text += '';"]],"pattern":"CSV flushes"},
+  {"name":"xml-quoted-attribute","file":"cloudflare-worker/src/services/decks/dataroomFormats.ts","edits":[["if (quote) { if (char === quote) quote = ''; }","if (false) { if (char === quote) quote = ''; }"]],"pattern":"CSV flushes"},
+  {"name":"xml-declaration-refusal","file":"cloudflare-worker/src/services/decks/dataroomFormats.ts","edits":[["if (s.startsWith('<!', open)) throw new Error('unsupported_xml_declaration');","if (s.startsWith('<!', open)) { at = s.indexOf('>', open) + 1; continue; }"]],"pattern":"unsupported XML declarations"},
+  {"name":"xml-malformed-attribute","file":"cloudflare-worker/src/services/decks/dataroomFormats.ts","edits":[["if (char === '<') throw new Error('invalid_office_file');","if (false) throw new Error('invalid_office_file');"]],"pattern":"CSV flushes"}
 ];
 
 async function run(kind, variant = null) {

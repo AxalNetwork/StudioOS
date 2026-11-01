@@ -33,16 +33,19 @@ function numeric(raw: unknown, slot: DocumentSlot): number | null {
 export function csvRows(text: string): string[][] {
   if (text.length > 2_000_000) throw new Error('document_too_large');
   const rows: string[][] = []; let row: string[] = [], cell = '', quoted = false;
-  for (let i = 0; i <= text.length; i++) {
+  for (let i = 0; i < text.length; i++) {
     const c = text[i];
-    if (c === '"') { if (quoted && text[i + 1] === '"') { cell += '"'; i++; } else quoted = !quoted; }
-    else if (!quoted && (c === ',' || c === '\n' || c == null)) {
+    if (c === '"') { if (quoted && i + 1 < text.length && text[i + 1] === '"') { cell += '"'; i++; } else quoted = !quoted; }
+    else if (!quoted && (c === ',' || c === '\n')) {
       row.push(cell.trim()); cell = '';
       if (c !== ',') { if (row.some(Boolean)) rows.push(row); row = []; }
-    } else if (c !== '\r' && c != null) cell += c;
+    } else if (c !== '\r') cell += c;
     if (cell.length > 20_000 || row.length > 256 || rows.length > 10_000) throw new Error('document_too_large');
   }
   if (quoted) throw new Error('invalid_csv');
+  // Flush EOF explicitly; never read a sentinel beyond the string's length.
+  if (cell || row.length) { row.push(cell.trim()); if (row.some(Boolean)) rows.push(row); }
+  if (row.length > 256 || rows.length > 10_000) throw new Error('document_too_large');
   return rows;
 }
 
@@ -94,10 +97,54 @@ export function officeParts(bytes: Uint8Array): { names: string[]; text: (name: 
     const packed = bytes.subarray(start, start + e.packed);
     const data = e.method === 0 ? packed : e.method === 8 ? inflateRawSync(packed, { maxOutputLength: 8_000_000 }) : null;
     if (!data || data.length !== e.size || (expanded += data.length) > 16_000_000) throw new Error('document_too_large');
-    const out = new TextDecoder().decode(data); cache.set(name, out); return out;
+    const out = readXml(new TextDecoder().decode(data), true); cache.set(name, out); return out;
   } };
 }
-const xml = (s: string) => s.replace(/<[^>]*>/g, '').replace(/&(?:amp|lt|gt|quot|apos);/g, s => ({ '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&apos;': "'" })[s] ?? s);
+const xmlEscape = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+/** Tokenise Office XML before looking for cells: comments/CDATA cannot create rows. */
+function readXml(s: string, keepMarkup: boolean): string {
+  let text = '', at = 0;
+  while (at < s.length) {
+    const open = s.indexOf('<', at);
+    if (open < 0) { text += s.slice(at); break; }
+    text += s.slice(at, open);
+    if (s.startsWith('<!--', open)) {
+      const end = s.indexOf('-->', open + 4); if (end < 0) throw new Error('invalid_office_file');
+      at = end + 3; continue;
+    }
+    if (s.startsWith('<![CDATA[', open)) {
+      const end = s.indexOf(']]>', open + 9); if (end < 0) throw new Error('invalid_office_file');
+      if (end - open > 1_000_000) throw new Error('document_too_large');
+      text += xmlEscape(s.slice(open + 9, end));
+      if (text.length > 8_000_000) throw new Error('document_too_large');
+      at = end + 3; continue;
+    }
+    if (s.startsWith('<?', open)) {
+      const end = s.indexOf('?>', open + 2); if (end < 0) throw new Error('invalid_office_file');
+      at = end + 2; continue;
+    }
+    if (s.startsWith('<!', open)) throw new Error('unsupported_xml_declaration'); // No DTD/entity loading.
+    let quote = '', end = open + 1;
+    for (; end < s.length; end++) {
+      const char = s[end];
+      if (char === '<') throw new Error('invalid_office_file');
+      if (quote) { if (char === quote) quote = ''; }
+      else if (char === '"' || char === "'") quote = char;
+      else if (char === '>') break;
+    }
+    if (end === s.length) throw new Error('invalid_office_file');
+    if (!/^\/?[A-Za-z_][A-Za-z0-9_.:-]*(?:\s|\/|$)/.test(s.slice(open + 1, end))) throw new Error('invalid_office_file');
+    if (keepMarkup) text += s.slice(open, end + 1);
+    if (text.length > 8_000_000) throw new Error('document_too_large');
+    at = end + 1;
+  }
+  if (text.length > 8_000_000) throw new Error('document_too_large');
+  return text;
+}
+/** Plain XML text, never an HTML sanitiser; still framed as untrusted input. */
+function xml(s: string): string {
+  return readXml(s, false).replace(/&(?:amp|lt|gt|quot|apos);/g, s => ({ '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&apos;': "'" })[s] ?? s);
+}
 
 export function xlsxValues(bytes: Uint8Array): DocumentValue[] {
   const parts = officeParts(bytes);

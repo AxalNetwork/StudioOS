@@ -326,3 +326,29 @@ test('migration cascades file/project values and clears an erased approver witho
     assert.equal((db.prepare('SELECT COUNT(*) n FROM dataroom_deck_values').get() as any).n, 0);
   } finally { db.close(); }
 });
+
+test('CSV flushes EOF without a sentinel; Office text keeps CDATA and quoted attributes but not commented cells', () => {
+  assert.deepEqual(csvRows('Revenue,1200000'), [['Revenue', '1200000']]);
+  assert.deepEqual(csvRows('Revenue,1200000\n'), [['Revenue', '1200000']]);
+  assert.deepEqual(csvRows('Revenue,'), [['Revenue', '']]);
+  assert.deepEqual(csvRows('"Revenue","1,200,000"'), [['Revenue', '1,200,000']]);
+  assert.deepEqual(csvRows('"Metric","say ""yes"""'), [['Metric', 'say "yes"']]);
+  const sheet = `<worksheet><sheetData><!--<row><c r="A1" t="inlineStr"><is><t>Headcount</t></is></c><c r="B1"><v>999</v></c></row>-->
+    <row><c r="A2" t="inlineStr"><is><t note="> plain text"><![CDATA[Revenue]]></t></is></c><c r="B2"><v>1200000</v></c></row></sheetData></worksheet>`;
+  assert.deepEqual(xlsxValues(office({ 'xl/worksheets/sheet1.xml': sheet })), [{ slot: 'dataroom.revenue_plan', value: 1200000, unit: 'usd', page: 1 }]);
+  assert.throws(() => xlsxValues(office({ 'xl/worksheets/sheet1.xml': '<worksheet note="x<y"><sheetData/></worksheet>' })));
+});
+
+test('unsupported XML declarations fail before a typed model run', async () => {
+  const f = await fixture('docx');
+  try {
+    f.objects.set('data-room/p-room/current', office({
+      'word/document.xml': '<!DOCTYPE document [<!ENTITY external SYSTEM "https://example.test/entity">]><w:document><w:body><w:p>&external;</w:p></w:body></w:document>',
+      'docProps/app.xml': '<Properties><Pages>1</Pages></Properties>',
+    }));
+    const q = await f.request(); await f.request(1, { enabled: true, confirm_quote: q.body.quote.confirm_quote });
+    await extractDataroomFile(f.env, f.payload());
+    assert.equal(f.calls.length, 0); assert.deepEqual(f.values(), []);
+    assert.equal((await sourceFile(f.env, 7, 'file-a'))!.deck_extract_state, 'unreadable');
+  } finally { f.db.close(); }
+});
