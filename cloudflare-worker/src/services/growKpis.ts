@@ -114,19 +114,31 @@ export async function customKpis(env: Env, projectId: number): Promise<CustomKpi
   return r.results || [];
 }
 
+/**
+ * A PostHog read for the KPI table (D1604). When the PostHog stores cannot be
+ * read, the table still answers with its other rows: the failure is logged
+ * without a value and no PostHog row is shown.
+ */
+async function posthogRead<T>(read: () => Promise<T>, none: T): Promise<T> {
+  try { return await read(); } catch (e) {
+    console.warn('[growKpis] posthog metrics unreadable', (e as Error)?.message);
+    return none;
+  }
+}
+
 /** Every KPI key the venture has: the seven, each custom KPI's `custom-<uid>`, then each tracked PostHog metric's `posthog-<uid>` (D1604). */
 export async function kpiKeys(env: Env, projectId: number): Promise<string[]> {
   return [
     ...KPI_KEYS,
     ...(await customKpis(env, projectId)).map((k) => `${CUSTOM_PREFIX}${k.uid}`),
-    ...(await trackedOf(env, projectId)).map((m) => `${POSTHOG_PREFIX}${m.uid}`),
+    ...(await posthogRead(() => trackedOf(env, projectId), [])).map((m) => `${POSTHOG_PREFIX}${m.uid}`),
   ];
 }
 
 /** Whether `key` is one of the venture's KPIs; another venture's `custom-<uid>` or `posthog-<uid>` is not. */
 export async function isKpiKey(env: Env, projectId: number, key: string): Promise<boolean> {
   if ((KPI_KEYS as readonly string[]).includes(key)) return true;
-  if (key.startsWith(POSTHOG_PREFIX)) return !!await trackedByUid(env, projectId, key.slice(POSTHOG_PREFIX.length));
+  if (key.startsWith(POSTHOG_PREFIX)) return !!await posthogRead(() => trackedByUid(env, projectId, key.slice(POSTHOG_PREFIX.length)), null);
   if (!key.startsWith(CUSTOM_PREFIX)) return false;
   return !!await env.DB.prepare('SELECT 1 FROM custom_kpis WHERE uid = ? AND project_id = ?').bind(key.slice(CUSTOM_PREFIX.length), projectId).first();
 }
@@ -224,7 +236,7 @@ export async function kpiRows(env: Env, projectId: number, now: number): Promise
     runway,
     ...customRows,
     // D1604: each tracked PostHog metric, read only from PostHog facts; never written here.
-    ...(await metricReadings(env, projectId)).map(({ metric: m, reading: r }): KpiRow => ({
+    ...(await posthogRead(() => metricReadings(env, projectId), [])).map(({ metric: m, reading: r }): KpiRow => ({
       id: `${POSTHOG_PREFIX}${m.uid}`, kpi: m.insight_name || ROLE_WORDS[m.role], value: r.value, unit: m.unit,
       change_30d: r.change_30d, source: r.value == null ? null : 'posthog', as_of: r.as_of, period: r.period, reason: r.reason,
     })),
