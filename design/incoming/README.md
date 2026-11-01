@@ -111,6 +111,27 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-11-01 — Studio modularity (#3698)
+
+The owner's two exports for #3698 arrived unpacked (the page's and the grid's
+bundles, read as data only), were rebuilt into their bundled form, and were
+decoded by `scripts/read-canvas.mjs`:
+- `Studio Modularity Page.dc.html` is the page, one component drawn per board
+  through its `v` prop (`sm0` to `sm6-d`);
+- `Studio Modularity · Boards.dc.html` is the board grid "Studio modularity":
+  SM0 to SM15. It imports the page by name, and its `RENAME` and `NOTES`
+  overrides are the final titles and notes (frame `sm10f` is filtered out).
+
+**Two edits, named.** The Axal VC mark (`uploads/axal-logo-200x200.png`) points
+at `/axal-mark.png` and the Eadwyn mark (`eadwyn-ai.png`) at `/eadwyn-ai.png`;
+the bundles carried neither image. No other value was edited.
+
+**Grade: UPGRADE for both (D1419).** `/studio` draws the module grid on all
+four Studios over the Worker's `/api/studio` (D1421, D1418, D1594). Eadwyn's
+layout proposals (SM9, SM10, SM13c) wait behind
+`frontend/src/pages/studio/studioProposalsAdapter.js` (#3864), so both files
+stay here. No file moved, so no count changed.
+
 ## Landed 2026-11-01 — Portfolio and Incorporate (#3696)
 
 The owner's three artifacts for #3696 (`389dc42b`, the Portfolio grid;
