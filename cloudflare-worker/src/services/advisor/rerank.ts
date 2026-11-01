@@ -13,11 +13,14 @@
  *   2. Drop any id seen in the last RECENT_TURN_WINDOW (default 3)
  *      assistant turns, so the same prompt can't bounce back instantly
  *      after a skip.
- *   3. Ask qwen2.5-coder-32b (via aiRouter task='rerank') to pick the
- *      most relevant id given the last 6 conversation messages.
- *   4. Validate the model's response is a known candidate id; if not,
- *      OR the router refuses (budget/safety/timeout), fall back to the
- *      deterministic head of the candidate list.
+ *   3. #3938 (ST5): the reranker (`bge-reranker-base`, aiRouter task
+ *      'rerank') scores each candidate against the last 6 conversation
+ *      messages, then clef-flash chooses one of the top CHOOSE_FROM
+ *      (`module_decision`, a `choice` question).
+ *   4. Clef's choice is always one of the options it was given. If it
+ *      sends no readable choice, the reranker's best stands; if the
+ *      router refuses (budget/safety/timeout), the deterministic head of
+ *      the candidate list stands.
  *
  * The bank is always the source of truth — the LLM only re-orders ≤K
  * options it ALREADY had permission to see, so persona / week / tier /
@@ -29,12 +32,14 @@
 
 import type { Env } from '../../types';
 import type { Question } from './questionBank';
-import { run as aiRouterRun } from '../aiRouter';
 import { AI_SURFACE } from '../aiSurfaces';
+import { CLEF_FLASH, decide, orderByRanking, rank } from '../ai/decide';
 
 const TOP_K = 8;
 const RECENT_TURN_WINDOW = 3;
 const RECENT_MESSAGE_WINDOW = 6;
+/** How many of the reranker's best clef-flash chooses among (ST5 step 1). */
+export const CHOOSE_FROM = 5;
 
 interface RecentMsg { role: string; content: string; question_id: string | null }
 
@@ -104,41 +109,19 @@ function recentlyAskedIds(msgs: RecentMsg[]): Set<string> {
 }
 
 /**
- * Compose the re-rank prompt. We keep it deliberately tight — qwen-
- * coder follows JSON schemas best when the instruction is short and
- * the candidate block is enumerated.
+ * The query the reranker scores each candidate against: the recent turns,
+ * each trimmed so a pasted document cannot crowd the reranker's 512 tokens.
  */
-function buildPrompt(cands: Question[], msgs: RecentMsg[]): { system: string; user: string } {
-  const system =
-    'You are the next-question selector for a venture-studio onboarding advisor. ' +
-    'Pick the MOST relevant unanswered question to ask next, given the recent conversation. ' +
-    'Output STRICTLY a single JSON object: {"id": "<one of the candidate ids>"}. ' +
-    'No prose, no markdown, no explanation. The id MUST exactly match one candidate. ' +
-    'Prefer questions that build naturally on what the user just said. ' +
-    'Avoid questions whose subject the user already covered in their answers.';
-
-  const ctxBlock = msgs.length === 0
-    ? '(no prior turns)'
-    : msgs.slice(-RECENT_MESSAGE_WINDOW).map((m) => {
-        const who = m.role === 'user' ? 'USER' : m.role === 'assistant' ? 'ADVISOR' : m.role.toUpperCase();
-        // Trim to keep token budget bounded — long pasted docs would
-        // blow the context window otherwise.
-        const content = (m.content || '').replace(/\s+/g, ' ').slice(0, 240);
-        return `- ${who}: ${content}`;
-      }).join('\n');
-
-  const candBlock = cands.map((q, i) => {
-    const sec = q.section ? `[${q.section}] ` : '';
-    const imp = q.importance && q.importance !== 'normal' ? ` (importance=${q.importance})` : '';
-    return `${i + 1}. id=${q.id}  ${sec}${q.prompt}${imp}`;
+export function rerankQuery(msgs: RecentMsg[]): string {
+  if (!msgs.length) return 'The founder has just started; ask the most important first question.';
+  return msgs.slice(-RECENT_MESSAGE_WINDOW).map((m) => {
+    const who = m.role === 'user' ? 'Founder' : m.role === 'assistant' ? 'Advisor' : m.role;
+    return `${who}: ${(m.content || '').replace(/\s+/g, ' ').slice(0, 240)}`;
   }).join('\n');
-
-  const user =
-    `RECENT TURNS:\n${ctxBlock}\n\nCANDIDATES (pick exactly one id):\n${candBlock}\n\n` +
-    'Respond with JSON only.';
-
-  return { system, user };
 }
+
+/** A candidate as the reranker and Clef read it: its section and prompt. */
+const candidateText = (q: Question): string => `${q.section ? `[${q.section}] ` : ''}${q.prompt}`.slice(0, 300);
 
 /**
  * Strict JSON id extractor. Accepts:
@@ -259,36 +242,28 @@ export async function pickNextQuestion(
   // Single survivor after recency filter — no need to spend tokens.
   if (pool.length === 1) return pool[0];
 
-  const allowedIds = new Set(pool.map((q) => q.id));
-  const { system, user } = buildPrompt(pool, msgs);
-
-  let picked: string | null = null;
+  const charge = { userId, surface: AI_SURFACE.studio, rail: { page: 'studio', option: 'rank:advisor-questions' } } as const;
+  const query = rerankQuery(msgs);
+  let ordered = pool;
   try {
-    const result = await aiRouterRun(env, {
-      task: 'rerank',
-      userId,
-      surface: AI_SURFACE.studio,
-      // D765: off on the page, the run is refused and the heuristic order stands.
-      rail: { page: 'studio', option: 'rank:advisor-questions' },
-      systemPrompt: system,
-      messages: [{ role: 'user', content: user }],
-      maxTokens: 64,
-      temperature: 0.1,
-    });
-    if (result.ok) picked = parsePickedId(result.output, allowedIds);
+    // ST5 step 0: the reranker orders the pool. D765: off on the page, the run is refused and the bank's order stands.
+    const ranked = await rank(env, charge, { task: 'rerank', query, contexts: pool.map(candidateText) });
+    if (!ranked.ok) return pool[0];
+    ordered = orderByRanking(pool, ranked.ranking);
+    // ST5 step 1: clef-flash chooses among the best few. Options are keyed q1..qN, since a bank id need not be a Clef key.
+    const top = ordered.slice(0, CHOOSE_FROM);
+    if (top.length > 1) {
+      const options = Object.fromEntries(top.map((q, n) => [`q${n + 1}`, candidateText(q).slice(0, 100)]));
+      const d = await decide(env, charge, {
+        model: CLEF_FLASH, key: 'next',
+        instructions: 'Choose the question the advisor should ask next: the one that builds most naturally on what the founder just said and that they have not already covered.',
+        options, text: query,
+      });
+      if (d.ok && d.answer) return top[Number(d.answer.choice.slice(1)) - 1] ?? ordered[0];
+    }
   } catch (e) {
-    // aiRouter is defensive but we wrap defensively anyway — a thrown
-    // error here MUST NOT break /next-question.
+    // a thrown error here MUST NOT break /next-question.
     console.warn('[advisor.rerank] aiRouter throw:', (e as Error).message);
   }
-
-  if (picked) {
-    const hit = pool.find((q) => q.id === picked);
-    if (hit) return hit;
-  }
-  // Router refusal, malformed JSON, or id outside candidate set —
-  // fall back to deterministic head of the recency-filtered pool so
-  // the route still returns a valid next question without bouncing
-  // back to a recently-asked id.
-  return pool[0];
+  return ordered[0];
 }

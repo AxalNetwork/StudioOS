@@ -96,3 +96,29 @@ test('D778: an answer is stored unsaved, and nothing else is written before the 
   assert.deepEqual(answers, [{ saved: 0, owner_user_id: OWNER }], 'the answer waits for the member\'s Save');
   assert.equal((f.db.prepare('SELECT COUNT(*) AS n FROM research_documents').get() as any).n, 1, 'no document is written');
 });
+
+test('#3938: Ask retrieves, ranks, then writes — the reranker\'s order is the order the answer reads and cites', async () => {
+  // Mutation checked: the ranking ignored (the index's order stands) → the prompt lists "Pricing" first.
+  const f = fixture();
+  f.db.exec(`INSERT INTO research_documents (id,uid,owner_user_id,title,r2_key,index_state) VALUES (2,'own-doc-2',${OWNER},'Churn','r/own2','indexed')`);
+  const seen: Array<{ model: string; input: any }> = [];
+  f.env.AI = { run: guardSafe(async (model: string, input: any) => {
+    seen.push({ model, input });
+    if (model === '@cf/baai/bge-reranker-base') return { response: [{ id: 1, score: 0.97 }, { id: 0, score: 0.12 }] };
+    if (model.includes('bge')) return { data: [Array(768).fill(0.01)] };
+    return { response: 'Churn is the answer [1].' };
+  }) };
+  f.env.VECTORIZE = { query: async () => ({ matches: [
+    { id: 'research_doc:1:0', score: 0.9, metadata: { type: 'research_doc', entity_id: 1, owner_user_id: OWNER, title: 'Pricing', snippet: 'Price talk', chunk: 0 } },
+    { id: 'research_doc:2:0', score: 0.8, metadata: { type: 'research_doc', entity_id: 2, owner_user_id: OWNER, title: 'Churn', snippet: 'Why users leave', chunk: 0 } },
+  ] }) };
+  const r = await ask(f, { question: 'Why do users leave?', session_uid: 'own-session' });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const rerank = seen.find((s) => s.model === '@cf/baai/bge-reranker-base');
+  assert.ok(rerank, 'the reranker ran between retrieval and the answer');
+  assert.equal(rerank!.input.query, 'Why do users leave?');
+  const answer = seen.find((s) => !s.model.includes('bge') && !/guard/.test(s.model));
+  const prompt = JSON.stringify(answer!.input);
+  assert.ok(prompt.indexOf('[1] Churn') >= 0 && prompt.indexOf('[2] Pricing') > prompt.indexOf('[1] Churn'), 'the best-ranked source is [1]');
+  assert.equal(r.body.citations[0].document_uid, 'own-doc-2', 'the citations follow the ranking');
+});

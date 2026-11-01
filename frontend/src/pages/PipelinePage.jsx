@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import SpinoutWizard from '../components/SpinoutWizard';
 import { useWebSocket } from '../hooks/useWebSocket';
 import Sheet from '../ui/Sheet.jsx';
+import { confidenceLine } from '../lib/decisionConfidence.js';
 
 const STAGES = [
   { id: 'idea', label: 'Idea', color: 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300', border: 'border-gray-300 dark:border-gray-600' },
@@ -313,6 +314,7 @@ function DealCard({ deal, onOpen, onSpinout, draggable, onDragStart, onDragEnd, 
           'bg-violet-50 text-violet-700'
         }`}>
           <Sparkles size={10} /> AI: {(gate.ai_recommendation || '').replace('_', ' ')}
+          {confidenceLine(gate.ai_confidence) && <span className="opacity-80">· {confidenceLine(gate.ai_confidence)}</span>}
           {gate.final_decision && <span className="ml-auto font-bold">→ {gate.final_decision}</span>}
         </div>
       )}
@@ -671,6 +673,7 @@ function GatesTab({ data, canEdit, onDecide, busy }) {
               <div className="text-xs text-gray-500 dark:text-gray-400">{new Date(g.created_at).toLocaleString()}</div>
               <div className="font-semibold text-sm flex items-center gap-2 mt-1">
                 <Sparkles size={14} className="text-violet-500" /> AI: <span className="uppercase text-violet-700">{(g.ai_recommendation || '').replace('_', ' ')}</span>
+                {confidenceLine(g.ai_confidence) && <span className="text-xs font-normal text-gray-500 dark:text-gray-400">{confidenceLine(g.ai_confidence)}</span>}
               </div>
             </div>
             <span className={`text-[10px] px-2 py-1 rounded font-medium ${

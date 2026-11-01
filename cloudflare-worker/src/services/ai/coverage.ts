@@ -128,7 +128,8 @@ export const STT_REF = 'services/sttModels.ts (STT_MODELS)';
 export const FITS: Readonly<Record<ModuleOperation, readonly ModuleKey[]>> = Object.freeze({
   chat: ['validate', 'record', 'build', 'raise', 'grow', 'network', 'research', 'articles', 'email', 'studio', 'admin', 'workspaces'],
   vision: ['build', 'raise', 'research', 'studio', 'admin', 'workspaces'],
-  decision: ['validate', 'build', 'raise', 'grow', 'network', 'research', 'email', 'studio', 'admin', 'safety', 'workspaces'],
+  // #3938 (VA8): Record a Session decides a contested segment's language among fixed options (clef-flash).
+  decision: ['validate', 'record', 'build', 'raise', 'grow', 'network', 'research', 'email', 'studio', 'admin', 'safety', 'workspaces'],
   image_labels: ['raise', 'research', 'admin', 'safety'],
   embed: ['validate', 'raise', 'grow', 'network', 'research', 'studio', 'admin', 'workspaces'],
   rerank: ['validate', 'raise', 'grow', 'network', 'research', 'studio', 'admin', 'workspaces'],

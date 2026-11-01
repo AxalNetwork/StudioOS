@@ -1,0 +1,11 @@
+-- 764 — #3938 (task 4 of #3721's model use-case plan, IN2): the decision
+-- gate's recommendation is now Clef's `choice`, and Clef sends the chosen
+-- option's probability. This column keeps it beside the recommendation so the
+-- pipeline's gate card can show "72% likely" after a reload. NULL is "not
+-- recorded": a rule-based gate, or a gate written before this column, never
+-- reads as 0.
+--
+-- Not idempotent (SQLite has no ADD COLUMN IF NOT EXISTS): the ledger applies
+-- it once. `routes/pipeline.ts` ensureSchema names the column for a database
+-- built without the migrations.
+ALTER TABLE decision_gates ADD COLUMN ai_confidence REAL;

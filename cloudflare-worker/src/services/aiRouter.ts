@@ -738,13 +738,11 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   // D1478 §3937 fix 1 (ST3, ON2): tool calls run on glm-4.7-flash, which carries Cloudflare's function-calling
   // badge (131,072 tokens); qwen2.5-coder carries none. glm-4.7-flash already runs (rail_chat's Default), so no model is new.
   tool_call:    { provider: 'workers-ai', model: '@cf/zai-org/glm-4.7-flash', fallbackChain: [MID_LLAMA, SMALL_LLAMA] },
-  // Personal Advisor next-question re-ranker (advisor/rerank.ts).
-  // Structured JSON pick over a bounded candidate list — qwen-coder
-  // is the strongest at obeying the {"id": "..."} schema; fall back
-  // to MID then SMALL llama if qwen 5xxs / times out. The route layer
-  // ALWAYS treats a router miss as deterministic-first-in-bank, so a
-  // total chain failure still yields a valid next question.
-  rerank:       { provider: 'workers-ai', model: '@cf/qwen/qwen2.5-coder-32b-instruct', fallbackChain: [MID_LLAMA, SMALL_LLAMA] },
+  // Personal Advisor next question (advisor/rerank.ts), ST5 step 1. #3938 (§4.2 fix 2): the
+  // reranker scores the candidates against the conversation (no JSON picker), then clef-flash
+  // chooses among the top few on `module_decision`. A reranker has no text fallback: a miss
+  // keeps the bank's order, so the route still returns a valid next question.
+  rerank:       { provider: 'workers-ai', model: '@cf/baai/bge-reranker-base' },
   explain:      { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA], cacheTtlSec: 7 * 86400 },
   // Personal Advisor free-form "explain" SSE endpoint. Workers AI is the
   // only provider in production (Task #31 removed the Anthropic narrow
@@ -943,9 +941,11 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
     model: '@cf/meta/m2m100-1.2b',
     alternates: ['@cf/meta/m2m100-1.2b', '@cf/ai4bharat/indictrans2-en-indic-1B'],
   },
-  // D857 — one ISO 639-1 code for a passage the script and word checks could not place.
-  detect_language: { provider: 'workers-ai', model: SMALL_LLAMA },
-  sentiment:    { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA], cacheTtlSec: 30 * 86400 },
+  // D857 — one language for a passage the script and word checks could not place.
+  // #3938 (§4.2 fix 3, VA8): a clef-flash `choice` among the working languages, with its probability.
+  detect_language: { provider: 'workers-ai', model: '@cf/cloudflare/clef-flash' },
+  // #3938 (§4.2 fix 4, ON5): distilbert reads English sentiment; `ai/decide.ts` sends every other language to clef-flash.
+  sentiment:    { provider: 'workers-ai', model: '@cf/huggingface/distilbert-sst-2-int8', cacheTtlSec: 30 * 86400 },
   embed:        { provider: 'workers-ai', model: '@cf/baai/bge-base-en-v1.5', isEmbed: true,  cacheTtlSec: 30 * 86400 },
   // D766 (#2094) — system calls (userId 0): logged at cost, charged to no member.
   // The monitoring summary keeps the model it called directly.

@@ -129,7 +129,36 @@ test('a budget stop answers 402 in the budget\'s words; a model that cannot be r
   assert.equal(gate.status, 'pending', 'a gate is a recommendation for a person to decide');
   assert.equal(gate.ai_recommendation, 'iterate', 'a recorded zero still supports the rule-based gate');
   assert.match(gate.ai_explanation, /^Rule-based: traction score 0\/100/);
-  assert.deepEqual(rows(w).map((x: any) => [x.task, x.rail_option, x.record_ref, x.surface]), [['rail_reason', 'review:decision-gate', 'deal:7', '/pipeline']]);
+  // #3938 (IN2): Clef decides first; with no decision there is nothing for gpt-oss-120b to explain.
+  assert.deepEqual(rows(w).map((x: any) => [x.task, x.rail_option, x.record_ref, x.surface]), [['module_decision', 'review:decision-gate', 'deal:7', '/pipeline']]);
+});
+
+test('#3938 IN2: Clef decides the gate with a probability, gpt-oss-120b explains it, and the gate keeps the probability', async () => {
+  // Mutations checked: the recommendation taken from gpt-oss's text again (the gate reads "iterate");
+  // the probability not stored (ai_confidence NULL); a choice outside the three options accepted.
+  const ai = makeAI((model) => model === '@cf/cloudflare/clef'
+    ? { answers: { gate: { type: 'choice', choice: 'continue', confidence: 0.72, probabilities: { spinout_ready: 0.08, continue: 0.72, iterate: 0.2 } } }, usage: { input_tokens: 120 } }
+    : reply('Recommendation: ITERATE. Traction is early.'));
+  const w = world(ai);
+  const r = await call(w, 'POST', '/api/pipeline/decision-gate/review', { deal_id: 7 });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.ai_recommendation, 'continue', 'the decision is Clef\'s, not the explainer\'s');
+  assert.equal(r.body.ai_confidence, 0.72);
+  assert.equal(r.body.model, '@cf/cloudflare/clef');
+  const gate = w.f.db.prepare('SELECT ai_recommendation, ai_explanation, ai_confidence FROM decision_gates').get();
+  assert.deepEqual([gate.ai_recommendation, gate.ai_confidence], ['continue', 0.72]);
+  assert.equal(gate.ai_explanation, 'Recommendation: ITERATE. Traction is early.', 'gpt-oss-120b only explains');
+  const explain = ai.calls.find((x) => x.model === ROUTE.rail_reason.model)!;
+  assert.match(JSON.stringify(explain.payload), /CONTINUE: on track/, 'the explainer is told the decision');
+  assert.deepEqual(rows(w).map((x: any) => [x.task, x.rail_option, x.record_ref]), [['module_decision', 'review:decision-gate', 'deal:7'], ['rail_reason', 'review:decision-gate', 'deal:7']]);
+
+  const odd = makeAI((model) => model === '@cf/cloudflare/clef'
+    ? { answers: { gate: { type: 'choice', choice: 'liquidate', confidence: 0.9 } }, usage: { input_tokens: 120 } }
+    : reply('x'));
+  const w2 = world(odd);
+  const r2 = await call(w2, 'POST', '/api/pipeline/decision-gate/review', { deal_id: 7 });
+  assert.equal(r2.status, 200);
+  assert.deepEqual([r2.body.ai_recommendation, r2.body.ai_confidence, r2.body.model], ['iterate', null, 'rule-based'], 'an option not offered is no decision');
 });
 
 // 4 ───────────────────────────────────────────────────────────────────────────
