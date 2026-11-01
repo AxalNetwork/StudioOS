@@ -54,7 +54,6 @@ export const SURFACES = Object.freeze({
   areasGenerate: { issue: 3764, what: 'Generate into several areas, with variants' },
   history: { issue: 3767, what: 'Undo and redo' },
   narrativeOutline: { issue: 3768, what: 'An outline from the investor narrative' },
-  themesV2: { issue: 3769, what: 'The six refreshed themes' },
   instruct: { issue: 3773, what: 'An instruction on several areas' },
   stagePlan: { issue: 3774, what: 'Stage, the order for it and missing proof' },
   figures: { issue: 3775, what: 'Linked, Stated and Uncited on every figure' },
@@ -135,7 +134,6 @@ export const areasQuote = off('areasQuote');
 export const areasGenerate = off('areasGenerate');
 export const history = off('history');
 export const narrativeOutline = off('narrativeOutline');
-export const themesV2 = off('themesV2');
 export const instruct = off('instruct');
 export const stagePlan = off('stagePlan');
 export const figures = off('figures');

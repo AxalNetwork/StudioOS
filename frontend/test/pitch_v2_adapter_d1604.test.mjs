@@ -58,7 +58,7 @@ test('D1499 (#3749): grid is swapped — it answers through deckGridApi.grid, an
 test('the adapter keys each surface to the plan’s issue (§6.2)', () => {
   const want = {
     grid: 3749, saveCard: 3751, discardDraft: 3751, batch: 3753, cancelBatch: 3753, elementModels: 3754,
-    areasQuote: 3764, areasGenerate: 3764, history: 3767, narrativeOutline: 3768, themesV2: 3769, instruct: 3773,
+    areasQuote: 3764, areasGenerate: 3764, history: 3767, narrativeOutline: 3768, instruct: 3773,
     stagePlan: 3774, figures: 3775, deckUsage: 3776, arrange: 3777, imageEdit: 3778, elementsLibrary: 3779,
     diagrams: 3780, ventureElements: 3781, templates: 3782, myTemplates: 3782, saveAsTemplate: 3782, typedTables: 3787,
     media: 3788, presets: 3796, orgLocks: 3786, critique: 3799, remix: 3800, consistency: 3802, deckActions: 3808,
@@ -67,6 +67,8 @@ test('the adapter keys each surface to the plan’s issue (§6.2)', () => {
     markSeen: 3879, setDeckSource: 3881,
   };
   // #3882 merged as D1603: the .odp export left the seam for its real client (pitch_v2_states_d1604).
+  // #3769 merged as D1517: the six themes arrive through GET /api/decks/model, so `themesV2` left the seam.
+  assert.equal('themesV2' in adapter, false, 'the six themes need no adapter method');
   assert.equal('exportOdp' in adapter, false, 'a surface whose route is on main is not in the adapter');
   assert.deepEqual(Object.fromEntries(Object.entries(adapter.SURFACES).map(([k, v]) => [k, v.issue])), want);
   for (const [k, v] of Object.entries(adapter.SURFACES)) assert.ok(typeof v.what === 'string' && v.what.length > 8, k);

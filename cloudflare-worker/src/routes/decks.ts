@@ -534,7 +534,7 @@ async function versionMetaOf(env: Env, projectId: number, body: any, base: any):
   let theme = has('theme') ? body.theme : themeOfRow(base);
   if (theme != null) {
     theme = sanitizeTheme(theme, sanitizeImageUrl);
-    if (!theme) return 'theme.kind must be brand, neutral_light or neutral_dark';
+    if (!theme) return `theme.kind must be one of ${THEME_KINDS.join(', ')}`;
   }
   return { audience, round_ref, theme };
 }

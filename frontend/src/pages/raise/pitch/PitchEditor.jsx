@@ -37,7 +37,7 @@ import { presentHref } from './presentExportModel';
 import {
   ADDABLE_KINDS, KIND_LABELS, MODEL_FAILED, NOTES_PLACEHOLDER, NO_CARDS,
   NOT_RECORDED, PHONE_NOTE, READ_FAILED, THEME_LABELS,
-  addBlock, applyLayout, applyToAll, blockLabel, cardColours, cardTitle, cardsOf, changesOf, firstFree,
+  addBlock, applyLayout, applyToAll, blockLabel, cardColours, cardTitle, cardsOf, changesOf, firstFree, isDarkTheme,
   moveCard, placementProblem, removeBlock, saveState, standardSizes, staleCards, updateBlock, withFieldBlocks,
 } from './editorModel';
 
@@ -333,7 +333,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   const kitData = kit.status === 'ok' ? kit.data?.kit ?? null : null;
   const colours = cardColours(theme, kitData);
   // D903: a background's overlay is in the brand ink, never the dark theme's light text colour.
-  const ink = theme?.kind === 'neutral_dark' ? undefined : colours.ink;
+  const ink = isDarkTheme(theme?.kind) ? undefined : colours.ink;
   const items = sources.data?.items || [];
   const [images, setImages] = useState([]);
   const loadImages = useCallback(() => {
