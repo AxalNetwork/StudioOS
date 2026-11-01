@@ -12,6 +12,9 @@ export function raiseEvidenceTables(db: any) {
   withGrantFolders(db); // D1103: a grant's folder scope (migration 594), read by every investor gate
   if (!exists('revenue_entries')) db.exec(sql('311_revenue_entries.sql'));
   if (!exists('mercury_raise_facts')) db.exec(sql('520_mercury_raise_feeds.sql'));
+  // D1607: readiness and the narrative check read the founder's PostHog figures (migrations 657 and 755).
+  if (!exists('posthog_project_links')) db.exec(sql('657_posthog_project_links.sql'));
+  if (!exists('posthog_tracked_metrics')) db.exec(sql('755_posthog_metrics.sql'));
   if (exists('readiness_scores')) {
     db.exec(sql('536_readiness_stated_evidence.sql'));
     db.exec(sql('558_readiness_scores_nullable_score.sql'));

@@ -46,6 +46,7 @@ import ValidateFromGoogle from './ValidateFromGoogle';
 import { DurableFromGoogle, RevenueFromGoogle } from './GrowFromGoogle';
 import FromNotion from './FromNotion';
 import { ValidateDemandPosthog, ValidateExperimentsPosthog } from './ValidatePosthog';
+import RaisePosthog from './RaisePosthog';
 import NotionInterviewImport from './NotionInterviewImport';
 import NotionSnapshotImport from './NotionSnapshotImport';
 import ContentCalendar from './ContentCalendar';
@@ -227,6 +228,8 @@ const CYCLE_DEFS = {
       ...Object.fromEntries(MODULES.raise.map((m) => [m.slug, (data, ctx) => (
         <>
           {mercuryPart(m.slug, data, ctx)}
+          {/* D1607 (#3731): Pitch deck's PostHog metrics; Readiness and Narrative draw theirs below. */}
+          <RaisePosthog slug={m.slug} projectId={ctx.projectId} />
           <EvidencePart slug={m.slug} projectId={ctx.projectId} />
         </>
       )])),
@@ -236,6 +239,7 @@ const CYCLE_DEFS = {
         <>
           <NarrativeHome data={data} admin={isNarrativeAdmin({ role: ctx.role })} />
           {mercuryPart('investor-narrative', data, ctx)}
+          <RaisePosthog slug="investor-narrative" projectId={ctx.projectId} />
           <EvidencePart slug="investor-narrative" projectId={ctx.projectId} />
         </>
       ),
@@ -244,6 +248,7 @@ const CYCLE_DEFS = {
         <>
           <PmfPart part={data?.parts?.pmf} card={data?.card} records={data?.records} projectId={ctx.projectId} reload={ctx.reload} />
           {mercuryPart('fundraising-readiness', data, ctx)}
+          <RaisePosthog slug="fundraising-readiness" projectId={ctx.projectId} />
           <EvidencePart slug="fundraising-readiness" projectId={ctx.projectId} />
         </>
       ),

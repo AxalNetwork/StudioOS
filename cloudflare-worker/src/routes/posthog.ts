@@ -54,6 +54,7 @@ import { hashEmail } from '../util/hashEmail';
 import { isTeamViewer } from '../services/mercury/growFeeds';
 // D1605–: each section's sync and acceptors register themselves on import.
 import '../services/posthog/validate';
+import '../services/posthog/raise';
 import { flagChips, mustHaves, toolsLine } from '../services/posthog/build';
 import { MARKS, marksOf, setMark } from '../services/posthog/validate';
 import {
