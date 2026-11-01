@@ -18,7 +18,7 @@
  * none of its questions or answers (D559).
  */
 import type { Env, User } from '../types';
-import { canSeeLearning, enrolledSql } from './learningAccess';
+import { canSeeLearning } from './learningAccess';
 import { notify } from './notify';
 
 export const PLAN_KINDS = ['course', 'lesson', 'video', 'webinar', 'exercise', 'exam', 'study_block'] as const;
@@ -48,26 +48,51 @@ export interface Subject {
  * does not exist): the two answer alike, as `routes/learning.ts` does.
  */
 /**
- * Each kind's read, fixed at load: the enrolment fragment (`enrolledSql`, D558)
- * takes literal arguments only and binds the caller by its single `?`; the
- * subject's uid is the second `?`.
+ * Each kind's read, as literal SQL the schema guard can read
+ * (`check-sqlite-columns`): the subject, plus `holder_uid`, the uid a program
+ * holds for it (a lesson's course). Enrolment is `ENROLLED_SQL` below.
  */
 const SUBJECT_SQL: Record<Exclude<PlanKind, 'study_block'>, string> = {
-  course: `SELECT id, uid, title, status, visibility, slug, ${enrolledSql('course', 'learning_courses.uid')} AS enrolled
+  course: `SELECT id, uid, title, status, visibility, slug, uid AS holder_uid
       FROM learning_courses WHERE uid = ?`,
-  lesson: `SELECT l.id, l.uid, l.title, c.status, c.visibility, c.slug, ${enrolledSql('course', 'c.uid')} AS enrolled
+  lesson: `SELECT l.id, l.uid, l.title, c.status, c.visibility, c.slug, c.uid AS holder_uid
       FROM learning_lessons l JOIN learning_course_modules m ON m.id = l.module_id JOIN learning_courses c ON c.id = m.course_id
       WHERE l.uid = ?`,
-  video: `SELECT id, uid, title, status, visibility, ${enrolledSql('item', 'learning_items.uid')} AS enrolled
+  video: `SELECT id, uid, title, status, visibility, uid AS holder_uid
       FROM learning_items WHERE uid = ? AND kind = 'video'`,
   // A webinar's "published" is D560's; canSeeLearning reads `published` only.
-  webinar: `SELECT id, uid, title, status, visibility, starts_at, ends_at, capacity, ${enrolledSql('webinar', 'learning_webinars.uid')} AS enrolled
+  webinar: `SELECT id, uid, title, status, visibility, starts_at, ends_at, capacity, uid AS holder_uid
       FROM learning_webinars WHERE uid = ?`,
-  exercise: `SELECT id, uid, title, status, visibility, ${enrolledSql('exercise', 'learning_exercises.uid')} AS enrolled
+  exercise: `SELECT id, uid, title, status, visibility, uid AS holder_uid
       FROM learning_exercises WHERE uid = ?`,
-  exam: `SELECT id, uid, title, status, visibility, ${enrolledSql('exam', 'learning_exams.uid')} AS enrolled
+  exam: `SELECT id, uid, title, status, visibility, uid AS holder_uid
       FROM learning_exams WHERE uid = ?`,
 };
+
+/**
+ * The program kind that holds each plan kind, and the lesson kinds through
+ * which a course carries it: `enrolledSql`'s rule (D558, D1124), with every
+ * value bound. A course is held directly only, so its lesson kinds match none.
+ */
+const HOLDER: Record<Exclude<PlanKind, 'study_block'>, { kind: string; lessons: [string, string] }> = {
+  course: { kind: 'course', lessons: ['', ''] },
+  lesson: { kind: 'course', lessons: ['', ''] },
+  video: { kind: 'item', lessons: ['video', 'reading'] },
+  webinar: { kind: 'webinar', lessons: ['webinar', 'webinar'] },
+  exercise: { kind: 'exercise', lessons: ['exercise', 'exercise'] },
+  exam: { kind: 'exam', lessons: ['exam', 'exam'] },
+};
+
+/** 1 when the caller is actively enrolled in a published program holding the subject, directly or through a course's lesson. */
+const ENROLLED_SQL = `SELECT 1 AS enrolled FROM learning_program_contents pc
+      JOIN learning_programs pp ON pp.id = pc.program_id AND pp.status = 'published'
+      JOIN learning_enrollments pe ON pe.program_id = pc.program_id AND pe.status = 'active' AND pe.user_id = ?
+     WHERE (pc.subject_kind = ? AND pc.subject_uid = ?)
+        OR (pc.subject_kind = 'course' AND EXISTS (SELECT 1 FROM learning_courses hc
+              JOIN learning_course_modules hm ON hm.course_id = hc.id
+              JOIN learning_lessons hl ON hl.module_id = hm.id
+             WHERE hc.uid = pc.subject_uid AND hl.ref_uid = ? AND hl.kind IN (?, ?)))
+     LIMIT 1`;
 
 const hrefFor = (kind: Exclude<PlanKind, 'study_block'>, row: any): string => {
   switch (kind) {
@@ -82,7 +107,12 @@ const hrefFor = (kind: Exclude<PlanKind, 'study_block'>, row: any): string => {
 
 export async function resolveSubject(env: Env, user: User, kind: PlanKind, uid: string): Promise<Subject | null> {
   if (kind === 'study_block' || !(kind in SUBJECT_SQL) || typeof uid !== 'string' || !uid || uid.length > 64) return null;
-  const row: any = await env.DB.prepare(SUBJECT_SQL[kind]).bind(user.id, uid).first();
+  const row: any = await env.DB.prepare(SUBJECT_SQL[kind]).bind(uid).first();
+  if (row && row.visibility === 'program') {
+    const h = HOLDER[kind];
+    const hit = await env.DB.prepare(ENROLLED_SQL).bind(user.id, h.kind, row.holder_uid, row.holder_uid, ...h.lessons).first();
+    row.enrolled = hit ? 1 : 0;
+  }
   if (row) row.href = hrefFor(kind, row);
   if (!row || !canSeeLearning(user, row)) return null;
   return {
