@@ -263,14 +263,22 @@ function VersionsTab({ projectId, versions, search, reload, onChanged, admin = f
  * read's `parts.narrative`. An admin (`admin`) gets no Answer it.
  * CycleRoute draws it as the module's part (D909); it reads nothing itself.
  */
-export function NarrativeHome({ data, search, admin = false }) {
+export function NarrativeHome({ data, search, admin = false, projectId = null }) {
   // The module page's address: the venture is kept on Needs you's links.
   const here = useLocation().search;
+  // D1463 (RR07): the founder's "Who read this narrative" is on Home as well as
+  // Story, so a founder with no saved version still sees who read it. Never an admin's.
+  const reads = !admin && projectId ? <NarrativeReads projectId={projectId} /> : null;
   if (homeUnreadable(data)) {
-    return <div className={`${CARD} p-4`} data-testid="narrative-home-unreadable"><Unreadable what="Your narrative versions" claim="This is not a claim that none are saved." /></div>;
+    return (
+      <div className="flex flex-col gap-3.5">
+        <div className={`${CARD} p-4`} data-testid="narrative-home-unreadable"><Unreadable what="Your narrative versions" claim="This is not a claim that none are saved." /></div>
+        {reads}
+      </div>
+    );
   }
   const part = homePart(data);
-  if (!part) return null;
+  if (!part) return reads;
   const needs = needsYou(part, search ?? here);
   return (
     <div className="flex flex-col gap-3.5" data-testid="narrative-home">
@@ -306,6 +314,7 @@ export function NarrativeHome({ data, search, admin = false }) {
       {/* D913 (#2697): the objections investors raised, from the part. */}
       <ObjectionsCard part={part} search={search ?? here} admin={admin} />
       <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="narrative-home-footer">{homeFooter(part)}</p>
+      {reads}
     </div>
   );
 }

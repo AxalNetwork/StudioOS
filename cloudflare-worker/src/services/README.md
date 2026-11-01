@@ -669,3 +669,5 @@ Learning page). `sendPlanReminders` runs on the 5-minute cron and claims each
 occurrence in `learning_plan_reminders` before calling `notify()`, so a
 reminder is sent once.
 D1420 (#3864): `studioLayoutRun.ts` is `studio:layout` on `POST /api/ai/rail/run`: the model's messages (the layout and its revision, the catalogue, a founder's Lab week and readiness tier; no other member's data and no table name), `validateOps` (add, remove, resize and move ops checked against the catalogue, the plan locks, the fixed blocks and the 12-module cap, each dropped op named by its title, never its key) and each profile's /studio rail key (`STUDIO_RAIL_PAGES`). It writes nothing; `../routes/rail_run.ts` files the kept ops as `ai_rail_proposals` rows.
+
+D1456 (#4014): interview processing persists its actual failed step and clears it on a successful recovery claim; session and active reads share the same DTO. See the D1456 decision for the complete contract.
