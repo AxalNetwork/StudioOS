@@ -205,6 +205,8 @@ import './integrations/providers/notion';
 import './integrations/providers/posthog';
 // D855 §4 (#3733 part 1) — a member's own Linear, read-only, through Linear's read-only MCP server: sign-in only, not listed yet.
 import './integrations/providers/linear';
+// D855 §4 (#3733 part 2) — a member's own Cloudflare, read-only, through Cloudflare's REST API: sign-in only, not listed yet.
+import './integrations/providers/cloudflare';
 // D1088 (#2953): Build's Notion writers and the design-note acceptor register with the sync engine.
 import './services/notion/build';
 import crunchbaseRoutes from './routes/crunchbase';
