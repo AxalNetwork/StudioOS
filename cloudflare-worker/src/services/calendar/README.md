@@ -29,6 +29,10 @@ when adding a kind.
   into ISO. `done` reads "Recorded", and "Transcript ready" appears only when
   the run's session holds its final transcript. Page only. It never reads
   the meeting link or the participants.
+- `raiseDates.ts`: #3982 (D1486 §c), Raise's dated stores, page only and all
+  day: `round_close` (an active round's close, for the venture's founder and
+  its accepted owners and co-founders) and `nda_expiry` (an active, unvoided
+  NDA's expiry, for its two parties only, by the other party's name).
 - `prefs.ts`: D1484 part 2 (#3978, migration 708), a member's own source
   settings. `calendar_source_prefs` holds whether a source is shown and its
   colour, a palette token and never hex. `calendar_settings` holds

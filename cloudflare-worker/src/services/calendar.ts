@@ -434,7 +434,7 @@ export async function fetchMicrosoftUserinfo(accessToken: string): Promise<any> 
 // ===========================================================================
 export interface CalendarEvent {
   id: string;
-  kind: 'ic_meeting' | 'founder_checkin' | 'advisor_booking' | 'partner_office_hour' | 'calendly_event' | 'expert_booking' | 'event_ticket' | 'event_hosted' | 'investor_meeting' | 'compliance_due' | 'interview_call' | 'cohort_date' | 'deal_closing' | 'manual' | 'learning' | 'publish_send' | 'content_planned' | 'bot_call';
+  kind: 'ic_meeting' | 'founder_checkin' | 'advisor_booking' | 'partner_office_hour' | 'calendly_event' | 'expert_booking' | 'event_ticket' | 'event_hosted' | 'investor_meeting' | 'compliance_due' | 'interview_call' | 'cohort_date' | 'deal_closing' | 'manual' | 'learning' | 'publish_send' | 'content_planned' | 'bot_call' | 'round_close' | 'nda_expiry';
   source_id: number;
   source_uid: string;
   title: string;
@@ -904,6 +904,9 @@ const READERS: Readonly<Record<CalendarEvent['kind'], CalendarReader>> = {
   content_planned: contentPlannedEvents,
   // D1486 §a (#3980): the meeting bot's runs, the member's own, page only.
   bot_call: async (env, userId, from, to) => (await (await import('./calendar/botCalls')).botCallEvents(env, userId, from, to)) as CalendarEvent[],
+  // #3982 (D1486 §c): Raise's dated stores, page only, all day: a round's close for the venture's members, an NDA's expiry for its two parties.
+  round_close: async (env, userId, from, to) => (await (await import('./calendar/raiseDates')).roundCloseEvents(env, userId, from, to)),
+  nda_expiry: async (env, userId, from, to) => (await (await import('./calendar/raiseDates')).ndaExpiryEvents(env, userId, from, to)),
 };
 
 export const KNOWN_KINDS = Object.keys(READERS) as readonly CalendarEvent['kind'][];
@@ -981,7 +984,7 @@ export async function fetchUserEventsWithSources(
 export const SCOPED_EXCLUDED_KINDS = ['calendly_event', 'expert_booking'] as const;
 /** D1484: read for their owner alone; a staff scope has no reader for them, so it does not list them. */
 // D1486 §b (#3981): Publish sends and planned content are the venture team's, never a staff scope's.
-export const PERSONAL_ONLY_KINDS = ['interview_call', 'cohort_date', 'deal_closing', 'manual', 'publish_send', 'content_planned', 'bot_call'] as const;
+export const PERSONAL_ONLY_KINDS = ['interview_call', 'cohort_date', 'deal_closing', 'manual', 'publish_send', 'content_planned', 'bot_call', 'round_close', 'nda_expiry'] as const;
 export const SCOPED_SOURCE_LIMIT = 1000;
 export function validScopeWindow(from: string, to: string): boolean {
   const start = Date.parse(from), end = Date.parse(to);

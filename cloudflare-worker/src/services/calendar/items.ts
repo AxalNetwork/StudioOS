@@ -40,6 +40,9 @@ export const FAMILY_OF: Readonly<Record<CalendarEvent['kind'], ItemFamily>> = {
   content_planned: 'grow',
   // D1486 §a (#3980): the meeting bot's calls.
   bot_call: 'meetings',
+  // #3982 (D1486 §c): a round's close and an NDA's expiry are deadlines.
+  round_close: 'deadlines',
+  nda_expiry: 'deadlines',
 };
 
 /** The kinds `POST /calendar/push/:kind/:source_id` copies to Google or Outlook. */
@@ -66,6 +69,8 @@ export const ROLE_WORDS: Readonly<Record<string, string>> = {
   venture_team: 'Your venture’s team',
   your_send: 'You confirmed this send',
   bot_sender: 'You sent the bot',
+  venture_round: 'Your venture’s round',
+  nda_party: 'A party to this NDA',
 };
 
 /** The role a kind's reader does not set, because there is only one. */
@@ -84,6 +89,8 @@ const ROLE_BY_KIND: Partial<Record<CalendarEvent['kind'], string>> = {
   publish_send: 'your_send',
   content_planned: 'venture_team',
   bot_call: 'bot_sender',
+  round_close: 'venture_round',
+  nda_expiry: 'nda_party',
 };
 
 export interface CalendarItem extends Omit<CalendarEvent, 'my_role' | 'advisor_uid'> {
@@ -123,6 +130,7 @@ export function hrefOf(ev: CalendarEvent): string | null {
     // D1486 §b: the send's Grow module, and Distribution for a planned piece.
     case 'publish_send': return typeof ev.url === 'string' && ev.url.startsWith('/grow') ? ev.url : '/grow';
     case 'content_planned': return '/grow/distribution';
+    case 'round_close': return '/raise/capital-relationships';
     default: return null;
   }
 }

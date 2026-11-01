@@ -148,6 +148,9 @@ const KINDS = [
   { id: 'content_planned', label: 'Planned content', from: 'Grow › Distribution' },
   // D1486 §a (#3980): the meeting bot's calls, page only; done reads Recorded.
   { id: 'bot_call', label: 'Recorded call', from: 'Validate › Record a session' },
+  // #3982 (D1486 §c): Raise's dated stores, page only.
+  { id: 'round_close', label: 'Round close', from: 'Raise › Round' },
+  { id: 'nda_expiry', label: 'NDA expiry', from: 'Raise › NDAs' },
 ];
 const KIND_LABEL = Object.fromEntries(KINDS.map((k) => [k.id, k.label]));
 

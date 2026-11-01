@@ -49,9 +49,9 @@ test('every kind the page reads is in exactly one family; Deadlines holds the Co
   assert.deepEqual([...FAMILIES.flatMap((f) => f.kinds)].sort(), [...PAGE_KINDS].sort());
   assert.equal(familyOf('event_ticket'), 'events');
   assert.equal(familyOf('calendly_event'), 'other');
-  // D1484 (#3977): the cohort dates and deal closings are deadlines too.
-  assert.deepEqual(FAMILIES.find((f) => f.key === 'deadlines').kinds, ['compliance_due', 'cohort_date', 'deal_closing']);
-  assert.equal(PAGE_KINDS.length, 18, 'the page kind table parsed'); // #3959: Learning is the fifteenth; D1486 §b's two make seventeen; §a's bot calls eighteen.
+  // D1484 (#3977): the cohort dates and deal closings are deadlines too; #3982: so are a round's close and an NDA's expiry.
+  assert.deepEqual(FAMILIES.find((f) => f.key === 'deadlines').kinds, ['compliance_due', 'cohort_date', 'deal_closing', 'round_close', 'nda_expiry']);
+  assert.equal(PAGE_KINDS.length, 20, 'the page kind table parsed'); // #3959: Learning is the fifteenth; D1486 §b's two make seventeen; §c's two and §a's bot calls make twenty.
   assert.deepEqual(FAMILIES.find((f) => f.key === 'grow').kinds, ['publish_send', 'content_planned']);
 });
 
