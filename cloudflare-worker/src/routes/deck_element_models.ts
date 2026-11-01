@@ -25,6 +25,14 @@
  * for GET and write for PUT. Bound SQL only; no activity row (a model choice
  * is not a venture write, as migration 465's are not).
  *
+ * D1509 (#3760): the member's flags (services/featureFlags.ts) apply to both
+ * sides. A model switched off leaves every `suggested` and `more` list and
+ * cannot be resolved or picked (400 model_not_offered); a stored pick of it
+ * is kept and `notice` says "<C> is unavailable. Using <B>.". An element
+ * switched off reads `switched_on: false` with `reason` "Not switched on
+ * yet." and no model, leaves its group's `elements`, and its generation side
+ * throws `ElementOffError` so the run answers 404 `not_switched_on`.
+ *
  * `elementModelFor` is the generation side (dk-auto amendment 10): `POST
  * /api/decks/generate` and the deck's image runs resolve their element's
  * model through it.
@@ -40,7 +48,8 @@ import { refuse } from '../util/refusal';
 import { aiLicenceKey } from '../services/aiBudget';
 import { billingMode, multiplierFor } from '../services/ai/pricing';
 import { MODEL_NAMES } from '../services/aiCatalog';
-import { isOffered, modelById, type CatalogueSwitches } from '../services/ai/catalogue';
+import { isOffered, modelById, switchedOff, type CatalogueSwitches } from '../services/ai/catalogue';
+import { NOT_SWITCHED_ON, catalogueSwitchesFor, flagsFor, notSwitchedOn } from '../services/featureFlags';
 import { MODEL_LOCKS, lockLabel, offerable } from '../services/ai/modelUseCases';
 import {
   ELEMENTS, ELEMENT_GROUPS, ELEMENT_ROUTES, FREE_LINE, ORG_HQ, choicesFor, estimateDeck, expected_ms, groupElements, isRouted,
@@ -78,10 +87,18 @@ async function clearStale(env: Env, stale: readonly PickRow[]): Promise<void> {
  * and this member, through the 8 levels, with any stale pick cleared. Throws
  * when the picks cannot be read, so a run never goes ahead on a guess.
  */
+/** D1509: the element is switched off for this member; the run answers 404 `not_switched_on`. */
+export class ElementOffError extends Error {
+  constructor(readonly element: string) { super(NOT_SWITCHED_ON); }
+}
+
 export async function elementModelFor(env: Env, user: User, projectId: number, element: string, area?: { card: number; area: string } | null): Promise<Resolved> {
+  const flags = await flagsFor(env, user);
+  if (!flags.elementOn(element)) throw new ElementOffError(element);
   const rows = await pickRows(env, projectId, Number(user.id) || 0);
   const r = resolveElementModel({
-    element, rows, deck: String(projectId), member: String(Number(user.id) || 0), area: area ?? null, planRank: planRankFor(user), env: env as CatalogueSwitches,
+    element, rows, deck: String(projectId), member: String(Number(user.id) || 0), area: area ?? null, planRank: planRankFor(user),
+    env: catalogueSwitchesFor(env as CatalogueSwitches, flags),
   });
   await clearStale(env, r.stale);
   return r;
@@ -106,6 +123,12 @@ async function deckOf(c: any, user: User, write: boolean): Promise<{ deckId: num
   return { deckId, projectId };
 }
 
+/** The element's choices without the models switched off for this member (D1509). */
+function offeredChoices(element: string, switches: CatalogueSwitches) {
+  const ch = choicesFor(element);
+  return { suggested: ch.suggested.filter((m) => !switchedOff(m.id, switches)), more: ch.more.filter((m) => !switchedOff(m.id, switches)) };
+}
+
 const nameOf = (id: string | null) => (id ? MODEL_NAMES[id] ?? modelById(id)?.name ?? null : null);
 
 deckElementModels.get('/:id{[0-9]+}/element-models', async (c) => {
@@ -113,6 +136,8 @@ deckElementModels.get('/:id{[0-9]+}/element-models', async (c) => {
   const deck = await deckOf(c, user, false);
   if (deck instanceof Response) return deck;
   const userId = Number(user.id) || 0;
+  const flags = await flagsFor(c.env, user);
+  const switches = catalogueSwitchesFor(c.env as CatalogueSwitches, flags);
   const rows = await pickRows(c.env, deck.projectId, userId);
   const planRank = planRankFor(user);
   const multiplier = multiplierFor(aiLicenceKey(user));
@@ -121,34 +146,45 @@ deckElementModels.get('/:id{[0-9]+}/element-models', async (c) => {
   });
   const stale: PickRow[] = [];
   const viewOf = (element: string) => {
-    const r = resolveElementModel({ element, rows, deck: String(deck.projectId), member: String(userId), planRank, env: c.env as CatalogueSwitches });
+    const r = resolveElementModel({ element, rows, deck: String(deck.projectId), member: String(userId), planRank, env: switches });
     stale.push(...r.stale);
-    const ch = choicesFor(element);
+    const ch = offeredChoices(element, switches);
     return {
       suggested: ch.suggested.map((m) => ({ id: m.id, role: m.role, line: m.line, ...priced(m.id) })),
       more: ch.more.map((m) => ({ id: m.id, line: m.line, ...priced(m.id) })),
       pick: r.source === 'default' || r.source === 'none' ? null : r.model,
-      resolved: { model: r.model, name: nameOf(r.model), source: r.source, locked: r.locked, notice: r.notice ? `A model retired · Using ${nameOf(r.model) ?? 'no model'}` : null },
+      resolved: {
+        model: r.model, name: nameOf(r.model), source: r.source, locked: r.locked,
+        notice: r.stale.length ? `A model retired · Using ${nameOf(r.model) ?? 'no model'}` : r.switched_off.length ? `${nameOf(r.switched_off[0].model) ?? 'That model'} is unavailable. Using ${nameOf(r.model) ?? 'no model'}.` : null,
+      },
     };
   };
   const elements = ELEMENTS.filter((e) => isRouted(e.id)).map((e) => {
     const route = ELEMENT_ROUTES[e.id];
+    if (!flags.elementOn(e.id)) {
+      return {
+        element: e.id, group: e.group, job: route.job, kind: route.kind, task: route.task, plan_min: route.plan_min,
+        switched_on: false, reason: NOT_SWITCHED_ON, suggested: [], more: [], pick: null, resolved: null, expected_ms: null, per_run_microusd: null,
+      };
+    }
     const v = viewOf(e.id);
     const line = v.resolved.model ? estimateDeck({ [e.id]: 1 }, { [e.id]: v.resolved.model }, multiplier).lines[0] : null;
     return {
       element: e.id, group: e.group, job: route.job, kind: route.kind, task: route.task, plan_min: route.plan_min,
-      expected_ms: expected_ms(e.id), per_run_microusd: line?.per_microusd ?? null, ...v,
+      switched_on: true, expected_ms: expected_ms(e.id), per_run_microusd: line?.per_microusd ?? null, ...v,
     };
   });
   const groups = ELEMENT_GROUPS.map((group) => {
-    const ids = groupElements(group);
+    const ids = groupElements(group).filter((id) => flags.elementOn(id));
     return ids.length ? { group, elements: ids, lead: ids[0], ...viewOf(ids[0]) } : { group, elements: [], lead: null, suggested: [], more: [], pick: null, resolved: null, free: FREE_LINE };
   });
   await clearStale(c.env, stale);
   return c.json({
     deck_id: deck.deckId, project_id: deck.projectId, billing: billingMode(c.env), plan_rank: planRank,
     elements, groups,
-    free: ELEMENTS.filter((e) => !isRouted(e.id)).map((e) => ({ element: e.id, group: e.group, line: FREE_LINE })),
+    free: ELEMENTS.filter((e) => !isRouted(e.id)).map((e) => (flags.elementOn(e.id)
+      ? { element: e.id, group: e.group, line: FREE_LINE, switched_on: true }
+      : { element: e.id, group: e.group, line: NOT_SWITCHED_ON, switched_on: false })),
   });
 });
 
@@ -162,6 +198,8 @@ deckElementModels.put('/:id{[0-9]+}/element-models', async (c) => {
   const key = body?.key;
   if (!pickKeyOk(key)) return refuse(c, 400, { code: 'invalid_key', message: 'The key is an element that runs a model, or "group:" and its group.' });
   const userId = Number(user.id) || 0;
+  const flags = await flagsFor(c.env, user);
+  if (!key.startsWith('group:') && !flags.elementOn(key)) return refuse(c, 404, notSwitchedOn);
   const rows = await pickRows(c.env, deck.projectId, userId);
   if (lockFor(rows, key)) return refuse(c, 403, { code: 'role_locked', message: 'Set by Axal VC HQ. This model cannot be changed here.' });
   const scopeId = scope === 'deck' ? String(deck.projectId) : String(userId);
@@ -171,7 +209,7 @@ deckElementModels.put('/:id{[0-9]+}/element-models', async (c) => {
     return c.json({ ok: true, scope, key, model: null });
   }
   const m = typeof model === 'string' ? modelById(model) : null;
-  if (!m || !isOffered(m, c.env as CatalogueSwitches) || !offerable(model) || !keyOffers(key, model)) {
+  if (!m || !isOffered(m, catalogueSwitchesFor(c.env as CatalogueSwitches, flags)) || !offerable(model) || !keyOffers(key, model)) {
     return refuse(c, 400, { code: 'model_not_offered', message: 'That model is not offered for this element.' });
   }
   const plan = MODEL_LOCKS[model] ?? 'all';

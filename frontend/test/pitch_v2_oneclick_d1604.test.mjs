@@ -230,7 +230,7 @@ test('the one-click: Build says what it holds, shows the cards it will write whi
     assert.match(m.text(m.by('pitch-build-progress-live-later')), /Live progress per card Coming later/);
     const [, body, headers] = m.named('newDeck.build')[0];
     // Mutation checked: drop round_ref from the build body → this fails.
-    assert.deepEqual(body, { project_id: 1, audience: 'pre_seed_fund', length: 'short', round_ref: 'round-1' }, 'the read\'s brief and round, nothing guessed');
+    assert.deepEqual(body, { project_id: 1, one_click: true, audience: 'pre_seed_fund', length: 'short', round_ref: 'round-1' }, 'the read\'s brief and round, nothing guessed; D1509: the press names itself so grid_generate can stop it');
     assert.equal(m.named('newDeck.quote')[0][1].round_ref, 'round-1', 'the quote prices the same build');
     assert.equal(headers['X-Rail-Option'], encodeURIComponent('deck:build'));
     await act(async () => { finish({ proposal: { id: 77 } }); });
