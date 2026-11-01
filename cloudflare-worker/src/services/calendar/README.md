@@ -16,6 +16,14 @@ when adding a kind.
   D1384 wires compliance into `READERS` as `compliance_due`, the Compliance
   layer that replaced /compliance: done deadlines on the page read only, the
   active company passed in, and never in a feed (`PAGE_ONLY_KINDS`).
+- `registry.ts`: D1484 (#3977), the one list of sources (`SOURCES`): each
+  kind's family, module and label in plain words (never a table name), and
+  whether it is page only or pushable. `READERS`, `FAMILY_OF`,
+  `COPYABLE_KINDS`, the route's `PUSHABLE_KINDS` and `PAGE_ONLY_KINDS` /
+  `FEED_KINDS` are derived from it or asserted against it, and every page item
+  carries `source`. D1484 also wires D1208's interview calls, cohort dates and
+  deal closings and the `manual` reader for "New event", all page only and for
+  their owner alone (`PERSONAL_ONLY_KINDS`: no staff scope lists them).
 - `items.ts`: page-only drawer fields for calendar items. Feed and provider
   projections keep their separate, smaller event shape.
 - `itemRead.ts`: one item for the drawer (the page read's own reader and

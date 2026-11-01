@@ -32,6 +32,13 @@
 //   Item = { uid, kind, option, module, headline, payload, status, agent: { uid, role_key, role_name, first_name, last_name },
 //            sponsor: { uid, name }, cost: { available, value_microusd }, created_at, decided_by: { uid, name } | null, decided_at }
 //   `counts.proposed` is { available: false } when unread: the page draws no badge, never "0".
+// Part 5 (#3844): the sponsor's approved read tools (D852), owner Q3 = A:
+//   GET    /api/teams/tools                               → { servers: [{ integration_uid, name, status: 'connected'|'disconnected',
+//                                                           tools: [{ name, description }] }] }; 404 custom_mcp_off; 403 plan_required
+//   POST   …/agents takes tool_grants: [{ integration_uid, tool }] (422 tool_not_approved); an Agent's `tools` are
+//           [{ integration_uid, tool, server: { uid, name }, status }]
+//   POST   …/agents/:uid/run takes tool_reads: [{ integration_uid, tool, arguments? }], at most five:
+//           403 tool_not_granted; 422 too_many_tool_reads; 409 tool_disconnected { server: { uid, name } } (the agent pauses)
 // `:scope` is 'company' (its uid) or 'project' (its id). A person is { uid, name },
 // never an email. `month_spend` is { available: false } when it cannot be read:
 // the page says "Not recorded", never 0.
@@ -61,8 +68,9 @@ export const teamAgentsApi = {
     if (option) q.set('option', option);
     return request(`/teams/agents/${enc(uid)}/run/quote?${q.toString()}`);
   },
-  runAgent: (uid, { module, option, record, prompt } = {}) =>
-    request(`/teams/agents/${enc(uid)}/run`, { method: 'POST', body: JSON.stringify({ module, option, record: record ?? null, prompt }) }),
+  runAgent: (uid, { module, option, record, prompt, toolReads } = {}) =>
+    request(`/teams/agents/${enc(uid)}/run`, { method: 'POST', body: JSON.stringify({ module, option, record: record ?? null, prompt, ...(toolReads ? { tool_reads: toolReads } : {}) }) }),
+  toolChoices: () => request('/teams/tools'),
   queue: (scope, id, { role, module, option, status, cursor, include } = {}) => {
     const q = new URLSearchParams();
     for (const [k, v] of Object.entries({ role, module, option, status, cursor, include })) if (v != null && v !== '') q.set(k, String(v));

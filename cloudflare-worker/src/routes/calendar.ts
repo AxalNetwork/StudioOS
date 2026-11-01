@@ -37,6 +37,7 @@ import {
 } from '../services/calendar/syncState';
 import { removeProviderCopies } from '../services/calendar/sync';
 import { describeItems } from '../services/calendar/items';
+import { SOURCES } from '../services/calendar/registry';
 import { adoptMeetCopy, makeMeetLink, readItem } from '../services/calendar/itemRead';
 import { investorUpsell, userMeetsInvestorTier } from '../middleware/requireInvestorTier';
 import { logAdminAction } from '../services/adminAudit';
@@ -238,7 +239,8 @@ calendar.get('/events', safe('events', 'Could not list calendar events', async (
     from: fromDt.toISOString(),
     to: toDt.toISOString(),
     google_connected: !!tok,
-    sources,
+    // D1484: each source's family, module and label from the registry, so the legend names what it read.
+    sources: sources.map((s) => { const src = SOURCES[s.kind]; return src ? { ...s, family: src.family, module: src.module, label: src.label } : s; }),
   });
 }));
 

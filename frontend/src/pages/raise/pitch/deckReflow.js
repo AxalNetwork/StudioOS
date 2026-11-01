@@ -13,7 +13,7 @@
  *     label and figure go to the notes.
  *
  * The capacity rules mirror `designSystem.ts` (type scale, glyph width,
- * density caps); `deck_reflow_d1554.test.ts` holds the two equal on every
+ * density caps, and D1517's 8 px baseline); `deck_reflow_d1554.test.ts` holds the two equal on every
  * structure. Pure: no React, no network.
  */
 import { aspectOf, boxOf } from './gridModel.js';
@@ -28,10 +28,15 @@ export const TYPE_SCALE = Object.freeze({
   metric: { size: 72, leading: 1.0 },
   metric_label: { size: 24, leading: 1.3 },
   caption: { size: 22, leading: 1.35 },
+  // D1517 (#3769): the cover's kicker.
+  kicker: { size: 24, leading: 1.3 },
 });
 export const GLYPH_EM = 0.52;
+/** D1517: every line sits on the 8 px baseline (`designSystem.BASELINE`, `lineHeight`). */
+export const BASELINE = 8;
+export const lineHeight = (size, leading) => Math.ceil((size * leading) / BASELINE) * BASELINE;
 export const DENSITY_MAX = Object.freeze({
-  display: 90, heading: 70, subheading: 90, paragraph: 280, list: 320, metric: 10, metric_label: 40, caption: 140,
+  display: 90, heading: 70, subheading: 90, paragraph: 280, list: 320, metric: 10, metric_label: 40, caption: 140, kicker: 40,
 });
 export const METRIC_VALUE_CHARS = 14;
 export const NOTES_MAX = 4000;
@@ -46,7 +51,7 @@ export function typeRoleOf(style, layout = null) {
 export function textCapacity(g, role, aspect = '16:9') {
   const { w, h } = boxOf(g, aspectOf(aspect));
   const t = TYPE_SCALE[role];
-  const lines = Math.max(1, Math.floor(h / (t.size * t.leading)));
+  const lines = Math.max(1, Math.floor(h / lineHeight(t.size, t.leading)));
   const perLine = Math.max(1, Math.floor(w / (t.size * GLYPH_EM)));
   return Math.min(lines * perLine, DENSITY_MAX[role]);
 }
