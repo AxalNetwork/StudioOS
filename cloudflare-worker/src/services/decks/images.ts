@@ -79,7 +79,7 @@ export async function ventureNames(env: Env, projectId: number): Promise<string[
 export const asksForChart = (description: string): boolean => CHART.test(description);
 
 /** One image request, read and checked: the parts every route shares. */
-export type ImageAsk = { use: Use; description: string; style: Style; palette: typeof PALETTES[number]; aspect: typeof ASPECTS[number]; count: number; card: number | null; points: string[] };
+export type ImageAsk = { use: Use; description: string; style: Style; palette: typeof PALETTES[number]; aspect: typeof ASPECTS[number]; count: number; card: number | null; card_uid: string | null; points: string[] };
 
 const oneOf = <T extends string>(v: unknown, list: readonly T[], fallback: T): T => (typeof v === 'string' && (list as readonly string[]).includes(v) ? v as T : fallback);
 
@@ -93,11 +93,14 @@ export function askOf(body: any): { ask: ImageAsk } | { error: string } {
   if (!Number.isInteger(count) || count < 1 || count > COUNT_MAX) return { error: `Ask for 1 to ${COUNT_MAX} images.` };
   const card = body?.card == null ? null : Number(body.card);
   if (card !== null && (!Number.isInteger(card) || card < 0 || card > 59)) return { error: 'card must be a card of the deck, from 0.' };
+  // D1500: the card's own uid, which the route records beside its place (`cardRefOf`).
+  const card_uid = body?.card_uid == null || body.card_uid === '' ? null : body.card_uid;
+  if (card_uid !== null && !(typeof card_uid === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(card_uid))) return { error: 'card_uid must be a card of the deck.' };
   // PD12e's text points shape the description: their labels only, never their values.
   const points = (Array.isArray(body?.points) ? body.points : []).filter((p: unknown): p is string => typeof p === 'string')
     .map((p: string) => p.replace(/\s+/g, ' ').trim().slice(0, 80)).filter(Boolean).slice(0, 4);
   return { ask: {
-    use, description, count, card, points,
+    use, description, count, card, card_uid, points,
     style: oneOf(body?.style, STYLES, 'flat'),
     palette: oneOf(body?.palette, PALETTES, 'brand'),
     aspect: oneOf(body?.aspect, ASPECTS, use === 'content' ? '4:3' : '16:9'),

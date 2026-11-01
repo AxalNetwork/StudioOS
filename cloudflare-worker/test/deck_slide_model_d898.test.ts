@@ -70,7 +70,10 @@ const MODEL_CARD = {
   ],
 };
 
+// D1500: the editor saves in model version 2; a save without it is refused (409), not stripped.
+const v2 = (method: string, path: string, body: unknown) => (method === 'PUT' && /^\/api\/decks\/\d+$/.test(path) && body && typeof body === 'object' && !('model_version' in (body as any)) ? { ...(body as any), model_version: 2 } : body);
 async function call(f: any, who: number | null, method: string, path: string, body?: unknown) {
+  body = v2(method, path, body);
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (who) headers.Authorization = 'Bearer ' + await new SignJWT({ user_id: who }).setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(SECRET));
@@ -114,7 +117,8 @@ test('1. an old fielded deck still opens, and reads its new columns as Not recor
   const f = await fixture();
   const r = await call(f, OWNER, 'GET', '/api/decks/10');
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  assert.deepEqual(r.body.slides, OLD_SLIDES, 'every old card reads back as it was written');
+  // D1500: and each gets a uid from its place, the same on every read.
+  assert.deepEqual(r.body.slides, OLD_SLIDES.map((s: any, i: number) => ({ ...s, uid: `c${i + 1}` })), 'every old card reads back as it was written');
   assert.equal(r.body.audience, null);
   assert.equal(r.body.round, null);
   assert.equal(r.body.theme, null);
@@ -416,11 +420,14 @@ test('200 large versions list as metadata under 50 MB; opening one reads only it
       created_at: (f.db.prepare('SELECT created_at FROM pitch_decks WHERE id=200').get() as any).created_at,
       audience: 'seed_fund', round: { uid: 'round-seed', name: 'Synthetic seed' }, theme: null,
       content_hash: (200).toString(16).padStart(64, '0'), by: { id: OWNER, name: `Synthetic ${OWNER}` }, shared_links: 0,
+      // D1500: every read names the model it is in.
+      model_version: 2,
     });
     const opened = await call(f, OWNER, 'GET', '/api/decks/73');
     assert.equal(opened.status, 200);
     assert.equal(opened.body.version, 73);
-    assert.deepEqual(opened.body.slides, JSON.parse(slides.replace('Synthetic large card', 'Synthetic large card 73')));
+    // D1500: a card saved without a uid reads `c<n>` from its place.
+    assert.deepEqual(opened.body.slides, JSON.parse(slides.replace('Synthetic large card', 'Synthetic large card 73')).map((s: any, i: number) => ({ ...s, uid: `c${i + 1}` })));
     assert.deepEqual(opened.body.theme, { kind: 'neutral_dark', background: { color: null, image_url: 'https://example.test/bg.png' } });
   } finally { f.db.close(); }
 });
