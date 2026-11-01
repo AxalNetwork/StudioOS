@@ -238,7 +238,8 @@ test('all four chips are live and the page implements each one', () => {
 
 test('the three ops are wired, and the handler names match what the page passes', () => {
   const row = ACTIONS.slice(ACTIONS.indexOf("'portfolio/value-add': ["), ACTIONS.indexOf('],', ACTIONS.indexOf("'portfolio/value-add': [")));
-  assert.match(row, /\{ label: 'Log support', kind: 'handler', handler: 'logSupport' \}/);
+  // D1424 (#3700): Log support is the zone's indigo primary.
+  assert.match(row, /\{ label: 'Log support', kind: 'handler', handler: 'logSupport', primary: true \}/);
   assert.match(row, /\{ label: 'Export', kind: 'export' \}/);
   assert.match(row, /\{ label: 'Per-company view', kind: 'handler', handler: 'byCompany' \}/);
   assert.ok(!row.includes('unbuilt'), 'an op went dark again');
@@ -349,7 +350,8 @@ test('the strip, the instrument and the header row match the artboard', () => {
   }
   // Task #150 asks for the eyebrow to go, as #95 already did for founder.
   assert.ok(!P.includes('i4-eyebrow'), 'the Portfolio / Value-add eyebrow is back');
-  assert.match(P, /<h1>Value-add desk<\/h1>/, 'the heading went with the eyebrow');
+  // D1424 (#3700): the heading is drawn by the shared ZoneHeader.
+  assert.match(P, /<ZoneHeader bucketPath="\/portfolio" title="Value-add desk"/, 'the heading went with the eyebrow');
   // Three client methods, all against the mounted route.
   for (const m of ['portfolioSupportList', 'portfolioSupportLog', 'portfolioSupportUpdate']) {
     assert.ok(API.includes(`${m}:`), `the ${m} client method is gone`);

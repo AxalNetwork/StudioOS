@@ -333,8 +333,9 @@ export function moreState(sections, { readOnly = false, aiOn = true, outOfTokens
     ...s,
     items: s.items.map((it) => {
       if (it.adapter) {
+        // `availability` answers null for a row whose route is on main (`SWAPPED`, D1553): that item is live.
         const a = availability(it.adapter);
-        if (!a || a.available !== true) return { ...it, disabled: true, later: true, why: a?.reason || NOT_ON };
+        if (a && a.available !== true) return { ...it, disabled: true, later: true, why: a.reason || NOT_ON };
       }
       if (readOnly && it.write) return { ...it, disabled: true, why: 'Read only' };
       if (waiting && !shareIds.has(it.id)) return { ...it, disabled: true, why: waiting };

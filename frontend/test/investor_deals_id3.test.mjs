@@ -209,7 +209,7 @@ test('a vote IS opened and closed, so the ops row says the narrower true thing',
   // A free field would let any string through, and `PUT /:uid` coerces an
   // unrecognised decision to null — closing nothing while looking like a save.
   assert.doesNotMatch(zone, /name="decision"/, 'the outcome became a free field');
-  assert.match(ACTIONS, /\{ label: 'Add LP', kind: 'handler', handler: 'addLp' \}/,
+  assert.match(ACTIONS, /\{ label: 'Add LP', kind: 'handler', handler: 'addLp', primary: true \}/,
     'the row this one was matched to is gone, so the pair no longer reads as one convention');
   // The guard in `profile_zone_actions` forbids a path in an unbuilt reason
   // because nothing checks it. Held here too, so a later edit cannot quietly

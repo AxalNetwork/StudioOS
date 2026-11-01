@@ -39,11 +39,15 @@ export const PROJECT_SETTINGS = 'Project settings';
 
 const enc = encodeURIComponent;
 export const companyTeamPath = (uid) => `/account/companies/${enc(uid)}/settings/team`;
-export const companySettingsPath = (uid) => `/account/companies/${enc(uid)}/settings`;
+export const companySettingsPath = (uid) => `/account/portfolio/${enc(uid)}/settings`;
+/** D1413 (#3696, PF6a/PF8): Company settings › Legal and › Projects, under Portfolio. */
+export const companyLegalPath = (uid) => `/account/portfolio/${enc(uid)}/settings/legal`;
+export const companyProjectsPath = (uid, id = null) => `/account/portfolio/${enc(uid)}/settings/projects${id != null ? `/${enc(id)}` : ''}`;
 export const companyProjectTeamPath = (uid, id) => `/account/companies/${enc(uid)}/settings/projects/${enc(id)}/team`;
 export const projectTeamPath = (id) => `/projects/${enc(id)}/settings/team`;
 export const projectSettingsPath = (id) => `/projects/${enc(id)}/settings`;
-export const PROJECTS_PATH = '/account/companies/projects';
+/** The Portfolio's Projects tab (a project's company is not known). */
+export const PROJECTS_PATH = '/account/portfolio/projects';
 export const BILLING_PATH = '/account/billing';
 
 const nameOf = (v, fallback) => String(v || '').trim() || fallback;
@@ -117,8 +121,9 @@ export function scopeFor({ company = null, project = null, projects = null } = {
 
 /**
  * A company's block: Team · Company settings (General, Legal) · Projects.
- * Legal is the company's legal page (#3697 part 1, D1415), which is not on
- * this base yet: the entry is drawn, without an address, and says so.
+ * D1413 (#3696): Legal is Company settings › Legal (`companyLegalPath`, the
+ * legal facts of D1415 and D1593), and Projects is Company settings ›
+ * Projects, where each project's own settings open (PF6c).
  *
  * Projects lists every project of the company when a read named them
  * (`GET /api/account/projects`, filtered to this company), each linking to its
@@ -136,17 +141,17 @@ function companyEntries(c, project, projects) {
     return here
       ? { key: `project-${p.id}`, label: nameOf(p.name, 'This project'), path: null, children: [
         { key: 'project-team', label: 'Team', path: companyProjectTeamPath(c.uid, p.id) },
-        { key: 'project-settings', label: 'Settings', path: projectSettingsPath(p.id) },
+        { key: 'project-settings', label: 'Settings', path: companyProjectsPath(c.uid, p.id) },
       ] }
-      : { key: `project-${p.id}`, label: nameOf(p.name, 'A project'), path: companyProjectTeamPath(c.uid, p.id) };
+      : { key: `project-${p.id}`, label: nameOf(p.name, 'A project'), path: companyProjectsPath(c.uid, p.id) };
   });
   return [
     { key: 'team', label: 'Team', path: companyTeamPath(c.uid) },
     { key: 'company', label: COMPANY_SETTINGS, path: companySettingsPath(c.uid), activeOnly: true, sub: 'General · Legal', children: [
       { key: 'general', label: 'General', path: companySettingsPath(c.uid), activeOnly: true },
-      { key: 'legal', label: 'Legal', path: null, reason: 'The company’s Legal page is not open yet.' },
+      { key: 'legal', label: 'Legal', path: companyLegalPath(c.uid) },
     ] },
-    { key: 'projects', label: 'Projects', path: PROJECTS_PATH, count: listed ? listed.length : null, children: rows },
+    { key: 'projects', label: 'Projects', path: companyProjectsPath(c.uid), count: listed ? listed.length : null, children: rows },
   ];
 }
 
@@ -256,8 +261,14 @@ export function usePublishScope(scope) {
   }, [key]);
 }
 
-/** The scope the sidebar draws: the page's when one is in view, else the active company's. */
-export function useScopeInView(activeCompany) {
+/**
+ * The scope the sidebar draws: the page's when one is in view, else the
+ * project picked in the switcher (D1413, PF5: `lib/activeProject.js`), else
+ * the active company's.
+ */
+export function useScopeInView(activeCompany, activeProject = null) {
   const published = useSyncExternalStore(subscribe, current, current);
-  return published || scopeFor({ company: activeCompany || null });
+  if (published) return published;
+  if (activeProject && activeProject.id != null) return scopeFor({ project: activeProject });
+  return scopeFor({ company: activeCompany || null });
 }

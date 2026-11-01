@@ -61,10 +61,10 @@ Prices are Cloudflare's printed USD per unit (per 1M tokens, per 1k characters, 
 | `@cf/lykon/dreamshaper-8-lcm` | Text-to-Image | ga | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/google/embeddinggemma-300m` | Text Embeddings | ga | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/deepgram/flux` | Automatic Speech Recognition | partner | audio_minutes_websocket 0.0077 | Not recorded | all | O | O | · | · | · | · | · | · | · | · | G | · | · | O |
-| `@cf/black-forest-labs/flux-1-schnell` | Text-to-Image | ga | tiles 0.0000528, steps 0.0001056 | Not recorded | all | · | · | G | W | W | · | · | · | W | · | · | O | · | G |
-| `@cf/black-forest-labs/flux-2-dev` | Text-to-Image | partner | input_tile_steps 0.00021, output_tile_steps 0.00041 | Not recorded | all, partner gate | · | · | G | O | O | · | · | · | G | · | · | O | · | G |
-| `@cf/black-forest-labs/flux-2-klein-4b` | Text-to-Image | partner | input_tiles 0.000059, output_tiles 0.000287 | Not recorded | all, partner gate | · | · | G | O | O | · | · | · | G | · | · | O | · | G |
-| `@cf/black-forest-labs/flux-2-klein-9b` | Text-to-Image | partner | first_megapixels 0.015, subsequent_megapixels 0.002, input_image_megapixels 0.002 | Not recorded | all, partner gate | · | · | G | O | O | · | · | · | G | · | · | O | · | G |
+| `@cf/black-forest-labs/flux-1-schnell` | Text-to-Image | ga | tiles 0.0000528, steps 0.0001056 | Not recorded | all | · | · | O | W | W | · | · | · | W | · | · | O | · | G |
+| `@cf/black-forest-labs/flux-2-dev` | Text-to-Image | partner | input_tile_steps 0.00021, output_tile_steps 0.00041 | Not recorded | all, partner gate | · | · | O | O | O | · | · | · | G | · | · | O | · | G |
+| `@cf/black-forest-labs/flux-2-klein-4b` | Text-to-Image | partner | input_tiles 0.000059, output_tiles 0.000287 | Not recorded | all, partner gate | · | · | O | O | O | · | · | · | G | · | · | O | · | G |
+| `@cf/black-forest-labs/flux-2-klein-9b` | Text-to-Image | partner | first_megapixels 0.015, subsequent_megapixels 0.002, input_image_megapixels 0.002 | Not recorded | all, partner gate | · | · | O | O | O | · | · | · | G | · | · | O | · | G |
 | `@cf/google/gemma-2b-it-lora` | Text Generation | beta | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/google/gemma-3-12b-it` | Text Generation | deprecated | tokens_in 0.345, tokens_out 0.556 | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/google/gemma-4-26b-a4b-it` | Text Generation | ga | tokens_in 0.100, tokens_out 0.300 | 256000 | all | G | G | G | W | G | G | W | · | G | G | G | W | · | G |
@@ -102,7 +102,7 @@ Prices are Cloudflare's printed USD per unit (per 1M tokens, per 1k characters, 
 | `@cf/meta/llama-4-scout-17b-16e-instruct` | Text Generation | ga | tokens_in 0.270, tokens_out 0.850 | 131000 | all | G | G | G | O | G | G | O | · | G | G | G | W | · | G |
 | `@cf/meta/llama-guard-3-8b` | Text Generation | ga | tokens_in 0.484, tokens_out 0.030 | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | W | · |
 | `@cf/llava-hf/llava-1.5-7b-hf` | Image-to-Text | beta | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
-| `@cf/leonardo/lucid-origin` | Text-to-Image | partner | tiles 0.006996, steps 0.000132 | Not recorded | all, partner gate | · | · | G | O | O | · | · | · | G | · | · | O | · | G |
+| `@cf/leonardo/lucid-origin` | Text-to-Image | partner | tiles 0.006996, steps 0.000132 | Not recorded | all, partner gate | · | · | O | O | O | · | · | · | G | · | · | O | · | G |
 | `@cf/meta/m2m100-1.2b` | Translation | ga | tokens_in 0.342, tokens_out 0.342 | Not recorded | all | O | W | · | · | O | · | O | · | G | G | G | · | · | O |
 | `@cf/myshell-ai/melotts` | Text-to-Speech | ga | audio_minutes 0.0002 | Not recorded | all | O | · | · | G | G | · | · | · | G | · | O | O | · | O |
 | `@hf/meta-llama/meta-llama-3-8b-instruct` | Text Generation | deprecated | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
@@ -114,7 +114,7 @@ Prices are Cloudflare's printed USD per unit (per 1M tokens, per 1k characters, 
 | `@cf/nvidia/nemotron-3-120b-a12b` | Text Generation | ga | tokens_in 0.500, tokens_out 1.500 | Not recorded | all | O | G | O | O | O | G | O | · | G | G | G | O | · | O |
 | `@cf/deepgram/nova-3` | Automatic Speech Recognition | partner | audio_minutes 0.0052, audio_minutes_websocket 0.0092 | Not recorded | all | O | W | · | G | · | · | · | · | · | · | O | · | · | O |
 | `@cf/microsoft/phi-2` | Text Generation | deprecated | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
-| `@cf/leonardo/phoenix-1.0` | Text-to-Image | partner | tiles 0.005830, steps 0.000110 | Not recorded | all, partner gate | · | · | G | O | O | · | · | · | G | · | · | O | · | G |
+| `@cf/leonardo/phoenix-1.0` | Text-to-Image | partner | tiles 0.005830, steps 0.000110 | Not recorded | all, partner gate | · | · | O | O | O | · | · | · | G | · | · | O | · | G |
 | `@cf/pfnet/plamo-embedding-1b` | Text Embeddings | ga | tokens_in 0.019 | Not recorded | all | O | · | · | O | O | O | O | · | · | · | G | O | · | O |
 | `@cf/qwen/qwen2.5-coder-32b-instruct` | Text Generation | ga | tokens_in 0.660, tokens_out 1.000 | Not recorded | all | G | G | O | G | G | G | G | · | G | G | W | O | · | G |
 | `@cf/qwen/qwen3-30b-a3b-fp8` | Text Generation | ga | tokens_in 0.051, tokens_out 0.335 | 32000 | all | O | G | O | O | O | G | G | · | G | G | O | O | · | O |
@@ -393,44 +393,44 @@ stream: Live conversational transcription in recorded sessions.
 
 draw: Generate pitch-deck visuals and brand-image drafts.
 
-- Build: **gap**, `#3721`
+- Build: **offered**, `/api/ai/modules on "Founder · Build · Prototype / MVP"`; `/api/ai/modules on "Founder · Build · Solution design"`
 - Raise: **wired**, `routes/deck_images.ts (deck_image)`
 - Grow: **wired**, `routes/brand.ts (brand_logo)`
 - Articles: **wired**, `routes/article_assist.ts (article_image)`
-- Admin consoles: **offered**, `/api/ai/modules on "Super Admin · Content · Publications"`
+- Admin consoles: **offered**, `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Community · Events"`; `/api/ai/modules on "Super Admin · Content · Content queue"`; `/api/ai/modules on "Super Admin · Content · Publications"`
 - Investor, Advisor and Partner workspaces: **gap**, `#3721`
 
 ### `@cf/black-forest-labs/flux-2-dev`
 
 draw: Generate pitch-deck visuals and brand-image drafts.
 
-- Build: **gap**, `#3721`
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Pitch deck"`; `railMatrix.json option deck:image`; `routes/deck_images.ts (deck_image)`
-- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`; `railMatrix.json option draft:logo`; `routes/brand.ts (brand_logo)`
+- Build: **offered**, `/api/ai/modules on "Founder · Build · Prototype / MVP"`; `/api/ai/modules on "Founder · Build · Solution design"`
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Investor narrative"`; `/api/ai/modules on "Founder · Raise · Pitch deck"`; `railMatrix.json option deck:image`; `routes/deck_images.ts (deck_image)`
+- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`; `/api/ai/modules on "Founder · Grow · Revenue and traction"`; `railMatrix.json option draft:logo`; `routes/brand.ts (brand_logo)`
 - Articles: **gap**, `#3721`
-- Admin consoles: **offered**, `/api/ai/modules on "Super Admin · Content · Publications"`
+- Admin consoles: **offered**, `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Community · Events"`; `/api/ai/modules on "Super Admin · Content · Content queue"`; `/api/ai/modules on "Super Admin · Content · Publications"`
 - Investor, Advisor and Partner workspaces: **gap**, `#3721`
 
 ### `@cf/black-forest-labs/flux-2-klein-4b`
 
 draw: Generate pitch-deck visuals and brand-image drafts.
 
-- Build: **gap**, `#3721`
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Pitch deck"`; `railMatrix.json option deck:image`; `routes/deck_images.ts (deck_image)`
-- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`; `railMatrix.json option draft:logo`; `routes/brand.ts (brand_logo)`
+- Build: **offered**, `/api/ai/modules on "Founder · Build · Prototype / MVP"`; `/api/ai/modules on "Founder · Build · Solution design"`
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Investor narrative"`; `/api/ai/modules on "Founder · Raise · Pitch deck"`; `railMatrix.json option deck:image`; `routes/deck_images.ts (deck_image)`
+- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`; `/api/ai/modules on "Founder · Grow · Revenue and traction"`; `railMatrix.json option draft:logo`; `routes/brand.ts (brand_logo)`
 - Articles: **gap**, `#3721`
-- Admin consoles: **offered**, `/api/ai/modules on "Super Admin · Content · Publications"`
+- Admin consoles: **offered**, `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Community · Events"`; `/api/ai/modules on "Super Admin · Content · Content queue"`; `/api/ai/modules on "Super Admin · Content · Publications"`
 - Investor, Advisor and Partner workspaces: **gap**, `#3721`
 
 ### `@cf/black-forest-labs/flux-2-klein-9b`
 
 draw: Generate pitch-deck visuals and brand-image drafts.
 
-- Build: **gap**, `#3721`
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Pitch deck"`; `railMatrix.json option deck:image`; `routes/deck_images.ts (deck_image)`
-- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`; `railMatrix.json option draft:logo`; `routes/brand.ts (brand_logo)`
+- Build: **offered**, `/api/ai/modules on "Founder · Build · Prototype / MVP"`; `/api/ai/modules on "Founder · Build · Solution design"`
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Investor narrative"`; `/api/ai/modules on "Founder · Raise · Pitch deck"`; `railMatrix.json option deck:image`; `routes/deck_images.ts (deck_image)`
+- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`; `/api/ai/modules on "Founder · Grow · Revenue and traction"`; `railMatrix.json option draft:logo`; `routes/brand.ts (brand_logo)`
 - Articles: **gap**, `#3721`
-- Admin consoles: **offered**, `/api/ai/modules on "Super Admin · Content · Publications"`
+- Admin consoles: **offered**, `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Community · Events"`; `/api/ai/modules on "Super Admin · Content · Content queue"`; `/api/ai/modules on "Super Admin · Content · Publications"`
 - Investor, Advisor and Partner workspaces: **gap**, `#3721`
 
 ### `@cf/google/gemma-4-26b-a4b-it`
@@ -536,7 +536,7 @@ chat: Research synthesis, evidence comparison and detailed planning.
 - Research: **offered**, `/api/ai/modules on "Advisor · Research · Ask"`; `/api/ai/modules on "Advisor · Research · Client prep"`; `/api/ai/modules on "Advisor · Research · Companies"`; `/api/ai/modules on "Advisor · Research · Markets"`; and 50 more
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
-- Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`; and 8 more
+- Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`; and 9 more
 - Admin consoles: **wired**, `railMatrix.json "Admin · Approvals · LP applications"`; `railMatrix.json "Admin · Approvals · Spin-Out applications"`; `railMatrix.json "Admin · Approvals · Spin-Out moderation"`; `railMatrix.json "Admin · Approvals"`
 - Investor, Advisor and Partner workspaces: **wired**, `railMatrix.json "Investor · Deals · Commit"`; `railMatrix.json "Investor · Deals · Screening"`; `railMatrix.json "Investor · Deals"`
 
@@ -553,7 +553,7 @@ chat: Interactive explanations, evidence summaries and planning drafts.
 - Research: **gap**, `#3721`
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
-- Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`; and 1 more
+- Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`; and 2 more
 - Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 19 more
 - Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Calendar"`; `/api/ai/modules on "Advisor · Cohorts · This week"`; `/api/ai/modules on "Advisor · Practice · Delivery"`; `/api/ai/modules on "Advisor · Practice · Engagements"`; and 17 more
 
@@ -755,11 +755,11 @@ guard: Check member inputs and generated drafts for unsafe content.
 
 draw: Generate pitch-deck visuals and brand-image drafts.
 
-- Build: **gap**, `#3721`
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Pitch deck"`; `railMatrix.json option deck:image`; `routes/deck_images.ts (deck_image)`
-- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`; `railMatrix.json option draft:logo`; `routes/brand.ts (brand_logo)`
+- Build: **offered**, `/api/ai/modules on "Founder · Build · Prototype / MVP"`; `/api/ai/modules on "Founder · Build · Solution design"`
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Investor narrative"`; `/api/ai/modules on "Founder · Raise · Pitch deck"`; `railMatrix.json option deck:image`; `routes/deck_images.ts (deck_image)`
+- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`; `/api/ai/modules on "Founder · Grow · Revenue and traction"`; `railMatrix.json option draft:logo`; `routes/brand.ts (brand_logo)`
 - Articles: **gap**, `#3721`
-- Admin consoles: **offered**, `/api/ai/modules on "Super Admin · Content · Publications"`
+- Admin consoles: **offered**, `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Community · Events"`; `/api/ai/modules on "Super Admin · Content · Content queue"`; `/api/ai/modules on "Super Admin · Content · Publications"`
 - Investor, Advisor and Partner workspaces: **gap**, `#3721`
 
 ### `@cf/meta/m2m100-1.2b`
@@ -846,11 +846,11 @@ transcribe: Transcribe member-supplied recordings and interview audio.
 
 draw: Generate pitch-deck visuals and brand-image drafts.
 
-- Build: **gap**, `#3721`
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Pitch deck"`; `railMatrix.json option deck:image`; `routes/deck_images.ts (deck_image)`
-- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`; `railMatrix.json option draft:logo`; `routes/brand.ts (brand_logo)`
+- Build: **offered**, `/api/ai/modules on "Founder · Build · Prototype / MVP"`; `/api/ai/modules on "Founder · Build · Solution design"`
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Investor narrative"`; `/api/ai/modules on "Founder · Raise · Pitch deck"`; `railMatrix.json option deck:image`; `routes/deck_images.ts (deck_image)`
+- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`; `/api/ai/modules on "Founder · Grow · Revenue and traction"`; `railMatrix.json option draft:logo`; `routes/brand.ts (brand_logo)`
 - Articles: **gap**, `#3721`
-- Admin consoles: **offered**, `/api/ai/modules on "Super Admin · Content · Publications"`
+- Admin consoles: **offered**, `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Community · Events"`; `/api/ai/modules on "Super Admin · Content · Content queue"`; `/api/ai/modules on "Super Admin · Content · Publications"`
 - Investor, Advisor and Partner workspaces: **gap**, `#3721`
 
 ### `@cf/pfnet/plamo-embedding-1b`

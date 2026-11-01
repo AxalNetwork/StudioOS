@@ -75,6 +75,10 @@ export const EXISTING_READS: Readonly<Record<string, string>> = Object.freeze({
   pain_groups: 'SELECT title AS value FROM pain_groups WHERE project_id = ? ORDER BY id DESC LIMIT 40',
   customer_segments: 'SELECT name AS value FROM customer_segments WHERE project_id = ? AND archived_at IS NULL ORDER BY id DESC LIMIT 40',
   hypotheses: 'SELECT claim AS value FROM hypotheses WHERE project_id = ? AND retired_at IS NULL ORDER BY id DESC LIMIT 40',
+  // #3740 part 2a: what the venture already holds, so a proposal is not a repeat.
+  roadmap_okrs: 'SELECT objective AS value FROM roadmap_okrs WHERE project_id = ? ORDER BY id DESC LIMIT 40',
+  raise_prospects: 'SELECT name AS value FROM raise_prospects WHERE project_id = ? ORDER BY id DESC LIMIT 40',
+  job_postings: 'SELECT title AS value FROM job_postings WHERE project_id = ? ORDER BY id DESC LIMIT 40',
 });
 
 /** The venture's own records the form's restatement fields pick from. Literal statements only. */

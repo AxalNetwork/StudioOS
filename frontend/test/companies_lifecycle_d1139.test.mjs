@@ -181,27 +181,18 @@ test('who may do what in a company is the Worker\'s rule; the Lab lock is the Wo
 
 // ---------------------------------------------------------------- CMP2
 
-test('mounted CMP2: a card opens /account/portfolio/<uid>; the lightbox reads the company and draws its facts, ventures, members and invitations', async () => {
+test('mounted CMP2, a page since D1413: /account/portfolio/<uid> is the company page (owner Q3), with the lightbox\'s acts and people by name', async () => {
   const v = await mount('founder', { url: '/account/portfolio/c7' });
   try {
-    assert.equal(v.prop('company-open-c8', 'href'), '/account/portfolio/c8');
-    assert.ok(v.has('company-lightbox'));
-    assert.equal(v.prop('company-lightbox', 'role'), 'dialog', 'D1317: the company is the shared Sheet over its list');
-    assert.ok(v.prop('company-lightbox', 'aria-labelledby'));
-    assert.equal(v.prop('company-lightbox', 'data-width'), 720);
-    assert.ok(v.has('company-lightbox-scrim'));
-    assert.match(v.of('company-facts'), /Seed.*harbor\.example.*12 Jan 2026.*3 Oct 2026.*Validate/s);
-    assert.match(v.of('company-ventures-block'), /Ledger app.*MVP · Lab week 2 of 4 · your seat: Owner/s);
-    assert.match(v.of('company-loose'), /Not in a company: 1 venture shows under every company until you move it/);
-    assert.match(v.of('company-members-block'), /Members · 2.*Sam Example · you.*Primary admin.*Ana Example.*Admin · Associate · Flag/s);
-    assert.equal(v.count('company-invitation'), 1, 'only the pending one');
-    assert.match(v.of('company-invitation'), /kim@example\.test.*email not sent/);
+    assert.ok(v.has('company-page'), 'D1413 (#3696, PF2): the company page replaced the lightbox');
+    assert.ok(!v.has('company-lightbox'), 'the D1139 lightbox is gone');
+    assert.equal(v.prop('company-back', 'href'), '/account/portfolio');
+    assert.match(v.of('company-page-name'), /Harbor Ledger/);
+    assert.match(v.of('company-team'), /Sam Example · you.*Primary admin.*Ana Example.*Admin/s);
+    assert.doesNotMatch(v.of('company-page'), /kim@example\.test/, 'people appear by name, never by email');
+    assert.match(v.of('company-page-projects'), /Ledger app/);
     for (const id of ['company-rename', 'company-invite', 'company-transfer', 'company-archive', 'company-leave', 'company-open-studio']) assert.ok(v.has(id), id);
     assert.ok(!v.has('company-make-active'), 'it is already active');
-    await v.click('company-lightbox-close');
-    assert.equal(v.path(), '/account/portfolio', 'D1317: closing the sheet returns to the list’s address');
-    assert.ok(!v.has('company-lightbox'));
-    assert.ok(v.has('company-open-c8'), 'the list was under it all along');
   } finally { await v.close(); }
 });
 
@@ -209,7 +200,7 @@ test('mounted CMP2 as a plain member: Make active and Leave only; no invitations
   const v = await mount('founder', { url: '/account/portfolio/c8' });
   try {
     assert.ok(v.has('company-make-active') && v.has('company-leave'));
-    for (const id of ['company-rename', 'company-invite', 'company-transfer', 'company-archive', 'company-invitations-block']) assert.ok(!v.has(id), id);
+    for (const id of ['company-rename', 'company-invite', 'company-transfer', 'company-archive']) assert.ok(!v.has(id), id);
     await v.click('company-make-active');
     assert.match(v.of('make-active-dialog-says'), /show Bluefern Labs’s work on this device\. Nothing else changes/);
     assert.deepEqual(v.switched, [], 'nothing switched before the confirm');
@@ -273,7 +264,7 @@ test('Archive says what happens and what is kept, then posts; a member\'s Leave 
     await v.click('company-leave');
     await v.click('leave-dialog-confirm');
     assert.deepEqual(v.writes().map((w) => w.call), ['POST /api/company/c8/leave']);
-    assert.ok(!v.has('company-lightbox'));
+    assert.ok(!v.has('company-page'), 'leaving returns to Portfolio');
     assert.equal(v.path(), '/account/portfolio');
   } finally { await v.close(); }
 });
@@ -310,7 +301,9 @@ test('Rename sends the new name; Invite sends its fields and, when the email doe
 test('New company says the clash under the field and sends nothing', async () => {
   const v = await mount('founder');
   try {
-    await v.click('companies-new');
+    // D1413 (#3696, PF1m, PF4a): "New ▾" opens Company or Project; Company is a Sheet.
+    await v.click('portfolio-new');
+    await v.click('portfolio-new-company');
     await v.change('new-company-name', 'harbor ledger');
     assert.match(v.of('new-company-clash'), /You already have a company called Harbor Ledger\./);
     assert.ok(v.prop('new-company-confirm', 'disabled'));

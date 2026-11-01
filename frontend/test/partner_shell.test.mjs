@@ -163,3 +163,27 @@ test('Trust stays in the user menu and Company Settings stays in the pinned foot
   assert.match(sidebar, /to="\/account\/portfolio"/); // D1140 (#3020)
   assert.ok(!/to="\/settings"/.test(sidebar));
 });
+
+test('D1424 (#3700): each Operating Partner zone header fills the primary D1424 names, or none', async () => {
+  // Every Pipeline zone, and Delivery's Board, Deliverables, Capacity and
+  // Health, have no live first step: their header ops are stated gaps (owner
+  // answer I keeps them disabled ghosts with their reasons).
+  const { PARTNER_ZONE_ACTIONS } = await import('../src/workspaces/partnerZoneActions.js');
+  const primaries = Object.fromEntries(Object.entries(PARTNER_ZONE_ACTIONS)
+    .map(([zone, rows]) => [zone, rows.filter((r) => r.primary).map((r) => r.label)])
+    .filter(([, labels]) => labels.length));
+  assert.deepEqual(primaries, {
+    'delivery/status-reports': ['New report'],
+    'offers/catalog': ['New service'],
+    'offers/perk-deals': ['New perk'],
+    'offers/proof': ['Ask for consent'],
+  });
+  for (const zone of ['delivery/board', 'delivery/deliverables', 'delivery/capacity', 'delivery/health']) {
+    assert.ok(PARTNER_ZONE_ACTIONS[zone].every((r) => !r.primary), `${zone} has no live first step`);
+  }
+  // Owner answer I: the Delivery stores stay disabled ghosts, each with its reason.
+  for (const label of ['Draft all', 'Cadence rules', 'Change order', 'Renewal watch']) {
+    const row = Object.values(PARTNER_ZONE_ACTIONS).flat().find((r) => r.label === label);
+    assert.ok(row?.unbuilt, `${label} lost its reason`);
+  }
+});

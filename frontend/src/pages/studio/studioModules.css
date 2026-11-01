@@ -1,0 +1,120 @@
+/* D1419 (#3698) — the Studio grid, edit mode and module map, drawn to
+   `design/incoming/Studio Modularity Page.dc.html` (SM0–SM15). The tokens are
+   the canvas's LIGHT and DARK sets; the app's dark class (or data-theme)
+   switches them, as everywhere else. */
+.sm-root, .sm-tokens {
+  --sm-bg: #f4f3f7; --sm-card: #ffffff; --sm-raised: #faf9fc; --sm-ink: #18181b; --sm-body: #3f3a47;
+  --sm-mut: #6b6577; --sm-line: #ececf1; --sm-line2: #e2dfe8; --sm-vtx: #6d28d9; --sm-lav: #f4f0fe;
+  --sm-lavE: #ddd0fb; --sm-chip: #f4f3f7; --sm-pos: #047857; --sm-posT: rgba(4, 120, 87, .09);
+  --sm-neg: #b91c1c; --sm-scrim: rgba(24, 24, 27, .4); --sm-skel: #ececf1; --sm-vio: #7c3aed;
+}
+:root[data-theme="dark"] .sm-root, .dark .sm-root, :root[data-theme="dark"] .sm-tokens, .dark .sm-tokens {
+  --sm-bg: #0b1220; --sm-card: #111827; --sm-raised: #1f2937; --sm-ink: #e5e7eb; --sm-body: #d1d5db;
+  --sm-mut: #9ca3af; --sm-line: #374151; --sm-line2: #4b5563; --sm-vtx: #a78bfa; --sm-lav: rgba(167, 139, 250, .14);
+  --sm-lavE: rgba(167, 139, 250, .4); --sm-chip: #1f2937; --sm-pos: #34d399; --sm-posT: rgba(52, 211, 153, .12);
+  --sm-neg: #f87171; --sm-scrim: rgba(0, 0, 0, .6); --sm-skel: #1f2937; --sm-vio: #a78bfa;
+}
+.sm-root { display: flex; flex-direction: column; gap: 14px; color: var(--sm-ink); }
+
+.sm-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; }
+.sm-head h2 { margin: 0; font-size: 16px; font-weight: 800; letter-spacing: -.01em; }
+.sm-head span { font-size: 12.5px; color: var(--sm-mut); }
+.sm-count { font-family: var(--font-mono); }
+
+/* The grid: 6 columns on desktop, 2 at tablet width, 1 on a phone (SM14, SM13). */
+.sm-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px; }
+.sm-grid > [data-size="1/3"] { grid-column: span 2; }
+.sm-grid > [data-size="1/2"] { grid-column: span 3; }
+.sm-grid > [data-size="full"] { grid-column: span 6; }
+@media (max-width: 1023px) {
+  .sm-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sm-grid > [data-size="1/3"], .sm-grid > [data-size="1/2"] { grid-column: span 1; }
+  .sm-grid > [data-size="full"] { grid-column: span 2; }
+}
+@media (max-width: 639px) {
+  .sm-grid { grid-template-columns: minmax(0, 1fr); }
+  .sm-grid > [data-size] { grid-column: span 1; }
+  /* On a phone every module is full width, so the size control is not offered. */
+  .sm-size { display: none !important; }
+}
+
+/* The tile frame (SM7). */
+.sm-tile { display: flex; min-width: 0; flex-direction: column; gap: 12px; border: 1px solid var(--sm-line); border-radius: 12px; background: var(--sm-card); padding: 16px; }
+.sm-tile[data-editing="true"] { border-color: var(--sm-lavE); }
+.sm-tile[data-lifted="true"] { transform: rotate(-1deg) scale(1.02); box-shadow: 0 22px 46px rgba(24, 24, 27, .26); }
+.sm-tile[data-fixed="true"] { opacity: .62; }
+.sm-tile-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.sm-tile-head h3 { margin: 0; flex: 1; min-width: 0; font-size: 14px; font-weight: 800; letter-spacing: -.01em; }
+.sm-note { font-size: 11.5px; color: var(--sm-mut); white-space: nowrap; }
+.sm-foot { display: flex; justify-content: flex-end; margin-top: auto; }
+.sm-link { font-size: 12.5px; font-weight: 600; color: var(--sm-vtx); }
+.sm-link:hover { text-decoration: underline; }
+.sm-muted { font-size: 12.5px; color: var(--sm-mut); }
+.sm-nr { display: flex; flex-direction: column; gap: 4px; }
+.sm-nr b { font-size: 14px; font-weight: 600; color: var(--sm-mut); }
+.sm-err { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12.5px; color: var(--sm-body); }
+.sm-err svg { color: var(--sm-neg); flex: none; }
+.sm-skel { display: grid; gap: 8px; }
+.sm-skel i { display: block; height: 10px; border-radius: 999px; background: var(--sm-skel); }
+
+/* Buttons. */
+.sm-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 0 14px; border-radius: 9px; font-size: 13.5px; font-weight: 600; border: 1px solid transparent; cursor: pointer; }
+.sm-btn[aria-disabled="true"] { opacity: .55; cursor: not-allowed; }
+.sm-btn-p { background: #7c3aed; color: #fff; }
+.sm-btn-s { background: var(--sm-card); color: var(--sm-ink); border-color: var(--sm-line2); }
+.sm-btn-t { background: transparent; color: var(--sm-vtx); }
+.sm-btn-sm { min-height: 30px; padding: 0 10px; font-size: 12.5px; }
+.sm-icon { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; color: var(--sm-mut); background: transparent; border: 0; cursor: pointer; }
+.sm-icon:hover { background: var(--sm-chip); }
+@media (max-width: 639px) { .sm-icon, .sm-btn-sm { min-width: 44px; min-height: 44px; } }
+
+/* Edit chrome. */
+.sm-handle { cursor: grab; touch-action: none; }
+.sm-size { display: inline-flex; border: 1px solid var(--sm-line2); border-radius: 8px; overflow: hidden; }
+.sm-size button { min-height: 26px; padding: 0 8px; font-size: 11.5px; font-weight: 600; color: var(--sm-mut); background: var(--sm-card); border: 0; cursor: pointer; }
+.sm-size button[aria-checked="true"] { background: var(--sm-lav); color: var(--sm-vtx); }
+.sm-menu-wrap { position: relative; }
+.sm-menu { position: absolute; right: 0; top: 34px; z-index: 30; display: grid; min-width: 140px; padding: 4px; border: 1px solid var(--sm-line2); border-radius: 10px; background: var(--sm-card); box-shadow: 0 12px 30px rgba(24, 24, 27, .16); }
+.sm-menu button { text-align: left; padding: 8px 10px; border: 0; border-radius: 7px; background: transparent; font-size: 13px; color: var(--sm-ink); cursor: pointer; }
+.sm-menu button:hover, .sm-menu button:focus-visible { background: var(--sm-lav); }
+.sm-slot { display: grid; place-items: center; min-height: 96px; border: 2px dashed #7c3aed; border-radius: 12px; background: var(--sm-lav); color: var(--sm-vtx); font-size: 13px; font-weight: 600; }
+.sm-hint { font-size: 12.5px; color: var(--sm-mut); }
+
+/* The edit bar, sticky at the bottom (SM5, SM13b). */
+.sm-bar { position: sticky; bottom: 16px; z-index: 20; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--sm-line2); border-radius: 12px; background: var(--sm-card); box-shadow: 0 12px 30px rgba(24, 24, 27, .14); }
+.sm-bar .sm-spacer { flex: 1; }
+.sm-saved { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 9px; background: var(--sm-posT); color: var(--sm-pos); font-size: 13px; font-weight: 600; }
+
+/* Notices (SM8). */
+.sm-notice { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; background: var(--sm-raised); border: 1px solid var(--sm-line); font-size: 13px; color: var(--sm-body); }
+.sm-notice[data-tone="lav"] { background: var(--sm-lav); border-color: var(--sm-lavE); }
+.sm-notice .sm-spacer { flex: 1; }
+.sm-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 24px; border: 2px dashed var(--sm-line2); border-radius: 12px; color: var(--sm-mut); font-size: 13.5px; }
+
+/* The fixed lock (strip, profile card). */
+.sm-lock { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 999px; background: var(--sm-chip); color: var(--sm-mut); }
+.sm-fixed { position: relative; }
+.sm-fixed > .sm-lock { position: absolute; top: -8px; right: -8px; z-index: 1; }
+.sm-dim { opacity: .62; }
+
+/* The module map (SM6). */
+.sm-map { display: flex; flex-direction: column; gap: 16px; }
+.sm-search { width: 100%; min-height: 40px; padding: 0 12px; border: 1px solid var(--sm-line2); border-radius: 9px; background: var(--sm-card); color: var(--sm-ink); font-size: 13.5px; }
+.sm-search:focus { outline: 2px solid #7c3aed; outline-offset: 0; }
+.sm-group h3 { margin: 0 0 8px; font-size: 14px; font-weight: 800; }
+.sm-group h3 span { margin-left: 6px; font-family: var(--font-mono); font-size: 12px; color: var(--sm-mut); }
+.sm-group[data-tone="lav"] { padding: 12px; border-radius: 12px; background: var(--sm-lav); }
+.sm-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+.sm-entry { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--sm-line); border-radius: 12px; background: var(--sm-card); }
+.sm-entry[data-locked="true"] { background: var(--sm-raised); color: var(--sm-mut); }
+.sm-entry b { font-size: 13px; font-weight: 800; }
+.sm-entry p { margin: 0; font-size: 12px; color: var(--sm-mut); }
+.sm-preview { height: 40px; border-radius: 8px; background: var(--sm-lav); }
+.sm-added { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 600; color: var(--sm-pos); }
+.sm-add { min-height: 30px; padding: 0 10px; border: 1px solid var(--sm-vio); border-radius: 9px; background: transparent; color: var(--sm-vtx); font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.sm-add[aria-disabled="true"] { opacity: .5; cursor: not-allowed; border-color: var(--sm-line2); color: var(--sm-mut); }
+.sm-locked { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; }
+
+/* The founder's strip and profile card, below 1024px (SM13a, SM14). */
+.sm-phone-bar { position: sticky; bottom: 0; z-index: 20; display: flex; gap: 10px; padding: 10px 22px; border-top: 1px solid var(--sm-line); background: var(--sm-card); }
+.sm-phone-bar .sm-btn { flex: 1; min-height: 44px; }
