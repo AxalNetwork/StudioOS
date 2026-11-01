@@ -75,7 +75,7 @@ async function readSurfaces(env: Env, advisorId: number, w: VisibilityWindow): P
   ).bind(advisorId).all<LinkRow>();
   const counts = await env.DB.prepare(
     `SELECT booking_link_id, status, COUNT(*) AS n FROM advisor_bookings
-      WHERE advisor_id = ? AND created_at >= ? AND created_at < ?
+      WHERE advisor_id = ? AND datetime(created_at) >= datetime(?) AND datetime(created_at) < datetime(?)
       GROUP BY booking_link_id, status`,
   ).bind(advisorId, w.from, w.until).all<CountRow>();
   const own = (links.results || []) as LinkRow[];
