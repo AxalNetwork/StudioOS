@@ -111,6 +111,7 @@ export * from './api/kycPeople.js';
 export * from './api/labOperations.js';
 export * from './api/labReportShares.js';
 export * from './api/learning.js';
+export * from './api/learningPlan.js';
 export * from './api/licenceAccount.js';
 export * from './api/licenceFeeInvoices.js';
 export * from './api/licencePrograms.js';
