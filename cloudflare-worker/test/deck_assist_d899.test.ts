@@ -166,7 +166,7 @@ test('a rewrite: quoted first, then one deck:rewrite run charged to the founder 
     assert.equal(r.body.cost.charged_microusd, runs[0].charged_microusd);
     const [p] = f.proposals();
     assert.deepEqual([p.user_id, p.rail_option, p.record_ref, p.kind, p.status], [2, 'deck:rewrite', 'deck:7', 'proposal', 'proposed']);
-    assert.deepEqual(JSON.parse(p.payload_json), { deck_id: 7, card: 0, action: 'rewrite', before: TEXT, after: 'Finance teams close their books faster.' });
+    assert.deepEqual(JSON.parse(p.payload_json), { deck_id: 7, card: 0, card_uid: 'c1', action: 'rewrite', before: TEXT, after: 'Finance teams close their books faster.' });
     assert.equal(r.body.proposal.uid, f.db.prepare('SELECT uid FROM ai_rail_proposals').get()!.uid);
     assert.deepEqual(f.audits(), ['deck_card_assist_proposed']);
     const v = f.db.prepare('SELECT slides FROM pitch_decks WHERE id = 7').get() as any;
