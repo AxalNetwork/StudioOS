@@ -2140,6 +2140,16 @@ No migration and no decision of its own: it fills TM2's gaps on the existing tab
 
 Saves: `PUT`/`POST` of a version keep `card.structure` (one of the 17, or `custom`) and `card.areas` (≤ 12, whole cells, no overlap) and refuse a bad one with its sentence (`modelProblems`); `theme.aspect` keeps `4:3`, and 16:9 is the default left out.
 
+### Element model routing (D1503, #3754)
+
+`routes/deck_element_models.ts`, mounted at `/api/decks` beside `deck_grid.ts`, before `decks`. The routes are in `services/decks/elementModels.ts` (pure: `ELEMENTS`, `ELEMENT_ROUTES`, `resolveElementModel`, `sizeFor`, `estimateDeck`, `expected_ms`; `OUTPUT_RULES` in `elementOutputRules.ts`). Each element's models come from its #3721 job in `services/ai/modelUseCases.ts` over `catalogue.ts`. Picks are kept in `deck_model_picks` (migration 717). Client: `lib/api/deckElementModels.js`, read through `deckV2Adapter.elementModels` (a `SWAPPED` row). The pitch pages' AIRail groups read it on a deck (`deckRailGroups.js`).
+
+| Route | Who | What it answers |
+| --- | --- | --- |
+| `GET /api/decks/:id/element-models` | whoever may read the deck (`projectOwned`) | `{ deck_id, project_id, billing, plan_rank, elements: [{ element, group, job, kind, task, plan_min, expected_ms, per_run_microusd, suggested: [≤ 3], more, pick, resolved: { model, name, source, locked, notice } }], groups: [{ group, elements, lead, suggested, more, pick, resolved, free? }], free: [{ element, group, line: 'No model · free' }] }`. `suggested`, `more` and `pick` use #3741's shape. Stale deck, area and member picks are cleared by the read, and `notice` says "A model retired · Using …". |
+| `PUT /api/decks/:id/element-models` `{ scope: 'deck' \| 'member', key, model \| null }` | whoever may write the deck | Stores the deck's pick (scope id: the project) or the caller's own. `key` is a routed element or `group:<group>`, and `null` clears the pick. Refusals: 400 `invalid_scope`, `invalid_key` or `model_not_offered`; 403 `role_locked` when HQ locked the key, and 403 `plan_locked` (with `plan`) for a model the caller's plan does not include. |
+
+Generation: `POST /api/decks/generate`, `POST /api/decks/new/quote` (build and card) and `POST /api/decks/proposals/:id/regenerate-card` run their words on Body's resolved model, and the build names it in `element_models`. `POST /api/decks/:id/images(/quote)` runs on the photo or illustration element's model. If no pick sits above the row default, a run keeps its rail option's own resolution, as before. `GET /api/ai/rail?page=Founder · Raise · Pitch deck&option=grid:<element>` answers the element's generated row.
 
 ### Deck quality floor (D1517, #3769)
 
