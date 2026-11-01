@@ -316,7 +316,9 @@ test('14. every token link previews as the private card, and D1 is never touched
   // Mutation checked: a prefix dropped from PRIVATE_LINK_GLOBS → that link gets the untouched home shell;
   // the private branch moved after `if (!env.DB)` with a resolveCard call → the spy sees a read.
   const { env, calls } = envFor(fixture());
-  env.DB = new Proxy(env.DB, { get: (t: any, k) => { calls.push(`touched:${String(k)}`); return t[k]; } });
+  // Any read of env.DB at all, not only a query, is recorded.
+  const db = new Proxy(env.DB, { get: (t: any, k) => { calls.push(`touched:${String(k)}`); return t[k]; } });
+  Object.defineProperty(env, 'DB', { get: () => { calls.push('env.DB'); return db; }, configurable: true });
   let first: string | null = null;
   for (const p of TOKEN_LINKS) {
     const r = await get(env, p);
@@ -330,7 +332,7 @@ test('14. every token link previews as the private card, and D1 is never touched
     // One card for every link: the bytes are the same whatever the token and prefix.
     if (first == null) first = r.text; else assert.equal(r.text, first, p);
   }
-  assert.deepEqual(calls, [], 'no D1 read, nor even a property access, for a token link');
+  assert.deepEqual(calls, [], 'no D1 read, nor even a read of env.DB, for a token link');
   const head = await get(env, `/esign/${TOKEN}`, { method: 'HEAD' });
   assert.equal(head.text, '');
   assert.equal(head.headers.get('x-robots-tag'), 'noindex');
