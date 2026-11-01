@@ -34,7 +34,7 @@ import { ConnectRefusal, getProviderImpl } from '../src/integrations/registry.ts
 import { encryptCredentials } from '../src/integrations/secrets.ts';
 import { CLOUDFLARE_TOOLS, SIGN_IN_ONLY, classifyCloudflareError, cloudflareAdapter } from '../src/integrations/providers/cloudflare.ts';
 import {
-  CLOUDFLARE_API, CLOUDFLARE_BLOCK_SECONDS, CLOUDFLARE_READ_SCOPES, CloudflareError, MAX_HOURS, MAX_LOG_LINES,
+  CLOUDFLARE_API, CLOUDFLARE_BLOCK_SECONDS, CLOUDFLARE_READ_SCOPES, CloudflareError, MAX_HOURS, MAX_LOG_LINES, MAX_LOG_PAGES,
   buildOf, checkGrantedScopes, cloudflareReads, errorOf, errorsQuery, eventOf, requestsQuery,
 } from '../src/services/cloudflare/api.ts';
 
@@ -276,6 +276,43 @@ test('5. a log page with a cursor that is not truncated is the last page', async
   try {
     const out = await cloudflareReads('fixture-token').getBuildLogs(ACCOUNT, BUILD);
     assert.deepEqual(out, { lines: [{ at: new Date(NOW).toISOString(), text: 'only page' }], truncated: false });
+    assert.equal(s.calls.length, 1);
+  } finally { s.restore(); }
+});
+
+test('5. a valid log cursor continues when the optional truncated flag is absent', async () => {
+  const s = stub((c) => {
+    if (!c.url.includes('/logs')) return undefined;
+    const next = new URL(c.url).searchParams.get('cursor');
+    return new Response(JSON.stringify({ success: true, result: next
+      ? { lines: [[NOW, 'last page']] }
+      : { lines: [[NOW, 'first page']], cursor: 'c-2' } }));
+  });
+  try {
+    const out = await cloudflareReads('fixture-token').getBuildLogs(ACCOUNT, BUILD);
+    assert.deepEqual(out, { lines: [{ at: new Date(NOW).toISOString(), text: 'first page' }, { at: new Date(NOW).toISOString(), text: 'last page' }], truncated: false });
+    assert.equal(s.calls.length, 2);
+    assert.equal(new URL(s.calls[1].url).searchParams.get('cursor'), 'c-2');
+  } finally { s.restore(); }
+});
+
+test('5. cursor-only pagination retains the page cap and reports an incomplete read', async () => {
+  let page = 0;
+  const s = stub((c) => (c.url.includes('/logs') ? new Response(JSON.stringify({ success: true, result: { lines: [[NOW, `page ${++page}`]], cursor: `c-${page + 1}` } })) : undefined));
+  try {
+    const out = await cloudflareReads('fixture-token').getBuildLogs(ACCOUNT, BUILD);
+    assert.equal(s.calls.length, MAX_LOG_PAGES);
+    assert.equal(out.lines.length, MAX_LOG_PAGES);
+    assert.equal(out.truncated, true);
+  } finally { s.restore(); }
+});
+
+test('5. an unusable log cursor preserves the provider truncation notice without another request', async () => {
+  const s = stub((c) => (c.url.includes('/logs') ? new Response(JSON.stringify({ success: true, result: { lines: [[NOW, 'partial page']], cursor: '../invalid', truncated: true } })) : undefined));
+  try {
+    const out = await cloudflareReads('fixture-token').getBuildLogs(ACCOUNT, BUILD);
+    assert.equal(out.lines.length, 1);
+    assert.equal(out.truncated, true);
     assert.equal(s.calls.length, 1);
   } finally { s.restore(); }
 });

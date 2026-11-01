@@ -351,7 +351,9 @@ export function cloudflareReads(token: string, now: () => number = Date.now): Cl
           if (lines.length >= MAX_LOG_LINES) return { lines, truncated: true };
         }
         const next = typeof res.cursor === 'string' && CURSOR.test(res.cursor) ? res.cursor : null;
-        if (!next || res.truncated !== true) return { lines, truncated: false };
+        // Cloudflare's flag is optional; a cursor can still identify another page.
+        // Explicit false means the last page even when it carries a cursor.
+        if (!next || res.truncated === false) return { lines, truncated: res.truncated === true };
         cursor = next;
       }
       return { lines, truncated: true };
