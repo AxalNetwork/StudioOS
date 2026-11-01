@@ -32,14 +32,14 @@ import { bindingKey } from '../util/schemaBootstrap';
 import { refuse } from '../util/refusal';
 import { DECK_PAGE_LOAD_MS, MAX_DECK_PDF_BYTES, MAX_SLIDE_PNG_BYTES, renderUrl, type RenderFailure } from '../services/browserRun';
 import { railFor } from '../util/railContext';
-import { slideTotals, recordSlideSeconds } from '../services/deckSlideDwell';
+import { slideTotals, recordSlideSeconds, recordSlideCardUids } from '../services/deckSlideDwell';
 import { logCycleWrite } from '../services/cycleActivity';
 import { shareAnalytics, type LinkAnalytics } from '../services/decks/shareAnalytics';
 import { DEFAULT_SHARE_INCLUDE, parseShareInclude, shareSlides, shareSpinoutFields, type ShareInclude } from '../services/decks/shareInclude';
 import { sanitizeBinding } from '../services/decks/sources';
 import {
   AUDIENCES, BLOCK_KINDS, CHART_RANGES, CHART_TYPES, GRID_COLS, GRID_ROWS, IMAGE_FITS, IMAGE_TAGS, LAYOUTS, MAX_BLOCKS, NOTES_MAX, OVERLAYS,
-  TEXT_STYLES, THEME_KINDS, VIDEO_RATIOS, contentHash, modelProblems, sanitizeModel, sanitizeTheme,
+  TEXT_STYLES, THEME_KINDS, VIDEO_RATIOS, contentHash, modelProblems, sanitizeModel, sanitizeTheme, assignCardUids, MODEL_VERSION,
 } from '../services/decks/slideModel';
 import { checkVideoLink } from '../services/decks/videoLink';
 import { ensureDeckVersionColumns, ensureProposalOutlineColumns } from '../services/decks/deckVersionColumns';
@@ -304,7 +304,8 @@ async function hashViewerField(env: Env, value: string | null): Promise<string |
 // method_id, fields:[{key,label,kind,value,source,edited?}] }. Anything
 // else is dropped. Caps prevent runaway sizes.
 export function sanitizeSlides(input: any[]): any[] {
-  return (input || []).slice(0, 60).map((s: any) => {
+  // D1500: every card leaves with a uid, kept from the input when sound.
+  return assignCardUids((input || []).slice(0, 60).map((s: any) => {
     const title = String((s?.title || '') as string).trim().slice(0, 120) || 'Slide';
     const sub = s?.subtitle ? String(s.subtitle).trim().slice(0, 200) : null;
     const body = s?.body ? String(s.body).trim().slice(0, 4000) : '';
@@ -325,7 +326,7 @@ export function sanitizeSlides(input: any[]): any[] {
     // #2675) the card's own binding, so refresh can find it.
     Object.assign(out, sanitizeModel(s, sanitizeImageUrl));
     return out;
-  });
+  }));
 }
 
 // `auto` = computed, non-editable field (e.g. the Cover Lab-activity strip);
@@ -484,9 +485,12 @@ export function rowToDeck(row: any, withSlides = true): any {
     theme: themeOfRow(row),
     content_hash: row.content_hash ?? null,
     by: row.created_by != null ? { id: Number(row.created_by), name: row.created_by_name ?? null } : null,
+    // D1500: the model this Worker reads and writes; a save must send it back.
+    model_version: MODEL_VERSION,
   };
   if (withSlides) {
-    try { out.slides = founderPitchSlides(JSON.parse(row.slides || '[]')); } catch { out.slides = []; }
+    // D1500: a version saved before uids reads the same uids every time (`assignCardUids`).
+    try { out.slides = assignCardUids(founderPitchSlides(JSON.parse(row.slides || '[]'))); } catch { out.slides = []; }
   }
   return out;
 }
@@ -974,9 +978,12 @@ decks.post('/share/:token/heartbeat', async (c) => {
   } catch {}
   // D663 — seconds on each slide, as the viewer's running totals. Each is
   // capped so a view's slides never add up to more than its read time.
-  for (const [slide, slideSeconds] of slideTotals(body?.slides)) {
+  const totals = slideTotals(body?.slides);
+  for (const [slide, slideSeconds] of totals) {
     try { await recordSlideSeconds(c.env, viewId, parseInt(m[1]), slide, slideSeconds); } catch {}
   }
+  // D1500: and the card each slide is, by uid.
+  await recordSlideCardUids(c.env, viewId, parseInt(m[1]), totals.map(([slide]) => slide));
   return c.json({ ok: true });
 });
 
@@ -1239,6 +1246,12 @@ decks.put('/:id', async (c) => {
     catch { return c.json({ error: 'paywall', code: 'PAYWALL_PREMIUM_METHOD', method_id: persistedMethod, required_tier: 'studio' }, 402); }
   }
   const body = await c.req.json().catch(() => ({} as any));
+  // D1500: a save in another model's shape is refused, never stripped: an
+  // older editor would drop v2 fields, and a newer one would lose its own.
+  if (body?.model_version !== MODEL_VERSION) {
+    return c.json({ error: 'upgrade_required', code: 'upgrade_required', model_version: MODEL_VERSION,
+      message: 'This editor and the server read decks differently. Reload the page, then save again. Nothing was saved.' }, 409);
+  }
   // D898: a save the model cannot keep whole is refused with what is wrong,
   // never trimmed, so no block is lost without the founder being told.
   const problems = modelProblems(body?.slides, sanitizeImageUrl);

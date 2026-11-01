@@ -53,6 +53,7 @@ import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 import { railFor, refuseRun } from '../util/railContext';
 import { refuse } from '../util/refusal';
 import { auditDeckWrite, getDeckRow, projectOwned, themeOfRow } from './decks';
+import { cardRefOf } from '../services/decks/slideModel';
 import { imageCapability, imagePlan } from '../services/decks/visuals';
 import { fetchLandingPageForProject } from '../services/decks/branding';
 
@@ -62,7 +63,7 @@ const HEX = /^#[0-9a-f]{6}$/i;
 const UID = /^[0-9a-f-]{36}$/;
 const NO_STORAGE = 'Images cannot be stored here yet. Nothing was run and nothing was charged.';
 
-type Deck = { deckId: number; projectId: number };
+type Deck = { deckId: number; projectId: number; slides: unknown[] };
 
 /** The deck version and its venture, which the caller may write (or read, with `write: false`), or the refusal. */
 async function deckOf(c: any, user: User, write = true): Promise<Deck | Response> {
@@ -74,7 +75,19 @@ async function deckOf(c: any, user: User, write = true): Promise<Deck | Response
   try { await projectOwned(c, user, projectId, { write }); } catch (e: any) {
     return e?.message === 'NotFound' ? c.json({ error: 'not found' }, 404) : c.json({ error: 'forbidden' }, 403);
   }
-  return { deckId, projectId };
+  let slides: unknown[] = [];
+  try { const parsed = JSON.parse(row.slides || '[]'); if (Array.isArray(parsed)) slides = parsed; } catch { slides = []; }
+  return { deckId, projectId, slides };
+}
+
+/**
+ * D1500: record the card's uid beside its place. Best effort, after the row is
+ * written: a database without migration 714 still keeps the image by place.
+ */
+async function recordCardUid(env: Env, imageUid: string, cardUid: string | null): Promise<void> {
+  if (!cardUid) return;
+  try { await env.DB.prepare('UPDATE deck_images SET card_uid = ? WHERE uid = ?').bind(cardUid, imageUid).run(); }
+  catch (e) { console.warn('[deck_images] card_uid not recorded', (e as Error)?.message); }
 }
 
 /** One image row by its uid, with the caller's write access to its venture checked. */
@@ -92,7 +105,7 @@ export const imageUrl = (requestUrl: string, uid: string) => new URL(`/api/decks
 
 function view(c: any, r: any) {
   return {
-    uid: r.uid, url: imageUrl(c.req.url, r.uid), state: r.state, use: r.use, source: r.source, card: r.card ?? null,
+    uid: r.uid, url: imageUrl(c.req.url, r.uid), state: r.state, use: r.use, source: r.source, card: r.card ?? null, card_uid: r.card_uid ?? null,
     style: r.style ?? null, aspect: r.aspect ?? null, overlay: r.overlay ?? null, alt: r.alt ?? '',
     width: r.width ?? null, height: r.height ?? null, model: r.model ?? null,
     model_label: imageModelLabel(r.model),
@@ -181,6 +194,8 @@ deckImages.post('/:id/images', async (c) => {
   try { ticket = await assertStorageRoom(c.env, { projectId: deck.projectId }, IMAGE_BYTES_ESTIMATE * p.ask.count, user); }
   catch (e) { if (e instanceof Response) return e; throw e; }
 
+  const ref = cardRefOf(deck.slides, { card: p.ask.card, card_uid: p.ask.card_uid });
+  const cardUid = 'error' in ref ? null : ref.uid;
   const images: any[] = [];
   let stopped: { code: string; message: string } | null = null;
   for (let i = 0; i < p.ask.count; i += 1) {
@@ -208,6 +223,7 @@ deckImages.post('/:id/images', async (c) => {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated', ?, ?, ?, ?, 'proposed', ?, ?, ?, ?)`)
       .bind(uid, deck.projectId, deck.deckId, p.ask.card, key, mime, r.image.bytes.byteLength, r.image.width, r.image.height,
         p.ask.description, p.ask.style, p.ask.aspect, p.ask.use, r.usage?.model ?? IMAGE_MODEL, r.usageLogId ?? null, charged, userId).run();
+    await recordCardUid(c.env, uid, cardUid);
     images.push(await c.env.DB.prepare('SELECT * FROM deck_images WHERE uid = ?').bind(uid).first());
   }
   await noteStorageLanded(c.env, ticket);
@@ -232,9 +248,10 @@ deckImages.post('/:id/images/upload', async (c) => {
   const showsPerson = form!.get('shows_person') === '1';
   if (showsPerson && form!.get('consent') !== '1') return refuse(c, 422, { code: 'person_consent_required', message: PERSON_CONSENT_MESSAGE });
   const use = (USES as readonly string[]).includes(String(form!.get('use'))) ? String(form!.get('use')) as Use : 'content';
-  const cardRaw = form!.get('card');
-  const card = cardRaw == null || cardRaw === '' ? null : Number(cardRaw);
-  if (card !== null && (!Number.isInteger(card) || card < 0 || card > 59)) return c.json({ error: 'card must be a card of the deck, from 0.' }, 400);
+  // D1500: the card by its uid when the editor sends one, else by its place.
+  const ref = cardRefOf(deck.slides, { card: form!.get('card'), card_uid: form!.get('card_uid') });
+  if ('error' in ref) return c.json({ error: ref.error }, 400);
+  const card = ref.index;
   const alt = String(form!.get('alt') ?? '').replace(/\s+/g, ' ').trim().slice(0, ALT_MAX);
   let ticket;
   try { ticket = await assertStorageRoom(c.env, { projectId: deck.projectId }, bytes.byteLength, user); }
@@ -251,6 +268,7 @@ deckImages.post('/:id/images/upload', async (c) => {
     .bind(uid, deck.projectId, deck.deckId, card, key, mime, bytes.byteLength, use, alt, use === 'content' ? 'kept' : 'proposed',
       showsPerson ? 1 : 0, showsPerson ? new Date().toISOString() : null, showsPerson ? userId : null, userId,
       use === 'content' ? new Date().toISOString() : null, use === 'content' ? userId : null).run();
+  await recordCardUid(c.env, uid, ref.uid);
   await noteStorageLanded(c.env, ticket);
   await auditDeckWrite(c, user, deck.projectId, 'deck_image_uploaded', `${card == null ? 'The deck' : `Card ${card + 1}`}: an image uploaded${showsPerson ? ', with the person’s agreement recorded' : ''}`);
   return c.json({ image: view(c, await c.env.DB.prepare('SELECT * FROM deck_images WHERE uid = ?').bind(uid).first()) }, 201);

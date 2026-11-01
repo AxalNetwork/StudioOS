@@ -26,6 +26,7 @@ import type { Env, User } from '../types';
 import { hydrateSuperAdmin, isSuperAdmin, requireAuth } from '../auth';
 import { projectOwned } from '../middleware/projectContentAccess';
 import { logCycleWriteStatement } from '../services/cycleActivity';
+import { cardRefOf } from '../services/decks/slideModel';
 
 const deckNotes = new Hono<{ Bindings: Env }>();
 
@@ -74,6 +75,8 @@ function noteView(r: NoteRow) {
     deck_id: r.deck_id,
     deck_version: r.deck_version,
     card_index: r.card_index,
+    // D1500: the card's uid, so a note follows its card; null on a note written before 714.
+    card_uid: (r as any).card_uid ?? null,
     body: r.body,
     author: { name: r.author_name ?? null, kind: r.author_kind },
     created_at: r.created_at,
@@ -87,7 +90,7 @@ deckNotes.get('/:id/notes', async (c) => {
   const kind = await noteRole(c, user, Number(row.project_id), false);
   if (!kind) return c.json(NOT_FOUND, 404);
   const rows = (await c.env.DB.prepare(
-    `SELECT n.id, n.deck_id, n.deck_version, n.card_index, n.body, n.author_kind, n.created_at, u.name AS author_name
+    `SELECT n.*, n.id, n.deck_id, n.deck_version, n.card_index, n.body, n.author_kind, n.created_at, u.name AS author_name
        FROM deck_notes n LEFT JOIN users u ON u.id = n.author_user_id
       WHERE n.project_id = ?
       ORDER BY n.created_at, n.id LIMIT ?`,
@@ -102,18 +105,19 @@ deckNotes.post('/:id/notes', async (c) => {
   const kind = await noteRole(c, user, Number(row.project_id), true);
   if (!kind) return c.json(NOT_FOUND, 404);
 
-  const input = await c.req.json().catch(() => null) as { body?: unknown; card_index?: unknown } | null;
+  const input = await c.req.json().catch(() => null) as { body?: unknown; card_index?: unknown; card_uid?: unknown } | null;
   const body = typeof input?.body === 'string' ? input.body.trim() : '';
   if (!body) return c.json({ error: 'note_required', message: 'Write the note first.' }, 400);
   if (body.length > NOTE_MAX) return c.json({ error: 'note_too_long', message: `A note is at most ${NOTE_MAX.toLocaleString('en-US')} characters.` }, 400);
-  let card: number | null = null;
-  if (input?.card_index !== undefined && input?.card_index !== null) {
-    const n = Number(input.card_index);
-    if (!Number.isInteger(n) || n < 0 || n >= slideCount(row)) {
-      return c.json({ error: 'invalid_card', message: 'That card is not in this version of the deck.' }, 400);
-    }
-    card = n;
-  }
+  // D1500: the card by its uid when the reader sends one, else by its place; it must be on this version.
+  let slides: unknown[] = [];
+  try { const parsed = JSON.parse(row.slides || '[]'); if (Array.isArray(parsed)) slides = parsed; } catch { slides = []; }
+  const ref = cardRefOf(slides, { card: input?.card_index ?? null, card_uid: input?.card_uid ?? null });
+  const notOnVersion = () => c.json({ error: 'invalid_card', message: 'That card is not in this version of the deck.' }, 400);
+  if ('error' in ref) return notOnVersion();
+  if ((ref.uid || ref.index !== null) && (ref.index === null || ref.index >= slideCount(row))) return notOnVersion();
+  const card: number | null = ref.index;
+  const cardUid: string | null = card === null ? null : ref.uid;
 
   const projectId = Number(row.project_id);
   const where = card === null ? 'the deck' : `card ${card + 1}`;
@@ -128,8 +132,13 @@ deckNotes.post('/:id/notes', async (c) => {
     }),
   ]);
   const id = Number(insert?.meta?.last_row_id);
+  // D1500: best effort, so a database without migration 714 still keeps the note by place.
+  if (cardUid) {
+    try { await c.env.DB.prepare('UPDATE deck_notes SET card_uid = ? WHERE id = ? AND project_id = ?').bind(cardUid, id, projectId).run(); }
+    catch (e) { console.warn('[deck_notes] card_uid not recorded', (e as Error)?.message); }
+  }
   const saved = await c.env.DB.prepare(
-    `SELECT n.id, n.deck_id, n.deck_version, n.card_index, n.body, n.author_kind, n.created_at, u.name AS author_name
+    `SELECT n.*, n.id, n.deck_id, n.deck_version, n.card_index, n.body, n.author_kind, n.created_at, u.name AS author_name
        FROM deck_notes n LEFT JOIN users u ON u.id = n.author_user_id WHERE n.id = ? AND n.project_id = ?`,
   ).bind(id, projectId).first<NoteRow>();
   if (!saved) return c.json({ error: 'note_unreadable', message: 'The note was saved but could not be read back. Reload the notes.' }, 500);
