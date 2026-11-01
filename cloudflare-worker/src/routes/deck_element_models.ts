@@ -89,7 +89,8 @@ async function clearStale(env: Env, stale: readonly PickRow[]): Promise<void> {
  */
 /** D1509: the element is switched off for this member; the run answers 404 `not_switched_on`. */
 export class ElementOffError extends Error {
-  constructor(readonly element: string) { super(NOT_SWITCHED_ON); }
+  readonly element: string;
+  constructor(element: string) { super(NOT_SWITCHED_ON); this.element = element; }
 }
 
 export async function elementModelFor(env: Env, user: User, projectId: number, element: string, area?: { card: number; area: string } | null): Promise<Resolved> {
