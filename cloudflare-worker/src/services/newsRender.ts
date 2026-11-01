@@ -81,6 +81,39 @@ function inline(s: string): string {
   return out;
 }
 
+/**
+ * D1410 (#3893) — the three blocks the article editor's Insert… menu adds
+ * beside the CommonMark ones. The body stays Markdown (S1's pick B(a)), so
+ * each has a Markdown form, rendered here and, for the editor's preview, by
+ * `frontend/src/pages/articles/articleBlocks.js`, which draws the same HTML.
+ *
+ *   · divider:   a line holding only `---`                → `<hr>`
+ *   · callout:   a blockquote opening `> [!note|tip|warning]`
+ *                → `<aside class="article-callout" data-kind="…">`
+ *   · link card: a paragraph holding only `[card](https://…)` or
+ *                `[card: Title — description](https://…)` → a bordered card
+ *
+ * A link card is never fetched: it shows the title and description stored in
+ * its Markdown, or the link's domain and the URL. Only http(s) makes a card;
+ * anything else is an ordinary paragraph, whose link the inline rule refuses.
+ */
+const CALLOUT_OPEN = /^\[!(note|tip|warning)\]\s*$/i;
+// On escaped text: `[card]` or `[card: …]`, then `(` an http(s) URL `)`, and nothing else.
+const CARD = /^\[card(?::\s*([^\]]*))?\]\(([^)\s]+)\)$/;
+
+/** The card's parts from its (already escaped) link text and URL, or null when it makes no card. */
+export function cardParts(stored: string | undefined, url: string): { title: string; description: string; domain: string } | null {
+  const host = url.match(/^https?:\/\/([^/?#:\s]+)/i);
+  if (!host) return null;
+  const domain = host[1].toLowerCase().replace(/^www\./, '');
+  const [title, ...rest] = (stored || '').split(' — ');
+  return {
+    title: title.trim() || domain,
+    description: rest.join(' — ').trim() || url,
+    domain,
+  };
+}
+
 export function renderMarkdown(md: string): string {
   const escaped = escapeHtml(md || '');
   const lines = escaped.split('\n');
@@ -101,6 +134,13 @@ export function renderMarkdown(md: string): string {
       out.push(`<pre><code>${buf.join('\n')}</code></pre>`);
       continue;
     }
+    // D1410 — a divider: a line holding only `---`. A fence's own lines never
+    // reach here, so `---` inside code stays code.
+    if (/^\s*---\s*$/.test(line)) {
+      out.push('<hr>');
+      i++;
+      continue;
+    }
     // Heading. Leading whitespace is tolerated so indented `## ...` lines are
     // recognised as headings rather than leaking as literal text.
     const h = line.match(/^\s*(#{1,6})\s+(.+)$/);
@@ -118,6 +158,14 @@ export function renderMarkdown(md: string): string {
       while (i < lines.length && /^\s*&gt;\s?/.test(lines[i])) {
         buf.push(lines[i].replace(/^\s*&gt;\s?/, ''));
         i++;
+      }
+      // D1410 — a callout: the first line is `[!note]`, `[!tip]` or `[!warning]`.
+      // Any other blockquote, an unknown kind included, is unchanged.
+      const callout = buf[0].trim().match(CALLOUT_OPEN);
+      if (callout) {
+        const body = buf.slice(1).join(' ').trim();
+        out.push(`<aside class="article-callout" data-kind="${callout[1].toLowerCase()}">${body ? `<p>${inline(body)}</p>` : ''}</aside>`);
+        continue;
       }
       out.push(`<blockquote>${inline(buf.join(' '))}</blockquote>`);
       continue;
@@ -150,9 +198,21 @@ export function renderMarkdown(md: string): string {
     // preserved as visible line breaks instead of collapsing into one run-on
     // block. Blank lines still start a fresh <p>.
     const buf: string[] = [];
-    while (i < lines.length && lines[i].trim() && !/^\s*(#{1,6}\s|&gt;\s?|[-*]\s+|\d+\.\s+|```)/.test(lines[i])) {
+    while (i < lines.length && lines[i].trim() && !/^\s*(#{1,6}\s|&gt;\s?|[-*]\s+|\d+\.\s+|```|---\s*$)/.test(lines[i])) {
       buf.push(lines[i].trim());
       i++;
+    }
+    // D1410 — a link card: the paragraph holds only `[card…](http(s)://…)`.
+    const card = buf.length === 1 ? buf[0].match(CARD) : null;
+    const parts = card ? cardParts(card[1], card[2]) : null;
+    if (card && parts) {
+      out.push(
+        `<a class="article-card" href="${card[2]}" rel="noopener noreferrer nofollow" target="_blank">`
+        + `<span class="article-card-title">${parts.title}</span>`
+        + `<span class="article-card-description">${parts.description}</span>`
+        + `<span class="article-card-domain">${parts.domain}</span></a>`,
+      );
+      continue;
     }
     if (buf.length > 0) out.push(`<p>${buf.map((l) => inline(l)).join('<br>')}</p>`);
   }

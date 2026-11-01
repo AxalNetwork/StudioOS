@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e9e7ee}
+a{color:#7c3aed;text-decoration:none}
+a:hover{color:#6d28d9;text-decoration:underline}
+</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:84px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1040px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">HQ › Platform</span>
+<h1 style="margin:0;font-size:42px;font-weight:800;letter-spacing:-0.03em">Event syndication</h1>
+<p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">SY0 to SY11. Only public events an admin approves are listed, and only when the admin presses Approve and publish. Every listing links back to the event on axal.vc, where paid tickets are sold. Channel logos are drawn as neutral letter tiles.</p>
+</header>
+<sc-for list="{{ groups }}" as="g" hint-placeholder-count="8">
+<section id="{{ g.id }}" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">{{ g.id }}</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">{{ g.t }}</h2></div>
+<sc-if value="{{ g.note }}" hint-placeholder-val="{{ false }}"><p style="margin:0;max-width:1100px;font-size:14px;line-height:1.55;color:#3f3a47;text-wrap:pretty">{{ g.note }}</p></sc-if>
+<div style="display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start">
+<sc-for list="{{ g.fr }}" as="f" hint-placeholder-count="2">
+<div style="display:flex;flex-direction:column;gap:8px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">{{ f.cap }}</span>
+<div style="{{ f.wst }}"><dc-import name="Event Syndication Page" v="{{ f.v }}" hint-size="{{ f.hs }}"></dc-import></div>
+</div>
+</sc-for>
+</div>
+</section>
+</sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const F = (v, cap, w, h) => { const d = /-d$/.test(v); return { v, cap, wst: `width:${w}px;${h ? 'height:' + h + 'px;' : ''}border-radius:${w < 500 ? 28 : 14}px;overflow:hidden;border:1px solid ${d ? '#374151' : '#dedbe5'};box-shadow:0 20px 50px rgba(24,24,27,.10);background:${d ? '#0b1220' : '#f4f3f7'}`, hs: `${w}px,${h || 900}px` }; };
+    return { groups: [
+      { id: 'SY0', t: 'Page canvas', note: 'The Channels page in the house shell, with the Ask panel open out of the AIRail and two proposals waiting.', fr: [F('sy0', 'Channels · Ask panel open', 1440)] },
+      { id: 'SY1', t: 'Channels', note: 'Super Admin only. Luma connected, Eventbrite expiring, Google waiting for the platform’s approval, LinkedIn not connected, Facebook in error. Link-post channels are marked pending owner.', fr: [F('sy1', 'Channels', 1440), F('sy1b', 'SY1b · Connect and Disconnect dialogs', 1440)] },
+      { id: 'SY2', t: 'In the event editor and on the Events desk', note: 'Syndicate to shows only while Visibility is Public. Ask sits in the editor’s header, with field triggers on LinkedIn’s blank Title and Description.', fr: [F('sy2a', 'SY2a · Syndicate to · Public', 1440), F('sy2u', 'SY2a · Visibility Unlisted', 1440, 700), F('sy2p', 'SY2p · Preview in the right Sheet', 1440), F('sy2q', 'SY2p · Each channel’s real format', 1440), F('sy2b', 'SY2b · Approve dialog · with channels on, and with none', 1440)] },
+      { id: 'SY3', t: 'Channels on one event', note: 'On the desk’s event page beside its existing cards, and on the host’s manage page.', fr: [F('sy3', 'Desk event page', 1440), F('sy3h', 'Before approval · after a cancellation', 1440)] },
+      { id: 'SY4', t: 'Registrations by channel', note: 'A later state, pending owner: importing waits on the owner’s privacy and ticketing answers.', fr: [F('sy4', 'Host’s Registrations tab', 1440)] },
+      { id: 'SY5', t: 'Activity', note: 'A failed row opens the right Sheet with the platform’s full reply and the HTTP status.', fr: [F('sy5', 'Activity · failed row open', 1440)] },
+      { id: 'SY6', t: 'Settings', fr: [F('sy6', 'Settings · saved', 1440)] },
+      { id: 'SY7', t: 'States', note: 'Small boards at 720. Out of AI tokens, AI paused and AI off sit side by side at the end.', fr: [F('sy7', 'SY7a to SY7o', 1530), F('sy6r', 'SY7j · Read only on Settings', 1440)] },
+      { id: 'SY8', t: 'Ask on this page', note: 'No suggestion chips: admin consoles have none (owner can restore them). Accepting saves a channel’s edit and never posts.', fr: [F('sy8', 'Running · done · nothing to propose', 1440)] },
+      { id: 'SY9', t: 'Phone · 390', fr: [F('sy9a', 'Channels', 390, 844), F('sy9b', 'Channels on one event', 390, 844), F('sy9c', 'Activity · filters sheet', 390, 844), F('sy9d', 'Approve · bottom sheet', 390, 844), F('sy9e', 'Ask · bottom sheet', 390, 844)] },
+      { id: 'SY10', t: 'Tablet · 768', fr: [F('sy10a', 'Channels · two cards per row', 768), F('sy10b', 'Event page · Ask over the content', 768)] },
+      { id: 'SY11', t: 'Dark', fr: [F('sy1-d', 'Channels', 1440), F('sy3-d', 'Channels on one event', 1440), F('sy0-d', 'Ask panel', 1440)] }
+    ] };
+  }
+}
+</script>
+</body></html>

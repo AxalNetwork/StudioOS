@@ -158,7 +158,9 @@ export * from './api/roundCalls.js';
 export * from './api/safeIssuances.js';
 export * from './api/section83bReview.js';
 export * from './api/shareUpdate.js';
+export * from './api/slugs.js';
 export * from './api/studioLayout.js';
+export * from './api/teamAgents.js';
 export * from './api/teams.js';
 export * from './api/ticketReviews.js';
 export * from './api/tokenPacks.js';
@@ -2977,6 +2979,20 @@ export const api = {
   // Response, like deckExport: the caller reads the file or the refusal.
   deckExportHtml: (id, { notes = false, sources = false } = {}) =>
     fetch(`${BASE}/decks/${id}/export/html`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+        ...getCsrfHeader('POST'),
+      },
+      body: JSON.stringify({ notes: Boolean(notes), sources: Boolean(sources) }),
+    }),
+  // D1603 (#3882) — pd8b's "Slides-suite file (.odp)": the version as an
+  // editable OpenDocument Presentation. A raw Response, like deckExportHtml:
+  // the caller reads the blob, or the refusal on a non-200.
+  deckExportOdp: (id, { notes = false, sources = false } = {}) =>
+    fetch(`${BASE}/decks/${id}/export/odp`, {
       method: 'POST',
       credentials: 'include',
       headers: {

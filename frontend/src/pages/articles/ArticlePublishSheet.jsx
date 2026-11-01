@@ -20,11 +20,21 @@ import { SEARCH_DESCRIPTION_MAX, SEARCH_TITLE_MAX, searchPreview } from './artic
  * primary button is the page's own submit, so PII, the weekly limit and the
  * length checks answer here exactly as before.
  */
+/** The viewer's time zone, named as the browser knows it. */
+function localZone() {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { return ''; }
+}
+
 export default function ArticlePublishSheet({
   article, editing, setEditing, sectors = [], editable, slugTouched, setSlugTouched,
   onClose, onSave, onSubmit, saving, submitting, onAsk, coverSrc,
+  chain = 'none', onPublishNow, publishing, onSchedule, scheduling,
 }) {
   const [tagInput, setTagInput] = useState('');
+  const [when, setWhen] = useState('');
+  // D1408 (AR5): an admin publishes or schedules another member's article (D1292's chain).
+  const adminCanPublish = (chain === 'direct' || chain === 'override') && article?.status !== 'published';
+  const adminCanSchedule = chain === 'direct' && article?.status === 'approved';
   const pv = searchPreview({ ...editing, slug: editing.slug || slugify(editing.title || '') }, appOrigin());
   const set = (k) => (e) => setEditing((p) => ({ ...p, [k]: e.target.value }));
   const addTag = () => {
@@ -37,6 +47,11 @@ export default function ArticlePublishSheet({
   const footer = (
     <div className="flex justify-end gap-2">
       <button type="button" className={actionGhost} onClick={onClose}>Close</button>
+      {adminCanPublish && onPublishNow && (
+        <button type="button" className={actionGhost} onClick={onPublishNow} disabled={publishing} data-testid="article-sheet-publish-now">
+          {publishing ? 'Publishing…' : 'Publish now'}
+        </button>
+      )}
       {editable && <button type="button" className={actionGhost} onClick={onSave} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>}
       {canSubmit && (
         <button type="button" className={actionPrimary} onClick={onSubmit} disabled={submitting} data-testid="article-send-for-review">
@@ -99,7 +114,21 @@ export default function ArticlePublishSheet({
 
         <section>
           <div className="text-xs text-slate-500 mb-1">When</div>
-          <p className="m-0">As soon as it is approved. The review team may set a publish time; you will see it here when they do.</p>
+          {adminCanSchedule ? (
+            <div className="flex flex-wrap items-center gap-2" data-testid="article-schedule">
+              <input type="datetime-local" aria-label="Publish at" value={when} onChange={(e) => setWhen(e.target.value)}
+                className="text-sm px-3 py-2 border border-slate-300 dark:border-slate-700 rounded bg-white dark:bg-slate-900" />
+              <span className="text-xs text-slate-500">{localZone()}</span>
+              <button type="button" className={actionGhost} disabled={!when || scheduling}
+                onClick={async () => { if (await onSchedule?.(new Date(when).toISOString())) onClose(); }}>
+                {scheduling ? 'Scheduling…' : 'Schedule'}
+              </button>
+            </div>
+          ) : chain === 'override' && article?.status === 'approved' ? (
+            <p className="m-0">You wrote this article, so another admin schedules it. You can publish it now with your reason.</p>
+          ) : (
+            <p className="m-0">As soon as it is approved. The review team may set a publish time; you will see it here when they do.</p>
+          )}
         </section>
 
         <section className="grid grid-cols-1 sm:grid-cols-2 gap-3">
