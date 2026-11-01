@@ -1,5 +1,5 @@
 import React from 'react';
-import { NOT_RECORDED, blockLabel, tileValue } from './editorModel';
+import { NOT_RECORDED, blockLabel, runsOf, tileValue } from './editorModel';
 import { SOURCE_NOT_RECORDED, chartLabel, objectPosition, sourceOf } from './presentExportModel';
 import { faceOf, projectionOf } from './figuresModel';
 import { aspectOf, placeOf } from './gridModel';
@@ -46,6 +46,28 @@ function faceLine(binding) {
 }
 
 /** One block's face. */
+/**
+ * D1500: a text block's paragraphs of runs: bold, italic, underline, an
+ * accent colour (the Worker kept it only when it reads on the card) and an
+ * https link, which opens in a new tab.
+ */
+function RichText({ paras, className }) {
+  return (
+    <span className={`flex flex-col gap-1 ${className}`} data-testid="deck-block-rich">
+      {paras.map((runs, i) => (
+        <span key={i}>
+          {runs.map((r, j) => {
+            const style = { fontWeight: r.b ? 800 : undefined, fontStyle: r.i ? 'italic' : undefined, textDecoration: r.u ? 'underline' : undefined, color: r.accent || undefined };
+            return r.href
+              ? <a key={j} href={r.href} target="_blank" rel="noopener noreferrer" className="underline" style={style}>{r.text}</a>
+              : <span key={j} style={style}>{r.text}</span>;
+          })}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 export function BlockView({ block: b, colours, live = false, sources = false, size = 'card', renderChart = null, renderFace = null }) {
   const big = size === 'print';
   const heading = big ? 'text-[64px]' : 'text-[20px]';
@@ -53,6 +75,9 @@ export function BlockView({ block: b, colours, live = false, sources = false, si
   const small = big ? 'text-[22px]' : 'text-[10.5px]';
   if (b.kind === 'text') {
     if (!String(b.text || '').trim()) return live ? null : <span className="text-[11px] italic" style={{ color: colours.muted }}>Text · empty</span>;
+    // D1500: rich text is drawn as its runs, read-only (editing them is A4c's).
+    const paras = runsOf(b);
+    if (paras) return <RichText paras={paras} className={b.style === 'heading' ? `${heading} font-extrabold leading-tight` : `${para} leading-snug`} />;
     if (b.style === 'heading') return <span className={`${heading} font-extrabold leading-tight`}>{b.text}</span>;
     if (b.style === 'list') return <ul className={`m-0 list-disc pl-4 ${para}`}>{String(b.text).split('\n').filter(Boolean).map((l, i) => <li key={i}>{l}</li>)}</ul>;
     return <span className={`${para} leading-snug`}>{b.text}</span>;
