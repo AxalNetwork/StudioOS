@@ -14,12 +14,19 @@
  *   GET    /conversations/:uid         its messages and actions
  *   DELETE /conversations/:uid         delete it, with its messages and actions
  *   PUT    /conversations/:uid/connectors   the switches, as a whole set
+ *   POST   /conversations/:uid/quote   what one run would hold, before Send (D1442)
  *   POST   /conversations/:uid/ask     one run
  *   POST   /actions/:uid/confirm       the member's Send: the only write
  *   POST   /actions/:uid/cancel        the member's Cancel
  *
  * Everything is the caller's own: every read is `WHERE user_id = ?`, and a
  * uid that is someone else's answers 404, the same as one that does not exist.
+ *
+ * D1442 (#3991): a support session (an impersonated token) and an Explorer
+ * are refused on create, quote and ask before anything is read, run or held
+ * (`askRefusal`), the panel's rule AK13 on the server. The quote and the ask
+ * build their run from one helper (`askRunOptions`), so the hold the panel
+ * shows before Send is the hold the run places.
  *
  * A conversation belongs to the company that was active when it started. A
  * run, and a Send, happen only while that company is still the member's
@@ -29,12 +36,14 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
-import { requireAuth } from '../auth';
+import { requireAuth, selectJwt } from '../auth';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { ensureTier } from '../middleware/requireTier';
 import { canAccessProject } from '../services/projectAccess';
 import { projectInActiveCompany } from '../services/tenancyScope';
-import { run as aiRun } from '../services/aiRouter';
+import { run as aiRun, quoteRun, type RunOptions } from '../services/aiRouter';
+import { isExplorer } from '../services/fills/scopes';
+import { modelById, providerModelById } from '../services/ai/catalogue';
 import { refuse } from '../util/refusal';
 import {
   ensureIntegrationsSchema,
@@ -45,7 +54,7 @@ import {
 } from '../integrations/registry';
 import { ensureRole, logEvent, pushScopeRefusal } from './integrations';
 import { CONNECTOR_READERS } from '../services/eadwynReaders';
-import { pageFromPath, railFor, refuseAssistOff } from '../util/railContext';
+import { pageFromPath, railFor, refuseAssistOff, runRefusalView } from '../util/railContext';
 import {
   SEND_TARGETS,
   actionEnvelope,
@@ -305,6 +314,8 @@ eadwyn.get('/conversations/mine', async (c) => {
 
 eadwyn.post('/conversations', async (c) => {
   const user = await requireAuth(c);
+  const no = await askRefusal(c, user);
+  if (no) return no;
   const body = await c.req.json<{ workspace?: string }>().catch(() => null);
   const workspace = String(body?.workspace || '').trim().slice(0, 60);
   if (!workspace) return c.json({ error: 'workspace is required' }, 400);
@@ -472,61 +483,149 @@ async function previewFor(env: Env, row: IntegrationRow, p: SendProposal): Promi
   }
 }
 
-eadwyn.post('/conversations/:uid/ask', async (c) => {
-  await ensureIntegrationsSchema(c.env);
-  const user = await requireAuth(c);
-  const conv = await loadConversation(c.env, c.req.param('uid'), user.id);
-  if (!conv) return c.json({ error: 'not_found' }, 404);
+/** D1442: the panel's words for the two members Ask is not for (AK13). */
+export const ASK_REFUSALS = Object.freeze({
+  support_session_refused: 'A support session cannot ask Eadwyn. Nothing was run, and nothing was held.',
+  no_profile: 'Ask opens once you hold a venture or a profile.',
+});
 
-  const body = await c.req.json<{ question?: string; model?: string; page?: string; file?: { name?: string; text?: string } }>()
-    .catch(() => null);
-  const question = String(body?.question || '').trim().slice(0, MAX_QUESTION);
-  if (!question) return c.json({ error: 'question is required' }, 400);
-  // Membership, re-read on every run: the active company is resolved against
-  // the member's company links now, not when the conversation started.
-  if ((await activeCompanyFor(c, user)) !== conv.company_id) return companyChanged(c);
+/**
+ * D1442: a support session (a token an admin holds as the member) and an
+ * Explorer get no run. Checked first on create, quote and ask, before the
+ * conversation, the connectors or the model are read, so nothing is held.
+ */
+async function askRefusal(c: Context<{ Bindings: Env }>, user: User): Promise<Response | null> {
+  if ((await selectJwt(c))?.payload?.impersonated_by) {
+    return refuse(c, 403, { code: 'support_session_refused', message: ASK_REFUSALS.support_session_refused });
+  }
+  if (isExplorer(user)) return refuse(c, 403, { code: 'no_profile', message: ASK_REFUSALS.no_profile });
+  return null;
+}
+
+type AskBody = { question?: string; model?: string; page?: string; file?: { name?: string; text?: string } };
+
+/** What a run reads before it runs: the member's words, the switched-on connectors and the earlier turns. */
+interface AskInputs {
+  question: string;
+  model: string | undefined;
+  page: string | undefined;
+  fileName: string;
+  fileText: string;
+  readable: IntegrationRow[];
+  reads: AskedRead[];
+  sendable: IntegrationRow[];
+  turns: { role: 'user' | 'assistant'; content: string }[];
+}
+
+async function askInputs(env: Env, user: User, conv: ConversationRow, body: AskBody | null, question: string): Promise<AskInputs> {
   const model = String(body?.model || '').trim().slice(0, 120) || undefined;
   const page = typeof body?.page === 'string' ? body.page.slice(0, 200) : undefined;
   const fileName = String(body?.file?.name || '').trim().slice(0, 120);
   const fileText = String(body?.file?.text || '').slice(0, MAX_FILE_TEXT);
 
   const enabled = parseConnectorKeys(conv.connectors_json);
-  const connections = await loadConnections(c.env, user.id);
-  const { readable, reads } = await readForRun(c.env, user, enabled, connections, conv.company_id);
+  const connections = await loadConnections(env, user.id);
+  const { readable, reads } = await readForRun(env, user, enabled, connections, conv.company_id);
 
-  const history = await c.env.DB.prepare(
+  const history = await env.DB.prepare(
     'SELECT role, content FROM eadwyn_messages WHERE conversation_id = ? ORDER BY id DESC LIMIT ?',
   ).bind(conv.id, HISTORY_TURNS).all<{ role: 'user' | 'assistant'; content: string }>();
   const turns = (history.results ?? []).reverse();
 
   const sendable = readable.filter((r) => SEND_TARGETS[r.provider_key] && getProviderImpl(r.provider_key)?.push && getProviderImpl(r.provider_key)?.preview);
-  const context = [
-    reads.length
-      ? `Connector data:\n${reads.map((r) => `[${r.source.name}]\n${r.facts.map((f) => `- ${f}`).join('\n')}`).join('\n\n')}`
-      : 'Connector data: none. No connector is switched on, or none returned anything.',
-    sendable.length
-      ? `Can propose:\n${sendable.map((r) => `- ${r.provider_key}: payload field ${SEND_TARGETS[r.provider_key].map((t) => `${t.field} (${t.label})`).join(' or ')}`).join('\n')}`
-      : 'Can propose: nothing.',
-    fileText ? `Attached file "${fileName || 'file'}":\n${fileText}` : '',
-  ].filter(Boolean).join('\n\n');
+  return { question, model, page, fileName, fileText, readable, reads, sendable, turns };
+}
 
-  const r = await aiRun(c.env, {
+/**
+ * D1442: THE ONE BUILDER of an ask's run. `POST /:uid/quote` prices exactly
+ * this and `POST /:uid/ask` runs exactly this, so the hold said before Send
+ * cannot drift from the hold the run places.
+ */
+export function askRunOptions(c: Context<{ Bindings: Env }>, user: User, x: AskInputs): RunOptions {
+  const context = [
+    x.reads.length
+      ? `Connector data:\n${x.reads.map((r) => `[${r.source.name}]\n${r.facts.map((f) => `- ${f}`).join('\n')}`).join('\n\n')}`
+      : 'Connector data: none. No connector is switched on, or none returned anything.',
+    x.sendable.length
+      ? `Can propose:\n${x.sendable.map((r) => `- ${r.provider_key}: payload field ${SEND_TARGETS[r.provider_key].map((t) => `${t.field} (${t.label})`).join(' or ')}`).join('\n')}`
+      : 'Can propose: nothing.',
+    x.fileText ? `Attached file "${x.fileName || 'file'}":\n${x.fileText}` : '',
+  ].filter(Boolean).join('\n\n');
+  return {
     task: 'workspace_explain',
     userId: user.id,
-    model,
-    surface: page,
+    model: x.model,
+    surface: x.page,
     // D765: the rail's page, else the page's workspace; asking Eadwyn is the option.
-    rail: railFor(c, { page: pageFromPath(page, 'eadwyn'), option: 'ask:eadwyn' }),
+    rail: railFor(c, { page: pageFromPath(x.page, 'eadwyn'), option: 'ask:eadwyn' }),
     systemPrompt: `${ASK_PROMPT}\n\n${context}`,
-    messages: [...turns.map((t) => ({ role: t.role, content: t.content })), { role: 'user' as const, content: question }],
+    messages: [...x.turns.map((t) => ({ role: t.role, content: t.content })), { role: 'user' as const, content: x.question }],
     maxTokens: 600,
     temperature: 0.2,
     // D763: the guard checks what the member typed and attached, once, before
     // the model runs; the connector data and the earlier turns are not theirs
     // to be checked again.
-    guardText: fileText ? `${question}\n\n${fileText}` : question,
+    guardText: x.fileText ? `${x.question}\n\n${x.fileText}` : x.question,
     role: user.role,
-  });
+  };
+}
+
+/** The name the panel prints for a model id, or null when the catalogue has none. */
+const modelLabel = (id: string): string | null => modelById(id)?.name ?? providerModelById(id)?.name ?? null;
+
+/**
+ * POST /conversations/:uid/quote — D1442 (#3991): the panel's cost line
+ * before Send ("Holds up to $X · you pay what it uses"). The same inputs and
+ * the same builder as `/ask`, priced by `quoteRun`: it reads the switched-on
+ * connectors as the run would, and runs, holds and writes nothing (no
+ * `ai_usage_logs` row, no message).
+ *
+ *   { question ≤ 2000, page?, model?, file? }
+ *     → { ai: true, hold_microusd, model, model_label }
+ *     | { ai: false, reason, message }   a refusal the run itself would give (the switch, the budget, the model)
+ *
+ * 400 `question_required`, 403 `support_session_refused` / `no_profile`,
+ * 404 for a uid that is not the caller's, 409 `company_changed`.
+ */
+eadwyn.post('/conversations/:uid/quote', async (c) => {
+  await ensureIntegrationsSchema(c.env);
+  const user = await requireAuth(c);
+  const no = await askRefusal(c, user);
+  if (no) return no;
+  const conv = await loadConversation(c.env, c.req.param('uid'), user.id);
+  if (!conv) return c.json({ error: 'not_found' }, 404);
+  const body = await c.req.json<AskBody>().catch(() => null);
+  const question = String(body?.question || '').trim().slice(0, MAX_QUESTION);
+  if (!question) return refuse(c, 400, { code: 'question_required', message: 'Type a question to see what it holds.' });
+  if ((await activeCompanyFor(c, user)) !== conv.company_id) return companyChanged(c);
+  const q = await quoteRun(c.env, askRunOptions(c, user, await askInputs(c.env, user, conv, body, question)));
+  if (!q.ok) {
+    const view = runRefusalView(q);
+    return c.json({ ai: false, reason: view?.code ?? q.refusal, message: view?.message ?? 'The hold for this question could not be worked out. Nothing was run.' });
+  }
+  return c.json({ ai: true, hold_microusd: q.hold_microusd, model: q.model, model_label: modelLabel(q.model) });
+});
+
+eadwyn.post('/conversations/:uid/ask', async (c) => {
+  await ensureIntegrationsSchema(c.env);
+  const user = await requireAuth(c);
+  const no = await askRefusal(c, user);
+  if (no) return no;
+  const conv = await loadConversation(c.env, c.req.param('uid'), user.id);
+  if (!conv) return c.json({ error: 'not_found' }, 404);
+
+  const body = await c.req.json<AskBody>().catch(() => null);
+  const question = String(body?.question || '').trim().slice(0, MAX_QUESTION);
+  if (!question) return c.json({ error: 'question is required' }, 400);
+  // Membership, re-read on every run: the active company is resolved against
+  // the member's company links now, not when the conversation started.
+  if ((await activeCompanyFor(c, user)) !== conv.company_id) return companyChanged(c);
+
+  const inputs = await askInputs(c.env, user, conv, body, question);
+  const { reads, sendable, fileName } = inputs;
+  const opts = askRunOptions(c, user, inputs);
+  // D765's listing reads each call's task and rail at the call: both are the builder's, named here.
+  const r = await aiRun(c.env, { ...opts, task: opts.task, rail: opts.rail });
 
   if (r.refusal === 'assist_off') return refuseAssistOff(c);
   if (r.refusal === 'guard_blocked') {

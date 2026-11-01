@@ -158,21 +158,36 @@ export async function getRail(env: Env, userId: number, uid: string): Promise<Ra
 }
 
 /** The member's own proposals for one option, newest first; `record` and `status` narrow them. */
-export async function listRail(env: Env, userId: number, q: { option: string; record?: string | null; status?: RailProposalStatus | null }): Promise<RailProposal[]> {
-  const option = railOptionKey(q.option);
-  if (!option) return [];
+/**
+ * The member's own rows, newest first, at most 50. A rail option, or (D1442,
+ * the Ask panel's "N waiting") a rail page, picks them: at least one of the
+ * two, never neither. `run` narrows to the rows one run proposed
+ * (`usage_log_id`). Every filter is a bound `? IS NULL OR column = ?` pair,
+ * and `user_id` is always bound.
+ */
+export async function listRail(env: Env, userId: number, q: { option?: string | null; page?: string | null; record?: string | null; status?: RailProposalStatus | null; run?: number | null }): Promise<RailProposal[]> {
+  const option = q.option != null ? railOptionKey(q.option) : null;
+  if (q.option != null && !option) return [];
+  const page = q.page != null ? railPageKey(q.page) : null;
+  if (q.page != null && !page) return [];
+  if (!option && !page) return [];
   const record = q.record != null ? railRecordKey(q.record) : null;
   if (q.record != null && !record) return [];
+  const run = q.run != null && Number.isSafeInteger(q.run) && q.run > 0 ? q.run : null;
+  if (q.run != null && run == null) return [];
   // A null filter matches every row: `? IS NULL OR column = ?`, bound twice.
   const r = await env.DB.prepare(
     `SELECT uid, rail_page, rail_option, record_ref, kind, payload_json, model, usage_log_id,
             status, decided_payload_json, decided_at, created_at
        FROM ai_rail_proposals
-      WHERE user_id = ? AND rail_option = ?
+      WHERE user_id = ?
+        AND (? IS NULL OR rail_option = ?)
+        AND (? IS NULL OR rail_page = ?)
         AND (? IS NULL OR record_ref = ?)
         AND (? IS NULL OR status = ?)
+        AND (? IS NULL OR usage_log_id = ?)
       ORDER BY id DESC LIMIT 50`,
-  ).bind(userId, option, record, record, q.status || null, q.status || null).all<Row>();
+  ).bind(userId, option, option, page, page, record, record, q.status || null, q.status || null, run, run).all<Row>();
   return (r.results || []).map(toProposal);
 }
 
