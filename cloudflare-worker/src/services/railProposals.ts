@@ -97,7 +97,18 @@ export interface ProposeInput {
   usageLogId?: number | null;
   /** D1496 part 2 (#3842): the team agent that made it (`ai_rail_proposals.agent_id`, migration 712); the row stays the sponsor's. */
   agentId?: number | null;
+  /** #3846 (#3742 E2): the task the agent worked on (`task_id`, migration 727). Agents only. */
+  taskId?: number | null;
+  /**
+   * #3846: the run's identity, `agent:<run uid>` (`run_key`, unique in migration
+   * 727). A second proposal for the same key is never stored: `proposeRail`
+   * answers the one already there. Agents only.
+   */
+  runKey?: string | null;
 }
+
+/** A run key as `agentRun` writes it: `agent:` and the run uid. */
+export const RUN_KEY_RE = /^agent:[A-Za-z0-9-]{8,64}$/;
 
 /**
  * Why a proposal may not be stored, or null when it may. A reason rather than a
@@ -109,6 +120,9 @@ export function proposeRefusal(input: ProposeInput): string | null {
   if (!railOptionKey(input.option)) return 'not a rail option';
   if (input.record != null && !railRecordKey(input.record)) return 'not a record';
   if (input.agentId != null && !(Number.isSafeInteger(input.agentId) && input.agentId > 0)) return 'not an agent';
+  if ((input.taskId != null || input.runKey != null) && input.agentId == null) return 'a task or a run key is an agent\'s';
+  if (input.taskId != null && !(Number.isSafeInteger(input.taskId) && input.taskId > 0)) return 'not a task';
+  if (input.runKey != null && !RUN_KEY_RE.test(input.runKey)) return 'not a run key';
   if (!RAIL_PROPOSAL_KINDS.includes(input.kind)) return 'not a kind';
   if (!input.payload || typeof input.payload !== 'object' || Array.isArray(input.payload)) return 'no payload';
   if (JSON.stringify(input.payload).length > MAX_PAYLOAD_CHARS) return 'payload too long';
@@ -127,8 +141,22 @@ export async function proposeRail(env: Env, input: ProposeInput): Promise<RailPr
     input.record != null ? railRecordKey(input.record) : null, input.kind,
     JSON.stringify(input.payload), input.model ?? null, input.usageLogId ?? null,
   ];
-  // D1496 part 2: an agent's proposal names its agent; a member's own keeps the statement it had.
-  if (input.agentId != null) {
+  // D1496 part 2: an agent's proposal names its agent; #3846: a run's, its task and run key too.
+  // A member's own keeps the statement it had.
+  if (input.agentId != null && (input.taskId != null || input.runKey != null)) {
+    try {
+      await env.DB.prepare(
+        `INSERT INTO ai_rail_proposals
+           (uid, user_id, rail_page, rail_option, record_ref, kind, payload_json, model, usage_log_id, agent_id, task_id, run_key)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(...values, input.agentId, input.taskId ?? null, input.runKey ?? null).run();
+    } catch (e) {
+      // #3846: another attempt of the same run stored its proposal first; that one is the run's.
+      const first = input.runKey && /UNIQUE/i.test(String((e as Error)?.message)) ? await railByRunKey(env, input.userId, input.runKey) : null;
+      if (first) return first;
+      throw e;
+    }
+  } else if (input.agentId != null) {
     await env.DB.prepare(
       `INSERT INTO ai_rail_proposals
          (uid, user_id, rail_page, rail_option, record_ref, kind, payload_json, model, usage_log_id, agent_id)
@@ -144,6 +172,17 @@ export async function proposeRail(env: Env, input: ProposeInput): Promise<RailPr
   const row = await getRail(env, input.userId, uid);
   if (!row) throw new Error('ai_rail_proposals: the row could not be read back');
   return row;
+}
+
+/** #3846: the proposal a run stored under its key (the sponsor's row), or null. */
+export async function railByRunKey(env: Env, userId: number, runKey: string): Promise<RailProposal | null> {
+  if (!RUN_KEY_RE.test(runKey)) return null;
+  const row = await env.DB.prepare(
+    `SELECT uid, rail_page, rail_option, record_ref, kind, payload_json, model, usage_log_id,
+            status, decided_payload_json, decided_at, created_at
+       FROM ai_rail_proposals WHERE run_key = ? AND user_id = ?`,
+  ).bind(runKey, userId).first<Row>();
+  return row ? toProposal(row) : null;
 }
 
 /** One of the member's own proposals, by uid, or null. */
