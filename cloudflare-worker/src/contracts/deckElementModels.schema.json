@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "deckElementModels.schema.json",
+  "title": "A model per grid element, for one deck",
+  "description": "D1511 (#3762): the 200 reply of GET /api/decks/:id/element-models (routes/deck_element_models.ts, D1503), as deckV2Adapter.js `elementModels` reads it through deckElementModelsApi.read. Every object is closed. A model's `price` is `routes/ai.ts` unitPrices: per-unit figures under `cost` and `billed`.",
+  "x-adapter": "elementModels",
+  "x-route": "GET /api/decks/:id/element-models",
+  "x-issue": 3754,
+  "type": "object",
+  "required": ["deck_id", "project_id", "billing", "plan_rank", "elements", "groups", "free"],
+  "additionalProperties": false,
+  "properties": {
+    "deck_id": { "type": "integer", "minimum": 1 },
+    "project_id": { "type": "integer", "minimum": 1 },
+    "billing": { "enum": ["cost", "billed"] },
+    "plan_rank": { "enum": [0, 1, 2] },
+    "elements": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["element", "group", "job", "kind", "task", "plan_min", "expected_ms", "per_run_microusd", "suggested", "more", "pick", "resolved"],
+        "additionalProperties": false,
+        "properties": {
+          "element": { "$ref": "#/$defs/key" },
+          "group": { "$ref": "#/$defs/key" },
+          "job": { "type": "string", "minLength": 1 },
+          "kind": { "$ref": "#/$defs/kind" },
+          "task": { "type": "string", "minLength": 1 },
+          "plan_min": { "$ref": "#/$defs/lock" },
+          "expected_ms": { "type": "integer", "minimum": 0 },
+          "per_run_microusd": { "type": ["integer", "null"], "minimum": 0 },
+          "suggested": { "type": "array", "maxItems": 3, "items": { "$ref": "#/$defs/suggestion" } },
+          "more": { "type": "array", "items": { "$ref": "#/$defs/model" } },
+          "pick": { "type": ["string", "null"] },
+          "resolved": { "$ref": "#/$defs/resolved" }
+        }
+      }
+    },
+    "groups": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["group", "elements", "lead", "suggested", "more", "pick", "resolved"],
+        "additionalProperties": false,
+        "properties": {
+          "group": { "$ref": "#/$defs/key" },
+          "elements": { "type": "array", "items": { "$ref": "#/$defs/key" } },
+          "lead": { "anyOf": [{ "$ref": "#/$defs/key" }, { "type": "null" }] },
+          "suggested": { "type": "array", "maxItems": 3, "items": { "$ref": "#/$defs/suggestion" } },
+          "more": { "type": "array", "items": { "$ref": "#/$defs/model" } },
+          "pick": { "type": ["string", "null"] },
+          "resolved": { "anyOf": [{ "$ref": "#/$defs/resolved" }, { "type": "null" }] },
+          "free": { "const": "No model · free" }
+        }
+      }
+    },
+    "free": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["element", "group", "line"],
+        "additionalProperties": false,
+        "properties": { "element": { "$ref": "#/$defs/key" }, "group": { "$ref": "#/$defs/key" }, "line": { "const": "No model · free" } }
+      }
+    }
+  },
+  "$defs": {
+    "key": { "type": "string", "pattern": "^[a-z0-9_]{1,40}$" },
+    "lock": { "enum": ["all", "lowest_paid", "top_paid", "hidden"] },
+    "kind": { "enum": ["chat", "write", "synth", "plan", "reason", "legal", "numbers", "research", "code", "agent", "read_images", "draw", "edit_image", "listen_file", "listen_live", "speak", "voice_turn", "translate", "decide", "sentiment", "retrieve", "retrieve_index", "rank", "screen", "guard", "turn_taking"] },
+    "units": { "type": "object", "additionalProperties": { "type": "number", "minimum": 0 } },
+    "price": {
+      "type": "object",
+      "required": ["cost", "billed"],
+      "additionalProperties": false,
+      "properties": { "cost": { "$ref": "#/$defs/units" }, "billed": { "$ref": "#/$defs/units" } }
+    },
+    "model": {
+      "type": "object",
+      "required": ["id", "line", "name", "price", "lock", "plan_locked"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^@cf/" },
+        "line": { "type": "string" },
+        "name": { "type": ["string", "null"] },
+        "price": { "$ref": "#/$defs/price" },
+        "lock": { "enum": [null, "Paid plans", "Top paid plan", "Not offered"] },
+        "plan_locked": { "type": "boolean" }
+      }
+    },
+    "suggestion": {
+      "type": "object",
+      "required": ["id", "role", "line", "name", "price", "lock", "plan_locked"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^@cf/" },
+        "role": { "type": "string", "minLength": 1 },
+        "line": { "type": "string" },
+        "name": { "type": ["string", "null"] },
+        "price": { "$ref": "#/$defs/price" },
+        "lock": { "enum": [null, "Paid plans", "Top paid plan", "Not offered"] },
+        "plan_locked": { "type": "boolean" }
+      }
+    },
+    "resolved": {
+      "type": "object",
+      "required": ["model", "name", "source", "locked", "notice"],
+      "additionalProperties": false,
+      "properties": {
+        "model": { "type": ["string", "null"] },
+        "name": { "type": ["string", "null"] },
+        "source": { "enum": ["org_lock", "area", "deck_element", "deck_group", "member_element", "member_group", "org_default", "default", "none"] },
+        "locked": { "type": "boolean" },
+        "notice": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

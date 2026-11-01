@@ -37,6 +37,7 @@ worker ahead of its schema.
 | `rpc/` | The two `WorkerEntrypoint` classes HQ and a branch call each other through (D108), plus the plain modules that hold their logic. The classes are thin on purpose: `cloudflare:workers` does not exist under `node --test`, so anything inside them could only be verified by deploying. |
 | `data/` | Seed and reference data. |
 | `util/` | Small shared helpers. |
+| `contracts/` | D1511: the JSON Schema of each reply a swapped deck v2 adapter method reads; `test:drift` validates the real reply against it. No runtime code. |
 
 ## Rules that have bitten people
 

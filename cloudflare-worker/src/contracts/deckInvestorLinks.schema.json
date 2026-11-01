@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "deckInvestorLinks.schema.json",
+  "title": "One deck version's investor links",
+  "description": "D1511 (#3762): the 200 reply of GET /api/decks/:id/investor-links (routes/deck_investor_links.ts, D1565), as deckV2Adapter.js `investorLinks` reads it through deckInvestorLinksApi.investorLinks. Every object is closed. `link` is shared with deckWithdrawInvestorLink.schema.json and must stay the same in both.",
+  "x-adapter": "investorLinks",
+  "x-route": "GET /api/decks/:id/investor-links",
+  "x-issue": 3812,
+  "type": "object",
+  "required": ["deck_id", "version", "links"],
+  "additionalProperties": false,
+  "properties": {
+    "deck_id": { "type": "integer", "minimum": 1 },
+    "version": { "type": "integer", "minimum": 1 },
+    "links": { "type": "array", "maxItems": 200, "items": { "$ref": "#/$defs/link" } }
+  },
+  "$defs": {
+    "link": {
+      "type": "object",
+      "required": ["id", "investor", "version", "nda", "expires_at", "view_cap", "watermark", "status", "withdrawn_at", "analytics", "created_at"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "integer", "minimum": 1 },
+        "investor": {
+          "type": "object",
+          "required": ["label", "fund", "prospect_id"],
+          "additionalProperties": false,
+          "properties": {
+            "label": { "type": ["string", "null"] },
+            "fund": { "type": ["string", "null"] },
+            "prospect_id": { "type": ["integer", "null"], "minimum": 1 }
+          }
+        },
+        "version": {
+          "type": "object",
+          "required": ["variant"],
+          "additionalProperties": false,
+          "properties": {
+            "variant": {
+              "anyOf": [
+                { "type": "null" },
+                { "type": "object", "required": ["uid", "name"], "additionalProperties": false, "properties": { "uid": { "type": "string", "minLength": 1 }, "name": { "type": "string", "minLength": 1 } } }
+              ]
+            }
+          }
+        },
+        "nda": {
+          "type": "object",
+          "required": ["state", "accepted_at"],
+          "additionalProperties": false,
+          "properties": {
+            "state": { "enum": ["accepted", "not_accepted", "not_required"] },
+            "accepted_at": { "type": ["string", "null"] }
+          }
+        },
+        "expires_at": { "type": ["string", "null"] },
+        "view_cap": {
+          "type": "object",
+          "required": ["limit", "used"],
+          "additionalProperties": false,
+          "properties": { "limit": { "type": ["integer", "null"], "minimum": 0 }, "used": { "type": "integer", "minimum": 0 } }
+        },
+        "watermark": { "type": ["string", "null"] },
+        "status": { "enum": ["live", "expired", "used_up", "withdrawn"] },
+        "withdrawn_at": { "type": ["string", "null"] },
+        "analytics": {
+          "type": "object",
+          "required": ["views", "last_viewed_at", "read_seconds"],
+          "additionalProperties": false,
+          "properties": {
+            "views": { "type": "integer", "minimum": 0 },
+            "last_viewed_at": { "type": ["string", "null"] },
+            "read_seconds": { "type": "number", "minimum": 0 }
+          }
+        },
+        "created_at": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

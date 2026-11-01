@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "deckRemix.schema.json",
+  "title": "Four layouts for one card",
+  "description": "D1511 (#3762): the 200 reply of POST /api/decks/:id/remix (routes/deck_remix.ts, D1553), as deckV2Adapter.js `remix` reads it through deckRemixApi.remix. The reply's own objects are closed. A `card` is the slide model a save keeps (slideModel.ts sanitizeModel, held by its own tests); here it is held to what the remix screen reads: its blocks, each on whole cells of the grid.",
+  "x-adapter": "remix",
+  "x-route": "POST /api/decks/:id/remix",
+  "x-issue": 3800,
+  "type": "object",
+  "required": ["deck_id", "current", "card", "options"],
+  "additionalProperties": false,
+  "properties": {
+    "deck_id": { "type": "integer", "minimum": 1 },
+    "current": { "$ref": "#/$defs/structure" },
+    "card": { "$ref": "#/$defs/card" },
+    "options": {
+      "type": "array",
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "required": ["structure", "label", "line", "card"],
+        "additionalProperties": false,
+        "properties": {
+          "structure": { "$ref": "#/$defs/structure" },
+          "label": { "type": "string", "minLength": 1 },
+          "line": { "type": "string", "minLength": 1 },
+          "card": { "$ref": "#/$defs/card" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "structure": { "type": "string", "pattern": "^[a-z0-9_]{1,32}$" },
+    "col": { "type": "integer", "minimum": 1, "maximum": 12 },
+    "row": { "type": "integer", "minimum": 1, "maximum": 6 },
+    "card": {
+      "type": "object",
+      "required": ["blocks"],
+      "properties": {
+        "blocks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "kind", "grid"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "kind": { "type": "string", "minLength": 1 },
+              "grid": {
+                "type": "object",
+                "required": ["c1", "c2", "r1", "r2"],
+                "additionalProperties": false,
+                "properties": { "c1": { "$ref": "#/$defs/col" }, "c2": { "$ref": "#/$defs/col" }, "r1": { "$ref": "#/$defs/row" }, "r2": { "$ref": "#/$defs/row" } }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "about": "D1511 (#3762): the fake AI binding's recorded outputs (cloudflare-worker/test/_fake_ai.mjs). Each recording answers the first call whose model (null: any) and prompt pattern (a RegExp source, multiline) match. Synthetic words only: no figure, no name of a real person or company. The deck build's words name no number, as the composer requires, so none is dropped.",
+  "recordings": [
+    {
+      "id": "deck_outline",
+      "model": null,
+      "prompt": "^Plan a ",
+      "response": { "rows": [
+        { "card": "title", "title": "Synthetic Ledger Co", "purpose": "Who we are", "message": "The close, done in a day" },
+        { "card": "problem", "title": "Problem", "purpose": "The pain", "message": "Finance teams lose the week to the close" },
+        { "card": "solution", "title": "Solution", "purpose": "What we do", "message": "One ledger that closes itself" },
+        { "card": "traction", "title": "Traction", "purpose": "Customers", "message": "Customers pay and stay" },
+        { "card": "team", "title": "Team", "purpose": "Founders", "message": "Operators who lived the problem" },
+        { "card": "round", "title": "The round", "purpose": "The ask", "message": "A seed round to scale the close" }
+      ] },
+      "usage": { "prompt_tokens": 420, "completion_tokens": 160 }
+    },
+    {
+      "id": "deck_build",
+      "model": null,
+      "prompt": "^Write the cards of a pitch deck",
+      "response": { "cards": [
+        { "n": 1, "headline": "The close, done in a day.", "body": "Synthetic Ledger Co gives finance teams their week back." },
+        { "n": 2, "headline": "Month-end eats the week.", "body": "Teams told us the close is the job they dread most." },
+        { "n": 3, "headline": "Customers pay and stay.", "body": "Revenue grows from teams who tried it and kept it." },
+        { "n": 4, "headline": "One ledger that closes itself.", "body": "Entries reconcile as they land, so the close is a review." },
+        { "n": 5, "headline": "Proof from the people who close.", "body": "Interviews and signed letters back the claim." },
+        { "n": 6, "headline": "Shipping steadily.", "body": "Must-haves are done and releases go out on a cadence." },
+        { "n": 7, "headline": "A crowded market, a sharp wedge.", "body": "We win where the close is the pain." },
+        { "n": 8, "headline": "Efficient by design.", "body": "Burn is held while revenue climbs." },
+        { "n": 9, "headline": "Operators who lived the problem.", "body": "The founders ran finance teams before building this." },
+        { "n": 10, "headline": "Raising to scale the close.", "body": "The round funds product and go to market." },
+        { "n": 11, "headline": "Where the money goes.", "body": "Most of it builds the product; the rest finds customers." },
+        { "n": 12, "headline": "Who we meet in deals.", "body": "We are tracked against the incumbents." },
+        { "n": 13, "headline": "What comes next.", "body": "Multi-entity close leads the roadmap." },
+        { "n": 14, "headline": "Who owns the company.", "body": "Founders hold the company with an early backer." },
+        { "n": 15, "headline": "Every figure, sourced.", "body": "Each figure carries its record." },
+        { "n": 16, "headline": "Thank you.", "body": "Questions welcome." }
+      ] },
+      "usage": { "prompt_tokens": 1800, "completion_tokens": 900 }
+    },
+    {
+      "id": "image",
+      "model": "@cf/black-forest-labs/flux-1-schnell",
+      "prompt": null,
+      "image": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    },
+    {
+      "id": "chat",
+      "model": null,
+      "prompt": "[\\s\\S]",
+      "response": "A clear, sourced line for this card.",
+      "usage": { "prompt_tokens": 120, "completion_tokens": 20 }
+    }
+  ]
+}

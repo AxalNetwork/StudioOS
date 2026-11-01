@@ -1,0 +1,166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "deckGrid.schema.json",
+  "title": "The Grid of one deck version",
+  "description": "D1511 (#3762): the 200 reply of GET /api/decks/:id/grid (routes/deck_grid.ts, D1499; ?aspect= adds reflow and reflow_map, D1554), as deckV2Adapter.js `grid` reads it through deckGridApi.grid. Every object is closed (additionalProperties false), so a field added or dropped on either side fails the contract test until this file says so.",
+  "x-adapter": "grid",
+  "x-route": "GET /api/decks/:id/grid",
+  "x-issue": 3749,
+  "type": "object",
+  "required": ["deck_id", "version", "aspect", "slide", "frame", "cell", "baseline", "grid", "structures", "cards"],
+  "additionalProperties": false,
+  "properties": {
+    "deck_id": { "type": "integer", "minimum": 1 },
+    "version": { "type": "integer", "minimum": 1 },
+    "aspect": { "$ref": "#/$defs/aspect" },
+    "slide": { "$ref": "#/$defs/size" },
+    "frame": {
+      "type": "object",
+      "required": ["marginX", "marginTop", "marginBottom", "gutter"],
+      "additionalProperties": false,
+      "properties": {
+        "marginX": { "type": "number", "minimum": 0 },
+        "marginTop": { "type": "number", "minimum": 0 },
+        "marginBottom": { "type": "number", "minimum": 0 },
+        "gutter": { "type": "number", "minimum": 0 }
+      }
+    },
+    "cell": {
+      "type": "object",
+      "required": ["width", "height"],
+      "additionalProperties": false,
+      "properties": { "width": { "type": "number", "exclusiveMinimum": 0 }, "height": { "type": "number", "exclusiveMinimum": 0 } }
+    },
+    "baseline": { "type": "integer", "minimum": 1 },
+    "grid": {
+      "type": "object",
+      "required": ["cols", "rows"],
+      "additionalProperties": false,
+      "properties": { "cols": { "const": 12 }, "rows": { "const": 6 } }
+    },
+    "structures": { "type": "array", "minItems": 17, "maxItems": 17, "items": { "$ref": "#/$defs/structure" } },
+    "cards": { "type": "array", "items": { "$ref": "#/$defs/card" } },
+    "reflow": {
+      "type": "object",
+      "required": ["from", "to", "count", "moved"],
+      "additionalProperties": false,
+      "properties": {
+        "from": { "$ref": "#/$defs/aspect" },
+        "to": { "$ref": "#/$defs/aspect" },
+        "count": { "type": "integer", "minimum": 0 },
+        "moved": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["card", "block", "kind", "text"],
+            "additionalProperties": false,
+            "properties": {
+              "card": { "type": "integer", "minimum": 1 },
+              "block": { "type": "string", "minLength": 1 },
+              "kind": { "enum": ["trimmed", "removed"] },
+              "text": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "reflow_map": {
+      "type": "array",
+      "minItems": 17,
+      "maxItems": 17,
+      "items": {
+        "type": "object",
+        "required": ["id", "areas"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "#/$defs/structureId" },
+          "areas": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 12,
+            "items": {
+              "type": "object",
+              "required": ["id", "boxes", "width_kept"],
+              "additionalProperties": false,
+              "properties": {
+                "id": { "$ref": "#/$defs/areaId" },
+                "boxes": {
+                  "type": "object",
+                  "required": ["16:9", "4:3"],
+                  "additionalProperties": false,
+                  "properties": { "16:9": { "$ref": "#/$defs/box" }, "4:3": { "$ref": "#/$defs/box" } }
+                },
+                "width_kept": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "aspect": { "enum": ["16:9", "4:3"] },
+    "size": {
+      "type": "object",
+      "required": ["width", "height"],
+      "additionalProperties": false,
+      "properties": { "width": { "type": "integer", "minimum": 1 }, "height": { "type": "integer", "minimum": 1 } }
+    },
+    "box": {
+      "type": "object",
+      "required": ["x", "y", "w", "h"],
+      "additionalProperties": false,
+      "properties": {
+        "x": { "type": "integer", "minimum": 0 },
+        "y": { "type": "integer", "minimum": 0 },
+        "w": { "type": "integer", "minimum": 1 },
+        "h": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "structureId": { "type": "string", "pattern": "^[a-z0-9_]{1,32}$" },
+    "areaId": { "type": "string", "minLength": 1, "maxLength": 32 },
+    "col": { "type": "integer", "minimum": 1, "maximum": 12 },
+    "row": { "type": "integer", "minimum": 1, "maximum": 6 },
+    "area": {
+      "type": "object",
+      "required": ["id", "c1", "c2", "r1", "r2", "order", "inset", "align", "box"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/areaId" },
+        "c1": { "$ref": "#/$defs/col" },
+        "c2": { "$ref": "#/$defs/col" },
+        "r1": { "$ref": "#/$defs/row" },
+        "r2": { "$ref": "#/$defs/row" },
+        "order": { "type": "integer", "minimum": 1 },
+        "inset": { "type": "integer", "minimum": 0, "maximum": 4 },
+        "align": { "enum": ["start", "center", "end"] },
+        "role": { "type": "string", "pattern": "^[a-z_]{1,24}$" },
+        "box": { "$ref": "#/$defs/box" }
+      }
+    },
+    "structure": {
+      "type": "object",
+      "required": ["id", "label", "use", "areas"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/structureId" },
+        "label": { "type": "string", "minLength": 1 },
+        "use": { "type": "string", "minLength": 1 },
+        "background": { "const": "image" },
+        "recommended": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "areas": { "type": "array", "minItems": 1, "maxItems": 12, "items": { "$ref": "#/$defs/area" } }
+      }
+    },
+    "card": {
+      "type": "object",
+      "required": ["index", "structure", "derived", "areas"],
+      "additionalProperties": false,
+      "properties": {
+        "index": { "type": "integer", "minimum": 0 },
+        "structure": { "type": "string", "minLength": 1 },
+        "derived": { "type": "boolean" },
+        "areas": { "type": "array", "minItems": 1, "maxItems": 12, "items": { "$ref": "#/$defs/area" } }
+      }
+    }
+  }
+}

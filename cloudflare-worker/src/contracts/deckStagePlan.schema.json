@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "deckStagePlan.schema.json",
+  "title": "The stage plan of one deck version",
+  "description": "D1511 (#3762): the 200 reply of GET /api/decks/:id/stage-plan (routes/deck_stage.ts, D1522), as deckV2Adapter.js `stagePlan` reads it through deckStageApi.stagePlan. Every object is closed (additionalProperties false).",
+  "x-adapter": "stagePlan",
+  "x-route": "GET /api/decks/:id/stage-plan",
+  "x-issue": 3774,
+  "type": "object",
+  "required": ["deck_id", "version", "stage", "stage_label", "investor_type", "order", "warnings", "extra", "stage_source", "sources", "evidence", "objections"],
+  "additionalProperties": false,
+  "properties": {
+    "deck_id": { "type": "integer", "minimum": 1 },
+    "version": { "type": "integer", "minimum": 1 },
+    "stage": { "enum": ["pre_seed", "seed", "series_a", "series_b_plus"] },
+    "stage_label": { "type": "string", "minLength": 1 },
+    "investor_type": { "anyOf": [{ "$ref": "#/$defs/audience" }, { "type": "null" }] },
+    "order": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["card", "title", "why", "weight", "required", "in_deck", "proof"],
+        "additionalProperties": false,
+        "properties": {
+          "card": { "$ref": "#/$defs/card" },
+          "title": { "type": "string", "minLength": 1 },
+          "why": { "type": "string", "minLength": 1 },
+          "weight": { "enum": [1, 2, 3] },
+          "required": { "type": "boolean" },
+          "in_deck": { "type": ["integer", "null"], "minimum": 0 },
+          "proof": { "enum": ["recorded", "missing", "unchecked"] }
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["card", "code", "message", "action"],
+        "additionalProperties": false,
+        "properties": {
+          "card": { "$ref": "#/$defs/card" },
+          "code": { "enum": ["missing_card", "missing_proof", "unchecked_proof"] },
+          "message": { "type": "string", "minLength": 1 },
+          "action": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "extra": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "stage_source": { "enum": ["asked", "audience", "venture", "default"] },
+    "sources": { "enum": ["ok", "unreadable"] },
+    "evidence": { "enum": ["ok", "unreadable"] },
+    "objections": {
+      "type": "object",
+      "required": ["state", "unanswered"],
+      "additionalProperties": false,
+      "properties": {
+        "state": { "enum": ["ok", "unreadable"] },
+        "unanswered": {
+          "type": "array",
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "required": ["text", "count"],
+            "additionalProperties": false,
+            "properties": { "text": { "type": "string", "minLength": 1 }, "count": { "type": "integer", "minimum": 1 } }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "audience": { "enum": ["angel", "pre_seed_fund", "seed_fund", "series_a_fund", "strategic", "grant", "other"] },
+    "card": { "type": "string", "pattern": "^[a-z_]{1,32}$" }
+  }
+}
