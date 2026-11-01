@@ -105,3 +105,7 @@ frontend/*.sqlite3
 
 # ---- Per-user activity exports (contain PII; regenerable by the backend) ----
 users/*/activity.md
+
+# D1511 (#3762): Playwright results and traces from the visual suite; only CI-made baselines are committed.
+frontend/test-results/
+frontend/playwright-report/

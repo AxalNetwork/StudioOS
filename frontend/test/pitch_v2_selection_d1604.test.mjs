@@ -206,7 +206,13 @@ test('nothing selected: the hint, and no block tools, no Ask chip, no SELBAR', a
     assert.ok(!m.by('pitch-editor-selbar'));
     assert.equal(asks(m).length, 0);
     assert.ok(m.text().includes(KEYS_LINE));
-    assert.equal(m.pr(m.by('pitch-editor-block-b2'))['aria-label'], 'Area 2 of 5 · c1–7 × r2–6 · Body');
+    // D1511 (#3762): the name is the area's position, then what it draws, so its visible words are in its name (WCAG 2.5.3).
+    const b2 = m.by('pitch-editor-block-b2');
+    const [nameId, faceId] = String(m.pr(b2)['aria-labelledby']).split(' ');
+    const byDomId = (id) => m.walk(b2).find((n) => n.id === id || m.pr(n).id === id);
+    assert.equal(m.text(byDomId(nameId)), 'Area 2 of 5 · c1–7 × r2–6 · Body');
+    assert.match(m.text(byDomId(faceId)), /Synthetic body words/);
+    assert.equal(m.pr(b2)['aria-label'], undefined);
   } finally { await m.close(); }
 });
 
