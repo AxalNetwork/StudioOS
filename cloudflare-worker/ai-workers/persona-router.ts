@@ -100,7 +100,7 @@ export async function classifyPersona(env: Env, input: PersonaClassifyInput, use
     });
     if (res.ok) {
       try {
-        const answer = (JSON.parse(res.output) as any)?.persona;
+        const answer = (JSON.parse(res.output ?? '') as any)?.persona;
         if (answer && typeof answer.choice === 'string' && answer.choice in PERSONA_BY_ID) {
           aiPersonaId = answer.choice as PersonaId;
           const probs = (answer.probabilities ?? {}) as Record<string, number>;
