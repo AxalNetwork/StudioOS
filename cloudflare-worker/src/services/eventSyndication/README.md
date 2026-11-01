@@ -15,6 +15,7 @@ each channel lands in its own task (D1492 Luma first) as a row in
 | `content.ts` | What a listing is sent (`listingEvent`), the hash over every sent field that says it changed (`contentHash`), and the link back to the event's page with its `utm_source`. |
 | `hooks.ts` | The four triggers called by `routes/events.ts` and `routes/admin_events.ts`: approve, edit, cancel and unpublish. Each is one bound UPDATE and one keyed job per row; a failure never fails the event write. |
 | `jobs.ts` | The `event_syndication` job: the run-time eligibility check, the adapter call, the row and its log row, the cleaned failure reason, and the dead-letter end. |
+| `copyAssist.ts` | D1493 (SY8): Ask proposes one channel's title and description. The rail option `draft:syndication-copy`, its page (`<Profile> · Events`) and record (`events:<id>`), the prompt, and the answer turned into one proposal per field, cut to the channel's limit. Pure; `routes/event_syndication_assist.ts` runs it. |
 
 ## Rules for adding here
 

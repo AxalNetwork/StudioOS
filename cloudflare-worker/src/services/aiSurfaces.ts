@@ -70,6 +70,8 @@ export const AI_SURFACE = {
   onboardingPersona: '/onboarding/persona',
   /** Articles · the editor — Eadwyn's writing options (`POST /api/articles/:id/assist`), D1409. */
   articles: '/articles/draft',
+  /** Events · Syndication — Eadwyn's proposed copy for a channel (`POST /api/events/:id/syndication/assist`), D1493. */
+  eventSyndication: '/my/events',
   /** HQ · Publications — the drafted headline summary (`/api/admin/publications/draft`). */
   adminPublications: '/admin/publications',
   /** Grow · Share an update — Eadwyn's draft of the highlights and lowlights (D654, `/api/portfolio-updates/share/draft-lines`). */
