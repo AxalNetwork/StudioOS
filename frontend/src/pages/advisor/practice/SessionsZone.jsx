@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
@@ -108,6 +108,9 @@ const EMPTY_RULES = Object.freeze({
   configured: false,
 });
 
+/** D1424 / D1596: the Block form's shape, closed. Never null (a ZoneBody child reads it on first render). */
+const CLOSED_BLOCK = Object.freeze({ open: false, from: '', until: '', reason: '', error: '' });
+
 export default function SessionsZone() {
   const [view, setView] = useState('two_weeks');
   const [slots, setSlots] = useState({ loading: true, error: '', items: [] });
@@ -203,16 +206,28 @@ export default function SessionsZone() {
   // from the rules card and says "Not set" rather than 0 when nobody set one.
   const capValue = ruleValue(rules?.weekly_paid_cap);
 
-  const blockRange = useCallback(async () => {
-    const from = window.prompt('Block from (YYYY-MM-DD)');
-    if (!from) return;
-    const until = window.prompt('Block until, exclusive (YYYY-MM-DD)');
-    if (!until) return;
-    const reason = window.prompt('Why? (optional, private to you)') || '';
+  // D1424 (#3700) and D1596 (#3869): "Block a date range" opens this page's
+  // own Block form instead of three `window.prompt`s. It is where a Block
+  // card accepted in the Ask panel will put its dates (#3706); nothing is
+  // blocked until the advisor presses Block. The reason stays the advisor's
+  // own words and is never filled.
+  const [blockForm, setBlockForm] = useState(() => ({ ...CLOSED_BLOCK }));
+  const blockFromRef = useRef(null);
+  const blockRange = useCallback(() => {
+    setBlockNote(null);
+    setBlockForm((f) => (f.open ? { ...CLOSED_BLOCK } : { ...CLOSED_BLOCK, open: true }));
+  }, []);
+  useEffect(() => { if (blockForm.open) blockFromRef.current?.focus?.(); }, [blockForm.open]);
+
+  const submitBlock = useCallback(async (event) => {
+    event?.preventDefault?.();
+    const { from, until, reason } = blockForm;
+    if (!from || !until) { setBlockForm((f) => ({ ...f, error: 'Choose the first day and the day after the last.' })); return; }
+    if (until <= from) { setBlockForm((f) => ({ ...f, error: 'The end comes after the start.' })); return; }
     setBlocking(true); setBlockNote(null);
     try {
       const res = await api.blockMyAdvisorSlotRange({
-        from: `${from}T00:00:00.000Z`, until: `${until}T00:00:00.000Z`, reason,
+        from: `${from}T00:00:00.000Z`, until: `${until}T00:00:00.000Z`, reason: reason || '',
       });
       // THE SKIPPED COUNT IS REPORTED, NEVER SWALLOWED. A booked hour cannot be
       // blocked — someone holds it — and an advisor who asked for a fortnight
@@ -224,11 +239,12 @@ export default function SessionsZone() {
             + `already booked and left alone — cancel those from Engagements if you mean to.`
           : `Blocked ${res.blocked} slot${res.blocked === 1 ? '' : 's'}.`,
       });
+      setBlockForm({ ...CLOSED_BLOCK });
       loadSlots(view);
     } catch (e) {
       setBlockNote({ ok: false, text: e?.message || 'Nothing was blocked.' });
     } finally { setBlocking(false); }
-  }, [loadSlots, view]);
+  }, [blockForm, loadSlots, view]);
 
   const exportCalendar = useCallback(() => {
     // Built from rows already on screen, so nothing leaves the browser and no
@@ -272,6 +288,29 @@ export default function SessionsZone() {
         actions={advisorZoneActions('practice/sessions', { handlers: opsHandlers })}
       />
 
+      {blockForm.open && (
+        <Card padding="lg">
+          <form onSubmit={submitBlock} className="grid grid-cols-1 gap-3 sm:grid-cols-3" data-testid="advisor-block-form">
+            <Field label="From">
+              <input ref={blockFromRef} type="date" className={inputClass} value={blockForm.from} data-testid="advisor-block-from"
+                onChange={(e) => setBlockForm({ ...blockForm, from: e.target.value, error: '' })} />
+            </Field>
+            <Field label="Until" hint="The day after the last one blocked.">
+              <input type="date" className={inputClass} value={blockForm.until} data-testid="advisor-block-until"
+                onChange={(e) => setBlockForm({ ...blockForm, until: e.target.value, error: '' })} />
+            </Field>
+            <Field label="Why" hint="Optional, and private to you.">
+              <input className={inputClass} value={blockForm.reason}
+                onChange={(e) => setBlockForm({ ...blockForm, reason: e.target.value })} />
+            </Field>
+            <div className="flex flex-wrap items-center gap-2 sm:col-span-3">
+              <button type="submit" className={buttonClass} disabled={blocking}>{blocking ? 'Blocking…' : 'Block'}</button>
+              <button type="button" className={ghostButtonClass} onClick={() => setBlockForm({ ...CLOSED_BLOCK })}>Cancel</button>
+              {blockForm.error ? <span className="text-[12px] text-rose-700 dark:text-rose-300" role="alert">{blockForm.error}</span> : null}
+            </div>
+          </form>
+        </Card>
+      )}
       <SaveNote note={blockNote} />
 
       {/* D377 — Spin-Out Lab founders see only approved hosts. */}

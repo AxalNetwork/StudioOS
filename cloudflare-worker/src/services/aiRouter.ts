@@ -40,6 +40,8 @@ import * as guard from './ai/guard';
 import { resolveRail, resolveRailChain, resolveRailOption, rowOffers } from './ai/railMatrix';
 import { MODEL_CONNECTIONS, MODULE_ROUTES, type ModuleTask } from './ai/moduleConnections';
 import { specialistRefusal, specialistRequest, specialistOutput, pcmBytes, pcmMinutes, type SpecialistInput } from './ai/moduleShapes';
+import { drawChoice, memberPlanTier, type DrawSkip, type DrawSource, type PlanTier } from './ai/drawJobs';
+import { speechChoice, type SpeechSkip, type SpeechSource } from './ai/speechJobs';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -102,6 +104,8 @@ export type TaskClass =
   // D1409 (#3695): an article's images, on the same model as the deck's, so
   // usage logs name articles and not decks.
   | 'article_image'
+  | 'event_cover'
+  | 'course_cover'
   // D1341 (#3549): Eadwyn's email draft from the member's ticked records.
   | 'mail_draft'
   // D1420 (#3864): Eadwyn's layout proposals for /studio (`studio:layout`).
@@ -166,7 +170,10 @@ export type RefusalReason =
   | 'assist_off'
   // D791 (#2216): a Super Admin paused the member's AI (HQ › AI usage). Refused
   // at the hold (`reserveAiBudget`), before anything is held; nothing is charged.
-  | 'ai_paused';
+  | 'ai_paused'
+  // #3935 (A (c)): the member named, or had stored, a model their plan does not
+  // run. Refused with the plan's label, before any hold; never swapped silently.
+  | 'plan_locked';
 
 /**
  * D765 (#2090) — where a member's run was asked from: the rail's page (D768's
@@ -251,6 +258,14 @@ export interface RunOptions {
   // D761 PR 4: an image drawn from `text` (the prompt) by an image model; the
   // result carries `image`. The size and steps are clamped to the model's range.
   draw?: shapes.DrawInput;
+  // #3935 (D1478 task 1): the use-case job a draw press runs (`ai/drawJobs.ts`):
+  // its Default or fallback by the legal hold, the partner switch and the
+  // member's plan lock. A draw run without one keeps its route's model.
+  drawJob?: string;
+  // #3936 (D1478 task 2): the use-case job a speech run serves (`ai/speechJobs.ts`):
+  // a Listen (file) or Speak run takes its Default, its fallback, or for Speak
+  // MeloTTS, by the partner switch and the plan lock. Without one the route's model runs.
+  speechJob?: string;
   // D765 (#2090): the rail context of a MEMBER's run. `run()` copies it into
   // `railPage`, `railOption` and `recordRef`, and refuses `assist_off` when the
   // member turned AI assistance off on that page. Every member call passes it
@@ -621,8 +636,11 @@ export const PRICE_USD_PER_1K_CHARACTERS: Record<string, number> = Object.fromEn
  * `shapes.imageUnits`); this set names which of them the router prices, and
  * fails at load if the catalogue cannot price one in its billing unit.
  */
+const IMAGE_UNIT_KEYS = { tiles: 1, steps: 1, output_tile_steps: 1, output_tiles: 1, first_megapixels: 1, subsequent_megapixels: 1, input_tiles: 1, input_tile_steps: 1, input_image_megapixels: 1 } as const;
 export const IMAGE_PRICED_MODELS: ReadonlySet<string> = new Set(Object.keys(shapes.IMAGE_SPECS).map((id) => {
-  for (const unit of Object.keys(shapes.imageUnits(id, 1024, 1024, 4)) as Array<'tiles' | 'steps' | 'output_tile_steps' | 'output_tiles' | 'first_megapixels' | 'subsequent_megapixels'>) {
+  // #3935: with one reference too, so a model that takes references must price its input unit.
+  const refs = (shapes.IMAGE_SPECS[id].maxReferences > 0 ? [{ width: 512, height: 512 }] : []);
+  for (const unit of Object.keys(shapes.imageUnits(id, 1024, 1024, 4, refs)) as Array<keyof typeof IMAGE_UNIT_KEYS>) {
     if (!unitPrice(id, unit)) throw new Error(`${id} has no ${unit} price in the catalogue`);
   }
   return id;
@@ -926,6 +944,9 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   deck_image:   { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-1-schnell', alternates: DRAW_MODELS },
   // D1409 (#3695): an article's images, on the same model as the deck's.
   article_image: { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-1-schnell' },
+  // #3935: the event cover (EV2) and the course cover (LE8); the job picks the model (`drawChoice`).
+  event_cover:  { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-1-schnell', alternates: RAIL_DRAW_MODELS },
+  course_cover: { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-1-schnell', alternates: RAIL_DRAW_MODELS },
   // D1478 §3937 fix 5 (MI1): a snippet paraphrase is a short rewrite, so the 8B fp8 answers it and the 70B is its fallback.
   paraphrase:   { provider: 'workers-ai', model: SMALL_LLAMA, fallbackChain: [MID_LLAMA] },
   // D765: `ai-workers/` jobs, which called the deprecated 8B directly, unlogged.
@@ -1118,8 +1139,8 @@ export function estimateCostUsd(
   if (model === '@cf/microsoft/resnet-50') return costMicro(model, { images: image.images ?? 0 }) / 1_000_000;
   // D761 PR 4: an image model is priced on its image units, at the catalogue's figure.
   if (IMAGE_PRICED_MODELS.has(model)) {
-    const { tiles, steps, output_tile_steps, output_tiles, first_megapixels, subsequent_megapixels } = image;
-    return costMicro(model, { tiles, steps, output_tile_steps, output_tiles, first_megapixels, subsequent_megapixels }) / 1_000_000;
+    const { tiles, steps, output_tile_steps, output_tiles, first_megapixels, subsequent_megapixels, input_tiles, input_tile_steps, input_image_megapixels } = image;
+    return costMicro(model, { tiles, steps, output_tile_steps, output_tiles, first_megapixels, subsequent_megapixels, input_tiles, input_tile_steps, input_image_megapixels }) / 1_000_000;
   }
   // D761 PR 3: a voice priced by the character has no token rate either.
   const perK = PRICE_USD_PER_1K_CHARACTERS[model];
@@ -1485,12 +1506,14 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
       if (req.wire === 'multipart') {
         const form = new FormData();
         for (const [k, v] of Object.entries(req.fields)) form.append(k, String(v));
+        // #3935: each reference image in binary, under the name the model reads.
+        for (const f of req.files) form.append(f.name, new Blob([f.bytes], { type: f.mime }), `${f.name}.${f.mime.split('/')[1]}`);
         const body = new Response(form);
         input = { multipart: { body: body.body, contentType: body.headers.get('content-type') } };
       }
       const image = await shapes.readImage(await ai.run(model, input, runOpt), req.sent);
       if (!image) return { ok: false, status: 502, error: 'unexpected image response' };
-      const units = shapes.imageUnits(model, image.width, image.height, req.sent.steps);
+      const units = shapes.imageUnits(model, image.width, image.height, req.sent.steps, req.sent.references);
       return { ok: true, output: '', image, prompt_tokens: 0, completion_tokens: 0, units };
     }
     if (opts.translate) {
@@ -1777,7 +1800,7 @@ export function budgetRefusalMessage(refusal: string, detail?: { limit_microusd?
 
 /** The models one run may reach, or why it may reach none. `record`: the refusal writes a usage row. */
 type ModelChoice =
-  | { ok: true; primary: string; chain: string[] }
+  | { ok: true; primary: string; chain: string[]; draw?: DrawReceipt; speech?: SpeechReceipt }
   | { ok: false; refusal: RefusalReason; error: string; record: boolean };
 
 /**
@@ -1786,7 +1809,44 @@ type ModelChoice =
  * route's, with the caller's own model only when the route offers it. Reads
  * the member's picks; writes nothing, so `run()` and `quoteRun()` share it.
  */
+/** #3935: how a draw job's model was chosen, for the receipt: the Default, the fallback (and why the Default did not run), or the member's choice. */
+export interface DrawReceipt { job: string; source: DrawSource; skipped: null | { model: string; reason: DrawSkip } }
+/** #3936: how a speech job's model was chosen, for the receipt, as a draw job's is. */
+export interface SpeechReceipt { job: string; source: SpeechSource; skipped: null | { model: string; reason: SpeechSkip } }
+
 async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Promise<ModelChoice> {
+  // ---- #3935 (D1478 task 1): a draw job's model ------------------------------
+  if (opts.draw && opts.drawJob) {
+    let pick: string | null = null;
+    const optionRow = opts.rail?.option ? resolveRailOption(opts.rail.page, opts.rail.option) : null;
+    let tier: PlanTier;
+    try {
+      if (optionRow && !opts.model) pick = (await railPicks(env, opts.userId, optionRow.pageKey, optionRow.optionKey)).option;
+      tier = await memberPlanTier(env, opts.userId);
+    } catch { return { ok: false, refusal: 'misconfigured', error: 'Unreadable: your plan or your model picks could not be read. Nothing was run.', record: false }; }
+    const c = drawChoice(opts.drawJob, { switches: env as catalogue.CatalogueSwitches, tier, caller: opts.model ?? null, pick });
+    if (!c.ok) return { ok: false, refusal: c.code === 'plan_locked' ? 'plan_locked' : 'model_not_offered', error: c.message, record: c.code !== 'press_hidden' };
+    // An image is never redrawn on another model: no chain.
+    return { ok: true, primary: c.model, chain: [], draw: { job: c.job, source: c.source, skipped: c.skipped } };
+  }
+
+  // ---- #3936 (D1478 task 2): a speech job's model ---------------------------
+  // A voice, or a file transcription, that names its job. A live stream keeps
+  // its own path (`liveTranscription.ts`); turn-taking runs as a specialist.
+  if (opts.speechJob && (opts.speak || (route.isAudio && !opts.specialist))) {
+    let pick: string | null = null;
+    const optionRow = opts.rail?.option ? resolveRailOption(opts.rail.page, opts.rail.option) : null;
+    let tier: PlanTier;
+    try {
+      if (optionRow && !opts.model) pick = (await railPicks(env, opts.userId, optionRow.pageKey, optionRow.optionKey)).option;
+      tier = await memberPlanTier(env, opts.userId);
+    } catch { return { ok: false, refusal: 'misconfigured', error: 'Unreadable: your plan or your model picks could not be read. Nothing was run.', record: false }; }
+    const c = speechChoice(opts.speechJob, { switches: env as catalogue.CatalogueSwitches, tier, caller: opts.model ?? null, pick });
+    if (!c.ok) return { ok: false, refusal: c.code === 'plan_locked' ? 'plan_locked' : 'model_not_offered', error: c.message, record: c.code !== 'press_hidden' };
+    // One voice, one transcription: never re-run on another model mid-press.
+    return { ok: true, primary: c.model, chain: [], speech: { job: c.job, source: c.source, skipped: c.skipped } };
+  }
+
   // ---- D764 PR 3: a rail run's models come from its page's row ------------
   // A text run (or a vision run) with rail context whose page, or option, has
   // a matrix row: the caller's model when it can do the work, else the
@@ -1874,7 +1934,7 @@ function holdQuoteMicro(opts: RunOptions, route: RouteEntry, models: string[], g
   const quoteImage = (model: string): shapes.Units => {
     if (opts.specialist?.operation === 'image_labels') return { images: 1 };
     const req = opts.draw ? shapes.drawRequest(model, opts.text ?? '', opts.draw) : null;
-    return req ? shapes.imageUnits(model, req.sent.width, req.sent.height, req.sent.steps) : {};
+    return req ? shapes.imageUnits(model, req.sent.width, req.sent.height, req.sent.steps, req.sent.references) : {};
   };
   const quote = Math.max(...models.map((model) => estimateCostUsd(model, promptBound, outputBound, quoteMinutes, 0, quoteChars, quoteImage(model))));
   // D763: the guard is held inside this hold, never in one of its own: every
@@ -1887,7 +1947,7 @@ function holdQuoteMicro(opts: RunOptions, route: RouteEntry, models: string[], g
 }
 
 export type RunQuote =
-  | { ok: true; hold_microusd: number; model: string }
+  | { ok: true; hold_microusd: number; model: string; draw?: DrawReceipt; speech?: SpeechReceipt }
   | { ok: false; refusal: RefusalReason; error: string };
 
 /**
@@ -1917,11 +1977,12 @@ export async function quoteRun(env: Env, input: RunOptions): Promise<RunQuote> {
     const refusal = modelRefusal(env, model);
     if (refusal) return { ok: false, refusal, error: `${model} ${refusal === 'model_unpriced' ? 'has no price' : 'is not offered'}` };
   }
-  if (opts.userId <= 0) return { ok: true, hold_microusd: 0, model: choice.primary };
+  const draw = { ...(choice.draw ? { draw: choice.draw } : {}), ...(choice.speech ? { speech: choice.speech } : {}) };
+  if (opts.userId <= 0) return { ok: true, hold_microusd: 0, model: choice.primary, ...draw };
   try {
     const multiplier = await aiBudget.memberChargeMultiplier(env, opts.userId);
     const guardOn = guarded(opts);
-    return { ok: true, hold_microusd: holdQuoteMicro(opts, route, models, guardOn, guardOn ? guardInputFor(opts) : '', multiplier), model: choice.primary };
+    return { ok: true, hold_microusd: holdQuoteMicro(opts, route, models, guardOn, guardOn ? guardInputFor(opts) : '', multiplier), model: choice.primary, ...draw };
   } catch {
     return { ok: false, refusal: 'misconfigured', error: 'Unreadable: the price of this run could not be worked out.' };
   }

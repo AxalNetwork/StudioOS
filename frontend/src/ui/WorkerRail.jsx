@@ -16,7 +16,10 @@ import { aiBudgetApi } from '../lib/api/aiBudget';
 import { railPrefsApi } from '../lib/api/railPrefs.js';
 import { syncRailPrefs } from './railModelChoice';
 import { useRailCrumbs, useRailPage } from './railCrumbs.js';
-import { openEadwynPanel, useEadwynPanel, useEadwynRailServes, eadwynPanelEvent } from './eadwynPanel.js';
+import { openEadwynPanel, useEadwynPanel, useEadwynRailServes, eadwynPanelEvent, askPanelEvent, useAskPanel, useAskRail } from './eadwynPanel.js';
+import AskPanel from './AskPanel.jsx';
+import { askLayout, askServes } from './askPanelModel.js';
+import { activeSupportSession } from '../lib/supportSession.js';
 import { EadwynPanel } from './EadwynPanel.jsx';
 import { Unreadable } from './Honesty';
 import { RailGroups, RailUsageExtra } from './RailGroups';
@@ -597,6 +600,41 @@ export default function WorkerRail({
   // D405 and D698 — the phone forms. See the notes above `railSheetReducer`
   // and in `ui/eadwynPanel.js`.
   const serves = role === 'founder' && viewer === 'founder';
+  // D1443 (#3706): Ask serves every licence on a page with a rail page key; a
+  // support session and an Explorer never (`askServes`).
+  const [supportOn] = useState(() => (typeof window === 'undefined' ? false : Boolean(activeSupportSession())));
+  const askLabel = module ? `${section} · ${module}` : section;
+  useAskRail(askServes({ page: pageKey, supportSession: supportOn, viewer, host: role }), pageKey, askLabel);
+  const askState = useAskPanel();
+  const [askWidth, setAskWidth] = useState(() => (typeof window === 'undefined' ? 1440 : window.innerWidth));
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const onResize = () => setAskWidth(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  const askAt = askLayout(askWidth);
+  const askDocked = askAt === 'dock' || askAt === 'overlay';
+  // A detail sheet opening closes Ask (D1317's one-surface rule).
+  useEffect(() => { if (sheetOpen) askPanelEvent({ type: 'sheet' }); }, [sheetOpen]);
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    const root = document.documentElement;
+    if (askState.open) root.setAttribute('data-eadwyn-ask', 'open');
+    else root.removeAttribute('data-eadwyn-ask');
+    return () => root.removeAttribute('data-eadwyn-ask');
+  }, [askState.open]);
+  const askPanel = askState.open ? (
+    <AskPanel
+      page={askState.page}
+      label={askState.label}
+      crumb={section}
+      options={rail.options}
+      aiOn={aiOn}
+      layout={askAt}
+      onClose={(why) => askPanelEvent({ type: why || 'close' })}
+    />
+  ) : null;
   useEadwynRailServes(serves);
   const panel = useEadwynPanel();
   const [sheet, dispatchSheet] = useReducer(railSheetReducer, { open: false });
@@ -610,6 +648,8 @@ export default function WorkerRail({
   useEffect(() => {
     dispatchSheet({ type: 'route' });
     if (lastPath.current !== pathname) eadwynPanelEvent({ type: 'route' });
+    // D1443: Ask belongs to the page it was opened on, too.
+    if (lastPath.current !== pathname) askPanelEvent({ type: 'route' });
     lastPath.current = pathname;
   }, [pathname]);
   // At 1024px and up the column takes over, so an open sheet or panel closes.
@@ -868,7 +908,15 @@ export default function WorkerRail({
       </div>
 
       {!sheet.open && !(serves && panel.open) && body}
+      {askPanel && askDocked && <div className="fwr-ask-dock" data-testid="ask-dock">{askPanel}</div>}
     </aside>
+    {portalReady && askPanel && !askDocked && createPortal(
+      <>
+        {askAt === 'sheet' && <button type="button" className="ead-ask-scrim" aria-label="Close Eadwyn" onClick={() => askPanelEvent({ type: 'scrim' })} />}
+        <div className="ead-ask-layer" data-layout={askAt}>{askPanel}</div>
+      </>,
+      document.body,
+    )}
     {portalReady && createPortal(
       serves ? (
         <>

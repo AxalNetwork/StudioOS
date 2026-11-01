@@ -277,5 +277,5 @@ test('the two canvases are in design/incoming, and D1612 names each board', () =
   for (const id of ['SK0', 'SK1', 'SK2', 'SK3', 'SK4', 'SK5', 'SK6', 'SK7', 'SK8', 'SK9']) assert.ok(b.includes(`B('${id}'`), id);
   assert.match(read(page), /\/axal-mark\.png/);
   const d = read('documentation/architecture/decisions/D1612.md');
-  for (const id of ['SK0', 'SK1', 'SK2', 'SK3', 'SK4', 'SK5', 'SK6', 'SK7', 'SK8', 'SK9', '#3951', '#3956', '#3953', '#3954', 'migration 757']) assert.ok(d.includes(id), id);
+  for (const id of ['SK0', 'SK1', 'SK2', 'SK3', 'SK4', 'SK5', 'SK6', 'SK7', 'SK8', 'SK9', '#3951', '#3956', '#3953', '#3954', 'migration 759']) assert.ok(d.includes(id), id);
 });

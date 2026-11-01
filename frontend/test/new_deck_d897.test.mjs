@@ -251,8 +251,9 @@ test('pd2, one page: Audience and stage, Sources and Outline together, the brief
     assert.ok(m.by('pitch-new-row-1'));
     assert.match(m.text(m.by('pitch-new-why-1')), /The founders and what they bring/);
     // Stage: the plan by stage waits on #3774, drawn greyed with its reason.
-    assert.match(m.text(m.by('pitch-new-stage')), /Pre-seed Seed Series A Series B\+ Coming later/);
-    assert.equal(m.pr(m.by('pitch-new-stage')).title, 'Not switched on yet.');
+    // D1522 (#3774): the stage plan's route is on main, so the chips no longer read Coming later.
+    assert.equal(m.text(m.by('pitch-new-stage')), 'Stage Pre-seed Seed Series A Series B+');
+    assert.equal(m.pr(m.by('pitch-new-stage')).title, undefined);
     assert.equal(m.pr(m.by('pitch-new-reorder'))['aria-disabled'], 'true', 'Reorder for stage waits on #3808');
   } finally { await m.unmount(); }
 });

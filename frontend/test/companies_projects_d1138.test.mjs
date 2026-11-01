@@ -179,7 +179,7 @@ test('mounted founder (CMP1): the tabs at their addresses, two cards from the su
     assert.equal(v.count('company-card'), 2);
     assert.equal(v.count('company-active'), 1);
     assert.match(v.of('companies-active-note'), /every page reads on this device/);
-    assert.ok(v.has('companies-new'));
+    assert.ok(v.has('portfolio-new'), 'D1413 (PF1m): New ▾');
     const members = v.seen.filter((s) => s === 'GET /api/projects');
     assert.deepEqual(members, [], 'the every-project read was made');
     assert.ok(v.reads().includes('GET /api/account/companies') && v.reads().includes('GET /api/account/projects'));
@@ -228,9 +228,11 @@ test('mounted investor (CMP9): Funds, not Projects; each firm\'s funds on its ca
   try {
     assert.ok(v.has('companies-tab-funds') && !v.has('companies-tab-projects'));
     assert.match(v.of('companies-tabs'), /Funds2/);
-    const funds = v.of('company-funds');
-    assert.match(funds, /Fund I · 2024 · Fundraising · Manage/);
-    assert.ok(!v.reads().includes('GET /api/account/projects') && !v.reads().includes('GET /api/projects'));
+    // D1413 (#3696, PF1): the card names the funds its firm runs; Manage is on the Funds tab.
+    assert.match(v.of('company-extra'), /Funds: Fund I/);
+    // D1413: Portfolio nests your own projects for every profile (`GET /api/account/projects`), never every venture.
+    assert.ok(!v.reads().includes('GET /api/projects'));
+    assert.match(v.of('portfolio-investor-link'), /Also in your investor Portfolio ›/, 'owner Q1: each Portfolio links to the other');
   } finally { await v.close(); }
   v = await mount('investor', { url: '/account/portfolio/funds' });
   try {
@@ -241,7 +243,7 @@ test('mounted investor (CMP9): Funds, not Projects; each firm\'s funds on its ca
 test('mounted Operating Partner (CMP10) and advisor (CMP11): the firm\'s counts, and the founders\' grants', async () => {
   let v = await mount('partner');
   try {
-    assert.match(v.of('company-firm-counts'), /3 engagements.*0 quotes.*offers: could not be read/s);
+    assert.match(v.of('company-extra'), /3 engagements.*0 quotes.*offers: could not be read/s);
   } finally { await v.close(); }
   v = await mount('advisor', { url: '/account/portfolio/engagements' });
   try {
@@ -291,7 +293,7 @@ test('states (CMP14–CMP16): empty offers New company; a failed summary is Unre
   try { assert.match(v.of('invitations-unreadable'), /Invitations to you could not be read/); } finally { await v.close(); }
   v = await mount('founder', { handle: () => new Promise(() => {}) });
   try {
-    assert.ok(v.has('companies-loading'));
+    assert.ok(v.has('portfolio-loading'), 'D1413 (PF7b)');
     assert.match(v.of('companies-tabs'), /Companies.*Projects.*Invitations/s);
   } finally { await v.close(); }
 });
@@ -299,8 +301,9 @@ test('states (CMP14–CMP16): empty offers New company; a failed summary is Unre
 test('mounted New company: the dialog says what happens, then one create', async () => {
   const v = await mount('founder', { handle: worker({ 'POST /api/company/create': () => response({ id: 9, uid: 'c9', company_name: 'Newco' }) }) });
   try {
-    await v.click('companies-new');
-    assert.match(v.of('new-company-dialog'), /primary admin.*active company on this device/s);
+    await v.click('portfolio-new');
+    await v.click('portfolio-new-company');
+    assert.match(v.of('new-company-sheet'), /primary admin.*active company on this device/s);
     assert.equal(v.prop('new-company-confirm', 'disabled'), true, 'an empty name could be created');
     await v.change('new-company-name', '  Newco  ');
     await v.click('new-company-confirm');

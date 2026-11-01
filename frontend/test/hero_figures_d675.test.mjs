@@ -47,7 +47,9 @@ test('every counted route is one the app opens', () => {
 });
 
 test('a zone with nothing behind it is not a module', () => {
-  assert.ok(!ROUTES.includes('/expertise/visibility'), 'the advisor\'s profile-views zone has no store');
+  // D1424 (#3700) mounted D1597's Visibility read (requests per link, opens),
+  // so the zone has a store and counts; profile views stay Not recorded on it.
+  assert.ok(ROUTES.includes('/expertise/visibility'), 'Visibility reads D1597 and counts');
   assert.ok(ROUTES.includes('/network/organizations'), 'Organizations counts: the founder, investor and partner licences back it');
 });
 

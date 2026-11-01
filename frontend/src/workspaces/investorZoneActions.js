@@ -53,6 +53,14 @@ import { makeZoneActions } from './zoneActionBuilder';
  * `shellConfig.js` agrees with the router. The keys below are the live routes,
  * and `frontend/test/profile_zone_actions.test.mjs` carries the mapping explicitly
  * rather than silently matching a canvas route to a page that is not at it.
+ *
+ * `primary: true` (D1424, #3700) marks the one row a zone's header draws
+ * filled, in indigo: Closing's Record wire, Reports' Chase all overdue,
+ * Value-add's Log support, LPs' Add LP, Calls' New call and Research › Ask's
+ * New brief. Screening, Commit, Positions, Accounting, Reporting and the
+ * Network zones have no live first step, so no primary. Deal flow (the Deals
+ * root) has no table: its "Set your thesis" primary is drawn by `DealFlow`
+ * while no deal matches (owner answer C).
  */
 
 export const INVESTOR_ZONE_ACTIONS = {
@@ -109,7 +117,7 @@ export const INVESTOR_ZONE_ACTIONS = {
     // conditions store doing its job.
     { label: 'Apply template', kind: 'handler', handler: 'applyTemplate' },
     { label: 'Export packet', kind: 'handler', handler: 'exportPacket' },
-    { label: 'Record wire', kind: 'handler', handler: 'recordWire' },
+    { label: 'Record wire', kind: 'handler', handler: 'recordWire', primary: true },
   ],
 
   // ── Fund ─────────────────────────────────────────────────────────────────
@@ -120,7 +128,7 @@ export const INVESTOR_ZONE_ACTIONS = {
     // missing. `requireFundGp` gates it — institutional tier AND the GP of
     // record for this fund — so the page disables it when no fund is readable
     // rather than posting into a 404.
-    { label: 'Add LP', kind: 'handler', handler: 'addLp' },
+    { label: 'Add LP', kind: 'handler', handler: 'addLp', primary: true },
     { label: 'Export register', kind: 'export' },
     { label: 'Comms log', unbuilt: 'no LP correspondence is stored' },
   ],
@@ -133,7 +141,7 @@ export const INVESTOR_ZONE_ACTIONS = {
     // working" true again. Migration 312 then gave a call a header, a number,
     // an exact cents split and receipts, and the Calls page is the form: New
     // call previews the split and issues it.
-    { label: 'New call', kind: 'handler', handler: 'newCall' },
+    { label: 'New call', kind: 'handler', handler: 'newCall', primary: true },
     // A reason still, and a narrower one than "nothing on this desk sends
     // mail": a notice is logged per LP account when a call is issued, and the
     // overdue lines are listed on the page. What nobody builds is the chase.
@@ -179,7 +187,7 @@ export const INVESTOR_ZONE_ACTIONS = {
     // set, the route re-checks the tenancy of each id, logs one row per
     // company, and notifies the founder. The notification type's settings row
     // is Session 4's to add.
-    { label: 'Chase all overdue', kind: 'handler', handler: 'chaseOverdue' },
+    { label: 'Chase all overdue', kind: 'handler', handler: 'chaseOverdue', primary: true },
     // WAS 'no reminder rules are stored', which is true and describes a
     // different object. The rules this desk actually has are the KPI
     // definitions companies are held to, and they ARE stored — firm-wide,
@@ -202,7 +210,7 @@ export const INVESTOR_ZONE_ACTIONS = {
   // third one is the artboard's own duplicate of the `By company` chip: one
   // view, reachable from either half of the header row.
   'portfolio/value-add': [
-    { label: 'Log support', kind: 'handler', handler: 'logSupport' },
+    { label: 'Log support', kind: 'handler', handler: 'logSupport', primary: true },
     { label: 'Export', kind: 'export' },
     { label: 'Per-company view', kind: 'handler', handler: 'byCompany' },
   ],
@@ -258,7 +266,7 @@ export const INVESTOR_ZONE_ACTIONS = {
   // erasing a reader's own questions is the one irreversible act on this page.
   // The reason is now about the refusal rather than about an absent store.
   'research/ask': [
-    { label: 'New brief', kind: 'handler', handler: 'newSession' },
+    { label: 'New brief', kind: 'handler', handler: 'newSession', primary: true },
     { label: 'Export session', kind: 'export' },
     // D495 (#1023): BUILT UP TO THE OWNER'S LINE. The refusal above was never
     // a recorded decision. Whether Clear deletes the caller's sessions, hides
@@ -307,4 +315,4 @@ export const INVESTOR_ZONE_ACTIONS = {
   ],
 };
 
-export const investorZoneActions = makeZoneActions(INVESTOR_ZONE_ACTIONS);
+export const investorZoneActions = makeZoneActions(INVESTOR_ZONE_ACTIONS, 'investor');

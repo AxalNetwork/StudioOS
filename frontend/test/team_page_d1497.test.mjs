@@ -421,7 +421,7 @@ test('an unread invitation list is "could not be read", never "No invitation is 
   } finally { await v.close(); }
   const w = await mount('/account/companies/nw1/settings/team', COMPANY_ROUTE, h(TeamAgentsPage, { form: 'company' }), { handle: worker({ 'GET /api/company/nw1': () => response({ detail: 'Company not found' }, 404) }) });
   try {
-    assert.match(w.text(), /Ask one of its editors to invite you\.Back to my companies/);
+    assert.match(w.text(), /Ask one of its editors to invite you\.Back to Portfolio/);
   } finally { await w.close(); }
 });
 

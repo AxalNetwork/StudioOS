@@ -1,10 +1,11 @@
-import React, { useId, useState } from 'react';
+import React, { useCallback, useId, useState } from 'react';
+import CoverDrawPress from '../../ui/CoverDrawPress';
 import { Pill } from '../../ui';
 import { SectionCard } from './LearningStates';
 import {
   ConfirmRow, DANGER, ErrorLine, Field, INPUT, MoveButtons, PRIMARY, SECONDARY, StatusActions,
 } from './studioParts';
-import { courseForm } from './studioActions';
+import { courseCoverDraw, courseCoverQuote, courseForm } from './studioActions';
 import { byPosition, lessonKindLabel } from './learningModel';
 
 const LEVELS = [['', 'Not set'], ['intro', 'Intro'], ['intermediate', 'Intermediate'], ['advanced', 'Advanced']];
@@ -29,6 +30,10 @@ const LEVELS = [['', 'Not set'], ['intro', 'Intro'], ['intermediate', 'Intermedi
 export default function StudioCourseBuilder({ course, items = [], exercises = [], exams = [], handlers, busy = false, error = null, notice = '' }) {
   const [form, setForm] = useState(() => courseForm(course));
   const ids = useId();
+  const uid = course?.uid ?? null;
+  const coverQuote = useCallback((prompt) => courseCoverQuote(uid, prompt), [uid]);
+  const coverDraw = useCallback((prompt) => courseCoverDraw(uid, prompt), [uid]);
+  const onCoverDrawn = useCallback((url) => setForm((f) => ({ ...f, cover_url: url })), []);
   const id = (name) => `${ids}-${name}`;
   const set = (name) => (event) => setForm((f) => ({ ...f, [name]: event.target.value }));
   const setResource = (i, name) => (event) => setForm((f) => ({
@@ -54,6 +59,8 @@ export default function StudioCourseBuilder({ course, items = [], exercises = []
           </Field>
           <Field id={id('cover')} label="Cover image link" hint="https.">
             <input id={id('cover')} type="url" className={INPUT} value={form.cover_url} onChange={set('cover_url')} />
+            {/* #3935 (LE8): a saved course can have its cover drawn; the URL fills this field, and Save writes it. */}
+            {course && <CoverDrawPress testid="course-cover-draw" quote={coverQuote} draw={coverDraw} onDrawn={onCoverDrawn} />}
           </Field>
           <Field id={id('minutes')} label="Estimated minutes">
             <input id={id('minutes')} inputMode="numeric" className={INPUT} value={form.estimated_minutes} onChange={set('estimated_minutes')} />
