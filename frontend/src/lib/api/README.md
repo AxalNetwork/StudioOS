@@ -447,6 +447,8 @@ The operator sends a bounded batch size and optional rescan flag; discovery curs
 
 D1199 (#3149): `productTesting.js` adds the programme logo: `partnerTestingApi.uploadLogo(uid, file)` and `.removeLogo(uid)`, the same on `adminTestingApi` for HQ's own programmes, and `productTestingApi.logoSrc(uid)`, the `<img>` path (a 404 there means no logo: draw the initial letter).
 
+D1484 part 2 (#3978): `calendarSources.js` holds the member's calendar source settings: `GET /calendar/sources`, `PUT /calendar/sources/:key` (`{ shown?, colour? }`; a colour is a palette token, or `null` for its family's) and `PUT /calendar/settings` (`{ copy_target }`).
+
 D1212 (#3178): `calendarConnections.js` holds the whole-calendar subscription (`GET`, `POST`, `DELETE /calendar/subscription`, D1209) and the disconnect with its choice (`DELETE /calendar/google` and `/calendar/microsoft`, `?remove_copies=1`). The link comes back once, from the POST, and the page never prints it.
 
 D1207 (#3173): `calendarItems.js` holds the Calendar's Reschedule (`PATCH /calendar/ic-meetings/:id` and `/calendar/founder-checkins/:id`) and its pickers (`/calendar/people`, `/calendar/deals`). A person comes back as a uid and a name, never an email or a user number.
