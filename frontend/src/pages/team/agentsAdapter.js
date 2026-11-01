@@ -167,18 +167,18 @@ export const publishSkill = (/* uid, { note } */) => off();
 /** `POST /api/teams/:scope/:id/skills/import { markdown }` → 201 `{ skill, problems }`, always a draft. */
 export const importSkill = (/* scope, id, markdown */) => off();
 
-// A2 #3956 — agents and skills
+// A2 #3956 — agents and skills: wired to `teamAgentsApi` with their routes (D1612 A2).
 /** `GET /api/teams/agents/:uid/skills` → `{ can_manage, skills, radar, values }`. */
-export const agentSkills = (/* uid */) => off();
+export const agentSkills = (uid) => throughSkill(() => teamAgentsApi.agentSkills(uid));
 /** `PUT /api/teams/agents/:uid/skills { skills: [{ uid, version }] }` → the same shape. */
-export const setAgentSkills = (/* uid, skills */) => off();
+export const setAgentSkills = (uid, skills) => throughSkill(() => teamAgentsApi.setAgentSkills(uid, skills));
 /** `GET /api/teams/agents/:uid/skills/available` → `{ skills }`, each with `blocked`. */
-export const availableSkills = (/* uid */) => off();
+export const availableSkills = (uid) => throughSkill(() => teamAgentsApi.availableSkills(uid));
 /** `GET /api/teams/skills/:uid/agents` → `{ agents }` the member can see. */
-export const skillAgents = (/* uid */) => off();
+export const skillAgents = (uid) => throughSkill(() => teamAgentsApi.skillAgents(uid));
 /** `GET /api/teams/skills/:uid/assignable` → `{ agents }`, each with `assigned` and `blocked`. */
-export const assignable = (/* uid */) => off();
+export const assignable = (uid) => throughSkill(() => teamAgentsApi.assignable(uid));
 /** `POST /api/teams/skills/:uid/assign { agent_uids }` → `{ added, refused }`. */
-export const assignSkill = (/* uid, agentUids */) => off();
+export const assignSkill = (uid, agentUids) => throughSkill(() => teamAgentsApi.assignSkill(uid, agentUids));
 /** `GET /api/teams/:scope/:id/coverage` → `{ axes: [{ slug, label, people_level, agent_level }] }`. */
-export const coverage = (/* scope, id */) => off();
+export const coverage = (scope, id) => throughSkill(() => teamAgentsApi.coverage(scope, id));

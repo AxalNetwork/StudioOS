@@ -10,6 +10,7 @@
 //      version, an editor of its scope; each refusal is a sentence and
 //      nothing is written.
 //   5. Assign one skill to several agents, all or nothing.
+//   (Cases 3 to 6 follow A2's contract, #3956: its codes, partial assign and radar shape.)
 //   6. The agent's radar: the 8 axes on the person's 0–5 scale, "Not
 //      recorded" where no skill tags an axis.
 //   7. A pasted SKILL.md lands as a draft and round-trips; an unreadable one is refused.
@@ -186,12 +187,13 @@ test('D1612: a published version is immutable; a pinned agent stays on it until 
   assert.equal(reader.body.skill.steps.length, 2, 'readers see the published version, not the edit');
   assert.equal((await call(w, SUPER, 'POST', `/skills/${uid}/publish`)).body.skill.version, 2);
   let mine = await call(w, MEMBER, 'GET', `/agents/${CFO}/skills`);
-  assert.equal(mine.body.skills[0].version, 1);
-  assert.equal(mine.body.skills[0].latest_version, 2);
+  // A2 (#3956) names them pinned_version and current_version.
+  assert.equal(mine.body.skills[0].pinned_version, 1);
+  assert.equal(mine.body.skills[0].current_version, 2);
   assert.equal(mine.body.skills[0].update_available, true);
   assert.equal(mine.body.skills[0].steps.length, 2, 'the pinned version\'s steps');
   assert.equal(mine.body.can_manage, false);
-  assert.equal((await call(w, EDITOR, 'PUT', `/agents/${CFO}/skills`, { skills: [{ uid, version: 2 }] })).body.skills[0].version, 2);
+  assert.equal((await call(w, EDITOR, 'PUT', `/agents/${CFO}/skills`, { skills: [{ uid, version: 2 }] })).body.skills[0].pinned_version, 2);
   mine = await call(w, EDITOR, 'GET', `/agents/${CFO}/skills`);
   assert.equal(mine.body.skills[0].update_available, false);
 
@@ -205,7 +207,7 @@ test('D1612: a published version is immutable; a pinned agent stays on it until 
   // Retired: it stays where it is pinned and cannot be added again.
   assert.equal((await call(w, SUPER, 'PATCH', `/skills/${uid}`, { status: 'retired' })).body.skill.status, 'retired');
   assert.equal((await call(w, EDITOR, 'PUT', `/agents/${CFO}/skills`, { skills: [uid] })).status, 200, 'kept at its version');
-  assert.equal((await call(w, EDITOR, 'PUT', `/agents/${PROJECT_CFO}/skills`, { skills: [uid] })).body.error, 'skill_not_attachable');
+  assert.equal((await call(w, EDITOR, 'PUT', `/agents/${PROJECT_CFO}/skills`, { skills: [uid] })).body.error, 'skill_retired');
   assert.equal((await call(w, SUPER, 'POST', `/skills/${uid}/publish`)).body.error, 'retired');
 });
 
@@ -217,18 +219,18 @@ test('D1612: an agent gets a skill only of its role, with its approved tools, fr
   const draft = (await call(w, SUPER, 'POST', '/skills', update({ name: 'Never published' }))).body.skill.uid;
   const links = () => Number((w.db.prepare('SELECT COUNT(*) AS n FROM agent_skill_links').get() as any).n);
 
+  // A2 (#3956)'s codes: role_mismatch and tool_not_approved are 422, the tool named.
   const role = await call(w, EDITOR, 'PUT', `/agents/${CFO}/skills`, { skills: [forIr] });
-  assert.equal(role.status, 409);
-  assert.match(role.body.message, /^This skill is not one of the .+ role's skills\.$/);
+  assert.deepEqual([role.status, role.body.error], [422, 'role_mismatch']);
   const tools = await call(w, EDITOR, 'PUT', `/agents/${IR}/skills`, { skills: [needsMore] });
-  assert.equal(tools.body.message, 'Needs the hubspot.read_deals tool, which this agent\'s sponsor hasn\'t approved.');
+  assert.deepEqual([tools.status, tools.body.error, tools.body.tool], [422, 'tool_not_approved', { key: 'hubspot.read_deals', label: 'hubspot.read_deals' }]);
   assert.equal((await call(w, EDITOR, 'PUT', `/agents/${IR}/skills`, { skills: [forIr] })).status, 200, 'its granted tool');
-  assert.equal((await call(w, OTHER_EDITOR, 'PUT', `/agents/${GLOBEX_CFO}/skills`, { skills: [acme] })).body.refusals[0].reason, 'There is no such skill.');
-  assert.equal((await call(w, ADMIN, 'PUT', `/agents/${GLOBEX_CFO}/skills`, { skills: [acme] })).body.message, 'This skill belongs to another company.');
+  assert.equal((await call(w, OTHER_EDITOR, 'PUT', `/agents/${GLOBEX_CFO}/skills`, { skills: [acme] })).body.error, 'not_found');
+  assert.equal((await call(w, ADMIN, 'PUT', `/agents/${GLOBEX_CFO}/skills`, { skills: [acme] })).body.error, 'not_found', 'another company\'s skill, even for HQ');
   // A project outside any company takes HQ skills only, even from its own founder.
-  assert.equal((await call(w, EDITOR, 'PUT', `/agents/${SOLO_CFO}/skills`, { skills: [acme] })).body.message, 'This skill belongs to another company.');
-  assert.equal((await call(w, SUPER, 'PUT', `/agents/${CFO}/skills`, { skills: [draft] })).body.message, 'This skill has not been published yet.');
-  assert.equal((await call(w, MEMBER, 'PUT', `/agents/${CFO}/skills`, { skills: [acme] })).status, 403);
+  assert.equal((await call(w, EDITOR, 'PUT', `/agents/${SOLO_CFO}/skills`, { skills: [acme] })).body.error, 'not_found');
+  assert.equal((await call(w, SUPER, 'PUT', `/agents/${CFO}/skills`, { skills: [draft] })).body.error, 'version_not_published');
+  assert.deepEqual([(await call(w, MEMBER, 'PUT', `/agents/${CFO}/skills`, { skills: [acme] })).status, (await call(w, MEMBER, 'PUT', `/agents/${CFO}/skills`, { skills: [acme] })).body.error], [403, 'not_manager']);
   assert.equal((await call(w, STRANGER, 'PUT', `/agents/${CFO}/skills`, { skills: [acme] })).status, 404);
   assert.equal(links(), 1);
   // A project agent inside Acme gets Acme's skills.
@@ -239,20 +241,17 @@ test('D1612: an agent gets a skill only of its role, with its approved tools, fr
   assert.deepEqual(missingTools(['a.b', 'c.d'], [{ integration_uid: 'x', tool: 'c.d' }]), ['a.b']);
 });
 
-test('D1612: assigning one skill to several agents is all or nothing', async () => {
+test('D1612: assigning one skill to several agents writes each it can and names each it cannot (A2, #3956)', async () => {
   const w = world();
   const uid = await published(w, update({ roles: ['cfo'] }));
-  const refused = await call(w, EDITOR, 'POST', `/skills/${uid}/assign`, { agents: [CFO, PROJECT_CFO, IR] });
-  assert.equal(refused.status, 409);
-  assert.deepEqual(refused.body.refusals.map((r: any) => r.agent_uid), [IR]);
-  assert.equal(Number((w.db.prepare('SELECT COUNT(*) AS n FROM agent_skill_links').get() as any).n), 0);
-  // Another company's agent reads as no agent; a member who is not an editor is told why.
-  assert.equal((await call(w, EDITOR, 'POST', `/skills/${uid}/assign`, { agents: [CFO, GLOBEX_CFO] })).body.refusals[0].reason, 'There is no such agent.');
-  assert.equal((await call(w, MEMBER, 'POST', `/skills/${uid}/assign`, { agents: [CFO] })).body.refusals[0].reason, 'Only the team\'s editors can change this agent\'s skills.');
+  const first = await call(w, EDITOR, 'POST', `/skills/${uid}/assign`, { agent_uids: [CFO, IR] });
+  assert.equal(first.status, 200, 'one agent never refuses the call');
+  assert.deepEqual([first.body.added, first.body.refused], [1, [{ agent_uid: IR, code: 'role_mismatch' }]]);
+  // Another company's agent reads as no agent; a member who is not an editor is told so.
+  assert.deepEqual((await call(w, EDITOR, 'POST', `/skills/${uid}/assign`, { agent_uids: [GLOBEX_CFO] })).body.refused, [{ agent_uid: GLOBEX_CFO, code: 'not_found' }]);
+  assert.deepEqual((await call(w, MEMBER, 'POST', `/skills/${uid}/assign`, { agent_uids: [CFO] })).body.refused, [{ agent_uid: CFO, code: 'not_manager' }]);
   const ok = await call(w, EDITOR, 'POST', `/skills/${uid}/assign`, { agents: [CFO, PROJECT_CFO] });
-  assert.deepEqual([ok.status, ok.body.added, ok.body.already, ok.body.used_by], [200, 2, 0, 2]);
-  const again = await call(w, EDITOR, 'POST', `/skills/${uid}/assign`, { agents: [CFO] });
-  assert.deepEqual([again.body.added, again.body.already], [0, 1]);
+  assert.deepEqual([ok.status, ok.body.added, ok.body.refused, ok.body.used_by], [200, 1, [], 2], 'one already had it');
   assert.equal((await call(w, MEMBER, 'GET', '/skills?company=co-uid-1')).body.hq[0].used_by, 2);
 });
 
@@ -260,14 +259,16 @@ test('D1612: the agent\'s radar is the 8 axes on the person\'s scale, "Not recor
   const w = world();
   const a = await published(w, update({ roles: ['cfo'], tags: [{ slug: 'investor_reporting', level: 'proficient' }, { slug: 'investor_relations', level: 'working' }] }));
   const b = await published(w, update({ name: 'FP&A pass', roles: ['cfo'], tags: [{ slug: 'fp_and_a', level: 'expert' }] }));
+  // A2 (#3956): no skills is no radar ("Not recorded"), never eight zeros; an axis no tag reaches is null.
   const none = await call(w, MEMBER, 'GET', `/agents/${CFO}/skills`);
-  assert.equal(none.body.radar.length, 8);
-  assert.ok(none.body.radar.every((x: any) => x.value.available === false && x.value.reason === 'Not recorded'));
+  assert.equal(none.body.radar, null);
   await call(w, EDITOR, 'PUT', `/agents/${CFO}/skills`, { skills: [a, b] });
-  const radar = Object.fromEntries((await call(w, MEMBER, 'GET', `/agents/${CFO}/skills`)).body.radar.map((x: any) => [x.slug, x.value]));
-  assert.deepEqual(radar.finance_ops, { available: true, value: 5 }, 'the highest level on the axis');
-  assert.deepEqual(radar.capital_network, { available: true, value: 2 });
-  assert.deepEqual(radar.product, { available: false, reason: 'Not recorded' });
+  const got = (await call(w, MEMBER, 'GET', `/agents/${CFO}/skills`)).body.radar.axes;
+  assert.equal(got.length, 8);
+  const radar = Object.fromEntries(got.map((x: any) => [x.slug, x.level]));
+  assert.equal(radar.finance_ops, 5, 'the highest level on the axis');
+  assert.equal(radar.capital_network, 2);
+  assert.equal(radar.product, null);
   const pure = skillsRadar([{ slug: 'x', level: 'expert' }], new Map([['x', 'design']]));
   assert.equal(pure.find((p) => p.slug === 'design')!.value.available, true);
 });

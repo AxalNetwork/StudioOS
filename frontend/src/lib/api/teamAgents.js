@@ -28,6 +28,17 @@
 //           [{ integration_uid, tool, server: { uid, name }, status }]
 //   POST   …/agents/:uid/run takes tool_reads: [{ integration_uid, tool, arguments? }], at most five:
 //           403 tool_not_granted; 422 too_many_tool_reads; 409 tool_disconnected { server: { uid, name } } (the agent pauses)
+// D1612 A2 (#3956), behind the same flag:
+//   GET  /api/teams/agents/:uid/skills            → { can_manage, skills: [{ uid, name, pinned_version, current_version, status,
+//                                                    tools: [{ key, label, approved }], taxonomy }], radar: { axes } | null, values: null }
+//   PUT  /api/teams/agents/:uid/skills            { skills: [{ uid, version? }] } → the same; 403 not_manager; 422 role_mismatch |
+//                                                    tool_not_approved { tool } | version_not_published; 409 skill_retired
+//   GET  /api/teams/agents/:uid/skills/available  → { skills: [SkillCard + { assigned, pinned_version, blocked }] }
+//   GET  /api/teams/skills/:uid/agents            → { agents: [{ uid, name, role_key, pinned_version, scope }] }
+//   GET  /api/teams/skills/:uid/assignable        → { agents: [{ uid, name, role_key, skill_count, assigned, blocked, scope }] }
+//   POST /api/teams/skills/:uid/assign            { agent_uids } → { added, refused: [{ agent_uid, code }] }, partial
+//   GET  /api/teams/:scope/:id/coverage           → { axes: [{ slug, label, people_level, agent_level }] }
+//   POST …/agents also takes skills: [{ uid, version? }] through the same gates.
 // `:scope` is 'company' (its uid) or 'project' (its id). A person is { uid, name },
 // never an email. `month_spend` is { available: false } when it cannot be read:
 // the page says "Not recorded", never 0.
@@ -60,4 +71,12 @@ export const teamAgentsApi = {
   runAgent: (uid, { module, option, record, prompt, toolReads } = {}) =>
     request(`/teams/agents/${enc(uid)}/run`, { method: 'POST', body: JSON.stringify({ module, option, record: record ?? null, prompt, ...(toolReads ? { tool_reads: toolReads } : {}) }) }),
   toolChoices: () => request('/teams/tools'),
+  // D1612 A2 (#3956): an agent's skills, assigning a skill, team coverage.
+  agentSkills: (uid) => request(`/teams/agents/${enc(uid)}/skills`),
+  setAgentSkills: (uid, skills) => request(`/teams/agents/${enc(uid)}/skills`, { method: 'PUT', body: JSON.stringify({ skills }) }),
+  availableSkills: (uid) => request(`/teams/agents/${enc(uid)}/skills/available`),
+  skillAgents: (skillUid) => request(`/teams/skills/${enc(skillUid)}/agents`),
+  assignable: (skillUid) => request(`/teams/skills/${enc(skillUid)}/assignable`),
+  assignSkill: (skillUid, agentUids) => request(`/teams/skills/${enc(skillUid)}/assign`, { method: 'POST', body: JSON.stringify({ agent_uids: agentUids }) }),
+  coverage: (scope, id) => request(`${base(scope, id)}/coverage`),
 };

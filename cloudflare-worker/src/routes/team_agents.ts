@@ -44,6 +44,7 @@ import { CATALOGUE } from '../services/ai/catalogue';
 import { MODEL_CONNECTIONS } from '../services/ai/moduleConnections';
 import { agentQuote, agentRun, type AgentRefusal } from '../services/agents/agentRun';
 import { checkGrants, grantsView } from '../services/agents/agentTools';
+import { ATTACH_STATUS, checkSkillList, linkStatement } from '../services/agents/skillLinks';
 import { configOf, customMcpEnabled, grantableTools } from '../integrations/customMcp';
 import type { IntegrationRow } from '../integrations/registry';
 import { isAdmin, mapError, newUid } from './_t13t14t15_helpers';
@@ -145,6 +146,15 @@ export function agentModels(env: Env, user: User) {
 }
 
 const answer = (c: C, r: AgentRefusal) => say(c, r.status, r.code, r.message, r.extra);
+
+/** D1612's attach refusals, in the add route's words. */
+const SKILL_WORDS = {
+  not_found: 'There is no such skill.',
+  version_not_published: 'Only a published version can be pinned.',
+  skill_retired: 'This skill is retired and cannot be added again.',
+  role_mismatch: 'An agent can only be given skills of its own role.',
+  tool_not_approved: 'That skill needs a read tool its sponsor has not approved.',
+} as const;
 
 const validCap = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) > 0 && (v as number) <= CAP_MAX_MICROUSD;
 
@@ -398,6 +408,19 @@ router.post('/:scope/:id/agents', async (c) => {
     // Part 5: each grant is the sponsor's (the caller's) own connected server, an approved, pinned read tool.
     const granted = await checkGrants(c.env, user.id, b.tool_grants);
     if (!granted.ok) return answer(c, granted);
+    // D1612 A2 (#3956): the Add-an-agent Skills step, through the same gates as PUT …/skills.
+    if (b.skills !== undefined && (!Array.isArray(b.skills) || b.skills.length > 40)) return say(c, 400, 'invalid_skills', 'Send the agent\'s skills as a list of up to 40.');
+    const [cId, pId] = scopeCols(s);
+    const skillsChecked = Array.isArray(b.skills) && b.skills.length
+      ? await checkSkillList(c.env, { id: null, scope_kind: s.kind, company_id: cId, project_id: pId, role_key: role.key, tool_grants_json: JSON.stringify(granted.grants) }, b.skills,
+        // A1's read gate: an HQ skill for everyone; a company's skill for that company's members (or HQ's admin).
+        async (sk) => sk.scope === 'hq' || isAdmin(user) || (sk.company_id != null
+          && !!(await c.env.DB.prepare('SELECT 1 AS ok FROM user_company_links WHERE company_id = ? AND user_id = ?').bind(sk.company_id, user.id).first())))
+      : { ok: true as const, wanted: [] };
+    if (!skillsChecked.ok) {
+      const bl = skillsChecked.blocked;
+      return say(c, ATTACH_STATUS[bl.code], bl.code, SKILL_WORDS[bl.code], { skill_uid: skillsChecked.skill_uid, ...(bl.tool ? { tool: bl.tool } : {}) });
+    }
     const [companyId, projectId] = scopeCols(s);
     const uid = newUid();
     try {
@@ -412,6 +435,7 @@ router.post('/:scope/:id/agents', async (c) => {
     }
     const a = await c.env.DB.prepare('SELECT * FROM team_agents WHERE uid = ?').bind(uid).first<AgentRow>();
     await logEvent(c.env, a!.id, user.id, 'added', { role_key: role.key, model_id: b.model_id, monthly_cap_microusd: b.monthly_cap_microusd });
+    if (skillsChecked.wanted.length) await c.env.DB.batch(skillsChecked.wanted.map((w) => linkStatement(c.env, a!.id, w.s.id, w.version, user.id)));
     return c.json({ agent: await agentDto(c.env, a!) }, 201);
   } catch (e) { return mapError(c, e); }
 });
