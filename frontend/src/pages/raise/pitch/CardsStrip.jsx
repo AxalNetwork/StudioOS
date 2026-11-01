@@ -4,6 +4,7 @@ import { availability } from './deckV2Adapter';
 import { LATER } from './deckV2Model';
 import { cardTitle, keyMove } from './editorModel';
 import useMenuFocus from './useMenuFocus';
+import { langAttrs } from './deckLanguage';
 
 /**
  * D1604 (#3716, pd0, pd3) — the Cards strip, in place of D898's rail: each
@@ -74,7 +75,7 @@ function CardMenu({ index, count, card, onAction, onClose, menu, row = false, le
       data-testid={`pitch-editor-card-menu-${index}`}>
       {items.map((it, i) => (
         <button key={it.id} ref={menu.item(i)} type="button" role="menuitem" aria-disabled={it.why ? true : undefined} title={it.why || undefined}
-          className={`flex min-h-[34px] items-center justify-between gap-2 rounded-[8px] px-2.5 text-left text-[12.5px] ${it.why ? 'cursor-not-allowed text-axal-muted dark:text-gray-500' : 'text-axal-ink hover:bg-axal-ground dark:text-gray-100 dark:hover:bg-gray-800'}`}
+          className={`flex min-h-[34px] items-center justify-between gap-2 rounded-[8px] px-2.5 text-start text-[12.5px] ${it.why ? 'cursor-not-allowed text-axal-muted dark:text-gray-500' : 'text-axal-ink hover:bg-axal-ground dark:text-gray-100 dark:hover:bg-gray-800'}`}
           onClick={() => { if (it.why) return; onClose(); onAction(it.id, index); }} data-testid={`pitch-editor-card-${it.id}-${index}`}>
           {it.label}{it.later ? <span className="font-mono text-[10px] text-axal-muted dark:text-gray-500">{LATER}</span> : null}
         </button>
@@ -83,7 +84,9 @@ function CardMenu({ index, count, card, onAction, onClose, menu, row = false, le
   );
 }
 
-export default function CardsStrip({ cards, sel, stale, readOnly, onSelect, move, onAdd, onCardAction, orientation = 'column' }) {
+export default function CardsStrip({ cards, sel, stale, readOnly, onSelect, move, onAdd, onCardAction, orientation = 'column', theme = null }) {
+  // D1571 (#3818): each card's title is the deck's words, so its thumbnail carries the deck's language and direction.
+  const words = langAttrs(theme);
   const [drag, setDrag] = useState(null);
   const [all, setAll] = useState(false);
   const [menu, setMenu] = useState(null);
@@ -116,8 +119,9 @@ export default function CardsStrip({ cards, sel, stale, readOnly, onSelect, move
             onDragOver={(e) => { if (drag != null) e.preventDefault(); }}
             onDrop={() => { if (drag != null && drag !== i) move(drag, i); setDrag(null); }}>
             <button type="button"
-              className={`flex w-full flex-col gap-1 rounded-[9px] border p-1.5 text-left text-[12px] ${i === sel ? 'border-axal-violet bg-axal-lavender font-bold text-axal-violet dark:border-violet-500 dark:bg-violet-950/40 dark:text-violet-300' : 'border-transparent text-axal-ink hover:bg-axal-ground dark:text-gray-100 dark:hover:bg-gray-800'}`}
+              className={`flex w-full flex-col gap-1 rounded-[9px] border p-1.5 text-start text-[12px] ${i === sel ? 'border-axal-violet bg-axal-lavender font-bold text-axal-violet dark:border-violet-500 dark:bg-violet-950/40 dark:text-violet-300' : 'border-transparent text-axal-ink hover:bg-axal-ground dark:text-gray-100 dark:hover:bg-gray-800'}`}
               aria-current={i === sel ? 'true' : undefined}
+              lang={words.lang} dir={words.dir}
               aria-keyshortcuts={readOnly ? undefined : row ? 'Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown' : 'Alt+ArrowUp Alt+ArrowDown'}
               onClick={() => onSelect(i)}
               onKeyDown={(e) => {

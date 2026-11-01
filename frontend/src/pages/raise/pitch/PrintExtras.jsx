@@ -3,6 +3,7 @@ import { BlockGrid } from './BlockGrid';
 import { SLIDE_SIZES, aspectOf } from './gridModel';
 import { EMPTY_CARD, NO_NOTES, cardOf } from './presentExportModel';
 import CardCompliance from './CardCompliance';
+import { langAttrs } from './deckLanguage';
 
 /**
  * D1112 (#2992) — what the headless print page (`/deck/print-export/:token`)
@@ -35,23 +36,25 @@ export const SOURCES_NOT_SENT = 'The Sources appendix did not come with this ver
 /** Does this slide belong to the studio (D897's fields, D898's blocks) rather than a template? */
 export const isStudioSlide = (s) => (Array.isArray(s?.blocks) && s.blocks.length > 0) || (Array.isArray(s?.fields) && s.fields.length > 0);
 
-export function StudioPrintCard({ slide, index, aspect = '16:9', chrome = null }) {
+export function StudioPrintCard({ slide, index, aspect = '16:9', chrome = null, theme = null }) {
   const card = cardOf(slide, index);
+  // D1571 (#3818): the printed page reads in the deck's language and direction.
+  const words = langAttrs(theme);
   if (card.blocks.length) {
     // D1499: the page is the slide itself, 1920 × 1080 or 1440 × 1080, so `boxOf`'s boxes print at their own pixels.
     return (
-      <div data-slide-frame="" style={{ ...PAGE, width: SLIDE_SIZES[aspectOf(aspect)].width }} data-testid={`print-card-${index}`} data-layout="grid">
-        <BlockGrid blocks={card.blocks} colours={COLOURS} live size="print" aspect={aspect} testId={`print-blocks-${index}`} />
+      <div data-slide-frame="" style={{ ...PAGE, width: SLIDE_SIZES[aspectOf(aspect)].width }} {...words} data-testid={`print-card-${index}`} data-layout="grid">
+        <BlockGrid blocks={card.blocks} colours={COLOURS} live size="print" aspect={aspect} lang={words.lang} dir={words.dir} testId={`print-blocks-${index}`} />
         <CardCompliance chrome={chrome} size="print" testId={`print-compliance-${index}`} />
       </div>
     );
   }
   return (
-    <div data-slide-frame="" style={{ ...PAGE, padding: 96, display: 'flex', flexDirection: 'column', gap: 28 }} data-testid={`print-card-${index}`}>
+    <div data-slide-frame="" style={{ ...PAGE, padding: 96, display: 'flex', flexDirection: 'column', gap: 28, textAlign: 'start' }} {...words} data-testid={`print-card-${index}`}>
       <div style={EYE}>{card.n} · {card.title}{card.appendix ? ' · Appendix' : ''}</div>
       {card.sub ? <div style={{ fontSize: 64, fontWeight: 700, lineHeight: 1.15 }}>{card.sub}</div> : null}
       {card.lines.map((l, k) => <p key={k} style={{ margin: 0, fontSize: 30, lineHeight: 1.5, whiteSpace: 'pre-line' }}>{l}</p>)}
-      {card.bullets.length ? <ul style={{ margin: 0, paddingLeft: 40, fontSize: 30, lineHeight: 1.5 }}>{card.bullets.map((b, k) => <li key={k}>{b}</li>)}</ul> : null}
+      {card.bullets.length ? <ul style={{ margin: 0, paddingInlineStart: 40, fontSize: 30, lineHeight: 1.5 }}>{card.bullets.map((b, k) => <li key={k}>{b}</li>)}</ul> : null}
       {card.figures.length ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20 }}>
           {card.figures.map((f, k) => (

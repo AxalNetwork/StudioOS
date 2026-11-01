@@ -724,8 +724,8 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
               <SourcesPage appendix={deck.sources_appendix} />
             ) : studioDeck ? (
               (singleSlideIdx != null
-                ? (deck.slides || []).slice(singleSlideIdx, singleSlideIdx + 1).map((s) => <StudioPrintCard key={singleSlideIdx} slide={s} index={singleSlideIdx} aspect={deck.theme?.aspect} chrome={chromeOf(deck, singleSlideIdx)} />)
-                : (deck.slides || []).map((s, i) => <StudioPrintCard key={i} slide={s} index={i} aspect={deck.theme?.aspect} chrome={chromeOf(deck, i)} />))
+                ? (deck.slides || []).slice(singleSlideIdx, singleSlideIdx + 1).map((s) => <StudioPrintCard key={singleSlideIdx} slide={s} index={singleSlideIdx} aspect={deck.theme?.aspect} theme={deck.theme} chrome={chromeOf(deck, singleSlideIdx)} />)
+                : (deck.slides || []).map((s, i) => <StudioPrintCard key={i} slide={s} index={i} aspect={deck.theme?.aspect} theme={deck.theme} chrome={chromeOf(deck, i)} />))
             ) : isAdvanced ? (
               singleSlideIdx != null ? (
                 <SingleSlideStage Template={Template} data={templateData} slideIdx={singleSlideIdx} />

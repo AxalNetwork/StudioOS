@@ -7,6 +7,7 @@ import { SOURCE_NOT_RECORDED, cardOf } from './presentExportModel';
 import { KIT_FAILED, NO_KIT, chromeOf } from './editorModel';
 import { areaLabel, askAreaName } from './deckV2Model';
 import { GRID, aspectOf, baselineShare, frameOf, placeOf, ratioOf } from './gridModel';
+import { langAttrs } from './deckLanguage';
 import { SourceChip } from './SourcesBoards';
 import { ChangedNotice, FigureCard } from './FigureCard';
 import { faceOf, isFigure, itemsByKey, staleFigures } from './figuresModel';
@@ -304,7 +305,7 @@ export default function GridStage({
         onPointerDown={(e) => { if (e.target === faceRef.current) down(e); }}
         onPointerMove={over} onPointerUp={up} onPointerLeave={() => { if (press.current) up(); }}
         onDragOver={(e) => dragOver(e, null)} onDrop={(e) => drop(e, null)}
-        data-aspect={aspect} data-testid="pitch-editor-card">
+        data-aspect={aspect} {...langAttrs(theme)} data-testid="pitch-editor-card">
         {veil ? <span className="absolute inset-0" style={{ background: veil }} aria-hidden="true" data-testid="pitch-editor-overlay" /> : null}
         {grid ? <GridOverlay aspect={aspect} /> : null}
         {areas ? (
@@ -334,7 +335,7 @@ export default function GridStage({
                   onPointerLeave={() => setHover((h) => (h === a.id ? null : h))}
                   onFocus={() => setHover(a.id)}
                   onClick={(e) => click(e, a)}
-                  className={`min-h-0 min-w-0 overflow-hidden rounded-[8px] p-1.5 text-left ${on ? 'outline outline-2 outline-violet-500 dark:outline-violet-400' : block ? 'outline outline-1 outline-dashed outline-black/10 dark:outline-white/20' : 'outline outline-1 outline-dashed outline-transparent hover:outline-black/15 dark:hover:outline-white/20'} ${a.id === live ? 'ring-[6px] ring-violet-400/30' : ''} ${ok.ok ? '' : 'cursor-not-allowed opacity-70'}`}
+                  className={`min-h-0 min-w-0 overflow-hidden rounded-[8px] p-1.5 text-start ${on ? 'outline outline-2 outline-violet-500 dark:outline-violet-400' : block ? 'outline outline-1 outline-dashed outline-black/10 dark:outline-white/20' : 'outline outline-1 outline-dashed outline-transparent hover:outline-black/15 dark:hover:outline-white/20'} ${a.id === live ? 'ring-[6px] ring-violet-400/30' : ''} ${ok.ok ? '' : 'cursor-not-allowed opacity-70'}`}
                   style={at}
                   data-testid={block ? `pitch-editor-block-${a.id}` : `pitch-editor-area-${a.id}`}>
                   {block
