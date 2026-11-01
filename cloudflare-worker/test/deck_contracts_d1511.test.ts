@@ -10,6 +10,9 @@
  *   3. Every `deckV2Adapter.js` method swapped to `through(…)` has a contract,
  *      and every contract names a swapped method, so an adapter swap changes
  *      no screen.
+ *   4. `GET /api/decks/:id/typed-values` (D1538) and the deck check's
+ *      `consistency` key (D1555), the two swaps that merged beside this file,
+ *      match their contracts.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/deck_contracts_d1511.test.ts
@@ -147,4 +150,39 @@ test('3. every adapter method swapped to through() has a contract, and every con
   for (const [method, c] of Object.entries(CONTRACTS)) {
     assert.match(src, new RegExp(`${method}: \\{ issue: ${c.issue},`), `${method} keeps its issue`);
   }
+});
+
+// ── 4. The replies of the two swaps that merged beside this file ─────────
+
+test('4. the typed-values reply matches deckTypedTables, for a number, a text figure and none', async () => {
+  const db = world();
+  const app = new Hono<any>().route('/api/decks', deckTypedValues);
+  const token = await new SignJWT({ user_id: 10, role: 'founder' }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const read = async () => {
+    const res = await withThrownResponses(() => app.request('/api/decks/1/typed-values', { headers: { Authorization: `Bearer ${token}` } }, { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any));
+    assert.equal(res.status, 200);
+    return res.json() as any;
+  };
+  const none = await read();
+  assert.deepEqual(contractErrors(CONTRACTS.typedTables.schema, none), []);
+  assert.deepEqual(none.values, []);
+  const add = db.prepare('INSERT INTO deck_typed_values (project_id, deck_id, key, label, value_num, value_text, unit, typed_by, typed_at) VALUES (1, 1, ?, ?, ?, ?, ?, ?, ?)');
+  add.run('arr', 'ARR', 120000, null, 'usd', 10, '2026-11-01 10:00:00');
+  add.run('market', 'Market', null, 'EU SMB', 'text', null, '2026-11-01 10:01:00');
+  const some = await read();
+  assert.equal(some.values.length, 2);
+  assert.deepEqual(contractErrors(CONTRACTS.typedTables.schema, some), []);
+  assert.deepEqual(contractErrors(CONTRACTS.typedTables.schema, { ...some, values: [{ ...some.values[0], grade: 'Linked' }] }), ['$.values[0].grade: must be "Stated"']);
+});
+
+test('4. deckConsistency\'s reply matches deckConsistency, with findings, unreadable, and null for a reader', () => {
+  const slides = [
+    { blocks: [{ kind: 'metric', label: 'ARR', value: '$1.2M' }] },
+    { blocks: [{ kind: 'metric', label: 'ARR', value: '$1.5M' }] },
+  ];
+  const found = deckConsistency(slides);
+  assert.deepEqual(contractErrors(CONTRACTS.consistency.schema, found), []);
+  assert.deepEqual(contractErrors(CONTRACTS.consistency.schema, deckConsistency('not slides')), []);
+  assert.deepEqual(contractErrors(CONTRACTS.consistency.schema, null), [], 'a reader who is not the founder gets null');
+  assert.deepEqual(contractErrors(CONTRACTS.consistency.schema, { state: 'ok', findings: [{ key: 'k', rule: 'tone', message: 'm', cards: [1] }] }), ['$.findings[0].rule: must be one of ["one_value","use_of_funds","runway","round","forecast"]']);
 });

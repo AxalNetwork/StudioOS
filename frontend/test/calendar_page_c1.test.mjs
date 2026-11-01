@@ -89,8 +89,8 @@ test('the canvas and the page were both parsed, so a silent zero-match cannot pa
   assert.equal(canvasKinds.length, 5, 'the canvas kind table no longer parses as five entries');
   // D1384 (#3692): compliance_due, the Compliance layer, is the tenth.
   // D1484 (#3977): D1208's three readers and "New event" make fourteen; #3959: Learning, fifteen;
-  // D1486 §b (#3981): Publish sends and planned content, seventeen.
-  assert.equal(pageKinds.length, 17, 'the page kind table no longer parses as seventeen entries');
+  // D1486 §b (#3981): Publish sends and planned content, seventeen; §c (#3982): round close and NDA expiry, nineteen.
+  assert.equal(pageKinds.length, 19, 'the page kind table no longer parses as nineteen entries');
 });
 
 test('the page draws a chip for every kind the worker can emit, and no others', () => {
@@ -99,7 +99,7 @@ test('the page draws a chip for every kind the worker can emit, and no others', 
   // is added — which is exactly how partner_office_hour lost its chip.
   const union = service.match(/\n {2}kind: ((?:'\w+'(?:\s*\|\s*)?)+);/)?.[1] || '';
   const emitted = [...union.matchAll(/'(\w+)'/g)].map((m) => m[1]).sort();
-  assert.equal(emitted.length, 17, 'the CalendarEvent kind union did not parse');
+  assert.equal(emitted.length, 19, 'the CalendarEvent kind union did not parse');
   assert.deepEqual(pageKinds.map((k) => k.id).sort(), emitted,
     'a kind the worker can emit has no chip on /calendar, or a chip names a kind it cannot');
 
