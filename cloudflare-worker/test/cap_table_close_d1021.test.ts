@@ -382,8 +382,11 @@ test('Eadwyn’s read: one metered run on the cap table’s rail, a draft kept f
     assert.deepEqual(f.conversions[0], { conversionOptions: { pdf: { metadata: false } } });
     assert.ok(f.prompts.some((p) => p.includes('--- Page 2 ---')));
     // Metered and charged to the member who pressed, on the page's rail.
-    const usage = all(f, 'SELECT user_id, task, rail_page, rail_option, record_ref, surface FROM ai_usage_logs WHERE guard_for IS NULL');
+    // #3937: the document's conversion is its own row (no charge), on the same rail; then the model's run.
+    const usage = all(f, "SELECT user_id, task, rail_page, rail_option, record_ref, surface FROM ai_usage_logs WHERE guard_for IS NULL AND task <> 'document_convert'");
     assert.equal(usage.length, 1);
+    const converted = all(f, "SELECT user_id, rail_page, rail_option, record_ref, surface, charged_microusd FROM ai_usage_logs WHERE task = 'document_convert'");
+    assert.deepEqual(converted.map((r: any) => ({ ...r })), [{ user_id: COFOUNDER, rail_page: 'Founder · Raise · Cap table', rail_option: 'draft:raise/document-terms', record_ref: 'project:10', surface: '/raise/cap-table', charged_microusd: 0 }]);
     assert.deepEqual({ ...usage[0] }, {
       user_id: COFOUNDER, task: 'rail_legal', rail_page: 'Founder · Raise · Cap table', rail_option: 'draft:raise/document-terms',
       record_ref: 'project:10', surface: '/raise/cap-table',
