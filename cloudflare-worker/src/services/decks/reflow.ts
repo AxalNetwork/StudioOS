@@ -20,7 +20,7 @@
  * Pure: no binding. `frontend/src/pages/raise/pitch/deckReflow.js` mirrors it
  * for the editor's draft, with a parity test (`deck_reflow_d1554.test.ts`).
  */
-import { fitProblems, fitText, metricValueChars, textCapacity, typeRoleOf } from './designSystem';
+import { fitProblems, fitText, metricValueChars, textCapacity, typeRoleOf, type Script } from './designSystem';
 import { NOTES_MAX, type Grid } from './slideModel';
 import { ASPECTS, STRUCTURES, aspectOf, boxOfAt, type Aspect } from './structures';
 
@@ -46,7 +46,7 @@ export function fitWords(text: string, max: number): string {
  * `count` is the number of blocks that moved, in whole or in part: the "[N]"
  * of "[N] blocks no longer fit and moved to the speaker notes."
  */
-export function reflowSlides(slides: unknown, toIn: unknown, fromIn: unknown = '16:9'): Reflow {
+export function reflowSlides(slides: unknown, toIn: unknown, fromIn: unknown = '16:9', script: Script = 'latin'): Reflow {
   const to = aspectOf(toIn);
   const from = aspectOf(fromIn);
   const moved: Moved[] = [];
@@ -61,12 +61,13 @@ export function reflowSlides(slides: unknown, toIn: unknown, fromIn: unknown = '
       if (b.kind === 'text') {
         const text = String(b.text ?? '');
         const role = typeRoleOf(b.style, s.layout ?? null);
-        const cap = textCapacity(g, role, to).chars;
+        // D1571: at the deck's script, so a CJK deck reflows at its own capacity.
+        const cap = textCapacity(g, role, to, script).chars;
         // D1511: kept text must also pass D1517's wrapped fit (`fitText`), the check `fitProblems` makes;
         // a word-wrapped line can hold fewer characters than the count, so drop words until it fits.
-        if (text.length <= cap && fitText(g, role, text, to).fits) { blocks.push(b); continue; }
+        if (text.length <= cap && fitText(g, role, text, to, script).fits) { blocks.push(b); continue; }
         let kept = fitWords(text, cap);
-        while (kept && !fitText(g, role, kept, to).fits) kept = fitWords(kept, kept.length - 1);
+        while (kept && !fitText(g, role, kept, to, script).fits) kept = fitWords(kept, kept.length - 1);
         const rest = text.slice(kept.length).trim();
         if (kept) {
           blocks.push({ ...b, text: kept });
@@ -96,8 +97,8 @@ export function reflowSlides(slides: unknown, toIn: unknown, fromIn: unknown = '
 }
 
 /** Whether a deck's slides have nothing the aspect makes overflow (text and figures). */
-export const fitsAt = (slides: unknown, aspect: unknown) =>
-  fitProblems(slides, aspect).filter((p) => p.kind === 'overflow' || p.kind === 'value_too_long').length === 0;
+export const fitsAt = (slides: unknown, aspect: unknown, script: Script = 'latin') =>
+  fitProblems(slides, aspect, script).filter((p) => p.kind === 'overflow' || p.kind === 'value_too_long').length === 0;
 
 /**
  * The reflow map of each structure: every area's box at both aspects, and how

@@ -19,6 +19,8 @@ is automatic. The routes are `cloudflare-worker/src/routes/team_agents.ts`, moun
 | `planner.ts` | D1530 (#3848, E4 of #3742): the goal planner. `parsePlan` (at most 20 items; an unknown module or role drops its item with a note; a loop is `plan_invalid`), `planQuote` and `draftPlan` (the CEO agent through `agentRun`, else the manager's Eadwyn, on `propose:goal-plan`), and `acceptPlan` (claims the proposal once and writes every task, event and dependency in the same atomic `DB.batch`). `agent_planner_d1530.test.ts` covers it. |
 | `templates.ts` | D1530: one role template per catalogue role (model tier, suggested cap, duties), the wizard's stage mapping, `suggestRoles` (rule-based, no model) and `monthEstimate` (unknown, never 0). |
 | `workBoard.ts` | D1614 W1 (#3969): project board fields and cards over `scope_tasks` (migration 762), transactional moves with actor events, close reasons, per-project numbering, scoped dependency checks (E1's cycle walk; 409 `task_blocked`) and the `unblocked` notice. E3's run store is read through the `WorkRunReader` seam, "no recorded runs" until #3847 supplies one. |
+| `workItems.ts` | D1614 W7 (#3993): a project task's comments (cleaned Markdown, mentions through `notify()`), its timeline and derived participants, a person's review, agents' task drafts (proposals until Accept), labels and milestones. Migration 763. `work_items_3993.test.ts` covers it. |
+| `workLabels.ts` | D1614 W7: the statements that keep `task_label_links` and W1's `labels_json` mirror in step inside W1's own batch. |
 
 **The rule for adding here.** `catalogue.ts` and `rulebook.ts` stay pure: no
 binding, no fetch. A read of the database goes in `teams.ts`, and a gate is
