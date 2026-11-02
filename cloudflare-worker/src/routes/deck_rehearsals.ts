@@ -23,6 +23,7 @@
  * The audio is held in R2 only until the report has been read
  * (`services/rehearsalAudio.ts`); the transcript and the report stay.
  */
+import { flagsFor, notSwitchedOn } from '../services/featureFlags';
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
@@ -111,6 +112,8 @@ async function rowOf(env: Env, deckId: number, userId: number, uid: string): Pro
 
 deckRehearsals.post('/:id{[0-9]+}/rehearsals/quote', async (c) => {
   const user = await requireAuth(c);
+  // #4189 (D4155 K2): HQ › Decks switches this feature (`deck:rehearsal`); off answers "Not switched on yet."
+  if (!(await flagsFor(c.env, user)).on('deck:rehearsal')) return refuse(c, 404, notSwitchedOn);
   const deck = await deckOf(c, user);
   if (deck instanceof Response) return deck;
   const body = await c.req.json().catch(() => ({} as any));
@@ -125,6 +128,8 @@ deckRehearsals.post('/:id{[0-9]+}/rehearsals/quote', async (c) => {
 
 deckRehearsals.post('/:id{[0-9]+}/rehearsals', async (c) => {
   const user = await requireAuth(c);
+  // #4189 (D4155 K2): HQ › Decks switches this feature (`deck:rehearsal`); off answers "Not switched on yet."
+  if (!(await flagsFor(c.env, user)).on('deck:rehearsal')) return refuse(c, 404, notSwitchedOn);
   const deck = await deckOf(c, user);
   if (deck instanceof Response) return deck;
   if (!c.env.FILES) return refuse(c, 503, { code: 'storage_unavailable', message: 'Rehearsals cannot be stored here yet. Nothing was run and nothing was charged.' });
