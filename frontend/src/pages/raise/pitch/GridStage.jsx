@@ -623,7 +623,7 @@ export function DecorPanel({ library, count, snapped, onPick, onSearch, onClose 
       {v ? <span className={MONO} data-testid="pitch-decor-licence">{`Open licence · recorded · ${v.licence?.name || 'Icons'} ${v.licence?.spdx || ''}`.trim()}</span> : null}
       <span className={MUTED} data-testid="pitch-decor-count">{full ? `This card holds ${DECOR_MAX} decor items, the most it can.` : `${count} of ${DECOR_MAX} decor items on this card`}</span>
       {snapped ? <span className={`${MONO} w-fit rounded-full bg-axal-lavender px-2 py-0.5 text-axal-violet dark:bg-violet-950/40 dark:text-violet-300`} role="status" data-testid="pitch-decor-snapped">Snapped to the baseline</span> : null}
-      <button type="button" disabled aria-disabled="true" className="flex min-h-[36px] flex-col items-start rounded-[8px] border border-dashed border-axal-hairline px-2 py-1 text-left opacity-60 dark:border-gray-700" data-testid="pitch-decor-generate">
+      <button type="button" disabled aria-disabled="true" className="flex min-h-[36px] flex-col items-start rounded-[8px] border border-dashed border-axal-hairline px-2 py-1 text-start opacity-60 dark:border-gray-700" data-testid="pitch-decor-generate">
         <b className="text-[12.5px]">Generate an icon · Coming later</b>
         <span className={MUTED}>It will show what it holds before it runs. Its model is picked in the rail's Graphics group.</span>
       </button>
