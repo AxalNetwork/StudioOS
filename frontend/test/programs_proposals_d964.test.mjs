@@ -416,5 +416,5 @@ test('the source: no toast or confirm, no canvas sample, no Product testers audi
   for (const sample of ['[Studio', '[Operator', '[12]', '[10:4', 'Studio Lisbon', 'Studio Nairobi']) assert.ok(!files.includes(sample), `a canvas sample: ${sample}`);
   assert.doesNotMatch(read('frontend/src/pages/admin/programs/proposalsModel.js'), /WHO_WORDS = Object\.freeze\(\[[^\]]*Product testers/);
   assert.match(read('frontend/src/pages/admin/programs/ProposePage.jsx'), /`Needs \$\{label/, 'each tool reads as a need');
-  assert.match(read('frontend/src/lib/api.js'), /\nexport \* from '\.\/api\/programProposals\.js';\n/);
+  assert.match(read('frontend/src/lib/apiModules.generated.js'), /\nexport \* from '\.\/api\/programProposals\.js';\n/);
 });

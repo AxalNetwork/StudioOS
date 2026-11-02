@@ -179,6 +179,22 @@ test('a push with no usable before-commit is refused, never downgraded to a pass
   }
 });
 
+test('#4107: a merge queue entry is judged against the main commit the queue built it on, and refused without one', () => {
+  assert.deepEqual(
+    resolveBase({ GITHUB_EVENT_NAME: 'merge_group', MIGRATION_GATE_BEFORE: SHA_A, GITHUB_BASE_REF: '' }),
+    { ok: true, mode: 'queue', sha: SHA_A, remoteRef: SHA_A },
+  );
+  // The queue's branch is gh-readonly-queue/main/…, not a PR, so there is no
+  // base branch to fall back to: a missing base_sha is refused, never a pass.
+  for (const before of [undefined, '', '0'.repeat(40), 'main']) {
+    const env = { GITHUB_EVENT_NAME: 'merge_group', GITHUB_BASE_REF: 'main' };
+    if (before !== undefined) env.MIGRATION_GATE_BEFORE = before;
+    const r = resolveBase(env);
+    assert.equal(r.ok, false, `${JSON.stringify(before)} must be refused`);
+    assert.match(r.reason, /a merge queue entry needs MIGRATION_GATE_BEFORE/);
+  }
+});
+
 test('a base name that is an option, a range or has a space is refused, not handed to git', () => {
   for (const bad of ['--upload-pack=touch', '-x', 'main..evil', 'has space', 'semi;colon', 'a$b']) {
     const r = resolveBase({ GITHUB_BASE_REF: bad });
@@ -227,10 +243,11 @@ test('workflow: a push run is never cancelled by the next push, a PR run may be'
   assert.match(block, /github\.sha/, 'each push is its own group, so two pushes never share one');
 });
 
-test('workflow: full history, the gate script, and the before-commit only on a push', () => {
+test('workflow: full history, the gate script, and the before-commit only on a push or a merge queue entry', () => {
   assert.match(WF_CODE, /fetch-depth: 0/, 'a depth-1 clone has no merge base to diff from');
   assert.match(WF_CODE, /run: node scripts\/migration-immutability-gate\.mjs\n/);
-  assert.match(WF_CODE, /MIGRATION_GATE_BEFORE: \$\{\{ github\.event_name == 'push' && github\.event\.before \|\| '' \}\}/);
+  // #4107: in the merge queue the base is the main commit the entry was built on.
+  assert.match(WF_CODE, /MIGRATION_GATE_BEFORE: \$\{\{ github\.event_name == 'push' && github\.event\.before \|\| github\.event_name == 'merge_group' && github\.event\.merge_group\.base_sha \|\| '' \}\}/);
   for (const line of WF_CODE.split('\n').filter((l) => /^\s*run:/.test(l))) {
     assert.doesNotMatch(line, /\$\{\{/, `no expression is substituted into shell text: ${line.trim()}`);
   }

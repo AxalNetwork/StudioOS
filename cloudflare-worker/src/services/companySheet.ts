@@ -1,3 +1,4 @@
+/** D699: which cycles a company is active in (`CYCLE_STORES`) and the member's last visit per cycle. */
 import type { Env, User } from '../types';
 import { nowIso, newUid } from '../routes/_t13t14t15_helpers';
 

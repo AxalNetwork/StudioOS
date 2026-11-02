@@ -30,6 +30,7 @@ import {
 import FormLightbox from '../src/pages/cycles/FormLightbox.jsx';
 import { formsFor } from '../src/pages/cycles/forms.js';
 import { cyclesWrite } from '../src/lib/api/cycles.js';
+import { apiModulesBlock } from './_apiModulesBlock.mjs';
 
 const h = React.createElement;
 const read = (path) => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
@@ -241,8 +242,8 @@ test('the routes and CycleRoute: NAR14a for the other profiles, and no write of 
   assert.match(route, /rowAction=\{!narrativeAdmin && edit/);
   assert.match(route, /if \(narrativeAdmin && projectStatus !== 'none' && !actionPage\) \{\n\s+body = <NarrativeAdminGate projectId=\{projectId\} onOpened=/);
   assert.match(route, /admin=\{narrativeAdmin\} \/>/);
-  const api = read('frontend/src/lib/api.js');
-  const exports = api.slice(api.indexOf('// api-modules:begin'), api.indexOf('// api-modules:end')).split('\n').filter(line => line.startsWith('export * from'));
+  assert.match(read('frontend/src/lib/api.js'), /^export \* from '\.\/apiModules\.generated\.js';$/m);
+  const exports = apiModulesBlock().split('\n').filter(line => line.startsWith('export * from'));
   assert.equal(exports.filter(line => line === "export * from './api/narrative.js';").length, 1);
   assert.deepEqual(exports, [...exports].sort(), 'API modules stay alphabetical as new domains land');
 });

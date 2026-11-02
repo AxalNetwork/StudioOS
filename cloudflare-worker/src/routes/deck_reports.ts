@@ -35,6 +35,8 @@ import { isSupportSession } from '../integrations/providers/mercury';
 import { logAdminAction } from '../services/adminAudit';
 import { refuse } from '../util/refusal';
 import { NEW_DECK_RAIL } from './deck_new';
+import type { RouteMount } from '../util/routeRegistry';
+import decks from './decks';
 
 /** The reasons a founder picks from, in the words the card shows. */
 export const REPORT_REASONS = Object.freeze({
@@ -155,3 +157,13 @@ hqDeckReports.post('/:uid/resolve', async (c) => {
   await logAdminAction(c.env, Number(actor.id), (actor as any).email ?? '', 'deck_report_resolved', { report_uid: uid, outcome });
   return c.json({ report: reportView(row) });
 });
+
+/**
+ * #4105: both routers mount themselves, ahead of `decks` (whose `/:id` routes
+ * would otherwise answer `/proposals/:uid/report`), where index.ts mounted
+ * them by hand: the founder's report under /api/decks, then HQ's queue.
+ */
+export const mount: RouteMount[] = [
+  { path: '/api/decks', router: deckReports, before: [decks] },
+  { path: '/api/admin/deck-reports', router: hqDeckReports, before: [decks] },
+];
