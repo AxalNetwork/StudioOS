@@ -20,14 +20,16 @@
  * (an advisor reads but does not write). A row of another venture is the same
  * 404 as no row.
  *
- * Mounted in index.ts BEFORE `decks`, so `GET /api/decks/:id` cannot answer
- * `/stage-norms`.
+ * Mounts itself (#4105): its `mount` export puts it ahead of `decks`, so
+ * `GET /api/decks/:id` cannot answer `/stage-norms`.
  */
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { projectOwned } from '../middleware/projectContentAccess';
 import { refuse } from '../util/refusal';
+import type { RouteMount } from '../util/routeRegistry';
+import decks from './decks';
 import {
   STAGES, STAGE_LABELS, NO_BENCHMARK, checkNorm, listNorms, normDto,
   type Stage, type StageNormRow,
@@ -140,3 +142,6 @@ deckStageNorms.delete('/stage-norms/:uid', async (c) => {
 });
 
 export default deckStageNorms;
+
+/** #4105: `/api/decks`, before `decks`, whose `GET /:id` would otherwise answer `GET /stage-norms`. */
+export const mount: RouteMount = { path: '/api/decks', router: deckStageNorms, before: [decks] };

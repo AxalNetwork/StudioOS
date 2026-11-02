@@ -371,7 +371,7 @@ test('the wiring: mounted at /api/reporting, CAPITAL\'s close calls it, the cron
   assert.ok(index.includes("app.route('/api/reporting', reporting);"));
   assert.match(index, /runReportingDaily\(env, now\.getTime\(\)\)/);
   assert.match(read('cloudflare-worker/src/services/closings.ts'), /createReportingDuties\(env, closing\.id\)/);
-  assert.ok(read('frontend/src/lib/api.js').includes("export * from './api/reporting.js';"));
+  assert.ok(read('frontend/src/lib/apiModules.generated.js').includes("export * from './api/reporting.js';"));
   const src = read('cloudflare-worker/src/routes/reporting.ts') + read('cloudflare-worker/src/services/reportingDuties.ts');
   assert.ok(!/prepare\(`[^`]*\$\{/.test(src), 'no interpolation inside a prepared statement');
 });

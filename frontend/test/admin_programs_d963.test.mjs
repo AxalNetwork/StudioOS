@@ -517,6 +517,6 @@ test('wiring: the new sub-paths are routed under today’s guard, are tabs of th
   assert.deepEqual(routeFor('/admin/programs/referral-partners/activity'), { program: 'referral-partners', tab: 'activity' });
   const { pageKeyFor } = await import('../src/lib/railPages.js');
   for (const p of ['/admin/programs/referral-partners/queue', '/admin/programs/investor-cohorts/activity']) assert.equal(pageKeyFor(p, 'admin'), 'Admin · Programs');
-  const api = read('frontend/src/lib/api.js');
+  const api = read('frontend/src/lib/apiModules.generated.js');
   assert.ok(api.includes("export * from './api/investorCohorts.js';") && api.includes("export * from './api/referralPartners.js';"));
 });
