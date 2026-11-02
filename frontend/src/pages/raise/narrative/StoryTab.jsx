@@ -84,7 +84,7 @@ function AskEadwyn({ aiOn, busy, onAsk }) {
     <span className="relative inline-block">
       <button type="button" aria-expanded={open} aria-haspopup="menu" disabled={!aiOn || busy} onClick={() => setOpen((o) => !o)}
         title={!aiOn ? AI_OFF_LINE : undefined} className={`${GHOST} border-axal-lavender-edge bg-axal-lavender text-axal-violet dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300`} data-testid="story-ask-open">
-        {busy ? 'Eadwyn is writing…' : 'Ask Eadwyn ▾'}
+        {busy ? 'Writing…' : 'Draft ▾'}
       </button>
       {open && aiOn ? (
         <span role="menu" className="absolute right-0 z-10 mt-1 flex min-w-[12rem] flex-col rounded-[10px] border border-axal-hairline bg-white p-1 shadow-lg dark:border-gray-700 dark:bg-gray-900" data-testid="story-ask-menu">
