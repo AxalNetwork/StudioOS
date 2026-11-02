@@ -73,6 +73,9 @@ passed (D4130). `frontend/test/merge_queue_ci_4107.test.mjs` fails
 on any of these, and its `REQUIRED` list changes with the ruleset ("main:
 required checks").
 
+TEST B (#4107): this paragraph conflicts with test A on purpose. The queue
+must eject this pull request; it is never meant to merge.
+
 ## When a workflow starts failing
 
 1. Open the failing run in the GitHub UI **immediately** — the per-job
