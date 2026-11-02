@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
@@ -12,6 +12,10 @@ import {
   AUDIENCE, EMPTY_CARD, ESC_TO_EXIT, NO_CARDS, NO_VERSION, PRESENTER, READ_FAILED, SHOW_SOURCES, SOURCE_NOT_RECORDED,
   cardsOf, clock, countLabel, dotsOf, exitHref, moveTo, notesOf, stepFor, swipeLine, swipeStep,
 } from './presentExportModel';
+import { REHEARSE } from './rehearseModel';
+
+// D1580 F1 (#3827): Present › Rehearse, loaded when it is opened.
+const RehearsePanel = lazy(() => import('./RehearsePanel'));
 
 /**
  * D901 (#2680) — present mode at /raise/pitch/present (PD16; PD26 frame 2 on
@@ -25,6 +29,10 @@ import {
  *
  * Keys: ← → (and Page Up / Page Down, Space, Home, End); Esc leaves for the
  * studio. Present reads; it writes nothing.
+ *
+ * D1580 F1 (#3827): Rehearse, beside the two views, times the founder card by
+ * card against the pitch length and writes a rehearsal and its report
+ * (`RehearsePanel.jsx`). While it is open the keys are Rehearse's.
  *
  * D1112 (#2992): a card the editor laid out on D898's 12 × 6 grid is drawn
  * from its blocks, each at its range: text, metric tiles with their source
@@ -94,6 +102,7 @@ export default function PitchPresent() {
 
   useEffect(() => {
     const onKey = (e) => {
+      if (view === 'rehearse') return;
       const s = stepFor(e.key);
       if (!s) return;
       e.preventDefault();
@@ -101,7 +110,7 @@ export default function PitchPresent() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [step]);
+  }, [step, view]);
 
   useEffect(() => {
     const t = setInterval(() => setSeconds((s) => s + 1), 1000);
@@ -160,12 +169,22 @@ export default function PitchPresent() {
           <button type="button" className={view === 'presenter' ? ON : OFF} aria-pressed={view === 'presenter'} onClick={() => setView('presenter')}>{PRESENTER}</button>
           <button type="button" className={view === 'audience' ? ON : OFF} aria-pressed={view === 'audience'} onClick={() => setView('audience')}>{AUDIENCE}</button>
           <button type="button" className={sources ? ON : OFF} aria-pressed={sources} onClick={() => setSources((v) => !v)} data-testid="pitch-present-sources">{SHOW_SOURCES}</button>
+          <button type="button" className={view === 'rehearse' ? ON : OFF} aria-pressed={view === 'rehearse'} onClick={() => setView('rehearse')} data-testid="pitch-present-rehearse">{REHEARSE}</button>
         </div>
         <span data-testid="pitch-present-status">
           {view === 'presenter' ? `${clock(seconds)} · ` : ''}{countLabel(i, n)} · <Link to={exit} className="text-gray-300 hover:underline">{ESC_TO_EXIT}</Link>
         </span>
       </div>
-      {view === 'presenter' ? (
+      {view === 'rehearse' ? (
+        <Suspense fallback={<span className="mx-4 h-6 w-48 animate-pulse rounded bg-gray-800" aria-label="Loading" />}>
+          <RehearsePanel
+            deck={deck}
+            cards={cards}
+            renderCard={(k) => <Card card={cards[k]} sources={false} aspect={aspect} chrome={chromeOf(deck, k)} />}
+            onClose={() => setView('presenter')}
+          />
+        </Suspense>
+      ) : view === 'presenter' ? (
         <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto px-4 pb-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
           <Card card={card} sources={sources} aspect={aspect} chrome={chromeOf(deck, i)} />
           <div className="flex min-w-0 flex-col gap-3">

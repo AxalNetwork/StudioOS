@@ -34,6 +34,8 @@
  * `elementModels` (D1503, #3754) answers through `deckElementModelsApi.read`.
  * And `consistency` (D1555, #3802): the free rules ride the deck check's own
  * reply, so it answers through `deckCheckApi.read`.
+ * `rehearse` (D1580 F1, #3827) answers through `deckRehearsalsApi.list`; Present's
+ * Rehearse panel runs, reads and keeps through the same client.
  *
  * Fields on routes that exist (`context.inferred` and `context.freshness`
  * from #3877; the PostHog, HubSpot and Linear source rows from #3880) need
@@ -48,6 +50,7 @@ import { deckRemixApi } from '../../../lib/api/deckRemix.js';
 import { deckTypedValuesApi } from '../../../lib/api/deckTypedValues.js';
 import { deckCheckApi } from '../../../lib/api/deckCheck.js';
 import { deckElementModelsApi } from '../../../lib/api/deckElementModels.js';
+import { deckRehearsalsApi } from '../../../lib/api/deckRehearsals.js';
 
 export { NOT_ON };
 
@@ -108,7 +111,7 @@ export const SURFACES = Object.freeze({
 const off = (name) => async () => unavailable(SURFACES[name].issue);
 
 /** The rows whose route is on main: each answers through its real client, never unavailable by default. */
-export const SWAPPED = Object.freeze(['grid', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency']);
+export const SWAPPED = Object.freeze(['grid', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'rehearse']);
 
 /**
  * A client call, as a surface reads it, for the day a method is swapped:
@@ -188,7 +191,8 @@ export const comments = off('comments');
 export const slideAnalytics = off('slideAnalytics');
 export const presence = off('presence');
 export const cardStatus = off('cardStatus');
-export const rehearse = off('rehearse');
+/** D1580 F1 (#3827): the founder's rehearsals of this version, newest first; the surface runs and reads them through `deckRehearsalsApi`. */
+export const rehearse = (deckId) => through(() => deckRehearsalsApi.list(deckId), SURFACES.rehearse.issue);
 export const walkthrough = off('walkthrough');
 export const retryFailed = off('retryFailed');
 export const unseenBatches = off('unseenBatches');

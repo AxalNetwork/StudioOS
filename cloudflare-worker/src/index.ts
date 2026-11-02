@@ -260,6 +260,7 @@ import deckTypedValues from './routes/deck_typed_values';
 import deckNew from './routes/deck_new';
 import deckAssist from './routes/deck_assist';
 import deckImages from './routes/deck_images';
+import deckRehearsals from './routes/deck_rehearsals';
 // D1565 (#3812): one link per investor, and tailored variants.
 import deckInvestorLinks from './routes/deck_investor_links';
 // D1589 (#3836): a venture's stage norms, the benchmarks a deck critic may cite.
@@ -1400,6 +1401,8 @@ app.route('/api/decks', deckNew);
 app.route('/api/decks', deckAssist);
 // D903 (#2682): card and background images (`/:id/images…`, `/images/:uid/…`), before `decks` so `GET /:id` cannot answer `/images/…`.
 app.route('/api/decks', deckImages);
+// D1580 F1 (#3827): rehearse a deck version and read its report.
+app.route('/api/decks', deckRehearsals);
 // D1565 (#3812): `/:id/investor-links…` and `/:id/variants`, before `decks` so its `/:id` routes cannot answer them.
 app.route('/api/decks', deckInvestorLinks);
 // D1589 (#3836): `/stage-norms`, before `decks` so `GET /:id` cannot answer it.
@@ -2285,6 +2288,14 @@ export default {
             await sweepQuietChats(env, now);
           } catch (e) {
             console.error('[cron] channel sweeps failed', e instanceof Error ? e.message : 'error');
+          }
+          // D1580 F1 (#3827) — a rehearsal's audio once its hour is up, unless the founder kept it.
+          try {
+            const { purgeRehearsalAudio } = await import('./services/rehearsalAudio');
+            const r = await purgeRehearsalAudio(env, now);
+            if (r.deleted) console.info(`[cron] rehearsal audio purge deleted=${r.deleted}`);
+          } catch (e) {
+            console.error('[cron] rehearsal audio purge failed', e instanceof Error ? e.message : 'error');
           }
         }
         // D685 §5.6 — recordings a closed tab left behind: drafts never

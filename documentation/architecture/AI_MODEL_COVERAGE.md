@@ -112,7 +112,7 @@ Prices are Cloudflare's printed USD per unit (per 1M tokens, per 1k characters, 
 | `@cf/mistralai/mistral-small-3.1-24b-instruct` | Text Generation | ga | tokens_in 0.351, tokens_out 0.555 | 128000 | all | O | G | O | O | O | O | O | · | G | G | G | O | · | O |
 | `@cf/moondream/moondream3.1-9B-A2B` | Image-to-Text | ga | tokens_in 0.300, tokens_out 1.000 | Not recorded | all | · | · | G | O | · | · | O | · | · | · | G | O | · | G |
 | `@cf/nvidia/nemotron-3-120b-a12b` | Text Generation | ga | tokens_in 0.500, tokens_out 1.500 | Not recorded | all | O | G | O | O | O | G | O | · | G | G | G | O | · | O |
-| `@cf/deepgram/nova-3` | Automatic Speech Recognition | partner | audio_minutes 0.0052, audio_minutes_websocket 0.0092 | Not recorded | all | O | W | · | G | · | · | · | · | · | · | O | · | · | O |
+| `@cf/deepgram/nova-3` | Automatic Speech Recognition | partner | audio_minutes 0.0052, audio_minutes_websocket 0.0092 | Not recorded | all | O | W | · | O | · | · | · | · | · | · | O | · | · | O |
 | `@cf/microsoft/phi-2` | Text Generation | deprecated | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/leonardo/phoenix-1.0` | Text-to-Image | partner | tiles 0.005830, steps 0.000110 | Not recorded | all, partner gate | · | · | O | O | O | · | · | · | G | · | · | O | · | G |
 | `@cf/pfnet/plamo-embedding-1b` | Text Embeddings | ga | tokens_in 0.019 | Not recorded | all | O | · | · | O | O | O | O | · | · | · | G | O | · | O |
@@ -129,8 +129,8 @@ Prices are Cloudflare's printed USD per unit (per 1M tokens, per 1k characters, 
 | `@cf/stabilityai/stable-diffusion-xl-base-1.0` | Text-to-Image | beta | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/bytedance/stable-diffusion-xl-lightning` | Text-to-Image | beta | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/unum/uform-gen2-qwen-500m` | Image-to-Text | deprecated | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
-| `@cf/openai/whisper` | Automatic Speech Recognition | ga | audio_minutes 0.0005 | Not recorded | all | O | O | · | G | · | · | · | · | · | · | O | · | · | O |
-| `@cf/openai/whisper-large-v3-turbo` | Automatic Speech Recognition | ga | audio_minutes 0.0005 | Not recorded | all | W | W | · | G | · | · | · | · | · | · | W | · | · | W |
+| `@cf/openai/whisper` | Automatic Speech Recognition | ga | audio_minutes 0.0005 | Not recorded | all | O | O | · | O | · | · | · | · | · | · | O | · | · | O |
+| `@cf/openai/whisper-large-v3-turbo` | Automatic Speech Recognition | ga | audio_minutes 0.0005 | Not recorded | all | W | W | · | O | · | · | · | · | · | · | W | · | · | W |
 | `@cf/openai/whisper-tiny-en` | Automatic Speech Recognition | beta | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 
 ## Where each offered model is wired and offered
@@ -838,7 +838,7 @@ transcribe: Transcribe member-supplied recordings and interview audio.
 
 - Validate: **offered**, `/api/ai/modules on "Founder · Validate · Customer research"`; `railMatrix.json "Founder · Validate · Customer research"`; `railMatrix.json option transcribe:interview`; `railMatrix.json option transcribe:recording`; and 2 more
 - Record a Session: **wired**, `services/sttModels.ts (STT_MODELS), live`
-- Raise: **gap**, `#3721`
+- Raise: **offered**, `railMatrix.json option transcribe:rehearsal`
 - Studio / Eadwyn: **offered**, `railMatrix.json option transcribe:voice-answer`; `routes/advisor.ts (transcribe)`
 - Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Practice · Sessions"`; `railMatrix.json "Advisor · Practice · Sessions"`
 
@@ -971,7 +971,7 @@ transcribe: Transcribe member-supplied recordings and interview audio.
 
 - Validate: **offered**, `/api/ai/modules on "Founder · Validate · Customer research"`; `railMatrix.json option transcribe:interview`; `railMatrix.json option transcribe:recording`; `railMatrix.json option transcribe:session`; and 1 more
 - Record a Session: **offered**, `routes/founder_validate.ts (transcribe)`; `services/sttModels.ts (STT_MODELS), final`
-- Raise: **gap**, `#3721`
+- Raise: **offered**, `railMatrix.json option transcribe:rehearsal`
 - Studio / Eadwyn: **offered**, `railMatrix.json option transcribe:voice-answer`; `routes/advisor.ts (transcribe)`
 - Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Practice · Sessions"`
 
@@ -981,7 +981,7 @@ transcribe: Transcribe member-supplied recordings and interview audio.
 
 - Validate: **wired**, `railMatrix.json "Founder · Validate · Customer research"`; `services/interviewProcessing.ts (transcribe)`
 - Record a Session: **wired**, `routes/founder_validate.ts (transcribe)`; `services/sttModels.ts (STT_MODELS), final`
-- Raise: **gap**, `#3721`
+- Raise: **offered**, `railMatrix.json option transcribe:rehearsal`
 - Studio / Eadwyn: **wired**, `routes/advisor.ts (transcribe)`
 - Investor, Advisor and Partner workspaces: **wired**, `railMatrix.json "Advisor · Practice · Sessions"`
 

@@ -469,6 +469,12 @@ run by the daily cron, removes audio past it through `interviewSessions.ts`'s
 `deleteSessionAudio`, which the founder's audio-only delete also calls. The
 segments stay, and the session records `audio_removed_at` and its reason.
 
+D1580 F1 (#3827): `rehearsalAudio.ts` keeps a deck rehearsal's audio for an
+hour after its report unless the founder turns "Keep the audio" on;
+`deleteRehearsalAudio` (also the switch's off) and `purgeRehearsalAudio`, run
+by the cron's five-minute step. It sits here, not under `decks/`, so the
+scheduled handler names no deck module (the D752 cron-reach guard).
+
 D684 (#1575): `interviewIntake.ts` is the one way an outside channel writes
 into an interview. It reloads the member and re-checks the venture on every
 write, takes the interview only from an id already scoped to the member, and
