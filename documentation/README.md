@@ -26,6 +26,7 @@ nothing here is served.
 | Where does anything live? | [architecture/CODEBASE_MAP.md](architecture/CODEBASE_MAP.md) |
 | Which canvas maps to which route, and what shipped? | [architecture/ROUTE_MAP.md](architecture/ROUTE_MAP.md) |
 | Which AI model runs, or can be picked, in which module? | [architecture/AI_MODEL_COVERAGE.md](architecture/AI_MODEL_COVERAGE.md) (generated) |
+| May this model run, and what do its provider's terms allow? | [architecture/MODEL_TERMS.md](architecture/MODEL_TERMS.md) |
 | Who sees a surface, where in their nav, and how do they reach it? | [architecture/PROFILE_ROUTING.md](architecture/PROFILE_ROUTING.md) |
 | What can each role actually navigate to? | [architecture/PAGE_INVENTORY.md](architecture/PAGE_INVENTORY.md) |
 | What is blocked, and on what? | [architecture/UNRESOLVED_ITEMS.md](architecture/UNRESOLVED_ITEMS.md) |
