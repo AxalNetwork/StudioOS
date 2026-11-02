@@ -22,25 +22,12 @@
  * D1603, so `ExportDialog.jsx` calls `api.deckExportOdp` directly and this
  * file no longer lists it.
  *
- * Swapped here (`SWAPPED`): `grid`, whose route `GET /api/decks/:id/grid`
- * merged as D1499 part 1 (#3749), `stagePlan`, whose route
- * `GET /api/decks/:id/stage-plan` is D1522 (#3774), `remix`, whose route
- * `POST /api/decks/:id/remix` is D1553 (#3800), D1565's (#3812)
- * `investorLinks` and `withdrawInvestorLink`, and `typedTables`, whose route
- * `GET /api/decks/:id/typed-values` is D1538 (#3787). Each keeps its row, so
- * the plan's table still reads whole, and answers through its client
- * (`deckGridApi.grid`, `deckStageApi.stagePlan`, `deckRemixApi.remix`,
- * `deckInvestorLinksApi`, `deckTypedValuesApi.list`).
- * `elementModels` (D1503, #3754) answers through `deckElementModelsApi.read`.
- * And `consistency` (D1555, #3802): the free rules ride the deck check's own
- * reply, so it answers through `deckCheckApi.read`.
- * `presets` (D1549, #3796) answers through `deckModelPresetsApi.read`, and so
- * does `orgLocks`, from the same reply's `locks` key: #3786 (B10) keyed that
- * row but has no route on main, so C1 built the read and the row keeps B10's
- * issue.
- * `comments` (D1570, #3817)
- * answers through `deckCommentsApi.list`.
- * `figures` (D1523, #3775) answers through `deckFiguresApi.list`.
+ * Which rows are swapped is not written down anywhere: `SWAPPED`, at the foot
+ * of this file, is derived (#4134). A row is swapped when its method below
+ * answers through `through()`, and off while it is `off('<name>')`. So a swap
+ * is one line, the row's own, and its decision is named in the comment above
+ * that line. Never add a row to a list here: two branches that each swap a
+ * row then meet only if they swap the same one.
  *
  * Fields on routes that exist (`context.inferred` and `context.freshness`
  * from #3877; the PostHog, HubSpot and Linear source rows from #3880) need
@@ -48,19 +35,20 @@
  */
 
 import { LATER, NOT_ON } from './deckV2Model.js';
-import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks.js';
-import { deckDraftApi } from '../../../lib/api/deckDraft.js';
-import { deckGridApi } from '../../../lib/api/deckGrid.js';
-import { deckStageApi } from '../../../lib/api/deckStage.js';
-import { deckRemixApi } from '../../../lib/api/deckRemix.js';
-import { deckTypedValuesApi } from '../../../lib/api/deckTypedValues.js';
+// One line per client, in file-name order (pitch_v2_adapter_d1604 holds it), so two swaps add lines at different places.
 import { deckCheckApi } from '../../../lib/api/deckCheck.js';
+import { deckCoeditApi } from '../../../lib/api/deckCoedit.js';
+import { deckCommentsApi } from '../../../lib/api/deckComments.js';
+import { deckDraftApi } from '../../../lib/api/deckDraft.js';
 import { deckElementModelsApi } from '../../../lib/api/deckElementModels.js';
 import { deckFiguresApi } from '../../../lib/api/deckFigures.js';
-import { deckModelPresetsApi } from '../../../lib/api/deckModelPresets.js';
-import { deckCommentsApi } from '../../../lib/api/deckComments.js';
-import { deckCoeditApi } from '../../../lib/api/deckCoedit.js';
+import { deckGridApi } from '../../../lib/api/deckGrid.js';
 import { deckImageEditsApi } from '../../../lib/api/deckImageEdits.js';
+import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks.js';
+import { deckModelPresetsApi } from '../../../lib/api/deckModelPresets.js';
+import { deckRemixApi } from '../../../lib/api/deckRemix.js';
+import { deckStageApi } from '../../../lib/api/deckStage.js';
+import { deckTypedValuesApi } from '../../../lib/api/deckTypedValues.js';
 
 export { NOT_ON };
 
@@ -120,10 +108,12 @@ export const SURFACES = Object.freeze({
   setDeckSource: { issue: 3881, what: 'Tag a data-room file as a deck source' },
 });
 
-const off = (name) => async () => unavailable(SURFACES[name].issue);
-
-/** The rows whose route is on main: each answers through its real client, never unavailable by default. */
-export const SWAPPED = Object.freeze(['grid', 'saveCard', 'discardDraft', 'draft', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'presets', 'orgLocks', 'comments', 'figures', 'presence', 'imageVary']);
+/** The rows still off. `off(name)` records its row, so `SWAPPED` (at the foot) is every other row. */
+const OFF = new Set();
+const off = (name) => {
+  OFF.add(name);
+  return async () => unavailable(SURFACES[name].issue);
+};
 
 
 /**
@@ -230,6 +220,13 @@ export const retryFailed = off('retryFailed');
 export const unseenBatches = off('unseenBatches');
 export const markSeen = off('markSeen');
 export const setDeckSource = off('setDeckSource');
+
+/**
+ * #4134: the rows whose route is on main, each answering through its real client, never unavailable by
+ * default. Derived, never listed: every row whose method above is not `off(...)`, in SURFACES order.
+ * pitch_v2_adapter_d1604 holds each one to a `through(() => <client>…)` body.
+ */
+export const SWAPPED = Object.freeze(Object.keys(SURFACES).filter((name) => !OFF.has(name)));
 
 /** Synchronous: whether a surface is on, for a menu that greys its item before any read. */
 export const availability = (name) => (SURFACES[name] && !SWAPPED.includes(name) ? unavailable(SURFACES[name].issue) : null);
