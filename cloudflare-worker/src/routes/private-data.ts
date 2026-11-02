@@ -1,3 +1,4 @@
+/** `/api/private-data`: signed-in reads — the caller's profile, private market signals, portfolio metrics and a founder's record. */
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';

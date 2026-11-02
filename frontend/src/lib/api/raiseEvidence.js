@@ -1,3 +1,4 @@
+/** D1263: Raise evidence reads, refresh and versioned accept or dismiss decisions (`/api/cycles/raise/evidence`). */
 import { request } from '../api.js';
 
 const query = (projectId, { limit, offset } = {}) => new URLSearchParams({ project: String(projectId), ...(limit != null ? { limit: String(limit) } : {}), ...(offset != null ? { offset: String(offset) } : {}) });
