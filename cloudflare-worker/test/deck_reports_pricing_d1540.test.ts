@@ -21,7 +21,7 @@ import decks from '../src/routes/decks.ts';
 import { deckReports, hqDeckReports, REPORT_REASONS } from '../src/routes/deck_reports.ts';
 import { __resetForTest } from '../src/services/aiRouter.ts';
 import { AI_MARKUP, multiplierFor, pricingVersion } from '../src/services/ai/pricing.ts';
-import { CEILING_REACHED, dailyCeiling } from '../src/services/decks/runQuotes.ts';
+import { CEILING_REACHED, dailyCeiling, pinQuote, takeQuote } from '../src/services/decks/runQuotes.ts';
 import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withGuard } from './_guard_stub.mjs';
@@ -204,6 +204,20 @@ test('a quote prices one run, for its member, venture and run only: anything els
   } finally { f.close(); }
 });
 
+test('a quote is taken only by the member it was made for, on its venture and step', async () => {
+  const f = await fixture();
+  try {
+    const opts: any = { task: 'rail_write', userId: FOUNDER, messages: [{ role: 'user', content: 'Synthetic' }], maxTokens: 100 };
+    const pin = (await pinQuote(f.env, { userId: FOUNDER, projectId: 1, step: 'build', holdMicrousd: 500, model: null, opts }))!;
+    assert.ok(pin, 'pinned');
+    assert.ok('stale' in await takeQuote(f.env, pin.uid, { userId: OTHER, projectId: 1, step: 'build', opts }), 'another member');
+    assert.ok('stale' in await takeQuote(f.env, pin.uid, { userId: FOUNDER, projectId: 4, step: 'build', opts }), 'another venture');
+    assert.ok('stale' in await takeQuote(f.env, pin.uid, { userId: FOUNDER, projectId: 1, step: 'outline', opts }), 'another step');
+    const taken = await takeQuote(f.env, pin.uid, { userId: FOUNDER, projectId: 1, step: 'build', opts });
+    assert.deepEqual('quote' in taken ? taken.quote : null, { uid: pin.uid, hold_microusd: 500, pricing_version: pin.pricing_version });
+  } finally { f.close(); }
+});
+
 // ─────────────────────────────────────────────────────────── markup and ceiling
 
 test('the markup is one figure, 1.25×, and the admin licence pays cost', () => {
@@ -315,7 +329,9 @@ test('HQ reads the queue and resolves a report; a founder or a branch cannot', a
     assert.equal((await call(f, ADMIN, 'GET', '/api/admin/deck-reports?status=resolved')).body.reports.length, 1);
     const audit = (f.db.prepare("SELECT action FROM admin_audit_log ORDER BY id").all() as any[]).map((x) => x.action);
     assert.ok(audit.includes('deck_report_resolved') && audit.includes('deck_reports_read'), JSON.stringify(audit));
-    assert.ok(!JSON.stringify(f.db.prepare('SELECT * FROM admin_audit_log').all()).includes('Wrong person'), 'the note is never in the audit log');
+    for (const table of ['admin_audit_log', 'activity_logs']) {
+      assert.ok(!JSON.stringify(f.db.prepare(`SELECT * FROM ${table}`).all()).includes('Wrong person'), `the founder's note is never in ${table}`);
+    }
     f.env.BRANCH_CODE = 'syn';
     assert.equal((await call(f, ADMIN, 'GET', '/api/admin/deck-reports')).status, 403, 'a branch is refused');
   } finally { f.close(); }
