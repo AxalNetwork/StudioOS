@@ -42,10 +42,11 @@ export type SkillDraft = {
   slug: string; name: string; purpose: string; steps: string[]; tools: string[];
   output_kind: OutputKind; tags: Tag[]; roles: string[];
 };
-export type DraftCheck = { ok: true; draft: SkillDraft } | { ok: false; code: SkillRefusal; message: string };
+export type DraftCheck = { ok: true; draft: SkillDraft } | { ok: false; code: SkillRefusal; message: string; tool?: string };
 export type SkillRefusal =
   | 'name_missing' | 'purpose_missing' | 'steps_invalid' | 'tools_invalid' | 'output_invalid'
-  | 'tags_invalid' | 'tag_unknown' | 'roles_missing' | 'role_unknown' | 'slug_invalid' | 'skill_md_invalid';
+  | 'tags_invalid' | 'tag_unknown' | 'roles_missing' | 'role_unknown' | 'slug_invalid' | 'skill_md_invalid'
+  | 'tool_not_read_only';
 
 export const SKILL_MESSAGES: Record<SkillRefusal, string> = {
   name_missing: `Give the skill a name of up to ${NAME_MAX} characters.`,
@@ -59,7 +60,20 @@ export const SKILL_MESSAGES: Record<SkillRefusal, string> = {
   role_unknown: 'One of the roles is not an agent role.',
   slug_invalid: 'A skill\'s short name is lower-case letters, digits and hyphens, up to 64 characters.',
   skill_md_invalid: 'That SKILL.md could not be read. It needs frontmatter between --- lines with at least name and description, then the steps.',
+  tool_not_read_only: 'Skills may only request read-only tools. Agents propose; a named person makes every change.',
 };
+
+/**
+ * D4160: a tool is read-only when its action is `read`, or starts `read_`,
+ * `list_`, `get_` or `search_` (`stripe.read`, `hubspot.read_contacts`).
+ * Anything else may write (`hubspot.update_deal`, `gmail.send`), and a skill
+ * may not request it, on any save or import.
+ */
+const READ_ACTION = /^(read|(read|list|get|search)_[a-z0-9_]+)$/;
+export function isReadOnlyTool(tool: string): boolean {
+  const action = tool.slice(tool.indexOf('.') + 1);
+  return tool.includes('.') && READ_ACTION.test(action);
+}
 
 const clean = (v: unknown, max: number) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max + 1) : '');
 
@@ -87,6 +101,8 @@ export function checkDraft(raw: any, ctx: { taxonomy: ReadonlySet<string>; roleK
   const toolsIn = b.tools ?? b.allowed_tools ?? [];
   if (!Array.isArray(toolsIn) || toolsIn.length > TOOLS_MAX || toolsIn.some((t: unknown) => typeof t !== 'string' || !TOOL.test(t))) return no('tools_invalid');
   const tools = [...new Set(toolsIn as string[])];
+  const writer = tools.find((t) => !isReadOnlyTool(t));
+  if (writer) return { ok: false, code: 'tool_not_read_only', tool: writer, message: `${writer} can change records, and skills may only request read-only tools. Agents propose; a named person makes every change.` };
   const output = b.output_kind ?? b.output;
   if (!(OUTPUT_KINDS as readonly string[]).includes(output)) return no('output_invalid');
   const tagsIn = b.tags ?? b.taxonomy;

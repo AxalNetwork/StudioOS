@@ -9,7 +9,9 @@
  *   GET  /skills/:uid                    one skill: its SKILL.md, versions and the agents using it
  *   POST /skills                         a new draft { scope, company?, ...fields } or { scope, company?, skill_md }
  *   PATCH /skills/:uid                   edit the draft, or retire it
- *   POST /skills/:uid/publish            a new immutable version
+ *   POST /skills/:uid/publish            a new immutable version (`services/agents/skillPublish.ts`); an HQ
+ *                                        skill needs a second Super Admin's approval and its golden cases
+ *                                        at 9 of 10 (D4160: 409 `needs_approval`, `golden_cases_failing`)
  *
  * A2 (#3956): an agent's skills, assigning a skill, the radar, coverage.
  *   GET  /agents/:uid/skills             { can_manage, skills, radar: { axes } | null, values: null }
@@ -48,10 +50,11 @@ import { isAdmin, newUid } from './_t13t14t15_helpers';
 import { ROLES, roleOf } from '../services/agents/catalogue';
 import { RADAR_AXES } from '../services/skillsTaxonomySchema';
 import {
-  OUTPUT_LABELS, SKILL_MESSAGES, checkDraft, parseSkillMd, toSkillMd,
+  OUTPUT_LABELS, SKILL_MESSAGES, checkDraft, parseSkillMd,
   type OutputKind, type SkillDraft, type Tag,
 } from '../services/agents/skills';
 import { teamAgentsEnabled } from './team_agents';
+import { publishDraft } from '../services/agents/skillPublish';
 import { grantsOf } from '../services/agents/agentTools';
 import { agentByUid, canManage, canRead, loadScope, scopeCols, scopeOfAgent, type AgentRow } from '../services/agents/teams';
 import {
@@ -289,7 +292,7 @@ router.post('/skills', async (c) => {
     fields = parsed;
   }
   const checked = checkDraft(fields, { taxonomy: (await taxonomy(c.env)).slugs, roleKeys: ROLE_KEYS });
-  if (!checked.ok) return say(c, 400, checked.code, checked.message);
+  if (!checked.ok) return say(c, 400, checked.code, checked.message, checked.tool ? { tool: checked.tool } : undefined);
   const d = checked.draft;
   const clash = await c.env.DB.prepare('SELECT 1 AS ok FROM agent_skills WHERE scope = ? AND IFNULL(company_id, 0) = ? AND slug = ?')
     .bind(b.scope, companyId ?? 0, d.slug).first();
@@ -314,6 +317,8 @@ router.patch('/skills/:uid', async (c) => {
   if (!b) return say(c, 400, 'body_invalid', 'Send the changes as a JSON object.');
   if (b.status !== undefined) {
     if (b.status !== 'retired') return say(c, 400, 'status_invalid', 'A skill can be retired here; publishing makes a new version.');
+    // D4160: an Axal skill is retired with its replacement and a reason, from HQ › AI agents.
+    if (s.scope === 'hq') return say(c, 409, 'replacement_required', 'Retire an Axal skill from HQ › AI agents, naming the skill that replaces it.');
     await c.env.DB.prepare(`UPDATE agent_skills SET status = 'retired', updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(user.id, s.id).run();
   } else {
     const cur = await draftParts(c.env, s);
@@ -324,7 +329,7 @@ router.patch('/skills/:uid', async (c) => {
       output_kind: has('output_kind') ? b.output_kind : cur.output_kind, tags: has('tags') ? b.tags : cur.tags, roles: has('roles') ? b.roles : cur.roles,
     };
     const checked = checkDraft(merged, { taxonomy: (await taxonomy(c.env)).slugs, roleKeys: ROLE_KEYS });
-    if (!checked.ok) return say(c, 400, checked.code, checked.message);
+    if (!checked.ok) return say(c, 400, checked.code, checked.message, checked.tool ? { tool: checked.tool } : undefined);
     const d = checked.draft;
     await c.env.DB.batch([
       c.env.DB.prepare(`UPDATE agent_skills SET name = ?, purpose = ?, steps_json = ?, allowed_tools_json = ?, output_kind = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
@@ -341,24 +346,12 @@ router.post('/skills/:uid/publish', async (c) => {
   const s = await skillByUid(c.env, c.req.param('uid'));
   if (!s || !(await mayRead(c.env, s, user))) return noSkill(c);
   if (!(await mayWrite(c.env, s, user))) return say(c, 403, 'not_editor', 'Only this skill\'s editors can publish it.');
-  if (s.status === 'retired') return say(c, 409, 'retired', 'A retired skill cannot be published again.');
-  const d = await draftParts(c.env, s);
-  const checked = checkDraft({ ...d, slug: s.slug }, { taxonomy: (await taxonomy(c.env)).slugs, roleKeys: ROLE_KEYS });
-  if (!checked.ok) return say(c, 400, checked.code, checked.message);
-  const version = s.current_version + 1;
-  const md = toSkillMd(checked.draft, version);
-  // The version row and the pointer land together, or neither does; the
-  // `current_version = ?` guard refuses a concurrent publish of the same number.
-  const res = await c.env.DB.batch([
-    c.env.DB.prepare(`UPDATE agent_skills SET status = 'published', current_version = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ? AND current_version = ?`).bind(version, user.id, s.id, s.current_version),
-    c.env.DB.prepare(`INSERT INTO agent_skill_versions (skill_id, version, skill_md, name, purpose, steps_json, allowed_tools_json, output_kind, taxonomy_json, roles_json, published_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(s.id, version, md, d.name, d.purpose, JSON.stringify(d.steps), JSON.stringify(d.tools), d.output_kind,
-      JSON.stringify(checked.draft.tags), JSON.stringify(checked.draft.roles), user.id),
-  ]).catch(() => null);
-  if (!res || Number(res[0]?.meta?.changes ?? 0) !== 1) return say(c, 409, 'publish_conflict', 'This skill was published by someone else just now. Reload it and try again.');
+  // D4160: one publish for this route and HQ's bulk publish; an HQ skill needs a
+  // second admin's approval and its golden cases at the bar (`publishRefusal`).
+  const done = await publishDraft(c.env, s, user);
+  if (!done.ok) return say(c, done.status, done.code, done.message, done.extra);
   const tax = await taxonomy(c.env);
-  return c.json({ skill: { ...(await cardOf(c.env, (await skillByUid(c.env, s.uid))!, user, tax, '')), skill_md: md } });
+  return c.json({ skill: { ...(await cardOf(c.env, (await skillByUid(c.env, s.uid))!, user, tax, '')), skill_md: done.skill_md } });
 });
 
 // ── An agent's skills (A2, #3956) ───────────────────────────────────────────

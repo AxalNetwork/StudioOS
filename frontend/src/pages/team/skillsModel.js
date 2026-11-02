@@ -149,6 +149,10 @@ export function skillRefusalWords(code, detail) {
   switch (code) {
     case 'not_manager': case 'not_member': return 'Only this team’s editors can do this.';
     case 'write_tool': return 'Write tools aren’t allowed: agents only read.';
+    case 'tool_not_read_only': return detail ? `${detail} can change records. Skills may only use read-only tools.` : 'Skills may only use read-only tools: agents only read.';
+    case 'needs_approval': return 'A second Super Admin approves this draft before it is published.';
+    case 'golden_cases_failing': return 'This draft is below 9 of 10 golden-case runs, so it can’t be published yet.';
+    case 'replacement_required': return 'An Axal skill is retired from HQ, with the skill that replaces it.';
     case 'unknown_role': return 'Choose one of the agent roles.';
     case 'unknown_taxonomy': return 'One of its taxonomy skills is not one of the /studio skills.';
     case 'no_steps': return 'A skill needs at least one step.';

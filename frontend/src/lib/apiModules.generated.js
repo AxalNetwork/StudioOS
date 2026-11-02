@@ -11,6 +11,7 @@ export * from './api/adminAiUsage.js';
 export * from './api/adminApprovals.js';
 export * from './api/adminCapitalAttestations.js';
 export * from './api/adminDeckModels.js';
+export * from './api/adminHqSkills.js';
 export * from './api/adminIncorporations.js';
 export * from './api/adminLab.js';
 export * from './api/adminLearning.js';
