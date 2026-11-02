@@ -2257,6 +2257,18 @@ export default {
         if (now.getUTCHours() === 3 && now.getUTCMinutes() === 0) {
           await Jobs.cleanup(env);
         }
+        // D1508 (#3759) — deck images nothing references leave R2: discarded ones
+        // after 24 hours, proposals nobody kept after 14 days, 500 at most a day.
+        // Every tier: each deployment's own images.
+        if (now.getUTCHours() === 3 && now.getUTCMinutes() === 5) {
+          try {
+            const { sweepDeckImages } = await import('./services/decks/imageSweep');
+            const r = await sweepDeckImages(env, now);
+            if (r.deleted || r.failed) cronSummary.push(`deck image sweep deleted=${r.deleted} failed=${r.failed}`);
+          } catch {
+            console.error('[cron] deck image sweep unreadable');
+          }
+        }
         // D1256 (#3279) — the venture scorecard. Every 15 minutes, ventures
         // whose people's connectors synced since their last row; at 04:20 the
         // nightly recompute; at 04:30 on a quarter's first day the fairness
