@@ -5,7 +5,7 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync, mkdtempSync, copyFileSync, rmSync } from 'node:fs';
+import { readFileSync, mkdtempSync, copyFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Hono } from 'hono';
@@ -17,16 +17,14 @@ import { queuePressure } from '../src/services/branchHome.ts';
 import { studioGlance } from '../src/services/studioGlance.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
 const read = (p: string) => readFileSync(p, 'utf8');
-const DIR = 'cloudflare-worker/sql/migrations';
 const scratch = mkdtempSync(join(tmpdir(), 'approvals-d1039-'));
 const seed = join(scratch, 'chain.sqlite');
 {
   const db = new DatabaseSync(seed, { enableForeignKeyConstraints: false });
-  db.exec(read('cloudflare-worker/sql/schema_baseline.sql'));
-  for (const name of readdirSync(DIR).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort()) db.exec(read(`${DIR}/${name}`));
+  loadSchema(db);
   db.close();
 }
 after(() => rmSync(scratch, { recursive: true, force: true }));

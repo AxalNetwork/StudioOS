@@ -19,7 +19,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
@@ -30,14 +30,14 @@ import { createCycleRecords } from '../src/routes/cycle_records.ts';
 import dataRoom from '../src/routes/data_room.ts';
 import decks from '../src/routes/decks.ts';
 import { saveScenario } from '../src/services/capTableWrites.ts';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { FORMS, EDITS, formFor, editFor, initialValues, validate } from '../../frontend/src/pages/cycles/forms.js';
 import { makeCycleWrites } from '../../frontend/src/lib/api/cycleWrites.js';
+import { loadSchema } from './_schema_once.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
-const BASELINE = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
 const MIGRATIONS = resolve(process.cwd(), 'cloudflare-worker/sql/migrations');
 
 const FOUNDER = 10, OTHER = 20, PARTNER = 40, ADVISOR = 41, INVESTOR = 50;
@@ -49,8 +49,7 @@ const B_DECK = 6, B_PROSPECT = 9, B_FOLDER = 'fo-b';
 const FILES = readdirSync(MIGRATIONS).filter((f) => /^\d+_.*\.sql$/.test(f)).sort(compareMigrations);
 const BUILT_DDL = (() => {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  db.exec(BASELINE);
-  for (const f of FILES.filter((n) => migrationNumber(n) > BASELINE_CUTOFF)) db.exec(readFileSync(resolve(MIGRATIONS, f), 'utf8'));
+  loadSchema(db);
   return (db.prepare(`SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'
     ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END`).all() as any[]).map((r) => r.sql as string);
 })();

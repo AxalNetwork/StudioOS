@@ -23,6 +23,8 @@ export type Scope = { kind: 'company'; id: number; uid: string; name: string } |
 export type AgentRow = {
   id: number; uid: string; scope_kind: 'company' | 'project'; company_id: number | null; project_id: number | null;
   role_key: string; first_name: string | null; last_name: string | null; model_id: string; tool_grants_json: string;
+  /** D4117: one of the 16 personas (`personas.ts`); null only for a role the backfill had no persona for. */
+  persona_key?: string | null;
   sponsor_user_id: number; monthly_cap_microusd: number; status: 'active' | 'paused' | 'removed'; paused_reason: string | null;
   created_at: string; updated_at: string; removed_at: string | null;
 };

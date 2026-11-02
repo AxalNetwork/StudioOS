@@ -6,9 +6,13 @@
 // `team_agents_off` until TEAM_AGENTS_ENABLED is on.
 //   GET    /api/teams/roles                               → { roles: [{ key, name, mission, works_in: [{ key, label }], default_rules }],
 //                                                           models: [{ id, label, kind, beta, plan_locked }] }
+// D4117 (#4117): the 16 personas an agent wears (fixed; no route edits one). Agent DTOs carry `persona`
+// and no job title (`role_name` is gone).
+//   GET    /api/teams/personas                            → { personas: [{ key, name, gender, tagline, goal, personality, story, risk,
+//                                                           values, top_values, natural_fit, avatar }], values: [{ key, label, description }], areas }
 //   GET    /api/teams/:scope/:id/agents?include=&module=  → { can_manage, plan_ok, agents: [Agent] }
-//   POST   /api/teams/:scope/:id/agents                   { role_key, first_name?, last_name?, model_id, tool_grants?, monthly_cap_microusd }
-//                                                         → 201 { agent }; 403 not_manager | plan_required; 409 role_taken;
+//   POST   /api/teams/:scope/:id/agents                   { role_key, persona_key?, first_name?, last_name?, model_id, tool_grants?, monthly_cap_microusd }
+//                                                         → 201 { agent }; 400 invalid_persona; 403 not_manager | plan_required; 409 role_taken | persona_on_team;
 //                                                           422 model_not_offered | tool_not_approved
 //   GET    /api/teams/agents/:uid                         → { agent, can_manage, rulebook, matrix, cap_microusd, month_spend, proposals, events }
 //   PATCH  /api/teams/agents/:uid                         { status?, monthly_cap_microusd?, first_name?, last_name? } → { agent }
@@ -60,6 +64,7 @@ const base = (scope, id) => `/teams/${enc(scope)}/${enc(id)}`;
 
 export const teamAgentsApi = {
   roles: () => request('/teams/roles'),
+  personas: () => request('/teams/personas'),
   listAgents: (scope, id, { include, module } = {}) => {
     const q = new URLSearchParams();
     if (include) q.set('include', include);

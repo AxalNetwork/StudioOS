@@ -11,7 +11,7 @@ import decks, { createShareLink, deckShareMetrics, SHARE_VIEWER_COOKIE } from '.
 import cycleRaise from '../src/routes/cycle_raise.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 
 const read = (p:string) => readFileSync(p,'utf8');
 const migration = read('cloudflare-worker/sql/migrations/549_deck_share_nullable_view_limit.sql');
@@ -22,7 +22,7 @@ const schema = new DatabaseSync(seed,{enableForeignKeyConstraints:false});
 schema.exec(read('cloudflare-worker/sql/schema_baseline.sql'));
 // The seed is the schema just before 549; the upgrade runs 549, then every later
 // migration in order, as production does (D902's 567 adds columns 549's rebuild would drop).
-const numbered=readdirSync('cloudflare-worker/sql/migrations').filter(n=>/^\d+_.*\.sql$/.test(n)&&migrationNumber(n)>BASELINE_CUTOFF).sort();
+const numbered=readdirSync('cloudflare-worker/sql/migrations').filter(n=>/^\d+_.*\.sql$/.test(n)&&migrationNumber(n)>BASELINE_CUTOFF).sort(compareMigrations);
 for(const name of numbered.filter(n=>migrationNumber(n)<549))schema.exec(read('cloudflare-worker/sql/migrations/'+name));
 const later=numbered.filter(n=>migrationNumber(n)>549).map(n=>read('cloudflare-worker/sql/migrations/'+n));
 schema.close();

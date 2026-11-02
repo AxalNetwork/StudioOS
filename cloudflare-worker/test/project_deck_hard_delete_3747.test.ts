@@ -2,22 +2,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
 import { hardDeleteProject, sweepTrashedProjects } from '../src/services/projectTrash.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
-const sqlRoot = new URL('../sql/', import.meta.url);
-const baseline = readFileSync(new URL('schema_baseline.sql', sqlRoot), 'utf8');
-const migrations = readdirSync(new URL('migrations/', sqlRoot)).filter(name => /^\d+_.*\.sql$/.test(name) && migrationNumber(name) > BASELINE_CUTOFF).sort()
-  .map(name => readFileSync(new URL('migrations/' + name, sqlRoot), 'utf8'));
 // Apply the canonical migrations once, then copy their resulting schema for
 // each isolated case. Replaying hundreds of ALTERs per case is unnecessary;
 // no hand-copied DDL or shared rows stand in for the production schema.
 const schema = (() => {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   try {
-    db.exec(baseline); for (const sql of migrations) db.exec(sql);
+    loadSchema(db);
     return (db.prepare(`SELECT sql FROM sqlite_master WHERE sql IS NOT NULL
       AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 WHEN 'view' THEN 2 ELSE 3 END`).all() as { sql: string }[])
       .map(row => row.sql + ';').join('\n');

@@ -31,6 +31,7 @@ import { ensureTier } from '../middleware/requireTier';
 import { watermarkFor } from './decks/variants';
 import { createShareLink, revokeShareLink, SHARE_NEVER_EXPIRES } from '../routes/decks';
 import { shareIncludeFromBody } from './decks/shareInclude';
+import { withTimePerSlide } from './decks/slideAnalytics';
 import { approvalSentence, pendingApprovers } from './decks/deckApproval';
 import { createProspect, RAISE_STAGES } from '../routes/contacts';
 import {
@@ -412,6 +413,8 @@ export async function createDeckLink(env: Env, a: { projectId: number; user: Use
   const ndaRequired = flag(b.nda_required, 'nda_required') ?? false;
   const include = shareIncludeFromBody(b.include);
   if (!include) throw new WriterError(400, 'include is an object of figures, sources, notes and bands, each true or false');
+  // D1573 (#3820): "Time per slide", on unless the founder turns it off; off keeps visit counts only.
+  const timePerSlide = flag(b.time_per_slide, 'time_per_slide') ?? true;
   const link = await createShareLink(env, {
     deckId: deck.id, deckVersion: Number(deck.version), userId: Number(a.user.id) || null, actorEmail: a.user.email || null,
     ttlSeconds: days == null ? null : days * 86400, prospectId: investor.prospectId, investorLabel: investor.label,
@@ -424,10 +427,15 @@ export async function createDeckLink(env: Env, a: { projectId: number; user: Use
     : await env.DB.prepare('SELECT name, firm FROM raise_prospects WHERE id = ?').bind(investor.prospectId).first<{ name: string | null; firm: string | null }>();
   await env.DB.prepare('UPDATE pitch_deck_share_tokens SET watermark_text = ? WHERE id = ?')
     .bind(watermarkFor(firm?.name ?? investor.label, firm?.firm ?? null), link.id).run();
+  // The consent is the link's own `include_json` key (D1573), beside what it includes; on is its absence.
+  if (!timePerSlide) {
+    const stored = await env.DB.prepare('SELECT include_json FROM pitch_deck_share_tokens WHERE id = ?').bind(link.id).first<{ include_json: string | null }>();
+    await env.DB.prepare('UPDATE pitch_deck_share_tokens SET include_json = ? WHERE id = ?').bind(withTimePerSlide(stored?.include_json ?? null, false), link.id).run();
+  }
   return {
     id: link.id, share_path: `/share/deck/${link.token}`, expires_at: link.expiresAt,
     allow_download: allowDownload, allow_forwarding: allowForwarding,
-    view_limit: limit ?? null, nda_required: ndaRequired, include,
+    view_limit: limit ?? null, nda_required: ndaRequired, include, time_per_slide: timePerSlide,
     // The version the link is frozen to (D902 §0.4): a link never follows a later save.
     deck_version: Number(deck.version),
   };

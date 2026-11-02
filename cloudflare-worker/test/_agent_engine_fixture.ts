@@ -15,6 +15,7 @@ import { admitInScope } from '../src/agents/engine.ts';
 import { READERS } from '../src/services/agents/reads.ts';
 import type { LoopDeps, StepLike, Decision } from '../src/agents/loop.ts';
 import type { AgentRuntime } from '../src/agents/runtime.ts';
+import { SdkScopeCore, dispatchSdk, sdkRuntimeOver, type DutyPayload, type SdkHost, type SdkSchedule, type SdkScopeState } from '../src/agents/sdkScope.ts';
 
 export const ADMIN = 1, SPONSOR = 10, STRANGER = 12, MEMBER = 11;
 export const PROJECT = 7, COMPANY = 1;
@@ -33,6 +34,50 @@ export class MemStorage implements ScopeStorage {
   async getAlarm() { return this.alarm; }
   async setAlarm(at: number) { this.alarm = at; }
   async deleteAlarm() { this.alarm = null; }
+}
+
+/**
+ * #3852 — a fake of the slice of the Agents SDK `Agent` the `sdk` runtime uses,
+ * keeping the SDK's semantics: `setState` persists a copy; a schedule's `time`
+ * is whole seconds; the alarm runs each due schedule's callback and then
+ * deletes the one-shot row; `runWorkflow` creates the instance first (a second
+ * create with the same id throws) and then tracks it.
+ */
+export class FakeSdkHost implements SdkHost {
+  state: SdkScopeState = { halted: false, live: [] };
+  rows = new Map<string, SdkSchedule & { time: number }>();
+  tracked = new Set<string>();
+  private seq = 0;
+  private env: any;
+  constructor(env: any) { this.env = env; }
+  readState() { return structuredClone(this.state); }
+  setState(s: SdkScopeState) { this.state = structuredClone(s); }
+  async schedule(when: Date, callback: 'dutyDue', payload: DutyPayload) {
+    const id = `sch-${++this.seq}`;
+    this.rows.set(id, { id, callback, payload: structuredClone(payload), time: Math.floor(when.getTime() / 1000) });
+    return { id };
+  }
+  async cancelSchedule(id: string) { return this.rows.delete(id); }
+  async listSchedules() { return [...this.rows.values()].map((r) => structuredClone(r)); }
+  async runWorkflow(name: 'AGENT_TASK', params: { run_uid: string }, o: { id: string }) {
+    const inst = await this.env[name].create({ id: o.id, params: { ...params, __agentName: 'scope', __workflowName: name } });
+    if (this.tracked.has(inst.id)) throw new Error(`Workflow with ID "${inst.id}" is already being tracked`);
+    this.tracked.add(inst.id);
+    return inst.id as string;
+  }
+  /** The earliest schedule, in ms, as the SDK sets the object's alarm. */
+  get alarm(): number | null {
+    const t = [...this.rows.values()].map((r) => r.time * 1000);
+    return t.length ? Math.min(...t) : null;
+  }
+  /** The SDK's alarm: each due row's callback, then the row goes. */
+  async fire(now: number, callback: (payload: DutyPayload) => Promise<void>) {
+    for (const r of [...this.rows.values()].sort((a, b) => a.time - b.time)) {
+      if (r.time * 1000 > now) continue;
+      await callback(r.payload as DutyPayload);
+      this.rows.delete(r.id);
+    }
+  }
 }
 
 export function memKv() {
@@ -68,7 +113,7 @@ export function fakeWorkflows() {
   };
 }
 
-export function world(o: { engine?: string; autonomy?: string } = {}) {
+export function world(o: { engine?: string; autonomy?: string; runtime?: 'do' | 'sdk' } = {}) {
   const db = migratedDatabase();
   const DB = d1Over(db);
   db.exec(`
@@ -121,7 +166,12 @@ export function world(o: { engine?: string; autonomy?: string } = {}) {
   };
   const storageOf = (name: string) => { if (!storages.has(name)) storages.set(name, new MemStorage()); return storages.get(name)!; };
   const core = (name: string) => new ScopeCore(storageOf(name), env, deps);
-  const caller: ScopeCaller = async (scope, path, body) => {
+  // #3852: the `sdk` runtime's Agents, one fake host per scope name, each request a fresh core (an evicted Agent).
+  const hosts = new Map<string, FakeSdkHost>();
+  const hostOf = (name: string) => { if (!hosts.has(name)) hosts.set(name, new FakeSdkHost(env)); return hosts.get(name)!; };
+  const sdkCore = (name: string) => new SdkScopeCore(hostOf(name), env, deps);
+  const sdkCaller: ScopeCaller = async (scope, path, body) => dispatchSdk(sdkCore(`${scope.kind}:${scope.id}`), scope, path, body);
+  const doCaller: ScopeCaller = async (scope, path, body) => {
     const name = `${scope.kind}:${scope.id}`;
     const c = core(name);
     const s = scopeOf(name)!;
@@ -137,10 +187,14 @@ export function world(o: { engine?: string; autonomy?: string } = {}) {
       default: throw new Error(path);
     }
   };
-  const runtime: AgentRuntime = doRuntime(env, caller);
+  if (o.runtime === 'sdk') env.AGENT_RUNTIME = 'sdk';
+  /** The runtime in force follows `env.AGENT_RUNTIME`, so a test can switch it mid-run (the runbook's rehearsal). */
+  const caller: ScopeCaller = (scope, path, body) => (env.AGENT_RUNTIME === 'sdk' ? sdkCaller : doCaller)(scope, path, body);
+  const runtimeFor = (name: 'do' | 'sdk'): AgentRuntime => (name === 'sdk' ? sdkRuntimeOver(env, sdkCaller) : doRuntime(env, doCaller));
+  const runtime: AgentRuntime = runtimeFor(o.runtime ?? 'do');
   /** Each case's copy of the template is removed as it closes: the disk holds one at a time. */
   const close = () => { const f = db.location(); db.close(); if (f) rmSync(f, { force: true }); };
-  return { db, DB, env, kv, queue, workflows, agent, task, storages, storageOf, core, caller, runtime, enqueued, due, deps, close };
+  return { db, DB, env, kv, queue, workflows, agent, task, storages, storageOf, core, hosts, hostOf, sdkCore, caller, runtime, runtimeFor, enqueued, due, deps, close };
 }
 export type World = ReturnType<typeof world>;
 

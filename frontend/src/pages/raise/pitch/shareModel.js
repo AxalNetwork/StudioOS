@@ -52,6 +52,8 @@ export const DEFAULT_INCLUDE = Object.freeze({ figures: true, sources: true, not
 export const DEFAULT_SHARE = Object.freeze({
   investor: '', label: '', expires: DEFAULT_EXPIRY, viewLimit: '',
   allowDownload: false, allowForwarding: false, ndaRequired: true, include: DEFAULT_INCLUDE,
+  // D1573 (#3820): "Time per slide", on as pd35's row editor draws it; off keeps visit counts only.
+  timePerSlide: true,
 });
 
 /** "Frozen at v4 as of 21 Oct": a link never follows a later save. */
@@ -89,6 +91,7 @@ export function shareBody(state, deck) {
     allow_forwarding: Boolean(state.allowForwarding),
     nda_required: Boolean(state.ndaRequired),
     include: { ...DEFAULT_INCLUDE, ...(state.include || {}) },
+    time_per_slide: state.timePerSlide !== false,
   };
   if (state.investor === TYPED) body.investor_label = String(state.label || '').trim();
   else body.prospect_id = Number(state.investor);

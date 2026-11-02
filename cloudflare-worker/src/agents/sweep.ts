@@ -11,6 +11,13 @@
  *      agent with no live run is offered its next ready task through its
  *      scope's object. With `manual` (the default) this step admits nothing.
  * Halted, it does neither.
+ *
+ * D1530 (#3849, E5): `sweepAgentDuties`, called from the same block, claims
+ * the duties that are due (claim before act, `services/agents/duties.ts`).
+ * Each claim makes a task for its agent and tells the sponsor; with
+ * `self_start` and the engine `on` it also asks the scope's object to admit
+ * that task. Halted or off, it claims nothing, so a due duty waits for the
+ * engine rather than being skipped.
  */
 import type { Env } from '../types';
 import type { AgentRow } from '../services/agents/teams';
@@ -18,6 +25,9 @@ import { depsOf, isReady, type TaskRow } from '../services/agents/tasks';
 import { scopeOfRow } from './engine';
 import { autonomy, engineMode, haltedAll, type AgentRuntime } from './runtime';
 import { enqueueAgentRun } from './agentQueue';
+import { defaultTokensLeft, sweepDuties, type DutyDeps } from '../services/agents/duties';
+import { notify } from '../services/notify';
+import { purgeExpired } from '../services/agents/memory';
 
 export const SWEEP_MAX = 60;
 export const RESEND_AFTER_MIN = 5;
@@ -60,4 +70,28 @@ export async function sweepAgents(env: Env, now: Date, deps?: Partial<SweepDeps>
     if (r.ok) out.admitted += 1;
   }
   return out;
+}
+
+/** Claim the due duties. Off or halted: nothing is claimed. */
+export async function sweepAgentDuties(env: Env, now: Date, deps?: Partial<DutyDeps> & { runtime?: () => Promise<AgentRuntime> }) {
+  // The retention (Q6 A) applies even while halted: it only forgets.
+  try { await purgeExpired(env, now); } catch { console.warn('[agents] purge_failed'); }
+  if (await haltedAll(env)) return null;
+  const mode = await engineMode(env);
+  if (mode === 'off') return null;
+  const selfStart = autonomy(env) === 'self_start' && mode === 'on';
+  const rt = async () => (deps?.runtime ? deps.runtime() : (await import('./runtime')).agentRuntime(env));
+  return sweepDuties(env, now, {
+    tokensLeft: deps?.tokensLeft ?? defaultTokensLeft,
+    admit: deps?.admit !== undefined ? deps.admit : selfStart
+      ? async (_env, a, task) => { await (await rt()).admit(scopeOfRow(a), { agentId: a.id, taskId: task.id, by: null, source: 'duty' }); }
+      : null,
+    tell: deps?.tell ?? (async (e, a, task) => {
+      await notify(e, {
+        userId: a.sponsor_user_id, type: 'agent_duty', channels: ['in_app'], category: 'proactive_nudges', link: null,
+        title: 'A duty made a task',
+        body: `A duty made a task: "${task.title.slice(0, 120)}". Press Start when you want the agent to draft it.`,
+      });
+    }),
+  });
 }

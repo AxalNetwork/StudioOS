@@ -22,9 +22,9 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 
-import { splitStatements } from './_baseline.mjs';
 import { declarationsFor } from '../../scripts/check-migration-declarations.mjs';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const MIGRATIONS = resolve(ROOT, 'cloudflare-worker/sql/migrations');
@@ -37,12 +37,7 @@ const EARLIER = FILES.filter((f) => migrationNumber(f) < 463);
 /** The baseline and every post-cutoff migration before 463: a database that predates it. */
 function bootstrap(): DatabaseSync {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  db.exec(BASELINE);
-  for (const f of EARLIER.filter((n) => migrationNumber(n) > BASELINE_CUTOFF)) {
-    for (const stmt of splitStatements(readFileSync(resolve(MIGRATIONS, f), 'utf8'))) {
-      try { db.exec(stmt); } catch { /* already present on the baseline */ }
-    }
-  }
+  loadSchema(db, { below: 463 });
   return db;
 }
 const BUILT = bootstrap();

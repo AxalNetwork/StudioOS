@@ -32,8 +32,8 @@ import webinars from '../src/routes/learning_webinars.ts';
 import adminWebinars from '../src/routes/admin_learning_webinars.ts';
 import { joinWindowOpen, JOIN_LEAD_MS } from '../src/services/learningWebinars.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { splitStatements } from './_baseline.mjs';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '../..');
@@ -46,13 +46,7 @@ const JOIN = 'https://meet.example.test/room-42';
 
 function builtFromMigrations(): DatabaseSync {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  db.exec(readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8'));
-  for (const f of readdirSync(MIGRATIONS).filter((x) => x.endsWith('.sql')).sort(compareMigrations)
-    .filter((x) => migrationNumber(x) > BASELINE_CUTOFF && migrationNumber(x) < 388)) {
-    for (const stmt of splitStatements(readFileSync(resolve(MIGRATIONS, f), 'utf8'))) {
-      try { db.exec(stmt); } catch { /* already present on the baseline */ }
-    }
-  }
+  loadSchema(db, { below: 388 });
   // The Learning migrations, whole and in order, as the deploy applies them.
   for (const f of readdirSync(MIGRATIONS).filter((x) => x.endsWith('.sql')).sort(compareMigrations)
     .filter((x) => migrationNumber(x) >= 388 && /^\d+_learning_/.test(x))) {

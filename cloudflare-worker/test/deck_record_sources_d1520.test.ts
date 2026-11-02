@@ -14,8 +14,6 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 import { DECK_SOURCES, GRADES, readSources, sanitizeBinding, type SourceItem } from '../src/services/decks/sources.ts';
@@ -24,16 +22,12 @@ import {
 } from '../src/services/decks/recordSources.ts';
 import { NARRATIVE_SECTIONS, POSITIONING_KINDS } from '../src/services/narrative/store.ts';
 import { FUND_SECTIONS } from '../src/services/raiseCycle.ts';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
-const BASELINE = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
-const MIGRATIONS = resolve(process.cwd(), 'cloudflare-worker/sql/migrations');
-const FILES = readdirSync(MIGRATIONS).filter((f) => /^\d+_.*\.sql$/.test(f)).sort(compareMigrations);
 const BUILT_DDL = (() => {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  db.exec(BASELINE);
-  for (const f of FILES.filter((n) => migrationNumber(n) > BASELINE_CUTOFF)) db.exec(readFileSync(resolve(MIGRATIONS, f), 'utf8'));
+  loadSchema(db);
   return (db.prepare(`SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'
     ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END`).all() as any[]).map((r) => r.sql as string);
 })();
