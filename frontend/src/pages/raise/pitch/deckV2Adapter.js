@@ -38,6 +38,7 @@
 import { LATER, NOT_ON } from './deckV2Model.js';
 // One line per client, in file-name order (pitch_v2_adapter_d1604 holds it), so two swaps add lines at different places.
 import { dataRoomApi } from '../../../lib/api/dataRoom.js';
+import { deckActionsApi } from '../../../lib/api/deckActions.js';
 import { deckBatchesApi } from '../../../lib/api/deckBatches.js';
 import { deckCardStatusApi } from '../../../lib/api/deckCardStatus.js';
 import { deckCheckApi } from '../../../lib/api/deckCheck.js';
@@ -103,7 +104,9 @@ export const SURFACES = Object.freeze({
   critique: { issue: 3799, what: 'Fix with critique' },
   remix: { issue: 3800, what: 'Remix this slide' },
   consistency: { issue: 3802, what: 'Consistency and wording checks' },
-  deckActions: { issue: 3808, what: 'Replace all images and Reorder for stage' },
+  deckActions: { issue: 3808, what: 'Reorder for stage, as one undo step' },
+  replaceImages: { issue: 3808, what: 'Replace all images, under one quote' },
+  outlineReorder: { issue: 3808, what: 'Reorder the New deck outline for a stage' },
   brandLocks: { issue: 3819, what: 'Brand kit locks' },
   pptxImport: { issue: 3809, what: 'Start from a .pptx template' },
   investorLinks: { issue: 3812, what: 'One link per investor, consent and watermark preview' },
@@ -238,7 +241,11 @@ export const remix = (deckId, card, opts) => through(() => deckRemixApi.remix(de
  * The Wording half stays with #3808 C13.
  */
 export const consistency = (deckId) => through(() => deckCheckApi.read(deckId).then((r) => r?.consistency ?? null), SURFACES.consistency.issue);
-export const deckActions = off('deckActions');
+// D1561 (#3808): Reorder for stage saves the stage plan's order as one new version. Replace all images waits on
+// #3756's pipeline, and the New deck outline's reorder on a stage order the browser can read; both stay off.
+export const deckActions = (deckId, body) => through(() => deckActionsApi.reorderForStage(deckId, body), SURFACES.deckActions.issue);
+export const replaceImages = off('replaceImages');
+export const outlineReorder = off('outlineReorder');
 export const brandLocks = off('brandLocks');
 export const pptxImport = off('pptxImport');
 // D1565 (#3812): wired. Each body is `through(() => <client>(…), issue)`.

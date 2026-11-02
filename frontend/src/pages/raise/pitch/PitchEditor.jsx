@@ -30,7 +30,7 @@ import { isDecorOn } from './arrangeModel';
 import ShareDialog from './ShareDialog';
 import CommentsSheet from './CommentsSheet';
 import ExportDialog from './ExportDialog';
-import { BackgroundSheet, BrandKitSheet, CheckSheet, RemixSheet, SizeSheet, SourcesSheet, StructureSheet, ThemeSheet, VersionsSheet } from './DeckSheets';
+import { BackgroundSheet, BrandKitSheet, CheckSheet, RemixSheet, SizeSheet, SourcesSheet, StageSheet, StructureSheet, ThemeSheet, VersionsSheet } from './DeckSheets';
 // D1583 (#3830): ⋯ › This deck › Teaser, one-pager or memo.
 import DeriveSheet from './DeriveSheet.jsx';
 import { EDITOR_WAITING, aiOffState, editIndex, placeTextEdit, saveChip } from './deckV2Model';
@@ -651,6 +651,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     if (id === 'undo') { if (!readOnly) undo(); return; }
     if (id === 'redo') { if (!readOnly) redo(); return; }
     // D1553 (#3800): ⋯ › This card › Remix this slide, the only way in (pd13).
+    // D1561 (#3808): ⋯ › Stage and ⋯ › Reorder for stage open the same stage sheet (pd23).
+    if (id === 'stage' || id === 'reorder') { setSheet('stage'); return; }
     if (['theme', 'size', 'brand', 'sources', 'versions', 'check', 'structure', 'background', 'remix', 'derive', 'comments', 'find'].includes(id)) setSheet(id);
   };
   if (actionRef) actionRef.current = act;
@@ -816,6 +818,9 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
       ) : null}
       {sheet === 'comments' && card && base.deck?.id ? (
         <CommentsSheet deckId={base.deck.id} card={card} index={sel} area={chosen.length === 1 ? chosen[0].id : null} admin={readOnly} onClose={() => setSheet(null)} />
+      ) : null}
+      {sheet === 'stage' && base.deck?.id ? (
+        <StageSheet deckId={base.deck.id} readOnly={readOnly} dirty={dirty} onReordered={saved} onClose={() => setSheet(null)} />
       ) : null}
       {sheet === 'check' && base.deck?.id ? (
         <CheckSheet deck={base.deck} projectId={project?.id} readOnly={readOnly} dirty={dirty} onReplaced={saved}

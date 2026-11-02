@@ -332,14 +332,14 @@ export const STILL_CHARGED = 'Still charged: undo takes the accepted run off the
  */
 export const MORE_MENU = Object.freeze([
   { id: 'deck', label: 'This deck', items: [
-    // D1522 (#3774): the stage plan's route is on main, but its sheet is pd23's, built with the reorder action (#3808),
-    // so the item stays greyed on that adapter until the editor can open it.
+    // D1522 (#3774), D1561 (#3808): Stage opens the stage sheet: the plan's order, its why lines and Reorder for stage.
     { id: 'stage', label: 'Stage', adapter: 'deckActions' },
     // D1499 (#3749): the theme's aspect, written like a theme and held until a version is saved.
     { id: 'size', label: 'Slide size 16:9 · 4:3', write: true },
     { id: 'theme', label: 'Theme', write: true },
     { id: 'brand', label: 'Brand kit' },
-    { id: 'reorder', label: 'Reorder for stage', adapter: 'deckActions' },
+    // D1561 (#3808): a new version, one undo step, so a reader sees it greyed.
+    { id: 'reorder', label: 'Reorder for stage', adapter: 'deckActions', write: true },
     { id: 'sources', label: 'Sources and coverage' },
     { id: 'versions', label: 'Versions…' },
     { id: 'save_named', label: 'Save as a named version…', write: true },
@@ -364,7 +364,7 @@ export const MORE_MENU = Object.freeze([
     { id: 'comments', label: 'Comments', adapter: 'comments' },
   ] },
   { id: 'ai', label: 'Whole deck · uses AI', items: [
-    { id: 'replace_images', label: 'Replace all images', adapter: 'deckActions', ai: true },
+    { id: 'replace_images', label: 'Replace all images', adapter: 'replaceImages', ai: true },
     { id: 'check', label: 'Check claims', note: 'Free checks' },
     { id: 'critique', label: 'Fix with critique', adapter: 'critique', ai: true },
   ] },

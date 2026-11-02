@@ -11,7 +11,8 @@ import { AUDIENCE_LABELS, KIT_FAILED, NOT_RECORDED, NO_KIT, THEME_LABELS } from 
 import { SLIDE_SIZES, STRUCTURES, aspectOf, placeOf, withAspect } from './gridModel';
 import { applyStructure, movedLine, recommendedLine } from './structureModel';
 import { LANGUAGES, langOf, languageLine, withLanguage } from './deckLanguage';
-import { figures as figuresAdapter, remix as remixAdapter, shown } from './deckV2Adapter';
+import { deckActions as deckActionsAdapter, figures as figuresAdapter, remix as remixAdapter, shown, stagePlan as stagePlanAdapter } from './deckV2Adapter';
+import { STAGES, reorderLabel, reorderNote } from './deckActionsModel';
 import { GO_TO_CARD, checkCounts, toReview } from './figuresModel';
 import { movedNotice } from './deckReflow';
 
@@ -45,6 +46,12 @@ import { movedNotice } from './deckReflow';
  *                    `POST /api/decks/:id/remix` runs no model, so it works
  *                    with AI paused. Use this layout applies at once, one edit
  *                    with its own Undo.
+ *
+ *   StageSheet       This deck › Stage and Reorder for stage (pd13, pd23,
+ *                    D1561): the stage chips, the plan's order with its why
+ *                    lines and missing-proof warnings, and "Order for [Seed] ·
+ *                    one undo step", which saves the order as one new version.
+ *                    Free: no model. Held while the editor has unsaved edits.
  *
  * A theme or a layout runs no model: it is applied at once, one edit like any
  * other, and nothing is saved until a version is.
@@ -387,6 +394,83 @@ export function RemixSheet({ deckId, card, index, readOnly, onApply, onClose }) 
           </div>
         </div>
       ) : null}
+    </Frame>
+  );
+}
+
+export const STAGE_TITLE = 'Stage';
+export const STAGE_DIRTY = 'Save your changes first: the new order is saved as its own version.';
+
+/** pd23: the deck's stage plan and Reorder for stage, one new version (one undo step). */
+export function StageSheet({ deckId, readOnly, dirty, onReordered, onClose }) {
+  const [stage, setStage] = useState(null);
+  const [plan, setPlan] = useState({ status: 'loading' });
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState(null);
+  const [error, setError] = useState(null);
+  useEffect(() => {
+    let live = true;
+    setPlan({ status: 'loading' });
+    stagePlanAdapter(deckId, stage ? { stage } : {}).then((r) => {
+      if (!live) return;
+      if (r.available) { setPlan({ status: 'ok', data: r.value }); if (!stage && r.value?.stage) setStage(r.value.stage); }
+      else setPlan({ status: 'error', reason: r.reason });
+    });
+    return () => { live = false; };
+  }, [deckId, stage]);
+  const data = plan.status === 'ok' ? plan.data : null;
+  const order = Array.isArray(data?.order) ? data.order : [];
+  const warnings = Array.isArray(data?.warnings) ? data.warnings : [];
+  const reorder = async () => {
+    setBusy(true); setError(null); setNote(null);
+    const r = await deckActionsAdapter(deckId, { stage: data?.stage ?? stage });
+    setBusy(false);
+    if (!r.available) { setError(r.reason || 'The deck could not be reordered. Nothing was saved.'); return; }
+    setNote(reorderNote(r.value));
+    if (r.value?.deck) onReordered?.(r.value);
+  };
+  return (
+    <Frame title={STAGE_TITLE} testId="pitch-sheet-stage" onClose={onClose} width={560}>
+      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Stage" data-testid="pitch-stage-chips">
+        {STAGES.map((s) => (
+          <button key={s.id} type="button" aria-pressed={(data?.stage ?? stage) === s.id} onClick={() => setStage(s.id)} data-testid={`pitch-stage-${s.id}`}
+            className={`min-h-[30px] rounded-full border px-2.5 text-[11.5px] font-semibold ${(data?.stage ?? stage) === s.id ? 'border-axal-violet text-axal-violet dark:border-violet-400 dark:text-violet-300' : 'border-axal-hairline text-axal-muted dark:border-gray-700 dark:text-gray-400'}`}>
+            {s.label}
+          </button>
+        ))}
+      </div>
+      {plan.status === 'loading' ? <span className={MUTED} role="status" data-testid="pitch-stage-loading">Reading the order for this stage…</span> : null}
+      {plan.status === 'error' ? <span className={MUTED} role="alert" data-testid="pitch-stage-error">{`The stage plan could not be read: ${plan.reason}`}</span> : null}
+      {data ? (
+        <>
+          <span className={EYE}>{`The ${data.stage_label} order`}</span>
+          <ol className="m-0 flex list-decimal flex-col gap-1.5 pl-5" data-testid="pitch-stage-order">
+            {order.map((row) => (
+              <li key={row.card} className={`text-[12.5px] ${INK}`} data-testid={`pitch-stage-row-${row.card}`}>
+                <span className="font-bold">{row.title}</span>
+                {row.in_deck == null ? <span className={`${MUTED} ml-1.5`}>· Not in this deck</span> : null}
+                {row.why ? <span className={`${MUTED} block`}>{row.why}</span> : null}
+              </li>
+            ))}
+          </ol>
+          {warnings.length ? (
+            <ul className="m-0 flex list-none flex-col gap-1.5 p-0" data-testid="pitch-stage-warnings">
+              {warnings.map((w) => <li key={`${w.card}-${w.code}`} className={MUTED}>{w.message}</li>)}
+            </ul>
+          ) : null}
+          {readOnly ? null : (
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" className={GHOST} onClick={reorder} disabled={busy || dirty} title={dirty ? STAGE_DIRTY : undefined} data-testid="pitch-stage-reorder">
+                {busy ? 'Ordering…' : reorderLabel(data.stage)}
+              </button>
+              <span className={MUTED}>Free · no AI charge</span>
+            </div>
+          )}
+          {dirty && !readOnly ? <span className={MUTED} data-testid="pitch-stage-dirty">{STAGE_DIRTY}</span> : null}
+        </>
+      ) : null}
+      {note ? <span className={MUTED} role="status" data-testid="pitch-stage-note">{note}</span> : null}
+      {error ? <span className={MUTED} role="alert" data-testid="pitch-stage-reorder-error">{error}</span> : null}
     </Frame>
   );
 }
