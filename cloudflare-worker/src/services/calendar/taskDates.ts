@@ -102,6 +102,7 @@ export async function engagementMilestoneEvents(env: Env, userId: number, from: 
        JOIN engagements e ON e.id = m.engagement_id
        JOIN users u ON u.id = ? AND u.is_active = 1 AND u.deletion_requested_at IS NULL
       WHERE u.partner_id IS NOT NULL AND e.partner_id = u.partner_id
+        AND u.role IN ('partner', 'admin')
         AND m.completed_at IS NULL
         AND e.cancelled_at IS NULL AND lower(COALESCE(e.status, '')) <> 'cancelled'
         AND date(m.due_at) IS NOT NULL AND julianday(date(m.due_at), '+1 day') > julianday(?) AND julianday(date(m.due_at)) < julianday(?)
