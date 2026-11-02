@@ -308,13 +308,41 @@ test('the counts: waiting and its bands leave Drafts out, the weekly series coun
   assert.ok(weeks.every((w: any) => w.verified === null && w.rejected === null), 'part 2\'s figures read as numbers');
   assert.equal(r.body.weekly.verified_available, false);
   assert.ok(weeks.every((w: any) => new Date(w.week_start + 'T00:00:00Z').getUTCDay() === 1), 'a week does not start on Monday');
-  assert.ok(weeks.at(-1).captured >= 1, 'this week\'s capture is missing');
+  // Early Monday, even the newest fixture (two hours ago) belongs to last
+  // week. Check every bucket against the fixture's actual capture times.
+  const captures = [ago(120), ago(2), ago(48), ago(24 * 40), ago(24 * 20)].map((t) => Date.parse(t.replace(' ', 'T') + 'Z'));
+  for (const week of weeks) {
+    const start = Date.parse(week.week_start + 'T00:00:00Z');
+    const expected = captures.filter((at) => at >= start && at < start + 7 * 86_400_000).length;
+    assert.equal(week.captured, expected, `captures in ${week.week_start}`);
+  }
   // An unreadable store costs its block, not the others, and never reads as zero.
   const broken: any = { DB: { prepare: () => { throw new Error('D1_ERROR: no such table'); } } };
   const b = await partnerProfileCounts(broken);
   assert.equal(b.waiting.available, false);
   assert.equal(b.waiting.count, null);
   assert.equal(b.weekly.available, false);
+});
+
+test('weekly captures cross the UTC Sunday-to-Monday boundary without inventing a current-week capture', async () => {
+  const f = fixture();
+  try {
+    f.db.exec("UPDATE partner_profiles SET created_at = '2026-11-01 23:00:00'");
+    const sunday = await partnerProfileCounts(f.env, new Date('2026-11-01T23:30:00Z'));
+    const sw = (sunday.weekly as any).weeks;
+    assert.deepEqual([sw.at(-1).week_start, sw.at(-1).captured], ['2026-10-26', 5]);
+    const monday = await partnerProfileCounts(f.env, new Date('2026-11-02T00:09:00Z'));
+    const mw = (monday.weekly as any).weeks;
+    assert.deepEqual(mw.slice(-2).map((w: any) => [w.week_start, w.captured]), [['2026-10-26', 5], ['2026-11-02', 0]]);
+    f.db.exec("INSERT INTO partner_profiles (email, persona, admin_status, created_at) VALUES ('monday@example.test', 'Founder', 'pending', '2026-11-02 00:00:00')");
+    const captured = await partnerProfileCounts(f.env, new Date('2026-11-02T00:09:00Z'));
+    const weeks = (captured.weekly as any).weeks;
+    assert.equal(weeks.at(-1).captured, 1, 'a capture at the Monday boundary is included');
+    assert.equal(weeks.reduce((n: number, w: any) => n + w.captured, 0), 6, 'the draft remains excluded across the boundary');
+    f.db.prepare("INSERT INTO partner_profiles (email, persona, admin_status, created_at) VALUES ('first-week@example.test', 'Founder', 'pending', ?)").run(weeks[0].week_start + ' 00:00:00');
+    const firstWeek = await partnerProfileCounts(f.env, new Date('2026-11-02T00:09:00Z'));
+    assert.equal((firstWeek.weekly as any).weeks[0].captured, 1, 'the first Monday in the window is inclusive');
+  } finally { f.db.close(); }
 });
 
 // ── 6. Approvals lane 7 ──────────────────────────────────────────────────────

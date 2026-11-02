@@ -525,4 +525,5 @@ D1594 (#3863): `studio_layout.ts`'s layout reads carry `revision` (migration 750
 | File | Purpose |
 | --- | --- |
 | `work_board.ts` | D1614 W1 (#3969): a project's Work board, item and move routes, mounted by `agent_engine.ts` ahead of E1's handlers under the same gates (`AGENT_ENGINE`, `TEAM_AGENTS_ENABLED`). `GET /:scope/:id/work/board`, project `POST /:scope/:id/tasks`, `GET`/`PATCH /tasks/:uid`, `PATCH /tasks/:uid/move`, `PUT /tasks/:uid/deps`. Project scope only: a company board is 404, and a company task falls through to E1 unchanged. Migration 762. |
+| `work_items.ts` | D1614 W7 (#3993): a project task's timeline, comments, review, agent drafts, labels and milestones, mounted by `agent_engine.ts` beside W1's board under the same gates. Project scope only: every company path is 404. Migration 763. |
 D1456 (#4014): the existing creator-only session bot read adds pattern-filtered failure detail codes from its selected run; its access and refusal behavior is unchanged.

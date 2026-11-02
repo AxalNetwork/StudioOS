@@ -41,7 +41,7 @@ export function workBoardRoutes(enabled: (env: Env) => boolean, readRuns: WorkRu
       const s=await loadScope(c.env,'project',c.req.param('id'));
       if(!s||s.kind!=='project') throw absent();
       if(!(await canRead(c.env,s,user))) return refuse(c,403,{code:'not_member',message:'Only the project team can read its Work.'});
-      return c.json(await projectBoard(c.env,s,c.req.query('filter')??'',readRuns));
+      return c.json(await projectBoard(c.env,s,c.req.query('filter')??'',readRuns,c.req.query('sort')??''));
     }catch(e){return failure(c,e);}
   });
   // Only project tasks are intercepted. Company E1 handlers are unchanged.
