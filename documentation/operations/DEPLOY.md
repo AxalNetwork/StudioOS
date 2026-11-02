@@ -83,7 +83,20 @@ listens for a push to `main` only, so the deploy starts when the queue's merge
 lands, as it did when a PR was merged by hand. A queue entry that fails is not
 merged and nothing ships; the PR returns to its author with the failing check.
 
-TEST ENTRY (#4107): this line exists only to conflict with the settings table and be ejected by the queue. Never merge.
+The queue's settings, as the owner set them on 2026-11-02 in the `main`
+ruleset (Settings → Rules → Rulesets → `main` → Require merge queue):
+
+| Setting | Value |
+| --- | --- |
+| Merge method | Squash |
+| Build concurrency | 5 |
+| Group size | minimum 1, maximum 5 |
+| Wait time to meet the minimum group size | 5 minutes |
+| Require all queue entries to pass required checks | on |
+| Status check timeout | 90 minutes (`test:drift`'s own job limit; a full run took 43 to 81 minutes on 2026-11-02) |
+| Require branches to be up to date before merging | off: the queue tests each entry on top of the latest `main` |
+
+To merge, press **Merge when ready**, not **Merge**.
 
 ### 1.3 A branch database
 
