@@ -24,6 +24,7 @@ import { run as aiRun, type RunOptions, type RunResult } from '../aiRouter';
 import { ELEMENT_ROUTES, GRID_PAGE } from './elementModels';
 import { MAX_BUSY_RETRIES, backoffMs, governorFor, isBusy, waitForSlot, type GovernorClient } from './aiGovernor';
 import { stepRecordRef, type StepExecutor, type StepRow } from './genRuntime';
+import { pipelineStep } from './imageDraw';
 
 export type ExecutorDeps = {
   run?: (env: Env, opts: RunOptions) => Promise<RunResult>;
@@ -82,6 +83,30 @@ export function stepExecutor(env: Env, deps: ExecutorDeps = {}): StepExecutor {
     const option = typeof input.option === 'string' ? input.option : (ELEMENT_ROUTES[step.element]?.option ?? null);
     let last: RunResult | null = null;
     let fellBack = false;
+    // D1505 (#3756): an image step is the image pipeline, not a bare draw:
+    // expand, draw at its size and seed, check, style, alt. A refused image
+    // settles at zero and is redrawn once; nothing unchecked leaves the step.
+    if (step.task === 'deck_image') {
+      try {
+        let n = 0;
+        const d = (passed.draw && typeof passed.draw === 'object' ? passed.draw : {}) as { width?: number; height?: number };
+        const r = await pipelineStep(env, {
+          userId: account, projectId: Number(ctx.batch.project_id), deckId: Number(ctx.batch.deck_id) || null, cardUid: step.card_uid, area: step.area_id,
+          base: String(passed.text ?? ''), draw: { ...passed, task: 'deck_image', userId: account, ...(step.model ? { model: step.model } : {}) } as RunOptions,
+          model: step.model, size: d.width && d.height ? { width: d.width, height: d.height } : null,
+          parentHold: ctx.parentHold ?? null, rail: { page: GRID_PAGE, option, record: ref },
+          run: (o) => run(env, { ...o, userId: account, parentHold: ctx.parentHold ?? undefined, idempotencyKey: `${ref}:p${n++}`, executionId: step.batch_uid, rail: { page: GRID_PAGE, option, record: ref } }),
+        });
+        const charged = await chargedFor(env, parentUid, ref);
+        if (!r.ok) return { ok: false, charged_microusd: charged, error_code: r.code };
+        return {
+          ok: true, charged_microusd: charged, model_used: r.model, usage_log_id: r.usage_log_id,
+          variant: { image: r.image, alt: r.alt, seed: r.seed, variant_index: r.variant_index, pipeline_uid: r.pipeline_uid, steps: r.steps, qa: r.qa, refused: r.refused },
+        };
+      } finally {
+        await gov.release(lease.id).catch(() => {});
+      }
+    }
     try {
       const candidates = candidatesFor(step);
       for (let i = 0; i < candidates.length; i++) {

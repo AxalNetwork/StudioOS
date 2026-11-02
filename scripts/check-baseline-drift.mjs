@@ -83,6 +83,8 @@ const ENGINE_OWNED = /^(_cf_[A-Z]|sqlite_)/;
 export function postCutoffMigrations(root = process.cwd()) {
   return readdirSync(resolve(root, MIGRATIONS))
     .filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF)
+    // D4106: a stamped file (YYYYMMDDHHMM_) applies after every numbered one, so
+    // the order is compareMigrations', never a plain string sort ('2026…' < '543_').
     .sort(compareMigrations)
     .map((name) => ({ name, sql: readFileSync(resolve(root, MIGRATIONS, name), 'utf8') }));
 }
