@@ -237,6 +237,12 @@ test('D4086: a link published before the round records an exemption stands until
   assert.equal((await req(db, 'GET', `/api/decks/share/${token}`)).body.gate, 'email', 'it keeps working');
   assert.equal((await frame()).status, 200);
   assert.ok((await readPublish(db, id)).body.publish);
+  // Recording 506(c) over "not recorded" takes nothing down.
+  const kept = await saveRound(db, { exemption: '506c' });
+  assert.equal(kept.body.unpublished_links, undefined);
+  assert.ok(publishOf(stored(db, id)), 'a 506(c) round keeps its published link');
+  assert.equal(unpublishes(null, '506c'), false);
+  db.prepare('UPDATE raise_rounds SET exemption = NULL WHERE uid = ?').run(ROUND);
   // Recorded under Reg S without the round write (an import, a hand edit): every read re-checks the round.
   db.prepare("UPDATE raise_rounds SET exemption = 'reg_s' WHERE uid = ?").run(ROUND);
   const open = await req(db, 'GET', `/api/decks/share/${token}`);
