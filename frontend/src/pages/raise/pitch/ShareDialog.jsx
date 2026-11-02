@@ -8,6 +8,7 @@ import InvestorLinksTable from './InvestorLinksTable.jsx';
 import PublishPanel from './PublishPanel.jsx';
 import { preShareGate } from './commentsModel';
 import { statusLabel } from './cardStatusModel';
+import { OFF_KEEPS, TIME_PER_SLIDE } from './slideAnalyticsModel.js';
 import {
   DEFAULT_SHARE, EXPIRIES, INCLUDE_ROWS, NDA_SWITCH, NEVER_SHARED, NO_LIMIT, SHARE_CTA, SHARE_TITLE, SHOWN_ONCE, TYPED,
   frozenLine, shareBody, shareFailure, shareProblem, shareUrl, whatShareDoes,
@@ -33,6 +34,10 @@ import {
  * them, with Review cards (back to the editor, on the first of them) and
  * Share. That line warns and never holds: Share passes it, unless an approver
  * is also waited on. One gate, one Share.
+ *
+ * D1573 (#3820, pd35's row editor): the new link's "Time per slide" switch,
+ * on by default; off sends `time_per_slide: false`, and the link then keeps
+ * visit counts only ("Off keeps visit counts only").
  */
 
 const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
@@ -233,6 +238,8 @@ export default function ShareDialog({ projectId, deck, onClose, onCreated, onRev
             <Toggle label="Download" on={state.allowDownload} onChange={(v) => set({ allowDownload: v })} testId="pitch-share-download" />
             <Toggle label="Forwarding" on={state.allowForwarding} onChange={(v) => set({ allowForwarding: v })} testId="pitch-share-forwarding" />
             <Toggle label={NDA_SWITCH} on={state.ndaRequired} onChange={(v) => set({ ndaRequired: v })} testId="pitch-share-nda" />
+            <Toggle label={TIME_PER_SLIDE} on={state.timePerSlide !== false} onChange={(v) => set({ timePerSlide: v })} testId="pitch-share-time-per-slide" />
+            {state.timePerSlide === false ? <span className={MUTED} data-testid="pitch-share-time-off">{OFF_KEEPS}</span> : null}
           </div>
           <div className="flex flex-col gap-2">
             <span className={EYE}>What is included</span>

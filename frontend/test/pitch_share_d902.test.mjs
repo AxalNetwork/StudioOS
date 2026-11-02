@@ -82,7 +82,7 @@ test('one body for the one writer: a prospect or a typed name, never both', () =
   const prospect = shareBody({ ...DEFAULT_SHARE, investor: '5', viewLimit: '3' }, deck);
   assert.deepEqual(prospect, {
     deck_id: 40, expires_days: 14, view_limit: 3, allow_download: false, allow_forwarding: false, nda_required: true,
-    include: { figures: true, sources: true, notes: false, bands: false, cap_table: false, team_photos: false }, prospect_id: 5,
+    include: { figures: true, sources: true, notes: false, bands: false, cap_table: false, team_photos: false }, time_per_slide: true, prospect_id: 5,
   });
   const typed = shareBody({ ...DEFAULT_SHARE, investor: TYPED, label: ' Fund Z ', expires: null, ndaRequired: false }, deck);
   assert.equal(typed.investor_label, 'Fund Z');
@@ -179,7 +179,7 @@ test('Create link writes once through the one writer, and shows the link once', 
     assert.equal(writes[0][1], 7);
     assert.deepEqual(writes[0][2], {
       deck_id: 40, expires_days: 14, view_limit: 2, allow_download: false, allow_forwarding: false, nda_required: true,
-      include: { figures: true, sources: true, notes: false, bands: true, cap_table: false, team_photos: false }, prospect_id: 6,
+      include: { figures: true, sources: true, notes: false, bands: true, cap_table: false, team_photos: false }, time_per_slide: true, prospect_id: 6,
     });
     assert.equal(m.created.length, 1, 'the caller refreshes its links');
     assert.ok(m.by('pitch-share-made'));

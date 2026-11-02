@@ -63,8 +63,11 @@ export async function recordSlideSeconds(env: Env, viewId: number, deckId: numbe
  * the version the view is of, so the seconds follow the card even after the
  * founder reorders it. Best effort: a database without 714, or a version that
  * cannot be read, keeps the seconds by place as before.
+ *
+ * D1573 (#3820): `cardsOf`, when given, answers the cards as the view's link
+ * sends them (a tailored link's own order), read only when a slide is unnamed.
  */
-export async function recordSlideCardUids(env: Env, viewId: number, deckId: number, slides: number[]): Promise<void> {
+export async function recordSlideCardUids(env: Env, viewId: number, deckId: number, slides: number[], cardsOf?: () => Promise<unknown[]>): Promise<void> {
   if (!slides.length) return;
   try {
     // Only the slides still unnamed: a heartbeat after the first reads nothing more.
@@ -72,8 +75,12 @@ export async function recordSlideCardUids(env: Env, viewId: number, deckId: numb
     const todo = new Set((open.results || []).map((r) => Number(r.slide_index)));
     const wanted = slides.filter((s) => todo.has(s));
     if (!wanted.length) return;
-    const row = await env.DB.prepare('SELECT slides FROM pitch_decks WHERE id = ?').bind(deckId).first<{ slides: string | null }>();
-    const cards = JSON.parse(row?.slides || '[]');
+    let cards: unknown[];
+    if (cardsOf) cards = await cardsOf();
+    else {
+      const row = await env.DB.prepare('SELECT slides FROM pitch_decks WHERE id = ?').bind(deckId).first<{ slides: string | null }>();
+      cards = JSON.parse(row?.slides || '[]');
+    }
     for (const slide of wanted) {
       const uid = cardUidAt(cards, slide);
       if (!uid) continue;
