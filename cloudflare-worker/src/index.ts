@@ -270,7 +270,6 @@ import deckDerive from './routes/deck_derive';
 import deckCritic from './routes/deck_critic';
 import deckQaRoutes from './routes/deck_qa';
 import deckTransform from './routes/deck_transform';
-import deckUpdateReuse from './routes/deck_update_reuse';
 import deckImages from './routes/deck_images';
 // D1565 (#3812): one link per investor, and tailored variants.
 import deckInvestorLinks from './routes/deck_investor_links';
@@ -1434,8 +1433,6 @@ app.route('/api/decks', deckCritic);
 app.route('/api/decks', deckQaRoutes);
 // D1560 (#3807): speaker notes, proofread, fix this slide and the translation pipeline, as proposals.
 app.route('/api/decks', deckTransform);
-// D1584 (#3831): `/:id/derive-update` and `/:id/changes-since`, before `decks` so its `/:id` routes cannot answer them.
-app.route('/api/decks', deckUpdateReuse);
 // D903 (#2682): card and background images (`/:id/images…`, `/images/:uid/…`), before `decks` so `GET /:id` cannot answer `/images/…`.
 app.route('/api/decks', deckImages);
 // D1565 (#3812): `/:id/investor-links…` and `/:id/variants`, before `decks` so its `/:id` routes cannot answer them.

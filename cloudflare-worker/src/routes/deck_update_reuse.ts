@@ -21,11 +21,14 @@
  * NO UPDATE YET. A venture that has sent no update gets `update: null`, no
  * proposal, and the reason in words; never a deck refreshed to zeros.
  *
- * Mounted in index.ts BEFORE `decks`, beside the other /api/decks routers.
+ * Mounted through the route registry (#4105, `mount` below). `decks.ts` has no
+ * route that answers `/:id/derive-update` or `/:id/changes-since`, so it needs no
+ * `before`.
  * All SQL is bound.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
+import type { RouteMount } from '../util/routeRegistry';
 import { requireAuth } from '../auth';
 import { projectOwned } from '../middleware/projectContentAccess';
 import { ensureSchema, getDeckRow } from './decks';
@@ -98,3 +101,6 @@ r.get('/:id{[0-9]+}/changes-since', async (c) => {
 });
 
 export default r;
+
+/** #4105: `/api/decks`, in the registry's slot; no `decks` route answers these two paths. */
+export const mount: RouteMount = { path: '/api/decks', router: r };

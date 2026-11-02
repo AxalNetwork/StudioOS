@@ -55,6 +55,7 @@ const { deckReports, hqDeckReports } = await import('../src/routes/deck_reports.
 const deckStageNorms = (await import('../src/routes/deck_stage_norms.ts')).default;
 const votes = (await import('../src/routes/votes.ts')).default;
 const fundSim = (await import('../src/routes/fund_simulator.ts')).default;
+const deckUpdateReuse = (await import('../src/routes/deck_update_reuse.ts')).default;
 
 /** The Worker's own app: the instance `route()` was called on most. */
 function workerMounts() {
@@ -95,7 +96,8 @@ test('the committed registry is exactly what the generator writes, and every des
 test('on the real Worker, the order-sensitive deck routers mount just above `decks`, and votes.ts mounts last', () => {
   const mounts = workerMounts();
   // 390 at #4105; +1 D1559's deckQaRoutes (#4094, which merged without the bump); +1 D1577's deck_coedit (#3824).
-  assert.equal(mounts.length, 392, 'the Worker no longer makes 392 top-level mounts');
+  // D1584 (#3831): deck_update_reuse.ts mounts through the registry (+1).
+  assert.equal(mounts.length, 393, 'the Worker no longer makes 393 top-level mounts');
   const at = mounts.findIndex((m) => m.router === decks);
   assert.ok(at > 0, '`decks` is not mounted');
   // The hand-written line above `decks` used to be deckReports + hqDeckReports,
@@ -116,8 +118,11 @@ test('on the real Worker, the order-sensitive deck routers mount just above `dec
   }
   // votes.ts has no `before`: the registry's slot, after index.ts's last line
   // (fund-sim), which is exactly where the two hand-written lines sat.
-  assert.deepEqual(mounts.slice(-3).map((m) => [m.path, m.router]), [
+  // D1584 (#3831): deck_update_reuse.ts has no `before` either, so it takes the
+  // same slot, in file-name order ahead of votes.ts.
+  assert.deepEqual(mounts.slice(-4).map((m) => [m.path, m.router]), [
     ['/api/fund-sim', fundSim],
+    ['/api/decks', deckUpdateReuse],
     ['/api/pipeline/votes', votes],
     ['/api/pipeline/vote', votes],
   ]);
