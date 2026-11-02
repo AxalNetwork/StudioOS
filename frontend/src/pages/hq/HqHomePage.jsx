@@ -8,6 +8,7 @@ import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 import { useViewAsBranch } from '../../contexts/ViewAsBranchContext';
 import HqBranchOverlay from './HqBranchOverlay';
 import { revenueAbsenceForLicence } from '../../lib/hqRevenuePerSub';
+import HeaderAsk from '../../ui/HeaderAsk.jsx';
 
 /**
  * HQ · Home — the whole business on one screen (Admin · Super canvas, H1).
@@ -356,7 +357,8 @@ export default function HqHomePage() {
           </p>
         )}
 
-        <header className="mt-4">
+        <header className="mt-4 flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
           <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
             <Landmark size={13} /> HQ · Home
           </div>
@@ -368,6 +370,8 @@ export default function HqHomePage() {
             Per-branch accounts, seats used and backlog on the cards below come from each branch's own read when it answers.
             Revenue per subsidiary stays not recorded — every stream in the morning report arrives unmeasured.
           </p>
+          </div>
+          <HeaderAsk />
         </header>
 
         {data === UNAVAILABLE && <div className="mt-4"><Unreadable what="The HQ overview" claim="This is not a claim that none exist." onRetry={load} /></div>}

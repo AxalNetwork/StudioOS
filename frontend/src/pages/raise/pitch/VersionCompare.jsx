@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../../../lib/api';
+import { deckCoeditApi } from '../../../lib/api/deckCoedit.js';
 import { reportError } from '../../../lib/log';
 import { Lightbox } from '../../../ui';
-import { changedPill, compareCards, restoreDialog, vLabel } from './compareModel';
+import { changedPill, compareCards, restoreCardDialog, restoreDialog, vLabel } from './compareModel';
 import { dayLabel } from './pitchStudioModel';
 
 /**
@@ -13,6 +14,10 @@ import { dayLabel } from './pitchStudioModel';
  * what stays, then calls the existing restore (`POST /api/decks/:id/restore`),
  * which saves a new version; nothing is deleted. An admin reads; there is no
  * Restore for them.
+ *
+ * D1577 (#3824): each changed card of the older version has "Restore card",
+ * which opens the same kind of dialog and calls `POST /api/decks/:id/restore-card`:
+ * that one card goes back as a new version, and every other card stays.
  *
  * Each version is read on its own; a failed read says so with Try again and
  * blanks nothing else.
@@ -39,7 +44,7 @@ function useDeck(id) {
   return { ...state, retry: () => setTick((t) => t + 1) };
 }
 
-function Column({ title, date, cards, testId }) {
+function Column({ title, date, cards, testId, onRestoreCard = null }) {
   return (
     <div className={`${CARD} flex flex-col gap-2.5 p-3.5`} data-testid={testId}>
       <div className="flex items-center justify-between gap-2">
@@ -53,6 +58,10 @@ function Column({ title, date, cards, testId }) {
             <span className="font-mono text-[9px] font-semibold text-teal-600 dark:text-teal-400">{c.n}</span>
             <span className={`text-[10px] font-bold leading-tight ${INK}`}>{c.title}</span>
             {c.changed ? <span className="sr-only">Changed</span> : null}
+            {onRestoreCard && c.changed && c.uid ? (
+              <button type="button" className="mt-auto self-start rounded-[6px] px-1 text-[10px] font-bold text-axal-violet underline hover:text-axal-violet-deep dark:text-violet-300"
+                onClick={() => onRestoreCard(c)} aria-label={`Restore card ${c.n}`} data-testid={`${testId}-card-${c.n}-restore`}>Restore card</button>
+            ) : null}
           </div>
         ))}
         {!cards.length ? <span className={MUTED}>No cards.</span> : null}
@@ -69,19 +78,23 @@ export default function VersionCompare({ older, newer, versions, readOnly, onClo
   const [refusal, setRefusal] = useState(null);
   const both = left.status === 'ok' && right.status === 'ok';
   const cmp = both ? compareCards(left.data, right.data) : null;
-  const d = restoreDialog(older, newer, versions);
+  // `dialog` is true for the whole version, or the card (from `compareCards`) for one card.
+  const d = dialog && dialog !== true ? restoreCardDialog(older, newer, versions, dialog) : restoreDialog(older, newer, versions);
   const restore = async () => {
     setBusy(true); setRefusal(null);
-    try { const r = await api.deckRestore(older.id); setDialog(false); onRestored?.(r?.deck || r); }
-    catch (e) { setRefusal(e?.message || 'The version could not be restored. Nothing changed.'); }
-    finally { setBusy(false); }
+    try {
+      const r = dialog !== true ? await deckCoeditApi.restoreCard(older.id, dialog.uid) : await api.deckRestore(older.id);
+      setDialog(false); onRestored?.(r?.deck || r);
+    } catch (e) {
+      setRefusal(e?.message || (dialog !== true ? 'The card could not be restored. Nothing changed.' : 'The version could not be restored. Nothing changed.'));
+    } finally { setBusy(false); }
   };
   return (
     <section className="flex flex-col gap-3" data-testid="pitch-compare" aria-label={`Compare ${vLabel(older)} with ${vLabel(newer)}`}>
       <div className="flex flex-wrap items-center justify-between gap-2.5">
         <span className={MUTED}>Changed cards are outlined. {cmp ? <span className={AMBER} data-testid="pitch-compare-count">{changedPill(cmp.changed)}</span> : null}</span>
         <span className="flex gap-2">
-          {!readOnly ? <button type="button" className={GHOST} disabled={!both} onClick={() => setDialog(true)} data-testid="pitch-compare-restore">Restore {vLabel(older)}</button> : null}
+          {!readOnly ? <button type="button" className={GHOST} disabled={!both} onClick={() => { setRefusal(null); setDialog(true); }} data-testid="pitch-compare-restore">Restore {vLabel(older)}</button> : null}
           <button type="button" className={GHOST} onClick={onClose} data-testid="pitch-compare-close">Close</button>
         </span>
       </div>
@@ -94,7 +107,8 @@ export default function VersionCompare({ older, newer, versions, readOnly, onClo
             </div>
           ) : r.status !== 'ok' ? <div key={id} className={`${CARD} h-40 animate-pulse`} aria-busy="true" /> : (
             <Column key={id} testId={id} title={`${vLabel(v)}${v.is_current || v.current ? ' · current' : ''}`} date={dayLabel(v.created_at)}
-              cards={id === 'pitch-compare-left' ? cmp.left : cmp.right} />
+              cards={id === 'pitch-compare-left' ? cmp.left : cmp.right}
+              onRestoreCard={id === 'pitch-compare-left' && !readOnly ? (card) => { setRefusal(null); setDialog(card); } : null} />
           )
         ))}
       </div>
