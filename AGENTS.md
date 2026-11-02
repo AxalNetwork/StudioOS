@@ -211,6 +211,12 @@ per canvas row (its README has the rules). So:
   same canvas, git stops on that one line: combine the two, keep one row.
 - Run `node scripts/build-route-map.mjs --check` before pushing. It fails on a
   canvas with two rows and names both files.
+- The map's two projections, `PROFILE_ROUTING.md` and `PAGE_INVENTORY.md`, are
+  not committed (D4103). Never commit them and never regenerate them in a task
+  PR: CI builds them, keeps them as the `routing-docs` artifact of the
+  `routing docs (artifact)` job, and `node scripts/build-profile-routing.mjs --check` fails a
+  routing inconsistency or a committed copy. `npm run docs:routing` writes them
+  locally if you want to read them.
 
 ### The repository is public
 
