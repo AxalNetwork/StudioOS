@@ -2073,6 +2073,19 @@ Worker routes in `routes/agent_engine.ts`, mounted at `/api/teams` before `team_
 | `PATCH /api/teams/tasks/:uid` | manage; a person assignee may send `status` and `blocked_reason` only | `{ task }`, with the same refusals. 403 `not_manager`. |
 | `PUT /api/teams/tasks/:uid/deps` | manage | Takes `{ depends_on: [uid] }` (at most 50); `{ task }`. 422 `dependency_cycle` / `cross_scope` / `too_many_dependencies`. |
 
+### Agent engine E4: the planner, role templates and the team wizard (D1530, #3848)
+
+The same router (`routes/agent_engine.ts`) and flags as E1, backed by `services/agents/planner.ts` and `services/agents/templates.ts`. No migration. The client methods are on `agentEngineApi`: `planQuote`, `draftPlan`, `acceptPlan`, `suggestedTeam`, `templates` and `capabilities`. The planner is the rail option `propose:goal-plan` in Studio, run by the scope's CEO / Chief of staff agent through `agentRun`, else by the manager's own Eadwyn. Custom roles wait for migration 728 (#3847).
+
+| Route | Gate | What it does |
+| --- | --- | --- |
+| `GET /api/teams/goals/:uid/plan/quote` | manage | `{ quote: { available, value_microusd }, by: 'agent' \| 'eadwyn' }`: what a plan would hold, an upper bound; `available: false` when it cannot be read, never 0. The agent run's refusals. |
+| `POST /api/teams/goals/:uid/plan` | manage | 201 `{ proposal: { uid, by, plan: { items: [{ title, module, suggested_assignee, depends_on, due_in_days }], dropped } } }`, at most 20 items. 422 `plan_invalid` (a loop, or no readable plan: the proposal is discarded); every run refusal in its own words. |
+| `POST /api/teams/goals/:uid/plan/accept` | manage | Takes `{ proposal, remove?: [index], titles?: { index: title } }`; 201 `{ tasks }`, written in one batch with `source_kind 'plan'`. 400 `invalid_plan`; 404; 409 `plan_decided`; 503 `plan_not_saved` (no task written, the plan can be accepted again). |
+| `GET /api/teams/:scope/:id/suggested-team?goal=` | manage | `{ stage, suggestions: [{ role_key, why, already_on_team, template, est_month_microusd }] }`. Rule-based: no model, nothing written. The estimate is `{ available: false }` when unknown, never 0. |
+| `GET /api/teams/templates` | signed in | `{ templates: [{ key, role_key, name, model_tier, suggested_cap_microusd, duties: [key] }] }`. |
+| `GET /api/teams/capabilities` | signed in | `{ modules: [{ key, label, cycle }], reads, options: { module: [option] }, floor }`. |
+
 ### Team agents part 1: the registry and the rule books (D1496, #3840)
 
 Worker routes in `routes/team_agents.ts`, mounted at `/api/teams`, backed by `services/agents/catalogue.ts`, `services/agents/rulebook.ts` and migration 712 (`team_agents`, `team_rulebooks`, `team_agent_events`; `agent_id` and `decided_by_user_id` on `ai_rail_proposals`, `agent_id` on `ai_usage_logs`). The client is `lib/api/teamAgents.js` (`teamAgentsApi`). No page yet: S1's Team page integrates it (#3727 part 6). Every route is 404 `team_agents_off` unless `TEAM_AGENTS_ENABLED` is `"true"` (off in both `wrangler.toml` blocks). `:scope` is `company` (its uid) or `project` (its id). Read: a company's `user_company_links` row, or `canAccessProject`. Manage: the company's `canEdit`, or `isProjectManager`. A person is `{ uid, name }`, never an email or a numeric id. Part 2 (#3842) adds the run below, through `services/agents/agentRun.ts` (the gates, the rule book and the spend are `services/agents/teams.ts`'s); part 3 (#3843) adds the approvals queue, through `services/agents/queue.ts`.
@@ -2149,6 +2162,16 @@ No migration and no decision of its own: it fills TM2's gaps on the existing tab
 | `GET /api/decks/:id/grid` | whoever may read the deck (`projectOwned`) | `{ deck_id, version, aspect: '16:9' \| '4:3', slide, frame, cell, baseline: 8, grid: { cols: 12, rows: 6 }, structures: [17 × { id, label, use, areas, background?, recommended? }], cards: [{ index, structure, derived, areas: [{ id, c1, c2, r1, r2, order, inset, align, role?, box }] }] }`. A card saved before v2 reads `structure: 'custom', derived: true`, its areas derived from its blocks. Every `box` is `boxOfAt(area, aspect)` in slide pixels. D1554 (#3801): `?aspect=16:9\|4:3` adds `reflow: { from, to, count, moved: [{ card, block, kind: 'trimmed' \| 'removed', text }] }`, which is what a switch to that aspect would move from the saved version into the speaker notes (`services/decks/reflow.ts`), and `reflow_map` (each structure's areas at both aspects). Any other aspect is 400 `invalid_aspect`. 403 / 404. |
 
 Saves: `PUT`/`POST` of a version keep `card.structure` (one of the 17, or `custom`) and `card.areas` (≤ 12, whole cells, no overlap) and refuse a bad one with its sentence (`modelProblems`); `theme.aspect` keeps `4:3`, and 16:9 is the default left out.
+
+### The Ask panel's Worker part (D1442, #3991)
+
+`routes/eadwyn.ts` and `routes/ai_rail_proposals.ts`; migration 694. Clients: `eadwynApi.quote` (`lib/api/eadwyn.js`) and `railProposalsApi.list({ page, run })` (`lib/api/railProposals.js`), read by the Ask panel's seam (`ui/askPanelAdapter.js`, D1443) once it is on main.
+
+| Route | Who | What it answers |
+| --- | --- | --- |
+| `POST /api/eadwyn/conversations/:uid/quote` | the conversation's member; not a support session, not an Explorer | `{ ai: true, hold_microusd, model, model_label }`, or `{ ai: false, reason, message }` when the run would be refused. Built by the same `askRunOptions` as `/ask` and priced by `quoteRun`: runs, holds and writes nothing. 400 `question_required`, 403 `support_session_refused` / `no_profile`, 404, 409 `company_changed`. |
+| `POST /api/eadwyn/conversations`, `POST /api/eadwyn/conversations/:uid/ask` | as before | Now 403 `support_session_refused` for an impersonated token and 403 `no_profile` for an Explorer, before any read, run or hold. |
+| `GET /api/ai/rail/proposals?page=&run=` | the caller | `page=<rail page>` as an alternative to `option=` (at least one, else 400 `option_or_page_required`); `run=<usage_log_id>` narrows to one run (400 `invalid_run`). The caller's rows only, newest first, at most 50. |
 
 ### Typed figures, the table block and the typed charts (D1538, #3787)
 
