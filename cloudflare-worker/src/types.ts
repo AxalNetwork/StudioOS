@@ -362,6 +362,8 @@ export interface Env {
   AGENT_RUNTIME?: string;
   /** D1528: the `agents` AI Gateway id agent runs pass. Unset = no gateway. Set only by `agentRun`. */
   AGENT_AI_GATEWAY?: string;
+  /** #3851 (E7): the `agents` gateway's monthly limit in micro-USD, mirrored from its dashboard; at 70% HQ ops hear once a month. Unset = no alert. */
+  AGENT_GATEWAY_MONTHLY_LIMIT_MICROUSD?: string;
   /** D1528: one `AgentScope` Durable Object per scope, named `project:{id}` or `company:{id}`. */
   AGENT_SCOPE?: DurableObjectNamespace;
   /** #3852 (E0): the `sdk` runtime's `ScopeAgent` namespace. Used only while `AGENT_RUNTIME` is `sdk`. */

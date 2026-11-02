@@ -37,6 +37,7 @@ import { railFor } from '../util/railContext';
 import { slideTotals, recordSlideSeconds, recordSlideCardUids } from '../services/deckSlideDwell';
 import { logCycleWrite } from '../services/cycleActivity';
 import { shareAnalytics, type LinkAnalytics } from '../services/decks/shareAnalytics';
+import { timePerSlideOn } from '../services/decks/slideAnalytics';
 import { gateFor, publishOf } from '../services/decks/publish';
 import { DEFAULT_SHARE_INCLUDE, parseShareInclude, shareGatesFor, shareSlides, shareSpinoutFields, type ShareInclude } from '../services/decks/shareInclude';
 import { sanitizeBinding } from '../services/decks/sources';
@@ -951,7 +952,9 @@ decks.get('/share/:token', async (c) => {
   } catch {}
   if (bind.setCookie) c.header('Set-Cookie', bind.setCookie);
   // D902 — only what the link includes leaves the Worker (`shareInclude.ts`).
-  const included = parseShareInclude(link?.include_json);
+  // D1586 (#3833): proof sits behind the NDA, so a link without one carries no `proof_ref`.
+  const stored = parseShareInclude(link?.include_json);
+  const included = { ...stored, evidence: stored.evidence && ndaRequired };
   // D898's public fields (no audience, round, author or hash), with the cards
   // as the link includes them: speaker notes go only with notes on.
   // D1565 (#3812): a link made with a variant opens the master's own cards in the variant's order.
@@ -1011,7 +1014,7 @@ async function closedLink(c: any, error: string, deckId: number | null) {
  * `POST /share/:token/nda`). It names the venture and the version, and sends
  * no card: the text is read from `GET /share/:token/nda`.
  */
-async function ndaGate(c: any, linkId: number, deckId: number) {
+export async function ndaGate(c: any, linkId: number, deckId: number) {
   const env: Env = c.env;
   let userId: number | null = null;
   try { userId = Number((await requireAuth(c)).id) || null; } catch { /* not signed in: the gate asks them to */ }
@@ -1059,7 +1062,13 @@ decks.post('/share/:token/heartbeat', async (c) => {
   if (!viewId || !seconds) return c.json({ ok: true });
   await ensureSchema(c.env);
   // D691 decision 5 — the same live-link predicate as the share read.
-  if (!(await shareLinkLive(c.env, await sha256Hex(token), await viewerHashOf(c)))) return c.json({ ok: false }, 200);
+  const live = await shareLinkLive(c.env, await sha256Hex(token), await viewerHashOf(c));
+  if (!live) return c.json({ ok: false }, 200);
+  // D1573 (#3820): "Time per slide" off keeps visit counts only. The share read wrote the view (the count);
+  // nothing more is stored for this link: no read seconds, no seconds per card.
+  const link = await c.env.DB.prepare('SELECT id, deck_id, include_json, variant_id FROM pitch_deck_share_tokens WHERE id = ?')
+    .bind(live.id).first<{ id: number; deck_id: number; include_json: string | null; variant_id: number | null }>();
+  if (!timePerSlideOn(link?.include_json)) return c.json({ ok: true, counts_only: true });
   try {
     await c.env.DB.prepare(
       `UPDATE deck_share_views
@@ -1074,10 +1083,37 @@ decks.post('/share/:token/heartbeat', async (c) => {
   for (const [slide, slideSeconds] of totals) {
     try { await recordSlideSeconds(c.env, viewId, parseInt(m[1]), slide, slideSeconds); } catch {}
   }
-  // D1500: and the card each slide is, by uid.
-  await recordSlideCardUids(c.env, viewId, parseInt(m[1]), totals.map(([slide]) => slide));
+  // D1500: and the card each slide is, by uid. D1573: read against the cards as this link sends them (its
+  // variant's order, less what it leaves out), so a place on a tailored link names the right card.
+  await recordSlideCardUids(c.env, viewId, parseInt(m[1]), totals.map(([slide]) => slide), async () => {
+    const row = await c.env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(parseInt(m[1])).first<any>();
+    return row ? linkSentCards(c.env, row, link) : [];
+  });
+  // D1568 (#3815): a read view of a prospect's link may signal a first view, a revisit or the ask reached.
+  try {
+    const { recordViewSignals } = await import('../services/raiseSignals');
+    await recordViewSignals(c.env, viewId, parseInt(m[1]), totals.map(([slide]) => slide));
+  } catch { /* a signal never fails a heartbeat */ }
   return c.json({ ok: true });
 });
+
+/**
+ * D1573 (#3820): the cards a link sends, in the order its reader sees them: the
+ * version's cards with their uids, in the link's variant order (D1565), less the
+ * cards it leaves out (`shareSlides`). The share read sends the same list, so a
+ * reader's slide place maps to one card here.
+ */
+export async function linkSentCards(env: Env, deckRow: any, link: { variant_id?: number | null; include_json?: string | null } | null): Promise<any[]> {
+  let cards = rowToDeck(deckRow).slides || [];
+  if (link?.variant_id) {
+    try {
+      const v = await env.DB.prepare('SELECT slide_order_json FROM deck_variants WHERE id = ? AND deck_id = ?').bind(Number(link.variant_id), Number(deckRow.id)).first<{ slide_order_json: string }>();
+      const order = v ? cleanOrder(cards, JSON.parse(v.slide_order_json || '[]')) : null;
+      if (order) cards = variantSlides(cards, order);
+    } catch { /* an unreadable variant opens the master as it is */ }
+  }
+  return shareSlides(cards, parseShareInclude(link?.include_json));
+}
 
 /** D895: unknown counts and an unlimited cap are distinct from measured zero. One rule, shared with the link records (D1111). */
 export { deckShareMetrics };
@@ -1747,7 +1783,7 @@ export async function shareLinkLive(env: Env, tokenHash: string, viewerHash: str
  * `UPDATE … WHERE bound_viewer_hash IS NULL`, so two first opens cannot both
  * win. Another browser is refused before any view is used.
  */
-async function bindShareViewer(c: any, tokenHash: string): Promise<{ refused: boolean; viewerHash: string | null; setCookie: string | null; allowDownload: boolean }> {
+export async function bindShareViewer(c: any, tokenHash: string): Promise<{ refused: boolean; viewerHash: string | null; setCookie: string | null; allowDownload: boolean }> {
   const env: Env = c.env;
   const tok = await env.DB.prepare(
     `SELECT id, allow_download, allow_forwarding, bound_viewer_hash,
@@ -1850,7 +1886,7 @@ export async function verifySignedToken(env: Env, token: string): Promise<any> {
   if (!payload?.k) throw new Error('Token missing key');
   return payload;
 }
-async function sha256Hex(s: string): Promise<string> {
+export async function sha256Hex(s: string): Promise<string> {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
   const bytes = new Uint8Array(buf);
   let out = '';

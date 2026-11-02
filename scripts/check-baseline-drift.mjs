@@ -53,7 +53,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from './lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from './lib/migrationPlan.mjs';
 
 const BASELINE = 'cloudflare-worker/sql/schema_baseline.sql';
 const MIGRATIONS = 'cloudflare-worker/sql/migrations';

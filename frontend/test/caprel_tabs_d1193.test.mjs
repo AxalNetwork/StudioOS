@@ -407,7 +407,7 @@ test('Eadwyn’s proposals: each beside its words, accepted, edited or dismissed
     await act(async () => l.props(open).onClick());
     await l.flush();
     await l.click('caprel-investor-eadwyn');
-    assert.match(l.text('caprel-proposals-ask'), /Ask Eadwyn about Bluefern Capital/);
+    assert.match(l.text('caprel-proposals-ask'), /Propose next steps for Bluefern Capital/);
     assert.ok(!l.writes().some((c) => /capital-relationships\/proposals/.test(c.url)), 'opening runs nothing');
     await l.click('caprel-proposals-ask');
     const run = l.writes().at(-1);

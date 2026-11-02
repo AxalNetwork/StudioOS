@@ -11,6 +11,13 @@
  * figure), deal-breakers first, then by card. One question per card; no
  * model runs, so it answers with AI off and costs nothing.
  *
+ * PER PROSPECT (D1582, #3829). Asked for one prospect (an investor in Capital
+ * relationships, already checked to be the venture's), the objections THAT
+ * prospect raised rank first, the ones it raised most first, then the
+ * venture's other objections in the order above, then the findings. Each
+ * objection says how many of its rows the prospect gave (`heard.from_prospect`).
+ * With no prospect the order is D1559's, unchanged.
+ *
  * ANSWERS ARE BINDINGS. A question draws on the deck cards it is about (an
  * objection by its words, `TOPICS`; a finding by its card), and its answer is
  * those cards' recorded deck sources (`CARD_CATALOGUE[].sources`), each with
@@ -237,7 +244,7 @@ export type Question = {
   question: string;
   /** The deck cards the answer draws on. */
   cards: string[];
-  heard?: { count: number; prospects: number; last_heard: string | null };
+  heard?: { count: number; prospects: number; last_heard: string | null; from_prospect?: number };
   /** D913: the saved narrative version and section marked as answering it. */
   answered_in?: Answered | null;
   /** The founder's own recorded answer in Capital relationships, when every figure in it is bound. */
@@ -268,14 +275,20 @@ export async function rankQuestions(input: {
   const out: Question[] = [];
   const keptFor = (key: string) => { const r = input.kept.get(key); return r ? keptOf(r, input.items) : null; };
 
-  for (const o of input.objections) {
+  // D1582: the asked-for prospect's own objections first (stable, so each half keeps D913's order).
+  const mine = (o: Objection) => o.of_prospect ?? 0;
+  const objections = input.objections.some((o) => o.of_prospect !== undefined)
+    ? input.objections.map((o, i) => ({ o, i })).sort((a, b) => mine(b.o) - mine(a.o) || a.i - b.i).map((x) => x.o)
+    : input.objections;
+  for (const o of objections) {
     const cards = cardsOfObjection(o.text);
     const answer = answerOf(sourcesOfCards(cards), input.items);
     const said = o.answer && !unboundFigures(o.answer, answer.bindings).length ? o.answer : null;
     const key = `objection-${o.key}`;
     out.push({
       key, rank: 0, kind: 'objection', question: o.text, cards,
-      heard: { count: o.count, prospects: o.prospects, last_heard: o.last_heard }, answered_in: o.answered ?? null,
+      heard: { count: o.count, prospects: o.prospects, last_heard: o.last_heard, ...(o.of_prospect !== undefined ? { from_prospect: o.of_prospect } : {}) },
+      answered_in: o.answered ?? null,
       said, ...(o.answer && !said ? { said_held: 'unbound_figure' as const } : {}),
       answer, kept: keptFor(key),
     });

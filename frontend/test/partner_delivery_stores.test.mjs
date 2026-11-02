@@ -193,7 +193,10 @@ const KNOWN_DUPLICATE_NUMBERS = {
 
 test('the migration numbers are free and in order', () => {
   const files = readdirSync(DIR).filter((f) => f.endsWith('.sql'));
-  const nums = files.map((f) => Number(f.split('_')[0])).filter(Number.isFinite);
+  // A migration's number is every digit before its first underscore: three for a
+  // numbered file, twelve for a D4106 stamp (`202611021724_…` is not 202).
+  const numberOf = (f) => (/^(\d+)_/.exec(f) || [])[1] ?? f;
+  const nums = files.map((f) => Number(numberOf(f))).filter(Number.isFinite);
   for (const n of [208, 209]) {
     assert.equal(nums.filter((x) => x === n).length, 1,
       `two files numbered ${n} order by filename, which is not a decision anyone made`);
@@ -202,7 +205,7 @@ test('the migration numbers are free and in order', () => {
   // Every number is used once, except the recorded collisions above.
   const byNumber = new Map();
   for (const f of files) {
-    const k = f.split('_')[0]; // a numbered file's three digits, or a D4106 stamp
+    const k = numberOf(f);
     if (!byNumber.has(k)) byNumber.set(k, []);
     byNumber.get(k).push(f);
   }
@@ -234,6 +237,7 @@ test('the migration numbers are free and in order', () => {
   // (`YYYYMMDDHHMM_<slug>.sql`), which the runner's numeric sort puts after
   // every numbered file. Anything else is still refused.
   for (const f of files) {
+    // D4106: or a 12-digit UTC-minute stamp, a real minute, which compareMigrations orders after every numbered file.
     assert.ok(/^\d{3}_/.test(f) || migrationStamp(f),
       `${f}: every migration needs a 3-digit prefix or a D4106 UTC-minute stamp`);
   }

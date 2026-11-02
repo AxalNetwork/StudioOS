@@ -59,7 +59,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { definitions } from './check-sqlite-table-collisions.mjs';
-
 import { compareMigrations } from './lib/migrationPlan.mjs';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MIGRATIONS = path.join(ROOT, 'cloudflare-worker/sql/migrations');
