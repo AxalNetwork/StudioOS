@@ -8,6 +8,8 @@
  *   not_found              the skill is another company's, or a draft nobody published
  *   version_not_published  the version asked for was never published
  *   skill_retired          409: a retired skill is not added again (one already pinned stays)
+ *   skill_suspended        409: HQ suspended the skill (D4161); one already pinned stays pinned,
+ *                          and the run gate (`skillModeration.ts`) keeps it from running
  *   role_mismatch          the skill does not list the agent's role
  *   tool_not_approved      a tool the skill uses is not in the agent's grants
  *                          (`tool_grants_json`, #3844), named as `{ key, label }`
@@ -26,6 +28,7 @@ import { roleOf } from './catalogue';
 import { grantsOf } from './agentTools';
 import { missingTools, type Tag } from './skills';
 import type { AgentRow } from './teams';
+import { openModeration } from './skillModeration';
 
 const LEVEL: Record<string, number> = { aware: 1, working: 2, proficient: 3, advanced: 4, expert: 5 };
 
@@ -38,13 +41,13 @@ export type VersionRow = {
   skill_id: number; version: number; skill_md: string; name: string; purpose: string; steps_json: string;
   allowed_tools_json: string; output_kind: string; taxonomy_json: string; roles_json: string; published_at: string; published_by: number;
 };
-export type AttachCode = 'not_found' | 'version_not_published' | 'skill_retired' | 'role_mismatch' | 'tool_not_approved';
+export type AttachCode = 'not_found' | 'version_not_published' | 'skill_retired' | 'skill_suspended' | 'role_mismatch' | 'tool_not_approved';
 export type Blocked = { code: AttachCode; tool?: { key: string; label: string } };
 export type Axis = { slug: string; label: string; level: number | null };
 
 /** The status each code answers with when a write is refused. */
 export const ATTACH_STATUS: Record<AttachCode, number> = {
-  not_found: 404, version_not_published: 422, skill_retired: 409, role_mismatch: 422, tool_not_approved: 422,
+  not_found: 404, version_not_published: 422, skill_retired: 409, skill_suspended: 409, role_mismatch: 422, tool_not_approved: 422,
 };
 
 const parse = <T>(json: string | null | undefined, fallback: T): T => { try { const v = JSON.parse(json ?? ''); return v ?? fallback; } catch { return fallback; } };
@@ -84,6 +87,7 @@ export async function attachCheck(env: Env, a: AgentPart, s: SkillRow, version: 
   if (!v) return { code: 'version_not_published' };
   if (pinned === version) return null;
   if (s.status === 'retired') return { code: 'skill_retired' };
+  if ((await openModeration(env, s.id))?.action === 'suspend') return { code: 'skill_suspended' };
   if (!versionRoles(v).includes(a.role_key)) return { code: 'role_mismatch' };
   const missing = missingTools(versionTools(v), grantsOf(a.tool_grants_json));
   if (missing.length) return { code: 'tool_not_approved', tool: { key: missing[0], label: toolLabel(missing[0]) } };

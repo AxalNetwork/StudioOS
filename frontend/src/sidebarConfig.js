@@ -20,7 +20,7 @@ import {
   UserCircle, Shield, ShieldCheck, Network, Sparkles, Briefcase,
   TrendingUp, MessageSquare, Package, Calendar,
   Inbox, Radar, Wallet, Landmark, Mail,
-  Map, UserCog, Coins, FileStack, SlidersHorizontal, Banknote, BadgeCheck, KeyRound,
+  Map, UserCog, Coins, FileStack, SlidersHorizontal, Banknote, BadgeCheck, KeyRound, Bot,
 } from 'lucide-react';
 
 // `workspaces/shellConfig.js` is a pure leaf module — it imports nothing — so
@@ -150,6 +150,9 @@ export const SIDEBAR_GROUPS = {
       // The owner's ruling (2026-10-20): the providers' keys and GitHub Sync are
       // Super Admin only and a row of their own, after Platform, whose strip
       // carried them. They left the Admin Console, so a plain admin has no door.
+      // D4137 (#4137): HQ › AI agents, the control panel for the agent roster
+      // and the skills library, after Platform as the canvas's nav draws it.
+      { to: '/hq/ai-agents', icon: Bot, label: 'AI agents', match: ['/hq/ai-agents'] },
       { to: '/admin/integration-keys', icon: KeyRound, label: 'Integration keys' },
       // Y1 — three queues, not the shared Help Center. /help stays for every role.
       // D606 — the review queue (/hq/review) is Support's: the canvas lights this row.

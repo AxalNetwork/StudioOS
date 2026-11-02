@@ -7,9 +7,12 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { codeOnly } from './_codeOnly.mjs';
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
+import { installDocument } from './_contracts_dom.mjs';
 import {
   COLUMNS, agenda, assignGroups, assigneeLine, backlogRows, boardColumns, burnup, complianceCan, complianceTiles,
-  dueLine, gutter, linkedWork, moveTargets, needsYou, runChip, runCost, runOutcome, AGENTS_OFF_REASON,
+  canMove, dueLine, gutter, linkedWork, moveTargets, needsYou, runChip, runCost, runOutcome, AGENTS_OFF_REASON,
 } from '../src/pages/work/workModel.js';
 import { WORK_SEAM, workAdapter } from '../src/pages/work/workAdapter.js';
 import { Agenda, TaskSheet } from '../src/pages/work/CompliancePage.jsx';
@@ -112,9 +115,9 @@ test('the agenda: Overdue pinned with its days, then months oldest first; a task
   assert.equal(complianceCan({ can_manage: true }).markDone, true);
 });
 
-// #3970 turned `burnup` on, and #3976 the compliance methods (company_compliance_d1614.test.mjs
-// holds what each sends); every other method stays off until its route lands.
-const LIVE = new Set(['burnup', 'complianceTasks', 'complianceTask', 'markDone', 'createWork', 'complianceCreate', 'complianceUpdate',
+// #3970 turned `burnup` on, #3969/#3973 the board methods, and #3976 the compliance methods
+// (company_compliance_d1614.test.mjs holds what each sends); every other method stays off until its route lands.
+const LIVE = new Set(['burnup', 'board', 'item', 'move', 'assign', 'create', 'complianceTasks', 'complianceTask', 'markDone', 'createWork', 'complianceCreate', 'complianceUpdate',
   'complianceAssignable', 'complianceAssign', 'complianceComment', 'complianceReady', 'complianceReopen']);
 test('the seam: every method not yet live is off, with the issue that turns it on, and makes no request', async () => {
   assert.deepEqual(Object.keys(WORK_SEAM).sort(), Object.keys(workAdapter).sort());
@@ -141,11 +144,13 @@ test('#3970: through answers the off block for agent_engine_off and rethrows any
 });
 
 test('the views draw the canvas\'s parts with fixtures', () => {
-  const board = html(h(Board, { items: ITEMS }));
+  const board = html(h(Board, { items: ITEMS, viewer: { can_manage: true, user_uid: 'u-1' } }));
   for (const w of ['To triage', 'In review', 'Needs you', 'Review 3 proposals', 'See the failed run', 'Waiting for you', 'Blocked', 'Move to ▾', 'Estimate: Not recorded']) assert.ok(board.includes(w), w);
   assert.ok(!board.includes('Somewhere else'));
-  const ro = html(h(Board, { items: ITEMS, readOnly: true }));
+  const ro = html(h(Board, { items: ITEMS, viewer: { can_manage: false, user_uid: 'u-1' } }));
   assert.ok(!ro.includes('Move to ▾'), 'a reader opens cards, never moves them');
+  assert.ok(!ro.includes('draggable="true"'), 'a reader gets no drag');
+  assert.ok(!html(h(Board, { items: ITEMS })).includes('Move to ▾'), 'without a viewer nothing moves');
   const back = html(h(Backlog, { items: ITEMS }));
   assert.match(back, /Sorted by title · Done hidden · 5 open/);
   assert.match(html(h(Burnup, { series: [] })), /Not recorded/);
@@ -184,4 +189,85 @@ test('the canvases are in design/incoming with the named logo edit, and D1614 na
   assert.ok(existsSync(new URL('../../documentation/architecture/decisions/D1614.md', import.meta.url)));
   assert.match(read('documentation/architecture/decisions/D1614.md'), /Prompt 1 v3/);
   assert.match(read('design/incoming/README.md'), /## Landed 2026-11-01 — Work and company compliance \(#3968\)/);
+});
+
+// ── #3973: W1 is live ───────────────────────────────────────────────────────
+
+test('#3973: canMove is the Worker\'s rule: an editor moves any card, anyone else only a card assigned to them', () => {
+  const mine = { uid: 'm', column: 'ready', assignee: { kind: 'person', uid: 'u-2', name: 'Max Member' } };
+  const theirs = { uid: 't', column: 'ready', assignee: { kind: 'person', uid: 'u-3', name: 'Ali Other' } };
+  const agent = { uid: 'a', column: 'ready', assignee: { kind: 'agent', uid: 'u-2', name: 'CFO agent' } };
+  assert.equal(canMove(theirs, { can_manage: true, user_uid: 'u-2' }), true);
+  // Mutation checked: let a reader move every card → this fails.
+  assert.equal(canMove(theirs, { can_manage: false, user_uid: 'u-2' }), false);
+  assert.equal(canMove(mine, { can_manage: false, user_uid: 'u-2' }), true);
+  assert.equal(canMove(agent, { can_manage: false, user_uid: 'u-2' }), false, 'an agent\'s card is not a person\'s own');
+  assert.equal(canMove(mine, null), false);
+  assert.equal(canMove(mine, { can_manage: false, user_uid: null }), false);
+});
+
+test('#3973: the five W1 methods go through workApi to W1\'s routes, and agent_engine_off is the honest block', async () => {
+  const src = codeOnly(read('frontend/src/pages/work/workAdapter.js'));
+  for (const m of ['board', 'item', 'move', 'assign', 'create']) assert.match(src, new RegExp(`${m}: \\([^)]*\\) => through\\(`), m);
+  const restore = installDocument();
+  const previous = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (u, o = {}) => {
+    calls.push({ url: String(u), method: o.method || 'GET', body: o.body ? JSON.parse(o.body) : null });
+    if (/\/work\/board/.test(String(u))) return new Response(JSON.stringify({ error: 'agent_engine_off' }), { status: 404, headers: { 'content-type': 'application/json' } });
+    return new Response(JSON.stringify({ task: { uid: 'u1', column: 'done' } }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    const moved = await workAdapter.move('u1', 'done');
+    assert.deepEqual(moved, { available: true, data: { uid: 'u1', column: 'done' } });
+    await workAdapter.item('u1');
+    await workAdapter.assign('u1', { kind: 'person', uid: 'u-2' });
+    await workAdapter.create(7, { title: 'New thing' });
+    const off = await workAdapter.board(7);
+    assert.equal(off.available, false, 'an engine that is off is the honest block');
+    const path = (c) => `${c.method} ${c.url.replace(/^.*\/api/, '')}`;
+    assert.deepEqual(calls.map(path), [
+      'PATCH /teams/tasks/u1/move', 'GET /teams/tasks/u1', 'PATCH /teams/tasks/u1', 'POST /teams/project/7/tasks', 'GET /teams/project/7/work/board',
+    ]);
+    assert.deepEqual(calls[0].body, { column: 'done' });
+    assert.deepEqual(calls[2].body, { assignee: { kind: 'person', uid: 'u-2' } });
+  } finally { globalThis.fetch = previous; restore(); }
+});
+
+test('#3973: mounted board: columns and counts from the read; Move to calls the move with the card and column; a reader gets neither menu nor drag', async () => {
+  const restore = installDocument();
+  try {
+    const container = document.createElement('div'); document.body.appendChild(container);
+    const root = createRoot(container);
+    const moves = [];
+    const live = [
+      { uid: 'x1', title: 'Draft runway note', column: 'ready', estimate: 2, assignee: { kind: 'person', uid: 'u-2', name: 'Max Member' } },
+      { uid: 'x2', title: 'Pricing page', column: 'ready', estimate: 3, assignee: { kind: 'person', uid: 'u-3', name: 'Ali Other' } },
+      { uid: 'x3', title: 'Seed deck', column: 'done', estimate: 5 },
+    ];
+    const props = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
+    const nodes = () => { const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)]; return walk(container); };
+    const byId = (id) => nodes().find((n) => props(n)['data-testid'] === id);
+    const text = (n) => (n?.nodeType === 3 ? n.textContent : (n?.childNodes || []).map(text).join('') || n?.textContent || '');
+    await act(async () => root.render(h(MemoryRouter, null, h(Board, { items: live, viewer: { can_manage: false, user_uid: 'u-2' }, onMove: (uid, col) => moves.push([uid, col]) }))));
+    assert.match(text(byId('work-col-ready')), /Ready2/);
+    assert.match(text(byId('work-col-ready')), /Estimate: 5/);
+    assert.match(text(byId('work-col-done')), /Done1/);
+    // The member's own card moves; the other's has no menu and no drag.
+    assert.equal(props(byId('work-card-x1')).draggable, true);
+    assert.equal(props(byId('work-card-x2')).draggable, false);
+    const toggle = nodes().find((n) => String(n.tagName).toUpperCase() === 'BUTTON' && text(n) === 'Move to ▾');
+    await act(async () => { props(toggle).onClick(); });
+    assert.ok(byId('work-move-x1-in_progress'));
+    assert.ok(!byId('work-move-x2-in_progress'), 'no menu on a card the reader may not move');
+    // Mutation checked: drop onMove from the menu item → no move is recorded and this fails.
+    await act(async () => { props(byId('work-move-x1-in_progress')).onClick(); });
+    assert.deepEqual(moves, [['x1', 'in_progress']]);
+    // A drop of a card the reader may not move does nothing.
+    const drop = (uid, col) => props(byId(`work-col-${col}`)).onDrop({ preventDefault() {}, dataTransfer: { getData: () => uid } });
+    await act(async () => { drop('x2', 'done'); });
+    await act(async () => { drop('x1', 'done'); });
+    assert.deepEqual(moves, [['x1', 'in_progress'], ['x1', 'done']]);
+    await act(async () => root.unmount());
+  } finally { restore(); }
 });

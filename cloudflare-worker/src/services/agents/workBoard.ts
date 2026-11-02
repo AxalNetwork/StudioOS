@@ -19,6 +19,8 @@ export type WorkTask = TaskRow & {
   close_reason: typeof CLOSE_REASONS[number] | null; duplicate_of: number | null; task_number: number | null;
   body: string | null; type: typeof WORK_TYPES[number]; parent_task_id: number | null;
   work_version: number; work_change_uid: string | null;
+  // D1614 W4 (#3972, migration 202611022205): a person's optional time block, UTC.
+  scheduled_start?: string | null; scheduled_end?: string | null;
   // D1614 W7 (#3993, migration 763).
   milestone_id: number | null; drafted_by_agent_id: number | null; review_state: 'approved' | 'changes_requested' | null;
 };
@@ -62,7 +64,8 @@ export async function workPermission(env: Env, t: WorkTask, actor: WorkActor, fi
     if (!(await canRead(env, scope, actor.user))) throw new WorkRefusal(404, 'not_found', 'There is no such task.');
     if (!(await canManage(env, scope, actor.user))) {
       const own = t.assignee_kind === 'person' && t.assignee_user_id === actor.user.id;
-      const movement = ['board_column', 'column', 'position', 'status', 'state', 'close_reason', 'duplicate_of', 'blocked_reason'];
+      // D1614 W4: the assignee also schedules their own time block.
+      const movement = ['board_column', 'column', 'position', 'status', 'state', 'close_reason', 'duplicate_of', 'blocked_reason', 'scheduled_start', 'scheduled_end'];
       if (!own || fields.some((k) => !movement.includes(k))) throw new WorkRefusal(403, 'not_manager', 'Only the task’s assignee or a project editor can move it.');
     }
   } else {
@@ -78,7 +81,18 @@ export async function workPermission(env: Env, t: WorkTask, actor: WorkActor, fi
 type BoardWrite = Partial<WorkTask> & TaskWrite;
 // context_project_id is E1's: its own rule refuses it on a project task (project_not_in_company).
 const FIELDS = new Set(['title','detail','body','type','parent_task_id','goal_uid','module','option','context_project_id','kind','assignee','priority','due_at',
-  'status','blocked_reason','source_kind','source_ref','board_column','column','estimate_points','position','labels','labels_json','close_reason','duplicate_of','state']);
+  'status','blocked_reason','source_kind','source_ref','board_column','column','estimate_points','position','labels','labels_json','close_reason','duplicate_of','state',
+  'scheduled_start','scheduled_end']);
+
+/** D1614 W4: a UTC time as `YYYY-MM-DD HH:MM:SS`, from `YYYY-MM-DDTHH:MM[:SS][Z]`; null when it is not one. */
+export function utcTime(v: unknown): string | null {
+  const m = typeof v === 'string' ? /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})(:\d{2})?(\.\d+)?Z?$/.exec(v) : null;
+  if (!m) return null;
+  const text = `${m[1]} ${m[2]}${m[3] ?? ':00'}`;
+  const ms = Date.parse(`${text.replace(' ', 'T')}Z`);
+  return Number.isFinite(ms) && new Date(ms).toISOString().slice(0, 19).replace('T', ' ') === text ? text : null;
+}
+const BLOCK_MAX_MS = 7 * 86_400_000;
 async function linked(env: Env, current: ScopeRow, value: unknown, field: string) {
   if (value === null) return null;
   // External references are uids. Numeric internal ids never leave this service.
@@ -102,6 +116,19 @@ export async function boardWrite(env: Env, scope: Project, b: Record<string, any
   if ('estimate_points' in b) {
     if (b.estimate_points !== null && (typeof b.estimate_points !== 'number' || !Number.isFinite(b.estimate_points) || b.estimate_points < 0 || b.estimate_points > 1000000)) bad('An estimate is a nonnegative number of points or null.');
     w.estimate_points = b.estimate_points;
+  }
+  if ('scheduled_start' in b || 'scheduled_end' in b) {
+    // Both or neither; the end after the start; a block of at most 7 days.
+    const pick = (k: 'scheduled_start' | 'scheduled_end') => (k in b ? b[k] : current?.[k] ?? null);
+    const [rawStart, rawEnd] = [pick('scheduled_start'), pick('scheduled_end')];
+    if (rawStart === null && rawEnd === null) { w.scheduled_start = null; w.scheduled_end = null; }
+    else {
+      const start = utcTime(rawStart), end = utcTime(rawEnd);
+      if (!start || !end) bad('A time block has a start and an end, each a UTC time such as 2026-11-04T09:00Z.');
+      const span = Date.parse(`${end!.replace(' ', 'T')}Z`) - Date.parse(`${start!.replace(' ', 'T')}Z`);
+      if (span <= 0 || span > BLOCK_MAX_MS) bad('A time block ends after it starts, within 7 days.');
+      w.scheduled_start = start; w.scheduled_end = end;
+    }
   }
   if ('position' in b) {
     if (typeof b.position !== 'number' || !Number.isFinite(b.position) || b.position < 0 || b.position > 1e12) bad('Position is a nonnegative finite number.');
@@ -185,6 +212,7 @@ export async function updateWorkTask(env: Env, t: WorkTask, b: Record<string, an
     `UPDATE scope_tasks SET title = ?, detail = ?, body = ?, type = ?, parent_task_id = ?, goal_id = ?, module = ?, option = ?, kind = ?,
       assignee_kind = ?, assignee_user_id = ?, assignee_agent_id = ?, status = ?, blocked_reason = ?, priority = ?, due_at = ?,
       source_kind = ?, source_ref = ?, board_column = ?, estimate_points = ?, position = ?, labels_json = ?, close_reason = ?, duplicate_of = ?,
+      scheduled_start = ?, scheduled_end = ?,
       work_version = work_version + 1, work_change_uid = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND work_version = ? AND (? = 0 OR NOT EXISTS (SELECT 1 FROM scope_task_deps d JOIN scope_tasks b ON b.id = d.depends_on_task_id WHERE d.task_id = scope_tasks.id AND NOT (b.status = 'done' AND (b.close_reason = 'completed' OR b.close_reason IS NULL))))
         AND NOT EXISTS (WITH parents(id) AS (SELECT ? WHERE ? IS NOT NULL UNION
@@ -192,6 +220,7 @@ export async function updateWorkTask(env: Env, t: WorkTask, b: Record<string, an
           SELECT 1 FROM parents WHERE id = scope_tasks.id OR (SELECT COUNT(*) FROM parents) > 200)`,
   ).bind(n.title,n.detail,n.body,n.type,n.parent_task_id,n.goal_id,n.module,n.option,n.kind,n.assignee_kind,n.assignee_user_id,n.assignee_agent_id,
     n.status,n.blocked_reason,n.priority,n.due_at,n.source_kind,n.source_ref,n.board_column,n.estimate_points,n.position,n.labels_json,n.close_reason,n.duplicate_of,
+    n.scheduled_start ?? null,n.scheduled_end ?? null,
     change,t.id,t.work_version,starting ? 1 : 0,n.parent_task_id,n.parent_task_id),
   eventStmt(env,t.id,actor,moved ? 'moved' : 'updated',{ change,from:columnOf(t),to:n.board_column,from_status:t.status,to_status:n.status,close_reason:n.close_reason,fields:Object.keys(b) },change)];
   // D1614 W7 (#3993): labels named here become the project's labels and links, in this batch.
@@ -240,13 +269,13 @@ export async function createWorkTask(env: Env, scope: Project, b: Record<string,
   await env.DB.batch([env.DB.prepare(
     `INSERT INTO scope_tasks (uid,scope_kind,project_id,task_number,title,detail,body,type,parent_task_id,goal_id,module,option,kind,
       assignee_kind,assignee_user_id,assignee_agent_id,status,blocked_reason,priority,due_at,source_kind,source_ref,created_by_user_id,
-      board_column,estimate_points,position,labels_json,close_reason,duplicate_of,work_change_uid,drafted_by_agent_id)
-     SELECT ?, 'project', ?, COALESCE(MAX(task_number),0)+1, ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+      board_column,estimate_points,position,labels_json,close_reason,duplicate_of,work_change_uid,drafted_by_agent_id,scheduled_start,scheduled_end)
+     SELECT ?, 'project', ?, COALESCE(MAX(task_number),0)+1, ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
      FROM scope_tasks WHERE project_id = ? AND scope_kind = 'project'`,
   ).bind(uid,scope.id,w.title!,w.detail??null,w.body??null,w.type??'task',w.parent_task_id??null,w.goal_id??null,w.module??null,w.option??null,w.kind??'work',
     w.assignee_kind??'none',w.assignee_user_id??null,w.assignee_agent_id??null,w.status!,w.blocked_reason??null,w.priority??0,w.due_at??null,
     w.source_kind??'manual',w.source_ref??null,user.id,w.board_column!,w.estimate_points??null,w.position??0,w.labels_json??'[]',w.close_reason??null,w.duplicate_of??null,change,
-    opts.draftedByAgentId??null,scope.id),
+    opts.draftedByAgentId??null,w.scheduled_start??null,w.scheduled_end??null,scope.id),
   env.DB.prepare(`INSERT INTO scope_task_events (task_id,actor_user_id,kind,detail_json) SELECT id,?,'created',? FROM scope_tasks WHERE uid = ?`)
     .bind(user.id,JSON.stringify({ change,column:w.board_column,...(opts.draftedByAgentId?{draft:true}:{}) }),uid),
   ...('labels' in b || 'labels_json' in b ? labelSyncStatements(env,uid,scope.id,JSON.parse(w.labels_json??'[]'),change) : []),
@@ -367,7 +396,8 @@ export async function workCards(env: Env, tasks: WorkTask[], readRuns: WorkRunRe
       assignee:person?{kind:'person' as const,uid:person.uid,name:person.name,person}
         :agent?{kind:'agent' as const,uid:agent.uid,agent_uid:agent.uid,name:[agent.first_name,agent.last_name].filter(Boolean).join(' ')||null,role:agent.role_key,agent}
         :{kind:'none' as const},
-      priority:t.priority,due:t.due_at,due_at:t.due_at,module:t.module,option:t.option,kind:t.kind,
+      priority:t.priority,due:t.due_at,due_at:t.due_at,
+      scheduled:t.scheduled_start&&t.scheduled_end?{start:t.scheduled_start,end:t.scheduled_end}:null,module:t.module,option:t.option,kind:t.kind,
       source:t.source_kind,goal:r.goal_title,goal_uid:r.goal_uid,depends_on:ownDeps.map(({uid,task_number,title})=>({uid,task_number,title})),blocked:blockers.length>0||t.status==='blocked',blocked_reason:t.blocked_reason,blockers,
       ready:t.status==='open'&&columnOf(t)==='ready'&&!blockers.length,
       run:run?{uid:run.uid,status:({done:'completed',waiting_decision:'waiting',admitted:'running'} as Record<string,string>)[run.status]??run.status,

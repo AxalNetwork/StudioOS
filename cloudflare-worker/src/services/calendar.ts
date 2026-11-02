@@ -434,7 +434,7 @@ export async function fetchMicrosoftUserinfo(accessToken: string): Promise<any> 
 // ===========================================================================
 export interface CalendarEvent {
   id: string;
-  kind: 'ic_meeting' | 'founder_checkin' | 'advisor_booking' | 'partner_office_hour' | 'calendly_event' | 'expert_booking' | 'event_ticket' | 'event_hosted' | 'investor_meeting' | 'compliance_due' | 'interview_call' | 'cohort_date' | 'deal_closing' | 'manual' | 'learning' | 'publish_send' | 'content_planned' | 'bot_call' | 'round_close' | 'nda_expiry' | 'workflow_task' | 'mvp_task' | 'contact_task' | 'engagement_milestone' | 'external_google' | 'external_microsoft';
+  kind: 'ic_meeting' | 'founder_checkin' | 'advisor_booking' | 'partner_office_hour' | 'calendly_event' | 'expert_booking' | 'event_ticket' | 'event_hosted' | 'investor_meeting' | 'compliance_due' | 'interview_call' | 'cohort_date' | 'deal_closing' | 'manual' | 'learning' | 'publish_send' | 'content_planned' | 'bot_call' | 'round_close' | 'nda_expiry' | 'workflow_task' | 'mvp_task' | 'contact_task' | 'engagement_milestone' | 'external_google' | 'external_microsoft' | 'work_item';
   source_id: number;
   source_uid: string;
   title: string;
@@ -919,6 +919,8 @@ const READERS: Readonly<Record<CalendarEvent['kind'], CalendarReader>> = {
   // #3983 (D1486 §d): tasks and engagement milestones, page only, all day, the member's own rows alone.
   workflow_task: async (env, userId, from, to) => (await (await import('./calendar/taskDates')).workflowTaskEvents(env, userId, from, to)),
   mvp_task: async (env, userId, from, to) => (await (await import('./calendar/taskDates')).mvpTaskEvents(env, userId, from, to)),
+  // D1614 W4 (#3972): the open tasks of the projects the member can read, in their time block or on their due day.
+  work_item: async (env, userId, from, to) => (await (await import('./calendar/workItems')).workItemEvents(env, userId, from, to)),
   contact_task: async (env, userId, from, to) => (await (await import('./calendar/taskDates')).contactTaskEvents(env, userId, from, to)),
   engagement_milestone: async (env, userId, from, to) => (await (await import('./calendar/taskDates')).engagementMilestoneEvents(env, userId, from, to)),
   // D1485 (#3979): the member's own Google and Outlook events, read live, page only, never pushable.
@@ -1011,7 +1013,9 @@ export const SCOPED_EXCLUDED_KINDS = ['calendly_event', 'expert_booking'] as con
 // D1486 §b (#3981): Publish sends and planned content are the venture team's, never a staff scope's.
 export const PERSONAL_ONLY_KINDS = ['interview_call', 'cohort_date', 'deal_closing', 'manual', 'publish_send', 'content_planned', 'bot_call', 'round_close', 'nda_expiry', 'workflow_task', 'mvp_task', 'contact_task', 'engagement_milestone',
   // D1485 (#3979): a member's own Google or Outlook events are theirs alone, never a staff scope's.
-  'external_google', 'external_microsoft'] as const;
+  'external_google', 'external_microsoft',
+  // D1614 W4 (#3972): a project's work items, on the member's own page only.
+  'work_item'] as const;
 export const SCOPED_SOURCE_LIMIT = 1000;
 export function validScopeWindow(from: string, to: string): boolean {
   const start = Date.parse(from), end = Date.parse(to);
