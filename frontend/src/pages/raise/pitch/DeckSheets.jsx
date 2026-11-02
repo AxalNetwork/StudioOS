@@ -9,6 +9,7 @@ import { comparePair } from './compareModel';
 import { APPLY } from './deckV2Model';
 import { AUDIENCE_LABELS, KIT_FAILED, NOT_RECORDED, NO_KIT, THEME_LABELS } from './editorModel';
 import { SLIDE_SIZES, aspectOf, withAspect } from './gridModel';
+import { LANGUAGES, langOf, languageLine, withLanguage } from './deckLanguage';
 import { remix as remixAdapter, shown } from './deckV2Adapter';
 import { movedNotice } from './deckReflow';
 
@@ -84,6 +85,13 @@ export function ThemeSheet({ model, theme, audience, kit, readOnly, onTheme, onA
           onChange={(e) => onTheme(withConfidential(theme, e.target.checked))} data-testid="pitch-theme-confidential" />
         <span className="flex flex-col"><span className="font-bold">{CONFIDENTIAL}</span><span className={MUTED}>{CONFIDENTIAL_HELP}</span></span>
       </label>
+      {/* D1571 (#3818): the deck's language — right to left for Arabic and Hebrew, CJK measured per character. Not in the header. */}
+      <span className={EYE}>Language</span>
+      <select className={FIELD} value={langOf(theme).split('-')[0]} disabled={readOnly} aria-label="Language of the deck"
+        onChange={(e) => onTheme(withLanguage(theme, e.target.value))} data-testid="pitch-theme-language">
+        {LANGUAGES.map((l) => <option key={l.id} value={l.id} lang={l.id}>{l.label}</option>)}
+      </select>
+      <span className={MUTED} data-testid="pitch-theme-language-line">{languageLine(theme)}</span>
       <span className={EYE}>Audience</span>
       <select className={FIELD} value={audience || ''} disabled={readOnly} onChange={(e) => onAudience(e.target.value || null)} data-testid="pitch-editor-audience-select">
         <option value="">{NOT_RECORDED}</option>

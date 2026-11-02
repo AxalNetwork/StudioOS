@@ -36,6 +36,7 @@ import { deckRail } from './deckRailGroups';
 import { presentHref } from './presentExportModel';
 import { aspectOf, withAspect } from './gridModel';
 import { reflowCards } from './deckReflow';
+import { scriptOfTheme } from './deckLanguage';
 import {
   ADDABLE_KINDS, KIND_LABELS, MODEL_FAILED, NOTES_PLACEHOLDER, NO_CARDS,
   NOT_RECORDED, PHONE_NOTE, READ_FAILED, THEME_LABELS,
@@ -414,7 +415,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   const [sizeUndo, setSizeUndo] = useState(null);
   const changeSize = (aspect) => {
     if (aspectOf(theme?.aspect) === aspect) return;
-    const r = reflowCards(cards, aspect);
+    const r = reflowCards(cards, aspect, scriptOfTheme(theme));
     setSizeUndo(r.count ? { cards, theme, count: r.count } : null);
     setCards(r.cards);
     setTheme(withAspect(theme, aspect));
@@ -502,7 +503,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
       ) : (
         <div className={`grid gap-3 ${narrow ? '' : 'lg:grid-cols-[150px_minmax(0,1fr)]'}`} data-testid="pitch-editor-body">
           <div className="flex min-w-0 flex-col gap-2">
-            <CardsStrip cards={cards} sel={sel} stale={stale} readOnly={readOnly} onSelect={choose} move={move}
+            <CardsStrip theme={theme} cards={cards} sel={sel} stale={stale} readOnly={readOnly} onSelect={choose} move={move}
               onCardAction={cardAction} orientation={narrow ? 'row' : 'column'}
               onAdd={() => {
                 const layout = model.layouts.find((l) => l.id === 'statement') || model.layouts[0];

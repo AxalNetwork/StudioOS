@@ -75,7 +75,7 @@ function TableView({ block, colours, para }) {
   const { head, body } = tableView(block);
   return (
     <table className={`w-full border-collapse ${para}`} data-testid={`deck-table-${block.id}`}>
-      {head ? <thead><tr>{head.map((c, i) => <th key={i} scope="col" className="border px-1 text-left font-bold" style={{ borderColor: colours.muted }}>{c}</th>)}</tr></thead> : null}
+      {head ? <thead><tr>{head.map((c, i) => <th key={i} scope="col" className="border px-1 text-start font-bold" style={{ borderColor: colours.muted }}>{c}</th>)}</tr></thead> : null}
       <tbody>{body.map((row, r) => <tr key={r}>{row.map((c, i) => <td key={i} className="border px-1" style={{ borderColor: colours.muted }}>{c}</td>)}</tr>)}</tbody>
     </table>
   );
@@ -199,16 +199,17 @@ export function BlockView({ block: b, colours, live = false, sources = false, si
  * print. `onSelect` makes each block a button (the editor); without it each
  * block is a plain cell.
  */
-export function BlockGrid({ blocks, colours, live = false, sources = false, size = 'card', selected = null, onSelect = null, testId = 'deck-blocks', renderChart = null, aspect = '16:9' }) {
+export function BlockGrid({ blocks, colours, live = false, sources = false, size = 'card', selected = null, onSelect = null, testId = 'deck-blocks', renderChart = null, aspect = '16:9', lang = undefined, dir = undefined }) {
+  // D1571 (#3818): the deck's language and direction (`deckLanguage.langAttrs`); text aligns to the start, so it mirrors.
   return (
-    <div className="absolute inset-0" data-aspect={aspectOf(aspect)} data-testid={testId}>
+    <div className="absolute inset-0" data-aspect={aspectOf(aspect)} lang={lang} dir={dir} data-testid={testId}>
       {blocks.map((b) => {
         const at = placeOf(b.grid, aspect);
         const inner = <BlockView block={b} colours={colours} live={live} sources={sources} size={size} renderChart={renderChart} />;
         if (onSelect) {
           return (
             <button type="button" key={b.id}
-              className={`min-h-0 min-w-0 overflow-hidden rounded-[8px] p-1.5 text-left ${selected === b.id ? 'outline outline-2 outline-violet-500' : 'outline outline-1 outline-dashed outline-black/10'}`}
+              className={`min-h-0 min-w-0 overflow-hidden rounded-[8px] p-1.5 text-start ${selected === b.id ? 'outline outline-2 outline-violet-500' : 'outline outline-1 outline-dashed outline-black/10'}`}
               style={at} onClick={() => onSelect(b.id)} aria-label={blockLabel(b)} data-testid={`pitch-editor-block-${b.id}`}>
               {inner}
             </button>

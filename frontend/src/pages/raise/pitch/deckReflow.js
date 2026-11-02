@@ -32,6 +32,8 @@ export const TYPE_SCALE = Object.freeze({
   kicker: { size: 24, leading: 1.3 },
 });
 export const GLYPH_EM = 0.52;
+/** D1571 (#3818): each script's glyph width (`designSystem.SCRIPT_EM`); a test holds the two equal. */
+export const SCRIPT_EM = Object.freeze({ latin: GLYPH_EM, arabic: 0.48, hebrew: 0.5, cjk: 1.0 });
 /** D1517: every line sits on the 8 px baseline (`designSystem.BASELINE`, `lineHeight`). */
 export const BASELINE = 8;
 export const lineHeight = (size, leading) => Math.ceil((size * leading) / BASELINE) * BASELINE;
@@ -48,11 +50,11 @@ export function typeRoleOf(style, layout = null) {
 }
 
 /** The characters a range holds at a type role and aspect. */
-export function textCapacity(g, role, aspect = '16:9') {
+export function textCapacity(g, role, aspect = '16:9', script = 'latin') {
   const { w, h } = boxOf(g, aspectOf(aspect));
   const t = TYPE_SCALE[role];
   const lines = Math.max(1, Math.floor(h / lineHeight(t.size, t.leading)));
-  const perLine = Math.max(1, Math.floor(w / (t.size * GLYPH_EM)));
+  const perLine = Math.max(1, Math.floor(w / (t.size * (SCRIPT_EM[script] ?? GLYPH_EM))));
   return Math.min(lines * perLine, DENSITY_MAX[role]);
 }
 
@@ -71,7 +73,7 @@ export function fitWords(text, max) {
 }
 
 /** `{ cards, moved, count }`: the cards at `to`, with what no longer fits in each card's notes. */
-export function reflowCards(cards, toIn) {
+export function reflowCards(cards, toIn, script = 'latin') {
   const to = aspectOf(toIn);
   const moved = [];
   const out = (Array.isArray(cards) ? cards : []).map((s, i) => {
@@ -84,7 +86,7 @@ export function reflowCards(cards, toIn) {
       if (!g) { blocks.push(b); continue; }
       if (b.kind === 'text') {
         const text = String(b.text ?? '');
-        const cap = textCapacity(g, typeRoleOf(b.style, s.layout ?? null), to);
+        const cap = textCapacity(g, typeRoleOf(b.style, s.layout ?? null), to, script);
         if (text.length <= cap) { blocks.push(b); continue; }
         const kept = fitWords(text, cap);
         const rest = text.slice(kept.length).trim();

@@ -71,6 +71,9 @@ export function keepSettings(next, prev) {
   const off = {};
   if (prev?.confidential === false) off.confidential = false;
   if (prev?.compliance_fls === false) off.compliance_fls = false;
+  // D1571 (#3818): the deck's language is a setting too, kept across a theme change.
+  if (typeof prev?.lang === 'string') off.lang = prev.lang;
+  if (prev?.dir === 'rtl' || prev?.dir === 'ltr') off.dir = prev.dir;
   if (!Object.keys(off).length) return next;
   return { kind: 'brand', background: null, ...(next || {}), ...off };
 }

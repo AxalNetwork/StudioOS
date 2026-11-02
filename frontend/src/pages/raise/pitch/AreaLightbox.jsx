@@ -382,7 +382,7 @@ function ElementPicker({ value, onPick, onClose, id }) {
             return (
               <button key={el.id} id={`${id}-opt-${el.id}`} ref={(n) => { refs.current[el.id] = n; }} type="button" role="option"
                 aria-selected={value === el.id} aria-disabled={on ? undefined : true} title={why || undefined} tabIndex={el.id === active ? 0 : -1}
-                className={`flex min-h-[32px] items-center justify-between gap-2 rounded-[7px] px-2 text-left text-[12.5px] ${on ? `${INK} hover:bg-axal-ground focus:bg-axal-ground dark:hover:bg-gray-800 dark:focus:bg-gray-800` : 'cursor-not-allowed text-axal-muted dark:text-gray-500'} ${value === el.id ? 'bg-axal-lavender dark:bg-violet-950/40' : ''}`}
+                className={`flex min-h-[32px] items-center justify-between gap-2 rounded-[7px] px-2 text-start text-[12.5px] ${on ? `${INK} hover:bg-axal-ground focus:bg-axal-ground dark:hover:bg-gray-800 dark:focus:bg-gray-800` : 'cursor-not-allowed text-axal-muted dark:text-gray-500'} ${value === el.id ? 'bg-axal-lavender dark:bg-violet-950/40' : ''}`}
                 onClick={() => { if (on) onPick(el.id); }} data-testid={`${id}-pick-${el.id}`}>
                 <span>{el.label}{el.pending ? ` ${PEND}` : ''}</span>
                 <span className="font-mono text-[10px] text-axal-muted dark:text-gray-400">{on ? (el.free ? 'Free' : '') : LATER}</span>
