@@ -33,6 +33,18 @@ export function tagChip(tag) {
   return { text: `${cat} · ${level}`, title: tag?.skill_label && tag.skill_label !== cat ? `${tag.skill_label} · ${level}` : undefined };
 }
 
+/**
+ * D4120: what a skill's SkillEnergy image is drawn from — its slug, and the
+ * area and level of its first taxonomy tag. Null when the skill has no tag
+ * with both, so a card draws no image rather than a made-up area.
+ */
+export function energyOf(s) {
+  const tag = (Array.isArray(s?.taxonomy) ? s.taxonomy : []).find((t) => SKILL_AXIS_ORDER.includes(t?.category_slug) && levelOf(t?.level));
+  const slug = s?.slug || s?.uid;
+  if (!tag || !slug) return null;
+  return { slug: String(slug), area: tag.category_slug, level: levelOf(tag.level) };
+}
+
 export const OUTPUT_KINDS = [['draft', 'A draft for a person to accept'], ['record_change', 'A record change for a person to accept'], ['brief', 'A brief']];
 export const outputWords = (s) => s?.output_label || (OUTPUT_KINDS.find(([k]) => k === s?.output_kind) || [])[1] || null;
 

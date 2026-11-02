@@ -23,7 +23,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 
 const SQL = resolve(dirname(fileURLToPath(import.meta.url)), '../sql');
 const MIGRATIONS = resolve(SQL, 'migrations');
@@ -81,7 +81,7 @@ test('a baseline plus every post-cutoff migration builds without failures', () =
   const newer = readdirSync(MIGRATIONS)
     .filter((name) => /^\d+_.*\.sql$/.test(name))
     .filter((name) => migrationNumber(name) > BASELINE_CUTOFF)
-    .sort();
+    .sort(compareMigrations);
 
   for (const name of newer) {
     try {

@@ -2305,6 +2305,15 @@ export default {
           } catch {
             console.error('[cron] agent duties unreadable');
           }
+          // #3851 (E7): the engine's alerts (caps, blocked tasks, waiting approvals, DLQ, gateway), each once per its window.
+          try {
+            const { sweepAgentAlerts } = await import('./services/agents/alerts');
+            const a = await sweepAgentAlerts(env, now);
+            const sent = Object.values(a).reduce((x, y) => x + y, 0);
+            if (sent) cronSummary.push(`agent alerts ${Object.entries(a).filter(([, n]) => n).map(([k, n]) => `${k}=${n}`).join(' ')}`);
+          } catch {
+            console.error('[cron] agent alerts unreadable');
+          }
         }
         // D1259: a published venture model rescores the next batch of ventures
         // each minute until every venture has its new rows. HQ only: only HQ
