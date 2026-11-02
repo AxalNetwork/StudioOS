@@ -143,6 +143,8 @@ const SELECT_PROGRAMME = `SELECT ${PROGRAMME_COLS} ${PROGRAMME_FROM}`;
 export function programmeDto(r: any) {
   const picked = Number(r.picked_count ?? 0);
   return {
+    // #4046 (B2): the row's id, the parent Ask on a member's answers names.
+    id: Number(r.id),
     uid: r.uid,
     owner_kind: r.owner_kind,
     owner_name: r.owner_name ?? null,
@@ -251,6 +253,8 @@ export function withdrawnBy(r: { status: string; user_id: unknown; withdrawn_act
 
 function applicationDto(r: any) {
   return {
+    // #4046 (B2): the row's id, so Ask's record step after Apply names the application it placed answers in.
+    id: Number(r.id),
     uid: r.uid,
     programme_uid: r.programme_uid,
     product_name: r.product_name,
@@ -844,6 +848,25 @@ export async function startTesting(env: Env, actor: number, uid: string) {
   const mail_reach = (await testersAudience(env, uid)).length;
   const told: Told = { owner, testers, mail_reach };
   return { programme: programmeDto(await programmeByUid(env, uid)), told };
+}
+
+/**
+ * #4046 (B2): whether this member may apply to programme `programmeId` now, by
+ * `apply`'s own rule: an active tester, the programme open and taking
+ * applications, their role eligible, a place left, and no application of
+ * theirs on it yet. Ask on the answers reads this before it offers a trigger.
+ */
+export async function mayApplyTo(env: Env, user: { id: number; role: string }, programmeId: number): Promise<boolean> {
+  if ((await testerStatusOf(env, user.id)) !== 'active') return false;
+  const now = nowIso();
+  const r = await env.DB.prepare(
+    `SELECT 1 AS ok FROM testing_programmes p
+      WHERE p.id = ? AND p.status = 'open' AND (p.closes_at IS NULL OR p.closes_at > ?) AND (p.opens_at IS NULL OR p.opens_at <= ?)
+        AND EXISTS (SELECT 1 FROM json_each(p.eligible_roles) r WHERE r.value = ?)
+        AND (SELECT COUNT(*) FROM testing_applications a WHERE a.programme_id = p.id AND a.status = 'picked') < p.places
+        AND NOT EXISTS (SELECT 1 FROM testing_applications a WHERE a.programme_id = p.id AND a.user_id = ?)`,
+  ).bind(programmeId, now, now, String(user.role), user.id).first();
+  return !!r;
 }
 
 export async function apply(env: Env, user: { id: number; role: string }, uid: string, body: any) {

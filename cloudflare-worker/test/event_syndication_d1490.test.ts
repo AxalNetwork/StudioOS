@@ -297,6 +297,7 @@ test('per-event routes: a non-manager gets 404 on each; registrations are null w
   const [row] = read.body.rows;
   assert.deepEqual([row.channel, row.account_uid, row.capability, row.on, row.status, row.registrations, row.registrations_reason],
     ['luma', luma, 'creates_events', false, null, null, REGISTRATIONS_NOT_RECORDED]);
+  assert.deepEqual(row.overrides, {}, 'D1493: no listing yet, no saved copy');
   assert.match(REGISTRATIONS_NOT_RECORDED, /^Not recorded/);
   assert.equal((await f.call(ADMIN, 'GET', `/api/events/${EVENT}/syndication`)).status, 200, 'an admin manages it too');
   const preview = await f.call(HOST, 'POST', `/api/events/${EVENT}/syndication/preview`, { account_uid: luma, overrides: { title: 'Short title' } });
@@ -318,6 +319,8 @@ test('PUT: over-limit overrides and a non-https ticket link are 400; another hos
   const ok = await put([{ account_uid: luma, on: true, overrides: { title: 'Evening', ticket_url: 'https://axal.vc/events/founders-evening' } }]);
   assert.equal(ok.status, 200, ok.text);
   assert.deepEqual([ok.body.rows[0].on, ok.body.rows[0].status], [true, 'selected']);
+  // D1493 (#3906): the read carries the saved copy, so a page that saves one field keeps the other.
+  assert.deepEqual(ok.body.rows[0].overrides, { title: 'Evening', ticket_url: 'https://axal.vc/events/founders-evening' });
   await f.call(ADMIN, 'POST', `/api/admin/events/${EVENT}/approve`, {});
   await f.drain();
   assert.equal(f.luma!.calls[0].title, 'Evening', 'the override is what posts');

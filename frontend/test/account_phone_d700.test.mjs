@@ -47,7 +47,6 @@ import CalendarPage, { CalendarPhoneView, NO_END_REASON } from '../src/pages/Cal
 import MyEventsPage from '../src/pages/events/MyEventsPage.jsx';
 import LearningHome, { LearningPhoneView } from '../src/pages/learning/LearningHome.jsx';
 import { COMING_SOON_LINE } from '../src/pages/learning/learningAccess.js';
-import { TAB_NOT_LIVE } from '../src/pages/learning/learningModel.js';
 import { HelpPhoneView } from '../src/pages/docs/DocsLayout.jsx';
 import { helpAreas } from '../src/pages/docs/guidePlacement.js';
 import { SECTIONS as HELP_SECTIONS, filterSectionsForRole } from '../src/pages/docs/sections/index.js';
@@ -628,7 +627,8 @@ test('5. A4m–A10m: each section reads its values from the page\'s sources', ()
   assert.match(learning, /Upcoming webinars Pricing teardown [^›]*Register/);
   assert.match(learning, /Browse Courses › Articles and publications › Exercises and exams/);
   for (const tab of ['courses', 'articles', 'exercises']) assert.match(html(PHONE_VIEWS.learning()), new RegExp(`href="/learning\\?tab=${tab}"`));
-  assert.ok(learning.includes(`Exercises and exams ${TAB_NOT_LIVE.exercises}`), 'Exercises carries its TAB_NOT_LIVE line for every profile');
+  // #4180: the Exercises and Exams tabs are live, so the row says what they hold.
+  assert.ok(learning.includes('Exercises and exams Your exercises and exams, with your status and best score.'), 'Exercises says what it lists for every profile');
 
   const help = text(html(PHONE_VIEWS.help()));
   assert.match(help, /Popular this week First steps 42 views · Getting started/);
