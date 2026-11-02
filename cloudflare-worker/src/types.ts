@@ -354,6 +354,18 @@ export interface Env {
   TEAM_AGENTS_ENABLED?: string;
   /** D1529 (#3845, #3742 E1): anything but `off` (with TEAM_AGENTS_ENABLED) turns on goals and tasks; `off` answers 404 `agent_engine_off`. */
   AGENT_ENGINE?: string;
+  /** D1528 (#3847, #3742 E3): `manual` (default) or `self_start`; `self_start` only after E3 and E5 merge (owner Q1 B). */
+  AGENT_AUTONOMY?: string;
+  /** D1528: the runtime behind the seam (`src/agents/runtime.ts`). `do` is the only one built. */
+  AGENT_RUNTIME?: string;
+  /** D1528: the `agents` AI Gateway id agent runs pass. Unset = no gateway. Set only by `agentRun`. */
+  AGENT_AI_GATEWAY?: string;
+  /** D1528: one `AgentScope` Durable Object per scope, named `project:{id}` or `company:{id}`. */
+  AGENT_SCOPE?: DurableObjectNamespace;
+  /** D1528: the `AgentTaskWorkflow`; the instance id is the run uid. */
+  AGENT_TASK?: Workflow<{ run_uid: string }>;
+  /** D1528: `studioos-agent-queue`; messages are `{ job_type: 'agent_run', payload: { run_uid } }`. */
+  AGENT_QUEUE?: Queue<JobMessage>;
   KEK_R2?: string;
   // Symmetric secret used by `services/cryptoBox.ts` for wellbeing data.
   // Kept distinct from KEK_PII so a key rotation on PII columns never

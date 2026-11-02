@@ -16,13 +16,14 @@ is automatic. The routes are `cloudflare-worker/src/routes/team_agents.ts`, moun
 | `agentTools.ts` | Part 5 (#3844): the sponsor's approved read tools (D852). `checkGrants` (the sponsor's own connected server, approved and pinned read tools only), `grantsView` (the profile's tools with their server and status), `cleanReads` (granted, at most five) and `readTools` (each through `callCustomTool` in `meteredCall`, cut to 8 KB, wrapped by `toolResultsForModel`; a gone or drifted server answers `disconnected`). |
 | `goals.ts` | D1529 (#3845, E1 of #3742): a scope's goals. A project goal rolls up only to its own company's goal and links only its own OKR. Also `sumCosts`, which never sums an unknown as 0. |
 | `tasks.ts` | D1529: a scope's tasks, for a person, an agent within its rule book, or no one; dependencies within one scope and without a cycle; ready derived; cost `{ available: false }` until E3. |
+| `reads.ts` | D1528 (#3847, E3): the read functions a run's `context` step may call, one per rule book `reads` key, each `{ untrusted: true, data }` and at most 8 KB. A key with no function refuses the run `read_unavailable`. Built: the project and company summaries, the team roster and the four cycles' records. |
 | `workBoard.ts` | D1614 W1 (#3969): project board fields and cards over `scope_tasks` (migration 762), transactional moves with actor events, close reasons, per-project numbering, scoped dependency checks (E1's cycle walk; 409 `task_blocked`) and the `unblocked` notice. E3's run store is read through the `WorkRunReader` seam, "no recorded runs" until #3847 supplies one. |
 
 **The rule for adding here.** `catalogue.ts` and `rulebook.ts` stay pure: no
 binding, no fetch. A read of the database goes in `teams.ts`, and a gate is
 written there once. A new module key must be a slug a cycle already has; a new
 rule book section is one entry in `rulebook.ts`'s `SECTIONS`; the floor only
-grows. An agent runs only through `agentRun.ts`, and its proposals are decided through `queue.ts`.
+grows. An agent runs only through `agentRun.ts`, and its proposals are decided through `queue.ts`. The engine's runtime (admission, the task Workflow, the agent queue) lives in `cloudflare-worker/src/agents/` (D1528) and calls `agentRun.ts`; a new read for the `context` step is one entry in `reads.ts`'s `READERS`.
 `team_agents_d1496.test.ts` covers the registry, the run and the queue, and
 `scope_goals_tasks_d1529.test.ts` covers goals and tasks.
 

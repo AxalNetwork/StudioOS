@@ -19,6 +19,21 @@
  * not "off" and `TEAM_AGENTS_ENABLED` is "true". The check is in each handler,
  * not a `*` middleware, so this router never answers for team_agents' paths.
  *
+ * D1528 (#3847, E3 of #3742) — the runtime's routes, behind the same flag and gates:
+ *
+ *   GET    /tasks/:uid/quote          manage or sponsor  { quote: { available, value_microusd } }
+ *   POST   /tasks/:uid/start          manage or sponsor  202 { run }; 409 agent_busy | scope_busy | queue_full | not_ready;
+ *                                                        403 engine_paused | scope_paused
+ *   GET    /agents/:uid/runs          read               { runs: [Run] }
+ *   GET    /runs/:uid                 read               { run, steps: [{ name, status, at, summary }], cost }
+ *   POST   /runs/:uid/cancel          manage             { run }; 409 not_running
+ *   GET    /:scope/:id/engine         read               { engine, halted, scope_paused, max_parallel_runs, autonomy }
+ *   PUT    /:scope/:id/engine         manage             body { paused?, max_parallel_runs? }; 400 invalid_engine
+ *
+ * A start goes through the runtime's seam (`src/agents/runtime.ts`), never a
+ * binding. With the engine off or paused, #3727's own
+ * `POST /agents/:uid/run` (team_agents.ts) still runs an agent by hand.
+ *
  * NEVER AN EMAIL, NEVER A NUMERIC USER ID. A person is `{ uid, name }`; an
  * agent `{ uid, role_key, first_name, last_name }`. `cost` is
  * `{ available: false }` until E3 records task runs, never 0.
@@ -35,11 +50,23 @@ import {
   TASK_STATUSES, depsOf, insertTask, isReady, setDeps, statusWrite, taskByUid, taskCosts, taskWrite, tasksOf, updateTask, type TaskRow,
 } from '../services/agents/tasks';
 import { workBoardRoutes } from './work_board';
+import { agentQuote } from '../services/agents/agentRun';
+import { agentByUid, type AgentRow } from '../services/agents/teams';
+import { agentRuntime, autonomy, engineMode, haltedAll, type AgentRuntime, type ScopeRef } from '../agents/runtime';
+import { moveTask, putScopeSettings, runByUid, runDto, scopeOfRow as runScopeOf, scopeSettings, stepsOf, type RunRow } from '../agents/engine';
+import { terminateRun, trackRun } from '../agents/doRuntime';
 
 type C = Context<{ Bindings: Env }>;
 
 export const agentEngineEnabled = (env: Env) =>
   typeof env.AGENT_ENGINE === 'string' && env.AGENT_ENGINE !== '' && env.AGENT_ENGINE !== 'off' && env.TEAM_AGENTS_ENABLED === 'true';
+
+/** The runtime the routes reach; tests pass their own (the `railRunRoutes` pattern). */
+export type EngineRouteDeps = { runtime: (env: Env) => Promise<AgentRuntime> };
+const DEFAULT_DEPS: EngineRouteDeps = { runtime: agentRuntime };
+let deps: EngineRouteDeps = DEFAULT_DEPS;
+/** Tests only. */
+export function __setEngineRouteDeps(d: Partial<EngineRouteDeps> | null) { deps = d ? { ...DEFAULT_DEPS, ...d } : DEFAULT_DEPS; }
 
 const router = new Hono<{ Bindings: Env }>();
 // D1614 W1 (#3969): a project's Work board, its moves and its task fields, ahead of E1's
@@ -247,6 +274,153 @@ router.put('/tasks/:uid/deps', async (c) => {
     const r = await setDeps(c.env, got.t, b?.depends_on, user.id);
     if (!r.ok) return say(c, r.refusal);
     return c.json({ task: await oneTask(c.env, (await taskByUid(c.env, got.t.uid))!) });
+  } catch (e) { return mapError(c, e); }
+});
+
+// ── The runtime (D1528, E3) ─────────────────────────────────────────────────
+
+const refRef = (s: Scope): ScopeRef => ({ kind: s.kind, id: s.id });
+
+/** The task's agent, when the caller may start it: the scope's manager or the agent's sponsor. */
+async function startableTask(c: C, user: User) {
+  const got = await visibleTask(c, user);
+  if (!got) return { refusal: refuse(c, 404, { code: 'not_found', message: 'There is no such task.' }) };
+  const agent = got.t.assignee_kind === 'agent' && got.t.assignee_agent_id
+    ? await c.env.DB.prepare('SELECT * FROM team_agents WHERE id = ?').bind(got.t.assignee_agent_id).first<AgentRow>()
+    : null;
+  const sponsor = !!agent && agent.sponsor_user_id === user.id;
+  if (!sponsor && !(await canManage(c.env, got.s, user))) {
+    return { refusal: refuse(c, 403, { code: 'not_manager', message: 'Only the team’s editors, or the person who added this agent, can start it.' }) };
+  }
+  if (!agent) return { refusal: refuse(c, 409, { code: 'not_ready', message: 'That task is not assigned to an agent.' }) };
+  return { ...got, agent };
+}
+
+router.get('/tasks/:uid/quote', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const got = await startableTask(c, user);
+    if ('refusal' in got) return got.refusal;
+    if (!got.t.module || !got.t.option) return refuse(c, 409, { code: 'not_ready', message: 'That task has no module and option for the agent to work in.' });
+    const q = await agentQuote(c.env, { agent: got.agent, module: got.t.module, option: got.t.option, taskId: got.t.id });
+    if (!q.ok) return refuse(c, q.status, { code: q.code, message: q.message });
+    return c.json({ quote: q.quote.available ? { available: true, value_microusd: q.quote.value_microusd } : { available: false } });
+  } catch (e) { return mapError(c, e); }
+});
+
+router.post('/tasks/:uid/start', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const got = await startableTask(c, user);
+    if ('refusal' in got) return got.refusal;
+    const rt = await deps.runtime(c.env);
+    const a = await rt.admit(refRef(got.s), { agentId: got.agent.id, taskId: got.t.id, by: user.id, source: 'person' });
+    if (!a.ok) return refuse(c, a.status, { code: a.code, message: a.message });
+    const run = await runByUid(c.env, a.run.uid);
+    return c.json({ run: run ? await runDto(c.env, run) : { uid: a.run.uid } }, 202);
+  } catch (e) { return mapError(c, e); }
+});
+
+/** The run and its agent's scope, when the caller can read it. */
+async function visibleRun(c: C, user: User): Promise<{ run: RunRow; agent: AgentRow; s: Scope } | null> {
+  const run = await runByUid(c.env, c.req.param('uid') ?? '');
+  const agent = run && await c.env.DB.prepare('SELECT * FROM team_agents WHERE id = ?').bind(run.agent_id).first<AgentRow>();
+  const s = agent && await scopeOfAgent(c.env, agent);
+  if (!run || !agent || !s || !(await canRead(c.env, s, user))) return null;
+  return { run, agent, s };
+}
+
+router.get('/agents/:uid/runs', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const a = await agentByUid(c.env, c.req.param('uid') ?? '');
+    const s = a && await scopeOfAgent(c.env, a);
+    if (!a || !s || !(await canRead(c.env, s, user))) return refuse(c, 404, { code: 'not_found', message: 'There is no such agent.' });
+    const rows = (await c.env.DB.prepare('SELECT * FROM agent_task_runs WHERE agent_id = ? ORDER BY id DESC LIMIT 50').bind(a.id).all<RunRow>()).results ?? [];
+    const runs = [];
+    for (const r of rows) runs.push(await runDto(c.env, r));
+    return c.json({ runs });
+  } catch (e) { return mapError(c, e); }
+});
+
+router.get('/runs/:uid', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const got = await visibleRun(c, user);
+    if (!got) return refuse(c, 404, { code: 'not_found', message: 'There is no such run.' });
+    const run = await runDto(c.env, got.run);
+    return c.json({ run, steps: stepsOf(got.run).map(({ name, status, at, summary }) => ({ name, status, at, summary })), cost: run.cost });
+  } catch (e) { return mapError(c, e); }
+});
+
+router.post('/runs/:uid/cancel', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const got = await visibleRun(c, user);
+    if (!got) return refuse(c, 404, { code: 'not_found', message: 'There is no such run.' });
+    if (!(await canManage(c.env, got.s, user))) return notManager(c);
+    if (!['admitted', 'running', 'waiting_decision'].includes(got.run.status)) {
+      return refuse(c, 409, { code: 'not_running', message: 'That run has already ended.' });
+    }
+    await terminateRun(c.env, got.run.uid, 'cancelled_by_person');
+    await moveTask(c.env, got.run.task_id, 'open', ['in_progress', 'waiting_decision']);
+    const fresh = (await runByUid(c.env, got.run.uid))!;
+    await trackRun(c.env, runScopeOf(got.agent), fresh);
+    return c.json({ run: await runDto(c.env, fresh) });
+  } catch (e) { return mapError(c, e); }
+});
+
+async function engineDto(env: Env, s: Scope) {
+  const settings = await scopeSettings(env, refRef(s));
+  return {
+    engine: await engineMode(env),
+    halted: await haltedAll(env),
+    scope_paused: settings.engine_paused,
+    max_parallel_runs: settings.max_parallel_runs,
+    autonomy: autonomy(env),
+  };
+}
+
+router.get('/:scope/:id/engine', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
+    if (!s) return noScope(c);
+    if (!(await canRead(c.env, s, user))) return notMember(c);
+    return c.json(await engineDto(c.env, s));
+  } catch (e) { return mapError(c, e); }
+});
+
+router.put('/:scope/:id/engine', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
+    if (!s) return noScope(c);
+    if (!(await canRead(c.env, s, user))) return notMember(c);
+    if (!(await canManage(c.env, s, user))) return notManager(c);
+    const b = await readBody(c);
+    const bad = (message: string) => say(c, { status: 400, code: 'invalid_engine', message });
+    if (!b || Object.keys(b).some((k) => k !== 'paused' && k !== 'max_parallel_runs') || !Object.keys(b).length) {
+      return bad('Send paused (true or false) and/or max_parallel_runs (1 to 5).');
+    }
+    if ('paused' in b && typeof b.paused !== 'boolean') return bad('paused is true or false.');
+    if ('max_parallel_runs' in b && !(Number.isSafeInteger(b.max_parallel_runs) && b.max_parallel_runs >= 1 && b.max_parallel_runs <= 5)) {
+      return bad('max_parallel_runs is a whole number from 1 to 5.');
+    }
+    const ref = refRef(s);
+    await putScopeSettings(c.env, ref, { paused: b.paused, max_parallel_runs: b.max_parallel_runs }, user.id);
+    const rt = await deps.runtime(c.env);
+    // A pause stops admissions in the scope's object from the next request on; a resume rebuilds it from D1.
+    if (b.paused === true) await rt.halt(ref, 'scope_paused');
+    else if (b.paused === false) await rt.rebuild(ref);
+    return c.json(await engineDto(c.env, s));
   } catch (e) { return mapError(c, e); }
 });
 

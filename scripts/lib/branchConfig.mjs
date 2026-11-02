@@ -75,6 +75,12 @@ export function derivedNames(code) {
     d1: `studioos-${code}`,
     queue: `studioos-${code}-job-queue`,
     dlq: `studioos-${code}-job-queue-dlq`,
+    // D1528 (#3847): the agent queue, its DLQ and the task Workflow are the
+    // branch's own. A branch that kept HQ's names would run HQ's agents'
+    // messages, or start its runs in HQ's Workflow.
+    agentQueue: `studioos-${code}-agent-queue`,
+    agentDlq: `studioos-${code}-agent-queue-dlq`,
+    agentTask: `studioos-${code}-agent-task`,
     r2: {
       FILES: `studioos-${code}-files`,
       PUBLICATIONS: `studioos-${code}-publications`,
@@ -82,6 +88,22 @@ export function derivedNames(code) {
     },
     vectorize: `axal-search-${code}`,
   };
+}
+
+/**
+ * HQ's queue name → the branch's. The agent queue (D1528) and its DLQ keep
+ * their own names; every other queue is the job queue or its DLQ.
+ */
+export function branchQueue(n, hqName) {
+  if (hqName.endsWith('agent-queue-dlq')) return n.agentDlq;
+  if (hqName.endsWith('agent-queue')) return n.agentQueue;
+  return hqName.endsWith('-dlq') ? n.dlq : n.queue;
+}
+
+/** HQ's Workflow name → the branch's. An unknown Workflow fails the render rather than ship under HQ's name. */
+export function branchWorkflow(n, hqName) {
+  if (hqName === 'studioos-agent-task') return n.agentTask;
+  throw new Error(`no branch name for Workflow ${hqName} — add it to derivedNames`);
 }
 
 /** The crons a branch runs: the queue drain and the nightly cleanup, nothing else. */
@@ -343,14 +365,16 @@ export function renderBranchConfig(tomlSrc, entry) {
         break;
       }
       case 'queues.producers':
-        kv.set('queue', q(n.queue));
+        kv.set('queue', q(branchQueue(n, JSON.parse(kv.get('queue')))));
         break;
       case 'queues.consumers': {
-        const isDlq = JSON.parse(kv.get('queue')).endsWith('-dlq');
-        kv.set('queue', q(isDlq ? n.dlq : n.queue));
-        if (kv.has('dead_letter_queue')) kv.set('dead_letter_queue', q(n.dlq));
+        kv.set('queue', q(branchQueue(n, JSON.parse(kv.get('queue')))));
+        if (kv.has('dead_letter_queue')) kv.set('dead_letter_queue', q(branchQueue(n, JSON.parse(kv.get('dead_letter_queue')))));
         break;
       }
+      case 'workflows':
+        kv.set('name', q(branchWorkflow(n, JSON.parse(kv.get('name')))));
+        break;
       case 'vectorize':
         kv.set('index_name', q(n.vectorize));
         break;
@@ -442,6 +466,7 @@ export function checkRendered(tomlSrc, entry, rendered) {
     'durable_objects.bindings': 'name',
     migrations: 'tag',
     tail_consumers: 'service',
+    workflows: 'binding',
   };
   const prodTables = new Map();
   for (const s of parseToml(tomlSrc).sections) {
@@ -450,7 +475,7 @@ export function checkRendered(tomlSrc, entry, rendered) {
     if (!prodTables.has(t)) prodTables.set(t, []);
     prodTables.get(t).push(s);
   }
-  const renamedQueue = (v) => (v.endsWith('-dlq') ? q(n.dlq) : q(n.queue));
+  const renamedQueue = (v) => q(branchQueue(n, v));
   for (const [table, declared] of prodTables) {
     // D681: the one HQ-only OAuth binding is intentionally absent on branches.
     const list = table === 'kv_namespaces'
@@ -474,6 +499,25 @@ export function checkRendered(tomlSrc, entry, rendered) {
     if (JSON.stringify(want) !== JSON.stringify(got)) {
       bad.push(`table ${table}: expected identities ${want.join(', ')}, found ${got.join(', ')}`);
     }
+  }
+
+  // D1528: the agent queue and the task Workflow are the branch's own, by name.
+  for (const s of byName('queues.producers')) {
+    const binding = s.kv.get('binding');
+    const want = binding === q('AGENT_QUEUE') ? q(n.agentQueue) : q(n.queue);
+    if (s.kv.get('queue') !== want) bad.push(`producer ${binding} must send to ${want}, found ${s.kv.get('queue')}`);
+  }
+  for (const s of byName('queues.consumers')) {
+    const name = s.kv.get('queue') ? JSON.parse(s.kv.get('queue')) : '';
+    if ([n.agentQueue].includes(name) && s.kv.get('dead_letter_queue') !== q(n.agentDlq)) {
+      bad.push(`the agent queue's dead letter queue must be ${n.agentDlq}`);
+    }
+    if (name === n.queue && s.kv.has('dead_letter_queue') && s.kv.get('dead_letter_queue') !== q(n.dlq)) {
+      bad.push(`the job queue's dead letter queue must be ${n.dlq}`);
+    }
+  }
+  for (const s of byName('workflows')) {
+    if (s.kv.get('name') !== q(n.agentTask)) bad.push(`Workflow ${s.kv.get('binding')} must be ${q(n.agentTask)}, found ${s.kv.get('name')} — HQ's Workflow is not the branch's`);
   }
 
   // Storage must be the branch's own.

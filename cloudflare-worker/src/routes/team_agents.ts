@@ -400,6 +400,9 @@ router.delete('/agents/:uid', async (c) => {
       "UPDATE team_agents SET status = 'removed', paused_reason = NULL, removed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
     ).bind(a.id).run();
     await logEvent(c.env, a.id, user.id, 'removed', { proposals_withdrawn: Number(withdrawn.meta?.changes ?? 0) });
+    // D1528 (#3847): the removed agent's runs end and its scope object forgets it.
+    const { eraseAgentRuntime } = await import('../agents/erasure');
+    await eraseAgentRuntime(c.env, a);
     return c.json({ ok: true });
   } catch (e) { return mapError(c, e); }
 });

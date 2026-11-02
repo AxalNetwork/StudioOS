@@ -494,6 +494,7 @@ import { bindingKey } from './util/schemaBootstrap';
 // Task #9 — 'exploring' holding-state role (CHECK relax + user_role_review side table).
 import { ensureExploringSchema, exploringSchemaReady } from './services/exploringSchema';
 import { queueConsumer, dlqConsumer } from './queue-consumer';
+import { agentDlqConsumer, agentQueueConsumer, dispatchQueue } from './agents/agentQueue';
 import { rateLimitMiddleware } from './middleware/rateLimit';
 import { observabilityMiddleware } from './middleware/observability';
 import { securityHeadersMiddleware } from './middleware/securityHeaders';
@@ -2213,6 +2214,18 @@ export default {
             console.error('[cron] subprocessor notices unreadable');
           }
         }
+        // D1528 (#3847): the agent sweep. Its own minute (% 5 === 1), under
+        // this lease, only while the engine is enabled. NOT GATED ON
+        // `hqCadences`: each deployment's agents and runs are its own rows.
+        if (now.getUTCMinutes() % 5 === 1 && env.AGENT_ENGINE && env.AGENT_ENGINE !== 'off' && env.TEAM_AGENTS_ENABLED === 'true') {
+          try {
+            const { sweepAgents } = await import('./agents/sweep');
+            const r = await sweepAgents(env, now);
+            if (r.resent || r.admitted) cronSummary.push(`agents resent=${r.resent} admitted=${r.admitted}`);
+          } catch {
+            console.error('[cron] agent sweep unreadable');
+          }
+        }
         // D1259: a published venture model rescores the next batch of ventures
         // each minute until every venture has its new rows. HQ only: only HQ
         // publishes.
@@ -3218,13 +3231,12 @@ export default {
     await work;
   },
   async queue(batch: MessageBatch<JobMessage>, env: Env, ctx: ExecutionContext) {
-    // Task #7 (IE) — route DLQ batches to dlqConsumer so exhausted CF Queue
-    // messages are mirrored to D1 for admin inspection + retry.
-    if (batch.queue?.includes('dlq')) {
-      await dlqConsumer(batch, env, ctx);
-    } else {
-      await queueConsumer(batch, env, ctx);
-    }
+    // D1528 (#3847): the agent queue's branch comes FIRST, before the `dlq`
+    // test, and its own DLQ goes to agentDlqConsumer (which ends the run and
+    // mirrors the message). Task #7 (IE) — every other DLQ batch goes to
+    // dlqConsumer so exhausted CF Queue messages are mirrored to D1 for admin
+    // inspection + retry. `agents/agentQueue.ts`'s dispatchQueue holds the order.
+    await dispatchQueue(batch, env, ctx, { queue: queueConsumer, dlq: dlqConsumer, agent: agentQueueConsumer, agentDlq: agentDlqConsumer });
   },
 };
 
@@ -3241,3 +3253,8 @@ export { OnboardingChat } from './durable-objects/onboarding-chat';
 export { HqEntrypoint, BranchEntrypoint } from './rpc';
 
 export { MeetingBotRun } from './durable-objects/meeting-bot-run';
+
+// D1528 (#3847, #3742 E3): the agent engine's scope object and task Workflow,
+// named in wrangler.toml's [[durable_objects.bindings]] and [[workflows]].
+export { AgentScope } from './agents/doRuntime';
+export { AgentTaskWorkflow } from './agents/taskWorkflow';

@@ -221,7 +221,8 @@ jobs:
             tolerate npx --yes wrangler@4.131.0 "${args[@]}" \
               || { echo "::error::r2 bucket create failed for ${suffix}"; exit 1; }
           done
-          for q in "studioos-${BRANCH}-job-queue" "studioos-${BRANCH}-job-queue-dlq"; do
+          # D1528 (#3847): the agent queue and its DLQ are the branch's own too (branchConfig.mjs derivedNames).
+          for q in "studioos-${BRANCH}-job-queue" "studioos-${BRANCH}-job-queue-dlq" "studioos-${BRANCH}-agent-queue" "studioos-${BRANCH}-agent-queue-dlq"; do
             tolerate npx --yes wrangler@4.131.0 queues create "$q" \
               || { echo "::error::queues create failed for ${q}"; exit 1; }
           done

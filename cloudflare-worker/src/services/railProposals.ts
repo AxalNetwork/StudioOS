@@ -281,7 +281,15 @@ export async function decideRailAs(env: Env, who: { ownerId: number; deciderId: 
         WHERE uid = ? AND user_id = ? AND status = 'proposed'`,
     ).bind(status, kept, uid, userId).run();
   if (!res.meta?.changes) return null;
-  return getRail(env, userId, uid);
+  const decided = await getRail(env, userId, uid);
+  // #3742 E3 (D1528): an agent run's proposal sends its decision to the waiting run. Never while the engine is off.
+  if (decided && env.AGENT_ENGINE && env.AGENT_ENGINE !== 'off') {
+    try {
+      const { deliverDecision } = await import('../agents/loop');
+      await deliverDecision(env, uid, decided.status);
+    } catch { console.warn('[rail] agent_decision_undelivered'); }
+  }
+  return decided;
 }
 
 /** The platform takes back a member's open proposals on a record that moved on. Returns how many. */

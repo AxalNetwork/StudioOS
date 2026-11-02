@@ -86,6 +86,11 @@ export async function hardDeleteProject(env: Env, projectId: number): Promise<vo
 
 async function hardDeleteWithSchema(env: Env, projectId: number, discovered?: CleanupSchema): Promise<void> {
   if (!Number.isSafeInteger(projectId) || projectId <= 0) throw new Error('Invalid project id');
+  // D1528 (#3847): the project's agent runs end and its scope object is emptied, before its rows go.
+  try {
+    const { eraseScopeRuntime } = await import('../agents/erasure');
+    await eraseScopeRuntime(env, { kind: 'project', id: projectId });
+  } catch { console.warn('[agents] erase_scope_failed'); }
   const schema = discovered ?? { present: await tables(env), columns: new Map<string, boolean>() };
   const { present } = schema;
   const statements: D1PreparedStatement[] = [];
