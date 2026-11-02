@@ -198,6 +198,9 @@ jobs:
   # -------------------------------------------------------------------------
   routing-docs:
     name: routing docs (artifact)
+    # Not a required check, and the queue entry's PR already built the
+    # artifact; skipped there like the other optional jobs (#4107).
+    if: github.event_name != 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
