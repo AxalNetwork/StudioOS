@@ -1,0 +1,1 @@
+| Founder Journey Map | admin (internal) | — (audit artifact, not a surface) | — | — (none) | NEW | Not a screen to ship: a journey map reconstructing 10 steps across 6 phases with per-step health tones, arguing the journey is strong at the workspace and broken on both sides of it. No seeded data. Treat as an audit input. |

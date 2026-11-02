@@ -96,6 +96,15 @@ invokes it, with step-up and count-only auditing. An explicit rescan restarts
 completed discovery to recover later retained uploads; an active scan keeps its
 cursor. No object content or deletion.
 
+## Files
+
+Every service module directly in this folder, one row each; each subfolder has its own README. The list below is generated, not written: `node scripts/check-folder-docs.mjs --write` fills it in your working tree from each file's own header comment (its first line), and `--clean` empties it again. It is never committed, so adding a file never edits this README (#4104), and `check-folder-docs` fails a file here that has no header comment.
+
+**The rule for a new file:** open it with a header comment whose first line says what it is and which decision or issue it belongs to. Write nothing here. The per-file notes elsewhere in this README predate #4104; they are kept as they are and take no new entries.
+
+<!-- files:begin -->
+<!-- files:end -->
+
 ## The ones worth knowing
 
 `segmentMembership.ts` (D1128, #3008) resolves stored segment identities,
@@ -147,6 +156,7 @@ it. Codes, counts and one screenshot; no link, name, page text or audio.
 | `accountNotes.ts` | D1303 (#3400): who saved an account's internal notes and when, over migration 639's `account_note_saves` (`noteSaveStatement` goes in the save's batch; `notesSavedOf` answers the profile read, saying "Not recorded" for notes saved before it). Never the text. |
 | `sessionsBlock.ts` | D1596 (#3869): `sessions:block`, Block proposals for Advisor › Sessions from the advisor's own open slots and four calendar readers. Arithmetic, no model: clashes with timed items, and free afternoons in the advisor's own time zone. A failing reader is named in `dropped`; never a `reason`; nothing written but the proposals `../routes/rail_run.ts` files. |
 | `profileWriteGates.ts` | D1595 (#3868): three routes' write gates, each shared with Fill with Eadwyn's scope for the same table so a trigger and the form's Save answer alike: `supportBookIds` (the support ledger's book, `portfolio_support.ts`), `offeringOwned` (`services.ts`) and `myPerk` (`perks.ts`), each narrowed by the verified active company. |
+| `dealNotes.ts` | #4046: the deal notes route's rule, shared with the deal note's fill scope (`fills/scopes.ts`): `noteFirm` (the request's verified active company, else the caller's only firm; an unverified claim never falls back) and `visibleDeal` (invited or committed, on a venture not deleted). |
 | `verificationResend.ts` | D1303 (#3400): re-sending an account's verification link (a fresh hashed token, 24 hours, the email best-effort, the `admin_resent_verification` row), shared by the single resend in `admin.ts` and the bulk resend in `admin_accounts.ts`. |
 | `apiKeyLimits.ts` | D849 (#2472) part 2: a member API key's own monthly cap and its alerts, with no migration. A key's metered holds are tagged `key:<uid>:exec:…` (`keyHoldKey`), so `keyMonthSpend` sums its own rows in `ai_budget_reservations` (pending and review at what they hold, settled at what they charged, refunded at nothing). `meteredCall` refuses with `key_limit_reached` before the hold and again after it. `noteKeyLimitThresholds` (`api_key_limit`, 80% and 100%) and `noteKeyFailures` (`api_key_failures`, more than 20% of at least 50 calls in an hour) notify through `notify()`, once per window, deduplicated in `RATE_LIMITS`. |
 | `metering.ts` | D844 (#2466): metering on the one AI token ledger. `METERING_POLICY` (versioned) prices each operation in integer micro-USD; v1 lists every MCP tool at 0. `quoteFor` quotes from the policy only; `meteredCall` holds through `reserveAiBudget` under `exec:<execution id>:<component>` (migration 525's idempotency key; `key:<uid>:exec:…` for a call through an API key, whose own cap it checks, D849), runs, settles at the provider's reported cost or the quote, and releases on a throw, timeout or cancel. `REFUSAL_WORDS` says the ledger's refusals in plain words, with no amounts. The failure table is in D844.md. |

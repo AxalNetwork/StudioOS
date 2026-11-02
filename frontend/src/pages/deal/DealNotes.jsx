@@ -16,6 +16,8 @@ import { reportError } from '../../lib/log';
 import { CARD, EYE, SUB, H3, BTN_S } from './DealFrame';
 import { EADWYN_DRAFT_WAITS, EMPTY, NOTE_MAX, NOTE_TAGS, noteError } from './dealFrameModel';
 import Sheet from '../../ui/Sheet.jsx';
+import { FillFormBar, FillLabel, useScopedFill } from '../../ui/useScopedFill.jsx';
+import { SCOPED_FORMS } from '../../lib/fillScoped.js';
 
 const FIELD = 'block w-full rounded-axal-xs border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 const TAG = (on) => `inline-flex min-h-[28px] items-center rounded-axal-pill border px-3 text-[12px] font-semibold ${on
@@ -78,6 +80,12 @@ function Notes({ dealId, userId }) {
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const [dialog, setDialog] = useState(null); // { mode, note }
+  // #4046 (#3740 2b): Ask on the new note's words, under this deal. The firm and who may fill are the
+  // notes route's own rule (the Worker's deal_notes scope); the Save stays the route's, then the record step.
+  const fill = useScopedFill({
+    scope: SCOPED_FORMS.dealNote, parent: Number(dealId) > 0 ? Number(dealId) : null, enabled: Number(dealId) > 0,
+    values: { body }, onValues: (v) => { if (v.body != null) setBody(v.body); },
+  });
   const load = () => {
     dealContextApi.notes(dealId).then((data) => setRead({ status: 'ready', data }))
       .catch((e) => { reportError('DealNotes:read', e); setRead({ status: 'unreadable' }); });
@@ -88,7 +96,8 @@ function Notes({ dealId, userId }) {
     if (bad) { setErr(bad); return; }
     setBusy(true); setErr('');
     try {
-      await dealContextApi.addNote(dealId, { body: body.trim(), tag: tag || null });
+      const created = await dealContextApi.addNote(dealId, { body: body.trim(), tag: tag || null });
+      await fill.afterSave(created?.id);
       setBody(''); setTag(''); load();
     } catch (e) { setErr(e?.message || 'That did not save. Try again.'); } finally { setBusy(false); }
   };
@@ -100,10 +109,11 @@ function Notes({ dealId, userId }) {
           <h3 className={H3}>Your notes</h3>
           {read.status === 'ready' && <span className={SUB}>{read.data?.total ?? items.length}</span>}
         </div>
-        <label className="flex flex-col gap-1.5">
-          <span className={EYE}>New note</span>
-          <textarea rows={3} maxLength={NOTE_MAX} value={body} onChange={(e) => setBody(e.target.value)} className={FIELD} placeholder="Write a note…" data-testid="deal-note-body" />
-        </label>
+        <FillFormBar fill={fill} />
+        <div className="flex flex-col gap-1.5">
+          <FillLabel fill={fill} name="body" label="Note" value={body}><label htmlFor="deal-note-body" className={EYE}>New note</label></FillLabel>
+          <textarea id="deal-note-body" rows={3} maxLength={NOTE_MAX} value={body} onChange={(e) => setBody(e.target.value)} className={FIELD} placeholder="Write a note…" data-testid="deal-note-body" />
+        </div>
         <div className="flex flex-col gap-1.5"><span className={EYE}>Tag</span><TagPicker value={tag} onChange={setTag} /></div>
         {err && <p role="alert" className="m-0 text-[12.5px] text-axal-destructive dark:text-red-300" data-testid="deal-note-error">{err}</p>}
         <div className="flex flex-wrap items-center justify-between gap-3">
