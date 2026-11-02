@@ -17,8 +17,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
@@ -32,11 +31,11 @@ import { DeckGenRoom } from '../src/durable-objects/deck-gen-room.ts';
 import { admitStatus } from '../src/services/decks/genRooms.ts';
 import deckBatches from '../src/routes/deck_batches.ts';
 import { DECK_GENERATE, rateLimitMiddleware } from '../src/middleware/rateLimit.ts';
-import { compareMigrations, migrationNumber, BASELINE_CUTOFF } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { contractErrors } from '../src/contracts/validate.ts';
 import { CONTRACTS } from '../src/contracts/index.ts';
+import { loadSchema } from './_schema_once.mjs';
 
 const BATCH_SCHEMA = JSON.parse(readFileSync(`cloudflare-worker/src/contracts/${CONTRACTS.batch.schema}`, 'utf8'));
 
@@ -75,12 +74,9 @@ test('1. the governor: per-kind caps, two runs per account and a bucket per mode
 });
 
 // ── 2 ────────────────────────────────────────────────────────────────────────
-const BASELINE_SQL = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
-const MIGRATIONS = resolve(process.cwd(), 'cloudflare-worker/sql/migrations');
 const BUILT_DDL = (() => {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  db.exec(BASELINE_SQL);
-  for (const f of readdirSync(MIGRATIONS).filter((n) => /^\d+_.*\.sql$/.test(n)).sort(compareMigrations).filter((n) => migrationNumber(n) > BASELINE_CUTOFF)) db.exec(readFileSync(resolve(MIGRATIONS, f), 'utf8'));
+  loadSchema(db);
   return (db.prepare(`SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END`).all() as any[]).map((r) => r.sql as string);
 })();
 const FOUNDER = 10, OTHER = 20, P = 1, DECK = 1;

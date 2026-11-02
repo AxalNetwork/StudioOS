@@ -53,6 +53,7 @@ const deckQuotes = (await import('../src/routes/deck_quotes.ts')).default;
 const { deckReports, hqDeckReports } = await import('../src/routes/deck_reports.ts');
 const deckStageNorms = (await import('../src/routes/deck_stage_norms.ts')).default;
 const votes = (await import('../src/routes/votes.ts')).default;
+const deckUpdateReuse = (await import('../src/routes/deck_update_reuse.ts')).default;
 
 /** The Worker's own app: the instance `route()` was called on most. */
 function workerMounts() {
@@ -121,10 +122,16 @@ test('on the real Worker, the order-sensitive deck routers mount just above `dec
     assert.equal(mounts.filter((m) => m.router === r).length, 1);
   }
   // votes.ts has no `before`: the registry's slot, after index.ts's last line,
-  // which is exactly where the two hand-written lines sat.
+  // which is exactly where the two hand-written lines sat. D1584 (#3831):
+  // deck_update_reuse.ts has no `before` either, so the slot holds every
+  // descriptor without one, in file-name order, and index.ts's last line sits
+  // just above them.
   const registeredRouters = new Set(planned.map((d) => d.router));
-  assert.equal(registeredRouters.has(mounts[mounts.length - 3].router), false, 'the mount above votes is not index.ts\'s last line');
-  assert.deepEqual(mounts.slice(-2).map((m) => [m.path, m.router]), [
+  const slot = planned.filter((d) => !d.before.length);
+  assert.deepEqual(mounts.slice(-slot.length).map((m) => [m.path, m.router]), slot.map((d) => [d.path, d.router]), 'the registry slot is every descriptor without a `before`, in order');
+  assert.equal(registeredRouters.has(mounts[mounts.length - slot.length - 1].router), false, 'the mount above the slot is index.ts\'s last line');
+  assert.deepEqual(mounts.slice(-3).map((m) => [m.path, m.router]), [
+    ['/api/decks', deckUpdateReuse],
     ['/api/pipeline/votes', votes],
     ['/api/pipeline/vote', votes],
   ]);

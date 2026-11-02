@@ -11,7 +11,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
@@ -22,25 +22,17 @@ import adminApprovalRoutes from '../src/routes/admin_approvals.ts';
 import { APPROVAL_SOURCES, sourcesFor } from '../src/services/approvalSources.ts';
 import { INBOX_LANE_CAP, INBOX_PAGE_SIZE } from '../src/services/approvalAssignments.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { splitStatements } from './_baseline.mjs';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '../..');
-const MIGRATIONS = resolve(ROOT, 'cloudflare-worker/sql/migrations');
 const JWT_SECRET = 'unit-test-jwt-secret-d1040-0123456789';
 
 const SUPER = 1, ADA = 2, BEA = 3, FOUNDER = 4, INACTIVE = 5;
 
 function built(): DatabaseSync {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  db.exec(readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8'));
-  for (const f of readdirSync(MIGRATIONS).filter((x) => x.endsWith('.sql')).sort(compareMigrations)
-    .filter((x) => migrationNumber(x) > BASELINE_CUTOFF)) {
-    for (const stmt of splitStatements(readFileSync(resolve(MIGRATIONS, f), 'utf8'))) {
-      try { db.exec(stmt); } catch { /* already present on the baseline */ }
-    }
-  }
+  loadSchema(db);
   return db;
 }
 const BUILT = built();

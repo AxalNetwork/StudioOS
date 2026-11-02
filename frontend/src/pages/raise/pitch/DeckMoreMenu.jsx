@@ -21,17 +21,21 @@ import useMenuFocus from './useMenuFocus';
  * items it carries out are greyed with that sentence; Share's stay live.
  * The keyboard is `useMenuFocus.js`'s. Nothing here runs a model or reads
  * the network.
+ *
+ * D1515 (#3767): This deck ends with Undo (⌘Z), Redo (⇧⌘Z) and Find and
+ * replace… (⌘F), the one place Find lives. `blocked` greys an item the
+ * editor cannot carry out now, with its reason ("Nothing to undo.").
  */
 
 const ITEM = 'flex min-h-[36px] w-full items-center justify-between gap-3 rounded-[8px] px-2.5 text-left text-[12.5px]';
 
-export default function DeckMoreMenu({ onPick, readOnly = false, phone = false, labels = {}, outOfTokens = false, waiting = null, testId = 'deck-more' }) {
+export default function DeckMoreMenu({ onPick, readOnly = false, phone = false, labels = {}, outOfTokens = false, waiting = null, blocked = {}, testId = 'deck-more' }) {
   const [aiOn] = useAssistMode('raise');
   const [open, setOpen] = useState(false);
   const menu = useMenuFocus(open, () => setOpen(false));
   const sections = useMemo(() => (phone ? [{ id: 'share', label: 'Share', items: readOnly ? [] : SHARE_ITEMS }, ...MORE_MENU] : MORE_MENU)
     .filter((s) => s.items.length), [phone, readOnly]);
-  const state = moreState(sections, { readOnly, aiOn, outOfTokens, availability, waiting });
+  const state = moreState(sections, { readOnly, aiOn, outOfTokens, availability, waiting, blocked });
 
   const choose = (it) => {
     if (it.disabled) return;

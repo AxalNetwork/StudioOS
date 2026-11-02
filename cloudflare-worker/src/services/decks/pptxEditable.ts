@@ -22,6 +22,12 @@
  *   - a card made of fields (D897), and the Sources appendix, are the text
  *     writer's stacked text frames.
  *
+ * D1533 (#3777): a card's decor is drawn first, under the blocks, in its
+ * layer order (`arrange.decorPlan`), as the native shape its kind and ref name
+ * (`EXPORT_GEOMETRY`), the print page's way; a pinned block or decor item
+ * (the Arrange set's Lock) is written with PowerPoint's move and resize locks,
+ * and the members of a group are one group shape.
+ *
  * Speaker notes are each card's notes when they were asked for, and empty
  * otherwise. Nothing here logs a title, a figure or a URL.
  */
@@ -31,6 +37,7 @@ import type { DeckBrand } from './branding';
 import { buildNotesSlideXml, buildSlideXml, buildZip, notesPackageParts, tf, xmlEsc, type ZipEntry } from './pptx';
 import { IMAGE_MISSING, NOT_RECORDED, NO_NOTES, chartLabel, type ImageKind } from './offlineHtml';
 import { tableLines } from './slideModel';
+import { decorPlan, type DecorDraw } from './arrange';
 
 /** The print card (D1112) the block geometry is measured on. */
 export const CARD_W = 1920;
@@ -68,21 +75,81 @@ const emu = (px: number) => Math.round(px * EMU_PER_PX);
 const MEDIA: Partial<Record<ImageKind, string>> = { png: 'png', jpeg: 'jpeg', gif: 'gif' };
 const COLOUR = /^#[0-9a-f]{6}$/i;
 
-function textBox(id: number, name: string, r: Rect, paragraphs: string[], anchor: 't' | 'ctr' = 't'): string {
+/** D1533: the Arrange set's Lock, as PowerPoint's own: the shape cannot be moved or resized. */
+const LOCKS = 'noMove="1" noResize="1"';
+
+function textBox(id: number, name: string, r: Rect, paragraphs: string[], anchor: 't' | 'ctr' = 't', pinned = false): string {
   const body = paragraphs.map((p) => `<a:p>${p}</a:p>`).join('');
   return `<p:sp>
-  <p:nvSpPr><p:cNvPr id="${id}" name="${xmlEsc(name)}"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>
+  <p:nvSpPr><p:cNvPr id="${id}" name="${xmlEsc(name)}"/>${pinned ? `<p:cNvSpPr txBox="1"><a:spLocks ${LOCKS}/></p:cNvSpPr>` : '<p:cNvSpPr txBox="1"/>'}<p:nvPr/></p:nvSpPr>
   <p:spPr><a:xfrm><a:off x="${emu(r.x)}" y="${emu(r.y)}"/><a:ext cx="${emu(r.w)}" cy="${emu(r.h)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr>
   <p:txBody><a:bodyPr wrap="square" rtlCol="0" anchor="${anchor}"><a:normAutofit/></a:bodyPr><a:lstStyle/>${body}</p:txBody>
 </p:sp>`;
 }
 
-function picture(id: number, name: string, r: Rect, rid: string, alt: string): string {
+function picture(id: number, name: string, r: Rect, rid: string, alt: string, pinned = false): string {
   return `<p:pic>
-  <p:nvPicPr><p:cNvPr id="${id}" name="${xmlEsc(name)}" descr="${xmlEsc(alt)}"/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr>
+  <p:nvPicPr><p:cNvPr id="${id}" name="${xmlEsc(name)}" descr="${xmlEsc(alt)}"/><p:cNvPicPr><a:picLocks noChangeAspect="1"${pinned ? ` ${LOCKS}` : ''}/></p:cNvPicPr><p:nvPr/></p:nvPicPr>
   <p:blipFill><a:blip r:embed="${rid}"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>
   <p:spPr><a:xfrm><a:off x="${emu(r.x)}" y="${emu(r.y)}"/><a:ext cx="${emu(r.w)}" cy="${emu(r.h)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
 </p:pic>`;
+}
+
+/** D1533: a decor item's box on the card: its 8 px `at` (slide pixels), else its cell range, else the whole card. */
+export function decorRect(d: DecorDraw): Rect {
+  if (d.at) return { x: d.at.x, y: d.at.y, w: d.at.w, h: d.at.h };
+  return d.grid ? blockRect(d.grid) : { x: 0, y: 0, w: CARD_W, h: CARD_H };
+}
+
+/** D1533: one decor item as a native shape (a line for a divider), filled with its tone; null for an item with no native shape. */
+export function decorShape(id: number, d: DecorDraw): string | null {
+  if (!d.geometry) return null;
+  const r = decorRect(d);
+  const fill = `<a:solidFill><a:srgbClr val="${d.colour.slice(1).toUpperCase()}"/></a:solidFill>`;
+  const name = xmlEsc(`Decor ${d.id}`);
+  if (d.geometry === 'line') {
+    const y = r.y + r.h / 2;
+    return `<p:cxnSp>
+  <p:nvCxnSpPr><p:cNvPr id="${id}" name="${name}"/>${d.pinned ? `<p:cNvCxnSpPr><a:cxnSpLocks ${LOCKS}/></p:cNvCxnSpPr>` : '<p:cNvCxnSpPr/>'}<p:nvPr/></p:nvCxnSpPr>
+  <p:spPr><a:xfrm><a:off x="${emu(r.x)}" y="${emu(y)}"/><a:ext cx="${emu(r.w)}" cy="0"/></a:xfrm><a:prstGeom prst="line"><a:avLst/></a:prstGeom><a:ln w="${emu(4)}">${fill}</a:ln></p:spPr>
+</p:cxnSp>`;
+  }
+  return `<p:sp>
+  <p:nvSpPr><p:cNvPr id="${id}" name="${name}"/>${d.pinned ? `<p:cNvSpPr><a:spLocks ${LOCKS}/></p:cNvSpPr>` : '<p:cNvSpPr/>'}<p:nvPr/></p:nvSpPr>
+  <p:spPr><a:xfrm><a:off x="${emu(r.x)}" y="${emu(r.y)}"/><a:ext cx="${emu(r.w)}" cy="${emu(r.h)}"/></a:xfrm><a:prstGeom prst="${d.geometry}"><a:avLst/></a:prstGeom>${fill}<a:ln><a:noFill/></a:ln></p:spPr>
+</p:sp>`;
+}
+
+type Placed = { xml: string; rect: Rect; group: string | null; pinned: boolean };
+
+/**
+ * D1533: the shapes in their order, each group's members gathered into one
+ * group shape where its first member stood. Decor and areas are grouped
+ * apart (a group never mixes the two layers), so a group never lifts decor
+ * over an area. A group whose members are all pinned is locked as a whole.
+ */
+export function withGroups(placed: Placed[], nextId: () => number): string[] {
+  const out: string[] = [];
+  const done = new Set<string>();
+  for (const p of placed) {
+    if (!p.group) { out.push(p.xml); continue; }
+    if (done.has(p.group)) continue;
+    done.add(p.group);
+    const members = placed.filter((q) => q.group === p.group);
+    if (members.length < 2) { out.push(p.xml); continue; }
+    const x = Math.min(...members.map((m) => m.rect.x));
+    const y = Math.min(...members.map((m) => m.rect.y));
+    const w = Math.max(...members.map((m) => m.rect.x + m.rect.w)) - x;
+    const h = Math.max(...members.map((m) => m.rect.y + m.rect.h)) - y;
+    const box = `<a:off x="${emu(x)}" y="${emu(y)}"/><a:ext cx="${emu(w)}" cy="${emu(h)}"/>`;
+    const locked = members.every((m) => m.pinned);
+    out.push(`<p:grpSp>
+  <p:nvGrpSpPr><p:cNvPr id="${nextId()}" name="${xmlEsc(`Group ${p.group}`)}"/>${locked ? `<p:cNvGrpSpPr><a:grpSpLocks ${LOCKS}/></p:cNvGrpSpPr>` : '<p:cNvGrpSpPr/>'}<p:nvPr/></p:nvGrpSpPr>
+  <p:grpSpPr><a:xfrm>${box}${box.replace('a:off', 'a:chOff').replace('a:ext', 'a:chExt')}</a:xfrm></p:grpSpPr>
+  ${members.map((m) => m.xml).join('\n')}
+</p:grpSp>`);
+  }
+  return out;
 }
 
 const INK = '0F172A';
@@ -173,6 +240,16 @@ async function blockSlideXml(slide: any, idx: number, total: number, input: Edit
   const shapes: string[] = [];
   const rels: string[] = [];
   let id = 2;
+  // D1533: decor first, bottom layer first, then the blocks; each tier gathers its own groups.
+  const decor: Placed[] = [];
+  for (const d of decorPlan(slide)) {
+    const xml = decorShape(id, d);
+    if (!xml) continue;
+    id += 1;
+    decor.push({ xml, rect: decorRect(d), group: d.group, pinned: d.pinned });
+  }
+  const placed: Placed[] = [];
+  const put = (b: any, r: Rect, xml: string) => placed.push({ xml, rect: r, group: typeof b.group === 'string' ? b.group : null, pinned: b.pinned === true });
   const embed = (kind: ImageKind, bytes: Uint8Array) => {
     const ext = MEDIA[kind] as string;
     const name = `s${idx + 1}_${media.length + 1}.${ext}`;
@@ -187,10 +264,10 @@ async function blockSlideXml(slide: any, idx: number, total: number, input: Edit
       if (!b.image_url) continue;
       const img = input.images.get(b.image_url) ?? null;
       if (img && MEDIA[img.kind]) {
-        shapes.push(picture(id++, `Image ${b.id}`, r, embed(img.kind, img.bytes), String(b.alt || '')));
+        put(b, r, picture(id++, `Image ${b.id}`, r, embed(img.kind, img.bytes), String(b.alt || ''), b.pinned === true));
         counts.placed += 1;
       } else {
-        shapes.push(textBox(id++, `Image ${b.id}`, r, [run(IMAGE_MISSING, { size: pt(22), italic: true, color: MUTED })], 'ctr'));
+        put(b, r, textBox(id++, `Image ${b.id}`, r, [run(IMAGE_MISSING, { size: pt(22), italic: true, color: MUTED })], 'ctr', b.pinned === true));
         counts.not_placed += 1;
       }
       continue;
@@ -199,7 +276,7 @@ async function blockSlideXml(slide: any, idx: number, total: number, input: Edit
       shots.left -= 1;
       const png = await input.chartShot(idx, r).catch(() => null);
       if (png) {
-        shapes.push(picture(id++, `Chart ${b.id}`, r, embed('png', png), `${chartLabel(b.chart_type)} chart`));
+        put(b, r, picture(id++, `Chart ${b.id}`, r, embed('png', png), `${chartLabel(b.chart_type)} chart`, b.pinned === true));
         counts.pictured += 1;
         continue;
       }
@@ -207,8 +284,9 @@ async function blockSlideXml(slide: any, idx: number, total: number, input: Edit
     const paras = blockParagraphs(b);
     if (!paras) continue;
     if (b.kind === 'chart') counts.as_text += 1;
-    shapes.push(textBox(id++, `${b.kind} ${b.id}`, r, input.dir === 'rtl' ? paras.map(rtlParagraph) : paras, b.kind === 'metric' ? 'ctr' : 't'));
+    put(b, r, textBox(id++, `${b.kind} ${b.id}`, r, input.dir === 'rtl' ? paras.map(rtlParagraph) : paras, b.kind === 'metric' ? 'ctr' : 't', b.pinned === true));
   }
+  shapes.push(...withGroups(decor, () => id++), ...withGroups(placed, () => id++));
   if (input.brand.show_footer) {
     shapes.push(textBox(id++, 'Footer', { x: PAD, y: CARD_H - 44, w: 1200, h: 36 }, [run(input.brand.footer_text, { size: 10, color: '94A3B8' })]));
   }

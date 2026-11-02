@@ -1,3 +1,4 @@
+import { contractErrors } from '../src/contracts/validate.ts';
 /**
  * D1538 (#3787, deck v2 B11) — typed figures, the table block, the
  * market_circles and projection charts, and the one-click rules.
@@ -16,7 +17,8 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
+const replyContract = JSON.parse(readFileSync(new URL('../src/contracts/deckTypedTables.schema.json', import.meta.url), 'utf8'));
 import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
@@ -30,18 +32,15 @@ import { writeOfflineDeck } from '../src/services/decks/offlineHtml.ts';
 import { blockParas } from '../src/services/decks/odp.ts';
 import { blockParagraphs } from '../src/services/decks/pptxEditable.ts';
 import { cardText, deck } from '../src/services/raiseClaims.ts';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
+import { loadSchema } from './_schema_once.mjs';
 
 const url = (u: string | null | undefined) => (typeof u === 'string' && u.startsWith('https://') ? u : null);
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef'; // synthetic test fixture
-const BASELINE_SQL = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
-const MIGRATIONS = resolve(process.cwd(), 'cloudflare-worker/sql/migrations');
 const BUILT_DDL = (() => {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  db.exec(BASELINE_SQL);
-  for (const f of readdirSync(MIGRATIONS).filter((n) => /^\d+_.*\.sql$/.test(n)).sort(compareMigrations).filter((n) => migrationNumber(n) > BASELINE_CUTOFF)) db.exec(readFileSync(resolve(MIGRATIONS, f), 'utf8'));
+  loadSchema(db);
   return (db.prepare(`SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END`).all() as any[]).map((r) => r.sql as string);
 })();
 const FOUNDER = 10, OTHER = 20, P = 1, Q = 2;
@@ -68,7 +67,9 @@ async function call(db: DatabaseSync, who: number, method: string, path: string,
     method, headers: { Authorization: `Bearer ${token}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   }, { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any));
-  return { status: res.status, body: await res.json().catch(() => null) as any };
+  const reply = await res.json().catch(() => null) as any;
+  if (res.status === 200 && method === 'GET') assert.deepEqual(contractErrors(replyContract, reply), [], 'typed values reply contract');
+  return { status: res.status, body: reply };
 }
 
 // 1 ───────────────────────────────────────────────────────────────────────────

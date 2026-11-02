@@ -113,7 +113,8 @@ test('the header holds the save state, ⋯, Present, Share and Ask, and nothing 
   const m = await mountEditor();
   try {
     const tools = m.by('pitch-header-tools');
-    assert.deepEqual(controls(m, tools), [MORE_NAME, 'Present', 'Share', 'Ask Eadwyn']);
+    // D1515 (#3767): Undo and Redo, with "100 steps", sit before the save state.
+    assert.deepEqual(controls(m, tools), ['Undo', 'Redo', MORE_NAME, 'Present', 'Share', 'Ask Eadwyn']);
     assert.match(m.text(m.by('pitch-editor-save-state')), /^✓ Saved$/);
     assert.match(m.pr(m.by('pitch-editor-save-state')).title, /^All changes saved · \d+ d ago$/, 'the version\'s own time, in the title');
     assert.equal(m.pr(m.by('deck-more-open'))['aria-haspopup'], 'menu');
@@ -121,8 +122,9 @@ test('the header holds the save state, ⋯, Present, Share and Ask, and nothing 
     assert.ok(!m.by('pitch-editor-save'), 'nothing to save: no Save version');
     await m.press(m.by('pitch-editor-block-b2'));
     await m.type(m.by('pitch-editor-notes'), 'Synthetic changed note');
+    // These synthetic cards carry no uid, so the autosave has nothing it can send (D1515): the line stays as on main.
     assert.match(m.text(m.by('pitch-editor-save-state')), /^● Unsaved changes$/);
-    assert.deepEqual(controls(m, m.by('pitch-header-tools')), ['Save version', MORE_NAME, 'Present', 'Share', 'Ask Eadwyn']);
+    assert.deepEqual(controls(m, m.by('pitch-header-tools')), ['Undo, 1 step', 'Redo', 'Save version', MORE_NAME, 'Present', 'Share', 'Ask Eadwyn']);
     await m.press(m.by('pitch-editor-save'));
     assert.match(m.text(m.by('pitch-editor-save-changes')), /the speaker notes change/);
   } finally { await m.close(); }
@@ -343,9 +345,10 @@ test('a card\'s ⋯ keeps a menu\'s keyboard, and its button closes it', async (
   try {
     await t.press('pitch-editor-card-menu-open-1');
     const menu = t.by('pitch-editor-card-menu-1');
-    assert.equal(document.activeElement, t.by('pitch-editor-card-duplicate-1'), 'focus on the first item');
+    // D1579 (#3826, pd34): Set status › leads the menu, then Assign ›.
+    assert.equal(document.activeElement, t.by('pitch-editor-card-status-1'), 'focus on the first item');
     await t.key(menu, 'ArrowDown');
-    assert.equal(document.activeElement, t.by('pitch-editor-card-up-1'));
+    assert.equal(document.activeElement, t.by('pitch-editor-card-assign-1'));
     await t.key(menu, 'End');
     // D1570 (#3817): Comments is the card menu's last item (pd33).
     assert.equal(document.activeElement, t.by('pitch-editor-card-comments-1'), 'the last item, Comments');
@@ -378,7 +381,7 @@ test('a tablet (768–1023 px) keeps the Grid with the strip as one scrolling ro
     assert.ok(!row.walk(list).includes(menu), 'outside the scrolling row, so it is not clipped');
     assert.match(row.pr(menu).className, /\btop-full\b/);
     assert.doesNotMatch(row.pr(menu).className, /\bleft-full\b/);
-    assert.equal(document.activeElement, row.by('pitch-editor-card-duplicate-1'));
+    assert.equal(document.activeElement, row.by('pitch-editor-card-status-1'), 'D1579: Set status › leads the menu');
   } finally { await row.close(); }
   const col = await strip({});
   try {
@@ -395,7 +398,7 @@ test('a tablet (768–1023 px) keeps the Grid with the strip as one scrolling ro
     assert.ok(m.by('pitch-editor-stage'), 'The Grid is the centre');
     assert.equal(m.pr(m.by('pitch-editor-cards'))['data-orientation'], 'row');
     assert.doesNotMatch(m.pr(m.by('pitch-editor-body')).className, /grid-cols/, 'the strip sits above the stage, the stage full width');
-    assert.deepEqual(controls(m, m.by('pitch-header-tools')), [MORE_NAME, 'Present', 'Share', 'Ask Eadwyn'], 'the desktop header');
+    assert.deepEqual(controls(m, m.by('pitch-header-tools')), ['Undo', 'Redo', MORE_NAME, 'Present', 'Share', 'Ask Eadwyn'], 'the desktop header');
   } finally { await m.close(); globalThis.matchMedia = before; }
   // A phone (below 768 px) keeps the phone editor.
   globalThis.matchMedia = () => ({ matches: true, addEventListener() {}, removeEventListener() {} });

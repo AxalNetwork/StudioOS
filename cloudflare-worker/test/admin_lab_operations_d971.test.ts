@@ -3,7 +3,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
@@ -13,8 +13,7 @@ import adminPrograms from '../src/routes/admin_programs.ts';
 import adminOperations from '../src/routes/admin_lab_operations.ts';
 import adminCohort from '../src/routes/admin_cohort.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { splitStatements } from './_baseline.mjs';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '../..');
@@ -31,13 +30,7 @@ const ROLE: Record<number, string> = {
 /** The baseline and every migration before 560, statement by statement, as the other suites build it. */
 function beforeM560(): DatabaseSync {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  db.exec(readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8'));
-  for (const f of readdirSync(MIGRATIONS).filter((x) => x.endsWith('.sql')).sort(compareMigrations)
-    .filter((x) => migrationNumber(x) > BASELINE_CUTOFF && migrationNumber(x) < 560)) {
-    for (const stmt of splitStatements(readFileSync(resolve(MIGRATIONS, f), 'utf8'))) {
-      try { db.exec(stmt); } catch { /* already present on the baseline */ }
-    }
-  }
+  loadSchema(db, { below: 560 });
   return db;
 }
 

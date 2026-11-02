@@ -64,15 +64,19 @@ export const SOURCES: Readonly<Record<CalendarEvent['kind'], SourceDef>> = Objec
   mvp_task: { family: 'tasks', module: 'Build › Board', label: 'Build task', page_only: true, pushable: false },
   contact_task: { family: 'tasks', module: 'Contacts › Follow-ups', label: 'Contact follow-up', page_only: true, pushable: false },
   engagement_milestone: { family: 'tasks', module: 'Engagements › Milestones', label: 'Engagement milestone', page_only: true, pushable: false },
+  // D1485 (#3979): the member's own connected calendars, read only. Page only and never pushable:
+  // copying an external event back out would loop.
+  external_google: { family: 'external', module: 'Google Calendar', label: 'Google event', page_only: true, pushable: false },
+  external_microsoft: { family: 'external', module: 'Outlook', label: 'Outlook event', page_only: true, pushable: false },
 });
 
 export const SOURCE_KINDS = Object.keys(SOURCES) as CalendarEvent['kind'][];
 export const pageOnlyKinds = (): CalendarEvent['kind'][] => SOURCE_KINDS.filter((k) => SOURCES[k].page_only);
 export const pushableKinds = (): CalendarEvent['kind'][] => SOURCE_KINDS.filter((k) => SOURCES[k].pushable);
 
-/** An item's `source`: its family, module and label. `account` is set by #3723 part 3's connected calendars only. */
-export type ItemSource = { family: SourceFamily; module: string; label: string; account: null };
-export function sourceOf(kind: CalendarEvent['kind']): ItemSource {
+/** An item's `source`: its family, module and label. `account` is set by D1485's connected calendars only, on the owner's own read. */
+export type ItemSource = { family: SourceFamily; module: string; label: string; account: { provider: 'google' | 'microsoft'; address: string | null } | null };
+export function sourceOf(kind: CalendarEvent['kind'], account: ItemSource['account'] = null): ItemSource {
   const s = SOURCES[kind];
-  return { family: s.family, module: s.module, label: s.label, account: null };
+  return { family: s.family, module: s.module, label: s.label, account };
 }
