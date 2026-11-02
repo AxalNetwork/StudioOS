@@ -57,7 +57,8 @@ import { auditDeckWrite, getDeckRow, projectOwned, themeOfRow } from './decks';
 import { cardRefOf } from '../services/decks/cardUids';
 import { imageCapability, imagePlan } from '../services/decks/visuals';
 import { fetchLandingPageForProject } from '../services/decks/branding';
-import { elementModelFor, runModelOf } from './deck_element_models';
+import { elementModelFor, lockedOutRefusal, runPickOf } from './deck_element_models';
+import { lockedOut, type Resolved } from '../services/decks/elementModels';
 import { imageSize, sha256Hex, stripMetadata, tooManyPixels, type ImageMime } from '../services/decks/imageBytes';
 import { fetchExternalImage } from '../services/decks/imageFetch';
 
@@ -129,10 +130,11 @@ async function refusedAsk(c: any, ask: ImageAsk, projectId: number): Promise<Res
 }
 
 /** One image's run, as one options object, so the quote and the run read the same input. */
-function runOptions(c: any, user: User, deck: Deck, ask: ImageAsk, colours: string[], model?: string): RunOptions {
+function runOptions(c: any, user: User, deck: Deck, ask: ImageAsk, colours: string[], pick: { model?: string; pinned?: true } = {}): RunOptions {
   const rail = { ...railFor(c, { page: IMAGE_PAGE, option: IMAGE_OPTION }, `deck:${deck.deckId}`), option: IMAGE_OPTION };
   // D1503 (#3754): the element's model is the caller's pick, which D1478's DK4 draw job weighs (`drawChoice`).
-  return { ...(model ? { model } : {}), task: 'deck_image', drawJob: 'DK4', userId: Number(user.id) || 0, text: promptOf(ask, colours).slice(0, 2048), draw: {}, surface: AI_SURFACE.raisePitch, rail };
+  // D1549 (#3796): an HQ lock runs pinned, so the draw job never swaps in another model.
+  return { ...pick, task: 'deck_image', drawJob: 'DK4', userId: Number(user.id) || 0, text: promptOf(ask, colours).slice(0, 2048), draw: {}, surface: AI_SURFACE.raisePitch, rail };
 }
 
 /** The grid element an image request is: a scene is a Generated photo, every other style an Illustration. */
@@ -147,7 +149,7 @@ async function chargedOf(env: Env, usageLogId: number | null | undefined, userId
   return row?.charged_microusd == null ? null : Number(row.charged_microusd);
 }
 
-type Priced = { ask: ImageAsk; colours: string[]; opts: RunOptions; model: string; per: number; total: number };
+type Priced = { ask: ImageAsk; colours: string[]; opts: RunOptions; model: string; per: number; total: number; element: Resolved };
 
 /** The checked request and its price, or the response that refuses it. Shared by the quote and the run. */
 async function priced(c: any, user: User, deck: Deck): Promise<Priced | Response> {
@@ -159,17 +161,19 @@ async function priced(c: any, user: User, deck: Deck): Promise<Priced | Response
   if (!c.env.FILES) return refuse(c, 503, { code: 'storage_unavailable', message: NO_STORAGE });
   const colours = coloursOf(body);
   // D1503 (#3754): the image runs on its element's model, a scene as Generated photo and every other style as Illustration.
-  let element;
+  let element: Resolved;
   try { element = await elementModelFor(c.env, user, deck.projectId, imageElementOf(read.ask)); } catch {
     return refuse(c, 503, { code: 'picks_unreadable', message: 'Your model picks for this deck could not be read. Nothing was run.' });
   }
-  const opts = runOptions(c, user, deck, read.ask, colours, runModelOf(element));
+  // D1549: HQ's lock wins; a lock the caller's plan cannot run stops the run before any quote or hold.
+  if (lockedOut(element)) return lockedOutRefusal(c, element);
+  const opts = runOptions(c, user, deck, read.ask, colours, runPickOf(element));
   const q = await quoteRun(c.env, opts);
   if (!q.ok) {
     const stop = refuseRun(c, { refusal: q.refusal, error: q.error });
     return stop ?? refuse(c, 503, { code: 'model_unavailable', message: 'The image model is not available. Nothing was run.' });
   }
-  return { ask: read.ask, colours, opts, model: q.model, per: q.hold_microusd, total: q.hold_microusd * read.ask.count };
+  return { ask: read.ask, colours, opts, model: q.model, per: q.hold_microusd, total: q.hold_microusd * read.ask.count, element };
 }
 
 deckImages.post('/:id/images/quote', async (c) => {
@@ -189,6 +193,8 @@ deckImages.post('/:id/images/quote', async (c) => {
     ai: true, model: p.model, model_label: imageModelLabel(p.model),
     models: [{ id: p.model, label: imageModelLabel(p.model), per_image_microusd: p.per }],
     per_image_microusd: p.per, count: p.ask.count, total_microusd: p.total,
+    // D1549 (#3796): the element the image runs as, the model it resolved to and why.
+    element_models: { [p.element.element]: { model: p.model, source: p.element.source, notice: p.element.notice, ...(p.element.locked ? { locked: true } : {}) } },
     balance: short ? { ok: false, code: short.code, message: short.message } : { ok: true },
   });
 });

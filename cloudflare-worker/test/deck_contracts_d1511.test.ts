@@ -13,6 +13,9 @@
  *   4. `GET /api/decks/:id/typed-values` (D1538) and the deck check's
  *      `consistency` key (D1555), the two swaps that merged beside this file,
  *      match their contracts.
+ *   5. D1549 (#3796): `GET /api/decks/:id/model-presets` matches
+ *      deckModelPresets, and its `locks` key deckOrgLocks, with nothing
+ *      stored, a stored preset with a deck pick, and an HQ lock.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/deck_contracts_d1511.test.ts
@@ -26,6 +29,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import deckGrid from '../src/routes/deck_grid.ts';
 import deckTypedValues from '../src/routes/deck_typed_values.ts';
+import { deckModelPresets } from '../src/routes/deck_model_presets.ts';
 import { deckConsistency } from '../src/services/deckConsistency.ts';
 import { CONTRACTS as NAMED } from '../src/contracts/index.ts';
 import { contractErrors } from '../src/contracts/validate.ts';
@@ -161,4 +165,32 @@ test('4. deckConsistency\'s reply matches deckConsistency, with findings, unread
   assert.deepEqual(contractErrors(CONTRACTS.consistency.schema, deckConsistency('not slides')), []);
   assert.deepEqual(contractErrors(CONTRACTS.consistency.schema, null), [], 'a reader who is not the founder gets null');
   assert.deepEqual(contractErrors(CONTRACTS.consistency.schema, { state: 'ok', findings: [{ key: 'k', rule: 'tone', message: 'm', cards: [1] }] }), ['$.findings[0].rule: must be one of ["one_value","use_of_funds","runway","round","forecast"]']);
+});
+
+// ── 5. D1549 (#3796): the presets and HQ's locks ─────────────────────────
+
+test('5. the model-presets reply matches deckModelPresets, and its locks key deckOrgLocks: nothing stored, a preset with a deck pick, an HQ lock', async () => {
+  // Mutation checked: the route answering `locks` without its line → the deckOrgLocks assert fails.
+  const db = world();
+  const app = new Hono<any>().route('/api/decks', deckModelPresets);
+  const token = await new SignJWT({ user_id: 10, role: 'founder' }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const read = async () => {
+    const res = await withThrownResponses(() => app.request('/api/decks/1/model-presets', { headers: { Authorization: `Bearer ${token}` } }, { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any));
+    assert.equal(res.status, 200);
+    return res.json() as any;
+  };
+  const none = await read();
+  assert.deepEqual(contractErrors(CONTRACTS.presets.schema, none), []);
+  assert.deepEqual(contractErrors(CONTRACTS.orgLocks.schema, none.locks), []);
+  assert.deepEqual(none.locks, []);
+  db.exec("INSERT INTO deck_model_picks(scope,scope_id,key,model,locked) VALUES('deck','1','preset','best',0)");
+  db.exec("INSERT INTO deck_model_picks(scope,scope_id,key,model,locked) VALUES('deck','1','group:data','@cf/mistralai/mistral-small-3.1-24b-instruct',0)");
+  db.exec("INSERT INTO deck_model_picks(scope,scope_id,key,model,locked,plan_min) VALUES('org','hq','group:images','@cf/black-forest-labs/flux-1-schnell',1,'all')");
+  const some = await read();
+  assert.equal(some.preset, 'custom'); assert.equal(some.stored, 'best');
+  assert.equal(some.locks.length, 1);
+  assert.deepEqual(contractErrors(CONTRACTS.presets.schema, some), []);
+  assert.deepEqual(contractErrors(CONTRACTS.orgLocks.schema, some.locks), []);
+  assert.deepEqual(contractErrors(CONTRACTS.orgLocks.schema, [{ ...some.locks[0], line: 'Locked' }]), ['$[0].line: must be "Set by Axal VC HQ"']);
+  assert.deepEqual(contractErrors(CONTRACTS.presets.schema, { ...some, preset: 'cheapest' }), ['$.preset: must be one of ["fast","balanced","best","custom"]']);
 });

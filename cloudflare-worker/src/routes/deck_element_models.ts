@@ -21,7 +21,7 @@
  *
  * A deck pick is the venture's (scope id: the project), so it holds across
  * versions; a member pick is the caller's own. HQ's defaults and locks are
- * written by C1 / B10, never here. Who: the deck routes' `projectOwned`, read
+ * written by `deck_model_presets.ts` (D1549), never here. Who: the deck routes' `projectOwned`, read
  * for GET and write for PUT. Bound SQL only; no activity row (a model choice
  * is not a venture write, as migration 465's are not).
  *
@@ -43,7 +43,7 @@ import { MODEL_NAMES } from '../services/aiCatalog';
 import { isOffered, modelById, type CatalogueSwitches } from '../services/ai/catalogue';
 import { MODEL_LOCKS, lockLabel, offerable } from '../services/ai/modelUseCases';
 import {
-  ELEMENTS, ELEMENT_GROUPS, ELEMENT_ROUTES, FREE_LINE, ORG_HQ, choicesFor, estimateDeck, expected_ms, groupElements, isRouted,
+  ELEMENTS, ELEMENT_GROUPS, ELEMENT_ROUTES, FREE_LINE, GROUP_LABELS, ORG_HQ, choicesFor, estimateDeck, expected_ms, groupElements, isRouted,
   keyOffers, lockFor, pickKeyOk, planRankOf, resolveElementModel, type PickRow, type Resolved,
 } from '../services/decks/elementModels';
 
@@ -54,10 +54,10 @@ export function planRankFor(user: User): number {
   return userMeetsTier(user, 'studio') ? 2 : userMeetsTier(user, 'growth') ? 1 : 0;
 }
 
-type Row = PickRow & { id: number };
+export type Row = PickRow & { id: number };
 
 /** Every pick row that can apply to this venture's deck and this member: HQ's, the deck's, its areas' and the member's. */
-async function pickRows(env: Env, projectId: number, userId: number): Promise<Row[]> {
+export async function pickRows(env: Env, projectId: number, userId: number): Promise<Row[]> {
   const res = await env.DB.prepare(
     `SELECT id, scope, scope_id, key, model, locked, plan_min, set_by FROM deck_model_picks
       WHERE (scope = 'org' AND scope_id = ?1) OR (scope = 'deck' AND scope_id = ?2)
@@ -67,7 +67,7 @@ async function pickRows(env: Env, projectId: number, userId: number): Promise<Ro
 }
 
 /** Clears the stale rows a read found; HQ's rows are HQ's to change, so they are read as none and kept. */
-async function clearStale(env: Env, stale: readonly PickRow[]): Promise<void> {
+export async function clearStale(env: Env, stale: readonly PickRow[]): Promise<void> {
   const ids = [...new Set(stale.filter((r) => r.scope !== 'org').map((r) => Number((r as Row).id)).filter((n) => Number.isSafeInteger(n) && n > 0))];
   for (const id of ids) await env.DB.prepare('DELETE FROM deck_model_picks WHERE id = ?1').bind(id).run();
   if (ids.length) console.log('[deck_element_models] stale picks cleared', { count: ids.length });
@@ -75,7 +75,7 @@ async function clearStale(env: Env, stale: readonly PickRow[]): Promise<void> {
 
 /**
  * The generation side: the model `element` runs on for this venture's deck
- * and this member, through the 8 levels, with any stale pick cleared. Throws
+ * and this member, through the 9 levels, with any stale pick cleared. Throws
  * when the picks cannot be read, so a run never goes ahead on a guess.
  */
 export async function elementModelFor(env: Env, user: User, projectId: number, element: string, area?: { card: number; area: string } | null): Promise<Resolved> {
@@ -95,7 +95,31 @@ export async function elementModelFor(env: Env, user: User, projectId: number, e
  */
 export const runModelOf = (r: Resolved): string | undefined => (r.model && r.source !== 'default' && r.source !== 'none' ? r.model : undefined);
 
-async function deckOf(c: any, user: User, write: boolean): Promise<{ deckId: number; projectId: number } | Response> {
+/**
+ * D1549 (#3796): what a run passes for its element: `runModelOf`, pinned
+ * when HQ locked the element, so the router runs that model or nothing and
+ * never falls back to another.
+ */
+export const runPickOf = (r: Resolved): { model?: string; pinned?: true } => {
+  const model = runModelOf(r);
+  return model ? { model, ...(r.locked ? { pinned: true as const } : {}) } : {};
+};
+
+/**
+ * D1549: the 403 a run gets when HQ locked its element to a model the
+ * caller's plan cannot run (`lockedOut`). pd9o's line, then why; nothing runs.
+ */
+export function lockedOutRefusal(c: any, r: Resolved): Response {
+  const e = ELEMENTS.find((x) => x.id === r.element);
+  const plan = r.plan_blocked.find((p) => p.level === 'org_lock')?.plan ?? null;
+  return refuse(c, 403, {
+    code: 'role_locked',
+    message: `Set by Axal VC HQ for this deck's ${GROUP_LABELS[e?.group ?? ''] ?? 'models'}. ${plan ? `Its model is on ${plan}.` : 'Its model cannot run on your plan.'} Nothing was run.`,
+    extra: { element: r.element, plan },
+  });
+}
+
+export async function deckOf(c: any, user: User, write: boolean): Promise<{ deckId: number; projectId: number } | Response> {
   const deckId = Number(c.req.param('id'));
   let row: any;
   try { row = await getDeckRow(c.env, deckId); } catch { return c.json({ error: 'not found' }, 404); }
@@ -106,7 +130,7 @@ async function deckOf(c: any, user: User, write: boolean): Promise<{ deckId: num
   return { deckId, projectId };
 }
 
-const nameOf = (id: string | null) => (id ? MODEL_NAMES[id] ?? modelById(id)?.name ?? null : null);
+export const nameOf = (id: string | null) => (id ? MODEL_NAMES[id] ?? modelById(id)?.name ?? null : null);
 
 deckElementModels.get('/:id{[0-9]+}/element-models', async (c) => {
   const user = await requireAuth(c);

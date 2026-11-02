@@ -19,8 +19,11 @@
  *   free of it so `railMatrix.ts` can import it without a cycle.)
  *   choicesFor         the element's ≤ 3 suggested and the rest, as #3741's
  *                      rail answers them
- *   resolveElementModel  the 8 levels, each candidate through `isOffered`,
- *                      the plan policy (`offerable`, MODEL_LOCKS) and plan_min
+ *   resolveElementModel  the 9 levels, each candidate through `isOffered`,
+ *                      the plan policy (`offerable`, MODEL_LOCKS) and plan_min;
+ *                      HQ's lock wins over every other level (D1549)
+ *   PRESETS, presetModelFor   D1549 (#3796): Fast, Balanced and Best, each
+ *                      the element's job's own preset row in #3721's plan
  *   sizeFor, estimateDeck, expected_ms   the units a run is sized at, the
  *                      deck's estimate line by line, and the time it plans for
  *   gridOptionRows     the `grid:<element>` rail rows `railMatrix.ts` answers
@@ -43,6 +46,10 @@ export const ELEMENTS: readonly ElementDef[] = Object.freeze(
   Object.entries(DECK_ELEMENT_JOBS).flatMap(([group, g]) => Object.entries(g.items).map(([id, job]) => Object.freeze({ id, group, job }))),
 );
 export const ELEMENT_GROUPS: readonly string[] = Object.freeze(Object.keys(DECK_ELEMENT_JOBS));
+/** D1549: each group's name as the AIRail prints it (`deckRailGroups.js`), for the HQ table and a lock's refusal. */
+export const GROUP_LABELS: Readonly<Record<string, string>> = Object.freeze({
+  text: 'Text', images: 'Images', graphics: 'Graphics', data: 'Data', diagrams: 'Diagrams', venture: 'Venture records', media: 'Media',
+});
 const BY_ID = new Map(ELEMENTS.map((e) => [e.id, e]));
 export const elementOf = (id: string): ElementDef | null => BY_ID.get(id) ?? null;
 
@@ -177,12 +184,38 @@ export type PickScope = 'org' | 'area' | 'deck' | 'member';
 /** One `deck_model_picks` row (migration 717). */
 export type PickRow = { scope: PickScope; scope_id: string; key: string; model: string; locked: number | boolean; plan_min?: string | null; set_by?: number | null };
 
-/** The levels, highest first. */
-export const LEVELS = ['org_lock', 'area', 'deck_element', 'deck_group', 'member_element', 'member_group', 'org_default', 'default'] as const;
+/** The levels, highest first. D1549 (#3796) adds `deck_preset`, the deck's Fast, Balanced or Best, below its own picks. */
+export const LEVELS = ['org_lock', 'area', 'deck_element', 'deck_group', 'deck_preset', 'member_element', 'member_group', 'org_default', 'default'] as const;
 export type Level = (typeof LEVELS)[number];
 
-/** HQ's scope id: the one org that sets defaults and locks today (C1 adds per-company orgs). */
+/** HQ's scope id: the one org that sets defaults and locks today. */
 export const ORG_HQ = 'hq';
+
+// ---------------------------------------------------------------------------
+// D1549 (#3796, deck v2 C1) — presets per element group
+// ---------------------------------------------------------------------------
+
+/**
+ * The presets a deck can hold. Custom is not stored: it is the deck's own
+ * group and element picks, with no preset under them. Each preset names no
+ * model here: an element runs its job's own `presets` row in #3721's plan
+ * (`modelUseCases.JOBS`), and only when that model is one of the element's
+ * choices, so a group's preset is its elements' rows, through the same
+ * routing as every pick.
+ */
+export const PRESETS = ['fast', 'balanced', 'best'] as const;
+export type Preset = (typeof PRESETS)[number];
+export const PRESET_LABELS: Readonly<Record<Preset | 'custom', string>> = Object.freeze({ fast: 'Fast', balanced: 'Balanced', best: 'Best', custom: 'Custom' });
+/** The key the deck's preset is stored under, scope 'deck': its `model` holds the preset's name, never a model id, and no run reads it as one. */
+export const PRESET_KEY = 'preset';
+export const isPreset = (v: unknown): v is Preset => typeof v === 'string' && (PRESETS as readonly string[]).includes(v);
+
+/** The model `preset` runs `element` on: its job's preset row, when the element offers it; else null (the levels below decide). */
+export function presetModelFor(element: string, preset: Preset): string | null {
+  const j = jobOf(elementOf(element));
+  const id = j?.presets?.[preset] ?? null;
+  return id && choiceIds(element).includes(id) ? id : null;
+}
 export const groupKey = (group: string): string => `group:${group}`;
 /** An area's scope id: the venture's deck, the card's index and the area's id. */
 export const areaScopeId = (deck: string, card: number, area: string): string => `${deck}/${card}/${area}`;
@@ -214,6 +247,12 @@ export type Resolved = {
   notice: string | null;
 };
 
+/**
+ * D1549: HQ locked the element to a model the caller's plan cannot run. The
+ * lock still wins, so nothing runs: `model` is null and the run refuses.
+ */
+export const lockedOut = (r: Resolved): boolean => r.locked && !r.model;
+
 /** Why a model cannot be the element's: stale (gone from the catalogue or the element's list) or the caller's plan. */
 function refusalOf(element: string, model: string, row: PickRow | null, input: ResolveInput, viaGroup: boolean): 'stale' | 'plan' | 'n/a' | null {
   const m = modelById(model);
@@ -227,10 +266,18 @@ function refusalOf(element: string, model: string, row: PickRow | null, input: R
 const modelName = (id: string | null): string => (id ? modelById(id)?.name ?? id.split('/').pop() ?? id : 'no model');
 
 /**
- * The model an element runs on, from the 8 levels in order: HQ's lock, the
- * area's override, the deck's element pick, the deck's group pick, the
- * member's element pick, the member's group pick, HQ's default, and the row
- * default (the job's first suggestion the caller can run). Each candidate
+ * The model an element runs on, from the 9 levels in order: HQ's lock, the
+ * area's override, the deck's element pick, the deck's group pick, the deck's
+ * preset (D1549), the member's element pick, the member's group pick, HQ's
+ * default, and the row default (the job's first suggestion the caller can
+ * run).
+ *
+ * HQ'S LOCK WINS OVER EVERY OTHER LEVEL (D1549). When HQ locked the element
+ * or its group, the levels a member sets (area, deck, preset, member) are not
+ * read at all: the lock's model runs; or, when the caller's plan cannot run
+ * it, nothing does (`lockedOut`); or, when the lock's model is retired or
+ * not one the element offers, HQ's default and then the row default decide.
+ * Each candidate
  * must be in the catalogue and offered (`isOffered`), allowed by policy
  * (`offerable`: not hidden, not on Legal's hold), one of the element's own
  * choices, and on the caller's plan (`plan_min`). A stale pick reads as none
@@ -251,20 +298,36 @@ export function resolveElementModel(input: ResolveInput): Resolved {
     }
     return null;
   };
-  const candidates: Array<[Level, PickRow | null, boolean]> = [
-    ['org_lock', find('org', ORG_HQ, [element, g], true), false],
+  const lock = find('org', ORG_HQ, [element, g], true);
+  const presetRow = lock ? null : find('deck', input.deck, [PRESET_KEY]);
+  const presetModel = presetRow && isPreset(presetRow.model) ? presetModelFor(element, presetRow.model) : null;
+  // A lock leaves only HQ's own levels below it: no member-set level is read.
+  const memberSet: Array<[Level, PickRow | null, boolean]> = lock ? [] : [
     ['area', input.area && input.deck != null ? find('area', areaScopeId(input.deck, input.area.card, input.area.area), [element]) : null, false],
     ['deck_element', find('deck', input.deck, [element]), false],
     ['deck_group', find('deck', input.deck, [g]), true],
+    ['deck_preset', presetRow && presetModel ? { ...presetRow, model: presetModel } : null, true],
     ['member_element', find('member', input.member, [element]), false],
     ['member_group', find('member', input.member, [g]), true],
+  ];
+  const candidates: Array<[Level, PickRow | null, boolean]> = [
+    ['org_lock', lock, false],
+    ...memberSet,
     ['org_default', find('org', ORG_HQ, [element, g], false), false],
   ];
   let dropped = false;
   for (const [level, row, viaGroup] of candidates) {
     if (!row) continue;
     const why = refusalOf(element, row.model, row, input, viaGroup || row.key === g);
+    // A preset's model the catalogue does not offer now is skipped: the stored row is the preset's name, never cleared as a stale pick.
+    if (why === 'stale' && level === 'deck_preset') continue;
     if (why === 'stale') { out.stale.push(row); dropped = true; continue; }
+    if (why === 'plan' && level === 'org_lock') {
+      // The lock wins even here: nothing runs, rather than a model HQ locked out.
+      out.plan_blocked.push({ level, model: row.model, plan: lockLabel(row.model) });
+      Object.assign(out, { source: level, locked: true, set_by: row.set_by ?? null });
+      return out;
+    }
     if (why === 'plan') { out.plan_blocked.push({ level, model: row.model, plan: lockLabel(row.model) }); continue; }
     if (why === 'n/a') continue;
     Object.assign(out, { model: row.model, source: level, locked: level === 'org_lock', set_by: row.set_by ?? null });

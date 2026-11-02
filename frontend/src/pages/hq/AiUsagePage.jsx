@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Search, X } from 'lucide-react';
 import { adminAiUsageApi } from '../../lib/api/adminAiUsage';
+import DeckModelsCard from './DeckModelsCard';
 import { Card, RailFrame, Unrecorded, Unreadable, WorkerRail } from '../../ui';
 import { microUsd, whenLabel } from '../account/usageModel';
 import { modelColour } from '../../lib/modelColours';
@@ -25,6 +26,10 @@ import {
  * Every write is the Worker's and is audited there with its reason
  * (`routes/admin_ai_usage.ts`): Pause AI and Resume AI need a reason of 10 to
  * 500 characters, and so does a cap.
+ *
+ * D1549 (#3796): below them, "Deck models · org default" (aird6b,
+ * `DeckModelsCard.jsx`), HQ's default and lock per deck element group. It
+ * reads on its own, so a run log that cannot be read does not hide it.
  */
 
 const ROSE = 'inline-flex items-center justify-center whitespace-nowrap rounded-axal-sm bg-rose-900 px-3 py-1.5 text-[12.5px] font-semibold text-white hover:bg-rose-950 disabled:cursor-not-allowed disabled:opacity-50';
@@ -509,6 +514,8 @@ export default function AiUsagePage() {
             </div>
           </>
         )}
+
+        <DeckModelsCard />
       </div>
       {dialog && (
         <ActionDialog kind={dialog.kind} member={dialog.member} onCancel={() => setDialog(null)}

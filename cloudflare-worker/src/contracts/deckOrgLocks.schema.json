@@ -1,0 +1,16 @@
+{
+  "$id": "deckOrgLocks",
+  "title": "GET /api/decks/:id/model-presets, its locks key (D1549, #3796; the row is #3786's)",
+  "description": "What the deck v2 adapter's `orgLocks` method passes on: each element group HQ locked, with the model it is locked to and aird5's line \"Set by Axal VC HQ\". An empty list when HQ locked none. D1511 (#3762).",
+  "type": "array",
+  "items": {
+    "type": "object", "additionalProperties": false, "required": ["group", "label", "model", "name", "line"],
+    "properties": {
+      "group": { "type": "string" },
+      "label": { "type": "string" },
+      "model": { "type": "string" },
+      "name": {},
+      "line": { "const": "Set by Axal VC HQ" }
+    }
+  }
+}
