@@ -234,6 +234,11 @@ export const FOUNDER_OPTIONS = [
     page: 'Founder · Raise · Pitch deck', key: 'deck:expand', route: '/raise/pitch/edit', label: 'Expand', kind: 'write', handler: 'draft',
     at: [[AREA_LIGHTBOX, 'deckAssistApi.run(']],
   },
+  // D1557 (#3804): the investor critic in the Check claims sheet, on a model of another family than the writer's.
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'deck:critic', route: '/raise/pitch/edit', label: 'Read as an investor', kind: 'reason', handler: 'draft',
+    at: [['frontend/src/pages/raise/pitch/CriticSection.jsx', 'deckCriticApi.run(']],
+  },
   // D1604 (#3716, plan §0): Change tone and Translate are typed in the instruction box ("warmer", "in French"),
   // which runs words that are only a tone or a language under these two options (`instructionModel.typedChange`).
   {

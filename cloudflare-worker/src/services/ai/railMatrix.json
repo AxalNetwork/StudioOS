@@ -5559,6 +5559,32 @@
   },
   {
    "pageKey": "Founder · Raise · Pitch deck",
+   "optionKey": "deck:critic",
+   "optionLabel": "Read as an investor",
+   "kind": "reason",
+   "handler": "draft",
+   "routeTask": "rail_reason",
+   "models": [
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Default",
+     "line": "Tests a claim against its evidence"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Alternative",
+     "line": "Reviews the first answer"
+    },
+    {
+     "id": "@cf/qwen/qwq-32b",
+     "role": "Deeper",
+     "line": "Argues the other side"
+    }
+   ],
+   "more": []
+  },
+  {
+   "pageKey": "Founder · Raise · Pitch deck",
    "optionKey": "deck:tone",
    "optionLabel": "Change tone",
    "kind": "write",

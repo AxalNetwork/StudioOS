@@ -937,7 +937,7 @@ chat: Compare evidence, work through scenarios and explain planning assumptions.
 - Validate: **offered**, `/api/ai/modules on "Founder · Validate · Demand and urgency signals"`; `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Verdict"`; `railMatrix.json "Founder · Validate · Experiments and evidence"`; and 2 more
 - Record a Session: **gap**, `#3721`
 - Build: **offered**, `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; `/api/ai/modules on "Founder · Build · Solution design"`; and 1 more
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Cap table"`; `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise · Use of funds"`; `/api/ai/modules on "Founder · Raise"`; and 8 more
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Cap table"`; `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise · Use of funds"`; `/api/ai/modules on "Founder · Raise"`; and 9 more
 - Grow: **offered**, `/api/ai/modules on "Founder · Grow · Revenue and traction"`; `/api/ai/modules on "Founder · Grow · Team expansion"`; `/api/ai/modules on "Founder · Grow"`
 - Network: **gap**, `#3721`
 - Research: **offered**, `/api/ai/modules on "Investor · Research · Benchmarking"`; `railMatrix.json option draft:thin-evidence`
