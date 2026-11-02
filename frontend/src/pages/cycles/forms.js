@@ -1048,13 +1048,16 @@ const editMarket = {
 };
 
 const OBLIGATION_STATE = opts([['upcoming', 'Upcoming'], ['scheduled', 'Scheduled'], ['draft', 'Draft'], ['done', 'Done'], ['not_set_up', 'Not set up']]);
-const OBLIGATION_CARRIED = ['status', 'owner_name', 'due_at'];
+// #4046: the title is carried too, now that the Edit draws it (and Ask fills it when blank).
+const OBLIGATION_CARRIED = ['title', 'status', 'owner_name', 'due_at'];
 const editObligation = {
   ...EDIT,
   key: 'edit-obligation',
   title: 'Edit obligation',
-  sub: 'Its kind, date, owner, how it repeats, its reminders and its state.',
+  sub: 'Its title, kind, date, owner, how it repeats, its reminders and its state.',
   fields: [
+    // #4046 (Group A1): the title, as the record's own Edit draws it, so a blank one can be asked for.
+    obligation.fields[0],
     withChips(obligation.fields[1], [['tax', 'Tax'], ['other', 'Other']]),
     { kind: 'T', name: 'due_at', k: 'Due', input: 'date' },
     obligation.fields[3],
@@ -1063,8 +1066,8 @@ const editObligation = {
     { kind: 'CH', name: 'status', k: 'State', opts: OBLIGATION_STATE, required: true },
   ],
   idOf: (row) => growEdit(row)?.id ?? null,
-  valuesOf: (row) => { const e = growEdit(row) || {}; return { status: asText(e.status), owner_name: asText(e.owner_name), due_at: dateText(e.due_at) }; },
-  toBody: (v) => sentOnly(v, { kind: v.kind || null, due_at: str(v.due_at), owner_name: str(v.owner_name), repeats: v.repeats || null, remind_days: remindDays(v), status: v.status },
+  valuesOf: (row) => { const e = growEdit(row) || {}; return { title: asText(e.title), status: asText(e.status), owner_name: asText(e.owner_name), due_at: dateText(e.due_at) }; },
+  toBody: (v) => sentOnly(v, { title: str(v.title), kind: v.kind || null, due_at: str(v.due_at), owner_name: str(v.owner_name), repeats: v.repeats || null, remind_days: remindDays(v), status: v.status },
     OBLIGATION_CARRIED, { remind_days: 'remind' }),
   submit: (w, projectId, id, v) => w.grow.obligationUpdate(projectId, id, editObligation.toBody(v)),
 };

@@ -54,6 +54,7 @@ const NEW_DECK = 'frontend/src/pages/raise/pitch/NewDeck.jsx';
 const ONE_CLICK = 'frontend/src/pages/raise/pitch/OneClickBuild.jsx';
 const TEMPLATES = 'frontend/src/pages/raise/pitch/TemplatesGallery.jsx';
 const STUDIO_ACTIONS = 'frontend/src/pages/raise/pitch/StudioActions.jsx';
+const REHEARSE = 'frontend/src/pages/raise/pitch/RehearsePanel.jsx';
 const PITCH_REVIEW = 'frontend/src/pages/raise/pitch/PitchReview.jsx';
 const AREA_LIGHTBOX = 'frontend/src/pages/raise/pitch/AreaLightbox.jsx';
 const INSTRUCTION_BOX = 'frontend/src/pages/raise/pitch/InstructionBox.jsx';
@@ -272,6 +273,11 @@ export const FOUNDER_OPTIONS = [
     page: 'Founder · Raise · Pitch deck', key: 'deck:image', route: '/raise/pitch/edit', label: 'Generate', kind: 'image', task: 'deck_image', handler: 'draft',
     at: [[AREA_LIGHTBOX, 'deckImagesApi.generate('], [IMAGE_LIGHTBOX, 'deckImagesApi.generate('], [ONE_CLICK, 'deckImagesApi.generate(']],
   },
+  // D1580 F1 (#3827): Present › Rehearse transcribes the rehearsal; the member's pick here is the run's model.
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'transcribe:rehearsal', route: '/raise/pitch/present', label: 'Rehearse', kind: 'speech', handler: 'transcribe',
+    at: [[REHEARSE, 'deckRehearsalsApi.run(']],
+  },
   {
     page: 'Founder · Raise · Pitch deck', key: 'review:deck-file', route: '/raise/pitch/review', label: 'Drop your deck here or click to browse', kind: 'vision', handler: 'upload',
     at: [[REVIEWER, '/api/deck-reviewer/upload']],
@@ -428,7 +434,8 @@ export const FOUNDER_QUIET_PAGES = {
   'Founder · Build · Founding team': 'Its tool is the cap table, which runs no model.',
   'Founder · Build · Company creation': 'Its legal and e-signature doors run no model; the legal generator refuses founders.',
   'Founder · Raise': 'Call for Capital matches by rule.',
-  'Founder · Raise · Data room': 'The Data room tool runs no model; the room is read on Fundraising readiness.',
+  // #3938 part 2: search runs on the room's own index, whose embedder is fixed (D1478 retrieve_index), so nothing is offered to pick.
+  'Founder · Raise · Data room': 'Search runs on the room’s own index with fixed models, so there is nothing to pick; the room is read on Fundraising readiness.',
   'Founder · Raise · Capital relationships': 'The pipeline, the investor match and Match to my Mercury run no model.',
   'Founder · Grow · Revenue and traction': 'The metric log runs no model.',
   'Founder · Grow · Partner network': 'Its records only.',

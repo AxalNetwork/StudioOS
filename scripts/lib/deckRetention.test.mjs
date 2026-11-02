@@ -5,6 +5,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { fileURLToPath } from 'node:url';
 import { deckRetentionProblems, deckTables, inventoryNames } from './deckRetention.mjs';
 
 const f = (number, sql) => ({ name: `${number}_x.sql`, number, sql });
@@ -39,6 +40,6 @@ test('a deck table from migration 722 on must cascade from its parent', () => {
 
 test('the real schema and inventory agree', async () => {
   const { execFileSync } = await import('node:child_process');
-  const out = execFileSync('node', [new URL('../check-deck-retention.mjs', import.meta.url).pathname], { encoding: 'utf8' });
+  const out = execFileSync('node', [fileURLToPath(new URL('../check-deck-retention.mjs', import.meta.url))], { encoding: 'utf8' });
   assert.match(out, /^✓ check-deck-retention: \d+ deck stores/);
 });

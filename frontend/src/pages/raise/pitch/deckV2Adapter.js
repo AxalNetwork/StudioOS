@@ -28,6 +28,7 @@
  * is one line, the row's own, and its decision is named in the comment above
  * that line. Never add a row to a list here: two branches that each swap a
  * row then meet only if they swap the same one.
+ * D1515 history is browser-local: it returns gridOps directly, with no API contract.
  *
  * Fields on routes that exist (`context.inferred` and `context.freshness`
  * from #3877; the PostHog, HubSpot and Linear source rows from #3880) need
@@ -45,14 +46,17 @@ import { deckElementModelsApi } from '../../../lib/api/deckElementModels.js';
 import { deckElementsApi } from '../../../lib/api/deckElements.js';
 import { deckFiguresApi } from '../../../lib/api/deckFigures.js';
 import { deckGridApi } from '../../../lib/api/deckGrid.js';
+import { deckImageEditsApi } from '../../../lib/api/deckImageEdits.js';
 import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks.js';
 import { deckModelPresetsApi } from '../../../lib/api/deckModelPresets.js';
+import { deckRehearsalsApi } from '../../../lib/api/deckRehearsals.js';
 import { deckRemixApi } from '../../../lib/api/deckRemix.js';
 import { deckStageApi } from '../../../lib/api/deckStage.js';
 import { deckTemplatesApi } from '../../../lib/api/deckTemplates.js';
 import { deckTypedValuesApi } from '../../../lib/api/deckTypedValues.js';
 import { deckUsageApi } from '../../../lib/api/deckUsage.js';
 import { deckVentureElementsApi } from '../../../lib/api/deckVentureElements.js';
+import * as gridOps from './gridOps.js';
 
 export { NOT_ON };
 
@@ -81,6 +85,7 @@ export const SURFACES = Object.freeze({
   deckUsage: { issue: 3776, what: 'Estimated and spent on this deck' },
   arrange: { issue: 3777, what: 'Align, distribute, group, lock and layers' },
   imageEdit: { issue: 3778, what: 'Crop, focus, filters, upscale and background removal' },
+  imageVary: { issue: 3784, what: 'Erase, expand, vary and reference images' },
   elementsLibrary: { issue: 3779, what: 'Icons, shapes, dividers and textures' },
   diagrams: { issue: 3780, what: 'Funnel, hierarchy, hub and spoke, and 2×2 diagrams' },
   ventureElements: { issue: 3781, what: 'Team bios, logo wall, use of funds, round terms, cap-table summary and interview quotes' },
@@ -137,7 +142,7 @@ export async function through(call, issue) {
     const message = typeof e?.message === 'string' && e.message ? e.message : 'could not be read';
     // D1543: a Worker refusal's code (a gate such as `no_consent`) rides along, so a surface can draw its line.
     const code = typeof e?.code === 'string' && e.code ? e.code : null;
-    return Object.freeze({ available: false, unreadable: true, reason: message, issue, ...(code ? { code } : {}) });
+    return Object.freeze({ available: false, unreadable: true, reason: message, issue, status, data: e?.data ?? null, ...(code ? { code } : {}) });
   }
 }
 
@@ -168,7 +173,11 @@ export const cancelBatch = (uid) => through(() => deckBatchesApi.cancel(uid), SU
 export const elementModels = (deckId) => through(() => deckElementModelsApi.read(deckId), SURFACES.elementModels.issue);
 export const areasQuote = off('areasQuote');
 export const areasGenerate = off('areasGenerate');
-export const history = off('history');
+/**
+ * D1515 (#3767): undo and redo, frontend-only. No Worker route stores the history, so this row answers at once with
+ * `gridOps.js` (its reducers and the 100-step history) and is not a client call: it has no contract.
+ */
+export const history = async () => Object.freeze({ available: true, value: gridOps });
 export const narrativeOutline = off('narrativeOutline');
 export const instruct = off('instruct');
 /** D1522 (#3774): the deck's stage plan — the order for its stage, a why line per card, and missing-proof warnings. */
@@ -184,6 +193,8 @@ export const figures = (deckId) => through(() => deckFiguresApi.list(deckId), SU
 export const deckUsage = (deckId) => through(() => deckUsageApi.rail(deckId), SURFACES.deckUsage.issue);
 export const arrange = off('arrange');
 export const imageEdit = off('imageEdit');
+/** D1544 (#3784): an edit's price (vary, edit, erase, expand) before it runs: one hold for the edit and its checks. */
+export const imageVary = (uid, ask) => through(() => deckImageEditsApi.quote(uid, ask), SURFACES.imageVary.issue);
 /**
  * D1541 (#3779): the elements library and a page of icons for the pd28
  * panel, in one answer: `{ licence, decor_max, shapes, dividers, textures,
@@ -238,7 +249,11 @@ export const slideAnalytics = off('slideAnalytics');
  */
 export const presence = (deckId) => through(() => deckCoeditApi.presence(deckId), SURFACES.presence.issue);
 export const cardStatus = off('cardStatus');
-export const rehearse = off('rehearse');
+/**
+ * D1580 F1 (#3827): the founder's rehearsals of this version, newest first; the surface runs and reads them through
+ * `deckRehearsalsApi`. Present's Rehearse panel runs, reads and keeps through the same client.
+ */
+export const rehearse = (deckId) => through(() => deckRehearsalsApi.list(deckId), SURFACES.rehearse.issue);
 export const walkthrough = off('walkthrough');
 export const retryFailed = off('retryFailed');
 export const unseenBatches = off('unseenBatches');

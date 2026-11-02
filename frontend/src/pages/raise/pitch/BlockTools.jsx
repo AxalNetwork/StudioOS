@@ -7,6 +7,7 @@ import { FIGURE_LINE } from './deckAssistModel';
 import { areaLabel } from './deckV2Model';
 import { areaKind } from './gridSelection';
 import { NOTES_PLACEHOLDER, placementProblem } from './editorModel';
+import TextWords from './TextWords';
 
 /**
  * D1604 (#3716, pd3) — the tools that show only while something on the Grid is
@@ -16,7 +17,8 @@ import { NOTES_PLACEHOLDER, placementProblem } from './editorModel';
  *   one block     "BODY · C1–7 × R2–6"; Columns, Rows, From column and From
  *                 row (a range that overlaps another block or leaves the Grid
  *                 says so and changes nothing); for text, Heading · Paragraph
- *                 · List and its words; a chart's toolbar (D898 group C); an
+ *                 · List and its words, with D1515's B · I · Accent · Link
+ *                 (`TextWords.jsx`, #3767); a chart's toolbar (D898 group C); an
  *                 image's toolbar with its Alt text (D903); a bound figure's
  *                 source, which no tool rewrites; Remove block. Eadwyn works
  *                 on the area from its Ask ("Generate into N areas",
@@ -81,13 +83,13 @@ export function SpeakerNotes({ card, index, readOnly, notesMax, onNotes }) {
     <label className={`${CARD} flex flex-col gap-1.5 px-4 py-3`}>
       <span className={EYE}>Speaker notes · card {index + 1}</span>
       <textarea className={`${FIELD} min-h-[72px]`} value={card.notes || ''} placeholder={NOTES_PLACEHOLDER} readOnly={readOnly}
-        maxLength={notesMax} onChange={(e) => onNotes(e.target.value)} data-testid="pitch-editor-notes" />
+        maxLength={notesMax} spellCheck onChange={(e) => onNotes(e.target.value)} data-testid="pitch-editor-notes" />
     </label>
   );
 }
 
 export default function BlockTools({
-  card, cardIndex, area, model, charts, images = [], items = [], deckId,
+  card, cardIndex, area, model, charts, images = [], items = [], deckId, accent,
   onPatch, onRemove, onChartLibrary, onAddBlock, onImage, onDesign, onPlace, onAddCard,
 }) {
   const block = area?.kind === 'block' ? area.block : null;
@@ -108,10 +110,7 @@ export default function BlockTools({
           ) : null}
           <button type="button" className={`${GHOST} ml-auto`} onClick={onRemove} data-testid="pitch-editor-remove-block"><Trash2 size={14} aria-hidden="true" /> Remove block</button>
         </div>
-        {block.kind === 'text' ? (
-          <textarea className={`${FIELD} min-h-[64px]`} value={block.text || ''} maxLength={4000} aria-label="Words in this block"
-            onChange={(e) => onPatch({ text: e.target.value })} data-testid="pitch-tools-text" />
-        ) : null}
+        {block.kind === 'text' ? <TextWords card={card} block={block} accent={accent} onPatch={onPatch} /> : null}
         {block.kind === 'metric' || block.binding?.source_key ? (
           <span className={MUTED} data-testid="pitch-tools-figure">
             {block.binding?.source_key ? `${block.binding.source_key} · ${block.binding.as_of || 'date not recorded'} · ${block.binding.grade || 'grade not recorded'}. ` : ''}

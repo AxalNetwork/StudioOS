@@ -29,6 +29,10 @@ export const FIT_OPTIONS = Object.freeze([['cover', 'Fill the range'], ['contain
 export const REAL_PERSON = 'Eadwyn does not draw real people. Upload a photo the person agreed to share.';
 export const FIGURES_LINE = 'Text points shape the description; image points go to the model as references. Figures stay in charts and never go into an image.';
 export const NO_REFERENCES = 'FLUX.1 Schnell takes no reference images, so image points cannot be chosen. A team photo goes in as an upload.';
+/** D1544 (#3784): the line for a model that takes references (FLUX.2): the deck's art direction reference travels with every image. */
+export const TAKES_REFERENCES = 'This model takes up to 4 reference images; the deck\'s art direction reference goes with every image it draws.';
+/** D1544: whether a model id takes reference images (FLUX.2 Klein and [dev]); FLUX.1 Schnell takes none. */
+export const takesReferences = (model) => typeof model === 'string' && /\/flux-2-/.test(model);
 export const CONSENT_LINE = 'This photo shows a person, and they agreed to share it.';
 export const ALT_HELP = 'Alt text travels with every export: the share link, present mode, PDF and PowerPoint.';
 

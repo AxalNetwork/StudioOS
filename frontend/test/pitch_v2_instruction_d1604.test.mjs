@@ -30,7 +30,6 @@ import { areasOf } from '../src/pages/raise/pitch/gridSelection.js';
 import {
   FIGURE_REFUSAL, INSTRUCTION_OFF, NOT_WORDS, instructionField, instructionPlan, placeholderFor, typedChange,
 } from '../src/pages/raise/pitch/instructionModel.js';
-import { CHARGED_LINE } from '../src/pages/raise/pitch/deckV2Model.js';
 import { FOUNDER_OPTIONS } from '../src/lib/railOptions/founder.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -79,7 +78,9 @@ test('one text area: Send quotes first, Run proposes under deck:rewrite, Accept 
     const run = m.calls.find((c) => c[0] === 'assist.run');
     assert.equal(decodeURIComponent(run[4]['X-Rail-Option']), 'deck:rewrite');
     assert.match(m.text(node(m, 'pitch-instruction-proposal-after')), /Synthetic warmer words/);
-    assert.equal(m.text(node(m, 'pitch-instruction-charged')), `Charged $0.0006. ${CHARGED_LINE}`, 'until undo: the run was already charged');
+    // D1515 (#3767): the interim line is gone now that undo says "Still charged"; the proposal's eyebrow keeps the cost.
+    assert.equal(m.by('pitch-instruction-charged'), undefined, 'no interim charged line beside Accept');
+    assert.match(m.text(node(m, 'pitch-instruction-proposal')), /\$0\.0006/);
     assert.match(m.text(node(m, 'pitch-editor-save-state')), /Saved/, 'a proposal is not a change');
     await m.press(node(m, 'pitch-instruction-proposal-accept'));
     assert.deepEqual(m.calls.filter((c) => c[0] === 'proposals.decide').map((c) => c.slice(1)), [['i1', 'accept']]);
@@ -109,7 +110,8 @@ test('Change tone and Translate are typed: a tone or a language alone runs under
     assert.deepEqual(m.calls.filter((c) => c[0] === 'assist.quote').at(-1)[3], { action: 'tone', block: { id: 'b2', kind: 'text' }, text: 'Synthetic body words', tone: 'warm' });
     await m.press(node(m, 'pitch-instruction-run'));
     assert.equal(decodeURIComponent(m.calls.filter((c) => c[0] === 'assist.run').at(-1)[4]['X-Rail-Option']), 'deck:tone');
-    assert.equal(m.text(node(m, 'pitch-instruction-charged')), `Charged; the amount is not recorded yet. ${CHARGED_LINE}`, 'no $0 for an amount not recorded');
+    assert.equal(m.by('pitch-instruction-charged'), undefined, 'D1515: no interim charged line');
+    assert.doesNotMatch(m.text(node(m, 'pitch-instruction-proposal')), /\$0\.00\b/, 'no $0 for an amount not recorded');
     await m.type(node(m, 'pitch-instruction-field'), 'in German');
     await m.press(node(m, 'pitch-instruction-send'));
     await m.press(node(m, 'pitch-instruction-run'));
