@@ -287,6 +287,21 @@ route draws its unavailable state through
 `frontend/src/pages/incorporate/incorporateAdapter.js` (#3855, #3706). All four
 files stay here: some bodies are outstanding. No file moved, so no count
 changed.
+## Landed 2026-11-02 — HQ › AI agents (#4137)
+
+The owner's two artifacts for #4137 (boards SA0–SA9), decoded by
+`scripts/read-canvas.mjs`:
+- `HQ AI Agents Page.dc.html` is the page, one frame per `v` value (`sa0` to
+  `sa9i`; a `-d` suffix is dark);
+- `HQ AI Agents · Boards.dc.html` is the board grid "HQ › AI agents", SA0 to
+  SA9. It imports the page by name.
+
+**One edit, named.** The Axal VC mark (`uploads/axal-logo-200x200.png`) points
+at `/axal-mark.png`, as in the earlier intakes. No other value was edited.
+
+**Grade: NEW (D4137).** A new HQ row, AI agents, after Platform, at
+`/hq/ai-agents` with four tabs. One read is live (the From Axal skills, D1612);
+the rest waits for H1–H5 (#4158, #4160–#4163) and says so.
 ## Landed 2026-11-01 — Team › Agents › Skills (#3945)
 
 The owner's two artifacts for #3945's consolidated prompt (boards SK0–SK9),

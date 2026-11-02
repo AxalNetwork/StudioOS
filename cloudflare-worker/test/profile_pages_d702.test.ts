@@ -51,7 +51,7 @@ import { buildLifecycleResponse } from '../src/routes/progress.ts';
 import { effectiveVisibility } from '../src/services/userSettings.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { splitStatements } from './_baseline.mjs';
-
+import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel: string) => readFileSync(resolve(ROOT, rel), 'utf8');
 const MIGRATION = read('cloudflare-worker/sql/migrations/467_founder_profile_pages.sql');
@@ -110,7 +110,7 @@ function buildWithout467(): InstanceType<typeof DatabaseSync> {
     try { db.exec(s); } catch { /* the baseline's two lp_investors triggers do not split; unrelated */ }
   }
   const dir = resolve(ROOT, 'cloudflare-worker/sql/migrations');
-  for (const f of readdirSync(dir).filter((x) => /^\d+_.*\.sql$/.test(x) && Number(x.split('_')[0]) > 219).sort()) {
+  for (const f of readdirSync(dir).filter((x) => /^\d+_.*\.sql$/.test(x) && Number(x.split('_')[0]) > 219).sort(compareMigrations)) {
     if (f.startsWith('467_')) continue;
     db.exec(readFileSync(join(dir, f), 'utf8'));
   }

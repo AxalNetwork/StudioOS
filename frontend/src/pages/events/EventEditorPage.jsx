@@ -16,6 +16,7 @@ import { useToast } from '../../components/useToast';
 import PageExplainer from '../../components/PageExplainer';
 import { EVENT_TYPE_IDS } from '../../lib/eventTypes';
 import { syndicateNote } from '../hq/eventSyndication/syndicationModel';
+import SyndicationAsk from './SyndicationAsk.jsx';
 import Lightbox from '../../ui/Lightbox';
 import CoverDrawPress from '../../ui/CoverDrawPress';
 import { publishAction } from './eventOrganiserModel';
@@ -339,6 +340,8 @@ export default function EventEditorPage() {
           <div className="border-t border-gray-100 pt-3 dark:border-gray-800" data-testid="event-syndicate-note">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Syndicate to</h3>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{syndicateNote(form.visibility)}</p>
+            {/* D1493 (#3906, SY8): Ask proposes each kept listing's title and description. */}
+            {isEdit && form.visibility === 'public' && <SyndicationAsk eventId={id} />}
           </div>
         </section>
 
