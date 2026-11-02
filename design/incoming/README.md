@@ -287,6 +287,23 @@ route draws its unavailable state through
 `frontend/src/pages/incorporate/incorporateAdapter.js` (#3855, #3706). All four
 files stay here: some bodies are outstanding. No file moved, so no count
 changed.
+## Landed 2026-11-02 — HQ › Decks (#4155)
+
+The owner's two artifacts for #4155 (boards HD1–HD6), decoded by
+`scripts/read-canvas.mjs`:
+- `HQ Decks Page.dc.html` is the page, one frame per `v` value (`hd1` to
+  `hd6d`; a `-d` suffix is dark);
+- `HQ Decks · Boards.dc.html` is the board grid, HD1 to HD6. It imports the
+  page by name.
+
+**One edit, named.** The Axal VC mark (`uploads/axal-logo-200x200.png`) points
+at `/axal-mark.png`, as in the earlier intakes. No other value was edited.
+
+**Grade: NEW (D4155).** A Platform tab, Decks, after Promo codes at
+`/admin/platform/decks` with five tabs. The reports queue and Resolve, the
+flags read and the default templates read are live; the rest waits for K1–K5
+(#4188–#4192) and says so.
+
 ## Landed 2026-11-02 — HQ › AI agents (#4137)
 
 The owner's two artifacts for #4137 (boards SA0–SA9), decoded by
