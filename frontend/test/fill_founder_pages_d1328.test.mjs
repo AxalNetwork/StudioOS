@@ -500,6 +500,8 @@ const MOUNTS = {
   'Investor · Portfolio · Value-add | support': { add: ['pages/investor/InvestorPortfolioValueAdd.jsx', /scope: SCOPED_FORMS\.support, parent: parentId/], edit: 'exempt: an entry is delivered, withdrawn or amended on its row (PATCH), and no form re-opens its summary' },
   'Operating Partner · Offers · Catalog | offering': { add: ['pages/ServiceCatalogPage.jsx', /parent: offering \? null : ownerId/], edit: ['pages/ServiceCatalogPage.jsx', /record: offering\?\.id \?\? null/] },
   'Operating Partner · Offers · Perk deals | perk': { add: ['pages/PerksPage.jsx', /scope: SCOPED_FORMS\.perk, parent: ownerId/], edit: 'exempt: a submitted perk is reviewed before it lists, and this console edits only its end date (Extend)' },
+  // #4046 (#3740 2b): the deal page's New note.
+  'Investor · Deals · Deal room | deal-note': { add: ['pages/deal/DealNotes.jsx', /scope: SCOPED_FORMS\.dealNote, parent: Number\(dealId\) > 0/], edit: 'exempt: a note cannot be saved blank, so its Edit dialog never has a blank field for Ask to fill' },
 };
 
 test('#3740 guard: every FILL_FIELDS form has an Add mount and an Edit mount that pass fill, or a named exemption', async () => {

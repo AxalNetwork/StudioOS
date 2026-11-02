@@ -1,0 +1,28 @@
+### Interview sessions Worker contract (D657, #1470)
+
+`founder_validate_sessions.ts` is mounted on `/api/founder/validate` beside `founder_validate.ts` (migration 438). A session hangs off a `discovery_interviews` row, so a Spin-Out Lab venture's interviews get it unchanged. Every route but the model list is gated on `canWrite`; since D685 another member gets 404, not 403.
+
+D685 S03-A (#1583, migration 452) adds the Worker half of "Record a session" set up in one call:
+- `POST /sessions` creates the interview from Who (booked, today, under the free-tier cap) or takes a picked one still in the pipeline, and opens the session on it. It takes `channel`, `call_provider`, `meeting_url`, the models, `language`, `points`, `messages` and an idempotent `client_key`; a new interview is written in the session's own D1 batch, so two Starts racing past the replay check make one interview. While the member already has a session recording or paused, an audio setup is 409 `session_active` with that session's id, before anything is written (#1587). `POST /interviews/:id/sessions` takes the same new fields.
+- `GET /sessions/:id` and `GET /interviews/:id/sessions` carry the interview (name, company, stage), `call_label`, `meeting_url` (a pasted link, else a scheduled D684 call's `join_url`) and the talking points with their covered count.
+- `PUT /sessions/:id/points/:pointId { covered }` ticks a point on the Worker's clock.
+- `start` refuses 409 `session_active` while the member records another session.
+- A stop moves the interview to `done` and fills its channel, and closes the call refs attached to the session (their start and end taken from the session), so the transcript sweep can collect them. `GET /sessions/models` lists the ten languages.
+- The Customer research list takes `stage:pipeline` and `sort=booked` for the recruiting picker, and its Channel filter reads the channel the sessions set.
+- Deleting an interview (`DELETE /api/progress/discovery/interview/:id`) now deletes each session's audio, rows and pending proposals.
+- `GET /sessions/models` lists the live and final speech-to-text models, priced from the router's own tables, with their tags.
+- `POST /interviews/:id/sessions` opens a session (channel, consent to record, models). `GET /interviews/:id/sessions` lists them, and `GET /sessions/:id` returns segments, marks and chunks.
+- `PATCH /sessions/:id/consent`, then `POST /sessions/:id/{start,pause,resume,stop}`. Starting an audio channel without consent `given` is 409 `consent_not_recorded`. After a recording (D757, #1898) consent takes exactly two changes: `not_recorded → given` with a method, on an imported call (it queues the digest, `consent_given`), and `given | not_recorded → declined`, a withdrawal that removes the summary and the pending suggestions and keeps decided ones without their quote. Anything else is 409 `consent_locked`; a declined session stays declined.
+- `POST /sessions/:id/summarise` and `POST /sessions/:id/structure` run through the Validate engine (`services/validateEngine.ts`): forced, so a button always runs. Either answers 409 `digest_running` while an automatic digest holds the session.
+- The digest (D757, #1924). `GET /sessions/:id` carries `digest`, the draft summary with its typed sections (`kept: false`) or the kept one. `POST /sessions/:id/digest/keep` keeps the draft as written. `PATCH /sessions/:id/digest` edits, then keeps: overview sentences and next steps may be reworded or removed (`{ index, text }`; a next step may also be added), and a key quote may only be removed, never rewritten (400 `quote_rewrite_refused`, nothing saved). Either answers 409 `no_digest` before a summary exists and returns `{ ok, digest }`.
+- `PUT /sessions/:id/chunks/:seq` stores one audio chunk, idempotent by sequence number. `POST /sessions/:id/marks` marks a moment.
+- `GET /sessions/:id/live` is the WebSocket for the live transcript (Nova-3 or Flux). It is 409 `live_off` when live is off.
+- `POST /sessions/:id/transcribe` produces the final transcript, chunk by chunk, after a budget hold for the whole job. `PATCH /sessions/:id/segments/:segId` assigns a speaker.
+- `GET /sessions/:id/receipt` returns each job's cost and the budget left. `DELETE /sessions/:id` deletes the session, its R2 audio, and writes an audit row.
+
+D877 (#2524, migration 530) keeps a call's audio apart from its text. A call is a session with a Zoom or Meet ref, or an uploaded recording (D872); the in-person recorder's audio is kept until deleted, as before.
+- `DELETE /sessions/:id/audio` removes the session's R2 chunks and their rows and keeps every segment, mark, receipt, digest and accepted item. The session then carries `audio_removed_at` and `audio_removed_reason` (`deleted`), and `GET /sessions/:id/audio` answers 404 `audio_removed` with the reason. It waits, 409 `transcribing`, while a run is moving, and is behind `scopeSession` like every session route.
+- `GET /sessions/audio-retention` returns the caller's `{ days, chosen, default_days, min_days, max_days }`: `days` is 30 by default (D877, owner question 1, answer A) and `null` keeps the audio until deleted. `PUT /sessions/audio-retention { days: 1..3650 | null }` sets it; anything else is 400 `invalid_retention`, with nothing changed.
+- The daily cron (03:50 UTC, beside the channel purge) runs `purgeExpiredCallAudio` (`services/callAudioRetention.ts`): a call's audio whose newest chunk is older than its founder's retention goes, with reason `retention`, and its text stays. A run that is still moving is left for the next day.
+- `DELETE /sessions/:id` still removes both. An accepted finding stays, as the founder accepted it, and its record line reads "Source deleted" (`findingsFor`'s `source_deleted`).
+

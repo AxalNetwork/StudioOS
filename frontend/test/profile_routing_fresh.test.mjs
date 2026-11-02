@@ -15,6 +15,7 @@ import {
   outputs, parseRouteMap, parseSidebar, routesIn, workspacesFor,
 } from '../../scripts/build-profile-routing.mjs';
 import { unionArtifacts } from '../../scripts/lib/readmeUnion.mjs';
+import { readRouteMap } from '../../scripts/lib/routeMap.mjs';
 
 const read = (p) => readFileSync(resolve(p), 'utf8');
 
@@ -55,7 +56,7 @@ test('both generated docs carry the do-not-hand-edit stamp', () => {
 });
 
 test('ROUTE_MAP still parses to the full canvas corpus', () => {
-  const recs = parseRouteMap(read('documentation/architecture/ROUTE_MAP.md'));
+  const recs = parseRouteMap(readRouteMap());
   // The P−1 audit's corpus was 107 canonical canvases; ROUTE_MAP's own header
   // says so, and design/canvases/README.md repeats it. If a row is added the
   // number moves — that is fine, but it must move deliberately, so it is
@@ -164,7 +165,7 @@ test('ROUTE_MAP still parses to the full canvas corpus', () => {
   // row of those tables must come out as a record. A parser that quietly
   // stopped matching a header, or stopped partway through a table, still fails
   // here; a branch adding a row no longer edits this file.
-  const src = read('documentation/architecture/ROUTE_MAP.md');
+  const src = readRouteMap();
   const { tables, rows } = canvasTables(src);
   assert.ok(tables >= 5, `ROUTE_MAP has ${tables} canvas tables; it has had five since the P−1 audit`);
   // Mutation checked: drop a row's leading `| ` → the parser ends the table, rows < walked rows.
@@ -178,7 +179,7 @@ test('ROUTE_MAP still parses to the full canvas corpus', () => {
 });
 
 test('every canvas resolves to at least one workspace', () => {
-  const recs = parseRouteMap(read('documentation/architecture/ROUTE_MAP.md'));
+  const recs = parseRouteMap(readRouteMap());
   for (const r of recs) {
     assert.ok(workspacesFor(r.persona).length > 0, `persona "${r.persona}" mapped to nothing`);
   }
@@ -240,12 +241,16 @@ test('D1310: a conflict marker anywhere in ROUTE_MAP fails rather than ending a 
   assert.throws(() => parseRouteMap(marked), /line 4 is a conflict marker/);
 });
 
-test('D1310: ROUTE_MAP and its two projections merge with union, and carry nothing a union leaves', () => {
+test('D4102: the route map is fragments with no union; its two projections still merge with union', () => {
   // Whole lines, compared as text: no pattern is built from a path.
   const attrs = read('.gitattributes').split('\n').map((l) => l.trim());
-  for (const f of ['documentation/architecture/ROUTE_MAP.md', 'documentation/architecture/PROFILE_ROUTING.md', 'documentation/architecture/PAGE_INVENTORY.md']) {
-    // Mutation checked: drop the ROUTE_MAP line → every pair of row-adding branches conflicts again.
+  // Mutation checked: restore `ROUTE_MAP.md merge=union` → a pointer page that never changes would hide a stray edit.
+  assert.ok(!attrs.some((l) => l.startsWith('documentation/architecture/ROUTE_MAP.md ')), 'ROUTE_MAP.md is a pointer now (D4102): no merge rule');
+  assert.ok(!attrs.some((l) => l.startsWith('documentation/architecture/route-map')), 'route-map fragments merge as ordinary files: no union');
+  for (const f of ['documentation/architecture/PROFILE_ROUTING.md', 'documentation/architecture/PAGE_INVENTORY.md']) {
     assert.ok(attrs.includes(`${f} merge=union`), `${f} has no merge=union line`);
     assert.deepEqual(unionArtifacts(read(f)), [], `${f} carries what a union merge left (scripts/lib/readmeUnion.mjs)`);
   }
+  // The pointer page holds no canvas table: rows live in route-map/canvases/.
+  assert.doesNotMatch(read('documentation/architecture/ROUTE_MAP.md'), /^\| Canvas \| Persona \|/m);
 });
