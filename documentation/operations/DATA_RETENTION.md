@@ -42,6 +42,8 @@ The retention periods for generated assets are owner decision W (#3716), pending
 | `deck_share_conversions` | what a viewer did after a view | no cascade | none |
 | `deck_share_feedback` | feedback a viewer left on a shared deck | no cascade | none |
 | `deck_qa_answers` | the answer a founder kept for each investor question: its bindings and their values when kept, a note, the version (D1559) | venture cascade; the deck is set null when its version goes | none |
+| `deck_brand_kits` | a venture's deck brand kit over its landing page's: a font pair from the Google Fonts (OFL) list, the logo address, the palette roles, the image style, who last saved it (D1562) | venture cascade; the saver is set null when their account goes | none |
+| `deck_brand_kit_images` | the brand kit's image library: at most 24 public https image addresses with alt text, 3 of them references, and who added each (D1562) | venture cascade; the adder is set null when their account goes | none (addresses only; no bytes are stored) |
 | `deck_area_batches` | one generation run on a deck's areas or a whole-deck build: its state, quote, hold and what it charged (D1502) | deck cascade | none |
 | `deck_area_batch_steps` | each step of a run: the area, element, model, state, charge, input and result (D1502) | cascade from its run | none |
 | `deck_logos` | a venture's customer logos for the logo wall: the customer's name, the image, and the permission to show it (D1543) | venture cascade | none of its own (the image is a `deck_images` row) |
