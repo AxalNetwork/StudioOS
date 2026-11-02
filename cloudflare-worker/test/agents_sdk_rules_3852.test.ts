@@ -177,7 +177,9 @@ test('wiring: AGENT_SCOPE_SDK and the v6-agent-scope-sdk tag in all three tables
     const dos = sections.filter((x: any) => x.name === `${prefix}durable_objects.bindings` && unq(x.kv.get('name')) === 'AGENT_SCOPE_SDK');
     assert.deepEqual(dos.map((x: any) => unq(x.kv.get('class_name'))), ['ScopeAgent'], `${prefix || 'top'}: the binding`);
     const tags = sections.filter((x: any) => x.name === `${prefix}migrations`).map((x: any) => [unq(x.kv.get('tag')), x.kv.get('new_sqlite_classes')]);
-    assert.deepEqual(tags.slice(-2), [['v5-agent-scope', '["AgentScope"]'], ['v6-agent-scope-sdk', '["ScopeAgent"]']], `${prefix || 'top'}: append-only, after v5`);
+    // Append-only: v6 directly after v5. Later tags (D1581's v7-deck-remote) follow; they never move these.
+    const v5 = tags.findIndex(([t]) => t === 'v5-agent-scope');
+    assert.deepEqual(tags.slice(v5, v5 + 2), [['v5-agent-scope', '["AgentScope"]'], ['v6-agent-scope-sdk', '["ScopeAgent"]']], `${prefix || 'top'}: append-only, after v5`);
     const vars = sections.find((x: any) => x.name === `${prefix}vars`);
     assert.equal(unq(vars.kv.get('AGENT_RUNTIME')), 'do', `${prefix || 'top'}: the default is unchanged`);
   }

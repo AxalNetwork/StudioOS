@@ -1089,6 +1089,11 @@ decks.post('/share/:token/heartbeat', async (c) => {
     const row = await c.env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(parseInt(m[1])).first<any>();
     return row ? linkSentCards(c.env, row, link) : [];
   });
+  // D1568 (#3815): a read view of a prospect's link may signal a first view, a revisit or the ask reached.
+  try {
+    const { recordViewSignals } = await import('../services/raiseSignals');
+    await recordViewSignals(c.env, viewId, parseInt(m[1]), totals.map(([slide]) => slide));
+  } catch { /* a signal never fails a heartbeat */ }
   return c.json({ ok: true });
 });
 

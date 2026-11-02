@@ -135,7 +135,7 @@ function FixDialog({ projectId, version, row, search, onClose }) {
           {row.metrics ? <><dt className={MUTED}>Metrics</dt><dd className={`m-0 font-mono ${INK}`}>{row.metrics.shown} <span className={`font-sans ${MUTED}`}>· {row.metrics.source}</span></dd></> : null}
           {row.deck ? <><dt className={MUTED}>Deck</dt><dd className={`m-0 font-mono ${INK}`}>{row.deck.shown} <span className={`font-sans ${MUTED}`}>· {row.deck.source}</span></dd></> : null}
         </dl>
-        {state.status !== 'done' ? <button type="button" className={BTN} onClick={ask} disabled={state.status === 'busy'} data-testid="narrative-fix-ask">{state.status === 'busy' ? 'Phrasing…' : 'Ask Eadwyn to phrase it'}</button> : null}
+        {state.status !== 'done' ? <button type="button" className={BTN} onClick={ask} disabled={state.status === 'busy'} data-testid="narrative-fix-ask">{state.status === 'busy' ? 'Phrasing…' : 'Phrase it'}</button> : null}
         {state.error ? <p role="alert" className="m-0 text-[12.5px] text-red-700 dark:text-red-300" data-testid="narrative-fix-error">{state.error}</p> : null}
         {parts ? (
           <div className={`${LAVENDER} flex flex-col gap-2`} data-testid="narrative-fix-proposal">

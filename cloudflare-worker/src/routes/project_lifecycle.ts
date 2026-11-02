@@ -26,6 +26,7 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { isProjectManager, ensureProjectMembershipSchema } from '../services/projectAccess';
 import { membershipEvent } from '../services/companyMembershipEvents';
+import { afterMove, sponsorsLeft } from '../services/agents/transfer';
 import { ownerUserId, projectMoveStatements } from '../services/projectMove';
 import { checkSlug, slugHolder, retireSlug, projectPath } from '../services/slugs';
 import { refuse } from '../util/refusal';
@@ -80,6 +81,8 @@ r.post('/:id/move', async (c) => {
   }
   // D1415 Part 3: the one writer of `projects.company_id`, shared with the filing (`services/projectMove.ts`).
   await c.env.DB.batch(projectMoveStatements(c.env, { projectId: g.project.id, from, to, actorUserId: user.id, slug }));
+  // #3850 (E6): only once the batch committed: in-flight runs end `scope_moved`, the boards and teams are told.
+  await afterMove(c.env, { projectId: g.project.id, from, to, actorUserId: user.id });
   return c.json({ project_id: g.project.id, company_id: to, previous_company_id: from });
 });
 
@@ -162,6 +165,16 @@ r.post('/:id/transfer', async (c) => {
       before: { owner_user_id: previousOwner }, after: { owner_user_id: targetId },
     }),
   ]);
+  // #3850 (E6): the project's agents the previous owner sponsored pause `sponsor_left` when they can no longer manage the team.
+  try {
+    const { pauseAgent } = await import('../agents/engine');
+    const { canManage, loadScope } = await import('../services/agents/teams');
+    await sponsorsLeft(c.env, g.project.id, previousOwner, (env, agentId) => pauseAgent(env, agentId, 'sponsor_left'), async (env, userId) => {
+      const s = await loadScope(env, 'project', String(g.project.id));
+      const sponsor = await env.DB.prepare('SELECT * FROM users WHERE id = ? AND is_active = 1').bind(userId).first<any>();
+      return Boolean(s && sponsor && (await canManage(env, s, sponsor)));
+    });
+  } catch (e) { console.warn('[agents] sponsor_check_failed', (e as Error)?.name); }
   return c.json({ project_id: g.project.id, owner_user_id: targetId, previous_owner_user_id: previousOwner });
 });
 

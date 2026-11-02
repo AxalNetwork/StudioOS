@@ -223,8 +223,8 @@ export function BranchBoxes({ deps, links, naming }) {
         <p className="mt-3 text-[11px] leading-relaxed text-axal-faint" data-testid="h14-naming">
           Every branch names its own resources from its code: Worker and database <span className="font-mono">{naming.worker}</span>,
           host <span className="font-mono">{naming.hostname}</span>, queue <span className="font-mono">{naming.queue}</span>,
-          buckets <span className="font-mono">{Object.values(naming.r2 || {}).join(', ')}</span>, search index{' '}
-          <span className="font-mono">{naming.vectorize}</span>.
+          buckets <span className="font-mono">{Object.values(naming.r2 || {}).join(', ')}</span>, search indexes{' '}
+          <span className="font-mono">{typeof naming.vectorize === 'string' ? naming.vectorize : Object.values(naming.vectorize || {}).join(', ')}</span>.
         </p>
       )}
     </Card>
