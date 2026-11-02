@@ -101,7 +101,7 @@ test('it opens from the card\'s ⋯ and from ⋯ › This card; there is no head
   assert.doesNotMatch(read('frontend/src/pages/raise/pitch/DeckToolbar.jsx'), /comments/i, 'no header button');
   const editor = read('frontend/src/pages/raise/pitch/PitchEditor.jsx');
   assert.match(editor, /id === 'comments' && cards\[i\]\) \{ choose\(i\); setSheet\('comments'\); \}/);
-  assert.match(editor, /'remix', 'comments'\]\.includes\(id\)\) setSheet\(id\)/);
+  assert.match(editor, /if \(\[[^\]\n]*'comments'[^\]\n]*\]\.includes\(id\)\) setSheet\(id\)/);
 });
 
 test('no model and no Eadwyn anywhere in a thread', () => {

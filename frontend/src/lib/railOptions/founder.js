@@ -443,6 +443,9 @@ export const FOUNDER_QUIET_PAGES = {
 export const FOUNDER_ASK_CHIPS = [
   // D1420 (#3864): Eadwyn proposes layout changes as cards in the Ask panel; nothing changes until Accept.
   { page: 'Founder · Studio', route: '/studio', key: 'studio:layout', label: 'Arrange my Studio for this stage', kind: 'plan', handler: 'form' },
+  // D1583 (#3830): ⋯ › This deck › Teaser, one-pager or memo. Only the memo runs a model (`memo_write`), and the
+  // member picks it here, in the AIRail; the teaser and the one-pager are made by code and are not listed.
+  { page: 'Founder · Raise · Pitch deck', route: '/raise/pitch/edit', key: 'derive:memo', label: 'Write a memo from this deck', kind: 'memo', task: 'memo_write', handler: 'draft' },
   // D1530 (#3848, E4 of #3742): the goal planner. The Chief of staff agent (or the sponsor's own Eadwyn) proposes a goal's plan as tasks.
   { page: 'Founder · Studio', route: '/studio', key: 'propose:goal-plan', label: 'Draft a plan for this goal', kind: 'plan', handler: 'draft' },
 ];
