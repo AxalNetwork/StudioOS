@@ -123,36 +123,6 @@ export function rerankQuery(msgs: RecentMsg[]): string {
 /** A candidate as the reranker and Clef read it: its section and prompt. */
 const candidateText = (q: Question): string => `${q.section ? `[${q.section}] ` : ''}${q.prompt}`.slice(0, 300);
 
-/**
- * Strict JSON id extractor. Accepts:
- *   {"id":"foo.bar"}   — canonical
- *   {"id": "foo.bar"}  — whitespace
- *   ```json {"id":…} ``` — markdown-fenced (defensive against models
- *      that ignore "no markdown" instructions; we strip the fence).
- * Returns null on any parse failure or schema mismatch.
- */
-function parsePickedId(raw: string | undefined | null, allowed: Set<string>): string | null {
-  if (!raw) return null;
-  // Strip ``` fences if the model added them despite instructions.
-  let body = raw.trim();
-  if (body.startsWith('```')) {
-    body = body.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '');
-  }
-  // Some models prepend a sentence — try to grab the first {…} block.
-  const brace = body.indexOf('{');
-  const close = body.lastIndexOf('}');
-  if (brace >= 0 && close > brace) body = body.slice(brace, close + 1);
-
-  try {
-    const parsed = JSON.parse(body) as { id?: unknown };
-    const id = typeof parsed.id === 'string' ? parsed.id.trim() : null;
-    if (id && allowed.has(id)) return id;
-    return null;
-  } catch {
-    return null;
-  }
-}
-
 export function rerankDisabled(env: Env): boolean {
   const e = env as unknown as Record<string, string | undefined>;
   const v = e.ADVISOR_RERANK_DISABLED;
