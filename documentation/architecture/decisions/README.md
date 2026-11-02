@@ -11,10 +11,14 @@ PR touches. `D526.md` records the change.
 
 ## Adding a decision
 
-- **Name.** The file is `D<n>.md`, where `<n>` is the number your issue gives.
-  Never pick a number yourself; ask on the issue if it gives none.
+- **Name.** The file is `D<n>.md`. From D4106 on, `<n>` is your issue's own
+  number (issue #4102 records D4102), so nothing is reserved and two PRs never
+  pick the same one. An issue written before that which names a lower D number
+  keeps it. Never take "the next free number".
 - **Heading.** The first line is `## D<n> — <title>`, the same number as the
-  file name.
+  file name. From D4000 up it also cites the issue: `## D4102 — <title> (#4102)`.
+- **The gap.** Numbers from the highest an issue handed out (D1614 when D4106
+  landed) to D3999 stay unused.
 - **Body.** What a `DECISIONS.md` entry holds: what was decided and why, what
   it changed, what stays not built, and how it was verified.
 - **One decision per file.** Cite other decisions by number, such as D404 or
@@ -30,7 +34,9 @@ here but this README, and runs under `npm run test:drift`. It fails when:
   heading or holds more than one decision;
 - a file's first line is not `## D<n> — <title>`;
 - `DECISIONS.md` gains a heading above D525;
-- a file here is numbered at or below D525, or is not named `D<n>.md`.
+- a file here is numbered at or below D525, or is not named `D<n>.md`;
+- a file numbered D4000 or above whose first line does not cite `#<n>`, its
+  own issue (D4106).
 
 Tests read an entry through `readDecision(id)` in `frontend/test/_decisions.mjs`,
 which finds it in either place.

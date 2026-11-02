@@ -173,6 +173,6 @@ test('the states: a teammate reads only; no link, disconnected, unreadable with 
 test('wiring: the client hits the Worker routes and is one line in api.js', () => {
   const client = readFileSync(new URL('../src/lib/api/posthog.js', import.meta.url), 'utf8');
   for (const path of ['/posthog-insights?project=', '/posthog?project=', '/posthog/tracked', '/posthog/facts/', '/posthog/proposals/']) assert.ok(client.includes(path), path);
-  const api = readFileSync(new URL('../src/lib/api.js', import.meta.url), 'utf8');
+  const api = readFileSync(new URL('../src/lib/apiModules.generated.js', import.meta.url), 'utf8');
   assert.match(api, /^export \* from '\.\/api\/posthog\.js';$/m);
 });

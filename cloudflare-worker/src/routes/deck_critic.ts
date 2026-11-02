@@ -52,7 +52,7 @@ import { NEW_DECK_RAIL } from './deck_new';
 const deckCritic = new Hono<{ Bindings: Env }>();
 const today = () => new Date().toISOString().slice(0, 10);
 
-type Ask = { deckId: number; projectId: number; deck: any; row: any; project: any; investorType: string | null; stage: string | null };
+export type Ask = { deckId: number; projectId: number; deck: any; row: any; project: any; investorType: string | null; stage: string | null };
 
 async function askOf(c: any, user: User): Promise<{ ask: Ask } | { refused: Response }> {
   const body = await c.req.json().catch(() => ({} as any));
@@ -93,8 +93,8 @@ function candidates(): string[] {
   return ids.length ? ids : [...(ROUTE.rail_reason.alternates ?? [ROUTE.rail_reason.model])];
 }
 
-/** Everything the critic reads, and the free findings. */
-async function readAll(c: any, user: User, a: Ask) {
+/** Everything the critic reads, and the free findings. D1559's likely questions (`deck_qa.ts`) read the same. */
+export async function readAll(c: any, user: User, a: Ask) {
   const plan = await stagePlan(c.env, {
     projectId: a.projectId, slides: a.deck.slides, audience: a.deck.audience, stage: a.stage, investorType: a.investorType,
     mercury: await mercuryFor(c, user, a.project ?? { founder_id: null, company_id: null }), today: today(),
