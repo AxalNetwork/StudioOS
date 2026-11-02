@@ -35,6 +35,7 @@ import { spendLimitMessage } from './aiSpendLimit';
 import { audioInputFor, parseAudioOutput, type SttTranscript } from './sttFormats';
 import * as shapes from './ai/shapes';
 import * as catalogue from './ai/catalogue';
+import { catalogueSwitchesFor, modelsOffFor } from './featureFlags';
 import { costMicro, unitPrice } from './ai/pricing';
 import * as guard from './ai/guard';
 import { resolveRail, resolveRailChain, resolveRailOption, rowOffers } from './ai/railMatrix';
@@ -110,6 +111,8 @@ export type TaskClass =
   | 'mail_draft'
   // D1420 (#3864): Eadwyn's layout proposals for /studio (`studio:layout`).
   | 'studio_layout'
+  // D1583 (#3830): a memo written from a deck's own words, around its figures' placeholders.
+  | 'memo_write'
   // D764 (#2089) — the rail's fourteen kinds of work, one task each. The
   // page's row in `ai/railMatrix.json` names the models a member may pick;
   // the entries below are each kind's default and its alternates.
@@ -235,6 +238,11 @@ export interface RunOptions {
   // primary: reporting success under a model the caller did not ask for is
   // the class of lie this router exists to avoid.
   model?: string;
+  // D1549 (#3796): `model` and nothing else. The run is refused when the
+  // router would choose another primary, and a failure falls back to no
+  // sibling. A deck element HQ locked runs pinned, so a model HQ locked out
+  // is never run, not even as a fallback.
+  pinned?: boolean;
   // The app path the run was asked from (`/validate/customer-research`), written to
   // `ai_usage_logs.surface` (migration 319, D404) so a page can show its own
   // spend. Optional, and absent for every internal caller: NULL is "not
@@ -783,6 +791,15 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
     model: MID_LLAMA,
     fallbackChain: [SMALL_LLAMA],
     alternates: [MID_LLAMA, SMALL_LLAMA, '@cf/meta/llama-3.2-3b-instruct'],
+  },
+  // D1583 (#3830, deck v2 F4): the memo from a deck. Its option kind `memo` reads the IC
+  // memo job (IN1, `ai/modelUseCases.ts` RAIL_KIND_JOBS): gpt-oss-120b by default, DeepSeek V4
+  // Pro and Nemotron 3 120B the member's other picks in the AIRail (`derive:memo`). No cache: the version is read at the press.
+  memo_write: {
+    provider: 'workers-ai',
+    model: '@cf/openai/gpt-oss-120b',
+    fallbackChain: ['@cf/nvidia/nemotron-3-120b-a12b'],
+    alternates: ['@cf/openai/gpt-oss-120b', '@cf/deepseek-ai/deepseek-v4-pro-0813', '@cf/nvidia/nemotron-3-120b-a12b'],
   },
   // D1420 (#3864): Eadwyn proposes a Studio layout as add, remove, resize and
   // move ops. Its own class, so the pricing read and Usage name it apart; a mid
@@ -1829,7 +1846,18 @@ export interface DrawReceipt { job: string; source: DrawSource; skipped: null | 
 /** #3936: how a speech job's model was chosen, for the receipt, as a draw job's is. */
 export interface SpeechReceipt { job: string; source: SpeechSource; skipped: null | { model: string; reason: SpeechSkip } }
 
+/** D1549: a pinned run's choice is its caller's model alone, with no fallback chain, or a refusal. */
+function pinnedChoice(choice: ModelChoice, opts: RunOptions): ModelChoice {
+  if (!opts.pinned || !choice.ok) return choice;
+  if (!opts.model || choice.primary !== opts.model) {
+    return { ok: false, refusal: 'model_not_offered', error: `${opts.model ?? 'No model'} is the only model this run may use, and it cannot run ${opts.task}`, record: true };
+  }
+  return { ...choice, chain: [] };
+}
+
 async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Promise<ModelChoice> {
+  // D1509 (#3760): the models HQ switched off for this member are not offered, here as in every reply.
+  const switches = catalogueSwitchesFor(env as catalogue.CatalogueSwitches, { modelsOff: await modelsOffFor(env, opts.userId) });
   // ---- #3935 (D1478 task 1): a draw job's model ------------------------------
   if (opts.draw && opts.drawJob) {
     let pick: string | null = null;
@@ -1839,7 +1867,7 @@ async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Prom
       if (optionRow && !opts.model) pick = (await railPicks(env, opts.userId, optionRow.pageKey, optionRow.optionKey)).option;
       tier = await memberPlanTier(env, opts.userId);
     } catch { return { ok: false, refusal: 'misconfigured', error: 'Unreadable: your plan or your model picks could not be read. Nothing was run.', record: false }; }
-    const c = drawChoice(opts.drawJob, { switches: env as catalogue.CatalogueSwitches, tier, caller: opts.model ?? null, pick });
+    const c = drawChoice(opts.drawJob, { switches, tier, caller: opts.model ?? null, pick });
     if (!c.ok) return { ok: false, refusal: c.code === 'plan_locked' ? 'plan_locked' : 'model_not_offered', error: c.message, record: c.code !== 'press_hidden' };
     // An image is never redrawn on another model: no chain.
     return { ok: true, primary: c.model, chain: [], draw: { job: c.job, source: c.source, skipped: c.skipped } };
@@ -1856,7 +1884,7 @@ async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Prom
       if (optionRow && !opts.model) pick = (await railPicks(env, opts.userId, optionRow.pageKey, optionRow.optionKey)).option;
       tier = await memberPlanTier(env, opts.userId);
     } catch { return { ok: false, refusal: 'misconfigured', error: 'Unreadable: your plan or your model picks could not be read. Nothing was run.', record: false }; }
-    const c = speechChoice(opts.speechJob, { switches: env as catalogue.CatalogueSwitches, tier, caller: opts.model ?? null, pick });
+    const c = speechChoice(opts.speechJob, { switches, tier, caller: opts.model ?? null, pick });
     if (!c.ok) return { ok: false, refusal: c.code === 'plan_locked' ? 'plan_locked' : 'model_not_offered', error: c.message, record: c.code !== 'press_hidden' };
     // One voice, one transcription: never re-run on another model mid-press.
     return { ok: true, primary: c.model, chain: [], speech: { job: c.job, source: c.source, skipped: c.skipped } };
@@ -1879,7 +1907,7 @@ async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Prom
     let picks: { page: string | null; option: string | null };
     try { picks = await railPicks(env, opts.userId, railRow.pageKey, opts.rail.option ?? null); }
     catch { return { ok: false, refusal: 'misconfigured', error: 'Unreadable: your model picks for this page could not be read. Nothing was run.', record: false }; }
-    const resolved = resolveRailChain(railRow, { vision: (opts.images?.length ?? 0) > 0 }, env as catalogue.CatalogueSwitches, {
+    const resolved = resolveRailChain(railRow, { vision: (opts.images?.length ?? 0) > 0 }, switches, {
       caller: opts.model ?? null, option: picks.option, page: picks.page,
     });
     if (resolved && !resolved.ok) return { ok: false, refusal: 'model_not_offered', error: `${resolved.model} cannot do this page's work`, record: true };
@@ -1899,7 +1927,7 @@ async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Prom
       const takes = (id: string | null | undefined): id is string => {
         if (!id || !rowOffers(row, id) || !route.alternates!.includes(id)) return false;
         const m = catalogue.modelById(id);
-        return !!m && catalogue.isOffered(m, env as catalogue.CatalogueSwitches);
+        return !!m && catalogue.isOffered(m, switches);
       };
       // The route's own chain when its default runs, so a run with no pick behaves as before.
       const chainAfter = (primary: string) => (opts.draw ? []
@@ -1920,7 +1948,15 @@ async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Prom
   if (!railed && opts.model && !offered.includes(opts.model)) {
     return { ok: false, refusal: 'model_not_offered', error: `${opts.model} is not offered for ${opts.task}`, record: true };
   }
-  return railed ? { ok: true, ...railed } : { ok: true, primary: opts.model || route.model, chain: route.fallbackChain ?? [] };
+  if (railed) return { ok: true, ...railed };
+  // D1509: a switched-off model never runs: the caller's is refused, the route's default gives way to its chain.
+  if (opts.model && catalogue.switchedOff(opts.model, switches)) {
+    return { ok: false, refusal: 'model_not_offered', error: `${opts.model} is switched off`, record: true };
+  }
+  const chain = (route.fallbackChain ?? []).filter((id) => !catalogue.switchedOff(id, switches));
+  if (opts.model || !catalogue.switchedOff(route.model, switches)) return { ok: true, primary: opts.model || route.model, chain };
+  if (!chain.length) return { ok: false, refusal: 'model_not_offered', error: `Every model for ${opts.task} is switched off`, record: true };
+  return { ok: true, primary: chain[0], chain: chain.slice(1) };
 }
 
 /**
@@ -1985,7 +2021,7 @@ export async function quoteRun(env: Env, input: RunOptions): Promise<RunQuote> {
     try { if (await assistOff(env, opts.userId, opts.rail.page)) return { ok: false, refusal: 'assist_off', error: ASSIST_OFF_MESSAGE }; }
     catch { return { ok: false, refusal: 'misconfigured', error: 'Unreadable: whether AI assistance is on for this page could not be checked.' }; }
   }
-  const choice = await chooseModels(env, opts, route);
+  const choice = pinnedChoice(await chooseModels(env, opts, route), opts);
   if (!choice.ok) return { ok: false, refusal: choice.refusal, error: choice.error };
   const models = [choice.primary, ...choice.chain];
   for (const model of models) {
@@ -2061,7 +2097,7 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
   }
 
   // ---- D764 PR 3: a rail run's models come from its page's row (`chooseModels`).
-  const choice = await chooseModels(env, opts, route);
+  const choice = pinnedChoice(await chooseModels(env, opts, route), opts);
   if (!choice.ok) {
     const usage: UsageMeta = {
       task: opts.task, model: route.model, latency_ms: 0,

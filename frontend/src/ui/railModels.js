@@ -64,6 +64,8 @@ export const MODEL_COPY = {
   '@cf/cloudflare/clef-flash': { name: 'Clef Flash' },
   '@cf/huggingface/distilbert-sst-2-int8': { name: 'DistilBERT SST-2' },
   '@cf/daily-co/phonellm-mini-alpha-2': { name: 'PhoneLLM Mini' },
+  // D1583 (#3830): `memo_write`'s pick from the IC memo job (IN1).
+  '@cf/nvidia/nemotron-3-120b-a12b': { name: 'Nemotron 3 120B' },
 };
 
 /** The guard: listed under Safety, never picked. */
@@ -88,7 +90,7 @@ export const ALL_MODELS = [
   ]],
   ['Reasoning', [
     R('GPT-OSS 120B', '@cf/openai/gpt-oss-120b'), R('DeepSeek V4 Pro', '@cf/deepseek-ai/deepseek-v4-pro-0813'), R('DeepSeek V4 Flash', '@cf/deepseek-ai/deepseek-v4-flash-0731'), R('GLM-5.3'),
-    R('Nemotron 3 120B'), R('Qwen3.8 27B'), R('QwQ 32B', '@cf/qwen/qwq-32b'), R('Kimi K2.6', '@cf/moonshotai/kimi-k2.6'),
+    R('Nemotron 3 120B', '@cf/nvidia/nemotron-3-120b-a12b'), R('Qwen3.8 27B'), R('QwQ 32B', '@cf/qwen/qwq-32b'), R('Kimi K2.6', '@cf/moonshotai/kimi-k2.6'),
     R('Clef', '@cf/cloudflare/clef'), R('Clef Flash', '@cf/cloudflare/clef-flash'), R('DistilBERT SST-2', '@cf/huggingface/distilbert-sst-2-int8'),
   ]],
   ['Code', [R('Kimi K2.7 Code', '@cf/moonshotai/kimi-k2.7-code'), R('Qwen2.5 Coder 32B', '@cf/qwen/qwen2.5-coder-32b-instruct')]],

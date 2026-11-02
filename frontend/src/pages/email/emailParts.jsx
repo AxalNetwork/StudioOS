@@ -17,9 +17,15 @@ export const EYEBROW = 'text-[11px] font-bold uppercase tracking-wider text-axal
 export const ERROR = 'rounded-axal-md border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300';
 
 /** EM4: the one Email button, on every record with a person. A record with no person draws nothing. */
-export function EmailAction({ person, from = null, className = BTN }) {
+// #4017: with `onOpen`, a plain click opens the composer in the right Sheet
+// over the page; the link stays a link, so a new tab still reaches `/email`.
+export function EmailAction({ person, from = null, className = BTN, onOpen = null }) {
   if (!person) return null;
-  return <Link to={emailHref(person, from)} className={className} data-testid="email-action" aria-label="Email this person">
+  const click = onOpen ? (e) => {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault(); onOpen();
+  } : undefined;
+  return <Link to={emailHref(person, from)} onClick={click} className={className} data-testid="email-action" aria-label="Email this person">
     <span aria-hidden="true">✉</span> Email
   </Link>;
 }

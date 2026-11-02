@@ -47,7 +47,9 @@ test('the Email action shows only on a record with a person', () => {
   // The action is mounted once, in the record route, for every record body.
   // D1454 (#3710, IV-D1): it goes into the record's one action row (after Ask), never a row of its own.
   const route = readFileSync(new URL('../src/pages/cycles/CycleRoute.jsx', import.meta.url), 'utf8');
-  assert.match(route, /<RecordHeaderProvider[\s\S]*?email=\{recordState\.data && personOfRecord\(cycle, slug, recordId\)\s*\?\s*<EmailAction person=\{personOfRecord\(cycle, slug, recordId\)\}/);
+  // #4017: the person is read once (`emailPerson`), and Email opens the composer in the Sheet over the record.
+  assert.match(route, /const emailPerson = recordState\.data \? personOfRecord\(cycle, slug, recordId\) : null;/);
+  assert.match(route, /<RecordHeaderProvider[\s\S]*?email=\{emailPerson \? <EmailAction person=\{emailPerson\}/);
   assert.doesNotMatch(route, /<div className="flex justify-end">\s*<EmailAction/, 'no lone Email row');
 });
 
