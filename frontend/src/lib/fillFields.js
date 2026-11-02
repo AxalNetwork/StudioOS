@@ -25,6 +25,8 @@ const CATALOG = 'Operating Partner · Offers · Catalog';
 const PERK_DEALS = 'Operating Partner · Offers · Perk deals';
 // #4046 (#3740 2b): the deal page's Notes tab.
 const DEAL_ROOM = 'Investor · Deals · Deal room';
+// #4046 (B2): a member's answers to a product-testing programme's questions, in Studio.
+const TESTING = 'Member · Studio · Product testing';
 const SOLUTION_DESIGN = 'Founder · Build · Solution design';
 const REVENUE = 'Founder · Grow · Revenue and traction';
 const PROBLEM = 'Founder · Validate · Problem discovery';
@@ -87,7 +89,8 @@ export const FILL_FIELDS = Object.freeze([
   // AF19: a status report's Done and Next, from the engagement record at no AI tokens.
   { page: REPORTING, form: 'status-report', field: 'shipped', label: 'Done this week', table: 'engagement_status_reports', column: 'shipped', class: 'restatement', sources: ['module:delivery/engagement'] },
   { page: REPORTING, form: 'status-report', field: 'next_up', label: 'Next week', table: 'engagement_status_reports', column: 'next_up', class: 'restatement', sources: ['module:delivery/engagement'] },
-  // AF20: an event's content, never its approval, times, capacity or price.
+  // AF20: an event's content, never its approval, times, capacity or price. #4046 (B2): its title too.
+  { page: EVENTS, form: 'event', field: 'title', label: 'Title', table: 'events', column: 'title', class: 'composition', sources: ['eadwyn'] },
   { page: EVENTS, form: 'event', field: 'description', label: 'Description', table: 'events', column: 'description', class: 'composition', sources: ['eadwyn'] },
   { page: EVENTS, form: 'agenda-item', field: 'title', label: 'Session', table: 'event_agenda_items', column: 'title', class: 'composition', sources: ['eadwyn'] },
   { page: EVENTS, form: 'agenda-item', field: 'description', label: 'What happens', table: 'event_agenda_items', column: 'description', class: 'composition', sources: ['eadwyn'] },
@@ -99,6 +102,8 @@ export const FILL_FIELDS = Object.freeze([
   { page: PERK_DEALS, form: 'perk', field: 'blurb', label: 'One line founders see on the card', table: 'perks', column: 'blurb', class: 'composition', sources: ['eadwyn'] },
   // #4046: a firm's private note on a deal, its words only. Its tag is the investor's own call, so it has no entry.
   { page: DEAL_ROOM, form: 'deal-note', field: 'body', label: 'Note', table: 'deal_notes', column: 'body', class: 'composition', sources: ['eadwyn'] },
+  // #4046 (B2): a member's answers to a programme's questions (at most five), their own words; never availability or consent.
+  ...[1, 2, 3, 4, 5].map((n) => ({ page: TESTING, form: 'testing-answers', field: `answer_${n}`, label: `Answer ${n}`, table: 'testing_applications', column: `answer_${n}`, class: 'composition', sources: ['eadwyn'] })),
 ].map((f) => Object.freeze({ ...f, sources: Object.freeze([...f.sources]) })));
 
 /** The fields of one form, in the form's order. */

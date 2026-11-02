@@ -72,3 +72,27 @@ the DD memo's parts are encrypted at rest (`dd_case_memos.*_enc`) while
 paper's open fields are merge values of a preview, not a stored column, and
 the non-money ones are names and dates; the data room's "Eadwyn proposals"
 are actions (a match, a folder), not field values.
+
+**#4046 Group B2, the owner's calls 2 and 5.** Two forms join, composition only.
+- **`/events/new`:** the event form's Title joins its Description
+  (`events.title`, on the edit page as well). A new event hangs under the
+  caller, its host (`events`' parent is `owner`, `ownUserId`, because `POST
+  /api/events` makes the caller the host). Any profile the page admits may
+  draft one. The run reads the host's own last event titles and nothing else.
+  The Save and Publish paths record against the new event's id. An event's
+  times, capacity, price, visibility and approval are never listed.
+- **A product-testing programme's answers** (`Member · Studio · Product
+  testing` / `testing-answers`): `answer_1` to `answer_5` on
+  `testing_applications`. The scope's read lays out `answers` (a JSON list)
+  one column per answer, so the record step compares each one.
+  - A new application hangs under the programme (`programme`), for a member
+    `apply` would take now (`../testing.ts` `mayApplyTo`). Anyone else is
+    told it does not exist (concealed).
+  - The run reads the programme's questions, its firm and what the test asks,
+    and the member's own role and headline. It never reads another tester's
+    answers. It asks only the programme's own questions: `FormGather.only`,
+    applied in `rail_run.ts` before any quote. It adds one line on voice
+    (`FormGather.guide`): the member's own words, with no claim they did not give.
+  - After Apply, the record step keeps what still equals each placed answer. An
+    Undo is always refused (`no_prior`), because the firm reads what was sent.
+  - Availability and the email consent are never listed.
