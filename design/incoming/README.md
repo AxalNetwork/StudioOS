@@ -121,6 +121,14 @@ The owner's two artifacts for #4152 (boards ST1–ST6), decoded by
   `st6f`; a `-d` suffix is dark);
 - `Settings · Boards.dc.html` is the board grid, ST1 to ST6. It imports the
   page by name.
+## Landed 2026-11-02 — Learning on Stream (#3726)
+
+The owner's two artifacts for #3726 (boards LR1–LR21), decoded by
+`scripts/read-canvas.mjs`:
+- `Learning Stream Page.dc.html` is the page, one frame per `v` value (`lr1`
+  to `lr21b`; a `-d` suffix is dark);
+- `Learning Stream · Boards.dc.html` is the board grid, LR1 to LR21. It
+  imports the page by name.
 ## Landed 2026-11-02 — Calendar admin scopes (#4154)
 
 The owner's two artifacts for #4154 (boards CA1–CA5), decoded by
@@ -137,6 +145,11 @@ at `/axal-mark.png`, as in the earlier intakes. No other value was edited.
 One "Settings" entry, Portfolio in the main navigation, Billing in the Account
 menu, and one header and one General form per company. The logo upload waits
 for G1 (#4201).
+**Grade: EXTENDS D562 (D3726).** The home's progress strip, New this week and
+Recommended; the player's resume, position writes, chapters and plain
+transcript; and a member's own program page at
+`/learning/my-programs/:program`. Stream itself, the studio, analytics and
+the list reads wait for L1–L6 (#4176–#4181) and say so.
 **Grade: EXTENDS the Calendar (D4154).** The Mine · Studio · Platform switcher
 and the read-only staff views over the scoped read D1206 already serves. Each
 item's owner, company, studio and link wait for C1 (#4196) and say so.

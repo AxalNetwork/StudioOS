@@ -16,7 +16,9 @@ import { suggestAudienceAndGoal, getRecommendedTemplatesForAudience, generateIni
 import { AssistLayout } from '../ui';
 import { useRailOption } from '../ui/railCrumbs';
 import BrandPagesSection from './founder/BrandPagesSection.jsx';
-import { keptProposals, proposalsFrom } from '../lib/brand/proposals.js';
+import { keptProposals, placeAsk, placeAskContent, proposalsFrom } from '../lib/brand/proposals.js';
+import { FillFormTrigger, FillMark } from '../ui/FillMark.jsx';
+import useAssistMode from '../hooks/useAssistMode.js';
 
 // Task #24 — Brand & landing page generator.
 // Task #2 — Reworked into the audience-first flow:
@@ -62,11 +64,19 @@ export default function BrandBuilderPage() {
   const [description, setDescription] = useState('');
   const [sector, setSector] = useState('');
   const [autofillBusy, setAutofillBusy] = useState(false);
-  // D1324 (#3485): what the last "Auto-fill with AI" proposed, until a Save records it.
+  // D1324 (#3485): what the last Ask proposed, until a Save records it.
   const [aiProposed, setAiProposed] = useState({});
   const aiModel = useRef(null);
+  // #4046 B3: what the page put in a field itself (step 2's kit copy, and what Ask placed, AI or not):
+  // a field still holding it is open to the next Ask. `askContent` is the same for template sections.
+  const askOpen = useRef({});
+  const askContent = useRef({});
+  // A value Ask placed reads "Not saved" until the founder saves or types over it.
+  const [askPlaced, setAskPlaced] = useState({});
+  const placedMark = (f) => (askPlaced[f] && String(draft?.[f] ?? '').trim() === String(askPlaced[f]).trim()
+    ? <span className="block" data-testid={`brand-placed-${f}`}><FillMark mark={null} placed /></span> : null);
   // A proposal belongs to the venture it was drafted for: another venture's Save never files it.
-  useEffect(() => { setAiProposed({}); aiModel.current = null; }, [projectId]);
+  useEffect(() => { setAiProposed({}); aiModel.current = null; setAskPlaced({}); askOpen.current = {}; askContent.current = {}; }, [projectId]);
   const [busy, setBusy] = useState(false);
   const [logoBusy, setLogoBusy] = useState(false);
   const [error, setError] = useState('');
@@ -106,7 +116,9 @@ export default function BrandBuilderPage() {
   const [taglineInputs, setTaglineInputs] = useState({ audience: '', tone: 'bold', marketAngle: 'innovation' });
   const [uploadBusy, setUploadBusy] = useState(false);
   // D771 (#2097): each press that runs a model names itself to the rail while it runs.
-  useRailOption(autofillBusy ? 'form:landing' : null, 'Auto-fill with AI');
+  // #4046 B3: the page's one Ask (it was "Auto-fill with AI"); its AI switch is the page's own.
+  useRailOption(autofillBusy ? 'form:landing' : null, 'Ask');
+  const [aiOn] = useAssistMode(decodeURIComponent(railPageHeaders()['X-Rail-Page'] || '') || 'Founder · Grow · Distribution');
   useRailOption(logoBusy ? 'draft:logo' : null, 'Regenerate logo');
   useRailOption(paletteBusy ? 'form:palette' : null, 'Suggest AI palette');
   useRailOption(taglineBusy ? 'draft:taglines' : null, 'Iterate');
@@ -272,6 +284,8 @@ export default function BrandBuilderPage() {
         : leavingSig
           ? { theme_color: '#7c3aed', palette_bg: '#faf7ff', palette_ink: '#1b1430', palette_secondary: '#c4b5fd', palette_accent: '#f59e0b' }
           : {};
+      // #4046 B3: the kit's copy is the page's, not the founder's: Ask may replace it while it stands.
+      askOpen.current = { ...askOpen.current, cta_text: kit.ctaLabel || d.cta_text, headline: kit.headline, subheadline: kit.subheadline, ...(d.name ? {} : { name: kit.brandName }) };
       return {
         ...d,
         ...palettePatch,
@@ -314,17 +328,25 @@ export default function BrandBuilderPage() {
         template: key,
       }, fillHeaders('form:landing'));
       if (activeForm.current !== form) return;
-      const merged = { ...defaultsForKey(key), ...((r && r.content) || {}) };
-      setAiProposed(proposalsFrom(r));
-      aiModel.current = r?.ai_generated === true && r?.model ? String(r.model) : null;
+      // #4046 B3: the standard Ask fills open fields only; what the founder wrote stays theirs.
+      const placed = placeAsk(draft, r, askOpen.current);
+      askOpen.current = { ...askOpen.current, ...placed };
+      setAskPlaced((old) => ({ ...old, ...placed }));
+      // D1324: provenance is Eadwyn's words only, each filed under the model that wrote it. A run by another
+      // model files only its own; a heuristic run (no model) leaves what an earlier run proposed as it was.
+      const model = r?.ai_generated === true && r?.model ? String(r.model) : null;
+      const fresh = Object.fromEntries(Object.entries(proposalsFrom(r)).filter(([f]) => f in placed));
+      if (model && Object.keys(fresh).length) {
+        if (model === aiModel.current) setAiProposed((old) => ({ ...old, ...fresh }));
+        else { setAiProposed(fresh); aiModel.current = model; }
+      }
+      const prevContent = askContent.current[key] || {};
+      askContent.current = { ...askContent.current, [key]: { ...prevContent, ...((r && r.content) || {}) } };
       setDraft((d) => ({
         ...d,
-        name: r?.name || d.name,
-        headline: r?.headline || d.headline,
-        subheadline: r?.subheadline || d.subheadline,
-        tagline: r?.tagline || d.tagline,
-        cta_text: r?.cta_text || d.cta_text,
-        content_json: { ...(d.content_json || {}), [key]: merged },
+        // A field typed into while Ask ran is the founder's: it keeps what they typed.
+        ...Object.fromEntries(Object.entries(placed).filter(([f]) => String(d[f] ?? '') === String(draft[f] ?? ''))),
+        content_json: { ...(d.content_json || {}), [key]: placeAskContent(d.content_json?.[key], defaultsForKey(key), (r && r.content) || {}, prevContent) },
       }));
     } catch (e) { setError(e?.message || 'Auto-fill failed'); }
     finally { setAutofillBusy(false); }
@@ -350,6 +372,7 @@ export default function BrandBuilderPage() {
       const lp = await api.brandSaveLanding(projectId, Object.keys(kept).length ? { ...draft, ai_proposals: kept, ai_model: aiModel.current } : draft);
       setLanding(lp);
       setAiProposed({});
+      setAskPlaced({});
       // Spin-Out Lab — Week 2 brand basics: name + tagline + primary colour.
       if (draft.name.trim() && (draft.tagline || '').trim() && draft.theme_color) {
         await markMilestone(user, 'brand_basics_filled');
@@ -676,20 +699,15 @@ export default function BrandBuilderPage() {
             <PenLine size={15} className="text-violet-600" /> 3. Brand & page content
           </h2>
 
-          {/* Task #3 — one-click AI auto-fill: writes hero copy + the selected
-              template's content fields from the project name, sector & step-1
-              description. Leaves those three inputs untouched. */}
-          <div className="border border-gray-200 rounded-lg p-3 mb-4 dark:border-gray-800">
+          {/* #4046 B3: the page's one Ask (it was "Auto-fill with AI"). It drafts the hero copy and the
+              template's sections from the startup's name, sector and step-1 description, into open
+              fields only; each placed value reads "Not saved" until Save, which records what was kept. */}
+          <div className="border border-gray-200 rounded-lg p-3 mb-4 dark:border-gray-800" data-testid="brand-ask">
             <div className="flex items-center justify-between gap-2 flex-wrap">
-              <span className="text-[11px] font-medium text-gray-600 dark:text-gray-400">Auto-fill page copy from your startup name, sector & description.</span>
-              <button
-                onClick={autofill}
-                disabled={autofillBusy || !projectId}
-                className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg disabled:opacity-50"
-              >
-                {autofillBusy ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-                Auto-fill with AI
-              </button>
+              <span className="text-[11px] font-medium text-gray-600 dark:text-gray-400">
+                {autofillBusy ? 'Eadwyn is drafting the page copy…' : 'Ask drafts the page copy from your startup’s name, sector and description. It fills blank fields only; what you wrote stays.'}
+              </span>
+              <FillFormTrigger aiOff={!aiOn} onOpen={autofill} disabled={autofillBusy || !projectId} />
             </div>
           </div>
 
@@ -808,16 +826,19 @@ export default function BrandBuilderPage() {
               </p>
             </div>
             <div className="sm:col-span-2 space-y-3">
+              {placedMark('name')}
               <input
                 value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })}
                 placeholder="Brand name"
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
               />
+              {placedMark('headline')}
               <input
                 value={draft.headline} onChange={(e) => setDraft({ ...draft, headline: e.target.value })}
                 placeholder="Headline"
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
               />
+              {placedMark('subheadline')}
               <textarea
                 value={draft.subheadline} onChange={(e) => setDraft({ ...draft, subheadline: e.target.value })}
                 rows={2} placeholder="Subheadline"
@@ -826,7 +847,8 @@ export default function BrandBuilderPage() {
               {/* Tagline iterator */}
               <div className="border border-gray-200 rounded-lg p-3 dark:border-gray-800">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] font-medium text-gray-600 dark:text-gray-400">Tagline iterator</span>
+                  <span className="text-[11px] font-medium text-gray-600 dark:text-gray-400">Tagline iterator{draft.tagline ? ` · ${draft.tagline}` : ''}</span>
+                  {placedMark('tagline')}
                   <button
                     onClick={() => { setShowTaglineIterator((v) => !v); if (!showTaglineIterator) suggestTaglines(); }}
                     disabled={taglineBusy}
@@ -886,6 +908,7 @@ export default function BrandBuilderPage() {
                   </div>
                 )}
               </div>
+              {placedMark('cta_text')}
               <input
                 value={draft.cta_text} onChange={(e) => setDraft({ ...draft, cta_text: e.target.value })}
                 placeholder="CTA button text"

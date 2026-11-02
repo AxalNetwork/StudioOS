@@ -54,6 +54,10 @@ when adding a kind.
   flags near matches.
 - `items.ts`: page-only drawer fields for calendar items. Feed and provider
   projections keep their separate, smaller event shape.
+- `scopeFacts.ts`: D4154 C1 (#4196), what a staff-scope item says about where
+  it lives: `owner` by name (never an email), `company` from one batched
+  lookup, `where`, `open_href` (a link, never a write) and, on `scope=all`,
+  `studio` (HQ-held). A failed lookup leaves the field null.
 - `itemRead.ts`: one item for the drawer (the page read's own reader and
   description, people by name only), and a Meet link made at create that becomes
   the creator's Google copy.

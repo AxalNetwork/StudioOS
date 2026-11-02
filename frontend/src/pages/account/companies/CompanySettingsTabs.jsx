@@ -13,6 +13,7 @@ import {
 } from './companiesModel';
 import { CompanyMark, EYEBROW, Fact, FactList, Failed, INK, LINK, MUTED, PCard, ProjectMark, Reading } from './portfolioUi.jsx';
 import LegalSheet from './LegalSheet.jsx';
+import ComplianceCard from '../../work/ComplianceCard.jsx';
 
 /**
  * D1413 (#3696, PF6a, PF6c, PF8a) — Company settings, by tab, under
@@ -216,7 +217,8 @@ export default function CompanySettingsTabs({ tab }) {
     <div className="mx-auto flex max-w-5xl flex-col gap-4 px-4 pb-8 pt-6 md:px-7" data-testid={`company-settings-${tab}`}>
       <SettingsHead uid={uid} name={name} tab={tab} />
       {detail.status === 'error' ? <Failed what="This company" onRetry={reread} testId="company-settings-unread" /> : null}
-      {tab === 'legal' ? <LegalTab uid={uid} name={name} /> : null}
+      {/* D1614 (#3976): the company's compliance tasks sit under Legal, a block that fails alone. */}
+      {tab === 'legal' ? <><LegalTab uid={uid} name={name} /><ComplianceCard uid={uid} /></> : null}
       {tab === 'projects' ? <ProjectsTab uid={uid} name={name} projectId={id} /> : null}
     </div>
   );

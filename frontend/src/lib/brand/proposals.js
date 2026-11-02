@@ -1,5 +1,5 @@
 /**
- * D1324 (#3485): what Eadwyn's "Auto-fill with AI" proposed on the founder's
+ * D1324 (#3485): what Eadwyn's Ask (once "Auto-fill with AI", #4046 B3) proposed on the founder's
  * brand page, and which of it the founder kept, so the Save can record
  * provenance (`ai_proposals`, read by `PUT /api/brand/landing/by-project/:pid`
  * through `recordCompositionFills`).
@@ -34,6 +34,43 @@ export function keptProposals(draft, proposed) {
   for (const [f, v] of Object.entries(proposed || {})) {
     if (!PROPOSED_FIELDS.includes(f)) continue;
     if (String(draft?.[f] ?? '').trim() === String(v).trim() && String(v).trim()) out[f] = v;
+  }
+  return out;
+}
+
+/**
+ * #4046 B3: the standard Ask's rule on the brand page. Ask places a value only
+ * where the field is open: blank, still the page's own default, or still what
+ * the page put there itself (`previous`: the copy step 2 seeds from the
+ * template kit, and what Ask placed last, AI or not). A founder's own words
+ * are never overwritten.
+ */
+export const OPEN_DEFAULTS = Object.freeze({ cta_text: 'Join the waitlist' });
+
+export function placeAsk(draft, answer, previous = {}) {
+  const out = {};
+  for (const f of PROPOSED_FIELDS) {
+    const v = answer?.[f];
+    if (typeof v !== 'string' || !v.trim()) continue;
+    const cur = String(draft?.[f] ?? '').trim();
+    const last = previous?.[f] != null ? String(previous[f]).trim() : null;
+    if (!cur || cur === OPEN_DEFAULTS[f] || (last && cur === last)) out[f] = v.trim();
+  }
+  return out;
+}
+
+/**
+ * #4046 B3: a template's sections under the same rule. A section the founder
+ * changed keeps their words; a blank one, one still at its default, or one
+ * still holding what Ask wrote last (`previous`) takes what Ask wrote.
+ */
+export function placeAskContent(existing = {}, defaults = {}, written = {}, previous = {}) {
+  const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+  const blank = (v) => v == null || (typeof v === 'string' && !v.trim()) || (Array.isArray(v) && !v.length);
+  const out = { ...defaults, ...existing };
+  for (const [k, v] of Object.entries(written || {})) {
+    const cur = existing?.[k];
+    if (blank(cur) || same(cur, defaults?.[k]) || (previous?.[k] !== undefined && same(cur, previous[k]))) out[k] = v;
   }
   return out;
 }

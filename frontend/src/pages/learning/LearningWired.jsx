@@ -7,8 +7,8 @@ import LessonPlayer from './LessonPlayer';
 import MyLearning from './MyLearning';
 import { LearningEmpty, LearningHeader, NotLiveYet, SectionCard } from './LearningStates';
 import { AssessmentLesson } from './LearningAssessments';
-import { findLesson, lessonHref, videoPlayback } from './learningModel';
-import { markItemComplete, markLessonComplete, readCourse, readItem, readMe, readMyAttempts, readMySubmissions } from './learningReads';
+import { findLesson, lessonHref, resumeAt, videoPlayback } from './learningModel';
+import { markItemComplete, markLessonComplete, readCourse, readItem, readMe, readMyAttempts, readMySubmissions, recordItemPosition } from './learningReads';
 import useLearningRead from './useLearningRead';
 
 /**
@@ -135,6 +135,8 @@ export function LessonView({ courseState, itemState, lessonUid, onMark, marking,
         prev={step(found.prev)}
         next={step(found.next)}
         completed={found.lesson.progress?.status === 'completed'}
+        resumeFrom={resumeAt(itemState.progress?.position_seconds, item.duration_seconds)}
+        onPosition={(s, p) => recordItemPosition(item.uid, s, p)}
         onMarkComplete={onMark}
         marking={marking}
         markError={markError}
@@ -219,6 +221,8 @@ export function ItemView({ state, onRetry, onMark, marking, markError }) {
       video={videoPlayback(item)}
       transcript={item?.transcript ?? null}
       completed={state.progress?.status === 'completed'}
+      resumeFrom={item ? resumeAt(state.progress?.position_seconds, item.duration_seconds) : null}
+      onPosition={item ? (s, p) => recordItemPosition(item.uid, s, p) : null}
       onMarkComplete={item ? onMark : undefined}
       marking={marking}
       markError={markError}

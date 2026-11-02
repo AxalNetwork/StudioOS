@@ -248,3 +248,30 @@ export function splitEnrolments(enrolments) {
 
 /** Who put a member in: the route answers `self` or `super_admin`. */
 export const ENROLLED_BY = { self: 'joined by themselves', super_admin: 'enrolled by a Super Admin' };
+
+// ── D3726 (#3726) LR13: a member's own program page ─────────────────────────
+
+/** The member program page's address (`/learning/my-programs/:program`). */
+export const memberProgramHref = (uid) => `/learning/my-programs/${encodeURIComponent(uid)}`;
+
+/** LR13's enrolment card: how a member comes to be in it, in the canvas's words. */
+export function enrolmentCopy(program, enrolled) {
+  const open = program?.enrolment === 'open';
+  return {
+    title: open ? 'Open to join' : 'By invitation',
+    line: enrolled
+      ? (open ? 'You joined this program.' : 'A Super Admin enrolled you.')
+      : (open ? 'Anyone with a profile can join.' : 'A Super Admin enrols members of this program.'),
+    none: 'No cohort dates, mentors or application: none is stored.',
+  };
+}
+
+/**
+ * LR13's "Continue": the first published item, in the program's order, that
+ * the member has not completed and that opens somewhere. Null when there is
+ * none (all done, or nothing opens yet).
+ */
+export function continueTarget(contents, completion) {
+  if (!Array.isArray(completion)) return null;
+  return (contents || []).find((c) => c?.status === 'published' && c.href && !isComplete(entryFor(completion, c))) || null;
+}

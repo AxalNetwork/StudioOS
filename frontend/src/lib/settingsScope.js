@@ -42,6 +42,8 @@ export const companyTeamPath = (uid) => `/account/companies/${enc(uid)}/settings
 export const companySettingsPath = (uid) => `/account/portfolio/${enc(uid)}/settings`;
 /** D1413 (#3696, PF6a/PF8): Company settings › Legal and › Projects, under Portfolio. */
 export const companyLegalPath = (uid) => `/account/portfolio/${enc(uid)}/settings/legal`;
+/** D1614 CO2 (#3976): the company's compliance tasks, under Legal. */
+export const companyCompliancePath = (uid) => `/account/companies/${enc(uid)}/settings/compliance`;
 export const companyProjectsPath = (uid, id = null) => `/account/portfolio/${enc(uid)}/settings/projects${id != null ? `/${enc(id)}` : ''}`;
 export const companyProjectTeamPath = (uid, id) => `/account/companies/${enc(uid)}/settings/projects/${enc(id)}/team`;
 export const projectTeamPath = (id) => `/projects/${enc(id)}/settings/team`;
@@ -147,9 +149,11 @@ function companyEntries(c, project, projects) {
   });
   return [
     { key: 'team', label: 'Team', path: companyTeamPath(c.uid) },
-    { key: 'company', label: COMPANY_SETTINGS, path: companySettingsPath(c.uid), activeOnly: true, sub: 'General · Legal', children: [
+    { key: 'company', label: COMPANY_SETTINGS, path: companySettingsPath(c.uid), activeOnly: true, sub: 'General · Legal · Compliance', children: [
       { key: 'general', label: 'General', path: companySettingsPath(c.uid), activeOnly: true },
       { key: 'legal', label: 'Legal', path: companyLegalPath(c.uid) },
+      // D1614 CO2 (#3976): the compliance task list, under Legal; a standalone project has no company, so no entry.
+      { key: 'compliance', label: 'Compliance', path: companyCompliancePath(c.uid) },
     ] },
     { key: 'projects', label: 'Projects', path: companyProjectsPath(c.uid), count: listed ? listed.length : null, children: rows },
   ];
