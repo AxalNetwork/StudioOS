@@ -4,8 +4,9 @@
  *
  * The rule and the reasons for it live in lib/migrationImmutability.mjs, so a
  * test can drive them without a repository. This file does the git: it
- * resolves the base — the pull request's base branch, or on a push to main
- * the commit main pointed at before the push — confirms it resolves, asks git
+ * resolves the base — the pull request's base branch, on a push to main the
+ * commit main pointed at before the push, or in the merge queue the main
+ * commit the queue built the entry on (#4107) — confirms it resolves, asks git
  * what changed under cloudflare-worker/sql/migrations/, and reports.
  *
  * CI-ONLY, AND NOT A check-*.mjs. `npm run test:guards` runs every
@@ -26,6 +27,7 @@
  * Usage (from the repository root):
  *   GITHUB_BASE_REF=main node scripts/migration-immutability-gate.mjs
  *   GITHUB_EVENT_NAME=push MIGRATION_GATE_BEFORE=<sha> node scripts/migration-immutability-gate.mjs
+ *   GITHUB_EVENT_NAME=merge_group MIGRATION_GATE_BEFORE=<base_sha> node scripts/migration-immutability-gate.mjs
  *
  * Exit codes:
  *   0  no migration on the base was changed
@@ -91,8 +93,9 @@ if (base.mode === 'branch') {
   try {
     git(['fetch', '--no-tags', 'origin', base.sha]);
   } catch (e) {
+    const what = base.mode === 'queue' ? 'the main commit this merge queue entry was built on' : 'the commit main pointed at before this push';
     cannotCheck([
-      `✖ ${NAME}: the commit main pointed at before this push (${base.sha}) is not in this checkout and could not be fetched.`,
+      `✖ ${NAME}: ${what} (${base.sha}) is not in this checkout and could not be fetched.`,
       `    ${gitError(e)}`,
     ]);
   }
