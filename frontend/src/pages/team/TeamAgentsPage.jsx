@@ -24,6 +24,7 @@ import RulebooksTab from './RulebooksTab.jsx';
 import SkillsTab from './SkillsTab.jsx';
 import TeamCoverageCard from './TeamCoverageCard.jsx';
 import ApprovalsTab from './ApprovalsTab.jsx';
+import ActivityFeed from '../work/ActivityFeed.jsx';
 import TeamSettingsTab from './TeamSettingsTab.jsx';
 import * as agents from './agentsAdapter.js';
 import { BTN_PRIMARY, BTN_TEXT, EYEBROW, FIELD, MUTED, useMenu } from './teamUi.jsx';
@@ -103,12 +104,12 @@ function AddToTeam({ disabled, reading, canInvite, agentOff, onPerson, onAgent }
 }
 
 /** The four sections, as links (each is its own address): the one in view carries `aria-current="page"`. */
-function Tabs({ tab, badges }) {
+function Tabs({ tab, badges, project = false }) {
   const { pathname } = useLocation();
   return (
     <nav aria-label="Team" className="flex gap-5 overflow-x-auto border-b border-axal-hairline dark:border-gray-800">
       <span className="flex gap-5">
-        {TABS.map((t) => (
+        {TABS.filter((t) => project || !t.projectOnly).map((t) => (
           <Link key={t.key} to={`${pathname}?tab=${t.key}`} aria-current={tab === t.key ? 'page' : undefined}
             className={`-mb-px flex h-[42px] items-center gap-1.5 whitespace-nowrap border-b-2 text-[13.5px] ${tab === t.key ? 'border-axal-violet font-bold text-axal-ink dark:border-violet-400 dark:text-gray-100' : 'border-transparent text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`}
             data-testid={`team-tab-${t.key}`}>
@@ -349,7 +350,7 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
           ) : null}
         </div>
       </header>
-      <Tabs tab={tab} badges={badges} />
+      <Tabs tab={tab} badges={badges} project={kind === 'project'} />
       <Toast notice={notice} onClose={() => setNotice(null)} />
       {actionError ? <p role="alert" className="m-0 text-[12.5px] text-axal-destructive dark:text-red-300">{actionError}</p> : null}
 
@@ -375,6 +376,7 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
       {tab === 'skills' ? <SkillsTab scope={scope} rolesBlock={rolesBlock} agentsBlock={agentsBlock} onAddAgent={!planLocked && agentsBlock?.value?.can_manage ? () => setSheet({ kind: 'agent' }) : null} /> : null}
       {tab === 'roles' ? <RulebooksTab scope={scope} canManage={!!agentsBlock?.value?.can_manage} agentsBlock={agentsBlock} /> : null}
       {tab === 'approvals' ? <ApprovalsTab scope={scope} /> : null}
+      {tab === 'activity' && kind === 'project' ? <ActivityFeed projectId={id} /> : null}
       {tab === 'settings' ? (
         <TeamSettingsTab scope={scope} agentsBlock={agentsBlock} canManage={canEdit}
           onEditCap={(a) => setSheet({ kind: 'profile', uid: a.uid, edit: 'cap' })}

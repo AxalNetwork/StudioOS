@@ -36,6 +36,8 @@ export const TABS = [
   { key: 'skills', label: 'Skills' },
   { key: 'roles', label: 'Roles and rule books' },
   { key: 'approvals', label: 'Approvals' },
+  // D1614 W6 (#3974): WK6, a project's activity feed; a company's Team page has none (the owner, 2026-11-01).
+  { key: 'activity', label: 'Activity', projectOnly: true },
   { key: 'settings', label: 'Settings' },
 ];
 const TAB_KEYS = new Set(TABS.map((t) => t.key));

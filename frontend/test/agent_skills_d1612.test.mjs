@@ -157,7 +157,9 @@ test('refusals come back in words, and update/file helpers', () => {
 // ---------------------------------------------------------------- the boards
 
 test('SK0: the Skills tab sits after People and agents; the figures and role tiles say "Not recorded" for a count not read', () => {
-  assert.deepEqual(TABS.map((t) => t.key), ['people', 'skills', 'roles', 'approvals', 'settings']);
+  // D1614 W6 (#3974): Activity is a project's tab only (`projectOnly`).
+  assert.deepEqual(TABS.map((t) => t.key), ['people', 'skills', 'roles', 'approvals', 'activity', 'settings']);
+  assert.deepEqual(TABS.filter((t) => t.projectOnly).map((t) => t.key), ['activity']);
   assert.equal(tabFrom('?tab=skills'), 'skills');
   const figs = text(h(SkillFigures, { figures: LIB.figures }));
   assert.match(figs, /Skills available\s*68/);

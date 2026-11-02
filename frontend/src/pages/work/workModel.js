@@ -19,6 +19,8 @@ export const WORK_TABS = Object.freeze([
   { key: 'backlog', label: 'Backlog' },
   { key: 'burnup', label: 'Burn-up' },
   { key: 'mine', label: 'My items' },
+  // D1614 W6 (#3974): WK7, the project's Workload (the owner: the Workload view is per project).
+  { key: 'workload', label: 'Workload' },
 ]);
 
 /** WK1: the six columns, in order, with the line under each title. */
@@ -250,3 +252,128 @@ export function complianceCan(viewer) {
 export const STANDALONE_LINE = 'No company, so no Legal and no Compliance anywhere for this project.';
 export const NO_PROJECTS_LINE = 'Add a project to this company first.';
 export const CREATE_WORK_LINE = (task) => `The item lands in that project’s Backlog, linked back here as “For: ${task}”. The task stays with the company.`;
+
+// ---------------------------------------------------------------------------
+// D1614 W6 (#3974) — WK5's run sheet, WK6's activity feed, WK7's workload.
+// W3's run (`GET /api/teams/runs/:uid`) and feed, and W4's workload, as words.
+// ---------------------------------------------------------------------------
+
+/** A `Spend` (`{ available, value_microusd }`) as money, or "Not recorded": never $0 for an unknown. */
+export function spendWords(s) {
+  return s && s.available === true && Number.isFinite(Number(s.value_microusd)) ? money(Number(s.value_microusd)) : NOT_RECORDED;
+}
+/** W3's tokens block. */
+export function tokenWords(t) {
+  if (!t || t.available !== true) return NOT_RECORDED;
+  return `${(Number(t.input || 0) + Number(t.output || 0)).toLocaleString('en-US')} tokens`;
+}
+/** A duration in plain words. */
+export function durationWords(ms) {
+  const n = num(ms);
+  if (n == null) return NOT_RECORDED;
+  const s = Math.round(n / 1000);
+  if (s < 60) return `${s} s`;
+  const m = Math.floor(s / 60), r = s % 60;
+  return r ? `${m} min ${r} s` : `${m} min`;
+}
+const clock = (at) => (at ? String(at).replace('T', ' ').slice(11, 16) : null);
+
+/** W3's outcome kinds in the canvas's words. */
+export function detailOutcome(o) {
+  switch (o?.kind) {
+    case 'in_progress': return { title: 'Running', tone: 'violet' };
+    case 'completed': return { title: o.awaiting_decision ? 'Completed · waiting for a decision' : 'Completed', tone: 'positive' };
+    case 'skipped': return { title: 'Skipped', tone: 'muted', reason: o.reason_text || NOT_RECORDED };
+    case 'cancelled': return { title: 'Cancelled', tone: 'muted', reason: o.reason_text || null };
+    case 'failed': return { title: 'Failed', tone: 'negative', reason: o.reason_text || NOT_RECORDED, retryable: o.retryable === true };
+    default: return { title: NOT_RECORDED, tone: 'muted' };
+  }
+}
+
+const DECIDED = { accepted: 'accepted', edited: 'accepted with edits', discarded: 'discarded', proposed: 'waiting', withdrawn: 'withdrawn' };
+
+/** WK5: the run's rows, from W3's `detail`: what it worked on, read, produced and decided, its outcome, timing and cost. */
+export function runSheet(r) {
+  const d = r?.detail || {};
+  const out = detailOutcome(d.outcome);
+  const proposals = Array.isArray(d.proposals) ? d.proposals : [];
+  const produced = proposals.length
+    ? `${proposals.length} ${proposals.length === 1 ? 'proposal' : 'proposals'} · ${proposals.map((p) => `${DECIDED[p.status] || p.status}${p.decided_by?.name ? ` by ${p.decided_by.name}` : ''}`).join(' · ')}`
+    : 'No proposal';
+  const timing = d.started_at
+    ? `Started ${clock(d.started_at)}${d.finished_at ? ` · ${out.tone === 'negative' ? 'stopped' : 'finished'} ${clock(d.finished_at)}` : ''} · ${durationWords(d.duration_ms)}`
+    : NOT_RECORDED;
+  const cost = d.cost || {};
+  const model = cost.model || d.agent?.model || null;
+  return {
+    title: out.title,
+    tone: out.tone,
+    agent: d.agent ? `${d.agent.name || NOT_RECORDED}${d.agent.role ? ` · ${d.agent.role}` : ''}` : NOT_RECORDED,
+    retryable: out.retryable === true,
+    rows: [
+      ['Skill', d.skill ? `${d.skill.name} · v${d.skill.version}` : NOT_RECORDED],
+      ['Worked on', d.work?.task?.title || NOT_RECORDED],
+      ['Instruction', d.work?.instruction || NOT_RECORDED],
+      ['Read', [...(d.sources || []), ...(d.tools || [])].join(' · ') || NOT_RECORDED],
+      ['Outcome', out.reason ? `${out.title}. ${out.reason}` : out.title],
+      ['Produced', produced],
+      ['Timing', timing],
+      ['Cost', [`Held ${spendWords(cost.held)}`, `charged ${spendWords(cost.charged)}`, tokenWords(cost.tokens), model].filter(Boolean).join(' · ')],
+    ],
+  };
+}
+
+export const FEED_WHO = Object.freeze([['people', 'People'], ['agents', 'AI agents'], ['both', 'Both']]);
+const VERB = { created: 'created', assigned: 'assigned', moved: 'moved', completed: 'completed' };
+
+/** WK6: one feed row's sentence, its time and, for a run, its cost. */
+export function feedRow(i) {
+  const who = i?.by?.name || (i?.by?.kind === 'agent' ? 'An agent' : 'Someone');
+  const task = i?.task?.title ? `“${i.task.title}”` : 'a task';
+  let text;
+  if (i?.type === 'agent_run') {
+    const o = detailOutcome(i.outcome);
+    text = `${who} ran on ${task} · ${o.title}`;
+  } else if (i?.type === 'proposal_decision') {
+    text = `${who} ${DECIDED[i.decision] || i.decision} a proposal on ${task}`;
+  } else {
+    text = `${who} ${VERB[i?.verb] || i?.verb || 'changed'} ${task}${i?.verb === 'moved' && i.to ? ` to ${columnLabel(i.to) || i.to}` : ''}`;
+  }
+  return { text, at: i?.at ? String(i.at).replace('T', ' ').slice(0, 16) : NOT_RECORDED, cost: i?.type === 'agent_run' ? spendWords(i.cost) : null, run: i?.type === 'agent_run' ? i.run_uid : null };
+}
+
+/** WK7: a week's column header, "W46 · 9–15 Nov". */
+export function weekLabel(start) {
+  const d = new Date(`${String(start).slice(0, 10)}T00:00:00Z`);
+  if (!Number.isFinite(d.getTime())) return NOT_RECORDED;
+  const end = new Date(d.getTime() + 6 * 86_400_000);
+  // ISO week: the week holding that Thursday, counted from the week holding 4 January.
+  const thu = new Date(d.getTime() + (3 - ((d.getUTCDay() + 6) % 7)) * 86_400_000);
+  const jan4 = new Date(Date.UTC(thu.getUTCFullYear(), 0, 4));
+  const week = 1 + Math.round(((thu - jan4) / 86_400_000 - 3 + ((jan4.getUTCDay() + 6) % 7)) / 7);
+  const mon = (x) => x.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' });
+  return `W${week} · ${d.getUTCDate()}${mon(d) === mon(end) ? '' : ` ${mon(d)}`}–${end.getUTCDate()} ${mon(end)}`;
+}
+
+/** WK7: the rows, people first then agents, each with its weekly cells; amber only when over a recorded capacity. */
+export function workloadRows(data) {
+  const row = (r, kind) => ({
+    key: `${kind}:${(r.person || r.agent)?.uid}`, kind, who: r.person || r.agent,
+    capacity: kind === 'person' ? (r.capacity?.available ? `${r.capacity.value} pts a week` : NOT_RECORDED) : null,
+    cells: (r.weeks || []).map((w) => ({
+      week: w.week_start, items: w.items || [],
+      load: `${w.estimate_points ?? 0} pts${w.unestimated ? ` · ${w.unestimated} not estimated` : ''}`,
+      over: w.over_capacity === true,
+    })),
+    unscheduled: r.unscheduled || [],
+  });
+  return [...(data?.people || []).map((r) => row(r, 'person')), ...(data?.agents || []).map((r) => row(r, 'agent'))];
+}
+
+/** WK7 "Schedule work": a time block from a day and hours, as the board's PATCH wants it; or why not. */
+export function scheduleBody(day, from, to) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(day || '')) || !/^\d{2}:\d{2}$/.test(String(from || '')) || !/^\d{2}:\d{2}$/.test(String(to || ''))) return { error: 'Choose a day, a start and an end.' };
+  const start = `${day}T${from}:00Z`, end = `${day}T${to}:00Z`;
+  if (!(Date.parse(end) > Date.parse(start))) return { error: 'The block ends after it starts.' };
+  return { body: { scheduled_start: start, scheduled_end: end } };
+}
