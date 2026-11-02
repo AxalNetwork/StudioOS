@@ -100,7 +100,12 @@ each significant directory saying what lives there and the rule for adding to
 it, and `scripts/check-folder-docs.mjs` fails the build if one is missing, if it
 does not name its own subfolders, or if it cites a file that does not exist —
 the first run caught a route README documenting a mount for a file that has
-never existed. Start at the README of whatever folder you land in.
+never existed. Start at the README of whatever folder you land in. A README
+whose folder lists its files (routes, services, `frontend/src/lib/api`) holds
+a **generated** list between `<!-- files:begin -->` and `<!-- files:end -->`:
+each file's header comment describes it, the list is never committed
+(`--write` fills it locally, `--clean` empties it), and a file there without a
+header comment fails the build (#4104). Adding such a file edits no README.
 
 ## Rules for new work
 

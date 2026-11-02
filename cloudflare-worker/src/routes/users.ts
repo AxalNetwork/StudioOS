@@ -1,3 +1,4 @@
+/** `/api/users`: user administration; listing users exposes names and roles, so it is admin only. */
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
