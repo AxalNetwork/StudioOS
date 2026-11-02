@@ -61,7 +61,7 @@ function useRead(load, deps) {
 const Reading = ({ testId }) => <p className={MUTED} role="status" data-testid={testId}>Reading…</p>;
 
 /** HD6b: a failed read is never an empty list. */
-function Unreadable({ what, claim, onRetry, testId }) {
+function ReadFailed({ what, claim, onRetry, testId }) {
   return (
     <div role="alert" className="flex flex-wrap items-center gap-2 text-[12.5px] text-red-700 dark:text-red-300" data-testid={testId}>
       <span><strong>Could not be read.</strong> {what} did not load. {claim}</span>
@@ -158,7 +158,7 @@ function Reports() {
   const open = rows.find((r) => r.uid === openUid) || null;
   let body;
   if (reply === undefined) body = <Reading testId="deck-reports-reading" />;
-  else if (reply === null) body = <Unreadable what="The reports" claim="That is not the same as no reports." onRetry={retry} testId="deck-reports-unreadable" />;
+  else if (reply === null) body = <ReadFailed what="The reports" claim="That is not the same as no reports." onRetry={retry} testId="deck-reports-unreadable" />;
   else if (!shownRows.length) {
     body = (
       <div className="py-6 text-center" data-testid="deck-reports-empty">
@@ -215,7 +215,7 @@ function Reports() {
 function Flags() {
   const [reply, retry] = useRead(() => adminFeatureFlagsApi.list(), []);
   if (reply === undefined) return <Card><Reading testId="deck-flags-reading" /></Card>;
-  if (reply === null) return <Card><Unreadable what="The feature flags" claim="That is not the same as every feature being off." onRetry={retry} testId="deck-flags-unreadable" /></Card>;
+  if (reply === null) return <Card><ReadFailed what="The feature flags" claim="That is not the same as every feature being off." onRetry={retry} testId="deck-flags-unreadable" /></Card>;
   const rows = flagRows(reply);
   const defaults = defaultOnKeys(reply);
   return (
@@ -267,7 +267,7 @@ function Beta() {
 function Templates({ superAdmin }) {
   const [reply, retry] = useRead(() => Promise.all([api.deckRecommendOverrides(), api.deckMethods().catch(() => null)]), []);
   if (reply === undefined) return <Card><Reading testId="deck-templates-reading" /></Card>;
-  if (reply === null) return <Card><Unreadable what="The default templates" claim="That is not the same as no defaults." onRetry={retry} testId="deck-templates-unreadable" /></Card>;
+  if (reply === null) return <Card><ReadFailed what="The default templates" claim="That is not the same as no defaults." onRetry={retry} testId="deck-templates-unreadable" /></Card>;
   const [overrides, methodsReply] = reply;
   const methods = Array.isArray(methodsReply?.methods) ? methodsReply.methods : Array.isArray(methodsReply?.items) ? methodsReply.items : [];
   const grid = templateGrid(overrides, methods);
