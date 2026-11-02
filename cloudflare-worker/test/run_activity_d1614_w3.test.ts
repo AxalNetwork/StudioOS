@@ -203,6 +203,21 @@ test('W3: the project feed — people and agents, filtered, paged, and a person\
   } finally { __setEngineRouteDeps(null); w.close(); }
 });
 
+test('W3: a board move is one item — W1\'s `moved` and its paired `status` read once', async () => {
+  const w = world();
+  try {
+    w.agent(AGENT); w.task(200, AGENT);
+    const ev = w.db.prepare('INSERT INTO scope_task_events (task_id, actor_user_id, kind, detail_json, created_at) VALUES (200, ?, ?, ?, ?)');
+    ev.run(SPONSOR, 'moved', JSON.stringify({ change: 'c1', from: 'ready', to: 'in_progress', from_status: 'open', to_status: 'in_progress' }), '2026-11-02 10:00:00');
+    ev.run(SPONSOR, 'status', JSON.stringify({ change: 'c1', from: 'open', to: 'in_progress' }), '2026-11-02 10:00:00');
+    ev.run(SPONSOR, 'moved', JSON.stringify({ change: 'c2', from: 'in_review', to: 'done', from_status: 'waiting_decision', to_status: 'done' }), '2026-11-02 11:00:00');
+    ev.run(SPONSOR, 'status', JSON.stringify({ change: 'c2', from: 'waiting_decision', to: 'done' }), '2026-11-02 11:00:00');
+    const r = await call(w, SPONSOR, 'GET', `/project/${PROJECT}/activity`);
+    // Mutation checked: `moved` events dropped → the board's moves vanish from the feed and this fails.
+    assert.deepEqual(r.body.items.map((i: any) => [i.verb, i.to]), [['completed', null], ['moved', 'in_progress']]);
+  } finally { __setEngineRouteDeps(null); w.close(); }
+});
+
 test('W3: the feed pages by its cursor, 50 at a time, with no item twice and none lost', async () => {
   const w = world();
   try {

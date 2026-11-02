@@ -184,10 +184,17 @@ type Item = { at: string; key: string; [k: string]: unknown };
 export function cursorOf(i: Pick<Item, 'at' | 'key'>) { return `${i.at}|${i.key}`; }
 const older = (i: Pick<Item, 'at' | 'key'>, before: string | null) => !before || cursorOf(i) < before;
 
+/**
+ * A task event as activity, or null. W1's board writes a column move as `moved`
+ * ({ change, to, to_status }) and, when the status changes with it, a `status`
+ * event carrying the same `change`: the pair is one item, read from `moved`.
+ * E1's and the engine's `status` events carry no `change` and stand alone.
+ */
 const EVENT_VERB = (kind: string, detail: any): string | null => {
   if (kind === 'created') return 'created';
   if (kind === 'assigned') return 'assigned';
-  if (kind === 'status') return detail?.to === 'done' ? 'completed' : 'moved';
+  if (kind === 'moved') return detail?.to_status === 'done' ? 'completed' : 'moved';
+  if (kind === 'status') return detail?.change ? null : detail?.to === 'done' ? 'completed' : 'moved';
   return null;
 };
 
@@ -225,6 +232,7 @@ export async function projectActivity(env: Env, projectId: number, f: FeedFilter
     items.push({
       at: e.created_at, key: `e${String(e.id).padStart(12, '0')}`, type: 'task_event', verb,
       by: byAgent ? (a ? { kind: 'agent', ...agentRef(a) } : null) : (e.actor_user_id ? { kind: 'person', ...(await person(e.actor_user_id))! } : null),
+      // `to`: a column for a board move, else the status.
       task: taskRef(e.task_id), to: verb === 'moved' ? detail?.to ?? null : null,
     });
   }
