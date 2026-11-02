@@ -6,6 +6,7 @@
  * (`cardBudgetsMs`, shared with #3828's timing).
  */
 import { aiTokens } from './newDeckModel.js';
+import { SEVERITY_LABEL } from './criticModel.js';
 
 export const PITCH_CHOICES = Object.freeze([
   { seconds: 120, label: '2 min' },
@@ -88,3 +89,75 @@ export function summaryLine(report) {
   const t = report.totals || {};
   return [report.time_line, t.wpm == null ? null : `${t.wpm} words a minute`, `${t.fillers ?? 0} filler words`, `${t.pauses ?? 0} pauses`].filter(Boolean).join(' · ');
 }
+
+// ─────────────────────────────────────────── D1582 F3 (#3829): likely questions and the drill
+
+export const QUESTIONS_TITLE = 'LIKELY QUESTIONS · REAL OBJECTIONS FIRST';
+export const PRACTISE = 'Practise answers';
+export const EVERY_INVESTOR = 'Every investor';
+export const NO_QUESTIONS = 'No likely questions yet: no investor has raised an objection and the deck check found nothing to ask.';
+export const OBJECTIONS_UNREAD = 'Investor objections could not be read, so only the deck check\'s questions are listed.';
+export const NOT_SAVED = 'What you type here is not saved or sent. It is checked against the records on this screen.';
+export const ALL_BOUND = 'Every figure you typed is carried by a record.';
+
+/** "Synthetic Partner · Synthetic Fund"; the firm alone, or "Investor 12", when a name is missing. */
+export const prospectLabel = (p) => [p?.name, p?.firm].filter(Boolean).join(' · ') || `Investor ${p?.id ?? ''}`.trim();
+
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * The line under a question: who raised it, or the deck check's severity. Counts only, never a figure of
+ * the venture's: the figures are in the answer, and each is a binding's.
+ */
+export function questionMeta(q, prospect) {
+  if (q?.kind === 'finding') return [SEVERITY_LABEL[q.severity] || null, 'from the deck check'].filter(Boolean).join(' · ');
+  const h = q?.heard || {};
+  const mine = Number(h.from_prospect) || 0;
+  return [
+    prospect && mine ? `Raised by ${prospectLabel(prospect)}${mine > 1 ? ` ${plural(mine, 'time', 'times')}` : ''}` : null,
+    h.count ? `heard ${plural(h.count, 'time', 'times')} from ${plural(h.prospects || 0, 'investor', 'investors')}` : null,
+  ].filter(Boolean).join(' · ') || 'An investor objection';
+}
+
+/** What the records say to a question, in the Worker's own words: its bound answer, or why there is none. */
+export function answerLine(q) {
+  const a = q?.answer || {};
+  if (a.state === 'bound' && a.text) return a.text;
+  if (a.state === 'not_recorded') {
+    const fill = (a.fill || []).map((f) => f.label).filter(Boolean);
+    return fill.length ? `No record answers this yet. Fill: ${fill.join(', ')}.` : 'No record answers this yet.';
+  }
+  if (a.state === 'unchecked') return 'The records this draws on could not be read, so it is not checked.';
+  return 'No deck record answers this question.';
+}
+
+// A figure is a run of digits, read as the Worker reads one (`services/decks/deckQa.ts` `figuresIn`):
+// separators and leading zeros set aside.
+const DIGITS = /\p{Nd}+(?:[.,]\p{Nd}+)*/gu;
+const digitsOf = (raw) => raw.replace(/[^\p{Nd}]/gu, '').replace(/^0+(?=\d)/u, '');
+export const figuresIn = (text) => (String(text ?? '').match(DIGITS) ?? []).map(digitsOf);
+
+/** Every figure the question's bindings carry: the answer's and the kept answer's values, second values, dates and labels. */
+export function carriedBy(q) {
+  const out = new Set();
+  for (const b of [...(q?.answer?.bindings || []), ...(q?.kept?.bindings || [])]) {
+    for (const t of [b.value, b.of, b.as_of, b.label]) for (const f of figuresIn(t)) out.add(f);
+  }
+  return out;
+}
+
+/** The figures in the founder's practice answer that no binding carries, as typed; empty when every one is carried. */
+export function unboundTyped(text, q) {
+  const held = carriedBy(q);
+  return (String(text ?? '').match(DIGITS) ?? []).filter((raw) => !held.has(digitsOf(raw)));
+}
+
+/** The figure check under a practice answer, or null before anything is typed. */
+export function figureCheckLine(text, q) {
+  if (!String(text ?? '').trim()) return null;
+  const loose = unboundTyped(text, q);
+  return loose.length ? `Not carried by any record: ${[...new Set(loose)].join(', ')}. Say only what a record holds.` : ALL_BOUND;
+}
+
+/** "Question 2 of 7". */
+export const drillLine = (at, total) => `Question ${at + 1} of ${total}`;
