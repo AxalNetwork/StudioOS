@@ -44,6 +44,7 @@ export const AI_SURFACE = {
   buildBrand: '/build/brand',
   /** Raise · Pitch deck — the deck draft and "Ask Eadwyn to draft from project" (#3930; was "Fill from project") (`/api/decks/generate`, `/apply-method`, `/:id/autofill`), D767. */
   raisePitch: '/raise/pitch',
+  raiseDataRoom: '/raise/data-room',
   /** Raise · Pitch · Review — the deck reviewer's section map and review (`/api/deck-reviewer/*`). */
   raisePitchReview: '/raise/pitch/review',
   /** Raise · Investor narrative — Eadwyn's positioning proposal (`POST /api/cycles/raise/narrative/positioning/draft`), D911. */

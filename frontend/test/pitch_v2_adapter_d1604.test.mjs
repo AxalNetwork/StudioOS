@@ -44,7 +44,7 @@ test('every adapter method answers unavailable, with the reason and the issue th
   // swapped row back to `off(...)` (or wire an off row) and the two sets part.
   const body = (src, name) => (src.match(new RegExp(`^export const ${name} = ([^\\n]*)$`, 'm')) || [])[1] || '';
   const code = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
-  const wired = methods.filter((n) => /\bthrough\(\(\) => [^\n]*deck[A-Za-z]+Api\./.test(body(code, n)));
+  const wired = methods.filter((n) => /\bthrough\(\(\) => [^\n]*\b[a-z][A-Za-z]*Api\./.test(body(code, n)));
   const local = methods.filter((n) => n === 'history' && body(code, n) === 'async () => Object.freeze({ available: true, value: gridOps });');
   const offRows = methods.filter((n) => body(code, n) === `off('${n}');`);
   assert.deepEqual([...adapter.SWAPPED].sort(), [...wired, ...local].sort(), 'SWAPPED is exactly the remote and browser-local rows');
@@ -225,11 +225,11 @@ test('the seam reaches no network, and no client method exists for a route that 
   const src = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
   assert.doesNotMatch(src, /request\(|fetch\(|XMLHttpRequest/);
   // A swapped row's client is the only `lib/api` the seam may import (#4134: a rule, not a list). Each import names
-  // one `deck<Name>Api` from `lib/api/deck<Name>.js`, the imports stand in file-name order (so two swaps add lines
+  // one `<name>Api` from `lib/api/<name>.js` (a deck client, or #3881's `dataRoomApi`), the imports stand in file-name order (so two swaps add lines
   // at different places), and every one is used by a swapped row's body. Mutation checked: an unused client import,
   // or two imports out of order, fails here. D1541's `deckElements.js` is one of those lines.
-  const imports = [...src.matchAll(/^import \{ (deck[A-Za-z]+Api) \} from '\.\.\/\.\.\/\.\.\/lib\/api\/(deck[A-Za-z]+)\.js';$/gm)].map((x) => ({ name: x[1], file: x[2] }));
-  assert.equal(imports.length, [...src.matchAll(/from '([^']*lib\/api[^']*)'/g)].length, 'every lib/api import is one `import { deck<Name>Api } from .../lib/api/deck<Name>.js` line');
+  const imports = [...src.matchAll(/^import \{ ([a-z][A-Za-z]*Api) \} from '\.\.\/\.\.\/\.\.\/lib\/api\/([a-z][A-Za-z]*)\.js';$/gm)].map((x) => ({ name: x[1], file: x[2] }));
+  assert.equal(imports.length, [...src.matchAll(/from '([^']*lib\/api[^']*)'/g)].length, 'every lib/api import is one `import { <name>Api } from .../lib/api/<name>.js` line');
   assert.ok(imports.length >= 10, 'the seam imports the clients of its swapped rows');
   const files = imports.map((i) => i.file);
   assert.deepEqual(files, [...files].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())), 'the lib/api imports stand in file-name order');

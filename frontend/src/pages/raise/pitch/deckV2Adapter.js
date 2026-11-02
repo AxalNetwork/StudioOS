@@ -37,6 +37,7 @@
 
 import { LATER, NOT_ON } from './deckV2Model.js';
 // One line per client, in file-name order (pitch_v2_adapter_d1604 holds it), so two swaps add lines at different places.
+import { dataRoomApi } from '../../../lib/api/dataRoom.js';
 import { deckBatchesApi } from '../../../lib/api/deckBatches.js';
 import { deckCheckApi } from '../../../lib/api/deckCheck.js';
 import { deckCoeditApi } from '../../../lib/api/deckCoedit.js';
@@ -251,7 +252,7 @@ export const walkthrough = off('walkthrough');
 export const retryFailed = off('retryFailed');
 export const unseenBatches = off('unseenBatches');
 export const markSeen = off('markSeen');
-export const setDeckSource = off('setDeckSource');
+export const setDeckSource = (projectUid, fileUid, opts) => through(() => dataRoomApi.setDeckSource(projectUid, fileUid, opts), SURFACES.setDeckSource.issue);
 
 /**
  * #4134: the rows whose route is on main, each answering through its real client, never unavailable by
