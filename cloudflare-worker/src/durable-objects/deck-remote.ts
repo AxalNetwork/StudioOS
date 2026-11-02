@@ -25,7 +25,7 @@ type Pointer = { deck_id: number; expires: number };
 
 export class DeckRemote implements DurableObject {
   private state: DurableObjectState;
-  /** Tests only: the clock and the code source. */
+  /** Tests only: the clock and the code source (uniform 32-bit draws). */
   now: () => number = () => Date.now();
   random: (() => number) | undefined = undefined;
 

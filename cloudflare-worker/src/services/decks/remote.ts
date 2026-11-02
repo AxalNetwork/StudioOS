@@ -21,9 +21,22 @@ export const STEP_WORDS = Object.freeze(['next', 'prev', 'first', 'last'] as con
 
 export type RemoteStep = (typeof STEP_WORDS)[number] | { card: number };
 
-/** A six-digit code from a random source (crypto in the Worker); leading zeros kept. */
-export function makeCode(random: () => number = () => crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32): string {
-  return String(Math.floor(random() * 10 ** CODE_DIGITS)).padStart(CODE_DIGITS, '0');
+const SPAN = 10 ** CODE_DIGITS;
+/** The largest multiple of a million below 2^32: draws at or above it are refused, so every code is equally likely. */
+const LIMIT = Math.floor(2 ** 32 / SPAN) * SPAN;
+const crypto32 = () => crypto.getRandomValues(new Uint32Array(1))[0];
+
+/**
+ * A six-digit code, leading zeros kept, from uniform 32-bit draws (crypto in
+ * the Worker). Rejection sampling, not division: a draw at or above LIMIT is
+ * drawn again, so no code is likelier than another.
+ */
+export function makeCode(next32: () => number = crypto32): string {
+  for (let i = 0; i < 64; i++) {
+    const x = next32() >>> 0;
+    if (x < LIMIT) return String(x % SPAN).padStart(CODE_DIGITS, '0');
+  }
+  throw new Error('no unbiased draw');
 }
 
 export const isCode = (v: unknown): v is string => typeof v === 'string' && /^[0-9]{6}$/.test(v);

@@ -50,7 +50,7 @@ function namespace(clock: { t: number }, codes: string[] = []) {
       const state = stateOf();
       const obj = new DeckRemote(state, {} as any);
       obj.now = () => clock.t;
-      obj.random = () => { const c = codes.shift(); return c === undefined ? Math.random() : Number(c) / 1e6; };
+      obj.random = () => { const c = codes.shift(); return c === undefined ? Math.floor(Math.random() * 2 ** 32) : Number(c); };
       rooms.set(name, { obj, state });
     }
     return rooms.get(name)!;
@@ -68,8 +68,12 @@ const post = (obj: DeckRemote, path: string, body: unknown = {}) =>
 
 // 1 ───────────────────────────────────────────────────────────────────────────
 test('1. the rules: six digits with their zeros, Present\'s steps or a card by number, nothing else', () => {
-  assert.equal(makeCode(() => 0.000042), '000042');
-  assert.equal(makeCode(() => 0.9999999), '999999');
+  assert.equal(makeCode(() => 42), '000042');
+  assert.equal(makeCode(() => 999_999), '999999');
+  assert.equal(makeCode(() => 4_000_123_456), '123456', 'below the limit: the remainder');
+  // Mutation checked: no rejection (always x % 1e6) → the draw past the limit is used and this reads 967295.
+  const draws = [2 ** 32 - 1, 7];
+  assert.equal(makeCode(() => draws.shift()!), '000007', 'a draw at or above the limit is drawn again');
   assert.ok(isCode(makeCode()));
   assert.deepEqual(['123456', '12345', '1234567', 'abcdef', 123456].map(isCode), [true, false, false, false, false]);
   assert.deepEqual(['next', 'prev', 'first', 'last'].map(stepOf), ['next', 'prev', 'first', 'last']);
