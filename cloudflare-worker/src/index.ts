@@ -2291,7 +2291,7 @@ export default {
           }
           // D1580 F1 (#3827) — a rehearsal's audio once its hour is up, unless the founder kept it.
           try {
-            const { purgeRehearsalAudio } = await import('./services/decks/rehearsalAudio');
+            const { purgeRehearsalAudio } = await import('./services/rehearsalAudio');
             const r = await purgeRehearsalAudio(env, now);
             if (r.deleted) console.info(`[cron] rehearsal audio purge deleted=${r.deleted}`);
           } catch (e) {

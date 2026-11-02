@@ -12,7 +12,7 @@
  * `purgeRehearsalAudio` runs every five minutes from the cron; each run reads
  * one bounded batch. Every value is bound.
  */
-import type { Env } from '../../types';
+import type { Env } from '../types';
 
 export const AUDIO_GRACE_MINUTES = 60;
 const BATCH = 100;

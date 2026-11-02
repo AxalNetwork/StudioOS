@@ -24,7 +24,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
 import deckRehearsals, { REHEARSE_OPTION, REHEARSE_PAGE } from '../src/routes/deck_rehearsals.ts';
-import { purgeRehearsalAudio } from '../src/services/decks/rehearsalAudio.ts';
+import { purgeRehearsalAudio } from '../src/services/rehearsalAudio.ts';
 import {
   budgetLine, cardBudgetsMs, figureFindings, fillersIn, itemCovered, marksOf, noteItems, rehearsalReport,
 } from '../src/services/decks/rehearsal.ts';

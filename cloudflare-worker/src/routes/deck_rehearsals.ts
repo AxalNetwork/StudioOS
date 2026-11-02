@@ -21,7 +21,7 @@
  * not rehearse as the member. Every statement is bound.
  *
  * The audio is held in R2 only until the report has been read
- * (`services/decks/rehearsalAudio.ts`); the transcript and the report stay.
+ * (`services/rehearsalAudio.ts`); the transcript and the report stay.
  */
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
@@ -32,7 +32,7 @@ import { balanceRefusal } from '../services/aiImages';
 import { CHUNK_MIME, MAX_CHUNK_BYTES } from '../services/interviewSessions';
 import { IMAGE_PAGE } from '../services/decks/images';
 import { MAX_DURATION_MS, PITCH_SECONDS, marksOf, rehearsalReport, type RehearsalReport } from '../services/decks/rehearsal';
-import { audioDeleteAfter, deleteRehearsalAudio } from '../services/decks/rehearsalAudio';
+import { audioDeleteAfter, deleteRehearsalAudio } from '../services/rehearsalAudio';
 import { isSupportSession } from '../integrations/providers/mercury';
 import { railFor, refuseRun } from '../util/railContext';
 import { refuse } from '../util/refusal';
