@@ -21,7 +21,7 @@ import { loadAiBudget, usdToMicro, memberChargeMultiplier } from '../src/service
 import { run, __resetForTest, ROUTE, estimateCostUsd, meterStream, guardQuoteMicro } from '../src/services/aiRouter.ts';
 import { AI_MARKUP, billingMode, chargeMultiplier } from '../src/services/ai/pricing.ts';
 import { catalogueFor } from '../src/routes/ai.ts';
-import { blockQuoteMicro, holdBlock, settleStream } from '../src/services/liveTranscription.ts';
+import { blockHoldMicro, blockQuoteMicro, holdBlock, settleStream } from '../src/services/liveTranscription.ts';
 import { PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET } from '../src/services/aiRouter.ts';
 
 const MODEL = ROUTE.advisor_turn.model;
@@ -410,7 +410,9 @@ test('charged: a live transcript block is held at the billed price', async () =>
     const h = await holdBlock(f.env, 2, model);
     assert.equal(h.ok, true);
     const [r] = reservations(f.db);
-    assert.equal(r.included_microusd + r.topup_microusd, blockQuoteMicro(model, AI_MARKUP));
+    // #3936: the block carries the guard's share of its text too, at the same billed price.
+    assert.equal(r.included_microusd + r.topup_microusd, blockHoldMicro(model, AI_MARKUP));
+    assert.ok(blockHoldMicro(model, AI_MARKUP) > blockQuoteMicro(model, AI_MARKUP));
   } finally { f.db.close(); }
 });
 

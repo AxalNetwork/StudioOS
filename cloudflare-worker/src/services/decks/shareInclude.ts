@@ -48,8 +48,9 @@
  *                at share time (`shareGatesFor`), never taken from the block;
  *   permission   a logo wall, and any logo a connected CRM (HubSpot, #3880)
  *                supplied, only when its `logo_key` is one of
- *                `gates.logo_permissions`. No store records a permission yet
- *                (#3781), so today no such logo goes out on a link.
+ *                `gates.logo_permissions`: migration 732's `deck_logos` rows
+ *                whose customer gave permission (D1543, #3781), read at
+ *                share time.
  *
  * And, whatever the gate: a block bound anywhere (its own binding, a chart
  * series, a table cell) to a bank slot or an internal score is never sent;
@@ -258,8 +259,8 @@ export function blockKept(b: any, include: ShareInclude, gates: ShareGates = NO_
 /**
  * The venture's recorded consents and permissions, read at share time. A
  * quote's session counts when it recorded consent and its interview agreed to
- * be quoted (the same rule as `quoteRetrieval.quotableLines`). Logo
- * permissions have no store yet (#3781), so the set is empty.
+ * be quoted (the same rule as `quoteRetrieval.quotableLines`). A logo
+ * counts while its `deck_logos` row (migration 732, D1543) is permitted.
  */
 export async function shareGatesFor(env: Pick<Env, 'DB'>, projectId: number): Promise<ShareGates> {
   let quote_sessions = new Set<string>();
@@ -272,7 +273,17 @@ export async function shareGatesFor(env: Pick<Env, 'DB'>, projectId: number): Pr
     ).bind(projectId).all<{ uid: string }>();
     quote_sessions = new Set((rows.results || []).map((r) => String(r.uid)));
   } catch { /* no interview tables here: no quote is consented */ }
-  return { quote_sessions, logo_permissions: new Set<string>() };
+  // D1543 (#3781): migration 732's logos, permitted ones only, read now: a permission withdrawn takes the logo off every link.
+  let logo_permissions = new Set<string>();
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT logo_key FROM deck_logos
+        WHERE project_id = ? AND permitted = 1 AND permitted_at IS NOT NULL AND permission_reference IS NOT NULL
+        LIMIT 1000`,
+    ).bind(projectId).all<{ logo_key: string }>();
+    logo_permissions = new Set((rows.results || []).map((r) => String(r.logo_key)));
+  } catch { /* no logo store here (before 732): no logo is permitted */ }
+  return { quote_sessions, logo_permissions };
 }
 
 /** The Spin-Out fields baked onto a shared deck, with the same two "never" rules. */

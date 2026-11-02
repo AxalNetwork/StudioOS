@@ -158,7 +158,7 @@ test('the consents the Worker reads: a session with consent recorded whose inter
       (5, 'no-date', 1, 1, 'given', NULL);`);
   const g = await shareGatesFor({ DB: d1Over(db) } as any, 1);
   assert.deepEqual([...g.quote_sessions], ['ok']);
-  assert.equal(g.logo_permissions.size, 0, 'no permission store yet');
+  assert.equal(g.logo_permissions.size, 0, 'no deck_logos table here (before 732): no logo is permitted');
   const none = await shareGatesFor({ DB: d1Over(new DatabaseSync(':memory:')) } as any, 1);
   assert.equal(none.quote_sessions.size, 0, 'no interview tables: no consent');
 });

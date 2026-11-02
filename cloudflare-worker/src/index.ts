@@ -256,13 +256,17 @@ import deckReview from './routes/deck_review';
 import deckSources from './routes/deck_sources';
 import deckCheck from './routes/deck_check';
 import deckGrid from './routes/deck_grid';
+import deckBatches from './routes/deck_batches';
 import deckDraft from './routes/deck_draft';
 import deckCoedit from './routes/deck_coedit';
 import deckElementModels from './routes/deck_element_models';
 import { adminDeckModels, deckModelPresets } from './routes/deck_model_presets';
+import deckElements from './routes/deck_elements';
 import deckStage from './routes/deck_stage';
 import deckRemix from './routes/deck_remix';
 import deckTypedValues from './routes/deck_typed_values';
+// D1543 (#3781): the venture-record elements and the logos store (migration 732).
+import deckVentureElements from './routes/deck_venture_elements';
 import deckFigures from './routes/deck_figures';
 import deckNew from './routes/deck_new';
 import deckAssist from './routes/deck_assist';
@@ -1403,6 +1407,8 @@ app.route('/api/decks', deckReview);
 app.route('/api/decks', deckCheck);
 // D1499 (#3749): The Grid of one deck version — geometry, the 17 structures and each card's areas.
 app.route('/api/decks', deckGrid);
+// D1502 part 2 (#3753): a generation run's status, its event stream, and Stop.
+app.route('/api/decks', deckBatches);
 // D1501 (#3751): a version's working copy, card by card (`/:id/cards/:uid`, `/:id/draft`), before `decks`.
 app.route('/api/decks', deckDraft);
 // D1577 (#3824): area saves (`/:id/cards/:uid/areas/:area`), single-slide restore (`/:id/restore-card`) and presence, before `decks`.
@@ -1412,12 +1418,15 @@ app.route('/api/decks', deckElementModels);
 // D1549 (#3796): the deck's preset and HQ's locks (`/:id/model-presets`), before `decks`; and HQ's org default and lock table.
 app.route('/api/decks', deckModelPresets);
 app.route('/api/admin/ai/deck-models', adminDeckModels);
+app.route('/api/decks', deckElements);
 // D1522 (#3774): the deck's stage plan — order, why lines and missing-proof warnings.
 app.route('/api/decks', deckStage);
 // D1553 (#3800): Remix — four layouts for one card and the remove-a-block reflow; no model, no charge.
 app.route('/api/decks', deckRemix);
 // D1538 (#3787): the figures a founder types for a deck, Stated (`/:id/typed-values`).
 app.route('/api/decks', deckTypedValues);
+// D1543 (#3781): `/:id/venture-elements[/:element]` and `/:id/logos…`, before `decks` so its `/:id` routes cannot answer them.
+app.route('/api/decks', deckVentureElements);
 // D1523 (#3775): each figure's provenance, Linked, Stated, Uncited or Not recorded (`/:id/figures`), editor-only.
 app.route('/api/decks', deckFigures);
 // D896: `/sources` and `/:id/refresh`, before `decks` so its `GET /:id` cannot answer `/sources`.
@@ -1863,6 +1872,9 @@ import { assertJwtSecretStrength, assertScoringHmacSecret } from './auth';
 // 404 — never reached the client without this: Hono re-throws non-Errors
 // past app.onError. See util/thrownResponse.ts.
 import { withThrownResponses } from './util/thrownResponse';
+// D1539 (#3789): imported here, not inside `scheduled`, so the handler names
+// only this function (mercury_member_privacy_d752 reads its words).
+import { pruneCardBlobs } from './services/decks/cardBlobs';
 
 // Phase 0.1 — D1 schema migration for the partner→investor split.
 // Lazy, idempotent, runs at most once per worker isolate. We piggy-back on the
@@ -2369,6 +2381,17 @@ export default {
             cronSummary.push(`grow daily reminders=${r.reminders} alerts=${r.alerts}`);
           } catch (e) {
             console.error('[cron] grow daily failed', e instanceof Error ? e.message : 'error');
+          }
+        }
+        // D1539 (#3789) — the deck card blob prune: a blob no version names,
+        // first written over an hour ago, goes (at most 500 a run).
+        if (now.getUTCHours() === 5 && now.getUTCMinutes() === 50) {
+          try {
+            const r = await pruneCardBlobs(env);
+            if (r.deleted) console.info(`[cron] deck card blobs pruned=${r.deleted}`);
+            cronSummary.push(`deck card blobs pruned=${r.deleted}`);
+          } catch (e) {
+            console.error('[cron] deck card blob prune failed', e instanceof Error ? e.message : 'error');
           }
         }
         // D1058 (#2928) — Reporting's daily step: duties a closing missed, the
@@ -3282,3 +3305,5 @@ export { DeckPresence } from './durable-objects/deck-presence';
 export { HqEntrypoint, BranchEntrypoint } from './rpc';
 
 export { MeetingBotRun } from './durable-objects/meeting-bot-run';
+export { DeckGenRoom } from './durable-objects/deck-gen-room';
+export { AiGovernor } from './durable-objects/ai-governor';

@@ -36,11 +36,13 @@
 
 import { LATER, NOT_ON } from './deckV2Model.js';
 // One line per client, in file-name order (pitch_v2_adapter_d1604 holds it), so two swaps add lines at different places.
+import { deckBatchesApi } from '../../../lib/api/deckBatches.js';
 import { deckCheckApi } from '../../../lib/api/deckCheck.js';
 import { deckCoeditApi } from '../../../lib/api/deckCoedit.js';
 import { deckCommentsApi } from '../../../lib/api/deckComments.js';
 import { deckDraftApi } from '../../../lib/api/deckDraft.js';
 import { deckElementModelsApi } from '../../../lib/api/deckElementModels.js';
+import { deckElementsApi } from '../../../lib/api/deckElements.js';
 import { deckFiguresApi } from '../../../lib/api/deckFigures.js';
 import { deckGridApi } from '../../../lib/api/deckGrid.js';
 import { deckImageEditsApi } from '../../../lib/api/deckImageEdits.js';
@@ -49,6 +51,7 @@ import { deckModelPresetsApi } from '../../../lib/api/deckModelPresets.js';
 import { deckRemixApi } from '../../../lib/api/deckRemix.js';
 import { deckStageApi } from '../../../lib/api/deckStage.js';
 import { deckTypedValuesApi } from '../../../lib/api/deckTypedValues.js';
+import { deckVentureElementsApi } from '../../../lib/api/deckVentureElements.js';
 
 export { NOT_ON };
 
@@ -80,7 +83,7 @@ export const SURFACES = Object.freeze({
   imageVary: { issue: 3784, what: 'Erase, expand, vary and reference images' },
   elementsLibrary: { issue: 3779, what: 'Icons, shapes, dividers and textures' },
   diagrams: { issue: 3780, what: 'Funnel, hierarchy, hub and spoke, and 2×2 diagrams' },
-  ventureElements: { issue: 3781, what: 'Logo wall, use of funds, round terms, cap-table summary and interview quotes' },
+  ventureElements: { issue: 3781, what: 'Team bios, logo wall, use of funds, round terms, cap-table summary and interview quotes' },
   templates: { issue: 3782, what: 'Template filters by stage, audience and style' },
   myTemplates: { issue: 3782, what: 'Your own templates' },
   saveAsTemplate: { issue: 3782, what: 'Save as my template' },
@@ -132,7 +135,9 @@ export async function through(call, issue) {
     // Worker without its binding) is still "Coming later", with the Worker's own sentence.
     if (status === 503 && typeof e?.code === 'string' && e.code.endsWith('_off')) return unavailable(issue, e.message || NOT_ON);
     const message = typeof e?.message === 'string' && e.message ? e.message : 'could not be read';
-    return Object.freeze({ available: false, unreadable: true, reason: message, issue });
+    // D1543: a Worker refusal's code (a gate such as `no_consent`) rides along, so a surface can draw its line.
+    const code = typeof e?.code === 'string' && e.code ? e.code : null;
+    return Object.freeze({ available: false, unreadable: true, reason: message, issue, ...(code ? { code } : {}) });
   }
 }
 
@@ -155,8 +160,10 @@ export const grid = (deckId) => through(() => deckGridApi.grid(deckId), SURFACES
 export const saveCard = (deckId, uid, card, rev, opts) => through(() => deckDraftApi.saveCard(deckId, uid, card, rev, opts), SURFACES.saveCard.issue);
 export const discardDraft = (deckId) => through(() => deckDraftApi.discard(deckId), SURFACES.discardDraft.issue);
 export const draft = (deckId) => through(() => deckDraftApi.draft(deckId), SURFACES.draft.issue);
-export const batch = off('batch');
-export const cancelBatch = off('cancelBatch');
+// D1502 part 2 (#3753): a run, read to resume it (pd2b, pd2c), and Stop. Follow it live with
+// `deckBatchesApi.events(uid, onEvent)`, the run's Server-Sent Events; `batch` is the read it falls back to.
+export const batch = (uid) => through(() => deckBatchesApi.batch(uid), SURFACES.batch.issue);
+export const cancelBatch = (uid) => through(() => deckBatchesApi.cancel(uid), SURFACES.cancelBatch.issue);
 /** D1503 (#3754): each grid element's models and the pick its next run uses (`GET /api/decks/:id/element-models`). */
 export const elementModels = (deckId) => through(() => deckElementModelsApi.read(deckId), SURFACES.elementModels.issue);
 export const areasQuote = off('areasQuote');
@@ -173,9 +180,19 @@ export const arrange = off('arrange');
 export const imageEdit = off('imageEdit');
 /** D1544 (#3784): an edit's price (vary, edit, erase, expand) before it runs: one hold for the edit and its checks. */
 export const imageVary = (uid, ask) => through(() => deckImageEditsApi.quote(uid, ask), SURFACES.imageVary.issue);
-export const elementsLibrary = off('elementsLibrary');
+/**
+ * D1541 (#3779): the elements library and a page of icons for the pd28
+ * panel, in one answer: `{ licence, decor_max, shapes, dividers, textures,
+ * generate, icons: { total, offset, items } }`.
+ */
+export const elementsLibrary = (opts = {}) => through(() => Promise.all([deckElementsApi.library(), deckElementsApi.icons(opts)]).then(([lib, page]) => ({ ...lib, icons: { total: page?.total ?? 0, offset: page?.offset ?? 0, items: page?.icons ?? [], licence: page?.licence ?? null } })), SURFACES.elementsLibrary.issue);
 export const diagrams = off('diagrams');
-export const ventureElements = off('ventureElements');
+/**
+ * D1543 (#3781): the venture-record elements, from records with their Source and grade, no model.
+ * `ventureElements(deckId, element, opts)` reads one (`GET /api/decks/:id/venture-elements/:element`), refused by its gate;
+ * `ventureElements(deckId, null, opts)` reads them all for the one-click run, each placed or left out.
+ */
+export const ventureElements = (deckId, element, opts) => through(() => (element ? deckVentureElementsApi.element(deckId, element, opts) : deckVentureElementsApi.list(deckId, opts)), SURFACES.ventureElements.issue);
 export const templates = off('templates');
 export const myTemplates = off('myTemplates');
 export const saveAsTemplate = off('saveAsTemplate');

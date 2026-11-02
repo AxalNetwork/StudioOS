@@ -100,6 +100,9 @@ export const BINDINGS: readonly BindingSpec[] = [
   { name: 'ONBOARDING_CHAT', kind: 'Durable Object namespace', hq: 'OnboardingChat', branch: () => 'OnboardingChat', shared: false },
   // D1577 (#3824): the deck's co-editing room.
   { name: 'DECK_PRESENCE', kind: 'Durable Object namespace', hq: 'DeckPresence', branch: () => 'DeckPresence', shared: false },
+  // D1502 part 2 (#3753): a deck's generation runs, and the per-account step throttles.
+  { name: 'DECK_GEN_ROOM', kind: 'Durable Object namespace', hq: 'DeckGenRoom', branch: () => 'DeckGenRoom', shared: false },
+  { name: 'AI_GOVERNOR', kind: 'Durable Object namespace', hq: 'AiGovernor', branch: () => 'AiGovernor', shared: false },
   { name: 'VECTORIZE', kind: 'Vectorize index', hq: 'axal-search', branch: (c) => branchResourceNames(c).vectorize, shared: false },
   { name: 'ANALYTICS', kind: 'Analytics Engine dataset', hq: 'studioos_metrics', branch: () => 'studioos_metrics', shared: true },
   { name: 'AI', kind: 'Workers AI', hq: null, branch: () => null, shared: true },
