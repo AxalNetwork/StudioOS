@@ -12,6 +12,7 @@ reply against its schema, not only that the route exists.
 | `deckDiscardDraft.schema.json` | `DELETE /api/decks/:id/draft` (D1501, #3751): ok, the deck and how many card copies were discarded. |
 | `deckDraft.schema.json` | `GET /api/decks/:id/draft` (D1501, #3751): the version, its rev and each card's working copy. |
 | `deckElementModels.schema.json` | `GET /api/decks/:id/element-models` (D1503, #3754): each routed element with its pick, the element groups and the free elements. |
+| `deckElements.schema.json` | `GET /api/decks/elements` (D1541, #3779): the icon set's licence record, the decor cap, the shapes, dividers and textures with their sanitised SVG, and Generate (Coming later). |
 | `deckFigures.schema.json` | `GET /api/decks/:id/figures` (D1523, #3775): every figure on the version with its state (Linked, Stated, Uncited, Not recorded) and source, and the counts. |
 | `deckGrid.schema.json` | `GET /api/decks/:id/grid` (D1499, #3749): the geometry, the 17 structures and each card's areas with their boxes. |
 | `deckInvestorLinks.schema.json` | `GET /api/decks/:id/investor-links` (D1565, #3812): the deck, its version and its per-investor links. |

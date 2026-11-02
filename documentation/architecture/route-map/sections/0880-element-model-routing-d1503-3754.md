@@ -12,6 +12,9 @@
 | `GET /api/decks/templates/:uid` | signed in (HQ's, or the caller's own) | D1535. `{ template: Meta, cards, theme }`. |
 | `POST /api/decks/templates/:uid/apply` `{ project_id }` | the venture's founders (`projectOwned`, write) | D1535. `{ proposal, template_id }`: a proposal (`method_id` `tpl:<uid>`), nothing kept before Accept. |
 | `POST /api/decks/:id/save-as-template` `{ name }` | the venture's founders | D1535. 201 `{ template: Meta }`: text and figures removed, structure, theme and decor kept, the caller's own. 422 `not_a_template`. |
+| `GET /api/decks/elements` | signed in | D1541 (#3779). `{ licence: { id, name, version, spdx, url, copyright, derived }, decor_max: 16, icons: { total }, shapes, dividers, textures: [{ kind, ref, label, svg }], generate: { available: false, reason: 'Coming later' } }`. Every `svg` sanitised; colours are theme tones. |
+| `GET /api/decks/elements/icons?q=&offset=&limit=` or `?refs=` | signed in | D1541. `{ total, offset, icons: [{ kind: 'icon', ref, label, svg }], licence: { set, version, spdx } }`; a page is at most 120, `refs` at most 16. |
+| `GET /api/decks/elements/licence` | signed in | D1541. The icon set's full licence text (ISC, with the Feather notice), as text/plain. |
 | `GET /api/admin/feature-flags` | admin | D1509 (#3760, migration 723): every `feature_flags` row (`key`, `scope`, `scope_id`, `enabled`, `updated_by`, `updated_at`), the `keys` a row may name (`grid_generate`, `element:<id>`, `model:<catalogue id>`) and `cache_s` (60). 503 `flags_unreadable` when the table cannot be read. |
 | `PUT /api/admin/feature-flags` `{ key, scope: 'global' \| 'role' \| 'user', scope_id?, enabled: true \| false \| null }` | admin | Writes one flag row (`null` deletes it: back to the default, on) and drops the 60 s KV copy. 400 `invalid_key`, `invalid_scope`, `invalid_scope_id` (a role name, or a user's numeric id) or `invalid_enabled`, each before any write. |
 
