@@ -6,6 +6,8 @@ reply against its schema, not only that the route exists.
 
 | File | What it is |
 |---|---|
+| `deckAreasProposals.schema.json` | `GET /api/decks/:id/areas/proposals?batch=` (D1512, #3764): the run's charged-of-held, whether every area settled, and each area's proposal with its variants (model, seed, cost, seconds, error, critique). |
+| `deckAreasQuote.schema.json` | `POST /api/decks/:id/areas/quote` (D1512, #3764): per-area lines that sum to the area's hold, each row's gates and refusal, the total hold and its expiry. |
 | `deckCardStatus.schema.json` | `GET /api/decks/:id/card-status` (D1579, #3826): each card's status and assignee under the filter, every card's count, the cards not Done, and who a card can be assigned to. |
 | `deckBatch.schema.json` | `GET /api/decks/areas/batches/:uid` and `POST …/cancel` (D1502, #3753): the run, its counts and each step's row as pd2b draws it. |
 | `deckComments.schema.json` | `GET /api/decks/:id/comments` (D1570, #3817): the venture's comment threads, who is reading, the people who can be mentioned and the open count. |

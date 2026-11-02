@@ -272,10 +272,14 @@ test('the seam reaches no network, and no client method exists for a route that 
   assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_batches.ts')), /deckBatches\.get\(`\/areas\/batches\/:uid\$\{UID\}`/);
   assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_batches.ts')), /deckBatches\.post\(`\/areas\/batches\/:uid\$\{UID\}\/cancel`/);
   assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckBatches\)/);
-  for (const path of ['/areas', '/areas/instruct']) {
+  // D1512 (#3764): Generate into areas has its routes (quote, admit, proposals, accept, discard) and its client.
+  assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_areas.ts')), /deckAreas\.post\(['"]\/:id\{\[0-9\]\+\}\/areas\/quote['"]/);
+  assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_areas.ts')), /deckAreas\.post\(['"]\/:id\{\[0-9\]\+\}\/areas['"]/);
+  assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckAreas\)/);
+  for (const path of ['/areas/instruct']) {
     assert.ok(!new RegExp(`['"\`]/decks/[^'"\`\\n]*${path.replace(/[$/{]/g, (c) => `\\${c}`)}`).test(client), `a client path for ${path} before its route is on main`);
   }
-  assert.ok(!readdirSync('frontend/src/lib/api').some((f) => /^deck(Areas|Instruct)\.js$/.test(f)));
+  assert.ok(!readdirSync('frontend/src/lib/api').some((f) => /^deckInstruct\.js$/.test(f)));
 });
 
 test('an unavailable answer is never printed as a zero, "$0.00" or "none"', async () => {
