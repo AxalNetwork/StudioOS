@@ -38,6 +38,7 @@ import { activityFor } from '../src/services/cycleActivity.ts';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
+import { migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const ROOT = process.cwd();
@@ -171,7 +172,7 @@ test('1: none of 464\'s columns or tables exists in the baseline or an earlier m
   for (const t of ['validation_decision_evidence', 'validation_decision_commitments', 'idx_validation_decisions_scope']) {
     assert.equal(BASELINE.includes(t), false, `${t} in the baseline`);
   }
-  const earlier = readdirSync(join(SQL_DIR, 'migrations')).filter((f) => f.endsWith('.sql') && f < '464');
+  const earlier = readdirSync(join(SQL_DIR, 'migrations')).filter((f) => f.endsWith('.sql') && migrationNumber(f) < 464);
   for (const f of earlier) {
     const src = sqlOf(f);
     for (const n of names.slice(3)) assert.equal(src.includes(n), false, `${n} in ${f}`);

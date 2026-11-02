@@ -33,7 +33,7 @@ import { buildCards, standardOutline } from '../src/services/decks/newDeck.ts';
 import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withGuard, GUARD_MODEL } from './_guard_stub.mjs';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { conflictingRecords, fullRecords, sparseRecords, wordsFor } from './fixtures/pitchStoryFixtures.ts';
 import { loadSchema } from './_schema_once.mjs';
@@ -82,7 +82,7 @@ test('a model switched off is not offered: `isOffered` reads MODELS_OFF, and a b
 // ─────────────────────────────────────────────────────────── the fixture
 
 const root = new URL('../sql/', import.meta.url);
-const migrations = readdirSync(new URL('migrations/', root)).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort()
+const migrations = readdirSync(new URL('migrations/', root)).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations)
   .map((n) => readFileSync(new URL('migrations/' + n, root), 'utf8'));
 const scratch = mkdtempSync(join(tmpdir(), 'feature-flags-d1509-'));
 const seedPath = join(scratch, 'schema.sqlite');
