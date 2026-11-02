@@ -24,7 +24,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { SignJWT } from 'jose';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import calendar from '../src/routes/calendar.ts';
 import { FEED_KINDS, PERSONAL_ONLY_KINDS, fetchUserEvents } from '../src/services/calendar.ts';
 import { ExternalReadError, MAX_PAGES, PAGE_SIZE, dedupeExternal, googleEvents, microsoftEvents } from '../src/services/calendar/externalReaders.ts';
@@ -32,7 +32,7 @@ import { onAxalSessionCreated } from '../src/services/calendar/sync.ts';
 
 const BASELINE = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
 const DIR = 'cloudflare-worker/sql/migrations';
-const MIGRATIONS = readdirSync(DIR).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort().map((n) => readFileSync(`${DIR}/${n}`, 'utf8'));
+const MIGRATIONS = readdirSync(DIR).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations).map((n) => readFileSync(`${DIR}/${n}`, 'utf8'));
 const SECRET = 'synthetic-calendar-external-1485-'.repeat(3);
 const FROM = '2026-11-01T00:00:00.000Z', TO = '2026-12-01T00:00:00.000Z';
 const TITLE = 'Synthetic private board dinner';
