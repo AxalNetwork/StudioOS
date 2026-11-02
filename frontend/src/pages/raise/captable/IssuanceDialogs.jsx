@@ -153,7 +153,7 @@ export function RecordDialog({ projectId, record, mode = 'record', admin = false
       </Field>
       {fileRef ? (
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" className={actionGhost} onClick={readIt} disabled={!!reading && reading.endsWith('…')} data-testid="captable-record-read">Let Eadwyn read its terms</button>
+          <button type="button" className={actionGhost} onClick={readIt} disabled={!!reading && reading.endsWith('…')} data-testid="captable-record-read">Find the terms in the file</button>
           <span className={`text-[11.5px] ${MUTED}`}>Eadwyn finds the terms and the pages; you enter every amount.</span>
         </div>
       ) : null}

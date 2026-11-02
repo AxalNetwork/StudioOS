@@ -77,10 +77,10 @@ export const PROGRESS_WAIT = 'Each accepted item’s stages (Accepted, Sent, In 
  * only ever starts from the press; in Manual mode the Worker refuses it.
  */
 export const WORD_OPTION = 'draft:build/plan';
-export const WORD_LABEL = 'Word with Eadwyn';
+export const WORD_LABEL = 'Word the plan';
 export const WORD_LINE = 'Eadwyn words the plan from your accepted evidence. You keep what you want.';
 export const WORD_READS = 'Only what you accepted in Validate.';
-export const WORD_COST = 'Taken from your AI tokens when you press Word with Eadwyn.';
+export const WORD_COST = 'Taken from your AI tokens when you press Word the plan.';
 export const WORDING_TAG = 'Eadwyn’s wording · not saved';
 export const KEEP = 'Keep wording';
 export const DISCARD = 'Discard wording';

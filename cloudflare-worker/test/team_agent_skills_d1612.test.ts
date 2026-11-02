@@ -22,6 +22,7 @@ import { readFileSync } from 'node:fs';
 import { SignJWT } from 'jose';
 import { Hono } from 'hono';
 import { makeD1 } from './_d1_sqlite.mjs';
+import { passHqGate } from './_hq_skill_gate.ts';
 import { addColumnsFrom, stripForeignKeys, tableFromBaseline } from './_baseline.mjs';
 import { AI_LOG_SCHEMA } from './_ai_budget_fixture.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
@@ -45,7 +46,10 @@ function world() {
   db.exec(sql('migrations/199_super_admin.sql'));
   db.exec(sql('migrations/089_skills_values_taxonomy.sql'));
   db.exec(sql('migrations/712_team_agents.sql'));
+  db.exec(sql('migrations/202611021724_team_agents_persona.sql')); // D4117: persona_key
   db.exec(sql('migrations/759_agent_skills.sql'));
+  db.exec(sql('migrations/202611022055_agent_skill_moderation.sql')); // D4161: the attach gate reads it
+  db.exec(sql('migrations/202611022140_hq_skill_lifecycle.sql')); // D4160: the HQ publish gate reads it
   db.exec(sql('migrations/091_user_skill_profile.sql'));
   db.exec(`CREATE TABLE project_members (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
     role TEXT NOT NULL DEFAULT 'cofounder', status TEXT NOT NULL DEFAULT 'accepted', source TEXT, invited_by INTEGER, created_at TEXT, updated_at TEXT)`);
@@ -109,6 +113,7 @@ const update = (over: Record<string, unknown> = {}) => ({
 async function published(w: W, body: Record<string, unknown>, who = SUPER) {
   const made = await call(w, who, 'POST', '/skills', body);
   assert.equal(made.status, 201, made.text);
+  await passHqGate(w.db, made.body.skill.uid); // D4160: HQ's approval and golden cases, as HQ's process gives them
   const pub = await call(w, who, 'POST', `/skills/${made.body.skill.uid}/publish`);
   assert.equal(pub.status, 200, pub.text);
   return made.body.skill.uid as string;
@@ -185,6 +190,7 @@ test('A2 assign is partial: each agent it can is pinned at the current version, 
   const w = world();
   const uid = await published(w, update({ roles: ['cfo'] }));
   await call(w, SUPER, 'PATCH', `/skills/${uid}`, { name: 'Draft the monthly investor update, v2' });
+  await passHqGate(w.db, uid);
   await call(w, SUPER, 'POST', `/skills/${uid}/publish`);
   const r = await call(w, EDITOR, 'POST', `/skills/${uid}/assign`, { agent_uids: [CFO, PROJECT_CFO, IR, GLOBEX_CFO, 'f'.repeat(32)] });
   assert.equal(r.status, 200);
@@ -219,7 +225,8 @@ test('A2 a retired skill stays pinned and readable, and cannot be added again', 
   const w = world();
   const uid = await published(w, update({ roles: ['cfo'] }));
   await call(w, EDITOR, 'PUT', `/agents/${CFO}/skills`, { skills: [{ uid }] });
-  await call(w, SUPER, 'PATCH', `/skills/${uid}`, { status: 'retired' });
+  // D4160: an Axal skill is retired from HQ with its replacement; the fixture retires it directly.
+  w.db.prepare("UPDATE agent_skills SET status = 'retired' WHERE uid = ?").run(uid);
   const read = await call(w, MEMBER, 'GET', `/agents/${CFO}/skills`);
   assert.deepEqual([read.body.skills[0].status, read.body.skills[0].pinned_version, read.body.skills[0].update_available], ['retired', 1, false]);
   assert.equal((await call(w, EDITOR, 'PUT', `/agents/${CFO}/skills`, { skills: [{ uid }] })).status, 200, 'kept at its version');

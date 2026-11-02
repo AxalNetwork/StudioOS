@@ -89,7 +89,7 @@ export default function ComposeSheet({ pack, refs, project = null, to, account, 
         <button type="button" className={PRIMARY} disabled={!canDraft({ estimate, intent, busy })} onClick={press} data-testid="compose-draft">Draft with Eadwyn</button>
       </div>;
 
-  return <Sheet title="Compose with Eadwyn" eyebrow="Email" sub={`Email to ${person.name}`} onClose={onClose} footer={footer} width={560} testId="compose-sheet">
+  return <Sheet title="Draft an email" eyebrow="Email" sub={`Email to ${person.name}`} onClose={onClose} footer={footer} width={560} testId="compose-sheet">
     <div className="flex flex-col gap-4">
       {from && <p className={`rounded-axal-md bg-axal-lavender px-3 py-2 text-[12.5px] text-axal-violet-deep dark:bg-violet-950/40 dark:text-violet-300`}>Opened from {from}. Person and context are filled in.</p>}
       <label className="flex flex-col gap-1">

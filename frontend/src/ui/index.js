@@ -43,6 +43,8 @@ export { default as FillSheet } from './FillSheet';
 export { default as BrandIcon, BRAND_MARKS, BRAND_GENERIC, BRAND_MONOGRAM, BRAND_ALIAS, resolveBrand, TILE_HEX } from './BrandIcon';
 // D753 — the one Verified mark, drawn only with a recorded check date. See VerifiedBadge.jsx.
 export { default as VerifiedBadge, verifiedDay } from './VerifiedBadge';
+// D4120 — a skill's energy image: a coded, deterministic SVG of rays toward its area (SkillEnergy canvas, style B). See SkillEnergy.jsx.
+export { default as SkillEnergy } from './SkillEnergy.jsx';
 export { default as ActionSheet, primary as actionPrimary, ghost as actionGhost, danger as actionDanger } from './ActionSheet';
 
 // The AI control rail — eight canvases, one component. Not navigation: see

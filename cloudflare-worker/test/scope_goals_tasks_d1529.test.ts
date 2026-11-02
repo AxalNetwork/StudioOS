@@ -47,6 +47,7 @@ function world() {
   );
   addColumnsFrom(db, sql('migrations/597_company_archive_and_events.sql'), 'company_profiles');
   db.exec(sql('migrations/712_team_agents.sql'));
+  db.exec(sql('migrations/202611021724_team_agents_persona.sql')); // D4117: persona_key
   db.exec(stripForeignKeys(MIGRATION));
   // D1614 W1 (#3969): the project board's columns on the same task store; project tasks now go through it.
   db.exec(stripForeignKeys(sql('migrations/762_scope_task_work_board.sql')));

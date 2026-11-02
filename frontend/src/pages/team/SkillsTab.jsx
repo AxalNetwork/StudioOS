@@ -6,7 +6,7 @@ import { AgentTile } from './AgentMark.jsx';
 import * as agents from './agentsAdapter.js';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, EYEBROW, FIELD, HonestBlock, MONO, MUTED } from './teamUi.jsx';
 import { day } from '../account/companies/companiesModel.js';
-import { SkillCard, TaxChips, ToolChips, UsedBy } from './SkillParts.jsx';
+import { AreaDot, SkillCard, TaxChips, ToolChips, UsedBy } from './SkillParts.jsx';
 import { AssignSkillSheet, NewSkillSheet } from './SkillSheets.jsx';
 import {
   CATEGORIES, SORTS, assignGroups, authorLine, companySkillsTitle, directory, groups, outputWords, scopeLine, skillFileName,
@@ -110,8 +110,8 @@ export function Filters({ category, setCategory, q, setQ, sort, setSort }) {
           const on = category === c.slug;
           return (
             <button key={c.label} type="button" aria-pressed={on} onClick={() => setCategory(c.slug)}
-              className={`inline-flex min-h-[28px] items-center rounded-axal-pill border px-2.5 text-[12px] ${on ? 'border-axal-lavender-edge bg-axal-lavender font-bold text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300' : 'border-axal-hairline text-axal-ink dark:border-gray-700 dark:text-gray-200'}`}
-              data-testid={`skills-cat-${c.slug || 'all'}`}>{c.label}</button>
+              className={`inline-flex min-h-[28px] items-center gap-1.5 rounded-axal-pill border px-2.5 text-[12px] ${on ? 'border-axal-lavender-edge bg-axal-lavender font-bold text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300' : 'border-axal-hairline text-axal-ink dark:border-gray-700 dark:text-gray-200'}`}
+              data-testid={`skills-cat-${c.slug || 'all'}`}>{c.slug ? <AreaDot area={c.slug} /> : null}{c.label}</button>
           );
         })}
       </div>

@@ -208,7 +208,8 @@ test('a handoff is a proposal: no task and no run for the target before a person
     assert.equal(count(w, 'SELECT COUNT(*) AS n FROM agent_task_runs WHERE agent_id = ?', GC), 0, 'manual: still no run');
     assert.equal((w.db.prepare('SELECT status FROM agent_handoffs WHERE id = ?').get(h.id) as any).status, 'accepted');
     // The target's run reads the note only inside the untrusted wrapper.
-    w.db.prepare("INSERT INTO agent_task_runs (uid, agent_id, task_id, attempt, status) VALUES ('ffffffff-run-gc', ?, ?, 1, 'running')").run(GC, t[0].id);
+    // Admitted while the project is in its company, as admission records (#3850's context re-check reads it).
+    w.db.prepare("INSERT INTO agent_task_runs (uid, agent_id, task_id, attempt, status, admitted_company_id) VALUES ('ffffffff-run-gc', ?, ?, 1, 'running', ?)").run(GC, t[0].id, COMPANY);
     w.db.prepare("UPDATE scope_tasks SET status = 'in_progress' WHERE id = ?").run(t[0].id);
     const run = w.db.prepare("SELECT * FROM agent_task_runs WHERE uid = 'ffffffff-run-gc'").get() as any;
     const built = await buildContext(loopDeps(w, fakeAgentRun(w).fn, READ_ALL), { run, agent: w.db.prepare('SELECT * FROM team_agents WHERE id = ?').get(GC) as any, task: { ...t[0], status: 'in_progress' } });

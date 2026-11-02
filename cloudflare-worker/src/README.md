@@ -33,7 +33,7 @@ worker ahead of its schema.
 | `models/` | Row types. |
 | `contracts/` | D1511 (#3762): the JSON Schema of every deck v2 adapter method's reply, checked against its route by `test:drift`. |
 | `templates/` | Legal document and email templates. |
-| `durable-objects/` | Realtime coordination, and a meeting bot's run. D1577 (#3824) adds `deck-presence.ts` (`DeckPresence`), bound as `DECK_PRESENCE` in all three `wrangler.toml` tables (the owner approved its cost, decision L). D1502 (#3753) adds a deck's generation runs (`deck-gen-room.ts`) and their per-account throttles (`ai-governor.ts`). |
+| `durable-objects/` | Realtime coordination, and a meeting bot's run. D1577 (#3824) adds `deck-presence.ts` (`DeckPresence`), bound as `DECK_PRESENCE` in all three `wrangler.toml` tables (the owner approved its cost, decision L). D1502 (#3753) adds a deck's generation runs (`deck-gen-room.ts`) and their per-account throttles (`ai-governor.ts`). D1581 (#3828) adds the phone remote for Present (`deck-remote.ts`), paired by code. |
 | `mcp/` | D666: StudioOS as a remote MCP server for AI assistants, its OAuth provider and its tools. Controlled by `MCP_SERVER_ENABLED` and `OAUTH_KV` (D681). |
 | `agents/` | D1528 (#3847, E3 of #3742): the agent engine's runtime behind one seam (`runtime.ts`): the `AgentScope` Durable Object per scope, the `AgentTaskWorkflow` per run, the agent queue and the sweep. Off unless `AGENT_ENGINE` is on. |
 | `rpc/` | The two `WorkerEntrypoint` classes HQ and a branch call each other through (D108), plus the plain modules that hold their logic. The classes are thin on purpose: `cloudflare:workers` does not exist under `node --test`, so anything inside them could only be verified by deploying. |
