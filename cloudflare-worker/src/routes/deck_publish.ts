@@ -4,7 +4,7 @@
  * the sites the founder lists, and the link's own preview card.
  *
  *   GET  /api/decks/:id/investor-links/:shareId/publish   { link_id, publish, public_views, note }
- *   PUT  /api/decks/:id/investor-links/:shareId/publish   { on: true, exemption: '506c', gate?: 'email', embed_origins?: [https origins] } | { on: false }
+ *   PUT  /api/decks/:id/investor-links/:shareId/publish   { on: true, gate?: 'email', embed_origins?: [https origins] } | { on: false }
  *   POST /api/decks/share/:token/email                    { email } → the reader passes the email gate in this browser
  *   GET  /embed/:token                                    the SPA shell, framed only by the link's listed origins (index.ts, before Hono)
  *   GET  /deck/share/:token, /share/deck/:token            the link's own preview card, only while public views are on (index.ts)
@@ -14,6 +14,15 @@
  * `public_views_off`), every published link asks for an email before it
  * sends a card, and no link previews as itself: the static private card of
  * #3916 stays. A 506(b) round never publishes (409 `exemption_506b`).
+ *
+ * D4086 (#4086): THE EXEMPTION IS THE ROUND'S. Publishing reads
+ * `raise_rounds.exemption` for the deck's round (`pitch_decks.round_ref`) and
+ * ignores any `exemption` a request sends; the refusals are `roundRefusal`'s
+ * (no round, not recorded, 506(b), not 506(c)). The read answers the round as
+ * `round: { uid, name, exemption } | null` and `refusal`, so the dialog shows
+ * it read-only. A link published earlier stands until its round records an
+ * exemption other than 506(c) (`linkStands`), wherever it is read: the share
+ * read, the email gate, the embed and the preview card.
  *
  * Publishing changes nothing else about the link: its expiry, view cap,
  * forwarding, NDA and what it includes all still apply, so a link meant as a
@@ -37,8 +46,8 @@ import { auditDeckWrite, getDeckRow, projectOwned, rowToDeck, shareLinkLive, ver
 import { ensureDeckShareConversionSchema } from './deck_share_actions';
 import { parseShareInclude, shareSlides } from '../services/decks/shareInclude';
 import {
-  PUBLIC_VIEWS_OFF, cleanEmail, cleanEmbedOrigins, embedAllowed, frameAncestors, gateFor, linkOgImage,
-  publicViewsOn, publishOf, publishRefusal, withPublish, type Publish,
+  PUBLIC_VIEWS_OFF, cleanEmail, cleanEmbedOrigins, embedAllowed, frameAncestors, gateFor, linkOgImage, linkStands,
+  publicViewsOn, publishOf, publishRefusal, roundExemptionOf, roundRefusal, withPublish, type DeckRound, type Publish, type Refusal,
 } from '../services/decks/publish';
 import { SHELL_HEADERS, rewriteShell } from '../services/socialCards';
 import { SITE_NAME, ogImageUrl } from '../../../frontend/src/lib/ogRegistry.js';
@@ -95,9 +104,42 @@ async function linkOf(env: Env, deckId: number, shareId: number): Promise<LinkRo
   ).bind(shareId, deckId).first<LinkRow>();
 }
 
-const answer = (linkId: number, p: Publish | null) => {
+/**
+ * D4086: the round a deck row names, with its recorded exemption. Null when the
+ * row names no round of its venture; 'unreadable' when the read failed (the
+ * column missing on a database not yet migrated, or D1 down).
+ */
+export async function deckRoundOf(env: Env, deck: { round_ref?: unknown; project_id?: unknown } | null | undefined): Promise<DeckRound | null | 'unreadable'> {
+  const ref = typeof deck?.round_ref === 'string' && deck.round_ref ? deck.round_ref : null;
+  if (!ref) return null;
+  try {
+    const r = await env.DB.prepare('SELECT uid, name, exemption FROM raise_rounds WHERE uid = ? AND project_id = ?')
+      .bind(ref, Number(deck?.project_id)).first<{ uid: string; name: string | null; exemption: string | null }>();
+    return r ? { uid: String(r.uid), name: r.name ?? null, exemption: roundExemptionOf(r.exemption) } : null;
+  } catch (e) {
+    console.error('[deck publish] round unreadable', (e as Error).message);
+    return 'unreadable';
+  }
+}
+
+/** D4086: the deck row a link belongs to, and whether its published state still stands against the round. */
+export async function linkStandsFor(env: Env, deckId: number): Promise<boolean> {
+  let row: { round_ref: string | null; project_id: number } | null = null;
+  try { row = await env.DB.prepare('SELECT round_ref, project_id FROM pitch_decks WHERE id = ?').bind(deckId).first<any>(); } catch { return true; }
+  return linkStands(await deckRoundOf(env, row));
+}
+
+const ROUND_UNREADABLE = { code: 'round_unreadable', message: 'The round this deck is for could not be read. Try again.' } as const;
+
+const answer = (linkId: number, p: Publish | null, round: DeckRound | null | 'unreadable') => {
   const on = publicViewsOn();
-  return { link_id: linkId, publish: p, gate: p ? gateFor(p, on) : null, public_views: on, note: on ? null : PUBLIC_VIEWS_OFF };
+  const readable = round === 'unreadable' ? null : round;
+  const refusal: Pick<Refusal, 'code' | 'message'> | null = round === 'unreadable' ? ROUND_UNREADABLE : roundRefusal(round);
+  return {
+    link_id: linkId, publish: p, gate: p ? gateFor(p, on) : null, public_views: on, note: on ? null : PUBLIC_VIEWS_OFF,
+    round: readable, round_readable: round !== 'unreadable',
+    refusal: refusal ? { code: refusal.code, message: refusal.message } : null,
+  };
 };
 
 deckPublish.get('/:id/investor-links/:shareId/publish', async (c) => {
@@ -108,7 +150,9 @@ deckPublish.get('/:id/investor-links/:shareId/publish', async (c) => {
   if (!Number.isSafeInteger(shareId) || shareId < 1) return c.json({ error: 'not found' }, 404);
   const link = await linkOf(c.env, Number(got.row.id), shareId);
   if (!link) return c.json({ error: 'not found' }, 404);
-  return c.json(answer(Number(link.id), publishOf(link.include_json)));
+  const round = await deckRoundOf(c.env, got.row);
+  const p = publishOf(link.include_json);
+  return c.json(answer(Number(link.id), p && linkStands(round) ? p : null, round));
 });
 
 deckPublish.put('/:id/investor-links/:shareId/publish', async (c) => {
@@ -125,11 +169,16 @@ deckPublish.put('/:id/investor-links/:shareId/publish', async (c) => {
   if (body.on === false) {
     await c.env.DB.prepare('UPDATE pitch_deck_share_tokens SET include_json = ? WHERE id = ?').bind(withPublish(link.include_json, null), link.id).run();
     await auditDeckWrite(c, user, projectId, 'deck_link_unpublished', 'A share link was unpublished');
-    return c.json(answer(Number(link.id), null));
+    return c.json(answer(Number(link.id), null, await deckRoundOf(c.env, got.row)));
   }
   if (body.on !== true) return refuse(c, 422, { code: 'on_missing', message: 'Say whether to publish the link: on true or false.' });
   const no = publishRefusal(body);
   if (no) return refuse(c, no.status, { code: no.code, message: no.message });
+  // D4086: the exemption is the round's; a request's own `exemption` is ignored.
+  const round = await deckRoundOf(c.env, got.row);
+  if (round === 'unreadable') return refuse(c, 503, { code: ROUND_UNREADABLE.code, message: ROUND_UNREADABLE.message });
+  const roundNo = roundRefusal(round);
+  if (roundNo) return refuse(c, roundNo.status, { code: roundNo.code, message: roundNo.message });
   if (!Number(link.live)) return refuse(c, 409, { code: 'link_closed', message: 'This link no longer opens, so it cannot be published. Make a new one.' });
   const p: Publish = {
     on: true, gate: body.gate === 'none' ? 'none' : 'email', exemption: '506c',
@@ -137,7 +186,7 @@ deckPublish.put('/:id/investor-links/:shareId/publish', async (c) => {
   };
   await c.env.DB.prepare('UPDATE pitch_deck_share_tokens SET include_json = ? WHERE id = ?').bind(withPublish(link.include_json, p), link.id).run();
   await auditDeckWrite(c, user, projectId, 'deck_link_published', `A share link was published under 506(c), ${gateFor(p) === 'email' ? 'email gate on' : 'no gate'}`);
-  return c.json(answer(Number(link.id), p));
+  return c.json(answer(Number(link.id), p, round));
 });
 
 /** The live link a share token names, with its publish state; null for a bad, closed or unpublished one. */
@@ -154,6 +203,8 @@ async function publishedLink(env: Env, token: string, viewerHash: string | null)
     'SELECT t.id, t.deck_id, t.include_json, d.project_id FROM pitch_deck_share_tokens t JOIN pitch_decks d ON d.id = t.deck_id WHERE t.id = ?',
   ).bind(live.id).first<{ id: number; deck_id: number; include_json: string | null; project_id: number }>();
   const publish = row ? publishOf(row.include_json) : null;
+  // D4086: a published link stands only while its round allows it.
+  if (row && publish && !(await linkStandsFor(env, Number(row.deck_id)))) return null;
   return row && publish ? { id: Number(row.id), deck_id: Number(row.deck_id), project_id: Number(row.project_id), include_json: row.include_json, publish } : null;
 }
 

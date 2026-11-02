@@ -5,9 +5,11 @@
 //        → 201 { report }; 409 already_reported with { report }; 404 when the
 //          result is not the caller's
 //   GET  /api/admin/deck-reports?status=open|resolved|all   (HQ admin)
-//        → { reports: [{ uid, reason, note, status, outcome, model, charged_microusd, proposal, … }] }
-//   POST /api/admin/deck-reports/:uid/resolve     { outcome: addressed|no_fault, note? }   (HQ admin)
-//        → { report }; 409 already_resolved
+//        → { reports: [{ uid, reason, note, status, outcome, model, charged_microusd, proposal,
+//            founder, deck, card, asked, before, after, … }], counts: { open, resolved_this_week } }
+//        (#4188; the Worker also takes `model` and `reason` filters)
+//   POST /api/admin/deck-reports/:uid/resolve     { outcome: addressed|no_fault, note }   (HQ admin)
+//        → { report }; 400 note_required (under 10 characters); 409 already_resolved
 // A report refunds nothing and changes no proposal.
 import { request } from '../api.js';
 

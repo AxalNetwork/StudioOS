@@ -180,7 +180,7 @@ function activeCompany(c: any, user: any): Promise<number | null> {
  * that role. Null for anyone else, which every route answers as 404. A
  * membership store that cannot be read is no membership.
  */
-async function roomProject(c: any, user: any, projectUid: string): Promise<RoomAccess | null> {
+export async function roomProject(c: any, user: any, projectUid: string): Promise<RoomAccess | null> {
   if (user.role === 'admin') return null;
   const owned = await ownedProject(c.env, user, projectUid, await activeCompany(c, user));
   if (owned) return { project: owned, role: 'owner' };
