@@ -33,6 +33,7 @@ which is the whole point: D1 rejects the entire statement, so one bad column
 name silently empties a screen in production.
 
 `_ts-loader.mjs` strips types at import; `fixtures/` holds shared rows.
+D1528 (#3847): `_agent_engine_fixture.ts` is the agent engine's world: the real migrated schema, the scope objects as `ScopeCore`s over in-memory storage, a fake Workflow binding and queue, a step harness that memoises by step name and can crash before a result is saved, and a fake `agentRun` that keeps E2's one-hold promise. `agent_engine_d1528.test.ts` (the loop, the queue, the routes, erasure), `agent_runtime_contract.test.ts` (the runtime contract, by runtime) and `agent_engine_bindings_d1528.test.ts` (wrangler.toml's three tables and a branch's config) run on it; each case removes its copy of the template as it closes.
 `_baseline.mjs` pulls one table's `CREATE TABLE` out of `schema_baseline.sql` so a
 fixture is the schema production has rather than a hand-copy that drifts from it —
 three tests had each grown their own copy of that reader, and one of the copies

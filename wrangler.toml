@@ -167,6 +167,11 @@ fallthrough = true
 TEAM_AGENTS_ENABLED = "false"
 # D1529 (#3845, #3742 E1): the agent engine's goals and tasks (/api/teams). "off" until the owner turns it on; needs TEAM_AGENTS_ENABLED too.
 AGENT_ENGINE = "off"
+# D1528 (#3847, #3742 E3): "manual" admits nothing on its own; "self_start" only after E3 and E5 merge (owner Q1 B).
+AGENT_AUTONOMY = "manual"
+# D1528: the runtime behind the seam (src/agents/runtime.ts). "do" is the only one built.
+AGENT_RUNTIME = "do"
+# D1528: AGENT_AI_GATEWAY (the `agents` AI Gateway id) stays unset until the owner creates the gateway.
 # D886 B9: meeting bot rollout; B1 enforces Super-Admin-only canary.
 MEETING_BOT = "canary"
 # Task #5 — canonical-host flip complete. APP_URL / PUBLIC_BASE_URL
@@ -358,6 +363,12 @@ binding = "AI"
 binding = "JOB_QUEUE"
 queue   = "studioos-job-queue"
 
+# D1528 (#3847, #3742 E3): the agent queue. A message names one admitted run;
+# its consumer starts that run's Workflow instance (a redelivery is a no-op).
+[[queues.producers]]
+binding = "AGENT_QUEUE"
+queue   = "studioos-agent-queue"
+
 [[queues.consumers]]
 queue              = "studioos-job-queue"
 max_batch_size     = 25
@@ -372,6 +383,23 @@ dead_letter_queue  = "studioos-job-queue-dlq"
 # so the admin panel can inspect and retry them.
 [[queues.consumers]]
 queue              = "studioos-job-queue-dlq"
+max_batch_size     = 10
+max_batch_timeout  = 5
+max_retries        = 3
+
+# D1528: the agent queue's consumer and its DLQ (spec #3742 §4.6). queue()
+# routes "agent-queue" batches before its own `dlq` test.
+[[queues.consumers]]
+queue              = "studioos-agent-queue"
+max_batch_size     = 5
+max_batch_timeout  = 5
+max_retries        = 3
+max_concurrency    = 10
+retry_delay        = 30
+dead_letter_queue  = "studioos-agent-queue-dlq"
+
+[[queues.consumers]]
+queue              = "studioos-agent-queue-dlq"
 max_batch_size     = 10
 max_batch_timeout  = 5
 max_retries        = 3
@@ -406,6 +434,11 @@ class_name = "OnboardingChat"
 name       = "MEETING_BOT_RUN"
 class_name = "MeetingBotRun"
 
+# D1528: one AgentScope object per scope (`project:{id}`, `company:{id}`).
+[[durable_objects.bindings]]
+name       = "AGENT_SCOPE"
+class_name = "AgentScope"
+
 [[migrations]]
 tag                = "v1-realtime"
 # Cloudflare requires `new_sqlite_classes` for all newly created Durable
@@ -416,6 +449,19 @@ new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
 [[migrations]]
 tag = "v2-meeting-bot"
 new_sqlite_classes = ["MeetingBotRun"]
+
+# D1528: append-only; no jurisdiction in v1.
+[[migrations]]
+tag = "v3-agent-scope"
+new_sqlite_classes = ["AgentScope"]
+
+# D1528: one AgentTaskWorkflow instance per run (id = run uid). State kept 7
+# days on success, 30 on error (owner Q6 A).
+[[workflows]]
+name       = "studioos-agent-task"
+binding    = "AGENT_TASK"
+class_name = "AgentTaskWorkflow"
+default_retention = { success_retention = "7 days", error_retention = "30 days" }
 
 # ---------- Vectorize (semantic search) ----------
 # Index `axal-search` (768-dim, cosine) backs the global search bar on the
@@ -588,6 +634,9 @@ custom_domain  = true
 TEAM_AGENTS_ENABLED = "false"
 # D1529 (#3845): the agent engine. Mirrored from [vars]; "off" until the owner turns it on.
 AGENT_ENGINE = "off"
+# D1528 (#3847): mirrored from [vars].
+AGENT_AUTONOMY = "manual"
+AGENT_RUNTIME = "do"
 # D886 B9: vars do not inherit into named environments.
 MEETING_BOT = "canary"
 # Task #5 — canonical-host flip. APP_URL/PUBLIC_BASE_URL now point at
@@ -690,6 +739,12 @@ binding = "AI"
 binding = "JOB_QUEUE"
 queue   = "studioos-job-queue"
 
+# D1528 (#3847, #3742 E3): the agent queue. A message names one admitted run;
+# its consumer starts that run's Workflow instance (a redelivery is a no-op).
+[[env.production.queues.producers]]
+binding = "AGENT_QUEUE"
+queue   = "studioos-agent-queue"
+
 [[env.production.queues.consumers]]
 queue              = "studioos-job-queue"
 max_batch_size     = 25
@@ -701,6 +756,23 @@ dead_letter_queue  = "studioos-job-queue-dlq"
 # Task #7 (IE) — production DLQ consumer
 [[env.production.queues.consumers]]
 queue              = "studioos-job-queue-dlq"
+max_batch_size     = 10
+max_batch_timeout  = 5
+max_retries        = 3
+
+# D1528: the agent queue's consumer and its DLQ (spec #3742 §4.6). queue()
+# routes "agent-queue" batches before its own `dlq` test.
+[[env.production.queues.consumers]]
+queue              = "studioos-agent-queue"
+max_batch_size     = 5
+max_batch_timeout  = 5
+max_retries        = 3
+max_concurrency    = 10
+retry_delay        = 30
+dead_letter_queue  = "studioos-agent-queue-dlq"
+
+[[env.production.queues.consumers]]
+queue              = "studioos-agent-queue-dlq"
 max_batch_size     = 10
 max_batch_timeout  = 5
 max_retries        = 3
@@ -723,6 +795,11 @@ class_name = "OnboardingChat"
 name       = "MEETING_BOT_RUN"
 class_name = "MeetingBotRun"
 
+# D1528: one AgentScope object per scope (`project:{id}`, `company:{id}`).
+[[env.production.durable_objects.bindings]]
+name       = "AGENT_SCOPE"
+class_name = "AgentScope"
+
 [[env.production.migrations]]
 tag                = "v1-realtime"
 new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
@@ -730,6 +807,19 @@ new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
 [[env.production.migrations]]
 tag = "v2-meeting-bot"
 new_sqlite_classes = ["MeetingBotRun"]
+
+# D1528: append-only; no jurisdiction in v1.
+[[env.production.migrations]]
+tag = "v3-agent-scope"
+new_sqlite_classes = ["AgentScope"]
+
+# D1528: one AgentTaskWorkflow instance per run (id = run uid). State kept 7
+# days on success, 30 on error (owner Q6 A).
+[[env.production.workflows]]
+name       = "studioos-agent-task"
+binding    = "AGENT_TASK"
+class_name = "AgentTaskWorkflow"
+default_retention = { success_retention = "7 days", error_retention = "30 days" }
 
 [[env.production.vectorize]]
 binding    = "VECTORIZE"
@@ -818,6 +908,10 @@ workers_dev = true
 [env.preview.vars]
 # D886: preview needs its own explicit enablement.
 MEETING_BOT = "off"
+# D1528 (#3847): the agent engine stays off in preview until the owner's account steps are done.
+AGENT_ENGINE = "off"
+AGENT_AUTONOMY = "manual"
+AGENT_RUNTIME = "do"
 # D867: private captures require explicit enablement in each environment.
 TELEGRAM_CAPTURE = "off"
 APP_URL           = "https://studioos-preview.workers.dev"
@@ -869,6 +963,12 @@ binding = "AI"
 binding = "JOB_QUEUE"
 queue   = "studioos-job-queue-preview"
 
+# D1528 (#3847, #3742 E3): the agent queue. A message names one admitted run;
+# its consumer starts that run's Workflow instance (a redelivery is a no-op).
+[[env.preview.queues.producers]]
+binding = "AGENT_QUEUE"
+queue   = "studioos-agent-queue-preview"
+
 [[env.preview.queues.consumers]]
 queue              = "studioos-job-queue-preview"
 max_batch_size     = 25
@@ -879,6 +979,23 @@ dead_letter_queue  = "studioos-job-queue-preview-dlq"
 # Task #7 (IE) — preview DLQ consumer
 [[env.preview.queues.consumers]]
 queue              = "studioos-job-queue-preview-dlq"
+max_batch_size     = 10
+max_batch_timeout  = 5
+max_retries        = 3
+
+# D1528: the agent queue's consumer and its DLQ (spec #3742 §4.6). queue()
+# routes "agent-queue" batches before its own `dlq` test.
+[[env.preview.queues.consumers]]
+queue              = "studioos-agent-queue-preview"
+max_batch_size     = 5
+max_batch_timeout  = 5
+max_retries        = 3
+max_concurrency    = 10
+retry_delay        = 30
+dead_letter_queue  = "studioos-agent-queue-preview-dlq"
+
+[[env.preview.queues.consumers]]
+queue              = "studioos-agent-queue-preview-dlq"
 max_batch_size     = 10
 max_batch_timeout  = 5
 max_retries        = 3
@@ -901,6 +1018,11 @@ class_name = "OnboardingChat"
 name       = "MEETING_BOT_RUN"
 class_name = "MeetingBotRun"
 
+# D1528: one AgentScope object per scope (`project:{id}`, `company:{id}`).
+[[env.preview.durable_objects.bindings]]
+name       = "AGENT_SCOPE"
+class_name = "AgentScope"
+
 [[env.preview.migrations]]
 tag                = "v1-realtime"
 new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
@@ -908,6 +1030,19 @@ new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
 [[env.preview.migrations]]
 tag = "v2-meeting-bot"
 new_sqlite_classes = ["MeetingBotRun"]
+
+# D1528: append-only; no jurisdiction in v1.
+[[env.preview.migrations]]
+tag = "v3-agent-scope"
+new_sqlite_classes = ["AgentScope"]
+
+# D1528: one AgentTaskWorkflow instance per run (id = run uid). State kept 7
+# days on success, 30 on error (owner Q6 A).
+[[env.preview.workflows]]
+name       = "studioos-agent-task-preview"
+binding    = "AGENT_TASK"
+class_name = "AgentTaskWorkflow"
+default_retention = { success_retention = "7 days", error_retention = "30 days" }
 
 [[env.preview.r2_buckets]]
 binding     = "FILES"

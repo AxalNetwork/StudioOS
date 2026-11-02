@@ -47,6 +47,11 @@
  * assigned to this agent (422 `task_not_assigned`) and is written on the
  * proposal.
  *
+ * GATEWAY (#3847, D1528). The run passes the `agents` AI Gateway id
+ * (`AGENT_AI_GATEWAY`, unset = none); a call the gateway refused for its limit
+ * answers 503 `gateway_limit`, which the runtime treats as the platform's
+ * circuit breaker.
+ *
  * The tool reads are named by the same run uid. Neither the prompt nor the
  * output is logged, thrown or written to an event.
  */
@@ -89,6 +94,16 @@ const RUN_UID_RE = /^[A-Za-z0-9-]{8,64}$/;
 /** `agent:<run uid>`: the proposal's `run_key`; `<run key>:run` is the hold's idempotency key. */
 export const runKeyOf = (runUid: string) => `agent:${runUid}`;
 export const holdKeyOf = (runKey: string) => `${runKey}:run`;
+/**
+ * D1528 (#3847, #3742 E3): the `agents` AI Gateway id, from `AGENT_AI_GATEWAY`;
+ * unset is none. Only this file passes a gateway id to the router.
+ */
+export const agentGatewayId = (env: Pick<Env, 'AGENT_AI_GATEWAY'>): string | null => {
+  const v = String(env.AGENT_AI_GATEWAY ?? '').trim();
+  return /^[A-Za-z0-9_-]{1,64}$/.test(v) ? v : null;
+};
+/** A gatewayed call the gateway refused for its limit: an attempt answered 429. */
+export const gatewayLimited = (r: { attempts?: { ok: boolean; status?: number }[] }) => !!r.attempts?.some((x) => !x.ok && x.status === 429);
 export type AgentQuote = { ok: true; quote: Spend } | AgentRefusal;
 
 const no = (status: number, code: string, message: string, extra?: Record<string, unknown>): AgentRefusal => ({ ok: false, status, code, message, ...(extra ? { extra } : {}) });
@@ -273,7 +288,8 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
   }
   if (!read.ok) return refused(env, a, read, input.module, input.option);
   if (read.block) c.opts.messages = [{ role: 'user', content: `${input.prompt}\n\n${read.block}` }];
-  const r = await run(env, { ...c.opts, rail: c.rail, surface: c.surface, idempotencyKey: holdKeyOf(runKey), executionId: runUid });
+  const gatewayId = agentGatewayId(env);
+  const r = await run(env, { ...c.opts, rail: c.rail, surface: c.surface, idempotencyKey: holdKeyOf(runKey), executionId: runUid, gatewayId });
   if (!r.ok && r.refusal === 'step_replayed') {
     // The hold was taken by an earlier attempt. Its proposal may have landed in the meantime.
     const landed = await railByRunKey(env, a.sponsor_user_id, runKey);
@@ -285,6 +301,10 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
     const lost: AgentStepLost = { ...no(409, 'step_lost', 'This step ran before, but what it wrote was not saved. Nothing more was charged.'), code: 'step_lost', holdStatus, runKey };
     await refused(env, a, lost, input.module, input.option);
     return lost;
+  }
+  if (!r.ok && gatewayId && gatewayLimited(r)) {
+    // D1528: the `agents` gateway's limit is the platform's circuit breaker; the runtime pauses the engine.
+    return refused(env, a, no(503, 'gateway_limit', 'Agents reached the platform\'s limit, so they are paused for now. You can still work on this yourself.'), input.module, input.option);
   }
   if (!r.ok) {
     // The guard's own words (and its Wellbeing link) when it refused; else the router's.

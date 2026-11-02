@@ -306,6 +306,10 @@ export interface RunOptions {
   // out and behaves as before.
   idempotencyKey?: string;
   executionId?: string;
+  // D1528 (#3847, #3742 E3): the `agents` AI Gateway id (`AGENT_AI_GATEWAY`).
+  // Only `agentRun` sets it. A gatewayed agent call is never retried without
+  // its gateway: the gateway's limit is the platform's circuit breaker.
+  gatewayId?: string | null;
 }
 
 /**
@@ -1438,6 +1442,15 @@ function gatewayOptionFor(env: Env, task: TaskClass, userId?: number | null): Ga
   return { gateway: { id: slug, metadata } };
 }
 
+/** D1528: an agent run's own gateway, with the same metadata keys (D261). */
+function agentGatewayOption(env: Env, opts: RunOptions): GatewayOption {
+  const branch = branchOf(env) ?? 'hq';
+  const metadata: Record<string, string> = { branch };
+  if (Number.isInteger(opts.userId) && opts.userId > 0) metadata.account = `${branch}:${opts.userId}`;
+  metadata.task = opts.task;
+  return { gateway: { id: String(opts.gatewayId), metadata } };
+}
+
 // True when this task would normally route through the advisor AI Gateway
 // AND a slug is configured — i.e. there's a gateway hop that could fail
 // independently of the underlying Workers AI model.
@@ -1456,7 +1469,7 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
   if (!ai || typeof ai.run !== 'function') {
     return { ok: false, status: 0, error: 'AI binding not configured' };
   }
-  const gatewayOpt = bypassGateway ? undefined : gatewayOptionFor(env, opts.task, opts.userId);
+  const gatewayOpt = opts.gatewayId ? agentGatewayOption(env, opts) : bypassGateway ? undefined : gatewayOptionFor(env, opts.task, opts.userId);
   // D761: cache affinity, so a member's next turn on the same page earns cached
   // input. The member's id and the page key only, never an email or a name.
   const affinity = shapes.sessionAffinity(opts.userId, normaliseSurface(opts.surface) ?? opts.task);
@@ -2309,7 +2322,7 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
   // reasoning and long context 30 s, images 60 s). A streamed run gets the
   // same limit for the handshake and its first chunk; the body after that
   // may legitimately run longer, so it is not timed.
-  const gatewayRouted = isGatewayRouted(env, opts.task);
+  const gatewayRouted = !opts.gatewayId && isGatewayRouted(env, opts.task);
   const inputTokens = route.isAudio ? 0
     : opts.rerank ? estTokens([opts.rerank.query, ...opts.rerank.contexts].join('\n'))
     : estTokens(route.isEmbed || opts.translate ? (opts.text ?? defaultContentBlob(opts)) : chatMessagesFor(opts).map((m) => m.content).join('\n'));

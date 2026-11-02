@@ -2061,7 +2061,7 @@ D1176 (#3103): Worker `/api/cycles/raise/use-of-funds` now serves GET `/plan`, s
 
 ### Agent engine E1: goals, tasks and dependencies (D1529, #3845)
 
-Worker routes in `routes/agent_engine.ts`, mounted at `/api/teams` before `team_agents.ts`, backed by `services/agents/goals.ts`, `services/agents/tasks.ts` and migration 727 (`scope_goals`, `scope_tasks`, `scope_task_deps`, `scope_task_events`; `task_id` and `run_key` on `ai_rail_proposals`). The client is `lib/api/agentEngine.js` (`agentEngineApi`). No page yet: S1's canvas integrates it (TM6b, TM6c, later TM10–TM11). Every route is 404 `agent_engine_off` unless `AGENT_ENGINE` is set and not `"off"` (it is `"off"` in both `wrangler.toml` blocks) and `TEAM_AGENTS_ENABLED` is `"true"`. The gates are D1496's read and manage. `cost` is `{ available: false }` until E3, never 0.
+Worker routes in `routes/agent_engine.ts`, mounted at `/api/teams` before `team_agents.ts`, backed by `services/agents/goals.ts`, `services/agents/tasks.ts` and migration 727 (`scope_goals`, `scope_tasks`, `scope_task_deps`, `scope_task_events`; `task_id` and `run_key` on `ai_rail_proposals`). The client is `lib/api/agentEngine.js` (`agentEngineApi`). No page yet: S1's canvas integrates it (TM6b, TM6c, later TM10–TM11). Every route is 404 `agent_engine_off` unless `AGENT_ENGINE` is set and not `"off"` (it is `"off"` in both `wrangler.toml` blocks) and `TEAM_AGENTS_ENABLED` is `"true"`. The gates are D1496's read and manage. `cost` is `{ available: false }` until E3 records task runs, never 0 (E3's runtime routes follow).
 
 | Route | Gate | What it does |
 | --- | --- | --- |
@@ -2072,6 +2072,20 @@ Worker routes in `routes/agent_engine.ts`, mounted at `/api/teams` before `team_
 | `POST /api/teams/:scope/:id/tasks` | manage | Takes `{ title, detail?, goal_uid?, module?, option?, kind?, context_project_id?, assignee?: { kind, uid? }, priority?, due_at?, source_kind?, source_ref? }`; 201 `{ task }`. 409 `agent_not_live`; 422 `module_not_allowed` / `option_not_allowed` / `assignee_not_member` / `project_not_in_company` / `goal_not_in_scope`. |
 | `PATCH /api/teams/tasks/:uid` | manage; a person assignee may send `status` and `blocked_reason` only | `{ task }`, with the same refusals. 403 `not_manager`. |
 | `PUT /api/teams/tasks/:uid/deps` | manage | Takes `{ depends_on: [uid] }` (at most 50); `{ task }`. 422 `dependency_cycle` / `cross_scope` / `too_many_dependencies`. |
+
+### Agent engine E3: the runtime (D1528, #3847)
+
+The same router (`routes/agent_engine.ts`), flag and gates. A start goes through the runtime's seam (`cloudflare-worker/src/agents/runtime.ts`): the scope's `AgentScope` object admits the run (`agents/engine.ts`, migration 728's `agent_task_runs` and `agent_scope_settings`), the agent queue starts its `AgentTaskWorkflow` instance, and the run's proposal waits in #3727's approvals queue above. The client is `agentEngineApi` (`taskQuote`, `startTask`, `agentRuns`, `run`, `cancelRun`, `engine`, `setEngine`). With the engine `off` or `paused`, #3727's `POST /api/teams/agents/:uid/run` still runs an agent by hand. `Run` is `{ uid, agent: { uid, role_key, first_name, last_name }, task: { uid, title }, attempt, status, step, refusal, proposal_uid, started_at, ended_at, cost: { available, value_microusd } }`; a step summary never holds a prompt.
+
+| Route | Gate | What it does |
+| --- | --- | --- |
+| `GET /api/teams/tasks/:uid/quote` | manage, or the assigned agent's sponsor | `{ quote: { available, value_microusd } }` (`agentQuote`), `available: false` when the price cannot be read. 403 `not_manager`; 409 `not_ready` (no agent, module or option); every quote refusal in its own words. |
+| `POST /api/teams/tasks/:uid/start` | manage, or the assigned agent's sponsor | 202 `{ run }`. 403 `engine_paused` (engine paused, halted, circuit breaker set, or canary without an admin starting) / `scope_paused`; 409 `agent_busy` (single flight) / `scope_busy` (`max_parallel_runs`) / `queue_full` (5 proposals waiting) / `not_ready` / `agent_not_live`; 503 `engine_unavailable` (no object binding). |
+| `GET /api/teams/agents/:uid/runs` | read | `{ runs: [Run] }`, newest first, at most 50. |
+| `GET /api/teams/runs/:uid` | read | `{ run, steps: [{ name, status, at, summary }], cost }`. |
+| `POST /api/teams/runs/:uid/cancel` | manage | `{ run }`: the instance is terminated, the run `cancelled`, the task open again. 409 `not_running`. |
+| `GET /api/teams/:scope/:id/engine` | read | `{ engine: 'off' \| 'paused' \| 'canary' \| 'on', halted, scope_paused, max_parallel_runs, autonomy: 'manual' \| 'self_start' }`, for the degraded-mode line. |
+| `PUT /api/teams/:scope/:id/engine` | manage | Takes `{ paused?, max_parallel_runs? }` (1 to 5); the same answer. A pause stops admissions in the scope's object; a resume rebuilds it from D1. 400 `invalid_engine`. |
 
 ### Team agents part 1: the registry and the rule books (D1496, #3840)
 
