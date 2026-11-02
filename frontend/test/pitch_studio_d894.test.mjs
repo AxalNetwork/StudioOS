@@ -843,7 +843,7 @@ test('D1604 home: the deck card, Start from, Data ready and Investor links; Vers
   assert.deepEqual(DECK_CARD_MENU.map((i) => i.label), ['Versions…', 'Export…', 'Brand kit']);
   // The deck card's facts, each from a read; nothing recorded is "Not recorded".
   assert.match(renderedText(between(html, 'pitch-studio-deck-facts', 'pitch-studio-coverage')), /Audience\s*Not recorded\s*Round\s*Not recorded\s*Saved\s*20 Oct · 2 cards\s*Views\s*5/);
-  // Start from: the one-click inside it; .pptx greyed "Coming later" until #3809.
+  // Start from: the one-click inside it; .pptx greyed "Coming later" until #3819.
   const start = between(html, 'pitch-studio-start', 'pitch-studio-data-ready');
   assert.match(start, /data-testid="pitch-studio-fast"/);
   assert.match(renderedText(between(start, 'pitch-studio-start-pptx')), /Import a \.pptx template ›\s*Coming later/);

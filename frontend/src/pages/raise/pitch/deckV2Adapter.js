@@ -104,7 +104,7 @@ export const SURFACES = Object.freeze({
   consistency: { issue: 3802, what: 'Consistency and wording checks' },
   deckActions: { issue: 3808, what: 'Replace all images and Reorder for stage' },
   brandLocks: { issue: 3819, what: 'Brand kit locks' },
-  pptxImport: { issue: 3809, what: 'Start from a .pptx template' },
+  pptxImport: { issue: 3819, what: 'Start from a .pptx template' },
   investorLinks: { issue: 3812, what: 'One link per investor, consent and watermark preview' },
   withdrawInvestorLink: { issue: 3812, what: 'Withdraw one investor\'s link, keeping its analytics' },
   comments: { issue: 3817, what: 'Comments with mentions' },

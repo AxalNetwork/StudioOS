@@ -14,6 +14,7 @@ import { LANGUAGES, langOf, languageLine, withLanguage } from './deckLanguage';
 import { figures as figuresAdapter, remix as remixAdapter, shown } from './deckV2Adapter';
 import { GO_TO_CARD, checkCounts, toReview } from './figuresModel';
 import { movedNotice } from './deckReflow';
+import { deckBrandKitApi } from '../../../lib/api/deckBrandKit';
 
 /**
  * D1604 (#3716, pd13) — the sheets the editor's ⋯ opens, each one v1 surface
@@ -216,7 +217,7 @@ export function BackgroundSheet({ card, index, readOnly, onBackground, onImage, 
   );
 }
 
-export function BrandKitSheet({ projectId, kit, readOnly, onClose }) {
+export function BrandKitSheet({ projectId, deckId = null, kit, readOnly, dirty = false, onApplied, onClose }) {
   const kitData = kit.status === 'ok' ? kit.data?.kit : null;
   return (
     <Frame title="Brand kit" testId="pitch-sheet-brand" onClose={onClose}>
@@ -230,8 +231,104 @@ export function BrandKitSheet({ projectId, kit, readOnly, onClose }) {
           {kitData.voice?.length ? ` · ${kitData.voice.join(', ')}` : ''}
         </span>
       ) : null}
+      {kit.status === 'ok' && projectId != null ? (
+        <DeckKitFields projectId={projectId} deckId={deckId} kit={kit} readOnly={readOnly} dirty={dirty} onApplied={onApplied} />
+      ) : null}
       {projectId != null ? <BrandingCard projectId={projectId} readOnly={readOnly} /> : null}
     </Frame>
+  );
+}
+
+/** D1562 (#3809, pd7): what the deck's own kit adds to the landing page's: palette roles, the font pair, the image style, the references. */
+export const KIT_ROLES = Object.freeze([['ground', 'Background'], ['ink', 'Text'], ['accent', 'Accent'], ['secondary', 'Secondary'], ['highlight', 'Highlight']]);
+export const IMAGE_STYLE_LABELS = Object.freeze({ photo: 'Photo', illustration: 'Illustration', screenshot: 'Screenshot' });
+export const APPLY_BRAND_LINE = 'One undo step';
+export const APPLY_BRAND_DIRTY = 'Save your changes first, then apply the brand.';
+const HEX_RE = /^#[0-9a-f]{6}$/i;
+
+/** The kit as the form holds it, from the read: a palette role left empty is not recorded, never black. */
+export function kitDraftOf(deck) {
+  return {
+    display: deck?.fonts?.display || '', body: deck?.fonts?.body || '',
+    palette: Object.fromEntries(KIT_ROLES.map(([role]) => [role, deck?.palette?.[role] || ''])),
+    image_style: deck?.image_style || '', references: Array.isArray(deck?.references) ? deck.references : [], logo_uid: deck?.logo_uid || null,
+  };
+}
+
+/** The body the writer takes: only what is set; a font pair only when both are chosen. */
+export function kitBodyOf(d) {
+  const palette = Object.fromEntries(Object.entries(d.palette).filter(([, v]) => HEX_RE.test(String(v || '').trim())).map(([k, v]) => [k, String(v).trim().toLowerCase()]));
+  return {
+    ...(d.display && d.body ? { fonts: { display: d.display, body: d.body } } : {}),
+    palette, image_style: d.image_style || null, references: d.references, logo_uid: d.logo_uid,
+  };
+}
+
+function DeckKitFields({ projectId, deckId, kit, readOnly, dirty, onApplied }) {
+  const fonts = kit.data?.font_options || [];
+  const [draft, setDraft] = useState(() => kitDraftOf(kit.data?.kit?.deck));
+  const [busy, setBusy] = useState(null);
+  const [line, setLine] = useState('');
+  const set = (patch) => setDraft((d) => ({ ...d, ...patch }));
+  const save = async () => {
+    setBusy('save'); setLine('');
+    try { await deckBrandKitApi.save(projectId, kitBodyOf(draft)); setLine('Brand kit saved.'); kit.retry?.(); }
+    catch (e) { setLine(e?.data?.message || e?.message || 'The brand kit could not be saved. Nothing was changed.'); }
+    finally { setBusy(null); }
+  };
+  const apply = async () => {
+    setBusy('apply'); setLine('');
+    try {
+      const r = await deckBrandKitApi.applyBrand(deckId);
+      setLine(r?.adjustments?.length ? r.adjustments.join(' ') : 'Brand applied to every card.');
+      onApplied?.(r);
+    } catch (e) { setLine(e?.data?.message || e?.message || 'The brand could not be applied. Nothing was changed.'); }
+    finally { setBusy(null); }
+  };
+  const swatch = (c) => (HEX_RE.test(c) ? { background: c } : undefined);
+  return (
+    <div className="flex flex-col gap-2" data-testid="pitch-sheet-brand-deck">
+      <span className={EYE}>Palette</span>
+      <div className="grid grid-cols-5 gap-2">
+        {KIT_ROLES.map(([role, label]) => (
+          <label key={role} className={`flex flex-col gap-1 ${MUTED}`}>
+            <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-full border border-axal-hairline dark:border-gray-700" style={swatch(draft.palette[role])} aria-hidden="true" />{label}</span>
+            <input className={FIELD} value={draft.palette[role]} placeholder="#rrggbb" disabled={readOnly} aria-label={`${label} colour`} data-testid={`pitch-brand-palette-${role}`}
+              onChange={(e) => set({ palette: { ...draft.palette, [role]: e.target.value } })} />
+          </label>
+        ))}
+      </div>
+      <span className={EYE}>Fonts</span>
+      <div className="grid grid-cols-2 gap-2">
+        {[['display', 'Headings'], ['body', 'Text']].map(([key, label]) => (
+          <label key={key} className={`flex flex-col gap-1 ${MUTED}`}>{label}
+            <select className={FIELD} value={draft[key]} disabled={readOnly} data-testid={`pitch-brand-font-${key}`} onChange={(e) => set({ [key]: e.target.value })}>
+              <option value="">Not set</option>
+              {fonts.map((f) => <option key={f} value={f}>{f}</option>)}
+            </select>
+          </label>
+        ))}
+      </div>
+      <span className={MUTED}>Google Fonts under the open font licence.</span>
+      <span className={EYE}>Image style</span>
+      <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Image style">
+        {Object.entries(IMAGE_STYLE_LABELS).map(([id, label]) => (
+          <button key={id} type="button" role="radio" aria-checked={draft.image_style === id} disabled={readOnly} className={GHOST}
+            data-testid={`pitch-brand-style-${id}`} onClick={() => set({ image_style: draft.image_style === id ? '' : id })}>{label}</button>
+        ))}
+      </div>
+      <span className={MUTED}>{draft.references.length ? `${draft.references.length} reference ${draft.references.length === 1 ? 'image' : 'images'}` : 'No reference images yet. Keep images in the image library to use them here.'}</span>
+      {!readOnly ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" className={GHOST} disabled={Boolean(busy)} onClick={save} data-testid="pitch-brand-save">{busy === 'save' ? 'Saving…' : 'Save brand kit'}</button>
+          {deckId != null ? (
+            <button type="button" className={GHOST} disabled={Boolean(busy) || dirty} onClick={apply} data-testid="pitch-brand-apply">{busy === 'apply' ? 'Applying…' : 'Apply brand'}</button>
+          ) : null}
+          <span className={MUTED}>{dirty ? APPLY_BRAND_DIRTY : APPLY_BRAND_LINE}</span>
+        </div>
+      ) : null}
+      {line ? <span className={MUTED} role="status" data-testid="pitch-brand-line">{line}</span> : null}
+    </div>
   );
 }
 

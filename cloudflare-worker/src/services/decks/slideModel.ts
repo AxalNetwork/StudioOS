@@ -54,6 +54,7 @@
  */
 import { sanitizeBinding } from './sources';
 import { sanitizeArtDirection } from './artDirection';
+import { fontPairOf } from './brandFonts';
 import { cellText, tableLines } from './tableCells';
 
 export { cellText, tableLines };
@@ -474,6 +475,9 @@ export function sanitizeTheme(v: any, url: UrlGuard): Record<string, unknown> & 
   // D1544 (#3784): a sentence (D1500) or the structured direction every image inherits.
   const art = sanitizeArtDirection(v.art_direction);
   if (art) out.art_direction = art;
+  // D1562 (#3809): the brand kit's font pair, two Google Fonts under the OFL; kept only when set.
+  const fonts = fontPairOf(v.fonts);
+  if (fonts) out.fonts = fonts;
   if (typeof v.lang === 'string' && LANG.test(v.lang)) out.lang = v.lang;
   const dir = oneOf(v.dir, DIRS);
   if (dir) out.dir = dir;
