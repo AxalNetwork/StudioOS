@@ -155,3 +155,6 @@
 - name: "changelog"
   color: "BFD4F2"
   description: "Session 1's CHANGELOG PR: the only PR allowed to edit CHANGELOG.md"
+- name: "prompt-eval-waiver"
+  color: "FEF2C0"
+  description: "Owner only: a deck prompt changed without re-running the element eval (D1519)"

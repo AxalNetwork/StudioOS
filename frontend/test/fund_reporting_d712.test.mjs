@@ -83,7 +83,7 @@ test('the PDF draws the empty sections as Not recorded, inside the sheet', () =>
 test('the client calls only the queue\'s routes, and the screens follow the admin gates', () => {
   const client = src('lib/api/fundReporting.js');
   for (const route of ['/fund-reporting/drafts', '/fund-reporting/build', '/rebuild', '/prepare', '/return', '/correct', '/issue', '/export']) assert.ok(client.includes(route), route);
-  assert.match(src('lib/api.js'), /export \* from '\.\/api\/fundPerformance\.js';\nexport \* from '\.\/api\/fundReporting\.js';\nexport \* from '\.\/api\/fundReports\.js';/);
+  assert.match(src('lib/apiModules.generated.js'), /export \* from '\.\/api\/fundPerformance\.js';\nexport \* from '\.\/api\/fundReporting\.js';\nexport \* from '\.\/api\/fundReports\.js';/);
   const period = src('pages/FundReportPeriodPage.jsx');
   assert.match(period, /A Super Admin issues this period\./);
   assert.match(period, /The fund&apos;s GP of record issues this period\./);

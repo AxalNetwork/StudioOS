@@ -27,6 +27,7 @@ import { resolve } from 'node:path';
 import { matchRoutes } from 'react-router-dom';
 // D528 — App.jsx plus every module under frontend/src/routes/, so a route in a module is checked like one in App.jsx.
 import { readRoutesSource } from './_routesSource.mjs';
+import { readRouteMap } from '../../scripts/lib/routeMap.mjs';
 
 const src = readRoutesSource();
 
@@ -89,7 +90,7 @@ test('a static segment outranks a param wherever it is registered', () => {
 });
 
 test('documentation/architecture/ROUTE_MAP.md carries the correction, not the original claim', () => {
-  const map = readFileSync(resolve(process.cwd(), 'documentation/architecture/ROUTE_MAP.md'), 'utf8');
+  const map = readRouteMap();
   assert.match(map, /React Router does not match in registration order/);
   // The old wording asserted the opposite; it must not still be sitting there.
   assert.doesNotMatch(map, /the param route swallows all four/,

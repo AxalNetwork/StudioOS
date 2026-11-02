@@ -6,6 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { apiModulesBlock } from './_apiModulesBlock.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 
@@ -17,7 +18,7 @@ test('researchFunds.js calls the two Worker routes and drops empty filters', () 
 });
 
 test('api.js re-exports it in its D527 block', () => {
-  const api = read('frontend/src/lib/api.js');
-  const block = api.slice(api.indexOf('// api-modules:begin'), api.indexOf('// api-modules:end'));
+  assert.match(read('frontend/src/lib/api.js'), /^export \* from '\.\/apiModules\.generated\.js';$/m);
+  const block = apiModulesBlock();
   assert.match(block, /^export \* from '\.\/api\/researchFunds\.js';$/m);
 });

@@ -307,6 +307,7 @@ test('the run and the quote: HQ\'s lock decides Body over the deck\'s pick, the 
     assert.equal(built.status, 201, JSON.stringify(built.body));
     assert.equal(f.calls().at(-1), MISTRAL, 'the lock, not the preset');
     assert.equal(built.body.element_models.body.source, 'org_lock');
+    assert.equal(built.body.wording.prompt_version, 'build.mistral@v2');
   } finally { f.close(); }
 });
 
