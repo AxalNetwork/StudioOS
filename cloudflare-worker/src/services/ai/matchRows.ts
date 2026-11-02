@@ -64,7 +64,7 @@ export function defaultMatchDeps(env: Env, charge: Charge, job: MatchJob): Match
   const { retrieve } = jobModels(job);
   return {
     async embed(text) {
-      const out = await aiRun(env, { ...charge, task: 'module_embed' as RunOptions['task'], model: retrieve, text });
+      const out = await aiRun(env, { ...charge, surface: charge.surface, task: 'module_embed' as RunOptions['task'], model: retrieve, text });
       stopOn(out);
       return out.ok && Array.isArray(out.embedding) && out.embedding.length ? out.embedding : null;
     },
@@ -76,7 +76,7 @@ export function defaultMatchDeps(env: Env, charge: Charge, job: MatchJob): Match
     async write(prompt, rows) {
       // The job's write step (`textJob`), so the member's pick and the presets apply.
       const out = await aiRun(env, {
-        ...charge, task: 'module_chat' as RunOptions['task'], textJob: job, maxTokens: Math.min(60 * rows, 900), temperature: 0.2,
+        ...charge, surface: charge.surface, task: 'module_chat' as RunOptions['task'], textJob: job, maxTokens: Math.min(60 * rows, 900), temperature: 0.2,
         systemPrompt: 'You explain matches in plain words. One line per numbered candidate, at most 25 words, why it fits. Use only what the candidate text says; never invent a figure, a name or a fact. Never give advice. Reply only with the numbered lines.',
         messages: [{ role: 'user', content: prompt }],
       });

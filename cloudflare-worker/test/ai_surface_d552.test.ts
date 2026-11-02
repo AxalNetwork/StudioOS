@@ -183,6 +183,7 @@ const FORWARDED: Record<string, string[]> = {
   'services/agents/agentRun.ts': ['c.surface'],  // D1496 part 2: the agent's module app path (moduleSurface), both the quote and the run
   'services/decks/imageDraw.ts': ['a.surface'],  // D1505: the deck image pipeline's seven runs, on the page its caller names (deck_images.ts: AI_SURFACE.raisePitch)
   'services/ai/decide.ts': ['charge.surface'],   // #3938: decisions, rankings and sentiment run on the caller's page (pipeline, studio, research, interviews)
+  'services/ai/matchRows.ts': ['charge.surface', 'charge.surface'], // #3938 part 2b: a match row's embeddings and its line, on the caller's page (networkfx, cycle_raise, events, research)
 };
 
 /** Every call site's fixed name, by file — the table D552.md lists. */
