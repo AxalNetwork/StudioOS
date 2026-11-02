@@ -985,6 +985,8 @@ auth.get('/me', async (c) => {
       suggestedRole = rr?.suggested_role || null;
     } catch { /* table absent on a partial DB — the screen falls back to generic copy */ }
   }
+  // D1548: set by `terms_acceptance_pending` below, read by the key after it.
+  let termsReason: 'missing' | 'updated' | null = null;
 
   return c.json({
     id: user.id, email: user.email, name: user.name, role: user.role,
@@ -1092,6 +1094,14 @@ auth.get('/me', async (c) => {
     // rows exist for anyone who has signed in. The dev FastAPI returns a
     // different shape entirely and therefore also gates nobody, which is why the
     // SPA must read a missing key as "do not gate".
+    //
+    // D1548 (#3793) — RE-ACCEPTANCE RIDES THE SAME FLAG. When
+    // `TERMS_REACCEPT_FROM` is set, a member who accepted the Terms before that
+    // version owes the acceptance again. The second query runs only then, so
+    // with the constant null (today) /me asks exactly what it asked before.
+    // `terms_acceptance_reason` tells the screen which case it is: 'missing'
+    // (never accepted) or 'updated' (accepted an earlier version); null when
+    // nothing is owed.
     terms_acceptance_pending: await (async () => {
       try {
         const row: any = await c.env.DB.prepare(
@@ -1102,9 +1112,26 @@ auth.get('/me', async (c) => {
               AND status IN ('pending', 'in_review')
             LIMIT 1`,
         ).bind(user.id).first();
-        return !!row;
+        if (row) { termsReason = 'missing'; return true; }
+        const { TERMS_REACCEPT_FROM } = await import('../services/trust');
+        if (!TERMS_REACCEPT_FROM) return false;
+        const stale: any = await c.env.DB.prepare(
+          `SELECT 1 FROM legal_obligations o
+            WHERE o.user_id = ?
+              AND o.obligation_key = 'tos_v1'
+              AND o.required = 1
+              AND o.status = 'satisfied'
+              AND NOT EXISTS (SELECT 1 FROM legal_acceptances a
+                               WHERE a.user_id = o.user_id
+                                 AND a.obligation_key = 'tos_v1'
+                                 AND a.document_version >= ?)
+            LIMIT 1`,
+        ).bind(user.id, TERMS_REACCEPT_FROM).first();
+        if (stale) { termsReason = 'updated'; return true; }
+        return false;
       } catch { return false; }
     })(),
+    terms_acceptance_reason: termsReason,
     // D106 — WHICH DEPLOYMENT IS THIS, told once, on the response the SPA
     // already fetches on every route change.
     //

@@ -3,7 +3,10 @@
 //   GET  /api/decks/new/context?project_id=<id>
 //        → { audiences, lengths, cards, standard, round, averages, fast_path, prompt_max }
 //   POST /api/decks/new/quote      { project_id, step, audience, length, prompt?, outline? }
-//        → { step, ai: true, hold_microusd, model } | { step, ai: false, reason, message }
+//        → { step, ai: true, hold_microusd, model, quote_uid?, pricing_version? } | { step, ai: false, reason, message }
+//        D1540 (#3791): send `quote_uid` back with the outline or the build and that run
+//        settles at no more than `hold_microusd`; 409 `quote_stale` when the quote was
+//        used, lapsed or priced another run (quote again).
 //   POST /api/decks/outline        { project_id, audience, round_ref?, length, prompt?, start? }
 //        → { proposal, outline: { rows, proposed_by, reason? }, cost }
 //   POST /api/decks/generate       { project_id, proposal_id?, audience?, length?, prompt?, outline? }

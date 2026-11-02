@@ -2,7 +2,7 @@
  * D1511 (#3762, deck v2 A18) — a reply checked against its contract schema.
  *
  * The subset of JSON Schema the contracts here use, and nothing more: `type`
- * (object, array, string, integer, number, boolean, null, or a list of them), `required`,
+ * (object, array, string, integer, number, boolean, null, or a list of these), `required`,
  * `properties`, `additionalProperties: false`, `items`, `minItems`,
  * `maxItems`, `enum`, `const`, `minimum`, `maximum` and a local `$ref` to
  * `#/$defs/<name>`. A keyword it does not know is an error, so a schema can
@@ -28,9 +28,8 @@ export function contractErrors(schema: Schema, value: unknown, root: Schema = sc
   if (schema.enum && !schema.enum.some((e: unknown) => same(e, value))) out.push(`${path}: must be one of ${JSON.stringify(schema.enum)}`);
   if (schema.type) {
     const t = typeOf(value);
-    // A list of types is any one of them ("integer" or "null"); "number" takes an integer.
-    const types: string[] = Array.isArray(schema.type) ? schema.type : [schema.type];
-    const ok = types.some((want) => t === want || (want === 'number' && t === 'integer'));
+    const types = Array.isArray(schema.type) ? schema.type : [schema.type];
+    const ok = types.includes(t) || (types.includes('number') && t === 'integer');
     if (!ok) return [...out, `${path}: must be ${types.join(' or ')}, is ${t}`];
   }
   if (typeof value === 'number') {
