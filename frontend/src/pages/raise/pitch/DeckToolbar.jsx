@@ -5,6 +5,7 @@ import DeckMoreMenu from './DeckMoreMenu';
 import { REDO, SAVE_VERSION, SHARE_ITEMS, STEPS_LINE, UNDO } from './deckV2Model';
 import { HISTORY_STEPS } from './gridOps';
 import useMenuFocus from './useMenuFocus';
+import { avatarsOf, editingLine } from './presenceModel';
 
 /**
  * D1604 (#3716, pd0, pd3, pd13) — the editor's header row, left of the Ask:
@@ -22,7 +23,11 @@ import useMenuFocus from './useMenuFocus';
  * Nothing else sits in the header (the owner's rule: Present, Share and Ask
  * stay visible, everything else goes in ⋯). The tablet keeps the same row.
  * `chip` is `saveChip()`'s; `onAction(id)` is the page's, for the ⋯ items,
- * `share`, `export` and `save`. The row is drawn as soon as the version is
+ * `share`, `export` and `save`.
+ *
+ * D1577 (#3824, pd32): left of the save state, the other members on the deck,
+ * each an avatar in their colour, and "[N] editing" (`presenceModel.js`).
+ * `editors` is null while presence is off, and then nothing is drawn. The row is drawn as soon as the version is
  * known, before the editor is: Present and Share need only the version, so
  * they stay while the deck or the model is still reading, or failed. Until
  * then `chip` is null and `waiting` (the sentence why) greys the ⋯ items the
@@ -42,8 +47,10 @@ const GHOST = `${BTN} border border-axal-hairline bg-white text-axal-ink hover:b
 const ICON = 'inline-flex h-10 min-w-[36px] items-center justify-center rounded-[9px] border border-axal-hairline bg-white px-2 text-axal-ink hover:bg-axal-ground aria-disabled:cursor-not-allowed aria-disabled:text-axal-muted max-sm:min-h-[44px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800 dark:aria-disabled:text-gray-500';
 const PRIMARY = `${BTN} bg-axal-violet text-white hover:bg-axal-violet-deep dark:bg-violet-600 dark:hover:bg-violet-500`;
 
-export default function DeckToolbar({ chip, presentTo = null, readOnly = false, phone = false, onAction, labels, outOfTokens = false, waiting = null, history = null, testId = 'deck-toolbar' }) {
+export default function DeckToolbar({ chip, presentTo = null, readOnly = false, phone = false, onAction, labels, outOfTokens = false, waiting = null, history = null, editors = null, youId = null, testId = 'deck-toolbar' }) {
   const [share, setShare] = useState(false);
+  const avatars = avatarsOf(editors, youId);
+  const editing = editingLine(editors, youId);
   const menu = useMenuFocus(share, () => setShare(false));
   const blocked = history ? { ...(history.undo ? {} : { undo: 'Nothing to undo.' }), ...(history.redo ? {} : { redo: 'Nothing to redo.' }) } : {};
 
@@ -56,6 +63,21 @@ export default function DeckToolbar({ chip, presentTo = null, readOnly = false, 
           <button type="button" className={ICON} aria-label={`${REDO}${history.redo ? `, ${history.redo} ${history.redo === 1 ? 'step' : 'steps'}` : ''}`} title={`${REDO} (⇧⌘Z)`}
             aria-disabled={!history.redo || undefined} onClick={() => history.redo && onAction?.('redo')} data-testid="pitch-editor-redo"><Redo2 size={14} aria-hidden="true" /></button>
           <span className="font-mono text-[10.5px] text-axal-muted dark:text-gray-400" data-testid="pitch-editor-steps">{STEPS_LINE(HISTORY_STEPS)}</span>
+        </span>
+      ) : null}
+      {avatars ? (
+        <span className="inline-flex items-center gap-1.5" data-testid={`${testId}-editors`}>
+          <span className="flex -space-x-1.5">
+            {avatars.shown.map((a) => (
+              <span key={a.id} title={a.name} aria-hidden="true"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-full border-2 border-white text-[10.5px] font-bold text-white dark:border-gray-900"
+                style={{ background: a.colour }} data-testid={`${testId}-editor-${a.id}`}>{a.initials}</span>
+            ))}
+            {avatars.more ? <span aria-hidden="true" className="inline-flex h-7 min-w-7 items-center justify-center rounded-full border-2 border-white bg-axal-ground px-1 text-[10.5px] font-bold text-axal-ink dark:border-gray-900 dark:bg-gray-800 dark:text-gray-100">+{avatars.more}</span> : null}
+          </span>
+          <span className="text-[12px] font-bold text-axal-ink dark:text-gray-100" data-testid={`${testId}-editing`}>
+            {editing}<span className="sr-only">: {avatars.shown.map((a) => a.name).join(', ')}{avatars.more ? ` and ${avatars.more} more` : ''}</span>
+          </span>
         </span>
       ) : null}
       {chip ? (
