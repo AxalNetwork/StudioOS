@@ -28,6 +28,7 @@ import type { Env } from '../types';
 import type { RouteMount } from '../util/routeRegistry';
 import { requireAuth } from '../auth';
 import { quoteRun, run } from '../services/aiRouter';
+import { AI_SURFACE } from '../services/aiSurfaces';
 import { refuseRun } from '../util/railContext';
 import { refuse } from '../util/refusal';
 import { mapError } from './_t13t14t15_helpers';
@@ -91,7 +92,8 @@ proposals.post('/:projectUid/proposals/run', async (c) => {
         extra: { quote: { hold_microusd: got.q.hold_microusd, model: got.q.model, confirm_quote: got.confirm } },
       });
     }
-    const res = await run(c.env, { ...got.opts, model: got.q.model });
+    // The surface and rail are runOptions' own, restated here so the D552 and D765 guards read them at the call.
+    const res = await run(c.env, { ...got.opts, model: got.q.model, surface: AI_SURFACE.raiseDataRoom, rail: got.opts.rail });
     if (!res.ok) {
       const stop = refuseRun(c, res);
       if (stop) return stop;
