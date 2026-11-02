@@ -43,7 +43,7 @@ import { areasOf } from '../src/pages/raise/pitch/gridSelection.js';
 import { FOUNDER_OPTIONS } from '../src/lib/railOptions/founder.js';
 import {
   CHART_MIN_LINE, EMPTY_TEXT_WHAT, NOT_RUN, TEXT_CHANGES, TEXT_ELEMENTS, aspectFor, batchMode, chargedLine, defaultElement, holdLine, modelChip,
-  placeResult, rowPlan, runSequence, validLine, variantWhy,
+  placeResult, rowPlan, runSequence, validLine, variantWhy, VENTURE_ELEMENTS, VENTURE_LINE,
 } from '../src/pages/raise/pitch/areaLightboxModel.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -67,6 +67,9 @@ test('every element maps to a route on main, a free placement, or its adapter is
       assert.equal(plan.run, 'later', el.id);
       assert.equal(plan.adapter, el.adapter, el.id);
       assert.equal(plan.issue, SURFACES[el.adapter].issue, `${el.id}: keyed to the issue that brings it`);
+    } else if (VENTURE_ELEMENTS.includes(el.id)) {
+      // D1543 (#3781): a record-bound element is read from the records, never generated here.
+      assert.deepEqual([plan.run, plan.why], ['refused', VENTURE_LINE], el.id);
     } else {
       assert.ok(runs.has(plan.run), `${el.id} runs on main (${plan.run})`);
     }

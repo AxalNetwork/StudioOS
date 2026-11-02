@@ -40,6 +40,11 @@
  * issue.
  * `comments` (D1570, #3817)
  * answers through `deckCommentsApi.list`.
+ * `ventureElements` (D1543, #3781) answers through `deckVentureElementsApi`:
+ * with an element, its one read, whose gate refusal (`no_consent`,
+ * `no_permission`, `totals_only`, `not_included`, `subject_to_counsel`,
+ * `quotes_not_switched_on`, …) reaches the surface as the answer's `code`
+ * and the canvas's line as its `reason`; without one, every element at once.
  *
  * Fields on routes that exist (`context.inferred` and `context.freshness`
  * from #3877; the PostHog, HubSpot and Linear source rows from #3880) need
@@ -57,6 +62,7 @@ import { deckCheckApi } from '../../../lib/api/deckCheck.js';
 import { deckElementModelsApi } from '../../../lib/api/deckElementModels.js';
 import { deckModelPresetsApi } from '../../../lib/api/deckModelPresets.js';
 import { deckCommentsApi } from '../../../lib/api/deckComments.js';
+import { deckVentureElementsApi } from '../../../lib/api/deckVentureElements.js';
 
 export { NOT_ON };
 
@@ -87,7 +93,7 @@ export const SURFACES = Object.freeze({
   imageEdit: { issue: 3778, what: 'Crop, focus, filters, upscale and background removal' },
   elementsLibrary: { issue: 3779, what: 'Icons, shapes, dividers and textures' },
   diagrams: { issue: 3780, what: 'Funnel, hierarchy, hub and spoke, and 2×2 diagrams' },
-  ventureElements: { issue: 3781, what: 'Logo wall, use of funds, round terms, cap-table summary and interview quotes' },
+  ventureElements: { issue: 3781, what: 'Team bios, logo wall, use of funds, round terms, cap-table summary and interview quotes' },
   templates: { issue: 3782, what: 'Template filters by stage, audience and style' },
   myTemplates: { issue: 3782, what: 'Your own templates' },
   saveAsTemplate: { issue: 3782, what: 'Save as my template' },
@@ -118,7 +124,7 @@ export const SURFACES = Object.freeze({
 const off = (name) => async () => unavailable(SURFACES[name].issue);
 
 /** The rows whose route is on main: each answers through its real client, never unavailable by default. */
-export const SWAPPED = Object.freeze(['grid', 'saveCard', 'discardDraft', 'draft', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'presets', 'orgLocks', 'comments']);
+export const SWAPPED = Object.freeze(['grid', 'saveCard', 'discardDraft', 'draft', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'presets', 'orgLocks', 'comments', 'ventureElements']);
 
 
 /**
@@ -134,7 +140,9 @@ export async function through(call, issue) {
     const status = e?.status ?? e?.response?.status ?? null;
     if (status === 404) return unavailable(issue);
     const message = typeof e?.message === 'string' && e.message ? e.message : 'could not be read';
-    return Object.freeze({ available: false, unreadable: true, reason: message, issue });
+    // D1543: a Worker refusal's code (a gate such as `no_consent`) rides along, so a surface can draw its line.
+    const code = typeof e?.code === 'string' && e.code ? e.code : null;
+    return Object.freeze({ available: false, unreadable: true, reason: message, issue, ...(code ? { code } : {}) });
   }
 }
 
@@ -174,7 +182,12 @@ export const arrange = off('arrange');
 export const imageEdit = off('imageEdit');
 export const elementsLibrary = off('elementsLibrary');
 export const diagrams = off('diagrams');
-export const ventureElements = off('ventureElements');
+/**
+ * D1543 (#3781): the venture-record elements, from records with their Source and grade, no model.
+ * `ventureElements(deckId, element, opts)` reads one (`GET /api/decks/:id/venture-elements/:element`), refused by its gate;
+ * `ventureElements(deckId, null, opts)` reads them all for the one-click run, each placed or left out.
+ */
+export const ventureElements = (deckId, element, opts) => through(() => (element ? deckVentureElementsApi.element(deckId, element, opts) : deckVentureElementsApi.list(deckId, opts)), SURFACES.ventureElements.issue);
 export const templates = off('templates');
 export const myTemplates = off('myTemplates');
 export const saveAsTemplate = off('saveAsTemplate');

@@ -55,6 +55,8 @@ export function areaLabel(grid) {
  */
 const R = (route, option = null) => ({ route, option });
 const A = (adapter, issue) => ({ adapter, issue });
+/** D1543 (#3781): a venture-record element, read from the records with no model (`deckV2Adapter.ventureElements`). */
+const V = Object.freeze({ free: true, ...R('GET /api/decks/:id/venture-elements/:element') });
 
 export const ELEMENT_GROUPS = Object.freeze([
   { id: 'text', label: 'Text', items: [
@@ -65,7 +67,7 @@ export const ELEMENT_GROUPS = Object.freeze([
     { id: 'callout', label: 'Call-out', ...R('POST /api/decks/:id/cards/:card/assist', 'deck:rewrite') },
     { id: 'caption', label: 'Caption', ...R('POST /api/decks/:id/cards/:card/assist', 'deck:rewrite') },
     { id: 'quote_founder', label: 'Quote · founder’s own', free: true },
-    { id: 'team_bios', label: 'Team bios', ...A('ventureElements', 3781) },
+    { id: 'team_bios', label: 'Team bios', ...V },
     { id: 'speaker_notes', label: 'Speaker notes', ...A('media', 3788) },
   ] },
   { id: 'images', label: 'Images', items: [
@@ -81,7 +83,7 @@ export const ELEMENT_GROUPS = Object.freeze([
     { id: 'icons', label: 'Icons', ...A('elementsLibrary', 3779) },
     { id: 'shapes', label: 'Shapes and dividers', ...A('elementsLibrary', 3779) },
     { id: 'textures', label: 'Backgrounds and textures', ...A('elementsLibrary', 3779) },
-    { id: 'logo_wall', label: 'Logo wall', ...A('ventureElements', 3781) },
+    { id: 'logo_wall', label: 'Logo wall', ...V },
   ] },
   { id: 'data', label: 'Data', items: [
     { id: 'chart', label: 'Chart from records', ...R('POST /api/decks/:id/cards/:card/assist', 'deck:chart') },
@@ -106,10 +108,10 @@ export const ELEMENT_GROUPS = Object.freeze([
   ] },
   { id: 'venture', label: 'Venture records', items: [
     { id: 'team_grid', label: 'Team grid', free: true },
-    { id: 'use_of_funds', label: 'Use of funds', ...A('ventureElements', 3781) },
-    { id: 'round_terms', label: 'Round terms', ...A('ventureElements', 3781) },
-    { id: 'interview_quote', label: 'Interview quote', ...A('ventureElements', 3781) },
-    { id: 'cap_table', label: 'Cap-table summary', ...A('ventureElements', 3781) },
+    { id: 'use_of_funds', label: 'Use of funds', ...V },
+    { id: 'round_terms', label: 'Round terms', ...V },
+    { id: 'interview_quote', label: 'Interview quote', ...V },
+    { id: 'cap_table', label: 'Cap-table summary', ...V },
   ] },
   { id: 'media', label: 'Media & links', items: [
     { id: 'video', label: 'Video', free: true, ...R('POST /api/decks/video-link') },

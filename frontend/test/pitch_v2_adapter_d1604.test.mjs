@@ -28,6 +28,7 @@ import { deckTypedValuesApi } from '../src/lib/api/deckTypedValues.js';
 import { deckCheckApi } from '../src/lib/api/deckCheck.js';
 import { deckElementModelsApi } from '../src/lib/api/deckElementModels.js';
 import { deckCommentsApi } from '../src/lib/api/deckComments.js';
+import { deckVentureElementsApi } from '../src/lib/api/deckVentureElements.js';
 
 test('every adapter method answers unavailable, with the reason and the issue that brings its route', async () => {
   const methods = Object.keys(adapter).filter((k) => !HELPERS.has(k));
@@ -36,7 +37,7 @@ test('every adapter method answers unavailable, with the reason and the issue th
   // D1499 (#3749) swapped grid, D1522 (#3774) stagePlan, D1553 (#3800) remix, D1503 (#3754) elementModels; D1565 (#3812)
   // the investor links; D1538 (#3787) typedTables; D1555 (#3802) consistency rides the check read. A swapped
   // surface's body calls its client through().
-  assert.deepEqual([...adapter.SWAPPED], ['grid', 'saveCard', 'discardDraft', 'draft', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'presets', 'orgLocks', 'comments'], 'the rows whose routes are on main');
+  assert.deepEqual([...adapter.SWAPPED], ['grid', 'saveCard', 'discardDraft', 'draft', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'presets', 'orgLocks', 'comments', 'ventureElements'], 'the rows whose routes are on main');
 
 
   const seam = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
@@ -171,7 +172,7 @@ test('the seam reaches no network, and no client method exists for a route that 
   const src = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
   assert.doesNotMatch(src, /request\(|fetch\(|XMLHttpRequest/);
   // A swapped row's client is the only `lib/api` the seam may import (D1499's `deckGrid.js`, D1522's `deckStage.js`, D1553's `deckRemix.js`, D1503's `deckElementModels.js`, D1565's `deckInvestorLinks.js`, D1538's `deckTypedValues.js`, D1555's `deckCheck.js`, D1549's `deckModelPresets.js`).
-  assert.deepEqual([...src.matchAll(/from '([^']*lib\/api[^']*)'/g)].map((x) => x[1]).sort(), ['../../../lib/api/deckCheck.js', '../../../lib/api/deckComments.js', '../../../lib/api/deckDraft.js', '../../../lib/api/deckElementModels.js', '../../../lib/api/deckGrid.js', '../../../lib/api/deckInvestorLinks.js', '../../../lib/api/deckModelPresets.js', '../../../lib/api/deckRemix.js', '../../../lib/api/deckStage.js', '../../../lib/api/deckTypedValues.js']);
+  assert.deepEqual([...src.matchAll(/from '([^']*lib\/api[^']*)'/g)].map((x) => x[1]).sort(), ['../../../lib/api/deckCheck.js', '../../../lib/api/deckComments.js', '../../../lib/api/deckDraft.js', '../../../lib/api/deckElementModels.js', '../../../lib/api/deckGrid.js', '../../../lib/api/deckInvestorLinks.js', '../../../lib/api/deckModelPresets.js', '../../../lib/api/deckRemix.js', '../../../lib/api/deckStage.js', '../../../lib/api/deckTypedValues.js', '../../../lib/api/deckVentureElements.js']);
   // D1549 (#3796): the presets route is on main, with its client; orgLocks reads the same reply.
   assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_model_presets.ts')), /deckModelPresets\.get\(['"]\/:id\{\[0-9\]\+\}\/model-presets['"]/);
   assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckModelPresets\)/);
@@ -242,7 +243,15 @@ test('the element picker: 8 groups, each item on main or on the seam, and the th
   assert.equal(PEND, '(pending owner)');
   const on = new Set(ELEMENTS.filter(elementOnMain).map((e) => e.id));
   for (const id of ['title', 'body', 'bullets', 'chart', 'table', 'timeline', 'metric', 'photo', 'upload', 'video', 'team_grid']) assert.ok(on.has(id), id);
-  for (const id of ['use_of_funds', 'round_terms', 'flow', 'funnel', 'icons']) assert.ok(!on.has(id), id);
+  for (const id of ['flow', 'funnel', 'icons']) assert.ok(!on.has(id), id);
+  // D1543 (#3781): the six venture-record items are keyed to their route, free (no model), and on main.
+  const venture = ['team_bios', 'logo_wall', 'use_of_funds', 'round_terms', 'interview_quote', 'cap_table'];
+  for (const id of venture) {
+    const e = ELEMENTS.find((x) => x.id === id);
+    assert.deepEqual([e.adapter, e.issue, e.free, e.route, e.option], [undefined, undefined, true, 'GET /api/decks/:id/venture-elements/:element', null], id);
+    assert.ok(on.has(id), id);
+  }
+  assert.ok(!ELEMENTS.some((e) => e.adapter === 'ventureElements'), 'no item waits on the swapped row');
 });
 
 test('area labels and the hold line', () => {
@@ -300,4 +309,35 @@ test('D1570 (#3817): comments is swapped — it answers through deckCommentsApi.
     assert.equal((await adapter.comments(7)).unreadable, true, 'anything else is unreadable, never an empty thread');
   } finally { deckCommentsApi.list = real; }
   assert.equal(adapter.availability('comments'), null);
+});
+
+test('D1543 (#3781): ventureElements is swapped — one element through deckVentureElementsApi.element, all through .list, a gate refusal keeps its code and line', async () => {
+  // Mutation checked: ventureElements left as off('ventureElements') → the available answer fails; through() dropping
+  // the code → the gate assert fails; element and list swapped → the asked assert fails.
+  const real = { ...deckVentureElementsApi };
+  const asked = [];
+  try {
+    const one = { deck_id: 7, element: 'round_terms', available: true, blocks: [], bindings: [], model: null, label: 'Proposed, subject to counsel' };
+    deckVentureElementsApi.element = async (...a) => { asked.push(['element', ...a]); return one; };
+    deckVentureElementsApi.list = async (...a) => { asked.push(['list', ...a]); return { deck_id: 7, elements: {} }; };
+    assert.deepEqual(await adapter.ventureElements(7, 'round_terms', { final: false }), { available: true, value: one });
+    assert.deepEqual(await adapter.ventureElements(7, null, { includeCapTable: true }), { available: true, value: { deck_id: 7, elements: {} } });
+    assert.deepEqual(asked, [['element', 7, 'round_terms', { final: false }], ['list', 7, { includeCapTable: true }]]);
+    for (const [code, line] of [
+      ['no_consent', 'Only quotes from sessions with recorded consent can be used.'],
+      ['no_permission', "Harbor Synth hasn't given permission to show their logo."],
+      ['not_included', 'Totals only · never shown in shared links unless you include it'],
+      ['subject_to_counsel', 'Proposed, subject to counsel'],
+    ]) {
+      deckVentureElementsApi.element = async () => { throw Object.assign(new Error(line), { status: 409, code }); };
+      const a = await adapter.ventureElements(7, 'logo_wall');
+      assert.deepEqual([a.available, a.code, a.reason, a.issue], [false, code, line, 3781], code);
+    }
+    deckVentureElementsApi.element = async () => { throw Object.assign(new Error('nope'), { status: 404 }); };
+    assert.deepEqual(await adapter.ventureElements(7, 'team_bios'), { available: false, reason: NOT_ON, issue: 3781 }, 'a 404 is still off');
+  } finally { Object.assign(deckVentureElementsApi, real); }
+  assert.equal(adapter.availability('ventureElements'), null);
+  assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckVentureElements\)/, 'the route is mounted');
+  assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_venture_elements.ts')), /\.get\(['"]\/:id\{\[0-9\]\+\}\/venture-elements\/:element['"]/);
+  assert.match(read('frontend/src/lib/api.js'), /^export \* from '\.\/api\/deckVentureElements\.js';$/m, 'one line in the D527 block');
 });

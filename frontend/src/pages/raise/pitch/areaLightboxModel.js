@@ -48,6 +48,14 @@ export const RAIL_PAGE = 'Founder · Raise · Pitch deck';
 export const TEXT_ELEMENTS = Object.freeze(['title', 'kicker', 'body', 'bullets', 'callout', 'caption']);
 const CHARTS = Object.freeze({ chart: 'chart', table: 'table', timeline: 'timeline' });
 const IMAGES = Object.freeze({ photo: 'scene', illustration: 'flat' });
+/**
+ * D1543 (#3781): the venture-record elements. Their route is on main
+ * (`deckV2Adapter.ventureElements`): each is read from the records with no
+ * model, or refused by its gate. This dialog generates; it does not insert a
+ * record-bound element, so the row says so instead of "Coming later".
+ */
+export const VENTURE_ELEMENTS = Object.freeze(['team_bios', 'logo_wall', 'use_of_funds', 'round_terms', 'interview_quote', 'cap_table']);
+export const VENTURE_LINE = 'Placed from your records, with no model. This dialog does not insert it yet.';
 /** Free elements the editor's existing dialogs place (Add a block, ⋯ › Structure). */
 const DIALOGS = Object.freeze({
   quote_founder: { open: 'add-block', kind: 'text' },
@@ -154,6 +162,7 @@ export function rowPlan({ area, element, card, cardIndex, items = [], choice = {
   const block = area?.kind === 'block' ? area.block : null;
   if (!el || !area) return { run: 'refused', why: 'Pick an element for this area.' };
   if (el.adapter) return { run: 'later', adapter: el.adapter, issue: el.issue, why: LATER };
+  if (VENTURE_ELEMENTS.includes(element)) return { run: 'refused', why: VENTURE_LINE };
   // A figure bound to a record is the record's: only another recorded figure replaces it.
   if (bound(block) && element !== 'metric') {
     const module = items.find((i) => i.source_key === block.binding?.source_key)?.module ?? null;

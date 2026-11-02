@@ -224,3 +224,34 @@ export async function retrieveQuotes(env: Env, projectId: number, query: string,
     return { available: false, reason: REASONS.unreadable };
   }
 }
+
+/**
+ * D1543 (#3781, B5) — the founder's manual pick of one line, for the
+ * Interview quote element. The same two rules as a search: while the index is
+ * not switched on (`deps.index` absent, owner decision L), nothing is picked;
+ * and the line must pass `quotableLines`' clause for this venture now, so a
+ * line whose consent was withdrawn, a founder's line or another venture's is
+ * `no_consent`. Attributed by role, never by name; no model runs.
+ */
+export async function pickQuote(
+  env: Env, projectId: number, segmentId: number, deps: Pick<QuoteDeps, 'index'>,
+): Promise<{ ok: true; quote: Omit<Quote, 'score'> } | { ok: false; code: 'quotes_not_switched_on' | 'no_consent'; reason: string }> {
+  if (!deps.index) return { ok: false, code: 'quotes_not_switched_on', reason: REASONS.not_set_up };
+  const l = (await quotableLines(env, projectId)).find((x) => Number(x.segment_id) === segmentId);
+  if (!l) return { ok: false, code: 'no_consent', reason: QUOTE_CONSENT_LINE };
+  const role = typeof l.role === 'string' && l.role.trim() ? l.role.trim().slice(0, 80) : null;
+  return {
+    ok: true,
+    quote: {
+      text: clip(l.text), attribution: role ?? 'Interviewee', role_recorded: role != null,
+      provenance: {
+        segment_id: Number(l.segment_id), session_uid: l.session_uid, interview_id: Number(l.interview_id),
+        held_on: l.held_on, start_ms: l.start_ms == null ? null : Number(l.start_ms), end_ms: l.end_ms == null ? null : Number(l.end_ms),
+        consent: 'given',
+      },
+    },
+  };
+}
+
+/** The canvas's gate line for a quote (dk-boards §3, pd9r). */
+export const QUOTE_CONSENT_LINE = 'Only quotes from sessions with recorded consent can be used.';
