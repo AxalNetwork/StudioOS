@@ -9,7 +9,7 @@ import { areaLabel, askAreaName } from './deckV2Model';
 import { GRID, aspectOf, baselineShare, frameOf, placeOf, ratioOf } from './gridModel';
 import { langAttrs } from './deckLanguage';
 import { SourceChip } from './SourcesBoards';
-import { ChangedNotice, FigureCard } from './FigureCard';
+import { ChangedNotice, FigureCard, UpdateRefresh } from './FigureCard';
 import { faceOf, isFigure, itemsByKey, staleFigures } from './figuresModel';
 import { elementsLibrary } from './deckV2Adapter.js';
 import {
@@ -182,6 +182,7 @@ export function CardChrome({ chrome, pageLabel = null, colours, logo = null }) {
 export default function GridStage({
   card, index, model, colours, ink, theme, kit, charts, readOnly = false,
   selection, focus, onSelection, onMove, onAsk, askOff = null, askLine = null, items = [], onRefresh = null,
+  onUpdateDerive = null, onUpdateAccept = null,
   pageLabel = null, onCard = null, onDecor = null,
   editors = null, youId = null, lockLine = null, onPointer = null,
 }) {
@@ -368,7 +369,8 @@ export default function GridStage({
     setDivLine({ error: false, text: dividerReadout(card, div, delta) });
     const over = overflowOf(r.card, div.a, aspect) || overflowOf(r.card, div.b, aspect);
     setOverflow(over ? { id: over.id, words: over.words } : null);
-    onCard?.(r.card);
+    // D1515: the second argument names the undo step.
+    onCard?.(r.card, 'divider');
   };
   const divKeys = (e, div) => {
     const step = DIVIDER_KEYS[div.axis][e.key];
@@ -404,7 +406,7 @@ export default function GridStage({
     if (!overflow) return;
     const r = moveOverflow(card, overflow.id, aspect);
     setOverflow(null);
-    if (!r.same) { setDivLine(null); onCard?.(r.card); }
+    if (!r.same) { setDivLine(null); onCard?.(r.card, 'overflow'); }
   };
 
   const one = chosen.length === 1 ? chosen[0] : null;
@@ -594,6 +596,8 @@ export default function GridStage({
         return at?.kind === 'block' && isFigure(at.block) ? <FigureCard block={at.block} items={items} charts={charts} /> : null;
       })()}
       <ChangedNotice changed={changed} readOnly={readOnly} onRefresh={onRefresh} />
+      {/* D1584 (#3831): Refresh from the latest update, beside Refresh from records. */}
+      <UpdateRefresh card={card} cardIndex={index} readOnly={readOnly} derive={onUpdateDerive} onAccept={onUpdateAccept} />
       {many ? (
         <div className="flex flex-wrap items-center gap-3 self-center rounded-full bg-gray-900 px-4 py-1.5 text-[12.5px] text-white shadow-lg dark:bg-gray-100 dark:text-gray-900" role="toolbar" aria-label="Selection" data-testid="pitch-editor-selbar">
           <span className="font-bold">{chosen.length} areas selected</span>

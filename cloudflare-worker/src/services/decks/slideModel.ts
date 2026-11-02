@@ -41,6 +41,7 @@
  * which every reader shows as "Not recorded", never 0.
  */
 import { sanitizeBinding } from './sources';
+import { sanitizeArtDirection } from './artDirection';
 import { cellText, tableLines } from './tableCells';
 
 export { cellText, tableLines };
@@ -445,7 +446,8 @@ export function sanitizeTheme(v: any, url: UrlGuard): Record<string, unknown> & 
   if (chrome) out.chrome = chrome;
   const voice = str(v.voice, 200);
   if (voice) out.voice = voice;
-  const art = str(v.art_direction, 500);
+  // D1544 (#3784): a sentence (D1500) or the structured direction every image inherits.
+  const art = sanitizeArtDirection(v.art_direction);
   if (art) out.art_direction = art;
   if (typeof v.lang === 'string' && LANG.test(v.lang)) out.lang = v.lang;
   const dir = oneOf(v.dir, DIRS);

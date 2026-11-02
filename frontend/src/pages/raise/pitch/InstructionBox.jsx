@@ -7,7 +7,7 @@ import { reportError } from '../../../lib/log';
 import { useRailOption } from '../../../ui/railCrumbs';
 import { aiTokens, refusalOf } from './newDeckModel';
 import { instruct, SURFACES } from './deckV2Adapter';
-import { CHARGED_LINE, areaLabel } from './deckV2Model';
+import { areaLabel } from './deckV2Model';
 import { areaKind } from './gridSelection';
 import { updateBlock } from './editorModel';
 import { INSTRUCTION_MAX, textBody } from './deckAssistModel';
@@ -31,8 +31,8 @@ import {
  *   Send     one filled text area: the quote first (`deck_assist`, action
  *            `ask`, rail option deck:rewrite), "Holds up to $x · you pay what
  *            it uses", then Run; what comes back is a proposal, placed only
- *            on Accept, held until Save; the proposal says the run was
- *            already charged (undo is #3767). Enter is Send, and neither
+ *            on Accept, held until Save, one undo step (D1515: undoing it
+ *            says the run is still charged). Enter is Send, and neither
  *            sends again while a quote is read or a run is in flight
  *            several areas: `deckV2Adapter.instruct` (#3773 / #3795), which
  *            answers "Coming later" on main
@@ -118,7 +118,8 @@ export default function InstructionBox({
     railProposalsApi.decide(proposal.uid, decision).then(
       () => {
         setDeciding(false);
-        if (decision === 'accept') onPlace?.(updateBlock(card, proposal.blockId, { text: proposal.after }));
+        // D1515: one undo step, marked charged, so undoing it says "Still charged".
+        if (decision === 'accept') onPlace?.(updateBlock(card, proposal.blockId, { text: proposal.after }), { charged: true, label: 'Accept' });
         setProposal(null); setText('');
         onProposals?.();
       },
@@ -178,10 +179,6 @@ export default function InstructionBox({
       {proposal ? (
         <>
           <TextProposal proposal={proposal} busy={deciding} onAccept={() => decide('accept')} onDiscard={() => decide('discard')} testId="pitch-instruction-proposal" />
-          {/* Until undo (#3767): the run is already charged, whatever Accept or Discard does. */}
-          <span className={`${MUTED} text-[11.5px]`} data-testid="pitch-instruction-charged">
-            {proposal.cost ? `Charged ${proposal.cost}.` : 'Charged; the amount is not recorded yet.'} {CHARGED_LINE}
-          </span>
           <RefusalLine refusal={placeError} testId="pitch-instruction-place-error" />
         </>
       ) : null}
