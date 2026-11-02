@@ -34,10 +34,20 @@
  *   POST   /tasks/:uid/start          manage or sponsor  202 { run }; 409 agent_busy | scope_busy | queue_full | not_ready;
  *                                                        403 engine_paused | scope_paused
  *   GET    /agents/:uid/runs          read               { runs: [Run] }
- *   GET    /runs/:uid                 read               { run, steps: [{ name, status, at, summary }], cost }
+ *   GET    /runs/:uid                 read               { run, steps: [{ name, status, at, summary }], cost, detail } (detail: W3 below)
  *   POST   /runs/:uid/cancel          manage             { run }; 409 not_running
  *   GET    /:scope/:id/engine         read               { engine, halted, scope_paused, max_parallel_runs, autonomy }
  *   PUT    /:scope/:id/engine         manage             body { paused?, max_parallel_runs? }; 400 invalid_engine
+ *
+ * D1614 W3 (#3971) — a run in full, its retry, and a project's activity feed (`services/agents/runActivity.ts`):
+ *
+ *   GET    /runs/:uid                 read               `detail`: agent (name, role, model), skill, work (task, instruction),
+ *                                                        sources and tools by name, proposals (decision, who), outcome
+ *                                                        (completed | failed { reason_text, retryable } | skipped { reason } |
+ *                                                        cancelled), times, cost { held, charged, model, tokens }
+ *   POST   /runs/:uid/retry           manage or sponsor  202 { run }; 409 not_retryable, and every start refusal
+ *   GET    /project/:id/activity?who=people|agents|both&person=&agent=&task=&before=
+ *                                     read               { items, next_cursor, lists? }; projects only (a company has no route)
  *
  * #3851 (E7 of #3742) — the evaluation board (TM14), behind the same flag and gates:
  *
@@ -95,6 +105,7 @@ import { addDuty, dutiesOf, dutyByUid, dutyDto, removeDuty, runsPerMonth, update
 import { chainsOf } from '../services/agents/handoffs';
 import { daysOf, evaluateScope, runCostReader } from '../services/agents/evaluation';
 import { RETENTION, addFact, forgetAll, forgetNote, noteByUid, noteDto, notesOf, retentionText } from '../services/agents/memory';
+import { isLatestAttempt, outcomeOf, projectActivity, runDetail } from '../services/agents/runActivity';
 
 type C = Context<{ Bindings: Env }>;
 
@@ -338,6 +349,35 @@ router.put('/tasks/:uid/deps', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+// D1614 W3 (#3971): a project's activity feed. Projects only, as the burn-up (owner revision,
+// 2026-11-01): a company has no route here (404).
+const WHO = ['people', 'agents', 'both'] as const;
+router.get('/project/:id/activity', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, 'project', c.req.param('id') ?? '');
+    if (!s || s.kind !== 'project') return refuse(c, 404, { code: 'not_found', message: 'There is no project here.' });
+    if (!(await canRead(c.env, s, user))) return refuse(c, 403, { code: 'not_member', message: 'Only the project team can read its activity.' });
+    const who = (c.req.query('who') ?? 'both') as (typeof WHO)[number];
+    if (!WHO.includes(who)) return refuse(c, 400, { code: 'invalid_who', message: 'Show people, agents or both.' });
+    const before = c.req.query('before') ?? null;
+    if (before != null && !/^[0-9: -]{10,19}\|[erp][0-9]{12}$/.test(before)) return refuse(c, 400, { code: 'invalid_cursor', message: 'That page marker is not one this feed gave.' });
+    const ref = async (q: string, sql: string) => {
+      const v = c.req.query(q);
+      if (!v) return { ok: true as const, id: null };
+      const row = /^[A-Za-z0-9_-]{1,64}$/.test(v) ? await c.env.DB.prepare(sql).bind(v, s.id).first<{ id: number }>() : null;
+      return row ? { ok: true as const, id: Number(row.id) } : { ok: false as const };
+    };
+    // A person is named by uid; only a member of this project's feed resolves (no lookup of anyone else).
+    const person = await ref('person', 'SELECT id FROM users WHERE uid = ? AND ? > 0');
+    const agent = await ref('agent', "SELECT id FROM team_agents WHERE uid = ? AND scope_kind = 'project' AND project_id = ?");
+    const task = await ref('task', "SELECT id FROM scope_tasks WHERE uid = ? AND scope_kind = 'project' AND project_id = ?");
+    if (!person.ok || !agent.ok || !task.ok) return refuse(c, 404, { code: 'not_found', message: 'There is no such person, agent or task on this project.' });
+    return c.json(await projectActivity(c.env, s.id, { who, personId: person.id, agentId: agent.id, taskId: task.id, before }));
+  } catch (e) { return mapError(c, e); }
+});
+
 // ── The runtime (D1528, E3) ─────────────────────────────────────────────────
 
 const refRef = (s: Scope): ScopeRef => ({ kind: s.kind, id: s.id });
@@ -414,7 +454,34 @@ router.get('/runs/:uid', async (c) => {
     const got = await visibleRun(c, user);
     if (!got) return refuse(c, 404, { code: 'not_found', message: 'There is no such run.' });
     const run = await runDto(c.env, got.run);
-    return c.json({ run, steps: stepsOf(got.run).map(({ name, status, at, summary }) => ({ name, status, at, summary })), cost: run.cost });
+    // D1614 W3 (#3971): the whole run, for its detail page (`services/agents/runActivity.ts`).
+    return c.json({
+      run, steps: stepsOf(got.run).map(({ name, status, at, summary }) => ({ name, status, at, summary })), cost: run.cost,
+      detail: await runDetail(c.env, got.run, got.agent),
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+// D1614 W3 (#3971): a retryable failure runs again, admitted as a fresh start is (the same hold,
+// cap, daily limit and single flight). The scope's editors or the agent's sponsor.
+router.post('/runs/:uid/retry', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const got = await visibleRun(c, user);
+    if (!got) return refuse(c, 404, { code: 'not_found', message: 'There is no such run.' });
+    if (got.agent.sponsor_user_id !== user.id && !(await canManage(c.env, got.s, user))) {
+      return refuse(c, 403, { code: 'not_manager', message: 'Only the team’s editors, or the person who added this agent, can retry its run.' });
+    }
+    const outcome = outcomeOf(got.run, stepsOf(got.run), await isLatestAttempt(c.env, got.run));
+    if (outcome.kind !== 'failed' || !outcome.retryable) {
+      return refuse(c, 409, { code: 'not_retryable', message: 'Only the latest run of a task that failed for a passing reason can be retried.' });
+    }
+    const rt = await deps.runtime(c.env);
+    const a = await rt.admit(refRef(got.s), { agentId: got.agent.id, taskId: got.run.task_id, by: user.id, source: 'person' });
+    if (!a.ok) return refuse(c, a.status, { code: a.code, message: a.message });
+    const run = await runByUid(c.env, a.run.uid);
+    return c.json({ run: run ? await runDto(c.env, run) : { uid: a.run.uid } }, 202);
   } catch (e) { return mapError(c, e); }
 });
 
