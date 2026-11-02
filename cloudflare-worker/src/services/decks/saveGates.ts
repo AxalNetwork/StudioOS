@@ -49,7 +49,7 @@ export async function saveGateRefusal(env: Pick<Env, 'DB'>, projectId: number, s
   }
 
   if (quotes.length) {
-    let sessions = new Set<string>();
+    let sessions: Set<string>;
     try {
       const rows = await env.DB.prepare(
         `SELECT DISTINCT s.uid AS session_uid
