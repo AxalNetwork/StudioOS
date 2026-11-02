@@ -23,6 +23,8 @@ export type Scope = { kind: 'company'; id: number; uid: string; name: string } |
 export type AgentRow = {
   id: number; uid: string; scope_kind: 'company' | 'project'; company_id: number | null; project_id: number | null;
   role_key: string; first_name: string | null; last_name: string | null; model_id: string; tool_grants_json: string;
+  /** D4117 (#4117): the persona it is; null for an agent added before personas, read as its role's default (`personaOfAgent`). */
+  persona_key?: string | null;
   sponsor_user_id: number; monthly_cap_microusd: number; status: 'active' | 'paused' | 'removed'; paused_reason: string | null;
   created_at: string; updated_at: string; removed_at: string | null;
 };
@@ -90,6 +92,63 @@ export async function effectiveBook(env: Env, s: Scope, roleKey: string): Promis
     try { return { rules: JSON.parse(top.rules_json), version: top.version }; } catch { /* a corrupt row falls back to the default */ }
   }
   return { rules: role!.default_rules, version: 0 };
+}
+
+/**
+ * D4117 (#4117): the roles an agent's skills give it. Each pinned skill
+ * version lists the roles it serves (`agent_skill_versions.roles_json`,
+ * D1612); an agent with no skills, or whose skills name no known role, works
+ * as its own role, the way every agent did before.
+ */
+export async function skillRoles(env: Env, a: Pick<AgentRow, 'id' | 'role_key'>): Promise<string[]> {
+  let rows: Array<{ roles_json: string }> = [];
+  try {
+    rows = (await env.DB.prepare(
+      `SELECT v.roles_json FROM agent_skill_links l JOIN agent_skill_versions v ON v.skill_id = l.skill_id AND v.version = l.version
+        WHERE l.agent_id = ?`,
+    ).bind(a.id).all<{ roles_json: string }>()).results ?? [];
+  } catch {
+    // The skills cannot be read (a database before 757): the agent works as its own role, never more.
+    return [a.role_key];
+  }
+  const roles = new Set<string>();
+  for (const r of rows) {
+    let list: unknown = [];
+    try { list = JSON.parse(r.roles_json); } catch { list = []; }
+    if (Array.isArray(list)) for (const k of list) if (typeof k === 'string' && roleOf(k)) roles.add(k);
+  }
+  return roles.size ? [...roles].sort() : [a.role_key];
+}
+
+const union = (lists: string[][]) => [...new Set(lists.flat())];
+
+/**
+ * D4117 (#4117): what an agent may do. Capability comes from its skills, not
+ * its role: the union of the effective rule books (`effectiveBook`) of the
+ * roles its skills serve (`skillRoles`). Where it works, what it reads, what
+ * it may propose, when it escalates and its KPIs are the union; what it must
+ * always ask a person is the union too (the stricter book wins); what it may
+ * do automatically is what every one of those books allows. Its mission and
+ * tone stay its own role's. `version` is its own role's book version, the one
+ * its profile shows.
+ */
+export async function agentBook(env: Env, s: Scope, a: Pick<AgentRow, 'id' | 'role_key'>): Promise<{ rules: Rules; version: number; roles: string[] }> {
+  const roles = await skillRoles(env, a);
+  const own = await effectiveBook(env, s, a.role_key);
+  if (roles.length === 1 && roles[0] === a.role_key) return { ...own, roles };
+  const books = await Promise.all(roles.map((k) => effectiveBook(env, s, k)));
+  const rules: Rules = {
+    mission: own.rules.mission,
+    tone: own.rules.tone,
+    works_in: union(books.map((b) => b.rules.works_in)),
+    reads: union(books.map((b) => b.rules.reads)),
+    may_propose: union(books.map((b) => b.rules.may_propose)),
+    escalates_when: union(books.map((b) => b.rules.escalates_when)),
+    kpis: union(books.map((b) => b.rules.kpis)),
+    always_asks_human: union([own.rules.always_asks_human, ...books.map((b) => b.rules.always_asks_human)]),
+    may_do_automatically: books.reduce<string[]>((acc, b) => acc.filter((x) => b.rules.may_do_automatically.includes(x)), [...own.rules.may_do_automatically]),
+  };
+  return { rules, version: own.version, roles };
 }
 
 // ── Agents ──────────────────────────────────────────────────────────────────

@@ -3,6 +3,7 @@
  * books. Mounted at `/api/teams`.
  *
  *   GET    /roles                              the catalogue: eleven roles, their default rule books, and the models an agent may run on
+ *   GET    /personas                           D4117: the 16 personas an agent can be (fixed identity and values), the six values and the eight areas
  *   GET    /:scope/:id/agents?include=projects&module=
  *   POST   /:scope/:id/agents                  add one (manage + paid plan)
  *   GET    /agents/:uid                        its profile: rule book, matrix, spend, proposals, events
@@ -58,10 +59,11 @@ import { isAdmin, mapError, newUid } from './_t13t14t15_helpers';
 import { neverFillMessage } from '../services/fills/neverFill';
 import { NeverFillRefusal, type RailDecision, type RailProposalStatus } from '../services/railProposals';
 import { QUEUE_STATUSES, queueCount, queueDecide, queueItem, queueList, type QueueRefusal } from '../services/agents/queue';
-import { ALWAYS_ASKS_FLOOR, MODULES, ROLES, moduleOf, optionsIn, roleOf } from '../services/agents/catalogue';
+import { ALWAYS_ASKS_FLOOR, DEFAULT_PERSONA_BY_ROLE, MODULES, ROLES, moduleOf, optionsIn, roleOf } from '../services/agents/catalogue';
+import { AREA_LABELS, PERSONAS, PERSONA_VALUES, personaOf, personaOfAgent, personaView } from '../services/agents/personas';
 import { checkRules, diffRules } from '../services/agents/rulebook';
 import {
-  agentByUid, bookRows, canManage, canRead, effectiveBook, loadScope, logEvent, monthSpend, scopeCols, scopeOfAgent,
+  agentBook, agentByUid, bookRows, canManage, canRead, effectiveBook, loadScope, logEvent, monthSpend, scopeCols, scopeOfAgent,
   type AgentRow,
 } from '../services/agents/teams';
 
@@ -114,7 +116,9 @@ async function agentDto(env: Env, a: AgentRow) {
   return {
     uid: a.uid,
     role_key: a.role_key,
+    // D4117: the work the role covers, never a job title; who the agent is, is `persona`.
     role_name: roleOf(a.role_key)?.name ?? a.role_key,
+    persona: (() => { const p = personaOfAgent(a); return p ? personaView(p) : null; })(),
     first_name: a.first_name,
     last_name: a.last_name,
     model_id: a.model_id,
@@ -186,6 +190,18 @@ router.get('/roles', async (c) => {
       })),
       models: agentModels(c.env, user),
     });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * D4117 (#4117): the 16 personas. Fixed: no route edits one. `values` are
+ * the six Axal values with their labels and descriptions (`axalFit.ts`), and
+ * `areas` the eight radar areas `natural_fit` names.
+ */
+router.get('/personas', async (c) => {
+  try {
+    await requireAuth(c);
+    return c.json({ personas: PERSONAS.map(personaView), values: PERSONA_VALUES, areas: AREA_LABELS });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -312,7 +328,7 @@ router.get('/agents/:uid', async (c) => {
     const s = a && await scopeOfAgent(c.env, a);
     if (!a || !s) return say(c, 404, 'not_found', 'There is no such agent.');
     if (!(await canRead(c.env, s, user))) return say(c, 403, 'not_member', 'Only the team can see its agents.');
-    const book = await effectiveBook(c.env, s, a.role_key);
+    const book = await agentBook(c.env, s, a);
     const matrix = MODULES.map((m) => {
       const read = book.rules.works_in.includes(m.key);
       const offered = new Set(optionsIn(m.key));
@@ -439,7 +455,7 @@ router.get('/:scope/:id/agents', async (c) => {
       const keep: AgentRow[] = [];
       for (const a of rows) {
         const own = a.scope_kind === 'company' ? s : await scopeOfAgent(c.env, a);
-        if (own && (await effectiveBook(c.env, own, a.role_key)).rules.works_in.includes(module)) keep.push(a);
+        if (own && (await agentBook(c.env, own, a)).rules.works_in.includes(module)) keep.push(a);
       }
       list = keep;
     }
@@ -464,6 +480,11 @@ router.post('/:scope/:id/agents', async (c) => {
     if (!validCap(b.monthly_cap_microusd)) return say(c, 400, 'invalid_cap', 'The monthly cap is a whole number of micro-dollars above zero.');
     const first = namePart(b.first_name); const last = namePart(b.last_name);
     if (!first.ok || !last.ok) return say(c, 400, 'invalid_name', `A name is at most ${NAME_MAX} characters.`);
+    // D4117: who the agent is. Absent, the role's default persona (the add sheet before personas).
+    if (b.persona_key !== undefined && !(typeof b.persona_key === 'string' && personaOf(b.persona_key))) {
+      return say(c, 400, 'invalid_persona', 'Choose one of the agents.');
+    }
+    const personaKey: string | null = typeof b.persona_key === 'string' ? b.persona_key : DEFAULT_PERSONA_BY_ROLE[role.key] ?? null;
     if (typeof b.model_id !== 'string' || !b.model_id || modelRefusal(c.env, b.model_id)) {
       return say(c, 422, 'model_not_offered', 'That model is not offered. Choose one from the list.');
     }
@@ -484,19 +505,29 @@ router.post('/:scope/:id/agents', async (c) => {
       return say(c, ATTACH_STATUS[bl.code], bl.code, SKILL_WORDS[bl.code], { skill_uid: skillsChecked.skill_uid, ...(bl.tool ? { tool: bl.tool } : {}) });
     }
     const [companyId, projectId] = scopeCols(s);
+    // D4117: one live agent per persona per Team, counting the role defaults of agents added before personas.
+    const live = (await c.env.DB.prepare(
+      `SELECT role_key, persona_key FROM team_agents
+        WHERE scope_kind = ? AND IFNULL(company_id, 0) = IFNULL(?, 0) AND IFNULL(project_id, 0) = IFNULL(?, 0) AND status <> 'removed'`,
+    ).bind(s.kind, companyId, projectId).all<{ role_key: string; persona_key: string | null }>()).results ?? [];
+    if (live.some((r) => r.role_key === role.key)) return say(c, 409, 'role_taken', 'This team already has an agent in that role.');
+    if (personaKey && live.some((r) => personaOfAgent(r)?.key === personaKey)) {
+      return say(c, 409, 'persona_on_team', `${personaOf(personaKey)!.name} is already on this team.`);
+    }
     const uid = newUid();
     try {
       await c.env.DB.prepare(
-        `INSERT INTO team_agents (uid, scope_kind, company_id, project_id, role_key, first_name, last_name, model_id,
+        `INSERT INTO team_agents (uid, scope_kind, company_id, project_id, role_key, persona_key, first_name, last_name, model_id,
            tool_grants_json, sponsor_user_id, monthly_cap_microusd, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).bind(uid, s.kind, companyId, projectId, role.key, first.value, last.value, b.model_id, JSON.stringify(granted.grants), user.id, b.monthly_cap_microusd, user.id).run();
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(uid, s.kind, companyId, projectId, role.key, personaKey, first.value, last.value, b.model_id, JSON.stringify(granted.grants), user.id, b.monthly_cap_microusd, user.id).run();
     } catch (e: any) {
+      if (/UNIQUE/i.test(String(e?.message)) && /persona/i.test(String(e?.message))) return say(c, 409, 'persona_on_team', 'That agent is already on this team.');
       if (/UNIQUE/i.test(String(e?.message))) return say(c, 409, 'role_taken', 'This team already has an agent in that role.');
       throw e;
     }
     const a = await c.env.DB.prepare('SELECT * FROM team_agents WHERE uid = ?').bind(uid).first<AgentRow>();
-    await logEvent(c.env, a!.id, user.id, 'added', { role_key: role.key, model_id: b.model_id, monthly_cap_microusd: b.monthly_cap_microusd });
+    await logEvent(c.env, a!.id, user.id, 'added', { role_key: role.key, persona_key: personaKey, model_id: b.model_id, monthly_cap_microusd: b.monthly_cap_microusd });
     if (skillsChecked.wanted.length) await c.env.DB.batch(skillsChecked.wanted.map((w) => linkStatement(c.env, a!.id, w.s.id, w.version, user.id)));
     return c.json({ agent: await agentDto(c.env, a!) }, 201);
   } catch (e) { return mapError(c, e); }

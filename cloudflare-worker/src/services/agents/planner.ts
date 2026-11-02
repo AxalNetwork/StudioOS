@@ -27,6 +27,7 @@ import { quoteRun, run, type TaskClass } from '../aiRouter';
 import { proposeRail } from '../railProposals';
 import { newUid } from '../../routes/_t13t14t15_helpers';
 import { moduleOf, roleOf, MODULES } from './catalogue';
+import { personaOfAgent } from './personas';
 import { agentQuote, agentRun, moduleSurface, optionRowIn, runRefusalStatus, type AgentRefusal } from './agentRun';
 import { scopeCols, type AgentRow, type Scope, type Spend } from './teams';
 import { agentFits } from './tasks';
@@ -149,9 +150,14 @@ export async function planContext(env: Env, s: Scope, goal: GoalRow): Promise<st
   }
   try {
     const agents = await env.DB.prepare(
-      "SELECT role_key FROM team_agents WHERE scope_kind = ? AND company_id IS ? AND project_id IS ? AND status = 'active' ORDER BY id",
-    ).bind(s.kind, companyId, projectId).all<{ role_key: string }>();
-    lines.push(`Agents on the team: ${(agents.results || []).map((a) => roleOf(a.role_key)?.name ?? a.role_key).join(', ') || 'none'}`);
+      "SELECT role_key, persona_key FROM team_agents WHERE scope_kind = ? AND company_id IS ? AND project_id IS ? AND status = 'active' ORDER BY id",
+    ).bind(s.kind, companyId, projectId).all<{ role_key: string; persona_key: string | null }>();
+    // D4117: each agent by its persona's name, with the role key the plan assigns by and the work it covers.
+    lines.push(`Agents on the team: ${(agents.results || []).map((a) => {
+      const work = `${a.role_key}: ${roleOf(a.role_key)?.name ?? a.role_key}`;
+      const p = personaOfAgent(a);
+      return p ? `${p.name} (${work})` : work;
+    }).join(', ') || 'none'}`);
   } catch { lines.push('Agents on the team: could not be read'); }
   lines.push(`Modules (use these keys): ${MODULES.map((m) => m.key).join(', ')}`);
   return lines.join('\n');

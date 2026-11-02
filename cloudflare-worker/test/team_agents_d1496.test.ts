@@ -39,7 +39,8 @@ import { GROW_MODULES as GROW } from '../src/services/growCycle.ts';
 
 const sql = (f: string) => readFileSync(new URL(`../sql/${f}`, import.meta.url), 'utf8');
 const BASELINE = sql('schema_baseline.sql');
-const MIGRATION = sql('migrations/712_team_agents.sql');
+// D4117 (#4117): persona_key rides on 712's table.
+const MIGRATION = sql('migrations/712_team_agents.sql') + '\n' + sql('migrations/202611021728_team_agents_persona.sql');
 
 const MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 const CAP = 5_000_000;
@@ -192,7 +193,7 @@ test('the registry: role_taken until removed, model_not_offered, invalid_name, t
   const w = world();
   const a = await call(w, EDITOR, 'POST', `${CO}/agents`, cfo());
   assert.equal(a.status, 201);
-  assert.deepEqual([a.body.agent.first_name, a.body.agent.last_name, a.body.agent.role_name, a.body.agent.status], ['Carla', 'Cash', 'CFO', 'active']);
+  assert.deepEqual([a.body.agent.first_name, a.body.agent.last_name, a.body.agent.role_name, a.body.agent.status], ['Carla', 'Cash', 'Finance', 'active']);
   assert.deepEqual(a.body.agent.sponsor, { uid: 'u-editor', name: 'Eve Editor' });
   assert.deepEqual(a.body.agent.month_spend, { available: true, value_microusd: 0 });
   assert.equal((await call(w, EDITOR, 'POST', `${CO}/agents`, cfo())).body.error, 'role_taken');
@@ -665,7 +666,7 @@ test('the queue lists only its own scope: a project\'s agents stay out of the co
   assert.equal(q.body.next_cursor, null);
   const item = q.body.items[1];
   assert.deepEqual([item.kind, item.option, item.module, item.headline, item.status], ['draft', 'draft:raise/capital', 'cap-table', 'Runway note q-co-1', 'proposed']);
-  assert.deepEqual(item.agent, { uid: co, role_key: 'cfo', role_name: 'CFO', first_name: 'Carla', last_name: 'Cash' });
+  assert.deepEqual(item.agent, { uid: co, role_key: 'cfo', role_name: 'Finance', first_name: 'Carla', last_name: 'Cash' });
   assert.deepEqual(item.sponsor, { uid: 'u-editor', name: 'Eve Editor' });
   assert.deepEqual(item.cost, { available: true, value_microusd: 1234 });
   assert.equal(item.decided_by, null);

@@ -137,13 +137,18 @@ const role = (key: string, name: string, r: Omit<Rules, 'may_do_automatically' |
 };
 
 /**
+ * D4117 (#4117): a role's `name` is the work it covers, never a job title (no
+ * CTO, CFO or "Head of"), because agents are named personas
+ * (`personas.ts`) and only the persona's name is shown as who an agent is.
+ * The key stays as it was, so every stored row keeps working.
+ *
  * The eleven roles of #3727's table. S1 drafted the defaults; the owner
  * reviews them in D1496. Each `may_propose` option is offered in one of the
  * role's `works_in` modules (the test checks it), so every default passes
  * the validator a scope's own edit must pass.
  */
 export const ROLES: readonly Role[] = Object.freeze([
-  role('ceo', 'CEO / Chief of staff', {
+  role('ceo', 'Company direction', {
     mission: 'Keep the studio pointed at this quarter’s priorities: the weekly plan, and drafts of board and investor updates.',
     works_in: ['studio', 'operating-systems', 'product-roadmap', 'revenue-and-traction'],
     reads: ['project.summary', 'company.profile', 'team.roster', 'build.records', 'grow.records'],
@@ -153,7 +158,7 @@ export const ROLES: readonly Role[] = Object.freeze([
     kpis: ['Weekly plan agreed each Monday', 'Updates drafted on time'],
     tone: 'Direct and brief',
   }),
-  role('cto', 'CTO', {
+  role('cto', 'Engineering', {
     mission: 'Turn validated problems into a buildable solution, a roadmap and a working prototype.',
     works_in: ['solution-design', 'prototype-mvp', 'product-roadmap'],
     reads: ['project.summary', 'build.records', 'github.repos', 'vercel.deployments'],
@@ -162,7 +167,7 @@ export const ROLES: readonly Role[] = Object.freeze([
     kpis: ['Must-haves shipped against the plan', 'Roadmap reviewed every month'],
     tone: 'Precise and plain',
   }),
-  role('cpo', 'CPO / Product', {
+  role('cpo', 'Product', {
     mission: 'Find the problem worth solving and the customer who has it, and test it before it is built.',
     works_in: ['problem-discovery', 'customer-research', 'ideal-customer-profile', 'experiments', 'product-roadmap'],
     reads: ['project.summary', 'validate.records', 'build.records'],
@@ -171,7 +176,7 @@ export const ROLES: readonly Role[] = Object.freeze([
     kpis: ['Interviews logged each week', 'Hypotheses with evidence'],
     tone: 'Curious and evidence-first',
   }),
-  role('cfo', 'CFO', {
+  role('cfo', 'Finance', {
     mission: 'Keep the money honest: use of funds, runway, the financial model and cap table scenarios, all as proposals.',
     works_in: ['use-of-funds', 'cap-table', 'fundraising-readiness', 'company-creation'],
     reads: ['project.summary', 'raise.records', 'cap_table.read', 'mercury.balances', 'stripe.revenue', 'compliance.calendar'],
@@ -180,7 +185,7 @@ export const ROLES: readonly Role[] = Object.freeze([
     kpis: ['Runway stated every month', 'Use of funds matches the raise'],
     tone: 'Careful and numerate',
   }),
-  role('cmo', 'CMO / Growth', {
+  role('cmo', 'Marketing and growth', {
     mission: 'Draft the campaigns, posts, newsletters and ads that bring the right customers in.',
     works_in: ['distribution', 'revenue-and-traction'],
     reads: ['project.summary', 'grow.records'],
@@ -189,7 +194,7 @@ export const ROLES: readonly Role[] = Object.freeze([
     kpis: ['Drafts ready for each campaign', 'Channels with a measured result'],
     tone: 'Clear and warm',
   }),
-  role('sales', 'Head of Sales / BD', {
+  role('sales', 'Sales and partnerships', {
     mission: 'Find and warm up prospects and partners, and draft the sequences that reach them.',
     works_in: ['distribution', 'partner-network', 'network'],
     reads: ['project.summary', 'grow.records', 'network.relationships'],
@@ -198,7 +203,7 @@ export const ROLES: readonly Role[] = Object.freeze([
     kpis: ['Prospects in the pipeline', 'Introductions asked for'],
     tone: 'Friendly and to the point',
   }),
-  role('coo', 'COO / Operations', {
+  role('coo', 'Operations', {
     mission: 'Set up and run the company: formation, operating systems, compliance and the calendar.',
     works_in: ['company-creation', 'operating-systems'],
     reads: ['project.summary', 'company.profile', 'build.records', 'compliance.calendar'],
@@ -207,7 +212,7 @@ export const ROLES: readonly Role[] = Object.freeze([
     kpis: ['Formation steps done', 'Weekly reviews held'],
     tone: 'Orderly and calm',
   }),
-  role('general_counsel', 'General counsel (assistant)', {
+  role('general_counsel', 'Legal (assistant)', {
     mission: 'Prepare the data room and legal readiness. It never gives legal advice as final, and always escalates.',
     works_in: ['data-room', 'fundraising-readiness', 'company-creation'],
     reads: ['project.summary', 'company.profile', 'data_room.index', 'raise.records'],
@@ -217,7 +222,7 @@ export const ROLES: readonly Role[] = Object.freeze([
     tone: 'Formal and cautious',
     asks: ['share_outside'],
   }, { disclaimer_key: 'agents.general_counsel.disclaimer' }),
-  role('people', 'Head of People', {
+  role('people', 'People and hiring', {
     mission: 'Shape the founding team, the roles to hire and the equity plan, as proposals.',
     works_in: ['founding-team', 'team-expansion'],
     reads: ['project.summary', 'team.roster', 'cap_table.read'],
@@ -226,7 +231,7 @@ export const ROLES: readonly Role[] = Object.freeze([
     kpis: ['Open roles described', 'Equity plan reviewed'],
     tone: 'Considerate and fair',
   }),
-  role('research_analyst', 'Research analyst', {
+  role('research_analyst', 'Research', {
     mission: 'Read the market and the competitors, and keep the research library current.',
     works_in: ['research', 'market-intelligence'],
     reads: ['project.summary', 'research.library', 'validate.records'],
@@ -247,3 +252,23 @@ export const ROLES: readonly Role[] = Object.freeze([
 ]);
 const ROLE_BY_KEY = new Map(ROLES.map((r) => [r.key, r]));
 export const roleOf = (key: string): Role | null => ROLE_BY_KEY.get(key) ?? null;
+
+/**
+ * D4117 (#4117): the persona an agent with this role and no `persona_key` is
+ * read as (every agent added before personas). Eleven distinct personas, so
+ * no team, which holds one live agent per role, reads two agents as one
+ * persona. Each is picked from the persona's natural fit and goal.
+ */
+export const DEFAULT_PERSONA_BY_ROLE: Readonly<Record<string, string>> = Object.freeze({
+  ceo: 'seren',
+  cto: 'corvane',
+  cpo: 'sylva',
+  cfo: 'orrin',
+  cmo: 'kade',
+  sales: 'ilyse',
+  coo: 'brann',
+  general_counsel: 'vesta',
+  people: 'corin',
+  research_analyst: 'tessaly',
+  investor_relations: 'aurel',
+});

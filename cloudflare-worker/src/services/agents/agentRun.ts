@@ -55,7 +55,7 @@ import { ROUTE, quoteRun, run, type RailContext, type RefusalReason, type RunOpt
 import { railOptionsOn, type RailOptionRow } from '../ai/railMatrix';
 import { proposeRail, railByRunKey, type RailProposal } from '../railProposals';
 import { moduleOf, optionsIn, roleOf, type ModuleDef, type Rules } from './catalogue';
-import { canManage, effectiveBook, logEvent, monthSpend, scopeOfAgent, type AgentRow, type Scope, type Spend } from './teams';
+import { agentBook, canManage, logEvent, monthSpend, scopeOfAgent, type AgentRow, type Scope, type Spend } from './teams';
 import { cleanReads, grantsOf, readTools, type ToolDeps } from './agentTools';
 
 export const PROMPT_MAX = 8000;
@@ -175,7 +175,8 @@ async function check(env: Env, input: AgentRunInput): Promise<Checked> {
     return no(403, 'sponsor_lost_access', 'The person who added this agent can no longer manage this team, so it is paused. An editor can add it again.');
   }
   if (a.status === 'paused') return no(403, 'agent_paused', 'This agent is paused. Resume it to run it.', { paused_reason: a.paused_reason });
-  const { rules } = await effectiveBook(env, s, a.role_key);
+  // D4117: the union of its skills' roles' books (`agentBook`), not its role's alone.
+  const { rules } = await agentBook(env, s, a);
   const m = moduleOf(input.module);
   if (!m || !rules.works_in.includes(m.key)) return no(403, 'module_not_allowed', 'This agent does not work in that module. Its rule book lists where it works.');
   const row = rules.may_propose.includes(input.option) ? optionRowIn(m.key, input.option) : null;

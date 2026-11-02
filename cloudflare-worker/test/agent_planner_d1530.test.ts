@@ -53,6 +53,7 @@ function world() {
   );
   addColumnsFrom(db, sql('migrations/597_company_archive_and_events.sql'), 'company_profiles');
   db.exec(sql('migrations/712_team_agents.sql'));
+  db.exec(sql('migrations/202611021728_team_agents_persona.sql')); // D4117: persona_key
   db.exec(stripForeignKeys(MIGRATION));
   db.exec(`CREATE TABLE IF NOT EXISTS project_members (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
     role TEXT NOT NULL DEFAULT 'cofounder', status TEXT NOT NULL DEFAULT 'accepted', source TEXT, invited_by INTEGER, created_at TEXT, updated_at TEXT)`);
@@ -205,7 +206,8 @@ test('draftPlan: the scope’s CEO / Chief of staff agent runs it through agentR
     assert.equal(r.proposal.by, 'agent');
     assert.deepEqual(asked.map(({ sees, ...x }) => x), [{ role: 'ceo', module: 'studio', option: PLAN_OPTION, record: `goal:${g}` }]);
     assert.match(asked[0].sees, /Goal: Close the seed round/);
-    assert.match(asked[0].sees, /Agents on the team: CEO \/ Chief of staff/);
+    // D4117: the agent by its persona's name, with the role key the plan assigns by; no job title.
+    assert.ok(asked[0].sees.includes('Agents on the team: Seren (ceo: Company direction)'), asked[0].sees);
     assert.doesNotMatch(asked[0].sees, /@example\.test/, 'the planner never sees an email');
     assert.ok(optionRowIn('studio', PLAN_OPTION) && textOption(optionRowIn('studio', PLAN_OPTION)!), 'the rail row exists and is a text run');
   } finally { w.db.close(); }

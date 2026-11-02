@@ -31,7 +31,7 @@
 import type { Env, User } from '../../types';
 import { newUid } from '../../routes/_t13t14t15_helpers';
 import { moduleOf, optionsIn } from './catalogue';
-import { canRead, effectiveBook, scopeCols, scopeOfAgent, type AgentRow, type Scope, type Spend } from './teams';
+import { agentBook, canRead, scopeCols, scopeOfAgent, type AgentRow, type Scope, type Spend } from './teams';
 import { text, type Refusal } from './goals';
 
 export const TASK_KINDS = ['work', 'duty', 'handoff', 'review'] as const;
@@ -191,7 +191,7 @@ async function assigneeWrite(env: Env, s: Scope, v: any): Promise<{ ok: true; wr
 export async function agentFits(env: Env, a: AgentRow, module: string | null, option: string | null): Promise<Refusal | null> {
   const own = await scopeOfAgent(env, a);
   if (!own) return no(409, 'agent_not_live', 'That agent is not working on this team right now.');
-  const { rules } = await effectiveBook(env, own, a.role_key);
+  const { rules } = await agentBook(env, own, a);
   if (!module || !rules.works_in.includes(module)) {
     return no(422, 'module_not_allowed', 'That agent does not work in this module. Its rule book lists where it works.');
   }
