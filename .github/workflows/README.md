@@ -73,9 +73,8 @@ passed (D4130). `frontend/test/merge_queue_ci_4107.test.mjs` fails
 on any of these, and its `REQUIRED` list changes with the ruleset ("main:
 required checks").
 
-The queue was switched on on 2026-11-02 and first verified with two test
-pull requests under #4107: one merged through it, and one that conflicted
-with it was taken out of the queue.
+TEST B2 (#4107): this paragraph conflicts with test A2 on purpose. The queue
+must take this pull request out; it is never meant to merge.
 
 ## When a workflow starts failing
 
