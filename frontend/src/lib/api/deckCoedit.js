@@ -6,7 +6,7 @@
 //   POST  /api/decks/:id/restore-card { card_uid } → the new current version, with
 //         `restored: { card_uid, from_version, placed, index }`; every other card is left as it is.
 //   GET   /api/decks/:id/presence → { deck_id, editors: [{ user_id, name, colour, card, area, cursor }] }
-//         503 presence_off until the owner approves the Durable Object's cost (decision L).
+//         503 presence_off on a Worker without the DECK_PRESENCE binding.
 //   GET   /api/decks/:id/presence/ws: the editors' socket (WebSocket, `bearer.<jwt>` subprotocol).
 import { request } from '../api.js';
 

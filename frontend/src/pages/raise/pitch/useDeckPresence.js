@@ -7,8 +7,8 @@ import { reportError } from '../../../lib/log';
  * and the Studio home deck card (`presenceModel.js` says what is drawn).
  *
  * First the read (`deckV2Adapter.presence`, `GET /api/decks/:id/presence`).
- * While the owner has not approved the Durable Object's cost it answers
- * "Coming later", `editors` stays null and nothing is drawn, and no socket is
+ * On a Worker without the room's binding it answers "Coming later",
+ * `editors` stays null and nothing is drawn, and no socket is
  * opened. Once it answers, a writer (`live`) joins the room's socket
  * (`/api/decks/:id/presence/ws`, `bearer.<jwt>` subprotocol as
  * `useWebSocket.js`) and sends:

@@ -312,7 +312,7 @@ test('D1577 (#3824): presence is swapped — it answers through deckCoeditApi.pr
     assert.deepEqual(await adapter.presence(7), { available: true, value: reply });
     assert.deepEqual(asked, [7]);
     deckCoeditApi.presence = async () => { throw Object.assign(new Error('Seeing who else is editing is not switched on yet.'), { status: 503, code: 'presence_off' }); };
-    assert.deepEqual(await adapter.presence(7), { available: false, reason: 'Seeing who else is editing is not switched on yet.', issue: 3824 }, 'unbound until the owner approves its cost');
+    assert.deepEqual(await adapter.presence(7), { available: false, reason: 'Seeing who else is editing is not switched on yet.', issue: 3824 }, 'a Worker without the binding');
     deckCoeditApi.presence = async () => { throw Object.assign(new Error('nope'), { status: 404 }); };
     assert.deepEqual(await adapter.presence(7), { available: false, reason: NOT_ON, issue: 3824 });
   } finally { deckCoeditApi.presence = real; }

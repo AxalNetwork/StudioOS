@@ -18,8 +18,8 @@
  * deck's current version, as a new version. No other card changes.
  *
  * PRESENCE runs in the `DeckPresence` Durable Object (one per venture's deck).
- * It is not bound until the owner approves D1577's cost estimate (decision L):
- * until then both presence routes answer 503 `presence_off`.
+ * It is bound as `DECK_PRESENCE` (the owner approved D1577's cost, decision L);
+ * a Worker without the binding answers 503 `presence_off` on both routes.
  *
  * Who: a deck's readers may read its presence; its writers may save an area,
  * restore a card and join the editors' socket (`projectOwned`).

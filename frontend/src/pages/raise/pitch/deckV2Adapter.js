@@ -134,8 +134,8 @@ export async function through(call, issue) {
   } catch (e) {
     const status = e?.status ?? e?.response?.status ?? null;
     if (status === 404) return unavailable(issue);
-    // D1577 (#3824): a route that is on main but switched off (503 `*_off`, e.g. `presence_off` until
-    // the owner approves its cost) is still "Coming later", with the Worker's own sentence.
+    // D1577 (#3824): a route that is on main but switched off (503 `*_off`, e.g. `presence_off` on a
+    // Worker without its binding) is still "Coming later", with the Worker's own sentence.
     if (status === 503 && typeof e?.code === 'string' && e.code.endsWith('_off')) return unavailable(issue, e.message || NOT_ON);
     const message = typeof e?.message === 'string' && e.message ? e.message : 'could not be read';
     return Object.freeze({ available: false, unreadable: true, reason: message, issue });
@@ -212,7 +212,7 @@ export const comments = (deckId) => through(() => deckCommentsApi.list(deckId), 
 export const slideAnalytics = off('slideAnalytics');
 /**
  * D1577 (#3824): who else is editing the deck (`GET /api/decks/:id/presence` → `{ editors }`).
- * Until the owner approves the Durable Object's cost the route answers 503 `presence_off`, so this stays
+ * A Worker without the DECK_PRESENCE binding answers 503 `presence_off`, so this stays
  * "Coming later" and no avatar, "N editing" or Suggest switch is drawn. Suggest mode waits on its store.
  */
 export const presence = (deckId) => through(() => deckCoeditApi.presence(deckId), SURFACES.presence.issue);

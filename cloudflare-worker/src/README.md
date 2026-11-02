@@ -33,7 +33,7 @@ worker ahead of its schema.
 | `models/` | Row types. |
 | `contracts/` | D1511 (#3762): the JSON Schema of every deck v2 adapter method's reply, checked against its route by `test:drift`. |
 | `templates/` | Legal document and email templates. |
-| `durable-objects/` | Realtime coordination. D1577 (#3824) adds `deck-presence.ts` (`DeckPresence`), exported from `index.ts` but not bound in `wrangler.toml` until the owner approves its cost. |
+| `durable-objects/` | Realtime coordination. D1577 (#3824) adds `deck-presence.ts` (`DeckPresence`), bound as `DECK_PRESENCE` in all three `wrangler.toml` tables (the owner approved its cost, decision L). |
 | `mcp/` | D666: StudioOS as a remote MCP server for AI assistants, its OAuth provider and its tools. Controlled by `MCP_SERVER_ENABLED` and `OAUTH_KV` (D681). |
 | `rpc/` | The two `WorkerEntrypoint` classes HQ and a branch call each other through (D108), plus the plain modules that hold their logic. The classes are thin on purpose: `cloudflare:workers` does not exist under `node --test`, so anything inside them could only be verified by deploying. |
 | `data/` | Seed and reference data. |

@@ -12,11 +12,10 @@
  * Durable Object storage write, and a closed socket takes its lock with it.
  * Hibernatable WebSockets keep an idle room off the duration bill.
  *
- * NOT BOUND YET. Under owner decision L (D1556), `wrangler.toml` binds this
- * class only after the owner approves D1577's monthly cost estimate. Until
- * then `env.DECK_PRESENCE` is absent and every presence route answers 503
- * `presence_off`; `index.ts` exports the class so binding it is one toml
- * change, with its `[[migrations]]` entry.
+ * BOUND as `DECK_PRESENCE` in all three `wrangler.toml` tables, with the
+ * `v3-deck-presence` migration, after the owner approved D1577's monthly cost
+ * estimate (decision L, D1556). A Worker without the binding (a test, a
+ * branch that dropped it) answers 503 `presence_off` on every presence route.
  */
 import type { Env } from '../types';
 import { EDITORS_MAX, colourOf, editorView, step, type Editor } from '../services/decks/coedit';

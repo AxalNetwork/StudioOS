@@ -11,7 +11,8 @@
  *   5. Presence and soft locks: a held area is refused with "Wait or ask [Name]",
  *      one member's own tabs never lock each other out, a lock lapses, cursors are throttled.
  *   6. DeckPresence fans state out from sockets' attachments, and refuses a claim on a held area.
- *   7. Unbound (decision L): both presence routes answer 503 `presence_off`; a non-member is 403 first.
+ *   7. Without the binding both presence routes answer 503 `presence_off`; a non-member is 403 first.
+ *   8. Bound (the owner approved the cost): DECK_PRESENCE in all three tables, and the read matches its contract.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -29,6 +30,7 @@ import {
   AREA_TITLE, CURSOR_MIN_MS, LOCK_TTL_MS, colourOf, editorView, lockHolder, mergeArea, restoreOneCard, stable, step, type Editor,
 } from '../src/services/decks/coedit.ts';
 import { DeckPresence } from '../src/durable-objects/deck-presence.ts';
+import { contractErrors } from '../src/contracts/validate.ts';
 
 const BASELINE = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
 const DIR = 'cloudflare-worker/sql/migrations';
@@ -266,7 +268,7 @@ test('DeckPresence: state lives in the sockets\' attachments; a claim on a held 
   assert.deepEqual(holder.sent.at(-1).editors.map((e: any) => e.user_id), [1], 'a closed socket leaves the room and takes its lock');
 });
 
-test('unbound (decision L): presence answers 503 presence_off; a non-member is refused first', async () => {
+test('without the binding, presence answers 503 presence_off; a non-member is refused first', async () => {
   const f = await world();
   const r = await f.call('GET', `/api/decks/${V2}/presence`);
   assert.deepEqual([r.status, r.body.error, r.body.message], [503, 'presence_off', PRESENCE_OFF]);
@@ -276,6 +278,34 @@ test('unbound (decision L): presence answers 503 presence_off; a non-member is r
   assert.equal(plain.status, 426);
   const other = await f.call('GET', `/api/decks/${V2}/presence`, { as: OTHER });
   assert.equal(other.status, 403);
+});
+
+test('bound (the owner approved the cost, decision L): DECK_PRESENCE in all three tables with its migration tag', () => {
+  // Mutation checked: dropping the binding or the migration from any one table fails here.
   const toml = readFileSync('wrangler.toml', 'utf8');
-  assert.ok(!toml.includes('DECK_PRESENCE') && !toml.includes('DeckPresence'), 'not bound until the owner approves D1577\'s cost');
+  for (const pre of ['', 'env.production.', 'env.preview.']) {
+    assert.ok(toml.includes(`[[${pre}durable_objects.bindings]]\nname       = "DECK_PRESENCE"\nclass_name = "DeckPresence"`), `${pre || 'top-level'} binding`);
+    assert.ok(toml.includes(`[[${pre}migrations]]\ntag = "v3-deck-presence"\nnew_sqlite_classes = ["DeckPresence"]`), `${pre || 'top-level'} migration`);
+  }
+  assert.ok(readFileSync('cloudflare-worker/src/index.ts', 'utf8').includes("export { DeckPresence } from './durable-objects/deck-presence';"));
+});
+
+test('bound: the presence read is the room\'s state, matching its contract, keyed per venture', async () => {
+  const f = await world();
+  const asked: string[] = [];
+  const holder = fakeSocket(ed(FOUNDER, { card: 'c1', area: 'b1', areaAt: Date.now(), cursor: { x: 0.2, y: 0.4 } }));
+  const room = new DeckPresence({ getWebSockets: () => [holder.ws] } as any, {} as any);
+  f.env.DECK_PRESENCE = {
+    idFromName: (n: string) => { asked.push(n); return n; },
+    get: () => ({ fetch: (input: RequestInfo) => room.fetch(typeof input === 'string' ? new Request(input) : input) }),
+  };
+  const r = await f.call('GET', `/api/decks/${V1}/presence`);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual(asked, [`deck:${P}`], 'every version of the venture\'s deck shares one room');
+  assert.deepEqual(r.body, { deck_id: V1, editors: [{ user_id: FOUNDER, name: `Member ${FOUNDER}`, colour: colourOf(FOUNDER), card: 'c1', area: 'b1', cursor: { x: 0.2, y: 0.4 } }] });
+  const schema = JSON.parse(readFileSync('cloudflare-worker/src/contracts/deckPresence.schema.json', 'utf8'));
+  assert.deepEqual(contractErrors(schema, r.body), []);
+  assert.notDeepEqual(contractErrors(schema, { ...r.body, editors: [{ ...r.body.editors[0], email: 'x@example.test' }] }), [], 'an address is not in the contract');
+  const other = await f.call('GET', `/api/decks/${V1}/presence`, { as: OTHER });
+  assert.equal(other.status, 403);
 });

@@ -3255,7 +3255,7 @@ export default {
 // can find the classes named in wrangler.toml's [[durable_objects.bindings]].
 export { PipelineRoom } from './durable-objects/pipeline-room';
 export { OnboardingChat } from './durable-objects/onboarding-chat';
-// D1577 (#3824): exported so binding it is one wrangler.toml change once the owner approves its cost (decision L).
+// D1577 (#3824): the deck's co-editing room, bound as DECK_PRESENCE (the owner approved its cost, decision L).
 export { DeckPresence } from './durable-objects/deck-presence';
 
 // D108 — the two RPC entrypoints, re-exported here because a service

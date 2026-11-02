@@ -12,7 +12,7 @@
  *
  * `editors` is the Worker's list (`GET /api/decks/:id/presence`, or the room's
  * `presence` frame): `[{ user_id, name, colour, card, area, cursor }]`. Null
- * means presence is not on (the owner has not approved its cost yet), and
+ * means presence is not on (a Worker without the room's binding), and
  * nothing is drawn: never "0 editing".
  */
 
