@@ -43,7 +43,7 @@
 //   GET  /api/teams/agents/:uid/skills            → { can_manage, skills: [{ uid, name, pinned_version, current_version, status,
 //                                                    tools: [{ key, label, approved }], taxonomy }], radar: { axes } | null, values: null }
 //   PUT  /api/teams/agents/:uid/skills            { skills: [{ uid, version? }] } → the same; 403 not_manager; 422 role_mismatch |
-//                                                    tool_not_approved { tool } | version_not_published; 409 skill_retired
+//                                                    tool_not_approved { tool } | version_not_published; 409 skill_retired | skill_suspended
 //   GET  /api/teams/agents/:uid/skills/available  → { skills: [SkillCard + { assigned, pinned_version, blocked }] }
 //   GET  /api/teams/skills/:uid/agents            → { agents: [{ uid, name, role_key, pinned_version, scope }] }
 //   GET  /api/teams/skills/:uid/assignable        → { agents: [{ uid, name, role_key, skill_count, assigned, blocked, scope }] }

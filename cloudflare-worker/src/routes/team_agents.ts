@@ -162,6 +162,7 @@ const SKILL_WORDS = {
   not_found: 'There is no such skill.',
   version_not_published: 'Only a published version can be pinned.',
   skill_retired: 'This skill is retired and cannot be added again.',
+  skill_suspended: 'HQ suspended this skill, so it cannot be added. The company can publish a fixed version.',
   role_mismatch: 'An agent can only be given skills of its own role.',
   tool_not_approved: 'That skill needs a read tool its sponsor has not approved.',
 } as const;

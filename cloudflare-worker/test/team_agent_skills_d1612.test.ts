@@ -46,6 +46,7 @@ function world() {
   db.exec(sql('migrations/089_skills_values_taxonomy.sql'));
   db.exec(sql('migrations/712_team_agents.sql'));
   db.exec(sql('migrations/759_agent_skills.sql'));
+  db.exec(sql('migrations/202611022055_agent_skill_moderation.sql')); // D4161: the attach gate reads it
   db.exec(sql('migrations/091_user_skill_profile.sql'));
   db.exec(`CREATE TABLE project_members (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
     role TEXT NOT NULL DEFAULT 'cofounder', status TEXT NOT NULL DEFAULT 'accepted', source TEXT, invited_by INTEGER, created_at TEXT, updated_at TEXT)`);

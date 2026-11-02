@@ -25,13 +25,17 @@
  *    that company's members (`user_company_links`) and HQ's admins. A draft
  *    is seen only by those who may write it.
  *  - Write: an HQ skill by a Super Admin only; a company skill by that
- *    company's editors (`canEdit`).
+ *    company's editors only (`canEditAsMember`): HQ's admins moderate a
+ *    company's skill (D4161, `admin_company_skills.ts`) and never write it.
+ *  - Publish clears HQ's open flag or suspension on a company skill: the new
+ *    version starts clean, and the versions a suspension covered stay off at
+ *    the run gate (`services/agents/skillModeration.ts`).
  *  - An agent's skills: changed only by those who manage the agent's company
  *    or project (`services/agents/teams.ts`'s `canManage`, called, never copied).
  *  - Attach (`services/agents/skillLinks.ts`'s `attachCheck`): readable from
  *    the agent's company (404 `not_found`), a published version (422
  *    `version_not_published`), not retired (409 `skill_retired`; one already
- *    pinned stays), of the agent's role (422 `role_mismatch`), and its tools in
+ *    pinned stays), not suspended by HQ (409 `skill_suspended`, D4161), of the agent's role (422 `role_mismatch`), and its tools in
  *    the agent's `tool_grants_json` (422 `tool_not_approved`, `{ tool }`).
  *    Changing an agent's skills is 403 `not_manager` for anyone else.
  *
@@ -43,7 +47,8 @@ import type { Env, User } from '../types';
 import { requireAuth, isSuperAdmin } from '../auth';
 import { refuse } from '../util/refusal';
 import { activeCompanyFor } from '../middleware/activeCompany';
-import { canEdit } from '../services/companyAccess';
+import { canEditAsMember } from '../services/companyAccess';
+import { clearOnRepublish, skillRunRefusal } from '../services/agents/skillModeration';
 import { isAdmin, newUid } from './_t13t14t15_helpers';
 import { ROLES, roleOf } from '../services/agents/catalogue';
 import { RADAR_AXES } from '../services/skillsTaxonomySchema';
@@ -102,7 +107,7 @@ async function isMember(env: Env, companyId: number, user: User): Promise<boolea
 }
 async function mayWrite(env: Env, s: Pick<SkillRow, 'scope' | 'company_id'>, user: User): Promise<boolean> {
   if (s.scope === 'hq') return isSuperAdmin(user as any);
-  return s.company_id != null && canEdit(env, { id: s.company_id }, user);
+  return s.company_id != null && canEditAsMember(env, { id: s.company_id }, user);
 }
 async function mayRead(env: Env, s: SkillRow, user: User): Promise<boolean> {
   if (!(s.scope === 'hq' || (s.company_id != null && await isMember(env, s.company_id, user)))) return false;
@@ -206,7 +211,7 @@ router.get('/skills', async (c) => {
   return c.json({
     roles,
     hq: list.filter((k) => k.scope === 'hq'),
-    company: company ? { uid: company.uid, name: company.company_name, skills: list.filter((k) => k.scope === 'company'), can_write: await canEdit(c.env, { id: company.id }, user) } : null,
+    company: company ? { uid: company.uid, name: company.company_name, skills: list.filter((k) => k.scope === 'company'), can_write: await canEditAsMember(c.env, { id: company.id }, user) } : null,
     can_write_hq: isSuperAdmin(user as any),
   });
 });
@@ -355,6 +360,8 @@ router.post('/skills/:uid/publish', async (c) => {
     c.env.DB.prepare(`INSERT INTO agent_skill_versions (skill_id, version, skill_md, name, purpose, steps_json, allowed_tools_json, output_kind, taxonomy_json, roles_json, published_by)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(s.id, version, md, d.name, d.purpose, JSON.stringify(d.steps), JSON.stringify(d.tools), d.output_kind,
       JSON.stringify(checked.draft.tags), JSON.stringify(checked.draft.roles), user.id),
+    // D4161: a company's new version starts clean of HQ's flag or suspension.
+    ...(s.scope === 'company' ? [clearOnRepublish(c.env, s.id, version, user.id)] : []),
   ]).catch(() => null);
   if (!res || Number(res[0]?.meta?.changes ?? 0) !== 1) return say(c, 409, 'publish_conflict', 'This skill was published by someone else just now. Reload it and try again.');
   const tax = await taxonomy(c.env);
@@ -380,6 +387,7 @@ const refusalWords: Record<AttachCode, string> = {
   not_found: 'There is no such skill.',
   version_not_published: 'Only a published version can be pinned.',
   skill_retired: 'This skill is retired and cannot be added again. An agent that has it keeps it at its pinned version.',
+  skill_suspended: 'HQ suspended this skill, so it cannot be added. The company can publish a fixed version.',
   role_mismatch: 'An agent can only be given skills of its own role.',
   tool_not_approved: 'That skill needs a read tool its sponsor has not approved.',
 };
@@ -403,6 +411,8 @@ async function agentSkillsDto(env: Env, a: AgentRow) {
       uid: s.uid, scope: s.scope, name: p.name, purpose: p.purpose, steps: p.steps, status: s.status,
       pinned_version: s.pinned, current_version: s.current_version,
       update_available: s.status !== 'retired' && s.pinned < s.current_version,
+      // D4161: HQ suspended the pinned version; the run gate refuses it.
+      suspended: !!(await skillRunRefusal(env, s.id, s.pinned)),
       tools: p.tools.map((k) => ({ key: k, label: toolLabel(k), approved: granted.has(k) })),
       taxonomy: p.tags.map((t) => ({ slug: t.slug, label: tax.label.get(t.slug) ?? t.slug, level: t.level })),
     });
