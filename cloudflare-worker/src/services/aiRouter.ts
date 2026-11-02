@@ -110,6 +110,8 @@ export type TaskClass =
   | 'mail_draft'
   // D1420 (#3864): Eadwyn's layout proposals for /studio (`studio:layout`).
   | 'studio_layout'
+  // D1583 (#3830): a memo written from a deck's own words, around its figures' placeholders.
+  | 'memo_write'
   // D764 (#2089) — the rail's fourteen kinds of work, one task each. The
   // page's row in `ai/railMatrix.json` names the models a member may pick;
   // the entries below are each kind's default and its alternates.
@@ -783,6 +785,15 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
     model: MID_LLAMA,
     fallbackChain: [SMALL_LLAMA],
     alternates: [MID_LLAMA, SMALL_LLAMA, '@cf/meta/llama-3.2-3b-instruct'],
+  },
+  // D1583 (#3830, deck v2 F4): the memo from a deck. Its option kind `memo` reads the IC
+  // memo job (IN1, `ai/modelUseCases.ts` RAIL_KIND_JOBS): gpt-oss-120b by default, DeepSeek V4
+  // Pro and Nemotron 3 120B the member's other picks in the AIRail (`derive:memo`). No cache: the version is read at the press.
+  memo_write: {
+    provider: 'workers-ai',
+    model: '@cf/openai/gpt-oss-120b',
+    fallbackChain: ['@cf/nvidia/nemotron-3-120b-a12b'],
+    alternates: ['@cf/openai/gpt-oss-120b', '@cf/deepseek-ai/deepseek-v4-pro-0813', '@cf/nvidia/nemotron-3-120b-a12b'],
   },
   // D1420 (#3864): Eadwyn proposes a Studio layout as add, remove, resize and
   // move ops. Its own class, so the pricing read and Usage name it apart; a mid

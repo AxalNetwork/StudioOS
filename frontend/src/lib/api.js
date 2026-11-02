@@ -80,6 +80,7 @@ export * from './api/dealViews.js';
 export * from './api/dealWorkroom.js';
 export * from './api/deckAssist.js';
 export * from './api/deckCheck.js';
+export * from './api/deckDerive.js';
 export * from './api/deckEditor.js';
 export * from './api/deckElementModels.js';
 export * from './api/deckGrants.js';
