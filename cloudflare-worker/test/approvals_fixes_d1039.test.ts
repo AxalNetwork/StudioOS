@@ -17,7 +17,7 @@ import { queuePressure } from '../src/services/branchHome.ts';
 import { studioGlance } from '../src/services/studioGlance.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 
 const read = (p: string) => readFileSync(p, 'utf8');
 const DIR = 'cloudflare-worker/sql/migrations';
@@ -26,7 +26,7 @@ const seed = join(scratch, 'chain.sqlite');
 {
   const db = new DatabaseSync(seed, { enableForeignKeyConstraints: false });
   db.exec(read('cloudflare-worker/sql/schema_baseline.sql'));
-  for (const name of readdirSync(DIR).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort()) db.exec(read(`${DIR}/${name}`));
+  for (const name of readdirSync(DIR).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations)) db.exec(read(`${DIR}/${name}`));
   db.close();
 }
 after(() => rmSync(scratch, { recursive: true, force: true }));

@@ -29,7 +29,7 @@ import { deckRubric } from '../src/services/decks/rubric.ts';
 import { sanitizeSlides } from '../src/routes/decks.ts';
 import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { CONTRACTS } from '../src/contracts/index.ts';
 import { contractErrors } from '../src/contracts/validate.ts';
@@ -37,7 +37,7 @@ const schemaOf = (m: 'templates' | 'myTemplates' | 'saveAsTemplate') => JSON.par
 
 const root = new URL('../sql/', import.meta.url);
 const baseline = readFileSync(new URL('schema_baseline.sql', root), 'utf8');
-const migrations = readdirSync(new URL('migrations/', root)).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort()
+const migrations = readdirSync(new URL('migrations/', root)).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations)
   .map((n) => readFileSync(new URL('migrations/' + n, root), 'utf8'));
 const JWT_SECRET = 'synthetic-d1535-only-not-a-real-credential'.repeat(2);
 

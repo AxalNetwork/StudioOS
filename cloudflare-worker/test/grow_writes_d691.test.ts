@@ -23,7 +23,7 @@ import cycleGrow, { shapeRecords } from '../src/routes/cycle_grow.ts';
 import jobs from '../src/routes/jobs.ts';
 import { RECORD_ID } from '../src/services/records/owned.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SQL = resolve(here, '../sql');
@@ -35,7 +35,7 @@ const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const FOUNDER = 1; const COFOUNDER = 2; const ADVISOR = 3; const PARTNER = 4; const ADMIN = 5; const OTHER = 6;
 const PA = 7; const PB = 8;
 
-const newer = readdirSync(M).filter((n) => /^\d+_.*\.sql$/.test(n)).filter((n) => migrationNumber(n) > BASELINE_CUTOFF).sort();
+const newer = readdirSync(M).filter((n) => /^\d+_.*\.sql$/.test(n)).filter((n) => migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations);
 
 /** The baseline plus every post-cutoff migration, stopping before `upTo` when given. */
 function build(upTo?: string): DatabaseSync {

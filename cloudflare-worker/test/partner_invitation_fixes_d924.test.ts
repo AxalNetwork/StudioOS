@@ -12,7 +12,7 @@ import adminPartners from '../src/routes/admin_partners.ts';
 import { activatePartnerDealOnSignature, ALL_PARTNER_DEAL_TYPES } from '../src/services/partnerDeals.ts';
 import { sendPartnerInvitationEmail, sendPartnerInvitationEmailResult, sendAgreementAssignedEmail, sendAgreementAssignedEmailResult } from '../src/services/email.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 
 const read = (p: string) => readFileSync(p, 'utf8');
 const migration = read('cloudflare-worker/sql/migrations/547_partner_invitation_sends.sql');
@@ -20,7 +20,7 @@ const scratch = mkdtempSync(join(tmpdir(), 'partner-d924-'));
 const seed = join(scratch, 'schema.sqlite');
 const schema = new DatabaseSync(seed, { enableForeignKeyConstraints: false });
 schema.exec(read('cloudflare-worker/sql/schema_baseline.sql'));
-for (const name of readdirSync('cloudflare-worker/sql/migrations').filter(n => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF && migrationNumber(n) < 547).sort()) schema.exec(read('cloudflare-worker/sql/migrations/'+name));
+for (const name of readdirSync('cloudflare-worker/sql/migrations').filter(n => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF && migrationNumber(n) < 547).sort(compareMigrations)) schema.exec(read('cloudflare-worker/sql/migrations/'+name));
 schema.close();
 after(() => rmSync(scratch, { recursive: true, force: true }));
 let serial = 0;
@@ -30,7 +30,7 @@ function fixture(upgrade = true) {
   db.exec("INSERT INTO users(id,role,name,email,is_active) VALUES(5,'admin','Synthetic inviter','inviter@example.invalid',1),(8,'admin','Synthetic resender','resender@example.invalid',1),(9,'founder','Synthetic outsider','outsider@example.invalid',1)");
   if (upgrade) {
     db.exec(migration);
-    for (const name of readdirSync('cloudflare-worker/sql/migrations').filter(n => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > 547).sort()) db.exec(read('cloudflare-worker/sql/migrations/'+name));
+    for (const name of readdirSync('cloudflare-worker/sql/migrations').filter(n => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > 547).sort(compareMigrations)) db.exec(read('cloudflare-worker/sql/migrations/'+name));
   }
   const env: any = envFor(db);
   const app = new Hono<any>().route('/', adminPartners);

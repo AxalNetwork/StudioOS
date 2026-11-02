@@ -25,7 +25,7 @@ import deckCheck from '../src/routes/deck_check.ts';
 import { deckConsistency, CONSISTENCY_RULES } from '../src/services/deckCheck.ts';
 import { lineFacts } from '../src/services/deckConsistency.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 
 const para = (value: string) => ({ key: 'body', label: 'Body', kind: 'paragraph', value });
 const card = (title: string, ...lines: string[]) => ({ title, fields: lines.map(para) });
@@ -123,7 +123,7 @@ const INCONSISTENT = [card('Ask', 'Raising $2.0M seed.'), card('Use of funds', '
 function fixture() {
   const db = new DatabaseSync(':memory:');
   db.exec(readFileSync(resolve(SQL, 'schema_baseline.sql'), 'utf8'));
-  for (const name of readdirSync(M).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort()) db.exec(readFileSync(resolve(M, name), 'utf8'));
+  for (const name of readdirSync(M).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations)) db.exec(readFileSync(resolve(M, name), 'utf8'));
   db.exec(`INSERT INTO founders (id, name, email) VALUES (10, 'Synthetic Founder', 'f@example.test'), (11, 'Synthetic Other', 'o@example.test');
     INSERT INTO users (id, email, name, role, founder_id) VALUES
       (${OWNER}, 'owner@example.test', 'Synthetic Owner', 'founder', 10), (${ADMIN}, 'admin@example.test', 'Synthetic Admin', 'admin', NULL),

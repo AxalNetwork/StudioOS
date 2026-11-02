@@ -5,11 +5,11 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { hardDeleteProject, sweepTrashedProjects } from '../src/services/projectTrash.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 
 const sqlRoot = new URL('../sql/', import.meta.url);
 const baseline = readFileSync(new URL('schema_baseline.sql', sqlRoot), 'utf8');
-const migrations = readdirSync(new URL('migrations/', sqlRoot)).filter(name => /^\d+_.*\.sql$/.test(name) && migrationNumber(name) > BASELINE_CUTOFF).sort()
+const migrations = readdirSync(new URL('migrations/', sqlRoot)).filter(name => /^\d+_.*\.sql$/.test(name) && migrationNumber(name) > BASELINE_CUTOFF).sort(compareMigrations)
   .map(name => readFileSync(new URL('migrations/' + name, sqlRoot), 'utf8'));
 // Apply the canonical migrations once, then copy their resulting schema for
 // each isolated case. Replaying hundreds of ALTERs per case is unnecessary;

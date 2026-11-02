@@ -14,7 +14,7 @@ import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { expertDecision } from '../src/services/wellbeing/expertReview.ts';
 import { APPROVAL_SOURCES } from '../src/services/approvalSources.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 
 // A broken refusal under mutation must still never contact a real provider.
 const originalFetch = globalThis.fetch;
@@ -30,7 +30,7 @@ const read = (p: string) => readFileSync(p, 'utf8');
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   db.exec(read('cloudflare-worker/sql/schema_baseline.sql'));
   const dir = 'cloudflare-worker/sql/migrations';
-  for (const name of readdirSync(dir).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort()) {
+  for (const name of readdirSync(dir).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations)) {
     if (migrationNumber(name) === 577) db.exec("INSERT INTO experts(uid,name,verified) VALUES('legacy-verified','Synthetic legacy expert',1)");
     db.exec(read(`${dir}/${name}`));
   }

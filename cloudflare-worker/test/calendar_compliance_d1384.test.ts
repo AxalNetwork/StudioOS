@@ -12,7 +12,7 @@ import { readFileSync, readdirSync, mkdtempSync, copyFileSync, rmSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SignJWT } from 'jose';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import {
   FEED_KINDS, KNOWN_KINDS, PAGE_ONLY_KINDS, fetchCalendarScope, fetchUserEvents, fetchUserEventsWithSources,
@@ -27,7 +27,7 @@ const seed = join(root, 'seed.sqlite');
 const initial = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
 initial.exec(readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8'));
 const dir = 'cloudflare-worker/sql/migrations';
-for (const n of readdirSync(dir).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort()) initial.exec(readFileSync(`${dir}/${n}`, 'utf8'));
+for (const n of readdirSync(dir).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations)) initial.exec(readFileSync(`${dir}/${n}`, 'utf8'));
 initial.prepare('VACUUM INTO ?').run(seed); initial.close();
 after(() => rmSync(root, { recursive: true, force: true }));
 

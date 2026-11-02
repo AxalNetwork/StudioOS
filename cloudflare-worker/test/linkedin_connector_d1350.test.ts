@@ -21,12 +21,12 @@ import { SignJWT } from 'jose';
 import linkedin from '../src/routes/linkedin.ts';
 import { finishImportJob, recordSource, startImportJob } from '../src/services/linkedinConnections.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 
 const root = new URL('../sql/', import.meta.url);
 const baseline = readFileSync(new URL('schema_baseline.sql', root), 'utf8');
-const names = readdirSync(new URL('migrations/', root)).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort();
+const names = readdirSync(new URL('migrations/', root)).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations);
 const read = (n: string) => readFileSync(new URL('migrations/' + n, root), 'utf8');
 const JWT_SECRET = 'synthetic-d1350-only-not-a-real-credential'.repeat(2);
 const TOKEN = 'SYNTHETIC-LINKEDIN-ACCESS-TOKEN-d1350';

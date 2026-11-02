@@ -27,7 +27,7 @@ import deckStageNorms from '../src/routes/deck_stage_norms.ts';
 import decks from '../src/routes/decks.ts';
 import { checkNorm, citableBenchmark, citableNorms, NO_BENCHMARK, NOT_RECORDED } from '../src/services/decks/stageNorms.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SQL = resolve(here, '../sql');
@@ -40,7 +40,7 @@ const PID = 7, OTHER_PID = 8;
 function fixture() {
   const db = new DatabaseSync(':memory:');
   db.exec(readFileSync(resolve(SQL, 'schema_baseline.sql'), 'utf8'));
-  for (const name of readdirSync(M).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort()) {
+  for (const name of readdirSync(M).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations)) {
     db.exec(readFileSync(resolve(M, name), 'utf8'));
   }
   db.exec(`INSERT INTO founders (id, name, email) VALUES (10, 'Synthetic Founder', 'f@example.test'), (11, 'Synthetic Other', 'o@example.test');

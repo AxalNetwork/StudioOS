@@ -14,14 +14,14 @@ import { Hono } from 'hono';
 import { envFor, token } from './_esign_harness.ts';
 import adminPartners from '../src/routes/admin_partners.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 
 const read = (p: string) => readFileSync(p, 'utf8');
 const scratch = mkdtempSync(join(tmpdir(), 'partner-d1117-'));
 const seed = join(scratch, 'schema.sqlite');
 const schema = new DatabaseSync(seed, { enableForeignKeyConstraints: false });
 schema.exec(read('cloudflare-worker/sql/schema_baseline.sql'));
-for (const name of readdirSync('cloudflare-worker/sql/migrations').filter(n => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort()) {
+for (const name of readdirSync('cloudflare-worker/sql/migrations').filter(n => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations)) {
   schema.exec(read('cloudflare-worker/sql/migrations/' + name));
 }
 schema.close();

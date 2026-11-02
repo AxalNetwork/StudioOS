@@ -10,13 +10,13 @@ import { SignJWT } from 'jose';
 import accounts from '../src/routes/company_receiving_accounts.ts';
 import { acceptProposal, ownCommitments } from '../src/services/mercury/investorFeeds.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 
 const scratch=mkdtempSync(join(tmpdir(),'receiving-d1217-')), seed=join(scratch,'seed.sqlite');
 const initial=new DatabaseSync(':memory:',{enableForeignKeyConstraints:false});
 initial.exec(readFileSync('cloudflare-worker/sql/schema_baseline.sql','utf8'));
 const dir='cloudflare-worker/sql/migrations';
-for(const name of readdirSync(dir).filter(n=>/^\d+_.*\.sql$/.test(n)&&migrationNumber(n)>BASELINE_CUTOFF).sort()) initial.exec(readFileSync(`${dir}/${name}`,'utf8'));
+for(const name of readdirSync(dir).filter(n=>/^\d+_.*\.sql$/.test(n)&&migrationNumber(n)>BASELINE_CUTOFF).sort(compareMigrations)) initial.exec(readFileSync(`${dir}/${name}`,'utf8'));
 initial.prepare('VACUUM INTO ?').run(seed);initial.close();
 after(()=>rmSync(scratch,{recursive:true,force:true}));
 const SECRET='x'.repeat(48), NUMBER='1234567890124821', OTHER_NUMBER='9934567890127777', ROUTING='021000021';

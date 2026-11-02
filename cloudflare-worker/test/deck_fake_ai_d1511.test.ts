@@ -31,13 +31,13 @@ import { fitProblems } from '../src/services/decks/designSystem.ts';
 import { readSources } from '../src/services/decks/sources.ts';
 import { readImage } from '../src/services/ai/shapes.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { FAILURES, GUARD_MODEL, OVER_CAPACITY, fakeAi } from './_fake_ai.mjs';
 
 const root = new URL('../sql/', import.meta.url);
 const baseline = readFileSync(new URL('schema_baseline.sql', root), 'utf8');
-const migrations = readdirSync(new URL('migrations/', root)).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort()
+const migrations = readdirSync(new URL('migrations/', root)).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations)
   .map((n) => readFileSync(new URL('migrations/' + n, root), 'utf8'));
 const scratch = mkdtempSync(join(tmpdir(), 'deck-fake-ai-d1511-'));
 const seedPath = join(scratch, 'schema.sqlite');
