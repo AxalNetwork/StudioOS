@@ -187,6 +187,8 @@ export const CATALOGUE: readonly CatalogueModel[] = Object.freeze([
 export interface CatalogueSwitches {
   AI_PARTNER_MODELS?: string;
   AI_PAID_MODELS?: string;
+  /** D1509 (#3760): the models HQ switched off (`model:<id>` flags, services/featureFlags.ts). Absent on a bare `env`: none. */
+  MODELS_OFF?: ReadonlySet<string>;
 }
 
 const BY_ID: ReadonlyMap<string, CatalogueModel> = new Map(CATALOGUE.map((m) => [m.id, m]));
@@ -204,6 +206,7 @@ export const partnerGated = (m: CatalogueModel): boolean => m.partner && !PARTNE
 /** Status `ga` or `partner`, with a price, and past the partner gate. */
 export function isOffered(m: CatalogueModel, env: CatalogueSwitches): boolean {
   if (m.status !== 'ga' && m.status !== 'partner') return false;
+  if (env.MODELS_OFF?.has(m.id)) return false;
   if (!isPriced(m)) return false;
   return !partnerGated(m) || env.AI_PARTNER_MODELS === 'on';
 }
@@ -220,6 +223,11 @@ export function refusalFor(model: string, env: CatalogueSwitches): 'model_unpric
   if (m.status !== 'ga' && m.status !== 'partner') return 'model_not_offered';
   if (!isPriced(m)) return 'model_unpriced';
   return isOffered(m, env) ? null : 'model_not_offered';
+}
+
+/** D1509: whether a model is one HQ switched off for this caller (a pick of it is kept, never cleared). */
+export function switchedOff(model: string | null | undefined, env: CatalogueSwitches): boolean {
+  return Boolean(model && env.MODELS_OFF?.has(model));
 }
 
 /** True unless the owner sets `AI_PAID_MODELS = 'on'`. D764 applies it to the paid-only models; this task only exports it. */
