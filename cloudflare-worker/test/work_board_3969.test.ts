@@ -100,7 +100,7 @@ test('numbering is per project and concurrent creates are distinct; body, type, 
     const [c,d]=await Promise.all([create(w,{title:'Concurrent C'}),create(w,{title:'Concurrent D'})]);
     assert.deepEqual([a.task_number,b.task_number,other.task_number],[1,2,1]);assert.notEqual(c.task_number,d.task_number);
     const board=(await call(w,OWNER,'GET','/project/7/work/board')).body;
-    assert.deepEqual(board.items.map((t:any)=>t.title),['Concurrent C','Concurrent D','Beta','Alpha']);
+    assert.deepEqual(board.items.map((t:any)=>t.title),[...[c,d].sort((left,right)=>left.task_number-right.task_number).map(t=>t.title),'Beta','Alpha']);
     const backlog=board.columns.find((c:any)=>c.key==='backlog');assert.equal(backlog.count,4);assert.equal(backlog.estimate_points,null);
     assert.deepEqual([a.body,a.type,a.estimate_points,a.labels],['Markdown **launch**','feature',0,['finance']]);
     const filtered=(await call(w,OWNER,'GET','/project/7/work/board?filter=label%3Afinance')).body;

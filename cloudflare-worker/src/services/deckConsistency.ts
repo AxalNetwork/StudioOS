@@ -151,6 +151,25 @@ export function deckFacts(slides: unknown[]): { facts: Fact[]; allocations: Arra
   return { facts, allocations };
 }
 
+/**
+ * D1580 (#3827): the figures the deck LINKS to the record — metric blocks bound
+ * to a slot this module reads — each with its card (1-based), slot and grade.
+ * A rehearsal compares what the founder said with these, never with typed text.
+ */
+export function boundFigures(slides: unknown[]): Array<{ metric: Metric; value: number; card: number; source_key: string; grade: string | null }> {
+  const out: Array<{ metric: Metric; value: number; card: number; source_key: string; grade: string | null }> = [];
+  slides.forEach((s: any, i) => {
+    for (const b of Array.isArray(s?.blocks) ? s.blocks : []) {
+      const key = typeof b?.binding?.source_key === 'string' ? b.binding.source_key : null;
+      const metric = b?.kind === 'metric' && key ? SLOT[key] : undefined;
+      if (!metric || !key || b.binding.grade === 'Not recorded') continue;
+      const v = shownNumber(b.value, UNIT[metric]);
+      if (v != null) out.push({ metric, value: v, card: i + 1, source_key: key, grade: typeof b.binding.grade === 'string' ? b.binding.grade : null });
+    }
+  });
+  return out;
+}
+
 const trim = (n: number) => String(Math.round(n * 10) / 10).replace(/\.0$/, '');
 export function shown(metric: Metric | 'money', v: number): string {
   const unit = metric === 'money' ? 'money' : UNIT[metric];

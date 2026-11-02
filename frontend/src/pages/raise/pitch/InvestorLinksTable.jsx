@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Lightbox } from '../../../ui';
 import * as v2 from './deckV2Adapter.js';
+import { deckUpdateReuseApi } from '../../../lib/api/deckUpdateReuse.js';
 
 /**
  * D1565 (#3812, PD-8 · pd35) — "Share, one link per investor": this version's
@@ -14,6 +15,11 @@ import * as v2 from './deckV2Adapter.js';
  *
  * Never a zero for what was not read: "No cap" is a link with no limit, and a
  * failed read is "Views on your links could not be read." with Try again (pd9c).
+ *
+ * D1584 (#3831): "Changes since vN" under each row's Version, when the deck
+ * has a newer current version than the one these links froze: the figures
+ * whose words changed and the cards added or removed, from the Worker's
+ * `GET /api/decks/:id/changes-since`. Nothing is drawn on the current version.
  */
 
 const MUTED = 'text-[12.5px] leading-[1.45] text-axal-muted dark:text-gray-400';
@@ -39,12 +45,43 @@ export const capWords = (cap) => (cap?.limit == null ? 'No cap' : `${cap.used ??
 export const expiryWords = (row) => (row.expires_at ? `Until ${day(row.expires_at)}` : 'Never');
 export const versionWords = (row, deck) => (row.version?.variant ? `v${deck?.version ?? '?'} · ${row.version.variant.name}` : `v${deck?.version ?? '?'}`);
 export const statusWords = { live: 'Live', withdrawn: 'Withdrawn', expired: 'Expired', used_up: 'Used up' };
+/** The figures shown before the rest are counted ("and 2 more"). */
+export const CHANGES_SHOWN = 3;
+/**
+ * pd35's "Changes since vN" for the rows of a version: null on the current
+ * version; "no figure changed" when only the words around them did.
+ */
+export function changesWords(answer) {
+  if (!answer || answer.latest || !answer.current) return null;
+  const head = `Changes since v${answer.since?.version ?? '?'} (now v${answer.current.version})`;
+  const figs = Array.isArray(answer.changes?.figures) ? answer.changes.figures : [];
+  const parts = figs.slice(0, CHANGES_SHOWN).map((f) => (f.was == null ? `${f.label} added` : f.now == null ? `${f.label} removed` : `${f.label} ${f.was} → ${f.now}`));
+  if (figs.length > CHANGES_SHOWN) parts.push(`and ${figs.length - CHANGES_SHOWN} more`);
+  const cards = answer.changes?.cards;
+  const delta = cards ? Number(cards.after) - Number(cards.before) : 0;
+  if (delta > 0) parts.push(`${delta} ${delta === 1 ? 'card' : 'cards'} added`);
+  if (delta < 0) parts.push(`${-delta} ${delta === -1 ? 'card' : 'cards'} removed`);
+  return `${head}: ${parts.length ? parts.join(' · ') : 'no figure changed'}`;
+}
+export const CHANGES_UNREAD = (deck) => `Changes since v${deck?.version ?? '?'} could not be read.`;
 export const viewsWords = (a) => `${a?.views ?? 0} ${a?.views === 1 ? 'view' : 'views'}${a?.last_viewed_at ? ` · last ${day(a.last_viewed_at)}` : ''}`;
 
 export default function InvestorLinksTable({ deck, refreshKey = 0 }) {
   const [block, setBlock] = useState(null);
   const [confirm, setConfirm] = useState(null);
   const [refusal, setRefusal] = useState('');
+  const [since, setSince] = useState({ status: 'idle', data: null });
+  useEffect(() => {
+    if (!deck?.id) return undefined;
+    let live = true;
+    setSince({ status: 'loading', data: null });
+    deckUpdateReuseApi.changesSince(deck.id).then(
+      (data) => { if (live) setSince({ status: 'ready', data }); },
+      () => { if (live) setSince({ status: 'error', data: null }); },
+    );
+    return () => { live = false; };
+  }, [deck?.id]);
+  const sinceLine = since.status === 'ready' ? changesWords(since.data) : since.status === 'error' ? CHANGES_UNREAD(deck) : null;
   const load = useCallback(() => {
     if (!deck?.id) return;
     setBlock(null);
@@ -87,7 +124,10 @@ export default function InvestorLinksTable({ deck, refreshKey = 0 }) {
                     {r.investor?.fund ? <span className={MUTED}>{r.investor.fund}</span> : null}
                     {r.watermark ? <span className={`block ${MUTED}`} data-testid={`investor-link-watermark-${r.id}`}>{r.watermark}</span> : null}
                   </td>
-                  <td className="py-1.5 pr-2 font-mono">{versionWords(r, deck)}</td>
+                  <td className="py-1.5 pr-2">
+                    <span className="block font-mono">{versionWords(r, deck)}</span>
+                    {sinceLine ? <span className={`block ${MUTED}`} data-testid={`investor-link-changes-${r.id}`}>{sinceLine}</span> : null}
+                  </td>
                   <td className="py-1.5 pr-2">{ndaWords(r.nda)}</td>
                   <td className="py-1.5 pr-2">{expiryWords(r)}</td>
                   <td className="py-1.5 pr-2 font-mono">{capWords(r.view_cap)}</td>

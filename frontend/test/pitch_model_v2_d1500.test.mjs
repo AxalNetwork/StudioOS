@@ -168,7 +168,8 @@ test('6. every save sends model version 2, and the card list keys on the card ui
   // Mutation checked: `key={i}` turns this red.
   assert.match(strip, /<li key=\{c\?\.uid \?\? `card-\$\{i\}`\}/);
   const editor = read('src/pages/raise/pitch/PitchEditor.jsx');
-  assert.match(editor, /const copyCard = \(c\) => withNewUid\(/);
-  assert.match(editor, /const placeCard = \(c\) => setCards\(\(cs\) => replaceCard\(cs, c, sel\) \?\? cs\);/);
+  // D1515 (#3767): a duplicate is `gridOps.duplicateCard` with a fresh uid, and a result is placed by its uid (`insertProposal`).
+  assert.match(editor, /edit\(\{ type: 'duplicateCard', index: i, uid: newCardUid\(\) \}/);
+  assert.match(editor, /const i = uid \? cardIndexByUid\(doc\.cards, uid\) : sel;/);
   assert.doesNotMatch(editor, /onPlace=\{\(c\) => setCard\(sel, c\)\}/, 'no result is placed by the selection\'s place');
 });
