@@ -23,12 +23,12 @@ import { AUDIENCES } from '../src/services/decks/slideModel.ts';
 import { LENGTH_IDS, FAST_PATH_AUDIENCE } from '../src/services/decks/newDeck.ts';
 import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 
 const root = new URL('../sql/', import.meta.url);
 const baseline = readFileSync(new URL('schema_baseline.sql', root), 'utf8');
-const migrations = readdirSync(new URL('migrations/', root)).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort()
+const migrations = readdirSync(new URL('migrations/', root)).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations)
   .map((n) => readFileSync(new URL('migrations/' + n, root), 'utf8'));
 const scratch = mkdtempSync(join(tmpdir(), 'deck-new-d1599-'));
 const seedPath = join(scratch, 'schema.sqlite');
