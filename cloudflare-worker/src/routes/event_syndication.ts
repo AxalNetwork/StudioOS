@@ -4,7 +4,7 @@
  * `events.ts`; every path is `/:id/syndication…`, so nothing of `events.ts`
  * is shadowed.
  *
- *   GET  /:id/syndication                 the rows, one per account it may use
+ *   GET  /:id/syndication                 the rows, one per account it may use; each carries its saved `overrides` (D1493)
  *   PUT  /:id/syndication                 { channels: [{ account_uid, on, overrides? }] }
  *   POST /:id/syndication/preview         { account_uid }: what would be sent; sends nothing
  *   POST /:id/syndication/:uid/retry      a failed listing, again
@@ -79,6 +79,13 @@ async function readRows(env: Env, event: Record<string, any>) {
   return { eligible: own.ok, reason: own.ok ? null : own.reason, rows };
 }
 
+function overridesRead(json: unknown): Record<string, string> {
+  try {
+    const o = JSON.parse(typeof json === 'string' && json ? json : '{}');
+    return o && typeof o === 'object' && !Array.isArray(o) ? o : {};
+  } catch { return {}; }
+}
+
 function shape(channel: string, accountUid: string, displayName: string, row: any | null, suggested: boolean) {
   const adapter = syndicationChannel(channel);
   return {
@@ -94,6 +101,8 @@ function shape(channel: string, accountUid: string, displayName: string, row: an
     last_error: row?.last_error ?? null,
     external_url: row?.external_url ?? null,
     posted_at: row?.posted_at ?? null,
+    // D1493 (#3906): the saved title and description, so a page that saves one field keeps the other.
+    overrides: overridesRead(row?.overrides_json),
     registrations: null,
     registrations_reason: REGISTRATIONS_NOT_RECORDED,
   };

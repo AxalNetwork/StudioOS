@@ -77,6 +77,17 @@ const raw=async(w:W,uid:string)=>(await taskByUid(w.env,uid)) as WorkTask;
 const user=(w:W,id=OWNER)=>w.db.prepare('SELECT * FROM users WHERE id = ?').get(id) as any;
 const close=(w:W,uid:string,reason='completed',extra={})=>call(w,OWNER,'PATCH',`/tasks/${uid}`,{state:'closed',close_reason:reason,...extra});
 
+test('#3973: the board says who is reading, so the page offers a move only where the Worker allows one',async()=>{
+  const w=world();try{
+    // Mutation checked: answer can_manage true for everyone → the member's read says true and this fails.
+    const own=await call(w,OWNER,'GET','/project/7/work/board');
+    assert.deepEqual(own.body.viewer,{can_manage:true,user_uid:'u-10'});
+    const member=await call(w,MEMBER,'GET','/project/7/work/board');
+    assert.deepEqual(member.body.viewer,{can_manage:false,user_uid:'u-11'});
+    assert.doesNotMatch(JSON.stringify(member.body.viewer),/@|"id"/,'a uid, never an email or a numeric id');
+  }finally{w.db.close();}
+});
+
 test('board gates, engine flags and project-only boundary; company E1 tasks still work',async()=>{
   const w=world();try{
     assert.equal((await call(w,null,'GET','/project/7/work/board')).status,401);
