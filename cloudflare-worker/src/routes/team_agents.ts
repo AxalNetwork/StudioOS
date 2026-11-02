@@ -3,6 +3,7 @@
  * books. Mounted at `/api/teams`.
  *
  *   GET    /roles                              the catalogue: eleven roles, their default rule books, and the models an agent may run on
+ *   GET    /personas                           D4117: the 16 personas an agent wears, the 6 value labels and the 8 areas
  *   GET    /:scope/:id/agents?include=projects&module=
  *   POST   /:scope/:id/agents                  add one (manage + paid plan)
  *   GET    /agents/:uid                        its profile: rule book, matrix, spend, proposals, events
@@ -59,6 +60,7 @@ import { neverFillMessage } from '../services/fills/neverFill';
 import { NeverFillRefusal, type RailDecision, type RailProposalStatus } from '../services/railProposals';
 import { QUEUE_STATUSES, queueCount, queueDecide, queueItem, queueList, type QueueRefusal } from '../services/agents/queue';
 import { ALWAYS_ASKS_FLOOR, MODULES, ROLES, moduleOf, optionsIn, roleOf } from '../services/agents/catalogue';
+import { AREAS, PERSONAS, ROLE_PERSONA, VALUE_LEGEND, personaDto, personaOf } from '../services/agents/personas';
 import { checkRules, diffRules } from '../services/agents/rulebook';
 import {
   agentByUid, bookRows, canManage, canRead, effectiveBook, loadScope, logEvent, monthSpend, scopeCols, scopeOfAgent,
@@ -111,10 +113,12 @@ async function agentDto(env: Env, a: AgentRow) {
   const project = a.scope_kind === 'project'
     ? await env.DB.prepare('SELECT id, name FROM projects WHERE id = ?').bind(a.project_id).first<{ id: number; name: string }>()
     : null;
+  const persona = personaOf(a.persona_key);
   return {
     uid: a.uid,
+    // D4117: the role keys the rule book only; no job title reaches the client.
     role_key: a.role_key,
-    role_name: roleOf(a.role_key)?.name ?? a.role_key,
+    persona: persona ? personaDto(persona) : null,
     first_name: a.first_name,
     last_name: a.last_name,
     model_id: a.model_id,
@@ -186,6 +190,16 @@ router.get('/roles', async (c) => {
       })),
       models: agentModels(c.env, user),
     });
+  } catch (e) { return mapError(c, e); }
+});
+
+// ── Personas (D4117) ────────────────────────────────────────────────────────
+
+/** The 16 personas, fixed: no route edits one. Readable by any signed-in member, like the roles. */
+router.get('/personas', async (c) => {
+  try {
+    await requireAuth(c);
+    return c.json({ personas: PERSONAS.map(personaDto), values: VALUE_LEGEND, areas: AREAS });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -461,6 +475,9 @@ router.post('/:scope/:id/agents', async (c) => {
     if (!b) return say(c, 400, 'invalid_body', 'Send the role, the model and the monthly cap.');
     const role = typeof b.role_key === 'string' ? roleOf(b.role_key) : null;
     if (!role) return say(c, 400, 'invalid_role', 'Choose one of the roles.');
+    // D4117: who the agent is. Sent, or the role's default persona while the screens still send a role alone.
+    if (b.persona_key !== undefined && !personaOf(b.persona_key)) return say(c, 400, 'invalid_persona', 'Choose one of the agents.');
+    const persona = personaOf(b.persona_key ?? ROLE_PERSONA[role.key])!;
     if (!validCap(b.monthly_cap_microusd)) return say(c, 400, 'invalid_cap', 'The monthly cap is a whole number of micro-dollars above zero.');
     const first = namePart(b.first_name); const last = namePart(b.last_name);
     if (!first.ok || !last.ok) return say(c, 400, 'invalid_name', `A name is at most ${NAME_MAX} characters.`);
@@ -484,19 +501,31 @@ router.post('/:scope/:id/agents', async (c) => {
       return say(c, ATTACH_STATUS[bl.code], bl.code, SKILL_WORDS[bl.code], { skill_uid: skillsChecked.skill_uid, ...(bl.tool ? { tool: bl.tool } : {}) });
     }
     const [companyId, projectId] = scopeCols(s);
+    const personaTaken = () => say(c, 409, 'persona_on_team', `${persona.name} is already on this team.`, { persona_key: persona.key });
+    const roleTaken = () => say(c, 409, 'role_taken', 'This team already has an agent in that role.');
+    // The role first: a second agent in a role is role_taken, whichever persona it would wear.
+    const taken = await c.env.DB.prepare(
+      `SELECT MAX(role_key = ?) AS role_hit, MAX(persona_key = ?) AS persona_hit FROM team_agents
+        WHERE status <> 'removed' AND scope_kind = ? AND IFNULL(company_id, 0) = ? AND IFNULL(project_id, 0) = ?`,
+    ).bind(role.key, persona.key, s.kind, companyId ?? 0, projectId ?? 0).first<{ role_hit: number | null; persona_hit: number | null }>();
+    if (taken?.role_hit) return roleTaken();
+    if (taken?.persona_hit) return personaTaken();
     const uid = newUid();
     try {
       await c.env.DB.prepare(
-        `INSERT INTO team_agents (uid, scope_kind, company_id, project_id, role_key, first_name, last_name, model_id,
+        `INSERT INTO team_agents (uid, scope_kind, company_id, project_id, role_key, persona_key, first_name, last_name, model_id,
            tool_grants_json, sponsor_user_id, monthly_cap_microusd, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).bind(uid, s.kind, companyId, projectId, role.key, first.value, last.value, b.model_id, JSON.stringify(granted.grants), user.id, b.monthly_cap_microusd, user.id).run();
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(uid, s.kind, companyId, projectId, role.key, persona.key, first.value, last.value, b.model_id, JSON.stringify(granted.grants), user.id, b.monthly_cap_microusd, user.id).run();
     } catch (e: any) {
-      if (/UNIQUE/i.test(String(e?.message))) return say(c, 409, 'role_taken', 'This team already has an agent in that role.');
+      const msg = String(e?.message);
+      // Two adds of the same persona at once: the partial unique index answers for the one that lost.
+      if (/UNIQUE/i.test(msg) && /persona/i.test(msg)) return personaTaken();
+      if (/UNIQUE/i.test(msg)) return roleTaken();
       throw e;
     }
     const a = await c.env.DB.prepare('SELECT * FROM team_agents WHERE uid = ?').bind(uid).first<AgentRow>();
-    await logEvent(c.env, a!.id, user.id, 'added', { role_key: role.key, model_id: b.model_id, monthly_cap_microusd: b.monthly_cap_microusd });
+    await logEvent(c.env, a!.id, user.id, 'added', { role_key: role.key, persona_key: persona.key, model_id: b.model_id, monthly_cap_microusd: b.monthly_cap_microusd });
     if (skillsChecked.wanted.length) await c.env.DB.batch(skillsChecked.wanted.map((w) => linkStatement(c.env, a!.id, w.s.id, w.version, user.id)));
     return c.json({ agent: await agentDto(c.env, a!) }, 201);
   } catch (e) { return mapError(c, e); }

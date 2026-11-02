@@ -53,7 +53,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { BASELINE_CUTOFF, migrationNumber } from './lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from './lib/migrationPlan.mjs';
 
 const BASELINE = 'cloudflare-worker/sql/schema_baseline.sql';
 const MIGRATIONS = 'cloudflare-worker/sql/migrations';
@@ -83,7 +83,8 @@ const ENGINE_OWNED = /^(_cf_[A-Z]|sqlite_)/;
 export function postCutoffMigrations(root = process.cwd()) {
   return readdirSync(resolve(root, MIGRATIONS))
     .filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF)
-    .sort()
+    // D4106: apply order, never a string sort, which puts a stamped name (2026…) before 712.
+    .sort(compareMigrations)
     .map((name) => ({ name, sql: readFileSync(resolve(root, MIGRATIONS, name), 'utf8') }));
 }
 
