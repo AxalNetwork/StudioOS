@@ -9,13 +9,13 @@ import { SignJWT } from 'jose';
 import perks from '../src/routes/perks.ts';
 import { perkCreditSummary } from '../src/services/perkCreditSummary.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 
 const scratch=mkdtempSync(join(tmpdir(),'credit-summary-d957-')),seed=join(scratch,'seed.sqlite');
 const base=new DatabaseSync(':memory:',{enableForeignKeyConstraints:false});
 base.exec(readFileSync('cloudflare-worker/sql/schema_baseline.sql','utf8'));
 const dir='cloudflare-worker/sql/migrations';
-for(const file of readdirSync(dir).filter(f=>/^\d+_.*\.sql$/.test(f)&&migrationNumber(f)>BASELINE_CUTOFF).sort())base.exec(readFileSync(`${dir}/${file}`,'utf8'));
+for(const file of readdirSync(dir).filter(f=>/^\d+_.*\.sql$/.test(f)&&migrationNumber(f)>BASELINE_CUTOFF).sort(compareMigrations))base.exec(readFileSync(`${dir}/${file}`,'utf8'));
 base.prepare('VACUUM INTO ?').run(seed);base.close();
 after(()=>rmSync(scratch,{recursive:true,force:true}));
 const SECRET='fixture-jwt-key-'.repeat(4);let serial=0;

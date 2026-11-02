@@ -37,10 +37,11 @@ import { neverFillMessage } from '../src/services/fills/neverFill.ts';
 import { fillsForRow } from '../src/services/fills/provenance.ts';
 import { NeverFillRefusal, decideRail, getRail, proposeRail, recordRailFill } from '../src/services/railProposals.ts';
 import railProposals from '../src/routes/ai_rail_proposals.ts';
+import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 
 const SQL = new URL('../sql/', import.meta.url);
 const BASELINE = readFileSync(new URL('schema_baseline.sql', SQL), 'utf8');
-const MIGRATIONS = readdirSync(new URL('migrations/', SQL)).filter((f) => f.endsWith('.sql')).sort();
+const MIGRATIONS = readdirSync(new URL('migrations/', SQL)).filter((f) => f.endsWith('.sql')).sort(compareMigrations);
 const migration = (name: string) => readFileSync(new URL(`migrations/${name}`, SQL), 'utf8');
 const M518 = '518_fill_provenance_rail_proposal.sql';
 const MEMBER = 1;
