@@ -21,6 +21,7 @@
  */
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { migrationDuplicates, migrationNameProblem } from './lib/migrationPlan.mjs';
 
 const DIR = 'cloudflare-worker/sql/migrations';
 
@@ -124,6 +125,17 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     for (const label of bannedIn(sql)) offenders.push(`${DIR}/${file} — ${label}`);
   }
 
+  // D4106: every name is numbered (at most NUMBERED_CEILING) or stamped
+  // (YYYYMMDDHHMM_<slug>.sql), and no two files share a number or a stamp.
+  const naming = [...files.map(migrationNameProblem).filter(Boolean), ...migrationDuplicates(files)];
+  if (naming.length) {
+    console.error('✖ check-sql-migrations (names, D4106):');
+    for (const n of naming) console.error(`  - ${n}`);
+    console.error('\nName a new migration by the UTC minute it was written: YYYYMMDDHHMM_<slug>.sql.');
+    console.error('Two files with one number or stamp leave their order to a tiebreak.');
+    process.exit(1);
+  }
+
   if (offenders.length) {
     console.error('✖ check-sql-migrations:');
     for (const o of offenders) console.error(`  - ${o}`);
@@ -136,6 +148,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
   console.log(
     `✓ check-sql-migrations: all ${files.length} migrations carry no transaction`
-    + ' statement and no pragma D1 ignores; no file is exempt.',
+    + ' statement and no pragma D1 ignores; no file is exempt; every name is numbered or stamped and none is shared (D4106).',
   );
 }

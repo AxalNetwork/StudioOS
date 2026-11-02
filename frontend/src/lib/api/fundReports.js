@@ -1,3 +1,4 @@
+/** D631: a fund's page and one issued reporting period (`/api/funds/:id/page`, `/report-periods/:id`), ids checked before any request. */
 import { request } from '../api.js';
 
 const id = (value) => {

@@ -144,7 +144,7 @@ test('the calls go to the Worker\'s routes, and the licence console draws the ta
     assert.ok(worker.includes(route), route);
   }
   assert.ok(readFileSync(new URL('../../cloudflare-worker/src/routes/licence.ts', import.meta.url), 'utf8').includes("r.get('/mine/fee-invoices/:uid/pdf'"));
-  assert.match(readFileSync(new URL('../src/lib/api.js', import.meta.url), 'utf8'), /export \* from '\.\/api\/licenceFeeInvoices\.js';/);
+  assert.match(readFileSync(new URL('../src/lib/apiModules.generated.js', import.meta.url), 'utf8'), /export \* from '\.\/api\/licenceFeeInvoices\.js';/);
   const page = readFileSync(new URL('../src/pages/admin/AdminLicences.jsx', import.meta.url), 'utf8');
   assert.match(page, /\{step === FEE_INVOICES_STEP && <LicenceFeeInvoices licence=\{d\} \/>\}/);
   assert.match(page, /data-testid="licence-fee-invoices-tab"/);
