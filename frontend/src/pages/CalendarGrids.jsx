@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Lightbox } from '../ui';
-import { itemPath } from './calendarItemModel';
+import { openPath } from './calendarItemModel';
 import { AgentMark } from './CalendarAgentSessions';
 import { AGENT_KIND, stateChip } from './calendarAgentModel';
 import {
@@ -34,7 +34,7 @@ function Chip({ ev, from, compact = false }) {
   );
   const cls = `cal-gchip${cancelled(ev) ? ' is-cancelled' : ''}`;
   return ev.source_id != null
-    ? <Link to={itemPath(ev.kind, ev.source_id)} state={{ from }} className={cls} title={label} data-testid={`cal-gchip-${ev.id}`}>{body}</Link>
+    ? <Link to={openPath(ev)} state={{ from }} className={cls} title={label} data-testid={`cal-gchip-${ev.id}`}>{body}</Link>
     : <span className={cls} title={label} data-testid={`cal-gchip-${ev.id}`}>{body}</span>;
 }
 

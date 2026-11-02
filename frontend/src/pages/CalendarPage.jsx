@@ -96,17 +96,17 @@ import { usePhoneWidth } from '../ui';
 import { AccountPhonePage, phonePending } from './account/AccountPhonePage';
 import { ACCOUNT_PHONE_PAGES } from './account/accountPhone';
 import { NOT_YET, VIEWS, WAITS, chipCount, viewOf, windowFor } from './calendarViews';
-import CalendarItemDrawer, { CancelDialog } from './CalendarItemDrawer';
+import CalendarItemDrawer, { CancelDialog, ExternalItemSheet } from './CalendarItemDrawer';
 import { NewCheckinDialog, NewIcDialog, NewMenu } from './CalendarNewDialogs';
 import { NewComplianceDialog } from './CalendarComplianceSheet';
 import { COMPLIANCE_KIND, stateLine, stateOf } from './calendarComplianceModel';
-import { itemOf, itemPath } from './calendarItemModel';
+import { externalItemOf, itemOf, openPath } from './calendarItemModel';
 import { DayPopover, KindsPanel, MonthGrid, WeekGrid } from './CalendarGrids';
 import AgentSessionSheet, { ScheduleAgentSheet } from './CalendarAgentSessions';
 import { AGENT_KIND } from './calendarAgentModel';
 import AskButton from './team/AskButton.jsx';
 import { ConnectedPanel, ConnectedSummary, GooglePanel, SubscribeDialog } from './CalendarConnected';
-import { CONNECTED_PATH, connectedOf, stripLabel, weekStrip } from './calendarConnectedModel';
+import { CONNECTED_PATH, connectedOf, externalReadError, stripLabel, weekStrip } from './calendarConnectedModel';
 import CalendarSourcesPanel from './CalendarSourcesPanel';
 import { SOURCES_PATH, coloursOf, sourcesOpen } from './calendarSourcesModel';
 import { calendarSourcesApi } from '../lib/api/calendarSources';
@@ -156,6 +156,9 @@ const KINDS = [
   { id: 'mvp_task', label: 'Build task', from: 'Build › Board' },
   { id: 'contact_task', label: 'Contact follow-up', from: 'Contacts › Follow-ups' },
   { id: 'engagement_milestone', label: 'Milestone', from: 'Engagements › Milestones' },
+  // D1485 (#3979): the member's own Google and Outlook events, read-only and page only.
+  { id: 'external_google', label: 'Google event', from: 'Google Calendar' },
+  { id: 'external_microsoft', label: 'Outlook event', from: 'Outlook' },
 ];
 const KIND_LABEL = Object.fromEntries(KINDS.map((k) => [k.id, k.label]));
 
@@ -320,9 +323,9 @@ function humanizeOAuthReason(reason) {
 /** The pill each provider state reads on the phone's sources (D700). */
 const PROVIDER_PILL = {
   reading: 'Checking', unreadable: 'Unreadable', unconfigured: 'Not configured',
-  off: 'Not connected', connected: 'Connected', failed: 'Sync failed',
+  off: 'Not connected', connected: 'Connected', failed: 'Sync failed', reconnect: 'Reconnect',
 };
-const PROVIDER_TONE = { connected: 'ok', failed: 'warn', unreadable: 'warn' };
+const PROVIDER_TONE = { connected: 'ok', failed: 'warn', reconnect: 'warn', unreadable: 'warn' };
 export const NO_END_REASON = 'This event has no end time recorded, so its length is not known.';
 
 /**
@@ -397,15 +400,17 @@ export default function CalendarPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const opened = itemOf(location.pathname);
+  // D1485 (#3979): /calendar/external/:kind/:id opens a Google or Outlook event's sheet, from this read.
+  const external = externalItemOf(location.pathname);
   // D1212: /calendar/connected (and /google) opens its panel over the view it came from, else over Month.
   const connected = connectedOf(location.pathname);
   // D1484 part 2: /calendar/sources opens CAL4 over the view it came from, like /calendar/connected.
   const sourcesPanel = sourcesOpen(location.pathname);
-  const behind = opened || connected || sourcesPanel ? (location.state?.from || '/calendar') : location.pathname;
+  const behind = opened || external || connected || sourcesPanel ? (location.state?.from || '/calendar') : location.pathname;
   const pathname = behind;
   const phone = usePhoneWidth();
   // D1210: `?date=` anchors the view (else today); `?kinds=` and `?needs=1` narrow it.
-  const search = opened || connected || sourcesPanel ? '' : location.search;
+  const search = opened || external || connected || sourcesPanel ? '' : location.search;
   // D1212 (CAL21a): on a phone Agenda is the default; Month is `/calendar?view=month`.
   const phoneAgenda = phone && viewOf(pathname) === 'month' && !/(^|[?&])view=month(&|$)/.test(search.replace(/^\?/, ''));
   const range = phoneAgenda ? 'agenda' : viewOf(pathname);
@@ -554,8 +559,8 @@ export default function CalendarPage() {
     return Array.from(out.values());
   }, [pool]);
 
-  const gState = providerState(google, googleResult);
-  const mState = providerState(microsoft, microsoftResult);
+  const gState = providerState(google, googleResult, externalReadError(sources, 'google'));
+  const mState = providerState(microsoft, microsoftResult, externalReadError(sources, 'microsoft'));
   // A provider whose sync was just refused cannot take a push either — the
   // canvas is explicit about this, drawing C6's expired Google as no provider
   // at all and putting the reconnect wording in place of the push control.
@@ -563,7 +568,7 @@ export default function CalendarPage() {
   // Connect and reconnect are different remedies and the note must name the
   // right one: a provider whose sync was just refused was demonstrably
   // connected, so telling its owner to "connect" would send them nowhere.
-  const pushRemedy = (gState === 'failed' || mState === 'failed')
+  const pushRemedy = [gState, mState].some((s) => s === 'failed' || s === 'reconnect')
     ? 'Push needs a working connection. A calendar connection was refused — reconnect it in the panel on the right, then this event can be copied there once.'
     : 'Push needs a connected calendar. Connect Google or Outlook in the panel on the right, then this event can be copied there once.';
 
@@ -835,6 +840,10 @@ export default function CalendarPage() {
       {subscribing && <SubscribeDialog onClose={() => setSubscribing(false)} />}
       {/* D1613 (CAL10, CAL11): a session has its own sheet and its own seam. */}
       {opened?.kind === AGENT_KIND && <AgentSessionSheet id={opened.id} onClose={() => navigate(behind)} onChanged={load} />}
+      {external && (
+        <ExternalItemSheet kind={external.kind} onClose={() => navigate(behind)}
+          item={(items || []).find((ev) => ev.kind === external.kind && ev.source_uid === external.id) || null} />
+      )}
       {opened && opened.kind !== AGENT_KIND && (
         <CalendarItemDrawer kind={opened.kind} id={opened.id} canCopy={anyConnected} onChanged={load}
                             onClose={() => navigate(behind)} />
@@ -964,7 +973,7 @@ function EventRow({ ev, myEmail, role, from, canPush, pushRemedy, onChanged }) {
             </span>
           )}
         </div>
-        <h3><Link to={itemPath(ev.kind, ev.source_id)} state={{ from }} data-testid={`calendar-open-${ev.id}`}>{ev.title}</Link></h3>
+        <h3><Link to={openPath(ev)} state={{ from }} data-testid={`calendar-open-${ev.id}`}>{ev.title}</Link></h3>
         {deadline ? (
           <div className="cal-ev-where">
             <span>{ev.project_name || 'Venture not recorded'}</span>
@@ -1029,12 +1038,12 @@ function EventRow({ ev, myEmail, role, from, canPush, pushRemedy, onChanged }) {
 }
 
 /**
- * Which of CAL9's six states a provider is in (`calendarConnectedModel.js` STATES).
+ * Which of CAL9's seven states a provider is in (`calendarConnectedModel.js` STATES).
  *
  * All are read from the server. `failed` is D1209's persisted `sync_error`, or
  * a connect THIS reader just ran that came back refused.
  */
-function providerState(status, result) {
+function providerState(status, result, readError = null) {
   if (!status) return 'reading';
   // D332 — checked before `unconfigured`: a request that never reached the
   // server (or that the server itself refused to answer) says nothing about
@@ -1043,6 +1052,8 @@ function providerState(status, result) {
   if (status.unreadable) return 'unreadable';
   if (status.available === false || status.configured === false) return 'unconfigured';
   if (!status.connected) return 'off';
+  // D1485 (#3979): the events read found the saved connection expired or withdrawn.
+  if (readError === 'reconnect') return 'reconnect';
   // D1212: D1209 persists the last sync's failure, so a cold load reads it too.
   if (status.sync_error || result?.kind === 'error') return 'failed';
   return 'connected';

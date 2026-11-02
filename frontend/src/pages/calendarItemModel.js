@@ -18,6 +18,32 @@ export function itemOf(pathname = '') {
   return m ? { kind: m[1], id: m[2] } : null;
 }
 
+/**
+ * D1485 (#3979): a Google or Outlook event is not stored (owner question A), so
+ * it has no row to read by id. Its address names the provider's own id, and the
+ * page draws it from the read it already holds.
+ */
+export const EXTERNAL_KINDS = Object.freeze(['external_google', 'external_microsoft']);
+export const isExternal = (ev) => EXTERNAL_KINDS.includes(ev?.kind);
+export const externalPath = (kind, providerId) => `/calendar/external/${encodeURIComponent(kind)}/${encodeURIComponent(providerId)}`;
+
+/** `/calendar/external/:kind/:id` → `{ kind, id }` (the provider's id, decoded), or null. */
+export function externalItemOf(pathname = '') {
+  const m = /^\/calendar\/external\/(external_google|external_microsoft)\/([^/]+)\/?$/.exec(String(pathname));
+  if (!m) return null;
+  try { return { kind: m[1], id: decodeURIComponent(m[2]) }; } catch { return null; }
+}
+
+/** Where an item on the page opens: its drawer, or an external event's sheet. */
+export const openPath = (ev) => (isExternal(ev) ? externalPath(ev.kind, ev.source_uid) : itemPath(ev.kind, ev.source_id));
+
+/** An external event's one action: open it where it lives, or nothing when the provider gave no link. */
+export function externalAction(item) {
+  const google = item?.kind === 'external_google';
+  const url = typeof item?.url === 'string' && /^https:\/\//.test(item.url) ? item.url : null;
+  return url ? { label: google ? 'Open in Google' : 'Open in Outlook', url } : null;
+}
+
 /** Each kind's eyebrow (CAL4, CAL5). */
 export const KIND_WORDS = Object.freeze({
   ic_meeting: 'IC meeting',
@@ -32,6 +58,8 @@ export const KIND_WORDS = Object.freeze({
   compliance_due: 'Compliance',
   learning: 'Learning plan',
   bot_call: 'Recorded call',
+  external_google: 'From Google Calendar',
+  external_microsoft: 'From Outlook',
 });
 
 /** The lengths each dialog offers, in minutes: CAL7 and CAL19 for an IC meeting, CAL8 for a check-in. */

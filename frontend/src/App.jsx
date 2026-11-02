@@ -3607,6 +3607,8 @@ function AppInner() {
       <Route path="/calendar/agenda" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CalendarPage />)} />
       {/* D1211 (#3177): an item's drawer over the view it was opened from (CAL4, CAL5, CAL18). */}
       <Route path="/calendar/item/:kind/:id" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CalendarPage />)} />
+      {/* D1485 (#3979): a Google or Outlook event's read-only sheet, over the view it was opened from. */}
+      <Route path="/calendar/external/:kind/:id" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CalendarPage />)} />
       {/* D1212 (#3178): the connected calendars (CAL9) and Google's panel (CAL10), over the calendar. */}
       <Route path="/calendar/connected" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CalendarPage />)} />
       <Route path="/calendar/sources" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CalendarPage />)} />
