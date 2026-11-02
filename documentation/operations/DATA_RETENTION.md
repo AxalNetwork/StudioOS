@@ -29,6 +29,8 @@ The retention periods for generated assets are owner decision W (#3716), pending
 | `deck_model_picks` | model picks per deck, member and element (D1503) | no cascade | none |
 | `deck_brand_watermarks` | a member's watermark choice | no cascade | none |
 | `deck_recommendation_overrides` | HQ's template recommendation overrides | no cascade; HQ data, not a venture's | none |
+| `deck_proposal_reports` | a member's report on an AI proposal: reason, a short note, HQ's resolution (D1540) | gone with the member who reported it; no cascade on the venture | none |
+| `deck_run_quotes` | the price New deck pinned before a run: the hold, the price list, a hash of the run, when it lapses (D1540) | gone with the member who asked; no cascade on the venture | none |
 | `deck_reviews` | AI reviews of an uploaded deck and their files | no cascade on the venture; gone with its member | the reviewed file (counted in storage as `deck_reviews`) |
 | `deck_review_history` | the history of a deck review | cascade from its review | none |
 | `deck_share_views` | each view of a share link: a hashed IP, a fingerprint, seconds read | no cascade | none |
