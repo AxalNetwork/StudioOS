@@ -57,6 +57,7 @@ import { deckTemplatesApi } from '../../../lib/api/deckTemplates.js';
 import { deckTypedValuesApi } from '../../../lib/api/deckTypedValues.js';
 import { deckUsageApi } from '../../../lib/api/deckUsage.js';
 import { deckVentureElementsApi } from '../../../lib/api/deckVentureElements.js';
+import { arrange as arrangeCard } from './arrangeModel.js';
 import * as gridOps from './gridOps.js';
 
 export { NOT_ON };
@@ -192,7 +193,11 @@ export const figures = (deckId) => through(() => deckFiguresApi.list(deckId), SU
  * figure the Worker could not read is null, never $0.00.
  */
 export const deckUsage = (deckId) => through(() => deckUsageApi.rail(deckId), SURFACES.deckUsage.issue);
-export const arrange = off('arrange');
+/**
+ * D1533 (#3777): one Arrange operation on a card (`arrangeModel.arrange`): `{ card, line }`,
+ * `{ same, line }` or `{ error }`. Local and synchronous underneath; the edited card is saved with every other edit.
+ */
+export const arrange = async (card, selection, op, opts) => ({ available: true, value: arrangeCard(card, selection, op, opts) });
 export const imageEdit = off('imageEdit');
 /** D1544 (#3784): an edit's price (vary, edit, erase, expand) before it runs: one hold for the edit and its checks. */
 export const imageVary = (uid, ask) => through(() => deckImageEditsApi.quote(uid, ask), SURFACES.imageVary.issue);

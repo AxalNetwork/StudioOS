@@ -45,10 +45,13 @@ test('every adapter method answers unavailable, with the reason and the issue th
   const body = (src, name) => (src.match(new RegExp(`^export const ${name} = ([^\\n]*)$`, 'm')) || [])[1] || '';
   const code = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
   const wired = methods.filter((n) => /\bthrough\(\(\) => [^\n]*\b[a-z][A-Za-z]*Api\./.test(body(code, n)));
-  const local = methods.filter((n) => n === 'history' && body(code, n) === 'async () => Object.freeze({ available: true, value: gridOps });');
+  const local = methods.filter((n) =>
+    (n === 'history' && body(code, n) === 'async () => Object.freeze({ available: true, value: gridOps });')
+    || (n === 'arrange' && /arrangeCard\(card, selection, op, opts\)/.test(body(code, n))));
   const offRows = methods.filter((n) => body(code, n) === `off('${n}');`);
   assert.deepEqual([...adapter.SWAPPED].sort(), [...wired, ...local].sort(), 'SWAPPED is exactly the remote and browser-local rows');
-  assert.deepEqual([...wired, ...local, ...offRows].sort(), [...methods].sort(), 'every row is remote, browser-local history, or off(\'<row>\'), nothing else');
+  assert.deepEqual([...wired, ...local, ...offRows].sort(), [...methods].sort(), 'every row is remote, browser-local history or Arrange, or off(\'<row>\')');
+  assert.match(body(code, 'arrange'), /arrangeCard\(card, selection, op, opts\)/, 'arrange edits locally before the existing card save');
   for (const n of wired) assert.match(body(code, n), new RegExp(`SURFACES\\.${n}\\.issue\\);$`), `${n} keys its own row's issue`);
   // A floor, so a parser that stopped matching cannot pass on two empty lists. D1541 (#3779) elementsLibrary is one of them.
   for (const n of ['grid', 'saveCard', 'stagePlan', 'remix', 'comments', 'ventureElements', 'elementsLibrary']) assert.ok(adapter.SWAPPED.includes(n), `${n} is swapped on main`);
