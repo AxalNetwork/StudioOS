@@ -30,6 +30,7 @@ export const CONTRACTS = Object.freeze({
   elementsLibrary: { issue: 3779, route: 'GET /api/decks/elements', schema: 'deckElements.schema.json' },
   figures: { issue: 3775, route: 'GET /api/decks/:id/figures', schema: 'deckFigures.schema.json' },
   grid: { issue: 3749, route: 'GET /api/decks/:id/grid', schema: 'deckGrid.schema.json' },
+  imageVary: { issue: 3784, route: 'POST /api/decks/images/:uid/edit/quote', schema: 'deckImageVary.schema.json' },
   investorLinks: { issue: 3812, route: 'GET /api/decks/:id/investor-links', schema: 'deckInvestorLinks.schema.json' },
   myTemplates: { issue: 3782, route: 'GET /api/decks/templates/mine', schema: 'deckMyTemplates.schema.json' },
   orgLocks: { issue: 3786, route: 'GET /api/decks/:id/model-presets (its locks key)', schema: 'deckOrgLocks.schema.json' },

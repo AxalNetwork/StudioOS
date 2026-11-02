@@ -115,6 +115,8 @@ export const BINDINGS: readonly BindingSpec[] = [
   { name: 'ANALYTICS', kind: 'Analytics Engine dataset', hq: 'studioos_metrics', branch: () => 'studioos_metrics', shared: true },
   { name: 'AI', kind: 'Workers AI', hq: null, branch: () => null, shared: true },
   { name: 'BROWSER', kind: 'Browser Rendering', hq: null, branch: () => null, shared: true },
+  // D1544 (#3784): resizes a deck image to a model's reference size before an edit.
+  { name: 'IMAGES', kind: 'Images', hq: null, branch: () => null, shared: true },
   { name: 'ASSETS', kind: 'Static assets', hq: './docs', branch: () => './docs', shared: false },
 ];
 

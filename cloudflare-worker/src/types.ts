@@ -456,6 +456,9 @@ export interface Env {
   // wrangler.toml don't crash on absence — the producer falls back to
   // the legacy D1 `queue_jobs` table when this is undefined.
   JOB_QUEUE?: Queue<JobMessage>;
+  // D1544 (#3784): Cloudflare Images, to resize a deck image to a model's
+  // reference size before an edit. Optional: without it an edit refuses.
+  IMAGES?: ImagesBinding;
   // Feature flag — string "true" enables the native CF Queue path.
   USE_CF_QUEUE?: string;
   // Durable Objects for real-time WebSocket fan-out. Optional so unit-test

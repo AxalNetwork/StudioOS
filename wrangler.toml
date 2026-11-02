@@ -546,6 +546,13 @@ dataset = "studioos_metrics"
 [browser]
 binding = "BROWSER"
 
+# ---------- Images ----------
+# D1544 (#3784): resizes a deck image to a model's reference size (each side at
+# most 512 px, FLUX.2) before an edit sends it (services/decks/imageEdits.ts).
+# Without it an edit answers 503 resize_unavailable and nothing is run.
+[images]
+binding = "IMAGES"
+
 # ---------- Cron Triggers ----------
 # The cron handler in cloudflare-worker/src/index.ts uses a per-minute
 # RATE_LIMITS lease so concurrent firings (e.g. when the every-minute
@@ -891,6 +898,10 @@ dataset = "studioos_metrics"
 
 [env.production.browser]
 binding = "BROWSER"
+
+# D1544 (#3784): mirror of the top-level [images] binding.
+[env.production.images]
+binding = "IMAGES"
 
 # Task #36 — Mirror of the top-level [assets] binding. Env tables
 # don't inherit, so the `--env production` deploy path needs its own.

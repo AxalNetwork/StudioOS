@@ -46,6 +46,7 @@ import { deckElementModelsApi } from '../../../lib/api/deckElementModels.js';
 import { deckElementsApi } from '../../../lib/api/deckElements.js';
 import { deckFiguresApi } from '../../../lib/api/deckFigures.js';
 import { deckGridApi } from '../../../lib/api/deckGrid.js';
+import { deckImageEditsApi } from '../../../lib/api/deckImageEdits.js';
 import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks.js';
 import { deckModelPresetsApi } from '../../../lib/api/deckModelPresets.js';
 import { deckRehearsalsApi } from '../../../lib/api/deckRehearsals.js';
@@ -83,6 +84,7 @@ export const SURFACES = Object.freeze({
   deckUsage: { issue: 3776, what: 'Estimated and spent on this deck' },
   arrange: { issue: 3777, what: 'Align, distribute, group, lock and layers' },
   imageEdit: { issue: 3778, what: 'Crop, focus, filters, upscale and background removal' },
+  imageVary: { issue: 3784, what: 'Erase, expand, vary and reference images' },
   elementsLibrary: { issue: 3779, what: 'Icons, shapes, dividers and textures' },
   diagrams: { issue: 3780, what: 'Funnel, hierarchy, hub and spoke, and 2×2 diagrams' },
   ventureElements: { issue: 3781, what: 'Team bios, logo wall, use of funds, round terms, cap-table summary and interview quotes' },
@@ -184,6 +186,8 @@ export const figures = (deckId) => through(() => deckFiguresApi.list(deckId), SU
 export const deckUsage = off('deckUsage');
 export const arrange = off('arrange');
 export const imageEdit = off('imageEdit');
+/** D1544 (#3784): an edit's price (vary, edit, erase, expand) before it runs: one hold for the edit and its checks. */
+export const imageVary = (uid, ask) => through(() => deckImageEditsApi.quote(uid, ask), SURFACES.imageVary.issue);
 /**
  * D1541 (#3779): the elements library and a page of icons for the pd28
  * panel, in one answer: `{ licence, decor_max, shapes, dividers, textures,
