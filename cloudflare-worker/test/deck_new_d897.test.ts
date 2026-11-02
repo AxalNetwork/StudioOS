@@ -514,12 +514,12 @@ test('§9 conflicting sources: the connector’s series is plotted, the founder�
   assert.equal(chart.series[0].binding.grade, 'Measured');
 });
 
-test('§9 words that would overflow move to the notes, never off the card; a numbered message is dropped', () => {
+test('§9 words that would overflow never leave the card: D1517 shortens or drops them, never into the notes; a numbered message is dropped', () => {
   const rec = fullRecords();
   const long = 'A headline that goes on and on far beyond what any heading on a slide could hold in one line of text';
   const card = cardOf({ card: 'product', title: 'Product', purpose: 'p' }, rec.items as any, { headline: long, body: 'Short.' }, null);
   assert.equal(card.blocks.find((b: any) => b.id === 'h').text, 'Product');
-  assert.match(card.notes, new RegExp(long));
+  assert.equal(String(card.notes ?? '').includes(long), false, 'D1517: the words are not pushed to the notes');
   assert.deepEqual(fitProblems([card]), []);
   const rows = outlineFromModel({ rows: [{ card: 'title', message: 'Close in a day' }, { card: 'problem', message: 'We saved 200 hours' }, { card: 'solution' }] }, 'short')!;
   assert.deepEqual(rows.map((r) => r.message ?? null), ['Close in a day', null, null]);

@@ -16,10 +16,14 @@ import { aiBudgetApi } from '../lib/api/aiBudget';
 import { railPrefsApi } from '../lib/api/railPrefs.js';
 import { syncRailPrefs } from './railModelChoice';
 import { useRailCrumbs, useRailPage } from './railCrumbs.js';
-import { openEadwynPanel, useEadwynPanel, useEadwynRailServes, eadwynPanelEvent } from './eadwynPanel.js';
+import { openEadwynPanel, useEadwynPanel, useEadwynRailServes, eadwynPanelEvent, askPanelEvent, useAskPanel, useAskRail } from './eadwynPanel.js';
+import AskPanel from './AskPanel.jsx';
+import { askLayout, askServes } from './askPanelModel.js';
+import { activeSupportSession } from '../lib/supportSession.js';
 import { EadwynPanel } from './EadwynPanel.jsx';
 import { Unreadable } from './Honesty';
 import { RailGroups, RailUsageExtra } from './RailGroups';
+import { FOUNDER_RECORD_OFF } from './reasonGate';
 import { ACCENT } from '../workspaces/shellConfig';
 import { PHONE_QUERY } from '../workspaces/lens.jsx';
 import { useViewMode } from '../contexts/ViewModeContext';
@@ -470,8 +474,17 @@ export default function WorkerRail({
    * Models and consumption only. Without it, nothing changes.
    */
   groups = null,
+  /**
+   * D1463 (#3713, Q1 A pending owner): 'founder-record' while an admin reads a
+   * founder's private record behind a reason. The rail keeps who and where,
+   * and draws no AI switch, no suggestions, no spend and no usage, no Ask and
+   * no floating button: one sentence says Eadwyn is off. The admin's own
+   * spend is not shown here, and a founder's never was.
+   */
+  readOnlyFor = null,
   'data-testid': testId = 'worker-rail',
 }) {
+  const founderRecord = readOnlyFor === 'founder-record';
   const pathname = useRailPathname();
   // `/api/ai/me/spend` (the spine). This page's month and last run left the
   // rail (D698).
@@ -597,7 +610,42 @@ export default function WorkerRail({
   // D405 and D698 — the phone forms. See the notes above `railSheetReducer`
   // and in `ui/eadwynPanel.js`.
   const serves = role === 'founder' && viewer === 'founder';
-  useEadwynRailServes(serves);
+  // D1443 (#3706): Ask serves every licence on a page with a rail page key; a
+  // support session and an Explorer never (`askServes`).
+  const [supportOn] = useState(() => (typeof window === 'undefined' ? false : Boolean(activeSupportSession())));
+  const askLabel = module ? `${section} · ${module}` : section;
+  useAskRail(!founderRecord && askServes({ page: pageKey, supportSession: supportOn, viewer, host: role }), pageKey, askLabel);
+  const askState = useAskPanel();
+  const [askWidth, setAskWidth] = useState(() => (typeof window === 'undefined' ? 1440 : window.innerWidth));
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const onResize = () => setAskWidth(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  const askAt = askLayout(askWidth);
+  const askDocked = askAt === 'dock' || askAt === 'overlay';
+  // A detail sheet opening closes Ask (D1317's one-surface rule).
+  useEffect(() => { if (sheetOpen) askPanelEvent({ type: 'sheet' }); }, [sheetOpen]);
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    const root = document.documentElement;
+    if (askState.open) root.setAttribute('data-eadwyn-ask', 'open');
+    else root.removeAttribute('data-eadwyn-ask');
+    return () => root.removeAttribute('data-eadwyn-ask');
+  }, [askState.open]);
+  const askPanel = askState.open ? (
+    <AskPanel
+      page={askState.page}
+      label={askState.label}
+      crumb={section}
+      options={rail.options}
+      aiOn={aiOn}
+      layout={askAt}
+      onClose={(why) => askPanelEvent({ type: why || 'close' })}
+    />
+  ) : null;
+  useEadwynRailServes(serves && !founderRecord);
   const panel = useEadwynPanel();
   const [sheet, dispatchSheet] = useReducer(railSheetReducer, { open: false });
   const sheetId = `${useId()}-worker-rail-sheet`;
@@ -610,6 +658,8 @@ export default function WorkerRail({
   useEffect(() => {
     dispatchSheet({ type: 'route' });
     if (lastPath.current !== pathname) eadwynPanelEvent({ type: 'route' });
+    // D1443: Ask belongs to the page it was opened on, too.
+    if (lastPath.current !== pathname) askPanelEvent({ type: 'route' });
     lastPath.current = pathname;
   }, [pathname]);
   // At 1024px and up the column takes over, so an open sheet or panel closes.
@@ -829,6 +879,26 @@ export default function WorkerRail({
     </div>
   );
 
+  // D1463: on a founder's record, who and where, then the one sentence.
+  const shown = founderRecord ? (
+    <div className="fwr-body" id={bodyId}>
+      <div className="fwr-who">
+        <div className="fwr-crumbs" data-testid="text-worker-rail-crumbs">
+          {trail.map((t, i) => (
+            <Fragment key={`${i}-${t}`}>
+              <span className="fwr-crumb" data-last={i === trail.length - 1 ? 'true' : 'false'}>{t}</span>
+              {i < trail.length - 1 && <span className="fwr-crumb-sep" aria-hidden="true">›</span>}
+            </Fragment>
+          ))}
+        </div>
+      </div>
+      <p className="fwr-founder-record" role="note" data-testid="text-worker-rail-founder-record">
+        <img src="/eadwyn-ai.png" alt="" width="16" height="16" className="fwr-founder-record-mark" />
+        <span>{FOUNDER_RECORD_OFF}</span>
+      </p>
+    </div>
+  ) : body;
+
   return (
     <>
     <aside
@@ -836,6 +906,7 @@ export default function WorkerRail({
       aria-label={`Eadwyn AI · ${workspace}`}
       data-collapsed={collapsed ? 'true' : 'false'}
       data-sheet-keep=""
+      {...(founderRecord ? { 'data-founder-record': 'true' } : {})}
       {...(railPage?.page ? { 'data-page-key': railPage.page } : {})}
       data-testid={testId}
       style={accentStyle}
@@ -846,8 +917,13 @@ export default function WorkerRail({
         {/* D406 — between the label and the toggle, because the collapsed
             title is a reversed column: the toggle draws on top, then the dot
             and the spend, then the turned label, the canvas's order. */}
-        {collapsed && (
+        {collapsed && !founderRecord && (
           <RailSpine aiOn={aiOn} spendState={spineSpend({ spend, loading, spendError })} />
+        )}
+        {collapsed && founderRecord && (
+          <span className="fwr-founder-record-spine" title={FOUNDER_RECORD_OFF} data-testid="text-worker-rail-founder-record-spine">
+            <span className="fwr-sr">{FOUNDER_RECORD_OFF}</span>
+          </span>
         )}
         <button
           type="button"
@@ -867,9 +943,17 @@ export default function WorkerRail({
         </button>
       </div>
 
-      {!sheet.open && !(serves && panel.open) && body}
+      {!sheet.open && !(serves && panel.open) && shown}
+      {askPanel && askDocked && <div className="fwr-ask-dock" data-testid="ask-dock">{askPanel}</div>}
     </aside>
-    {portalReady && createPortal(
+    {portalReady && askPanel && !askDocked && createPortal(
+      <>
+        {askAt === 'sheet' && <button type="button" className="ead-ask-scrim" aria-label="Close Eadwyn" onClick={() => askPanelEvent({ type: 'scrim' })} />}
+        <div className="ead-ask-layer" data-layout={askAt} data-sheet-keep="">{askPanel}</div>
+      </>,
+      document.body,
+    )}
+    {portalReady && !founderRecord && createPortal(
       serves ? (
         <>
           {!panel.triggered && (

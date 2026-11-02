@@ -30,6 +30,7 @@
  *
  * Mounted in index.ts BEFORE `decks`, beside the other `/api/decks/*` routers.
  */
+import { withoutGuarantees } from '../services/decks/compliance';
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
@@ -37,7 +38,7 @@ import { quoteRun, run, type RunOptions } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { parseJsonLoose } from '../services/decks/autofill';
 import {
-  ACTIONS, ASSIST_OPTIONS, ASSIST_PAGE, CHART_ACTIONS, FIGURE_LINE, INSTRUCTION_MAX, LANGUAGES, TEXT_MAX, TONES,
+  ACTIONS, ASSIST_OPTIONS, ASSIST_PAGE, ASSIST_PROMPT_VERSION, CHART_ACTIONS, FIGURE_LINE, INSTRUCTION_MAX, LANGUAGES, TEXT_MAX, TONES,
   chartBlock, chartMessage, chartable, textMessage, wordingOf, wordingProblem, type Action, type ChartAction, type TextAction,
 } from '../services/decks/assist';
 import { figureRefusal } from '../services/decks/newDeck';
@@ -45,7 +46,8 @@ import { readSources, sanitizeBinding, type SourceItem } from '../services/decks
 import { proposeRail } from '../services/railProposals';
 import { railFor, refuseRun } from '../util/railContext';
 import { refuse } from '../util/refusal';
-import { auditDeckWrite, getDeckRow, projectOwned } from './decks';
+import { auditDeckWrite, getDeckRow, projectOwned, themeOfRow } from './decks';
+import { cardRefOf } from '../services/decks/cardUids';
 import { mercuryFor } from './deck_sources';
 
 const deckAssist = new Hono<{ Bindings: Env }>();
@@ -54,17 +56,21 @@ const today = () => new Date().toISOString().slice(0, 10);
 const isChart = (a: Action): a is ChartAction => (CHART_ACTIONS as readonly string[]).includes(a);
 
 type Press = {
-  action: Action; option: string; deckId: number; card: number; projectId: number; text: string;
+  action: Action; option: string; deckId: number; card: number; card_uid: string | null; projectId: number; text: string;
   tone?: string; language?: string; instruction?: string; labels?: string[]; items: SourceItem[]; heading: string;
+  /** D1519: the deck theme's voice (`theme.voice`), read from the saved version. */
+  voice: string | null;
 };
 
 /** The press a request asks for, checked, or the response that refuses it. */
 async function pressOf(c: any, user: User): Promise<{ press: Press } | { refused: Response }> {
   const body = await c.req.json().catch(() => ({} as any));
   const deckId = Number(c.req.param('id'));
-  const card = Number(c.req.param('card'));
+  const cardParam = String(c.req.param('card') ?? '');
   if (!Number.isSafeInteger(deckId) || deckId <= 0) return { refused: c.json({ error: 'deck id required' }, 400) };
-  if (!Number.isSafeInteger(card) || card < 0 || card > 59) return { refused: c.json({ error: 'card must be a card of the deck, from 0' }, 400) };
+  // D1500: `:card` is the card's uid, or (an older editor) its place from 0.
+  const byPlace = /^(0|[1-9][0-9]?)$/.test(cardParam);
+  if (!byPlace && !/^[A-Za-z0-9_-]{1,40}$/.test(cardParam)) return { refused: c.json({ error: 'card must be a card of the deck' }, 400) };
   const action = String(body?.action || '') as Action;
   if (!(ACTIONS as readonly string[]).includes(action)) return { refused: c.json({ error: `action must be one of ${ACTIONS.join(', ')}` }, 400) };
 
@@ -75,6 +81,13 @@ async function pressOf(c: any, user: User): Promise<{ press: Press } | { refused
   try { project = await projectOwned(c, user, projectId, { write: true }); } catch (e: any) {
     return { refused: e?.message === 'NotFound' ? c.json({ error: 'not found' }, 404) : c.json({ error: 'forbidden' }, 403) };
   }
+  let savedCards: unknown[] = [];
+  try { const parsed = JSON.parse(row.slides || '[]'); if (Array.isArray(parsed)) savedCards = parsed; } catch { savedCards = []; }
+  // A uid the saved version does not hold yet (a card added since) keeps the place the editor sends.
+  const ref = cardRefOf(savedCards, byPlace ? { card: Number(cardParam) } : { card_uid: cardParam, card: body?.card_index ?? null });
+  if ('error' in ref || ref.index === null) return { refused: c.json({ error: 'card must be a card of the deck. Save the deck, then ask again.' }, 400) };
+  const card = ref.index;
+  const cardUid = ref.uid;
   const { items } = await readSources({ env: c.env, projectId, today: today(), mercury: await mercuryFor(c, user, project) });
 
   // A figure bound to a record is the record's: the block as the editor holds it, or as the version stored it.
@@ -95,7 +108,8 @@ async function pressOf(c: any, user: User): Promise<{ press: Press } | { refused
 
   const text = typeof body?.text === 'string' ? body.text.trim() : '';
   const heading = typeof body?.heading === 'string' ? body.heading.trim().slice(0, 120) : '';
-  const press: Press = { action, option: ASSIST_OPTIONS[action], deckId, card, projectId, text, items, heading };
+  const voice = typeof themeOfRow(row)?.voice === 'string' ? String(themeOfRow(row).voice) : null;
+  const press: Press = { action, option: ASSIST_OPTIONS[action], deckId, card, card_uid: cardUid, projectId, text, items, heading, voice };
   if (!isChart(action) && action !== 'headline') {
     if (!text) return { refused: c.json({ error: 'text required: select the words to change' }, 400) };
     if (text.length > TEXT_MAX) return { refused: c.json({ error: `the text is at most ${TEXT_MAX} characters` }, 400) };
@@ -132,7 +146,7 @@ async function pressOf(c: any, user: User): Promise<{ press: Press } | { refused
 function runOptions(c: any, user: User, p: Press): RunOptions {
   const msg = isChart(p.action)
     ? chartMessage(p.action, chartable(p.items), p.heading)
-    : textMessage(p.action as TextAction, p.text, { tone: p.tone, language: p.language, instruction: p.instruction, labels: p.labels });
+    : textMessage(p.action as TextAction, p.text, { tone: p.tone, language: p.language, instruction: p.instruction, labels: p.labels, voice: p.voice });
   // The press names its own option: a header can name the page, never another option's price.
   const rail = { ...railFor(c, { page: ASSIST_PAGE, option: p.option }, `deck:${p.deckId}`), option: p.option };
   return {
@@ -184,13 +198,15 @@ deckAssist.post('/:id/cards/:card/assist', async (c) => {
   if (isChart(p.action)) {
     const made = chartBlock(p.action, parseJsonLoose<any>(res.output), p.items);
     if (!made) return refuse(c, 422, { code: 'no_figures_chosen', message: 'Eadwyn named no recorded figure to show, so nothing was placed. It was charged for the run.', extra: { cost } });
-    payload = { deck_id: p.deckId, card: p.card, action: p.action, block: made.block, title: made.title };
+    payload = { deck_id: p.deckId, card: p.card, card_uid: p.card_uid, action: p.action, block: made.block, title: made.title };
     answer = { block: made.block, title: made.title };
   } else {
-    const after = wordingOf(res.output, p.action === 'headline' ? 120 : TEXT_MAX);
+    // D1546: the guarantee-language block before anything is proposed; words that only promised a return propose nothing.
+    const { text: after, dropped: promised } = withoutGuarantees(wordingOf(res.output, p.action === 'headline' ? 120 : TEXT_MAX));
+    if (promised && !after.trim()) return refuse(c, 422, { code: 'guarantee_language', message: 'Eadwyn’s words promised a return, which a deck may not, so nothing was proposed. It was charged for the run.', extra: { cost } });
     const problem = wordingProblem(p.action as TextAction, p.text, after);
     if (problem) return refuse(c, 422, { code: 'figure_in_output', message: `${problem} It was charged for the run.`, extra: { cost } });
-    payload = { deck_id: p.deckId, card: p.card, action: p.action, before: p.text, after };
+    payload = { deck_id: p.deckId, card: p.card, card_uid: p.card_uid, action: p.action, before: p.text, after };
     answer = { before: p.text, after };
   }
   let proposal = null;
@@ -203,7 +219,7 @@ deckAssist.post('/:id/cards/:card/assist', async (c) => {
     return refuse(c, 503, { code: 'proposal_unsaved', message: 'Eadwyn answered, but the proposal could not be kept. It was charged for the run; try again in a moment.', extra: { cost } });
   }
   await auditDeckWrite(c, user, p.projectId, 'deck_card_assist_proposed', `Card ${p.card + 1}: ${p.action} proposed`);
-  return c.json({ proposal, action: p.action, option: p.option, ...answer, cost });
+  return c.json({ proposal, action: p.action, option: p.option, ...answer, ...(isChart(p.action) ? {} : { prompt_version: ASSIST_PROMPT_VERSION }), cost });
 });
 
 export default deckAssist;

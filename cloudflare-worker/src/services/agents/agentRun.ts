@@ -27,16 +27,36 @@
  *  7. a `run` event (with `usage_log_id` and `proposal_uid`) or a `refused` one,
  *     both by the sponsor; a pause is the system's (no actor).
  *
- * The input is an object: #3742 E2 adds `taskId`, `runKey` and an idempotency
- * key. Tool reads are part 5; this part calls no tool. Neither the prompt nor
- * the output is logged, thrown or written to an event.
+ * Part 5 (#3844): between steps 4 and 5, the reads the sponsor named
+ * (`toolReads`) run through `agentTools.ts`: only granted tools, at most five,
+ * each metered and cut to 8 KB, the results in the prompt only inside the
+ * untrusted-data wrapper. A granted server that is gone or drifted pauses the
+ * agent `tool_disconnected` and the run is 409 `tool_disconnected`.
+ *
+ * RUN IDENTITY (#3846, #3742 E2). A run has a uid (`runUid`; a fresh one when
+ * the caller names none). Its key is `agent:<run uid>`: the proposal's
+ * `run_key` (unique) and, with `:run`, the hold's idempotency key, so a step
+ * retried any number of times takes one hold, makes at most one proposal and
+ * is charged once:
+ *  - a retry whose proposal exists answers that proposal (`replayed: true`)
+ *    before any check, and runs nothing;
+ *  - a retry whose hold replays with no proposal runs nothing and ends
+ *    `step_lost` (409, charging nothing more), or `step_in_flight` (409) while
+ *    the first attempt's hold is still pending.
+ * The hold also carries `executionId: <run uid>`. A `taskId` must be a task
+ * assigned to this agent (422 `task_not_assigned`) and is written on the
+ * proposal.
+ *
+ * The tool reads are named by the same run uid. Neither the prompt nor the
+ * output is logged, thrown or written to an event.
  */
 import type { Env, User } from '../../types';
 import { ROUTE, quoteRun, run, type RailContext, type RefusalReason, type RunOptions, type TaskClass } from '../aiRouter';
 import { railOptionsOn, type RailOptionRow } from '../ai/railMatrix';
-import { proposeRail, type RailProposal } from '../railProposals';
+import { proposeRail, railByRunKey, type RailProposal } from '../railProposals';
 import { moduleOf, optionsIn, roleOf, type ModuleDef, type Rules } from './catalogue';
 import { canManage, effectiveBook, logEvent, monthSpend, scopeOfAgent, type AgentRow, type Scope, type Spend } from './teams';
+import { cleanReads, grantsOf, readTools, type ToolDeps } from './agentTools';
 
 export const PROMPT_MAX = 8000;
 const CYCLE_PAGE = { validate: 'Founder · Validate', build: 'Founder · Build', raise: 'Founder · Raise', grow: 'Founder · Grow' } as const;
@@ -47,10 +67,28 @@ export type AgentRunInput = {
   option: string;
   record?: string | null;
   prompt: string;
+  /** Part 5: the reads the sponsor named, `[{ integration_uid, tool, arguments? }]`; untrusted until `cleanReads`. */
+  toolReads?: unknown;
+  /** Tests only: the tool call and the meter. */
+  toolDeps?: ToolDeps;
+  /** #3846: the task this run works on; it must be assigned to this agent. */
+  taskId?: number | null;
+  /** #3846: the run's uid, the same on every retry of one step. Absent, the run gets a fresh one. */
+  runUid?: string | null;
 };
 
 export type AgentRefusal = { ok: false; status: number; code: string; message: string; extra?: Record<string, unknown> };
-export type AgentRunResult = { ok: true; proposal: RailProposal; charged: Spend; usageLogId: number | null } | AgentRefusal;
+/** #3846: a retried step whose hold was taken but whose proposal never landed. Nothing more was charged. */
+export type AgentStepLost = AgentRefusal & { code: 'step_lost'; holdStatus: string; runKey: string };
+export type AgentRunResult =
+  | { ok: true; proposal: RailProposal; charged: Spend; usageLogId: number | null; runKey: string; replayed: boolean }
+  | AgentStepLost
+  | AgentRefusal;
+
+const RUN_UID_RE = /^[A-Za-z0-9-]{8,64}$/;
+/** `agent:<run uid>`: the proposal's `run_key`; `<run key>:run` is the hold's idempotency key. */
+export const runKeyOf = (runUid: string) => `agent:${runUid}`;
+export const holdKeyOf = (runKey: string) => `${runKey}:run`;
 export type AgentQuote = { ok: true; quote: Spend } | AgentRefusal;
 
 const no = (status: number, code: string, message: string, extra?: Record<string, unknown>): AgentRefusal => ({ ok: false, status, code, message, ...(extra ? { extra } : {}) });
@@ -60,7 +98,7 @@ export function runRefusalStatus(r: RefusalReason | undefined): number {
   switch (r) {
     case 'assist_off': case 'ai_paused': return 403;
     case 'budget_user_day': case 'budget_user_month': case 'budget_review': case 'spend_limit': return 402;
-    case 'model_not_offered': case 'model_unpriced': case 'guard_blocked': case 'guard_blocked_output': case 'safety_block': return 422;
+    case 'model_not_offered': case 'model_unpriced': case 'model_terms_unreviewed': case 'guard_blocked': case 'guard_blocked_output': case 'safety_block': return 422;
     case 'invalid_input': return 400;
     default: return 503;
   }
@@ -94,7 +132,7 @@ async function sponsorOf(env: Env, a: AgentRow): Promise<User | null> {
   return env.DB.prepare('SELECT * FROM users WHERE id = ? AND is_active = 1').bind(a.sponsor_user_id).first<User>();
 }
 
-async function pause(env: Env, a: AgentRow, reason: 'cap' | 'sponsor_left') {
+async function pause(env: Env, a: AgentRow, reason: 'cap' | 'sponsor_left' | 'tool_disconnected') {
   if (a.status !== 'active') return;
   await env.DB.prepare(
     "UPDATE team_agents SET status = 'paused', paused_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'active'",
@@ -107,7 +145,7 @@ async function refused(env: Env, a: AgentRow, r: AgentRefusal, module: string, o
   return r;
 }
 
-/** The system prompt: the role and its rule book, never the scope's records (part 5 reads those). */
+/** The system prompt: the role and its rule book, never the scope's records; part 5's tool reads go in the user message, as data. */
 function systemPrompt(a: AgentRow, rules: Rules, s: Scope, moduleLabel: string): string {
   const role = roleOf(a.role_key);
   const name = [a.first_name, a.last_name].filter(Boolean).join(' ');
@@ -187,7 +225,7 @@ export async function agentQuote(env: Env, input: Omit<AgentRunInput, 'prompt'> 
 }
 
 /** The usage row's charge with its guard rows', or unknown when any is unrecorded. */
-async function chargedFor(env: Env, usageLogId: number | null): Promise<Spend> {
+export async function chargedFor(env: Env, usageLogId: number | null): Promise<Spend> {
   if (!usageLogId) return { available: false };
   try {
     const row = await env.DB.prepare(
@@ -201,13 +239,53 @@ async function chargedFor(env: Env, usageLogId: number | null): Promise<Spend> {
   }
 }
 
+/** #3846: a task this agent may work on: one of its own, assigned to it. */
+async function taskRefusal(env: Env, a: AgentRow, taskId: number | null | undefined): Promise<AgentRefusal | null> {
+  if (taskId == null) return null;
+  const t = Number.isSafeInteger(taskId) && taskId > 0
+    ? await env.DB.prepare("SELECT id FROM scope_tasks WHERE id = ? AND assignee_kind = 'agent' AND assignee_agent_id = ?").bind(taskId, a.id).first<{ id: number }>()
+    : null;
+  return t ? null : no(422, 'task_not_assigned', 'That task is not this agent\'s.');
+}
+
 export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRunResult> {
   const a = input.agent;
-  const bad = promptRefusal(input.prompt);
+  if (input.runUid != null && !(typeof input.runUid === 'string' && RUN_UID_RE.test(input.runUid))) {
+    return no(400, 'invalid_run', 'A run is named by a uid of letters, digits and dashes.');
+  }
+  const runUid = input.runUid ?? crypto.randomUUID();
+  const runKey = runKeyOf(runUid);
+  // A retry of a step that already proposed answers that proposal and runs nothing.
+  const done = await railByRunKey(env, a.sponsor_user_id, runKey);
+  if (done) return { ok: true, proposal: done, charged: await chargedFor(env, done.usage_log_id), usageLogId: done.usage_log_id, runKey, replayed: true };
+  const bad = promptRefusal(input.prompt) ?? await taskRefusal(env, a, input.taskId);
   if (bad) return refused(env, a, bad, input.module, input.option);
   const c = await check(env, input);
   if (!c.ok) return a.status === 'removed' || c.code === 'not_found' ? c : refused(env, a, c, input.module, input.option);
-  const r = await run(env, { ...c.opts, rail: c.rail, surface: c.surface });
+  // Part 5: the named reads, through granted tools only, before the model sees anything.
+  const shaped = cleanReads(input.toolReads, grantsOf(a.tool_grants_json));
+  if (!shaped.ok) return refused(env, a, shaped, input.module, input.option);
+  const read = await readTools(env, a, shaped.reads, runUid, input.toolDeps);
+  if ('disconnected' in read) {
+    await pause(env, a, 'tool_disconnected');
+    return refused(env, a, no(409, 'tool_disconnected', `${read.disconnected.name} is disconnected or one of its tools changed, so this agent is paused. Reconnect it, then resume the agent.`,
+      { server: read.disconnected }), input.module, input.option);
+  }
+  if (!read.ok) return refused(env, a, read, input.module, input.option);
+  if (read.block) c.opts.messages = [{ role: 'user', content: `${input.prompt}\n\n${read.block}` }];
+  const r = await run(env, { ...c.opts, rail: c.rail, surface: c.surface, idempotencyKey: holdKeyOf(runKey), executionId: runUid });
+  if (!r.ok && r.refusal === 'step_replayed') {
+    // The hold was taken by an earlier attempt. Its proposal may have landed in the meantime.
+    const landed = await railByRunKey(env, a.sponsor_user_id, runKey);
+    if (landed) return { ok: true, proposal: landed, charged: await chargedFor(env, landed.usage_log_id), usageLogId: landed.usage_log_id, runKey, replayed: true };
+    const holdStatus = r.replayedStatus ?? 'unknown';
+    if (holdStatus === 'pending') {
+      return refused(env, a, no(409, 'step_in_flight', 'This step is still running. Try again in a moment.'), input.module, input.option);
+    }
+    const lost: AgentStepLost = { ...no(409, 'step_lost', 'This step ran before, but what it wrote was not saved. Nothing more was charged.'), code: 'step_lost', holdStatus, runKey };
+    await refused(env, a, lost, input.module, input.option);
+    return lost;
+  }
   if (!r.ok) {
     // The guard's own words (and its Wellbeing link) when it refused; else the router's.
     const words = r.guard?.refusal?.message ?? r.error ?? 'The agent could not run.';
@@ -220,10 +298,13 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
     proposal = await proposeRail(env, {
       userId: c.opts.userId, page: c.row.pageKey, option: c.row.optionKey, record: input.record ?? null,
       kind: 'draft', payload: { text: r.output ?? '' }, model: r.usage.model, usageLogId, agentId: a.id,
+      taskId: input.taskId ?? null, runKey,
     });
   } catch {
     return refused(env, a, no(500, 'proposal_not_saved', 'The agent ran, but its proposal could not be saved.'), input.module, input.option);
   }
-  await logEvent(env, a.id, a.sponsor_user_id, 'run', { module: input.module, option: input.option }, { usageLogId, proposalUid: proposal.uid });
-  return { ok: true, proposal, charged: await chargedFor(env, usageLogId), usageLogId };
+  // The tools read are named, never their arguments or results.
+  const tools = shaped.reads.map((t) => ({ integration_uid: t.integration_uid, tool: t.tool }));
+  await logEvent(env, a.id, a.sponsor_user_id, 'run', { module: input.module, option: input.option, ...(tools.length ? { tool_reads: tools } : {}) }, { usageLogId, proposalUid: proposal.uid });
+  return { ok: true, proposal, charged: await chargedFor(env, usageLogId), usageLogId, runKey, replayed: false };
 }

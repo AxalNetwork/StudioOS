@@ -3,19 +3,20 @@ import { ChevronDown } from 'lucide-react';
 import { Lightbox } from '../../../ui';
 import { deckAssistApi } from '../../../lib/api/deckAssist';
 import { deckImagesApi } from '../../../lib/api/deckImages';
+import { deckTransformApi } from '../../../lib/api/deckTransform';
 import { railPrefsApi } from '../../../lib/api/railPrefs';
 import { railPressHeaders } from '../../../lib/railPage';
 import { reportError } from '../../../lib/log';
 import { useRailOption } from '../../../ui/railCrumbs';
 import { aiTokens, refusalOf } from './newDeckModel';
-import { ELEMENT_GROUPS, LATER, PEND, elementOnMain } from './deckV2Model';
-import { SURFACES, areasGenerate } from './deckV2Adapter';
+import { ELEMENT_GROUPS, LATER, NOT_ON, PEND, elementOnMain } from './deckV2Model';
+import { SURFACES, areasGenerate, elementModels } from './deckV2Adapter';
 import { SourceChip } from './SourcesBoards';
 import { CONSENT_LINE } from './imageModel';
 import AreaResults from './AreaResults';
 import {
   HEADLINE_WHY, NO_MODEL, RAIL_PAGE, SEQUENCE_LINE, TEXT_ELEMENTS, VARIANTS,
-  batchMode, cardFigures, changesFor, charged, defaultElement, holdLine, holdOf, imageBlock, metricBlock, modelChip, rowLabel, rowPlan, runSequence, runnable, validLine, variantWhy,
+  assistBody, batchMode, cardFigures, cardKeyOf, changesFor, charged, defaultElement, holdLine, holdOf, imageBlock, metricBlock, modelChip, rowLabel, rowPlan, runSequence, runnable, validLine, variantWhy,
 } from './areaLightboxModel';
 import { COST, EYE, FIELD, GHOST, INK, MUTED, PRIMARY, RefusalLine } from './AssistParts';
 
@@ -62,7 +63,7 @@ const ELEMENT_LABEL = Object.fromEntries(ELEMENT_GROUPS.flatMap((g) => g.items.m
  * the bottom of the same sheet.
  */
 export default function AreaLightbox({
-  deckId, cardIndex, card, areas, model, items = [], aiOn = true,
+  deckId, cardIndex, card, cards = null, areas, model, items = [], aiOn = true,
   onPlace, onProposals, onClose, onDialog, onImageOptions, instruction = null, onTokens = null,
 }) {
   const [rows, setRows] = useState(() => (areas || []).map((a) => ({ key: a.id, area: a, element: defaultElement(a), choice: {} })));
@@ -79,7 +80,7 @@ export default function AreaLightbox({
   // The run in flight names its own option to the rail (each area's, one after another).
   useRailOption(busy ? ({
     rewrite: 'deck:rewrite', shorten: 'deck:shorten', expand: 'deck:expand', headline: 'deck:rewrite',
-    chart: 'deck:chart', table: 'deck:table', timeline: 'deck:timeline', image: 'deck:image',
+    chart: 'deck:chart', table: 'deck:table', timeline: 'deck:timeline', image: 'deck:image', speaker_notes: 'deck:notes',
   })[busy.action] ?? null : null, 'Generate');
 
   // Each charged row is quoted as its plan settles; a quote runs nothing and charges nothing.
@@ -91,7 +92,9 @@ export default function AreaLightbox({
       if (!charged(r.plan)) continue;
       const sig = `${r.plan.run}|${JSON.stringify(r.plan.body)}`;
       setQuotes((q) => ({ ...q, [r.key]: { sig, status: 'loading' } }));
-      const ask = r.plan.run === 'image' ? deckImagesApi.quote(deckId, r.plan.body) : deckAssistApi.quote(deckId, cardIndex, r.plan.body);
+      const ask = r.plan.run === 'image' ? deckImagesApi.quote(deckId, r.plan.body)
+        : r.plan.run === 'notes' ? deckTransformApi.quote(deckId, r.plan.body)
+          : deckAssistApi.quote(deckId, r.plan.cardKey, assistBody(r.plan, cardIndex));
       ask.then(
         (data) => { if (live) setQuotes((q) => ({ ...q, [r.key]: { sig, status: 'ok', data } })); },
         (e) => {
@@ -124,6 +127,19 @@ export default function AreaLightbox({
     }
   }, [options]);
 
+  // D1509 (#3760): the elements HQ has not switched on for this member, from the element-models reply; greyed in the picker.
+  const [offElements, setOffElements] = useState(() => new Set());
+  useEffect(() => {
+    if (deckId == null) return undefined;
+    let live = true;
+    elementModels(deckId).then((a) => {
+      if (!live || !a?.available) return;
+      const v = a.value || {};
+      setOffElements(new Set([...(v.elements || []), ...(v.free || [])].filter((e) => e?.switched_on === false).map((e) => e.element)));
+    }, () => {});
+    return () => { live = false; };
+  }, [deckId]);
+
   const set = (key, patch) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   const choose = (key, patch) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, choice: { ...r.choice, ...patch } } : r)));
 
@@ -150,11 +166,18 @@ export default function AreaLightbox({
   const runOne = async ({ plan, choice }) => {
     setBusy({ action: plan.run === 'image' ? 'image' : plan.action || plan.run });
     if (plan.run === 'assist') {
-      const r = await deckAssistApi.run(deckId, cardIndex, plan.body, railPressHeaders(plan.option));
+      const r = await deckAssistApi.run(deckId, plan.cardKey, assistBody(plan, cardIndex), railPressHeaders(plan.option));
       if (!r?.proposal?.uid) throw new Error('Eadwyn returned nothing to place. Nothing was placed.');
       const base = { uid: r.proposal.uid, charged: r.cost?.charged_microusd ?? null, charges: true, modelName: modelName(plan.option) };
       if (r.block) return { ...base, kind: 'block', block: r.block, title: r.title || null };
       return { ...base, kind: 'text', before: String(r.before ?? plan.body.text ?? ''), after: String(r.after ?? '') };
+    }
+    if (plan.run === 'notes') {
+      // D1560: one transform run for this card's notes; the proposal is placed on Accept.
+      const r = await deckTransformApi.run(deckId, plan.body, railPressHeaders(plan.option));
+      const notes = (r?.cards || [])[0]?.notes;
+      if (!r?.proposal?.uid || !notes?.after) throw new Error('Eadwyn returned no notes to place. Nothing was placed.');
+      return { uid: r.proposal.uid, charged: r.cost?.charged_microusd ?? null, charges: true, modelName: modelName(plan.option), kind: 'notes', before: String(notes.before ?? ''), after: String(notes.after) };
     }
     if (plan.run === 'image') {
       const r = await deckImagesApi.generate(deckId, plan.body, railPressHeaders(plan.option));
@@ -164,7 +187,7 @@ export default function AreaLightbox({
     }
     if (plan.run === 'metric') return { kind: 'block', block: metricBlock(plan.item), local: true };
     // An upload is stored as the venture's image at once; the card takes it only on Accept.
-    const r = await deckImagesApi.upload(deckId, plan.file, { use: 'content', card: cardIndex, alt: choice.alt || '', ...(choice.person ? { shows_person: true, consent: true } : {}) });
+    const r = await deckImagesApi.upload(deckId, plan.file, { use: 'content', card: cardIndex, ...(cardKeyOf(card, cardIndex) !== cardIndex ? { card_uid: cardKeyOf(card, cardIndex) } : {}), alt: choice.alt || '', ...(choice.person ? { shows_person: true, consent: true } : {}) });
     if (!r?.image?.uid) throw new Error('The image could not be stored. Nothing was placed.');
     return { kind: 'image', imageUid: r.image.uid, image: r.image, block: imageBlock(r.image, 'photo'), local: true };
   };
@@ -174,7 +197,7 @@ export default function AreaLightbox({
     let out;
     if (mode === 'batch') {
       // #3764 / #3766: one quote and one hold for every area. The adapter answers unavailable on main.
-      const a = await areasGenerate({ deckId, card: cardIndex, areas: list.map((r) => ({ id: r.key, grid: r.area.grid, element: r.element })), variants });
+      const a = await areasGenerate({ deckId, card: cardKeyOf(card, cardIndex), areas: list.map((r) => ({ id: r.key, grid: r.area.grid, element: r.element })), variants });
       out = a?.available ? { results: a.value?.results || [], refusal: null } : await runSequence(list, runOne);
     } else {
       out = await runSequence(list, runOne);
@@ -215,7 +238,7 @@ export default function AreaLightbox({
   return (
     <Lightbox label={title} title={title} width={680} onClose={() => !busy && onClose()} testId="pitch-areas" footer={footer}>
       {results ? (
-        <AreaResults results={results} card={card} model={model} items={items} onPlace={onPlace} onProposals={onProposals} />
+        <AreaResults results={results} card={card} cards={cards} model={model} items={items} onPlace={onPlace} onProposals={onProposals} />
       ) : (
         <div className="flex flex-col gap-2.5">
           <div className="flex flex-wrap items-center gap-2">
@@ -226,7 +249,7 @@ export default function AreaLightbox({
           {ready.length > 1 && mode === 'sequence' ? <span className={MUTED} data-testid="pitch-areas-sequence">{SEQUENCE_LINE}</span> : null}
           {quoteRefusal?.topUp ? <RefusalLine refusal={quoteRefusal} testId="pitch-areas-refusal" /> : null}
           {plans.map((r, i) => (
-            <AreaRow key={r.key} row={r} index={i} items={items} card={card} quote={quoteOf(r)} several={rows.length > 1} canDialog={Boolean(onDialog)}
+            <AreaRow key={r.key} row={r} index={i} offElements={offElements} items={items} card={card} quote={quoteOf(r)} several={rows.length > 1} canDialog={Boolean(onDialog)}
               chip={charged(r.plan) ? modelChip(rails[r.plan.option]?.status === 'ok' ? rails[r.plan.option].data : null) : NO_MODEL}
               open={picker === r.key} onPicker={(o) => setPicker(o ? r.key : null)}
               onElement={(element) => { set(r.key, { element }); setPicker(null); }}
@@ -241,7 +264,7 @@ export default function AreaLightbox({
   );
 }
 
-function AreaRow({ row, index, items, card, quote, several, canDialog, chip, open, onPicker, onElement, onChoice, onDialog, onImageOptions }) {
+function AreaRow({ row, index, offElements, items, card, quote, several, canDialog, chip, open, onPicker, onElement, onChoice, onDialog, onImageOptions }) {
   const trigger = useRef(null);
   const { key, area, element, choice, plan } = row;
   const id = `pitch-areas-row-${key}`;
@@ -264,7 +287,7 @@ function AreaRow({ row, index, items, card, quote, several, canDialog, chip, ope
             {ELEMENT_LABEL[element] || element} <ChevronDown size={13} aria-hidden="true" />
           </button>
           {open ? (
-            <ElementPicker value={element} id={id}
+            <ElementPicker value={element} id={id} off={offElements}
               onPick={(el) => { onElement(el); trigger.current?.focus?.(); }}
               onClose={() => { onPicker(false); trigger.current?.focus?.(); }} />
           ) : null}
@@ -354,9 +377,11 @@ function Segmented({ label, options, value, onPick, testId }) {
  * main is greyed, titled why, and skipped by the arrows. One tab stop: the
  * selected element (else the first that can be picked) takes focus on open.
  */
-function ElementPicker({ value, onPick, onClose, id }) {
+function ElementPicker({ value, onPick, onClose, id, off = null }) {
   const refs = useRef({});
-  const enabled = ELEMENT_GROUPS.flatMap((g) => g.items).filter(elementOnMain).map((el) => el.id);
+  // D1509: an element HQ switched off reads greyed, "Not switched on yet.", and the arrows pass it.
+  const isOn = (el) => elementOnMain(el) && !off?.has(el.id);
+  const enabled = ELEMENT_GROUPS.flatMap((g) => g.items).filter(isOn).map((el) => el.id);
   const [active, setActive] = useState(() => (enabled.includes(value) ? value : enabled[0] ?? null));
   useEffect(() => { if (active) refs.current[active]?.focus?.(); }, [active]);
   const key = (e) => {
@@ -377,15 +402,15 @@ function ElementPicker({ value, onPick, onClose, id }) {
         <div key={g.id} role="group" aria-label={g.label} className="flex flex-col">
           <span className={`${EYE} px-1.5 pt-1`}>{g.label}</span>
           {g.items.map((el) => {
-            const on = elementOnMain(el);
-            const why = on ? null : (SURFACES[el.adapter] ? `${SURFACES[el.adapter].what}. Not switched on yet.` : LATER);
+            const on = isOn(el);
+            const why = on ? null : off?.has(el.id) ? NOT_ON : (SURFACES[el.adapter] ? `${SURFACES[el.adapter].what}. Not switched on yet.` : LATER);
             return (
               <button key={el.id} id={`${id}-opt-${el.id}`} ref={(n) => { refs.current[el.id] = n; }} type="button" role="option"
                 aria-selected={value === el.id} aria-disabled={on ? undefined : true} title={why || undefined} tabIndex={el.id === active ? 0 : -1}
-                className={`flex min-h-[32px] items-center justify-between gap-2 rounded-[7px] px-2 text-left text-[12.5px] ${on ? `${INK} hover:bg-axal-ground focus:bg-axal-ground dark:hover:bg-gray-800 dark:focus:bg-gray-800` : 'cursor-not-allowed text-axal-muted dark:text-gray-500'} ${value === el.id ? 'bg-axal-lavender dark:bg-violet-950/40' : ''}`}
+                className={`flex min-h-[32px] items-center justify-between gap-2 rounded-[7px] px-2 text-start text-[12.5px] ${on ? `${INK} hover:bg-axal-ground focus:bg-axal-ground dark:hover:bg-gray-800 dark:focus:bg-gray-800` : 'cursor-not-allowed text-axal-muted dark:text-gray-500'} ${value === el.id ? 'bg-axal-lavender dark:bg-violet-950/40' : ''}`}
                 onClick={() => { if (on) onPick(el.id); }} data-testid={`${id}-pick-${el.id}`}>
                 <span>{el.label}{el.pending ? ` ${PEND}` : ''}</span>
-                <span className="font-mono text-[10px] text-axal-muted dark:text-gray-400">{on ? (el.free ? 'Free' : '') : LATER}</span>
+                <span className="font-mono text-[10px] text-axal-muted dark:text-gray-400">{on ? (el.free ? 'Free' : '') : off?.has(el.id) ? 'Off' : LATER}</span>
               </button>
             );
           })}

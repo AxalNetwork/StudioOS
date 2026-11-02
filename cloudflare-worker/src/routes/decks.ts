@@ -5,6 +5,7 @@
  * (markdown body) + image fields, version history, restore, and
  * ONE-TIME signed share URLs (HMAC + DB-tracked single-use).
  */
+import { deckCompliance } from '../services/decks/compliance';
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { hydrateSuperAdmin, isSuperAdmin, requireAuth } from '../auth';
@@ -29,22 +30,26 @@ import { renderDeckPPTX, renderDeckPPTXWithImages } from '../services/decks/pptx
 import { NO_NOTES as NO_SPEAKER_NOTES, NO_SOURCES as NO_SOURCES_RECORDED, aiCards, sourceLines } from '../services/decks/offlineHtml';
 import { stripTrailingSlashes } from '../util/url';
 import { bindingKey } from '../util/schemaBootstrap';
+import { applyExportImageCopies, checkedExportImageCopies, copyExternalImages, copyRefusalMessage, type ExportImageCopies } from '../services/decks/imageCopy';
 import { refuse } from '../util/refusal';
 import { DECK_PAGE_LOAD_MS, MAX_DECK_PDF_BYTES, MAX_SLIDE_PNG_BYTES, renderUrl, type RenderFailure } from '../services/browserRun';
 import { railFor } from '../util/railContext';
-import { slideTotals, recordSlideSeconds } from '../services/deckSlideDwell';
+import { slideTotals, recordSlideSeconds, recordSlideCardUids } from '../services/deckSlideDwell';
 import { logCycleWrite } from '../services/cycleActivity';
 import { shareAnalytics, type LinkAnalytics } from '../services/decks/shareAnalytics';
-import { DEFAULT_SHARE_INCLUDE, parseShareInclude, shareSlides, shareSpinoutFields, type ShareInclude } from '../services/decks/shareInclude';
+import { DEFAULT_SHARE_INCLUDE, parseShareInclude, shareGatesFor, shareSlides, shareSpinoutFields, type ShareInclude } from '../services/decks/shareInclude';
 import { sanitizeBinding } from '../services/decks/sources';
 import {
-  AUDIENCES, BLOCK_KINDS, CHART_RANGES, CHART_TYPES, GRID_COLS, GRID_ROWS, IMAGE_FITS, IMAGE_TAGS, LAYOUTS, MAX_BLOCKS, NOTES_MAX, OVERLAYS,
-  TEXT_STYLES, THEME_KINDS, VIDEO_RATIOS, contentHash, modelProblems, sanitizeModel, sanitizeTheme,
+  AUDIENCES, BLOCK_KINDS, CHART_RANGES, LIBRARY_CHART_TYPES, TYPED_CHART_TYPES, GRID_COLS, GRID_ROWS, IMAGE_FITS, IMAGE_TAGS, LAYOUTS, MAX_BLOCKS, NOTES_MAX, OVERLAYS,
+  TEXT_STYLES, THEME_KINDS, VIDEO_RATIOS, contentHash, modelProblems, sanitizeModel, sanitizeTheme, assignCardUids, MODEL_VERSION,
 } from '../services/decks/slideModel';
 import { checkVideoLink } from '../services/decks/videoLink';
 import { ensureDeckVersionColumns, ensureProposalOutlineColumns } from '../services/decks/deckVersionColumns';
 import { isSupportSession } from '../integrations/providers/mercury';
 import { deckShareMetrics, LEGACY_SHARE_NO_VIEW_LIMIT } from '../services/deckShareUse';
+import { cleanOrder, variantSlides } from '../services/decks/variants';
+import { revOf } from '../services/decks/ifMatch';
+import { approvalRefusal, pendingApprovers } from '../services/decks/deckApproval';
 
 /** D895 applies only to deck operations, not other project-content routes. */
 export async function projectOwned(c: any, user: any, projectId: number, opts: { write?: boolean; audit?: boolean; contactData?: boolean } = {}) {
@@ -184,6 +189,9 @@ export async function ensureSchema(env: Env): Promise<void> {
       // Migration 567 — D902: the NDA gate and what the link includes.
       ['nda_required', `ALTER TABLE pitch_deck_share_tokens ADD COLUMN nda_required INTEGER NOT NULL DEFAULT 0 CHECK (nda_required IN (0, 1))`],
       ['include_json', `ALTER TABLE pitch_deck_share_tokens ADD COLUMN include_json TEXT`],
+      // Migration 738 — D1565: the variant a link opens and its recipient watermark.
+      ['variant_id', `ALTER TABLE pitch_deck_share_tokens ADD COLUMN variant_id INTEGER REFERENCES deck_variants(id) ON DELETE SET NULL`],
+      ['watermark_text', `ALTER TABLE pitch_deck_share_tokens ADD COLUMN watermark_text TEXT`],
     ];
     for (const [col, ddl] of add463) {
       if (!have.has(col)) {
@@ -262,15 +270,18 @@ async function deckPrintHmacKey(env: Env): Promise<CryptoKey> {
 export type PrintOptions = { notes: boolean; sources: boolean };
 const NO_PRINT_OPTIONS: PrintOptions = { notes: false, sources: false };
 
-export async function signDeckPrintToken(env: Env, deckId: number, ttlSec = 180, opts: PrintOptions = NO_PRINT_OPTIONS): Promise<string> {
+export async function signDeckPrintToken(env: Env, deckId: number, ttlSec = 180, opts: PrintOptions = NO_PRINT_OPTIONS, imageCopies: ExportImageCopies = {}): Promise<string> {
   const exp = Math.floor(Date.now() / 1000) + ttlSec;
   const flags = `${opts.notes ? 'n' : ''}${opts.sources ? 's' : ''}`;
-  const payload = `deck-print|${deckId}|${exp}${flags ? `|${flags}` : ''}`;
+  const checked = checkedExportImageCopies(imageCopies);
+  if (!checked) throw new Error('invalid export image references');
+  const suffix = Object.keys(checked).length ? `|${flags}|${JSON.stringify(checked)}` : flags ? `|${flags}` : '';
+  const payload = `deck-print|${deckId}|${exp}${suffix}`;
   const key = await deckPrintHmacKey(env);
   const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload));
   return `${b64url(new TextEncoder().encode(payload))}.${b64url(sig)}`;
 }
-export async function verifyDeckPrintToken(env: Env, token: string): Promise<({ deckId: number } & PrintOptions) | null> {
+export async function verifyDeckPrintToken(env: Env, token: string): Promise<({ deckId: number; imageCopies?: ExportImageCopies } & PrintOptions) | null> {
   try {
     const [pB64, sB64] = (token || '').split('.');
     if (!pB64 || !sB64) return null;
@@ -280,12 +291,15 @@ export async function verifyDeckPrintToken(env: Env, token: string): Promise<({ 
     const ok = await crypto.subtle.verify('HMAC', key, sigBytes, payloadBytes);
     if (!ok) return null;
     const payload = new TextDecoder().decode(payloadBytes);
-    const [tag, idStr, expStr, flags = ''] = payload.split('|');
+    const [tag, idStr, expStr, flags = '', copiesText, ...extra] = payload.split('|');
+    if (extra.length) return null;
+    const imageCopies = copiesText === undefined ? undefined : checkedExportImageCopies(JSON.parse(copiesText));
+    if (imageCopies === null) return null;
     if (tag !== 'deck-print' || !idStr || !expStr) return null;
     if (Math.floor(Date.now() / 1000) > Number(expStr)) return null;
     const deckId = parseInt(idStr, 10);
     if (!Number.isFinite(deckId) || deckId <= 0) return null;
-    return { deckId, notes: flags.includes('n'), sources: flags.includes('s') };
+    return { deckId, notes: flags.includes('n'), sources: flags.includes('s'), ...(imageCopies ? { imageCopies } : {}) };
   } catch { return null; }
 }
 
@@ -304,7 +318,8 @@ async function hashViewerField(env: Env, value: string | null): Promise<string |
 // method_id, fields:[{key,label,kind,value,source,edited?}] }. Anything
 // else is dropped. Caps prevent runaway sizes.
 export function sanitizeSlides(input: any[]): any[] {
-  return (input || []).slice(0, 60).map((s: any) => {
+  // D1500: every card leaves with a uid, kept from the input when sound.
+  return assignCardUids((input || []).slice(0, 60).map((s: any) => {
     const title = String((s?.title || '') as string).trim().slice(0, 120) || 'Slide';
     const sub = s?.subtitle ? String(s.subtitle).trim().slice(0, 200) : null;
     const body = s?.body ? String(s.body).trim().slice(0, 4000) : '';
@@ -325,7 +340,7 @@ export function sanitizeSlides(input: any[]): any[] {
     // #2675) the card's own binding, so refresh can find it.
     Object.assign(out, sanitizeModel(s, sanitizeImageUrl));
     return out;
-  });
+  }));
 }
 
 // `auto` = computed, non-editable field (e.g. the Cover Lab-activity strip);
@@ -484,9 +499,12 @@ export function rowToDeck(row: any, withSlides = true): any {
     theme: themeOfRow(row),
     content_hash: row.content_hash ?? null,
     by: row.created_by != null ? { id: Number(row.created_by), name: row.created_by_name ?? null } : null,
+    // D1500: the model this Worker reads and writes; a save must send it back.
+    model_version: MODEL_VERSION,
   };
   if (withSlides) {
-    try { out.slides = founderPitchSlides(JSON.parse(row.slides || '[]')); } catch { out.slides = []; }
+    // D1500: a version saved before uids reads the same uids every time (`assignCardUids`).
+    try { out.slides = assignCardUids(founderPitchSlides(JSON.parse(row.slides || '[]'))); } catch { out.slides = []; }
   }
   return out;
 }
@@ -505,6 +523,9 @@ export function publicDeckOf(row: any): any {
     void notes;
     return card;
   });
+  // D1546: every reader of a deck (share, present, the print page the PDF and PowerPoint photograph)
+  // gets Confidential and each card's footnotes from the one rule (`compliance.ts`).
+  deck.compliance = deckCompliance(deck.slides, themeOfRow(row));
   return deck;
 }
 
@@ -534,7 +555,7 @@ async function versionMetaOf(env: Env, projectId: number, body: any, base: any):
   let theme = has('theme') ? body.theme : themeOfRow(base);
   if (theme != null) {
     theme = sanitizeTheme(theme, sanitizeImageUrl);
-    if (!theme) return 'theme.kind must be brand, neutral_light or neutral_dark';
+    if (!theme) return `theme.kind must be one of ${THEME_KINDS.join(', ')}`;
   }
   return { audience, round_ref, theme };
 }
@@ -569,6 +590,22 @@ async function withNames(env: Env, rows: any[]): Promise<any[]> {
 /** #3748: the current row the caller read, not a client-supplied version. */
 type DeckVersionBase = { id: number; version: number };
 
+/**
+ * D1501 (#3751): the one 409 body for a save that is not on the current
+ * version, whether #3748's stale base found it or a stale `If-Match` did: the
+ * current version's id, version and `rev`, the server's copy of it, and a plain
+ * sentence (`SaveDialog` shows `message`).
+ */
+export async function versionConflictBody(env: Env, projectId: number) {
+  const row = await env.DB.prepare('SELECT * FROM pitch_decks WHERE project_id = ? AND is_current = 1').bind(projectId).first<any>();
+  const current: DeckVersionBase | null = row ? { id: Number(row.id), version: Number(row.version) } : null;
+  return {
+    error: 'deck_version_conflict', code: 'deck_version_conflict',
+    message: 'This deck was saved somewhere else. Reload to see the current version.',
+    current, rev: current ? current.version : null, server: row ? rowToDeck(row) : null,
+  };
+}
+
 export async function insertVersion(env: Env, projectId: number, slides: any[], title: string, userId: number | null, meta: VersionMeta = {}, expectedBase?: DeckVersionBase | null): Promise<number> {
   const base = expectedBase === undefined
     ? await env.DB.prepare('SELECT id, version FROM pitch_decks WHERE project_id = ? AND is_current = 1').bind(projectId).first<DeckVersionBase>()
@@ -589,9 +626,7 @@ export async function insertVersion(env: Env, projectId: number, slides: any[], 
         theme ? JSON.stringify(theme) : null, hash, projectId, base?.id ?? null),
   ]);
   if (Number(results[1]?.meta?.changes) !== 1) {
-    const current = await env.DB.prepare('SELECT id, version FROM pitch_decks WHERE project_id = ? AND is_current = 1')
-      .bind(projectId).first<DeckVersionBase>();
-    throw Response.json({ error: 'deck_version_conflict', message: 'This deck was saved somewhere else. Reload to see the current version.', current }, { status: 409 });
+    throw Response.json(await versionConflictBody(env, projectId), { status: 409 });
   }
   return Number(results[1]?.meta?.last_row_id || 0);
 }
@@ -726,8 +761,13 @@ decks.get('/print-export/:token', async (c) => {
   const v = await verifyDeckPrintToken(c.env, token);
   if (!v) return c.json({ error: 'invalid_or_expired_token' }, 403);
   await ensureSchema(c.env);
-  const row = await c.env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(v.deckId).first<any>();
+  let row = await c.env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(v.deckId).first<any>();
   if (!row) return c.json({ error: 'not_found' }, 404);
+  if (v.imageCopies) {
+    let slides: any[] = [];
+    try { slides = JSON.parse(row.slides || '[]'); } catch { /* unreadable stored slides render empty */ }
+    row = { ...row, slides: JSON.stringify(await applyExportImageCopies(c.env, Number(row.project_id), Array.isArray(slides) ? slides : [], v.imageCopies, c.req.url)) };
+  }
   const methodId = extractDeckMethodId(row);
   let projectName: string | null = null;
   try {
@@ -787,8 +827,8 @@ decks.get('/share/:token', async (c) => {
   // link sends no card, and uses no view, until the person opening it has
   // accepted the NDA on this link; the gate carries only what the NDA names.
   const link = await c.env.DB.prepare(
-    'SELECT id, nda_required, include_json, prospect_id, investor_label FROM pitch_deck_share_tokens WHERE token_hash = ?',
-  ).bind(await sha256Hex(token)).first<{ id: number; nda_required: number | null; include_json: string | null; prospect_id: number | null; investor_label: string | null }>();
+    'SELECT * FROM pitch_deck_share_tokens WHERE token_hash = ?',
+  ).bind(await sha256Hex(token)).first<{ id: number; nda_required: number | null; include_json: string | null; prospect_id: number | null; investor_label: string | null; variant_id?: number | null; watermark_text?: string | null }>();
   const ndaRequired = Number(link?.nda_required ?? 0) === 1;
   if (link && ndaRequired && await shareLinkLive(c.env, await sha256Hex(token), bind.viewerHash)) {
     const gate = await ndaGate(c, Number(link.id), parseInt(m[1]));
@@ -872,9 +912,21 @@ decks.get('/share/:token', async (c) => {
   const included = parseShareInclude(link?.include_json);
   // D898's public fields (no audience, round, author or hash), with the cards
   // as the link includes them: speaker notes go only with notes on.
+  // D1565 (#3812): a link made with a variant opens the master's own cards in the variant's order.
+  let cards = rowToDeck(row).slides;
+  if (link?.variant_id) {
+    try {
+      const v = await c.env.DB.prepare('SELECT slide_order_json FROM deck_variants WHERE id = ? AND deck_id = ?').bind(Number(link.variant_id), id).first<{ slide_order_json: string }>();
+      const order = v ? cleanOrder(cards, JSON.parse(v.slide_order_json || '[]')) : null;
+      if (order) cards = variantSlides(cards, order);
+    } catch { /* an unreadable variant opens the master as it is */ }
+  }
   return c.json({
     ...publicDeckOf(row),
-    slides: shareSlides(rowToDeck(row).slides, included),
+    // D1507: quotes and logos go out only with the consent or permission the venture's records hold.
+    slides: shareSlides(cards, included, await shareGatesFor(c.env, Number(row.project_id))),
+    // D1565: who the link was made for, drawn over every card ("Prepared for …").
+    watermark: link?.watermark_text ?? null,
     view_id: viewId,
     method_id: methodId,
     project_id: Number(row.project_id) || null,
@@ -974,9 +1026,12 @@ decks.post('/share/:token/heartbeat', async (c) => {
   } catch {}
   // D663 — seconds on each slide, as the viewer's running totals. Each is
   // capped so a view's slides never add up to more than its read time.
-  for (const [slide, slideSeconds] of slideTotals(body?.slides)) {
+  const totals = slideTotals(body?.slides);
+  for (const [slide, slideSeconds] of totals) {
     try { await recordSlideSeconds(c.env, viewId, parseInt(m[1]), slide, slideSeconds); } catch {}
   }
+  // D1500: and the card each slide is, by uid.
+  await recordSlideCardUids(c.env, viewId, parseInt(m[1]), totals.map(([slide]) => slide));
   return c.json({ ok: true });
 });
 
@@ -1108,7 +1163,9 @@ decks.get('/model', async (c) => {
     notes_max: NOTES_MAX,
     layouts: LAYOUTS,
     block_kinds: BLOCK_KINDS,
-    chart_types: CHART_TYPES,
+    // D1538 (#3787): the library's types (pd6, 12), and the two drawn from typed figures beside them.
+    chart_types: LIBRARY_CHART_TYPES,
+    typed_chart_types: TYPED_CHART_TYPES,
     chart_ranges: CHART_RANGES,
     text_styles: TEXT_STYLES,
     image_tags: IMAGE_TAGS,
@@ -1238,7 +1295,21 @@ decks.put('/:id', async (c) => {
     try { ensureMethodAllowed(user, persistedMethod, PREMIUM_METHOD_IDS); }
     catch { return c.json({ error: 'paywall', code: 'PAYWALL_PREMIUM_METHOD', method_id: persistedMethod, required_tier: 'studio' }, 402); }
   }
+  // D1501 (#3751): `If-Match: <rev>` names the version the editor read (a deck's rev is its version).
+  // A stale one is refused before anything is read or written, with the server's copy.
+  const ifMatch = c.req.header('if-match');
+  if (ifMatch != null) {
+    const rev = revOf(ifMatch);
+    if (rev == null) return c.json({ error: 'invalid_if_match', code: 'invalid_if_match', message: 'If-Match must be the version you edited, a whole number.' }, 400);
+    if (rev !== Number(row.version) || Number(row.is_current) !== 1) return c.json(await versionConflictBody(c.env, Number(row.project_id)), 409);
+  }
   const body = await c.req.json().catch(() => ({} as any));
+  // D1500: a save in another model's shape is refused, never stripped: an
+  // older editor would drop v2 fields, and a newer one would lose its own.
+  if (body?.model_version !== MODEL_VERSION) {
+    return c.json({ error: 'upgrade_required', code: 'upgrade_required', model_version: MODEL_VERSION,
+      message: 'This editor and the server read decks differently. Reload the page, then save again. Nothing was saved.' }, 409);
+  }
   // D898: a save the model cannot keep whole is refused with what is wrong,
   // never trimmed, so no block is lost without the founder being told.
   const problems = modelProblems(body?.slides, sanitizeImageUrl);
@@ -1254,6 +1325,11 @@ decks.put('/:id', async (c) => {
     }
   }
   if (!slides.length) return c.json({ error: 'slides required' }, 400);
+  // D1506: an outside image is copied into the venture's storage and the slide names the copy;
+  // one that cannot be copied refuses the save, naming it.
+  const copy = await copyExternalImages(c.env, { projectId: Number(row.project_id), deckId: Number(row.id), user: { id: Number(user.id), role: user.role }, requestUrl: c.req.url, slides });
+  if (!copy.ok) return refuse(c, 422, { code: 'image_not_copied', message: copyRefusalMessage(copy.code), extra: { image_url: copy.image_url, reason: copy.code } });
+  slides.splice(0, slides.length, ...copy.slides);
   const title = String(body?.title || row.title || 'Pitch deck').slice(0, 200);
 
   const newId = await insertVersion(c.env, Number(row.project_id), slides, title, Number(user.id) || null, meta,
@@ -1358,6 +1434,9 @@ decks.post('/:id/share', async (c) => {
   try { row = await getDeckRow(c.env, id); } catch { return c.json({ error: 'not found' }, 404); }
   try { await projectOwned(c, user, Number(row.project_id), { write: true }); }
   catch { return c.json({ error: 'forbidden' }, 403); }
+  // D1570 (#3817): no link until every approver on the deck has signed off this version.
+  const waiting = await pendingApprovers(c.env, Number(row.project_id), id);
+  if (waiting.length) return c.json(approvalRefusal(waiting), 409);
   const body = await c.req.json().catch(() => ({} as any));
   const ttlHours = Math.min(
     24 * 30,
@@ -2000,6 +2079,22 @@ decks.post('/:id/autofill', async (c) => {
  * shape: one per slide, plus the Sources appendix as a last page when asked
  * for. The PDF/PowerPoint export and D904's Google Slides export share it.
  */
+/**
+ * D1506: a stored version's outside images, copied before it is exported, so the
+ * export browser loads only our own origin. The export uses an in-memory row naming
+ * the copies; historical versions remain immutable. One that cannot be copied stays
+ * as it was: the export says it is missing, and the export browser cannot load it.
+ */
+export async function copyStoredDeckImages(c: any, user: { id: number; role?: string | null }, row: any): Promise<{ row: any; imageCopies?: ExportImageCopies } | { refused: Response }> {
+  let slides: any[] = [];
+  try { slides = JSON.parse(row.slides || '[]'); } catch { return { row }; }
+  const copy = await copyExternalImages(c.env, { projectId: Number(row.project_id), deckId: Number(row.id), user: { id: Number(user.id), role: user.role }, requestUrl: c.req.url, slides, mode: 'export' });
+  if (!copy.ok) return { refused: refuse(c, 422, { code: 'image_not_copied', message: copyRefusalMessage(copy.code), extra: { image_url: copy.image_url, reason: copy.code } }) };
+  if (!copy.copied) return { row };
+  const text = JSON.stringify(copy.slides);
+  return { row: { ...row, slides: text }, imageCopies: copy.imageCopies };
+}
+
 export function exportDeckOf(row: any, opts: PrintOptions): { slides: any[]; renderable: RenderableDeck } {
   let slides: any[] = [];
   try { slides = JSON.parse(row.slides || '[]'); } catch { slides = []; }
@@ -2092,6 +2187,9 @@ decks.post('/:id/export', async (c) => {
   if (!['pdf', 'pptx'].includes(format)) {
     return c.json({ error: 'format must be pdf | pptx' }, 400);
   }
+  const copied = await copyStoredDeckImages(c, user, row);
+  if ('refused' in copied) return copied.refused;
+  row = copied.row;
   // D1112 (#2992): PD17's two options apply to every format, not only HTML.
   const opts: PrintOptions = { notes: body?.notes === true, sources: body?.sources === true };
   const { renderable } = exportDeckOf(row, opts);
@@ -2118,7 +2216,7 @@ decks.post('/:id/export', async (c) => {
         fallback: 'client_render',
       }, 503);
     }
-    const token = await signDeckPrintToken(c.env, id, 180, opts);
+    const token = await signDeckPrintToken(c.env, id, 180, opts, copied.imageCopies);
     const r = await renderUrl(c.env, 'pdf', {
       url: `${publicBase}/deck/print-export/${token}?print_mode=pdf`,
       viewport: SLIDE_VIEWPORT,
@@ -2169,7 +2267,7 @@ decks.post('/:id/export', async (c) => {
   // comfortably covers the longest deck (60-slide cap). #3655: a few at a
   // time under one deadline; the first slide that cannot be pictured stops
   // the export, and nothing is handed out or recorded.
-  const token = await signDeckPrintToken(c.env, id, 300, opts);
+  const token = await signDeckPrintToken(c.env, id, 300, opts, copied.imageCopies);
   // With sources, the last index is the appendix page the print page draws after the cards.
   const slideCount = renderable.slides.length;
   const deadline = Date.now() + PPTX_RENDER_BUDGET_MS;

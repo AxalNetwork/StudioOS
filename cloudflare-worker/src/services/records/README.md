@@ -86,3 +86,5 @@ route in `../../routes/cycle_records.ts` checks the project, gate and owned row
 before invoking the spec. `formOptions` receives every query parameter except
 `project` and must bound and bind its own reads. An action that names another
 record must declare that reference for an ownership check before it writes.
+
+D1456 (#4014): Customer research returns recorded channel/capture labels, writer-only null-fact actions and a primary pending-findings link. The action contract gains an optional fact action key.

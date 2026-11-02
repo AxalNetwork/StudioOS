@@ -20,7 +20,9 @@ function fixture() {
   db.exec(readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8'));
   for (const name of ['235_calendar_events_kind.sql', '277_user_recovery_state.sql', '603_calendar_feed_tokens.sql', '256_branch_local_copies.sql', '258_licence_deployments.sql', '463_raise_record_stores.sql', '607_raise_money_cents.sql', '610_calendar_feed_scope_sync_errors.sql',
     // D1384: compliance_events' owner_name, which the Compliance source reads.
-    '443_grow_stores.sql']) {
+    '443_grow_stores.sql',
+    // #3959: the Learning source reads the member's plan.
+    '388_learning_core.sql', '389_learning_programs.sql', '390_learning_exercises_exams.sql', '391_learning_webinars.sql', '758_learning_plan.sql']) {
     db.exec(readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8'));
   }
   for (const [id, role] of [[1,'admin'],[2,'founder'],[3,'advisor'],[4,'investor'],[5,'investor']] as const) {
@@ -107,7 +109,11 @@ test('D1206: source failures carry fixed codes, preserve other sources and leak 
     const response = await f.request(`/events?${window}&kinds=ic_meeting,advisor_booking`);
     assert.equal(response.status, 200);
     const body = await response.json() as any;
-    assert.deepEqual(body.sources, [{ kind: 'ic_meeting', ok: true, error: null }, { kind: 'advisor_booking', ok: false, error: 'not_configured' }]);
+    // D1484: the page's read also names each source in plain words, from the registry.
+    assert.deepEqual(body.sources, [
+      { kind: 'ic_meeting', ok: true, error: null, family: 'meetings', module: 'Deals › Investment committee', label: 'IC meeting' },
+      { kind: 'advisor_booking', ok: false, error: 'not_configured', family: 'meetings', module: 'Advisors › Sessions', label: 'Advisor session' },
+    ]);
     assert.equal(JSON.stringify(said).includes('synthetic private'), false);
     assert.equal(JSON.stringify(said).includes('user_id'), false);
     assert.ok(said.some(args => args.some((arg: any) => arg?.outcome === 'not_configured')));
@@ -484,7 +490,8 @@ test('D1206: set-based scope preserves every allowed source and filters private 
     const queries = f.statements().slice(before);
     assert.equal(queries.some(sql => /\b(?:m\.agenda|c\.notes|ev\.note|u\.email|location_uri|location_url)\b/.test(sql)),false,'scoped reads must not fetch private content only to strip it');
     const expected = new Set<string>();
-    const allowed = service.KNOWN_KINDS.filter(kind => !['calendly_event','expert_booking'].includes(kind));
+    // D1484: the personal page-only kinds have no staff projection, so the scope leaves them out too.
+    const allowed = service.KNOWN_KINDS.filter(kind => !['calendly_event','expert_booking'].includes(kind) && !(service.PERSONAL_ONLY_KINDS as readonly string[]).includes(kind));
     for (const member of f.db.prepare("SELECT id,role FROM users WHERE is_active=1 AND (role<>'admin' OR id=1)").all() as any[]) {
       const personal = await service.fetchUserEventsWithSources(f.env,member.id,member.role,FROM,TO,allowed,{ withCancelled:true });
       assert.ok(personal.sources.every(source=>source.ok));

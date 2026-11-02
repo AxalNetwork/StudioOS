@@ -66,7 +66,8 @@ export const ELEMENT_GROUPS = Object.freeze([
     { id: 'caption', label: 'Caption', ...R('POST /api/decks/:id/cards/:card/assist', 'deck:rewrite') },
     { id: 'quote_founder', label: 'Quote · founder’s own', free: true },
     { id: 'team_bios', label: 'Team bios', ...A('ventureElements', 3781) },
-    { id: 'speaker_notes', label: 'Speaker notes', ...A('media', 3788) },
+    // D1560 (#3807): the card's speaker notes, written from its own words by the transform route.
+    { id: 'speaker_notes', label: 'Speaker notes', ...R('POST /api/decks/:id/transform', 'deck:notes') },
   ] },
   { id: 'images', label: 'Images', items: [
     { id: 'photo', label: 'Generated photo', ...R('POST /api/decks/:id/images', 'deck:image') },
@@ -211,7 +212,9 @@ export function cardEdit(row, deckId) {
   const p = row.payload && typeof row.payload === 'object' ? row.payload : null;
   if (!p || String(p.deck_id) !== String(deckId) || !Number.isInteger(p.card) || p.card < 0) return null;
   const action = String(p.action || '');
-  const base = { uid: row.uid, option: row.rail_option || null, card: p.card, action, what: ACTION_WORDS[action] || 'Edit', at: row.created_at || null };
+  // D1500: the card's own uid, so the edit lands on that card even if it moved since.
+  const cardUid = typeof p.card_uid === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(p.card_uid) ? p.card_uid : null;
+  const base = { uid: row.uid, option: row.rail_option || null, card: p.card, card_uid: cardUid, action, what: ACTION_WORDS[action] || 'Edit', at: row.created_at || null };
   if (CHART_ACTIONS.has(action)) {
     if (!p.block || typeof p.block !== 'object') return null;
     return { ...base, kind: 'block', block: p.block, title: p.title || null, size: CHART_SIZE[action] };
@@ -229,15 +232,28 @@ export const cardEditLine = (edit) => `Card ${edit.card + 1} · ${edit.what}`;
  */
 export function waitingCount({ deck, edits }) {
   if (deck?.status !== 'ready' || edits?.status !== 'ready') return null;
-  return (deck.proposal ? 1 : 0) + edits.items.length;
+  // D1583 (#3830): a teaser, one-pager or memo waiting counts like a card edit.
+  return (deck.proposal ? 1 : 0) + edits.items.length + (Array.isArray(edits.derived) ? edits.derived.length : 0);
 }
 
 /**
  * Where a text edit lands: the card's text block whose text is still the
  * proposal's `before`. When the card changed since, nothing is guessed.
  */
+/**
+ * D1500: where the card an edit was made for sits now. By its uid when the
+ * edit names one: a card moved since is found, and a card removed since is -1,
+ * never the card that took its place. An edit made before uids reads by place.
+ */
+export function editIndex(cards, edit) {
+  const list = Array.isArray(cards) ? cards : [];
+  if (edit?.card_uid) return list.findIndex((c) => c?.uid === edit.card_uid);
+  return Number.isInteger(edit?.card) && edit.card < list.length ? edit.card : -1;
+}
+
 export function placeTextEdit(cards, edit) {
-  const card = Array.isArray(cards) ? cards[edit.card] : null;
+  const at = editIndex(cards, edit);
+  const card = at >= 0 ? cards[at] : null;
   if (!card) return { error: `Card ${edit.card + 1} is no longer in this deck. Discard this proposal.` };
   const blocks = Array.isArray(card.blocks) ? card.blocks : [];
   const hit = blocks.find((b) => b.kind === 'text' && String(b.text ?? '') === edit.before);
@@ -280,7 +296,9 @@ export function saveChip({ dirty, readOnly, when, version = null }) {
  */
 export const MORE_MENU = Object.freeze([
   { id: 'deck', label: 'This deck', items: [
-    { id: 'stage', label: 'Stage', adapter: 'stagePlan' },
+    // D1522 (#3774): the stage plan's route is on main, but its sheet is pd23's, built with the reorder action (#3808),
+    // so the item stays greyed on that adapter until the editor can open it.
+    { id: 'stage', label: 'Stage', adapter: 'deckActions' },
     // D1499 (#3749): the theme's aspect, written like a theme and held until a version is saved.
     { id: 'size', label: 'Slide size 16:9 · 4:3', write: true },
     { id: 'theme', label: 'Theme', write: true },
@@ -289,6 +307,8 @@ export const MORE_MENU = Object.freeze([
     { id: 'sources', label: 'Sources and coverage' },
     { id: 'versions', label: 'Versions…' },
     { id: 'save_named', label: 'Save as a named version…', write: true },
+    // D1583 (#3830): a teaser, a one-pager or a memo from the saved version, each a proposal Ask lists.
+    { id: 'derive', label: 'Teaser, one-pager or memo…', write: true },
     // Kept from v1's editor bar and Notes tab: the thread with the venture's admins (D905).
     { id: 'notes', label: 'Notes from your admins' },
   ] },
@@ -300,6 +320,8 @@ export const MORE_MENU = Object.freeze([
     { id: 'section', label: 'Move to section', adapter: 'media' },
     { id: 'appendix', label: 'Mark as appendix', write: true },
     { id: 'background', label: 'Background image', write: true },
+    // D1570 (#3817, pd33): the card's threads; opened here or from the card's ⋯, never from the header.
+    { id: 'comments', label: 'Comments', adapter: 'comments' },
   ] },
   { id: 'ai', label: 'Whole deck · uses AI', items: [
     { id: 'replace_images', label: 'Replace all images', adapter: 'deckActions', ai: true },
@@ -331,8 +353,9 @@ export function moreState(sections, { readOnly = false, aiOn = true, outOfTokens
     ...s,
     items: s.items.map((it) => {
       if (it.adapter) {
+        // `availability` answers null for a row whose route is on main (`SWAPPED`, D1553): that item is live.
         const a = availability(it.adapter);
-        if (!a || a.available !== true) return { ...it, disabled: true, later: true, why: a?.reason || NOT_ON };
+        if (a && a.available !== true) return { ...it, disabled: true, later: true, why: a.reason || NOT_ON };
       }
       if (readOnly && it.write) return { ...it, disabled: true, why: 'Read only' };
       if (waiting && !shareIds.has(it.id)) return { ...it, disabled: true, why: waiting };

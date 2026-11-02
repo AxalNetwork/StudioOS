@@ -1,0 +1,35 @@
+{
+  "$id": "deckElementModels",
+  "title": "GET /api/decks/:id/element-models (D1503, #3754)",
+  "description": "The reply the deck v2 adapter's `elementModels` method passes through: each routed element with its pick, the element groups, and the free elements (`routes/deck_element_models.ts`). D1511 (#3762).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["deck_id", "project_id", "billing", "plan_rank", "elements", "groups", "free"],
+  "properties": {
+    "deck_id": { "type": "integer", "minimum": 1 },
+    "project_id": { "type": "integer", "minimum": 1 },
+    "billing": { "type": "string" },
+    "plan_rank": { "type": "integer", "minimum": 0, "maximum": 2 },
+    "elements": {
+      "type": "array",
+      "items": {
+        "type": "object", "required": ["element", "group", "job", "kind", "task", "plan_min", "expected_ms", "per_run_microusd"],
+        "properties": { "element": { "type": "string" }, "group": { "type": "string" } }
+      }
+    },
+    "groups": {
+      "type": "array",
+      "items": {
+        "type": "object", "required": ["group", "elements", "lead"],
+        "properties": { "group": { "type": "string" }, "elements": { "type": "array", "items": { "type": "string" } } }
+      }
+    },
+    "free": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["element", "group", "line"],
+        "properties": { "element": { "type": "string" }, "group": { "type": "string" }, "line": { "type": "string" } }
+      }
+    }
+  }
+}

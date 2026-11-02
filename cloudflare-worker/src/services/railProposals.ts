@@ -97,7 +97,18 @@ export interface ProposeInput {
   usageLogId?: number | null;
   /** D1496 part 2 (#3842): the team agent that made it (`ai_rail_proposals.agent_id`, migration 712); the row stays the sponsor's. */
   agentId?: number | null;
+  /** #3846 (#3742 E2): the task the agent worked on (`task_id`, migration 727). Agents only. */
+  taskId?: number | null;
+  /**
+   * #3846: the run's identity, `agent:<run uid>` (`run_key`, unique in migration
+   * 727). A second proposal for the same key is never stored: `proposeRail`
+   * answers the one already there. Agents only.
+   */
+  runKey?: string | null;
 }
+
+/** A run key as `agentRun` writes it: `agent:` and the run uid. */
+export const RUN_KEY_RE = /^agent:[A-Za-z0-9-]{8,64}$/;
 
 /**
  * Why a proposal may not be stored, or null when it may. A reason rather than a
@@ -109,6 +120,9 @@ export function proposeRefusal(input: ProposeInput): string | null {
   if (!railOptionKey(input.option)) return 'not a rail option';
   if (input.record != null && !railRecordKey(input.record)) return 'not a record';
   if (input.agentId != null && !(Number.isSafeInteger(input.agentId) && input.agentId > 0)) return 'not an agent';
+  if ((input.taskId != null || input.runKey != null) && input.agentId == null) return 'a task or a run key is an agent\'s';
+  if (input.taskId != null && !(Number.isSafeInteger(input.taskId) && input.taskId > 0)) return 'not a task';
+  if (input.runKey != null && !RUN_KEY_RE.test(input.runKey)) return 'not a run key';
   if (!RAIL_PROPOSAL_KINDS.includes(input.kind)) return 'not a kind';
   if (!input.payload || typeof input.payload !== 'object' || Array.isArray(input.payload)) return 'no payload';
   if (JSON.stringify(input.payload).length > MAX_PAYLOAD_CHARS) return 'payload too long';
@@ -127,8 +141,22 @@ export async function proposeRail(env: Env, input: ProposeInput): Promise<RailPr
     input.record != null ? railRecordKey(input.record) : null, input.kind,
     JSON.stringify(input.payload), input.model ?? null, input.usageLogId ?? null,
   ];
-  // D1496 part 2: an agent's proposal names its agent; a member's own keeps the statement it had.
-  if (input.agentId != null) {
+  // D1496 part 2: an agent's proposal names its agent; #3846: a run's, its task and run key too.
+  // A member's own keeps the statement it had.
+  if (input.agentId != null && (input.taskId != null || input.runKey != null)) {
+    try {
+      await env.DB.prepare(
+        `INSERT INTO ai_rail_proposals
+           (uid, user_id, rail_page, rail_option, record_ref, kind, payload_json, model, usage_log_id, agent_id, task_id, run_key)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(...values, input.agentId, input.taskId ?? null, input.runKey ?? null).run();
+    } catch (e) {
+      // #3846: another attempt of the same run stored its proposal first; that one is the run's.
+      const first = input.runKey && /UNIQUE/i.test(String((e as Error)?.message)) ? await railByRunKey(env, input.userId, input.runKey) : null;
+      if (first) return first;
+      throw e;
+    }
+  } else if (input.agentId != null) {
     await env.DB.prepare(
       `INSERT INTO ai_rail_proposals
          (uid, user_id, rail_page, rail_option, record_ref, kind, payload_json, model, usage_log_id, agent_id)
@@ -146,6 +174,17 @@ export async function proposeRail(env: Env, input: ProposeInput): Promise<RailPr
   return row;
 }
 
+/** #3846: the proposal a run stored under its key (the sponsor's row), or null. */
+export async function railByRunKey(env: Env, userId: number, runKey: string): Promise<RailProposal | null> {
+  if (!RUN_KEY_RE.test(runKey)) return null;
+  const row = await env.DB.prepare(
+    `SELECT uid, rail_page, rail_option, record_ref, kind, payload_json, model, usage_log_id,
+            status, decided_payload_json, decided_at, created_at
+       FROM ai_rail_proposals WHERE run_key = ? AND user_id = ?`,
+  ).bind(runKey, userId).first<Row>();
+  return row ? toProposal(row) : null;
+}
+
 /** One of the member's own proposals, by uid, or null. */
 export async function getRail(env: Env, userId: number, uid: string): Promise<RailProposal | null> {
   // Literal SQL throughout this file, so the schema guards can read every statement.
@@ -158,21 +197,36 @@ export async function getRail(env: Env, userId: number, uid: string): Promise<Ra
 }
 
 /** The member's own proposals for one option, newest first; `record` and `status` narrow them. */
-export async function listRail(env: Env, userId: number, q: { option: string; record?: string | null; status?: RailProposalStatus | null }): Promise<RailProposal[]> {
-  const option = railOptionKey(q.option);
-  if (!option) return [];
+/**
+ * The member's own rows, newest first, at most 50. A rail option, or (D1442,
+ * the Ask panel's "N waiting") a rail page, picks them: at least one of the
+ * two, never neither. `run` narrows to the rows one run proposed
+ * (`usage_log_id`). Every filter is a bound `? IS NULL OR column = ?` pair,
+ * and `user_id` is always bound.
+ */
+export async function listRail(env: Env, userId: number, q: { option?: string | null; page?: string | null; record?: string | null; status?: RailProposalStatus | null; run?: number | null }): Promise<RailProposal[]> {
+  const option = q.option != null ? railOptionKey(q.option) : null;
+  if (q.option != null && !option) return [];
+  const page = q.page != null ? railPageKey(q.page) : null;
+  if (q.page != null && !page) return [];
+  if (!option && !page) return [];
   const record = q.record != null ? railRecordKey(q.record) : null;
   if (q.record != null && !record) return [];
+  const run = q.run != null && Number.isSafeInteger(q.run) && q.run > 0 ? q.run : null;
+  if (q.run != null && run == null) return [];
   // A null filter matches every row: `? IS NULL OR column = ?`, bound twice.
   const r = await env.DB.prepare(
     `SELECT uid, rail_page, rail_option, record_ref, kind, payload_json, model, usage_log_id,
             status, decided_payload_json, decided_at, created_at
        FROM ai_rail_proposals
-      WHERE user_id = ? AND rail_option = ?
+      WHERE user_id = ?
+        AND (? IS NULL OR rail_option = ?)
+        AND (? IS NULL OR rail_page = ?)
         AND (? IS NULL OR record_ref = ?)
         AND (? IS NULL OR status = ?)
+        AND (? IS NULL OR usage_log_id = ?)
       ORDER BY id DESC LIMIT 50`,
-  ).bind(userId, option, record, record, q.status || null, q.status || null).all<Row>();
+  ).bind(userId, option, option, page, page, record, record, q.status || null, q.status || null, run, run).all<Row>();
   return (r.results || []).map(toProposal);
 }
 
@@ -182,35 +236,68 @@ export async function listRail(env: Env, userId: number, q: { option: string; re
  * `edit` needs the member's version, and records it beside Eadwyn's.
  */
 export async function decideRail(env: Env, userId: number, uid: string, decision: RailDecision, edited?: Record<string, unknown> | null): Promise<RailProposal | null> {
+  return decideRailAs(env, { ownerId: userId, deciderId: null }, uid, decision, edited);
+}
+
+/**
+ * THE decide: the member's own press (`decideRail`) and, D1496 part 3
+ * (#3843), a team manager's or the agent's sponsor's press on an agent's
+ * proposal from the queue (`services/agents/queue.ts`, which checks the gate
+ * before it calls this). `ownerId` is the row's `user_id` (an agent's
+ * proposal is its sponsor's); `deciderId` is who pressed from the queue,
+ * written to `decided_by_user_id` (migration 712). The member's own press
+ * passes null and keeps the statements it had: its row's owner decided it.
+ * Once only, atomically; the never-fill check runs here for both. #3742 E3 hooks the Workflow `decision` event to this one function.
+ */
+export async function decideRailAs(env: Env, who: { ownerId: number; deciderId: number | null }, uid: string, decision: RailDecision, edited?: Record<string, unknown> | null): Promise<RailProposal | null> {
+  const userId = who.ownerId;
   const status: RailProposalStatus | null = decision === 'accept' ? 'accepted' : decision === 'edit' ? 'edited' : decision === 'discard' ? 'discarded' : null;
   if (!status) return null;
   // D1263: these decisions must pin/link and audit in their own atomic founder writer.
   const routed = await getRail(env, userId, uid);
   if (routed && ['raise:evidence', 'raise:evidence-link'].includes(routed.rail_option)) return null;
+  // D1583 (#3830): a derived teaser, one-pager or memo is kept only by its own route, which stores it with the
+  // accept in one batch (`routes/deck_derive.ts`); here it can only be discarded.
+  if (routed && routed.rail_option.startsWith('derive:') && status !== 'discarded') return null;
   if (status === 'edited' && (!edited || typeof edited !== 'object' || JSON.stringify(edited).length > MAX_PAYLOAD_CHARS)) return null;
   // D777 part 3: keeping a value re-checks the never-fill registry. The stored
   // field may have been listed since it was proposed, and an edit may name one.
   if (status === 'accepted' || status === 'edited') {
-    const open = await getRail(env, userId, uid);
+    const open = routed;
     if (open && open.status === 'proposed') {
       const stored = open.payload.field;
       if (typeof stored === 'string' && neverFillReason(stored)) {
-        await env.DB.prepare(
-          `UPDATE ai_rail_proposals
-              SET status = 'discarded', decided_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-            WHERE uid = ? AND user_id = ? AND status = 'proposed'`,
-        ).bind(uid, userId).run();
+        if (who.deciderId != null) {
+          await env.DB.prepare(
+            `UPDATE ai_rail_proposals
+                SET status = 'discarded', decided_at = CURRENT_TIMESTAMP, decided_by_user_id = ?, updated_at = CURRENT_TIMESTAMP
+              WHERE uid = ? AND user_id = ? AND status = 'proposed'`,
+          ).bind(who.deciderId, uid, userId).run();
+        } else {
+          await env.DB.prepare(
+            `UPDATE ai_rail_proposals
+                SET status = 'discarded', decided_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+              WHERE uid = ? AND user_id = ? AND status = 'proposed'`,
+          ).bind(uid, userId).run();
+        }
         throw new NeverFillRefusal(stored, true);
       }
       const named = status === 'edited' ? edited?.field : undefined;
       if (typeof named === 'string' && neverFillReason(named)) throw new NeverFillRefusal(named, false);
     }
   }
-  const res = await env.DB.prepare(
-    `UPDATE ai_rail_proposals
-        SET status = ?, decided_payload_json = ?, decided_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-      WHERE uid = ? AND user_id = ? AND status = 'proposed'`,
-  ).bind(status, status === 'edited' ? JSON.stringify(edited) : null, uid, userId).run();
+  const kept = status === 'edited' ? JSON.stringify(edited) : null;
+  const res = who.deciderId != null
+    ? await env.DB.prepare(
+      `UPDATE ai_rail_proposals
+          SET status = ?, decided_payload_json = ?, decided_at = CURRENT_TIMESTAMP, decided_by_user_id = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE uid = ? AND user_id = ? AND status = 'proposed'`,
+    ).bind(status, kept, who.deciderId, uid, userId).run()
+    : await env.DB.prepare(
+      `UPDATE ai_rail_proposals
+          SET status = ?, decided_payload_json = ?, decided_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        WHERE uid = ? AND user_id = ? AND status = 'proposed'`,
+    ).bind(status, kept, uid, userId).run();
   if (!res.meta?.changes) return null;
   return getRail(env, userId, uid);
 }

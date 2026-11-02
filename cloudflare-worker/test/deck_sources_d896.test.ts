@@ -119,6 +119,8 @@ sources.route('/api/decks', decks);
 sources.onError((err: any, c) => c.json({ detail: String(err?.message || '') }, 500));
 
 async function call(db: DatabaseSync, who: number, method: string, path: string, extra: Record<string, unknown> = {}, body?: unknown) {
+  // D1500: the editor saves in model version 2.
+  if (method === 'PUT' && body && typeof body === 'object' && !('model_version' in (body as any))) body = { ...(body as any), model_version: 2 };
   const role = { [ADMIN]: 'admin', [INVESTOR]: 'investor' }[who] ?? 'founder';
   const token = await new SignJWT({ user_id: who, role, ...extra }).setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));

@@ -28,8 +28,10 @@ import { ownedRow } from './records/owned';
 import { addHolder, updateHolder, HolderError, type AddHolderArgs } from './capTableWrites';
 import { SERVED_FUNDS } from './researchFundDirectory';
 import { ensureTier } from '../middleware/requireTier';
+import { watermarkFor } from './decks/variants';
 import { createShareLink, revokeShareLink, SHARE_NEVER_EXPIRES } from '../routes/decks';
 import { shareIncludeFromBody } from './decks/shareInclude';
+import { approvalSentence, pendingApprovers } from './decks/deckApproval';
 import { createProspect, RAISE_STAGES } from '../routes/contacts';
 import {
   READINESS_ITEMS, READINESS_KEYS, INVESTOR_TYPES, INVESTOR_TYPE_LABEL, VERSION_MARKER_KEY, CHECKLIST_KEYS, FUND_SECTIONS,
@@ -397,6 +399,9 @@ export async function createDeckLink(env: Env, a: { projectId: number; user: Use
   const deck = deckId == null ? null : await env.DB.prepare('SELECT id, version FROM pitch_decks WHERE id = ? AND project_id = ?')
     .bind(deckId, a.projectId).first<{ id: number; version: number }>();
   if (!deck) throw new WriterError(404, 'Deck not found');
+  // D1570 (#3817): no link until every approver on the deck has signed off this version.
+  const waiting = await pendingApprovers(env, a.projectId, deck.id);
+  if (waiting.length) throw new WriterError(409, approvalSentence(waiting));
   const investor = await linkInvestor(env, a.projectId, b);
   if (!investor) throw new WriterError(400, 'Name the investor: a prospect or a name');
   if (!has(b, 'expires_days')) throw new WriterError(400, 'expires_days is 7, 14, 30 or null (Never)');
@@ -414,6 +419,11 @@ export async function createDeckLink(env: Env, a: { projectId: number; user: Use
     viewLimit: limit, ndaRequired, include,
   });
   if (link.id == null) throw new WriterError(500, 'The link was made but its id was not reported');
+  // D1565 (#3812): every link names its recipient in a watermark: the prospect and their fund, or the name typed.
+  const firm = investor.prospectId == null ? null
+    : await env.DB.prepare('SELECT name, firm FROM raise_prospects WHERE id = ?').bind(investor.prospectId).first<{ name: string | null; firm: string | null }>();
+  await env.DB.prepare('UPDATE pitch_deck_share_tokens SET watermark_text = ? WHERE id = ?')
+    .bind(watermarkFor(firm?.name ?? investor.label, firm?.firm ?? null), link.id).run();
   return {
     id: link.id, share_path: `/share/deck/${link.token}`, expires_at: link.expiresAt,
     allow_download: allowDownload, allow_forwarding: allowForwarding,

@@ -125,6 +125,11 @@ export default function ProjectSettingsPage() {
         )}
         <Link to={`/projects/${encodeURIComponent(id)}`} className={`mt-3 ${BTN_TEXT}`}>Edit on the project page</Link>
       </TeamCard>
+      {/* D1614 (#3968, WK0): only projects have Work. */}
+      <TeamCard title="Work" testId="project-settings-work">
+        <p className={`m-0 ${MUTED}`}>The board, backlog and burn-up of {name}: what its people and AI agents are doing.</p>
+        <Link to={`/projects/${encodeURIComponent(id)}/work`} className={`mt-3 ${BTN_TEXT}`} data-testid="project-settings-open-work">Open Work ›</Link>
+      </TeamCard>
       <TeamCard title="Company" testId="project-settings-company">
         {!ready ? <p className={MUTED} data-testid="project-settings-company-reading">Reading…</p> : scope.kind === 'project' ? (
           <>

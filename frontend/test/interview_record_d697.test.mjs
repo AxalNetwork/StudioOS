@@ -111,7 +111,7 @@ test('7: /validate/session/:id\'s transcript still draws no time', () => {
   assert.equal(calls.length, 1, 'one transcript on the session page');
   assert.doesNotMatch(calls[0], /\btime\b/);
   // The record (PR 2) is the one caller that passes it.
-  assert.match(read('frontend/src/pages/founder/InterviewReviewPage.jsx'), /<TranscriptReview\b[^>]*\btime \/>/);
+  assert.match(read('frontend/src/pages/founder/InterviewReviewPage.jsx'), /<TranscriptReview\b[^>]*\btime\b/);
 });
 
 // ---------------------------------------------------------------------------
@@ -297,13 +297,14 @@ const routeHandler = (read = WRITER, extra = () => null) => (url, o) => extra(ur
               : json({}));
 const classes = (d) => d.walk(d.container).map((n) => String(d.pr(n).className || '')).join(' ');
 
-test('7: the record renders inside the cycle body with "‹ Back to Customer research", and no max-w-5xl inset or breadcrumb', async () => {
+test('7: the record renders inside the cycle body with "‹ Customer research" (D1454: above the eyebrow), and no max-w-5xl inset or breadcrumb', async () => {
   const m = await routeMount(routeHandler());
   try {
     const body = m.by('cycle-route-body');
     assert.ok(body, 'the cycle body');
     assert.ok(m.by('interview-record', body), 'the record is inside it');
-    assert.match(m.text(), /‹ Back to Customer research/);
+    assert.ok(m.by('record-back'), 'the back link above the eyebrow');
+    assert.match(m.text(m.by('record-back')), /‹ Customer research/);
     assert.doesNotMatch(classes(m), /max-w-5xl/);
     assert.equal(m.by('interview-review-page'), undefined, 'the old page frame is gone');
   } finally { await m.close(); }
@@ -391,6 +392,8 @@ test('8: at 1024px and up Edit details and Delete\'s confirm render after the si
     assert.ok(form, 'the form');
     assert.equal(desktop.walk(body.parentNode).includes(form), false, 'not inside the size container');
     await desktop.press('Cancel');
+    // D1454 (IV-D1): Delete is in ⋯.
+    await desktop.click('record-header-more');
     await desktop.press('Delete');
     const confirm = desktop.by('delete-interview-confirm');
     assert.ok(confirm);
@@ -402,6 +405,8 @@ test('8: at 1024px and up Edit details and Delete\'s confirm render after the si
   } finally { await desktop.close(); }
   const phone = await routeMount(routeHandler(), { phone: true });
   try {
+    // D1454 (IV-M1): on a phone the primary, Ask and ⋯ sit under the bar; Edit details is in ⋯.
+    await phone.click('record-header-more');
     await phone.press('Edit details');
     const body = phone.by('cycle-route-body');
     // Below 1024px FormLightbox is a page (pageBelow="lg"): its <form> sits in the body.

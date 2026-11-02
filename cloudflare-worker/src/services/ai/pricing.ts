@@ -20,7 +20,7 @@
  * neurons, $0.0000528, 52.8 micro-USD, so rounding each tile up would charge
  * five tiles 265 micro-USD instead of 264.
  */
-import { modelById, UNIT_SCALE, type PriceUnit } from './catalogue';
+import { CATALOGUE_READ, modelById, PROVIDER_PRICING_VERSION, UNIT_SCALE, type PriceUnit } from './catalogue';
 
 /** Cloudflare's rate: $0.011 per 1,000 neurons (the pricing page, 2026-10-15). */
 export const USD_PER_NEURON = '0.000011';
@@ -43,6 +43,16 @@ export const billingMode = (env?: unknown): BillingMode =>
  */
 export const chargeMultiplier = (env: unknown, licence: string): number =>
   (billingMode(env) === 'billed' ? multiplierFor(licence) : 1);
+
+/**
+ * D1540 (#3791): the price list a quote was made under, as one string: the
+ * catalogue's Cloudflare pricing page, the outside providers' price version,
+ * whether runs settle at cost or billed, and the markup. A quote records it
+ * (`deck_run_quotes.pricing_version`); a quote made under one version settles
+ * under another at no more than it said (`RunOptions.pinMicrousd`).
+ */
+export const pricingVersion = (env?: unknown): string =>
+  `cf-${CATALOGUE_READ.pricing_page_updated}.${PROVIDER_PRICING_VERSION}.${billingMode(env)}.x${AI_MARKUP}`;
 
 /** The multiplier a licence pays over cost. The `admin` licence (`aiLicenceKey`) always pays cost. */
 export const multiplierFor = (licence: string): number => (licence === 'admin' ? 1 : AI_MARKUP);
@@ -107,9 +117,21 @@ function decString(d: Dec): string {
  * figure for that unit.
  */
 export function unitPrice(model: string, unit: PriceUnit): string | null {
+  const dollars = DOLLAR_PRICED[model]?.includes(unit) ? modelById(model)?.prices?.[unit] : null;
+  if (dollars != null) return dollars;
   const raw = modelById(model)?.neurons?.[unit];
   return raw == null ? null : decString(mul(dec(raw), dec(USD_PER_NEURON)));
 }
+
+/**
+ * #3936 (owner answer F (b)): a model and unit billed at the catalogue's DOLLAR
+ * figure, not its neurons × `USD_PER_NEURON`. smart-turn-v2's model page prints
+ * $0.00033795 a minute but 0.51 neurons, which would bill $0.00000561, sixty
+ * times less; the owner chose the dollar figure.
+ */
+export const DOLLAR_PRICED: Readonly<Record<string, readonly PriceUnit[]>> = Object.freeze({
+  '@cf/pipecat-ai/smart-turn-v2': ['audio_minutes'],
+});
 
 /**
  * Cloudflare's cost for a run, in USD, exactly. `tokens_in` is the provider's
@@ -130,6 +152,8 @@ function costUsd(model: string, units: RunUnits): Dec {
     let n = count;
     if (unit === 'tokens_cached') { if (!cachedRate) continue; n = cached; }
     if (unit === 'tokens_in') n = count - cached;
+    const dollars = DOLLAR_PRICED[model]?.includes(unit) ? m?.prices?.[unit] : null;
+    if (dollars != null) { total = add(total, div(mul(dec(dollars), decOf(n)), UNIT_SCALE[unit])); continue; }
     const raw = neurons[unit];
     if (raw == null) throw new Error(`model_unpriced: ${model} has no ${unit} price`);
     total = add(total, div(mul(mul(dec(raw), dec(USD_PER_NEURON)), decOf(n)), UNIT_SCALE[unit]));

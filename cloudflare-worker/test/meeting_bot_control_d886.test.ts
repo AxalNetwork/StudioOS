@@ -560,6 +560,13 @@ test('D1368: a failed run keeps the bot\'s own code and last step, and only in t
     const row=(await botRow(w.env,uid))! as any;
     assert.deepEqual([row.status,row.failure_code],['failed','runtime_failed']);
     assert.equal(w.db.prepare('SELECT failure_detail FROM meeting_bots WHERE uid=?').get(uid).failure_detail,stored);
+    const read=await call(w.env,FOUNDER,'GET',`/sessions/${w.session}/bot`);
+    assert.equal(read.status,200);
+    assert.equal(read.body.bot.failure_detail,stored);
+    w.db.prepare("UPDATE users SET role='admin',founder_id=100 WHERE id=?").run(OTHER);
+    assert.equal((await call(w.env,OTHER,'GET',`/sessions/${w.session}/bot`)).status,404);
+    w.db.prepare('UPDATE meeting_bots SET failure_detail=? WHERE uid=?').run('SYNTHETIC provider sentence https://example.invalid',uid);
+    assert.equal((await call(w.env,FOUNDER,'GET',`/sessions/${w.session}/bot`)).body.bot.failure_detail,null);
   }
 });
 

@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { cyclesWrite } from '../../../lib/api/cycles';
+import { deckCommentsApi } from '../../../lib/api/deckComments.js';
 import { reportError } from '../../../lib/log';
 import { Lightbox } from '../../../ui';
+import InvestorLinksTable from './InvestorLinksTable.jsx';
+import { preShareGate } from './commentsModel';
 import {
   DEFAULT_SHARE, EXPIRIES, INCLUDE_ROWS, NDA_SWITCH, NEVER_SHARED, NO_LIMIT, SHARE_CTA, SHARE_TITLE, SHOWN_ONCE, TYPED,
   frozenLine, shareBody, shareFailure, shareProblem, shareUrl, whatShareDoes,
@@ -12,6 +15,14 @@ import {
  * "New link" on Share & analytics. It writes through the one link writer,
  * `POST /api/cycles/raise/deck-links`, and says what it writes before it
  * writes it. The link is shown once, with Copy.
+ *
+ * D1570 (#3817): Share opens a single gate. Before the link is written, the
+ * pre-share confirm (pd34's, which pd33's inset joins) reads who must approve
+ * this version (`GET /api/decks/:id/approval`). While an approver has not, it
+ * shows the amber "Approval needed before sharing · [name] has not approved
+ * yet" and holds Share: the Worker refuses the link until they sign off, so
+ * there is no "Share anyway" past it. #3826's "[N] cards are not Done. Share
+ * anyway?" joins this same confirm through `preShareGate`.
  */
 
 const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
@@ -38,6 +49,8 @@ export default function ShareDialog({ projectId, deck, onClose, onCreated }) {
   const [failed, setFailed] = useState(null);
   const [made, setMade] = useState(null);
   const [copied, setCopied] = useState(false);
+  // D1570: the pre-share confirm, while it is open; null when Share goes straight through.
+  const [gate, setGate] = useState(null);
   const set = (patch) => setState((s) => ({ ...s, ...patch }));
 
   useEffect(() => {
@@ -62,8 +75,28 @@ export default function ShareDialog({ projectId, deck, onClose, onCreated }) {
   const investorName = state.investor === TYPED ? String(state.label || '').trim() : prospects.rows.find((p) => String(p.value) === String(state.investor))?.label;
   const url = shareUrl(made);
 
-  const create = async () => {
+  // D1570: read the gate first; anything to say opens the confirm, else the link is made.
+  const share = async () => {
     if (problem || busy) return;
+    setBusy(true); setFailed(null);
+    let approval;
+    try { approval = { status: 'ok', ...(await deckCommentsApi.approval(deck.id)) }; }
+    catch (e) {
+      // Unread (or a reader the comments route does not admit), the link is still asked for: the Worker refuses a
+      // held one, and its sentence is printed in place of the link.
+      if (e?.status !== 404) reportError('ShareDialog:approval', e);
+      approval = { status: 'error', pending: [] };
+    }
+    setBusy(false);
+    const g = preShareGate(approval);
+    if (g.show) { setGate(g); return; }
+    await create();
+  };
+
+  const create = async () => {
+    // Held by an approver: the Worker would refuse the link, so it is not asked for.
+    if (problem || busy || gate?.held) return;
+    setGate(null);
     setBusy(true); setFailed(null);
     try {
       const r = await cyclesWrite.raise.deckLink(projectId, shareBody(state, deck));
@@ -89,15 +122,33 @@ export default function ShareDialog({ projectId, deck, onClose, onCreated }) {
       testId="pitch-share-dialog"
       footer={(
         <div className="flex justify-end gap-2">
-          <button type="button" className={GHOST} onClick={onClose} disabled={busy}>{made ? 'Done' : 'Cancel'}</button>
-          {!made ? (
-            <button type="button" className={PRIMARY} onClick={create} disabled={busy || Boolean(problem)} data-testid="pitch-share-create">
+          <button type="button" className={GHOST} onClick={gate ? () => setGate(null) : onClose} disabled={busy}>{made ? 'Done' : gate ? 'Back' : 'Cancel'}</button>
+          {!made && gate ? (
+            <button type="button" className={PRIMARY} onClick={create} disabled={busy || gate.held} title={gate.held ? 'Share opens once every approver has approved this version.' : undefined}
+              data-testid="pitch-share-anyway">
+              {busy ? 'Creating…' : 'Share anyway'}
+            </button>
+          ) : null}
+          {!made && !gate ? (
+            <button type="button" className={PRIMARY} onClick={share} disabled={busy || Boolean(problem)} data-testid="pitch-share-create">
               {busy ? 'Creating…' : SHARE_CTA}
             </button>
           ) : null}
         </div>
       )}
     >
+      {/* D1565 (#3812, pd35): this version's links, one row per investor, above the new one. */}
+      <div className="mb-3"><InvestorLinksTable deck={deck} refreshKey={made ? 1 : 0} /></div>
+      {gate && !made ? (
+        <div className="mb-3 flex flex-col gap-2" role="alertdialog" aria-label="Before you share" data-testid="pitch-share-gate">
+          {gate.lines.map((l) => (
+            <div key={l.key} className={l.tone === 'amber'
+              ? 'rounded-[10px] bg-amber-50 px-3 py-2.5 text-[12.5px] font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-200'
+              : `rounded-[10px] bg-axal-ground px-3 py-2.5 ${MUTED} dark:bg-gray-800`} data-testid={`pitch-share-gate-${l.key}`}>{l.text}</div>
+          ))}
+          {gate.held ? <p className={`m-0 ${MUTED}`}>Share opens once every approver has approved this version. They approve from Comments on any card.</p> : null}
+        </div>
+      ) : null}
       {made ? (
         <div className="flex flex-col gap-3" data-testid="pitch-share-made">
           {url ? (
@@ -120,6 +171,8 @@ export default function ShareDialog({ projectId, deck, onClose, onCreated }) {
               <input className={FIELD} value={state.label} onChange={(e) => set({ label: e.target.value })} placeholder="The investor's name" maxLength={200} data-testid="pitch-share-label" />
             ) : null}
             {prospects.status === 'error' ? <span className={MUTED}>Your prospects could not be read. Type a name instead.</span> : null}
+            {/* D1565: the recipient watermark the link will carry on every card. */}
+            {investorName ? <span className={MUTED} data-testid="pitch-share-watermark">Watermark: Prepared for {investorName}</span> : null}
           </div>
           <div className="flex flex-col gap-1.5">
             <span className={EYE}>Expires</span>

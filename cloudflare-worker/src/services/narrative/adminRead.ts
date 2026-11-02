@@ -47,13 +47,16 @@ export async function kindOf(env: Env, user: User): Promise<Kind> {
   return isSuperAdmin(await hydrateSuperAdmin(env, user as any)) ? 'super_admin' : 'admin';
 }
 
-type Reason = { id: number; reason: string; created_at: string; expires_at: string };
+type Reason = { id: number; reason: string; created_at: string; expires_at: string; ended_at?: string | null };
 
-/** The caller's own unexpired reason for this venture, or null. Throws when the log cannot be read. */
+/**
+ * The caller's own live reason for this venture, or null: unexpired and not
+ * ended early (D1465 G1, migration 761). Throws when the log cannot be read.
+ */
 export async function activeReason(env: Env, projectId: number, userId: number): Promise<Reason | null> {
   return env.DB.prepare(
-    `SELECT id, reason, created_at, expires_at FROM narrative_read_reasons
-      WHERE project_id = ? AND reader_user_id = ? AND datetime(expires_at) > datetime('now')
+    `SELECT id, reason, created_at, expires_at, ended_at FROM narrative_read_reasons
+      WHERE project_id = ? AND reader_user_id = ? AND datetime(expires_at) > datetime('now') AND ended_at IS NULL
       ORDER BY id DESC LIMIT 1`,
   ).bind(projectId, userId).first<Reason>();
 }
@@ -79,12 +82,13 @@ type ReasonRow = Reason & { reader_kind: 'admin' | 'super_admin'; reader_name: s
 
 const reasonView = (r: ReasonRow) => ({
   id: r.id, reason: r.reason, by: { name: r.reader_name ?? null, kind: r.reader_kind }, created_at: r.created_at, expires_at: r.expires_at,
+  ended_at: r.ended_at ?? null,
 });
 
 /** Every reason given for this venture's narrative, newest first, and the caller's own unexpired one. */
 export async function listReasons(env: Env, projectId: number, user: User) {
   const { results } = await env.DB.prepare(
-    `SELECT r.id, r.reason, r.reader_kind, r.created_at, r.expires_at, u.name AS reader_name
+    `SELECT r.id, r.reason, r.reader_kind, r.created_at, r.expires_at, r.ended_at, u.name AS reader_name
        FROM narrative_read_reasons r LEFT JOIN users u ON u.id = r.reader_user_id
       WHERE r.project_id = ? ORDER BY r.id DESC LIMIT ?`,
   ).bind(projectId, LIST_MAX).all<ReasonRow>();
@@ -116,12 +120,64 @@ export async function giveReason(env: Env, projectId: number, user: User, raw: u
       action: 'narrative_read_opened', summary: kind === 'super_admin' ? 'HQ opened the narrative to read it' : 'An admin opened the narrative to read it',
     }),
   ]);
+  return readOne(env, projectId, Number(insert?.meta?.last_row_id));
+}
+
+async function readOne(env: Env, projectId: number, id: number) {
   const row = await env.DB.prepare(
-    `SELECT r.id, r.reason, r.reader_kind, r.created_at, r.expires_at, u.name AS reader_name
+    `SELECT r.id, r.reason, r.reader_kind, r.created_at, r.expires_at, r.ended_at, u.name AS reader_name
        FROM narrative_read_reasons r LEFT JOIN users u ON u.id = r.reader_user_id WHERE r.id = ? AND r.project_id = ?`,
-  ).bind(Number(insert?.meta?.last_row_id), projectId).first<ReasonRow>();
+  ).bind(id, projectId).first<ReasonRow>();
   if (!row) throw new Error('reason saved but unreadable');
   return reasonView(row);
+}
+
+/** D1465 G1: the caller has no live read of this narrative to end. */
+export class NoOpenRead extends Error {}
+
+/**
+ * D1465 G1 (#4020): an admin ends their own live read early. One UPDATE and
+ * one activity row, in one batch; the activity row names neither the reason
+ * nor its words. Throws `NoOpenRead` when nothing of theirs is live, and the
+ * database's error when the log cannot be read or written.
+ */
+export async function endRead(env: Env, projectId: number, user: User) {
+  const live = await activeReason(env, projectId, Number(user.id));
+  if (!live) throw new NoOpenRead();
+  const kind = await kindOf(env, user);
+  const [update] = await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE narrative_read_reasons SET ended_at = datetime('now')
+        WHERE id = ? AND project_id = ? AND reader_user_id = ? AND ended_at IS NULL`,
+    ).bind(live.id, projectId, user.id),
+    logCycleWriteStatement(env, {
+      projectId, userId: Number(user.id), cycle: 'raise', module: 'investor-narrative', entityId: null,
+      action: 'narrative_read_ended', summary: kind === 'super_admin' ? 'HQ ended their narrative read' : 'An admin ended their narrative read',
+    }),
+  ]);
+  if (!Number(update?.meta?.changes)) throw new NoOpenRead();
+  return readOne(env, projectId, live.id);
+}
+
+/**
+ * D1465 G2 (#4020): the venture an admin is about to read, before the reason:
+ * its name and logo, and its founder's name only when exactly one active
+ * founder user holds the venture's founder id (else null: the page draws no
+ * founder line, never a guess). Reads no narrative content.
+ */
+export async function ventureOf(env: Env, projectId: number) {
+  const p = await env.DB.prepare('SELECT id, name, logo_url, founder_id FROM projects WHERE id = ?')
+    .bind(projectId).first<{ id: number; name: string | null; logo_url: string | null; founder_id: number | null }>();
+  if (!p) return null;
+  let founderName: string | null = null;
+  if (p.founder_id != null) {
+    const { results } = await env.DB.prepare(
+      `SELECT name FROM users WHERE founder_id = ? AND role = 'founder' AND is_active = 1 LIMIT 2`,
+    ).bind(p.founder_id).all<{ name: string | null }>();
+    const rows = results || [];
+    founderName = rows.length === 1 ? (rows[0].name?.trim() || null) : null;
+  }
+  return { id: p.id, name: p.name ?? null, logo_url: p.logo_url ?? null, founder_name: founderName };
 }
 
 type NoteRow = { id: number; version: number | null; body: string; author_kind: Kind; author_name: string | null; created_at: string };

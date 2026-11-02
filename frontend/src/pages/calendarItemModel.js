@@ -30,6 +30,8 @@ export const KIND_WORDS = Object.freeze({
   event_hosted: 'Event · hosting',
   calendly_event: 'From Calendly',
   compliance_due: 'Compliance',
+  learning: 'Learning plan',
+  bot_call: 'Recorded call',
 });
 
 /** The lengths each dialog offers, in minutes: CAL7 and CAL19 for an IC meeting, CAL8 for a check-in. */

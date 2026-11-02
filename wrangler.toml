@@ -165,6 +165,8 @@ fallthrough = true
 [vars]
 # D1496 (#3840): team agents (/api/teams). Off until the owner turns them on.
 TEAM_AGENTS_ENABLED = "false"
+# D1529 (#3845, #3742 E1): the agent engine's goals and tasks (/api/teams). "off" until the owner turns it on; needs TEAM_AGENTS_ENABLED too.
+AGENT_ENGINE = "off"
 # D886 B9: meeting bot rollout; B1 enforces Super-Admin-only canary.
 MEETING_BOT = "canary"
 # Task #5 — canonical-host flip complete. APP_URL / PUBLIC_BASE_URL
@@ -274,6 +276,8 @@ USE_CF_QUEUE      = "true"
 # 200-rpm/account) before deploy; when the slug is missing or unknown
 # Cloudflare silently treats the call as un-gatewayed (no breakage).
 CF_AI_GATEWAY_SLUG_ADVISOR = "advisor-ongoing"
+# D1504 (#3755): the deck's AI Gateway, empty (inert) until the owner creates it (owner question L).
+CF_AI_GATEWAY_SLUG_DECK    = ""
 # Task #4 (CG) — daily turn cap per user for the advisor. Soft-warn at
 # 80%, hard-block at 100%. Counted in KV under
 # `ai_spend:advisor:{user_id}:{yyyy-mm-dd}`. The "USD_DAY" suffix is a
@@ -584,6 +588,8 @@ custom_domain  = true
 [env.production.vars]
 # D1496 (#3840): team agents (/api/teams). Mirrored from [vars]; off until the owner turns them on.
 TEAM_AGENTS_ENABLED = "false"
+# D1529 (#3845): the agent engine. Mirrored from [vars]; "off" until the owner turns it on.
+AGENT_ENGINE = "off"
 # D886 B9: vars do not inherit into named environments.
 MEETING_BOT = "canary"
 # Task #5 — canonical-host flip. APP_URL/PUBLIC_BASE_URL now point at
@@ -645,6 +651,8 @@ WORKER_DEPLOY_VERSION = ""
 # Task #4 (CG) — see top-level [vars] for the rationale. Mirrored here
 # because Wrangler env tables don't inherit from the top-level [vars].
 CF_AI_GATEWAY_SLUG_ADVISOR     = "advisor-ongoing"
+# D1504 (#3755): the deck's AI Gateway, empty (inert) until the owner creates it (owner question L).
+CF_AI_GATEWAY_SLUG_DECK        = ""
 WORKERS_AI_ADVISOR_BUDGET_USD_DAY = "100"
 # D538 (#1078) — see top-level [vars]. Mirrored because env tables don't inherit.
 MI_STUB_ROWS           = "off"
@@ -833,6 +841,8 @@ USE_CF_QUEUE      = "true"
 # `advisor-ongoing-preview`) created in the dashboard. Defaults to the
 # prod slug so the binding still works before a preview gateway exists.
 CF_AI_GATEWAY_SLUG_ADVISOR     = "advisor-ongoing"
+# D1504 (#3755): the deck's AI Gateway, empty (inert) until the owner creates it (owner question L).
+CF_AI_GATEWAY_SLUG_DECK        = ""
 WORKERS_AI_ADVISOR_BUDGET_USD_DAY = "100"
 # Preview is allowed to widen CORS so PR review deploys can talk to
 # localhost SPAs and the workers.dev sandbox URL.

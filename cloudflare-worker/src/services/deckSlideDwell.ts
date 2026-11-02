@@ -7,6 +7,7 @@
  * them (`services/raiseCycle.ts`).
  */
 import type { Env } from '../types';
+import { cardUidAt } from './decks/cardUids';
 
 /** Highest slide index the heartbeat accepts (the store's CHECK). */
 export const MAX_SLIDE_INDEX = 199;
@@ -55,4 +56,30 @@ export async function recordSlideSeconds(env: Env, viewId: number, deckId: numbe
         AND v.read_seconds - COALESCE((SELECT SUM(o.seconds) FROM deck_view_slides o WHERE o.view_id = v.id AND o.slide_index != ?), 0) > 0
      ON CONFLICT(view_id, slide_index) DO UPDATE SET seconds = MAX(seconds, excluded.seconds), updated_at = excluded.updated_at`,
   ).bind(slide, seconds, slide, viewId, deckId, slide).run();
+}
+
+/**
+ * D1500: name each counted slide's card by its uid (migration 714), read from
+ * the version the view is of, so the seconds follow the card even after the
+ * founder reorders it. Best effort: a database without 714, or a version that
+ * cannot be read, keeps the seconds by place as before.
+ */
+export async function recordSlideCardUids(env: Env, viewId: number, deckId: number, slides: number[]): Promise<void> {
+  if (!slides.length) return;
+  try {
+    // Only the slides still unnamed: a heartbeat after the first reads nothing more.
+    const open = await env.DB.prepare('SELECT slide_index FROM deck_view_slides WHERE view_id = ? AND card_uid IS NULL').bind(viewId).all<{ slide_index: number }>();
+    const todo = new Set((open.results || []).map((r) => Number(r.slide_index)));
+    const wanted = slides.filter((s) => todo.has(s));
+    if (!wanted.length) return;
+    const row = await env.DB.prepare('SELECT slides FROM pitch_decks WHERE id = ?').bind(deckId).first<{ slides: string | null }>();
+    const cards = JSON.parse(row?.slides || '[]');
+    for (const slide of wanted) {
+      const uid = cardUidAt(cards, slide);
+      if (!uid) continue;
+      await env.DB.prepare('UPDATE deck_view_slides SET card_uid = ? WHERE view_id = ? AND slide_index = ? AND card_uid IS NULL').bind(uid, viewId, slide).run();
+    }
+  } catch (e) {
+    console.warn('[deck_view_slides] card_uid not recorded', (e as Error)?.message);
+  }
 }

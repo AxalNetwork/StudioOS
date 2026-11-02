@@ -663,7 +663,7 @@ test('the source: every write is a dialog, no corner toast, part 1’s client in
     .map((f) => codeOnly(read(`frontend/src/pages/admin/programs/${f}`)));
   const src = [...files, codeOnly(read('frontend/src/pages/admin/AdvisorCohortAssignments.jsx')), codeOnly(read('frontend/src/pages/admin/ReferralReview.jsx'))].join('\n');
   assert.doesNotMatch(src, /ToastMessage|useToast|window\.confirm/);
-  assert.match(read('frontend/src/lib/api.js'), /^export \* from '\.\/api\/programs\.js';$/m);
+  assert.match(read('frontend/src/lib/apiModules.generated.js'), /^export \* from '\.\/api\/programs\.js';$/m);
   assert.match(read('frontend/src/pages/PerksPage.jsx'), /k: 'review', label: 'Review queue', icon: ClipboardCheck, to: PERKS_REVIEW_PATH/);
   assert.doesNotMatch(codeOnly(read('frontend/src/pages/PerksPage.jsx')), /api\.perkReview\(/);
   // Each write the pages make sits inside a Lightbox (or, D1317, a detail Sheet) component's handler.

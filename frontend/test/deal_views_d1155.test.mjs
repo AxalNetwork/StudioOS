@@ -15,6 +15,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
+import { readRouteMap } from '../../scripts/lib/routeMap.mjs';
 import DealCommitmentsStaff from '../src/pages/deal/DealCommitmentsStaff.jsx';
 import {
   FOOT, VIEWERS, WHO_SEES, cellOf, gateLine, heading, rowAction, statusWord, tableRows, viewerOf, wireCents,
@@ -229,8 +230,9 @@ test('the wiring: each non-investor gets the staff table, the Operating Partner 
   assert.match(page, /<DealCommitment key=\{proofKey\} deal=\{deal\} user=\{user\} onChangeAmount=\{\(\) => setCommitOpen\(true\)\} onShare=\{openProof\} \/>/, 'D752’s proof door sits on the investor’s own commitment');
   assert.match(read('frontend/src/pages/closing/ClosingRoom.jsx'), /if \(role === 'partner' \|\| !Array\.isArray\(read\.data\)\) return null;/, 'the closing room keeps the Operating Partner to the total');
   assert.match(read('frontend/src/lib/api/dealStaff.js'), /transferGate: \(dealId\) => request\(`\/deals\/\$\{encodeURIComponent\(dealId\)\}\/transfer-gate`\)/);
-  assert.match(read('frontend/src/lib/api.js'), /^export \* from '\.\/api\/dealStaff\.js';$/m);
-  for (const f of ['documentation/architecture/decisions/D1155.md', 'frontend/src/pages/deal/README.md', 'documentation/architecture/ROUTE_MAP.md']) assert.match(read(f), /D1155/, f);
+  assert.match(read('frontend/src/lib/apiModules.generated.js'), /^export \* from '\.\/api\/dealStaff\.js';$/m);
+  for (const f of ['documentation/architecture/decisions/D1155.md', 'frontend/src/pages/deal/README.md']) assert.match(read(f), /D1155/, f);
+  assert.match(readRouteMap(), /D1155/, 'the route map (D4102 fragments)');
 });
 
 test('no browser pop-up and no raw colour in the new files; every light hover has its dark pair', () => {

@@ -1,4 +1,6 @@
-import React, { useId } from 'react';
+import React, { useEffect, useId, useState } from 'react';
+import { askPanelAdapter } from './askPanelAdapter.js';
+import { openAskPanel, useAskPanel } from './eadwynPanel.js';
 
 /**
  * The shared Eadwyn "Ask" button (D1604, #3716; lifted from Team's D1497
@@ -20,8 +22,8 @@ import React, { useId } from 'react';
  *                      `aria-describedby` (why it is off, unreadable or out)
  *
  * The word "Ask" is drawn on every width, at 44px tall on a phone. It runs
- * nothing itself: what it opens is its host's (Team: nothing until #3706's
- * panel; the Pitch deck studio: `DeckAsk`'s "Waiting for you" sheet).
+ * nothing itself: what it opens is its host's (`PageAsk` below opens #3706's
+ * Ask panel, D1443; the Pitch deck studio: `DeckAsk`'s "Waiting for you" sheet).
  */
 export const ASK_NAME = 'Ask Eadwyn';
 
@@ -73,6 +75,29 @@ export function AskButtonView({ onClick, disabled = false, expanded, waiting = n
       <span id={subId} className="max-w-[260px] text-right text-[11.5px] text-axal-muted dark:text-gray-400" data-testid={`${testId}-sub`}>{sub}</span>
     </span>
   );
+}
+
+/**
+ * D1443 (#3706) — THE PAGE'S ASK, connected. It opens the Ask panel
+ * (`ui/AskPanel.jsx`), which slides out of the AIRail's left edge. It draws
+ * nothing while no rail serves the viewer: a page with no rail, a support
+ * session or an Explorer never shows Ask (AK13). `label` names what the panel
+ * is about ("Team · Northwind Labs"); without it the rail's own page label is
+ * used. D1442: its "N waiting" is the member's open proposals on the rail's
+ * page (`askPanelAdapter.waiting`), read again each time the panel closes; a
+ * count that could not be read draws nothing, never "0 waiting".
+ */
+export function PageAsk({ label, testId = 'ask-eadwyn' }) {
+  const ask = useAskPanel();
+  const [waiting, setWaiting] = useState(null);
+  useEffect(() => {
+    if (!ask.available || !ask.page || ask.open) return undefined;
+    let live = true;
+    askPanelAdapter.waiting(ask.page).then((w) => { if (live) setWaiting(w.available ? w.data?.count ?? null : null); });
+    return () => { live = false; };
+  }, [ask.available, ask.page, ask.open]);
+  if (!ask.available) return null;
+  return <AskButtonView onClick={() => openAskPanel(label)} expanded={ask.open} waiting={waiting} testId={testId} />;
 }
 
 export default AskButtonView;

@@ -39,6 +39,7 @@ import { aiTokens } from './newDeckModel.js';
 import { askBody, defaultDescription } from './imageModel.js';
 import { addBlock, removeBlock, updateBlock } from './editorModel.js';
 import { areaKind } from './gridSelection.js';
+import { railModelPrice } from '../../../ui/railPrices.js';
 
 /** The AIRail page every deck option is read on (`railOptions/founder.js`). */
 export const RAIL_PAGE = 'Founder · Raise · Pitch deck';
@@ -133,11 +134,28 @@ export function aspectFor(grid) {
  * (`GET /api/decks/sources`). A Title starts as its Headline when the card
  * has a recorded figure bound, and as Rewrite when it has none.
  */
+/**
+ * D1500: how a run names its card: by uid, so a proposal made while the
+ * founder reorders still belongs to that card; by place only for a card read
+ * before it had one.
+ */
+export const cardKeyOf = (card, cardIndex) => (typeof card?.uid === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(card.uid) ? card.uid : cardIndex);
+
+/**
+ * D1500: an assist request's body as sent: when the card is named by uid, its
+ * place rides along, for a card added since the version was saved (the Worker
+ * does not hold its uid yet).
+ */
+export const assistBody = (plan, cardIndex) => (plan.cardKey !== cardIndex && Number.isInteger(cardIndex) ? { ...plan.body, card_index: cardIndex } : plan.body);
+
 export function rowPlan({ area, element, card, cardIndex, items = [], choice = {} }) {
+  const cardKey = cardKeyOf(card, cardIndex);
   const el = byId(element);
   const block = area?.kind === 'block' ? area.block : null;
   if (!el || !area) return { run: 'refused', why: 'Pick an element for this area.' };
   if (el.adapter) return { run: 'later', adapter: el.adapter, issue: el.issue, why: LATER };
+  // D1560 (#3807): speaker notes are the card's, written from its own words; the area is not replaced.
+  if (element === 'speaker_notes') return { run: 'notes', action: 'speaker_notes', option: 'deck:notes', cardKey, body: { action: 'speaker_notes', cards: [cardKey] } };
   // A figure bound to a record is the record's: only another recorded figure replaces it.
   if (bound(block) && element !== 'metric') {
     const module = items.find((i) => i.source_key === block.binding?.source_key)?.module ?? null;
@@ -151,7 +169,7 @@ export function rowPlan({ area, element, card, cardIndex, items = [], choice = {
     const offered = figures.length ? changesFor(element) : TEXT_CHANGES;
     const change = offered.find((c) => c.action === choice.change) || offered[0];
     const body = change.action === 'headline' ? { ...textBody('headline', block), source_keys: figures } : textBody(change.action, block);
-    return { run: 'assist', action: change.action, option: change.option, cardIndex, body };
+    return { run: 'assist', action: change.action, option: change.option, cardKey, body };
   }
   if (CHARTS[element]) {
     const min = element === 'chart' ? CHART_MIN : RECORDS_MIN;
@@ -159,14 +177,14 @@ export function rowPlan({ area, element, card, cardIndex, items = [], choice = {
       return { run: 'refused', why: element === 'chart' ? CHART_MIN_LINE : `A ${element} needs at least ${min.cols} × ${min.rows} cells. Select a larger area.` };
     }
     const heading = String(card?.title || '').trim();
-    return { run: 'assist', action: CHARTS[element], option: `deck:${CHARTS[element]}`, cardIndex, body: { action: CHARTS[element], ...(heading ? { heading } : {}) } };
+    return { run: 'assist', action: CHARTS[element], option: `deck:${CHARTS[element]}`, cardKey, body: { action: CHARTS[element], ...(heading ? { heading } : {}) } };
   }
   if (IMAGES[element]) {
     const description = defaultDescription(card) || String(card?.title || '').trim();
     if (description.length < 3) return { run: 'refused', why: 'Give this card a title first: the picture is described from its words.' };
     return {
       run: 'image', option: 'deck:image',
-      body: askBody({ use: 'content', description, style: IMAGES[element], palette: 'brand', aspect: aspectFor(area.grid), count: 1, card: cardIndex }),
+      body: { ...askBody({ use: 'content', description, style: IMAGES[element], palette: 'brand', aspect: aspectFor(area.grid), count: 1, card: cardIndex }), ...(cardKey !== cardIndex ? { card_uid: cardKey } : {}) },
     };
   }
   if (element === 'metric') {
@@ -179,9 +197,9 @@ export function rowPlan({ area, element, card, cardIndex, items = [], choice = {
 }
 
 /** True for a plan Generate runs (a model run, or a free element that needs nothing more). */
-export const runnable = (plan) => (plan.run === 'assist' || plan.run === 'image') || ((plan.run === 'metric' || plan.run === 'upload') && !plan.why);
+export const runnable = (plan) => (plan.run === 'assist' || plan.run === 'image' || plan.run === 'notes') || ((plan.run === 'metric' || plan.run === 'upload') && !plan.why);
 /** True for a plan that runs a model and so is quoted and charged. */
-export const charged = (plan) => plan.run === 'assist' || plan.run === 'image';
+export const charged = (plan) => plan.run === 'assist' || plan.run === 'image' || plan.run === 'notes';
 
 /** A quote's hold in micro-dollars: the assist route's `hold_microusd`, the image route's `total_microusd`. */
 export function holdOf(quote) {
@@ -222,7 +240,11 @@ export function modelChip(rail) {
   const models = Array.isArray(rail?.models) ? rail.models : [];
   const m = models.find((x) => x.id === rail?.pick) || models[0] || null;
   if (!m) return `Model ${MODEL_WHERE}`;
-  return [m.name || m.id, m.price ? `${m.price} per variant` : null, MODEL_WHERE].filter(Boolean).join(' · ');
+  // D1511: the route's `price` is the model's unit prices (`{ cost, billed }`, routes/ai.ts `unitPrices`),
+  // printed as the AIRail prints them; a string (an older read) is kept as it was. Never "[object Object]".
+  const price = typeof m.price === 'string' ? (m.price ? `${m.price} per variant` : null)
+    : m.price && typeof m.price === 'object' ? railModelPrice(m, rail?.billing, false) : null;
+  return [m.name || m.id, price, MODEL_WHERE].filter(Boolean).join(' · ');
 }
 
 /**
@@ -283,6 +305,11 @@ export function placeResult(card, result, model = null) {
   const area = result?.area;
   if (!card || !area) return { error: 'This card is no longer open. Discard this proposal.' };
   const blocks = Array.isArray(card.blocks) ? card.blocks : [];
+  // D1560: notes land only while the card's notes are still the proposal's `before`.
+  if (result.kind === 'notes') {
+    if (String(card.notes ?? '').trim() !== String(result.before ?? '').trim()) return { error: 'This card’s speaker notes changed since Eadwyn proposed these. Ask again.' };
+    return { card: { ...card, notes: result.after }, blockId: null };
+  }
   if (result.kind === 'text') {
     const hit = blocks.find((b) => String(b.id) === String(area.block?.id) && b.kind === 'text' && String(b.text ?? '') === result.before);
     if (!hit) return { error: `${areaLabel(area.grid) || 'This area'} changed since Eadwyn proposed this. Select it and ask again.` };

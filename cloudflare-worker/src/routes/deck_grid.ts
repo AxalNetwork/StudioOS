@@ -10,6 +10,18 @@
  * slide pixels from `boxOfAt`, the one geometry the editor, Present and print
  * share.
  *
+ * D1554 (#3801, C6): `?aspect=16:9|4:3` adds `reflow`, what a switch to that
+ * aspect would move from the saved version into the speaker notes
+ * (`services/decks/reflow.ts`: per block, and the count pd3c's notice reads),
+ * and `reflow_map`, each structure's areas at both aspects. Any other value
+ * is 400 `invalid_aspect`. The aspect itself is written with the version's
+ * theme, as #3749 decided; the editor runs the same reflow on its draft.
+ *
+ * D1571 (#3818): the reply names the deck's `lang` (null when none was
+ * chosen), its `dir` (the theme's own, else right to left for Arabic and
+ * Hebrew) and the `script` its capacity is measured in, and the reflow runs
+ * at that script (`designSystem.SCRIPT_EM`).
+ *
  * Who: whoever may read the deck (`projectOwned`, the rule `GET /:id` uses).
  * Writes nothing.
  */
@@ -19,13 +31,20 @@ import { requireAuth } from '../auth';
 import { projectOwned } from '../middleware/projectContentAccess';
 import { ensureSchema, getDeckRow, rowToDeck } from './decks';
 import { GRID_COLS, GRID_ROWS } from '../services/decks/slideModel';
-import { BASELINE, FRAME, SLIDE_SIZES, STRUCTURES, areasOf, aspectOf, boxOfAt, cellAt } from '../services/decks/structures';
+import { ASPECTS, BASELINE, FRAME, SLIDE_SIZES, STRUCTURES, areasOf, aspectOf, boxOfAt, cellAt } from '../services/decks/structures';
+import { reflowMap, reflowSlides } from '../services/decks/reflow';
+import { dirOf, scriptOfTheme } from '../services/decks/designSystem';
+import { refuse } from '../util/refusal';
 
 const deckGrid = new Hono<{ Bindings: Env }>();
 
 deckGrid.get('/:id{[0-9]+}/grid', async (c) => {
   const user = await requireAuth(c);
   const id = Number(c.req.param('id'));
+  const target = c.req.query('aspect');
+  if (target !== undefined && !(ASPECTS as readonly string[]).includes(target)) {
+    return refuse(c, 400, { code: 'invalid_aspect', message: 'The slide size is 16:9 or 4:3.' });
+  }
   await ensureSchema(c.env);
   let row: any;
   try { row = await getDeckRow(c.env, id); } catch { return c.json({ error: 'not found' }, 404); }
@@ -37,6 +56,10 @@ deckGrid.get('/:id{[0-9]+}/grid', async (c) => {
     deck_id: deck.id,
     version: deck.version,
     aspect,
+    // D1571 (#3818): the deck's language and direction, and the script its capacity is measured in.
+    lang: typeof deck.theme?.lang === 'string' ? deck.theme.lang : null,
+    dir: dirOf(deck.theme?.lang, deck.theme?.dir),
+    script: scriptOfTheme(deck.theme),
     slide: SLIDE_SIZES[aspect],
     frame: FRAME,
     cell: cellAt(aspect),
@@ -47,6 +70,10 @@ deckGrid.get('/:id{[0-9]+}/grid', async (c) => {
       const { structure, areas, derived } = areasOf(card);
       return { index, structure, derived, areas: withBoxes(areas) };
     }),
+    ...(target !== undefined ? (() => {
+      const r = reflowSlides(deck.slides, target, aspect, scriptOfTheme(deck.theme));
+      return { reflow: { from: r.from, to: r.to, count: r.count, moved: r.moved }, reflow_map: reflowMap() };
+    })() : {}),
   });
 });
 

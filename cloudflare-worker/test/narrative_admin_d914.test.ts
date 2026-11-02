@@ -15,7 +15,7 @@
  *      row that names neither's words.
  *
  * The real `cycle_raise.ts` and `cycle_records.ts` routers over HTTP, on
- * migrations 442, 459, 463, 544 and 545 over schema_baseline.sql.
+ * migrations 442, 459, 463, 544, 545 and 761 (D1465) over schema_baseline.sql.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/narrative_admin_d914.test.ts
@@ -31,6 +31,7 @@ import { Hono } from 'hono';
 import cycleRaise from '../src/routes/cycle_raise.ts';
 import cycleRecords from '../src/routes/cycle_records.ts';
 import { ADMIN_READ_ONLY, REASON_REQUIRED } from '../src/services/narrative/adminRead.ts';
+import { classifyIdempotency } from '../../scripts/lib/migrationPlan.mjs';
 import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { raiseEvidenceTables } from './_raise_evidence_fixture.ts';
@@ -56,7 +57,7 @@ function fixture() {
   const cols = (t: string) => new Set((db.prepare(`SELECT name FROM pragma_table_info('${t}')`).all() as any[]).map((r) => r.name));
   if (!cols('pitch_deck_share_tokens').has('revoked_at')) db.exec(sqlOf('248_deck_share_revoked_at.sql'));
   for (const m of ['129_captable_one_canonical_per_project.sql', '249_project_metrics.sql', '410_safe_issuances.sql', '442_raise_cycle_stores.sql',
-    '459_cycle_activity_convention.sql', '463_raise_record_stores.sql', '544_narrative_sections.sql', '545_narrative_notes.sql']) db.exec(sqlOf(m));
+    '459_cycle_activity_convention.sql', '463_raise_record_stores.sql', '544_narrative_sections.sql', '545_narrative_notes.sql', '761_narrative_read_end.sql']) db.exec(sqlOf(m));
   raiseEvidenceTables(db);
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001);
@@ -229,4 +230,65 @@ test('4. the notes thread: an admin with a reason posts, the founder answers, no
   }
   assert.deepEqual(logs(db).filter((l) => l.action === 'narrative_note_posted').map((l) => l.details), [`Note posted on v${v}`, 'Note posted on the narrative']);
   assert.ok(!JSON.stringify(logs(db)).includes(NOTE), 'no activity row carries a note’s words');
+});
+
+test('5. D1465 G1: an admin ends their own read early; the next read needs a reason again; the founder sees it ended', async () => {
+  // Mutation checked: `AND ended_at IS NULL` dropped from activeReason → the read after the end answers 200; the batch's activity row dropped → no `narrative_read_ended` row.
+  const db = fixture();
+  const v = await v1(db);
+  await openAsAdmin(db);
+  await openAsAdmin(db, HQ);
+  assert.equal((await call(db, ADMIN, 'GET', `/narrative/${v}`)).status, 200);
+
+  const ended = await call(db, ADMIN, 'DELETE', '/narrative/reads/mine');
+  assert.equal(ended.status, 200, JSON.stringify(ended.body));
+  assert.equal(ended.body.read.reason, REASON);
+  assert.ok(ended.body.read.ended_at, 'the read carries when it ended');
+  const after = await call(db, ADMIN, 'GET', `/narrative/${v}`);
+  assert.deepEqual([after.status, after.body.code], [403, 'read_reason_required'], 'an ended read opens nothing');
+  assert.equal((await call(db, HQ, 'GET', `/narrative/${v}`)).status, 200, "another admin's live read is untouched");
+
+  const again = await call(db, ADMIN, 'DELETE', '/narrative/reads/mine');
+  assert.deepEqual([again.status, again.body.code], [404, 'no_open_read'], 'nothing live to end');
+  const founder = await call(db, FOUNDER, 'DELETE', '/narrative/reads/mine');
+  assert.deepEqual([founder.status, founder.body.code], [403, 'admins_only']);
+
+  const list = await call(db, FOUNDER, 'GET', '/narrative/reads');
+  const mine = list.body.reads.find((r: any) => r.by.name === 'Ada Admin');
+  const hq = list.body.reads.find((r: any) => r.by.kind === 'super_admin');
+  assert.ok(mine.ended_at, 'the founder sees "Ended early"');
+  assert.equal(hq.ended_at, null);
+  assert.equal((await call(db, HQ, 'DELETE', '/narrative/reads/mine')).status, 200, 'HQ ends its own');
+  const endedLogs = logs(db).filter((l) => l.action === 'narrative_read_ended');
+  assert.deepEqual(endedLogs.map((l) => l.details), ['An admin ended their narrative read', 'HQ ended their narrative read']);
+  assert.ok(!JSON.stringify(logs(db)).includes(REASON), 'no activity row carries the reason');
+
+  // A log that cannot be written answers 503, and nothing is ended.
+  await openAsAdmin(db);
+  db.exec('DROP TABLE activity_logs');
+  const broken = await call(db, ADMIN, 'DELETE', '/narrative/reads/mine');
+  assert.deepEqual([broken.status, broken.body.code], [503, 'read_log_unreadable']);
+  assert.equal(count(db, `SELECT COUNT(*) AS n FROM narrative_read_reasons WHERE reader_user_id = ${ADMIN} AND ended_at IS NULL AND datetime(expires_at) > datetime('now')`), 1);
+});
+
+test('6. D1465 G2: the reads list names the venture, and its founder only when exactly one founder holds it', async () => {
+  // Mutation checked: `rows.length === 1` loosened to `>= 1` → two founders name one of them.
+  const db = fixture();
+  db.exec("UPDATE projects SET logo_url = 'https://cdn.example.test/kestrel.png' WHERE id = 1");
+  const one = await call(db, ADMIN, 'GET', '/narrative/reads');
+  assert.equal(one.status, 200, JSON.stringify(one.body));
+  assert.deepEqual(one.body.venture, { id: P, name: 'Kestrel Labs', logo_url: 'https://cdn.example.test/kestrel.png', founder_name: 'Fay Founder' });
+  db.prepare("INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (111, 'founder', 'Second Founder', 'second@example.test', 1, 1001)").run();
+  assert.equal((await call(db, ADMIN, 'GET', '/narrative/reads')).body.venture.founder_name, null, 'two founders: no guess');
+  db.exec('UPDATE users SET founder_id = NULL WHERE id IN (110, 111)');
+  assert.equal((await call(db, ADMIN, 'GET', '/narrative/reads')).body.venture.founder_name, null, 'no founder');
+  assert.equal((await call(db, ADMIN, 'GET', '/narrative/reads')).body.venture.name, 'Kestrel Labs');
+});
+
+test('7. migration 761 is additive: applied once by the ledger, a replay fails only on the column, and the runner never replays it', () => {
+  const db = fixture();
+  const cols = (db.prepare("SELECT name FROM pragma_table_info('narrative_read_reasons')").all() as any[]).map((r) => r.name);
+  assert.ok(cols.includes('ended_at'));
+  assert.throws(() => db.exec(sqlOf('761_narrative_read_end.sql')), /duplicate column name: ended_at/);
+  assert.equal(classifyIdempotency(sqlOf('761_narrative_read_end.sql')).idempotent, false, 'baseline marks it, never replays it');
 });

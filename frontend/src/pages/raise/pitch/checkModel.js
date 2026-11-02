@@ -123,3 +123,29 @@ export function checkNote(text) {
   if (t.length > NOTE_MAX) return { error: `A note is at most ${NOTE_MAX} characters.` };
   return { note: t };
 }
+
+// ------------------------------------------------- D1555 (#3802): Consistency · free
+
+export const CONSISTENCY_TITLE = 'Consistency · free';
+export const CONSISTENCY_EMPTY = 'Every figure is linked and consistent.';
+export const CONSISTENCY_FAILED = 'Could not be read.';
+
+/**
+ * What the Consistency section draws from the check reply's `consistency`:
+ *   'none'        the reply carries no section (a reader who is not the founder);
+ *   'unreadable'  the rules could not read this version's cards (Try again);
+ *   'empty'       every rule passed;
+ *   'findings'    one row per finding, its cards in order.
+ * A missing or malformed answer is unreadable, never "consistent".
+ */
+export function consistencyView(c) {
+  if (c === null || c === undefined) return { kind: 'none', rows: [] };
+  if (c?.state !== 'ok' || !Array.isArray(c.findings)) return { kind: 'unreadable', rows: [] };
+  const rows = c.findings
+    .filter((f) => f && typeof f.message === 'string' && Array.isArray(f.cards))
+    .map((f) => ({ key: String(f.key ?? f.message), message: f.message, cards: f.cards.filter((n) => Number.isInteger(n) && n > 0) }));
+  return rows.length ? { kind: 'findings', rows } : { kind: 'empty', rows: [] };
+}
+
+/** "card 2", "cards 1 and 3". */
+export const cardsLabel = (cards) => (cards.length === 1 ? `card ${cards[0]}` : `cards ${cards.slice(0, -1).join(', ')} and ${cards.at(-1)}`);

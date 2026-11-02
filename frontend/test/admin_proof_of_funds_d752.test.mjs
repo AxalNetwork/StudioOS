@@ -128,7 +128,7 @@ test('who can reach it: four files name the admin read, api.js names only its mo
   const root = resolve('frontend/src');
   const naming = walk(root).filter((f) => /\.(jsx?|mjs)$/.test(f) && readFileSync(f, 'utf8').includes('adminCapitalAttestationsApi')).map((f) => f.slice(root.length + 1)).sort();
   assert.deepEqual(naming, ['lib/api/adminCapitalAttestations.js', 'pages/admin/AdminLpApplications.jsx', 'pages/admin/fundAdmin/FundAdminConsole.jsx', 'pages/deal/DealCommitmentsStaff.jsx']);
-  assert.match(read('lib/api.js'), /export \* from '\.\/api\/adminCapitalAttestations\.js';/);
+  assert.match(read('lib/apiModules.generated.js'), /export \* from '\.\/api\/adminCapitalAttestations\.js';/);
   const lps = read('pages/investor/InvestorFundLPs.jsx');
   assert.doesNotMatch(lps, /ProofOfFunds|proof_of_funds/);
 });

@@ -80,7 +80,7 @@ export type RecordContent = {
   parts?: Record<string, unknown>;
 };
 
-export type RecordFact = { label: string; value: string | number | null; reason?: string };
+export type RecordFact = { label: string; value: string | number | null; reason?: string; action?: string };
 /** "Next for this record" (CO:263-269): what to do next, and the declared action that does it. */
 export type Next = { text: string; action: string | null };
 export type RecordForm = {

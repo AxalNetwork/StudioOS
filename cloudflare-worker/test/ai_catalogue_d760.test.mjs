@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 import {
   CATALOGUE, CATALOGUE_READ, isOffered, isPriced, partnerGated, refusalFor, defaultDemoted, modelById,
 } from '../src/services/ai/catalogue.ts';
-import { AI_MARKUP, billingMode, multiplierFor, costMicro, billedMicro, billedUnitPrice, unitPrice, USD_PER_NEURON } from '../src/services/ai/pricing.ts';
+import { AI_MARKUP, billingMode, multiplierFor, costMicro, billedMicro, billedUnitPrice, unitPrice, USD_PER_NEURON, DOLLAR_PRICED } from '../src/services/ai/pricing.ts';
 import {
   run, ROUTE, __resetForTest, estimateCostUsd, modelRefusal,
   PRICE_USD_PER_1M_TOKENS, PRICE_USD_PER_AUDIO_MINUTE, PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET,
@@ -166,8 +166,9 @@ test('every priced row carries the neuron figure Cloudflare prints, and its pric
       assert.ok(row, `${m.id} (${unit}) has no row in S1's pricing copy`);
       const figures = row.replace(/(\d),(\d)/g, '$1$2').match(/(?<![$\d.])\d+(\.\d+)?(?![\d.])/g) ?? [];
       assert.ok(figures.includes(n), `${m.id} ${unit}: ${n} neurons is not printed on its row`);
-      // The price served is the exact product, not the page's rounded dollar column.
-      assert.ok(Math.abs(Number(unitPrice(m.id, unit)) - Number(n) * 0.000011) < 1e-15, `${m.id} ${unit}`);
+      // The price served is the exact product, not the page's rounded dollar column
+      // (smart-turn's minutes aside: #3936, owner answer F (b), below).
+      if (!DOLLAR_PRICED[m.id]?.includes(unit)) assert.ok(Math.abs(Number(unitPrice(m.id, unit)) - Number(n) * 0.000011) < 1e-15, `${m.id} ${unit}`);
       // And the dollar column is that product rounded: within half its last printed digit.
       const printed = m.prices[unit];
       const half = 0.5 * 10 ** -((printed.split('.')[1] ?? '').length);
@@ -178,9 +179,11 @@ test('every priced row carries the neuron figure Cloudflare prints, and its pric
   }
   assert.equal(rows, 70);
   // Smart Turn v2 is the one row whose two columns disagree: 0.51 neurons is
-  // $0.00000561, where the dollar column prints $0.00033795. It is priced from
-  // the neurons, as every row is (D760.md).
-  assert.equal(unitPrice('@cf/pipecat-ai/smart-turn-v2', 'audio_minutes'), '0.00000561');
+  // $0.00000561, where the dollar column prints $0.00033795. D760 priced it from
+  // the neurons; #3936 (owner answer F (b)) bills the dollar figure, and it is
+  // the only model and unit that does.
+  assert.equal(unitPrice('@cf/pipecat-ai/smart-turn-v2', 'audio_minutes'), '0.00033795');
+  assert.deepEqual(DOLLAR_PRICED, { '@cf/pipecat-ai/smart-turn-v2': ['audio_minutes'] });
   assert.equal(unitPrice('@cf/no/such-model', 'tokens_in'), null);
   assert.equal(unitPrice('@cf/meta/llama-3.3-70b-instruct-fp8-fast', 'tiles'), null);
 });

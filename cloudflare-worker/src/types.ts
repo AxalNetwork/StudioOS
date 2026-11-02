@@ -240,6 +240,8 @@ export interface Env {
   // simply mix in with the onboarding traffic, but no functionality
   // breaks. Default: `advisor-ongoing` once wrangler.toml is deployed.
   CF_AI_GATEWAY_SLUG_ADVISOR?: string;
+  /** D1504 (#3755): the deck's AI Gateway; empty until the owner creates it. */
+  CF_AI_GATEWAY_SLUG_DECK?: string;
   // Task #4 (CG) — per-user daily advisor turn cap. Counts /api/advisor
   // turns (chat completions, not /explain) in KV bucket
   // `ai_spend:advisor:{user_id}:{yyyy-mm-dd}` and hard-blocks at this
@@ -352,6 +354,8 @@ export interface Env {
   CUSTOM_MCP_ENABLED?: string;
   /** D1496 (#3840): `true` turns on team agents (`/api/teams`); anything else answers 404 `team_agents_off`. */
   TEAM_AGENTS_ENABLED?: string;
+  /** D1529 (#3845, #3742 E1): anything but `off` (with TEAM_AGENTS_ENABLED) turns on goals and tasks; `off` answers 404 `agent_engine_off`. */
+  AGENT_ENGINE?: string;
   KEK_R2?: string;
   // Symmetric secret used by `services/cryptoBox.ts` for wellbeing data.
   // Kept distinct from KEK_PII so a key rotation on PII columns never
@@ -465,6 +469,10 @@ export interface Env {
   // until the owner approves its monthly cost (decision L); absent, quote
   // retrieval answers "not switched on yet".
   DECK_QUOTES?: VectorizeIndex;
+  // D1540 (#3791, owner decision AA): the owner's daily ceiling on deck
+  // generation, in micro-USD across every member per UTC day
+  // (`services/decks/runQuotes.ts`). Not in wrangler.toml: unset is off.
+  DECK_DAILY_CEILING_MICROUSD?: string;
   // Task #13 — Workers Analytics Engine binding (`studioos_requests` dataset).
   // observability middleware writes one data point per HTTP request so the
   // Admin Analytics → Technical sub-tab can serve true edge-level traffic

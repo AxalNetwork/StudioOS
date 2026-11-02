@@ -132,6 +132,28 @@ test('the routes: a member lists and decides their own, and another member gets 
   assert.equal(ok.body.proposal.status, 'discarded');
 });
 
+// 4b ──────────────────────────────────────────────────────────────────────────
+test('D1496 part 3 (#3843): the member path is unchanged, and an agent\'s proposal shows on it only to its sponsor', async () => {
+  // Mutations checked: listRail/getRail unbound from user_id (an agent's proposal listed to anyone) → the OTHER asserts fail;
+  // the member path writing decided_by_user_id → the NULL assert fails (its row's owner decided it).
+  const w = world();
+  // Migration 712's two columns on this table (its other tables are not this test's).
+  w.f.db.exec('ALTER TABLE ai_rail_proposals ADD COLUMN agent_id INTEGER; ALTER TABLE ai_rail_proposals ADD COLUMN decided_by_user_id INTEGER;');
+  const agents = await proposeRail(w.env, { ...base, agentId: 42 });
+  const mine = await proposeRail(w.env, base);
+  // The sponsor (the row's owner) sees both on the member route; anyone else sees neither, and cannot decide.
+  assert.deepEqual((await call(w, MEMBER, 'GET', '/api/ai/rail/proposals?option=draft:thing')).body.proposals.map((x: any) => x.uid), [mine.uid, agents.uid]);
+  assert.deepEqual((await call(w, OTHER, 'GET', '/api/ai/rail/proposals?option=draft:thing')).body.proposals, []);
+  assert.equal(await getRail(w.env, OTHER, agents.uid), null);
+  assert.equal((await call(w, OTHER, 'POST', `/api/ai/rail/proposals/${agents.uid}/decide`, { decision: 'accept' })).status, 409);
+  const ok = await call(w, MEMBER, 'POST', `/api/ai/rail/proposals/${mine.uid}/decide`, { decision: 'accept' });
+  assert.deepEqual([ok.status, ok.body.proposal.status], [200, 'accepted']);
+  assert.deepEqual(Object.keys(ok.body.proposal).sort(), ['created_at', 'decided_at', 'decided_payload', 'kind', 'model', 'payload', 'rail_option', 'rail_page', 'record_ref', 'status', 'uid', 'usage_log_id'], 'the answer is the shape it had');
+  const row = w.f.db.prepare('SELECT decided_by_user_id AS d, agent_id AS a FROM ai_rail_proposals WHERE uid = ?').get(mine.uid) as any;
+  assert.deepEqual([row.d, row.a], [null, null]);
+  assert.equal((w.f.db.prepare('SELECT agent_id AS a FROM ai_rail_proposals WHERE uid = ?').get(agents.uid) as any).a, 42);
+});
+
 // 5 ───────────────────────────────────────────────────────────────────────────
 test('H20 draft:publication-summary: the summary is a proposal naming its run; the publication starts empty', async () => {
   // Mutations checked: the AI summary written into summary_text again; the proposal stored without its usage row; the old option key.
@@ -186,4 +208,34 @@ test('H20: a model that cannot be reached keeps the aggregate fallback in the bl
   assert.equal(r.body.summary_proposal, null);
   assert.notEqual(w.f.db.prepare('SELECT summary_text FROM admin_publications').get().summary_text, '');
   assert.equal(w.f.db.prepare('SELECT COUNT(*) AS n FROM ai_rail_proposals').get().n, 0);
+});
+
+// ── #3846 (E2): an agent's proposal names its task and run key ──────────────
+test('#3846: run_key is unique (a second proposal for the same run answers the first), and a member\'s proposal is unchanged', async () => {
+  // Mutations checked: migration 727's run_key index dropped → two rows under one key; the UNIQUE catch removed → it throws.
+  const { stripForeignKeys } = await import('./_baseline.mjs');
+  const f = aiBudgetFixture();
+  try {
+    f.db.exec(MIGRATION);
+    f.db.exec(stripForeignKeys(readFileSync(new URL('../sql/migrations/712_team_agents.sql', import.meta.url), 'utf8')));
+    f.db.exec(stripForeignKeys(readFileSync(new URL('../sql/migrations/727_scope_goals_and_tasks.sql', import.meta.url), 'utf8')));
+    const env = { DB: f.DB } as any;
+    const base = { userId: MEMBER, page: 'Founder · Raise · Use of funds', option: 'draft:raise/use-of-funds-runway', kind: 'draft' as const };
+    const first = await proposeRail(env, { ...base, payload: { text: 'one' }, agentId: 4, taskId: 7, runKey: 'agent:run-0001-abcd' });
+    const second = await proposeRail(env, { ...base, payload: { text: 'two' }, agentId: 4, taskId: 7, runKey: 'agent:run-0001-abcd' });
+    assert.equal(second.uid, first.uid, 'the same run answers its first proposal');
+    assert.deepEqual(second.payload, { text: 'one' });
+    const rows = f.db.prepare('SELECT agent_id, task_id, run_key FROM ai_rail_proposals').all().map((r: any) => ({ ...r }));
+    assert.deepEqual(rows, [{ agent_id: 4, task_id: 7, run_key: 'agent:run-0001-abcd' }]);
+    // The index itself refuses a duplicate key, whatever writes it.
+    assert.throws(() => f.db.prepare("INSERT INTO ai_rail_proposals (uid, user_id, rail_page, rail_option, kind, payload_json, run_key) VALUES ('dup', 2, 'x', 'y', 'draft', '{}', 'agent:run-0001-abcd')").run(), /UNIQUE/);
+    // A member's own proposal: no agent, no task, no key, and any number of them.
+    await proposeRail(env, { ...base, payload: { text: 'm1' } });
+    await proposeRail(env, { ...base, payload: { text: 'm2' } });
+    const members = f.db.prepare('SELECT agent_id, task_id, run_key FROM ai_rail_proposals WHERE agent_id IS NULL').all().map((r: any) => ({ ...r }));
+    assert.deepEqual(members, [{ agent_id: null, task_id: null, run_key: null }, { agent_id: null, task_id: null, run_key: null }]);
+    // A task or a key belongs to an agent's proposal only, and a key has the run's shape.
+    assert.equal(proposeRefusal({ ...base, payload: { text: 'x' }, runKey: 'agent:run-0002-abcd' }), "a task or a run key is an agent's");
+    assert.equal(proposeRefusal({ ...base, payload: { text: 'x' }, agentId: 4, runKey: 'not a key' }), 'not a run key');
+  } finally { f.db.close(); }
 });

@@ -33,6 +33,8 @@ import { __resetForTest } from '../src/services/aiRouter.ts';
 
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const MIGRATION = readFileSync(new URL('../sql/migrations/538_deck_notes.sql', import.meta.url), 'utf8');
+// D1500: migration 714's deck_notes column (its other tables are not in this fixture).
+const CARD_UID = readFileSync(new URL('../sql/migrations/714_deck_card_uids.sql', import.meta.url), 'utf8').split('\n').filter((l) => l.startsWith('ALTER TABLE deck_notes ')).join('\n');
 const SECRET = 'synthetic-deck-notes-secret-d905'.repeat(2);
 const SLIDES = [1, 2, 3].map((n) => ({ title: `Synthetic card ${n}`, method_id: 'yc_seed', spec_id: 'problem', fields: [] }));
 const LINE = 'SYNTHETIC-NOTE the market figure on card 2 has no record';
@@ -58,6 +60,7 @@ async function fixture() {
   f.db.exec('PRAGMA foreign_keys=OFF; ALTER TABLE users ADD COLUMN founder_id INTEGER; ALTER TABLE activity_logs ADD COLUMN project_id INTEGER; ALTER TABLE activity_logs ADD COLUMN entity_type TEXT; ALTER TABLE activity_logs ADD COLUMN entity_id TEXT;');
   for (const table of ['projects', 'pitch_decks']) f.db.exec(stripForeignKeys(tableFromBaseline(BASELINE, table)));
   f.db.exec(stripForeignKeys(MIGRATION));
+  f.db.exec(CARD_UID);
   f.db.exec(`CREATE TABLE mi_pro_subscriptions(user_id INTEGER PRIMARY KEY, status TEXT, subscription_id TEXT, plan TEXT, period_end TEXT, stripe_customer_id TEXT);
     CREATE TABLE user_recovery_state(user_id INTEGER PRIMARY KEY, cooling_off_until TEXT, step_up_due_at TEXT);
     CREATE TABLE user_company_links(user_id INTEGER, company_id INTEGER);
@@ -88,7 +91,7 @@ test('an Admin and the Super Admin post; the founders read and answer; each note
   const a = await call(f, ADMIN, 'POST', '/api/decks/10/notes', { body: `  ${LINE}  `, card_index: 1 });
   assert.equal(a.status, 201, JSON.stringify(a.body));
   assert.deepEqual({ ...a.body.note, id: 0, created_at: '' }, {
-    id: 0, deck_id: 10, deck_version: 1, card_index: 1, body: LINE, author: { name: `Synthetic ${ADMIN}`, kind: 'admin' }, created_at: '',
+    id: 0, deck_id: 10, deck_version: 1, card_index: 1, card_uid: 'c2', body: LINE, author: { name: `Synthetic ${ADMIN}`, kind: 'admin' }, created_at: '',
   });
   const s = await call(f, SUPER, 'POST', '/api/decks/10/notes', { body: 'Synthetic: the whole deck reads well.' });
   assert.deepEqual([s.status, s.body.note.author.kind, s.body.note.card_index], [201, 'super_admin', null]);

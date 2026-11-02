@@ -190,7 +190,8 @@ test('RO03: the lead row draws only the parts the read returns, side by side at 
 test('RO00, RO08: Raise header Ask opens Eadwyn on "Raise · Overview", only where the panel serves the viewer', () => {
   assert.equal(html(h(RaiseAsk)), '', 'no panel for this viewer, no Ask');
   const lead = read('frontend/src/pages/cycles/RaiseOverviewLead.jsx');
-  assert.match(lead, /<AskButtonView onClick=\{\(\) => openEadwynPanel\('Raise · Overview'\)\} testId="raise-ask" \/>/);
+  // D1443 (#3706): Ask opens the Ask panel (PageAsk), which serves only where a rail serves the viewer.
+  assert.match(lead, /<PageAsk label="Raise · Overview" testId="raise-ask" \/>/);
   assert.doesNotMatch(lead, /\bFill\b/, 'Ask, never Fill');
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.match(route, /ask=\{cycle === 'raise' && projectId \? <RaiseAsk \/> : null\}/);

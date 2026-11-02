@@ -35,7 +35,8 @@ export const AUDIENCE_LABELS = {
   angel: 'Angel', pre_seed_fund: 'Pre-seed fund', seed_fund: 'Seed fund', series_a_fund: 'Series A fund',
   strategic: 'Strategic', grant: 'Grant', other: 'Other',
 };
-export const THEME_LABELS = { brand: 'From your brand kit', neutral_light: 'Neutral light', neutral_dark: 'Neutral dark' };
+// D1517 (#3769): Sand, Ocean and Forest are served by GET /api/decks/model beside the first three.
+export const THEME_LABELS = { brand: 'From your brand kit', neutral_light: 'Neutral light', neutral_dark: 'Neutral dark', sand: 'Sand', ocean: 'Ocean', forest: 'Forest' };
 
 export const KIND_LABELS = {
   text: 'Text', chart: 'Chart', graphic: 'Graphic', image: 'Image', video: 'Video link', audio: 'Audio link', link: 'Link button', metric: 'Metric tile',
@@ -57,6 +58,74 @@ const clone = (v) => JSON.parse(JSON.stringify(v ?? null));
 
 /** The version's cards, deep-copied so the editor never mutates what it read. */
 export const cardsOf = (deck) => (Array.isArray(deck?.slides) ? clone(deck.slides) : []);
+
+// ---------------------------------------------------------------------------
+// D1500 (#3750): card uids, and the v2 fields the editor reads
+// ---------------------------------------------------------------------------
+
+/** The document model the editor reads and saves (the Worker's `MODEL_VERSION`). */
+export const DECK_MODEL_VERSION = 2;
+
+const UID_OK = /^[A-Za-z0-9_-]{1,40}$/;
+
+/** A fresh card uid, unlike any the Worker gives a stored card (`c<n>`). */
+export function newCardUid(random = globalThis.crypto) {
+  const bytes = new Uint8Array(8);
+  if (random?.getRandomValues) random.getRandomValues(bytes);
+  else for (let i = 0; i < bytes.length; i += 1) bytes[i] = Math.floor(Math.random() * 256);
+  return `k${Array.from(bytes, (b) => b.toString(36).padStart(2, '0')).join('')}`.slice(0, 24);
+}
+
+/** A card about to join the deck, with a uid of its own: a duplicate never shares its original's. */
+export const withNewUid = (card, uid = newCardUid()) => ({ ...(card || {}), uid });
+
+/** The card's uid, or null when it has none (a card read before the Worker gave it one). */
+export const cardUid = (card) => (typeof card?.uid === 'string' && UID_OK.test(card.uid) ? card.uid : null);
+
+/** Where the card with this uid sits now, or -1. */
+export const cardIndexByUid = (cards, uid) => (uid ? (Array.isArray(cards) ? cards.findIndex((c) => cardUid(c) === uid) : -1) : -1);
+
+/**
+ * Put an edited card back by its uid, wherever it sits now: a result made for
+ * a card lands on that card even if the founder moved it meanwhile. A card
+ * with no uid falls back to `at`. Null when its card is no longer in the deck.
+ */
+export function replaceCard(cards, card, at = -1) {
+  const list = Array.isArray(cards) ? cards : [];
+  const uid = cardUid(card);
+  const i = uid ? cardIndexByUid(list, uid) : at;
+  if (i < 0 || i >= list.length) return null;
+  return list.map((c, j) => (j === i ? card : c));
+}
+
+/** The chrome drawn on every card (pd3): page number, footer text, logo corner, confidential; null when none is on. */
+export function chromeOf(theme) {
+  const c = theme?.chrome;
+  if (!c || typeof c !== 'object') return null;
+  const footer = str(c.footer_text) || null;
+  const out = { page_number: c.page_number === true, footer_text: footer, logo_corner: c.logo_corner === true, confidential: c.confidential === true };
+  return out.page_number || out.footer_text || out.logo_corner || out.confidential ? out : null;
+}
+
+/** A card's v2 flags: left out of Present, its section, and whether it is an appendix. */
+export const cardFlags = (card) => ({ hidden: card?.hidden === true, section: str(card?.section) || null, appendix: card?.appendix === true });
+
+/** "3 / 12": the page number the chrome draws, counting only the cards Present shows. */
+export function pageNumberOf(cards, index) {
+  const list = Array.isArray(cards) ? cards : [];
+  if (!list[index] || cardFlags(list[index]).hidden) return null;
+  const shown = list.filter((c) => !cardFlags(c).hidden);
+  return `${list.slice(0, index + 1).filter((c) => !cardFlags(c).hidden).length} / ${shown.length}`;
+}
+
+/** A text block's rich runs (read-only here; editing them is A4c's), or null to draw its plain text. */
+export function runsOf(block) {
+  if (!Array.isArray(block?.paras)) return null;
+  // A link is drawn only when it is https, whatever the store held (the server keeps only https on a public host).
+  const safe = (r) => (typeof r.href === 'string' && /^https:\/\//i.test(r.href) ? r : (({ href, ...rest }) => rest)(r));
+  const paras = block.paras.map((p) => (Array.isArray(p?.runs) ? p.runs.filter((r) => typeof r?.text === 'string' && r.text).map(safe) : [])).filter((r) => r.length);
+  return paras.length ? paras : null;
+}
 
 export function cardTitle(card, i) {
   const fromBlock = Array.isArray(card?.blocks) ? card.blocks.find((b) => b?.kind === 'text' && b.style === 'heading' && str(b.text)) : null;
@@ -297,9 +366,23 @@ export function saveState({ dirty, savedAt, now = Date.now(), readOnly = false, 
   return `Saved · ${Math.round(hours / 24)} d ago`;
 }
 
-/** The colours the centre card draws with: the brand kit, or a neutral theme, or neutral light when the kit is missing. */
+/**
+ * D1517: the three themes of #3769, as the Worker's `designSystem.ts`
+ * BASE_THEMES draws them (ground, ink, accent, muted); `pitch_themes_d1517`
+ * holds the two to the same colours.
+ */
+export const THEME_COLOURS = Object.freeze({
+  sand: Object.freeze({ bg: '#f6efe6', ink: '#2b2118', accent: '#a16207', muted: '#6b5b4b' }),
+  ocean: Object.freeze({ bg: '#0f2740', ink: '#eaf2fb', accent: '#5eead4', muted: '#9fb3c8' }),
+  forest: Object.freeze({ bg: '#f3f6f1', ink: '#1f2a1c', accent: '#3f6212', muted: '#55604f' }),
+});
+/** The themes drawn light on dark, as the Worker's DARK_THEMES. */
+export const isDarkTheme = (kind) => kind === 'neutral_dark' || kind === 'ocean';
+
+/** The colours the centre card draws with: the brand kit, or a named theme, or neutral light when the kit is missing. */
 export function cardColours(theme, kit) {
   if (theme?.kind === 'neutral_dark') return { bg: '#111827', ink: '#f9fafb', accent: '#a78bfa', muted: '#9ca3af' };
+  if (THEME_COLOURS[theme?.kind]) return { ...THEME_COLOURS[theme.kind] };
   const light = { bg: '#ffffff', ink: '#0f2a3d', accent: '#6d28d9', muted: '#6b7280' };
   if (theme?.kind === 'neutral_light' || !kit?.palette) return light;
   const p = kit.palette;

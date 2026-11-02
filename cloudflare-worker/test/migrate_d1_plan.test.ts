@@ -456,3 +456,23 @@ test('no workflow interpolates a dispatch input into a SQL command', () => {
     assert.deepEqual(bad, [], `${name} builds SQL from a workflow input`);
   }
 });
+
+
+test('D1456 migration 760 adds a nullable constrained failure stage and the runner applies it once across two runs', () => {
+  const name='760_interview_processing_failed_stage.sql';
+  const {dir,files}=tmpMigrations({[name]:fs.readFileSync(path.join(REAL_MIGRATIONS,name),'utf8')});
+  const db=new DatabaseSync(':memory:');
+  try {
+    db.exec('CREATE TABLE interview_sessions(id INTEGER PRIMARY KEY); INSERT INTO interview_sessions VALUES (1)');
+    const engine=makeEngine(db);
+    const first=applyPlan(planActions(files,engine.appliedSet()),engine);
+    assert.equal(first.failure,null);
+    assert.equal(first.applied.length,1);
+    assert.equal(db.prepare('SELECT processing_failed_stage FROM interview_sessions').get()!.processing_failed_stage,null);
+    for(const stage of ['uploading','transcribing','summarising','placing',null]) db.prepare('UPDATE interview_sessions SET processing_failed_stage=?').run(stage);
+    assert.throws(()=>db.prepare('UPDATE interview_sessions SET processing_failed_stage=?').run('failed'),/CHECK/);
+    const second=applyPlan(planActions(files,engine.appliedSet()),engine);
+    assert.equal(second.failure,null);
+    assert.equal(second.applied.length,0);
+  } finally {db.close();fs.rmSync(dir,{recursive:true,force:true});}
+});

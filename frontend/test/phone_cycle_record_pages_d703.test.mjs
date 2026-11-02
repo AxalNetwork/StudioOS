@@ -263,12 +263,20 @@ test('9 (route): #1659\'s Customer research record gets the same bar and groups,
     assert.deepEqual([bars[0].back.label, bars[0].back.to, bars[0].title, bars[0].eadwynLabel],
       ['Customer research', `/validate/customer-research${Q}`, 'Rowan Vale', 'Validate · Rowan Vale']);
     assert.match(m.text(m.by('record-facts')), /At a glance.*Not recorded/);
-    assert.match(m.text(m.by('record-actions')), /Actions/);
+    // D1454 (#3710, IV-M1): the record's actions open the page, under the bar: primary · Ask · ⋯.
     const record = m.by('interview-record');
     assert.equal(pr(record)['data-phone'], 'true');
-    assert.ok(record.childNodes[record.childNodes.length - 1] === m.by('record-actions'), 'phone actions follow content rather than sharing its status header');
+    assert.ok(record.childNodes[0] === m.by('record-phone-head'), 'the actions lead the page');
+    assert.equal(m.all('record-actions').length, 1, 'one action row, in the head; none left at the foot');
+    assert.ok(m.by('record-header-more'), '⋯ holds the rest');
+    // IV-M2: the sections as a sticky control; Summary first, kept in ?tab=.
+    assert.match(pr(m.by('record-tabs')).className, /sticky/);
+    assert.equal(pr(m.by('record-tabs-summary'))['aria-selected'], true);
+    // IV-M7 (amends D703 decision 1 here): one column below 768px, two from 768px.
     assert.match(pr(m.by('interview-content')).className, /flex-col/);
-    assert.doesNotMatch(pr(m.by('interview-content')).className, /grid-cols/);
+    assert.match(pr(m.by('interview-content')).className, /md:grid-cols-/);
+    assert.doesNotMatch(pr(m.by('interview-content')).className, /(^| )grid-cols-/);
+    await m.press('⋯');
     await m.press('Edit details');
     const page = m.fibers(CycleBar);
     assert.equal(page.length, 1);

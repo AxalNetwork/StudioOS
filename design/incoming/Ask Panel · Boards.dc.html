@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>body{margin:0;background:#e9e7ee}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9;text-decoration:underline}</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:72px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1100px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Axal VC · Eadwyn on every AIRail page</span>
+<h1 style="margin:0;font-size:42px;font-weight:800;letter-spacing:-0.03em">Ask and the Eadwyn panel</h1>
+<p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">One Ask button in every page and module header, secondary to the purple primary. Ask or the rail opens the panel, docked to the rail’s left edge from under the app header to above the footer. Proposals arrive as cards inside the conversation, with Accept, Edit and Discard; nothing is written until you accept. There is no separate proposals sheet.</p>
+</header>
+<sc-for list="{{ groups }}" as="g" hint-placeholder-count="6">
+<section id="{{ g.id }}" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">{{ g.id }}</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">{{ g.t }}</h2></div>
+<sc-if value="{{ g.note }}" hint-placeholder-val="{{ false }}"><p style="margin:0;max-width:1100px;font-size:14px;line-height:1.55;color:#3f3a47;text-wrap:pretty">{{ g.note }}</p></sc-if>
+<sc-if value="{{ g.asks }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:6px;max-width:1440px"><sc-for list="{{ g.asks }}" as="a" hint-placeholder-count="3"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:baseline;font-size:13px;line-height:1.5"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#6b6577;min-width:160px">{{ a.m }}</span><span style="color:#3f3a47">{{ a.c }}</span></div></sc-for></div></sc-if>
+<div style="display:flex;flex-wrap:wrap;gap:32px;align-items:flex-start">
+<sc-for list="{{ g.fr }}" as="f" hint-placeholder-count="1">
+<div style="display:flex;flex-direction:column;gap:8px">
+<sc-if value="{{ f.cap }}" hint-placeholder-val="{{ false }}"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">{{ f.cap }}</span></sc-if>
+<div style="{{ f.wst }}"><dc-import name="Ask Panel Page" v="{{ f.v }}" hint-size="{{ f.hs }}"></dc-import></div>
+</div>
+</sc-for>
+</div>
+</section>
+</sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const F = (v, cap, w, h) => { const d = /-d$/.test(v); return { v, cap: cap || '', wst: `width:${w}px;${h ? 'height:' + h + 'px;' : ''}border-radius:${w < 500 ? 28 : 14}px;overflow:hidden;border:1px solid ${d ? '#374151' : '#dedbe5'};box-shadow:0 20px 50px rgba(24,24,27,.10);background:${d ? '#0b1220' : '#f4f3f7'}`, hs: `${w}px,${h || 600}px` }; };
+    const G = (id, t, fr, note, asks) => ({ id, t, fr, note: note || '', asks: asks || false });
+    const A = (m, c) => ({ m, c });
+    return { groups: [
+      G('AK1', 'The Ask button', [F('k0', '', 1440, 400)], 'Beside the page’s primary, ghost and clearly secondary. Accessible names are annotated under each state. AI off keeps “Ask” with a grey mark and fills only from your own sources.'),
+      G('AK2', 'Validate modules', [F('k1', 'Customer research', 1440, 900)], '', [A('Problem discovery', 'Group my pains by severity · Which pains repeat across segments?'), A('Ideal customer profile', 'Draft the ICP from my interviews · Who said no, and why?'), A('Experiments and evidence', 'Design a test for H2 · What contradicts H1?')]),
+      G('AK3', 'Build modules', [F('k2', 'Solution design', 1440, 900)], '', [A('Prototype / MVP', 'Pick the must-haves for a first prototype · Draft a Lovable prompt'), A('Product roadmap', 'Sort my features into Now, Next, Later · What blocks the next release?'), A('Founding team', 'Which skills does the team lack? · Draft a co-founder brief'), A('Company creation', 'What’s left before incorporation? · List the IP to assign'), A('Operating systems', 'Which tools should I connect first? · Summarise my weekly rhythm')]),
+      G('AK4', 'Raise', [F('k3', 'Investor narrative', 1440, 900)], '', [A('Pitch deck', 'Build a slide from my traction · Check every figure has a source'), A('Data room', 'Which checklist items are missing? · Match my files to the checklist'), A('Fundraising readiness', 'Explain my score · What raises it the most?')]),
+      G('AK5', 'Grow modules', [F('k4', 'Distribution', 1440, 900)], '', [A('Revenue and traction', 'Explain this month’s MRR change · Which customers churned?'), A('Team expansion', 'Draft a job post from my roadmap · Who should I hire first?'), A('Partner network', 'Which partners fit my next quarter?')]),
+      G('AK6', 'Network', [F('k5', '', 1440, 900)]),
+      G('AK7', 'Research', [F('k6', '', 1440, 900)]),
+      G('AK8', 'Calendar', [F('k7', '', 1440, 900)], 'Calendar holds no proposals until you ask; a proposed slot becomes an entry only when you accept it.'),
+      G('AK9', 'Studio', [F('k8', 'Studio keeps its own chat', 1440, 900), F('k8-d', 'Dark', 1440, 900)], 'Studio has no AIRail and no Ask button: Eadwyn works through the chat container already on the page, with the same suggested asks, inline proposal cards and cost line.'),
+      G('AK10', 'Investor, Advisor and Operating Partner sections', [F('k9', 'Investor · Portfolio › Reports', 1440, 900), F('k10', 'Advisor · Practice › Sessions', 1440, 900), F('k11', 'Operating Partner · Delivery › Status reports', 1440, 900)]),
+      G('AK11', 'Admin consoles', [F('k12', 'Approvals · no primary, so Ask stands alone', 1440, 900)], 'Eadwyn proposes; the admin decides. Assigning an item decides nothing about it.'),
+      G('AK12', 'Widths', [F('k13', '1024 · the panel overlays the content only', 1024, 900), F('k14', '390 · bottom sheet at 92%', 390, 844)], 'From 1440px the content narrows beside the panel. Below that the panel overlays the content column only, never the header, sidebar, rail or footer.'),
+      G('AK13', 'States', [F('k15', '', 1440, 1420)], 'Red only for the error. The support session shows no Ask and no primary, and the rail says why.'),
+      G('AK14', 'Dark', [F('k2-d', 'Solution design', 1440, 900)])
+    ] };
+  }
+}
+</script>
+</body></html>

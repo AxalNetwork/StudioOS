@@ -23,9 +23,12 @@ import CardsStrip from './CardsStrip';
 import GridStage from './GridStage';
 import BlockTools, { SpeakerNotes } from './BlockTools';
 import ShareDialog from './ShareDialog';
+import CommentsSheet from './CommentsSheet';
 import ExportDialog from './ExportDialog';
-import { BackgroundSheet, BrandKitSheet, CheckSheet, SizeSheet, SourcesSheet, StructureSheet, ThemeSheet, VersionsSheet } from './DeckSheets';
-import { EDITOR_WAITING, aiOffState, placeTextEdit, saveChip } from './deckV2Model';
+import { BackgroundSheet, BrandKitSheet, CheckSheet, RemixSheet, SizeSheet, SourcesSheet, StructureSheet, ThemeSheet, VersionsSheet } from './DeckSheets';
+// D1583 (#3830): ⋯ › This deck › Teaser, one-pager or memo.
+import DeriveSheet from './DeriveSheet.jsx';
+import { EDITOR_WAITING, aiOffState, editIndex, placeTextEdit, saveChip } from './deckV2Model';
 import { AiOffBanner } from './DeckAsk';
 import { areaTitle, areasOf, askTarget, liveFocus } from './gridSelection';
 import AreaLightbox from './AreaLightbox';
@@ -34,11 +37,16 @@ import { PitchMovedNotice } from './PitchWorkspaceMoved';
 import { refreshCard } from './figuresModel';
 import { deckRail } from './deckRailGroups';
 import { presentHref } from './presentExportModel';
+import { aspectOf, withAspect } from './gridModel';
+import { reflowCards } from './deckReflow';
+import { movedLine } from './structureModel';
+import { scriptOfTheme } from './deckLanguage';
 import {
   ADDABLE_KINDS, KIND_LABELS, MODEL_FAILED, NOTES_PLACEHOLDER, NO_CARDS,
   NOT_RECORDED, PHONE_NOTE, READ_FAILED, THEME_LABELS,
-  addBlock, applyLayout, applyToAll, blockLabel, cardColours, cardTitle, cardsOf, changesOf, firstFree,
+  addBlock, applyLayout, applyToAll, blockLabel, cardColours, cardTitle, cardsOf, changesOf, firstFree, isDarkTheme,
   moveCard, placementProblem, removeBlock, saveState, standardSizes, staleCards, updateBlock, withFieldBlocks,
+  replaceCard, withNewUid, pageNumberOf,
 } from './editorModel';
 
 /**
@@ -304,7 +312,8 @@ export function sourcesCard(model, lines) {
 }
 
 /** A copy of a card with its own block ids kept (ids are per card). */
-const copyCard = (c) => JSON.parse(JSON.stringify(c));
+// D1500: a duplicate is a new card, with its own uid.
+const copyCard = (c) => withNewUid(JSON.parse(JSON.stringify(c)));
 
 function Editor({ project, deck, model, kit, refresh, sources, charts, versions, readOnly, phone, narrow = false, onTitle, onSaved, placeRef, onProposals, onChrome, actionRef }) {
   const [aiOn] = useAssistMode('raise');
@@ -318,6 +327,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   const [askLine, setAskLine] = useState(null);
   const [dialog, setDialog] = useState(null);
   const [sheet, setSheet] = useState(null);
+  // D1513 (#3765): what the last structure moved to the speaker notes, until the card changes.
+  const [structureNote, setStructureNote] = useState(null);
   const [compare, setCompare] = useState(null);
   // PD-9: a run or a quote refused for tokens (a 402) turns Ask off for the
   // session; adding tokens leaves the page, so the next visit starts on.
@@ -333,7 +344,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   const kitData = kit.status === 'ok' ? kit.data?.kit ?? null : null;
   const colours = cardColours(theme, kitData);
   // D903: a background's overlay is in the brand ink, never the dark theme's light text colour.
-  const ink = theme?.kind === 'neutral_dark' ? undefined : colours.ink;
+  const ink = isDarkTheme(theme?.kind) ? undefined : colours.ink;
   const items = sources.data?.items || [];
   const [images, setImages] = useState([]);
   const loadImages = useCallback(() => {
@@ -356,6 +367,9 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   const selectBlock = (id) => setPickState({ selection: id == null ? [] : [String(id)], focus: id == null ? null : String(id) });
 
   const setCard = (i, c) => setCards((cs) => cs.map((x, j) => (j === i ? c : x)));
+  // D1500: a result goes back onto the card it was made for, by its uid,
+  // wherever that card sits now; a card with no uid falls back to the selection.
+  const placeCard = (c) => setCards((cs) => replaceCard(cs, c, sel) ?? cs);
 
   // D1604: a card edit accepted from the header Ask. Checked against the cards
   // on screen first; `commit()` then places it, synchronously, against the
@@ -370,7 +384,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     placeRef.current = readOnly ? null : (edit) => {
       const place = (cs) => {
         if (edit.kind === 'text') return placeTextEdit(cs, edit);
-        const at = cs[edit.card];
+        const at = cs[editIndex(cs, edit)];
         if (!at) return { error: `Card ${edit.card + 1} is no longer in this deck. Discard this proposal.` };
         const grid = firstFree(at, edit.size.cols, edit.size.rows, model);
         if (!grid) return { error: `No free ${edit.size.cols} × ${edit.size.rows} range on card ${edit.card + 1}. Remove a block, then accept.` };
@@ -382,12 +396,14 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
         commit: () => {
           const r = place(cardsNow.current);
           if (r.error) return { error: r.error };
-          const was = cardsNow.current[edit.card];
-          const put = (from, to) => (cs) => cs.map((x, j) => (j === edit.card && x === from ? to : x));
+          // D1500: the card the edit was made for, by uid, wherever it sits now.
+          const where = editIndex(cardsNow.current, edit);
+          const was = cardsNow.current[where];
+          const put = (from, to) => (cs) => cs.map((x) => (x === from ? to : x));
           // The next check (Accept all's next edit) sees this one at once.
           cardsNow.current = put(was, r.card)(cardsNow.current);
           setCards(put(was, r.card));
-          setSel(edit.card); setPickState(NO_PICK);
+          setSel(where); setPickState(NO_PICK);
           return {
             // Back to the card as it was, unless something changed it since.
             undo: () => { cardsNow.current = put(r.card, was)(cardsNow.current); setCards(put(r.card, was)); },
@@ -398,6 +414,24 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     return () => { placeRef.current = null; };
   }, [placeRef, readOnly, model]);
   const move = (from, to) => { setCards((cs) => moveCard(cs, from, to)); setSel(to); setPickState(NO_PICK); };
+
+  // D1554 (#3801): ⋯ › Slide size reflows the draft; what no longer fits moves
+  // to each card's notes (`deckReflow.js`). One Undo, while the sheet is open,
+  // puts the cards and the size back as they were.
+  const [sizeUndo, setSizeUndo] = useState(null);
+  const changeSize = (aspect) => {
+    if (aspectOf(theme?.aspect) === aspect) return;
+    const r = reflowCards(cards, aspect, scriptOfTheme(theme));
+    setSizeUndo(r.count ? { cards, theme, count: r.count } : null);
+    setCards(r.cards);
+    setTheme(withAspect(theme, aspect));
+  };
+  const undoSize = () => {
+    if (!sizeUndo) return;
+    setCards(sizeUndo.cards);
+    setTheme(sizeUndo.theme);
+    setSizeUndo(null);
+  };
 
   const saved = (fresh) => {
     const d = fresh?.deck || fresh;
@@ -436,7 +470,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     if (id === 'duplicate') { if (!readOnly) duplicate(sel); return; }
     if (id === 'appendix') { if (!readOnly) toggleAppendix(sel); return; }
     if (id === 'notes') { navigate(`/raise/pitch/notes${ventureQuery(project?.id)}`); return; }
-    if (['theme', 'size', 'brand', 'sources', 'versions', 'check', 'structure', 'background'].includes(id)) setSheet(id);
+    // D1553 (#3800): ⋯ › This card › Remix this slide, the only way in (pd13).
+    if (['theme', 'size', 'brand', 'sources', 'versions', 'check', 'structure', 'background', 'remix', 'derive', 'comments'].includes(id)) setSheet(id);
   };
   if (actionRef) actionRef.current = act;
   const cardAction = (id, i) => {
@@ -445,6 +480,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     else if (id === 'up' && i > 0) move(i, i - 1);
     else if (id === 'down' && i < cards.length - 1) move(i, i + 1);
     else if (id === 'appendix') toggleAppendix(i);
+    // D1570 (#3817, pd33): the card's threads, on that card.
+    else if (id === 'comments' && cards[i]) { choose(i); setSheet('comments'); }
   };
 
   // The selection's Ask opens "Generate into N areas" (`AreaLightbox.jsx`) on
@@ -470,32 +507,35 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
       {phone ? (
         <PhoneEditor cards={cards} sel={sel} setSel={choose} move={move} card={card} readOnly={readOnly}
           onNotes={(v) => setCard(sel, { ...card, notes: v })} notesMax={model.notes_max}
-          deckId={base.deck.id} items={items} aiOn={aiOn} off={off} onTokens={onTokens} model={model} onPlace={(c) => setCard(sel, c)} onProposals={onProposals} />
+          deckId={base.deck.id} items={items} aiOn={aiOn} off={off} onTokens={onTokens} model={model} onPlace={placeCard} onProposals={onProposals} />
       ) : (
         <div className={`grid gap-3 ${narrow ? '' : 'lg:grid-cols-[150px_minmax(0,1fr)]'}`} data-testid="pitch-editor-body">
           <div className="flex min-w-0 flex-col gap-2">
-            <CardsStrip cards={cards} sel={sel} stale={stale} readOnly={readOnly} onSelect={choose} move={move}
+            <CardsStrip theme={theme} cards={cards} sel={sel} stale={stale} readOnly={readOnly} onSelect={choose} move={move}
               onCardAction={cardAction} orientation={narrow ? 'row' : 'column'}
               onAdd={() => {
                 const layout = model.layouts.find((l) => l.id === 'statement') || model.layouts[0];
-                const fresh = applyLayout({ title: 'New card' }, layout).card;
+                const fresh = withNewUid(applyLayout({ title: 'New card' }, layout).card);
                 setCards((cs) => [...cs, fresh]); setSel(cards.length); setPickState(NO_PICK);
               }} />
             {refresh.status === 'error' ? <ReadFailed text="Which figures have changed could not be read." onRetry={refresh.retry} testId="pitch-editor-refresh-error" /> : null}
           </div>
           <div className="flex min-w-0 flex-col gap-3">
+            {structureNote ? <span className={MUTED} role="status" data-testid="pitch-editor-structure-note">{structureNote} The speaker notes keep each one.</span> : null}
             {cards.length === 0 ? <div className={`${CARD} p-6 ${MUTED}`}>{NO_CARDS}</div> : (
-              <GridStage card={card} index={sel} model={model} colours={colours} ink={ink} theme={theme} kit={kit} charts={charts}
+              <GridStage card={card} index={sel} model={model} colours={colours} ink={ink} theme={theme} kit={kit} charts={charts} pageLabel={pageNumberOf(cards, sel)}
                 readOnly={readOnly} selection={selection} focus={focus}
                 onSelection={setPickState}
                 onMove={(id, grid) => setCard(sel, updateBlock(card, id, { grid }))}
+                // D1513: a divider move (both blocks) and its overflow are each one edit.
+                onCard={(next) => { setCard(sel, next); setStructureNote(null); }}
                 onAsk={ask} askOff={askOff} askLine={askLine}
                 items={items} onRefresh={() => { const r = refreshCard(card, items, charts); if (r.moved) setCard(sel, r.card); }} />
             )}
             {card && !readOnly && chosen.length ? (
               <InstructionBox deckId={base.deck.id} cardIndex={sel} card={card} areas={chosen} items={items} aiOn={aiOn} onTokens={onTokens}
                 onRemove={(id) => setPickState((p) => ({ selection: p.selection.filter((x) => x !== id), focus: p.focus }))}
-                onPlace={(c) => setCard(sel, c)} onProposals={onProposals} />
+                onPlace={placeCard} onProposals={onProposals} />
             ) : null}
             {card && !readOnly && (one || !areas) ? (
               <BlockTools card={card} cardIndex={sel} area={one} model={model} charts={charts} images={images} items={items}
@@ -506,8 +546,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
                 onAddBlock={(range, kind) => setDialog({ kind: 'add-block', range: range || null, initial: kind })}
                 onImage={(use, replace) => setDialog({ kind: 'image', use, replace: replace || null })}
                 onDesign={() => setSheet('structure')}
-                onPlace={(c) => setCard(sel, c)}
-                onAddCard={(c) => { setCards((cs) => [...cs, c]); setSel(cards.length); setPickState(NO_PICK); }} />
+                onPlace={placeCard}
+                onAddCard={(c) => { setCards((cs) => [...cs, withNewUid(c)]); setSel(cards.length); setPickState(NO_PICK); }} />
             ) : null}
             {card && (one || !areas) ? (
               <SpeakerNotes card={card} index={sel} readOnly={readOnly} notesMax={model.notes_max} onNotes={(v) => setCard(sel, { ...card, notes: v })} />
@@ -520,13 +560,21 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
         <ThemeSheet model={model} theme={theme} audience={audience} kit={kit} readOnly={readOnly}
           onTheme={setTheme} onAudience={setAudience} onApplyAll={() => setDialog({ kind: 'apply-all' })} onClose={() => setSheet(null)} />
       ) : null}
-      {sheet === 'size' ? <SizeSheet theme={theme} readOnly={readOnly} onTheme={setTheme} onClose={() => setSheet(null)} /> : null}
+      {sheet === 'size' ? <SizeSheet theme={theme} readOnly={readOnly} onSize={changeSize} moved={sizeUndo?.count ?? 0} onUndo={undoSize}
+        onClose={() => { setSizeUndo(null); setSheet(null); }} /> : null}
       {sheet === 'structure' && card ? (
-        <StructureSheet model={model} card={card} index={sel} readOnly={readOnly} onLayout={(layout) => setDialog({ kind: 'layout', layout })} onClose={() => setSheet(null)} />
+        <StructureSheet model={model} card={card} index={sel} readOnly={readOnly} onLayout={(layout) => setDialog({ kind: 'layout', layout })}
+          // D1513 (#3765): a structure is one edit; what has no area is already in the notes.
+          onStructure={(r) => { setCard(sel, r.card); setPickState(NO_PICK); setSheet(null); setStructureNote(r.count ? `${movedLine(r.count)}.` : null); }}
+          onClose={() => setSheet(null)} />
       ) : null}
       {sheet === 'background' && card ? (
         <BackgroundSheet card={card} index={sel} readOnly={readOnly} onBackground={(bg) => setCard(sel, { ...card, background: bg })}
           onImage={() => { setSheet(null); setDialog({ kind: 'image', use: 'card' }); }} onClose={() => setSheet(null)} />
+      ) : null}
+      {sheet === 'derive' && base.deck?.id ? (
+        <DeriveSheet deckId={base.deck.id} version={base.deck.version ?? null} dirty={dirty} readOnly={readOnly} aiOn={aiOn} outOfTokens={outOfTokens}
+          onProposed={onProposals} onClose={() => setSheet(null)} />
       ) : null}
       {sheet === 'brand' ? <BrandKitSheet projectId={project?.id ?? null} kit={kit} readOnly={readOnly} onClose={() => setSheet(null)} /> : null}
       {sheet === 'versions' ? (
@@ -539,11 +587,27 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
           <SourcesPanel items={items} status={sources.status} onRetry={sources.retry} stale={staleMap} />
           {/* D1267 (#3290, VR7): the claims this slide states, and the optional Sources on Axal card. */}
           <SlideEvidence projectId={project?.id} version={base.deck.version} slide={sel + 1} readOnly={readOnly}
-            onAddSources={(lines) => { const c = sourcesCard(model, lines); setCards((cs) => [...cs, c]); setSel(cards.length); setPickState(NO_PICK); setSheet(null); }} />
+            onAddSources={(lines) => { const c = withNewUid(sourcesCard(model, lines)); setCards((cs) => [...cs, c]); setSel(cards.length); setPickState(NO_PICK); setSheet(null); }} />
         </SourcesSheet>
       ) : null}
+      {sheet === 'remix' && card && base.deck?.id ? (
+        <RemixSheet deckId={base.deck.id} card={card} index={sel} readOnly={readOnly}
+          onApply={(next) => {
+            // One edit, one undo step: Undo puts the card back as it was, unless something changed it since.
+            const i = sel;
+            const was = cardsNow.current[i];
+            setCards((cs) => cs.map((x, j) => (j === i && x === was ? next : x)));
+            setPickState(NO_PICK);
+            return () => setCards((cs) => cs.map((x, j) => (j === i && x === next ? was : x)));
+          }}
+          onClose={() => setSheet(null)} />
+      ) : null}
+      {sheet === 'comments' && card && base.deck?.id ? (
+        <CommentsSheet deckId={base.deck.id} card={card} index={sel} area={chosen.length === 1 ? chosen[0].id : null} admin={readOnly} onClose={() => setSheet(null)} />
+      ) : null}
       {sheet === 'check' && base.deck?.id ? (
-        <CheckSheet deck={base.deck} projectId={project?.id} readOnly={readOnly} dirty={dirty} onReplaced={saved} onClose={() => setSheet(null)} />
+        <CheckSheet deck={base.deck} projectId={project?.id} readOnly={readOnly} dirty={dirty} onReplaced={saved}
+          onGoToCard={(i) => { if (i >= 0 && i < cards.length) { choose(i); setSheet(null); } }} onClose={() => setSheet(null)} />
       ) : null}
 
       {dialog?.kind === 'save' ? (
@@ -595,8 +659,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
           }} />
       ) : null}
       {dialog?.kind === 'areas' && card ? (
-        <AreaLightbox deckId={base.deck.id} cardIndex={sel} card={card} areas={dialog.areas} model={model} items={items} aiOn={aiOn}
-          onTokens={onTokens} onPlace={(c) => setCard(sel, c)} onProposals={onProposals} onClose={() => setDialog(null)}
+        <AreaLightbox deckId={base.deck.id} cardIndex={sel} card={card} cards={cards} areas={dialog.areas} model={model} items={items} aiOn={aiOn}
+          onTokens={onTokens} onPlace={placeCard} onProposals={onProposals} onClose={() => setDialog(null)}
           onDialog={(plan, area) => {
             if (plan.open === 'structure') { setDialog(null); setSheet('structure'); return; }
             // "Add it here": the area's own range; a block that holds it gives way when Add places the new one.
@@ -890,7 +954,7 @@ function PhoneEditor({ cards, sel, setSel, move, card, readOnly, onNotes, notesM
         </div>
       ) : null}
       {asking && area && target?.kind === 'areas' ? (
-        <AreaLightbox deckId={deckId} cardIndex={sel} card={card} areas={[area]} model={model} items={items} aiOn={aiOn}
+        <AreaLightbox deckId={deckId} cardIndex={sel} card={card} cards={cards} areas={[area]} model={model} items={items} aiOn={aiOn}
           onTokens={onTokens} onPlace={onPlace} onProposals={onProposals} onClose={() => setAsking(false)}
           instruction={words ? (
             <InstructionBox sheet deckId={deckId} cardIndex={sel} card={card} areas={[area]} items={items} aiOn={aiOn} onTokens={onTokens}

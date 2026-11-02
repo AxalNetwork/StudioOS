@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # #4107: `scan` is a required check, so it runs on each merge queue entry.
+  merge_group:
+    types: [checks_requested]
 
 permissions:
   contents: read
@@ -70,6 +73,10 @@ jobs:
           # .gitleaks.toml for the running list of those unchangeable findings).
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             echo "logopts=--log-opts=${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "merge_group" ]; then
+            # #4107: the queue entry is main (base_sha) plus the queued PRs, so
+            # the range is every commit the queue would merge.
+            echo "logopts=--log-opts=${{ github.event.merge_group.base_sha }}..${{ github.event.merge_group.head_sha }}" >> "$GITHUB_OUTPUT"
           else
             BEFORE="${{ github.event.before }}"
             if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then

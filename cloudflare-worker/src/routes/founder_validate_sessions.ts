@@ -1,3 +1,4 @@
+import { BOT_FAILURE_DETAIL } from '../durable-objects/meeting-bot-run';
 import { botParticipants } from '../services/meetingBotParticipants';
 import { BotError, dispatchBot, sessionBot, botControl, botView, stopSessionBot } from '../services/meetingBots';
 /**
@@ -221,7 +222,10 @@ sessions.get('/sessions/:id/bot', async (c) => {
     if (!run) return json({bot:null});
     const response=await botControl(c.env,run.uid,'init');
     if (!response.ok) return botFailure(new BotError(503,'bot_unavailable','The meeting bot is temporarily unavailable.'));
-    return json({bot:await response.json()});
+    const detail = await c.env.DB.prepare('SELECT failure_detail FROM meeting_bots WHERE uid = ?')
+      .bind(run.uid).first<{ failure_detail: string | null }>();
+    return json({ bot: { ...await response.json() as Record<string, unknown>,
+      failure_detail: typeof detail?.failure_detail === 'string' && BOT_FAILURE_DETAIL.test(detail.failure_detail) ? detail.failure_detail : null } });
   } catch (e) { return botFailure(e); }
 });
 // D886 B7: identities are a separate creator-only read, never the content-free status DTO.

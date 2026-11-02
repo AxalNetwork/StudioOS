@@ -37,6 +37,7 @@ import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts'
 import { IMAGE_MISSING, NAV_SCRIPT, NOT_RECORDED, NO_NOTES, NO_SOURCES } from '../src/services/decks/offlineHtml.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
+import { dohAnswer } from './_doh_fake.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const BASELINE = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
@@ -91,6 +92,7 @@ function images() {
   fetched.length = 0;
   globalThis.fetch = (async (input: any) => {
     const url = String(input?.url ?? input);
+    const dns = dohAnswer(url); if (dns) return dns; // D1506: the image host resolves to a public address
     fetched.push(url);
     if (url === 'https://img.example.test/a.png') return new Response(PNG, { status: 200 });
     if (url === 'https://img.example.test/b.svg') return new Response('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>', { status: 200 });

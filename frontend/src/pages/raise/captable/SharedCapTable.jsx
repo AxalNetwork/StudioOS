@@ -2,10 +2,10 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { capTableAccessApi } from '../../../lib/api/capTableAccess';
 import { Unreadable, actionGhost } from '../../../ui';
+import ReasonGate, { AccessBanner, AccessPill, RecordSkeleton } from '../../../ui/ReasonGate';
 import { usePhoneWidth } from '../../../ui/phone/usePhoneWidth';
 import { PHONE_ROOT } from './capTableModel';
 import { CARD, INK, MONO, MUTED, EYEBROW, Section, Skeleton, TD, Table } from './CapTableTool';
-import CapTableDialog, { useWrite } from './CapTableDialog';
 import { SUPPORT_REASON, logRows, sharedLine, sharedView, supportProblem } from './capTableAccess';
 
 /**
@@ -105,21 +105,20 @@ function HqLog() {
   );
 }
 
-function SupportDialog({ projectId, onClose, onOpened }) {
-  const [reason, setReason] = useState('');
-  const w = useWrite(onOpened);
-  const problem = supportProblem(reason);
+/**
+ * D1463/D1464 (#3713, RR10): Open for support is the shared reason gate in
+ * per-open mode, on the page in place of the table (the old dialog is gone).
+ * 10–500 characters, the cap table's own rule. A reload asks again.
+ */
+function SupportGate({ projectId, venture, onOpened, onCancel }) {
   return (
-    <CapTableDialog title="Open for support" testId="captable-support-dialog" write={w} onClose={onClose} action="Open read only" disabled={!!problem}
-      sub="The founder sees your reason in their access log. The table opens read only; a correction goes through the record’s correction, with its own reason."
-      onAction={() => w.run(() => capTableAccessApi.support(projectId, reason.trim()))}>
-      <label className="flex flex-col gap-1.5">
-        <span className={EYEBROW}>Reason the founder will see · required</span>
-        <textarea className="min-h-[72px] rounded-[8px] border border-axal-hairline bg-white px-2.5 py-1.5 text-[13px] dark:border-gray-700 dark:bg-gray-900" maxLength={SUPPORT_REASON.max}
-          value={reason} onChange={(e) => setReason(e.target.value)} data-testid="captable-support-reason" />
-      </label>
-      {problem && reason ? <span className={`text-[12px] ${MUTED}`} data-testid="captable-support-problem">{problem}</span> : null}
-    </CapTableDialog>
+    <ReasonGate
+      record="Cap table" what="this cap table" venture={venture ? { name: venture } : null} viewer="admin"
+      rule={{ kind: 'per_open' }} min={SUPPORT_REASON.min} max={SUPPORT_REASON.max} short={supportProblem('')}
+      onSubmit={async (reason) => onOpened(await capTableAccessApi.support(projectId, reason))}
+      back={null} preview={<RecordSkeleton rows={4} />} testId="captable-support"
+      notice={null} onCancel={onCancel}
+    />
   );
 }
 
@@ -159,18 +158,31 @@ export function CapTableReadPage() {
   if (state.status === 'refused') return <Frame title="Cap table" testId="captable-read"><p className={`m-0 text-[13px] ${INK}`} data-testid="captable-read-refused">{state.message || 'The founder has not shared the cap table with you.'}</p></Frame>;
   if (state.status === 'error') return <Frame title="Cap table" testId="captable-read"><Unreadable what="This cap table" claim="This is not a claim that it is empty." onRetry={load} /></Frame>;
   const via = read?.via;
-  const readOnly = <span className={PILL} data-testid="captable-read-only">Read only</span>;
+  const readOnly = <span data-testid="captable-read-only">{via === 'studio' || support ? <AccessPill viewer="admin" testId="captable-read-only-pill" /> : <span className={PILL}>Read only</span>}</span>;
+  // D1463 (RR10a): while the reason is asked, nothing of the table is drawn behind the gate.
+  if (asking && via === 'studio' && !support) {
+    return (
+      <Frame title="Cap table" testId="captable-read" line={sharedLine(read)} pills={readOnly}>
+        <SupportGate projectId={projectId} venture={typeof read?.venture === 'string' ? read.venture : null} onOpened={(out) => { setAsking(false); if (out) setSupport(out); }} onCancel={() => setAsking(false)} />
+      </Frame>
+    );
+  }
   return (
     <Frame title="Cap table" testId="captable-read" line={sharedLine(read)} pills={read?.read_only !== false ? readOnly : null}
       aside={via === 'studio' && !support
         ? <button type="button" className={actionGhost} onClick={() => setAsking(true)} data-testid="captable-support-open">Open for support…</button>
         : null}>
-      {support ? <p className={`m-0 ${LAVENDER}`} data-testid="captable-support-line">You are viewing this cap table as a studio admin, for: ‘{support.reason}’. The founder sees why, and each correction.</p> : null}
+      {support ? (
+        <>
+          {/* RR10b: the amber banner, per open — no countdown and no End access; a reload asks again. */}
+          <AccessBanner reason={support.reason} viewer="admin" testId="captable-support-banner" />
+          <p className={`m-0 ${LAVENDER}`} data-testid="captable-support-line">You are viewing this cap table as a studio admin, for: ‘{support.reason}’. The founder sees why, and each correction.</p>
+        </>
+      ) : null}
       {via === 'studio' && !support ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-support-note">{read.support || 'Open for support asks for a reason first. The founder sees it.'}</p> : null}
       <section className={`${CARD} px-4 py-3`}><SharedViewBody read={read} testId="captable-read-view" /></section>
       {via === 'grant' || via === 'member' ? <p className={`m-0 text-[11.5px] ${MUTED}`} data-testid="captable-read-scenarios">Scenarios stay the founder’s: a shared level shows the issuance record.</p> : null}
       {via === 'hq' ? <HqLog /> : null}
-      {asking ? <SupportDialog projectId={projectId} onClose={() => setAsking(false)} onOpened={(out) => { setAsking(false); if (out) setSupport(out); }} /> : null}
     </Frame>
   );
 }

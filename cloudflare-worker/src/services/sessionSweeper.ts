@@ -138,7 +138,7 @@ export async function sweepInterviewSessions(env: Env, now = new Date()): Promis
     const have = new Set((stored.results || []).map((r) => r.seq));
     if (!have.size) {
       await env.DB.prepare(
-        `UPDATE interview_sessions SET processing_stage = 'failed', processing_error = ?, processing_updated_at = datetime('now') WHERE id = ? AND processing_stage = 'uploading'`,
+        `UPDATE interview_sessions SET processing_stage = 'failed', processing_failed_stage = 'uploading', processing_error = ?, processing_updated_at = datetime('now') WHERE id = ? AND processing_stage = 'uploading'`,
       ).bind('None of the recording arrived, so there is nothing to transcribe.', s.id).run();
       continue;
     }

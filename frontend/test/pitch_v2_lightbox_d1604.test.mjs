@@ -59,7 +59,8 @@ const WHOLE = { id: 'free:whole', kind: 'free', grid: { c1: 1, c2: 12, r1: 1, r2
  * ------------------------------------------------------------------ */
 
 test('every element maps to a route on main, a free placement, or its adapter issue', () => {
-  const runs = new Set(['assist', 'image', 'metric', 'upload', 'dialog']);
+  // D1560 (#3807): Speaker notes is a transform run for the card's notes.
+  const runs = new Set(['assist', 'image', 'metric', 'upload', 'dialog', 'notes']);
   for (const el of ELEMENTS) {
     const on = TEXT_ELEMENTS.includes(el.id) ? area('b2') : WHOLE;
     const plan = rowPlan({ area: on, element: el.id, card: CARD, cardIndex: 0, items: ITEMS });
@@ -70,7 +71,7 @@ test('every element maps to a route on main, a free placement, or its adapter is
     } else {
       assert.ok(runs.has(plan.run), `${el.id} runs on main (${plan.run})`);
     }
-    if (plan.run === 'assist' || plan.run === 'image') {
+    if (plan.run === 'assist' || plan.run === 'image' || plan.run === 'notes') {
       assert.ok(FOUNDER_OPTIONS.some((o) => o.key === plan.option && o.page === 'Founder · Raise · Pitch deck'), `${el.id}: ${plan.option} is a deck rail option`);
     }
   }
@@ -123,6 +124,10 @@ test('the model chip is the AIRail\'s pick, read-only, and says where it is set'
   assert.equal(modelChip(rail), 'Synthetic B · $0.002 per variant · set in the AIRail');
   assert.equal(modelChip({ ...rail, pick: null }), 'Synthetic A · $0.001 per variant · set in the AIRail', 'the row\'s first when nothing is picked');
   assert.equal(modelChip(null), 'Model set in the AIRail', 'a failed read names no model');
+  // D1511: `GET /api/ai/rail` answers each model's unit prices as an object; the chip prints them as the AIRail does.
+  const real = { models: [{ id: 'c', name: 'Synthetic C', price: { cost: { tokens_in: 0.29, tokens_out: 2.25 }, billed: { tokens_in: 0.58, tokens_out: 4.5 } } }], pick: 'c', billing: 'billed' };
+  assert.doesNotMatch(modelChip(real), /object Object/);
+  assert.match(modelChip(real), /^Synthetic C · \$0\.58.* · set in the AIRail$/);
 });
 
 test('several areas run in sequence until #3764: the adapter is asked first; variants 2 and 3 are off', () => {

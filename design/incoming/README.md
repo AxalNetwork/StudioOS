@@ -1,8 +1,9 @@
 # design/incoming — new Claude Design UIs waiting to be integrated
 
 **Drop new Claude Design exports here.** This is the intake queue: a canvas
-lands in this folder, gets triaged, gets built, and then the row in
-`documentation/architecture/ROUTE_MAP.md` records what shipped and what did not.
+lands in this folder, gets triaged, gets built, and then its row in the route map
+(`documentation/architecture/route-map/`, one file per canvas, D4102) records
+what shipped and what did not.
 
 Nothing in this folder is built, bundled, imported or served. It is source
 material. The app never reads it at runtime.
@@ -74,8 +75,9 @@ strength of a live route would empty the queue of the work it exists to track.
 1. **Land it.** Save the export here as `<Surface Name>.dc.html`, keeping the
    name Claude Design gave it so it can be matched against the design source
    later. One file per canvas.
-2. **Triage it** into one of six grades, and add a row to
-   `documentation/architecture/ROUTE_MAP.md`:
+2. **Triage it** into one of six grades, and add its row as one new file under
+   `documentation/architecture/route-map/canvases/part-N/` (D4102: one file per
+   canvas; never a shared file):
 
    | Grade | Meaning |
    | --- | --- |
@@ -110,6 +112,106 @@ strength of a live route would empty the queue of the work it exists to track.
    unbuilt canvas, both clauses firing at once — and on 2026-09-07 it sent
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
+
+## Landed 2026-11-01 — One interview, and its session (#3710)
+
+The owner's artifacts `CoQEhHr637iFdxgpe2WKx9` (the page, `Interview Record Page.dc.html`)
+and `MyWazkYQH52jTsYgMPdL1E` (the board grid, `Interview Record · Boards.dc.html`) were
+decoded by `scripts/read-canvas.mjs`. The grid imports the page and frames it
+as twenty-one groups:
+- **Page**, the record at 1440 with the Ask panel closed;
+- **IV-D1 to IV-D5**, the desktop header (one action row: primary, Ask with
+  "[3] waiting", Email, Edit details, ⋯), the fact cards with their one action,
+  the Email composer in the right Sheet, 1280, 1024 and dark, and the Ask
+  panel open;
+- **IV-M1 to IV-M7**, the phone: the header, the four sections, the transcript
+  with search, tap-to-play and the sticky player, the findings in thumb reach,
+  Ask as a bottom sheet, the record's states, and the tablet at 768 in two
+  columns;
+- **IV-S1, IV-S2**, the AI states and who is reading;
+- **REC1 to REC6**, the session page: the one lifecycle stepper, one failure
+  panel, the participants timeline, the transcript's states, cost as money,
+  and the session's states (phone and dark among them).
+
+**One edit, named.** The Axal VC mark (the export's
+`uploads/axal-logo-200x200.png`) points at `/axal-mark.png`. No other value was
+edited.
+
+**Grade: UPGRADE (D1454 for the record, D1455 for the session page; D1456 is
+the Worker part).** Built: one record header for every cycle
+(`frontend/src/pages/cycles/RecordHeader.jsx`), the fact action, the phone
+record's sections, player and tablet columns, the session page's stepper,
+failure panel and money (`frontend/src/pages/founder/SessionLifecycle.jsx`).
+Not built here, each filed: the channel pill, the fact actions' keys,
+"Review findings (n)" and the failed step (#3710 W1 to W3, D1456); the Email
+composer in the Sheet (IV-D3); the participants timeline (REC3); Ask as a
+bottom sheet on the record (IV-M5, after #3706). Two files arrived and none
+left this folder.
+## Landed 2026-11-01 — Read with a reason (#3713)
+
+The owner's artifacts `8PfdzapnNsUCxYSB3Yhh3X` (the page, `Read With A Reason Page.dc.html`)
+and `3eydkF7Mvqy6cpg94Ypp2b` (the board grid, `Read With A Reason · Boards.dc.html`) were
+decoded by `scripts/read-canvas.mjs`. The grid imports the page by name and frames:
+- **RR00 to RR03**, the gate: grant mode on the Investor narrative, the field while typing, and the rail on a founder's record;
+- **RR04 to RR06**, while the access lasts: the amber banner, End access now, and the grant running out;
+- **RR07 to RR09**, what the founder sees: "Who read this narrative" on Home and Story, the notification, and the other three logs;
+- **RR10 to RR14**, the same gate on the per-open records (Cap table, Data room, Capital relationships), the inline form in the New version dialog, and the Pitch deck with no gate;
+- **RR15 to RR22**, the states, the phone at 390, the tablet at 768, and dark.
+
+**One edit, named.** The Axal mark (the export's `uploads/axal-logo-200x200.png`)
+points at `/axal-mark.png`. No other value was edited.
+
+**Grade: UPGRADE (D1463).** The gate and the banner are built (`frontend/src/ui/ReasonGate.jsx`)
+and used by the Investor narrative and the Cap table; the rail's founder-record mode is in
+`frontend/src/ui/WorkerRail.jsx`. End access now and the venture header wait on the Worker
+part (#3713 part 2); the Data room and Capital relationships pages wait on part 3.
+Two files arrived and none left this folder.
+
+## Landed 2026-11-01 — Work and company compliance (#3968)
+
+The owner's artifacts `6snU4LwGECSELCgYtneiB3` (the page, `Work Compliance Page.dc.html`)
+and `XJd9TTJgzjdasWvuJv6ArV` (the board grid, `Work Compliance · Boards.dc.html`)
+were decoded by `scripts/read-canvas.mjs`. They draw **WK0 to WK8** (a project's
+Work: entry points, board, backlog, burn-up, item sheet, run detail, activity
+feed, workload, states) and **CO1 to CO5** (a company's compliance tasks: the
+company card, the agenda, the task sheet with "Create work in a project…", the
+Calendar, states). They follow the consolidated prompts, not S1's Prompt 1 v3
+(tasks as GitHub Issues), which waits for its own canvas (the owner, 2026-11-01).
+
+**One edit, named.** The Axal mark (the export's `uploads/axal-logo-200x200.png`)
+points at `/axal-mark.png`. No other value was edited.
+
+**Grade: UPGRADE (D1614).** `frontend/src/pages/work/` draws the board, backlog,
+burn-up, item and run sheets and the compliance agenda and task sheet, behind
+`frontend/src/pages/work/workAdapter.js`, which is off until #3969–#3972 and #3976.
+Two files arrived and none left this folder.
+## Landed 2026-11-01 — The Ask panel (#3706)
+
+The owner's artifacts `6228BkjTtjxMY7C5mmMZRu` (the page, `Ask Panel Page.dc.html`)
+and `5xbqiAp2WTW3iK6JL1pGFs` (the board grid, `Ask Panel · Boards.dc.html`) were
+decoded by `scripts/read-canvas.mjs`. The grid imports the page and frames it
+as fourteen groups:
+- **AK1**, the Ask button's eight states, with their accessible names;
+- **AK2 to AK8**, the docked panel on Validate, Build, Raise, Grow, Network,
+  Research and Calendar, each with its suggested chips and proposal cards;
+- **AK9**, Studio, which keeps its own chat and has no Ask;
+- **AK10**, the Investor, Advisor and Operating Partner sections;
+- **AK11**, the admin consoles, where Ask stands alone;
+- **AK12**, the widths (1024 overlays the content only; 390 is a bottom sheet
+  at 92%);
+- **AK13**, the states (nothing to propose, running, an error, out of AI
+  tokens, AI paused, a support session with no Ask);
+- **AK14**, dark.
+
+**One edit, named.** The Axal VC mark (the export's
+`uploads/axal-logo-200x200.png`) points at `/axal-mark.png`. No other value was
+edited.
+
+**Grade: UPGRADE (D1443; the board-to-page map is D1444).** The panel and the
+connected Ask are built (`frontend/src/ui/AskPanel.jsx`, `frontend/src/ui/AskButton.jsx`'s `PageAsk`),
+mounted by `WorkerRail` for every licence. The pre-run quote and the
+"N waiting" count wait on the Worker part, D1442, and are off in
+`frontend/src/ui/askPanelAdapter.js`. Two files arrived and none left this folder.
 
 ## Landed 2026-11-01 — Profile zone headers (#3700)
 
@@ -1973,7 +2075,7 @@ design in two layouts with their own sidebar and type; they are not committed.
   Until they are answered, those parts of the screens print `Not recorded`
   with the reason.
 
-Each build PR adds or updates its `ROUTE_MAP.md` row (pipeline step 5). A
+Each build PR adds or updates its route-map row file (pipeline step 5; D4102). A
 canvas leaves this folder for `canvases/integrated/` once its route is live.
 
 ## Landed 2026-10-06 — the Ops canvas: five areas of screens for stored data (D566)

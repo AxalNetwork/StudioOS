@@ -217,7 +217,8 @@ test('the source: the editor opens Check from ⋯ › Check claims, PD2 draws th
   const editor = read('../src/pages/raise/pitch/PitchEditor.jsx');
   assert.doesNotMatch(editor, /\['check', 'Check'\]/, 'no Check tab');
   assert.match(editor, /\{sheet === 'check' && base\.deck\?\.id \? \(\s*<CheckSheet deck=\{base\.deck\}/);
-  assert.match(read('../src/pages/raise/pitch/DeckSheets.jsx'), /<CheckPanel key=\{deck\.id\} deck=\{deck\} projectId=\{projectId\} readOnly=\{readOnly\} dirty=\{dirty\} onReplaced=\{onReplaced\} \/>/);
+  // D1555 (#3802): the sheet also passes Go to card for the Consistency findings.
+  assert.match(read('../src/pages/raise/pitch/DeckSheets.jsx'), /<CheckPanel key=\{deck\.id\} deck=\{deck\} projectId=\{projectId\} readOnly=\{readOnly\} dirty=\{dirty\} onReplaced=\{onReplaced\} onGoToCard=\{onGoToCard\} \/>/);
   assert.match(read('../src/pages/raise/pitch/deckV2Model.js'), /\{ id: 'check', label: 'Check claims', note: 'Free checks' \}/);
   // D1604 (#3716, pd1): the pills are on the home's deck card, the Checks column in ⋯ › Versions…'s table.
   assert.match(read('../src/pages/raise/pitch/StudioHome.jsx'), /<CheckPills /);

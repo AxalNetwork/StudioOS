@@ -15,6 +15,7 @@
 import matrix from './railMatrix.json';
 import * as catalogue from './catalogue';
 import { chatCompatible, withModuleModels } from './moduleConnections';
+import { GRID_PAGE, gridOptionRows } from '../decks/elementModels';
 
 /** Curated cards carry roles; overflow choices deliberately do not. */
 export type RailChoice = { id: string; line: string };
@@ -57,10 +58,25 @@ export function railOptionsOn(page: string | null | undefined): readonly RailOpt
   return typeof page === 'string' ? OPTIONS_BY_PAGE.get(page.trim().toLowerCase()) ?? [] : [];
 }
 
+/**
+ * D1503 (#3754): one `grid:<element>` row per routed deck element, generated
+ * from the job tables (`elementModels.gridOptionRows`): at most three models,
+ * the rest under `more`, each row of a kind `RAIL_KINDS` already has. They are
+ * answered by `resolveRailOption` on the Pitch deck page, never listed by
+ * `railOptionsOn`, so the page's own option list is unchanged.
+ */
+let GRID_ROWS: readonly RailOptionRow[] | null = null;
+export function gridRailRows(): readonly RailOptionRow[] {
+  GRID_ROWS ??= Object.freeze(gridOptionRows());
+  return GRID_ROWS;
+}
+
 /** One option's row on a page, or null when the page registers no such option. */
 export function resolveRailOption(page: string | null | undefined, option: string | null | undefined): RailOptionRow | null {
   if (typeof option !== 'string') return null;
-  return railOptionsOn(page).find((o) => o.optionKey === option) ?? null;
+  const registered = railOptionsOn(page).find((o) => o.optionKey === option) ?? null;
+  if (registered || !option.startsWith('grid:') || typeof page !== 'string' || page.trim().toLowerCase() !== GRID_PAGE.toLowerCase()) return registered;
+  return gridRailRows().find((o) => o.optionKey === option) ?? null;
 }
 
 /** The preference section a page's picks and mode are stored under. */

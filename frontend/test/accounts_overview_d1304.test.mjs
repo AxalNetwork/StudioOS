@@ -22,6 +22,7 @@ import {
   attentionRows, attentionWord, initials, isEmptyStudio, kpiTiles, lpByProfileLine, lpProfilesWord, mixParts, newestRows,
   profileWidgets, readinessRows, sparkline, stateOf,
 } from '../src/pages/admin/accounts/overviewModel.js';
+import { readRouteMap } from '../../scripts/lib/routeMap.mjs';
 
 const h = React.createElement;
 const read = (p) => readFileSync(new URL(`../../${p}`, import.meta.url), 'utf8');
@@ -353,5 +354,5 @@ test('the source: dark classes (ACC8), the phone grid, the record address, no br
   assert.ok(!/(?<![.\w])(alert|confirm|prompt)\(|window\.open/.test(src));
   assert.ok(read('frontend/src/pages/admin/HeldAccounts.jsx').includes('<AccountsOverview />'));
   assert.match(read('documentation/architecture/decisions/D1304.md'), /UNVERIFIED/);
-  assert.ok(read('documentation/architecture/ROUTE_MAP.md').includes('D1304'));
+  assert.ok(readRouteMap().includes('D1304'));
 });

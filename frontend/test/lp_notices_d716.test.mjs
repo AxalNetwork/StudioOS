@@ -253,7 +253,7 @@ test('no run of 8 or more digits before the check, and only the routing numbers 
 });
 
 test('the client is wired, and nothing is stored in the browser', () => {
-  const api = read('frontend/src/lib/api.js');
+  const api = read('frontend/src/lib/apiModules.generated.js');
   assert.match(api, /export \* from '\.\/api\/fundLedger\.js';\nexport \* from '\.\/api\/fundNotices\.js';/);
   const client = read('frontend/src/lib/api/fundNotices.js');
   assert.ok(client.includes("request('/fund-notices/mine')"));

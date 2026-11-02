@@ -22,6 +22,9 @@ import { FIGURE_LABEL, FIGURE_UNIT, fmtFigure, parseStatedFigures, type FigureKe
 import { claimRecord, slideText, type ComputedClaim } from './raiseClaims';
 import type { RefreshRow } from './decks/sources';
 
+/** D1555 (#3802): the free consistency rules across the deck's cards, a pure function the automated run also calls. */
+export { deckConsistency, CONSISTENCY_RULES, type Consistency, type Finding } from './deckConsistency';
+
 export const DISPLAY_STATES = ['backed', 'founders_figure', 'mismatch', 'not_backed', 'stale'] as const;
 export type DisplayState = (typeof DISPLAY_STATES)[number];
 

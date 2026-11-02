@@ -26,7 +26,7 @@
  */
 import type { Env } from '../../types';
 import { snapshotHash, sourceAndGrade, type Grade, type Origin, type SourceLabel, type Unit } from './sources';
-import { CHART_TYPES } from './slideModel';
+import { CHART_TYPES, LIBRARY_CHART_TYPES } from './slideModel';
 import { posthogDeckLink, posthogWauWeekly } from '../posthog/deckFacts';
 
 export type Point = { x: string; y: number };
@@ -178,6 +178,8 @@ export const CHART_TYPE_WORDS: Record<(typeof CHART_TYPES)[number], { label: str
   comparison_table: { label: 'Comparison table', description: 'You against the alternatives' },
   waterfall: { label: 'Waterfall', description: 'How a figure moves' },
   nested_bars: { label: 'Nested bars', description: 'Total, serviceable, obtainable' },
+  market_circles: { label: 'Market circles', description: 'TAM, SAM and SOM, nested' },
+  projection: { label: 'Projection', description: 'A forecast, dashed past today' },
 };
 
 /** Why a type has nothing to draw from a dated series: the data it needs is not a series StudioOS keeps. */
@@ -202,7 +204,8 @@ export function chartFits(series: Series[]) {
   const byUnit = new Map<string, number>();
   for (const s of rec) byUnit.set(s.unit, (byUnit.get(s.unit) || 0) + 1);
   const sameUnit = Math.max(0, ...byUnit.values());
-  return CHART_TYPES.map((type) => {
+  // D1538: the library is the bound-series tiles; market circles and projections are drawn from typed figures.
+  return LIBRARY_CHART_TYPES.map((type) => {
     let fits = 0;
     let reason: string | null = NEEDS[type] ?? null;
     if (type === 'line' || type === 'columns' || type === 'waterfall') { fits = trend.length; reason = fits ? null : 'Needs a series with two or more points.'; }

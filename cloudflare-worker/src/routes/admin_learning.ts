@@ -33,6 +33,7 @@ import type { Env } from '../types';
 import { requireSuperAdmin } from '../auth';
 import { refuse } from '../util/refusal';
 import { logAdminAction } from '../services/adminAudit';
+import { COURSE_COVER, COURSE_UID, courseCoverPrefix, coverAsk, coverRunOptions, drawCover, quoteCover } from '../services/coverDraws';
 import { mapError, newUid } from './_t13t14t15_helpers';
 import {
   allowedVideoUrl, httpsUrl, parseResources, SLUG_RE,
@@ -325,6 +326,43 @@ r.patch('/courses/:uid', async (c) => {
     await record(c, admin, 'learning.course.update', { uid, fields: COURSE_COLUMNS.filter((k) => (f as any)[k] !== undefined) });
     return c.json({ course: await courseTree(c.env, uid) });
   });
+});
+
+// ── #3935 (D1478 task 1, LE8): a course's drawn cover ─────────────────────
+// The Super Admin describes a cover; one quote covers the draw and its checks.
+// The answer fills the course form's cover field, and the Super Admin's Save
+// (`PATCH /courses/:uid`) writes it. Nothing here writes the course.
+const COURSE_RAIL = { page: 'Super Admin · Content', option: null } as const;
+
+async function coverCourse(c: Context<{ Bindings: Env }>) {
+  const uid = String(c.req.param('uid') || '');
+  if (!COURSE_UID.test(uid)) return null;
+  const exists = await c.env.DB.prepare('SELECT uid FROM learning_courses WHERE uid = ?').bind(uid).first();
+  return exists ? uid : null;
+}
+
+r.post('/courses/:uid/cover/quote', async (c) => {
+  const admin = await gate(c); if (admin instanceof Response) return admin;
+  const uid = await coverCourse(c);
+  if (!uid) return refuse(c, 404, { code: 'not_found', message: 'No such course.' });
+  const ask = coverAsk(await c.req.json().catch(() => ({})));
+  if (!ask.ok) return refuse(c, ask.status, { code: ask.code, message: ask.message });
+  const q = await quoteCover(c.env, coverRunOptions(COURSE_COVER, Number(admin.id) || 0, ask.prompt, { ...COURSE_RAIL, record: `course:${uid}` }));
+  if (!q.ok) return refuse(c, q.status, { code: q.code, message: q.message });
+  return c.json(q);
+});
+
+r.post('/courses/:uid/cover/draw', async (c) => {
+  const admin = await gate(c); if (admin instanceof Response) return admin;
+  const uid = await coverCourse(c);
+  if (!uid) return refuse(c, 404, { code: 'not_found', message: 'No such course.' });
+  const ask = coverAsk(await c.req.json().catch(() => ({})));
+  if (!ask.ok) return refuse(c, ask.status, { code: ask.code, message: ask.message });
+  const opts = coverRunOptions(COURSE_COVER, Number(admin.id) || 0, ask.prompt, { ...COURSE_RAIL, record: `course:${uid}` });
+  const out = await drawCover(c.env, opts, courseCoverPrefix(uid));
+  if (!out.ok) return refuse(c, out.status, { code: out.code, message: out.message });
+  await record(c, admin, 'learning.course.cover_drawn', { uid, model: out.model });
+  return c.json({ ...out, key: undefined, url: new URL(`/api/learning/courses/${encodeURIComponent(uid)}/cover/${out.filename}`, c.req.url).toString() });
 });
 
 async function setCourseStatus(c: Context<{ Bindings: Env }>, action: 'publish' | 'unpublish' | 'archive') {

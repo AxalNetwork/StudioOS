@@ -315,7 +315,10 @@ export const REASON_HELP = 'The founder sees this reason, who gave it and when. 
 export const REASON_PLACEHOLDER = 'For example: quarterly portfolio review';
 export const REASON_MIN = 3;
 export const REASON_MAX = 200;
+// D1463 (#3713): the narrative's grant, in hours (`adminRead.ts`'s `+8 hours`). The gate's rule line reads it.
+export const REASON_HOURS = 8;
 export const READS_TITLE = 'Who read this narrative';
+export const READS_LINE = 'An admin gives a reason before reading. You see each read here.';
 export const NO_READS = 'No admin has opened this narrative.';
 export const NOTES_TITLE = 'Notes';
 export const NOTES_META = 'Visible to the founder';

@@ -242,7 +242,7 @@ test('Notes: empty says so; your own note has Edit and Delete, a colleague\'s do
   let v = await mounted('/deals/4/notes', INVESTOR);
   try {
     assert.match(v.textOf('deal-notes-empty'), new RegExp(EMPTY.notes.title));
-    assert.match(v.textOf('deal-eadwyn-draft'), /through Ask as a proposal[\s\S]*nothing lands until you save it/);
+    assert.match(v.textOf('deal-eadwyn-draft'), /Ask on New note drafts a note[\s\S]*Nothing lands until you save it as your note/); // #4046: Ask is on the form now
   } finally { await v.close(); }
   const notes = { items: [{ uid: 'n1', author_user_id: 21, tag: 'Thesis', body: 'Mine', created_at: '2026-10-18T09:00:00Z' }, { uid: 'n2', author_user_id: 99, tag: null, body: 'Theirs', created_at: '2026-10-14T09:00:00Z' }], total: 2 };
   v = await mounted('/deals/4/notes', INVESTOR, handlerWith({

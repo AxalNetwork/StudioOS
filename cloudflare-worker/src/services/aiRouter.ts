@@ -35,12 +35,16 @@ import { spendLimitMessage } from './aiSpendLimit';
 import { audioInputFor, parseAudioOutput, type SttTranscript } from './sttFormats';
 import * as shapes from './ai/shapes';
 import * as catalogue from './ai/catalogue';
+import { termsCleared } from './ai/modelTerms';
+import { isUnavailable, markUnavailable, meansUnavailable } from './ai/availability';
+import { catalogueSwitchesFor, modelsOffFor } from './featureFlags';
 import { costMicro, unitPrice } from './ai/pricing';
 import * as guard from './ai/guard';
 import { resolveRail, resolveRailChain, resolveRailOption, rowOffers } from './ai/railMatrix';
 import { MODEL_CONNECTIONS, MODULE_ROUTES, type ModuleTask } from './ai/moduleConnections';
 import { specialistRefusal, specialistRequest, specialistOutput, pcmBytes, pcmMinutes, type SpecialistInput } from './ai/moduleShapes';
 import { drawChoice, memberPlanTier, type DrawSkip, type DrawSource, type PlanTier } from './ai/drawJobs';
+import { speechChoice, type SpeechSkip, type SpeechSource } from './ai/speechJobs';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -103,10 +107,14 @@ export type TaskClass =
   // D1409 (#3695): an article's images, on the same model as the deck's, so
   // usage logs name articles and not decks.
   | 'article_image'
+  | 'event_cover'
+  | 'course_cover'
   // D1341 (#3549): Eadwyn's email draft from the member's ticked records.
   | 'mail_draft'
   // D1420 (#3864): Eadwyn's layout proposals for /studio (`studio:layout`).
   | 'studio_layout'
+  // D1583 (#3830): a memo written from a deck's own words, around its figures' placeholders.
+  | 'memo_write'
   // D764 (#2089) — the rail's fourteen kinds of work, one task each. The
   // page's row in `ai/railMatrix.json` names the models a member may pick;
   // the entries below are each kind's default and its alternates.
@@ -149,6 +157,8 @@ export type RefusalReason =
   // D760: a model the catalogue cannot price. Refused before it runs, because
   // a run billed at zero trips no cap.
   | 'model_unpriced'
+  // D1504 (#3755): a model whose terms are neither grandfathered nor reviewed (`ai/modelTerms.ts`).
+  | 'model_terms_unreviewed'
   | 'all_models_failed'
   // D763: the guard could not be reached, threw, or answered something it is
   // not allowed to answer. Nothing runs (or, on the output side, nothing the
@@ -170,7 +180,12 @@ export type RefusalReason =
   | 'ai_paused'
   // #3935 (A (c)): the member named, or had stored, a model their plan does not
   // run. Refused with the plan's label, before any hold; never swapped silently.
-  | 'plan_locked';
+  | 'plan_locked'
+  // #3846 (#3742 E2, D1529 §E2): a run whose `idempotencyKey` already took a
+  // hold. The model is not called again, no usage row is written and nothing
+  // more is charged; `replayedStatus` is that hold's status. The caller decides
+  // what the earlier attempt left (`agentRun`: its proposal, or `step_lost`).
+  | 'step_replayed';
 
 /**
  * D765 (#2090) — where a member's run was asked from: the rail's page (D768's
@@ -227,6 +242,11 @@ export interface RunOptions {
   // primary: reporting success under a model the caller did not ask for is
   // the class of lie this router exists to avoid.
   model?: string;
+  // D1549 (#3796): `model` and nothing else. The run is refused when the
+  // router would choose another primary, and a failure falls back to no
+  // sibling. A deck element HQ locked runs pinned, so a model HQ locked out
+  // is never run, not even as a fallback.
+  pinned?: boolean;
   // The app path the run was asked from (`/validate/customer-research`), written to
   // `ai_usage_logs.surface` (migration 319, D404) so a page can show its own
   // spend. Optional, and absent for every internal caller: NULL is "not
@@ -259,6 +279,10 @@ export interface RunOptions {
   // its Default or fallback by the legal hold, the partner switch and the
   // member's plan lock. A draw run without one keeps its route's model.
   drawJob?: string;
+  // #3936 (D1478 task 2): the use-case job a speech run serves (`ai/speechJobs.ts`):
+  // a Listen (file) or Speak run takes its Default, its fallback, or for Speak
+  // MeloTTS, by the partner switch and the plan lock. Without one the route's model runs.
+  speechJob?: string;
   // D765 (#2090): the rail context of a MEMBER's run. `run()` copies it into
   // `railPage`, `railOption` and `recordRef`, and refuses `assist_off` when the
   // member turned AI assistance off on that page. Every member call passes it
@@ -286,6 +310,20 @@ export interface RunOptions {
   // is still the sponsor's (`userId`), paid from their tokens.
   agentId?: number;
   agentRole?: string;
+  // #3846 (#3742 E2): a retried step's identity. `idempotencyKey` goes to
+  // `reserveAiBudget`, so the same key takes one hold however often it is sent
+  // (D844), and a replayed hold runs nothing (`step_replayed`). `executionId`
+  // is written on the hold (migration 632's `execution_id`). Only
+  // `services/agents/agentRun.ts` sets them; every other caller leaves both
+  // out and behaves as before.
+  idempotencyKey?: string;
+  executionId?: string;
+  // D1540 (#3791): a pinned quote. The most this run may charge the member, in
+  // micro-USD, from a quote the Worker stored before the run (New deck's
+  // `deck_run_quotes`). The hold is no larger, and the settlement is capped at
+  // it, so a price that changed after the quote never charges more than it
+  // said. Never from a request body: the route reads it from its own row.
+  pinMicrousd?: number;
 }
 
 /**
@@ -431,6 +469,8 @@ export interface RunResult {
   // it produced can name its run. Set on an answered run; null when the row
   // could not be written; absent on a refusal and on a stream, which records later.
   usageLogId?: number | null;
+  // #3846: on `step_replayed`, the status of the hold the key already took.
+  replayedStatus?: string;
 }
 
 /**
@@ -762,6 +802,15 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
     fallbackChain: [SMALL_LLAMA],
     alternates: [MID_LLAMA, SMALL_LLAMA, '@cf/meta/llama-3.2-3b-instruct'],
   },
+  // D1583 (#3830, deck v2 F4): the memo from a deck. Its option kind `memo` reads the IC
+  // memo job (IN1, `ai/modelUseCases.ts` RAIL_KIND_JOBS): gpt-oss-120b by default, DeepSeek V4
+  // Pro and Nemotron 3 120B the member's other picks in the AIRail (`derive:memo`). No cache: the version is read at the press.
+  memo_write: {
+    provider: 'workers-ai',
+    model: '@cf/openai/gpt-oss-120b',
+    fallbackChain: ['@cf/nvidia/nemotron-3-120b-a12b'],
+    alternates: ['@cf/openai/gpt-oss-120b', '@cf/deepseek-ai/deepseek-v4-pro-0813', '@cf/nvidia/nemotron-3-120b-a12b'],
+  },
   // D1420 (#3864): Eadwyn proposes a Studio layout as add, remove, resize and
   // move ops. Its own class, so the pricing read and Usage name it apart; a mid
   // model with the same priced alternates. No cache: the layout is read at the press.
@@ -937,6 +986,9 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   deck_image:   { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-1-schnell', alternates: DRAW_MODELS },
   // D1409 (#3695): an article's images, on the same model as the deck's.
   article_image: { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-1-schnell' },
+  // #3935: the event cover (EV2) and the course cover (LE8); the job picks the model (`drawChoice`).
+  event_cover:  { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-1-schnell', alternates: RAIL_DRAW_MODELS },
+  course_cover: { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-1-schnell', alternates: RAIL_DRAW_MODELS },
   // D1478 §3937 fix 5 (MI1): a snippet paraphrase is a short rewrite, so the 8B fp8 answers it and the 70B is its fallback.
   paraphrase:   { provider: 'workers-ai', model: SMALL_LLAMA, fallbackChain: [MID_LLAMA] },
   // D765: `ai-workers/` jobs, which called the deprecated 8B directly, unlogged.
@@ -1161,11 +1213,18 @@ export function estimateCostUsd(
  * but neither of this file's price views holds is unpriced here too, because
  * its receipt would have nothing to be computed from.
  */
-export function modelRefusal(env: Env, model: string): 'model_unpriced' | 'model_not_offered' | null {
+export function modelRefusal(env: Env, model: string, cleared: (id: string) => boolean = termsCleared): 'model_unpriced' | 'model_not_offered' | 'model_terms_unreviewed' | null {
   const refusal = catalogue.refusalFor(model, env);
   if (refusal) return refusal;
-  return model in PRICE_USD_PER_1M_TOKENS || model in PRICE_USD_PER_AUDIO_MINUTE || model in PRICE_USD_PER_1K_CHARACTERS || IMAGE_PRICED_MODELS.has(model) || model === '@cf/microsoft/resnet-50' ? null : 'model_unpriced';
+  const priced = model in PRICE_USD_PER_1M_TOKENS || model in PRICE_USD_PER_AUDIO_MINUTE || model in PRICE_USD_PER_1K_CHARACTERS || IMAGE_PRICED_MODELS.has(model) || model === '@cf/microsoft/resnet-50';
+  if (!priced) return 'model_unpriced';
+  // D1504 (#3755): a model main did not run before the terms register, and whose terms no one has reviewed, does not run.
+  return cleared(model) ? null : 'model_terms_unreviewed';
 }
+
+/** A refused model in a sentence (never a provider's raw text). */
+export const modelRefusalWords = (model: string, refusal: 'model_unpriced' | 'model_not_offered' | 'model_terms_unreviewed'): string =>
+  `${model} ${refusal === 'model_unpriced' ? 'has no price' : refusal === 'model_terms_unreviewed' ? 'is waiting on a review of its terms' : 'is not offered'}`;
 
 // Crude token estimator — ≈ 4 chars/token for English. Good enough for
 // budget accounting; real prompt/completion counts come back from the
@@ -1357,13 +1416,13 @@ interface ProviderResult {
 }
 
 /** The slice of workers-types' `GatewayOptions` this router sends (D261). */
-type GatewayOption = { gateway: { id: string; metadata: Record<string, string> } };
+type GatewayOption = { gateway: { id: string; metadata: Record<string, string>; skipCache?: boolean; collectLog?: boolean } };
 
 interface WorkersAIBinding {
   run(
     model: string,
     payload: unknown,
-    options?: { gateway?: { id: string; skipCache?: boolean; cacheTtl?: number; metadata?: Record<string, string> }; extraHeaders?: Record<string, string> },
+    options?: { gateway?: { id: string; skipCache?: boolean; cacheTtl?: number; collectLog?: boolean; metadata?: Record<string, string> }; extraHeaders?: Record<string, string> },
   ): Promise<unknown>;
 }
 
@@ -1413,6 +1472,41 @@ function gatewayOptionFor(env: Env, task: TaskClass, userId?: number | null): Ga
   return { gateway: { id: slug, metadata } };
 }
 
+/**
+ * D1504 (#3755, deck v2 A11) — the deck's AI Gateway, inert until the owner
+ * creates it (owner question L): `CF_AI_GATEWAY_SLUG_DECK` is empty in every
+ * `wrangler.toml` table, so no deck run is gatewayed until it is set.
+ *
+ * A deck run is `deck_image`, or a run on a `deck:` rail option (an element's
+ * words). Once set, its call carries the gateway with:
+ *   - `skipCache: true` — a variant is never served from cache, so Regenerate
+ *     and the 2–3 variants really differ;
+ *   - `collectLog: false` — no prompt or answer is kept in the gateway's logs;
+ *   - no retry: a deck run is never re-sent un-gatewayed (the advisor's
+ *     Task #50 bypass is not applied), so a failure goes down the run's own
+ *     chain once;
+ *   - metadata, at most five entries: branch, account, task, rail option.
+ */
+export function deckGatewaySlug(env: Env): string | null {
+  const slug = env.CF_AI_GATEWAY_SLUG_DECK;
+  return slug && slug.trim() ? slug.trim() : null;
+}
+export const isDeckRun = (opts: Pick<RunOptions, 'task' | 'rail'>): boolean =>
+  opts.task === 'deck_image' || (typeof opts.rail?.option === 'string' && opts.rail.option.startsWith('deck:'));
+export const DECK_GATEWAY_METADATA_KEYS = ['branch', 'account', 'task', 'option'] as const;
+
+export function deckGatewayOptionFor(env: Env, opts: Pick<RunOptions, 'task' | 'rail' | 'userId'>): GatewayOption | undefined {
+  if (!isDeckRun(opts)) return undefined;
+  const slug = deckGatewaySlug(env);
+  if (!slug) return undefined;
+  const branch = branchOf(env) ?? 'hq';
+  const metadata: Record<string, string> = { branch };
+  if (typeof opts.userId === 'number' && Number.isInteger(opts.userId) && opts.userId > 0) metadata.account = `${branch}:${opts.userId}`;
+  metadata.task = opts.task;
+  if (typeof opts.rail?.option === 'string') metadata.option = opts.rail.option.slice(0, 64);
+  return { gateway: { id: slug, metadata, skipCache: true, collectLog: false } };
+}
+
 // True when this task would normally route through the advisor AI Gateway
 // AND a slug is configured — i.e. there's a gateway hop that could fail
 // independently of the underlying Workers AI model.
@@ -1431,7 +1525,7 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
   if (!ai || typeof ai.run !== 'function') {
     return { ok: false, status: 0, error: 'AI binding not configured' };
   }
-  const gatewayOpt = bypassGateway ? undefined : gatewayOptionFor(env, opts.task, opts.userId);
+  const gatewayOpt = bypassGateway ? undefined : (gatewayOptionFor(env, opts.task, opts.userId) ?? deckGatewayOptionFor(env, opts));
   // D761: cache affinity, so a member's next turn on the same page earns cached
   // input. The member's id and the page key only, never an email or a name.
   const affinity = shapes.sessionAffinity(opts.userId, normaliseSurface(opts.surface) ?? opts.task);
@@ -1790,7 +1884,7 @@ export function budgetRefusalMessage(refusal: string, detail?: { limit_microusd?
 
 /** The models one run may reach, or why it may reach none. `record`: the refusal writes a usage row. */
 type ModelChoice =
-  | { ok: true; primary: string; chain: string[]; draw?: DrawReceipt }
+  | { ok: true; primary: string; chain: string[]; draw?: DrawReceipt; speech?: SpeechReceipt }
   | { ok: false; refusal: RefusalReason; error: string; record: boolean };
 
 /**
@@ -1801,8 +1895,21 @@ type ModelChoice =
  */
 /** #3935: how a draw job's model was chosen, for the receipt: the Default, the fallback (and why the Default did not run), or the member's choice. */
 export interface DrawReceipt { job: string; source: DrawSource; skipped: null | { model: string; reason: DrawSkip } }
+/** #3936: how a speech job's model was chosen, for the receipt, as a draw job's is. */
+export interface SpeechReceipt { job: string; source: SpeechSource; skipped: null | { model: string; reason: SpeechSkip } }
+
+/** D1549: a pinned run's choice is its caller's model alone, with no fallback chain, or a refusal. */
+function pinnedChoice(choice: ModelChoice, opts: RunOptions): ModelChoice {
+  if (!opts.pinned || !choice.ok) return choice;
+  if (!opts.model || choice.primary !== opts.model) {
+    return { ok: false, refusal: 'model_not_offered', error: `${opts.model ?? 'No model'} is the only model this run may use, and it cannot run ${opts.task}`, record: true };
+  }
+  return { ...choice, chain: [] };
+}
 
 async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Promise<ModelChoice> {
+  // D1509 (#3760): the models HQ switched off for this member are not offered, here as in every reply.
+  const switches = catalogueSwitchesFor(env as catalogue.CatalogueSwitches, { modelsOff: await modelsOffFor(env, opts.userId) });
   // ---- #3935 (D1478 task 1): a draw job's model ------------------------------
   if (opts.draw && opts.drawJob) {
     let pick: string | null = null;
@@ -1812,10 +1919,27 @@ async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Prom
       if (optionRow && !opts.model) pick = (await railPicks(env, opts.userId, optionRow.pageKey, optionRow.optionKey)).option;
       tier = await memberPlanTier(env, opts.userId);
     } catch { return { ok: false, refusal: 'misconfigured', error: 'Unreadable: your plan or your model picks could not be read. Nothing was run.', record: false }; }
-    const c = drawChoice(opts.drawJob, { switches: env as catalogue.CatalogueSwitches, tier, caller: opts.model ?? null, pick });
+    const c = drawChoice(opts.drawJob, { switches, tier, caller: opts.model ?? null, pick });
     if (!c.ok) return { ok: false, refusal: c.code === 'plan_locked' ? 'plan_locked' : 'model_not_offered', error: c.message, record: c.code !== 'press_hidden' };
     // An image is never redrawn on another model: no chain.
     return { ok: true, primary: c.model, chain: [], draw: { job: c.job, source: c.source, skipped: c.skipped } };
+  }
+
+  // ---- #3936 (D1478 task 2): a speech job's model ---------------------------
+  // A voice, or a file transcription, that names its job. A live stream keeps
+  // its own path (`liveTranscription.ts`); turn-taking runs as a specialist.
+  if (opts.speechJob && (opts.speak || (route.isAudio && !opts.specialist))) {
+    let pick: string | null = null;
+    const optionRow = opts.rail?.option ? resolveRailOption(opts.rail.page, opts.rail.option) : null;
+    let tier: PlanTier;
+    try {
+      if (optionRow && !opts.model) pick = (await railPicks(env, opts.userId, optionRow.pageKey, optionRow.optionKey)).option;
+      tier = await memberPlanTier(env, opts.userId);
+    } catch { return { ok: false, refusal: 'misconfigured', error: 'Unreadable: your plan or your model picks could not be read. Nothing was run.', record: false }; }
+    const c = speechChoice(opts.speechJob, { switches, tier, caller: opts.model ?? null, pick });
+    if (!c.ok) return { ok: false, refusal: c.code === 'plan_locked' ? 'plan_locked' : 'model_not_offered', error: c.message, record: c.code !== 'press_hidden' };
+    // One voice, one transcription: never re-run on another model mid-press.
+    return { ok: true, primary: c.model, chain: [], speech: { job: c.job, source: c.source, skipped: c.skipped } };
   }
 
   // ---- D764 PR 3: a rail run's models come from its page's row ------------
@@ -1835,7 +1959,7 @@ async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Prom
     let picks: { page: string | null; option: string | null };
     try { picks = await railPicks(env, opts.userId, railRow.pageKey, opts.rail.option ?? null); }
     catch { return { ok: false, refusal: 'misconfigured', error: 'Unreadable: your model picks for this page could not be read. Nothing was run.', record: false }; }
-    const resolved = resolveRailChain(railRow, { vision: (opts.images?.length ?? 0) > 0 }, env as catalogue.CatalogueSwitches, {
+    const resolved = resolveRailChain(railRow, { vision: (opts.images?.length ?? 0) > 0 }, switches, {
       caller: opts.model ?? null, option: picks.option, page: picks.page,
     });
     if (resolved && !resolved.ok) return { ok: false, refusal: 'model_not_offered', error: `${resolved.model} cannot do this page's work`, record: true };
@@ -1855,7 +1979,7 @@ async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Prom
       const takes = (id: string | null | undefined): id is string => {
         if (!id || !rowOffers(row, id) || !route.alternates!.includes(id)) return false;
         const m = catalogue.modelById(id);
-        return !!m && catalogue.isOffered(m, env as catalogue.CatalogueSwitches);
+        return !!m && catalogue.isOffered(m, switches);
       };
       // The route's own chain when its default runs, so a run with no pick behaves as before.
       const chainAfter = (primary: string) => (opts.draw ? []
@@ -1876,7 +2000,15 @@ async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Prom
   if (!railed && opts.model && !offered.includes(opts.model)) {
     return { ok: false, refusal: 'model_not_offered', error: `${opts.model} is not offered for ${opts.task}`, record: true };
   }
-  return railed ? { ok: true, ...railed } : { ok: true, primary: opts.model || route.model, chain: route.fallbackChain ?? [] };
+  if (railed) return { ok: true, ...railed };
+  // D1509: a switched-off model never runs: the caller's is refused, the route's default gives way to its chain.
+  if (opts.model && catalogue.switchedOff(opts.model, switches)) {
+    return { ok: false, refusal: 'model_not_offered', error: `${opts.model} is switched off`, record: true };
+  }
+  const chain = (route.fallbackChain ?? []).filter((id) => !catalogue.switchedOff(id, switches));
+  if (opts.model || !catalogue.switchedOff(route.model, switches)) return { ok: true, primary: opts.model || route.model, chain };
+  if (!chain.length) return { ok: false, refusal: 'model_not_offered', error: `Every model for ${opts.task} is switched off`, record: true };
+  return { ok: true, primary: chain[0], chain: chain.slice(1) };
 }
 
 /**
@@ -1918,7 +2050,7 @@ function holdQuoteMicro(opts: RunOptions, route: RouteEntry, models: string[], g
 }
 
 export type RunQuote =
-  | { ok: true; hold_microusd: number; model: string; draw?: DrawReceipt }
+  | { ok: true; hold_microusd: number; model: string; draw?: DrawReceipt; speech?: SpeechReceipt }
   | { ok: false; refusal: RefusalReason; error: string };
 
 /**
@@ -1941,14 +2073,14 @@ export async function quoteRun(env: Env, input: RunOptions): Promise<RunQuote> {
     try { if (await assistOff(env, opts.userId, opts.rail.page)) return { ok: false, refusal: 'assist_off', error: ASSIST_OFF_MESSAGE }; }
     catch { return { ok: false, refusal: 'misconfigured', error: 'Unreadable: whether AI assistance is on for this page could not be checked.' }; }
   }
-  const choice = await chooseModels(env, opts, route);
+  const choice = pinnedChoice(await chooseModels(env, opts, route), opts);
   if (!choice.ok) return { ok: false, refusal: choice.refusal, error: choice.error };
   const models = [choice.primary, ...choice.chain];
   for (const model of models) {
     const refusal = modelRefusal(env, model);
-    if (refusal) return { ok: false, refusal, error: `${model} ${refusal === 'model_unpriced' ? 'has no price' : 'is not offered'}` };
+    if (refusal) return { ok: false, refusal, error: modelRefusalWords(model, refusal) };
   }
-  const draw = choice.draw ? { draw: choice.draw } : {};
+  const draw = { ...(choice.draw ? { draw: choice.draw } : {}), ...(choice.speech ? { speech: choice.speech } : {}) };
   if (opts.userId <= 0) return { ok: true, hold_microusd: 0, model: choice.primary, ...draw };
   try {
     const multiplier = await aiBudget.memberChargeMultiplier(env, opts.userId);
@@ -2017,7 +2149,7 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
   }
 
   // ---- D764 PR 3: a rail run's models come from its page's row (`chooseModels`).
-  const choice = await chooseModels(env, opts, route);
+  const choice = pinnedChoice(await chooseModels(env, opts, route), opts);
   if (!choice.ok) {
     const usage: UsageMeta = {
       task: opts.task, model: route.model, latency_ms: 0,
@@ -2056,7 +2188,7 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
       fallback_used: false, cached: false, safety_score: null,
     };
     await recordUsage(env, opts, usage, refusal);
-    return { ok: false, refusal, error: `${model} ${refusal === 'model_unpriced' ? 'has no price' : 'is not offered'}`, usage };
+    return { ok: false, refusal, error: modelRefusalWords(model, refusal), usage };
   }
 
   const store = kv(env);
@@ -2150,6 +2282,9 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
   }
 
   let reservation: {uid:string;userId:number} | undefined;
+  // D1540 (#3791): a pinned quote caps the hold and every settlement of it.
+  const pin = Number.isSafeInteger(opts.pinMicrousd) && opts.pinMicrousd! >= 0 ? opts.pinMicrousd! : null;
+  const pinned = (micro: number) => (pin == null ? micro : Math.min(micro, pin));
   // D762: what this run is settled at over its cost, from the member's licence.
   // Cost (est_cost_usd, the KV buckets, the organisation cap) stays cost.
   let multiplier = 1;
@@ -2157,12 +2292,18 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
     try {
       multiplier = await aiBudget.memberChargeMultiplier(env, opts.userId);
       // D1278: the hold names the run's task, never its prompt.
-      const held = await aiBudget.reserveAiBudget(env, opts.userId, holdQuoteMicro(opts, route, [primaryModel, ...fallbacks], guardOn, guardInput, multiplier),
-        new Date(), { context: { operation: holdOperation(opts), surface: 'ai' } });
+      // D1540: a pinned quote holds no more than it said.
+      const held = await aiBudget.reserveAiBudget(env, opts.userId, pinned(holdQuoteMicro(opts, route, [primaryModel, ...fallbacks], guardOn, guardInput, multiplier)),
+        new Date(), { idempotencyKey: opts.idempotencyKey ?? null, context: { operation: holdOperation(opts), surface: 'ai', executionId: opts.executionId ?? null } });
       if (!held.ok) {
         const usage:UsageMeta={task:opts.task,model:primaryModel,latency_ms:0,prompt_tokens:0,completion_tokens:0,est_cost_usd:0,fallback_used:false,cached:false,safety_score:null};
         await recordUsage(env, opts, usage, held.refusal);
         return {ok:false,refusal:held.refusal,error:budgetRefusalMessage(held.refusal,held.refusal==='spend_limit'?held:null),usage};
+      }
+      // #3846: this key's hold was taken before. Run nothing, write no row, charge nothing more.
+      if ('replayed' in held && held.replayed) {
+        const usage:UsageMeta={task:opts.task,model:primaryModel,latency_ms:0,prompt_tokens:0,completion_tokens:0,est_cost_usd:0,fallback_used:false,cached:false,safety_score:null};
+        return {ok:false,refusal:'step_replayed',error:'This step already ran. Nothing was run again.',usage,replayedStatus:held.status};
       }
       reservation = held.reservation;
     } catch {
@@ -2190,6 +2331,8 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
    * False when the settlement could not be written.
    */
   const settleHold = async (micro: number, usd: number, answered: boolean): Promise<boolean> => {
+    // D1540: never more than the pinned quote, whatever the run cost at today's prices.
+    micro = pinned(micro);
     if (reservation) {
       try { await aiBudget.settleAiReservation(env, reservation, micro, !answered && micro === 0); }
       catch { return false; }
@@ -2309,7 +2452,13 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
     if (!route.isAudio && !shapes.fitsContext(facts, inputTokens, shapes.maxTokensFor(facts, opts.maxTokens, route.reasoningMaxTokens))) {
       return record(model, { ok: false, status: 413, error: `input does not fit ${model}'s context window` }, false);
     }
-    return record(model, await callWaiCalled(model));
+    // D1504 (#3755): a model Workers AI said it does not have, within the hour, is skipped without a call.
+    if (await isUnavailable(env, model)) {
+      return record(model, { ok: false, status: 503, code: null, error: `${model} is unavailable for now` }, false);
+    }
+    const called = await callWaiCalled(model);
+    if (meansUnavailable(called)) await markUnavailable(env, model, called.code ?? null);
+    return record(model, called);
   };
   const callWaiCalled = async (model: string): Promise<ProviderResult> => {
     const first = await callWaiRaw(model, false);
@@ -2385,7 +2534,9 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
    * written.
    */
   const settle = async (u: UsageMeta, ok: boolean): Promise<RunCharge | null> => {
-    const charged = ok ? aiBudget.billedUsdToMicro(u.est_cost_usd, multiplier) : 0;
+    // D1540: the run's own row records its share of a pinned quote, after the guard's.
+    const billed = ok ? aiBudget.billedUsdToMicro(u.est_cost_usd, multiplier) : 0;
+    const charged = pin == null ? billed : Math.min(billed, Math.max(0, pin - guardMicro()));
     if (!await settleHold(charged + guardMicro(), (ok ? u.est_cost_usd : 0) + guardUsd(), ok)) return null;
     // A run with no hold (a system run) charged nobody.
     return { charged: reservation ? charged : 0, reservationUid: reservation?.uid ?? null, units: unitsFor(u) };
