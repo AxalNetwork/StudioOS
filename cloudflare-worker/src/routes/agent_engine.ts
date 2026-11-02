@@ -11,6 +11,15 @@
  *   PATCH  /tasks/:uid                         manage; a person assignee may change status only
  *   PUT    /tasks/:uid/deps                    manage
  *
+ * D1530 (#3848, E4) — the planner, the role templates and the wizard:
+ *   GET    /goals/:uid/plan/quote              manage: what a plan would hold (the CEO agent's sponsor, else the caller)
+ *   POST   /goals/:uid/plan                    manage: a plan, one proposal (`services/agents/planner.ts`)
+ *   POST   /goals/:uid/plan/accept             manage: { proposal, remove?, titles? } → every task in one batch
+ *   GET    /:scope/:id/suggested-team?goal=    manage: the wizard (rule-based, no model, nothing written)
+ *   GET    /templates                          signed in: the role templates
+ *   GET    /capabilities                       signed in: modules, reads, options, floor
+ * Custom roles (`/:scope/:id/roles/custom`) wait for migration 728 (#3847).
+ *
  * `:scope` is `company` (by uid) or `project` (by numeric id). The gates are
  * D1496's (`services/agents/teams.ts`), so the company branch #3697 part 2
  * adds to `isProjectManager` reaches them unchanged.
@@ -29,6 +38,11 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
 import { mapError } from './_t13t14t15_helpers';
+import { quoteRun, type TaskClass } from '../services/aiRouter';
+import { ALWAYS_ASKS_FLOOR, MODULES, READ_KEYS, optionsIn } from '../services/agents/catalogue';
+import { moduleSurface } from '../services/agents/agentRun';
+import { acceptPlan, draftPlan, planQuote } from '../services/agents/planner';
+import { TEMPLATES, monthEstimate, suggestRoles, templateOf, type DutyQuote } from '../services/agents/templates';
 import { canManage, canRead, loadScope, scopeOfAgent, type Scope } from '../services/agents/teams';
 import { goalByUid, goalDto, goalWrite, goalsOf, insertGoal, updateGoal, type Refusal } from '../services/agents/goals';
 import {
@@ -247,6 +261,127 @@ router.put('/tasks/:uid/deps', async (c) => {
     const r = await setDeps(c.env, got.t, b?.depends_on, user.id);
     if (!r.ok) return say(c, r.refusal);
     return c.json({ task: await oneTask(c.env, (await taskByUid(c.env, got.t.uid))!) });
+  } catch (e) { return mapError(c, e); }
+});
+
+// ── D1530: the planner ──────────────────────────────────────────────────────
+
+/** A goal the caller may manage, with its scope; else the refusal. */
+async function managedGoal(c: C, user: User) {
+  const g = await goalByUid(c.env, c.req.param('uid') ?? '');
+  const s = g && await scopeOfRow(c.env, g);
+  if (!g || !s || !(await canRead(c.env, s, user))) return { refusal: refuse(c, 404, { code: 'not_found', message: 'There is no such goal.' }) };
+  if (!(await canManage(c.env, s, user))) return { refusal: notManager(c) };
+  return { g, s };
+}
+
+router.get('/goals/:uid/plan/quote', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const m = await managedGoal(c, user);
+    if ('refusal' in m) return m.refusal;
+    const q = await planQuote(c.env, m.s!, m.g!, user);
+    if (!q.ok) return refuse(c, q.status as any, { code: q.code, message: q.message, ...(q.extra ? { extra: q.extra } : {}) });
+    return c.json({ quote: q.quote, by: q.by });
+  } catch (e) { return mapError(c, e); }
+});
+
+router.post('/goals/:uid/plan', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const m = await managedGoal(c, user);
+    if ('refusal' in m) return m.refusal;
+    const r = await draftPlan(c.env, m.s!, m.g!, user);
+    if (!r.ok) return refuse(c, r.status as any, { code: r.code, message: r.message, ...(r.extra ? { extra: r.extra } : {}) });
+    return c.json({ proposal: r.proposal }, 201);
+  } catch (e) { return mapError(c, e); }
+});
+
+router.post('/goals/:uid/plan/accept', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const m = await managedGoal(c, user);
+    if ('refusal' in m) return m.refusal;
+    const b = await readBody(c);
+    if (!b) return say(c, { status: 400, code: 'invalid_plan', message: 'Name the plan to accept.' });
+    const r = await acceptPlan(c.env, m.s!, m.g!, b.proposal, { remove: b.remove, titles: b.titles }, user);
+    if (!r.ok) return refuse(c, r.status as any, { code: r.code, message: r.message });
+    const tasks = [];
+    for (const uid of r.tasks) tasks.push((await taskByUid(c.env, uid))!);
+    return c.json({ tasks: await tasksDto(c.env, tasks) }, 201);
+  } catch (e) { return mapError(c, e); }
+});
+
+// ── D1530: templates, capabilities, the wizard ──────────────────────────────
+
+router.get('/templates', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    await requireAuth(c);
+    return c.json({ templates: TEMPLATES.map((t) => ({ key: t.key, role_key: t.role_key, name: t.name, model_tier: t.model_tier, suggested_cap_microusd: t.suggested_cap_microusd, duties: t.duties.map((d) => d.key) })) });
+  } catch (e) { return mapError(c, e); }
+});
+
+router.get('/capabilities', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    await requireAuth(c);
+    return c.json({
+      modules: MODULES.map((m) => ({ key: m.key, label: m.label, cycle: m.cycle })),
+      reads: [...READ_KEYS],
+      options: Object.fromEntries(MODULES.map((m) => [m.key, optionsIn(m.key)])),
+      floor: [...ALWAYS_ASKS_FLOOR],
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/** One duty run's hold for this member, or null when it cannot be read (never 0). */
+export const dutyQuoteFor = (env: Env, user: User): DutyQuote => async (d, row) => {
+  const m = MODULES.find((x) => x.key === d.module)!;
+  const q = await quoteRun(env, {
+    task: row.routeTask as TaskClass, userId: Number(user.id), role: user.role ?? null, messages: [{ role: 'user', content: ' ' }],
+    rail: { page: row.pageKey, option: row.optionKey, record: null }, surface: moduleSurface(m),
+  });
+  return q.ok ? q.hold_microusd : null;
+};
+
+router.get('/:scope/:id/suggested-team', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
+    if (!s) return noScope(c);
+    if (!(await canRead(c.env, s, user)) || !(await canManage(c.env, s, user))) return notManager(c);
+    let stage: string | null = null;
+    const goalUid = c.req.query('goal');
+    if (goalUid) {
+      const g = await goalByUid(c.env, goalUid);
+      if (!g || g.scope_kind !== s.kind || g.company_id !== (s.kind === 'company' ? s.id : null) || g.project_id !== (s.kind === 'project' ? s.id : null)) {
+        return refuse(c, 404, { code: 'not_found', message: 'There is no such goal on this team.' });
+      }
+      stage = g.stage;
+    }
+    if (!stage && s.kind === 'project') {
+      stage = (await c.env.DB.prepare('SELECT lifecycle_stage FROM projects WHERE id = ?').bind(s.id).first<{ lifecycle_stage: string | null }>())?.lifecycle_stage ?? null;
+    }
+    const open = (await tasksOf(c.env, s)).filter((t) => !['done', 'cancelled'].includes(t.status) && t.module).map((t) => t.module!);
+    const onTeam = new Set(((await c.env.DB.prepare(
+      "SELECT role_key FROM team_agents WHERE scope_kind = ? AND company_id IS ? AND project_id IS ? AND status <> 'removed'",
+    ).bind(s.kind, s.kind === 'company' ? s.id : null, s.kind === 'project' ? s.id : null).all<{ role_key: string }>()).results || []).map((r) => r.role_key));
+    const quote = dutyQuoteFor(c.env, user);
+    const suggestions = [];
+    for (const r of suggestRoles({ scopeKind: s.kind, stage, openTaskModules: open })) {
+      const t = templateOf(r.role_key);
+      suggestions.push({
+        role_key: r.role_key, why: r.why, already_on_team: onTeam.has(r.role_key),
+        template: t ? { key: t.key, model_tier: t.model_tier, suggested_cap_microusd: t.suggested_cap_microusd, duties: t.duties.map((d) => d.key) } : null,
+        est_month_microusd: t ? await monthEstimate(t, quote) : { available: false },
+      });
+    }
+    return c.json({ stage, suggestions });
   } catch (e) { return mapError(c, e); }
 });
 
