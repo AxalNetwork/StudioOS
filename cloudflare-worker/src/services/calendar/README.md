@@ -45,13 +45,22 @@ when adding a kind.
   row is written. Every read and write is `WHERE user_id = ?` bound. Only the
   page read honours these settings (`hiddenKinds`); `.ics`, the feeds and the
   push never read them.
+- `externalReaders.ts`: D1485 (#3979), the member's own Google and Outlook
+  events, read live per window and never stored (`external_google`,
+  `external_microsoft`: page only, never pushable, never in a staff scope).
+  Each read stops at 4 pages of 250 and says `truncated`; a dead token is
+  `reconnect` and a 429 `rate_limited`, for that source alone. `dedupeExternal`
+  drops Axal's own copies (by `calendar_sync_records` and by iCalUID) and
+  flags near matches.
 - `items.ts`: page-only drawer fields for calendar items. Feed and provider
   projections keep their separate, smaller event shape.
 - `itemRead.ts`: one item for the drawer (the page read's own reader and
   description, people by name only), and a Meet link made at create that becomes
   the creator's Google copy.
 - `sync.ts`: create, update and cancellation hooks for copies of Axal-booked
-  sessions on the member's connected Google or Outlook calendar.
+  sessions on the member's connected Google or Outlook calendar. D1485: a new
+  copy goes only where the attendee's `copy_target` says, checked before any
+  token is loaded; a copy a provider already holds keeps being updated.
 - `cancelEvents.ts`: bounded immediate cleanup and durable continuation for a
   cancelled registration or event, rechecking source state before deletion.
 - `syncState.ts`: fixed sync-error codes and retained-copy/disconnection state;

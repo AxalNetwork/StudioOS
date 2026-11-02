@@ -77,14 +77,19 @@ test('the advisor ranks only on a press: GET /next-question and /start take the 
     f.db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('founder:free',0,0,1)").run();
     f.db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(2,5000000)').run();
     const models: string[] = [];
-    const env: any = { DB: f.DB, ENVIRONMENT: 'development', AI: withGuard({ run: async (m: string) => { models.push(m); return { response: '{"id":"q3"}', usage: { prompt_tokens: 10, completion_tokens: 2 } }; } }) };
+    // #3938 (ST5): the reranker scores the pool [q2, q3] with q3 first, then clef-flash chooses among the best (q1 = q3).
+    const env: any = { DB: f.DB, ENVIRONMENT: 'development', AI: withGuard({ run: async (m: string) => {
+      models.push(m);
+      if (m === ROUTE.rerank.model) return { response: [{ id: 1, score: 0.9 }, { id: 0, score: 0.2 }] };
+      return { answers: { next: { type: 'choice', choice: 'q1', confidence: 0.8, probabilities: { q1: 0.8, q2: 0.2 } } }, usage: { input_tokens: 20 } };
+    } }) };
     const q = (id: string) => ({ id, persona: 'founder', prompt: id, input_kind: 'short' }) as any;
     const bank = [q('q1'), q('q2'), q('q3')];
     assert.equal((await pickNextQuestion(env, 2, 1, bank, new Set(['q1'])))?.id, 'q2', 'the first unanswered, in bank order');
     assert.equal((await pickNextQuestion(env, 2, 1, bank, new Set(['q1']), { rerank: false }))?.id, 'q2');
     assert.deepEqual(models, [], 'no model was asked');
     assert.equal((await pickNextQuestion(env, 2, 1, bank, new Set(['q1']), { rerank: true }))?.id, 'q3', 'a press lets the model rank');
-    assert.deepEqual(models, [ROUTE.rerank.model]);
+    assert.deepEqual(models, [ROUTE.rerank.model, '@cf/cloudflare/clef-flash'], 'the reranker orders, then clef-flash chooses');
   } finally { f.db.close(); }
 });
 
