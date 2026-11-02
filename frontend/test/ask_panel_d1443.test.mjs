@@ -238,8 +238,10 @@ test('Ask buttons: PageAsk draws only where a rail serves the viewer; Team and R
   const btn = codeOnly(read('frontend/src/ui/AskButton.jsx'));
   assert.match(btn, /if \(!ask\.available\) return null;/);
   assert.match(btn, /onClick=\{\(\) => openAskPanel\(label\)\}/);
-  assert.match(codeOnly(read('frontend/src/pages/team/AskButton.jsx')), /return <PageAsk label=\{label\} \/>;/);
-  assert.match(codeOnly(read('frontend/src/pages/cycles/RaiseOverviewLead.jsx')), /<PageAsk label="Raise · Overview" testId="raise-ask" \/>/);
+  // D1443 part 5 (#3992): through HeaderAsk, the page's one header Ask, which is PageAsk.
+  assert.match(codeOnly(read('frontend/src/pages/team/AskButton.jsx')), /return <HeaderAsk label=\{label\} \/>;/);
+  assert.match(codeOnly(read('frontend/src/pages/cycles/RaiseOverviewLead.jsx')), /<HeaderAsk label="Raise · Overview" testId="raise-ask" \/>/);
+  assert.match(codeOnly(read('frontend/src/ui/HeaderAsk.jsx')), /return <PageAsk label=\{label\} testId=\{testId\} \/>;/);
 });
 
 test('the canvases are in design/incoming with the one named edit, and the decisions name them', () => {

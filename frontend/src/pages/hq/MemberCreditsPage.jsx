@@ -7,6 +7,7 @@ import { Card, Unrecorded } from '../../ui';
 import {
   NOTE_MAX, PERIODS, REASON_MIN, SOURCES, changeText, filterLedger, newSourceRef, pageOf, sourceOf, submitAdjust,
 } from '../../lib/memberCredits';
+import HeaderAsk from '../../ui/HeaderAsk.jsx';
 
 /**
  * D633 (#1391, Q2) — HQ · Team → one member's credits, the Ops canvas's
@@ -166,13 +167,16 @@ export default function MemberCreditsPage() {
   const name = read.data?.member?.name || read.data?.member?.email || (read.status === 'ready' ? `Account #${userId}` : 'Member');
   return (
     <div className="space-y-4" data-testid="member-credits-page">
-      <header>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
         <Link to="/admin/hq-team" className="inline-flex items-center gap-1 text-[12px] font-semibold text-axal-muted hover:underline"><ArrowLeft size={12} aria-hidden="true" /> Team</Link>
         <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-2xl font-extrabold tracking-tight text-axal-ink dark:text-white">{name} · credits</h1>
           {read.status === 'ready' && !adjusting ? <button type="button" className={primary} onClick={() => { setAdjusting(true); setNotice(null); }}>Adjust credits</button> : null}
         </div>
         <p className="mt-1 text-[13px] text-axal-muted">1 credit = US$1 of perk value. Every adjustment is kept in the audit log with its reason. What each reward pays is set on <Link to="/admin/credit-rules" className="font-semibold underline">HQ · Credits</Link>.</p>
+        </div>
+        <HeaderAsk />
       </header>
       {read.status === 'not_found' ? (
         <Card className="p-4" data-testid="member-not-found"><p className="text-[12.5px]"><strong>Unknown member.</strong> No account matches this id. <Link to="/admin/hq-team" className="font-semibold underline">Back to Team</Link></p></Card>

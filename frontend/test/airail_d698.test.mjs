@@ -36,6 +36,7 @@ import {
   __resetEadwynPanelForTest, eadwynPanelEvent, openEadwynPanel, useEadwynPanel,
 } from '../src/ui/eadwynPanel.js';
 import { EadwynButton } from '../src/ui/EadwynPanel.jsx';
+import HeaderAsk from '../src/ui/HeaderAsk.jsx';
 import {
   __resetRailPrefsSyncForTest, railModelKey, readRailModel, syncRailPrefs, writeRailModel,
 } from '../src/ui/railModelChoice.js';
@@ -738,6 +739,35 @@ test('20 · an investor, and an admin on a cycle page, keep the floating button 
       assert.equal(out.panel.available, false);
     } finally { await m.unmount(); }
   }
+});
+
+// ── 20b · D405 retires where the header carries Ask (D1443 part 5, #3992) ──
+
+test('20b · D405 retires where a page header carries Ask; it stays where none does or Ask does not serve', async () => {
+  // Mutations checked: d405Retired without `askState.available` (the admin keeps no button);
+  // the fallback counted as a header (the button goes with no header Ask).
+  const page = (header, shellRole = 'investor', role = 'investor', path = '/deals/commit') => onPage(path, viewing(shellRole, h(React.Fragment, null,
+    header ? h(HeaderAsk, { testId: 'probe-header-ask' }) : null,
+    h(WorkerRail, { workspace: 'Deals', role }))), role);
+  // An investor on a rail page whose header has no Ask mount: the rail's own Ask, and the phone button stays.
+  let m = await mount(page(false));
+  try {
+    assert.ok(m.by('rail-ask'), 'the rail carries the page\'s Ask');
+    assert.ok(m.by('button-worker-rail-fab'), 'no header Ask: D405 stays');
+  } finally { await m.unmount(); }
+  // The header carries Ask: one Ask on the page, and no phone button.
+  m = await mount(page(true));
+  try {
+    assert.ok(m.by('probe-header-ask'));
+    assert.equal(m.all('rail-ask').length, 0, 'the rail stands down for the header');
+    assert.equal(m.all('button-worker-rail-fab').length, 0, 'D405 retired');
+  } finally { await m.unmount(); }
+  // An admin on a founder page: Ask does not serve, so the header draws nothing and D405 stays.
+  m = await mount(page(true, 'admin', 'founder', '/validate/problem-discovery'));
+  try {
+    assert.equal(m.all('probe-header-ask').length, 0);
+    assert.ok(m.by('button-worker-rail-fab'), 'Ask does not serve: D405 stays');
+  } finally { await m.unmount(); }
 });
 
 // ── 21 · The preferences client ───────────────────────────────────────
