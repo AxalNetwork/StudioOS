@@ -35,6 +35,10 @@ import { DECK_GENERATE, rateLimitMiddleware } from '../src/middleware/rateLimit.
 import { compareMigrations, migrationNumber, BASELINE_CUTOFF } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
+import { contractErrors } from '../src/contracts/validate.ts';
+import { CONTRACTS } from '../src/contracts/index.ts';
+
+const BATCH_SCHEMA = JSON.parse(readFileSync(`cloudflare-worker/src/contracts/${CONTRACTS.batch.schema}`, 'utf8'));
 
 // ── 1 ────────────────────────────────────────────────────────────────────────
 test('1. the governor: per-kind caps, two runs per account and a bucket per model are throttles, and leases free their slots', () => {
@@ -233,6 +237,7 @@ test('4. the routes: the deck reads a run, a stranger gets 404, only its starter
     assert.deepEqual([own.body.state, own.body.counts.waiting, own.body.held_microusd, own.body.charged_microusd], ['queued', 3, 0, 0]);
     assert.deepEqual(own.body.steps[0], { seq: 0, card_uid: 'c1', area_id: 'a1', element: 'body', kind: 'text', model_label: 'llama-3.3-70b-instruct-fp8-fast', state: 'waiting', seconds: null, cost_microusd: 0, fallback_used: false, error_code: null, result: null });
     assert.equal(JSON.stringify(own.body).includes('private brief'), false, 'the step request stays in D1');
+    assert.deepEqual(contractErrors(BATCH_SCHEMA, own.body), [], 'GET answers its D1511 contract');
     const stranger = await call(db, OTHER, 'GET', `/api/decks/areas/batches/${a.uid}`);
     assert.equal(stranger.status, 404);
     assert.equal((await call(db, FOUNDER, 'GET', '/api/decks/areas/batches/00000000-0000-4000-8000-000000000000')).status, 404);
@@ -246,6 +251,8 @@ test('4. the routes: the deck reads a run, a stranger gets 404, only its starter
     assert.deepEqual([notYours.status, notYours.body.error], [403, 'not_your_run']);
     const stop = await call(db, FOUNDER, 'POST', `/api/decks/areas/batches/${a.uid}/cancel`);
     assert.deepEqual([stop.status, stop.body.state, stop.body.counts.stopped], [200, 'cancelled', 3]);
+    assert.deepEqual(contractErrors(BATCH_SCHEMA, stop.body), [], 'Stop answers the same contract');
+    assert.equal(CONTRACTS.cancelBatch.schema, CONTRACTS.batch.schema);
   } finally { db.close(); }
 });
 

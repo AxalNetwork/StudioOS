@@ -38,6 +38,8 @@
  * does `orgLocks`, from the same reply's `locks` key: #3786 (B10) keyed that
  * row but has no route on main, so C1 built the read and the row keeps B10's
  * issue.
+ * `batch` and `cancelBatch` (D1502, #3753) answer through `deckBatchesApi`:
+ * `GET /api/decks/areas/batches/:uid` and `POST …/cancel`.
  * `comments` (D1570, #3817)
  * answers through `deckCommentsApi.list`.
  *
@@ -49,6 +51,7 @@
 import { LATER, NOT_ON } from './deckV2Model.js';
 import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks.js';
 import { deckDraftApi } from '../../../lib/api/deckDraft.js';
+import { deckBatchesApi } from '../../../lib/api/deckBatches.js';
 import { deckGridApi } from '../../../lib/api/deckGrid.js';
 import { deckStageApi } from '../../../lib/api/deckStage.js';
 import { deckRemixApi } from '../../../lib/api/deckRemix.js';
@@ -118,7 +121,7 @@ export const SURFACES = Object.freeze({
 const off = (name) => async () => unavailable(SURFACES[name].issue);
 
 /** The rows whose route is on main: each answers through its real client, never unavailable by default. */
-export const SWAPPED = Object.freeze(['grid', 'saveCard', 'discardDraft', 'draft', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'presets', 'orgLocks', 'comments']);
+export const SWAPPED = Object.freeze(['grid', 'saveCard', 'discardDraft', 'draft', 'batch', 'cancelBatch', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'presets', 'orgLocks', 'comments']);
 
 
 /**
@@ -157,8 +160,10 @@ export const grid = (deckId) => through(() => deckGridApi.grid(deckId), SURFACES
 export const saveCard = (deckId, uid, card, rev, opts) => through(() => deckDraftApi.saveCard(deckId, uid, card, rev, opts), SURFACES.saveCard.issue);
 export const discardDraft = (deckId) => through(() => deckDraftApi.discard(deckId), SURFACES.discardDraft.issue);
 export const draft = (deckId) => through(() => deckDraftApi.draft(deckId), SURFACES.draft.issue);
-export const batch = off('batch');
-export const cancelBatch = off('cancelBatch');
+// D1502 part 2 (#3753): a run, read to resume it (pd2b, pd2c), and Stop. Follow it live with
+// `deckBatchesApi.events(uid, onEvent)`, the run's Server-Sent Events; `batch` is the read it falls back to.
+export const batch = (uid) => through(() => deckBatchesApi.batch(uid), SURFACES.batch.issue);
+export const cancelBatch = (uid) => through(() => deckBatchesApi.cancel(uid), SURFACES.cancelBatch.issue);
 /** D1503 (#3754): each grid element's models and the pick its next run uses (`GET /api/decks/:id/element-models`). */
 export const elementModels = (deckId) => through(() => deckElementModelsApi.read(deckId), SURFACES.elementModels.issue);
 export const areasQuote = off('areasQuote');

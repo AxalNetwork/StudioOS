@@ -28,6 +28,7 @@ import { deckTypedValuesApi } from '../src/lib/api/deckTypedValues.js';
 import { deckCheckApi } from '../src/lib/api/deckCheck.js';
 import { deckElementModelsApi } from '../src/lib/api/deckElementModels.js';
 import { deckCommentsApi } from '../src/lib/api/deckComments.js';
+import { deckBatchesApi, parseSse } from '../src/lib/api/deckBatches.js';
 
 test('every adapter method answers unavailable, with the reason and the issue that brings its route', async () => {
   const methods = Object.keys(adapter).filter((k) => !HELPERS.has(k));
@@ -36,7 +37,7 @@ test('every adapter method answers unavailable, with the reason and the issue th
   // D1499 (#3749) swapped grid, D1522 (#3774) stagePlan, D1553 (#3800) remix, D1503 (#3754) elementModels; D1565 (#3812)
   // the investor links; D1538 (#3787) typedTables; D1555 (#3802) consistency rides the check read. A swapped
   // surface's body calls its client through().
-  assert.deepEqual([...adapter.SWAPPED], ['grid', 'saveCard', 'discardDraft', 'draft', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'presets', 'orgLocks', 'comments'], 'the rows whose routes are on main');
+  assert.deepEqual([...adapter.SWAPPED], ['grid', 'saveCard', 'discardDraft', 'draft', 'batch', 'cancelBatch', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'presets', 'orgLocks', 'comments'], 'the rows whose routes are on main');
 
 
   const seam = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
@@ -171,7 +172,7 @@ test('the seam reaches no network, and no client method exists for a route that 
   const src = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
   assert.doesNotMatch(src, /request\(|fetch\(|XMLHttpRequest/);
   // A swapped row's client is the only `lib/api` the seam may import (D1499's `deckGrid.js`, D1522's `deckStage.js`, D1553's `deckRemix.js`, D1503's `deckElementModels.js`, D1565's `deckInvestorLinks.js`, D1538's `deckTypedValues.js`, D1555's `deckCheck.js`, D1549's `deckModelPresets.js`).
-  assert.deepEqual([...src.matchAll(/from '([^']*lib\/api[^']*)'/g)].map((x) => x[1]).sort(), ['../../../lib/api/deckCheck.js', '../../../lib/api/deckComments.js', '../../../lib/api/deckDraft.js', '../../../lib/api/deckElementModels.js', '../../../lib/api/deckGrid.js', '../../../lib/api/deckInvestorLinks.js', '../../../lib/api/deckModelPresets.js', '../../../lib/api/deckRemix.js', '../../../lib/api/deckStage.js', '../../../lib/api/deckTypedValues.js']);
+  assert.deepEqual([...src.matchAll(/from '([^']*lib\/api[^']*)'/g)].map((x) => x[1]).sort(), ['../../../lib/api/deckBatches.js', '../../../lib/api/deckCheck.js', '../../../lib/api/deckComments.js', '../../../lib/api/deckDraft.js', '../../../lib/api/deckElementModels.js', '../../../lib/api/deckGrid.js', '../../../lib/api/deckInvestorLinks.js', '../../../lib/api/deckModelPresets.js', '../../../lib/api/deckRemix.js', '../../../lib/api/deckStage.js', '../../../lib/api/deckTypedValues.js']);
   // D1549 (#3796): the presets route is on main, with its client; orgLocks reads the same reply.
   assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_model_presets.ts')), /deckModelPresets\.get\(['"]\/:id\{\[0-9\]\+\}\/model-presets['"]/);
   assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckModelPresets\)/);
@@ -195,6 +196,10 @@ test('the seam reaches no network, and no client method exists for a route that 
   // D1501 (#3751): the working copy has its routes (`/:id/draft`, `/:id/cards/:uid`) and its client.
   assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_draft.ts')), /deckDraft\.get\(['"]\/:id\{\[0-9\]\+\}\/draft['"]/);
   assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckDraft\)/);
+  // D1502 part 2 (#3753): a generation run's read, stream and Stop have their routes and client.
+  assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_batches.ts')), /deckBatches\.get\(`\/areas\/batches\/:uid\$\{UID\}`/);
+  assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_batches.ts')), /deckBatches\.post\(`\/areas\/batches\/:uid\$\{UID\}\/cancel`/);
+  assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckBatches\)/);
   for (const path of ['/areas', '/figures', '/areas/instruct']) {
     assert.ok(!new RegExp(`['"\`]/decks/[^'"\`\\n]*${path.replace(/[$/{]/g, (c) => `\\${c}`)}`).test(client), `a client path for ${path} before its route is on main`);
   }
@@ -300,4 +305,24 @@ test('D1570 (#3817): comments is swapped — it answers through deckCommentsApi.
     assert.equal((await adapter.comments(7)).unreadable, true, 'anything else is unreadable, never an empty thread');
   } finally { deckCommentsApi.list = real; }
   assert.equal(adapter.availability('comments'), null);
+});
+
+test('D1502 (#3753): batch and cancelBatch answer through deckBatchesApi; the stream parser keeps what has not ended', async () => {
+  // Mutation checked: cancelBatch left off(…) → its answer is unavailable and this fails.
+  const real = { batch: deckBatchesApi.batch, cancel: deckBatchesApi.cancel };
+  const asked = [];
+  deckBatchesApi.batch = async (uid) => { asked.push(['batch', uid]); return { uid, state: 'running' }; };
+  deckBatchesApi.cancel = async (uid) => { asked.push(['cancel', uid]); return { uid, state: 'cancelled' }; };
+  try {
+    assert.deepEqual(await adapter.batch('run-1'), { available: true, value: { uid: 'run-1', state: 'running' } });
+    assert.deepEqual(await adapter.cancelBatch('run-1'), { available: true, value: { uid: 'run-1', state: 'cancelled' } });
+    assert.deepEqual(asked, [['batch', 'run-1'], ['cancel', 'run-1']]);
+    assert.equal(adapter.availability('batch'), null);
+    deckBatchesApi.cancel = async () => { throw Object.assign(new Error('Only the member who started this run can stop it.'), { status: 403 }); };
+    assert.deepEqual(await adapter.cancelBatch('run-1'), { available: false, unreadable: true, reason: 'Only the member who started this run can stop it.', issue: 3753 });
+  } finally { Object.assign(deckBatchesApi, real); }
+  const { events, rest } = parseSse('event: snapshot\ndata: {"state":"running"}\n\nevent: step_done\ndata: {"seq":0}\n\nevent: area_busy\ndata: {"att');
+  assert.deepEqual(events, [{ event: 'snapshot', data: { state: 'running' } }, { event: 'step_done', data: { seq: 0 } }]);
+  assert.equal(rest, 'event: area_busy\ndata: {"att');
+  assert.deepEqual(parseSse('event: x\ndata: not json\n\n').events, [], 'a malformed event is skipped');
 });
