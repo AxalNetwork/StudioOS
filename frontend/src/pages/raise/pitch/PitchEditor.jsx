@@ -544,6 +544,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
                 onMove={(id, grid) => setCard(sel, updateBlock(card, id, { grid }))}
                 // D1513: a divider move (both blocks) and its overflow are each one edit.
                 onCard={(next) => { setCard(sel, next); setStructureNote(null); }}
+                onDecor={(item) => setCard(sel, { ...card, decor: [...(card.decor || []), item] })}
                 onAsk={ask} askOff={askOff} askLine={askLine}
                 items={items} onRefresh={() => { const r = refreshCard(card, items, charts); if (r.moved) setCard(sel, r.card); }}
                 // D1584 (#3831): the latest investor update's figures, proposed; Accept places them like Refresh from records.
