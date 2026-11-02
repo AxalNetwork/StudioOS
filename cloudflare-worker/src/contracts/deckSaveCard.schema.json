@@ -1,0 +1,27 @@
+{
+  "$id": "deckSaveCard",
+  "title": "PATCH /api/decks/:id/cards/:uid (D1501, #3751)",
+  "description": "The reply the deck v2 adapter's `saveCard` method passes through: ok, the deck, and the card's working copy with its new revision (`routes/deck_draft.ts`). D1511 (#3762).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ok", "deck_id", "card"],
+  "properties": {
+    "ok": { "const": true },
+    "deck_id": { "type": "integer", "minimum": 1 },
+    "card": { "$ref": "#/$defs/draftCard" }
+  },
+  "$defs": {
+    "draftCard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["uid", "ord", "rev", "updated_at", "card"],
+      "properties": {
+        "uid": { "type": "string" },
+        "ord": { "type": "integer", "minimum": 0, "maximum": 59 },
+        "rev": { "type": "integer", "minimum": 1 },
+        "updated_at": { "type": "string" },
+        "card": { "type": "object", "required": ["uid"], "properties": { "uid": { "type": "string" } } }
+      }
+    }
+  }
+}

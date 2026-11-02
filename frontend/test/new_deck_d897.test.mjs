@@ -358,9 +358,9 @@ test('the route is static, the studio opens it, and the fast path builds a propo
   const one = read('frontend/src/pages/raise/pitch/OneClickBuild.jsx');
   assert.match(one, /newDeckApi\.context\(projectId\)/);
   // D1540 (#3791): the build also sends back the quote it showed.
-  assert.match(one, /newDeckApi\.build\(\{ project_id: projectId, audience: brief\.audience, length: brief\.length, round_ref: roundRef, \.\.\.\(ex\.length \? \{ exclude: ex \} : \{\}\), \.\.\.\(quote\?\.quote_uid \? \{ quote_uid: quote\.quote_uid \} : \{\}\) \}, railPressHeaders\('deck:build'\)\)/);
-  assert.match(one, /newDeckApi\.quote\(\{ project_id: projectId, step: 'build', audience: brief\.audience, length: brief\.length/);
-  assert.match(one, /disabled=\{!brief\}[^>]*data-testid=\{`\$\{testId\}-build`\}/, 'Build waits for the read, never a guessed brief');
+  assert.match(one, /newDeckApi\.build\(\{ project_id: projectId, one_click: true, audience: brief\.audience, length: brief\.length, round_ref: roundRef, \.\.\.\(ex\.length \? \{ exclude: ex \} : \{\}\), \.\.\.\(quote\?\.quote_uid \? \{ quote_uid: quote\.quote_uid \} : \{\}\) \}, railPressHeaders\('deck:build'\)\)/);
+  assert.match(one, /newDeckApi\.quote\(\{ project_id: projectId, one_click: true, step: 'build', audience: brief\.audience, length: brief\.length/);
+  assert.match(one, /disabled=\{!brief \|\| switchedOff\}[^>]*data-testid=\{`\$\{testId\}-build`\}/, 'Build waits for the read, never a guessed brief');
   for (const f of ['StudioHome.jsx', 'PitchStudio.jsx', 'newDeckModel.js', 'NewDeck.jsx', 'OneClickBuild.jsx', 'oneClickModel.js']) {
     assert.doesNotMatch(read(`frontend/src/pages/raise/pitch/${f}`), /seed_fund|'standard'/, `${f}: no hard-coded audience or length`);
   }

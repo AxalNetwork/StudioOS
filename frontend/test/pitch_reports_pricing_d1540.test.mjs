@@ -123,5 +123,5 @@ test('the one-click build sends back the quote it showed, and a stale quote asks
   const src = read('frontend/src/pages/raise/pitch/OneClickBuild.jsx');
   assert.match(src, /quote\?\.quote_uid \? \{ quote_uid: quote\.quote_uid \}/);
   assert.match(src, /why\?\.code === 'quote_stale'\) \{ setQuote\(null\); setRequote/);
-  assert.match(src, /roundRef, exKey, requote\]/);
+  assert.match(src, /roundRef, exKey, requote, switchedOff\]/);
 });

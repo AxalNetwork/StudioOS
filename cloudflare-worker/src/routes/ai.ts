@@ -31,6 +31,7 @@ import type { PriceUnit } from '../services/ai/catalogue';
 import { aiLicenceKey } from '../services/aiBudget';
 import { ensureAdminAuditLogTable } from './admin';
 import { BRANCH_CODE_RE } from '../util/branch';
+import { flagsFor, unavailableLine } from '../services/featureFlags';
 import { railCrumbs, railOptionRows, railOptionsOn, railRows, railSectionOf, resolveRail, resolveRailOption, rowOffers, type RailRow } from '../services/ai/railMatrix';
 import { MODEL_LOCKS, lockLabel } from '../services/ai/modelUseCases';
 import { railFor, refuseAssistOff } from '../util/railContext';
@@ -486,9 +487,15 @@ function refuseRailOption(c: any) {
  * every run.
  * `options` stays empty until D764 PR 3 adds option rows. A stored pick the
  * row no longer offers is cleared here and reads as no pick.
+ *
+ * D1509 (#3760): a model HQ switched off for the member (`model:<id>`,
+ * services/featureFlags.ts) leaves `models`, `more` and every option's lists.
+ * A stored pick of it is kept (it comes back with the flag), reads as no
+ * pick, and `notice` says "<C> is unavailable. Using <B>." (aird5).
  */
 ai.get('/rail', async (c) => {
   const user = await requireAuth(c);
+  const off = (await flagsFor(c.env, user)).modelsOff;
   const page = c.req.query('page');
   const row = resolveRail(page);
   if (!row) return refuseRailPage(c, page);
@@ -505,9 +512,12 @@ ai.get('/rail', async (c) => {
   ).bind(user.id, section).all<{ task: string; model: string | null; mode: string | null }>()).results ?? [];
   const stale = new Set<string>();
   // A stored pick the row it was made on no longer offers is no pick, and is cleared.
+  const switchedOff: string[] = [];
   const pickFor = (task: string, on: RailRow): string | null => {
     const model = rows.find((r) => r.task === task)?.model ?? null;
     if (!model) return null;
+    // D1509: switched off is kept, not cleared.
+    if (off.has(model)) { switchedOff.push(model); return null; }
     if (rowOffers(on, model)) return model;
     stale.add(task);
     return null;
@@ -515,11 +525,11 @@ ai.get('/rail', async (c) => {
   const pagePick = pickFor('page', row);
   const pick = (option ? pickFor(option, active) : null) ?? (rowOffers(active, pagePick ?? '') ? pagePick : null);
   // #3934 (A (c)): a locked model shows its plan label, `lock`, null when every plan runs it.
-  const view = (r: RailRow) => r.models.map((m) => ({
+  const view = (r: RailRow) => r.models.filter((m) => !off.has(m.id)).map((m) => ({
     id: m.id, name: MODEL_NAMES[m.id] ?? modelById(m.id)?.name ?? null, role: m.role, line: m.line, price: unitPrices(m.id, multiplier), lock: lockLabel(m.id),
   }));
   // Stable overflow shape: { id, name, line, price, lock }; no suggested role or optional flag.
-  const more = (r: RailRow) => (r.more ?? []).map(m => ({
+  const more = (r: RailRow) => (r.more ?? []).filter((m) => !off.has(m.id)).map(m => ({
     id: m.id, name: MODEL_NAMES[m.id] ?? modelById(m.id)?.name ?? null, line: m.line, price: unitPrices(m.id, multiplier), lock: lockLabel(m.id),
   }));
   const options = railOptionsOn(row.pageKey).map((o) => ({
@@ -540,11 +550,14 @@ ai.get('/rail', async (c) => {
     more: more(active),
     options,
     pick,
+    notice: switchedOff.length ? unavailableLine(nameOfModel(switchedOff[0]), nameOfModel(pick ?? active.models.find((m) => !off.has(m.id))?.id ?? null)) : null,
     mode: rows.find((r) => r.task === '')?.mode ?? null,
     billing: billingMode(c.env),
     guard: { model: ROUTE.safety.model, every_run: true },
   });
 });
+
+const nameOfModel = (id: string | null): string | null => (id ? MODEL_NAMES[id] ?? modelById(id)?.name ?? id : null);
 
 async function railBody(c: any): Promise<{ row: RailRow; body: Record<string, unknown> } | Response> {
   const body = await readBody(c);
@@ -564,11 +577,12 @@ ai.put('/rail/pick', async (c) => {
   // PR 3: a registered option's pick is checked against its own row.
   const on = (option ? resolveRailOption(row.pageKey, option) : null) ?? row;
   const model = body.model;
-  if (model !== null && !(typeof model === 'string' && rowOffers(on, model))) {
+  const off = (await flagsFor(c.env, user)).modelsOff;
+  if (model !== null && !(typeof model === 'string' && rowOffers(on, model) && !off.has(model))) {
     return refuse(c, 400, {
       code: 'model_not_offered',
       message: 'That model is not offered on this page.',
-      extra: { models: [...on.models, ...(on.more ?? [])].map((m) => m.id) },
+      extra: { models: [...on.models, ...(on.more ?? [])].map((m) => m.id).filter((id) => !off.has(id)) },
     });
   }
   const task = option ?? 'page';
