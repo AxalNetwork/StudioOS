@@ -505,6 +505,15 @@ default_retention = { success_retention = "7 days", error_retention = "30 days" 
 binding    = "VECTORIZE"
 index_name = "axal-search"
 
+# D1556 (#3803): consented interview quotes for the deck (bge-m3, 1024 dimensions,
+# cosine; metadata index on project_id). Approved under owner decision L = A on
+# 2026-11-02. The index must exist before this deploys:
+#   npx wrangler vectorize create axal-deck-quotes --dimensions=1024 --metric=cosine
+#   npx wrangler vectorize create-metadata-index axal-deck-quotes --property-name=project_id --type=number
+[[vectorize]]
+binding    = "DECK_QUOTES"
+index_name = "axal-deck-quotes"
+
 # ---------- R2 (object storage) ----------
 # Stores KYC documents (passport / ID images) under key prefix `kyc/{user_id}/`.
 # Bucket is private — access is gated by Worker routes that re-check auth on
@@ -896,6 +905,10 @@ default_retention = { success_retention = "7 days", error_retention = "30 days" 
 [[env.production.vectorize]]
 binding    = "VECTORIZE"
 index_name = "axal-search"
+
+[[env.production.vectorize]]
+binding    = "DECK_QUOTES"
+index_name = "axal-deck-quotes"
 
 [[env.production.r2_buckets]]
 binding     = "FILES"
