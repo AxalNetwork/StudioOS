@@ -39,6 +39,14 @@ import { api, request } from '../api.js';
 //                           an admin, 1–500 characters; 400 support_reason_required, 409 support_owner_unresolved, 503 support_read_unavailable
 //   supportReads(p, page)   GET  /data-room/:p/support-reads?page → { page, page_size, has_more, reads: [{ id, reader: { name, kind }, reason, created_at }] };
 //                           the owner and a co-founder; 503 support_history_unreadable
+// D4170 (#4170) — Eadwyn's proposals for the room (routes/data_room_proposals.ts), the member's own:
+//   proposals(p)              GET  /data-room/:p/proposals → { proposals: [{ uid, type: 'match'|'folder'|'gap', status, reason,
+//                                   file: { uid, name } | null, item: { key, label } | null, folder: { name } | null, would_satisfy, undoable }] }
+//   proposalsQuote(p)         POST /data-room/:p/proposals/quote → { quote: { hold_microusd, model, confirm_quote } }
+//   proposalsRun(p, confirm)  POST /data-room/:p/proposals/run { confirm_quote } → { proposals, cost }; 402 quote_required
+//   acceptProposal(p, uid)    POST /data-room/:p/proposals/:uid/accept → { proposal, change }; 409 not_open | proposal_stale | would_change_access
+//   dismissProposal(p, uid)   POST /data-room/:p/proposals/:uid/dismiss → { proposal }
+//   undoProposal(p, uid)      POST /data-room/:p/proposals/:uid/undo → { proposal, change }; 409 not_undoable | proposal_stale
 const seg = (v) => encodeURIComponent(String(v));
 const activityQuery = (q = {}) => {
   const p = new URLSearchParams();
@@ -64,6 +72,12 @@ export const dataRoomApi = {
   activity: (projectUid, q) => request(`/data-room/${seg(projectUid)}/activity${activityQuery(q)}`),
   activityCsv: (projectUid, q) => api._downloadCsv(`/data-room/${seg(projectUid)}/activity.csv${activityQuery(q)}`, 'data-room-activity.csv'),
   checklist: (projectUid) => request(`/data-room/${seg(projectUid)}/checklist`),
+  proposals: (projectUid) => request(`/data-room/${seg(projectUid)}/proposals`),
+  proposalsQuote: (projectUid) => request(`/data-room/${seg(projectUid)}/proposals/quote`, { method: 'POST' }),
+  proposalsRun: (projectUid, confirm_quote) => request(`/data-room/${seg(projectUid)}/proposals/run`, { method: 'POST', inlinePaywall: true, body: JSON.stringify({ confirm_quote }) }),
+  acceptProposal: (projectUid, uid) => request(`/data-room/${seg(projectUid)}/proposals/${seg(uid)}/accept`, { method: 'POST' }),
+  dismissProposal: (projectUid, uid) => request(`/data-room/${seg(projectUid)}/proposals/${seg(uid)}/dismiss`, { method: 'POST' }),
+  undoProposal: (projectUid, uid) => request(`/data-room/${seg(projectUid)}/proposals/${seg(uid)}/undo`, { method: 'POST' }),
   // #3938 part 2: search inside the room, on its own index. `{ available: false, reason }` until the index is bound.
   search: (projectUid, q) => request(`/data-room/${seg(projectUid)}/search`, { method: 'POST', body: JSON.stringify({ q }) }),
   searchIndex: (projectUid) => request(`/data-room/${seg(projectUid)}/search/index`, { method: 'POST' }),
