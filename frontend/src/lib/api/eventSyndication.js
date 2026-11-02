@@ -16,10 +16,15 @@
 //
 // One event (`/api/events/:id/syndication`, host or admin; anyone else 404):
 //   GET  → { eligible, reason|null, rows: [{ uid|null, channel, account_uid, display_name, capability, on, status,
-//         sync_state, skip_reason, last_error, external_url, posted_at, registrations: null, registrations_reason }] }
+//         sync_state, skip_reason, last_error, external_url, posted_at, overrides, registrations: null, registrations_reason }] }
+//         (`overrides` is the saved { title?, description?, ticket_url? }, D1493)
 //   PUT  { channels: [{ account_uid, on, overrides?: { title?, description?, ticket_url? } }] } → the same shape
 //   POST /preview { account_uid, overrides? } → { channel, capability, title, text, link, cover_url, warnings }
 //   POST /:uid/retry | /:uid/withdraw → { row }
+// D1493 (#3906, SY8) — Ask proposes a channel's copy (routes/event_syndication_assist.ts):
+//   POST /assist/quote { account_uid, fields? } → { option, ai: true, hold_microusd, model } | { option, ai: false, reason, message }
+//   POST /assist       { account_uid, fields? } → { proposals, option, cost: { charged_microusd|null, usage_log_id } }
+//   Nothing is written: Accept decides the proposal (railProposalsApi.decide) and the page saves with PUT.
 // `registrations` stays null with "Not recorded: …" until registrations are imported (Part D); never 0.
 import { request } from '../api.js';
 
@@ -43,6 +48,11 @@ export const eventSyndicationApi = {
   forEvent: (eventId) => request(`/events/${enc(eventId)}/syndication`),
   choose: (eventId, channels) => send(`/events/${enc(eventId)}/syndication`, 'PUT', { channels }),
   preview: (eventId, accountUid, overrides) => send(`/events/${enc(eventId)}/syndication/preview`, 'POST', { account_uid: accountUid, ...(overrides ? { overrides } : {}) }),
+  assistQuote: (eventId, accountUid, fields) => send(`/events/${enc(eventId)}/syndication/assist/quote`, 'POST', { account_uid: accountUid, ...(fields ? { fields } : {}) }),
+  // A model run: the 30s default would abort a run still being paid for.
+  assist: (eventId, accountUid, fields) => request(`/events/${enc(eventId)}/syndication/assist`, {
+    method: 'POST', timeoutMs: 60_000, body: JSON.stringify({ account_uid: accountUid, ...(fields ? { fields } : {}) }),
+  }),
   retry: (eventId, uid) => send(`/events/${enc(eventId)}/syndication/${enc(uid)}/retry`, 'POST', {}),
   withdraw: (eventId, uid) => send(`/events/${enc(eventId)}/syndication/${enc(uid)}/withdraw`, 'POST', {}),
 };
