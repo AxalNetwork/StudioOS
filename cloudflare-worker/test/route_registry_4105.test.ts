@@ -130,11 +130,13 @@ test('on the real Worker, the order-sensitive deck routers mount just above `dec
   const slot = planned.filter((d) => !d.before.length);
   assert.deepEqual(mounts.slice(-slot.length).map((m) => [m.path, m.router]), slot.map((d) => [d.path, d.router]), 'the registry slot is every descriptor without a `before`, in order');
   assert.equal(registeredRouters.has(mounts[mounts.length - slot.length - 1].router), false, 'the mount above the slot is index.ts\'s last line');
-  assert.deepEqual(mounts.slice(-3).map((m) => [m.path, m.router]), [
-    ['/api/decks', deckUpdateReuse],
+  // votes.ts sorts last, so its two mounts close the slot. deck_update_reuse is in the slot, but a
+  // registered file between the two names (#4180's learning_lists) sits between them, so it is not pinned to -3.
+  assert.deepEqual(mounts.slice(-2).map((m) => [m.path, m.router]), [
     ['/api/pipeline/votes', votes],
     ['/api/pipeline/vote', votes],
   ]);
+  assert.ok(mounts.slice(-slot.length).some((m) => m.path === '/api/decks' && m.router === deckUpdateReuse), 'deck_update_reuse mounts in the registry slot');
 });
 
 const JWT_SECRET = randomBytes(32).toString('hex');
