@@ -358,4 +358,3 @@ export async function trackRun(env: Env, scope: ScopeRef, run: RunRow | LiveRun,
   const live = 'uid' in run ? liveOf(run) : run;
   try { await call(scope, '/track', { run: live }); } catch { console.warn('[agents] track_failed'); }
 }
-

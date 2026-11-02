@@ -112,15 +112,30 @@ test('the agenda: Overdue pinned with its days, then months oldest first; a task
   assert.equal(complianceCan({ can_manage: true }).markDone, true);
 });
 
-test('the seam: every method is off, with the issue that turns it on, and makes no request', async () => {
+// #3970 turned `burnup` on; every other method stays off until its route lands.
+const LIVE = new Set(['burnup']);
+test('the seam: every method not yet live is off, with the issue that turns it on, and makes no request', async () => {
   assert.deepEqual(Object.keys(WORK_SEAM).sort(), Object.keys(workAdapter).sort());
   for (const [m, issue] of Object.entries(WORK_SEAM)) {
+    assert.match(issue, /^#39(69|70|71|72|76)$/);
+    if (LIVE.has(m)) continue;
     const r = await workAdapter[m]('x');
     assert.equal(r.available, false, m);
-    assert.match(issue, /^#39(69|70|71|72|76)$/);
   }
   const src = codeOnly(read('frontend/src/pages/work/workAdapter.js'));
-  assert.doesNotMatch(src, /request\(|fetch\(|\/api\//, 'no client path for a route that is not on main');
+  // No request of its own and no API URL; the import of lib/api/work.js is the client, not a path.
+  assert.doesNotMatch(src, /request\(|fetch\(|['"`]\/api\//, 'the adapter never reaches the network itself');
+  // #3970: the burn-up goes through workApi.burnup, and an engine that is off is the honest off block.
+  assert.match(src, /burnup: \(projectId, opts\) => through\(\(\) => workApi\.burnup\(projectId, opts\), WORK_OFF\)/);
+  const client = read('frontend/src/lib/api/work.js');
+  assert.match(client, /request\(`\/teams\/project\/\$\{enc\(projectId\)\}\/work\/burnup/);
+});
+
+test('#3970: through answers the off block for agent_engine_off and rethrows anything else', async () => {
+  const { through } = await import('../src/pages/work/workAdapter.js');
+  assert.deepEqual(await through(async () => ({ series: [] }), 'off'), { available: true, data: { series: [] } });
+  assert.deepEqual(await through(async () => { throw Object.assign(new Error('x'), { status: 404, data: { error: 'agent_engine_off' } }); }, 'off'), { available: false, reason: 'off' });
+  await assert.rejects(through(async () => { throw Object.assign(new Error('x'), { status: 500 }); }, 'off'));
 });
 
 test('the views draw the canvas\'s parts with fixtures', () => {

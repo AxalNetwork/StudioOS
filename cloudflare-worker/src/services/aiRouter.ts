@@ -318,6 +318,14 @@ export interface RunOptions {
   // out and behaves as before.
   idempotencyKey?: string;
   executionId?: string;
+  /**
+   * D1502 (#3753, deck v2 A3a): a step of a deck generation run, under the
+   * run's ONE parent hold (`services/decks/genRuntime.ts`, `reserveBatch`). The
+   * step takes no hold of its own and settles nothing: its usage row names the
+   * parent (`reservation_uid`) and records what it charged, and the run settles
+   * the parent once, at the sum of its steps. Only `genRuntime` sets it.
+   */
+  parentHold?: { uid: string; userId: number };
   // D1528 (#3847, #3742 E3): the `agents` AI Gateway id (`AGENT_AI_GATEWAY`).
   // Only `agentRun` sets it. A gatewayed agent call is never retried without
   // its gateway: the gateway's limit is the platform's circuit breaker.
@@ -1761,7 +1769,7 @@ const GUARD_TEMPLATE_TOKENS = 1_024;
 const GUARD_QUOTE_OUT_TOKENS = 4 * GUARD_MAX_TOKENS;
 const GUARD_CHARS_PER_OUTPUT_TOKEN = 8;
 // A transcript's length bound, for the quote of a transcription's output check.
-const TRANSCRIPT_CHARS_PER_MINUTE = 2_000;
+export const TRANSCRIPT_CHARS_PER_MINUTE = 2_000;
 // How many slices are checked at once.
 const GUARD_CONCURRENCY = 4;
 // The user turn an output slice is checked under, so Llama Guard reads the
@@ -1863,6 +1871,30 @@ async function recordGuardCalls(env: Env, opts: RunOptions, calls: GuardCall[], 
       units: { tokens_in: call.usage.prompt_tokens, tokens_out: call.usage.completion_tokens },
     });
   }
+}
+
+/**
+ * #3936 (D1478 task 2, part 2): the guard over text a model produced outside
+ * `run()`'s own call — the live transcript's final text (`liveTranscription.ts`),
+ * whose stream is a WebSocket the router cannot hold open. The same output
+ * check `run()` makes: Llama Guard over every slice, failing closed. `record`
+ * writes the guard rows once the stream's own row exists, each naming it in
+ * `guard_for`, charged under `reservationUid` at `multiplier`.
+ */
+export async function guardFinalText(env: Env, who: { userId: number; surface?: string | null }, text: string, multiplier = 1): Promise<{
+  decision: guard.GuardDecision; calls: number; micro: number; usd: number;
+  record: (runRowId: number | null, reservationUid: string | null) => Promise<void>;
+}> {
+  const opts = { task: 'transcribe', userId: who.userId, surface: who.surface ?? undefined } as RunOptions;
+  const calls: GuardCall[] = [];
+  const decision = text.trim() ? await guardCheck(env, opts, text, 'output', calls) : ({ action: 'pass' } as guard.GuardDecision);
+  const charge = (c: GuardCall) => (c.micro > 0 ? aiBudget.billedUsdToMicro(c.usage.est_cost_usd, multiplier) : 0);
+  return {
+    decision, calls: calls.length,
+    micro: calls.reduce((n, c) => n + charge(c), 0),
+    usd: calls.reduce((n, c) => n + c.usage.est_cost_usd, 0),
+    record: (runRowId, reservationUid) => recordGuardCalls(env, opts, calls, runRowId, reservationUid, charge),
+  };
 }
 
 /** The report a run returns, and the member's words when it was refused. */
@@ -2301,7 +2333,16 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
   // D762: what this run is settled at over its cost, from the member's licence.
   // Cost (est_cost_usd, the KV buckets, the organisation cap) stays cost.
   let multiplier = 1;
-  if (opts.userId > 0) {
+  if (opts.userId > 0 && opts.parentHold) {
+    // D1502: a step of a run held by its parent. The parent must be the same member's.
+    if (opts.parentHold.userId !== opts.userId) {
+      const usage:UsageMeta={task:opts.task,model:primaryModel,latency_ms:0,prompt_tokens:0,completion_tokens:0,est_cost_usd:0,fallback_used:false,cached:false,safety_score:null};
+      await recordUsage(env, opts, usage, 'misconfigured');
+      return {ok:false,refusal:'misconfigured',error:'Unreadable: this step is not under its own run\'s hold.',usage};
+    }
+    multiplier = await aiBudget.memberChargeMultiplier(env, opts.userId);
+    reservation = { uid: opts.parentHold.uid, userId: opts.parentHold.userId };
+  } else if (opts.userId > 0) {
     try {
       multiplier = await aiBudget.memberChargeMultiplier(env, opts.userId);
       // D1278: the hold names the run's task, never its prompt.
@@ -2346,7 +2387,8 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
   const settleHold = async (micro: number, usd: number, answered: boolean): Promise<boolean> => {
     // D1540: never more than the pinned quote, whatever the run cost at today's prices.
     micro = pinned(micro);
-    if (reservation) {
+    // D1502: a step under a parent hold settles nothing; its row records the charge and the run settles the parent.
+    if (reservation && !opts.parentHold) {
       try { await aiBudget.settleAiReservation(env, reservation, micro, !answered && micro === 0); }
       catch { return false; }
     }

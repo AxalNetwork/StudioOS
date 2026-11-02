@@ -442,6 +442,14 @@ class_name = "MeetingBotRun"
 name       = "DECK_PRESENCE"
 class_name = "DeckPresence"
 
+# D1502 part 2 (#3753): a deck's generation runs, and the per-account step throttles.
+[[durable_objects.bindings]]
+name       = "DECK_GEN_ROOM"
+class_name = "DeckGenRoom"
+
+[[durable_objects.bindings]]
+name       = "AI_GOVERNOR"
+class_name = "AiGovernor"
 # D1528: one AgentScope object per scope (`project:{id}`, `company:{id}`).
 [[durable_objects.bindings]]
 name       = "AGENT_SCOPE"
@@ -462,9 +470,12 @@ new_sqlite_classes = ["MeetingBotRun"]
 tag = "v3-deck-presence"
 new_sqlite_classes = ["DeckPresence"]
 
+[[migrations]]
+tag = "v4-deck-gen"
+new_sqlite_classes = ["DeckGenRoom", "AiGovernor"]
 # D1528: append-only; no jurisdiction in v1.
 [[migrations]]
-tag = "v4-agent-scope"
+tag = "v5-agent-scope"
 new_sqlite_classes = ["AgentScope"]
 
 # D1528: one AgentTaskWorkflow instance per run (id = run uid). State kept 7
@@ -815,6 +826,14 @@ class_name = "MeetingBotRun"
 name       = "DECK_PRESENCE"
 class_name = "DeckPresence"
 
+# D1502 part 2 (#3753): a deck's generation runs, and the per-account step throttles.
+[[env.production.durable_objects.bindings]]
+name       = "DECK_GEN_ROOM"
+class_name = "DeckGenRoom"
+
+[[env.production.durable_objects.bindings]]
+name       = "AI_GOVERNOR"
+class_name = "AiGovernor"
 # D1528: one AgentScope object per scope (`project:{id}`, `company:{id}`).
 [[env.production.durable_objects.bindings]]
 name       = "AGENT_SCOPE"
@@ -832,9 +851,12 @@ new_sqlite_classes = ["MeetingBotRun"]
 tag = "v3-deck-presence"
 new_sqlite_classes = ["DeckPresence"]
 
+[[env.production.migrations]]
+tag = "v4-deck-gen"
+new_sqlite_classes = ["DeckGenRoom", "AiGovernor"]
 # D1528: append-only; no jurisdiction in v1.
 [[env.production.migrations]]
-tag = "v4-agent-scope"
+tag = "v5-agent-scope"
 new_sqlite_classes = ["AgentScope"]
 
 # D1528: one AgentTaskWorkflow instance per run (id = run uid). State kept 7
@@ -1050,6 +1072,14 @@ class_name = "MeetingBotRun"
 name       = "DECK_PRESENCE"
 class_name = "DeckPresence"
 
+# D1502 part 2 (#3753): a deck's generation runs, and the per-account step throttles.
+[[env.preview.durable_objects.bindings]]
+name       = "DECK_GEN_ROOM"
+class_name = "DeckGenRoom"
+
+[[env.preview.durable_objects.bindings]]
+name       = "AI_GOVERNOR"
+class_name = "AiGovernor"
 # D1528: one AgentScope object per scope (`project:{id}`, `company:{id}`).
 [[env.preview.durable_objects.bindings]]
 name       = "AGENT_SCOPE"
@@ -1067,9 +1097,12 @@ new_sqlite_classes = ["MeetingBotRun"]
 tag = "v3-deck-presence"
 new_sqlite_classes = ["DeckPresence"]
 
+[[env.preview.migrations]]
+tag = "v4-deck-gen"
+new_sqlite_classes = ["DeckGenRoom", "AiGovernor"]
 # D1528: append-only; no jurisdiction in v1.
 [[env.preview.migrations]]
-tag = "v4-agent-scope"
+tag = "v5-agent-scope"
 new_sqlite_classes = ["AgentScope"]
 
 # D1528: one AgentTaskWorkflow instance per run (id = run uid). State kept 7

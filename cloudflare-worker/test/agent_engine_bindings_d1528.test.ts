@@ -4,7 +4,7 @@
  *   · `AGENT_QUEUE` (producer, consumer and its DLQ), `AGENT_SCOPE` and
  *     `AGENT_TASK` at the top level, under `[env.production]` with the same
  *     names, and under `[env.preview]` with `-preview` names;
- *   · the `v4-agent-scope` migration tag (after D1577's `v3-deck-presence`) in all three migration tables;
+ *   · the `v5-agent-scope` migration tag (after D1502's `v4-deck-gen`) in all three migration tables;
  *   · `AGENT_ENGINE`, `AGENT_AUTONOMY` and `AGENT_RUNTIME` default to `off`,
  *     `manual` and `do`, and `AGENT_AI_GATEWAY` is set nowhere;
  *   · the cron lists are unchanged (the sweep has no cron line of its own);
@@ -46,8 +46,10 @@ for (const [label, prefix, sfx] of TABLES) {
       [[`studioos-agent-task${sfx}`, 'AGENT_TASK', 'AgentTaskWorkflow']]);
     assert.equal(wf[0].kv.get('default_retention'), '{ success_retention = "7 days", error_retention = "30 days" }', 'owner Q6 A');
     const migs = inTable(prefix, 'migrations');
-    assert.deepEqual(migs.map((s: any) => unq(s.kv.get('tag'))), ['v1-realtime', 'v2-meeting-bot', 'v3-deck-presence', 'v4-agent-scope'], 'append-only');
-    assert.equal(migs[3].kv.get('new_sqlite_classes'), '["AgentScope"]');
+    assert.deepEqual(migs.slice(0, 4).map((s: any) => unq(s.kv.get('tag'))), ['v1-realtime', 'v2-meeting-bot', 'v3-deck-presence', 'v4-deck-gen'], "keep main's existing migration history");
+    const scopeMigration = migs.find((s: any) => unq(s.kv.get('tag')) === 'v5-agent-scope');
+    assert.ok(scopeMigration, 'the agent scope has its own migration');
+    assert.equal(scopeMigration.kv.get('new_sqlite_classes'), '["AgentScope"]');
   });
 
   test(`${label}: the engine's vars default to off, manual and do; no gateway is set`, () => {
@@ -89,7 +91,7 @@ test('a branch gets its own agent queue, DLQ and Workflow; the check fails one t
   assert.ok(out.find((s: any) => s.name === 'queues.consumers' && unq(s.kv.get('queue')) === n.agentDlq));
   const wf = out.find((s: any) => s.name === 'workflows');
   assert.equal(unq(wf.kv.get('name')), `studioos-${EXAMPLE.code}-agent-task`);
-  assert.ok(out.find((s: any) => s.name === 'migrations' && unq(s.kv.get('tag')) === 'v4-agent-scope'));
+  assert.ok(out.find((s: any) => s.name === 'migrations' && unq(s.kv.get('tag')) === 'v5-agent-scope'));
   // A branch that kept HQ's Workflow, or sent AGENT_QUEUE to its job queue, fails the check.
   const keptWorkflow = rendered.replace(`name = "${n.agentTask}"`, 'name = "studioos-agent-task"');
   assert.ok(checkRendered(TOML, EXAMPLE, keptWorkflow).some((p: string) => /Workflow .*AGENT_TASK.* must be/.test(p)));

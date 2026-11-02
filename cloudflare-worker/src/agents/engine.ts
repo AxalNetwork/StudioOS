@@ -363,4 +363,3 @@ export async function runInScope(env: Env, uid: string): Promise<{ run: RunRow; 
 
 /** The scope of an agent as the object names it. */
 export const objectNameOf = (a: Pick<AgentRow, 'scope_kind' | 'company_id' | 'project_id'>) => scopeName(scopeOfRow(a));
-
