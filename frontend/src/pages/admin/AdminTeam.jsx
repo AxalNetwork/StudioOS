@@ -19,6 +19,7 @@ import { isSuperAdminUser } from '../../lib/shellRole';
 import { RailFrame, WorkerRail } from '../../ui';
 import Sheet from '../../ui/Sheet.jsx';
 import useRecordCrumb from './useRecordCrumb';
+import HeaderAsk from '../../ui/HeaderAsk.jsx';
 
 const EMPTY = {
   slug: '',
@@ -407,6 +408,7 @@ export default function AdminTeam() {
           >
             <Plus className="w-4 h-4" /> Add member
           </button>
+          <HeaderAsk />
         </div>
       </header>
 

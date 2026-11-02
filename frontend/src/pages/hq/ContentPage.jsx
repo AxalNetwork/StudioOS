@@ -44,6 +44,7 @@ import { reportError } from '../../lib/log';
 import { relationLead, RELATION_NOT_RECORDED, RELATION_NOT_RECORDED_REASON } from '../../lib/escalationRelation';
 import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 import { ConsoleLinkBody, CONSOLE_LINK, CONSOLE_TILE } from './ConsoleLink';
+import HeaderAsk from '../../ui/HeaderAsk.jsx';
 
 const UNAVAILABLE = Symbol('unavailable');
 const num = (v) => (v === null || v === undefined || !Number.isFinite(Number(v)) ? null : Number(v).toLocaleString());
@@ -950,7 +951,8 @@ export default function ContentPage() {
           </span>
         </div>
 
-        <header className="mt-4">
+        <header className="mt-4 flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
           <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
             <FileStack size={13} /> HQ · Content
           </div>
@@ -962,6 +964,8 @@ export default function ContentPage() {
             holding a number. Below it, the deck roster, assessment games and the personas taxonomy — each a read-only
             summary of the records on this platform.
           </p>
+          </div>
+          <HeaderAsk />
         </header>
 
         {unreadable && (

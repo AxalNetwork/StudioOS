@@ -48,6 +48,7 @@ import { reportError } from '../../lib/log';
 import { REFUND_REASON_MIN, refundReasonOk } from '../../lib/refundReason';
 import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 import { revenueAbsenceForLicence, usageCoverageLabel } from '../../lib/hqRevenuePerSub';
+import HeaderAsk from '../../ui/HeaderAsk.jsx';
 
 export const UNAVAILABLE = Symbol('unavailable');
 
@@ -801,7 +802,8 @@ export default function RevenuePage() {
           </span>
         </div>
 
-        <header className="mt-4">
+        <header className="mt-4 flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
           <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
             <Coins size={13} /> HQ · Revenue
           </div>
@@ -817,6 +819,8 @@ export default function RevenuePage() {
             margin and the per-subsidiary split are not recorded anywhere, and each says so where its figure
             would be.
           </p>
+          </div>
+          <HeaderAsk />
         </header>
 
         {data === UNAVAILABLE && (
