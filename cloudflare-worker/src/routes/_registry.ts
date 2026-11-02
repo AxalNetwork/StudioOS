@@ -10,6 +10,7 @@ import { mount as admin_ai_agentsMount } from './admin_ai_agents';
 import { mount as admin_company_skillsMount } from './admin_company_skills';
 import { mount as admin_hq_skillsMount } from './admin_hq_skills';
 import { mount as deck_card_statusMount } from './deck_card_status';
+import { mount as deck_preflightMount } from './deck_preflight';
 import { mount as deck_proofMount } from './deck_proof';
 import { mount as deck_quotesMount } from './deck_quotes';
 import { mount as deck_remoteMount } from './deck_remote';
@@ -26,6 +27,7 @@ export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'admin_company_skills', mount: admin_company_skillsMount },
   { file: 'admin_hq_skills', mount: admin_hq_skillsMount },
   { file: 'deck_card_status', mount: deck_card_statusMount },
+  { file: 'deck_preflight', mount: deck_preflightMount },
   { file: 'deck_proof', mount: deck_proofMount },
   { file: 'deck_quotes', mount: deck_quotesMount },
   { file: 'deck_remote', mount: deck_remoteMount },
