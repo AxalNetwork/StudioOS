@@ -29,6 +29,7 @@ import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { bindingKey } from '../util/schemaBootstrap';
 import { refuse } from '../util/refusal';
+import type { RouteMount } from '../util/routeRegistry';
 
 const votes = new Hono<{ Bindings: Env }>();
 
@@ -287,3 +288,15 @@ votes.get('/:deal_id', async (c) => {
 });
 
 export default votes;
+
+/**
+ * #4105: mounted by the route registry, at the end of the route table as
+ * index.ts mounted it. The frontend (and backend) cast endpoint is the
+ * singular `/vote/:deal_id`; the plural `/votes/:deal_id` exists as a
+ * back-compat alias. Both go to the same handler so the threshold publisher
+ * fires regardless of caller.
+ */
+export const mount: RouteMount[] = [
+  { path: '/api/pipeline/votes', router: votes },
+  { path: '/api/pipeline/vote', router: votes },
+];

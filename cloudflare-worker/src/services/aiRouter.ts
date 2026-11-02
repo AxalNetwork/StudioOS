@@ -35,6 +35,8 @@ import { spendLimitMessage } from './aiSpendLimit';
 import { audioInputFor, parseAudioOutput, type SttTranscript } from './sttFormats';
 import * as shapes from './ai/shapes';
 import * as catalogue from './ai/catalogue';
+import { termsCleared } from './ai/modelTerms';
+import { isUnavailable, markUnavailable, meansUnavailable } from './ai/availability';
 import { catalogueSwitchesFor, modelsOffFor } from './featureFlags';
 import { costMicro, unitPrice } from './ai/pricing';
 import * as guard from './ai/guard';
@@ -155,6 +157,8 @@ export type RefusalReason =
   // D760: a model the catalogue cannot price. Refused before it runs, because
   // a run billed at zero trips no cap.
   | 'model_unpriced'
+  // D1504 (#3755): a model whose terms are neither grandfathered nor reviewed (`ai/modelTerms.ts`).
+  | 'model_terms_unreviewed'
   | 'all_models_failed'
   // D763: the guard could not be reached, threw, or answered something it is
   // not allowed to answer. Nothing runs (or, on the output side, nothing the
@@ -314,6 +318,12 @@ export interface RunOptions {
   // out and behaves as before.
   idempotencyKey?: string;
   executionId?: string;
+  // D1540 (#3791): a pinned quote. The most this run may charge the member, in
+  // micro-USD, from a quote the Worker stored before the run (New deck's
+  // `deck_run_quotes`). The hold is no larger, and the settlement is capped at
+  // it, so a price that changed after the quote never charges more than it
+  // said. Never from a request body: the route reads it from its own row.
+  pinMicrousd?: number;
 }
 
 /**
@@ -1203,11 +1213,18 @@ export function estimateCostUsd(
  * but neither of this file's price views holds is unpriced here too, because
  * its receipt would have nothing to be computed from.
  */
-export function modelRefusal(env: Env, model: string): 'model_unpriced' | 'model_not_offered' | null {
+export function modelRefusal(env: Env, model: string, cleared: (id: string) => boolean = termsCleared): 'model_unpriced' | 'model_not_offered' | 'model_terms_unreviewed' | null {
   const refusal = catalogue.refusalFor(model, env);
   if (refusal) return refusal;
-  return model in PRICE_USD_PER_1M_TOKENS || model in PRICE_USD_PER_AUDIO_MINUTE || model in PRICE_USD_PER_1K_CHARACTERS || IMAGE_PRICED_MODELS.has(model) || model === '@cf/microsoft/resnet-50' ? null : 'model_unpriced';
+  const priced = model in PRICE_USD_PER_1M_TOKENS || model in PRICE_USD_PER_AUDIO_MINUTE || model in PRICE_USD_PER_1K_CHARACTERS || IMAGE_PRICED_MODELS.has(model) || model === '@cf/microsoft/resnet-50';
+  if (!priced) return 'model_unpriced';
+  // D1504 (#3755): a model main did not run before the terms register, and whose terms no one has reviewed, does not run.
+  return cleared(model) ? null : 'model_terms_unreviewed';
 }
+
+/** A refused model in a sentence (never a provider's raw text). */
+export const modelRefusalWords = (model: string, refusal: 'model_unpriced' | 'model_not_offered' | 'model_terms_unreviewed'): string =>
+  `${model} ${refusal === 'model_unpriced' ? 'has no price' : refusal === 'model_terms_unreviewed' ? 'is waiting on a review of its terms' : 'is not offered'}`;
 
 // Crude token estimator — ≈ 4 chars/token for English. Good enough for
 // budget accounting; real prompt/completion counts come back from the
@@ -1399,13 +1416,13 @@ interface ProviderResult {
 }
 
 /** The slice of workers-types' `GatewayOptions` this router sends (D261). */
-type GatewayOption = { gateway: { id: string; metadata: Record<string, string> } };
+type GatewayOption = { gateway: { id: string; metadata: Record<string, string>; skipCache?: boolean; collectLog?: boolean } };
 
 interface WorkersAIBinding {
   run(
     model: string,
     payload: unknown,
-    options?: { gateway?: { id: string; skipCache?: boolean; cacheTtl?: number; metadata?: Record<string, string> }; extraHeaders?: Record<string, string> },
+    options?: { gateway?: { id: string; skipCache?: boolean; cacheTtl?: number; collectLog?: boolean; metadata?: Record<string, string> }; extraHeaders?: Record<string, string> },
   ): Promise<unknown>;
 }
 
@@ -1455,6 +1472,41 @@ function gatewayOptionFor(env: Env, task: TaskClass, userId?: number | null): Ga
   return { gateway: { id: slug, metadata } };
 }
 
+/**
+ * D1504 (#3755, deck v2 A11) — the deck's AI Gateway, inert until the owner
+ * creates it (owner question L): `CF_AI_GATEWAY_SLUG_DECK` is empty in every
+ * `wrangler.toml` table, so no deck run is gatewayed until it is set.
+ *
+ * A deck run is `deck_image`, or a run on a `deck:` rail option (an element's
+ * words). Once set, its call carries the gateway with:
+ *   - `skipCache: true` — a variant is never served from cache, so Regenerate
+ *     and the 2–3 variants really differ;
+ *   - `collectLog: false` — no prompt or answer is kept in the gateway's logs;
+ *   - no retry: a deck run is never re-sent un-gatewayed (the advisor's
+ *     Task #50 bypass is not applied), so a failure goes down the run's own
+ *     chain once;
+ *   - metadata, at most five entries: branch, account, task, rail option.
+ */
+export function deckGatewaySlug(env: Env): string | null {
+  const slug = env.CF_AI_GATEWAY_SLUG_DECK;
+  return slug && slug.trim() ? slug.trim() : null;
+}
+export const isDeckRun = (opts: Pick<RunOptions, 'task' | 'rail'>): boolean =>
+  opts.task === 'deck_image' || (typeof opts.rail?.option === 'string' && opts.rail.option.startsWith('deck:'));
+export const DECK_GATEWAY_METADATA_KEYS = ['branch', 'account', 'task', 'option'] as const;
+
+export function deckGatewayOptionFor(env: Env, opts: Pick<RunOptions, 'task' | 'rail' | 'userId'>): GatewayOption | undefined {
+  if (!isDeckRun(opts)) return undefined;
+  const slug = deckGatewaySlug(env);
+  if (!slug) return undefined;
+  const branch = branchOf(env) ?? 'hq';
+  const metadata: Record<string, string> = { branch };
+  if (typeof opts.userId === 'number' && Number.isInteger(opts.userId) && opts.userId > 0) metadata.account = `${branch}:${opts.userId}`;
+  metadata.task = opts.task;
+  if (typeof opts.rail?.option === 'string') metadata.option = opts.rail.option.slice(0, 64);
+  return { gateway: { id: slug, metadata, skipCache: true, collectLog: false } };
+}
+
 // True when this task would normally route through the advisor AI Gateway
 // AND a slug is configured — i.e. there's a gateway hop that could fail
 // independently of the underlying Workers AI model.
@@ -1473,7 +1525,7 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
   if (!ai || typeof ai.run !== 'function') {
     return { ok: false, status: 0, error: 'AI binding not configured' };
   }
-  const gatewayOpt = bypassGateway ? undefined : gatewayOptionFor(env, opts.task, opts.userId);
+  const gatewayOpt = bypassGateway ? undefined : (gatewayOptionFor(env, opts.task, opts.userId) ?? deckGatewayOptionFor(env, opts));
   // D761: cache affinity, so a member's next turn on the same page earns cached
   // input. The member's id and the page key only, never an email or a name.
   const affinity = shapes.sessionAffinity(opts.userId, normaliseSurface(opts.surface) ?? opts.task);
@@ -2026,7 +2078,7 @@ export async function quoteRun(env: Env, input: RunOptions): Promise<RunQuote> {
   const models = [choice.primary, ...choice.chain];
   for (const model of models) {
     const refusal = modelRefusal(env, model);
-    if (refusal) return { ok: false, refusal, error: `${model} ${refusal === 'model_unpriced' ? 'has no price' : 'is not offered'}` };
+    if (refusal) return { ok: false, refusal, error: modelRefusalWords(model, refusal) };
   }
   const draw = { ...(choice.draw ? { draw: choice.draw } : {}), ...(choice.speech ? { speech: choice.speech } : {}) };
   if (opts.userId <= 0) return { ok: true, hold_microusd: 0, model: choice.primary, ...draw };
@@ -2136,7 +2188,7 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
       fallback_used: false, cached: false, safety_score: null,
     };
     await recordUsage(env, opts, usage, refusal);
-    return { ok: false, refusal, error: `${model} ${refusal === 'model_unpriced' ? 'has no price' : 'is not offered'}`, usage };
+    return { ok: false, refusal, error: modelRefusalWords(model, refusal), usage };
   }
 
   const store = kv(env);
@@ -2230,6 +2282,9 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
   }
 
   let reservation: {uid:string;userId:number} | undefined;
+  // D1540 (#3791): a pinned quote caps the hold and every settlement of it.
+  const pin = Number.isSafeInteger(opts.pinMicrousd) && opts.pinMicrousd! >= 0 ? opts.pinMicrousd! : null;
+  const pinned = (micro: number) => (pin == null ? micro : Math.min(micro, pin));
   // D762: what this run is settled at over its cost, from the member's licence.
   // Cost (est_cost_usd, the KV buckets, the organisation cap) stays cost.
   let multiplier = 1;
@@ -2237,7 +2292,8 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
     try {
       multiplier = await aiBudget.memberChargeMultiplier(env, opts.userId);
       // D1278: the hold names the run's task, never its prompt.
-      const held = await aiBudget.reserveAiBudget(env, opts.userId, holdQuoteMicro(opts, route, [primaryModel, ...fallbacks], guardOn, guardInput, multiplier),
+      // D1540: a pinned quote holds no more than it said.
+      const held = await aiBudget.reserveAiBudget(env, opts.userId, pinned(holdQuoteMicro(opts, route, [primaryModel, ...fallbacks], guardOn, guardInput, multiplier)),
         new Date(), { idempotencyKey: opts.idempotencyKey ?? null, context: { operation: holdOperation(opts), surface: 'ai', executionId: opts.executionId ?? null } });
       if (!held.ok) {
         const usage:UsageMeta={task:opts.task,model:primaryModel,latency_ms:0,prompt_tokens:0,completion_tokens:0,est_cost_usd:0,fallback_used:false,cached:false,safety_score:null};
@@ -2275,6 +2331,8 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
    * False when the settlement could not be written.
    */
   const settleHold = async (micro: number, usd: number, answered: boolean): Promise<boolean> => {
+    // D1540: never more than the pinned quote, whatever the run cost at today's prices.
+    micro = pinned(micro);
     if (reservation) {
       try { await aiBudget.settleAiReservation(env, reservation, micro, !answered && micro === 0); }
       catch { return false; }
@@ -2394,7 +2452,13 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
     if (!route.isAudio && !shapes.fitsContext(facts, inputTokens, shapes.maxTokensFor(facts, opts.maxTokens, route.reasoningMaxTokens))) {
       return record(model, { ok: false, status: 413, error: `input does not fit ${model}'s context window` }, false);
     }
-    return record(model, await callWaiCalled(model));
+    // D1504 (#3755): a model Workers AI said it does not have, within the hour, is skipped without a call.
+    if (await isUnavailable(env, model)) {
+      return record(model, { ok: false, status: 503, code: null, error: `${model} is unavailable for now` }, false);
+    }
+    const called = await callWaiCalled(model);
+    if (meansUnavailable(called)) await markUnavailable(env, model, called.code ?? null);
+    return record(model, called);
   };
   const callWaiCalled = async (model: string): Promise<ProviderResult> => {
     const first = await callWaiRaw(model, false);
@@ -2470,7 +2534,9 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
    * written.
    */
   const settle = async (u: UsageMeta, ok: boolean): Promise<RunCharge | null> => {
-    const charged = ok ? aiBudget.billedUsdToMicro(u.est_cost_usd, multiplier) : 0;
+    // D1540: the run's own row records its share of a pinned quote, after the guard's.
+    const billed = ok ? aiBudget.billedUsdToMicro(u.est_cost_usd, multiplier) : 0;
+    const charged = pin == null ? billed : Math.min(billed, Math.max(0, pin - guardMicro()));
     if (!await settleHold(charged + guardMicro(), (ok ? u.est_cost_usd : 0) + guardUsd(), ok)) return null;
     // A run with no hold (a system run) charged nobody.
     return { charged: reservation ? charged : 0, reservationUid: reservation?.uid ?? null, units: unitsFor(u) };

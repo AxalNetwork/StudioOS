@@ -35,7 +35,8 @@ export const CONTRACTS = Object.freeze({
   comments: { issue: 3817, route: 'GET /api/decks/:id/comments', schema: 'deckComments.schema.json' },
   // D1579 (#3826): each card's status and assignee, filtered, the cards not Done, and who a card can be assigned to.
   cardStatus: { issue: 3826, route: 'GET /api/decks/:id/card-status', schema: 'deckCardStatus.schema.json' },
-
+  // D1523 (#3775): every figure on the version and where it comes from.
+  figures: { issue: 3775, route: 'GET /api/decks/:id/figures', schema: 'deckFigures.schema.json' },
 });
 
 export type ContractMethod = keyof typeof CONTRACTS;

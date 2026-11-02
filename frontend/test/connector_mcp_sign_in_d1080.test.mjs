@@ -77,7 +77,7 @@ test('1. the mcp kind\'s words: the label, Manage, the tooltip, the Sign-in row;
 
 test('2. the client: one module, one line in api.js, the generic start', () => {
   assert.equal(api.mcpOauthApi, mcpOauthApi);
-  const lines = readFileSync('frontend/src/lib/api.js', 'utf8').split('\n').filter((l) => l.includes('mcpOauth'));
+  const lines = readFileSync('frontend/src/lib/apiModules.generated.js', 'utf8').split('\n').filter((l) => l.includes('mcpOauth'));
   assert.deepEqual(lines, ["export * from './api/mcpOauth.js';"]);
 });
 

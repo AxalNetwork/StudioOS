@@ -1,3 +1,4 @@
+/** D628: a fund's ledger reads (`/api/fund-ledger`): the funds the caller administers, and one fund's ledger for a period. */
 import { request } from '../api.js';
 export const fundLedgerApi = {
   list: () => request('/fund-ledger'),

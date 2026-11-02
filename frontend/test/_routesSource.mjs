@@ -14,15 +14,19 @@
  * splits on `<Route` or scans `path="…"` lines works unchanged.
  *
  * `missingRouteModules()` is the other half: a module that exists but is not
- * imported and composed in `App.jsx`'s block is a page nobody can open and a
- * route table two readers disagree about. `routes_modules_d528.test.mjs`
- * fails on one.
+ * collected and composed by `App.jsx` is a page nobody can open and a route
+ * table two readers disagree about. Since #4105 `App.jsx` names no module: it
+ * collects every file here with one eager `import.meta.glob` and composes the
+ * list in one line, so a module is wired exactly when that glob and that line
+ * are in place and the module default-exports its `<area>Routes` function.
+ * `routes_modules_d528.test.mjs` fails on one that is not.
  *
  * `root` defaults to the repository root (the cwd the suite runs from) and is
  * a parameter so the test can point the helper at a fixture tree.
  */
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { resolve, basename } from 'node:path';
+import { codeOnly } from './_codeOnly.mjs';
 
 export const APP_PATH = 'frontend/src/App.jsx';
 export const ROUTES_DIR = 'frontend/src/routes';
@@ -103,20 +107,44 @@ export function routeModuleExport(file) {
   return `${camel}Routes`;
 }
 
+/** The one line that collects every module (#4105), as `App.jsx` writes it. */
+export const ROUTE_MODULES_LINE = "const ROUTE_MODULES = collectRouteModules(import.meta.glob('./routes/*.jsx', { eager: true }));";
+/** The one line that composes them, inside the Routes element's D528 block. */
+export const ROUTE_MODULES_COMPOSE = '{ROUTE_MODULES.map(({ file, routes }) => <React.Fragment key={file}>{routes(routeTools)}</React.Fragment>)}';
+
 /**
- * Modules under `frontend/src/routes/` that `App.jsx` does not both import
- * (`import <name>Routes from './routes/<area>'`) and compose
- * (`{<name>Routes(routeTools)}`). Empty when every module is wired.
+ * Whether `App.jsx`'s CODE (comments stripped) collects the folder with the
+ * glob line and composes the list with the compose line, each exactly once,
+ * the compose line inside the composition block.
+ */
+export function routeModulesWiring(root = process.cwd()) {
+  const app = readFileSync(resolve(root, APP_PATH), 'utf8');
+  const code = codeOnly(app);
+  const count = (needle) => code.split(needle).length - 1;
+  const open = app.indexOf('{/* ── Route modules (D528)');
+  const close = app.indexOf('{/* ── end route modules');
+  const inBlock = open >= 0 && close > open && app.slice(open, close).includes(ROUTE_MODULES_COMPOSE);
+  return {
+    collected: count(ROUTE_MODULES_LINE) === 1 && /^import \{ collectRouteModules \} from '\.\/lib\/routeModules';$/m.test(code),
+    composed: count(ROUTE_MODULES_COMPOSE) === 1 && inBlock,
+  };
+}
+
+/**
+ * Modules under `frontend/src/routes/` that `App.jsx` would not serve: every
+ * module when the glob or the compose line is missing (`collected`,
+ * `composed`), and any module whose default export is not the function its
+ * file name implies (`exported`, `export default function <area>Routes(`).
+ * Empty when every module is wired.
  */
 export function missingRouteModules(root = process.cwd()) {
-  const app = readFileSync(resolve(root, APP_PATH), 'utf8');
+  const { collected, composed } = routeModulesWiring(root);
   const missing = [];
   for (const file of routeModuleFiles(root)) {
     const name = routeModuleExport(file);
-    const stem = basename(file, '.jsx');
-    const imported = app.includes(`import ${name} from './routes/${stem}';`);
-    const composed = app.includes(`{${name}(routeTools)}`);
-    if (!imported || !composed) missing.push({ file, name, imported, composed });
+    const src = readFileSync(resolve(root, file), 'utf8');
+    const exported = [...src.matchAll(/^export default function ([\w$]+)\(/gm)].some((m) => m[1] === name);
+    if (!collected || !composed || !exported) missing.push({ file, name, collected, composed, exported });
   }
   return missing;
 }

@@ -72,6 +72,17 @@ The token behind `CLOUDFLARE_API_TOKEN` therefore needs **D1:Edit** as well as
 Workers Scripts:Edit. Until 2026-09-03 the deploy workflow called
 `wrangler deploy` directly — the first "silent skip" above, on every merge.
 
+### 1.2.1 The merge queue in front of the deploy (#4107)
+
+A pull request reaches `main` through GitHub's merge queue. The queue tests
+each entry on a `gh-readonly-queue/main/…` branch through the `merge_group`
+event and merges it only when main's six required checks pass there (the
+table is in `.github/workflows/README.md`, "The merge queue"). Nothing in a
+queue run deploys or touches production: `cloudflare-worker-deploy.yml`
+listens for a push to `main` only, so the deploy starts when the queue's merge
+lands, as it did when a PR was merged by hand. A queue entry that fails is not
+merged and nothing ships; the PR returns to its author with the failing check.
+
 ### 1.3 A branch database
 
 A subsidiary branch is a separate Worker over a separate D1 database
