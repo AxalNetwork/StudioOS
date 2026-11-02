@@ -43,7 +43,7 @@ function build(upTo?: string): DatabaseSync {
   db.exec('PRAGMA foreign_keys = ON;');
   db.exec(BASELINE);
   for (const name of newer) {
-    if (upTo && name >= upTo) break;
+    if (upTo && compareMigrations(name, upTo) >= 0) break;
     db.exec(readFileSync(resolve(M, name), 'utf8'));
   }
   return db;
@@ -116,7 +116,7 @@ test('3: migration 462 applies over a fresh build, and adds nothing that already
     assert.equal(before.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(t), undefined, `${t} is new`);
   }
   // The grep the task asks for (D-t): no earlier file names the columns or the tables.
-  const earlier = [BASELINE, ...newer.filter((n) => n < M462).map((n) => readFileSync(resolve(M, n), 'utf8'))].join('\n');
+  const earlier = [BASELINE, ...newer.filter((n) => compareMigrations(n, M462) < 0).map((n) => readFileSync(resolve(M, n), 'utf8'))].join('\n');
   for (const name of [...created, 'from_company', 'notify_on_ship', 'told_via', 'cac_bar_cents', 'comp_min_cents', 'terms_amount_cents', 'remind_days_json', 'geography_ref']) {
     assert.doesNotMatch(earlier, new RegExp(`\\b${name}\\b`), `${name} appears in no earlier file`);
   }

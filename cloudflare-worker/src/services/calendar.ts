@@ -1146,6 +1146,10 @@ function scopedEvent(kind: CalendarEvent['kind'], row: ScopedRow): CalendarEvent
     due_date: String(row.start_at), event_type: row.event_type ?? null, jurisdiction: row.jurisdiction ?? null,
     recurrence: row.recurrence ?? null, owner: typeof row.owner_name === 'string' && row.owner_name.trim() ? row.owner_name.trim() : null,
     source: row.source ?? null,
+    // D1614 CO4 (#3976): a staff scope reads venture rows only, so never a company-level task.
+    // The company badge is filled from the one batched lookup in fetchCalendarScope (D4154), not a second join here.
+    company: null,
+    company_task: false,
   } : undefined;
   return {
     id: `${kind}:${row.id}`, kind, source_id: Number(row.id), source_uid: String(uid),
@@ -1278,8 +1282,13 @@ export async function fetchCalendarScope(
   const companies = await scopeCompanies(env, described);
   const events: CalendarScopeItem[] = described.map(event => {
     const company = companyOf(event, companies);
+    // D1614 CO4: the deadline's own company badge is the same company the scope item names.
+    const compliance = event.kind === 'compliance_due' && event.compliance
+      ? { ...event.compliance, company: company ? { uid: company.uid, name: company.name } : null }
+      : undefined;
     return {
-      ...event, organizer_email: null, attendees: event.attendees.map(attendee => ({ ...attendee, email: null })),
+      ...event, ...(compliance ? { compliance } : {}),
+      organizer_email: null, attendees: event.attendees.map(attendee => ({ ...attendee, email: null })),
       location_uri: null, notes: null, url: undefined, pushed_to: [], read_only: true as const,
       my_role: { code: 'read_only', words: 'Read only' }, href: null,
       can: { rsvp: false as const, reschedule: false as const, cancel: false as const, copy: false as const },
