@@ -300,5 +300,5 @@ test('wiring: mounted ahead of admin.ts; every statement bound; the client spell
   assert.ok(!/prepare\(`[^`]*\$\{/.test(src), 'no interpolated SQL');
   const client = read('frontend/src/lib/api/adminAccountWrites.js');
   for (const p of ["'/admin/accounts/resend-verification'", "'/admin/accounts/views'", '/admin/accounts/views/', "'/admin/accounts/export'"]) assert.ok(client.includes(p), p);
-  assert.match(read('frontend/src/lib/api.js'), /export \* from '\.\/api\/adminAccountWrites\.js';/);
+  assert.match(read('frontend/src/lib/apiModules.generated.js'), /export \* from '\.\/api\/adminAccountWrites\.js';/);
 });

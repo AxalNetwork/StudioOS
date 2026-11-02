@@ -17,6 +17,8 @@
 import { sanitizeBinding, type SourceItem } from './sources';
 import { numberIn } from './newDeck';
 import { unrecordedLinks, untrustedBlock, withUntrustedRule } from '../ai/untrusted';
+import * as ASSIST_PROMPT from './prompts/assist.default';
+import { voicePreamble } from './prompts/voice';
 
 export const ASSIST_PAGE = 'Founder · Raise · Pitch deck';
 
@@ -50,12 +52,10 @@ export const SERIES_MAX = 6;
 export const AI_OFF_LINE = 'AI assistance is off on this page. Your records still fill the figures.';
 export const FIGURE_LINE = (module: string | null) => `Figures come from your records. Update ${module || 'its module'} to change this one.`;
 
-const SYSTEM = [
-  'You edit the words on one card of a founder\'s pitch deck.',
-  'Return only the new wording: no quotes, no preface, no explanation.',
-  'Never add a number, an amount, a percentage, a date or a count. Keep every figure the text already has exactly as written, or leave it out.',
-  'Keep the founder\'s meaning. Do not invent customers, partners or results.',
-].join(' ');
+/** D1519 (#3771): the assist prompt is the registry's (`prompts/assist.default.ts`); the voice preamble is added per deck. */
+const SYSTEM = ASSIST_PROMPT.system;
+/** What every assist reply records (D1519): the prompt that wrote it. */
+export const ASSIST_PROMPT_VERSION = `assist.default@v${ASSIST_PROMPT.version}`;
 
 const ASK: Record<Exclude<TextAction, 'headline'>, (o: { tone?: string; language?: string; instruction?: string }) => string> = {
   rewrite: () => 'Rewrite this text so it reads clearly to an investor.',
@@ -68,14 +68,16 @@ const ASK: Record<Exclude<TextAction, 'headline'>, (o: { tone?: string; language
 };
 
 /** What a text press asks the model. */
-export function textMessage(action: TextAction, text: string, o: { tone?: string; language?: string; instruction?: string; labels?: string[] } = {}): { system: string; user: string } {
+export function textMessage(action: TextAction, text: string, o: { tone?: string; language?: string; instruction?: string; labels?: string[]; voice?: unknown } = {}): { system: string; user: string } {
+  // D1519: every press opens with the house voice and the deck theme's own (`theme.voice`), whichever model runs it.
+  const voiced = `${voicePreamble(o.voice)} ${SYSTEM}`;
   if (action === 'headline') {
     return {
-      system: `${SYSTEM} Write one headline of at most ${HEADLINE_MAX} characters.`,
+      system: withUntrustedRule(`${voiced} Write one headline of at most ${HEADLINE_MAX} characters.`),
       user: `Write a headline for a card that shows these figures from the founder's records (their values are filled in by the records, not by you): ${(o.labels ?? []).join('; ')}.`,
     };
   }
-  return { system: withUntrustedRule(SYSTEM), user: `${ASK[action](o)}\n\nText:\n${untrustedBlock('deck_import', text)}` };
+  return { system: withUntrustedRule(voiced), user: `${ASK[action](o)}\n\nText:\n${untrustedBlock('deck_import', text)}` };
 }
 
 /** The wording from a model's answer: trimmed, its wrapping quotes taken off, cut to the field. */

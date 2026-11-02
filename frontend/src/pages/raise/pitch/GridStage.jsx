@@ -19,6 +19,7 @@ import {
   NUDGE_LINE, decorLabel, decorPlan, guidesFor, isDecorSel, itemsOf, moveDecor, nudgeStep, placeBox, spacingOf,
 } from './arrangeModel';
 import { minSizeProblem, moveOverflow, overLine, overflowOf } from './structureModel';
+import { cursorsOn, heldAreas } from './presenceModel';
 
 /**
  * D1604 (#3716, pd0, pd3, pd3b, pd11) — the card on The Grid, the editor's
@@ -165,9 +166,23 @@ export default function GridStage({
   card, index, model, colours, ink, theme, kit, charts, readOnly = false,
   selection, focus, onSelection, onMove, onAsk, askOff = null, askLine = null, items = [], onRefresh = null,
   pageLabel = null, onCard = null,
+  editors = null, youId = null, lockLine = null, onPointer = null,
 }) {
   const aspect = aspectOf(theme?.aspect);
   const areas = useMemo(() => areasOf(card, model), [card, model]);
+  // D1577 (#3824, pd32): the areas another member is in, outlined in their colour, and their cursors.
+  const held = useMemo(() => heldAreas(editors, youId, card?.uid ?? null), [editors, youId, card]);
+  const cursors = useMemo(() => cursorsOn(editors, youId, card?.uid ?? null), [editors, youId, card]);
+  const lastPointer = useRef(0);
+  // D1577: this member's pointer, as fractions of the stage, at most five a second (one handler with the drag's `over`).
+  const pointerMoved = (e) => {
+    if (!onPointer || !card?.uid) return;
+    const now = Date.now();
+    const r = faceRef.current?.getBoundingClientRect?.();
+    if (!r || !r.width || !r.height || now - lastPointer.current < 200) return;
+    lastPointer.current = now;
+    onPointer(card.uid, (e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
+  };
   const byKey = useMemo(() => itemsByKey(items), [items]);
   const changed = useMemo(() => staleFigures(card, items, charts), [card, items, charts]);
   const [hover, setHover] = useState(null);
@@ -387,6 +402,7 @@ export default function GridStage({
         ) : null}
       </div>
       {askLine ? <span className={MUTED} role="status" data-testid="pitch-editor-ask-line">{askLine}</span> : null}
+      {lockLine ? <span className="text-[12.5px] font-semibold text-amber-800 dark:text-amber-200" role="status" data-testid="pitch-editor-lock-line">{lockLine}</span> : null}
 
       <div ref={faceRef}
         className="relative w-full select-none overflow-hidden rounded-[12px] border border-axal-hairline shadow-sm dark:border-gray-700"
@@ -394,11 +410,15 @@ export default function GridStage({
         role={areas ? 'group' : undefined} aria-label={areas ? `Card ${index + 1} on the Grid` : undefined}
         onKeyDown={keys} onKeyUp={keyUp}
         onPointerDown={(e) => { if (e.target === faceRef.current) down(e); }}
-        onPointerMove={over} onPointerUp={up} onPointerLeave={() => { if (press.current) up(); }}
+        onPointerMove={(e) => { over(e); pointerMoved(e); }} onPointerUp={up} onPointerLeave={() => { if (press.current) up(); }}
         onDragOver={(e) => dragOver(e, null)} onDrop={(e) => drop(e, null)}
         data-aspect={aspect} {...langAttrs(theme)} data-testid="pitch-editor-card">
         {veil ? <span className="absolute inset-0" style={{ background: veil }} aria-hidden="true" data-testid="pitch-editor-overlay" /> : null}
         {grid ? <GridOverlay aspect={aspect} /> : null}
+        {cursors.map((k) => (
+          <span key={k.id} className="pointer-events-none absolute z-20 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white" title={k.name}
+            style={{ left: k.left, top: k.top, background: k.colour }} aria-hidden="true" data-testid={`pitch-editor-cursor-${k.id}`} />
+        ))}
         {areas ? (
           <div ref={layer} className={LAYER}
             onPointerDown={(e) => { if (e.target === e.currentTarget) down(e); }} data-testid="pitch-editor-blocks">
@@ -426,7 +446,7 @@ export default function GridStage({
                   aria-describedby={worded ? nameId : undefined}
                   aria-pressed={on}
                   aria-disabled={ok.ok ? undefined : true}
-                  title={ok.ok ? undefined : ok.why}
+                  title={ok.ok ? held.get(a.id)?.tooltip : ok.why}
                   draggable={block && ok.ok && !readOnly}
                   onDragStart={(e) => { setDrag(a.id); try { e.dataTransfer?.setData?.('text/plain', a.id); } catch { /* the drag still works */ } }}
                   onDragEnd={() => { setDrag(null); setGhost(null); }}
@@ -444,6 +464,11 @@ export default function GridStage({
                     ? <BlockView block={a.block} colours={colours} renderFace={face} renderChart={(b) => <ChartBlock block={b} charts={charts} colours={colours} />} />
                     : on ? <span className="font-mono text-[10px]" style={{ color: colours.muted }}>Empty · {areaLabel(a.grid)}</span> : null}
                 </button>
+                {held.get(a.id) ? (
+                  <span className="pointer-events-none relative rounded-[8px]" style={{ ...at, outline: `2px solid ${held.get(a.id).colour}` }} data-testid={`pitch-editor-held-${a.id}`}>
+                    <span className="absolute -top-2.5 left-1 whitespace-nowrap rounded-[6px] px-1.5 py-0.5 text-[10px] font-bold text-white" style={{ background: held.get(a.id).colour }}>{held.get(a.id).label}</span>
+                  </span>
+                ) : null}
                 </React.Fragment>
               );
             })}

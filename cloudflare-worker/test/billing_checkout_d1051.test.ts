@@ -395,7 +395,7 @@ test('wiring: mounted ahead of billing, the client names the three routes, and s
   assert.ok(index.indexOf("app.route('/api/billing', billingCheckout)") < index.indexOf("app.route('/api/billing', billing)"));
   const client = read('frontend/src/lib/api/billingCheckout.js');
   for (const p of ["'/billing/checkout/quote'", "'/billing/checkout/start'", '/billing/checkout/status?ref=']) assert.ok(client.includes(p), p);
-  assert.match(read('frontend/src/lib/api.js'), /export \* from '\.\/api\/billingCheckout\.js';/);
+  assert.match(read('frontend/src/lib/apiModules.generated.js'), /export \* from '\.\/api\/billingCheckout\.js';/);
   // D1054 (#2905) is part 6: the paywall opens the sheet now, never the hosted checkout. The hosted
   // route stays mounted; answering it 410 is its own change, once nothing else calls it.
   assert.doesNotMatch(read('frontend/src/components/PaywallModal.jsx'), /api\.(tierCheckout|investorCheckout)/);

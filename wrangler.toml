@@ -276,6 +276,8 @@ USE_CF_QUEUE      = "true"
 # 200-rpm/account) before deploy; when the slug is missing or unknown
 # Cloudflare silently treats the call as un-gatewayed (no breakage).
 CF_AI_GATEWAY_SLUG_ADVISOR = "advisor-ongoing"
+# D1504 (#3755): the deck's AI Gateway, empty (inert) until the owner creates it (owner question L).
+CF_AI_GATEWAY_SLUG_DECK    = ""
 # Task #4 (CG) — daily turn cap per user for the advisor. Soft-warn at
 # 80%, hard-block at 100%. Counted in KV under
 # `ai_spend:advisor:{user_id}:{yyyy-mm-dd}`. The "USD_DAY" suffix is a
@@ -406,6 +408,12 @@ class_name = "OnboardingChat"
 name       = "MEETING_BOT_RUN"
 class_name = "MeetingBotRun"
 
+# D1577 (#3824): the deck's co-editing room (presence, cursors, soft locks), one per venture's
+# deck. Hibernatable WebSockets, no Durable Object storage. Cost approved by the owner (decision L).
+[[durable_objects.bindings]]
+name       = "DECK_PRESENCE"
+class_name = "DeckPresence"
+
 [[migrations]]
 tag                = "v1-realtime"
 # Cloudflare requires `new_sqlite_classes` for all newly created Durable
@@ -416,6 +424,10 @@ new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
 [[migrations]]
 tag = "v2-meeting-bot"
 new_sqlite_classes = ["MeetingBotRun"]
+
+[[migrations]]
+tag = "v3-deck-presence"
+new_sqlite_classes = ["DeckPresence"]
 
 # ---------- Vectorize (semantic search) ----------
 # Index `axal-search` (768-dim, cosine) backs the global search bar on the
@@ -649,6 +661,8 @@ WORKER_DEPLOY_VERSION = ""
 # Task #4 (CG) — see top-level [vars] for the rationale. Mirrored here
 # because Wrangler env tables don't inherit from the top-level [vars].
 CF_AI_GATEWAY_SLUG_ADVISOR     = "advisor-ongoing"
+# D1504 (#3755): the deck's AI Gateway, empty (inert) until the owner creates it (owner question L).
+CF_AI_GATEWAY_SLUG_DECK        = ""
 WORKERS_AI_ADVISOR_BUDGET_USD_DAY = "100"
 # D538 (#1078) — see top-level [vars]. Mirrored because env tables don't inherit.
 MI_STUB_ROWS           = "off"
@@ -723,6 +737,12 @@ class_name = "OnboardingChat"
 name       = "MEETING_BOT_RUN"
 class_name = "MeetingBotRun"
 
+# D1577 (#3824): the deck's co-editing room (presence, cursors, soft locks), one per venture's
+# deck. Hibernatable WebSockets, no Durable Object storage. Cost approved by the owner (decision L).
+[[env.production.durable_objects.bindings]]
+name       = "DECK_PRESENCE"
+class_name = "DeckPresence"
+
 [[env.production.migrations]]
 tag                = "v1-realtime"
 new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
@@ -730,6 +750,10 @@ new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
 [[env.production.migrations]]
 tag = "v2-meeting-bot"
 new_sqlite_classes = ["MeetingBotRun"]
+
+[[env.production.migrations]]
+tag = "v3-deck-presence"
+new_sqlite_classes = ["DeckPresence"]
 
 [[env.production.vectorize]]
 binding    = "VECTORIZE"
@@ -837,6 +861,8 @@ USE_CF_QUEUE      = "true"
 # `advisor-ongoing-preview`) created in the dashboard. Defaults to the
 # prod slug so the binding still works before a preview gateway exists.
 CF_AI_GATEWAY_SLUG_ADVISOR     = "advisor-ongoing"
+# D1504 (#3755): the deck's AI Gateway, empty (inert) until the owner creates it (owner question L).
+CF_AI_GATEWAY_SLUG_DECK        = ""
 WORKERS_AI_ADVISOR_BUDGET_USD_DAY = "100"
 # Preview is allowed to widen CORS so PR review deploys can talk to
 # localhost SPAs and the workers.dev sandbox URL.
@@ -901,6 +927,12 @@ class_name = "OnboardingChat"
 name       = "MEETING_BOT_RUN"
 class_name = "MeetingBotRun"
 
+# D1577 (#3824): the deck's co-editing room (presence, cursors, soft locks), one per venture's
+# deck. Hibernatable WebSockets, no Durable Object storage. Cost approved by the owner (decision L).
+[[env.preview.durable_objects.bindings]]
+name       = "DECK_PRESENCE"
+class_name = "DeckPresence"
+
 [[env.preview.migrations]]
 tag                = "v1-realtime"
 new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
@@ -908,6 +940,10 @@ new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
 [[env.preview.migrations]]
 tag = "v2-meeting-bot"
 new_sqlite_classes = ["MeetingBotRun"]
+
+[[env.preview.migrations]]
+tag = "v3-deck-presence"
+new_sqlite_classes = ["DeckPresence"]
 
 [[env.preview.r2_buckets]]
 binding     = "FILES"

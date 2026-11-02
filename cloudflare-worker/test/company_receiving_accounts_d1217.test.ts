@@ -381,7 +381,7 @@ test('#3214: the route is mounted before the Closing router, and the client name
  const client=readFileSync('frontend/src/lib/api/companyReceivingAccounts.js','utf8');
  assert.match(client,/`\/closings\/company-receiving-accounts\/\$\{encodeURIComponent\(projectId\)\}`/);
  assert.match(client,/\$\{at\(projectId\)\}\/reveal/);
- assert.match(readFileSync('frontend/src/lib/api.js','utf8'),/^export \* from '\.\/api\/companyReceivingAccounts\.js';$/m);
+ assert.match(readFileSync('frontend/src/lib/apiModules.generated.js','utf8'),/^export \* from '\.\/api\/companyReceivingAccounts\.js';$/m);
 });
 
 test('#3214: the reveal checks the account against the signed line\'s own currency, and a refused Accept writes no line evidence', async()=>{

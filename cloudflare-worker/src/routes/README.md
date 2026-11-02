@@ -73,9 +73,58 @@ bounded immediate work; provider failures do not undo local cancellation, and
 failed mappings remain retryable. `/events/suggested` now includes
 the authenticated caller's actual registration eligibility.
 
+## Mounting a new router (#4105)
+
+A **new** router mounts itself; do not add an import or an `app.route(...)`
+line to `index.ts`, which changed in 63 of 403 commits in one week for exactly
+that reason. Export a `mount` descriptor from the router's file
+(`RouteMount`, `../util/routeRegistry.ts`):
+
+```ts
+import type { RouteMount } from '../util/routeRegistry';
+import decks from './decks';
+
+export const mount: RouteMount = { path: '/api/decks', router: deckQuotes, before: [decks] };
+// several routers, mounted in this order:
+export const mount: RouteMount[] = [{ path: '/api/a', router: a }, { path: '/api/b', router: b }];
+```
+
+then run `node scripts/build-route-registry.mjs`, which checks every
+descriptor and rewrites `_registry.ts` (generated, committed; Workers cannot
+list a folder at runtime). Write `path` as a string literal and `router` and
+each `before` entry as identifiers: the drift check reads them statically.
+
+Where it mounts:
+
+- **No `before`:** in the registry's slot, `routeRegistry.mountRemaining()` in
+  `index.ts`, after the last hand-written `app.route(...)` and before
+  `app.notFound` — where a line appended to the route table always went. Any
+  router mounted earlier on a covering prefix (a `/:id`, a `use('*')`) still
+  sees the request first, as it did for an appended line.
+- **`before: [r]`:** ahead of `r`. If `r` is still mounted by a line in
+  `index.ts`, immediately above that line; if `r` is registered too, simply
+  first. This is how a router claims paths an older router's `/:id` would
+  answer (`deck_quotes.ts`, `deck_reports.ts` and `deck_stage_norms.ts` are
+  `before: [decks]`).
+- Otherwise file-name order, then a module's own array order.
+
+`cloudflare-worker/test/route_registry_4105.test.ts` fails while `_registry.ts`
+is stale or a descriptor is unsound (a `before` naming a router nobody mounts, a
+cycle, a router mounted both ways), and holds the deck pair's order on the real
+Worker. The mounts already in `index.ts` stay there.
+## Files
+
+Every route module in this folder, one row each. The list below is generated, not written: `node scripts/check-folder-docs.mjs --write` fills it in your working tree from each file's own header comment (its first line), and `--clean` empties it again. It is never committed, so adding a file never edits this README (#4104), and `check-folder-docs` fails a file here that has no header comment.
+
+**The rule for a new file:** open it with a header comment whose first line says what it is and which decision or issue it belongs to. Write nothing here. The per-file notes elsewhere in this README predate #4104; they are kept as they are and take no new entries.
+
+<!-- files:begin -->
+<!-- files:end -->
+
 ## Mount map
 
-`index.ts` mounts each router under `/api/<prefix>`. **This is a selected list,
+`index.ts` mounts each router under `/api/<prefix>`, and `_registry.ts` the
+routers that mount themselves (#4105). **This is a selected list,
 not the whole set** — there are 155 `app.route()` calls in `index.ts` and 35
 rows here, most of the remainder being the `/api/admin/*` family. `index.ts` is
 the complete answer; this map exists to name the ones worth knowing first.
@@ -351,8 +400,10 @@ D903 (#2682): `deck_images.ts` mounts the deck's card and background images — 
 D1565 (#3812): `deck_investor_links.ts` mounts `GET`/`POST /api/decks/:id/investor-links`, `POST /api/decks/:id/investor-links/:shareId/withdraw` and `GET`/`POST /api/decks/:id/variants` — after `deck_images.ts` and before `decks.ts`. Built on the existing per-prospect links: `createDeckLink` makes a link and writes its recipient watermark, this route adds the variant, and Withdraw is `revokeShareLink`. Migration 738. See `documentation/architecture/decisions/D1565.md`.
 
 D1570 (#3817): `deck_comments.ts` mounts `GET`/`POST /api/decks/:id/comments`, `POST /api/decks/:id/comments/:uid/assign`, `POST /api/decks/:id/comments/:uid/resolve`, `GET /api/decks/:id/approval`, `PUT /api/decks/:id/approvers` and `POST /api/decks/:id/approve` — after `deck_notes.ts` and before `decks.ts`. Comments pinned to a card and optionally an area, @mentions that notify each person once, an assignee and Resolve, and the approvers a share waits for (`../services/decks/deckApproval.ts`, asked by `POST /:id/share` and `createDeckLink`). Founders, and advisors or Operating Partners only under the founder's `scope_deck` grant (`advisor_grants.ts`, owner decision Q = B). No model in a thread. Migration 741. See `documentation/architecture/decisions/D1570.md`.
-D1556 (#3803): `deck_quotes.ts` mounts `POST /api/decks/quotes/search` and `POST /api/decks/quotes/index` — after `deck_images.ts` and before `decks.ts`. Both run paid models, so both are POSTs; `projectOwned` decides, and indexing needs `write: true`. Until the owner approves the `axal-deck-quotes` index (decision L), `DECK_QUOTES` is unbound and both answer "Quote retrieval is not switched on yet." The rules are `../services/decks/quoteRetrieval.ts`. See `documentation/architecture/decisions/D1556.md`.
-D1589 (#3836): `deck_stage_norms.ts` mounts a venture's stage norms (migration 746) — `GET /api/decks/stage-norms?project_id=&stage=`, `POST /api/decks/stage-norms`, `PUT` and `DELETE /api/decks/stage-norms/:uid` — after `deck_images.ts` and before `decks.ts`, so `GET /:id` cannot answer `/stage-norms`. `projectOwned` decides; writes need `write: true`. A norm without its source or sample size is refused, and a stage with no row reads "No stage benchmark recorded". The rules are `../services/decks/stageNorms.ts`. See `documentation/architecture/decisions/D1589.md`.
+D1556 (#3803): `deck_quotes.ts` mounts `POST /api/decks/quotes/search` and `POST /api/decks/quotes/index` — before `decks.ts`, through its own `mount` export (#4105: `before: [decks]`, just below `deck_investor_links.ts`). Both run paid models, so both are POSTs; `projectOwned` decides, and indexing needs `write: true`. Until the owner approves the `axal-deck-quotes` index (decision L), `DECK_QUOTES` is unbound and both answer "Quote retrieval is not switched on yet." The rules are `../services/decks/quoteRetrieval.ts`. See `documentation/architecture/decisions/D1556.md`.
+
+D1540 (#3791): `deck_reports.ts` mounts `POST /api/decks/proposals/:uid/report` (a founder's report of their own deck rail proposal; never a support session) after `deck_quotes.ts` and before `decks.ts` (its `mount` export, #4105), and HQ's queue at `/api/admin/deck-reports` (`GET /`, `POST /:uid/resolve`, `requireHqAdmin`). Store `deck_proposal_reports` (migration 733). It refunds nothing. `deck_new.ts`'s pinned quotes and the owner's daily ceiling are `../services/decks/runQuotes.ts`. See `documentation/architecture/decisions/D1540.md`.
+D1589 (#3836): `deck_stage_norms.ts` mounts a venture's stage norms (migration 746) — `GET /api/decks/stage-norms?project_id=&stage=`, `POST /api/decks/stage-norms`, `PUT` and `DELETE /api/decks/stage-norms/:uid` — after `deck_reports.ts` and before `decks.ts` (its `mount` export, #4105: `before: [decks]`), so `GET /:id` cannot answer `/stage-norms`. `projectOwned` decides; writes need `write: true`. A norm without its source or sample size is refused, and a stage with no row reads "No stage benchmark recorded". The rules are `../services/decks/stageNorms.ts`. See `documentation/architecture/decisions/D1589.md`.
 
 D1409 (#3695): `article_assist.ts` mounts Eadwyn's writing options on an article — `POST /api/articles/:id/assist/quote` and `POST /api/articles/:id/assist` — before `articles.ts` at `/api/articles`. Each press is one of eight rail options on "<Profile> · Articles" (`../services/articleAssist.ts`), quoted, run once through `run()`, charged to the presser, and kept as one `ai_rail_proposals` row; nothing writes the article. The gate is `loadOwned` (the author or an admin), not published, not a support session. Part 2 adds the images: `POST /api/articles/:id/images/quote`, `/images/generate` (at most four, each one run of the `article_image` task, stored at `articles/<id>/img-<uuid>.<ext>` with one proposal) and `/images/:uid/discard`; `articles.ts`'s `POST /:id/cover` also takes `{ image }`, a copy of one of the article's own images. See `documentation/architecture/decisions/D1409.md`.
 
@@ -366,13 +417,19 @@ D900 (#2679), the check: `deck_check.ts` mounts `GET /api/decks/checks` (each ve
 D1499 (#3749), The Grid: `deck_grid.ts` mounts `GET /api/decks/:id/grid` beside `deck_check.ts` — the deck's aspect (16:9 or 4:3), slide, frame, cell, 8 px baseline, the 17 structures and each card's structure and areas (derived from its blocks for a card saved before v2), every area with its box from `../services/decks/structures.ts`'s `boxOfAt`. Read by whoever may read the deck (`projectOwned`); writes nothing. See `documentation/architecture/decisions/D1499.md`.
 
 D1538 (#3787), typed figures: `deck_typed_values.ts` mounts `GET`, `PUT` and `DELETE /api/decks/:id/typed-values[/:key]` beside `deck_grid.ts` — the venture's typed figures (migration 734), each Stated with who typed it; read by whoever may read the deck, written with write access and never by a support session. See `documentation/architecture/decisions/D1538.md`.
+D1523 (#3775), figure badges: `deck_figures.ts` mounts `GET /api/decks/:id/figures` after `deck_typed_values.ts` — every figure on the version, Linked, Stated, Uncited or Not recorded, and the counts, from `../services/decks/figures.ts`. Read by whoever may read the deck (`projectOwned`); the editor's alone (Present, share links and exports never call it); writes nothing. See `documentation/architecture/decisions/D1523.md`.
 D1501 (#3751): `deck_draft.ts` mounts `PATCH /api/decks/:id/cards/:uid` and `GET`/`DELETE /api/decks/:id/draft` beside `deck_grid.ts`, before `decks`: a version's working copy, card by card (migration 715), so a paid result is never lost to a closed tab. A card's PATCH needs `If-Match: <rev>` (0 for its first copy; 428 without it) and is one conditional statement, so a stale revision is 409 `card_rev_conflict` with the server's copy. `PUT /api/decks/:id` reads `If-Match: <version>` too: a stale one is 409 `deck_version_conflict`, the same body #3748's stale base answers (`versionConflictBody`: current, `rev`, the server's copy). Readers read the draft and writers change it (`projectOwned`); nothing else reads `pitch_deck_cards`, so no share link, export or reader sees it. See `documentation/architecture/decisions/D1501.md`.
+
+D1577 (#3824): `deck_coedit.ts` mounts `PATCH /api/decks/:id/cards/:uid/areas/:area`, `POST /api/decks/:id/restore-card` and `GET /api/decks/:id/presence` (and `/presence/ws`) right after `deck_draft.ts`, before `decks`. An area save applies one area onto the card's working copy as the server holds it now and retries on a moved `rev`, so two members on different areas never lose an edit and two on one area get 409 `area_conflict`. Single-slide restore writes a new version with one card from an older one and nothing else changed. Presence runs in `DeckPresence` (`../durable-objects/deck-presence.ts`), bound as `DECK_PRESENCE` once the owner approved its cost; a Worker without the binding answers 503 `presence_off`. See `documentation/architecture/decisions/D1577.md`.
 D1503 (#3754): `deck_element_models.ts` mounts `GET` and `PUT /api/decks/:id/element-models` beside `deck_grid.ts`, before `decks`. For each grid element they answer its suggested models (at most three), the rest under `more`, the stored pick and the model the next run uses (`../services/decks/elementModels.ts`, `resolveElementModel`). A PUT stores the deck's pick or the caller's own, and HQ's lock refuses it with 403 `role_locked`. `elementModelFor` is what `deck_new.ts` (`/generate`, the quote, regenerate-card) and `deck_images.ts` call to pick each run's model. See `documentation/architecture/decisions/D1503.md`.
 
 D1549 (#3796): `deck_model_presets.ts` mounts `GET` and `PUT /api/decks/:id/model-presets` beside `deck_element_models.ts`, before `decks` (the deck's preset, Fast, Balanced, Best or Custom, per element group, and the groups HQ locked), and `GET` and `PUT /api/admin/ai/deck-models` (HQ's org default and lock per group, a Super Admin's with a recent step-up, audited). Both write `deck_model_picks`. See `documentation/architecture/decisions/D1549.md`.
 D1509 (#3760): `admin_feature_flags.ts` mounts `GET` and `PUT /api/admin/feature-flags`, HQ's switches for The Grid (`grid_generate`, one per element, one per model; migration 723). What each flag does is `../services/featureFlags.ts`, read by `ai.ts` (`GET /api/ai/rail`, the pick), `deck_element_models.ts` (both routes and `elementModelFor`), `deck_new.ts` (the one press and Body's words) and `deck_images.ts`. See `documentation/architecture/decisions/D1509.md`.
 D1522 (#3774), the stage plan: `deck_stage.ts` mounts `GET /api/decks/:id/stage-plan?stage=&investor_type=` beside `deck_grid.ts` — the order for the deck's stage and investor type, a why line per card and the missing-proof warnings, from `../services/decks/stagePlan.ts`. Read by whoever may read the deck (`projectOwned`); bank-derived sources only for the founder (`mercuryFor`). No model, no charge, writes nothing. See `documentation/architecture/decisions/D1522.md`.
+D1560 (#3807): `deck_transform.ts` mounts `POST /api/decks/:id/transform/quote` and `POST /api/decks/:id/transform` (`{ action, cards?, language? }`: `speaker_notes`, `proofread`, `fix_slide` on one card, `translate`) after `deck_assist.ts` and before `decks.ts`. Each call is one `run()` under its rail option (`deck:notes`, `deck:proofread`, `deck:fix-slide`, `deck:translate`), quoted and held, leaves one `ai_rail_proposals` row and writes no version; a block whose figures changed is listed in `dropped`, and a translation outside Llama Guard's languages carries `warning`. The founders only (`projectOwned` with `write`). See `documentation/architecture/decisions/D1560.md`.
 D1557 (#3804): `deck_critic.ts` mounts `POST /api/decks/:id/critic/quote` and `POST /api/decks/:id/critic` (`{ investor_type?, stage? }`) after `deck_assist.ts` and before `decks.ts`. The rule findings (A23's stage rules, Not backed figures, a market with no source) are free and always answered; the critic's own findings are one `run()` under `deck:critic` (a reason option) on a model of another family than the writer's, and a stage benchmark is cited only when the venture recorded a norm ("No stage benchmark recorded" otherwise). Nothing is written but one activity row. The founders only. See `documentation/architecture/decisions/D1557.md`.
+
+D1559 (#3806): `deck_qa.ts` mounts `GET /api/decks/:id/qa` after `deck_critic.ts` and before `decks.ts`: the deck's likely investor questions, the venture's real objections first, then the critic's free rule findings (`deck_critic.ts`'s `readAll`), each answer bindings to its records with no figure a binding does not carry (`../services/decks/deckQa.ts`). No model, nothing written; the founder alone (`deck_check.ts`'s `reader`). Kept answers are written by `cycle_raise.ts` (`PUT`/`DELETE /narrative/questions/:question/answer`, migration 736). See `documentation/architecture/decisions/D1559.md`.
 
 D1553 (#3800), Remix: `deck_remix.ts` mounts `POST /api/decks/:id/remix` (`{ card, remove? }`) beside `deck_grid.ts` — four layouts for the posted card (its unsaved edits included, sanitised as a save would be) and, with `remove`, the card after pd5's reflow, from `../services/decks/remix.ts`. Read by whoever may read the deck (`projectOwned`). No model, no hold, no charge, works with AI paused, writes nothing. See `documentation/architecture/decisions/D1553.md`.
 

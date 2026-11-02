@@ -72,6 +72,32 @@ The token behind `CLOUDFLARE_API_TOKEN` therefore needs **D1:Edit** as well as
 Workers Scripts:Edit. Until 2026-09-03 the deploy workflow called
 `wrangler deploy` directly — the first "silent skip" above, on every merge.
 
+### 1.2.1 The merge queue in front of the deploy (#4107)
+
+A pull request reaches `main` through GitHub's merge queue. The queue tests
+each entry on a `gh-readonly-queue/main/…` branch through the `merge_group`
+event and merges it only when main's six required checks pass there (the
+table is in `.github/workflows/README.md`, "The merge queue"). Nothing in a
+queue run deploys or touches production: `cloudflare-worker-deploy.yml`
+listens for a push to `main` only, so the deploy starts when the queue's merge
+lands, as it did when a PR was merged by hand. A queue entry that fails is not
+merged and nothing ships; the PR returns to its author with the failing check.
+
+The queue's settings, as the owner set them on 2026-11-02 in the `main`
+ruleset (Settings → Rules → Rulesets → `main` → Require merge queue):
+
+| Setting | Value |
+| --- | --- |
+| Merge method | Squash |
+| Build concurrency | 5 |
+| Group size | minimum 1, maximum 5 |
+| Wait time to meet the minimum group size | 5 minutes |
+| Require all queue entries to pass required checks | on |
+| Status check timeout | 90 minutes (`test:drift`'s own job limit; a full run took 43 to 81 minutes on 2026-11-02) |
+| Require branches to be up to date before merging | off: the queue tests each entry on top of the latest `main` |
+
+To merge, press **Merge when ready**, not **Merge**.
+
 ### 1.3 A branch database
 
 A subsidiary branch is a separate Worker over a separate D1 database
