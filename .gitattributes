@@ -166,16 +166,12 @@ design/incoming/**        linguist-generated=true
 # scripts/lib/readmeUnion.mjs): pick one version and delete the other.
 README.md merge=union
 
-# ---- ROUTE_MAP.md and its two projections: union merges (D1310) ---------------
-# Every canvas integration adds a row to ROUTE_MAP's last table, so any two of
-# them conflicted on it, and again on the two documents generated from it. Same
-# remedy as README.md above. Two branches each adding a row keep both. Two
-# branches changing the SAME row keep both versions, and parseRouteMap
-# (scripts/build-profile-routing.mjs) refuses a canvas with two rows, naming
-# the lines: keep one. The projections' union is never trusted:
-# frontend/test/profile_routing_fresh.test.mjs fails a stale one and names the
-# command (`node scripts/build-profile-routing.mjs`), as check-docs-fresh does
-# for the build stamp.
-documentation/architecture/ROUTE_MAP.md merge=union
-documentation/architecture/PROFILE_ROUTING.md merge=union
-documentation/architecture/PAGE_INVENTORY.md merge=union
+# ---- The route map: no union (D4102, D4103) ---------------------------------
+# The route map itself is no longer one file (D4102, #4102): every section and
+# every canvas row is its own fragment under documentation/architecture/route-map/,
+# so two branches adding canvases add two files and never meet, and two
+# branches changing the same canvas meet as an ordinary conflict on that one
+# line. No union, so no silent second row. scripts/lib/routeMap.mjs refuses a
+# canvas with two rows and names both files. Its two projections,
+# PROFILE_ROUTING.md and PAGE_INVENTORY.md, are not committed at all (D4103,
+# #4103): they are gitignored build output, so they need no merge rule either.

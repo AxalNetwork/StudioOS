@@ -628,7 +628,7 @@ test('the wiring: the scenario route under the module guard, the cycle path, the
   const client = read('frontend/src/lib/api/capTableScenarios.js');
   assert.match(client, /\/today`/);
   assert.match(client, /\/simulate`, \{ method: 'POST'/);
-  assert.match(read('frontend/src/lib/api.js'), /export \* from '\.\/api\/capTableScenarios\.js';/);
+  assert.match(read('frontend/src/lib/apiModules.generated.js'), /export \* from '\.\/api\/capTableScenarios\.js';/);
   for (const f of ['ScenariosPages.jsx', 'scenariosModel.js', 'ScenarioModelEditor.jsx']) assert.doesNotMatch(read(`frontend/src/pages/raise/captable/${f}`), /\b(alert|confirm|prompt)\(/, f);
 });
 

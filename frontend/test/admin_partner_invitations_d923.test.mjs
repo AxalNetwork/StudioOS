@@ -45,6 +45,7 @@ import {
 import {
   RESENT_NOT_RENEWED, RESENT_NOT_SENT_LINK, RESENT_ONBOARDING, RESENT_PLAIN, RESENT_RENEWED, listQuery, lookupChecks, noServerMatch, resendResult,
 } from '../src/pages/admin/partners/invitationsModel.js';
+import { readRouteMap } from '../../scripts/lib/routeMap.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
@@ -685,7 +686,7 @@ test('the desk reads only D923 §2\'s reads through existing clients, and draws 
 test('docs: the folder is documented, ROUTE_MAP has the row, and the canvas is graded', () => {
   assert.ok(existsSync(resolve(root, 'frontend/src/pages/admin/partners/README.md')));
   assert.match(read('frontend/src/pages/admin/README.md'), /`partners\/`/);
-  assert.match(read('documentation/architecture/ROUTE_MAP.md'), /\n\| Partner invitations \| admin, super-admin \| `\/admin\/partner-invitations`/);
+  assert.match(readRouteMap(), /\n\| Partner invitations \| admin, super-admin \| `\/admin\/partner-invitations`/);
   const incoming = read('design/incoming/README.md');
   assert.doesNotMatch(incoming, /S1's integration lands next and records its grade\s+here\./);
   assert.match(incoming, /\*\*Grade: UPGRADE\.\*\* `\/admin\/partner-invitations` is live\./);

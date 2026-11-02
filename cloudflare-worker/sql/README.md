@@ -7,7 +7,7 @@ and is not kept in sync.
 | Path | What it is |
 | --- | --- |
 | `schema_baseline.sql` | The production-derived schema for bootstrapping a fresh database. |
-| `migrations/` | **Forward-only, numbered, and the thing that actually runs.** |
+| `migrations/` | **Forward-only, numbered (up to 799) or stamped `YYYYMMDDHHMM_` (D4106), and the thing that actually runs.** |
 | `historical/` | Legacy one-off schema scripts, kept for archaeology only. Nothing builds from them. |
 | `migrations/713_pitch_decks_unique_version.sql` | #3748: preserve and renumber duplicate deck versions, choose one current row per project, and enforce unique versions/current rows. |
 
@@ -17,8 +17,12 @@ and is not kept in sync.
 
 ## Adding a change
 
-1. Write a new numbered file in `migrations/` — `NNN_short_name.sql`, one higher
-   than the current maximum.
+1. Write a new file in `migrations/` named by the UTC minute you write it:
+   YYYYMMDDHHMM_short_name.sql (D4106), for example
+   202611021015_add_widgets.sql. No number to pick, so two parallel PRs never
+   collide; it sorts after every numbered file (they stop at 799) and the
+   ledger applies it once. `scripts/check-sql-migrations.mjs` refuses a
+   malformed name and two files sharing a number or a stamp, naming both.
 2. Prefer idempotent statements: `CREATE TABLE IF NOT EXISTS`,
    `CREATE INDEX IF NOT EXISTS`. `node scripts/migrate-d1.mjs --audit` reports
    which files are safely re-runnable. `ALTER TABLE ... ADD COLUMN` is not (SQLite

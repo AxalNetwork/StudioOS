@@ -178,6 +178,37 @@ jobs:
         run: node scripts/check-api-drift.mjs
 
   # -------------------------------------------------------------------------
+  # D4103 (#4103): the route map's two projections, PROFILE_ROUTING.md and
+  # PAGE_INVENTORY.md, are not committed: every routing change rewrote them
+  # and parallel branches conflicted on them. This job builds them from the
+  # route map and the sidebar (node only, no install) and keeps them as the
+  # run's `routing-docs` artifact, so they can still be read without cloning.
+  # Their invariants are checked by `--check` in test:guards (the gate job).
+  # -------------------------------------------------------------------------
+  routing-docs:
+    name: routing docs (artifact)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Check the projection
+        run: node scripts/build-profile-routing.mjs --check
+      - name: Build the routing docs
+        run: node scripts/build-profile-routing.mjs
+      - name: Keep the routing docs
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: routing-docs
+          path: |
+            documentation/architecture/PROFILE_ROUTING.md
+            documentation/architecture/PAGE_INVENTORY.md
+          if-no-files-found: error
+          retention-days: 30
+
+  # -------------------------------------------------------------------------
   # Open Graph / social-preview gate.
   #
   # Guards the "every axal.vc link previews with the same wrong image" class of

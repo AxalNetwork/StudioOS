@@ -12,7 +12,7 @@ const page = read('frontend/src/pages/SpinoutLabScoringPage.jsx');
 const sheet = read('frontend/src/components/spinout/LabReportShareSheet.jsx');
 const openPage = read('frontend/src/pages/LabReportSharePage.jsx');
 const worker = read('cloudflare-worker/src/services/labReportShare.ts');
-const api = read('frontend/src/lib/api.js');
+const api = read('frontend/src/lib/apiModules.generated.js');
 const index = read('cloudflare-worker/src/index.ts');
 
 const SENTENCES = [
