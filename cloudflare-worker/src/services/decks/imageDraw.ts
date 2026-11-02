@@ -3,8 +3,9 @@
  * with no press between the steps: the route's press and the one-click run
  * both call `drawDeckImages`.
  *
- *   deckArt          the venture's seed base and art direction, written once
- *                    (the first drawn image's style, palette and colours)
+ *   deckArtOf        the deck's seed base and art direction: D1544's
+ *                    `theme.art_direction` (the venture's id as the base when
+ *                    the theme keeps no seed_base); nothing is stored twice
  *   drawDeckImages   for each variant: seed, size, `runPipeline`, then
  *                     · passed  → the XMP mark, R2, a `proposed` row with its
  *                               steps, seed, prompt hash, qa and provenance
@@ -33,25 +34,34 @@ import { EXTENSION, MIMES, sniffMime, type ImageAsk } from './images';
 import { aiXmpPacket, imageSize, sha256Hex, stripMetadata, withXmp, type ImageMime } from './imageBytes';
 import { areasOf, boxOfAt } from './structures';
 import { logCycleWrite } from '../cycleActivity';
-import { newSeedBase, pipelineQuote, runPipeline, seedOf, sizeFor, type ArtDirection, type PipelineInput, type StepLine } from './pipelines';
+import { artDirectionOfTheme, type ArtDirection as D1544Art } from './artDirection';
+import { pipelineQuote, runPipeline, seedOf, sizeFor, type ArtDirection, type PipelineInput, type StepLine } from './pipelines';
 import type { Aspect } from '../ai/shapes';
 
 export type DeckArt = { seed_base: string; art: ArtDirection };
 
-/** The venture's art, written once from the first request's style, palette and colours. */
-export async function deckArt(env: Env, projectId: number, first: ArtDirection): Promise<DeckArt> {
-  const row = await env.DB.prepare('SELECT seed_base, art_direction_json FROM deck_art WHERE project_id = ?').bind(projectId).first<{ seed_base: string; art_direction_json: string }>();
-  if (row) {
-    let art: ArtDirection = first;
-    try { art = { ...first, ...JSON.parse(row.art_direction_json) }; } catch { /* the stored art is unreadable: draw with the request's */ }
-    return { seed_base: row.seed_base, art };
+/**
+ * The deck's one art direction and seed base, read from D1544's art direction
+ * on the version's theme (`theme.art_direction`), never stored a second time.
+ * The seed base is the theme's `seed_base` when it keeps one, else the
+ * venture's own id: either way the same deck, card, area and variant draw the
+ * same seed.
+ */
+export function deckArtOf(theme: Pick<D1544Art, 'seed_base' | 'reference_uid'> | null | undefined, projectId: number, art: ArtDirection): DeckArt {
+  const seed_base = theme?.seed_base != null ? `seed:${theme.seed_base}` : `venture:${projectId}`;
+  return { seed_base, art: { ...art, ...(theme?.reference_uid ? { reference: theme.reference_uid } : {}) } };
+}
+
+/** The art of the deck version a generation run draws on (its theme's art direction), for a step with no request. */
+async function artOfDeck(env: Env, deckId: number | null, projectId: number): Promise<DeckArt> {
+  let theme: D1544Art = {};
+  if (deckId) {
+    try {
+      const row = await env.DB.prepare('SELECT theme_json FROM pitch_decks WHERE id = ? AND project_id = ?').bind(deckId, projectId).first<{ theme_json: string | null }>();
+      theme = artDirectionOfTheme(row?.theme_json ? JSON.parse(row.theme_json) : null);
+    } catch { theme = {}; }
   }
-  const seed_base = newSeedBase();
-  await env.DB.prepare('INSERT OR IGNORE INTO deck_art (project_id, seed_base, art_direction_json) VALUES (?, ?, ?)')
-    .bind(projectId, seed_base, JSON.stringify(first)).run();
-  // A concurrent first image may have written it: read back the one that stands.
-  const won = await env.DB.prepare('SELECT seed_base, art_direction_json FROM deck_art WHERE project_id = ?').bind(projectId).first<{ seed_base: string; art_direction_json: string }>();
-  return won ? { seed_base: won.seed_base, art: { ...first, ...JSON.parse(won.art_direction_json) } } : { seed_base, art: first };
+  return deckArtOf(theme, projectId, { style: theme.style ?? 'flat', palette: theme.palette ?? 'brand', colours: [] });
 }
 
 /** An area's box on its card, in slide pixels, or null when the card names no such area. */
@@ -96,6 +106,8 @@ export type DrawArgs = {
   cardUid: string | null;
   surface: string;                     // the page the press is on (D552); every run of the pipeline records it
   rail: RailContext;
+  /** The deck's art direction and seed base (`deckArtOf`). */
+  art: DeckArt;
   /** The one-click run's batch hold; without it the press holds its own. */
   parentHold?: { uid: string; userId: number } | null;
   /** Redraw a refused image once, at the next variant (the one-click bar). */
@@ -126,7 +138,7 @@ export function inputFor(a: DrawArgs, art: DeckArt, variant: number, parentHold:
  * out. Nothing it returns has skipped the check.
  */
 export type PipelineStepArgs = {
-  userId: number; projectId: number; cardUid: string | null; area: string | null;
+  userId: number; projectId: number; deckId: number | null; cardUid: string | null; area: string | null;
   base: string; draw: RunOptions; model: string | null; size: { width: number; height: number } | null;
   parentHold: { uid: string; userId: number } | null; rail: RailContext;
   run: (o: RunOptions) => Promise<RunResult>;
@@ -135,7 +147,7 @@ export type PipelineStepResult =
   | { ok: true; image: NonNullable<RunResult['image']>; model: string; alt: string | null; seed: number; variant_index: number; pipeline_uid: string; steps: StepLine[]; qa: unknown; refused: Refused[]; usage_log_id: number | null }
   | { ok: false; code: string; message: string; refused: Refused[] };
 export async function pipelineStep(env: Env, a: PipelineStepArgs): Promise<PipelineStepResult> {
-  const art = await deckArt(env, a.projectId, { style: 'flat', palette: 'brand', colours: [] });
+  const art = await artOfDeck(env, a.deckId, a.projectId);
   const charged = async (id: number | null | undefined) => {
     if (!id) return null;
     const row = await env.DB.prepare('SELECT charged_microusd FROM ai_usage_logs WHERE id = ? AND user_id = ?').bind(id, a.userId).first<any>().catch(() => null);
@@ -162,15 +174,14 @@ export async function pipelineStep(env: Env, a: PipelineStepArgs): Promise<Pipel
 }
 
 /** What one image's every step holds, priced by the router (pd14's one quote). */
-export async function quoteDeckImage(env: Env, a: DrawArgs, art: DeckArt) {
-  return pipelineQuote(inputFor(a, art, 0, null), { quoteRun: (o) => quoteRun(env, o) as any });
+export async function quoteDeckImage(env: Env, a: DrawArgs) {
+  return pipelineQuote(inputFor(a, a.art, 0, null), { quoteRun: (o) => quoteRun(env, o) as any });
 }
 
 /** Draw `ask.count` images (plus one redraw each with `autoRedraw`), checked, under one hold. */
 export async function drawDeckImages(env: Env, a: DrawArgs): Promise<Drawn | { refusal: string; error: string }> {
-  const first: ArtDirection = { style: a.ask.style, palette: a.ask.palette, colours: a.colours.slice(0, 4) };
-  const art = await deckArt(env, a.projectId, first);
-  const q = await quoteDeckImage(env, a, art);
+  const art = a.art;
+  const q = await quoteDeckImage(env, a);
   if (!q.ok) return { refusal: q.refusal, error: q.error };
   const tries = a.ask.count * (a.autoRedraw ? 2 : 1);
   let own: { uid: string; userId: number } | null = null;
@@ -229,7 +240,12 @@ export async function drawDeckImages(env: Env, a: DrawArgs): Promise<Drawn | { r
         const taken = await env.DB.prepare('SELECT 1 FROM deck_images WHERE project_id = ? AND sha256 = ?').bind(a.projectId, sha).first();
         const uid = crypto.randomUUID();
         const key = `deck-images/${a.projectId}/${uid}.${EXTENSION[mime]}`;
-        await env.FILES!.put(key, bytes, { httpMetadata: { contentType: mime }, customMetadata: { projectId: String(a.projectId), userId: String(a.userId) } });
+        try {
+          await env.FILES!.put(key, bytes, { httpMetadata: { contentType: mime }, customMetadata: { projectId: String(a.projectId), userId: String(a.userId) } });
+        } catch {
+          stopped = { code: 'image_unsaved', message: 'Eadwyn drew the image, but it could not be stored. It was charged for the run; try again in a moment.' };
+          break;
+        }
         const total = r.steps.reduce((s, x) => (s == null || x.charged_microusd == null ? null : s + x.charged_microusd), 0 as number | null);
         const provenance = {
           pipeline_uid: pipelineUid, model: r.model, seed: input.seed, size: input.size, prompt_sha256: promptSha, expanded: r.expanded,

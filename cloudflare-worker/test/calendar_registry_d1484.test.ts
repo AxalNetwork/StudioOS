@@ -22,6 +22,7 @@ import { d1Over } from './_d1_sqlite.mjs';
 import { KNOWN_KINDS, PAGE_ONLY_KINDS, FEED_KINDS, PERSONAL_ONLY_KINDS, fetchUserEvents, fetchUserEventsWithSources, eventsToIcs } from '../src/services/calendar.ts';
 import { SOURCES, SOURCE_FAMILIES, pageOnlyKinds, pushableKinds } from '../src/services/calendar/registry.ts';
 import { COPYABLE_KINDS, FAMILY_OF, describeItems } from '../src/services/calendar/items.ts';
+import { loadSchema } from './_schema_once.mjs';
 
 const BASELINE = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
 const SERVICE = readFileSync('cloudflare-worker/src/services/calendar.ts', 'utf8');
@@ -33,8 +34,7 @@ const NEW_KINDS = ['interview_call', 'cohort_date', 'deal_closing', 'manual'] as
 
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
-  db.exec(BASELINE);
-  for (const m of MIGRATIONS) db.exec(m);
+  loadSchema(db);
   db.exec(`INSERT INTO users(id,role,name,email,founder_id,is_active) VALUES
     (1,'founder','Fixture founder','one@example.test',101,1),(2,'founder','Other founder','two@example.test',102,1),
     (4,'investor','Fixture investor','four@example.test',NULL,1),(6,'investor','Other investor','six@example.test',NULL,1);
@@ -56,7 +56,7 @@ function fixture() {
 
 test('D1484: registry keys equal READERS keys equal the union, and every derived list agrees with it', () => {
   const union = [...(SERVICE.match(/\n {2}kind: ((?:'\w+'(?:\s*\|\s*)?)+);/)?.[1] || '').matchAll(/'(\w+)'/g)].map((m) => m[1]).sort();
-  assert.equal(union.length, 24); // #3959: Learning joined; D1486 §b (#3981): Publish sends and planned content; §c (#3982): round_close and nda_expiry; §d (#3983): four task stores.
+  assert.equal(union.length, 26); // #3959: Learning joined; D1486 §b (#3981): Publish sends and planned content; §c (#3982): round_close and nda_expiry; §d (#3983): four task stores; D1485 (#3979): external_google and external_microsoft.
   assert.deepEqual(Object.keys(SOURCES).sort(), union);
   assert.deepEqual([...KNOWN_KINDS].sort(), union);
   assert.deepEqual(Object.keys(FAMILY_OF).sort(), union);

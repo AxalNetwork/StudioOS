@@ -33,7 +33,9 @@ import { IMPERSONATION_CEILING_MINUTES, IMPERSONATION_EXPIRY_MINUTES } from '../
 
 const STUB = 'export class WorkerEntrypoint { constructor(ctx, env) { this.ctx = ctx; this.env = env; } } '
   + 'export class DurableObject { constructor(ctx, env) { this.ctx = ctx; this.env = env; } } '
-  + 'export class RpcTarget {} export class WorkflowEntrypoint {} export const env = {};';
+  + 'export class RpcTarget {} export class WorkflowEntrypoint {} export const env = {};'
+  // #3852: the Agents SDK (sdkRuntime.ts) also imports these; nothing here calls them.
+  + ' export const exports = {}; export class WorkflowEvent {} export class EmailMessage {}';
 const out = join(mkdtempSync(join(tmpdir(), 'd248-')), 'worker.mjs');
 await build({
   entryPoints: [new URL('../src/index.ts', import.meta.url).pathname],

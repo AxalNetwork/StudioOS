@@ -21,7 +21,6 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import decks, { createShareLink, ensureSchema } from '../src/routes/decks.ts';
@@ -29,12 +28,11 @@ import deckDraft, { DRAFT_MAX_CARDS } from '../src/routes/deck_draft.ts';
 import { revOf } from '../src/services/decks/ifMatch.ts';
 import { MODEL_VERSION } from '../src/services/decks/slideModel.ts';
 import { contractErrors } from '../src/contracts/validate.ts';
+import { loadSchema } from './_schema_once.mjs';
 
 const schema = (f: string) => JSON.parse(readFileSync(`cloudflare-worker/src/contracts/${f}`, 'utf8'));
 
-const BASELINE = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
 const DIR = 'cloudflare-worker/sql/migrations';
-const MIGRATIONS = readdirSync(DIR).filter((n) => /^\d+_.*\.sql$/.test(n)).sort(compareMigrations).filter((n) => migrationNumber(n) > BASELINE_CUTOFF).map((n) => readFileSync(`${DIR}/${n}`, 'utf8'));
 const M715 = readFileSync(`${DIR}/715_pitch_deck_cards.sql`, 'utf8');
 const SECRET = 'synthetic-deck-draft-d1501-secret-'.repeat(2);
 const FOUNDER = 1, OTHER = 2, P = 10, DECK = 100;
@@ -43,8 +41,7 @@ const IMAGE = '0b0b0b0b-0b0b-4b0b-8b0b-0b0b0b0b0b0b';
 async function world() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: true, enableDoubleQuotedStringLiterals: true });
   db.exec('PRAGMA foreign_keys = OFF');
-  db.exec(BASELINE);
-  for (const m of MIGRATIONS) { try { db.exec(m); } catch { /* a view naming an object replayed later */ } }
+  loadSchema(db);
   db.exec(M715); // applied twice
   db.exec(`INSERT INTO users (id, role, name, email, founder_id, is_active) VALUES
       (${FOUNDER}, 'founder', 'Synthetic founder', 'draft1501@example.test', 1001, 1),

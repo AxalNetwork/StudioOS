@@ -18,7 +18,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import deckImages from '../src/routes/deck_images.ts';
@@ -37,13 +36,9 @@ import { stepRecordRef } from '../src/services/decks/genRuntime.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withGuard } from './_guard_stub.mjs';
 import { PIPELINE_PNG, pipelineAI, type PipelineAnswers } from './_pipeline_ai.ts';
-import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 
-const root = new URL('../sql/', import.meta.url);
-const baseline = readFileSync(new URL('schema_baseline.sql', root), 'utf8');
-const migrations = readdirSync(new URL('migrations/', root)).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations)
-  .map((n) => readFileSync(new URL('migrations/' + n, root), 'utf8'));
 const JWT_SECRET = 'synthetic-d1505-only-not-a-real-credential'.repeat(2);
 const ORIGIN = 'https://axal.vc';
 const BODY = { use: 'content', description: 'A calm month-end close at a tidy desk', style: 'flat', palette: 'brand', aspect: '4:3', count: 1, card: 0 };
@@ -51,7 +46,7 @@ const BODY = { use: 'content', description: 'A calm month-end close at a tidy de
 async function fixture(answers: PipelineAnswers = {}) {
   __resetForTest();
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  db.exec(baseline); for (const sql of migrations) db.exec(sql);
+  loadSchema(db);
   db.prepare("INSERT INTO users(id, role, founder_id, name, email, is_active, subscription_tier) VALUES (2, 'founder', 100, 'Synthetic founder', 'synthetic-2@example.invalid', 1, 'studio')").run();
   db.exec("INSERT INTO projects(id,name,founder_id) VALUES (1,'Synthetic venture',100)");
   db.prepare('INSERT INTO pitch_decks (id, project_id, version, slides, is_current) VALUES (7, 1, 3, ?, 1)').run(JSON.stringify([{ title: 'Solution' }]));
@@ -238,14 +233,18 @@ test('the seed reproduces: the same deck, card, area and variant draw the same s
   const f = await fixture();
   try {
     await press(f); await press(f);
-    const arts = f.db.prepare('SELECT seed_base, art_direction_json FROM deck_art WHERE project_id = 1').all() as any[];
-    assert.equal(arts.length, 1, 'the deck\'s seed base is written once');
     const [a, b] = f.rows();
     assert.deepEqual([a.variant_index, b.variant_index], [0, 1], 'a second press is the next variant: "draw one more" is not the same picture');
     assert.notEqual(a.seed, b.seed);
     for (const row of [a, b]) {
-      assert.equal(row.seed, seedOf(arts[0].seed_base, row.card_uid, null, row.variant_index), 'each row\'s seed is hash(seed base, card, area, its variant)');
+      // No seed base on the theme: the venture's own id is the base, so nothing is stored a second time.
+      assert.equal(row.seed, seedOf('venture:1', row.card_uid, null, row.variant_index), 'each row\'s seed is hash(seed base, card, area, its variant)');
     }
+    // D1544's art direction keeps a seed base on the theme: every seed starts from it.
+    f.db.prepare('UPDATE pitch_decks SET theme_json = ? WHERE id = 7').run(JSON.stringify({ kind: 'neutral_light', art_direction: { seed_base: 42, style: 'flat' } }));
+    await press(f);
+    const c = f.rows()[2];
+    assert.equal(c.seed, seedOf('seed:42', c.card_uid, null, c.variant_index), 'the theme\'s seed base');
   } finally { f.close(); }
 });
 

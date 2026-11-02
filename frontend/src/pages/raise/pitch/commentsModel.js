@@ -7,6 +7,7 @@
  * Comments are only between people: nothing here, or in the sheet, runs a
  * model or drafts a reply. No network, no React.
  */
+import { NOT_DONE_UNREAD, notDoneLine } from './cardStatusModel.js';
 
 /** The sheet's title, "Comments · card 4" (cards counted from 1). */
 export const commentsTitle = (index) => `Comments · card ${Number(index) + 1}`;
@@ -102,15 +103,25 @@ export function mayAct(viewer, thread, what) {
  * The pre-share gate (pd34's confirm, which pd33's inset joins): the lines it
  * shows before a link is made, and whether Share is held. An approver who has
  * not signed off this version holds it: the Worker refuses the link until they
- * do, so the confirm offers no "Share anyway". `approval` is
+ * do, so the confirm offers no way past. `approval` is
  * `GET /api/decks/:id/approval`'s reply. Unread, the gate opens nothing: the
  * Worker still refuses a held link, and the dialog prints its sentence.
- * #3826 adds its "[N] cards are not Done. Share anyway?" line here.
+ *
+ * D1579 (#3826): `cards` is `GET /api/decks/:id/card-status`'s reply for the
+ * version being shared. Cards not Done add pd34's inset, "[n] cards are not
+ * Done. Share anyway?", listing them, which Share passes: it warns and never
+ * holds. Unread (`{ status: 'error' }`), it says so and still lets Share
+ * through. Both lines sit in this one confirm; the approval alone holds it.
  */
-export function preShareGate(approval) {
+export function preShareGate(approval, cards = null) {
   const pending = Array.isArray(approval?.pending) ? approval.pending : [];
-  if (!pending.length) return { show: false, held: false, lines: [] };
-  return { show: true, held: true, lines: [{ tone: 'amber', key: 'approval', text: approval.message || approvalLine(pending) }] };
+  const lines = [];
+  if (pending.length) lines.push({ tone: 'amber', key: 'approval', text: approval.message || approvalLine(pending) });
+  const waiting = Array.isArray(cards?.not_done?.cards) ? cards.not_done.cards : [];
+  const n = Number.isInteger(cards?.not_done?.count) ? cards.not_done.count : waiting.length;
+  if (cards?.status === 'error') lines.push({ tone: 'muted', key: 'not_done_unread', text: NOT_DONE_UNREAD });
+  else if (n > 0) lines.push({ tone: 'amber', key: 'not_done', text: notDoneLine(n), cards: waiting });
+  return { show: lines.length > 0, held: pending.length > 0, lines };
 }
 
 /** "Approval needed before sharing · Sam has not approved yet." — the Worker's own sentence, for when it sent none. */

@@ -91,7 +91,7 @@ export function stepExecutor(env: Env, deps: ExecutorDeps = {}): StepExecutor {
         let n = 0;
         const d = (passed.draw && typeof passed.draw === 'object' ? passed.draw : {}) as { width?: number; height?: number };
         const r = await pipelineStep(env, {
-          userId: account, projectId: Number(ctx.batch.project_id), cardUid: step.card_uid, area: step.area_id,
+          userId: account, projectId: Number(ctx.batch.project_id), deckId: Number(ctx.batch.deck_id) || null, cardUid: step.card_uid, area: step.area_id,
           base: String(passed.text ?? ''), draw: { ...passed, task: 'deck_image', userId: account, ...(step.model ? { model: step.model } : {}) } as RunOptions,
           model: step.model, size: d.width && d.height ? { width: d.width, height: d.height } : null,
           parentHold: ctx.parentHold ?? null, rail: { page: GRID_PAGE, option, record: ref },

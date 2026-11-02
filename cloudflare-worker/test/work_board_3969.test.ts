@@ -2,13 +2,12 @@
 // assigns the production migration. No external providers or production rows.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
 import { Hono } from 'hono';
 import { makeD1 } from './_d1_sqlite.mjs';
-import { addColumnsFrom, splitStatements, stripForeignKeys, tableFromBaseline } from './_baseline.mjs';
-import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { addColumnsFrom, stripForeignKeys, tableFromBaseline } from './_baseline.mjs';
 import { AI_LOG_SCHEMA } from './_ai_budget_fixture.mjs';
 import engine, { agentEngineEnabled } from '../src/routes/agent_engine.ts';
 import teamAgents from '../src/routes/team_agents.ts';
@@ -17,6 +16,7 @@ import { projectBoard, setWorkDeps, updateWorkTask, WorkRefusal, type WorkRunRea
 import { taskByUid } from '../src/services/agents/tasks.ts';
 import { loadScope } from '../src/services/agents/teams.ts';
 import { removeMigratedDatabases } from './_storage_schema.ts';
+import { loadSchema } from './_schema_once.mjs';
 
 const sql = (f: string) => readFileSync(new URL(`../sql/${f}`,import.meta.url),'utf8');
 const baseline = sql('schema_baseline.sql');
@@ -39,11 +39,7 @@ const runReader: WorkRunReader = async (env,taskIds) => {
 /** The schema every migration before 762 builds, so 762 meets real legacy rows (the deploy's order). */
 function builtBefore762(): DatabaseSync {
   const db=new DatabaseSync(':memory:',{enableDoubleQuotedStringLiterals:true});
-  db.exec(baseline);
-  const dir=new URL('../sql/migrations/',import.meta.url);
-  for(const f of readdirSync(dir).filter((x)=>x.endsWith('.sql')).sort(compareMigrations).filter((x)=>migrationNumber(x)>BASELINE_CUTOFF&&migrationNumber(x)<762)){
-    for(const stmt of splitStatements(readFileSync(new URL(f,dir),'utf8'))){ try{db.exec(stmt);}catch{/* already on the baseline */} }
-  }
+  loadSchema(db, { below: 762 });
   return db;
 }
 function world() {
@@ -104,7 +100,7 @@ test('numbering is per project and concurrent creates are distinct; body, type, 
     const [c,d]=await Promise.all([create(w,{title:'Concurrent C'}),create(w,{title:'Concurrent D'})]);
     assert.deepEqual([a.task_number,b.task_number,other.task_number],[1,2,1]);assert.notEqual(c.task_number,d.task_number);
     const board=(await call(w,OWNER,'GET','/project/7/work/board')).body;
-    assert.deepEqual(board.items.map((t:any)=>t.title),['Concurrent C','Concurrent D','Beta','Alpha']);
+    assert.deepEqual(board.items.map((t:any)=>t.title),[...[c,d].sort((left,right)=>left.task_number-right.task_number).map(t=>t.title),'Beta','Alpha']);
     const backlog=board.columns.find((c:any)=>c.key==='backlog');assert.equal(backlog.count,4);assert.equal(backlog.estimate_points,null);
     assert.deepEqual([a.body,a.type,a.estimate_points,a.labels],['Markdown **launch**','feature',0,['finance']]);
     const filtered=(await call(w,OWNER,'GET','/project/7/work/board?filter=label%3Afinance')).body;

@@ -71,6 +71,10 @@ export function branchResourceNames(code: string) {
     d1: `studioos-${code}`,
     queue: `studioos-${code}-job-queue`,
     dlq: `studioos-${code}-job-queue-dlq`,
+    // D1528 (#3847): the agent queue, its DLQ and the task Workflow.
+    agentQueue: `studioos-${code}-agent-queue`,
+    agentDlq: `studioos-${code}-agent-queue-dlq`,
+    agentTask: `studioos-${code}-agent-task`,
     r2: {
       FILES: `studioos-${code}-files`,
       PUBLICATIONS: `studioos-${code}-publications`,
@@ -94,6 +98,12 @@ export const BINDINGS: readonly BindingSpec[] = [
   { name: 'PUBLICATIONS', kind: 'R2 bucket', hq: 'studioos-publications', branch: (c) => branchResourceNames(c).r2.PUBLICATIONS, shared: false },
   { name: 'BACKUPS', kind: 'R2 bucket', hq: 'studioos-backups', branch: (c) => branchResourceNames(c).r2.BACKUPS, shared: false },
   { name: 'JOB_QUEUE', kind: 'Queue', hq: 'studioos-job-queue', branch: (c) => branchResourceNames(c).queue, shared: false },
+  { name: 'AGENT_QUEUE', kind: 'Queue', hq: 'studioos-agent-queue', branch: (c) => branchResourceNames(c).agentQueue, shared: false },
+  { name: 'AGENT_SCOPE', kind: 'Durable Object namespace', hq: 'AgentScope', branch: () => 'AgentScope', shared: false },
+  // #3852 (E0): the `sdk` runtime's Agent, an evaluation behind the same seam.
+  { name: 'AGENT_SCOPE_SDK', kind: 'Durable Object namespace', hq: 'ScopeAgent', branch: () => 'ScopeAgent', shared: false },
+  // A Workflow is per script like a DO class; its name is the branch's own (`agentTask`).
+  { name: 'AGENT_TASK', kind: 'Workflow', hq: 'AgentTaskWorkflow', branch: () => 'AgentTaskWorkflow', shared: false },
   { name: 'PIPELINE_ROOM', kind: 'Durable Object namespace', hq: 'PipelineRoom', branch: () => 'PipelineRoom', shared: false },
   { name: 'MEETING_BOT_RUN', kind: 'Durable Object namespace', hq: 'MeetingBotRun', branch: () => 'MeetingBotRun', shared: false },
   { name: 'MEETING_BOT_CONTAINER', kind: 'Durable Object namespace', hq: 'MeetingBotContainer', branch: () => null, shared: false, hqOnly: true },
@@ -107,6 +117,8 @@ export const BINDINGS: readonly BindingSpec[] = [
   { name: 'ANALYTICS', kind: 'Analytics Engine dataset', hq: 'studioos_metrics', branch: () => 'studioos_metrics', shared: true },
   { name: 'AI', kind: 'Workers AI', hq: null, branch: () => null, shared: true },
   { name: 'BROWSER', kind: 'Browser Rendering', hq: null, branch: () => null, shared: true },
+  // D1544 (#3784): resizes a deck image to a model's reference size before an edit.
+  { name: 'IMAGES', kind: 'Images', hq: null, branch: () => null, shared: true },
   { name: 'ASSETS', kind: 'Static assets', hq: './docs', branch: () => './docs', shared: false },
 ];
 

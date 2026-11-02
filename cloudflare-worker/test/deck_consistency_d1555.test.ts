@@ -1,3 +1,4 @@
+import { contractErrors } from '../src/contracts/validate.ts';
 /**
  * D1555 (#3802, deck v2 C7) — the deck's consistency rules across its cards.
  *
@@ -12,7 +13,8 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
+const replyContract = JSON.parse(readFileSync(new URL('../src/contracts/deckConsistency.schema.json', import.meta.url), 'utf8'));
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
@@ -23,7 +25,7 @@ import deckCheck from '../src/routes/deck_check.ts';
 import { deckConsistency, CONSISTENCY_RULES } from '../src/services/deckCheck.ts';
 import { lineFacts } from '../src/services/deckConsistency.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
 const para = (value: string) => ({ key: 'body', label: 'Body', kind: 'paragraph', value });
 const card = (title: string, ...lines: string[]) => ({ title, fields: lines.map(para) });
@@ -113,15 +115,13 @@ test('speaker notes and image text are never read; slides that are not a list ar
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SQL = resolve(here, '../sql');
-const M = resolve(SQL, 'migrations');
 const JWT_SECRET = 'unit-test-jwt-secret-d1555-consistency-0123456789-abcdef';
 const OWNER = 1, ADMIN = 4, OTHER = 5, PID = 7;
 const INCONSISTENT = [card('Ask', 'Raising $2.0M seed.'), card('Use of funds', 'Engineering $1.0M', 'Sales $0.5M', 'Operations $0.3M')];
 
 function fixture() {
   const db = new DatabaseSync(':memory:');
-  db.exec(readFileSync(resolve(SQL, 'schema_baseline.sql'), 'utf8'));
-  for (const name of readdirSync(M).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations)) db.exec(readFileSync(resolve(M, name), 'utf8'));
+  loadSchema(db);
   db.exec(`INSERT INTO founders (id, name, email) VALUES (10, 'Synthetic Founder', 'f@example.test'), (11, 'Synthetic Other', 'o@example.test');
     INSERT INTO users (id, email, name, role, founder_id) VALUES
       (${OWNER}, 'owner@example.test', 'Synthetic Owner', 'founder', 10), (${ADMIN}, 'admin@example.test', 'Synthetic Admin', 'admin', NULL),
@@ -139,7 +139,9 @@ async function call(db: any, who: number, method: string, path: string) {
   const token = await new SignJWT({ user_id: who }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
   const res = await app.fetch(new Request(`http://t${path}`, { method, headers: { 'content-type': 'application/json', Authorization: `Bearer ${token}` }, ...(method === 'POST' ? { body: '{}' } : {}) }),
     { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any, { waitUntil() {}, passThroughOnException() {} } as any);
-  return { status: res.status, body: await res.json().catch(() => null) as any };
+  const reply = await res.json().catch(() => null) as any;
+  if (res.status === 200 && 'consistency' in reply) assert.deepEqual(contractErrors(replyContract, reply.consistency), [], 'consistency reply contract');
+  return { status: res.status, body: reply };
 }
 
 test('D1555 route: the founder\'s read and run both carry the findings with their cards; a consistent version is ok with none', async () => {

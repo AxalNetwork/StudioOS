@@ -32,8 +32,8 @@ import { MODEL_VERSION } from '../src/services/decks/slideModel.ts';
 import {
   canonicalJson, cardHash, cardBlobsOf, pruneCardBlobs, renditionKey, RENDITIONS_SWITCHED_ON, ensureCardBlobSchema,
 } from '../src/services/decks/cardBlobs.ts';
+import { loadSchema } from './_schema_once.mjs';
 
-const BASELINE = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
 const DIR = 'cloudflare-worker/sql/migrations';
 const NAMES = readdirSync(DIR).filter((n) => /^\d+_.*\.sql$/.test(n)).sort(compareMigrations).filter((n) => migrationNumber(n) > BASELINE_CUTOFF);
 const MIGRATIONS = NAMES.map((n) => readFileSync(`${DIR}/${n}`, 'utf8'));
@@ -46,8 +46,7 @@ async function world() {
   assert.ok(NAMES.includes('730_pitch_card_blobs.sql'), 'migration 730 is a post-cutoff migration the fresh build applies');
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: true, enableDoubleQuotedStringLiterals: true });
   db.exec('PRAGMA foreign_keys = OFF');
-  db.exec(BASELINE);
-  for (const m of MIGRATIONS) { try { db.exec(m); } catch { /* a view naming an object replayed later */ } }
+  loadSchema(db);
   const legacySlides = JSON.stringify(cards(60));
   db.prepare(`INSERT INTO users (id, role, name, email, founder_id, is_active) VALUES (?, 'founder', ?, ?, ?, 1)`).run(FOUNDER, 'Synthetic founder', 'blobs1539@example.test', 1001);
   db.prepare(`INSERT INTO users (id, role, name, email, founder_id, is_active) VALUES (?, 'founder', ?, ?, ?, 1)`).run(OTHER, 'Other founder', 'other1539@example.test', 1002);

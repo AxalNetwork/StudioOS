@@ -48,6 +48,9 @@ export const FAMILY_OF: Readonly<Record<CalendarEvent['kind'], ItemFamily>> = {
   mvp_task: 'deadlines',
   contact_task: 'deadlines',
   engagement_milestone: 'deadlines',
+  // D1485 (#3979): the member's own connected calendars.
+  external_google: 'other',
+  external_microsoft: 'other',
 };
 
 /** The kinds `POST /calendar/push/:kind/:source_id` copies to Google or Outlook. */
@@ -79,6 +82,8 @@ export const ROLE_WORDS: Readonly<Record<string, string>> = {
   assigned_to_you: 'Assigned to you',
   venture_follow_up: 'Your venture’s follow-up',
   delivering: 'You deliver this',
+  from_google: 'On your Google Calendar',
+  from_outlook: 'On your Outlook calendar',
 };
 
 /** The role a kind's reader does not set, because there is only one. */
@@ -103,6 +108,8 @@ const ROLE_BY_KIND: Partial<Record<CalendarEvent['kind'], string>> = {
   mvp_task: 'assigned_to_you',
   contact_task: 'venture_follow_up',
   engagement_milestone: 'delivering',
+  external_google: 'from_google',
+  external_microsoft: 'from_outlook',
 };
 
 export interface CalendarItem extends Omit<CalendarEvent, 'my_role' | 'advisor_uid'> {
@@ -213,7 +220,7 @@ export async function describeItems(
     return {
       ...rest,
       family: FAMILY_OF[ev.kind],
-      source: sourceOf(ev.kind),
+      source: sourceOf(ev.kind, ev.external?.account ?? null),
       my_role: { code, words: ROLE_WORDS[code] },
       can: canOf({ ...ev, my_role: code }, isAdmin, nowMs),
       all_day: isAllDay(ev),

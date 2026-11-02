@@ -40,6 +40,7 @@ import { describeItems } from '../services/calendar/items';
 import { SOURCES, SOURCE_KINDS } from '../services/calendar/registry';
 import { hiddenKinds, isColour, isCopyTarget, isSourceKey, providerConnected, sourcesRead, writeCopyTarget, writeSourcePref } from '../services/calendar/prefs';
 import { adoptMeetCopy, makeMeetLink, readItem } from '../services/calendar/itemRead';
+import { dedupeExternal, isExternalKind, syncedCopies } from '../services/calendar/externalReaders';
 import { investorUpsell, userMeetsInvestorTier } from '../middleware/requireInvestorTier';
 import { logAdminAction } from '../services/adminAudit';
 import { requireAuth, isSuperAdmin } from '../auth';
@@ -237,7 +238,10 @@ calendar.get('/events', safe('events', 'Could not list calendar events', async (
     : await fetchUserEventsWithSources(
       c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString(), shownKinds, { withCancelled: true, companyId },
     );
-  const items = await describeItems(c.env, user, await attachPushRecords(c.env, user.id, events));
+  // D1485 (#3979): a Google or Outlook event that is Axal's own copy is dropped
+  // and its Axal item says `also_on`; a near match is flagged, never merged.
+  const deduped = events.some((e) => isExternalKind(e.kind)) ? dedupeExternal(events, await syncedCopies(c.env, user.id)) : events;
+  const items = await describeItems(c.env, user, await attachPushRecords(c.env, user.id, deduped));
   await ensureCalendarOAuthSchema(c.env);
   const sql = getSQL(c.env);
   const tok = (await sql`SELECT 1 FROM google_oauth_tokens WHERE user_id = ${user.id}` as any[])[0];

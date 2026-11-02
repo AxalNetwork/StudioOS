@@ -145,7 +145,7 @@ export function stepRuns(input: PipelineInput, image: string = QUOTE_IMAGE, prom
   const vision = { ...common, images: [image], maxTokens: 8 };
   return {
     expand: { ...common, task: 'rail_chat', systemPrompt: EXPAND_SYSTEM, text: input.base.slice(0, 2000), maxTokens: 160, temperature: 0.4 } as RunOptions,
-    draw: { ...input.draw, ...common, text: prompt.slice(0, 2048), draw: { ...(input.size ?? {}), seed: input.seed } } as RunOptions,
+    draw: { ...input.draw, ...common, text: prompt.slice(0, 2048), draw: { ...(input.draw.draw ?? {}), ...(input.size ?? {}), seed: input.seed } } as RunOptions, // keeps D1544's reference images
     face: { ...vision, task: 'module_vision', model: FACE_MODEL, text: FACE_QUESTION } as RunOptions,
     text: { ...vision, task: 'module_vision', model: FACE_MODEL, text: TEXT_QUESTION } as RunOptions,
     screen: { ...vision, task: 'image_screen', text: SCREEN_QUESTION } as RunOptions,

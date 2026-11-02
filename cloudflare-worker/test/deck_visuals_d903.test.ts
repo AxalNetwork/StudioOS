@@ -10,11 +10,10 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { copyFileSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import {
   ART_CARDS, artDirection, chartTypeFor, competitorMatrix, imageCapability, imagePlan, recordDiagrams, roadmapDiagram, useOfFundsDiagram,
 } from '../src/services/decks/visuals.ts';
@@ -22,14 +21,14 @@ import { buildCards, standardOutline } from '../src/services/decks/newDeck.ts';
 import { fitProblems } from '../src/services/decks/designSystem.ts';
 import { modelProblems } from '../src/services/decks/slideModel.ts';
 import { fullRecords, wordsFor } from './fixtures/pitchStoryFixtures.ts';
+import { loadSchema } from './_schema_once.mjs';
 
 const root = new URL('../sql/', import.meta.url);
 const scratch = mkdtempSync(join(tmpdir(), 'deck-visuals-d903-'));
 const seed = join(scratch, 'schema.sqlite');
 {
   const db = new DatabaseSync(seed, { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  db.exec(readFileSync(new URL('schema_baseline.sql', root), 'utf8'));
-  for (const n of readdirSync(new URL('migrations/', root)).filter((f) => /^\d+_.*\.sql$/.test(f) && migrationNumber(f) > BASELINE_CUTOFF).sort(compareMigrations)) db.exec(readFileSync(new URL('migrations/' + n, root), 'utf8'));
+  loadSchema(db);
   db.close();
 }
 after(() => rmSync(scratch, { recursive: true, force: true }));

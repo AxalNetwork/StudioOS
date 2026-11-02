@@ -15,7 +15,6 @@ The retention periods for generated assets are owner decision W (#3716), pending
 | `pitch_deck_proposals` | proposed decks from New deck and Fill from project, before Accept | no cascade | none |
 | `pitch_deck_share_tokens` | share links: a token hash, its expiry and options | no cascade; an expired or withdrawn link stops opening, its row stays for its analytics | none |
 | `deck_images` | uploaded, copied and generated deck images, proposed, kept or discarded | venture cascade. The daily cleanup (D1508) removes a discarded image 24 hours after Discard and a proposal nobody kept 14 days after it was made, unless a version, draft, proposal or derivative names it. A kept image stays | one per row, `deck-images/<project>/<uid>.<ext>`; deleted with its row by the cleanup |
-| `deck_art` | one row per venture: the seed base every deck image's seed starts from, and the art direction every image inherits (D1505) | venture cascade | none |
 | `deck_r2_tombstones` | one row per deck image the cleanup deleted: key, venture, bytes, reason, day (D1508) | venture cascade | none (each names an object already deleted) |
 | `deck_exports` | the record of each export: version, format, hash, Drive id | no cascade | none stored (an export is sent, not kept) |
 | `deck_checks` | claim-check runs on a version (D900) | deck and venture cascade | none |
@@ -46,6 +45,7 @@ The retention periods for generated assets are owner decision W (#3716), pending
 | `deck_area_batches` | one generation run on a deck's areas or a whole-deck build: its state, quote, hold and what it charged (D1502) | deck cascade | none |
 | `deck_area_batch_steps` | each step of a run: the area, element, model, state, charge, input and result (D1502) | cascade from its run | none |
 | `deck_logos` | a venture's customer logos for the logo wall: the customer's name, the image, and the permission to show it (D1543) | venture cascade | none of its own (the image is a `deck_images` row) |
+| `deck_rehearsals` | a founder’s rehearsal transcript, card timings and counted report (D1580) | deck cascade | rehearsal audio: removed after an hour unless its maker keeps it; turning Keep the audio off removes it immediately |
 
 ## Not covered yet
 

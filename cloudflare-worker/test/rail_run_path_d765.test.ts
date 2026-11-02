@@ -230,7 +230,9 @@ test('D1496 part 2 (#3842) and #3846: every run() reached from services/agents/ 
   const agent = fromAgents.filter((c) => c.where.startsWith('services/agents/agentRun.ts:'));
   assert.equal(agent.length, 1, 'one run() call');
   const src = readFileSync(join(SRC, 'services/agents/agentRun.ts'), 'utf8');
-  assert.match(agent[0].options, /^run\(env, \{ \.\.\.c\.opts, rail: c\.rail, surface: c\.surface, idempotencyKey: holdKeyOf\(runKey\), executionId: runUid \}\)$/);
+  assert.match(agent[0].options, /^run\(env, \{ \.\.\.c\.opts, rail: c\.rail, surface: c\.surface, idempotencyKey: holdKeyOf\(runKey\), executionId: runUid, gatewayId \}\)$/);
+  // #3847 (D1528): the `agents` AI Gateway id, read only from AGENT_AI_GATEWAY.
+  assert.match(src, /const gatewayId = agentGatewayId\(env\);/);
   assert.match(src, /const rail: RailContext = \{ page: row\.pageKey, option: row\.optionKey, record: input\.record \?\? null \}/);
   assert.match(src, /agentId: a\.id,\s*agentRole: a\.role_key/);
 });

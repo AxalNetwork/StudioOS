@@ -65,16 +65,38 @@ import { lockedOut, type Resolved } from '../services/decks/elementModels';
 import { notSwitchedOn } from '../services/featureFlags';
 import { imageSize, sha256Hex, stripMetadata, tooManyPixels, type ImageMime } from '../services/decks/imageBytes';
 import { fetchExternalImage } from '../services/decks/imageFetch';
-import { deckArt, drawDeckImages, quoteDeckImage, type DrawArgs } from '../services/decks/imageDraw';
+import { deckArtOf, drawDeckImages, quoteDeckImage, type DrawArgs } from '../services/decks/imageDraw';
 import type { Aspect } from '../services/ai/shapes';
+import { artDirectionOfTheme, seedFor, type ArtDirection } from '../services/decks/artDirection';
+import { asReference } from '../services/decks/imageEdits';
+import { IMAGE_SPECS, type DrawReference } from '../services/ai/shapes';
 
 const deckImages = new Hono<{ Bindings: Env }>();
+
+/**
+ * D1544 (#3784): the art direction's reference image as a model's reference,
+ * or null: when the deck keeps none, the model takes none, the image is not a
+ * kept image of this venture, or it cannot be read or resized (then the image
+ * is drawn without it rather than refused).
+ */
+async function artReference(env: Env, deck: Deck, model: string): Promise<DrawReference | null> {
+  if (!deck.art.reference_uid || !((IMAGE_SPECS[model]?.maxReferences ?? 0) > 0) || !env.FILES) return null;
+  const row = await env.DB.prepare("SELECT r2_key, mime, shows_person FROM deck_images WHERE uid = ? AND project_id = ? AND state = 'kept'")
+    .bind(deck.art.reference_uid, deck.projectId).first<any>().catch(() => null);
+  if (!row || Number(row.shows_person) === 1) return null;
+  try {
+    const obj = await env.FILES.get(row.r2_key);
+    if (!obj) return null;
+    const bytes = new Uint8Array(await new Response(obj.body).arrayBuffer());
+    return await asReference(env, bytes, row.mime as ImageMime);
+  } catch { return null; }
+}
 
 const HEX = /^#[0-9a-f]{6}$/i;
 const UID = /^[0-9a-f-]{36}$/;
 const NO_STORAGE = 'Images cannot be stored here yet. Nothing was run and nothing was charged.';
 
-type Deck = { deckId: number; projectId: number; slides: unknown[] };
+type Deck = { deckId: number; projectId: number; slides: unknown[]; art: ArtDirection };
 
 /** The deck version and its venture, which the caller may write (or read, with `write: false`), or the refusal. */
 async function deckOf(c: any, user: User, write = true): Promise<Deck | Response> {
@@ -88,7 +110,8 @@ async function deckOf(c: any, user: User, write = true): Promise<Deck | Response
   }
   let slides: unknown[] = [];
   try { const parsed = JSON.parse(row.slides || '[]'); if (Array.isArray(parsed)) slides = parsed; } catch { slides = []; }
-  return { deckId, projectId, slides };
+  // D1544 (#3784): the version's art direction, which every image request on it inherits.
+  return { deckId, projectId, slides, art: artDirectionOfTheme(themeOfRow(row)) };
 }
 
 /**
@@ -141,11 +164,14 @@ async function refusedAsk(c: any, ask: ImageAsk, projectId: number): Promise<Res
 }
 
 /** One image's run, as one options object, so the quote and the run read the same input. */
-function runOptions(c: any, user: User, deck: Deck, ask: ImageAsk, colours: string[], pick: { model?: string; pinned?: true } = {}): RunOptions {
+function runOptions(c: any, user: User, deck: Deck, ask: ImageAsk, colours: string[], pick: { model?: string; pinned?: true } = {}, references: DrawReference[] = []): RunOptions {
   const rail = { ...railFor(c, { page: IMAGE_PAGE, option: IMAGE_OPTION }, `deck:${deck.deckId}`), option: IMAGE_OPTION };
   // D1503 (#3754): the element's model is the caller's pick, which D1478's DK4 draw job weighs (`drawChoice`).
   // D1549 (#3796): an HQ lock runs pinned, so the draw job never swaps in another model.
-  return { ...pick, task: 'deck_image', drawJob: 'DK4', userId: Number(user.id) || 0, text: promptOf(ask, colours).slice(0, 2048), draw: {}, surface: AI_SURFACE.raisePitch, rail };
+  // D1544 (#3784): the deck's art direction: its note in the prompt, its seed family, its reference image when the model takes one.
+  const note = deck.art.note ? ` Art direction: ${deck.art.note}.` : '';
+  const seed = seedFor(deck.art, 0);
+  return { ...pick, task: 'deck_image', drawJob: 'DK4', userId: Number(user.id) || 0, text: (promptOf(ask, colours) + note).slice(0, 2048), draw: { ...(seed != null ? { seed } : {}), ...(references.length ? { references } : {}) }, surface: AI_SURFACE.raisePitch, rail };
 }
 
 /** The grid element an image request is: a scene is a Generated photo, every other style an Illustration. */
@@ -158,7 +184,8 @@ type Priced = { ask: ImageAsk; colours: string[]; opts: RunOptions; model: strin
 /** The checked request and its price, or the response that refuses it. Shared by the quote and the run. */
 async function priced(c: any, user: User, deck: Deck): Promise<Priced | Response> {
   const body = await c.req.json().catch(() => ({} as any));
-  const read = askOf(body);
+  // D1544 (#3784): a request that names no style or palette takes the deck's art direction's.
+  const read = askOf({ ...body, style: body?.style ?? deck.art.style, palette: body?.palette ?? deck.art.palette });
   if ('error' in read) return c.json({ error: read.error }, 400);
   const refused = await refusedAsk(c, read.ask, deck.projectId);
   if (refused) return refused;
@@ -173,8 +200,14 @@ async function priced(c: any, user: User, deck: Deck): Promise<Priced | Response
   }
   // D1549: HQ's lock wins; a lock the caller's plan cannot run stops the run before any quote or hold.
   if (lockedOut(element)) return lockedOutRefusal(c, element);
-  const opts = runOptions(c, user, deck, read.ask, colours, runPickOf(element));
-  const q = await quoteRun(c.env, opts);
+  let opts = runOptions(c, user, deck, read.ask, colours, runPickOf(element));
+  let q = await quoteRun(c.env, opts);
+  // D1544: the art direction's reference image, sent only to a model that takes references, and priced in the hold.
+  const styleRef = q.ok ? await artReference(c.env, deck, q.model) : null;
+  if (q.ok && styleRef) {
+    opts = runOptions(c, user, deck, read.ask, colours, { ...runPickOf(element), model: q.model }, [styleRef]);
+    q = await quoteRun(c.env, opts);
+  }
   if (!q.ok) {
     const stop = refuseRun(c, { refusal: q.refusal, error: q.error });
     return stop ?? refuse(c, 503, { code: 'model_unavailable', message: 'The image model is not available. Nothing was run.' });
@@ -183,13 +216,15 @@ async function priced(c: any, user: User, deck: Deck): Promise<Priced | Response
   const ref = cardRefOf(deck.slides, { card: read.ask.card, card_uid: read.ask.card_uid });
   const args: DrawArgs = {
     userId: Number(user.id), deckId: deck.deckId, projectId: deck.projectId, slides: deck.slides, ask: read.ask,
-    base: promptOf(read.ask, colours).slice(0, 2048), colours, draw: opts, model: q.model,
+    // D1544's note is in the prompt the pipeline draws, and its reference image in the draw's options.
+    base: String(opts.text ?? promptOf(read.ask, colours)).slice(0, 2048), colours, draw: opts, model: q.model,
     area: typeof body?.area === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(body.area) ? body.area : null,
     slideAspect: (body?.slide_aspect === '4:3' ? '4:3' : '16:9') as Aspect,
     cardUid: 'error' in ref ? null : ref.uid, surface: AI_SURFACE.raisePitch, rail: opts.rail!,
+    // The deck's one art direction (D1544, on the version's theme): the request's style and palette already default to it.
+    art: deckArtOf(deck.art, deck.projectId, { style: read.ask.style, palette: read.ask.palette, colours: colours.slice(0, 4) }),
   };
-  const art = await deckArt(c.env, deck.projectId, { style: read.ask.style, palette: read.ask.palette, colours: colours.slice(0, 4) });
-  const pq = await quoteDeckImage(c.env, args, art);
+  const pq = await quoteDeckImage(c.env, args);
   if (!pq.ok) {
     const stop = refuseRun(c, { refusal: pq.refusal, error: pq.error });
     return stop ?? refuse(c, 503, { code: 'model_unavailable', message: 'The image model is not available. Nothing was run.' });

@@ -48,7 +48,12 @@ const VERSIONS = { versions: [{ id: 31, version: 3, is_current: true, title: 'Sy
 
 const groups = { api, deckEditorApi, deckSourcesApi, deckImagesApi, deckCheckApi, railProposalsApi, deckAssistApi, railPrefsApi };
 
-export async function mountEditor({ user = FOUNDER, answers = {} } = {}) {
+/**
+ * `onDocument` (D1515) runs once the synthetic document is installed and before
+ * the editor renders: a suite can put a fake IndexedDB or a listener recorder on
+ * the window there.
+ */
+export async function mountEditor({ user = FOUNDER, answers = {}, onDocument = null } = {}) {
   const originals = Object.fromEntries(Object.entries(groups).map(([k, v]) => [k, { ...v }]));
   const calls = [];
   const stub = (name, fn) => (...a) => { calls.push([name, ...a]); return fn(...a); };
@@ -77,6 +82,7 @@ export async function mountEditor({ user = FOUNDER, answers = {} } = {}) {
   const fetchBefore = globalThis.fetch;
   const restore = installDocument();
   globalThis.fetch = async () => Response.json({});
+  onDocument?.();
   localStorage.setItem('user', JSON.stringify(user));
   const make = document.createElement.bind(document);
   document.createElement = (tag) => { const n = make(tag); n.focus = () => { document.activeElement = n; }; return n; };

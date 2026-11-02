@@ -10,6 +10,7 @@ import { bindingKey } from '../util/schemaBootstrap';
 import { run as runAI } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { railFor, refuseRun } from '../util/railContext';
+import { CLEF, confidenceLine, decide } from '../services/ai/decide';
 
 const pipeline = new Hono<{ Bindings: Env }>();
 
@@ -72,6 +73,7 @@ async function ensureSchema(env: Env) {
       status TEXT NOT NULL DEFAULT 'pending',
       ai_recommendation TEXT,
       ai_explanation TEXT,
+      ai_confidence REAL,
       final_decision TEXT,
       decided_by INTEGER,
       decided_at TIMESTAMP,
@@ -107,6 +109,13 @@ async function llmText(c: any, userId: number, dealId: number, system: string, p
   if (r.ok) return { text: (r.output || '').trim() || null, refused: null };
   return { text: null, refused: refuseRun(c, r) };
 }
+
+/** IN2's options, as Clef reads them: the gate's three recommendations. */
+const GATE_OPTIONS: Record<'spinout_ready' | 'continue' | 'iterate', string> = {
+  spinout_ready: 'SPIN-OUT READY: the venture has the traction to spin out now',
+  continue: 'CONTINUE: on track, keep building toward the next gate',
+  iterate: 'ITERATE: change course before investing further',
+};
 
 async function getCurrentStage(env: Env, dealId: number): Promise<string | null> {
   const r: any = await env.DB.prepare(`SELECT stage_name FROM project_stages WHERE deal_id = ? AND status = 'active' ORDER BY id DESC LIMIT 1`).bind(dealId).first();
@@ -413,28 +422,33 @@ pipeline.post('/decision-gate/review', async (c) => {
   else if (traction >= 40) ruleRec = 'continue';
   else ruleRec = 'iterate';
 
-  const out = await llmText(c, user.id, dealId,
-    'You are a venture-studio decision-gate analyst. Given a project and its latest traction metrics, recommend exactly one of: SPIN-OUT READY, CONTINUE, or ITERATE. Return JSON: {"recommendation":"spinout_ready|continue|iterate","explanation":"2-3 sentences"}.',
-    `Project: ${project.name}\nSector: ${project.sector || 'n/a'}\nStage: ${project.stage}\nTraction Score: ${traction}/100\nLatest Metrics: ${JSON.stringify(km)}\nProblem: ${(project.problem_statement || '').slice(0, 500)}\nSolution: ${(project.solution || '').slice(0, 500)}`);
-  if (out.refused) return out.refused;
-  const ai = out.text;
+  // #3938 (§4.2 fix 13, IN2): Clef decides, with a probability for every option; gpt-oss-120b
+  // (`rail_reason`) only explains the decision Clef made. Both are the member's press (D765).
+  const facts = `Project: ${project.name}\nSector: ${project.sector || 'n/a'}\nStage: ${project.stage}\nTraction Score: ${traction}/100\nLatest Metrics: ${JSON.stringify(km)}\nProblem: ${(project.problem_statement || '').slice(0, 500)}\nSolution: ${(project.solution || '').slice(0, 500)}`;
+  const rail = railFor(c, { page: 'pipeline', option: 'review:decision-gate' }, `deal:${dealId}`);
+  const decided = await decide(c.env, { userId: user.id, surface: AI_SURFACE.pipeline, rail }, {
+    model: CLEF, key: 'gate',
+    instructions: 'A venture-studio decision gate: from the project and its latest traction metrics, which recommendation fits?',
+    options: GATE_OPTIONS, text: facts,
+  });
+  if (!decided.ok) { const refused = refuseRun(c, decided.result); if (refused) return refused; }
+  const choice = decided.ok ? decided.answer : null;
 
   let aiRec = ruleRec;
+  let aiConfidence: number | null = null;
   let aiExp = `Rule-based: traction score ${traction}/100 → ${ruleRec.replace('_', ' ')}.`;
-  if (ai) {
-    const m = ai.match(/\{[\s\S]*\}/);
-    if (m) {
-      try {
-        const parsed = JSON.parse(m[0]);
-        const rec = String(parsed.recommendation || '').toLowerCase().replace(/[\s-]/g, '_');
-        if (['spinout_ready', 'continue', 'iterate'].includes(rec)) aiRec = rec as any;
-        if (parsed.explanation) aiExp = String(parsed.explanation).slice(0, 1000);
-      } catch {}
-    }
+  if (choice) {
+    aiRec = choice.choice as typeof ruleRec;
+    aiConfidence = choice.confidence;
+    const out = await llmText(c, user.id, dealId,
+      'You are a venture-studio decision-gate analyst. A decision model has already chosen the recommendation; explain it in 2-3 plain sentences from the facts given. Do not change the recommendation.',
+      `Recommendation: ${GATE_OPTIONS[aiRec]}\n\n${facts}`);
+    if (out.refused) return out.refused;
+    aiExp = out.text ? out.text.slice(0, 1000) : `Recommended ${aiRec.replace('_', ' ')} (${confidenceLine(aiConfidence)}); the explanation could not be written.`;
   }
 
-  const gate: any = await c.env.DB.prepare(`INSERT INTO decision_gates (deal_id, gate_type, status, ai_recommendation, ai_explanation) VALUES (?, 'traction_review', 'pending', ?, ?) RETURNING *`)
-    .bind(dealId, aiRec, aiExp).first();
+  const gate: any = await c.env.DB.prepare(`INSERT INTO decision_gates (deal_id, gate_type, status, ai_recommendation, ai_explanation, ai_confidence) VALUES (?, 'traction_review', 'pending', ?, ?, ?) RETURNING *`)
+    .bind(dealId, aiRec, aiExp, aiConfidence).first();
 
   // Move project into decision_gate stage if not already
   const cur = await getCurrentStage(c.env, dealId);
@@ -464,7 +478,7 @@ pipeline.post('/decision-gate/review', async (c) => {
 
   await logAction(c.env, 'ai_call', user.id, { kind: 'decision_gate_review', deal_id: dealId });
   await logAction(c.env, 'decision_gate_review', user.id, { deal_id: dealId, gate_id: gate.id, recommendation: aiRec });
-  return c.json({ ...gate, model: ai ? '@cf/meta/llama-3.1-8b-instruct-fp8' : 'rule-based', traction_score: traction });
+  return c.json({ ...gate, model: choice && decided.ok ? decided.model : 'rule-based', traction_score: traction });
 });
 
 pipeline.patch('/decision-gate/decide', async (c) => {

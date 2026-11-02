@@ -1,6 +1,6 @@
 ### Agent engine E1: goals, tasks and dependencies (D1529, #3845)
 
-Worker routes in `routes/agent_engine.ts`, mounted at `/api/teams` before `team_agents.ts`, backed by `services/agents/goals.ts`, `services/agents/tasks.ts` and migration 727 (`scope_goals`, `scope_tasks`, `scope_task_deps`, `scope_task_events`; `task_id` and `run_key` on `ai_rail_proposals`). The client is `lib/api/agentEngine.js` (`agentEngineApi`). No page yet: S1's canvas integrates it (TM6b, TM6c, later TM10–TM11). Every route is 404 `agent_engine_off` unless `AGENT_ENGINE` is set and not `"off"` (it is `"off"` in both `wrangler.toml` blocks) and `TEAM_AGENTS_ENABLED` is `"true"`. The gates are D1496's read and manage. `cost` is `{ available: false }` until E3, never 0.
+Worker routes in `routes/agent_engine.ts`, mounted at `/api/teams` before `team_agents.ts`, backed by `services/agents/goals.ts`, `services/agents/tasks.ts` and migration 727 (`scope_goals`, `scope_tasks`, `scope_task_deps`, `scope_task_events`; `task_id` and `run_key` on `ai_rail_proposals`). The client is `lib/api/agentEngine.js` (`agentEngineApi`). No page yet: S1's canvas integrates it (TM6b, TM6c, later TM10–TM11). Every route is 404 `agent_engine_off` unless `AGENT_ENGINE` is set and not `"off"` (it is `"off"` in both `wrangler.toml` blocks) and `TEAM_AGENTS_ENABLED` is `"true"`. The gates are D1496's read and manage. `cost` is `{ available: false }` until E3 records task runs, never 0 (E3's runtime routes follow).
 
 | Route | Gate | What it does |
 | --- | --- | --- |

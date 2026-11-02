@@ -1,9 +1,9 @@
 /** D891 / #2447: synthetic facts on the canonical schema, never request-claimed provenance. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations, listMigrationFiles, planActions } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, migrationNumber, listMigrationFiles, planActions } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { checkInputs, computeReadiness, dataRoomCard, figures, loadVersions } from '../src/services/raiseCycle.ts';
 import { projectNdaActive } from '../src/routes/data_room.ts';
@@ -12,14 +12,12 @@ import { readableRoomFiles, mercuryFacts, selectedCheckSources } from '../src/se
 import { buildMetrics, cleanMetrics } from '../src/services/updateShare.ts';
 import { fillAxalSpinoutDemoDay } from '../src/services/decks/axalSpinoutDemoDay.ts';
 import { mapToSpinoutDeckData } from '../src/services/decks/spinoutDeckData.ts';
+import { loadSchema } from './_schema_once.mjs';
 const sql = (name: string) => readFileSync(new URL('../sql/migrations/' + name, import.meta.url), 'utf8');
 const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const ddl = (() => {
  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
- db.exec(baseline);
- for (const name of readdirSync(new URL('../sql/migrations/', import.meta.url)).filter(n => /^\d+_.*\.sql$/.test(n)).sort(compareMigrations)) {
-  if (migrationNumber(name) > BASELINE_CUTOFF) db.exec(sql(name));
- }
+ loadSchema(db);
  const result = (db.prepare("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END").all() as any[]).map(r => r.sql).join(';\n');
  db.close(); return result;
 })();
