@@ -12,7 +12,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { removeMigratedDatabases } from './_storage_schema.ts';
@@ -168,10 +168,12 @@ test('the import guard: nothing outside src/agents/sdkRuntime.ts imports the `ag
   const root = fileURLToPath(new URL('../src/', import.meta.url));
   const offenders: string[] = [];
   const walk = (dir: string) => {
-    for (const f of readdirSync(dir)) {
+    // Directory entries carry their own type, so no file is checked and then read (CodeQL js/file-system-race).
+    for (const d of readdirSync(dir, { withFileTypes: true })) {
+      const f = d.name;
       const p = join(dir, f);
-      if (statSync(p).isDirectory()) { walk(p); continue; }
-      if (!/\.(ts|js|mjs)$/.test(f)) continue;
+      if (d.isDirectory()) { walk(p); continue; }
+      if (!d.isFile() || !/\.(ts|js|mjs)$/.test(f)) continue;
       const rel = p.slice(root.length);
       if (rel === 'agents/sdkRuntime.ts') continue;
       const src = readFileSync(p, 'utf8');
