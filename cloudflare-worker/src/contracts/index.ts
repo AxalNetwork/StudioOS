@@ -35,6 +35,8 @@ export const CONTRACTS = Object.freeze({
   comments: { issue: 3817, route: 'GET /api/decks/:id/comments', schema: 'deckComments.schema.json' },
   // D1523 (#3775): every figure on the version and where it comes from.
   figures: { issue: 3775, route: 'GET /api/decks/:id/figures', schema: 'deckFigures.schema.json' },
+  // D1577 (#3824): who is editing the deck now, from its DeckPresence room.
+  presence: { issue: 3824, route: 'GET /api/decks/:id/presence', schema: 'deckPresence.schema.json' },
   // D1544 (#3784): an image edit's price before it runs.
   imageVary: { issue: 3784, route: 'POST /api/decks/images/:uid/edit/quote', schema: 'deckImageVary.schema.json' },
 

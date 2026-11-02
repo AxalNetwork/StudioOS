@@ -68,7 +68,8 @@ async function changed(before,after) {
   const {code}=await transformWithOxc(source.replace(before,()=>after),'MeetingBotsPage.jsx',{jsx:{runtime:'automatic'}});
   const imports={ '../../lib/api/adminMeetingBots':new URL('../src/lib/api/adminMeetingBots.js',import.meta.url).href,
     '../../ui':new URL('../src/ui/index.js',import.meta.url).href,
-    './MeetingBotDiagnosePanel':new URL('../src/pages/hq/MeetingBotDiagnosePanel.jsx',import.meta.url).href };
+    './MeetingBotDiagnosePanel':new URL('../src/pages/hq/MeetingBotDiagnosePanel.jsx',import.meta.url).href,
+    '../../ui/HeaderAsk.jsx':new URL('../src/ui/HeaderAsk.jsx',import.meta.url).href };
   const js=code.replace(/(from\s*['"])([^'"]+)(['"])/g,(_m,p,s,q)=>p+(imports[s]||import.meta.resolve(s))+q);
   return import('data:text/javascript;base64,'+Buffer.from(js+'\n// mutation '+ ++mutation).toString('base64'));
 }
