@@ -50,6 +50,8 @@ CREATE TABLE IF NOT EXISTS deck_area_batch_steps (
   fallback_used    INTEGER NOT NULL DEFAULT 0 CHECK (fallback_used IN (0, 1)),
   usage_log_id     INTEGER,
   error_code       TEXT,
+  input            TEXT,
+  result           TEXT,
   started_at       TEXT,
   ended_at         TEXT,
   PRIMARY KEY (batch_uid, seq)
