@@ -291,7 +291,7 @@ test('the live pill is the one Platform → Deployments draws', () => {
 
 test('the naming rule is the Worker\'s, drawn once with <code> standing in', () => {
   const n = byTestId(boxes({ deployments: [] }, []), 'h14-naming');
-  for (const v of ['studioos-<code>', '<code>.axal.vc', 'studioos-<code>-job-queue', 'axal-search-<code>', ...Object.values(HQ.branch_naming.r2)]) {
+  for (const v of ['studioos-<code>', '<code>.axal.vc', 'studioos-<code>-job-queue', 'axal-search-<code>', 'axal-deck-quotes-<code>', ...Object.values(HQ.branch_naming.r2)]) {
     assert.ok(n.includes(v), `the naming line carries ${v}`);
   }
   assert.doesNotMatch(html(BranchBoxes, { deps: { deployments: [] }, links: [], naming: null }), /h14-naming/);

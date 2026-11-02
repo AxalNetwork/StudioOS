@@ -31,9 +31,9 @@
  * a quote.
  *
  * SPEND (owner decision L = A). The index is new Cloudflare spend, approved item by
- * item. It is not in wrangler.toml until the owner approves its monthly cost;
- * until then `env.DECK_QUOTES` is absent and every read answers "not switched
- * on yet". The embedding and the rerank go through the AI router's module
+ * item. The owner approved its monthly cost, and wrangler.toml binds it
+ * (#3803); a Worker without `env.DECK_QUOTES` still answers "not switched on
+ * yet". The embedding and the rerank go through the AI router's module
  * tasks with their catalogue ids (D760), never a second model list.
  */
 import type { Env } from '../../types';

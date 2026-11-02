@@ -27,6 +27,8 @@ export const SCOPED_FORMS = Object.freeze({
   perk: Object.freeze({ page: 'Operating Partner · Offers · Perk deals', form: 'perk', table: 'perks' }),
   // #4046 (#3740 2b): the deal page's New note, a firm's private note; its words only.
   dealNote: Object.freeze({ page: 'Investor · Deals · Deal room', form: 'deal-note', table: 'deal_notes' }),
+  // #4046 (B2): a member's answers to a product-testing programme's questions, in their own words.
+  testingAnswers: Object.freeze({ page: 'Member · Studio · Product testing', form: 'testing-answers', table: 'testing_applications' }),
 });
 
 export const SUPPORT_OFF = 'Ask is off in a support session.';
@@ -54,6 +56,7 @@ export const NOT_FILLED_HERE = Object.freeze({
   offering: Object.freeze(['Price · Eadwyn never fills what you charge.']),
   perk: Object.freeze(['Value, credits, cap and conditions · they are yours to set.']),
   'deal-note': Object.freeze(['Tag · it is yours to choose.']),
+  'testing-answers': Object.freeze(['Availability and email consent · they are yours to give.']),
 });
 
 /** The values a scoped form's Save should still treat as Eadwyn's: placed and not typed over. */
