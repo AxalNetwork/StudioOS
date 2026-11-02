@@ -8,8 +8,11 @@ import { Versions, useDeckChecks } from './DeckVersions';
 import { comparePair } from './compareModel';
 import { APPLY } from './deckV2Model';
 import { AUDIENCE_LABELS, KIT_FAILED, NOT_RECORDED, NO_KIT, THEME_LABELS } from './editorModel';
-import { SLIDE_SIZES, aspectOf, withAspect } from './gridModel';
-import { remix as remixAdapter, shown } from './deckV2Adapter';
+import { SLIDE_SIZES, STRUCTURES, aspectOf, placeOf, withAspect } from './gridModel';
+import { applyStructure, movedLine, recommendedLine } from './structureModel';
+import { LANGUAGES, langOf, languageLine, withLanguage } from './deckLanguage';
+import { figures as figuresAdapter, remix as remixAdapter, shown } from './deckV2Adapter';
+import { GO_TO_CARD, checkCounts, toReview } from './figuresModel';
 import { movedNotice } from './deckReflow';
 
 /**
@@ -32,7 +35,10 @@ import { movedNotice } from './deckReflow';
  *   VersionsSheet    PD15: every version, Compare, and Restore behind its
  *                    dialog (`POST /api/decks/:id/restore`)
  *   SourcesSheet     D896's Sources panel, with the slide's own evidence
- *   CheckSheet       D900's Check panel ("Check claims · Free checks")
+ *   CheckSheet       D900's Check panel ("Check claims · Free checks"),
+ *                    headed by D1523's figure counts (pd25: "▤ Linked n ·
+ *                    ✎ Stated n · ! Uncited n") and the Stated and Uncited
+ *                    figures, each with "Go to card ›" (`deckV2Adapter.figures`)
  *   RemixSheet       This card › Remix this slide (pd5, D1553): four layouts
  *                    from The Grid's structures, each keeping every block, and
  *                    "Remove a block · the rest reflows inside the grid". Free:
@@ -84,6 +90,13 @@ export function ThemeSheet({ model, theme, audience, kit, readOnly, onTheme, onA
           onChange={(e) => onTheme(withConfidential(theme, e.target.checked))} data-testid="pitch-theme-confidential" />
         <span className="flex flex-col"><span className="font-bold">{CONFIDENTIAL}</span><span className={MUTED}>{CONFIDENTIAL_HELP}</span></span>
       </label>
+      {/* D1571 (#3818): the deck's language — right to left for Arabic and Hebrew, CJK measured per character. Not in the header. */}
+      <span className={EYE}>Language</span>
+      <select className={FIELD} value={langOf(theme).split('-')[0]} disabled={readOnly} aria-label="Language of the deck"
+        onChange={(e) => onTheme(withLanguage(theme, e.target.value))} data-testid="pitch-theme-language">
+        {LANGUAGES.map((l) => <option key={l.id} value={l.id} lang={l.id}>{l.label}</option>)}
+      </select>
+      <span className={MUTED} data-testid="pitch-theme-language-line">{languageLine(theme)}</span>
       <span className={EYE}>Audience</span>
       <select className={FIELD} value={audience || ''} disabled={readOnly} onChange={(e) => onAudience(e.target.value || null)} data-testid="pitch-editor-audience-select">
         <option value="">{NOT_RECORDED}</option>
@@ -130,9 +143,52 @@ export function SizeSheet({ theme, readOnly, onSize, moved, onUndo, onClose }) {
   );
 }
 
-export function StructureSheet({ model, card, index, readOnly, onLayout, onClose }) {
+/** One structure's tile: its areas drawn on a mini slide, its name and its use (pd10). */
+function StructureTile({ s, current, disabled, onPick, onPreview }) {
+  const seed = recommendedLine(s);
+  return (
+    <button type="button" disabled={disabled} aria-pressed={current}
+      onClick={() => onPick(s)} onMouseEnter={() => onPreview(s)} onFocus={() => onPreview(s)}
+      className={`flex flex-col items-stretch gap-1 rounded-[9px] border p-1.5 text-left ${current ? 'border-axal-violet bg-axal-lavender dark:border-violet-500 dark:bg-violet-950/40' : 'border-axal-hairline hover:bg-axal-ground dark:border-gray-700 dark:hover:bg-gray-800'} ${INK}`}
+      data-testid={`pitch-structure-${s.id}`}>
+      <span className="relative block aspect-[16/9] w-full rounded-[4px] bg-axal-ground dark:bg-gray-800" aria-hidden="true">
+        {s.background === 'image' ? <span className="absolute inset-0 rounded-[4px] bg-violet-200/50 dark:bg-violet-900/40" /> : null}
+        {s.areas.map((a) => <span key={a.id} className="rounded-[2px] border border-axal-violet/40 bg-white/80 dark:border-violet-500/50 dark:bg-gray-900/80" style={placeOf(a)} />)}
+      </span>
+      <span className="text-[11.5px] font-bold leading-tight">{s.label}</span>
+      <span className="text-[10.5px] leading-tight text-axal-muted dark:text-gray-400">{s.use}</span>
+      {seed ? <span className="text-[10px] font-bold uppercase tracking-[.05em] text-axal-violet dark:text-violet-300">{seed}</span> : null}
+    </button>
+  );
+}
+
+/**
+ * ⋯ › This card › Structure. D1513 (#3765, pd10): the 17 structures, each
+ * with its mini, name and use, and "Recommended for Seed" where the plan says
+ * so. Hovering or focusing one says what would move ("[1] block moves to the
+ * notes"); choosing it applies it as one edit (`applyStructure`). The 12
+ * presets that fill a card kind by kind stay below, behind their own dialog.
+ */
+export function StructureSheet({ model, card, index, readOnly, onLayout, onStructure, onClose }) {
+  const [preview, setPreview] = useState(null);
+  const result = preview && card ? applyStructure(card, preview) : null;
+  const pick = (s) => {
+    const r = applyStructure(card, s);
+    if (!r.error) onStructure?.(r);
+  };
   return (
     <Frame title={`Structure · card ${index + 1}`} testId="pitch-sheet-structure" onClose={onClose}>
+      <span className={EYE}>Structures</span>
+      <span className={MUTED}>A structure divides the card into areas. The card&apos;s blocks take them in reading order; anything with no area moves to the speaker notes, never away.</span>
+      <div className="grid grid-cols-3 gap-1.5 max-sm:grid-cols-2" role="group" aria-label="Structures">
+        {STRUCTURES.map((s) => (
+          <StructureTile key={s.id} s={s} current={card?.structure === s.id} disabled={readOnly || !card} onPick={pick} onPreview={setPreview} />
+        ))}
+      </div>
+      <span className={MUTED} role="status" aria-live="polite" data-testid="pitch-structure-preview">
+        {result ? (result.error ? result.error : `${preview.label}: ${movedLine(result.count)}${result.count ? ` (${result.moved.map((m) => m.kind).join(', ')})` : ''}.`) : 'Point at a structure to see what moves.'}
+      </span>
+      <span className={EYE}>Presets</span>
       <span className={MUTED}>The layouts on The Grid. The card&apos;s words move with them, kind by kind; a dialog names anything that has no place.</span>
       <div className="grid grid-cols-3 gap-1.5">
         {model.layouts.map((l) => (
@@ -198,9 +254,47 @@ export function SourcesSheet({ onClose, children }) {
   return <Frame title="Sources and coverage" testId="pitch-sheet-sources" onClose={onClose} width={560}>{children}</Frame>;
 }
 
+/**
+ * D1523 (#3775, pd25): where the figures on the saved version come from. It
+ * reads the saved version, so an unsaved edit shows after Save; a read that
+ * fails says so and never counts 0.
+ */
+export function FigureCounts({ deckId, onGoToCard }) {
+  const [answer, setAnswer] = useState(null);
+  useEffect(() => {
+    let live = true;
+    setAnswer(null);
+    figuresAdapter(deckId).then((a) => { if (live) setAnswer(a); });
+    return () => { live = false; };
+  }, [deckId]);
+  if (!answer) return <span className={MUTED} role="status" data-testid="pitch-figures-loading">Reading where each figure comes from…</span>;
+  if (!answer.available) return <span className={MUTED} role="status" data-testid="pitch-figures-off">{shown(answer)}</span>;
+  const review = toReview(answer.value?.figures);
+  return (
+    <div className="flex flex-col gap-1.5" data-testid="pitch-figures">
+      <span className={EYE}>Figures on the saved version</span>
+      <span className={`text-[12.5px] font-bold ${INK}`} data-testid="pitch-figures-counts">{checkCounts(answer.value?.counts)}</span>
+      {review.length ? (
+        <ul className="m-0 flex list-none flex-col gap-1 p-0" data-testid="pitch-figures-review">
+          {review.map((f) => (
+            <li key={f.key} className="flex flex-wrap items-center justify-between gap-2 rounded-[8px] border border-axal-hairline px-2.5 py-1.5 dark:border-gray-700" data-testid={`pitch-figures-row-${f.key}`}>
+              <span className="flex flex-col">
+                <span className={`text-[12.5px] ${INK}`}><b>{f.chip}</b> · card {f.card + 1} · {f.title}</span>
+                <span className={MUTED}>{f.line}</span>
+              </span>
+              {onGoToCard ? <button type="button" className={GHOST} onClick={() => onGoToCard(f.card)} data-testid={`pitch-figures-go-${f.key}`}>{GO_TO_CARD}</button> : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 export function CheckSheet({ deck, projectId, readOnly, dirty, onReplaced, onGoToCard, onClose }) {
   return (
     <Frame title="Check claims" testId="pitch-sheet-check" onClose={onClose} width={560}>
+      <FigureCounts key={`figures-${deck.id}-${deck.updated_at ?? ''}`} deckId={deck.id} onGoToCard={onGoToCard} />
       <CheckPanel key={deck.id} deck={deck} projectId={projectId} readOnly={readOnly} dirty={dirty} onReplaced={onReplaced} onGoToCard={onGoToCard} />
     </Frame>
   );

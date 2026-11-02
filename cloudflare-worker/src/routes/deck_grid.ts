@@ -17,6 +17,11 @@
  * is 400 `invalid_aspect`. The aspect itself is written with the version's
  * theme, as #3749 decided; the editor runs the same reflow on its draft.
  *
+ * D1571 (#3818): the reply names the deck's `lang` (null when none was
+ * chosen), its `dir` (the theme's own, else right to left for Arabic and
+ * Hebrew) and the `script` its capacity is measured in, and the reflow runs
+ * at that script (`designSystem.SCRIPT_EM`).
+ *
  * Who: whoever may read the deck (`projectOwned`, the rule `GET /:id` uses).
  * Writes nothing.
  */
@@ -28,6 +33,7 @@ import { ensureSchema, getDeckRow, rowToDeck } from './decks';
 import { GRID_COLS, GRID_ROWS } from '../services/decks/slideModel';
 import { ASPECTS, BASELINE, FRAME, SLIDE_SIZES, STRUCTURES, areasOf, aspectOf, boxOfAt, cellAt } from '../services/decks/structures';
 import { reflowMap, reflowSlides } from '../services/decks/reflow';
+import { dirOf, scriptOfTheme } from '../services/decks/designSystem';
 import { refuse } from '../util/refusal';
 
 const deckGrid = new Hono<{ Bindings: Env }>();
@@ -50,6 +56,10 @@ deckGrid.get('/:id{[0-9]+}/grid', async (c) => {
     deck_id: deck.id,
     version: deck.version,
     aspect,
+    // D1571 (#3818): the deck's language and direction, and the script its capacity is measured in.
+    lang: typeof deck.theme?.lang === 'string' ? deck.theme.lang : null,
+    dir: dirOf(deck.theme?.lang, deck.theme?.dir),
+    script: scriptOfTheme(deck.theme),
     slide: SLIDE_SIZES[aspect],
     frame: FRAME,
     cell: cellAt(aspect),
@@ -61,7 +71,7 @@ deckGrid.get('/:id{[0-9]+}/grid', async (c) => {
       return { index, structure, derived, areas: withBoxes(areas) };
     }),
     ...(target !== undefined ? (() => {
-      const r = reflowSlides(deck.slides, target, aspect);
+      const r = reflowSlides(deck.slides, target, aspect, scriptOfTheme(deck.theme));
       return { reflow: { from: r.from, to: r.to, count: r.count, moved: r.moved }, reflow_map: reflowMap() };
     })() : {}),
   });

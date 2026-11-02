@@ -52,6 +52,8 @@ function world() {
   db.exec(sql('migrations/712_team_agents.sql'));
   db.exec(stripForeignKeys(sql('migrations/727_scope_goals_and_tasks.sql')));
   db.exec(sql('migrations/762_scope_task_work_board.sql'));
+  // D1614 W7 (#3993): the board reads 763's milestone, author and draft columns.
+  db.exec(sql('migrations/763_task_comments_labels_milestones.sql'));
   db.exec(`CREATE TABLE project_members (id INTEGER PRIMARY KEY,project_id INTEGER,user_id INTEGER,role TEXT,status TEXT,created_at TEXT,updated_at TEXT)`);
   for(const [id,name,role,founder] of [[OWNER,'Pat Owner','founder',100],[MEMBER,'Max Member','founder',101],[OTHER,'Ali Other','founder',102],[STRANGER,'Sam Stranger','founder',103]])
     db.prepare("INSERT INTO users (id,uid,email,name,role,founder_id,subscription_tier,subscription_status) VALUES (?,?,?,?,?,?,'growth','active')").run(id,`u-${id}`,`fixture-${id}@example.test`,name,role,founder);
@@ -102,7 +104,7 @@ test('numbering is per project and concurrent creates are distinct; body, type, 
     const [c,d]=await Promise.all([create(w,{title:'Concurrent C'}),create(w,{title:'Concurrent D'})]);
     assert.deepEqual([a.task_number,b.task_number,other.task_number],[1,2,1]);assert.notEqual(c.task_number,d.task_number);
     const board=(await call(w,OWNER,'GET','/project/7/work/board')).body;
-    assert.deepEqual(board.items.map((t:any)=>t.title),['Concurrent C','Concurrent D','Beta','Alpha']);
+    assert.deepEqual(board.items.map((t:any)=>t.title),[...[c,d].sort((left,right)=>left.task_number-right.task_number).map(t=>t.title),'Beta','Alpha']);
     const backlog=board.columns.find((c:any)=>c.key==='backlog');assert.equal(backlog.count,4);assert.equal(backlog.estimate_points,null);
     assert.deepEqual([a.body,a.type,a.estimate_points,a.labels],['Markdown **launch**','feature',0,['finance']]);
     const filtered=(await call(w,OWNER,'GET','/project/7/work/board?filter=label%3Afinance')).body;
