@@ -45,14 +45,15 @@ test('the week is Monday to Sunday; the month is the calendar month; the agenda 
 });
 
 test('every kind the page reads is in exactly one family; Deadlines holds the Compliance layer (D1384)', () => {
-  assert.deepEqual(FAMILIES.map((f) => f.label), ['Events', 'Meetings', 'Sessions', 'Deadlines', 'Learning', 'Grow', 'From other calendars']);
+  assert.deepEqual(FAMILIES.map((f) => f.label), ['Events', 'Meetings', 'Sessions', 'Deadlines', 'Learning', 'Grow', 'Tasks', 'From other calendars']);
   assert.deepEqual([...FAMILIES.flatMap((f) => f.kinds)].sort(), [...PAGE_KINDS].sort());
   assert.equal(familyOf('event_ticket'), 'events');
   assert.equal(familyOf('calendly_event'), 'other');
   // D1484 (#3977): the cohort dates and deal closings are deadlines too; #3982: so are a round's close and an NDA's expiry.
   assert.deepEqual(FAMILIES.find((f) => f.key === 'deadlines').kinds, ['compliance_due', 'cohort_date', 'deal_closing', 'round_close', 'nda_expiry']);
-  assert.equal(PAGE_KINDS.length, 19, 'the page kind table parsed'); // #3959: Learning is the fifteenth; D1486 §b's two make seventeen; §c's two, nineteen.
+  assert.equal(PAGE_KINDS.length, 23, 'the page kind table parsed'); // #3959: Learning is the fifteenth; D1486 §b's two make seventeen; §c's two, nineteen; §d's four, twenty-three.
   assert.deepEqual(FAMILIES.find((f) => f.key === 'grow').kinds, ['publish_send', 'content_planned']);
+  assert.deepEqual(FAMILIES.find((f) => f.key === 'tasks').kinds, ['workflow_task', 'mvp_task', 'contact_task', 'engagement_milestone']);
 });
 
 test('a failed source counts a dash, never 0; a read list counts; no list counts nothing', () => {
