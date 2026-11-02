@@ -7,7 +7,9 @@
  * as every save is (`checkDraft`, 400 with its code); an HQ skill must pass
  * `publishRefusal` (409 `needs_approval`, `golden_cases_failing`); then the
  * version row and the pointer land together, guarded on `current_version`
- * (409 `publish_conflict`). An HQ publish writes the admin audit row.
+ * (409 `publish_conflict`). A company publish also clears HQ's open flag or
+ * suspension in that same batch (D4161, `clearOnRepublish`). An HQ publish
+ * writes the admin audit row.
  *
  * Who may publish is the caller's check (`mayWrite` in team_skills, Super
  * Admin in HQ's routes); this file does not decide it.
@@ -16,6 +18,7 @@ import type { Env, User } from '../../types';
 import { ROLES } from './catalogue';
 import { checkDraft, toSkillMd, type OutputKind, type Tag } from './skills';
 import { publishRefusal, type DraftParts } from './skillLifecycle';
+import { clearOnRepublish } from './skillModeration';
 import type { SkillRow } from './skillLinks';
 import { logAdminAction } from '../adminAudit';
 
@@ -57,6 +60,8 @@ export async function publishDraft(env: Env, s: SkillRow, user: User, reason: st
     env.DB.prepare(`INSERT INTO agent_skill_versions (skill_id, version, skill_md, name, purpose, steps_json, allowed_tools_json, output_kind, taxonomy_json, roles_json, published_by)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(s.id, version, md, d.name, d.purpose, JSON.stringify(d.steps), JSON.stringify(d.tools), d.output_kind,
       JSON.stringify(checked.draft.tags), JSON.stringify(checked.draft.roles), user.id),
+    // D4161: a company's new version starts clean of HQ's flag or suspension.
+    ...(s.scope === 'company' ? [clearOnRepublish(env, s.id, version, user.id)] : []),
   ]).catch(() => null);
   if (!res || Number(res[0]?.meta?.changes ?? 0) !== 1) return { ok: false, status: 409, code: 'publish_conflict', message: 'This skill was published by someone else just now. Reload it and try again.' };
   if (s.scope === 'hq') {

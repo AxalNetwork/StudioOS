@@ -167,7 +167,7 @@ test('refusals: Manual mode and an empty purse say so, with a way to top up; not
 
 test('the rail option is listed where it lives, and Eadwyn is never called an advisor', () => {
   const o = FOUNDER_OPTIONS.find((x) => x.key === 'draft:build/plan');
-  assert.deepEqual([o.page, o.route, o.label, o.handler], ['Founder · Build', '/build/plan', 'Word with Eadwyn', 'draft']);
+  assert.deepEqual([o.page, o.route, o.label, o.handler], ['Founder · Build', '/build/plan', 'Word the plan', 'draft']);
   const page = read('frontend/src/pages/cycles/BuildPlan.jsx');
   assert.ok(page.includes("useRailOption(running ? 'draft:build/plan' : null"));
   const words = page + read('frontend/src/pages/cycles/buildPlanModel.js');
