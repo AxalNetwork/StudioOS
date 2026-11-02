@@ -170,6 +170,7 @@ export * from './api/programGrants.js';
 export * from './api/programProposals.js';
 export * from './api/programs.js';
 export * from './api/promoUsage.js';
+export * from './api/prospectBrief.js';
 export * from './api/publicAiModels.js';
 export * from './api/publicPricing.js';
 export * from './api/publish.js';

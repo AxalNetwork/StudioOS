@@ -448,6 +448,8 @@ export interface CalendarEvent {
   notes: string | null;
   deal_id?: number | null;
   project_id?: number | null;
+  /** D1585 (#3832): an investor meeting's prospect, so the drawer's "Prep" reads its brief. */
+  prospect_id?: number | null;
   /**
    * D1033 — set only by the two My events kinds (`calendar/myEvents.ts`). The
    * venue words (`location_text`), the event row the copy came from, its page,
