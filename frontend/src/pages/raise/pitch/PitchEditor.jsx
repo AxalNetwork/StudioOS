@@ -37,6 +37,7 @@ import { deckRail } from './deckRailGroups';
 import { presentHref } from './presentExportModel';
 import { aspectOf, withAspect } from './gridModel';
 import { reflowCards } from './deckReflow';
+import { movedLine } from './structureModel';
 import { scriptOfTheme } from './deckLanguage';
 import {
   ADDABLE_KINDS, KIND_LABELS, MODEL_FAILED, NOTES_PLACEHOLDER, NO_CARDS,
@@ -324,6 +325,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   const [askLine, setAskLine] = useState(null);
   const [dialog, setDialog] = useState(null);
   const [sheet, setSheet] = useState(null);
+  // D1513 (#3765): what the last structure moved to the speaker notes, until the card changes.
+  const [structureNote, setStructureNote] = useState(null);
   const [compare, setCompare] = useState(null);
   // PD-9: a run or a quote refused for tokens (a 402) turns Ask off for the
   // session; adding tokens leaves the page, so the next visit starts on.
@@ -516,11 +519,14 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
             {refresh.status === 'error' ? <ReadFailed text="Which figures have changed could not be read." onRetry={refresh.retry} testId="pitch-editor-refresh-error" /> : null}
           </div>
           <div className="flex min-w-0 flex-col gap-3">
+            {structureNote ? <span className={MUTED} role="status" data-testid="pitch-editor-structure-note">{structureNote} The speaker notes keep each one.</span> : null}
             {cards.length === 0 ? <div className={`${CARD} p-6 ${MUTED}`}>{NO_CARDS}</div> : (
               <GridStage card={card} index={sel} model={model} colours={colours} ink={ink} theme={theme} kit={kit} charts={charts} pageLabel={pageNumberOf(cards, sel)}
                 readOnly={readOnly} selection={selection} focus={focus}
                 onSelection={setPickState}
                 onMove={(id, grid) => setCard(sel, updateBlock(card, id, { grid }))}
+                // D1513: a divider move (both blocks) and its overflow are each one edit.
+                onCard={(next) => { setCard(sel, next); setStructureNote(null); }}
                 onAsk={ask} askOff={askOff} askLine={askLine}
                 items={items} onRefresh={() => { const r = refreshCard(card, items, charts); if (r.moved) setCard(sel, r.card); }} />
             )}
@@ -555,7 +561,10 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
       {sheet === 'size' ? <SizeSheet theme={theme} readOnly={readOnly} onSize={changeSize} moved={sizeUndo?.count ?? 0} onUndo={undoSize}
         onClose={() => { setSizeUndo(null); setSheet(null); }} /> : null}
       {sheet === 'structure' && card ? (
-        <StructureSheet model={model} card={card} index={sel} readOnly={readOnly} onLayout={(layout) => setDialog({ kind: 'layout', layout })} onClose={() => setSheet(null)} />
+        <StructureSheet model={model} card={card} index={sel} readOnly={readOnly} onLayout={(layout) => setDialog({ kind: 'layout', layout })}
+          // D1513 (#3765): a structure is one edit; what has no area is already in the notes.
+          onStructure={(r) => { setCard(sel, r.card); setPickState(NO_PICK); setSheet(null); setStructureNote(r.count ? `${movedLine(r.count)}.` : null); }}
+          onClose={() => setSheet(null)} />
       ) : null}
       {sheet === 'background' && card ? (
         <BackgroundSheet card={card} index={sel} readOnly={readOnly} onBackground={(bg) => setCard(sel, { ...card, background: bg })}
