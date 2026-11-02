@@ -2,10 +2,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import checkout from '../src/routes/billing_checkout.ts';
 import billing from '../src/routes/billing.ts';
@@ -15,15 +14,12 @@ import { plansAndPacks } from '../src/services/aiCredits.ts';
 import { keyReadiness, planReadiness } from '../src/services/stripeReadiness.ts';
 import { PLAN_CATALOGUE, planByKey } from '../src/services/planCatalogue.ts';
 import { catalogChecks } from '../src/services/paymentsCatalog.ts';
+import { loadSchema } from './_schema_once.mjs';
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const DDL = (() => {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  db.exec(read('../sql/schema_baseline.sql'));
-  for (const file of readdirSync(new URL('../sql/migrations/', import.meta.url))
-    .filter(file => /^\d+_.*\.sql$/.test(file) && migrationNumber(file) > BASELINE_CUTOFF).sort(compareMigrations)) {
-    db.exec(read('../sql/migrations/' + file));
-  }
+  loadSchema(db);
   const rows = db.prepare("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END").all() as Array<{ sql: string }>;
   db.close();
   return rows.map(row => row.sql);

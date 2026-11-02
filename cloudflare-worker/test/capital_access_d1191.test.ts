@@ -1,7 +1,7 @@
 /** D1191: real routers and SQLite; all identities and investor records are synthetic. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, mkdtempSync, copyFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, copyFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
@@ -11,7 +11,7 @@ import cycleRaise from '../src/routes/cycle_raise.ts';
 import contacts from '../src/routes/contacts.ts';
 import records from '../src/routes/cycle_records.ts';
 import { capitalCanWork, capitalMemberProjectIds, capitalOwner, capitalPage, capitalRequestPath, capitalStaffRequestAllowed, CAPITAL_SUPPORT_ACTION } from '../src/services/capRelAccess.ts';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
 const SECRET = 'synthetic-capital-access-d1191-'.repeat(3);
 const folder = mkdtempSync(join(tmpdir(),'studioos-capital-access-'));
@@ -22,11 +22,7 @@ function fixture() {
   const template = join(folder,'schema.sqlite');
   if (!schemaReady) {
   const schema = new DatabaseSync(template, { enableForeignKeyConstraints: false });
-  schema.exec(readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8'));
-  const migrations = readdirSync(new URL('../sql/migrations/', import.meta.url)).filter(name => name.endsWith('.sql') && migrationNumber(name) > BASELINE_CUTOFF).sort(compareMigrations);
-  for (const name of migrations) {
-    schema.exec(readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8'));
-  }
+  loadSchema(schema);
   schema.close(); schemaReady = true;
   }
   const file = join(folder,`fixture-${fixtureNumber++}.sqlite`); copyFileSync(template,file);

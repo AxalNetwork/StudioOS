@@ -2,18 +2,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import router from '../src/routes/cycle_raise.ts';
 import { collectEvidenceSources, evidenceDate, evidenceStale, EVIDENCE_RULES, candidateKey } from '../src/services/raiseEvidenceSources.ts';
 import { raiseEvidenceContext, buildCandidates, acceptItem, dismissItem, setSharing, linkClaim, readRaiseEvidence } from '../src/services/raiseEvidence.ts';
 import { decideRail } from '../src/services/railProposals.ts';
+import { loadSchema } from './_schema_once.mjs';
 const read=(p:string)=>readFileSync(new URL(p,import.meta.url),'utf8');
-const DDL=(()=>{const db=new DatabaseSync(':memory:',{enableDoubleQuotedStringLiterals:true});db.exec(read('../sql/schema_baseline.sql'));
- for(const f of readdirSync(new URL('../sql/migrations/',import.meta.url)).filter(f=>/^\d+_.*\.sql$/.test(f)&&migrationNumber(f)>BASELINE_CUTOFF).sort(compareMigrations))db.exec(read('../sql/migrations/'+f));
+const DDL=(()=>{const db=new DatabaseSync(':memory:',{enableDoubleQuotedStringLiterals:true});loadSchema(db);
  const ddl=db.prepare("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END").all().map((r:any)=>r.sql);db.close();return ddl;})();
 const secret='t'.repeat(64); // in-memory test signing seed only
 function world(){

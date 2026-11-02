@@ -1,10 +1,8 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
 import { SignJWT } from 'jose';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 import scoring from '../src/routes/scoring.ts';
 import projects from '../src/routes/projects.ts';
 import deals, { userMayReadDeal, userReadableDealIds } from '../src/routes/deals.ts';
@@ -13,6 +11,7 @@ import trust from '../src/routes/trust.ts';
 import { runFullScore, runScoreV2 } from '../src/services/scoring.ts';
 import { REQUIRED_OFFICIAL_INPUTS, signScore } from '../src/services/scoreIntegrity.ts';
 import { computeAutoLayers, mergeLayers, overallFromLayers } from '../src/services/ventureRisk.ts';
+import { loadSchema } from './_schema_once.mjs';
 
 // Synthetic records only; no connector (including Mercury) may reach the network.
 const realFetch = globalThis.fetch;
@@ -27,10 +26,7 @@ const inputs = [Object.fromEntries(REQUIRED_OFFICIAL_INPUTS.map(k => [k, 0])),
   { ...high, team_network: 0, fit_alignment: 0, fit_synergy: 0, distribution_virality: 0 }, high];
 const ddl = (() => {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  db.exec(readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8'));
-  for (const name of readdirSync(new URL('../sql/migrations/', import.meta.url)).filter(n => /^\d+_.*\.sql$/.test(n)).sort(compareMigrations)) {
-    if (migrationNumber(name) > BASELINE_CUTOFF) db.exec(readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8'));
-  }
+  loadSchema(db);
   const sql = (db.prepare("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END").all() as any[]).map(r => r.sql).join(';\n');
   db.close(); return sql;
 })();

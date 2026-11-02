@@ -307,6 +307,13 @@ export async function decideRailAs(env: Env, who: { ownerId: number; deciderId: 
       await deliverDecision(env, uid, decided.status);
     } catch { console.warn('[rail] agent_decision_undelivered'); }
   }
+  // D1530 (#3849, E5): a handoff's proposal makes (or ends) its step of the chain. Never while the engine is off.
+  if (decided && decided.rail_option === 'propose:handoff' && env.AGENT_ENGINE && env.AGENT_ENGINE !== 'off') {
+    try {
+      const { decideHandoff } = await import('./agents/handoffs');
+      await decideHandoff(env, uid, decided.status, who.deciderId ?? who.ownerId, decided.decided_payload);
+    } catch { console.warn('[rail] handoff_decision_unapplied'); }
+  }
   return decided;
 }
 

@@ -23,7 +23,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
@@ -34,18 +34,15 @@ import { GATE_CODES, PERMISSION_LINE, TOTALS_LINE, VENTURE_ELEMENTS } from '../s
 import { DEFAULT_SHARE_INCLUDE, shareGatesFor, shareSlides } from '../src/services/decks/shareInclude.ts';
 import { ROUND_TERMS_LABEL, ROUND_TERMS_NOTE, slideFootnotes, complianceOf } from '../src/services/decks/compliance.ts';
 import { QUOTE_CONSENT_LINE, REASONS } from '../src/services/decks/quoteRetrieval.ts';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { contractErrors } from '../src/contracts/validate.ts';
+import { loadSchema } from './_schema_once.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-d1543-venture-elements-0123456789'; // synthetic test fixture
-const BASELINE_SQL = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
-const MIGRATIONS = resolve(process.cwd(), 'cloudflare-worker/sql/migrations');
 const BUILT_DDL = (() => {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  db.exec(BASELINE_SQL);
-  for (const f of readdirSync(MIGRATIONS).filter((n) => /^\d+_.*\.sql$/.test(n)).sort(compareMigrations).filter((n) => migrationNumber(n) > BASELINE_CUTOFF)) db.exec(readFileSync(resolve(MIGRATIONS, f), 'utf8'));
+  loadSchema(db);
   return (db.prepare(`SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END`).all() as any[]).map((r) => r.sql as string);
 })();
 const FOUNDER = 10, OTHER = 20, P = 1, Q = 2, DECK = 2;

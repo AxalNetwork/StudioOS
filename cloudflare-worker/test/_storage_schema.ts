@@ -3,11 +3,11 @@
  * baseline, then every later migration, replayed once into a template file.
  * Each case copies that file, so the DDL is not re-run per case.
  */
-import { readFileSync, readdirSync, mkdtempSync, copyFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, copyFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
 const ROOT = new URL('../sql/', import.meta.url);
 const OPTIONS = { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true } as const;
@@ -18,10 +18,7 @@ let count = 0;
 function template(): string {
   if (templatePath) return templatePath;
   const build = new DatabaseSync(':memory:', OPTIONS);
-  build.exec(readFileSync(new URL('schema_baseline.sql', ROOT), 'utf8'));
-  for (const name of readdirSync(new URL('migrations/', ROOT)).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations)) {
-    build.exec(readFileSync(new URL('migrations/' + name, ROOT), 'utf8'));
-  }
+  loadSchema(build);
   const ddl = build.prepare("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END")
     .all().map((x: any) => String(x.sql));
   build.close();
