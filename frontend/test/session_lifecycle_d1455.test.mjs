@@ -128,7 +128,7 @@ test('REC2, REC5: the session page wires one panel, hides the bot card\'s red li
   const page = readFileSync(new URL('../src/pages/founder/InterviewSessionPage.jsx', import.meta.url), 'utf8');
   assert.match(page, /<SessionStepper view=\{life\} \/>/);
   assert.match(page, /<SessionFailure failure=\{failure\}/);
-  assert.match(page, /<MeetingBotPanel [^>]*onRead=\{setBotRead\} hideFailure \/>/);
+  assert.match(page, /<MeetingBotPanel [^>]*onRead=\{setBotRead\}[^>]* hideFailure[ />]/);
   assert.match(page, /\(recordingOther \|\| imported\) && !failure &&/, 'the separate "Processing stopped" card is not drawn beside the panel');
   assert.match(page, /Nothing was charged for this session\./);
   assert.match(page, /onClick=\{runAgain\}|onRetry=\{runAgain\}/);
