@@ -17,14 +17,22 @@
  * which `parseShareInclude` reads by name and so never sees it. Nothing else
  * writes `include_json` after the link is made (`createShareLink`).
  *
- * THE EXEMPTION IS STATED, NOT READ. No table records a round's Reg D
- * exemption (`raise_rounds` has none; grep 506 finds only the accreditation
- * templates). With "Migration: none" the founder states it when publishing
- * and it is kept on the link; an unstated exemption is refused, as is
- * 506(b). A refused request writes nothing. A stored state that does not say
- * 506(c) reads as not published (`publishOf`), whatever wrote it. Recording
- * the exemption on the round itself needs a column (`raise_rounds`), which is
- * a later task's migration.
+ * THE EXEMPTION IS THE ROUND'S (D4086, #4086). A round records the exemption
+ * it is offered under (`raise_rounds.exemption`, the founder's own statement
+ * in Raise, NULL when not recorded). Publishing reads it from the deck's round
+ * (`pitch_decks.round_ref`) and ignores anything a request states:
+ *   no round on the deck      → 409 `round_not_linked`;
+ *   exemption not recorded    → 409 `exemption_not_recorded`, naming Raise;
+ *   506(b)                    → 409 `exemption_506b`;
+ *   Reg CF, Reg S or other    → 409 `exemption_not_publishable` (only 506(c)
+ *                               allows general solicitation; counsel may
+ *                               widen this, D4086 §3);
+ *   506(c)                    → may publish.
+ * A refused request writes nothing. A link published before the round
+ * recorded its exemption keeps working until the round records one; from
+ * then on it stands only while the round says 506(c) (`linkStands`), and
+ * recording anything else unpublishes it (`routes/contacts.ts`). A stored
+ * state that does not say 506(c) still reads as not published (`publishOf`).
  *
  * Pure: no database, no model.
  */
@@ -36,6 +44,13 @@ export const publicViewsOn = (): boolean => PUBLIC_VIEWS_ON;
 
 export const EXEMPTIONS = ['506b', '506c'] as const;
 export type Exemption = typeof EXEMPTIONS[number];
+/** The exemptions a round may record (migration 202611022116's CHECK); a proposal for counsel. */
+export const ROUND_EXEMPTIONS = ['506b', '506c', 'reg_cf', 'reg_s', 'other'] as const;
+export type RoundExemption = typeof ROUND_EXEMPTIONS[number];
+/** The one exemption under which a deck may be published as a page. */
+export const PUBLISHABLE: RoundExemption = '506c';
+/** The deck's round as publishing reads it: null when the deck names no round of its venture. */
+export type DeckRound = { uid: string; name: string | null; exemption: RoundExemption | null };
 export const GATES = ['email', 'none'] as const;
 export type Gate = typeof GATES[number];
 
@@ -46,7 +61,9 @@ export const MAX_EMBED_ORIGINS = 5;
 
 export const PUBLIC_VIEWS_OFF = 'Public pages are off until counsel\'s wording is in. A published link asks for the reader\'s email first.';
 export const REFUSE_506B = 'A 506(b) round cannot be published: Rule 506(b) allows no general solicitation. Share it one investor at a time.';
-export const REFUSE_NO_EXEMPTION = 'Say which exemption this round is offered under, 506(b) or 506(c), before publishing.';
+export const REFUSE_NO_ROUND = 'Choose the round this deck is for, then record its exemption in Raise.';
+export const REFUSE_NO_EXEMPTION = 'Record this round\'s exemption in Raise first.';
+export const REFUSE_NOT_PUBLISHABLE = 'Only a Rule 506(c) round can be published as a page. Share this deck one investor at a time.';
 export const REFUSE_ORIGINS = 'Each site that may embed the deck is an https address, at most five.';
 
 /** The stored `include_json` as an object; `{}` for none or one that cannot be read. */
@@ -109,11 +126,32 @@ export function gateFor(p: Publish, publicViews: boolean = PUBLIC_VIEWS_ON): Gat
 
 export type Refusal = { status: 409 | 422; code: string; message: string };
 
-/** Why a publish request is refused, or null. */
+/** A stored round exemption, or null for one not recorded (or not on the list). */
+export function roundExemptionOf(v: unknown): RoundExemption | null {
+  return (ROUND_EXEMPTIONS as readonly string[]).includes(String(v)) ? v as RoundExemption : null;
+}
+
+/** Why the deck's round does not allow publishing, or null when it does (506(c)). */
+export function roundRefusal(round: DeckRound | null): Refusal | null {
+  if (!round) return { status: 409, code: 'round_not_linked', message: REFUSE_NO_ROUND };
+  if (round.exemption == null) return { status: 409, code: 'exemption_not_recorded', message: REFUSE_NO_EXEMPTION };
+  if (round.exemption === '506b') return { status: 409, code: 'exemption_506b', message: REFUSE_506B };
+  if (round.exemption !== PUBLISHABLE) return { status: 409, code: 'exemption_not_publishable', message: REFUSE_NOT_PUBLISHABLE };
+  return null;
+}
+
+/**
+ * Does a link already published still stand against its round. It stands
+ * until the round records an exemption, and then only while that is 506(c).
+ * `'unreadable'` (the round could not be read) leaves it as it was.
+ */
+export function linkStands(round: DeckRound | null | 'unreadable'): boolean {
+  if (round === 'unreadable' || round == null || round.exemption == null) return true;
+  return round.exemption === PUBLISHABLE;
+}
+
+/** Why a publish request's own fields are refused, or null. The exemption is the round's (`roundRefusal`), never the request's. */
 export function publishRefusal(body: Record<string, unknown>, publicViews: boolean = PUBLIC_VIEWS_ON): Refusal | null {
-  const exemption = body.exemption;
-  if (exemption === '506b') return { status: 409, code: 'exemption_506b', message: REFUSE_506B };
-  if (exemption !== '506c') return { status: 422, code: 'exemption_missing', message: REFUSE_NO_EXEMPTION };
   const gate = body.gate ?? 'email';
   if (!(GATES as readonly string[]).includes(String(gate))) return { status: 422, code: 'gate_invalid', message: 'The gate is email, or none once public pages are on.' };
   if (gate === 'none' && !publicViews) return { status: 409, code: 'public_views_off', message: PUBLIC_VIEWS_OFF };

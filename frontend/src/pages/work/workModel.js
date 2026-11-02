@@ -78,6 +78,18 @@ export function dueLine(due, now = new Date()) {
 }
 
 /** "Move to ▾": every column but the card's own. */
+/**
+ * #3973: whether this reader may move this card, by the Worker's own rule
+ * (`workPermission`): a project editor moves any card; anyone else moves only
+ * a card assigned to them by name. Without a viewer, nothing moves.
+ */
+export function canMove(card, viewer) {
+  if (!viewer) return false;
+  if (viewer.can_manage === true) return true;
+  const a = card?.assignee;
+  return !!(a && a.kind === 'person' && viewer.user_uid && a.uid === viewer.user_uid);
+}
+
 export function moveTargets(item) {
   return COLUMNS.filter((c) => c.key !== item?.column);
 }

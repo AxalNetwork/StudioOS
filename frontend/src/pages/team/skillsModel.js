@@ -33,6 +33,18 @@ export function tagChip(tag) {
   return { text: `${cat} · ${level}`, title: tag?.skill_label && tag.skill_label !== cat ? `${tag.skill_label} · ${level}` : undefined };
 }
 
+/**
+ * D4120: what a skill's SkillEnergy image is drawn from — its slug, and the
+ * area and level of its first taxonomy tag. Null when the skill has no tag
+ * with both, so a card draws no image rather than a made-up area.
+ */
+export function energyOf(s) {
+  const tag = (Array.isArray(s?.taxonomy) ? s.taxonomy : []).find((t) => SKILL_AXIS_ORDER.includes(t?.category_slug) && levelOf(t?.level));
+  const slug = s?.slug || s?.uid;
+  if (!tag || !slug) return null;
+  return { slug: String(slug), area: tag.category_slug, level: levelOf(tag.level) };
+}
+
 export const OUTPUT_KINDS = [['draft', 'A draft for a person to accept'], ['record_change', 'A record change for a person to accept'], ['brief', 'A brief']];
 export const outputWords = (s) => s?.output_label || (OUTPUT_KINDS.find(([k]) => k === s?.output_kind) || [])[1] || null;
 
@@ -149,6 +161,10 @@ export function skillRefusalWords(code, detail) {
   switch (code) {
     case 'not_manager': case 'not_member': return 'Only this team’s editors can do this.';
     case 'write_tool': return 'Write tools aren’t allowed: agents only read.';
+    case 'tool_not_read_only': return detail ? `${detail} can change records. Skills may only use read-only tools.` : 'Skills may only use read-only tools: agents only read.';
+    case 'needs_approval': return 'A second Super Admin approves this draft before it is published.';
+    case 'golden_cases_failing': return 'This draft is below 9 of 10 golden-case runs, so it can’t be published yet.';
+    case 'replacement_required': return 'An Axal skill is retired from HQ, with the skill that replaces it.';
     case 'unknown_role': return 'Choose one of the agent roles.';
     case 'unknown_taxonomy': return 'One of its taxonomy skills is not one of the /studio skills.';
     case 'no_steps': return 'A skill needs at least one step.';
@@ -157,6 +173,7 @@ export function skillRefusalWords(code, detail) {
     case 'slug_taken': return 'A skill with that name already exists here.';
     case 'version_changed': return 'Someone published this skill a moment ago. Reload it and try again.';
     case 'skill_retired': return 'Axal retired this skill. It keeps working at its pinned version.';
+    case 'skill_suspended': return 'HQ suspended this skill. Agents don’t use it until a fixed version is published.';
     case 'role_mismatch': return 'An agent can only be given skills of its own role.';
     case 'tool_not_approved': return detail ? `Needs the ${detail} read tool, which its sponsor hasn’t approved.` : 'That tool is not one its sponsor approved for read-only use.';
     case 'version_not_published': return 'Only a published version can be pinned.';

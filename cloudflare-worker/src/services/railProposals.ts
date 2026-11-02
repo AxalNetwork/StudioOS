@@ -259,6 +259,9 @@ export async function decideRailAs(env: Env, who: { ownerId: number; deciderId: 
   // D1583 (#3830): a derived teaser, one-pager or memo is kept only by its own route, which stores it with the
   // accept in one batch (`routes/deck_derive.ts`); here it can only be discarded.
   if (routed && routed.rail_option.startsWith('derive:') && status !== 'discarded') return null;
+  // D4170 (#4170): a data room proposal's one file change is written only by the room's own accept, behind the
+  // room's gate (`routes/data_room_proposals.ts`); here it can only be discarded.
+  if (routed && routed.rail_option.startsWith('dataroom:') && status !== 'discarded') return null;
   if (status === 'edited' && (!edited || typeof edited !== 'object' || JSON.stringify(edited).length > MAX_PAYLOAD_CHARS)) return null;
   // D777 part 3: keeping a value re-checks the never-fill registry. The stored
   // field may have been listed since it was proposed, and an edit may name one.

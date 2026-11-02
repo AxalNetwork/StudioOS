@@ -227,7 +227,8 @@ const SITES: Array<[string, string, string]> = [
   ['services/google/raise.ts', 'async function copyFile', 'await env.FILES.put(key, bytes'],
   // D903: a deck image is the member's file. Room is checked before either write; the bytes are not in the usage total yet.
   // D1506 (#3757): the drawn image is stripped of its metadata before it lands (`drawn`).
-  ['routes/deck_images.ts', "deckImages.post('/:id/images', async", 'await c.env.FILES!.put(key, drawn'],
+  // D1505: the press's images are written by the pipeline (`services/decks/imageDraw.ts`); the route checks room before it starts.
+  ['routes/deck_images.ts', "deckImages.post('/:id/images', async", 'await drawDeckImages(c.env'],
   // D1506: upload and import (an external image copied in) both land through `landImage`.
   ['routes/deck_images.ts', 'async function landImage', 'await c.env.FILES.put(key, bytes'],
   // D1506: save/export-time copies also check room before storage.

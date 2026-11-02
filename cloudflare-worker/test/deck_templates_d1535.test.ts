@@ -29,7 +29,7 @@ import { deckRubric } from '../src/services/decks/rubric.ts';
 import { sanitizeSlides } from '../src/routes/decks.ts';
 import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { CONTRACTS } from '../src/contracts/index.ts';
 import { contractErrors } from '../src/contracts/validate.ts';
@@ -37,7 +37,7 @@ const schemaOf = (m: 'templates' | 'myTemplates' | 'saveAsTemplate') => JSON.par
 
 const root = new URL('../sql/', import.meta.url);
 const baseline = readFileSync(new URL('schema_baseline.sql', root), 'utf8');
-const migrations = readdirSync(new URL('migrations/', root)).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort()
+const migrations = readdirSync(new URL('migrations/', root)).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations)
   .map((n) => readFileSync(new URL('migrations/' + n, root), 'utf8'));
 const JWT_SECRET = 'synthetic-d1535-only-not-a-real-credential'.repeat(2);
 
@@ -52,7 +52,7 @@ function template(over: Record<string, unknown> = {}) {
     statement('round', '[The ask and what it proves]'), statement('use_of_funds', '[Where the money goes]'), statement('cap_table', '[Who holds the company]'),
   ];
   return {
-    contract: 'deck_template/1', uid: 'tpl_hq_quiet_start', name: 'Quiet Start', description: 'A calm pre-seed story.', stage: 'pre_seed',
+    contract: 'deck_template/1', uid: 'tpl_fx_quiet_start', name: 'Quiet Start', description: 'A calm pre-seed story.', stage: 'pre_seed',
     audience_tags: ['angel', 'pre_seed_fund'], deck_audience: 'angel', style: 'minimal', swatch: 'white', length: 'full', aspect: '16:9', card_count: cards.length,
     theme: { kind: 'neutral_light', version: 1 }, cards, pending_cards: [],
     provenance: { origin: 'original', prompt_id: 'TPL-05', authored_by: 'test', reviewed_by: null, attestation: ATTESTATION }, ...over,
@@ -117,15 +117,18 @@ test('the Gallery filters by stage, New deck\'s seven audiences and style; a bad
   // Mutation checked: the audience filter dropped → the strategic assert fails.
   const w = await world();
   w.put(template());
-  w.put(template({ uid: 'tpl_hq_joinery', name: 'Joinery', stage: 'series_a', audience_tags: ['strategic'], style: 'minimal' }));
+  w.put(template({ uid: 'tpl_fx_joinery', name: 'Joinery', stage: 'series_a', audience_tags: ['strategic'], style: 'minimal' }));
   const all = await call(w, 2, 'GET', '/api/decks/templates');
   assert.equal(all.status, 200, all.text);
-  assert.deepEqual(all.body.templates.map((t: any) => t.uid), ['tpl_hq_joinery', 'tpl_hq_quiet_start']);
-  assert.deepEqual(all.body.templates[1], metaOf(template()));
+  // #3876's 24 seeds are in the table too; these cases read only this file's fixtures.
+  const fx = (list: any[]) => list.map((t: any) => t.uid).filter((u: string) => u.startsWith('tpl_fx_'));
+  assert.deepEqual(fx(all.body.templates), ['tpl_fx_joinery', 'tpl_fx_quiet_start']);
+  assert.deepEqual(all.body.templates.find((t: any) => t.uid === 'tpl_fx_quiet_start'), metaOf(template()));
+  assert.equal(all.body.templates.filter((t: any) => t.uid.startsWith('tpl_hq_')).length, 24, 'the seeds are listed beside them');
   assert.deepEqual(all.body.filters.audiences.map((a: any) => a.key), ['angel', 'pre_seed_fund', 'seed_fund', 'series_a_fund', 'strategic', 'grant', 'other']);
-  assert.deepEqual((await call(w, 2, 'GET', '/api/decks/templates?audience=strategic')).body.templates.map((t: any) => t.uid), ['tpl_hq_joinery']);
-  assert.deepEqual((await call(w, 2, 'GET', '/api/decks/templates?stage=pre_seed&style=minimal')).body.templates.map((t: any) => t.uid), ['tpl_hq_quiet_start']);
-  assert.deepEqual((await call(w, 2, 'GET', '/api/decks/templates?audience=grant')).body.templates, [], 'an empty filter is an empty list the Gallery words');
+  assert.deepEqual(fx((await call(w, 2, 'GET', '/api/decks/templates?audience=strategic')).body.templates), ['tpl_fx_joinery']);
+  assert.deepEqual(fx((await call(w, 2, 'GET', '/api/decks/templates?stage=pre_seed&style=minimal')).body.templates), ['tpl_fx_quiet_start']);
+  assert.deepEqual(fx((await call(w, 2, 'GET', '/api/decks/templates?audience=grant')).body.templates), [], 'no fixture is tagged grant');
   assert.equal((await call(w, 2, 'GET', '/api/decks/templates?stage=growth')).body.error, 'invalid_stage');
   assert.ok(!all.text.includes('example.invalid'));
   assert.deepEqual(contractErrors(schemaOf('templates'), all.body), [], 'D1511: the reply matches its contract');
@@ -136,14 +139,14 @@ test('apply writes a proposal, never a version; the v1 method ids are untouched 
   const w = await world();
   w.put(template());
   const before = Number((w.db.prepare('SELECT COUNT(*) AS n FROM pitch_decks').get() as any).n);
-  const r = await call(w, 2, 'POST', '/api/decks/templates/tpl_hq_quiet_start/apply', { project_id: 1 });
+  const r = await call(w, 2, 'POST', '/api/decks/templates/tpl_fx_quiet_start/apply', { project_id: 1 });
   assert.equal(r.status, 200, r.text);
-  assert.equal(r.body.template_id, 'tpl_hq_quiet_start');
+  assert.equal(r.body.template_id, 'tpl_fx_quiet_start');
   const row = w.db.prepare('SELECT method_id, slides FROM pitch_deck_proposals WHERE project_id = 1').get() as any;
-  assert.equal(row.method_id, 'tpl:tpl_hq_quiet_start');
+  assert.equal(row.method_id, 'tpl:tpl_fx_quiet_start');
   assert.equal(JSON.parse(row.slides).length, 10);
   assert.equal(Number((w.db.prepare('SELECT COUNT(*) AS n FROM pitch_decks').get() as any).n), before, 'nothing is saved before Accept');
-  assert.equal((await call(w, 4, 'POST', '/api/decks/templates/tpl_hq_quiet_start/apply', { project_id: 1 })).status, 403);
+  assert.equal((await call(w, 4, 'POST', '/api/decks/templates/tpl_fx_quiet_start/apply', { project_id: 1 })).status, 403);
   assert.equal((await call(w, 2, 'POST', '/api/decks/templates/tpl_hq_nope/apply', { project_id: 1 })).status, 404);
 });
 
@@ -174,13 +177,14 @@ test('Save as my template strips text and figures, keeps structure, theme and de
 
 test('the pick: by stage and audience, sector optional; the same inputs always give the same template and reason', async () => {
   // Mutation checked: Math.random in the tie-break → the repeat assert fails.
-  const metas = [template(), template({ uid: 'tpl_hq_field_letter', name: 'Field Letter', audience_tags: ['strategic'] }), template({ uid: 'tpl_hq_ledger_line', name: 'Ledger Line', stage: 'series_a', audience_tags: ['seed_fund'] })].map(metaOf);
+  const metas = [template(), template({ uid: 'tpl_fx_field_letter', name: 'Field Letter', audience_tags: ['strategic'] }), template({ uid: 'tpl_fx_ledger_line', name: 'Ledger Line', stage: 'series_a', audience_tags: ['seed_fund'] })].map(metaOf);
   const a = pickTemplate(metas, { stage: 'pre_seed', audience: 'strategic', sector: 'fintech' });
-  assert.deepEqual(a, { template_id: 'tpl_hq_field_letter', reason: 'Picked Field Letter because it matches its stage and audience (Pre-seed · Strategic).' });
+  assert.deepEqual(a, { template_id: 'tpl_fx_field_letter', reason: 'Picked Field Letter because it matches its stage and audience (Pre-seed · Strategic).' });
   for (let i = 0; i < 5; i += 1) assert.deepEqual(pickTemplate([...metas].reverse(), { stage: 'pre_seed', audience: 'strategic', sector: 'fintech' }), a, 'the same every time');
   assert.equal(pickTemplate(metas, { stage: 'series_b_plus', audience: 'grant' }).reason.startsWith('Picked'), true, 'never empty while the gallery has one');
   assert.deepEqual(pickTemplate([], { stage: 'seed' }), { template_id: null, reason: 'No template is in the gallery yet.' });
   const w = await world();
   w.put(template());
-  assert.equal((await call(w, 2, 'GET', '/api/decks/templates/pick?stage=pre_seed&audience=angel')).body.template_id, 'tpl_hq_quiet_start');
+  const picked = (await call(w, 2, 'GET', '/api/decks/templates/pick?stage=pre_seed&audience=angel')).body;
+  assert.match(picked.reason, /its stage and audience \(Pre-seed · Angel\)/, 'the route picks from the table, seeds and fixtures alike');
 });

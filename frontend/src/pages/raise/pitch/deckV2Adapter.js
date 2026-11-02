@@ -54,6 +54,7 @@ import { deckMediaApi } from '../../../lib/api/deckMedia.js';
 import { deckModelPresetsApi } from '../../../lib/api/deckModelPresets.js';
 import { deckRehearsalsApi } from '../../../lib/api/deckRehearsals.js';
 import { deckRemixApi } from '../../../lib/api/deckRemix.js';
+import { deckSlideAnalyticsApi } from '../../../lib/api/deckSlideAnalytics.js';
 import { deckStageApi } from '../../../lib/api/deckStage.js';
 import { deckTemplatesApi } from '../../../lib/api/deckTemplates.js';
 import { deckTypedValuesApi } from '../../../lib/api/deckTypedValues.js';
@@ -260,7 +261,12 @@ export const withdrawInvestorLink = (deckId, shareId) => through(() => deckInves
  * (`GET /api/decks/:id/comments`). The sheet writes through `deckCommentsApi`; no model is in a thread.
  */
 export const comments = (deckId) => through(() => deckCommentsApi.list(deckId), SURFACES.comments.issue);
-export const slideAnalytics = off('slideAnalytics');
+/**
+ * D1573 (#3820): one investor link's pd37 sheet (`GET /api/decks/:id/investor-links/:shareId/analytics`): its views,
+ * its Time per slide consent, seconds per card by uid (null when not counted, and `cards: null` with the consent
+ * off), the most-read card and the visit timeline. #3815's signals read the same timeline.
+ */
+export const slideAnalytics = (deckId, shareId) => through(() => deckSlideAnalyticsApi.read(deckId, shareId), SURFACES.slideAnalytics.issue);
 /**
  * D1577 (#3824): who else is editing the deck (`GET /api/decks/:id/presence` → `{ editors }`).
  * A Worker without the DECK_PRESENCE binding answers 503 `presence_off`, so this stays

@@ -80,7 +80,12 @@ export function branchResourceNames(code: string) {
       PUBLICATIONS: `studioos-${code}-publications`,
       BACKUPS: `studioos-${code}-backups`,
     },
-    vectorize: `axal-search-${code}`,
+    // One branch index per Vectorize binding, as scripts/lib/branchConfig.mjs names them.
+    vectorize: {
+      VECTORIZE: `axal-search-${code}`,
+      // D1556 (#3803): consented interview quotes for the deck.
+      DECK_QUOTES: `axal-deck-quotes-${code}`,
+    },
   };
 }
 
@@ -113,7 +118,11 @@ export const BINDINGS: readonly BindingSpec[] = [
   // D1502 part 2 (#3753): a deck's generation runs, and the per-account step throttles.
   { name: 'DECK_GEN_ROOM', kind: 'Durable Object namespace', hq: 'DeckGenRoom', branch: () => 'DeckGenRoom', shared: false },
   { name: 'AI_GOVERNOR', kind: 'Durable Object namespace', hq: 'AiGovernor', branch: () => 'AiGovernor', shared: false },
-  { name: 'VECTORIZE', kind: 'Vectorize index', hq: 'axal-search', branch: (c) => branchResourceNames(c).vectorize, shared: false },
+  // D1581 (#3828): the phone remote for Present.
+  { name: 'DECK_REMOTE', kind: 'Durable Object namespace', hq: 'DeckRemote', branch: () => 'DeckRemote', shared: false },
+  { name: 'VECTORIZE', kind: 'Vectorize index', hq: 'axal-search', branch: (c) => branchResourceNames(c).vectorize.VECTORIZE, shared: false },
+  // D1556 (#3803): consented interview quotes for the deck (bge-m3, 1024 dimensions).
+  { name: 'DECK_QUOTES', kind: 'Vectorize index', hq: 'axal-deck-quotes', branch: (c) => branchResourceNames(c).vectorize.DECK_QUOTES, shared: false },
   { name: 'ANALYTICS', kind: 'Analytics Engine dataset', hq: 'studioos_metrics', branch: () => 'studioos_metrics', shared: true },
   { name: 'AI', kind: 'Workers AI', hq: null, branch: () => null, shared: true },
   { name: 'BROWSER', kind: 'Browser Rendering', hq: null, branch: () => null, shared: true },

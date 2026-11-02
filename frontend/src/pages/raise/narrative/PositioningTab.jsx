@@ -221,7 +221,7 @@ export default function PositioningTab({ projectId, version = null, readOnly = f
             </div>
           )}
           {!readOnly && <div className="flex flex-col gap-2 pt-2">
-            <button type="button" className={BTN} disabled={asking} onClick={ask} data-testid="positioning-ask">{asking ? 'Eadwyn is proposing…' : 'Ask Eadwyn to propose positioning'}</button>
+            <button type="button" className={BTN} disabled={asking} onClick={ask} data-testid="positioning-ask">{asking ? 'Proposing…' : 'Propose positioning'}</button>
             <span className={`text-[12px] ${MUTED}`}>{PROPOSE_FOOT}</span>
             {askError ? <p role="alert" className="m-0 text-[12.5px] text-axal-destructive dark:text-red-400" data-testid="positioning-ask-error">{askError}</p> : null}
             {!run && openProposals?.length ? (

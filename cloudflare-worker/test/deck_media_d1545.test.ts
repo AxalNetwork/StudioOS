@@ -23,7 +23,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import deckMedia, { VIDEO_MAX_BYTES, isMp4, pastedCards, rangeOf, videoKey } from '../src/routes/deck_media.ts';
 import deckShareActions from '../src/routes/deck_share_actions.ts';
-import decks, { exportDeckOf, printDeckOf, publicDeckOf, sanitizeImageUrl, sanitizeSlides } from '../src/routes/decks.ts';
+import decks, { exportDeckOf, linkSentCards, printDeckOf, publicDeckOf, sanitizeImageUrl, sanitizeSlides } from '../src/routes/decks.ts';
 import { BLOCK_KINDS, VIDEO_FILE_PATH, VIDEO_PROVIDERS, modelProblems, visibleCards } from '../src/services/decks/slideModel.ts';
 import { BLOCK_KIND_GATES, DEFAULT_SHARE_INCLUDE, shareSlides } from '../src/services/decks/shareInclude.ts';
 import { checkVideoLink } from '../src/services/decks/videoLink.ts';
@@ -152,7 +152,9 @@ test('the heartbeat names each seen slide by the card the link sent, past a hidd
     const tokenId = Number(f.db.prepare('SELECT id FROM pitch_deck_share_tokens ORDER BY id DESC LIMIT 1').get()!.id);
     f.db.prepare('INSERT INTO deck_share_views (id, share_token_id, deck_id) VALUES (1, ?, ?)').run(tokenId, DECK);
     f.db.prepare('INSERT INTO deck_view_slides (view_id, slide_index, seconds) VALUES (1, 0, 4), (1, 1, 6)').run();
-    await recordSlideCardUids(f.env, 1, DECK, [0, 1], tokenId);
+    const linkRow = f.db.prepare('SELECT include_json, variant_id FROM pitch_deck_share_tokens WHERE id = ?').get(tokenId) as any;
+    // As the heartbeat calls it (D1573): against the cards this link sends, which never hold a hidden card.
+    await recordSlideCardUids(f.env, 1, DECK, [0, 1], async () => linkSentCards(f.env, f.db.prepare('SELECT * FROM pitch_decks WHERE id = ?').get(DECK), linkRow));
     const named = f.db.prepare('SELECT slide_index, card_uid FROM deck_view_slides WHERE view_id = 1 ORDER BY slide_index').all() as any[];
     assert.deepEqual(named.map((r) => r.card_uid), ['k-cover', 'k-ask'], 'slide 1 on the link is the ask, not the hidden card');
     assert.ok(link);

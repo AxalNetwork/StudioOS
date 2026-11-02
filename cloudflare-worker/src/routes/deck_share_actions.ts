@@ -8,10 +8,9 @@
  * cannot create accounts or impersonate the deck owner.
  */
 import { Hono } from 'hono';
-import { assignCardUids, cardUidAt } from '../services/decks/cardUids';
-import { parseShareInclude, shareSlides } from '../services/decks/shareInclude';
+import { cardUidAt } from '../services/decks/cardUids';
 import type { Env } from '../types';
-import { verifySignedToken, shareLinkLive, viewerHashOf } from './decks';
+import { verifySignedToken, shareLinkLive, viewerHashOf, linkSentCards } from './decks';
 import { createJWT, setAuthCookies, generateCsrfToken, requireAuth } from '../auth';
 import { hashEmail } from '../util/hashEmail';
 import { verifyTurnstile } from '../services/turnstile';
@@ -527,10 +526,11 @@ deckShareActions.post('/share/:token/click', async (c) => {
   const viewId = Number.isSafeInteger(Number(body?.view_id)) && Number(body.view_id) > 0 ? Number(body.view_id) : null;
   if (!cardUid || !blockId) return refuse(c, 400, { code: 'button_required', message: 'Say which button was pressed.' });
   await ensureDeckShareConversionSchema(c.env);
-  const deck = await c.env.DB.prepare('SELECT project_id, slides FROM pitch_decks WHERE id = ?').bind(tok.deckId).first<any>();
-  const link = tok.tokenId == null ? null : await c.env.DB.prepare('SELECT include_json FROM pitch_deck_share_tokens WHERE id = ?').bind(tok.tokenId).first<any>();
+  const deck = await c.env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(tok.deckId).first<any>();
+  const link = tok.tokenId == null ? null : await c.env.DB.prepare('SELECT include_json, variant_id FROM pitch_deck_share_tokens WHERE id = ?').bind(tok.tokenId).first<any>();
+  // The cards this link sends (D1573's `linkSentCards`: its variant's order, less what it leaves out, never a hidden card).
   let cards: any[] = [];
-  try { cards = shareSlides(assignCardUids(JSON.parse(deck?.slides || '[]')), parseShareInclude(link?.include_json)); } catch { cards = []; }
+  try { cards = deck ? await linkSentCards(c.env, deck, link) : []; } catch { cards = []; }
   const card = cards.find((s: any) => s?.uid === cardUid);
   const isButton = Array.isArray(card?.blocks) && card.blocks.some((b: any) => b?.id === blockId && b?.kind === 'button');
   if (!isButton) return refuse(c, 404, { code: 'button_not_found', message: 'That button is not on this deck.' });

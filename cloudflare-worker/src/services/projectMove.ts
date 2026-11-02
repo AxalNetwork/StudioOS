@@ -4,7 +4,8 @@
  * statements, bound and not run, so each caller batches them with its own
  * change: the move route (`routes/project_lifecycle.ts`) runs them alone; the
  * filing (`incorporationCompany.ts`) runs them in the batch that creates the
- * company. #3850 (S07, agent engine E6) adds its transfer statements here.
+ * company. #3850 (S07, agent engine E6) adds its transfer statements here:
+ * the agent engine's goals and tasks change in the same batch as the move.
  *
  * Every move writes its `project_move` membership event in the same batch, so
  * a move without its record cannot land.
@@ -12,6 +13,7 @@
 import type { Env } from '../types';
 import { membershipEvent } from './companyMembershipEvents';
 import { retireSlug } from './slugs';
+import { transferStatements } from './agents/transfer';
 
 /** The owner's account: the oldest user on the venture's founders row, as `projects.ts` resolves it. */
 export async function ownerUserId(env: Pick<Env, 'DB'>, founderId: number | null): Promise<number | null> {
@@ -54,6 +56,8 @@ export function projectMoveStatements(env: Pick<Env, 'DB'>, m: ProjectMove): D1P
           WHERE cp.uid = ? AND EXISTS (SELECT 1 FROM incorporations WHERE id = ? AND status = 'filed' AND company_id IS NULL)`,
       ).bind(m.projectId, m.actorUserId, before, m.toNewCompanyUid, m.orderId),
       ...retired,
+      // #3850: a venture filed into a new company leaves no company, so this adds nothing today; kept for the rule.
+      ...transferStatements(env, { projectId: m.projectId, from: m.from, to: null, actorUserId: m.actorUserId }),
     ];
   }
   return [
@@ -63,5 +67,7 @@ export function projectMoveStatements(env: Pick<Env, 'DB'>, m: ProjectMove): D1P
       before: { company_id: m.from }, after: { company_id: m.to },
     }),
     ...retired,
+    // #3850 (E6): the agent engine's side, committed with the move or not at all.
+    ...transferStatements(env, { projectId: m.projectId, from: m.from, to: m.to, actorUserId: m.actorUserId }),
   ];
 }

@@ -67,13 +67,16 @@ export type LinkAnalytics = {
 };
 
 export async function shareAnalytics(env: Env, deck: { id: number; project_id: number; version: number; slides: string | null }) {
+  // D1573 (#3820): a view on a link with "Time per slide" off stored no seconds. It counts as a viewer, and
+  // stays out of the median (its seconds are null, never 0); a viewer with no timed view at all is left out of it.
   const viewers = await env.DB.prepare(
-    `SELECT COALESCE(ip_hash, '') || '|' || COALESCE(ua_fingerprint, '') AS who,
-            SUM(read_seconds) AS secs
-       FROM deck_share_views WHERE deck_id = ? GROUP BY who`,
-  ).bind(deck.id).all<{ who: string; secs: number }>();
+    `SELECT COALESCE(v.ip_hash, '') || '|' || COALESCE(v.ua_fingerprint, '') AS who,
+            SUM(CASE WHEN json_valid(t.include_json) AND json_extract(t.include_json, '$.time_per_slide') = 0 THEN NULL ELSE v.read_seconds END) AS secs
+       FROM deck_share_views v LEFT JOIN pitch_deck_share_tokens t ON t.id = v.share_token_id
+      WHERE v.deck_id = ? GROUP BY who`,
+  ).bind(deck.id).all<{ who: string; secs: number | null }>();
   const rows = viewers.results || [];
-  const median = medianSeconds(rows.map((r) => n(r.secs)));
+  const median = medianSeconds(rows.filter((r) => r.secs != null).map((r) => n(r.secs)));
 
   let slides: unknown = [];
   try { slides = JSON.parse(deck.slides || '[]'); } catch { slides = []; }

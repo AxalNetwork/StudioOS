@@ -22,6 +22,12 @@
  *     and a field bound to a score, a bank slot or a band is judged by that
  *     slot as by its own key.
  *
+ * D1586 (#3833) adds `evidence`, off by default: with it on (and the link's
+ * NDA required), a figure bound to a data-room citation (D1602) carries that
+ * citation as `proof_ref`, and `GET /share/:token/proof/:ref` opens the cited
+ * file behind the NDA, the investor's account and grant, and the file's tier
+ * (`routes/deck_proof.ts`). The viewer draws no badge or chip for it.
+ *
  * A link made before 567 has no `include_json` and gets the default. A field
  * this removes is gone from the card, not blanked: the viewer shows what is
  * there and says nothing about what is not.
@@ -60,10 +66,17 @@
 
 import type { Env } from '../../types';
 
-export type ShareInclude = { figures: boolean; sources: boolean; notes: boolean; bands: boolean; cap_table: boolean; team_photos: boolean };
+export type ShareInclude = { figures: boolean; sources: boolean; notes: boolean; bands: boolean; cap_table: boolean; team_photos: boolean; evidence: boolean };
 
-export const DEFAULT_SHARE_INCLUDE: Readonly<ShareInclude> = Object.freeze({ figures: true, sources: true, notes: false, bands: false, cap_table: false, team_photos: false });
-export const SHARE_INCLUDE_KEYS = ['figures', 'sources', 'notes', 'bands', 'cap_table', 'team_photos'] as const;
+export const DEFAULT_SHARE_INCLUDE: Readonly<ShareInclude> = Object.freeze({ figures: true, sources: true, notes: false, bands: false, cap_table: false, team_photos: false, evidence: false });
+export const SHARE_INCLUDE_KEYS = ['figures', 'sources', 'notes', 'bands', 'cap_table', 'team_photos', 'evidence'] as const;
+
+/**
+ * D1586 (#3833) — a data-room citation (D1602): `dataroom:<file uid>:v<content
+ * revision>:p<page>`. The only kind of record a link can prove. Every other
+ * record (a bank figure, an interview quote, a metric) has no proof link.
+ */
+export const DATAROOM_REF = /^dataroom:([A-Za-z0-9_-]{1,64}):v(\d{1,9}):p(\d{1,6})$/;
 
 /** A readiness field: the venture's internal score. Never on a link. */
 const INTERNAL_SCORE_KEY = /^vr_/;
@@ -108,10 +121,25 @@ function boundSlot(b: any): string {
   return k.includes('.') ? k.slice(k.indexOf('.') + 1) : '';
 }
 
-/** What a link may say of a binding: its grade and its date. Its record and snapshot are the venture's. */
-function shareBinding(b: any): { grade: string | null; as_of: string | null } | undefined {
+/** A binding's data-room citation, when it is one and its slot is a data-room slot (D1586); null otherwise. */
+function proofRefOf(b: any): string | null {
+  if (!b || typeof b !== 'object' || typeof b.record_ref !== 'string') return null;
+  if (!String(b.source_key ?? '').toLowerCase().startsWith('dataroom.')) return null;
+  return DATAROOM_REF.test(b.record_ref) ? b.record_ref : null;
+}
+
+/**
+ * What a link may say of a binding: its grade and its date. Its record and
+ * snapshot are the venture's. D1586: with `evidence` on, a data-room citation
+ * also goes out as `proof_ref`, the key `GET /share/:token/proof/:ref` takes;
+ * no other record does.
+ */
+function shareBinding(b: any, evidence = false): { grade: string | null; as_of: string | null; proof_ref?: string } | undefined {
   if (!b || typeof b !== 'object') return undefined;
-  return { grade: typeof b.grade === 'string' ? b.grade : null, as_of: typeof b.as_of === 'string' ? b.as_of : null };
+  const out: { grade: string | null; as_of: string | null; proof_ref?: string } = { grade: typeof b.grade === 'string' ? b.grade : null, as_of: typeof b.as_of === 'string' ? b.as_of : null };
+  const ref = evidence ? proofRefOf(b) : null;
+  if (ref) out.proof_ref = ref;
+  return out;
 }
 
 function fieldKept(f: any, inc: ShareInclude): boolean {
@@ -128,10 +156,10 @@ function fieldKept(f: any, inc: ShareInclude): boolean {
 }
 
 /** A field, a slide or a block as a link sends it: its binding cut to grade and date. */
-function withSharedBinding<T extends Record<string, any>>(x: T): T {
+function withSharedBinding<T extends Record<string, any>>(x: T, evidence = false): T {
   if (!x || typeof x !== 'object' || !('binding' in x)) return x;
   const out: any = { ...x };
-  const b = shareBinding(x.binding);
+  const b = shareBinding(x.binding, evidence);
   if (b) out.binding = b; else delete out.binding;
   return out;
 }
@@ -143,11 +171,11 @@ export function shareSlides(slides: unknown, include: ShareInclude, gates: Share
     // D1545 (#3788): a hidden card never leaves in a link.
     .filter((s) => s && typeof s === 'object' && (s as any).hidden !== true && (include.sources || !(s as any).appendix))
     .map((s: any) => {
-      const out: any = withSharedBinding({ ...s });
+      const out: any = withSharedBinding({ ...s }, include.evidence);
       if (!include.notes) delete out.notes;
       if (Array.isArray(s.fields)) {
         out.fields = s.fields.filter((f: any) => fieldKept(f, include)).map((f: any) => {
-          const g = withSharedBinding(f);
+          const g = withSharedBinding(f, include.evidence);
           if (include.notes || !('notes' in g)) return g;
           const { notes: _n, ...rest } = g;
           return rest;
@@ -159,11 +187,40 @@ export function shareSlides(slides: unknown, include: ShareInclude, gates: Share
           if (!kept) return [];
           // The references a gate checked are the venture's: the viewer gets the block, not its session or logo key.
           const { session_uid: _s, logo_key: _l, ...sent } = kept;
-          return [withSharedBinding(sent)];
+          // D1586: a chart series' and a table cell's binding go out as every other binding does.
+          if (Array.isArray(sent.series)) sent.series = sent.series.map((sr: any) => withSharedBinding(sr, include.evidence));
+          if (Array.isArray(sent.rows)) sent.rows = sent.rows.map((row: any) => (Array.isArray(row) ? row.map((cell: any) => withSharedBinding(cell, include.evidence)) : row));
+          return [withSharedBinding(sent, include.evidence)];
         });
       }
       return out;
     });
+}
+
+/**
+ * D1586 (#3833) — the data-room citations a link can prove: those carried by a
+ * card, field or block the link sends (the same rules as `shareSlides`), on
+ * its own binding, a chart series' or a table cell's. Empty with `evidence`
+ * off. A figure the link leaves out (a bank slot, an internal score, a quote
+ * without consent, a figure with figures off) proves nothing, so a ref the
+ * proof route is asked for must be in this set.
+ */
+export function sharedProofRefs(slides: unknown, include: ShareInclude, gates: ShareGates = NO_GATES): Set<string> {
+  const refs = new Set<string>();
+  if (!include.evidence || !Array.isArray(slides)) return refs;
+  const add = (b: any) => { const r = proofRefOf(b); if (r) refs.add(r); };
+  const addAll = (x: any) => {
+    add(x?.binding);
+    for (const sr of Array.isArray(x?.series) ? x.series : []) add(sr?.binding);
+    for (const row of Array.isArray(x?.rows) ? x.rows : []) for (const cell of Array.isArray(row) ? row : []) add(cell?.binding);
+  };
+  for (const s of slides as any[]) {
+    if (!s || typeof s !== 'object' || (!include.sources && s.appendix)) continue;
+    add(s.binding);
+    for (const f of Array.isArray(s.fields) ? s.fields : []) if (fieldKept(f, include)) add(f.binding);
+    for (const b of Array.isArray(s.blocks) ? s.blocks : []) { const kept = blockKept(b, include, gates); if (kept) addAll(kept); }
+  }
+  return refs;
 }
 
 // ---------------------------------------------------------------------------

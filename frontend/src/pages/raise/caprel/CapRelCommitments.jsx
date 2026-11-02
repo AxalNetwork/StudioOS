@@ -6,7 +6,7 @@ import { Unreadable } from '../../../ui';
 import { ProRataPanel } from '../RoundClosesPanel';
 import { Dialog, Footer, useWrite } from './CapRelPipeline';
 import { CLOSING, amountText, centsText, tabHref } from './capRelModel';
-import { CLOSE_STATES, commitmentBar, commitmentRows, roundBody, sourceGaps } from './capRelTabsModel';
+import { CLOSE_STATES, EXEMPTION_HELP, EXEMPTION_NOT_RECORDED, ROUND_EXEMPTIONS, commitmentBar, commitmentRows, exemptionNote, roundBody, sourceGaps } from './capRelTabsModel';
 
 /**
  * D1193 (#3127, CRL9, CRL10) — Commitments: committed against the target
@@ -56,14 +56,20 @@ function useRead(fn, deps) {
   return { ...read, reload: () => setN((x) => x + 1) };
 }
 
-/** Round settings (CRL10): name, target, currency, close date and notes; the change shows in Activity. */
+/** Round settings (CRL10): name, target, currency, close date, notes and (D4086) the exemption; the change shows in Activity. */
 export function RoundSettingsDialog({ projectId, onClose, onDone }) {
   const [f, setF] = useState(null);
+  const [was, setWas] = useState(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     let alive = true;
     Promise.resolve().then(() => api.raiseRound(projectId))
-      .then((d) => { const r = d?.round || {}; if (alive) setF({ name: r.name || '', target: r.target_amount ?? '', currency: r.currency || 'USD', close_date: r.close_date || '', notes: r.notes || '' }); })
+      .then((d) => {
+        const r = d?.round || {};
+        if (!alive) return;
+        setWas(r.exemption || null);
+        setF({ name: r.name || '', target: r.target_amount ?? '', currency: r.currency || 'USD', close_date: r.close_date || '', notes: r.notes || '', exemption: r.exemption || '' });
+      })
       .catch(() => { if (alive) setFailed(true); });
     return () => { alive = false; };
   }, [projectId]);
@@ -72,7 +78,7 @@ export function RoundSettingsDialog({ projectId, onClose, onDone }) {
   const out = f ? roundBody(projectId, f) : null;
   return (
     <Dialog label="Round settings" testId="caprel-round-dialog" onClose={onClose} title="Round settings"
-      sub="The round’s name, target, currency and close date. Changes show in Activity."
+      sub="The round’s name, target, currency, close date and exemption. Changes show in Activity."
       footer={<Footer testId="caprel-round" busy={w.busy} error={w.error || out?.error || ''} onClose={onClose} cta="Save round" disabled={!f || !!out?.error}
         onGo={() => w.run(() => api.raiseRoundSave(out.body), 'The round could not be saved')} />}>
       {failed ? <Unreadable what="The round" claim="Saving here would set it from blank." /> : null}
@@ -84,6 +90,14 @@ export function RoundSettingsDialog({ projectId, onClose, onDone }) {
             <label className={LABEL}>Currency<input className={`${FIELD} font-mono`} maxLength={3} value={f.currency} onChange={set('currency')} data-testid="caprel-round-currency" /></label>
           </div>
           <label className={LABEL}>Close date<input className={FIELD} type="date" value={f.close_date} onChange={set('close_date')} /></label>
+          <label className={LABEL}>Securities exemption
+            <select className={FIELD} value={f.exemption} onChange={set('exemption')} data-testid="caprel-round-exemption">
+              <option value="">{EXEMPTION_NOT_RECORDED}</option>
+              {ROUND_EXEMPTIONS.map((e) => <option key={e.value} value={e.value}>{e.label}</option>)}
+            </select>
+            <span className={`text-[12px] font-normal ${MUTED}`}>{EXEMPTION_HELP}</span>
+          </label>
+          {exemptionNote(was, f.exemption) ? <p role="note" className="m-0 rounded-lg bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900 dark:bg-amber-950/40 dark:text-amber-200" data-testid="caprel-round-exemption-note">{exemptionNote(was, f.exemption)}</p> : null}
           <label className={LABEL}>Notes<textarea className={FIELD} rows={2} value={f.notes} onChange={set('notes')} /></label>
           <p className={`m-0 text-[12px] ${MUTED}`}>One currency per venture: a commitment in another currency is listed and never added in. Instrument and terms are set in the Call for Capital and the closing room.</p>
         </div>

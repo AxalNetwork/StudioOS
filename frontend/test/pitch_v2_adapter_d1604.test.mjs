@@ -280,8 +280,8 @@ test('the seam reaches no network, and no client method exists for a route that 
 
 test('an unavailable answer is never printed as a zero, "$0.00" or "none"', async () => {
   const money = (v) => `$${Number(v).toFixed(2)}`;
-  // D1524 (#3776) swapped deckUsage; `slideAnalytics` is still on the seam.
-  const off = await adapter.slideAnalytics('deck');
+  // D1524 (#3776) swapped deckUsage, and D1573 (#3820) slideAnalytics; `walkthrough` is still on the seam.
+  const off = await adapter.walkthrough('deck');
   assert.equal(adapter.shown(off, money), LATER);
   assert.equal(adapter.shown(off, () => '0'), LATER, 'the formatter never runs on an unavailable answer');
   assert.equal(adapter.shown(undefined, money), LATER);

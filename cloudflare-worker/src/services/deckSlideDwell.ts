@@ -7,8 +7,7 @@
  * them (`services/raiseCycle.ts`).
  */
 import type { Env } from '../types';
-import { assignCardUids } from './decks/cardUids';
-import { parseShareInclude, shareSlides } from './decks/shareInclude';
+import { cardUidAt } from './decks/cardUids';
 
 /** Highest slide index the heartbeat accepts (the store's CHECK). */
 export const MAX_SLIDE_INDEX = 199;
@@ -64,8 +63,11 @@ export async function recordSlideSeconds(env: Env, viewId: number, deckId: numbe
  * the version the view is of, so the seconds follow the card even after the
  * founder reorders it. Best effort: a database without 714, or a version that
  * cannot be read, keeps the seconds by place as before.
+ *
+ * D1573 (#3820): `cardsOf`, when given, answers the cards as the view's link
+ * sends them (a tailored link's own order), read only when a slide is unnamed.
  */
-export async function recordSlideCardUids(env: Env, viewId: number, deckId: number, slides: number[], tokenId: number | null = null): Promise<void> {
+export async function recordSlideCardUids(env: Env, viewId: number, deckId: number, slides: number[], cardsOf?: () => Promise<unknown[]>): Promise<void> {
   if (!slides.length) return;
   try {
     // Only the slides still unnamed: a heartbeat after the first reads nothing more.
@@ -73,15 +75,15 @@ export async function recordSlideCardUids(env: Env, viewId: number, deckId: numb
     const todo = new Set((open.results || []).map((r) => Number(r.slide_index)));
     const wanted = slides.filter((s) => todo.has(s));
     if (!wanted.length) return;
-    const row = await env.DB.prepare('SELECT slides FROM pitch_decks WHERE id = ?').bind(deckId).first<{ slides: string | null }>();
-    // D1545 (#3788): a slide's index is its place in what the link sent: uids first, on the whole
-    // deck, then the link's own list (no hidden card, and no appendix unless the link includes it).
-    const link = tokenId == null ? null
-      : await env.DB.prepare('SELECT include_json FROM pitch_deck_share_tokens WHERE id = ?').bind(tokenId).first<{ include_json: string | null }>();
-    const sent = shareSlides(assignCardUids(JSON.parse(row?.slides || '[]')), parseShareInclude(link?.include_json));
+    let cards: unknown[];
+    if (cardsOf) cards = await cardsOf();
+    else {
+      const row = await env.DB.prepare('SELECT slides FROM pitch_decks WHERE id = ?').bind(deckId).first<{ slides: string | null }>();
+      cards = JSON.parse(row?.slides || '[]');
+    }
     for (const slide of wanted) {
-      const uid = sent[slide]?.uid;
-      if (typeof uid !== 'string' || !uid) continue;
+      const uid = cardUidAt(cards, slide);
+      if (!uid) continue;
       await env.DB.prepare('UPDATE deck_view_slides SET card_uid = ? WHERE view_id = ? AND slide_index = ? AND card_uid IS NULL').bind(uid, viewId, slide).run();
     }
   } catch (e) {

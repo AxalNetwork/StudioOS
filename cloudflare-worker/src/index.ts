@@ -2305,6 +2305,15 @@ export default {
           } catch {
             console.error('[cron] agent duties unreadable');
           }
+          // #3851 (E7): the engine's alerts (caps, blocked tasks, waiting approvals, DLQ, gateway), each once per its window.
+          try {
+            const { sweepAgentAlerts } = await import('./services/agents/alerts');
+            const a = await sweepAgentAlerts(env, now);
+            const sent = Object.values(a).reduce((x, y) => x + y, 0);
+            if (sent) cronSummary.push(`agent alerts ${Object.entries(a).filter(([, n]) => n).map(([k, n]) => `${k}=${n}`).join(' ')}`);
+          } catch {
+            console.error('[cron] agent alerts unreadable');
+          }
         }
         // D1259: a published venture model rescores the next batch of ventures
         // each minute until every venture has its new rows. HQ only: only HQ
@@ -3356,6 +3365,7 @@ export { HqEntrypoint, BranchEntrypoint } from './rpc';
 export { MeetingBotRun } from './durable-objects/meeting-bot-run';
 export { DeckGenRoom } from './durable-objects/deck-gen-room';
 export { AiGovernor } from './durable-objects/ai-governor';
+export { DeckRemote } from './durable-objects/deck-remote';
 
 // D1528 (#3847, #3742 E3): the agent engine's scope object and task Workflow,
 // named in wrangler.toml's [[durable_objects.bindings]] and [[workflows]].
