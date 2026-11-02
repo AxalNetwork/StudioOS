@@ -369,7 +369,8 @@ export default function GridStage({
     setDivLine({ error: false, text: dividerReadout(card, div, delta) });
     const over = overflowOf(r.card, div.a, aspect) || overflowOf(r.card, div.b, aspect);
     setOverflow(over ? { id: over.id, words: over.words } : null);
-    onCard?.(r.card);
+    // D1515: the second argument names the undo step.
+    onCard?.(r.card, 'divider');
   };
   const divKeys = (e, div) => {
     const step = DIVIDER_KEYS[div.axis][e.key];
@@ -405,7 +406,7 @@ export default function GridStage({
     if (!overflow) return;
     const r = moveOverflow(card, overflow.id, aspect);
     setOverflow(null);
-    if (!r.same) { setDivLine(null); onCard?.(r.card); }
+    if (!r.same) { setDivLine(null); onCard?.(r.card, 'overflow'); }
   };
 
   const one = chosen.length === 1 ? chosen[0] : null;

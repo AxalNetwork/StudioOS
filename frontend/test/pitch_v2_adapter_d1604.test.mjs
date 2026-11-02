@@ -45,9 +45,10 @@ test('every adapter method answers unavailable, with the reason and the issue th
   const body = (src, name) => (src.match(new RegExp(`^export const ${name} = ([^\\n]*)$`, 'm')) || [])[1] || '';
   const code = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
   const wired = methods.filter((n) => /\bthrough\(\(\) => [^\n]*deck[A-Za-z]+Api\./.test(body(code, n)));
+  const local = methods.filter((n) => n === 'history' && body(code, n) === 'async () => Object.freeze({ available: true, value: gridOps });');
   const offRows = methods.filter((n) => body(code, n) === `off('${n}');`);
-  assert.deepEqual([...adapter.SWAPPED].sort(), wired.sort(), 'SWAPPED is exactly the rows whose body answers through a client');
-  assert.deepEqual([...wired, ...offRows].sort(), [...methods].sort(), 'every row is either through(...) or off(\'<row>\'), nothing else');
+  assert.deepEqual([...adapter.SWAPPED].sort(), [...wired, ...local].sort(), 'SWAPPED is exactly the remote and browser-local rows');
+  assert.deepEqual([...wired, ...local, ...offRows].sort(), [...methods].sort(), 'every row is remote, browser-local history, or off(\'<row>\'), nothing else');
   for (const n of wired) assert.match(body(code, n), new RegExp(`SURFACES\\.${n}\\.issue\\);$`), `${n} keys its own row's issue`);
   // A floor, so a parser that stopped matching cannot pass on two empty lists. D1541 (#3779) elementsLibrary is one of them.
   for (const n of ['grid', 'saveCard', 'stagePlan', 'remix', 'comments', 'ventureElements', 'elementsLibrary']) assert.ok(adapter.SWAPPED.includes(n), `${n} is swapped on main`);
@@ -439,7 +440,7 @@ test('D1502 (#3753): batch and cancelBatch answer through deckBatchesApi; the st
     assert.deepEqual(asked, [['batch', 'run-1'], ['cancel', 'run-1']]);
     assert.equal(adapter.availability('batch'), null);
     deckBatchesApi.cancel = async () => { throw Object.assign(new Error('Only the member who started this run can stop it.'), { status: 403 }); };
-    assert.deepEqual(await adapter.cancelBatch('run-1'), { available: false, unreadable: true, reason: 'Only the member who started this run can stop it.', issue: 3753 });
+    assert.deepEqual(await adapter.cancelBatch('run-1'), { available: false, unreadable: true, reason: 'Only the member who started this run can stop it.', issue: 3753, status: 403, data: null });
   } finally { Object.assign(deckBatchesApi, real); }
   const { events, rest } = parseSse('event: snapshot\ndata: {"state":"running"}\n\nevent: step_done\ndata: {"seq":0}\n\nevent: area_busy\ndata: {"att');
   assert.deepEqual(events, [{ event: 'snapshot', data: { state: 'running' } }, { event: 'step_done', data: { seq: 0 } }]);
