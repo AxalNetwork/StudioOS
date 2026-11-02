@@ -73,9 +73,9 @@ passed (D4130). `frontend/test/merge_queue_ci_4107.test.mjs` fails
 on any of these, and its `REQUIRED` list changes with the ruleset ("main:
 required checks").
 
-The queue was switched on on 2026-11-02 and first verified with two test
-pull requests under #4107: one merged through it, and one that conflicted
-with it was taken out of the queue.
+The queue was switched on on 2026-11-02 (#4107). The ruleset lets the Admin
+role bypass it, so an admin's plain Merge skips the queue and its checks: use
+**Merge when ready**, which adds the pull request to the queue.
 
 ## When a workflow starts failing
 
