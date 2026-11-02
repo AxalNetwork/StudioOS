@@ -88,7 +88,8 @@ import {
 import { mercuryFor } from './deck_sources';
 import { inferBrief, type InferredBrief } from '../services/decks/inferBrief';
 import { freshnessFor, type Freshness } from '../services/decks/freshness';
-import { ElementOffError, elementModelFor, runModelOf } from './deck_element_models';
+import { ElementOffError, elementModelFor, lockedOutRefusal, runPickOf } from './deck_element_models';
+import { lockedOut } from '../services/decks/elementModels';
 import { NOT_SWITCHED_ON, flagsFor, notSwitchedOn } from '../services/featureFlags';
 import type { Resolved } from '../services/decks/elementModels';
 
@@ -161,18 +162,24 @@ async function sourcesFor(c: any, user: User, project: any, projectId: number): 
  */
 export const BUILD_ELEMENT = 'body';
 
-/** The build's element model, or the 503 that stops the press when the picks cannot be read. */
+/**
+ * The build's element model, or the 503 that stops the press when the picks
+ * cannot be read. D1549 (#3796): HQ's lock wins, so a lock on a model the
+ * caller's plan cannot run stops the press with a 403 and runs nothing.
+ */
 async function buildModelOf(c: any, user: User, projectId: number): Promise<Resolved | Response | 'off'> {
-  try { return await elementModelFor(c.env, user, projectId, BUILD_ELEMENT); } catch (e) {
-    // D1509: Body switched off cuts the words from the plan; the build runs on the records only.
+  let r: Resolved;
+  try { r = await elementModelFor(c.env, user, projectId, BUILD_ELEMENT); } catch (e) {
     if (e instanceof ElementOffError) return 'off';
+
     console.warn('[deck_new] element model picks unreadable', { project_id: projectId });
     return refuse(c, 503, { code: 'picks_unreadable', message: 'Your model picks for this deck could not be read. Nothing was run.' });
   }
+  return lockedOut(r) ? lockedOutRefusal(c, r) : r;
 }
 
 const elementModelsView = (r: Resolved | 'off') => ({
-  [BUILD_ELEMENT]: r === 'off' ? { model: null, source: 'none', notice: NOT_SWITCHED_ON } : { model: r.model, source: r.source, notice: r.notice },
+  [BUILD_ELEMENT]: r === 'off' ? { model: null, source: 'none', notice: NOT_SWITCHED_ON } : { model: r.model, source: r.source, notice: r.notice, ...(r.locked ? { locked: true } : {}) },
 });
 
 /** D1509: the words' sentence when Body is switched off, so the founder knows why the cards carry titles only. */
@@ -187,9 +194,10 @@ async function oneClickRefusal(c: any, user: User, body: any): Promise<Response 
 
 /** The run each press makes, as one options object, so the quote and the run read the same input. */
 function runOptions(c: any, user: User, projectId: number, step: 'outline' | 'build', message: string, rows = 0, element?: Resolved): RunOptions {
-  const model = step === 'build' && element ? runModelOf(element) : undefined;
+  // D1549: a model HQ locked runs pinned: that model or nothing, never a fallback.
+  const pick = step === 'build' && element ? runPickOf(element) : {};
   return {
-    ...(model ? { model } : {}),
+    ...pick,
     task: 'rail_write',
     userId: Number(user.id) || 0,
     surface: AI_SURFACE.raisePitch,
@@ -306,6 +314,7 @@ deckNew.post('/new/quote', async (c) => {
   if (refused) return refuseFigure(c, refused);
   const items = await sourcesFor(c, user, got.project, projectId);
   let opts: RunOptions;
+  let element: Resolved | null = null;
   if (step === 'outline') {
     opts = runOptions(c, user, projectId, 'outline', outlineMessage({ ...inputs, items }));
   } else {
@@ -316,14 +325,16 @@ deckNew.post('/new/quote', async (c) => {
     // D897 §9: a card's regeneration is one row's build run, so its price is that run's.
     const rows = step === 'card' ? picked.rows.slice(Number.isInteger(body?.index) ? body.index : 0, (Number.isInteger(body?.index) ? body.index : 0) + 1) : picked.rows;
     if (!rows.length) return c.json({ error: 'index must be a card position in the outline' }, 400);
-    const element = await buildModelOf(c, user, projectId);
-    if (element instanceof Response) return element;
-    if (element === 'off') return c.json({ step, ai: false, reason: 'not_switched_on', message: NOT_SWITCHED_ON });
+    const resolved = await buildModelOf(c, user, projectId);
+    if (resolved instanceof Response) return resolved;
+    if (resolved === 'off') return c.json({ step, ai: false, reason: 'not_switched_on', message: NOT_SWITCHED_ON });
+    element = resolved;
     // D1517: the quote reads the same message the run sends, budgets included.
     opts = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows, items, ventureName: await ventureName(c.env, projectId), exclude: new Set(excluded), visuals: await visualsFor(c.env, projectId) }), rows.length, element);
   }
   const q = await quoteRun(c.env, opts);
-  if (q.ok) return c.json({ step, ai: true, hold_microusd: q.hold_microusd, model: q.model });
+  // D1549 (#3796): the quote names the model each element resolved to, as the run will use it.
+  if (q.ok) return c.json({ step, ai: true, hold_microusd: q.hold_microusd, model: q.model, ...(element ? { element_models: elementModelsView(element) } : {}) });
   return c.json({ step, ai: false, reason: q.refusal, message: q.error });
 });
 
