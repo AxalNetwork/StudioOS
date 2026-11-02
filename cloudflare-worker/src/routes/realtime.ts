@@ -24,7 +24,7 @@ const realtime = new Hono<{ Bindings: Env }>();
 const UPGRADE_LIMIT = 30;
 const UPGRADE_WINDOW_S = 60;
 
-async function checkUpgradeRate(env: Env, userId: number): Promise<boolean> {
+export async function checkUpgradeRate(env: Env, userId: number): Promise<boolean> {
   if (!env.RATE_LIMITS) return true;
   const key = `ws:upgrade:${userId}:${Math.floor(Date.now() / (UPGRADE_WINDOW_S * 1000))}`;
   const cur = parseInt((await env.RATE_LIMITS.get(key)) || '0', 10);
@@ -56,7 +56,7 @@ function extractBearerToken(c: any): string | null {
   return q || null;
 }
 
-async function authenticateForUpgrade(c: any): Promise<{ id: number; email: string; role: string; kyc_status: string | null } | null> {
+export async function authenticateForUpgrade(c: any): Promise<{ id: number; email: string; role: string; kyc_status: string | null } | null> {
   const token = extractBearerToken(c);
   if (!token) return null;
   try {

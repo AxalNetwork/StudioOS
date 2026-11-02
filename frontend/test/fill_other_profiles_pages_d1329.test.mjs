@@ -298,9 +298,9 @@ test('D1424 (#3700): the in-form Ask stays on all six forms, and the header Ask 
   for (const k of ['support', 'offering', 'perk']) assert.ok(SCOPED_FORMS[k], `${k} is not a scoped form`);
   assert.match(NOT_FILLED_HERE.offering[0], /^Price/);
   assert.match(NOT_FILLED_HERE.perk[0], /Value, credits, cap and conditions/);
-  // The header Ask: drawn by the shared button, shut until #3706's panel.
+  // The header Ask: drawn by the shared HeaderAsk; open since D1443 part 5 (#3992), still shut with the panel unbuilt.
   const { headerAskGate } = await import('../src/workspaces/ProfileHeaderAsk.jsx');
-  assert.equal(headerAskGate({ role: 'investor', pathname: '/deals/commit' }).reason, 'ask_panel_unbuilt');
+  assert.equal(headerAskGate({ role: 'investor', pathname: '/deals/commit', panel: { available: false, reason: null } }).reason, 'ask_panel_unbuilt');
   // Code only: the docblock says Never "Fill" in words.
   const { codeOnly } = await import('./_codeOnly.mjs');
   assert.doesNotMatch(codeOnly(read('workspaces/ProfileHeaderAsk.jsx')), /'Fill|"Fill|>Fill/);
