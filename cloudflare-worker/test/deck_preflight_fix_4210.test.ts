@@ -40,7 +40,6 @@ loadSchema(schema); schema.close();
 after(() => rmSync(scratch, { recursive: true, force: true }));
 let n = 0;
 const JWT_SECRET = 'synthetic-4210-only-not-a-real-credential'.repeat(2);
-const PAGE = 'Founder · Raise · Pitch deck';
 
 // The version the editor opened: card 0 has a heading, a paragraph and a metric tile bound to paying accounts.
 const BOUND = { source_key: 'grow.paying_customers', record_ref: 'project_metrics:1', as_of: '2026-10-10', grade: 'Stated', snapshot_hash: 'a'.repeat(24) };
@@ -103,7 +102,6 @@ const ASSIST = '/api/decks/7/cards/0/assist';
 const QUOTE = `${ASSIST}/quote`;
 const P1 = { id: 'p1', kind: 'text' };
 const TEXT = 'Small finance teams close their books faster with us.';
-const aiOff = (f: F, user = 2) => f.db.prepare("INSERT INTO ai_rail_preferences(uid,user_id,section,task,mode) VALUES(?,?,?,'','manual')").run(`off-${user}`, user, PAGE.toLowerCase());
 
 const SHORT = 'Small teams close books faster.';
 const fixOf = (check: string, extra: Record<string, unknown> = {}) => ({ tool: 'preflight_fix', finding: { check, block: 'p1', title: 'Card 1, block p1: likely too much text for its range.' }, block: P1, text: TEXT, ...extra });
