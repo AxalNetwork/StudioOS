@@ -21,6 +21,10 @@ The retention periods for generated assets are owner decision W (#3716), pending
 | `deck_notes` | notes on a version's cards (D905) | no cascade | none |
 | `deck_comments` | comment threads on a deck (D1570) | deck and venture cascade | none |
 | `deck_comment_mentions` | who a comment mentions | cascade from its comment | none |
+| `deck_area_batches` | a deck generation run (D1502): its areas or whole-deck build, its quote and parent hold, and its state | deck cascade | none |
+| `deck_area_batch_steps` | a generation run's plan and progress, one row per quoted line (D1502) | cascade from its run | none (its images are `deck_images` rows) |
+| `deck_logos` | the customer logos a venture may show, each with its own permission record (D1543) | venture cascade | none (each picture is a `deck_images` row) |
+| `deck_templates` | Gallery templates (D1535): HQ's, and each member's own Save as my template, text and figures already stripped | a member's own leave with their account (user cascade); HQ's are never deleted by the app | none |
 | `deck_approvers` | who must approve a deck before it is shared | venture cascade | none |
 | `deck_derivatives` | teasers, one-pagers and memos made from a version (D1583) | deck and venture cascade | none |
 | `deck_grants` | an investor's access to a version through a deal (D1587) | no cascade; a withdrawn grant keeps its row with `revoked_at` | none |
@@ -38,6 +42,9 @@ The retention periods for generated assets are owner decision W (#3716), pending
 | `deck_share_conversions` | what a viewer did after a view | no cascade | none |
 | `deck_share_feedback` | feedback a viewer left on a shared deck | no cascade | none |
 | `deck_qa_answers` | the answer a founder kept for each investor question: its bindings and their values when kept, a note, the version (D1559) | venture cascade; the deck is set null when its version goes | none |
+| `deck_area_batches` | one generation run on a deck's areas or a whole-deck build: its state, quote, hold and what it charged (D1502) | deck cascade | none |
+| `deck_area_batch_steps` | each step of a run: the area, element, model, state, charge, input and result (D1502) | cascade from its run | none |
+| `deck_logos` | a venture's customer logos for the logo wall: the customer's name, the image, and the permission to show it (D1543) | venture cascade | none of its own (the image is a `deck_images` row) |
 
 ## Not covered yet
 
