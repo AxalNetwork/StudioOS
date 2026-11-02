@@ -76,7 +76,7 @@ const nameOf = (a: Pick<AgentRow, 'first_name' | 'last_name' | 'role_key'>) =>
 
 export type AlertDeps = { tellTeam: typeof tellTeam; tellHq: typeof tellHq };
 const DEFAULT_DEPS: AlertDeps = { tellTeam, tellHq };
-export type AlertCounts = { cap_80: number; cap_100: number; blocked: number; waiting: number; dlq: number; gateway: number };
+export type AlertCounts = { cap_80: number; cap_100: number; blocked: number; waiting: number; dlq: number; gateway_70: number };
 
 /** Caps: each agent with a cap and this month's known spend at or past a threshold, once a month per threshold. */
 async function capAlerts(env: Env, now: Date, d: AlertDeps, out: AlertCounts) {
@@ -178,13 +178,13 @@ async function gatewayAlerts(env: Env, now: Date, d: AlertDeps, out: AlertCounts
     body: `Agent runs this month have spent ${GATEWAY_THRESHOLD}% or more of the agents gateway's limit. At 100% the engine pauses itself.`,
     link: '/admin/operations',
   });
-  out.gateway += 1;
+  out.gateway_70 += 1;
 }
 
 /** Every sweep alert, each kind on its own so one failed read never stops another. */
 export async function sweepAgentAlerts(env: Env, now = new Date(), deps: Partial<AlertDeps> = {}): Promise<AlertCounts> {
   const d = { ...DEFAULT_DEPS, ...deps };
-  const out: AlertCounts = { cap_80: 0, cap_100: 0, blocked: 0, waiting: 0, dlq: 0, gateway: 0 };
+  const out: AlertCounts = { cap_80: 0, cap_100: 0, blocked: 0, waiting: 0, dlq: 0, gateway_70: 0 };
   const steps: [string, () => Promise<void>][] = [
     ['cap', () => capAlerts(env, now, d, out)],
     ['blocked', () => blockedAlerts(env, d, out)],

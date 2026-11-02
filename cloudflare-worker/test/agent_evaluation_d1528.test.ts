@@ -164,16 +164,16 @@ test('alerts: cap 80% and 100%, a blocked task, a waiting approval, DLQ arrivals
       tellHq: async (_e: any, n: any) => { told.push(n.type); return 1; },
     };
     const first = await sweepAgentAlerts(w.env, NOW, deps);
-    assert.deepEqual(first, { cap_80: 1, cap_100: 0, blocked: 1, waiting: 1, dlq: 1, gateway: 1 });
+    assert.deepEqual(first, { cap_80: 1, cap_100: 0, blocked: 1, waiting: 1, dlq: 1, gateway_70: 1 });
     assert.deepEqual(told.sort(), ['agent_approval_waiting:50', 'agent_cap_near:50', 'agent_task_blocked:50', 'agents_dlq', 'agents_gateway_near'].sort());
     told.length = 0;
-    assert.deepEqual(await sweepAgentAlerts(w.env, NOW, deps), { cap_80: 0, cap_100: 0, blocked: 0, waiting: 0, dlq: 0, gateway: 0 }, 'nothing twice in its window');
+    assert.deepEqual(await sweepAgentAlerts(w.env, NOW, deps), { cap_80: 0, cap_100: 0, blocked: 0, waiting: 0, dlq: 0, gateway_70: 0 }, 'nothing twice in its window');
     assert.deepEqual(told, []);
     // Crossing 100% tells once; a new DLQ row tells again.
     usage(w, AGENT, 1_000_000, t('2030-03-06T10:00:00Z'));
     w.db.prepare("INSERT INTO cf_dlq_mirror (message_id, job_type, payload, attempts) VALUES ('m3', 'agent_run', '{}', 3)").run();
-    assert.deepEqual(await sweepAgentAlerts(w.env, NOW, deps), { cap_80: 0, cap_100: 1, blocked: 0, waiting: 0, dlq: 1, gateway: 0 });
-    assert.deepEqual(await sweepAgentAlerts(w.env, NOW, deps), { cap_80: 0, cap_100: 0, blocked: 0, waiting: 0, dlq: 0, gateway: 0 });
+    assert.deepEqual(await sweepAgentAlerts(w.env, NOW, deps), { cap_80: 0, cap_100: 1, blocked: 0, waiting: 0, dlq: 1, gateway_70: 0 });
+    assert.deepEqual(await sweepAgentAlerts(w.env, NOW, deps), { cap_80: 0, cap_100: 0, blocked: 0, waiting: 0, dlq: 0, gateway_70: 0 });
     // A new month is a new window.
     usage(w, AGENT, 4_500_000, t('2030-04-02T10:00:00Z'));
     const april = await sweepAgentAlerts(w.env, new Date('2030-04-03T12:00:00Z'), deps);

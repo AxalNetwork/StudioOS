@@ -61,9 +61,6 @@ function knownSums(rows: SumRow[]): Map<number, number> {
   return out;
 }
 
-/** A run with a usage log whose row or charge is missing makes its sum unknown. */
-const UNKNOWN_CHARGE = 'CASE WHEN r.usage_log_id IS NOT NULL AND (l.id IS NULL OR l.charged_microusd IS NULL) THEN 1 ELSE 0 END';
-
 /**
  * E1's `CostReader`, filled: each task's charges, the sum over its runs' usage
  * logs. A task with no run is 0; a task with any unrecorded charge is left out
@@ -74,7 +71,7 @@ export const runCostReader: CostReader = async (env, taskIds) => {
   const rows = (await env.DB.prepare(
     `SELECT t.value AS id, COUNT(r.id) AS runs,
             SUM(CASE WHEN l.charged_microusd IS NOT NULL THEN l.charged_microusd END) AS charged,
-            SUM(${UNKNOWN_CHARGE}) AS unknown
+            SUM(CASE WHEN r.usage_log_id IS NOT NULL AND (l.id IS NULL OR l.charged_microusd IS NULL) THEN 1 ELSE 0 END) AS unknown
        FROM json_each(?) t
        LEFT JOIN agent_task_runs r ON r.task_id = t.value
        LEFT JOIN ai_usage_logs l ON l.id = r.usage_log_id
@@ -160,30 +157,29 @@ export function rateRole(role_key: string, p: { status: string; created_at: stri
   };
 }
 
-const scopeWhere = (s: Scope) => (s.kind === 'company'
-  ? { sql: "a.scope_kind = 'company' AND a.company_id = ?", id: s.id }
-  : { sql: "a.scope_kind = 'project' AND a.project_id = ?", id: s.id });
+/** The scope's agents, bound in each query as `a.scope_kind = ?` and its company or project id `= ?`. */
+const scopeArgs = (s: Scope): [string, number] => [s.kind, s.id];
 
 /** TM14: the scope's roles over the last `days` days. */
 export async function evaluateScope(env: Env, s: Scope, days: EvaluationDays, now = new Date()): Promise<{ days: EvaluationDays; roles: RoleEvaluation[] }> {
-  const w = scopeWhere(s);
+  const [kind, id] = scopeArgs(s);
   const since = daysBefore(now, days);
   const roles = (await env.DB.prepare(
-    `SELECT DISTINCT a.role_key FROM team_agents a WHERE ${w.sql} AND a.status != 'removed' ORDER BY a.role_key`,
-  ).bind(w.id).all<{ role_key: string }>()).results ?? [];
+    `SELECT DISTINCT a.role_key FROM team_agents a WHERE a.scope_kind = ? AND (CASE a.scope_kind WHEN 'company' THEN a.company_id ELSE a.project_id END) = ? AND a.status != 'removed' ORDER BY a.role_key`,
+  ).bind(kind, id).all<{ role_key: string }>()).results ?? [];
   const proposals = (await env.DB.prepare(
     `SELECT a.role_key, p.status, p.created_at, p.decided_at
        FROM ai_rail_proposals p JOIN team_agents a ON a.id = p.agent_id
-      WHERE ${w.sql} AND p.created_at >= ?
+      WHERE a.scope_kind = ? AND (CASE a.scope_kind WHEN 'company' THEN a.company_id ELSE a.project_id END) = ? AND p.created_at >= ?
       ORDER BY p.id DESC LIMIT ?`,
-  ).bind(w.id, since, BOARD_ROWS_MAX).all<{ role_key: string; status: string; created_at: string; decided_at: string | null }>()).results ?? [];
+  ).bind(kind, id, since, BOARD_ROWS_MAX).all<{ role_key: string; status: string; created_at: string; decided_at: string | null }>()).results ?? [];
   const runs = (await env.DB.prepare(
     `SELECT a.role_key, r.status, r.refusal, r.usage_log_id, l.id AS log_id, l.charged_microusd AS charged
        FROM agent_task_runs r JOIN team_agents a ON a.id = r.agent_id
        LEFT JOIN ai_usage_logs l ON l.id = r.usage_log_id
-      WHERE ${w.sql} AND r.created_at >= ?
+      WHERE a.scope_kind = ? AND (CASE a.scope_kind WHEN 'company' THEN a.company_id ELSE a.project_id END) = ? AND r.created_at >= ?
       ORDER BY r.id DESC LIMIT ?`,
-  ).bind(w.id, since, BOARD_ROWS_MAX).all<{ role_key: string; status: string; refusal: string | null; usage_log_id: number | null; log_id: number | null; charged: number | null }>()).results ?? [];
+  ).bind(kind, id, since, BOARD_ROWS_MAX).all<{ role_key: string; status: string; refusal: string | null; usage_log_id: number | null; log_id: number | null; charged: number | null }>()).results ?? [];
   const keys = new Set<string>([...roles.map((r) => r.role_key), ...proposals.map((p) => p.role_key), ...runs.map((r) => r.role_key)]);
   return {
     days,
