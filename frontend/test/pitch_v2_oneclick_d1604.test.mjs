@@ -230,7 +230,7 @@ test('the one-click: Build says what it holds, shows the cards it will write whi
     assert.match(m.text(m.by('pitch-build-progress-live-later')), /Live progress per card Coming later/);
     const [, body, headers] = m.named('newDeck.build')[0];
     // Mutation checked: drop round_ref from the build body → this fails.
-    assert.deepEqual(body, { project_id: 1, audience: 'pre_seed_fund', length: 'short', round_ref: 'round-1' }, 'the read\'s brief and round, nothing guessed');
+    assert.deepEqual(body, { project_id: 1, one_click: true, audience: 'pre_seed_fund', length: 'short', round_ref: 'round-1' }, 'the read\'s brief and round, nothing guessed; D1509: the press names itself so grid_generate can stop it');
     assert.equal(m.named('newDeck.quote')[0][1].round_ref, 'round-1', 'the quote prices the same build');
     assert.equal(headers['X-Rail-Option'], encodeURIComponent('deck:build'));
     await act(async () => { finish({ proposal: { id: 77 } }); });
@@ -367,4 +367,24 @@ test('the review: a theme write is one more version, and the saved line names bo
     assert.equal(m.text(m.by('pitch-review-saved-line')), SAVED_THEMED_LINE(4, 5));
     assert.match(SAVED_THEMED_LINE(4, 5), /v4 holds the same cards in the earlier theme/);
   } finally { await m.close(); }
+});
+
+test('D1509 (#3760): grid_generate off — Build is greyed "Not switched on yet." before it is pressed, and nothing is quoted', async () => {
+  // Mutation checked: Build left enabled while the context says grid_generate: false → the disabled assert fails.
+  const m = await mount(h(OneClickBuild, { projectId: 1, q: '?project_id=1', as: 'section' }), {
+    'newDeck.context': async () => ({ ...CTX, grid_generate: false }),
+    'newDeck.quote': async () => ({ ai: true, hold_microusd: 6000 }),
+  }, '/raise/pitch?project_id=1');
+  try {
+    assert.equal(m.pr(m.by('pitch-studio-fast-build')).disabled, true);
+    assert.equal(m.text(m.by('pitch-studio-fast-off')), 'Not switched on yet.');
+    assert.equal(m.named('newDeck.quote').length, 0, 'no quote for a press that cannot run');
+  } finally { await m.close(); }
+});
+
+test('D1509: an element HQ switched off is greyed in the lightbox picker with the Worker\'s sentence, and the arrows pass it', () => {
+  const src = codeOnly(read(`${PITCH}/AreaLightbox.jsx`));
+  assert.match(src, /const isOn = \(el\) => elementOnMain\(el\) && !off\?\.has\(el\.id\);/);
+  assert.match(src, /filter\(\(e\) => e\?\.switched_on === false\)/);
+  assert.match(src, /off\?\.has\(el\.id\) \? NOT_ON/);
 });

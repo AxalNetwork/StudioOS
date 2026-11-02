@@ -35,6 +35,7 @@ import { spendLimitMessage } from './aiSpendLimit';
 import { audioInputFor, parseAudioOutput, type SttTranscript } from './sttFormats';
 import * as shapes from './ai/shapes';
 import * as catalogue from './ai/catalogue';
+import { catalogueSwitchesFor, modelsOffFor } from './featureFlags';
 import { costMicro, unitPrice } from './ai/pricing';
 import * as guard from './ai/guard';
 import { resolveRail, resolveRailChain, resolveRailOption, rowOffers } from './ai/railMatrix';
@@ -1830,6 +1831,8 @@ export interface DrawReceipt { job: string; source: DrawSource; skipped: null | 
 export interface SpeechReceipt { job: string; source: SpeechSource; skipped: null | { model: string; reason: SpeechSkip } }
 
 async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Promise<ModelChoice> {
+  // D1509 (#3760): the models HQ switched off for this member are not offered, here as in every reply.
+  const switches = catalogueSwitchesFor(env as catalogue.CatalogueSwitches, { modelsOff: await modelsOffFor(env, opts.userId) });
   // ---- #3935 (D1478 task 1): a draw job's model ------------------------------
   if (opts.draw && opts.drawJob) {
     let pick: string | null = null;
@@ -1839,7 +1842,7 @@ async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Prom
       if (optionRow && !opts.model) pick = (await railPicks(env, opts.userId, optionRow.pageKey, optionRow.optionKey)).option;
       tier = await memberPlanTier(env, opts.userId);
     } catch { return { ok: false, refusal: 'misconfigured', error: 'Unreadable: your plan or your model picks could not be read. Nothing was run.', record: false }; }
-    const c = drawChoice(opts.drawJob, { switches: env as catalogue.CatalogueSwitches, tier, caller: opts.model ?? null, pick });
+    const c = drawChoice(opts.drawJob, { switches, tier, caller: opts.model ?? null, pick });
     if (!c.ok) return { ok: false, refusal: c.code === 'plan_locked' ? 'plan_locked' : 'model_not_offered', error: c.message, record: c.code !== 'press_hidden' };
     // An image is never redrawn on another model: no chain.
     return { ok: true, primary: c.model, chain: [], draw: { job: c.job, source: c.source, skipped: c.skipped } };
@@ -1856,7 +1859,7 @@ async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Prom
       if (optionRow && !opts.model) pick = (await railPicks(env, opts.userId, optionRow.pageKey, optionRow.optionKey)).option;
       tier = await memberPlanTier(env, opts.userId);
     } catch { return { ok: false, refusal: 'misconfigured', error: 'Unreadable: your plan or your model picks could not be read. Nothing was run.', record: false }; }
-    const c = speechChoice(opts.speechJob, { switches: env as catalogue.CatalogueSwitches, tier, caller: opts.model ?? null, pick });
+    const c = speechChoice(opts.speechJob, { switches, tier, caller: opts.model ?? null, pick });
     if (!c.ok) return { ok: false, refusal: c.code === 'plan_locked' ? 'plan_locked' : 'model_not_offered', error: c.message, record: c.code !== 'press_hidden' };
     // One voice, one transcription: never re-run on another model mid-press.
     return { ok: true, primary: c.model, chain: [], speech: { job: c.job, source: c.source, skipped: c.skipped } };
@@ -1879,7 +1882,7 @@ async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Prom
     let picks: { page: string | null; option: string | null };
     try { picks = await railPicks(env, opts.userId, railRow.pageKey, opts.rail.option ?? null); }
     catch { return { ok: false, refusal: 'misconfigured', error: 'Unreadable: your model picks for this page could not be read. Nothing was run.', record: false }; }
-    const resolved = resolveRailChain(railRow, { vision: (opts.images?.length ?? 0) > 0 }, env as catalogue.CatalogueSwitches, {
+    const resolved = resolveRailChain(railRow, { vision: (opts.images?.length ?? 0) > 0 }, switches, {
       caller: opts.model ?? null, option: picks.option, page: picks.page,
     });
     if (resolved && !resolved.ok) return { ok: false, refusal: 'model_not_offered', error: `${resolved.model} cannot do this page's work`, record: true };
@@ -1899,7 +1902,7 @@ async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Prom
       const takes = (id: string | null | undefined): id is string => {
         if (!id || !rowOffers(row, id) || !route.alternates!.includes(id)) return false;
         const m = catalogue.modelById(id);
-        return !!m && catalogue.isOffered(m, env as catalogue.CatalogueSwitches);
+        return !!m && catalogue.isOffered(m, switches);
       };
       // The route's own chain when its default runs, so a run with no pick behaves as before.
       const chainAfter = (primary: string) => (opts.draw ? []
@@ -1920,7 +1923,15 @@ async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Prom
   if (!railed && opts.model && !offered.includes(opts.model)) {
     return { ok: false, refusal: 'model_not_offered', error: `${opts.model} is not offered for ${opts.task}`, record: true };
   }
-  return railed ? { ok: true, ...railed } : { ok: true, primary: opts.model || route.model, chain: route.fallbackChain ?? [] };
+  if (railed) return { ok: true, ...railed };
+  // D1509: a switched-off model never runs: the caller's is refused, the route's default gives way to its chain.
+  if (opts.model && catalogue.switchedOff(opts.model, switches)) {
+    return { ok: false, refusal: 'model_not_offered', error: `${opts.model} is switched off`, record: true };
+  }
+  const chain = (route.fallbackChain ?? []).filter((id) => !catalogue.switchedOff(id, switches));
+  if (opts.model || !catalogue.switchedOff(route.model, switches)) return { ok: true, primary: opts.model || route.model, chain };
+  if (!chain.length) return { ok: false, refusal: 'model_not_offered', error: `Every model for ${opts.task} is switched off`, record: true };
+  return { ok: true, primary: chain[0], chain: chain.slice(1) };
 }
 
 /**

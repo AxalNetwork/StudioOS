@@ -48,6 +48,15 @@
  * does everywhere (`refuseRun`); a model that could not answer leaves the
  * figures-only path, and says so.
  *
+ * FLAGS (D1509, #3760). `grid_generate` decides whether the one press can run
+ * at all: a quote or a build that says `one_click: true` is refused 404
+ * `not_switched_on` ("Not switched on yet.") while it is off, and
+ * `/new/context` carries `grid_generate` so the button says so first. The
+ * build's words are Body's element (`element:body`): switched off, they are
+ * cut from the plan before the quote (`ai: false`, `not_switched_on`) and the
+ * build runs on the records only, its cards carrying their titles, never an
+ * empty area. A switched-off model is out of every resolution (`MODELS_OFF`).
+ *
  * WHO. The deck routes' `projectOwned`: the venture's founders write, an admin
  * reads only (D895), and New deck is on the Raise + Grow plan as /generate was.
  */
@@ -79,7 +88,8 @@ import {
 import { mercuryFor } from './deck_sources';
 import { inferBrief, type InferredBrief } from '../services/decks/inferBrief';
 import { freshnessFor, type Freshness } from '../services/decks/freshness';
-import { elementModelFor, runModelOf } from './deck_element_models';
+import { ElementOffError, elementModelFor, runModelOf } from './deck_element_models';
+import { NOT_SWITCHED_ON, flagsFor, notSwitchedOn } from '../services/featureFlags';
 import type { Resolved } from '../services/decks/elementModels';
 
 const deckNew = new Hono<{ Bindings: Env }>();
@@ -152,14 +162,28 @@ async function sourcesFor(c: any, user: User, project: any, projectId: number): 
 export const BUILD_ELEMENT = 'body';
 
 /** The build's element model, or the 503 that stops the press when the picks cannot be read. */
-async function buildModelOf(c: any, user: User, projectId: number): Promise<Resolved | Response> {
-  try { return await elementModelFor(c.env, user, projectId, BUILD_ELEMENT); } catch {
+async function buildModelOf(c: any, user: User, projectId: number): Promise<Resolved | Response | 'off'> {
+  try { return await elementModelFor(c.env, user, projectId, BUILD_ELEMENT); } catch (e) {
+    // D1509: Body switched off cuts the words from the plan; the build runs on the records only.
+    if (e instanceof ElementOffError) return 'off';
     console.warn('[deck_new] element model picks unreadable', { project_id: projectId });
     return refuse(c, 503, { code: 'picks_unreadable', message: 'Your model picks for this deck could not be read. Nothing was run.' });
   }
 }
 
-const elementModelsView = (r: Resolved) => ({ [BUILD_ELEMENT]: { model: r.model, source: r.source, notice: r.notice } });
+const elementModelsView = (r: Resolved | 'off') => ({
+  [BUILD_ELEMENT]: r === 'off' ? { model: null, source: 'none', notice: NOT_SWITCHED_ON } : { model: r.model, source: r.source, notice: r.notice },
+});
+
+/** D1509: the words' sentence when Body is switched off, so the founder knows why the cards carry titles only. */
+export const WORDS_OFF = 'Eadwyn’s words are not switched on yet. Your records still fill the figures; the cards carry their titles. Nothing was charged.';
+
+/** D1509: a one-click press while `grid_generate` is off, refused before anything is read or run; null when it may go on. */
+async function oneClickRefusal(c: any, user: User, body: any): Promise<Response | null> {
+  if (body?.one_click !== true) return null;
+  const flags = await flagsFor(c.env, user);
+  return flags.gridGenerate ? null : refuse(c, 404, notSwitchedOn);
+}
 
 /** The run each press makes, as one options object, so the quote and the run read the same input. */
 function runOptions(c: any, user: User, projectId: number, step: 'outline' | 'build', message: string, rows = 0, element?: Resolved): RunOptions {
@@ -221,6 +245,7 @@ deckNew.get('/new/context', async (c) => {
   if ('refused' in got) return got.refused;
   const userId = Number(user.id) || 0;
   const round = await activeRound(c.env, projectId);
+  const flags = await flagsFor(c.env, user);
   let inferred: InferredBrief | null = null;
   try {
     const p = await c.env.DB.prepare('SELECT stage FROM projects WHERE id = ?').bind(projectId).first<{ stage: string | null }>();
@@ -243,6 +268,8 @@ deckNew.get('/new/context', async (c) => {
     // D1599: the fast path is the inferred brief; FAST_PATH_AUDIENCE only when nothing could be inferred.
     fast_path: inferred ? { audience: inferred.audience, length: inferred.length } : { audience: FAST_PATH_AUDIENCE, length: 'standard' },
     prompt_max: PROMPT_MAX,
+    // D1509: whether the one press can run for this member (`grid_generate`).
+    grid_generate: flags.gridGenerate,
     // A read that fails leaves its key out: never a guessed brief, never an empty list that reads as "all fresh".
     ...(inferred ? { inferred } : {}),
     ...(freshness ? { freshness } : {}),
@@ -269,6 +296,8 @@ deckNew.post('/new/quote', async (c) => {
   if (!projectId) return c.json({ error: 'project_id required' }, 400);
   const step = body?.step === 'outline' ? 'outline' : body?.step === 'build' ? 'build' : body?.step === 'card' ? 'card' : null;
   if (!step) return c.json({ error: 'step must be outline, build or card' }, 400);
+  const oneClick = await oneClickRefusal(c, user, body);
+  if (oneClick) return oneClick;
   const got = await venture(c, user, projectId, true);
   if ('refused' in got) return got.refused;
   const inputs = await inputsOf(c.env, projectId, body);
@@ -289,6 +318,7 @@ deckNew.post('/new/quote', async (c) => {
     if (!rows.length) return c.json({ error: 'index must be a card position in the outline' }, 400);
     const element = await buildModelOf(c, user, projectId);
     if (element instanceof Response) return element;
+    if (element === 'off') return c.json({ step, ai: false, reason: 'not_switched_on', message: NOT_SWITCHED_ON });
     // D1517: the quote reads the same message the run sends, budgets included.
     opts = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows, items, ventureName: await ventureName(c.env, projectId), exclude: new Set(excluded), visuals: await visualsFor(c.env, projectId) }), rows.length, element);
   }
@@ -427,6 +457,8 @@ deckNew.post('/generate', async (c) => {
   const body = await c.req.json().catch(() => ({} as any));
   const projectId = projectIdOf(body?.project_id);
   if (!projectId) return c.json({ error: 'project_id required' }, 400);
+  const oneClick = await oneClickRefusal(c, user, body);
+  if (oneClick) return oneClick;
   const got = await venture(c, user, projectId, true);
   if ('refused' in got) return got.refused;
   await ensureSchema(c.env);
@@ -462,13 +494,14 @@ deckNew.post('/generate', async (c) => {
   const element = await buildModelOf(c, user, projectId);
   if (element instanceof Response) return element;
   const visuals = await visualsFor(c.env, projectId);
-  const ask = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows, items, ventureName: name, exclude, visuals }), rows.length, element);
-  const res = await run(c.env, { ...ask, surface: AI_SURFACE.raisePitch, rail: ask.rail });
+  const ask = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows, items, ventureName: name, exclude, visuals }), rows.length, element === 'off' ? undefined : element);
+  // D1509: Body switched off — no run, no hold: the cards are built from the records with their titles.
+  const res = element === 'off' ? null : await run(c.env, { ...ask, surface: AI_SURFACE.raisePitch, rail: ask.rail });
   let wording: Wording[] = rows.map(() => ({ headline: null, body: null }));
   let dropped = 0;
   let by: 'Eadwyn' | 'none' = 'none';
   let reason: string | null = null;
-  if (res.ok) {
+  if (res?.ok) {
     const w = wordingFromModel(parseJsonLoose<any>(res.output), rows.length, recordTexts(items));
     // D1546: the guarantee-language block, before the words are proposed; each sentence dropped counts.
     const g = blockGuarantees(w.byIndex);
@@ -476,6 +509,8 @@ deckNew.post('/generate', async (c) => {
     dropped = w.dropped + g.dropped;
     by = wording.some((x) => x.headline || x.body) ? 'Eadwyn' : 'none';
     if (by === 'none') reason = 'Eadwyn’s words could not be read. The figures are from your records; the cards carry their titles.';
+  } else if (!res) {
+    reason = WORDS_OFF;
   } else if (res.refusal === 'assist_off') {
     reason = 'AI assistance is off on this page. Your records still fill the figures; the cards carry their titles. Nothing was charged.';
   } else {
@@ -511,7 +546,7 @@ deckNew.post('/generate', async (c) => {
     progress: cardProgress(rows, items, wording, exclude),
     wording: { by, dropped, ...(reason ? { reason } : {}) },
     element_models: elementModelsView(element),
-    cost: { charged_microusd: res.ok ? await chargedOf(c.env, res.usageLogId, userId) : 0, usage_log_id: res.usageLogId ?? null },
+    cost: { charged_microusd: res?.ok ? await chargedOf(c.env, res.usageLogId, userId) : 0, usage_log_id: res?.usageLogId ?? null },
   }, 201);
 });
 
@@ -552,17 +587,19 @@ deckNew.post('/proposals/:id/regenerate-card', async (c) => {
   const element = await buildModelOf(c, user, projectId);
   if (element instanceof Response) return element;
   const visuals = await visualsFor(c.env, projectId);
-  const ask = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows: [rowOf], items, ventureName: name, exclude, visuals }), 1, element);
-  const res = await run(c.env, { ...ask, surface: AI_SURFACE.raisePitch, rail: ask.rail });
+  const ask = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows: [rowOf], items, ventureName: name, exclude, visuals }), 1, element === 'off' ? undefined : element);
+  const res = element === 'off' ? null : await run(c.env, { ...ask, surface: AI_SURFACE.raisePitch, rail: ask.rail });
   let words: Wording = { headline: null, body: null };
   let reason: string | null = null;
   let dropped = 0;
-  if (res.ok) {
+  if (res?.ok) {
     const w = wordingFromModel(parseJsonLoose<any>(res.output), 1, recordTexts(items));
     const g = blockGuarantees(w.byIndex[0]);
     words = g.value;
     dropped = w.dropped + g.dropped;
     if (!words.headline && !words.body) reason = 'Eadwyn’s words could not be read. The card keeps its figures and its title.';
+  } else if (!res) {
+    reason = WORDS_OFF;
   } else if (res.refusal === 'assist_off') {
     reason = 'AI assistance is off on this page, so the card was rebuilt from your records with its title. Nothing was charged.';
   } else {
@@ -580,7 +617,7 @@ deckNew.post('/proposals/:id/regenerate-card', async (c) => {
     proposal: rowToProposal(written), proposal_hash: await proposalHash(written),
     card: { index, layout: card.layout },
     wording: { by: words.headline || words.body ? 'Eadwyn' : 'none', dropped, ...(reason ? { reason } : {}) },
-    cost: { charged_microusd: res.ok ? await chargedOf(c.env, res.usageLogId, userId) : 0, usage_log_id: res.usageLogId ?? null },
+    cost: { charged_microusd: res?.ok ? await chargedOf(c.env, res.usageLogId, userId) : 0, usage_log_id: res?.usageLogId ?? null },
   });
 });
 

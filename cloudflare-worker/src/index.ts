@@ -53,6 +53,7 @@ import adminPartnersReads from './routes/admin_partners_reads';
 import adminPartnerFirms from './routes/admin_partner_firms';
 import adminPartnerDealReads from './routes/admin_partner_deal_reads';
 import adminNetworkReads from './routes/admin_network_reads';
+import adminFeatureFlags from './routes/admin_feature_flags';
 import adminPublications from './routes/admin_publications';
 // Task #10 (LD) — Admin team roster + public team endpoint.
 import adminTeam from './routes/admin_team';
@@ -987,6 +988,8 @@ app.route('/api/admin/partners', adminPartners);
 // D976 (#2762) — the advisor and partner network's pause, directory switch and standing read.
 app.route('/api/admin/network', adminNetworkReads);
 app.route('/api/admin/network', adminNetwork);
+// D1509 (#3760): HQ's Grid switches — grid_generate, one per element, one per model (migration 723).
+app.route('/api/admin/feature-flags', adminFeatureFlags);
 // D959 (#2792) — Investor cohort access: the admin's grants, and the investor's and founder's routes.
 app.route('/api/admin/investor-cohorts', adminInvestorCohorts);
 app.route('/api/investor-cohorts', investorCohorts);

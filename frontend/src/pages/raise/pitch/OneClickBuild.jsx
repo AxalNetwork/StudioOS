@@ -11,7 +11,7 @@ import { Lightbox } from '../../../ui';
 import { useRailOption } from '../../../ui/railCrumbs';
 import BuildProgress, { BuildAnnouncer } from './BuildProgress';
 import { BlockGrid, gridBlocks } from './BlockGrid';
-import { ACCEPT_ALL, DISCARD, HOLD } from './deckV2Model';
+import { ACCEPT_ALL, DISCARD, HOLD, NOT_ON } from './deckV2Model';
 import { THEME_LABELS, cardColours } from './editorModel';
 import { placeImage } from './imageModel';
 import {
@@ -140,6 +140,8 @@ export default function OneClickBuild({
   const ex = Array.isArray(exclude) ? exclude : [];
   const exKey = ex.join(',');
   const busy = startedAt != null;
+  // D1509 (#3760): `grid_generate` off for this member — the one press cannot run, and says so before it is pressed.
+  const switchedOff = ctx?.grid_generate === false;
   // The venture's round, as New deck's own Build sends it: the brief's when the page gives one, else the read's.
   const roundRef = brief && brief.round_ref !== undefined ? brief.round_ref : ctx?.round?.uid ?? null;
   useRailOption(busy ? 'deck:build' : null, 'Build deck');
@@ -154,13 +156,13 @@ export default function OneClickBuild({
   }, [projectId, given]);
 
   useEffect(() => {
-    if (!brief) return undefined;
+    if (!brief || switchedOff) return undefined;
     let live = true;
-    newDeckApi.quote({ project_id: projectId, step: 'build', audience: brief.audience, length: brief.length, round_ref: roundRef, ...(ex.length ? { exclude: ex } : {}) })
+    newDeckApi.quote({ project_id: projectId, one_click: true, step: 'build', audience: brief.audience, length: brief.length, round_ref: roundRef, ...(ex.length ? { exclude: ex } : {}) })
       .then((qt) => { if (live) setQuote(qt); }, (e) => { if (live) setQuote(null); reportError('pitch-oneclick:quote', e); });
     return () => { live = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, brief?.audience, brief?.length, roundRef, exKey]);
+  }, [projectId, brief?.audience, brief?.length, roundRef, exKey, switchedOff]);
 
   const titles = useMemo(() => {
     const rows = brief ? ctx?.standard?.[brief.length] : null;
@@ -171,7 +173,7 @@ export default function OneClickBuild({
     if (!brief) return;
     setStartedAt(Date.now()); setRefusal(null);
     try {
-      const r = await newDeckApi.build({ project_id: projectId, audience: brief.audience, length: brief.length, round_ref: roundRef, ...(ex.length ? { exclude: ex } : {}) }, railPressHeaders('deck:build'));
+      const r = await newDeckApi.build({ project_id: projectId, one_click: true, audience: brief.audience, length: brief.length, round_ref: roundRef, ...(ex.length ? { exclude: ex } : {}) }, railPressHeaders('deck:build'));
       setOpen(false);
       if (onBuilt) onBuilt(r); else navigate(reviewHref(q, r.proposal.id));
     } catch (e) { setRefusal(refusalOf(e)); setOpen(false); reportError('pitch-oneclick:build', e); } finally { setStartedAt(null); }
@@ -187,12 +189,13 @@ export default function OneClickBuild({
         <span className={MUTED}>{line}</span>
         <span className={SMALL} data-testid={`${testId}-line`}>{fastPathLine(quote, brief)}</span>
         {brief?.why ? <span className={SMALL} data-testid={`${testId}-why`}>{brief.why}</span> : null}
+        {switchedOff ? <span className={SMALL} data-testid={`${testId}-off`}>{NOT_ON}</span> : null}
         {read.status === 'error' && !given ? <span className={SMALL} data-testid={`${testId}-unread`}>{FAST_UNREAD}</span> : null}
         {children}
         <FreshnessLines ctx={ctx} testId={`${testId}-fresh`} />
         <RefusalLine refusal={refusal} testId={`${testId}-refusal`} />
       </div>
-      <button type="button" className={PRIMARY} onClick={() => setOpen(true)} disabled={!brief}
+      <button type="button" className={PRIMARY} onClick={() => setOpen(true)} disabled={!brief || switchedOff}
         aria-busy={read.status === 'loading' && !given ? 'true' : undefined} data-testid={`${testId}-build`}>Build</button>
       {open ? (
         <Lightbox label={title} title={title} width={560} onClose={() => !busy && setOpen(false)} testId={`${testId}-dialog`}
