@@ -48,6 +48,7 @@ import { activeCompanyFor } from '../middleware/activeCompany';
 import { canEdit } from '../services/companyAccess';
 import { isAdmin, newUid } from './_t13t14t15_helpers';
 import { ROLES, roleOf } from '../services/agents/catalogue';
+import { personaOf } from '../services/agents/personas';
 import { RADAR_AXES } from '../services/skillsTaxonomySchema';
 import {
   OUTPUT_LABELS, SKILL_MESSAGES, checkDraft, parseSkillMd,
@@ -356,7 +357,9 @@ router.post('/skills/:uid/publish', async (c) => {
 
 // ── An agent's skills (A2, #3956) ───────────────────────────────────────────
 
-const agentName = (a: Pick<AgentRow, 'first_name' | 'last_name' | 'role_key'>) => [a.first_name, a.last_name].filter(Boolean).join(' ') || roleOf(a.role_key)?.name || a.role_key;
+/** D4117: the persona's name, else the name the team gave it; never a job title. */
+const agentName = (a: Pick<AgentRow, 'first_name' | 'last_name' | 'role_key' | 'persona_key'>) =>
+  personaOf(a.persona_key)?.name || [a.first_name, a.last_name].filter(Boolean).join(' ') || 'An agent';
 
 /** Where an agent works, as the screens group it: `{ kind, company_name, project_name }`. */
 async function scopeLine(env: Env, a: AgentRow) {

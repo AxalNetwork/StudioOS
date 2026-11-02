@@ -44,6 +44,8 @@ export type Objection = {
   last_heard: string | null;
   answer: string | null;
   answered?: Answered | null;
+  /** D1582 (#3829): how many of its rows one named prospect gave; only when a prospect was asked for. */
+  of_prospect?: number;
 };
 
 export type ObjectionsRead = { state: 'ok'; items: Objection[]; capped: boolean; answers: 'ok' | 'unreadable' };
@@ -58,23 +60,29 @@ export async function objectionKey(text: string): Promise<string> {
 
 type Row = { objection: string; answer: string | null; prospect_id: number; created_at: string | null };
 
-/** Group the rows, newest first, into objections: most heard first, then by their words. */
-export async function groupObjections(rows: readonly Row[]): Promise<Objection[]> {
-  const by = new Map<string, { text: string; count: number; prospects: Set<number>; last: string | null; answer: string | null }>();
+/**
+ * Group the rows, newest first, into objections: most heard first, then by their words.
+ * D1582: with `prospectId`, each objection also says how many of its rows that prospect gave
+ * (`of_prospect`, 0 for none); the order is unchanged.
+ */
+export async function groupObjections(rows: readonly Row[], prospectId: number | null = null): Promise<Objection[]> {
+  const by = new Map<string, { text: string; count: number; prospects: Set<number>; last: string | null; answer: string | null; mine: number }>();
   for (const r of rows) {
     const text = String(r.objection ?? '').replace(/\s+/g, ' ').trim();
     if (!text) continue;
     const n = normal(text);
     let g = by.get(n);
     // Rows arrive newest first, so the first row seen gives the words shown and the last heard day.
-    if (!g) { g = { text, count: 0, prospects: new Set(), last: r.created_at ? String(r.created_at).slice(0, 10) : null, answer: null }; by.set(n, g); }
+    if (!g) { g = { text, count: 0, prospects: new Set(), last: r.created_at ? String(r.created_at).slice(0, 10) : null, answer: null, mine: 0 }; by.set(n, g); }
     g.count += 1;
+    if (prospectId !== null && Number(r.prospect_id) === prospectId) g.mine += 1;
     g.prospects.add(Number(r.prospect_id));
     const answer = String(r.answer ?? '').trim();
     if (answer && g.answer === null) g.answer = answer;
   }
   const out = await Promise.all([...by.values()].map(async (g) => ({
     key: await objectionKey(g.text), text: g.text, count: g.count, prospects: g.prospects.size, last_heard: g.last, answer: g.answer,
+    ...(prospectId !== null ? { of_prospect: g.mine } : {}),
   })));
   return out.sort((a, b) => b.count - a.count || a.text.localeCompare(b.text));
 }
@@ -97,8 +105,11 @@ export async function readAnswers(env: Env, projectId: number): Promise<Map<stri
   } as Answered]));
 }
 
-/** Every objection the venture's investors raised. A failed read throws; the caller says it could not be read. */
-export async function readObjections(env: Env, projectId: number): Promise<ObjectionsRead> {
+/**
+ * Every objection the venture's investors raised. A failed read throws; the caller says it could not be read.
+ * D1582: `prospectId` (already checked to be one of this venture's) adds each objection's `of_prospect`.
+ */
+export async function readObjections(env: Env, projectId: number, prospectId: number | null = null): Promise<ObjectionsRead> {
   const res = await env.DB.prepare(
     `SELECT f.objection, f.answer, f.prospect_id, f.created_at
        FROM raise_prospect_feedback f JOIN raise_prospects p ON p.id = f.prospect_id
@@ -106,7 +117,7 @@ export async function readObjections(env: Env, projectId: number): Promise<Objec
       ORDER BY f.created_at DESC, f.id DESC LIMIT ?`,
   ).bind(projectId, FEEDBACK_CAP + 1).all<Row>();
   const rows = res.results || [];
-  const items = await groupObjections(rows.slice(0, FEEDBACK_CAP));
+  const items = await groupObjections(rows.slice(0, FEEDBACK_CAP), prospectId);
   let answers: Map<string, Answered> | null = null;
   try { answers = await readAnswers(env, projectId); } catch (e) {
     console.warn('[narrative] objection answers unreadable:', (e as Error)?.name);

@@ -37,7 +37,7 @@ import { sanitizeTheme } from '../src/services/decks/slideModel.ts';
 import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withGuard } from './_guard_stub.mjs';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { CONTRACTS } from '../src/contracts/index.ts';
 import { contractErrors } from '../src/contracts/validate.ts';
@@ -46,7 +46,7 @@ const VARY_SCHEMA = JSON.parse(readFileSync(new URL('../src/contracts/' + CONTRA
 
 const root = new URL('../sql/', import.meta.url);
 const baseline = readFileSync(new URL('schema_baseline.sql', root), 'utf8');
-const migrations = readdirSync(new URL('migrations/', root)).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort()
+const migrations = readdirSync(new URL('migrations/', root)).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations)
   .map((n) => readFileSync(new URL('migrations/' + n, root), 'utf8'));
 const JWT_SECRET = 'synthetic-d1544-only-not-a-real-credential'.repeat(2);
 const ORIGIN = 'https://axal.vc';

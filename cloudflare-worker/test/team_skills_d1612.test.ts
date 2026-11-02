@@ -49,6 +49,7 @@ function world() {
   db.exec(sql('migrations/199_super_admin.sql'));
   db.exec(sql('migrations/089_skills_values_taxonomy.sql'));
   db.exec(sql('migrations/712_team_agents.sql'));
+  db.exec(sql('migrations/202611021724_team_agents_persona.sql')); // D4117: persona_key
   db.exec(sql('migrations/759_agent_skills.sql'));
   db.exec(sql('migrations/202611022140_hq_skill_lifecycle.sql')); // D4160: the HQ publish gate reads it
   const user = db.prepare("INSERT INTO users (id, uid, email, name, role, founder_id, subscription_tier, subscription_status) VALUES (?, ?, ?, ?, ?, ?, 'growth', 'active')");

@@ -42,6 +42,8 @@ An investor reads the deck version the venture granted them on that deal (`GET /
 with the share link's rules and no provenance. The venture's founder grants, lists and withdraws
 (`/:id/deck-grants`). The founder's answers never carry an investor's note, score or decision. Migration 745.
 
+D1582 (#3829): `deck_qa.ts`'s `GET /api/decks/:id/qa` takes `?prospect=<id>`: that investor's objections rank first. The prospect is read with the deck's `project_id` (404 `prospect_not_found` otherwise, after the founder gate). No new mount, no migration.
+
 D1153: `deal_workroom.ts`, mounted before `deals.ts` at `/api/deals`, serves
 the investor's working tabs: the data room's door and a request to the founder,
 the round as a count and a total, and a withdrawal with a required reason kept

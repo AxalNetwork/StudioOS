@@ -103,4 +103,16 @@ export const agentEngineApi = {
   addMemoryFact: (agentUid, body) => request(`/teams/agents/${enc(agentUid)}/memory`, { method: 'POST', body: JSON.stringify(body) }),
   forgetMemory: (noteUid) => request(`/teams/memory/${enc(noteUid)}`, { method: 'DELETE' }),
   forgetAllMemory: (agentUid) => request(`/teams/agents/${enc(agentUid)}/memory`, { method: 'DELETE' }),
+  // #3851 (E7 of #3742): the evaluation board (TM14), and HQ's halt and rebuild.
+  //   GET    /api/teams/:scope/:id/evaluation?days=30|90 → { days, roles: [{ role_key, decided, rated, note, acceptance, edit, discard,
+  //                                              median_decision_h, open_past_3d, expired, cost_per_accepted: { available, value_microusd },
+  //                                              refused: [{ reason, n }] }] }; 400 invalid_days. Under 10 decisions the rates are null
+  //                                              and `note` reads "Too few decisions to rate (n)".
+  //   GET    /api/admin/agents/halt               → { halted, reason, by: { uid, name } | null, at } (platform admin)
+  //   POST   /api/admin/agents/halt               { halted, reason? } → the same; 400 invalid_halt
+  //   POST   /api/admin/agents/rebuild/:scope     scope `project:<id>` | `company:<id>` → { ok, schedules, status }; 404 not_found
+  evaluation: (scope, id, { days } = {}) => request(`${base(scope, id)}/evaluation${days ? `?days=${enc(days)}` : ''}`),
+  haltState: () => request('/admin/agents/halt'),
+  setHalt: ({ halted, reason } = {}) => request('/admin/agents/halt', { method: 'POST', body: JSON.stringify({ halted, ...(reason ? { reason } : {}) }) }),
+  rebuildScope: (scope) => request(`/admin/agents/rebuild/${enc(scope)}`, { method: 'POST', body: JSON.stringify({}) }),
 };
