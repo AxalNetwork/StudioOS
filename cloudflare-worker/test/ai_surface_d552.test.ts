@@ -181,6 +181,7 @@ const FORWARDED: Record<string, string[]> = {
   'routes/research.ts': ['page'],               // the zone draft's app path (D404, D510)
   'services/advisor/guardrails.ts': ['surface'], // classifyInput's required parameter
   'services/agents/agentRun.ts': ['c.surface'],  // D1496 part 2: the agent's module app path (moduleSurface), both the quote and the run
+  'services/decks/imageDraw.ts': ['a.surface'],  // D1505: the deck image pipeline's seven runs, on the page its caller names (deck_images.ts: AI_SURFACE.raisePitch)
 };
 
 /** Every call site's fixed name, by file — the table D552.md lists. */
@@ -204,7 +205,6 @@ const EXPECTED: Record<string, string[]> = {
   'routes/deck_derive.ts': ['AI_SURFACE.raisePitch'], // D1583: the memo from a deck
   'routes/deck_critic.ts': ['AI_SURFACE.raisePitch'], // D1557: the investor critic
   'routes/deck_transform.ts': ['AI_SURFACE.raisePitch'], // D1560: notes, proofread, fix this slide, translate
-  'routes/deck_images.ts': ['AI_SURFACE.raisePitch'], // D903: the card and background images
   'routes/article_assist.ts': ['AI_SURFACE.articles', 'AI_SURFACE.articles'], // D1409: Eadwyn's writing options on an article, and its images
   'routes/event_syndication_assist.ts': ['AI_SURFACE.eventSyndication'], // D1493: Eadwyn's proposed copy for a syndication channel
   'services/mail/drafts.ts': ['AI_SURFACE.mailDraft'], // D1341: Eadwyn's email drafts and revisions; D1343 moved the call into `runDraft`, shared by the route and the MCP tool

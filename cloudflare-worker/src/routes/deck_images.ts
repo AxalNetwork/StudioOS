@@ -42,10 +42,10 @@
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
-import { quoteRun, run, type RunOptions } from '../services/aiRouter';
+import { quoteRun, type RunOptions } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import {
-  ALT_MAX, EXTENSION, IMAGE_BYTES_ESTIMATE, IMAGE_MODEL, IMAGE_OPTION, IMAGE_PAGE, MIMES, NOT_ILLUSTRATIVE_MESSAGE, imageModelLabel,
+  ALT_MAX, EXTENSION, IMAGE_BYTES_ESTIMATE, IMAGE_OPTION, IMAGE_PAGE, NOT_ILLUSTRATIVE_MESSAGE, imageModelLabel,
   OVERLAYS, PERSON_CONSENT_MESSAGE, REAL_PERSON_MESSAGE, UPLOAD_MAX_BYTES, USES, asksForChart, askOf, balanceRefusal, overlayContrast,
   personIn, promptOf, readable, sniffMime, ventureNames, type ImageAsk, type Overlay, type Use,
 } from '../services/decks/images';
@@ -62,6 +62,8 @@ import { lockedOut, type Resolved } from '../services/decks/elementModels';
 import { notSwitchedOn } from '../services/featureFlags';
 import { imageSize, sha256Hex, stripMetadata, tooManyPixels, type ImageMime } from '../services/decks/imageBytes';
 import { fetchExternalImage } from '../services/decks/imageFetch';
+import { deckArt, drawDeckImages, quoteDeckImage, type DrawArgs } from '../services/decks/imageDraw';
+import type { Aspect } from '../services/ai/shapes';
 
 const deckImages = new Hono<{ Bindings: Env }>();
 
@@ -117,8 +119,13 @@ function view(c: any, r: any) {
     model_label: imageModelLabel(r.model),
     usage_log_id: r.ai_usage_log_id ?? null, charged_microusd: r.charged_microusd ?? null,
     shows_person: r.shows_person === 1, created_at: r.created_at, kept_at: r.kept_at ?? null,
+    // D1505 (#3756): the pipeline's step lines, seed and provenance.
+    seed: r.seed ?? null, pipeline_uid: r.pipeline_uid ?? null, variant_index: r.variant_index ?? null,
+    steps: parseJson(r.steps, null), provenance: parseJson(r.provenance_json, null),
   };
 }
+
+const parseJson = <T>(s: unknown, d: T): T => { try { return typeof s === 'string' && s ? JSON.parse(s) : d; } catch { return d; } };
 
 /** What a description is refused for before anything is quoted or held, or null. */
 async function refusedAsk(c: any, ask: ImageAsk, projectId: number): Promise<Response | null> {
@@ -143,14 +150,7 @@ export const imageElementOf = (ask: ImageAsk): 'photo' | 'illustration' => (ask.
 
 const coloursOf = (body: any): string[] => (Array.isArray(body?.colours) ? body.colours : []).filter((x: unknown): x is string => typeof x === 'string' && HEX.test(x)).slice(0, 4);
 
-/** What a run charged, from its usage row; null when it is not known. */
-async function chargedOf(env: Env, usageLogId: number | null | undefined, userId: number): Promise<number | null> {
-  if (!usageLogId) return null;
-  const row = await env.DB.prepare('SELECT charged_microusd FROM ai_usage_logs WHERE id = ? AND user_id = ?').bind(usageLogId, userId).first<any>().catch(() => null);
-  return row?.charged_microusd == null ? null : Number(row.charged_microusd);
-}
-
-type Priced = { ask: ImageAsk; colours: string[]; opts: RunOptions; model: string; per: number; total: number; element: Resolved };
+type Priced = { ask: ImageAsk; colours: string[]; opts: RunOptions; model: string; per: number; total: number; element: Resolved; args: DrawArgs; steps: Array<{ step: string; label: string; hold_microusd: number }> };
 
 /** The checked request and its price, or the response that refuses it. Shared by the quote and the run. */
 async function priced(c: any, user: User, deck: Deck): Promise<Priced | Response> {
@@ -176,7 +176,22 @@ async function priced(c: any, user: User, deck: Deck): Promise<Priced | Response
     const stop = refuseRun(c, { refusal: q.refusal, error: q.error });
     return stop ?? refuse(c, 503, { code: 'model_unavailable', message: 'The image model is not available. Nothing was run.' });
   }
-  return { ask: read.ask, colours, opts, model: q.model, per: q.hold_microusd, total: q.hold_microusd * read.ask.count, element };
+  // D1505 (#3756): one image is every step of the pipeline, priced step by step under one figure (pd14).
+  const ref = cardRefOf(deck.slides, { card: read.ask.card, card_uid: read.ask.card_uid });
+  const args: DrawArgs = {
+    userId: Number(user.id), deckId: deck.deckId, projectId: deck.projectId, slides: deck.slides, ask: read.ask,
+    base: promptOf(read.ask, colours).slice(0, 2048), colours, draw: opts, model: q.model,
+    area: typeof body?.area === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(body.area) ? body.area : null,
+    slideAspect: (body?.slide_aspect === '4:3' ? '4:3' : '16:9') as Aspect,
+    cardUid: 'error' in ref ? null : ref.uid, surface: AI_SURFACE.raisePitch, rail: opts.rail!,
+  };
+  const art = await deckArt(c.env, deck.projectId, { style: read.ask.style, palette: read.ask.palette, colours: colours.slice(0, 4) });
+  const pq = await quoteDeckImage(c.env, args, art);
+  if (!pq.ok) {
+    const stop = refuseRun(c, { refusal: pq.refusal, error: pq.error });
+    return stop ?? refuse(c, 503, { code: 'model_unavailable', message: 'The image model is not available. Nothing was run.' });
+  }
+  return { ask: read.ask, colours, opts, model: q.model, per: pq.hold_microusd, total: pq.hold_microusd * read.ask.count, element, args, steps: pq.steps };
 }
 
 deckImages.post('/:id/images/quote', async (c) => {
@@ -196,6 +211,8 @@ deckImages.post('/:id/images/quote', async (c) => {
     ai: true, model: p.model, model_label: imageModelLabel(p.model),
     models: [{ id: p.model, label: imageModelLabel(p.model), per_image_microusd: p.per }],
     per_image_microusd: p.per, count: p.ask.count, total_microusd: p.total,
+    // D1505: expand prompt · draw · image check · style check · alt text, each priced (pd14).
+    steps: p.steps,
     // D1549 (#3796): the element the image runs as, the model it resolved to and why.
     element_models: { [p.element.element]: { model: p.model, source: p.element.source, notice: p.element.notice, ...(p.element.locked ? { locked: true } : {}) } },
     balance: short ? { ok: false, code: short.code, message: short.message } : { ok: true },
@@ -216,47 +233,23 @@ deckImages.post('/:id/images', async (c) => {
   try { ticket = await assertStorageRoom(c.env, { projectId: deck.projectId }, IMAGE_BYTES_ESTIMATE * p.ask.count, user); }
   catch (e) { if (e instanceof Response) return e; throw e; }
 
-  const ref = cardRefOf(deck.slides, { card: p.ask.card, card_uid: p.ask.card_uid });
-  const cardUid = 'error' in ref ? null : ref.uid;
-  const images: any[] = [];
-  let stopped: { code: string; message: string } | null = null;
-  for (let i = 0; i < p.ask.count; i += 1) {
-    const r = await run(c.env, { ...p.opts, surface: AI_SURFACE.raisePitch, rail: p.opts.rail });
-    if (!r.ok || !r.image) {
-      const answer = refuseRun(c, r);
-      if (!images.length) return answer ?? refuse(c, 503, { code: 'model_unavailable', message: 'Eadwyn could not draw the image. Nothing was charged and nothing changed.' });
-      const body: any = await answer?.clone().json().catch(() => null);
-      stopped = { code: body?.error || 'model_unavailable', message: body?.message || 'Eadwyn stopped before drawing every image. What it drew is below.' };
-      break;
-    }
-    const mime = (MIMES as readonly string[]).includes(r.image.mime) ? r.image.mime as typeof MIMES[number] : sniffMime(r.image.bytes);
-    const charged = await chargedOf(c.env, r.usageLogId, userId);
-    if (!mime) { stopped = { code: 'image_unreadable', message: 'The image came back in a format the deck cannot show. It was charged; nothing was placed.' }; break; }
-    // D1506: a drawn image is stripped, measured and hashed like an upload. The same picture twice keeps no hash the second time.
-    const drawn = stripMetadata(r.image.bytes, mime as ImageMime);
-    const drawnSize = imageSize(drawn, mime as ImageMime);
-    const drawnSha = await sha256Hex(drawn);
-    const taken = await c.env.DB.prepare('SELECT 1 FROM deck_images WHERE project_id = ? AND sha256 = ?').bind(deck.projectId, drawnSha).first();
-    const uid = crypto.randomUUID();
-    const key = `deck-images/${deck.projectId}/${uid}.${EXTENSION[mime]}`;
-    try {
-      await c.env.FILES!.put(key, drawn, { httpMetadata: { contentType: mime }, customMetadata: { projectId: String(deck.projectId), userId: String(userId) } });
-    } catch {
-      stopped = { code: 'image_unsaved', message: 'Eadwyn drew the image, but it could not be stored. It was charged for the run; try again in a moment.' };
-      break;
-    }
-    await c.env.DB.prepare(`INSERT INTO deck_images (uid, project_id, deck_id, card, r2_key, mime, size_bytes, width, height, sha256, source, prompt, style, aspect, use,
-        state, model, ai_usage_log_id, charged_microusd, created_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated', ?, ?, ?, ?, 'proposed', ?, ?, ?, ?)`)
-      .bind(uid, deck.projectId, deck.deckId, p.ask.card, key, mime, drawn.byteLength, drawnSize?.width ?? r.image.width, drawnSize?.height ?? r.image.height, taken ? null : drawnSha,
-        p.ask.description, p.ask.style, p.ask.aspect, p.ask.use, r.usage?.model ?? IMAGE_MODEL, r.usageLogId ?? null, charged, userId).run();
-    await recordCardUid(c.env, uid, cardUid);
-    images.push(await c.env.DB.prepare('SELECT * FROM deck_images WHERE uid = ?').bind(uid).first());
+  // D1505 (#3756): every image runs the pipeline under one hold; a refused one is kept as discarded, settled at zero.
+  const drawn = await drawDeckImages(c.env, p.args);
+  if ('refusal' in drawn) {
+    await noteStorageLanded(c.env, ticket);
+    const stop = refuseRun(c, { refusal: drawn.refusal, error: drawn.error });
+    return stop ?? refuse(c, 503, { code: 'model_unavailable', message: 'Eadwyn could not draw the image. Nothing was charged and nothing changed.' });
   }
+  if (!drawn.rows.length && !drawn.refused.length && drawn.stopped) {
+    await noteStorageLanded(c.env, ticket);
+    return refuse(c, 503, { code: drawn.stopped.code, message: drawn.stopped.message });
+  }
+  const images = drawn.rows;
+  const stopped = drawn.stopped;
   await noteStorageLanded(c.env, ticket);
   const where = p.ask.card == null ? 'The deck' : `Card ${p.ask.card + 1}`;
   await auditDeckWrite(c, user, deck.projectId, 'deck_image_proposed', `${where}: ${images.length} image${images.length === 1 ? '' : 's'} proposed`);
-  return c.json({ images: images.map((r) => view(c, r)), ...(stopped ? { stopped } : {}) });
+  return c.json({ images: images.map((r) => view(c, r)), refused: drawn.refused, ...(stopped ? { stopped } : {}) });
 });
 
 type Landing = { use: Use; card: number | null; cardUid: string | null; alt: string; showsPerson: boolean; audit: string };
