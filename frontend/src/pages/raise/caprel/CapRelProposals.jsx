@@ -121,7 +121,7 @@ export default function CapRelProposals({ projectId, prospect = null, onClose, o
       <div className="flex flex-col gap-4">
         {prospect ? (
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" className={BTN_P} onClick={ask} disabled={run.busy} data-testid="caprel-proposals-ask">{run.busy ? 'Reading your note…' : `Ask Eadwyn about ${prospect.name}`}</button>
+            <button type="button" className={BTN_P} onClick={ask} disabled={run.busy} data-testid="caprel-proposals-ask">{run.busy ? 'Reading your note…' : `Propose next steps for ${prospect.name}`}</button>
             <span className={`text-[12px] ${MUTED}`}>Reads your newest note on their timeline, once. It uses your AI allowance.</span>
           </div>
         ) : null}

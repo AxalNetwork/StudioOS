@@ -156,7 +156,7 @@ export function PlanWording({ projectId, scope = 'venture', board = null }) {
   const [busy, setBusy] = useState(null);
   const [refusal, setRefusal] = useState(null);
   const ai = useAiSpend();
-  useRailOption(running ? 'draft:build/plan' : null, 'Word with Eadwyn');
+  useRailOption(running ? 'draft:build/plan' : null, WORD_LABEL);
   const press = async () => {
     setRunning(true); setRefusal(null);
     try {

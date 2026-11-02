@@ -25,6 +25,7 @@ import {
 } from '../src/services/licencePush.ts';
 import { applyLicenceCopy } from '../src/rpc/branchOps.ts';
 
+import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 const MIGRATION_295 = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/295_licence_push_pending.sql'), 'utf8');
 
 function coerce(a: any[]): any[] {
@@ -157,7 +158,7 @@ test('D272: the branch never lets an older copy overwrite a newer one', async ()
   // 265 and 284 add columns. Each ALTER is applied on its own.
   const d = new DatabaseSync(':memory:');
   const dir = resolve(process.cwd(), 'cloudflare-worker/sql/migrations');
-  for (const f of readdirSync(dir).filter((x) => /^(256|257|265|284)_/.test(x)).sort()) {
+  for (const f of readdirSync(dir).filter((x) => /^(256|257|265|284)_/.test(x)).sort(compareMigrations)) {
     const body = readFileSync(resolve(dir, f), 'utf8').replace(/--[^\n]*/g, '');
     for (const stmt of body.split(';')) {
       if (/\bbranch_licence\b/.test(stmt) && /\b(CREATE TABLE|ALTER TABLE)\b/i.test(stmt)) d.exec(stmt);

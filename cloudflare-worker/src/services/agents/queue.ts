@@ -18,7 +18,8 @@
  */
 import type { Env, User } from '../../types';
 import { chargedFor } from './agentRun';
-import { moduleOf, roleOf } from './catalogue';
+import { moduleOf } from './catalogue';
+import { personaDto, personaOf } from './personas';
 import { NeverFillRefusal, decideRailAs, type RailDecision, type RailProposal, type RailProposalStatus } from '../railProposals';
 import { canManage, canRead, logEvent, scopeCols, scopeOfAgent, type AgentRow, type Scope, type Spend } from './teams';
 
@@ -36,7 +37,8 @@ export type QueueItem = {
   headline: string;
   payload: Record<string, unknown>;
   status: RailProposalStatus;
-  agent: { uid: string; role_key: string; role_name: string; first_name: string | null; last_name: string | null };
+  // D4117: who the agent is (its persona); no job title reaches the client.
+  agent: { uid: string; role_key: string; persona: ReturnType<typeof personaDto> | null; first_name: string | null; last_name: string | null };
   sponsor: Person | null;
   cost: Spend;
   created_at: string;
@@ -48,7 +50,7 @@ type QueueRow = {
   id: number; uid: string; user_id: number; kind: string; rail_option: string; record_ref: string | null;
   payload_json: string; decided_payload_json: string | null; status: RailProposalStatus; created_at: string; decided_at: string | null;
   usage_log_id: number | null; agent_id: number;
-  agent_uid: string; role_key: string; first_name: string | null; last_name: string | null; sponsor_user_id: number;
+  agent_uid: string; role_key: string; persona_key: string | null; first_name: string | null; last_name: string | null; sponsor_user_id: number;
   scope_kind: 'company' | 'project'; company_id: number | null; project_id: number | null;
   sponsor_uid: string | null; sponsor_name: string | null; decider_uid: string | null; decider_name: string | null;
   module: string | null; run_usage_log_id: number | null;
@@ -79,7 +81,7 @@ async function toItem(env: Env, r: QueueRow): Promise<QueueItem> {
     headline: headlineOf(parse(r.payload_json) ?? {}),
     payload,
     status: r.status,
-    agent: { uid: r.agent_uid, role_key: r.role_key, role_name: roleOf(r.role_key)?.name ?? r.role_key, first_name: r.first_name, last_name: r.last_name },
+    agent: { uid: r.agent_uid, role_key: r.role_key, persona: (() => { const p = personaOf(r.persona_key); return p ? personaDto(p) : null; })(), first_name: r.first_name, last_name: r.last_name },
     sponsor: r.sponsor_uid ? { uid: r.sponsor_uid, name: r.sponsor_name ?? '' } : null,
     cost: await chargedFor(env, r.run_usage_log_id ?? r.usage_log_id ?? null),
     created_at: r.created_at,
@@ -109,7 +111,7 @@ export async function queueList(env: Env, s: Scope, f: QueueFilter): Promise<{ i
   const r = await env.DB.prepare(
     `SELECT p.id, p.uid, p.user_id, p.kind, p.rail_option, p.record_ref, p.payload_json, p.decided_payload_json, p.status,
          p.created_at, p.decided_at, p.usage_log_id, p.agent_id,
-         a.uid AS agent_uid, a.role_key, a.first_name, a.last_name, a.sponsor_user_id, a.scope_kind, a.company_id, a.project_id,
+         a.uid AS agent_uid, a.role_key, a.persona_key, a.first_name, a.last_name, a.sponsor_user_id, a.scope_kind, a.company_id, a.project_id,
          su.uid AS sponsor_uid, su.name AS sponsor_name, du.uid AS decider_uid, du.name AS decider_name,
          (SELECT json_extract(e.detail_json, '$.module') FROM team_agent_events e
            WHERE e.agent_id = p.agent_id AND e.proposal_uid = p.uid AND e.kind = 'run' ORDER BY e.id LIMIT 1) AS module,
@@ -160,7 +162,7 @@ async function rowByUid(env: Env, uid: string): Promise<QueueRow | null> {
   if (typeof uid !== 'string' || !uid || uid.length > 64) return null;
   return env.DB.prepare(`SELECT p.id, p.uid, p.user_id, p.kind, p.rail_option, p.record_ref, p.payload_json, p.decided_payload_json, p.status,
          p.created_at, p.decided_at, p.usage_log_id, p.agent_id,
-         a.uid AS agent_uid, a.role_key, a.first_name, a.last_name, a.sponsor_user_id, a.scope_kind, a.company_id, a.project_id,
+         a.uid AS agent_uid, a.role_key, a.persona_key, a.first_name, a.last_name, a.sponsor_user_id, a.scope_kind, a.company_id, a.project_id,
          su.uid AS sponsor_uid, su.name AS sponsor_name, du.uid AS decider_uid, du.name AS decider_name,
          (SELECT json_extract(e.detail_json, '$.module') FROM team_agent_events e
            WHERE e.agent_id = p.agent_id AND e.proposal_uid = p.uid AND e.kind = 'run' ORDER BY e.id LIMIT 1) AS module,

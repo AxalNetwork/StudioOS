@@ -2,8 +2,10 @@ import React from 'react';
 import { Check, Lock } from 'lucide-react';
 import { Unrecorded } from '../../ui';
 import SkillRadar from '../../components/play/SkillRadar.jsx';
+import SkillEnergy from '../../ui/SkillEnergy.jsx';
+import { areaVars } from '../../lib/skillAreas.js';
 import { BTN_SECONDARY, MONO, MUTED } from './teamUi.jsx';
-import { authorLine, outputWords, radarLines, tagChip, usedBy } from './skillsModel.js';
+import { authorLine, energyOf, outputWords, radarLines, tagChip, usedBy } from './skillsModel.js';
 
 /**
  * D1612 (#3952, SK1, SK4, SK5) — the pieces every skill screen shares: the
@@ -14,13 +16,24 @@ import { authorLine, outputWords, radarLines, tagChip, usedBy } from './skillsMo
 const CHIP = 'inline-flex min-h-[22px] items-center gap-1 whitespace-nowrap rounded-axal-pill border px-2 text-[11.5px] font-semibold';
 
 export function TaxChips({ tags }) {
-  const chips = (Array.isArray(tags) ? tags : []).map(tagChip).filter(Boolean);
+  const chips = (Array.isArray(tags) ? tags : []).map((t) => { const c = tagChip(t); return c ? { ...c, area: t?.category_slug } : null; }).filter(Boolean);
   if (!chips.length) return null;
   return (
     <span className="flex flex-wrap gap-1.5" data-testid="skill-tax">
-      {chips.map((c) => <span key={c.text} title={c.title} className={`${CHIP} border-axal-lavender-edge bg-axal-lavender text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300`}>{c.text}</span>)}
+      {chips.map((c) => (
+        <span key={c.text} title={c.title} className={`${CHIP} border-axal-lavender-edge bg-axal-lavender text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300`}>
+          {c.area ? <AreaDot area={c.area} /> : null}{c.text}
+        </span>
+      ))}
     </span>
   );
+}
+
+/** D4120: an area's colour dot, from the shared tokens (the area chips and the SkillRadar axes use the same table). */
+export function AreaDot({ area }) {
+  const vars = areaVars(area);
+  if (!vars) return null;
+  return <span aria-hidden="true" style={vars} className="block size-[7px] shrink-0 rounded-full bg-[var(--area-l)] dark:bg-[var(--area-d)]" data-testid="area-dot" />;
 }
 
 /** A read tool as a chip: "Mercury · read", ticked when approved, locked when its sponsor hasn't approved it. */
@@ -53,6 +66,7 @@ export function UsedBy({ n }) {
 export function SkillCard({ s, onOpen, onAssign, canAssign }) {
   return (
     <article className="flex min-w-0 flex-col gap-2 rounded-axal-lg border border-axal-hairline bg-white p-4 dark:border-gray-700 dark:bg-gray-900" data-testid={`skill-card-${s.uid}`}>
+      {energyOf(s) ? <SkillEnergy {...energyOf(s)} size={96} /> : null}
       <div className="flex items-start gap-2">
         <button type="button" onClick={() => onOpen(s)} className="min-w-0 flex-1 text-left text-[14.5px] font-extrabold text-axal-ink hover:underline dark:text-gray-100" data-testid={`skill-open-${s.uid}`}>{s.name}</button>
         {s.status === 'retired' ? <span className={`${CHIP} border-axal-hairline text-axal-muted dark:border-gray-700 dark:text-gray-400`}>Retired</span> : null}
