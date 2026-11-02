@@ -37,7 +37,7 @@ export function CompanyMark({ name, size = 40, logoUrl = null }) {
   if (src && failed !== src) {
     return (
       <img src={src} alt="" aria-hidden="true" width={size} height={size} style={{ width: size, height: size }}
-        className="inline-block shrink-0 rounded-[24%] border border-axal-hairline bg-white object-contain dark:border-gray-700"
+        className="inline-block shrink-0 rounded-[24%] border border-axal-hairline bg-white object-contain dark:border-gray-700 dark:bg-gray-100"
         data-mark="company" data-logo={src.startsWith('/api/') ? 'stored' : 'outside'}
         onError={() => setFailed(src)} />
     );
