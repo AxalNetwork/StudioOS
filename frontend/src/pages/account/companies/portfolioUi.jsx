@@ -17,8 +17,31 @@ export const LINK = 'font-semibold text-axal-violet-deep hover:underline dark:te
 
 const initialsOf = (name) => String(name || '?').replace(/[[\]]/g, '').trim().split(/\s+/).slice(0, 2).map((w) => w[0] || '').join('').toUpperCase() || '?';
 
-/** A company's mark: lavender, its initials in violet. */
-export function CompanyMark({ name, size = 40 }) {
+/**
+ * The image a company's `logo_url` may draw, or null for the initials: the
+ * uploaded logo's served path (`/api/company/<uid>/logo?v=…`, #4201), or an
+ * outside http(s) URL a member pasted before uploads existed. Anything else
+ * (a `javascript:` or `data:` URL, a relative path elsewhere) draws initials.
+ */
+export function logoSrcOf(logoUrl) {
+  if (typeof logoUrl !== 'string') return null;
+  const u = logoUrl.trim();
+  if (/^\/api\/company\/[^/?#]+\/logo(?:\?v=[0-9a-f]{32}\.(?:png|svg))?$/.test(u)) return u;
+  return /^https?:\/\/[^\s]+$/i.test(u) ? u : null;
+}
+
+/** A company's mark: its logo when it has one (stored or outside), else lavender with its initials in violet. */
+export function CompanyMark({ name, size = 40, logoUrl = null }) {
+  const src = logoSrcOf(logoUrl);
+  const [failed, setFailed] = React.useState(null);
+  if (src && failed !== src) {
+    return (
+      <img src={src} alt="" aria-hidden="true" width={size} height={size} style={{ width: size, height: size }}
+        className="inline-block shrink-0 rounded-[24%] border border-axal-hairline bg-white object-contain dark:border-gray-700"
+        data-mark="company" data-logo={src.startsWith('/api/') ? 'stored' : 'outside'}
+        onError={() => setFailed(src)} />
+    );
+  }
   return (
     <span aria-hidden="true" style={{ width: size, height: size, fontSize: Math.round(size * 0.34) }}
       className="inline-flex shrink-0 items-center justify-center rounded-[24%] border border-violet-200 bg-axal-lavender font-mono font-bold text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300"

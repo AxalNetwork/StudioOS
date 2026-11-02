@@ -27,6 +27,9 @@ import { membershipEvent } from '../services/companyMembershipEvents';
 import { checkSlug, slugHolder, generateSlug } from '../services/slugs';
 import { legalPatch, MESSAGES as LEGAL_MESSAGES } from './company_legal';
 import { currencyCode, CURRENCY_INVALID_MESSAGE } from '../services/currencies';
+import {
+  MAX_LOGO_BYTES, LOGO_CONTENT_TYPE, LOGO_MESSAGES, checkLogo, logoHeaders, logoKeyFor, logoUrlFor, newLogoToken, storedLogoOf,
+} from '../services/companyLogo';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -422,6 +425,127 @@ r.get('/companies', async (c) => {
     const items: any[] = [];
     for (const r of slice) items.push(await summaryDto(c.env, r));
     return c.json({ total, limit, offset, items });
+  } catch (e) { return mapError(c, e); }
+});
+
+// /company/:uid/logo — #4201 (#4152 G1): the company's own logo, stored in R2
+// `COMPANY_LOGOS` (services/companyLogo.ts holds the rules and the key shape).
+//
+//   POST   editor  multipart `file`: a PNG or SVG, at most 2 MB, near-square;
+//                  stores it, sets logo_url to the served path, deletes the
+//                  previously stored logo.
+//   DELETE editor  deletes the stored logo and sets logo_url to null.
+//   GET    member  the stored bytes, inline, for the switcher and Portfolio.
+//
+// The edit rule is PATCH /company/:uid's, unchanged: `canEdit`, with the same
+// 404 and 403. Reads are `viewerIsMember`'s, and a non-member gets the same
+// 404 as an unknown uid. A logo_url on an outside host is never touched by
+// GET (it is not ours to serve, so GET answers 404 `no_stored_logo` and the
+// client keeps rendering the URL itself); POST replaces it and DELETE clears it.
+//
+// No membership event yet: logo_change waits on a migration that widens
+// company_membership_events.kind; #4201. Its CHECK (migration 757) admits only
+// the kinds in services/companyMembershipEvents.ts, and the owner chose to
+// ship without one.
+
+const logoStore = (env: Env) => env.COMPANY_LOGOS ?? null;
+const storageUnconfigured = (c: any) => refuse(c, 503, { code: 'storage_unconfigured', message: 'Logo storage is not configured on this deployment.' });
+
+/** The company and the edit gate exactly as PATCH /company/:uid applies it; a Response when refused. */
+async function logoEditGate(c: any): Promise<{ user: User; company: Company } | Response> {
+  const user = await requireAuth(c);
+  const company = await getCompanyOr404(c.env, c.req.param('uid'));
+  if (!company) return c.json({ detail: 'Company not found' }, 404);
+  if (!(await canEdit(c.env, company, user))) {
+    return c.json({ detail: 'Not authorized to edit this company' }, 403);
+  }
+  return { user, company };
+}
+
+/** Best effort: a stored object left behind is an orphan, never a wrong logo. */
+async function dropStoredLogo(store: R2Bucket, key: string) {
+  try { await store.delete(key); } catch (e) { console.warn('[company/logo] delete', key, e); }
+}
+
+r.post('/company/:uid/logo', async (c) => {
+  try {
+    const gate = await logoEditGate(c);
+    if (gate instanceof Response) return gate;
+    const { user, company } = gate;
+    const store = logoStore(c.env);
+    if (!store) return storageUnconfigured(c);
+
+    const fileRequired = () => refuse(c, 400, { code: 'file_required', message: 'Choose a PNG or SVG file to upload.' });
+    if (!(c.req.header('content-type') || '').toLowerCase().includes('multipart/form-data')) return fileRequired();
+    let form: FormData;
+    try { form = await c.req.formData(); } catch { return fileRequired(); }
+    const file = form.get('file') as unknown as { type?: string; size?: number; arrayBuffer?: () => Promise<ArrayBuffer> } | null;
+    if (!file || typeof file !== 'object' || typeof file.arrayBuffer !== 'function') return fileRequired();
+    const tooLarge = () => refuse(c, 413, { code: 'file_too_large', message: LOGO_MESSAGES.file_too_large });
+    if (typeof file.size === 'number' && file.size > MAX_LOGO_BYTES) return tooLarge();
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const check = checkLogo(bytes, file.type);
+    if (!check.ok) {
+      return check.code === 'file_too_large' ? tooLarge() : refuse(c, 400, { code: check.code, message: LOGO_MESSAGES[check.code] });
+    }
+
+    const token = newLogoToken();
+    const key = logoKeyFor(company.uid, token, check.kind);
+    try {
+      await store.put(key, bytes, {
+        httpMetadata: { contentType: LOGO_CONTENT_TYPE[check.kind] },
+        customMetadata: { companyId: String(company.id), userId: String(user.id) },
+      });
+    } catch (e) {
+      return refuse(c, 502, { code: 'storage_failed', message: 'The logo could not be stored. Try again.', raw: e });
+    }
+    const previous = storedLogoOf(company.uid, company.logo_url);
+    try {
+      // logo_change membership event: waits on a migration that widens company_membership_events.kind; #4201.
+      await c.env.DB.prepare('UPDATE company_profiles SET logo_url = ?, updated_at = ? WHERE id = ?')
+        .bind(logoUrlFor(company.uid, token, check.kind), nowIso(), company.id).run();
+    } catch (e) {
+      await dropStoredLogo(store, key);
+      throw e;
+    }
+    if (previous && previous.key !== key) await dropStoredLogo(store, previous.key);
+    const fresh = await c.env.DB.prepare('SELECT * FROM company_profiles WHERE id = ?').bind(company.id).first<Company>();
+    return c.json(await detailDto(c.env, fresh!, user));
+  } catch (e) { return mapError(c, e); }
+});
+
+r.delete('/company/:uid/logo', async (c) => {
+  try {
+    const gate = await logoEditGate(c);
+    if (gate instanceof Response) return gate;
+    const { user, company } = gate;
+    const previous = storedLogoOf(company.uid, company.logo_url);
+    const store = logoStore(c.env);
+    if (previous && !store) return storageUnconfigured(c);
+    if (company.logo_url != null) {
+      // logo_change membership event: waits on a migration that widens company_membership_events.kind; #4201.
+      await c.env.DB.prepare('UPDATE company_profiles SET logo_url = NULL, updated_at = ? WHERE id = ?')
+        .bind(nowIso(), company.id).run();
+    }
+    if (previous && store) await dropStoredLogo(store, previous.key);
+    const fresh = await c.env.DB.prepare('SELECT * FROM company_profiles WHERE id = ?').bind(company.id).first<Company>();
+    return c.json(await detailDto(c.env, fresh!, user));
+  } catch (e) { return mapError(c, e); }
+});
+
+r.get('/company/:uid/logo', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const company = await getCompanyOr404(c.env, c.req.param('uid'));
+    const notFound = () => refuse(c, 404, { code: 'not_found', message: 'Company not found.' });
+    if (!company || !(await viewerIsMember(c.env, company.id, user))) return notFound();
+    const stored = storedLogoOf(company.uid, company.logo_url);
+    const store = logoStore(c.env);
+    const none = () => refuse(c, 404, { code: 'no_stored_logo', message: 'This company has no uploaded logo.' });
+    if (!stored || !store) return none();
+    const obj = await store.get(stored.key);
+    if (!obj) return none();
+    return new Response(obj.body, { headers: logoHeaders(stored.kind) });
   } catch (e) { return mapError(c, e); }
 });
 

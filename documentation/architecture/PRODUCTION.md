@@ -18,6 +18,7 @@ post-deploy checklist.
 | MCP OAuth        | OAuth 2.1 + KV             | Cloudflare KV (`OAUTH_KV`)              | `cloudflare-worker/src/mcp/oauth.ts`             |
 | Job queue        | Cloudflare Queues + cron   | Cloudflare                             | `cloudflare-worker/src/services/queueWorker.ts` |
 | File storage     | R2                         | Cloudflare R2 (`studioos-files`)       | bound as `env.FILES`                            |
+| Company logos    | R2                         | Cloudflare R2 (`studioos-company-logos`) | bound as `env.COMPANY_LOGOS` (#4201); created by an operator before the deploy that binds it |
 | Vector search    | Vectorize                  | Cloudflare (`axal-search`)             | bound as `env.VECTORIZE`                        |
 | Dev backend      | FastAPI (Python)           | Local Replit only                      | `backend/`                                      |
 | Frontend         | React + Vite               | **Cloudflare Workers** — the `studioos` Worker's `[assets]` copy of `docs/`, on `axal.vc` + `app.axal.vc` | `frontend/`                                     |
