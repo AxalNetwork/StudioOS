@@ -9,17 +9,17 @@
  * four rows of the shipped document silently split into 11-13 cells against a
  * 9-cell header. Nothing failed; the page just rendered wrong.
  *
- * `--check` cannot catch this: it only asks whether the file matches what the
- * generator would produce right now, so a generator that emits a broken table
- * consistently passes. This asks the different question — is the output
- * well-formed.
+ * A freshness check could not catch this: a generator that emits a broken
+ * table consistently passes it. This asks the different question — is the
+ * output well-formed. D4103 (#4103): the document is no longer committed, so
+ * this reads the generator's output, not a file on disk.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { outputs } from '../../scripts/build-profile-routing.mjs';
 
 const DOC = 'documentation/architecture/PROFILE_ROUTING.md';
+const generated = () => new Map(outputs()).get(DOC);
 
 /** Split a GFM table row: a pipe preceded by a backslash is content, not a cell edge. */
 function cells(row) {
@@ -37,7 +37,7 @@ function cells(row) {
 const isDivider = (l) => /^\|[\s|:-]+\|$/.test(l);
 
 test('every generated table row has its header’s column count', () => {
-  const lines = readFileSync(resolve(process.cwd(), DOC), 'utf8').split('\n');
+  const lines = generated().split('\n');
   const bad = [];
   let header = null;
   let rows = 0;
@@ -57,7 +57,7 @@ test('every generated table row has its header’s column count', () => {
 test('no cell double-escapes a pipe', () => {
   // `\\|` is the exact shape that breaks a row: escaped backslash, then a live
   // separator. `\|` (one backslash) is the correct escape and stays.
-  const doc = readFileSync(resolve(process.cwd(), DOC), 'utf8');
+  const doc = generated();
   const hits = [...doc.matchAll(/\\\\+\|/g)].map((m) => m[0]);
   assert.deepEqual(hits, [],
     `${hits.length} double-escaped pipe(s) — each one ends its row early`);
@@ -87,7 +87,7 @@ test('esc round-trips every metacharacter shape the source can hold', async () =
 test('no escaped output can end a table row early', () => {
   // The failure mode in one sentence: `\\|` reads as escaped-backslash plus a
   // LIVE separator. Whatever esc emits, it must never produce that shape.
-  const doc = readFileSync(resolve(process.cwd(), DOC), 'utf8');
+  const doc = generated();
   for (const row of doc.split('\n').filter((l) => l.startsWith('|'))) {
     assert.doesNotMatch(row, /(?<!\\)\\\\\|/,
       `row ends early on an escaped backslash + pipe:\n  ${row.slice(0, 120)}`);

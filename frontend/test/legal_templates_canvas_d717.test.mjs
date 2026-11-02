@@ -19,6 +19,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { readRouteMap } from '../../scripts/lib/routeMap.mjs';
 
 const at = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const FILE = 'Legal Documents · Templates.dc.html';
@@ -82,7 +83,7 @@ test('D717 the README row names the four routes, the grade and #1782, and says t
 });
 
 test('D717 ROUTE_MAP triages L9 to L12: L9\'s editor and catalog, L10 and L11 are CURRENT; L9\'s other rows and L12 wait on their PRs', () => {
-  const map = at('documentation/architecture/ROUTE_MAP.md');
+  const map = readRouteMap();
   const start = map.indexOf('### Legal templates Worker contract (D717, #1782)');
   const end = map.indexOf('\n### ', start + 1);
   assert.ok(start > 0 && end > start);
