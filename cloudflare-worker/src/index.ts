@@ -261,6 +261,7 @@ import deckDraft from './routes/deck_draft';
 import deckCoedit from './routes/deck_coedit';
 import deckElementModels from './routes/deck_element_models';
 import { adminDeckModels, deckModelPresets } from './routes/deck_model_presets';
+import deckTemplates from './routes/deck_templates';
 import deckElements from './routes/deck_elements';
 import deckUsage from './routes/deck_usage';
 import deckStage from './routes/deck_stage';
@@ -1418,6 +1419,7 @@ app.route('/api/decks', deckElementModels);
 // D1549 (#3796): the deck's preset and HQ's locks (`/:id/model-presets`), before `decks`; and HQ's org default and lock table.
 app.route('/api/decks', deckModelPresets);
 app.route('/api/admin/ai/deck-models', adminDeckModels);
+app.route('/api/decks', deckTemplates);
 app.route('/api/decks', deckElements);
 // D1524 (#3776): the AIRail's plain usage meter (`/:id/usage`).
 app.route('/api/decks', deckUsage);
