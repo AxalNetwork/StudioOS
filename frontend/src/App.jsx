@@ -513,6 +513,8 @@ const PublicPartnerProfilePage = lazy(() => import('./pages/PublicPartnerProfile
 const PublicProfilePage = lazy(() => import('./pages/PublicProfilePage'));
 const PublicStartupProfilePage = lazy(() => import('./pages/PublicStartupProfilePage'));
 const PitchDeckPrintPage = lazy(() => import('./pages/PitchDeckPrintPage'));
+// D1564 (#3811): a published deck framed on a site its founder listed; the Worker answers only those frames.
+const DeckEmbedPage = lazy(() => import('./pages/DeckEmbedPage'));
 import { PERSONA_BY_ID as PERSONA_LOOKUP } from './lib/personas';
 const EmailChangeConfirmPage = lazy(() => import('./pages/EmailChangeConfirmPage'));
 const EmailChangeRevokePage = lazy(() => import('./pages/EmailChangeRevokePage'));
@@ -2861,6 +2863,7 @@ function AppInner() {
       <Route path="/partner/relationships/:id" element={guard(['admin', 'partner'], <PartnerRelationshipLog />)} />
       <Route path="/deck/:id/print" element={guard(['admin', 'founder', 'partner', 'investor'], <PitchDeckPrintPage />)} />
       <Route path="/deck/share/:token" element={<PitchDeckPrintPage shareMode />} />
+      <Route path="/embed/:token" element={<DeckEmbedPage />} />
       {/* Task #53 — canonical share URL per spec is /share/deck/<token>. */}
       {/* Build queue #120 — public, audience-scoped cap-table link. No auth:
           the payload is redacted server-side for the link's audience. */}
@@ -3607,6 +3610,8 @@ function AppInner() {
       <Route path="/calendar/agenda" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CalendarPage />)} />
       {/* D1211 (#3177): an item's drawer over the view it was opened from (CAL4, CAL5, CAL18). */}
       <Route path="/calendar/item/:kind/:id" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CalendarPage />)} />
+      {/* D1485 (#3979): a Google or Outlook event's read-only sheet, over the view it was opened from. */}
+      <Route path="/calendar/external/:kind/:id" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CalendarPage />)} />
       {/* D1212 (#3178): the connected calendars (CAL9) and Google's panel (CAL10), over the calendar. */}
       <Route path="/calendar/connected" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CalendarPage />)} />
       <Route path="/calendar/sources" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CalendarPage />)} />

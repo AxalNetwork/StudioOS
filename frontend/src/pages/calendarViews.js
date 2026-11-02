@@ -55,7 +55,7 @@ export const FAMILIES = Object.freeze([
   { key: 'learning', label: 'Learning', kinds: ['learning'] },
   // D1486 §b (#3981): Publish's sends and Grow › Distribution's planned pieces.
   { key: 'grow', label: 'Grow', kinds: ['publish_send', 'content_planned'] },
-  { key: 'other', label: 'From other calendars', kinds: ['calendly_event'] },
+  { key: 'other', label: 'From other calendars', kinds: ['calendly_event', 'external_google', 'external_microsoft'] },
 ]);
 
 export const familyOf = (kind) => FAMILIES.find((f) => f.kinds.includes(kind))?.key || null;

@@ -42,7 +42,7 @@ test('the addresses and the six states, in the canvas order, each with its pill'
   assert.equal(connectedOf('/calendar/connected/'), 'list');
   assert.equal(connectedOf('/calendar/connected/google'), 'google');
   assert.equal(connectedOf('/calendar/week'), null);
-  assert.deepEqual(STATES.map((s) => pillText(s.key)), ['◌ Checking', '– Not set up on Axal yet', '– Not connected', '✓ Connected', '! Last copy failed · Reconnect', '✕ Could not be read']);
+  assert.deepEqual(STATES.map((s) => pillText(s.key)), ['◌ Checking', '– Not set up on Axal yet', '– Not connected', '✓ Connected', '! Last copy failed · Reconnect', '! Reconnect to show its events', '✕ Could not be read']);
   assert.equal(pillText('failed', { sync_error: { at: '2026-11-10T10:12:00Z' } }).replace(/\d\d:\d\d/, 'HH:MM'), '! Last copy failed · HH:MM · Reconnect');
 });
 

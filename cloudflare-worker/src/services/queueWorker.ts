@@ -1,3 +1,4 @@
+import { extractDataroomFile } from './decks/dataroomExtract';
 /**
  * Queue consumer — claims pending jobs and dispatches them to AI/business
  * handlers. Invoked by the cron `scheduled()` handler and by the manual
@@ -64,6 +65,9 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
     }
   }
   switch (job.job_type) {
+    case 'dataroom_extract':
+      await extractDataroomFile(env, payload, job.id);
+      break;
     case 'ai_scoring': {
       // Writes to `ai_score_drafts`, not `score_snapshots` (migration 179).
       // This scorer produces 4 category totals on a 0-75 scale with no

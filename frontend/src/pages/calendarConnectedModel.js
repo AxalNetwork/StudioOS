@@ -31,9 +31,22 @@ export const STATES = Object.freeze([
   { key: 'off', mark: '–', label: 'Not connected', tone: 'n' },
   { key: 'connected', mark: '✓', label: 'Connected', tone: 'g' },
   { key: 'failed', mark: '!', label: 'Last copy failed', tone: 'a' },
+  // D1485 (#3979): its events could not be read because the saved connection expired or was revoked.
+  { key: 'reconnect', mark: '!', label: 'Reconnect to show its events', tone: 'a' },
   { key: 'unreadable', mark: '✕', label: 'Could not be read', tone: 'r' },
 ]);
 export const stateOf = (key) => STATES.find((s) => s.key === key) || STATES[0];
+
+/**
+ * D1485 (#3979): how the page's read of this provider's events answered, from
+ * `GET /calendar/events`' `sources`: 'reconnect', 'rate_limited', 'unreadable',
+ * or null when it answered or was not asked (no connection gives no source).
+ */
+export function externalReadError(sources, provider) {
+  const kind = provider === 'google' ? 'external_google' : 'external_microsoft';
+  const row = Array.isArray(sources) ? sources.find((s) => s?.kind === kind) : null;
+  return row && !row.ok ? (row.error || 'unreadable') : null;
+}
 
 /** "10 Nov 09:12", or null when the stamp is missing or not a date. */
 export function stamp(at) {
@@ -98,6 +111,12 @@ export function connectionRow(key, state, status = null) {
         sub: `${status?.sync_error?.message || 'The last copy did not finish.'} ${last ? `The ${last} copy is the latest in ${where}.` : 'No copy has finished yet.'}`,
         actions: [{ key: 'connect', label: 'Reconnect', primary: true }, key === 'google' ? { key: 'manage', label: 'Manage', to: GOOGLE_PATH } : { key: 'disconnect', label: 'Disconnect…' }],
       };
+    case 'reconnect':
+      return {
+        ...base,
+        sub: `The saved connection to ${key === 'google' ? 'Google' : 'Outlook'} has expired or was withdrawn, so its events are not shown here and nothing new is copied. Reconnect to show them again.`,
+        actions: [{ key: 'connect', label: 'Reconnect', primary: true }, key === 'google' ? { key: 'manage', label: 'Manage', to: GOOGLE_PATH } : { key: 'disconnect', label: 'Disconnect…' }],
+      };
     case 'off':
       return { ...base, sub: `Not connected. Nothing is written to ${key === 'google' ? 'Google' : 'Outlook'} until you connect.`, actions: [{ key: 'connect', label: 'Connect' }] };
     case 'unconfigured':
@@ -107,6 +126,28 @@ export function connectionRow(key, state, status = null) {
     default:
       return { ...base, sub: 'Checking…', actions: [] };
   }
+}
+
+/**
+ * D1485 part 4 (#3979): "Copy new Axal sessions to…", from `GET /calendar/sources`'
+ * `copy_target`. A calendar that is not connected cannot be chosen (the Worker
+ * answers 409), and 'all' copies to each one that is, today's behaviour.
+ */
+export function copyTargetChoices(gState, mState) {
+  const usable = (s) => s === 'connected' || s === 'failed';
+  return [
+    { key: 'all', label: 'Every connected calendar', ok: true },
+    { key: 'google', label: 'Google Calendar only', ok: usable(gState) },
+    { key: 'microsoft', label: 'Outlook only', ok: usable(mState) },
+    { key: 'none', label: 'Nowhere', ok: true },
+  ];
+}
+
+/** The sentence a refused copy-target change is shown with, from the Worker's code. */
+export function copyTargetRefusal(e) {
+  const code = e?.code || e?.data?.code || e?.data?.error?.code;
+  if (code === 'provider_not_connected') return 'That calendar is not connected, so sessions cannot be copied to it. Connect it first.';
+  return 'The choice could not be saved. Try again.';
 }
 
 /** CAL9's "What each option does". */

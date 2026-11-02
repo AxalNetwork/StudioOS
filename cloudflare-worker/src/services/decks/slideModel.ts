@@ -36,16 +36,30 @@
  * corner, confidential), `voice`, `art_direction`, `lang` and `dir`.
  * A card is at most 256 KB and 12 areas.
  *
+ * D1579 (#3826, deck v2 E6) adds, on a card, its working state:
+ *   status      'todo', 'in_progress' or 'done' (To do, In progress, Done).
+ *   assignee    the user id of the person working on it, one of the people
+ *               D1570's rule lets work on the deck (`routes/deck_comments.ts`
+ *               `peopleOf`), checked when a version is saved.
+ * Both live in the version's card document (no table of their own) and are
+ * the venture's: `publicDeckOf` leaves them out of every outside reader.
+ *
+ * D1533 (#3777) — direct manipulation: a block and a decor item keep a group
+ * id and a pin (the Arrange set's Lock), and a decor item its layer and an
+ * 8 px box (`arrange.ts`). Decor stays in the card's one `decor` list.
+ *
  * A binding is D896's: `{ source_key, record_ref, as_of, grade, snapshot_hash }`
  * (`services/decks/sources.ts`). A metric tile with no value is `value: null`,
  * which every reader shows as "Not recorded", never 0.
  */
 import { sanitizeBinding } from './sources';
+import { sanitizeArtDirection } from './artDirection';
 import { cellText, tableLines } from './tableCells';
 
 export { cellText, tableLines };
 import { diagramProblem, sanitizeDiagram } from './diagramModel';
 import { CUSTOM, STRUCTURE_IDS, areasProblem, sanitizeAreas } from './structures';
+import { BASELINE, atOf, blockArrange, decorArrange, decorHoldsContent, groupOf, layered } from './arrange';
 import { DECOR_KINDS, MAX_DECOR as LIBRARY_MAX_DECOR, cleanDecorItem } from './elements';
 
 export const GRID_COLS = 12;
@@ -61,6 +75,9 @@ export const MAX_ACCENT_RUNS = 3;
 export const MAX_PARAS = 40;
 export const MAX_RUNS = 40;
 export const SECTION_MAX = 60;
+/** D1579 (#3826): a card's status, in the strip's order. */
+export const CARD_STATUSES = ['todo', 'in_progress', 'done'] as const;
+export type CardStatus = typeof CARD_STATUSES[number];
 export const FOOTER_MAX = 120;
 /** WCAG AA for body text: an accent run must read against the card. */
 export const ACCENT_CONTRAST = 4.5;
@@ -300,6 +317,8 @@ function decorOf(v: unknown): DecorItem[] | null {
     const item: DecorItem = { id: typeof d.id === 'string' && ID.test(d.id) ? d.id : `d${i + 1}`, kind, ...(lib ? { ref: lib.ref, tone: lib.tone, ...(lib.seed ? { seed: lib.seed } : {}), ...(lib.licence ? { licence: { ...lib.licence } } : {}) } : {}) };
     const grid = gridOf(d.grid);
     if (grid) item.grid = grid;
+    // D1533 (#3777): its group, its pin (the Arrange set's Lock), its layer and its 8 px box (`arrange.ts`).
+    Object.assign(item, decorArrange(d));
     return [item];
   });
   return out.length ? out : null;
@@ -389,6 +408,8 @@ export function sanitizeBlocks(input: unknown, url: UrlGuard, ground = '#ffffff'
     if (typeof v.element === 'string' && ELEMENT_ID.test(v.element)) block.element = v.element;
     if (typeof v.session_uid === 'string' && GATE_REF.test(v.session_uid)) block.session_uid = v.session_uid;
     if (typeof v.logo_key === 'string' && GATE_REF.test(v.logo_key)) block.logo_key = v.logo_key;
+    // D1533 (#3777): the area's group and its pin (the Arrange set's Lock, not #3819's brand-kit `locked`).
+    Object.assign(block, blockArrange(v));
     out.push(block);
   }
   return out;
@@ -408,8 +429,13 @@ export function sanitizeModel(s: any, url: UrlGuard): Record<string, unknown> {
   if (s?.hidden === true) out.hidden = true;
   const section = str(s?.section, SECTION_MAX);
   if (section) out.section = section;
-  const decor = decorOf(s?.decor);
+  // D1533 (#3777): the decor in its layer order, bottom first; an item that claims a block's kind is not decor.
+  const decor = layered(decorOf(s?.decor), BLOCK_KINDS);
   if (decor) out.decor = decor;
+  // D1579: the card's status and assignee, each kept only when set, so a card saved before E6 hashes as it did.
+  const status = oneOf(s?.status, CARD_STATUSES);
+  if (status) out.status = status;
+  if (Number.isSafeInteger(s?.assignee) && s.assignee > 0) out.assignee = s.assignee;
   const bd = bindingOf(s?.binding);
   if (bd) out.binding = bd;
   // D1499: a card's structure and areas, kept only when sound; a card without them derives its areas (`structures.areasOf`).
@@ -445,7 +471,8 @@ export function sanitizeTheme(v: any, url: UrlGuard): Record<string, unknown> & 
   if (chrome) out.chrome = chrome;
   const voice = str(v.voice, 200);
   if (voice) out.voice = voice;
-  const art = str(v.art_direction, 500);
+  // D1544 (#3784): a sentence (D1500) or the structured direction every image inherits.
+  const art = sanitizeArtDirection(v.art_direction);
   if (art) out.art_direction = art;
   if (typeof v.lang === 'string' && LANG.test(v.lang)) out.lang = v.lang;
   const dir = oneOf(v.dir, DIRS);
@@ -469,12 +496,18 @@ export function modelProblems(slides: unknown, url: UrlGuard): string[] {
     if (ap) out.push(`${card}: ${ap}`);
     // D1500: the caps a card is refused past, each with its sentence.
     if (s?.decor != null && (!Array.isArray(s.decor) || s.decor.length > MAX_DECOR)) out.push(`${card}: a card holds at most ${MAX_DECOR} decor items.`);
-    // D1541: a library item the elements library cannot draw.
+    // D1533 (#3777): decor never holds a figure or body text; its box sits on the 8 px baseline; a group id is a plain id.
     for (const d of Array.isArray(s?.decor) ? s.decor : []) {
+      if (decorHoldsContent(d, BLOCK_KINDS)) out.push(`${card}: decor never holds a figure or body text.`);
+      if (d?.at != null && !atOf(d.at)) out.push(`${card}: a decor item's box sits on the ${BASELINE} px baseline, inside the slide.`);
+      if (d?.group != null && !groupOf(d.group)) out.push(`${card}: a group id is at most 40 letters, digits, - or _.`);
       if ((DECOR_KINDS as readonly string[]).includes(String(d?.kind)) && d?.ref != null && !cleanDecorItem(d)) out.push(`${card}: ${String(d?.ref ?? 'a decor item').slice(0, 40)} is not in the elements library.`);
     }
     if (cardBytes(s) > CARD_BYTES_MAX) out.push(`${card}: the card is larger than 256 KB. Remove an image or some text, then save.`);
     if (s?.section != null && (typeof s.section !== 'string' || s.section.length > SECTION_MAX)) out.push(`${card}: the section name is at most ${SECTION_MAX} characters.`);
+    // D1579: a status is one of the three; an assignee is a person's id (whether they may work on the deck is the save's check).
+    if (s?.status != null && !oneOf(s.status, CARD_STATUSES)) out.push(`${card}: the status is To do, In progress or Done.`);
+    if (s?.assignee != null && !(Number.isSafeInteger(s.assignee) && s.assignee > 0)) out.push(`${card}: the assignee must be a person on the deck.`);
     if (s?.blocks == null) return;
     if (!Array.isArray(s.blocks)) { out.push(`${card}: blocks must be a list.`); return; }
     if (s.blocks.length > MAX_BLOCKS) out.push(`${card}: a card holds at most ${MAX_BLOCKS} blocks.`);
@@ -496,6 +529,7 @@ export function modelProblems(slides: unknown, url: UrlGuard): string[] {
         out.push(`${where}: a table holds at most ${TABLE_COLS} columns and ${TABLE_ROWS} rows.`);
       }
       if (v?.binding != null && !bindingOf(v.binding)) out.push(`${where}: the binding is not a source.`);
+      if (v?.group != null && !groupOf(v.group)) out.push(`${where}: a group id is at most 40 letters, digits, - or _.`);
       const dp = kind === 'graphic' ? diagramProblem(v?.diagram) : null;
       if (dp) out.push(`${where}: ${dp}`);
       const pp = kind === 'text' ? parasProblem(v?.paras, groundOf(s)) : null;

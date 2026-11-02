@@ -13,7 +13,7 @@ import { Lightbox, Sheet, Unreadable, actionDanger, actionGhost, actionPrimary }
 import CalendarComplianceSheet from './CalendarComplianceSheet';
 import {
   ANSWERS, ANSWER_WORD, KIND_WORDS, LENGTHS, NOT_PARTY, NOT_PARTY_SUB, SAYS,
-  copyLines, goingLine, joinOpen, minutesOf, noChangeLine, refusalOf, startError, startOf, whenLine, whenShort, zoneLabel,
+  copyLines, externalAction, goingLine, joinOpen, minutesOf, noChangeLine, refusalOf, startError, startOf, whenLine, whenShort, zoneLabel,
 } from './calendarItemModel';
 
 const INK = 'text-axal-ink dark:text-gray-200';
@@ -177,6 +177,44 @@ function Where({ item, now }) {
       </span>
       <span className={`text-[11.5px] ${MUTED}`}>Join turns violet 15 minutes before the start.</span>
     </Section>
+  );
+}
+
+/**
+ * D1485 (#3979): a Google or Outlook event on the calendar. It is read-only and
+ * not stored, so `item` is the page's own read of it, or null when this view
+ * does not hold it. It offers one thing, opening it where it lives.
+ */
+export function ExternalItemSheet({ kind, item, onClose }) {
+  const zone = viewerZone();
+  const kindWord = KIND_WORDS[kind] || kind;
+  const open = externalAction(item);
+  const footer = open
+    ? <a className={actionPrimary} href={open.url} target="_blank" rel="noopener noreferrer" data-testid="cal-external-open">{open.label} ↗</a>
+    : null;
+  return (
+    <Sheet label={item?.title || kindWord} title={item?.title || kindWord} onClose={onClose} width={480} footer={footer} testId="cal-item-drawer"
+      eyebrow={null} sub={<span className={EYEBROW}>{kindWord}</span>}>
+      <div className="flex flex-col" data-testid={`cal-item-${kind}`}>
+        {item ? (
+          <>
+            <Section title="When" testId="cal-external-when">
+              <p className={`m-0 font-mono text-[12.5px] font-semibold leading-relaxed ${INK}`}>{whenLine(item, zone)}</p>
+            </Section>
+            <Section testId="cal-external-note">
+              <p className={`m-0 text-[12.5px] ${MUTED}`}>
+                {`Read from ${kind === 'external_google' ? 'your Google Calendar' : 'Outlook'} when this page loaded. It is changed there, not here.`}
+                {item.possible_duplicate ? ' It may be the same as an Axal item at the same time.' : ''}
+              </p>
+            </Section>
+          </>
+        ) : (
+          <Section testId="cal-external-missing">
+            <p className={`m-0 text-[13px] ${MUTED}`}>This event is not in the view that is open, so it cannot be shown. Go back to the calendar and open it from there.</p>
+          </Section>
+        )}
+      </div>
+    </Sheet>
   );
 }
 

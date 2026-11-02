@@ -45,6 +45,7 @@ The retention periods for generated assets are owner decision W (#3716), pending
 | `deck_area_batches` | one generation run on a deck's areas or a whole-deck build: its state, quote, hold and what it charged (D1502) | deck cascade | none |
 | `deck_area_batch_steps` | each step of a run: the area, element, model, state, charge, input and result (D1502) | cascade from its run | none |
 | `deck_logos` | a venture's customer logos for the logo wall: the customer's name, the image, and the permission to show it (D1543) | venture cascade | none of its own (the image is a `deck_images` row) |
+| `deck_rehearsals` | a founder’s rehearsal transcript, card timings and counted report (D1580) | deck cascade | rehearsal audio: removed after an hour unless its maker keeps it; turning Keep the audio off removes it immediately |
 
 ## Not covered yet
 

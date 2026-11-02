@@ -2,11 +2,12 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { calendarConnectionsApi } from '../lib/api/calendarConnections';
+import { calendarSourcesApi } from '../lib/api/calendarSources';
 import { connectorsApi } from '../lib/api/connectors';
 import { Lightbox } from '../ui';
 import BrandIcon from '../ui/BrandIcon.jsx';
 import {
-  CONNECTED_PATH, GOOGLE_PATH, OPTIONS, STATES, connectionRow, connectorState, disconnectCopy, disconnectRefusal,
+  CONNECTED_PATH, GOOGLE_PATH, OPTIONS, STATES, connectionRow, connectorState, copyTargetChoices, copyTargetRefusal, disconnectCopy, disconnectRefusal,
   gmailStillGranted, googleAbilities, maskedLink, pillText, stamp, subscribeState,
 } from './calendarConnectedModel';
 
@@ -50,6 +51,48 @@ async function runCopy(provider, setSaid, reload) {
     setSaid('The copy did not finish. Its state below says why.');
   }
   await reload();
+}
+
+/**
+ * D1485 part 4 (#3979): "Copy new Axal sessions to…". The stored choice is read
+ * from `GET /calendar/sources`; until it is, or when it cannot be, nothing is
+ * drawn as chosen and the choice cannot be changed.
+ */
+function CopyTarget({ gState, mState }) {
+  const [target, setTarget] = useState(undefined);
+  const [said, setSaid] = useState('');
+  useEffect(() => {
+    let live = true;
+    calendarSourcesApi.sources()
+      .then((r) => { if (live) setTarget(typeof r?.copy_target === 'string' ? r.copy_target : null); })
+      .catch(() => { if (live) setTarget(null); });
+    return () => { live = false; };
+  }, []);
+  const choose = async (next) => {
+    setSaid('Saving…');
+    try {
+      const r = await calendarSourcesApi.setCopyTarget(next);
+      setTarget(r?.copy_target ?? next);
+      setSaid('Saved. Sessions already copied stay where they are.');
+    } catch (e) {
+      setSaid(copyTargetRefusal(e));
+    }
+  };
+  return (
+    <section className="cal-sect" data-testid="cal-conn-copy-target">
+      <label className="cal-eb" htmlFor="cal-copy-target">Copy new Axal sessions to…</label>
+      {target === undefined ? <p data-testid="cal-conn-copy-target-reading">Checking…</p> : null}
+      {target === null ? <p data-testid="cal-conn-copy-target-unreadable">Where new sessions are copied could not be read. Try again later.</p> : null}
+      {typeof target === 'string' ? (
+        <select id="cal-copy-target" className="mt-1 w-full rounded-[9px] border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" value={target} onChange={(e) => choose(e.target.value)} data-testid="cal-conn-copy-target-select">
+          {copyTargetChoices(gState, mState).map((o) => (
+            <option key={o.key} value={o.key} disabled={!o.ok && o.key !== target}>{o.ok ? o.label : `${o.label} (not connected)`}</option>
+          ))}
+        </select>
+      ) : null}
+      {said ? <p role="status" className="cal-conn-said" data-testid="cal-conn-copy-target-said">{said}</p> : null}
+    </section>
+  );
 }
 
 /** CAL9 / CAL21d: the four calendars, the six states and what each option does. */
@@ -101,6 +144,7 @@ export function ConnectedPanel({ google, microsoft, gState, mState, reloadGoogle
             </li>
           ))}
         </ul>
+        <CopyTarget gState={gState} mState={mState} />
         <section className="cal-sect" data-testid="cal-conn-states">
           <div className="cal-eb">States a calendar can be in</div>
           <div className="cal-states">{STATES.map((s) => <Pill key={s.key} state={s.key} />)}</div>
@@ -126,7 +170,7 @@ export function GooglePanel({ google, gState, reloadGoogle, onClose }) {
   const [gmail, setGmail] = useState(false);
   const [said, setSaid] = useState('');
   const last = stamp(google?.last_synced_at);
-  const connected = gState === 'connected' || gState === 'failed';
+  const connected = ['connected', 'failed', 'reconnect'].includes(gState);
   return (
     <Lightbox label="Google connection" eyebrow="Connected calendars" title="Google connection" width={600}
       sub={connected ? (last ? `Last copy ${last}.` : 'No copy has run yet.') : connectionRow('google', gState, google).sub}
@@ -350,6 +394,7 @@ export function ConnectedSummary({ gState, mState, google, microsoft }) {
     if (state === 'off') return `Nothing is written to ${key === 'google' ? 'Google' : 'Outlook'}`;
     if (state === 'unconfigured') return 'Not set up on Axal yet';
     if (state === 'unreadable') return 'Could not be read';
+    if (state === 'reconnect') return 'Reconnect to show its events';
     return 'Checking…';
   };
   return (
