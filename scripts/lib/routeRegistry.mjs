@@ -144,8 +144,9 @@ export function importBindings(src, fromDirRel) {
 
 /** The name `ident` is exported under in `src`, or null when it is not exported. */
 function exportNameOf(src, ident) {
-  if (new RegExp(`^export\\s+default\\s+${ident}\\s*;`, 'm').test(src)) return 'default';
-  if (new RegExp(`^export\\s+(?:const|let|function)\\s+${ident}\\b`, 'm').test(src)) return ident;
+  // Fixed patterns, compared by name: no regex is built from `ident`.
+  for (const m of src.matchAll(/^export\s+default\s+([\w$]+)\s*;/gm)) if (m[1] === ident) return 'default';
+  for (const m of src.matchAll(/^export\s+(?:const|let|function)\s+([\w$]+)(?![\w$])/gm)) if (m[1] === ident) return ident;
   for (const m of src.matchAll(/^export\s*\{([^}]*)\}\s*;/gm)) {
     for (const part of m[1].split(',')) {
       const [name, alias] = part.trim().split(/\s+as\s+/).map((x) => x.trim());
@@ -155,7 +156,7 @@ function exportNameOf(src, ident) {
   return null;
 }
 
-const declares = (src, ident) => new RegExp(`(?:^|[^\\w$.])(?:const|let|var)\\s+${ident.replace(/\$/g, '\\$')}\\s*[=:]`).test(src);
+const declares = (src, ident) => [...src.matchAll(/(?:^|[^\w$.])(?:const|let|var)\s+([\w$]+)\s*[=:]/g)].some((m) => m[1] === ident);
 
 /**
  * The routers `index.ts` still mounts by hand, as `file#exportName` keys, with

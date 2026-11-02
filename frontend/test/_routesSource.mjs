@@ -143,7 +143,7 @@ export function missingRouteModules(root = process.cwd()) {
   for (const file of routeModuleFiles(root)) {
     const name = routeModuleExport(file);
     const src = readFileSync(resolve(root, file), 'utf8');
-    const exported = new RegExp(`^export default function ${name}\\(`, 'm').test(src);
+    const exported = [...src.matchAll(/^export default function ([\w$]+)\(/gm)].some((m) => m[1] === name);
     if (!collected || !composed || !exported) missing.push({ file, name, collected, composed, exported });
   }
   return missing;
