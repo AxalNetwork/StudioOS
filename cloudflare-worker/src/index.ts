@@ -1854,6 +1854,9 @@ import { assertJwtSecretStrength, assertScoringHmacSecret } from './auth';
 // 404 — never reached the client without this: Hono re-throws non-Errors
 // past app.onError. See util/thrownResponse.ts.
 import { withThrownResponses } from './util/thrownResponse';
+// D1539 (#3789): imported here, not inside `scheduled`, so the handler names
+// only this function (mercury_member_privacy_d752 reads its words).
+import { pruneCardBlobs } from './services/decks/cardBlobs';
 
 // Phase 0.1 — D1 schema migration for the partner→investor split.
 // Lazy, idempotent, runs at most once per worker isolate. We piggy-back on the
@@ -2366,7 +2369,6 @@ export default {
         // first written over an hour ago, goes (at most 500 a run).
         if (now.getUTCHours() === 5 && now.getUTCMinutes() === 50) {
           try {
-            const { pruneCardBlobs } = await import('./services/decks/cardBlobs');
             const r = await pruneCardBlobs(env);
             if (r.deleted) console.info(`[cron] deck card blobs pruned=${r.deleted}`);
             cronSummary.push(`deck card blobs pruned=${r.deleted}`);
