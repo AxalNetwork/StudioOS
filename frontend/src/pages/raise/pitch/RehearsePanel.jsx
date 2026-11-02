@@ -4,9 +4,10 @@ import { reportError } from '../../../lib/log';
 import { useRailOption } from '../../../ui/railCrumbs';
 import { rehearse as rehearsals, shown } from './deckV2Adapter.js';
 import { refusalOf } from './newDeckModel';
+import LikelyQuestions from './LikelyQuestions.jsx';
 import {
   AUDIO_BITS_PER_SECOND, AUDIO_GONE, KEEP_AUDIO, KEEP_AUDIO_OFF, KEEP_AUDIO_ON, MAX_RECORDING_MS, NO_FIGURES, NO_MIC, PITCH_CHOICES,
-  QUESTIONS_LATER, RETENTION, TOO_SHORT, budgetLine, cardBudgetsMs, clock, figureGrade, holdLine, noteItemsOf, rowOf, spentByCard, summaryLine,
+  RETENTION, TOO_SHORT, budgetLine, cardBudgetsMs, clock, figureGrade, holdLine, noteItemsOf, rowOf, spentByCard, summaryLine,
 } from './rehearseModel';
 
 /**
@@ -20,8 +21,9 @@ import {
  *              level and the card's notes as a checklist. ← → move the cards;
  *              each move is a mark the report times the cards by.
  *   Report     per card: Time · WPM · Filler words · Pauses · Notes covered;
- *              each figure said that disagrees with a linked one; the "Likely
- *              questions" slot (#3829); "Keep the audio", off by default.
+ *              each figure said that disagrees with a linked one; the likely
+ *              questions with "Practise answers" (D1582, #3829,
+ *              `LikelyQuestions.jsx`); "Keep the audio", off by default.
  *
  * The transcript is one run on the rail option `transcribe:rehearsal`: the
  * model is the member's pick in the AIRail, quoted and held before it runs.
@@ -232,7 +234,7 @@ export default function RehearsePanel({ deck, cards, renderCard, onClose }) {
     );
   }
 
-  if (stage === 'report' && report) return <Report report={report} onKeep={keep} onAgain={() => { setReport(null); setStage('setup'); }} onClose={onClose} problem={problem} />;
+  if (stage === 'report' && report) return <Report deckId={deckId} report={report} onKeep={keep} onAgain={() => { setReport(null); setStage('setup'); }} onClose={onClose} problem={problem} />;
 
   const hold = holdLine(quote);
   const list = earlier?.available ? earlier.value?.rehearsals || [] : [];
@@ -289,7 +291,7 @@ function Problem({ problem }) {
   );
 }
 
-function Report({ report, onKeep, onAgain, onClose, problem }) {
+function Report({ deckId, report, onKeep, onAgain, onClose, problem }) {
   const r = report.report;
   const rows = (r?.cards || []).map(rowOf);
   return (
@@ -328,10 +330,7 @@ function Report({ report, onKeep, onAgain, onClose, problem }) {
           </div>
         )) : <span className="text-[13px] text-gray-400">{NO_FIGURES}</span>}
       </div>
-      <div className={BOX} data-testid="rehearse-questions">
-        <span className={LABEL}>LIKELY QUESTIONS</span>
-        <span className="text-[13px] text-gray-400">{QUESTIONS_LATER}</span>
-      </div>
+      <LikelyQuestions deckId={deckId} />
       <div className={BOX} data-testid="rehearse-keep-audio">
         {report.audio === 'deleted' ? <span className="text-[13px] text-gray-400">{AUDIO_GONE}</span> : (
           <label className="flex items-center gap-2 text-[13.5px] font-bold text-gray-100">
