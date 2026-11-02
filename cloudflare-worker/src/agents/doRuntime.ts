@@ -227,6 +227,13 @@ export class AgentScope implements DurableObject {
     this.core = new ScopeCore(state.storage as unknown as ScopeStorage, env, deps);
   }
 
+  private tellBoards(message: Record<string, unknown>) {
+    const frame = JSON.stringify(message);
+    for (const ws of (this.state as unknown as Socketed).getWebSockets()) {
+      try { ws.send(frame); } catch { /* closing; webSocketClose cleans up */ }
+    }
+  }
+
   private broadcast(status: ScopeStatus) {
     const frame = JSON.stringify({ type: 'agent_status', status });
     for (const ws of (this.state as unknown as Socketed).getWebSockets()) {
@@ -252,6 +259,14 @@ export class AgentScope implements DurableObject {
       switch (path) {
         case '/admit': out = await this.core.admit(scope, body.trigger as Trigger); break;
         case '/track': await this.core.track(body.run as LiveRun); out = { ok: true }; break;
+        // #3850 (E6): a project moved; the live boards hear it before the status that follows.
+        case '/moved': {
+          // The runs the move ended leave the live view.
+          for (const uid of Array.isArray(body.move?.ended) ? body.move.ended : []) await this.core.track({ run_uid: String(uid), agent_id: 0, task_id: 0, status: 'scope_moved' });
+          this.tellBoards({ type: 'scope_moved', move: body.move });
+          out = { ok: true };
+          break;
+        }
         case '/schedule': await this.core.schedule(body.duty as DutyEntry); out = { ok: true }; break;
         case '/cancel-schedule': await this.core.cancelSchedule(Number(body.dutyId)); out = { ok: true }; break;
         case '/status': return json(await this.core.status(scope));
@@ -353,6 +368,12 @@ export function doRuntime(env: Env, call: ScopeCaller | null = bindingCaller(env
 }
 
 /** Tell the scope's object a run moved, so the live view follows. Best effort. */
+/** #3850 (E6): tell a scope's live boards that a project moved (`scope_moved`). No binding: nothing to tell. */
+export async function tellMoved(env: Env, scope: ScopeRef, move: { project_id: number; from: number | null; to: number | null; ended: string[] }, call: ScopeCaller | null = bindingCaller(env)) {
+  if (!call) return;
+  await call(scope, '/moved', { move });
+}
+
 export async function trackRun(env: Env, scope: ScopeRef, run: RunRow | LiveRun, call: ScopeCaller | null = bindingCaller(env)) {
   if (!call) return;
   const live = 'uid' in run ? liveOf(run) : run;

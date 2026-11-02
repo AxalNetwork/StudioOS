@@ -72,6 +72,7 @@ import { terminateRun, trackRun } from '../agents/doRuntime';
 import { workItemRoutes } from './work_items';
 import { memberTimeZone, projectBurnup } from '../services/agents/workBurnup';
 import { WorkRefusal } from '../services/agents/workBoard';
+import { movesOf } from '../services/agents/transfer';
 
 type C = Context<{ Bindings: Env }>;
 
@@ -180,6 +181,20 @@ async function goalsDto(env: Env, s: Scope) {
 }
 
 // ── Goals ───────────────────────────────────────────────────────────────────
+
+// #3850 (E6): the moves a team saw, newest first (TM18's banner). Read gate; at most 20.
+router.get('/:scope/:id/moves', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
+    if (!s) return noScope(c);
+    if (!(await canRead(c.env, s, user))) return notMember(c);
+    const asked = Number(c.req.query('limit') ?? 5);
+    const limit = Number.isSafeInteger(asked) && asked > 0 ? Math.min(asked, 20) : 5;
+    return c.json({ moves: await movesOf(c.env, { kind: s.kind, id: s.id }, limit) });
+  } catch (e) { return mapError(c, e); }
+});
 
 router.get('/:scope/:id/goals', async (c) => {
   try {

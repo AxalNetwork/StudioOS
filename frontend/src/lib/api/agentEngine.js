@@ -4,6 +4,8 @@
 // boards (E8).
 // Worker: routes/agent_engine.ts, migration 727. Every route answers 404
 // `agent_engine_off` until AGENT_ENGINE is on (and TEAM_AGENTS_ENABLED).
+//   GET    /api/teams/:scope/:id/moves?limit=5        → { moves: [{ direction: 'in' | 'out', project: { id, name }, from: { uid, name } | null,
+//                                                    to: { uid, name } | null, by: { uid, name } | null, at, blocked_tasks }] } (#3850, E6)
 //   GET    /api/teams/:scope/:id/goals              → { goals: [{ uid, title, why, metric, target_date, stage, parent: { uid, title } | null,
 //                                                       okr_id, status, priority, progress: { done, total }, cost: { available, value_microusd } }] }
 //   POST   /api/teams/:scope/:id/goals              { title, why?, metric?, target_date?, stage?, parent_goal_uid?, okr_id?, priority? } → 201 { goal }
@@ -52,6 +54,8 @@ const base = (scope, id) => `/teams/${enc(scope)}/${enc(id)}`;
 
 export const agentEngineApi = {
   goals: (scope, id) => request(`${base(scope, id)}/goals`),
+  // #3850 (E6): the moves a team saw, newest first (TM18).
+  moves: (scope, id, { limit } = {}) => request(`${base(scope, id)}/moves${limit ? `?limit=${enc(limit)}` : ''}`),
   createGoal: (scope, id, body) => request(`${base(scope, id)}/goals`, { method: 'POST', body: JSON.stringify(body) }),
   updateGoal: (uid, patch) => request(`/teams/goals/${enc(uid)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   tasks: (scope, id, { goal, assignee, status, module } = {}) => {

@@ -28,6 +28,9 @@ const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const M597 = readFileSync(new URL('../sql/migrations/597_company_archive_and_events.sql', import.meta.url), 'utf8');
 const M685 = readFileSync(new URL('../sql/migrations/685_company_legal_record_and_slugs.sql', import.meta.url), 'utf8');
+// #3850 (E6): a move changes the agent engine's goals and tasks in its own batch, so the engine's tables are here.
+const ENGINE = ['506_ai_rail_proposals', '712_team_agents', '727_scope_goals_and_tasks', '728_agent_engine', '762_scope_task_work_board', '763_task_comments_labels_milestones']
+  .map((m) => readFileSync(new URL(`../sql/migrations/${m}.sql`, import.meta.url), 'utf8'));
 
 // People: Ada is the primary admin of Northwind (company 1) and owns the venture; Ben is a member of
 // Northwind and a co-founder of the venture with a founder account; Cy is a co-founder with no founder
@@ -39,9 +42,10 @@ const VENTURE = 10;
 
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  for (const t of ['users', 'founders', 'projects', 'company_profiles', 'user_company_links', 'activity_logs', 'incorporations']) db.exec(tableFromBaseline(BASELINE, t));
+  for (const t of ['users', 'founders', 'projects', 'company_profiles', 'user_company_links', 'activity_logs', 'incorporations', 'ai_usage_logs']) db.exec(tableFromBaseline(BASELINE, t));
   db.exec(M597);
   db.exec(M685); // D1415: projects.slug, which a move checks
+  for (const m of ENGINE) db.exec(m);
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');
   u.run(ADA, 'founder', 'Ada Made-up', 'ada@example.test', 101);
   u.run(BEN, 'founder', 'Ben Made-up', 'ben@example.test', 102);
@@ -220,6 +224,63 @@ test('the owner seat goes to a co-founder with a founder account who belongs to 
   assert.deepEqual(events(db).map((e) => [e.kind, e.project_id, e.company_id, e.target_user_id, JSON.parse(e.after_json)]),
     [['project_transfer', VENTURE, NORTH, BEN, { owner_user_id: BEN }]]);
   assert.equal((await call(db, env, ADA, 'POST', `/api/projects/${VENTURE}/move`, { company_id: SOUTH })).status, 403, 'Ada no longer owns it');
+});
+
+// ── #3850 (E6 of #3742, D1528 §4.4): what a move and an owner transfer do to the agent engine ──
+
+const agentRow = (db: DatabaseSync, id: number, scope: 'company' | 'project', role: string, sponsor: number) =>
+  db.prepare(`INSERT INTO team_agents (id, uid, scope_kind, company_id, project_id, role_key, first_name, model_id, sponsor_user_id, monthly_cap_microusd, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, '@cf/meta/llama-3.3-70b-instruct-fp8-fast', ?, 5000000, ?)`)
+    .run(id, `agent-${id}`, scope, scope === 'company' ? NORTH : null, scope === 'project' ? VENTURE : null, role, `Made-up ${id}`, sponsor, sponsor);
+const taskRow = (db: DatabaseSync, id: number, status: string, contextProject: number | null) =>
+  db.prepare(`INSERT INTO scope_tasks (id, uid, scope_kind, company_id, title, context_project_id, status, created_by_user_id)
+    VALUES (?, ?, 'company', ?, ?, ?, ?, ?)`).run(id, `task-${id}`, NORTH, `Made-up task ${id}`, contextProject, status, ADA);
+
+test('#3850: the move route cuts the goal roll-up and blocks the old company\'s open tasks about the venture, and its agents travel', async () => {
+  // Mutation checked: the transfer statements left out of projectMoveStatements turn every assertion on goals and tasks red.
+  const db = fixture(); const env = envOf(db); await seats(db, env);
+  const g = db.prepare('INSERT INTO scope_goals (id, uid, scope_kind, company_id, project_id, title, parent_goal_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+  g.run(1, 'g-co', 'company', NORTH, null, 'Northwind goal', null, ADA);
+  g.run(2, 'g-up', 'project', null, VENTURE, 'Rolls up', 1, ADA);
+  g.run(3, 'g-own', 'project', null, VENTURE, 'Its own', null, ADA);
+  agentRow(db, 60, 'company', 'ceo', ADA);
+  agentRow(db, 61, 'project', 'cto', ADA);
+  taskRow(db, 70, 'open', VENTURE);
+  taskRow(db, 71, 'done', VENTURE);
+  taskRow(db, 72, 'open', null);
+
+  const moved = await call(db, env, ADA, 'POST', `/api/projects/${VENTURE}/move`, { company_id: SOUTH });
+  assert.equal(moved.status, 200, JSON.stringify(moved.body));
+  const goals = Object.fromEntries((db.prepare('SELECT id, parent_goal_id FROM scope_goals').all() as any[]).map((r) => [r.id, r.parent_goal_id]));
+  assert.deepEqual(goals, { 1: null, 2: null, 3: null }, 'the venture\'s goal no longer rolls up to Northwind\'s');
+  const tasks = Object.fromEntries((db.prepare('SELECT id, status, blocked_reason, context_project_id FROM scope_tasks').all() as any[])
+    .map((r) => [r.id, [r.status, r.blocked_reason, r.context_project_id]]));
+  assert.deepEqual(tasks, { 70: ['blocked', 'project_left', null], 71: ['done', null, null], 72: ['open', null, null] });
+  const ev = db.prepare('SELECT task_id, actor_user_id, kind, detail_json FROM scope_task_events').all() as any[];
+  assert.deepEqual(ev.map((e) => [e.task_id, e.actor_user_id, e.kind, JSON.parse(e.detail_json)]),
+    [[70, ADA, 'status', { reason: 'project_left', project_id: VENTURE, from: NORTH, to: SOUTH, status_from: 'open', status_to: 'blocked' }]]);
+  assert.deepEqual((db.prepare('SELECT id, status FROM team_agents ORDER BY id').all() as any[]).map((r) => [r.id, r.status]), [[60, 'active'], [61, 'active']],
+    'the venture\'s agent travels; the company\'s stays');
+
+  // A move refused before its batch (here: unchanged) changes no goal or task.
+  db.prepare("UPDATE scope_goals SET parent_goal_id = 1 WHERE id = 3").run();
+  taskRow(db, 73, 'open', VENTURE);
+  db.prepare('UPDATE scope_tasks SET company_id = ? WHERE id = 73').run(SOUTH);
+  assert.equal((await call(db, env, ADA, 'POST', `/api/projects/${VENTURE}/move`, { company_id: SOUTH })).body.code, 'unchanged');
+  assert.equal((db.prepare('SELECT parent_goal_id FROM scope_goals WHERE id = 3').get() as any).parent_goal_id, 1);
+  assert.equal((db.prepare('SELECT status FROM scope_tasks WHERE id = 73').get() as any).status, 'open');
+});
+
+test('#3850: an owner-seat transfer pauses the venture\'s agents the old owner sponsored, sponsor_left; an admin\'s stay', async () => {
+  // Mutations checked: sponsorsLeft not called by the route; the pause given to every agent of the venture whatever its sponsor.
+  const db = fixture(); const env = envOf(db); await seats(db, env);
+  agentRow(db, 62, 'project', 'ceo', ADA);
+  agentRow(db, 63, 'project', 'cto', EVE);
+  agentRow(db, 64, 'company', 'cfo', ADA);
+  const t = await call(db, env, ADA, 'POST', `/api/projects/${VENTURE}/transfer`, { user_id: BEN });
+  assert.equal(t.status, 200, JSON.stringify(t.body));
+  assert.deepEqual((db.prepare('SELECT id, status, paused_reason FROM team_agents ORDER BY id').all() as any[]).map((r) => [r.id, r.status, r.paused_reason]),
+    [[62, 'paused', 'sponsor_left'], [63, 'active', null], [64, 'active', null]]);
 });
 
 // ── Every membership change writes its event ────────────────────────────────
