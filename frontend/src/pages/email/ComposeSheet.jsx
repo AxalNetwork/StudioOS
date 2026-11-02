@@ -18,15 +18,9 @@ import Sheet from '../../ui/Sheet';
 import Lightbox from '../../ui/Lightbox';
 import { mailApi } from '../../lib/api/mail.js';
 import { ADD_TOKENS_PATH } from '../../lib/aiTokens';
-import { canDraft, estimateLine, INTENTS, LENGTHS, TONES } from './emailModel.js';
+import { BLOCKS, bodyText, canDraft, cap, estimateLine, INTENTS, LENGTHS, TONES } from './emailModel.js';
 import { BODY, BTN, Chips, ERROR, EYEBROW, INPUT, MUTED, PRIMARY } from './emailParts.jsx';
 
-const BLOCKS = [
-  { value: 'kpis', label: 'KPIs' }, { value: 'raise_status', label: 'Raise status' }, { value: 'project_progress', label: 'Project progress' },
-  { value: 'interview_insights', label: 'Interview insights' }, { value: 'one_liner', label: 'Company one-liner' },
-];
-const cap = (w) => w.charAt(0).toUpperCase() + w.slice(1);
-const bodyText = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
 
 export default function ComposeSheet({ pack, refs, project = null, to, account, from = null, onClose, onSent, onAddAddress, api = mailApi }) {
   const person = pack.person;

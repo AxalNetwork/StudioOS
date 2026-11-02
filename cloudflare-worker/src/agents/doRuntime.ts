@@ -367,14 +367,16 @@ export function doRuntime(env: Env, call: ScopeCaller | null = bindingCaller(env
   };
 }
 
-/** Tell the scope's object a run moved, so the live view follows. Best effort. */
-/** #3850 (E6): tell a scope's live boards that a project moved (`scope_moved`). No binding: nothing to tell. */
-export async function tellMoved(env: Env, scope: ScopeRef, move: { project_id: number; from: number | null; to: number | null; ended: string[] }, call: ScopeCaller | null = bindingCaller(env)) {
+/** #3850 (E6): tell a scope's live boards (of the runtime in force) that a project moved (`scope_moved`). No binding: nothing to tell. */
+export async function tellMoved(env: Env, scope: ScopeRef, move: { project_id: number; from: number | null; to: number | null; ended: string[] }, given?: ScopeCaller | null) {
+  const call = given === undefined ? await (await import('./runtime')).runtimeCaller(env) : given;
   if (!call) return;
   await call(scope, '/moved', { move });
 }
 
-export async function trackRun(env: Env, scope: ScopeRef, run: RunRow | LiveRun, call: ScopeCaller | null = bindingCaller(env)) {
+/** Tell the scope's object (of the runtime in force) a run moved, so the live view follows. Best effort. */
+export async function trackRun(env: Env, scope: ScopeRef, run: RunRow | LiveRun, given?: ScopeCaller | null) {
+  const call = given === undefined ? await (await import('./runtime')).runtimeCaller(env) : given;
   if (!call) return;
   const live = 'uid' in run ? liveOf(run) : run;
   try { await call(scope, '/track', { run: live }); } catch { console.warn('[agents] track_failed'); }

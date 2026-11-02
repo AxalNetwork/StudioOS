@@ -18,25 +18,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { readFileSync } from 'node:fs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { FEED_KINDS, PAGE_ONLY_KINDS, PERSONAL_ONLY_KINDS, eventsToIcs, fetchUserEvents, fetchUserEventsWithSources } from '../src/services/calendar.ts';
 import { SOURCES } from '../src/services/calendar/registry.ts';
 import { describeItems } from '../src/services/calendar/items.ts';
 import { BOT_STATE_WORDS, TRANSCRIPT_READY, botCallEvents } from '../src/services/calendar/botCalls.ts';
+import { loadSchema } from './_schema_once.mjs';
 
-const BASELINE = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
-const DIR = 'cloudflare-worker/sql/migrations';
-const MIGRATIONS = readdirSync(DIR).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort().map((n) => readFileSync(`${DIR}/${n}`, 'utf8'));
 const READER = readFileSync('cloudflare-worker/src/services/calendar/botCalls.ts', 'utf8');
 const FROM = '2026-11-01T00:00:00.000Z', TO = '2026-12-01T00:00:00.000Z';
 const ms = (iso: string) => Date.parse(iso);
 
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
-  db.exec(BASELINE);
-  for (const m of MIGRATIONS) db.exec(m);
+  loadSchema(db);
   db.exec(`INSERT INTO users(id,role,name,email,founder_id,is_active) VALUES
     (1,'founder','Fixture founder','one@example.test',101,1),(2,'founder','Other founder','two@example.test',102,1);
    INSERT INTO projects(id,name,founder_id) VALUES(10,'Fixture venture',101),(20,'Other venture',102);

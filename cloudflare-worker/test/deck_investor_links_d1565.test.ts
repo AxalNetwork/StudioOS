@@ -14,20 +14,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import deckInvestorLinks from '../src/routes/deck_investor_links.ts';
 import decks from '../src/routes/decks.ts';
 import { checkVariantFigures, cleanOrder, tailorMatch, variantSlides, watermarkFor } from '../src/services/decks/variants.ts';
+import { loadSchema } from './_schema_once.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-d1565-investor-links-0123456789';
-const BASELINE = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
-const DIR = 'cloudflare-worker/sql/migrations';
-const MIGRATIONS = readdirSync(DIR).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort().map((n) => readFileSync(`${DIR}/${n}`, 'utf8'));
 const ADMIN = 1, FOUNDER = 3, OTHER = 4;
 const P = 5, OTHER_P = 6, DECK = 6, PROSPECT = 7;
 
@@ -40,8 +36,7 @@ const SLIDES = [
 
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
-  db.exec(BASELINE);
-  for (const m of MIGRATIONS) db.exec(m);
+  loadSchema(db);
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');
   u.run(ADMIN, 'admin', 'Ada Admin', 'ada@example.test', null);
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001);

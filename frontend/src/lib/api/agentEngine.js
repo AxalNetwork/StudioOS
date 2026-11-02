@@ -84,4 +84,27 @@ export const agentEngineApi = {
   suggestedTeam: (scope, id, { goal } = {}) => request(`${base(scope, id)}/suggested-team${goal ? `?goal=${enc(goal)}` : ''}`),
   templates: () => request('/teams/templates'),
   capabilities: () => request('/teams/capabilities'),
+  // D1530 (#3849, E5 of #3742): duties (TM12), the handoff trail (TM13) and an agent's memory (TM5a).
+  //   GET    /api/teams/agents/:uid/duties   → { duties: [{ uid, template, title, module, option, cadence, weekday, day_of_month,
+  //                                              hour_utc, next_due_at, last_outcome, status, est_month: { available, value_microusd } }] }
+  //   POST   /api/teams/agents/:uid/duties   { template, cadence?, weekday?, day_of_month?, hour_utc?, title? } → 201 { duty };
+  //                                          422 template_not_in_role; 409 duty_exists | too_many_duties
+  //   PATCH  /api/teams/duties/:uid          { cadence?, weekday?, day_of_month?, hour_utc?, title?, status?: 'active'|'paused' } → { duty }
+  //   DELETE /api/teams/duties/:uid          → { ok }
+  //   GET    /api/teams/:scope/:id/handoffs  → { chains: [{ uid, steps: [{ uid, depth, from: { role_key }, to: { role_key }, title, status,
+  //                                              refusal, decided_by: { uid, name } | null, task_created }], refused: [{ reason }] }] }
+  //   GET    /api/teams/agents/:uid/memory   → { notes: [{ uid, kind, body, by: { uid, name } | null, at, expires_at }],
+  //                                              retention: { days_after_removal, run_summaries_days, text } }
+  //   POST   /api/teams/agents/:uid/memory   { body } → 201 { note }; 422 note_too_long
+  //   DELETE /api/teams/memory/:uid          → { ok } ("Forget this")
+  //   DELETE /api/teams/agents/:uid/memory   → { ok, forgotten } ("Forget everything")
+  duties: (agentUid) => request(`/teams/agents/${enc(agentUid)}/duties`),
+  addDuty: (agentUid, body) => request(`/teams/agents/${enc(agentUid)}/duties`, { method: 'POST', body: JSON.stringify(body) }),
+  updateDuty: (uid, patch) => request(`/teams/duties/${enc(uid)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  removeDuty: (uid) => request(`/teams/duties/${enc(uid)}`, { method: 'DELETE' }),
+  handoffs: (scope, id) => request(`${base(scope, id)}/handoffs`),
+  memory: (agentUid) => request(`/teams/agents/${enc(agentUid)}/memory`),
+  addMemoryFact: (agentUid, body) => request(`/teams/agents/${enc(agentUid)}/memory`, { method: 'POST', body: JSON.stringify(body) }),
+  forgetMemory: (noteUid) => request(`/teams/memory/${enc(noteUid)}`, { method: 'DELETE' }),
+  forgetAllMemory: (agentUid) => request(`/teams/agents/${enc(agentUid)}/memory`, { method: 'DELETE' }),
 };
