@@ -14,6 +14,7 @@ import { moduleConnections } from '../services/ai/moduleConnections';
 import { pcmBytes, pcmMinutes, pcmWave, questionsValid } from '../services/ai/moduleShapes';
 import { INDIC_FLORES, INDIC_TRANSLATION_MODEL, imagesRefusal, rerankRefusal } from '../services/ai/shapes';
 import { run as runModuleModel, quoteRun, normaliseSurface, type RunOptions, type TaskClass } from '../services/aiRouter';
+import { isSpeechJob, speechJob } from '../services/ai/speechJobs';
 
 const modules = new Hono<{ Bindings: Env }>();
 modules.use('*', bodyLimit({ maxSize: 7_000_000, onError: c => refuse(c, 413, { code: 'payload_too_large', message: 'That material is too large for one run.' }) }));
@@ -65,7 +66,9 @@ for (const action of ['run', 'quote'] as const) modules.post(`/${action}`, async
   const allowed = ['page', 'surface', 'option', 'model', 'text', ...(operation === 'chat' || operation === 'vision' || operation === 'image_labels' ? ['images'] : []),
     ...(operation === 'decision' ? ['questions'] : []), ...(operation === 'turn' || operation === 'transcribe' ? ['audio_pcm16'] : []),
     ...(operation === 'translate' ? ['source_language', 'target_language'] : []), ...(operation === 'rerank' ? ['contexts'] : []),
-    ...(operation === 'voice' ? ['voice', 'language'] : [])];
+    ...(operation === 'voice' ? ['voice', 'language'] : []),
+    // #3936 (D1478 task 2, part 2): a Speak or file Listen press may name its speech job.
+    ...(operation === 'voice' || operation === 'transcribe' ? ['job'] : [])];
   if (Object.keys(body).some(k => !allowed.includes(k))) return invalid(c, 'An input does not belong to this operation.');
   const opts: RunOptions = {
     task: `module_${operation}` as TaskClass,
@@ -91,6 +94,13 @@ for (const action of ['run', 'quote'] as const) modules.post(`/${action}`, async
     if (rerankRefusal(opts.rerank) || body.contexts.reduce((n: number, text: string) => n + text.length, 0) > 24_000) return invalid(c, 'Send non-empty context excerpts totalling up to 24,000 characters.');
   }
   else if (operation === 'voice') opts.speak = { voice: body.voice, lang: body.language };
+  if (body.job != null) {
+    // The job must be a speech job of this operation's kind: a voice speaks, a transcription listens to a file.
+    const job = isSpeechJob(body.job) ? speechJob(body.job) : null;
+    const kind = operation === 'voice' ? 'speak' : 'listen_file';
+    if (!job || job.kind !== kind) return invalid(c, 'That job is not a speech job of this operation.');
+    opts.speechJob = body.job;
+  }
   else if (operation === 'draw') opts.draw = {};
   else if (operation === 'vision' && images?.length !== 1) return invalid(c, 'Send one image and a question.');
   const result = action === 'quote' ? await quoteRun(c.env, { ...opts, surface })

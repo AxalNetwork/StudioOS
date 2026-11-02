@@ -699,10 +699,15 @@ export function coverageOf(items: SourceItem[]): Coverage {
   return { slots: filled + not_recorded + unreadable, filled, by_grade, not_recorded, unreadable };
 }
 
-/** Every slot of every adapter, read. Scoring slots only when `includeScoring`. */
-export async function readSources(ctx: SourceCtx, opts: { includeScoring?: boolean } = {}): Promise<{ items: SourceItem[]; coverage: Coverage }> {
+/**
+ * Every slot of every adapter, read. Scoring slots only when `includeScoring`.
+ * D1543 (#3781): `only` names the adapters to read (by id), for an element
+ * that needs a few of them; the grades and snapshots are the same mapping.
+ */
+export async function readSources(ctx: SourceCtx, opts: { includeScoring?: boolean; only?: readonly string[] } = {}): Promise<{ items: SourceItem[]; coverage: Coverage }> {
   const items: SourceItem[] = [];
   for (const a of DECK_SOURCES) {
+    if (opts.only && !opts.only.includes(a.id)) continue;
     const slots = a.slots.filter((s) => !s.optional || opts.includeScoring);
     if (!slots.length) continue;
     let got: Partial<Record<string, Read | 'withheld'>> | null;
