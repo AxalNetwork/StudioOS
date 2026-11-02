@@ -83,6 +83,8 @@ listens for a push to `main` only, so the deploy starts when the queue's merge
 lands, as it did when a PR was merged by hand. A queue entry that fails is not
 merged and nothing ships; the PR returns to its author with the failing check.
 
+TEST ENTRY (#4107): this line exists only to conflict with the settings table and be ejected by the queue. Never merge.
+
 ### 1.3 A branch database
 
 A subsidiary branch is a separate Worker over a separate D1 database

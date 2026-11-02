@@ -474,6 +474,7 @@ D1484 part 2 (#3978): `calendarSources.js` holds the member's calendar source se
 D1501 (#3751): `deckDraft.js` holds a deck version's working copy: `deckDraftApi.saveCard(deckId, uid, card, rev, { ord })` (`PATCH /decks/:id/cards/:uid` with `If-Match`), `draft(deckId)` and `discard(deckId)` (`GET`/`DELETE /decks/:id/draft`). `deckV2Adapter.js` reads it through `saveCard`, `discardDraft` and `draft`.
 
 D1502 part 2 (#3753): `deckBatches.js` holds a deck generation run: `deckBatchesApi.batch(uid)` (`GET /decks/areas/batches/:uid`), `cancel(uid)` (`POST …/cancel`) and `events(uid, onEvent, { signal })`, which reads the run's Server-Sent Events with `fetch` (EventSource cannot send the Authorization header); `parseSse` splits the stream. `deckV2Adapter.js` reads it through `batch` and `cancelBatch`.
+D1577 (#3824): `deckCoedit.js` holds co-editing: `deckCoeditApi.saveArea(deckId, uid, area, base, next)` (`PATCH /decks/:id/cards/:uid/areas/:area`, 409 `area_conflict` with the server's copy), `restoreCard(versionId, cardUid)` (`POST /decks/:id/restore-card`, called by `VersionCompare.jsx`) and `presence(deckId)` (`GET /decks/:id/presence`, read through `deckV2Adapter.presence`; 503 `presence_off` on a Worker without the room's binding).
 
 D1212 (#3178): `calendarConnections.js` holds the whole-calendar subscription (`GET`, `POST`, `DELETE /calendar/subscription`, D1209) and the disconnect with its choice (`DELETE /calendar/google` and `/calendar/microsoft`, `?remove_copies=1`). The link comes back once, from the POST, and the page never prints it.
 

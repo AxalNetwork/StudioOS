@@ -75,6 +75,7 @@ export * from './api/dealWorkroom.js';
 export * from './api/deckAssist.js';
 export * from './api/deckBatches.js';
 export * from './api/deckCheck.js';
+export * from './api/deckCoedit.js';
 export * from './api/deckComments.js';
 export * from './api/deckCritic.js';
 export * from './api/deckDerive.js';

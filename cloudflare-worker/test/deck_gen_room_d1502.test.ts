@@ -12,7 +12,7 @@
  *   4. The routes: the deck's readers read a run, a stranger gets 404, only its
  *      starter stops it, and Stop without a room still settles in D1.
  *   5. `deck_generate`: 6 a minute and 20 an hour per member, failing closed.
- *   6. All three wrangler tables bind both classes under the v3-deck-gen tag.
+ *   6. All three wrangler tables bind both classes under the v4-deck-gen tag.
  * The contract suite (`deck_gen_runtime_contract.test.ts`) runs DeckGenRoom too.
  */
 import test from 'node:test';
@@ -288,7 +288,7 @@ test('6. all three wrangler tables bind DeckGenRoom and AiGovernor under one new
     const re = new RegExp(`\\[\\[(?:env\\.(?:production|preview)\\.)?durable_objects\\.bindings\\]\\]\\s*\\nname\\s*=\\s*"${name}"\\s*\\nclass_name\\s*=\\s*"${cls}"`, 'g');
     assert.equal(toml.match(re)?.length, 3, name);
   }
-  const tags = [...toml.matchAll(/\[\[(env\.(?:production|preview)\.)?migrations\]\]\s*\ntag\s*=\s*"v3-deck-gen"\s*\nnew_sqlite_classes\s*=\s*\["DeckGenRoom", "AiGovernor"\]/g)].map((m) => m[1] ?? 'top');
+  const tags = [...toml.matchAll(/\[\[(env\.(?:production|preview)\.)?migrations\]\]\s*\ntag\s*=\s*"v4-deck-gen"\s*\nnew_sqlite_classes\s*=\s*\["DeckGenRoom", "AiGovernor"\]/g)].map((m) => m[1] ?? 'top');
   assert.deepEqual(tags, ['top', 'env.production.', 'env.preview.']);
   const index = readFileSync('cloudflare-worker/src/index.ts', 'utf8');
   assert.match(index, /export \{ DeckGenRoom \} from '\.\/durable-objects\/deck-gen-room';/);

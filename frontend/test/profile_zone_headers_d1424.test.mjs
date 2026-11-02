@@ -83,12 +83,12 @@ test('the header Ask gate: a profile, a rail, no support session, and the panel 
   assert.equal(headerAskGate({ role: 'investor', pathname: '/account', panel: open }).reason, 'no_rail', '/account has no rail');
   assert.equal(headerAskGate({ role: 'partner', pathname: '/offers/testing', panel: open }).reason, 'no_rail', 'Product testing is off-canvas');
   assert.equal(headerAskGate({ role: 'partner', pathname: '/delivery/status-reports', support: true, panel: open }).reason, 'support_session', 'PH19b: no Ask in a support session');
-  // ON MAIN: the panel does not serve these licences, so nothing is drawn anywhere.
-  assert.deepEqual(askAvailability(), { available: false, reason: 'ask_panel_unbuilt', waitsOn: '#3706 (D1443)' });
-  const shut = headerAskGate({ role: 'advisor', pathname: '/practice/sessions' });
-  assert.equal(shut.show, false);
-  assert.equal(shut.reason, 'ask_panel_unbuilt');
-  assert.equal(routed(h(ProfileHeaderAsk, { role: 'investor' }), '/deals/closing'), '');
+  // D1443 part 5 (#3992): the panel serves these licences, so the gate opens on a rail page;
+  // the button itself still waits for the rail to serve Ask (PageAsk), so with no rail mounted nothing is drawn.
+  assert.deepEqual(askAvailability(), { available: true, reason: null, waitsOn: null });
+  assert.equal(headerAskGate({ role: 'advisor', pathname: '/practice/sessions' }).show, true);
+  assert.equal(headerAskGate({ role: 'advisor', pathname: '/practice/sessions', panel: { available: false, reason: 'x' } }).reason, 'x');
+  assert.equal(routed(h(ProfileHeaderAsk, { role: 'investor' }), '/deals/closing'), '', 'no rail mounted: no Ask');
 });
 
 test('the waiting count is unavailable until D1442, and an unread count is never "0 waiting"', () => {
@@ -109,7 +109,7 @@ test('the waiting count is unavailable until D1442, and an unread count is never
 
 test('the header Ask is "Ask", never "Fill", and the shared button is the one drawn', () => {
   const src = codeOnly(read('frontend/src/workspaces/ProfileHeaderAsk.jsx'));
-  assert.match(src, /import \{ AskButtonView \} from '\.\.\/ui\/AskButton\.jsx'/);
+  assert.match(src, /import HeaderAsk from '\.\.\/ui\/HeaderAsk\.jsx'/, 'the shared header Ask (D1443 part 5), which draws AskButtonView');
   assert.doesNotMatch(src, /Fill/);
   assert.match(renderToStaticMarkup(h(AskButtonView, {})), />Ask</);
 });

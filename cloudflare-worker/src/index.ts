@@ -258,6 +258,7 @@ import deckCheck from './routes/deck_check';
 import deckGrid from './routes/deck_grid';
 import deckBatches from './routes/deck_batches';
 import deckDraft from './routes/deck_draft';
+import deckCoedit from './routes/deck_coedit';
 import deckElementModels from './routes/deck_element_models';
 import { adminDeckModels, deckModelPresets } from './routes/deck_model_presets';
 import deckStage from './routes/deck_stage';
@@ -1406,6 +1407,8 @@ app.route('/api/decks', deckGrid);
 app.route('/api/decks', deckBatches);
 // D1501 (#3751): a version's working copy, card by card (`/:id/cards/:uid`, `/:id/draft`), before `decks`.
 app.route('/api/decks', deckDraft);
+// D1577 (#3824): area saves (`/:id/cards/:uid/areas/:area`), single-slide restore (`/:id/restore-card`) and presence, before `decks`.
+app.route('/api/decks', deckCoedit);
 // D1503 (#3754): a model per grid element (`/:id/element-models`), before `decks` so `GET /:id` cannot answer it.
 app.route('/api/decks', deckElementModels);
 // D1549 (#3796): the deck's preset and HQ's locks (`/:id/model-presets`), before `decks`; and HQ's org default and lock table.
@@ -3268,6 +3271,8 @@ export default {
 // can find the classes named in wrangler.toml's [[durable_objects.bindings]].
 export { PipelineRoom } from './durable-objects/pipeline-room';
 export { OnboardingChat } from './durable-objects/onboarding-chat';
+// D1577 (#3824): the deck's co-editing room, bound as DECK_PRESENCE (the owner approved its cost, decision L).
+export { DeckPresence } from './durable-objects/deck-presence';
 
 // D108 — the two RPC entrypoints, re-exported here because a service
 // binding's `entrypoint` resolves against the Worker's MODULE EXPORTS, the
