@@ -352,8 +352,9 @@ export function doRuntime(env: Env, call: ScopeCaller | null = bindingCaller(env
   };
 }
 
-/** Tell the scope's object a run moved, so the live view follows. Best effort. */
-export async function trackRun(env: Env, scope: ScopeRef, run: RunRow | LiveRun, call: ScopeCaller | null = bindingCaller(env)) {
+/** Tell the scope's object (of the runtime in force) a run moved, so the live view follows. Best effort. */
+export async function trackRun(env: Env, scope: ScopeRef, run: RunRow | LiveRun, given?: ScopeCaller | null) {
+  const call = given === undefined ? await (await import('./runtime')).runtimeCaller(env) : given;
   if (!call) return;
   const live = 'uid' in run ? liveOf(run) : run;
   try { await call(scope, '/track', { run: live }); } catch { console.warn('[agents] track_failed'); }
