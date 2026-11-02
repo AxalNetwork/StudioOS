@@ -93,6 +93,7 @@ export * from './api/deckRemix.js';
 export * from './api/deckReports.js';
 export * from './api/deckSources.js';
 export * from './api/deckStage.js';
+export * from './api/deckTemplates.js';
 export * from './api/deckTransform.js';
 export * from './api/deckTypedValues.js';
 export * from './api/deckVentureElements.js';
