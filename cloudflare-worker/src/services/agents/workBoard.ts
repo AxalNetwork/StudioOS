@@ -7,6 +7,7 @@ import { newUid } from '../../routes/_t13t14t15_helpers';
 import { notify, type NotifyArgs } from '../notify';
 import { canManage, canRead, scopeOfAgent, type Scope } from './teams';
 import { closesCycle, DEPS_MAX, DEP_WALK_MAX, taskByUid, taskWrite, type TaskRow, type TaskWrite } from './tasks';
+import { labelSyncStatements } from './workLabels';
 
 export const BOARD_COLUMNS = ['triage', 'backlog', 'ready', 'in_progress', 'in_review', 'done'] as const;
 export const WORK_TYPES = ['task', 'bug', 'feature', 'research', 'compliance', 'chore'] as const;
@@ -18,6 +19,8 @@ export type WorkTask = TaskRow & {
   close_reason: typeof CLOSE_REASONS[number] | null; duplicate_of: number | null; task_number: number | null;
   body: string | null; type: typeof WORK_TYPES[number]; parent_task_id: number | null;
   work_version: number; work_change_uid: string | null;
+  // D1614 W7 (#3993, migration 763).
+  milestone_id: number | null; drafted_by_agent_id: number | null; review_state: 'approved' | 'changes_requested' | null;
 };
 export type WorkActor = { user: User; agentId?: never } | { agentId: number; user?: never };
 type Blocker = { uid: string; task_number: number | null; title: string };
@@ -191,6 +194,8 @@ export async function updateWorkTask(env: Env, t: WorkTask, b: Record<string, an
     n.status,n.blocked_reason,n.priority,n.due_at,n.source_kind,n.source_ref,n.board_column,n.estimate_points,n.position,n.labels_json,n.close_reason,n.duplicate_of,
     change,t.id,t.work_version,starting ? 1 : 0,n.parent_task_id,n.parent_task_id),
   eventStmt(env,t.id,actor,moved ? 'moved' : 'updated',{ change,from:columnOf(t),to:n.board_column,from_status:t.status,to_status:n.status,close_reason:n.close_reason,fields:Object.keys(b) },change)];
+  // D1614 W7 (#3993): labels named here become the project's labels and links, in this batch.
+  if ('labels' in b || 'labels_json' in b) statements.push(...labelSyncStatements(env,t.uid,t.project_id!,JSON.parse(n.labels_json),change));
   if (t.status !== n.status) statements.push(eventStmt(env,t.id,actor,'status',{change,from:t.status,to:n.status},change));
   if (t.assignee_user_id !== n.assignee_user_id || t.assignee_agent_id !== n.assignee_agent_id) statements.push(eventStmt(env,t.id,actor,'assigned',{change,assignee_kind:n.assignee_kind},change));
   const completing = closed(n) && (!closed(t) || reasonOf(t) !== n.close_reason);
@@ -226,20 +231,24 @@ export async function updateWorkTask(env: Env, t: WorkTask, b: Record<string, an
   return (await taskByUid(env,t.uid)) as WorkTask;
 }
 
-export async function createWorkTask(env: Env, scope: Project, b: Record<string, any>, user: User): Promise<WorkTask> {
+/** D1614 W7 (#3993): a task created by accepting an agent's draft names that agent. */
+export type CreateOptions = { draftedByAgentId?: number | null };
+export async function createWorkTask(env: Env, scope: Project, b: Record<string, any>, user: User, opts: CreateOptions = {}): Promise<WorkTask> {
   if (!(await canRead(env,scope,user)) || !(await canManage(env,scope,user))) throw new WorkRefusal(403,'not_manager','Only a project editor can create tasks.');
   const w = await boardWrite(env,scope,b,null), uid = newUid(), change = newUid();
   await env.DB.batch([env.DB.prepare(
     `INSERT INTO scope_tasks (uid,scope_kind,project_id,task_number,title,detail,body,type,parent_task_id,goal_id,module,option,kind,
       assignee_kind,assignee_user_id,assignee_agent_id,status,blocked_reason,priority,due_at,source_kind,source_ref,created_by_user_id,
-      board_column,estimate_points,position,labels_json,close_reason,duplicate_of,work_change_uid)
-     SELECT ?, 'project', ?, COALESCE(MAX(task_number),0)+1, ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+      board_column,estimate_points,position,labels_json,close_reason,duplicate_of,work_change_uid,drafted_by_agent_id)
+     SELECT ?, 'project', ?, COALESCE(MAX(task_number),0)+1, ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
      FROM scope_tasks WHERE project_id = ? AND scope_kind = 'project'`,
   ).bind(uid,scope.id,w.title!,w.detail??null,w.body??null,w.type??'task',w.parent_task_id??null,w.goal_id??null,w.module??null,w.option??null,w.kind??'work',
     w.assignee_kind??'none',w.assignee_user_id??null,w.assignee_agent_id??null,w.status!,w.blocked_reason??null,w.priority??0,w.due_at??null,
-    w.source_kind??'manual',w.source_ref??null,user.id,w.board_column!,w.estimate_points??null,w.position??0,w.labels_json??'[]',w.close_reason??null,w.duplicate_of??null,change,scope.id),
+    w.source_kind??'manual',w.source_ref??null,user.id,w.board_column!,w.estimate_points??null,w.position??0,w.labels_json??'[]',w.close_reason??null,w.duplicate_of??null,change,
+    opts.draftedByAgentId??null,scope.id),
   env.DB.prepare(`INSERT INTO scope_task_events (task_id,actor_user_id,kind,detail_json) SELECT id,?,'created',? FROM scope_tasks WHERE uid = ?`)
-    .bind(user.id,JSON.stringify({ change,column:w.board_column }),uid)]);
+    .bind(user.id,JSON.stringify({ change,column:w.board_column,...(opts.draftedByAgentId?{draft:true}:{}) }),uid),
+  ...('labels' in b || 'labels_json' in b ? labelSyncStatements(env,uid,scope.id,JSON.parse(w.labels_json??'[]'),change) : [])]);
   return (await taskByUid(env,uid)) as WorkTask;
 }
 
@@ -281,8 +290,10 @@ export function boardFilter(raw: string): Filter {
     const colon = token.indexOf(':');
     if (colon < 0) { out.text.push(token.replaceAll('"','').toLowerCase()); continue; }
     const key = token.slice(0,colon), value = token.slice(colon+1).replaceAll('"','');
-    if (!['is','assignee','label','goal','module','due','type'].includes(key) || !value) throw new WorkRefusal(400,'invalid_filter','Use a keyword, is, assignee, label, goal, module, due or type filter.');
+    // D1614 W7 (#3993) adds author, milestone, drafted_by and review.
+    if (!['is','assignee','label','goal','module','due','type','author','milestone','drafted_by','review'].includes(key) || !value) throw new WorkRefusal(400,'invalid_filter','Use a keyword, is, assignee, author, label, type, milestone, goal, module, due, drafted_by or review filter.');
     if (key === 'is' && !['open','closed','blocked'].includes(value)) throw new WorkRefusal(400,'invalid_filter','is is open, closed or blocked.');
+    if (key === 'review' && !['needed','approved','changes_requested'].includes(value)) throw new WorkRefusal(400,'invalid_filter','review is needed, approved or changes_requested.');
     out.fields.push([key,value.toLowerCase()]);
   }
   return out;
@@ -300,8 +311,13 @@ export async function workCards(env: Env, tasks: WorkTask[], readRuns: WorkRunRe
   const refs = await env.DB.prepare(`SELECT t.id,u.uid AS person_uid,u.name AS person_name,
     a.uid AS agent_uid,a.role_key,a.first_name,a.last_name,g.uid AS goal_uid,g.title AS goal_title,
     p.uid AS parent_uid,p.task_number AS parent_number,p.title AS parent_title,
-    d.uid AS duplicate_uid,d.task_number AS duplicate_number,d.title AS duplicate_title
+    d.uid AS duplicate_uid,d.task_number AS duplicate_number,d.title AS duplicate_title,
+    m.uid AS milestone_uid,m.title AS milestone_title,m.due_on AS milestone_due,m.state AS milestone_state,
+    cu.uid AS author_uid,cu.name AS author_name,da.uid AS drafter_uid,da.role_key AS drafter_role,da.first_name AS drafter_first,da.last_name AS drafter_last
     FROM scope_tasks t LEFT JOIN users u ON u.id = t.assignee_user_id
+    LEFT JOIN task_milestones m ON m.id = t.milestone_id AND m.project_id = t.project_id
+    LEFT JOIN users cu ON cu.id = t.created_by_user_id
+    LEFT JOIN team_agents da ON da.id = t.drafted_by_agent_id AND da.scope_kind = 'project' AND da.project_id = t.project_id
     LEFT JOIN team_agents a ON a.id = t.assignee_agent_id AND a.scope_kind = 'project' AND a.project_id = t.project_id
     LEFT JOIN scope_goals g ON g.id = t.goal_id AND g.scope_kind = 'project' AND g.project_id = t.project_id
     LEFT JOIN scope_tasks p ON p.id = t.parent_task_id AND p.project_id = t.project_id
@@ -310,6 +326,8 @@ export async function workCards(env: Env, tasks: WorkTask[], readRuns: WorkRunRe
       id:number;person_uid:string|null;person_name:string|null;agent_uid:string|null;role_key:string|null;first_name:string|null;last_name:string|null;
       goal_uid:string|null;goal_title:string|null;parent_uid:string|null;parent_number:number|null;parent_title:string|null;
       duplicate_uid:string|null;duplicate_number:number|null;duplicate_title:string|null;
+      milestone_uid:string|null;milestone_title:string|null;milestone_due:string|null;milestone_state:string|null;
+      author_uid:string|null;author_name:string|null;drafter_uid:string|null;drafter_role:string|null;drafter_first:string|null;drafter_last:string|null;
     }>();
   const refsById = new Map((refs.results??[]).map(r=>[r.id,r]));
   const deps = await env.DB.prepare(`SELECT d.task_id,b.uid,b.task_number,b.title,b.status,b.close_reason
@@ -325,6 +343,10 @@ export async function workCards(env: Env, tasks: WorkTask[], readRuns: WorkRunRe
     const agent = r.agent_uid ? {uid:r.agent_uid,role_key:r.role_key,first_name:r.first_name,last_name:r.last_name} : null;
     const parent = r.parent_uid ? {uid:r.parent_uid,task_number:r.parent_number,title:r.parent_title} : null;
     const duplicate = r.duplicate_uid ? {uid:r.duplicate_uid,task_number:r.duplicate_number,title:r.duplicate_title} : null;
+    // D1614 W7 (#3993): the milestone, who opened the task (the drafting agent when it came from a draft) and the last review.
+    const milestone = r.milestone_uid ? {uid:r.milestone_uid,title:r.milestone_title,due_on:r.milestone_due,state:r.milestone_state} : null;
+    const drafter = r.drafter_uid ? {kind:'agent' as const,uid:r.drafter_uid,name:[r.drafter_first,r.drafter_last].filter(Boolean).join(' ')||null,role:r.drafter_role} : null;
+    const author = drafter ?? (r.author_uid ? {kind:'person' as const,uid:r.author_uid,name:r.author_name} : null);
     const ownDeps = (deps.results??[]).filter(d=>d.task_id===t.id);
     const blockers = ownDeps.filter(d=>!(d.status==='done'&&(d.close_reason===null||d.close_reason==='completed'))).map(({uid,task_number,title})=>({uid,task_number,title}));
     const run = runByTask.get(t.id);
@@ -337,7 +359,8 @@ export async function workCards(env: Env, tasks: WorkTask[], readRuns: WorkRunRe
       uid:t.uid,task_number:t.task_number,title:t.title,detail:t.detail,body:t.body,type:t.type,
       project:{id:t.project_id},column:columnOf(t),board_column:columnOf(t),status:t.status,state:closed(t)?'closed':'open',
       close_reason:reasonOf(t),duplicate_of:duplicate,parent,
-      estimate:t.estimate_points,estimate_points:t.estimate_points,position:t.position,labels,milestone:null,
+      estimate:t.estimate_points,estimate_points:t.estimate_points,position:t.position,labels,milestone,
+      author,drafted_by:drafter,review_state:t.review_state??null,
       assignee:person?{kind:'person' as const,uid:person.uid,name:person.name,person}
         :agent?{kind:'agent' as const,uid:agent.uid,agent_uid:agent.uid,name:[agent.first_name,agent.last_name].filter(Boolean).join(' ')||null,role:agent.role_key,agent}
         :{kind:'none' as const},
@@ -352,7 +375,24 @@ export async function workCards(env: Env, tasks: WorkTask[], readRuns: WorkRunRe
   return cards;
 }
 
-export async function projectBoard(env: Env, scope: Project, filter = '', readRuns: WorkRunReader = NO_WORK_RUNS_RECORDED) {
+/** D1614 W7 (#3993): the list's sort (items only; a column keeps its board order). */
+export const WORK_SORTS = ['number','number-desc','created','created-desc','updated','updated-desc','due','due-desc','priority','priority-desc'] as const;
+type SortableCard = { task_number: number | null; created_at: string; updated_at: string; due: string | null; priority: number };
+function sortCards<T extends SortableCard>(cards: T[], sort: string): T[] {
+  if (!(WORK_SORTS as readonly string[]).includes(sort)) throw new WorkRefusal(400,'invalid_sort',`Sort by ${WORK_SORTS.join(', ')}.`);
+  const [key, dir] = sort.split('-'), sign = dir === 'desc' ? -1 : 1;
+  const of = (c: T): string | number | null => key === 'number' ? c.task_number : key === 'created' ? c.created_at : key === 'updated' ? c.updated_at : key === 'due' ? c.due : c.priority;
+  // An unrecorded value (no due date) sorts last either way; ties keep the number order.
+  return [...cards].sort((a, b) => {
+    const x = of(a), y = of(b);
+    if (x === y) return (a.task_number ?? 0) - (b.task_number ?? 0);
+    if (x === null) return 1;
+    if (y === null) return -1;
+    return (x < y ? -1 : 1) * sign;
+  });
+}
+
+export async function projectBoard(env: Env, scope: Project, filter = '', readRuns: WorkRunReader = NO_WORK_RUNS_RECORDED, sort = '') {
   const f = boardFilter(filter);
   const r = await env.DB.prepare(`SELECT * FROM scope_tasks WHERE scope_kind = 'project' AND project_id = ? ORDER BY position,id LIMIT 5001`)
     .bind(scope.id).all<WorkTask>();
@@ -367,9 +407,14 @@ export async function projectBoard(env: Env, scope: Project, filter = '', readRu
       case 'module': return c.module===value;
       case 'type': return c.type===value;
       case 'due': return c.due?.slice(0,10)===value;
+      case 'author': return value==='agent'?c.author?.kind==='agent':value==='person'?c.author?.kind==='person':c.author?.uid===value;
+      case 'milestone': return value==='none'?c.milestone===null:c.milestone?.uid===value||c.milestone?.title?.toLowerCase()===value;
+      case 'drafted_by': return value==='agent'?c.drafted_by!==null:c.drafted_by?.uid===value;
+      case 'review': return value==='needed'?c.column==='in_review':c.review_state===value;
       default: return false;
     }
   }));
+  const listed = sort ? sortCards(items, sort) : items;
   const columns = BOARD_COLUMNS.map((key) => {
     const rows = items.filter((c)=>c.column===key);
     const known = rows.filter((c)=>c.estimate_points!==null);
@@ -378,5 +423,5 @@ export async function projectBoard(env: Env, scope: Project, filter = '', readRu
     return {key,count:rows.length,estimate_points:rows.length&&known.length!==rows.length?null:known.reduce((n,c)=>n+c.estimate_points!,0),
       estimate_recorded:known.length,cards:rows};
   });
-  return {project:{id:scope.id,name:scope.name},items,columns,count:items.length};
+  return {project:{id:scope.id,name:scope.name},items:listed,columns,count:items.length};
 }

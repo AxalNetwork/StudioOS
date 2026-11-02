@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { useEscapeClose } from '../components/useEscapeClose';
 import { askPanelAdapter } from './askPanelAdapter.js';
+import { setAskSlot, useAskPanel } from './eadwynPanel.js';
 import {
   ASK_FOOT, ASK_RUNNING, ASK_SUGGESTED, ASK_PLACEHOLDER, acceptAllLabel, canSend, chargeLine, costLine,
   panelChips, proposalCard, refusalState, stateBlock,
@@ -27,12 +28,15 @@ import './askPanel.css';
  * WHAT IT DRAWS, top to bottom (AK2 to AK15): the head, the page's suggested
  * chips, the conversation with proposal cards, and the composer with the cost
  * line before Send and "Nothing is written until you accept." Every read and
- * write goes through `askPanelAdapter.js`; the two the Worker does not answer
- * yet (the pre-run quote and the "N waiting" count, D1442) are off there.
+ * write goes through `askPanelAdapter.js`, the pre-run quote included
+ * (D1442, asked for once typing pauses).
  */
+/** D1442: the quote waits this long after the last keystroke, so typing is not priced letter by letter. */
+export const QUOTE_PAUSE_MS = 400;
 const CHIP_ROUTES = Object.fromEntries([...FOUNDER_ASK_CHIPS, ...ADVISOR_ASK_CHIPS].map((c) => [c.key, c.route]));
 
 export default function AskPanel({ page, label, crumb, options = [], aiOn = true, layout = 'dock', onClose }) {
+  const intent = useAskPanel().intent;
   const [convUid, setConvUid] = useState(null);
   const [messages, setMessages] = useState([]);
   const [cards, setCards] = useState([]);
@@ -76,13 +80,17 @@ export default function AskPanel({ page, label, crumb, options = [], aiOn = true
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]);
 
-  // D1442's quote: off until the Worker answers, so the line says the hold is
-  // not shown rather than inventing one.
+  // D1442's quote, once typing pauses (it reads the switched-on connectors, as
+  // the run will). Off, refused or unreadable, the line says the hold is not
+  // shown rather than inventing one.
   useEffect(() => {
     let live = true;
-    askPanelAdapter.quote(convUid, text).then((q) => { if (live) setHold(q.available ? q.data?.hold_microusd ?? null : null); });
-    return () => { live = false; };
-  }, [convUid, text]);
+    setHold(null);
+    const t = setTimeout(() => {
+      askPanelAdapter.quote(convUid, text, page).then((q) => { if (live) setHold(q.available ? q.data?.hold_microusd ?? null : null); });
+    }, QUOTE_PAUSE_MS);
+    return () => { live = false; clearTimeout(t); };
+  }, [convUid, text, page]);
 
   const send = useCallback(async (question) => {
     const q = String(question ?? text).trim();
@@ -163,6 +171,8 @@ export default function AskPanel({ page, label, crumb, options = [], aiOn = true
       </header>
 
       <div className="ead-ask-body">
+        {/* D1443 part 4 (#3992): a page's own task (a form's Sources and Preview, a module's row proposals) is drawn here, by its host's AskIntent. */}
+        {intent ? <div ref={setAskSlot} className="ead-ask-intent" data-testid="ask-panel-intent" /> : null}
         {chips.length > 0 && (
           <div className="ead-ask-chips" data-testid="ask-panel-chips">
             <span className="ead-ask-eyebrow">{ASK_SUGGESTED}</span>

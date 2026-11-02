@@ -361,6 +361,9 @@ test('the cap is 1,000 rows a member: a new page pick past it is 409, an existin
 
 // ─────────────────────────────────────────────── PR 3: option rows and the run
 
+/** The option-only kinds the builder reads from the overrides (D1478: image; D1583: memo). */
+const OPTION_ONLY_KINDS = new Set(Object.keys(OVERRIDES.optionKinds ?? {}));
+
 test('every option a profile registers that runs a model has a row, with its own kind\'s models', async () => {
   const registered = await loadRegisteredOptions();
   const live = registered.filter((o: any) => o.handler !== 'none');
@@ -377,9 +380,10 @@ test('every option a profile registers that runs a model has a row, with its own
     assert.ok(row, `${o.file} ${o.key} on ${page.key} has no row`);
     assert.equal(row!.optionLabel, o.label);
     assert.equal(row!.kind, o.kind);
-    // D1478 (#3721): an image option names the fixed job it runs; every other option runs its kind's rail task.
-    assert.equal(row!.routeTask, o.kind === 'image' ? o.task : `rail_${o.kind}`);
-    if (o.kind === 'image' || o.handler === 'transcribe') continue; // their own lists, held by the D1478 cases below
+    // D1478 (#3721): an option of an option-only kind (`optionKinds`: image; D1583, memo) names the fixed job it
+    // runs; every other option runs its kind's rail task.
+    assert.equal(row!.routeTask, OPTION_ONLY_KINDS.has(o.kind) ? o.task : `rail_${o.kind}`);
+    if (OPTION_ONLY_KINDS.has(o.kind) || o.handler === 'transcribe') continue; // their own lists, held by the D1478 and D1583 cases
     const kindRow = ROWS.find((r) => r.kind === o.kind)!;
     assert.deepEqual(row!.models, withModuleModels({ ...kindRow, pageKey: page.key }).models, `${o.key}: an option takes its kind's models and connected alternatives`);
   }

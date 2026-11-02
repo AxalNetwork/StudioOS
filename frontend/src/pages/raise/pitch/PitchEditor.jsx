@@ -23,8 +23,11 @@ import CardsStrip from './CardsStrip';
 import GridStage from './GridStage';
 import BlockTools, { SpeakerNotes } from './BlockTools';
 import ShareDialog from './ShareDialog';
+import CommentsSheet from './CommentsSheet';
 import ExportDialog from './ExportDialog';
 import { BackgroundSheet, BrandKitSheet, CheckSheet, RemixSheet, SizeSheet, SourcesSheet, StructureSheet, ThemeSheet, VersionsSheet } from './DeckSheets';
+// D1583 (#3830): ⋯ › This deck › Teaser, one-pager or memo.
+import DeriveSheet from './DeriveSheet.jsx';
 import { EDITOR_WAITING, aiOffState, editIndex, placeTextEdit, saveChip } from './deckV2Model';
 import { AiOffBanner } from './DeckAsk';
 import { areaTitle, areasOf, askTarget, liveFocus } from './gridSelection';
@@ -36,6 +39,8 @@ import { deckRail } from './deckRailGroups';
 import { presentHref } from './presentExportModel';
 import { aspectOf, withAspect } from './gridModel';
 import { reflowCards } from './deckReflow';
+import { movedLine } from './structureModel';
+import { scriptOfTheme } from './deckLanguage';
 import {
   ADDABLE_KINDS, KIND_LABELS, MODEL_FAILED, NOTES_PLACEHOLDER, NO_CARDS,
   NOT_RECORDED, PHONE_NOTE, READ_FAILED, THEME_LABELS,
@@ -322,6 +327,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   const [askLine, setAskLine] = useState(null);
   const [dialog, setDialog] = useState(null);
   const [sheet, setSheet] = useState(null);
+  // D1513 (#3765): what the last structure moved to the speaker notes, until the card changes.
+  const [structureNote, setStructureNote] = useState(null);
   const [compare, setCompare] = useState(null);
   // PD-9: a run or a quote refused for tokens (a 402) turns Ask off for the
   // session; adding tokens leaves the page, so the next visit starts on.
@@ -414,7 +421,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   const [sizeUndo, setSizeUndo] = useState(null);
   const changeSize = (aspect) => {
     if (aspectOf(theme?.aspect) === aspect) return;
-    const r = reflowCards(cards, aspect);
+    const r = reflowCards(cards, aspect, scriptOfTheme(theme));
     setSizeUndo(r.count ? { cards, theme, count: r.count } : null);
     setCards(r.cards);
     setTheme(withAspect(theme, aspect));
@@ -464,7 +471,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     if (id === 'appendix') { if (!readOnly) toggleAppendix(sel); return; }
     if (id === 'notes') { navigate(`/raise/pitch/notes${ventureQuery(project?.id)}`); return; }
     // D1553 (#3800): ⋯ › This card › Remix this slide, the only way in (pd13).
-    if (['theme', 'size', 'brand', 'sources', 'versions', 'check', 'structure', 'background', 'remix'].includes(id)) setSheet(id);
+    if (['theme', 'size', 'brand', 'sources', 'versions', 'check', 'structure', 'background', 'remix', 'derive', 'comments'].includes(id)) setSheet(id);
   };
   if (actionRef) actionRef.current = act;
   const cardAction = (id, i) => {
@@ -473,6 +480,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     else if (id === 'up' && i > 0) move(i, i - 1);
     else if (id === 'down' && i < cards.length - 1) move(i, i + 1);
     else if (id === 'appendix') toggleAppendix(i);
+    // D1570 (#3817, pd33): the card's threads, on that card.
+    else if (id === 'comments' && cards[i]) { choose(i); setSheet('comments'); }
   };
 
   // The selection's Ask opens "Generate into N areas" (`AreaLightbox.jsx`) on
@@ -502,7 +511,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
       ) : (
         <div className={`grid gap-3 ${narrow ? '' : 'lg:grid-cols-[150px_minmax(0,1fr)]'}`} data-testid="pitch-editor-body">
           <div className="flex min-w-0 flex-col gap-2">
-            <CardsStrip cards={cards} sel={sel} stale={stale} readOnly={readOnly} onSelect={choose} move={move}
+            <CardsStrip theme={theme} cards={cards} sel={sel} stale={stale} readOnly={readOnly} onSelect={choose} move={move}
               onCardAction={cardAction} orientation={narrow ? 'row' : 'column'}
               onAdd={() => {
                 const layout = model.layouts.find((l) => l.id === 'statement') || model.layouts[0];
@@ -512,11 +521,14 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
             {refresh.status === 'error' ? <ReadFailed text="Which figures have changed could not be read." onRetry={refresh.retry} testId="pitch-editor-refresh-error" /> : null}
           </div>
           <div className="flex min-w-0 flex-col gap-3">
+            {structureNote ? <span className={MUTED} role="status" data-testid="pitch-editor-structure-note">{structureNote} The speaker notes keep each one.</span> : null}
             {cards.length === 0 ? <div className={`${CARD} p-6 ${MUTED}`}>{NO_CARDS}</div> : (
               <GridStage card={card} index={sel} model={model} colours={colours} ink={ink} theme={theme} kit={kit} charts={charts} pageLabel={pageNumberOf(cards, sel)}
                 readOnly={readOnly} selection={selection} focus={focus}
                 onSelection={setPickState}
                 onMove={(id, grid) => setCard(sel, updateBlock(card, id, { grid }))}
+                // D1513: a divider move (both blocks) and its overflow are each one edit.
+                onCard={(next) => { setCard(sel, next); setStructureNote(null); }}
                 onAsk={ask} askOff={askOff} askLine={askLine}
                 items={items} onRefresh={() => { const r = refreshCard(card, items, charts); if (r.moved) setCard(sel, r.card); }} />
             )}
@@ -551,11 +563,18 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
       {sheet === 'size' ? <SizeSheet theme={theme} readOnly={readOnly} onSize={changeSize} moved={sizeUndo?.count ?? 0} onUndo={undoSize}
         onClose={() => { setSizeUndo(null); setSheet(null); }} /> : null}
       {sheet === 'structure' && card ? (
-        <StructureSheet model={model} card={card} index={sel} readOnly={readOnly} onLayout={(layout) => setDialog({ kind: 'layout', layout })} onClose={() => setSheet(null)} />
+        <StructureSheet model={model} card={card} index={sel} readOnly={readOnly} onLayout={(layout) => setDialog({ kind: 'layout', layout })}
+          // D1513 (#3765): a structure is one edit; what has no area is already in the notes.
+          onStructure={(r) => { setCard(sel, r.card); setPickState(NO_PICK); setSheet(null); setStructureNote(r.count ? `${movedLine(r.count)}.` : null); }}
+          onClose={() => setSheet(null)} />
       ) : null}
       {sheet === 'background' && card ? (
         <BackgroundSheet card={card} index={sel} readOnly={readOnly} onBackground={(bg) => setCard(sel, { ...card, background: bg })}
           onImage={() => { setSheet(null); setDialog({ kind: 'image', use: 'card' }); }} onClose={() => setSheet(null)} />
+      ) : null}
+      {sheet === 'derive' && base.deck?.id ? (
+        <DeriveSheet deckId={base.deck.id} version={base.deck.version ?? null} dirty={dirty} readOnly={readOnly} aiOn={aiOn} outOfTokens={outOfTokens}
+          onProposed={onProposals} onClose={() => setSheet(null)} />
       ) : null}
       {sheet === 'brand' ? <BrandKitSheet projectId={project?.id ?? null} kit={kit} readOnly={readOnly} onClose={() => setSheet(null)} /> : null}
       {sheet === 'versions' ? (
@@ -582,6 +601,9 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
             return () => setCards((cs) => cs.map((x, j) => (j === i && x === next ? was : x)));
           }}
           onClose={() => setSheet(null)} />
+      ) : null}
+      {sheet === 'comments' && card && base.deck?.id ? (
+        <CommentsSheet deckId={base.deck.id} card={card} index={sel} area={chosen.length === 1 ? chosen[0].id : null} admin={readOnly} onClose={() => setSheet(null)} />
       ) : null}
       {sheet === 'check' && base.deck?.id ? (
         <CheckSheet deck={base.deck} projectId={project?.id} readOnly={readOnly} dirty={dirty} onReplaced={saved}
