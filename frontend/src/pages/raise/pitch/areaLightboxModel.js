@@ -39,6 +39,7 @@ import { aiTokens } from './newDeckModel.js';
 import { askBody, defaultDescription } from './imageModel.js';
 import { addBlock, removeBlock, updateBlock } from './editorModel.js';
 import { areaKind } from './gridSelection.js';
+import { railModelPrice } from '../../../ui/railPrices.js';
 
 /** The AIRail page every deck option is read on (`railOptions/founder.js`). */
 export const RAIL_PAGE = 'Founder · Raise · Pitch deck';
@@ -237,7 +238,11 @@ export function modelChip(rail) {
   const models = Array.isArray(rail?.models) ? rail.models : [];
   const m = models.find((x) => x.id === rail?.pick) || models[0] || null;
   if (!m) return `Model ${MODEL_WHERE}`;
-  return [m.name || m.id, m.price ? `${m.price} per variant` : null, MODEL_WHERE].filter(Boolean).join(' · ');
+  // D1511: the route's `price` is the model's unit prices (`{ cost, billed }`, routes/ai.ts `unitPrices`),
+  // printed as the AIRail prints them; a string (an older read) is kept as it was. Never "[object Object]".
+  const price = typeof m.price === 'string' ? (m.price ? `${m.price} per variant` : null)
+    : m.price && typeof m.price === 'object' ? railModelPrice(m, rail?.billing, false) : null;
+  return [m.name || m.id, price, MODEL_WHERE].filter(Boolean).join(' · ');
 }
 
 /**

@@ -53,6 +53,7 @@ import adminPartnersReads from './routes/admin_partners_reads';
 import adminPartnerFirms from './routes/admin_partner_firms';
 import adminPartnerDealReads from './routes/admin_partner_deal_reads';
 import adminNetworkReads from './routes/admin_network_reads';
+import adminFeatureFlags from './routes/admin_feature_flags';
 import adminPublications from './routes/admin_publications';
 // Task #10 (LD) — Admin team roster + public team endpoint.
 import adminTeam from './routes/admin_team';
@@ -249,16 +250,23 @@ import deckShareActions from './routes/deck_share_actions';
 // D901 (#2680) — the HTML export and the deck export ledger.
 import deckExports from './routes/deck_exports';
 import deckNotes from './routes/deck_notes';
+// D1570 (#3817): comments on a deck's cards, @mentions, assignee, Resolve, and the approval a share waits for.
+import deckComments from './routes/deck_comments';
 import deckReview from './routes/deck_review';
 import deckSources from './routes/deck_sources';
 import deckCheck from './routes/deck_check';
 import deckGrid from './routes/deck_grid';
+import deckDraft from './routes/deck_draft';
 import deckElementModels from './routes/deck_element_models';
+import { adminDeckModels, deckModelPresets } from './routes/deck_model_presets';
 import deckStage from './routes/deck_stage';
 import deckRemix from './routes/deck_remix';
 import deckTypedValues from './routes/deck_typed_values';
+import deckFigures from './routes/deck_figures';
 import deckNew from './routes/deck_new';
 import deckAssist from './routes/deck_assist';
+import deckDerive from './routes/deck_derive';
+import deckCritic from './routes/deck_critic';
 import deckImages from './routes/deck_images';
 import deckRehearsals from './routes/deck_rehearsals';
 // D1565 (#3812): one link per investor, and tailored variants.
@@ -267,6 +275,7 @@ import deckInvestorLinks from './routes/deck_investor_links';
 import deckStageNorms from './routes/deck_stage_norms';
 // D1556 (#3803): a venture's consented interview quotes, ranked for a deck.
 import deckQuotes from './routes/deck_quotes';
+import { deckReports, hqDeckReports } from './routes/deck_reports';
 import notificationsRoutes from './routes/notifications';
 import votesRoutes from './routes/votes';
 import linkedinRoutes from './routes/linkedin';
@@ -988,6 +997,8 @@ app.route('/api/admin/partners', adminPartners);
 // D976 (#2762) — the advisor and partner network's pause, directory switch and standing read.
 app.route('/api/admin/network', adminNetworkReads);
 app.route('/api/admin/network', adminNetwork);
+// D1509 (#3760): HQ's Grid switches — grid_generate, one per element, one per model (migration 723).
+app.route('/api/admin/feature-flags', adminFeatureFlags);
 // D959 (#2792) — Investor cohort access: the admin's grants, and the investor's and founder's routes.
 app.route('/api/admin/investor-cohorts', adminInvestorCohorts);
 app.route('/api/investor-cohorts', investorCohorts);
@@ -1379,26 +1390,39 @@ app.route('/api/decks', deckShareActions);
 app.route('/api/decks', deckExports);
 // D905 (#2684): a deck's notes, from its admins to its founders; two-segment paths, before `decks`.
 app.route('/api/decks', deckNotes);
+// D1570 (#3817): `/:id/comments…`, `/:id/approval`, `/:id/approvers` and `/:id/approve`, before `decks`.
+app.route('/api/decks', deckComments);
 // D900 (#2679): a version's review and the venture's review history; two-segment paths, before `decks`.
 app.route('/api/decks', deckReview);
 // D900 (#2679): `/checks`, `/:id/check` and `/:id/claims/:uid/use-record`, before `decks` so `GET /:id` cannot answer `/checks`.
 app.route('/api/decks', deckCheck);
 // D1499 (#3749): The Grid of one deck version — geometry, the 17 structures and each card's areas.
 app.route('/api/decks', deckGrid);
+// D1501 (#3751): a version's working copy, card by card (`/:id/cards/:uid`, `/:id/draft`), before `decks`.
+app.route('/api/decks', deckDraft);
 // D1503 (#3754): a model per grid element (`/:id/element-models`), before `decks` so `GET /:id` cannot answer it.
 app.route('/api/decks', deckElementModels);
+// D1549 (#3796): the deck's preset and HQ's locks (`/:id/model-presets`), before `decks`; and HQ's org default and lock table.
+app.route('/api/decks', deckModelPresets);
+app.route('/api/admin/ai/deck-models', adminDeckModels);
 // D1522 (#3774): the deck's stage plan — order, why lines and missing-proof warnings.
 app.route('/api/decks', deckStage);
 // D1553 (#3800): Remix — four layouts for one card and the remove-a-block reflow; no model, no charge.
 app.route('/api/decks', deckRemix);
 // D1538 (#3787): the figures a founder types for a deck, Stated (`/:id/typed-values`).
 app.route('/api/decks', deckTypedValues);
+// D1523 (#3775): each figure's provenance, Linked, Stated, Uncited or Not recorded (`/:id/figures`), editor-only.
+app.route('/api/decks', deckFigures);
 // D896: `/sources` and `/:id/refresh`, before `decks` so its `GET /:id` cannot answer `/sources`.
 app.route('/api/decks', deckSources);
 // D897: New deck (`/new/context`, `/new/quote`, `/outline`, `/generate`, `/proposals/:id/keep-slides`), before `decks` for the same reason.
 app.route('/api/decks', deckNew);
 // D899 (#2678): Eadwyn's card tools, before `decks` with the other /api/decks routers.
 app.route('/api/decks', deckAssist);
+// D1583 (#3830): teaser, one-pager and memo from one version; before `decks` so its `/:id` routes cannot answer them.
+app.route('/api/decks', deckDerive);
+// D1557 (#3804): the investor critic: rule findings, and one run on a model of another family than the writer's.
+app.route('/api/decks', deckCritic);
 // D903 (#2682): card and background images (`/:id/images…`, `/images/:uid/…`), before `decks` so `GET /:id` cannot answer `/images/…`.
 app.route('/api/decks', deckImages);
 // D1580 F1 (#3827): rehearse a deck version and read its report.
@@ -1409,6 +1433,9 @@ app.route('/api/decks', deckInvestorLinks);
 app.route('/api/decks', deckStageNorms);
 // D1556 (#3803): `/quotes/search` and `/quotes/index`, before `decks` so `/:id` routes cannot answer them.
 app.route('/api/decks', deckQuotes);
+// D1540 (#3791): a founder's report of a bad result (`/proposals/:uid/report`), and HQ's queue of them.
+app.route('/api/decks', deckReports);
+app.route('/api/admin/deck-reports', hqDeckReports);
 app.route('/api/decks', decks);
 // Competitor Analysis (in-house crawl + Workers AI synthesis) and Pitch Deck
 // Reviewer (document conversion + investor-style review). Both are

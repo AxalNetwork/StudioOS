@@ -106,6 +106,9 @@ export type OfflineDeck = {
   sources: boolean;
   /** D1546: Confidential and each card's footnotes (`compliance.ts`); absent, nothing is added. */
   compliance?: DeckCompliance;
+  /** D1571 (#3818): the deck's language and direction; each card's face carries them, and its text aligns to the start. */
+  lang?: string | null;
+  dir?: 'ltr' | 'rtl';
 };
 
 const esc = (s: unknown) => String(s ?? '')
@@ -244,7 +247,8 @@ function card(s: any, i: number, d: OfflineDeck, mark: string): string {
   const lines = d.compliance?.footnotes[i] ?? [];
   const foot = lines.length ? `<div class="fn">${lines.map((l) => `<p>${esc(l)}</p>`).join('')}</div>` : '';
   const conf = d.compliance?.confidential ? `<span class="conf">${CONFIDENTIAL}</span>` : '';
-  return `<section class="card" id="card-${i + 1}" aria-label="Card ${i + 1} of ${d.slides.length}"><div class="face">`
+  const words = `${d.lang ? ` lang="${esc(d.lang)}"` : ''}${d.dir === 'rtl' ? ' dir="rtl"' : ''}`;
+  return `<section class="card" id="card-${i + 1}" aria-label="Card ${i + 1} of ${d.slides.length}"><div class="face"${words}>`
     + `<span class="eye">${pad2(i + 1)}${s?.appendix ? ' · Appendix' : ''}</span><h2>${esc(title)}</h2>${body}${foot}${conf}${mark}</div>${notes}</section>`;
 }
 
@@ -317,8 +321,8 @@ const CSS = [
   ".face{aspect-ratio:16/9;background:#fbfaf7;border-radius:12px;padding:5% 6%;display:flex;flex-direction:column;gap:12px;overflow:hidden;position:relative}",
   ".eye{font:700 12px 'Public Sans',sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#6d28d9}",
   "h2{margin:0;font:700 clamp(22px,3.6vw,44px)/1.15 'Space Grotesk','Public Sans',sans-serif}",
-  "p,li{font-size:clamp(14px,1.6vw,20px);line-height:1.5;margin:0}.sub{color:#475569}ul{margin:0;padding-left:1.2em}",
-  "blockquote{margin:0;padding-left:14px;border-left:3px solid #6d28d9;font-size:clamp(15px,1.8vw,22px)}",
+  "p,li{font-size:clamp(14px,1.6vw,20px);line-height:1.5;margin:0}.sub{color:#475569}ul{margin:0;padding-inline-start:1.2em}",
+  "blockquote{margin:0;padding-inline-start:14px;border-inline-start:3px solid #6d28d9;font-size:clamp(15px,1.8vw,22px)}",
   ".grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:0}.grid div{border:1px solid #e5e7eb;border-radius:9px;padding:10px}",
   "dt{font-size:12px;color:#475569}dd{margin:0;font-weight:700;font-size:clamp(16px,2vw,24px)}dd.cell-sub{font-weight:400;font-size:12px;color:#475569}",
   "img{max-width:100%;max-height:55%;object-fit:contain;align-self:flex-start;border-radius:8px}",
@@ -327,7 +331,7 @@ const CSS = [
   "h3{margin:0;font:700 clamp(18px,2.6vw,32px)/1.2 'Space Grotesk','Public Sans',sans-serif}",
   ".tile{display:flex;flex-direction:column;gap:2px;border:1px solid #e5e7eb;border-radius:9px;padding:10px;height:100%;box-sizing:border-box}.tile span{font-size:12px;color:#475569}.tile b{font-size:clamp(16px,2vw,26px)}.tile b.nr{font-size:14px;font-weight:600}",
   ".chart{border:1px solid #e5e7eb;border-radius:9px;padding:10px;height:100%;box-sizing:border-box}.chart li{font-size:13px}",
-  "table.typed{border-collapse:collapse;width:100%;font-size:13px}table.typed th,table.typed td{border:1px solid #e5e7eb;padding:4px 6px;text-align:left}table.typed th{background:#f8fafc}",
+  "table.typed{border-collapse:collapse;width:100%;font-size:13px}table.typed th,table.typed td{border:1px solid #e5e7eb;padding:4px 6px;text-align:start}table.typed th{background:#f8fafc}",
   ".btn{display:inline-block;background:#6d28d9;color:#fff;border-radius:8px;padding:6px 12px;font-weight:700;font-size:14px}.addr{font-size:12px;color:#475569;word-break:break-all}",
   ".sources{display:flex;flex-direction:column;gap:6px;margin:0}.sources dd{font-weight:400;font-size:13px}",
   ".notes{margin-top:10px;background:#111827;color:#e5e7eb;border-radius:10px;padding:12px 14px}.notes .eye{color:#c4b5fd}.notes .nr{color:#9ca3af}",

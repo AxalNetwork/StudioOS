@@ -10,9 +10,15 @@
  *   POST /skills                         a new draft { scope, company?, ...fields } or { scope, company?, skill_md }
  *   PATCH /skills/:uid                   edit the draft, or retire it
  *   POST /skills/:uid/publish            a new immutable version
- *   POST /skills/:uid/assign             { agents: [uid] }: add the current version to several agents
- *   GET  /agents/:uid/skills             an agent's skills, pinned versions, updates and its radar
- *   PUT  /agents/:uid/skills             { skills: [{ uid, version? }] }: set an agent's skills
+ *
+ * A2 (#3956): an agent's skills, assigning a skill, the radar, coverage.
+ *   GET  /agents/:uid/skills             { can_manage, skills, radar: { axes } | null, values: null }
+ *   PUT  /agents/:uid/skills             { skills: [{ uid, version? }] }: set the whole list, gated; the same shape
+ *   GET  /agents/:uid/skills/available   the role's published skills, most used first, each with `blocked`
+ *   GET  /skills/:uid/agents             the agents using a skill that the caller can see, with their scope
+ *   GET  /skills/:uid/assignable         the skill's role's agents the caller can manage: assigned, blocked, skill_count
+ *   POST /skills/:uid/assign             { agent_uids }: pins the current version; partial, { added, refused }
+ *   GET  /:scope/:id/coverage            per axis, the team's people's highest level and its agents'
  *
  * GATES.
  *  - Read: an HQ skill is readable by every member; a company skill only by
@@ -22,9 +28,12 @@
  *    company's editors (`canEdit`).
  *  - An agent's skills: changed only by those who manage the agent's company
  *    or project (`services/agents/teams.ts`'s `canManage`, called, never copied).
- *  - Attach: the skill must be published, readable from the agent's company,
- *    of the agent's role, and its tools a subset of the agent's
- *    `tool_grants_json`; otherwise 409 with a sentence per skill.
+ *  - Attach (`services/agents/skillLinks.ts`'s `attachCheck`): readable from
+ *    the agent's company (404 `not_found`), a published version (422
+ *    `version_not_published`), not retired (409 `skill_retired`; one already
+ *    pinned stays), of the agent's role (422 `role_mismatch`), and its tools in
+ *    the agent's `tool_grants_json` (422 `tool_not_approved`, `{ tool }`).
+ *    Changing an agent's skills is 403 `not_manager` for anyone else.
  *
  * A person is `{ uid, name }`, never an email. Nothing here runs a model.
  */
@@ -33,17 +42,22 @@ import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, isSuperAdmin } from '../auth';
 import { refuse } from '../util/refusal';
+import { activeCompanyFor } from '../middleware/activeCompany';
 import { canEdit } from '../services/companyAccess';
 import { isAdmin, newUid } from './_t13t14t15_helpers';
 import { ROLES, roleOf } from '../services/agents/catalogue';
 import { RADAR_AXES } from '../services/skillsTaxonomySchema';
 import {
-  OUTPUT_LABELS, SKILL_MESSAGES, attachRefusal, checkDraft, parseSkillMd, skillsRadar, toSkillMd,
+  OUTPUT_LABELS, SKILL_MESSAGES, checkDraft, parseSkillMd, toSkillMd,
   type OutputKind, type SkillDraft, type Tag,
 } from '../services/agents/skills';
 import { teamAgentsEnabled } from './team_agents';
 import { grantsOf } from '../services/agents/agentTools';
-import { agentByUid, canManage, canRead, scopeOfAgent, type AgentRow } from '../services/agents/teams';
+import { agentByUid, canManage, canRead, loadScope, scopeCols, scopeOfAgent, type AgentRow } from '../services/agents/teams';
+import {
+  ATTACH_STATUS, agentCompanyId, agentValues, attachCheck, axesOf, checkSkillList, linkStatement, peopleAxes, teamUserIds, toolLabel, versionTags,
+  type AttachCode, type Blocked,
+} from '../services/agents/skillLinks';
 
 type C = Context<{ Bindings: Env }>;
 type SkillRow = {
@@ -347,30 +361,37 @@ router.post('/skills/:uid/publish', async (c) => {
   return c.json({ skill: { ...(await cardOf(c.env, (await skillByUid(c.env, s.uid))!, user, tax, '')), skill_md: md } });
 });
 
-// ── An agent's skills ───────────────────────────────────────────────────────
+// ── An agent's skills (A2, #3956) ───────────────────────────────────────────
 
-/** The company an agent's skills may come from: its own, or its project's. */
-async function agentCompanyId(env: Env, a: AgentRow): Promise<number | null> {
-  if (a.scope_kind === 'company') return a.company_id;
-  const p = await env.DB.prepare('SELECT company_id FROM projects WHERE id = ?').bind(a.project_id).first<{ company_id: number | null }>();
-  return p?.company_id ?? null;
+const agentName = (a: Pick<AgentRow, 'first_name' | 'last_name' | 'role_key'>) => [a.first_name, a.last_name].filter(Boolean).join(' ') || roleOf(a.role_key)?.name || a.role_key;
+
+/** Where an agent works, as the screens group it: `{ kind, company_name, project_name }`. */
+async function scopeLine(env: Env, a: AgentRow) {
+  if (a.scope_kind === 'company') {
+    const co = await env.DB.prepare('SELECT company_name FROM company_profiles WHERE id = ?').bind(a.company_id).first<{ company_name: string }>();
+    return { kind: 'company' as const, company_name: co?.company_name ?? null, project_name: null };
+  }
+  const p = await env.DB.prepare('SELECT p.name, c.company_name FROM projects p LEFT JOIN company_profiles c ON c.id = p.company_id WHERE p.id = ?')
+    .bind(a.project_id).first<{ name: string; company_name: string | null }>();
+  return { kind: 'project' as const, company_name: p?.company_name ?? null, project_name: p?.name ?? null };
 }
 
-/** Why `a` may not have `s` at `version`; null when it may. */
-async function refusalFor(env: Env, a: AgentRow, s: SkillRow, version: number): Promise<string | null> {
-  if (s.scope === 'company' && s.company_id !== await agentCompanyId(env, a)) return 'This skill belongs to another company.';
-  if (s.current_version < 1) return 'This skill has not been published yet.';
-  const v = await versionOf(env, s.id, version);
-  if (!v) return `There is no version ${version} of this skill.`;
-  const p = versionParts(v);
-  const role = roleOf(a.role_key);
-  return attachRefusal({ roles: p.roles, tools: p.tools, status: s.status }, { role_key: a.role_key, role_label: role?.name ?? a.role_key, grants: grantsOf(a.tool_grants_json) });
-}
+const refusalWords: Record<AttachCode, string> = {
+  not_found: 'There is no such skill.',
+  version_not_published: 'Only a published version can be pinned.',
+  skill_retired: 'This skill is retired and cannot be added again. An agent that has it keeps it at its pinned version.',
+  role_mismatch: 'An agent can only be given skills of its own role.',
+  tool_not_approved: 'That skill needs a read tool its sponsor has not approved.',
+};
+const refuseBlocked = (c: C, b: Blocked, extra: Record<string, unknown> = {}) =>
+  say(c, ATTACH_STATUS[b.code], b.code, b.code === 'tool_not_approved' && b.tool ? `That skill needs the ${b.tool.label} read tool, which its sponsor has not approved.` : refusalWords[b.code],
+    { ...(b.tool ? { tool: b.tool } : {}), ...extra });
 
 async function agentSkillsDto(env: Env, a: AgentRow) {
   const tax = await taxonomy(env);
   const links = await all<SkillRow & { pinned: number }>(env,
     'SELECT s.*, l.version AS pinned FROM agent_skill_links l JOIN agent_skills s ON s.id = l.skill_id WHERE l.agent_id = ? ORDER BY l.id', a.id);
+  const granted = new Set(grantsOf(a.tool_grants_json).map((g) => g.tool));
   const skills = [];
   const tags: Tag[] = [];
   for (const s of links) {
@@ -379,57 +400,138 @@ async function agentSkillsDto(env: Env, a: AgentRow) {
     const p = versionParts(v);
     tags.push(...p.tags);
     skills.push({
-      uid: s.uid, scope: s.scope, status: s.status, version: s.pinned, latest_version: s.current_version,
-      update_available: s.status !== 'retired' && s.pinned < s.current_version, ...partsDto(p, tax),
+      uid: s.uid, scope: s.scope, name: p.name, purpose: p.purpose, steps: p.steps, status: s.status,
+      pinned_version: s.pinned, current_version: s.current_version,
+      update_available: s.status !== 'retired' && s.pinned < s.current_version,
+      tools: p.tools.map((k) => ({ key: k, label: toolLabel(k), approved: granted.has(k) })),
+      taxonomy: p.tags.map((t) => ({ slug: t.slug, label: tax.label.get(t.slug) ?? t.slug, level: t.level })),
     });
   }
-  return { agent: { uid: a.uid, role_key: a.role_key }, skills, radar: skillsRadar(tags, tax.category) };
+  return {
+    agent: { uid: a.uid, role_key: a.role_key },
+    skills,
+    // No skills: no radar ("Not recorded"), never eight zeros.
+    radar: skills.length ? { axes: axesOf(tags, tax.category) } : null,
+    values: await agentValues(env, a),
+  };
 }
+
+/** The agent and its scope, when the caller can read its team. */
+async function readableAgent(c: C, user: User) {
+  const a = await agentByUid(c.env, c.req.param('uid') ?? '');
+  const scope = a && await scopeOfAgent(c.env, a);
+  if (!a || !scope || !(await canRead(c.env, scope, user))) return null;
+  return { a, scope };
+}
+
+router.get('/agents/:uid/skills/available', async (c) => {
+  const user = await requireAuth(c);
+  const got = await readableAgent(c, user);
+  if (!got) return say(c, 404, 'not_found', 'There is no such agent.');
+  const { a } = got;
+  const tax = await taxonomy(c.env);
+  const companyId = await agentCompanyId(c.env, a);
+  const rows = await all<SkillRow>(c.env,
+    `SELECT s.* FROM agent_skills s WHERE s.status = 'published' AND s.current_version > 0
+       AND (s.scope = 'hq' OR (s.scope = 'company' AND s.company_id = ?)) ORDER BY s.id`, companyId ?? -1);
+  const pinned = new Map((await all<{ skill_id: number; version: number }>(c.env, 'SELECT skill_id, version FROM agent_skill_links WHERE agent_id = ?', a.id)).map((l) => [l.skill_id, l.version]));
+  const out = [];
+  for (const s of rows) {
+    const blocked = await attachCheck(c.env, a, s, s.current_version, pinned.get(s.id) ?? null);
+    // Only the agent's own role's skills are offered; a tool it lacks is shown, blocked.
+    if (blocked && blocked.code !== 'tool_not_approved') continue;
+    const card = await cardOf(c.env, s, user, tax, '');
+    out.push({ ...card, assigned: pinned.has(s.id), pinned_version: pinned.get(s.id) ?? null, blocked: blocked ? { code: blocked.code, tool: blocked.tool ?? null } : null });
+  }
+  out.sort((x, y) => y.used_by - x.used_by || x.name.localeCompare(y.name));
+  return c.json({ skills: out });
+});
 
 router.get('/agents/:uid/skills', async (c) => {
   const user = await requireAuth(c);
-  const a = await agentByUid(c.env, c.req.param('uid'));
-  const scope = a && await scopeOfAgent(c.env, a);
-  if (!a || !scope || !(await canRead(c.env, scope, user))) return say(c, 404, 'not_found', 'There is no such agent.');
-  return c.json({ ...(await agentSkillsDto(c.env, a)), can_manage: await canManage(c.env, scope, user) });
+  const got = await readableAgent(c, user);
+  if (!got) return say(c, 404, 'not_found', 'There is no such agent.');
+  return c.json({ can_manage: await canManage(c.env, got.scope, user), ...(await agentSkillsDto(c.env, got.a)) });
 });
 
 router.put('/agents/:uid/skills', async (c) => {
   const user = await requireAuth(c);
-  const a = await agentByUid(c.env, c.req.param('uid'));
-  const scope = a && await scopeOfAgent(c.env, a);
-  if (!a || !scope || !(await canRead(c.env, scope, user))) return say(c, 404, 'not_found', 'There is no such agent.');
-  if (!(await canManage(c.env, scope, user))) return say(c, 403, 'not_editor', 'Only the team\'s editors can change an agent\'s skills.');
+  const got = await readableAgent(c, user);
+  if (!got) return say(c, 404, 'not_found', 'There is no such agent.');
+  const { a, scope } = got;
+  if (!(await canManage(c.env, scope, user))) return say(c, 403, 'not_manager', 'Only the team\'s editors can change an agent\'s skills.');
   if (a.status === 'removed') return say(c, 409, 'agent_removed', 'This agent was removed.');
   const b = await readBody(c);
   if (!b || !Array.isArray(b.skills) || b.skills.length > 40) return say(c, 400, 'body_invalid', 'Send the agent\'s skills as a list of up to 40.');
-  const wanted: Array<{ s: SkillRow; version: number }> = [];
-  const refusals: Array<{ skill_uid: string; reason: string }> = [];
-  for (const item of b.skills) {
-    const uid = typeof item === 'string' ? item : item?.uid;
-    const s = typeof uid === 'string' ? await skillByUid(c.env, uid) : null;
-    if (!s || !(await mayRead(c.env, s, user))) { refusals.push({ skill_uid: String(uid ?? ''), reason: 'There is no such skill.' }); continue; }
-    if (wanted.some((w) => w.s.id === s.id)) continue;
-    const existing = await c.env.DB.prepare('SELECT version FROM agent_skill_links WHERE agent_id = ? AND skill_id = ?').bind(a.id, s.id).first<{ version: number }>();
-    const asked = item && typeof item === 'object' && item.version != null ? Number(item.version) : null;
-    if (asked != null && !(Number.isSafeInteger(asked) && asked >= 1)) { refusals.push({ skill_uid: s.uid, reason: 'Choose a published version.' }); continue; }
-    const version = asked ?? existing?.version ?? s.current_version;
-    // A skill the agent already has at that version stays, even if it was retired since.
-    const unchanged = existing && existing.version === version;
-    const why = unchanged ? null : await refusalFor(c.env, a, s, version);
-    if (why) refusals.push({ skill_uid: s.uid, reason: why });
-    else wanted.push({ s, version });
-  }
-  if (refusals.length) return say(c, 409, 'skill_not_attachable', refusals[0].reason, { refusals });
+  const checked = await checkSkillList(c.env, a, b.skills, (sk) => mayRead(c.env, sk as SkillRow, user));
+  if (!checked.ok) return refuseBlocked(c, checked.blocked, { skill_uid: checked.skill_uid });
   await c.env.DB.batch([
-    c.env.DB.prepare('DELETE FROM agent_skill_links WHERE agent_id = ? AND skill_id NOT IN (SELECT value FROM json_each(?))').bind(a.id, JSON.stringify(wanted.map((w) => w.s.id))),
-    ...wanted.map((w) => c.env.DB.prepare(
-      `INSERT INTO agent_skill_links (agent_id, skill_id, version, linked_by) VALUES (?, ?, ?, ?)
-       ON CONFLICT (agent_id, skill_id) DO UPDATE SET version = excluded.version, linked_by = excluded.linked_by, linked_at = CURRENT_TIMESTAMP
-       WHERE agent_skill_links.version <> excluded.version`,
-    ).bind(a.id, w.s.id, w.version, user.id)),
+    c.env.DB.prepare('DELETE FROM agent_skill_links WHERE agent_id = ? AND skill_id NOT IN (SELECT value FROM json_each(?))').bind(a.id, JSON.stringify(checked.wanted.map((w) => w.s.id))),
+    ...checked.wanted.map((w) => linkStatement(c.env, a.id, w.s.id, w.version, user.id)),
   ]);
-  return c.json({ ...(await agentSkillsDto(c.env, a)), can_manage: true });
+  return c.json({ can_manage: true, ...(await agentSkillsDto(c.env, a)) });
+});
+
+router.get('/skills/:uid/agents', async (c) => {
+  const user = await requireAuth(c);
+  const s = await skillByUid(c.env, c.req.param('uid'));
+  if (!s || !(await mayRead(c.env, s, user))) return noSkill(c);
+  const links = await all<AgentRow & { pinned: number }>(c.env,
+    `SELECT a.*, l.version AS pinned FROM agent_skill_links l JOIN team_agents a ON a.id = l.agent_id
+      WHERE l.skill_id = ? AND a.status <> 'removed' ORDER BY a.id LIMIT 500`, s.id);
+  const agents = [];
+  for (const a of links) {
+    const scope = await scopeOfAgent(c.env, a);
+    // A member sees only the agents of the teams they can read: never another company's.
+    if (!scope || !(await canRead(c.env, scope, user))) continue;
+    agents.push({ uid: a.uid, name: agentName(a), role_key: a.role_key, pinned_version: a.pinned, scope: await scopeLine(c.env, a) });
+  }
+  agents.sort((x, y) => String(x.scope.company_name ?? '').localeCompare(String(y.scope.company_name ?? ''))
+    || String(x.scope.project_name ?? '').localeCompare(String(y.scope.project_name ?? '')) || x.name.localeCompare(y.name));
+  return c.json({ agents });
+});
+
+/**
+ * The live agents the caller might manage: of their companies (and their projects), their own projects; every agent for HQ's admin.
+ * With a company chosen in the switcher (`active`), only that company's agents and those on a project with no company, as every
+ * founder-ownership read narrows (`projectInActiveCompany`); null means no company chosen.
+ */
+async function candidateAgents(env: Env, user: User, roles: string[], active: number | null): Promise<AgentRow[]> {
+  if (!roles.length) return [];
+  if (isAdmin(user)) {
+    return all<AgentRow>(env, `SELECT * FROM team_agents WHERE status <> 'removed' AND role_key IN (SELECT value FROM json_each(?)) ORDER BY id LIMIT 500`, JSON.stringify(roles));
+  }
+  return all<AgentRow>(env,
+    `SELECT a.* FROM team_agents a LEFT JOIN projects p ON p.id = a.project_id
+      WHERE a.status <> 'removed' AND a.role_key IN (SELECT value FROM json_each(?))
+        AND (a.company_id IN (SELECT company_id FROM user_company_links WHERE user_id = ?)
+          OR p.company_id IN (SELECT company_id FROM user_company_links WHERE user_id = ?)
+          OR p.founder_id = ?)
+        AND (? IS NULL OR COALESCE(a.company_id, p.company_id) IS NULL OR COALESCE(a.company_id, p.company_id) = ?)
+      ORDER BY a.id LIMIT 500`, JSON.stringify(roles), user.id, user.id, user.founder_id ?? -1, active, active);
+}
+
+router.get('/skills/:uid/assignable', async (c) => {
+  const user = await requireAuth(c);
+  const s = await skillByUid(c.env, c.req.param('uid'));
+  if (!s || !(await mayRead(c.env, s, user))) return noSkill(c);
+  const current = s.current_version > 0 ? await versionOf(c.env, s.id, s.current_version) : null;
+  const roles = current ? versionParts(current).roles : [];
+  const agents = [];
+  for (const a of await candidateAgents(c.env, user, roles, await activeCompanyFor(c, user))) {
+    const scope = await scopeOfAgent(c.env, a);
+    if (!scope || !(await canManage(c.env, scope, user))) continue;
+    const pinned = await c.env.DB.prepare('SELECT version FROM agent_skill_links WHERE agent_id = ? AND skill_id = ?').bind(a.id, s.id).first<{ version: number }>();
+    // A company skill is assignable only inside its company.
+    if (s.scope === 'company' && s.company_id !== await agentCompanyId(c.env, a)) continue;
+    const blocked = pinned ? null : await attachCheck(c.env, a, s, s.current_version);
+    const count = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM agent_skill_links WHERE agent_id = ?').bind(a.id).first<{ n: number }>();
+    agents.push({
+      uid: a.uid, name: agentName(a), role_key: a.role_key, skill_count: Number(count?.n ?? 0), assigned: !!pinned,
+      blocked: blocked ? { code: blocked.code, tool: blocked.tool ?? null } : null, scope: await scopeLine(c.env, a),
+    });
+  }
+  return c.json({ agents });
 });
 
 router.post('/skills/:uid/assign', async (c) => {
@@ -437,24 +539,49 @@ router.post('/skills/:uid/assign', async (c) => {
   const s = await skillByUid(c.env, c.req.param('uid'));
   if (!s || !(await mayRead(c.env, s, user))) return noSkill(c);
   const b = await readBody(c);
-  if (!b || !Array.isArray(b.agents) || b.agents.length < 1 || b.agents.length > 100) return say(c, 400, 'body_invalid', 'Choose between 1 and 100 agents.');
+  const list = Array.isArray(b?.agent_uids) ? b!.agent_uids : Array.isArray(b?.agents) ? b!.agents : null;
+  if (!list || list.length < 1 || list.length > 100) return say(c, 400, 'body_invalid', 'Choose between 1 and 100 agents.');
+  // Partial: each agent it can is written; each it cannot is named. One agent never refuses the call.
+  const refused: Array<{ agent_uid: string; code: string; tool?: { key: string; label: string } }> = [];
   const targets: AgentRow[] = [];
-  const refusals: Array<{ agent_uid: string; reason: string }> = [];
-  for (const uid of new Set(b.agents.filter((x: unknown) => typeof x === 'string') as string[])) {
+  for (const uid of new Set(list.filter((x: unknown) => typeof x === 'string') as string[])) {
     const a = await agentByUid(c.env, uid);
     const scope = a && await scopeOfAgent(c.env, a);
-    if (!a || !scope || a.status === 'removed' || !(await canRead(c.env, scope, user))) { refusals.push({ agent_uid: uid, reason: 'There is no such agent.' }); continue; }
-    if (!(await canManage(c.env, scope, user))) { refusals.push({ agent_uid: uid, reason: 'Only the team\'s editors can change this agent\'s skills.' }); continue; }
-    const why = await refusalFor(c.env, a, s, s.current_version);
-    if (why) refusals.push({ agent_uid: uid, reason: why });
-    else targets.push(a);
+    if (!a || !scope || a.status === 'removed' || !(await canRead(c.env, scope, user))) { refused.push({ agent_uid: uid, code: 'not_found' }); continue; }
+    if (!(await canManage(c.env, scope, user))) { refused.push({ agent_uid: uid, code: 'not_manager' }); continue; }
+    const pinned = await c.env.DB.prepare('SELECT version FROM agent_skill_links WHERE agent_id = ? AND skill_id = ?').bind(a.id, s.id).first<{ version: number }>();
+    if (pinned) continue;
+    const blocked = await attachCheck(c.env, a, s, s.current_version);
+    if (blocked) { refused.push({ agent_uid: uid, code: blocked.code, ...(blocked.tool ? { tool: blocked.tool } : {}) }); continue; }
+    targets.push(a);
   }
-  if (refusals.length) return say(c, 409, 'skill_not_attachable', refusals[0].reason, { refusals });
-  const res = await c.env.DB.batch(targets.map((a) => c.env.DB.prepare(
+  const res = targets.length ? await c.env.DB.batch(targets.map((a) => c.env.DB.prepare(
     'INSERT INTO agent_skill_links (agent_id, skill_id, version, linked_by) VALUES (?, ?, ?, ?) ON CONFLICT (agent_id, skill_id) DO NOTHING',
-  ).bind(a.id, s.id, s.current_version, user.id)));
+  ).bind(a.id, s.id, s.current_version, user.id))) : [];
   const added = res.reduce((n, r) => n + Number(r?.meta?.changes ?? 0), 0);
-  return c.json({ added, already: targets.length - added, used_by: await usedBy(c.env, s.id) });
+  return c.json({ added, refused, used_by: await usedBy(c.env, s.id) });
+});
+
+// ── Team coverage (A2) ──────────────────────────────────────────────────────
+
+router.get('/:scope/:id/coverage', async (c) => {
+  const user = await requireAuth(c);
+  const scope = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
+  if (!scope) return say(c, 404, 'not_found', 'There is no such team.');
+  if (!(await canRead(c.env, scope, user))) return say(c, 403, 'not_member', 'Only the team can see its coverage.');
+  const [companyId, projectId] = scopeCols(scope);
+  const tax = await taxonomy(c.env);
+  const rows = await all<{ taxonomy_json: string }>(c.env,
+    `SELECT v.taxonomy_json FROM team_agents a
+       JOIN agent_skill_links l ON l.agent_id = a.id
+       JOIN agent_skill_versions v ON v.skill_id = l.skill_id AND v.version = l.version
+      WHERE a.status <> 'removed' AND a.scope_kind = ? AND IFNULL(a.company_id, 0) = ? AND IFNULL(a.project_id, 0) = ?`,
+    scope.kind, companyId ?? 0, projectId ?? 0);
+  const agentAxes = axesOf(rows.flatMap((r) => versionTags(r)), tax.category);
+  const people = await peopleAxes(c.env, await teamUserIds(c.env, scope.kind === 'company' ? { kind: 'company', id: scope.id } : { kind: 'project', id: scope.id, founder_id: scope.founder_id }));
+  return c.json({
+    axes: agentAxes.map((x) => ({ slug: x.slug, label: x.label, people_level: people.get(x.slug) ?? null, agent_level: x.level })),
+  });
 });
 
 export default router;
