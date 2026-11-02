@@ -28,7 +28,6 @@ import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
-import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 
 import founderProfile, { ventureUpdate, figureRows, previewNotes } from '../src/routes/founder_profile.ts';
 import profileHistory from '../src/routes/profile_history.ts';
