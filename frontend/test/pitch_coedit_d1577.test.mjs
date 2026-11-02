@@ -9,7 +9,7 @@
  *      the stage read the same model.
  *   4. Restore one card: `compareCards` carries each card's uid, the dialog says only that
  *      card changes, and VersionCompare calls `POST /api/decks/:id/restore-card`.
- *   5. The client module is re-exported by one line in api.js's alphabetical block (D527).
+ *   5. The client module is re-exported by one line in the generated API index (D527, #4123).
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -131,6 +131,7 @@ test('restore one card: the uid rides the compare, the dialog says only that car
   assert.ok(vc.includes("id === 'pitch-compare-left' && !readOnly"), 'a reader, or a deck with unsaved changes, gets none');
   const client = read('lib/api/deckCoedit.js');
   for (const s of ['/restore-card', '/presence', '/areas/', "method: 'PATCH'"]) assert.ok(client.includes(s), s);
-  const api = read('lib/api.js');
-  assert.ok(api.includes("export * from './api/deckCheck.js';\nexport * from './api/deckCoedit.js';\nexport * from './api/deckComments.js';"), 'one line, in alphabetical order');
+  // #4123: api.js re-exports the generated index, which lists each module once, in alphabetical order.
+  const index = read('lib/apiModules.generated.js');
+  assert.ok(index.includes("export * from './api/deckCheck.js';\nexport * from './api/deckCoedit.js';\nexport * from './api/deckComments.js';"), 'one line, in alphabetical order');
 });
