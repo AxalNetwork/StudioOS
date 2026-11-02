@@ -334,6 +334,10 @@ export interface RunOptions {
    * the parent once, at the sum of its steps. Only `genRuntime` sets it.
    */
   parentHold?: { uid: string; userId: number };
+  // D1528 (#3847, #3742 E3): the `agents` AI Gateway id (`AGENT_AI_GATEWAY`).
+  // Only `agentRun` sets it. A gatewayed agent call is never retried without
+  // its gateway: the gateway's limit is the platform's circuit breaker.
+  gatewayId?: string | null;
   // D1540 (#3791): a pinned quote. The most this run may charge the member, in
   // micro-USD, from a quote the Worker stored before the run (New deck's
   // `deck_run_quotes`). The hold is no larger, and the settlement is capped at
@@ -772,13 +776,11 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   // D1478 §3937 fix 1 (ST3, ON2): tool calls run on glm-4.7-flash, which carries Cloudflare's function-calling
   // badge (131,072 tokens); qwen2.5-coder carries none. glm-4.7-flash already runs (rail_chat's Default), so no model is new.
   tool_call:    { provider: 'workers-ai', model: '@cf/zai-org/glm-4.7-flash', fallbackChain: [MID_LLAMA, SMALL_LLAMA] },
-  // Personal Advisor next-question re-ranker (advisor/rerank.ts).
-  // Structured JSON pick over a bounded candidate list — qwen-coder
-  // is the strongest at obeying the {"id": "..."} schema; fall back
-  // to MID then SMALL llama if qwen 5xxs / times out. The route layer
-  // ALWAYS treats a router miss as deterministic-first-in-bank, so a
-  // total chain failure still yields a valid next question.
-  rerank:       { provider: 'workers-ai', model: '@cf/qwen/qwen2.5-coder-32b-instruct', fallbackChain: [MID_LLAMA, SMALL_LLAMA] },
+  // Personal Advisor next question (advisor/rerank.ts), ST5 step 1. #3938 (§4.2 fix 2): the
+  // reranker scores the candidates against the conversation (no JSON picker), then clef-flash
+  // chooses among the top few on `module_decision`. A reranker has no text fallback: a miss
+  // keeps the bank's order, so the route still returns a valid next question.
+  rerank:       { provider: 'workers-ai', model: '@cf/baai/bge-reranker-base' },
   explain:      { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA], cacheTtlSec: 7 * 86400 },
   // Personal Advisor free-form "explain" SSE endpoint. Workers AI is the
   // only provider in production (Task #31 removed the Anthropic narrow
@@ -990,9 +992,11 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
     model: '@cf/meta/m2m100-1.2b',
     alternates: ['@cf/meta/m2m100-1.2b', '@cf/ai4bharat/indictrans2-en-indic-1B'],
   },
-  // D857 — one ISO 639-1 code for a passage the script and word checks could not place.
-  detect_language: { provider: 'workers-ai', model: SMALL_LLAMA },
-  sentiment:    { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA], cacheTtlSec: 30 * 86400 },
+  // D857 — one language for a passage the script and word checks could not place.
+  // #3938 (§4.2 fix 3, VA8): a clef-flash `choice` among the working languages, with its probability.
+  detect_language: { provider: 'workers-ai', model: '@cf/cloudflare/clef-flash' },
+  // #3938 (§4.2 fix 4, ON5): distilbert reads English sentiment; `ai/decide.ts` sends every other language to clef-flash.
+  sentiment:    { provider: 'workers-ai', model: '@cf/huggingface/distilbert-sst-2-int8', cacheTtlSec: 30 * 86400 },
   embed:        { provider: 'workers-ai', model: '@cf/baai/bge-base-en-v1.5', isEmbed: true,  cacheTtlSec: 30 * 86400 },
   // D766 (#2094) — system calls (userId 0): logged at cost, charged to no member.
   // The monitoring summary keeps the model it called directly.
@@ -1493,6 +1497,15 @@ function gatewayOptionFor(env: Env, task: TaskClass, userId?: number | null): Ga
   return { gateway: { id: slug, metadata } };
 }
 
+/** D1528: an agent run's own gateway, with the same metadata keys (D261). */
+function agentGatewayOption(env: Env, opts: RunOptions): GatewayOption {
+  const branch = branchOf(env) ?? 'hq';
+  const metadata: Record<string, string> = { branch };
+  if (Number.isInteger(opts.userId) && opts.userId > 0) metadata.account = `${branch}:${opts.userId}`;
+  metadata.task = opts.task;
+  return { gateway: { id: String(opts.gatewayId), metadata } };
+}
+
 /**
  * D1504 (#3755, deck v2 A11) — the deck's AI Gateway, inert until the owner
  * creates it (owner question L): `CF_AI_GATEWAY_SLUG_DECK` is empty in every
@@ -1546,7 +1559,7 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
   if (!ai || typeof ai.run !== 'function') {
     return { ok: false, status: 0, error: 'AI binding not configured' };
   }
-  const gatewayOpt = bypassGateway ? undefined : (gatewayOptionFor(env, opts.task, opts.userId) ?? deckGatewayOptionFor(env, opts));
+  const gatewayOpt = opts.gatewayId ? agentGatewayOption(env, opts) : bypassGateway ? undefined : (gatewayOptionFor(env, opts.task, opts.userId) ?? deckGatewayOptionFor(env, opts));
   // D761: cache affinity, so a member's next turn on the same page earns cached
   // input. The member's id and the page key only, never an email or a name.
   const affinity = shapes.sessionAffinity(opts.userId, normaliseSurface(opts.surface) ?? opts.task);
@@ -2485,7 +2498,7 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
   // reasoning and long context 30 s, images 60 s). A streamed run gets the
   // same limit for the handshake and its first chunk; the body after that
   // may legitimately run longer, so it is not timed.
-  const gatewayRouted = isGatewayRouted(env, opts.task);
+  const gatewayRouted = !opts.gatewayId && isGatewayRouted(env, opts.task);
   const inputTokens = route.isAudio ? 0
     : opts.rerank ? estTokens([opts.rerank.query, ...opts.rerank.contexts].join('\n'))
     : estTokens(route.isEmbed || opts.translate ? (opts.text ?? defaultContentBlob(opts)) : chatMessagesFor(opts).map((m) => m.content).join('\n'));

@@ -9,6 +9,7 @@ import { mount as deck_card_statusMount } from './deck_card_status';
 import { mount as deck_quotesMount } from './deck_quotes';
 import { mount as deck_reportsMount } from './deck_reports';
 import { mount as deck_stage_normsMount } from './deck_stage_norms';
+import { mount as deck_update_reuseMount } from './deck_update_reuse';
 import { mount as votesMount } from './votes';
 
 export const ROUTE_MODULES: readonly RegisteredModule[] = [
@@ -16,5 +17,6 @@ export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'deck_quotes', mount: deck_quotesMount },
   { file: 'deck_reports', mount: deck_reportsMount },
   { file: 'deck_stage_norms', mount: deck_stage_normsMount },
+  { file: 'deck_update_reuse', mount: deck_update_reuseMount },
   { file: 'votes', mount: votesMount },
 ];

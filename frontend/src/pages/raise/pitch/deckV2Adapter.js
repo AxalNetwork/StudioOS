@@ -28,6 +28,7 @@
  * is one line, the row's own, and its decision is named in the comment above
  * that line. Never add a row to a list here: two branches that each swap a
  * row then meet only if they swap the same one.
+ * D1515 history is browser-local: it returns gridOps directly, with no API contract.
  *
  * Fields on routes that exist (`context.inferred` and `context.freshness`
  * from #3877; the PostHog, HubSpot and Linear source rows from #3880) need
@@ -36,6 +37,7 @@
 
 import { LATER, NOT_ON } from './deckV2Model.js';
 // One line per client, in file-name order (pitch_v2_adapter_d1604 holds it), so two swaps add lines at different places.
+import { dataRoomApi } from '../../../lib/api/dataRoom.js';
 import { deckBatchesApi } from '../../../lib/api/deckBatches.js';
 import { deckCardStatusApi } from '../../../lib/api/deckCardStatus.js';
 import { deckCheckApi } from '../../../lib/api/deckCheck.js';
@@ -46,13 +48,18 @@ import { deckElementModelsApi } from '../../../lib/api/deckElementModels.js';
 import { deckElementsApi } from '../../../lib/api/deckElements.js';
 import { deckFiguresApi } from '../../../lib/api/deckFigures.js';
 import { deckGridApi } from '../../../lib/api/deckGrid.js';
+import { deckImageEditsApi } from '../../../lib/api/deckImageEdits.js';
 import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks.js';
 import { deckModelPresetsApi } from '../../../lib/api/deckModelPresets.js';
+import { deckRehearsalsApi } from '../../../lib/api/deckRehearsals.js';
 import { deckRemixApi } from '../../../lib/api/deckRemix.js';
 import { deckStageApi } from '../../../lib/api/deckStage.js';
 import { deckTemplatesApi } from '../../../lib/api/deckTemplates.js';
 import { deckTypedValuesApi } from '../../../lib/api/deckTypedValues.js';
+import { deckUsageApi } from '../../../lib/api/deckUsage.js';
 import { deckVentureElementsApi } from '../../../lib/api/deckVentureElements.js';
+import { arrange as arrangeCard } from './arrangeModel.js';
+import * as gridOps from './gridOps.js';
 
 export { NOT_ON };
 
@@ -81,6 +88,7 @@ export const SURFACES = Object.freeze({
   deckUsage: { issue: 3776, what: 'Estimated and spent on this deck' },
   arrange: { issue: 3777, what: 'Align, distribute, group, lock and layers' },
   imageEdit: { issue: 3778, what: 'Crop, focus, filters, upscale and background removal' },
+  imageVary: { issue: 3784, what: 'Erase, expand, vary and reference images' },
   elementsLibrary: { issue: 3779, what: 'Icons, shapes, dividers and textures' },
   diagrams: { issue: 3780, what: 'Funnel, hierarchy, hub and spoke, and 2×2 diagrams' },
   ventureElements: { issue: 3781, what: 'Team bios, logo wall, use of funds, round terms, cap-table summary and interview quotes' },
@@ -137,7 +145,7 @@ export async function through(call, issue) {
     const message = typeof e?.message === 'string' && e.message ? e.message : 'could not be read';
     // D1543: a Worker refusal's code (a gate such as `no_consent`) rides along, so a surface can draw its line.
     const code = typeof e?.code === 'string' && e.code ? e.code : null;
-    return Object.freeze({ available: false, unreadable: true, reason: message, issue, ...(code ? { code } : {}) });
+    return Object.freeze({ available: false, unreadable: true, reason: message, issue, status, data: e?.data ?? null, ...(code ? { code } : {}) });
   }
 }
 
@@ -168,16 +176,32 @@ export const cancelBatch = (uid) => through(() => deckBatchesApi.cancel(uid), SU
 export const elementModels = (deckId) => through(() => deckElementModelsApi.read(deckId), SURFACES.elementModels.issue);
 export const areasQuote = off('areasQuote');
 export const areasGenerate = off('areasGenerate');
-export const history = off('history');
+/**
+ * D1515 (#3767): undo and redo, frontend-only. No Worker route stores the history, so this row answers at once with
+ * `gridOps.js` (its reducers and the 100-step history) and is not a client call: it has no contract.
+ */
+export const history = async () => Object.freeze({ available: true, value: gridOps });
 export const narrativeOutline = off('narrativeOutline');
 export const instruct = off('instruct');
 /** D1522 (#3774): the deck's stage plan — the order for its stage, a why line per card, and missing-proof warnings. */
 export const stagePlan = (deckId, opts) => through(() => deckStageApi.stagePlan(deckId, opts), SURFACES.stagePlan.issue);
 /** D1523 (#3775): every figure on the version, Linked, Stated, Uncited or Not recorded, and the counts Check claims shows. Editor-only. */
 export const figures = (deckId) => through(() => deckFiguresApi.list(deckId), SURFACES.figures.issue);
-export const deckUsage = off('deckUsage');
-export const arrange = off('arrange');
+/**
+ * D1524 (#3776): the deck's estimate and spend, formatted for the rail rows
+ * (`deckUsageApi.rail`),
+ * with the per-run prices the plain-units line divides the balance by. A
+ * figure the Worker could not read is null, never $0.00.
+ */
+export const deckUsage = (deckId) => through(() => deckUsageApi.rail(deckId), SURFACES.deckUsage.issue);
+/**
+ * D1533 (#3777): one Arrange operation on a card (`arrangeModel.arrange`): `{ card, line }`,
+ * `{ same, line }` or `{ error }`. Local and synchronous underneath; the edited card is saved with every other edit.
+ */
+export const arrange = async (card, selection, op, opts) => ({ available: true, value: arrangeCard(card, selection, op, opts) });
 export const imageEdit = off('imageEdit');
+/** D1544 (#3784): an edit's price (vary, edit, erase, expand) before it runs: one hold for the edit and its checks. */
+export const imageVary = (uid, ask) => through(() => deckImageEditsApi.quote(uid, ask), SURFACES.imageVary.issue);
 /**
  * D1541 (#3779): the elements library and a page of icons for the pd28
  * panel, in one answer: `{ licence, decor_max, shapes, dividers, textures,
@@ -237,12 +261,16 @@ export const presence = (deckId) => through(() => deckCoeditApi.presence(deckId)
  * by saving a version.
  */
 export const cardStatus = (deckId, filter) => through(() => deckCardStatusApi.read(deckId, filter), SURFACES.cardStatus.issue);
-export const rehearse = off('rehearse');
+/**
+ * D1580 F1 (#3827): the founder's rehearsals of this version, newest first; the surface runs and reads them through
+ * `deckRehearsalsApi`. Present's Rehearse panel runs, reads and keeps through the same client.
+ */
+export const rehearse = (deckId) => through(() => deckRehearsalsApi.list(deckId), SURFACES.rehearse.issue);
 export const walkthrough = off('walkthrough');
 export const retryFailed = off('retryFailed');
 export const unseenBatches = off('unseenBatches');
 export const markSeen = off('markSeen');
-export const setDeckSource = off('setDeckSource');
+export const setDeckSource = (projectUid, fileUid, opts) => through(() => dataRoomApi.setDeckSource(projectUid, fileUid, opts), SURFACES.setDeckSource.issue);
 
 /**
  * #4134: the rows whose route is on main, each answering through its real client, never unavailable by

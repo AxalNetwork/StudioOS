@@ -139,3 +139,28 @@ test('a refused read (another firm, an admin, no staff bypass) draws no Ask and 
     assert.ok(w.byTestId('deal-note-save'), 'the form works as it is');
   } finally { await w.unmount(); }
 });
+
+test('the author’s Edit dialog reads Fill against the note record and saves through the notes route', async () => {
+  const note = { id: 501, uid: 'n-1', author_user_id: 41, body: 'Original note', tag: null };
+  const w = await mount(h(DealNotes, { dealId: 900, userId: 41 }), {
+    'GET /deals/900/notes': () => json({ items: [note], total: 1 }),
+    'GET /api/fills/sheet': (c) => json(c.url.includes('record=501')
+      ? SHEET({ record: 501, fields: [{ ...SHEET().fields[0], value: note.body, trigger: false }] }) : SHEET()),
+    'PUT /deals/900/notes/n-1': () => json({ ok: true }),
+  });
+  try {
+    await w.press('deal-note-edit-n-1');
+    const read = w.calls.find(c => c.url.includes('/api/fills/sheet') && c.url.includes('record=501'));
+    assert.ok(read, 'Edit names the existing note');
+    assert.ok(!read.url.includes('parent=') && !read.url.includes('project='), 'Edit is scoped to its note, not an Add form');
+    const dialog = w.byTestId('deal-note-edit-dialog');
+    assert.ok(dialog);
+    const walk = n => [n, ...(n.childNodes || []).flatMap(walk)];
+    const textarea = walk(dialog).find(n => w.props(n)['aria-label'] === 'Note');
+    assert.ok(textarea);
+    await act(async () => { w.props(textarea).onChange({ target: { value: 'Revised by the author' } }); });
+    await w.press('deal-note-edit-confirm');
+    assert.deepEqual(w.calls.find(c => c.method === 'PUT').body, { body: 'Revised by the author', tag: null });
+    assert.equal(w.byTestId('deal-note-edit-dialog'), undefined, 'the saved Edit closes');
+  } finally { await w.unmount(); }
+});

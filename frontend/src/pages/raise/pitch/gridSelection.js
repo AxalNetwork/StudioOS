@@ -22,12 +22,19 @@
  * row-by-row free ranges below. The divider drag is A4's (#3765). Locks
  * arrive with #3819; until then a block is locked only when it says so
  * (`locked: true`).
+ *
+ * D1533 (#3777): multi-select reaches decor, `decor:<id>` beside the areas'
+ * ids (`arrangeModel.decorSel`), and a group selects together: a click on a
+ * grouped area or decor item selects the whole group (`pickGroup`,
+ * `groupSelection`); Shift still adds or takes away one. The Arrange set's
+ * Lock is `pinned` and leaves an area selectable, so it can be unlocked.
  */
 
 import { areaLabel } from './deckV2Model.js';
 import { KIND_LABELS, placementProblem } from './editorModel.js';
 import { blockRefusal } from './deckAssistModel.js';
 import { SLIDE_SIZES, aspectOf, nearestCell, structureOf } from './gridModel.js';
+import { decorSel, isDecorOn, isDecorSel, itemsOf } from './arrangeModel.js';
 
 export const GRID = Object.freeze({ cols: 12, rows: 6 });
 
@@ -157,6 +164,32 @@ export function pick(selection, areas, id, { shift = false } = {}) {
   if (!selectable(area).ok) return sel;
   if (!shift) return [id];
   return sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id];
+}
+
+/** D1533: the ids a click on `sel` selects: its whole group (one layer: areas or decor), else just it. */
+export function groupSelection(card, sel) {
+  const [one] = itemsOf(card, [sel]);
+  if (!one?.group) return [sel];
+  const pool = one.tier === 'decor'
+    ? (card.decor || []).filter((d) => d?.group === one.group).map((d) => decorSel(d.id))
+    : (card.blocks || []).filter((b) => b?.group === one.group && b.hidden !== true && b.locked !== true).map((b) => String(b.id));
+  return pool.length ? pool : [sel];
+}
+
+/**
+ * D1533: `pick`, group-aware. A plain click on a grouped area selects its
+ * group; a decor item (`decor:<id>`, from the layers list) is picked the
+ * same way, alone or, with Shift, added or taken away.
+ */
+export function pickGroup(selection, areas, id, { shift = false } = {}, card = null) {
+  const sel = Array.isArray(selection) ? selection : [];
+  if (isDecorSel(id)) {
+    if (!isDecorOn(card, id)) return sel;
+    if (shift) return sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id];
+    return groupSelection(card, id);
+  }
+  const next = pick(sel, areas, id, { shift });
+  return shift || next.length !== 1 || !card ? next : groupSelection(card, id);
 }
 
 /** The cell range two cells span, in either order. */

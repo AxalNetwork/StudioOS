@@ -17,6 +17,7 @@ is automatic. The routes are `cloudflare-worker/src/routes/team_agents.ts`, moun
 | `agentTools.ts` | Part 5 (#3844): the sponsor's approved read tools (D852). `checkGrants` (the sponsor's own connected server, approved and pinned read tools only), `grantsView` (the profile's tools with their server and status), `cleanReads` (granted, at most five) and `readTools` (each through `callCustomTool` in `meteredCall`, cut to 8 KB, wrapped by `toolResultsForModel`; a gone or drifted server answers `disconnected`). |
 | `goals.ts` | D1529 (#3845, E1 of #3742): a scope's goals. A project goal rolls up only to its own company's goal and links only its own OKR. Also `sumCosts`, which never sums an unknown as 0. |
 | `tasks.ts` | D1529: a scope's tasks, for a person, an agent within its rule book, or no one; dependencies within one scope and without a cycle; ready derived; cost `{ available: false }` until E3. |
+| `reads.ts` | D1528 (#3847, E3): the read functions a run's `context` step may call, one per rule book `reads` key, each `{ untrusted: true, data }` and at most 8 KB. A key with no function refuses the run `read_unavailable`. Built: the project and company summaries, the team roster and the four cycles' records. |
 | `workBurnup.ts` | D1614 W2 (#3970): a project's burn-up, derived from `scope_task_events` on every read and stored nowhere. Each day is the end of that day in the member's time zone: scope, completed, open, not planned, duplicate, and completed by assignee kind. Days before the first item are `{ available: false }`, never zeros. |
 | `planner.ts` | D1530 (#3848, E4 of #3742): the goal planner. `parsePlan` (at most 20 items; an unknown module or role drops its item with a note; a loop is `plan_invalid`), `planQuote` and `draftPlan` (the CEO agent through `agentRun`, else the manager's Eadwyn, on `propose:goal-plan`), and `acceptPlan` (claims the proposal once and writes every task, event and dependency in the same atomic `DB.batch`). `agent_planner_d1530.test.ts` covers it. |
 | `templates.ts` | D1530: one role template per catalogue role (model tier, suggested cap, duties), the wizard's stage mapping, `suggestRoles` (rule-based, no model) and `monthEstimate` (unknown, never 0). |
@@ -28,7 +29,7 @@ is automatic. The routes are `cloudflare-worker/src/routes/team_agents.ts`, moun
 binding, no fetch. A read of the database goes in `teams.ts`, and a gate is
 written there once. A new module key must be a slug a cycle already has; a new
 rule book section is one entry in `rulebook.ts`'s `SECTIONS`; the floor only
-grows. An agent runs only through `agentRun.ts`, and its proposals are decided through `queue.ts`.
+grows. An agent runs only through `agentRun.ts`, and its proposals are decided through `queue.ts`. The engine's runtime (admission, the task Workflow, the agent queue) lives in `cloudflare-worker/src/agents/` (D1528) and calls `agentRun.ts`; a new read for the `context` step is one entry in `reads.ts`'s `READERS`.
 `team_agents_d1496.test.ts` covers the registry, the run and the queue, and
 `scope_goals_tasks_d1529.test.ts` covers goals and tasks.
 
