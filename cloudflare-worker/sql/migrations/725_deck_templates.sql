@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS deck_templates (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   uid TEXT NOT NULL UNIQUE,
   scope TEXT NOT NULL CHECK (scope IN ('hq', 'user')),
-  owner_id INTEGER REFERENCES users(id),
+  owner_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
   name TEXT NOT NULL CHECK (length(trim(name)) BETWEEN 1 AND 40),
   description TEXT CHECK (description IS NULL OR length(description) <= 140),
   stage TEXT CHECK (stage IS NULL OR stage IN ('pre_seed', 'seed', 'series_a', 'series_b_plus')),
