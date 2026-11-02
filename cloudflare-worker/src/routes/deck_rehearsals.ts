@@ -14,7 +14,15 @@
  *   GET  /api/decks/:id/rehearsals        → { deck_id, rehearsals: [summary] }
  *   GET  /api/decks/:id/rehearsals/:uid   → { rehearsal }
  *   PUT  /api/decks/:id/rehearsals/:uid/keep-audio { keep } → { rehearsal }
- *        Off deletes the audio now; on keeps it, while it is still held.
+ *        Off deletes the audio now; on keeps it, while it is still held, and
+ *        counts it against the venture's storage plan (413 storage_full when
+ *        it would not fit; part 2).
+ *   POST /api/decks/:id/rehearsals/:uid/coach/quote → { model, hold_microusd, balance }
+ *   POST /api/decks/:id/rehearsals/:uid/coach → { rehearsal }  — part 2:
+ *        `rehearse_coach`, one run on the rail option `rehearse:coach`,
+ *        quoted and held; its points are checked in code
+ *        (`services/decks/rehearseCoach.ts`). Written once (409
+ *        already_coached). The audio's hour then counts from the coaching.
  *
  * Who: the founder, on a deck version they may write; a rehearsal is its
  * maker's alone, so a co-founder never reads another's. A support session may
@@ -33,6 +41,9 @@ import { CHUNK_MIME, MAX_CHUNK_BYTES } from '../services/interviewSessions';
 import { IMAGE_PAGE } from '../services/decks/images';
 import { MAX_DURATION_MS, PITCH_SECONDS, marksOf, rehearsalReport, type RehearsalReport } from '../services/decks/rehearsal';
 import { audioDeleteAfter, deleteRehearsalAudio } from '../services/rehearsalAudio';
+import { COACH_OPTION, COACH_SYSTEM, coachMessage, coachPoints, type Coaching } from '../services/decks/rehearseCoach';
+import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
+import { parseJsonLoose } from '../services/decks/autofill';
 import { isSupportSession } from '../integrations/providers/mercury';
 import { railFor, refuseRun } from '../util/railContext';
 import { refuse } from '../util/refusal';
@@ -83,6 +94,8 @@ type Row = {
   id: number; uid: string; deck_id: number; pitch_seconds: number; duration_ms: number; status: string; report_json: string | null;
   transcript_json: string | null; model: string | null; charged_microusd: number | null; audio_r2_key: string | null; keep_audio: number;
   audio_delete_after: string | null; audio_deleted_at: string | null; created_at: string;
+  project_id: number; audio_bytes: number | null; coach_json: string | null; coach_model: string | null;
+  coach_charged_microusd: number | null; coached_at: string | null;
 };
 
 const audioState = (r: Row): 'kept' | 'held' | 'deleted' => (r.audio_r2_key ? (r.keep_audio ? 'kept' : 'held') : 'deleted');
@@ -102,11 +115,21 @@ function whole(r: Row) {
     ...summary(r), report: parse<RehearsalReport>(r.report_json), transcript: transcript?.text ?? null, model: r.model,
     charged_microusd: r.charged_microusd == null ? null : Number(r.charged_microusd),
     audio_delete_after: r.audio_r2_key && !r.keep_audio ? r.audio_delete_after : null, audio_deleted_at: r.audio_deleted_at,
+    audio_bytes: r.audio_bytes == null ? null : Number(r.audio_bytes),
+    coaching: r.coach_json ? {
+      ...(parse<Coaching>(r.coach_json) ?? { points: [], dropped: 0 }), model: r.coach_model,
+      charged_microusd: r.coach_charged_microusd == null ? null : Number(r.coach_charged_microusd), coached_at: r.coached_at,
+    } : null,
   };
 }
 
 async function rowOf(env: Env, deckId: number, userId: number, uid: string): Promise<Row | null> {
-  return env.DB.prepare('SELECT * FROM deck_rehearsals WHERE uid = ? AND deck_id = ? AND user_id = ?').bind(uid, deckId, userId).first<Row>();
+  // Part 2a: the size and the coaching sit beside the rehearsal (deck_rehearsal_extras).
+  return env.DB.prepare(
+    `SELECT r.*, x.audio_bytes, x.coach_json, x.coach_model, x.coach_charged_microusd, x.coached_at
+       FROM deck_rehearsals r LEFT JOIN deck_rehearsal_extras x ON x.rehearsal_id = r.id
+      WHERE r.uid = ? AND r.deck_id = ? AND r.user_id = ?`,
+  ).bind(uid, deckId, userId).first<Row>();
 }
 
 deckRehearsals.post('/:id{[0-9]+}/rehearsals/quote', async (c) => {
@@ -182,6 +205,9 @@ deckRehearsals.post('/:id{[0-9]+}/rehearsals', async (c) => {
     JSON.stringify({ text: r.transcript?.text ?? '', language: r.transcript?.language ?? null, segments }), JSON.stringify(report),
     r.usage?.model ?? q.model, r.usageLogId ?? null, charged?.charged_microusd == null ? null : Number(charged.charged_microusd),
     key, mime, audioDeleteAfter(new Date())).run();
+  // Part 2a: the recording's size, for the storage plan once it is kept.
+  await c.env.DB.prepare('INSERT INTO deck_rehearsal_extras (rehearsal_id, audio_bytes) SELECT id, ? FROM deck_rehearsals WHERE uid = ?')
+    .bind(bytes.byteLength, uid).run();
   const row = await rowOf(c.env, deck.deckId, userId, uid);
   return c.json({ rehearsal: row ? whole(row) : null }, 201);
 });
@@ -217,12 +243,89 @@ deckRehearsals.put('/:id{[0-9]+}/rehearsals/:uid/keep-audio', async (c) => {
   if (!row) return c.json({ error: 'not found' }, 404);
   if (body.keep) {
     if (!row.audio_r2_key) return refuse(c, 409, { code: 'audio_deleted', message: 'The audio has already been deleted. The transcript and the report stay.' });
+    // Part 2: kept audio counts against the venture's storage plan; 413 storage_full when it would not fit.
+    const room = row.keep_audio ? null : await assertStorageRoom(c.env, { projectId: deck.projectId }, Number(row.audio_bytes) || 0, user);
     await c.env.DB.prepare('UPDATE deck_rehearsals SET keep_audio = 1 WHERE id = ?').bind(row.id).run();
+    if (room) await noteStorageLanded(c.env, room);
   } else {
     await c.env.DB.prepare('UPDATE deck_rehearsals SET keep_audio = 0 WHERE id = ?').bind(row.id).run();
     await deleteRehearsalAudio(c.env, row);
   }
   const fresh = await rowOf(c.env, deck.deckId, Number(user.id), uid);
+  return c.json({ rehearsal: fresh ? whole(fresh) : null });
+});
+
+// ── part 2: rehearse_coach ──────────────────────────────────────────────────
+
+const NOT_REPORTED = { code: 'not_reported', message: 'This rehearsal has no report to coach on.' };
+
+function coachRun(c: any, user: User, deckId: number, row: Row, model?: string): RunOptions | null {
+  const report = parse<RehearsalReport>(row.report_json);
+  const transcript = parse<{ text?: string }>(row.transcript_json)?.text ?? '';
+  if (!report || row.status !== 'reported') return null;
+  const rail = { ...railFor(c, { page: REHEARSE_PAGE, option: COACH_OPTION }, `deck:${deckId}`), option: COACH_OPTION };
+  return {
+    ...(model ? { model } : {}), task: 'rail_reason', userId: Number(user.id) || 0, surface: AI_SURFACE.raisePitch, rail,
+    systemPrompt: COACH_SYSTEM, messages: [{ role: 'user', content: coachMessage(report, transcript) }], temperature: 0.3, maxTokens: 900,
+  };
+}
+
+async function coachRow(c: any): Promise<{ user: User; deck: Deck; row: Row } | Response> {
+  const uid = c.req.param('uid');
+  if (!UID.test(uid)) return c.json({ error: 'not found' }, 404);
+  const user = await requireAuth(c);
+  const deck = await deckOf(c, user);
+  if (deck instanceof Response) return deck;
+  const row = await rowOf(c.env, deck.deckId, Number(user.id), uid);
+  return row ? { user, deck, row } : c.json({ error: 'not found' }, 404);
+}
+
+deckRehearsals.post('/:id{[0-9]+}/rehearsals/:uid/coach/quote', async (c) => {
+  const got = await coachRow(c);
+  if (got instanceof Response) return got;
+  const body = await c.req.json().catch(() => ({} as any));
+  const opts = coachRun(c, got.user, got.deck.deckId, got.row, modelOf(body?.model));
+  if (!opts) return refuse(c, 409, NOT_REPORTED);
+  const q = await quoteRun(c.env, opts);
+  if (!q.ok) return refuseRun(c, { refusal: q.refusal, error: q.error }) ?? refuse(c, 503, { code: 'model_unavailable', message: 'Coaching is not available. Nothing was run.' });
+  const short = await balanceRefusal(c.env, Number(got.user.id), q.hold_microusd);
+  return c.json({ model: q.model, hold_microusd: q.hold_microusd, balance: short ? { ok: false, code: short.code, message: short.message } : { ok: true } });
+});
+
+deckRehearsals.post('/:id{[0-9]+}/rehearsals/:uid/coach', async (c) => {
+  const got = await coachRow(c);
+  if (got instanceof Response) return got;
+  const { user, deck, row } = got;
+  if (row.coach_json) return refuse(c, 409, { code: 'already_coached', message: 'This rehearsal already has its coaching.' });
+  const body = await c.req.json().catch(() => ({} as any));
+  const opts = coachRun(c, user, deck.deckId, row, modelOf(body?.model));
+  if (!opts) return refuse(c, 409, NOT_REPORTED);
+  const userId = Number(user.id);
+  const q = await quoteRun(c.env, opts);
+  if (!q.ok) return refuseRun(c, { refusal: q.refusal, error: q.error }) ?? refuse(c, 503, { code: 'model_unavailable', message: 'Coaching is not available. Nothing was run.' });
+  const short = await balanceRefusal(c.env, userId, q.hold_microusd);
+  if (short) return refuse(c, 402, { code: short.code, message: short.message });
+  const r = await run(c.env, { ...opts, rail: opts.rail, surface: AI_SURFACE.raisePitch });
+  if (!r.ok) return refuseRun(c, { refusal: r.refusal, error: r.error }) ?? refuse(c, 503, { code: 'model_unavailable', message: 'The coach could not answer. Nothing was charged.' });
+  const report = parse<RehearsalReport>(row.report_json)!;
+  const coaching = coachPoints(parseJsonLoose<any>(r.output), report, parse<{ text?: string }>(row.transcript_json)?.text ?? '');
+  const charged = r.usageLogId
+    ? await c.env.DB.prepare('SELECT charged_microusd FROM ai_usage_logs WHERE id = ? AND user_id = ?').bind(r.usageLogId, userId).first<any>().catch(() => null)
+    : null;
+  // The coaching is written once; the audio's hour now counts from it (U = A), unless it is kept or gone.
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      `INSERT INTO deck_rehearsal_extras (rehearsal_id, coach_json, coach_model, coach_usage_log_id, coach_charged_microusd, coached_at)
+       VALUES (?, ?, ?, ?, ?, datetime('now'))
+       ON CONFLICT(rehearsal_id) DO UPDATE SET coach_json = excluded.coach_json, coach_model = excluded.coach_model,
+         coach_usage_log_id = excluded.coach_usage_log_id, coach_charged_microusd = excluded.coach_charged_microusd, coached_at = excluded.coached_at
+       WHERE deck_rehearsal_extras.coach_json IS NULL`,
+    ).bind(row.id, JSON.stringify(coaching), r.usage?.model ?? q.model, r.usageLogId ?? null, charged?.charged_microusd == null ? null : Number(charged.charged_microusd)),
+    c.env.DB.prepare(
+      `UPDATE deck_rehearsals SET audio_delete_after = ? WHERE id = ? AND audio_r2_key IS NOT NULL AND keep_audio = 0`,
+    ).bind(audioDeleteAfter(new Date()), row.id),
+  ]);
+  const fresh = await rowOf(c.env, deck.deckId, userId, row.uid);
   return c.json({ rehearsal: fresh ? whole(fresh) : null });
 });
 

@@ -25,6 +25,8 @@ import { SignJWT } from 'jose';
 
 import deckRehearsals, { REHEARSE_OPTION, REHEARSE_PAGE } from '../src/routes/deck_rehearsals.ts';
 import { purgeRehearsalAudio } from '../src/services/rehearsalAudio.ts';
+import { COACH_OPTION, COACH_POINTS, coachPoints } from '../src/services/decks/rehearseCoach.ts';
+import { storageUsedBytes } from '../src/services/storageUsage.ts';
 import {
   budgetLine, cardBudgetsMs, figureFindings, fillersIn, itemCovered, marksOf, noteItems, rehearsalReport,
 } from '../src/services/decks/rehearsal.ts';
@@ -33,6 +35,7 @@ import { contractErrors } from '../src/contracts/validate.ts';
 import { FOUNDER_OPTIONS } from '../../frontend/src/lib/railOptions/founder.js';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withGuard } from './_guard_stub.mjs';
+import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -136,15 +139,19 @@ const SEGMENTS = [
   { start: 43, end: 48, text: "We're at $2M ARR." },
 ];
 
-async function call(db: any, FILES: any, method: string, path: string, body?: any, user = FOUNDER) {
-  const AI = withGuard({ run: async () => ({ text: SEGMENTS.map((s) => s.text).join(' '), transcription_info: { language: 'en' }, segments: SEGMENTS }) });
+async function call(db: any, FILES: any, method: string, path: string, body?: any, user = FOUNDER, coach: unknown = null) {
+  // Part 2: a chat run (the coach) answers `coach`; a transcription answers the segments.
+  const AI = withGuard({ run: async (_m: string, input: any) => (input?.messages
+    ? { response: JSON.stringify(coach ?? { points: [] }), usage: { prompt_tokens: 40, completion_tokens: 20 } }
+    : { text: SEGMENTS.map((s) => s.text).join(' '), transcription_info: { language: 'en' }, segments: SEGMENTS }) });
   const app = new Hono<any>().route('/api/decks', deckRehearsals);
   const token = await new SignJWT({ user_id: user, role: 'founder' }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
   const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
   let payload: any = body;
   if (body && !(body instanceof FormData)) { headers['Content-Type'] = 'application/json'; payload = JSON.stringify(body); }
-  const res = await app.fetch(new Request(`http://t/api/decks${path}`, { method, headers, body: payload }),
-    { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db), AI, FILES } as any, { waitUntil() {}, passThroughOnException() {} } as any);
+  // A thrown Response (storage_full) is the response, as index.ts makes it.
+  const res = await withThrownResponses(() => app.fetch(new Request(`http://t/api/decks${path}`, { method, headers, body: payload }),
+    { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db), AI, FILES } as any, { waitUntil() {}, passThroughOnException() {} } as any));
   return { status: res.status, body: await res.json().catch(() => null) as any };
 }
 
@@ -246,4 +253,84 @@ test('3. bad input refuses before any run; another member cannot rehearse or rea
   const theirs = await call(db, FILES, 'GET', `/${DECK}/rehearsals/${mine.body.rehearsal.uid}`, undefined, OTHER);
   assert.ok([403, 404].includes(theirs.status), String(theirs.status));
   assert.ok([403, 404].includes((await call(db, FILES, 'POST', `/${DECK}/rehearsals`, recording(), OTHER)).status));
+});
+
+// ── 4. Part 2: rehearse_coach, and kept audio against the storage plan ─────
+
+test('4. the coach\'s points: a card of the deck, within the limit, and no number the rehearsal does not hold', () => {
+  // Mutation checked: coachPoints not checking numbers → the invented "40%" point is shown.
+  const report: any = { pitch_seconds: 120, time_line: '1:30 of 2:00', figures: [], cards: [{ card: 1, title: 'Kestrel', time_line: '0:42 of 1:00' }, { card: 2, title: 'Traction', time_line: '0:48 of 1:00' }] };
+  const transcript = "Um, let me introduce the team. We're at $2M ARR.";
+  const got = coachPoints({ points: [
+    { card: 1, point: 'Drop the "um" before you introduce the team.' },
+    { card: 2, point: 'You said $2M ARR; say the recorded figure.' },
+    { card: 2, point: 'Investors expect 40% growth.' },
+    { card: 9, point: 'A card the deck does not have.' },
+    { card: 1, point: 'x'.repeat(400) },
+    { card: 1 },
+  ] }, report, transcript);
+  assert.deepEqual(got.points.map((p) => p.card), [1, 2]);
+  assert.equal(got.dropped, 4);
+  assert.deepEqual(coachPoints('not json', report, transcript), { points: [], dropped: 0 });
+  const many = coachPoints({ points: Array.from({ length: 20 }, () => ({ card: 1, point: 'Slow down.' })) }, report, transcript);
+  assert.equal(many.points.length, COACH_POINTS);
+  const rows = FOUNDER_OPTIONS.filter((o: any) => o.key === COACH_OPTION);
+  assert.deepEqual(rows.map((o: any) => [o.page, o.kind]), [[REHEARSE_PAGE, 'reason']]);
+});
+
+test('4. coaching is quoted, run once on rehearse:coach, written once, and the audio\'s hour restarts from it', async () => {
+  // Mutation checked: the coach UPDATE not resetting audio_delete_after → the hour stays in 2000.
+  const db = fixture();
+  const FILES = bucket();
+  const r = await call(db, FILES, 'POST', `/${DECK}/rehearsals`, recording());
+  const uid = r.body.rehearsal.uid;
+  assert.equal(r.body.rehearsal.coaching, null);
+  assert.equal(r.body.rehearsal.audio_bytes, 64, 'the recording\'s size is kept for the storage plan');
+  const q = await call(db, FILES, 'POST', `/${DECK}/rehearsals/${uid}/coach/quote`, {});
+  assert.equal(q.status, 200, JSON.stringify(q.body));
+  assert.ok(q.body.hold_microusd > 0);
+  db.prepare("UPDATE deck_rehearsals SET audio_delete_after = '2000-01-01 00:00:00' WHERE uid = ?").run(uid);
+  const coached = await call(db, FILES, 'POST', `/${DECK}/rehearsals/${uid}/coach`, {}, FOUNDER,
+    { points: [{ card: 2, point: 'You said $2M ARR; say the recorded figure.' }, { card: 1, point: 'Growth will hit 300% next year.' }] });
+  assert.equal(coached.status, 200, JSON.stringify(coached.body));
+  const c = coached.body.rehearsal.coaching;
+  assert.deepEqual(c.points, [{ card: 2, point: 'You said $2M ARR; say the recorded figure.' }]);
+  assert.equal(c.dropped, 1);
+  assert.ok(c.coached_at);
+  assert.ok(coached.body.rehearsal.audio_delete_after > '2000-01-01 00:00:00', 'the hour now counts from the coaching');
+  const runs = db.prepare(`SELECT task, rail_option FROM ai_usage_logs WHERE guard_for IS NULL ORDER BY id`).all() as any[];
+  assert.deepEqual(runs.map((x) => [x.task, x.rail_option]), [['transcribe', REHEARSE_OPTION], ['rail_reason', COACH_OPTION]]);
+  const twice = await call(db, FILES, 'POST', `/${DECK}/rehearsals/${uid}/coach`, {}, FOUNDER, { points: [] });
+  assert.deepEqual([twice.status, twice.body.error], [409, 'already_coached']);
+  // A kept audio is not given a new hour.
+  const r2 = await call(db, FILES, 'POST', `/${DECK}/rehearsals`, recording());
+  await call(db, FILES, 'PUT', `/${DECK}/rehearsals/${r2.body.rehearsal.uid}/keep-audio`, { keep: true });
+  db.prepare("UPDATE deck_rehearsals SET audio_delete_after = '2000-01-01 00:00:00' WHERE uid = ?").run(r2.body.rehearsal.uid);
+  await call(db, FILES, 'POST', `/${DECK}/rehearsals/${r2.body.rehearsal.uid}/coach`, {}, FOUNDER, { points: [] });
+  assert.equal((db.prepare('SELECT audio_delete_after AS d FROM deck_rehearsals WHERE uid = ?').get(r2.body.rehearsal.uid) as any).d, '2000-01-01 00:00:00');
+  // Another member cannot coach it.
+  assert.ok([403, 404].includes((await call(db, FILES, 'POST', `/${DECK}/rehearsals/${uid}/coach/quote`, {}, OTHER)).status));
+});
+
+test('4. kept audio counts against the venture\'s storage plan; held audio does not; a full plan refuses Keep', async () => {
+  // Mutation checked: the keep route not asserting room → the full plan keeps it (200).
+  const db = fixture();
+  const FILES = bucket();
+  const env: any = { DB: d1Over(db), FILES };
+  const r = await call(db, FILES, 'POST', `/${DECK}/rehearsals`, recording());
+  const uid = r.body.rehearsal.uid;
+  const before = await storageUsedBytes(env, FOUNDER);
+  const kept = await call(db, FILES, 'PUT', `/${DECK}/rehearsals/${uid}/keep-audio`, { keep: true });
+  assert.equal(kept.status, 200, JSON.stringify(kept.body));
+  const after = await storageUsedBytes(env, FOUNDER);
+  assert.equal(after!.measured_bytes - before!.measured_bytes, 64, 'held audio is not counted; kept audio is');
+  await call(db, FILES, 'PUT', `/${DECK}/rehearsals/${uid}/keep-audio`, { keep: false });
+  assert.equal((await storageUsedBytes(env, FOUNDER))!.measured_bytes, before!.measured_bytes, 'deleted audio counts nothing');
+  // A plan already over its allowance refuses to keep another.
+  db.prepare("INSERT INTO deck_rehearsals (uid, deck_id, project_id, user_id, pitch_seconds, duration_ms, audio_r2_key, keep_audio) VALUES ('huge', ?, ?, ?, 120, 1000, 'k', 1)").run(DECK, PID, FOUNDER);
+  db.prepare("INSERT INTO deck_rehearsal_extras (rehearsal_id, audio_bytes) SELECT id, ? FROM deck_rehearsals WHERE uid = 'huge'").run(10 ** 15);
+  const r2 = await call(db, FILES, 'POST', `/${DECK}/rehearsals`, recording());
+  const full = await call(db, FILES, 'PUT', `/${DECK}/rehearsals/${r2.body.rehearsal.uid}/keep-audio`, { keep: true });
+  assert.deepEqual([full.status, full.body?.error], [413, 'storage_full']);
+  assert.equal((db.prepare('SELECT keep_audio AS k FROM deck_rehearsals WHERE uid = ?').get(r2.body.rehearsal.uid) as any).k, 0, 'not kept');
 });

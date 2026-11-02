@@ -31,7 +31,7 @@ import { storagePlan, storagePlanKey } from './storagePlans';
 
 export type StorageAreaKey =
   | 'data_room' | 'diligence_files' | 'research_library' | 'interview_recordings'
-  | 'data_room_versions' | 'session_audio' | 'deck_reviews' | 'validate_evidence' | 'build_proofs'
+  | 'data_room_versions' | 'session_audio' | 'deck_reviews' | 'deck_rehearsals' | 'validate_evidence' | 'build_proofs'
   | 'grow_minutes' | 'brand_files' | 'csv_imports' | 'articles';
 export type StorageKindKey = 'data_room' | 'documents' | 'recordings' | 'decks_exports' | 'brand' | 'other';
 export type StorageState = 'ok' | 'near_80' | 'near_95' | 'full' | 'over' | 'no_allowance';
@@ -154,6 +154,25 @@ const AREAS: ReadonlyArray<Def> = [
     owners: `SELECT d.user_id AS user_id, COUNT(*) AS files, SUM(d.size) AS bytes, SUM(CASE WHEN d.size IS NULL THEN 1 ELSE 0 END) AS unknown_size_files
       FROM deck_reviews d WHERE d.user_id IS NOT NULL AND d.raw_retained = 1 AND d.r2_key IS NOT NULL AND TRIM(d.r2_key) <> ''
       GROUP BY d.user_id` },
+  // D1580 part 2 (#3827): a rehearsal's audio counts while the founder keeps
+  // it (keep_audio = 1) and it is still stored. Held audio (its hour after the
+  // report or the coaching) is not counted: the sweep deletes it.
+  { key: 'deck_rehearsals', kind: 'recordings', scope: 'company',
+    groups: `SELECT r.project_id AS project_id, COUNT(*) AS files, SUM(x.audio_bytes) AS bytes,
+      SUM(CASE WHEN x.audio_bytes IS NULL THEN 1 ELSE 0 END) AS unknown_size_files
+      FROM json_each(?) own JOIN deck_rehearsals r ON r.project_id = own.value
+      LEFT JOIN deck_rehearsal_extras x ON x.rehearsal_id = r.id
+      WHERE r.keep_audio = 1 AND r.audio_r2_key IS NOT NULL GROUP BY r.project_id`,
+    largest: `SELECT 'Rehearsal of ' || substr(r.created_at, 1, 16) AS name, NULL AS version, x.audio_bytes AS bytes, r.created_at AS added_at,
+      r.project_id AS project_id, r.uid AS ref
+      FROM json_each(?) own JOIN deck_rehearsals r ON r.project_id = own.value
+      JOIN deck_rehearsal_extras x ON x.rehearsal_id = r.id
+      WHERE r.keep_audio = 1 AND r.audio_r2_key IS NOT NULL AND x.audio_bytes IS NOT NULL ORDER BY x.audio_bytes DESC, r.id DESC LIMIT 10`,
+    owners: `SELECT vo.user_id AS user_id, COUNT(*) AS files, SUM(x.audio_bytes) AS bytes,
+      SUM(CASE WHEN x.audio_bytes IS NULL THEN 1 ELSE 0 END) AS unknown_size_files
+      FROM ` + VENTURE_OWNERS + ` JOIN deck_rehearsals r ON r.project_id = vo.project_id
+      LEFT JOIN deck_rehearsal_extras x ON x.rehearsal_id = r.id
+      WHERE r.keep_audio = 1 AND r.audio_r2_key IS NOT NULL AND vo.user_id IS NOT NULL GROUP BY vo.user_id` },
   // D1168's stores: a row marked missing holds no object and is not a file.
   { key: 'validate_evidence', kind: 'documents', scope: 'company',
     groups: `SELECT d.project_id AS project_id, COUNT(*) AS files, SUM(d.size_bytes) AS bytes,

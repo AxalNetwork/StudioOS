@@ -191,7 +191,8 @@ const KNOWN_DUPLICATE_NUMBERS = {
 };
 
 test('the migration numbers are free and in order', () => {
-  const files = readdirSync(DIR).filter((f) => f.endsWith('.sql'));
+  // D4106: a stamped file (YYYYMMDDHHMM_) is not numbered; check-sql-migrations keeps those unique.
+  const files = readdirSync(DIR).filter((f) => f.endsWith('.sql') && /^\d{1,3}_/.test(f));
   const nums = files.map((f) => Number(f.slice(0, 3))).filter(Number.isFinite);
   for (const n of [208, 209]) {
     assert.equal(nums.filter((x) => x === n).length, 1,
