@@ -9,7 +9,8 @@
  *   advisor_services          the advisor's own service    (routes/advisors.ts, `requireMyAdvisor`)
  *   engagement_status_reports the partner on the engagement, until it is sent
  *                             (routes/partner_delivery.ts, `requireOwnEngagement`; a sent report is frozen)
- *   events, event_agenda_items `canManage`: an admin, or the event's host (routes/events.ts)
+ *   events, event_agenda_items `canManage`: an admin, or the event's host (routes/events.ts);
+ *                             #4046 (B2): a new event (/events/new) hangs under the caller, its host
  *   admin_publications        an admin (routes/admin_publications.ts, `requireAdmin`)
  *   ic_decisions              its author, while it is not decided (routes/ic.ts `PUT /:uid`);
  *                             read as `icDecisionScope` reads it
@@ -22,8 +23,11 @@
  *   deal_notes                #4046: a firm's private note on a deal (routes/deal_context.ts,
  *                             `context`): an investor who may open the deal for that firm reads
  *                             the firm's notes; only the note's author fills it. No staff bypass.
+ *   testing_applications      #4046 (B2): a member's application to a product-testing programme,
+ *                             under the programme while `apply` would take it (services/testing.ts,
+ *                             `mayApplyTo`); a sent one is its member's alone. No staff bypass.
  *
- * The D1595 three and the deal note are CONCEALED: a caller who may not read the record is
+ * The D1595 three, the deal note and a testing application are CONCEALED: a caller who may not read the record is
  * answered as if it did not exist, and each reads the request's verified
  * active company (`ScopeContext`), as its route does; without one it answers
  * nothing.
@@ -45,9 +49,10 @@
 import type { Env, User } from '../../types';
 import { inSupportBook, myPerk, offeringOwned, supportBookIds } from '../profileWriteGates';
 import { noteFirm, visibleDeal } from '../dealNotes';
+import { mayApplyTo } from '../testing';
 
 export interface ScopeAccess { read: boolean; write: boolean }
-export type ParentKind = 'advisor' | 'engagement' | 'event' | 'project' | 'owner' | 'deal';
+export type ParentKind = 'advisor' | 'engagement' | 'event' | 'project' | 'owner' | 'deal' | 'programme';
 
 /** What a scope may need from the request: the caller's verified active company (`activeCompanyFor`). */
 export interface ScopeContext {
@@ -93,6 +98,8 @@ async function myPartnerId(env: Env, user: User): Promise<number | null> {
 }
 
 /** `canManage` in routes/events.ts: an admin, or the event's host. */
+/** #4046 (B2): the profiles `/events/new` admits (App.jsx's guard); `POST /api/events` makes the caller its host. */
+const EVENT_HOSTS = new Set(['admin', 'founder', 'partner', 'investor', 'advisor']);
 const manages = (event: Record<string, unknown> | null, user: User) => !!event && (isAdminUser(user) || Number(event.host_user_id) === Number(user.id));
 
 export const RECORD_SCOPES: Readonly<Record<string, RecordScope>> = Object.freeze({
@@ -127,11 +134,14 @@ export const RECORD_SCOPES: Readonly<Record<string, RecordScope>> = Object.freez
       return NONE;
     },
   },
+  // #4046 (B2): /events/new. A new event hangs under its host, the caller (`POST /api/events` makes the caller
+  // its host); any profile the page admits may draft one. A saved event is its host's, or an admin's (`canManage`).
   events: {
     read: 'SELECT * FROM events WHERE id = ?',
-    parent: null,
-    async access(_env, user, row) {
-      return manages(row, user) ? { read: true, write: true } : NONE;
+    parent: { kind: 'owner', column: 'host_user_id', own: ownUserId },
+    async access(_env, user, row, parentId) {
+      if (row) return manages(row, user) ? BOTH : NONE;
+      return parentId != null && parentId === Number(user.id) && EVENT_HOSTS.has(role(user)) ? BOTH : NONE;
     },
   },
   event_agenda_items: {
@@ -206,6 +216,22 @@ export const RECORD_SCOPES: Readonly<Record<string, RecordScope>> = Object.freez
         if (await myPerk(env, String(row.uid ?? ''), Number(user.id), await ctx.activeCompany())) return BOTH;
       }
       return isAdminUser(user) && row ? READ_ONLY : NONE;
+    },
+  },
+  // #4046 (B2): a member's application to a product-testing programme, its answers only. A new one hangs under
+  // the programme, for a member `apply` would take now (`mayApplyTo`); a sent one is its member's alone, and
+  // only while it waits ('applied'), so the record step after Apply can keep what was placed. Concealed:
+  // another member's application, or a programme they may not apply to, reads as one that does not exist.
+  // The read lays the answers out as one column each, so a kept answer is compared field by field.
+  testing_applications: {
+    read: `SELECT a.*, json_extract(a.answers, '$[0]') AS answer_1, json_extract(a.answers, '$[1]') AS answer_2,
+      json_extract(a.answers, '$[2]') AS answer_3, json_extract(a.answers, '$[3]') AS answer_4, json_extract(a.answers, '$[4]') AS answer_5
+      FROM testing_applications a WHERE a.id = ?`,
+    parent: { kind: 'programme', column: 'programme_id' },
+    concealed: true,
+    async access(env, user, row, parentId) {
+      if (row) return Number(row.user_id) === Number(user.id) ? (row.status === 'applied' ? BOTH : READ_ONLY) : NONE;
+      return parentId != null && (await mayApplyTo(env, { id: Number(user.id), role: role(user) }, parentId)) ? BOTH : NONE;
     },
   },
   // #4046 (#3740 2b): Deal notes' New note. The firm and the deal by `context`'s own rule (routes/deal_context.ts);

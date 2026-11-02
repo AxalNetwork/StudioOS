@@ -11,8 +11,9 @@
  *     data stays out, and a card left with nothing stays out; the compliance
  *     footnote and Confidential stay on (owner decision T);
  *   · the publish control lives only in ShareDialog, says public pages are off
- *     until counsel's wording, has no default exemption, and does not publish
- *     a 506(b) round.
+ *     until counsel's wording, and does not publish a 506(b) round. Since D4086
+ *     the exemption is the round's: the panel shows it read-only and links to
+ *     Raise when it does not allow a page; there is no per-link picker.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/deck_card_view_d1564.test.mjs
  */
@@ -28,7 +29,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { installDocument } from './_contracts_dom.mjs';
 import { renderedText } from './_renderedText.mjs';
 import DeckCardView from '../src/pages/raise/pitch/DeckCardView.jsx';
-import PublishPanel, { EXEMPTION_506B_NOTE, PUBLIC_OFF, embedUrl, originsOf, whatPublishDoes } from '../src/pages/raise/pitch/PublishPanel.jsx';
+import PublishPanel, { NO_ROUND, PUBLIC_OFF, RAISE_LINK, embedUrl, originsOf, raiseHref, roundLine, whatPublishDoes } from '../src/pages/raise/pitch/PublishPanel.jsx';
 import { EmailGate } from '../src/pages/raise/pitch/ShareViewerParts.jsx';
 import { GUTTER, PHONE_WIDTH, blockHasData, cardViewCards } from '../src/pages/raise/pitch/cardViewModel.js';
 import { deckPublishApi } from '../src/lib/api/deckPublish.js';
@@ -195,7 +196,7 @@ async function mountPanel(answers) {
   const container = document.createElement('div'); document.body.appendChild(container);
   const rootEl = createRoot(container);
   const settle = () => act(async () => { for (let i = 0; i < 6; i += 1) await new Promise((r) => setTimeout(r, 0)); });
-  await act(async () => { rootEl.render(h(PublishPanel, { deck: { id: 40 }, made: { id: 91, share_path: '/share/deck/tok.abc' } })); });
+  await act(async () => { rootEl.render(h(PublishPanel, { deck: { id: 40, project_id: 12 }, made: { id: 91, share_path: '/share/deck/tok.abc' } })); });
   await settle();
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
   const pr = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
@@ -210,38 +211,56 @@ async function mountPanel(answers) {
   };
 }
 
-const OFF = { link_id: 91, publish: null, gate: null, public_views: false, note: PUBLIC_OFF };
+const ROUND_506C = { uid: 'r-1', name: 'Seed', exemption: '506c' };
+const OFF = { link_id: 91, publish: null, gate: null, public_views: false, note: PUBLIC_OFF, round: ROUND_506C, round_readable: true, refusal: null };
+const REFUSE_506B = 'A 506(b) round cannot be published: Rule 506(b) allows no general solicitation. Share it one investor at a time.';
 
-test('the panel says public pages are off until counsel\'s wording, has no default exemption, and does not publish 506(b)', async () => {
+test('the panel says public pages are off until counsel\'s wording, shows the round\'s exemption read-only, and publishes a 506(c) round', async () => {
   const m = await mountPanel({
     read: async () => OFF,
-    save: async (_d, _s, body) => ({ ...OFF, publish: { on: true, gate: 'email', exemption: body.exemption, embed_origins: body.embed_origins, at: 'x' }, gate: 'email' }),
+    save: async (_d, _s, body) => ({ ...OFF, publish: { on: true, gate: 'email', exemption: '506c', embed_origins: body.embed_origins, at: 'x' }, gate: 'email' }),
   });
   try {
     assert.deepEqual(m.calls[0], ['read', 40, 91]);
     assert.match(m.text(), /Public pages are off until counsel's wording is in\./);
     assert.equal(m.pr(m.by('pitch-publish-gate')).checked, true, 'the email gate is on');
     assert.equal(m.pr(m.by('pitch-publish-gate')).disabled, true, 'and cannot be turned off while public pages are off');
-    assert.equal(m.pr(m.by('pitch-publish-save')).disabled, true, 'no exemption is chosen for the founder');
-    await m.change('pitch-publish-exemption-506b', true);
-    assert.equal(m.pr(m.by('pitch-publish-save')).disabled, true, 'a 506(b) round does not publish');
-    assert.ok(m.text().includes(EXEMPTION_506B_NOTE), 'the full 506(b) note is shown verbatim');
-    assert.equal(m.calls.filter((c) => c[0] === 'save').length, 0, 'nothing is written');
-    await m.change('pitch-publish-exemption-506c', true);
+    assert.match(m.text(), /Round Seed · Rule 506\(c\)/);
+    assert.equal(m.by('pitch-publish-exemption-506c'), undefined, 'no per-link exemption picker');
+    assert.equal(m.by('pitch-publish-raise'), undefined, 'no link to Raise when the round allows a page');
     await m.change('pitch-publish-origins', 'https://partner.example.test');
     assert.match(m.text(), /after giving their email\. It can be embedded on one site\./);
     await m.press('pitch-publish-save');
-    assert.deepEqual(m.calls.at(-1), ['save', 40, 91, { on: true, exemption: '506c', gate: 'email', embed_origins: ['https://partner.example.test'] }]);
+    assert.deepEqual(m.calls.at(-1), ['save', 40, 91, { on: true, gate: 'email', embed_origins: ['https://partner.example.test'] }], 'the request states no exemption');
     assert.ok(m.by('pitch-publish-on'));
     assert.match(m.pr(m.by('pitch-publish-embed')).children, /<iframe src="\/embed\/tok\.abc"/);
   } finally { await m.unmount(); }
 });
 
+test('a round that does not allow a page: its reason verbatim, Publish off, and the way to Raise; nothing is written', async () => {
+  const cases = [
+    [{ ...OFF, round: { uid: 'r-1', name: 'Seed', exemption: '506b' }, refusal: { code: 'exemption_506b', message: REFUSE_506B } }, /Seed · Rule 506\(b\)/, /allows no general solicitation/],
+    [{ ...OFF, round: { uid: 'r-1', name: 'Seed', exemption: null }, refusal: { code: 'exemption_not_recorded', message: 'Record this round\'s exemption in Raise first.' } }, /Seed · Not recorded/, /Record this round's exemption in Raise first\./],
+    [{ ...OFF, round: null, refusal: { code: 'round_not_linked', message: 'Choose the round this deck is for, then record its exemption in Raise.' } }, new RegExp(NO_ROUND), /Choose the round this deck is for/],
+  ];
+  for (const [read, line, why] of cases) {
+    const m = await mountPanel({ read: async () => read, save: async () => OFF });
+    try {
+      assert.match(m.text(), line);
+      assert.match(m.text(), why);
+      assert.equal(m.pr(m.by('pitch-publish-save')).disabled, true);
+      assert.equal(m.pr(m.by('pitch-publish-raise')).href, '/raise/capital-relationships/commitments?project_id=12');
+      assert.match(m.text(), new RegExp(RAISE_LINK));
+      await m.press('pitch-publish-save');
+      assert.equal(m.calls.filter((c) => c[0] === 'save').length, 0, 'nothing is written');
+    } finally { await m.unmount(); }
+  }
+});
+
 test('a refusal is shown in the Worker\'s words; an unread state offers Try again', async () => {
-  const refused = Object.assign(new Error('409'), { status: 409, data: { error: 'exemption_506b', message: 'A 506(b) round cannot be published: Rule 506(b) allows no general solicitation. Share it one investor at a time.' } });
+  const refused = Object.assign(new Error('409'), { status: 409, data: { error: 'exemption_506b', message: REFUSE_506B } });
   const m = await mountPanel({ read: async () => OFF, save: async () => { throw refused; } });
   try {
-    await m.change('pitch-publish-exemption-506c', true);
     await m.press('pitch-publish-save');
     assert.match(m.text(), /allows no general solicitation/);
   } finally { await m.unmount(); }
@@ -254,7 +273,9 @@ test('a refusal is shown in the Worker\'s words; an unread state offers Try agai
   assert.deepEqual(originsOf('https://a.test, https://b.test\nhttps://c.test'), ['https://a.test', 'https://b.test', 'https://c.test']);
   assert.equal(embedUrl({ share_path: '/share/deck/tok.abc' }, 'https://axal.vc'), 'https://axal.vc/embed/tok.abc');
   assert.equal(embedUrl({ share_path: '/elsewhere' }, 'https://axal.vc'), null);
-  assert.equal(whatPublishDoes({ exemption: null, origins: '' }), 'Say which exemption the round is offered under before publishing.');
+  assert.equal(whatPublishDoes({ origins: '' }, { round_readable: false }), 'The round this deck is for could not be read.');
+  assert.equal(roundLine({ round_readable: true, round: { name: null, exemption: 'reg_s' } }), 'Unnamed round · Regulation S');
+  assert.equal(raiseHref(null), '/raise/capital-relationships/commitments');
 });
 
 test('the embed page and the email gate are wired: /embed/:token is public, and the reader answers gate "email" before any card', () => {
