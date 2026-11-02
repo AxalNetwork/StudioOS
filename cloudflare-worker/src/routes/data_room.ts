@@ -110,6 +110,7 @@ import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 import { WriterError } from '../services/validateWriters';
 import { DECLINE_REASON_MAX, readRequests } from '../services/dataRoomRequests';
 import { investorEvidence, RaiseEvidenceError } from '../services/raiseEvidence';
+import { defaultDeps as searchDeps, filesToIndex, forgetFile, indexFile, searchRoom } from '../services/dataRoomSearch';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -349,6 +350,65 @@ r.get('/shared/:projectUid', async (c) => {
     const room: Partial<typeof view> = { ...view };
     delete room.hidden_from_grant;
     return c.json(room);
+  } catch (e) { return mapError(c, e); }
+});
+
+// #3938 part 2 (D1478 task 4): search inside the room, on its own index
+// (`services/dataRoomSearch.ts`). The founders search the whole room; an
+// investor searches only the files their own listing shows (grant, tier and
+// NDA, as `investorView` decides). Unbound index: `{ available: false }`.
+r.post('/shared/:projectUid/search', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (user.role === 'admin') return refuse(c, 403, { code: 'support_read_required', message: 'Use an audited support read to open this room.' });
+    const project = await c.env.DB.prepare('SELECT id, uid, name FROM projects WHERE uid = ?')
+      .bind(c.req.param('projectUid')).first<ProjectRow>();
+    const grant = project ? await activeGrant(c.env, project.id, user.id) : null;
+    if (!project || !grant) return c.json({ detail: 'Data room not found' }, 404);
+    const body = await c.req.json().catch(() => ({} as any));
+    const view = await investorView(c.env, project, grant, user.id);
+    const uids = (view.files || []).map((f: any) => String(f.uid));
+    const ids = uids.length
+      ? await c.env.DB.prepare('SELECT id FROM data_room_files WHERE project_id = ? AND uid IN (SELECT value FROM json_each(?))')
+        .bind(project.id, JSON.stringify(uids)).all<{ id: number }>()
+      : { results: [] as Array<{ id: number }> };
+    const allowed = new Set((ids.results || []).map((x) => Number(x.id)));
+    const out = await searchRoom(c.env, searchDeps(c.env, Number(user.id), project.id), project.id, String(body?.q ?? ''), allowed);
+    if (out.available) await logAccess(c.env, project.id, user.id, 'search', null);
+    return c.json(out);
+  } catch (e) { return mapError(c, e); }
+});
+
+r.post('/:projectUid/search', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const room = await roomProject(c, user, c.req.param('projectUid'));
+    if (!room) return c.json({ detail: 'Project not found' }, 404);
+    const body = await c.req.json().catch(() => ({} as any));
+    const out = await searchRoom(c.env, searchDeps(c.env, Number(user.id), room.project.id), room.project.id, String(body?.q ?? ''), null);
+    return c.json(out);
+  } catch (e) { return mapError(c, e); }
+});
+
+/** Index the next few files that have no index row or changed since; press again for the rest. */
+r.post('/:projectUid/search/index', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const room = await roomProject(c, user, c.req.param('projectUid'));
+    if (!room) return c.json({ detail: 'Project not found' }, 404);
+    const deps = searchDeps(c.env, Number(user.id), room.project.id);
+    if (!deps.index) return c.json({ available: false, reason: 'Data room search is not switched on yet.' });
+    const { files, remaining } = await filesToIndex(c.env, room.project.id);
+    let indexed = 0; let noText = 0; const failed: Array<{ file_uid: string; code: string }> = [];
+    for (const f of files) {
+      const r = await indexFile(c.env, deps, room.project.id, f);
+      if (!r.available) {
+        failed.push({ file_uid: f.uid, code: r.code || 'failed' });
+        if (r.code === 'dimension_mismatch') break;
+      } else if (r.value.status === 'indexed') indexed += 1;
+      else noText += 1;
+    }
+    return c.json({ available: true, value: { indexed, no_text: noText, failed, remaining } });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -1213,6 +1273,9 @@ export async function removeDataRoomFile(
       catch (e) { console.error('[data_room] R2 delete failed', e); }
     }
   }
+  // #3938: the file's passages and vectors go with it.
+  try { await forgetFile(env, { index: (env.DATAROOM_INDEX as any) ?? null }, file.id); }
+  catch (e) { console.error('[data_room] search index delete failed', e instanceof Error ? e.message : 'error'); }
   await logCycleWrite(env, { projectId: project.id, userId: a.userId, cycle: 'raise', module: 'data-room',
     entityId: file.id, action: 'file_removed', summary: `File removed with ${(versions.results || []).length} earlier versions` });
   return { id: file.id };

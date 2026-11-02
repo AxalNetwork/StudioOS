@@ -30,6 +30,10 @@ import { api, request } from '../api.js';
 //   activityCsv(p, q)  GET /data-room/:p/activity.csv?… (the same rows; 413 too_many_rows past 10,000)
 //   checklist(p)       GET /data-room/:p/checklist → { grants_in_force, totals, items: [{ key, area, label, state, reason, files }] }
 // A refusal (`blocked`) is never counted as an open. `investor` is a grant's uid.
+// #3938 part 2 (D1478 task 4) — search inside the room:
+//   search(p, q)        POST /data-room/:p/search { q } → { available, value: { hits: [{ file_uid, file_name, snippet, score }] } } | { available: false, reason }
+//   searchIndex(p)      POST /data-room/:p/search/index → { available, value: { indexed, no_text, failed, remaining } }
+//   sharedSearch(p, q)  POST /data-room/shared/:p/search { q } — an investor, over the files their listing shows
 const seg = (v) => encodeURIComponent(String(v));
 const activityQuery = (q = {}) => {
   const p = new URLSearchParams();
@@ -53,4 +57,8 @@ export const dataRoomApi = {
   activity: (projectUid, q) => request(`/data-room/${seg(projectUid)}/activity${activityQuery(q)}`),
   activityCsv: (projectUid, q) => api._downloadCsv(`/data-room/${seg(projectUid)}/activity.csv${activityQuery(q)}`, 'data-room-activity.csv'),
   checklist: (projectUid) => request(`/data-room/${seg(projectUid)}/checklist`),
+  // #3938 part 2: search inside the room, on its own index. `{ available: false, reason }` until the index is bound.
+  search: (projectUid, q) => request(`/data-room/${seg(projectUid)}/search`, { method: 'POST', body: JSON.stringify({ q }) }),
+  searchIndex: (projectUid) => request(`/data-room/${seg(projectUid)}/search/index`, { method: 'POST' }),
+  sharedSearch: (projectUid, q) => request(`/data-room/shared/${seg(projectUid)}/search`, { method: 'POST', body: JSON.stringify({ q }) }),
 };

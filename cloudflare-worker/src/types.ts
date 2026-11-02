@@ -467,6 +467,10 @@ export interface Env {
   // until the owner approves its monthly cost (decision L); absent, quote
   // retrieval answers "not switched on yet".
   DECK_QUOTES?: VectorizeIndex;
+  // #3938 part 2: `axal-dataroom` (qwen3-embedding-0.6b, 1024 dimensions, cosine). Not in
+  // wrangler.toml until the owner creates the index (#1008); absent, data room
+  // search answers "not switched on yet".
+  DATAROOM_INDEX?: VectorizeIndex;
   // Task #13 — Workers Analytics Engine binding (`studioos_requests` dataset).
   // observability middleware writes one data point per HTTP request so the
   // Admin Analytics → Technical sub-tab can serve true edge-level traffic
