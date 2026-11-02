@@ -6,14 +6,14 @@ import { AccountPhonePage, phonePending } from '../account/AccountPhonePage';
 import { ACCOUNT_PHONE_PAGES } from '../account/accountPhone';
 import { COMING_SOON_LINE } from './learningAccess';
 import {
-  ALL_LIMIT, ARTICLES_PAGE_SIZE, EVENTS_PAGE_SIZE, LEARNING_TABS, TAB_KIND, TAB_NOT_LIVE,
+  ALL_LIMIT, ARTICLES_PAGE_SIZE, EVENTS_PAGE_SIZE, LEARNING_TABS, SUBMISSION_STATUS, TAB_KIND,
   durationLabel, formatDay, formatWhen, kindLabel, matchesQuery, minutesLabel, rangeLabel, resolveTab, sourceStates, tabMode, webinarPhase,
 } from './learningModel';
-import { readArticles, readCatalog, readEvents, readMe, readPublications } from './learningReads';
+import { readArticles, readCatalog, readEvents, readExams, readExercises, readMe, readPublications } from './learningReads';
 import { readWebinars } from './webinarReads';
 import {
   ComingSoonCard, LearningEmpty, LearningLoading, LearningUnreadable, NotLiveYet,
-  RouteUnreadable, SectionCard,
+  RouteUnreadable, SectionCard, stateBlock,
 } from './LearningStates';
 import { MyProgramsSection, OpenPrograms, useMyPrograms } from './MyPrograms';
 import { UpcomingWebinarsList, WebinarsTabPanel, useNow } from './LearningWebinars';
@@ -247,6 +247,7 @@ export function CatalogList({ state, kind = null, q = '', onPage, onRetry }) {
                   </span>
                   <span className="line-clamp-2 text-[13.5px] font-semibold text-axal-ink dark:text-gray-100">{row.title}</span>
                   <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{catalogMeta(row) || <Unrecorded>Not recorded</Unrecorded>}</span>
+                  {row.found ? <span className="line-clamp-2 text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="catalog-row-found">{row.found}</span> : null}
                 </>
               );
               return row.href
@@ -365,9 +366,57 @@ function AdminLinks({ links }) {
 }
 
 /** The catalogue card: the tab bar, the search and the open tab's list. */
+/**
+ * #4180 (lr2a, lr2b): the Exercises and Exams tabs, from their own list
+ * routes. A failed read says so; an exam whose best score is not recorded says
+ * "Score not recorded", never 0%.
+ */
+export function AssessmentList({ state = IDLE, kind, onPage, onRetry }) {
+  const what = kind === 'exam' ? 'the exams' : 'the exercises';
+  const rows = state.status === 'ready' ? state.rows || [] : [];
+  const block = stateBlock({
+    status: state.status, what, onRetry, claim: `This is not a claim that there are no ${kind}s.`, isEmpty: rows.length === 0,
+    empty: { title: kind === 'exam' ? 'No exams published yet' : 'No exercises published yet', body: 'They appear here when HQ publishes them.' },
+  });
+  if (block) return <div data-testid={`${kind}-list`}>{block}</div>;
+  const range = rangeLabel(state.offset || 0, rows.length, state.total);
+  return (
+    <div className="space-y-3" data-testid={`${kind}-list`}>
+      <ul className="m-0 list-none divide-y divide-axal-hairline p-0 dark:divide-gray-800">
+        {rows.map((row) => (
+          <li key={row.key} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5" data-testid={`${kind}-row`}>
+            <RowTitle href={row.href} testid={`${kind}-row-title`}>{row.title}</RowTitle>
+            <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{row.where || <Unrecorded>Not in a course or programme</Unrecorded>}</span>
+            {kind === 'exercise' ? (
+              <span className="ml-auto inline-flex items-center gap-2 text-[11.5px] text-axal-muted dark:text-gray-400">
+                {row.status ? <Pill tone={SUBMISSION_STATUS[row.status].tone}>{SUBMISSION_STATUS[row.status].label}</Pill> : <Pill tone="neutral">Not started</Pill>}
+                <span className="tabular-nums">{formatDay(row.updated) || 'date not recorded'}</span>
+              </span>
+            ) : (
+              <span className="ml-auto inline-flex flex-wrap items-center gap-2 text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="exam-row-meta">
+                <span className="tabular-nums">{row.questions == null ? 'Questions not recorded' : `${row.questions} question${row.questions === 1 ? '' : 's'}`}</span>
+                <span>· {row.limit}</span>
+                {row.passMark ? <span>· {row.passMark}</span> : null}
+                <span>· {row.attemptsLeft}</span>
+                <span>· {row.best ? `Your best ${row.best}` : <Unrecorded>Score not recorded</Unrecorded>}</span>
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+      {range ? (
+        <div className="flex items-center justify-between gap-2 text-[11.5px] text-axal-muted dark:text-gray-400">
+          <span className="tabular-nums">{range}</span>
+          <Pager prevDisabled={!state.offset} nextDisabled={state.total == null || (state.offset || 0) + rows.length >= state.total} onPage={onPage} testid={`${kind}-pager`} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function LearningCatalogue({
   gated, tab, onTab, query, onQuery, q, catalog, articles, publications, events, upcoming, past, now,
-  onCatalogPage, onArticlesPage, onRetry,
+  onCatalogPage, onArticlesPage, onRetry, exercises = IDLE, exams = IDLE, onAssessmentPage = () => {},
 }) {
   const mode = tabMode(tab, gated);
   return (
@@ -392,7 +441,7 @@ function LearningCatalogue({
       )}
       <div id="learning-panel" role="tabpanel" aria-labelledby={`learning-tab-${tab}`} className="p-4" data-testid={`panel-${tab}`} data-mode={mode}>
         {mode === 'coming_soon' && <ComingSoonCard />}
-        {mode === 'not_live' && <NotLiveYet line={TAB_NOT_LIVE[tab]} />}
+        {mode === 'not_live' && <NotLiveYet />}
         {mode === 'live' && tab === 'all' && <CatalogList state={catalog} q={q} onRetry={onRetry.catalog} />}
         {mode === 'live' && TAB_KIND[tab] && <CatalogList state={catalog} kind={TAB_KIND[tab]} q={q} onPage={onCatalogPage} onRetry={onRetry.catalog} />}
         {mode === 'live' && tab === 'webinars' && (
@@ -401,6 +450,8 @@ function LearningCatalogue({
         {mode === 'live' && tab === 'articles' && <ArticleList state={articles} q={q} onPage={onArticlesPage} onRetry={onRetry.article} />}
         {mode === 'live' && tab === 'publications' && <PublicationList state={publications} q={q} onRetry={onRetry.publication} />}
         {mode === 'live' && tab === 'events' && <EventList state={events} q={q} onRetry={onRetry.event} />}
+        {mode === 'live' && tab === 'exercises' && <AssessmentList state={exercises} kind="exercise" onPage={onAssessmentPage} onRetry={onRetry.exercises} />}
+        {mode === 'live' && tab === 'exams' && <AssessmentList state={exams} kind="exam" onPage={onAssessmentPage} onRetry={onRetry.exams} />}
       </div>
     </Card>
   );
@@ -443,6 +494,7 @@ export function LearningHomeView({
   catalog = IDLE, articles = IDLE, publications = IDLE, events = IDLE, me = IDLE,
   upcoming = IDLE, past = IDLE, programs = PROGRAMS_IDLE, now = Date.now(),
   onCatalogPage = () => {}, onArticlesPage = () => {}, onRetry = {}, links = [],
+  exercises = IDLE, exams = IDLE, onAssessmentPage = () => {},
 }) {
   return (
     <>
@@ -461,6 +513,7 @@ export function LearningHomeView({
           gated={gated} tab={tab} onTab={onTab} query={query} onQuery={onQuery} q={q}
           catalog={catalog} articles={articles} publications={publications} events={events}
           upcoming={upcoming} past={past} now={now} onCatalogPage={onCatalogPage} onArticlesPage={onArticlesPage} onRetry={onRetry}
+          exercises={exercises} exams={exams} onAssessmentPage={onAssessmentPage}
         />
         {!gated && (
           <SectionCard title="Upcoming webinars" testid="section-webinars">
@@ -491,7 +544,7 @@ export function browseGroup({ gated }) {
     rows: BROWSE.map((b) => ({
       key: b.tab,
       title: b.title,
-      description: b.tab === 'exercises' ? TAB_NOT_LIVE.exercises : '',
+      description: b.tab === 'exercises' ? 'Your exercises and exams, with your status and best score.' : '',
       pill: gated && b.tab !== 'articles' ? { label: 'Coming soon', tone: 'neutral' } : null,
       to: `/learning?tab=${b.tab}`,
       chevron: true,
@@ -621,6 +674,13 @@ export default function LearningHome({ gated, links = [] }) {
   const [upcoming, retryUpcoming] = useLearningRead(() => readWebinars('upcoming'), [], { enabled: !gated, scope: 'webinars-upcoming' });
   const [past, retryPast] = useLearningRead(() => readWebinars('past'), [],
     { enabled: live && tab === 'webinars', scope: 'webinars-past' });
+  // #4180: the Exercises and Exams tabs read their own lists, a page at a time.
+  const [assessmentOffset, setAssessmentOffset] = useState(0);
+  const [exercises, retryExercises] = useLearningRead(() => readExercises({ offset: assessmentOffset }), [assessmentOffset],
+    { enabled: live && tab === 'exercises', scope: 'exercises' });
+  const [exams, retryExams] = useLearningRead(() => readExams({ offset: assessmentOffset }), [assessmentOffset],
+    { enabled: live && tab === 'exams', scope: 'exams' });
+  const onAssessmentPage = (step) => setAssessmentOffset((o) => Math.max(0, o + step * ALL_LIMIT));
   const programs = useMyPrograms(!gated);
   const now = useNow(60 * 1000);
 
@@ -628,13 +688,14 @@ export default function LearningHome({ gated, links = [] }) {
   const onTab = useCallback((key) => {
     setPage(0);
     setCatalogOffset(0);
+    setAssessmentOffset(0);
     setParams((old) => { const next = new URLSearchParams(old); next.set('tab', key); return next; }, { replace: true });
   }, [setParams]);
   const onCatalogPage = (step) => setCatalogOffset((o) => Math.max(0, o + step * ALL_LIMIT));
   const onArticlesPage = (step) => setPage((p) => Math.max(0, p + step));
   const onRetry = {
     catalog: retryCatalog, article: retryArticles, publication: retryPublications, event: retryEvents, me: retryMe,
-    upcoming: retryUpcoming, past: retryPast,
+    upcoming: retryUpcoming, past: retryPast, exercises: retryExercises, exams: retryExams,
   };
   // The Learning home has no AI rail; the shared frame keeps its body layout.
   const phone = usePhoneWidth();
@@ -649,6 +710,7 @@ export default function LearningHome({ gated, links = [] }) {
             gated={gated} tab={tab} onTab={onTab} query={query} onQuery={setQuery} q={q}
             catalog={catalog} articles={articles} publications={publications} events={events}
             upcoming={upcoming} past={past} now={now} onCatalogPage={onCatalogPage} onArticlesPage={onArticlesPage} onRetry={onRetry}
+            exercises={exercises} exams={exams} onAssessmentPage={onAssessmentPage}
           />
         </LearningPhoneView>
       ) : (
@@ -673,6 +735,9 @@ export default function LearningHome({ gated, links = [] }) {
             onArticlesPage={onArticlesPage}
             onRetry={onRetry}
             links={links}
+            exercises={exercises}
+            exams={exams}
+            onAssessmentPage={onAssessmentPage}
           />
         </div>
       )}

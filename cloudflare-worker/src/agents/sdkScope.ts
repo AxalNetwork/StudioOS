@@ -172,6 +172,10 @@ export async function dispatchSdk(core: SdkScopeCore, scope: ScopeRef, path: str
   switch (path) {
     case '/admit': return core.admit(scope, body.trigger as Trigger);
     case '/track': await core.track(body.run as LiveRun); return { ok: true };
+    // #3850 (E6): a project moved; the runs it ended leave the live view (the Agent's state reaches its boards).
+    case '/moved':
+      for (const uid of Array.isArray(body.move?.ended) ? body.move.ended : []) await core.track({ run_uid: String(uid), agent_id: 0, task_id: 0, status: 'scope_moved' });
+      return { ok: true };
     case '/schedule': await core.schedule(body.duty as DutyEntry); return { ok: true };
     case '/cancel-schedule': await core.cancelSchedule(Number(body.dutyId)); return { ok: true };
     case '/status': return core.status(scope);
