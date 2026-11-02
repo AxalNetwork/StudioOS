@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { cyclesWrite } from '../../../lib/api/cycles';
 import { deckCommentsApi } from '../../../lib/api/deckComments.js';
+import { cardStatus } from './deckV2Adapter';
 import { reportError } from '../../../lib/log';
 import { Lightbox } from '../../../ui';
 import InvestorLinksTable from './InvestorLinksTable.jsx';
 import { preShareGate } from './commentsModel';
+import { statusLabel } from './cardStatusModel';
 import {
   DEFAULT_SHARE, EXPIRIES, INCLUDE_ROWS, NDA_SWITCH, NEVER_SHARED, NO_LIMIT, SHARE_CTA, SHARE_TITLE, SHOWN_ONCE, TYPED,
   frozenLine, shareBody, shareFailure, shareProblem, shareUrl, whatShareDoes,
@@ -21,8 +23,14 @@ import {
  * this version (`GET /api/decks/:id/approval`). While an approver has not, it
  * shows the amber "Approval needed before sharing · [name] has not approved
  * yet" and holds Share: the Worker refuses the link until they sign off, so
- * there is no "Share anyway" past it. #3826's "[N] cards are not Done. Share
- * anyway?" joins this same confirm through `preShareGate`.
+ * there is no way past it.
+ *
+ * D1579 (#3826, pd34): the same confirm reads the version's card status
+ * (`deckV2Adapter.cardStatus`) beside the approval, and while any card is not
+ * Done it shows the inset "[n] cards are not Done. Share anyway?" listing
+ * them, with Review cards (back to the editor, on the first of them) and
+ * Share. That line warns and never holds: Share passes it, unless an approver
+ * is also waited on. One gate, one Share.
  */
 
 const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
@@ -42,7 +50,7 @@ function Toggle({ label, on, onChange, testId }) {
   );
 }
 
-export default function ShareDialog({ projectId, deck, onClose, onCreated }) {
+export default function ShareDialog({ projectId, deck, onClose, onCreated, onReviewCards = null }) {
   const [state, setState] = useState({ ...DEFAULT_SHARE, include: { ...DEFAULT_SHARE.include } });
   const [prospects, setProspects] = useState({ status: 'loading', rows: [] });
   const [busy, setBusy] = useState(false);
@@ -76,19 +84,27 @@ export default function ShareDialog({ projectId, deck, onClose, onCreated }) {
   const url = shareUrl(made);
 
   // D1570: read the gate first; anything to say opens the confirm, else the link is made.
+  // D1579: the approval and the card status are read together, for the one confirm.
   const share = async () => {
     if (problem || busy) return;
     setBusy(true); setFailed(null);
-    let approval;
-    try { approval = { status: 'ok', ...(await deckCommentsApi.approval(deck.id)) }; }
-    catch (e) {
-      // Unread (or a reader the comments route does not admit), the link is still asked for: the Worker refuses a
-      // held one, and its sentence is printed in place of the link.
-      if (e?.status !== 404) reportError('ShareDialog:approval', e);
-      approval = { status: 'error', pending: [] };
-    }
+    const readApproval = async () => {
+      try { return { status: 'ok', ...(await deckCommentsApi.approval(deck.id)) }; }
+      catch (e) {
+        // Unread (or a reader the comments route does not admit), the link is still asked for: the Worker refuses a
+        // held one, and its sentence is printed in place of the link.
+        if (e?.status !== 404) reportError('ShareDialog:approval', e);
+        return { status: 'error', pending: [] };
+      }
+    };
+    const readCards = async () => {
+      const a = await cardStatus(deck.id);
+      if (a?.available === true) return { status: 'ok', ...a.value };
+      return a?.unreadable ? { status: 'error' } : null;
+    };
+    const [approval, cards] = await Promise.all([readApproval(), readCards()]);
     setBusy(false);
-    const g = preShareGate(approval);
+    const g = preShareGate(approval, cards);
     if (g.show) { setGate(g); return; }
     await create();
   };
@@ -126,7 +142,7 @@ export default function ShareDialog({ projectId, deck, onClose, onCreated }) {
           {!made && gate ? (
             <button type="button" className={PRIMARY} onClick={create} disabled={busy || gate.held} title={gate.held ? 'Share opens once every approver has approved this version.' : undefined}
               data-testid="pitch-share-anyway">
-              {busy ? 'Creating…' : 'Share anyway'}
+              {busy ? 'Creating…' : 'Share'}
             </button>
           ) : null}
           {!made && !gate ? (
@@ -144,7 +160,24 @@ export default function ShareDialog({ projectId, deck, onClose, onCreated }) {
           {gate.lines.map((l) => (
             <div key={l.key} className={l.tone === 'amber'
               ? 'rounded-[10px] bg-amber-50 px-3 py-2.5 text-[12.5px] font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-200'
-              : `rounded-[10px] bg-axal-ground px-3 py-2.5 ${MUTED} dark:bg-gray-800`} data-testid={`pitch-share-gate-${l.key}`}>{l.text}</div>
+              : `rounded-[10px] bg-axal-ground px-3 py-2.5 ${MUTED} dark:bg-gray-800`} data-testid={`pitch-share-gate-${l.key}`}>
+              {l.text}
+              {/* D1579 (pd34): the cards not Done, each with its place and status, and the way back to them. */}
+              {Array.isArray(l.cards) && l.cards.length ? (
+                <ul className="m-0 mt-1.5 flex list-none flex-col gap-0.5 p-0 font-normal" data-testid="pitch-share-gate-cards">
+                  {l.cards.map((c) => (
+                    <li key={c.uid} className="flex items-baseline gap-2 text-[12px]">
+                      <span className="font-mono text-[10.5px]">{String(Number(c.index) + 1).padStart(2, '0')}</span>
+                      <span className="min-w-0 flex-1 truncate">{c.title}</span>
+                      <span className="font-mono text-[10.5px]">{statusLabel(c.status) ?? ''}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {Array.isArray(l.cards) && l.cards.length && onReviewCards ? (
+                <button type="button" className={`${GHOST} mt-2`} onClick={() => onReviewCards(l.cards[0].uid)} disabled={busy} data-testid="pitch-share-review-cards">Review cards</button>
+              ) : null}
+            </div>
           ))}
           {gate.held ? <p className={`m-0 ${MUTED}`}>Share opens once every approver has approved this version. They approve from Comments on any card.</p> : null}
         </div>

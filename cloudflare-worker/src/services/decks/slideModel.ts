@@ -36,6 +36,14 @@
  * corner, confidential), `voice`, `art_direction`, `lang` and `dir`.
  * A card is at most 256 KB and 12 areas.
  *
+ * D1579 (#3826, deck v2 E6) adds, on a card, its working state:
+ *   status      'todo', 'in_progress' or 'done' (To do, In progress, Done).
+ *   assignee    the user id of the person working on it, one of the people
+ *               D1570's rule lets work on the deck (`routes/deck_comments.ts`
+ *               `peopleOf`), checked when a version is saved.
+ * Both live in the version's card document (no table of their own) and are
+ * the venture's: `publicDeckOf` leaves them out of every outside reader.
+ *
  * A binding is D896's: `{ source_key, record_ref, as_of, grade, snapshot_hash }`
  * (`services/decks/sources.ts`). A metric tile with no value is `value: null`,
  * which every reader shows as "Not recorded", never 0.
@@ -59,6 +67,9 @@ export const MAX_ACCENT_RUNS = 3;
 export const MAX_PARAS = 40;
 export const MAX_RUNS = 40;
 export const SECTION_MAX = 60;
+/** D1579 (#3826): a card's status, in the strip's order. */
+export const CARD_STATUSES = ['todo', 'in_progress', 'done'] as const;
+export type CardStatus = typeof CARD_STATUSES[number];
 export const FOOTER_MAX = 120;
 /** WCAG AA for body text: an accent run must read against the card. */
 export const ACCENT_CONTRAST = 4.5;
@@ -397,6 +408,10 @@ export function sanitizeModel(s: any, url: UrlGuard): Record<string, unknown> {
   if (section) out.section = section;
   const decor = decorOf(s?.decor);
   if (decor) out.decor = decor;
+  // D1579: the card's status and assignee, each kept only when set, so a card saved before E6 hashes as it did.
+  const status = oneOf(s?.status, CARD_STATUSES);
+  if (status) out.status = status;
+  if (Number.isSafeInteger(s?.assignee) && s.assignee > 0) out.assignee = s.assignee;
   const bd = bindingOf(s?.binding);
   if (bd) out.binding = bd;
   // D1499: a card's structure and areas, kept only when sound; a card without them derives its areas (`structures.areasOf`).
@@ -458,6 +473,9 @@ export function modelProblems(slides: unknown, url: UrlGuard): string[] {
     if (s?.decor != null && (!Array.isArray(s.decor) || s.decor.length > MAX_DECOR)) out.push(`${card}: a card holds at most ${MAX_DECOR} decor items.`);
     if (cardBytes(s) > CARD_BYTES_MAX) out.push(`${card}: the card is larger than 256 KB. Remove an image or some text, then save.`);
     if (s?.section != null && (typeof s.section !== 'string' || s.section.length > SECTION_MAX)) out.push(`${card}: the section name is at most ${SECTION_MAX} characters.`);
+    // D1579: a status is one of the three; an assignee is a person's id (whether they may work on the deck is the save's check).
+    if (s?.status != null && !oneOf(s.status, CARD_STATUSES)) out.push(`${card}: the status is To do, In progress or Done.`);
+    if (s?.assignee != null && !(Number.isSafeInteger(s.assignee) && s.assignee > 0)) out.push(`${card}: the assignee must be a person on the deck.`);
     if (s?.blocks == null) return;
     if (!Array.isArray(s.blocks)) { out.push(`${card}: blocks must be a list.`); return; }
     if (s.blocks.length > MAX_BLOCKS) out.push(`${card}: a card holds at most ${MAX_BLOCKS} blocks.`);

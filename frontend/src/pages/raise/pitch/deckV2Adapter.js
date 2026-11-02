@@ -39,7 +39,8 @@
  * row but has no route on main, so C1 built the read and the row keeps B10's
  * issue.
  * `comments` (D1570, #3817)
- * answers through `deckCommentsApi.list`.
+ * answers through `deckCommentsApi.list`, and `cardStatus` (D1579, #3826)
+ * through `deckCardStatusApi.read`.
  *
  * Fields on routes that exist (`context.inferred` and `context.freshness`
  * from #3877; the PostHog, HubSpot and Linear source rows from #3880) need
@@ -57,6 +58,7 @@ import { deckCheckApi } from '../../../lib/api/deckCheck.js';
 import { deckElementModelsApi } from '../../../lib/api/deckElementModels.js';
 import { deckModelPresetsApi } from '../../../lib/api/deckModelPresets.js';
 import { deckCommentsApi } from '../../../lib/api/deckComments.js';
+import { deckCardStatusApi } from '../../../lib/api/deckCardStatus.js';
 
 export { NOT_ON };
 
@@ -118,7 +120,7 @@ export const SURFACES = Object.freeze({
 const off = (name) => async () => unavailable(SURFACES[name].issue);
 
 /** The rows whose route is on main: each answers through its real client, never unavailable by default. */
-export const SWAPPED = Object.freeze(['grid', 'saveCard', 'discardDraft', 'draft', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'presets', 'orgLocks', 'comments']);
+export const SWAPPED = Object.freeze(['grid', 'saveCard', 'discardDraft', 'draft', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'presets', 'orgLocks', 'comments', 'cardStatus']);
 
 
 /**
@@ -207,7 +209,12 @@ export const withdrawInvestorLink = (deckId, shareId) => through(() => deckInves
 export const comments = (deckId) => through(() => deckCommentsApi.list(deckId), SURFACES.comments.issue);
 export const slideAnalytics = off('slideAnalytics');
 export const presence = off('presence');
-export const cardStatus = off('cardStatus');
+/**
+ * D1579 (#3826): each card's status and assignee on the saved version, filtered by status and assignee, the cards
+ * not Done, and who a card can be assigned to (`GET /api/decks/:id/card-status`). Status and assignee are written
+ * by saving a version.
+ */
+export const cardStatus = (deckId, filter) => through(() => deckCardStatusApi.read(deckId, filter), SURFACES.cardStatus.issue);
 export const rehearse = off('rehearse');
 export const walkthrough = off('walkthrough');
 export const retryFailed = off('retryFailed');

@@ -33,6 +33,8 @@ export const CONTRACTS = Object.freeze({
 
   // D1570 (#3817): the venture's comment threads, the people who can be mentioned, and the open count.
   comments: { issue: 3817, route: 'GET /api/decks/:id/comments', schema: 'deckComments.schema.json' },
+  // D1579 (#3826): each card's status and assignee, filtered, the cards not Done, and who a card can be assigned to.
+  cardStatus: { issue: 3826, route: 'GET /api/decks/:id/card-status', schema: 'deckCardStatus.schema.json' },
 
 });
 

@@ -50,6 +50,8 @@ import { deckShareMetrics, LEGACY_SHARE_NO_VIEW_LIMIT } from '../services/deckSh
 import { cleanOrder, variantSlides } from '../services/decks/variants';
 import { revOf } from '../services/decks/ifMatch';
 import { approvalRefusal, pendingApprovers } from '../services/decks/deckApproval';
+import { newAssignments, notifyAssignments } from '../services/decks/cardStatus';
+import { peopleOf } from '../services/decks/deckPeople';
 
 /** D895 applies only to deck operations, not other project-content routes. */
 export async function projectOwned(c: any, user: any, projectId: number, opts: { write?: boolean; audit?: boolean; contactData?: boolean } = {}) {
@@ -519,8 +521,9 @@ export function publicDeckOf(row: any): any {
   const { audience, round, by, content_hash, ...deck } = rowToDeck(row);
   void audience; void round; void by; void content_hash;
   deck.slides = (deck.slides || []).map((s: any) => {
-    const { notes, ...card } = s || {};
-    void notes;
+    // D1579 (#3826): a card's status and assignee are the venture's working state, never an outside reader's.
+    const { notes, status, assignee, ...card } = s || {};
+    void notes; void status; void assignee;
     return card;
   });
   // D1546: every reader of a deck (share, present, the print page the PDF and PowerPoint photograph)
@@ -1325,15 +1328,28 @@ decks.put('/:id', async (c) => {
     }
   }
   if (!slides.length) return c.json({ error: 'slides required' }, 400);
+  // D1579 (#3826): a card newly assigned names someone who can work on the deck (D1570's people rule);
+  // an assignee kept from the version before is not checked again, so a person who left never blocks a save.
+  let priorSlides: unknown[] = [];
+  try { priorSlides = JSON.parse(row.slides || '[]'); } catch { priorSlides = []; }
+  const assigned = newAssignments(priorSlides, slides);
+  if (assigned.length) {
+    const people = new Set((await peopleOf(c.env, Number(row.project_id))).map((p) => p.id));
+    const stray = assigned.find((a) => !people.has(a.user_id));
+    if (stray) return refuse(c, 400, { code: 'assignee_not_on_deck', message: `Card ${stray.index + 1}: assign someone who can work on this deck. Nothing was saved.` });
+  }
   // D1506: an outside image is copied into the venture's storage and the slide names the copy;
   // one that cannot be copied refuses the save, naming it.
   const copy = await copyExternalImages(c.env, { projectId: Number(row.project_id), deckId: Number(row.id), user: { id: Number(user.id), role: user.role }, requestUrl: c.req.url, slides });
   if (!copy.ok) return refuse(c, 422, { code: 'image_not_copied', message: copyRefusalMessage(copy.code), extra: { image_url: copy.image_url, reason: copy.code } });
   slides.splice(0, slides.length, ...copy.slides);
   const title = String(body?.title || row.title || 'Pitch deck').slice(0, 200);
-
   const newId = await insertVersion(c.env, Number(row.project_id), slides, title, Number(user.id) || null, meta,
     { id: Number(row.id), version: Number(row.version) });
+  // Only the save whose version won reaches here: each new assignment is told once.
+  if (assigned.length) {
+    await notifyAssignments(c.env, { projectId: Number(row.project_id), deckId: Number(newId), by: { id: Number(user.id), name: user.name ?? null }, assigned });
+  }
 
   // Task #2 — Spin-Out Demo Day deck: when the founder edits the
   // Review-the-deal data-room URL or NDA flag inline on the slide,

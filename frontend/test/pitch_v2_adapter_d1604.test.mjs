@@ -28,6 +28,7 @@ import { deckTypedValuesApi } from '../src/lib/api/deckTypedValues.js';
 import { deckCheckApi } from '../src/lib/api/deckCheck.js';
 import { deckElementModelsApi } from '../src/lib/api/deckElementModels.js';
 import { deckCommentsApi } from '../src/lib/api/deckComments.js';
+import { deckCardStatusApi } from '../src/lib/api/deckCardStatus.js';
 
 test('every adapter method answers unavailable, with the reason and the issue that brings its route', async () => {
   const methods = Object.keys(adapter).filter((k) => !HELPERS.has(k));
@@ -36,7 +37,7 @@ test('every adapter method answers unavailable, with the reason and the issue th
   // D1499 (#3749) swapped grid, D1522 (#3774) stagePlan, D1553 (#3800) remix, D1503 (#3754) elementModels; D1565 (#3812)
   // the investor links; D1538 (#3787) typedTables; D1555 (#3802) consistency rides the check read. A swapped
   // surface's body calls its client through().
-  assert.deepEqual([...adapter.SWAPPED], ['grid', 'saveCard', 'discardDraft', 'draft', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'presets', 'orgLocks', 'comments'], 'the rows whose routes are on main');
+  assert.deepEqual([...adapter.SWAPPED], ['grid', 'saveCard', 'discardDraft', 'draft', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'presets', 'orgLocks', 'comments', 'cardStatus'], 'the rows whose routes are on main');
 
 
   const seam = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
@@ -171,7 +172,7 @@ test('the seam reaches no network, and no client method exists for a route that 
   const src = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
   assert.doesNotMatch(src, /request\(|fetch\(|XMLHttpRequest/);
   // A swapped row's client is the only `lib/api` the seam may import (D1499's `deckGrid.js`, D1522's `deckStage.js`, D1553's `deckRemix.js`, D1503's `deckElementModels.js`, D1565's `deckInvestorLinks.js`, D1538's `deckTypedValues.js`, D1555's `deckCheck.js`, D1549's `deckModelPresets.js`).
-  assert.deepEqual([...src.matchAll(/from '([^']*lib\/api[^']*)'/g)].map((x) => x[1]).sort(), ['../../../lib/api/deckCheck.js', '../../../lib/api/deckComments.js', '../../../lib/api/deckDraft.js', '../../../lib/api/deckElementModels.js', '../../../lib/api/deckGrid.js', '../../../lib/api/deckInvestorLinks.js', '../../../lib/api/deckModelPresets.js', '../../../lib/api/deckRemix.js', '../../../lib/api/deckStage.js', '../../../lib/api/deckTypedValues.js']);
+  assert.deepEqual([...src.matchAll(/from '([^']*lib\/api[^']*)'/g)].map((x) => x[1]).sort(), ['../../../lib/api/deckCardStatus.js', '../../../lib/api/deckCheck.js', '../../../lib/api/deckComments.js', '../../../lib/api/deckDraft.js', '../../../lib/api/deckElementModels.js', '../../../lib/api/deckGrid.js', '../../../lib/api/deckInvestorLinks.js', '../../../lib/api/deckModelPresets.js', '../../../lib/api/deckRemix.js', '../../../lib/api/deckStage.js', '../../../lib/api/deckTypedValues.js']);
   // D1549 (#3796): the presets route is on main, with its client; orgLocks reads the same reply.
   assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_model_presets.ts')), /deckModelPresets\.get\(['"]\/:id\{\[0-9\]\+\}\/model-presets['"]/);
   assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckModelPresets\)/);
@@ -300,4 +301,20 @@ test('D1570 (#3817): comments is swapped — it answers through deckCommentsApi.
     assert.equal((await adapter.comments(7)).unreadable, true, 'anything else is unreadable, never an empty thread');
   } finally { deckCommentsApi.list = real; }
   assert.equal(adapter.availability('comments'), null);
+});
+
+test('D1579 (#3826): cardStatus is swapped — it answers through deckCardStatusApi.read with the filter asked, and a 404 is still off', async () => {
+  const real = deckCardStatusApi.read;
+  const asked = [];
+  try {
+    const reply = { deck_id: 7, version: 2, tracked: true, filter: { status: 'todo', assignee: 'anyone' }, total: 3, cards: [], not_done: { count: 2, cards: [] }, people: [] };
+    deckCardStatusApi.read = async (id, f) => { asked.push([id, f]); return reply; };
+    assert.deepEqual(await adapter.cardStatus(7, { status: 'todo' }), { available: true, value: reply });
+    assert.deepEqual(asked, [[7, { status: 'todo' }]]);
+    deckCardStatusApi.read = async () => { throw Object.assign(new Error('nope'), { status: 404 }); };
+    assert.deepEqual(await adapter.cardStatus(7), { available: false, reason: NOT_ON, issue: 3826 });
+    deckCardStatusApi.read = async () => { throw Object.assign(new Error('Card status could not be read.'), { status: 500 }); };
+    assert.equal((await adapter.cardStatus(7)).unreadable, true, 'anything else is unreadable, never a count of 0');
+  } finally { deckCardStatusApi.read = real; }
+  assert.equal(adapter.availability('cardStatus'), null);
 });

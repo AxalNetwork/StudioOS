@@ -252,6 +252,7 @@ import deckExports from './routes/deck_exports';
 import deckNotes from './routes/deck_notes';
 // D1570 (#3817): comments on a deck's cards, @mentions, assignee, Resolve, and the approval a share waits for.
 import deckComments from './routes/deck_comments';
+import deckCardStatus from './routes/deck_card_status';
 import deckReview from './routes/deck_review';
 import deckSources from './routes/deck_sources';
 import deckCheck from './routes/deck_check';
@@ -1389,6 +1390,8 @@ app.route('/api/decks', deckExports);
 app.route('/api/decks', deckNotes);
 // D1570 (#3817): `/:id/comments…`, `/:id/approval`, `/:id/approvers` and `/:id/approve`, before `decks`.
 app.route('/api/decks', deckComments);
+// D1579 (#3826): `/:id/card-status`, each card's status and assignee, filtered, and what is not Done; before `decks`.
+app.route('/api/decks', deckCardStatus);
 // D900 (#2679): a version's review and the venture's review history; two-segment paths, before `decks`.
 app.route('/api/decks', deckReview);
 // D900 (#2679): `/checks`, `/:id/check` and `/:id/claims/:uid/use-record`, before `decks` so `GET /:id` cannot answer `/checks`.

@@ -16,6 +16,8 @@
  *   5. D1549 (#3796): `GET /api/decks/:id/model-presets` matches
  *      deckModelPresets, and its `locks` key deckOrgLocks, with nothing
  *      stored, a stored preset with a deck pick, and an HQ lock.
+ *   6. D1579 (#3826): `GET /api/decks/:id/card-status` matches
+ *      deckCardStatus, for a deck never tracked and a tracked one, filtered.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/deck_contracts_d1511.test.ts
@@ -32,6 +34,7 @@ import deckCheck from '../src/routes/deck_check.ts';
 import deckTypedValues from '../src/routes/deck_typed_values.ts';
 import { deckModelPresets } from '../src/routes/deck_model_presets.ts';
 import deckComments from '../src/routes/deck_comments.ts';
+import deckCardStatus from '../src/routes/deck_card_status.ts';
 
 import { deckConsistency } from '../src/services/deckConsistency.ts';
 import { CONTRACTS as NAMED } from '../src/contracts/index.ts';
@@ -265,4 +268,34 @@ test('5. the comments reply matches deckComments, for no comments and a thread w
   assert.deepEqual(contractErrors(CONTRACTS.comments.schema, { ...some.body, viewer: { ...some.body.viewer, kind: 'admin' } }), ['$.viewer.kind: must be one of ["founder","advisor","operating_partner"]']);
   assert.deepEqual(contractErrors(CONTRACTS.comments.schema, { ...some.body, comments: [{ ...some.body.comments[0], ai: true }] }), ['$.comments[0]: ai is not in the contract']);
 
+});
+
+// ── 6. The card status swap (D1579, #3826) ───────────────────────────────
+
+test('6. the card-status reply matches deckCardStatus, for a deck never tracked and a tracked, filtered one', async () => {
+  const db = world();
+  db.exec("INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (11, 'founder', 'Synthetic Cofounder', 'co@example.test', 1, 1011)");
+  db.exec("INSERT INTO project_members (project_id, user_id, role, status) VALUES (1, 11, 'cofounder', 'accepted')");
+  const app = new Hono<any>().route('/api/decks', deckCardStatus);
+  const token = await new SignJWT({ user_id: 10, role: 'founder' }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const call = async (path: string) => {
+    const res = await withThrownResponses(() => app.request(path, { headers: { Authorization: `Bearer ${token}` } }, { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any));
+    return { status: res.status, body: await res.json() as any };
+  };
+  const plain = await call('/api/decks/1/card-status');
+  assert.equal(plain.status, 200);
+  assert.equal(plain.body.tracked, false);
+  assert.deepEqual(contractErrors(CONTRACTS.cardStatus.schema, plain.body), []);
+  db.prepare('UPDATE pitch_decks SET slides = ? WHERE id = 1').run(JSON.stringify([
+    { title: 'Synthetic one', status: 'done', assignee: 11 }, { title: 'Synthetic two', status: 'in_progress', assignee: 10 }, { title: 'Synthetic three' },
+  ]));
+  for (const q of ['', '?status=in_progress', '?assignee=11', '?assignee=none&status=todo']) {
+    const r = await call(`/api/decks/1/card-status${q}`);
+    assert.equal(r.status, 200, q);
+    assert.deepEqual(contractErrors(CONTRACTS.cardStatus.schema, r.body), [], q);
+  }
+  const some = await call('/api/decks/1/card-status');
+  assert.equal(some.body.not_done.count, 2);
+  assert.deepEqual(contractErrors(CONTRACTS.cardStatus.schema, { ...some.body, cards: [{ ...some.body.cards[0], status: 'blocked' }] }), ['$.cards[0].status: must be one of ["todo","in_progress","done",null]']);
+  assert.deepEqual(contractErrors(CONTRACTS.cardStatus.schema, { ...some.body, not_done: { ...some.body.not_done, cards: [{ ...some.body.not_done.cards[0], status: 'done' }] } }), ['$.not_done.cards[0].status: must be one of ["todo","in_progress"]']);
 });

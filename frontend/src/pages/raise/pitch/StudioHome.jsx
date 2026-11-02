@@ -12,7 +12,8 @@ import { BrandKitSheet, VersionsSheet } from './DeckSheets';
 import { useDeckChecks } from './DeckVersions';
 import { CoverageMeter, useDeckSources } from './SourcesBoards';
 import { SpinoutReadiness } from './StudioActions';
-import { availability } from './deckV2Adapter';
+import { availability, cardStatus } from './deckV2Adapter';
+import { notDonePill } from './cardStatusModel';
 import { LATER, aiOffState } from './deckV2Model';
 import { AiOffBanner } from './DeckAsk';
 import useAssistMode from '../../../hooks/useAssistMode';
@@ -38,9 +39,10 @@ import {
  *                   coverage (the sources read), Saved, Views, the check
  *                   pills, then Open, Present and ⋯: Versions… (PD15's table,
  *                   Compare and Restore, `DeckSheets.VersionsSheet`), Export…
- *                   and Brand kit. Who else is editing (#3824) and "cards not
- *                   Done" (#3826) are not drawn until their routes merge; one
- *                   deck per venture is what main holds.
+ *                   and Brand kit. D1579 (#3826): the amber "[n] cards not
+ *                   Done" pill beside Current, from the version's card-status
+ *                   read. Who else is editing (#3824) is not drawn until its
+ *                   route merges; one deck per venture is what main holds.
  *   Start from      Standard outline (New deck), Build a standard deck now
  *                   (the one-click, from your records: `OneClickBuild.jsx`),
  *                   Browse templates (the gallery, `TemplatesGallery.jsx`) and
@@ -242,6 +244,7 @@ function DeckCard({ project, current, deck, engagement, sources, q, phone, readO
         <div className="flex flex-wrap items-center gap-2">
           <span className={`text-[15px] font-extrabold ${INK}`}>{`${name} · ${versionLabel(current)}`}</span>
           {current.is_current ? <span className={PILL_VIO}>Current</span> : null}
+          <DeckNotDone deckId={current.id} />
         </div>
         <dl className="m-0 flex flex-col" data-testid="pitch-studio-deck-facts">
           <Fact k="Audience" testId="pitch-studio-deck-audience">{row.audience}</Fact>
@@ -265,6 +268,35 @@ function DeckCard({ project, current, deck, engagement, sources, q, phone, readO
       </div>
     </section>
   );
+}
+
+/**
+ * D1579 (#3826, pd1): the deck card's amber "[n] cards not Done", from the
+ * version's card status (`deckV2Adapter.cardStatus`). Nothing while it reads,
+ * on an untracked deck, or with every card Done; a failed read says so, with
+ * Try again, and never draws a count.
+ */
+export function DeckNotDone({ deckId }) {
+  const [answer, setAnswer] = useState(null);
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    let live = true;
+    setAnswer(null);
+    if (deckId == null) return undefined;
+    cardStatus(deckId).then((a) => { if (live) setAnswer(a); });
+    return () => { live = false; };
+  }, [deckId, tick]);
+  if (answer?.unreadable) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="pitch-studio-not-done-error">
+        Card status could not be read.
+        <button type="button" className="font-bold text-axal-violet hover:underline dark:text-violet-300" onClick={() => setTick((t) => t + 1)}>Try again</button>
+      </span>
+    );
+  }
+  const line = answer?.available === true ? notDonePill(answer.value?.not_done?.count) : null;
+  if (!line) return null;
+  return <span className={`${PILL} border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200`} data-testid="pitch-studio-not-done">{line}</span>;
 }
 
 /** pd1's Start from: four ways to begin, the one-click among them. */
