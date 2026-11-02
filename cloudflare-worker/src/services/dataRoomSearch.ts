@@ -154,11 +154,18 @@ export async function indexFile(env: Env, deps: SearchDeps, projectId: number, f
 
 /** The room's files that have no index row, or were replaced after it. Bounded. */
 export async function filesToIndex(env: Env, projectId: number, limit = INDEX_BATCH): Promise<{ files: FileRow[]; remaining: number }> {
-  const stale = `FROM data_room_files f LEFT JOIN data_room_search_state s ON s.file_id = f.id
-     WHERE f.project_id = ? AND (s.file_id IS NULL OR datetime(f.updated_at) > datetime(s.indexed_at))`;
-  const rows = await env.DB.prepare(`SELECT f.id, f.uid, f.name, f.r2_key, f.content_type, f.size_bytes ${stale} ORDER BY f.id LIMIT ?`)
-    .bind(projectId, limit).all<FileRow>();
-  const count = await env.DB.prepare(`SELECT COUNT(*) AS n ${stale}`).bind(projectId).first<{ n: number }>();
+  // Both queries carry the same stale-file condition, written out so each query text is static.
+  const rows = await env.DB.prepare(
+    `SELECT f.id, f.uid, f.name, f.r2_key, f.content_type, f.size_bytes
+       FROM data_room_files f LEFT JOIN data_room_search_state s ON s.file_id = f.id
+      WHERE f.project_id = ? AND (s.file_id IS NULL OR datetime(f.updated_at) > datetime(s.indexed_at))
+      ORDER BY f.id LIMIT ?`,
+  ).bind(projectId, limit).all<FileRow>();
+  const count = await env.DB.prepare(
+    `SELECT COUNT(*) AS n
+       FROM data_room_files f LEFT JOIN data_room_search_state s ON s.file_id = f.id
+      WHERE f.project_id = ? AND (s.file_id IS NULL OR datetime(f.updated_at) > datetime(s.indexed_at))`,
+  ).bind(projectId).first<{ n: number }>();
   const files = rows.results || [];
   return { files, remaining: Math.max(0, Number(count?.n ?? 0) - files.length) };
 }

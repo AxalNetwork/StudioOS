@@ -34,6 +34,11 @@ import { api, request } from '../api.js';
 //   search(p, q)        POST /data-room/:p/search { q } → { available, value: { hits: [{ file_uid, file_name, snippet, score }] } } | { available: false, reason }
 //   searchIndex(p)      POST /data-room/:p/search/index → { available, value: { indexed, no_text, failed, remaining } }
 //   sharedSearch(p, q)  POST /data-room/shared/:p/search { q } — an investor, over the files their listing shows
+// D1464 (#4021) — read with a reason, per open (D1102's routes):
+//   supportRead(p, reason)  POST /data-room/:p/support-read { reason } → the room read only (`mode: 'support'`);
+//                           an admin, 1–500 characters; 400 support_reason_required, 409 support_owner_unresolved, 503 support_read_unavailable
+//   supportReads(p, page)   GET  /data-room/:p/support-reads?page → { page, page_size, has_more, reads: [{ id, reader: { name, kind }, reason, created_at }] };
+//                           the owner and a co-founder; 503 support_history_unreadable
 const seg = (v) => encodeURIComponent(String(v));
 const activityQuery = (q = {}) => {
   const p = new URLSearchParams();
@@ -61,4 +66,6 @@ export const dataRoomApi = {
   search: (projectUid, q) => request(`/data-room/${seg(projectUid)}/search`, { method: 'POST', body: JSON.stringify({ q }) }),
   searchIndex: (projectUid) => request(`/data-room/${seg(projectUid)}/search/index`, { method: 'POST' }),
   sharedSearch: (projectUid, q) => request(`/data-room/shared/${seg(projectUid)}/search`, { method: 'POST', body: JSON.stringify({ q }) }),
+  supportRead: (projectUid, reason) => request(`/data-room/${seg(projectUid)}/support-read`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  supportReads: (projectUid, page = 1) => request(`/data-room/${seg(projectUid)}/support-reads?page=${encodeURIComponent(String(page))}`),
 };

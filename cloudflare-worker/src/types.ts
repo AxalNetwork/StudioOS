@@ -240,6 +240,8 @@ export interface Env {
   // simply mix in with the onboarding traffic, but no functionality
   // breaks. Default: `advisor-ongoing` once wrangler.toml is deployed.
   CF_AI_GATEWAY_SLUG_ADVISOR?: string;
+  /** D1504 (#3755): the deck's AI Gateway; empty until the owner creates it. */
+  CF_AI_GATEWAY_SLUG_DECK?: string;
   // Task #4 (CG) — per-user daily advisor turn cap. Counts /api/advisor
   // turns (chat completions, not /explain) in KV bucket
   // `ai_spend:advisor:{user_id}:{yyyy-mm-dd}` and hard-blocks at this
@@ -471,6 +473,10 @@ export interface Env {
   // wrangler.toml until the owner creates the index (#1008); absent, data room
   // search answers "not switched on yet".
   DATAROOM_INDEX?: VectorizeIndex;
+  // D1540 (#3791, owner decision AA): the owner's daily ceiling on deck
+  // generation, in micro-USD across every member per UTC day
+  // (`services/decks/runQuotes.ts`). Not in wrangler.toml: unset is off.
+  DECK_DAILY_CEILING_MICROUSD?: string;
   // Task #13 — Workers Analytics Engine binding (`studioos_requests` dataset).
   // observability middleware writes one data point per HTTP request so the
   // Admin Analytics → Technical sub-tab can serve true edge-level traffic

@@ -86,6 +86,7 @@ export const FIXED_JOBS: readonly FixedJob[] = Object.freeze([
   { module: 'record', task: 'summarise_interview', ref: 'services/interviewStructuring.ts' },
   { module: 'record', task: 'extract_conversation_items', ref: 'services/conversationItems.ts' },
   { module: 'raise', task: 'deck_image', ref: 'routes/deck_images.ts' },
+  { module: 'raise', task: 'memo_write', ref: 'routes/deck_derive.ts' },
   { module: 'grow', task: 'grow_theme_feedback', ref: 'services/fills/registry.ts' },
   { module: 'grow', task: 'brand_autofill', ref: 'routes/brand.ts' },
   { module: 'grow', task: 'brand_logo', ref: 'routes/brand.ts' },
