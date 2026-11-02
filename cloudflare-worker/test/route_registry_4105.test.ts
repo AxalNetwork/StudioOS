@@ -94,7 +94,12 @@ test('the committed registry is exactly what the generator writes, and every des
 
 test('on the real Worker, the order-sensitive deck routers mount just above `decks`, and votes.ts mounts last', () => {
   const mounts = workerMounts();
-  assert.equal(mounts.length, 390, 'the Worker no longer makes 390 top-level mounts');
+  // Every hand-written `app.route(` line in index.ts mounts once, and every
+  // registered mount once: counted from the source, so a new router (either
+  // way) moves both sides instead of breaking a pinned number.
+  const index = readFileSync(resolve(ROOT, 'cloudflare-worker/src/index.ts'), 'utf8');
+  const handWritten = [...index.matchAll(/^app\.route\(/gm)].length;
+  assert.equal(mounts.length, handWritten + registeredMounts(ROOT).length, 'a mount was made twice, or one was lost');
   const at = mounts.findIndex((m) => m.router === decks);
   assert.ok(at > 0, '`decks` is not mounted');
   // The hand-written line above `decks` used to be deckReports + hqDeckReports,
