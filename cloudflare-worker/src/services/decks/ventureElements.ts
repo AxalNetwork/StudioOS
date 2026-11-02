@@ -177,7 +177,7 @@ export async function ventureElement(env: Env, projectId: number, element: Ventu
     }
 
     case 'cap_table': {
-      
+      if (opts.holders) return refused(element, 'totals_only', TOTALS_LINE);
       if (!opts.includeCapTable) return refused(element, 'not_included', TOTALS_LINE);
       const all = await itemsOf(env, projectId, ['cap_table'], today);
       const holders = recorded(all).find((it) => it.source_key === 'raise.cap_table');
