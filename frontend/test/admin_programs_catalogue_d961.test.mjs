@@ -474,7 +474,7 @@ test('docs: D961 is recorded, with the phone decision; the client has its Worker
   const d = read('documentation/architecture/decisions/D961.md');
   assert.match(d, /#2794/);
   assert.match(d, /Waiting by program and Credits in and out by month are not drawn on a phone/);
-  assert.match(read('frontend/src/lib/api.js'), /export \* from '\.\/api\/adminPrograms\.js';/);
+  assert.match(read('frontend/src/lib/apiModules.generated.js'), /export \* from '\.\/api\/adminPrograms\.js';/);
   assert.match(read('cloudflare-worker/src/index.ts'), /app\.route\('\/api\/admin\/programs', adminPrograms\)/);
 });
 

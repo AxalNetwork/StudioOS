@@ -472,6 +472,10 @@ export interface Env {
   // until the owner approves its monthly cost (decision L); absent, quote
   // retrieval answers "not switched on yet".
   DECK_QUOTES?: VectorizeIndex;
+  // D1540 (#3791, owner decision AA): the owner's daily ceiling on deck
+  // generation, in micro-USD across every member per UTC day
+  // (`services/decks/runQuotes.ts`). Not in wrangler.toml: unset is off.
+  DECK_DAILY_CEILING_MICROUSD?: string;
   // Task #13 — Workers Analytics Engine binding (`studioos_requests` dataset).
   // observability middleware writes one data point per HTTP request so the
   // Admin Analytics → Technical sub-tab can serve true edge-level traffic

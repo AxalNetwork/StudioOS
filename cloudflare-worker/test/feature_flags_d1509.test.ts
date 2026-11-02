@@ -18,6 +18,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync, mkdtempSync, copyFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import deckElementModels from '../src/routes/deck_element_models.ts';
@@ -233,11 +234,21 @@ test('an element switched off reads "Not switched on yet.", leaves its group, ca
     assert.equal(put.status, 404); assert.equal(put.body.error, 'not_switched_on'); assert.equal(put.body.message, NOT_SWITCHED_ON);
     const quote = await call(f, 2, 'POST', '/api/decks/new/quote', { project_id: 1, step: 'build', audience: 'seed_fund' });
     assert.deepEqual([quote.status, quote.body.ai, quote.body.reason, quote.body.message], [200, false, 'not_switched_on', NOT_SWITCHED_ON]);
-    const built = await call(f, 2, 'POST', '/api/decks/generate', { project_id: 1 });
+    // D1540 integration: a paid-run ceiling and an irrelevant stale quote cannot block the free records-only path.
+    f.env.DECK_DAILY_CEILING_MICROUSD = '1';
+    const holdsBefore = (f.db.prepare('SELECT COUNT(*) AS n FROM ai_budget_reservations').get() as any).n;
+    const built = await call(f, 2, 'POST', '/api/decks/generate', { project_id: 1, quote_uid: 'dq_not_a_paid_run' });
     assert.equal(built.status, 201, JSON.stringify(built.body));
     assert.deepEqual(f.calls(), [], 'no words run, nothing held');
     assert.match(built.body.wording.reason, /not switched on yet/);
+    assert.equal(built.body.wording.prompt_version, 'build.default@v2');
     assert.equal(built.body.cost.charged_microusd, 0);
+    const regenerated = await call(f, 2, 'POST', `/api/decks/proposals/${built.body.proposal.id}/regenerate-card`, { index: 0 });
+    assert.equal(regenerated.status, 200, JSON.stringify(regenerated.body));
+    assert.equal(regenerated.body.cost.charged_microusd, 0);
+    assert.equal(regenerated.body.wording.prompt_version, 'build.default@v2');
+    assert.deepEqual(f.calls(), [], 'neither free path runs AI');
+    assert.equal((f.db.prepare('SELECT COUNT(*) AS n FROM ai_budget_reservations').get() as any).n, holdsBefore, 'neither free path takes a hold');
     assert.ok(built.body.proposal.slides.length > 0 && built.body.proposal.slides.every((s: any) => String(s.title || '').length > 0), 'every card keeps its title: no empty area');
   } finally { f.close(); }
 });
@@ -303,7 +314,7 @@ test('an unmigrated table reads as no flag: every flag at its default, never a r
 
 test('option (b): no grid_v2_editor gate and no ?editor=v1 anywhere in the editor; the element routes name no model', () => {
   const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((d) => (d.isDirectory() ? walk(join(dir, d.name)) : /\.(jsx?|ts)$/.test(d.name) ? [join(dir, d.name)] : []));
-  const src = [...walk(new URL('../../frontend/src/', import.meta.url).pathname), ...walk(new URL('../src/', import.meta.url).pathname)];
+  const src = [...walk(fileURLToPath(new URL('../../frontend/src/', import.meta.url))), ...walk(fileURLToPath(new URL('../src/', import.meta.url)))];
   for (const file of src) {
     const text = readFileSync(file, 'utf8');
     assert.equal(/grid_v2_editor|editor=v1/.test(text), false, file);

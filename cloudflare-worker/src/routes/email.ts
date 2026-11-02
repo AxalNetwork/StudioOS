@@ -1,3 +1,4 @@
+/** `/api/email`: referral invite sends and reminders, each under a per-sender daily cap (Task #4). */
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';

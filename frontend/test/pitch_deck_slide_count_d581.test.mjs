@@ -19,6 +19,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { codeOnly } from './_codeOnly.mjs';
 import { SLIDE_META } from '../src/lib/pitchDeckViewModel.js';
+import { readRouteMap } from '../../scripts/lib/routeMap.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const SURFACES = [
@@ -75,7 +76,7 @@ test('the decision and the route map record eleven, and the canvas\'s thirteen a
   const d = read('documentation/architecture/decisions/D581.md');
   assert.match(d, /eleven/i);
   assert.match(d, /thirteen/i);
-  const row = read('documentation/architecture/ROUTE_MAP.md').split('\n').find((l) => l.startsWith('| Pitch Deck Builder |'));
+  const row = readRouteMap().split('\n').find((l) => l.startsWith('| Pitch Deck Builder |'));
   assert.ok(row, 'the Pitch Deck Builder row is gone');
   assert.match(row, /D581/);
   assert.match(row, /thirteen/i);

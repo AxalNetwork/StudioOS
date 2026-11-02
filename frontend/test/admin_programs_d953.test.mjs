@@ -51,6 +51,7 @@ import {
   etStamp, laneFrom, learningFigures, learningJoin, mentorFigures, mentorNeeds, movedNotice, openReferrals, perkPrice,
   perkQueueFrom, referralOverview, refusalText, rejectBody, routeFor, scopeChip, waitingForYou, weekLines, withoutMoved,
 } from '../src/pages/admin/programs/programsModel.js';
+import { readRouteMap } from '../../scripts/lib/routeMap.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
@@ -743,5 +744,5 @@ test('docs: the folder is documented, the admin README names it, ROUTE_MAP has t
   const admin = read('frontend/src/pages/admin/README.md');
   assert.match(admin, /`programs\/` is D953's Admin › Programs[\s\S]*see its own README/);
   assert.doesNotMatch(admin, /`HeldPrograms\.jsx`/);
-  assert.match(read('documentation/architecture/ROUTE_MAP.md'), /\n\| Admin · Programs \| admin, super-admin \| [^|]+ \| `\/admin\/programs` live \(D953, #2371\)/);
+  assert.match(readRouteMap(), /\n\| Admin · Programs \| admin, super-admin \| [^|]+ \| `\/admin\/programs` live \(D953, #2371\)/);
 });

@@ -159,7 +159,7 @@ test('methodology: the dashed return path stops for reduced motion', () => {
 test('intelligence: the model table reads the public registry, and the page names no model', () => {
   assert.match(code(INTEL_SRC), /publicAiModelsApi\.list\(\)/, 'the table is fed by the registry read');
   assert.match(read('frontend/src/lib/api/publicAiModels.js'), /request\('\/public\/ai-models'\)/);
-  assert.match(read('frontend/src/lib/api.js'), /^export \* from '\.\/api\/publicAiModels\.js';$/m, 'one re-export line (D527)');
+  assert.match(read('frontend/src/lib/apiModules.generated.js'), /^export \* from '\.\/api\/publicAiModels\.js';$/m, 'one re-export line (D527)');
   assert.match(read('cloudflare-worker/src/routes/public.ts'), /publicRoutes\.get\('\/ai-models'/, 'the Worker serves it');
   const literals = /@cf\/|llama|guard-3|glm|kimi|gemma|whisper|qwen|deepgram|aura|bge|gpt-oss|deepseek|moonshot|zai-org/i;
   assert.doesNotMatch(code(INTEL_SRC), literals, 'no model id or name typed into the page');

@@ -339,7 +339,7 @@ test('the client calls the review routes the Worker mounts', () => {
   const src = read('frontend/src/lib/api/ticketReviews.js');
   for (const path of ['/admin/ticket-reviews/features', '/admin/ticket-reviews/tasks']) assert.ok(src.includes(`'${path}'`), path);
   for (const m of ['features', 'tasks', 'approveFeature', 'declineFeature', 'approveTask', 'declineTask']) assert.equal(typeof ticketReviewsApi[m], 'function', m);
-  assert.match(read('frontend/src/lib/api.js'), /export \* from '\.\/api\/ticketReviews\.js';/);
+  assert.match(read('frontend/src/lib/apiModules.generated.js'), /export \* from '\.\/api\/ticketReviews\.js';/);
 });
 
 test('the chat carries the panel\'s three tabs, and "Suggest a task" opens the form on Task', () => {
