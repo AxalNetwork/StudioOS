@@ -132,6 +132,8 @@ export default function OneClickBuild({
   const navigate = useNavigate();
   const [read, setRead] = useState(given ? { status: 'ok', data: given } : { status: 'loading', data: null });
   const [quote, setQuote] = useState(null);
+  // D1540: a stale pinned quote (used, lapsed, or another run's) asks for the price again.
+  const [requote, setRequote] = useState(0);
   const [open, setOpen] = useState(false);
   const [startedAt, setStartedAt] = useState(null);
   const [refusal, setRefusal] = useState(null);
@@ -162,7 +164,7 @@ export default function OneClickBuild({
       .then((qt) => { if (live) setQuote(qt); }, (e) => { if (live) setQuote(null); reportError('pitch-oneclick:quote', e); });
     return () => { live = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, brief?.audience, brief?.length, roundRef, exKey, switchedOff]);
+  }, [projectId, brief?.audience, brief?.length, roundRef, exKey, requote, switchedOff]);
 
   const titles = useMemo(() => {
     const rows = brief ? ctx?.standard?.[brief.length] : null;
@@ -173,10 +175,16 @@ export default function OneClickBuild({
     if (!brief) return;
     setStartedAt(Date.now()); setRefusal(null);
     try {
-      const r = await newDeckApi.build({ project_id: projectId, one_click: true, audience: brief.audience, length: brief.length, round_ref: roundRef, ...(ex.length ? { exclude: ex } : {}) }, railPressHeaders('deck:build'));
+      // D1540: the quote shown is pinned; the build settles at no more than it.
+      const r = await newDeckApi.build({ project_id: projectId, one_click: true, audience: brief.audience, length: brief.length, round_ref: roundRef, ...(ex.length ? { exclude: ex } : {}), ...(quote?.quote_uid ? { quote_uid: quote.quote_uid } : {}) }, railPressHeaders('deck:build'));
       setOpen(false);
+      setRequote((k) => k + 1);
       if (onBuilt) onBuilt(r); else navigate(reviewHref(q, r.proposal.id));
-    } catch (e) { setRefusal(refusalOf(e)); setOpen(false); reportError('pitch-oneclick:build', e); } finally { setStartedAt(null); }
+    } catch (e) {
+      const why = refusalOf(e);
+      if (why?.code === 'quote_stale') { setQuote(null); setRequote((k) => k + 1); }
+      setRefusal(why); setOpen(false); reportError('pitch-oneclick:build', e);
+    } finally { setStartedAt(null); }
   };
 
   const wrap = Tag === 'li'

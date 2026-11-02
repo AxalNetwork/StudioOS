@@ -196,7 +196,8 @@ test('RR03 (Q1 A): on a founder\'s record the rail keeps where, says Eadwyn is o
   assert.match(on, /switch-worker-rail-ai-off/, 'every other page keeps its switch');
   assert.doesNotMatch(on, /text-worker-rail-founder-record/);
   const route = read('pages/cycles/CycleRoute.jsx');
-  assert.match(route, /readOnlyFor=\{narrativeAdmin \? 'founder-record' : null\}/);
+  // D1464 (#4021): a per-open read of the Data room or Capital relationships turns it off too.
+  assert.match(route, /readOnlyFor=\{narrativeAdmin \|\| supportOpen \? 'founder-record' : null\}/);
 });
 
 test('RR07: a founder sees who read the narrative on Home, even with no saved version; an admin never does', () => {
