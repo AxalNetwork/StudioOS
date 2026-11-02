@@ -27,7 +27,12 @@ import { railPageHeaders } from '../lib/railPage.js';
  * hold a venture or a profile." (AF22). A failed read is Unreadable with Try
  * again, never a form with no Ask.
  */
-export function useScopedFill({ scope, record = null, parent = null, enabled = true, values = {}, onValues }) {
+/**
+ * `only` (#4046 B2): the field names this record draws, when it draws fewer
+ * than its form lists (a programme's two questions of five); the others get no
+ * trigger and do not count toward the form's Ask.
+ */
+export function useScopedFill({ scope, record = null, parent = null, enabled = true, values = {}, onValues, only = null }) {
   const { page, form, table } = scope;
   // The rail's workspace is the switch key; the canonical form page is the
   // fallback when no rail is mounted (D765).
@@ -54,7 +59,8 @@ export function useScopedFill({ scope, record = null, parent = null, enabled = t
     return () => { live = false; };
   }, [page, form, record, parent, enabled, tick]);
 
-  const fields = read.status === 'ready' && Array.isArray(read.data?.fields) ? read.data.fields : [];
+  const listed = read.status === 'ready' && Array.isArray(read.data?.fields) ? read.data.fields : [];
+  const fields = Array.isArray(only) ? listed.filter((f) => only.includes(f.field)) : listed;
   const canFill = read.status === 'ready' && read.data?.can_fill === true;
   const support = read.status === 'ready' && !canFill && !!activeSupportSession();
   const names = fields.map((f) => f.field);

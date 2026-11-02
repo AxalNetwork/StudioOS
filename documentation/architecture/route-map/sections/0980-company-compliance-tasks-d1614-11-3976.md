@@ -1,4 +1,4 @@
-### Company compliance tasks (D1614 §9, #3976, migration 202611021812)
+### Company compliance tasks (D1614 §11, #3976, migration 202611021812)
 
 - **Worker:** `routes/company_compliance.ts`, mounted at `/api/company` ahead of `company.ts` by its own `mount` (#4105); every gate is in `services/compliance/companyTasks.ts`.
   - `GET /company/:uid/compliance?status=due|done|snoozed&jurisdiction=&owner=<uid>|none&type=` → `{ company, viewer: { can_manage, can_comment, read_only }, tasks, truncated, projects }` (at most 1,000 tasks; `projects` is the company's own, for "Create work").
