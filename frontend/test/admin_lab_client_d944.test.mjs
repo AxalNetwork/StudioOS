@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { apiModulesBlock } from './_apiModulesBlock.mjs';
 const seen=[];
 globalThis.localStorage={getItem:()=>null,setItem:()=>{},removeItem:()=>{}};
 globalThis.fetch=async(url,options)=>{
@@ -24,7 +25,7 @@ test('D944: applications sends all supported filters and pagination, retaining z
   assert.deepEqual(Object.fromEntries(url.searchParams),{cohort:'2026-11',status:'waiting',origin:'university',tech_transfer:'signed',stage:'prototype',incorporated:'no',interview:'none',carried_forward:'yes',sort:'team_size',q:'%_ & Lab',limit:'25',offset:'0'});
 });
 test('D944: the client is its own module and re-exported once in the alphabetical API block',()=>{
-  const src=readFileSync('frontend/src/lib/api.js','utf8');const block=src.slice(src.indexOf('// api-modules:begin'),src.indexOf('// api-modules:end'));
+  assert.match(readFileSync('frontend/src/lib/api.js','utf8'), /^export \* from '\.\/apiModules\.generated\.js';$/m);const block=apiModulesBlock();
   const lines=block.split('\n').filter(x=>x.startsWith('export * from'));
   assert.equal(lines.filter(x=>x==="export * from './api/adminLab.js';").length,1);assert.deepEqual(lines,[...lines].sort());
 });

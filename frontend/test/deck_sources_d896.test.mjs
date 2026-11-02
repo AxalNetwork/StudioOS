@@ -178,7 +178,7 @@ test('the API module names the two Worker routes, mounted before decks', () => {
   const index = read('cloudflare-worker/src/index.ts');
   assert.ok(index.indexOf("app.route('/api/decks', deckSources)") > 0);
   assert.ok(index.indexOf("app.route('/api/decks', deckSources)") < index.indexOf("app.route('/api/decks', decks)"), 'before decks, whose GET /:id would answer /sources');
-  assert.match(read('frontend/src/lib/api.js'), /^export \* from '\.\/api\/deckSources\.js';$/m);
+  assert.match(read('frontend/src/lib/apiModules.generated.js'), /^export \* from '\.\/api\/deckSources\.js';$/m);
 });
 
 /* ------------------------------------------------------------------ *

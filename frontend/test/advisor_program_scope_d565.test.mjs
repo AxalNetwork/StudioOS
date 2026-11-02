@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readRouteMap } from '../../scripts/lib/routeMap.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (p) => readFileSync(resolve(ROOT, p), 'utf8');
@@ -19,7 +20,7 @@ const count = (dir) => readdirSync(resolve(ROOT, 'design/canvases', dir)).filter
 test('the Advisor Studio canvas is in backlog/, its row is NEW and names D565, and the design exists', () => {
   assert.ok(existsSync(resolve(ROOT, 'design/canvases/backlog/Advisor Studio.dc.html')), 'the canvas is in backlog/');
   assert.ok(!existsSync(resolve(ROOT, 'design/canvases/out-of-scope/Advisor Studio.dc.html')), 'and no longer in out-of-scope/');
-  const row = read('documentation/architecture/ROUTE_MAP.md').split('\n').find((l) => l.startsWith('| Advisor Studio |'));
+  const row = readRouteMap().split('\n').find((l) => l.startsWith('| Advisor Studio |'));
   assert.ok(row, 'ROUTE_MAP has the Advisor Studio row');
   assert.equal(row.split('|')[6].trim(), 'NEW', 'graded as backlog/ holds it');
   assert.match(row, /D565/);

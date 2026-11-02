@@ -1,0 +1,88 @@
+# D1511 (#3762, deck v2 A18) — visual regression and axe on the Pitch deck
+# editor, in a pinned container: the Playwright image matching
+# @playwright/test, with the fonts pinned in frontend/package.json. A laptop's
+# pixels are never a baseline (frontend/playwright.visual.config.js).
+#
+# BASELINES ARE MADE HERE. The suite runs with `--update-snapshots=missing`:
+# a screenshot that has no baseline yet is written, not compared. When a run
+# writes new ones on a branch of this repository, the job commits them to
+# that branch ("Deck visual baselines from CI") for the PR's reviewer to look
+# at, and passes. Every later run compares against them, and a change past
+# `maxDiffPixelRatio` fails. A fork's run cannot commit, so missing baselines
+# fail it instead. To redraw them on purpose, delete the changed PNGs in
+# frontend/tests/visual/__screenshots__/ and push: the next run writes them.
+#
+# axe needs no baseline: zero serious or critical violations, every run.
+name: deck-visual
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'frontend/src/pages/raise/pitch/**'
+      - 'frontend/src/index.css'
+      - 'frontend/tests/visual/**'
+      - 'frontend/playwright.visual.config.js'
+      - 'frontend/package.json'
+      - 'frontend/package-lock.json'
+      - 'cloudflare-worker/src/services/decks/**'
+      - '.github/workflows/deck-visual.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deck-visual-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  visual:
+    name: Deck editor visual regression and axe (Playwright, pinned container)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.head_ref || github.ref }}
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend --no-audit --no-fund
+
+      - name: Run the visual and axe suites
+        id: run
+        working-directory: frontend
+        env:
+          CI: 'true'
+        run: npx --no-install playwright test -c playwright.visual.config.js --update-snapshots=missing
+
+      - name: Commit new baselines to this branch
+        if: success()
+        shell: bash
+        env:
+          SAME_REPO: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository }}
+          # The branch name is user input: it reaches the shell only as a quoted variable, never interpolated into the script.
+          PUSH_REF: ${{ github.head_ref || github.ref_name }}
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          new=$(git status --porcelain -- frontend/tests/visual/__screenshots__ | wc -l)
+          if [ "$new" = "0" ]; then echo "Every screenshot matched its baseline."; exit 0; fi
+          echo "$new new baseline(s) written in the pinned container."
+          if [ "$SAME_REPO" != "true" ]; then
+            echo "::error::Baselines are missing and a fork's run cannot commit them. A maintainer runs this workflow on the branch."
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add frontend/tests/visual/__screenshots__
+          git commit -m "Deck visual baselines from CI (D1511, pinned container)"
+          git push origin "HEAD:${PUSH_REF}"
+
+      - name: Keep the failed screenshots and traces
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: deck-visual-results
+          path: frontend/test-results/
+          retention-days: 7

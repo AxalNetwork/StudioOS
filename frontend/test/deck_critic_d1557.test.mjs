@@ -47,5 +47,5 @@ test('the client posts to the critic route; the sheet mounts the section and the
   assert.match(src('pages/raise/pitch/CheckPanel.jsx'), /<CriticSection deck=\{deck\} readOnly=\{readOnly\} onGoToCard=\{onGoToCard\} \/>/);
   assert.match(src('pages/raise/pitch/CriticSection.jsx'), /if \(readOnly \|\| !deck\?\.id\) return null;/);
   assert.match(src('lib/railOptions/founder.js'), /key: 'deck:critic'[^\n]*kind: 'reason'/);
-  assert.match(src('lib/api.js'), /export \* from '\.\/api\/deckCritic\.js';/);
+  assert.match(src('lib/apiModules.generated.js'), /export \* from '\.\/api\/deckCritic\.js';/);
 });

@@ -174,8 +174,11 @@ export const EMPTY = {
   activity: 'No activity on this deal yet.',
 };
 
-/** Eadwyn's draft (DL14) is AUTOFILL's proposal (#2431); nothing reads it yet. */
-export const EADWYN_DRAFT_WAITS = 'Eadwyn’s draft summary of this deal is not read here yet. It will arrive through Ask as a proposal: nothing lands until you save it as your note.';
+/**
+ * Eadwyn's draft (DL14) is AUTOFILL's proposal (#2431). #4046: it arrives through Ask on New note, drawn
+ * from the deal's company and stage and your firm's notes; a summary of the deal's whole record is not read yet.
+ */
+export const EADWYN_DRAFT_WAITS = 'Ask on New note drafts a note from this deal’s company and stage and your firm’s notes. Nothing lands until you save it as your note. A summary of the deal’s whole record is not read here yet.';
 
 /** DL24a: the scorecard strip's slot until SCORING's per-deal read exists (#2428). */
 export const DECK_SLOT = {

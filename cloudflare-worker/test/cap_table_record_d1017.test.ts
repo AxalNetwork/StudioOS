@@ -451,5 +451,5 @@ test('the record routes are matched before the venture alias, and the client nam
   assert.ok(src.indexOf("captable.get('/record/:projectId'") < src.indexOf("captable.get('/:projectId'"));
   const client = readFileSync(resolve(ROOT, 'frontend/src/lib/api/capTableRecord.js'), 'utf8');
   for (const p of ['/proposals', '/accept', '/dismiss', '/issuances', '/void', '/classes', '/currency', '/history']) assert.ok(client.includes(p), p);
-  assert.match(readFileSync(resolve(ROOT, 'frontend/src/lib/api.js'), 'utf8'), /export \* from '\.\/api\/capTableRecord\.js';/);
+  assert.match(readFileSync(resolve(ROOT, 'frontend/src/lib/apiModules.generated.js'), 'utf8'), /export \* from '\.\/api\/capTableRecord\.js';/);
 });
