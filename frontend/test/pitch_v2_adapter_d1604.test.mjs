@@ -35,11 +35,18 @@ test('every adapter method answers unavailable, with the reason and the issue th
   const methods = Object.keys(adapter).filter((k) => !HELPERS.has(k));
   assert.deepEqual(methods.sort(), Object.keys(adapter.SURFACES).sort(), 'a method with no SURFACES row, or a row with no method');
   assert.ok(methods.length >= 40);
-  // D1499 (#3749) swapped grid, D1522 (#3774) stagePlan, D1553 (#3800) remix, D1503 (#3754) elementModels; D1565 (#3812)
-  // the investor links; D1538 (#3787) typedTables; D1555 (#3802) consistency rides the check read; D1535 (#3782) the three template methods. A swapped
-  // surface's body calls its client through().
-  assert.deepEqual([...adapter.SWAPPED], ['grid', 'saveCard', 'discardDraft', 'draft', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'presets', 'orgLocks', 'comments', 'figures', 'presence', 'templates', 'myTemplates', 'saveAsTemplate'], 'the rows whose routes are on main');
-  // D1523 (#3775): figures also reads its mounted route through its client.
+  // #4134: SWAPPED is derived, never listed. A row is swapped exactly when its method's body answers through
+  // its client (`through(() => <client>Api.<method>(…), SURFACES.<row>.issue)`), and off exactly when the body is
+  // `off('<row>')`. Mutation checked: turn a swapped row back to `off(...)` (or wire an off row) and the two sets part.
+  const body = (src, name) => (src.match(new RegExp(`^export const ${name} = ([^\\n]*)$`, 'm')) || [])[1] || '';
+  const code = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
+  const wired = methods.filter((n) => /\bthrough\(\(\) => deck[A-Za-z]+Api\./.test(body(code, n)));
+  const offRows = methods.filter((n) => body(code, n) === `off('${n}');`);
+  assert.deepEqual([...adapter.SWAPPED].sort(), wired.sort(), 'SWAPPED is exactly the rows whose body answers through a client');
+  assert.deepEqual([...wired, ...offRows].sort(), [...methods].sort(), 'every row is either through(...) or off(\'<row>\'), nothing else');
+  for (const n of wired) assert.match(body(code, n), new RegExp(`SURFACES\\.${n}\\.issue\\);$`), `${n} keys its own row's issue`);
+  // A floor, so a parser that stopped matching cannot pass on two empty lists.
+  for (const n of ['grid', 'saveCard', 'stagePlan', 'remix', 'comments']) assert.ok(adapter.SWAPPED.includes(n), `${n} is swapped on main`);
   const seam = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
   for (const name of ['investorLinks', 'withdrawInvestorLink']) {
     assert.match(seam, new RegExp(`export const ${name} = [^\\n]*through\\(\\(\\) => deckInvestorLinksApi\\.${name}\\(`), `${name} is wired to its client`);
@@ -196,8 +203,20 @@ test('the adapter keys each surface to the plan’s issue (§6.2)', () => {
 test('the seam reaches no network, and no client method exists for a route that is not on main', () => {
   const src = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
   assert.doesNotMatch(src, /request\(|fetch\(|XMLHttpRequest/);
-  // A swapped row's client is the only `lib/api` the seam may import (D1499's `deckGrid.js`, D1522's `deckStage.js`, D1553's `deckRemix.js`, D1503's `deckElementModels.js`, D1565's `deckInvestorLinks.js`, D1538's `deckTypedValues.js`, D1555's `deckCheck.js`, D1549's `deckModelPresets.js`, D1535's `deckTemplates.js`).
-  assert.deepEqual([...src.matchAll(/from '([^']*lib\/api[^']*)'/g)].map((x) => x[1]).sort(), ['../../../lib/api/deckCheck.js', '../../../lib/api/deckCoedit.js', '../../../lib/api/deckComments.js', '../../../lib/api/deckDraft.js', '../../../lib/api/deckElementModels.js', '../../../lib/api/deckFigures.js', '../../../lib/api/deckGrid.js', '../../../lib/api/deckInvestorLinks.js', '../../../lib/api/deckModelPresets.js', '../../../lib/api/deckRemix.js', '../../../lib/api/deckStage.js', '../../../lib/api/deckTemplates.js', '../../../lib/api/deckTypedValues.js']);
+  // A swapped row's client is the only `lib/api` the seam may import (#4134: a rule, not a list). Each import names
+  // one `deck<Name>Api` from `lib/api/deck<Name>.js`, the imports stand in file-name order (so two swaps add lines
+  // at different places), and every one is used by a swapped row's body. Mutation checked: an unused client import,
+  // or two imports out of order, fails here.
+  const imports = [...src.matchAll(/^import \{ (deck[A-Za-z]+Api) \} from '\.\.\/\.\.\/\.\.\/lib\/api\/(deck[A-Za-z]+)\.js';$/gm)].map((x) => ({ name: x[1], file: x[2] }));
+  assert.equal(imports.length, [...src.matchAll(/from '([^']*lib\/api[^']*)'/g)].length, 'every lib/api import is one `import { deck<Name>Api } from .../lib/api/deck<Name>.js` line');
+  assert.ok(imports.length >= 10, 'the seam imports the clients of its swapped rows');
+  const files = imports.map((i) => i.file);
+  assert.deepEqual(files, [...files].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())), 'the lib/api imports stand in file-name order');
+  const bodies = adapter.SWAPPED.map((n) => (src.match(new RegExp(`^export const ${n} = ([^\\n]*)$`, 'm')) || [])[1] || '').join('\n');
+  for (const { name, file } of imports) {
+    assert.equal(name, `${file}Api`, `${file}.js exports ${file}Api`);
+    assert.ok(bodies.includes(`${name}.`), `${name} is imported but no swapped row calls it`);
+  }
   // D1549 (#3796): the presets route is on main, with its client; orgLocks reads the same reply.
   assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_model_presets.ts')), /deckModelPresets\.get\(['"]\/:id\{\[0-9\]\+\}\/model-presets['"]/);
   assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckModelPresets\)/);

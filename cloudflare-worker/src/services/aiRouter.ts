@@ -318,6 +318,14 @@ export interface RunOptions {
   // out and behaves as before.
   idempotencyKey?: string;
   executionId?: string;
+  /**
+   * D1502 (#3753, deck v2 A3a): a step of a deck generation run, under the
+   * run's ONE parent hold (`services/decks/genRuntime.ts`, `reserveBatch`). The
+   * step takes no hold of its own and settles nothing: its usage row names the
+   * parent (`reservation_uid`) and records what it charged, and the run settles
+   * the parent once, at the sum of its steps. Only `genRuntime` sets it.
+   */
+  parentHold?: { uid: string; userId: number };
   // D1540 (#3791): a pinned quote. The most this run may charge the member, in
   // micro-USD, from a quote the Worker stored before the run (New deck's
   // `deck_run_quotes`). The hold is no larger, and the settlement is capped at
@@ -2288,7 +2296,16 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
   // D762: what this run is settled at over its cost, from the member's licence.
   // Cost (est_cost_usd, the KV buckets, the organisation cap) stays cost.
   let multiplier = 1;
-  if (opts.userId > 0) {
+  if (opts.userId > 0 && opts.parentHold) {
+    // D1502: a step of a run held by its parent. The parent must be the same member's.
+    if (opts.parentHold.userId !== opts.userId) {
+      const usage:UsageMeta={task:opts.task,model:primaryModel,latency_ms:0,prompt_tokens:0,completion_tokens:0,est_cost_usd:0,fallback_used:false,cached:false,safety_score:null};
+      await recordUsage(env, opts, usage, 'misconfigured');
+      return {ok:false,refusal:'misconfigured',error:'Unreadable: this step is not under its own run\'s hold.',usage};
+    }
+    multiplier = await aiBudget.memberChargeMultiplier(env, opts.userId);
+    reservation = { uid: opts.parentHold.uid, userId: opts.parentHold.userId };
+  } else if (opts.userId > 0) {
     try {
       multiplier = await aiBudget.memberChargeMultiplier(env, opts.userId);
       // D1278: the hold names the run's task, never its prompt.
@@ -2333,7 +2350,8 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
   const settleHold = async (micro: number, usd: number, answered: boolean): Promise<boolean> => {
     // D1540: never more than the pinned quote, whatever the run cost at today's prices.
     micro = pinned(micro);
-    if (reservation) {
+    // D1502: a step under a parent hold settles nothing; its row records the charge and the run settles the parent.
+    if (reservation && !opts.parentHold) {
       try { await aiBudget.settleAiReservation(env, reservation, micro, !answered && micro === 0); }
       catch { return false; }
     }
