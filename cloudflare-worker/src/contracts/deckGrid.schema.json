@@ -4,11 +4,14 @@
   "description": "The reply the deck v2 adapter's `grid` method passes through. D1511 (#3762).",
   "type": "object",
   "additionalProperties": false,
-  "required": ["deck_id", "version", "aspect", "slide", "frame", "cell", "baseline", "grid", "structures", "cards"],
+  "required": ["deck_id", "version", "aspect", "lang", "dir", "script", "slide", "frame", "cell", "baseline", "grid", "structures", "cards"],
   "properties": {
     "deck_id": { "type": "integer", "minimum": 1 },
     "version": { "type": "integer", "minimum": 1 },
     "aspect": { "enum": ["16:9", "4:3"] },
+    "lang": { "description": "D1571 (#3818): the deck's language (theme.lang, a BCP 47 tag), or null when none was chosen. No `type`, so null holds." },
+    "dir": { "enum": ["ltr", "rtl"], "description": "D1571: the direction the deck's words read in." },
+    "script": { "enum": ["latin", "arabic", "hebrew", "cjk"], "description": "D1571: the script its capacity is measured in (designSystem.SCRIPT_EM)." },
     "slide": { "$ref": "#/$defs/size" },
     "frame": {
       "type": "object", "additionalProperties": false,
