@@ -29,7 +29,7 @@ import CreateStartupForm from '../../components/CreateStartupForm';
 import CycleOverview, { CycleHeader } from './CycleOverview';
 import RecordView, { RecordPhoneProvider } from './RecordView';
 import { HEADER_BUTTON, RecordHeaderProvider } from './RecordHeader.jsx';
-import { PageAsk } from '../../ui/AskButton.jsx';
+import HeaderAsk from '../../ui/HeaderAsk.jsx';
 import { EmailAction } from '../email/emailParts.jsx';
 import { emailHref, personOfRecord } from '../email/emailModel.js';
 import { prototypeLovable } from './lovable/lovableModel';
@@ -1169,7 +1169,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
           ? <EmailAction person={personOfRecord(cycle, slug, recordId)} from={`${recordTitle} · ${moduleName}`} className={HEADER_BUTTON.default} />
           : null}
         emailTo={recordState.data && personOfRecord(cycle, slug, recordId) ? emailHref(personOfRecord(cycle, slug, recordId), `${recordTitle} · ${moduleName}`) : null}
-        ask={<PageAsk label={`${name} · ${recordTitle}`} testId="record-ask" />}>
+        ask={<HeaderAsk label={`${name} · ${recordTitle}`} testId="record-ask" />}>
       {recordState.status === 'loading' ? <p className="text-sm text-axal-muted dark:text-gray-400" aria-busy="true">Loading record…</p>
         : recordState.status === 'refused' ? <p className="text-sm text-axal-ink dark:text-gray-100">{recordState.error}</p>
         : recordState.status === 'unreadable' ? <Unreadable what="This record" claim={recordState.error} onRetry={() => setReload(n => n + 1)} />

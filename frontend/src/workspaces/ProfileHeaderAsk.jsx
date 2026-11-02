@@ -1,10 +1,9 @@
 import React from 'react';
 import { useLocation } from 'react-router-dom';
-import { AskButtonView } from '../ui/AskButton.jsx';
-import { openEadwynPanel } from '../ui/eadwynPanel.js';
+import HeaderAsk from '../ui/HeaderAsk.jsx';
 import { NO_RAIL_ROUTES, pageFor } from '../lib/railPages.js';
 import { activeSupportSession } from '../lib/supportSession.js';
-import { askAvailability, waitingCount } from './profileAskAdapter.js';
+import { askAvailability } from './profileAskAdapter.js';
 
 /**
  * D1424 (#3700) — the zone header's "Ask" on the Investor, Advisor and
@@ -57,12 +56,6 @@ export default function ProfileHeaderAsk({ role }) {
   const { pathname } = useLocation();
   const gate = headerAskGate({ role, pathname, support: !!activeSupportSession() });
   if (!gate.show) return null;
-  const waiting = waitingCount(gate.pageKey);
-  return (
-    <AskButtonView
-      testId="zone-header-ask"
-      waiting={waiting.available ? waiting.count : null}
-      onClick={() => openEadwynPanel(gate.pageKey)}
-    />
-  );
+  // D1443 part 5 (#3992): the page's one header Ask (`HeaderAsk`), drawn while the rail serves it, with D1442's "N waiting".
+  return <HeaderAsk testId="zone-header-ask" />;
 }
