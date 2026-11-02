@@ -42,6 +42,7 @@ import { logCycleWriteStatement } from '../services/cycleActivity';
 import { cardRefOf } from '../services/decks/cardUids';
 import { approvalSentence, pendingApprovers } from '../services/decks/deckApproval';
 import { notify } from '../services/notify';
+import { kindOfRole, peopleOf, type Kind } from '../services/decks/deckPeople';
 
 const deckComments = new Hono<{ Bindings: Env }>();
 
@@ -49,14 +50,11 @@ export const COMMENT_MAX = 2000;
 export const COMMENT_LIST_MAX = 500;
 export const MENTION_MAX = 20;
 export const APPROVER_MAX = 10;
-const PEOPLE_MAX = 100;
 const AREA = /^[A-Za-z0-9_.:-]{1,64}$/;
 const UID = /^[a-f0-9]{32}$/;
 
-type Kind = 'founder' | 'advisor' | 'operating_partner';
 type Viewer = { kind: Kind; manage: boolean };
 type DeckRow = { id: number; project_id: number; version: number; slides: string | null };
-type Person = { id: number; name: string | null; kind: Kind };
 type CommentRow = {
   id: number; uid: string; deck_id: number; deck_version: number; card_index: number; card_uid: string | null; area: string | null;
   parent_uid: string | null; author_user_id: number; author_name: string | null; body: string;
@@ -66,7 +64,6 @@ type CommentRow = {
 
 const NOT_FOUND = { error: 'deck_not_found', message: 'That deck is not one you can read.' };
 const newUid = () => crypto.randomUUID().replace(/-/g, '');
-const kindOfRole = (role: unknown): Kind => (role === 'advisor' ? 'advisor' : role === 'partner' ? 'operating_partner' : 'founder');
 const person = (id: number | null, name: string | null) => (id == null ? null : { id: Number(id), name: name ?? null });
 
 async function deckRow(env: Env, id: number): Promise<DeckRow | null> {
@@ -99,23 +96,6 @@ async function viewerOf(c: any, user: User, projectId: number, writing: boolean)
   } catch { /* not a founder of this venture: the grant decides */ }
   if (role !== 'advisor' && role !== 'partner') return null;
   return await deckGrantLive(c.env, projectId, Number(user.id)) ? { kind: kindOfRole(role), manage: false } : null;
-}
-
-/** Who can be mentioned, assigned or named an approver: everyone who can read the threads. */
-async function peopleOf(env: Env, projectId: number): Promise<Person[]> {
-  const rows = (await env.DB.prepare(
-    `SELECT u.id, u.name, u.role FROM users u
-      WHERE COALESCE(u.is_active, 1) = 1 AND u.role <> 'admin' AND (
-        (u.role = 'founder' AND u.founder_id IS NOT NULL AND u.founder_id = (SELECT founder_id FROM projects WHERE id = ?))
-        OR u.id IN (SELECT m.user_id FROM project_members m WHERE m.project_id = ? AND m.status = 'accepted' AND m.role IN ('owner', 'cofounder'))
-        OR (u.role IN ('advisor', 'partner') AND u.id IN (
-          SELECT g.advisor_user_id FROM advisor_client_grants g
-           WHERE g.project_id = ? AND g.status = 'active' AND g.scope_deck = 1
-             AND (g.expires_at IS NULL OR datetime(g.expires_at) > datetime('now'))))
-      )
-      ORDER BY u.name, u.id LIMIT ?`,
-  ).bind(projectId, projectId, projectId, PEOPLE_MAX).all<{ id: number; name: string | null; role: string | null }>()).results ?? [];
-  return rows.map((r) => ({ id: Number(r.id), name: r.name ?? null, kind: kindOfRole(r.role) }));
 }
 
 // The one comment reader, by venture (all) or by id (one); bound, never built.

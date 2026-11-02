@@ -1,0 +1,30 @@
+{
+  "$id": "deckUsage",
+  "title": "GET /api/decks/:id/usage (D1524, #3776)",
+  "description": "The reply the deck v2 adapter's `deckUsage` method formats for the AIRail: the deck's estimate (`estimateDeck`'s quote lines), what has been spent on it from the ledger, and the per-run prices of a text area and an image. A figure that cannot be read is `{ available: false, reason }`, never 0; a price that cannot be read is null. D1511 (#3762).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["deck_id", "project_id", "estimated", "spent", "units"],
+  "properties": {
+    "deck_id": { "type": "integer", "minimum": 1 },
+    "project_id": { "type": "integer", "minimum": 1 },
+    "estimated": {
+      "type": "object", "additionalProperties": false, "required": ["available"],
+      "properties": {
+        "available": { "type": "boolean" }, "value_microusd": { "type": "integer", "minimum": 0 },
+        "lines": { "type": "array" }, "reason": { "type": "string" }
+      }
+    },
+    "spent": {
+      "type": "object", "additionalProperties": false, "required": ["available"],
+      "properties": {
+        "available": { "type": "boolean" }, "value_microusd": { "type": "integer", "minimum": 0 },
+        "runs": { "type": "integer", "minimum": 0 }, "reason": { "type": "string" }
+      }
+    },
+    "units": {
+      "type": "object", "additionalProperties": false, "required": ["text_area_microusd", "image_microusd"],
+      "properties": { "text_area_microusd": { "description": "integer micro-USD, or null when it cannot be priced" }, "image_microusd": { "description": "integer micro-USD, or null when it cannot be priced" } }
+    }
+  }
+}

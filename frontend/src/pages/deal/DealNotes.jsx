@@ -40,13 +40,18 @@ function NoteDialog({ mode, note, dealId, onDone, onClose }) {
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const del = mode === 'delete';
+  // #4046 (Group A2): Ask on the note's words, read against the note itself (its id), the author's only.
+  const fill = useScopedFill({
+    scope: SCOPED_FORMS.dealNote, record: note.id ?? null, enabled: !del && Number(note.id) > 0,
+    values: { body }, onValues: (v) => { if (v.body != null) setBody(v.body); },
+  });
   const go = async () => {
     const bad = del ? null : noteError(body);
     if (bad) { setErr(bad); return; }
     setBusy(true); setErr('');
     try {
       if (del) await dealContextApi.deleteNote(dealId, note.uid);
-      else await dealContextApi.editNote(dealId, note.uid, { body: body.trim(), tag: tag || null });
+      else { await dealContextApi.editNote(dealId, note.uid, { body: body.trim(), tag: tag || null }); await fill.afterSave(note.id); }
       onDone();
     } catch (e) { setErr(e?.message || 'That did not save. Try again.'); } finally { setBusy(false); }
   };
@@ -64,8 +69,10 @@ function NoteDialog({ mode, note, dealId, onDone, onClose }) {
         {del
           ? <p className="m-0 whitespace-pre-line text-[13px] text-axal-ink dark:text-gray-100">{note.body}</p>
           : (<>
+            <FillLabel fill={fill} name="body" label="Note" value={body}><span className={EYE}>Note</span></FillLabel>
             <textarea rows={5} maxLength={NOTE_MAX} value={body} onChange={(e) => setBody(e.target.value)} className={FIELD} aria-label="Note" />
             <TagPicker value={tag} onChange={setTag} />
+            <FillFormBar fill={fill} />
           </>)}
         {err && <p role="alert" className="m-0 text-[12.5px] text-axal-destructive dark:text-red-300">{err}</p>}
       </div>

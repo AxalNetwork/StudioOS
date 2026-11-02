@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { cyclesWrite } from '../../../lib/api/cycles.js';
 import { answerChips } from '../../cycles/forms.js';
 import DataRoomDialog, { roomRefusal } from './DataRoomDialog.jsx';
 import FolderLightbox, { NewFolderDialog } from './DataRoomFolders.jsx';
+import DataRoomSearch from './DataRoomSearch.jsx';
 import {
   GATES, OWNER_ONLY, endCopy, fileHref, folderChoices, gateCopy, matchCopy, moveCopy, removeCopy, tableRows, treeRows,
 } from './filesModel.js';
@@ -64,6 +65,7 @@ export default function DataRoomFiles({ room, projectUid, projectId, reload, sea
   const [openFolder, setOpenFolder] = useState(null);
   const [newFolder, setNewFolder] = useState(false);
   const [done, setDone] = useState(null);
+  const navigate = useNavigate();
   const owner = room?.role !== 'cofounder';
   const tree = useMemo(() => treeRows(room), [room]);
   const rows = useMemo(() => tableRows(room, { folder, q }), [room, folder, q]);
@@ -161,6 +163,14 @@ export default function DataRoomFiles({ room, projectUid, projectId, reload, sea
         </div>
       </div>
       {done ? <p role="status" className={`m-0 border-b border-axal-hairline bg-axal-lavender px-4 py-2 text-[12.5px] font-semibold ${INK} dark:border-gray-800 dark:bg-violet-950/40`} data-testid="dataroom-files-done">{done}</p> : null}
+      {/* #3938 part 2: search inside the files, on the room's own index (no model to pick). */}
+      {none ? null : (
+        <DataRoomSearch
+          projectUid={projectUid}
+          canIndex
+          onOpen={(uid) => { const f = (room?.files || []).find((x) => x.uid === uid); if (f) navigate(fileHref(f.id, search)); }}
+        />
+      )}
       {none ? (
         <div className="flex flex-col items-start gap-2 px-4 py-6" data-testid="dataroom-files-none">
           <p className={`m-0 text-[13px] ${INK}`}>No files yet.</p>

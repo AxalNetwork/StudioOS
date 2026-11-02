@@ -82,7 +82,8 @@ export const ELEMENT_GROUPS = Object.freeze([
     { id: 'illustration', label: 'Illustration', ...R('POST /api/decks/:id/images', 'deck:image') },
     { id: 'upload', label: 'Uploaded', free: true, ...R('POST /api/decks/:id/images/upload') },
     { id: 'brand_assets', label: 'Brand assets', ...A('brandLocks', 3819) },
-    { id: 'edit_vary', label: 'Edit or vary', ...A('imageEdit', 3778) },
+    // D1544 (#3784): erase, expand, vary and edit are #3784's; crop, focus, filters, upscale and background removal stay #3778's.
+    { id: 'edit_vary', label: 'Edit or vary', ...A('imageVary', 3784) },
     { id: 'remove_bg', label: 'Background removal', pending: true, ...A('imageEdit', 3778) },
     { id: 'upscale', label: 'Upscale', ...A('imageEdit', 3778) },
   ] },
@@ -145,7 +146,7 @@ export const ACCEPT_ALL = 'Accept all';
 export const DISCARD = 'Discard';
 /** Only for an edit that runs no model (a theme, a layout): one undo step, not a proposal. */
 export const APPLY = 'Apply';
-/** Said beside Accept until undo (#3767) can say "Still charged". */
+/** What an accepted run cost, said where the run's results are listed (undo says "Still charged", `STILL_CHARGED`). */
 export const CHARGED_LINE = 'The run was charged when Eadwyn proposed it. Accepting places it; it costs nothing more.';
 
 // ---------------------------------------------------------------------------
@@ -281,19 +282,46 @@ export const SAVE_VERSION = 'Save version';
 export const READ_ONLY_LINE = 'Read only';
 
 /**
- * The save state the header draws. With no autosave on main (#3751), Save
- * version shows only while there is something to save (owner question G,
- * S1's pick (a)). `when` is editorModel's `saveState` line ("Saved · 2 min
- * ago"), whose time becomes the title.
+ * The save state the header draws. `when` is editorModel's `saveState` line
+ * ("Saved · 2 min ago"), whose time becomes the title. Save version shows
+ * only while the deck differs from its version (owner question G, S1's pick
+ * (a)): versions stay explicit.
+ *
+ * D1515 (#3767): `sync` is the autosave's state (`deckAutosave.js`) while the
+ * deck differs from its version, with `clock` its "14:32":
+ *   pending, saving   "Saving…"
+ *   synced            "✓ All changes saved", titled "Saved to your draft at 14:32…"
+ *   offline           "Offline · N changes saved on this device" (pd9p)
+ *   conflict          "● Card changed elsewhere" (pd9q opens under the header)
+ *   error, off, none  "● Unsaved changes", titled with the reason
  */
-export function saveChip({ dirty, readOnly, when, version = null }) {
+export function saveChip({ dirty, readOnly, when, version = null, sync = null }) {
   if (readOnly) return { text: version == null ? READ_ONLY_LINE : `${READ_ONLY_LINE} · v${version}`, title: 'You can read this deck. Changes are the founder’s.', save: false };
-  if (dirty) return { text: UNSAVED, title: 'Nothing is saved until you save a version.', save: true };
+  if (dirty) {
+    const st = sync?.state;
+    if (st === 'pending' || st === 'saving') return { text: SAVING, title: 'Saving your changes to this version’s draft.', save: true, calm: true };
+    if (st === 'synced') return { text: ALL_SAVED, title: sync.clock ? `Saved to your draft at ${sync.clock}. Save version makes them a version.` : 'Saved to your draft. Save version makes them a version.', save: true, calm: true };
+    if (st === 'offline') return { text: `Offline · ${sync.queued} ${sync.queued === 1 ? 'change' : 'changes'} saved on this device`, title: "They'll sync when you're back. Typing still works.", save: true, warn: true };
+    if (st === 'conflict') return { text: CONFLICT_CHIP, title: 'Another tab or member saved this card first. Choose which version to keep.', save: true, warn: true };
+    return { text: UNSAVED, title: sync?.reason || 'Nothing is saved until you save a version.', save: true };
+  }
   const at = /^Saved · (.+)$/.exec(String(when || ''))?.[1];
   // "Saved · v3" names the version, not a time: no time is drawn then.
   if (at && /^v\S+$/.test(at)) return { text: SAVED, title: 'All changes saved', save: false };
   return { text: SAVED, title: at ? `All changes saved · ${at}` : 'All changes saved', save: false };
 }
+
+/** D1515: the autosave's words in the header. */
+export const SAVING = 'Saving…';
+export const ALL_SAVED = '✓ All changes saved';
+export const CONFLICT_CHIP = '● Card changed elsewhere';
+
+/** D1515 (pd3): Undo and Redo, with the history's depth. */
+export const UNDO = 'Undo';
+export const REDO = 'Redo';
+export const STEPS_LINE = (n) => `${n} steps`;
+/** D1515 (plan §4.5, dk-boards l.1073): undoing an accepted run never refunds it. */
+export const STILL_CHARGED = 'Still charged: undo takes the accepted run off the card, but what it cost stays spent.';
 
 /**
  * The ⋯ menu, in its three sections (plan §2.2). An item is wired on main
@@ -319,6 +347,10 @@ export const MORE_MENU = Object.freeze([
     { id: 'derive', label: 'Teaser, one-pager or memo…', write: true },
     // Kept from v1's editor bar and Notes tab: the thread with the venture's admins (D905).
     { id: 'notes', label: 'Notes from your admins' },
+    // D1515 (#3767, pd3): Undo and Redo (also in the header) and Find and replace, which lives only here.
+    { id: 'undo', label: 'Undo', note: '⌘Z', write: true },
+    { id: 'redo', label: 'Redo', note: '⇧⌘Z', write: true },
+    { id: 'find', label: 'Find and replace…', note: '⌘F', write: true },
   ] },
   { id: 'card', label: 'This card', items: [
     { id: 'structure', label: 'Structure', write: true },
@@ -353,7 +385,7 @@ export const SHARE_ITEMS = Object.freeze([
  * other: the seam greys it only until its issue merges. `off` counts only the
  * last kind: the items that would work but for AI.
  */
-export function moreState(sections, { readOnly = false, aiOn = true, outOfTokens = false, availability = () => null, waiting = null } = {}) {
+export function moreState(sections, { readOnly = false, aiOn = true, outOfTokens = false, availability = () => null, waiting = null, blocked = {} } = {}) {
   let off = 0;
   let why = null;
   const shareIds = new Set(SHARE_ITEMS.map((i) => i.id));
@@ -367,6 +399,8 @@ export function moreState(sections, { readOnly = false, aiOn = true, outOfTokens
       }
       if (readOnly && it.write) return { ...it, disabled: true, why: 'Read only' };
       if (waiting && !shareIds.has(it.id)) return { ...it, disabled: true, why: waiting };
+      // D1515: an item the editor cannot carry out now ("Nothing to undo.").
+      if (blocked?.[it.id]) return { ...it, disabled: true, why: blocked[it.id] };
       if (it.ai && (!aiOn || outOfTokens)) {
         off += 1;
         why = why || (!aiOn ? 'AI is paused' : 'out of AI tokens');

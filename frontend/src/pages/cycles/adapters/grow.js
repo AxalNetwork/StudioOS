@@ -414,7 +414,7 @@ export const RECORDS = {
       due: typeof r.due_at === 'string' ? r.due_at.slice(0, 10) : null,
       owner: r.owner_name ?? { text: 'No owner', tone: 'warn' },
       state: pill(OBLIGATION_STATE, r.status),
-    }, edit: editOf(num(r.id) ? { id: r.id } : null, r, ['status', 'owner_name', 'due_at']) }),
+    }, edit: editOf(num(r.id) ? { id: r.id } : null, r, ['title', 'status', 'owner_name', 'due_at']) }),  // #4046: the title, which its Edit now draws
     filters: [{ key: 'status', label: 'State', options: options(OBLIGATION_STATE) }],
     sorts: [{ key: 'due_at', label: 'Due soonest' }, { key: '-due_at', label: 'Due latest' }],
   },

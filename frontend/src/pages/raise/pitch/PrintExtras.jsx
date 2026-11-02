@@ -4,6 +4,7 @@ import { SLIDE_SIZES, aspectOf } from './gridModel';
 import { EMPTY_CARD, NO_NOTES, cardOf } from './presentExportModel';
 import CardCompliance from './CardCompliance';
 import { langAttrs } from './deckLanguage';
+import { decorBox, decorPlan, placeBox } from './arrangeModel';
 
 /**
  * D1112 (#2992) — what the headless print page (`/deck/print-export/:token`)
@@ -18,6 +19,10 @@ import { langAttrs } from './deckLanguage';
  *                    (the PDF only: PowerPoint carries them as speaker notes).
  *   SourcesPage      the Sources appendix the Worker sends with the version
  *                    (`sources_appendix`), the same lines as the HTML file's.
+ *
+ * D1533 (#3777): a grid card's decor is drawn under its blocks, bottom layer
+ * first (`PrintDecor`), the shapes the editable PowerPoint draws natively
+ * (`arrangeModel.decorPlan`, the Worker's), so the PDF and PowerPoint agree.
  *
  * The notes and the appendix are drawn only when the token the founder's own
  * export signed asked for them; the Worker sends neither otherwise.
@@ -44,6 +49,7 @@ export function StudioPrintCard({ slide, index, aspect = '16:9', chrome = null, 
     // D1499: the page is the slide itself, 1920 × 1080 or 1440 × 1080, so `boxOf`'s boxes print at their own pixels.
     return (
       <div data-slide-frame="" style={{ ...PAGE, width: SLIDE_SIZES[aspectOf(aspect)].width }} {...words} data-testid={`print-card-${index}`} data-layout="grid">
+        <PrintDecor slide={slide} aspect={aspect} index={index} />
         <BlockGrid blocks={card.blocks} colours={COLOURS} live size="print" aspect={aspect} lang={words.lang} dir={words.dir} testId={`print-blocks-${index}`} />
         <CardCompliance chrome={chrome} size="print" testId={`print-compliance-${index}`} />
       </div>
@@ -68,6 +74,28 @@ export function StudioPrintCard({ slide, index, aspect = '16:9', chrome = null, 
       {card.image ? <img src={card.image} alt={card.title} style={{ maxHeight: '45%', alignSelf: 'flex-start', objectFit: 'contain', borderRadius: 12 }} /> : null}
       {card.empty ? <p style={{ margin: 0, fontSize: 30, color: '#64748b' }}>{EMPTY_CARD}</p> : null}
       <CardCompliance chrome={chrome} size="print" testId={`print-compliance-${index}`} />
+    </div>
+  );
+}
+
+/**
+ * D1533: a card's decor on the printed page, in layer order, under the
+ * blocks: a circle, a square, a rounded square or a divider line in its tone.
+ * An item with no native shape is placed in neither export.
+ */
+export function PrintDecor({ slide, aspect = '16:9', index = 0 }) {
+  const plan = decorPlan(slide).filter((d) => d.geometry);
+  if (!plan.length) return null;
+  return (
+    <div style={{ position: 'absolute', inset: 0 }} aria-hidden="true" data-testid={`print-decor-${index}`}>
+      {plan.map((d) => {
+        const box = decorBox(d, aspect);
+        const at = placeBox(box, aspect);
+        const style = d.geometry === 'line'
+          ? { ...at, top: `calc(${at.top} + ${at.height} / 2 - 2px)`, height: 4, background: d.colour }
+          : { ...at, background: d.colour, borderRadius: d.geometry === 'ellipse' ? '50%' : d.geometry === 'roundRect' ? Math.round(Math.min(box.w, box.h) / 6) : 0 };
+        return <span key={d.id} style={style} data-geometry={d.geometry} data-layer={d.layer} data-group={d.group || undefined} data-pinned={d.pinned ? 'true' : undefined} data-testid={`print-decor-${index}-${d.id}`} />;
+      })}
     </div>
   );
 }

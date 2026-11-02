@@ -103,7 +103,8 @@ test('the stage, the editor and Studio home read the same model; the area claim 
   assert.equal(face.split('onPointerMove=').length - 1, 1, 'the stage has exactly one onPointerMove');
   const editor = read('pages/raise/pitch/PitchEditor.jsx');
   assert.ok(editor.includes("useDeckPresence(current?.id ?? null, { live: !readOnly && !phone })"));
-  assert.ok(editor.includes('const claimArea = selection.length === 1 ? selection[0] : null;'));
+  // One picked area is claimed; several, none, or a decor item (D1533, not an area) claim nothing.
+  assert.ok(editor.includes('const claimArea = selection.length === 1 && (areas || []).some((a) => a.id === selection[0]) ? selection[0] : null;'));
   assert.ok(editor.includes('presence?.edit?.();'), 'each change keeps the soft lock');
   assert.ok(read('pages/raise/pitch/StudioHome.jsx').includes('avatarsOf(useDeckPresence(current?.id ?? null).editors, null)'));
   const hook = read('pages/raise/pitch/useDeckPresence.js');
