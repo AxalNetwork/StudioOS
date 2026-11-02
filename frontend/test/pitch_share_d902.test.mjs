@@ -32,6 +32,7 @@ import { installDocument } from './_contracts_dom.mjs';
 import { renderedText } from './_renderedText.mjs';
 import { api } from '../src/lib/api.js';
 import { cyclesWrite } from '../src/lib/api/cycles.js';
+import { deckCommentsApi } from '../src/lib/api/deckComments.js';
 import ShareDialog from '../src/pages/raise/pitch/ShareDialog.jsx';
 import { ClosedLink, FigureSources, NdaGate } from '../src/pages/raise/pitch/ShareViewerParts.jsx';
 import { StudioAnalytics } from '../src/pages/raise/pitch/PitchStudio.jsx';
@@ -56,9 +57,9 @@ const deck = { id: 40, version: 4, created_at: '2026-10-21 09:00:00' };
 test('the dialog\'s defaults are the canvas\'s: 14 days, Download and Forwarding off, the NDA on, figures and sources in', () => {
   assert.equal(DEFAULT_SHARE.expires, 14);
   assert.deepEqual([DEFAULT_SHARE.allowDownload, DEFAULT_SHARE.allowForwarding, DEFAULT_SHARE.ndaRequired], [false, false, true]);
-  assert.deepEqual(DEFAULT_INCLUDE, { figures: true, sources: true, notes: false, bands: false });
+  assert.deepEqual(DEFAULT_INCLUDE, { figures: true, sources: true, notes: false, bands: false, cap_table: false, team_photos: false });
   assert.deepEqual(EXPIRIES.map((x) => x.id), [7, 14, 30, null]);
-  assert.deepEqual(INCLUDE_ROWS.map((r) => r.label), ['Figures with chips', 'Sources appendix', 'Speaker notes', 'Scorecard and Product-market fit bands']);
+  assert.deepEqual(INCLUDE_ROWS.map((r) => r.label), ['Figures with chips', 'Sources appendix', 'Speaker notes', 'Scorecard and Product-market fit bands', 'Cap-table totals', 'Team photos']);
   assert.ok(!INCLUDE_ROWS.some((r) => /bank|account|score\b|quote/i.test(r.key)), 'what is never shared has no switch');
 });
 
@@ -80,7 +81,7 @@ test('one body for the one writer: a prospect or a typed name, never both', () =
   const prospect = shareBody({ ...DEFAULT_SHARE, investor: '5', viewLimit: '3' }, deck);
   assert.deepEqual(prospect, {
     deck_id: 40, expires_days: 14, view_limit: 3, allow_download: false, allow_forwarding: false, nda_required: true,
-    include: { figures: true, sources: true, notes: false, bands: false }, prospect_id: 5,
+    include: { figures: true, sources: true, notes: false, bands: false, cap_table: false, team_photos: false }, prospect_id: 5,
   });
   const typed = shareBody({ ...DEFAULT_SHARE, investor: TYPED, label: ' Fund Z ', expires: null, ndaRequired: false }, deck);
   assert.equal(typed.investor_label, 'Fund Z');
@@ -109,7 +110,7 @@ test('the dialog draws the canvas\'s rows, the frozen version, and what is never
   const html = draw(h(ShareDialog, { projectId: 7, deck, onClose() {} }));
   const t = renderedText(html);
   assert.match(html, /data-testid="pitch-share-dialog"/);
-  for (const id of ['investor', 'expires-7', 'expires-14', 'expires-30', 'expires-never', 'limit', 'download', 'forwarding', 'nda', 'include-figures', 'include-sources', 'include-notes', 'include-bands', 'frozen', 'what', 'create']) {
+  for (const id of ['investor', 'expires-7', 'expires-14', 'expires-30', 'expires-never', 'limit', 'download', 'forwarding', 'nda', 'include-figures', 'include-sources', 'include-notes', 'include-bands', 'include-cap_table', 'include-team_photos', 'frozen', 'what', 'create']) {
     assert.match(html, new RegExp(`data-testid="pitch-share-${id}"`), id);
   }
   assert.match(html, /role="radio" aria-checked="true"[^>]*data-testid="pitch-share-expires-14"/);
@@ -127,6 +128,9 @@ async function mountDialog(answers) {
   const calls = [];
   cyclesWrite.formOptions = async (...a) => { calls.push(['formOptions', ...a]); return answers.formOptions(...a); };
   cyclesWrite.raise.deckLink = async (...a) => { calls.push(['deckLink', ...a]); return answers.deckLink(...a); };
+  // D1570 (#3817): Share reads who must approve this version first; nobody, unless a test says so.
+  const savedApproval = deckCommentsApi.approval;
+  deckCommentsApi.approval = async (...a) => { calls.push(['approval', ...a]); return (answers.approval || (async () => ({ pending: [], message: null })))(...a); };
   const restore = installDocument();
   const container = document.createElement('div'); document.body.appendChild(container);
   const rootEl = createRoot(container);
@@ -146,6 +150,7 @@ async function mountDialog(answers) {
     async unmount() {
       await act(async () => rootEl.unmount()); restore();
       cyclesWrite.formOptions = saved.formOptions; cyclesWrite.raise.deckLink = saved.deckLink;
+      deckCommentsApi.approval = savedApproval;
     },
   };
 }
@@ -168,7 +173,7 @@ test('Create link writes once through the one writer, and shows the link once', 
     assert.equal(writes[0][1], 7);
     assert.deepEqual(writes[0][2], {
       deck_id: 40, expires_days: 14, view_limit: 2, allow_download: false, allow_forwarding: false, nda_required: true,
-      include: { figures: true, sources: true, notes: false, bands: true }, prospect_id: 6,
+      include: { figures: true, sources: true, notes: false, bands: true, cap_table: false, team_photos: false }, prospect_id: 6,
     });
     assert.equal(m.created.length, 1, 'the caller refreshes its links');
     assert.ok(m.by('pitch-share-made'));
@@ -193,6 +198,38 @@ test('a failed prospects read falls back to a typed name, and a refusal makes no
     assert.equal(m.created.length, 0);
     assert.equal(m.by('pitch-share-made'), undefined);
   } finally { await m.unmount(); }
+});
+
+test('D1570 (#3817): Share opens one gate; an approver who has not approved holds it, with the amber line, and no link is asked for', async () => {
+  let pending = [{ user_id: 5, name: 'Sam Advisor' }];
+  const m = await mountDialog({
+    formOptions: async () => ({ prospects: [{ value: 5, label: 'Fund A' }] }),
+    deckLink: async () => ({ id: 92, share_path: '/share/deck/tok.def', deck_version: 4 }),
+    approval: async () => ({ pending, message: pending.length ? 'Approval needed before sharing · Sam Advisor has not approved yet.' : null }),
+  });
+  try {
+    await m.press('pitch-share-create');
+    assert.deepEqual(m.calls.filter((c) => c[0] === 'approval').map((c) => c[1]), [40], 'the version on screen');
+    assert.ok(m.by('pitch-share-gate'), 'the pre-share confirm opens');
+    assert.match(m.text(), /Approval needed before sharing · Sam Advisor has not approved yet\./);
+    assert.equal(m.pr(m.by('pitch-share-anyway')).disabled, true, 'held: no Share anyway past an approver');
+    assert.equal(m.calls.filter((c) => c[0] === 'deckLink').length, 0, 'no link was asked for');
+    await m.press('pitch-share-anyway');
+    assert.equal(m.calls.filter((c) => c[0] === 'deckLink').length, 0);
+    // Signed off, Share goes straight through: no confirm when there is nothing to say.
+    pending = [];
+    await m.press('pitch-share-anyway'); // still held in the open confirm
+    assert.equal(m.calls.filter((c) => c[0] === 'deckLink').length, 0);
+  } finally { await m.unmount(); }
+  const ok = await mountDialog({
+    formOptions: async () => ({ prospects: [{ value: 5, label: 'Fund A' }] }),
+    deckLink: async () => ({ id: 93, share_path: '/share/deck/tok.ghi', deck_version: 4 }),
+  });
+  try {
+    await ok.press('pitch-share-create');
+    assert.equal(ok.by('pitch-share-gate'), undefined);
+    assert.equal(ok.calls.filter((c) => c[0] === 'deckLink').length, 1);
+  } finally { await ok.unmount(); }
 });
 
 /* ------------------------------------------------------------------ *
