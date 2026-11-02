@@ -30,7 +30,7 @@ import type { RouteMount } from '../util/routeRegistry';
 import { requireAuth } from '../auth';
 import { clampLimit, parseOffset } from '../util/pagination';
 import { mapError } from './_t13t14t15_helpers';
-import { canSeeLearning, enrolledSql } from '../services/learningAccess';
+import { canSeeLearning } from '../services/learningAccess';
 
 const r = new Hono<{ Bindings: Env }>();
 type C = Context<{ Bindings: Env }>;
@@ -39,35 +39,14 @@ async function auth(c: C): Promise<any | Response> {
   try { return await requireAuth(c); } catch (e) { return mapError(c, e); }
 }
 
-// Each `enrolledSql` binds the caller's id once.
-const EX_ENROLLED = enrolledSql('exercise', 'x.uid');
-const EXAM_ENROLLED = enrolledSql('exam', 'x.uid');
-/** Published, and open or the caller's programme: binds the caller's id once. */
-const memberSees = (enrolled: string) => `x.status = 'published' AND (x.visibility = 'open' OR (x.visibility = 'program' AND ${enrolled}))`;
-
-/**
- * The course or programme a subject sits in, for the list's second column: a
- * published course that holds it as a lesson, else a published programme that
- * holds it directly. Binds nothing.
- */
-const whereSql = (lessonKind: 'exercise' | 'exam') => `
-  (SELECT c.title FROM learning_lessons l JOIN learning_course_modules m ON m.id = l.module_id
-     JOIN learning_courses c ON c.id = m.course_id AND c.status = 'published' AND c.visibility = 'open'
-    WHERE l.kind = '${lessonKind}' AND l.ref_uid = x.uid ORDER BY c.id LIMIT 1) AS course_title,
-  (SELECT p.name FROM learning_program_contents pc JOIN learning_programs p ON p.id = pc.program_id AND p.status = 'published'
-    WHERE pc.subject_kind = '${lessonKind}' AND pc.subject_uid = x.uid ORDER BY p.id LIMIT 1) AS program_title`;
+// Every statement below is written out in full, with the programme check
+// (`enrolledSql` from services/learningAccess.ts) expanded: the schema guards
+// read literal SQL only. Each enrolment check binds the caller's id once. The
+// course or programme beside a row must itself be published (a course open).
 
 const whereOf = (row: { course_title: string | null; program_title: string | null }) =>
   row.course_title ? { kind: 'course' as const, title: row.course_title }
     : row.program_title ? { kind: 'program' as const, title: row.program_title } : null;
-
-const EXERCISES_SQL = `SELECT x.id, x.uid, x.title, x.submission_kind, x.status, x.visibility, x.updated_at, x.published_at,
-    ${EX_ENROLLED} AS enrolled, ${whereSql('exercise')},
-    (SELECT s.status FROM learning_exercise_submissions s WHERE s.exercise_id = x.id AND s.user_id = ? ORDER BY s.id DESC LIMIT 1) AS my_status,
-    (SELECT s.submitted_at FROM learning_exercise_submissions s WHERE s.exercise_id = x.id AND s.user_id = ? ORDER BY s.id DESC LIMIT 1) AS my_submitted_at
-  FROM learning_exercises x WHERE ${memberSees(EX_ENROLLED)}
-  ORDER BY COALESCE(x.published_at, x.updated_at) DESC, x.id DESC LIMIT ? OFFSET ?`;
-const EXERCISES_COUNT = `SELECT COUNT(*) AS n FROM learning_exercises x WHERE ${memberSees(EX_ENROLLED)}`;
 
 r.get('/exercises', async (c) => {
   const user = await auth(c); if (user instanceof Response) return user;
@@ -75,8 +54,40 @@ r.get('/exercises', async (c) => {
   const offset = parseOffset(c.req.query('offset'));
   try {
     const [rows, n] = await Promise.all([
-      c.env.DB.prepare(EXERCISES_SQL).bind(user.id, user.id, user.id, user.id, limit, offset).all<any>(),
-      c.env.DB.prepare(EXERCISES_COUNT).bind(user.id).first<{ n: number }>(),
+      c.env.DB.prepare(
+        `SELECT x.id, x.uid, x.title, x.submission_kind, x.status, x.visibility, x.updated_at, x.published_at,
+    EXISTS (SELECT 1 FROM learning_program_contents pc
+      JOIN learning_programs pp ON pp.id = pc.program_id AND pp.status = 'published'
+      JOIN learning_enrollments pe ON pe.program_id = pc.program_id AND pe.status = 'active' AND pe.user_id = ?
+     WHERE ((pc.subject_kind = 'exercise' AND pc.subject_uid = x.uid) OR (pc.subject_kind = 'course' AND EXISTS (SELECT 1 FROM learning_courses hc
+      JOIN learning_course_modules hm ON hm.course_id = hc.id
+      JOIN learning_lessons hl ON hl.module_id = hm.id
+     WHERE hc.uid = pc.subject_uid AND hl.ref_uid = x.uid AND hl.kind IN ('exercise'))))) AS enrolled, 
+  (SELECT c.title FROM learning_lessons l JOIN learning_course_modules m ON m.id = l.module_id
+     JOIN learning_courses c ON c.id = m.course_id AND c.status = 'published' AND c.visibility = 'open'
+    WHERE l.kind = 'exercise' AND l.ref_uid = x.uid ORDER BY c.id LIMIT 1) AS course_title,
+  (SELECT p.name FROM learning_program_contents pc JOIN learning_programs p ON p.id = pc.program_id AND p.status = 'published'
+    WHERE pc.subject_kind = 'exercise' AND pc.subject_uid = x.uid ORDER BY p.id LIMIT 1) AS program_title,
+    (SELECT s.status FROM learning_exercise_submissions s WHERE s.exercise_id = x.id AND s.user_id = ? ORDER BY s.id DESC LIMIT 1) AS my_status,
+    (SELECT s.submitted_at FROM learning_exercise_submissions s WHERE s.exercise_id = x.id AND s.user_id = ? ORDER BY s.id DESC LIMIT 1) AS my_submitted_at
+  FROM learning_exercises x WHERE x.status = 'published' AND (x.visibility = 'open' OR (x.visibility = 'program' AND EXISTS (SELECT 1 FROM learning_program_contents pc
+      JOIN learning_programs pp ON pp.id = pc.program_id AND pp.status = 'published'
+      JOIN learning_enrollments pe ON pe.program_id = pc.program_id AND pe.status = 'active' AND pe.user_id = ?
+     WHERE ((pc.subject_kind = 'exercise' AND pc.subject_uid = x.uid) OR (pc.subject_kind = 'course' AND EXISTS (SELECT 1 FROM learning_courses hc
+      JOIN learning_course_modules hm ON hm.course_id = hc.id
+      JOIN learning_lessons hl ON hl.module_id = hm.id
+     WHERE hc.uid = pc.subject_uid AND hl.ref_uid = x.uid AND hl.kind IN ('exercise')))))))
+  ORDER BY COALESCE(x.published_at, x.updated_at) DESC, x.id DESC LIMIT ? OFFSET ?`,
+      ).bind(user.id, user.id, user.id, user.id, limit, offset).all<any>(),
+      c.env.DB.prepare(
+        `SELECT COUNT(*) AS n FROM learning_exercises x WHERE x.status = 'published' AND (x.visibility = 'open' OR (x.visibility = 'program' AND EXISTS (SELECT 1 FROM learning_program_contents pc
+      JOIN learning_programs pp ON pp.id = pc.program_id AND pp.status = 'published'
+      JOIN learning_enrollments pe ON pe.program_id = pc.program_id AND pe.status = 'active' AND pe.user_id = ?
+     WHERE ((pc.subject_kind = 'exercise' AND pc.subject_uid = x.uid) OR (pc.subject_kind = 'course' AND EXISTS (SELECT 1 FROM learning_courses hc
+      JOIN learning_course_modules hm ON hm.course_id = hc.id
+      JOIN learning_lessons hl ON hl.module_id = hm.id
+     WHERE hc.uid = pc.subject_uid AND hl.ref_uid = x.uid AND hl.kind IN ('exercise')))))))`,
+      ).bind(user.id).first<{ n: number }>(),
     ]);
     const items = (rows.results || []).filter((x) => canSeeLearning(user, x)).map((x) => ({
       uid: x.uid, title: x.title, submission_kind: x.submission_kind, where: whereOf(x),
@@ -88,24 +99,48 @@ r.get('/exercises', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
-const EXAMS_SQL = `SELECT x.id, x.uid, x.title, x.pass_mark_percent, x.time_limit_minutes, x.max_attempts, x.status, x.visibility, x.updated_at, x.published_at,
-    ${EXAM_ENROLLED} AS enrolled, ${whereSql('exam')},
-    (SELECT COUNT(*) FROM learning_exam_questions q WHERE q.exam_id = x.id) AS question_count,
-    (SELECT COUNT(*) FROM learning_exam_attempts a WHERE a.exam_id = x.id AND a.user_id = ?) AS my_attempts,
-    (SELECT MAX(a.score_percent) FROM learning_exam_attempts a WHERE a.exam_id = x.id AND a.user_id = ? AND a.submitted_at IS NOT NULL AND a.score_percent IS NOT NULL) AS my_best,
-    (SELECT MAX(a.passed) FROM learning_exam_attempts a WHERE a.exam_id = x.id AND a.user_id = ? AND a.submitted_at IS NOT NULL) AS my_passed
-  FROM learning_exams x WHERE ${memberSees(EXAM_ENROLLED)}
-  ORDER BY COALESCE(x.published_at, x.updated_at) DESC, x.id DESC LIMIT ? OFFSET ?`;
-const EXAMS_COUNT = `SELECT COUNT(*) AS n FROM learning_exams x WHERE ${memberSees(EXAM_ENROLLED)}`;
-
 r.get('/exams', async (c) => {
   const user = await auth(c); if (user instanceof Response) return user;
   const limit = clampLimit(c.req.query('limit'), 24, 100);
   const offset = parseOffset(c.req.query('offset'));
   try {
     const [rows, n] = await Promise.all([
-      c.env.DB.prepare(EXAMS_SQL).bind(user.id, user.id, user.id, user.id, user.id, limit, offset).all<any>(),
-      c.env.DB.prepare(EXAMS_COUNT).bind(user.id).first<{ n: number }>(),
+      c.env.DB.prepare(
+        `SELECT x.id, x.uid, x.title, x.pass_mark_percent, x.time_limit_minutes, x.max_attempts, x.status, x.visibility, x.updated_at, x.published_at,
+    EXISTS (SELECT 1 FROM learning_program_contents pc
+      JOIN learning_programs pp ON pp.id = pc.program_id AND pp.status = 'published'
+      JOIN learning_enrollments pe ON pe.program_id = pc.program_id AND pe.status = 'active' AND pe.user_id = ?
+     WHERE ((pc.subject_kind = 'exam' AND pc.subject_uid = x.uid) OR (pc.subject_kind = 'course' AND EXISTS (SELECT 1 FROM learning_courses hc
+      JOIN learning_course_modules hm ON hm.course_id = hc.id
+      JOIN learning_lessons hl ON hl.module_id = hm.id
+     WHERE hc.uid = pc.subject_uid AND hl.ref_uid = x.uid AND hl.kind IN ('exam'))))) AS enrolled, 
+  (SELECT c.title FROM learning_lessons l JOIN learning_course_modules m ON m.id = l.module_id
+     JOIN learning_courses c ON c.id = m.course_id AND c.status = 'published' AND c.visibility = 'open'
+    WHERE l.kind = 'exam' AND l.ref_uid = x.uid ORDER BY c.id LIMIT 1) AS course_title,
+  (SELECT p.name FROM learning_program_contents pc JOIN learning_programs p ON p.id = pc.program_id AND p.status = 'published'
+    WHERE pc.subject_kind = 'exam' AND pc.subject_uid = x.uid ORDER BY p.id LIMIT 1) AS program_title,
+    (SELECT COUNT(*) FROM learning_exam_questions q WHERE q.exam_id = x.id) AS question_count,
+    (SELECT COUNT(*) FROM learning_exam_attempts a WHERE a.exam_id = x.id AND a.user_id = ?) AS my_attempts,
+    (SELECT MAX(a.score_percent) FROM learning_exam_attempts a WHERE a.exam_id = x.id AND a.user_id = ? AND a.submitted_at IS NOT NULL AND a.score_percent IS NOT NULL) AS my_best,
+    (SELECT MAX(a.passed) FROM learning_exam_attempts a WHERE a.exam_id = x.id AND a.user_id = ? AND a.submitted_at IS NOT NULL) AS my_passed
+  FROM learning_exams x WHERE x.status = 'published' AND (x.visibility = 'open' OR (x.visibility = 'program' AND EXISTS (SELECT 1 FROM learning_program_contents pc
+      JOIN learning_programs pp ON pp.id = pc.program_id AND pp.status = 'published'
+      JOIN learning_enrollments pe ON pe.program_id = pc.program_id AND pe.status = 'active' AND pe.user_id = ?
+     WHERE ((pc.subject_kind = 'exam' AND pc.subject_uid = x.uid) OR (pc.subject_kind = 'course' AND EXISTS (SELECT 1 FROM learning_courses hc
+      JOIN learning_course_modules hm ON hm.course_id = hc.id
+      JOIN learning_lessons hl ON hl.module_id = hm.id
+     WHERE hc.uid = pc.subject_uid AND hl.ref_uid = x.uid AND hl.kind IN ('exam')))))))
+  ORDER BY COALESCE(x.published_at, x.updated_at) DESC, x.id DESC LIMIT ? OFFSET ?`,
+      ).bind(user.id, user.id, user.id, user.id, user.id, limit, offset).all<any>(),
+      c.env.DB.prepare(
+        `SELECT COUNT(*) AS n FROM learning_exams x WHERE x.status = 'published' AND (x.visibility = 'open' OR (x.visibility = 'program' AND EXISTS (SELECT 1 FROM learning_program_contents pc
+      JOIN learning_programs pp ON pp.id = pc.program_id AND pp.status = 'published'
+      JOIN learning_enrollments pe ON pe.program_id = pc.program_id AND pe.status = 'active' AND pe.user_id = ?
+     WHERE ((pc.subject_kind = 'exam' AND pc.subject_uid = x.uid) OR (pc.subject_kind = 'course' AND EXISTS (SELECT 1 FROM learning_courses hc
+      JOIN learning_course_modules hm ON hm.course_id = hc.id
+      JOIN learning_lessons hl ON hl.module_id = hm.id
+     WHERE hc.uid = pc.subject_uid AND hl.ref_uid = x.uid AND hl.kind IN ('exam')))))))`,
+      ).bind(user.id).first<{ n: number }>(),
     ]);
     const items = (rows.results || []).filter((x) => canSeeLearning(user, x)).map((x) => ({
       uid: x.uid, title: x.title, where: whereOf(x),
@@ -124,20 +159,21 @@ r.get('/exams', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
-/** The caller's own rows; the subject's visibility binds the caller's id first. */
-const MY_SUBMISSIONS_SQL = `SELECT s.uid, s.status, s.feedback, s.submitted_at, s.reviewed_at, x.uid AS exercise_uid, x.title AS exercise_title,
-              x.status AS x_status, x.visibility AS x_visibility, ${EX_ENROLLED} AS enrolled
-         FROM learning_exercise_submissions s JOIN learning_exercises x ON x.id = s.exercise_id
-        WHERE s.user_id = ? ORDER BY s.id DESC LIMIT 200`;
-const MY_ATTEMPTS_SQL = `SELECT a.uid, a.started_at, a.submitted_at, a.score_percent, a.passed, a.timed_out, x.uid AS exam_uid, x.title AS exam_title,
-              x.pass_mark_percent, x.status AS x_status, x.visibility AS x_visibility, ${EXAM_ENROLLED} AS enrolled
-         FROM learning_exam_attempts a JOIN learning_exams x ON x.id = a.exam_id
-        WHERE a.user_id = ? ORDER BY a.id DESC LIMIT 200`;
-
 r.get('/me/submissions', async (c) => {
   const user = await auth(c); if (user instanceof Response) return user;
   try {
-    const rows = await c.env.DB.prepare(MY_SUBMISSIONS_SQL).bind(user.id, user.id).all<any>();
+    const rows = await c.env.DB.prepare(
+      `SELECT s.uid, s.status, s.feedback, s.submitted_at, s.reviewed_at, x.uid AS exercise_uid, x.title AS exercise_title,
+              x.status AS x_status, x.visibility AS x_visibility, EXISTS (SELECT 1 FROM learning_program_contents pc
+      JOIN learning_programs pp ON pp.id = pc.program_id AND pp.status = 'published'
+      JOIN learning_enrollments pe ON pe.program_id = pc.program_id AND pe.status = 'active' AND pe.user_id = ?
+     WHERE ((pc.subject_kind = 'exercise' AND pc.subject_uid = x.uid) OR (pc.subject_kind = 'course' AND EXISTS (SELECT 1 FROM learning_courses hc
+      JOIN learning_course_modules hm ON hm.course_id = hc.id
+      JOIN learning_lessons hl ON hl.module_id = hm.id
+     WHERE hc.uid = pc.subject_uid AND hl.ref_uid = x.uid AND hl.kind IN ('exercise'))))) AS enrolled
+         FROM learning_exercise_submissions s JOIN learning_exercises x ON x.id = s.exercise_id
+        WHERE s.user_id = ? ORDER BY s.id DESC LIMIT 200`,
+    ).bind(user.id, user.id).all<any>();
     const submissions = (rows.results || [])
       .filter((x) => canSeeLearning(user, { status: x.x_status, visibility: x.x_visibility, enrolled: x.enrolled }))
       .map((x) => ({
@@ -151,7 +187,18 @@ r.get('/me/submissions', async (c) => {
 r.get('/me/attempts', async (c) => {
   const user = await auth(c); if (user instanceof Response) return user;
   try {
-    const rows = await c.env.DB.prepare(MY_ATTEMPTS_SQL).bind(user.id, user.id).all<any>();
+    const rows = await c.env.DB.prepare(
+      `SELECT a.uid, a.started_at, a.submitted_at, a.score_percent, a.passed, a.timed_out, x.uid AS exam_uid, x.title AS exam_title,
+              x.pass_mark_percent, x.status AS x_status, x.visibility AS x_visibility, EXISTS (SELECT 1 FROM learning_program_contents pc
+      JOIN learning_programs pp ON pp.id = pc.program_id AND pp.status = 'published'
+      JOIN learning_enrollments pe ON pe.program_id = pc.program_id AND pe.status = 'active' AND pe.user_id = ?
+     WHERE ((pc.subject_kind = 'exam' AND pc.subject_uid = x.uid) OR (pc.subject_kind = 'course' AND EXISTS (SELECT 1 FROM learning_courses hc
+      JOIN learning_course_modules hm ON hm.course_id = hc.id
+      JOIN learning_lessons hl ON hl.module_id = hm.id
+     WHERE hc.uid = pc.subject_uid AND hl.ref_uid = x.uid AND hl.kind IN ('exam'))))) AS enrolled
+         FROM learning_exam_attempts a JOIN learning_exams x ON x.id = a.exam_id
+        WHERE a.user_id = ? ORDER BY a.id DESC LIMIT 200`,
+    ).bind(user.id, user.id).all<any>();
     const attempts = (rows.results || [])
       .filter((x) => canSeeLearning(user, { status: x.x_status, visibility: x.x_visibility, enrolled: x.enrolled }))
       .map((x) => ({
