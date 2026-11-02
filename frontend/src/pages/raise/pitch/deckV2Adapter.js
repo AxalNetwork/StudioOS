@@ -57,6 +57,7 @@ import { deckCheckApi } from '../../../lib/api/deckCheck.js';
 import { deckElementModelsApi } from '../../../lib/api/deckElementModels.js';
 import { deckModelPresetsApi } from '../../../lib/api/deckModelPresets.js';
 import { deckCommentsApi } from '../../../lib/api/deckComments.js';
+import { deckCoeditApi } from '../../../lib/api/deckCoedit.js';
 
 export { NOT_ON };
 
@@ -118,7 +119,7 @@ export const SURFACES = Object.freeze({
 const off = (name) => async () => unavailable(SURFACES[name].issue);
 
 /** The rows whose route is on main: each answers through its real client, never unavailable by default. */
-export const SWAPPED = Object.freeze(['grid', 'saveCard', 'discardDraft', 'draft', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'presets', 'orgLocks', 'comments']);
+export const SWAPPED = Object.freeze(['grid', 'saveCard', 'discardDraft', 'draft', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'presets', 'orgLocks', 'comments', 'presence']);
 
 
 /**
@@ -133,6 +134,9 @@ export async function through(call, issue) {
   } catch (e) {
     const status = e?.status ?? e?.response?.status ?? null;
     if (status === 404) return unavailable(issue);
+    // D1577 (#3824): a route that is on main but switched off (503 `*_off`, e.g. `presence_off` until
+    // the owner approves its cost) is still "Coming later", with the Worker's own sentence.
+    if (status === 503 && typeof e?.code === 'string' && e.code.endsWith('_off')) return unavailable(issue, e.message || NOT_ON);
     const message = typeof e?.message === 'string' && e.message ? e.message : 'could not be read';
     return Object.freeze({ available: false, unreadable: true, reason: message, issue });
   }
@@ -206,7 +210,12 @@ export const withdrawInvestorLink = (deckId, shareId) => through(() => deckInves
  */
 export const comments = (deckId) => through(() => deckCommentsApi.list(deckId), SURFACES.comments.issue);
 export const slideAnalytics = off('slideAnalytics');
-export const presence = off('presence');
+/**
+ * D1577 (#3824): who else is editing the deck (`GET /api/decks/:id/presence` → `{ editors }`).
+ * Until the owner approves the Durable Object's cost the route answers 503 `presence_off`, so this stays
+ * "Coming later" and no avatar, "N editing" or Suggest switch is drawn. Suggest mode waits on its store.
+ */
+export const presence = (deckId) => through(() => deckCoeditApi.presence(deckId), SURFACES.presence.issue);
 export const cardStatus = off('cardStatus');
 export const rehearse = off('rehearse');
 export const walkthrough = off('walkthrough');
