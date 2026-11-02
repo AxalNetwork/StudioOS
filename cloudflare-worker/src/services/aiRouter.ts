@@ -3302,7 +3302,11 @@ export function bindAi(env: Env): (task: TaskClass, payload: Omit<RunOptions, 't
 // #3937 (D1478 task 3, part 2): toMarkdown, metered like a run
 // ---------------------------------------------------------------------------
 /** The image types Markdown Conversion would describe with its object detector and gemma-4. */
-const IMAGE_DOC = /^image\/|\.(png|jpe?g|webp|gif|bmp|svg|tiff?|heic|heif)$/i;
+// An image MIME type, or a file name ending in an image extension: two anchored
+// patterns, so neither half's anchor reads as the other's (CodeQL js/regex/missing-regexp-anchor).
+const IMAGE_MIME = /^image\//i;
+const IMAGE_EXT = /\.(?:png|jpe?g|webp|gif|bmp|svg|tiff?|heic|heif)$/i;
+const isImageDoc = (s: string): boolean => IMAGE_MIME.test(s) || IMAGE_EXT.test(s);
 export const IMAGE_CONVERSION_REFUSED = 'Images are not read into text here: Cloudflare describes an image with an object-detection model that is in beta and has no published price. Upload the document as a PDF. Nothing was run.';
 
 export type ConvertResult =
@@ -3320,7 +3324,7 @@ export async function convertToMarkdown(env: Env, who: { userId: number; surface
   docs: Array<{ name: string; blob: Blob }>, options?: Record<string, unknown>): Promise<ConvertResult> {
   const ai = (env as unknown as { AI?: { toMarkdown?: (d: unknown, o?: unknown) => Promise<unknown> } }).AI;
   if (!ai || typeof ai.toMarkdown !== 'function') return { ok: false, refusal: 'misconfigured', error: 'Reading documents is not configured here.' };
-  if (docs.some((d) => IMAGE_DOC.test(d.blob.type || '') || IMAGE_DOC.test(d.name || ''))) return { ok: false, refusal: 'model_unpriced', error: IMAGE_CONVERSION_REFUSED };
+  if (docs.some((d) => isImageDoc(d.blob.type || '') || isImageDoc(d.name || ''))) return { ok: false, refusal: 'model_unpriced', error: IMAGE_CONVERSION_REFUSED };
   if (who.userId > 0) {
     try { if (await aiBudget.aiPaused(env, who.userId)) return { ok: false, refusal: 'ai_paused', error: aiBudget.AI_PAUSED_MESSAGE }; }
     catch { return { ok: false, refusal: 'misconfigured', error: 'Unreadable: whether your AI is paused could not be checked. Nothing was run.' }; }
