@@ -21,6 +21,9 @@ The retention periods for generated assets are owner decision W (#3716), pending
 | `deck_notes` | notes on a version's cards (D905) | no cascade | none |
 | `deck_comments` | comment threads on a deck (D1570) | deck and venture cascade | none |
 | `deck_comment_mentions` | who a comment mentions | cascade from its comment | none |
+| `deck_area_batches` | a deck generation run (D1502): its areas or whole-deck build, its quote and parent hold, and its state | deck cascade | none |
+| `deck_area_batch_steps` | a generation run's plan and progress, one row per quoted line (D1502) | cascade from its run | none (its images are `deck_images` rows) |
+| `deck_logos` | the customer logos a venture may show, each with its own permission record (D1543) | venture cascade | none (each picture is a `deck_images` row) |
 | `deck_approvers` | who must approve a deck before it is shared | venture cascade | none |
 | `deck_derivatives` | teasers, one-pagers and memos made from a version (D1583) | deck and venture cascade | none |
 | `deck_grants` | an investor's access to a version through a deal (D1587) | no cascade; a withdrawn grant keeps its row with `revoked_at` | none |
