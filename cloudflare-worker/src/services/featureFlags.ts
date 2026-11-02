@@ -69,8 +69,9 @@ export async function loadFlagRows(env: Env): Promise<FlagRow[]> {
     if (Array.isArray(hit)) return hit as FlagRow[];
   } catch { /* a KV miss reads D1 */ }
   let rows: FlagRow[] = [];
+  // `.bind()` with no values: a statement bound like every other, so a harness that pairs each query with its binds stays in step.
   try {
-    rows = ((await env.DB.prepare('SELECT key, scope, scope_id, enabled FROM feature_flags').all<FlagRow>()).results ?? [])
+    rows = ((await env.DB.prepare('SELECT key, scope, scope_id, enabled FROM feature_flags').bind().all<FlagRow>()).results ?? [])
       .map((r) => ({ key: String(r.key), scope: r.scope, scope_id: String(r.scope_id ?? ''), enabled: Number(r.enabled) ? 1 : 0 }));
   } catch {
     // Not migrated yet, or D1 unreadable: every flag at its default. Not cached, so the next read tries again.
