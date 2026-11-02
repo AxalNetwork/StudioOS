@@ -15,7 +15,7 @@
  * `scripts/check-api-drift.mjs` (in `npm run test:drift`) fails on a stale
  * index too, with the same remedy.
  */
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { API_INDEX_REL, API_MODULES_DIR_REL, listModules, renderApiIndex } from './lib/apiModules.mjs';
@@ -23,7 +23,17 @@ import { API_INDEX_REL, API_MODULES_DIR_REL, listModules, renderApiIndex } from 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const file = resolve(ROOT, API_INDEX_REL);
 const want = renderApiIndex(listModules(resolve(ROOT, API_MODULES_DIR_REL)));
-const have = existsSync(file) ? readFileSync(file, 'utf8') : null;
+// Read without an existence check first: a check-then-read-then-write is a
+// file-system race (CodeQL js/file-system-race). A missing index reads as null.
+function readIndex(path) {
+  try {
+    return readFileSync(path, 'utf8');
+  } catch (e) {
+    if (e && e.code === 'ENOENT') return null;
+    throw e;
+  }
+}
+const have = readIndex(file);
 
 if (process.argv.includes('--check')) {
   if (have !== want) {

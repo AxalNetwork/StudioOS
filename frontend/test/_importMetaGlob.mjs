@@ -25,6 +25,20 @@ import { dirname, resolve, posix } from 'node:path';
 
 const CALL = /import\.meta\.glob\(\s*(['"])([^'"]+)\1\s*(?:,\s*(\{[^}]*\})\s*)?\)/g;
 
+// What goes into the generated import code: a path built from the glob's
+// pattern and a directory entry. Both are checked against a plain path
+// character set first, and the literal is then escaped for code as well as
+// JSON (CodeQL js/bad-code-sanitization), so no file name can close the
+// string or the statement it sits in.
+const SAFE_PATH = /^[A-Za-z0-9_.\/-]+$/;
+const UNSAFE_IN_CODE = { '<': '\\u003C', '>': '\\u003E', '\u2028': '\\u2028', '\u2029': '\\u2029' };
+function codeLiteral(path, filename) {
+  if (!SAFE_PATH.test(path)) {
+    throw new Error(`${filename}: import.meta.glob matched ${JSON.stringify(path)}, which is not a plain path the test loader will write into code`);
+  }
+  return JSON.stringify(path).replace(/[<>\u2028\u2029]/g, (c) => UNSAFE_IN_CODE[c]);
+}
+
 export function expandImportMetaGlob(source, filename) {
   if (!source.includes('import.meta.glob')) return source;
   const imports = [];
@@ -56,13 +70,13 @@ export function expandImportMetaGlob(source, filename) {
       : [];
     const entries = names.map((name, i) => {
       const rel = posix.join(dirPart, name);
-      const key = rel.startsWith('.') ? rel : `./${rel}`;
+      const key = codeLiteral(rel.startsWith('.') ? rel : `./${rel}`, filename);
       if (eager) {
         const id = `__glob_${at}_${i}`;
-        imports.push(`import * as ${id} from ${JSON.stringify(key)};`);
-        return `${JSON.stringify(key)}: ${id}`;
+        imports.push(`import * as ${id} from ${key};`);
+        return `${key}: ${id}`;
       }
-      return `${JSON.stringify(key)}: () => import(${JSON.stringify(key)})`;
+      return `${key}: () => import(${key})`;
     });
     return `({ ${entries.join(', ')} })`;
   });
