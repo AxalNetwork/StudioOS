@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { SignJWT } from 'jose';
 import { Hono } from 'hono';
 import { makeD1 } from './_d1_sqlite.mjs';
-import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
+import { tableFromBaseline, stripForeignKeys, addComplianceStore } from './_baseline.mjs';
 import company from '../src/routes/company.ts';
 import projects from '../src/routes/projects.ts';
 
@@ -13,6 +13,7 @@ const SECRET = 'synthetic-d1135-secret'.repeat(3);
 const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 function fixture() {
   const { DB, db } = makeD1('');
+  addComplianceStore(db); // D1614 (#3976): a seat's removal flags its compliance tasks in the same batch.
   for (const name of ['users', 'founders', 'company_profiles', 'user_company_links', 'projects', 'deals', 'activity_logs', 'project_member_invitations']) db.exec(stripForeignKeys(tableFromBaseline(baseline, name)));
   db.exec(tableFromBaseline(readFileSync(new URL('../sql/migrations/515_newsletter_lists.sql', import.meta.url), 'utf8'), 'email_suppressions'));
   // D1137 (#3017): a rename writes its membership event in the same batch (migration 597).
