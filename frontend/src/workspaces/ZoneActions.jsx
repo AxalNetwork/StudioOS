@@ -2,6 +2,7 @@ import React, { createContext, useContext, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { primaryOf } from './zoneActionBuilder';
+import HeaderAsk from '../ui/HeaderAsk.jsx';
 
 /**
  * The zone header's action row — what a reader can DO on this page.
@@ -163,6 +164,8 @@ export default function ZoneActions({ items = [], className = '' }) {
   return (
     <div className={`flex flex-wrap items-center gap-2 ${className}`}>
       {primary ? <ZonePrimary item={primary} /> : null}
+      {/* D1443 part 5 (#3992): Ask beside the primary, on every page with a rail; one per page (HeaderAsk). */}
+      <HeaderAsk testId="zone-actions-ask" />
       {live.map((item) => {
         const key = item.label;
         if (item.to) {
