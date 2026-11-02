@@ -61,6 +61,7 @@ const IDENTITY = {
   analytics_engine_datasets: 'binding',
   assets: 'binding',
   browser: 'binding',
+  images: 'binding',
   ai: 'binding',
   'queues.producers': 'binding',
   'queues.consumers': 'queue',
