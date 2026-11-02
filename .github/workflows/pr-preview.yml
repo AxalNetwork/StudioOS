@@ -5,7 +5,11 @@ name: PR preview
 # declares NO bindings: a preview can never touch production data, and
 # `/api/*` is a 404 there, exactly as it was on the retired Cloudflare Pages
 # mirror. Deployed on open / synchronize / reopen, deleted on close, its URL
-# kept in one sticky comment on the PR. Same-repository PRs only — secrets are
+# kept in one sticky comment on the PR. D4130 (#4130): drafts get no preview —
+# agents push to a draft many times, and each push built and deployed a
+# Worker nobody opened. The first deploy is when the PR is marked ready for
+# review (`ready_for_review`), then every push after; a PR that goes back to
+# draft keeps its last preview until it closes. Same-repository PRs only — secrets are
 # not available to forks — and never for Dependabot. After the deploy, the
 # `login-e2e` job runs frontend/tests/e2e/google_popup_signin.spec.js (D722)
 # and frontend/tests/e2e/integrations.spec.js (D753, #1992) against that
@@ -22,7 +26,7 @@ name: PR preview
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, closed]
+    types: [opened, synchronize, reopened, ready_for_review, closed]
 
 concurrency:
   group: pr-preview-${{ github.event.pull_request.number }}
@@ -37,6 +41,7 @@ jobs:
     name: deploy the preview Worker
     if: >-
       github.event.action != 'closed' &&
+      github.event.pull_request.draft == false &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest

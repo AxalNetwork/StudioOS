@@ -45,6 +45,7 @@ import { MODEL_CONNECTIONS, MODULE_ROUTES, type ModuleTask } from './ai/moduleCo
 import { specialistRefusal, specialistRequest, specialistOutput, pcmBytes, pcmMinutes, type SpecialistInput } from './ai/moduleShapes';
 import { drawChoice, memberPlanTier, type DrawSkip, type DrawSource, type PlanTier } from './ai/drawJobs';
 import { speechChoice, type SpeechSkip, type SpeechSource } from './ai/speechJobs';
+import { TASK_TEXT_JOBS, textChoice, type TextSkip, type TextSource } from './ai/textJobs';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -115,6 +116,8 @@ export type TaskClass =
   | 'studio_layout'
   // D1583 (#3830): a memo written from a deck's own words, around its figures' placeholders.
   | 'memo_write'
+  // #3937 (D1478 task 3, part 2): a document read into Markdown (`env.AI.toMarkdown`), metered as a run (`convertToMarkdown`).
+  | 'document_convert'
   // D764 (#2089) — the rail's fourteen kinds of work, one task each. The
   // page's row in `ai/railMatrix.json` names the models a member may pick;
   // the entries below are each kind's default and its alternates.
@@ -283,6 +286,11 @@ export interface RunOptions {
   // a Listen (file) or Speak run takes its Default, its fallback, or for Speak
   // MeloTTS, by the partner switch and the plan lock. Without one the route's model runs.
   speechJob?: string;
+  // #3937 (D1478 task 3, part 2): the use-case job a text run serves (`ai/textJobs.ts`):
+  // its Default, Alternative, Deeper and fallback in order, each skipped when it
+  // is not offered, the plan locks it, or the input does not fit its window.
+  // A task listed in `TASK_TEXT_JOBS` names its job when the caller does not.
+  textJob?: string;
   // D765 (#2090): the rail context of a MEMBER's run. `run()` copies it into
   // `railPage`, `railOption` and `recordRef`, and refuses `assist_off` when the
   // member turned AI assistance off on that page. Every member call passes it
@@ -318,6 +326,14 @@ export interface RunOptions {
   // out and behaves as before.
   idempotencyKey?: string;
   executionId?: string;
+  /**
+   * D1502 (#3753, deck v2 A3a): a step of a deck generation run, under the
+   * run's ONE parent hold (`services/decks/genRuntime.ts`, `reserveBatch`). The
+   * step takes no hold of its own and settles nothing: its usage row names the
+   * parent (`reservation_uid`) and records what it charged, and the run settles
+   * the parent once, at the sum of its steps. Only `genRuntime` sets it.
+   */
+  parentHold?: { uid: string; userId: number };
   // D1540 (#3791): a pinned quote. The most this run may charge the member, in
   // micro-USD, from a quote the Worker stored before the run (New deck's
   // `deck_run_quotes`). The hold is no larger, and the settlement is capped at
@@ -814,6 +830,10 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   // D1420 (#3864): Eadwyn proposes a Studio layout as add, remove, resize and
   // move ops. Its own class, so the pricing read and Usage name it apart; a mid
   // model with the same priced alternates. No cache: the layout is read at the press.
+  // #3937: `convertToMarkdown`'s row. A document's conversion runs no model (Cloudflare's
+  // Markdown Conversion uses models only for images, which it refuses: their object
+  // detector is beta and unpriced, owner answer B (c)). Never called through run().
+  document_convert: { provider: 'workers-ai', model: '@cf/google/gemma-4-26b-a4b-it' },
   studio_layout: {
     provider: 'workers-ai',
     model: MID_LLAMA,
@@ -989,8 +1009,9 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   // #3935: the event cover (EV2) and the course cover (LE8); the job picks the model (`drawChoice`).
   event_cover:  { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-1-schnell', alternates: RAIL_DRAW_MODELS },
   course_cover: { provider: 'workers-ai', model: '@cf/black-forest-labs/flux-1-schnell', alternates: RAIL_DRAW_MODELS },
-  // D1478 §3937 fix 5 (MI1): a snippet paraphrase is a short rewrite, so the 8B fp8 answers it and the 70B is its fallback.
-  paraphrase:   { provider: 'workers-ai', model: SMALL_LLAMA, fallbackChain: [MID_LLAMA] },
+  // D1478 §3937 fix 5 (MI1): a snippet paraphrase is a short rewrite, so the 8B fp8 answers it. Part 2: its
+  // fallback is MI1's Alternative, granite (it was the 70B), so the route and the job (TASK_TEXT_JOBS) agree.
+  paraphrase:   { provider: 'workers-ai', model: SMALL_LLAMA, fallbackChain: ['@cf/ibm-granite/granite-4.0-h-micro'] },
   // D765: `ai-workers/` jobs, which called the deprecated 8B directly, unlogged.
   // D1478 §3937 fix 14: no queue job runs on the 8B. IN5 valuation and equity (Numbers) run gpt-oss-120b with
   // granite as the fallback, as `rail_numbers` does; IN4 deal scoring rides this route until its clef score lands.
@@ -1748,7 +1769,7 @@ const GUARD_TEMPLATE_TOKENS = 1_024;
 const GUARD_QUOTE_OUT_TOKENS = 4 * GUARD_MAX_TOKENS;
 const GUARD_CHARS_PER_OUTPUT_TOKEN = 8;
 // A transcript's length bound, for the quote of a transcription's output check.
-const TRANSCRIPT_CHARS_PER_MINUTE = 2_000;
+export const TRANSCRIPT_CHARS_PER_MINUTE = 2_000;
 // How many slices are checked at once.
 const GUARD_CONCURRENCY = 4;
 // The user turn an output slice is checked under, so Llama Guard reads the
@@ -1852,6 +1873,30 @@ async function recordGuardCalls(env: Env, opts: RunOptions, calls: GuardCall[], 
   }
 }
 
+/**
+ * #3936 (D1478 task 2, part 2): the guard over text a model produced outside
+ * `run()`'s own call — the live transcript's final text (`liveTranscription.ts`),
+ * whose stream is a WebSocket the router cannot hold open. The same output
+ * check `run()` makes: Llama Guard over every slice, failing closed. `record`
+ * writes the guard rows once the stream's own row exists, each naming it in
+ * `guard_for`, charged under `reservationUid` at `multiplier`.
+ */
+export async function guardFinalText(env: Env, who: { userId: number; surface?: string | null }, text: string, multiplier = 1): Promise<{
+  decision: guard.GuardDecision; calls: number; micro: number; usd: number;
+  record: (runRowId: number | null, reservationUid: string | null) => Promise<void>;
+}> {
+  const opts = { task: 'transcribe', userId: who.userId, surface: who.surface ?? undefined } as RunOptions;
+  const calls: GuardCall[] = [];
+  const decision = text.trim() ? await guardCheck(env, opts, text, 'output', calls) : ({ action: 'pass' } as guard.GuardDecision);
+  const charge = (c: GuardCall) => (c.micro > 0 ? aiBudget.billedUsdToMicro(c.usage.est_cost_usd, multiplier) : 0);
+  return {
+    decision, calls: calls.length,
+    micro: calls.reduce((n, c) => n + charge(c), 0),
+    usd: calls.reduce((n, c) => n + c.usage.est_cost_usd, 0),
+    record: (runRowId, reservationUid) => recordGuardCalls(env, opts, calls, runRowId, reservationUid, charge),
+  };
+}
+
 /** The report a run returns, and the member's words when it was refused. */
 function guardReport(
   input: GuardReport['input'], output: GuardReport['output'], decisions: guard.GuardDecision[], calls: number,
@@ -1884,7 +1929,7 @@ export function budgetRefusalMessage(refusal: string, detail?: { limit_microusd?
 
 /** The models one run may reach, or why it may reach none. `record`: the refusal writes a usage row. */
 type ModelChoice =
-  | { ok: true; primary: string; chain: string[]; draw?: DrawReceipt; speech?: SpeechReceipt }
+  | { ok: true; primary: string; chain: string[]; draw?: DrawReceipt; speech?: SpeechReceipt; text?: TextReceipt }
   | { ok: false; refusal: RefusalReason; error: string; record: boolean };
 
 /**
@@ -1897,6 +1942,8 @@ type ModelChoice =
 export interface DrawReceipt { job: string; source: DrawSource; skipped: null | { model: string; reason: DrawSkip } }
 /** #3936: how a speech job's model was chosen, for the receipt, as a draw job's is. */
 export interface SpeechReceipt { job: string; source: SpeechSource; skipped: null | { model: string; reason: SpeechSkip } }
+/** #3937: how a text job's model was chosen: its role in the job, and every model passed over before it, and why. */
+export interface TextReceipt { job: string; source: TextSource; skipped: Array<{ model: string; reason: TextSkip }> }
 
 /** D1549: a pinned run's choice is its caller's model alone, with no fallback chain, or a refusal. */
 function pinnedChoice(choice: ModelChoice, opts: RunOptions): ModelChoice {
@@ -1940,6 +1987,31 @@ async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Prom
     if (!c.ok) return { ok: false, refusal: c.code === 'plan_locked' ? 'plan_locked' : 'model_not_offered', error: c.message, record: c.code !== 'press_hidden' };
     // One voice, one transcription: never re-run on another model mid-press.
     return { ok: true, primary: c.model, chain: [], speech: { job: c.job, source: c.source, skipped: c.skipped } };
+  }
+
+  // ---- #3937 (D1478 task 3, part 2): a text job's model ----------------------
+  // A text run that names its job (or whose task `TASK_TEXT_JOBS` maps, when no
+  // model is named): the job's ladder, each model offered, unlocked and able to
+  // hold the input. A rail pick the job lists is honoured; a named model the job
+  // does not list is refused. Too long for every model: refused, naming the
+  // longest-window one, before anything is held.
+  const textShaped = !route.isAudio && !route.isEmbed && !opts.rerank && !opts.translate && !opts.speak && !opts.draw && !opts.specialist && !(opts.images?.length);
+  const textJobId = opts.textJob ?? (!opts.model ? TASK_TEXT_JOBS[opts.task] : undefined);
+  if (textJobId && textShaped) {
+    let pick: string | null = null;
+    let tier: PlanTier;
+    try {
+      const optionRow = opts.rail?.option ? resolveRailOption(opts.rail.page, opts.rail.option) : null;
+      if (optionRow && !opts.model) pick = (await railPicks(env, opts.userId, optionRow.pageKey, optionRow.optionKey)).option;
+      tier = await memberPlanTier(env, opts.userId);
+    } catch { return { ok: false, refusal: 'misconfigured', error: 'Unreadable: your plan or your model picks could not be read. Nothing was run.', record: false }; }
+    const inputTokens = estTokens(chatMessagesFor(opts).map((m) => m.content).join('\n'));
+    const c = textChoice(textJobId, { switches, tier, caller: opts.model ?? null, pick, inputTokens, outputTokens: opts.maxTokens ?? 512 });
+    if (!c.ok) {
+      const refusal: RefusalReason = c.code === 'plan_locked' ? 'plan_locked' : c.code === 'input_too_long' ? 'invalid_input' : 'model_not_offered';
+      return { ok: false, refusal, error: c.message, record: c.code !== 'press_hidden' && c.code !== 'input_too_long' };
+    }
+    return { ok: true, primary: c.model, chain: c.chain, text: { job: c.job, source: c.source, skipped: c.skipped } };
   }
 
   // ---- D764 PR 3: a rail run's models come from its page's row ------------
@@ -2050,7 +2122,7 @@ function holdQuoteMicro(opts: RunOptions, route: RouteEntry, models: string[], g
 }
 
 export type RunQuote =
-  | { ok: true; hold_microusd: number; model: string; draw?: DrawReceipt; speech?: SpeechReceipt }
+  | { ok: true; hold_microusd: number; model: string; draw?: DrawReceipt; speech?: SpeechReceipt; text?: TextReceipt }
   | { ok: false; refusal: RefusalReason; error: string };
 
 /**
@@ -2080,7 +2152,7 @@ export async function quoteRun(env: Env, input: RunOptions): Promise<RunQuote> {
     const refusal = modelRefusal(env, model);
     if (refusal) return { ok: false, refusal, error: modelRefusalWords(model, refusal) };
   }
-  const draw = { ...(choice.draw ? { draw: choice.draw } : {}), ...(choice.speech ? { speech: choice.speech } : {}) };
+  const draw = { ...(choice.draw ? { draw: choice.draw } : {}), ...(choice.speech ? { speech: choice.speech } : {}), ...(choice.text ? { text: choice.text } : {}) };
   if (opts.userId <= 0) return { ok: true, hold_microusd: 0, model: choice.primary, ...draw };
   try {
     const multiplier = await aiBudget.memberChargeMultiplier(env, opts.userId);
@@ -2288,7 +2360,16 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
   // D762: what this run is settled at over its cost, from the member's licence.
   // Cost (est_cost_usd, the KV buckets, the organisation cap) stays cost.
   let multiplier = 1;
-  if (opts.userId > 0) {
+  if (opts.userId > 0 && opts.parentHold) {
+    // D1502: a step of a run held by its parent. The parent must be the same member's.
+    if (opts.parentHold.userId !== opts.userId) {
+      const usage:UsageMeta={task:opts.task,model:primaryModel,latency_ms:0,prompt_tokens:0,completion_tokens:0,est_cost_usd:0,fallback_used:false,cached:false,safety_score:null};
+      await recordUsage(env, opts, usage, 'misconfigured');
+      return {ok:false,refusal:'misconfigured',error:'Unreadable: this step is not under its own run\'s hold.',usage};
+    }
+    multiplier = await aiBudget.memberChargeMultiplier(env, opts.userId);
+    reservation = { uid: opts.parentHold.uid, userId: opts.parentHold.userId };
+  } else if (opts.userId > 0) {
     try {
       multiplier = await aiBudget.memberChargeMultiplier(env, opts.userId);
       // D1278: the hold names the run's task, never its prompt.
@@ -2333,7 +2414,8 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
   const settleHold = async (micro: number, usd: number, answered: boolean): Promise<boolean> => {
     // D1540: never more than the pinned quote, whatever the run cost at today's prices.
     micro = pinned(micro);
-    if (reservation) {
+    // D1502: a step under a parent hold settles nothing; its row records the charge and the run settles the parent.
+    if (reservation && !opts.parentHold) {
       try { await aiBudget.settleAiReservation(env, reservation, micro, !answered && micro === 0); }
       catch { return false; }
     }
@@ -3256,4 +3338,51 @@ export function __resetForTest(): void {
 // matches the conceptual signature: `const ai = bindAi(env); ai('embed', { text })`.
 export function bindAi(env: Env): (task: TaskClass, payload: Omit<RunOptions, 'task' | 'userId'> & { userId?: number }, userId?: number) => Promise<RunResult> {
   return (task, payload, userId = 0) => run(env, { ...payload, task, userId: payload.userId ?? userId });
+}
+
+// ---------------------------------------------------------------------------
+// #3937 (D1478 task 3, part 2): toMarkdown, metered like a run
+// ---------------------------------------------------------------------------
+/** The image types Markdown Conversion would describe with its object detector and gemma-4. */
+// An image MIME type, or a file name ending in an image extension: two anchored
+// patterns, so neither half's anchor reads as the other's (CodeQL js/regex/missing-regexp-anchor).
+const IMAGE_MIME = /^image\//i;
+const IMAGE_EXT = /\.(?:png|jpe?g|webp|gif|bmp|svg|tiff?|heic|heif)$/i;
+const isImageDoc = (s: string): boolean => IMAGE_MIME.test(s) || IMAGE_EXT.test(s);
+export const IMAGE_CONVERSION_REFUSED = 'Images are not read into text here: Cloudflare describes an image with an object-detection model that is in beta and has no published price. Upload the document as a PDF. Nothing was run.';
+
+export type ConvertResult =
+  | { ok: true; documents: Array<{ name: string; data: string; tokens: number | null }> }
+  | { ok: false; refusal: RefusalReason; error: string };
+
+/**
+ * `env.AI.toMarkdown`, as `run()` treats a model call: a paused member is
+ * refused before anything runs; an image is refused (B (c)); the call is
+ * recorded as one `ai_usage_logs` row (task `document_convert`, units the
+ * documents and their bytes) on the caller's surface, at the cost Cloudflare
+ * bills for a document conversion, which is none. Nothing is held for it.
+ */
+export async function convertToMarkdown(env: Env, who: { userId: number; surface?: string | null; rail?: RailContext },
+  docs: Array<{ name: string; blob: Blob }>, options?: Record<string, unknown>): Promise<ConvertResult> {
+  const ai = (env as unknown as { AI?: { toMarkdown?: (d: unknown, o?: unknown) => Promise<unknown> } }).AI;
+  if (!ai || typeof ai.toMarkdown !== 'function') return { ok: false, refusal: 'misconfigured', error: 'Reading documents is not configured here.' };
+  if (docs.some((d) => isImageDoc(d.blob.type || '') || isImageDoc(d.name || ''))) return { ok: false, refusal: 'model_unpriced', error: IMAGE_CONVERSION_REFUSED };
+  if (who.userId > 0) {
+    try { if (await aiBudget.aiPaused(env, who.userId)) return { ok: false, refusal: 'ai_paused', error: aiBudget.AI_PAUSED_MESSAGE }; }
+    catch { return { ok: false, refusal: 'misconfigured', error: 'Unreadable: whether your AI is paused could not be checked. Nothing was run.' }; }
+  }
+  const startedAt = Date.now();
+  const bytes = docs.reduce((n, d) => n + (d.blob.size || 0), 0);
+  const logWho: UsageWho = { userId: who.userId, surface: who.surface ?? undefined, railPage: who.rail?.page, railOption: who.rail?.option ?? undefined, recordRef: who.rail?.record ?? undefined };
+  const usage = (): UsageMeta => ({ task: 'document_convert', model: 'toMarkdown', latency_ms: Date.now() - startedAt,
+    prompt_tokens: 0, completion_tokens: 0, est_cost_usd: 0, fallback_used: false, cached: false, safety_score: null });
+  let out: unknown;
+  try { out = await ai.toMarkdown(docs, options); }
+  catch (e) {
+    await recordUsage(env, logWho, usage(), 'all_models_failed', { charged: 0, units: { documents: docs.length, bytes } });
+    return { ok: false, refusal: 'all_models_failed', error: (e as Error)?.message || 'The document could not be read.' };
+  }
+  const list = (Array.isArray(out) ? out : [out]) as Array<{ name?: string; data?: string; tokens?: number }>;
+  await recordUsage(env, logWho, usage(), null, { charged: 0, units: { documents: docs.length, bytes } });
+  return { ok: true, documents: list.map((r, i) => ({ name: String(r?.name ?? docs[i]?.name ?? ''), data: String(r?.data ?? ''), tokens: Number.isFinite(r?.tokens) ? Number(r?.tokens) : null })) };
 }

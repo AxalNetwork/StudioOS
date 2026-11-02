@@ -86,6 +86,14 @@ test('1. every contract schema uses only what the validator checks', () => {
   }
 });
 
+test('1. contract rows are in key order, one per line, so two swaps add rows at different places (#4134)', () => {
+  const keys = Object.keys(NAMED);
+  assert.deepEqual(keys, [...keys].sort((a, b) => a.localeCompare(b, 'en')), 'CONTRACTS rows must be in key order');
+  const src = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/contracts/index.ts'), 'utf8');
+  const lines = src.slice(src.indexOf('Object.freeze({')).split('\n');
+  for (const k of keys) assert.equal(lines.filter((l) => l.startsWith(`  ${k}: { issue: `) && l.endsWith(' },')).length, 1, `${k} is one row on one line`);
+});
+
 // ── 2. The route's reply ─────────────────────────────────────────────────
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef'; // synthetic test fixture

@@ -49,12 +49,10 @@ const { default: worker } = await import('../src/index.ts');
 proto.route = realRoute;
 const { ROUTE_MODULES } = await import('../src/routes/_registry.ts');
 const decks = (await import('../src/routes/decks.ts')).default;
-const deckInvestorLinks = (await import('../src/routes/deck_investor_links.ts')).default;
 const deckQuotes = (await import('../src/routes/deck_quotes.ts')).default;
 const { deckReports, hqDeckReports } = await import('../src/routes/deck_reports.ts');
 const deckStageNorms = (await import('../src/routes/deck_stage_norms.ts')).default;
 const votes = (await import('../src/routes/votes.ts')).default;
-const fundSim = (await import('../src/routes/fund_simulator.ts')).default;
 
 /** The Worker's own app: the instance `route()` was called on most. */
 function workerMounts() {
@@ -94,15 +92,24 @@ test('the committed registry is exactly what the generator writes, and every des
 
 test('on the real Worker, the order-sensitive deck routers mount just above `decks`, and votes.ts mounts last', () => {
   const mounts = workerMounts();
-  assert.equal(mounts.length, 390, 'the Worker no longer makes 390 top-level mounts');
+  // No pinned total (#4134): every PR that adds a router used to bump one
+  // number here, so any two of them conflicted. The total is derived instead —
+  // each `app.route(` line in index.ts, plus each registered descriptor — and
+  // no router answers twice on the same path. D1541's deckElements is one of those lines.
+  const index = readFileSync(resolve(ROOT, 'cloudflare-worker/src/index.ts'), 'utf8');
+  const handLines = [...index.matchAll(/^app\.route\(/gm)].length;
+  const planned = planMounts(ROUTE_MODULES);
+  assert.equal(mounts.length, handLines + planned.length, 'a mount the Worker makes is neither an index.ts line nor a descriptor');
+  const ids = new Map<unknown, number>();
+  const pairs = mounts.map((m) => `${m.path} #${ids.get(m.router) ?? ids.set(m.router, ids.size).get(m.router)}`);
+  assert.equal(new Set(pairs).size, pairs.length, 'a router is mounted twice on the same path');
   const at = mounts.findIndex((m) => m.router === decks);
   assert.ok(at > 0, '`decks` is not mounted');
   // The hand-written line above `decks` used to be deckReports + hqDeckReports,
   // with deckQuotes and deckStageNorms above them. Each now mounts through its
-  // `before: [decks]`, in file-name order, still between deckInvestorLinks
-  // (index.ts's previous line) and `decks`.
-  assert.deepEqual(mounts.slice(at - 5, at + 1).map((m) => [m.path, m.router]), [
-    ['/api/decks', deckInvestorLinks],
+  // `before: [decks]`, in file-name order, directly above `decks`. The line
+  // above them is whatever index.ts mounts there; it is not pinned (#4134).
+  assert.deepEqual(mounts.slice(at - 4, at + 1).map((m) => [m.path, m.router]), [
     ['/api/decks', deckQuotes],
     ['/api/decks', deckReports],
     ['/api/admin/deck-reports', hqDeckReports],
@@ -113,10 +120,11 @@ test('on the real Worker, the order-sensitive deck routers mount just above `dec
   for (const r of [deckQuotes, deckReports, hqDeckReports, deckStageNorms]) {
     assert.equal(mounts.filter((m) => m.router === r).length, 1);
   }
-  // votes.ts has no `before`: the registry's slot, after index.ts's last line
-  // (fund-sim), which is exactly where the two hand-written lines sat.
-  assert.deepEqual(mounts.slice(-3).map((m) => [m.path, m.router]), [
-    ['/api/fund-sim', fundSim],
+  // votes.ts has no `before`: the registry's slot, after index.ts's last line,
+  // which is exactly where the two hand-written lines sat.
+  const registeredRouters = new Set(planned.map((d) => d.router));
+  assert.equal(registeredRouters.has(mounts[mounts.length - 3].router), false, 'the mount above votes is not index.ts\'s last line');
+  assert.deepEqual(mounts.slice(-2).map((m) => [m.path, m.router]), [
     ['/api/pipeline/votes', votes],
     ['/api/pipeline/vote', votes],
   ]);

@@ -292,6 +292,17 @@ async function releaseExpired(env:Env,userId:number,now:Date) {
   if (rows.success !== true) throw new Error('AI reservations unreadable');
   for (const r of rows.results) await settleAiReservation(env,{uid:r.uid,userId},0,true);
 }
+/**
+ * D1502 (#3753): keeps a pending hold alive for another `HOLD_TTL_MS` from
+ * `now`. A deck generation run's one parent hold outlives the five-minute rule
+ * while its steps run, so a long run is never released (and charged nothing)
+ * mid-way; each step start extends it. False when the hold is no longer pending.
+ */
+export async function extendAiReservation(env:Env,reservation:AiReservation,now=new Date()):Promise<boolean> {
+  const r=await env.DB.prepare("UPDATE ai_budget_reservations SET expires_at=?,updated_at=datetime('now') WHERE uid=? AND user_id=? AND status='pending'")
+    .bind(clock(new Date(now.getTime()+HOLD_TTL_MS)).at,reservation.uid,reservation.userId).run();
+  return Number(r?.meta?.changes||0)===1;
+}
 /** How long a pending hold lives before the next read releases it: the five-minute rule `reserveAiBudget` writes. */
 export const HOLD_TTL_MS = 300000;
 /**

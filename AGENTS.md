@@ -218,6 +218,27 @@ per canvas row (its README has the rules). So:
   routing inconsistency or a committed copy. `npm run docs:routing` writes them
   locally if you want to read them.
 
+### Shared lists are derived or kept in key order (D4134)
+
+A list every feature extends conflicts when two branches append to its end.
+The deck v2 swaps showed this in three places at once, so those lists no longer
+grow at the end:
+
+- **`SWAPPED` in `deckV2Adapter.js` is derived.** A row is swapped when its
+  method answers through `through(…)`; never add a row to a list. A swap
+  changes only its own method's line, and adds its `lib/api` import in
+  file-name order.
+- **`CONTRACTS` in `cloudflare-worker/src/contracts/index.ts` is in key
+  order**, one row per line. Insert a new row at its place.
+- **No test pins a total.** `route_registry_4105.test.ts` derives the Worker's
+  mount count from `index.ts` and the registry; never add a test that asserts
+  how many routes, rows or files there are.
+- A swap's own test goes in its own file (`pitch_<surface>_d<n>.test.mjs`),
+  never appended to `pitch_v2_adapter_d1604.test.mjs`.
+
+The tests beside each list fail a row out of order, a row neither swapped nor
+off, or an unused import.
+
 ### The repository is public
 
 Never put secrets, tokens, personal data or security-sensitive operational
