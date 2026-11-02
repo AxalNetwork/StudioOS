@@ -2215,6 +2215,8 @@ The slide model gains a `table` block (≤ 8 columns × 12 rows; each cell `{ te
 | `PATCH /api/decks/:id/logos/:key` `{ permitted, permission_reference? }` | as `POST` | `{ logo }`: records the customer's permission (a reference is required) or withdraws it, which takes the logo off every link at once. 400 `invalid_logo_key`, `invalid_permission`, `permission_reference_required`; 404 `logo_not_found`. |
 | `DELETE /api/decks/:id/logos/:key` | as `POST` | `{ deleted: true }`; 404 `logo_not_found`. |
 
+Saves: `PUT /api/decks/:id` and `PATCH /api/decks/:id/cards/:uid` refuse a block with an unpermitted `logo_key` (409 `no_permission`) or an `interview_quote` whose session has no recorded consent (409 `no_consent`), writing nothing (`services/decks/saveGates.ts`).
+
 Share links: `shareInclude.shareGatesFor` now reads `deck_logos`' permitted keys at share time, so a logo-wall block goes out only while its customer's permission stands; the cap table still needs the link's `include.cap_table` (off by default) and then sends totals only; a quote still needs a consented session.
 ### Element model routing (D1503, #3754)
 

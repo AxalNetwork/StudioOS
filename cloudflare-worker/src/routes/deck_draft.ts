@@ -29,6 +29,7 @@ import { refuse } from '../util/refusal';
 import { ensureSchema, getDeckRow, sanitizeImageUrl, sanitizeSlides } from './decks';
 import { modelProblems } from '../services/decks/slideModel';
 import { revOf } from '../services/decks/ifMatch';
+import { saveGateRefusal } from '../services/decks/saveGates';
 
 const deckDraft = new Hono<{ Bindings: Env }>();
 
@@ -95,6 +96,9 @@ deckDraft.patch('/:id{[0-9]+}/cards/:uid', async (c) => {
   const problems = modelProblems([body.card], sanitizeImageUrl);
   if (problems.length) return refuse(c, 400, { code: 'SLIDE_MODEL', message: problems[0], extra: { problems } });
   const card = sanitizeSlides([{ ...body.card, uid }])[0];
+  // D1543 (#3781): the same gates as a save: an unpermitted logo or an unconsented quote is refused, nothing written.
+  const gate = await saveGateRefusal(c.env, Number(got.row.project_id), [card]);
+  if (gate) return refuse(c, 409, gate);
   const json = JSON.stringify(card);
   const current = async () => (await c.env.DB.prepare(
     'SELECT card_uid, ord, json, rev, updated_at FROM pitch_deck_cards WHERE deck_id = ?1 AND card_uid = ?2',
