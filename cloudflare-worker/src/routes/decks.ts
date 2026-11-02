@@ -951,7 +951,9 @@ decks.get('/share/:token', async (c) => {
   } catch {}
   if (bind.setCookie) c.header('Set-Cookie', bind.setCookie);
   // D902 — only what the link includes leaves the Worker (`shareInclude.ts`).
-  const included = parseShareInclude(link?.include_json);
+  // D1586 (#3833): proof sits behind the NDA, so a link without one carries no `proof_ref`.
+  const stored = parseShareInclude(link?.include_json);
+  const included = { ...stored, evidence: stored.evidence && ndaRequired };
   // D898's public fields (no audience, round, author or hash), with the cards
   // as the link includes them: speaker notes go only with notes on.
   // D1565 (#3812): a link made with a variant opens the master's own cards in the variant's order.
@@ -1011,7 +1013,7 @@ async function closedLink(c: any, error: string, deckId: number | null) {
  * `POST /share/:token/nda`). It names the venture and the version, and sends
  * no card: the text is read from `GET /share/:token/nda`.
  */
-async function ndaGate(c: any, linkId: number, deckId: number) {
+export async function ndaGate(c: any, linkId: number, deckId: number) {
   const env: Env = c.env;
   let userId: number | null = null;
   try { userId = Number((await requireAuth(c)).id) || null; } catch { /* not signed in: the gate asks them to */ }
@@ -1747,7 +1749,7 @@ export async function shareLinkLive(env: Env, tokenHash: string, viewerHash: str
  * `UPDATE … WHERE bound_viewer_hash IS NULL`, so two first opens cannot both
  * win. Another browser is refused before any view is used.
  */
-async function bindShareViewer(c: any, tokenHash: string): Promise<{ refused: boolean; viewerHash: string | null; setCookie: string | null; allowDownload: boolean }> {
+export async function bindShareViewer(c: any, tokenHash: string): Promise<{ refused: boolean; viewerHash: string | null; setCookie: string | null; allowDownload: boolean }> {
   const env: Env = c.env;
   const tok = await env.DB.prepare(
     `SELECT id, allow_download, allow_forwarding, bound_viewer_hash,
@@ -1850,7 +1852,7 @@ export async function verifySignedToken(env: Env, token: string): Promise<any> {
   if (!payload?.k) throw new Error('Token missing key');
   return payload;
 }
-async function sha256Hex(s: string): Promise<string> {
+export async function sha256Hex(s: string): Promise<string> {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
   const bytes = new Uint8Array(buf);
   let out = '';
