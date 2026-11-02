@@ -15,12 +15,13 @@
         "properties": {
           "key": { "type": "string" },
           "label": { "type": "string" },
-          "value": {},
+          "value": { "type": ["number", "string"] },
           "unit": { "enum": ["count", "usd", "percent", "months", "text"] },
           "grade": { "const": "Stated" },
           "typed_by": {
+            "type": ["object", "null"],
             "additionalProperties": false, "required": ["id", "name"],
-            "properties": { "id": { "type": "integer", "minimum": 1 }, "name": {} }
+            "properties": { "id": { "type": "integer", "minimum": 1 }, "name": { "type": ["string", "null"] } }
           },
           "typed_at": { "type": "string" }
         }

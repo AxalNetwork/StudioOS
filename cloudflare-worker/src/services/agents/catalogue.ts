@@ -147,7 +147,8 @@ export const ROLES: readonly Role[] = Object.freeze([
     mission: 'Keep the studio pointed at this quarter’s priorities: the weekly plan, and drafts of board and investor updates.',
     works_in: ['studio', 'operating-systems', 'product-roadmap', 'revenue-and-traction'],
     reads: ['project.summary', 'company.profile', 'team.roster', 'build.records', 'grow.records'],
-    may_propose: ['draft:build/plan', 'draft:build/this-week', 'draft:build/retro', 'draft:update'],
+    // D1530 (#3848): the Chief of staff drafts a goal's plan (`services/agents/planner.ts`).
+    may_propose: ['draft:build/plan', 'draft:build/this-week', 'draft:build/retro', 'draft:update', 'propose:goal-plan'],
     escalates_when: ['A priority slips two weeks in a row', 'An update would go to investors'],
     kpis: ['Weekly plan agreed each Monday', 'Updates drafted on time'],
     tone: 'Direct and brief',
