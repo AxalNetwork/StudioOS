@@ -27,11 +27,12 @@
  * batch step, whose record_ref the batch settles by.
  */
 import type { Env } from '../../types';
-import { quoteRun, run, type RailContext, type RunOptions } from '../aiRouter';
+import { quoteRun, run, type RailContext, type RunOptions, type RunResult } from '../aiRouter';
 import { reserveAiBudget, settleAiReservation } from '../aiBudget';
 import { EXTENSION, MIMES, sniffMime, type ImageAsk } from './images';
 import { aiXmpPacket, imageSize, sha256Hex, stripMetadata, withXmp, type ImageMime } from './imageBytes';
 import { areasOf, boxOfAt } from './structures';
+import { logCycleWrite } from '../cycleActivity';
 import { newSeedBase, pipelineQuote, runPipeline, seedOf, sizeFor, type ArtDirection, type PipelineInput, type StepLine } from './pipelines';
 import type { Aspect } from '../ai/shapes';
 
@@ -72,9 +73,11 @@ export async function refundSettled(env: Env, a: { reservationUid: string; userI
     `UPDATE ai_usage_logs SET charged_microusd = 0
       WHERE user_id = ? AND reservation_uid = ? AND id IN (SELECT CAST(value AS INTEGER) FROM json_each(?))`,
   ).bind(a.userId, a.reservationUid, ids).run();
-  await env.DB.prepare('INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)')
-    .bind('deck_image_refused_zero', JSON.stringify({ project_id: a.projectId, pipeline_uid: a.pipelineUid, code: a.code, usage_log_ids: a.usageLogIds, reservation_uid: a.reservationUid }),
-      'system', a.userId).run();
+  // The venture's own cycle log, beside the press's `deck_image_proposed` row: the zeroing is a write it can read.
+  await logCycleWrite(env, {
+    projectId: a.projectId, userId: a.userId, cycle: 'raise', module: 'pitch-deck', entityId: null, action: 'deck_image_refused_zero',
+    summary: `An image was refused (${a.code}); its ${a.usageLogIds.length} run${a.usageLogIds.length === 1 ? '' : 's'} settled at zero (pipeline ${a.pipelineUid})`,
+  });
   return Number(r.meta?.changes ?? 0);
 }
 
@@ -116,6 +119,48 @@ export function inputFor(a: DrawArgs, art: DeckArt, variant: number, parentHold:
   };
 }
 
+/**
+ * A generation run's image step (#3753, the one-click run): the same pipeline,
+ * under the run's parent hold, with no press. A refused image settles at zero
+ * and is redrawn once at the next variant; a second refusal leaves the area
+ * out. Nothing it returns has skipped the check.
+ */
+export type PipelineStepArgs = {
+  userId: number; projectId: number; cardUid: string | null; area: string | null;
+  base: string; draw: RunOptions; model: string | null; size: { width: number; height: number } | null;
+  parentHold: { uid: string; userId: number } | null; rail: RailContext;
+  run: (o: RunOptions) => Promise<RunResult>;
+};
+export type PipelineStepResult =
+  | { ok: true; image: NonNullable<RunResult['image']>; model: string; alt: string | null; seed: number; variant_index: number; pipeline_uid: string; steps: StepLine[]; qa: unknown; refused: Refused[]; usage_log_id: number | null }
+  | { ok: false; code: string; message: string; refused: Refused[] };
+export async function pipelineStep(env: Env, a: PipelineStepArgs): Promise<PipelineStepResult> {
+  const art = await deckArt(env, a.projectId, { style: 'flat', palette: 'brand', colours: [] });
+  const charged = async (id: number | null | undefined) => {
+    if (!id) return null;
+    const row = await env.DB.prepare('SELECT charged_microusd FROM ai_usage_logs WHERE id = ? AND user_id = ?').bind(id, a.userId).first<any>().catch(() => null);
+    return row?.charged_microusd == null ? null : Number(row.charged_microusd);
+  };
+  const refused: Refused[] = [];
+  let last: { code: string; message: string } = { code: 'image_refused', message: 'The image was not used. You were not charged for it.' };
+  for (let v = 0; v < 2; v += 1) {
+    const pipelineUid = crypto.randomUUID();
+    const seed = seedOf(art.seed_base, a.cardUid, a.area, v);
+    const r = await runPipeline({
+      userId: a.userId, rail: a.rail, base: a.base, draw: a.draw, size: a.size, seed, art: art.art,
+      ...(a.parentHold ? { parentHold: a.parentHold } : {}),
+    }, { run: a.run, quoteRun: (o) => quoteRun(env, o) as any, charged });
+    if (r.ok) {
+      return { ok: true, image: r.image, model: r.model, alt: r.alt, seed, variant_index: v, pipeline_uid: pipelineUid, steps: r.steps, qa: r.qa, refused, usage_log_id: r.draw_usage_log_id };
+    }
+    last = { code: r.code, message: r.message };
+    if (!r.image) break; // the draw itself failed: nothing to check, nothing to redraw
+    if (a.parentHold) await refundSettled(env, { reservationUid: a.parentHold.uid, userId: a.userId, usageLogIds: r.usage_log_ids, projectId: a.projectId, pipelineUid, code: r.code });
+    refused.push({ pipeline_uid: pipelineUid, variant_index: v, code: r.code, message: r.message, steps: r.steps.map((s) => ({ ...s, charged_microusd: 0 })), charged_microusd: 0, redraw: false });
+  }
+  return { ok: false, ...last, refused };
+}
+
 /** What one image's every step holds, priced by the router (pd14's one quote). */
 export async function quoteDeckImage(env: Env, a: DrawArgs, art: DeckArt) {
   return pipelineQuote(inputFor(a, art, 0, null), { quoteRun: (o) => quoteRun(env, o) as any });
@@ -144,7 +189,12 @@ export async function drawDeckImages(env: Env, a: DrawArgs): Promise<Drawn | { r
   const rows: any[] = [];
   const refused: Refused[] = [];
   let stopped: { code: string; message: string } | null = null;
-  let variant = 0;
+  // A press starts at the card's next variant, so "draw one more" is a new seed
+  // and not the same picture again; each row records its variant, so its seed
+  // is still hash(seed_base, card_uid, area, variant_index).
+  const last = await env.DB.prepare('SELECT MAX(variant_index) AS v FROM deck_images WHERE project_id = ? AND card_uid IS ?')
+    .bind(a.projectId, a.cardUid).first<{ v: number | null }>();
+  let variant = last?.v == null ? 0 : Number(last.v) + 1;
   try {
     for (let n = 0; n < a.ask.count; n += 1) {
       for (let attempt = 0; attempt < (a.autoRedraw ? 2 : 1); attempt += 1) {
@@ -189,7 +239,7 @@ export async function drawDeckImages(env: Env, a: DrawArgs): Promise<Drawn | { r
             state, model, alt, ai_usage_log_id, charged_microusd, created_by, seed, steps, prompt_sha256, pipeline_uid, variant_index, qa_json, provenance_json)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated', ?, ?, ?, ?, 'proposed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
           .bind(uid, a.projectId, a.deckId, a.ask.card, a.cardUid, key, mime, bytes.byteLength, size?.width ?? r.image.width, size?.height ?? r.image.height, taken ? null : sha,
-            a.ask.description, a.ask.style, a.ask.aspect, a.ask.use, r.model, r.alt ?? '', r.usage_log_ids[1] ?? r.usage_log_ids[0] ?? null, total, a.userId,
+            a.ask.description, a.ask.style, a.ask.aspect, a.ask.use, r.model, r.alt ?? '', r.draw_usage_log_id, total, a.userId,
             input.seed, JSON.stringify(r.steps), promptSha, pipelineUid, v, JSON.stringify(r.qa), JSON.stringify(provenance)).run();
         rows.push(await env.DB.prepare('SELECT * FROM deck_images WHERE uid = ?').bind(uid).first());
         break;

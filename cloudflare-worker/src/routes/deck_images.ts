@@ -6,7 +6,10 @@
  *        { use, description, style, palette, aspect, count, card?, points?, colours? }
  *        → { ai: true, models: [{ id, label, per_image_microusd }], model, per_image_microusd, count,
  *            total_microusd, balance: { ok, code?, message? } } | { ai: false, reason, message }
- *   POST /api/decks/:id/images           (the same body) → { images: [image], stopped? }
+ *   POST /api/decks/:id/images           (the same body, plus area?, slide_aspect?) → { images: [image], refused: [line], stopped? };
+ *        D1505: each image is the pipeline (expand · draw at its area's size and seed · image check · style ·
+ *        alt text · provenance) under one hold, the quote above prices every step (`steps`), and a press whose
+ *        every image was refused is 422 in the first one's words, with `refused` and `charged_microusd: 0`.
  *   POST /api/decks/:id/images/upload    multipart: file, use, card?, alt?, shows_person?, consent?
  *   POST /api/decks/:id/images/import    D1506: { url, use?, card?, alt?, shows_person?, consent? }, an external image copied into R2
  *   GET  /api/decks/:id/images           the venture's kept images, generated or uploaded (PD12d's Design list)
@@ -243,6 +246,14 @@ deckImages.post('/:id/images', async (c) => {
   if (!drawn.rows.length && !drawn.refused.length && drawn.stopped) {
     await noteStorageLanded(c.env, ticket);
     return refuse(c, 503, { code: drawn.stopped.code, message: drawn.stopped.message });
+  }
+  if (!drawn.rows.length && drawn.refused.length) {
+    // Every image was refused: a refusal in the words of the first one (pd15's
+    // refused card), with the refused lines and the zero settle beside it, so
+    // `refusalOf` draws it as the sentence and not "could not draw".
+    await noteStorageLanded(c.env, ticket);
+    const [first] = drawn.refused;
+    return refuse(c, 422, { code: first.code, message: first.message, extra: { refused: drawn.refused, charged_microusd: 0, redraw: first.redraw } });
   }
   const images = drawn.rows;
   const stopped = drawn.stopped;

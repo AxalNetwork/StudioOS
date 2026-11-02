@@ -181,7 +181,7 @@ export async function pipelineQuote(input: PipelineInput, deps: Pick<PipelineDep
 export type QaRecord = { face: boolean | null; text: boolean | null; screen: boolean | null; on_style: boolean | null };
 export type PipelineResult =
   | { ok: true; image: NonNullable<RunResult['image']>; model: string; prompt: string; expanded: boolean; alt: string | null; alt_reason: string | null;
-      steps: StepLine[]; usage_log_ids: number[]; qa: QaRecord }
+      steps: StepLine[]; usage_log_ids: number[]; draw_usage_log_id: number | null; qa: QaRecord }
   | { ok: false; code: string; message: string; image: RunResult['image'] | null; model: string | null; prompt: string;
       steps: StepLine[]; usage_log_ids: number[]; qa: QaRecord };
 
@@ -271,6 +271,6 @@ export async function runPipeline(input: PipelineInput, deps: PipelineDeps): Pro
   return {
     ok: true, image: drawn.image, model, prompt: p.prompt, expanded: p.expanded,
     alt: alt || null, alt_reason: alt ? null : (al.ok ? 'the describer returned nothing' : 'the describer could not run'),
-    steps, usage_log_ids: ids, qa,
+    steps, usage_log_ids: ids, draw_usage_log_id: drawn.usageLogId ?? null, qa,
   };
 }
