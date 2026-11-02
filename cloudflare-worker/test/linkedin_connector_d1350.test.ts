@@ -21,7 +21,7 @@ import { SignJWT } from 'jose';
 import linkedin from '../src/routes/linkedin.ts';
 import { finishImportJob, recordSource, startImportJob } from '../src/services/linkedinConnections.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 
 const root = new URL('../sql/', import.meta.url);

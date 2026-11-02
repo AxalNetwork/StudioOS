@@ -14,7 +14,7 @@ import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { expertDecision } from '../src/services/wellbeing/expertReview.ts';
 import { APPROVAL_SOURCES } from '../src/services/approvalSources.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 
 // A broken refusal under mutation must still never contact a real provider.
 const originalFetch = globalThis.fetch;

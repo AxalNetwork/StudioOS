@@ -12,7 +12,7 @@ import adminPartners from '../src/routes/admin_partners.ts';
 import { activatePartnerDealOnSignature, ALL_PARTNER_DEAL_TYPES } from '../src/services/partnerDeals.ts';
 import { sendPartnerInvitationEmail, sendPartnerInvitationEmailResult, sendAgreementAssignedEmail, sendAgreementAssignedEmailResult } from '../src/services/email.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
-import { migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { loadSchema } from './_schema_once.mjs';
 
 const read = (p: string) => readFileSync(p, 'utf8');

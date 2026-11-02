@@ -11,7 +11,7 @@ import decks, { createShareLink, deckShareMetrics, SHARE_VIEWER_COOKIE } from '.
 import cycleRaise from '../src/routes/cycle_raise.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
-import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 
 const read = (p:string) => readFileSync(p,'utf8');
 const migration = read('cloudflare-worker/sql/migrations/549_deck_share_nullable_view_limit.sql');

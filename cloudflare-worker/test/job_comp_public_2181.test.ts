@@ -23,7 +23,7 @@ import { createCycleRecords } from '../src/routes/cycle_records.ts';
 import jobsPublic from '../src/routes/jobs_public.ts';
 import { publicCompensation } from '../src/services/jobBoardCommon.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SQL = resolve(here, '../sql');

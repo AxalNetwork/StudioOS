@@ -33,7 +33,7 @@ import { buildCards, standardOutline } from '../src/services/decks/newDeck.ts';
 import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withGuard, GUARD_MODEL } from './_guard_stub.mjs';
-import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { conflictingRecords, fullRecords, sparseRecords, wordsFor } from './fixtures/pitchStoryFixtures.ts';
 import { loadSchema } from './_schema_once.mjs';

@@ -24,7 +24,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { SignJWT } from 'jose';
-import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import calendar from '../src/routes/calendar.ts';
 import { FEED_KINDS, PERSONAL_ONLY_KINDS, fetchUserEvents } from '../src/services/calendar.ts';
 import { ExternalReadError, MAX_PAGES, PAGE_SIZE, dedupeExternal, googleEvents, microsoftEvents } from '../src/services/calendar/externalReaders.ts';

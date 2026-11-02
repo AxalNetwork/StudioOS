@@ -23,7 +23,7 @@ import cycleGrow, { shapeRecords } from '../src/routes/cycle_grow.ts';
 import jobs from '../src/routes/jobs.ts';
 import { RECORD_ID } from '../src/services/records/owned.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SQL = resolve(here, '../sql');
