@@ -198,6 +198,9 @@ test('a generated caption fills an empty transcript and never overwrites an auth
   const vid = (f.db.prepare('SELECT id FROM learning_stream_videos WHERE stream_uid = ?').get(sid) as any).id;
   const vtt = 'WEBVTT\n\n1\n00:00:00.000 --> 00:00:02.000\nWelcome to <b>pricing</b>.\n\n2\n00:00:02.000 --> 00:00:04.000\nWe cover churn.\n';
   assert.equal(vttToText(vtt), 'Welcome to pricing. We cover churn.');
+  // Mutation checked: keep the stray angle brackets → '<script' survives and this fails.
+  assert.equal(vttToText('WEBVTT\n\n00:00:00.000 --> 00:00:01.000\n<<script>script>alert(1)</b>'), 'scriptalert(1)', 'no markup and no angle bracket survives');
+  assert.equal(vttToText('WEBVTT\n\n00:00.000 --> 00:01.000\nThe arrow --> stays in words.'), 'The arrow -- stays in words.', 'only a timing line is dropped');
   assert.deepEqual(await captionReady(f.env, vid, 'en', vtt), { transcriptFilled: true });
   assert.equal((f.db.prepare('SELECT transcript FROM learning_items WHERE uid = ?').get('vid-1') as any).transcript, 'Welcome to pricing. We cover churn.');
   f.db.prepare("UPDATE learning_items SET transcript = 'The author wrote this.' WHERE uid = 'vid-1'").run();

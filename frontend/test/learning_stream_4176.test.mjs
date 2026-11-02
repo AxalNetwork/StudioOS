@@ -22,7 +22,7 @@ test('a ready Stream video plays first, in Stream\'s own iframe; processing and 
   assert.equal(STREAM_PROCESSING, 'This video is still processing.');
   assert.deepEqual(videoPlayback({ ...VIDEO, video_stream: { state: 'error' } }), { reason: STREAM_FAILED });
   assert.equal(STREAM_FAILED, 'This video could not be processed. Ask HQ to upload it again.');
-  assert.match(videoPlayback({ ...VIDEO, video_stream: null }).src, /youtube-nocookie\.com\/embed\/dQw4w9WgXcQ/, 'no Stream video: the link plays as before');
+  assert.equal(videoPlayback({ ...VIDEO, video_stream: null }).src, 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ', 'no Stream video: the link plays as before');
   // Mutation checked: drop the host check → a foreign iframe is embedded and this fails.
   const foreign = videoPlayback({ ...VIDEO, video_stream: { ...READY, iframe_url: 'https://evil.example/tok/iframe' } });
   assert.ok(foreign.reason && !foreign.src, 'only Stream\'s own hosts are embedded');
