@@ -19,6 +19,8 @@
  * Which decision added a row is in its issue, and in `git log -L` here.
  */
 export const CONTRACTS = Object.freeze({
+  batch: { issue: 3753, route: 'GET /api/decks/areas/batches/:uid', schema: 'deckBatch.schema.json' },
+  cancelBatch: { issue: 3753, route: 'POST /api/decks/areas/batches/:uid/cancel', schema: 'deckBatch.schema.json' },
   comments: { issue: 3817, route: 'GET /api/decks/:id/comments', schema: 'deckComments.schema.json' },
   consistency: { issue: 3802, route: 'GET /api/decks/:id/check (its consistency key)', schema: 'deckConsistency.schema.json' },
   discardDraft: { issue: 3751, route: 'DELETE /api/decks/:id/draft', schema: 'deckDiscardDraft.schema.json' },

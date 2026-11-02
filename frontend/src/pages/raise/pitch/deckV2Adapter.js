@@ -36,6 +36,7 @@
 
 import { LATER, NOT_ON } from './deckV2Model.js';
 // One line per client, in file-name order (pitch_v2_adapter_d1604 holds it), so two swaps add lines at different places.
+import { deckBatchesApi } from '../../../lib/api/deckBatches.js';
 import { deckCheckApi } from '../../../lib/api/deckCheck.js';
 import { deckCoeditApi } from '../../../lib/api/deckCoedit.js';
 import { deckCommentsApi } from '../../../lib/api/deckComments.js';
@@ -156,8 +157,10 @@ export const grid = (deckId) => through(() => deckGridApi.grid(deckId), SURFACES
 export const saveCard = (deckId, uid, card, rev, opts) => through(() => deckDraftApi.saveCard(deckId, uid, card, rev, opts), SURFACES.saveCard.issue);
 export const discardDraft = (deckId) => through(() => deckDraftApi.discard(deckId), SURFACES.discardDraft.issue);
 export const draft = (deckId) => through(() => deckDraftApi.draft(deckId), SURFACES.draft.issue);
-export const batch = off('batch');
-export const cancelBatch = off('cancelBatch');
+// D1502 part 2 (#3753): a run, read to resume it (pd2b, pd2c), and Stop. Follow it live with
+// `deckBatchesApi.events(uid, onEvent)`, the run's Server-Sent Events; `batch` is the read it falls back to.
+export const batch = (uid) => through(() => deckBatchesApi.batch(uid), SURFACES.batch.issue);
+export const cancelBatch = (uid) => through(() => deckBatchesApi.cancel(uid), SURFACES.cancelBatch.issue);
 /** D1503 (#3754): each grid element's models and the pick its next run uses (`GET /api/decks/:id/element-models`). */
 export const elementModels = (deckId) => through(() => deckElementModelsApi.read(deckId), SURFACES.elementModels.issue);
 export const areasQuote = off('areasQuote');

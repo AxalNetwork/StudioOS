@@ -29,6 +29,7 @@ import { deckCheckApi } from '../src/lib/api/deckCheck.js';
 import { deckElementModelsApi } from '../src/lib/api/deckElementModels.js';
 import { deckFiguresApi } from '../src/lib/api/deckFigures.js';
 import { deckCommentsApi } from '../src/lib/api/deckComments.js';
+import { deckBatchesApi, parseSse } from '../src/lib/api/deckBatches.js';
 import { deckCoeditApi } from '../src/lib/api/deckCoedit.js';
 import { deckVentureElementsApi } from '../src/lib/api/deckVentureElements.js';
 
@@ -242,6 +243,10 @@ test('the seam reaches no network, and no client method exists for a route that 
   // D1501 (#3751): the working copy has its routes (`/:id/draft`, `/:id/cards/:uid`) and its client.
   assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_draft.ts')), /deckDraft\.get\(['"]\/:id\{\[0-9\]\+\}\/draft['"]/);
   assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckDraft\)/);
+  // D1502 part 2 (#3753): a generation run's read, stream and Stop have their routes and client.
+  assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_batches.ts')), /deckBatches\.get\(`\/areas\/batches\/:uid\$\{UID\}`/);
+  assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_batches.ts')), /deckBatches\.post\(`\/areas\/batches\/:uid\$\{UID\}\/cancel`/);
+  assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckBatches\)/);
   for (const path of ['/areas', '/areas/instruct']) {
     assert.ok(!new RegExp(`['"\`]/decks/[^'"\`\\n]*${path.replace(/[$/{]/g, (c) => `\\${c}`)}`).test(client), `a client path for ${path} before its route is on main`);
   }
@@ -402,4 +407,24 @@ test('D1577 (#3824): presence is swapped — it answers through deckCoeditApi.pr
     deckCoeditApi.presence = async () => { throw Object.assign(new Error('nope'), { status: 404 }); };
     assert.deepEqual(await adapter.presence(7), { available: false, reason: NOT_ON, issue: 3824 });
   } finally { deckCoeditApi.presence = real; }
+});
+
+test('D1502 (#3753): batch and cancelBatch answer through deckBatchesApi; the stream parser keeps what has not ended', async () => {
+  // Mutation checked: cancelBatch left off(…) → its answer is unavailable and this fails.
+  const real = { batch: deckBatchesApi.batch, cancel: deckBatchesApi.cancel };
+  const asked = [];
+  deckBatchesApi.batch = async (uid) => { asked.push(['batch', uid]); return { uid, state: 'running' }; };
+  deckBatchesApi.cancel = async (uid) => { asked.push(['cancel', uid]); return { uid, state: 'cancelled' }; };
+  try {
+    assert.deepEqual(await adapter.batch('run-1'), { available: true, value: { uid: 'run-1', state: 'running' } });
+    assert.deepEqual(await adapter.cancelBatch('run-1'), { available: true, value: { uid: 'run-1', state: 'cancelled' } });
+    assert.deepEqual(asked, [['batch', 'run-1'], ['cancel', 'run-1']]);
+    assert.equal(adapter.availability('batch'), null);
+    deckBatchesApi.cancel = async () => { throw Object.assign(new Error('Only the member who started this run can stop it.'), { status: 403 }); };
+    assert.deepEqual(await adapter.cancelBatch('run-1'), { available: false, unreadable: true, reason: 'Only the member who started this run can stop it.', issue: 3753 });
+  } finally { Object.assign(deckBatchesApi, real); }
+  const { events, rest } = parseSse('event: snapshot\ndata: {"state":"running"}\n\nevent: step_done\ndata: {"seq":0}\n\nevent: area_busy\ndata: {"att');
+  assert.deepEqual(events, [{ event: 'snapshot', data: { state: 'running' } }, { event: 'step_done', data: { seq: 0 } }]);
+  assert.equal(rest, 'event: area_busy\ndata: {"att');
+  assert.deepEqual(parseSse('event: x\ndata: not json\n\n').events, [], 'a malformed event is skipped');
 });

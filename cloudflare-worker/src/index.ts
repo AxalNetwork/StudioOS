@@ -256,6 +256,7 @@ import deckReview from './routes/deck_review';
 import deckSources from './routes/deck_sources';
 import deckCheck from './routes/deck_check';
 import deckGrid from './routes/deck_grid';
+import deckBatches from './routes/deck_batches';
 import deckDraft from './routes/deck_draft';
 import deckCoedit from './routes/deck_coedit';
 import deckElementModels from './routes/deck_element_models';
@@ -1404,6 +1405,8 @@ app.route('/api/decks', deckReview);
 app.route('/api/decks', deckCheck);
 // D1499 (#3749): The Grid of one deck version — geometry, the 17 structures and each card's areas.
 app.route('/api/decks', deckGrid);
+// D1502 part 2 (#3753): a generation run's status, its event stream, and Stop.
+app.route('/api/decks', deckBatches);
 // D1501 (#3751): a version's working copy, card by card (`/:id/cards/:uid`, `/:id/draft`), before `decks`.
 app.route('/api/decks', deckDraft);
 // D1577 (#3824): area saves (`/:id/cards/:uid/areas/:area`), single-slide restore (`/:id/restore-card`) and presence, before `decks`.
@@ -3283,3 +3286,5 @@ export { DeckPresence } from './durable-objects/deck-presence';
 export { HqEntrypoint, BranchEntrypoint } from './rpc';
 
 export { MeetingBotRun } from './durable-objects/meeting-bot-run';
+export { DeckGenRoom } from './durable-objects/deck-gen-room';
+export { AiGovernor } from './durable-objects/ai-governor';
