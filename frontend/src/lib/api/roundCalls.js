@@ -1,3 +1,4 @@
+/** D653: founder round calls (`/api/round-calls`): availability, D1222's readiness, the context, the list and their writes. */
 import { request } from '../api.js';
 const params = input => new URLSearchParams(Object.entries(input || {}).filter(([,value]) => value != null && value !== '')).toString();
 export const roundCallsApi = {

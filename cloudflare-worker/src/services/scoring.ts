@@ -1,3 +1,4 @@
+/** Venture scoring: the six dimension scores (market, team, product, capital, fit, distribution), the tier and `runScoreV2`; D1254 ignores reserved adjustments. */
 import { REQUIRED_OFFICIAL_INPUTS } from './scoreIntegrity';
 
 export function scoreMarket(tam: number, urgency: number, trend: number) {

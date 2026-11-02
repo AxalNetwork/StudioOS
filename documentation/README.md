@@ -24,11 +24,11 @@ nothing here is served.
 | Question | File |
 | --- | --- |
 | Where does anything live? | [architecture/CODEBASE_MAP.md](architecture/CODEBASE_MAP.md) |
-| Which canvas maps to which route, and what shipped? | [architecture/ROUTE_MAP.md](architecture/ROUTE_MAP.md) |
+| Which canvas maps to which route, and what shipped? | [architecture/ROUTE_MAP.md](architecture/ROUTE_MAP.md), which points to [architecture/route-map/](architecture/route-map/README.md) (one file per canvas; D4102) |
 | Which AI model runs, or can be picked, in which module? | [architecture/AI_MODEL_COVERAGE.md](architecture/AI_MODEL_COVERAGE.md) (generated) |
 | May this model run, and what do its provider's terms allow? | [architecture/MODEL_TERMS.md](architecture/MODEL_TERMS.md) |
-| Who sees a surface, where in their nav, and how do they reach it? | [architecture/PROFILE_ROUTING.md](architecture/PROFILE_ROUTING.md) |
-| What can each role actually navigate to? | [architecture/PAGE_INVENTORY.md](architecture/PAGE_INVENTORY.md) |
+| Who sees a surface, where in their nav, and how do they reach it? | The profile routing map, generated (D4103): `npm run docs:routing` writes PROFILE_ROUTING.md into `architecture/`, and every CI run keeps it in the `routing-docs` artifact of its `routing docs (artifact)` job. It is not committed. |
+| What can each role actually navigate to? | The page inventory, generated beside it the same way (PAGE_INVENTORY.md, not committed). |
 | What is blocked, and on what? | [architecture/UNRESOLVED_ITEMS.md](architecture/UNRESOLVED_ITEMS.md) |
 | Why was this routed that way with nobody asked? | [architecture/ASSUMPTIONS_LOG.md](architecture/ASSUMPTIONS_LOG.md) |
 | Who serves the frontend, and how did it get that way? | [architecture/PRODUCTION.md](architecture/PRODUCTION.md) for today — the Worker, on both `axal.vc` and `app.axal.vc`. [architecture/CLOUDFLARE-CUTOVER.md](architecture/CLOUDFLARE-CUTOVER.md) and [architecture/CLOUDFLARE-PAGES-MIGRATION.md](architecture/CLOUDFLARE-PAGES-MIGRATION.md) are the superseded 2026-08 records of how the apex left GitHub Pages, sat on Cloudflare Pages for one day, and came to the Worker. |

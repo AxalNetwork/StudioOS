@@ -1,3 +1,4 @@
+/** `/api/activity`: the activity log reads (`activity_logs`), by actor id; the email-to-id backfill is a one-time SQL script (T16). */
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';

@@ -1,4 +1,5 @@
-import { AskButtonView, PageAsk } from '../../ui/AskButton.jsx';
+import { AskButtonView } from '../../ui/AskButton.jsx';
+import HeaderAsk from '../../ui/HeaderAsk.jsx';
 
 /**
  * D1497 (#3727, canvas TMA) — the Team page's Eadwyn button. It is "Ask",
@@ -15,5 +16,5 @@ import { AskButtonView, PageAsk } from '../../ui/AskButton.jsx';
 export { AskButtonView };
 
 export default function AskButton({ label } = {}) {
-  return <PageAsk label={label} />;
+  return <HeaderAsk label={label} />;
 }

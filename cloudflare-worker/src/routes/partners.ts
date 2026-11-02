@@ -1,3 +1,4 @@
+/** `/api/partners`: the partner directory, referral codes and matchmaking recommendations. */
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';

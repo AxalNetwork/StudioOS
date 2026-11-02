@@ -1,3 +1,4 @@
+/** Cloudflare Turnstile verification for the sign-in and contact forms (`verifyTurnstile`). */
 import type { Env } from '../types';
 
 interface TurnstileResponse {

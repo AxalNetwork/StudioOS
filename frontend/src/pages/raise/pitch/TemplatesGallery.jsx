@@ -18,6 +18,7 @@ import {
   FILTERS, GALLERY, LOCKED_LINE, METHODS_FAILED, NO_TEMPLATES, RECOMMENDED, SAVE_MINE, SAVE_MINE_LINE, TEMPLATES_TITLE, USE_TEMPLATE, YOURS,
   galleryTiles, templateSentence,
 } from './templatesModel';
+import HeaderAsk from '../../../ui/HeaderAsk.jsx';
 
 /**
  * D1604 (#3716, pd29, plan §7) — the templates gallery at
@@ -100,6 +101,7 @@ export default function TemplatesGallery() {
                 data-testid={`pitch-templates-tab-${id}`}>{label}</button>
             ))}
           </div>
+          <HeaderAsk />
         </header>
         {readOnly ? <div role="note" className="rounded-[10px] bg-amber-100 px-3 py-2 text-[12.5px] font-semibold text-amber-900 dark:bg-amber-950/40 dark:text-amber-200" data-testid="pitch-templates-readonly">{READ_ONLY}</div> : null}
         <Filters />

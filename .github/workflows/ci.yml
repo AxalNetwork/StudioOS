@@ -5,6 +5,16 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # #4107: the merge queue tests each entry on a `gh-readonly-queue/main/…`
+  # branch through this event, and waits for main's required checks there.
+  # Four of them are this file's: `frontend (build)`, `worker (typecheck)`,
+  # `test:drift (full suite)` and `api ↔ worker drift`. They run on every
+  # entry. The other jobs here are not required, already ran on the pull
+  # request, and would only hold runners the queue needs, so each is skipped
+  # under `merge_group` (`if: github.event_name != 'merge_group'`).
+  # frontend/test/merge_queue_ci_4107.test.mjs keeps both lists honest.
+  merge_group:
+    types: [checks_requested]
 
 # A pull request's run is cancelled by its next push: only its head matters.
 # A push to main is NEVER cancelled, and each push is its own group (D1279).
@@ -74,22 +84,95 @@ jobs:
   # worker test files used to be omitted from the hand-maintained list, and one
   # of them had been failing unnoticed.
   #
-  # This job is why the suite exists. Without it the gate only ran on whichever
+  # This gate is why the suite exists. Without it the gate only ran on whichever
   # developer remembered, which is how a ReferenceError that `test:drift` catches
   # in seconds reached main (PR #218).
+  #
+  # D4130 (#4130): the suite runs in PARTS, in parallel. As one job it took 74
+  # minutes on one runner (main at c8c362cd17), on every push to every PR. The
+  # `suite` matrix runs one part each (scripts/test-drift-parts.mjs: the
+  # frontend and worker suites cut by node's own --test-shard, plus `rest`, the
+  # other steps of test:drift in order); the parts are derived from
+  # package.json's test:drift, and ci_suite_parts_4130.test.mjs proves their
+  # union is exactly the suite and that this matrix lists exactly them. The
+  # required check is still the job named `test:drift (full suite)`, below.
+  # It always runs and passes only when every part passed.
+  #
+  # On a push to main, `verified` looks for a successful merge-queue run of
+  # this workflow on the SAME commit. The queue merges the very commit it
+  # tested, so a second full run would test identical code. Only then are the
+  # parts skipped; when the queue is off, when nothing is found, or when the
+  # lookup fails, the full suite runs (D1279: main still finishes a run for
+  # every commit, and that run names the queue run it relies on).
   # -------------------------------------------------------------------------
-  gate:
-    name: test:drift (full suite)
+  verified:
+    name: already verified in the merge queue
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
-    # #3911: the complete suites passed, but the final guards reached the
-    # 60-minute runner limit. Leave room for the full gate on slower runners;
-    # a real hang still stops at this bounded limit.
-    timeout-minutes: 90
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    outputs:
+      run: ${{ steps.lookup.outputs.run }}
+    steps:
+      - name: A successful merge_group run of ci.yml on this commit
+        id: lookup
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        # The queue merges as soon as its required checks pass, so the queue
+        # run can still be closing when this push starts: look four times,
+        # 20 seconds apart. A miss, or a failed call, means the suite runs.
+        run: |
+          run=''
+          for attempt in 1 2 3 4; do
+            run=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$SHA&event=merge_group&status=success&per_page=1" \
+              --jq '.workflow_runs[0] | select(.head_sha == env.SHA and .event == "merge_group" and .conclusion == "success") | .html_url' || true)
+            [ -n "$run" ] && break
+            [ "$attempt" -lt 4 ] && sleep 20
+          done
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          if [ -n "$run" ]; then
+            echo "The merge queue already passed the full suite on $SHA: $run"
+          else
+            echo "No merge-queue run passed on $SHA, so the full suite runs."
+          fi
+
+  suite:
+    name: suite (${{ matrix.part }})
+    needs: verified
+    # Runs whenever `verified` found nothing (always on a PR and in the queue,
+    # where `verified` is skipped, and when its lookup failed).
+    if: ${{ !cancelled() && needs.verified.outputs.run == '' }}
+    runs-on: ubuntu-latest
+    # #3911 gave the single job 90 minutes. One part is a fraction of it; a
+    # real hang still stops here.
+    timeout-minutes: 40
+    strategy:
+      # Every part reports, so one red part does not hide another.
+      fail-fast: false
+      matrix:
+        part:
+          - frontend-1-of-2
+          - frontend-2-of-2
+          - worker-1-of-6
+          - worker-2-of-6
+          - worker-3-of-6
+          - worker-4-of-6
+          - worker-5-of-6
+          - worker-6-of-6
+          - rest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            frontend/package-lock.json
+            cloudflare-worker/package-lock.json
+            package-lock.json
       # The suite imports React deck templates and the worker's TypeScript, so
       # it needs both workspaces' dependencies installed.
       - name: Install frontend deps
@@ -105,7 +188,34 @@ jobs:
       # it first — the same root build the deploy runs.
       - name: Build the SPA
         run: npm run build
-      - run: npm run test:drift
+      - run: node scripts/test-drift-parts.mjs ${{ matrix.part }}
+
+  gate:
+    name: test:drift (full suite)
+    needs: [verified, suite]
+    # Always, never skipped: a skipped required check reports as passed. This
+    # job decides, and it passes only when every part passed — or, on a push
+    # to main only, when the merge queue already passed this exact commit.
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every part of test:drift passed
+        env:
+          EVENT: ${{ github.event_name }}
+          VERIFIED_RUN: ${{ needs.verified.outputs.run }}
+          SUITE: ${{ needs.suite.result }}
+        run: |
+          if [ "$EVENT" = "push" ] && [ -n "$VERIFIED_RUN" ] && [ "$SUITE" = "skipped" ]; then
+            echo "The merge queue passed the full suite on this commit: $VERIFIED_RUN"
+            exit 0
+          fi
+          if [ "$SUITE" = "success" ]; then
+            echo "Every part of test:drift passed."
+            exit 0
+          fi
+          echo "::error::test:drift did not pass: the suite parts ended '$SUITE'."
+          exit 1
 
   # -------------------------------------------------------------------------
   # D1511 (#3762): the Pitch deck editor's visual regression and axe suites
@@ -123,6 +233,7 @@ jobs:
   # -------------------------------------------------------------------------
   visual:
     name: editor visual regression and axe
+    if: github.event_name != 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     container:
@@ -178,6 +289,40 @@ jobs:
         run: node scripts/check-api-drift.mjs
 
   # -------------------------------------------------------------------------
+  # D4103 (#4103): the route map's two projections, PROFILE_ROUTING.md and
+  # PAGE_INVENTORY.md, are not committed: every routing change rewrote them
+  # and parallel branches conflicted on them. This job builds them from the
+  # route map and the sidebar (node only, no install) and keeps them as the
+  # run's `routing-docs` artifact, so they can still be read without cloning.
+  # Their invariants are checked by `--check` in test:guards (the gate job).
+  # -------------------------------------------------------------------------
+  routing-docs:
+    name: routing docs (artifact)
+    # Not a required check, and the queue entry's PR already built the
+    # artifact; skipped there like the other optional jobs (#4107).
+    if: github.event_name != 'merge_group'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Check the projection
+        run: node scripts/build-profile-routing.mjs --check
+      - name: Build the routing docs
+        run: node scripts/build-profile-routing.mjs
+      - name: Keep the routing docs
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: routing-docs
+          path: |
+            documentation/architecture/PROFILE_ROUTING.md
+            documentation/architecture/PAGE_INVENTORY.md
+          if-no-files-found: error
+          retention-days: 30
+
+  # -------------------------------------------------------------------------
   # Open Graph / social-preview gate.
   #
   # Guards the "every axal.vc link previews with the same wrong image" class of
@@ -190,6 +335,7 @@ jobs:
   # -------------------------------------------------------------------------
   og-tags:
     name: open graph metadata
+    if: github.event_name != 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -248,6 +394,7 @@ jobs:
   # -------------------------------------------------------------------------
   dev-backend:
     name: dev backend (import smoke)
+    if: github.event_name != 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -277,6 +424,7 @@ jobs:
   # -------------------------------------------------------------------------
   audit-frontend:
     name: audit (frontend npm)
+    if: github.event_name != 'merge_group'
     runs-on: ubuntu-latest
     # 10, not 5. Both npm audit jobs were CANCELLED — not failed — on two
     # consecutive runs of PR #429, a diff with no dependency change on either
@@ -322,6 +470,7 @@ jobs:
 
   audit-worker:
     name: audit (worker npm)
+    if: github.event_name != 'merge_group'
     runs-on: ubuntu-latest
     # 10, not 5. Both npm audit jobs were CANCELLED — not failed — on two
     # consecutive runs of PR #429, a diff with no dependency change on either
@@ -357,6 +506,7 @@ jobs:
 
   audit-python:
     name: audit (python pip-audit)
+    if: github.event_name != 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

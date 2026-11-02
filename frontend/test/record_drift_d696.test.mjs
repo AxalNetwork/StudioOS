@@ -5,6 +5,7 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'nod
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { renderApiIndex } from '../../scripts/lib/apiModules.mjs';
 const script = readFileSync('scripts/check-api-drift.mjs', 'utf8');
 function check(source = script, route = true, mountedFactory = 'makeRecords') {
   const root = mkdtempSync(resolve(tmpdir(), 'record-drift-d696-'));
@@ -12,8 +13,11 @@ function check(source = script, route = true, mountedFactory = 'makeRecords') {
   try {
     put('scripts/check-api-drift.mjs', source);
     put('scripts/lib/apiModules.mjs', readFileSync('scripts/lib/apiModules.mjs', 'utf8'));
+    put('scripts/lib/routeRegistry.mjs', readFileSync('scripts/lib/routeRegistry.mjs', 'utf8'));
     put('scripts/api-drift-baseline.json', readFileSync('scripts/api-drift-baseline.json', 'utf8'));
-    put('frontend/src/lib/api.js', "export const api = { record: () => request(`/cycles/${cycle}/modules/${slug}/records/${id}`) };\n// api-modules:begin\n// api-modules:end\n");
+    put('frontend/src/lib/api.js', "export const api = { record: () => request(`/cycles/${cycle}/modules/${slug}/records/${id}`) };\nexport * from './apiModules.generated.js';\n");
+    // #4105: the module re-export block is generated beside api.js; this tree has no module.
+    put('frontend/src/lib/apiModules.generated.js', renderApiIndex([]));
     mkdirSync(resolve(root, 'frontend/src/lib/api'), { recursive: true });
     put('cloudflare-worker/src/index.ts', "import records from './routes/records';\napp.route('/api/cycles', records);\n");
     put('cloudflare-worker/src/routes/records.ts', `import { Hono } from 'hono';

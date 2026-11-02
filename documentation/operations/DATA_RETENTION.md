@@ -37,6 +37,7 @@ The retention periods for generated assets are owner decision W (#3716), pending
 | `deck_view_slides` | per-slide seconds of a view | cascade from its view | none |
 | `deck_share_conversions` | what a viewer did after a view | no cascade | none |
 | `deck_share_feedback` | feedback a viewer left on a shared deck | no cascade | none |
+| `deck_qa_answers` | the answer a founder kept for each investor question: its bindings and their values when kept, a note, the version (D1559) | venture cascade; the deck is set null when its version goes | none |
 
 ## Not covered yet
 
