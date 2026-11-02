@@ -26,6 +26,9 @@ export const CONTRACTS = Object.freeze({
   // D1549 (#3796): the deck's preset, and HQ's locks from the same reply (the orgLocks row keeps #3786, B10's issue).
   presets: { issue: 3796, route: 'GET /api/decks/:id/model-presets', schema: 'deckModelPresets.schema.json' },
   orgLocks: { issue: 3786, route: 'GET /api/decks/:id/model-presets (its locks key)', schema: 'deckOrgLocks.schema.json' },
+  // D1570 (#3817): the venture's comment threads, the people who can be mentioned, and the open count.
+  comments: { issue: 3817, route: 'GET /api/decks/:id/comments', schema: 'deckComments.schema.json' },
+
 });
 
 export type ContractMethod = keyof typeof CONTRACTS;

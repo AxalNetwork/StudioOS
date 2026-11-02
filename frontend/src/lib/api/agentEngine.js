@@ -20,6 +20,19 @@
 // `:scope` is 'company' (its uid) or 'project' (its id). A person is { uid, name },
 // never an email. `cost` is { available: false } until E3 records task runs: the
 // page says "Not recorded", never $0.
+//
+// D1530 (#3848, E4): the planner (TM10), the wizard and templates (TM15), the capabilities (TM16).
+//   GET    /api/teams/goals/:uid/plan/quote         → { quote: { available, value_microusd }, by: 'agent' | 'eadwyn' }
+//   POST   /api/teams/goals/:uid/plan               → 201 { proposal: { uid, by, plan: { items: [{ title, module,
+//                                                       suggested_assignee: { role_key } | { person: true }, depends_on: [index], due_in_days }],
+//                                                       dropped: [sentence] } } }; 422 plan_invalid; the run's refusals in their own words
+//   POST   /api/teams/goals/:uid/plan/accept        { proposal, remove?: [index], titles?: { index: title } } → 201 { tasks } (one batch)
+//                                                   404 not_found; 409 plan_decided; 400 invalid_plan
+//   GET    /api/teams/:scope/:id/suggested-team?goal= → { stage, suggestions: [{ role_key, why, template, already_on_team,
+//                                                       est_month_microusd: { available, value } }] }
+//   GET    /api/teams/templates                     → { templates: [{ key, role_key, name, model_tier, suggested_cap_microusd, duties: [key] }] }
+//   GET    /api/teams/capabilities                  → { modules, reads, options, floor }
+// Custom roles (TM16's create and edit) wait for migration 728 (#3847).
 import { request } from '../api.js';
 
 const enc = encodeURIComponent;
@@ -41,4 +54,11 @@ export const agentEngineApi = {
   createTask: (scope, id, body) => request(`${base(scope, id)}/tasks`, { method: 'POST', body: JSON.stringify(body) }),
   updateTask: (uid, patch) => request(`/teams/tasks/${enc(uid)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   setTaskDeps: (uid, dependsOn) => request(`/teams/tasks/${enc(uid)}/deps`, { method: 'PUT', body: JSON.stringify({ depends_on: dependsOn }) }),
+  planQuote: (goalUid) => request(`/teams/goals/${enc(goalUid)}/plan/quote`),
+  draftPlan: (goalUid) => request(`/teams/goals/${enc(goalUid)}/plan`, { method: 'POST', body: JSON.stringify({}) }),
+  acceptPlan: (goalUid, proposal, { remove, titles } = {}) =>
+    request(`/teams/goals/${enc(goalUid)}/plan/accept`, { method: 'POST', body: JSON.stringify({ proposal, ...(remove ? { remove } : {}), ...(titles ? { titles } : {}) }) }),
+  suggestedTeam: (scope, id, { goal } = {}) => request(`${base(scope, id)}/suggested-team${goal ? `?goal=${enc(goal)}` : ''}`),
+  templates: () => request('/teams/templates'),
+  capabilities: () => request('/teams/capabilities'),
 };
