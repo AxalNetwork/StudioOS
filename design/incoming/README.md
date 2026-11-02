@@ -113,6 +113,23 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-11-02 — Settings, simplified (#4152)
+
+The owner's two artifacts for #4152 (boards ST1–ST6), decoded by
+`scripts/read-canvas.mjs`:
+- `Settings Page.dc.html` is the page, one frame per `v` value (`st1a` to
+  `st6f`; a `-d` suffix is dark);
+- `Settings · Boards.dc.html` is the board grid, ST1 to ST6. It imports the
+  page by name.
+
+**One edit, named.** The Axal VC mark (`uploads/axal-logo-200x200.png`) points
+at `/axal-mark.png`, as in the earlier intakes. No other value was edited.
+
+**Grade: REPLACES D1497's sidebar block and D1413's settings head (D4152).**
+One "Settings" entry, Portfolio in the main navigation, Billing in the Account
+menu, and one header and one General form per company. The logo upload waits
+for G1 (#4201).
+
 ## Landed 2026-11-01 — One interview, and its session (#3710)
 
 The owner's artifacts `CoQEhHr637iFdxgpe2WKx9` (the page, `Interview Record Page.dc.html`)

@@ -111,9 +111,9 @@ test('legacy investor deep links still highlight their owning workspace', () => 
   assert.match(investor, /label: 'Network', match: \['\/network', '\/relationships', '\/contacts'\]/);
 });
 
-test('investors keep the global Company Settings footer', () => {
+test('investors keep the global settings footer (D4152: one "Settings" entry for every role)', () => {
   const nav = read('frontend/src/ui/SidebarNav.jsx');
-  assert.match(nav, /<div className="flex-none border-t border-gray-200 dark:border-gray-700">[\s\S]*Company Settings/);
+  assert.match(nav, /<div className="flex-none border-t border-gray-200 dark:border-gray-700">\s*\{settingsScope \? <SettingsScopeBlock /);
 });
 /* ────────────────────────────────────────────────────────────────────────────
  * The five defect classes the investor shell shipped, one check each.
