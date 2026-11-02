@@ -451,6 +451,8 @@ D1199 (#3149): `productTesting.js` adds the programme logo: `partnerTestingApi.u
 
 D1484 part 2 (#3978): `calendarSources.js` holds the member's calendar source settings: `GET /calendar/sources`, `PUT /calendar/sources/:key` (`{ shown?, colour? }`; a colour is a palette token, or `null` for its family's) and `PUT /calendar/settings` (`{ copy_target }`).
 
+D1501 (#3751): `deckDraft.js` holds a deck version's working copy: `deckDraftApi.saveCard(deckId, uid, card, rev, { ord })` (`PATCH /decks/:id/cards/:uid` with `If-Match`), `draft(deckId)` and `discard(deckId)` (`GET`/`DELETE /decks/:id/draft`). `deckV2Adapter.js` reads it through `saveCard`, `discardDraft` and `draft`.
+
 D1212 (#3178): `calendarConnections.js` holds the whole-calendar subscription (`GET`, `POST`, `DELETE /calendar/subscription`, D1209) and the disconnect with its choice (`DELETE /calendar/google` and `/calendar/microsoft`, `?remove_copies=1`). The link comes back once, from the POST, and the page never prints it.
 
 D1207 (#3173): `calendarItems.js` holds the Calendar's Reschedule (`PATCH /calendar/ic-meetings/:id` and `/calendar/founder-checkins/:id`) and its pickers (`/calendar/people`, `/calendar/deals`). A person comes back as a uid and a name, never an email or a user number.
