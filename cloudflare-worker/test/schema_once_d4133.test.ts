@@ -116,7 +116,7 @@ test('two processes racing the first build both get a complete file', async () =
     assert.equal(y.ok, 'ok');
     assert.equal(x.n, y.n);
     assert.ok(x.n > 100);
-    assert.deepEqual(readdirSync(cache).filter((n) => n.endsWith('.tmp') || n.endsWith('.lock')), [], 'no temp file or lock is left behind');
+    assert.deepEqual(readdirSync(cache).filter((n) => n.startsWith('build-') || n.endsWith('.lock')), [], 'no build directory or lock is left behind');
     assert.equal(schemaPath({ below: 300, cacheDir: cache }), x.p, 'a later call reuses it');
   } finally { rmSync(cache, { recursive: true, force: true }); }
 });

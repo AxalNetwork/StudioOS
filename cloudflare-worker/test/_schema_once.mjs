@@ -12,10 +12,11 @@
  *   · `schemaKey(opts)` is a sha256 of this file's BUILD version, the baseline
  *     and every selected migration's name and bytes. A changed migration is a
  *     new key and so a fresh build; nothing is ever served stale.
- *   · `schemaPath(opts)` builds `<tmpdir>/studioos-schema-<key>.sqlite` once.
- *     The first process to take `<file>.lock` (O_EXCL) builds into a private
- *     temp file and renames it into place, which is atomic, so a reader sees
- *     either no file or a complete one. Every other process waits for the
+ *   · `schemaPath(opts)` builds the file once, in the checkout's own
+ *     `node_modules/.cache/studioos-schema/` (never the shared temp dir).
+ *     The first process to take `<file>.lock` (O_EXCL, mode 0600) builds in
+ *     a private `mkdtemp` directory and renames the file into place, which is
+ *     atomic, so a reader sees either no file or a complete one. Every other process waits for the
  *     file; a lock older than LOCK_STALE_MS is taken over, and a process that
  *     waits past it builds its own copy rather than fail.
  *   · `loadSchema(db, opts)` fills an EMPTY database handle (in memory or on
@@ -37,8 +38,7 @@
  */
 import { DatabaseSync } from 'node:sqlite';
 import { createHash } from 'node:crypto';
-import { closeSync, copyFileSync, existsSync, openSync, readFileSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
@@ -48,6 +48,12 @@ export const BUILD = 1;  // the load changing does not change a built file, so o
 export const SCHEMA_OPTIONS = Object.freeze({ enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
 const SQL = fileURLToPath(new URL('../sql/', import.meta.url));
 const LOCK_STALE_MS = 10 * 60 * 1000;
+/**
+ * The default cache: the checkout's own `node_modules/.cache` (gitignored), never the shared temp dir. A file
+ * with a predictable name in a world-writable directory could be planted by another user of the machine
+ * before the first build, and every test would then load it.
+ */
+const CACHE = fileURLToPath(new URL('../../node_modules/.cache/studioos-schema/', import.meta.url));
 
 /** The baseline's text and the selected migrations, in the order the ledger runner applies them. */
 export function schemaInputs({ below = Infinity, sqlDir = SQL } = {}) {
@@ -79,22 +85,32 @@ export function buildSchema(path, opts = {}) {
 
 const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
+/** Build in a private (0700) directory of its own, then rename into place: a reader sees no file or a whole one. */
+function buildInto(file, dir, opts) {
+  const work = mkdtempSync(join(dir, 'build-'));
+  try {
+    const tmp = join(work, 'schema.sqlite');
+    buildSchema(tmp, opts);
+    renameSync(tmp, file);
+  } finally { rmSync(work, { recursive: true, force: true }); }
+}
+
 /** The cached schema file for this run, built once across every test process. */
 export function schemaPath(opts = {}) {
-  const dir = opts.cacheDir ?? tmpdir();
+  const dir = opts.cacheDir ?? CACHE;
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
   const file = join(dir, `studioos-schema-${schemaKey(opts)}.sqlite`);
   if (existsSync(file)) return file;
   const lock = `${file}.lock`;
   const deadline = Date.now() + LOCK_STALE_MS;
   for (;;) {
     let fd = null;
-    try { fd = openSync(lock, 'wx'); } catch (e) { if (e.code !== 'EEXIST') throw e; }
+    try { fd = openSync(lock, 'wx', 0o600); } catch (e) { if (e.code !== 'EEXIST') throw e; }
     if (fd !== null) {
       closeSync(fd);
       try {
         if (!existsSync(file)) {
-          const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
-          try { buildSchema(tmp, opts); renameSync(tmp, file); } finally { rmSync(tmp, { force: true }); }
+          buildInto(file, dir, opts);
         }
         return file;
       } finally { rmSync(lock, { force: true }); }
@@ -103,8 +119,7 @@ export function schemaPath(opts = {}) {
     // Someone else is building. Take the lock over if it has gone stale; past the deadline, build privately.
     try { if (Date.now() - statSync(lock).mtimeMs > LOCK_STALE_MS) rmSync(lock, { force: true }); } catch { /* it just went away */ }
     if (Date.now() > deadline) {
-      const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
-      try { buildSchema(tmp, opts); renameSync(tmp, file); } finally { rmSync(tmp, { force: true }); }
+      buildInto(file, dir, opts);
       return file;
     }
     sleep(100);

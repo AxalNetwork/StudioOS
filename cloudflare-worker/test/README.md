@@ -41,7 +41,7 @@ three tests had each grown their own copy of that reader, and one of the copies
 had already been caught reading a column name production does not use.
 `baseline_reader.test.mjs` holds it to what the regex it replaced returned.
 `_schema_once.mjs` (D4133) builds the whole schema (the baseline and every
-migration above `BASELINE_CUTOFF`) once per run, keyed by a hash of those files,
+migration above `BASELINE_CUTOFF`) once per run into `node_modules/.cache/studioos-schema/`, keyed by a hash of those files,
 and `loadSchema(db)` fills a test's own database from it; `loadSchema(db, { below: N })`
 is the schema as it stood before migration N. A test that needs the migrated
 schema calls it rather than replaying the files, which took 4–10 s per file.
