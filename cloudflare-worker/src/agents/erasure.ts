@@ -69,3 +69,15 @@ export async function eraseAccountRuntime(env: Env, userId: number, rt: Rt = () 
   } catch { console.warn('[agents] erase_account_unreadable'); return; }
   for (const a of agents) await eraseAgentRuntime(env, a, rt);
 }
+
+/**
+ * D1530 (#3849, E5): an account's erasure, both halves: the runtime above,
+ * then the D1 rows (`eraseAgentData`: memory notes, run summaries, queued
+ * tasks). The platform has no account delete (D168: erasure is manual); this
+ * is what that manual erasure runs.
+ */
+export async function eraseAccountAgents(env: Env, userId: number, rt: Rt = () => agentRuntime(env)) {
+  await eraseAccountRuntime(env, userId, rt);
+  const { eraseAgentData } = await import('../services/agents/memory');
+  await eraseAgentData(env, { userId });
+}

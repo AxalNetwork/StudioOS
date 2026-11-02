@@ -25,12 +25,11 @@ import figuresRoutes from '../src/routes/deck_figures.ts';
 import { figuresOf, numbersIn } from '../src/services/decks/figures.ts';
 import { contractErrors } from '../src/contracts/validate.ts';
 import { badgeOf, checkCounts, toReview } from '../../frontend/src/pages/raise/pitch/figuresModel.js';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
+import { loadSchema } from './_schema_once.mjs';
 
 const JWT_SECRET = 'synthetic-figures-only-not-a-real-credential'.repeat(2);
-const MIGRATIONS = resolve(process.cwd(), 'cloudflare-worker/sql/migrations');
 const SCHEMA = JSON.parse(readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/contracts/deckFigures.schema.json'), 'utf8'));
 const FOUNDER = 10, OTHER = 20, P = 1, Q = 2;
 
@@ -117,8 +116,7 @@ test('the editor\'s tile badge agrees with the Worker, block by block', () => {
 
 function world() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  db.exec(readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8'));
-  for (const f of readdirSync(MIGRATIONS).filter((n) => /^\d+_.*\.sql$/.test(n)).sort(compareMigrations).filter((n) => migrationNumber(n) > BASELINE_CUTOFF)) db.exec(readFileSync(resolve(MIGRATIONS, f), 'utf8'));
+  loadSchema(db);
   const add = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');
   add.run(FOUNDER, 'founder', 'Synthetic Founder', 'founder@example.test', 1001);
   add.run(OTHER, 'founder', 'Synthetic Other', 'other@example.test', 1002);

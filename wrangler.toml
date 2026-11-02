@@ -96,6 +96,9 @@ custom_domain  = true
 # use the same syntax as Workers routes (`*` wildcards, not regex).
 # The five token-link prefixes (`/esign/*` … `/join/*`) are #3916's Part D:
 # the Worker gives them the static "Sign in to view" card, with no D1 call.
+# `/embed/*` is D1564's embed (#3811): the Worker answers a published deck
+# only to a frame from an origin its founder listed, with `frame-ancestors`
+# for those origins; everything else there is refused with frames denied.
 #
 # Vite is configured (frontend/vite.config.js) to build into the
 # repo-root `./docs/` directory. The path dates from when GitHub Pages
@@ -124,7 +127,7 @@ not_found_handling = "single-page-application"
 # URL, and the one every `location.replace('/login')` uses — and sends
 # `/login/` to `/login` once.
 html_handling = "drop-trailing-slash"
-run_worker_first = ["/api/*", "/mcp", "/mcp/*", "/landing/*", "/p/*", "/assets/*", "/.well-known/oauth-authorization-server*", "/.well-known/oauth-protected-resource*", "/account/developer", "/account/developer/*", "/events/*", "/articles/*", "/jobs/*", "/u/*", "/startups/*", "/partners/*", "/authors/*", "/insights/public/*", "/esign/*", "/deck/share/*", "/share/*", "/invite/*", "/join/*"]
+run_worker_first = ["/api/*", "/mcp", "/mcp/*", "/landing/*", "/p/*", "/assets/*", "/.well-known/oauth-authorization-server*", "/.well-known/oauth-protected-resource*", "/account/developer", "/account/developer/*", "/events/*", "/articles/*", "/jobs/*", "/u/*", "/startups/*", "/partners/*", "/authors/*", "/insights/public/*", "/esign/*", "/deck/share/*", "/share/*", "/invite/*", "/join/*", "/embed/*"]
 
 # ---------- Module Rules ----------
 # Task #9 (AO) — register `.md` files (and the Vite-style `?raw` suffix)
@@ -454,6 +457,10 @@ class_name = "AiGovernor"
 [[durable_objects.bindings]]
 name       = "AGENT_SCOPE"
 class_name = "AgentScope"
+# #3852 (E0): the `sdk` runtime's Agent, one per scope; used only while AGENT_RUNTIME is `sdk`.
+[[durable_objects.bindings]]
+name       = "AGENT_SCOPE_SDK"
+class_name = "ScopeAgent"
 
 [[migrations]]
 tag                = "v1-realtime"
@@ -477,6 +484,10 @@ new_sqlite_classes = ["DeckGenRoom", "AiGovernor"]
 [[migrations]]
 tag = "v5-agent-scope"
 new_sqlite_classes = ["AgentScope"]
+# #3852 (E0): the Agents SDK evaluation's own class; append-only.
+[[migrations]]
+tag = "v6-agent-scope-sdk"
+new_sqlite_classes = ["ScopeAgent"]
 
 # D1528: one AgentTaskWorkflow instance per run (id = run uid). State kept 7
 # days on success, 30 on error (owner Q6 A).
@@ -845,6 +856,10 @@ class_name = "AiGovernor"
 [[env.production.durable_objects.bindings]]
 name       = "AGENT_SCOPE"
 class_name = "AgentScope"
+# #3852 (E0): the `sdk` runtime's Agent, one per scope; used only while AGENT_RUNTIME is `sdk`.
+[[env.production.durable_objects.bindings]]
+name       = "AGENT_SCOPE_SDK"
+class_name = "ScopeAgent"
 
 [[env.production.migrations]]
 tag                = "v1-realtime"
@@ -865,6 +880,10 @@ new_sqlite_classes = ["DeckGenRoom", "AiGovernor"]
 [[env.production.migrations]]
 tag = "v5-agent-scope"
 new_sqlite_classes = ["AgentScope"]
+# #3852 (E0): the Agents SDK evaluation's own class; append-only.
+[[env.production.migrations]]
+tag = "v6-agent-scope-sdk"
+new_sqlite_classes = ["ScopeAgent"]
 
 # D1528: one AgentTaskWorkflow instance per run (id = run uid). State kept 7
 # days on success, 30 on error (owner Q6 A).
@@ -913,7 +932,7 @@ not_found_handling = "single-page-application"
 # production deploy that kept the default would 307 `/login` back to
 # `/login/` — the URL Safari crashes on.
 html_handling = "drop-trailing-slash"
-run_worker_first = ["/api/*", "/mcp", "/mcp/*", "/landing/*", "/p/*", "/assets/*", "/.well-known/oauth-authorization-server*", "/.well-known/oauth-protected-resource*", "/account/developer", "/account/developer/*", "/events/*", "/articles/*", "/jobs/*", "/u/*", "/startups/*", "/partners/*", "/authors/*", "/insights/public/*", "/esign/*", "/deck/share/*", "/share/*", "/invite/*", "/join/*"]
+run_worker_first = ["/api/*", "/mcp", "/mcp/*", "/landing/*", "/p/*", "/assets/*", "/.well-known/oauth-authorization-server*", "/.well-known/oauth-protected-resource*", "/account/developer", "/account/developer/*", "/events/*", "/articles/*", "/jobs/*", "/u/*", "/startups/*", "/partners/*", "/authors/*", "/insights/public/*", "/esign/*", "/deck/share/*", "/share/*", "/invite/*", "/join/*", "/embed/*"]
 
 # Task #9 (AO) — wire the studioos-tail consumer worker
 # (cloudflare-worker-tail/) so all production worker tail events get
@@ -1095,6 +1114,10 @@ class_name = "AiGovernor"
 [[env.preview.durable_objects.bindings]]
 name       = "AGENT_SCOPE"
 class_name = "AgentScope"
+# #3852 (E0): the `sdk` runtime's Agent, one per scope; used only while AGENT_RUNTIME is `sdk`.
+[[env.preview.durable_objects.bindings]]
+name       = "AGENT_SCOPE_SDK"
+class_name = "ScopeAgent"
 
 [[env.preview.migrations]]
 tag                = "v1-realtime"
@@ -1115,6 +1138,10 @@ new_sqlite_classes = ["DeckGenRoom", "AiGovernor"]
 [[env.preview.migrations]]
 tag = "v5-agent-scope"
 new_sqlite_classes = ["AgentScope"]
+# #3852 (E0): the Agents SDK evaluation's own class; append-only.
+[[env.preview.migrations]]
+tag = "v6-agent-scope-sdk"
+new_sqlite_classes = ["ScopeAgent"]
 
 # D1528: one AgentTaskWorkflow instance per run (id = run uid). State kept 7
 # days on success, 30 on error (owner Q6 A).

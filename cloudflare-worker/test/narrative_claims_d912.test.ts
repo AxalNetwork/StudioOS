@@ -23,7 +23,6 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
@@ -35,11 +34,10 @@ import { FIGURE_KINDS, couldBack, sectionOfField } from '../src/services/narrati
 import { FIGURES, SECTION_STORE_KEYS } from '../src/services/raiseCycle.ts';
 import { NARRATIVE_SECTIONS } from '../src/services/narrative/store.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SQL = resolve(here, '../sql');
-const M = resolve(SQL, 'migrations');
 const JWT_SECRET = 'unit-test-jwt-secret-d912-narrative-claims-0123456789';
 const OWNER = 1, ADMIN = 4, OTHER = 5;
 const PID = 7, OTHER_PID = 8;
@@ -48,10 +46,7 @@ const today = new Date().toISOString().slice(0, 10);
 
 function fixture() {
   const db = new DatabaseSync(':memory:');
-  db.exec(readFileSync(resolve(SQL, 'schema_baseline.sql'), 'utf8'));
-  for (const name of readdirSync(M).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations)) {
-    db.exec(readFileSync(resolve(M, name), 'utf8'));
-  }
+  loadSchema(db);
   db.exec(`INSERT INTO founders (id, name, email) VALUES (10, 'Synthetic Founder', 'f@example.test'), (11, 'Synthetic Other', 'o@example.test');
     INSERT INTO users (id, email, name, role, founder_id, is_active) VALUES
       (${OWNER}, 'owner@example.test', 'Synthetic Owner', 'founder', 10, 1),

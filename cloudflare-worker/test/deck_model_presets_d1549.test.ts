@@ -14,7 +14,7 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync, mkdtempSync, copyFileSync, rmSync } from 'node:fs';
+import { readFileSync, mkdtempSync, copyFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Hono } from 'hono';
@@ -27,14 +27,12 @@ import decks from '../src/routes/decks.ts';
 import { __resetForTest } from '../src/services/aiRouter.ts';
 import { modelById } from '../src/services/ai/catalogue.ts';
 import { jobStep } from '../src/services/ai/modelUseCases.ts';
-import {
-  ELEMENTS, PRESETS, choicesFor, groupElements, isRouted, lockedOut, presetModelFor, resolveElementModel, type PickRow,
-} from '../src/services/decks/elementModels.ts';
+import { ELEMENTS, PRESETS, choicesFor, groupElements, isRouted, lockedOut, presetModelFor, resolveElementModel, type PickRow } from '../src/services/decks/elementModels.ts';
 import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withGuard, GUARD_MODEL } from './_guard_stub.mjs';
-import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
+import { loadSchema } from './_schema_once.mjs';
 
 const LLAMA = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 const MISTRAL = '@cf/mistralai/mistral-small-3.1-24b-instruct';
@@ -124,13 +122,10 @@ test('the deck preset sits below the deck\'s own picks and above my default; a p
 // ─────────────────────────────────────────────────────────── the routes
 
 const root = new URL('../sql/', import.meta.url);
-const baseline = readFileSync(new URL('schema_baseline.sql', root), 'utf8');
-const migrations = readdirSync(new URL('migrations/', root)).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations)
-  .map((n) => readFileSync(new URL('migrations/' + n, root), 'utf8'));
 const scratch = mkdtempSync(join(tmpdir(), 'deck-model-presets-d1549-'));
 const seedPath = join(scratch, 'schema.sqlite');
 const schema = new DatabaseSync(seedPath, { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-schema.exec(baseline); for (const sql of migrations) schema.exec(sql); schema.close();
+loadSchema(schema); schema.close();
 after(() => rmSync(scratch, { recursive: true, force: true }));
 let n = 0;
 const JWT_SECRET = 'synthetic-d1549-only-not-a-real-credential'.repeat(2);

@@ -21,6 +21,7 @@
 export const CONTRACTS = Object.freeze({
   batch: { issue: 3753, route: 'GET /api/decks/areas/batches/:uid', schema: 'deckBatch.schema.json' },
   cancelBatch: { issue: 3753, route: 'POST /api/decks/areas/batches/:uid/cancel', schema: 'deckBatch.schema.json' },
+  cardStatus: { issue: 3826, route: 'GET /api/decks/:id/card-status', schema: 'deckCardStatus.schema.json' },
   comments: { issue: 3817, route: 'GET /api/decks/:id/comments', schema: 'deckComments.schema.json' },
   consistency: { issue: 3802, route: 'GET /api/decks/:id/check (its consistency key)', schema: 'deckConsistency.schema.json' },
   deckUsage: { issue: 3776, route: 'GET /api/decks/:id/usage', schema: 'deckUsage.schema.json' },

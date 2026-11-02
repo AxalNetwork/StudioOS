@@ -977,10 +977,17 @@ settings.get('/data-export', async (c) => {
                             FROM users WHERE id = ${user.id}`;
   const activity = await sql`SELECT action, details, created_at FROM activity_logs WHERE user_id = ${user.id} ORDER BY created_at DESC LIMIT 500`;
   await sql.end();
+  // D1530 (#3849, E5): the agents, rule books, memory notes and run history this member can see.
+  let agents: unknown = null;
+  try {
+    const { exportAgentData } = await import('../services/agents/memory');
+    agents = await exportAgentData(c.env, user as any);
+  } catch { agents = { unavailable: true }; }
   const payload = {
     exported_at: new Date().toISOString(),
     user: userRow[0] || null,
     recent_activity: activity,
+    agents,
     note: 'This export contains your account profile and the most recent 500 activity log entries. For a full export across all sub-systems (deals, projects, KYC), contact support.',
   };
   return new Response(JSON.stringify(payload, null, 2), {

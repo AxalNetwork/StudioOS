@@ -8,11 +8,21 @@ import { fileURLToPath } from 'node:url';
 const CLOUDFLARE_WORKERS = 'data:text/javascript,' + encodeURIComponent(
   'export class WorkerEntrypoint { constructor(ctx, env) { this.ctx = ctx; this.env = env; } }\n'
   + 'export class DurableObject { constructor(ctx, env) { this.ctx = ctx; this.env = env; } }\n'
-  + 'export class RpcTarget {}\nexport class WorkflowEntrypoint {}\nexport const env = {};\n',
+  + 'export class RpcTarget {}\nexport class WorkflowEntrypoint {}\nexport const env = {};\n'
+  // #3852: the Agents SDK also names `exports` (ctx.exports) and `WorkflowEvent`.
+  + 'export const exports = {};\nexport class WorkflowEvent {}\n',
+);
+
+// #3852: the Agents SDK (`agents`, imported only by src/agents/sdkRuntime.ts,
+// which src/index.ts exports) also imports `cloudflare:email` for its email
+// helpers. No test sends mail through it; an empty class lets the module load.
+const CLOUDFLARE_EMAIL = 'data:text/javascript,' + encodeURIComponent(
+  'export class EmailMessage { constructor(from, to, raw) { this.from = from; this.to = to; this.raw = raw; } }\n',
 );
 
 export async function resolve(specifier, context, nextResolve) {
   if (specifier === 'cloudflare:workers') return { url: CLOUDFLARE_WORKERS, shortCircuit: true };
+  if (specifier === 'cloudflare:email') return { url: CLOUDFLARE_EMAIL, shortCircuit: true };
   if (specifier.startsWith('./') || specifier.startsWith('../')) {
     try {
       const parentURL = context.parentURL ? new URL(specifier, context.parentURL) : null;

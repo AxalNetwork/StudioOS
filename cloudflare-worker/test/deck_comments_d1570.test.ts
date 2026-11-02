@@ -28,10 +28,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
-import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import deckComments from '../src/routes/deck_comments.ts';
@@ -39,11 +38,9 @@ import deckInvestorLinks from '../src/routes/deck_investor_links.ts';
 import decks from '../src/routes/decks.ts';
 import advisorGrants from '../src/routes/advisor_grants.ts';
 import { approvalSentence } from '../src/services/decks/deckApproval.ts';
+import { loadSchema } from './_schema_once.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-d1570-deck-comments-0123456789';
-const BASELINE = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
-const DIR = 'cloudflare-worker/sql/migrations';
-const MIGRATIONS = readdirSync(DIR).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations).map((n) => readFileSync(`${DIR}/${n}`, 'utf8'));
 
 // [id, role, founder_id, name]
 const FOUNDER = 3, COFOUNDER = 4, ADVISOR = 5, PARTNER = 6, MEMBER_ADVISOR = 7, NO_SCOPE = 8, ADMIN = 1, OTHER = 9;
@@ -57,8 +54,7 @@ const SLIDES = [1, 2, 3, 4].map((n) => ({ title: `Synthetic card ${n}`, fields: 
 
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
-  db.exec(BASELINE);
-  for (const m of MIGRATIONS) db.exec(m);
+  loadSchema(db);
   const u = db.prepare("INSERT INTO users (id, role, name, email, is_active, founder_id, subscription_tier) VALUES (?, ?, ?, ?, 1, ?, 'studio')");
   const ss = db.prepare("INSERT INTO user_sessions (user_id, jti, factor, created_at) VALUES (?, ?, 'totp', datetime('now'))");
   for (const [id, role, founder, name] of PEOPLE) { u.run(id, role, name, `synthetic${id}@example.test`, founder); ss.run(id, `j-${id}`); }

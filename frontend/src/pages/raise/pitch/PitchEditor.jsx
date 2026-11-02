@@ -21,6 +21,8 @@ import PitchPage from './PitchPage';
 import DeckToolbar from './DeckToolbar';
 import useDeckPresence from './useDeckPresence';
 import CardsStrip from './CardsStrip';
+import { cardStatus } from './deckV2Adapter';
+import { withAssignee, withStatus } from './cardStatusModel';
 import GridStage from './GridStage';
 import BlockTools, { SpeakerNotes } from './BlockTools';
 import { ArrangeSet, DecorLayers } from './BlockTools';
@@ -243,7 +245,8 @@ export default function PitchEditor() {
       editors={presence.editors} youId={youId} />
   ) : null;
   const overlay = shareDialog === 'share' && projectId != null && current ? (
-    <ShareDialog projectId={projectId} deck={current} onClose={() => setShareDialog(null)} onCreated={() => {}} />
+    <ShareDialog projectId={projectId} deck={current} onClose={() => setShareDialog(null)} onCreated={() => {}}
+      onReviewCards={(uid) => { setShareDialog(null); actionRef.current?.('review_cards', uid); }} />
   ) : shareDialog === 'export' && current ? (
     <ExportDialog versions={versionList} current={current} onClose={() => setShareDialog(null)} />
   ) : null;
@@ -404,6 +407,9 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   const ink = isDarkTheme(theme?.kind) ? undefined : colours.ink;
   const items = sources.data?.items || [];
   const [images, setImages] = useState([]);
+  // D1579 (#3826): who a card can be assigned to (D1570's people), from the card-status read; null until read.
+  const statusRead = useRead(base.deck.id, () => cardStatus(base.deck.id), []);
+  const people = statusRead.status === 'ok' && statusRead.data?.available === true && Array.isArray(statusRead.data.value?.people) ? statusRead.data.value.people : null;
   const loadImages = useCallback(() => {
     if (readOnly) return;
     deckImagesApi.list(base.deck.id).then((r) => setImages(r?.images || []), (e) => reportError('pitch-images:list', e));
@@ -634,7 +640,9 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     if (!c) return;
     edit({ type: 'setFlag', index: i, key: 'appendix', value: c.appendix ? undefined : true }, { label: 'Appendix' });
   };
-  const act = (id) => {
+  const act = (id, arg) => {
+    // D1579 (#3826): the pre-share confirm's Review cards: the first card not Done, by its uid.
+    if (id === 'review_cards') { const at = cards.findIndex((c) => c?.uid === arg); if (at >= 0) choose(at); return; }
     if (id === 'save') { if (!readOnly && dirty) setDialog({ kind: 'save' }); return; }
     if (id === 'save_named') { if (!readOnly) setDialog({ kind: 'save', named: true }); return; }
     if (id === 'duplicate') { if (!readOnly) duplicate(sel); return; }
@@ -646,8 +654,11 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     if (['theme', 'size', 'brand', 'sources', 'versions', 'check', 'structure', 'background', 'remix', 'derive', 'comments', 'find'].includes(id)) setSheet(id);
   };
   if (actionRef) actionRef.current = act;
-  const cardAction = (id, i) => {
+  const cardAction = (id, i, value) => {
     if (readOnly) return;
+    // D1579 (#3826): Set status › and Assign ›, edits held until a version is saved; the save tells a new assignee.
+    if (id === 'status' && cards[i]) { setCard(i, withStatus(cards[i], value)); return; }
+    if (id === 'assign' && cards[i]) { setCard(i, withAssignee(cards[i], value)); return; }
     if (id === 'duplicate') duplicate(i);
     else if (id === 'up' && i > 0) move(i, i - 1);
     else if (id === 'down' && i < cards.length - 1) move(i, i + 1);
@@ -684,7 +695,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
         <div className={`grid gap-3 ${narrow ? '' : 'lg:grid-cols-[150px_minmax(0,1fr)]'}`} data-testid="pitch-editor-body">
           <div className="flex min-w-0 flex-col gap-2">
             <CardsStrip theme={theme} cards={cards} sel={sel} stale={stale} readOnly={readOnly} onSelect={choose} move={move}
-              onCardAction={cardAction} orientation={narrow ? 'row' : 'column'}
+              onCardAction={cardAction} orientation={narrow ? 'row' : 'column'} people={people}
               onAdd={() => {
                 const layout = model.layouts.find((l) => l.id === 'statement') || model.layouts[0];
                 const fresh = withNewUid(applyLayout({ title: 'New card' }, layout).card);

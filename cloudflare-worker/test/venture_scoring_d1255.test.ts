@@ -1,13 +1,13 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 import { NEVER_READ, SCORED_SCOPES, SCOPE_ORDER, VENTURE_MODEL_V1, type Rule } from '../src/services/ventureScoring/model.ts';
 import { normalise, scoreScope, type InputFacts } from '../src/services/ventureScoring/engine.ts';
 import { STATEMENTS } from '../src/services/ventureScoring/collectors.ts';
 import { scoreVenture, storedScorecard } from '../src/services/ventureScoring/store.ts';
+import { loadSchema } from './_schema_once.mjs';
 
 // Synthetic records only; no connector may reach the network.
 const realFetch = globalThis.fetch;
@@ -145,10 +145,7 @@ test('bias guards: no collector statement reads a never-input, and kyc_data is n
 
 const ddl = (() => {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  db.exec(read('../sql/schema_baseline.sql'));
-  for (const name of readdirSync(new URL('../sql/migrations/', import.meta.url)).filter((n) => /^\d+_.*\.sql$/.test(n)).sort(compareMigrations)) {
-    if (migrationNumber(name) > BASELINE_CUTOFF) db.exec(read(`../sql/migrations/${name}`));
-  }
+  loadSchema(db);
   const sql = (db.prepare("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END").all() as any[]).map((r) => r.sql).join(';\n');
   db.close();
   return sql;

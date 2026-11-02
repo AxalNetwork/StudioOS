@@ -2,7 +2,7 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync, mkdtempSync, copyFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, copyFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Hono } from 'hono';
@@ -21,16 +21,14 @@ import { fillAxalSpinoutDemoDay } from '../src/services/decks/axalSpinoutDemoDay
 import { canWrite, canWritePitchDeck } from '../src/routes/_founder_validate_helpers.ts';
 import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
+import { loadSchema } from './_schema_once.mjs';
 
 const root = new URL('../sql/', import.meta.url);
-const baseline = readFileSync(new URL('schema_baseline.sql', root), 'utf8');
-const migrations = readdirSync(new URL('migrations/', root)).filter(n => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations).map(n => readFileSync(new URL('migrations/'+n, root), 'utf8'));
 const scratch = mkdtempSync(join(tmpdir(), 'pitch-d895-'));
 const seedPath = join(scratch, 'schema.sqlite');
 const schema = new DatabaseSync(seedPath, { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-schema.exec(baseline); for (const sql of migrations) schema.exec(sql); schema.close();
+loadSchema(schema); schema.close();
 let nextFixture = 0;
 after(() => rmSync(scratch, { recursive: true, force: true }));
 const JWT_SECRET = 'synthetic-d895-only-not-a-real-credential'.repeat(2);
