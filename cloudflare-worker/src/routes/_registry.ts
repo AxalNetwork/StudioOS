@@ -6,8 +6,11 @@
 // cloudflare-worker/test/route_registry_4105.test.ts fails while stale.
 import type { RegisteredModule } from '../util/routeRegistry';
 import { mount as admin_agentsMount } from './admin_agents';
+import { mount as admin_ai_agentsMount } from './admin_ai_agents';
 import { mount as admin_company_skillsMount } from './admin_company_skills';
 import { mount as admin_hq_skillsMount } from './admin_hq_skills';
+import { mount as company_complianceMount } from './company_compliance';
+import { mount as data_room_proposalsMount } from './data_room_proposals';
 import { mount as deck_brand_kitMount } from './deck_brand_kit';
 import { mount as deck_card_statusMount } from './deck_card_status';
 import { mount as deck_proofMount } from './deck_proof';
@@ -17,12 +20,16 @@ import { mount as deck_reportsMount } from './deck_reports';
 import { mount as deck_slide_analyticsMount } from './deck_slide_analytics';
 import { mount as deck_stage_normsMount } from './deck_stage_norms';
 import { mount as deck_update_reuseMount } from './deck_update_reuse';
+import { mount as learning_listsMount } from './learning_lists';
 import { mount as votesMount } from './votes';
 
 export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'admin_agents', mount: admin_agentsMount },
+  { file: 'admin_ai_agents', mount: admin_ai_agentsMount },
   { file: 'admin_company_skills', mount: admin_company_skillsMount },
   { file: 'admin_hq_skills', mount: admin_hq_skillsMount },
+  { file: 'company_compliance', mount: company_complianceMount },
+  { file: 'data_room_proposals', mount: data_room_proposalsMount },
   { file: 'deck_brand_kit', mount: deck_brand_kitMount },
   { file: 'deck_card_status', mount: deck_card_statusMount },
   { file: 'deck_proof', mount: deck_proofMount },
@@ -32,5 +39,6 @@ export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'deck_slide_analytics', mount: deck_slide_analyticsMount },
   { file: 'deck_stage_norms', mount: deck_stage_normsMount },
   { file: 'deck_update_reuse', mount: deck_update_reuseMount },
+  { file: 'learning_lists', mount: learning_listsMount },
   { file: 'votes', mount: votesMount },
 ];

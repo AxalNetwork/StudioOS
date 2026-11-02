@@ -320,8 +320,8 @@ test('HQ reads the queue and resolves a report; a founder or a branch cannot', a
     const done = await call(f, ADMIN, 'POST', `/api/admin/deck-reports/${r.uid}/resolve`, { outcome: 'addressed', note: 'Image model flagged.' });
     assert.equal(done.status, 200, JSON.stringify(done.body));
     assert.deepEqual([done.body.report.status, done.body.report.outcome, done.body.report.resolution_note], ['resolved', 'addressed', 'Image model flagged.']);
-    assert.equal((await call(f, ADMIN, 'POST', `/api/admin/deck-reports/${r.uid}/resolve`, { outcome: 'no_fault' })).body.error, 'already_resolved');
-    assert.equal((await call(f, ADMIN, 'POST', '/api/admin/deck-reports/dr_missing/resolve', { outcome: 'no_fault' })).status, 404);
+    assert.equal((await call(f, ADMIN, 'POST', `/api/admin/deck-reports/${r.uid}/resolve`, { outcome: 'no_fault', note: 'A second look, too late.' })).body.error, 'already_resolved');
+    assert.equal((await call(f, ADMIN, 'POST', '/api/admin/deck-reports/dr_missing/resolve', { outcome: 'no_fault', note: 'No such report here.' })).status, 404);
     assert.deepEqual((await call(f, ADMIN, 'GET', '/api/admin/deck-reports')).body.reports, [], 'the open queue is empty');
     assert.equal((await call(f, ADMIN, 'GET', '/api/admin/deck-reports?status=resolved')).body.reports.length, 1);
     const audit = (f.db.prepare("SELECT action FROM admin_audit_log ORDER BY id").all() as any[]).map((x) => x.action);

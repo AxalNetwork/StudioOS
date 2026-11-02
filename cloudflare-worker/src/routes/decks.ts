@@ -866,7 +866,10 @@ decks.get('/share/:token', async (c) => {
   // D1564 (#3811): a published link asks for the reader's email first, and
   // sends no card and uses no view until this browser has given one. While
   // public views are off (owner decision T) the gate is always on.
-  const published = publishOf(link?.include_json);
+  // D4086: a published link stands only while its round allows it; a round
+  // recorded under any exemption but 506(c) leaves it a private link.
+  const storedPublish = publishOf(link?.include_json);
+  const published = storedPublish && await (await import('./deck_publish')).linkStandsFor(c.env, parseInt(m[1])) ? storedPublish : null;
   if (link && published && gateFor(published) === 'email' && await shareLinkLive(c.env, await sha256Hex(token), bind.viewerHash)) {
     const { emailGatePassed, emailGateAnswer } = await import('./deck_publish');
     if (!(await emailGatePassed(c.env, c.req.header('cookie'), Number(link.id)))) {
