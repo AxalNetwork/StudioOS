@@ -53,10 +53,10 @@ import { figureRefusal } from '../services/decks/newDeck';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 import { railFor, refuseRun } from '../util/railContext';
 import { refuse } from '../util/refusal';
-import { auditDeckWrite, getDeckRow, projectOwned, themeOfRow } from './decks';
+import { auditDeckWrite, getDeckRow, projectOwned, sanitizeImageUrl, themeOfRow } from './decks';
 import { cardRefOf } from '../services/decks/cardUids';
 import { imageCapability, imagePlan } from '../services/decks/visuals';
-import { fetchLandingPageForProject } from '../services/decks/branding';
+import { brandKitFor } from '../services/decks/brandKit';
 import { ElementOffError, elementModelFor, lockedOutRefusal, runPickOf } from './deck_element_models';
 import { lockedOut, type Resolved } from '../services/decks/elementModels';
 import { notSwitchedOn } from '../services/featureFlags';
@@ -407,7 +407,8 @@ deckImages.get('/:id/images/plan', async (c) => {
   let slides: any[] = [];
   try { slides = JSON.parse(row?.slides || '[]'); } catch { slides = []; }
   const theme = themeOfRow(row);
-  const kit = await fetchLandingPageForProject(c.env, deck.projectId);
+  // D1562 (#3809): the deck kit over the landing page's, so the kit's image style sets the art direction.
+  const kit = await brandKitFor(c.env, deck.projectId, sanitizeImageUrl);
   return c.json(imagePlan(slides, theme?.kind ?? 'brand', kit, imageCapability(c.env)));
 });
 

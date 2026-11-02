@@ -341,6 +341,8 @@ export function ProposalReview({ projectId, q = '', proposal, items = [], versio
             </label>
           </span>
           {pick?.from === 'unread' && !picked ? <span className={SMALL} data-testid="pitch-review-kit-unread">{KIT_UNREAD}</span> : null}
+          {/* D1562 (#3809): the brand kit's pick says why, in its own words. */}
+          {pick?.reason && !picked ? <span className={SMALL} data-testid="pitch-review-kit-reason">{pick.reason}</span> : null}
           <span className={`text-[12.5px] font-semibold ${INK}`} data-testid="pitch-review-ready">{readyLine(kept, out.length)}</span>
         </div>
         <div className="flex flex-col items-end gap-1.5">

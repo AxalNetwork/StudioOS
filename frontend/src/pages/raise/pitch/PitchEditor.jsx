@@ -41,6 +41,8 @@ import InstructionBox from './InstructionBox';
 import { PitchMovedNotice } from './PitchWorkspaceMoved';
 import { acceptUpdate, refreshCard } from './figuresModel';
 import { deckUpdateReuseApi } from '../../../lib/api/deckUpdateReuse.js';
+import { deckBrandKitApi } from '../../../lib/api/deckBrandKit.js';
+import { APPLY_BRAND, appliedLine, applyOps } from './brandKitModel';
 import { deckRail } from './deckRailGroups';
 import { presentHref } from './presentExportModel';
 import { aspectOf, withAspect } from './gridModel';
@@ -113,7 +115,7 @@ import {
  * 100-step history (`editReducer`): Undo and Redo in the header and ⋯, and
  * Cmd/Ctrl+Z, Shift+Cmd/Ctrl+Z (a text field keeps its own undo); Cmd/Ctrl+F
  * opens ⋯ › Find and replace. Apply theme, a structure or layout, Move
- * overflow to notes, Slide size and Accept all are one step each; undoing a
+ * overflow to notes, Slide size, Accept all and Apply brand (D1562) are one step each; undoing a
  * step that placed a charged run says it is still charged. The working deck
  * autosaves (`deckAutosave.js`): to the device at once, to the version's
  * draft 1.5 s after the last edit (at most 10 s while typing goes on), with
@@ -585,6 +587,23 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   const counts = historyCounts(ed.history);
   const docNow = useRef(ed.doc);
   docNow.current = ed.doc;
+  // D1562 (#3809): Apply brand. The Worker restyles the deck as it is on screen
+  // (no model, nothing written); its answer is one op, so one undo step. An
+  // edit made while it answered wins: the answer is refused, never merged.
+  const applyBrand = async () => {
+    const asked = docNow.current;
+    try {
+      const r = await deckBrandKitApi.apply(base.deck.id, { cards: asked.cards, theme: asked.theme });
+      const op = applyOps(r);
+      if (!op) return { error: 'Apply brand answered no deck. Nothing was changed.' };
+      if (docNow.current.cards !== asked.cards || docNow.current.theme !== asked.theme) return { error: 'The deck changed while the brand was applied. Nothing was changed; apply it again.' };
+      edit(op, { label: APPLY_BRAND });
+      return { line: appliedLine(r) };
+    } catch (e) {
+      reportError('pitch-editor:apply-brand', e);
+      return { error: e?.message || 'Apply brand could not run. Nothing was changed. Try again.' };
+    }
+  };
   const findReplace = (q) => {
     const op = { type: 'findReplace', ...q };
     const r = applyOp(docNow.current, op);
@@ -788,7 +807,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
         <DeriveSheet deckId={base.deck.id} version={base.deck.version ?? null} dirty={dirty} readOnly={readOnly} aiOn={aiOn} outOfTokens={outOfTokens}
           onProposed={onProposals} onClose={() => setSheet(null)} />
       ) : null}
-      {sheet === 'brand' ? <BrandKitSheet projectId={project?.id ?? null} kit={kit} readOnly={readOnly} onClose={() => setSheet(null)} /> : null}
+      {sheet === 'brand' ? <BrandKitSheet projectId={project?.id ?? null} kit={kit} readOnly={readOnly} onApply={base.deck?.id != null ? applyBrand : null} onClose={() => setSheet(null)} /> : null}
       {sheet === 'versions' ? (
         <VersionsSheet projectId={project?.id ?? null} versions={versions} readOnly={readOnly} dirty={dirty} phone={phone}
           compare={compare} onCompare={setCompare} onRestored={() => { setCompare(null); setSheet(null); onSaved?.(); }} onClose={() => { setCompare(null); setSheet(null); }} />

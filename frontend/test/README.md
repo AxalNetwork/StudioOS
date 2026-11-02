@@ -135,3 +135,4 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `route_error_recording_3593.test.mjs` | #3593: recording-safe chunk-error copy, SPA return links, deferred manual reload and unchanged idle recovery. |
 
 | `pitch_shell_3717.test.mjs` | #3717: pitch route/frame/crumb integration, shared gutter and responsive grids, with restored-old-behavior mutations. |
+| `pitch_brand_kit_d1562.test.mjs` | D1562 (#3809): the Brand kit sheet's pd7 fields and its draft, Apply brand as one op (a 12-card deck is one undo step, one Undo gives it back), the mounted editor's Apply, Undo and Save, a reader's sheet, and the one-click run taking the kit's pick first with its reason. |

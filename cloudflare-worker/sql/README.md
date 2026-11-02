@@ -14,6 +14,7 @@ and is not kept in sync.
 
 | `migrations/728_agent_engine.sql` | D1528 (#3847, E3 of #3742): the agent engine's six tables (runs, duties, handoffs, memory notes, custom roles, scope settings). All new tables, re-runnable; the runtime that uses them follows. |
 | `migrations/730_pitch_card_blobs.sql` | D1539 (#3789, deck v2 B13): `pitch_card_blobs(hash, json, created_at)`, each card's JSON once under the SHA-256 of its canonical JSON, and `pitch_decks.card_hashes`, a version's cards as an ordered hash list. Additive; nothing backfilled; `slides` is still written during the transition. |
+| `migrations/737_deck_brand_kits.sql` | D1562 (#3809, deck v2 D1): the deck brand kit over the landing page's — `deck_brand_kits` (one row per venture: an OFL font pair, the logo, the palette roles as JSON, the image style) and `deck_brand_kit_images` (the library, each a public https address with alt text, at most 3 flagged as references). Additive; number given on the issue. |
 | `migrations/760_interview_processing_failed_stage.sql` | D1456 (#4014): nullable, constrained failed processing step; existing migration ledger prevents replay. |
 
 ## Adding a change

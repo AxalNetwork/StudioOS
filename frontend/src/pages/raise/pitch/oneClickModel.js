@@ -16,10 +16,11 @@
  *                          reaches Present, share or export. A card that is
  *                          only partly empty keeps its "Not recorded" tile,
  *                          never a 0.
- *   the theme              the base version's theme when it has one; else the
- *                          brand kit's when the venture has one; else Neutral
- *                          light. The pick is part of the proposal: nothing is
- *                          written before Accept.
+ *   the theme              the brand kit's pick when the venture has a kit
+ *                          (D1562: Brand, its fonts, logo and image style,
+ *                          and the reason); else the base version's theme;
+ *                          else Neutral light. The pick is part of the
+ *                          proposal: nothing is written before Accept.
  *   the ready line         "Ready to present: 10 cards, 2 left out."
  *   the images plan        `GET /api/decks/:id/images/plan` on the saved
  *                          version: the cards an illustration helps, offered
@@ -162,16 +163,35 @@ export function readyLine(kept, left) {
 
 /**
  * The theme the proposal carries, decided before anything is saved:
- *   - the base version's theme, kept as it is (nothing to write);
+ *   - D1562 (#3809, dk-auto AUTO-2's brand-kit precedence): when the kit read
+ *     carries the Worker's pure pick (`kit.pick`, `services/decks/brandKit.ts`
+ *     `brandKitPick`), that first, without asking: Brand, the kit's font
+ *     pair, the logo in the corner and its image style, with the pick's
+ *     `reason` recorded. The base version's own settings (size, language,
+ *     Confidential) ride along; Change still offers every other theme;
+ *   - else the base version's theme, kept as it is (nothing to write);
  *   - else the venture's brand kit, "Brand · from your brand kit" (written on Accept);
  *   - else Neutral light, which a card with no theme draws already.
  * `kit` is the brand-kit read: `{ status, data }`. While it reads, null.
  */
 export function themePick(baseTheme, kit) {
+  const picked = kit?.status === 'ok' ? kit.data?.kit?.pick : null;
+  if (picked?.theme?.kind === 'brand') {
+    return { theme: kitTheme(picked.theme, baseTheme), from: 'kit', line: 'Theme: Brand · from your brand kit', reason: str(picked.reason) || null };
+  }
   if (baseTheme?.kind) return { theme: baseTheme, from: 'version', line: `Theme: ${THEME_LABELS[baseTheme.kind] || baseTheme.kind} · as on your current version` };
   if (!kit || kit.status === 'loading' || kit.status === 'idle') return null;
   if (kit.status === 'ok' && kit.data?.kit) return { theme: { kind: 'brand', background: null }, from: 'kit', line: 'Theme: Brand · from your brand kit' };
   return { theme: { kind: 'neutral_light', background: null }, from: kit.status === 'error' ? 'unread' : 'none', line: 'Theme: Neutral light' };
+}
+
+/** The settings a theme carries that are the deck's, not the kit's: kept when the kit's pick replaces the theme. */
+const DECK_SETTINGS = ['aspect', 'compliance_fls', 'confidential', 'lang', 'dir', 'voice'];
+/** D1562: the kit's picked theme over the base version's own settings. */
+function kitTheme(picked, base) {
+  const out = { ...picked };
+  for (const k of DECK_SETTINGS) if (base && Object.prototype.hasOwnProperty.call(base, k) && !Object.prototype.hasOwnProperty.call(out, k)) out[k] = base[k];
+  return out;
 }
 
 /** The theme kinds main renders. */
@@ -188,12 +208,24 @@ export function themeChoices(kit, baseTheme = null) {
   return THEME_CHOICES.filter((k) => k !== 'brand' || brand);
 }
 
-/** Whether Accept must write the theme after saving: only a pick that differs from what the saved version carries. */
+/** D1562: what the brand kit's pick adds to a theme beyond its kind (the font pair, the logo corner, the image style). */
+const KIT_PARTS = ['fonts', 'chrome', 'art_direction'];
+const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
+/**
+ * Whether Accept must write the theme after saving: only a pick that differs
+ * from what the saved version carries. D1562: a kit's pick is written whole
+ * (its fonts, logo corner and image style with it), and differs when any of
+ * those does, even on a version that is Brand already.
+ */
 export function themeToWrite(chosen, baseTheme) {
   if (!chosen?.kind) return null;
-  if ((baseTheme?.kind || null) === chosen.kind) return null;
+  const parts = KIT_PARTS.filter((k) => chosen[k] != null);
+  const kitDiffers = parts.some((k) => !same(chosen[k], baseTheme?.[k]));
+  if ((baseTheme?.kind || null) === chosen.kind && !kitDiffers) return null;
   // A version with no theme draws Neutral light, so choosing it writes nothing.
   if (!baseTheme?.kind && chosen.kind === 'neutral_light') return null;
+  if (parts.length) return { ...chosen, background: chosen.background ?? null };
   return { kind: chosen.kind, background: chosen.background ?? null };
 }
 

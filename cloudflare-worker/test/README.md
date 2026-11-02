@@ -7,6 +7,8 @@ canonical SQLite tables with Stripe stubbed.
 
 `deck_qa_d1559.test.ts` mounts `deck_qa.ts` and `cycle_raise.ts` over the real migrated schema (migration 736) and checks that no likely-question answer, founder's answer or kept note states a figure no binding carries, that real objections rank first, the founder-only gates, and the kept answers' write-back, staleness and refusals.
 
+`deck_brand_kit_d1562.test.ts` mounts `deck_brand_kit.ts` and `decks.ts` over the real migrated schema (migration 737) and checks the kit's write and refusals, who may read, write and apply, the pure pick and its reason, the issue's test (a 12-card deck restyled in one answer with zero contrast failures, no model, nothing written), `themeTokens` passing `themeProblems` for seeded random kits, the OFL-only font list, and the image style feeding the art direction.
+
 `program_usage_d1156.test.ts` exercises migration 601, count-only branch reports,
 newest-wins HQ storage, monthly source counts, partial failures, roles,
 throttling and the dated in-use read with synthetic SQLite records.

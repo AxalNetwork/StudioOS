@@ -56,6 +56,7 @@ import { revOf } from '../services/decks/ifMatch';
 import { approvalRefusal, pendingApprovers } from '../services/decks/deckApproval';
 import { newAssignments, notifyAssignments } from '../services/decks/cardStatus';
 import { peopleOf } from '../services/decks/deckPeople';
+import { KIT_CHOICES, readKitView } from '../services/decks/brandKit';
 
 /** D895 applies only to deck operations, not other project-content routes. */
 export async function projectOwned(c: any, user: any, projectId: number, opts: { write?: boolean; audit?: boolean; contactData?: boolean } = {}) {
@@ -1263,41 +1264,20 @@ decks.get('/model', async (c) => {
 // logos and voice. `kit: null` is a venture with no brand kit yet; a read that
 // fails is 503, never an empty kit. The inline logo SVG is not sent (the page
 // would have to inject it); its URL forms are, through the image guard.
+// D1562 (#3809): the deck kit of migration 737 is read over the page's, and the
+// view adds its roles, font pair, image style, references, library and the
+// pure pick (`services/decks/brandKit.ts`). Its write is `routes/deck_brand_kit.ts`.
 decks.get('/brand-kit', async (c) => {
   const user = await requireAuth(c);
   const pid = Number(c.req.query('project_id'));
   if (!Number.isSafeInteger(pid) || pid <= 0) return c.json({ error: 'project_id required' }, 400);
   try { await projectOwned(c, user, pid); } catch { return c.json({ error: 'forbidden' }, 403); }
-  let row: any;
   try {
-    row = await c.env.DB.prepare(
-      `SELECT name, theme_color, palette_bg, palette_ink, palette_secondary, palette_accent, font_pairing, voice_json,
-              logo_url, logo_dark_url, logo_svg, logo_dark_svg, updated_at
-         FROM landing_pages WHERE project_id = ? AND archived_at IS NULL ORDER BY id DESC LIMIT 1`,
-    ).bind(pid).first<any>();
+    return c.json({ project_id: pid, kit: await readKitView(c.env, pid, sanitizeImageUrl), choices: KIT_CHOICES });
   } catch (e) {
     console.warn('[decks] brand kit unreadable', (e as Error)?.message);
     return c.json({ error: 'Your brand kit could not be read.', code: 'unreadable' }, 503);
   }
-  if (!row) return c.json({ project_id: pid, kit: null });
-  const hex = (v: unknown) => (typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v.trim()) ? v.trim().toLowerCase() : null);
-  let voice: string[] = [];
-  try {
-    const parsed = JSON.parse(row.voice_json || '[]');
-    const list = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.tags) ? parsed.tags : [];
-    voice = list.filter((t: unknown) => typeof t === 'string' && t.trim()).map((t: string) => t.trim().slice(0, 40)).slice(0, 8);
-  } catch { voice = []; }
-  return c.json({
-    project_id: pid,
-    kit: {
-      name: typeof row.name === 'string' ? row.name.slice(0, 120) : null,
-      palette: { bg: hex(row.palette_bg), ink: hex(row.palette_ink), accent: hex(row.palette_accent) ?? hex(row.theme_color), secondary: hex(row.palette_secondary) },
-      fonts: typeof row.font_pairing === 'string' && row.font_pairing.trim() ? row.font_pairing.trim().slice(0, 120) : null,
-      voice,
-      logo: { light: sanitizeImageUrl(row.logo_url), dark: sanitizeImageUrl(row.logo_dark_url), inline: Boolean(row.logo_svg || row.logo_dark_svg) },
-      updated_at: row.updated_at ?? null,
-    },
-  });
 });
 
 // D898, PD8c — a video link, checked with its provider before it is placed.

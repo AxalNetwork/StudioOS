@@ -6,6 +6,7 @@
 // cloudflare-worker/test/route_registry_4105.test.ts fails while stale.
 import type { RegisteredModule } from '../util/routeRegistry';
 import { mount as admin_agentsMount } from './admin_agents';
+import { mount as deck_brand_kitMount } from './deck_brand_kit';
 import { mount as deck_card_statusMount } from './deck_card_status';
 import { mount as deck_proofMount } from './deck_proof';
 import { mount as deck_quotesMount } from './deck_quotes';
@@ -17,6 +18,7 @@ import { mount as votesMount } from './votes';
 
 export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'admin_agents', mount: admin_agentsMount },
+  { file: 'deck_brand_kit', mount: deck_brand_kitMount },
   { file: 'deck_card_status', mount: deck_card_statusMount },
   { file: 'deck_proof', mount: deck_proofMount },
   { file: 'deck_quotes', mount: deck_quotesMount },

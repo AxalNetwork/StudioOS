@@ -33,7 +33,9 @@
  * on a text block, `paras`: rich-text runs (bold, italic, underline, an
  * accent colour that passes contrast, an https link), with `text` kept as the
  * plain copy; and on the theme: `chrome` (page number, footer text, logo
- * corner, confidential), `voice`, `art_direction`, `lang` and `dir`.
+ * corner, confidential), `voice`, `art_direction`, `lang` and `dir`; D1562
+ * (#3809) adds `fonts`, the brand kit's `{ heading, body }` pair from the
+ * Google Fonts (OFL) list (`brandKitLists.ts`).
  * A card is at most 256 KB and 12 areas.
  *
  * D1579 (#3826, deck v2 E6) adds, on a card, its working state:
@@ -54,6 +56,7 @@
  */
 import { sanitizeBinding } from './sources';
 import { sanitizeArtDirection } from './artDirection';
+import { fontPairOf } from './brandKitLists';
 import { cellText, tableLines } from './tableCells';
 
 export { cellText, tableLines };
@@ -474,6 +477,9 @@ export function sanitizeTheme(v: any, url: UrlGuard): Record<string, unknown> & 
   // D1544 (#3784): a sentence (D1500) or the structured direction every image inherits.
   const art = sanitizeArtDirection(v.art_direction);
   if (art) out.art_direction = art;
+  // D1562 (#3809): the brand kit's font pair, both from the Google Fonts (OFL) list; kept only when set.
+  const fonts = fontPairOf(v.fonts);
+  if (fonts) out.fonts = fonts;
   if (typeof v.lang === 'string' && LANG.test(v.lang)) out.lang = v.lang;
   const dir = oneOf(v.dir, DIRS);
   if (dir) out.dir = dir;
