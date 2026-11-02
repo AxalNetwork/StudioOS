@@ -129,6 +129,7 @@ function bucket() {
     store,
     async put(k: string, v: Uint8Array) { store.set(k, v); },
     async get(k: string) { const v = store.get(k); return v ? { arrayBuffer: async () => v.buffer.slice(0) } : null; },
+    async head(k: string) { const v = store.get(k); return v ? { size: v.byteLength } : null; },
     async delete(k: string) { store.delete(k); },
   };
 }
@@ -326,9 +327,15 @@ test('4. kept audio counts against the venture\'s storage plan; held audio does 
   assert.equal(after!.measured_bytes - before!.measured_bytes, 64, 'held audio is not counted; kept audio is');
   await call(db, FILES, 'PUT', `/${DECK}/rehearsals/${uid}/keep-audio`, { keep: false });
   assert.equal((await storageUsedBytes(env, FOUNDER))!.measured_bytes, before!.measured_bytes, 'deleted audio counts nothing');
+  // A part 1 rehearsal (no size row) gets its row, with the stored object's size, when it is kept.
+  // Mutation checked: the keep route not writing that row → the kept audio is not counted.
+  const old = await call(db, FILES, 'POST', `/${DECK}/rehearsals`, recording());
+  db.prepare('DELETE FROM deck_rehearsal_extras WHERE rehearsal_id = (SELECT id FROM deck_rehearsals WHERE uid = ?)').run(old.body.rehearsal.uid);
+  assert.equal((await call(db, FILES, 'PUT', `/${DECK}/rehearsals/${old.body.rehearsal.uid}/keep-audio`, { keep: true })).status, 200);
+  assert.equal((await storageUsedBytes(env, FOUNDER))!.measured_bytes - before!.measured_bytes, 64);
   // A plan already over its allowance refuses to keep another.
   db.prepare("INSERT INTO deck_rehearsals (uid, deck_id, project_id, user_id, pitch_seconds, duration_ms, audio_r2_key, keep_audio) VALUES ('huge', ?, ?, ?, 120, 1000, 'k', 1)").run(DECK, PID, FOUNDER);
-  db.prepare("INSERT INTO deck_rehearsal_extras (rehearsal_id, audio_bytes) SELECT id, ? FROM deck_rehearsals WHERE uid = 'huge'").run(10 ** 15);
+  db.prepare("INSERT INTO deck_rehearsal_extras (rehearsal_id, project_id, audio_bytes) SELECT id, project_id, ? FROM deck_rehearsals WHERE uid = 'huge'").run(10 ** 15);
   const r2 = await call(db, FILES, 'POST', `/${DECK}/rehearsals`, recording());
   const full = await call(db, FILES, 'PUT', `/${DECK}/rehearsals/${r2.body.rehearsal.uid}/keep-audio`, { keep: true });
   assert.deepEqual([full.status, full.body?.error], [413, 'storage_full']);

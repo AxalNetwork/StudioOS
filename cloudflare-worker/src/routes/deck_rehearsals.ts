@@ -206,7 +206,7 @@ deckRehearsals.post('/:id{[0-9]+}/rehearsals', async (c) => {
     r.usage?.model ?? q.model, r.usageLogId ?? null, charged?.charged_microusd == null ? null : Number(charged.charged_microusd),
     key, mime, audioDeleteAfter(new Date())).run();
   // Part 2a: the recording's size, for the storage plan once it is kept.
-  await c.env.DB.prepare('INSERT INTO deck_rehearsal_extras (rehearsal_id, audio_bytes) SELECT id, ? FROM deck_rehearsals WHERE uid = ?')
+  await c.env.DB.prepare('INSERT INTO deck_rehearsal_extras (rehearsal_id, project_id, audio_bytes) SELECT id, project_id, ? FROM deck_rehearsals WHERE uid = ?')
     .bind(bytes.byteLength, uid).run();
   const row = await rowOf(c.env, deck.deckId, userId, uid);
   return c.json({ rehearsal: row ? whole(row) : null }, 201);
@@ -243,8 +243,16 @@ deckRehearsals.put('/:id{[0-9]+}/rehearsals/:uid/keep-audio', async (c) => {
   if (!row) return c.json({ error: 'not found' }, 404);
   if (body.keep) {
     if (!row.audio_r2_key) return refuse(c, 409, { code: 'audio_deleted', message: 'The audio has already been deleted. The transcript and the report stay.' });
-    // Part 2: kept audio counts against the venture's storage plan; 413 storage_full when it would not fit.
-    const room = row.keep_audio ? null : await assertStorageRoom(c.env, { projectId: deck.projectId }, Number(row.audio_bytes) || 0, user);
+    // Part 2a: kept audio counts against the venture's storage plan; 413 storage_full when it would not fit.
+    // A part 1 rehearsal gets its row here, with the stored object's size.
+    let size = row.audio_bytes == null ? null : Number(row.audio_bytes);
+    if (size == null) {
+      const head = await c.env.FILES?.head?.(row.audio_r2_key).catch(() => null);
+      size = head && Number.isSafeInteger(head.size) ? head.size : null;
+      await c.env.DB.prepare('INSERT INTO deck_rehearsal_extras (rehearsal_id, project_id, audio_bytes) VALUES (?, ?, ?) ON CONFLICT(rehearsal_id) DO UPDATE SET audio_bytes = COALESCE(deck_rehearsal_extras.audio_bytes, excluded.audio_bytes)')
+        .bind(row.id, deck.projectId, size).run();
+    }
+    const room = row.keep_audio ? null : await assertStorageRoom(c.env, { projectId: deck.projectId }, size ?? 0, user);
     await c.env.DB.prepare('UPDATE deck_rehearsals SET keep_audio = 1 WHERE id = ?').bind(row.id).run();
     if (room) await noteStorageLanded(c.env, room);
   } else {
@@ -315,12 +323,12 @@ deckRehearsals.post('/:id{[0-9]+}/rehearsals/:uid/coach', async (c) => {
   // The coaching is written once; the audio's hour now counts from it (U = A), unless it is kept or gone.
   await c.env.DB.batch([
     c.env.DB.prepare(
-      `INSERT INTO deck_rehearsal_extras (rehearsal_id, coach_json, coach_model, coach_usage_log_id, coach_charged_microusd, coached_at)
-       VALUES (?, ?, ?, ?, ?, datetime('now'))
+      `INSERT INTO deck_rehearsal_extras (rehearsal_id, project_id, coach_json, coach_model, coach_usage_log_id, coach_charged_microusd, coached_at)
+       VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
        ON CONFLICT(rehearsal_id) DO UPDATE SET coach_json = excluded.coach_json, coach_model = excluded.coach_model,
          coach_usage_log_id = excluded.coach_usage_log_id, coach_charged_microusd = excluded.coach_charged_microusd, coached_at = excluded.coached_at
        WHERE deck_rehearsal_extras.coach_json IS NULL`,
-    ).bind(row.id, JSON.stringify(coaching), r.usage?.model ?? q.model, r.usageLogId ?? null, charged?.charged_microusd == null ? null : Number(charged.charged_microusd)),
+    ).bind(row.id, deck.projectId, JSON.stringify(coaching), r.usage?.model ?? q.model, r.usageLogId ?? null, charged?.charged_microusd == null ? null : Number(charged.charged_microusd)),
     c.env.DB.prepare(
       `UPDATE deck_rehearsals SET audio_delete_after = ? WHERE id = ? AND audio_r2_key IS NOT NULL AND keep_audio = 0`,
     ).bind(audioDeleteAfter(new Date()), row.id),
