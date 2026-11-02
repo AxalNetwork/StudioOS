@@ -412,7 +412,7 @@ export default function GridStage({
         {one && !readOnly ? (
           <span className="flex min-w-0 flex-wrap items-center gap-2" data-testid="pitch-editor-htb">
             {askButton(1, 'pitch-editor-ask-area')}
-            {!readOnly && onDecor ? (
+            {onDecor ? (
               <button type="button" aria-pressed={panel} aria-expanded={panel} onClick={() => setPanel((p) => !p)}
                 className={`${CHIP} border-axal-hairline bg-white text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100`} data-testid="pitch-editor-graphics">
                 <Shapes size={13} aria-hidden="true" /> Graphics
@@ -613,7 +613,7 @@ export function DecorPanel({ library, count, snapped, onPick, onSearch, onClose 
             <div className="grid grid-cols-5 gap-1.5" data-testid="pitch-decor-grid">
               {list.map((x) => (
                 <button key={`${x.kind}:${x.ref}`} type="button" title={x.label} aria-label={x.label} disabled={full} onClick={() => onPick(x)}
-                  className="flex aspect-square items-center justify-center rounded-[8px] border border-axal-hairline p-1.5 hover:bg-axal-ground disabled:opacity-50 dark:border-gray-700"
+                  className="flex aspect-square items-center justify-center rounded-[8px] border border-axal-hairline p-1.5 hover:bg-axal-ground disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800"
                   data-testid={`pitch-decor-item-${x.kind}-${x.ref}`}>
                   <img alt="" src={decorSrc(x.svg, { ink: 'currentColor' }) || undefined} className="h-full w-full object-contain" />
                 </button>

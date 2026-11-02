@@ -94,7 +94,7 @@ test('decor is an image of the Worker\'s SVG in the card\'s tones; ids and libra
 test('the panel opens from the selection tools only, places on the selected area\'s cells, and the adapter is swapped', async () => {
   const src = codeOnly(readFileSync('frontend/src/pages/raise/pitch/GridStage.jsx', 'utf8'));
   // Graphics sits in the one-area selection tools beside Ask, never a toolbar or a right panel.
-  assert.match(src, /askButton\(1, 'pitch-editor-ask-area'\)\}\s*\{!readOnly && onDecor \?/);
+  assert.match(src, /askButton\(1, 'pitch-editor-ask-area'\)\}\s*\{onDecor \?/);
   assert.match(src, /onDecor\(\{ id: decorId\(card\), kind: item\.kind, ref: item\.ref, tone: 'ink', grid: \{ \.\.\.one\.grid \} \}\)/, 'on the selected area\'s cells: the 8 px baseline');
   assert.match(src, /\(card\?\.decor \|\| \[\]\)\.length >= DECOR_MAX\) return;/, 'the 17th is never placed');
   assert.match(codeOnly(readFileSync('frontend/src/pages/raise/pitch/PitchEditor.jsx', 'utf8')), /onDecor=\{\(item\) => setCard\(sel, \{ \.\.\.card, decor: \[\.\.\.\(card\.decor \|\| \[\]\), item\] \}\)\}/);
