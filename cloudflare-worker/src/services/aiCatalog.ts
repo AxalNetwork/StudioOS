@@ -75,6 +75,8 @@ export const TASK_LABELS: Record<TaskClass, string> = {
   mail_draft: 'Draft an email',
   // D1420 (#3864).
   studio_layout: 'Arrange your Studio',
+  // D1583 (#3830).
+  memo_write: 'Write a memo from a deck',
   document_convert: 'Read a document into text',
   // D764 (#2089) — the rail's kinds of work, in the canvas's words.
   rail_chat: 'Chat on a page',

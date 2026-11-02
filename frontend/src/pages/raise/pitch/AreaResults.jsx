@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { railProposalsApi } from '../../../lib/api/railProposals';
+import { DECK_REPORT_NOTE_MAX, DECK_REPORT_REASONS, deckReportsApi } from '../../../lib/api/deckReports';
 import { deckImagesApi } from '../../../lib/api/deckImages';
 import { reportError } from '../../../lib/log';
 import { ACCEPT, ACCEPT_ALL, CHARGED_LINE, DISCARD } from './deckV2Model';
@@ -15,6 +16,7 @@ const PILL = 'inline-flex items-center rounded-full border border-axal-lavender-
 /** What each kind was checked for before it reached the founder (the Worker refuses the rest). */
 const CHECKS = {
   text: 'Checked: no figure added to your words.',
+  notes: 'Speaker notes · checked: no figure that is not on the card.',
   block: 'Checked: every series is bound to its record; no value was written by a model.',
   image: 'Checked: no real person and no figures in the picture.',
   metric: 'The value is the record’s, with its source and grade.',
@@ -40,6 +42,11 @@ const CHECKS = {
  * A proposed figure carries its source and grade (`SourceChip`, from the
  * deck's sources `items`); a value, a grade or a source that is not recorded
  * says so, never a zero.
+ *
+ * D1540 (#3791): a result Eadwyn proposed (one with a rail proposal uid) can
+ * be reported, before or after it is decided: Report opens a reason and an
+ * optional short note in place, and Send records it for HQ. A report refunds
+ * nothing and changes nothing on the card.
  */
 export default function AreaResults({ results, card, cards = null, model, items = [], onPlace, onProposals, testId = 'pitch-area-results' }) {
   const [state, setState] = useState({});
@@ -137,6 +144,7 @@ export default function AreaResults({ results, card, cards = null, model, items 
             ) : null}
             {decided ? <span className={`text-[12.5px] font-bold ${INK}`} data-testid={`${id}-decided`}>{decided === 'accepted' ? 'Placed on the card. Save writes the version.' : 'Discarded. Nothing was placed.'}</span> : null}
             {error?.key === r.key ? <RefusalLine refusal={error} testId={`${id}-error`} /> : null}
+            {r.uid && (r.status === 'proposed' || decided) ? <ReportControl uid={r.uid} id={id} /> : null}
           </div>
         );
       })}
@@ -149,10 +157,10 @@ export default function AreaResults({ results, card, cards = null, model, items 
 }
 
 function Body({ result: r, id, items }) {
-  if (r.kind === 'text') {
+  if (r.kind === 'text' || r.kind === 'notes') {
     return (
       <span className="flex flex-col gap-1">
-        <del className="text-[12.5px] text-axal-muted line-through dark:text-gray-400" data-testid={`${id}-before`}>{r.before}</del>
+        {r.kind === 'notes' && !r.before ? null : <del className="text-[12.5px] text-axal-muted line-through dark:text-gray-400" data-testid={`${id}-before`}>{r.before}</del>}
         <span className={`rounded-[8px] bg-white/70 px-2 py-1.5 text-[13px] ${INK} dark:bg-violet-950/60`} data-testid={`${id}-after`}>{r.after}</span>
       </span>
     );
@@ -174,6 +182,51 @@ function Body({ result: r, id, items }) {
   return (
     <span className={`text-[13px] ${INK}`} data-testid={`${id}-body`}>
       {r.title ? `${r.title}: ` : ''}a {String(b.chart_type || 'chart').replace(/_/g, ' ')} of {series || 'your recorded figures'}.
+    </span>
+  );
+}
+
+/** D1540: the small Report control on one proposed result: a reason, an optional note, Send. */
+export function ReportControl({ uid, id }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState(null);
+  if (sent) return <span className={MUTED} data-testid={`${id}-reported`}>Reported. HQ will look at it; nothing on the card changed.</span>;
+  if (!open) {
+    return <button type="button" className={`${MUTED} self-start underline`} onClick={() => setOpen(true)} data-testid={`${id}-report`}>Report this result</button>;
+  }
+  const send = async () => {
+    setBusy(true); setError(null);
+    try {
+      await deckReportsApi.report(uid, { reason, note: note.trim() || undefined });
+      setSent(true);
+    } catch (e) {
+      // Already reported is still reported.
+      if (refusalOf(e)?.code === 'already_reported') setSent(true);
+      else { reportError('pitch-areas:report', e); setError(refusalOf(e)); }
+    } finally { setBusy(false); }
+  };
+  return (
+    <span className="flex flex-col gap-1.5" data-testid={`${id}-report-form`}>
+      <label className={MUTED}>
+        What is wrong?{' '}
+        <select value={reason} onChange={(e) => setReason(e.target.value)} disabled={busy} data-testid={`${id}-report-reason`}
+          className="rounded-[6px] border border-axal-hairline bg-white px-1.5 py-0.5 text-[12.5px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">
+          <option value="">Pick a reason</option>
+          {DECK_REPORT_REASONS.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
+        </select>
+      </label>
+      <input type="text" value={note} maxLength={DECK_REPORT_NOTE_MAX} onChange={(e) => setNote(e.target.value)} disabled={busy}
+        placeholder="A short note (optional)" aria-label="A short note (optional)" data-testid={`${id}-report-note`}
+        className="rounded-[6px] border border-axal-hairline bg-white px-2 py-1 text-[12.5px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" />
+      <span className="flex gap-2">
+        <button type="button" className={GHOST} disabled={busy || !reason} onClick={send} data-testid={`${id}-report-send`}>Send report</button>
+        <button type="button" className={GHOST} disabled={busy} onClick={() => setOpen(false)}>Cancel</button>
+      </span>
+      {error ? <RefusalLine refusal={error} testId={`${id}-report-error`} /> : null}
     </span>
   );
 }

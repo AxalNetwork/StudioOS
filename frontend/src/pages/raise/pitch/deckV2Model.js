@@ -66,7 +66,8 @@ export const ELEMENT_GROUPS = Object.freeze([
     { id: 'caption', label: 'Caption', ...R('POST /api/decks/:id/cards/:card/assist', 'deck:rewrite') },
     { id: 'quote_founder', label: 'Quote · founder’s own', free: true },
     { id: 'team_bios', label: 'Team bios', ...A('ventureElements', 3781) },
-    { id: 'speaker_notes', label: 'Speaker notes', ...A('media', 3788) },
+    // D1560 (#3807): the card's speaker notes, written from its own words by the transform route.
+    { id: 'speaker_notes', label: 'Speaker notes', ...R('POST /api/decks/:id/transform', 'deck:notes') },
   ] },
   { id: 'images', label: 'Images', items: [
     { id: 'photo', label: 'Generated photo', ...R('POST /api/decks/:id/images', 'deck:image') },
@@ -231,7 +232,8 @@ export const cardEditLine = (edit) => `Card ${edit.card + 1} · ${edit.what}`;
  */
 export function waitingCount({ deck, edits }) {
   if (deck?.status !== 'ready' || edits?.status !== 'ready') return null;
-  return (deck.proposal ? 1 : 0) + edits.items.length;
+  // D1583 (#3830): a teaser, one-pager or memo waiting counts like a card edit.
+  return (deck.proposal ? 1 : 0) + edits.items.length + (Array.isArray(edits.derived) ? edits.derived.length : 0);
 }
 
 /**
@@ -305,6 +307,8 @@ export const MORE_MENU = Object.freeze([
     { id: 'sources', label: 'Sources and coverage' },
     { id: 'versions', label: 'Versions…' },
     { id: 'save_named', label: 'Save as a named version…', write: true },
+    // D1583 (#3830): a teaser, a one-pager or a memo from the saved version, each a proposal Ask lists.
+    { id: 'derive', label: 'Teaser, one-pager or memo…', write: true },
     // Kept from v1's editor bar and Notes tab: the thread with the venture's admins (D905).
     { id: 'notes', label: 'Notes from your admins' },
   ] },
