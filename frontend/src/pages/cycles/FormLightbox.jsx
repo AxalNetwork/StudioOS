@@ -29,7 +29,7 @@ import { FillFormTrigger, FillMark, FillTrigger } from '../../ui/FillMark.jsx';
 import { fillsApi } from '../../lib/api/fills.js';
 import { railProposalsApi } from '../../lib/api/railProposals.js';
 import { reportError } from '../../lib/log.js';
-import { placeValues, placedProposals, savedId, stillPlaced } from '../../lib/fillForms.js';
+import { fillTable, placeValues, placedProposals, savedId, stillPlaced } from '../../lib/fillForms.js';
 import { activeSupportSession } from '../../lib/supportSession.js';
 import { SUPPORT_OFF } from '../../lib/fillScoped.js';
 
@@ -292,7 +292,7 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
   const afterSave = async (result, sent) => {
     if (!fill) return;
     const uids = placedProposals(placed);
-    const id = savedId(result) ?? fill.record ?? null;
+    const id = savedId(result, fillTable(fill.page, fill.form)) ?? fill.record ?? null;
     if (uids.length && id) {
       try { await fillsApi.record({ page: fill.page, form: fill.form, project: fill.project, record: id, proposals: uids }); }
       catch (error) { reportError('fill-form:record', error); }

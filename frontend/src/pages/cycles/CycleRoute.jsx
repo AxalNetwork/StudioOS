@@ -67,7 +67,7 @@ import { acceptSuggestions } from './validatePhone';
 import { interviewSessionsApi } from '../../lib/api/interviewSessions';
 import FormLightbox from './FormLightbox';
 import { FillModule } from './FillRowsPanel';
-import { fillRecordId, fillTarget, moduleFillTarget } from '../../lib/fillForms.js';
+import { fillRecordId, fillTable, fillTarget, moduleFillTarget } from '../../lib/fillForms.js';
 import { usePhoneWidth } from '../../ui/phone/usePhoneWidth';
 import { editFor, formFor, formsFor } from './forms';
 import { adaptCard, adaptModule, adaptOverview, fnOf, toFnMap } from './adapters';
@@ -896,7 +896,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   const fillFor = (entry, rowId = null) => {
     const t = !narrativeAdmin && projectId ? fillTarget(cycle, slug, entry?.key) : null;
     if (!t) return null;
-    const record = fillRecordId(rowId);
+    const record = fillRecordId(rowId, fillTable(t.page, t.form));
     return { ...t, project: projectId, aiOff: !fillsOn, ...(record ? { record } : {}),
       edited: rowId == null && fillRow && fillRow.form === entry.key ? fillRow : null };
   };
