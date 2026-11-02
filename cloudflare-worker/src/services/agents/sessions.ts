@@ -216,7 +216,7 @@ export async function checkSession(env: Env, a: AgentRow, s: Scope, b: SessionIn
   if (!place) return { ok: false, refusal: no(422, 'skill_not_in_role', 'This agent’s rule book has nowhere for that work to land.') };
   // The cap: what this session would spend this month must fit what the agent has left.
   const est = await sessionEstimate(env, a, place, sched.s, now, base?.uid ?? null);
-  if (est.month_cents != null && est.cap_left_cents != null && est.month_cents > est.cap_left_cents) {
+  if (est.cap_reached || (est.month_cents != null && est.cap_left_cents != null && est.month_cents > est.cap_left_cents)) {
     return { ok: false, refusal: no(422, 'over_cap', 'This would go over the agent’s monthly cap. Lower the repeat or raise the cap in Team › Agents.') };
   }
   return { ok: true, c: { skill, schedule: sched.s, target, instruction, place } };
@@ -241,9 +241,11 @@ export function runsLeftThisMonth(s: Schedule, now: Date): number {
 }
 
 export async function sessionEstimate(env: Env, a: AgentRow, place: { module: string; option: string }, s: Schedule, now: Date, exceptUid: string | null) {
-  const q = await agentQuote(env, { agent: a, module: place.module, option: place.option });
-  const per = q.ok && q.quote.available ? q.quote.value_microusd : null;
   const spent = await monthSpend(env, a.id);
+  // At or over the cap already: no quote is asked for (a quote at the cap pauses the agent, and an estimate changes nothing).
+  const capReached = spent.available && spent.value_microusd >= a.monthly_cap_microusd;
+  const q = capReached ? null : await agentQuote(env, { agent: a, module: place.module, option: place.option });
+  const per = q && q.ok && q.quote.available ? q.quote.value_microusd : null;
   // The agent's other live sessions this month count against the cap too.
   let others = 0;
   if (per != null) {
@@ -258,6 +260,7 @@ export async function sessionEstimate(env: Env, a: AgentRow, place: { module: st
     cap_used_cents: spent.available ? cents(spent.value_microusd) : null,
     cap_cents: cents(a.monthly_cap_microusd),
     cap_left_cents: spent.available ? cents(Math.max(0, a.monthly_cap_microusd - spent.value_microusd - others)) : null,
+    cap_reached: capReached,
     run_hold_cents: per != null ? cents(per) : null,
   };
 }
