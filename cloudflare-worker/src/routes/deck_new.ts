@@ -5,7 +5,10 @@
  *   GET  /api/decks/new/context?project_id=<id>
  *        → { project_id, audiences, lengths, cards, round, averages, fast_path }
  *   POST /api/decks/new/quote      { project_id, step: outline|build, audience, length, prompt?, outline?, exclude? }
- *        → { step, ai: true, hold_microusd, model } | { step, ai: false, reason, message }
+ *        → { step, ai: true, hold_microusd, model, quote_uid?, pricing_version? } | { step, ai: false, reason, message }
+ *        D1540 (#3791): an outline or build quote is pinned (`deck_run_quotes`);
+ *        `quote_uid` sent back with `/outline` or `/generate` settles that run
+ *        at no more than `hold_microusd`, whatever prices do meanwhile.
  *   POST /api/decks/outline        { project_id, audience, round_ref?, length, prompt?, start? }
  *        → { proposal, outline: { rows, proposed_by, reason? }, cost }
  *   POST /api/decks/generate       { project_id, proposal_id?, audience?, round_ref?, length?, prompt?, outline?, exclude? }
@@ -48,6 +51,15 @@
  * does everywhere (`refuseRun`); a model that could not answer leaves the
  * figures-only path, and says so.
  *
+ * FLAGS (D1509, #3760). `grid_generate` decides whether the one press can run
+ * at all: a quote or a build that says `one_click: true` is refused 404
+ * `not_switched_on` ("Not switched on yet.") while it is off, and
+ * `/new/context` carries `grid_generate` so the button says so first. The
+ * build's words are Body's element (`element:body`): switched off, they are
+ * cut from the plan before the quote (`ai: false`, `not_switched_on`) and the
+ * build runs on the records only, its cards carrying their titles, never an
+ * empty area. A switched-off model is out of every resolution (`MODELS_OFF`).
+ *
  * WHO. The deck routes' `projectOwned`: the venture's founders write, an admin
  * reads only (D895), and New deck is on the Raise + Grow plan as /generate was.
  */
@@ -57,12 +69,14 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { ensureTier } from '../middleware/requireTier';
 import { quoteRun, railOptionKey, run, type RunOptions } from '../services/aiRouter';
+import { pricingVersion } from '../services/ai/pricing';
+import { QUOTE_STALE, ceilingRefusal, dailyCeiling, pinQuote, returnQuote, takeQuote, type QuoteStep, type TakenQuote } from '../services/decks/runQuotes';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { parseJsonLoose } from '../services/decks/autofill';
 import { readSources, type SourceItem } from '../services/decks/sources';
 import { AUDIENCES } from '../services/decks/slideModel';
 import {
-  AUDIENCE_CARDS, BUILD_SYSTEM, CARD_CATALOGUE, FAST_PATH_AUDIENCE, LENGTHS, LENGTH_IDS, OUTLINE_SYSTEM, PROMPT_MAX,
+  AUDIENCE_CARDS, CARD_CATALOGUE, FAST_PATH_AUDIENCE, LENGTHS, LENGTH_IDS, PROMPT_MAX,
   buildCards, buildMessage, cardOf, cardProgress, excludedOf, figureRefusal, keptIndexes, outlineFromBody, outlineFromModel, outlineMessage,
   planOf, recordTexts, standardOutline, wordingFromModel, type Audience, type CardVisuals, type FigureRefusal, type Length, type OutlineRow, type Wording,
 } from '../services/decks/newDeck';
@@ -79,8 +93,11 @@ import {
 import { mercuryFor } from './deck_sources';
 import { inferBrief, type InferredBrief } from '../services/decks/inferBrief';
 import { freshnessFor, type Freshness } from '../services/decks/freshness';
-import { elementModelFor, runModelOf } from './deck_element_models';
+import { ElementOffError, elementModelFor, lockedOutRefusal, runPickOf } from './deck_element_models';
+import { lockedOut } from '../services/decks/elementModels';
+import { NOT_SWITCHED_ON, flagsFor, notSwitchedOn } from '../services/featureFlags';
 import type { Resolved } from '../services/decks/elementModels';
+import { promptFor } from '../services/decks/prompts';
 
 const deckNew = new Hono<{ Bindings: Env }>();
 
@@ -151,29 +168,55 @@ async function sourcesFor(c: any, user: User, project: any, projectId: number): 
  */
 export const BUILD_ELEMENT = 'body';
 
-/** The build's element model, or the 503 that stops the press when the picks cannot be read. */
-async function buildModelOf(c: any, user: User, projectId: number): Promise<Resolved | Response> {
-  try { return await elementModelFor(c.env, user, projectId, BUILD_ELEMENT); } catch {
+/**
+ * The build's element model, or the 503 that stops the press when the picks
+ * cannot be read. D1549 (#3796): HQ's lock wins, so a lock on a model the
+ * caller's plan cannot run stops the press with a 403 and runs nothing.
+ */
+async function buildModelOf(c: any, user: User, projectId: number): Promise<Resolved | Response | 'off'> {
+  let r: Resolved;
+  try { r = await elementModelFor(c.env, user, projectId, BUILD_ELEMENT); } catch (e) {
+    if (e instanceof ElementOffError) return 'off';
+
     console.warn('[deck_new] element model picks unreadable', { project_id: projectId });
     return refuse(c, 503, { code: 'picks_unreadable', message: 'Your model picks for this deck could not be read. Nothing was run.' });
   }
+  return lockedOut(r) ? lockedOutRefusal(c, r) : r;
 }
 
-const elementModelsView = (r: Resolved) => ({ [BUILD_ELEMENT]: { model: r.model, source: r.source, notice: r.notice } });
+const elementModelsView = (r: Resolved | 'off') => ({
+  [BUILD_ELEMENT]: r === 'off' ? { model: null, source: 'none', notice: NOT_SWITCHED_ON } : { model: r.model, source: r.source, notice: r.notice, ...(r.locked ? { locked: true } : {}) },
+});
+
+/** D1509: the words' sentence when Body is switched off, so the founder knows why the cards carry titles only. */
+export const WORDS_OFF = 'Eadwyn’s words are not switched on yet. Your records still fill the figures; the cards carry their titles. Nothing was charged.';
+
+/** D1509: a one-click press while `grid_generate` is off, refused before anything is read or run; null when it may go on. */
+async function oneClickRefusal(c: any, user: User, body: any): Promise<Response | null> {
+  if (body?.one_click !== true) return null;
+  const flags = await flagsFor(c.env, user);
+  return flags.gridGenerate ? null : refuse(c, 404, notSwitchedOn);
+}
+
+/** D1519 (#3771): the registry's prompt for a step, on the model the element resolved to (its family's file, else `default`). */
+const promptOf = (step: 'outline' | 'build', element?: Resolved | 'off') => promptFor(step, step === 'build' && element !== 'off' ? element?.model ?? null : null);
 
 /** The run each press makes, as one options object, so the quote and the run read the same input. */
 function runOptions(c: any, user: User, projectId: number, step: 'outline' | 'build', message: string, rows = 0, element?: Resolved): RunOptions {
-  const model = step === 'build' && element ? runModelOf(element) : undefined;
+  // D1549: a model HQ locked runs pinned: that model or nothing, never a fallback.
+  const pick = step === 'build' && element ? runPickOf(element) : {};
   return {
-    ...(model ? { model } : {}),
+    ...pick,
     task: 'rail_write',
     userId: Number(user.id) || 0,
     surface: AI_SURFACE.raisePitch,
     rail: railFor(c, { page: NEW_DECK_RAIL.page, option: step === 'outline' ? NEW_DECK_RAIL.outline : NEW_DECK_RAIL.build }, `project:${projectId}`),
-    systemPrompt: step === 'outline' ? OUTLINE_SYSTEM : BUILD_SYSTEM,
+    // D1519 (#3771): the prompt for the model's family, with the house voice (`services/decks/prompts`).
+    systemPrompt: promptOf(step, element).system,
     messages: [{ role: 'user', content: message }],
     temperature: 0.4,
-    maxTokens: step === 'outline' ? 900 : Math.min(2400, 200 + rows * 110),
+    // D1560 (#3807): the build run also writes each card's speaker notes, so its room (and its quote) holds them.
+    maxTokens: step === 'outline' ? 900 : Math.min(4000, 200 + rows * 190),
   };
 }
 
@@ -183,6 +226,39 @@ async function chargedOf(env: Env, usageLogId: number | null | undefined, userId
   const row = await env.DB.prepare('SELECT charged_microusd FROM ai_usage_logs WHERE id = ? AND user_id = ?').bind(usageLogId, userId).first<any>().catch(() => null);
   return row?.charged_microusd == null ? null : Number(row.charged_microusd);
 }
+
+/**
+ * D1540 (#3791): before a run, the price it is held to and the owner's daily
+ * ceiling. A `quote_uid` takes the founder's pinned quote for exactly this run
+ * (409 `quote_stale` when it cannot), and a run that would pass the ceiling is
+ * refused 429 `deck_ceiling_reached` before any hold, its quote given back.
+ */
+async function priceGate(c: any, user: User, projectId: number, step: QuoteStep | null, body: any, ask: RunOptions):
+  Promise<{ quote: TakenQuote | null } | { refused: Response }> {
+  let quote: TakenQuote | null = null;
+  if (step && body?.quote_uid != null) {
+    const taken = await takeQuote(c.env, body.quote_uid, { userId: Number(user.id) || 0, projectId, step, opts: ask });
+    if ('stale' in taken) return { refused: refuse(c, 409, { code: 'quote_stale', message: QUOTE_STALE }) };
+    quote = taken.quote;
+  }
+  if (dailyCeiling(c.env) != null) {
+    let next = quote?.hold_microusd ?? 0;
+    if (!quote) { const q = await quoteRun(c.env, { ...ask, surface: AI_SURFACE.raisePitch, rail: ask.rail }); next = q.ok ? q.hold_microusd : 0; }
+    const stop = await ceilingRefusal(c.env, NEW_DECK_RAIL.page, next);
+    if (stop) {
+      if (quote) await returnQuote(c.env, quote.uid);
+      return { refused: refuse(c, 429, stop) };
+    }
+  }
+  return { quote };
+}
+
+/** The run's pinned quote, as options for the run, if it has one. */
+const pinOf = (quote: TakenQuote | null): Pick<RunOptions, 'pinMicrousd'> => (quote ? { pinMicrousd: quote.hold_microusd } : {});
+
+/** What the answer says about the quote a run settled under. */
+const quoteView = (env: Env, quote: TakenQuote | null) =>
+  (quote ? { quote: { uid: quote.uid, quoted_microusd: quote.hold_microusd, pricing_version: quote.pricing_version, pricing_version_now: pricingVersion(env) } } : {});
 
 /** The member's own average charge for one option over their charged runs, or null when they have none. */
 async function averageOf(env: Env, userId: number, option: string): Promise<{ runs: number; average_microusd: number } | null> {
@@ -221,6 +297,7 @@ deckNew.get('/new/context', async (c) => {
   if ('refused' in got) return got.refused;
   const userId = Number(user.id) || 0;
   const round = await activeRound(c.env, projectId);
+  const flags = await flagsFor(c.env, user);
   let inferred: InferredBrief | null = null;
   try {
     const p = await c.env.DB.prepare('SELECT stage FROM projects WHERE id = ?').bind(projectId).first<{ stage: string | null }>();
@@ -243,6 +320,8 @@ deckNew.get('/new/context', async (c) => {
     // D1599: the fast path is the inferred brief; FAST_PATH_AUDIENCE only when nothing could be inferred.
     fast_path: inferred ? { audience: inferred.audience, length: inferred.length } : { audience: FAST_PATH_AUDIENCE, length: 'standard' },
     prompt_max: PROMPT_MAX,
+    // D1509: whether the one press can run for this member (`grid_generate`).
+    grid_generate: flags.gridGenerate,
     // A read that fails leaves its key out: never a guessed brief, never an empty list that reads as "all fresh".
     ...(inferred ? { inferred } : {}),
     ...(freshness ? { freshness } : {}),
@@ -269,6 +348,8 @@ deckNew.post('/new/quote', async (c) => {
   if (!projectId) return c.json({ error: 'project_id required' }, 400);
   const step = body?.step === 'outline' ? 'outline' : body?.step === 'build' ? 'build' : body?.step === 'card' ? 'card' : null;
   if (!step) return c.json({ error: 'step must be outline, build or card' }, 400);
+  const oneClick = await oneClickRefusal(c, user, body);
+  if (oneClick) return oneClick;
   const got = await venture(c, user, projectId, true);
   if ('refused' in got) return got.refused;
   const inputs = await inputsOf(c.env, projectId, body);
@@ -277,6 +358,7 @@ deckNew.post('/new/quote', async (c) => {
   if (refused) return refuseFigure(c, refused);
   const items = await sourcesFor(c, user, got.project, projectId);
   let opts: RunOptions;
+  let element: Resolved | null = null;
   if (step === 'outline') {
     opts = runOptions(c, user, projectId, 'outline', outlineMessage({ ...inputs, items }));
   } else {
@@ -287,13 +369,20 @@ deckNew.post('/new/quote', async (c) => {
     // D897 §9: a card's regeneration is one row's build run, so its price is that run's.
     const rows = step === 'card' ? picked.rows.slice(Number.isInteger(body?.index) ? body.index : 0, (Number.isInteger(body?.index) ? body.index : 0) + 1) : picked.rows;
     if (!rows.length) return c.json({ error: 'index must be a card position in the outline' }, 400);
-    const element = await buildModelOf(c, user, projectId);
-    if (element instanceof Response) return element;
+    const resolved = await buildModelOf(c, user, projectId);
+    if (resolved instanceof Response) return resolved;
+    if (resolved === 'off') return c.json({ step, ai: false, reason: 'not_switched_on', message: NOT_SWITCHED_ON });
+    element = resolved;
     // D1517: the quote reads the same message the run sends, budgets included.
     opts = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows, items, ventureName: await ventureName(c.env, projectId), exclude: new Set(excluded), visuals: await visualsFor(c.env, projectId) }), rows.length, element);
   }
   const q = await quoteRun(c.env, opts);
-  if (q.ok) return c.json({ step, ai: true, hold_microusd: q.hold_microusd, model: q.model });
+  if (q.ok) {
+    // D1540: the outline's and the whole deck's quotes are pinned; a card's is shown only.
+    const pin = step === 'card' ? null
+      : await pinQuote(c.env, { userId: Number(user.id) || 0, projectId, step, holdMicrousd: q.hold_microusd, model: q.model, opts });
+    return c.json({ step, ai: true, hold_microusd: q.hold_microusd, model: q.model, ...(pin ? { quote_uid: pin.uid, pricing_version: pin.pricing_version } : {}), ...(element ? { element_models: elementModelsView(element) } : {}) });
+  }
   return c.json({ step, ai: false, reason: q.refusal, message: q.error });
 });
 
@@ -372,8 +461,11 @@ deckNew.post('/outline', async (c) => {
   const items = await sourcesFor(c, user, got.project, projectId);
   const userId = Number(user.id) || 0;
   const ask = runOptions(c, user, projectId, 'outline', outlineMessage({ ...inputs, items }));
+  const gate = await priceGate(c, user, projectId, 'outline', body, ask);
+  if ('refused' in gate) return gate.refused;
   // D552 and D765: the page and the rail context are named at the call, as every run() names them.
-  const res = await run(c.env, { ...ask, surface: AI_SURFACE.raisePitch, rail: ask.rail });
+  const res = await run(c.env, { ...ask, surface: AI_SURFACE.raisePitch, rail: ask.rail, ...pinOf(gate.quote) });
+  if (!res.ok && gate.quote) await returnQuote(c.env, gate.quote.uid);
   let rows: OutlineRow[] | null = null;
   let reason: string | null = null;
   if (res.ok) {
@@ -414,9 +506,9 @@ deckNew.post('/outline', async (c) => {
   return c.json({
     proposal: rowToProposal(written),
     proposal_hash: await proposalHash(written),
-    outline: { rows, proposed_by: proposedBy, ...(reason ? { reason } : {}) },
+    outline: { rows, proposed_by: proposedBy, prompt_version: promptOf('outline').prompt_version, ...(reason ? { reason } : {}) },
     plan: planOf(rows, items),
-    cost: { charged_microusd: res.ok ? await chargedOf(c.env, res.usageLogId, userId) : 0, usage_log_id: res.usageLogId ?? null },
+    cost: { charged_microusd: res.ok ? await chargedOf(c.env, res.usageLogId, userId) : 0, usage_log_id: res.usageLogId ?? null, ...quoteView(c.env, gate.quote) },
   }, 201);
 });
 
@@ -427,6 +519,8 @@ deckNew.post('/generate', async (c) => {
   const body = await c.req.json().catch(() => ({} as any));
   const projectId = projectIdOf(body?.project_id);
   if (!projectId) return c.json({ error: 'project_id required' }, 400);
+  const oneClick = await oneClickRefusal(c, user, body);
+  if (oneClick) return oneClick;
   const got = await venture(c, user, projectId, true);
   if ('refused' in got) return got.refused;
   await ensureSchema(c.env);
@@ -462,13 +556,17 @@ deckNew.post('/generate', async (c) => {
   const element = await buildModelOf(c, user, projectId);
   if (element instanceof Response) return element;
   const visuals = await visualsFor(c.env, projectId);
-  const ask = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows, items, ventureName: name, exclude, visuals }), rows.length, element);
-  const res = await run(c.env, { ...ask, surface: AI_SURFACE.raisePitch, rail: ask.rail });
+  const ask = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows, items, ventureName: name, exclude, visuals }), rows.length, element === 'off' ? undefined : element);
+  const gate = element === 'off' ? { quote: null } : await priceGate(c, user, projectId, 'build', body, ask);
+  if ('refused' in gate) return gate.refused;
+  // D1509: no price gate, run or hold while Body is switched off.
+  const res = element === 'off' ? null : await run(c.env, { ...ask, surface: AI_SURFACE.raisePitch, rail: ask.rail, ...pinOf(gate.quote) });
+  if (res && !res.ok && gate.quote) await returnQuote(c.env, gate.quote.uid);
   let wording: Wording[] = rows.map(() => ({ headline: null, body: null }));
   let dropped = 0;
   let by: 'Eadwyn' | 'none' = 'none';
   let reason: string | null = null;
-  if (res.ok) {
+  if (res?.ok) {
     const w = wordingFromModel(parseJsonLoose<any>(res.output), rows.length, recordTexts(items));
     // D1546: the guarantee-language block, before the words are proposed; each sentence dropped counts.
     const g = blockGuarantees(w.byIndex);
@@ -476,6 +574,8 @@ deckNew.post('/generate', async (c) => {
     dropped = w.dropped + g.dropped;
     by = wording.some((x) => x.headline || x.body) ? 'Eadwyn' : 'none';
     if (by === 'none') reason = 'Eadwyn’s words could not be read. The figures are from your records; the cards carry their titles.';
+  } else if (!res) {
+    reason = WORDS_OFF;
   } else if (res.refusal === 'assist_off') {
     reason = 'AI assistance is off on this page. Your records still fill the figures; the cards carry their titles. Nothing was charged.';
   } else {
@@ -509,9 +609,9 @@ deckNew.post('/generate', async (c) => {
     proposal_hash: await proposalHash(written),
     plan: planOf(rows, items, exclude),
     progress: cardProgress(rows, items, wording, exclude),
-    wording: { by, dropped, ...(reason ? { reason } : {}) },
+    wording: { by, dropped, prompt_version: promptOf('build', element).prompt_version, ...(reason ? { reason } : {}) },
     element_models: elementModelsView(element),
-    cost: { charged_microusd: res.ok ? await chargedOf(c.env, res.usageLogId, userId) : 0, usage_log_id: res.usageLogId ?? null },
+    cost: { charged_microusd: res?.ok ? await chargedOf(c.env, res.usageLogId, userId) : 0, usage_log_id: res?.usageLogId ?? null, ...quoteView(c.env, gate.quote) },
   }, 201);
 });
 
@@ -552,17 +652,23 @@ deckNew.post('/proposals/:id/regenerate-card', async (c) => {
   const element = await buildModelOf(c, user, projectId);
   if (element instanceof Response) return element;
   const visuals = await visualsFor(c.env, projectId);
-  const ask = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows: [rowOf], items, ventureName: name, exclude, visuals }), 1, element);
-  const res = await run(c.env, { ...ask, surface: AI_SURFACE.raisePitch, rail: ask.rail });
+  const ask = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows: [rowOf], items, ventureName: name, exclude, visuals }), 1, element === 'off' ? undefined : element);
+  // D1540: a card's run is under the daily ceiling; its quote is shown, not pinned.
+  const gate = element === 'off' ? { quote: null } : await priceGate(c, user, projectId, null, body, ask);
+  if ('refused' in gate) return gate.refused;
+  // D1509: no price gate, run or hold while Body is switched off.
+  const res = element === 'off' ? null : await run(c.env, { ...ask, surface: AI_SURFACE.raisePitch, rail: ask.rail });
   let words: Wording = { headline: null, body: null };
   let reason: string | null = null;
   let dropped = 0;
-  if (res.ok) {
+  if (res?.ok) {
     const w = wordingFromModel(parseJsonLoose<any>(res.output), 1, recordTexts(items));
     const g = blockGuarantees(w.byIndex[0]);
     words = g.value;
     dropped = w.dropped + g.dropped;
     if (!words.headline && !words.body) reason = 'Eadwyn’s words could not be read. The card keeps its figures and its title.';
+  } else if (!res) {
+    reason = WORDS_OFF;
   } else if (res.refusal === 'assist_off') {
     reason = 'AI assistance is off on this page, so the card was rebuilt from your records with its title. Nothing was charged.';
   } else {
@@ -579,8 +685,8 @@ deckNew.post('/proposals/:id/regenerate-card', async (c) => {
   return c.json({
     proposal: rowToProposal(written), proposal_hash: await proposalHash(written),
     card: { index, layout: card.layout },
-    wording: { by: words.headline || words.body ? 'Eadwyn' : 'none', dropped, ...(reason ? { reason } : {}) },
-    cost: { charged_microusd: res.ok ? await chargedOf(c.env, res.usageLogId, userId) : 0, usage_log_id: res.usageLogId ?? null },
+    wording: { by: words.headline || words.body ? 'Eadwyn' : 'none', dropped, prompt_version: promptOf('build', element).prompt_version, ...(reason ? { reason } : {}) },
+    cost: { charged_microusd: res?.ok ? await chargedOf(c.env, res.usageLogId, userId) : 0, usage_log_id: res?.usageLogId ?? null },
   });
 });
 

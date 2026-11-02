@@ -5,6 +5,8 @@ branch refusal even with an elevation row, stale/non-TOTP sessions, the
 production cool-off prefix, and successful billing-audited writes over
 canonical SQLite tables with Stripe stubbed.
 
+`deck_qa_d1559.test.ts` mounts `deck_qa.ts` and `cycle_raise.ts` over the real migrated schema (migration 736) and checks that no likely-question answer, founder's answer or kept note states a figure no binding carries, that real objections rank first, the founder-only gates, and the kept answers' write-back, staleness and refusals.
+
 `program_usage_d1156.test.ts` exercises migration 601, count-only branch reports,
 newest-wins HQ storage, monthly source counts, partial failures, roles,
 throttling and the dated in-use read with synthetic SQLite records.

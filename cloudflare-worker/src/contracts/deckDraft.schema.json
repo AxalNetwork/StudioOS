@@ -1,0 +1,29 @@
+{
+  "$id": "deckDraft",
+  "title": "GET /api/decks/:id/draft (D1501, #3751)",
+  "description": "The reply the deck v2 adapter's `draft` method passes through: the version, its rev, when its working copy last changed (null with no cards) and each card's copy (`routes/deck_draft.ts`). D1511 (#3762).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["deck_id", "version", "rev", "updated_at", "cards"],
+  "properties": {
+    "deck_id": { "type": "integer", "minimum": 1 },
+    "version": { "type": "integer", "minimum": 1 },
+    "rev": { "type": "integer", "minimum": 1 },
+    "updated_at": {},
+    "cards": { "type": "array", "maxItems": 60, "items": { "$ref": "#/$defs/draftCard" } }
+  },
+  "$defs": {
+    "draftCard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["uid", "ord", "rev", "updated_at", "card"],
+      "properties": {
+        "uid": { "type": "string" },
+        "ord": { "type": "integer", "minimum": 0, "maximum": 59 },
+        "rev": { "type": "integer", "minimum": 1 },
+        "updated_at": { "type": "string" },
+        "card": { "type": "object", "required": ["uid"], "properties": { "uid": { "type": "string" } } }
+      }
+    }
+  }
+}

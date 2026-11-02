@@ -139,5 +139,5 @@ test('the rail: each source\'s dot takes the member\'s colour, and links to the 
   } finally { await v.close(); }
   const app = read('frontend/src/App.jsx');
   assert.match(app, /<Route path="\/calendar\/sources" element=\{guard\(\['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'\], <CalendarPage \/>\)\} \/>/, 'the same guard as /calendar/connected');
-  assert.match(read('frontend/src/lib/api.js'), /export \* from '\.\/api\/calendarSources\.js';/);
+  assert.match(read('frontend/src/lib/apiModules.generated.js'), /export \* from '\.\/api\/calendarSources\.js';/);
 });

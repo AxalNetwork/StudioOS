@@ -84,6 +84,8 @@ export function useLightboxPage() {
 
 export default function Lightbox({
   label, onClose, onEscape, children, eyebrow, title, sub, footer, initialFocus, returnFocusTo, width = 560, size = 'fit', testId = 'lightbox', focusKey, pageBelow, bar: barProp, pageClass = '', phone: phoneForm,
+  // D1443 part 4 (#3992): selectors of what stays live behind the dialog (the AIRail and the Ask panel beside an open form).
+  keep = null,
 }) {
   const id = useId();
   const dialog = useRef(null);
@@ -104,7 +106,8 @@ export default function Lightbox({
     if (!el || typeof document === 'undefined' || typeof el.querySelector !== 'function') return undefined; // no DOM to manage (a server render, a stub)
     const opener = returnFocusTo?.current || document.activeElement;
     const release = lockScroll(document.body);
-    const restore = inertOutside(el, document.body);
+    const kept = Array.isArray(keep) && typeof document.querySelectorAll === 'function' ? keep.flatMap((sel) => Array.from(document.querySelectorAll(sel))) : [];
+    const restore = inertOutside(el, document.body, kept);
     const pop = pushDialog(id);
     const first = (initialFocus?.current) || el.querySelector(FOCUSABLE) || el;
     first.focus?.();
@@ -119,7 +122,7 @@ export default function Lightbox({
       pop(); restore(); release();
       if (opener && opener.isConnected !== false) opener.focus?.();
     };
-  }, [id, initialFocus, returnFocusTo, page]);
+  }, [id, initialFocus, returnFocusTo, page, keep]);
 
   // D686 §5.4 (#1597): the frame's content can swap (Build's list ⇄ a tool) under
   // the same dialog. A swap that removed the focused control leaves focus on

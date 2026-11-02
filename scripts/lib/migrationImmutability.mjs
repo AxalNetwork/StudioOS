@@ -160,6 +160,13 @@ const NO_SHA = /^0{40}$/;
  *   · a push to main (GITHUB_EVENT_NAME=push): the commit main pointed at
  *     before this push, MIGRATION_GATE_BEFORE. Returns `{ ok, mode: 'push',
  *     sha, remoteRef: sha }`.
+ *   · a merge queue entry (GITHUB_EVENT_NAME=merge_group, #4107): the main
+ *     commit the queue built this entry on, `merge_group.base_sha`, handed in
+ *     as MIGRATION_GATE_BEFORE. Returns `{ ok, mode: 'queue', sha, remoteRef:
+ *     sha }`. The entry's branch (`gh-readonly-queue/main/…`) is main plus the
+ *     queued PRs, so `base_sha...HEAD` is exactly what the queue would merge;
+ *     `origin/main...HEAD` would be the same today but goes wrong the moment
+ *     main moves under a queued group.
  *
  * WHY PUSHES ARE CHECKED AT ALL. Six of the eight edits D269 records arrived
  * in one commit pushed straight to main (1563f0aa8), not through a pull
@@ -174,15 +181,18 @@ const NO_SHA = /^0{40}$/;
  */
 export function resolveBase(env) {
   const e = env || {};
-  if (e.GITHUB_EVENT_NAME === 'push') {
+  if (e.GITHUB_EVENT_NAME === 'push' || e.GITHUB_EVENT_NAME === 'merge_group') {
+    const queue = e.GITHUB_EVENT_NAME === 'merge_group';
     const before = typeof e.MIGRATION_GATE_BEFORE === 'string' ? e.MIGRATION_GATE_BEFORE.trim().toLowerCase() : '';
     if (!SHA.test(before) || NO_SHA.test(before)) {
       return {
         ok: false,
-        reason: `a push needs MIGRATION_GATE_BEFORE, the commit main pointed at before it, and '${before}' is not one, so no base can be resolved`,
+        reason: queue
+          ? `a merge queue entry needs MIGRATION_GATE_BEFORE, the main commit the queue built it on (merge_group.base_sha), and '${before}' is not one, so no base can be resolved`
+          : `a push needs MIGRATION_GATE_BEFORE, the commit main pointed at before it, and '${before}' is not one, so no base can be resolved`,
       };
     }
-    return { ok: true, mode: 'push', sha: before, remoteRef: before };
+    return { ok: true, mode: queue ? 'queue' : 'push', sha: before, remoteRef: before };
   }
   const raw = typeof e.GITHUB_BASE_REF === 'string' ? e.GITHUB_BASE_REF.trim() : '';
   const branch = raw || 'main';

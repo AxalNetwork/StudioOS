@@ -1,0 +1,1 @@
+| Co-founder Agreement | founder | `/spinout-lab/cofounder-agreement` | `/spinout-lab/cofounder-agreement` | `legal.ts`, `cofounder.ts`, `captable.ts`, `projects.ts` | OUT OF SCOPE | Lab tool; clause builder prefilled from Cap Table / Incorporate / Co-founder Match. |

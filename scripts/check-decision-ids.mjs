@@ -58,6 +58,16 @@ const FILE = 'documentation/architecture/DECISIONS.md';
 const DIR = 'documentation/architecture/decisions';
 /** The last number `DECISIONS.md` holds; D526 onwards are files in `DIR` (D526). */
 export const LAST_IN_DECISIONS_MD = 525;
+/**
+ * D4106 (#4106): from D4000 up a decision's number IS its issue's number (the
+ * decision for issue #4102 is D4102), so two parallel PRs can never pick the
+ * same one and nothing needs reserving. Its heading cites that issue,
+ * `## D4106 — <title> (#4106)`, which is what this check reads: the network is
+ * not consulted, so the citation is the proof the number is an issue's. Below
+ * D4000 the numbers issues handed out before this rule stay as they are; the
+ * range from the highest of them to D3999 is a gap no one fills.
+ */
+export const ISSUE_NUMBERED_FROM = 4000;
 
 /**
  * Fenced code blocks are stripped first.
@@ -147,7 +157,7 @@ export function decisionFileProblems(files) {
     if (n <= LAST_IN_DECISIONS_MD) {
       problems.push(
         `${name} is numbered D${n}, but D1-D${LAST_IN_DECISIONS_MD} live in DECISIONS.md.`
-        + ` A new decision takes a number above D${LAST_IN_DECISIONS_MD}, from the issue.`,
+        + ` A new decision is numbered by its issue: D<issue number> (D4106).`,
       );
     }
     const heads = decisionIds(md);
@@ -166,6 +176,16 @@ export function decisionFileProblems(files) {
     }
     if (heads.length > 1) {
       problems.push(`${name} holds ${heads.length} decision headings; one file holds one decision.`);
+    }
+    if (n >= ISSUE_NUMBERED_FROM) {
+      const first = md.split(/\r?\n/, 1)[0];
+      const cited = [...first.matchAll(/#(\d+)\b/g)].map((m) => Number(m[1]));
+      if (!cited.includes(n)) {
+        problems.push(
+          `${name}: from D${ISSUE_NUMBERED_FROM} up a decision is numbered by its issue, so its heading cites #${n}`
+          + ` (\`## D${n} — <title> (#${n})\`). ${cited.length ? `It cites #${cited.join(', #')}.` : 'It cites no issue.'} (D4106)`,
+        );
+      }
     }
   }
   return problems;

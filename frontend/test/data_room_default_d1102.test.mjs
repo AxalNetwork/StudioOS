@@ -50,29 +50,30 @@ test('the admin summary renders counts without owner controls, and an unreadable
   ]);
 });
 
-test('D1101 Files, Access and Activity tabs render an admin aggregate before any detail derivation',async()=>{
+// D1464 (#4021) supersedes D1101's admin aggregate on the tabs: an admin's summary answer
+// now draws the per-open reason gate (`DataRoomSupport.jsx`), still before any detail derivation
+// and still with nothing but GETs until a reason is given. reason_gate_per_open_d1464 mounts the rest.
+test('D1101, D1464: Files, Access and Activity draw the reason gate for an admin before any detail derivation',async()=>{
   const path='pages/raise/dataroom/DataRoomTool.jsx';
   const source=readFileSync('frontend/src/'+path,'utf8');
   await mutationCheck(source,path,async({DataRoomTabPage})=>{
     for(const tab of ['files','access','activity'])for(const phone of [false,true]){
-      const previous=globalThis.fetch;let failed=true;let view;const seen=[];
+      const previous=globalThis.fetch;let view;const seen=[];
       globalThis.fetch=async(url,init={})=>{
         seen.push(init.method||'GET');
         const projects=String(url).includes('/api/projects');
         const body=projects?[{id:3,uid:'synthetic-room'}]:{mode:'summary',read_only:true,project:{uid:'synthetic-room'},
-          files:failed?{available:false}:{available:true,total:2},folders:{available:true,total:1},coverage:{available:true,covered_items:1,total_items:7},grants:{available:true,total:3}};
+          files:{available:true,total:2},folders:{available:true,total:1},coverage:{available:true,covered_items:1,total_items:7},grants:{available:true,total:3}};
         return new Response(JSON.stringify(body),{headers:{'Content-Type':'application/json'}});
       };
       try{
         await assert.doesNotReject(async()=>{view=await mountForm(h(DataRoomTabPage,{tab,phone,projectId:3,search:'?project_id=3'}),{phone});await view.flush();});
-        assert.ok(view.by('data-room-admin-summary'));assert.match(view.text(),/FilesUnreadable/);
-        assert.match(view.text(),/Checklist coverage1 of 7/);assert.match(view.text(),/Grants3/);
+        assert.ok(view.by('dataroom-support-page'));assert.match(view.text(),/Why are you opening this data room\?/);
         assert.doesNotMatch(view.text(),/Upload files|Share or revoke|Nothing in the log yet|not shared with anyone|Nothing in the room/);
-        failed=false;await view.click('Try again');await view.flush();assert.match(view.text(),/Files2/);
         assert.ok(seen.every(method=>method==='GET'));
       }finally{if(view)await view.unmount();globalThis.fetch=previous;}
     }
   },[
-    ["else if (read.status === 'ready' && read.room?.mode === 'summary') body = <AdminRoomSummary room={read.room} reload={retry} />;",''],
+    ["else if (read.status === 'ready' && read.room?.mode === 'summary') body = <DataRoomSupport key={read.uid} projectUid={read.uid} venture={venture} viewer={viewer} onOpen={onSupportRead} />;",''],
   ]);
 });

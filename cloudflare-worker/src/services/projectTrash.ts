@@ -132,6 +132,10 @@ async function hardDeleteWithSchema(env: Env, projectId: number, discovered?: Cl
   }
   for (const [table, query] of [
     ['deck_notes', 'DELETE FROM deck_notes WHERE project_id = ?'],
+    // D1570 (#3817): comments, who they mention, and the deck's approvers.
+    ['deck_comment_mentions', 'DELETE FROM deck_comment_mentions WHERE comment_id IN (SELECT id FROM deck_comments WHERE project_id = ?)'],
+    ['deck_comments', 'DELETE FROM deck_comments WHERE project_id = ?'],
+    ['deck_approvers', 'DELETE FROM deck_approvers WHERE project_id = ?'],
     ['deck_images', 'DELETE FROM deck_images WHERE project_id = ?'],
     ['pitch_deck_proposals', 'DELETE FROM pitch_deck_proposals WHERE project_id = ?'],
     ['pitch_decks', 'DELETE FROM pitch_decks WHERE project_id = ?'],

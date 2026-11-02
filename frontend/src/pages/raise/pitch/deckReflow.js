@@ -32,6 +32,8 @@ export const TYPE_SCALE = Object.freeze({
   kicker: { size: 24, leading: 1.3 },
 });
 export const GLYPH_EM = 0.52;
+/** D1571 (#3818): each script's glyph width (`designSystem.SCRIPT_EM`); a test holds the two equal. */
+export const SCRIPT_EM = Object.freeze({ latin: GLYPH_EM, arabic: 0.48, hebrew: 0.5, cjk: 1.0 });
 /** D1517: every line sits on the 8 px baseline (`designSystem.BASELINE`, `lineHeight`). */
 export const BASELINE = 8;
 export const lineHeight = (size, leading) => Math.ceil((size * leading) / BASELINE) * BASELINE;
@@ -48,11 +50,11 @@ export function typeRoleOf(style, layout = null) {
 }
 
 /** The characters a range holds at a type role and aspect. */
-export function textCapacity(g, role, aspect = '16:9') {
+export function textCapacity(g, role, aspect = '16:9', script = 'latin') {
   const { w, h } = boxOf(g, aspectOf(aspect));
   const t = TYPE_SCALE[role];
   const lines = Math.max(1, Math.floor(h / lineHeight(t.size, t.leading)));
-  const perLine = Math.max(1, Math.floor(w / (t.size * GLYPH_EM)));
+  const perLine = Math.max(1, Math.floor(w / (t.size * (SCRIPT_EM[script] ?? GLYPH_EM))));
   return Math.min(lines * perLine, DENSITY_MAX[role]);
 }
 
@@ -101,13 +103,13 @@ function wrapBalanced(text, perLine, title = false) {
   }
   return lines;
 }
-export function fitsWrapped(g, role, text, aspect = '16:9') {
+export function fitsWrapped(g, role, text, aspect = '16:9', script = 'latin') {
   const t = String(text ?? '').trim();
   if (t.length > DENSITY_MAX[role]) return false;
   const { w, h } = boxOf(g, aspectOf(aspect));
   for (const size of TYPE_STEPS[role]) {
     const lines = Math.max(1, Math.floor(h / lineHeight(size, TYPE_SCALE[role].leading)));
-    const perLine = Math.max(1, Math.floor(w / (size * GLYPH_EM)));
+    const perLine = Math.max(1, Math.floor(w / (size * (SCRIPT_EM[script] ?? GLYPH_EM))));
     const wrapped = wrapBalanced(t, perLine, TITLE_ROLES.includes(role));
     if (wrapped.length <= lines && !wrapped.some((l) => l.length > perLine)) return true;
   }
@@ -129,7 +131,7 @@ export function fitWords(text, max) {
 }
 
 /** `{ cards, moved, count }`: the cards at `to`, with what no longer fits in each card's notes. */
-export function reflowCards(cards, toIn) {
+export function reflowCards(cards, toIn, script = 'latin') {
   const to = aspectOf(toIn);
   const moved = [];
   const out = (Array.isArray(cards) ? cards : []).map((s, i) => {
@@ -143,11 +145,11 @@ export function reflowCards(cards, toIn) {
       if (b.kind === 'text') {
         const text = String(b.text ?? '');
         const role = typeRoleOf(b.style, s.layout ?? null);
-        const cap = textCapacity(g, role, to);
-        // D1511: as the Worker's, kept text also passes D1517's wrapped fit (`fitsWrapped`).
-        if (text.length <= cap && fitsWrapped(g, role, text, to)) { blocks.push(b); continue; }
+        const cap = textCapacity(g, role, to, script);
+        // D1511: as the Worker's, kept text also passes D1517's wrapped fit (`fitsWrapped`); D1571: at the deck's script.
+        if (text.length <= cap && fitsWrapped(g, role, text, to, script)) { blocks.push(b); continue; }
         let kept = fitWords(text, cap);
-        while (kept && !fitsWrapped(g, role, kept, to)) kept = fitWords(kept, kept.length - 1);
+        while (kept && !fitsWrapped(g, role, kept, to, script)) kept = fitWords(kept, kept.length - 1);
         const rest = text.slice(kept.length).trim();
         if (kept) {
           blocks.push({ ...b, text: kept });
