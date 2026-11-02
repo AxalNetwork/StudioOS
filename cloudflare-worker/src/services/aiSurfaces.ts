@@ -44,6 +44,7 @@ export const AI_SURFACE = {
   buildBrand: '/build/brand',
   /** Raise · Pitch deck — the deck draft and "Ask Eadwyn to draft from project" (#3930; was "Fill from project") (`/api/decks/generate`, `/apply-method`, `/:id/autofill`), D767. */
   raisePitch: '/raise/pitch',
+  raiseDataRoom: '/raise/data-room',
   /** Raise · Pitch · Review — the deck reviewer's section map and review (`/api/deck-reviewer/*`). */
   raisePitchReview: '/raise/pitch/review',
   /** Raise · Investor narrative — Eadwyn's positioning proposal (`POST /api/cycles/raise/narrative/positioning/draft`), D911. */
@@ -62,6 +63,8 @@ export const AI_SURFACE = {
   raiseCapTable: '/raise/cap-table',
   /** Raise · Capital relationships — Eadwyn's proposals from a note and its message drafts (`POST /api/cycles/raise/capital-relationships/proposals`, `/drafts`), D1193. */
   raiseCapitalRelationships: '/raise/capital-relationships',
+  /** Raise · Data room — search inside the room on its own index (`POST /api/data-room/:uid/search`, `/search/index`, `/shared/:uid/search`), #3938. */
+  raiseDataRoom: '/raise/data-room',
   /** Studio — Eadwyn's interview: answers, explain, tool routing, rerank, dictation, and their safety pass. */
   studio: '/studio',
   /** Onboarding · Chat — the profiling conversation and its extraction (`/api/profiling/*`). */

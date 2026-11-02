@@ -44,6 +44,7 @@ import { mintDownloadToken } from '../services/signedDownload';
 import { searchSemantic, deleteChunkedEntity, researchNamespace } from '../services/vectorize';
 import { run as runAI } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
+import { orderByRanking, rank } from '../services/ai/decide';
 import { companyScope, esignEnvelopeScope } from '../services/tenancyScope';
 import { fundOverlapNote } from '../services/researchFundRead';
 import { CompanyQueryError, getCompany, listCompanies, parseCompanyQuery } from '../services/researchCompanyDirectory';
@@ -697,7 +698,18 @@ research.post('/ask', async (c) => {
     namespace: researchNamespace(user.id),
     ownerUserId: user.id,
   });
-  const usable = hits.filter((h) => h.score >= SCORE_FLOOR);
+  // #3938 (task 4): retrieve, then rank, then write. The reranker orders the passages that passed the
+  // floor against the question, so the answer reads (and cites) the best first. A refused or failed
+  // rank keeps the index's order: the answer's own run below states any refusal.
+  const retrieved = hits.filter((h) => h.score >= SCORE_FLOOR);
+  let usable = retrieved;
+  if (retrieved.length > 1) {
+    const ranked = await rank(c.env, {
+      userId: user.id, surface: AI_SURFACE.researchAsk,
+      rail: railFor(c, { page: ASK_PAGE, option: ASK_OPTION }, `research_ask_session:${session.uid}`),
+    }, { query: question, contexts: retrieved.map((h) => `${h.title}\n${h.snippet}`.slice(0, 1500)) });
+    if (ranked.ok) usable = orderByRanking(retrieved, ranked.ranking);
+  }
   const documentUids = await Promise.all(usable.map(async (hit) => {
     const document = await c.env.DB.prepare(
       'SELECT uid FROM research_documents WHERE id = ? AND owner_user_id = ?'
