@@ -58,6 +58,10 @@ export const DECK_SHARE_SIGNUP = /^\/api\/decks\/share\/[^/]+\/signup$/;
 // member's allowance for its whole quote, so a script starting runs in a loop
 // would lock it up; A3's area routes (#3764) and the one-click build (#3768)
 // admit runs under these paths, and `admitDeckRun` is reached only from them.
+// D1581 (#3828): pairing a phone remote to Present. A code is six digits, so
+// both the presenter's pair and the phone's join are capped, failing closed.
+export const DECK_REMOTE_PAIR = /^\/api\/decks\/\d+\/remote\/pair\/?$/;
+export const DECK_REMOTE_JOIN = /^\/api\/decks\/remote\/join\/?$/;
 export const DECK_GENERATE = /^\/api\/decks\/(?:\d+\/)?(?:areas\/(?:generate|batches)|build)\/?$/;
 
 // D810 — three of the four public newsletter routes, and nothing else under
@@ -406,6 +410,24 @@ const BUCKETS: Bucket[] = [
   // D1502 part 2 (#3753): 6 runs a minute and 20 an hour per member.
   // failClosed: a limit on holding the allowance that a KV outage removes is
   // no limit; the run waits a minute instead.
+  // D1581 (#3828): ten pairings and ten joins a minute per member; a guess at a
+  // code costs a join, so a million codes take far longer than one lives.
+  {
+    name: 'deck_remote_pair',
+    limit: 10,
+    windowSec: 60,
+    test: (p, m) => m === 'POST' && DECK_REMOTE_PAIR.test(p),
+    scope: 'user',
+    failClosed: true,
+  },
+  {
+    name: 'deck_remote_join',
+    limit: 10,
+    windowSec: 60,
+    test: (p, m) => m === 'POST' && DECK_REMOTE_JOIN.test(p),
+    scope: 'user',
+    failClosed: true,
+  },
   {
     name: 'deck_generate',
     limit: 6,

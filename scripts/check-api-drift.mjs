@@ -119,6 +119,8 @@ const KNOWN_DRIFT_ALLOWLIST = new Set([
 ]);
 
 function declaresIdent(src, ident) {
+  // #3973: a router factory mounted by its own name (`function workBoardRoutes(…) { … return router; }`).
+  if (new RegExp(`(?:^|[^A-Za-z0-9_$])function\\s+${ident}\\s*\\(`).test(src)) return true;
   for (const kind of ['const ', 'let ', 'var ']) {
     const needle = kind + ident;
     let from = 0;
@@ -171,8 +173,11 @@ const defaultExportIdent = (src) => (src.match(/export\s+default\s+(\w+)/) || []
 // router in the file, which would also count unmounted test/alternate routes.
 function factoryRouter(src, ident) {
   const instance = [...src.matchAll(/\b(?:const|let)\s+(\w+)\s*=\s*(\w+)\(\s*\)/g)].find(match => match[1] === ident);
-  if (!instance) return { ident, source: src };
-  const declaration = [...src.matchAll(/(?:export\s+)?function\s+(\w+)\([^\n]*\)\s*\{([\s\S]*?)^\}/gm)].find(match => match[1] === instance[2]);
+  // #3973: a factory called at the mount site (`router.route('/', workBoardRoutes(enabled))`)
+  // is mounted by its own name; follow the Hono it builds and returns, as for an instance.
+  const factory = instance ? instance[2] : ident;
+  const declaration = [...src.matchAll(/(?:export\s+)?function\s+(\w+)\([^\n]*\)\s*\{([\s\S]*?)^\}/gm)].find(match => match[1] === factory);
+  if (!instance && !declaration) return { ident, source: src };
   const body = declaration?.[2];
   const returned = body?.match(/\breturn\s+(\w+)\s*;\s*$/)?.[1];
   const honos = body ? [...body.matchAll(/\bconst\s+(\w+)\s*=\s*new\s+Hono\b/g)] : [];

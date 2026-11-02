@@ -52,6 +52,7 @@ function world() {
   // D1614 W1 (#3969): the project board's columns on the same task store; project tasks now go through it.
   db.exec(stripForeignKeys(sql('migrations/762_scope_task_work_board.sql')));
   db.exec(stripForeignKeys(sql('migrations/763_task_comments_labels_milestones.sql')));
+  db.exec(stripForeignKeys(sql('migrations/202611022205_work_workload.sql'))); // D1614 W4: the board reads the time block
   db.exec(`CREATE TABLE IF NOT EXISTS project_members (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
     role TEXT NOT NULL DEFAULT 'cofounder', status TEXT NOT NULL DEFAULT 'accepted', source TEXT, invited_by INTEGER, created_at TEXT, updated_at TEXT)`);
   const user = db.prepare("INSERT INTO users (id, uid, email, name, role, founder_id, subscription_tier, subscription_status) VALUES (?, ?, ?, ?, ?, ?, 'growth', 'active')");

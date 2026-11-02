@@ -6067,7 +6067,7 @@
   {
    "pageKey": "Founder · Grow · Distribution",
    "optionKey": "form:landing",
-   "optionLabel": "Auto-fill with AI",
+   "optionLabel": "Ask",
    "kind": "write",
    "handler": "form",
    "routeTask": "rail_write",

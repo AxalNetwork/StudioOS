@@ -321,9 +321,9 @@ export const FOUNDER_OPTIONS = [
     page: 'Founder · Grow · Distribution', key: 'draft:grow/customers', route: '/grow/distribution', label: 'Draft a sequence', kind: 'write', handler: 'draft',
     at: [[CYCLE, "surface: 'grow/customers'"]],
   },
-  // The brand builder, Distribution's "Open landing-page builder" door.
+  // The brand builder, Distribution's "Open landing-page builder" door. #4046 B3: its one Ask (was "Auto-fill with AI").
   {
-    page: 'Founder · Grow · Distribution', key: 'form:landing', route: '/build/brand', label: 'Auto-fill with AI', kind: 'write', handler: 'form',
+    page: 'Founder · Grow · Distribution', key: 'form:landing', route: '/build/brand', label: 'Ask', kind: 'write', handler: 'form',
     at: [[BRAND, 'api.brandAutofillLanding(']],
   },
   {

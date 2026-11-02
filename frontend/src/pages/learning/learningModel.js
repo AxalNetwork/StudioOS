@@ -22,9 +22,9 @@
  * STAGE 3 READS THE REST, each through its own module: programs
  * (`programReads.js`, D558), exercises and exams (`assessmentReads.js`,
  * D559), webinars (`webinarReads.js`, D560), and an uploaded video's upload
- * and playback (`videoUpload.js`, `studioActions.js`, D561). What no route
- * serves still says so in one line rather than drawing a row: no route lists
- * exercises or exams on their own (`UNLISTED`).
+ * and playback (`videoUpload.js`, `studioActions.js`, D561). Exercises and
+ * exams are listed on their own, and a member's submissions and attempts
+ * across them, since #4180 (D4180, `routes/learning_lists.ts`).
  */
 import { titleCase } from '../../lib/absence';
 
@@ -47,22 +47,10 @@ export const NOT_LIVE = {
 };
 
 /**
- * What stays "Not recorded" with every store live: D559 serves one exercise or
- * exam at a time, with the caller's own submissions and attempts on its page,
- * and no route LISTS them, for the home's tabs or for My learning.
- */
-export const UNLISTED = {
-  exercises: 'Exercises open from the courses and programs that hold them. No route lists them on their own yet.',
-  exams: 'Exams open from the courses and programs that hold them. No route lists them on their own yet.',
-  submissions: 'No route lists your submissions across exercises yet. Each exercise shows yours on its own page.',
-  attempts: 'No route lists your attempts across exams yet. Each exam shows yours on its own page.',
-};
-
-/**
  * The canvas's nine tabs, in its order. `live` marks the ones a route fills:
  * All, Courses and Videos read D557's catalog; Webinars D560's list (stage
- * 3); Articles, Publications and Events their own routes. Exercises and
- * Exams have no list route (`UNLISTED`).
+ * 3); Articles, Publications and Events their own routes; Exercises and
+ * Exams their own lists (#4180).
  */
 export const LEARNING_TABS = [
   { key: 'all', label: 'All', live: true },
@@ -72,15 +60,9 @@ export const LEARNING_TABS = [
   { key: 'articles', label: 'Articles', live: true },
   { key: 'publications', label: 'Publications', live: true },
   { key: 'events', label: 'Events', live: true },
-  { key: 'exercises', label: 'Exercises', live: false },
-  { key: 'exams', label: 'Exams', live: false },
+  { key: 'exercises', label: 'Exercises', live: true },
+  { key: 'exams', label: 'Exams', live: true },
 ];
-
-/** The line each tab no route fills says, and why. */
-export const TAB_NOT_LIVE = {
-  exercises: UNLISTED.exercises,
-  exams: UNLISTED.exams,
-};
 
 export const ARTICLES_PAGE_SIZE = 20;
 export const EVENTS_PAGE_SIZE = 20;
@@ -291,7 +273,7 @@ export function catalogRow(r) {
       return { ...base, href: id ? `/learning/courses/${enc(id)}` : null, level, minutes: r.estimated_minutes ?? null };
     case 'video':
     case 'reading':
-      return { ...base, href: itemHref({ kind: r.kind, uid: id }), level, topic: clean(r.topic) || null, seconds: r.duration_seconds ?? null };
+      return { ...base, href: itemHref({ kind: r.kind, uid: id }), level, topic: clean(r.topic) || null, seconds: r.duration_seconds ?? null, found: transcriptLine(r.match) };
     case 'article': {
       const minutes = Number(r.read_minutes);
       return {
@@ -563,3 +545,173 @@ export const SUBMISSION_STATUS = {
 
 /** A content row's status, as a pill tone. */
 export const CONTENT_STATUS_TONE = { published: 'ok', draft: 'warn', archived: 'neutral', cancelled: 'danger' };
+
+// ---------------------------------------------------------------------------
+// D3726 (#3726) — the Learning on Stream canvas (`Learning Stream Page.dc.html`),
+// what the screens draw before the Stream and list tasks land.
+// ---------------------------------------------------------------------------
+
+/** The build tasks behind the boards this integration cannot fill yet. */
+export const LEARNING_STREAM_TASKS = {
+  stream: 4176, studio: 4177, player: 4178, copy: 4179, lists: 4180, analytics: 4181,
+};
+
+/** LR1 "New this week": the kinds it lists, and how far back a week reaches. */
+export const NEW_THIS_WEEK_KINDS = ['course', 'video', 'reading'];
+const WEEK_MS = 7 * 24 * 3600 * 1000;
+
+/**
+ * LR1 "New this week", newest first, from the catalog rows the All tab already
+ * reads (`catalogRow`): only courses, videos and readings dated within the
+ * last seven days, at most `max`. A row with no date is never "new".
+ */
+export function newThisWeek(rows, now = Date.now(), max = 4) {
+  const since = now - WEEK_MS;
+  return (rows || [])
+    .filter((r) => NEW_THIS_WEEK_KINDS.includes(r?.kind))
+    .map((r) => ({ r, t: Date.parse(r.date ?? '') }))
+    .filter(({ t }) => Number.isFinite(t) && t >= since && t <= now + 60_000)
+    .sort((a, b) => b.t - a.t)
+    .slice(0, max)
+    .map(({ r }) => r);
+}
+
+/** LR1 "Recommended for you": a marked future block, never rows. */
+export const RECOMMENDED_FUTURE = 'Waits on recommendations (#3724). Nothing is drawn here until then.';
+
+/** LR4 chapters: none is stored until #4176 adds them. */
+export const NO_CHAPTERS = 'No chapters';
+export const CHAPTERS_NOT_YET = 'Chapters arrive with the Stream videos (#4176).';
+
+/** LR4b: a transcript with no caption cues is the plain text, and says so. */
+export const PLAIN_TRANSCRIPT_LINE = 'No caption cues, so the plain transcript is shown.';
+
+/**
+ * LR4's "Resume from [12:05]": the stored position, when there is one worth
+ * resuming — at least 5 s in and, when the length is known, more than 5 s
+ * before the end. Null otherwise.
+ */
+export function resumeAt(positionSeconds, durationSeconds = null) {
+  const p = Number(positionSeconds);
+  if (!Number.isFinite(p) || p < 5) return null;
+  const d = Number(durationSeconds);
+  if (Number.isFinite(d) && d > 0 && p >= d - 5) return null;
+  return Math.floor(p);
+}
+
+/**
+ * The player's position writes (LR4 resume): at most one every `every` ms
+ * while playing, and one on pause or end. `write(seconds, percent)` is the
+ * caller's; a write in flight is never doubled.
+ */
+export function positionWriter(write, { every = 15_000, now = () => Date.now() } = {}) {
+  let last = -Infinity;
+  let busy = false;
+  const send = (seconds, duration) => {
+    const s = Math.floor(Number(seconds));
+    if (!Number.isFinite(s) || s < 0 || busy) return false;
+    const d = Number(duration);
+    const percent = Number.isFinite(d) && d > 0 ? Math.min(100, Math.max(0, Math.floor((100 * s) / d))) : null;
+    busy = true;
+    last = now();
+    Promise.resolve().then(() => write(s, percent)).catch(() => {}).finally(() => { busy = false; });
+    return true;
+  };
+  return {
+    tick: (seconds, duration) => (now() - last >= every ? send(seconds, duration) : false),
+    flush: (seconds, duration) => send(seconds, duration),
+  };
+}
+
+// ── #4180 (D4180): the list reads ───────────────────────────────────────────
+
+/** "04:12", or "1:02:03" past the hour; null when the time is not recorded. */
+export function clockLabel(seconds) {
+  const n = Number(seconds);
+  if (seconds === null || seconds === undefined || seconds === '' || !Number.isFinite(n) || n < 0) return null;
+  const s = Math.floor(n);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = String(s % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${String(m).padStart(2, '0')}:${sec}`;
+}
+
+/** lr7: "Found in a transcript … at 04:12", or without the time when the transcript carries none; null when not a transcript match. */
+export function transcriptLine(match) {
+  if (!match || match.in !== 'transcript') return null;
+  const at = clockLabel(match.at_seconds);
+  return `Found in a transcript${match.snippet ? ` “${clean(match.snippet)}”` : ''}${at ? ` at ${at}` : ''}`;
+}
+
+const whereLine = (w) => (w && clean(w.title) ? `${w.kind === 'program' ? 'Programme' : 'Course'} · ${clean(w.title)}` : null);
+
+/** lr2a: an exercise row — title, the course or programme, your status, updated. */
+export function exerciseRow(x) {
+  return {
+    key: `exercise:${clean(x?.uid)}`,
+    uid: clean(x?.uid),
+    title: clean(x?.title) || 'Untitled exercise',
+    where: whereLine(x?.where),
+    status: SUBMISSION_STATUS[x?.status] ? x.status : null,
+    updated: x?.updated_at || null,
+    href: x?.uid ? `/learning/exercises/${encodeURIComponent(x.uid)}` : null,
+  };
+}
+
+/** lr2b: an exam row. A best score not recorded is null ("Score not recorded"), never 0; null attempts left is unlimited. */
+export function examRow(x) {
+  const best = x?.best_score_percent;
+  return {
+    key: `exam:${clean(x?.uid)}`,
+    uid: clean(x?.uid),
+    title: clean(x?.title) || 'Untitled exam',
+    where: whereLine(x?.where),
+    questions: Number.isFinite(Number(x?.question_count)) ? Number(x.question_count) : null,
+    limit: minutesLabel(x?.time_limit_minutes) || 'Untimed',
+    passMark: x?.pass_mark_percent == null ? null : `${Number(x.pass_mark_percent)}% to pass`,
+    attemptsLeft: x?.attempts_left == null ? 'Unlimited attempts' : `${Number(x.attempts_left)} attempt${Number(x.attempts_left) === 1 ? '' : 's'} left`,
+    best: best === null || best === undefined || !Number.isFinite(Number(best)) ? null : `${Math.round(Number(best))}%`,
+    href: x?.uid ? `/learning/exams/${encodeURIComponent(x.uid)}` : null,
+  };
+}
+
+/** lr12: My learning's exercises, one per exercise, the latest submission's status. */
+export function mySubmissionRows(submissions) {
+  const seen = new Set();
+  const out = [];
+  for (const s of Array.isArray(submissions) ? submissions : []) {
+    const uid = clean(s?.exercise?.uid);
+    if (!uid || seen.has(uid)) continue;
+    seen.add(uid);
+    out.push({ exercise_uid: uid, title: clean(s.exercise.title) || 'Untitled exercise', status: s.status ?? null, href: `/learning/exercises/${encodeURIComponent(uid)}` });
+  }
+  return out;
+}
+
+/** lr12: My learning's exam results, one per exam: the best submitted score, else the latest attempt with no score. */
+export function myAttemptRows(attempts) {
+  const by = new Map();
+  for (const a of Array.isArray(attempts) ? attempts : []) {
+    const uid = clean(a?.exam?.uid);
+    if (!uid) continue;
+    const score = a.score_percent == null ? null : Number(a.score_percent);
+    const was = by.get(uid);
+    if (!was || (score !== null && (was.score_percent === null || score > was.score_percent))) {
+      by.set(uid, { exam_uid: uid, title: clean(a.exam.title) || 'Untitled exam', score_percent: score, passed: a.passed ?? null, href: `/learning/exams/${encodeURIComponent(uid)}` });
+    }
+  }
+  return [...by.values()];
+}
+
+/** lr1: the "Your progress" strip's four figures; a figure not recorded reads "Not recorded", never 0. */
+export function statsTiles(stats) {
+  const nr = 'Not recorded';
+  const n = (v) => (v === null || v === undefined || !Number.isFinite(Number(v)) ? nr : String(Number(v)));
+  const exams = stats?.exams;
+  return [
+    { key: 'courses', label: 'Courses in progress', value: n(stats?.courses_in_progress) },
+    { key: 'lessons', label: 'Lessons completed this month', value: n(stats?.lessons_completed_this_month) },
+    { key: 'watch', label: 'Watch time this month', value: durationLabel(stats?.watch_seconds_this_month) || nr },
+    { key: 'exams', label: 'Exams passed', value: exams && Number.isFinite(Number(exams.sat)) && Number.isFinite(Number(exams.passed)) ? `${Number(exams.passed)} of ${Number(exams.sat)}` : nr },
+  ];
+}

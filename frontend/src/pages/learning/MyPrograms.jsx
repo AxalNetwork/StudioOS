@@ -5,7 +5,7 @@ import { byPosition } from './learningModel';
 import { LearningEmpty, LearningLoading, LearningUnreadable, RouteUnreadable, SectionCard } from './LearningStates';
 import { ErrorLine, PRIMARY } from './studioParts';
 import {
-  UNAVAILABLE_LINE, completionCell, entryFor, programProgress, progressLine, subjectKindLabel,
+  UNAVAILABLE_LINE, completionCell, entryFor, memberProgramHref, programProgress, progressLine, subjectKindLabel,
 } from './programModel';
 import { enrolSelf, readMyPrograms, readOpenPrograms } from './programReads';
 import useLearningRead from './useLearningRead';
@@ -43,7 +43,7 @@ function EnrolledProgram({ row, onRetry }) {
   return (
     <li className="space-y-1.5 py-3 first:pt-0" data-testid={`my-program-${program.uid}`}>
       <div className="flex items-baseline justify-between gap-2">
-        <span className="min-w-0 truncate text-[13.5px] font-semibold text-axal-ink dark:text-gray-100">{program.name || 'Untitled program'}</span>
+        <Link to={memberProgramHref(program.uid)} className="min-w-0 truncate text-[13.5px] font-semibold text-axal-ink hover:text-axal-violet-deep dark:text-gray-100 dark:hover:text-violet-300" data-testid={`my-program-open-${program.uid}`}>{program.name || 'Untitled program'}</Link>
         <span className="flex-none text-[11.5px] text-axal-faint dark:text-gray-500">{program.region || <Unrecorded>Region not recorded</Unrecorded>}</span>
       </div>
       {detail.status === 'unreadable' && (

@@ -182,9 +182,9 @@ test('the reads and writes call the routes D557 mounted, in the shapes those rou
   for (const field of ["href: `/learning/items/${x.uid}`", "author: { name: x.author_name ?? null, role: x.author_role ?? null }", 'event_type: x.type ?? null', 'estimated_minutes: x.estimated_minutes ?? null']) {
     assert.ok(member.includes(field), `the catalog row no longer carries ${field}`);
   }
-  // The course route sends no lesson length: the outline says so once.
+  // #4180: the course route sends each lesson's length, its item's (null otherwise), so the outline draws it.
   const lessonSelect = member.slice(member.indexOf('SELECT l.uid, l.module_id'), member.indexOf('FROM learning_lessons l JOIN'));
-  assert.doesNotMatch(lessonSelect, /duration/);
+  assert.match(lessonSelect, /i\.duration_seconds/);
   const admin = read('cloudflare-worker/src/routes/admin_learning.ts');
   for (const reply of ["return c.json({ items: res.results || [] });", "return c.json({ courses: (res.results || []).map", "c.json({ course: await courseTree(", "c.json({ item: await c.env.DB.prepare(ITEM_SELECT"]) {
     assert.ok(admin.includes(reply), `admin_learning.ts no longer answers ${reply}`);
