@@ -11,10 +11,12 @@ import { createElement as h } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import {
-  CHAPTERS_NOT_YET, LEARNING_STREAM_TASKS, NO_CHAPTERS, PLAIN_TRANSCRIPT_LINE, PROGRESS_FIGURES, PROGRESS_NOT_YET, RECOMMENDED_FUTURE,
-  clockLabel, newThisWeek, positionWriter, resumeAt,
+  CHAPTERS_NOT_YET, LEARNING_STREAM_TASKS, NO_CHAPTERS, PLAIN_TRANSCRIPT_LINE, RECOMMENDED_FUTURE,
+  clockLabel, newThisWeek, positionWriter, resumeAt, statsTiles,
 } from '../src/pages/learning/learningModel.js';
 import { continueTarget, enrolmentCopy, memberProgramHref } from '../src/pages/learning/programModel.js';
+import { readMyStats } from '../src/pages/learning/learningReads.js';
+import { learningApi } from '../src/lib/api/learning.js';
 import { NewThisWeek, ProgressStrip, RecommendedFuture } from '../src/pages/learning/LearningHome.jsx';
 import LessonPlayer from '../src/pages/learning/LessonPlayer.jsx';
 import { MemberProgramView } from '../src/pages/learning/MemberProgram.jsx';
@@ -28,17 +30,23 @@ const settle = () => new Promise((r) => setTimeout(r, 0));
 
 test('every board this build cannot fill names its task', () => {
   assert.deepEqual(LEARNING_STREAM_TASKS, { stream: 4176, studio: 4177, player: 4178, copy: 4179, lists: 4180, analytics: 4181 });
-  assert.match(PROGRESS_NOT_YET, /#4180/);
   assert.match(CHAPTERS_NOT_YET, /#4176/);
   assert.match(RECOMMENDED_FUTURE, /#3724/);
 });
 
-test('LR1 Your progress: four figures, each "Not recorded", never a 0', () => {
-  assert.deepEqual(PROGRESS_FIGURES, ['Courses in progress', 'Lessons completed this month', 'Watch time this month', 'Exams passed']);
-  const m = html(h(ProgressStrip));
+test('LR1 Your progress: the four figures of #4180; one not recorded reads "Not recorded", never a 0; a failed read is never zeros', () => {
+  const tiles = statsTiles({ courses_in_progress: 2, lessons_completed_this_month: null, watch_seconds_this_month: 3600, exams: { passed: 1, sat: 2 } });
+  assert.deepEqual(tiles.map((t) => t.label), ['Courses in progress', 'Lessons completed this month', 'Watch time this month', 'Exams passed']);
+  const m = html(h(ProgressStrip, { state: { status: 'ready', tiles } }));
   assert.equal((m.match(/data-testid="progress-figure"/g) || []).length, 4);
-  assert.equal((flat(m).match(/Not recorded/g) || []).length, 4);
-  assert.doesNotMatch(flat(m), /\b0\b/);
+  assert.equal((flat(m).match(/Not recorded/g) || []).length, 1, 'only the figure the route did not record');
+  assert.match(flat(m), /1 of 2/);
+  const none = html(h(ProgressStrip, { state: { status: 'ready', tiles: statsTiles(null) } }));
+  assert.equal((flat(none).match(/Not recorded/g) || []).length, 4);
+  assert.doesNotMatch(flat(none), /\b0\b/);
+  const failed = html(h(ProgressStrip, { state: { status: 'error' } }));
+  assert.match(flat(failed), /not a claim that they are zero/);
+  assert.doesNotMatch(failed, /data-testid="progress-figure"/);
 });
 
 test('LR1 New this week: courses, videos and readings of the last seven days, newest first, at most four', () => {
@@ -73,7 +81,7 @@ test('LR4 resume: a position worth resuming, as a clock', () => {
   assert.equal(clockLabel(725), '12:05');
   assert.equal(clockLabel(3725), '1:02:05');
   assert.equal(clockLabel(null), null);
-  assert.equal(clockLabel(0), '0:00');
+  assert.equal(clockLabel(0), '00:00', '#4180\'s clock, padded');
   assert.equal(clockLabel(-1), null);
   assert.equal(resumeAt(null), null);
   assert.equal(resumeAt(3), null, 'the first seconds are not worth a resume');
@@ -108,12 +116,12 @@ test('LR4 the player: resume pill, chapters not yet, the plain transcript line',
   const m = html(h(LessonPlayer, { status: 'ready', lesson: null, item, video: { src: '/media/i1', embed: false }, transcript: 'Hello.', resumeFrom: 725, onPosition: () => {} }));
   assert.match(flat(m), /Resume from 12:05/);
   assert.match(m, /data-testid="lesson-chapters-none"/);
-  assert.match(flat(m), new RegExp(`${NO_CHAPTERS} · ${CHAPTERS_NOT_YET.replace(/[().]/g, '\\$&')}`));
-  assert.match(flat(m), new RegExp(PLAIN_TRANSCRIPT_LINE.replace(/[.,]/g, '\\$&')));
+  assert.ok(flat(m).includes(`${NO_CHAPTERS} · ${CHAPTERS_NOT_YET}`), 'no chapters, with the line saying why');
+  assert.ok(flat(m).includes(PLAIN_TRANSCRIPT_LINE), 'the plain transcript line');
   const none = html(h(LessonPlayer, { status: 'ready', lesson: null, item, video: { src: '/media/i1', embed: false } }));
   assert.doesNotMatch(none, /lesson-resume/, 'no position, no resume');
   const chapters = html(h(LessonPlayer, { status: 'ready', lesson: null, item: { ...item, chapters: [{ start_seconds: 0, title: 'Intro' }, { start_seconds: 725, title: 'The script' }] }, video: { src: '/media/i1', embed: false } }));
-  assert.match(flat(chapters), /0:00 Intro 12:05 The script/);
+  assert.match(flat(chapters), /00:00 Intro 12:05 The script/);
 });
 
 test('LR4 the wired pages pass the stored position and write it back through the progress route', () => {
@@ -163,4 +171,15 @@ test('LR13 enrolled: progress per item and overall; LR13b open: Join to start an
   assert.doesNotMatch(open, /member-program-continue/);
   assert.match(flat(html(h(MemberProgramView, { state: { status: 'missing' } }))), /No such program/);
   assert.match(flat(html(h(MemberProgramView, { state: { status: 'unreadable' }, onRetry: () => {} }))), /not a claim that it holds nothing/);
+});
+
+test('LR1 readMyStats reads #4180\'s stats route once and turns it into the four tiles', async () => {
+  const real = learningApi.myStats;
+  let calls = 0;
+  learningApi.myStats = async () => { calls += 1; return { courses_in_progress: 3, lessons_completed_this_month: 0, watch_seconds_this_month: null, exams: null }; };
+  try {
+    const { tiles } = await readMyStats();
+    assert.equal(calls, 1);
+    assert.deepEqual(tiles.map((t) => t.value), ['3', '0', 'Not recorded', 'Not recorded'], 'a recorded 0 is 0; an unrecorded figure is never 0');
+  } finally { learningApi.myStats = real; }
 });

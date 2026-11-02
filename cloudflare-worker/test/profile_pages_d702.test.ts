@@ -52,7 +52,6 @@ import { effectiveVisibility } from '../src/services/userSettings.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { splitStatements } from './_baseline.mjs';
 import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
-
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel: string) => readFileSync(resolve(ROOT, rel), 'utf8');
 const MIGRATION = read('cloudflare-worker/sql/migrations/467_founder_profile_pages.sql');

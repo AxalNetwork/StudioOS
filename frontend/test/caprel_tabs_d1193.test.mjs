@@ -342,7 +342,7 @@ test('Commitments: the bar against the target, what is not counted, every commit
     await v.change('caprel-round-target', '1,750,000');
     await v.click('caprel-round-go');
     let w = v.writes().at(-1);
-    assert.deepEqual([w.method, w.url.replace(/^.*\/api/, ''), w.body], ['PUT', '/contacts/raise-round', { project_id: 3, name: 'Seed', target_amount: 1750000, currency: 'USD', close_date: '2026-12-14', notes: null }]);
+    assert.deepEqual([w.method, w.url.replace(/^.*\/api/, ''), w.body], ['PUT', '/contacts/raise-round', { project_id: 3, name: 'Seed', target_amount: 1750000, currency: 'USD', close_date: '2026-12-14', notes: null, exemption: null }], 'D4086: a round with no exemption recorded saves it as not recorded, never a default');
     await v.click('caprel-close-new');
     await v.change('caprel-close-name', 'Second close');
     await v.click('caprel-close-go');

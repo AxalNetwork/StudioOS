@@ -4,8 +4,9 @@
  * A method is OFF until its route is on `main`: it answers
  * `{ available: false, reason }` without a request, so a page draws the honest
  * "not switched on yet" block and never invents a board, a chart or a task.
- * `burnup` is on (#3970): it goes through `workApi.burnup`, and an engine that
- * is off answers the same honest block.
+ * `burnup` is on (#3970), and so are W1's board, item, move, assign and create
+ * (#3969, wired by #3973): each goes through `workApi`, and an engine that is
+ * off answers the same honest block.
  * The builder of each Worker part adds the client method with its route, in a
  * module under `frontend/src/lib/api/` (D527), and replaces only that method's
  * body here with `through(…)`.
@@ -37,11 +38,11 @@ export async function through(call, reason) {
 }
 
 export const workAdapter = {
-  board: off(WORK_OFF),
-  item: off(WORK_OFF),
-  move: off(WORK_OFF),
-  assign: off(WORK_OFF),
-  create: off(WORK_OFF),
+  board: (projectId, opts) => through(() => workApi.board(projectId, opts), WORK_OFF),
+  item: (uid) => through(async () => (await workApi.item(uid))?.task ?? null, WORK_OFF),
+  move: (uid, column, position) => through(async () => (await workApi.move(uid, { column, position }))?.task ?? null, WORK_OFF),
+  assign: (uid, assignee) => through(async () => (await workApi.assign(uid, assignee))?.task ?? null, WORK_OFF),
+  create: (projectId, body) => through(async () => (await workApi.create(projectId, body))?.task ?? null, WORK_OFF),
   burnup: (projectId, opts) => through(() => workApi.burnup(projectId, opts), WORK_OFF),
   run: off('Run detail arrives with #3971.'),
   retry: off('Run detail arrives with #3971.'),

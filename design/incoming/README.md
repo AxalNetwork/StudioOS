@@ -121,6 +121,14 @@ The owner's two artifacts for #3726 (boards LR1–LR21), decoded by
   to `lr21b`; a `-d` suffix is dark);
 - `Learning Stream · Boards.dc.html` is the board grid, LR1 to LR21. It
   imports the page by name.
+## Landed 2026-11-02 — Calendar admin scopes (#4154)
+
+The owner's two artifacts for #4154 (boards CA1–CA5), decoded by
+`scripts/read-canvas.mjs`:
+- `Calendar Admin Page.dc.html` is the page, one frame per `v` value (`ca1` to
+  `ca5d`; a `-d` suffix is dark);
+- `Calendar Admin · Boards.dc.html` is the board grid, CA1 to CA5. It imports
+  the page by name.
 
 **One edit, named.** The Axal VC mark (`uploads/axal-logo-200x200.png`) points
 at `/axal-mark.png`, as in the earlier intakes. No other value was edited.
@@ -130,6 +138,9 @@ Recommended; the player's resume, position writes, chapters and plain
 transcript; and a member's own program page at
 `/learning/my-programs/:program`. Stream itself, the studio, analytics and
 the list reads wait for L1–L6 (#4176–#4181) and say so.
+**Grade: EXTENDS the Calendar (D4154).** The Mine · Studio · Platform switcher
+and the read-only staff views over the scoped read D1206 already serves. Each
+item's owner, company, studio and link wait for C1 (#4196) and say so.
 
 ## Landed 2026-11-01 — One interview, and its session (#3710)
 
@@ -305,6 +316,21 @@ route draws its unavailable state through
 `frontend/src/pages/incorporate/incorporateAdapter.js` (#3855, #3706). All four
 files stay here: some bodies are outstanding. No file moved, so no count
 changed.
+## Landed 2026-11-02 — HQ › AI agents (#4137)
+
+The owner's two artifacts for #4137 (boards SA0–SA9), decoded by
+`scripts/read-canvas.mjs`:
+- `HQ AI Agents Page.dc.html` is the page, one frame per `v` value (`sa0` to
+  `sa9i`; a `-d` suffix is dark);
+- `HQ AI Agents · Boards.dc.html` is the board grid "HQ › AI agents", SA0 to
+  SA9. It imports the page by name.
+
+**One edit, named.** The Axal VC mark (`uploads/axal-logo-200x200.png`) points
+at `/axal-mark.png`, as in the earlier intakes. No other value was edited.
+
+**Grade: NEW (D4137).** A new HQ row, AI agents, after Platform, at
+`/hq/ai-agents` with four tabs. One read is live (the From Axal skills, D1612);
+the rest waits for H1–H5 (#4158, #4160–#4163) and says so.
 ## Landed 2026-11-01 — Team › Agents › Skills (#3945)
 
 The owner's two artifacts for #3945's consolidated prompt (boards SK0–SK9),

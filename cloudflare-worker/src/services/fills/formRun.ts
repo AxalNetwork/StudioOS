@@ -49,6 +49,10 @@ export interface FormGather {
   existing: string[];
   /** D1329: what a record that is not a venture's says about itself (titles, names), never a figure. */
   context?: string[];
+  /** #4046 (B2): the fields this record offers when it offers fewer than its form lists (a programme's questions). */
+  only?: string[];
+  /** #4046 (B2): one line on how this form's words are written (an answer in the member's own voice). */
+  guide?: string;
 }
 
 /**
@@ -131,6 +135,30 @@ export async function gatherScoped(env: Env, userId: number, table: string, row:
     out.context = [`Decision: ${String(row.title ?? 'title not recorded')}`, `Company: ${name?.name ?? 'not recorded'}`];
   } else if (table === 'events' && row) {
     out.context = [`Event: ${String(row.title ?? 'title not recorded')}`, `Kind: ${String(row.type ?? 'not recorded')}`];
+  } else if (table === 'events') {
+    // #4046 (B2): /events/new. The host's own last event titles, so a new one is not a repeat; nothing else is read.
+    out.existing = await list('SELECT title AS value FROM events WHERE host_user_id = ? ORDER BY id DESC LIMIT 20', userId);
+  } else if (table === 'testing_applications') {
+    // #4046 (B2): the programme as the member reads it (its firm, what the test asks, its questions) and what the
+    // member's own profile says (their role and headline). Never another tester's answers, the places or the dates.
+    const programmeId = row ? row.programme_id : parentId;
+    const p = await env.DB.prepare(`SELECT p.product_name, p.summary, p.tester_tasks, p.time_needed, p.questions,
+        CASE WHEN p.owner_kind = 'hq' THEN 'Axal VC' ELSE COALESCE(pt.company, pt.name) END AS owner_name
+      FROM testing_programmes p LEFT JOIN partners pt ON pt.id = p.owner_partner_id WHERE p.id = ?`)
+      .bind(programmeId ?? null).first<Record<string, unknown>>();
+    let questions: string[] = [];
+    try { const q = JSON.parse(String(p?.questions ?? '[]')); if (Array.isArray(q)) questions = q.map((x) => String(x)).slice(0, 5); } catch { questions = []; }
+    const me = await env.DB.prepare('SELECT role, headline FROM users WHERE id = ?').bind(userId).first<{ role: string | null; headline: string | null }>();
+    out.context = [
+      `Product: ${String(p?.product_name ?? 'not recorded')}`,
+      `Run by: ${String(p?.owner_name ?? 'not recorded')}`,
+      `What the test asks: ${String(p?.tester_tasks ?? p?.summary ?? 'not described')}`,
+      ...questions.map((q, i) => `answer_${i + 1} replies to the question: ${q}`),
+      `The member's role: ${String(me?.role ?? 'not recorded')}`,
+      `The member's headline: ${String(me?.headline ?? 'not recorded')}`,
+    ];
+    out.only = questions.map((_, i) => `answer_${i + 1}`);
+    out.guide = 'Write each answer in the member\'s own voice, in the first person, a few lines long. Use only what is on record and the member\'s notes; never claim an experience, a tool or a figure they did not give. Leave out an answer you cannot write from that.';
   } else if (table === 'event_agenda_items') {
     const eventId = row ? row.event_id : parentId;
     out.existing = await list('SELECT title AS value FROM event_agenda_items WHERE event_id = ? ORDER BY display_order, id LIMIT 40', eventId ?? null);
@@ -186,6 +214,7 @@ export function formMessages(asked: readonly FillField[], gather: FormGather, op
     'Fields:', ...lines,
     gather.existing.length ? `Already on file, do not repeat: ${JSON.stringify(gather.existing)}` : '',
     gather.context?.length ? `On record: ${JSON.stringify(gather.context)}` : '',
+    gather.guide ?? '',
     words ? `The founder's notes: ${words}` : '',
   ].filter(Boolean).join('\n');
   return {
