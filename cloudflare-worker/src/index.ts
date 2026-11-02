@@ -3241,6 +3241,17 @@ export default {
         } catch (e) {
           console.error('[cron] market intel failed', e);
         }
+        // D1536 (#3785): the weekly AI catalogue drift job, Mondays 05:17 UTC on
+        // HQ only. It skips with a logged reason until the owner sets its read-only token.
+        if (hqCadences && now.getUTCDay() === 1 && now.getUTCHours() === 5 && now.getUTCMinutes() === 17) {
+          try {
+            const { runCatalogueDrift } = await import('./services/aiCatalogueDrift');
+            const r = await runCatalogueDrift(env, { now });
+            cronSummary.push(r.state === 'ok' ? `ai catalogue drift=${r.drift} alerted=${r.alerted}` : `ai catalogue drift ${r.state} reason=${r.reason}`);
+          } catch {
+            console.error('[cron] ai catalogue drift unreadable');
+          }
+        }
         // D670 — the market-intel watchlist digest (Task #30: a weekly email on
         // Mondays and a monthly one on the 1st, 09:00 UTC) is retired with the
         // /market-intel page. Nothing here sends it any more.

@@ -1,8 +1,10 @@
 /**
  * D1502 (#3753, deck v2 A3a) — the contract every `DeckGenRuntime` passes.
  *
- * Run against each implementation of the seam (`IMPLEMENTATIONS`): the D1 core
- * now; `DeckGenRoom` (part 2) and B9's Queue fallback join this list.
+ * Run against each implementation of the seam (`IMPLEMENTATIONS`): the D1 core,
+ * `DeckGenRoom` (part 2) and B9's Queue fallback, `QueueGenRuntime` (D1536,
+ * #3785; its messages go to an in-memory queue, and its own suite,
+ * `deck_gen_queue_d1536.test.ts`, delivers them).
  *
  *   1. quote = parent hold = sum of the lines, and quote = the settled maximum;
  *   2. the same Idempotency-Key twice is one run, one hold, one charge;
@@ -25,6 +27,7 @@ import { withGuard } from './_guard_stub.mjs';
 import { D1GenRuntime, FREE_LABEL, quoteOf, stepRecordRef, type DeckGenRuntime, type GenEvent, type PlanLine, type StepExecutor } from '../src/services/decks/genRuntime.ts';
 import { run as aiRun, __resetForTest } from '../src/services/aiRouter.ts';
 import { DeckGenRoom } from '../src/durable-objects/deck-gen-room.ts';
+import { QueueGenRuntime } from '../src/services/decks/queueRuntime.ts';
 
 const M716 = readFileSync('cloudflare-worker/sql/migrations/716_deck_area_batches.sql', 'utf8');
 // The hold's Idempotency-Key (D844) and context (D1278), which the budget fixture predates.
@@ -87,6 +90,7 @@ const IMPLEMENTATIONS: Array<[string, (env: any, execute: StepExecutor, events: 
     room.onEvent((e) => { events.push(e); });
     return room;
   }],
+  ['QueueGenRuntime', (env, execute, events) => new QueueGenRuntime(env, { execute, emit: (e) => { events.push(e); }, send: async () => {} })],
 ];
 
 const admit = (rt: DeckGenRuntime, key: string, lines = plan(), cls: 'areas' | 'deck_build' = 'areas') =>

@@ -113,6 +113,11 @@ export async function dlqConsumer(
         message.attempts ?? 0,
         `CF DLQ message; timestamp=${message.timestamp}`,
       ).run();
+      // D1536 — a deck run whose message ran out of retries ends: what ran is settled once, the rest released.
+      if (body.job_type === 'deck_gen_batch') {
+        const { endExhaustedRun } = await import('./services/decks/queueRuntime');
+        await endExhaustedRun(env, body).catch(() => console.warn('[dlq-consumer] deck_run_end_failed'));
+      }
       // D1490 — a listing whose job ran out of retries reads `failed`, keeping its last reason.
       if (body.job_type === 'event_syndication') {
         const { markSyndicationDead } = await import('./services/eventSyndication/jobs');
@@ -149,6 +154,18 @@ export async function queueConsumer(
         await meter(env, body.job_type, 'failed', Date.now() - t0);
         message.retry();
       }
+      continue;
+    }
+
+    // D1536: a deck generation run's slice. It dedupes on its steps' claims in
+    // D1, not on `job_idempotency`: a retried delivery must run again (it
+    // rebuilds the run first), and each slice sends the next as its last act.
+    if (body.job_type === 'deck_gen_batch') {
+      const { consumeDeckGenMessage } = await import('./services/decks/queueRuntime');
+      const d = await consumeDeckGenMessage(env, body, message.attempts ?? 1);
+      if (d === 'retry') message.retry({ delaySeconds: 30 });
+      else message.ack();
+      await meter(env, body.job_type, d === 'retry' ? 'failed' : 'completed', Date.now() - t0);
       continue;
     }
 

@@ -483,6 +483,9 @@ export interface Env {
   DECK_PRESENCE?: DurableObjectNamespace;
   // D1502 part 2 (#3753): one room per deck that drives its generation runs, and one governor per account that throttles their steps.
   DECK_GEN_ROOM?: DurableObjectNamespace;
+  // D1536 (#3785, B9): `"queue"` sends a run of more than 18 variants through JOB_QUEUE
+  // (`services/decks/queueRuntime.ts`); `"do"` (and unset) keeps every run on DECK_GEN_ROOM.
+  DECK_GEN_RUNTIME?: string;
   AI_GOVERNOR?: DurableObjectNamespace;
   // Vectorize index `axal-search` (768-dim, cosine) for semantic search.
   // Optional so unit-test envs without the binding still type-check; the
@@ -514,6 +517,10 @@ export interface Env {
   // 32-hex account UUID. Both unset → `loadTechnical` reads from D1.
   CLOUDFLARE_ACCOUNT_ID?: string;
   CLOUDFLARE_AE_API_TOKEN?: string;
+  // D1536 (#3785, B9): a read-only token (`Account · Workers AI · Read`) for the weekly
+  // catalogue drift job (`services/ai/catalogueDrift.ts`), with CLOUDFLARE_ACCOUNT_ID.
+  // Unset → the job skips with a logged reason and raises no alert. Never logged.
+  CLOUDFLARE_AI_MODELS_API_TOKEN?: string;
   // D161 — the dataset name the SQL reader queries. The generated branch
   // configs have written this since D105 (scripts/lib/branchConfig.mjs) with
   // the stated purpose of "keeping the SQL-API reader from hardcoding HQ's",

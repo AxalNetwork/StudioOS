@@ -17,6 +17,11 @@
  *     the run's recent events, then each event as it happens (`area_started`,
  *     `area_busy`, `step_done`, `variant_ready`, `area_failed`, `batch_done`).
  *
+ * D1536 (#3785, B9): a run the job queue drives (`services/decks/queueRuntime.ts`)
+ * is never driven here. Its events arrive on `/relay` and are streamed like the
+ * room's own, and `/cancel` re-arms the alarm only for a run this room drives,
+ * so the room never rebuilds a step the queue has in flight.
+ *
  * Only the Worker reaches it (`services/decks/genRooms.ts`), after the route
  * has checked who may read or stop the run; the member's id arrives in
  * `x-deck-user`.
@@ -32,6 +37,7 @@ export const DRIVERS = 6;
 export const SLICE_MS = 10 * 60_000;
 const RECENT = 200;
 const ACTIVE = new Set(['queued', 'running', 'cancelling']);
+const RELAYED = new Set<GenEvent['type']>(['area_started', 'area_busy', 'step_done', 'variant_ready', 'area_failed', 'batch_done']);
 
 type Stream = { uid: string; writer: WritableStreamDefaultWriter<Uint8Array> };
 const enc = new TextEncoder();
@@ -131,8 +137,15 @@ export class DeckGenRoom implements DurableObject, DeckGenRuntime {
       const uid = url.searchParams.get('uid') ?? '';
       if (req.method === 'POST' && url.pathname === '/cancel') {
         const st = await this.runtime.cancel(uid, user);
-        if (st && ACTIVE.has(st.state)) await this.kick(uid); // the driver stops the waiting steps and settles
+        // The driver stops the waiting steps and settles: this room's alarm for its own runs, the queue's delivery for the queue's.
+        if (st && ACTIVE.has(st.state) && (await this.activeUids()).includes(uid)) await this.kick(uid);
         return st ? json(st) : json({ error: 'not_found' }, 404);
+      }
+      if (req.method === 'POST' && url.pathname === '/relay') {
+        const e = (await req.json()) as GenEvent;
+        if (!e || !RELAYED.has(e.type) || typeof e.batch_uid !== 'string') return json({ error: 'invalid_event' }, 400);
+        await this.broadcast(e);
+        return json({ ok: true });
       }
       if (req.method === 'GET' && url.pathname === '/events') {
         const st = await this.runtime.status(uid);

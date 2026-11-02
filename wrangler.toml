@@ -175,6 +175,10 @@ AGENT_AUTONOMY = "manual"
 # D1528: the runtime behind the seam (src/agents/runtime.ts). "do" is the only one built.
 AGENT_RUNTIME = "do"
 # D1528: AGENT_AI_GATEWAY (the `agents` AI Gateway id) stays unset until the owner creates the gateway.
+# D1536 (#3785, B9): the deck generation runtime. "queue" sends a batch of more than 18 variants
+# through JOB_QUEUE under the same hold, quote and events (owner decision Z = A); "do" keeps every
+# batch on DECK_GEN_ROOM and is the switch back. Mirrored in the production and preview vars tables.
+DECK_GEN_RUNTIME = "queue"
 # D886 B9: meeting bot rollout; B1 enforces Super-Admin-only canary.
 MEETING_BOT = "canary"
 # Task #5 — canonical-host flip complete. APP_URL / PUBLIC_BASE_URL
@@ -678,6 +682,8 @@ AGENT_ENGINE = "off"
 # D1528 (#3847): mirrored from [vars].
 AGENT_AUTONOMY = "manual"
 AGENT_RUNTIME = "do"
+# D1536 (#3785): mirrored from [vars]; env tables do not inherit.
+DECK_GEN_RUNTIME = "queue"
 # D886 B9: vars do not inherit into named environments.
 MEETING_BOT = "canary"
 # Task #5 — canonical-host flip. APP_URL/PUBLIC_BASE_URL now point at
@@ -988,6 +994,8 @@ MEETING_BOT = "off"
 AGENT_ENGINE = "off"
 AGENT_AUTONOMY = "manual"
 AGENT_RUNTIME = "do"
+# D1536 (#3785): mirrored from [vars].
+DECK_GEN_RUNTIME = "queue"
 # D867: private captures require explicit enablement in each environment.
 TELEGRAM_CAPTURE = "off"
 APP_URL           = "https://studioos-preview.workers.dev"

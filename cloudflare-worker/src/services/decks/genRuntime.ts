@@ -4,7 +4,8 @@
  * Routes talk only to `DeckGenRuntime` (`admit`, `startBatch`, `cancel`,
  * `status`, `rebuild`). `D1GenRuntime` is the implementation over D1 that every
  * other one builds on: `DeckGenRoom` (part 2, one Durable Object per deck, so a
- * run survives a closed tab) drives it, and B9's Queue fallback will too. The
+ * run survives a closed tab) drives it, and so does B9's Queue fallback
+ * (`queueRuntime.ts`, D1536) for a batch of more than 18 variants. The
  * contract suite (`deck_gen_runtime_contract.test.ts`) runs against every one.
  *
  * ONE QUOTE, ONE HOLD (dk-auto AUTO-6, option (a): a `deck_build` class).
