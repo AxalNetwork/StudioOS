@@ -5,6 +5,16 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # #4107: the merge queue tests each entry on a `gh-readonly-queue/main/…`
+  # branch through this event, and waits for main's required checks there.
+  # Four of them are this file's: `frontend (build)`, `worker (typecheck)`,
+  # `test:drift (full suite)` and `api ↔ worker drift`. They run on every
+  # entry. The other jobs here are not required, already ran on the pull
+  # request, and would only hold runners the queue needs, so each is skipped
+  # under `merge_group` (`if: github.event_name != 'merge_group'`).
+  # frontend/test/merge_queue_ci_4107.test.mjs keeps both lists honest.
+  merge_group:
+    types: [checks_requested]
 
 # A pull request's run is cancelled by its next push: only its head matters.
 # A push to main is NEVER cancelled, and each push is its own group (D1279).
@@ -123,6 +133,7 @@ jobs:
   # -------------------------------------------------------------------------
   visual:
     name: editor visual regression and axe
+    if: github.event_name != 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     container:
@@ -190,6 +201,7 @@ jobs:
   # -------------------------------------------------------------------------
   og-tags:
     name: open graph metadata
+    if: github.event_name != 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -248,6 +260,7 @@ jobs:
   # -------------------------------------------------------------------------
   dev-backend:
     name: dev backend (import smoke)
+    if: github.event_name != 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -277,6 +290,7 @@ jobs:
   # -------------------------------------------------------------------------
   audit-frontend:
     name: audit (frontend npm)
+    if: github.event_name != 'merge_group'
     runs-on: ubuntu-latest
     # 10, not 5. Both npm audit jobs were CANCELLED — not failed — on two
     # consecutive runs of PR #429, a diff with no dependency change on either
@@ -322,6 +336,7 @@ jobs:
 
   audit-worker:
     name: audit (worker npm)
+    if: github.event_name != 'merge_group'
     runs-on: ubuntu-latest
     # 10, not 5. Both npm audit jobs were CANCELLED — not failed — on two
     # consecutive runs of PR #429, a diff with no dependency change on either
@@ -357,6 +372,7 @@ jobs:
 
   audit-python:
     name: audit (python pip-audit)
+    if: github.event_name != 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
