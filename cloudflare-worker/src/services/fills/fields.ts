@@ -91,6 +91,9 @@ export const FILL_FIELDS: readonly FillField[] = Object.freeze([
   { page: ROADMAP, form: 'item', field: 'title', label: 'Item', table: 'roadmap_okrs', column: 'objective', class: 'composition', sources: ['eadwyn'] },
   { page: CAPITAL, form: 'investor', field: 'notes', label: 'Notes', table: 'raise_prospects', column: 'notes', class: 'composition', sources: ['eadwyn'] },
   { page: TEAM, form: 'role', field: 'title', label: 'Role', table: 'job_postings', column: 'title', class: 'composition', sources: ['eadwyn'] },
+  // #4046 (Group A2): a deal page's note, an investor's own words on a deal their firm holds. Its tag is the
+  // member's call; an amount, a term or a decision is never written into a note by Eadwyn (D777, D1325).
+  { page: 'Investor · Deals · Deal page', form: 'deal-note', field: 'body', label: 'Note', table: 'deal_notes', column: 'body', class: 'composition', sources: ['eadwyn'] },
   // D1329 (#3490, #2431 part 6): every other profile. These records are not a
   // venture's; `scopes.ts` holds each one's own write check. No amount, legal
   // name, approval, decision, outcome, term or member's record is listed.

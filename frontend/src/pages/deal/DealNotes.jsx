@@ -16,6 +16,8 @@ import { reportError } from '../../lib/log';
 import { CARD, EYE, SUB, H3, BTN_S } from './DealFrame';
 import { EADWYN_DRAFT_WAITS, EMPTY, NOTE_MAX, NOTE_TAGS, noteError } from './dealFrameModel';
 import Sheet from '../../ui/Sheet.jsx';
+import { FillFormBar, FillLabel, useScopedFill } from '../../ui/useScopedFill.jsx';
+import { SCOPED_FORMS } from '../../lib/fillScoped.js';
 
 const FIELD = 'block w-full rounded-axal-xs border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 const TAG = (on) => `inline-flex min-h-[28px] items-center rounded-axal-pill border px-3 text-[12px] font-semibold ${on
@@ -38,13 +40,18 @@ function NoteDialog({ mode, note, dealId, onDone, onClose }) {
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const del = mode === 'delete';
+  // #4046 (Group A2): Ask on the note's words, read against the note itself (its id), the author's only.
+  const fill = useScopedFill({
+    scope: SCOPED_FORMS.dealNote, record: note.id ?? null, enabled: !del && Number(note.id) > 0,
+    values: { body }, onValues: (v) => { if (v.body != null) setBody(v.body); },
+  });
   const go = async () => {
     const bad = del ? null : noteError(body);
     if (bad) { setErr(bad); return; }
     setBusy(true); setErr('');
     try {
       if (del) await dealContextApi.deleteNote(dealId, note.uid);
-      else await dealContextApi.editNote(dealId, note.uid, { body: body.trim(), tag: tag || null });
+      else { await dealContextApi.editNote(dealId, note.uid, { body: body.trim(), tag: tag || null }); await fill.afterSave(note.id); }
       onDone();
     } catch (e) { setErr(e?.message || 'That did not save. Try again.'); } finally { setBusy(false); }
   };
@@ -62,8 +69,10 @@ function NoteDialog({ mode, note, dealId, onDone, onClose }) {
         {del
           ? <p className="m-0 whitespace-pre-line text-[13px] text-axal-ink dark:text-gray-100">{note.body}</p>
           : (<>
+            <FillLabel fill={fill} name="body" label="Note" value={body}><span className={EYE}>Note</span></FillLabel>
             <textarea rows={5} maxLength={NOTE_MAX} value={body} onChange={(e) => setBody(e.target.value)} className={FIELD} aria-label="Note" />
             <TagPicker value={tag} onChange={setTag} />
+            <FillFormBar fill={fill} />
           </>)}
         {err && <p role="alert" className="m-0 text-[12.5px] text-axal-destructive dark:text-red-300">{err}</p>}
       </div>
@@ -78,6 +87,11 @@ function Notes({ dealId, userId }) {
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const [dialog, setDialog] = useState(null); // { mode, note }
+  // #4046 (Group A2): Ask on a new note's words, under this deal (`parent`); Save then keeps what was placed.
+  const fill = useScopedFill({
+    scope: SCOPED_FORMS.dealNote, parent: Number(dealId) > 0 ? Number(dealId) : null, enabled: Number(dealId) > 0,
+    values: { body }, onValues: (v) => { if (v.body != null) setBody(v.body); },
+  });
   const load = () => {
     dealContextApi.notes(dealId).then((data) => setRead({ status: 'ready', data }))
       .catch((e) => { reportError('DealNotes:read', e); setRead({ status: 'unreadable' }); });
@@ -88,7 +102,8 @@ function Notes({ dealId, userId }) {
     if (bad) { setErr(bad); return; }
     setBusy(true); setErr('');
     try {
-      await dealContextApi.addNote(dealId, { body: body.trim(), tag: tag || null });
+      const created = await dealContextApi.addNote(dealId, { body: body.trim(), tag: tag || null });
+      await fill.afterSave(created?.id);
       setBody(''); setTag(''); load();
     } catch (e) { setErr(e?.message || 'That did not save. Try again.'); } finally { setBusy(false); }
   };
@@ -101,10 +116,11 @@ function Notes({ dealId, userId }) {
           {read.status === 'ready' && <span className={SUB}>{read.data?.total ?? items.length}</span>}
         </div>
         <label className="flex flex-col gap-1.5">
-          <span className={EYE}>New note</span>
+          <FillLabel fill={fill} name="body" label="New note" value={body}><span className={EYE}>New note</span></FillLabel>
           <textarea rows={3} maxLength={NOTE_MAX} value={body} onChange={(e) => setBody(e.target.value)} className={FIELD} placeholder="Write a note…" data-testid="deal-note-body" />
         </label>
         <div className="flex flex-col gap-1.5"><span className={EYE}>Tag</span><TagPicker value={tag} onChange={setTag} /></div>
+        <FillFormBar fill={fill} />
         {err && <p role="alert" className="m-0 text-[12.5px] text-axal-destructive dark:text-red-300" data-testid="deal-note-error">{err}</p>}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <span className={SUB}>Visible to you and your firm.</span>

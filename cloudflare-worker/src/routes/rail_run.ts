@@ -247,7 +247,7 @@ export function railRunRoutes(deps: { run?: Runner; quote?: Quoter } = {}) {
       } else {
         return refuse(c, 404, 'record_not_found');
       }
-      const access = await recordScope.access(c.env, user, row, parentId, { activeCompany: () => activeCompanyFor(c, user) });
+      const access = await recordScope.access(c.env, user, row, parentId, { activeCompany: () => activeCompanyFor(c, user), claimed: () => !!c.req.header('X-Company-Id') });
       // D1595: a concealed scope answers a record the caller may not read as one that does not exist.
       if (!access.read && recordScope.concealed) return refuse(c, 404, 'record_not_found');
       if (!access.write) return refuse(c, 403, 'record_not_available');

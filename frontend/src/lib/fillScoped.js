@@ -25,6 +25,8 @@ export const SCOPED_FORMS = Object.freeze({
   support: Object.freeze({ page: 'Investor · Portfolio · Value-add', form: 'support', table: 'portfolio_support_entries' }),
   offering: Object.freeze({ page: 'Operating Partner · Offers · Catalog', form: 'offering', table: 'service_offerings' }),
   perk: Object.freeze({ page: 'Operating Partner · Offers · Perk deals', form: 'perk', table: 'perks' }),
+  // #4046 (Group A2): a deal page's note, under its deal; its Edit names the note.
+  dealNote: Object.freeze({ page: 'Investor · Deals · Deal page', form: 'deal-note', table: 'deal_notes' }),
 });
 
 export const SUPPORT_OFF = 'Ask is off in a support session.';

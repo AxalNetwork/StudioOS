@@ -46,3 +46,17 @@ wait for a later part: the competitor's row is keyed by name and the
 feedback's by uid, which `ROW_READS` and `fillRecordId` do not take. An
 obligation's title waits for its Edit form to draw one.
 
+
+**#4046 Group A2.** A deal page's note joins as a scoped record
+(`scopes.ts` `deal_notes`, parent `deal`): `deal_notes.body`, composition, its tag
+never. Its rule is the notes route's own (`../../routes/deal_context.ts` `context`, now
+`dealFirm` and `investorDeal`, shared): an investor, the firm the request is for
+(`ScopeContext.claimed` carries whether one was named, so an unverified claim never
+falls back), and a deal they hold an invitation or a commitment on. The firm reads a
+note's marks; only its author fills it; an admin is answered as if it did not exist.
+The run reads the deal's company and the author's own notes, never a colleague's.
+Not built in A2, with the reason recorded on #4046: the DD memo (its parts are
+encrypted at rest, and Fill's provenance and proposals keep values in plaintext), the
+closing paper's open fields (legal merge fields an Admin types into a document to be
+signed: identity and terms, with no stored row) and the data room's "Eadwyn
+proposals" (checklist matches and folders, a new Eadwyn handler, not a form field).

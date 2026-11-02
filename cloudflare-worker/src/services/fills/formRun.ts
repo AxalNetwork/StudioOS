@@ -139,6 +139,13 @@ export async function gatherScoped(env: Env, userId: number, table: string, row:
     out.existing = await list('SELECT title AS value FROM service_offerings WHERE owner_user_id = ? ORDER BY id DESC LIMIT 40', userId);
   } else if (table === 'perks') {
     out.existing = await list('SELECT offer AS value FROM perks WHERE partner_user_id = ? ORDER BY id DESC LIMIT 40', userId);
+  } else if (table === 'deal_notes') {
+    // #4046: the company the deal is for, and the caller's own last notes on it (never a colleague's, never a figure).
+    const dealId = row ? row.deal_id : parentId;
+    const company = await env.DB.prepare('SELECT p.name FROM deals d JOIN projects p ON p.id = d.project_id AND p.deleted_at IS NULL WHERE d.id = ?')
+      .bind(dealId ?? null).first<{ name: string }>();
+    out.context = [`Company: ${company?.name ?? 'not recorded'}`];
+    out.existing = await list('SELECT body AS value FROM deal_notes WHERE deal_id = ? AND author_user_id = ? ORDER BY id DESC LIMIT 10', dealId ?? null, userId);
   } else if (table === 'admin_publications' && row) {
     out.context = [`Publication: ${String(row.title ?? 'title not recorded')}`, `Section: ${String(row.section ?? 'not recorded')}`];
   }

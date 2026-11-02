@@ -21,25 +21,41 @@ r.use('/:id/whats-new', guard);
 r.use('/:id/notes', guard);
 r.use('/:id/notes/:uid', guard);
 
+/**
+ * The firm a deal request is for: the verified active company, or (when no
+ * company is claimed) the investor's one firm. `invalid` when a claim does not
+ * verify, `ambiguous` when there is no claim and more than one firm.
+ * #4046: Fill's deal-note scope (`services/fills/scopes.ts`) shares it.
+ */
+export async function dealFirm(env: Env, user: { id: number }, active: number | null, claimed: boolean): Promise<{ company: number | null } | 'invalid' | 'ambiguous'> {
+  // An invalid explicit claim never falls back to another firm.
+  if (claimed && active == null) return 'invalid';
+  if (active != null) return { company: active };
+  const links = await env.DB.prepare('SELECT DISTINCT company_id FROM user_company_links WHERE user_id = ? LIMIT 2').bind(user.id).all();
+  if (links.results.length > 1) return 'ambiguous';
+  return { company: links.results.length ? Number(links.results[0].company_id) : null };
+}
+
+/** The deal, if this investor holds an invitation or a commitment on it for this firm (or none). #4046: shared with Fill. */
+export async function investorDeal(env: Env, user: { id: number }, id: number, company: number | null) {
+  return env.DB.prepare(`SELECT d.id, d.project_id, d.status, d.created_at, d.updated_at FROM deals d
+    WHERE d.id = ? AND EXISTS (SELECT 1 FROM projects p WHERE p.id = d.project_id AND p.deleted_at IS NULL)
+    AND (EXISTS (SELECT 1 FROM deal_invitations i WHERE i.deal_id = d.id AND i.investor_user_id = ? AND (i.company_id = ? OR i.company_id IS NULL))
+      OR EXISTS (SELECT 1 FROM commitments k WHERE k.deal_id = d.id AND k.investor_user_id = ? AND (k.company_id = ? OR k.company_id IS NULL)))`)
+    .bind(id, user.id, company, user.id, company).first<any>();
+}
+
 export async function context(c: any) {
   const user = await requireAuth(c);
   if (user.role !== 'investor') return { error: c.json({ error: 'investor_only' }, 403) };
   const raw = c.req.param('id');
   if (!/^[1-9][0-9]{0,14}$/.test(raw)) return { error: c.json({ error: 'invalid_deal' }, 400) };
-  let company = await activeCompanyFor(c, user);
-  // An invalid explicit claim never falls back to another firm.
-  if (c.req.header('X-Company-Id') && company == null) return { error: c.json({ error: 'firm_required' }, 403) };
-  if (company == null) {
-    const links = await c.env.DB.prepare('SELECT DISTINCT company_id FROM user_company_links WHERE user_id = ? LIMIT 2').bind(user.id).all();
-    if (links.results.length > 1) return { error: c.json({ error: 'firm_required', message: 'Choose the firm this deal is for.' }, 409) };
-    company = links.results.length ? Number(links.results[0].company_id) : null;
-  }
+  const firm = await dealFirm(c.env, user, await activeCompanyFor(c, user), !!c.req.header('X-Company-Id'));
+  if (firm === 'invalid') return { error: c.json({ error: 'firm_required' }, 403) };
+  if (firm === 'ambiguous') return { error: c.json({ error: 'firm_required', message: 'Choose the firm this deal is for.' }, 409) };
+  const company = firm.company;
   const id = Number(raw);
-  const deal = await c.env.DB.prepare(`SELECT d.id, d.project_id, d.status, d.created_at, d.updated_at FROM deals d
-    WHERE d.id = ? AND EXISTS (SELECT 1 FROM projects p WHERE p.id = d.project_id AND p.deleted_at IS NULL)
-    AND (EXISTS (SELECT 1 FROM deal_invitations i WHERE i.deal_id = d.id AND i.investor_user_id = ? AND (i.company_id = ? OR i.company_id IS NULL))
-      OR EXISTS (SELECT 1 FROM commitments k WHERE k.deal_id = d.id AND k.investor_user_id = ? AND (k.company_id = ? OR k.company_id IS NULL)))`)
-    .bind(id, user.id, company, user.id, company).first();
+  const deal = await investorDeal(c.env, user, id, company);
   if (!deal) return { error: c.json({ error: 'deal_not_found' }, 404) };
   return { user, company, id, deal };
 }
@@ -141,7 +157,8 @@ r.get('/:id/notes', async c => {
     const limit = Math.min(100, Math.max(1, Number(c.req.query('limit')) || 25));
     const offset = Math.max(0, Number(c.req.query('offset')) || 0);
     if (!Number.isSafeInteger(limit) || !Number.isSafeInteger(offset)) return c.json({error:'invalid_page'},400);
-    const rows = await c.env.DB.prepare(`SELECT uid, author_user_id, company_id, tag, body, created_at, updated_at FROM deal_notes
+    // #4046: `id`, which a note's Edit names to Fill as its record.
+    const rows = await c.env.DB.prepare(`SELECT id, uid, author_user_id, company_id, tag, body, created_at, updated_at FROM deal_notes
       WHERE deal_id = ? AND company_id IS ? AND (company_id IS NOT NULL OR author_user_id = ?) ORDER BY id DESC LIMIT ? OFFSET ?`).bind(x.id,x.company,x.user.id,limit,offset).all();
     const count = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM deal_notes WHERE deal_id = ? AND company_id IS ? AND (company_id IS NOT NULL OR author_user_id = ?)').bind(x.id,x.company,x.user.id).first<{n:number}>();
     return c.json({ items: rows.results, total: count!.n });
@@ -165,7 +182,9 @@ r.post('/:id/notes', async c => {
       c.env.DB.prepare('INSERT INTO deal_notes (uid,deal_id,author_user_id,company_id,tag,body) VALUES (?,?,?,?,?,?)').bind(uid,x.id,x.user.id,x.company,b.tag,b.body),
       audit(c.env.DB,x,'deal_note_added',uid),
     ]);
-    return c.json({uid},201);
+    // #4046: the row's id too, which Fill's record step names after Save.
+    const row = await c.env.DB.prepare('SELECT id FROM deal_notes WHERE uid = ?').bind(uid).first<{ id: number }>();
+    return c.json({ uid, id: row ? Number(row.id) : null }, 201);
   } catch { return c.json({error:'note_write_failed',message:'The note could not be saved. Try again.'},503); }
 });
 function changeNote(method: 'put' | 'delete') {
