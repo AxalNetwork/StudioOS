@@ -276,6 +276,7 @@ import deckCritic from './routes/deck_critic';
 import deckQaRoutes from './routes/deck_qa';
 import deckTransform from './routes/deck_transform';
 import deckImages from './routes/deck_images';
+import deckRehearsals from './routes/deck_rehearsals';
 // D1565 (#3812): one link per investor, and tailored variants.
 import deckInvestorLinks from './routes/deck_investor_links';
 import notificationsRoutes from './routes/notifications';
@@ -1447,6 +1448,8 @@ app.route('/api/decks', deckQaRoutes);
 app.route('/api/decks', deckTransform);
 // D903 (#2682): card and background images (`/:id/images…`, `/images/:uid/…`), before `decks` so `GET /:id` cannot answer `/images/…`.
 app.route('/api/decks', deckImages);
+// D1580 F1 (#3827): rehearse a deck version and read its report.
+app.route('/api/decks', deckRehearsals);
 // D1565 (#3812): `/:id/investor-links…` and `/:id/variants`, before `decks` so its `/:id` routes cannot answer them.
 app.route('/api/decks', deckInvestorLinks);
 // #4105: deck_quotes.ts (D1556), deck_reports.ts (D1540, with HQ's queue at
@@ -2348,6 +2351,14 @@ export default {
             await sweepQuietChats(env, now);
           } catch (e) {
             console.error('[cron] channel sweeps failed', e instanceof Error ? e.message : 'error');
+          }
+          // D1580 F1 (#3827) — a rehearsal's audio once its hour is up, unless the founder kept it.
+          try {
+            const { purgeRehearsalAudio } = await import('./services/rehearsalAudio');
+            const r = await purgeRehearsalAudio(env, now);
+            if (r.deleted) console.info(`[cron] rehearsal audio purge deleted=${r.deleted}`);
+          } catch (e) {
+            console.error('[cron] rehearsal audio purge failed', e instanceof Error ? e.message : 'error');
           }
         }
         // D685 §5.6 — recordings a closed tab left behind: drafts never
