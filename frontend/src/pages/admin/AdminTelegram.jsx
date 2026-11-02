@@ -13,6 +13,7 @@ import { useAuth } from '../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../lib/shellRole';
 import { RailFrame, WorkerRail } from '../../ui';
 import TelegramBotHealth from './TelegramBotHealth';
+import HeaderAsk from '../../ui/HeaderAsk.jsx';
 
 const AUDIENCES = ['public', 'founders', 'investors', 'advisors', 'partners', 'alumni'];
 const TABS = [
@@ -948,7 +949,8 @@ export default function AdminTelegram() {
     <RailFrame rail={rail} data-testid="telegram-frame">
     <div className="max-w-6xl mx-auto p-6 space-y-4">
       <ToastMessage toast={toast.toast} onDismiss={toast.dismissToast} />
-      <header>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <Send className="w-6 h-6 text-violet-600" /> Telegram
         </h1>
@@ -956,6 +958,8 @@ export default function AdminTelegram() {
           Manage the public @axalvc channel and the five invite-only cohort channels.
           All sends are admin-gated and audited; the PII linter blocks leaky drafts.
         </p>
+        </div>
+        <HeaderAsk />
       </header>
 
       {superAdmin && <TelegramBotHealth />}
