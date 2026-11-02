@@ -37,6 +37,7 @@ import { railFor } from '../util/railContext';
 import { slideTotals, recordSlideSeconds, recordSlideCardUids } from '../services/deckSlideDwell';
 import { logCycleWrite } from '../services/cycleActivity';
 import { shareAnalytics, type LinkAnalytics } from '../services/decks/shareAnalytics';
+import { gateFor, publishOf } from '../services/decks/publish';
 import { DEFAULT_SHARE_INCLUDE, parseShareInclude, shareSlides, shareSpinoutFields, type ShareInclude } from '../services/decks/shareInclude';
 import { sanitizeBinding } from '../services/decks/sources';
 import {
@@ -814,6 +815,17 @@ decks.get('/share/:token', async (c) => {
     'SELECT * FROM pitch_deck_share_tokens WHERE token_hash = ?',
   ).bind(await sha256Hex(token)).first<{ id: number; nda_required: number | null; include_json: string | null; prospect_id: number | null; investor_label: string | null; variant_id?: number | null; watermark_text?: string | null }>();
   const ndaRequired = Number(link?.nda_required ?? 0) === 1;
+  // D1564 (#3811): a published link asks for the reader's email first, and
+  // sends no card and uses no view until this browser has given one. While
+  // public views are off (owner decision T) the gate is always on.
+  const published = publishOf(link?.include_json);
+  if (link && published && gateFor(published) === 'email' && await shareLinkLive(c.env, await sha256Hex(token), bind.viewerHash)) {
+    const { emailGatePassed, emailGateAnswer } = await import('./deck_publish');
+    if (!(await emailGatePassed(c.env, c.req.header('cookie'), Number(link.id)))) {
+      if (bind.setCookie) c.header('Set-Cookie', bind.setCookie);
+      return c.json(await emailGateAnswer(c.env, parseInt(m[1])));
+    }
+  }
   if (link && ndaRequired && await shareLinkLive(c.env, await sha256Hex(token), bind.viewerHash)) {
     const gate = await ndaGate(c, Number(link.id), parseInt(m[1]));
     if (gate) {
@@ -919,6 +931,8 @@ decks.get('/share/:token', async (c) => {
     // does not stop a screenshot or the browser's own print.
     allow_download: bind.allowDownload,
     nda_required: ndaRequired,
+    // D1564: a link published as a page, and the gate it applies; null for an investor's own link.
+    published: published ? { gate: gateFor(published) } : null,
     // D902 — a studio link names its investor and offers no deal pack (bug 12; `deck_share_actions.ts`).
     offers_deal_pack: !(link && (link.prospect_id != null || String(link.investor_label || '').trim() !== '')),
     included,

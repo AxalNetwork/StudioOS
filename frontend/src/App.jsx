@@ -512,6 +512,8 @@ const PublicPartnerProfilePage = lazy(() => import('./pages/PublicPartnerProfile
 const PublicProfilePage = lazy(() => import('./pages/PublicProfilePage'));
 const PublicStartupProfilePage = lazy(() => import('./pages/PublicStartupProfilePage'));
 const PitchDeckPrintPage = lazy(() => import('./pages/PitchDeckPrintPage'));
+// D1564 (#3811): a published deck framed on a site its founder listed; the Worker answers only those frames.
+const DeckEmbedPage = lazy(() => import('./pages/DeckEmbedPage'));
 import { PERSONA_BY_ID as PERSONA_LOOKUP } from './lib/personas';
 const EmailChangeConfirmPage = lazy(() => import('./pages/EmailChangeConfirmPage'));
 const EmailChangeRevokePage = lazy(() => import('./pages/EmailChangeRevokePage'));
@@ -2856,6 +2858,7 @@ function AppInner() {
       <Route path="/partner/relationships/:id" element={guard(['admin', 'partner'], <PartnerRelationshipLog />)} />
       <Route path="/deck/:id/print" element={guard(['admin', 'founder', 'partner', 'investor'], <PitchDeckPrintPage />)} />
       <Route path="/deck/share/:token" element={<PitchDeckPrintPage shareMode />} />
+      <Route path="/embed/:token" element={<DeckEmbedPage />} />
       {/* Task #53 — canonical share URL per spec is /share/deck/<token>. */}
       {/* Build queue #120 — public, audience-scoped cap-table link. No auth:
           the payload is redacted server-side for the link's audience. */}
