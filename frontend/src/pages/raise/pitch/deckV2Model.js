@@ -73,7 +73,8 @@ export const ELEMENT_GROUPS = Object.freeze([
     { id: 'illustration', label: 'Illustration', ...R('POST /api/decks/:id/images', 'deck:image') },
     { id: 'upload', label: 'Uploaded', free: true, ...R('POST /api/decks/:id/images/upload') },
     { id: 'brand_assets', label: 'Brand assets', ...A('brandLocks', 3819) },
-    { id: 'edit_vary', label: 'Edit or vary', ...A('imageEdit', 3778) },
+    // D1544 (#3784): erase, expand, vary and edit are #3784's; crop, focus, filters, upscale and background removal stay #3778's.
+    { id: 'edit_vary', label: 'Edit or vary', ...A('imageVary', 3784) },
     { id: 'remove_bg', label: 'Background removal', pending: true, ...A('imageEdit', 3778) },
     { id: 'upscale', label: 'Upscale', ...A('imageEdit', 3778) },
   ] },

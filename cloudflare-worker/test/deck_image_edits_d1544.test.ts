@@ -39,6 +39,10 @@ import { d1Over } from './_d1_sqlite.mjs';
 import { withGuard } from './_guard_stub.mjs';
 import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
+import { CONTRACTS } from '../src/contracts/index.ts';
+import { contractErrors } from '../src/contracts/validate.ts';
+
+const VARY_SCHEMA = JSON.parse(readFileSync(new URL('../src/contracts/' + CONTRACTS.imageVary.schema, import.meta.url), 'utf8'));
 
 const root = new URL('../sql/', import.meta.url);
 const baseline = readFileSync(new URL('schema_baseline.sql', root), 'utf8');
@@ -73,7 +77,7 @@ const P_PERSON = '00000000-0000-4000-8000-000000000002';
 const P_SMALL = '00000000-0000-4000-8000-000000000003';
 const P_OTHER = '00000000-0000-4000-8000-000000000004';
 
-async function fixture({ partner = true, images = true, theme = null as any } = {}) {
+async function fixture({ partner = true, images = true, theme = null as any, face = 'NO' } = {}) {
   __resetForTest();
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   db.exec(baseline); for (const sql of migrations) db.exec(sql);
@@ -103,7 +107,7 @@ async function fixture({ partner = true, images = true, theme = null as any } = 
   const calls: Array<{ model: string; what: string; input: any }> = [];
   const AI = withGuard({
     run: async (model: string, input: any) => {
-      if (model === FACE_MODEL) { calls.push({ model, what: 'face', input }); return { answer: 'NO' }; }
+      if (model === FACE_MODEL) { calls.push({ model, what: 'face', input }); return { answer: face }; }
       if (model === SCOUT) {
         const what = /nudity/.test(JSON.stringify(input ?? {})) ? 'screen' : 'alt';
         calls.push({ model, what, input });
@@ -194,6 +198,7 @@ test('the hold includes the input images: the parent is resized and priced; an e
     assert.ok(erase.body.draw_microusd > edit.body.draw_microusd, `an erase's mask is a second input image, held: ${erase.body.draw_microusd} > ${edit.body.draw_microusd}`);
     assert.equal(edit.body.hold_microusd, edit.body.draw_microusd + edit.body.checks_microusd, 'one figure: the edit and its checks');
     assert.equal(f.calls.length, 0, 'a quote runs nothing');
+    for (const reply of [edit.body, erase.body]) assert.deepEqual(contractErrors(VARY_SCHEMA, reply), [], 'the adapter\'s imageVary contract (D1511)');
   } finally { f.close(); }
 });
 
@@ -261,6 +266,16 @@ test('no edit to a person without consent: an image showing a person, or an inst
   } finally { f.close(); }
 });
 
+test('an edit that comes back showing a face is refused and nothing is stored', async () => {
+  const f = await fixture({ face: 'YES' });
+  try {
+    const r = await call(f, FOUNDER, `/api/decks/images/${P_DRAWN}/edit`, { op: 'vary' });
+    assert.deepEqual([r.status, r.body.error], [422, 'real_person']);
+    assert.deepEqual(f.calls.map((c) => c.what), ['draw', 'face'], 'nothing runs after the face check');
+    assert.deepEqual(f.children(), [], 'no child is stored');
+  } finally { f.close(); }
+});
+
 // ─────────────────────────────────────────────────────────── 5. the gate
 
 test('with the partner switch off DK5 cannot run: an edit runs nothing; a vary of a drawn image redraws its description on DK4', async () => {
@@ -268,6 +283,7 @@ test('with the partner switch off DK5 cannot run: an edit runs nothing; a vary o
   try {
     const q = await call(f, FOUNDER, `/api/decks/images/${P_DRAWN}/edit/quote`, { op: 'edit', instruction: 'Make the lamp warmer' });
     assert.deepEqual([q.status, q.body.ai, q.body.reason], [200, false, 'model_not_offered']);
+    assert.deepEqual(contractErrors(VARY_SCHEMA, q.body), [], 'a refusal matches the contract too');
     const e = await call(f, FOUNDER, `/api/decks/images/${P_DRAWN}/edit`, { op: 'edit', instruction: 'Make the lamp warmer' });
     assert.notEqual(e.status, 200);
     assert.equal(f.calls.length, 0, 'nothing ran');
