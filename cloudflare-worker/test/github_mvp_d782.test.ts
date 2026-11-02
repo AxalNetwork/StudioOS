@@ -148,7 +148,7 @@ const snapshot = (w: any) => JSON.stringify({
 test('the migration adds only what no earlier schema has, and nothing is backfilled', () => {
   // Mutation checked: add `ALTER TABLE mvp_features ADD COLUMN is_must_have` to 501 → fails here.
   const earlier = [readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8'),
-    ...readdirSync('cloudflare-worker/sql/migrations').filter((f) => f.endsWith('.sql') && f < '501').map(mig)].join('\n');
+    ...readdirSync('cloudflare-worker/sql/migrations').filter((f) => f.endsWith('.sql') && Number.parseInt(f, 10) < 501).map(mig)].join('\n');
   for (const [table, col] of [['mvp_features', 'pr_state'], ['mvp_features', 'pr_url'], ['mvp_release_checks', 'release_id'], ['mvp_release_checks', 'in_release']]) {
     assert.ok(!new RegExp(`ALTER TABLE ${table} ADD COLUMN ${col}\\b`).test(earlier), `${table}.${col} already exists`);
     assert.match(M501, new RegExp(`ALTER TABLE ${table} ADD COLUMN ${col}\\b`));

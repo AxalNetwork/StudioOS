@@ -165,3 +165,64 @@ export async function sha256Hex(bytes: Uint8Array): Promise<string> {
   const d = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
   return Array.from(d, (x) => x.toString(16).padStart(2, '0')).join('');
 }
+
+// ── D1505 (#3756, decision V = A): the AI mark written into a drawn image ──────
+
+/** IPTC's term for an image made by a trained model. */
+export const AI_SOURCE_TYPE = 'http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia';
+
+const xmlEscape = (s: string) => s.replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' }[c] as string));
+
+/** The XMP packet: IPTC's DigitalSourceType and the model that drew it. */
+export function aiXmpPacket(model: string): string {
+  return '<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>'
+    + '<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
+    + '<rdf:Description rdf:about="" xmlns:Iptc4xmpExt="http://iptc.org/std/Iptc4xmpExt/2008-02-29/" xmlns:xmp="http://ns.adobe.com/xap/1.0/"'
+    + ` Iptc4xmpExt:DigitalSourceType="${AI_SOURCE_TYPE}" xmp:CreatorTool="${xmlEscape(model)}"/>`
+    + '</rdf:RDF></x:xmpmeta><?xpacket end="r"?>';
+}
+
+let CRC_TABLE: Uint32Array | null = null;
+function crc32(bytes: Uint8Array): number {
+  if (!CRC_TABLE) {
+    CRC_TABLE = new Uint32Array(256);
+    for (let n = 0; n < 256; n += 1) { let c = n; for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; CRC_TABLE[n] = c >>> 0; }
+  }
+  let c = 0xffffffff;
+  for (let i = 0; i < bytes.length; i += 1) c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+const be32 = (n: number) => new Uint8Array([(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255]);
+
+/**
+ * The image with the XMP packet written in, after any stripping: a PNG gets an
+ * `iTXt` chunk (`XML:com.adobe.xmp`) after IHDR, a JPEG an APP1 segment after
+ * SOI. A WebP, or a file this cannot walk, comes back unchanged (its row keeps
+ * the same facts in `provenance_json`). Null when nothing was written.
+ */
+export function withXmp(bytes: Uint8Array, mime: ImageMime, packet: string): Uint8Array | null {
+  const xmp = new TextEncoder().encode(packet);
+  if (mime === 'image/png' && isPng(bytes) && bytes.length >= 33 && ascii(bytes, 12, 4) === 'IHDR') {
+    const ihdrEnd = 8 + 12 + u32be(bytes, 8);
+    const data = concat([new TextEncoder().encode('XML:com.adobe.xmp'), new Uint8Array([0, 0, 0, 0, 0]), xmp]);
+    const typeAndData = concat([new TextEncoder().encode('iTXt'), data]);
+    const chunk = concat([be32(data.length), typeAndData, be32(crc32(typeAndData))]);
+    return concat([bytes.subarray(0, ihdrEnd), chunk, bytes.subarray(ihdrEnd)]);
+  }
+  if (mime === 'image/jpeg' && isJpeg(bytes)) {
+    const head = concat([new TextEncoder().encode('http://ns.adobe.com/xap/1.0/'), new Uint8Array([0]), xmp]);
+    if (head.length + 2 > 0xffff) return null;
+    const seg = concat([new Uint8Array([0xff, 0xe1, ((head.length + 2) >> 8) & 255, (head.length + 2) & 255]), head]);
+    return concat([bytes.subarray(0, 2), seg, bytes.subarray(2)]);
+  }
+  return null;
+}
+
+/** The XMP packet a file carries, as text, or null (the read-back the tests use). */
+export function xmpOf(bytes: Uint8Array): string | null {
+  const text = new TextDecoder('latin1').decode(bytes);
+  const at = text.indexOf('<x:xmpmeta');
+  if (at < 0) return null;
+  const end = text.indexOf('</x:xmpmeta>', at);
+  return end < 0 ? null : text.slice(at, end + '</x:xmpmeta>'.length);
+}

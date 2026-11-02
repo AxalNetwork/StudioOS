@@ -453,6 +453,11 @@ class_name = "DeckGenRoom"
 [[durable_objects.bindings]]
 name       = "AI_GOVERNOR"
 class_name = "AiGovernor"
+
+# D1581 (#3828): the phone remote for Present, paired by code; one room per deck version.
+[[durable_objects.bindings]]
+name       = "DECK_REMOTE"
+class_name = "DeckRemote"
 # D1528: one AgentScope object per scope (`project:{id}`, `company:{id}`).
 [[durable_objects.bindings]]
 name       = "AGENT_SCOPE"
@@ -488,6 +493,10 @@ new_sqlite_classes = ["AgentScope"]
 [[migrations]]
 tag = "v6-agent-scope-sdk"
 new_sqlite_classes = ["ScopeAgent"]
+# D1581 (#3828): the phone remote; append-only.
+[[migrations]]
+tag = "v7-deck-remote"
+new_sqlite_classes = ["DeckRemote"]
 
 # D1528: one AgentTaskWorkflow instance per run (id = run uid). State kept 7
 # days on success, 30 on error (owner Q6 A).
@@ -852,6 +861,11 @@ class_name = "DeckGenRoom"
 [[env.production.durable_objects.bindings]]
 name       = "AI_GOVERNOR"
 class_name = "AiGovernor"
+
+# D1581 (#3828): the phone remote for Present, paired by code; one room per deck version.
+[[env.production.durable_objects.bindings]]
+name       = "DECK_REMOTE"
+class_name = "DeckRemote"
 # D1528: one AgentScope object per scope (`project:{id}`, `company:{id}`).
 [[env.production.durable_objects.bindings]]
 name       = "AGENT_SCOPE"
@@ -884,6 +898,10 @@ new_sqlite_classes = ["AgentScope"]
 [[env.production.migrations]]
 tag = "v6-agent-scope-sdk"
 new_sqlite_classes = ["ScopeAgent"]
+# D1581 (#3828): the phone remote; append-only.
+[[env.production.migrations]]
+tag = "v7-deck-remote"
+new_sqlite_classes = ["DeckRemote"]
 
 # D1528: one AgentTaskWorkflow instance per run (id = run uid). State kept 7
 # days on success, 30 on error (owner Q6 A).
@@ -1110,6 +1128,11 @@ class_name = "DeckGenRoom"
 [[env.preview.durable_objects.bindings]]
 name       = "AI_GOVERNOR"
 class_name = "AiGovernor"
+
+# D1581 (#3828): the phone remote for Present, paired by code; one room per deck version.
+[[env.preview.durable_objects.bindings]]
+name       = "DECK_REMOTE"
+class_name = "DeckRemote"
 # D1528: one AgentScope object per scope (`project:{id}`, `company:{id}`).
 [[env.preview.durable_objects.bindings]]
 name       = "AGENT_SCOPE"
@@ -1142,6 +1165,10 @@ new_sqlite_classes = ["AgentScope"]
 [[env.preview.migrations]]
 tag = "v6-agent-scope-sdk"
 new_sqlite_classes = ["ScopeAgent"]
+# D1581 (#3828): the phone remote; append-only.
+[[env.preview.migrations]]
+tag = "v7-deck-remote"
+new_sqlite_classes = ["DeckRemote"]
 
 # D1528: one AgentTaskWorkflow instance per run (id = run uid). State kept 7
 # days on success, 30 on error (owner Q6 A).
