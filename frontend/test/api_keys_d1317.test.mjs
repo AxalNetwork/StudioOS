@@ -477,7 +477,7 @@ test('the source: one home for the secret, no pop-up, no hex, dark pairs, the cl
   for (const src of [page, dialogs]) for (const m of src.matchAll(/hover:bg-gray-50(?! dark:hover)/g)) assert.match(src.slice(m.index, m.index + 200), /dark:hover:bg-/);
   const client = read('frontend/src/lib/api/developerKeys.js');
   assert.match(client, /update: \(uid, body\) => request\(`\/developer\/keys\/\$\{enc\(uid\)\}`, \{ method: 'PATCH'/);
-  assert.match(read('frontend/src/lib/api.js'), /^export \* from '\.\/api\/developerKeys\.js';$/m);
+  assert.match(read('frontend/src/lib/apiModules.generated.js'), /^export \* from '\.\/api\/developerKeys\.js';$/m);
   assert.match(read('cloudflare-worker/src/routes/developer_keys.ts'), /developerKeys\.patch\('\/:uid'/);
   assert.match(read('documentation/architecture/decisions/D1317.md'), /## D1317/);
 });

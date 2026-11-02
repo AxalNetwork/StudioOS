@@ -1,0 +1,1 @@
+| Pitch Deck Studio v2 · Boards | founder | — (the board grid: Page, PD-1 to PD-9, Ask; 58 frames) | — | as Pitch Deck Studio v2 Page | UPGRADE | D1604. The grid imports `Pitch Deck Studio v2 Page` by name. Every board maps to a live route; pd29 (Templates gallery) is `/raise/pitch/templates` since batch 5. |
