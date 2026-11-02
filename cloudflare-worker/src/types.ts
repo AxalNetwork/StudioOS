@@ -459,6 +459,9 @@ export interface Env {
   MEETING_BOT_RUNTIME?: import('./services/meetingBots').BotRuntime;
   PIPELINE_ROOM?: DurableObjectNamespace;
   ONBOARDING_CHAT?: DurableObjectNamespace;
+  // D1577 (#3824): the `DeckPresence` room. Not in wrangler.toml until the owner approves
+  // its monthly cost (decision L); absent, the presence routes answer 503 `presence_off`.
+  DECK_PRESENCE?: DurableObjectNamespace;
   // Vectorize index `axal-search` (768-dim, cosine) for semantic search.
   // Optional so unit-test envs without the binding still type-check; the
   // search service no-ops gracefully when undefined.
