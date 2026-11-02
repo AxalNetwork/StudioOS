@@ -240,7 +240,7 @@ test('the Kinds filter (CAL6): families with counts, a dash and why for a source
   // Mutation checked: the panel counting the pool (narrowed) instead of the one list.
   const v = await mounted('/calendar?date=' + TK, { events: { items: ITEMS, sources: ok(['partner_office_hour']) } });
   try {
-    assert.equal(v.text('cal-kinds'), 'Kinds 24 on');
+    assert.equal(v.text('cal-kinds'), 'Kinds 26 on');
     await v.click('cal-kinds');
     assert.ok(v.text('cal-fam-meetings').startsWith('Meetings 2'));
     assert.ok(v.text('cal-fam-sessions').includes('and 1 unread'));
@@ -277,7 +277,7 @@ test('the states (CAL16, CAL17): nothing answered shows no grid and no count; Ag
   let v = await mounted('/calendar', { fail: true });
   try {
     assert.ok(!v.has('cal-month'), 'no grid of empty days for a calendar that was not read');
-    assert.equal(v.text('cal-kinds'), 'Kinds 24 on');
+    assert.equal(v.text('cal-kinds'), 'Kinds 26 on');
     await v.click('cal-kinds');
     assert.ok(!/\b0\b/.test(v.text('cal-kinds-panel').replace(/\?kinds=…/, '')), 'no zero in the panel for an unread list');
     assert.equal(v.text('cal-kinds-show'), 'Show these kinds');
@@ -292,8 +292,8 @@ test('the Explorer (CAL14): reaches the calendar, sees Events and From other cal
     assert.ok(!v.has('cal-new-menu') && !v.ids().some((id) => id.startsWith('cal-new')), 'no New');
     await v.click('cal-kinds');
     assert.deepEqual(v.ids().filter((id) => /^cal-fam-[a-z]+$/.test(id)), ['cal-fam-events', 'cal-fam-other']);
-    // D1484 (#3977): Events holds the member's own events too.
-    assert.equal(v.text('cal-kinds'), 'Kinds 4 on');
+    // D1484 (#3977): Events holds the member's own events too; D1485 (#3979): From other calendars holds Google and Outlook.
+    assert.equal(v.text('cal-kinds'), 'Kinds 6 on');
   } finally { await v.close(); }
   const app = readFileSync('frontend/src/App.jsx', 'utf8');
   for (const p of ['/calendar', '/calendar/week', '/calendar/agenda', '/calendar/item/:kind/:id']) {

@@ -89,8 +89,9 @@ test('the canvas and the page were both parsed, so a silent zero-match cannot pa
   assert.equal(canvasKinds.length, 5, 'the canvas kind table no longer parses as five entries');
   // D1384 (#3692): compliance_due, the Compliance layer, is the tenth.
   // D1484 (#3977): D1208's three readers and "New event" make fourteen; #3959: Learning, fifteen;
-  // D1486 §b (#3981): Publish sends and planned content, seventeen; §c (#3982): round close and NDA expiry, nineteen; §d (#3983): four task stores, twenty-three.
-  assert.equal(pageKinds.length, 24, 'the page kind table no longer parses as twenty-four entries');
+  // D1486 §b (#3981): Publish sends and planned content, seventeen; §c (#3982): round close and NDA expiry, nineteen; §d (#3983): four task stores, twenty-four;
+  // D1485 (#3979): Google and Outlook events, twenty-six.
+  assert.equal(pageKinds.length, 26, 'the page kind table no longer parses as twenty-six entries');
 });
 
 test('the page draws a chip for every kind the worker can emit, and no others', () => {
@@ -99,7 +100,7 @@ test('the page draws a chip for every kind the worker can emit, and no others', 
   // is added — which is exactly how partner_office_hour lost its chip.
   const union = service.match(/\n {2}kind: ((?:'\w+'(?:\s*\|\s*)?)+);/)?.[1] || '';
   const emitted = [...union.matchAll(/'(\w+)'/g)].map((m) => m[1]).sort();
-  assert.equal(emitted.length, 24, 'the CalendarEvent kind union did not parse');
+  assert.equal(emitted.length, 26, 'the CalendarEvent kind union did not parse');
   assert.deepEqual(pageKinds.map((k) => k.id).sort(), emitted,
     'a kind the worker can emit has no chip on /calendar, or a chip names a kind it cannot');
 
@@ -349,7 +350,8 @@ test('nothing absent renders as a dash or a plausible zero', () => {
   // six states draws its own sentence there, and its pill says the state.
   // D332 — 'unreadable' (the status read never came back) stays apart from
   // 'unconfigured' (the server answered that it has no sign-in for it).
-  assert.deepEqual(CONNECTED_STATES.map((x) => x.key), ['reading', 'unconfigured', 'off', 'connected', 'failed', 'unreadable'],
+  // D1485 (#3979): 'reconnect', the events read found the saved connection expired, is the seventh.
+  assert.deepEqual(CONNECTED_STATES.map((x) => x.key), ['reading', 'unconfigured', 'off', 'connected', 'failed', 'reconnect', 'unreadable'],
     'the provider states changed without this guard');
   for (const x of CONNECTED_STATES) {
     const row = connectionRow('google', x.key, {});
@@ -371,7 +373,8 @@ test('with no provider connected the push control is withheld and the note names
     'the push control no longer depends on a connection');
   assert.match(pageRaw, /reconnect it in the panel on the right/, 'the reconnect remedy is gone');
   assert.match(pageRaw, /Connect Google or Outlook in the panel on the right/, 'the connect remedy is gone');
-  assert.match(page, /\(gState === 'failed' \|\| mState === 'failed'\)/,
+  // D1485 (#3979): an expired connection found by the events read is a reconnect too.
+  assert.match(page, /\[gState, mState\]\.some\(\(s\) => s === 'failed' \|\| s === 'reconnect'\)/,
     'the two remedies are no longer told apart');
 });
 
