@@ -8,9 +8,11 @@
  * 156 tests read them. Two things can fail quietly, and this file pins both:
  *
  *   - A module that exists and is not wired in: a page nobody can open, and a
- *     route table that `App.jsx` and the module disagree about.
- *     `missingRouteModules()` reports it, on the real tree and on a fixture
- *     tree where one module is deliberately left out.
+ *     route table that `App.jsx` and the module disagree about. Since #4105
+ *     `App.jsx` collects the folder with one eager `import.meta.glob` and
+ *     composes the list in one line, so `missingRouteModules()` reports every
+ *     module when either line is missing, and a module whose default export
+ *     is not its `<area>Routes` function; on the real tree and on fixtures.
  *   - A route in a module that the whole-app tests cannot see. They read
  *     `readRoutesSource()`, which is `App.jsx` plus every module; on the
  *     fixture tree the module's route parses exactly like `App.jsx`'s own,
@@ -21,14 +23,17 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readFileSync, existsSync, mkdtempSync, cpSync, writeFileSync, rmSync } from 'node:fs';
+import { resolve, join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { codeOnly } from './_codeOnly.mjs';
 import { routeBlock } from './_routes.mjs';
 import {
   APP_PATH, ROUTES_DIR, readRoutesSource, routeModuleFiles, routeModuleExport, missingRouteModules,
-  lazyImports, conflictingLazyImports,
+  lazyImports, conflictingLazyImports, routeModulesWiring, ROUTE_MODULES_LINE, ROUTE_MODULES_COMPOSE,
 } from './_routesSource.mjs';
+import { expandImportMetaGlob } from './_importMetaGlob.mjs';
+import { collectRouteModules } from '../src/lib/routeModules.js';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const FIXTURE = resolve(process.cwd(), 'frontend/test/fixtures/routes_modules');
@@ -85,22 +90,37 @@ test('App.jsx carries the two blocks, one above the imports and one above the ca
   assert.match(read(`${ROUTES_DIR}/README.md`), /Never move an existing route out of `App\.jsx`/);
 });
 
-test('every module under frontend/src/routes/ is imported and composed by App.jsx, alphabetically, one line each', () => {
+test('every module under frontend/src/routes/ is collected by App.jsx\'s one glob and composed by its one line, in order (#4105)', async () => {
   const missing = missingRouteModules();
   assert.deepEqual(missing, [], `modules that exist and are not wired in: ${JSON.stringify(missing)}`);
+  assert.deepEqual(routeModulesWiring(), { collected: true, composed: true });
   const { imp, comp } = blocks(APP);
+  // The glob sits in the import block and the compose line in the composition block.
+  assert.ok(imp.includes(ROUTE_MODULES_LINE), 'the glob is not in the import block');
+  assert.ok(comp.includes(ROUTE_MODULES_COMPOSE), 'the compose line is not in the composition block');
+  // No module is imported or composed by hand any more: a second, hand-written
+  // wiring would compose a module twice.
+  assert.doesNotMatch(codeOnly(APP), /^import \w+ from '\.\/routes\//m, 'a route module is imported by hand');
+  assert.doesNotMatch(codeOnly(APP), /\{\w+Routes\(routeTools\)\}/, 'a route module is composed by hand');
+  // What the glob yields, as Vite and the node loader expand it, is every
+  // module on disk; composed in `order`, then file-name order. None of the
+  // real modules declares an order, so that is file-name order, as before #4105.
   const files = routeModuleFiles();
-  const names = files.map(routeModuleExport);
-  // One import and one composition line per module, in file-name order.
-  const importOrder = [...imp.matchAll(/^import (\w+) from '\.\/routes\/[\w-]+';$/gm)].map((m) => m[1]);
-  const composeOrder = [...comp.matchAll(/^\s*\{(\w+)\(routeTools\)\}$/gm)].map((m) => m[1]);
-  assert.deepEqual(importOrder, names, 'the import block is not one line per module in file-name order');
-  assert.deepEqual(composeOrder, names, 'the composition block is not one line per module in file-name order');
-  // Nothing composes a module outside the block: every `{xRoutes(routeTools)}`
-  // in the CODE (comments stripped, so the block's own prose does not count)
-  // is one of the block's lines.
-  const everywhere = [...codeOnly(APP).matchAll(/\{(\w+)\(routeTools\)\}/g)].map((m) => m[1]);
-  assert.deepEqual(everywhere, names, 'a module is composed outside the block, or twice');
+  const globbed = {};
+  for (const file of files) globbed[`./${file.slice('frontend/src/'.length)}`] = await import(`../src/${file.slice('frontend/src/'.length)}`);
+  const collected = collectRouteModules(globbed);
+  assert.deepEqual(collected.map((m) => `frontend/src/${m.file}`), files);
+  assert.deepEqual(collected.map((m) => m.routes.name), files.map(routeModuleExport));
+  // The node loader expands App.jsx's glob to exactly those files, eagerly.
+  const expanded = expandImportMetaGlob(APP, resolve(process.cwd(), APP_PATH));
+  for (const file of files) {
+    assert.match(expanded, new RegExp(`import \\* as __glob_0_\\d+ from "\\./${file.slice('frontend/src/'.length).replace('.', '\\.')}";`), `${file} is not in the expanded glob`);
+  }
+  // Lazy routes stay lazy: a module imports no page statically, so its pages
+  // remain their own chunks although the module itself is eager.
+  for (const file of files) {
+    assert.doesNotMatch(read(file), /^import [^;]* from '\.\.\/pages\//m, `${file} imports a page eagerly`);
+  }
 });
 
 test('a route declared in a module is served: the readers the whole-app tests use see it exactly like an App.jsx route', () => {
@@ -123,20 +143,56 @@ test('a route declared in a module is served: the readers the whole-app tests us
   assert.ok(!routePaths(readFileSync(resolve(FIXTURE, APP_PATH), 'utf8')).includes('/fixture-alpha'));
 });
 
-test('a module missing from App.jsx\'s block is reported, with which half is missing', () => {
-  const missing = missingRouteModules(FIXTURE);
-  assert.deepEqual(missing, [
-    { file: 'frontend/src/routes/beta.jsx', name: 'betaRoutes', imported: false, composed: false },
-    // Imported and never composed is the quieter half: the import is dead
-    // code and the page has no route. It is reported on its own.
-    { file: 'frontend/src/routes/gamma.jsx', name: 'gammaRoutes', imported: true, composed: false },
+test('a module App.jsx would not serve is reported, with what is missing', (t) => {
+  // gamma.jsx is collected, but its default export is not `gammaRoutes`.
+  assert.deepEqual(missingRouteModules(FIXTURE), [
+    { file: 'frontend/src/routes/gamma.jsx', name: 'gammaRoutes', collected: true, composed: true, exported: false },
   ]);
+  // Without the glob line, or without the compose line, no module is served:
+  // every one is reported.
+  for (const [cut, field] of [[ROUTE_MODULES_LINE, 'collected'], [ROUTE_MODULES_COMPOSE, 'composed']]) {
+    const root = mkdtempSync(join(tmpdir(), 'routes-modules-4105-'));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    cpSync(FIXTURE, root, { recursive: true });
+    const app = readFileSync(resolve(FIXTURE, APP_PATH), 'utf8');
+    assert.ok(app.includes(cut));
+    writeFileSync(resolve(root, APP_PATH), app.replace(cut, ''));
+    const missing = missingRouteModules(root);
+    assert.deepEqual(missing.map((m) => m.file), routeModuleFiles(FIXTURE), `${field}: not every module is reported`);
+    assert.ok(missing.every((m) => m[field] === false), `${field} is not what is reported missing`);
+  }
   // The unwired module's route is still read (it exists), which is why the
   // wiring check is its own assertion rather than a side effect of parsing.
-  assert.ok(routePaths(readRoutesSource(FIXTURE)).includes('/fixture-beta'));
+  assert.ok(routePaths(readRoutesSource(FIXTURE)).includes('/fixture-gamma'));
   // The export name follows the file name, hyphens camel-cased.
   assert.equal(routeModuleExport('frontend/src/routes/admin-labs.jsx'), 'adminLabsRoutes');
   assert.equal(routeModuleExport('frontend/src/routes/alpha.jsx'), 'alphaRoutes');
+});
+
+test('collectRouteModules composes by `order`, then file name, and refuses a module it cannot compose; the loader expands only what it can (#4105)', () => {
+  const fn = (name) => ({ [name]() { return null; } })[name];
+  const got = collectRouteModules({
+    './routes/zeta.jsx': { default: fn('zetaRoutes') },
+    './routes/beta.jsx': { default: fn('betaRoutes'), order: -1 },
+    './routes/alpha.jsx': { default: fn('alphaRoutes') },
+    './routes/omega.jsx': { default: fn('omegaRoutes'), order: 10 },
+  });
+  assert.deepEqual(got.map((m) => `${m.order} ${m.file} ${m.name}`), [
+    '-1 routes/beta.jsx beta', '0 routes/alpha.jsx alpha', '0 routes/zeta.jsx zeta', '10 routes/omega.jsx omega',
+  ]);
+  assert.throws(() => collectRouteModules({ './routes/x.jsx': { default: {} } }), /default-exports a function/);
+  assert.throws(() => collectRouteModules({ './routes/x.jsx': { default: fn('xRoutes'), order: '1' } }), /finite number/);
+  // The fixture's glob expands to its three modules, in file-name order.
+  const fixtureApp = resolve(FIXTURE, APP_PATH);
+  const expanded = expandImportMetaGlob(readFileSync(fixtureApp, 'utf8'), fixtureApp);
+  assert.match(expanded, /^import \* as __glob_0_0 from "\.\/routes\/alpha\.jsx"; import \* as __glob_0_1 from "\.\/routes\/beta\.jsx"; import \* as __glob_0_2 from "\.\/routes\/gamma\.jsx"; /);
+  assert.match(expanded, /collectRouteModules\(\(\{ "\.\/routes\/alpha\.jsx": __glob_0_0, "\.\/routes\/beta\.jsx": __glob_0_1, "\.\/routes\/gamma\.jsx": __glob_0_2 \}\)\)/);
+  // Every line stays on its line, so a stack trace still points at the source.
+  assert.equal(expanded.split('\n').length, readFileSync(fixtureApp, 'utf8').split('\n').length);
+  // A lazy glob stays lazy; any other shape is refused rather than guessed.
+  assert.match(expandImportMetaGlob("const m = import.meta.glob('./routes/*.jsx');", fixtureApp), /"\.\/routes\/alpha\.jsx": \(\) => import\("\.\/routes\/alpha\.jsx"\)/);
+  assert.throws(() => expandImportMetaGlob("import.meta.glob('./routes/**/*.jsx', { eager: true })", fixtureApp), /not a pattern/);
+  assert.throws(() => expandImportMetaGlob("import.meta.glob('./routes/*.jsx', { eager: true, import: 'default' })", fixtureApp), /not supported/);
 });
 
 test('the whole-app route tests read the helper, not App.jsx alone', () => {

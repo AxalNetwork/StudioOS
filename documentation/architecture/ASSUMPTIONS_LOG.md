@@ -130,7 +130,9 @@ number. All three were true when written and wrong within a week.
 **Decided:** `PROFILE_ROUTING.md` and `PAGE_INVENTORY.md` are projections
 emitted by `scripts/build-profile-routing.mjs`, and
 `frontend/test/profile_routing_fresh.test.mjs` fails the build if either falls
-behind its sources. `ROUTE_MAP.md` stays the single authority on what shipped
+behind its sources. (Since D4103 they are not committed at all: CI builds them
+as the `routing-docs` artifact, and the test checks the projection's invariants
+instead of a copy on disk.) `ROUTE_MAP.md` stays the single authority on what shipped
 from each canvas; the generated pair answers the different question of *who sees
 it and where*.
 

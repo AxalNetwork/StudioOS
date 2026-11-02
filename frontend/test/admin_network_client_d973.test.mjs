@@ -2,6 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { apiModulesBlock } from './_apiModulesBlock.mjs';
 const seen = [];
 const storage = new Map();
 globalThis.localStorage = { getItem: k => storage.get(k) ?? null, setItem: (k, v) => storage.set(k, String(v)), removeItem: k => storage.delete(k) };
@@ -30,8 +31,8 @@ test('an unavailable overview block survives transport alongside healthy blocks'
 });
 test('D527 re-export and Worker mount are present for the drift scanner', () => {
   const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
-  const root = read('../src/lib/api.js');
-  const exports = root.slice(root.indexOf('// api-modules:begin'), root.indexOf('// api-modules:end')).split('\n').filter(x => x.startsWith('export * from'));
+  assert.match(read('../src/lib/api.js'), /^export \* from '\.\/apiModules\.generated\.js';$/m);
+  const exports = apiModulesBlock().split('\n').filter(x => x.startsWith('export * from'));
   assert.ok(exports.includes("export * from './api/adminNetwork.js';")); assert.deepEqual(exports, [...exports].sort());
   const worker = read('../../cloudflare-worker/src/index.ts');
   assert.match(worker, /app\.route\('\/api\/admin\/network', adminNetworkReads\)/);
