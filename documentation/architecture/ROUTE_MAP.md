@@ -16,9 +16,10 @@ conflicts.
   `npm run test:guards`) fails on a canvas with two rows and names both files.
 
 Every script and test reads the map through `scripts/lib/routeMap.mjs`, which
-returns exactly the text this file held before the split. `PROFILE_ROUTING.md`
-and `PAGE_INVENTORY.md` are still generated from it by
-`node scripts/build-profile-routing.mjs`.
+returns exactly the text this file held before the split. Its two projections,
+the profile routing map and the page inventory, are generated from it by
+`node scripts/build-profile-routing.mjs` (`npm run docs:routing`). They are not
+committed (D4103): CI builds them and keeps them as the `routing-docs` artifact.
 
 **Why.** ROUTE_MAP.md was touched by 226 of 403 commits in the week to
 2026-11-02, by far the most-edited file in the repository. Its `merge=union`

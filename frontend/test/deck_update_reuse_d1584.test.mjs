@@ -146,5 +146,6 @@ test('the wiring: beside Refresh from records, through its own client, and Chang
   assert.match(editor, /onUpdateDerive=\{base\.deck\?\.id != null \? \(\) => deckUpdateReuseApi\.deriveUpdate\(base\.deck\.id\) : null\}/);
   assert.match(editor, /const r = acceptUpdate\(card, proposals, items\); if \(r\.moved\) setCard\(sel, r\.card\);/);
   assert.match(codeOnly(read('pages/raise/pitch/InvestorLinksTable.jsx')), /deckUpdateReuseApi\.changesSince\(deck\.id\)/);
-  assert.match(read('lib/api.js'), /export \* from '\.\/api\/deckUpdateReuse\.js';/);
+  // #4105: the module's line is in the generated index, not in api.js.
+  assert.match(read('lib/apiModules.generated.js'), /export \* from '\.\/api\/deckUpdateReuse\.js';/);
 });

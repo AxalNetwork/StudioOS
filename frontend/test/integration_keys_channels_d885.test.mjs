@@ -98,7 +98,7 @@ test('the console draws the section from the list\'s `channels`, and the client 
     '/admin/integration-keys/channels/${enc(channel)}', '/admin/integration-keys/channels/${enc(channel)}/rotate',
     '/admin/integration-keys/channels/${enc(channel)}/rotate', '/admin/integration-keys/channels/${enc(channel)}',
   ]);
-  assert.match(read('frontend/src/lib/api.js'), /export \* from '\.\/api\/channelKeys\.js';/);
+  assert.match(read('frontend/src/lib/apiModules.generated.js'), /export \* from '\.\/api\/channelKeys\.js';/);
   const section = read('frontend/src/pages/admin/consoles/ChannelKeysSection.jsx');
   assert.match(section, /from '\.\.\/\.\.\/\.\.\/lib\/api\/channelKeys\.js'/, 'imported from its module, not through api.js');
   assert.ok(!/console\.(log|info)\(/.test(section), 'nothing is logged');
