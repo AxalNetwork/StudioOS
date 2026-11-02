@@ -17,25 +17,23 @@
  */
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 import reporting from '../src/routes/reporting.ts';
 import reportingReports from '../src/routes/reporting_reports.ts';
 import portfolioUpdates from '../src/routes/portfolio_updates.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
+import { loadSchema } from './_schema_once.mjs';
 
 const ROOT = process.cwd();
 const read = (p: string) => readFileSync(resolve(ROOT, p), 'utf8');
-const MIGRATIONS = readdirSync(resolve(ROOT, 'cloudflare-worker/sql/migrations')).filter((f) => /^\d+_.*\.sql$/.test(f)).sort(compareMigrations);
 const DDL = (() => {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  db.exec(read('cloudflare-worker/sql/schema_baseline.sql'));
-  for (const f of MIGRATIONS) if (migrationNumber(f) > BASELINE_CUTOFF) db.exec(read(`cloudflare-worker/sql/migrations/${f}`));
+  loadSchema(db);
   const out = (db.prepare("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 WHEN 'view' THEN 2 ELSE 3 END").all() as any[]).map((r) => r.sql as string);
   db.close();
   return out;

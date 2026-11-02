@@ -28,8 +28,9 @@ import cycleRecords from '../src/routes/cycle_records.ts';
 import { hasRecords } from '../src/services/records/index.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { declarationsFor } from '../../scripts/check-migration-declarations.mjs';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { editFor, initialValues } from '../../frontend/src/pages/cycles/forms.js';
+import { loadSchema } from './_schema_once.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const ROOT = process.cwd();
@@ -48,8 +49,7 @@ const NAMES = ['wren', 'okafor', 'tomas', 'reyes', 'kestrel', 'harbour'];
 /** The baseline, then every post-cutoff migration in order: a new environment's database. */
 function freshBuild(): DatabaseSync {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  db.exec(BASELINE);
-  for (const f of FILES.filter((n) => migrationNumber(n) > BASELINE_CUTOFF)) db.exec(readFileSync(resolve(MIGRATIONS, f), 'utf8'));
+  loadSchema(db);
   return db;
 }
 const BUILT_DDL = (freshBuild().prepare(`SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'
@@ -342,8 +342,7 @@ test('test 12, grep first (D-t): no column 461 adds is on its table in the basel
 
 test('test 12: 461 applies whole over a database that predates it, and its rows keep their shape', () => {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  db.exec(BASELINE);
-  for (const f of EARLIER.filter((n) => migrationNumber(n) > BASELINE_CUTOFF)) db.exec(readFileSync(resolve(MIGRATIONS, f), 'utf8'));
+  loadSchema(db, { below: 461 });
   db.exec(`INSERT INTO projects (id, name) VALUES (1, 'Kestrel Works')`);
   db.exec(`INSERT INTO mvp_features (id, project_id, title, added_value, effort) VALUES (1, 1, 'Old feature', 'Low', 'XL')`);
   db.exec(SQL_461);
