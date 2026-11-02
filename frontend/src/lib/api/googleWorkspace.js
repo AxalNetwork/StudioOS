@@ -1,3 +1,4 @@
+/** D1091: Google Workspace's consent, picked files, mapping, Stop using and previews (`/api/connectors/google-workspace`, the cycles' Google facts). */
 import { request } from '../api.js';
 const post = (path, body) => request(path, { method: 'POST', body: JSON.stringify(body) });
 const base = '/connectors/google-workspace';

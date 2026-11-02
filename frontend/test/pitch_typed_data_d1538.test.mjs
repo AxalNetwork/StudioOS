@@ -101,7 +101,7 @@ test('pd24: a typed tile reads "✎ Stated" in the editor, and its hover line sa
 
 test('the typed-values client: one module under lib/api, re-exported by one line, on the Worker\'s paths', async () => {
   // Mutation checked: the api.js export line removed → the re-export assert fails.
-  assert.match(read('src/lib/api.js'), /^export \* from '\.\/api\/deckTypedValues\.js';$/m);
+  assert.match(read('src/lib/apiModules.generated.js'), /^export \* from '\.\/api\/deckTypedValues\.js';$/m);
   const src = read('src/lib/api/deckTypedValues.js');
   assert.match(src, /`\/decks\/\$\{encodeURIComponent\(deckId\)\}\/typed-values/);
   assert.match(read('../cloudflare-worker/src/routes/deck_typed_values.ts'), /r\.(get|put|delete)\('\/:id\{\[0-9\]\+\}\/typed-values/);
