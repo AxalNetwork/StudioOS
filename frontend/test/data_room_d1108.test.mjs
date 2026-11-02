@@ -25,7 +25,7 @@ import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
 import {
   dailyChart, eventWords, investorRows, logCount, logRows, periodQuery, phoneDays, totalsLine,
 } from '../src/pages/raise/dataroom/activityModel.js';
-import { PROPOSALS_WAIT, areasOf, fileChips, itemView, opensLine, summaryLine } from '../src/pages/raise/dataroom/checklistModel.js';
+import { PROPOSALS_EMPTY, PROPOSALS_UNREADABLE, areasOf, fileChips, itemView, opensLine, proposalView, proposalsHoldLine, proposalsOf, summaryLine } from '../src/pages/raise/dataroom/checklistModel.js';
 import { previewView, viewAsOptions } from '../src/pages/raise/dataroom/previewModel.js';
 
 const h = React.createElement;
@@ -112,7 +112,19 @@ const PREVIEW = {
 };
 const ENDED = { grant_uid: 'g2', open: false, reason: 'This grant is revoked or has ended, so it opens nothing.' };
 
+// D4170 (#4170): the member's own proposals. Synthetic names only.
+const PROPOSALS = { proposals: [
+  { uid: 'pr-1', type: 'match', status: 'proposed', reason: 'The name says it is the certificate.', file: { uid: 'f1', name: 'Certificate.pdf' }, item: { key: 'incorporation', label: 'Certificate of incorporation' }, folder: null, would_satisfy: null, undoable: false },
+  { uid: 'pr-2', type: 'folder', status: 'accepted', reason: 'It sits with the financial files.', file: { uid: 'f2', name: 'Model.xlsx' }, item: null, folder: { name: 'Financials' }, would_satisfy: null, undoable: true },
+  { uid: 'pr-3', type: 'gap', status: 'proposed', reason: 'No file answers it yet.', file: null, item: { key: 'security', label: 'Security and privacy' }, folder: null, would_satisfy: 'A short security overview.', undoable: false },
+] };
+const QUOTE = { quote: { hold_microusd: 50000, model: 'synthetic-model', confirm_quote: 'c'.repeat(64) } };
+
 function handler(url) {
+  if (/\/data-room\/p3uid\/proposals\/quote$/.test(url)) return response(QUOTE);
+  if (/\/data-room\/p3uid\/proposals\/run$/.test(url)) return response(PROPOSALS);
+  if (/\/data-room\/p3uid\/proposals\/[^/]+\/(accept|dismiss|undo)$/.test(url)) return response({ proposal: { uid: 'x', status: 'accepted' }, change: null });
+  if (/\/data-room\/p3uid\/proposals$/.test(url)) return response(PROPOSALS);
   if (/\/data-room\/p3uid\/activity\.csv/.test(url)) return response({ detail: 'too many', error: 'too_many_rows' }, 413);
   if (/\/data-room\/p3uid\/activity\?/.test(url)) return response(ACTIVITY);
   if (/\/data-room\/p3uid\/checklist$/.test(url)) return response(CHECKLIST);
@@ -128,7 +140,7 @@ async function mounted(url, { phone = false, handle = handler } = {}) {
   const restore = installDocument();
   const previous = { fetch: globalThis.fetch, matchMedia: globalThis.matchMedia };
   const requests = [];
-  globalThis.fetch = async (u, options = {}) => { requests.push({ url: String(u), method: options.method || 'GET' }); return handle(String(u), options); };
+  globalThis.fetch = async (u, options = {}) => { requests.push({ url: String(u), method: options.method || 'GET', body: options.body }); return handle(String(u), options); };
   globalThis.matchMedia = () => ({ matches: phone, addEventListener() {}, removeEventListener() {} });
   const create = document.createElement.bind(document);
   document.createElement = (tag) => { const node = create(tag); node.querySelector = () => null; node.querySelectorAll = () => []; node.focus = () => {}; node.children = []; return node; };
@@ -322,7 +334,21 @@ test('mounted Activity on a phone: the last seven days as a table and the invest
   } finally { await v.close(); }
 });
 
-test('mounted Checklist: each area and item from the read, links to Files and Upload, the proposals wait with nothing to accept, and nothing is written', async () => {
+test('proposal words: what each changes, its reason, and what can be pressed; a read that is not a list is unreadable', () => {
+  const [match, folder, gap] = proposalsOf(PROPOSALS);
+  assert.deepEqual([match.title, match.actions], ['Match Certificate.pdf to Certificate of incorporation', ['accept', 'dismiss']]);
+  assert.deepEqual([folder.title, folder.actions, folder.done], ['Move Model.xlsx into Financials', ['undo'], 'Accepted']);
+  assert.deepEqual([gap.title, gap.actions], ['Security and privacy has no file. A short security overview.', ['accept', 'dismiss']]);
+  assert.equal(proposalView({ ...PROPOSALS.proposals[2], status: 'accepted' }).done, 'Noted');
+  assert.deepEqual(proposalView({ ...PROPOSALS.proposals[0], status: 'accepted', undoable: false }).actions, [], 'nothing to press once decided and not undoable');
+  assert.equal(proposalsOf({}), null, 'no list is not an empty list');
+  assert.deepEqual(proposalsOf({ proposals: [] }), []);
+  assert.equal(proposalsHoldLine(QUOTE.quote), 'Holds up to $0.0500 · you pay what it uses');
+  assert.equal(proposalsHoldLine(null), null);
+  for (const p of proposalsOf(PROPOSALS)) assert.doesNotMatch(`${p.title} ${p.reason}`, /advis|advice|@/i);
+});
+
+test('mounted Checklist: each area and item from the read, links to Files and Upload, and nothing is written by reading it', async () => {
   const v = await mounted('/raise/data-room/checklist?project_id=3');
   try {
     assert.equal(v.count('dataroom-checklist-area'), 2);
@@ -333,15 +359,62 @@ test('mounted Checklist: each area and item from the read, links to Files and Up
     assert.ok(v.hrefs().includes('/raise/data-room/files?project_id=3'));
     assert.ok(v.hrefs().includes('/raise/data-room/new?project_id=3'));
     assert.ok(v.hrefs().includes('/raise/fundraising-readiness?project_id=3'));
-    assert.equal(v.textOf('dataroom-proposals-wait'), PROPOSALS_WAIT);
-    assert.match(v.textOf('dataroom-proposals-wait'), /Each waits until Ask can record where a proposal came from\./);
-    assert.ok(!v.buttons().some((b) => /Accept|Dismiss/.test(b)), 'a proposal is never offered for acceptance here');
-    assert.deepEqual(writes(v.requests), [], 'the checklist changes nothing');
+    assert.deepEqual(writes(v.requests), [], 'reading the checklist and the proposals changes nothing');
   } finally { await v.close(); }
   const fail = await mounted('/raise/data-room/checklist?project_id=3', { handle: (u) => (/\/checklist$/.test(u) ? response({}, 500) : handler(u)) });
   try {
     assert.ok(fail.has('dataroom-checklist-unreadable'));
     assert.ok(fail.has('dataroom-proposals'), 'one failed block never blanks the page');
+  } finally { await fail.close(); }
+});
+
+test('mounted Eadwyn proposals: each with its reason, Accept and Dismiss, Undo once accepted; each press is one call', async () => {
+  const v = await mounted('/raise/data-room/checklist?project_id=3');
+  try {
+    assert.equal(v.count('dataroom-proposal'), 3);
+    assert.match(v.textOf('dataroom-proposals'), /The name says it is the certificate\./);
+    assert.match(v.textOf('dataroom-proposals'), /Match Certificate\.pdf to Certificate of incorporation/);
+    assert.equal(v.count('dataroom-proposal-accept'), 2);
+    assert.equal(v.count('dataroom-proposal-dismiss'), 2);
+    assert.equal(v.count('dataroom-proposal-undo'), 1);
+    assert.doesNotMatch(v.textOf('dataroom-proposals'), /advis|advice|@/i);
+    await v.click('dataroom-proposal-accept');
+    assert.deepEqual(writes(v.requests).map((r) => r.url.replace(/^.*\/api/, '')), ['/data-room/p3uid/proposals/pr-1/accept'], 'one press, one call');
+    assert.ok(v.requests.filter((r) => /\/checklist$/.test(r.url)).length >= 2, 'an accepted match reads the checklist again');
+    await v.click('dataroom-proposal-undo');
+    assert.ok(writes(v.requests).some((r) => /\/proposals\/pr-2\/undo$/.test(r.url)));
+  } finally { await v.close(); }
+});
+
+test('mounted Ask Eadwyn: the quote first, the run only with its confirmation; Cancel runs nothing', async () => {
+  const v = await mounted('/raise/data-room/checklist?project_id=3');
+  try {
+    await v.click('dataroom-proposals-ask');
+    assert.equal(v.textOf('dataroom-proposals-hold'), 'Holds up to $0.0500 · you pay what it uses');
+    assert.ok(!v.requests.some((r) => /\/proposals\/run$/.test(r.url)), 'a quote runs nothing');
+    await v.click('dataroom-proposals-cancel');
+    assert.ok(!v.has('dataroom-proposals-hold'));
+    await v.click('dataroom-proposals-ask');
+    await v.click('dataroom-proposals-run');
+    const run = v.requests.filter((r) => /\/proposals\/run$/.test(r.url));
+    assert.equal(run.length, 1);
+    assert.equal(JSON.parse(run[0].body).confirm_quote, QUOTE.quote.confirm_quote);
+  } finally { await v.close(); }
+});
+
+test('mounted proposals, empty and unreadable: "No proposals"; a failed read is never an empty list and offers Try again', async () => {
+  const empty = await mounted('/raise/data-room/checklist?project_id=3', { handle: (u) => (/\/proposals$/.test(u) ? response({ proposals: [] }) : handler(u)) });
+  try {
+    assert.equal(empty.textOf('dataroom-proposals-empty'), PROPOSALS_EMPTY);
+    assert.ok(!empty.has('dataroom-proposal'));
+  } finally { await empty.close(); }
+  let calls = 0;
+  const fail = await mounted('/raise/data-room/checklist?project_id=3', { handle: (u) => (/\/proposals$/.test(u) ? (calls += 1, response({}, 500)) : handler(u)) });
+  try {
+    assert.match(fail.textOf('dataroom-proposals-unreadable'), new RegExp(`${PROPOSALS_UNREADABLE} · Try again`));
+    assert.ok(!fail.has('dataroom-proposals-empty'), 'a failed read is not "No proposals"');
+    await fail.click('dataroom-proposals-retry');
+    assert.equal(calls, 2, 'Try again reads again');
   } finally { await fail.close(); }
 });
 

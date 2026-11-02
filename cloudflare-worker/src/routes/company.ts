@@ -24,6 +24,7 @@ import {
   validatePerson, validateCoverage, validatePlan, personDto,
 } from '../services/companyTeam';
 import { membershipEvent } from '../services/companyMembershipEvents';
+import { seatEndedStatements } from '../services/compliance/companyTasks';
 import { checkSlug, slugHolder, generateSlug } from '../services/slugs';
 import { legalPatch, MESSAGES as LEGAL_MESSAGES } from './company_legal';
 import { currencyCode, CURRENCY_INVALID_MESSAGE } from '../services/currencies';
@@ -666,12 +667,13 @@ r.post('/company/:uid/leave', async (c) => {
     const link = await getLink(c.env, company.id, user.id);
     if (!link) return c.json({ detail: 'Company not found' }, 404);
     // One statement makes the last-admin check hold even for simultaneous leaves.
-    const result = await c.env.DB.prepare(
+    // D1614 (#3976): the member's open compliance tasks are flagged in the same batch, only if the seat went.
+    const [result] = await c.env.DB.batch([c.env.DB.prepare(
       `DELETE FROM user_company_links WHERE company_id = ? AND user_id = ?
        AND (is_primary_admin = 0 OR EXISTS (
          SELECT 1 FROM user_company_links other
          WHERE other.company_id = ? AND other.user_id != ? AND other.is_primary_admin = 1))`
-    ).bind(company.id, user.id, company.id, user.id).run();
+    ).bind(company.id, user.id, company.id, user.id), ...seatEndedStatements(c.env, company.id, user.id)]);
     if (!result.meta.changes) return c.json({ code: 'last_primary_admin', detail: 'Assign another primary admin before leaving this company.' }, 409);
     return c.json({ ok: true });
   } catch (e) { return mapError(c, e); }
@@ -697,6 +699,8 @@ r.delete('/company/:uid/members/:userId', async (c) => {
     // D1137: a removal, or a leave when the member removes themselves.
     await c.env.DB.batch([
       c.env.DB.prepare('DELETE FROM user_company_links WHERE id = ?').bind(link.id),
+      // D1614 (#3976): flag the member's open compliance tasks for reassignment; never reassigned automatically.
+      ...seatEndedStatements(c.env, company.id, userId),
       membershipEvent(c.env, {
         kind: userId === user.id ? 'leave' : 'remove', companyId: company.id, actorUserId: user.id, targetUserId: userId,
         before: { role_in_company: link.role_in_company, is_primary_admin: Boolean(link.is_primary_admin) },
