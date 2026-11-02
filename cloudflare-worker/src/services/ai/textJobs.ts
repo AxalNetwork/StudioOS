@@ -77,7 +77,7 @@ export function fits(model: string, inputTokens: number, outputTokens: number): 
  * not offered. `text_jobs_part2_d1478.test.ts` holds this list equal to the
  * ladder models nothing else runs.
  */
-export const AWAITING_SPEND_APPROVAL: ReadonlySet<string> = new Set(['@cf/nvidia/nemotron-3-120b-a12b']);
+export const AWAITING_SPEND_APPROVAL: ReadonlySet<string> = new Set<string>(); // nemotron left it when #4063 wired it (memo_write's fallback)
 
 /** Why a model cannot run this job for this plan and input, or null when it can. */
 export function textBlock(model: string, ctx: TextContext): TextSkip | null {

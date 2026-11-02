@@ -66,8 +66,8 @@ const TEAM = 'Founder · Grow · Team expansion';
  * Eadwyn fill, so its model is the job's (`ai/textJobs.ts`), not whatever kind
  * the page's rail row is. Prototype's must-have fill read the page's Code row
  * (kimi-k2.7-code or qwen-coder); BU4 is Plan (glm-4.7-flash). A form with no
- * entry keeps its page's rail row. A ladder model no route runs yet (nemotron)
- * is passed over until its spend is approved (`AWAITING_SPEND_APPROVAL`).
+ * entry keeps its page's rail row. A ladder model no route runs yet is passed
+ * over until its spend is approved (`AWAITING_SPEND_APPROVAL`).
  */
 export const FORM_TEXT_JOBS: Readonly<Record<string, string>> = Object.freeze({
   feature: 'BU4', 'must-have': 'BU4',
