@@ -1,9 +1,11 @@
 /**
  * D1614 (#3968) — Work's and company compliance's one seam to the Worker.
  *
- * Every method is OFF today: none of their routes is on `main`. Each answers
+ * A method is OFF until its route is on `main`: it answers
  * `{ available: false, reason }` without a request, so a page draws the honest
  * "not switched on yet" block and never invents a board, a chart or a task.
+ * `burnup` is on (#3970): it goes through `workApi.burnup`, and an engine that
+ * is off answers the same honest block.
  * The builder of each Worker part adds the client method with its route, in a
  * module under `frontend/src/lib/api/` (D527), and replaces only that method's
  * body here with `through(…)`.
@@ -15,10 +17,24 @@
  *   complianceTasks, complianceTask,
  *   markDone, createWork               #3976 (S15)  the company compliance list
  */
+import { workApi } from '../../lib/api/work.js';
+
 export const WORK_OFF = 'Work is not switched on yet. Its board, backlog and burn-up arrive with the Worker part (#3969).';
 export const COMPLIANCE_OFF = 'Compliance tasks are not switched on yet. They arrive with the company compliance list (#3976).';
 
 const off = (reason) => async () => ({ available: false, reason });
+
+/** A live method: `{ available: true, data }`, or the off block when the engine is off. */
+export async function through(call, reason) {
+  try {
+    return { available: true, data: await call() };
+  } catch (e) {
+    const status = e?.status ?? e?.response?.status ?? null;
+    const code = e?.code || e?.data?.code || e?.data?.error || null;
+    if (status === 404 && code === 'agent_engine_off') return { available: false, reason };
+    throw e;
+  }
+}
 
 export const workAdapter = {
   board: off(WORK_OFF),
@@ -26,7 +42,7 @@ export const workAdapter = {
   move: off(WORK_OFF),
   assign: off(WORK_OFF),
   create: off(WORK_OFF),
-  burnup: off('The burn-up arrives with #3970.'),
+  burnup: (projectId, opts) => through(() => workApi.burnup(projectId, opts), WORK_OFF),
   run: off('Run detail arrives with #3971.'),
   retry: off('Run detail arrives with #3971.'),
   feed: off('The project activity feed arrives with #3971.'),

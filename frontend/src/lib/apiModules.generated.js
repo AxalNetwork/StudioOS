@@ -93,6 +93,7 @@ export * from './api/deckSources.js';
 export * from './api/deckStage.js';
 export * from './api/deckTransform.js';
 export * from './api/deckTypedValues.js';
+export * from './api/deckVentureElements.js';
 export * from './api/developerKeys.js';
 export * from './api/developerUsage.js';
 export * from './api/eadwyn.js';
@@ -184,4 +185,5 @@ export * from './api/useOfFunds.js';
 export * from './api/ventureScoreModels.js';
 export * from './api/ventureScores.js';
 export * from './api/verdict.js';
+export * from './api/work.js';
 // api-modules:end
