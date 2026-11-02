@@ -1,0 +1,5 @@
+### Deck v2 D7: follow-up signals from views (D1568, #3815)
+
+- **No new route.** `decks.ts` `POST /api/decks/share/:token/heartbeat` calls `services/raiseSignals.ts` `recordViewSignals` once a view's read time is stored. A view of a link made for a prospect may write a `raise_prospect_signals` row (migration 740): `first_view`, `revisit` (48 hours or more after the link's previous read view) or `reached_ask` (the ask card or a later one read).
+- **What each signal leaves:** an in-app notice to the founder who made the link; an `after_view` email draft for the prospect (`mail_drafts`, from a template, no seconds or figures); and, when the prospect's stage is behind, a stage proposal on the rail (`ai_rail_proposals`, option `signal:stage`, record `prospect:<id>`). The stage changes only when the founder presses Accept.
+- **Reads:** `deck_investor_links.ts` `GET /api/decks/:id/investor-links` gives each link `signals: [{ kind, at, words }]`; `InvestorLinksTable.jsx` draws pd35's TAG "Revisited after 48 h". The visit timeline (pd37) reads the same signals when #3820's `slideAnalytics` lands.

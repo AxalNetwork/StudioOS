@@ -55,6 +55,7 @@ function world() {
   );
   addColumnsFrom(db, sql('migrations/597_company_archive_and_events.sql'), 'company_profiles');
   db.exec(MIGRATION);
+  db.exec(sql('migrations/202611021724_team_agents_persona.sql')); // D4117: persona_key
   // #3846: migration 727's task_id and run_key, which an agent's proposal names.
   db.exec(stripForeignKeys(sql('migrations/727_scope_goals_and_tasks.sql')));
   const user = db.prepare("INSERT INTO users (id, uid, email, name, role, founder_id, subscription_tier, subscription_status) VALUES (?, ?, ?, ?, ?, ?, ?, 'active')");
@@ -192,7 +193,9 @@ test('the registry: role_taken until removed, model_not_offered, invalid_name, t
   const w = world();
   const a = await call(w, EDITOR, 'POST', `${CO}/agents`, cfo());
   assert.equal(a.status, 201);
-  assert.deepEqual([a.body.agent.first_name, a.body.agent.last_name, a.body.agent.role_name, a.body.agent.status], ['Carla', 'Cash', 'CFO', 'active']);
+  // D4117: no job title; the CFO role's default persona is Orrin.
+  assert.deepEqual([a.body.agent.first_name, a.body.agent.last_name, a.body.agent.persona?.name, a.body.agent.status], ['Carla', 'Cash', 'Orrin', 'active']);
+  assert.equal('role_name' in a.body.agent, false);
   assert.deepEqual(a.body.agent.sponsor, { uid: 'u-editor', name: 'Eve Editor' });
   assert.deepEqual(a.body.agent.month_spend, { available: true, value_microusd: 0 });
   assert.equal((await call(w, EDITOR, 'POST', `${CO}/agents`, cfo())).body.error, 'role_taken');
@@ -665,7 +668,7 @@ test('the queue lists only its own scope: a project\'s agents stay out of the co
   assert.equal(q.body.next_cursor, null);
   const item = q.body.items[1];
   assert.deepEqual([item.kind, item.option, item.module, item.headline, item.status], ['draft', 'draft:raise/capital', 'cap-table', 'Runway note q-co-1', 'proposed']);
-  assert.deepEqual(item.agent, { uid: co, role_key: 'cfo', role_name: 'CFO', first_name: 'Carla', last_name: 'Cash' });
+  assert.deepEqual({ ...item.agent, persona: item.agent.persona?.key }, { uid: co, role_key: 'cfo', persona: 'orrin', first_name: 'Carla', last_name: 'Cash' });
   assert.deepEqual(item.sponsor, { uid: 'u-editor', name: 'Eve Editor' });
   assert.deepEqual(item.cost, { available: true, value_microusd: 1234 });
   assert.equal(item.decided_by, null);
