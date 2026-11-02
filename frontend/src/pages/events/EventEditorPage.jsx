@@ -16,6 +16,7 @@ import { useToast } from '../../components/useToast';
 import PageExplainer from '../../components/PageExplainer';
 import { EVENT_TYPE_IDS } from '../../lib/eventTypes';
 import { syndicateNote } from '../hq/eventSyndication/syndicationModel';
+import SyndicationAsk from './SyndicationAsk.jsx';
 import Lightbox from '../../ui/Lightbox';
 import CoverDrawPress from '../../ui/CoverDrawPress';
 import { publishAction } from './eventOrganiserModel';
@@ -74,12 +75,14 @@ export default function EventEditorPage() {
   // What the header shows: the event as last read or saved, and Registrations' count.
   const [saved, setSaved] = useState(null);
   const [pending, setPending] = useState(undefined);
-  // D1329 (#3490, AF20): Fill with Eadwyn on a saved event's Description, for
-  // an admin or its host (`canManage`). Its times, capacity, price and approval
-  // are never filled.
+  // D1329 (#3490, AF20): Fill with Eadwyn on a saved event's Title and
+  // Description, for an admin or its host (`canManage`). #4046 (B2): on
+  // /events/new too, where the new event hangs under the caller, its host.
+  // Its times, capacity, price and approval are never filled.
   const fill = useScopedFill({
-    scope: SCOPED_FORMS.event, record: isEdit ? Number(id) : null, enabled: isEdit,
-    values: { description: form.description }, onValues: (v) => { if (v.description != null) setForm((f) => ({ ...f, description: v.description })); },
+    scope: SCOPED_FORMS.event, record: isEdit ? Number(id) : null,
+    values: { title: form.title, description: form.description },
+    onValues: (v) => setForm((f) => ({ ...f, ...(v.title != null ? { title: v.title } : {}), ...(v.description != null ? { description: v.description } : {}) })),
   });
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
@@ -156,6 +159,8 @@ export default function EventEditorPage() {
       } else {
         const created = await eventsApi.create(payload());
         const newId = created?.id ?? created?.event?.id;
+        // #4046 (B2): what Ask placed and the host kept is filed against the new event.
+        await fill.afterSave(newId);
         showToast({ kind: 'success', msg: 'Event created.' });
         // D1036: a new event lands on its Details tab, not on the manage page.
         if (newId) navigate(`/events/${newId}/edit`);
@@ -186,6 +191,7 @@ export default function EventEditorPage() {
         const created = await eventsApi.create(payload());
         const newId = created?.id ?? created?.event?.id;
         if (!newId) throw new Error('The reply did not say the new event\'s id.');
+        await fill.afterSave(newId);
         await eventsApi.submitReview(newId);
         setPublishing(null);
         showToast({ kind: 'success', msg: asked.done });
@@ -226,8 +232,11 @@ export default function EventEditorPage() {
       <div className="mt-4 space-y-6">
         {/* Basics */}
         <section className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-5 space-y-4">
+          <FillFormBar fill={fill} />
           <div>
-            <label className={labelCls}>Title</label>
+            <FillLabel fill={fill} name="title" label="Title" value={form.title}>
+              <label className={labelCls}>Title</label>
+            </FillLabel>
             <input className={inputCls} value={form.title} onChange={(e) => set('title', e.target.value)} placeholder="Spring Demo Day" />
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -252,7 +261,6 @@ export default function EventEditorPage() {
             <FillLabel fill={fill} name="description" label="Description" value={form.description}>
               <label className={labelCls}>Description</label>
             </FillLabel>
-            <FillFormBar fill={fill} />
             <textarea className={inputCls} rows={4} value={form.description} onChange={(e) => set('description', e.target.value)} placeholder="What attendees can expect…" />
           </div>
         </section>
@@ -339,6 +347,8 @@ export default function EventEditorPage() {
           <div className="border-t border-gray-100 pt-3 dark:border-gray-800" data-testid="event-syndicate-note">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Syndicate to</h3>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{syndicateNote(form.visibility)}</p>
+            {/* D1493 (#3906, SY8): Ask proposes each kept listing's title and description. */}
+            {isEdit && form.visibility === 'public' && <SyndicationAsk eventId={id} />}
           </div>
         </section>
 

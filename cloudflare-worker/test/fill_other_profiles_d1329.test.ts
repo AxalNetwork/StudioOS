@@ -96,7 +96,7 @@ test('the registry: each profile\'s fields in both copies; no amount, legal name
   assert.deepEqual(fieldsOf(COMMIT, 'ic-memo').map((f) => f.column), ['memo']);
   assert.deepEqual(fieldsOf(SERVICES, 'service').map((f) => f.column), ['title', 'scope']);
   assert.deepEqual(fieldsOf(REPORTING, 'status-report').map((f) => [f.column, f.sources]), [['shipped', ['module:delivery/engagement']], ['next_up', ['module:delivery/engagement']]]);
-  assert.deepEqual(fieldsOf(EVENTS, 'event').map((f) => f.column), ['description']);
+  assert.deepEqual(fieldsOf(EVENTS, 'event').map((f) => f.column), ['title', 'description']);
   assert.deepEqual(fieldsOf(EVENTS, 'agenda-item').map((f) => f.column), ['title', 'description']);
   assert.deepEqual(fieldsOf(PUBLICATIONS, 'publication').map((f) => f.column), ['summary_text']);
   const scoped = FILL_FIELDS.filter((f) => RECORD_SCOPES[f.table]);
@@ -154,7 +154,8 @@ test('AF20 and AF21: an admin or the host fills event content; approvals and pub
   for (const who of [51, 52]) assert.equal((await f.sheet(who, { page: EVENTS, form: 'event', record: 901 })).body.can_fill, true, `user ${who}`);
   assert.equal((await f.sheet(11, { page: EVENTS, form: 'event', record: 901 })).status, 403);
   assert.equal((await f.sheet(51, { page: EVENTS, form: 'review', record: 901 })).status, 404, 'an approval has no form Eadwyn fills');
-  assert.equal((await f.sheet(51, { page: EVENTS, form: 'event' })).status, 404, 'an event is edited here, not added');
+  // #4046 (B2): /events/new is the owner's call 5, yes: a new event hangs under its host, the caller (fill_events_testing_4046).
+  assert.equal((await f.sheet(51, { page: EVENTS, form: 'event' })).body.scope, 'owner:51', 'a new event, under its host');
   assert.equal((await f.sheet(51, { page: PUBLICATIONS, form: 'publication', record: 951 })).body.can_fill, true);
   assert.equal((await f.sheet(52, { page: PUBLICATIONS, form: 'publication', record: 951 })).status, 403);
 });

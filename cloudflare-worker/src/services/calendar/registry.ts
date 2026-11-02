@@ -68,6 +68,8 @@ export const SOURCES: Readonly<Record<CalendarEvent['kind'], SourceDef>> = Objec
   // copying an external event back out would loop.
   external_google: { family: 'external', module: 'Google Calendar', label: 'Google event', page_only: true, pushable: false },
   external_microsoft: { family: 'external', module: 'Outlook', label: 'Outlook event', page_only: true, pushable: false },
+  // D1614 W4 (#3972): a project's open tasks, in their time block or on their due day.
+  work_item: { family: 'tasks', module: 'Work › Board', label: 'Work item', page_only: true, pushable: false },
 });
 
 export const SOURCE_KINDS = Object.keys(SOURCES) as CalendarEvent['kind'][];
