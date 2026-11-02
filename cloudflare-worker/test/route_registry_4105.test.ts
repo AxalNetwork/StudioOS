@@ -94,7 +94,8 @@ test('the committed registry is exactly what the generator writes, and every des
 
 test('on the real Worker, the order-sensitive deck routers mount just above `decks`, and votes.ts mounts last', () => {
   const mounts = workerMounts();
-  assert.equal(mounts.length, 390, 'the Worker no longer makes 390 top-level mounts');
+  // 390 at #4105; +1 D1559's deckQaRoutes (#4094, which merged without the bump); +1 D1577's deck_coedit (#3824).
+  assert.equal(mounts.length, 392, 'the Worker no longer makes 392 top-level mounts');
   const at = mounts.findIndex((m) => m.router === decks);
   assert.ok(at > 0, '`decks` is not mounted');
   // The hand-written line above `decks` used to be deckReports + hqDeckReports,

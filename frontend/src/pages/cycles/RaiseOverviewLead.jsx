@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { PageAsk } from '../../ui/AskButton.jsx';
+import HeaderAsk from '../../ui/HeaderAsk.jsx';
 import { nextHref } from './cycleModel';
 
 /**
@@ -155,5 +155,5 @@ export default function RaiseLead({ data, search = '', onRetry }) {
  */
 export function RaiseAsk() {
   // D1443 (#3706): Ask opens the Ask panel for every viewer a rail serves.
-  return <PageAsk label="Raise · Overview" testId="raise-ask" />;
+  return <HeaderAsk label="Raise · Overview" testId="raise-ask" />;
 }

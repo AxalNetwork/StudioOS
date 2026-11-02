@@ -7,6 +7,7 @@ import HqTeamActions from './HqTeamActions';
 import { Unrecorded, RailFrame, WorkerRail, useMovedNotice } from '../../ui';
 import { TEAM_MOVED_NOTICES } from '../admin/accountsAddress';
 import { useViewAsBranch } from '../../contexts/ViewAsBranchContext';
+import HeaderAsk from '../../ui/HeaderAsk.jsx';
 
 /**
  * HQ · Team — the cross-tenant people desk (canvas H4, H9 since D138, H20 since D221).
@@ -86,7 +87,8 @@ export default function HqAccountsPage({ onImpersonate }) {
   return (
     <RailFrame rail={rail} data-testid="hq-accounts-page">
       <div className="min-w-0 space-y-5">
-        <header>
+        <header className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
           <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
             <Users size={13} /> HQ · Team
           </div>
@@ -104,6 +106,8 @@ export default function HqAccountsPage({ onImpersonate }) {
               <button type="button" onClick={moved.dismiss} className="inline-flex min-h-[40px] shrink-0 items-center rounded-[9px] px-2.5 text-[13px] font-bold text-axal-violet-deep dark:text-violet-300">Dismiss</button>
             </div>
           ) : null}
+          </div>
+          <HeaderAsk />
         </header>
 
         {viewAs ? (
