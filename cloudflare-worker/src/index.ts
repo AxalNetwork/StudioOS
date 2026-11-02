@@ -256,6 +256,7 @@ import deckReview from './routes/deck_review';
 import deckSources from './routes/deck_sources';
 import deckCheck from './routes/deck_check';
 import deckGrid from './routes/deck_grid';
+import deckDraft from './routes/deck_draft';
 import deckElementModels from './routes/deck_element_models';
 import { adminDeckModels, deckModelPresets } from './routes/deck_model_presets';
 import deckStage from './routes/deck_stage';
@@ -1393,6 +1394,8 @@ app.route('/api/decks', deckReview);
 app.route('/api/decks', deckCheck);
 // D1499 (#3749): The Grid of one deck version — geometry, the 17 structures and each card's areas.
 app.route('/api/decks', deckGrid);
+// D1501 (#3751): a version's working copy, card by card (`/:id/cards/:uid`, `/:id/draft`), before `decks`.
+app.route('/api/decks', deckDraft);
 // D1503 (#3754): a model per grid element (`/:id/element-models`), before `decks` so `GET /:id` cannot answer it.
 app.route('/api/decks', deckElementModels);
 // D1549 (#3796): the deck's preset and HQ's locks (`/:id/model-presets`), before `decks`; and HQ's org default and lock table.
