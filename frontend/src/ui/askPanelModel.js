@@ -125,9 +125,12 @@ export function askServes({ page, supportSession, viewer, host }) {
  * in the panel, so it is no chip either.
  */
 const STUDIO_CHAT_ONLY = new Set(['studio:layout', 'propose:goal-plan']);
+// D1583 (#3830): `derive:memo` is listed for its AIRail pick only; it runs from
+// ⋯ › This deck through `POST /api/decks/:id/derive`, never `/api/ai/rail/run`.
+const OWN_ROUTE = new Set(['derive:memo']);
 export const RUN_CHIPS = Object.freeze(
   [...FOUNDER_ASK_CHIPS, ...INVESTOR_ASK_CHIPS, ...ADVISOR_ASK_CHIPS, ...PARTNER_ASK_CHIPS]
-    .filter((c) => !STUDIO_CHAT_ONLY.has(c.key))
+    .filter((c) => !STUDIO_CHAT_ONLY.has(c.key) && !OWN_ROUTE.has(c.key))
     .map((c) => c.key),
 );
 

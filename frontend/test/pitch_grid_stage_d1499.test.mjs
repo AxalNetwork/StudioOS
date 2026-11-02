@@ -74,7 +74,8 @@ test('the structure is the area source: its areas no block touches are the free 
   assert.deepEqual(areasOf(hero, MODEL).map((a) => a.id), ['free:1-1', 'free:1-4', 'free:5-4', 'free:9-4'], 'Hero + 3, in its reading order');
   // A block that touches an area takes it; the areas it does not touch stay.
   const touched = { blocks: [{ id: 'b9', kind: 'metric', grid: { c1: 6, c2: 7, r1: 5, r2: 5 }, label: 'Synthetic' }], structure: 'hero_3' };
-  assert.deepEqual(areasOf(touched, MODEL).map((a) => a.id), ['b9', 'free:1-1', 'free:1-4', 'free:9-4']);
+  // D1513 (#3765): in the structure's reading order — the block sits in the third area, so it is third.
+  assert.deepEqual(areasOf(touched, MODEL).map((a) => a.id), ['free:1-1', 'free:1-4', 'b9', 'free:9-4']);
   // The card's own areas win over the catalogue's; a bad one is skipped.
   const own = { blocks: [], structure: 'custom', areas: [{ id: 'x', c1: 1, c2: 12, r1: 1, r2: 2, order: 2 }, { id: 'y', c1: 1, c2: 12, r1: 3, r2: 6, order: 1 }, { id: 'z', c1: 0, c2: 3, r1: 1, r2: 1, order: 3 }] };
   assert.deepEqual(structureAreas(own, MODEL), [{ c1: 1, c2: 12, r1: 3, r2: 6 }, { c1: 1, c2: 12, r1: 1, r2: 2 }]);

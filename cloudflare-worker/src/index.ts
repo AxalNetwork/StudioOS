@@ -256,12 +256,15 @@ import deckReview from './routes/deck_review';
 import deckSources from './routes/deck_sources';
 import deckCheck from './routes/deck_check';
 import deckGrid from './routes/deck_grid';
+import deckDraft from './routes/deck_draft';
 import deckElementModels from './routes/deck_element_models';
+import { adminDeckModels, deckModelPresets } from './routes/deck_model_presets';
 import deckStage from './routes/deck_stage';
 import deckRemix from './routes/deck_remix';
 import deckTypedValues from './routes/deck_typed_values';
 import deckNew from './routes/deck_new';
 import deckAssist from './routes/deck_assist';
+import deckDerive from './routes/deck_derive';
 import deckCritic from './routes/deck_critic';
 import deckImages from './routes/deck_images';
 // D1565 (#3812): one link per investor, and tailored variants.
@@ -1392,8 +1395,13 @@ app.route('/api/decks', deckReview);
 app.route('/api/decks', deckCheck);
 // D1499 (#3749): The Grid of one deck version — geometry, the 17 structures and each card's areas.
 app.route('/api/decks', deckGrid);
+// D1501 (#3751): a version's working copy, card by card (`/:id/cards/:uid`, `/:id/draft`), before `decks`.
+app.route('/api/decks', deckDraft);
 // D1503 (#3754): a model per grid element (`/:id/element-models`), before `decks` so `GET /:id` cannot answer it.
 app.route('/api/decks', deckElementModels);
+// D1549 (#3796): the deck's preset and HQ's locks (`/:id/model-presets`), before `decks`; and HQ's org default and lock table.
+app.route('/api/decks', deckModelPresets);
+app.route('/api/admin/ai/deck-models', adminDeckModels);
 // D1522 (#3774): the deck's stage plan — order, why lines and missing-proof warnings.
 app.route('/api/decks', deckStage);
 // D1553 (#3800): Remix — four layouts for one card and the remove-a-block reflow; no model, no charge.
@@ -1406,6 +1414,8 @@ app.route('/api/decks', deckSources);
 app.route('/api/decks', deckNew);
 // D899 (#2678): Eadwyn's card tools, before `decks` with the other /api/decks routers.
 app.route('/api/decks', deckAssist);
+// D1583 (#3830): teaser, one-pager and memo from one version; before `decks` so its `/:id` routes cannot answer them.
+app.route('/api/decks', deckDerive);
 // D1557 (#3804): the investor critic: rule findings, and one run on a model of another family than the writer's.
 app.route('/api/decks', deckCritic);
 // D903 (#2682): card and background images (`/:id/images…`, `/images/:uid/…`), before `decks` so `GET /:id` cannot answer `/images/…`.
