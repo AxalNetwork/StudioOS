@@ -2243,6 +2243,15 @@ No new route. What changes on existing routes:
 - **Images:** `deck_images.ts` adds `POST /api/decks/:id/images/import` (`{ url, use?, card?, alt?, shows_person?, consent? }`), which copies an external image in through `services/decks/imageFetch.ts`. Upload, import and drawn images are stripped of metadata, measured from the header (413 `image_too_large` over 50 MP) and stored once per venture: a repeat upload answers 200 with `duplicate: true` (migration 718, `sha256`).
 - **Export browser:** `services/browserRun.ts` `renderUrl` passes `allowRequestPattern`: the page's own origin, Google Fonts, `data:` and `blob:`.
 
+### Deck v2 B8: image edits and the deck's art direction (D1544, #3784)
+
+- **Routes** (`deck_image_edits.ts`, mounted before `deck_images.ts`): `POST /api/decks/images/:uid/edit/quote`, `POST /api/decks/images/:uid/edit` (`{ op: vary | edit | erase | expand, instruction?, mask?, aspect? }`) and `POST /api/decks/images/:uid/revert`.
+- **An edit is a child image:** a proposed `deck_images` row with `parent_uid` and `edit_op` (migration 735). The parent row never changes; revert discards the child and answers the parent.
+- **Model:** DK5, FLUX.2 Klein 4B (partner switch and a paid plan), with the parent resized through the new `IMAGES` binding as its first reference and an erase's mask as its second. A vary of a drawn image redraws its own description on DK4 when DK5 cannot run.
+- **Never a person:** an image showing a person is never edited (422 `person_edit_refused`), and a result showing a face is refused and not stored.
+- **Art direction:** `theme.art_direction` may be `{ style, palette, seed_base, reference_uid, note }`; every image request on the deck inherits it.
+- **Studio:** the adapter's `imageVary` (#3784) prices an edit; "Edit or vary" is re-keyed to it. The lightbox's references line follows the quoted model.
+
 ### Deck v2 A14: share scoping for every Grid element (D1507, #3758)
 
 - **No new route.** The share read (`decks.ts` `GET /api/decks/share/:token`) and the investor's grant read (`deck_grants.ts`) send every block through `services/decks/shareInclude.ts` `blockKept`, with the venture's recorded quote consents read by `shareGatesFor`.
