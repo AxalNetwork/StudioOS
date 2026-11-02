@@ -66,7 +66,8 @@ export const ELEMENT_GROUPS = Object.freeze([
     { id: 'caption', label: 'Caption', ...R('POST /api/decks/:id/cards/:card/assist', 'deck:rewrite') },
     { id: 'quote_founder', label: 'Quote · founder’s own', free: true },
     { id: 'team_bios', label: 'Team bios', ...A('ventureElements', 3781) },
-    { id: 'speaker_notes', label: 'Speaker notes', ...A('media', 3788) },
+    // D1560 (#3807): the card's speaker notes, written from its own words by the transform route.
+    { id: 'speaker_notes', label: 'Speaker notes', ...R('POST /api/decks/:id/transform', 'deck:notes') },
   ] },
   { id: 'images', label: 'Images', items: [
     { id: 'photo', label: 'Generated photo', ...R('POST /api/decks/:id/images', 'deck:image') },
