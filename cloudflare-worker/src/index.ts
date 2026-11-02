@@ -261,6 +261,7 @@ import deckDraft from './routes/deck_draft';
 import deckCoedit from './routes/deck_coedit';
 import deckElementModels from './routes/deck_element_models';
 import { adminDeckModels, deckModelPresets } from './routes/deck_model_presets';
+import deckElements from './routes/deck_elements';
 import deckStage from './routes/deck_stage';
 import deckRemix from './routes/deck_remix';
 import deckTypedValues from './routes/deck_typed_values';
@@ -1416,6 +1417,7 @@ app.route('/api/decks', deckElementModels);
 // D1549 (#3796): the deck's preset and HQ's locks (`/:id/model-presets`), before `decks`; and HQ's org default and lock table.
 app.route('/api/decks', deckModelPresets);
 app.route('/api/admin/ai/deck-models', adminDeckModels);
+app.route('/api/decks', deckElements);
 // D1522 (#3774): the deck's stage plan — order, why lines and missing-proof warnings.
 app.route('/api/decks', deckStage);
 // D1553 (#3800): Remix — four layouts for one card and the remove-a-block reflow; no model, no charge.

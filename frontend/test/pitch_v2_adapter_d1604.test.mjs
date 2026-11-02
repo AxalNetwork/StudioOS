@@ -48,8 +48,8 @@ test('every adapter method answers unavailable, with the reason and the issue th
   assert.deepEqual([...adapter.SWAPPED].sort(), wired.sort(), 'SWAPPED is exactly the rows whose body answers through a client');
   assert.deepEqual([...wired, ...offRows].sort(), [...methods].sort(), 'every row is either through(...) or off(\'<row>\'), nothing else');
   for (const n of wired) assert.match(body(code, n), new RegExp(`SURFACES\\.${n}\\.issue\\);$`), `${n} keys its own row's issue`);
-  // A floor, so a parser that stopped matching cannot pass on two empty lists.
-  for (const n of ['grid', 'saveCard', 'stagePlan', 'remix', 'comments', 'ventureElements']) assert.ok(adapter.SWAPPED.includes(n), `${n} is swapped on main`);
+  // A floor, so a parser that stopped matching cannot pass on two empty lists. D1541 (#3779) elementsLibrary is one of them.
+  for (const n of ['grid', 'saveCard', 'stagePlan', 'remix', 'comments', 'ventureElements', 'elementsLibrary']) assert.ok(adapter.SWAPPED.includes(n), `${n} is swapped on main`);
   const seam = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
   for (const name of ['investorLinks', 'withdrawInvestorLink']) {
     assert.match(seam, new RegExp(`export const ${name} = [^\\n]*through\\(\\(\\) => deckInvestorLinksApi\\.${name}\\(`), `${name} is wired to its client`);
@@ -209,7 +209,7 @@ test('the seam reaches no network, and no client method exists for a route that 
   // A swapped row's client is the only `lib/api` the seam may import (#4134: a rule, not a list). Each import names
   // one `deck<Name>Api` from `lib/api/deck<Name>.js`, the imports stand in file-name order (so two swaps add lines
   // at different places), and every one is used by a swapped row's body. Mutation checked: an unused client import,
-  // or two imports out of order, fails here.
+  // or two imports out of order, fails here. D1541's `deckElements.js` is one of those lines.
   const imports = [...src.matchAll(/^import \{ (deck[A-Za-z]+Api) \} from '\.\.\/\.\.\/\.\.\/lib\/api\/(deck[A-Za-z]+)\.js';$/gm)].map((x) => ({ name: x[1], file: x[2] }));
   assert.equal(imports.length, [...src.matchAll(/from '([^']*lib\/api[^']*)'/g)].length, 'every lib/api import is one `import { deck<Name>Api } from .../lib/api/deck<Name>.js` line');
   assert.ok(imports.length >= 10, 'the seam imports the clients of its swapped rows');

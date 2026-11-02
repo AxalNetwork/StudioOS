@@ -42,6 +42,7 @@ import { deckCoeditApi } from '../../../lib/api/deckCoedit.js';
 import { deckCommentsApi } from '../../../lib/api/deckComments.js';
 import { deckDraftApi } from '../../../lib/api/deckDraft.js';
 import { deckElementModelsApi } from '../../../lib/api/deckElementModels.js';
+import { deckElementsApi } from '../../../lib/api/deckElements.js';
 import { deckFiguresApi } from '../../../lib/api/deckFigures.js';
 import { deckGridApi } from '../../../lib/api/deckGrid.js';
 import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks.js';
@@ -175,7 +176,12 @@ export const figures = (deckId) => through(() => deckFiguresApi.list(deckId), SU
 export const deckUsage = off('deckUsage');
 export const arrange = off('arrange');
 export const imageEdit = off('imageEdit');
-export const elementsLibrary = off('elementsLibrary');
+/**
+ * D1541 (#3779): the elements library and a page of icons for the pd28
+ * panel, in one answer: `{ licence, decor_max, shapes, dividers, textures,
+ * generate, icons: { total, offset, items } }`.
+ */
+export const elementsLibrary = (opts = {}) => through(() => Promise.all([deckElementsApi.library(), deckElementsApi.icons(opts)]).then(([lib, page]) => ({ ...lib, icons: { total: page?.total ?? 0, offset: page?.offset ?? 0, items: page?.icons ?? [], licence: page?.licence ?? null } })), SURFACES.elementsLibrary.issue);
 export const diagrams = off('diagrams');
 /**
  * D1543 (#3781): the venture-record elements, from records with their Source and grade, no model.
