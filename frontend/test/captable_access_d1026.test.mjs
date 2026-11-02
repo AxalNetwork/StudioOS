@@ -368,7 +368,7 @@ test('the wiring: the tabs, the routes, the clients, and the import and export o
   const app = read('frontend/src/App.jsx');
   assert.match(app, /path="\/cap-tables\/:projectId" element=\{guard\(\['admin', 'advisor', 'partner'\], <CapTableReadPage \/>\)\}/);
   assert.ok(app.indexOf('path="/share/captable/venture/:token"') < app.indexOf('path="/share/captable/:token"'));
-  const api = read('frontend/src/lib/api.js');
+  const api = read('frontend/src/lib/apiModules.generated.js');
   for (const m of ['capTableAccess', 'capTableRecord', 'capTableRegister']) assert.match(api, new RegExp(`export \\* from './api/${m}\\.js';`));
   const worker = read('cloudflare-worker/src/routes/captable.ts');
   assert.match(worker, /captable\.post\('\/record\/:projectId\/proposals\/import'/);

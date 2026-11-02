@@ -229,7 +229,7 @@ test('the wiring: each non-investor gets the staff table, the Operating Partner 
   assert.match(page, /<DealCommitment key=\{proofKey\} deal=\{deal\} user=\{user\} onChangeAmount=\{\(\) => setCommitOpen\(true\)\} onShare=\{openProof\} \/>/, 'D752’s proof door sits on the investor’s own commitment');
   assert.match(read('frontend/src/pages/closing/ClosingRoom.jsx'), /if \(role === 'partner' \|\| !Array\.isArray\(read\.data\)\) return null;/, 'the closing room keeps the Operating Partner to the total');
   assert.match(read('frontend/src/lib/api/dealStaff.js'), /transferGate: \(dealId\) => request\(`\/deals\/\$\{encodeURIComponent\(dealId\)\}\/transfer-gate`\)/);
-  assert.match(read('frontend/src/lib/api.js'), /^export \* from '\.\/api\/dealStaff\.js';$/m);
+  assert.match(read('frontend/src/lib/apiModules.generated.js'), /^export \* from '\.\/api\/dealStaff\.js';$/m);
   for (const f of ['documentation/architecture/decisions/D1155.md', 'frontend/src/pages/deal/README.md', 'documentation/architecture/ROUTE_MAP.md']) assert.match(read(f), /D1155/, f);
 });
 

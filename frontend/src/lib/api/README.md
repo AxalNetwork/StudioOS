@@ -38,15 +38,22 @@ adding a domain.
    ```
 
    Call `request` only inside method bodies, never at the top level of the
-   module: `api.js` re-exports this file, so the two import each other, and a
-   top-level call would run before `request` is defined.
+   module: `api.js` re-exports this file (through the generated index), so
+   the two import each other, and a top-level call would run before `request`
+   is defined.
 
-2. Add ONE line to the re-export block near the top of `api.js`, between
-   `// api-modules:begin` and `// api-modules:end`, in alphabetical order. For
-   the module above, it is `export * from './api/communityTasks.js';`.
+2. Run `node scripts/build-api-index.mjs`. It rewrites
+   `../apiModules.generated.js`, one `export * from './api/<name>.js';` line
+   per file in this folder, alphabetical, between `// api-modules:begin` and
+   `// api-modules:end`. `api.js` re-exports that file with one line that
+   never changes, so **you do not edit `api.js`** (#4105). Commit the
+   generated file with your module; if another branch added a module next to
+   yours, rerun the script rather than resolving its conflict by hand.
 
-   The block sits under the imports, away from the end of the file where other
-   pull requests append, so two new domains touch two different lines.
+   It is a generated file and not a Vite `import.meta.glob` because the
+   modules are re-exported by name (`import { verdictApi } from
+   '../lib/api'`) and ES named exports must be static; a plain file also runs
+   unchanged in the node tests.
 
 3. Pick export names that `api.js` does not already use. With `export *`, a
    name `api.js` declares itself wins and the module's export is silently
@@ -56,9 +63,11 @@ adding a domain.
 
 `scripts/check-api-drift.mjs` (run by `npm run test:drift`) reads `api.js` and
 every module here. A `request()` in a module must match a mounted Worker
-route exactly as one in `api.js` must, and the check fails if the re-export
-block does not name exactly the files in this folder, one well-formed line
-each, in alphabetical order. The rules themselves live in
+route exactly as one in `api.js` must, and the check fails if the generated
+index does not name exactly the files in this folder, one well-formed line
+each, in alphabetical order, or is not byte-for-byte what
+`build-api-index.mjs` writes, or if `api.js` stops re-exporting it (or lists
+a module by hand again). The rules themselves live in
 `scripts/lib/apiModules.mjs` and are tested by
 `scripts/lib/apiModules.test.mjs`. The Worker's own drift tests
 (`cloudflare-worker/test/api_drift.test.*`) read this folder too.

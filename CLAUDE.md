@@ -108,10 +108,21 @@ never existed. Start at the README of whatever folder you land in.
   FastAPI ports in `backend/app/api/routes/` are an optional dev convenience
   for fast local iteration; they are not the production behaviour.
 - **Do not add a `/api/*` method to `frontend/src/lib/api.js`, or to a module
-  under `frontend/src/lib/api/`,** without a matching worker route in
-  `cloudflare-worker/src/index.ts`. A new API domain goes in its own module
-  there, re-exported by one line in `api.js`'s alphabetical block (D527). The
-  drift smoke test (`npm run test:drift`) enforces both on every PR.
+  under `frontend/src/lib/api/`,** without a matching mounted worker route. A
+  new API domain goes in its own module there (D527); `node
+  scripts/build-api-index.mjs` regenerates `frontend/src/lib/apiModules.generated.js`,
+  which `api.js` re-exports with one fixed line, so nobody edits `api.js`'s
+  module list by hand (#4105). The drift smoke test (`npm run test:drift`)
+  enforces both on every PR, and fails while the generated index is stale.
+- **A new Worker router mounts itself; a new route area collects itself**
+  (#4105). A new `cloudflare-worker/src/routes/<name>.ts` exports `mount`
+  (`{ path, router, before?: [routers it must precede] }`, see
+  `cloudflare-worker/src/util/routeRegistry.ts`) and `node
+  scripts/build-route-registry.mjs` regenerates `routes/_registry.ts`; do not
+  add an `app.route(...)` line to `index.ts`. A new
+  `frontend/src/routes/<area>.jsx` is picked up by `App.jsx`'s glob with no
+  edit there (`frontend/src/routes/README.md`). The mounts already in
+  `index.ts` and the routes already in `App.jsx` stay where they are.
 - **Do not modify `wrangler.toml`'s `main` field** — it points at the worker
   entry. FastAPI is not deployable on Workers.
 - **D1 schema changes go in `cloudflare-worker/sql/`** as new migration
