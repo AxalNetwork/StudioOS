@@ -133,6 +133,13 @@ cloudflare-worker/src/templates/legal/paper/roboto-mono-400.woff2 -filter -diff 
 cloudflare-worker/src/templates/legal/paper/roboto-mono-700.woff2 -filter -diff -merge -text
 cloudflare-worker/src/templates/legal/paper/space-grotesk-700.woff2 -filter -diff -merge -text
 
+# D1511 (#3762): the editor's visual suite serves these faces in place of Google
+# Fonts (frontend/tests/visual/_editor.mjs). As LFS pointers, the CI checkout —
+# which fetches no LFS — would serve 130 bytes of pointer text, every screen
+# would draw a fallback face, and every baseline would differ. Three variable
+# latin files, 103 KB together.
+frontend/tests/visual/fonts/*.woff2 -filter -diff -merge -text
+
 # ---- Generated and pasted trees: linguist-generated ---------------------------
 # Not hand-written source. The same five trees are already excluded from the
 # repo's own CodeQL (.github/codeql/codeql-config.yml paths-ignore) and from
