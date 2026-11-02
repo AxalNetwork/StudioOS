@@ -168,7 +168,7 @@ test('Not recorded is null, never 0: an unrecorded charge, a rate with nothing t
 test('with H4\'s budget set, spend reads against it; the projection, the lines and the teams at their cap', async () => {
   const f = fixture();
   try {
-    f.db.exec('INSERT INTO ai_agent_policy (id, platform_budget_microusd) VALUES (1, 500000000)');
+    f.db.exec('INSERT INTO ai_agent_policy (id, platform_budget_microusd) VALUES (1, 500000000) ON CONFLICT(id) DO UPDATE SET platform_budget_microusd = excluded.platform_budget_microusd');
     const o = (await get(f, SUPER, '/overview')).body;
     assert.deepEqual([o.spend_month.spent_microusd, o.spend_month.budget_microusd], [3_500, 500_000_000]);
     for (const by of ['agent', 'skill', 'company', 'model']) {
