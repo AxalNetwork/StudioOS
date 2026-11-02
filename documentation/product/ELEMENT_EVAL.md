@@ -69,3 +69,9 @@ The jobs #3721's plan gives each routed element. `cloudflare-worker/test/deck_ev
 ## Scoring
 
 Rubric v0 is D1517's code rubric (`services/decks/rubric.ts`, gate `RUBRIC_GATE`). The investor rubric v0 (problem, why now, traction, team, ask, flow; 1 to 5 by a person) is recorded beside it and **never gated**.
+
+## The prompts this eval ran against
+
+D1519 (#3771): every deck prompt is a file in `cloudflare-worker/src/services/decks/prompts/`. The hash below is the prompt set this eval last ran against. A pull request that changes a prompt fails `.github/workflows/prompt-eval-gate.yml` until the eval is re-run and the hash recorded (`node scripts/check-prompt-eval.mjs --write`), or the owner adds the `prompt-eval-waiver` label.
+
+<!-- prompts-hash: 371bf3f3fcbc6e69e897211fce4e32588137cac21edb2d226ad087f545f5f380 -->

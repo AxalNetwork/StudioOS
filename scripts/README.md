@@ -129,6 +129,7 @@ unit tests over its pure helpers that *are* in the suite.
 | File | What it does |
 | --- | --- |
 | `eval-elements.mjs` | D1518 (#3770): the element eval and the deck benchmark, on `lib/deckEval.mjs`. Run through `cloudflare-worker/test/_ts-loader.mjs`, since it reads the Worker's TypeScript. `--plan` (default) lists each golden brief with its element's job and the models the rail suggests, calling nothing. `--benchmark [--write]` runs the zero-edit acceptance arm on the three sample ventures and refreshes `documentation/product/DECK_BENCHMARK.md`; it exits 1 while any venture fails the gate (#3768's). `--live` is refused (exit 2) until the owner sets the evaluation cap (decision N) and a staging URL, and it never targets production. Not in `test:guards`: `cloudflare-worker/test/deck_eval_d1518.test.ts` covers its helpers and holds the benchmark table to the arm. |
+| `check-prompt-eval.mjs` | D1519 (#3771): a changed deck prompt (`cloudflare-worker/src/services/decks/prompts/`) fails unless `documentation/product/ELEMENT_EVAL.md` records the new prompts hash, or the PR carries the owner's `prompt-eval-waiver` label (`PROMPT_EVAL_WAIVER=true`). `--write` records the hash after the eval is re-run. Run by `.github/workflows/prompt-eval-gate.yml` (label-aware, so it re-runs when the label changes), not by `test:guards`. Its rules are tested in `cloudflare-worker/test/deck_prompts_d1519.test.ts`. |
 
 ## The pull-request preview
 

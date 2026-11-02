@@ -62,7 +62,7 @@ import { parseJsonLoose } from '../services/decks/autofill';
 import { readSources, type SourceItem } from '../services/decks/sources';
 import { AUDIENCES } from '../services/decks/slideModel';
 import {
-  AUDIENCE_CARDS, BUILD_SYSTEM, CARD_CATALOGUE, FAST_PATH_AUDIENCE, LENGTHS, LENGTH_IDS, OUTLINE_SYSTEM, PROMPT_MAX,
+  AUDIENCE_CARDS, CARD_CATALOGUE, FAST_PATH_AUDIENCE, LENGTHS, LENGTH_IDS, PROMPT_MAX,
   buildCards, buildMessage, cardOf, cardProgress, excludedOf, figureRefusal, keptIndexes, outlineFromBody, outlineFromModel, outlineMessage,
   planOf, recordTexts, standardOutline, wordingFromModel, type Audience, type CardVisuals, type FigureRefusal, type Length, type OutlineRow, type Wording,
 } from '../services/decks/newDeck';
@@ -81,6 +81,7 @@ import { inferBrief, type InferredBrief } from '../services/decks/inferBrief';
 import { freshnessFor, type Freshness } from '../services/decks/freshness';
 import { elementModelFor, runModelOf } from './deck_element_models';
 import type { Resolved } from '../services/decks/elementModels';
+import { promptFor } from '../services/decks/prompts';
 
 const deckNew = new Hono<{ Bindings: Env }>();
 
@@ -161,6 +162,9 @@ async function buildModelOf(c: any, user: User, projectId: number): Promise<Reso
 
 const elementModelsView = (r: Resolved) => ({ [BUILD_ELEMENT]: { model: r.model, source: r.source, notice: r.notice } });
 
+/** D1519 (#3771): the registry's prompt for a step, on the model the element resolved to (its family's file, else `default`). */
+const promptOf = (step: 'outline' | 'build', element?: Resolved) => promptFor(step, step === 'build' ? element?.model ?? null : null);
+
 /** The run each press makes, as one options object, so the quote and the run read the same input. */
 function runOptions(c: any, user: User, projectId: number, step: 'outline' | 'build', message: string, rows = 0, element?: Resolved): RunOptions {
   const model = step === 'build' && element ? runModelOf(element) : undefined;
@@ -170,7 +174,8 @@ function runOptions(c: any, user: User, projectId: number, step: 'outline' | 'bu
     userId: Number(user.id) || 0,
     surface: AI_SURFACE.raisePitch,
     rail: railFor(c, { page: NEW_DECK_RAIL.page, option: step === 'outline' ? NEW_DECK_RAIL.outline : NEW_DECK_RAIL.build }, `project:${projectId}`),
-    systemPrompt: step === 'outline' ? OUTLINE_SYSTEM : BUILD_SYSTEM,
+    // D1519 (#3771): the prompt for the model's family, with the house voice (`services/decks/prompts`).
+    systemPrompt: promptOf(step, element).system,
     messages: [{ role: 'user', content: message }],
     temperature: 0.4,
     maxTokens: step === 'outline' ? 900 : Math.min(2400, 200 + rows * 110),
@@ -414,7 +419,7 @@ deckNew.post('/outline', async (c) => {
   return c.json({
     proposal: rowToProposal(written),
     proposal_hash: await proposalHash(written),
-    outline: { rows, proposed_by: proposedBy, ...(reason ? { reason } : {}) },
+    outline: { rows, proposed_by: proposedBy, prompt_version: promptOf('outline').prompt_version, ...(reason ? { reason } : {}) },
     plan: planOf(rows, items),
     cost: { charged_microusd: res.ok ? await chargedOf(c.env, res.usageLogId, userId) : 0, usage_log_id: res.usageLogId ?? null },
   }, 201);
@@ -509,7 +514,7 @@ deckNew.post('/generate', async (c) => {
     proposal_hash: await proposalHash(written),
     plan: planOf(rows, items, exclude),
     progress: cardProgress(rows, items, wording, exclude),
-    wording: { by, dropped, ...(reason ? { reason } : {}) },
+    wording: { by, dropped, prompt_version: promptOf('build', element).prompt_version, ...(reason ? { reason } : {}) },
     element_models: elementModelsView(element),
     cost: { charged_microusd: res.ok ? await chargedOf(c.env, res.usageLogId, userId) : 0, usage_log_id: res.usageLogId ?? null },
   }, 201);
@@ -579,7 +584,7 @@ deckNew.post('/proposals/:id/regenerate-card', async (c) => {
   return c.json({
     proposal: rowToProposal(written), proposal_hash: await proposalHash(written),
     card: { index, layout: card.layout },
-    wording: { by: words.headline || words.body ? 'Eadwyn' : 'none', dropped, ...(reason ? { reason } : {}) },
+    wording: { by: words.headline || words.body ? 'Eadwyn' : 'none', dropped, prompt_version: promptOf('build', element).prompt_version, ...(reason ? { reason } : {}) },
     cost: { charged_microusd: res.ok ? await chargedOf(c.env, res.usageLogId, userId) : 0, usage_log_id: res.usageLogId ?? null },
   });
 });
