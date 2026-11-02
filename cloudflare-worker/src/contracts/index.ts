@@ -35,6 +35,8 @@ export const CONTRACTS = Object.freeze({
   comments: { issue: 3817, route: 'GET /api/decks/:id/comments', schema: 'deckComments.schema.json' },
   // D1523 (#3775): every figure on the version and where it comes from.
   figures: { issue: 3775, route: 'GET /api/decks/:id/figures', schema: 'deckFigures.schema.json' },
+  // D1543 (#3781): the venture-record elements, all at once or one placed.
+  ventureElements: { issue: 3781, route: 'GET /api/decks/:id/venture-elements(/:element)', schema: 'deckVentureElements.schema.json' },
 });
 
 export type ContractMethod = keyof typeof CONTRACTS;

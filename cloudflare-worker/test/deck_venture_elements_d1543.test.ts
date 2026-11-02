@@ -37,6 +37,7 @@ import { QUOTE_CONSENT_LINE, REASONS } from '../src/services/decks/quoteRetrieva
 import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
+import { contractErrors } from '../src/contracts/validate.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-d1543-venture-elements-0123456789'; // synthetic test fixture
 const BASELINE_SQL = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
@@ -323,4 +324,26 @@ test('who: another venture cannot read or write; a support session cannot record
   const d = readFileSync(resolve(process.cwd(), 'documentation/architecture/decisions/D1543.md'), 'utf8');
   for (const code of Object.keys(GATE_CODES)) assert.match(d, new RegExp(`\`${code}\``), `D1543 documents ${code}`);
   assert.match(d, /732_deck_logos\.sql/);
+});
+
+// 7 ───────────────────────────────────────────────────────────────────────────
+test('the replies match the ventureElements contract (D1511): the one-click list and every placed element', async () => {
+  // Mutations checked: a stray key on an answer, or a gate code the contract does not list, fails it.
+  const schema = JSON.parse(readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/contracts/deckVentureElements.schema.json'), 'utf8'));
+  const db = world();
+  records(db);
+  const list = await call(db, FOUNDER, 'GET', `/api/decks/${DECK}/venture-elements`);
+  assert.equal(list.status, 200);
+  assert.deepEqual(contractErrors(schema, list.body), [], 'the one-click list');
+  let placed = 0;
+  for (const element of VENTURE_ELEMENTS) {
+    const r = await el(db, element, element === 'cap_table' ? '?include=cap_table' : '');
+    if (r.status !== 200) continue;
+    placed += 1;
+    assert.deepEqual(contractErrors(schema, r.body), [], element);
+  }
+  assert.ok(placed >= 3, `several elements are placed in this world (${placed})`);
+  const answer = list.body.elements.cap_table;
+  assert.notDeepEqual(contractErrors(schema, { ...list.body, elements: { ...list.body.elements, cap_table: { ...answer, stray: 1 } } }), []);
+  assert.notDeepEqual(contractErrors(schema, { ...list.body, elements: { ...list.body.elements, cap_table: { ...answer, code: 'other' } } }), []);
 });
