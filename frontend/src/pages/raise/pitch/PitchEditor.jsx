@@ -19,6 +19,7 @@ import { asList, currentVersion, isReadOnly, ventureQuery } from './pitchStudioM
 import { NEW_PATH } from './newDeckModel';
 import PitchPage from './PitchPage';
 import DeckToolbar from './DeckToolbar';
+import useDeckPresence from './useDeckPresence';
 import CardsStrip from './CardsStrip';
 import GridStage from './GridStage';
 import BlockTools, { SpeakerNotes } from './BlockTools';
@@ -212,13 +213,17 @@ export default function PitchEditor() {
   // Share and Export need only the version on screen, so the page opens them
   // itself, editor or not; every other ⋯ item is the editor's.
   const [shareDialog, setShareDialog] = useState(null);
+  // D1577 (#3824): the other members on the deck. Null (nothing drawn) until presence is switched on.
+  const presence = useDeckPresence(current?.id ?? null, { live: !readOnly && !phone });
+  const youId = presence.you?.user_id ?? user?.id ?? null;
   const onAction = useCallback((id) => {
     if (id === 'share' || id === 'export') { if (!readOnly) setShareDialog(id); return; }
     actionRef.current?.(id);
   }, [readOnly]);
   const tools = current?.id ? (
     <DeckToolbar chip={chrome?.chip ?? null} presentTo={presentHref(projectId, current.id)} readOnly={readOnly} phone={phone}
-      onAction={onAction} labels={chrome?.labels} outOfTokens={Boolean(chrome?.outOfTokens)} waiting={chrome ? null : EDITOR_WAITING} />
+      onAction={onAction} labels={chrome?.labels} outOfTokens={Boolean(chrome?.outOfTokens)} waiting={chrome ? null : EDITOR_WAITING}
+      editors={presence.editors} youId={youId} />
   ) : null;
   const overlay = shareDialog === 'share' && projectId != null && current ? (
     <ShareDialog projectId={projectId} deck={current} onClose={() => setShareDialog(null)} onCreated={() => {}} />
@@ -254,6 +259,8 @@ export default function PitchEditor() {
     <Shell {...shell}>
       <Editor
         key={deck.data.id}
+        presence={presence}
+        youId={youId}
         project={project}
         deck={deck.data}
         model={model.data}
@@ -315,7 +322,7 @@ export function sourcesCard(model, lines) {
 // D1500: a duplicate is a new card, with its own uid.
 const copyCard = (c) => withNewUid(JSON.parse(JSON.stringify(c)));
 
-function Editor({ project, deck, model, kit, refresh, sources, charts, versions, readOnly, phone, narrow = false, onTitle, onSaved, placeRef, onProposals, onChrome, actionRef }) {
+function Editor({ project, deck, model, kit, refresh, sources, charts, versions, readOnly, phone, narrow = false, onTitle, onSaved, placeRef, onProposals, onChrome, actionRef, presence = null, youId = null }) {
   const [aiOn] = useAssistMode('raise');
   const navigate = useNavigate();
   const [base, setBase] = useState(() => ({ deck, cards: cardsOf(deck), theme: deck.theme ?? null, audience: deck.audience ?? null }));
@@ -357,6 +364,12 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   // range filled) drop out of it on their own.
   const areas = useMemo(() => areasOf(card, model), [card, model]);
   const selection = pickState.selection.filter((id) => (areas || []).some((a) => a.id === id));
+  // D1577 (#3824): the area this member is in is theirs (a soft lock) while they edit it; the room says
+  // "Wait or ask [Name]" when another member holds it. One area, or none when several or none are picked.
+  const claimArea = selection.length === 1 ? selection[0] : null;
+  const claimCard = card?.uid ?? null;
+  const claim = presence?.claim;
+  useEffect(() => { if (claim && !readOnly) claim(claimCard, claimArea); }, [claim, claimCard, claimArea, readOnly]);
   const chosen = (areas || []).filter((a) => selection.includes(a.id));
   const one = chosen.length === 1 ? chosen[0] : null;
   // The focus too: a free range a block now covers hands it to that block.
@@ -366,7 +379,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   const choose = (i) => { setSel(i); setPickState(NO_PICK); };
   const selectBlock = (id) => setPickState({ selection: id == null ? [] : [String(id)], focus: id == null ? null : String(id) });
 
-  const setCard = (i, c) => setCards((cs) => cs.map((x, j) => (j === i ? c : x)));
+  const setCard = (i, c) => { setCards((cs) => cs.map((x, j) => (j === i ? c : x))); presence?.edit?.(); };
   // D1500: a result goes back onto the card it was made for, by its uid,
   // wherever that card sits now; a card with no uid falls back to the selection.
   const placeCard = (c) => setCards((cs) => replaceCard(cs, c, sel) ?? cs);
@@ -526,6 +539,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
               <GridStage card={card} index={sel} model={model} colours={colours} ink={ink} theme={theme} kit={kit} charts={charts} pageLabel={pageNumberOf(cards, sel)}
                 readOnly={readOnly} selection={selection} focus={focus}
                 onSelection={setPickState}
+                editors={presence?.editors ?? null} youId={youId} lockLine={presence?.locked ?? null} onPointer={presence?.cursor ?? null}
                 onMove={(id, grid) => setCard(sel, updateBlock(card, id, { grid }))}
                 // D1513: a divider move (both blocks) and its overflow are each one edit.
                 onCard={(next) => { setCard(sel, next); setStructureNote(null); }}

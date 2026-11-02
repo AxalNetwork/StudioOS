@@ -29,7 +29,7 @@ export function compareCards(older, newer) {
   const n = Math.max(a.length, b.length);
   const changedAt = new Set();
   for (let i = 0; i < n; i += 1) if (i >= a.length || i >= b.length || !same(a[i], b[i])) changedAt.add(i);
-  const col = (cards) => cards.map((c, i) => ({ n: String(i + 1).padStart(2, '0'), title: cardTitle(c, i), changed: changedAt.has(i) }));
+  const col = (cards) => cards.map((c, i) => ({ n: String(i + 1).padStart(2, '0'), title: cardTitle(c, i), changed: changedAt.has(i), uid: typeof c?.uid === 'string' ? c.uid : null }));
   return { left: col(a), right: col(b), changed: changedAt.size };
 }
 
@@ -47,6 +47,25 @@ export function restoreDialog(older, current, versions = []) {
       'Nothing is deleted.',
     ],
     confirm: `Restore ${vLabel(older)}`,
+  };
+}
+
+/**
+ * D1577 (#3824): the Restore-one-card dialog. One card of the older version goes back into the
+ * current one as a new version (`POST /api/decks/:id/restore-card`); every other card stays.
+ */
+export function restoreCardDialog(older, current, versions = [], card) {
+  const top = Math.max(0, ...versions.map((v) => Number(v?.version) || 0), Number(current?.version) || 0);
+  const next = top ? `v${top + 1}` : 'a new version';
+  const name = `card ${card.n}${card.title ? `, “${card.title}”` : ''}`;
+  return {
+    title: `Restore ${name} from ${vLabel(older)}?`,
+    lines: [
+      `${next} is saved with ${name} as it was in ${vLabel(older)}, and becomes the working deck.`,
+      `Every other card stays as it is in ${vLabel(current)}, in the same order.`,
+      'Nothing is deleted.',
+    ],
+    confirm: 'Restore this card',
   };
 }
 

@@ -23,6 +23,7 @@ import { availability } from './deckV2Adapter';
 import { HOLD, LATER } from './deckV2Model';
 import { markRecommended } from './studioActionsModel';
 import { deckRail } from './deckRailGroups';
+import HeaderAsk from '../../../ui/HeaderAsk.jsx';
 
 /**
  * D897 (#2677, part 3 of #2434), rebuilt by D1604 (#3716, pd2, plan §11 step
@@ -132,6 +133,7 @@ export default function NewDeck() {
           <div className="flex min-w-0 flex-col gap-1">
             <h1 className={`m-0 text-[24px] font-extrabold leading-tight tracking-[-.02em] ${INK}`}>New deck</h1>
           </div>
+          <HeaderAsk />
         </header>
         {body}
       </div>
