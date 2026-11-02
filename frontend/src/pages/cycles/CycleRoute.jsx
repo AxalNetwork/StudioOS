@@ -29,7 +29,7 @@ import CreateStartupForm from '../../components/CreateStartupForm';
 import CycleOverview, { CycleHeader } from './CycleOverview';
 import RecordView, { RecordPhoneProvider } from './RecordView';
 import { HEADER_BUTTON, RecordHeaderProvider } from './RecordHeader.jsx';
-import { PageAsk } from '../../ui/AskButton.jsx';
+import HeaderAsk from '../../ui/HeaderAsk.jsx';
 import { EmailAction } from '../email/emailParts.jsx';
 import RecordEmailSheet from '../email/RecordEmailSheet.jsx';
 import { emailHref, personOfRecord } from '../email/emailModel.js';
@@ -68,7 +68,7 @@ import { acceptSuggestions } from './validatePhone';
 import { interviewSessionsApi } from '../../lib/api/interviewSessions';
 import FormLightbox from './FormLightbox';
 import { FillModule } from './FillRowsPanel';
-import { fillRecordId, fillTarget, moduleFillTarget } from '../../lib/fillForms.js';
+import { fillRecordId, fillTable, fillTarget, moduleFillTarget } from '../../lib/fillForms.js';
 import { usePhoneWidth } from '../../ui/phone/usePhoneWidth';
 import { editFor, formFor, formsFor } from './forms';
 import { adaptCard, adaptModule, adaptOverview, fnOf, toFnMap } from './adapters';
@@ -905,7 +905,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   const fillFor = (entry, rowId = null) => {
     const t = !narrativeAdmin && projectId ? fillTarget(cycle, slug, entry?.key) : null;
     if (!t) return null;
-    const record = fillRecordId(rowId);
+    const record = fillRecordId(rowId, fillTable(t.page, t.form));
     return { ...t, project: projectId, aiOff: !fillsOn, ...(record ? { record } : {}),
       edited: rowId == null && fillRow && fillRow.form === entry.key ? fillRow : null };
   };
@@ -1181,7 +1181,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
         email={emailPerson ? <EmailAction person={emailPerson} from={emailFrom} className={HEADER_BUTTON.default} onOpen={openEmail} /> : null}
         emailTo={emailPerson ? emailHref(emailPerson, emailFrom) : null}
         onEmail={emailPerson ? openEmail : null}
-        ask={<PageAsk label={`${name} · ${recordTitle}`} testId="record-ask" />}>
+        ask={<HeaderAsk label={`${name} · ${recordTitle}`} testId="record-ask" />}>
       {recordState.status === 'loading' ? <p className="text-sm text-axal-muted dark:text-gray-400" aria-busy="true">Loading record…</p>
         : recordState.status === 'refused' ? <p className="text-sm text-axal-ink dark:text-gray-100">{recordState.error}</p>
         : recordState.status === 'unreadable' ? <Unreadable what="This record" claim={recordState.error} onRetry={() => setReload(n => n + 1)} />
@@ -1191,7 +1191,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
           onWrite={recordState.write} onClient={recordState.client} onShowAll={recordState.showAll} />)}
       </RecordHeaderProvider>
       </RecordPhoneProvider>
-      {emailing && emailPerson && <RecordEmailSheet person={emailPerson} from={emailFrom} onClose={() => setEmailing(false)} />}
+      {emailing && emailPerson && <RecordEmailSheet person={emailPerson} from={emailFrom} readOnly={Boolean(narrativeAdmin || supportOpen)} onClose={() => setEmailing(false)} />}
       {recordState.actionError && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{recordState.actionError}</p>}
     </div>;
   } else if (!slug) {

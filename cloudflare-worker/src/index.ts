@@ -256,12 +256,19 @@ import deckReview from './routes/deck_review';
 import deckSources from './routes/deck_sources';
 import deckCheck from './routes/deck_check';
 import deckGrid from './routes/deck_grid';
+import deckBatches from './routes/deck_batches';
 import deckDraft from './routes/deck_draft';
+import deckCoedit from './routes/deck_coedit';
 import deckElementModels from './routes/deck_element_models';
 import { adminDeckModels, deckModelPresets } from './routes/deck_model_presets';
+import deckTemplates from './routes/deck_templates';
+import deckElements from './routes/deck_elements';
+import deckUsage from './routes/deck_usage';
 import deckStage from './routes/deck_stage';
 import deckRemix from './routes/deck_remix';
 import deckTypedValues from './routes/deck_typed_values';
+// D1543 (#3781): the venture-record elements and the logos store (migration 732).
+import deckVentureElements from './routes/deck_venture_elements';
 import deckFigures from './routes/deck_figures';
 import deckNew from './routes/deck_new';
 import deckAssist from './routes/deck_assist';
@@ -270,8 +277,11 @@ import deckCritic from './routes/deck_critic';
 import deckQaRoutes from './routes/deck_qa';
 import deckTransform from './routes/deck_transform';
 import deckImages from './routes/deck_images';
+import deckImageEdits from './routes/deck_image_edits';
+import deckRehearsals from './routes/deck_rehearsals';
 // D1565 (#3812): one link per investor, and tailored variants.
 import deckInvestorLinks from './routes/deck_investor_links';
+import deckPublish, { serveDeckEmbed, serveDeckShareCard } from './routes/deck_publish';
 import notificationsRoutes from './routes/notifications';
 import linkedinRoutes from './routes/linkedin';
 import calendarRoutes from './routes/calendar';
@@ -499,6 +509,7 @@ import { bindingKey } from './util/schemaBootstrap';
 // Task #9 — 'exploring' holding-state role (CHECK relax + user_role_review side table).
 import { ensureExploringSchema, exploringSchemaReady } from './services/exploringSchema';
 import { queueConsumer, dlqConsumer } from './queue-consumer';
+import { agentDlqConsumer, agentQueueConsumer, dispatchQueue } from './agents/agentQueue';
 import { rateLimitMiddleware } from './middleware/rateLimit';
 import { observabilityMiddleware } from './middleware/observability';
 import { securityHeadersMiddleware } from './middleware/securityHeaders';
@@ -1401,19 +1412,29 @@ app.route('/api/decks', deckReview);
 app.route('/api/decks', deckCheck);
 // D1499 (#3749): The Grid of one deck version — geometry, the 17 structures and each card's areas.
 app.route('/api/decks', deckGrid);
+// D1502 part 2 (#3753): a generation run's status, its event stream, and Stop.
+app.route('/api/decks', deckBatches);
 // D1501 (#3751): a version's working copy, card by card (`/:id/cards/:uid`, `/:id/draft`), before `decks`.
 app.route('/api/decks', deckDraft);
+// D1577 (#3824): area saves (`/:id/cards/:uid/areas/:area`), single-slide restore (`/:id/restore-card`) and presence, before `decks`.
+app.route('/api/decks', deckCoedit);
 // D1503 (#3754): a model per grid element (`/:id/element-models`), before `decks` so `GET /:id` cannot answer it.
 app.route('/api/decks', deckElementModels);
 // D1549 (#3796): the deck's preset and HQ's locks (`/:id/model-presets`), before `decks`; and HQ's org default and lock table.
 app.route('/api/decks', deckModelPresets);
 app.route('/api/admin/ai/deck-models', adminDeckModels);
+app.route('/api/decks', deckTemplates);
+app.route('/api/decks', deckElements);
+// D1524 (#3776): the AIRail's plain usage meter (`/:id/usage`).
+app.route('/api/decks', deckUsage);
 // D1522 (#3774): the deck's stage plan — order, why lines and missing-proof warnings.
 app.route('/api/decks', deckStage);
 // D1553 (#3800): Remix — four layouts for one card and the remove-a-block reflow; no model, no charge.
 app.route('/api/decks', deckRemix);
 // D1538 (#3787): the figures a founder types for a deck, Stated (`/:id/typed-values`).
 app.route('/api/decks', deckTypedValues);
+// D1543 (#3781): `/:id/venture-elements[/:element]` and `/:id/logos…`, before `decks` so its `/:id` routes cannot answer them.
+app.route('/api/decks', deckVentureElements);
 // D1523 (#3775): each figure's provenance, Linked, Stated, Uncited or Not recorded (`/:id/figures`), editor-only.
 app.route('/api/decks', deckFigures);
 // D896: `/sources` and `/:id/refresh`, before `decks` so its `GET /:id` cannot answer `/sources`.
@@ -1431,7 +1452,14 @@ app.route('/api/decks', deckQaRoutes);
 // D1560 (#3807): speaker notes, proofread, fix this slide and the translation pipeline, as proposals.
 app.route('/api/decks', deckTransform);
 // D903 (#2682): card and background images (`/:id/images…`, `/images/:uid/…`), before `decks` so `GET /:id` cannot answer `/images/…`.
+// D1544 (#3784): an image's edits (vary, edit, erase, expand) and their revert, before `decks`.
+app.route('/api/decks', deckImageEdits);
 app.route('/api/decks', deckImages);
+// D1564 (#3811): `/:id/investor-links/:shareId/publish` and the email gate `/share/:token/email`, before `decks`
+// (above deckInvestorLinks, whose paths it shares none of, so #4105's registered routers stay just above `decks`).
+app.route('/api/decks', deckPublish);
+// D1580 F1 (#3827): rehearse a deck version and read its report.
+app.route('/api/decks', deckRehearsals);
 // D1565 (#3812): `/:id/investor-links…` and `/:id/variants`, before `decks` so its `/:id` routes cannot answer them.
 app.route('/api/decks', deckInvestorLinks);
 // #4105: deck_quotes.ts (D1556), deck_reports.ts (D1540, with HQ's queue at
@@ -1857,6 +1885,9 @@ import { assertJwtSecretStrength, assertScoringHmacSecret } from './auth';
 // 404 — never reached the client without this: Hono re-throws non-Errors
 // past app.onError. See util/thrownResponse.ts.
 import { withThrownResponses } from './util/thrownResponse';
+// D1539 (#3789): imported here, not inside `scheduled`, so the handler names
+// only this function (mercury_member_privacy_d752 reads its words).
+import { pruneCardBlobs } from './services/decks/cardBlobs';
 
 // Phase 0.1 — D1 schema migration for the partner→investor split.
 // Lazy, idempotent, runs at most once per worker isolate. We piggy-back on the
@@ -2110,7 +2141,14 @@ export default {
     // `SOCIAL_CARD_GLOBS` reach here (both `run_worker_first` lists), and the
     // token share links in `PRIVATE_LINK_GLOBS` (#3916), which get the static
     // "Sign in to view" card with no D1 call.
+    // D1564 (#3811): `/embed/:token`, a published deck framed only by the
+    // origins its founder listed (`frame-ancestors`, no `X-Frame-Options`); the
+    // SPA's `_headers` deny stays for every other path.
+    if (pathname.startsWith('/embed/')) return serveDeckEmbed(request, env);
     if (env.ASSETS && [...SOCIAL_CARD_GLOBS, ...PRIVATE_LINK_GLOBS].some((g) => pathname.startsWith(g.slice(0, -1)))) {
+      // D1564: a published link's own card, only while public views are on (owner decision T); null keeps Part D's static card.
+      const own = await serveDeckShareCard(request, env);
+      if (own) return own;
       const card = await serveSocialCard(request, env);
       if (card) return card;
     }
@@ -2246,6 +2284,28 @@ export default {
             console.error('[cron] subprocessor notices unreadable');
           }
         }
+        // D1528 (#3847): the agent sweep. Its own minute (% 5 === 1), under
+        // this lease, only while the engine is enabled. NOT GATED ON
+        // `hqCadences`: each deployment's agents and runs are its own rows.
+        if (now.getUTCMinutes() % 5 === 1 && env.AGENT_ENGINE && env.AGENT_ENGINE !== 'off' && env.TEAM_AGENTS_ENABLED === 'true') {
+          try {
+            const { sweepAgents } = await import('./agents/sweep');
+            const r = await sweepAgents(env, now);
+            if (r.resent || r.admitted) cronSummary.push(`agents resent=${r.resent} admitted=${r.admitted}`);
+          } catch {
+            console.error('[cron] agent sweep unreadable');
+          }
+          // D1530 (#3849, E5): the due duties, claim before act.
+          try {
+            const { sweepAgentDuties } = await import('./agents/sweep');
+            const d = await sweepAgentDuties(env, now);
+            if (d && (d.task_created || d['skipped:agent_paused'] || d['skipped:no_tokens'])) {
+              cronSummary.push(`agent duties tasks=${d.task_created} skipped=${d['skipped:agent_paused'] + d['skipped:no_tokens'] + d['skipped:scope_gone']}`);
+            }
+          } catch {
+            console.error('[cron] agent duties unreadable');
+          }
+        }
         // D1259: a published venture model rescores the next batch of ventures
         // each minute until every venture has its new rows. HQ only: only HQ
         // publishes.
@@ -2319,6 +2379,14 @@ export default {
           } catch (e) {
             console.error('[cron] channel sweeps failed', e instanceof Error ? e.message : 'error');
           }
+          // D1580 F1 (#3827) — a rehearsal's audio once its hour is up, unless the founder kept it.
+          try {
+            const { purgeRehearsalAudio } = await import('./services/rehearsalAudio');
+            const r = await purgeRehearsalAudio(env, now);
+            if (r.deleted) console.info(`[cron] rehearsal audio purge deleted=${r.deleted}`);
+          } catch (e) {
+            console.error('[cron] rehearsal audio purge failed', e instanceof Error ? e.message : 'error');
+          }
         }
         // D685 §5.6 — recordings a closed tab left behind: drafts never
         // started (24 h), silent recordings paused (10 min), uploads that never
@@ -2363,6 +2431,17 @@ export default {
             cronSummary.push(`grow daily reminders=${r.reminders} alerts=${r.alerts}`);
           } catch (e) {
             console.error('[cron] grow daily failed', e instanceof Error ? e.message : 'error');
+          }
+        }
+        // D1539 (#3789) — the deck card blob prune: a blob no version names,
+        // first written over an hour ago, goes (at most 500 a run).
+        if (now.getUTCHours() === 5 && now.getUTCMinutes() === 50) {
+          try {
+            const r = await pruneCardBlobs(env);
+            if (r.deleted) console.info(`[cron] deck card blobs pruned=${r.deleted}`);
+            cronSummary.push(`deck card blobs pruned=${r.deleted}`);
+          } catch (e) {
+            console.error('[cron] deck card blob prune failed', e instanceof Error ? e.message : 'error');
           }
         }
         // D1058 (#2928) — Reporting's daily step: duties a closing missed, the
@@ -3251,13 +3330,12 @@ export default {
     await work;
   },
   async queue(batch: MessageBatch<JobMessage>, env: Env, ctx: ExecutionContext) {
-    // Task #7 (IE) — route DLQ batches to dlqConsumer so exhausted CF Queue
-    // messages are mirrored to D1 for admin inspection + retry.
-    if (batch.queue?.includes('dlq')) {
-      await dlqConsumer(batch, env, ctx);
-    } else {
-      await queueConsumer(batch, env, ctx);
-    }
+    // D1528 (#3847): the agent queue's branch comes FIRST, before the `dlq`
+    // test, and its own DLQ goes to agentDlqConsumer (which ends the run and
+    // mirrors the message). Task #7 (IE) — every other DLQ batch goes to
+    // dlqConsumer so exhausted CF Queue messages are mirrored to D1 for admin
+    // inspection + retry. `agents/agentQueue.ts`'s dispatchQueue holds the order.
+    await dispatchQueue(batch, env, ctx, { queue: queueConsumer, dlq: dlqConsumer, agent: agentQueueConsumer, agentDlq: agentDlqConsumer });
   },
 };
 
@@ -3265,6 +3343,8 @@ export default {
 // can find the classes named in wrangler.toml's [[durable_objects.bindings]].
 export { PipelineRoom } from './durable-objects/pipeline-room';
 export { OnboardingChat } from './durable-objects/onboarding-chat';
+// D1577 (#3824): the deck's co-editing room, bound as DECK_PRESENCE (the owner approved its cost, decision L).
+export { DeckPresence } from './durable-objects/deck-presence';
 
 // D108 — the two RPC entrypoints, re-exported here because a service
 // binding's `entrypoint` resolves against the Worker's MODULE EXPORTS, the
@@ -3274,3 +3354,12 @@ export { OnboardingChat } from './durable-objects/onboarding-chat';
 export { HqEntrypoint, BranchEntrypoint } from './rpc';
 
 export { MeetingBotRun } from './durable-objects/meeting-bot-run';
+export { DeckGenRoom } from './durable-objects/deck-gen-room';
+export { AiGovernor } from './durable-objects/ai-governor';
+
+// D1528 (#3847, #3742 E3): the agent engine's scope object and task Workflow,
+// named in wrangler.toml's [[durable_objects.bindings]] and [[workflows]].
+export { AgentScope } from './agents/doRuntime';
+export { AgentTaskWorkflow } from './agents/taskWorkflow';
+// #3852 (#3742 E0): the `sdk` runtime's Agent, an evaluation behind the same seam; used only while AGENT_RUNTIME is `sdk`.
+export { ScopeAgent } from './agents/sdkRuntime';

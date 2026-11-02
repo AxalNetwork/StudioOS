@@ -14,7 +14,6 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
@@ -23,23 +22,15 @@ import adminPrograms from '../src/routes/admin_programs.ts';
 import { EXPORTABLE_PROGRAMS, cell, exportCsv, flatten } from '../src/services/programExport.ts';
 import { refusesCountsOnly } from '../src/services/insightsExport.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { splitStatements } from './_baseline.mjs';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-const MIGRATIONS = resolve(ROOT, 'cloudflare-worker/sql/migrations');
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const ADMIN = 2, FOUNDER = 5;
 
 function built(): DatabaseSync {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  db.exec(readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8'));
-  for (const f of readdirSync(MIGRATIONS).filter((x) => x.endsWith('.sql')).sort(compareMigrations)
-    .filter((x) => migrationNumber(x) > BASELINE_CUTOFF)) {
-    for (const stmt of splitStatements(readFileSync(resolve(MIGRATIONS, f), 'utf8'))) {
-      try { db.exec(stmt); } catch { /* already present on the baseline */ }
-    }
-  }
+  loadSchema(db);
   db.exec('PRAGMA foreign_keys = OFF');
   for (const [id, role, email] of [[ADMIN, 'admin', 'admin@axal.example'], [FOUNDER, 'founder', 'ana@venture.example']] as const) {
     db.prepare('INSERT INTO users (id, email, name, role, is_active) VALUES (?, ?, ?, ?, 1)').run(id, email, `Person ${id}`, role);

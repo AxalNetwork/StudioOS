@@ -92,6 +92,7 @@
  *     appear as a locked row to an investor without an NDA — a filename is
  *     itself information ("Series B term sheet — Acme.pdf").
  */
+import { notifyReasonedRead } from '../services/reasonedReadNotice';
 import { markRequestAnsweredByFile } from '../services/ddRequests';
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -111,7 +112,9 @@ import { logCycleWrite } from '../services/cycleActivity';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 import { WriterError } from '../services/validateWriters';
 import { DECLINE_REASON_MAX, readRequests } from '../services/dataRoomRequests';
+import { deckSourceReady, sourceFile, sourceState, sourceQuote, typedFile, fileKind, enableSource, resetSourceStatements } from '../services/decks/dataroomExtract';
 import { investorEvidence, RaiseEvidenceError } from '../services/raiseEvidence';
+import { defaultDeps as searchDeps, filesToIndex, forgetFile, indexFile, searchRoom } from '../services/dataRoomSearch';
 import { SupportHistoryError, supportPage, supportReadHistory } from '../services/supportReads';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -355,6 +358,65 @@ r.get('/shared/:projectUid', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+// #3938 part 2 (D1478 task 4): search inside the room, on its own index
+// (`services/dataRoomSearch.ts`). The founders search the whole room; an
+// investor searches only the files their own listing shows (grant, tier and
+// NDA, as `investorView` decides). Unbound index: `{ available: false }`.
+r.post('/shared/:projectUid/search', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (user.role === 'admin') return refuse(c, 403, { code: 'support_read_required', message: 'Use an audited support read to open this room.' });
+    const project = await c.env.DB.prepare('SELECT id, uid, name FROM projects WHERE uid = ?')
+      .bind(c.req.param('projectUid')).first<ProjectRow>();
+    const grant = project ? await activeGrant(c.env, project.id, user.id) : null;
+    if (!project || !grant) return c.json({ detail: 'Data room not found' }, 404);
+    const body = await c.req.json().catch(() => ({} as any));
+    const view = await investorView(c.env, project, grant, user.id);
+    const uids = (view.files || []).map((f: any) => String(f.uid));
+    const ids = uids.length
+      ? await c.env.DB.prepare('SELECT id FROM data_room_files WHERE project_id = ? AND uid IN (SELECT value FROM json_each(?))')
+        .bind(project.id, JSON.stringify(uids)).all<{ id: number }>()
+      : { results: [] as Array<{ id: number }> };
+    const allowed = new Set((ids.results || []).map((x) => Number(x.id)));
+    const out = await searchRoom(c.env, searchDeps(c.env, Number(user.id), project.id), project.id, String(body?.q ?? ''), allowed);
+    if (out.available) await logAccess(c.env, project.id, user.id, 'search', null);
+    return c.json(out);
+  } catch (e) { return mapError(c, e); }
+});
+
+r.post('/:projectUid/search', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const room = await roomProject(c, user, c.req.param('projectUid'));
+    if (!room) return c.json({ detail: 'Project not found' }, 404);
+    const body = await c.req.json().catch(() => ({} as any));
+    const out = await searchRoom(c.env, searchDeps(c.env, Number(user.id), room.project.id), room.project.id, String(body?.q ?? ''), null);
+    return c.json(out);
+  } catch (e) { return mapError(c, e); }
+});
+
+/** Index the next few files that have no index row or changed since; press again for the rest. */
+r.post('/:projectUid/search/index', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const room = await roomProject(c, user, c.req.param('projectUid'));
+    if (!room) return c.json({ detail: 'Project not found' }, 404);
+    const deps = searchDeps(c.env, Number(user.id), room.project.id);
+    if (!deps.index) return c.json({ available: false, reason: 'Data room search is not switched on yet.' });
+    const { files, remaining } = await filesToIndex(c.env, room.project.id);
+    let indexed = 0; let noText = 0; const failed: Array<{ file_uid: string; code: string }> = [];
+    for (const f of files) {
+      const r = await indexFile(c.env, deps, room.project.id, f);
+      if (!r.available) {
+        failed.push({ file_uid: f.uid, code: r.code || 'failed' });
+        if (r.code === 'dimension_mismatch') break;
+      } else if (r.value.status === 'indexed') indexed += 1;
+      else noText += 1;
+    }
+    return c.json({ available: true, value: { indexed, no_text: noText, failed, remaining } });
+  } catch (e) { return mapError(c, e); }
+});
+
 // D1265 (#3288): the founder's shared Raise evidence, as this investor may see it. Who counts as an
 // investor in the raise, the NDA, each item's sharing, the file gate and quote consent are all
 // `investorEvidence`'s; an outsider and a missing venture answer alike. Each open logs `open_evidence`.
@@ -542,12 +604,16 @@ async function roomDetails(env: Env, project: ProjectRow, role: RoomRole | 'supp
 
     const scopes = await grantScopesOf(env, project.id);
 
+    const deckSourcesAvailable = await deckSourceReady(env);
+    const deckFiles = deckSourcesAvailable ? await env.DB.prepare('SELECT * FROM data_room_files WHERE project_id = ?').bind(project.id).all<any>() : null;
+    const states = new Map((deckFiles?.results || []).map(f => [f.uid, sourceState(f)]));
     return {
+      deck_sources_available: deckSourcesAvailable,
       project: { uid: project.uid, name: project.name },
       // D1103 — what the caller may do here: `owner` shares and sets gates.
       role,
       folders: folders.results || [],
-      files: files.results || [],
+      files: (files.results || []).map(f => ({ ...f, ...(states.get(f.uid) || {}) })),
       grants: (grants.results || []).map(({ id, folders_scoped, ...g }) => ({
         ...g, nda_signed: !!g.nda_signed, nda_pending: !g.nda_signed && !!g.nda_pending,
         // D1103 — null opens every folder; else the uids it opens. Unreadable
@@ -684,6 +750,11 @@ r.post('/:projectUid/support-read', async (c) => {
     if (!audit.success || audit.meta.changes !== 1) throw new Error('Support audit unavailable');
     await logAdminAction(c.env, Number(admin.id), admin.email || '', 'data_room_support_read', {
       project_id: project.id, target_user_id: ownerId, reason, read_only: true,
+    });
+    // D1465 § Notifications (#4022): the founder is told, after the read is recorded. Never throws.
+    await notifyReasonedRead(c.env, {
+      surface: 'data_room', projectId: project.id, founderId: project.founder_id ?? null, admin: { id: Number(admin.id), role: admin.role }, reason,
+      link: `/raise/data-room?project_id=${project.id}`,
     });
     const detail = await roomDetails(c.env, { ...project, name: '' }, 'support');
     // Fetching the name belongs to the audited detail read, not the summary.
@@ -961,6 +1032,7 @@ export async function replaceDataRoomFile(
     httpMetadata: { contentType },
     customMetadata: { project_uid: project.uid, uploaded_by: String(a.userId) },
   });
+  const deckReady = await deckSourceReady(env);
   await env.DB.batch([
     env.DB.prepare(
       `INSERT INTO data_room_file_versions (file_id, version, r2_key, content_type, size_bytes, uploaded_by) VALUES (?, ?, ?, ?, ?, ?)`,
@@ -968,12 +1040,51 @@ export async function replaceDataRoomFile(
     env.DB.prepare(
       `UPDATE data_room_files SET r2_key = ?, content_type = ?, size_bytes = ?, uploaded_by_user_id = ?, updated_at = ? WHERE id = ? AND project_id = ?`,
     ).bind(key, contentType, a.bytes.byteLength, a.userId, nowIso(), file.id, project.id),
+    ...(deckReady ? resetSourceStatements(env, file.id, project.id, key, null, a.userId) : []),
   ]);
   await logCycleWrite(env, { projectId: project.id, userId: a.userId, cycle: 'raise', module: 'data-room',
     entityId: file.id, action: 'file_replaced', summary: `File replaced; version ${version} kept` });
   await noteStorageLanded(env, room);
   return { id: file.id, version, size_bytes: a.bytes.byteLength };
 }
+
+/** D1602: an explicit owner opt-in; quotes never open the object. */
+r.put('/:projectUid/files/:uid/deck-source', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (user.role === 'admin') return c.json({ code: 'support_read_required', detail: 'Use an audited support read.' }, 403);
+    const room = await roomProject(c, user, c.req.param('projectUid'));
+    if (!room) return c.json({ detail: 'Project not found' }, 404);
+    if (room.role !== 'owner') return c.json(OWNER_ONLY, 403);
+    if (!await deckSourceReady(c.env)) return c.json({ code: 'deck_sources_unavailable', detail: 'Deck sources are not available yet.' }, 503);
+    const file = await sourceFile(c.env, room.project.id, c.req.param('uid'));
+    if (!file) return c.json({ detail: 'File not found' }, 404);
+    const body = await c.req.json().catch(() => null);
+    if (!body || typeof body.enabled !== 'boolean') return c.json({ code: 'invalid_enabled', detail: 'Choose whether this file is a deck source.' }, 400);
+    if (!body.enabled) {
+      await c.env.DB.batch([
+        c.env.DB.prepare(`UPDATE data_room_files SET deck_source = 0, deck_source_token = NULL, deck_extract_state = NULL,
+          deck_extract_started_at = NULL, deck_extract_queued_at = NULL, deck_source_as_of = NULL, deck_source_user_id = NULL, deck_source_quote = NULL WHERE id = ? AND project_id = ?`).bind(file.id, room.project.id),
+        c.env.DB.prepare('DELETE FROM dataroom_deck_values WHERE project_id = ? AND file_uid = ?').bind(room.project.id, file.uid),
+      ]);
+    } else {
+      if (!fileKind(file)) return c.json({ code: 'unsupported_file', detail: 'Use CSV, XLSX, PDF or DOCX.' }, 400);
+      // A repeated save must not buy a second run. An unreadable extraction can be retried deliberately.
+      if (file.deck_source && sourceState(file).extraction.state !== 'unreadable') return c.json(sourceState(file));
+      let approved = null;
+      if (typedFile(file)) {
+        const quote = await sourceQuote(c.env, file, Number(user.id));
+        if (!quote.ok) return c.json({ code: 'extraction_unavailable', detail: quote.error }, 503);
+        if (body.confirm_quote !== quote.confirm_quote) return c.json({ code: 'quote_required', detail: 'Confirm the extraction cost before continuing.', quote }, 402);
+        approved = { model: quote.model, hold_microusd: quote.hold_microusd };
+      }
+      if (!await enableSource(c.env, file, Number(user.id), approved)) return c.json({ code: 'version_conflict', detail: 'The file changed. Read it again before retrying.' }, 409);
+    }
+    await logCycleWrite(c.env, { projectId: room.project.id, userId: Number(user.id), cycle: 'raise', module: 'data-room',
+      entityId: file.id, action: body.enabled ? 'deck_source_enabled' : 'deck_source_disabled', summary: body.enabled ? 'Deck source enabled' : 'Deck source withdrawn' });
+    return c.json(sourceState((await sourceFile(c.env, room.project.id, file.uid))!));
+  } catch (e) { return mapError(c, e); }
+});
 
 r.patch('/:projectUid/files/:uid', async (c) => {
   try {
@@ -1150,16 +1261,28 @@ r.post('/:projectUid/files/:uid/versions/:n/current', async (c) => {
     if (!file || !version) return c.json({ detail: 'Version not found' }, 404);
     if (!version.r2_key.startsWith(`data-room/${project.uid}/`)) return c.json({ detail: 'Version not found' }, 404);
     const at = nowIso();
+    const deckReady = await deckSourceReady(c.env);
+    // Tie invalidation to this successful swap, not another writer's identical target key.
+    const swapToken = crypto.randomUUID();
+    const fileSwap = deckReady ? c.env.DB.prepare(
+      `UPDATE data_room_files SET r2_key = ?, content_type = ?, size_bytes = ?, uploaded_by_user_id = ?, updated_at = ?, deck_source_token = ?
+        WHERE id = ? AND project_id = ? AND r2_key = ?
+          AND EXISTS (SELECT 1 FROM data_room_file_versions WHERE id = ? AND file_id = ? AND r2_key = ?)`,
+    ).bind(version.r2_key, version.content_type, version.size_bytes, version.uploaded_by, at, swapToken, file.id, project.id, file.r2_key, version.id, file.id, version.r2_key) : c.env.DB.prepare(
+      `UPDATE data_room_files SET r2_key = ?, content_type = ?, size_bytes = ?, uploaded_by_user_id = ?, updated_at = ?
+        WHERE id = ? AND project_id = ? AND r2_key = ?
+          AND EXISTS (SELECT 1 FROM data_room_file_versions WHERE id = ? AND file_id = ? AND r2_key = ?)`,
+    ).bind(version.r2_key, version.content_type, version.size_bytes, version.uploaded_by, at, file.id, project.id, file.r2_key, version.id, file.id, version.r2_key);
     const [toFile, toVersion] = await c.env.DB.batch([
-      c.env.DB.prepare(
-        `UPDATE data_room_files SET r2_key = ?, content_type = ?, size_bytes = ?, uploaded_by_user_id = ?, updated_at = ?
-          WHERE id = ? AND project_id = ? AND r2_key = ?`,
-      ).bind(version.r2_key, version.content_type, version.size_bytes, version.uploaded_by, at, file.id, project.id, file.r2_key),
+      fileSwap,
+      // No intervening statement: changes() is the first swap's affected-row count.
+      // A stale pair must not move the archive even if another writer chose the same key.
       c.env.DB.prepare(
         `UPDATE data_room_file_versions SET r2_key = ?, content_type = ?, size_bytes = ?, uploaded_by = ?, updated_at = ?
-          WHERE id = ? AND r2_key = ?
+          WHERE id = ? AND r2_key = ? AND changes() = 1
             AND EXISTS (SELECT 1 FROM data_room_files WHERE id = ? AND r2_key = ?)`,
       ).bind(file.r2_key, file.content_type, file.size_bytes, file.uploaded_by_user_id, at, version.id, version.r2_key, file.id, version.r2_key),
+      ...(deckReady ? resetSourceStatements(c.env, file.id, project.id, version.r2_key, swapToken, Number(user.id)) : []),
     ]);
     if (!(toFile as any).meta?.changes || !(toVersion as any).meta?.changes) {
       return c.json({ detail: 'The file changed while this was saved. Read it again and retry.', code: 'version_conflict' }, 409);
@@ -1217,7 +1340,9 @@ export async function removeDataRoomFile(
   // Row first. A deleted object with a surviving row is a broken download;
   // a surviving object with no row is unreachable, which is merely waste.
   // D1 may run with foreign keys off, so the versions' rows go by hand.
+  const deckReady = await deckSourceReady(env);
   await env.DB.batch([
+    ...(deckReady ? [env.DB.prepare('DELETE FROM dataroom_deck_values WHERE project_id = ? AND file_uid IN (SELECT uid FROM data_room_files WHERE id = ?)').bind(project.id, file.id)] : []),
     env.DB.prepare('DELETE FROM data_room_file_versions WHERE file_id = ?').bind(file.id),
     env.DB.prepare('DELETE FROM data_room_files WHERE id = ?').bind(file.id),
   ]);
@@ -1232,6 +1357,9 @@ export async function removeDataRoomFile(
       catch (e) { console.error('[data_room] R2 delete failed', e); }
     }
   }
+  // #3938: the file's passages and vectors go with it.
+  try { await forgetFile(env, { index: (env.DATAROOM_INDEX as any) ?? null }, file.id); }
+  catch (e) { console.error('[data_room] search index delete failed', e instanceof Error ? e.message : 'error'); }
   await logCycleWrite(env, { projectId: project.id, userId: a.userId, cycle: 'raise', module: 'data-room',
     entityId: file.id, action: 'file_removed', summary: `File removed with ${(versions.results || []).length} earlier versions` });
   return { id: file.id };

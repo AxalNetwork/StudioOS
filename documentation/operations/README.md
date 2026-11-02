@@ -9,6 +9,7 @@ files say how to act on it.
 | --- | --- |
 | `STRIPE_RENEWAL_GRACE.md` | Configure failed-payment termination and verify the bounded grace and webhook payload version (D1100). |
 | `DEPLOY.md` | Ship the Worker and the SPA to production, and roll a deploy back. |
+| `DATA_RETENTION.md` | Look up how long each deck store keeps its rows and R2 objects, what removes them, and the known gaps (D1508). |
 | `D1_RECOVERY.md` | Recover D1 when the data is wrong and a Worker rollback will not help. |
 | `INCIDENT_RESPONSE.md` | Respond to an incident: severities, response times and who is paged. |
 | `CLAUDE_REVIEW.md` | Run, tune and cost the advisory pull-request review on the Anthropic API. |
@@ -17,6 +18,7 @@ files say how to act on it.
 | `TELEGRAM.md` | Set up the Telegram Business interview bot, check it on a real phone, rotate its secrets and switch it off (D756). |
 | `WHATSAPP.md` | Switch WhatsApp Business on, check it on a real phone and roll it back (D754). |
 | `MEETING_BOT.md` | Set up Eadwyn AI for Zoom, Google Meet and Teams; check notice, consent and retention; interpret failures; switch it off (D886). |
+| `AGENT_RUNTIME_SWITCH.md` | Stop every agent run at once, pause the engine, switch the agent runtime behind its seam and rebuild each scope, and what still works while the engine is down (D1528). |
 | `ZOOM_AND_MEET_TRANSCRIPTS.md` | Create and share the Zoom app, switch on Google Meet transcript import, run the live check, read each refusal and roll back (D757). |
 | `AI_TOKEN_PACKS.md` | Run AI token packs (D755): create, adopt and archive packs, handle refunds and disputes, an overdue credit, adjustments and reconcile, and run the live purchase-and-refund check. |
 | `AIRAIL.md` | Run the Eadwyn AI rail (D720): how a page gets its models, add a model Cloudflare publishes, how members are billed, and where a member's consumption is shown. A draft until D781 closes. |

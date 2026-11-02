@@ -21,7 +21,6 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import decks, { createShareLink, ensureSchema } from '../src/routes/decks.ts';
@@ -29,12 +28,11 @@ import deckDraft, { DRAFT_MAX_CARDS } from '../src/routes/deck_draft.ts';
 import { revOf } from '../src/services/decks/ifMatch.ts';
 import { MODEL_VERSION } from '../src/services/decks/slideModel.ts';
 import { contractErrors } from '../src/contracts/validate.ts';
+import { loadSchema } from './_schema_once.mjs';
 
 const schema = (f: string) => JSON.parse(readFileSync(`cloudflare-worker/src/contracts/${f}`, 'utf8'));
 
-const BASELINE = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
 const DIR = 'cloudflare-worker/sql/migrations';
-const MIGRATIONS = readdirSync(DIR).filter((n) => /^\d+_.*\.sql$/.test(n)).sort(compareMigrations).filter((n) => migrationNumber(n) > BASELINE_CUTOFF).map((n) => readFileSync(`${DIR}/${n}`, 'utf8'));
 const M715 = readFileSync(`${DIR}/715_pitch_deck_cards.sql`, 'utf8');
 const SECRET = 'synthetic-deck-draft-d1501-secret-'.repeat(2);
 const FOUNDER = 1, OTHER = 2, P = 10, DECK = 100;
@@ -43,8 +41,7 @@ const IMAGE = '0b0b0b0b-0b0b-4b0b-8b0b-0b0b0b0b0b0b';
 async function world() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: true, enableDoubleQuotedStringLiterals: true });
   db.exec('PRAGMA foreign_keys = OFF');
-  db.exec(BASELINE);
-  for (const m of MIGRATIONS) { try { db.exec(m); } catch { /* a view naming an object replayed later */ } }
+  loadSchema(db);
   db.exec(M715); // applied twice
   db.exec(`INSERT INTO users (id, role, name, email, founder_id, is_active) VALUES
       (${FOUNDER}, 'founder', 'Synthetic founder', 'draft1501@example.test', 1001, 1),
@@ -195,7 +192,8 @@ test('a draft never reaches a share link; writers change it, readers alone read 
     // Nothing outside the draft routes reads the working copy.
     const sources = readdirSync('cloudflare-worker/src', { recursive: true }).filter((n: any) => /\.ts$/.test(n)) as string[];
     const readers = sources.filter((n) => readFileSync(`cloudflare-worker/src/${n}`, 'utf8').includes('pitch_deck_cards'));
-    assert.deepEqual(readers.map((n) => n.replace(/\\/g, '/')), ['routes/deck_draft.ts']);
+    // D1577 (#3824): area saves write the same working copy; D1508's cleanup reads drafts only to keep the images they name (through its view, migration 722).
+    assert.deepEqual(readers.map((n) => n.replace(/\\/g, '/')).sort(), ['routes/deck_coedit.ts', 'routes/deck_draft.ts', 'services/decks/imageSweep.ts'], 'neither is a share link, export or reader');
     // Another member: no read, no write.
     assert.equal((await f.call('GET', `/api/decks/${DECK}/draft`, { as: OTHER })).status, 403);
     assert.equal((await f.patch('c1', { title: 'Intruder' }, '1', {}, OTHER)).status, 403);

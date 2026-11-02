@@ -61,6 +61,7 @@ export const LEDGER = [
   { file: 'assistant.ts', contains: 'resultJson = { error: (e as Error).message }', reason: 'A tool-call result inside a streamed turn; out of scope and filed in D278.' },
   { file: 'assistant.ts', contains: "send('error', { message: (e as Error).message", reason: 'An SSE error event; out of scope and filed in D278.' },
   { file: 'integrations.ts', contains: "'integration_oauth_failed', JSON.stringify({ provider_key: provider, message:", reason: 'An audit-log row, not a response body.' },
+  { file: 'deck_image_edits.ts', contains: 'const refusal = (c: any, e: EditRefusal) => refuse(c, e.status, { code: e.code, message: e.message });', reason: 'D1544: EditRefusal carries a sentence services/decks/imageEdits.ts wrote, with its code; never provider or SQLite text.' },
   { file: 'testing.ts', contains: 'return c.json(refusalBody({ code: e.code, message: e.message }), e.status as any);', reason: 'D812: TestingRefusal carries a sentence services/testing.ts wrote, with its code; never provider or SQLite text.' },
 ];
 

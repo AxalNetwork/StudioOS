@@ -386,9 +386,9 @@ test('images, a rerank and a translation are part of the cache key', async () =>
   // Mutation checked: the extra seed dropped (the second image is answered from the first one's cache).
   shapes.setModelFactsSource(visionFacts);
   const env = envWith(makeAI((m, p, n) => ok(`answer ${n}`)));
-  const a = await run(env, { task: 'sentiment', userId: 0, messages: ask, images: [PNG] });
-  const b = await run(env, { task: 'sentiment', userId: 0, messages: ask, images: [JPEG] });
-  const again = await run(env, { task: 'sentiment', userId: 0, messages: ask, images: [PNG] });
+  const a = await run(env, { task: 'explain', userId: 0, messages: ask, images: [PNG] });
+  const b = await run(env, { task: 'explain', userId: 0, messages: ask, images: [JPEG] });
+  const again = await run(env, { task: 'explain', userId: 0, messages: ask, images: [PNG] });
   assert.equal(a.output, 'answer 1');
   assert.equal(b.output, 'answer 2', 'another image is another question');
   assert.equal(again.usage.cached, true, 'the same image is a cache hit');
@@ -564,7 +564,9 @@ test('voice: the audio is never cached; a live stream reports WebSocket minutes'
   assert.deepEqual(shapes.websocketUnits(2.5), { audio_minutes_websocket: 2.5 });
   assert.deepEqual(shapes.websocketUnits(Number.NaN), { audio_minutes_websocket: 0 });
   const live = readFileSync('cloudflare-worker/src/services/liveTranscription.ts', 'utf8');
-  assert.match(live, /return \{ minutes, cost_microusd: charged, units: websocketUnits\(minutes\) \};/);
+  // #3936: the stream's units are WebSocket minutes, returned with the guard's outcome.
+  assert.match(live, /const units = websocketUnits\(minutes\);/);
+  assert.match(live, /return \{ minutes, cost_microusd: charged, units, guard: guardState \};/);
 });
 
 test('readSpeech: base64 flat or under result, bytes, a buffer or a stream; WAV is told apart; too large is none', async () => {
@@ -742,12 +744,13 @@ test('image: priced at the catalogue\'s figure in each model\'s unit; a member i
 
 
 test('interview analysis allows complete output on primary and fallback; ordinary chat keeps its deadline', async () => {
-  for (const task of ['summarise_interview', 'structure_interview', 'extract_conversation_items', 'sentiment']) {
+  for (const task of ['summarise_interview', 'structure_interview', 'extract_conversation_items', 'explain']) {
+    // #3938: `sentiment` runs on distilbert now (a classifier, no fallback), so `explain` stands for ordinary chat.
     __resetForTest();
     const ai = makeAI((_model, _payload, n) => n === 1 ? failWith('unavailable', 503) : ok());
     const result = await run(envWith(ai), { task, userId: 0, messages: ask });
     assert.equal(result.ok, true, task);
     assert.equal(result.attempts.length, 2, task);
-    assert.deepEqual(result.attempts.map(a => a.timeout_ms), task === 'sentiment' ? [8000, 8000] : [30000, 30000], task);
+    assert.deepEqual(result.attempts.map(a => a.timeout_ms), task === 'explain' ? [8000, 8000] : [30000, 30000], task);
   }
 });

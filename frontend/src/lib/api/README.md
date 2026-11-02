@@ -473,6 +473,9 @@ D1484 part 2 (#3978): `calendarSources.js` holds the member's calendar source se
 
 D1501 (#3751): `deckDraft.js` holds a deck version's working copy: `deckDraftApi.saveCard(deckId, uid, card, rev, { ord })` (`PATCH /decks/:id/cards/:uid` with `If-Match`), `draft(deckId)` and `discard(deckId)` (`GET`/`DELETE /decks/:id/draft`). `deckV2Adapter.js` reads it through `saveCard`, `discardDraft` and `draft`.
 
+D1502 part 2 (#3753): `deckBatches.js` holds a deck generation run: `deckBatchesApi.batch(uid)` (`GET /decks/areas/batches/:uid`), `cancel(uid)` (`POST …/cancel`) and `events(uid, onEvent, { signal })`, which reads the run's Server-Sent Events with `fetch` (EventSource cannot send the Authorization header); `parseSse` splits the stream. `deckV2Adapter.js` reads it through `batch` and `cancelBatch`.
+D1577 (#3824): `deckCoedit.js` holds co-editing: `deckCoeditApi.saveArea(deckId, uid, area, base, next)` (`PATCH /decks/:id/cards/:uid/areas/:area`, 409 `area_conflict` with the server's copy), `restoreCard(versionId, cardUid)` (`POST /decks/:id/restore-card`, called by `VersionCompare.jsx`) and `presence(deckId)` (`GET /decks/:id/presence`, read through `deckV2Adapter.presence`; 503 `presence_off` on a Worker without the room's binding).
+
 D1212 (#3178): `calendarConnections.js` holds the whole-calendar subscription (`GET`, `POST`, `DELETE /calendar/subscription`, D1209) and the disconnect with its choice (`DELETE /calendar/google` and `/calendar/microsoft`, `?remove_copies=1`). The link comes back once, from the POST, and the page never prints it.
 
 D1207 (#3173): `calendarItems.js` holds the Calendar's Reschedule (`PATCH /calendar/ic-meetings/:id` and `/calendar/founder-checkins/:id`) and its pickers (`/calendar/people`, `/calendar/deals`). A person comes back as a uid and a name, never an email or a user number.
@@ -487,8 +490,13 @@ D1051 adds `billingCheckout.js`: `checkoutApi.quote`, `.start(…, nonce)` and `
 | `dealInsights.js` | D1151: per-deal Team, Market and Traction read clients. |
 | `mail.js` | Email (#3547): the member's own mailboxes (Outlook, Gmail behind its switch, IMAP/SMTP) and the confirmed send (D1340); Eadwyn's drafts — the context pack, live update blocks, the estimate, drafts and revisions (D1341). |
 | `relationships.js` | D1356: who on my teams knows a person — sharing per team, who-knows, and introduction requests. |
+| `deckCardStatus.js` | D1579: a deck version's card status and assignees, filtered by status and assignee, with the cards not Done and who can be assigned, under `/api/decks/:id/card-status`. Reads only: status and assignee are saved with the version. |
+| `deckRehearsals.js` | D1580 F1: rehearse a deck version — quote, run (the recording as a form), list, read and keep-audio under `/api/decks/:id/rehearsals`. |
 | `deckReports.js` | D1540: a founder's report of a bad deck result (`POST /api/decks/proposals/:uid/report`), and HQ's queue and resolve under `/api/admin/deck-reports`. A report refunds nothing. |
 | `deckComments.js` | D1570: a deck's comments (list, post, assign, resolve) and its approval (read, set approvers, approve) under `/api/decks/:id/comments…`, `/approval`, `/approvers` and `/approve`. |
 | `deckTypedValues.js` | D1538: the figures a founder types for a deck, Stated — list, set and remove under `/api/decks/:id/typed-values`. |
+| `deckPublish.js` | D1564: a share link published as a web page — read and save its publish state under `/api/decks/:id/investor-links/:shareId/publish` (ShareDialog's `PublishPanel` only), and the reader's email gate, `POST /api/decks/share/:token/email`. |
+| `deckUpdateReuse.js` | D1584 (#3831): investor-update reuse — `deriveUpdate` (`GET /api/decks/:id/derive-update`, the latest sent update's figures as a proposal for the version's bound tiles) and `changesSince` (`GET /api/decks/:id/changes-since`, pd35's "Changes since vN"). |
+| `deckVentureElements.js` | D1543: the venture-record elements (team grid and bios, use of funds, round terms, cap-table totals, logo wall, interview quote) under `/api/decks/:id/venture-elements[/:element]`, each from records with its gate refusal, and the logos store with its permission flag under `/api/decks/:id/logos`. |
 | `deckModelPresets.js` | D1549: a deck's preset (Fast, Balanced, Best or Custom) per element group, and the groups HQ locked, under `/api/decks/:id/model-presets`. |
 | `adminDeckModels.js` | D1549: HQ's org default and lock per deck element group, under `/api/admin/ai/deck-models` (Super Admin, step-up). |

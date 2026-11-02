@@ -16,13 +16,18 @@
  *   5. D1549 (#3796): `GET /api/decks/:id/model-presets` matches
  *      deckModelPresets, and its `locks` key deckOrgLocks, with nothing
  *      stored, a stored preset with a deck pick, and an HQ lock.
+ *   6. D1579 (#3826): `GET /api/decks/:id/card-status` matches
+ *      deckCardStatus, for a deck never tracked and a tracked one, filtered.
+ *   7. D1573 (#3820): `GET /api/decks/:id/investor-links/:shareId/analytics`
+ *      matches deckSlideAnalytics, for a link nobody opened, a timed one and
+ *      one with Time per slide off.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/deck_contracts_d1511.test.ts
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
@@ -32,14 +37,17 @@ import deckCheck from '../src/routes/deck_check.ts';
 import deckTypedValues, { TYPED_UNITS } from '../src/routes/deck_typed_values.ts';
 import { deckModelPresets } from '../src/routes/deck_model_presets.ts';
 import deckComments from '../src/routes/deck_comments.ts';
+import deckCardStatus from '../src/routes/deck_card_status.ts';
+import deckSlideAnalytics from '../src/routes/deck_slide_analytics.ts';
+import { ensureSchema } from '../src/routes/decks.ts';
 import { CONTRACTS as NAMED } from '../src/contracts/index.ts';
 import { contractErrors } from '../src/contracts/validate.ts';
 import { CONSISTENCY_RULES, deckConsistency } from '../src/services/deckConsistency.ts';
 import { LAYOUTS } from '../src/services/decks/slideModel.ts';
 import { STRUCTURES } from '../src/services/decks/structures.ts';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
+import { loadSchema } from './_schema_once.mjs';
 
 /** Each contract with its schema read from its JSON file. */
 const CONTRACTS = Object.fromEntries(Object.entries(NAMED).map(([k, c]) => [k, { ...c,
@@ -83,14 +91,20 @@ test('1. every contract schema uses only what the validator checks', () => {
   }
 });
 
+test('1. contract rows are in key order, one per line, so two swaps add rows at different places (#4134)', () => {
+  const keys = Object.keys(NAMED);
+  assert.deepEqual(keys, [...keys].sort((a, b) => a.localeCompare(b, 'en')), 'CONTRACTS rows must be in key order');
+  const src = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/contracts/index.ts'), 'utf8');
+  const lines = src.slice(src.indexOf('Object.freeze({')).split('\n');
+  for (const k of keys) assert.equal(lines.filter((l) => l.startsWith(`  ${k}: { issue: `) && l.endsWith(' },')).length, 1, `${k} is one row on one line`);
+});
+
 // ── 2. The route's reply ─────────────────────────────────────────────────
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef'; // synthetic test fixture
-const MIGRATIONS = resolve(process.cwd(), 'cloudflare-worker/sql/migrations');
 function world() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  db.exec(readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8'));
-  for (const f of readdirSync(MIGRATIONS).filter((n) => /^\d+_.*\.sql$/.test(n)).sort(compareMigrations).filter((n) => migrationNumber(n) > BASELINE_CUTOFF)) db.exec(readFileSync(resolve(MIGRATIONS, f), 'utf8'));
+  loadSchema(db);
   db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (10, ?, ?, ?, 1, 1001)').run('founder', 'Synthetic Founder', 'founder@example.test');
   db.exec("INSERT INTO projects (id, name, founder_id) VALUES (1, 'Synthetic venture', 1001)");
   const old = [{ layout: 'chart_text', blocks: LAYOUTS.find((l) => l.id === 'chart_text')!.blocks }];
@@ -198,6 +212,16 @@ test('3. every adapter method swapped to through() has a contract, and every con
   }
 });
 
+
+test('nullable contract types accept only their named alternatives', () => {
+  assert.deepEqual(contractErrors({ type: ['object', 'null'] }, null), []);
+  assert.deepEqual(contractErrors({ type: ['object', 'null'] }, {}), []);
+  assert.deepEqual(contractErrors({ type: ['number', 'string'] }, 1), []);
+  assert.deepEqual(contractErrors({ type: ['number', 'string'] }, 'one'), []);
+  assert.deepEqual(contractErrors({ type: ['object', 'null'] }, []), ['$: must be object or null, is array']);
+  assert.deepEqual(contractErrors({ type: ['number', 'string'] }, false), ['$: must be number or string, is boolean']);
+});
+
 // ── 4. The replies of the two swaps that merged beside this file ─────────
 
 test('4. the typed-values reply matches deckTypedTables, for a number, a text figure and none', async () => {
@@ -288,4 +312,66 @@ test('5. the comments reply matches deckComments, for no comments and a thread w
   assert.deepEqual(contractErrors(CONTRACTS.comments.schema, { ...some.body, viewer: { ...some.body.viewer, kind: 'admin' } }), ['$.viewer.kind: must be one of ["founder","advisor","operating_partner"]']);
   assert.deepEqual(contractErrors(CONTRACTS.comments.schema, { ...some.body, comments: [{ ...some.body.comments[0], ai: true }] }), ['$.comments[0]: ai is not in the contract']);
 
+});
+
+// ── 6. The card status swap (D1579, #3826) ───────────────────────────────
+
+test('6. the card-status reply matches deckCardStatus, for a deck never tracked and a tracked, filtered one', async () => {
+  const db = world();
+  db.exec("INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (11, 'founder', 'Synthetic Cofounder', 'co@example.test', 1, 1011)");
+  db.exec("INSERT INTO project_members (project_id, user_id, role, status) VALUES (1, 11, 'cofounder', 'accepted')");
+  const app = new Hono<any>().route('/api/decks', deckCardStatus);
+  const token = await new SignJWT({ user_id: 10, role: 'founder' }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const call = async (path: string) => {
+    const res = await withThrownResponses(() => app.request(path, { headers: { Authorization: `Bearer ${token}` } }, { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any));
+    return { status: res.status, body: await res.json() as any };
+  };
+  const plain = await call('/api/decks/1/card-status');
+  assert.equal(plain.status, 200);
+  assert.equal(plain.body.tracked, false);
+  assert.deepEqual(contractErrors(CONTRACTS.cardStatus.schema, plain.body), []);
+  db.prepare('UPDATE pitch_decks SET slides = ? WHERE id = 1').run(JSON.stringify([
+    { title: 'Synthetic one', status: 'done', assignee: 11 }, { title: 'Synthetic two', status: 'in_progress', assignee: 10 }, { title: 'Synthetic three' },
+  ]));
+  for (const q of ['', '?status=in_progress', '?assignee=11', '?assignee=none&status=todo']) {
+    const r = await call(`/api/decks/1/card-status${q}`);
+    assert.equal(r.status, 200, q);
+    assert.deepEqual(contractErrors(CONTRACTS.cardStatus.schema, r.body), [], q);
+  }
+  const some = await call('/api/decks/1/card-status');
+  assert.equal(some.body.not_done.count, 2);
+  assert.deepEqual(contractErrors(CONTRACTS.cardStatus.schema, { ...some.body, cards: [{ ...some.body.cards[0], status: 'blocked' }] }), ['$.cards[0].status: must be one of ["todo","in_progress","done",null]']);
+  assert.deepEqual(contractErrors(CONTRACTS.cardStatus.schema, { ...some.body, not_done: { ...some.body.not_done, cards: [{ ...some.body.not_done.cards[0], status: 'done' }] } }), ['$.not_done.cards[0].status: must be one of ["todo","in_progress"]']);
+});
+
+// ── 7. The slide analytics swap (D1573, #3820) ───────────────────────────
+
+test('7. the slide analytics reply matches deckSlideAnalytics, for a link nobody opened, a timed one and one with Time per slide off', async () => {
+  const db = world();
+  const env = { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any;
+  await ensureSchema(env);
+  db.prepare('UPDATE pitch_decks SET slides = ? WHERE id = 1').run(JSON.stringify([{ uid: 'cover', title: 'Synthetic cover' }, { uid: 'ask', title: 'The Ask' }]));
+  const link = db.prepare("INSERT INTO pitch_deck_share_tokens (deck_id, token_hash, expires_at, view_limit, investor_label) VALUES (1, ?, '2999-01-01 00:00:00', 10, 'Synthetic Fund')");
+  link.run('h-1'); link.run('h-2');
+  const app = new Hono<any>().route('/api/decks', deckSlideAnalytics);
+  const token = await new SignJWT({ user_id: 10, role: 'founder' }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const read = async (id: number) => {
+    const res = await withThrownResponses(() => app.request(`/api/decks/1/investor-links/${id}/analytics`, { headers: { Authorization: `Bearer ${token}` } }, env));
+    assert.equal(res.status, 200);
+    return res.json() as any;
+  };
+  const none = await read(1);
+  assert.deepEqual(contractErrors(CONTRACTS.slideAnalytics.schema, none), []);
+  assert.equal(none.most_read, null);
+  db.exec("INSERT INTO deck_share_views (id, share_token_id, deck_id, read_seconds, created_at) VALUES (1, 1, 1, 50, '2026-11-01 09:00:00'), (2, 1, 1, 0, '2026-11-03 09:00:00'), (3, 2, 1, 0, '2026-11-01 10:00:00')");
+  db.exec("INSERT INTO deck_view_slides (view_id, slide_index, seconds, card_uid, updated_at) VALUES (1, 0, 20, 'cover', '2026-11-01 09:01:00'), (1, 1, 30, 'ask', '2026-11-01 09:02:00')");
+  const timed = await read(1);
+  assert.deepEqual(timed.timeline.map((e: any) => e.kind), ['opened', 'reached_ask', 'revisited']);
+  assert.deepEqual(contractErrors(CONTRACTS.slideAnalytics.schema, timed), []);
+  db.prepare('UPDATE pitch_deck_share_tokens SET include_json = ? WHERE id = 2').run('{"time_per_slide":false}');
+  const off = await read(2);
+  assert.equal(off.cards, null);
+  assert.deepEqual(contractErrors(CONTRACTS.slideAnalytics.schema, off), []);
+  assert.deepEqual(contractErrors(CONTRACTS.slideAnalytics.schema, { ...timed, cards: [{ ...timed.cards[0], seconds: 0 }] }), ['$.cards[0].seconds: must be at least 1'], 'a counted card is never 0 seconds');
+  assert.deepEqual(contractErrors(CONTRACTS.slideAnalytics.schema, { ...timed, timeline: [{ ...timed.timeline[0], kind: 'clicked' }] }), ['$.timeline[0].kind: must be one of ["opened","nda_accepted","reached_ask","revisited"]']);
 });

@@ -37,19 +37,25 @@ import { railFor } from '../util/railContext';
 import { slideTotals, recordSlideSeconds, recordSlideCardUids } from '../services/deckSlideDwell';
 import { logCycleWrite } from '../services/cycleActivity';
 import { shareAnalytics, type LinkAnalytics } from '../services/decks/shareAnalytics';
+import { timePerSlideOn } from '../services/decks/slideAnalytics';
+import { gateFor, publishOf } from '../services/decks/publish';
 import { DEFAULT_SHARE_INCLUDE, parseShareInclude, shareGatesFor, shareSlides, shareSpinoutFields, type ShareInclude } from '../services/decks/shareInclude';
 import { sanitizeBinding } from '../services/decks/sources';
+import { saveGateRefusal } from '../services/decks/saveGates';
 import {
   AUDIENCES, BLOCK_KINDS, CHART_RANGES, LIBRARY_CHART_TYPES, TYPED_CHART_TYPES, GRID_COLS, GRID_ROWS, IMAGE_FITS, IMAGE_TAGS, LAYOUTS, MAX_BLOCKS, NOTES_MAX, OVERLAYS,
   TEXT_STYLES, THEME_KINDS, VIDEO_RATIOS, contentHash, modelProblems, sanitizeModel, sanitizeTheme, assignCardUids, MODEL_VERSION,
 } from '../services/decks/slideModel';
 import { checkVideoLink } from '../services/decks/videoLink';
 import { ensureDeckVersionColumns, ensureProposalOutlineColumns } from '../services/decks/deckVersionColumns';
+import { cardBlobsOf, ensureCardBlobSchema, hashesOf, hydrateSlides, RENDITIONS_SWITCHED_ON, renditionKey, renditionSizeOf } from '../services/decks/cardBlobs';
 import { isSupportSession } from '../integrations/providers/mercury';
 import { deckShareMetrics, LEGACY_SHARE_NO_VIEW_LIMIT } from '../services/deckShareUse';
 import { cleanOrder, variantSlides } from '../services/decks/variants';
 import { revOf } from '../services/decks/ifMatch';
 import { approvalRefusal, pendingApprovers } from '../services/decks/deckApproval';
+import { newAssignments, notifyAssignments } from '../services/decks/cardStatus';
+import { peopleOf } from '../services/decks/deckPeople';
 
 /** D895 applies only to deck operations, not other project-content routes. */
 export async function projectOwned(c: any, user: any, projectId: number, opts: { write?: boolean; audit?: boolean; contactData?: boolean } = {}) {
@@ -203,6 +209,8 @@ export async function ensureSchema(env: Env): Promise<void> {
   await ensureDeckVersionColumns(env);
   // Migration 542 — D897: a New deck proposal's outline and kept cards.
   await ensureProposalOutlineColumns(env);
+  // Migration 730 — D1539: the card blobs and each version's card hashes.
+  await ensureCardBlobSchema(env);
   MIGRATED.set(bindingKey(env), true);
 }
 
@@ -519,8 +527,9 @@ export function publicDeckOf(row: any): any {
   const { audience, round, by, content_hash, ...deck } = rowToDeck(row);
   void audience; void round; void by; void content_hash;
   deck.slides = (deck.slides || []).map((s: any) => {
-    const { notes, ...card } = s || {};
-    void notes;
+    // D1579 (#3826): a card's status and assignee are the venture's working state, never an outside reader's.
+    const { notes, status, assignee, ...card } = s || {};
+    void notes; void status; void assignee;
     return card;
   });
   // D1546: every reader of a deck (share, present, the print page the PDF and PowerPoint photograph)
@@ -597,7 +606,8 @@ type DeckVersionBase = { id: number; version: number };
  * sentence (`SaveDialog` shows `message`).
  */
 export async function versionConflictBody(env: Env, projectId: number) {
-  const row = await env.DB.prepare('SELECT * FROM pitch_decks WHERE project_id = ? AND is_current = 1').bind(projectId).first<any>();
+  const found = await env.DB.prepare('SELECT * FROM pitch_decks WHERE project_id = ? AND is_current = 1').bind(projectId).first<any>();
+  const row = found ? await hydrateSlides(env, found) : null;
   const current: DeckVersionBase | null = row ? { id: Number(row.id), version: Number(row.version) } : null;
   return {
     error: 'deck_version_conflict', code: 'deck_version_conflict',
@@ -613,18 +623,38 @@ export async function insertVersion(env: Env, projectId: number, slides: any[], 
   const stored = founderPitchSlides(slides);
   const theme = meta.theme ?? null;
   const hash = await contentHash(stored, theme);
+  // D1539 (#3789): the version also records its cards' hashes, and each card
+  // not stored yet becomes one `pitch_card_blobs` row. `slides` is still
+  // written in full during the transition. Where migration 730 cannot be
+  // reached, the version is written exactly as before.
+  const blobs = await ensureCardBlobSchema(env) ? await cardBlobsOf(stored) : null;
+  const update = env.DB.prepare('UPDATE pitch_decks SET is_current = 0 WHERE project_id = ? AND is_current = 1 AND id = ? AND version = ?')
+    .bind(projectId, base?.id ?? null, base?.version ?? null);
+  const metaArgs = [title, userId, meta.audience ?? null, meta.round_ref ?? null, theme ? JSON.stringify(theme) : null, hash] as const;
   // D1 batches are transactional. A stale UPDATE changes no row, so the
   // following INSERT does nothing; MAX(version) is read inside the same batch.
-  const results = await env.DB.batch([
-    env.DB.prepare('UPDATE pitch_decks SET is_current = 0 WHERE project_id = ? AND is_current = 1 AND id = ? AND version = ?')
-      .bind(projectId, base?.id ?? null, base?.version ?? null),
-    env.DB.prepare(`INSERT INTO pitch_decks (project_id, version, slides, title, is_current, created_by, audience, round_ref, theme_json, content_hash)
-      SELECT ?, COALESCE(MAX(version), 0) + 1, ?, ?, 1, ?, ?, ?, ?, ?
-        FROM pitch_decks WHERE project_id = ?
-      HAVING changes() = 1 OR (? IS NULL AND COUNT(*) = 0)`)
-      .bind(projectId, JSON.stringify(stored), title, userId, meta.audience ?? null, meta.round_ref ?? null,
-        theme ? JSON.stringify(theme) : null, hash, projectId, base?.id ?? null),
-  ]);
+  // The blobs go in the same batch, after the version and only when it was
+  // written (`changes() = 1`), so a prune runs wholly before or after both.
+  const results = blobs
+    ? await env.DB.batch([
+      update,
+      env.DB.prepare(`INSERT INTO pitch_decks (project_id, version, slides, title, is_current, created_by, audience, round_ref, theme_json, content_hash, card_hashes)
+        SELECT ?, COALESCE(MAX(version), 0) + 1, ?, ?, 1, ?, ?, ?, ?, ?, ?
+          FROM pitch_decks WHERE project_id = ?
+        HAVING changes() = 1 OR (? IS NULL AND COUNT(*) = 0)`)
+        .bind(projectId, JSON.stringify(stored), ...metaArgs, JSON.stringify(blobs.hashes), projectId, base?.id ?? null),
+      env.DB.prepare(`INSERT OR IGNORE INTO pitch_card_blobs (hash, json)
+        SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]') FROM json_each(?) WHERE changes() = 1`)
+        .bind(JSON.stringify(blobs.blobs)),
+    ])
+    : await env.DB.batch([
+      update,
+      env.DB.prepare(`INSERT INTO pitch_decks (project_id, version, slides, title, is_current, created_by, audience, round_ref, theme_json, content_hash)
+        SELECT ?, COALESCE(MAX(version), 0) + 1, ?, ?, 1, ?, ?, ?, ?, ?
+          FROM pitch_decks WHERE project_id = ?
+        HAVING changes() = 1 OR (? IS NULL AND COUNT(*) = 0)`)
+        .bind(projectId, JSON.stringify(stored), ...metaArgs, projectId, base?.id ?? null),
+    ]);
   if (Number(results[1]?.meta?.changes) !== 1) {
     throw Response.json(await versionConflictBody(env, projectId), { status: 409 });
   }
@@ -693,7 +723,9 @@ decks.get('/by-project/:pid', async (c) => {
 export async function getDeckRow(env: Env, id: number): Promise<any> {
   const row = await env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(id).first<any>();
   if (!row) throw new Error('NotFound');
-  return (await withNames(env, [row]))[0];
+  // D1539 (#3789): the slides from the version's card hashes; a version saved
+  // before migration 730 reads its own `slides`.
+  return (await withNames(env, [await hydrateSlides(env, row)]))[0];
 }
 
 // ---------------------------------------------------------------------
@@ -830,6 +862,17 @@ decks.get('/share/:token', async (c) => {
     'SELECT * FROM pitch_deck_share_tokens WHERE token_hash = ?',
   ).bind(await sha256Hex(token)).first<{ id: number; nda_required: number | null; include_json: string | null; prospect_id: number | null; investor_label: string | null; variant_id?: number | null; watermark_text?: string | null }>();
   const ndaRequired = Number(link?.nda_required ?? 0) === 1;
+  // D1564 (#3811): a published link asks for the reader's email first, and
+  // sends no card and uses no view until this browser has given one. While
+  // public views are off (owner decision T) the gate is always on.
+  const published = publishOf(link?.include_json);
+  if (link && published && gateFor(published) === 'email' && await shareLinkLive(c.env, await sha256Hex(token), bind.viewerHash)) {
+    const { emailGatePassed, emailGateAnswer } = await import('./deck_publish');
+    if (!(await emailGatePassed(c.env, c.req.header('cookie'), Number(link.id)))) {
+      if (bind.setCookie) c.header('Set-Cookie', bind.setCookie);
+      return c.json(await emailGateAnswer(c.env, parseInt(m[1])));
+    }
+  }
   if (link && ndaRequired && await shareLinkLive(c.env, await sha256Hex(token), bind.viewerHash)) {
     const gate = await ndaGate(c, Number(link.id), parseInt(m[1]));
     if (gate) {
@@ -936,6 +979,8 @@ decks.get('/share/:token', async (c) => {
     // does not stop a screenshot or the browser's own print.
     allow_download: bind.allowDownload,
     nda_required: ndaRequired,
+    // D1564: a link published as a page, and the gate it applies; null for an investor's own link.
+    published: published ? { gate: gateFor(published) } : null,
     // D902 — a studio link names its investor and offers no deal pack (bug 12; `deck_share_actions.ts`).
     offers_deal_pack: !(link && (link.prospect_id != null || String(link.investor_label || '').trim() !== '')),
     included,
@@ -1015,7 +1060,13 @@ decks.post('/share/:token/heartbeat', async (c) => {
   if (!viewId || !seconds) return c.json({ ok: true });
   await ensureSchema(c.env);
   // D691 decision 5 — the same live-link predicate as the share read.
-  if (!(await shareLinkLive(c.env, await sha256Hex(token), await viewerHashOf(c)))) return c.json({ ok: false }, 200);
+  const live = await shareLinkLive(c.env, await sha256Hex(token), await viewerHashOf(c));
+  if (!live) return c.json({ ok: false }, 200);
+  // D1573 (#3820): "Time per slide" off keeps visit counts only. The share read wrote the view (the count);
+  // nothing more is stored for this link: no read seconds, no seconds per card.
+  const link = await c.env.DB.prepare('SELECT id, deck_id, include_json, variant_id FROM pitch_deck_share_tokens WHERE id = ?')
+    .bind(live.id).first<{ id: number; deck_id: number; include_json: string | null; variant_id: number | null }>();
+  if (!timePerSlideOn(link?.include_json)) return c.json({ ok: true, counts_only: true });
   try {
     await c.env.DB.prepare(
       `UPDATE deck_share_views
@@ -1030,10 +1081,32 @@ decks.post('/share/:token/heartbeat', async (c) => {
   for (const [slide, slideSeconds] of totals) {
     try { await recordSlideSeconds(c.env, viewId, parseInt(m[1]), slide, slideSeconds); } catch {}
   }
-  // D1500: and the card each slide is, by uid.
-  await recordSlideCardUids(c.env, viewId, parseInt(m[1]), totals.map(([slide]) => slide));
+  // D1500: and the card each slide is, by uid. D1573: read against the cards as this link sends them (its
+  // variant's order, less what it leaves out), so a place on a tailored link names the right card.
+  await recordSlideCardUids(c.env, viewId, parseInt(m[1]), totals.map(([slide]) => slide), async () => {
+    const row = await c.env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(parseInt(m[1])).first<any>();
+    return row ? linkSentCards(c.env, row, link) : [];
+  });
   return c.json({ ok: true });
 });
+
+/**
+ * D1573 (#3820): the cards a link sends, in the order its reader sees them: the
+ * version's cards with their uids, in the link's variant order (D1565), less the
+ * cards it leaves out (`shareSlides`). The share read sends the same list, so a
+ * reader's slide place maps to one card here.
+ */
+export async function linkSentCards(env: Env, deckRow: any, link: { variant_id?: number | null; include_json?: string | null } | null): Promise<any[]> {
+  let cards = rowToDeck(deckRow).slides || [];
+  if (link?.variant_id) {
+    try {
+      const v = await env.DB.prepare('SELECT slide_order_json FROM deck_variants WHERE id = ? AND deck_id = ?').bind(Number(link.variant_id), Number(deckRow.id)).first<{ slide_order_json: string }>();
+      const order = v ? cleanOrder(cards, JSON.parse(v.slide_order_json || '[]')) : null;
+      if (order) cards = variantSlides(cards, order);
+    } catch { /* an unreadable variant opens the master as it is */ }
+  }
+  return shareSlides(cards, parseShareInclude(link?.include_json));
+}
 
 /** D895: unknown counts and an unlimited cap are distinct from measured zero. One rule, shared with the link records (D1111). */
 export { deckShareMetrics };
@@ -1325,15 +1398,31 @@ decks.put('/:id', async (c) => {
     }
   }
   if (!slides.length) return c.json({ error: 'slides required' }, 400);
+  // D1579 (#3826): a card newly assigned names someone who can work on the deck (D1570's people rule);
+  // an assignee kept from the version before is not checked again, so a person who left never blocks a save.
+  let priorSlides: unknown[] = [];
+  try { priorSlides = JSON.parse(row.slides || '[]'); } catch { priorSlides = []; }
+  const assigned = newAssignments(priorSlides, slides);
+  if (assigned.length) {
+    const people = new Set((await peopleOf(c.env, Number(row.project_id))).map((p) => p.id));
+    const stray = assigned.find((a) => !people.has(a.user_id));
+    if (stray) return refuse(c, 400, { code: 'assignee_not_on_deck', message: `Card ${stray.index + 1}: assign someone who can work on this deck. Nothing was saved.` });
+  }
+  // D1543 (#3781): a logo without its customer's permission, or a quote without recorded consent, is refused; nothing is written.
+  const gate = await saveGateRefusal(c.env, Number(row.project_id), slides);
+  if (gate) return refuse(c, 409, gate);
   // D1506: an outside image is copied into the venture's storage and the slide names the copy;
   // one that cannot be copied refuses the save, naming it.
   const copy = await copyExternalImages(c.env, { projectId: Number(row.project_id), deckId: Number(row.id), user: { id: Number(user.id), role: user.role }, requestUrl: c.req.url, slides });
   if (!copy.ok) return refuse(c, 422, { code: 'image_not_copied', message: copyRefusalMessage(copy.code), extra: { image_url: copy.image_url, reason: copy.code } });
   slides.splice(0, slides.length, ...copy.slides);
   const title = String(body?.title || row.title || 'Pitch deck').slice(0, 200);
-
   const newId = await insertVersion(c.env, Number(row.project_id), slides, title, Number(user.id) || null, meta,
     { id: Number(row.id), version: Number(row.version) });
+  // Only the save whose version won reaches here: each new assignment is told once.
+  if (assigned.length) {
+    await notifyAssignments(c.env, { projectId: Number(row.project_id), deckId: Number(newId), by: { id: Number(user.id), name: user.name ?? null }, assigned });
+  }
 
   // Task #2 — Spin-Out Demo Day deck: when the founder edits the
   // Review-the-deal data-room URL or NDA flag inline on the slide,
@@ -1423,6 +1512,32 @@ decks.post('/:id/restore', async (c) => {
     { audience: row.audience ?? null, round_ref: row.round_ref ?? null, theme: themeOfRow(row) });
   await auditDeckWrite(c, user, Number(row.project_id), 'deck_restored', 'Deck version restored');
   return c.json(rowToDeck(await getDeckRow(c.env, Number(newId))));
+});
+
+/**
+ * D1539 §4 (#3789) — a card's 256 or 1024 px rendition, by the card's hash, for
+ * the version's readers. NOT switched on: nothing renders or stores one until
+ * the owner approves the monthly cost (D1556), so today this answers 404
+ * `rendition_not_available` with `switched_on: false`. The key and the reader
+ * are the seam the renderer will fill (`renditionKey`, the existing FILES bucket).
+ */
+decks.get('/:id/cards/:hash/rendition/:size', async (c) => {
+  const user = await requireAuth(c);
+  const id = parseInt(c.req.param('id'));
+  const hash = c.req.param('hash');
+  const size = renditionSizeOf(c.req.param('size'));
+  if (!size) return refuse(c, 400, { code: 'invalid_rendition_size', message: 'A rendition is 256 or 1024 pixels wide.' });
+  await ensureSchema(c.env);
+  const none = () => refuse(c, 404, { code: 'rendition_not_available', message: 'This card has no picture yet.', extra: { switched_on: RENDITIONS_SWITCHED_ON } });
+  if (!(await ensureCardBlobSchema(c.env))) return none();
+  const row = await c.env.DB.prepare('SELECT project_id, card_hashes FROM pitch_decks WHERE id = ?').bind(id).first<any>();
+  if (!row) return c.json({ error: 'not found' }, 404);
+  try { await projectOwned(c, user, Number(row.project_id)); }
+  catch { return c.json({ error: 'forbidden' }, 403); }
+  if (!(hashesOf(row) || []).includes(hash)) return c.json({ error: 'not found' }, 404);
+  const obj = RENDITIONS_SWITCHED_ON && c.env.FILES ? await c.env.FILES.get(renditionKey(hash, size)) : null;
+  if (!obj) return none();
+  return new Response(obj.body, { headers: { 'content-type': 'image/png', 'cache-control': 'private, max-age=31536000, immutable' } });
 });
 
 decks.post('/:id/share', async (c) => {
@@ -1904,7 +2019,7 @@ decks.post('/apply-method', async (c) => {
  * earlier unkept proposal is replaced (it was never a version); the deck
  * versions in `pitch_decks` are not read for writing and not touched.
  */
-async function proposeFill(env: Env, base: any, slides: any[], methodId: string, userId: number): Promise<any> {
+export async function proposeFill(env: Env, base: any, slides: any[], methodId: string, userId: number): Promise<any> {
   const projectId = Number(base.project_id);
   const res = await env.DB.batch([
     env.DB.prepare('DELETE FROM pitch_deck_proposals WHERE project_id = ?').bind(projectId),

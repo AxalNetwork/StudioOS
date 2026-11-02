@@ -17,10 +17,30 @@
  * Worker's clock, and one receipt is written for the job.
  *
  * "Live transcript off" opens no socket and holds nothing.
+ *
+ * #3936 (D1478 task 2, part 2) — THE SAME HOLD, GUARD AND SETTLE AS `run()`.
+ * A WebSocket cannot be held open inside the router, so the stream does each
+ * step `run()` does, here:
+ *   - the model is the Record a Session live job's (VA2) through
+ *     `speechChoice`: offered, doing live work, and allowed by the plan lock;
+ *     a locked or unoffered model is refused before any socket opens;
+ *   - each block's hold carries the guard's share for the text that block can
+ *     produce (`blockHoldMicro`), as `run()`'s quote does for a transcription;
+ *   - when the stream ends its final text, the live passages it stored, goes
+ *     through the output guard (`guardFinalText`). A block, or a guard that
+ *     cannot answer, removes the live draft (the final transcript replaces it
+ *     anyway) and says so on the receipt; nothing unchecked stays on screen;
+ *   - the stream's minutes and the guard's calls settle against the holds, and
+ *     one `ai_usage_logs` row records the stream on Interviews' surface, with
+ *     the guard's rows naming it.
  */
 import type { Env } from '../types';
 import * as aiBudget from './aiBudget';
-import { PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET, budgetRefusalMessage } from './aiRouter';
+import { PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET, TRANSCRIPT_CHARS_PER_MINUTE, budgetRefusalMessage, guardFinalText, guardQuoteMicro, recordUsage } from './aiRouter';
+import { AI_SURFACE } from './aiSurfaces';
+import { speechChoice, type SpeechChoice } from './ai/speechJobs';
+import type { CatalogueSwitches } from './ai/catalogue';
+import type { PlanTier } from './ai/drawJobs';
 import { liveInputFor, parseLiveEvent } from './sttFormats';
 import { websocketUnits, type Units } from './ai/shapes';
 import { labelSegments, recordReceipt, storeLiveSegment, type SessionRow } from './interviewSessions';
@@ -33,6 +53,24 @@ export function blockQuoteMicro(model: string, multiplier = 1): number {
   const perMinute = PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET[model];
   if (typeof perMinute !== 'number') throw new Error(`no websocket price for ${model}`);
   return aiBudget.billedUsdToMicro(perMinute * LIVE_BLOCK_MINUTES, multiplier);
+}
+
+/** The guard's share of one block: the output check on the most text a block of streaming can produce. */
+export function blockGuardMicro(multiplier = 1): number {
+  return guardQuoteMicro('', TRANSCRIPT_CHARS_PER_MINUTE * LIVE_BLOCK_MINUTES, multiplier);
+}
+
+/** What one block holds: its minutes and the guard's share, at `multiplier`. */
+export function blockHoldMicro(model: string, multiplier = 1): number {
+  return blockQuoteMicro(model, multiplier) + blockGuardMicro(multiplier);
+}
+
+/** Record a Session's live transcript (plan job VA2). */
+export const LIVE_JOB = 'VA2';
+
+/** The live model a session may stream on, by the VA2 job's rules: the session's model, offered, live, and allowed by the plan. */
+export function liveChoice(model: string, switches: CatalogueSwitches, tier: PlanTier): SpeechChoice {
+  return speechChoice(LIVE_JOB, { switches, tier, caller: model });
 }
 
 /** Blocks needed to cover `elapsedMs` of streaming (at least one). */
@@ -64,21 +102,47 @@ export type HoldResult = { ok: true; reservation: aiBudget.AiReservation } | { o
 
 /** Hold one block. A refusal carries the budget's own message. */
 export async function holdBlock(env: Env, userId: number, model: string): Promise<HoldResult> {
-  const held = await aiBudget.reserveAiBudget(env, userId, blockQuoteMicro(model, await aiBudget.memberChargeMultiplier(env, userId)));
+  const held = await aiBudget.reserveAiBudget(env, userId, blockHoldMicro(model, await aiBudget.memberChargeMultiplier(env, userId)));
   if (!held.ok) return { ok: false, refusal: held.refusal, message: budgetRefusalMessage(held.refusal, held.refusal === 'spend_limit' ? held : null) };
   return { ok: true, reservation: held.reservation };
 }
 
-/** Settle every block against the minutes streamed, and write the job's receipt. */
+export type LiveGuard = 'passed' | 'blocked' | 'unavailable';
+
+/**
+ * Settle every block against the minutes streamed and the guard's calls,
+ * write the stream's usage row and its guard rows, and the job's receipt.
+ * The final text is the live passages the stream stored; a blocked or
+ * unanswered guard removes them.
+ */
 export async function settleStream(
   env: Env, session: SessionRow, model: string, holds: aiBudget.AiReservation[], elapsedMs: number,
-): Promise<{ minutes: number; cost_microusd: number; units: Units }> {
+): Promise<{ minutes: number; cost_microusd: number; units: Units; guard: LiveGuard }> {
   const minutes = billedMinutes(elapsedMs);
   const perMinute = PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET[model] ?? 0;
+  const userId = holds[0]?.userId ?? session.created_by_user_id;
   // D762: the stream is settled at the billed price its blocks were held at.
   const multiplier = holds.length ? await aiBudget.memberChargeMultiplier(env, holds[0].userId) : 1;
-  const total = aiBudget.billedUsdToMicro(minutes * perMinute, multiplier);
-  const parts = splitCost(total, blockQuoteMicro(model, multiplier), holds.length);
+  const streamMicro = aiBudget.billedUsdToMicro(minutes * perMinute, multiplier);
+
+  // The guard over the final text, as run() checks a transcription's output.
+  const rows = await env.DB.prepare("SELECT text FROM interview_transcript_segments WHERE session_id = ? AND source = 'live' ORDER BY start_ms, id")
+    .bind(session.id).all<{ text: string | null }>().catch(() => ({ results: [] as Array<{ text: string | null }> }));
+  const finalText = (rows.results ?? []).map((r) => String(r.text ?? '')).filter(Boolean).join('\n');
+  const surface = AI_SURFACE.validateInterviews;
+  let checked: Awaited<ReturnType<typeof guardFinalText>> | null = null;
+  try { checked = await guardFinalText(env, { userId, surface }, finalText, multiplier); }
+  catch (e) { console.error('[live] guard failed:', (e as Error).message); }
+  const guardState: LiveGuard = !checked || checked.decision.action === 'fail' ? 'unavailable'
+    : checked.decision.action === 'block' ? 'blocked' : 'passed';
+  if (guardState !== 'passed') {
+    // Nothing unchecked, and nothing the guard blocked, stays as the draft.
+    await env.DB.prepare("DELETE FROM interview_transcript_segments WHERE session_id = ? AND source = 'live'").bind(session.id).run()
+      .catch((e: Error) => console.error('[live] draft removal failed:', e.message));
+  }
+
+  const total = streamMicro + (checked?.micro ?? 0);
+  const parts = splitCost(total, blockHoldMicro(model, multiplier), holds.length);
   let charged = 0;
   for (let i = 0; i < holds.length; i++) {
     try {
@@ -88,12 +152,22 @@ export async function settleStream(
       console.error('[live] settlement failed:', (e as Error).message);
     }
   }
+  // D761 PR 3: the stream's units, as WebSocket minutes, apart from a file's `audio_minutes`.
+  const units = websocketUnits(minutes);
+  const reservationUid = holds[0]?.uid ?? null;
+  const streamCharged = Math.min(charged, streamMicro);
+  const rowId = await recordUsage(env, { userId, surface }, {
+    task: 'transcribe', model, latency_ms: Math.max(0, Math.round(elapsedMs)), prompt_tokens: 0, completion_tokens: 0,
+    est_cost_usd: minutes * perMinute, fallback_used: false, cached: false,
+    safety_score: guardState === 'passed' ? 1 : guardState === 'blocked' ? 0 : null,
+  }, null, { charged: streamCharged, reservationUid, units: units as Record<string, number> });
+  await checked?.record(rowId, reservationUid);
   await recordReceipt(env, session.id, {
     kind: 'live', model, requested_model: model, fallback_used: false,
     audio_minutes: minutes, cost_microusd: charged, outcome: 'ok',
+    refusal: guardState === 'passed' ? null : guardState === 'blocked' ? 'guard_blocked' : 'guard_unavailable',
   });
-  // D761 PR 3: the stream's units, as WebSocket minutes, apart from a file's `audio_minutes`.
-  return { minutes, cost_microusd: charged, units: websocketUnits(minutes) };
+  return { minutes, cost_microusd: charged, units, guard: guardState };
 }
 
 type AnyWebSocket = WebSocket & { accept(): void };

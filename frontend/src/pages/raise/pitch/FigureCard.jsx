@@ -1,7 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
-import { CHANGED_LINE, GONE_LINE, REFRESH_FROM_RECORDS, REFRESH_HELD, figureCard } from './figuresModel';
+import {
+  CHANGED_LINE, GONE_LINE, REFRESH_FROM_RECORDS, REFRESH_FROM_UPDATE, REFRESH_HELD, UPDATE_HELD, UPDATE_NONE, UPDATE_SAME,
+  cardHasUpdateSlot, figureCard, updateForCard, updateLine,
+} from './figuresModel';
 
 /**
  * D1604 (#3716, pd6, pd24) — a live figure's two lines of explanation in the
@@ -17,6 +20,13 @@ import { CHANGED_LINE, GONE_LINE, REFRESH_FROM_RECORDS, REFRESH_HELD, figureCard
  *                  Refresh from records, which moves every stale figure on
  *                  the card to its store's snapshot (held until a version is
  *                  saved, like every other edit)
+ *
+ *   UpdateRefresh  D1584 (#3831): Refresh from the latest update, beside
+ *                  Refresh from records. It reads the Worker's proposal for
+ *                  the card's tiles bound to an update's figures, shows each
+ *                  value then and now with its source and grade, and places
+ *                  them on Accept (held until a version is saved). Discard
+ *                  drops the proposal; nothing was saved by the read.
  *
  * It sits outside the area buttons, so nothing interactive is nested in one.
  */
@@ -85,3 +95,66 @@ export function ChangedNotice({ changed, readOnly = false, onRefresh }) {
     </div>
   );
 }
+
+const PRIMARY = `${BTN} bg-axal-violet text-white hover:bg-axal-violet-deep`;
+
+/**
+ * `derive()` resolves to the Worker's answer (or rejects); `onAccept(proposals)`
+ * places them. Drawn only where the card holds a tile an update reports, and
+ * never while read-only.
+ */
+export function UpdateRefresh({ card, cardIndex, readOnly = false, derive, onAccept }) {
+  const [state, setState] = useState({ status: 'idle', data: null });
+  if (readOnly || !derive || !cardHasUpdateSlot(card)) return null;
+  const read = () => {
+    setState({ status: 'loading', data: null });
+    Promise.resolve().then(derive).then(
+      (data) => setState({ status: 'ready', data }),
+      () => setState({ status: 'error', data: null }),
+    );
+  };
+  const close = () => setState({ status: 'idle', data: null });
+  if (state.status === 'idle' || state.status === 'loading') {
+    return (
+      <div className="flex justify-end">
+        <button type="button" className={GHOST} onClick={read} disabled={state.status === 'loading'} aria-busy={state.status === 'loading'} data-testid="pitch-update-refresh">
+          <RefreshCw size={14} aria-hidden="true" /> {state.status === 'loading' ? 'Reading the latest update…' : REFRESH_FROM_UPDATE}
+        </button>
+      </div>
+    );
+  }
+  const box = 'flex flex-col gap-1.5 rounded-[10px] border border-axal-hairline bg-white px-3 py-2 dark:border-gray-700 dark:bg-gray-900';
+  if (state.status === 'error') {
+    return (
+      <div className={box} role="status" data-testid="pitch-update-error">
+        <span className={MUTED}>The latest update could not be read. Nothing on the card changed.</span>
+        <span className="flex gap-2">
+          <button type="button" className={GHOST} onClick={read} data-testid="pitch-update-retry">Try again</button>
+          <button type="button" className={GHOST} onClick={close}>Close</button>
+        </span>
+      </div>
+    );
+  }
+  const d = state.data || {};
+  const { proposals, missing } = updateForCard(d, cardIndex);
+  const empty = !d.update ? (d.reason || 'No investor update has been sent yet.') : !proposals.length ? (missing.length ? UPDATE_NONE : UPDATE_SAME) : null;
+  return (
+    <div className={box} role="region" aria-label={REFRESH_FROM_UPDATE} data-testid="pitch-update-proposal">
+      <span className={`text-[12.5px] font-bold ${INK}`}>{REFRESH_FROM_UPDATE}</span>
+      {empty ? <span className={MUTED} data-testid="pitch-update-empty">{empty}</span> : null}
+      {proposals.map((p) => (
+        <span key={p.block_id} className="flex flex-col" data-testid="pitch-update-row">
+          <span className={`text-[12px] ${INK}`}>{p.label}: {p.was ? <><s>{p.was}</s> → </> : null}<b>{p.now}</b></span>
+          <span className={MUTED}>{updateLine(d.update, p)}</span>
+        </span>
+      ))}
+      {missing.map((m) => <span key={m.block_id} className={`${MUTED} italic`} data-testid="pitch-update-missing">{m.label}: {m.reason}</span>)}
+      {proposals.length ? <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{UPDATE_HELD}</span> : null}
+      <span className="flex gap-2">
+        {proposals.length ? <button type="button" className={PRIMARY} onClick={() => { onAccept?.(proposals); close(); }} data-testid="pitch-update-accept">Accept</button> : null}
+        <button type="button" className={GHOST} onClick={close} data-testid="pitch-update-discard">{proposals.length ? 'Discard' : 'Close'}</button>
+      </span>
+    </div>
+  );
+}
+

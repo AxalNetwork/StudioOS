@@ -410,6 +410,16 @@ router.delete('/agents/:uid', async (c) => {
       "UPDATE team_agents SET status = 'removed', paused_reason = NULL, removed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
     ).bind(a.id).run();
     await logEvent(c.env, a.id, user.id, 'removed', { proposals_withdrawn: Number(withdrawn.meta?.changes ?? 0) });
+    // D1530 (#3849, E5): its notes are kept 90 days after removal (Q6 A), its duties end.
+    // Best effort: the removal stands even where migration 728 has not run.
+    try {
+      const { onAgentRemoved } = await import('../services/agents/memory');
+      await onAgentRemoved(c.env, a.id);
+      await c.env.DB.prepare("UPDATE agent_duties SET status = 'removed', updated_at = CURRENT_TIMESTAMP WHERE agent_id = ? AND status <> 'removed'").bind(a.id).run();
+    } catch { console.warn('[agents] removal_retention_failed'); }
+    // D1528 (#3847): the removed agent's runs end and its scope object forgets it.
+    const { eraseAgentRuntime } = await import('../agents/erasure');
+    await eraseAgentRuntime(c.env, a);
     return c.json({ ok: true });
   } catch (e) { return mapError(c, e); }
 });

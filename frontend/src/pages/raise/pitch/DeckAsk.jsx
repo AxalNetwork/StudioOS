@@ -7,6 +7,7 @@ import { reportError } from '../../../lib/log';
 import useAssistMode from '../../../hooks/useAssistMode';
 import Sheet from '../../../ui/Sheet.jsx';
 import { AskButtonView } from '../../../ui/AskButton.jsx';
+import { useHeaderAskClaim } from '../../../ui/HeaderAsk.jsx';
 import { EDIT_PATH, asList, currentVersion, ventureQuery } from './pitchStudioModel';
 import { NEW_PATH, refusalOf } from './newDeckModel';
 import { ADD_TOKENS_PATH } from '../../../lib/aiTokens';
@@ -117,6 +118,9 @@ async function readEdits(source, deckId) {
 
 export default function DeckAsk({ projectId, versions, readOnly = false, onPlace = null, onChanged, editsKey = 0, source = SOURCE }) {
   const [aiOn] = useAssistMode('raise');
+  // D1443 part 5 (#3992): the deck's Ask is this page's one Ask, so the shared
+  // header and the rail's fallback draw none beside it.
+  useHeaderAskClaim();
   const [own, setOwn] = useState({ status: 'loading', data: null });
   const [edits, setEdits] = useState({ status: 'loading', items: [], derived: [] });
   const [tick, setTick] = useState(0);
@@ -205,10 +209,11 @@ export function WaitingSheet({ projectId, deck, edits, aiOn = true, onPlace = nu
    * record the decision; a refused decision takes the placement back. A
    * placement that fails records nothing. True when it was placed and decided.
    */
-  const place = async (edit) => {
+  const place = async (edit, group = null) => {
     const plan = onPlace?.(edit);
     if (!plan || plan.error) { refuse(edit.uid, plan?.error || 'Open the editor to accept this.'); return false; }
-    const placed = plan.commit();
+    // D1515: Accept all's placements share a group, so the editor undoes them as one step.
+    const placed = plan.commit(group);
     if (!placed || placed.error) { refuse(edit.uid, placed?.error || 'That did not work. Nothing was changed.'); return false; }
     try {
       await source.proposals.decide(edit.uid, 'accept');
@@ -221,8 +226,9 @@ export function WaitingSheet({ projectId, deck, edits, aiOn = true, onPlace = nu
   const acceptEdit = (edit) => act(edit.uid, () => place(edit));
   const acceptAll = () => act('all', async () => {
     // One decision per proposal (D777 part 3): there is no bulk decision.
+    const group = `ask-all:${Date.now()}`;
     for (const edit of items) {
-      try { await place(edit); } catch (e) {
+      try { await place(edit, group); } catch (e) {
         reportError('pitch-ask:accept', e);
         refuse(edit.uid, refusalOf(e)?.message || 'That did not work. Nothing was changed.');
       }

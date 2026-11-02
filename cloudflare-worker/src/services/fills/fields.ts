@@ -62,6 +62,26 @@ const PROTOTYPE = 'Founder · Build · Prototype / MVP';
 const ROADMAP = 'Founder · Build · Product roadmap';
 const CAPITAL = 'Founder · Raise · Capital relationships';
 const TEAM = 'Founder · Grow · Team expansion';
+// #4046 (Group A1): a competitor's why, feedback's new theme and an obligation's title.
+const MARKET_INTEL = 'Founder · Validate · Market intelligence';
+const PRODUCT = 'Founder · Grow · Product improvement';
+const DURABLE = 'Founder · Grow · Durable company building';
+
+/**
+ * #3937 (D1478 task 3, part 2; §4.2 fix 7): the plan's text job for a form's
+ * Eadwyn fill, so its model is the job's (`ai/textJobs.ts`), not whatever kind
+ * the page's rail row is. Prototype's must-have fill read the page's Code row
+ * (kimi-k2.7-code or qwen-coder); BU4 is Plan (glm-4.7-flash). A form with no
+ * entry keeps its page's rail row. A ladder model no route runs yet is passed
+ * over until its spend is approved (`AWAITING_SPEND_APPROVAL`).
+ */
+export const FORM_TEXT_JOBS: Readonly<Record<string, string>> = Object.freeze({
+  feature: 'BU4', 'must-have': 'BU4',
+  'status-report': 'IN11', service: 'IN11',
+  theme: 'VA11', segment: 'VA12', hypothesis: 'VA15',
+  'ic-memo': 'IN1',
+  event: 'EV1', 'agenda-item': 'EV1',
+});
 
 export const FILL_FIELDS: readonly FillField[] = Object.freeze([
   // AF1, AF3: Add feature. Impact is the founder's call, so it has no entry.
@@ -93,6 +113,12 @@ export const FILL_FIELDS: readonly FillField[] = Object.freeze([
   { page: ROADMAP, form: 'item', field: 'title', label: 'Item', table: 'roadmap_okrs', column: 'objective', class: 'composition', sources: ['eadwyn'] },
   { page: CAPITAL, form: 'investor', field: 'notes', label: 'Notes', table: 'raise_prospects', column: 'notes', class: 'composition', sources: ['eadwyn'] },
   { page: TEAM, form: 'role', field: 'title', label: 'Role', table: 'job_postings', column: 'title', class: 'composition', sources: ['eadwyn'] },
+  // #4046 (Group A1). Composition only: a competitor's kind and what to watch, feedback's words (what a
+  // customer said), its source and its person, an obligation's kind, date, owner and repeats are never filled.
+  // The competitor's row is keyed by name and feedback's by uid (`ROW_KEYS` in routes/fills.ts).
+  { page: MARKET_INTEL, form: 'competitor', field: 'why', label: 'Why it matters', table: 'competitor_tracking', column: 'why_it_matters', class: 'composition', sources: ['eadwyn'] },
+  { page: PRODUCT, form: 'feedback', field: 'theme', label: 'Theme name', table: 'product_feedback', column: 'theme', class: 'composition', sources: ['eadwyn'] },
+  { page: DURABLE, form: 'obligation', field: 'title', label: 'Obligation', table: 'compliance_events', column: 'title', class: 'composition', sources: ['eadwyn'] },
   // D1329 (#3490, #2431 part 6): every other profile. These records are not a
   // venture's; `scopes.ts` holds each one's own write check. No amount, legal
   // name, approval, decision, outcome, term or member's record is listed.

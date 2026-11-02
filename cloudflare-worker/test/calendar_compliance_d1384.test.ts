@@ -8,11 +8,10 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync, mkdtempSync, copyFileSync, rmSync } from 'node:fs';
+import { readFileSync, mkdtempSync, copyFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SignJWT } from 'jose';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import {
   FEED_KINDS, KNOWN_KINDS, PAGE_ONLY_KINDS, fetchCalendarScope, fetchUserEvents, fetchUserEventsWithSources,
@@ -21,13 +20,12 @@ import { describeItems } from '../src/services/calendar/items.ts';
 import { readItem } from '../src/services/calendar/itemRead.ts';
 import { complianceState } from '../src/services/calendar/sourceReaders.ts';
 import calendar from '../src/routes/calendar.ts';
+import { loadSchema } from './_schema_once.mjs';
 
 const root = mkdtempSync(join(tmpdir(), 'calendar-d1384-'));
 const seed = join(root, 'seed.sqlite');
 const initial = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
-initial.exec(readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8'));
-const dir = 'cloudflare-worker/sql/migrations';
-for (const n of readdirSync(dir).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort()) initial.exec(readFileSync(`${dir}/${n}`, 'utf8'));
+loadSchema(initial);
 initial.prepare('VACUUM INTO ?').run(seed); initial.close();
 after(() => rmSync(root, { recursive: true, force: true }));
 
@@ -56,8 +54,9 @@ const page = (env: any, user: number, companyId?: number | null, kinds = ['compl
 test('the registry reads compliance as one more source, and no feed or file kind includes it', () => {
   assert.ok(KNOWN_KINDS.includes('compliance_due'), 'compliance_due is registered in READERS');
   // D1484 (#3977): D1208's three readers and the manual reader joined it, all page only; #3959: so is Learning;
-  // D1486 §b (#3981): so are Publish's sends and Grow's planned content; #3982 (§c): a round's close and an NDA's expiry; #3983 (§d): the four task stores.
-  assert.deepEqual([...PAGE_ONLY_KINDS], ['compliance_due', 'interview_call', 'cohort_date', 'deal_closing', 'manual', 'learning', 'publish_send', 'content_planned', 'bot_call', 'round_close', 'nda_expiry', 'workflow_task', 'mvp_task', 'contact_task', 'engagement_milestone']);
+  // D1486 §b (#3981): so are Publish's sends and Grow's planned content; #3982 (§c): a round's close and an NDA's expiry; #3983 (§d): the four task stores;
+  // D1485 (#3979): and the member's own Google and Outlook events.
+  assert.deepEqual([...PAGE_ONLY_KINDS], ['compliance_due', 'interview_call', 'cohort_date', 'deal_closing', 'manual', 'learning', 'publish_send', 'content_planned', 'bot_call', 'round_close', 'nda_expiry', 'workflow_task', 'mvp_task', 'contact_task', 'engagement_milestone', 'external_google', 'external_microsoft']);
   assert.ok(!FEED_KINDS.includes('compliance_due'));
   assert.deepEqual([...FEED_KINDS, ...PAGE_ONLY_KINDS].sort(), [...KNOWN_KINDS].sort());
 });

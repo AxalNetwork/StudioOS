@@ -659,12 +659,38 @@ const scoring: Adapter = {
   async read() { return {}; },
 };
 
+/** D1602: file figures stay Document / Sourced until a verified approval exists. */
+export const dataroom: Adapter = {
+  id: 'dataroom', area: 'raise', module: 'Raise › Data room', href: q('/raise/data-room'),
+  slots: [
+    { key: 'dataroom.revenue_plan', label: 'Revenue plan', unit: 'usd' },
+    { key: 'dataroom.headcount_plan', label: 'Headcount plan', unit: 'count' },
+    { key: 'dataroom.contract_count', label: 'Signed contracts', unit: 'count' },
+  ],
+  async read({ env, projectId }) {
+    const rows = await env.DB.prepare(`SELECT v.* FROM dataroom_deck_values v
+      JOIN data_room_files f ON f.uid = v.file_uid AND f.project_id = v.project_id
+      WHERE v.project_id = ? AND f.deck_source = 1 AND f.deck_extract_state = 'done'
+        AND v.file_version = f.deck_source_revision
+      ORDER BY v.as_of DESC, v.file_uid ASC`).bind(projectId).all<any>();
+    const out: Partial<Record<string, Read>> = {};
+    for (const row of rows.results || []) {
+      if (!this.slots.some(s => s.key === row.slot) || out[row.slot]) continue;
+      // A dated, current revision only; CSV's p0 explicitly means unpaged.
+      if (!Number.isFinite(row.value) || !/^\d{4}-\d{2}-\d{2}$/.test(row.as_of)) continue;
+      out[row.slot] = { value: row.value, as_of: row.as_of, origin: 'file',
+        record_ref: `dataroom:${row.file_uid}:v${row.file_version}:p${row.page ?? 0}` };
+    }
+    return out;
+  },
+};
+
 export const DECK_SOURCES: Adapter[] = [
   interviews, painThemes, claims, demand, competitors,
   mustHaves, roadmap, github, shipping,
   round, capTable, useOfFunds, narrative,
   revenue, mercury, updates, product, pipeline,
-  team, notionSource, googleSource, scoring,
+  team, notionSource, googleSource, scoring, dataroom,
   // D1520 (#3772): market size, the competition table, round terms, use of funds by section, the projection, the narrative's words.
   ...RECORD_SOURCES,
 ];
@@ -699,10 +725,15 @@ export function coverageOf(items: SourceItem[]): Coverage {
   return { slots: filled + not_recorded + unreadable, filled, by_grade, not_recorded, unreadable };
 }
 
-/** Every slot of every adapter, read. Scoring slots only when `includeScoring`. */
-export async function readSources(ctx: SourceCtx, opts: { includeScoring?: boolean } = {}): Promise<{ items: SourceItem[]; coverage: Coverage }> {
+/**
+ * Every slot of every adapter, read. Scoring slots only when `includeScoring`.
+ * D1543 (#3781): `only` names the adapters to read (by id), for an element
+ * that needs a few of them; the grades and snapshots are the same mapping.
+ */
+export async function readSources(ctx: SourceCtx, opts: { includeScoring?: boolean; only?: readonly string[] } = {}): Promise<{ items: SourceItem[]; coverage: Coverage }> {
   const items: SourceItem[] = [];
   for (const a of DECK_SOURCES) {
+    if (opts.only && !opts.only.includes(a.id)) continue;
     const slots = a.slots.filter((s) => !s.optional || opts.includeScoring);
     if (!slots.length) continue;
     let got: Partial<Record<string, Read | 'withheld'>> | null;

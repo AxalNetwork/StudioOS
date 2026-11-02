@@ -62,14 +62,36 @@ import { lockedOut, type Resolved } from '../services/decks/elementModels';
 import { notSwitchedOn } from '../services/featureFlags';
 import { imageSize, sha256Hex, stripMetadata, tooManyPixels, type ImageMime } from '../services/decks/imageBytes';
 import { fetchExternalImage } from '../services/decks/imageFetch';
+import { artDirectionOfTheme, seedFor, type ArtDirection } from '../services/decks/artDirection';
+import { asReference } from '../services/decks/imageEdits';
+import { IMAGE_SPECS, type DrawReference } from '../services/ai/shapes';
 
 const deckImages = new Hono<{ Bindings: Env }>();
+
+/**
+ * D1544 (#3784): the art direction's reference image as a model's reference,
+ * or null: when the deck keeps none, the model takes none, the image is not a
+ * kept image of this venture, or it cannot be read or resized (then the image
+ * is drawn without it rather than refused).
+ */
+async function artReference(env: Env, deck: Deck, model: string): Promise<DrawReference | null> {
+  if (!deck.art.reference_uid || !((IMAGE_SPECS[model]?.maxReferences ?? 0) > 0) || !env.FILES) return null;
+  const row = await env.DB.prepare("SELECT r2_key, mime, shows_person FROM deck_images WHERE uid = ? AND project_id = ? AND state = 'kept'")
+    .bind(deck.art.reference_uid, deck.projectId).first<any>().catch(() => null);
+  if (!row || Number(row.shows_person) === 1) return null;
+  try {
+    const obj = await env.FILES.get(row.r2_key);
+    if (!obj) return null;
+    const bytes = new Uint8Array(await new Response(obj.body).arrayBuffer());
+    return await asReference(env, bytes, row.mime as ImageMime);
+  } catch { return null; }
+}
 
 const HEX = /^#[0-9a-f]{6}$/i;
 const UID = /^[0-9a-f-]{36}$/;
 const NO_STORAGE = 'Images cannot be stored here yet. Nothing was run and nothing was charged.';
 
-type Deck = { deckId: number; projectId: number; slides: unknown[] };
+type Deck = { deckId: number; projectId: number; slides: unknown[]; art: ArtDirection };
 
 /** The deck version and its venture, which the caller may write (or read, with `write: false`), or the refusal. */
 async function deckOf(c: any, user: User, write = true): Promise<Deck | Response> {
@@ -83,7 +105,8 @@ async function deckOf(c: any, user: User, write = true): Promise<Deck | Response
   }
   let slides: unknown[] = [];
   try { const parsed = JSON.parse(row.slides || '[]'); if (Array.isArray(parsed)) slides = parsed; } catch { slides = []; }
-  return { deckId, projectId, slides };
+  // D1544 (#3784): the version's art direction, which every image request on it inherits.
+  return { deckId, projectId, slides, art: artDirectionOfTheme(themeOfRow(row)) };
 }
 
 /**
@@ -131,11 +154,14 @@ async function refusedAsk(c: any, ask: ImageAsk, projectId: number): Promise<Res
 }
 
 /** One image's run, as one options object, so the quote and the run read the same input. */
-function runOptions(c: any, user: User, deck: Deck, ask: ImageAsk, colours: string[], pick: { model?: string; pinned?: true } = {}): RunOptions {
+function runOptions(c: any, user: User, deck: Deck, ask: ImageAsk, colours: string[], pick: { model?: string; pinned?: true } = {}, references: DrawReference[] = []): RunOptions {
   const rail = { ...railFor(c, { page: IMAGE_PAGE, option: IMAGE_OPTION }, `deck:${deck.deckId}`), option: IMAGE_OPTION };
   // D1503 (#3754): the element's model is the caller's pick, which D1478's DK4 draw job weighs (`drawChoice`).
   // D1549 (#3796): an HQ lock runs pinned, so the draw job never swaps in another model.
-  return { ...pick, task: 'deck_image', drawJob: 'DK4', userId: Number(user.id) || 0, text: promptOf(ask, colours).slice(0, 2048), draw: {}, surface: AI_SURFACE.raisePitch, rail };
+  // D1544 (#3784): the deck's art direction: its note in the prompt, its seed family, its reference image when the model takes one.
+  const note = deck.art.note ? ` Art direction: ${deck.art.note}.` : '';
+  const seed = seedFor(deck.art, 0);
+  return { ...pick, task: 'deck_image', drawJob: 'DK4', userId: Number(user.id) || 0, text: (promptOf(ask, colours) + note).slice(0, 2048), draw: { ...(seed != null ? { seed } : {}), ...(references.length ? { references } : {}) }, surface: AI_SURFACE.raisePitch, rail };
 }
 
 /** The grid element an image request is: a scene is a Generated photo, every other style an Illustration. */
@@ -155,7 +181,8 @@ type Priced = { ask: ImageAsk; colours: string[]; opts: RunOptions; model: strin
 /** The checked request and its price, or the response that refuses it. Shared by the quote and the run. */
 async function priced(c: any, user: User, deck: Deck): Promise<Priced | Response> {
   const body = await c.req.json().catch(() => ({} as any));
-  const read = askOf(body);
+  // D1544 (#3784): a request that names no style or palette takes the deck's art direction's.
+  const read = askOf({ ...body, style: body?.style ?? deck.art.style, palette: body?.palette ?? deck.art.palette });
   if ('error' in read) return c.json({ error: read.error }, 400);
   const refused = await refusedAsk(c, read.ask, deck.projectId);
   if (refused) return refused;
@@ -170,8 +197,14 @@ async function priced(c: any, user: User, deck: Deck): Promise<Priced | Response
   }
   // D1549: HQ's lock wins; a lock the caller's plan cannot run stops the run before any quote or hold.
   if (lockedOut(element)) return lockedOutRefusal(c, element);
-  const opts = runOptions(c, user, deck, read.ask, colours, runPickOf(element));
-  const q = await quoteRun(c.env, opts);
+  let opts = runOptions(c, user, deck, read.ask, colours, runPickOf(element));
+  let q = await quoteRun(c.env, opts);
+  // D1544: the art direction's reference image, sent only to a model that takes references, and priced in the hold.
+  const styleRef = q.ok ? await artReference(c.env, deck, q.model) : null;
+  if (q.ok && styleRef) {
+    opts = runOptions(c, user, deck, read.ask, colours, { ...runPickOf(element), model: q.model }, [styleRef]);
+    q = await quoteRun(c.env, opts);
+  }
   if (!q.ok) {
     const stop = refuseRun(c, { refusal: q.refusal, error: q.error });
     return stop ?? refuse(c, 503, { code: 'model_unavailable', message: 'The image model is not available. Nothing was run.' });
@@ -221,7 +254,9 @@ deckImages.post('/:id/images', async (c) => {
   const images: any[] = [];
   let stopped: { code: string; message: string } | null = null;
   for (let i = 0; i < p.ask.count; i += 1) {
-    const r = await run(c.env, { ...p.opts, surface: AI_SURFACE.raisePitch, rail: p.opts.rail });
+    // D1544: image i of the run draws with the deck's seed base + i, so a deck's images share one seed family.
+    const seed = seedFor(deck.art, i);
+    const r = await run(c.env, { ...p.opts, surface: AI_SURFACE.raisePitch, rail: p.opts.rail, draw: { ...(p.opts.draw ?? {}), ...(seed != null ? { seed } : {}) } });
     if (!r.ok || !r.image) {
       const answer = refuseRun(c, r);
       if (!images.length) return answer ?? refuse(c, 503, { code: 'model_unavailable', message: 'Eadwyn could not draw the image. Nothing was charged and nothing changed.' });
@@ -404,7 +439,8 @@ deckImages.post('/images/:uid/discard', async (c) => {
   if (row instanceof Response) return row;
   // A kept image may already sit in a saved version, which keeps reading it.
   if (row.state === 'kept') return refuse(c, 409, { code: 'image_kept', message: 'A kept image stays: a saved version may show it. Remove it from the card instead.' });
-  await c.env.DB.prepare("UPDATE deck_images SET state = 'discarded' WHERE uid = ? AND state = 'proposed'").bind(row.uid).run();
+  // D1508: the daily cleanup removes it from R2 24 hours after this, unless a version, draft or proposal names it.
+  await c.env.DB.prepare("UPDATE deck_images SET state = 'discarded', discarded_at = datetime('now') WHERE uid = ? AND state = 'proposed'").bind(row.uid).run();
   return c.json({ ok: true, uid: row.uid });
 });
 

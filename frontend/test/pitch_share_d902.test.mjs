@@ -33,6 +33,7 @@ import { renderedText } from './_renderedText.mjs';
 import { api } from '../src/lib/api.js';
 import { cyclesWrite } from '../src/lib/api/cycles.js';
 import { deckCommentsApi } from '../src/lib/api/deckComments.js';
+import { deckCardStatusApi } from '../src/lib/api/deckCardStatus.js';
 import ShareDialog from '../src/pages/raise/pitch/ShareDialog.jsx';
 import { ClosedLink, FigureSources, NdaGate } from '../src/pages/raise/pitch/ShareViewerParts.jsx';
 import { StudioAnalytics } from '../src/pages/raise/pitch/PitchStudio.jsx';
@@ -81,7 +82,7 @@ test('one body for the one writer: a prospect or a typed name, never both', () =
   const prospect = shareBody({ ...DEFAULT_SHARE, investor: '5', viewLimit: '3' }, deck);
   assert.deepEqual(prospect, {
     deck_id: 40, expires_days: 14, view_limit: 3, allow_download: false, allow_forwarding: false, nda_required: true,
-    include: { figures: true, sources: true, notes: false, bands: false, cap_table: false, team_photos: false }, prospect_id: 5,
+    include: { figures: true, sources: true, notes: false, bands: false, cap_table: false, team_photos: false }, time_per_slide: true, prospect_id: 5,
   });
   const typed = shareBody({ ...DEFAULT_SHARE, investor: TYPED, label: ' Fund Z ', expires: null, ndaRequired: false }, deck);
   assert.equal(typed.investor_label, 'Fund Z');
@@ -131,19 +132,23 @@ async function mountDialog(answers) {
   // D1570 (#3817): Share reads who must approve this version first; nobody, unless a test says so.
   const savedApproval = deckCommentsApi.approval;
   deckCommentsApi.approval = async (...a) => { calls.push(['approval', ...a]); return (answers.approval || (async () => ({ pending: [], message: null })))(...a); };
+  // D1579 (#3826): and the version's card status, beside it; every card Done, unless a test says so.
+  const savedCards = deckCardStatusApi.read;
+  deckCardStatusApi.read = async (...a) => { calls.push(['cardStatus', ...a]); return (answers.cardStatus || (async () => ({ tracked: false, not_done: { count: 0, cards: [] } })))(...a); };
   const restore = installDocument();
   const container = document.createElement('div'); document.body.appendChild(container);
   const rootEl = createRoot(container);
   const created = [];
   const settle = () => act(async () => { for (let i = 0; i < 6; i += 1) await new Promise((r) => setTimeout(r, 0)); });
-  await act(async () => { rootEl.render(h(ShareDialog, { projectId: 7, deck, onClose() {}, onCreated: (r) => created.push(r) })); });
+  const reviewed = [];
+  await act(async () => { rootEl.render(h(ShareDialog, { projectId: 7, deck, onClose() {}, onCreated: (r) => created.push(r), onReviewCards: (uid) => reviewed.push(uid) })); });
   await settle();
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
   const pr = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
   const by = (id) => walk(container).find((n) => pr(n)['data-testid'] === id);
   const text = (n) => (!n ? '' : n.nodeType === 3 ? n.textContent || '' : n.childNodes?.length ? n.childNodes.map(text).join(' ') : n.textContent || '');
   return {
-    calls, created, by, pr, settle,
+    calls, created, reviewed, by, pr, settle,
     text: () => text(container).replace(/\s+/g, ' '),
     async change(id, value) { await act(async () => { pr(by(id)).onChange?.({ target: { value, checked: value } }); }); await settle(); },
     async press(id) { await act(async () => { await pr(by(id)).onClick?.({ preventDefault() {} }); }); await settle(); },
@@ -151,6 +156,7 @@ async function mountDialog(answers) {
       await act(async () => rootEl.unmount()); restore();
       cyclesWrite.formOptions = saved.formOptions; cyclesWrite.raise.deckLink = saved.deckLink;
       deckCommentsApi.approval = savedApproval;
+      deckCardStatusApi.read = savedCards;
     },
   };
 }
@@ -173,7 +179,7 @@ test('Create link writes once through the one writer, and shows the link once', 
     assert.equal(writes[0][1], 7);
     assert.deepEqual(writes[0][2], {
       deck_id: 40, expires_days: 14, view_limit: 2, allow_download: false, allow_forwarding: false, nda_required: true,
-      include: { figures: true, sources: true, notes: false, bands: true, cap_table: false, team_photos: false }, prospect_id: 6,
+      include: { figures: true, sources: true, notes: false, bands: true, cap_table: false, team_photos: false }, time_per_slide: true, prospect_id: 6,
     });
     assert.equal(m.created.length, 1, 'the caller refreshes its links');
     assert.ok(m.by('pitch-share-made'));
@@ -230,6 +236,60 @@ test('D1570 (#3817): Share opens one gate; an approver who has not approved hold
     assert.equal(ok.by('pitch-share-gate'), undefined);
     assert.equal(ok.calls.filter((c) => c[0] === 'deckLink').length, 1);
   } finally { await ok.unmount(); }
+});
+
+test('D1579 (#3826, pd34): cards not Done add "[n] cards are not Done. Share anyway?" to the one confirm, listing them; Share passes it, Review cards goes back', async () => {
+  const notDone = { tracked: true, not_done: { count: 2, cards: [
+    { index: 1, uid: 'u2', title: 'Synthetic problem', status: 'in_progress' },
+    { index: 3, uid: 'u4', title: 'Synthetic traction', status: 'todo' },
+  ] } };
+  const m = await mountDialog({
+    formOptions: async () => ({ prospects: [{ value: 5, label: 'Fund A' }] }),
+    deckLink: async () => ({ id: 94, share_path: '/share/deck/tok.jkl', deck_version: 4 }),
+    cardStatus: async () => notDone,
+  });
+  try {
+    await m.press('pitch-share-create');
+    assert.deepEqual(m.calls.filter((c) => c[0] === 'cardStatus').map((c) => c[1]), [40], 'the version on screen');
+    assert.ok(m.by('pitch-share-gate'), 'the one pre-share confirm opens');
+    assert.match(m.text(), /2 cards are not Done\. Share anyway\?/);
+    assert.match(m.text(), /02 Synthetic problem In progress/);
+    assert.match(m.text(), /04 Synthetic traction To do/);
+    assert.equal(m.calls.filter((c) => c[0] === 'deckLink').length, 0, 'nothing is written before Share');
+    await m.press('pitch-share-review-cards');
+    assert.deepEqual(m.reviewed, ['u2'], 'Review cards goes back to the first card not Done');
+    assert.equal(m.pr(m.by('pitch-share-anyway')).disabled, false, 'the warning never holds');
+    await m.press('pitch-share-anyway');
+    assert.equal(m.calls.filter((c) => c[0] === 'deckLink').length, 1, 'Share passes it');
+    assert.ok(m.by('pitch-share-made'));
+  } finally { await m.unmount(); }
+  // With an approver waited on as well, both lines sit in the one confirm, and the approver still holds Share.
+  const both = await mountDialog({
+    formOptions: async () => ({ prospects: [{ value: 5, label: 'Fund A' }] }),
+    deckLink: async () => ({ id: 95, share_path: '/share/deck/tok.mno', deck_version: 4 }),
+    approval: async () => ({ pending: [{ user_id: 5, name: 'Sam Advisor' }], message: 'Approval needed before sharing · Sam Advisor has not approved yet.' }),
+    cardStatus: async () => notDone,
+  });
+  try {
+    await both.press('pitch-share-create');
+    assert.ok(both.by('pitch-share-gate-approval'));
+    assert.ok(both.by('pitch-share-gate-not_done'));
+    assert.equal(both.pr(both.by('pitch-share-anyway')).disabled, true, 'an approver who has not signed off still holds Share');
+    await both.press('pitch-share-anyway');
+    assert.equal(both.calls.filter((c) => c[0] === 'deckLink').length, 0);
+  } finally { await both.unmount(); }
+  // Unread, the confirm says so and Share still passes.
+  const unread = await mountDialog({
+    formOptions: async () => ({ prospects: [{ value: 5, label: 'Fund A' }] }),
+    deckLink: async () => ({ id: 96, share_path: '/share/deck/tok.pqr', deck_version: 4 }),
+    cardStatus: async () => { const e = new Error('Synthetic failure'); e.status = 500; throw e; },
+  });
+  try {
+    await unread.press('pitch-share-create');
+    assert.match(unread.text(), /Which cards are not Done could not be read\. You can still share\./);
+    await unread.press('pitch-share-anyway');
+    assert.equal(unread.calls.filter((c) => c[0] === 'deckLink').length, 1);
+  } finally { await unread.unmount(); }
 });
 
 /* ------------------------------------------------------------------ *

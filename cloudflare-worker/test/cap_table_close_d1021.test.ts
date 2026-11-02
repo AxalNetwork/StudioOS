@@ -10,7 +10,6 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
@@ -22,12 +21,10 @@ import { AMOUNTS, NOT_FOUND, pagesOf, screenRead } from '../src/services/capTabl
 import { __resetForTest } from '../src/services/aiRouter.ts';
 import { withGuard } from './_guard_stub.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
-import { splitStatements } from './_baseline.mjs';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '../..');
-const MIGRATIONS = resolve(ROOT, 'cloudflare-worker/sql/migrations');
 const JWT_SECRET = 'unit-test-jwt-secret-d1021-0123456789';
 
 // 1 admin · 4 owner · 5 co-founder · 6 advisor · 9 another venture's founder
@@ -36,13 +33,7 @@ const ADMIN = 1, OWNER = 4, COFOUNDER = 5, ADVISOR = 6, OTHER = 9;
 
 function built(): DatabaseSync {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  db.exec(readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8'));
-  for (const f of readdirSync(MIGRATIONS).filter((x) => x.endsWith('.sql')).sort(compareMigrations)
-    .filter((x) => migrationNumber(x) > BASELINE_CUTOFF)) {
-    for (const stmt of splitStatements(readFileSync(resolve(MIGRATIONS, f), 'utf8'))) {
-      try { db.exec(stmt); } catch { /* already present on the baseline */ }
-    }
-  }
+  loadSchema(db);
   return db;
 }
 const BUILT = built();
@@ -382,8 +373,11 @@ test('Eadwyn’s read: one metered run on the cap table’s rail, a draft kept f
     assert.deepEqual(f.conversions[0], { conversionOptions: { pdf: { metadata: false } } });
     assert.ok(f.prompts.some((p) => p.includes('--- Page 2 ---')));
     // Metered and charged to the member who pressed, on the page's rail.
-    const usage = all(f, 'SELECT user_id, task, rail_page, rail_option, record_ref, surface FROM ai_usage_logs WHERE guard_for IS NULL');
+    // #3937: the document's conversion is its own row (no charge), on the same rail; then the model's run.
+    const usage = all(f, "SELECT user_id, task, rail_page, rail_option, record_ref, surface FROM ai_usage_logs WHERE guard_for IS NULL AND task <> 'document_convert'");
     assert.equal(usage.length, 1);
+    const converted = all(f, "SELECT user_id, rail_page, rail_option, record_ref, surface, charged_microusd FROM ai_usage_logs WHERE task = 'document_convert'");
+    assert.deepEqual(converted.map((r: any) => ({ ...r })), [{ user_id: COFOUNDER, rail_page: 'Founder · Raise · Cap table', rail_option: 'draft:raise/document-terms', record_ref: 'project:10', surface: '/raise/cap-table', charged_microusd: 0 }]);
     assert.deepEqual({ ...usage[0] }, {
       user_id: COFOUNDER, task: 'rail_legal', rail_page: 'Founder · Raise · Cap table', rail_option: 'draft:raise/document-terms',
       record_ref: 'project:10', surface: '/raise/cap-table',

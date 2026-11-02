@@ -27,6 +27,7 @@
  *     frontend/tests/visual/server.ts            (from the repo root; PORT defaults to 4791)
  */
 import { createServer } from 'node:http';
+import { fileURLToPath } from 'node:url';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { extname, join, normalize, resolve } from 'node:path';
 import worker from '../../../cloudflare-worker/src/index.ts';
@@ -39,7 +40,7 @@ import { memKV } from '../../../cloudflare-worker/test/_mem_kv.mjs';
 import { fakeAI } from '../../../cloudflare-worker/test/_recorded_ai.mjs';
 import { ONE_CLICK, seedOneClickVenture } from '../../../cloudflare-worker/test/fixtures/oneClickVenture.ts';
 
-const ROOT = resolve(new URL('../../../', import.meta.url).pathname);
+const ROOT = resolve(fileURLToPath(new URL('../../../', import.meta.url)));
 const DOCS = join(ROOT, 'docs');
 const PORT = Number(process.env.PORT || 4791);
 const JWT_SECRET = 'synthetic-d1511-visual-suite-not-a-real-credential';

@@ -33,6 +33,7 @@ import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 import { cssHex, hexWithAlpha } from '../../lib/brandHex';
+import HeaderAsk from '../../ui/HeaderAsk.jsx';
 
 const UNAVAILABLE = Symbol('unavailable');
 const num = (v) => (v === null || v === undefined || !Number.isFinite(Number(v)) ? null : Number(v).toLocaleString());
@@ -220,7 +221,8 @@ export default function HqBranchOverlay({ branch, 'data-testid': testId }) {
       data-licence-kind={licenceReadable?.kind || (licenceUnreadable ? 'unreadable' : 'unknown')}
     >
       <LicenceShellNotice licenceShell={licenceShell} code={code} />
-      <header>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
         <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
           <Eye size={13} /> HQ · Viewing as {code}
         </div>
@@ -233,6 +235,8 @@ export default function HqBranchOverlay({ branch, 'data-testid': testId }) {
           their deployment, not in HQ&rsquo;s copy of their figures.
           {asOf ? ` The branch stamped its answer ${asOf}.` : ''}
         </p>
+        </div>
+        <HeaderAsk />
       </header>
 
       {data === UNAVAILABLE && (

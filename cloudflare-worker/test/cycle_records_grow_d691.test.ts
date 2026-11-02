@@ -18,9 +18,9 @@
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/cycle_records_grow_d691.test.ts
  */
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, readdirSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -37,7 +37,8 @@ import { fillKind } from '../src/services/fills/registry.ts';
 import { markFeedbackTold, updateFeedback } from '../src/services/growWriters.ts';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
 const ROOT = process.cwd();
 const MIGRATIONS = resolve(ROOT, 'cloudflare-worker/sql/migrations');
@@ -57,16 +58,22 @@ const PEOPLE: Array<[number, string, string, number | null]> = [
 const MONTH = new Date().toISOString().slice(0, 7);
 const TODAY = new Date().toISOString().slice(0, 10);
 
-/** The baseline and every later migration, built once into a file each test copies (seeds included). */
-const BUILT = join(mkdtempSync(join(tmpdir(), 'grow-d691-')), 'built.db');
+/**
+ * The baseline and every later migration, built once into a file each test copies (seeds included).
+ * Every file lives in one scratch directory, removed when this file's tests end, so a run leaves
+ * nothing in the system temp directory (each run used to leave one directory per copy).
+ */
+const SCRATCH = mkdtempSync(join(tmpdir(), 'grow-d691-'));
+after(() => rmSync(SCRATCH, { recursive: true, force: true }));
+const BUILT = join(SCRATCH, 'built.db');
+let copies = 0;
 function fresh(): DatabaseSync {
   if (!existsSync(BUILT)) {
     const db = new DatabaseSync(BUILT, { enableDoubleQuotedStringLiterals: true });
-    db.exec(BASELINE);
-    for (const f of FILES.filter((n) => migrationNumber(n) > BASELINE_CUTOFF)) db.exec(readFileSync(resolve(MIGRATIONS, f), 'utf8'));
+    loadSchema(db);
     db.close();
   }
-  const copy = join(mkdtempSync(join(tmpdir(), 'grow-d691-')), 'test.db');
+  const copy = join(SCRATCH, `case-${++copies}.db`);
   copyFileSync(BUILT, copy);
   const db = new DatabaseSync(copy, { enableDoubleQuotedStringLiterals: true });
   db.exec('PRAGMA foreign_keys = ON');

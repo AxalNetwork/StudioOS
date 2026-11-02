@@ -32,4 +32,11 @@ The Worker answers the record prefixes (D1439) and, since #3916, the token
 share links `/esign/*`, `/deck/share/*`, `/share/*`, `/invite/*` and `/join/*`
 before the SPA shell: those get the static "Sign in to view" card, `noindex`,
 and no D1 call (D1439 Part D).
+D1564 (#3811) adds `/embed/:token` to both `run_worker_first` lists: the
+Worker answers it only to a frame from an origin the founder listed on a
+published link (`frame-ancestors` with those origins, no `X-Frame-Options`)
+and refuses everything else with frames denied; the SPA draws the card view
+there (`DeckEmbedPage.jsx`). A published link's own card on `/deck/share/*`
+and `/share/deck/*` (`serveDeckShareCard`) is off while public views are off
+(owner decision T), so those keep the static card.
 

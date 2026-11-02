@@ -38,14 +38,14 @@ import { canAccessProject } from '../services/projectAccess';
 import { run as aiRun, quoteRun, type RunOptions, type RunResult } from '../services/aiRouter';
 import { loadAiBudget } from '../services/aiBudget';
 import { proposeRail } from '../services/railProposals';
-import { fieldsOf, type FillField } from '../services/fills/fields';
+import { FORM_TEXT_JOBS, fieldsOf, type FillField } from '../services/fills/fields';
 import { MAX_RUN_ROWS, fieldsToAsk, formMessages, gatherForm, gatherScoped, parseFields, parseRows, type Dropped } from '../services/fills/formRun';
 import { isExplorer, parentKey, scopeOf } from '../services/fills/scopes';
 import { runRefusalView } from '../util/railContext';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { ensureAdvisorStoresSchema } from '../services/advisorStoresSchema';
 import { sessionBlockProposals, windowDays } from '../services/sessionsBlock';
-import { ROW_READS } from './fills';
+import { ROW_READS, venturedRowId } from './fills';
 import { layoutView, savedRow } from './studio_layout';
 import { studioProfile } from '../services/studioModules';
 import {
@@ -263,8 +263,9 @@ export function railRunRoutes(deps: { run?: Runner; quote?: Quoter } = {}) {
         .bind(projectId).first<{ id: number; founder_id: number | null; company_id: number | null }>();
       if (!project || !(await canAccessProject(c.env, user, project, { write: true }))) return refuse(c, 403, 'project_not_available');
       if (rec != null) {
-        recordId = Number(rec?.id);
-        if (rec?.type !== table || !Number.isSafeInteger(recordId) || recordId <= 0 || !ROW_READS[table]) return refuse(c, 404, 'record_not_found');
+        // #4046: a positive id, or a text key of a table `ROW_KEYS` lists.
+        recordId = rec?.type === table ? await venturedRowId(c.env, table, rec?.id, projectId) : null;
+        if (!recordId || !ROW_READS[table]) return refuse(c, 404, 'record_not_found');
         row = await c.env.DB.prepare(ROW_READS[table]).bind(recordId, projectId).first<Record<string, unknown>>();
         if (!row) return refuse(c, 404, 'record_not_found');
       }
@@ -286,6 +287,8 @@ export function railRunRoutes(deps: { run?: Runner; quote?: Quoter } = {}) {
     const runInput: RunOptions = {
       task: 'rail_write', userId: Number(user.id), messages, guardText, maxTokens: rowsWanted ? 1200 : 600, temperature: 0.2,
       model: typeof body?.model === 'string' && body.model ? body.model : undefined,
+      // #3937 (§4.2 fix 7): the form's plan job decides the model, not the page row's kind.
+      ...(FORM_TEXT_JOBS[form] ? { textJob: FORM_TEXT_JOBS[form] } : {}),
       rail: { page, option, record: recordRef },
     };
 

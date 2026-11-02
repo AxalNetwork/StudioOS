@@ -16,6 +16,7 @@
     "@cloudflare/workers-oauth-provider": "1.2.4",
     "@modelcontextprotocol/sdk": "1.32.2",
     "@simplewebauthn/server": "^14.0.3",
+    "agents": "0.32.0",
     "hono": "^4.13.14",
     "jose": "^6.2.13",
     "libphonenumber-js": "1.13.15",

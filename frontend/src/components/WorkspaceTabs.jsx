@@ -4,14 +4,19 @@
 // tab is derived from the URL so every tab stays addressable and back/forward work.
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import HeaderAsk from '../ui/HeaderAsk.jsx';
 
 export function WorkspaceHeader({ icon: Icon, title, description }) {
   return (
-    <div className="mb-6">
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-        {Icon && <Icon className="w-6 h-6 text-violet-600" />} {title}
-      </h1>
-      {description && <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{description}</p>}
+    <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+      <div className="min-w-0">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+          {Icon && <Icon className="w-6 h-6 text-violet-600" />} {title}
+        </h1>
+        {description && <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{description}</p>}
+      </div>
+      {/* D1443 part 5 (#3992): the investor portfolio's header carries Ask. */}
+      <HeaderAsk />
     </div>
   );
 }

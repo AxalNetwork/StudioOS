@@ -31,6 +31,13 @@
  * Check claims draws the counts and the Stated and Uncited list from
  * `deckV2Adapter.figures` (`checkCounts`, `toReview`). Editor-only: Present,
  * share links and the print page never draw a badge.
+ *
+ * D1584 (#3831, pd6): Refresh from the latest update, beside Refresh from
+ * records. The Worker's `GET /api/decks/:id/derive-update` proposes the
+ * version's tiles bound to an update's five figures (`UPDATE_SLOTS`) with the
+ * update's words; `acceptUpdate` places what the founder accepts on the card,
+ * held until a version is saved, like Refresh from records. Nothing is saved
+ * by the read.
  */
 
 import { NOT_RECORDED } from '../../../lib/absence.js';
@@ -59,6 +66,16 @@ export const REMOVE_FIGURE = 'Remove';
 export const GO_TO_CARD = 'Go to card ›';
 export const BADGES = Object.freeze({ linked: LINKED_CHIP, stated: STATED_CHIP, uncited: UNCITED_CHIP, not_recorded: NOT_RECORDED });
 export const GONE_LINE = 'Its store no longer holds this figure. The card keeps what it shows until you change it.';
+
+// D1584 (#3831): the latest investor update as a source of a card's figures.
+export const REFRESH_FROM_UPDATE = 'Refresh from the latest update';
+export const UPDATE_HELD = 'A proposal: nothing changes until you accept, and nothing is saved until you save a version.';
+export const UPDATE_NONE = 'The latest update reports none of this card\'s figures.';
+export const UPDATE_SAME = 'This card already shows the latest update\'s figures.';
+/** The deck slots an investor update reports (the Worker's `UPDATE_SLOTS`, `services/decks/updateReuse.ts`). */
+export const UPDATE_SLOTS = Object.freeze(['grow.mrr', 'grow.mercury_growth', 'grow.paying_customers', 'grow.net_burn', 'grow.runway']);
+/** "From the investor update "June update" · Measured". */
+export const updateLine = (update, p) => `From the investor update${update?.title ? ` \u201C${update.title}\u201D` : ''} · ${p?.binding?.grade || NOT_RECORDED}`;
 
 const AREAS = { validate: 'Validate', build: 'Build', raise: 'Raise', grow: 'Grow', team: 'Team', scoring: 'Scoring' };
 const GRADED = new Set(['Measured', 'Reviewed', 'Sourced', 'Stated']);
@@ -336,3 +353,40 @@ export function toReview(figures) {
     }))
     .sort((a, b) => rank[a.state] - rank[b.state] || a.card - b.card);
 }
+
+/** Whether a card holds a metric tile bound to a slot an investor update reports. */
+export function cardHasUpdateSlot(card) {
+  return (Array.isArray(card?.blocks) ? card.blocks : []).some((b) => b?.kind === 'metric' && UPDATE_SLOTS.includes(str(b.binding?.source_key)));
+}
+
+/** The derive-update answer's proposals and missing figures for one card. */
+export function updateForCard(derived, cardIndex) {
+  const on = (x) => Number(x?.card) === Number(cardIndex);
+  return {
+    proposals: (Array.isArray(derived?.proposals) ? derived.proposals : []).filter(on),
+    missing: (Array.isArray(derived?.not_in_update) ? derived.not_in_update : []).filter(on),
+  };
+}
+
+/**
+ * Accept: each proposal's tile takes the update's words. Its binding is the
+ * store's own snapshot when the store already holds the same words (so the
+ * card does not say its figure changed), else the update's record, grade and
+ * date from the proposal. A tile that is gone, or no longer bound to the
+ * proposal's slot, is left as it is. Returns `{ card, moved }`.
+ */
+export function acceptUpdate(card, proposals, items = []) {
+  const byKey = itemsByKey(items);
+  const want = new Map((Array.isArray(proposals) ? proposals : []).map((p) => [p.block_id, p]));
+  let moved = 0;
+  const blocks = (Array.isArray(card?.blocks) ? card.blocks : []).map((b) => {
+    const p = want.get(b?.id);
+    if (!p || b.kind !== 'metric' || str(b.binding?.source_key) !== p.source_key || !str(p.now)) return b;
+    moved += 1;
+    const store = byKey.get(p.source_key);
+    if (store && store.state === 'recorded' && valueText(store) === p.now) return refreshMetric(b, store);
+    return { ...b, value: p.now, binding: { ...p.binding } };
+  });
+  return { card: moved ? { ...card, blocks } : card, moved };
+}
+

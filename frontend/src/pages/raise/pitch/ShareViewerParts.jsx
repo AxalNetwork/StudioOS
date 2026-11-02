@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../../../lib/api';
+import { deckPublishApi } from '../../../lib/api/deckPublish.js';
 import { reportError } from '../../../lib/log';
 import {
   ACCEPT_AND_OPEN, NDA_GATE_TITLE, NDA_UNREADABLE, SIGN_IN_TO_ACCEPT, closedCard, figureChips, frozenLine,
@@ -85,6 +86,53 @@ export function NdaGate({ token, gate, onAccepted }) {
       )}
       <p className={`m-0 text-[12px] ${MUTED}`}>Nothing from the deck opens until the NDA is accepted. Accepting is recorded with the venture.</p>
       {failed ? <p role="alert" className="m-0 text-[12.5px] font-semibold text-red-600 dark:text-red-400" data-testid="share-nda-failed">{failed}</p> : null}
+    </div>
+  );
+}
+
+export const EMAIL_GATE_TITLE = 'Enter your email to read this deck';
+export const EMAIL_GATE_NOTE = 'The venture sees the address you give. Nothing from the deck opens until you do.';
+
+/**
+ * D1564 (#3811; owner decision E = B): a link published as a page asks for
+ * the reader's email first. The share read sends no card, and uses no view,
+ * until this browser has given one on this link.
+ */
+export function EmailGate({ token, gate, onPassed }) {
+  const [email, setEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(null);
+  const ok = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim());
+  const submit = async (e) => {
+    e?.preventDefault?.();
+    if (!ok || busy) return;
+    setBusy(true); setFailed(null);
+    try {
+      await deckPublishApi.gateEmail(token, email.trim());
+      onPassed?.();
+    } catch (err) {
+      reportError('EmailGate:submit', err);
+      setFailed(err?.data?.message || err?.data?.error || 'Your email could not be recorded. Try again.');
+    } finally { setBusy(false); }
+  };
+  return (
+    <div className="px-4">
+    <form className={CARD} onSubmit={submit} data-testid="share-email-gate">
+      <span className="font-mono text-[10.5px] uppercase tracking-[.07em] text-gray-500 dark:text-slate-400">
+        {gate?.project_name || 'This venture'} · {frozenLine({ version: gate?.frozen?.version, created_at: gate?.frozen?.as_of })}
+      </span>
+      <h1 className="m-0 text-lg font-semibold text-gray-900 dark:text-slate-100">{EMAIL_GATE_TITLE}</h1>
+      <label className="flex flex-col gap-1 text-[12.5px] text-gray-700 dark:text-slate-300">
+        Your email
+        <input type="email" autoComplete="email" inputMode="email" className="min-h-[44px] rounded-lg border border-gray-300 px-2.5 dark:border-slate-600 dark:bg-slate-900"
+          value={email} onChange={(e) => setEmail(e.target.value)} maxLength={254} data-testid="share-email-input" />
+      </label>
+      <button type="submit" className={`${BTN} min-h-[44px] bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50`} disabled={busy || !ok} data-testid="share-email-submit">
+        {busy ? 'Opening…' : 'Read the deck'}
+      </button>
+      <p className={`m-0 text-[12px] ${MUTED}`}>{EMAIL_GATE_NOTE}</p>
+      {failed ? <p role="alert" className="m-0 text-[12.5px] font-semibold text-red-600 dark:text-red-400" data-testid="share-email-failed">{failed}</p> : null}
+    </form>
     </div>
   );
 }

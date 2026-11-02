@@ -15,7 +15,6 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
@@ -26,11 +25,10 @@ import deckReviewer, { DECK_REVIEW_OPTIONS, DECK_REVIEW_PAGE } from '../src/rout
 import { FOUNDER_OPTIONS } from '../../frontend/src/lib/railOptions/founder.js';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withGuard } from './_guard_stub.mjs';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SQL = resolve(here, '../sql');
-const M = resolve(SQL, 'migrations');
 const JWT_SECRET = 'unit-test-jwt-secret-d778-deck-review-0123456789';
 const FOUNDER = 1; const PID = 7;
 const DECK_TEXT = '# Problem\nFreight teams reconcile invoices by hand.\n\n# Solution\nAn agent that reconciles them.';
@@ -38,10 +36,7 @@ const DECK_TEXT = '# Problem\nFreight teams reconcile invoices by hand.\n\n# Sol
 function fixture() {
   const db = new DatabaseSync(':memory:');
   db.exec('PRAGMA foreign_keys = ON;');
-  db.exec(readFileSync(resolve(SQL, 'schema_baseline.sql'), 'utf8'));
-  for (const name of readdirSync(M).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort()) {
-    db.exec(readFileSync(resolve(M, name), 'utf8'));
-  }
+  loadSchema(db);
   db.exec(`INSERT INTO founders (id, name, email) VALUES (10, 'Founder A', 'fa@example.test');
     INSERT INTO users (id, email, name, role, founder_id) VALUES (${FOUNDER}, 'founder@example.test', 'Fay Founder', 'founder', 10);
     INSERT INTO projects (id, name, founder_id) VALUES (${PID}, 'Kestrel Labs', 10);
@@ -70,7 +65,9 @@ async function call(db: any, method: string, path: string, init: { body?: BodyIn
     { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db), AI } as any, { waitUntil() {}, passThroughOnException() {} } as any);
   return { status: res.status, body: await res.json().catch(() => null) as any };
 }
-const runs = (db: any) => (db.prepare(`SELECT user_id, rail_page, rail_option, record_ref FROM ai_usage_logs WHERE guard_for IS NULL ORDER BY id`).all() as any[]).map((r) => ({ ...r }));
+// #3937: a file's conversion is its own uncharged row (`document_convert`); these are the model runs.
+const runs = (db: any) => (db.prepare(`SELECT user_id, rail_page, rail_option, record_ref FROM ai_usage_logs WHERE guard_for IS NULL AND task <> 'document_convert' ORDER BY id`).all() as any[]).map((r) => ({ ...r }));
+const conversions = (db: any) => (db.prepare(`SELECT user_id, surface, charged_microusd FROM ai_usage_logs WHERE task = 'document_convert'`).all() as any[]).map((r) => ({ ...r }));
 const upload = (db: any, headers?: Record<string, string>) => {
   const fd = new FormData();
   fd.append('file', new File([new Uint8Array([37, 80, 68, 70])], 'kestrel.pdf', { type: 'application/pdf' }));
@@ -102,6 +99,7 @@ test('D778: each press with no rail context names its inventoried option, and th
     [DECK_REVIEW_PAGE, 'review:deck-again', at(pasted.body.id)],
   ], 'mapping and review are two runs; a regenerate is one');
   assert.ok(runs(db).every((r) => r.user_id === FOUNDER), 'charged to the member who pressed');
+  assert.deepEqual(conversions(db), [{ user_id: FOUNDER, surface: '/raise/pitch/review', charged_microusd: 0 }], 'the uploaded file was read once, metered, at no charge');
 });
 
 test('D778: a mounted rail\'s page and the press\'s option win; the browser\'s record label never does', async () => {

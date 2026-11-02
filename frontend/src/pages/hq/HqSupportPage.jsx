@@ -42,6 +42,7 @@ import { reportError } from '../../lib/log';
 import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 import useRecordCrumb from '../admin/useRecordCrumb';
 import { escalationKindLabel, filterByKind, kindFilters } from '../../lib/escalationKinds';
+import HeaderAsk from '../../ui/HeaderAsk.jsx';
 
 const UNAVAILABLE = Symbol('unavailable');
 
@@ -1164,7 +1165,8 @@ export default function HqSupportPage() {
           </div>
         )}
 
-        <header className="mt-4">
+        <header className="mt-4 flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
           <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
             <Inbox size={13} /> HQ · Support
           </div>
@@ -1181,6 +1183,8 @@ export default function HqSupportPage() {
               Review queue: feature requests and suggested tasks →
             </Link>
           </p>
+          </div>
+          <HeaderAsk />
         </header>
 
         <EscalationKindFilter escalations={ready?.escalations} value={kindFilter} onChange={setKindFilter} />

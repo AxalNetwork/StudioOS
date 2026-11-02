@@ -224,6 +224,7 @@ it. Codes, counts and one screenshot; no link, name, page text or audio.
 | `fills/` | "AI fills the blanks" — the fill-kind registry and the provenance of an accepted fill. A `sourced` fill carries a citation or it is dropped. `neverFill.ts` lists the fields Eadwyn never fills (D777), mirrored by `frontend/src/lib/neverFill.js`; propose, accept and `recordFill` each refuse one. D1325 (#3486): `fields.ts` is FILL_FIELDS, which form fields Fill with Eadwyn may fill, how and from where (mirrored by `frontend/src/lib/fillFields.js`); `sources.ts` is FILL_SOURCES, the read-only adapters the sheet gathers; `provenance.ts` adds migration 643's source columns and `marksForRows`. D1326 (#3487): `formRun.ts` is the `form` handler's gather, prompt and parse; `keep.ts` records what a form's Save kept, Accept all for row proposals, and undo. |
 | `relationships.ts` | D1356: the team relationship layer — who on my teams knows a person. The access rule (my team, the teammate's membership, their share effective now) is inside each statement over migration 653's views; a shared reply has no email, phone, notes or URL; identity is the exact URL or email, never a name. |
 | `apiUsageReport.ts` | D845: a member's own usage reports over `api_usage_events` (D843). Every statement is `WHERE e.user_id = ?` from the session and joins only the same user's hold; a `key=` is re-checked by `ownsKey`. Grouping is a bound `CASE ?1`, never a spliced column. A charge is the settled hold's, else the row's own, and stays NULL when unknown. |
+| `reasonedReadNotice.ts` | D1465 § Notifications (#4022, RR08): `notifyReasonedRead` tells the venture's founder users in the app, never by email, each time an admin reads with a reason: the narrative grant, and the cap table, data room and capital relationships support reads. It is called after each read is recorded, and never throws: a failure leaves the read standing and is logged by code. The reason goes only into the founder's own notification, and a missing admin name reads "Not recorded". |
 | `railProposals.ts` | D780: `ai_rail_proposals` (migration 506), what a rail option's run leaves for the member to decide. `proposeRail` stores a draft, proposal or note with the run's page, option, record, model and `usage_log_id` (refusing a field D777 never fills); `decideRail` is the member's accept, edit or discard, once and on their own rows only, through `decideRailAs`, the one decide that D1496 part 3's team queue (`agents/queue.ts`) also calls, writing `decided_by_user_id`; `listRail`, `getRail` and `withdrawRail`. Every option outside Validate and the zone drafts writes here. |
 | `narrative/` | D908: the Investor narrative's sections, positioning and bound figures, and the compare of two versions, behind `/api/cycles/raise/narrative/*`. Its README has the rules. |
 | `market_intel/` | Sourcing, extraction and scoring for market intelligence. |
@@ -423,6 +424,13 @@ opens nothing.
 batch under its claim), `dealPageRequestStatement()` (for DEAL's DL9) and
 `readRequests()`. One open request per investor and venture, and none for an
 investor who already has the room.
+`dataRoomSearch.ts` (#3938, D1478 task 4) is search inside a data room, on its
+own Vectorize index `axal-dataroom` (`env.DATAROOM_INDEX`, qwen3-embedding-0.6b,
+1024 dimensions; migration 765 keeps the passages and each file's index
+state). The embedder is fixed and a vector of any other length is refused
+(`dimension_mismatch`). A hit is re-checked against D1 and the reader's files
+(an investor's listing), then reranked. Unbound, it answers "not switched on
+yet".
 `deckSlideDwell.ts` stores a share-link view's seconds per slide, bounded so
 they never add up to more than the view's read time.
 `peerBenchmark.ts` (#1524) is the peer-group benchmark for every founder:
@@ -443,7 +451,7 @@ D657: interview sessions, for `../routes/founder_validate_sessions.ts`.
   - deletion that removes the R2 audio and writes an audit row.
 - `sttFormats.ts` has, for each speech-to-text model, its request and response shapes and its live events, plus the speaker labels.
 - `sttModels.ts` lists the models the rail offers, priced from `aiRouter`'s own tables.
-- `liveTranscription.ts` is the WebSocket relay to Workers AI. It holds the D640 budget in four-minute blocks and settles them on the minutes streamed.
+- `liveTranscription.ts` is the WebSocket relay to Workers AI. It holds the D640 budget in four-minute blocks and settles them on the minutes streamed. Since #3936 (D1478 task 2, part 2) it takes `run()`'s steps: the VA2 live job decides the model (`liveChoice`), each block also holds the guard's share, the stream's final text goes through the output guard (`guardFinalText`), and one `ai_usage_logs` row records the stream with its guard rows.
 - `sessionSetup.ts` (D685, #1583) holds the setup call's rules:
   - which call providers each channel admits, and the meeting-link host check (video only, HTTPS, the provider's own host);
   - `callLabel`, derived on every read and never stored;
@@ -479,6 +487,12 @@ or an upload (D872). It reads and writes the member's setting (migration 530;
 run by the daily cron, removes audio past it through `interviewSessions.ts`'s
 `deleteSessionAudio`, which the founder's audio-only delete also calls. The
 segments stay, and the session records `audio_removed_at` and its reason.
+
+D1580 F1 (#3827): `rehearsalAudio.ts` keeps a deck rehearsal's audio for an
+hour after its report unless the founder turns "Keep the audio" on;
+`deleteRehearsalAudio` (also the switch's off) and `purgeRehearsalAudio`, run
+by the cron's five-minute step. It sits here, not under `decks/`, so the
+scheduled handler names no deck module (the D752 cron-reach guard).
 
 D684 (#1575): `interviewIntake.ts` is the one way an outside channel writes
 into an interview. It reloads the member and re-checks the venture on every

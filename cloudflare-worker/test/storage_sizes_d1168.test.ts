@@ -1,14 +1,13 @@
 /** D1168 / migration 605: actual migrated SQLite, synthetic objects only. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync,readdirSync,mkdtempSync,copyFileSync,rmSync} from 'node:fs';
+import { mkdtempSync, copyFileSync, rmSync } from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
 import {format} from 'node:util';
 import {Hono} from 'hono';
 import {SignJWT} from 'jose';
-import {BASELINE_CUTOFF,migrationNumber,compareMigrations} from '../../scripts/lib/migrationPlan.mjs';
 import {d1Over} from './_d1_sqlite.mjs';
 import {AUTH_ERROR_STATUSES} from '../src/util/authErrors.ts';
 import platform from '../src/routes/admin_platform.ts';
@@ -17,10 +16,10 @@ import settings from '../src/routes/settings.ts';
 import imports from '../src/routes/imports.ts';
 import {backfillMemberFileSizes} from '../src/services/memberFileSizeBackfill.ts';
 import {memberFileStatement} from '../src/services/memberFiles.ts';
+import { loadSchema } from './_schema_once.mjs';
 const ROOT=new URL('../sql/',import.meta.url),SECRET='synthetic-storage-test-secret-'.repeat(3);
 const build=new DatabaseSync(':memory:',{enableForeignKeyConstraints:false,enableDoubleQuotedStringLiterals:true});
-build.exec(readFileSync(new URL('schema_baseline.sql',ROOT),'utf8'));
-for(const name of readdirSync(new URL('migrations/',ROOT)).filter(n=>/^\d+_.*\.sql$/.test(n)&&migrationNumber(n)>BASELINE_CUTOFF).sort(compareMigrations))build.exec(readFileSync(new URL('migrations/'+name,ROOT),'utf8'));
+loadSchema(build);
 const ddl=build.prepare("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END").all().map(x=>String(x.sql));build.close();
 // Replay the actual migrated DDL once; each case receives a disposable exact
 // copy, avoiding tens of thousands of redundant CREATE statements per run.

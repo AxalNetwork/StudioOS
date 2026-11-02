@@ -29,6 +29,7 @@ also exercises a `project_id` deep link.
 | File | Guarantee |
 | --- | --- |
 | `capital_access_client_d1191.test.mjs` | D1191: capital summary/support transport preserves project, page, reason, investor target and POST verb. |
+| `dataroom_deck_source_d1602.test.mjs` | D1602: owner controls, capability hiding, quote confirmation, failed saves, withdrawal and the deck-source client seam. |
 
 ## Conventions
 
@@ -56,7 +57,10 @@ also exercises a `project_id` deep link.
 D1604's editor suites (`pitch_v2_chrome_d1604.test.mjs`,
 `pitch_v2_selection_d1604.test.mjs`) mount the Pitch deck editor through
 `_pitch_editor_mount.mjs`: synthetic reads for every client the editor calls,
-restored on close.
+restored on close. Its `onDocument` hook (D1515) runs after the synthetic
+document is installed and before the editor renders, so
+`pitch_editing_ops_d1515.test.mjs` can put a fake IndexedDB, kept across two
+mounts, and a keydown recorder on the window.
 
 D696's record contracts live in `record_page_d696.test.mjs` (real rendering,
 parent callbacks, safe links and declared actions) and `persona_pdf_d696.test.mjs`
