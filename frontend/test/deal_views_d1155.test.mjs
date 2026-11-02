@@ -232,7 +232,7 @@ test('the wiring: each non-investor gets the staff table, the Operating Partner 
   assert.match(read('frontend/src/lib/api/dealStaff.js'), /transferGate: \(dealId\) => request\(`\/deals\/\$\{encodeURIComponent\(dealId\)\}\/transfer-gate`\)/);
   assert.match(read('frontend/src/lib/api.js'), /^export \* from '\.\/api\/dealStaff\.js';$/m);
   for (const f of ['documentation/architecture/decisions/D1155.md', 'frontend/src/pages/deal/README.md']) assert.match(read(f), /D1155/, f);
-  assert.match(readRouteMap(), /D1155/, 'the route map (D1615 fragments)');
+  assert.match(readRouteMap(), /D1155/, 'the route map (D4102 fragments)');
 });
 
 test('no browser pop-up and no raw colour in the new files; every light hover has its dark pair', () => {

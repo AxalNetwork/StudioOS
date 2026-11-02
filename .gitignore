@@ -21,7 +21,7 @@ yarn-error.log*
 .npm/
 .yarn/
 
-# The route map as one document (D1615, #4102): built from the fragments in
+# The route map as one document (D4102, #4102): built from the fragments in
 # documentation/architecture/route-map/ by `node scripts/build-route-map.mjs`.
 # Nothing reads it back; every script and test reads the fragments.
 documentation/architecture/route-map/ROUTE_MAP.combined.md

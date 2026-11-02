@@ -1,5 +1,5 @@
 /**
- * D1615 (#4102): the route map is a folder of fragments, not one shared file.
+ * D4102 (#4102): the route map is a folder of fragments, not one shared file.
  *
  * `documentation/architecture/route-map/` holds:
  *   - `sections/NNNN-<slug>.md` — one file per section of the map, in order;
@@ -105,7 +105,7 @@ export function checkRouteMap(lines) {
   return lines;
 }
 
-/** The whole map as one document, as ROUTE_MAP.md read before D1615. */
+/** The whole map as one document, as ROUTE_MAP.md read before D4102. */
 export function readRouteMap(root = REPO_ROOT) {
   return `${checkRouteMap(routeMapFragments(root)).map((l) => l.text).join('\n')}\n`;
 }

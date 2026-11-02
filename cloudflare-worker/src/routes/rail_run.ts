@@ -247,7 +247,7 @@ export function railRunRoutes(deps: { run?: Runner; quote?: Quoter } = {}) {
       } else {
         return refuse(c, 404, 'record_not_found');
       }
-      const access = await recordScope.access(c.env, user, row, parentId, { activeCompany: () => activeCompanyFor(c, user) });
+      const access = await recordScope.access(c.env, user, row, parentId, { activeCompany: () => activeCompanyFor(c, user), claimed: () => !!c.req.header('X-Company-Id') });
       // D1595: a concealed scope answers a record the caller may not read as one that does not exist.
       if (!access.read && recordScope.concealed) return refuse(c, 404, 'record_not_found');
       if (!access.write) return refuse(c, 403, 'record_not_available');
@@ -281,7 +281,7 @@ export function railRunRoutes(deps: { run?: Runner; quote?: Quoter } = {}) {
     const asked = rowsWanted ? fields.filter((f) => fieldsToAsk([f]).length) : fieldsToAsk(fields, input.values ?? {}, row);
     if (!asked.length) return refuse(c, 400, 'nothing_to_fill');
 
-    const gather = recordScope ? await gatherScoped(c.env, Number(user.id), table, row, scopedParent) : await gatherForm(c.env, projectId as number, asked);
+    const gather = recordScope ? await gatherScoped(c.env, Number(user.id), table, row, scopedParent, { activeCompany: () => activeCompanyFor(c, user), claimed: () => !!c.req.header('X-Company-Id') }) : await gatherForm(c.env, projectId as number, asked);
     const { messages, guardText } = formMessages(asked, gather, { text: typeof input.text === 'string' ? input.text : '', rows: rowsWanted || undefined });
     const runInput: RunOptions = {
       task: 'rail_write', userId: Number(user.id), messages, guardText, maxTokens: rowsWanted ? 1200 : 600, temperature: 0.2,

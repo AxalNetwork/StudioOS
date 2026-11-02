@@ -241,11 +241,11 @@ test('D1310: a conflict marker anywhere in ROUTE_MAP fails rather than ending a 
   assert.throws(() => parseRouteMap(marked), /line 4 is a conflict marker/);
 });
 
-test('D1615: the route map is fragments with no union; its two projections still merge with union', () => {
+test('D4102: the route map is fragments with no union; its two projections still merge with union', () => {
   // Whole lines, compared as text: no pattern is built from a path.
   const attrs = read('.gitattributes').split('\n').map((l) => l.trim());
   // Mutation checked: restore `ROUTE_MAP.md merge=union` → a pointer page that never changes would hide a stray edit.
-  assert.ok(!attrs.some((l) => l.startsWith('documentation/architecture/ROUTE_MAP.md ')), 'ROUTE_MAP.md is a pointer now (D1615): no merge rule');
+  assert.ok(!attrs.some((l) => l.startsWith('documentation/architecture/ROUTE_MAP.md ')), 'ROUTE_MAP.md is a pointer now (D4102): no merge rule');
   assert.ok(!attrs.some((l) => l.startsWith('documentation/architecture/route-map')), 'route-map fragments merge as ordinary files: no union');
   for (const f of ['documentation/architecture/PROFILE_ROUTING.md', 'documentation/architecture/PAGE_INVENTORY.md']) {
     assert.ok(attrs.includes(`${f} merge=union`), `${f} has no merge=union line`);

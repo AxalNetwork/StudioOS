@@ -1,7 +1,7 @@
 # ROUTE_MAP — canvas → route → backend, with implementation status
 
 **The map lives in [`route-map/`](route-map/README.md), one file per section and
-one file per canvas row (D1615, #4102).** This page only says where it is. Do
+one file per canvas row (D4102, #4102).** This page only says where it is. Do
 not add rows or notes here: no branch needs to edit this file, so it never
 conflicts.
 

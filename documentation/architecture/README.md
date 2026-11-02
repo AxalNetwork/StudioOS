@@ -6,7 +6,7 @@ disagrees with the code, the document is the thing to fix.
 | File | Answers |
 | --- | --- |
 | `CODEBASE_MAP.md` | Where does anything live? |
-| `ROUTE_MAP.md` | A pointer to `route-map/` (D1615). |
+| `ROUTE_MAP.md` | A pointer to `route-map/` (D4102). |
 | `route-map/` | Which design canvas maps to which route, what shipped from it, and what deliberately did not: one file per section and one file per canvas row. `node scripts/build-route-map.mjs` joins them into one document. |
 | `SHELL_MIGRATION.md` | The four workspace shell migrations (Founder, Investor/LP, Advisor, Partner): IA rules, zone inventory, shipped vs open, verification commands. |
 | `PROFILE_ROUTING.md` | **Generated.** Which workspace sees each canvas, under which nav section, as what surface, and how it is reached. |

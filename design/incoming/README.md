@@ -2,7 +2,7 @@
 
 **Drop new Claude Design exports here.** This is the intake queue: a canvas
 lands in this folder, gets triaged, gets built, and then its row in the route map
-(`documentation/architecture/route-map/`, one file per canvas, D1615) records
+(`documentation/architecture/route-map/`, one file per canvas, D4102) records
 what shipped and what did not.
 
 Nothing in this folder is built, bundled, imported or served. It is source
@@ -76,7 +76,7 @@ strength of a live route would empty the queue of the work it exists to track.
    name Claude Design gave it so it can be matched against the design source
    later. One file per canvas.
 2. **Triage it** into one of six grades, and add its row as one new file under
-   `documentation/architecture/route-map/canvases/part-N/` (D1615: one file per
+   `documentation/architecture/route-map/canvases/part-N/` (D4102: one file per
    canvas; never a shared file):
 
    | Grade | Meaning |
@@ -2075,7 +2075,7 @@ design in two layouts with their own sidebar and type; they are not committed.
   Until they are answered, those parts of the screens print `Not recorded`
   with the reason.
 
-Each build PR adds or updates its route-map row file (pipeline step 5; D1615). A
+Each build PR adds or updates its route-map row file (pipeline step 5; D4102). A
 canvas leaves this folder for `canvases/integrated/` once its route is live.
 
 ## Landed 2026-10-06 — the Ops canvas: five areas of screens for stored data (D566)

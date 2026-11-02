@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * D1615 (#4102): the route map as one document, built from its fragments.
+ * D4102 (#4102): the route map as one document, built from its fragments.
  *
  *   node scripts/build-route-map.mjs           writes the combined map (not committed)
  *   node scripts/build-route-map.mjs --check   only checks the fragments (test:guards)

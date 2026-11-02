@@ -40,7 +40,7 @@ import { readRouteMap } from './lib/routeMap.mjs';
 const ROOT = resolve(process.cwd());
 const read = (p) => readFileSync(resolve(ROOT, p), 'utf8');
 
-// D1615 (#4102): the map is a folder of fragments; readRouteMap() joins them.
+// D4102 (#4102): the map is a folder of fragments; readRouteMap() joins them.
 const ROUTE_MAP = 'documentation/architecture/route-map/';
 const SIDEBAR = 'frontend/src/sidebarConfig.js';
 const OUT_ROUTING = 'documentation/architecture/PROFILE_ROUTING.md';

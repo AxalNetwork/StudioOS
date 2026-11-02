@@ -167,7 +167,7 @@ design/incoming/**        linguist-generated=true
 README.md merge=union
 
 # ---- ROUTE_MAP's two projections: union merges (D1310) ----------------------
-# The route map itself is no longer one file (D1615, #4102): every section and
+# The route map itself is no longer one file (D4102, #4102): every section and
 # every canvas row is its own fragment under documentation/architecture/route-map/,
 # so two branches adding canvases add two files and never meet, and two
 # branches changing the same canvas meet as an ordinary conflict on that one
