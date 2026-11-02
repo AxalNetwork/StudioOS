@@ -1,3 +1,4 @@
+/** Live market quotes and headlines for the dashboard, cached for 30 minutes, each fetch under a 4-second timeout. */
 import type { Env } from '../types';
 
 const CACHE_TTL = 30 * 60;

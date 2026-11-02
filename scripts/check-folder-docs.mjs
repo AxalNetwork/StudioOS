@@ -27,6 +27,16 @@
  * legitimately point at `index.ts` one level up, or at a sibling module. What
  * it may not do is name something that is not there at all.
  *
+ *   5. GENERATED LISTS (#4104) — a README that holds `<!-- files:begin -->` and
+ *                   `<!-- files:end -->` gets its folder's file list generated
+ *                   between them (`lib/folderFiles.mjs`), one row per source file,
+ *                   described by the file's own header comment. Every such file
+ *                   must have one; a file without fails here by name. The list
+ *                   is NOT committed: `--write` fills it in the working tree for
+ *                   reading, `--clean` empties it, and a block that the index
+ *                   (what a commit holds) carries filled fails, so adding a file
+ *                   never edits a README.
+ *
  *   4. ONE VERSION — every README.md merges with `union` (`.gitattributes`), so
  *                   two branches appending at the same spot never conflict.
  *                   When two branches rewrote the same line, union keeps both
@@ -38,8 +48,12 @@ import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { resolve, join, relative } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { unionArtifacts } from './lib/readmeUnion.mjs';
+import { blockHoldsList, findBlock, listedFile, renderList, withBlock } from './lib/folderFiles.mjs';
+import { writeFileSync } from 'node:fs';
 
 const ROOT = resolve(process.cwd());
+// #4104: `--write` fills the generated file lists in the working tree; `--clean` empties them.
+const MODE = process.argv.includes('--write') ? 'write' : process.argv.includes('--clean') ? 'clean' : 'check';
 
 // Folders that must explain themselves, and the one-line reason each is worth
 // a newcomer's attention. Adding a folder here is the cheap part; the README
@@ -84,6 +98,13 @@ const DOCUMENTED = new Map([
   ['design/canvases',                 'the 107 canvases, sorted by whether a route exists'],
   ['documentation/architecture',      'the maintained architecture set'],
   ['documentation/architecture/decisions', 'one file per decision from D526 on — how to name and head one'],
+  ['documentation/architecture/route-map', 'the route map (D4102): one file per section and per canvas row, and the rules'],
+  ['documentation/architecture/route-map/canvases', 'one folder per canvas table, one file per row (D4102)'],
+  ['documentation/architecture/route-map/canvases/part-1', 'one route-map canvas row per file (D4102)'],
+  ['documentation/architecture/route-map/canvases/part-2', 'one route-map canvas row per file (D4102)'],
+  ['documentation/architecture/route-map/canvases/part-3', 'one route-map canvas row per file (D4102)'],
+  ['documentation/architecture/route-map/canvases/part-4', 'one route-map canvas row per file (D4102)'],
+  ['documentation/architecture/route-map/canvases/part-5', 'one route-map canvas row per file (D4102)'],
   ['documentation/audits',            'dated snapshots — true on their date only'],
   ['documentation/operations',        'runbooks — the steps to ship, check and recover production'],
   // Nested folders heavy enough to be opaque from their parent alone.
@@ -127,6 +148,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/cycles',               'the four cycle overviews and module pages, from the shared cycle read (D661)'],
   ['frontend/src/pages/cycles/evidence',      'Raise evidence (D1261, D1266, D1267): the founder\'s view, its drawers, the module parts and the deck chips'],
   ['frontend/src/pages/closing',              'the closing room and the admin Closings desk, one closing, its paper, routes and activity (D1213, D1219)'],
+  ['frontend/src/pages/email',                'the Email page and its composer (D1344), and a record\'s Email in the right Sheet (#4017)'],
   ['frontend/src/pages/events',                 'event host tools and public/member detail'],
   ['frontend/src/pages/founder',              'founder workspace landing pages and shared shell'],
   ['frontend/src/pages/site',                 'the public site\'s pages from the owner\'s website canvas (D673–D680), and their stylesheets'],
@@ -250,7 +272,10 @@ for (const [dir] of DOCUMENTED) {
   const abs = join(ROOT, dir);
   const readmePath = join(abs, 'README.md');
   if (!existsSync(readmePath)) continue;
-  const src = readFileSync(readmePath, 'utf8');
+  const disk = readFileSync(readmePath, 'utf8');
+  // #4104: the README as a commit holds it, its generated list (if filled in the working tree) left out.
+  const block0 = findBlock(disk);
+  const src = block0 && !block0.broken ? withBlock(disk, '') : disk;
 
   if (!/^#\s+\S/m.test(src)) errors.push(`${dir}/README.md has no heading`);
 
@@ -312,13 +337,47 @@ for (const [dir] of DOCUMENTED) {
   if (words < 40) notes.push(`${dir}/README.md is very short (${words} words)`);
 }
 
+// ── 5. GENERATED LISTS (#4104) ─────────────────────────────────────────────
+/** The README as the index holds it (what a commit takes), or as it is on disk outside a checkout. */
+function indexed(file) {
+  try { return execFileSync('git', ['show', `:${file}`], { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }); }
+  catch { return null; }
+}
+let listed = 0;
+for (const [dir] of DOCUMENTED) {
+  const abs = join(ROOT, dir);
+  const readmePath = join(abs, 'README.md');
+  if (!existsSync(readmePath)) continue;
+  const src = readFileSync(readmePath, 'utf8');
+  const block = findBlock(src);
+  if (!block) continue;
+  if (block.broken) { errors.push(`${dir}/README.md has a broken file list: one \`<!-- files:begin -->\`, then one \`<!-- files:end -->\``); continue; }
+  listed += 1;
+  const files = readdirSync(abs, { withFileTypes: true }).filter((e) => e.isFile() && listedFile(e.name))
+    .map((e) => ({ name: e.name, text: readFileSync(join(abs, e.name), 'utf8') }));
+  const list = renderList(files);
+  for (const row of list.split('\n').filter((l) => /\|\s*\|$/.test(l) && l.startsWith('| `'))) {
+    const name = /^\| `([^`]+)`/.exec(row)[1];
+    errors.push(`${dir}/${name} has no header comment — its first line describes it in ${dir}/README.md's generated file list (#4104)`);
+  }
+  if (MODE === 'write') writeFileSync(readmePath, withBlock(src, list));
+  else if (MODE === 'clean') writeFileSync(readmePath, withBlock(src, ''));
+  // What a commit carries must hold no list: a committed list would make every new file a README edit.
+  const committed = findBlock(indexed(relative(ROOT, readmePath)) ?? (MODE === 'check' ? src : ''));
+  if (committed && !committed.broken && blockHoldsList(committed.content)) {
+    errors.push(`${dir}/README.md carries its generated file list in the index; it is generated, never committed — run \`node scripts/check-folder-docs.mjs --clean\` and stage the README again (#4104)`);
+  }
+}
+
 // Rule 4: every tracked README.md, not only the documented folders' — union
 // merges them all. Outside a git checkout there is nothing union could have done.
 let readmes = [];
 try { readmes = execFileSync('git', ['ls-files', '-z', '*README.md'], { cwd: ROOT, encoding: 'utf8' }).split('\0').filter(Boolean); } catch { readmes = []; }
 for (const file of readmes) {
   if (!existsSync(join(ROOT, file))) continue;
-  for (const f of unionArtifacts(readFileSync(join(ROOT, file), 'utf8'))) {
+  const text = readFileSync(join(ROOT, file), 'utf8');
+  const gen = findBlock(text);
+  for (const f of unionArtifacts(gen && !gen.broken ? withBlock(text, '') : text)) {
     errors.push(f.kind === 'marker' ? `${file}:${f.line} still holds a conflict marker (${f.text})`
       : f.kind === 'row' ? `${file}:${f.line} lists ${f.text} a second time in the same table — a union merge kept two versions; keep one`
         : `${file}:${f.line} repeats a line from just above — a union merge kept two versions; keep one: "${f.text}"`);
@@ -330,4 +389,5 @@ if (errors.length) {
   process.exit(1);
 }
 for (const n of notes) console.log(`  note: ${n}`);
-console.log(`✓ check-folder-docs: ${DOCUMENTED.size} folders documented; every name they cite resolves.`);
+if (MODE !== 'check') console.log(`  ${MODE === 'write' ? 'filled' : 'emptied'} ${listed} generated file list(s) in the working tree`);
+console.log(`✓ check-folder-docs: ${DOCUMENTED.size} folders documented; every name they cite resolves; ${listed} file list(s) generated, every file described.`);

@@ -22,8 +22,15 @@
  *
  * NEVER A ZERO. A figure nothing records reads "Not recorded", never 0, and a
  * tile whose store has dropped its value keeps the value the card holds until
- * the founder chooses. Linked, Stated and Uncited badges come from #3775
- * (`deckV2Adapter.figures`) and are not drawn here.
+ * the founder chooses.
+ *
+ * D1523 (#3775, pd24, pd25): the badges. A figure is Linked (bound to a
+ * record), Stated (typed by the founder), Uncited (a number in free text) or
+ * Not recorded. The tile faces draw them in the editor from what the card
+ * holds (`badgeOf`, the same rule as the Worker's `services/decks/figures.ts`);
+ * Check claims draws the counts and the Stated and Uncited list from
+ * `deckV2Adapter.figures` (`checkCounts`, `toReview`). Editor-only: Present,
+ * share links and the print page never draw a badge.
  */
 
 import { NOT_RECORDED } from '../../../lib/absence.js';
@@ -43,6 +50,14 @@ export const PROJECTION_NOTE = 'Forward-looking: a projection from your financia
 /** pd24: a figure typed rather than read from a store is graded Stated; its chip, and its hover line, with who typed it when that is known. */
 export const STATED_CHIP = '✎ Stated';
 export const TYPED_LINE = (name = null) => `${String(name ?? '').trim() ? `Typed by ${String(name).trim()}` : 'Typed on the card'} · not linked to a record`;
+/** D1523 (#3775): the other badges, and the Uncited hover. */
+export const LINKED_CHIP = '▤ Linked';
+export const UNCITED_CHIP = '! Uncited';
+export const UNCITED_LINE = 'This number has no source';
+export const LINK_RECORD = 'Link a record ›';
+export const REMOVE_FIGURE = 'Remove';
+export const GO_TO_CARD = 'Go to card ›';
+export const BADGES = Object.freeze({ linked: LINKED_CHIP, stated: STATED_CHIP, uncited: UNCITED_CHIP, not_recorded: NOT_RECORDED });
 export const GONE_LINE = 'Its store no longer holds this figure. The card keeps what it shows until you change it.';
 
 const AREAS = { validate: 'Validate', build: 'Build', raise: 'Raise', grow: 'Grow', team: 'Team', scoring: 'Scoring' };
@@ -205,8 +220,8 @@ export function projectionOf(block, today = new Date().toISOString().slice(0, 10
  *   link     "Open the record ›" to the module, when the store names it
  *   missing  "Not recorded", with "Add in … ›"; null for a tile whose
  *            face holds a typed value no record backs, which reads
- *            TYPED_LINE (pd24: "Typed by [name] · not linked to a record") instead (#3775's Stated and Uncited badges will
- *            grade it)
+ *            TYPED_LINE (pd24: "Typed by [name] · not linked to a record") instead, graded
+ *            Stated (D1523's `badgeOf`)
  *   changed  the line, and `was → now` for a tile
  *   projection
  */
@@ -241,3 +256,83 @@ export function figureCard(block, items, charts = null, today) {
 
 /** True when the block is a figure the hover card speaks for. */
 export const isFigure = (block) => Boolean(block && (block.kind === 'metric' || (block.kind === 'chart' && Array.isArray(block.series) && block.series.length)));
+
+/**
+ * D1523: every number a text names, in order, as the Worker's `numbersIn`
+ * reads it: digits in any script, a currency sign, separators and a % or
+ * k/m/b suffix kept on; up to 20.
+ */
+export function numbersIn(text) {
+  if (typeof text !== 'string' || !text) return [];
+  const out = [];
+  for (const m of text.matchAll(/[$€£¥₹]?\s?\p{Nd}[\p{Nd},.]*(?:\s?%|\s?[kKmMbB](?![\p{L}]))?/gu)) {
+    const t = m[0].trim().replace(/[.,]+$/, '');
+    if (t) out.push(t);
+    if (out.length >= 20) break;
+  }
+  return out;
+}
+
+const recordedBinding = (b) => Boolean(b && typeof b.source_key === 'string' && b.source_key && typeof b.grade === 'string' && b.grade !== 'Not recorded');
+
+/**
+ * The badge a block's face carries in the editor: `linked`, `stated`,
+ * `uncited`, `not_recorded`, or null for a block that names no figure. A
+ * chart or a table is graded by its weakest figure (Uncited, then Stated,
+ * then Not recorded), so the face never claims more than its cells hold.
+ */
+export function badgeOf(block) {
+  if (!block || typeof block !== 'object') return null;
+  if (block.kind === 'metric') {
+    const value = str(block.value);
+    if (block.binding?.source_key) return recordedBinding(block.binding) && value ? 'linked' : 'not_recorded';
+    return value ? 'stated' : 'not_recorded';
+  }
+  if (block.kind === 'text') return numbersIn(block.text).length ? 'uncited' : null;
+  const states = [];
+  if (block.kind === 'chart') {
+    for (const s of Array.isArray(block.series) ? block.series : []) {
+      if (s?.binding?.source_key) states.push(recordedBinding(s.binding) ? 'linked' : 'not_recorded');
+      else if (Array.isArray(s?.points) && s.points.length) states.push('stated');
+    }
+  }
+  if (block.kind === 'table') {
+    for (const row of Array.isArray(block.rows) ? block.rows : []) {
+      for (const cell of Array.isArray(row) ? row : []) {
+        if (cell?.binding?.source_key) states.push(recordedBinding(cell.binding) ? 'linked' : 'not_recorded');
+        else if (numbersIn(cell?.text).length) states.push('stated');
+      }
+    }
+  }
+  for (const s of ['uncited', 'stated', 'not_recorded', 'linked']) if (states.includes(s)) return s;
+  return null;
+}
+
+/** pd25: "▤ Linked 4 · ✎ Stated 2 · ! Uncited 1", with Not recorded added when any is. Null while the read is not in. */
+export function checkCounts(counts) {
+  if (!counts || typeof counts !== 'object') return null;
+  const n = (k) => (Number.isFinite(counts[k]) ? counts[k] : 0);
+  const parts = [`${LINKED_CHIP} ${n('linked')}`, `${STATED_CHIP} ${n('stated')}`, `${UNCITED_CHIP} ${n('uncited')}`];
+  if (n('not_recorded')) parts.push(`${NOT_RECORDED} ${n('not_recorded')}`);
+  return parts.join(' · ');
+}
+
+/**
+ * pd25: the figures Check claims lists for the founder to look at, Uncited
+ * first, then Stated, each `{ key, card, chip, title, line }`: card is
+ * 0-based, for "Go to card ›".
+ */
+export function toReview(figures) {
+  const rank = { uncited: 0, stated: 1 };
+  return (Array.isArray(figures) ? figures : [])
+    .filter((f) => f && (f.state === 'uncited' || f.state === 'stated') && Number.isInteger(f.card))
+    .map((f, i) => ({
+      key: `${f.card}-${f.block_id ?? 'x'}-${f.at ?? ''}-${i}`,
+      card: f.card,
+      state: f.state,
+      chip: BADGES[f.state],
+      title: str(f.label) || (f.state === 'uncited' ? (Array.isArray(f.figures) ? f.figures.join(', ') : 'A number') : (str(f.value) || 'A figure')),
+      line: f.state === 'uncited' ? UNCITED_LINE : TYPED_LINE(),
+    }))
+    .sort((a, b) => rank[a.state] - rank[b.state] || a.card - b.card);
+}

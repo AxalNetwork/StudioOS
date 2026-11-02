@@ -26,6 +26,8 @@ import ShareDialog from './ShareDialog';
 import CommentsSheet from './CommentsSheet';
 import ExportDialog from './ExportDialog';
 import { BackgroundSheet, BrandKitSheet, CheckSheet, RemixSheet, SizeSheet, SourcesSheet, StructureSheet, ThemeSheet, VersionsSheet } from './DeckSheets';
+// D1583 (#3830): ⋯ › This deck › Teaser, one-pager or memo.
+import DeriveSheet from './DeriveSheet.jsx';
 import { EDITOR_WAITING, aiOffState, editIndex, placeTextEdit, saveChip } from './deckV2Model';
 import { AiOffBanner } from './DeckAsk';
 import { areaTitle, areasOf, askTarget, liveFocus } from './gridSelection';
@@ -469,7 +471,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     if (id === 'appendix') { if (!readOnly) toggleAppendix(sel); return; }
     if (id === 'notes') { navigate(`/raise/pitch/notes${ventureQuery(project?.id)}`); return; }
     // D1553 (#3800): ⋯ › This card › Remix this slide, the only way in (pd13).
-    if (['theme', 'size', 'brand', 'sources', 'versions', 'check', 'structure', 'background', 'remix', 'comments'].includes(id)) setSheet(id);
+    if (['theme', 'size', 'brand', 'sources', 'versions', 'check', 'structure', 'background', 'remix', 'derive', 'comments'].includes(id)) setSheet(id);
   };
   if (actionRef) actionRef.current = act;
   const cardAction = (id, i) => {
@@ -569,6 +571,10 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
       {sheet === 'background' && card ? (
         <BackgroundSheet card={card} index={sel} readOnly={readOnly} onBackground={(bg) => setCard(sel, { ...card, background: bg })}
           onImage={() => { setSheet(null); setDialog({ kind: 'image', use: 'card' }); }} onClose={() => setSheet(null)} />
+      ) : null}
+      {sheet === 'derive' && base.deck?.id ? (
+        <DeriveSheet deckId={base.deck.id} version={base.deck.version ?? null} dirty={dirty} readOnly={readOnly} aiOn={aiOn} outOfTokens={outOfTokens}
+          onProposed={onProposals} onClose={() => setSheet(null)} />
       ) : null}
       {sheet === 'brand' ? <BrandKitSheet projectId={project?.id ?? null} kit={kit} readOnly={readOnly} onClose={() => setSheet(null)} /> : null}
       {sheet === 'versions' ? (

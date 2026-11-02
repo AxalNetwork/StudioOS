@@ -89,7 +89,7 @@ test('the canvas and the page were both parsed, so a silent zero-match cannot pa
   assert.equal(canvasKinds.length, 5, 'the canvas kind table no longer parses as five entries');
   // D1384 (#3692): compliance_due, the Compliance layer, is the tenth.
   // D1484 (#3977): D1208's three readers and "New event" make fourteen; #3959: Learning, fifteen;
-  // D1486 §b (#3981): Publish sends and planned content, seventeen; §c (#3982): round close and NDA expiry, nineteen.
+  // D1486 §b (#3981): Publish sends and planned content, seventeen; §c (#3982): round close and NDA expiry, nineteen; §d (#3983): four task stores, twenty-three.
   assert.equal(pageKinds.length, 24, 'the page kind table no longer parses as twenty-four entries');
 });
 

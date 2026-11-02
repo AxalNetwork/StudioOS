@@ -27,37 +27,83 @@ import { Unreadable } from './Honesty';
  * undone and its message shown. No other block or layout changes.
  *
  *   RailPresets      Fast · Balanced · Best · Custom, greyed "Coming later"
- *                    while the presets read answers unavailable
+ *                    while the presets read answers unavailable. D1549
+ *                    (#3796): on a deck the read answers the preset in force,
+ *                    drawn pressed; a press stores it (`presets.pick`) and
+ *                    the group blocks read again. Read only, no press.
+ *   HQ's lock        D1549: a group HQ locked (`groups.locks()`, the deck's
+ *                    `orgLocks` read, or the group's own read) says
+ *                    "🔒 Set by Axal VC HQ" under its name (aird5) and offers
+ *                    no pick.
  *   RailGroups       the blocks
  *   RailUsageExtra   usage rows the host adds ("Held now"; the deck's
  *                    estimate and spend), each drawn only when its read
  *                    answers, or "Could not be read", never $0.00
  */
 
-export function RailPresets({ presets }) {
+export function RailPresets({ presets, live = false, onChange }) {
   const [state, setState] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [refused, setRefused] = useState(null);
   useEffect(() => {
-    let live = true;
-    Promise.resolve().then(() => presets?.read?.()).then((a) => { if (live) setState(a || null); }, () => { if (live) setState(null); });
-    return () => { live = false; };
+    let alive = true;
+    Promise.resolve().then(() => presets?.read?.()).then((a) => { if (alive) setState(a || null); }, () => { if (alive) setState(null); });
+    return () => { alive = false; };
   }, [presets]);
   if (!presets) return null;
   const on = state?.available === true;
+  const current = on ? state.value?.preset ?? null : null;
+  const pressable = on && live && typeof presets.pick === 'function' && !busy;
+  const press = (p) => {
+    const id = p.toLowerCase();
+    if (!pressable || id === current) return;
+    setBusy(true); setRefused(null);
+    Promise.resolve().then(() => presets.pick(id)).then((value) => {
+      setBusy(false); setState({ available: true, value }); onChange?.();
+    }, (e) => {
+      setBusy(false);
+      setRefused(typeof e?.message === 'string' && e.message ? e.message : 'The preset was not saved.');
+    });
+  };
   return (
     <div className="fwr-presets" data-testid="worker-rail-presets">
       <span className="fwr-eyebrow">Models</span>
       <div className="fwr-preset-row" role="group" aria-label="Preset">
-        {presets.options.map((p) => (
-          <span key={p} className="fwr-preset" aria-disabled={on ? undefined : 'true'} title={on ? undefined : state?.reason || presets.later}
-            data-testid={`text-worker-rail-preset-${p.toLowerCase()}`}>{p}</span>
-        ))}
+        {presets.options.map((p) => {
+          const id = p.toLowerCase();
+          const chosen = on && current === id;
+          return pressable ? (
+            <button key={p} type="button" className="fwr-preset" aria-pressed={chosen} data-selected={chosen ? 'true' : 'false'} onClick={() => press(p)}
+              data-testid={`button-worker-rail-preset-${id}`}>{p}</button>
+          ) : (
+            <span key={p} className="fwr-preset" aria-disabled={on ? undefined : 'true'} data-selected={chosen ? 'true' : 'false'} title={on ? undefined : state?.reason || presets.later}
+              data-testid={`text-worker-rail-preset-${id}`}>{p}</span>
+          );
+        })}
       </div>
-      {!on ? <p className="fwr-models-note" data-testid="text-worker-rail-presets-later">{presets.later}</p> : null}
+      {!on ? <p className="fwr-models-note" data-testid="text-worker-rail-presets-later">{state?.unreadable ? 'Could not be read' : presets.later}</p> : null}
+      {refused ? <p className="fwr-models-note" role="status" data-testid="text-worker-rail-presets-refused">{refused}</p> : null}
     </div>
   );
 }
 
-function useGroupRow(page, option, open, read) {
+/** D1549: each group HQ locked, keyed by group id, from the host's `locks()` read; an answer that is off or unreadable locks nothing here (the Worker still refuses the pick). */
+function useLocks(read, stamp) {
+  const [locks, setLocks] = useState({});
+  useEffect(() => {
+    if (typeof read !== 'function') return undefined;
+    let alive = true;
+    Promise.resolve().then(() => read()).then((a) => {
+      if (!alive) return;
+      const list = a?.available === true && Array.isArray(a.value) ? a.value : [];
+      setLocks(Object.fromEntries(list.filter((l) => l?.group).map((l) => [l.group, l])));
+    }, () => { if (alive) setLocks({}); });
+    return () => { alive = false; };
+  }, [read, stamp]);
+  return locks;
+}
+
+function useGroupRow(page, option, open, read, stamp) {
   const [reading, setReading] = useState({ loading: false, data: null, error: false, status: null });
   const load = useCallback(() => {
     if (!page || !(option || read) || !open) return undefined;
@@ -68,18 +114,21 @@ function useGroupRow(page, option, open, read) {
       .then((data) => { if (live) setReading({ loading: false, data, error: false, status: 200 }); },
         (e) => { if (live) setReading({ loading: false, data: null, error: true, status: e?.status ?? null }); });
     return () => { live = false; };
-  }, [page, option, open, read]);
+  }, [page, option, open, read, stamp]);
   useEffect(() => load(), [load]);
   return { ...reading, reload: load };
 }
 
-function RailGroup({ group, page, live, guardLine }) {
+function RailGroup({ group, page, live: railLive, guardLine, lock, stamp }) {
   const [open, setOpen] = useState(false);
   const [picked, setPicked] = useState(null);
   const [kept, setKept] = useState([]);
   const [refused, setRefused] = useState(null);
   const lead = group.read ? `group:${group.id}` : group.options[0] || null;
-  const row = useGroupRow(page, group.read ? null : lead, open, group.read);
+  const row = useGroupRow(page, group.read ? null : lead, open, group.read, stamp);
+  // D1549: a group HQ locked offers no pick; the line says who set it.
+  const lockLine = lock?.line || (row.data?.locked ? 'Set by Axal VC HQ' : null);
+  const live = railLive && !lockLine;
   const rail = lead && open && !row.data?.free
     ? railView({ reading: (row.loading || row.status == null) && !row.error && !row.data ? { loading: true } : row, page, option: lead, pick: picked, price: (m) => railModelPrice(m, row.data?.billing, true) })
     : null;
@@ -129,6 +178,7 @@ function RailGroup({ group, page, live, guardLine }) {
         <span className="fwr-rgroup-name">{group.label}</span>
         <span className="fwr-rgroup-chev" aria-hidden="true">{open ? '−' : '+'}</span>
       </button>
+      {lockLine ? <p className="fwr-models-note" data-testid={`text-worker-rail-group-lock-${group.id}`}>{`🔒 ${lockLine}`}</p> : null}
       {group.usedBy ? <p className="fwr-models-note">Used by: {group.usedBy}</p> : null}
       {open ? (
         <div id={bodyId}>
@@ -168,11 +218,14 @@ function RailGroup({ group, page, live, guardLine }) {
 }
 
 export function RailGroups({ groups, page, live, guardLine }) {
+  // D1549: a preset press changes what every group resolves to, so the blocks and the locks read again.
+  const [stamp, setStamp] = useState(0);
+  const locks = useLocks(groups.locks, stamp);
   return (
     <div className="fwr-rgroups" data-testid="worker-rail-groups">
-      <RailPresets presets={groups.presets} />
+      <RailPresets presets={groups.presets} live={live} onChange={() => setStamp((n) => n + 1)} />
       <span className="fwr-eyebrow">Suggested for this page</span>
-      {(groups.items || []).map((g) => <RailGroup key={g.id} group={g} page={groups.page || page} live={live} guardLine={guardLine} />)}
+      {(groups.items || []).map((g) => <RailGroup key={g.id} group={g} page={groups.page || page} live={live} guardLine={guardLine} lock={locks[g.id] || null} stamp={stamp} />)}
     </div>
   );
 }

@@ -488,6 +488,8 @@ export const RAIL_KIND_JOBS: Readonly<Record<string, { id: string; step: number 
   multi: { id: 'RE6', step: 0 }, search: { id: 'RE1', step: 2 },
   draw: { id: 'DK4', step: 0 }, edit_image: { id: 'DK5', step: 0 }, voice_turn: { id: 'ST9', step: 0 }, agent: { id: 'AG1', step: 0 },
   decide: { id: 'VA14', step: 0 }, sentiment: { id: 'ON5', step: 0 }, translate: { id: 'VA7', step: 0 },
+  // D1583 (#3830): `derive:memo`'s option kind reads the IC memo job.
+  memo: { id: 'IN1', step: 0 },
 });
 
 /**
