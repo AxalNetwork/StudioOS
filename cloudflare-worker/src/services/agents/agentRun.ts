@@ -291,7 +291,7 @@ async function underPolicy(env: Env, a: AgentRow, c: { opts: Omit<RunOptions, 'r
     try { q = await quoteRun(env, { ...c.opts, rail: c.rail, surface: c.surface }); } catch { q = { ok: false, refusal: 'misconfigured', error: 'unreadable' } as any; }
     if (!q.ok) return no(503, 'run_quote_unreadable', 'This run could not be priced, so it was not checked against the platform\'s per-run ceiling. Nothing was charged.');
     if (q.hold_microusd > ceiling) {
-      return no(402, 'run_ceiling', `This run would cost more than the platform allows for one run ($${(ceiling / 1e6).toFixed(2)}). Nothing was charged.`);
+      return no(402, 'run_ceiling', `This run would cost more than the platform's per-run ceiling of $${(ceiling / 1e6).toFixed(2)}. Nothing was charged.`);
     }
   }
   return null;

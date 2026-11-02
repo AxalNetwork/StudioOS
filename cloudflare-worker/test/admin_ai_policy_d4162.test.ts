@@ -190,3 +190,15 @@ test('models, locks, caps and tools: each checked, each with a reason, each audi
     assert.equal(JSON.parse(capsRow.after_json).platform_budget_microusd, 500_000_000);
   } finally { w.close(); }
 });
+
+test('the banner route mounts above every /api/teams router, so a team-agents flag that is off cannot answer 404 for it', async () => {
+  const { ROUTE_MODULES } = await import('../src/routes/_registry.ts');
+  const { planMounts } = await import('../src/util/routeRegistry.ts');
+  const agentEngine = (await import('../src/routes/agent_engine.ts')).default;
+  const plan = planMounts(ROUTE_MODULES).find((m) => m.path === '/api/teams/platform-status');
+  assert.ok(plan, 'the banner route is registered');
+  assert.ok(plan!.before.includes(agentEngine), 'it mounts before agent_engine.ts, the first /api/teams line in index.ts');
+  const index = (await import('node:fs')).readFileSync(new URL('../src/index.ts', import.meta.url), 'utf8');
+  const teamLines = [...index.matchAll(/^app\.route\('\/api\/teams', (\w+)\);/gm)].map((m) => m[1]);
+  assert.equal(teamLines[0], 'agentEngineRoutes', 'agent_engine.ts is still the first /api/teams mount');
+});
