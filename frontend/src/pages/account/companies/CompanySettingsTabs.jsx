@@ -199,11 +199,9 @@ function ProjectsTab({ uid, name, projectId }) {
 export default function CompanySettingsTabs({ tab }) {
   const { uid, id } = useParams();
   const load = useCallback(() => portfolio.through(() => teamsApi.getCompany(uid)), [uid]);
-  const loadLegal = useCallback(() => portfolio.legal(uid), [uid]);
   const [tick, setTick] = useState(0);
   const reread = useCallback(() => setTick((n) => n + 1), []);
   const detail = useBlock(load, tick);
-  const legal = useBlock(loadLegal, tick);
   const name = String(detail.value?.company_name || '').trim();
   usePublishScope(detail.status === 'ready' ? scopeFor({ company: { uid, name } }) : null);
   if (detail.status === 'notFound') {
