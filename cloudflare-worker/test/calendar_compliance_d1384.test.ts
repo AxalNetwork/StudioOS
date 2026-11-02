@@ -74,6 +74,8 @@ test('the page read: the founder\'s own deadlines, open and done, each with its 
     assert.deepEqual(open.compliance, {
       state: complianceState('pending', '2026-11-10', new Date().toISOString().slice(0, 10)), due_date: '2026-11-10',
       event_type: 'annual_report', jurisdiction: 'US-DE', recurrence: 'annual', owner: null, source: 'auto',
+      // D1614 CO4 (#3976): the company badge (this fixture's venture has no company profile) and the row's kind.
+      company: null, company_task: false,
     });
     assert.equal(done.status, 'completed');
     assert.equal(done.compliance.state, 'done');

@@ -28,7 +28,7 @@ test('a company: "Company settings" with Team, Company settings (General, Legal)
   assert.equal(s.label, COMPANY_SETTINGS);
   assert.equal(s.team, '/account/companies/nw1/settings/team');
   assert.deepEqual(s.entries.map((e) => e.label), ['Team', 'Company settings', 'Projects']);
-  assert.deepEqual(entryLabels(s), ['Team', 'Company settings', 'General', 'Legal', 'Projects']);
+  assert.deepEqual(entryLabels(s), ['Team', 'Company settings', 'General', 'Legal', 'Compliance', 'Projects']);
   const legal = s.entries[1].children.find((c) => c.key === 'legal');
   // D1413 (#3696, PF6a/PF8): Legal is Company settings › Legal, a page of its own now.
   assert.equal(legal.path, '/account/portfolio/nw1/settings/legal');
@@ -42,7 +42,7 @@ test('a project inside a company is governed by it: the company\'s block, with t
   assert.equal(s.label, COMPANY_SETTINGS, 'the project page names its own company, whichever is active');
   assert.equal(s.eyebrow, 'Project · in [Northwind Labs]');
   assert.equal(s.team, '/account/companies/nw1/settings/projects/7/team');
-  assert.deepEqual(entryLabels(s), ['Team', 'Company settings', 'General', 'Legal', 'Projects', '[Atlas Pilot]', 'Team', 'Settings']);
+  assert.deepEqual(entryLabels(s), ['Team', 'Company settings', 'General', 'Legal', 'Compliance', 'Projects', '[Atlas Pilot]', 'Team', 'Settings']);
   // A company this account cannot name still governs: never drawn as standalone.
   const unnamed = scopeFor({ project: { id: 7, name: '[Atlas Pilot]', company: { uid: null } } });
   assert.equal(unnamed.kind, 'company_project');
@@ -56,6 +56,8 @@ test('a standalone project: "Project settings" with Team and Project settings, a
   assert.equal(s.eyebrow, 'Project');
   assert.deepEqual(entryLabels(s), ['Team', 'Project settings', 'General']);
   assert.ok(!JSON.stringify(s).includes('Legal'), 'a standalone project is not a legal entity');
+  // D1614 CO5 (#3976): and has no compliance anywhere.
+  assert.ok(!JSON.stringify(s).includes('Compliance'), 'a standalone project shows Compliance');
   assert.equal(s.team, '/projects/9/settings/team');
   assert.equal(scopeFor({}), null, 'nothing in view, no block');
   assert.ok(!entryLabels(scopeFor({ company: NORTHWIND })).some((l) => /Billing/.test(l)), 'Billing is not in the block');
@@ -73,6 +75,7 @@ test('#3697 part 2\'s answer maps onto the same shape, and the seam is closed un
   const solo = fromSettingsScope({ scope: 'project', company: null, project: { id: 9, name: '[Lantern]' } });
   assert.equal(solo.label, PROJECT_SETTINGS);
   assert.ok(!entryLabels(solo).includes('Legal'));
+  assert.ok(!entryLabels(solo).includes('Compliance'));
   assert.deepEqual(solo.companyEditors, { available: false });
   assert.equal((await readSettingsScope()).available, false);
   // #3697 part 2 is on main: the seam reads the route through its client.
@@ -131,12 +134,12 @@ test('Projects lists every project of the company, the one in view with its Team
   const projects = projectsOfCompany(ROWS, 'nw1');
   assert.deepEqual(projects, [{ id: 7, name: '[Atlas Pilot]' }, { id: 8, name: '[Orbit]' }]);
   const co = scopeFor({ company: { uid: 'nw1', name: '[Northwind Labs]' }, projects });
-  assert.deepEqual(entryLabels(co), ['Team', 'Company settings', 'General', 'Legal', 'Projects', '[Atlas Pilot]', '[Orbit]']);
+  assert.deepEqual(entryLabels(co), ['Team', 'Company settings', 'General', 'Legal', 'Compliance', 'Projects', '[Atlas Pilot]', '[Orbit]']);
   assert.equal(co.entries[2].count, 2);
   // D1413 (PF6c): a project under Projects opens its settings inside the company.
   assert.equal(co.entries[2].children[1].path, '/account/portfolio/nw1/settings/projects/8');
   const inView = scopeFor({ project: ATLAS, projects });
-  assert.deepEqual(entryLabels(inView), ['Team', 'Company settings', 'General', 'Legal', 'Projects', '[Atlas Pilot]', 'Team', 'Settings', '[Orbit]']);
+  assert.deepEqual(entryLabels(inView), ['Team', 'Company settings', 'General', 'Legal', 'Compliance', 'Projects', '[Atlas Pilot]', 'Team', 'Settings', '[Orbit]']);
   assert.equal(projectsOfCompany(null, 'nw1'), null, 'an unread list is not "none"');
   assert.equal(scopeFor({ company: { uid: 'nw1', name: 'x' } }).entries[2].count, null);
 });

@@ -21,7 +21,7 @@ import projectLifecycle from '../src/routes/project_lifecycle.ts';
 import projects from '../src/routes/projects.ts';
 import { resolveActiveCompany } from '../src/middleware/activeCompany.ts';
 import { membershipEvent, MEMBERSHIP_EVENT_KINDS } from '../src/services/companyMembershipEvents.ts';
-import { tableFromBaseline } from './_baseline.mjs';
+import { tableFromBaseline, addComplianceStore } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
@@ -39,6 +39,7 @@ const VENTURE = 10;
 
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
+  addComplianceStore(db); // D1614 (#3976): a seat's removal flags its compliance tasks in the same batch.
   for (const t of ['users', 'founders', 'projects', 'company_profiles', 'user_company_links', 'activity_logs', 'incorporations']) db.exec(tableFromBaseline(BASELINE, t));
   db.exec(M597);
   db.exec(M685); // D1415: projects.slug, which a move checks

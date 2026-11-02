@@ -1091,8 +1091,10 @@ async function scopedRows(env: Env, actor: User, all: boolean, kind: CalendarEve
     case 'compliance_due':
       query = `WITH members AS (SELECT id,founder_id FROM users WHERE is_active = 1 AND (role <> 'admin' OR id = ? OR ? = 1))
         SELECT e.id AS id,e.uid,e.title,date(e.due_date) AS start_at,date(e.due_date,'+1 day') AS end_at,
-               e.completion_status,e.project_id,e.event_type,e.jurisdiction,e.recurrence,e.source,e.owner_name
+               e.completion_status,e.project_id,e.event_type,e.jurisdiction,e.recurrence,e.source,e.owner_name,
+               co.uid AS company_uid,co.company_name
         FROM compliance_events e JOIN projects pr ON pr.id = e.project_id AND pr.deleted_at IS NULL
+        LEFT JOIN company_profiles co ON co.id = pr.company_id
         WHERE julianday(date(e.due_date), '+1 day') > julianday(?) AND julianday(date(e.due_date)) < julianday(?)
           AND pr.founder_id IN (SELECT founder_id FROM members WHERE founder_id IS NOT NULL)`;
       break;
@@ -1132,6 +1134,9 @@ function scopedEvent(kind: CalendarEvent['kind'], row: ScopedRow): CalendarEvent
     due_date: String(row.start_at), event_type: row.event_type ?? null, jurisdiction: row.jurisdiction ?? null,
     recurrence: row.recurrence ?? null, owner: typeof row.owner_name === 'string' && row.owner_name.trim() ? row.owner_name.trim() : null,
     source: row.source ?? null,
+    // D1614 CO4 (#3976): the company badge; a staff scope reads venture rows only, so never a company-level task.
+    company: row.company_uid ? { uid: String(row.company_uid), name: String(row.company_name ?? '') } : null,
+    company_task: false,
   } : undefined;
   return {
     id: `${kind}:${row.id}`, kind, source_id: Number(row.id), source_uid: String(uid),
