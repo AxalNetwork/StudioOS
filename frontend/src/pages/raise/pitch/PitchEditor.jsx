@@ -23,6 +23,7 @@ import CardsStrip from './CardsStrip';
 import GridStage from './GridStage';
 import BlockTools, { SpeakerNotes } from './BlockTools';
 import ShareDialog from './ShareDialog';
+import CommentsSheet from './CommentsSheet';
 import ExportDialog from './ExportDialog';
 import { BackgroundSheet, BrandKitSheet, CheckSheet, RemixSheet, SizeSheet, SourcesSheet, StructureSheet, ThemeSheet, VersionsSheet } from './DeckSheets';
 import { EDITOR_WAITING, aiOffState, editIndex, placeTextEdit, saveChip } from './deckV2Model';
@@ -464,7 +465,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     if (id === 'appendix') { if (!readOnly) toggleAppendix(sel); return; }
     if (id === 'notes') { navigate(`/raise/pitch/notes${ventureQuery(project?.id)}`); return; }
     // D1553 (#3800): ⋯ › This card › Remix this slide, the only way in (pd13).
-    if (['theme', 'size', 'brand', 'sources', 'versions', 'check', 'structure', 'background', 'remix'].includes(id)) setSheet(id);
+    if (['theme', 'size', 'brand', 'sources', 'versions', 'check', 'structure', 'background', 'remix', 'comments'].includes(id)) setSheet(id);
   };
   if (actionRef) actionRef.current = act;
   const cardAction = (id, i) => {
@@ -473,6 +474,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     else if (id === 'up' && i > 0) move(i, i - 1);
     else if (id === 'down' && i < cards.length - 1) move(i, i + 1);
     else if (id === 'appendix') toggleAppendix(i);
+    // D1570 (#3817, pd33): the card's threads, on that card.
+    else if (id === 'comments' && cards[i]) { choose(i); setSheet('comments'); }
   };
 
   // The selection's Ask opens "Generate into N areas" (`AreaLightbox.jsx`) on
@@ -582,6 +585,9 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
             return () => setCards((cs) => cs.map((x, j) => (j === i && x === next ? was : x)));
           }}
           onClose={() => setSheet(null)} />
+      ) : null}
+      {sheet === 'comments' && card && base.deck?.id ? (
+        <CommentsSheet deckId={base.deck.id} card={card} index={sel} area={chosen.length === 1 ? chosen[0].id : null} admin={readOnly} onClose={() => setSheet(null)} />
       ) : null}
       {sheet === 'check' && base.deck?.id ? (
         <CheckSheet deck={base.deck} projectId={project?.id} readOnly={readOnly} dirty={dirty} onReplaced={saved}
