@@ -264,10 +264,12 @@ import deckRemix from './routes/deck_remix';
 import deckTypedValues from './routes/deck_typed_values';
 // D1543 (#3781): the venture-record elements and the logos store (migration 732).
 import deckVentureElements from './routes/deck_venture_elements';
+import deckFigures from './routes/deck_figures';
 import deckNew from './routes/deck_new';
 import deckAssist from './routes/deck_assist';
 import deckDerive from './routes/deck_derive';
 import deckCritic from './routes/deck_critic';
+import deckTransform from './routes/deck_transform';
 import deckImages from './routes/deck_images';
 // D1565 (#3812): one link per investor, and tailored variants.
 import deckInvestorLinks from './routes/deck_investor_links';
@@ -275,6 +277,7 @@ import deckInvestorLinks from './routes/deck_investor_links';
 import deckStageNorms from './routes/deck_stage_norms';
 // D1556 (#3803): a venture's consented interview quotes, ranked for a deck.
 import deckQuotes from './routes/deck_quotes';
+import { deckReports, hqDeckReports } from './routes/deck_reports';
 import notificationsRoutes from './routes/notifications';
 import votesRoutes from './routes/votes';
 import linkedinRoutes from './routes/linkedin';
@@ -1412,6 +1415,8 @@ app.route('/api/decks', deckRemix);
 app.route('/api/decks', deckTypedValues);
 // D1543 (#3781): `/:id/venture-elements[/:element]` and `/:id/logos…`, before `decks` so its `/:id` routes cannot answer them.
 app.route('/api/decks', deckVentureElements);
+// D1523 (#3775): each figure's provenance, Linked, Stated, Uncited or Not recorded (`/:id/figures`), editor-only.
+app.route('/api/decks', deckFigures);
 // D896: `/sources` and `/:id/refresh`, before `decks` so its `GET /:id` cannot answer `/sources`.
 app.route('/api/decks', deckSources);
 // D897: New deck (`/new/context`, `/new/quote`, `/outline`, `/generate`, `/proposals/:id/keep-slides`), before `decks` for the same reason.
@@ -1422,6 +1427,8 @@ app.route('/api/decks', deckAssist);
 app.route('/api/decks', deckDerive);
 // D1557 (#3804): the investor critic: rule findings, and one run on a model of another family than the writer's.
 app.route('/api/decks', deckCritic);
+// D1560 (#3807): speaker notes, proofread, fix this slide and the translation pipeline, as proposals.
+app.route('/api/decks', deckTransform);
 // D903 (#2682): card and background images (`/:id/images…`, `/images/:uid/…`), before `decks` so `GET /:id` cannot answer `/images/…`.
 app.route('/api/decks', deckImages);
 // D1565 (#3812): `/:id/investor-links…` and `/:id/variants`, before `decks` so its `/:id` routes cannot answer them.
@@ -1430,6 +1437,9 @@ app.route('/api/decks', deckInvestorLinks);
 app.route('/api/decks', deckStageNorms);
 // D1556 (#3803): `/quotes/search` and `/quotes/index`, before `decks` so `/:id` routes cannot answer them.
 app.route('/api/decks', deckQuotes);
+// D1540 (#3791): a founder's report of a bad result (`/proposals/:uid/report`), and HQ's queue of them.
+app.route('/api/decks', deckReports);
+app.route('/api/admin/deck-reports', hqDeckReports);
 app.route('/api/decks', decks);
 // Competitor Analysis (in-house crawl + Workers AI synthesis) and Pitch Deck
 // Reviewer (document conversion + investor-style review). Both are
