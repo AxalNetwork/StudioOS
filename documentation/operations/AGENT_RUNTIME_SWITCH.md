@@ -15,7 +15,7 @@ the engine is down. The decision is
 | `agents:halt` | KV `RATE_LIMITS` | Set: every run ends at its next step (`halted`) and nothing is admitted. The fastest stop; no deploy. |
 | `agents:paused` | KV `RATE_LIMITS` | The platform circuit breaker. A gateway limit sets it (`gateway_limit`); while it is set the engine reads `paused`. A person clears it. |
 | A scope's pause | `PUT /api/teams/:scope/:id/engine` `{ paused: true }` | That scope admits nothing more; a resume rebuilds its object from D1. |
-| `AGENT_RUNTIME` | `[vars]` and `[env.production.vars]` | `do` (the only one built). `sdk` is not built: asking for it falls back to `do` and logs a warning. |
+| `AGENT_RUNTIME` | `[vars]` and `[env.production.vars]` | `do` (the default). `sdk` (#3852, E0: an evaluation) runs one Agents SDK `ScopeAgent` per scope through `AGENT_SCOPE_SDK`; without that binding, asking for it falls back to `do` and logs a warning. |
 | `AGENT_AUTONOMY` | `[vars]` and `[env.production.vars]` | `manual` (default): only a person starts a task. `self_start` only after E3 and E5 merge (owner Q1 B). |
 
 ## Stop every agent now
@@ -32,8 +32,9 @@ gateway's limit is understood.
 
 ## Switch the runtime
 
-Switching from `sdk` to `do`, or back, is the same runbook. Today only `do`
-exists, so this is the rehearsal path for E0.
+Switching from `sdk` to `do`, or back, is the same runbook. Both are built
+(`do`, and since #3852 `sdk`, `cloudflare-worker/src/agents/sdkRuntime.ts`);
+`do` is the default, and S1 decides a switch on E0's report (#3742).
 
 1. Set `AGENT_ENGINE = "paused"` and deploy (`npm run deploy`). Admissions
    stop; running and waiting Workflows continue; decisions still land, because
@@ -41,7 +42,9 @@ exists, so this is the rehearsal path for E0.
    `AGENT_TASK.get(run uid).sendEvent()`).
 2. Set `AGENT_RUNTIME` to the target and deploy.
    - Both classes stay declared, each with its own migration tag, in all three
-     migration tables, mirrored under `[env.production]`.
+     migration tables, mirrored under `[env.production]`: `AgentScope`
+     (`v5-agent-scope`, binding `AGENT_SCOPE`) and `ScopeAgent`
+     (`v6-agent-scope-sdk`, binding `AGENT_SCOPE_SDK`).
    - No class is deleted in the same deploy.
 3. Run `rebuild(scope)` for every scope with an active agent. It recreates
    the admission view, the duty timers and the scope's pause from D1 alone.
@@ -55,13 +58,19 @@ exists, so this is the rehearsal path for E0.
 A run waiting for approval when the switch is pulled completes after it, with
 one charge and one proposal: its Workflow instance does not belong to either
 runtime, and its proposal's run key makes a replayed step answer the same
-proposal (E2).
+proposal (E2). `agent_runtime_contract.test.ts` rehearses it (`do` → `sdk` →
+`do` with a run waiting on its decision), and a run's status follows the
+runtime in force (`trackRun` asks `runtimeCaller`), so the new runtime's
+object sees it end.
 
 ## When the switch is pulled
 
 - At E0, or at any SDK upgrade: the contract suite
-  (`cloudflare-worker/test/agent_runtime_contract.test.ts`) or the guard tests
-  fail, and the fix is not trivial.
+  (`cloudflare-worker/test/agent_runtime_contract.test.ts`, every case on both
+  runtimes) or the guard tests (`agents_sdk_rules_3852.test.ts`: the three
+  rules, the exact pin, every package subpath classified) fail, and the fix is
+  not trivial. An SDK upgrade is its own PR: `agents` is pinned exactly in
+  `cloudflare-worker/package.json`.
 - In operation: a Cloudflare advisory or deprecation affecting the SDK; a
   security issue in the package; unexplained duplicate runs or charges; Durable
   Object cost beyond the Q3 estimate by 2× for a month.

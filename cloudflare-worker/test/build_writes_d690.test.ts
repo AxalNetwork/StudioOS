@@ -32,7 +32,8 @@ import build from '../src/routes/cycle_build.ts';
 import cycleRecords from '../src/routes/cycle_records.ts';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const ROOT = process.cwd();
@@ -46,8 +47,7 @@ const PRIVATE = ['ana', 'wren', 'tomas', 'reyes', 'example.test', 'okafor', 'ima
 
 function freshBuild(): DatabaseSync {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  db.exec(BASELINE);
-  for (const f of FILES.filter((n) => migrationNumber(n) > BASELINE_CUTOFF)) db.exec(readFileSync(resolve(MIGRATIONS, f), 'utf8'));
+  loadSchema(db);
   return db;
 }
 const BUILT_DDL = (freshBuild().prepare(`SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'

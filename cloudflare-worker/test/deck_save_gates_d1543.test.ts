@@ -13,11 +13,10 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import decks, { ensureSchema } from '../src/routes/decks.ts';
@@ -26,10 +25,8 @@ import { MODEL_VERSION } from '../src/services/decks/slideModel.ts';
 import { CONSENT_LINE, QUOTE_MIN_CHARS as SAVE_MIN, permissionLine, saveGateRefusal } from '../src/services/decks/saveGates.ts';
 import { QUOTE_CONSENT_LINE, QUOTE_MIN_CHARS } from '../src/services/decks/quoteRetrieval.ts';
 import { PERMISSION_LINE } from '../src/services/decks/ventureElements.ts';
+import { loadSchema } from './_schema_once.mjs';
 
-const BASELINE = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
-const DIR = 'cloudflare-worker/sql/migrations';
-const MIGRATIONS = readdirSync(DIR).filter((n) => /^\d+_.*\.sql$/.test(n)).sort(compareMigrations).filter((n) => migrationNumber(n) > BASELINE_CUTOFF).map((n) => readFileSync(`${DIR}/${n}`, 'utf8'));
 const SECRET = 'synthetic-deck-save-gates-d1543-secret-'.repeat(2);
 const FOUNDER = 1, P = 10, DECK = 100;
 const OK_KEY = 'logo_aaaaaaaaaaaaaaaaaaaaaaaa';
@@ -40,8 +37,7 @@ const GRID_B = { c1: 7, c2: 12, r1: 1, r2: 2 };
 async function world() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: true, enableDoubleQuotedStringLiterals: true });
   db.exec('PRAGMA foreign_keys = OFF');
-  db.exec(BASELINE);
-  for (const m of MIGRATIONS) { try { db.exec(m); } catch { /* a view naming an object replayed later */ } }
+  loadSchema(db);
   db.exec(`INSERT INTO users (id, role, name, email, founder_id, is_active) VALUES (${FOUNDER}, 'founder', 'Synthetic founder', 'gates1543@example.test', 1001, 1);
     INSERT INTO projects (id, name, founder_id) VALUES (${P}, 'Gates fixture', 1001);
     INSERT INTO pitch_decks (id, project_id, version, slides, title, is_current, created_by) VALUES

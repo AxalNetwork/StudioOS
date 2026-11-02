@@ -9,11 +9,16 @@
  * once they share it, and never another member's or a participant's. A
  * member who has not shared an address cannot be written to from here
  * either, and the Sheet says so instead of composing.
+ *
+ * #4017 items 2 and 3: the Sheet is `RecordCompose`. Its Body carries Ask's
+ * field trigger while blank; the draft arrives as a form intent in the Ask
+ * panel, and Accept places it "Not saved" until Send. `readOnly` (a reader:
+ * the narrative's admin, a support session) never sees the trigger or Send.
  */
 import { useCallback, useEffect, useState } from 'react';
 import Sheet from '../../ui/Sheet';
 import { mailApi } from '../../lib/api/mail.js';
-import ComposeSheet from './ComposeSheet.jsx';
+import RecordCompose from './RecordCompose.jsx';
 import { recipientFor, sendingAccount } from './emailModel.js';
 import { BODY, MUTED } from './emailParts.jsx';
 
@@ -21,7 +26,7 @@ export const READING = 'Reading their records…';
 export const UNREADABLE = 'Unreadable: this person’s records could not be read. Close and try again.';
 export const NOT_SHARED = 'This member has not shared an email address yet. You can write once they do.';
 
-export default function RecordEmailSheet({ person, from = null, onClose, api = mailApi }) {
+export default function RecordEmailSheet({ person, from = null, readOnly = false, onClose, api = mailApi }) {
   const [state, setState] = useState({ status: 'reading' });
   const load = useCallback(() => {
     setState({ status: 'reading' });
@@ -48,6 +53,7 @@ export default function RecordEmailSheet({ person, from = null, onClose, api = m
   }
   // As `/email` starts: the records the pack selects.
   const refs = (pack.items ?? []).filter((i) => i.selected).map((i) => i.ref);
-  return <ComposeSheet pack={pack} refs={refs} to={recipientFor(who, shares)} account={sendingAccount(accounts)} from={from} api={api}
+  // #4017 (IV-D3): a form the member writes, with Ask's field trigger on a blank Body (`RecordCompose`).
+  return <RecordCompose pack={pack} refs={refs} to={recipientFor(who, shares)} account={sendingAccount(accounts)} from={from} readOnly={readOnly} api={api}
     onClose={onClose} onSent={onClose} />;
 }

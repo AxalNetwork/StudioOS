@@ -24,7 +24,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
@@ -40,9 +40,9 @@ import { contractErrors } from '../src/contracts/validate.ts';
 import { CONSISTENCY_RULES, deckConsistency } from '../src/services/deckConsistency.ts';
 import { LAYOUTS } from '../src/services/decks/slideModel.ts';
 import { STRUCTURES } from '../src/services/decks/structures.ts';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
+import { loadSchema } from './_schema_once.mjs';
 
 /** Each contract with its schema read from its JSON file. */
 const CONTRACTS = Object.fromEntries(Object.entries(NAMED).map(([k, c]) => [k, { ...c,
@@ -97,11 +97,9 @@ test('1. contract rows are in key order, one per line, so two swaps add rows at 
 // ── 2. The route's reply ─────────────────────────────────────────────────
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef'; // synthetic test fixture
-const MIGRATIONS = resolve(process.cwd(), 'cloudflare-worker/sql/migrations');
 function world() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  db.exec(readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8'));
-  for (const f of readdirSync(MIGRATIONS).filter((n) => /^\d+_.*\.sql$/.test(n)).sort(compareMigrations).filter((n) => migrationNumber(n) > BASELINE_CUTOFF)) db.exec(readFileSync(resolve(MIGRATIONS, f), 'utf8'));
+  loadSchema(db);
   db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (10, ?, ?, ?, 1, 1001)').run('founder', 'Synthetic Founder', 'founder@example.test');
   db.exec("INSERT INTO projects (id, name, founder_id) VALUES (1, 'Synthetic venture', 1001)");
   const old = [{ layout: 'chart_text', blocks: LAYOUTS.find((l) => l.id === 'chart_text')!.blocks }];
