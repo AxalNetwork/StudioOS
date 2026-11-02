@@ -241,12 +241,12 @@ test('an element switched off reads "Not switched on yet.", leaves its group, ca
     assert.equal(built.status, 201, JSON.stringify(built.body));
     assert.deepEqual(f.calls(), [], 'no words run, nothing held');
     assert.match(built.body.wording.reason, /not switched on yet/);
-    assert.equal(built.body.wording.prompt_version, 'build.default@v1');
+    assert.equal(built.body.wording.prompt_version, 'build.default@v2');
     assert.equal(built.body.cost.charged_microusd, 0);
     const regenerated = await call(f, 2, 'POST', `/api/decks/proposals/${built.body.proposal.id}/regenerate-card`, { index: 0 });
     assert.equal(regenerated.status, 200, JSON.stringify(regenerated.body));
     assert.equal(regenerated.body.cost.charged_microusd, 0);
-    assert.equal(regenerated.body.wording.prompt_version, 'build.default@v1');
+    assert.equal(regenerated.body.wording.prompt_version, 'build.default@v2');
     assert.deepEqual(f.calls(), [], 'neither free path runs AI');
     assert.equal((f.db.prepare('SELECT COUNT(*) AS n FROM ai_budget_reservations').get() as any).n, holdsBefore, 'neither free path takes a hold');
     assert.ok(built.body.proposal.slides.length > 0 && built.body.proposal.slides.every((s: any) => String(s.title || '').length > 0), 'every card keeps its title: no empty area');

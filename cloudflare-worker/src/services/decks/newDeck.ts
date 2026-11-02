@@ -376,11 +376,13 @@ export function buildMessage(o: { audience: Audience; prompt: string; rows: Outl
     // D1519: the instruction is the registry's (`prompts/build.default.ts`), the same for every family.
     `${promptFor('build').template} Cards:\n${untrustedBlock('record_text', JSON.stringify(cards))}`,
     o.prompt ? `The founder's note on tone and emphasis (it is not a source of facts):\n${untrustedBlock('instruction', JSON.stringify(o.prompt))}` : '',
-    'Return {"cards":[{"n":<card number>,"headline":"...","body":"..."}]}.',
+    'Return {"cards":[{"n":<card number>,"headline":"...","body":"...","notes":"..."}]}.',
   ].filter(Boolean).join('\n');
 }
 
-export type Wording = { headline: string | null; body: string | null };
+// D1560 (#3807): `notes`, the card's speaker notes from the same run, so a built deck is present-ready.
+export type Wording = { headline: string | null; body: string | null; notes?: string | null };
+export const NOTES_MAX = 900;
 
 /**
  * The run's words per card (by position), with every string that names a
@@ -395,7 +397,7 @@ export function wordingFromModel(raw: unknown, count: number, records: readonly 
   for (const c of list) {
     const i = Number(c?.n) - 1;
     if (!Number.isInteger(i) || i < 0 || i >= count) continue;
-    for (const [k, max] of [['headline', HEADLINE_MAX], ['body', BODY_MAX]] as const) {
+    for (const [k, max] of [['headline', HEADLINE_MAX], ['body', BODY_MAX], ['notes', NOTES_MAX]] as const) {
       const v = text(c?.[k], max);
       if (!v) continue;
       // D1519: a string out of the house voice (`prompts/voice.ts`'s glossary) is dropped like one that names a number.
@@ -716,7 +718,11 @@ export function fixOrDrop(layout: string, input: any[], title: string): any[] {
 
 /** Every card of the proposal, in the outline's order, checked against the slide model and the design system's fit. */
 export function buildCards(rows: OutlineRow[], items: SourceItem[], wording: Wording[], ventureName: string | null, exclude: Excluded = NONE, visuals: CardVisuals = NO_VISUALS): { slides: any[]; problems: string[] } {
-  const slides = rows.map((r, i) => cardOf(r, items, wording[i] ?? { headline: null, body: null }, ventureName, exclude, visuals));
+  const slides = rows.map((r, i) => {
+    const card = cardOf(r, items, wording[i] ?? { headline: null, body: null }, ventureName, exclude, visuals);
+    // D1560 (#3807): the run's speaker notes ride on the card; a card with none has none, never a placeholder.
+    return wording[i]?.notes ? { ...card, notes: wording[i].notes } : card;
+  });
   // A title the balance could not mend is a quality note (the rubric counts it), never an unsound card.
   return { slides, problems: [...modelProblems(slides, () => null), ...fitProblems(slides.filter((s) => !s.appendix)).filter((p) => p.kind !== 'single_word_line').map((p) => p.message)] };
 }

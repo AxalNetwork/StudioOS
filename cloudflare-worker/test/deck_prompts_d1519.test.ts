@@ -60,12 +60,12 @@ test('promptFor: the model\'s family or default, the voice preamble first, the t
   for (const [f, model] of Object.entries(MODELS)) {
     const p = promptFor('build', model, 'Warm and exact, like a founder talking to a friend.');
     assert.equal(p.family, f);
-    assert.equal(p.prompt_version, `build.${f}@v1`);
+    assert.equal(p.prompt_version, `build.${f}@v2`);
     assert.ok(p.system.startsWith(HOUSE_VOICE), `${f}: the voice comes first`);
     assert.match(p.system, /Warm and exact/);
     assert.match(p.system, /BEGIN_INSTRUCTION_UNTRUSTED_[0-9a-f]+/, `${f}: the theme's voice is framed as data (D1506)`);
   }
-  assert.equal(promptFor('build', '@cf/openai/gpt-oss-120b').prompt_version, 'build.default@v1');
+  assert.equal(promptFor('build', '@cf/openai/gpt-oss-120b').prompt_version, 'build.default@v2');
   assert.equal(promptFor('outline', MODELS.llama).prompt_version, 'outline.default@v1', 'a family with no file falls back to default');
   assert.ok(BUILD_SYSTEM.startsWith(HOUSE_VOICE));
   assert.ok(buildMessage({ audience: 'seed_fund', prompt: '', rows: standardOutline('standard', 'seed_fund').slice(0, 1), items: [], ventureName: null } as any).includes(REGISTRY.build.default!.template));
