@@ -1,0 +1,78 @@
+{
+  "$id": "deckSlideAnalytics",
+  "title": "GET /api/decks/:id/investor-links/:shareId/analytics (D1573, #3820)",
+  "description": "The reply the deck v2 adapter's `slideAnalytics` method passes through: one investor link's views, its Time per slide consent, seconds per card by card uid in the link's own order, the most-read card and the visit timeline (`routes/deck_slide_analytics.ts`). Missing is null, never 0: `cards` and `most_read` are null with the consent off, and a card no heartbeat counted has null seconds. D1511 (#3762).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["deck_id", "link_id", "investor", "nda", "status", "withdrawn_at", "time_per_slide", "views", "last_viewed_at", "read_seconds", "cards", "most_read", "ask_card_uid", "timeline"],
+  "properties": {
+    "deck_id": { "type": "integer", "minimum": 1 },
+    "link_id": { "type": "integer", "minimum": 1 },
+    "investor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "fund", "prospect_id"],
+      "properties": {
+        "label": { "type": ["string", "null"] },
+        "fund": { "type": ["string", "null"] },
+        "prospect_id": { "type": ["integer", "null"] }
+      }
+    },
+    "nda": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "accepted_at"],
+      "properties": {
+        "state": { "enum": ["accepted", "not_accepted", "not_required"] },
+        "accepted_at": { "type": ["string", "null"] }
+      }
+    },
+    "status": { "enum": ["live", "withdrawn", "expired", "used_up"] },
+    "withdrawn_at": { "type": ["string", "null"] },
+    "time_per_slide": { "type": "boolean" },
+    "views": { "type": "integer", "minimum": 0 },
+    "last_viewed_at": { "type": ["string", "null"] },
+    "read_seconds": { "type": ["integer", "null"], "minimum": 1 },
+    "cards": { "type": ["array", "null"], "maxItems": 200, "items": { "$ref": "#/$defs/card" } },
+    "most_read": { "$ref": "#/$defs/cardOrNull" },
+    "ask_card_uid": { "type": ["string", "null"] },
+    "timeline": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "at", "view_id"],
+        "properties": {
+          "kind": { "enum": ["opened", "nda_accepted", "reached_ask", "revisited"] },
+          "at": { "type": "string" },
+          "view_id": { "type": ["integer", "null"], "minimum": 1 }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "card": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["card_uid", "index", "title", "seconds"],
+      "properties": {
+        "card_uid": { "type": "string" },
+        "index": { "type": "integer", "minimum": 0 },
+        "title": { "type": ["string", "null"] },
+        "seconds": { "type": ["integer", "null"], "minimum": 1 }
+      }
+    },
+    "cardOrNull": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["card_uid", "index", "title", "seconds"],
+      "properties": {
+        "card_uid": { "type": "string" },
+        "index": { "type": "integer", "minimum": 0 },
+        "title": { "type": ["string", "null"] },
+        "seconds": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}
