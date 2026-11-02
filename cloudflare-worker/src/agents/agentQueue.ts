@@ -63,7 +63,9 @@ export async function agentQueueConsumer(batch: Batch, env: Env, _ctx: Execution
 }
 
 /** Exhausted messages: the run ends `failed`, the task is open again, and the message is mirrored. */
-export async function agentDlqConsumer(batch: Batch, env: Env, ctx: ExecutionContext, mirror?: Consumer): Promise<void> {
+// `mirror` is the job queue's dlqConsumer, handed in by dispatchQueue: this file never imports
+// queue-consumer.ts, which reaches billing and Stripe (fund_modules_no_stripe_d707 walks dynamic imports too).
+export async function agentDlqConsumer(batch: Batch, env: Env, ctx: ExecutionContext, mirror: Consumer): Promise<void> {
   for (const m of batch.messages) {
     const uid = runUidOf(m.body);
     if (!uid) continue;
@@ -80,17 +82,16 @@ export async function agentDlqConsumer(batch: Batch, env: Env, ctx: ExecutionCon
       console.warn('[agent-dlq] end_failed');
     }
   }
-  const m = mirror ?? (await import('../queue-consumer')).dlqConsumer;
-  await m(batch, env, ctx);
+  await mirror(batch, env, ctx);
 }
 
-export type QueueConsumers = { queue: Consumer; dlq: Consumer; agent: Consumer; agentDlq: Consumer };
+export type QueueConsumers = { queue: Consumer; dlq: Consumer; agent: Consumer; agentDlq: (batch: Batch, env: Env, ctx: ExecutionContext, mirror: Consumer) => Promise<void> };
 
 /** The `queue()` handler's routing. The agent branch is first; see the header. */
 export async function dispatchQueue(batch: Batch, env: Env, ctx: ExecutionContext, c: QueueConsumers): Promise<void> {
   const name = batch.queue ?? '';
   if (name.includes('agent-queue')) {
-    if (name.endsWith('-dlq')) return c.agentDlq(batch, env, ctx);
+    if (name.endsWith('-dlq')) return c.agentDlq(batch, env, ctx, c.dlq);
     return c.agent(batch, env, ctx);
   }
   // Task #7 (IE) — DLQ batches go to dlqConsumer, which mirrors them to D1.

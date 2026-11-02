@@ -466,6 +466,12 @@ test('queue() routes agent-queue and agent DLQ batches; job-queue batches are un
     await dispatchQueue({ queue: q, messages: [] } as any, {} as any, {} as any, c);
     assert.deepEqual(seen, [want], q);
   }
+  // The agent DLQ is handed the job queue's dlqConsumer as its mirror, so agentQueue.ts never imports
+  // queue-consumer.ts (which reaches Stripe; fund_modules_no_stripe_d707).
+  let mirror: unknown = null;
+  await dispatchQueue({ queue: 'studioos-agent-queue-dlq', messages: [] } as any, {} as any, {} as any, { ...c, agentDlq: async (_b: any, _e: any, _c: any, m: unknown) => { mirror = m; } });
+  assert.equal(mirror, c.dlq);
+  assert.doesNotMatch(readFileSync(new URL('../src/agents/agentQueue.ts', import.meta.url), 'utf8').replace(/\/\/[^\n]*/g, ''), /queue-consumer/);
   // index.ts's one queue() handler goes through dispatchQueue with the four consumers.
   const index = readFileSync(new URL('../src/index.ts', import.meta.url), 'utf8');
   const body = index.slice(index.indexOf('async queue(batch'), index.indexOf('async queue(batch') + 900);
