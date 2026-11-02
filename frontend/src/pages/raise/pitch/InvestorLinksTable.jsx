@@ -9,7 +9,7 @@ import { deckUpdateReuseApi } from '../../../lib/api/deckUpdateReuse.js';
  * `GET /api/decks/:id/investor-links`).
  *
  * Columns: Investor · Version (frozen, or the variant) · NDA · Expiry · View cap
- * · Analytics. Time per slide (#3820) and Walkthrough (#3837) are not read
+ * · Analytics, with pd35's signal TAG ("Revisited after 48 h", D1568). Time per slide (#3820) and Walkthrough (#3837) are not read
  * here, so they are not drawn. Withdraw asks first ("Withdraw this link?
  * Analytics so far are kept."), and a withdrawn row keeps its views.
  *
@@ -64,6 +64,8 @@ export function changesWords(answer) {
   return `${head}: ${parts.length ? parts.join(' · ') : 'no figure changed'}`;
 }
 export const CHANGES_UNREAD = (deck) => `Changes since v${deck?.version ?? '?'} could not be read.`;
+/** D1568 (#3815): pd35's signal TAG on the row: "Revisited after 48 h" once a revisit is recorded, never a number. */
+export const signalTag = (signals) => (Array.isArray(signals) && signals.some((x) => x?.kind === 'revisit') ? 'Revisited after 48 h' : null);
 export const viewsWords = (a) => `${a?.views ?? 0} ${a?.views === 1 ? 'view' : 'views'}${a?.last_viewed_at ? ` · last ${day(a.last_viewed_at)}` : ''}`;
 
 export default function InvestorLinksTable({ deck, refreshKey = 0 }) {
@@ -131,7 +133,10 @@ export default function InvestorLinksTable({ deck, refreshKey = 0 }) {
                   <td className="py-1.5 pr-2">{ndaWords(r.nda)}</td>
                   <td className="py-1.5 pr-2">{expiryWords(r)}</td>
                   <td className="py-1.5 pr-2 font-mono">{capWords(r.view_cap)}</td>
-                  <td className="py-1.5 pr-2">{viewsWords(r.analytics)}</td>
+                  <td className="py-1.5 pr-2">
+                    {viewsWords(r.analytics)}
+                    {signalTag(r.signals) ? <span className="ml-1 rounded border border-axal-hairline px-1 text-[11px] text-axal-ink dark:border-gray-700 dark:text-gray-100" data-testid={`investor-link-signal-${r.id}`}>{signalTag(r.signals)}</span> : null}
+                  </td>
                   <td className="py-1.5">
                     {r.status === 'live' ? <button type="button" className={GHOST} onClick={() => { setRefusal(''); setConfirm(r); }} data-testid={`investor-link-withdraw-${r.id}`}>Withdraw</button>
                       : <span className={MUTED}>{statusWords[r.status] || r.status}</span>}

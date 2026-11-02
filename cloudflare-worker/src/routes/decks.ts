@@ -1076,6 +1076,11 @@ decks.post('/share/:token/heartbeat', async (c) => {
   }
   // D1500: and the card each slide is, by uid.
   await recordSlideCardUids(c.env, viewId, parseInt(m[1]), totals.map(([slide]) => slide));
+  // D1568 (#3815): a read view of a prospect's link may signal a first view, a revisit or the ask reached.
+  try {
+    const { recordViewSignals } = await import('../services/raiseSignals');
+    await recordViewSignals(c.env, viewId, parseInt(m[1]), totals.map(([slide]) => slide));
+  } catch { /* a signal never fails a heartbeat */ }
   return c.json({ ok: true });
 });
 

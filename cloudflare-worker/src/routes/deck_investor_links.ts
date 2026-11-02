@@ -33,6 +33,7 @@ import { refuse } from '../util/refusal';
 import { getDeckRow, projectOwned, revokeShareLink, rowToDeck } from './decks';
 import { createDeckLink, WriterError } from '../services/raiseWriters';
 import { checkVariantFigures, cleanOrder, cleanThesis, tailorMatch, tailorPlan, variantSlides } from '../services/decks/variants';
+import { signalsForLinks } from '../services/raiseSignals';
 
 const deckInvestorLinks = new Hono<{ Bindings: Env }>();
 
@@ -79,6 +80,8 @@ async function rowsOf(env: Env, deckId: number) {
       WHERE type = 'nda_signed' AND share_token_id IN (SELECT CAST(value AS INTEGER) FROM json_each(?)) GROUP BY share_token_id`,
   ).bind(ids).all<{ id: number; at: string }>()).results || [];
   const viewOf = new Map(views.map((v) => [Number(v.id), v]));
+  // D1568 (#3815): each link's signals, for pd35's TAG and pd37's visit timeline.
+  const signalsOf = await signalsForLinks(env, links.map((l) => Number(l.id)));
   const ndaOf = new Map(ndas.map((n) => [Number(n.id), n.at]));
   const now = Date.now();
   return links.map((l) => {
@@ -101,6 +104,7 @@ async function rowsOf(env: Env, deckId: number) {
       status: l.revoked_at ? 'withdrawn' : expired ? 'expired' : usedUp ? 'used_up' : 'live',
       withdrawn_at: l.revoked_at,
       analytics: { views: Number(v?.n ?? 0), last_viewed_at: v?.last_at ?? null, read_seconds: Number(v?.seconds ?? 0) },
+      signals: signalsOf.get(Number(l.id)) ?? [],
       created_at: l.created_at,
     };
   });

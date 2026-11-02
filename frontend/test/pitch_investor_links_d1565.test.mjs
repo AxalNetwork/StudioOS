@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { installDocument } from './_contracts_dom.mjs';
-import InvestorLinksTable, { capWords, expiryWords, ndaWords, versionWords, viewsWords } from '../src/pages/raise/pitch/InvestorLinksTable.jsx';
+import InvestorLinksTable, { capWords, expiryWords, ndaWords, signalTag, versionWords, viewsWords } from '../src/pages/raise/pitch/InvestorLinksTable.jsx';
 import ShareDialog from '../src/pages/raise/pitch/ShareDialog.jsx';
 
 const h = React.createElement;
@@ -106,5 +106,23 @@ test('ShareDialog draws the table above the new link, and the new link previews 
     assert.ok(v.has('investor-links'));
     assert.ok(v.has('investor-link-11'));
     assert.match(v.text(), /Watermark: Prepared for \[Pat Partner\]/);
+  } finally { await v.close(); }
+});
+
+test('D1568 (#3815): pd35\'s signal TAG shows once a revisit is recorded, in words and never a number', async () => {
+  assert.equal(signalTag(undefined), null);
+  assert.equal(signalTag([{ kind: 'first_view', at: '2026-10-30 09:00:00' }, { kind: 'reached_ask', at: '2026-10-30 09:05:00' }]), null);
+  assert.equal(signalTag([{ kind: 'revisit', at: '2026-11-01 18:02:00' }]), 'Revisited after 48 h');
+  const handle = {
+    'GET /api/decks/6/investor-links': () => response({ deck_id: 6, version: 3, links: [
+      ROW({ signals: [{ kind: 'first_view', at: '2026-10-30 09:00:00', words: 'Opened' }, { kind: 'revisit', at: '2026-11-01 18:02:00', words: 'Revisited after 48 h' }] }),
+      ROW({ id: 12, signals: [] }),
+    ] }),
+  };
+  const v = await mount(h(InvestorLinksTable, { deck: DECK }), handle);
+  try {
+    assert.ok(v.has('investor-link-signal-11'));
+    assert.match(v.text(), /Revisited after 48 h/);
+    assert.equal(v.has('investor-link-signal-12'), false, 'a link with no revisit has no TAG');
   } finally { await v.close(); }
 });
