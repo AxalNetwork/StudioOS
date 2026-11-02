@@ -33,7 +33,6 @@ import { withGuard } from './_guard_stub.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { loadSchema } from './_schema_once.mjs';
 
-const root = new URL('../sql/', import.meta.url);
 const scratch = mkdtempSync(join(tmpdir(), 'deck-preflight-fix-4210-'));
 const seedPath = join(scratch, 'schema.sqlite');
 const schema = new DatabaseSync(seedPath, { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
