@@ -17,6 +17,7 @@ The retention periods for generated assets are owner decision W (#3716), pending
 | `deck_images` | uploaded, copied and generated deck images, proposed, kept or discarded | venture cascade. The daily cleanup (D1508) removes a discarded image 24 hours after Discard and a proposal nobody kept 14 days after it was made, unless a version, draft, proposal or derivative names it. A kept image stays | one per row, `deck-images/<project>/<uid>.<ext>`; deleted with its row by the cleanup |
 | `deck_r2_tombstones` | one row per deck image the cleanup deleted: key, venture, bytes, reason, day (D1508) | venture cascade | none (each names an object already deleted) |
 | `deck_exports` | the record of each export: version, format, hash, Drive id | no cascade | none stored (an export is sent, not kept) |
+| `deck_brand_kits` | a venture's deck brand kit: font pair, palette roles, image style, reference and logo image uids (D1562) | venture cascade; one row per venture, replaced whole on save | none (it names kept `deck_images` rows by uid) |
 | `deck_checks` | claim-check runs on a version (D900) | deck and venture cascade | none |
 | `deck_notes` | notes on a version's cards (D905) | no cascade | none |
 | `deck_comments` | comment threads on a deck (D1570) | deck and venture cascade | none |
