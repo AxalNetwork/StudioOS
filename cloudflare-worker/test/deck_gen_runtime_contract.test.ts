@@ -24,6 +24,7 @@ import { aiBudgetFixture, setFixtureAllowance } from './_ai_budget_fixture.mjs';
 import { withGuard } from './_guard_stub.mjs';
 import { D1GenRuntime, FREE_LABEL, quoteOf, stepRecordRef, type DeckGenRuntime, type GenEvent, type PlanLine, type StepExecutor } from '../src/services/decks/genRuntime.ts';
 import { run as aiRun, __resetForTest } from '../src/services/aiRouter.ts';
+import { DeckGenRoom } from '../src/durable-objects/deck-gen-room.ts';
 
 const M716 = readFileSync('cloudflare-worker/sql/migrations/716_deck_area_batches.sql', 'utf8');
 // The hold's Idempotency-Key (D844) and context (D1278), which the budget fixture predates.
@@ -65,8 +66,27 @@ function executorFor(db: any, opts: { fail?: Set<number>; onStep?: (seq: number)
   return { calls, execute };
 }
 
+/** A Durable Object's state: storage in a map, an alarm that is only recorded. */
+function roomState() {
+  const store = new Map<string, unknown>();
+  const state: any = { alarm: null as number | null };
+  state.storage = {
+    get: async (k: string) => store.get(k),
+    put: async (k: string, v: unknown) => { store.set(k, v); },
+    setAlarm: async (t: number) => { state.alarm = t; },
+  };
+  state.blockConcurrencyWhile = async (fn: () => Promise<unknown>) => fn();
+  return state;
+}
+
 const IMPLEMENTATIONS: Array<[string, (env: any, execute: StepExecutor, events: GenEvent[]) => DeckGenRuntime]> = [
   ['D1GenRuntime', (env, execute, events) => new D1GenRuntime(env, execute, (e) => { events.push(e); })],
+  ['DeckGenRoom', (env, execute, events) => {
+    const room = new DeckGenRoom(roomState(), env);
+    room.useExecutor(execute);
+    room.onEvent((e) => { events.push(e); });
+    return room;
+  }],
 ];
 
 const admit = (rt: DeckGenRuntime, key: string, lines = plan(), cls: 'areas' | 'deck_build' = 'areas') =>
