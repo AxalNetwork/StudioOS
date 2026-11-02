@@ -37,6 +37,7 @@
 
 import { LATER, NOT_ON } from './deckV2Model.js';
 // One line per client, in file-name order (pitch_v2_adapter_d1604 holds it), so two swaps add lines at different places.
+import { dataRoomApi } from '../../../lib/api/dataRoom.js';
 import { deckBatchesApi } from '../../../lib/api/deckBatches.js';
 import { deckCheckApi } from '../../../lib/api/deckCheck.js';
 import { deckCoeditApi } from '../../../lib/api/deckCoedit.js';
@@ -54,7 +55,9 @@ import { deckRemixApi } from '../../../lib/api/deckRemix.js';
 import { deckStageApi } from '../../../lib/api/deckStage.js';
 import { deckTemplatesApi } from '../../../lib/api/deckTemplates.js';
 import { deckTypedValuesApi } from '../../../lib/api/deckTypedValues.js';
+import { deckUsageApi } from '../../../lib/api/deckUsage.js';
 import { deckVentureElementsApi } from '../../../lib/api/deckVentureElements.js';
+import { arrange as arrangeCard } from './arrangeModel.js';
 import * as gridOps from './gridOps.js';
 
 export { NOT_ON };
@@ -183,8 +186,18 @@ export const instruct = off('instruct');
 export const stagePlan = (deckId, opts) => through(() => deckStageApi.stagePlan(deckId, opts), SURFACES.stagePlan.issue);
 /** D1523 (#3775): every figure on the version, Linked, Stated, Uncited or Not recorded, and the counts Check claims shows. Editor-only. */
 export const figures = (deckId) => through(() => deckFiguresApi.list(deckId), SURFACES.figures.issue);
-export const deckUsage = off('deckUsage');
-export const arrange = off('arrange');
+/**
+ * D1524 (#3776): the deck's estimate and spend, formatted for the rail rows
+ * (`deckUsageApi.rail`),
+ * with the per-run prices the plain-units line divides the balance by. A
+ * figure the Worker could not read is null, never $0.00.
+ */
+export const deckUsage = (deckId) => through(() => deckUsageApi.rail(deckId), SURFACES.deckUsage.issue);
+/**
+ * D1533 (#3777): one Arrange operation on a card (`arrangeModel.arrange`): `{ card, line }`,
+ * `{ same, line }` or `{ error }`. Local and synchronous underneath; the edited card is saved with every other edit.
+ */
+export const arrange = async (card, selection, op, opts) => ({ available: true, value: arrangeCard(card, selection, op, opts) });
 export const imageEdit = off('imageEdit');
 /** D1544 (#3784): an edit's price (vary, edit, erase, expand) before it runs: one hold for the edit and its checks. */
 export const imageVary = (uid, ask) => through(() => deckImageEditsApi.quote(uid, ask), SURFACES.imageVary.issue);
@@ -251,7 +264,7 @@ export const walkthrough = off('walkthrough');
 export const retryFailed = off('retryFailed');
 export const unseenBatches = off('unseenBatches');
 export const markSeen = off('markSeen');
-export const setDeckSource = off('setDeckSource');
+export const setDeckSource = (projectUid, fileUid, opts) => through(() => dataRoomApi.setDeckSource(projectUid, fileUid, opts), SURFACES.setDeckSource.issue);
 
 /**
  * #4134: the rows whose route is on main, each answering through its real client, never unavailable by

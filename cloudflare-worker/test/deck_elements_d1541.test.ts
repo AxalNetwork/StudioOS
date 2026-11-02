@@ -96,7 +96,7 @@ test('decor: at most 16 per card; an icon\'s licence is recorded and travels wit
   const [card] = sanitizeSlides([{ title: 'Decor', decor: items }]);
   assert.equal(card.decor.length, 16, 'kept at 16');
   assert.ok(slideProblems([{ title: 'Decor', decor: items }]).some((p: string) => /at most 16 decor items/.test(p)));
-  assert.deepEqual(card.decor[0], { id: 'd1', kind: 'icon', ref: 'house', tone: 'ink', licence: { set: 'lucide', version: ICON_LICENCE.version, spdx: 'ISC' } });
+  assert.deepEqual(card.decor[0], { id: 'd1', kind: 'icon', ref: 'house', tone: 'ink', layer: 1, licence: { set: 'lucide', version: ICON_LICENCE.version, spdx: 'ISC' } });
   // A client cannot write another licence: it is set from the library.
   assert.deepEqual(cleanDecorItem({ kind: 'icon', ref: 'house', licence: { set: 'mine', spdx: 'proprietary' } })!.licence, ICON_LICENCE);
   const mixed = sanitizeSlides([{ title: 'x', decor: [{ kind: 'icon', ref: 'not-an-icon' }, { kind: 'shape', ref: 'circle', tone: 'accent' }, { kind: 'sparkle' }] }])[0].decor;

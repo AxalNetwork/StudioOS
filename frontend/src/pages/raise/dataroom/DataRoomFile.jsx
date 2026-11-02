@@ -10,6 +10,7 @@ import {
 } from './filesModel.js';
 import { day } from './dataRoomModel.js';
 import Sheet from '../../../ui/Sheet.jsx';
+import DataRoomDeckSource from './DataRoomDeckSource.jsx';
 
 /**
  * D1106 (#2986) — DR3, one file's lightbox at `/raise/data-room/file/<id>`,
@@ -168,6 +169,8 @@ export default function DataRoomFile({ fileId, room, projectUid, projectId, onCl
             </ul>
           )}
         </section>
+
+        <DataRoomDeckSource file={file} room={room} projectUid={projectUid} onChanged={onChanged} />
 
         <section className={SEC} data-testid="dataroom-file-gate">
           <h3 className={EYE}>Gate</h3>
