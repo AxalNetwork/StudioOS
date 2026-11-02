@@ -84,7 +84,7 @@ test('the source: every shared header mounts HeaderAsk, and the pages that drew 
   assert.match(codeOnly(read('workspaces/ZoneActions.jsx')), /<HeaderAsk testId="zone-actions-ask" \/>/);
   assert.match(codeOnly(read('workspaces/ProfileHeaderAsk.jsx')), /return <HeaderAsk testId="zone-header-ask" \/>;/);
   assert.match(codeOnly(read('pages/cycles/CycleOverview.jsx')), /const askNode = ask \?\? <HeaderAsk label=/);
-  for (const f of ['pages/cycles/CycleRoute.jsx', 'pages/cycles/RaiseOverviewLead.jsx', 'pages/work/CompliancePage.jsx', 'pages/team/AskButton.jsx']) {
+  for (const f of ['pages/cycles/CycleRoute.jsx', 'pages/cycles/RaiseOverviewLead.jsx', 'pages/work/CompliancePage.jsx', 'pages/work/WorkPage.jsx', 'pages/team/AskButton.jsx']) {
     const src = codeOnly(read(f));
     assert.match(src, /<HeaderAsk\b/, f);
     assert.doesNotMatch(src, /<PageAsk\b/, `${f} draws a second Ask beside the shared one`);
