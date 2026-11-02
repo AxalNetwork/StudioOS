@@ -16,6 +16,7 @@ import { mount as deck_reportsMount } from './deck_reports';
 import { mount as deck_slide_analyticsMount } from './deck_slide_analytics';
 import { mount as deck_stage_normsMount } from './deck_stage_norms';
 import { mount as deck_update_reuseMount } from './deck_update_reuse';
+import { mount as learning_listsMount } from './learning_lists';
 import { mount as votesMount } from './votes';
 
 export const ROUTE_MODULES: readonly RegisteredModule[] = [
@@ -30,5 +31,6 @@ export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'deck_slide_analytics', mount: deck_slide_analyticsMount },
   { file: 'deck_stage_norms', mount: deck_stage_normsMount },
   { file: 'deck_update_reuse', mount: deck_update_reuseMount },
+  { file: 'learning_lists', mount: learning_listsMount },
   { file: 'votes', mount: votesMount },
 ];
