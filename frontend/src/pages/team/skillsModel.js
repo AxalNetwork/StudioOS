@@ -169,6 +169,7 @@ export function skillRefusalWords(code, detail) {
     case 'slug_taken': return 'A skill with that name already exists here.';
     case 'version_changed': return 'Someone published this skill a moment ago. Reload it and try again.';
     case 'skill_retired': return 'Axal retired this skill. It keeps working at its pinned version.';
+    case 'skill_suspended': return 'HQ suspended this skill. Agents don’t use it until a fixed version is published.';
     case 'role_mismatch': return 'An agent can only be given skills of its own role.';
     case 'tool_not_approved': return detail ? `Needs the ${detail} read tool, which its sponsor hasn’t approved.` : 'That tool is not one its sponsor approved for read-only use.';
     case 'version_not_published': return 'Only a published version can be pinned.';
