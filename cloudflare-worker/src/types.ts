@@ -485,6 +485,10 @@ export interface Env {
   DECK_PRESENCE?: DurableObjectNamespace;
   // D1502 part 2 (#3753): one room per deck that drives its generation runs, and one governor per account that throttles their steps.
   DECK_GEN_ROOM?: DurableObjectNamespace;
+  /** D1536 (#3785, deck v2 B9): `do` (the default) or `queue`. While `queue`, every deck run goes to the Queue fallback; otherwise only a run of more than 18 variant steps does. */
+  DECK_GEN_RUNTIME?: string;
+  /** D1536: a read-only Cloudflare API token (Workers AI · Read) for the weekly catalogue drift job, with CLOUDFLARE_ACCOUNT_ID. Unset: the job skips with a logged reason and raises no alert. */
+  CF_AI_CATALOGUE_TOKEN?: string;
   AI_GOVERNOR?: DurableObjectNamespace;
   // Vectorize index `axal-search` (768-dim, cosine) for semantic search.
   // Optional so unit-test envs without the binding still type-check; the

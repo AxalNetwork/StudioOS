@@ -2553,6 +2553,17 @@ export default {
             console.error('[cron] fund reporting failed', (e as Error)?.message);
           }
         }
+        // D1536 (#3785) — Monday 05:55 UTC, HQ only: the Workers AI catalogue
+        // against Cloudflare's live model list. Without CF_AI_CATALOGUE_TOKEN it
+        // logs why and skips; a failed read writes nothing and tells no one.
+        if (hqCadences && now.getUTCDay() === 1 && now.getUTCHours() === 5 && now.getUTCMinutes() === 55) {
+          try {
+            const { runCatalogueDrift } = await import('./services/ai/catalogueDrift');
+            await runCatalogueDrift(env);
+          } catch (e) {
+            console.error('[cron] ai catalogue drift failed', (e as Error)?.message);
+          }
+        }
         // Task #3 (Y-1) — nightly Trust Center housekeeping at 04:35 UTC:
         // expires past-due `legal_obligations` (TTL elapsed) and pairwise
         // NDAs past their `valid_until`, then runs the KYC/KYB resync stub
