@@ -23,7 +23,7 @@ import { SignJWT } from 'jose';
 import adminLearning from '../src/routes/admin_learning.ts';
 import learning from '../src/routes/learning.ts';
 import { adminLearningStream, learningStreamHooks } from '../src/routes/learning_stream.ts';
-import { captionReady, parseChapters, verifyWebhook, vttToText } from '../src/services/learningStream.ts';
+import { captionReady, parseChapters, stripMarkup, verifyWebhook, vttToText } from '../src/services/learningStream.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { loadSchema } from './_schema_once.mjs';
 
@@ -200,6 +200,8 @@ test('a generated caption fills an empty transcript and never overwrites an auth
   assert.equal(vttToText(vtt), 'Welcome to pricing. We cover churn.');
   // Mutation checked: keep the stray angle brackets → '<script' survives and this fails.
   assert.equal(vttToText('WEBVTT\n\n00:00:00.000 --> 00:00:01.000\n<<script>script>alert(1)</b>'), 'scriptalert(1)', 'no markup and no angle bracket survives');
+  for (const t of ['x<<<y>>>z', 'a > b < c', '<scr<script>ipt>', '>>><'] as const) assert.doesNotMatch(stripMarkup(t), /[<>]/, t);
+  assert.equal(stripMarkup('<v Ana>Hello</v> there'), 'Hello there');
   assert.equal(vttToText('WEBVTT\n\n00:00.000 --> 00:01.000\nThe arrow --> stays in words.'), 'The arrow -- stays in words.', 'only a timing line is dropped');
   assert.deepEqual(await captionReady(f.env, vid, 'en', vtt), { transcriptFilled: true });
   assert.equal((f.db.prepare('SELECT transcript FROM learning_items WHERE uid = ?').get('vid-1') as any).transcript, 'Welcome to pricing. We cover churn.');

@@ -159,6 +159,22 @@ export async function applyStatus(env: Env, details: any): Promise<'ready' | 'er
 
 const CUE_TIMING = /^(?:\d{1,2}:)?\d{1,2}:\d{2}[.,]\d{3}\s+-->\s+(?:\d{1,2}:)?\d{1,2}:\d{2}[.,]\d{3}/;
 
+/**
+ * Cue text with its markup dropped: everything from a `<` to the next `>` is
+ * left out, in one pass, and no `<` or `>` survives (a stray `>` is dropped
+ * too). A scan, not a pattern, so no tag can be rebuilt from what is left.
+ */
+export function stripMarkup(text: string): string {
+  let out = '';
+  let inTag = false;
+  for (const ch of text) {
+    if (ch === '<') { inTag = true; continue; }
+    if (ch === '>') { inTag = false; continue; }
+    if (!inTag) out += ch;
+  }
+  return out;
+}
+
 /** The words of a WebVTT file without its header, cue numbers, timings, notes or tags. */
 export function vttToText(vtt: string): string {
   const lines = String(vtt ?? '').replace(/\r\n?/g, '\n').split('\n');
@@ -172,7 +188,7 @@ export function vttToText(vtt: string): string {
     // A cue's timing line (`00:00:01.000 --> 00:00:04.000 …`) and a bare cue number carry no words.
     if (CUE_TIMING.test(line) || /^\d+$/.test(line)) continue;
     // Cue text is drawn as plain text, never HTML; markup is dropped, and so is any angle bracket left over.
-    out.push(line.replace(/<[^<>]*>/g, '').replace(/[<>]/g, '').trim());
+    out.push(stripMarkup(line).trim());
   }
   return out.filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
 }
