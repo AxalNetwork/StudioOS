@@ -266,7 +266,7 @@ test('opt-in page mode starts at phone width and restores modal effects when wid
   await assertPage({ default: Lightbox });
   await mutationCheck(shellSource, 'ui/Lightbox.jsx', assertPage, [
     ["pageBelow === 'lg' && phone", "pageBelow === 'lg'"],
-    ['[id, initialFocus, returnFocusTo, page]', '[id, initialFocus, returnFocusTo]'],
+    ['[id, initialFocus, returnFocusTo, page, keep]', '[id, initialFocus, returnFocusTo, keep]'],
     ['{bar || <header', '{null || <header'],
     ["pageBelow === 'lg' && phone", 'phone'],
   ]);
@@ -316,7 +316,7 @@ test('desktop keeps focus trap, inert, scroll lock, top-only Escape and focus re
   await assertModal({ default: Lightbox });
   await mutationCheck(shellSource, 'ui/Lightbox.jsx', assertModal, [
     ["const release = lockScroll(document.body);", 'const release = () => {};'],
-    ['const restore = inertOutside(el, document.body);', 'const restore = () => {};'],
+    ['const restore = inertOutside(el, document.body, kept);', 'const restore = () => {};'],
     ['|| !topmost(id)', ''],
     ['e.preventDefault();\n    (to === -1', '(to === -1'],
     ['opener.focus?.();', 'void opener;'],

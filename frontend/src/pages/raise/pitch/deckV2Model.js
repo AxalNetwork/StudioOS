@@ -319,6 +319,8 @@ export const MORE_MENU = Object.freeze([
     { id: 'section', label: 'Move to section', adapter: 'media' },
     { id: 'appendix', label: 'Mark as appendix', write: true },
     { id: 'background', label: 'Background image', write: true },
+    // D1570 (#3817, pd33): the card's threads; opened here or from the card's ⋯, never from the header.
+    { id: 'comments', label: 'Comments', adapter: 'comments' },
   ] },
   { id: 'ai', label: 'Whole deck · uses AI', items: [
     { id: 'replace_images', label: 'Replace all images', adapter: 'deckActions', ai: true },

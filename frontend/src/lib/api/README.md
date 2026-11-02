@@ -451,6 +451,8 @@ D1199 (#3149): `productTesting.js` adds the programme logo: `partnerTestingApi.u
 
 D1484 part 2 (#3978): `calendarSources.js` holds the member's calendar source settings: `GET /calendar/sources`, `PUT /calendar/sources/:key` (`{ shown?, colour? }`; a colour is a palette token, or `null` for its family's) and `PUT /calendar/settings` (`{ copy_target }`).
 
+D1501 (#3751): `deckDraft.js` holds a deck version's working copy: `deckDraftApi.saveCard(deckId, uid, card, rev, { ord })` (`PATCH /decks/:id/cards/:uid` with `If-Match`), `draft(deckId)` and `discard(deckId)` (`GET`/`DELETE /decks/:id/draft`). `deckV2Adapter.js` reads it through `saveCard`, `discardDraft` and `draft`.
+
 D1212 (#3178): `calendarConnections.js` holds the whole-calendar subscription (`GET`, `POST`, `DELETE /calendar/subscription`, D1209) and the disconnect with its choice (`DELETE /calendar/google` and `/calendar/microsoft`, `?remove_copies=1`). The link comes back once, from the POST, and the page never prints it.
 
 D1207 (#3173): `calendarItems.js` holds the Calendar's Reschedule (`PATCH /calendar/ic-meetings/:id` and `/calendar/founder-checkins/:id`) and its pickers (`/calendar/people`, `/calendar/deals`). A person comes back as a uid and a name, never an email or a user number.
@@ -465,4 +467,5 @@ D1051 adds `billingCheckout.js`: `checkoutApi.quote`, `.start(…, nonce)` and `
 | `dealInsights.js` | D1151: per-deal Team, Market and Traction read clients. |
 | `mail.js` | Email (#3547): the member's own mailboxes (Outlook, Gmail behind its switch, IMAP/SMTP) and the confirmed send (D1340); Eadwyn's drafts — the context pack, live update blocks, the estimate, drafts and revisions (D1341). |
 | `relationships.js` | D1356: who on my teams knows a person — sharing per team, who-knows, and introduction requests. |
+| `deckComments.js` | D1570: a deck's comments (list, post, assign, resolve) and its approval (read, set approvers, approve) under `/api/decks/:id/comments…`, `/approval`, `/approvers` and `/approve`. |
 | `deckTypedValues.js` | D1538: the figures a founder types for a deck, Stated — list, set and remove under `/api/decks/:id/typed-values`. |

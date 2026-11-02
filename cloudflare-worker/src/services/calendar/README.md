@@ -24,10 +24,24 @@ when adding a kind.
   carries `source`. D1484 also wires D1208's interview calls, cohort dates and
   deal closings and the `manual` reader for "New event", all page only and for
   their owner alone (`PERSONAL_ONLY_KINDS`: no staff scope lists them).
+- `botCalls.ts`: D1486 §a (#3980), the meeting bot's runs (`meeting_bots`)
+  as the `bot_call` kind: the member's own runs only, with epoch ms turned
+  into ISO. `done` reads "Recorded", and "Transcript ready" appears only when
+  the run's session holds its final transcript. Page only. It never reads
+  the meeting link or the participants.
 - `raiseDates.ts`: #3982 (D1486 §c), Raise's dated stores, page only and all
   day: `round_close` (an active round's close, for the venture's founder and
   its accepted owners and co-founders) and `nda_expiry` (an active, unvoided
   NDA's expiry, for its two parties only, by the other party's name).
+- `taskDates.ts`: #3983 (D1486 §d), tasks and engagement milestones, family
+  `tasks`, page only and all day on the due day, the member's own rows by each
+  route's rule: `workflow_task` (assigned, or unassigned in a workflow the
+  member owns), `mvp_task` (a founder-board card assigned to a member who can
+  read the board, or unassigned on their own venture), `contact_task` (created
+  by the member on their own venture's contact, by the contact's name) and
+  `engagement_milestone` (the member's partner firm, engagement not cancelled).
+  Done, cancelled and completed rows are hidden; a due date that is not a date
+  is skipped.
 - `prefs.ts`: D1484 part 2 (#3978, migration 708), a member's own source
   settings. `calendar_source_prefs` holds whether a source is shown and its
   colour, a palette token and never hex. `calendar_settings` holds

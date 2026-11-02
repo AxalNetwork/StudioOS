@@ -226,6 +226,8 @@ another release or commit, keeps the old tags unless `--delete-old-tags`, and
 `--dry-run` lists the plan without writes. `lib/releaseAlphaRename.test.mjs`
 covers it.
 
+`deck-dry-run.mjs` (D1509, #3760) reads an owner-exported D1 dump into an in-memory SQLite and compares every current deck as Present draws it today with The Grid's draw (a fields card through the editor's conversion; every block against the grid and its text capacity). It lists each difference as explained (`converted`, `placeholder`) or not, by deck id, version, card and kind only, writes nothing, and exits 1 on any unexplained one. Run it as `node scripts/deck-dry-run.mjs <backup.sql> [--all-versions] [--json]`.
+
 `dry-run-meeting-bot-deploy.mjs` validates only the separate bot Worker configs
 with an isolated scratch image; Docker is required. It never deploys.
 `lib/meetingBotDeploy.test.mjs` protects independent site releases, remote

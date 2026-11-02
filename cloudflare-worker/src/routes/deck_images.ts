@@ -57,7 +57,8 @@ import { auditDeckWrite, getDeckRow, projectOwned, themeOfRow } from './decks';
 import { cardRefOf } from '../services/decks/cardUids';
 import { imageCapability, imagePlan } from '../services/decks/visuals';
 import { fetchLandingPageForProject } from '../services/decks/branding';
-import { elementModelFor, runModelOf } from './deck_element_models';
+import { ElementOffError, elementModelFor, runModelOf } from './deck_element_models';
+import { notSwitchedOn } from '../services/featureFlags';
 import { imageSize, sha256Hex, stripMetadata, tooManyPixels, type ImageMime } from '../services/decks/imageBytes';
 import { fetchExternalImage } from '../services/decks/imageFetch';
 
@@ -160,7 +161,9 @@ async function priced(c: any, user: User, deck: Deck): Promise<Priced | Response
   const colours = coloursOf(body);
   // D1503 (#3754): the image runs on its element's model, a scene as Generated photo and every other style as Illustration.
   let element;
-  try { element = await elementModelFor(c.env, user, deck.projectId, imageElementOf(read.ask)); } catch {
+  try { element = await elementModelFor(c.env, user, deck.projectId, imageElementOf(read.ask)); } catch (e) {
+    // D1509: an image element switched off answers as a surface not switched on, never as a failure.
+    if (e instanceof ElementOffError) return refuse(c, 404, notSwitchedOn);
     return refuse(c, 503, { code: 'picks_unreadable', message: 'Your model picks for this deck could not be read. Nothing was run.' });
   }
   const opts = runOptions(c, user, deck, read.ask, colours, runModelOf(element));

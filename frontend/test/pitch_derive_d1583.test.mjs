@@ -78,7 +78,7 @@ test('⋯ › This deck has the item, as a write and not as an AI item (the teas
   const item = deck.items.find((i) => i.id === 'derive');
   assert.deepEqual(item, { id: 'derive', label: 'Teaser, one-pager or memo…', write: true });
   const editor = readFileSync('frontend/src/pages/raise/pitch/PitchEditor.jsx', 'utf8');
-  assert.match(editor, /'remix', 'derive'\]\.includes\(id\)\) setSheet\(id\)/, 'the item opens its sheet');
+  assert.match(editor, /if \(\[[^\]\n]*'derive'[^\]\n]*\]\.includes\(id\)\) setSheet\(id\)/, 'the item opens its sheet');
   // The memo's chip is there for its AIRail pick; the Ask panel never runs it on the generic run route.
   assert.ok(!RUN_CHIPS.includes('derive:memo'));
   assert.deepEqual(panelChips([{ key: 'derive:memo', label: 'Write a memo from this deck' }]), [{ key: 'derive:memo', label: 'Write a memo from this deck', run: false }]);

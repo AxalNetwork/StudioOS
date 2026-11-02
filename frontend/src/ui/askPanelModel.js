@@ -120,9 +120,11 @@ export function askServes({ page, supportSession, viewer, host }) {
  * and come back as proposal cards. Today two exist (D1420 `studio:layout`,
  * D1596 `sessions:block`); `studio:layout` lives in Studio's own chat (AK9),
  * which has no AIRail, so the panel runs `sessions:block` only. A new run
- * chip is added here with the page it runs on.
+ * chip is added here with the page it runs on. D1530's `propose:goal-plan`
+ * runs on a goal's own plan route (`POST /api/teams/goals/:uid/plan`), never
+ * in the panel, so it is no chip either.
  */
-const STUDIO_CHAT_ONLY = new Set(['studio:layout']);
+const STUDIO_CHAT_ONLY = new Set(['studio:layout', 'propose:goal-plan']);
 // D1583 (#3830): `derive:memo` is listed for its AIRail pick only; it runs from
 // ⋯ › This deck through `POST /api/decks/:id/derive`, never `/api/ai/rail/run`.
 const OWN_ROUTE = new Set(['derive:memo']);
