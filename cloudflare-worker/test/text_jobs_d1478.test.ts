@@ -27,9 +27,9 @@ test('fix 1: tool calls run glm-4.7-flash, which carries the function-calling ba
   assert.ok(!JSON.stringify(ROUTE.tool_call).includes('qwen2.5-coder'));
 });
 
-test('fix 5 (MI1): the snippet paraphrase runs the 8B fp8 first, the 70B only as its fallback', () => {
+test('fix 5 (MI1): the snippet paraphrase runs the 8B fp8 first, granite (MI1\'s Alternative) as its fallback', () => {
   assert.equal(ROUTE.paraphrase.model, '@cf/meta/llama-3.1-8b-instruct-fp8');
-  assert.deepEqual(ROUTE.paraphrase.fallbackChain, ['@cf/meta/llama-3.3-70b-instruct-fp8-fast']);
+  assert.deepEqual(ROUTE.paraphrase.fallbackChain, ['@cf/ibm-granite/granite-4.0-h-micro']);
 });
 
 test('fix 14: no system_job route runs on the 8B; AD3 (ops_summary) is the one system job left there', () => {

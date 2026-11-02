@@ -299,7 +299,7 @@ test('the branch rail column collapses with the rail', () => {
   const zone = codeOnlyJsx(read('frontend/src/pages/branch/BranchZone.jsx'));
   assert.match(zone, /<RailFrame\b/, 'the branch rail must sit in the shared frame, or collapsing the rail leaves a hole');
   assert.doesNotMatch(zone, /grid-cols-\[minmax\(0,1fr\)_280px\]/, 'do not copy the HQ literal — it cannot collapse');
-  assert.match(read('frontend/src/ui/workerRail.css'), /\.fwr-frame-rail\s*\{[^}]*width:\s*var\(--fwr-track,\s*280px\)/,
+  assert.match(read('frontend/src/ui/workerRail.css'), /\.fwr-frame-rail\s*\{[^}]*width:\s*calc\(var\(--fwr-track,\s*280px\) \+ var\(--fwr-ask, 0px\)\)/,
     'the shared frame column must read --fwr-track');
 });
 

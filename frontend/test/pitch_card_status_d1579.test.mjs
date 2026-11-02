@@ -29,6 +29,8 @@ import { installDocument } from './_contracts_dom.mjs';
 import { codeOnly } from './_codeOnly.mjs';
 import CardsStrip, { cardMenuItems, subMenuItems } from '../src/pages/raise/pitch/CardsStrip.jsx';
 import { DeckNotDone } from '../src/pages/raise/pitch/StudioHome.jsx';
+import * as adapter from '../src/pages/raise/pitch/deckV2Adapter.js';
+import { NOT_ON } from '../src/pages/raise/pitch/deckV2Model.js';
 import { availability } from '../src/pages/raise/pitch/deckV2Adapter.js';
 import { deckCardStatusApi } from '../src/lib/api/deckCardStatus.js';
 import { preShareGate } from '../src/pages/raise/pitch/commentsModel.js';
@@ -301,4 +303,20 @@ test('the client reads `/api/decks/:id/card-status`, with the filter in the quer
   assert.deepEqual(seen.map((u) => u.replace(/^.*\/api/, '/api')), [
     '/api/decks/7/card-status', '/api/decks/7/card-status', '/api/decks/7/card-status?status=in_progress&assignee=none', `/api/decks/7/card-status?assignee=${SAM}`,
   ]);
+});
+
+test('D1579 (#3826): cardStatus is swapped — it answers through deckCardStatusApi.read with the filter asked, and a 404 is still off', async () => {
+  const real = deckCardStatusApi.read;
+  const asked = [];
+  try {
+    const reply = { deck_id: 7, version: 2, tracked: true, filter: { status: 'todo', assignee: 'anyone' }, total: 3, cards: [], not_done: { count: 2, cards: [] }, people: [] };
+    deckCardStatusApi.read = async (id, f) => { asked.push([id, f]); return reply; };
+    assert.deepEqual(await adapter.cardStatus(7, { status: 'todo' }), { available: true, value: reply });
+    assert.deepEqual(asked, [[7, { status: 'todo' }]]);
+    deckCardStatusApi.read = async () => { throw Object.assign(new Error('nope'), { status: 404 }); };
+    assert.deepEqual(await adapter.cardStatus(7), { available: false, reason: NOT_ON, issue: 3826 });
+    deckCardStatusApi.read = async () => { throw Object.assign(new Error('Card status could not be read.'), { status: 500 }); };
+    assert.equal((await adapter.cardStatus(7)).unreadable, true, 'anything else is unreadable, never a count of 0');
+  } finally { deckCardStatusApi.read = real; }
+  assert.equal(adapter.availability('cardStatus'), null);
 });

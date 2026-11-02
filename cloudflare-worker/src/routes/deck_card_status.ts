@@ -27,7 +27,8 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { projectOwned } from '../middleware/projectContentAccess';
-import { ensureSchema, getDeckRow } from './decks';
+import decks, { ensureSchema, getDeckRow } from './decks';
+import type { RouteMount } from '../util/routeRegistry';
 import { cardStates, filterCards, filterOf, isTracked, notDone } from '../services/decks/cardStatus';
 import { peopleOf } from '../services/decks/deckPeople';
 import { refuse } from '../util/refusal';
@@ -73,3 +74,5 @@ deckCardStatus.get('/:id{[0-9]+}/card-status', async (c) => {
 });
 
 export default deckCardStatus;
+
+export const mount: RouteMount = { path: '/api/decks', router: deckCardStatus, before: [decks] };
