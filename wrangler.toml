@@ -436,6 +436,12 @@ class_name = "OnboardingChat"
 name       = "MEETING_BOT_RUN"
 class_name = "MeetingBotRun"
 
+# D1577 (#3824): the deck's co-editing room (presence, cursors, soft locks), one per venture's
+# deck. Hibernatable WebSockets, no Durable Object storage. Cost approved by the owner (decision L).
+[[durable_objects.bindings]]
+name       = "DECK_PRESENCE"
+class_name = "DeckPresence"
+
 # D1528: one AgentScope object per scope (`project:{id}`, `company:{id}`).
 [[durable_objects.bindings]]
 name       = "AGENT_SCOPE"
@@ -452,9 +458,13 @@ new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
 tag = "v2-meeting-bot"
 new_sqlite_classes = ["MeetingBotRun"]
 
+[[migrations]]
+tag = "v3-deck-presence"
+new_sqlite_classes = ["DeckPresence"]
+
 # D1528: append-only; no jurisdiction in v1.
 [[migrations]]
-tag = "v3-agent-scope"
+tag = "v4-agent-scope"
 new_sqlite_classes = ["AgentScope"]
 
 # D1528: one AgentTaskWorkflow instance per run (id = run uid). State kept 7
@@ -799,6 +809,12 @@ class_name = "OnboardingChat"
 name       = "MEETING_BOT_RUN"
 class_name = "MeetingBotRun"
 
+# D1577 (#3824): the deck's co-editing room (presence, cursors, soft locks), one per venture's
+# deck. Hibernatable WebSockets, no Durable Object storage. Cost approved by the owner (decision L).
+[[env.production.durable_objects.bindings]]
+name       = "DECK_PRESENCE"
+class_name = "DeckPresence"
+
 # D1528: one AgentScope object per scope (`project:{id}`, `company:{id}`).
 [[env.production.durable_objects.bindings]]
 name       = "AGENT_SCOPE"
@@ -812,9 +828,13 @@ new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
 tag = "v2-meeting-bot"
 new_sqlite_classes = ["MeetingBotRun"]
 
+[[env.production.migrations]]
+tag = "v3-deck-presence"
+new_sqlite_classes = ["DeckPresence"]
+
 # D1528: append-only; no jurisdiction in v1.
 [[env.production.migrations]]
-tag = "v3-agent-scope"
+tag = "v4-agent-scope"
 new_sqlite_classes = ["AgentScope"]
 
 # D1528: one AgentTaskWorkflow instance per run (id = run uid). State kept 7
@@ -1024,6 +1044,12 @@ class_name = "OnboardingChat"
 name       = "MEETING_BOT_RUN"
 class_name = "MeetingBotRun"
 
+# D1577 (#3824): the deck's co-editing room (presence, cursors, soft locks), one per venture's
+# deck. Hibernatable WebSockets, no Durable Object storage. Cost approved by the owner (decision L).
+[[env.preview.durable_objects.bindings]]
+name       = "DECK_PRESENCE"
+class_name = "DeckPresence"
+
 # D1528: one AgentScope object per scope (`project:{id}`, `company:{id}`).
 [[env.preview.durable_objects.bindings]]
 name       = "AGENT_SCOPE"
@@ -1037,9 +1063,13 @@ new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
 tag = "v2-meeting-bot"
 new_sqlite_classes = ["MeetingBotRun"]
 
+[[env.preview.migrations]]
+tag = "v3-deck-presence"
+new_sqlite_classes = ["DeckPresence"]
+
 # D1528: append-only; no jurisdiction in v1.
 [[env.preview.migrations]]
-tag = "v3-agent-scope"
+tag = "v4-agent-scope"
 new_sqlite_classes = ["AgentScope"]
 
 # D1528: one AgentTaskWorkflow instance per run (id = run uid). State kept 7

@@ -106,6 +106,8 @@ export const BINDINGS: readonly BindingSpec[] = [
   { name: 'MEETING_BOT_RUN', kind: 'Durable Object namespace', hq: 'MeetingBotRun', branch: () => 'MeetingBotRun', shared: false },
   { name: 'MEETING_BOT_CONTAINER', kind: 'Durable Object namespace', hq: 'MeetingBotContainer', branch: () => null, shared: false, hqOnly: true },
   { name: 'ONBOARDING_CHAT', kind: 'Durable Object namespace', hq: 'OnboardingChat', branch: () => 'OnboardingChat', shared: false },
+  // D1577 (#3824): the deck's co-editing room.
+  { name: 'DECK_PRESENCE', kind: 'Durable Object namespace', hq: 'DeckPresence', branch: () => 'DeckPresence', shared: false },
   { name: 'VECTORIZE', kind: 'Vectorize index', hq: 'axal-search', branch: (c) => branchResourceNames(c).vectorize, shared: false },
   { name: 'ANALYTICS', kind: 'Analytics Engine dataset', hq: 'studioos_metrics', branch: () => 'studioos_metrics', shared: true },
   { name: 'AI', kind: 'Workers AI', hq: null, branch: () => null, shared: true },
