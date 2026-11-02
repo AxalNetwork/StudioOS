@@ -24,6 +24,7 @@ import {
   infoMessage, noticePreview, pageLine, queryParams, refusalWord, screeningView, tiles, waitLead, waitText, weekBars, weekLead,
 } from '../src/pages/admin/kyc/peopleModel.js';
 import { viewerRefusal } from '../src/pages/admin/kyc/KycViewer.jsx';
+import { readRouteMap } from '../../scripts/lib/routeMap.mjs';
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -528,6 +529,6 @@ test('the wiring: People mounts the queue, the case is KycCase, the viewer reads
   assert.match(client, /rawRequestHeaders\('GET'\)/, 'the viewer sends request()’s headers');
   assert.match(client, /redirect: 'manual'/);
   assert.match(read('documentation/architecture/decisions/D1233.md'), /## D1233/);
-  assert.match(read('documentation/architecture/ROUTE_MAP.md'), /D1233/);
+  assert.match(readRouteMap(), /D1233/);
   assert.match(read('frontend/src/pages/admin/kyc/README.md'), /KycCase\.jsx/);
 });

@@ -290,7 +290,7 @@ async function scopedTarget(c: Context<{ Bindings: Env }>, user: User, scope: Re
   } else {
     return refuse(c, 404, 'record_not_found');
   }
-  const access = await scope.access(c.env, user, row, parentId, { activeCompany: () => activeCompanyFor(c, user) });
+  const access = await scope.access(c.env, user, row, parentId, { activeCompany: () => activeCompanyFor(c, user), claimed: () => !!c.req.header('X-Company-Id') });
   // D1595: a concealed scope answers a record the caller may not read as one that does not exist.
   if (!access.read) return scope.concealed ? refuse(c, 404, 'record_not_found') : refuse(c, 403, 'record_not_available');
   const recordRef = recordId ? `${table}:${recordId}` : null;

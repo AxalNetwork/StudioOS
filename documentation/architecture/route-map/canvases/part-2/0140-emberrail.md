@@ -1,0 +1,1 @@
+| EmberRail | chrome | — (docked rail component) | — | `services/aiRouter.ts` | NEW | Near-identical sibling of DetailRail — same four blocks, different mode copy. Treat DetailRail + EmberRail as **one** rail spec with two wordings. |

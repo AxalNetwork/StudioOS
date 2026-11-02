@@ -21,6 +21,7 @@ import {
   blockState, currencyRows, nearEndRows, nearEndSentence, periodWord, productsChart, rangeDays, rangeProblem, topCodesChart,
   usageHref, usageRangeOf, usageTiles, weekChart,
 } from '../src/pages/admin/promos/promoModel.js';
+import { readRouteMap } from '../../scripts/lib/routeMap.mjs';
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -296,5 +297,5 @@ test('the source: dark violet, the phone at one block per width, the address doo
   assert.ok(!/(?<![.\w])(alert|confirm|prompt)\(|window\.open/.test(usage));
   const doc = read('documentation/architecture/decisions/D1276.md');
   assert.match(doc, /UNVERIFIED/);
-  assert.ok(read('documentation/architecture/ROUTE_MAP.md').includes('D1276'));
+  assert.ok(readRouteMap().includes('D1276'));
 });
