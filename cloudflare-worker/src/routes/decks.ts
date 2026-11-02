@@ -37,6 +37,7 @@ import { railFor } from '../util/railContext';
 import { slideTotals, recordSlideSeconds, recordSlideCardUids } from '../services/deckSlideDwell';
 import { logCycleWrite } from '../services/cycleActivity';
 import { shareAnalytics, type LinkAnalytics } from '../services/decks/shareAnalytics';
+import { gateFor, publishOf } from '../services/decks/publish';
 import { DEFAULT_SHARE_INCLUDE, parseShareInclude, shareGatesFor, shareSlides, shareSpinoutFields, type ShareInclude } from '../services/decks/shareInclude';
 import { sanitizeBinding } from '../services/decks/sources';
 import { saveGateRefusal } from '../services/decks/saveGates';
@@ -52,6 +53,8 @@ import { deckShareMetrics, LEGACY_SHARE_NO_VIEW_LIMIT } from '../services/deckSh
 import { cleanOrder, variantSlides } from '../services/decks/variants';
 import { revOf } from '../services/decks/ifMatch';
 import { approvalRefusal, pendingApprovers } from '../services/decks/deckApproval';
+import { newAssignments, notifyAssignments } from '../services/decks/cardStatus';
+import { peopleOf } from '../services/decks/deckPeople';
 
 /** D895 applies only to deck operations, not other project-content routes. */
 export async function projectOwned(c: any, user: any, projectId: number, opts: { write?: boolean; audit?: boolean; contactData?: boolean } = {}) {
@@ -523,8 +526,9 @@ export function publicDeckOf(row: any): any {
   const { audience, round, by, content_hash, ...deck } = rowToDeck(row);
   void audience; void round; void by; void content_hash;
   deck.slides = (deck.slides || []).map((s: any) => {
-    const { notes, ...card } = s || {};
-    void notes;
+    // D1579 (#3826): a card's status and assignee are the venture's working state, never an outside reader's.
+    const { notes, status, assignee, ...card } = s || {};
+    void notes; void status; void assignee;
     return card;
   });
   // D1546: every reader of a deck (share, present, the print page the PDF and PowerPoint photograph)
@@ -857,6 +861,17 @@ decks.get('/share/:token', async (c) => {
     'SELECT * FROM pitch_deck_share_tokens WHERE token_hash = ?',
   ).bind(await sha256Hex(token)).first<{ id: number; nda_required: number | null; include_json: string | null; prospect_id: number | null; investor_label: string | null; variant_id?: number | null; watermark_text?: string | null }>();
   const ndaRequired = Number(link?.nda_required ?? 0) === 1;
+  // D1564 (#3811): a published link asks for the reader's email first, and
+  // sends no card and uses no view until this browser has given one. While
+  // public views are off (owner decision T) the gate is always on.
+  const published = publishOf(link?.include_json);
+  if (link && published && gateFor(published) === 'email' && await shareLinkLive(c.env, await sha256Hex(token), bind.viewerHash)) {
+    const { emailGatePassed, emailGateAnswer } = await import('./deck_publish');
+    if (!(await emailGatePassed(c.env, c.req.header('cookie'), Number(link.id)))) {
+      if (bind.setCookie) c.header('Set-Cookie', bind.setCookie);
+      return c.json(await emailGateAnswer(c.env, parseInt(m[1])));
+    }
+  }
   if (link && ndaRequired && await shareLinkLive(c.env, await sha256Hex(token), bind.viewerHash)) {
     const gate = await ndaGate(c, Number(link.id), parseInt(m[1]));
     if (gate) {
@@ -963,6 +978,8 @@ decks.get('/share/:token', async (c) => {
     // does not stop a screenshot or the browser's own print.
     allow_download: bind.allowDownload,
     nda_required: ndaRequired,
+    // D1564: a link published as a page, and the gate it applies; null for an investor's own link.
+    published: published ? { gate: gateFor(published) } : null,
     // D902 — a studio link names its investor and offers no deal pack (bug 12; `deck_share_actions.ts`).
     offers_deal_pack: !(link && (link.prospect_id != null || String(link.investor_label || '').trim() !== '')),
     included,
@@ -1352,6 +1369,16 @@ decks.put('/:id', async (c) => {
     }
   }
   if (!slides.length) return c.json({ error: 'slides required' }, 400);
+  // D1579 (#3826): a card newly assigned names someone who can work on the deck (D1570's people rule);
+  // an assignee kept from the version before is not checked again, so a person who left never blocks a save.
+  let priorSlides: unknown[] = [];
+  try { priorSlides = JSON.parse(row.slides || '[]'); } catch { priorSlides = []; }
+  const assigned = newAssignments(priorSlides, slides);
+  if (assigned.length) {
+    const people = new Set((await peopleOf(c.env, Number(row.project_id))).map((p) => p.id));
+    const stray = assigned.find((a) => !people.has(a.user_id));
+    if (stray) return refuse(c, 400, { code: 'assignee_not_on_deck', message: `Card ${stray.index + 1}: assign someone who can work on this deck. Nothing was saved.` });
+  }
   // D1543 (#3781): a logo without its customer's permission, or a quote without recorded consent, is refused; nothing is written.
   const gate = await saveGateRefusal(c.env, Number(row.project_id), slides);
   if (gate) return refuse(c, 409, gate);
@@ -1361,9 +1388,12 @@ decks.put('/:id', async (c) => {
   if (!copy.ok) return refuse(c, 422, { code: 'image_not_copied', message: copyRefusalMessage(copy.code), extra: { image_url: copy.image_url, reason: copy.code } });
   slides.splice(0, slides.length, ...copy.slides);
   const title = String(body?.title || row.title || 'Pitch deck').slice(0, 200);
-
   const newId = await insertVersion(c.env, Number(row.project_id), slides, title, Number(user.id) || null, meta,
     { id: Number(row.id), version: Number(row.version) });
+  // Only the save whose version won reaches here: each new assignment is told once.
+  if (assigned.length) {
+    await notifyAssignments(c.env, { projectId: Number(row.project_id), deckId: Number(newId), by: { id: Number(user.id), name: user.name ?? null }, assigned });
+  }
 
   // Task #2 — Spin-Out Demo Day deck: when the founder edits the
   // Review-the-deal data-room URL or NDA flag inline on the slide,

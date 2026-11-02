@@ -345,9 +345,10 @@ test('a card\'s ⋯ keeps a menu\'s keyboard, and its button closes it', async (
   try {
     await t.press('pitch-editor-card-menu-open-1');
     const menu = t.by('pitch-editor-card-menu-1');
-    assert.equal(document.activeElement, t.by('pitch-editor-card-duplicate-1'), 'focus on the first item');
+    // D1579 (#3826, pd34): Set status › leads the menu, then Assign ›.
+    assert.equal(document.activeElement, t.by('pitch-editor-card-status-1'), 'focus on the first item');
     await t.key(menu, 'ArrowDown');
-    assert.equal(document.activeElement, t.by('pitch-editor-card-up-1'));
+    assert.equal(document.activeElement, t.by('pitch-editor-card-assign-1'));
     await t.key(menu, 'End');
     // D1570 (#3817): Comments is the card menu's last item (pd33).
     assert.equal(document.activeElement, t.by('pitch-editor-card-comments-1'), 'the last item, Comments');
@@ -380,7 +381,7 @@ test('a tablet (768–1023 px) keeps the Grid with the strip as one scrolling ro
     assert.ok(!row.walk(list).includes(menu), 'outside the scrolling row, so it is not clipped');
     assert.match(row.pr(menu).className, /\btop-full\b/);
     assert.doesNotMatch(row.pr(menu).className, /\bleft-full\b/);
-    assert.equal(document.activeElement, row.by('pitch-editor-card-duplicate-1'));
+    assert.equal(document.activeElement, row.by('pitch-editor-card-status-1'), 'D1579: Set status › leads the menu');
   } finally { await row.close(); }
   const col = await strip({});
   try {
