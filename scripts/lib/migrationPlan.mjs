@@ -83,6 +83,67 @@ export function migrationNumber(name) {
   return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
 }
 
+// D4106 (#4106): MIGRATION NAMES THAT CANNOT COLLIDE. Two parallel PRs each
+// took "the next free number" and collided (011, 068, 118 and 259 each exist
+// twice, and 228, 229 and 230 too). From now on a new migration is named by the UTC minute it was
+// written, `YYYYMMDDHHMM_<slug>.sql` (twelve digits, no `T` or `Z`): it still
+// matches every `/^\d+_.*\.sql$/` filter the guards and test fixtures already
+// use, its number (2026… > 763) sorts after every numbered file, and the full
+// name breaks a same-minute tie. The numbered files stay as they are.
+//
+//   NUMBERED_CEILING  the highest number a numbered file may take; PRs already
+//                     open when this landed may still take a number up to it,
+//                     and anything new uses the timestamp form
+//   LEGACY_DUPLICATES the seven prefixes that already exist twice; never more
+export const NUMBERED_CEILING = 799;
+export const LEGACY_DUPLICATES = Object.freeze([11, 68, 118, 228, 229, 230, 259]);
+const STAMPED = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})_[a-z0-9][a-z0-9_]*\.sql$/;
+const NUMBERED = /^(\d{1,4})_.+\.sql$/;
+
+/** `202611021015_slug.sql` → '202611021015'; a numbered or malformed name → null. */
+export function migrationStamp(name) {
+  const m = STAMPED.exec(name);
+  if (!m) return null;
+  const [, y, mo, d, h, mi] = m.map(Number);
+  const ok = y >= 2026 && y <= 2100 && mo >= 1 && mo <= 12 && d >= 1 && d <= 31 && h <= 23 && mi <= 59;
+  return ok ? name.slice(0, 12) : null;
+}
+
+/**
+ * What is wrong with one migration file's name, or null. A file is either
+ * numbered (`NNN_slug.sql`, at most NUMBERED_CEILING) or stamped
+ * (`YYYYMMDDHHMM_slug.sql`, a real UTC minute, a lower-case slug).
+ */
+export function migrationNameProblem(name) {
+  if (/^\d{12}_/.test(name)) {
+    return migrationStamp(name) ? null : `${name}: a stamped migration is YYYYMMDDHHMM_<slug>.sql, a real UTC minute and a lower-case slug.`;
+  }
+  const m = NUMBERED.exec(name);
+  if (!m) return `${name}: a migration is named YYYYMMDDHHMM_<slug>.sql (the UTC minute it was written, D4106).`;
+  if (Number(m[1]) > NUMBERED_CEILING) {
+    return `${name}: numbered migrations stop at ${NUMBERED_CEILING}. Name a new one by the UTC minute it was written: YYYYMMDDHHMM_<slug>.sql (D4106).`;
+  }
+  return null;
+}
+
+/**
+ * Every pair of migration files that share a number or a stamp, naming both,
+ * beyond the seven historical duplicates. A shared address would leave their
+ * order to the tiebreak and make one of them unciteable.
+ */
+export function migrationDuplicates(names) {
+  const byKey = new Map();
+  const out = [];
+  for (const name of [...names].sort(compareMigrations)) {
+    const stamp = migrationStamp(name);
+    const key = stamp ? `t${stamp}` : `n${migrationNumber(name)}`;
+    if (!stamp && LEGACY_DUPLICATES.includes(migrationNumber(name))) continue;
+    if (byKey.has(key)) out.push(`${byKey.get(key)} and ${name} share ${stamp ? `the stamp ${stamp}` : `the number ${migrationNumber(name)}`}.`);
+    else byKey.set(key, name);
+  }
+  return out;
+}
+
 export function checksum(sql) {
   return crypto.createHash('sha256').update(sql, 'utf8').digest('hex');
 }

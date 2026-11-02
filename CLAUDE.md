@@ -122,10 +122,18 @@ never existed. Start at the README of whatever folder you land in.
   one. It covers slots, the `state:*` labels, STATUS comments, and who gives
   instructions.
 - **A new decision is its own file.** From D526 on, each decision is
-  `documentation/architecture/decisions/D<n>.md`, with the number its issue
-  gives. `DECISIONS.md` keeps D1 to D525 and takes no new entries.
+  `documentation/architecture/decisions/D<n>.md`.
+  `DECISIONS.md` keeps D1 to D525 and takes no new entries. From D4106 on, `<n>` is the issue's number
+  (the decision for issue #4102 is D4102), so parallel PRs never pick the same
+  one; the heading cites it, `## D4102 — <title> (#4102)`. Numbers below D4000
+  are the ones issues handed out before that, and keep them.
   `node scripts/check-decision-ids.mjs` reads both places and fails on a
-  number used twice.
+  number used twice, or a D4000+ heading that does not cite its own issue.
+- **A new migration is named by its UTC minute** (D4106):
+  `cloudflare-worker/sql/migrations/YYYYMMDDHHMM_<slug>.sql`. It sorts after
+  every numbered file and applies once like any other; numbered files stop at
+  799. `scripts/check-sql-migrations.mjs` fails on a shared number or stamp,
+  naming both files.
 
 ## Why this doc exists
 
