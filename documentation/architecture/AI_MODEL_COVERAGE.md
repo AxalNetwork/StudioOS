@@ -536,7 +536,7 @@ chat: Research synthesis, evidence comparison and detailed planning.
 - Research: **offered**, `/api/ai/modules on "Advisor · Research · Ask"`; `/api/ai/modules on "Advisor · Research · Client prep"`; `/api/ai/modules on "Advisor · Research · Companies"`; `/api/ai/modules on "Advisor · Research · Markets"`; and 50 more
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
-- Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`; and 9 more
+- Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`; and 10 more
 - Admin consoles: **wired**, `railMatrix.json "Admin · Approvals · LP applications"`; `railMatrix.json "Admin · Approvals · Spin-Out applications"`; `railMatrix.json "Admin · Approvals · Spin-Out moderation"`; `railMatrix.json "Admin · Approvals"`
 - Investor, Advisor and Partner workspaces: **wired**, `railMatrix.json "Investor · Deals · Commit"`; `railMatrix.json "Investor · Deals · Screening"`; `railMatrix.json "Investor · Deals"`
 
@@ -553,7 +553,7 @@ chat: Interactive explanations, evidence summaries and planning drafts.
 - Research: **gap**, `#3721`
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
-- Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`; and 2 more
+- Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`; and 3 more
 - Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 19 more
 - Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Calendar"`; `/api/ai/modules on "Advisor · Cohorts · This week"`; `/api/ai/modules on "Advisor · Practice · Delivery"`; `/api/ai/modules on "Advisor · Practice · Engagements"`; and 17 more
 
@@ -937,7 +937,7 @@ chat: Compare evidence, work through scenarios and explain planning assumptions.
 - Validate: **offered**, `/api/ai/modules on "Founder · Validate · Demand and urgency signals"`; `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Verdict"`; `railMatrix.json "Founder · Validate · Experiments and evidence"`; and 2 more
 - Record a Session: **gap**, `#3721`
 - Build: **offered**, `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; `/api/ai/modules on "Founder · Build · Solution design"`; and 1 more
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Cap table"`; `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise · Use of funds"`; `/api/ai/modules on "Founder · Raise"`; and 8 more
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Cap table"`; `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise · Use of funds"`; `/api/ai/modules on "Founder · Raise"`; and 9 more
 - Grow: **offered**, `/api/ai/modules on "Founder · Grow · Revenue and traction"`; `/api/ai/modules on "Founder · Grow · Team expansion"`; `/api/ai/modules on "Founder · Grow"`
 - Network: **gap**, `#3721`
 - Research: **offered**, `/api/ai/modules on "Investor · Research · Benchmarking"`; `railMatrix.json option draft:thin-evidence`

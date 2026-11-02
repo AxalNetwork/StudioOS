@@ -52,6 +52,8 @@ function world() {
   db.exec(sql('migrations/712_team_agents.sql'));
   db.exec(stripForeignKeys(sql('migrations/727_scope_goals_and_tasks.sql')));
   db.exec(sql('migrations/762_scope_task_work_board.sql'));
+  // D1614 W7 (#3993): the board reads 763's milestone, author and draft columns.
+  db.exec(sql('migrations/763_task_comments_labels_milestones.sql'));
   db.exec(`CREATE TABLE project_members (id INTEGER PRIMARY KEY,project_id INTEGER,user_id INTEGER,role TEXT,status TEXT,created_at TEXT,updated_at TEXT)`);
   for(const [id,name,role,founder] of [[OWNER,'Pat Owner','founder',100],[MEMBER,'Max Member','founder',101],[OTHER,'Ali Other','founder',102],[STRANGER,'Sam Stranger','founder',103]])
     db.prepare("INSERT INTO users (id,uid,email,name,role,founder_id,subscription_tier,subscription_status) VALUES (?,?,?,?,?,?,'growth','active')").run(id,`u-${id}`,`fixture-${id}@example.test`,name,role,founder);

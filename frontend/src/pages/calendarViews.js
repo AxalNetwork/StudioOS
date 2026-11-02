@@ -48,13 +48,15 @@ export function windowFor(view, now = new Date()) {
 /** The canvas's five families, each with the kinds the Worker reads today. */
 export const FAMILIES = Object.freeze([
   { key: 'events', label: 'Events', kinds: ['event_ticket', 'event_hosted', 'manual'] },
-  { key: 'meetings', label: 'Meetings', kinds: ['ic_meeting', 'founder_checkin', 'investor_meeting', 'interview_call'] },
+  { key: 'meetings', label: 'Meetings', kinds: ['ic_meeting', 'founder_checkin', 'investor_meeting', 'interview_call', 'bot_call'] },
   { key: 'sessions', label: 'Sessions', kinds: ['advisor_booking', 'partner_office_hour', 'expert_booking'] },
   { key: 'deadlines', label: 'Deadlines', kinds: ['compliance_due', 'cohort_date', 'deal_closing', 'round_close', 'nda_expiry'] },
   // #3959: the member's own learning plan and registered webinars (its boards are LRN1–LRN3, CAL12).
   { key: 'learning', label: 'Learning', kinds: ['learning'] },
   // D1486 §b (#3981): Publish's sends and Grow › Distribution's planned pieces.
   { key: 'grow', label: 'Grow', kinds: ['publish_send', 'content_planned'] },
+  // #3983 (D1486 §d): the member's own tasks and engagement milestones, all day on their due day.
+  { key: 'tasks', label: 'Tasks', kinds: ['workflow_task', 'mvp_task', 'contact_task', 'engagement_milestone'] },
   { key: 'other', label: 'From other calendars', kinds: ['calendly_event'] },
 ]);
 
