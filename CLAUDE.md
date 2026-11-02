@@ -147,7 +147,8 @@ If a doc disagrees with this file, **this file wins** — fix the doc.
 
 Everything else worth reading is indexed in
 [documentation/README.md](documentation/README.md): the architecture set
-(`CODEBASE_MAP`, `ROUTE_MAP`, `DECISIONS` with the per-decision files in
+(`CODEBASE_MAP`, the route map in `route-map/` (one file per canvas row, D4102),
+`DECISIONS` with the per-decision files in
 `decisions/` from D526 on, `GOTCHAS`) under `documentation/architecture/`;
 dated snapshots under `documentation/audits/`, which are true as of their
 date and are **not** maintained afterwards — never
