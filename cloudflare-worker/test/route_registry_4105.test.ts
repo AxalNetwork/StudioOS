@@ -110,12 +110,18 @@ test('on the real Worker, the order-sensitive deck routers mount just above `dec
   // with deckQuotes and deckStageNorms above them. Each now mounts through its
   // `before: [decks]`, in file-name order, directly above `decks`. The line
   // above them is whatever index.ts mounts there; it is not pinned (#4134).
-  assert.deepEqual(mounts.slice(at - 4, at + 1).map((m) => [m.path, m.router]), [
+  // The block is derived from the registry (#4134): every descriptor naming
+  // `before: [decks]`, in plan order, so a new one (D1581's deckRemote) joins
+  // it without editing a list here. The four that replaced hand-written lines
+  // must be in it, in their file order.
+  const aboveDecks = planned.filter((d) => d.before.includes(decks)).map((d) => [d.path, d.router]);
+  assert.deepEqual(mounts.slice(at - aboveDecks.length, at + 1).map((m) => [m.path, m.router]), [...aboveDecks, ['/api/decks', decks]]);
+  const named = aboveDecks.filter(([, r]) => [deckQuotes, deckReports, hqDeckReports, deckStageNorms].includes(r));
+  assert.deepEqual(named, [
     ['/api/decks', deckQuotes],
     ['/api/decks', deckReports],
     ['/api/admin/deck-reports', hqDeckReports],
     ['/api/decks', deckStageNorms],
-    ['/api/decks', decks],
   ]);
   // No other mount of these routers anywhere.
   for (const r of [deckQuotes, deckReports, hqDeckReports, deckStageNorms]) {
