@@ -10,7 +10,8 @@
  *     picked;
  *   · "Held now" is read from `GET /api/ai-budget/holds`, and the deck's
  *     estimate and spend (#3776) are not drawn while the adapter says they
- *     are off, never as $0.00; the presets are "Coming later" (#3796);
+ *     are off, never as $0.00; with no deck the presets are greyed, and on
+ *     a deck they read the preset in force (D1549, #3796);
  *   · `WorkerRail` with `groups`: one block per group, a group's models read
  *     only when it is opened, at most three suggestions, a pick stored for
  *     each option of the group, and no button that runs a model, takes words
@@ -38,6 +39,7 @@ import { railPrefsApi } from '../src/lib/api/railPrefs.js';
 import { FOUNDER_OPTIONS } from '../src/lib/railOptions/founder.js';
 import { DECK_RAIL_GROUPS, DECK_RAIL_PAGE, PRESETS, deckRail, groupAnswer, heldNow, railItems, usedBy } from '../src/pages/raise/pitch/deckRailGroups.js';
 import { deckElementModelsApi } from '../src/lib/api/deckElementModels.js';
+import { deckModelPresetsApi } from '../src/lib/api/deckModelPresets.js';
 
 const h = React.createElement;
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
@@ -100,6 +102,7 @@ test('the deck\'s estimate and spend read the adapter and are off on this base',
   assert.deepEqual(await rows.estimated.read(), { available: false, reason: 'Not switched on yet.', issue: 3776 });
   assert.deepEqual(await rows.spent.read(), { available: false, reason: 'Not switched on yet.', issue: 3776 });
   assert.equal((await PRESETS.read()).issue, 3796);
+  assert.match((await PRESETS.read()).reason, /picked per deck/, 'with no deck nothing is read, and the segment says why');
 });
 
 /* ------------------------------------------------------------------ *
@@ -132,6 +135,9 @@ async function mount(el, { holds = { holds: [{ included_microusd: 60000, topup_m
   const realBudget = { ...aiBudgetApi };
   const realPrefs = { ...railPrefsApi };
   const realElements = { ...deckElementModelsApi };
+  const realPresets = { ...deckModelPresetsApi };
+  // D1549 (#3796): the deck's presets, Balanced in force, nothing locked.
+  deckModelPresetsApi.read = async () => ({ deck_id: 31, project_id: 1, preset: 'balanced', stored: null, options: [], groups: [], locks: [] });
   const calls = { page: [], pick: [], elements: [], elementPick: [] };
   deckElementModelsApi.read = async (id) => { calls.elements.push(id); return ELEMENTS_REPLY(); };
   deckElementModelsApi.pick = (id, body) => { calls.elementPick.push([id, body]); return elementPick(body); };
@@ -160,7 +166,7 @@ async function mount(el, { holds = { holds: [{ included_microusd: 60000, topup_m
     async click(id) { const n = by(id); if (!n) throw new Error(`Missing ${id}`); await act(async () => { await pr(n).onClick?.({ preventDefault() {} }); }); await settle(); },
     async unmount() {
       await act(async () => root.unmount()); restore();
-      Object.assign(api, real); Object.assign(aiBudgetApi, realBudget); Object.assign(railPrefsApi, realPrefs); Object.assign(deckElementModelsApi, realElements);
+      Object.assign(api, real); Object.assign(aiBudgetApi, realBudget); Object.assign(railPrefsApi, realPrefs); Object.assign(deckElementModelsApi, realElements); Object.assign(deckModelPresetsApi, realPresets);
       __resetEadwynPanelForTest(); __resetAssistModeForTest(); __resetRailPrefsSyncForTest();
     },
   };
@@ -175,8 +181,9 @@ test('with groups: one block per group, no model read until a group opens, at mo
     assert.deepEqual(m.calls.elements, [], 'nor the per-element reply');
     assert.ok(!m.by('text-worker-rail-group-off-graphics'), 'on a deck no element group is greyed');
     assert.match(m.text(m.by('worker-rail-group-safety')), /Required Always on\. Not pickable\./);
-    assert.match(m.text(m.by('worker-rail-presets')), /Fast Balanced Best Custom Coming later/);
-    assert.equal(m.pr(m.by('text-worker-rail-preset-fast'))['aria-disabled'], 'true');
+    // D1549 (#3796): on a deck the presets read the one in force, pressed.
+    assert.equal(m.text(m.by('worker-rail-presets')), 'Models Fast Balanced Best Custom');
+    assert.equal(m.pr(m.by('button-worker-rail-preset-balanced'))['aria-pressed'], true);
     // Usage: Held now from the holds read; the deck's estimate and spend are off, so not drawn at all.
     assert.equal(m.text(m.by('text-worker-rail-usage-held')), 'Held now $0.06 · 2 runs in progress');
     assert.ok(!m.by('text-worker-rail-usage-estimated') && !m.by('text-worker-rail-usage-spent'));
@@ -232,7 +239,7 @@ test('with groups the rail has no button that runs a model, takes words or acts 
   const m = await mount(h(WorkerRail, { workspace: 'Raise', groups: deckRail(31) }));
   try {
     for (const g of DECK_RAIL_GROUPS) if (m.by(`button-worker-rail-group-${g.id}`)) await m.click(`button-worker-rail-group-${g.id}`);
-    const allowed = /^(button-worker-rail-(toggle|group-[a-z]+|all-models|fab|add-tokens)|switch-worker-rail-ai-off|card-worker-rail-group-.+)$/;
+    const allowed = /^(button-worker-rail-(toggle|group-[a-z]+|preset-[a-z]+|all-models|fab|add-tokens)|switch-worker-rail-ai-off|card-worker-rail-group-.+)$/;
     for (const b of m.buttons()) {
       const id = String(m.pr(b)['data-testid'] || '');
       assert.match(id, allowed, `a button the rail should not have: ${id || m.text(b)}`);

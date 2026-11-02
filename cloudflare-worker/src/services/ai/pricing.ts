@@ -20,7 +20,7 @@
  * neurons, $0.0000528, 52.8 micro-USD, so rounding each tile up would charge
  * five tiles 265 micro-USD instead of 264.
  */
-import { modelById, UNIT_SCALE, type PriceUnit } from './catalogue';
+import { CATALOGUE_READ, modelById, PROVIDER_PRICING_VERSION, UNIT_SCALE, type PriceUnit } from './catalogue';
 
 /** Cloudflare's rate: $0.011 per 1,000 neurons (the pricing page, 2026-10-15). */
 export const USD_PER_NEURON = '0.000011';
@@ -43,6 +43,16 @@ export const billingMode = (env?: unknown): BillingMode =>
  */
 export const chargeMultiplier = (env: unknown, licence: string): number =>
   (billingMode(env) === 'billed' ? multiplierFor(licence) : 1);
+
+/**
+ * D1540 (#3791): the price list a quote was made under, as one string: the
+ * catalogue's Cloudflare pricing page, the outside providers' price version,
+ * whether runs settle at cost or billed, and the markup. A quote records it
+ * (`deck_run_quotes.pricing_version`); a quote made under one version settles
+ * under another at no more than it said (`RunOptions.pinMicrousd`).
+ */
+export const pricingVersion = (env?: unknown): string =>
+  `cf-${CATALOGUE_READ.pricing_page_updated}.${PROVIDER_PRICING_VERSION}.${billingMode(env)}.x${AI_MARKUP}`;
 
 /** The multiplier a licence pays over cost. The `admin` licence (`aiLicenceKey`) always pays cost. */
 export const multiplierFor = (licence: string): number => (licence === 'admin' ? 1 : AI_MARKUP);

@@ -16,6 +16,7 @@ import { ChannelSessionPanel } from './InterviewChannels';
 import { clock } from './interviewReviewModel.js';
 import { failureView, lifecycle, money } from './sessionLifecycle.js';
 import { SessionFailure, SessionStepper } from './SessionLifecycle.jsx';
+import ParticipantsTimeline from './ParticipantsTimeline.jsx';
 import { botView } from './meetingBotSession.js';
 import { chatConsentOf, consentLine } from './chatConsent.js';
 import { useRailOption } from '../../ui/railCrumbs';
@@ -367,6 +368,8 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
   const [digestError, setDigestError] = useState(null);
   // D1455 (#3710): the bot read the panel holds, for the one stepper and the one failure panel.
   const [botRead, setBotRead] = useState(undefined);
+  // #4018 (REC3): the bot's latest roster, read by the panel's poll, for the participants timeline.
+  const [botParticipants, setBotParticipants] = useState(undefined);
   const [retry, setRetry] = useState({ busy: false, error: null });
   // D771 (#2097): Summarise and Transcribe run a model (Keep and Edit do not), so each names itself to the rail while it runs.
   const [summarising, setSummarising] = useState(false);
@@ -545,8 +548,9 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
         )}
         <ChannelVoiceNotes api={api} session={session} chunks={chunks} consent={data.channel_consent} />
         {life && <SessionStepper view={life} />}
+        {botSession && botRead?.bot !== null && <ParticipantsTimeline participants={botParticipants} bot={botRead?.bot || null} segments={segments} />}
         {failure && <SessionFailure failure={failure} details={failureDetails} onRetry={runAgain} retrying={retry.busy} error={retry.error} retryHref={retryHref} />}
-        {botSession && <MeetingBotPanel sessionId={session.id} api={api} onStatus={load} onRead={setBotRead} hideFailure />}
+        {botSession && <MeetingBotPanel sessionId={session.id} api={api} onStatus={load} onRead={setBotRead} onParticipants={setBotParticipants} hideFailure hideParticipants />}
         {session.status === 'draft' && !botSession && (waiting
           ? <ChannelSessionPanel session={session} onChanged={() => { load(); loadReceipt(); }} />
           : <StartPanel session={session} error={startError} liveHref={startLive} busy={busy} onStart={start} onConsent={consent} />)}
