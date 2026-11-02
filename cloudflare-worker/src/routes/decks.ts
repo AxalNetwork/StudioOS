@@ -37,7 +37,7 @@ import { railFor } from '../util/railContext';
 import { slideTotals, recordSlideSeconds, recordSlideCardUids } from '../services/deckSlideDwell';
 import { logCycleWrite } from '../services/cycleActivity';
 import { shareAnalytics, type LinkAnalytics } from '../services/decks/shareAnalytics';
-import { DEFAULT_SHARE_INCLUDE, parseShareInclude, shareSlides, shareSpinoutFields, type ShareInclude } from '../services/decks/shareInclude';
+import { DEFAULT_SHARE_INCLUDE, parseShareInclude, shareGatesFor, shareSlides, shareSpinoutFields, type ShareInclude } from '../services/decks/shareInclude';
 import { sanitizeBinding } from '../services/decks/sources';
 import {
   AUDIENCES, BLOCK_KINDS, CHART_RANGES, LIBRARY_CHART_TYPES, TYPED_CHART_TYPES, GRID_COLS, GRID_ROWS, IMAGE_FITS, IMAGE_TAGS, LAYOUTS, MAX_BLOCKS, NOTES_MAX, OVERLAYS,
@@ -907,7 +907,8 @@ decks.get('/share/:token', async (c) => {
   }
   return c.json({
     ...publicDeckOf(row),
-    slides: shareSlides(cards, included),
+    // D1507: quotes and logos go out only with the consent or permission the venture's records hold.
+    slides: shareSlides(cards, included, await shareGatesFor(c.env, Number(row.project_id))),
     // D1565: who the link was made for, drawn over every card ("Prepared for …").
     watermark: link?.watermark_text ?? null,
     view_id: viewId,
