@@ -5559,6 +5559,32 @@
   },
   {
    "pageKey": "Founder · Raise · Pitch deck",
+   "optionKey": "deck:critic",
+   "optionLabel": "Read as an investor",
+   "kind": "reason",
+   "handler": "draft",
+   "routeTask": "rail_reason",
+   "models": [
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Default",
+     "line": "Tests a claim against its evidence"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Alternative",
+     "line": "Reviews the first answer"
+    },
+    {
+     "id": "@cf/qwen/qwq-32b",
+     "role": "Deeper",
+     "line": "Argues the other side"
+    }
+   ],
+   "more": []
+  },
+  {
+   "pageKey": "Founder · Raise · Pitch deck",
    "optionKey": "deck:tone",
    "optionLabel": "Change tone",
    "kind": "write",
@@ -5587,6 +5613,32 @@
    "pageKey": "Founder · Raise · Pitch deck",
    "optionKey": "deck:translate",
    "optionLabel": "Translate",
+   "kind": "write",
+   "handler": "draft",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Alternative",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Deeper",
+     "line": "Short drafts and replies"
+    }
+   ],
+   "more": []
+  },
+  {
+   "pageKey": "Founder · Raise · Pitch deck",
+   "optionKey": "deck:notes",
+   "optionLabel": "Speaker notes",
    "kind": "write",
    "handler": "draft",
    "routeTask": "rail_write",
@@ -7996,6 +8048,53 @@
    "optionLabel": "Arrange my Studio for this stage",
    "kind": "plan",
    "handler": "form",
+   "routeTask": "rail_plan",
+   "models": [
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Default",
+     "line": "Plans, lists and next steps"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-20b",
+     "role": "Alternative",
+     "line": "Steady structured output"
+    },
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Deeper",
+     "line": "Trade-offs and dependencies"
+    }
+   ],
+   "more": []
+  },
+  {
+   "pageKey": "Founder · Raise · Pitch deck",
+   "optionKey": "derive:memo",
+   "optionLabel": "Write a memo from this deck",
+   "kind": "memo",
+   "handler": "draft",
+   "routeTask": "memo_write",
+   "models": [
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Default",
+     "line": "A full memo from a long deck"
+    },
+    {
+     "id": "@cf/nvidia/nemotron-3-120b-a12b",
+     "role": "Alternative",
+     "line": "A second reading, at a lower price"
+    }
+   ],
+   "more": []
+  },
+  {
+   "pageKey": "Founder · Studio",
+   "optionKey": "propose:goal-plan",
+   "optionLabel": "Draft a plan for this goal",
+   "kind": "plan",
+   "handler": "draft",
    "routeTask": "rail_plan",
    "models": [
     {

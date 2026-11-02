@@ -193,6 +193,9 @@ function FieldHead({ fill, name, label, value, busy, children }) {
   </div>;
 }
 
+/** What stays live behind an open form: the AIRail and the Ask panel (`data-sheet-keep`, D1317's own mark). */
+export const FORM_KEEP = Object.freeze(['[data-sheet-keep]']);
+
 export default function FormLightbox({ form: base, current = null, cycle, slug, moduleName, onSubmit, onSaved, onClose, loadOptions = null, onSearch = null, searchDelay = 250, search = '', bar, refused = '', renderAssistant, fill = null, readOnly = '', renderReadRecovery = null }) {
   const id = useId();
   const initialFields = useMemo(() => formFields(base, {}, current), [base, current]);
@@ -338,7 +341,8 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
       {!done && !readOnly && <button type="submit" form={id} disabled={busy || !loaded || blocked} data-testid="cycle-form-save" className="rounded-[9px] bg-axal-violet px-3.5 py-[9px] text-[12.5px] font-bold text-white disabled:opacity-50 dark:bg-violet-600 dark:text-white max-lg:h-[52px] max-lg:w-full">{busy ? 'Saving…' : base.cta || base.button || 'Save'}</button>}
     </div>
   </div>;
-  return <Lightbox pageBelow="lg" width={560} label={base.title} eyebrow={eyebrow} title={base.title} sub={base.sub ?? base.lead} onClose={onClose} footer={footer} focusKey={readRecovery ? 'read-reason' : done ? 'done' : 'form'} testId="cycle-form" bar={bar}>
+  // D1443 part 4 (#3992, S1's B = a): the rail and the Ask panel stay live beside the open form, so Ask opens next to it.
+  return <Lightbox keep={FORM_KEEP} pageBelow="lg" width={560} label={base.title} eyebrow={eyebrow} title={base.title} sub={base.sub ?? base.lead} onClose={onClose} footer={footer} focusKey={readRecovery ? 'read-reason' : done ? 'done' : 'form'} testId="cycle-form" bar={bar}>
     {readOnly ? <p role="status" data-testid="cycle-form-read-only" className="m-0 px-5 pt-4 text-[13px] text-axal-muted dark:text-gray-400">{readOnly}</p> : null}
     {readRecovery ? <div className="px-5 py-4">{readRecovery}</div> : null}
     {!readRecovery && <form id={id} onSubmit={save} noValidate className="flex flex-col gap-3.5 px-5 py-4">
