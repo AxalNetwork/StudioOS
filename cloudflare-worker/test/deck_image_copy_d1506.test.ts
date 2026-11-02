@@ -12,7 +12,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import deckImages from '../src/routes/deck_images.ts';
@@ -23,9 +22,9 @@ import { MAX_COPIES_PER_SAVE, copyRefusalMessage, externalImageUrls, isOwnImageU
 import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withGuard } from './_guard_stub.mjs';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { dohAnswer } from './_doh_fake.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
 const enc = (s: string) => new TextEncoder().encode(s);
 const has = (b: Uint8Array, s: string) => Buffer.from(b).includes(Buffer.from(s, 'latin1'));
@@ -81,16 +80,13 @@ test('our own stored image URLs are left alone; every other image a slide names 
 
 
 const root = new URL('../sql/', import.meta.url);
-const baseline = readFileSync(new URL('schema_baseline.sql', root), 'utf8');
-const migrations = readdirSync(new URL('migrations/', root)).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations)
-  .map((n) => readFileSync(new URL('migrations/' + n, root), 'utf8'));
 const JWT_SECRET = 'synthetic-d1506-only-not-a-real-credential'.repeat(2);
 const ORIGIN = 'https://axal.vc';
 
 async function fixture() {
   __resetForTest();
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  db.exec(baseline); for (const sql of migrations) db.exec(sql);
+  loadSchema(db);
   const insert = db.prepare('INSERT INTO users(id, role, founder_id, name, email, is_active, subscription_tier) VALUES (?, ?, ?, ?, ?, 1, ?)');
   insert.run(2, 'founder', 100, 'Synthetic founder', 'synthetic-2@example.invalid', 'studio');
   db.exec("INSERT INTO projects(id,name,founder_id) VALUES (1,'Synthetic venture',100)");
