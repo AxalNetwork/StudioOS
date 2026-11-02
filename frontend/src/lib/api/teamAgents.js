@@ -82,6 +82,10 @@ export const teamAgentsApi = {
   runAgent: (uid, { module, option, record, prompt, toolReads } = {}) =>
     request(`/teams/agents/${enc(uid)}/run`, { method: 'POST', body: JSON.stringify({ module, option, record: record ?? null, prompt, ...(toolReads ? { tool_reads: toolReads } : {}) }) }),
   toolChoices: () => request('/teams/tools'),
+  // D4137 (#4137): the "From Axal" skills, the `hq` list of D1612 A1's
+  // `GET /api/teams/skills` (no company), for HQ › AI agents › Skills library.
+  // The company-scoped library stays behind `agentsAdapter.skillLibrary`.
+  axalSkills: () => request('/teams/skills'),
   // D1612 A2 (#3956): an agent's skills, assigning a skill, team coverage.
   agentSkills: (uid) => request(`/teams/agents/${enc(uid)}/skills`),
   setAgentSkills: (uid, skills) => request(`/teams/agents/${enc(uid)}/skills`, { method: 'PUT', body: JSON.stringify({ skills }) }),
