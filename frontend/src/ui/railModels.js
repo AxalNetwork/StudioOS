@@ -64,6 +64,8 @@ export const MODEL_COPY = {
   '@cf/cloudflare/clef-flash': { name: 'Clef Flash' },
   '@cf/huggingface/distilbert-sst-2-int8': { name: 'DistilBERT SST-2' },
   '@cf/daily-co/phonellm-mini-alpha-2': { name: 'PhoneLLM Mini' },
+  // #3938 part 1: the `rerank` task's model (advisor reranking, founder research).
+  '@cf/baai/bge-reranker-base': { name: 'BGE Reranker Base' },
 };
 
 /** The guard: listed under Safety, never picked. */
@@ -93,7 +95,7 @@ export const ALL_MODELS = [
   ]],
   ['Code', [R('Kimi K2.7 Code', '@cf/moonshotai/kimi-k2.7-code'), R('Qwen2.5 Coder 32B', '@cf/qwen/qwen2.5-coder-32b-instruct')]],
   ['Reading images and files', [R('Llama 4 Scout', '@cf/meta/llama-4-scout-17b-16e-instruct'), R('Gemma 4 26B', '@cf/google/gemma-4-26b-a4b-it'), R('Llama 3.2 11B Vision'), R('Moondream 3.1')]],
-  ['Search and ranking', [R('BGE-M3'), R('Qwen3 Embedding 0.6B'), R('BGE Base EN v1.5', '@cf/baai/bge-base-en-v1.5'), R('BGE Reranker Base')]],
+  ['Search and ranking', [R('BGE-M3'), R('Qwen3 Embedding 0.6B'), R('BGE Base EN v1.5', '@cf/baai/bge-base-en-v1.5'), R('BGE Reranker Base', '@cf/baai/bge-reranker-base')]],
   ['Languages', [R('M2M100', '@cf/meta/m2m100-1.2b'), R('IndicTrans2', '@cf/ai4bharat/indictrans2-en-indic-1B'), R('SEA-LION v4 27B')]],
   ['Speech to text', [
     R('Whisper Large v3 Turbo', '@cf/openai/whisper-large-v3-turbo'), R('Whisper', '@cf/openai/whisper'),

@@ -336,11 +336,26 @@ test('neither the original nor the translation reaches a log line', async () => 
   for (const words of [ES, FR, 'odiamos', 'Ledgerly', PHRASEBOOK[ES]]) assert.ok(!all.includes(words), `logged: ${words}`);
 });
 
-test('detect_language runs only for a contested passage, on the small model', async () => {
-  const { env, db, calls } = world((model, input) => (model === SMALL ? { response: 'es' } : translator()(model, input)));
-  db.prepare("DELETE FROM interview_transcript_segments WHERE session_id = ?").run(SESSION);
-  db.prepare(`INSERT INTO interview_transcript_segments (session_id, source, start_ms, end_ms, speaker_label, text) VALUES (?, 'final', 0, 1000, '[Interviewee]', 'la vida')`).run(SESSION);
+test('detect_language runs only for a contested passage: one clef-flash choice among the working languages (#3938, VA8)', async () => {
+  // "other" leaves the passage undetected; an option not asked ("klingon") is refused by the router itself (moduleShapes).
+  const CLEF_FLASH = '@cf/cloudflare/clef-flash';
+  const answer = (choice: string) => ({ answers: { language: { type: 'choice', choice, confidence: 0.91, probabilities: { [choice]: 0.91 } } }, usage: { input_tokens: 40 } });
+  const contested = (db: any) => {
+    db.prepare("DELETE FROM interview_transcript_segments WHERE session_id = ?").run(SESSION);
+    db.prepare(`INSERT INTO interview_transcript_segments (session_id, source, start_ms, end_ms, speaker_label, text) VALUES (?, 'final', 0, 1000, '[Interviewee]', 'la vida')`).run(SESSION);
+  };
+  const { env, db, calls } = world((model, input) => (model === CLEF_FLASH ? answer('es') : translator()(model, input)));
+  contested(db);
   await translateSession(env, { sessionId: SESSION, userId: ME });
-  assert.deepEqual(calls.map((c) => c.model), [SMALL, TRANSLATION_MODEL]);
+  assert.deepEqual(calls.map((c) => c.model), [CLEF_FLASH, TRANSLATION_MODEL]);
+  assert.deepEqual(Object.keys(calls[0].input.questions.language.criteria), ['en', 'es', 'fr', 'pt', 'de', 'it', 'nl', 'other'], 'the options are the working languages and "other"');
   assert.equal(segments(db)[0].source_lang, 'es');
+
+  for (const choice of ['other', 'klingon']) {
+    const w = world((model, input) => (model === CLEF_FLASH ? answer(choice) : translator()(model, input)));
+    contested(w.db);
+    await translateSession(w.env, { sessionId: SESSION, userId: ME });
+    assert.deepEqual(w.calls.map((c) => c.model), [CLEF_FLASH], `${choice}: nothing is translated`);
+    assert.equal(segments(w.db)[0].source_lang, null, `${choice}: the passage stays undetected`);
+  }
 });
