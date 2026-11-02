@@ -163,7 +163,8 @@ If a doc disagrees with this file, **this file wins** — fix the doc.
 
 Everything else worth reading is indexed in
 [documentation/README.md](documentation/README.md): the architecture set
-(`CODEBASE_MAP`, the route map in `route-map/` (one file per canvas row, D4102),
+(`CODEBASE_MAP`, the route map in `route-map/` (one file per canvas row, D4102;
+its two projections are built by CI, not committed, D4103),
 `DECISIONS` with the per-decision files in
 `decisions/` from D526 on, `GOTCHAS`) under `documentation/architecture/`;
 dated snapshots under `documentation/audits/`, which are true as of their
