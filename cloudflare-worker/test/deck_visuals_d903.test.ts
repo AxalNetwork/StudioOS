@@ -14,7 +14,7 @@ import { copyFileSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import {
   ART_CARDS, artDirection, chartTypeFor, competitorMatrix, imageCapability, imagePlan, recordDiagrams, roadmapDiagram, useOfFundsDiagram,
 } from '../src/services/decks/visuals.ts';
@@ -29,7 +29,7 @@ const seed = join(scratch, 'schema.sqlite');
 {
   const db = new DatabaseSync(seed, { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   db.exec(readFileSync(new URL('schema_baseline.sql', root), 'utf8'));
-  for (const n of readdirSync(new URL('migrations/', root)).filter((f) => /^\d+_.*\.sql$/.test(f) && migrationNumber(f) > BASELINE_CUTOFF).sort()) db.exec(readFileSync(new URL('migrations/' + n, root), 'utf8'));
+  for (const n of readdirSync(new URL('migrations/', root)).filter((f) => /^\d+_.*\.sql$/.test(f) && migrationNumber(f) > BASELINE_CUTOFF).sort(compareMigrations)) db.exec(readFileSync(new URL('migrations/' + n, root), 'utf8'));
   db.close();
 }
 after(() => rmSync(scratch, { recursive: true, force: true }));

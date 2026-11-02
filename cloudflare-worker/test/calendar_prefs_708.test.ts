@@ -18,7 +18,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { SignJWT } from 'jose';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import calendar from '../src/routes/calendar.ts';
 import { SOURCE_KINDS } from '../src/services/calendar/registry.ts';
 import { COLOURS, FAMILY_LABELS } from '../src/services/calendar/prefs.ts';
@@ -26,7 +26,7 @@ import { mintFeedToken, CALENDAR_FEED_SCOPE } from '../src/services/calendar/fee
 
 const BASELINE = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
 const DIR = 'cloudflare-worker/sql/migrations';
-const MIGRATIONS = readdirSync(DIR).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort().map((n) => readFileSync(`${DIR}/${n}`, 'utf8'));
+const MIGRATIONS = readdirSync(DIR).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations).map((n) => readFileSync(`${DIR}/${n}`, 'utf8'));
 const M708 = readFileSync(`${DIR}/708_calendar_source_prefs.sql`, 'utf8');
 const SECRET = 'synthetic-calendar-prefs-708-'.repeat(3);
 const FROM = '2026-11-01T00:00:00.000Z', TO = '2026-12-01T00:00:00.000Z';
