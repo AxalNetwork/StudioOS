@@ -45,7 +45,7 @@ function events(lines) {
   return out;
 }
 
-/** Each job under `jobs:`: its id, display name and job-level `if:`. */
+/** Each job under `jobs:`: its id, display name, job-level `if:`, `needs:` and its lines. */
 function jobs(lines) {
   const at = lines.findIndex((l) => /^jobs:/.test(l));
   const out = [];
@@ -53,14 +53,31 @@ function jobs(lines) {
   for (const l of lines.slice(at + 1)) {
     if (/^\S/.test(l)) break;
     const id = /^ {2}([\w-]+):\s*$/.exec(l);
-    if (id) { job = { id: id[1], name: id[1], if: null }; out.push(job); continue; }
+    if (id) { job = { id: id[1], name: id[1], if: null, needs: [], body: [] }; out.push(job); continue; }
+    if (job) job.body.push(l);
     const name = /^ {4}name:\s*(.+)$/.exec(l);
     if (job && name) job.name = unquote(name[1]);
     const cond = /^ {4}if:\s*(.+)$/.exec(l);
     if (job && cond) job.if = cond[1].trim();
+    const needs = /^ {4}needs:\s*(.+)$/.exec(l);
+    if (job && needs) job.needs = needs[1].replace(/[[\]]/g, '').split(',').map((n) => n.trim()).filter(Boolean);
   }
   return out;
 }
+
+// D4130 (#4130): the one required check that is an aggregator. Its parts run
+// as other jobs it `needs`, so it must run even when one of them failed —
+// a job whose need failed is SKIPPED by default, and a skipped required check
+// reports as passed. It is the only required check allowed `if: always()`, and
+// its own step must fail unless every part passed.
+const AGGREGATOR = 'test:drift (full suite)';
+
+// The forms of job-level `if:` that skip a job under merge_group.
+const SKIPS_IN_QUEUE = Object.freeze([
+  "github.event_name != 'merge_group'",
+  "github.event_name == 'pull_request'",
+  "github.event_name == 'push'",
+]);
 
 const FILES = readdirSync(DIR).filter((f) => /\.ya?ml$/.test(f)).sort();
 
@@ -72,8 +89,13 @@ test('every required check comes from a job in its workflow, which listens for m
     assert.deepEqual(matches.map((j) => j.file), [file], `"${check}" is one job's name, in ${file}`);
     const [job] = matches;
     // A skipped job reports as passed, so a required check that skips in the
-    // queue would let anything through. It runs unconditionally.
-    assert.equal(job.if, null, `"${check}" (${file}) has an if: ${job.if}; a required check never skips in the queue`);
+    // queue would let anything through. It runs unconditionally — or, for the
+    // aggregator, `always()`, which never skips.
+    if (check === AGGREGATOR) {
+      assert.equal(job.if, 'always()', `"${check}" needs its parts, so it runs on always(); without it a failed part would skip it, and a skipped required check passes`);
+    } else {
+      assert.equal(job.if, null, `"${check}" (${file}) has an if: ${job.if}; a required check never skips in the queue`);
+    }
   }
   assert.match(code('ci.yml').join('\n'), /\n {2}merge_group:\n {4}types: \[checks_requested\]\n/);
 });
@@ -87,17 +109,51 @@ test('the queue runs only these workflows: no deploy, preview, review or comment
   }
 });
 
-test('in a queue workflow, every job that is not a required check is skipped under merge_group', () => {
+test('in a queue workflow, every job that is not a required check is skipped under merge_group, unless a required check needs it', () => {
   const required = new Set(Object.keys(REQUIRED));
   for (const f of IN_QUEUE) {
-    for (const j of jobs(code(f))) {
+    const all = jobs(code(f));
+    // What the required checks wait on. Such a job feeds a required check, so
+    // it must RUN in the queue; the others already ran on the pull request.
+    const fed = new Set(all.filter((j) => required.has(j.name)).flatMap((j) => j.needs));
+    for (const j of all) {
       if (required.has(j.name)) continue;
+      if (fed.has(j.id) && !SKIPS_IN_QUEUE.includes(j.if)) continue;
       assert.ok(
-        j.if === "github.event_name != 'merge_group'" || j.if === "github.event_name == 'pull_request'",
-        `${f} › ${j.name} is not a required check, so it is skipped in the queue (if: ${j.if})`,
+        SKIPS_IN_QUEUE.includes(j.if),
+        `${f} › ${j.name} is not a required check and no required check needs it, so it is skipped in the queue (if: ${j.if})`,
       );
     }
   }
+});
+
+test('D4130: the full-suite check passes only when every part passed, and trusts a queue run only on a push to main', () => {
+  const all = jobs(code('ci.yml'));
+  const gate = all.find((j) => j.name === AGGREGATOR);
+  const body = gate.body.join('\n');
+  assert.deepEqual(gate.needs, ['verified', 'suite']);
+  // The two ways to pass, and nothing else.
+  assert.match(body, /if \[ "\$EVENT" = "push" \] && \[ -n "\$VERIFIED_RUN" \] && \[ "\$SUITE" = "skipped" \]; then\n\s+echo [^\n]+\n\s+exit 0\n\s+fi/);
+  assert.match(body, /if \[ "\$SUITE" = "success" \]; then\n\s+echo [^\n]+\n\s+exit 0\n\s+fi/);
+  assert.match(body, /exit 0\n\s+fi\n\s+echo "::error::[^\n]+"\n\s+exit 1\s*$/, 'anything else fails');
+  assert.equal((body.match(/exit 0/g) || []).length, 2, 'exactly two ways to pass');
+  assert.match(body, /SUITE: \$\{\{ needs\.suite\.result \}\}/);
+  assert.match(body, /EVENT: \$\{\{ github\.event_name \}\}/);
+  assert.match(body, /VERIFIED_RUN: \$\{\{ needs\.verified\.outputs\.run \}\}/, 'the gate reads the queue run from the lookup');
+  // The lookup: only a merge_group run of THIS workflow, on THIS commit, that succeeded.
+  const verified = all.find((j) => j.id === 'verified');
+  assert.equal(verified.if, "github.event_name == 'push'", 'a pull request or a queue entry never skips the suite');
+  const v = verified.body.join('\n');
+  assert.match(v, /actions\/workflows\/ci\.yml\/runs\?head_sha=\$SHA&event=merge_group&status=success/);
+  assert.match(v, /select\(\.head_sha == env\.SHA and \.event == "merge_group" and \.conclusion == "success"\)/);
+  assert.match(v, /SHA: \$\{\{ github\.sha \}\}/);
+  assert.match(v, /permissions:\n\s+actions: read\n/, 'it reads run history and nothing else');
+  assert.match(v, /outputs:\n\s+run: \$\{\{ steps\.lookup\.outputs\.run \}\}/, 'the job output is the lookup step\'s');
+  assert.match(v, /id: lookup\n/);
+  // The parts run unless that lookup found a run — including when it failed.
+  const suite = all.find((j) => j.id === 'suite');
+  assert.equal(suite.if, "${{ !cancelled() && needs.verified.outputs.run == '' }}");
+  assert.match(suite.body.join('\n'), /fail-fast: false/);
 });
 
 test('the diffing gates compare against the queue entry\'s base, never the PR\'s, under merge_group', () => {

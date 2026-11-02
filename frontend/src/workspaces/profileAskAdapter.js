@@ -22,7 +22,8 @@
  * and Log support, New service and New perk (D1595) run through
  * `ui/useScopedFill.jsx` today and keep doing so.
  */
-export const ASK_PANEL = Object.freeze({ available: false, reason: 'ask_panel_unbuilt', waitsOn: '#3706 (D1443)' });
+// D1443 part 5 (#3992): the panel serves these licences now (`WorkerRail`'s `askServes`); the header Ask draws while the rail serves it.
+export const ASK_PANEL = Object.freeze({ available: true, reason: null, waitsOn: null });
 export const ASK_WAITING = Object.freeze({ available: false, count: null, reason: 'proposals_by_page_unbuilt', waitsOn: '#3706 (D1442)' });
 
 /** Whether the Ask panel serves these licences. */

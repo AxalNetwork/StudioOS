@@ -94,8 +94,11 @@ test('the committed registry is exactly what the generator writes, and every des
 
 test('on the real Worker, the order-sensitive deck routers mount just above `decks`, and votes.ts mounts last', () => {
   const mounts = workerMounts();
-  // 392 since D1564 (#3811): deck_publish.ts's router and its public /embed/:token page.
-  assert.equal(mounts.length, 392, 'the Worker no longer makes 392 top-level mounts');
+  // No pinned total (#4134): derived from index.ts's `app.route(` lines plus the
+  // registry's planned mounts, so a new router never conflicts on a number.
+  const indexSrc = readFileSync(resolve(ROOT, 'cloudflare-worker/src/index.ts'), 'utf8');
+  const handLines = [...indexSrc.matchAll(/^app\.route\(/gm)].length;
+  assert.equal(mounts.length, handLines + planMounts(ROUTE_MODULES).length, 'a mount the Worker makes is neither an index.ts line nor a descriptor');
   const at = mounts.findIndex((m) => m.router === decks);
   assert.ok(at > 0, '`decks` is not mounted');
   // The hand-written line above `decks` used to be deckReports + hqDeckReports,
