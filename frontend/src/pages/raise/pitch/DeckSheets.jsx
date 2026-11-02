@@ -11,8 +11,11 @@ import { AUDIENCE_LABELS, KIT_FAILED, NOT_RECORDED, NO_KIT, THEME_LABELS } from 
 import { SLIDE_SIZES, STRUCTURES, aspectOf, placeOf, withAspect } from './gridModel';
 import { applyStructure, movedLine, recommendedLine } from './structureModel';
 import { LANGUAGES, langOf, languageLine, withLanguage } from './deckLanguage';
-import { deckActions as deckActionsAdapter, figures as figuresAdapter, remix as remixAdapter, shown, stagePlan as stagePlanAdapter } from './deckV2Adapter';
-import { STAGES, reorderLabel, reorderNote } from './deckActionsModel';
+import { deckActions as deckActionsAdapter, figures as figuresAdapter, remix as remixAdapter, replaceImages as replaceImagesAdapter, shown, stagePlan as stagePlanAdapter } from './deckV2Adapter';
+import { deckImagesApi } from '../../../lib/api/deckImages';
+import { railPressHeaders } from '../../../lib/railPage';
+import { aiTokens, refusalOf } from './newDeckModel';
+import { STAGES, replaceLabel, replaceNote, reorderLabel, reorderNote } from './deckActionsModel';
 import { GO_TO_CARD, checkCounts, toReview } from './figuresModel';
 import { movedNotice } from './deckReflow';
 
@@ -52,6 +55,11 @@ import { movedNotice } from './deckReflow';
  *                    lines and missing-proof warnings, and "Order for [Seed] ·
  *                    one undo step", which saves the order as one new version.
  *                    Free: no model. Held while the editor has unsaved edits.
+ *
+ *   ReplaceImagesSheet  Whole deck · uses AI › Replace all images (pd13,
+ *                    D1561): one quote for every image area of the deck, the
+ *                    areas left out and why, and one press that draws them all
+ *                    under one hold. The images are proposals, kept card by card.
  *
  * A theme or a layout runs no model: it is applied at once, one edit like any
  * other, and nothing is saved until a version is.
@@ -471,6 +479,64 @@ export function StageSheet({ deckId, readOnly, dirty, onReordered, onClose }) {
       ) : null}
       {note ? <span className={MUTED} role="status" data-testid="pitch-stage-note">{note}</span> : null}
       {error ? <span className={MUTED} role="alert" data-testid="pitch-stage-reorder-error">{error}</span> : null}
+    </Frame>
+  );
+}
+
+export const REPLACE_TITLE = 'Replace all images';
+export const REPLACE_LINE = 'One quote for every image area. Each image is checked before it is shown; one that fails is drawn once more or left out, and never charged.';
+
+/** pd13: Replace all images, one quote and one hold for the whole deck. */
+export function ReplaceImagesSheet({ deckId, readOnly, onDone, onClose }) {
+  const [quote, setQuote] = useState({ status: 'loading' });
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+  const [key] = useState(() => (globalThis.crypto?.randomUUID?.() || `replace-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`));
+  useEffect(() => {
+    let live = true;
+    replaceImagesAdapter(deckId, {}).then((r) => {
+      if (!live) return;
+      setQuote(r.available ? { status: 'ok', data: r.value } : { status: 'error', reason: r.reason });
+    });
+    return () => { live = false; };
+  }, [deckId]);
+  const q = quote.status === 'ok' ? quote.data : null;
+  const leftOut = Array.isArray(q?.left_out) ? q.left_out : [];
+  const canPress = !readOnly && !busy && !result && q?.ai === true && q.count > 0 && q.balance?.ok !== false;
+  const press = async () => {
+    setBusy(true); setError(null);
+    try {
+      const r = await deckImagesApi.replaceAll(deckId, {}, { ...railPressHeaders('deck:image'), 'Idempotency-Key': key });
+      setResult(r);
+      onDone?.(r);
+    } catch (e) { setError(refusalOf(e)?.message || 'The images could not be drawn. Nothing was charged.'); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Frame title={REPLACE_TITLE} testId="pitch-sheet-replace-images" onClose={onClose}>
+      <span className={MUTED}>{REPLACE_LINE}</span>
+      {quote.status === 'loading' ? <span className={MUTED} role="status" data-testid="pitch-replace-loading">Pricing every image area…</span> : null}
+      {quote.status === 'error' ? <span className={MUTED} role="alert" data-testid="pitch-replace-error">{`The images could not be priced: ${quote.reason}`}</span> : null}
+      {q && q.ai === false ? <span className={MUTED} data-testid="pitch-replace-off">{q.message}</span> : null}
+      {q && q.ai === true ? (
+        <>
+          <span className={`text-[12.5px] font-bold ${INK}`} data-testid="pitch-replace-quote">{`${q.count} image area${q.count === 1 ? '' : 's'} · holds up to ${aiTokens(q.hold_microusd) || 'Not recorded'}`}</span>
+          {leftOut.length ? (
+            <ul className="m-0 flex list-none flex-col gap-1 p-0" data-testid="pitch-replace-left-out">
+              {leftOut.map((x) => <li key={`${x.card}-${x.block}`} className={MUTED}>{`Card ${x.card + 1}: left out. ${x.message}`}</li>)}
+            </ul>
+          ) : null}
+          {q.balance?.ok === false ? <span className={MUTED} role="alert" data-testid="pitch-replace-balance">{q.balance.message}</span> : null}
+          {readOnly ? null : (
+            <button type="button" className={GHOST} onClick={press} disabled={!canPress} data-testid="pitch-replace-press">
+              {busy ? 'Drawing…' : replaceLabel(q)}
+            </button>
+          )}
+        </>
+      ) : null}
+      {result ? <span className={MUTED} role="status" data-testid="pitch-replace-result">{replaceNote(result)}</span> : null}
+      {error ? <span className={MUTED} role="alert" data-testid="pitch-replace-press-error">{error}</span> : null}
     </Frame>
   );
 }

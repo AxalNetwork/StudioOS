@@ -9,7 +9,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { deckActionsApi } from '../src/lib/api/deckActions.js';
 import { deckStageApi } from '../src/lib/api/deckStage.js';
-import { reorderLabel, reorderNote, stageLabel, wordingLabel } from '../src/pages/raise/pitch/deckActionsModel.js';
+import { deckImagesApi } from '../src/lib/api/deckImages.js';
+import { replaceLabel, replaceNote, reorderLabel, reorderNote, stageLabel, wordingLabel } from '../src/pages/raise/pitch/deckActionsModel.js';
 import { DECK, mountEditor } from './_pitch_editor_mount.mjs';
 
 const src = (p) => readFileSync(new URL(`../src/${p}`, import.meta.url), 'utf8');
@@ -114,5 +115,39 @@ test('Check claims › Wording: the hold on the button, one press, each finding 
   } finally {
     await m.close();
     Object.assign(deckActionsApi, { wordingQuote: before.quote, wording: before.run });
+  }
+});
+
+test('the Replace all images words: the hold only when quoted; refused images say they were not charged', () => {
+  assert.equal(replaceLabel({ ai: true, hold_microusd: 60000 }), 'Replace all images · holds up to $0.0600');
+  assert.equal(replaceLabel({ ai: false }), 'Replace all images');
+  assert.equal(replaceNote({ images: [{}, {}], refused: [{}] }), '2 images proposed. Keep them card by card. 1 not used after the image check; you were not charged for it.');
+  assert.equal(replaceNote({ images: [], refused: [], stopped: { message: 'Eadwyn stopped.' } }), '0 images proposed. Keep them card by card. Eadwyn stopped.');
+});
+
+test('⋯ › Replace all images opens one quote for the deck; one press, with its own Idempotency-Key, draws them all', async () => {
+  const before = { quote: deckImagesApi.replaceAllQuote, run: deckImagesApi.replaceAll };
+  const pressed = [];
+  deckImagesApi.replaceAllQuote = async () => ({ ai: true, count: 3, total_microusd: 30000, hold_microusd: 60000, areas: [], left_out: [{ card: 1, block: 'i9', code: 'not_illustrative', message: 'A chart is drawn from your figures.' }], balance: { ok: true } });
+  deckImagesApi.replaceAll = async (id, body, headers) => { pressed.push([id, headers['Idempotency-Key']]); return { images: [{}, {}], refused: [{}, {}], left_out: [], hold_microusd: 60000, charged_microusd: 20000 }; };
+  const m = await mountEditor();
+  try {
+    await m.press(m.by('deck-more-open'));
+    await m.press(m.by('deck-more-replace_images'));
+    assert.ok(m.by('pitch-sheet-replace-images'), 'an in-page sheet, never a browser pop-up');
+    assert.equal(m.text(m.by('pitch-replace-quote')), '3 image areas · holds up to $0.0600');
+    assert.match(m.text(m.by('pitch-replace-left-out')), /Card 2: left out\. A chart is drawn from your figures\./);
+    assert.equal(pressed.length, 0, 'opening it charges nothing');
+    await m.press(m.by('pitch-replace-press'));
+    assert.equal(pressed.length, 1);
+    assert.equal(pressed[0][0], 31);
+    assert.equal(typeof pressed[0][1], 'string', 'the press carries its own key');
+    assert.match(pressed[0][1], /^[A-Za-z0-9._:-]{8,64}$/);
+    assert.notEqual(pressed[0][1], 'undefined');
+    assert.match(m.text(m.by('pitch-replace-result')), /2 images proposed\. Keep them card by card\. 2 not used/);
+    assert.equal(m.pr(m.by('pitch-replace-press')).disabled, true, 'one press per sheet');
+  } finally {
+    await m.close();
+    Object.assign(deckImagesApi, { replaceAllQuote: before.quote, replaceAll: before.run });
   }
 });

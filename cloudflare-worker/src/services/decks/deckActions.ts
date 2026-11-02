@@ -1,6 +1,6 @@
 /**
  * D1561 (#3808, deck v2 C13) — the ⋯ menu's whole-deck actions: Reorder for
- * stage and Check wording. Replace all images waits on #3756's pipeline.
+ * stage, Check wording, and the areas Replace all images draws.
  *
  *   reorderForStage   the deck's cards in the stage plan's order (D1522), pure.
  *                     A card the plan does not know moves with the known card
@@ -11,9 +11,13 @@
  *                     guarantee language, quoted from the card. A finding is
  *                     shown only when its quote is on that card word for word,
  *                     and it holds no number the card does not hold.
+ *   replaceAreasOf    every image area of the deck, with its aspect and a
+ *                     description that holds no figure. Replace all images
+ *                     quotes and draws exactly these, under one hold.
  */
 import { cardOfSlide } from '../narrative/arcs';
 import { untrustedBlock, withUntrustedRule } from '../ai/untrusted';
+import { areasOf, boxOfAt } from './structures';
 
 // ─────────────────────────────────────────────────────────── reorder for stage
 
@@ -129,4 +133,43 @@ export function wordingFindings(raw: unknown, cards: WordingCard[]): { findings:
   }
   findings.sort((a, b) => a.card_index - b.card_index);
   return { findings, dropped };
+}
+
+// ─────────────────────────────────────────────────────────── replace all images
+
+export const REPLACE_MAX_AREAS = 24;
+const IMAGE_ASPECTS: Array<{ id: '16:9' | '4:3' | '1:1' | '3:4'; r: number }> = [
+  { id: '16:9', r: 16 / 9 }, { id: '4:3', r: 4 / 3 }, { id: '1:1', r: 1 }, { id: '3:4', r: 3 / 4 },
+];
+
+export type ReplaceArea = { card: number; card_uid: string | null; block: string; area: string | null; aspect: '16:9' | '4:3' | '1:1' | '3:4'; description: string };
+
+/** Words a description may carry: no digits or currency signs, so no figure reaches an image prompt. */
+const wordsOnly = (t: unknown) => String(t ?? '').replace(/[\p{Nd}%$€£¥]/gu, '').replace(/\s+/g, ' ').trim();
+
+/**
+ * Every image area of the deck, in card order: each `image` block on each
+ * card, with the area of the card's grid it fills (`areasOf`), the aspect
+ * nearest its box, and a description from its own alt text, else the card's
+ * heading. Pure; at most `REPLACE_MAX_AREAS`.
+ */
+export function replaceAreasOf(slides: unknown, slideAspect: '16:9' | '4:3' = '16:9'): ReplaceArea[] {
+  const out: ReplaceArea[] = [];
+  (Array.isArray(slides) ? slides : []).forEach((s: any, card) => {
+    const blocks = Array.isArray(s?.blocks) ? s.blocks : [];
+    const { areas } = areasOf(s);
+    const heading = wordsOnly(blocks.find((b: any) => b?.kind === 'text' && b.style === 'heading')?.text || s?.title || '');
+    for (const b of blocks) {
+      if (b?.kind !== 'image' || !b.grid || out.length >= REPLACE_MAX_AREAS) continue;
+      const g = b.grid;
+      const area = areas.find((x) => x.c1 <= g.c1 && x.c2 >= g.c2 && x.r1 <= g.r1 && x.r2 >= g.r2)?.id ?? null;
+      const box = boxOfAt({ c1: g.c1, c2: g.c2, r1: g.r1, r2: g.r2 }, slideAspect);
+      const ratio = box.h > 0 ? box.w / box.h : 16 / 9;
+      const aspect = IMAGE_ASPECTS.reduce((best, x) => (Math.abs(Math.log(x.r / ratio)) < Math.abs(Math.log(best.r / ratio)) ? x : best)).id;
+      const alt = wordsOnly(b.alt);
+      const description = (alt || (heading ? `An illustration for: ${heading}` : 'An illustration for this card')).slice(0, 400);
+      out.push({ card, card_uid: typeof s?.uid === 'string' ? s.uid : null, block: String(b.id ?? ''), area, aspect, description });
+    }
+  });
+  return out;
 }

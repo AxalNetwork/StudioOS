@@ -59,11 +59,13 @@ test('⋯: three sections; adapter items are Coming later with the adapter\'s re
   }
   assert.equal(MORE_MENU[0].items.findIndex((i) => i.id === 'reorder') >= 0, true, 'Reorder for stage sits under This deck');
   const on = moreState(MORE_MENU, { availability });
-  // D1561 (#3808): Stage and Reorder for stage are live; Replace all images waits on #3756's pipeline.
-  const stage = on.sections[0].items.find((i) => i.id === 'stage');
-  assert.deepEqual([stage.disabled, stage.later ?? false], [false, false], 'Stage opens its sheet');
-  const replace = on.sections[2].items.find((i) => i.id === 'replace_images');
-  assert.deepEqual([replace.disabled, replace.later, replace.why], [true, true, 'Not switched on yet.']);
+  // D1561 (#3808): Stage, Reorder for stage and Replace all images are live; Fix with critique (#3799) is still off.
+  for (const [s, id] of [[0, 'stage'], [0, 'reorder'], [2, 'replace_images']]) {
+    const it = on.sections[s].items.find((i) => i.id === id);
+    assert.deepEqual([it.disabled, it.later ?? false], [false, false], `${id} is on`);
+  }
+  const later = on.sections[2].items.find((i) => i.id === 'critique');
+  assert.deepEqual([later.disabled, later.later, later.why], [true, true, 'Not switched on yet.']);
   const readerReorder = moreState(MORE_MENU, { readOnly: true, availability }).sections[0].items.find((i) => i.id === 'reorder');
   assert.deepEqual([readerReorder.disabled, readerReorder.why], [true, 'Read only'], 'a reader cannot reorder the deck');
   assert.equal(on.off, 0, 'nothing wired runs a model today, so nothing is off');
@@ -103,7 +105,7 @@ test('while the editor is not on screen, the ⋯ items it carries out wait; Shar
   const st = moreState([{ id: 'share', label: 'Share', items: [{ id: 'share', label: 'Share link…' }, { id: 'export', label: 'Export…' }] }, ...MORE_MENU], { availability, waiting: EDITOR_WAITING });
   assert.deepEqual(st.sections[0].items.map((i) => i.disabled), [false, false]);
   assert.equal(st.sections[1].items.find((i) => i.id === 'versions').why, EDITOR_WAITING);
-  assert.equal(st.sections[3].items.find((i) => i.id === 'replace_images').why, 'Not switched on yet.', 'an adapter item keeps its own reason');
+  assert.equal(st.sections[3].items.find((i) => i.id === 'critique').why, 'Not switched on yet.', 'an adapter item keeps its own reason');
 });
 
 /* ------------------------------------------------------------------ *
@@ -142,8 +144,8 @@ test('⋯ draws its three sections; an adapter item is greyed, reachable, titled
     const menu = m.by('deck-more-menu');
     assert.equal(m.pr(menu).role, 'menu');
     assert.deepEqual(['deck', 'card', 'ai'].map((s) => m.pr(m.by(`deck-more-section-${s}`))['aria-label']), ['This deck', 'This card', 'Whole deck · uses AI']);
-    // D1561 (#3808): Replace all images is the adapter item still off (it waits on #3756's pipeline).
-    const later = m.by('deck-more-replace_images');
+    // D1561 (#3808): Fix with critique (#3799) is an adapter item still off.
+    const later = m.by('deck-more-critique');
     assert.equal(m.pr(later)['aria-disabled'], true);
     assert.equal(m.pr(later).disabled, undefined, 'still focusable, so the reason is read out');
     assert.equal(m.pr(later).title, 'Not switched on yet.');

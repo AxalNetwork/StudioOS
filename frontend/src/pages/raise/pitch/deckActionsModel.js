@@ -1,6 +1,6 @@
 /**
  * D1561 (#3808): the words of the ⋯ menu's whole-deck actions as pd13, pd23
- * and pd25 draw them: Reorder for stage and Check wording. Pure.
+ * and pd25 draw them: Reorder for stage, Check wording and Replace all images. Pure.
  */
 import { aiTokens } from './newDeckModel';
 
@@ -33,4 +33,21 @@ export function reorderNote(r) {
   if (r.unchanged) return `The cards are already in the ${r.stage_label} order. Nothing was saved.`;
   const n = Number(r.moved) || 0;
   return `Ordered for ${r.stage_label}: ${n} card${n === 1 ? '' : 's'} moved, saved as one version. Undo restores the old order.`;
+}
+
+/** Replace all images' button: the hold when quoted, never a guessed price. */
+export function replaceLabel(quote) {
+  const price = quote?.ai === true ? aiTokens(quote.hold_microusd) : null;
+  return price ? `Replace all images · holds up to ${price}` : 'Replace all images';
+}
+
+/** What the press did, in one line: the images proposed, the ones not used (never charged), and where it stopped. */
+export function replaceNote(r) {
+  if (!r) return null;
+  const n = Array.isArray(r.images) ? r.images.length : 0;
+  const no = Array.isArray(r.refused) ? r.refused.length : 0;
+  const parts = [`${n} image${n === 1 ? '' : 's'} proposed. Keep them card by card.`];
+  if (no) parts.push(`${no} not used after the image check; you were not charged for ${no === 1 ? 'it' : 'them'}.`);
+  if (r.stopped?.message) parts.push(r.stopped.message);
+  return parts.join(' ');
 }

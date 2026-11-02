@@ -50,6 +50,7 @@ import { deckElementsApi } from '../../../lib/api/deckElements.js';
 import { deckFiguresApi } from '../../../lib/api/deckFigures.js';
 import { deckGridApi } from '../../../lib/api/deckGrid.js';
 import { deckImageEditsApi } from '../../../lib/api/deckImageEdits.js';
+import { deckImagesApi } from '../../../lib/api/deckImages.js';
 import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks.js';
 import { deckModelPresetsApi } from '../../../lib/api/deckModelPresets.js';
 import { deckRehearsalsApi } from '../../../lib/api/deckRehearsals.js';
@@ -241,10 +242,11 @@ export const remix = (deckId, card, opts) => through(() => deckRemixApi.remix(de
  * The Wording half stays with #3808 C13.
  */
 export const consistency = (deckId) => through(() => deckCheckApi.read(deckId).then((r) => r?.consistency ?? null), SURFACES.consistency.issue);
-// D1561 (#3808): Reorder for stage saves the stage plan's order as one new version. Replace all images waits on
-// #3756's pipeline, and the New deck outline's reorder on a stage order the browser can read; both stay off.
+// D1561 (#3808): Reorder for stage saves the stage plan's order as one new version; Replace all images quotes every
+// image area as one figure on #3756's pipeline. The New deck outline's reorder waits on a stage order the browser
+// can read, and stays off.
 export const deckActions = (deckId, body) => through(() => deckActionsApi.reorderForStage(deckId, body), SURFACES.deckActions.issue);
-export const replaceImages = off('replaceImages');
+export const replaceImages = (deckId, body) => through(() => deckImagesApi.replaceAllQuote(deckId, body), SURFACES.replaceImages.issue);
 export const outlineReorder = off('outlineReorder');
 export const brandLocks = off('brandLocks');
 export const pptxImport = off('pptxImport');
