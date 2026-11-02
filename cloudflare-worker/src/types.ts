@@ -486,6 +486,8 @@ export interface Env {
   // D1502 part 2 (#3753): one room per deck that drives its generation runs, and one governor per account that throttles their steps.
   DECK_GEN_ROOM?: DurableObjectNamespace;
   AI_GOVERNOR?: DurableObjectNamespace;
+  // D1581 (#3828): the phone remote for Present, paired by code. Optional: without it the remote routes answer 503 `remote_off`.
+  DECK_REMOTE?: DurableObjectNamespace;
   // Vectorize index `axal-search` (768-dim, cosine) for semantic search.
   // Optional so unit-test envs without the binding still type-check; the
   // search service no-ops gracefully when undefined.

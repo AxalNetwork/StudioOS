@@ -28,6 +28,8 @@ import { sanitizeBlocks, sanitizeModel } from '../src/services/decks/slideModel.
 import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withGuard } from './_guard_stub.mjs';
+import { pipelineAI, type PipelineAnswers } from './_pipeline_ai.ts';
+import { xmpOf } from '../src/services/decks/imageBytes.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { overlayContrast as panelContrast } from '../../frontend/src/pages/raise/pitch/imageContrast.js';
 import { loadSchema } from './_schema_once.mjs';
@@ -39,7 +41,7 @@ const ORIGIN = 'https://axal.vc';
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 const BODY = { use: 'content', description: 'A calm month-end close at a tidy desk', style: 'flat', palette: 'brand', aspect: '4:3', count: 2, card: 0 };
 
-async function fixture({ balance = 5_000_000 } = {}) {
+async function fixture({ balance = 5_000_000, answers = {} as PipelineAnswers } = {}) {
   __resetForTest();
   // In memory: nothing is copied to disk per case.
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
@@ -52,10 +54,11 @@ async function fixture({ balance = 5_000_000 } = {}) {
   db.prepare('INSERT INTO pitch_decks (id, project_id, version, slides, is_current) VALUES (7, 1, 3, ?, 1)').run(JSON.stringify([{ title: 'Solution' }]));
   db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(2,?)').run(balance);
   for (const key of ['founder:free', 'founder:studio']) db.prepare('INSERT OR IGNORE INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES(?,0,0,2)').run(key);
-  const calls: Array<{ model: string; prompt: string }> = [];
-  const AI = withGuard({
-    run: async (model: string, input: any) => { calls.push({ model, prompt: String(input?.prompt ?? '') }); return { image: PNG }; },
-  });
+  // D1505 (#3756): each image is a pipeline of seven runs; `calls` is its draws,
+  // `all` every run, so the D903 assertions about the draw keep their meaning.
+  const ai = pipelineAI(answers, PNG);
+  const all = ai.calls;
+  const AI = withGuard({ run: ai.run });
   const r2 = new Map<string, Uint8Array>();
   const FILES = {
     put: async (key: string, bytes: Uint8Array) => { r2.set(key, new Uint8Array(bytes)); },
@@ -72,7 +75,7 @@ async function fixture({ balance = 5_000_000 } = {}) {
   const holds = () => (db.prepare('SELECT COUNT(*) AS n FROM ai_budget_reservations').get() as any).n as number;
   const rows = () => db.prepare('SELECT * FROM deck_images ORDER BY id').all() as any[];
   const audits = () => (db.prepare("SELECT action FROM activity_logs WHERE entity_type = 'raise.pitch-deck' ORDER BY id").all() as any[]).map((r) => r.action);
-  return { db, env, app, calls, r2, runs, holds, rows, audits, close };
+  return { db, env, app, get calls() { return ai.draws(); }, all, r2, runs, holds, rows, audits, close };
 }
 type F = Awaited<ReturnType<typeof fixture>>;
 
@@ -246,7 +249,11 @@ test('every image keeps its usage row and its charge, lives in R2, and is read a
     assert.ok(runs.every((x) => x.user_id === 2 && x.rail_option === 'deck:image'));
     const rows = f.rows();
     assert.deepEqual(rows.map((x) => x.ai_usage_log_id), runs.map((x) => x.id), 'each image names its own run');
-    assert.deepEqual(rows.map((x) => x.charged_microusd), runs.map((x) => x.charged_microusd), 'and keeps what it was charged');
+    // D1505 (#3756): an image is a pipeline of runs, so its row keeps what the
+    // whole pipeline charged: every run whose record is that pipeline's.
+    const ofPipeline = (uid: string) => (f.db.prepare("SELECT COALESCE(SUM(charged_microusd), 0) AS n FROM ai_usage_logs WHERE record_ref = ? AND guard_for IS NULL AND task <> 'safety'").get(`deckimg:${uid}`) as any).n;
+    assert.deepEqual(rows.map((x) => x.charged_microusd), rows.map((x) => ofPipeline(x.pipeline_uid)), 'and keeps what its pipeline was charged');
+    assert.ok(rows.every((x, i) => x.charged_microusd >= runs[i].charged_microusd), 'the draw is part of that charge');
     assert.ok(rows.every((x) => x.state === 'proposed' && x.source === 'generated' && x.mime === 'image/png' && x.use === 'content' && x.card === 0));
     assert.ok(rows.every((x) => f.r2.has(x.r2_key) && x.r2_key.startsWith('deck-images/1/')));
     for (const image of r.body.images) {
@@ -255,7 +262,7 @@ test('every image keeps its usage row and its charge, lives in R2, and is read a
       assert.doesNotMatch(JSON.stringify(image), /data:image/);
       assert.equal(image.model_label, 'FLUX.1 Schnell');
     }
-    assert.equal(f.holds(), 2, 'each image was held before it ran, as every charged run is');
+    assert.equal(f.holds(), 1, 'the press held every image before the first one ran (D1505: one hold, its pipelines run under it)');
     assert.deepEqual(f.audits(), ['deck_image_proposed'], 'one cycle row for the run, with no figure');
   } finally { f.close(); }
 });
@@ -270,7 +277,12 @@ test('a proposal is the venture\'s own; Keep makes it readable by its URL; a dis
     const own = await call(f, 2, file(a.uid));
     assert.equal(own.status, 200); assert.equal(own.headers.get('content-type'), 'image/png');
     assert.equal(own.headers.get('cache-control'), 'private, no-store');
-    assert.deepEqual([...own.body], [...Buffer.from(PNG, 'base64')]);
+    // D1505 (#3756, V = A): the stored file is the drawn PNG with its XMP
+    // packet naming it machine-made; nothing else in it changed.
+    const png = [...Buffer.from(PNG, 'base64')];
+    assert.deepEqual([...own.body].slice(0, 33), png.slice(0, 33), 'the signature and IHDR are the drawn image\'s');
+    assert.deepEqual([...own.body].slice(-png.length + 33), png.slice(33), 'and so is everything after the packet');
+    assert.match(xmpOf(own.body) ?? '', /trainedAlgorithmicMedia/);
     assert.equal((await call(f, 3, `/api/decks/images/${a.uid}/keep`, { json: {} })).status, 404, 'another founder cannot keep it');
     const kept = await call(f, 2, `/api/decks/images/${a.uid}/keep`, { json: { alt: 'A tidy desk at month end' } });
     assert.equal(kept.status, 200); assert.equal(kept.body.image.state, 'kept'); assert.equal(kept.body.image.alt, 'A tidy desk at month end');
