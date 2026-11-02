@@ -28,6 +28,11 @@
  * (the Arrange set's Lock) is written with PowerPoint's move and resize locks,
  * and the members of a group are one group shape.
  *
+ * D1534 (#3778): an image is drawn as the browser draws it — its cover fit at
+ * its focus point and its zoom window as the picture's `<a:srcRect>`, its
+ * filter as the picture's own effects and its colour wash as a filled
+ * rectangle over it (`imageLook.ts`, one table for every renderer).
+ *
  * Speaker notes are each card's notes when they were asked for, and empty
  * otherwise. Nothing here logs a title, a figure or a URL.
  */
@@ -38,6 +43,9 @@ import { buildNotesSlideXml, buildSlideXml, buildZip, notesPackageParts, tf, xml
 import { IMAGE_MISSING, NOT_RECORDED, NO_NOTES, chartLabel, type ImageKind } from './offlineHtml';
 import { tableLines } from './slideModel';
 import { decorPlan, type DecorDraw } from './arrange';
+import { FILTER_SPECS, blipEffectsXml, filterOf, srcRectXml, visibleSource, washColour } from './imageLook';
+import { imageSize } from './imageBytes';
+import { DEFAULT_INK } from './images';
 
 /** The print card (D1112) the block geometry is measured on. */
 export const CARD_W = 1920;
@@ -87,12 +95,42 @@ function textBox(id: number, name: string, r: Rect, paragraphs: string[], anchor
 </p:sp>`;
 }
 
-function picture(id: number, name: string, r: Rect, rid: string, alt: string, pinned = false): string {
+function picture(id: number, name: string, r: Rect, rid: string, alt: string, pinned = false, look: { src?: string; effects?: string } = {}): string {
+  const blip = look.effects ? `<a:blip r:embed="${rid}">${look.effects}</a:blip>` : `<a:blip r:embed="${rid}"/>`;
   return `<p:pic>
   <p:nvPicPr><p:cNvPr id="${id}" name="${xmlEsc(name)}" descr="${xmlEsc(alt)}"/><p:cNvPicPr><a:picLocks noChangeAspect="1"${pinned ? ` ${LOCKS}` : ''}/></p:cNvPicPr><p:nvPr/></p:nvPicPr>
-  <p:blipFill><a:blip r:embed="${rid}"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>
+  <p:blipFill>${blip}${look.src ?? ''}<a:stretch><a:fillRect/></a:stretch></p:blipFill>
   <p:spPr><a:xfrm><a:off x="${emu(r.x)}" y="${emu(r.y)}"/><a:ext cx="${emu(r.w)}" cy="${emu(r.h)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
 </p:pic>`;
+}
+
+/** D1534 (#3778): a filter's colour wash, a filled rectangle over the picture at the preset's alpha (`imageLook.ts`). */
+function wash(id: number, name: string, r: Rect, colour: string, alpha: number): string {
+  return `<p:sp>
+  <p:nvSpPr><p:cNvPr id="${id}" name="${xmlEsc(name)}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+  <p:spPr><a:xfrm><a:off x="${emu(r.x)}" y="${emu(r.y)}"/><a:ext cx="${emu(r.w)}" cy="${emu(r.h)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="${colour.slice(1).toUpperCase()}"><a:alpha val="${Math.round(alpha * 100_000)}"/></a:srgbClr></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr>
+</p:sp>`;
+}
+
+/** D1534: an embedded picture's pixel size, from its own header; null when it cannot be read. */
+export function pixelSize(kind: ImageKind, bytes: Uint8Array): { w: number; h: number } | null {
+  if (kind === 'gif') return bytes.length >= 10 ? { w: bytes[6] | (bytes[7] << 8), h: bytes[8] | (bytes[9] << 8) } : null;
+  const s = imageSize(bytes, kind === 'png' ? 'image/png' : 'image/jpeg');
+  return s ? { w: s.width, h: s.height } : null;
+}
+
+/**
+ * D1534: the picture's look as the browser draws it — the cover fit at its
+ * focus point and its zoom window (as `<a:srcRect>`), its filter (as blip
+ * effects) — and its wash, when its filter has one.
+ */
+export function imageLookParts(b: any, r: Rect, img: { kind: ImageKind; bytes: Uint8Array }, ink: string = DEFAULT_INK) {
+  const size = pixelSize(img.kind, img.bytes);
+  const src = size ? srcRectXml(visibleSource(b.crop ?? null, b.fit ?? null, { w: r.w, h: r.h }, size)) : '';
+  const filter = filterOf(b.filter);
+  const spec = FILTER_SPECS[filter ?? 'original'];
+  const colour = washColour(spec, ink);
+  return { src, effects: blipEffectsXml(filter), wash: colour && spec.wash ? { colour, alpha: spec.wash.alpha } : null };
 }
 
 /** D1533: a decor item's box on the card: its 8 px `at` (slide pixels), else its cell range, else the whole card. */
@@ -264,7 +302,9 @@ async function blockSlideXml(slide: any, idx: number, total: number, input: Edit
       if (!b.image_url) continue;
       const img = input.images.get(b.image_url) ?? null;
       if (img && MEDIA[img.kind]) {
-        put(b, r, picture(id++, `Image ${b.id}`, r, embed(img.kind, img.bytes), String(b.alt || ''), b.pinned === true));
+        const look = imageLookParts(b, r, img);
+        put(b, r, picture(id++, `Image ${b.id}`, r, embed(img.kind, img.bytes), String(b.alt || ''), b.pinned === true, look));
+        if (look.wash) put(b, r, wash(id++, `Image ${b.id} filter`, r, look.wash.colour, look.wash.alpha));
         counts.placed += 1;
       } else {
         put(b, r, textBox(id++, `Image ${b.id}`, r, [run(IMAGE_MISSING, { size: pt(22), italic: true, color: MUTED })], 'ctr', b.pinned === true));

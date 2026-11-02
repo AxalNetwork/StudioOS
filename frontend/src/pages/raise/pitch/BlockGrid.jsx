@@ -1,9 +1,10 @@
 import React from 'react';
 import { NOT_RECORDED, blockLabel, runsOf, tileValue } from './editorModel';
-import { SOURCE_NOT_RECORDED, chartLabel, objectPosition, sourceOf } from './presentExportModel';
+import { SOURCE_NOT_RECORDED, chartLabel, sourceOf } from './presentExportModel';
 import { STATED_CHIP, TYPED_LINE, UNCITED_CHIP, UNCITED_LINE, faceOf, numbersIn, projectionOf } from './figuresModel';
 import { isTypedChart, marketCircles, projectionLines, tableView } from './typedChartsModel';
 import { aspectOf, placeOf } from './gridModel';
+import { imageLookStyle } from './imageLook';
 
 export { gridBlocks } from './presentExportModel';
 
@@ -150,7 +151,16 @@ export function BlockView({ block: b, colours, live = false, sources = false, si
   }
   if (b.kind === 'image') {
     // D903: the image keeps its fit and its crop (the point that stays in view); its alt text travels everywhere it is drawn.
-    if (b.image_url) return <img src={b.image_url} alt={b.alt || ''} className={`h-full w-full rounded ${b.fit === 'contain' ? 'object-contain' : 'object-cover'}`} style={{ objectPosition: objectPosition(b.crop) }} />;
+    // D1534 (#3778): its zoom window and filter, the one rule the editable PowerPoint reads too (`imageLook.js`).
+    if (b.image_url) {
+      const look = imageLookStyle(b);
+      return (
+        <span className="relative block h-full w-full overflow-hidden rounded" data-testid={live ? undefined : `deck-block-image-${b.id}`}>
+          <img src={b.image_url} alt={b.alt || ''} className="block" style={look.img} />
+          {look.wash ? <span aria-hidden="true" className="pointer-events-none absolute inset-0" style={{ background: look.wash }} /> : null}
+        </span>
+      );
+    }
     return live ? null : <span className="text-[11px] italic">Image · none chosen</span>;
   }
   if (b.kind === 'video') {
