@@ -113,6 +113,24 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-11-02 — Learning on Stream (#3726)
+
+The owner's two artifacts for #3726 (boards LR1–LR21), decoded by
+`scripts/read-canvas.mjs`:
+- `Learning Stream Page.dc.html` is the page, one frame per `v` value (`lr1`
+  to `lr21b`; a `-d` suffix is dark);
+- `Learning Stream · Boards.dc.html` is the board grid, LR1 to LR21. It
+  imports the page by name.
+
+**One edit, named.** The Axal VC mark (`uploads/axal-logo-200x200.png`) points
+at `/axal-mark.png`, as in the earlier intakes. No other value was edited.
+
+**Grade: EXTENDS D562 (D3726).** The home's progress strip, New this week and
+Recommended; the player's resume, position writes, chapters and plain
+transcript; and a member's own program page at
+`/learning/my-programs/:program`. Stream itself, the studio, analytics and
+the list reads wait for L1–L6 (#4176–#4181) and say so.
+
 ## Landed 2026-11-01 — One interview, and its session (#3710)
 
 The owner's artifacts `CoQEhHr637iFdxgpe2WKx9` (the page, `Interview Record Page.dc.html`)

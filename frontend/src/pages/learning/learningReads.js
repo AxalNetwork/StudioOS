@@ -123,3 +123,19 @@ export async function markItemComplete(uid) {
   const reply = await learningApi.recordProgress({ subject_kind: 'item', subject_uid: uid, status: 'completed' });
   return reply?.progress || null;
 }
+
+/**
+ * D3726 LR4 — the player's resume position on a standalone video or a lesson's
+ * item: `status: 'started'` with the second it reached (a completed item stays
+ * completed, and the percent never goes backwards — the route's own rules).
+ */
+export async function recordItemPosition(uid, seconds, percent = null) {
+  const reply = await learningApi.recordProgress({
+    subject_kind: 'item',
+    subject_uid: uid,
+    status: 'started',
+    position_seconds: seconds,
+    ...(Number.isInteger(percent) ? { percent } : {}),
+  });
+  return reply?.progress || null;
+}
