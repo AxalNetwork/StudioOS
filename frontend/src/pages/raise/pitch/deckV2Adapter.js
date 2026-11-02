@@ -48,6 +48,7 @@ import { deckFiguresApi } from '../../../lib/api/deckFigures.js';
 import { deckGridApi } from '../../../lib/api/deckGrid.js';
 import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks.js';
 import { deckModelPresetsApi } from '../../../lib/api/deckModelPresets.js';
+import { deckRehearsalsApi } from '../../../lib/api/deckRehearsals.js';
 import { deckRemixApi } from '../../../lib/api/deckRemix.js';
 import { deckStageApi } from '../../../lib/api/deckStage.js';
 import { deckTemplatesApi } from '../../../lib/api/deckTemplates.js';
@@ -237,7 +238,11 @@ export const slideAnalytics = off('slideAnalytics');
  */
 export const presence = (deckId) => through(() => deckCoeditApi.presence(deckId), SURFACES.presence.issue);
 export const cardStatus = off('cardStatus');
-export const rehearse = off('rehearse');
+/**
+ * D1580 F1 (#3827): the founder's rehearsals of this version, newest first; the surface runs and reads them through
+ * `deckRehearsalsApi`. Present's Rehearse panel runs, reads and keeps through the same client.
+ */
+export const rehearse = (deckId) => through(() => deckRehearsalsApi.list(deckId), SURFACES.rehearse.issue);
 export const walkthrough = off('walkthrough');
 export const retryFailed = off('retryFailed');
 export const unseenBatches = off('unseenBatches');

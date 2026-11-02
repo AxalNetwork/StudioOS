@@ -276,6 +276,7 @@ import deckCritic from './routes/deck_critic';
 import deckQaRoutes from './routes/deck_qa';
 import deckTransform from './routes/deck_transform';
 import deckImages from './routes/deck_images';
+import deckRehearsals from './routes/deck_rehearsals';
 // D1565 (#3812): one link per investor, and tailored variants.
 import deckInvestorLinks from './routes/deck_investor_links';
 import notificationsRoutes from './routes/notifications';
@@ -505,6 +506,7 @@ import { bindingKey } from './util/schemaBootstrap';
 // Task #9 — 'exploring' holding-state role (CHECK relax + user_role_review side table).
 import { ensureExploringSchema, exploringSchemaReady } from './services/exploringSchema';
 import { queueConsumer, dlqConsumer } from './queue-consumer';
+import { agentDlqConsumer, agentQueueConsumer, dispatchQueue } from './agents/agentQueue';
 import { rateLimitMiddleware } from './middleware/rateLimit';
 import { observabilityMiddleware } from './middleware/observability';
 import { securityHeadersMiddleware } from './middleware/securityHeaders';
@@ -1446,6 +1448,8 @@ app.route('/api/decks', deckQaRoutes);
 app.route('/api/decks', deckTransform);
 // D903 (#2682): card and background images (`/:id/images…`, `/images/:uid/…`), before `decks` so `GET /:id` cannot answer `/images/…`.
 app.route('/api/decks', deckImages);
+// D1580 F1 (#3827): rehearse a deck version and read its report.
+app.route('/api/decks', deckRehearsals);
 // D1565 (#3812): `/:id/investor-links…` and `/:id/variants`, before `decks` so its `/:id` routes cannot answer them.
 app.route('/api/decks', deckInvestorLinks);
 // #4105: deck_quotes.ts (D1556), deck_reports.ts (D1540, with HQ's queue at
@@ -2263,6 +2267,18 @@ export default {
             console.error('[cron] subprocessor notices unreadable');
           }
         }
+        // D1528 (#3847): the agent sweep. Its own minute (% 5 === 1), under
+        // this lease, only while the engine is enabled. NOT GATED ON
+        // `hqCadences`: each deployment's agents and runs are its own rows.
+        if (now.getUTCMinutes() % 5 === 1 && env.AGENT_ENGINE && env.AGENT_ENGINE !== 'off' && env.TEAM_AGENTS_ENABLED === 'true') {
+          try {
+            const { sweepAgents } = await import('./agents/sweep');
+            const r = await sweepAgents(env, now);
+            if (r.resent || r.admitted) cronSummary.push(`agents resent=${r.resent} admitted=${r.admitted}`);
+          } catch {
+            console.error('[cron] agent sweep unreadable');
+          }
+        }
         // D1259: a published venture model rescores the next batch of ventures
         // each minute until every venture has its new rows. HQ only: only HQ
         // publishes.
@@ -2335,6 +2351,14 @@ export default {
             await sweepQuietChats(env, now);
           } catch (e) {
             console.error('[cron] channel sweeps failed', e instanceof Error ? e.message : 'error');
+          }
+          // D1580 F1 (#3827) — a rehearsal's audio once its hour is up, unless the founder kept it.
+          try {
+            const { purgeRehearsalAudio } = await import('./services/rehearsalAudio');
+            const r = await purgeRehearsalAudio(env, now);
+            if (r.deleted) console.info(`[cron] rehearsal audio purge deleted=${r.deleted}`);
+          } catch (e) {
+            console.error('[cron] rehearsal audio purge failed', e instanceof Error ? e.message : 'error');
           }
         }
         // D685 §5.6 — recordings a closed tab left behind: drafts never
@@ -3279,13 +3303,12 @@ export default {
     await work;
   },
   async queue(batch: MessageBatch<JobMessage>, env: Env, ctx: ExecutionContext) {
-    // Task #7 (IE) — route DLQ batches to dlqConsumer so exhausted CF Queue
-    // messages are mirrored to D1 for admin inspection + retry.
-    if (batch.queue?.includes('dlq')) {
-      await dlqConsumer(batch, env, ctx);
-    } else {
-      await queueConsumer(batch, env, ctx);
-    }
+    // D1528 (#3847): the agent queue's branch comes FIRST, before the `dlq`
+    // test, and its own DLQ goes to agentDlqConsumer (which ends the run and
+    // mirrors the message). Task #7 (IE) — every other DLQ batch goes to
+    // dlqConsumer so exhausted CF Queue messages are mirrored to D1 for admin
+    // inspection + retry. `agents/agentQueue.ts`'s dispatchQueue holds the order.
+    await dispatchQueue(batch, env, ctx, { queue: queueConsumer, dlq: dlqConsumer, agent: agentQueueConsumer, agentDlq: agentDlqConsumer });
   },
 };
 
@@ -3306,3 +3329,8 @@ export { HqEntrypoint, BranchEntrypoint } from './rpc';
 export { MeetingBotRun } from './durable-objects/meeting-bot-run';
 export { DeckGenRoom } from './durable-objects/deck-gen-room';
 export { AiGovernor } from './durable-objects/ai-governor';
+
+// D1528 (#3847, #3742 E3): the agent engine's scope object and task Workflow,
+// named in wrangler.toml's [[durable_objects.bindings]] and [[workflows]].
+export { AgentScope } from './agents/doRuntime';
+export { AgentTaskWorkflow } from './agents/taskWorkflow';

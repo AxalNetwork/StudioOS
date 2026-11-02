@@ -24,6 +24,7 @@ addresses here with DR24's notice.
 | `filesModel.js` | Pure (D1106): who can open a file (the investor rule, then each grant's folders), the tree and table, every dialog's words with who gains or loses, the upload queue, storage, and Home's blocks. |
 | `DataRoomHome.jsx` | DR1, Home's blocks: the counts, Needs you (with the open access requests from D1104's queue, D1284), who has access, what was added; the last ninety days say what they wait for. |
 | `DataRoomFiles.jsx` | DR2, Files: the folder tree, search, the table and the bulk bar (Move, Set gate, Set end date, Match to checklist, Remove, Clear). |
+| `DataRoomSearch.jsx` | #3938 part 2: search inside the files, on the room's own index; no model to pick. The founders' Index files for search; `shared` searches as an investor. Mounted at the top of Files. |
 | `DataRoomFile.jsx` | DR3 and DR15, one file's sheet (the shared `Sheet`, D1317) at `/raise/data-room/file/<id>`: who can open it now and why, its gate, what it answers, its versions with Make current, and the links issued and refusals. |
 | `DataRoomFolders.jsx` | DR5: a folder's sheet (`Sheet`, D1317; its NDA switch, Rename, Delete folder) and New folder. |
 | `DataRoomUpload.jsx` | DR4 and DR4s: Upload, the sheet at `/raise/data-room/new`, with its queue in states. |

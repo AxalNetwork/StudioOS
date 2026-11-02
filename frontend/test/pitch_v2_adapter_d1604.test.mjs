@@ -27,6 +27,7 @@ import { deckRemixApi } from '../src/lib/api/deckRemix.js';
 import { deckTypedValuesApi } from '../src/lib/api/deckTypedValues.js';
 import { deckCheckApi } from '../src/lib/api/deckCheck.js';
 import { deckElementModelsApi } from '../src/lib/api/deckElementModels.js';
+import { deckRehearsalsApi } from '../src/lib/api/deckRehearsals.js';
 import { deckFiguresApi } from '../src/lib/api/deckFigures.js';
 import { deckCommentsApi } from '../src/lib/api/deckComments.js';
 import { deckBatchesApi, parseSse } from '../src/lib/api/deckBatches.js';
@@ -146,6 +147,20 @@ test('D1538 (#3787): typedTables is swapped — it answers through deckTypedValu
   assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckTypedValues\)/, 'the route is mounted');
 });
 
+test('D1580 (#3827): rehearse is swapped — it answers through deckRehearsalsApi.list, and a refusal is never an empty list', async () => {
+  // Mutation checked: rehearse left as off('rehearse') → the available answer fails; the issue key changed → the 404 answer fails.
+  const real = deckRehearsalsApi.list;
+  try {
+    deckRehearsalsApi.list = async (id) => ({ deck_id: id, rehearsals: [] });
+    assert.deepEqual(await adapter.rehearse(7), { available: true, value: { deck_id: 7, rehearsals: [] } });
+    deckRehearsalsApi.list = async () => { throw Object.assign(new Error('Not found'), { status: 404 }); };
+    assert.deepEqual(await adapter.rehearse(7), { available: false, reason: NOT_ON, issue: 3827 });
+    deckRehearsalsApi.list = async () => { throw Object.assign(new Error('The rehearsals could not be read.'), { status: 500 }); };
+    assert.equal((await adapter.rehearse(7)).unreadable, true, 'unreadable, never an empty list');
+  } finally { deckRehearsalsApi.list = real; }
+  assert.equal(adapter.availability('rehearse'), null);
+});
+
 test('D1523 (#3775): figures is swapped — it answers through deckFiguresApi.list, and a refusal is never a row of zeros', async () => {
   // Mutation checked: figures left as off('figures') → the available answer fails; the issue key changed → the 404 answer fails.
   const real = deckFiguresApi.list;
@@ -239,6 +254,9 @@ test('the seam reaches no network, and no client method exists for a route that 
   // D1503 (#3754): the element models route is on main, with its client.
   assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_element_models.ts')), /deckElementModels\.get\(['"]\/:id\{\[0-9\]\+\}\/element-models['"]/);
   assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckElementModels\)/);
+  // D1580 (#3827): the rehearsals route is on main, with its client.
+  assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_rehearsals.ts')), /deckRehearsals\.get\(['"]\/:id\{\[0-9\]\+\}\/rehearsals['"]/);
+  assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckRehearsals\)/);
   // D1523 (#3775): the figures route is on main, with its client.
   assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_figures.ts')), /r\.get\(['"]\/:id\{\[0-9\]\+\}\/figures['"]/);
   // D1501 (#3751): the working copy has its routes (`/:id/draft`, `/:id/cards/:uid`) and its client.
