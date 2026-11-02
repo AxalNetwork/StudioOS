@@ -284,12 +284,13 @@ test('AF1: "N waiting" counts this venture’s rows; an unreadable read draws no
   const m = await mount(module(), { routes: { '/api/ai/rail/proposals?': () => json(LIST) } });
   try {
     assert.match(m.calls[0].url, /\/api\/ai\/rail\/proposals\?option=form%3Afeature&status=proposed/);
-    assert.equal(m.text(m.byTestId('fill-module-waiting')), '2 waiting');
+    // D1443 part 4 (#3992): the trigger is the shared Ask, its count the Ask button's own pill.
+    assert.equal(m.text(m.byTestId('fill-module-trigger-waiting')), '2 waiting');
     assert.equal(m.props(m.byTestId('fill-module-trigger'))['aria-label'], 'Ask Eadwyn, 2 waiting');
   } finally { await m.unmount(); }
   const k = await mount(module(), { routes: { '/api/ai/rail/proposals?': () => json({ detail: 'x' }, 500) } });
   try {
-    assert.equal(k.byTestId('fill-module-waiting'), undefined, 'never "0 waiting" for a failed read');
+    assert.equal(k.byTestId('fill-module-trigger-waiting'), undefined, 'never "0 waiting" for a failed read');
     assert.equal(k.props(k.byTestId('fill-module-trigger'))['aria-label'], 'Ask Eadwyn');
     await k.press('fill-module-trigger');
     assert.match(k.text(k.byTestId('fill-rows-unreadable')), /This is not a claim that none is waiting\./);
@@ -377,7 +378,11 @@ test('AF16: Ask Eadwyn runs the form’s handler for rows; a refusal is a senten
 
 test('AF23 and the wiring: Sources a bottom sheet, Preview full height, 44px targets; the founder forms are mounted', () => {
   const sheet = readFileSync(new URL('../src/ui/FillSheet.jsx', import.meta.url), 'utf8');
-  assert.match(sheet, /phone=\{step === 'sources' && read\.status !== 'error' && !nothingToFill \? 'sheet' : 'full'\}/);
+  // D1443 part 4 (#3992): no Sheet left; both are the Ask panel's intents (at 390px the panel is the bottom sheet).
+  for (const src of [sheet, readFileSync(new URL('../src/pages/cycles/FillRowsPanel.jsx', import.meta.url), 'utf8')]) {
+    assert.doesNotMatch(src, /import Sheet from|ui\/Sheet\.jsx|<Sheet\b/, 'a Fill surface still opens a Sheet');
+    assert.match(src, /import AskIntent from '[./]+(ui\/)?AskIntent\.jsx'/);
+  }
   for (const name of ['BTN', 'GHOST']) assert.match(sheet, new RegExp(`const ${name} = '[^']*max-sm:min-h-\\[44px\\]'`), name);
   const panel = readFileSync(new URL('../src/pages/cycles/FillRowsPanel.jsx', import.meta.url), 'utf8');
   for (const name of ['BTN', 'GHOST']) assert.match(panel, new RegExp(`const ${name} = '[^']*max-sm:min-h-\\[44px\\]'`), name);
