@@ -4967,7 +4967,7 @@
   {
    "pageKey": "Founder · Build",
    "optionKey": "draft:build/plan",
-   "optionLabel": "Word with Eadwyn",
+   "optionLabel": "Word the plan",
    "kind": "write",
    "handler": "draft",
    "routeTask": "rail_write",

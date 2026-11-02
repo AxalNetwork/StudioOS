@@ -23,7 +23,7 @@ import { createCycleRecords } from '../src/routes/cycle_records.ts';
 import jobsPublic from '../src/routes/jobs_public.ts';
 import { publicCompensation } from '../src/services/jobBoardCommon.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SQL = resolve(here, '../sql');
@@ -32,7 +32,7 @@ const M507 = '507_job_postings_comp_public.sql';
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const FOUNDER = 1; const PA = 7;
 
-const newer = readdirSync(M).filter((n) => /^\d+_.*\.sql$/.test(n)).filter((n) => migrationNumber(n) > BASELINE_CUTOFF).sort();
+const newer = readdirSync(M).filter((n) => /^\d+_.*\.sql$/.test(n)).filter((n) => migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations);
 
 function build(upTo?: string): DatabaseSync {
   const db = new DatabaseSync(':memory:');

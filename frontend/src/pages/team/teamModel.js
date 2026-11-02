@@ -468,7 +468,8 @@ export function eventWords(e) {
   return `${what} by ${who}`;
 }
 
-export const agentName = (a) => [a?.first_name, a?.last_name].map((s) => String(s || '').trim()).filter(Boolean).join(' ') || a?.role_name || 'Unnamed agent';
+// D4117 (#4117): an agent is its persona (Vesta, Orrin, …); the Worker sends no job title.
+export const agentName = (a) => String(a?.persona?.name || '').trim() || [a?.first_name, a?.last_name].map((s) => String(s || '').trim()).filter(Boolean).join(' ') || 'Unnamed agent';
 
 const PAUSE = {
   manual: (a) => ({ reason: a?.paused_by?.name ? `Paused by ${a.paused_by.name}` : 'Paused by a person', fix: 'Resume' }),
