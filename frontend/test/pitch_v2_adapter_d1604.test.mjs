@@ -364,5 +364,5 @@ test('D1543 (#3781): ventureElements is swapped — one element through deckVent
   assert.equal(adapter.availability('ventureElements'), null);
   assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckVentureElements\)/, 'the route is mounted');
   assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_venture_elements.ts')), /\.get\(['"]\/:id\{\[0-9\]\+\}\/venture-elements\/:element['"]/);
-  assert.match(read('frontend/src/lib/api.js'), /^export \* from '\.\/api\/deckVentureElements\.js';$/m, 'one line in the D527 block');
+  assert.match(read('frontend/src/lib/apiModules.generated.js'), /^export \* from '\.\/api\/deckVentureElements\.js';$/m, 'one line in the generated D527 block (#4105)');
 });
