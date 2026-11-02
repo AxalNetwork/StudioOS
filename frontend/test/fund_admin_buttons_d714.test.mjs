@@ -117,7 +117,7 @@ test('the pages draw Capital call, Distribute and Issue through FundActControl w
 });
 
 test('fundAdminApi and fundFeesApi are re-exported by one line each, in the block\'s order (D527)', () => {
-  const api = src('lib/api.js');
+  const api = src('lib/apiModules.generated.js');
   // The fund lines in the block's order. What sorts before them changes as clients are added (D1325's fills.js).
   assert.ok(api.includes("export * from './api/fundAdmin.js';\nexport * from './api/fundBooklets.js';\nexport * from './api/fundFees.js';\nexport * from './api/fundLedger.js';"));
   assert.ok(src('lib/api/fundAdmin.js').includes("request('/fund-admin/access')"));

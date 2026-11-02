@@ -6,12 +6,16 @@
 //      and `../../lib/pitchCopyLength` have no suffix on disk).
 //   2. load() — transform `.ts`/`.tsx`/`.jsx` source to plain JS via Vite's
 //      Oxc transform (Vite 8 dropped the bundled esbuild), emitting the
-//      automatic React JSX runtime so `react/jsx-runtime` is used.
+//      automatic React JSX runtime so `react/jsx-runtime` is used. Before the
+//      transform, Vite's `import.meta.glob` is expanded the way Vite expands
+//      it (`_importMetaGlob.mjs`, #4105: App.jsx collects its route modules
+//      with one).
 //
 // Used by frontend/test/spinout_demoday_deck.test.mjs via:
 //   node --import ./frontend/test/_deck-loader.mjs --test …
 import { existsSync, statSync, readFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { expandImportMetaGlob } from './_importMetaGlob.mjs';
 
 const TRY_EXTS = ['.tsx', '.ts', '.jsx', '.js', '.mjs', '.cjs', '.json'];
 const TRANSFORM_EXTS = /\.(tsx|ts|jsx)$/;
@@ -79,7 +83,9 @@ export async function load(url, context, nextLoad) {
   }
   if (url.startsWith('file://') && TRANSFORM_EXTS.test(new URL(url).pathname)) {
     const filename = fileURLToPath(url);
-    const source = readFileSync(filename, 'utf8');
+    // #4105: App.jsx collects its route modules with Vite's import.meta.glob,
+    // which node does not have; expand it here the way Vite does.
+    const source = expandImportMetaGlob(readFileSync(filename, 'utf8'), filename);
     const transform = await getTransform();
     const { code } = await transform(source, filename, {
       jsx: { runtime: 'automatic' },
