@@ -158,7 +158,7 @@ test('the editor: Structure offers 17 tiles with a preview, and applying one is 
     assert.equal(m.by('pitch-editor-block-b2'), undefined);
     assert.match(m.text(m.by('pitch-editor-structure-note')), /^2 blocks move to the notes\. The speaker notes keep each one\.$/);
     assert.match(m.text(m.by('pitch-editor-save-state')), /Unsaved changes/);
-    assert.match(m.pr(m.by('pitch-editor-block-b1'))['aria-label'], /c1–12 × r1–6/);
+    assert.match(m.text(m.by('pitch-editor-area-name-b1')), /c1–12 × r1–6/);
   } finally { await m.close(); }
 });
 
@@ -175,15 +175,15 @@ test('the editor: a divider moves by arrow keys, says its readout, refuses with 
     let stopped = false;
     await m.fire(d, 'onKeyDown', { key: 'ArrowRight', stopPropagation() { stopped = true; } });
     assert.ok(stopped, 'the arrow does not also move the area focus');
-    assert.match(m.pr(m.by('pitch-editor-block-b2'))['aria-label'], /c1–8 × r2–6/);
-    assert.match(m.pr(m.by('pitch-editor-block-b3'))['aria-label'], /c9–10 × r2–3/);
+    assert.match(m.text(m.by('pitch-editor-area-name-b2')), /c1–8 × r2–6/);
+    assert.match(m.text(m.by('pitch-editor-area-name-b3')), /c9–10 × r2–3/);
     assert.equal(m.text(m.by('pitch-editor-divider-line')), '7 | 3 → 8 | 2');
     await m.fire(m.by('pitch-editor-divider-v:b2|b3'), 'onKeyDown', { key: 'ArrowRight' });
     await m.fire(m.by('pitch-editor-divider-v:b2|b3'), 'onKeyDown', { key: 'ArrowRight' });
     assert.equal(m.text(m.by('pitch-editor-divider-refused')), 'Each side keeps at least one cell.');
-    assert.match(m.pr(m.by('pitch-editor-block-b3'))['aria-label'], /c10 × r2–3/, 'the refused move changed nothing');
+    assert.match(m.text(m.by('pitch-editor-area-name-b3')), /c10 × r2–3/, 'the refused move changed nothing');
     await m.fire(m.by('pitch-editor-divider-v:b2|b3'), 'onKeyDown', { key: 'ArrowUp' });
-    assert.match(m.pr(m.by('pitch-editor-block-b3'))['aria-label'], /c10 × r2–3/, 'a vertical divider ignores Up');
+    assert.match(m.text(m.by('pitch-editor-area-name-b3')), /c10 × r2–3/, 'a vertical divider ignores Up');
     assert.match(m.text(m.by('pitch-editor-save-state')), /Unsaved changes/);
   } finally { await m.close(); }
 });

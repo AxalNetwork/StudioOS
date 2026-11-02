@@ -15,7 +15,7 @@ import useMenuFocus from './useMenuFocus';
  * own). Past `SHOWN` cards the rest fold under "+ N more cards" (the current
  * card always shows). Each card has its menu, the card's ⋯ (pd13): Duplicate,
  * Move up, Move down and Mark as appendix are local edits held until a
- * version is saved; Hide and Move to section read the adapter (#3788) and are
+ * version is saved; Comments opens the card's threads (pd33, D1570); Hide and Move to section read the adapter (#3788) and are
  * drawn "Coming later" while their surface answers unavailable. A reader
  * reads the strip and moves nothing. The card menu keeps the keyboard a menu
  * promises (`useMenuFocus.js`).
@@ -58,6 +58,8 @@ export function cardMenuItems(index, count, card, avail = availability) {
     { id: 'appendix', label: card?.appendix ? 'Not an appendix' : 'Mark as appendix' },
     { id: 'hide', label: 'Hide', adapter: 'media' },
     { id: 'section', label: 'Move to section', adapter: 'media' },
+    // D1570 (#3817, pd33): wired on main (`deckV2Adapter.comments` is swapped), so it reads no adapter here.
+    { id: 'comments', label: 'Comments' },
   ].map((it) => {
     const a = it.adapter ? avail(it.adapter) : null;
     const later = Boolean(it.adapter) && (!a || a.available !== true);

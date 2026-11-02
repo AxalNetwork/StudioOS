@@ -1,4 +1,5 @@
-import React, { useId } from 'react';
+import React, { useEffect, useId, useState } from 'react';
+import { askPanelAdapter } from './askPanelAdapter.js';
 import { openAskPanel, useAskPanel } from './eadwynPanel.js';
 
 /**
@@ -82,13 +83,21 @@ export function AskButtonView({ onClick, disabled = false, expanded, waiting = n
  * nothing while no rail serves the viewer: a page with no rail, a support
  * session or an Explorer never shows Ask (AK13). `label` names what the panel
  * is about ("Team · Northwind Labs"); without it the rail's own page label is
- * used. The "N waiting" count waits on D1442's proposals-by-page read, so it is
- * not drawn: a count that is not read is never "0 waiting".
+ * used. D1442: its "N waiting" is the member's open proposals on the rail's
+ * page (`askPanelAdapter.waiting`), read again each time the panel closes; a
+ * count that could not be read draws nothing, never "0 waiting".
  */
 export function PageAsk({ label, testId = 'ask-eadwyn' }) {
   const ask = useAskPanel();
+  const [waiting, setWaiting] = useState(null);
+  useEffect(() => {
+    if (!ask.available || !ask.page || ask.open) return undefined;
+    let live = true;
+    askPanelAdapter.waiting(ask.page).then((w) => { if (live) setWaiting(w.available ? w.data?.count ?? null : null); });
+    return () => { live = false; };
+  }, [ask.available, ask.page, ask.open]);
   if (!ask.available) return null;
-  return <AskButtonView onClick={() => openAskPanel(label)} expanded={ask.open} testId={testId} />;
+  return <AskButtonView onClick={() => openAskPanel(label)} expanded={ask.open} waiting={waiting} testId={testId} />;
 }
 
 export default AskButtonView;

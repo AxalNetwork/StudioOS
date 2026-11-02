@@ -40,6 +40,9 @@ const SCOPES = [
     'Files you marked NDA-only stay hidden until that advisor has a signed NDA on file — shown to them as a count, never as names.'],
   ['scope_sessions', 'Your sessions with other advisors',
     'This shows the advisor who else you have been working with, and on what. It is the widest of the three; leave it off unless you mean it.'],
+  // D1570 (#3817, owner decision Q = B): advisors and Operating Partners comment on the deck only when you grant it.
+  ['scope_deck', 'Comment on your pitch deck',
+    'They read and write the comments on your deck\'s cards, can be mentioned and assigned, and can be asked to approve before you share. An Operating Partner can be given this one alone.'],
 ];
 
 /**
@@ -334,7 +337,7 @@ function ReceivedWorkProducts() {
 export default function AdvisorGrantSection({ projectUid }) {
   const [state, setState] = useState({ loading: true, error: null, items: [] });
   const [email, setEmail] = useState('');
-  const [scopes, setScopes] = useState({ scope_project: true, scope_data_room: false, scope_sessions: false });
+  const [scopes, setScopes] = useState({ scope_project: true, scope_data_room: false, scope_sessions: false, scope_deck: false });
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
 
@@ -411,7 +414,7 @@ export default function AdvisorGrantSection({ projectUid }) {
 
       <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
         This links an <strong>existing</strong> Axal advisor account — it does not send an
-        invitation. An address that is not an advisor is refused, because the grant would
+        invitation. An Operating Partner can be given deck comments alone. Any other address that is not an advisor is refused, because the grant would
         do nothing: every read re-checks the role, so an advisor who later stops being one
         loses access on their next attempt without you doing anything.
       </p>
@@ -431,7 +434,7 @@ export default function AdvisorGrantSection({ projectUid }) {
                 {g.status === 'active' ? 'Can see: ' : 'Access revoked · '}
                 {g.status === 'active' && (
                   [g.scope_project && 'their record', g.scope_data_room && 'open data-room files',
-                    g.scope_sessions && 'your other advisory sessions'].filter(Boolean).join(', ')
+                    g.scope_sessions && 'your other advisory sessions', g.scope_deck && 'deck comments'].filter(Boolean).join(', ')
                   || 'nothing — every scope is off'
                 )}
               </div>
