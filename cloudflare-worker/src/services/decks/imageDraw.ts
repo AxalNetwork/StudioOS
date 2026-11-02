@@ -203,7 +203,7 @@ export async function drawDeckImages(env: Env, a: DrawArgs): Promise<Drawn | { r
         const pipelineUid = crypto.randomUUID();
         const rail = a.parentHold ? a.rail : { ...a.rail, record: `deckimg:${pipelineUid}` };
         const input = { ...inputFor(a, art, v, parent), rail };
-        const r = await runPipeline({ ...input, draw: { ...input.draw, rail } }, { run: (o) => run(env, { ...o, surface: a.surface }), quoteRun: (o) => quoteRun(env, o) as any, charged });
+        const r = await runPipeline({ ...input, draw: { ...input.draw, rail } }, { run: (o) => run(env, { ...o, surface: a.surface, rail: o.rail ?? rail }), quoteRun: (o) => quoteRun(env, o) as any, charged });
         const promptSha = await sha256Hex(new TextEncoder().encode(r.prompt));
         if (!r.ok && !r.image) { stopped = { code: r.code, message: r.message }; break; }
         if (!r.ok) {
