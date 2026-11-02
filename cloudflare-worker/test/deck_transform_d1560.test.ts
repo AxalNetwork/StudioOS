@@ -73,7 +73,7 @@ test('a language outside Guard\'s set warns; one inside it does not', () => {
   for (const lang of ['Japanese', 'Arabic', 'Korean', 'Dutch', 'Chinese (Simplified)']) {
     const w = languageWarning(lang);
     assert.equal(w?.code, 'guard_language', lang);
-    assert.match(String(w?.message), new RegExp(`not trained on ${lang.replace(/[()]/g, '\\$&')}`));
+    assert.ok(String(w?.message).includes(`not trained on ${lang}`), lang);
   }
 });
 
@@ -84,7 +84,7 @@ test('a run sees only the founder\'s words: titles and unbound text blocks, neve
   assert.deepEqual(cardsOf(SLIDES, ['1']).map((c) => c.uid), ['c-team'], 'a place picks too');
   const msg = transformMessage('translate', cards, { language: 'French' });
   assert.match(msg.user, /Translate each block into French/);
-  assert.match(msg.user, new RegExp(TITLE_ID));
+  assert.ok(msg.user.includes(TITLE_ID));
   assert.doesNotMatch(msg.user, /Bound words|Paying customers|"42"/);
   for (const action of ['speaker_notes', 'proofread', 'fix_slide', 'translate'] as const) assert.match(TRANSFORM_OPTIONS[action], /^deck:/);
 });
