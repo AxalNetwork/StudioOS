@@ -33,7 +33,8 @@
  * `deckInvestorLinksApi`, `deckTypedValuesApi.list`).
  * `elementModels` (D1503, #3754) answers through `deckElementModelsApi.read`.
  * And `consistency` (D1555, #3802): the free rules ride the deck check's own
- * reply, so it answers through `deckCheckApi.read`.
+ * reply, so it answers through `deckCheckApi.read`. `comments` (D1570, #3817)
+ * answers through `deckCommentsApi.list`.
  *
  * Fields on routes that exist (`context.inferred` and `context.freshness`
  * from #3877; the PostHog, HubSpot and Linear source rows from #3880) need
@@ -48,6 +49,7 @@ import { deckRemixApi } from '../../../lib/api/deckRemix.js';
 import { deckTypedValuesApi } from '../../../lib/api/deckTypedValues.js';
 import { deckCheckApi } from '../../../lib/api/deckCheck.js';
 import { deckElementModelsApi } from '../../../lib/api/deckElementModels.js';
+import { deckCommentsApi } from '../../../lib/api/deckComments.js';
 
 export { NOT_ON };
 
@@ -108,7 +110,7 @@ export const SURFACES = Object.freeze({
 const off = (name) => async () => unavailable(SURFACES[name].issue);
 
 /** The rows whose route is on main: each answers through its real client, never unavailable by default. */
-export const SWAPPED = Object.freeze(['grid', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency']);
+export const SWAPPED = Object.freeze(['grid', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'comments']);
 
 /**
  * A client call, as a surface reads it, for the day a method is swapped:
@@ -184,7 +186,11 @@ export const pptxImport = off('pptxImport');
 // D1565 (#3812): wired. Each body is `through(() => <client>(…), issue)`.
 export const investorLinks = (deckId) => through(() => deckInvestorLinksApi.investorLinks(deckId), SURFACES.investorLinks.issue);
 export const withdrawInvestorLink = (deckId, shareId) => through(() => deckInvestorLinksApi.withdrawInvestorLink(deckId, shareId), SURFACES.withdrawInvestorLink.issue);
-export const comments = off('comments');
+/**
+ * D1570 (#3817): the venture's comment threads, who is reading, the people who can be mentioned and the open count
+ * (`GET /api/decks/:id/comments`). The sheet writes through `deckCommentsApi`; no model is in a thread.
+ */
+export const comments = (deckId) => through(() => deckCommentsApi.list(deckId), SURFACES.comments.issue);
 export const slideAnalytics = off('slideAnalytics');
 export const presence = off('presence');
 export const cardStatus = off('cardStatus');
