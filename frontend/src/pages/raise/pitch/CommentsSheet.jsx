@@ -198,7 +198,7 @@ function Approvers({ deckId, people, viewer }) {
               <span className="flex items-center gap-2">
                 <span className={x.approved ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}>{x.approved ? `Approved v${a.version}` : 'Not approved yet'}</span>
                 {viewer.can_manage ? (
-                  <button type="button" className="text-[11.5px] font-bold text-axal-muted hover:text-axal-ink dark:text-gray-400" disabled={busy}
+                  <button type="button" className="text-[11.5px] font-bold text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100" disabled={busy}
                     onClick={() => write('approvers', () => deckCommentsApi.setApprovers(deckId, ids.filter((id) => id !== Number(x.user_id))))}
                     aria-label={`Remove ${nameOf(x)} as an approver`}>Remove</button>
                 ) : null}
