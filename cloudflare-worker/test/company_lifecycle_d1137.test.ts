@@ -23,14 +23,12 @@ import { resolveActiveCompany } from '../src/middleware/activeCompany.ts';
 import { membershipEvent, MEMBERSHIP_EVENT_KINDS } from '../src/services/companyMembershipEvents.ts';
 import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
+import { addAgentEngineTables } from './_agent_engine_tables.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const M597 = readFileSync(new URL('../sql/migrations/597_company_archive_and_events.sql', import.meta.url), 'utf8');
 const M685 = readFileSync(new URL('../sql/migrations/685_company_legal_record_and_slugs.sql', import.meta.url), 'utf8');
-// #3850 (E6): a move changes the agent engine's goals and tasks in its own batch, so the engine's tables are here.
-const ENGINE = ['506_ai_rail_proposals', '712_team_agents', '727_scope_goals_and_tasks', '728_agent_engine', '762_scope_task_work_board', '763_task_comments_labels_milestones']
-  .map((m) => readFileSync(new URL(`../sql/migrations/${m}.sql`, import.meta.url), 'utf8'));
 
 // People: Ada is the primary admin of Northwind (company 1) and owns the venture; Ben is a member of
 // Northwind and a co-founder of the venture with a founder account; Cy is a co-founder with no founder
@@ -42,10 +40,10 @@ const VENTURE = 10;
 
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  for (const t of ['users', 'founders', 'projects', 'company_profiles', 'user_company_links', 'activity_logs', 'incorporations', 'ai_usage_logs']) db.exec(tableFromBaseline(BASELINE, t));
+  for (const t of ['users', 'founders', 'projects', 'company_profiles', 'user_company_links', 'activity_logs', 'incorporations']) db.exec(tableFromBaseline(BASELINE, t));
   db.exec(M597);
   db.exec(M685); // D1415: projects.slug, which a move checks
-  for (const m of ENGINE) db.exec(m);
+  addAgentEngineTables(db); // #3850 (E6): a move changes the engine's goals and tasks in its own batch
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');
   u.run(ADA, 'founder', 'Ada Made-up', 'ada@example.test', 101);
   u.run(BEN, 'founder', 'Ben Made-up', 'ben@example.test', 102);
