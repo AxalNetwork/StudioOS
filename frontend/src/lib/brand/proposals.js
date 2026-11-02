@@ -41,7 +41,9 @@ export function keptProposals(draft, proposed) {
 /**
  * #4046 B3: the standard Ask's rule on the brand page. Ask places a value only
  * where the field is open: blank, still the page's own default, or still what
- * Ask placed there last time. A founder's own words are never overwritten.
+ * the page put there itself (`previous`: the copy step 2 seeds from the
+ * template kit, and what Ask placed last, AI or not). A founder's own words
+ * are never overwritten.
  */
 export const OPEN_DEFAULTS = Object.freeze({ cta_text: 'Join the waitlist' });
 
@@ -59,15 +61,16 @@ export function placeAsk(draft, answer, previous = {}) {
 
 /**
  * #4046 B3: a template's sections under the same rule. A section the founder
- * changed from the template's default keeps their words; a blank one, or one
- * still at its default, takes what Ask wrote.
+ * changed keeps their words; a blank one, one still at its default, or one
+ * still holding what Ask wrote last (`previous`) takes what Ask wrote.
  */
-export function placeAskContent(existing = {}, defaults = {}, written = {}) {
+export function placeAskContent(existing = {}, defaults = {}, written = {}, previous = {}) {
   const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
   const blank = (v) => v == null || (typeof v === 'string' && !v.trim()) || (Array.isArray(v) && !v.length);
   const out = { ...defaults, ...existing };
   for (const [k, v] of Object.entries(written || {})) {
-    if (blank(existing?.[k]) || same(existing?.[k], defaults?.[k])) out[k] = v;
+    const cur = existing?.[k];
+    if (blank(cur) || same(cur, defaults?.[k]) || (previous?.[k] !== undefined && same(cur, previous[k]))) out[k] = v;
   }
   return out;
 }

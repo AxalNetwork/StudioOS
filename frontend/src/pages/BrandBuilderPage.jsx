@@ -67,11 +67,16 @@ export default function BrandBuilderPage() {
   // D1324 (#3485): what the last Ask proposed, until a Save records it.
   const [aiProposed, setAiProposed] = useState({});
   const aiModel = useRef(null);
-  // #4046 B3: a value Ask placed reads "Not saved" until the founder saves or types over it.
-  const placedMark = (f) => (aiProposed[f] && String(draft?.[f] ?? '').trim() === String(aiProposed[f]).trim()
+  // #4046 B3: what the page put in a field itself (step 2's kit copy, and what Ask placed, AI or not):
+  // a field still holding it is open to the next Ask. `askContent` is the same for template sections.
+  const askOpen = useRef({});
+  const askContent = useRef({});
+  // A value Ask placed reads "Not saved" until the founder saves or types over it.
+  const [askPlaced, setAskPlaced] = useState({});
+  const placedMark = (f) => (askPlaced[f] && String(draft?.[f] ?? '').trim() === String(askPlaced[f]).trim()
     ? <span className="block" data-testid={`brand-placed-${f}`}><FillMark mark={null} placed /></span> : null);
   // A proposal belongs to the venture it was drafted for: another venture's Save never files it.
-  useEffect(() => { setAiProposed({}); aiModel.current = null; }, [projectId]);
+  useEffect(() => { setAiProposed({}); aiModel.current = null; setAskPlaced({}); askOpen.current = {}; askContent.current = {}; }, [projectId]);
   const [busy, setBusy] = useState(false);
   const [logoBusy, setLogoBusy] = useState(false);
   const [error, setError] = useState('');
@@ -279,6 +284,8 @@ export default function BrandBuilderPage() {
         : leavingSig
           ? { theme_color: '#7c3aed', palette_bg: '#faf7ff', palette_ink: '#1b1430', palette_secondary: '#c4b5fd', palette_accent: '#f59e0b' }
           : {};
+      // #4046 B3: the kit's copy is the page's, not the founder's: Ask may replace it while it stands.
+      askOpen.current = { ...askOpen.current, cta_text: kit.ctaLabel || d.cta_text, headline: kit.headline, subheadline: kit.subheadline, ...(d.name ? {} : { name: kit.brandName }) };
       return {
         ...d,
         ...palettePatch,
@@ -322,15 +329,24 @@ export default function BrandBuilderPage() {
       }, fillHeaders('form:landing'));
       if (activeForm.current !== form) return;
       // #4046 B3: the standard Ask fills open fields only; what the founder wrote stays theirs.
-      const placed = placeAsk(draft, r, aiProposed);
-      const proposed = proposalsFrom(r);
-      setAiProposed((old) => ({ ...old, ...Object.fromEntries(Object.entries(proposed).filter(([f]) => f in placed)) }));
-      aiModel.current = r?.ai_generated === true && r?.model ? String(r.model) : null;
+      const placed = placeAsk(draft, r, askOpen.current);
+      askOpen.current = { ...askOpen.current, ...placed };
+      setAskPlaced((old) => ({ ...old, ...placed }));
+      // D1324: provenance is Eadwyn's words only, each filed under the model that wrote it. A run by another
+      // model files only its own; a heuristic run (no model) leaves what an earlier run proposed as it was.
+      const model = r?.ai_generated === true && r?.model ? String(r.model) : null;
+      const fresh = Object.fromEntries(Object.entries(proposalsFrom(r)).filter(([f]) => f in placed));
+      if (model && Object.keys(fresh).length) {
+        if (model === aiModel.current) setAiProposed((old) => ({ ...old, ...fresh }));
+        else { setAiProposed(fresh); aiModel.current = model; }
+      }
+      const prevContent = askContent.current[key] || {};
+      askContent.current = { ...askContent.current, [key]: { ...prevContent, ...((r && r.content) || {}) } };
       setDraft((d) => ({
         ...d,
         // A field typed into while Ask ran is the founder's: it keeps what they typed.
         ...Object.fromEntries(Object.entries(placed).filter(([f]) => String(d[f] ?? '') === String(draft[f] ?? ''))),
-        content_json: { ...(d.content_json || {}), [key]: placeAskContent(d.content_json?.[key], defaultsForKey(key), (r && r.content) || {}) },
+        content_json: { ...(d.content_json || {}), [key]: placeAskContent(d.content_json?.[key], defaultsForKey(key), (r && r.content) || {}, prevContent) },
       }));
     } catch (e) { setError(e?.message || 'Auto-fill failed'); }
     finally { setAutofillBusy(false); }
@@ -356,6 +372,7 @@ export default function BrandBuilderPage() {
       const lp = await api.brandSaveLanding(projectId, Object.keys(kept).length ? { ...draft, ai_proposals: kept, ai_model: aiModel.current } : draft);
       setLanding(lp);
       setAiProposed({});
+      setAskPlaced({});
       // Spin-Out Lab — Week 2 brand basics: name + tagline + primary colour.
       if (draft.name.trim() && (draft.tagline || '').trim() && draft.theme_color) {
         await markMilestone(user, 'brand_basics_filled');
@@ -830,7 +847,8 @@ export default function BrandBuilderPage() {
               {/* Tagline iterator */}
               <div className="border border-gray-200 rounded-lg p-3 dark:border-gray-800">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] font-medium text-gray-600 dark:text-gray-400">Tagline iterator</span>
+                  <span className="text-[11px] font-medium text-gray-600 dark:text-gray-400">Tagline iterator{draft.tagline ? ` · ${draft.tagline}` : ''}</span>
+                  {placedMark('tagline')}
                   <button
                     onClick={() => { setShowTaglineIterator((v) => !v); if (!showTaglineIterator) suggestTaglines(); }}
                     disabled={taglineBusy}

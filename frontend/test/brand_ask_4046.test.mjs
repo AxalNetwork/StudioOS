@@ -19,6 +19,7 @@ import BrandBuilderPage from '../src/pages/BrandBuilderPage.jsx';
 import { api } from '../src/lib/api.js';
 import { optionLabel } from '../src/lib/fillRun.js';
 import { OPEN_DEFAULTS, placeAsk, placeAskContent } from '../src/lib/brand/proposals.js';
+import { getRecommendedTemplatesForAudience } from '../src/lib/brand/flow.js';
 import { mountContracts } from './_contracts_dom.mjs';
 
 const PAGE = 'Founder · Grow · Distribution';
@@ -37,6 +38,9 @@ test('placeAskContent: a section changed from its default keeps the founder\'s w
   assert.deepEqual(placeAskContent({ hero: 'Mine', items: [{ t: 'a' }] }, defaults, { hero: 'Ask hero', items: [{ t: 'b' }] }), { hero: 'Mine', items: [{ t: 'b' }] });
   assert.deepEqual(placeAskContent(undefined, defaults, { hero: 'Ask hero' }), { hero: 'Ask hero', items: [{ t: 'a' }] });
   assert.deepEqual(placeAskContent({ hero: '' }, defaults, { hero: 'Ask hero' }), { hero: 'Ask hero', items: [{ t: 'a' }] });
+  // Review finding: a second Ask refreshes a section that still holds what Ask wrote last.
+  assert.deepEqual(placeAskContent({ hero: 'Ask hero' }, defaults, { hero: 'Ask hero 2' }, { hero: 'Ask hero' }).hero, 'Ask hero 2');
+  assert.deepEqual(placeAskContent({ hero: 'Mine' }, defaults, { hero: 'Ask hero 2' }, { hero: 'Ask hero' }).hero, 'Mine');
 });
 
 test('the one control is the standard Ask; nothing reads "Auto-fill with AI"', () => {
@@ -52,7 +56,8 @@ test('the one control is the standard Ask; nothing reads "Auto-fill with AI"', (
 
 async function mount(answerWith) {
   const original = { ...api }; const saves = [];
-  let release; const pending = new Promise((r) => { release = r; });
+  const answers = Array.isArray(answerWith) ? [...answerWith] : [answerWith];
+  let release; let pending = new Promise((r) => { release = r; });
   api.listProjects = async () => [{ id: 1, name: 'Harbour', description: 'Local dispatch for small fleets' }];
   api.brandGetLanding = async () => ({ name: 'Harbour', template: 'minimal', audience: 'customer', headline: 'Founder headline', tagline: 'Founder tagline', theme_color: '#7c3aed' });
   api.brandListWaitlist = async () => ({ signups: [] });
@@ -60,6 +65,7 @@ async function mount(answerWith) {
   api.brandListTemplates = async () => ({ templates: [] });
   api.myAiSpend = api.aiPricing = async () => null;
   api.brandAutofillLanding = () => pending;
+  const nextRun = () => { pending = new Promise((r) => { release = r; }); };
   api.brandSaveLanding = async (id, body) => { saves.push([id, structuredClone(body)]); return { ...body }; };
   const m = await mountContracts(React.createElement(BrandBuilderPage), '/build/brand');
   for (let i = 0; i < 4; i += 1) await m.flush();
@@ -67,7 +73,14 @@ async function mount(answerWith) {
   return {
     ...m, saves, byTestId,
     async ask() { await act(async () => { m.props(byTestId('fill-form-trigger')).onClick(); }); },
-    async answer() { await act(async () => { release(answerWith); await pending; }); await m.flush(); },
+    async answer() { const a = answers.shift(); await act(async () => { release(a); await pending; }); await m.flush(); nextRun(); },
+    async pickKit() {
+      const textOf = (n) => (n.nodeType === 3 ? n.textContent || '' : n.childNodes?.length ? n.childNodes.map(textOf).join('') : n.textContent || '');
+      const kit = getRecommendedTemplatesForAudience('customer').find((t) => t.visualTemplate !== 'minimal');
+      const pick = m.nodes().find((n) => n.tagName === 'BUTTON' && textOf(n).includes(kit.label));
+      assert.ok(pick, kit.label);
+      await act(async () => { m.props(pick).onClick(); }); await m.flush();
+    },
     async typeInto(placeholder, value) {
       const n = m.nodes().find((x) => m.props(x)?.placeholder === placeholder);
       assert.ok(n, placeholder);
@@ -93,5 +106,36 @@ test('the page: Ask fills the open fields, marks them "Not saved", and Save send
     assert.equal(body.subheadline, 'Ask subheadline');
     assert.equal(body.cta_text, 'Talk to us', 'typed while Ask ran: the founder\'s');
     assert.deepEqual(body.ai_proposals, { subheadline: 'Ask subheadline' }, 'only what Ask placed and the founder kept');
+  } finally { await m.close(); }
+});
+
+test('the page: copy step 2 seeded from the template kit is the page\'s, so Ask may replace it', async () => {
+  // Review finding (high): before, a kit-seeded headline counted as the founder's and Ask never filled it.
+  // Mutation checked: the askOpen seed in chooseTemplate dropped → the headline stays the kit's.
+  const m = await mount({ ai_generated: true, model: 'm', headline: 'Ask headline', content: {} });
+  try {
+    await m.pickKit();
+    await m.ask();
+    await m.answer();
+    await m.click('Save');
+    assert.equal(m.saves.at(-1)[1].headline, 'Ask headline');
+  } finally { await m.close(); }
+});
+
+test('the page: a fallback answer (no model) is marked and stays open to the next Ask, and is never filed as Eadwyn\'s', async () => {
+  // Review finding (medium): fallback text got no "Not saved" mark and locked the field against the next Ask.
+  const m = await mount([
+    { ai_generated: false, subheadline: 'Fallback subheadline', content: {} },
+    { ai_generated: true, model: 'm', subheadline: 'Ask subheadline', content: {} },
+  ]);
+  try {
+    await m.ask(); await m.answer();
+    assert.ok(m.byTestId('brand-placed-subheadline'), 'fallback text reads "Not saved" too');
+    await m.ask(); await m.answer();
+    await m.click('Save');
+    const [, body] = m.saves.at(-1);
+    assert.equal(body.subheadline, 'Ask subheadline', 'the next Ask replaces what Ask placed');
+    assert.deepEqual(body.ai_proposals, { subheadline: 'Ask subheadline' });
+    assert.equal(body.ai_model, 'm');
   } finally { await m.close(); }
 });
