@@ -53,7 +53,7 @@ when adding a kind.
   drops Axal's own copies (by `calendar_sync_records` and by iCalUID) and
   flags near matches.
 - `agent_session` (#3957, D1613 §6) has no file here: its reader is
-  `services/agents/sessions.ts` (`sessionEvents`), registered in `READERS`
+  `../agents/sessions.ts` (`sessionEvents`), registered in `READERS`
   and in `registry.ts` as the "AI agents" family. It is page only, and in
   `PERSONAL_ONLY_KINDS`: a team's members read its sessions, never a staff scope.
 - `items.ts`: page-only drawer fields for calendar items. Feed and provider
