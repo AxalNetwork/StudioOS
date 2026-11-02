@@ -101,8 +101,20 @@ r.get('/webinars/:uid', async (c) => {
   const w = await visible(c, user); if (w instanceof Response) return w;
   const [reg, counts] = await Promise.all([registrationOf(c.env, w.id, user.id), registeredCounts(c.env, [w.id])]);
   const now = Date.now();
+  // #4180 (lr9b): the host — the Super Admin, or whoever made the webinar — reads "Attended [n] of [m]".
+  // An attendance nobody recorded is null, never 0.
+  const host = isSuperAdmin(user) || Number((w as any).created_by) === Number(user.id);
+  let attendance: { registered_count: number; attended_count: number | null } | undefined;
+  if (host) {
+    const a = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS registered, SUM(CASE WHEN attended = 1 THEN 1 ELSE 0 END) AS attended,
+              SUM(CASE WHEN attended IS NOT NULL THEN 1 ELSE 0 END) AS recorded
+         FROM learning_webinar_registrations WHERE webinar_id = ?`,
+    ).bind(w.id).first<{ registered: number; attended: number | null; recorded: number | null }>();
+    attendance = { registered_count: Number(a?.registered ?? 0), attended_count: Number(a?.recorded ?? 0) > 0 ? Number(a?.attended ?? 0) : null };
+  }
   return c.json({
-    webinar: memberWebinar(w, { registeredCount: counts.get(w.id) ?? 0, registered: Boolean(reg), now }),
+    webinar: { ...memberWebinar(w, { registeredCount: counts.get(w.id) ?? 0, registered: Boolean(reg), now }), ...(attendance ?? {}) },
     registration: registrationView(reg ?? null),
     recording: webinarPhase(w, now) === 'past' ? await recordingOf(c.env, w) : null,
     ics_href: `/api/learning/webinars/${w.uid}/calendar.ics`,

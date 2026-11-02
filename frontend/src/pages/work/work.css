@@ -58,6 +58,12 @@
 .dark .wk-menu { box-shadow: 0 10px 30px rgba(0, 0, 0, .45); }
 .wk-menu li { padding: 6px 8px; border-radius: 7px; font-size: 13px; cursor: pointer; }
 .wk-menu li:hover { background: var(--wk-lav); }
+.wk-menu li button { all: unset; display: block; width: 100%; cursor: pointer; }
+.wk-menu li button:focus-visible { outline: 2px solid var(--wk-amb); outline-offset: 2px; }
+/* #3973: a move or create the Worker refused, in its own words; "+ New item"'s one-line form. Variables only, so dark mode follows. */
+.wk-notice { margin: 0; padding: 8px 12px; border-radius: 10px; background: var(--wk-amb-bg); border: 1px solid var(--wk-amb-edge); color: var(--wk-body); font-size: 13px; }
+.wk-new { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.wk-new input { flex: 1 1 220px; min-height: 34px; padding: 0 10px; border: 1px solid var(--wk-line2); border-radius: 9px; background: var(--wk-card); color: var(--wk-body); font-size: 13px; }
 .wk-table-wrap { display: flex; flex-direction: column; gap: 8px; overflow-x: auto; }
 .wk-table { width: 100%; border-collapse: collapse; background: var(--wk-card); border: 1px solid var(--wk-line); border-radius: 12px; font-size: 13px; }
 .wk-table th { text-align: left; font: 700 10.5px ui-monospace, monospace; letter-spacing: .07em; text-transform: uppercase; color: var(--wk-mut); padding: 10px 12px; border-bottom: 1px solid var(--wk-line); }

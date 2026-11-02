@@ -75,7 +75,7 @@ export type ElementOpts = {
   logos?: string[] | null;
   /** interview_quote: the picked transcript line. */
   segment?: number | null;
-  /** interview_quote: D1556's index (`env.DECK_QUOTES`); absent until the owner approves it. */
+  /** interview_quote: D1556's index (`env.DECK_QUOTES`); null where it is not bound. */
   quoteIndex?: unknown;
   /** logo_wall: the app URL of one of the venture's kept images. */
   imageUrl?: (uid: string) => string;

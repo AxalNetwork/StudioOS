@@ -499,9 +499,9 @@ export interface Env {
   // Optional so unit-test envs without the binding still type-check; the
   // search service no-ops gracefully when undefined.
   VECTORIZE?: VectorizeIndex;
-  // D1556 (#3803): `axal-deck-quotes` (bge-m3, 1024 dimensions). Not in wrangler.toml
-  // until the owner approves its monthly cost (decision L); absent, quote
-  // retrieval answers "not switched on yet".
+  // D1556 (#3803): `axal-deck-quotes` (bge-m3, 1024 dimensions), bound in
+  // wrangler.toml once the owner approved its monthly cost (decision L).
+  // Optional for test envs; absent, quote retrieval answers "not switched on yet".
   DECK_QUOTES?: VectorizeIndex;
   // #3938 part 2: `axal-dataroom` (qwen3-embedding-0.6b, 1024 dimensions, cosine). Not in
   // wrangler.toml until the owner creates the index (#1008); absent, data room
