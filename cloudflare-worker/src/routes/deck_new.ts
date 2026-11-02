@@ -16,8 +16,8 @@
  *        D1503 (#3754): the words run on Body's element model (`resolveElementModel`),
  *        named in `element_models`; with no pick above the row default the run
  *        keeps its rail option's own resolution, as before.
- *   POST /api/decks/proposals/:id/keep-slides   { indexes?: number[], all?: true, save?: true }
- *        → { proposal } | { deck }
+ *   POST /api/decks/proposals/:id/keep-slides   { indexes?: number[], all?: true, save?: true, base_hash? }
+ *        → { proposal, proposal_hash } | { deck }
  *   POST /api/decks/proposals/:id/regenerate-card { index, base_hash? }   (D897 §9, #3659)
  *        → { proposal, proposal_hash, card: { index, layout }, wording, cost }
  *
@@ -82,12 +82,11 @@ import {
 } from '../services/decks/newDeck';
 import { readAllSeries } from '../services/decks/chartSeries';
 import { recordDiagrams } from '../services/decks/visuals';
-import { contentHash } from '../services/decks/slideModel';
 import { proposeRail } from '../services/railProposals';
 import { railFor, refuseRun } from '../util/railContext';
 import { refuse } from '../util/refusal';
 import {
-  auditDeckWrite, ensureSchema, getDeckRow, insertVersion, ownedProposal, projectOwned, rowToDeck, rowToProposal,
+  auditDeckWrite, ensureSchema, getDeckRow, insertVersion, ownedProposal, projectOwned, proposalHash, rowToDeck, rowToProposal,
   sanitizeSlides, themeOfRow,
 } from './decks';
 import { mercuryFor } from './deck_sources';
@@ -402,10 +401,8 @@ async function proposalRow(env: Env, id: number) {
   return env.DB.prepare('SELECT * FROM pitch_deck_proposals WHERE id = ?').bind(id).first<any>();
 }
 
-/** D897 §9: what a proposal holds now, as one hash: its cards, what is kept and its outline. */
-export async function proposalHash(row: any): Promise<string> {
-  return contentHash(String(row?.slides ?? '[]'), `${row?.kept_slides_json ?? ''}|${row?.outline_json ?? ''}`);
-}
+/** D897 §9: the proposal's hash lives beside `rowToProposal` (decks.ts), which the versions read also answers with. */
+export { proposalHash };
 
 /** A 409 when the request read an older proposal than the one stored; null when it did not say, or read this one. */
 async function staleRefusal(c: any, row: any, body: any): Promise<Response | null> {
@@ -701,6 +698,9 @@ deckNew.post('/proposals/:id/keep-slides', async (c) => {
   const row = await ownedProposal(c, user, Number(c.req.param('id')) || 0);
   if (row instanceof Response) return row;
   const body = await c.req.json().catch(() => ({} as any));
+  // D897 §9 (#3659): a keep that read an older proposal (another tab built, regenerated or kept) changes nothing.
+  const stale = await staleRefusal(c, row, body);
+  if (stale) return stale;
   const proposal = rowToProposal(row);
   const slides: any[] = proposal.slides;
   if (!slides.length) return c.json({ error: 'this proposal has no cards yet; build the deck first' }, 409);
@@ -730,7 +730,8 @@ deckNew.post('/proposals/:id/keep-slides', async (c) => {
   if (!asked.length) return c.json({ error: 'name the cards to keep, or all' }, 400);
   await c.env.DB.prepare('UPDATE pitch_deck_proposals SET kept_slides_json = ? WHERE id = ?').bind(JSON.stringify(kept), row.id).run();
   await auditDeckWrite(c, user, projectId, 'deck_cards_kept', `Kept ${asked.length} card${asked.length === 1 ? '' : 's'} of the proposal`);
-  return c.json({ proposal: rowToProposal(await proposalRow(c.env, Number(row.id))) });
+  const written = await proposalRow(c.env, Number(row.id));
+  return c.json({ proposal: rowToProposal(written), proposal_hash: await proposalHash(written) });
 });
 
 export default deckNew;

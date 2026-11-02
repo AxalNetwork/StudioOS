@@ -37,6 +37,7 @@ import NewDeck from '../src/pages/raise/pitch/NewDeck.jsx';
 import {
   NEW_PATH, addRow, aiTokens, buildSentence, chipsFor, editRow, estimateLine, fastBrief, fastPathLine, moveRow,
   numberIn, outlineSentence, promptWarning, refusalOf, removeRow, roundLine, rowWarning, startOptions,
+  STALE_GONE, STALE_LINE, canRegenerate, cardQuoteBody, regenerateSentence, regeneratedLine, withBase,
 } from '../src/pages/raise/pitch/newDeckModel.js';
 
 const h = React.createElement;
@@ -196,11 +197,12 @@ async function mount(url, over = {}) {
   stub(newDeckApi, 'context', over.context || (async () => CONTEXT));
   stub(newDeckApi, 'quote', async (b) => ({ step: b.step, ai: true, hold_microusd: b.step === 'outline' ? 1100 : 6000, model: 'synthetic' }));
   stub(newDeckApi, 'outline', over.outline || (async () => ({ proposal: { id: 77, slides: [], outline: { rows: ROWS } }, outline: { rows: ROWS, proposed_by: 'Eadwyn' }, cost: { charged_microusd: 900 } })));
-  stub(newDeckApi, 'build', async () => ({
+  stub(newDeckApi, 'build', over.build || (async () => ({
     proposal: { id: 77, base_deck_id: 9, slides: BUILT_SLIDES, kept: null, outline: { audience: 'series_a_fund', rows: ROWS } },
     progress: [], wording: { by: 'Eadwyn', dropped: 1 }, cost: { charged_microusd: 3200 },
-  }));
-  stub(newDeckApi, 'keepSlides', async (_id, b) => (b.save ? { deck: { id: 12, version: 4, title: 'Pitch deck', slides: BUILT_SLIDES.slice(0, 3), theme: null } } : { proposal: { id: 77, slides: BUILT_SLIDES } }));
+  })));
+  stub(newDeckApi, 'keepSlides', over.keepSlides || (async (_id, b) => (b.save ? { deck: { id: 12, version: 4, title: 'Pitch deck', slides: BUILT_SLIDES.slice(0, 3), theme: null } } : { proposal: { id: 77, slides: BUILT_SLIDES } })));
+  stub(newDeckApi, 'regenerateCard', over.regenerateCard || (async () => { throw new Error('not stubbed'); }));
   stub(deckSourcesApi, 'list', async () => ({ project_id: 1, items: ITEMS, coverage: COVERAGE }));
   stub(deckEditorApi, 'brandKit', over.kit || (async () => ({ project_id: 1, kit: null })));
   stub(deckImagesApi, 'plan', async () => ({ capability: { available: false, reason: 'Image generation is not available on this deployment.' }, cards: [] }));
@@ -339,6 +341,116 @@ test('?proposal= reopens the fast path\'s proposal on the review; one no longer 
   } finally { await m.unmount(); }
   const gone = await mount(`${NEW_PATH}?project_id=1&proposal=5`);
   try { assert.ok(gone.by('pitch-new-proposal-gone')); } finally { await gone.unmount(); }
+});
+
+/* ------------------------------------------------------------------ *
+ * D897 §9 (#3659): the message per card, one card at a time, other tabs
+ * ------------------------------------------------------------------ */
+
+test('§9 the model: a message is checked for figures, a write says which proposal it read, one card is priced and rebuilt alone', () => {
+  // Mutation checked: rowWarning without the message → the first assertion fails; canRegenerate without the kept check → a kept card is offered.
+  assert.match(rowWarning([{ card: 'traction', title: 'Traction', purpose: 'Customers', message: 'Grew 40% in a quarter' }]), /Row 1 names a figure/);
+  assert.equal(rowWarning([{ card: 'traction', title: 'Traction', purpose: 'Customers', message: 'Customers keep coming back' }]), null);
+  assert.deepEqual(withBase({ index: 1 }, 'h1'), { index: 1, base_hash: 'h1' });
+  assert.deepEqual(withBase({ index: 1 }, null), { index: 1 }, 'no hash, no key: the Worker does not check');
+  const p = { slides: SLIDES, kept: [0], outline: { audience: 'angel', length: 'short', rows: ROWS, exclude: ['grow.mrr'] } };
+  assert.deepEqual([0, 1, 2].map((i) => canRegenerate(p, i)), [false, true, true], 'a kept card stays as it is');
+  assert.equal(canRegenerate({ ...p, slides: [SLIDES[0], { ...SLIDES[1], spec_id: 'new:market' }] }, 1), false, 'a card that no longer matches its row');
+  assert.equal(canRegenerate({ slides: SLIDES, outline: null }, 1), false, 'a fill proposal has no outline');
+  assert.deepEqual(cardQuoteBody(1, p, 2), { project_id: 1, step: 'card', index: 2, audience: 'angel', length: 'short', outline: ROWS, exclude: ['grow.mrr'] });
+  assert.match(regenerateSentence({ ai: true, hold_microusd: 1300 }, 'Traction'), /^StudioOS rebuilds “Traction” from your records\. Eadwyn rewrites its wording, holding up to \$0\.0013 in AI tokens.*Every other card stays as it is/);
+  assert.match(regenerateSentence({ ai: false, reason: 'assist_off' }, 'Team'), /at no cost/);
+  assert.equal(regeneratedLine({ wording: { by: 'Eadwyn' }, cost: { charged_microusd: 1200 } }), 'Eadwyn rewrote this card. It used $0.0012 in AI tokens.');
+  assert.match(regeneratedLine({ wording: { by: 'none', reason: 'AI assistance is off on this page.' }, cost: { charged_microusd: 0 } }), /^AI assistance is off on this page\.$/);
+  const stale = refusalOf(Object.assign(new Error('x'), { status: 409, code: 'proposal_changed' }));
+  assert.deepEqual([stale.message, stale.reload], [STALE_LINE, true]);
+});
+
+test('§9 the outline: each row\'s message is edited, checked and sent; Build sends back the outline it read', async () => {
+  // Mutation checked: Build without base_hash → the hash check fails; the message input dropped → no row carries it.
+  const m = await mount(`${NEW_PATH}?project_id=1`, {
+    outline: async () => ({ proposal: { id: 77, slides: [], outline: { rows: ROWS } }, proposal_hash: 'h-outline', outline: { rows: ROWS, proposed_by: 'Eadwyn' }, cost: { charged_microusd: 900 } }),
+  });
+  try {
+    await m.press(m.by('pitch-new-regenerate'));
+    await m.press(m.by('pitch-new-confirm'));
+    await m.change(m.by('pitch-new-message-1'), 'Twelve hundred teams use it');
+    assert.match(m.text(), /Row 2 names a figure/, 'a number word in a message is flagged as the Worker refuses it');
+    assert.equal(m.pr(m.by('pitch-new-build')).disabled, true);
+    await m.change(m.by('pitch-new-message-1'), 'Teams keep coming back');
+    await m.press(m.by('pitch-new-build'));
+    await m.press(m.by('pitch-new-confirm'));
+    const [, b] = m.calls.find(([n]) => n === 'build');
+    assert.equal(b.outline[1].message, 'Teams keep coming back');
+    assert.equal(b.base_hash, 'h-outline');
+  } finally { await m.unmount(); }
+});
+
+const REVIEWED = { id: 77, base_deck_id: 9, slides: SLIDES, kept: null, outline: { audience: 'seed_fund', length: 'standard', rows: ROWS } };
+const reopen = (p, hash) => async () => ({ versions: [], proposal: { ...p, proposal_hash: hash } });
+
+test('§9 the review: keep one card, or regenerate just it with its price first; every write sends the hash it read; edits survive', async () => {
+  // Mutation checked: the keep or the regeneration without withBase → their base_hash checks fail; the quote skipped → the dialog has no price.
+  const fresh = SLIDES.map((x, i) => (i === 2 ? { ...x, title: 'A team that ships' } : x));
+  const m = await mount(`${NEW_PATH}?project_id=1&proposal=77`, {
+    versions: reopen(REVIEWED, 'h-0'),
+    keepSlides: async (_id, b) => (b.save ? { deck: { id: 12, version: 4, title: 'Pitch deck', slides: SLIDES, theme: null } } : { proposal: { ...REVIEWED, kept: b.indexes }, proposal_hash: 'h-1' }),
+    regenerateCard: async () => ({ proposal: { ...REVIEWED, kept: [1], slides: fresh }, proposal_hash: 'h-2', card: { index: 2, layout: 'statement' }, wording: { by: 'Eadwyn', dropped: 0 }, cost: { charged_microusd: 1200 } }),
+  });
+  try {
+    assert.ok(m.by('pitch-review-regenerate-1') && m.by('pitch-review-regenerate-2'));
+    await m.press(m.by('pitch-review-keep-1'));
+    assert.deepEqual(m.calls.filter(([n]) => n === 'keepSlides').at(-1).slice(1), [77, { indexes: [1], base_hash: 'h-0' }]);
+    assert.ok(m.by('pitch-review-kept-1'), 'kept now, on the Worker');
+    assert.ok(!m.by('pitch-review-regenerate-1') && !m.by('pitch-review-keep-1'), 'a kept card is no longer offered for regeneration');
+    await m.press(m.by('pitch-review-regenerate-2'));
+    const [, q] = m.calls.filter(([n]) => n === 'quote').at(-1);
+    assert.deepEqual([q.step, q.index, q.audience, q.length], ['card', 2, 'seed_fund', 'standard']);
+    assert.match(m.text(m.by('pitch-review-regenerate-sentence')), /rebuilds “Team” from your records\. Eadwyn rewrites its wording, holding up to \$0\.0060/);
+    assert.equal(m.calls.filter(([n]) => n === 'regenerateCard').length, 0, 'nothing runs before Confirm');
+    await m.press(m.by('pitch-review-regenerate-confirm'));
+    const [, id, body, headers] = m.calls.find(([n]) => n === 'regenerateCard');
+    assert.deepEqual([id, body], [77, { index: 2, base_hash: 'h-1' }], 'the hash from the keep, not the reopen');
+    assert.equal(headers['X-Rail-Option'], encodeURIComponent('deck:build'));
+    assert.match(m.text(m.by('pitch-review-card-2')), /03 A team that ships/, 'the regenerated card is the one drawn');
+    assert.match(m.text(m.by('pitch-review-card-0')), /01 Title/, 'the others as they were');
+    assert.equal(m.text(m.by('pitch-review-regenerated-2')).trim(), 'Eadwyn rewrote this card. It used $0.0012 in AI tokens.');
+    assert.ok(m.by('pitch-review-kept-1'), 'the card kept before survives the regeneration');
+    await m.press(m.by('pitch-review-accept'));
+    const save = m.calls.filter(([n]) => n === 'keepSlides').at(-1);
+    assert.equal(save[2].base_hash, 'h-2');
+    assert.ok(save[2].indexes.includes(1) && save[2].save === true);
+  } finally { await m.unmount(); }
+});
+
+test('§9 another tab moved the proposal: the write is refused, said, and Reload reads the latest; gone when it was kept there', async () => {
+  // Mutation checked: Reload not re-reading versions → the new card never shows; the gone branch dropped → the review stays on a closed proposal.
+  let moved = false;
+  const latest = SLIDES.map((x, i) => (i === 0 ? { ...x, title: 'Built in the other tab' } : x));
+  const stale = async () => { throw Object.assign(new Error('This deck changed in another tab or window.'), { status: 409, code: 'proposal_changed' }); };
+  const m = await mount(`${NEW_PATH}?project_id=1&proposal=77`, {
+    versions: async () => ({ versions: [], proposal: moved ? { ...REVIEWED, slides: latest, proposal_hash: 'h-new' } : { ...REVIEWED, proposal_hash: 'h-old' } }),
+    keepSlides: stale,
+  });
+  try {
+    await m.press(m.by('pitch-review-keep-0'));
+    assert.match(m.text(m.by('pitch-review-refusal')), new RegExp(STALE_LINE.replace(/\./g, '\\.')));
+    moved = true;
+    await m.press(m.by('pitch-review-refusal-reload'));
+    assert.match(m.text(m.by('pitch-review-card-0')), /Built in the other tab/);
+    assert.ok(!m.by('pitch-review-refusal'), 'the refusal is cleared once the latest is read');
+  } finally { await m.unmount(); }
+  let keptThere = false;
+  const g = await mount(`${NEW_PATH}?project_id=1&proposal=77`, {
+    versions: async () => ({ versions: [], proposal: keptThere ? null : { ...REVIEWED, proposal_hash: 'h-old' } }),
+    keepSlides: stale,
+  });
+  try {
+    await g.press(g.by('pitch-review-keep-0'));
+    keptThere = true; // the other tab saved it meanwhile
+    await g.press(g.by('pitch-review-refusal-reload'));
+    assert.match(g.text(g.by('pitch-review-gone')), new RegExp(STALE_GONE.replace(/\./g, '\\.')));
+  } finally { await g.unmount(); }
 });
 
 /* ------------------------------------------------------------------ *
