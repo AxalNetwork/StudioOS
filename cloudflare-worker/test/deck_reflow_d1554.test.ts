@@ -22,7 +22,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
 import deckGrid from '../src/routes/deck_grid.ts';
-import { DENSITY_MAX, TYPE_SCALE, TYPE_STEPS, boxOf, capacityAt, fitProblems, fitText, lineHeight, metricValueChars, textCapacity } from '../src/services/decks/designSystem.ts';
+import { DENSITY_MAX, TYPE_SCALE, TYPE_STEPS, boxOf, capacityAt, fitProblems, fitText, lineHeight, metricValueChars, textCapacity, type TypeRole } from '../src/services/decks/designSystem.ts';
 import { GRID_COLS, GRID_ROWS, NOTES_MAX } from '../src/services/decks/slideModel.ts';
 import { STRUCTURES } from '../src/services/decks/structures.ts';
 import { MOVED_HEADING, fitWords, fitsAt, reflowMap, reflowSlides } from '../src/services/decks/reflow.ts';

@@ -27,7 +27,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
 import deckQuotes from '../src/routes/deck_quotes.ts';
-import { QUOTE_DIMENSIONS, QUOTE_EMBED_MODEL, QUOTE_RERANK_MODEL, REASONS, indexProjectQuotes, quotableLines, retrieveQuotes, vectorId } from '../src/services/decks/quoteRetrieval.ts';
+import { QUOTE_DIMENSIONS, QUOTE_EMBED_MODEL, QUOTE_RERANK_MODEL, REASONS, indexProjectQuotes, quotableLines, retrieveQuotes, vectorId, type QuoteDeps, type QuoteIndex } from '../src/services/decks/quoteRetrieval.ts';
 import { modelById } from '../src/services/ai/catalogue.ts';
 import { MODULE_ROUTES } from '../src/services/ai/moduleConnections.ts';
 import { d1Over } from './_d1_sqlite.mjs';

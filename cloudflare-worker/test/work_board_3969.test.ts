@@ -12,7 +12,7 @@ import { AI_LOG_SCHEMA } from './_ai_budget_fixture.mjs';
 import engine, { agentEngineEnabled } from '../src/routes/agent_engine.ts';
 import teamAgents from '../src/routes/team_agents.ts';
 import { workBoardRoutes } from '../src/routes/work_board.ts';
-import { projectBoard, setWorkDeps, updateWorkTask, WorkRefusal } from '../src/services/agents/workBoard.ts';
+import { projectBoard, setWorkDeps, updateWorkTask, WorkRefusal, type WorkRunReader, type WorkTask } from '../src/services/agents/workBoard.ts';
 import { taskByUid } from '../src/services/agents/tasks.ts';
 import { loadScope } from '../src/services/agents/teams.ts';
 import { removeMigratedDatabases } from './_storage_schema.ts';

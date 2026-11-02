@@ -18,7 +18,7 @@ import { SignJWT } from 'jose';
 
 import deckSources from '../src/routes/deck_sources.ts';
 import decks from '../src/routes/decks.ts';
-import { DECK_SOURCES, coverageOf, sourceAndGrade, bindingsOf, sanitizeBinding } from '../src/services/decks/sources.ts';
+import { DECK_SOURCES, coverageOf, sourceAndGrade, bindingsOf, sanitizeBinding, type SourceItem } from '../src/services/decks/sources.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { loadSchema } from './_schema_once.mjs';

@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { FIGURES, NARRATIVE_CHECK_FIGURES, parseStatedFigures, computeReadiness, checkedLabels } from '../src/services/raiseCycle.ts';
-import { checkClaims, computeClaims, decideCount, decideFigure, decidePresence } from '../src/services/raiseClaims.ts';
+import { checkClaims, computeClaims, decideCount, decideFigure, decidePresence, type Candidate, type PinnedItem } from '../src/services/raiseClaims.ts';
 import { readRaiseEvidence } from '../src/services/raiseEvidence.ts';
 import { loadSchema } from './_schema_once.mjs';
 

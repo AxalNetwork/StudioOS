@@ -27,7 +27,7 @@ import decks from '../src/routes/decks.ts';
 import { __resetForTest } from '../src/services/aiRouter.ts';
 import { modelById } from '../src/services/ai/catalogue.ts';
 import { jobStep } from '../src/services/ai/modelUseCases.ts';
-import { ELEMENTS, PRESETS, choicesFor, groupElements, isRouted, lockedOut, presetModelFor, resolveElementModel } from '../src/services/decks/elementModels.ts';
+import { ELEMENTS, PRESETS, choicesFor, groupElements, isRouted, lockedOut, presetModelFor, resolveElementModel, type PickRow } from '../src/services/decks/elementModels.ts';
 import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withGuard, GUARD_MODEL } from './_guard_stub.mjs';

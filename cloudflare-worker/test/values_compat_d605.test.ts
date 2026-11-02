@@ -23,7 +23,7 @@ import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
 import profileHistory from '../src/routes/profile_history.ts';
-import { ALIGNED, AXAL_KEYS, FAR_APART, MIN_COMPARED, pairDimensions, sideOf, valuesFit } from '../src/services/valuesCompat.ts';
+import { ALIGNED, AXAL_KEYS, FAR_APART, MIN_COMPARED, pairDimensions, sideOf, valuesFit, type ValueProfile } from '../src/services/valuesCompat.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { loadSchema } from './_schema_once.mjs';
 

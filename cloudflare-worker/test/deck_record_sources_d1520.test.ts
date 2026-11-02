@@ -16,7 +16,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 
-import { DECK_SOURCES, GRADES, readSources, sanitizeBinding } from '../src/services/decks/sources.ts';
+import { DECK_SOURCES, GRADES, readSources, sanitizeBinding, type SourceItem } from '../src/services/decks/sources.ts';
 import {
   COMPETITOR_NAMES_MAX, NARRATIVE_SECTION_KEYS, POSITIONING_KIND_KEYS, PROJECTION_FOOTNOTE, PROJECTION_LABEL, RECORD_SOURCES, fundSlotKey, nestedMarket,
 } from '../src/services/decks/recordSources.ts';

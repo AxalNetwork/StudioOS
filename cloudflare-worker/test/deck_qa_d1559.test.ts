@@ -19,7 +19,7 @@ import { SignJWT } from 'jose';
 import deckQaRoutes from '../src/routes/deck_qa.ts';
 import cycleRaise from '../src/routes/cycle_raise.ts';
 import decks from '../src/routes/decks.ts';
-import { answerOf, bindingOf, cardOfFinding, cardsOfObjection, figuresIn, keptOf, keptText, lineOf, rankQuestions, shown, unboundFigures } from '../src/services/decks/deckQa.ts';
+import { answerOf, bindingOf, cardOfFinding, cardsOfObjection, figuresIn, keptOf, keptText, lineOf, rankQuestions, shown, unboundFigures, type QaBinding } from '../src/services/decks/deckQa.ts';
 import type { SourceItem } from '../src/services/decks/sources.ts';
 import type { Finding } from '../src/services/decks/critic.ts';
 import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';

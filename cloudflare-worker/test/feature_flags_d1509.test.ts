@@ -28,7 +28,7 @@ import adminFeatureFlags, { knownKeys } from '../src/routes/admin_feature_flags.
 import { __resetForTest } from '../src/services/aiRouter.ts';
 import { isOffered, modelById } from '../src/services/ai/catalogue.ts';
 import { choicesFor } from '../src/services/decks/elementModels.ts';
-import { CACHE_KEY, NOT_SWITCHED_ON, flagsOf, keyShape, loadFlagRows } from '../src/services/featureFlags.ts';
+import { CACHE_KEY, NOT_SWITCHED_ON, flagsOf, keyShape, loadFlagRows, type FlagRow } from '../src/services/featureFlags.ts';
 import { buildCards, standardOutline } from '../src/services/decks/newDeck.ts';
 import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';
 import { d1Over } from './_d1_sqlite.mjs';

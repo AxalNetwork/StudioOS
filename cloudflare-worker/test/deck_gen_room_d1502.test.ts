@@ -26,7 +26,7 @@ import {
 } from '../src/services/decks/aiGovernor.ts';
 import { candidatesFor, stepExecutor } from '../src/services/decks/stepExecutor.ts';
 import { ELEMENT_ROUTES } from '../src/services/decks/elementModels.ts';
-import { D1GenRuntime, stepRecordRef } from '../src/services/decks/genRuntime.ts';
+import { D1GenRuntime, stepRecordRef, type PlanLine, type StepRow } from '../src/services/decks/genRuntime.ts';
 import { DeckGenRoom } from '../src/durable-objects/deck-gen-room.ts';
 import { admitStatus } from '../src/services/decks/genRooms.ts';
 import deckBatches from '../src/routes/deck_batches.ts';

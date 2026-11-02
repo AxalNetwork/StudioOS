@@ -23,7 +23,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
 import deckSources from '../src/routes/deck_sources.ts';
-import { DECK_SOURCES, readSources, sourceAndGrade } from '../src/services/decks/sources.ts';
+import { DECK_SOURCES, readSources, sourceAndGrade, type SourceItem } from '../src/services/decks/sources.ts';
 import { CARD_CATALOGUE } from '../src/services/decks/newDeck.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';

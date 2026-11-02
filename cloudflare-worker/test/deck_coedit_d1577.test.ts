@@ -25,7 +25,7 @@ import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import decks, { ensureSchema } from '../src/routes/decks.ts';
 import deckDraft from '../src/routes/deck_draft.ts';
 import deckCoedit, { AREA_RETRIES, PRESENCE_OFF } from '../src/routes/deck_coedit.ts';
-import { AREA_TITLE, CURSOR_MIN_MS, LOCK_TTL_MS, colourOf, editorView, lockHolder, mergeArea, restoreOneCard, stable, step } from '../src/services/decks/coedit.ts';
+import { AREA_TITLE, CURSOR_MIN_MS, LOCK_TTL_MS, colourOf, editorView, lockHolder, mergeArea, restoreOneCard, stable, step, type Editor } from '../src/services/decks/coedit.ts';
 import { DeckPresence } from '../src/durable-objects/deck-presence.ts';
 import { contractErrors } from '../src/contracts/validate.ts';
 import { loadSchema } from './_schema_once.mjs';
