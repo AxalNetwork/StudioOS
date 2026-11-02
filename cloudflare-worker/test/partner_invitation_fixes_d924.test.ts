@@ -12,15 +12,15 @@ import adminPartners from '../src/routes/admin_partners.ts';
 import { activatePartnerDealOnSignature, ALL_PARTNER_DEAL_TYPES } from '../src/services/partnerDeals.ts';
 import { sendPartnerInvitationEmail, sendPartnerInvitationEmailResult, sendAgreementAssignedEmail, sendAgreementAssignedEmailResult } from '../src/services/email.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
 const read = (p: string) => readFileSync(p, 'utf8');
 const migration = read('cloudflare-worker/sql/migrations/547_partner_invitation_sends.sql');
 const scratch = mkdtempSync(join(tmpdir(), 'partner-d924-'));
 const seed = join(scratch, 'schema.sqlite');
 const schema = new DatabaseSync(seed, { enableForeignKeyConstraints: false });
-schema.exec(read('cloudflare-worker/sql/schema_baseline.sql'));
-for (const name of readdirSync('cloudflare-worker/sql/migrations').filter(n => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF && migrationNumber(n) < 547).sort(compareMigrations)) schema.exec(read('cloudflare-worker/sql/migrations/'+name));
+loadSchema(schema, { below: 547 });
 schema.close();
 after(() => rmSync(scratch, { recursive: true, force: true }));
 let serial = 0;

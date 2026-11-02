@@ -11,7 +11,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
@@ -19,22 +19,19 @@ import { SignJWT } from 'jose';
 
 import grantsRoute, { SQL_TERM_COLUMNS } from '../src/routes/admin_program_grants.ts';
 import { PROGRAMS, TERM_KEYS, termsFor, validateTerms } from '../src/services/programGrants.ts';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
+import { loadSchema } from './_schema_once.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef'; // synthetic test fixture
-const BASELINE = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
 const MIGRATIONS = resolve(process.cwd(), 'cloudflare-worker/sql/migrations');
 const SUPER = 1, PLAIN_ADMIN = 2;
 const LIVE = 'lic_live', SUSPENDED = 'lic_susp', ENDED = 'lic_term', DRAFT = 'lic_draft', PENDING = 'lic_pend';
 const REASON = 'Approved at the October HQ review.';
 
-const FILES = readdirSync(MIGRATIONS).filter((f) => /^\d+_.*\.sql$/.test(f)).sort(compareMigrations);
 const BUILT_DDL = (() => {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  db.exec(BASELINE);
-  for (const f of FILES.filter((n) => migrationNumber(n) > BASELINE_CUTOFF)) db.exec(readFileSync(resolve(MIGRATIONS, f), 'utf8'));
+  loadSchema(db);
   return (db.prepare(`SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'
     ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END`).all() as any[]).map((r) => r.sql as string);
 })();
@@ -352,8 +349,7 @@ test('migration 553 restores the licence_events seal on the full chain, and the 
 
 test('migration 553 keeps every licence event the rebuild copies', () => {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  db.exec(BASELINE);
-  for (const f of FILES.filter((n) => migrationNumber(n) > BASELINE_CUTOFF && migrationNumber(n) < 553)) db.exec(readFileSync(resolve(MIGRATIONS, f), 'utf8'));
+  loadSchema(db, { below: 553 });
   db.exec("INSERT INTO users (id, role, name, email) VALUES (9, 'admin', 'A', 'a@example.test')");
   db.exec("INSERT INTO territory_licences (id, uid, licence_ref, legal_entity_name, brand_name, status) VALUES (1, 'u', 'R', 'E', 'B', 'active')");
   db.exec("INSERT INTO licence_events (id, licence_id, event, note, actor_user_id) VALUES (41, 1, 'created', 'n', 9), (42, 1, 'contract_sent', NULL, 9)");

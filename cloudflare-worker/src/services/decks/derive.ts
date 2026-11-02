@@ -133,7 +133,7 @@ export function cleanCard(card: any, blind: boolean): any {
 
 /** The master's cards as a derived output may start from: shared-safe, then whitelisted. */
 export function sourceCards(slides: unknown, blind: boolean): any[] {
-  return shareSlides(slides, { figures: true, sources: false, notes: false, bands: false, cap_table: false, team_photos: false })
+  return shareSlides(slides, { figures: true, sources: false, notes: false, bands: false, cap_table: false, team_photos: false, evidence: false })
     .filter((c: any) => c && !c.hidden)
     .map((c: any) => cleanCard(c, blind));
 }

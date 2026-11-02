@@ -43,6 +43,7 @@ import { logCycleWrite, type CycleWrite } from '../services/cycleActivity';
 import { readOne, READERS, type ReadContext } from '../services/agents/reads';
 import { depsOf, isReady, taskEvent, type TaskRow } from '../services/agents/tasks';
 import { canRead, effectiveBook, scopeOfAgent, type AgentRow } from '../services/agents/teams';
+import { handoffBlockFor, handsOffTo, parseHandoff, proposeHandoff } from '../services/agents/handoffs';
 import {
   dailyLimitReached, markRun, moveTask, pauseAgent, runByUid, runsToday, scopeOfRow, scopeSettings, tellTeam,
   type PauseReason, type RunRow, type RunStep,
@@ -176,22 +177,28 @@ export async function buildContext(d: LoopDeps, l: Loaded): Promise<Built> {
   const goal = l.task.goal_id
     ? await d.env.DB.prepare('SELECT title, why FROM scope_goals WHERE id = ?').bind(l.task.goal_id).first<{ title: string; why: string | null }>()
     : null;
+  // D1530 (#3849, E5): the roles this agent may hand off to, and how; a handoff task's why and note, as data.
+  const handTo = await handsOffTo(d.env, l.agent);
+  const handoff = await handoffBlockFor(d.env, l.task);
   const head = [
     `Task: ${l.task.title}`,
     l.task.detail ? `Detail: ${l.task.detail}` : '',
     goal ? `Goal: ${goal.title}${goal.why ? ` (why: ${goal.why})` : ''}` : '',
     l.task.source_kind === 'one_next_thing' && l.task.source_ref ? `One next thing: ${l.task.source_ref}` : '',
+    handTo.length ? `If part of this belongs to another role, end your answer with one line {"handoff":{"to_role":"<role>","title":"<the task for them>","why":"<why>","note":"<what they need to know>"}}. Roles you may hand off to: ${handTo.join(', ')}. A person decides it.` : '',
   ].filter(Boolean).join('\n');
   const blocks = [
     `<agent_data source="memory" trust="data">${inert({ untrusted: true, data: notes })}</agent_data>`,
+    ...(handoff ? [`<agent_data source="handoff" trust="data">${inert({ untrusted: true, data: handoff })}</agent_data>`] : []),
     ...reads.map((r) => r.block),
   ];
   // Everything within the run's prompt limit, in order; what does not fit is named, not cut in half.
   let prompt = `${head}\n\n${UNTRUSTED_NOTICE}`;
   const omitted: string[] = [];
+  const names = ['memory', ...(handoff ? ['handoff'] : []), ...reads.map((r) => r.key)];
   blocks.forEach((b, i) => {
     if (prompt.length + 1 + b.length <= PROMPT_MAX - 200) prompt += `\n${b}`;
-    else omitted.push(i === 0 ? 'memory' : reads[i - 1].key);
+    else omitted.push(names[i]);
   });
   if (omitted.length) prompt += `\nLeft out for length: ${omitted.join(', ')}.`;
   return { ok: true, prompt, reads: rules.reads, notes: notes.length, omitted };
@@ -257,7 +264,19 @@ export async function propose(d: LoopDeps, uid: string): Promise<StepOut> {
   if (!l) return stop('gone', 'run_gone');
   const g = await gate(d, l, 'propose');
   if (g) return g;
-  await markRun(d.env, uid, 'propose', { status: 'waiting', summary: 'Waiting for a person to decide.' }, { status: 'waiting_decision' });
+  // D1530 (#3849, E5): a handoff the output ends with is its own proposal (or a refused step of its chain).
+  let handoffLine = '';
+  if (l.run.proposal_uid) {
+    try {
+      const p = await d.env.DB.prepare('SELECT payload_json FROM ai_rail_proposals WHERE uid = ?').bind(l.run.proposal_uid).first<{ payload_json: string }>();
+      const ask = p ? parseHandoff(String(JSON.parse(p.payload_json)?.text ?? '')) : null;
+      if (ask) {
+        const h = await proposeHandoff(d.env, { from: l.agent, task: l.task, runUid: uid, ask });
+        handoffLine = h.status === 'proposed' ? ' It also proposes a handoff.' : ` Its handoff was refused (${h.code}).`;
+      }
+    } catch { console.warn('[agents] handoff_unrecorded'); }
+  }
+  await markRun(d.env, uid, 'propose', { status: 'waiting', summary: `Waiting for a person to decide.${handoffLine}` }, { status: 'waiting_decision' });
   if (await moveTask(d.env, l.task.id, 'waiting_decision', ['in_progress'])) {
     await taskEvent(d.env, l.task.id, null, 'status', { from: 'in_progress', to: 'waiting_decision' });
     await tellTeam(d.env, l.agent, {

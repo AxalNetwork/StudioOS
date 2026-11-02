@@ -358,12 +358,16 @@ export interface Env {
   AGENT_ENGINE?: string;
   /** D1528 (#3847, #3742 E3): `manual` (default) or `self_start`; `self_start` only after E3 and E5 merge (owner Q1 B). */
   AGENT_AUTONOMY?: string;
-  /** D1528: the runtime behind the seam (`src/agents/runtime.ts`). `do` is the only one built. */
+  /** D1528: the runtime behind the seam (`src/agents/runtime.ts`): `do` (default) or `sdk` (#3852, an evaluation; needs `AGENT_SCOPE_SDK`). */
   AGENT_RUNTIME?: string;
   /** D1528: the `agents` AI Gateway id agent runs pass. Unset = no gateway. Set only by `agentRun`. */
   AGENT_AI_GATEWAY?: string;
+  /** #3851 (E7): the `agents` gateway's monthly limit in micro-USD, mirrored from its dashboard; at 70% HQ ops hear once a month. Unset = no alert. */
+  AGENT_GATEWAY_MONTHLY_LIMIT_MICROUSD?: string;
   /** D1528: one `AgentScope` Durable Object per scope, named `project:{id}` or `company:{id}`. */
   AGENT_SCOPE?: DurableObjectNamespace;
+  /** #3852 (E0): the `sdk` runtime's `ScopeAgent` namespace. Used only while `AGENT_RUNTIME` is `sdk`. */
+  AGENT_SCOPE_SDK?: DurableObjectNamespace;
   /** D1528: the `AgentTaskWorkflow`; the instance id is the run uid. */
   AGENT_TASK?: Workflow<{ run_uid: string }>;
   /** D1528: `studioos-agent-queue`; messages are `{ job_type: 'agent_run', payload: { run_uid } }`. */

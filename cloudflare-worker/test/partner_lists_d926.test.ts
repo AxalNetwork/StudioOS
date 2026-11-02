@@ -4,23 +4,20 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync, mkdtempSync, copyFileSync, rmSync } from 'node:fs';
+import { readFileSync, mkdtempSync, copyFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Hono } from 'hono';
 import { envFor, token } from './_esign_harness.ts';
 import adminPartners from '../src/routes/admin_partners.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
 const read = (p: string) => readFileSync(p, 'utf8');
 const scratch = mkdtempSync(join(tmpdir(), 'partner-d926-'));
 const seed = join(scratch, 'schema.sqlite');
 const schema = new DatabaseSync(seed, { enableForeignKeyConstraints: false });
-schema.exec(read('cloudflare-worker/sql/schema_baseline.sql'));
-for (const name of readdirSync('cloudflare-worker/sql/migrations').filter(n => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations)) {
-  schema.exec(read('cloudflare-worker/sql/migrations/' + name));
-}
+loadSchema(schema);
 schema.close();
 after(() => rmSync(scratch, { recursive: true, force: true }));
 

@@ -17,24 +17,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { FEED_KINDS, PAGE_ONLY_KINDS, PERSONAL_ONLY_KINDS, eventsToIcs, fetchUserEvents, fetchUserEventsWithSources } from '../src/services/calendar.ts';
 import { SOURCES } from '../src/services/calendar/registry.ts';
 import { describeItems } from '../src/services/calendar/items.ts';
+import { loadSchema } from './_schema_once.mjs';
 
-const BASELINE = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
-const DIR = 'cloudflare-worker/sql/migrations';
-const MIGRATIONS = readdirSync(DIR).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations).map((n) => readFileSync(`${DIR}/${n}`, 'utf8'));
 const FROM = '2026-11-01T00:00:00.000Z', TO = '2026-12-01T00:00:00.000Z';
 const KINDS = ['round_close', 'nda_expiry'] as const;
 const FOUNDER = 1, COFOUNDER = 2, PENDING = 3, OTHER_FOUNDER = 5, INVESTOR = 4, OUTSIDER = 6;
 
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
-  db.exec(BASELINE);
-  for (const m of MIGRATIONS) db.exec(m);
+  loadSchema(db);
   db.exec(`INSERT INTO users(id,role,name,email,founder_id,is_active) VALUES
     (1,'founder','Fixture founder','one@example.test',101,1),
     (2,'founder','Fixture cofounder','two@example.test',NULL,1),
