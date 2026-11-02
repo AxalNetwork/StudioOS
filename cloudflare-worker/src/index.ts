@@ -256,6 +256,7 @@ import deckReview from './routes/deck_review';
 import deckSources from './routes/deck_sources';
 import deckCheck from './routes/deck_check';
 import deckGrid from './routes/deck_grid';
+import deckBatches from './routes/deck_batches';
 import deckElementModels from './routes/deck_element_models';
 import deckStage from './routes/deck_stage';
 import deckRemix from './routes/deck_remix';
@@ -1392,6 +1393,8 @@ app.route('/api/decks', deckReview);
 app.route('/api/decks', deckCheck);
 // D1499 (#3749): The Grid of one deck version — geometry, the 17 structures and each card's areas.
 app.route('/api/decks', deckGrid);
+// D1502 part 2 (#3753): a generation run's status, its event stream, and Stop.
+app.route('/api/decks', deckBatches);
 // D1503 (#3754): a model per grid element (`/:id/element-models`), before `decks` so `GET /:id` cannot answer it.
 app.route('/api/decks', deckElementModels);
 // D1522 (#3774): the deck's stage plan — order, why lines and missing-proof warnings.
@@ -3251,3 +3254,5 @@ export { OnboardingChat } from './durable-objects/onboarding-chat';
 export { HqEntrypoint, BranchEntrypoint } from './rpc';
 
 export { MeetingBotRun } from './durable-objects/meeting-bot-run';
+export { DeckGenRoom } from './durable-objects/deck-gen-room';
+export { AiGovernor } from './durable-objects/ai-governor';

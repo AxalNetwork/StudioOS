@@ -406,6 +406,15 @@ class_name = "OnboardingChat"
 name       = "MEETING_BOT_RUN"
 class_name = "MeetingBotRun"
 
+# D1502 part 2 (#3753): a deck's generation runs, and the per-account step throttles.
+[[durable_objects.bindings]]
+name       = "DECK_GEN_ROOM"
+class_name = "DeckGenRoom"
+
+[[durable_objects.bindings]]
+name       = "AI_GOVERNOR"
+class_name = "AiGovernor"
+
 [[migrations]]
 tag                = "v1-realtime"
 # Cloudflare requires `new_sqlite_classes` for all newly created Durable
@@ -416,6 +425,10 @@ new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
 [[migrations]]
 tag = "v2-meeting-bot"
 new_sqlite_classes = ["MeetingBotRun"]
+
+[[migrations]]
+tag = "v3-deck-gen"
+new_sqlite_classes = ["DeckGenRoom", "AiGovernor"]
 
 # ---------- Vectorize (semantic search) ----------
 # Index `axal-search` (768-dim, cosine) backs the global search bar on the
@@ -723,6 +736,15 @@ class_name = "OnboardingChat"
 name       = "MEETING_BOT_RUN"
 class_name = "MeetingBotRun"
 
+# D1502 part 2 (#3753): a deck's generation runs, and the per-account step throttles.
+[[env.production.durable_objects.bindings]]
+name       = "DECK_GEN_ROOM"
+class_name = "DeckGenRoom"
+
+[[env.production.durable_objects.bindings]]
+name       = "AI_GOVERNOR"
+class_name = "AiGovernor"
+
 [[env.production.migrations]]
 tag                = "v1-realtime"
 new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
@@ -730,6 +752,10 @@ new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
 [[env.production.migrations]]
 tag = "v2-meeting-bot"
 new_sqlite_classes = ["MeetingBotRun"]
+
+[[env.production.migrations]]
+tag = "v3-deck-gen"
+new_sqlite_classes = ["DeckGenRoom", "AiGovernor"]
 
 [[env.production.vectorize]]
 binding    = "VECTORIZE"
@@ -901,6 +927,15 @@ class_name = "OnboardingChat"
 name       = "MEETING_BOT_RUN"
 class_name = "MeetingBotRun"
 
+# D1502 part 2 (#3753): a deck's generation runs, and the per-account step throttles.
+[[env.preview.durable_objects.bindings]]
+name       = "DECK_GEN_ROOM"
+class_name = "DeckGenRoom"
+
+[[env.preview.durable_objects.bindings]]
+name       = "AI_GOVERNOR"
+class_name = "AiGovernor"
+
 [[env.preview.migrations]]
 tag                = "v1-realtime"
 new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
@@ -908,6 +943,10 @@ new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
 [[env.preview.migrations]]
 tag = "v2-meeting-bot"
 new_sqlite_classes = ["MeetingBotRun"]
+
+[[env.preview.migrations]]
+tag = "v3-deck-gen"
+new_sqlite_classes = ["DeckGenRoom", "AiGovernor"]
 
 [[env.preview.r2_buckets]]
 binding     = "FILES"

@@ -459,6 +459,9 @@ export interface Env {
   MEETING_BOT_RUNTIME?: import('./services/meetingBots').BotRuntime;
   PIPELINE_ROOM?: DurableObjectNamespace;
   ONBOARDING_CHAT?: DurableObjectNamespace;
+  // D1502 part 2 (#3753): one room per deck that drives its generation runs, and one governor per account that throttles their steps.
+  DECK_GEN_ROOM?: DurableObjectNamespace;
+  AI_GOVERNOR?: DurableObjectNamespace;
   // Vectorize index `axal-search` (768-dim, cosine) for semantic search.
   // Optional so unit-test envs without the binding still type-check; the
   // search service no-ops gracefully when undefined.

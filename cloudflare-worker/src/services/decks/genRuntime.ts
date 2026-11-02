@@ -89,7 +89,9 @@ export type StepExecutor = (step: StepRow, ctx: { batch: BatchRow; parentHold: {
 
 /** What pd2b draws per row, plus the running "charged so far of held". */
 export type GenEvent = {
-  type: 'area_started' | 'step_done' | 'variant_ready' | 'area_failed' | 'batch_done';
+  type: 'area_started' | 'area_busy' | 'step_done' | 'variant_ready' | 'area_failed' | 'batch_done';
+  /** `area_busy`: the retry this is (1, 2 …) and how long the step waits before it. */
+  attempt?: number; wait_ms?: number;
   batch_uid: string; seq?: number; card_uid?: string | null; area_id?: string | null; element?: string;
   model_label?: string; state: StepState | BatchState; seconds?: number; cost_microusd?: number;
   charged_microusd: number; held_microusd: number; variant?: unknown;
@@ -98,7 +100,8 @@ export type BatchStatus = BatchRow & { steps: StepRow[]; held_microusd: number }
 
 export interface DeckGenRuntime {
   admit(input: AdmitInput): Promise<Admitted>;
-  startBatch(uid: string): Promise<BatchStatus | null>;
+  /** Drives the run until it ends, or until `until` (epoch ms) passes between steps; then it returns with the run still going. */
+  startBatch(uid: string, opts?: { until?: number }): Promise<BatchStatus | null>;
   cancel(uid: string, userId: number): Promise<BatchStatus | null>;
   status(uid: string): Promise<BatchStatus | null>;
   rebuild(uid: string): Promise<BatchStatus | null>;
@@ -198,7 +201,7 @@ export class D1GenRuntime implements DeckGenRuntime {
     return { ok: true, uid, quote_microusd: quote, reservation_uid: reservation?.uid ?? null, replayed: false };
   }
 
-  async startBatch(uid: string): Promise<BatchStatus | null> {
+  async startBatch(uid: string, opts: { until?: number } = {}): Promise<BatchStatus | null> {
     const b0 = await this.batchRow(uid);
     if (!b0) return null;
     if (!ACTIVE.includes(b0.state)) return this.status(uid);
@@ -207,11 +210,12 @@ export class D1GenRuntime implements DeckGenRuntime {
     for (;;) {
       const b = (await this.batchRow(uid))!;
       if (b.state !== 'running') break;
+      if (opts.until !== undefined && Date.now() >= opts.until) return this.status(uid);
       const step = await this.env.DB.prepare(`SELECT * FROM deck_area_batch_steps WHERE batch_uid = ?1 AND state = 'waiting' ORDER BY seq LIMIT 1`).bind(uid).first<StepRow>();
       if (!step) break;
-      // Claim the step; a second driver that raced here claims nothing and stops.
+      // Claim the step; a driver that raced here claims nothing and looks for the next one.
       const claim = await this.env.DB.prepare(`UPDATE deck_area_batch_steps SET state = 'running', started_at = ?3 WHERE batch_uid = ?1 AND seq = ?2 AND state = 'waiting'`).bind(uid, step.seq, nowSql()).run();
-      if (!Number(claim?.meta?.changes)) break;
+      if (!Number(claim?.meta?.changes)) continue;
       if (parent) await extendAiReservation(this.env, parent).catch(() => false);
       const started = Date.now();
       const charged0 = await this.chargedSoFar(uid);
@@ -260,7 +264,9 @@ export class D1GenRuntime implements DeckGenRuntime {
     const end: BatchState = b.state === 'cancelling' ? 'cancelled' : Number(done?.n || 0) > 0 ? 'done' : 'failed';
     const closed = await this.env.DB.prepare(`UPDATE deck_area_batches SET state = ?2, charged_microusd = ?3, settled_at = ?4 WHERE uid = ?1 AND state IN ('queued','running','cancelling')`)
       .bind(uid, end, charged, nowSql()).run();
-    if (Number(closed?.meta?.changes) && b.reservation_uid) {
+    // Only the driver that closed the run settles it and says so: the others closed nothing.
+    if (!Number(closed?.meta?.changes)) return this.status(uid);
+    if (b.reservation_uid) {
       await settleAiReservation(this.env, { uid: b.reservation_uid, userId: Number(b.created_by) }, charged, charged === 0);
     }
     await this.emit({ type: 'batch_done', batch_uid: uid, state: end, charged_microusd: charged, held_microusd: Number(b.quote_microusd) });
@@ -282,7 +288,8 @@ export class D1GenRuntime implements DeckGenRuntime {
     if (!ACTIVE.includes(b.state)) return this.status(uid);
     for (const s of (await this.steps(uid)).filter((x) => x.state === 'running')) {
       const row = b.reservation_uid
-        ? await this.env.DB.prepare('SELECT id, model, charged_microusd, fallback_used FROM ai_usage_logs WHERE reservation_uid = ?1 AND record_ref = ?2 ORDER BY id DESC LIMIT 1')
+        ? await this.env.DB.prepare(// The answered row says the step ran; what it charged is every row under its ref (a busy retry's included).
+          'SELECT id, model, fallback_used, (SELECT COALESCE(SUM(charged_microusd), 0) FROM ai_usage_logs WHERE reservation_uid = ?1 AND record_ref = ?2) AS charged_microusd FROM ai_usage_logs WHERE reservation_uid = ?1 AND record_ref = ?2 AND refusal IS NULL ORDER BY id DESC LIMIT 1')
           .bind(b.reservation_uid, stepRecordRef(uid, s.seq)).first<any>()
         : null;
       if (row) {
