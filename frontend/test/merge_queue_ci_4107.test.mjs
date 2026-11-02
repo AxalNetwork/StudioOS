@@ -139,6 +139,7 @@ test('D4130: the full-suite check passes only when every part passed, and trusts
   assert.equal((body.match(/exit 0/g) || []).length, 2, 'exactly two ways to pass');
   assert.match(body, /SUITE: \$\{\{ needs\.suite\.result \}\}/);
   assert.match(body, /EVENT: \$\{\{ github\.event_name \}\}/);
+  assert.match(body, /VERIFIED_RUN: \$\{\{ needs\.verified\.outputs\.run \}\}/, 'the gate reads the queue run from the lookup');
   // The lookup: only a merge_group run of THIS workflow, on THIS commit, that succeeded.
   const verified = all.find((j) => j.id === 'verified');
   assert.equal(verified.if, "github.event_name == 'push'", 'a pull request or a queue entry never skips the suite');
@@ -147,6 +148,8 @@ test('D4130: the full-suite check passes only when every part passed, and trusts
   assert.match(v, /select\(\.head_sha == env\.SHA and \.event == "merge_group" and \.conclusion == "success"\)/);
   assert.match(v, /SHA: \$\{\{ github\.sha \}\}/);
   assert.match(v, /permissions:\n\s+actions: read\n/, 'it reads run history and nothing else');
+  assert.match(v, /outputs:\n\s+run: \$\{\{ steps\.lookup\.outputs\.run \}\}/, 'the job output is the lookup step\'s');
+  assert.match(v, /id: lookup\n/);
   // The parts run unless that lookup found a run — including when it failed.
   const suite = all.find((j) => j.id === 'suite');
   assert.equal(suite.if, "${{ !cancelled() && needs.verified.outputs.run == '' }}");
