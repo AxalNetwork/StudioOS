@@ -155,7 +155,7 @@ test('the frame is the founder panel: docked, stretched, seamed, grounded, colla
   assert.match(row, /display:\s*flex/);
   assert.match(row, /align-items:\s*stretch/);
   const col = rule('.fwr-frame-rail');
-  assert.match(col, /width:\s*var\(--fwr-track,\s*280px\)/, 'the column must collapse to the spine');
+  assert.match(col, /width:\s*calc\(var\(--fwr-track,\s*280px\) \+ var\(--fwr-ask, 0px\)\)/, 'the column must collapse to the spine (and widen for the Ask panel, D1443 AK12)');
   assert.match(col, /border-left:\s*1px solid/, 'the seam against the body');
   assert.match(col, /background:\s*#fff/, 'the panel ground');
   assert.match(col, /padding:\s*18px 18px 28px/, 'the panel inset');

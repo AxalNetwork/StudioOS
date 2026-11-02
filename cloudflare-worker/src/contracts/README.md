@@ -15,6 +15,7 @@ reply against its schema, not only that the route exists.
 | `deckGrid.schema.json` | `GET /api/decks/:id/grid` (D1499, #3749): the geometry, the 17 structures and each card's areas with their boxes. |
 | `deckInvestorLinks.schema.json` | `GET /api/decks/:id/investor-links` (D1565, #3812): the deck, its version and its per-investor links. |
 | `deckRehearsals.schema.json` | `GET /api/decks/:id/rehearsals` (D1580 F1, #3827): the founder's own rehearsals of the version, newest first, each a summary. |
+| `deckPresence.schema.json` | `GET /api/decks/:id/presence` (D1577, #3824): the deck and who is editing it now (user id, name, colour, card, area, cursor). |
 | `deckRemix.schema.json` | `POST /api/decks/:id/remix` (D1553, #3800): the card's structure, the card and its layout options. |
 | `deckSaveCard.schema.json` | `PATCH /api/decks/:id/cards/:uid` (D1501, #3751): the card's working copy with its new revision. |
 | `deckStagePlan.schema.json` | `GET /api/decks/:id/stage-plan` (D1522, #3774): the keys the route adds to `stagePlan()`'s plan. |
