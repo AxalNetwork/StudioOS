@@ -23,6 +23,7 @@ export const CONTRACTS = Object.freeze({
   cancelBatch: { issue: 3753, route: 'POST /api/decks/areas/batches/:uid/cancel', schema: 'deckBatch.schema.json' },
   comments: { issue: 3817, route: 'GET /api/decks/:id/comments', schema: 'deckComments.schema.json' },
   consistency: { issue: 3802, route: 'GET /api/decks/:id/check (its consistency key)', schema: 'deckConsistency.schema.json' },
+  deckUsage: { issue: 3776, route: 'GET /api/decks/:id/usage', schema: 'deckUsage.schema.json' },
   discardDraft: { issue: 3751, route: 'DELETE /api/decks/:id/draft', schema: 'deckDiscardDraft.schema.json' },
   draft: { issue: 3751, route: 'GET /api/decks/:id/draft', schema: 'deckDraft.schema.json' },
   elementModels: { issue: 3754, route: 'GET /api/decks/:id/element-models', schema: 'deckElementModels.schema.json' },

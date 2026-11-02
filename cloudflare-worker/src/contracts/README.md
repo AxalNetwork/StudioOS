@@ -25,6 +25,7 @@ reply against its schema, not only that the route exists.
 | `deckSaveCard.schema.json` | `PATCH /api/decks/:id/cards/:uid` (D1501, #3751): the card's working copy with its new revision. |
 | `deckSaveAsTemplate.schema.json` | `POST /api/decks/:id/save-as-template` (D1535, #3782): the template a deck was saved as. |
 | `deckStagePlan.schema.json` | `GET /api/decks/:id/stage-plan` (D1522, #3774): the keys the route adds to `stagePlan()`'s plan. |
+| `deckUsage.schema.json` | `GET /api/decks/:id/usage` (D1524, #3776): the deck's estimate, its spend from the ledger and the per-run unit prices; unread is `{ available: false }`, never 0. |
 | `deckTemplates.schema.json` | `GET /api/decks/templates` (D1535, #3782): HQ's Gallery templates, filtered, with New deck's seven audiences. |
 | `deckVentureElements.schema.json` | `GET /api/decks/:id/venture-elements` and `/venture-elements/:element` (D1543, #3781): every venture-record element placed or refused by its gate, or one placed element, with its blocks and bindings. |
 | `deckTypedTables.schema.json` | `GET /api/decks/:id/typed-values` (D1538, #3787): the deck and the venture's typed figures, graded Stated. |

@@ -55,6 +55,7 @@ import { deckRemixApi } from '../../../lib/api/deckRemix.js';
 import { deckStageApi } from '../../../lib/api/deckStage.js';
 import { deckTemplatesApi } from '../../../lib/api/deckTemplates.js';
 import { deckTypedValuesApi } from '../../../lib/api/deckTypedValues.js';
+import { deckUsageApi } from '../../../lib/api/deckUsage.js';
 import { deckVentureElementsApi } from '../../../lib/api/deckVentureElements.js';
 import * as gridOps from './gridOps.js';
 
@@ -184,7 +185,13 @@ export const instruct = off('instruct');
 export const stagePlan = (deckId, opts) => through(() => deckStageApi.stagePlan(deckId, opts), SURFACES.stagePlan.issue);
 /** D1523 (#3775): every figure on the version, Linked, Stated, Uncited or Not recorded, and the counts Check claims shows. Editor-only. */
 export const figures = (deckId) => through(() => deckFiguresApi.list(deckId), SURFACES.figures.issue);
-export const deckUsage = off('deckUsage');
+/**
+ * D1524 (#3776): the deck's estimate and spend, formatted for the rail rows
+ * (`deckUsageApi.rail`),
+ * with the per-run prices the plain-units line divides the balance by. A
+ * figure the Worker could not read is null, never $0.00.
+ */
+export const deckUsage = (deckId) => through(() => deckUsageApi.rail(deckId), SURFACES.deckUsage.issue);
 export const arrange = off('arrange');
 export const imageEdit = off('imageEdit');
 /** D1544 (#3784): an edit's price (vary, edit, erase, expand) before it runs: one hold for the edit and its checks. */

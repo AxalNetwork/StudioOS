@@ -263,6 +263,7 @@ import deckElementModels from './routes/deck_element_models';
 import { adminDeckModels, deckModelPresets } from './routes/deck_model_presets';
 import deckTemplates from './routes/deck_templates';
 import deckElements from './routes/deck_elements';
+import deckUsage from './routes/deck_usage';
 import deckStage from './routes/deck_stage';
 import deckRemix from './routes/deck_remix';
 import deckTypedValues from './routes/deck_typed_values';
@@ -1423,6 +1424,8 @@ app.route('/api/decks', deckModelPresets);
 app.route('/api/admin/ai/deck-models', adminDeckModels);
 app.route('/api/decks', deckTemplates);
 app.route('/api/decks', deckElements);
+// D1524 (#3776): the AIRail's plain usage meter (`/:id/usage`).
+app.route('/api/decks', deckUsage);
 // D1522 (#3774): the deck's stage plan — order, why lines and missing-proof warnings.
 app.route('/api/decks', deckStage);
 // D1553 (#3800): Remix — four layouts for one card and the remove-a-block reflow; no model, no charge.
