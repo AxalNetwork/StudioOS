@@ -10,4 +10,10 @@ import { request } from '../api.js';
 
 export const deckUsageApi = {
   usage: (deckId) => request(`/decks/${encodeURIComponent(deckId)}/usage`),
+  /** The rail's shape: `estimated` and `spent` in dollars, or null when the Worker could not read one (never $0.00). */
+  rail: async (deckId) => {
+    const r = await deckUsageApi.usage(deckId);
+    const dollars = (m) => (m?.available && Number.isFinite(Number(m.value_microusd)) ? `$${(Number(m.value_microusd) / 1e6).toFixed(2)}` : null);
+    return { estimated: dollars(r?.estimated), spent: dollars(r?.spent), units: r?.units ?? null };
+  },
 };

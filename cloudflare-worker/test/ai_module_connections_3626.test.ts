@@ -379,6 +379,35 @@ test('translation, voices, images, transcription, reranking and each decision mo
   assert.deepEqual(results, Object.entries(MODEL_CONNECTIONS).filter(([, c]) => operations.includes(c.operation)).map(([id]) => [id, true, id, id, true]));
 });
 
+test('#3936: a Speak or file Listen press names its speech job; the job decides the voice\'s rules', async () => {
+  const melo = '@cf/myshell-ai/melotts', turbo = '@cf/openai/whisper-large-v3-turbo';
+  const wav = new Uint8Array([82, 73, 70, 70, 0, 0, 0, 0, 87, 65, 86, 69]);
+  const f = fixture((id) => (id === melo ? wav : id === '@cf/cloudflare/clef' ? { answers: { urgent: 0.8 }, usage: { input_tokens: 20 } } : { text: 'Spoken words.' }));
+  try {
+    // ST7 (read an answer aloud) on MeloTTS runs.
+    const ok = await post(f, { page: pageFor(melo).pageKey, model: melo, text: 'Read this aloud.', job: 'ST7' });
+    assert.deepEqual([ok.status, ok.body.ok, f.calls.map((c) => c.id)], [200, true, [melo]]);
+    // GR9's voice notes must be Opus in Ogg: MeloTTS is refused before any call.
+    f.calls.length = 0;
+    const gr9 = await post(f, { page: pageFor(melo).pageKey, model: melo, text: 'A voice note.', job: 'GR9' });
+    assert.notEqual(gr9.status, 200);
+    assert.equal(gr9.body.ok, false);
+    assert.deepEqual(f.calls, [], 'GR9 never calls MeloTTS');
+    // A job of another kind, or none at all, is refused as input.
+    // Refused by the route itself (its own code), before the router is asked.
+    for (const job of ['ST1', 'ST8', 'DK11C', 'nope']) {
+      const r = await post(f, { page: pageFor(melo).pageKey, model: melo, text: 'x', job });
+      assert.deepEqual([r.status, r.body.error], [400, 'invalid_input'], job);
+    }
+    // The walkthrough captions (DK11C) are a file Listen job; a draw or a decision takes no job.
+    const cap = await post(f, { page: pageFor(turbo).pageKey, model: turbo, text: '', audio_pcm16: pcm, job: 'DK11C' });
+    assert.deepEqual([cap.status, cap.body.ok], [200, true], JSON.stringify(cap.body));
+    assert.equal((await post(f, { page: pageFor(turbo).pageKey, model: turbo, text: '', audio_pcm16: pcm, job: 'ST7' })).status, 400, 'a Speak job on a transcription');
+    assert.equal((await post(f, decisionBody)).status, 200);
+    assert.equal((await post(f, { ...decisionBody, job: 'ST7' })).status, 400, 'a decision takes no job');
+  } finally { f.db.close(); }
+});
+
 test('Indic translation refuses unsupported directions and mixed-shape requests', async () => {
   const f = fixture();
   try {

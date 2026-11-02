@@ -534,7 +534,8 @@ async function indexResearchDocument(env: Env, id: number): Promise<boolean> {
 
   const bytes = new Uint8Array(await obj.arrayBuffer());
   const { extractDeck, chunkMarkdown } = await import('./deckExtract');
-  const extracted = await extractDeck(env, bytes, row.content_type || '', row.title || 'document');
+  // #3937: the owner's read, recorded on Research Ask's surface.
+  const extracted = await extractDeck(env, bytes, row.content_type || '', row.title || 'document', { userId: Number(row.owner_user_id) || 0, surface: '/research/ask' });
 
   if (extracted.status === 'empty') {
     return fail('unsupported', 'No text could be read from this file, so Ask cannot answer from it.');
