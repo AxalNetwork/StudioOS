@@ -22,7 +22,7 @@ import {
   CARD_DEADLINE_MS, PRIVATE_LINK_GLOBS, SHELL_HEADERS, matchPrivatePath, matchSocialPath, rewriteShell, sectionTags, serveSocialCard,
 } from '../src/services/socialCards.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(here, '../..');
@@ -56,7 +56,7 @@ const SCRIPTS = ['<script type="module" crossorigin src="/assets/index-AbC123.js
 function fixture() {
   const db = new DatabaseSync(':memory:');
   db.exec(readFileSync(resolve(SQL, 'schema_baseline.sql'), 'utf8'));
-  for (const name of readdirSync(M).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort()) {
+  for (const name of readdirSync(M).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations)) {
     db.exec(readFileSync(resolve(M, name), 'utf8'));
   }
   db.exec(`

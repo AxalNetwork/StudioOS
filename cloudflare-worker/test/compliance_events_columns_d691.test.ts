@@ -12,7 +12,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import cycleGrow from '../src/routes/cycle_grow.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { sqlStrings } from '../../scripts/check-sqlite-dialect.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -27,7 +27,7 @@ function freshDatabase() {
   db.exec(readFileSync(resolve(SQL, 'schema_baseline.sql'), 'utf8'));
   const migrations = resolve(SQL, 'migrations');
   for (const name of readdirSync(migrations).filter((name) => /^\d+_.*\.sql$/.test(name))
-    .filter((name) => migrationNumber(name) > BASELINE_CUTOFF).sort()) {
+    .filter((name) => migrationNumber(name) > BASELINE_CUTOFF).sort(compareMigrations)) {
     db.exec(readFileSync(resolve(migrations, name), 'utf8'));
   }
   return db;
