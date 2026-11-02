@@ -121,6 +121,8 @@ export const BINDINGS: readonly BindingSpec[] = [
   { name: 'BROWSER', kind: 'Browser Rendering', hq: null, branch: () => null, shared: true },
   // D1544 (#3784): resizes a deck image to a model's reference size before an edit.
   { name: 'IMAGES', kind: 'Images', hq: null, branch: () => null, shared: true },
+  // D4176 (#4176): Learning video on Cloudflare Stream, account-wide like Images.
+  { name: 'STREAM', kind: 'Stream', hq: null, branch: () => null, shared: true },
   { name: 'ASSETS', kind: 'Static assets', hq: './docs', branch: () => './docs', shared: false },
 ];
 
