@@ -388,7 +388,7 @@ button.fwr-add-tokens:disabled { cursor: not-allowed; opacity: .55; }
  * COLLAPSED — the spine, and the track that has to shrink with it.
  *
  * `--fwr-track` is the whole mechanism. Every host declares its rail column as
- * `var(--fwr-track, 286px)` with its OWN width as the fallback, so while this
+ * `calc(var(--fwr-track, 286px) + var(--fwr-ask, 0px))` with its OWN width as the fallback, so while this
  * property is undefined each page keeps the width it has always had, to the
  * pixel. Defining it here — once, globally — collapses all twenty at the same
  * moment, which is what makes one stored preference move the whole product
@@ -551,7 +551,7 @@ button.fwr-add-tokens:disabled { cursor: not-allowed; opacity: .55; }
   .fwr-frame-main { flex: 1 1 auto; min-width: 0; }
   .fwr-frame-rail {
     display: block; flex: none;
-    width: var(--fwr-track, 280px);
+    width: calc(var(--fwr-track, 280px) + var(--fwr-ask, 0px));
     padding: 18px 18px 28px;
     border-left: 1px solid #ececf1;
     background: #fff;
@@ -732,3 +732,11 @@ p.fwr-founder-record {
 .fwr-founder-record-spine { display: block; width: 8px; height: 8px; border-radius: 999px; background: var(--fwr-line); }
 .fwr[data-founder-record="true"] .fwr-title .fwr-mark { filter: grayscale(1); opacity: .55; }
 .dark p.fwr-founder-record { border-color: #3b2a63; color: var(--d698-ink); }
+
+/*
+ * D1443 part 5 (#3992) — the rail's fallback Ask, under the title, for a page
+ * whose header has no Ask mount. Empty (a header carries Ask, or Ask does not
+ * serve here) it takes no room.
+ */
+.fwr-ask-entry { margin-top: 10px; display: flex; }
+.fwr-ask-entry:empty { display: none; }
