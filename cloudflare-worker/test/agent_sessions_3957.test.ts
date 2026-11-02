@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { SignJWT } from 'jose';
 import { Hono } from 'hono';
 import { removeMigratedDatabases } from './_storage_schema.ts';
-import { AGENT, PROJECT, SPONSOR, STRANGER, fakeAgentRun, loopDeps, world, type World } from './_agent_engine_fixture.ts';
+import { AGENT, COMPANY, PROJECT, SPONSOR, STRANGER, fakeAgentRun, loopDeps, world, type World } from './_agent_engine_fixture.ts';
 import { buildContext } from '../src/agents/loop.ts';
 import { claimDuty, sweepDuties, type DutyDeps, type DutyRow } from '../src/services/agents/duties.ts';
 import { sessionEvents, zonedInstant, zonedNext } from '../src/services/agents/sessions.ts';
@@ -199,7 +199,8 @@ test('the instruction reaches the model only inside the untrusted wrapper', asyn
     const r = row(w, s) as DutyRow;
     await claimDuty(w.env, r, new Date(`${r.next_due_at.replace(' ', 'T')}Z`), deps());
     const task = tasksFrom(w, s)[0];
-    w.db.prepare("INSERT INTO agent_task_runs (uid, agent_id, task_id, attempt, status) VALUES ('run-i', ?, ?, 1, 'running')").run(AGENT, task.id);
+    // As admission records it: the project's company at admission (the context step ends a run whose project moved).
+    w.db.prepare("INSERT INTO agent_task_runs (uid, agent_id, task_id, attempt, status, admitted_company_id) VALUES ('run-i', ?, ?, 1, 'running', ?)").run(AGENT, task.id, COMPANY);
     const run = w.db.prepare("SELECT * FROM agent_task_runs WHERE uid = 'run-i'").get() as any;
     const built = await buildContext(loopDeps(w, fakeAgentRun(w).fn, READ_ALL), { run, agent: w.db.prepare('SELECT * FROM team_agents WHERE id = ?').get(AGENT) as any, task });
     assert.ok(built.ok, JSON.stringify(built));
