@@ -9,6 +9,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { missingRouteModules } from './_routesSource.mjs';
 import React, { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createRoot } from 'react-dom/client';
@@ -537,7 +538,8 @@ test('the routes: company settings tabs and the project page beside their siblin
   const mod = read('frontend/src/routes/portfolio.jsx');
   assert.match(mod, /<Route path="\/c\/\*"/);
   assert.match(mod, /<Route path="\/p\/\*"/);
-  assert.ok(app.includes('{portfolioRoutes(routeTools)}'));
+  // #4105: App.jsx's glob collects the module; it is served when it is not reported.
+  assert.deepEqual(missingRouteModules().filter((m) => m.file === 'frontend/src/routes/portfolio.jsx'), []);
 });
 
 test('the rendered overview says "Not recorded" in muted grey, never red', async () => {

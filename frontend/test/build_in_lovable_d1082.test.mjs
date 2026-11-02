@@ -217,7 +217,7 @@ test('the wiring: LV7 beside Add must-have, the phone sheet, the client’s rout
   assert.match(read('frontend/src/pages/cycles/CycleModulePage.jsx'), /\{lovable && <BuildInLovable lovable=\{lovable\} \/>\}<\/div>/);
   assert.match(read('frontend/src/pages/cycles/PhoneModulePage.jsx'), /\{lovable && <div className="mt-3 flex justify-center"><BuildInLovable lovable=\{lovable\} \/><\/div>\}/);
   assert.match(read('frontend/src/pages/cycles/lovable/BuildInLovable.jsx'), /flex h-full w-full flex-col[^"]*sm:h-auto/, 'LV8a: full height on the phone');
-  assert.equal((read('frontend/src/lib/api.js').match(/export \* from '\.\/api\/lovable\.js';/g) || []).length, 1);
+  assert.equal((read('frontend/src/lib/apiModules.generated.js').match(/export \* from '\.\/api\/lovable\.js';/g) || []).length, 1);
   const walk = (dir) => readdirSync(dir).flatMap((n) => { const p = join(dir, n); return statSync(p).isDirectory() ? walk(p) : [p]; });
   for (const f of walk(resolve(process.cwd(), 'frontend/src'))) {
     if (!/\.(jsx?|mjs)$/.test(f)) continue;

@@ -27,7 +27,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter, Route, Routes, matchRoutes } from 'react-router-dom';
 import { codeOnly } from './_codeOnly.mjs';
 import { routeBlock } from './_routes.mjs';
-import { readRoutesSource } from './_routesSource.mjs';
+import { readRoutesSource, missingRouteModules, routeModuleFiles } from './_routesSource.mjs';
 
 import {
   COMING_SOON_LINE, LEARNING_COMING_SOON, learningComingSoon,
@@ -178,10 +178,10 @@ test('every Learning route resolves, behind the narrowest guard it needs', () =>
     assert.ok(block.includes('user={user} activeRole={effectiveRole}'), `${pattern} does not hand the gate its user and role`);
   }
   assert.equal(declaredRoutes().filter((p) => p.startsWith('/learning')).length, ROUTES.length, 'a Learning route is declared that this test does not pin');
-  // The module is wired through App.jsx's D528 block.
-  const app = read('frontend/src/App.jsx');
-  assert.match(app, /^import learningRoutes from '\.\/routes\/learning';$/m);
-  assert.match(codeOnly(app), /\{learningRoutes\(routeTools\)\}/);
+  // The module is wired through App.jsx's D528 block: since #4105 its glob
+  // collects every module, so the module is served when it is not reported.
+  assert.deepEqual(missingRouteModules().filter((m) => m.file === 'frontend/src/routes/learning.jsx'), []);
+  assert.ok(routeModuleFiles().includes('frontend/src/routes/learning.jsx'));
 });
 
 // ── The coming-soon gate ──────────────────────────────────────────────────

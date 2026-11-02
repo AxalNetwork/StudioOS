@@ -1,0 +1,1 @@
+| DetailRail | chrome | — (docked rail component) | — | `services/aiRouter.ts` | NEW | Right-docked "Worker AI" rail for a **detail** page: mode + model shown as INHERITED from the parent workspace, batch operation with a pre-run cost estimate, spend meter, "Screened" chip. No live equivalent. |

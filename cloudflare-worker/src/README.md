@@ -14,7 +14,7 @@ worker ahead of its schema.
 
 | File | What it is |
 | --- | --- |
-| `index.ts` | Every mount. The route table for the whole API. |
+| `index.ts` | Every hand-written mount, and the hook for the rest: the route table for the whole API is `index.ts` plus `routes/_registry.ts`, the generated list of routers that mount themselves (#4105, `util/routeRegistry.ts`). A new router does not add a line here; see `routes/README.md`. |
 | `auth.ts` | `requireAuth` and session resolution. |
 | `db.ts` | `getSQL(c.env)` — the tagged-template shim. Every `${}` becomes a bound `?`. |
 | `kv.ts` | KV helpers. |

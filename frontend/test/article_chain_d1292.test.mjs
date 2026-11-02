@@ -11,6 +11,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { publishChainFor, OVERRIDE_REASON_MIN } from '../src/pages/ArticleAuthorPage.jsx';
+import { readRouteMap } from '../../scripts/lib/routeMap.mjs';
 
 const read = (p) => readFileSync(p, 'utf8');
 const ADMIN = { id: 2, role: 'admin' };
@@ -51,5 +52,5 @@ test('the page wires it: no button on blocked, a reason dialog before an overrid
 
 test('the docs', () => {
   assert.match(read('documentation/architecture/decisions/D1292.md'), /## D1292/);
-  assert.match(read('documentation/architecture/ROUTE_MAP.md'), /D1292/);
+  assert.match(readRouteMap(), /D1292/);
 });

@@ -420,6 +420,6 @@ test('the source: every statement bound, the routes mounted ahead, the client co
   assert.ok(index.indexOf("app.route('/api/cycles', notionCycleRoutes)") < index.indexOf("app.route('/api/cycles/grow', cycleGrow)"));
   const client = readFileSync('frontend/src/lib/api/notion.js', 'utf8');
   for (const p of ['/search?', '/sources', '/schema', '/preview', '/notion/sync', '/accept', '/dismiss', '/notion/facts/']) assert.ok(client.includes(p), p);
-  assert.ok(readFileSync('frontend/src/lib/api.js', 'utf8').includes("export * from './api/notion.js';"));
+  assert.ok(readFileSync('frontend/src/lib/apiModules.generated.js', 'utf8').includes("export * from './api/notion.js';"));
   assert.match(readFileSync('cloudflare-worker/sql/migrations/640_notion_sources.sql', 'utf8'), /UNIQUE \(integration_id, project_id, module, notion_id\)[\s\S]*UNIQUE \(integration_id, project_id, kind, source_key\)/);
 });
