@@ -27,6 +27,7 @@ import { SignJWT } from 'jose';
 import deckGrid from '../src/routes/deck_grid.ts';
 import deckCheck from '../src/routes/deck_check.ts';
 import deckTypedValues from '../src/routes/deck_typed_values.ts';
+import deckComments from '../src/routes/deck_comments.ts';
 import { deckConsistency } from '../src/services/deckConsistency.ts';
 import { CONTRACTS as NAMED } from '../src/contracts/index.ts';
 import { contractErrors } from '../src/contracts/validate.ts';
@@ -202,4 +203,32 @@ test('4. deckConsistency\'s reply matches deckConsistency, with findings, unread
   assert.deepEqual(contractErrors(CONTRACTS.consistency.schema, deckConsistency('not slides')), []);
   assert.deepEqual(contractErrors(CONTRACTS.consistency.schema, null), [], 'a reader who is not the founder gets null');
   assert.deepEqual(contractErrors(CONTRACTS.consistency.schema, { state: 'ok', findings: [{ key: 'k', rule: 'tone', message: 'm', cards: [1] }] }), ['$.findings[0].rule: must be one of ["one_value","use_of_funds","runway","round","forecast"]']);
+});
+
+// ── 5. The comments swap (D1570, #3817) ──────────────────────────────────
+
+test('5. the comments reply matches deckComments, for no comments and a thread with a mention, an assignee, a resolve and a reply', async () => {
+  const db = world();
+  db.exec("INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (11, 'founder', 'Synthetic Cofounder', 'co@example.test', 1, 1011)");
+  db.exec("INSERT INTO project_members (project_id, user_id, role, status) VALUES (1, 11, 'cofounder', 'accepted')");
+  const app = new Hono<any>().route('/api/decks', deckComments);
+  const token = await new SignJWT({ user_id: 10, role: 'founder' }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const call = async (method: string, path: string, body?: unknown) => {
+    const res = await withThrownResponses(() => app.request(path, { method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }, { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any));
+    return { status: res.status, body: await res.json() as any };
+  };
+  const none = await call('GET', '/api/decks/1/comments');
+  assert.equal(none.status, 200);
+  assert.deepEqual(contractErrors(CONTRACTS.comments.schema, none.body), []);
+  assert.equal(none.body.open, 0);
+  const t = await call('POST', '/api/decks/1/comments', { body: '@Synthetic Cofounder check this', card_index: 0, area: 'a1', mentions: [11] });
+  assert.equal(t.status, 201);
+  await call('POST', `/api/decks/1/comments/${t.body.comment.uid}/assign`, { user_id: 11 });
+  await call('POST', '/api/decks/1/comments', { body: 'Synthetic reply', parent_uid: t.body.comment.uid });
+  await call('POST', `/api/decks/1/comments/${t.body.comment.uid}/resolve`, {});
+  const some = await call('GET', '/api/decks/1/comments');
+  assert.equal(some.body.comments.length, 2);
+  assert.deepEqual(contractErrors(CONTRACTS.comments.schema, some.body), []);
+  assert.deepEqual(contractErrors(CONTRACTS.comments.schema, { ...some.body, viewer: { ...some.body.viewer, kind: 'admin' } }), ['$.viewer.kind: must be one of ["founder","advisor","operating_partner"]']);
+  assert.deepEqual(contractErrors(CONTRACTS.comments.schema, { ...some.body, comments: [{ ...some.body.comments[0], ai: true }] }), ['$.comments[0]: ai is not in the contract']);
 });

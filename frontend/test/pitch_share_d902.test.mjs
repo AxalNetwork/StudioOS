@@ -32,6 +32,7 @@ import { installDocument } from './_contracts_dom.mjs';
 import { renderedText } from './_renderedText.mjs';
 import { api } from '../src/lib/api.js';
 import { cyclesWrite } from '../src/lib/api/cycles.js';
+import { deckCommentsApi } from '../src/lib/api/deckComments.js';
 import ShareDialog from '../src/pages/raise/pitch/ShareDialog.jsx';
 import { ClosedLink, FigureSources, NdaGate } from '../src/pages/raise/pitch/ShareViewerParts.jsx';
 import { StudioAnalytics } from '../src/pages/raise/pitch/PitchStudio.jsx';
@@ -127,6 +128,9 @@ async function mountDialog(answers) {
   const calls = [];
   cyclesWrite.formOptions = async (...a) => { calls.push(['formOptions', ...a]); return answers.formOptions(...a); };
   cyclesWrite.raise.deckLink = async (...a) => { calls.push(['deckLink', ...a]); return answers.deckLink(...a); };
+  // D1570 (#3817): Share reads who must approve this version first; nobody, unless a test says so.
+  const savedApproval = deckCommentsApi.approval;
+  deckCommentsApi.approval = async (...a) => { calls.push(['approval', ...a]); return (answers.approval || (async () => ({ pending: [], message: null })))(...a); };
   const restore = installDocument();
   const container = document.createElement('div'); document.body.appendChild(container);
   const rootEl = createRoot(container);
@@ -146,6 +150,7 @@ async function mountDialog(answers) {
     async unmount() {
       await act(async () => rootEl.unmount()); restore();
       cyclesWrite.formOptions = saved.formOptions; cyclesWrite.raise.deckLink = saved.deckLink;
+      deckCommentsApi.approval = savedApproval;
     },
   };
 }
@@ -193,6 +198,38 @@ test('a failed prospects read falls back to a typed name, and a refusal makes no
     assert.equal(m.created.length, 0);
     assert.equal(m.by('pitch-share-made'), undefined);
   } finally { await m.unmount(); }
+});
+
+test('D1570 (#3817): Share opens one gate; an approver who has not approved holds it, with the amber line, and no link is asked for', async () => {
+  let pending = [{ user_id: 5, name: 'Sam Advisor' }];
+  const m = await mountDialog({
+    formOptions: async () => ({ prospects: [{ value: 5, label: 'Fund A' }] }),
+    deckLink: async () => ({ id: 92, share_path: '/share/deck/tok.def', deck_version: 4 }),
+    approval: async () => ({ pending, message: pending.length ? 'Approval needed before sharing · Sam Advisor has not approved yet.' : null }),
+  });
+  try {
+    await m.press('pitch-share-create');
+    assert.deepEqual(m.calls.filter((c) => c[0] === 'approval').map((c) => c[1]), [40], 'the version on screen');
+    assert.ok(m.by('pitch-share-gate'), 'the pre-share confirm opens');
+    assert.match(m.text(), /Approval needed before sharing · Sam Advisor has not approved yet\./);
+    assert.equal(m.pr(m.by('pitch-share-anyway')).disabled, true, 'held: no Share anyway past an approver');
+    assert.equal(m.calls.filter((c) => c[0] === 'deckLink').length, 0, 'no link was asked for');
+    await m.press('pitch-share-anyway');
+    assert.equal(m.calls.filter((c) => c[0] === 'deckLink').length, 0);
+    // Signed off, Share goes straight through: no confirm when there is nothing to say.
+    pending = [];
+    await m.press('pitch-share-anyway'); // still held in the open confirm
+    assert.equal(m.calls.filter((c) => c[0] === 'deckLink').length, 0);
+  } finally { await m.unmount(); }
+  const ok = await mountDialog({
+    formOptions: async () => ({ prospects: [{ value: 5, label: 'Fund A' }] }),
+    deckLink: async () => ({ id: 93, share_path: '/share/deck/tok.ghi', deck_version: 4 }),
+  });
+  try {
+    await ok.press('pitch-share-create');
+    assert.equal(ok.by('pitch-share-gate'), undefined);
+    assert.equal(ok.calls.filter((c) => c[0] === 'deckLink').length, 1);
+  } finally { await ok.unmount(); }
 });
 
 /* ------------------------------------------------------------------ *

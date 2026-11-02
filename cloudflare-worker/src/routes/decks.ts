@@ -48,6 +48,7 @@ import { ensureDeckVersionColumns, ensureProposalOutlineColumns } from '../servi
 import { isSupportSession } from '../integrations/providers/mercury';
 import { deckShareMetrics, LEGACY_SHARE_NO_VIEW_LIMIT } from '../services/deckShareUse';
 import { cleanOrder, variantSlides } from '../services/decks/variants';
+import { approvalRefusal, pendingApprovers } from '../services/decks/deckApproval';
 
 /** D895 applies only to deck operations, not other project-content routes. */
 export async function projectOwned(c: any, user: any, projectId: number, opts: { write?: boolean; audit?: boolean; contactData?: boolean } = {}) {
@@ -1409,6 +1410,9 @@ decks.post('/:id/share', async (c) => {
   try { row = await getDeckRow(c.env, id); } catch { return c.json({ error: 'not found' }, 404); }
   try { await projectOwned(c, user, Number(row.project_id), { write: true }); }
   catch { return c.json({ error: 'forbidden' }, 403); }
+  // D1570 (#3817): no link until every approver on the deck has signed off this version.
+  const waiting = await pendingApprovers(c.env, Number(row.project_id), id);
+  if (waiting.length) return c.json(approvalRefusal(waiting), 409);
   const body = await c.req.json().catch(() => ({} as any));
   const ttlHours = Math.min(
     24 * 30,
