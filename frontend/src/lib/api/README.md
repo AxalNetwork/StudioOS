@@ -492,5 +492,6 @@ D1051 adds `billingCheckout.js`: `checkoutApi.quote`, `.start(…, nonce)` and `
 | `deckReports.js` | D1540: a founder's report of a bad deck result (`POST /api/decks/proposals/:uid/report`), and HQ's queue and resolve under `/api/admin/deck-reports`. A report refunds nothing. |
 | `deckComments.js` | D1570: a deck's comments (list, post, assign, resolve) and its approval (read, set approvers, approve) under `/api/decks/:id/comments…`, `/approval`, `/approvers` and `/approve`. |
 | `deckTypedValues.js` | D1538: the figures a founder types for a deck, Stated — list, set and remove under `/api/decks/:id/typed-values`. |
+| `deckVentureElements.js` | D1543: the venture-record elements (team grid and bios, use of funds, round terms, cap-table totals, logo wall, interview quote) under `/api/decks/:id/venture-elements[/:element]`, each from records with its gate refusal, and the logos store with its permission flag under `/api/decks/:id/logos`. |
 | `deckModelPresets.js` | D1549: a deck's preset (Fast, Balanced, Best or Custom) per element group, and the groups HQ locked, under `/api/decks/:id/model-presets`. |
 | `adminDeckModels.js` | D1549: HQ's org default and lock per deck element group, under `/api/admin/ai/deck-models` (Super Admin, step-up). |

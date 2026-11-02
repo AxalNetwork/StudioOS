@@ -34,6 +34,7 @@ export const CONTRACTS = Object.freeze({
   saveCard: { issue: 3751, route: 'PATCH /api/decks/:id/cards/:uid', schema: 'deckSaveCard.schema.json' },
   stagePlan: { issue: 3774, route: 'GET /api/decks/:id/stage-plan', schema: 'deckStagePlan.schema.json' },
   typedTables: { issue: 3787, route: 'GET /api/decks/:id/typed-values', schema: 'deckTypedTables.schema.json' },
+  ventureElements: { issue: 3781, route: 'GET /api/decks/:id/venture-elements(/:element)', schema: 'deckVentureElements.schema.json' },
   withdrawInvestorLink: { issue: 3812, route: 'POST /api/decks/:id/investor-links/:shareId/withdraw', schema: 'deckWithdrawInvestorLink.schema.json' },
 });
 
