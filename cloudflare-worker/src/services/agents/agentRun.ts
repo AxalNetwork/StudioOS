@@ -56,6 +56,8 @@
  * output is logged, thrown or written to an event.
  */
 import type { Env, User } from '../../types';
+import { PLATFORM_PAUSED_MESSAGE, modelUnder, readPolicy } from './aiPolicy';
+import { agentAreas } from './adminReads';
 import { ROUTE, quoteRun, run, type RailContext, type RefusalReason, type RunOptions, type TaskClass } from '../aiRouter';
 import { railOptionsOn, type RailOptionRow } from '../ai/railMatrix';
 import { proposeRail, railByRunKey, type RailProposal } from '../railProposals';
@@ -263,6 +265,35 @@ async function taskRefusal(env: Env, a: AgentRow, taskId: number | null | undefi
   return t ? null : no(422, 'task_not_assigned', 'That task is not this agent\'s.');
 }
 
+/**
+ * D4162: the platform's AI policy on one run. The kill switch refuses it (403
+ * `platform_paused`); a locked model is swapped for the agent's area default,
+ * or refused (403 `model_locked`) when that is locked too; a quote above the
+ * per-run ceiling is refused (402 `run_ceiling`) before any hold. A policy that
+ * cannot be read refuses the run: it may be paused.
+ */
+async function underPolicy(env: Env, a: AgentRow, c: { opts: Omit<RunOptions, 'rail' | 'surface'>; rail: RailContext; surface: string }): Promise<AgentRefusal | null> {
+  const policy = await readPolicy(env);
+  if (!policy) return no(503, 'policy_unreadable', 'The platform\'s AI policy could not be read, so the agent was not run. Try again shortly.');
+  if (policy.paused.on) return no(403, 'platform_paused', PLATFORM_PAUSED_MESSAGE);
+  if (c.opts.model) {
+    const area = (await agentAreas(env)).get(a.id) ?? null;
+    const m = modelUnder(policy, String(c.opts.model), area);
+    if (!m) return no(403, 'model_locked', 'This agent\'s model is switched off on the platform, and so is its area\'s default. Pick another model for it.');
+    c.opts.model = m.model;
+  }
+  const ceiling = policy.per_run_ceiling_microusd;
+  if (ceiling != null) {
+    let q: Awaited<ReturnType<typeof quoteRun>>;
+    try { q = await quoteRun(env, { ...c.opts, rail: c.rail, surface: c.surface }); } catch { q = { ok: false, refusal: 'misconfigured', error: 'unreadable' } as any; }
+    if (!q.ok) return no(503, 'run_quote_unreadable', 'This run could not be priced, so it was not checked against the platform\'s per-run ceiling. Nothing was charged.');
+    if (q.hold_microusd > ceiling) {
+      return no(402, 'run_ceiling', `This run would cost more than the platform allows for one run ($${(ceiling / 1e6).toFixed(2)}). Nothing was charged.`);
+    }
+  }
+  return null;
+}
+
 export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRunResult> {
   const a = input.agent;
   if (input.runUid != null && !(typeof input.runUid === 'string' && RUN_UID_RE.test(input.runUid))) {
@@ -277,6 +308,9 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
   if (bad) return refused(env, a, bad, input.module, input.option);
   const c = await check(env, input);
   if (!c.ok) return a.status === 'removed' || c.code === 'not_found' ? c : refused(env, a, c, input.module, input.option);
+  // D4162 (#4162): HQ's AI policy, before anything is read, held or charged.
+  const held = await underPolicy(env, a, c);
+  if (held) return refused(env, a, held, input.module, input.option);
   // Part 5: the named reads, through granted tools only, before the model sees anything.
   const shaped = cleanReads(input.toolReads, grantsOf(a.tool_grants_json));
   if (!shaped.ok) return refused(env, a, shaped, input.module, input.option);

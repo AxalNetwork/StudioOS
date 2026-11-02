@@ -8,6 +8,15 @@
 //   GET /admin/ai-agents/spend?by=agent|skill|company|model
 //   GET /admin/ai-agents/audit?admin=&action=&area=&from=&to=&cursor=
 //   GET /admin/ai-agents/audit.csv?(the same filters)
+// D4162 (#4162, H4): the platform's AI policy (routes/admin_ai_agents_policy.ts).
+//   GET    /admin/ai-agents/policy
+//   PUT    /admin/ai-agents/policy/models  { areas, reason }
+//   POST   /admin/ai-agents/policy/locks   { model, reason }
+//   DELETE /admin/ai-agents/policy/locks/:model  { reason }
+//   PUT    /admin/ai-agents/policy/caps    { platform_budget_microusd?, default_team_cap_microusd?, max_team_cap_microusd?, per_run_ceiling_microusd?, reason }
+//   PUT    /admin/ai-agents/policy/tools   { tools, reason }
+//   POST   /admin/ai-agents/policy/pause   { reason, confirm: 'PAUSE' }
+//   POST   /admin/ai-agents/policy/resume  { reason }
 import { api, request } from '../api.js';
 
 const enc = encodeURIComponent;
@@ -20,4 +29,12 @@ export const adminAiAgentsApi = {
   spend: (by = 'agent') => request(`/admin/ai-agents/spend?${q({ by })}`),
   audit: (filters = {}) => request(`/admin/ai-agents/audit?${q(filters)}`),
   auditCsv: (filters = {}) => api._downloadCsv(`/admin/ai-agents/audit.csv?${q(filters)}`, 'ai-agents-audit.csv'),
+  policy: () => request('/admin/ai-agents/policy'),
+  setModels: (areas, reason) => request('/admin/ai-agents/policy/models', { method: 'PUT', body: JSON.stringify({ areas, reason }) }),
+  lockModel: (model, reason) => request('/admin/ai-agents/policy/locks', { method: 'POST', body: JSON.stringify({ model, reason }) }),
+  unlockModel: (model, reason) => request(`/admin/ai-agents/policy/locks/${enc(model)}`, { method: 'DELETE', body: JSON.stringify({ reason }) }),
+  setCaps: (caps, reason) => request('/admin/ai-agents/policy/caps', { method: 'PUT', body: JSON.stringify({ ...caps, reason }) }),
+  setReadTools: (tools, reason) => request('/admin/ai-agents/policy/tools', { method: 'PUT', body: JSON.stringify({ tools, reason }) }),
+  pauseAll: (reason, confirm) => request('/admin/ai-agents/policy/pause', { method: 'POST', body: JSON.stringify({ reason, confirm }) }),
+  resumeAll: (reason) => request('/admin/ai-agents/policy/resume', { method: 'POST', body: JSON.stringify({ reason }) }),
 };

@@ -40,6 +40,7 @@
  * Part 5 (#3844, owner Q3 = A) adds the sponsor's approved read tools
  * (D852), through `services/agents/agentTools.ts`.
  */
+import { maxTeamCap } from '../services/agents/aiPolicy';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
@@ -81,6 +82,14 @@ router.use('*', async (c, next) => {
 
 const say = (c: C, status: number, code: string, message: string, extra?: Record<string, unknown>) =>
   refuse(c, status, { code, message, extra });
+
+/** D4162 (#4162): HQ's maximum team cap. A cap above it is refused; a policy that cannot be read sets no new cap. */
+async function capOverPlatform(c: any, cap: number): Promise<Response | null> {
+  const m = await maxTeamCap(c.env);
+  if (!m.ok) return say(c, 503, 'policy_unreadable', 'The platform\'s AI policy could not be read, so the cap was not changed. Try again shortly.');
+  if (m.max != null && cap > m.max) return say(c, 422, 'cap_over_platform_max', `The platform allows a monthly cap of at most $${(m.max / 1e6).toFixed(2)} per agent.`);
+  return null;
+}
 const notFound = (c: C) => say(c, 404, 'not_found', 'There is no such team.');
 
 // ── Gates ───────────────────────────────────────────────────────────────────
@@ -373,6 +382,8 @@ router.patch('/agents/:uid', async (c) => {
     }
     if ('monthly_cap_microusd' in b) {
       if (!validCap(b.monthly_cap_microusd)) return say(c, 400, 'invalid_cap', 'The monthly cap is a whole number of micro-dollars above zero.');
+      const over = await capOverPlatform(c, b.monthly_cap_microusd);
+      if (over) return over;
       if (b.monthly_cap_microusd !== a.monthly_cap_microusd) {
         next.cap = b.monthly_cap_microusd;
         events.push(['cap_changed', { from_microusd: a.monthly_cap_microusd, to_microusd: b.monthly_cap_microusd }]);
@@ -472,6 +483,8 @@ router.post('/:scope/:id/agents', async (c) => {
     const role = typeof b.role_key === 'string' ? roleOf(b.role_key) : null;
     if (!role) return say(c, 400, 'invalid_role', 'Choose one of the roles.');
     if (!validCap(b.monthly_cap_microusd)) return say(c, 400, 'invalid_cap', 'The monthly cap is a whole number of micro-dollars above zero.');
+    const over = await capOverPlatform(c, b.monthly_cap_microusd);
+    if (over) return over;
     const first = namePart(b.first_name); const last = namePart(b.last_name);
     if (!first.ok || !last.ok) return say(c, 400, 'invalid_name', `A name is at most ${NAME_MAX} characters.`);
     if (typeof b.model_id !== 'string' || !b.model_id || modelRefusal(c.env, b.model_id)) {
