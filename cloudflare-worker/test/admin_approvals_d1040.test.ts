@@ -251,5 +251,5 @@ test('mounted where the client calls it, and the branch board shares the same st
   assert.match(branch, /readHistoryQuery\(/);
   const client = readFileSync(resolve(ROOT, 'frontend/src/lib/api/adminApprovals.js'), 'utf8');
   for (const p of ["'/admin/approvals/assignments'", '/admin/approvals/history?lane=', '/admin/approvals?page=']) assert.ok(client.includes(p), p);
-  assert.match(readFileSync(resolve(ROOT, 'frontend/src/lib/api.js'), 'utf8'), /export \* from '\.\/api\/adminApprovals\.js';/);
+  assert.match(readFileSync(resolve(ROOT, 'frontend/src/lib/apiModules.generated.js'), 'utf8'), /export \* from '\.\/api\/adminApprovals\.js';/);
 });
