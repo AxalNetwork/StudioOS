@@ -41,7 +41,7 @@ import { canAccessFounderResource, requireAuth, selectJwt } from '../auth';
 import { refuse } from '../util/refusal';
 import { context as investorDealContext } from './deal_context';
 import { publicDeckOf } from './decks';
-import { parseShareInclude, shareIncludeFromBody, shareSlides } from '../services/decks/shareInclude';
+import { parseShareInclude, shareGatesFor, shareIncludeFromBody, shareSlides } from '../services/decks/shareInclude';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -94,7 +94,7 @@ r.get('/:id/deck', async (c) => {
         title: deck.title ?? null,
         theme: deck.theme ?? null,
         frozen: { version: Number(row.version), as_of: row.created_at ?? null },
-        slides: withoutProvenance(shareSlides(deck.slides, include)),
+        slides: withoutProvenance(shareSlides(deck.slides, include, await shareGatesFor(c.env, x.deal.project_id))),
       },
       included: include,
     });

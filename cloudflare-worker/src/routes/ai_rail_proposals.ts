@@ -5,6 +5,9 @@
  * Two routes, both the caller's own rows only (`services/railProposals.ts`
  * binds `user_id` on every read and write):
  *   GET  /?option=<key>&record=<type:id>&status=proposed   newest first
+ *   GET  /?page=<rail page>&run=<usage_log_id>               D1442: the Ask panel's
+ *        "N waiting" (a page instead of an option; at least one of the two) and
+ *        one run's rows
  *   POST /:uid/decide  { decision: 'accept' | 'edit' | 'discard', payload? }
  *
  * Deciding keeps or throws away the proposal. It writes no record: the page's
@@ -27,12 +30,17 @@ const DECISIONS: readonly RailDecision[] = ['accept', 'edit', 'discard'];
 
 r.get('/', async (c) => {
   const user = await requireAuth(c);
-  const option = String(c.req.query('option') || '');
-  if (!option) return c.json({ error: 'option_required' }, 400);
+  const option = String(c.req.query('option') || '') || null;
+  const page = String(c.req.query('page') || '') || null;
+  // D1442: an option or a page picks the rows; neither would list every row the member has.
+  if (!option && !page) return c.json({ error: 'option_or_page_required' }, 400);
   const status = c.req.query('status');
   if (status && !STATUSES.includes(status as RailProposalStatus)) return c.json({ error: 'invalid_status' }, 400);
+  const runRaw = c.req.query('run');
+  const run = runRaw != null && runRaw !== '' ? Number(runRaw) : null;
+  if (run != null && !(Number.isSafeInteger(run) && run > 0)) return c.json({ error: 'invalid_run' }, 400);
   const proposals = await listRail(c.env, user.id, {
-    option, record: c.req.query('record') ?? null, status: (status as RailProposalStatus) || null,
+    option, page, record: c.req.query('record') ?? null, status: (status as RailProposalStatus) || null, run,
   });
   return c.json({ proposals });
 });

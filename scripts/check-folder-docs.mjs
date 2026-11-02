@@ -127,6 +127,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/cycles',               'the four cycle overviews and module pages, from the shared cycle read (D661)'],
   ['frontend/src/pages/cycles/evidence',      'Raise evidence (D1261, D1266, D1267): the founder\'s view, its drawers, the module parts and the deck chips'],
   ['frontend/src/pages/closing',              'the closing room and the admin Closings desk, one closing, its paper, routes and activity (D1213, D1219)'],
+  ['frontend/src/pages/email',                'the Email page and its composer (D1344), and a record\'s Email in the right Sheet (#4017)'],
   ['frontend/src/pages/events',                 'event host tools and public/member detail'],
   ['frontend/src/pages/founder',              'founder workspace landing pages and shared shell'],
   ['frontend/src/pages/site',                 'the public site\'s pages from the owner\'s website canvas (D673–D680), and their stylesheets'],
@@ -162,6 +163,9 @@ const DOCUMENTED = new Map([
   ['cloudflare-worker/src/services/mail', 'Email (#3547): mailboxes and send, drafts and their context pack, address shares, and each profile\'s People pane'],
   ['cloudflare-worker/src/services/mail/adapters', 'D1340 mailbox adapters, one per provider'],
   ['cloudflare-worker/src/templates/legal',   'the legal document templates'],
+  ['cloudflare-worker/src/contracts',         'D1511: one JSON Schema per swapped deck v2 adapter method, checked against the real reply'],
+  ['cloudflare-worker/test/fixtures',         'recorded and synthetic inputs the worker tests read, the fake AI binding\'s recordings among them'],
+  ['frontend/tests/visual',                   'D1511: the Pitch deck editor\'s visual regression and axe suites, their server and baselines'],
 ]);
 
 // Trees inside which a heavy folder is expected to document itself.
