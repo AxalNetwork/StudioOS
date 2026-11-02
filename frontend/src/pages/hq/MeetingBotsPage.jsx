@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { adminMeetingBotsApi } from '../../lib/api/adminMeetingBots';
 import { Card } from '../../ui';
 import MeetingBotDiagnosePanel from './MeetingBotDiagnosePanel';
+import HeaderAsk from '../../ui/HeaderAsk.jsx';
 
 const platforms = { zoom: 'Zoom', google_meet: 'Google Meet', teams: 'Microsoft Teams' };
 const number = (n) => n == null ? 'Not recorded' : new Intl.NumberFormat('en', { maximumFractionDigits: 2 }).format(n);
@@ -78,7 +79,7 @@ export default function MeetingBotsPage() {
   };
   return <div className="space-y-4 text-axal-ink dark:text-white" data-testid="meeting-bots-page">
     <Link to="/admin/platform" className="text-xs font-bold text-axal-muted dark:text-gray-300">← Platform</Link>
-    <header className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-2xl font-extrabold tracking-tight">Meeting bots</h1><p className="mt-1 text-sm text-axal-muted dark:text-gray-300">HQ operations · counts, timing and cost</p></div><button className={button} disabled={reading} onClick={refresh}>{reading ? 'Reading…' : 'Refresh'}</button></header>
+    <header className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-2xl font-extrabold tracking-tight">Meeting bots</h1><p className="mt-1 text-sm text-axal-muted dark:text-gray-300">HQ operations · counts, timing and cost</p></div><div className="flex flex-wrap items-center gap-2"><button className={button} disabled={reading} onClick={refresh}>{reading ? 'Reading…' : 'Refresh'}</button><HeaderAsk /></div></header>
     {data ? <BotOperationsPanel report={data.operations} pricing={data.pricing} range={range} setRange={setRange} /> : <p role="status" className="text-sm text-axal-muted dark:text-gray-300">Reading meeting bot operations…</p>}
     <Card><h2 className="font-bold">Test Eadwyn AI</h2><p className="mt-1 text-sm text-axal-muted dark:text-gray-300">Send Eadwyn AI to a test meeting. First create a fresh audio session in Validate and record consent. This uses your session and the usual AI-token charges.</p>
       <form onSubmit={start} className="mt-4 grid gap-3 sm:grid-cols-[9rem_1fr_auto] sm:items-end">

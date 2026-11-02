@@ -169,8 +169,8 @@ test('the routes, the Project settings card, and the honest block while off', ()
   assert.match(page, /testId="work-off"/);
   assert.match(page, /disabled=\{off\}/, 'New item is off while Work is');
   assert.doesNotMatch(read('frontend/src/pages/work/CompliancePage.jsx'), /company_projects|scope_tasks/);
-  // D1443 (#3706): both pages' Ask is the Ask panel's own PageAsk.
-  for (const f of ['WorkPage.jsx', 'CompliancePage.jsx']) assert.match(codeOnly(read(`frontend/src/pages/work/${f}`)), /import \{ PageAsk \} from '\.\.\/\.\.\/ui\/AskButton\.jsx'[\s\S]*<PageAsk label=/, f);
+  // D1443 (#3706, part 5 #3992): both pages' Ask is the page's one header Ask (HeaderAsk, which draws PageAsk).
+  for (const f of ['WorkPage.jsx', 'CompliancePage.jsx']) assert.match(codeOnly(read(`frontend/src/pages/work/${f}`)), /import HeaderAsk from '\.\.\/\.\.\/ui\/HeaderAsk\.jsx'[\s\S]*<HeaderAsk label=/, f);
 });
 
 test('the canvases are in design/incoming with the named logo edit, and D1614 names them', () => {

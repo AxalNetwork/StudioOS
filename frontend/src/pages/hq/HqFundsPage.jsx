@@ -48,6 +48,7 @@ import { Landmark } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
+import HeaderAsk from '../../ui/HeaderAsk.jsx';
 
 const UNAVAILABLE = Symbol('unavailable');
 
@@ -589,7 +590,8 @@ export default function HqFundsPage() {
           </span>
         </div>
 
-        <header>
+        <header className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
           <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
             <Landmark size={13} /> HQ · Funds
           </div>
@@ -599,6 +601,8 @@ export default function HqFundsPage() {
             and which facts it has not recorded. HQ&rsquo;s own funds are the row &ldquo;HQ&rdquo;; every branch is read
             over its own binding, and one that does not answer reads Unreadable without changing any other row.
           </p>
+          </div>
+          <HeaderAsk />
         </header>
 
         {data === UNAVAILABLE && (
