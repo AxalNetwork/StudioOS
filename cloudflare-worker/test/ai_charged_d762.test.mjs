@@ -23,6 +23,7 @@ import { AI_MARKUP, billingMode, chargeMultiplier } from '../src/services/ai/pri
 import { catalogueFor } from '../src/routes/ai.ts';
 import { blockHoldMicro, blockQuoteMicro, holdBlock, settleStream } from '../src/services/liveTranscription.ts';
 import { PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET } from '../src/services/aiRouter.ts';
+import { MIP_OPT_OUT_PRICE_FACTOR } from '../src/services/sttFormats.ts';
 
 const MODEL = ROUTE.advisor_turn.model;
 const caps = (db, day = 0, month = 0) => db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('founder:free',?,?,1)").run(day, month);
@@ -456,7 +457,8 @@ test('charged: a live transcript is settled at the billed price its blocks were 
       fallback_used INTEGER, audio_minutes REAL, cost_microusd INTEGER, outcome TEXT, refusal TEXT)`);
     const h = await holdBlock(f.env, 2, model);
     const out = await settleStream(f.env, { id: 1 }, model, [h.reservation], 60_000);
-    const charge = usdToMicro(PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET[model] * AI_MARKUP);
+    // #3936 part 3: interview audio, so Nova-3 streams at Deepgram's opt-out rate.
+    const charge = usdToMicro(PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET[model] * MIP_OPT_OUT_PRICE_FACTOR * AI_MARKUP);
     assert.equal(out.cost_microusd, charge);
     const [r] = reservations(f.db);
     assert.equal(r.actual_included_microusd + r.actual_topup_microusd, charge);
