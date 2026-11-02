@@ -195,7 +195,8 @@ test('a draft never reaches a share link; writers change it, readers alone read 
     // Nothing outside the draft routes reads the working copy.
     const sources = readdirSync('cloudflare-worker/src', { recursive: true }).filter((n: any) => /\.ts$/.test(n)) as string[];
     const readers = sources.filter((n) => readFileSync(`cloudflare-worker/src/${n}`, 'utf8').includes('pitch_deck_cards'));
-    assert.deepEqual(readers.map((n) => n.replace(/\\/g, '/')), ['routes/deck_draft.ts']);
+    // D1577 (#3824): area saves write the same working copy; D1508's cleanup reads drafts only to keep the images they name (through its view, migration 722).
+    assert.deepEqual(readers.map((n) => n.replace(/\\/g, '/')).sort(), ['routes/deck_coedit.ts', 'routes/deck_draft.ts', 'services/decks/imageSweep.ts'], 'neither is a share link, export or reader');
     // Another member: no read, no write.
     assert.equal((await f.call('GET', `/api/decks/${DECK}/draft`, { as: OTHER })).status, 403);
     assert.equal((await f.patch('c1', { title: 'Intruder' }, '1', {}, OTHER)).status, 403);

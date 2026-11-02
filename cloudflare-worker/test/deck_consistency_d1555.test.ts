@@ -1,5 +1,4 @@
 import { contractErrors } from '../src/contracts/validate.ts';
-const replyContract = JSON.parse(readFileSync(new URL('../src/contracts/deckConsistency.schema.json', import.meta.url), 'utf8'));
 /**
  * D1555 (#3802, deck v2 C7) — the deck's consistency rules across its cards.
  *
@@ -15,6 +14,7 @@ const replyContract = JSON.parse(readFileSync(new URL('../src/contracts/deckCons
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
+const replyContract = JSON.parse(readFileSync(new URL('../src/contracts/deckConsistency.schema.json', import.meta.url), 'utf8'));
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';

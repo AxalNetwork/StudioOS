@@ -4,6 +4,7 @@ import { ShieldCheck, AlertTriangle, Loader2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
+import HeaderAsk from '../../ui/HeaderAsk.jsx';
 
 /**
  * HQ · Security — canvas H23 (Admin · Super), which "completes Y2/H7".
@@ -975,7 +976,8 @@ export default function HqSecurityPage() {
           </span>
         </div>
 
-        <header className="mt-4">
+        <header className="mt-4 flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
           <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
             <ShieldCheck size={13} /> HQ · Security
           </div>
@@ -994,6 +996,8 @@ export default function HqSecurityPage() {
             {/* D1079 (#2971): TRU14, the public trust center's content. */}
             <Link to="/admin/security/trust-center" className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300" data-testid="security-trust-content-link">Trust center content</Link>
           </p>
+          </div>
+          <HeaderAsk />
         </header>
 
         {data === UNAVAILABLE && <div className="mt-4"><Unreadable what="The security overview" claim="This is not a claim that nothing happened." onRetry={load} /></div>}

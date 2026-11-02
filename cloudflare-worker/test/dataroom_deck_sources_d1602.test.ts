@@ -1,10 +1,10 @@
 import { contractErrors } from '../src/contracts/validate.ts';
-const replyContract = JSON.parse(readFileSync(new URL('../src/contracts/deckSource.schema.json', import.meta.url), 'utf8'));
 /** D1602: migrated SQLite, real router/billing, synthetic files and a stubbed AI binding. */
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync, mkdtempSync, copyFileSync, rmSync } from 'node:fs';
+const replyContract = JSON.parse(readFileSync(new URL('../src/contracts/deckSource.schema.json', import.meta.url), 'utf8'));
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Hono } from 'hono';

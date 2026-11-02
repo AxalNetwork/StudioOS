@@ -17,6 +17,8 @@ import { LATER, aiOffState } from './deckV2Model';
 import { AiOffBanner } from './DeckAsk';
 import useAssistMode from '../../../hooks/useAssistMode';
 import useMenuFocus from './useMenuFocus';
+import useDeckPresence from './useDeckPresence';
+import { avatarsOf } from './presenceModel';
 import { NOT_CHECKED, checkPills } from './checkModel';
 import { presentHref } from './presentExportModel';
 import { FAST_TITLE, NEW_PATH } from './newDeckModel';
@@ -225,6 +227,8 @@ function DeckCard({ project, current, deck, engagement, sources, q, phone, readO
   const row = versionRows([current])[0];
   const stats = engagement.status === 'ok' ? readerStats(engagement.data) : null;
   const views = engagement.status === 'error' ? 'Could not be read' : engagement.status !== 'ok' ? '…' : stats ? `${stats.views}${stats.capped ? '+' : ''}` : NOT_RECORDED;
+  // D1577 (#3824, pd1): who is editing this deck now, read once (no socket here); nothing while presence is off.
+  const editing = avatarsOf(useDeckPresence(current?.id ?? null).editors, null);
   return (
     <section className={`${CARD} flex flex-col gap-3 p-4 ${wide ? 'lg:col-span-3' : 'lg:col-span-2'} ${phone ? '' : 'sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] sm:items-start'}`} data-testid="pitch-studio-current">
       <div className="flex aspect-video flex-col justify-end gap-1 rounded-[8px] border border-axal-hairline bg-axal-ground p-3.5 dark:border-gray-700 dark:bg-gray-800" data-testid="pitch-studio-cover">
@@ -242,6 +246,15 @@ function DeckCard({ project, current, deck, engagement, sources, q, phone, readO
         <div className="flex flex-wrap items-center gap-2">
           <span className={`text-[15px] font-extrabold ${INK}`}>{`${name} · ${versionLabel(current)}`}</span>
           {current.is_current ? <span className={PILL_VIO}>Current</span> : null}
+          {editing ? (
+            <span className="flex -space-x-1.5" data-testid="pitch-studio-editors">
+              {editing.shown.map((a) => (
+                <span key={a.id} title={`${a.name} is editing`} className="inline-flex h-6 w-6 items-center justify-center rounded-full border-2 border-white text-[9.5px] font-bold text-white dark:border-gray-900"
+                  style={{ background: a.colour }}><span aria-hidden="true">{a.initials}</span><span className="sr-only">{a.name} is editing</span></span>
+              ))}
+              {editing.more ? <span className="inline-flex h-6 items-center px-1.5 text-[10.5px] font-bold text-axal-muted dark:text-gray-400">+{editing.more}</span> : null}
+            </span>
+          ) : null}
         </div>
         <dl className="m-0 flex flex-col" data-testid="pitch-studio-deck-facts">
           <Fact k="Audience" testId="pitch-studio-deck-audience">{row.audience}</Fact>

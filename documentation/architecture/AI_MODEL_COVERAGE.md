@@ -77,7 +77,7 @@ Prices are Cloudflare's printed USD per unit (per 1M tokens, per 1k characters, 
 | `@cf/zai-org/glm-5.3-flash` | Text Generation | ga | tokens_in 0.150, tokens_cached 0.030, tokens_out 0.500 | 1048576 | paid | O | G | O | O | O | G | G | · | G | G | G | O | · | O |
 | `@cf/openai/gpt-oss-120b` | Text Generation | ga | tokens_in 0.350, tokens_out 0.750 | 128000 | all | W | G | O | W | O | O | O | · | G | G | O | W | · | W |
 | `@cf/openai/gpt-oss-20b` | Text Generation | ga | tokens_in 0.200, tokens_out 0.300 | 128000 | all | O | G | O | O | O | G | G | · | G | G | O | O | · | O |
-| `@cf/ibm-granite/granite-4.0-h-micro` | Text Generation | ga | tokens_in 0.017, tokens_out 0.112 | 131000 | all | O | G | O | O | O | G | O | · | G | G | O | O | · | O |
+| `@cf/ibm-granite/granite-4.0-h-micro` | Text Generation | ga | tokens_in 0.017, tokens_out 0.112 | 131000 | all | O | G | O | O | O | G | W | · | G | G | O | O | · | O |
 | `@hf/nousresearch/hermes-2-pro-mistral-7b` | Text Generation | deprecated | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/ai4bharat/indictrans2-en-indic-1B` | Translation | ga | tokens_in 0.342, tokens_out 0.342 | Not recorded | all | O | O | · | · | O | · | O | · | G | G | G | · | · | O |
 | `@cf/moonshotai/kimi-k2.5` | Text Generation | deprecated | tokens_in 0.600, tokens_cached 0.100, tokens_out 3.000 | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
@@ -567,7 +567,7 @@ chat: Short summaries, labels and lightweight record explanations.
 - Raise: **offered**, `/api/ai/modules on "Founder · Raise · Cap table"`; `/api/ai/modules on "Founder · Raise · Use of funds"`; `railMatrix.json "Founder · Raise · Cap table"`; `railMatrix.json "Founder · Raise · Use of funds"`; and 3 more
 - Grow: **offered**, `/api/ai/modules on "Founder · Grow · Product improvement"`; `/api/ai/modules on "Founder · Grow · Revenue and traction"`; `railMatrix.json "Founder · Grow · Revenue and traction"`
 - Network: **gap**, `#3721`
-- Research: **offered**, `/api/ai/modules on "Investor · Research · Benchmarking"`; `railMatrix.json "Investor · Research · Benchmarking"`
+- Research: **wired**, `services/market_intel/extractors/index.ts (paraphrase)`
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`
@@ -721,7 +721,7 @@ chat: Summarise research, explain records and draft member communications.
 - Raise: **wired**, `railMatrix.json "Founder · Raise · Investor narrative"`
 - Grow: **wired**, `railMatrix.json "Founder · Grow · Distribution"`; `railMatrix.json "Founder · Grow · Product improvement"`; `routes/brand.ts (brand_autofill)`; `routes/brand.ts (brand_palette)`; and 2 more
 - Network: **offered**, `/api/ai/modules on "Advisor · Network · Introductions"`; `/api/ai/modules on "Advisor · Network · Organizations"`; `/api/ai/modules on "Advisor · Network · Relationships"`; `/api/ai/modules on "Advisor · Network"`; and 35 more
-- Research: **wired**, `routes/research.ts (research_ask)`; `routes/research.ts (workspace_explain)`; `services/market_intel/extractors/index.ts (paraphrase)`
+- Research: **wired**, `routes/research.ts (research_ask)`; `routes/research.ts (workspace_explain)`
 - Articles: **gap**, `#3721`
 - Email: **wired**, `services/mail/drafts.ts (mail_draft)`
 - Studio / Eadwyn: **wired**, `routes/advisor.ts (advisor_explain)`; `routes/advisor.ts (tool_call)`; `routes/ai.ts (workspace_explain)`; `routes/profiling.ts (onboarding_chat)`; and 1 more

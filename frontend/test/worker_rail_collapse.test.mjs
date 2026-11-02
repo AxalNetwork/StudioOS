@@ -101,7 +101,8 @@ test('every rail track keeps its own width as the fallback', () => {
   const tracks = [];
   for (const file of stylesheets()) {
     const src = readFileSync(file, 'utf8');
-    for (const m of src.matchAll(/grid-template-columns:\s*minmax\(\s*0\s*,\s*1fr\s*\)\s+var\(([^)]*)\)/g)) {
+    // D1443 part 5 (#3992, AK12): each track adds the Ask panel's width, 0 unless it is docked open at 1440px+.
+    for (const m of src.matchAll(/grid-template-columns:\s*minmax\(\s*0\s*,\s*1fr\s*\)\s+calc\(var\(([^)]*)\) \+ var\(--fwr-ask, 0px\)\)/g)) {
       tracks.push({ file: relative(ROOT, file), inner: m[1] });
     }
   }
@@ -127,7 +128,7 @@ test('the shared rail frame reads the same property', () => {
   const FRAME = codeOnly(CSS);
   const column = FRAME.match(/\.fwr-frame-rail\s*\{([^}]*)\}/g)?.find((r) => /width:/.test(r));
   assert.ok(column, 'the frame column must keep its own rule — nothing else identifies it');
-  assert.match(column, /width:\s*var\(--fwr-track,\s*280px\)/,
+  assert.match(column, /width:\s*calc\(var\(--fwr-track,\s*280px\) \+ var\(--fwr-ask, 0px\)\)/,
     'the frame must collapse with the host grids, not stay 280px around a spine');
   assert.doesNotMatch(column, /width:\s*280px/,
     'the literal width would win over the property and pin the column open');

@@ -8,7 +8,15 @@ import { useAuth } from '../../../hooks/useAuthSync';
 import { Lightbox, WorkerRail } from '../../../ui';
 import { useRailOption } from '../../../ui/railCrumbs';
 import PitchPage from './PitchPage';
-import { availability } from './deckV2Adapter';
+import { SURFACES } from './deckV2Adapter';
+
+/**
+ * D1535 (#3782) put the template routes on main and swapped the adapter's
+ * `templates`, `myTemplates` and `saveAsTemplate`. This screen does not read
+ * them yet: until S1 wires the filters and Yours to those methods, they stay
+ * greyed with the seam's words, so no chip looks live and does nothing.
+ */
+const NOT_WIRED = (name) => Object.freeze({ available: false, reason: 'Not switched on yet.', issue: SURFACES[name].issue });
 import { LATER } from './deckV2Model';
 import { deckRail } from './deckRailGroups';
 import { refusalOf } from './newDeckModel';
@@ -18,6 +26,7 @@ import {
   FILTERS, GALLERY, LOCKED_LINE, METHODS_FAILED, NO_TEMPLATES, RECOMMENDED, SAVE_MINE, SAVE_MINE_LINE, TEMPLATES_TITLE, USE_TEMPLATE, YOURS,
   galleryTiles, templateSentence,
 } from './templatesModel';
+import HeaderAsk from '../../../ui/HeaderAsk.jsx';
 
 /**
  * D1604 (#3716, pd29, plan §7) — the templates gallery at
@@ -100,6 +109,7 @@ export default function TemplatesGallery() {
                 data-testid={`pitch-templates-tab-${id}`}>{label}</button>
             ))}
           </div>
+          <HeaderAsk />
         </header>
         {readOnly ? <div role="note" className="rounded-[10px] bg-amber-100 px-3 py-2 text-[12.5px] font-semibold text-amber-900 dark:bg-amber-950/40 dark:text-amber-200" data-testid="pitch-templates-readonly">{READ_ONLY}</div> : null}
         <Filters />
@@ -111,7 +121,7 @@ export default function TemplatesGallery() {
 
 /** Stage, Audience and Style: greyed until #3782's tags, each chip reached by the keyboard so its reason is read. */
 function Filters() {
-  const off = availability('templates');
+  const off = NOT_WIRED('templates');
   const later = off && off.available !== true;
   return (
     <section className={`${CARD} flex flex-col gap-2 p-3.5`} aria-label="Filters" data-testid="pitch-templates-filters">
@@ -131,8 +141,8 @@ function Filters() {
 }
 
 function Yours() {
-  const mine = availability('myTemplates');
-  const save = availability('saveAsTemplate');
+  const mine = NOT_WIRED('myTemplates');
+  const save = NOT_WIRED('saveAsTemplate');
   return (
     <section className={`${CARD} flex flex-col gap-2.5 p-5`} aria-label={YOURS} data-testid="pitch-templates-yours">
       <span className={`text-[14px] font-extrabold ${INK}`}>{YOURS}</span>

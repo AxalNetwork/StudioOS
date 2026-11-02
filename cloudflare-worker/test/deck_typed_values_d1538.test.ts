@@ -1,5 +1,4 @@
 import { contractErrors } from '../src/contracts/validate.ts';
-const replyContract = JSON.parse(readFileSync(new URL('../src/contracts/deckTypedTables.schema.json', import.meta.url), 'utf8'));
 /**
  * D1538 (#3787, deck v2 B11) — typed figures, the table block, the
  * market_circles and projection charts, and the one-click rules.
@@ -19,6 +18,7 @@ const replyContract = JSON.parse(readFileSync(new URL('../src/contracts/deckType
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
+const replyContract = JSON.parse(readFileSync(new URL('../src/contracts/deckTypedTables.schema.json', import.meta.url), 'utf8'));
 import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';

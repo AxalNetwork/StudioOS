@@ -70,7 +70,9 @@ async function call(db: any, method: string, path: string, init: { body?: BodyIn
     { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db), AI } as any, { waitUntil() {}, passThroughOnException() {} } as any);
   return { status: res.status, body: await res.json().catch(() => null) as any };
 }
-const runs = (db: any) => (db.prepare(`SELECT user_id, rail_page, rail_option, record_ref FROM ai_usage_logs WHERE guard_for IS NULL ORDER BY id`).all() as any[]).map((r) => ({ ...r }));
+// #3937: a file's conversion is its own uncharged row (`document_convert`); these are the model runs.
+const runs = (db: any) => (db.prepare(`SELECT user_id, rail_page, rail_option, record_ref FROM ai_usage_logs WHERE guard_for IS NULL AND task <> 'document_convert' ORDER BY id`).all() as any[]).map((r) => ({ ...r }));
+const conversions = (db: any) => (db.prepare(`SELECT user_id, surface, charged_microusd FROM ai_usage_logs WHERE task = 'document_convert'`).all() as any[]).map((r) => ({ ...r }));
 const upload = (db: any, headers?: Record<string, string>) => {
   const fd = new FormData();
   fd.append('file', new File([new Uint8Array([37, 80, 68, 70])], 'kestrel.pdf', { type: 'application/pdf' }));
@@ -102,6 +104,7 @@ test('D778: each press with no rail context names its inventoried option, and th
     [DECK_REVIEW_PAGE, 'review:deck-again', at(pasted.body.id)],
   ], 'mapping and review are two runs; a regenerate is one');
   assert.ok(runs(db).every((r) => r.user_id === FOUNDER), 'charged to the member who pressed');
+  assert.deepEqual(conversions(db), [{ user_id: FOUNDER, surface: '/raise/pitch/review', charged_microusd: 0 }], 'the uploaded file was read once, metered, at no charge');
 });
 
 test('D778: a mounted rail\'s page and the press\'s option win; the browser\'s record label never does', async () => {
