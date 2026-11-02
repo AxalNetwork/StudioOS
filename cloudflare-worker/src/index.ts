@@ -267,6 +267,7 @@ import deckAssist from './routes/deck_assist';
 import deckDerive from './routes/deck_derive';
 import deckCritic from './routes/deck_critic';
 import deckImages from './routes/deck_images';
+import deckImageEdits from './routes/deck_image_edits';
 // D1565 (#3812): one link per investor, and tailored variants.
 import deckInvestorLinks from './routes/deck_investor_links';
 // D1589 (#3836): a venture's stage norms, the benchmarks a deck critic may cite.
@@ -1419,6 +1420,8 @@ app.route('/api/decks', deckDerive);
 // D1557 (#3804): the investor critic: rule findings, and one run on a model of another family than the writer's.
 app.route('/api/decks', deckCritic);
 // D903 (#2682): card and background images (`/:id/images…`, `/images/:uid/…`), before `decks` so `GET /:id` cannot answer `/images/…`.
+// D1544 (#3784): an image's edits (vary, edit, erase, expand) and their revert, before `decks`.
+app.route('/api/decks', deckImageEdits);
 app.route('/api/decks', deckImages);
 // D1565 (#3812): `/:id/investor-links…` and `/:id/variants`, before `decks` so its `/:id` routes cannot answer them.
 app.route('/api/decks', deckInvestorLinks);
