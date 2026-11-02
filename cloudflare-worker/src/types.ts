@@ -463,6 +463,13 @@ export interface Env {
   // D1544 (#3784): Cloudflare Images, to resize a deck image to a model's
   // reference size before an edit. Optional: without it an edit refuses.
   IMAGES?: ImagesBinding;
+  // #4176 (D4176): Cloudflare Stream for Learning video. Optional: without it every Stream route answers
+  // 503 stream_unavailable and an item plays from R2 or its link as before.
+  STREAM?: import('./services/learningStream').StreamBinding;
+  // #4176: the tus route (files over 200 MB) calls Stream's REST API with this token and CLOUDFLARE_ACCOUNT_ID.
+  STREAM_API_TOKEN?: string;
+  // #4176: verifies Stream's Webhook-Signature (owner step B).
+  STREAM_WEBHOOK_SECRET?: string;
   // Feature flag — string "true" enables the native CF Queue path.
   USE_CF_QUEUE?: string;
   // Durable Objects for real-time WebSocket fan-out. Optional so unit-test
