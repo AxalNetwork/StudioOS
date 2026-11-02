@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import Sheet from '../../ui/Sheet.jsx';
+import AskIntent from '../../ui/AskIntent.jsx';
+import { AskButtonView } from '../../ui/AskButton.jsx';
 import Lightbox from '../../ui/Lightbox.jsx';
-import { FillGlyph, FillModuleTrigger } from '../../ui/FillMark.jsx';
+import { FillGlyph } from '../../ui/FillMark.jsx';
 import { fillsApi } from '../../lib/api/fills.js';
 import { railProposalsApi } from '../../lib/api/railProposals.js';
 import { refusalView } from '../../lib/fillSheet.js';
@@ -9,10 +10,12 @@ import { reportError } from '../../lib/log.js';
 import { acceptReport, rowLines, waitingRows } from '../../lib/fillForms.js';
 
 /**
- * D1328 (#3489, part 5 of #2431) — a module's "Fill with Eadwyn" (AF1) and the
- * row proposals waiting for it (AF16), on D1317's `Sheet` at 520px.
+ * D1328 (#3489, part 5 of #2431) — a module's Ask (AF1) and the row proposals
+ * waiting for it (AF16). D1443 part 4 (#3992): the rows are the Ask panel's
+ * row cards, drawn in the panel above the conversation (`AskIntent`), no
+ * longer a D1317 `Sheet`.
  *
- *   The trigger   "Fill with Eadwyn", with "N waiting": the member's own row
+ *   The trigger   the shared "Ask" (`AskButtonView`), with "N waiting": the member's own row
  *                 proposals for this module's Add form and this venture
  *                 (`GET /api/ai/rail/proposals`, `option=form:<form>`). A
  *                 failed read draws no count, never "0 waiting".
@@ -58,17 +61,20 @@ export function FillModule({ target, projectId, moduleName, aiOff = false, refre
   useEffect(() => { load(); }, [load, refresh]);
   return (
     <>
-      <span ref={opener} className="inline-flex"><FillModuleTrigger waiting={read.rows.length} aiOff={aiOff} onOpen={() => setOpen(true)} /></span>
+      <span ref={opener} className="inline-flex">
+        <AskButtonView onClick={() => setOpen(true)} expanded={open} waiting={read.status === 'ready' ? read.rows.length : null}
+          state={aiOff ? 'off' : read.status === 'unreadable' ? 'unreadable' : 'rest'} testId="fill-module-trigger" />
+      </span>
       {open ? (
         <FillRowsPanel target={target} projectId={projectId} moduleName={moduleName} read={read} reload={load} aiOff={aiOff} source={source}
-          onChanged={onChanged} onEdit={(p) => { setOpen(false); onEdit?.(p); }} onClose={() => setOpen(false)} returnFocusTo={opener} />
+          onChanged={onChanged} onEdit={(p) => { setOpen(false); onEdit?.(p); }} onClose={() => { setOpen(false); opener.current?.querySelector?.('button')?.focus?.(); }} />
       ) : null}
     </>
   );
 }
 
 /** AF16: the waiting rows, each decided by the member. */
-export function FillRowsPanel({ target, projectId, moduleName, read, reload, aiOff = false, onChanged, onEdit, onClose, returnFocusTo, source = SOURCE }) {
+export function FillRowsPanel({ target, projectId, moduleName, read, reload, aiOff = false, onChanged, onEdit, onClose, source = SOURCE }) {
   const [busy, setBusy] = useState(null);
   const [report, setReport] = useState(null);
   const [asking, setAsking] = useState(false);
@@ -130,8 +136,8 @@ export function FillRowsPanel({ target, projectId, moduleName, read, reload, aiO
 
   return (
     <>
-      <Sheet label={`Proposals for ${where}`} eyebrow="Ask Eadwyn" title={rows.length ? `${rows.length} ${rows.length === 1 ? 'proposal' : 'proposals'} for ${where}` : `Proposals for ${where}`}
-        width={520} onClose={onClose} returnFocusTo={returnFocusTo} footer={footer} testId="fill-rows-panel">
+      <AskIntent label={`Proposals for ${where}`} eyebrow="Ask Eadwyn" title={rows.length ? `${rows.length} ${rows.length === 1 ? 'proposal' : 'proposals'} for ${where}` : `Proposals for ${where}`}
+        onClose={onClose} footer={footer} testId="fill-rows-panel">
         <div className="flex flex-col gap-3">
           {report ? (
             <div role="status" className={`${NOTE} ${report.tone === 'bad' ? BAD : INFO}`} data-testid="fill-rows-report">{report.line}</div>
@@ -172,7 +178,7 @@ export function FillRowsPanel({ target, projectId, moduleName, read, reload, aiO
             {askNote ? <span role="status" className={`text-[12px] ${INK}`} data-testid="fill-rows-ask-note">{askNote}</span> : null}
           </div>
         </div>
-      </Sheet>
+      </AskIntent>
       {confirmDiscard ? (
         <Lightbox size="fit" width={420} label="Discard all proposals" title={`Discard ${rows.length} ${rows.length === 1 ? 'proposal' : 'proposals'}?`} onClose={() => setConfirmDiscard(false)} testId="fill-rows-confirm"
           footer={<div className="flex justify-end gap-2 p-4">

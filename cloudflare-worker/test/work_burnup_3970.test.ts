@@ -1,5 +1,5 @@
 // D1614 W2 (#3970): a project's burn-up, derived from scope_task_events.
-// Real SQLite with migrations 712, 727 and 762; authenticated Hono for the
+// Real SQLite with migrations 712, 727, 762 and 763; authenticated Hono for the
 // route. The derivation cases write rows and events with chosen timestamps,
 // so day and time-zone edges are exact; one case drives W1's own routes, so
 // the burn-up reads the events W1 really writes. Each case names the
@@ -32,6 +32,8 @@ function world() {
   db.exec(sql('migrations/712_team_agents.sql'));
   db.exec(stripForeignKeys(sql('migrations/727_scope_goals_and_tasks.sql')));
   db.exec(sql('migrations/762_scope_task_work_board.sql'));
+  // D1614 W7 (#3993): the board, which `filter=` reuses, reads 763's milestone, author and draft columns.
+  db.exec(sql('migrations/763_task_comments_labels_milestones.sql'));
   db.exec('CREATE TABLE project_members (id INTEGER PRIMARY KEY,project_id INTEGER,user_id INTEGER,role TEXT,status TEXT,created_at TEXT,updated_at TEXT)');
   db.exec("CREATE TABLE user_settings (user_id INTEGER PRIMARY KEY, timezone TEXT DEFAULT 'UTC')");
   for (const [id, name, founder] of [[OWNER, 'Pat Owner', 100], [MEMBER, 'Max Member', 101], [STRANGER, 'Sam Stranger', 103]] as const) {

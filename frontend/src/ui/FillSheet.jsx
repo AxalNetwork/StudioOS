@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import Sheet from './Sheet.jsx';
+import AskIntent from './AskIntent.jsx';
 import { FillGlyph } from './FillMark.jsx';
 import { fillsApi } from '../lib/api/fills.js';
 import { ADD_TOKENS_PATH } from '../lib/aiTokens.js';
@@ -11,8 +11,10 @@ import {
 } from '../lib/fillSheet.js';
 
 /**
- * D1327 (#3488, part 4 of #2431) — the one Fill with Eadwyn sheet, on D1317's
- * `Sheet` at 520px (AF4–AF14, AF24; a full-height page under 640px).
+ * D1327 (#3488, part 4 of #2431) — the one Fill with Eadwyn surface (AF4–AF14,
+ * AF24). D1443 part 4 (#3992): it is the Ask panel's FORM INTENT, drawn in the
+ * panel above the conversation (`AskIntent`), no longer a D1317 `Sheet`; the
+ * open form beside it keeps the rail live (FormLightbox's `keep`).
  *
  *   Sources (AF4)   each source with a checkbox: connectors and modules first,
  *                   "No AI tokens"; Eadwyn last, "for what's left", with the
@@ -39,9 +41,8 @@ import {
  * memo); the read and the run then name the record, or `parent` for an Add
  * form under an engagement or an event (`services/fills/scopes.ts`).
  *
- * D1328 (#3489, AF23): below 640px Sources is a bottom sheet (`phone="sheet"`)
- * and Preview a full-height page, its footer (Accept all) fixed below the
- * scrolling table; every control there is at least 44px.
+ * D1328 (#3489, AF23): every control is at least 44px below 640px; at 390px
+ * the panel itself is the bottom sheet (D1443).
  */
 const INK = 'text-axal-ink dark:text-gray-100';
 const MUTED = 'text-axal-muted dark:text-gray-400';
@@ -290,12 +291,10 @@ export default function FillSheet({ page, form, project = null, record = null, p
   }
 
   return (
-    <Sheet label={`Ask Eadwyn about ${title}`} eyebrow="Ask Eadwyn" title={title} width={520} onClose={onClose} footer={footer} testId="fill-sheet"
-      phone={step === 'sources' && read.status !== 'error' && !nothingToFill ? 'sheet' : 'full'}>
-      <div className="flex flex-col gap-3">
-        <img src="/eadwyn-ai.png" alt="" width={24} height={24} className="h-6 w-6" />
+    <AskIntent label={`Ask Eadwyn about ${title}`} eyebrow="Ask Eadwyn" title={title} onClose={onClose} footer={footer} testId="fill-sheet">
+      <div className="flex flex-col gap-3" data-step={step}>
         {body}
       </div>
-    </Sheet>
+    </AskIntent>
   );
 }
