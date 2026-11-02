@@ -445,7 +445,8 @@ export function ProposalReview({ projectId, q = '', proposal: given, items = [],
                   aria-label={`Include card ${c.n} · ${c.title}`} data-testid={`pitch-review-tick-${c.index}`} />
                 <span className="flex min-w-0 flex-col">
                   <span className={`font-semibold ${INK}`}><span className="font-mono text-axal-muted dark:text-gray-400">{c.n}</span> {c.title}</span>
-                  {fixed ? <span className={SMALL} data-testid={`pitch-review-kept-${c.index}`}>{ALREADY_KEPT} {KEPT_LINE}</span> : null}
+                  {fixed ? <span className={SMALL} data-testid={`pitch-review-kept-${c.index}`}>{ALREADY_KEPT}</span> : null}
+                  {fixed ? <span className={SMALL} data-testid={`pitch-review-kept-line-${c.index}`}>{KEPT_LINE}</span> : null}
                   {lines[c.index] ? <span role="status" className={SMALL} data-testid={`pitch-review-regenerated-${c.index}`}>{lines[c.index]}</span> : null}
                   {c.emptyOnly ? <span className={SMALL}>Nothing on this card is recorded yet.</span> : null}
                   {c.partial ? <span className={SMALL} data-testid={`pitch-review-partial-${c.index}`}>A figure here is not recorded: it reads {NOT_ON_STUDIOOS}, never 0.</span> : null}
