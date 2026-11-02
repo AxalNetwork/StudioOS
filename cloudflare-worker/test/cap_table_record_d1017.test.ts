@@ -11,7 +11,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
@@ -20,7 +20,8 @@ import { SignJWT } from 'jose';
 import captable from '../src/routes/captable.ts';
 import { acceptProposal, recordFromSource } from '../src/services/capTableRecord.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { loadSchema } from './_schema_once.mjs';
+import { splitStatements } from './_baseline.mjs';
+import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '../..');
@@ -38,7 +39,13 @@ const ADMIN = 1, PARTNER = 2, INVESTOR = 3, OWNER = 4, COFOUNDER = 5, ADVISOR = 
 
 function built(): DatabaseSync {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  loadSchema(db);
+  db.exec(readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8'));
+  for (const f of readdirSync(MIGRATIONS).filter((x) => x.endsWith('.sql') && x !== RECORD).sort(compareMigrations)
+    .filter((x) => migrationNumber(x) > BASELINE_CUTOFF)) {
+    for (const stmt of splitStatements(readFileSync(resolve(MIGRATIONS, f), 'utf8'))) {
+      try { db.exec(stmt); } catch { /* already present on the baseline */ }
+    }
+  }
   // Whole, as the deploy applies it: a failure here fails the file.
   db.exec(readFileSync(resolve(MIGRATIONS, RECORD), 'utf8'));
   return db;

@@ -8,14 +8,14 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 
 import * as W from '../src/services/legalDocFormat.ts';
 import * as M from '../../frontend/src/lib/legalDocFormat.js';
-import { loadSchema } from './_schema_once.mjs';
+import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SQL = resolve(here, '../sql');
@@ -180,10 +180,13 @@ test('securities_legend is a policy in both; the booklet lists nine parts in ord
 // Migration 478
 // ---------------------------------------------------------------------------
 
+const FILES = readdirSync(MIG).filter((f) => /^\d+_.*\.sql$/.test(f)).sort(compareMigrations)
+  .filter((f) => migrationNumber(f) > BASELINE_CUTOFF);
 function build(upTo?: string) {
   const db = new DatabaseSync(':memory:');
   db.exec('PRAGMA foreign_keys = ON;');
-  loadSchema(db);
+  db.exec(readFileSync(resolve(SQL, 'schema_baseline.sql'), 'utf8'));
+  for (const f of FILES) { if (upTo && f >= upTo) break; db.exec(readFileSync(resolve(MIG, f), 'utf8')); }
   return db;
 }
 const one = (db: DatabaseSync, sql: string, ...a: any[]) => ({ ...(db.prepare(sql).get(...a) as any) });
