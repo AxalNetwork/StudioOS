@@ -13,6 +13,11 @@
  *                                        skill needs a second Super Admin's approval and its golden cases
  *                                        at 9 of 10 (D4160: 409 `needs_approval`, `golden_cases_failing`)
  *
+ * D4121 (#4121): what skills cost per run.
+ *   GET  /agents/:uid/cost-estimate?add=&remove=   the agent with skills added or removed:
+ *        { tokens_per_run, est_usd_per_run, monthly_at_cap, delta, hint }, or { available: false }
+ *   GET  /:scope/:id/cost-estimate?model=&role=&persona=&skills=&cap_microusd=   an agent not yet added (AG3)
+ *
  * A2 (#3956): an agent's skills, assigning a skill, the radar, coverage.
  *   GET  /agents/:uid/skills             { can_manage, skills, radar: { axes } | null, values: null }
  *   PUT  /agents/:uid/skills             { skills: [{ uid, version? }] }: set the whole list, gated; the same shape
@@ -62,7 +67,11 @@ import {
 import { teamAgentsEnabled } from './team_agents';
 import { publishDraft } from '../services/agents/skillPublish';
 import { grantsOf } from '../services/agents/agentTools';
-import { agentByUid, canManage, canRead, loadScope, scopeCols, scopeOfAgent, type AgentRow } from '../services/agents/teams';
+import { agentByUid, canManage, canRead, effectiveBook, loadScope, scopeCols, scopeOfAgent, type AgentRow, type Scope } from '../services/agents/teams';
+import { moduleOf } from '../services/agents/catalogue';
+import { systemPrompt } from '../services/agents/agentRun';
+import { RUN_COST_CONFIG, deltaOf, estimate, pinTokens, specialistHint, type Estimate, type Pin } from '../services/agents/runCost';
+import { modelRefusal } from '../services/aiRouter';
 import {
   ATTACH_STATUS, agentCompanyId, agentValues, attachCheck, axesOf, checkSkillList, linkStatement, peopleAxes, teamUserIds, toolLabel, versionTags,
   type AttachCode, type Blocked,
@@ -167,6 +176,8 @@ async function cardOf(env: Env, s: SkillRow, user: User, tax: Taxonomy, authorNa
     author: s.scope === 'hq' ? 'Axal' : authorName,
     ...partsDto(shown, tax),
     used_by: await usedBy(env, s.id),
+    // D4121: what the current version adds to every run, in tokens; null for a draft never published.
+    context_tokens: current ? (await pinTokens(env, [{ skill_id: s.id, version: s.current_version }]))?.[0] ?? null : null,
     updated_at: s.updated_at,
     can_write: writer,
     ...(writer ? { draft: partsDto(await draftParts(env, s), tax) } : {}),
@@ -475,6 +486,120 @@ router.put('/agents/:uid/skills', async (c) => {
     ...checked.wanted.map((w) => linkStatement(c.env, a.id, w.s.id, w.version, user.id)),
   ]);
   return c.json({ can_manage: true, ...(await agentSkillsDto(c.env, a)) });
+});
+
+// ── Run cost (D4121, #4121) ─────────────────────────────────────────────────
+
+const COST_LIST_MAX = 40;
+/** A comma-separated list of skill uids from a query parameter (repeatable), or null when it is malformed. */
+function uidsOf(c: C, key: string): string[] | null {
+  const all = c.req.queries(key) ?? [];
+  const out = all.flatMap((v) => v.split(',')).map((v) => v.trim()).filter(Boolean);
+  if (out.length > COST_LIST_MAX || out.some((u) => !/^[a-f0-9]{32}$/.test(u))) return null;
+  return [...new Set(out)];
+}
+
+/** The published skills these uids name that the caller may read, as pins at their current version; null when one is not. */
+async function readablePins(c: C, user: User, uids: readonly string[]): Promise<Array<Pin & { uid: string }> | null> {
+  const out: Array<Pin & { uid: string }> = [];
+  for (const uid of uids) {
+    const s = await c.env.DB.prepare('SELECT * FROM agent_skills WHERE uid = ?').bind(uid).first<SkillRow>();
+    if (!s || s.status !== 'published' || !s.current_version || !(await mayRead(c.env, s, user))) return null;
+    out.push({ uid, skill_id: s.id, version: s.current_version });
+  }
+  return out;
+}
+
+/** The personas live on a team, for the specialist hint (one not already there). */
+async function teamPersonas(c: C, scope: Scope): Promise<Set<string>> {
+  const [companyId, projectId] = scopeCols(scope);
+  const rows = await all<{ persona_key: string | null }>(c.env,
+    `SELECT persona_key FROM team_agents WHERE status <> 'removed' AND scope_kind = ? AND IFNULL(company_id, 0) = ? AND IFNULL(project_id, 0) = ?`,
+    scope.kind, companyId ?? 0, projectId ?? 0);
+  return new Set(rows.map((r) => r.persona_key).filter((k): k is string => !!k));
+}
+
+const shape = (e: Estimate) => (e.available ? { skills: e.skills, tokens_per_run: e.tokens_per_run, est_usd_per_run: e.est_usd_per_run } : null);
+const THRESHOLDS = { max_skills: RUN_COST_CONFIG.specialistMaxSkills, cost_ratio: RUN_COST_CONFIG.specialistCostRatio };
+
+/** The answer both estimate routes give: never a 0 for an unknown price. */
+async function costAnswer(c: C, input: { model: string; sponsorId: number; prompt: string; capMicro: number | null; before: Pin[]; after: Pin[]; scope: Scope }) {
+  const base = { model: input.model, sponsorId: input.sponsorId, systemPrompt: input.prompt, capMicro: input.capMicro };
+  const after = await estimate(c.env, { ...base, pins: input.after });
+  if (!after.available) return c.json({ available: false, reason: after.reason });
+  const before = await estimate(c.env, { ...base, pins: input.before });
+  const baseline = await estimate(c.env, { ...base, pins: [] });
+  const hint = await specialistHint(c.env, after, baseline, input.after.map((p) => p.skill_id), await teamPersonas(c, input.scope));
+  return c.json({
+    available: true,
+    model: input.model,
+    skills: after.skills,
+    tokens_per_run: after.tokens_per_run,
+    est_usd_per_run: after.est_usd_per_run,
+    monthly_at_cap: after.monthly_at_cap,
+    cap_usd: input.capMicro == null ? null : input.capMicro / 1_000_000,
+    before: shape(before),
+    baseline: shape(baseline),
+    delta: deltaOf(before, after),
+    hint,
+    thresholds: THRESHOLDS,
+  });
+}
+
+/**
+ * D4121: what this agent costs per run, with `add` skills added and `remove`
+ * skills taken off (uids, comma-separated). Any team member may read it.
+ */
+router.get('/agents/:uid/cost-estimate', async (c) => {
+  const user = await requireAuth(c);
+  const got = await readableAgent(c, user);
+  if (!got) return say(c, 404, 'not_found', 'There is no such agent.');
+  const { a, scope } = got;
+  const add = uidsOf(c, 'add'); const remove = uidsOf(c, 'remove');
+  if (!add || !remove) return say(c, 400, 'skills_invalid', `Name up to ${COST_LIST_MAX} skills by their ids.`);
+  const pinned = await all<{ skill_id: number; version: number; uid: string }>(c.env,
+    'SELECT l.skill_id, l.version, s.uid FROM agent_skill_links l JOIN agent_skills s ON s.id = l.skill_id WHERE l.agent_id = ? ORDER BY l.skill_id', a.id);
+  const adding = await readablePins(c, user, add.filter((u) => !pinned.some((p) => p.uid === u)));
+  if (!adding) return say(c, 404, 'skill_not_found', 'One of those skills is not one this agent can be given.');
+  const before = pinned.map((p) => ({ skill_id: p.skill_id, version: p.version }));
+  const after = [...pinned.filter((p) => !remove.includes(p.uid)).map((p) => ({ skill_id: p.skill_id, version: p.version })), ...adding.map((p) => ({ skill_id: p.skill_id, version: p.version }))];
+  const { rules } = await effectiveBook(c.env, scope, a.role_key);
+  const label = moduleOf(rules.works_in[0] ?? '')?.label ?? 'its modules';
+  return costAnswer(c, {
+    model: a.model_id, sponsorId: a.sponsor_user_id ?? user.id, prompt: systemPrompt(a, rules, scope, label),
+    capMicro: a.monthly_cap_microusd, before, after, scope,
+  });
+});
+
+/**
+ * D4121: what an agent not yet added would cost per run (AG3): its model,
+ * role, persona, skills and cap, as the Add-an-agent sheet has them.
+ */
+router.get('/:scope/:id/cost-estimate', async (c) => {
+  const user = await requireAuth(c);
+  const scope = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
+  if (!scope) return say(c, 404, 'not_found', 'There is no such team.');
+  if (!(await canRead(c.env, scope, user))) return say(c, 403, 'not_member', 'Only the team can see what its agents cost.');
+  const model = c.req.query('model') ?? '';
+  if (!model || modelRefusal(c.env, model)) return say(c, 422, 'model_not_offered', 'That model is not offered. Choose one from the list.');
+  const role = roleOf(c.req.query('role') ?? '');
+  if (!role) return say(c, 400, 'role_unknown', SKILL_MESSAGES.role_unknown);
+  const personaKey = c.req.query('persona') ?? null;
+  if (personaKey && !personaOf(personaKey)) return say(c, 400, 'persona_unknown', 'Choose one of the agents.');
+  const capRaw = c.req.query('cap_microusd');
+  const cap = capRaw == null || capRaw === '' ? null : Number(capRaw);
+  if (cap != null && (!Number.isSafeInteger(cap) || cap <= 0)) return say(c, 400, 'cap_invalid', 'The monthly cap is a whole number of micro-dollars above zero.');
+  const uids = uidsOf(c, 'skills');
+  if (!uids) return say(c, 400, 'skills_invalid', `Name up to ${COST_LIST_MAX} skills by their ids.`);
+  const pins = await readablePins(c, user, uids);
+  if (!pins) return say(c, 404, 'skill_not_found', 'One of those skills is not one this agent can be given.');
+  const { rules } = await effectiveBook(c.env, scope, role.key);
+  const label = moduleOf(rules.works_in[0] ?? '')?.label ?? 'its modules';
+  const draft = { persona_key: personaKey, first_name: null, last_name: null } as Pick<AgentRow, 'persona_key' | 'first_name' | 'last_name'>;
+  return costAnswer(c, {
+    model, sponsorId: user.id, prompt: systemPrompt(draft, rules, scope, label), capMicro: cap,
+    before: [], after: pins.map((p) => ({ skill_id: p.skill_id, version: p.version })), scope,
+  });
 });
 
 router.get('/skills/:uid/agents', async (c) => {

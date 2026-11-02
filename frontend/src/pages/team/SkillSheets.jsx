@@ -5,10 +5,29 @@ import { api } from '../../lib/api';
 import { AgentTile } from './AgentMark.jsx';
 import * as agents from './agentsAdapter.js';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, EYEBROW, FIELD, HonestBlock, MONO, MUTED } from './teamUi.jsx';
-import { AgentRadar, SkillRow, TaxChips } from './SkillParts.jsx';
+import { AgentRadar, CostExplainer, CostLine, SkillRow, TaxChips } from './SkillParts.jsx';
 import {
-  LEVELS, OUTPUT_KINDS, assignGroups, blockedWords, directory, parseSkillMd, previewRadar, problemWords, radarVector, scopeLine,
+  LEVELS, OUTPUT_KINDS, assignGroups, blockedWords, changeLine, directory, parseSkillMd, previewRadar, problemWords, radarVector, scopeLine, warningLine,
 } from './skillsModel.js';
+
+/**
+ * D4121 (#4121): an estimate that follows a changing pick, read again only
+ * when `key` changes; `null` while it is read, the block's value (or
+ * `{ available: false }`) after.
+ */
+function useCost(key, read) {
+  const [cost, setCost] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    setCost(null);
+    Promise.resolve().then(read).then((b) => { if (alive) setCost(b?.available ? b.value : { available: false }); }, () => { if (alive) setCost({ available: false }); });
+    return () => { alive = false; };
+  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  return cost;
+}
+
+/** SK3: the cost change of each agent the skill could be added to, at most this many read. */
+const ASSIGN_COST_MAX = 20;
 
 /**
  * D1612 (#3952) — the skill sheets: SK3 Assign to agents, SK5 Add skills to
@@ -58,6 +77,17 @@ export function AssignSkillSheet({ skill, onClose, onDone }) {
   useEffect(() => { let alive = true; agents.assignable(skill.uid).then((b) => { if (alive) setBlock(b); }); return () => { alive = false; }; }, [skill.uid]);
   const list = block?.available && Array.isArray(block.value?.agents) ? block.value.agents : [];
   const free = list.filter((a) => !a.blocked && !a.assigned);
+  // D4121: each agent's run-cost change if the skill is added.
+  const [costs, setCosts] = useState({});
+  const freeKey = free.slice(0, ASSIGN_COST_MAX).map((a) => a.uid).join(',');
+  useEffect(() => {
+    let alive = true;
+    for (const a of free.slice(0, ASSIGN_COST_MAX)) {
+      agents.costEstimate(a.uid, { add: [skill.uid] }).then((b) => { if (alive) setCosts((c) => ({ ...c, [a.uid]: b?.available ? b.value : { available: false } })); });
+    }
+    return () => { alive = false; };
+  }, [freeKey, skill.uid]); // eslint-disable-line react-hooks/exhaustive-deps
+  const anyCost = Object.values(costs).find((e) => e?.available) || null;
   const tick = (uid) => setPicked((s) => { const n = new Set(s); if (n.has(uid)) n.delete(uid); else n.add(uid); return n; });
   const save = async () => {
     setRefusal('');
@@ -96,12 +126,15 @@ export function AssignSkillSheet({ skill, onClose, onDone }) {
                         <b className="text-[13.5px] text-axal-ink dark:text-gray-100">{a.name}</b>
                         <span className={MUTED}>{scopeLine(a.scope)}{Number.isFinite(a.skill_count) ? ` · ${a.skill_count} skills` : ''}</span>
                         {why ? <span className="text-[12px] text-amber-800 dark:text-amber-200" data-testid="assign-why">{why}</span> : null}
+                        {!off && costs[a.uid] ? <span className={`${MONO} text-[12px] text-axal-ink dark:text-gray-200`} data-testid="assign-cost">{changeLine(a.name, costs[a.uid])}</span> : null}
+                        {!off && warningLine(a.name, costs[a.uid]) ? <span className="text-[12px] text-amber-800 dark:text-amber-200" data-testid="assign-cost-warning">{warningLine(a.name, costs[a.uid])}</span> : null}
                       </span>
                     </label>
                   );
                 })}
               </div>
             ))}
+            <CostExplainer est={anyCost} skillTokens={skill.context_tokens} />
           </>
         )}
         <Refusal text={refusal} />
@@ -130,6 +163,9 @@ export function AddSkillsSheet({ agent, current, radar, onClose, onSaved }) {
     onSaved?.(out.value);
   };
   const preview = previewRadar(radar, chosen);
+  // D4121: the cost per run with the picks, read again as they change.
+  const pickKey = chosen.map((s) => s.uid).join(',');
+  const cost = useCost(`${agent.uid}|${pickKey}`, () => agents.costEstimate(agent.uid, { add: chosen.map((s) => s.uid) }));
   return (
     <Sheet title="Add skills to this agent" sub={`${agent.role_name || 'Its role'}’s skills, most used first`} width={560} onClose={onClose} testId="add-skills-sheet"
       footer={(
@@ -140,6 +176,7 @@ export function AddSkillsSheet({ agent, current, radar, onClose, onSaved }) {
       )}>
       <div className="flex flex-col gap-3 px-5 py-5">
         <AgentRadar vector={chosen.length ? preview : radarVector(radar)} radar={radar} height={180} label={chosen.length ? 'With your picks.' : 'Now.'} />
+        <CostLine est={cost} />
         {!block?.available ? <ReadState block={block} what="Its role’s skills" /> : !list.length ? <HonestBlock>No other skill of this role yet.</HonestBlock>
           : list.map((s) => {
             const why = blockedWords(s.blocked);
@@ -152,6 +189,7 @@ export function AddSkillsSheet({ agent, current, radar, onClose, onSaved }) {
               </label>
             );
           })}
+        <CostExplainer est={cost} />
         <Refusal text={refusal} />
       </div>
     </Sheet>
@@ -161,8 +199,14 @@ export function AddSkillsSheet({ agent, current, radar, onClose, onSaved }) {
 // ---------------------------------------------------------------- SK6
 
 /** SK6: the Add-an-agent Skills step. Its role's published skills, the three most used picked for you. */
-export function SkillsStep({ scope, role, picked, setPicked, onList }) {
+export function SkillsStep({ scope, role, model, picked, setPicked, onList }) {
   const [block, setBlock] = useState(null);
+  // D4121 AG3: what the agent would cost per run with these skills, before it is added (its cap comes at Review).
+  const kind = scope.kind === 'company' ? 'company' : 'project';
+  const scopeId = kind === 'company' ? scope.company?.uid : scope.project?.id;
+  const pickList = [...(picked || [])];
+  const cost = useCost(`${kind}|${scopeId}|${model}|${role}|${pickList.join(',')}`,
+    () => (model ? agents.draftCostEstimate(kind, scopeId, { model, role, skills: pickList }) : { available: false }));
   useEffect(() => {
     let alive = true;
     const kind = scope.kind === 'company' ? 'company' : 'project';
@@ -196,6 +240,7 @@ export function SkillsStep({ scope, role, picked, setPicked, onList }) {
             <SkillRow s={s} version={s.version} check={<Box on={set.has(s.uid)} />} />
           </label>
         ))}
+      <CostLine est={cost} />
     </div>
   );
 }

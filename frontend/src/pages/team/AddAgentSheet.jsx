@@ -195,7 +195,7 @@ export default function AddAgentSheet({ scope, roles, models, held = [], me, onC
             </p>
           </>
         ) : null}
-        {step === 2 ? <SkillsStep scope={scope} role={role} picked={skillPicks} setPicked={setSkillPicks} onList={setSkillList} /> : null}
+        {step === 2 ? <SkillsStep scope={scope} role={role} model={model} picked={skillPicks} setPicked={setSkillPicks} onList={setSkillList} /> : null}
         {step === 3 ? (
           <>
             <div className="grid grid-cols-2 gap-2">

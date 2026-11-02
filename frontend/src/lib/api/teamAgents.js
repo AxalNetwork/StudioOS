@@ -54,6 +54,11 @@
 //   POST /api/teams/skills/:uid/assign            { agent_uids } → { added, refused: [{ agent_uid, code }] }, partial
 //   GET  /api/teams/:scope/:id/coverage           → { axes: [{ slug, label, people_level, agent_level }] }
 //   POST …/agents also takes skills: [{ uid, version? }] through the same gates.
+// D4121 (#4121), behind the same flag: what skills cost per run.
+//   GET  /api/teams/agents/:uid/cost-estimate?add=&remove=   → { available, skills, tokens_per_run, est_usd_per_run,
+//                                                    monthly_at_cap, cap_usd, before, baseline, delta, hint, thresholds }
+//                                                    or { available: false, reason }; skill cards carry `context_tokens`
+//   GET  /api/teams/:scope/:id/cost-estimate?model=&role=&persona=&skills=&cap_microusd=   the same, for an agent not yet added
 // `:scope` is 'company' (its uid) or 'project' (its id). A person is { uid, name },
 // never an email. `month_spend` is { available: false } when it cannot be read:
 // the page says "Not recorded", never 0.
@@ -99,6 +104,20 @@ export const teamAgentsApi = {
   assignable: (skillUid) => request(`/teams/skills/${enc(skillUid)}/assignable`),
   assignSkill: (skillUid, agentUids) => request(`/teams/skills/${enc(skillUid)}/assign`, { method: 'POST', body: JSON.stringify({ agent_uids: agentUids }) }),
   coverage: (scope, id) => request(`${base(scope, id)}/coverage`),
+  // D4121 (#4121): an agent's cost per run with skills added or removed, and an agent not yet added (AG3).
+  costEstimate: (uid, { add = [], remove = [] } = {}) => {
+    const q = new URLSearchParams();
+    if (add.length) q.set('add', add.join(','));
+    if (remove.length) q.set('remove', remove.join(','));
+    const qs = q.toString();
+    return request(`/teams/agents/${enc(uid)}/cost-estimate${qs ? `?${qs}` : ''}`);
+  },
+  draftCostEstimate: (scope, id, { model, role, persona, skills = [], capMicro } = {}) => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries({ model, role, persona, cap_microusd: capMicro })) if (v != null && v !== '') q.set(k, String(v));
+    if (skills.length) q.set('skills', skills.join(','));
+    return request(`${base(scope, id)}/cost-estimate?${q.toString()}`);
+  },
   queue: (scope, id, { role, module, option, status, cursor, include } = {}) => {
     const q = new URLSearchParams();
     for (const [k, v] of Object.entries({ role, module, option, status, cursor, include })) if (v != null && v !== '') q.set(k, String(v));

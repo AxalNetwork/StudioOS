@@ -248,3 +248,92 @@ export function skillFileName(s) {
 
 /** "Update to v3" when the pinned version is behind the published one. */
 export const updateLabel = (s) => (Number.isFinite(s?.pinned_version) && Number.isFinite(s?.current_version) && s.current_version > s.pinned_version ? `Update to v${s.current_version}` : null);
+
+// ── Run cost (D4121, #4121) ───────────────────────────────────────────────────
+// More skills make an agent more capable and dearer per run: each skill's
+// SKILL.md is context every run carries. An estimate the Worker could not price
+// is `{ available: false }` and reads "Not recorded"; no figure here is ever
+// "$0.00" for a price nobody read.
+
+const NOT_RECORDED_COST = 'Not recorded';
+/** A persona area key (`personas.ts` AREAS) in words. */
+const AREA_WORDS = { product: 'Product', engineering: 'Engineering', design: 'Design', gtm: 'GTM', marketing: 'Marketing', finance: 'Finance', legal: 'Legal', capital: 'Capital' };
+export const areaWord = (k) => AREA_WORDS[k] || null;
+
+/** 1240 → "1.2k", 800 → "800". */
+export function tokensWord(n) {
+  if (!Number.isFinite(n) || n < 0) return null;
+  return n >= 1000 ? `${(Math.round(n / 100) / 10).toString()}k` : String(Math.round(n));
+}
+/** A skill card's line: "+≈1.2k tokens per run", or null when it was never measured. */
+export const skillTokensLine = (t) => (Number.isFinite(t) ? `+≈${tokensWord(t)} tokens per run` : null);
+
+/** A per-run figure: "$0.05", "< $0.01" for a real fraction of a cent, "Not recorded" when unknown. */
+export function perRunUsd(v) {
+  if (!Number.isFinite(v)) return NOT_RECORDED_COST;
+  if (v > 0 && v < 0.005) return '< $0.01';
+  return `$${v.toFixed(2)}`;
+}
+const capWord = (cap) => (Number.isFinite(cap) ? ` · cap $${Number.isInteger(cap) ? cap : cap.toFixed(2)}/month` : '');
+const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * The cost line. AG3 and SK5 ("With 4 skills ≈ $0.05 per run · cap $20/month")
+ * and the profile ("6 skills ≈ $0.05 per run · cap $20/month").
+ */
+export function costLine(est, { lead = 'with' } = {}) {
+  if (!est?.available) return `Cost per run: ${NOT_RECORDED_COST}`;
+  const n = Number(est.skills) || 0;
+  const head = lead === 'with' ? (n ? `With ${plural(n, 'skill')}` : 'With no skills') : (n ? plural(n, 'skill') : 'No skills');
+  return `${head} ≈ ${perRunUsd(est.est_usd_per_run)} per run${capWord(est.cap_usd)}`;
+}
+
+/** SK3: "Ilyse: $0.03 → $0.04 per run", from an estimate with `before`. */
+export function changeLine(name, est) {
+  if (!est?.available || !est.before) return `${name}: ${NOT_RECORDED_COST}`;
+  return `${name}: ${perRunUsd(est.before.est_usd_per_run)} → ${perRunUsd(est.est_usd_per_run)} per run`;
+}
+
+/** How many times the baseline (the same agent with no skills) a run costs, to one decimal; null when unknown. */
+export function costRatio(est) {
+  const base = est?.baseline?.est_usd_per_run;
+  if (!est?.available || !Number.isFinite(base) || base <= 0) return null;
+  return Math.round((est.est_usd_per_run / base) * 10) / 10;
+}
+
+/** AG3 and SK5: "Specialists are cheaper. Consider adding Ilyse for GTM instead." */
+export function hintLine(est) {
+  const h = est?.hint;
+  if (!h) return null;
+  const area = areaWord(h.area);
+  if (h.suggest?.name && area) return `Specialists are cheaper. Consider adding ${h.suggest.name} for ${area} instead.`;
+  return area ? `Specialists are cheaper. Consider a specialist for ${area}.` : 'Specialists are cheaper. Consider a specialist.';
+}
+
+/** SK3: "Kade now has 9 skills: more capable, but ≈ 2× the cost per run. Consider a specialist." */
+export function warningLine(name, est) {
+  if (!est?.hint) return null;
+  const r = costRatio(est);
+  return `${name} now has ${plural(est.skills, 'skill')}: more capable, but ${r == null ? 'dearer' : `≈ ${r}×`} the cost per run. Consider a specialist.`;
+}
+
+/**
+ * SK6, the explainer: one generalist with `generalist` skills against
+ * `specialists` specialists with `each` skills, for the same week of work
+ * (`runs` runs, shared out among the specialists). From one estimate: its
+ * baseline and its price per token. Null when the estimate is unknown.
+ */
+export function explainer(est, { skillTokens, generalist = 8, specialists = 3, each = 3, runs = 30 } = {}) {
+  if (!est?.available || !est.baseline || !(est.tokens_per_run > 0)) return null;
+  const perSkill = Number.isFinite(skillTokens) && skillTokens > 0 ? skillTokens
+    : est.skills > 0 ? (est.tokens_per_run - est.baseline.tokens_per_run) / est.skills : null;
+  if (!(perSkill > 0)) return null;
+  const usdPerToken = est.est_usd_per_run / est.tokens_per_run;
+  const g = est.baseline.tokens_per_run + generalist * perSkill;
+  const s = est.baseline.tokens_per_run + each * perSkill;
+  return {
+    generalist: { skills: generalist, tokens: Math.round(g), week_usd: g * usdPerToken * runs },
+    specialists: { count: specialists, skills: each, tokens: Math.round(s), week_usd: s * usdPerToken * runs },
+    runs,
+  };
+}
