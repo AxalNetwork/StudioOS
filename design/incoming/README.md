@@ -1,8 +1,9 @@
 # design/incoming — new Claude Design UIs waiting to be integrated
 
 **Drop new Claude Design exports here.** This is the intake queue: a canvas
-lands in this folder, gets triaged, gets built, and then the row in
-`documentation/architecture/ROUTE_MAP.md` records what shipped and what did not.
+lands in this folder, gets triaged, gets built, and then its row in the route map
+(`documentation/architecture/route-map/`, one file per canvas, D4102) records
+what shipped and what did not.
 
 Nothing in this folder is built, bundled, imported or served. It is source
 material. The app never reads it at runtime.
@@ -74,8 +75,9 @@ strength of a live route would empty the queue of the work it exists to track.
 1. **Land it.** Save the export here as `<Surface Name>.dc.html`, keeping the
    name Claude Design gave it so it can be matched against the design source
    later. One file per canvas.
-2. **Triage it** into one of six grades, and add a row to
-   `documentation/architecture/ROUTE_MAP.md`:
+2. **Triage it** into one of six grades, and add its row as one new file under
+   `documentation/architecture/route-map/canvases/part-N/` (D4102: one file per
+   canvas; never a shared file):
 
    | Grade | Meaning |
    | --- | --- |
@@ -111,6 +113,40 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-11-01 — One interview, and its session (#3710)
+
+The owner's artifacts `CoQEhHr637iFdxgpe2WKx9` (the page, `Interview Record Page.dc.html`)
+and `MyWazkYQH52jTsYgMPdL1E` (the board grid, `Interview Record · Boards.dc.html`) were
+decoded by `scripts/read-canvas.mjs`. The grid imports the page and frames it
+as twenty-one groups:
+- **Page**, the record at 1440 with the Ask panel closed;
+- **IV-D1 to IV-D5**, the desktop header (one action row: primary, Ask with
+  "[3] waiting", Email, Edit details, ⋯), the fact cards with their one action,
+  the Email composer in the right Sheet, 1280, 1024 and dark, and the Ask
+  panel open;
+- **IV-M1 to IV-M7**, the phone: the header, the four sections, the transcript
+  with search, tap-to-play and the sticky player, the findings in thumb reach,
+  Ask as a bottom sheet, the record's states, and the tablet at 768 in two
+  columns;
+- **IV-S1, IV-S2**, the AI states and who is reading;
+- **REC1 to REC6**, the session page: the one lifecycle stepper, one failure
+  panel, the participants timeline, the transcript's states, cost as money,
+  and the session's states (phone and dark among them).
+
+**One edit, named.** The Axal VC mark (the export's
+`uploads/axal-logo-200x200.png`) points at `/axal-mark.png`. No other value was
+edited.
+
+**Grade: UPGRADE (D1454 for the record, D1455 for the session page; D1456 is
+the Worker part).** Built: one record header for every cycle
+(`frontend/src/pages/cycles/RecordHeader.jsx`), the fact action, the phone
+record's sections, player and tablet columns, the session page's stepper,
+failure panel and money (`frontend/src/pages/founder/SessionLifecycle.jsx`).
+Not built here, each filed: the channel pill, the fact actions' keys,
+"Review findings (n)" and the failed step (#3710 W1 to W3, D1456); the Email
+composer in the Sheet (IV-D3); the participants timeline (REC3); Ask as a
+bottom sheet on the record (IV-M5, after #3706). Two files arrived and none
+left this folder.
 ## Landed 2026-11-01 — Read with a reason (#3713)
 
 The owner's artifacts `8PfdzapnNsUCxYSB3Yhh3X` (the page, `Read With A Reason Page.dc.html`)
@@ -2039,7 +2075,7 @@ design in two layouts with their own sidebar and type; they are not committed.
   Until they are answered, those parts of the screens print `Not recorded`
   with the reason.
 
-Each build PR adds or updates its `ROUTE_MAP.md` row (pipeline step 5). A
+Each build PR adds or updates its route-map row file (pipeline step 5; D4102). A
 canvas leaves this folder for `canvases/integrated/` once its route is live.
 
 ## Landed 2026-10-06 — the Ops canvas: five areas of screens for stored data (D566)

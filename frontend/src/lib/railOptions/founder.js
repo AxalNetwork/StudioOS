@@ -97,7 +97,8 @@ export const FOUNDER_OPTIONS = [
   },
   {
     page: 'Founder · Validate · Customer research', key: 'transcribe:session', route: '/validate/record/live', label: 'Stop and process', kind: 'speech', handler: 'transcribe',
-    at: [['frontend/src/lib/activeRecording.js', 'api.finish('], ['frontend/src/lib/activeRecording.js', 'api.process(']],
+    // D1455 (#3710, REC2): the session page's Try again runs the same processing again.
+    at: [['frontend/src/lib/activeRecording.js', 'api.finish('], ['frontend/src/lib/activeRecording.js', 'api.process('], [SESSION, 'api.process(']],
     // The store runs it; the live view, which draws the processing, names it.
     rail: ['frontend/src/pages/founder/RecordingView.jsx'],
   },
@@ -233,6 +234,11 @@ export const FOUNDER_OPTIONS = [
     page: 'Founder · Raise · Pitch deck', key: 'deck:expand', route: '/raise/pitch/edit', label: 'Expand', kind: 'write', handler: 'draft',
     at: [[AREA_LIGHTBOX, 'deckAssistApi.run(']],
   },
+  // D1557 (#3804): the investor critic in the Check claims sheet, on a model of another family than the writer's.
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'deck:critic', route: '/raise/pitch/edit', label: 'Read as an investor', kind: 'reason', handler: 'draft',
+    at: [['frontend/src/pages/raise/pitch/CriticSection.jsx', 'deckCriticApi.run(']],
+  },
   // D1604 (#3716, plan §0): Change tone and Translate are typed in the instruction box ("warmer", "in French"),
   // which runs words that are only a tone or a language under these two options (`instructionModel.typedChange`).
   {
@@ -242,6 +248,11 @@ export const FOUNDER_OPTIONS = [
   {
     page: 'Founder · Raise · Pitch deck', key: 'deck:translate', route: '/raise/pitch/edit', label: 'Translate', kind: 'write', handler: 'draft',
     at: [[INSTRUCTION_BOX, 'deckAssistApi.run(']],
+  },
+  // D1560 (#3807): the Speaker notes element writes the card's notes from its own words (POST /api/decks/:id/transform).
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'deck:notes', route: '/raise/pitch/edit', label: 'Speaker notes', kind: 'write', handler: 'draft',
+    at: [[AREA_LIGHTBOX, 'deckTransformApi.run(']],
   },
   {
     page: 'Founder · Raise · Pitch deck', key: 'deck:chart', route: '/raise/pitch/edit', label: 'Chart from your records', kind: 'write', handler: 'draft',
@@ -437,4 +448,9 @@ export const FOUNDER_QUIET_PAGES = {
 export const FOUNDER_ASK_CHIPS = [
   // D1420 (#3864): Eadwyn proposes layout changes as cards in the Ask panel; nothing changes until Accept.
   { page: 'Founder · Studio', route: '/studio', key: 'studio:layout', label: 'Arrange my Studio for this stage', kind: 'plan', handler: 'form' },
+  // D1583 (#3830): ⋯ › This deck › Teaser, one-pager or memo. Only the memo runs a model (`memo_write`), and the
+  // member picks it here, in the AIRail; the teaser and the one-pager are made by code and are not listed.
+  { page: 'Founder · Raise · Pitch deck', route: '/raise/pitch/edit', key: 'derive:memo', label: 'Write a memo from this deck', kind: 'memo', task: 'memo_write', handler: 'draft' },
+  // D1530 (#3848, E4 of #3742): the goal planner. The Chief of staff agent (or the sponsor's own Eadwyn) proposes a goal's plan as tasks.
+  { page: 'Founder · Studio', route: '/studio', key: 'propose:goal-plan', label: 'Draft a plan for this goal', kind: 'plan', handler: 'draft' },
 ];

@@ -51,6 +51,19 @@ export const SOURCES: Readonly<Record<CalendarEvent['kind'], SourceDef>> = Objec
   manual: { family: 'tasks', module: 'Calendar', label: 'Your event', page_only: true, pushable: false },
   // #3959: the member's own learning plan; page only until its feed and provider copy are designed.
   learning: { family: 'learning', module: 'Learning › Your plan', label: 'Learning', page_only: true, pushable: false },
+  // D1486 §b (#3981): Grow's dated stores. Page only: a send's time and a planned day are not provider copies.
+  publish_send: { family: 'grow', module: 'Publish', label: 'Publish send', page_only: true, pushable: false },
+  content_planned: { family: 'grow', module: 'Grow › Distribution', label: 'Planned content', page_only: true, pushable: false },
+  // D1486 §a (#3980): the meeting bot's calls; `done` reads Recorded.
+  bot_call: { family: 'meetings', module: 'Validate › Record a session', label: 'Recorded call', page_only: true, pushable: false },
+  // #3982 (D1486 §c): Raise's dated stores.
+  round_close: { family: 'raise', module: 'Raise › Round', label: 'Round close', page_only: true, pushable: false },
+  nda_expiry: { family: 'raise', module: 'Raise › NDAs', label: 'NDA expiry', page_only: true, pushable: false },
+  // #3983 (D1486 §d): the dated task stores.
+  workflow_task: { family: 'tasks', module: 'Workflows › Tasks', label: 'Workflow task', page_only: true, pushable: false },
+  mvp_task: { family: 'tasks', module: 'Build › Board', label: 'Build task', page_only: true, pushable: false },
+  contact_task: { family: 'tasks', module: 'Contacts › Follow-ups', label: 'Contact follow-up', page_only: true, pushable: false },
+  engagement_milestone: { family: 'tasks', module: 'Engagements › Milestones', label: 'Engagement milestone', page_only: true, pushable: false },
 });
 
 export const SOURCE_KINDS = Object.keys(SOURCES) as CalendarEvent['kind'][];

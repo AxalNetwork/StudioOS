@@ -24,6 +24,7 @@ import { CYCLES, cycleTabs } from '../src/pages/cycles/cycleModel.js';
 import { CycleHeader } from '../src/pages/cycles/CycleOverview.jsx';
 import CycleRoute, { underSlug, underModule } from '../src/pages/cycles/CycleRoute.jsx';
 import { MODULES } from '../src/pages/cycles/modules.js';
+import { readRouteMap } from '../../scripts/lib/routeMap.mjs';
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -396,7 +397,7 @@ test('the docs say what the code does: useEscapeClose names the mount-order haza
   const hook = read('frontend/src/components/useEscapeClose.js');
   assert.match(hook, /THE HAZARD: within one commit React runs a child's effects before its\s+\* parent's\./);
   assert.match(hook, /the first Escape\s+\* closes the lightbox, nested dialog and all/);
-  const row = read('documentation/architecture/ROUTE_MAP.md').split('\n').find((l) => l.startsWith('| Grow · Share an update |'));
+  const row = readRouteMap().split('\n').find((l) => l.startsWith('| Grow · Share an update |'));
   assert.match(row, /\| `\/grow\/update` \(D686 S02-A, #1596\): the Grow page with the sheet open over it/);
   assert.match(row, /`\/grow\/updates` redirects to `\/grow\/reporting` \(D1056\)/);
   assert.doesNotMatch(row, /`\/grow` \(the cycle overview's primary action\) → the sheet/);

@@ -39,6 +39,7 @@ import {
   filteredRows, hostLine, hostOptions, isFull, isLowSignups, isOverdue, matchesFilters, matchesSearch, paidOnCancelled,
   paidTicketsText, priceMatches, readQuery, whenMatches, writeQuery,
 } from '../src/pages/admin/events/allEventsModel.js';
+import { readRouteMap } from '../../scripts/lib/routeMap.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
@@ -342,7 +343,7 @@ test('the new files read nothing new, upload nothing and draw no chart', () => {
   const hook = codeOnly(read('frontend/src/pages/admin/events/useEventsDesk.js'));
   assert.match(hook, /const wantPaid = tab === 'all' && paidView;\n\s*const paid = useRead\('overview', 'paid', withList, wantPaid, \(\) => adminEvents\.overview\(\)\);/, 'the overview is read only for the paid-tickets view');
   assert.match(read('frontend/src/pages/admin/AdminEventsPage.jsx'), /<HeaderTab to="\/admin\/events\/calendar" data-testid="events-tab-calendar">Calendar<\/HeaderTab>/, 'a literal door for the reachability walk');
-  assert.match(read('documentation/architecture/ROUTE_MAP.md'), /`\/admin\/events\/calendar`/);
+  assert.match(readRouteMap(), /`\/admin\/events\/calendar`/);
   assert.match(read('frontend/src/pages/admin/events/README.md'), /EventsCalendar\.jsx/);
 });
 

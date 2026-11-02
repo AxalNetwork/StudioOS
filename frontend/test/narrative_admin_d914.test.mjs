@@ -30,6 +30,7 @@ import {
 import FormLightbox from '../src/pages/cycles/FormLightbox.jsx';
 import { formsFor } from '../src/pages/cycles/forms.js';
 import { cyclesWrite } from '../src/lib/api/cycles.js';
+import { apiModulesBlock } from './_apiModulesBlock.mjs';
 
 const h = React.createElement;
 const read = (path) => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
@@ -137,7 +138,7 @@ const narrativeHandler = (url) => {
 };
 
 test('D1465 (G1): End access now ends the admin\'s own read, and the gate returns; a refusal keeps the read open', async () => {
-  // Mutation checked: onEnd dropped from the banner → no end button; the re-read dropped → the narrative stays drawn.
+  // Mutation checked: onEnd dropped from the banner → no end button; the re-read dropped → the narrative stays drawn; the notice dropped → no RR05 line.
   let mine = { ...REASON };
   let refuse = true;
   const page = await mounted(
@@ -166,6 +167,8 @@ test('D1465 (G1): End access now ends the admin\'s own read, and the gate return
       ['/cycles/raise/narrative/reads/mine?project=1', '/cycles/raise/narrative/reads/mine?project=1']);
     assert.ok(!page.testIds().includes('the-narrative'), 'nothing of the narrative is drawn once the read ends');
     assert.ok(page.testIds().includes('narrative-reason'), 'the gate returns: a new reason to read again');
+    assert.equal(page.text().match(/Your read ended\. The founder sees it ended early\./g)?.length, 1, 'RR05: the line above the gate');
+    assert.ok(page.testIds().includes('narrative-reason-notice'));
   } finally { await page.close(); }
 });
 
@@ -239,8 +242,8 @@ test('the routes and CycleRoute: NAR14a for the other profiles, and no write of 
   assert.match(route, /rowAction=\{!narrativeAdmin && edit/);
   assert.match(route, /if \(narrativeAdmin && projectStatus !== 'none' && !actionPage\) \{\n\s+body = <NarrativeAdminGate projectId=\{projectId\} onOpened=/);
   assert.match(route, /admin=\{narrativeAdmin\} \/>/);
-  const api = read('frontend/src/lib/api.js');
-  const exports = api.slice(api.indexOf('// api-modules:begin'), api.indexOf('// api-modules:end')).split('\n').filter(line => line.startsWith('export * from'));
+  assert.match(read('frontend/src/lib/api.js'), /^export \* from '\.\/apiModules\.generated\.js';$/m);
+  const exports = apiModulesBlock().split('\n').filter(line => line.startsWith('export * from'));
   assert.equal(exports.filter(line => line === "export * from './api/narrative.js';").length, 1);
   assert.deepEqual(exports, [...exports].sort(), 'API modules stay alphabetical as new domains land');
 });

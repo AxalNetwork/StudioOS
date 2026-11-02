@@ -79,6 +79,30 @@ export const BASELINE = 8;
 /** The average glyph width, in em, of the theme families (measured for Space Grotesk and Inter). */
 export const GLYPH_EM = 0.52;
 
+/**
+ * D1571 (#3818): a script's average glyph width, in em, so a range's capacity
+ * is per script. Latin keeps `GLYPH_EM` (every deck saved before D1571 fits as
+ * it did); Arabic and Hebrew letters run a little narrower; a CJK character is
+ * one full em, so a line holds about half as many of them.
+ */
+export const SCRIPTS = ['latin', 'arabic', 'hebrew', 'cjk'] as const;
+export type Script = (typeof SCRIPTS)[number];
+export const SCRIPT_EM: Readonly<Record<Script, number>> = Object.freeze({ latin: GLYPH_EM, arabic: 0.48, hebrew: 0.5, cjk: 1.0 });
+const SCRIPT_OF: Readonly<Record<string, Script>> = Object.freeze({ ar: 'arabic', fa: 'arabic', ur: 'arabic', he: 'hebrew', yi: 'hebrew', zh: 'cjk', ja: 'cjk', ko: 'cjk' });
+/** A BCP 47 tag's script ('ar', 'zh-Hant', 'ja-JP' …); anything else, or none, is Latin. */
+export function scriptOf(lang: unknown): Script {
+  const base = typeof lang === 'string' ? lang.toLowerCase().split('-')[0] : '';
+  return SCRIPT_OF[base] ?? 'latin';
+}
+/** The direction a language reads in: right to left for the Arabic and Hebrew scripts. A theme's own `dir` wins. */
+export function dirOf(lang: unknown, dir: unknown = null): 'ltr' | 'rtl' {
+  if (dir === 'rtl' || dir === 'ltr') return dir;
+  const sc = scriptOf(lang);
+  return sc === 'arabic' || sc === 'hebrew' ? 'rtl' : 'ltr';
+}
+/** The script a deck's theme writes in (`theme.lang`, D1571). */
+export const scriptOfTheme = (theme: any): Script => scriptOf(theme?.lang);
+
 /** A line's height at a size and leading, rounded up to the baseline so every line sits on it. */
 export const lineHeight = (size: number, leading: number) => Math.ceil((size * leading) / BASELINE) * BASELINE;
 
@@ -119,15 +143,16 @@ export const DENSITY_MAX: Record<TypeRole, number> = {
  * How many characters a range holds at a type role, and its lines: the budget a text must fit.
  * D1554 (#3801): at the deck's aspect. 4:3 keeps the rows and narrows the columns, so a line holds less.
  */
-export function textCapacity(g: Grid, role: TypeRole, aspect: Aspect = '16:9'): { chars: number; lines: number; perLine: number } {
-  return capacityAt(g, role, TYPE_SCALE[role].size, aspect);
+export function textCapacity(g: Grid, role: TypeRole, aspect: Aspect = '16:9', script: Script = 'latin'): { chars: number; lines: number; perLine: number } {
+  return capacityAt(g, role, TYPE_SCALE[role].size, aspect, script);
 }
 
 /** A range's capacity at one size of a role (D1517): lines on the baseline, characters per line at that size, at the deck's aspect. */
-export function capacityAt(g: Grid, role: TypeRole, size: number, aspect: Aspect = '16:9'): { chars: number; lines: number; perLine: number } {
+export function capacityAt(g: Grid, role: TypeRole, size: number, aspect: Aspect = '16:9', script: Script = 'latin'): { chars: number; lines: number; perLine: number } {
   const { w, h } = boxOfAt(g, aspect);
   const lines = Math.max(1, Math.floor(h / lineHeight(size, TYPE_SCALE[role].leading)));
-  const perLine = Math.max(1, Math.floor(w / (size * GLYPH_EM)));
+  // D1571: characters per line at the script's glyph width.
+  const perLine = Math.max(1, Math.floor(w / (size * (SCRIPT_EM[script] ?? GLYPH_EM))));
   return { chars: Math.min(lines * perLine, DENSITY_MAX[role]), lines, perLine };
 }
 
@@ -193,13 +218,13 @@ export type TextFit = { fits: boolean; size: number; step: number; lines: string
  * the characters past that step's capacity. Density (`DENSITY_MAX`) holds at
  * every size: a slide is read in seconds, whatever its type.
  */
-export function fitText(g: Grid, role: TypeRole, text: unknown, aspect: Aspect = '16:9'): TextFit {
+export function fitText(g: Grid, role: TypeRole, text: unknown, aspect: Aspect = '16:9', script: Script = 'latin'): TextFit {
   const t = String(text ?? '').trim();
   const steps = TYPE_STEPS[role];
   const title = TITLE_ROLES.includes(role);
   let last: TextFit = { fits: false, size: steps[0], step: 0, lines: [], over: 0 };
   for (let i = 0; i < steps.length; i += 1) {
-    const cap = capacityAt(g, role, steps[i], aspect);
+    const cap = capacityAt(g, role, steps[i], aspect, script);
     const lines = wrapBalanced(t, cap.perLine, title);
     const tooLong = lines.some((l) => l.length > cap.perLine);
     const fits = t.length <= DENSITY_MAX[role] && lines.length <= cap.lines && !tooLong;
@@ -467,7 +492,7 @@ export function chooseLayout(role: string, evidence: Partial<Evidence> & { quote
 
 // ───────────────────────────────────────────────────────────── fit
 
-export type FitProblem = { card: number; block: string; kind: 'overflow' | 'single_word_line' | 'too_many_series' | 'too_many_points' | 'too_many_items' | 'value_too_long' | 'too_small'; over: number; message: string };
+export type FitProblem = { card: number; block: string; kind: 'overflow' | 'single_word_line' | 'too_many_series' | 'too_many_points' | 'too_many_items' | 'too_many_rows' | 'value_too_long' | 'too_small'; over: number; message: string };
 
 /** The characters a metric tile's figure holds at an aspect. */
 export function metricValueChars(g: Grid, aspect: Aspect = '16:9'): number {
@@ -481,7 +506,7 @@ export function metricValueChars(g: Grid, aspect: Aspect = '16:9'): number {
  * metric's value against its tile. D1554 (#3801): only text and a metric's
  * value depend on the aspect; the other limits count rows, columns or points.
  */
-export function fitProblems(slides: unknown, aspectIn: unknown = '16:9'): FitProblem[] {
+export function fitProblems(slides: unknown, aspectIn: unknown = '16:9', script: Script = 'latin'): FitProblem[] {
   const aspect = aspectOf(aspectIn);
   const at = aspect === '16:9' ? '' : ` at ${aspect}`;
   const out: FitProblem[] = [];
@@ -494,7 +519,7 @@ export function fitProblems(slides: unknown, aspectIn: unknown = '16:9'): FitPro
       if (b.kind === 'text') {
         // D1517: the text steps down within the scale before it counts as overflowing.
         const role = typeRoleOf(b.style, s.layout ?? null);
-        const fit = fitText(g, role, b.text, aspect);
+        const fit = fitText(g, role, b.text, aspect, script);
         const smallest = TYPE_STEPS[role][TYPE_STEPS[role].length - 1];
         if (!fit.fits) out.push({ card, block: id, kind: 'overflow', over: fit.over, message: `Card ${card}: the text is ${fit.over} characters longer than its space holds, even at ${smallest}px${at}.` });
         else if (TITLE_ROLES.includes(role) && singleWordLine(fit.lines)) out.push({ card, block: id, kind: 'single_word_line', over: 1, message: `Card ${card}: the title leaves one word on a line of its own${at}.` });
@@ -509,6 +534,11 @@ export function fitProblems(slides: unknown, aspectIn: unknown = '16:9'): FitPro
         if (series.length > CHART_MAX_SERIES) out.push({ card, block: id, kind: 'too_many_series', over: series.length - CHART_MAX_SERIES, message: `Card ${card}: a chart reads at most ${CHART_MAX_SERIES} series.` });
         const pts = Math.max(0, ...series.map((x: any) => (Array.isArray(x?.points) ? x.points.length : 0)));
         if (pts > CHART_MAX_POINTS) out.push({ card, block: id, kind: 'too_many_points', over: pts - CHART_MAX_POINTS, message: `Card ${card}: a chart reads at most ${CHART_MAX_POINTS} points; pick a shorter range.` });
+      } else if (b.kind === 'table') {
+        // D1538: a grid row holds two table rows at the table's type size; more spills out of the block.
+        const rows = Array.isArray(b.rows) ? b.rows.length : 0;
+        const max = (g.r2 - g.r1 + 1) * TABLE_ROWS_PER_GRID_ROW;
+        if (rows > max) out.push({ card, block: id, kind: 'too_many_rows', over: rows - max, message: `Card ${card}: the table has ${rows - max} more rows than its space holds${at}; make it taller.` });
       } else if (b.kind === 'graphic' && b.diagram) {
         const n = Array.isArray(b.diagram.items) ? b.diagram.items.length : 0;
         const max = Math.max(2, Math.floor((g.c2 - g.c1 + 1) / 2));
@@ -518,6 +548,9 @@ export function fitProblems(slides: unknown, aspectIn: unknown = '16:9'): FitPro
   });
   return out;
 }
+
+/** D1538: how many table rows one grid row holds. */
+export const TABLE_ROWS_PER_GRID_ROW = 2;
 
 /** The layout ids this module knows, so a test can hold it to slideModel's list. */
 export const KNOWN_LAYOUTS = Object.keys(LAYOUT_BUDGETS);

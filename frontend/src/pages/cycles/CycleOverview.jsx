@@ -63,22 +63,32 @@ export function lastCardSpan(n) {
 /** D1466 (RO06): an overview card draws at most this many charts, then "More in the module ›". */
 export const CARD_CHART_LIMIT = 2;
 
-export function CycleHeader({ cycle, cards, active = null, action, title, sub, record = false, moduleName, search = '', chip = null, more = null }) {
+/**
+ * D1454 (#3710, IV-D1): on a record, one header block. "‹ <Module>" sits above
+ * the eyebrow, never among the tabs (D696's relabelled tab is gone here); the
+ * record's pills sit beside the title and its one action row at top right,
+ * both filled by the record through `slots` (`RecordHeader.jsx`); the module
+ * tabs below are navigation only.
+ */
+export function CycleHeader({ cycle, cards, active = null, action, title, sub, record = false, moduleName, search = '', chip = null, more = null, slots = null }) {
   const meta = cycleOf(cycle);
   const navigate = useNavigate();
-  const tabs = cycleTabs(meta.key, cards, active, search, { back: record ? `‹ Back to ${moduleName}` : null });
+  const tabs = cycleTabs(meta.key, cards, active, search);
   const current = tabs.find((t) => t.active) || tabs[0];
+  const backHref = record ? (tabs.find((t) => t.key === active)?.href || `/${meta.key}${linkSearch(search)}`) : null;
   const label = action?.label || meta.action;
   const href = safeHref(action?.href);
   const btn = 'inline-flex items-center rounded-[9px] bg-axal-violet px-3.5 py-2 text-[12.5px] font-bold text-white hover:bg-axal-violet-deep';
   return (
     <header className="flex flex-col gap-1.5" data-testid="cycle-header">
+      {record && <Link to={backHref} className="w-fit text-[12.5px] font-bold text-axal-violet hover:underline dark:text-violet-300" data-testid="record-back">‹ {moduleName}</Link>}
       <span className={`${SECTION} text-axal-violet dark:text-violet-300`}>{meta.name} · {record ? moduleName : meta.question}</span>
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className={`flex flex-wrap justify-between gap-3 ${record ? 'items-start' : 'items-end'}`}>
         <div className="flex min-w-0 flex-wrap items-center gap-2.5">
           <h1 className="m-0 text-[20px] font-extrabold leading-tight tracking-[-.025em] text-axal-ink sm:text-2xl dark:text-gray-100">{title || meta.name}</h1>
           {/* D1146 (#3032): a header chip, such as Validate's Product-market fit (RD12). */}
           {chip}
+          {record && slots && <span ref={slots.pills} className="flex flex-wrap items-center gap-2" data-testid="record-header-pills" />}
         </div>
         {/* D1060 (#2930): `more` sits beside the action, as the Reporting desk's More menu. */}
         <div className="flex items-center gap-2">
@@ -86,12 +96,13 @@ export function CycleHeader({ cycle, cards, active = null, action, title, sub, r
             ? <button type="button" className={btn} onClick={action.onClick} disabled={!!action.disabled} data-testid="cycle-action">{label}</button>
             : !record && href ? <Link className={btn} to={href} data-testid="cycle-action" aria-haspopup={action?.onOpen ? 'dialog' : undefined} onClick={action?.onOpen ? (e) => { if (isPlainClick(e)) { e.preventDefault(); action.onOpen(); } } : undefined}>{label}</Link> : null}
           {more}
+          {record && slots && <div ref={slots.actions} className="flex flex-wrap items-center justify-end gap-2" data-testid="record-header-actions" />}
         </div>
       </div>
       <p className="m-0 text-[13px] leading-relaxed text-axal-ink/80 dark:text-gray-300">{sub ?? `${meta.outcome}. The cycle’s data at a glance; the tabs above move between modules.`}</p>
       <nav aria-label={`${meta.name} modules`} className="mt-1 hidden flex-wrap gap-1.5 lg:flex" data-testid="cycle-tabs">
         {tabs.map((t) => (
-          <Link key={t.key || 'overview'} to={t.href} aria-current={t.active && !t.back ? 'page' : undefined}
+          <Link key={t.key || 'overview'} to={t.href} aria-current={t.active && !record ? 'page' : undefined}
             className={`whitespace-nowrap rounded-full border px-[11px] py-[5px] text-[11px] ${t.active ? 'border-axal-lavender-edge bg-axal-lavender font-bold text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300' : 'border-axal-hairline bg-white font-semibold text-axal-muted hover:text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:text-gray-100'}`}>
             {t.name}
           </Link>

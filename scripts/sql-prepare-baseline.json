@@ -231,6 +231,7 @@
     "table @ services/shareLink.ts": 2,
     "table @ services/taxonomyVersion.ts": 1,
     "tail @ routes/introductions.ts": 2,
+    "TEAM @ services/calendar/growReaders.ts": 2,
     "TMP @ util/usersRoleRebuild.ts": 4,
     "type @ routes/decks.ts": 1,
     "type @ routes/kyc.ts": 1,

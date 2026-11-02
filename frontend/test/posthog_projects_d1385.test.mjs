@@ -147,7 +147,7 @@ test('the states: a failed read says so with Try again; a failed project list bl
 test('wiring: the page draws the section for PostHog only; the client is one line in api.js and hits the Worker route', () => {
   const page = readFileSync(new URL('../src/pages/account/ConnectorPage.jsx', import.meta.url), 'utf8');
   assert.match(page, /\{p\.key === 'posthog' && <PosthogProjectsSection p=\{p\} onChanged=\{onChanged\} \/>\}/);
-  const api = readFileSync(new URL('../src/lib/api.js', import.meta.url), 'utf8');
+  const api = readFileSync(new URL('../src/lib/apiModules.generated.js', import.meta.url), 'utf8');
   assert.match(api, /^export \* from '\.\/api\/posthog\.js';$/m);
   const client = readFileSync(new URL('../src/lib/api/posthog.js', import.meta.url), 'utf8');
   assert.match(client, /\/connectors\/\$\{enc\(uid\)\}\/posthog-projects/);

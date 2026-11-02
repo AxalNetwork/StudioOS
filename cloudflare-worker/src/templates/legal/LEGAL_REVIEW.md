@@ -134,7 +134,27 @@ checks this).
 | `dpa_v2.md` | Four Cloudflare rows in the Sub-processor Schedule: Workers AI and AI Gateway; Vectorize; Browser Rendering; Queues, Durable Objects and Analytics Engine. `dpa_v1.md` listed Cloudflare for Workers, D1, R2 and KV only, although all of these are bound in production (`wrangler.toml`). | Whether these are new sub-processors needing §6.1's ten days' notice, or the same sub-processor (Cloudflare) under an existing listing. **Not added:** Anthropic, which runs only behind a switch that is off (`AI_PROVIDER_ANTHROPIC`), and third-party image models (Bria, Recraft), which need decision M and the ten-day notice before any row is added. |
 | `ai_image_marking_spec_v1.md` | How generated images (`deck_image`, `brand_logo`, `article_image`) are marked: XMP `DigitalSourceType = trainedAlgorithmicMedia` plus the model id and date, stamped after the image check and before storage, kept by every export; one on-screen attribution line, the existing `placedLine`, led by "AI image" when marking is on. | EU AI Act Article 50(2); whether C2PA is required; any visible label on slides; per-licence attribution (for example "Built with Llama"). |
 
-**Owner decisions these drafts wait on** (S1's picks, all pending):
+**Owner decisions** (2026-11-01, on #3716): **V = A**, **X = A**, **Y = A**,
+as below. W and M are still open. The owner keeps the counsel text his:
+only wording counsel has given is published.
+
+**B17 (#3793, D1548): not published, waiting on counsel's text.** None of
+the four drafts carries counsel's approval yet, so nothing here went live.
+What B17 built so it can go live without more code:
+
+- **Terms re-acceptance.** `TERMS_REACCEPT_FROM` in `services/trust.ts`
+  is null (off). Once counsel's Terms text is on `/terms` and the template
+  module imports it, setting it to the page's date asks every member who
+  accepted an earlier Terms to accept again, through the existing
+  interstitial (`/auth/me`'s `terms_acceptance_pending`, reason `updated`).
+- **The ten days' notice.** It is started by HQ › Trust content: draft the
+  sub-processor rows counsel confirms and press Publish. Publish lists each
+  new row as active no sooner than `NOTICE_DAYS` (10) days later and emails
+  confirmed subscribers, which is `dpa_v1.md` §6.1's promise
+  (`test/legal_publish_d1548.test.ts` holds the two together). Counsel's
+  answer on whether the Cloudflare rows need notice at all comes first.
+
+**The decisions, as S1 put them:**
 
 - **V · Marking AI images.** A: XMP `DigitalSourceType` and the model id (S1's pick); B: A plus a C2PA manifest, if counsel requires it; C: none.
 - **W · Retention periods for generated assets.** S1's pick: plan §5.9.5's periods (discarded images 24 hours, unreferenced proposals 14 days, text proposals 30 days), confirmed by counsel. The plan's decision text also names snapshots "hourly for 7 days then daily"; §5.9.5 itself gives no snapshot period, so `privacy_v3.md` does not state one.

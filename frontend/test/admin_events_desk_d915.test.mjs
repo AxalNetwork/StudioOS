@@ -36,6 +36,7 @@ import {
   readEveryPage, refusalText, showUpText, statusCounts, statusFromSearch, statusWord, tabFor, unpublishCopy, whenLine,
 } from '../src/pages/admin/events/eventsDeskModel.js';
 import { SCOPE_LABEL as INSIGHTS_SCOPE_LABEL } from '../src/pages/admin/insights/insightsModel.js';
+import { readRouteMap } from '../../scripts/lib/routeMap.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
@@ -388,7 +389,7 @@ test('the desk reads only R1, R2, R3 and R5, never the roster, R2\'s summary or 
 test('docs: the folder is documented, ROUTE_MAP has the row, and the canvas is graded', () => {
   assert.ok(existsSync(resolve(root, 'frontend/src/pages/admin/events/README.md')));
   assert.match(read('frontend/src/pages/admin/README.md'), /`events\/`/);
-  assert.match(read('documentation/architecture/ROUTE_MAP.md'), /\n\| Events Console \| admin, super-admin \| `\/admin\/events`/);
+  assert.match(readRouteMap(), /\n\| Events Console \| admin, super-admin \| `\/admin\/events`/);
   const incoming = read('design/incoming/README.md');
   assert.doesNotMatch(incoming, /S1's integration lands next and records its grade\s+here\./);
   assert.match(incoming, /\*\*Grade: UPGRADE\.\*\* `\/admin\/events` is live\./);

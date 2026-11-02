@@ -275,8 +275,14 @@ export async function depsOf(env: Env, taskIds: number[]): Promise<Map<number, {
   return out;
 }
 
-/** Ready: open, and every dependency done. Derived on every read, never stored. */
-export const isReady = (t: Pick<TaskRow, 'status'>, deps: { status: string }[]) => t.status === 'open' && deps.every((d) => d.status === 'done');
+/**
+ * Ready: open, every dependency done, and (D1614 W1, #3969) on a project board
+ * only in its Ready column. A task with no board column (a company task, or one
+ * from before migration 762) keeps E1's rule, so triage and backlog work is never
+ * offered to an agent. Derived on every read, never stored.
+ */
+export const isReady = (t: Pick<TaskRow, 'status'> & { board_column?: string | null }, deps: { status: string }[]) =>
+  t.status === 'open' && (t.board_column == null || t.board_column === 'ready') && deps.every((d) => d.status === 'done');
 
 /**
  * Would `taskId` depending on `on` close a loop? A depth-first walk from each

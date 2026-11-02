@@ -42,6 +42,7 @@ import { CARD_H, CARD_W, CHART_SHOTS_MAX, blockRect, writeEditableDeck } from '.
 import { IMAGE_MISSING, NOT_RECORDED, NO_NOTES } from '../src/services/decks/offlineHtml.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
+import { dohAnswer } from './_doh_fake.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (p: string) => readFileSync(resolve(ROOT, p), 'utf8');
@@ -209,6 +210,7 @@ function google(answer: (call: Call) => Response) {
   const calls: Call[] = [];
   globalThis.fetch = (async (input: any, init: any = {}) => {
     const url = String(input?.url ?? input);
+    const dns = dohAnswer(url); if (dns) return dns; // D1506: the image host resolves to a public address
     const method = init.method || 'GET';
     const body = init.body instanceof Uint8Array ? init.body : typeof init.body === 'string' ? new TextEncoder().encode(init.body) : null;
     const headers = Object.fromEntries(new Headers(init.headers || {}).entries());

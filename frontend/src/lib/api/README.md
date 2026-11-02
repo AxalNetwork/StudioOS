@@ -4,6 +4,8 @@ D1409: `articleAuthoring.js` is the article editor's Eadwyn client (`/api/articl
 
 D1503: `deckElementModels.js` is the client for a model per grid element (`GET`/`PUT /api/decks/:id/element-models`). `read` returns each element's suggested models, its `more` list and its pick. `pick` stores a pick for the deck or for the caller. It keeps no copy of the routes; the Worker answers every model and default.
 
+D1549: `deckModelPresets.js` reads and sets a deck's preset (`GET`/`PUT /api/decks/:id/model-presets`) and answers the groups HQ locked; `adminDeckModels.js` reads and sets HQ's org default and lock per element group (`GET`/`PUT /api/admin/ai/deck-models`). Neither keeps a model list.
+
 D1256: `ventureScores.js` is the venture scorecard's client (`/api/venture-scores`): the reads, the deal list's strip, reviews, corrections, weighting and sharing. It sends no computed field.
 
 D1239: `dealViews.js` reads personal thesis fit and saves, edits or removes private/firm view settings. The server rechecks deal and accepted-seat access.
@@ -21,6 +23,15 @@ Existing methods stay in `api.js`. 147 tests and scripts read that file by
 path, so moving code out of it is a separate decision, not a side effect of
 adding a domain.
 
+## Files
+
+Every client module in this folder, one row each. The list below is generated, not written: `node scripts/check-folder-docs.mjs --write` fills it in your working tree from each file's own header comment (its first line), and `--clean` empties it again. It is never committed, so adding a file never edits this README (#4104), and `check-folder-docs` fails a file here that has no header comment.
+
+**The rule for a new file:** open it with a header comment whose first line says what it is and which decision or issue it belongs to. Write nothing here. The per-file notes elsewhere in this README predate #4104; they are kept as they are and take no new entries.
+
+<!-- files:begin -->
+<!-- files:end -->
+
 ## Adding a domain
 
 1. Create one module here for the domain, named in camelCase, as
@@ -36,15 +47,22 @@ adding a domain.
    ```
 
    Call `request` only inside method bodies, never at the top level of the
-   module: `api.js` re-exports this file, so the two import each other, and a
-   top-level call would run before `request` is defined.
+   module: `api.js` re-exports this file (through the generated index), so
+   the two import each other, and a top-level call would run before `request`
+   is defined.
 
-2. Add ONE line to the re-export block near the top of `api.js`, between
-   `// api-modules:begin` and `// api-modules:end`, in alphabetical order. For
-   the module above, it is `export * from './api/communityTasks.js';`.
+2. Run `node scripts/build-api-index.mjs`. It rewrites
+   `../apiModules.generated.js`, one `export * from './api/<name>.js';` line
+   per file in this folder, alphabetical, between `// api-modules:begin` and
+   `// api-modules:end`. `api.js` re-exports that file with one line that
+   never changes, so **you do not edit `api.js`** (#4105). Commit the
+   generated file with your module; if another branch added a module next to
+   yours, rerun the script rather than resolving its conflict by hand.
 
-   The block sits under the imports, away from the end of the file where other
-   pull requests append, so two new domains touch two different lines.
+   It is a generated file and not a Vite `import.meta.glob` because the
+   modules are re-exported by name (`import { verdictApi } from
+   '../lib/api'`) and ES named exports must be static; a plain file also runs
+   unchanged in the node tests.
 
 3. Pick export names that `api.js` does not already use. With `export *`, a
    name `api.js` declares itself wins and the module's export is silently
@@ -54,9 +72,11 @@ adding a domain.
 
 `scripts/check-api-drift.mjs` (run by `npm run test:drift`) reads `api.js` and
 every module here. A `request()` in a module must match a mounted Worker
-route exactly as one in `api.js` must, and the check fails if the re-export
-block does not name exactly the files in this folder, one well-formed line
-each, in alphabetical order. The rules themselves live in
+route exactly as one in `api.js` must, and the check fails if the generated
+index does not name exactly the files in this folder, one well-formed line
+each, in alphabetical order, or is not byte-for-byte what
+`build-api-index.mjs` writes, or if `api.js` stops re-exporting it (or lists
+a module by hand again). The rules themselves live in
 `scripts/lib/apiModules.mjs` and are tested by
 `scripts/lib/apiModules.test.mjs`. The Worker's own drift tests
 (`cloudflare-worker/test/api_drift.test.*`) read this folder too.
@@ -449,6 +469,10 @@ The operator sends a bounded batch size and optional rescan flag; discovery curs
 
 D1199 (#3149): `productTesting.js` adds the programme logo: `partnerTestingApi.uploadLogo(uid, file)` and `.removeLogo(uid)`, the same on `adminTestingApi` for HQ's own programmes, and `productTestingApi.logoSrc(uid)`, the `<img>` path (a 404 there means no logo: draw the initial letter).
 
+D1484 part 2 (#3978): `calendarSources.js` holds the member's calendar source settings: `GET /calendar/sources`, `PUT /calendar/sources/:key` (`{ shown?, colour? }`; a colour is a palette token, or `null` for its family's) and `PUT /calendar/settings` (`{ copy_target }`).
+
+D1501 (#3751): `deckDraft.js` holds a deck version's working copy: `deckDraftApi.saveCard(deckId, uid, card, rev, { ord })` (`PATCH /decks/:id/cards/:uid` with `If-Match`), `draft(deckId)` and `discard(deckId)` (`GET`/`DELETE /decks/:id/draft`). `deckV2Adapter.js` reads it through `saveCard`, `discardDraft` and `draft`.
+
 D1212 (#3178): `calendarConnections.js` holds the whole-calendar subscription (`GET`, `POST`, `DELETE /calendar/subscription`, D1209) and the disconnect with its choice (`DELETE /calendar/google` and `/calendar/microsoft`, `?remove_copies=1`). The link comes back once, from the POST, and the page never prints it.
 
 D1207 (#3173): `calendarItems.js` holds the Calendar's Reschedule (`PATCH /calendar/ic-meetings/:id` and `/calendar/founder-checkins/:id`) and its pickers (`/calendar/people`, `/calendar/deals`). A person comes back as a uid and a name, never an email or a user number.
@@ -463,3 +487,8 @@ D1051 adds `billingCheckout.js`: `checkoutApi.quote`, `.start(…, nonce)` and `
 | `dealInsights.js` | D1151: per-deal Team, Market and Traction read clients. |
 | `mail.js` | Email (#3547): the member's own mailboxes (Outlook, Gmail behind its switch, IMAP/SMTP) and the confirmed send (D1340); Eadwyn's drafts — the context pack, live update blocks, the estimate, drafts and revisions (D1341). |
 | `relationships.js` | D1356: who on my teams knows a person — sharing per team, who-knows, and introduction requests. |
+| `deckReports.js` | D1540: a founder's report of a bad deck result (`POST /api/decks/proposals/:uid/report`), and HQ's queue and resolve under `/api/admin/deck-reports`. A report refunds nothing. |
+| `deckComments.js` | D1570: a deck's comments (list, post, assign, resolve) and its approval (read, set approvers, approve) under `/api/decks/:id/comments…`, `/approval`, `/approvers` and `/approve`. |
+| `deckTypedValues.js` | D1538: the figures a founder types for a deck, Stated — list, set and remove under `/api/decks/:id/typed-values`. |
+| `deckModelPresets.js` | D1549: a deck's preset (Fast, Balanced, Best or Custom) per element group, and the groups HQ locked, under `/api/decks/:id/model-presets`. |
+| `adminDeckModels.js` | D1549: HQ's org default and lock per deck element group, under `/api/admin/ai/deck-models` (Super Admin, step-up). |

@@ -4,7 +4,7 @@ import { narrativeApi } from '../../../lib/api/narrative';
 import { reportError } from '../../../lib/log';
 import { Lightbox, Unreadable } from '../../../ui';
 import ReasonGate, { AccessBanner, RecordSkeleton } from '../../../ui/ReasonGate';
-import { endedLine, grantSpan } from '../../../ui/reasonGate';
+import { ENDED_NOW, endedLine, grantSpan } from '../../../ui/reasonGate';
 import {
   BOUNDARY, HOME_PATH, NOTES_META, NOTES_TITLE, NOTE_ANSWER_PLACEHOLDER, NOTE_MAX, NOTE_PLACEHOLDER, NO_NOTES, NO_READS,
   OTHER_VENTURE, READS_LINE, READS_TITLE, READ_ONLY, REASON_HOURS, REASON_MAX, REASON_MIN, TITLE,
@@ -103,26 +103,27 @@ export function narrativeFormAccess(projectId, user) {
  * D1463: the banner counts down to the grant's `expires_at` each minute; at
  * zero the reads are read again, so the gate returns with RR06's line. The
  * venture header reads `venture` from the reads (G2, D1465). End access now
- * (G1, D1465) ends the read early and re-reads, so the gate returns.
+ * (G1, D1465) ends the read early and re-reads, so the gate returns with RR05's line.
  */
 export function NarrativeAdminGate({ projectId, onOpened, back = null, children }) {
   const [tick, setTick] = useState(0);
   const [lapsed, setLapsed] = useState(null);
+  const [endedNow, setEndedNow] = useState(false);
   const reads = useReads(projectId, tick);
-  const opened = useCallback(() => { setLapsed(null); setTick((n) => n + 1); onOpened?.(); }, [onOpened]);
+  const opened = useCallback(() => { setLapsed(null); setEndedNow(false); setTick((n) => n + 1); onOpened?.(); }, [onOpened]);
   const mine = reads.mine;
-  const expire = useCallback(() => { setLapsed(mine?.expires_at || null); setTick((n) => n + 1); }, [mine?.expires_at]);
+  const expire = useCallback(() => { setLapsed(mine?.expires_at || null); setEndedNow(false); setTick((n) => n + 1); }, [mine?.expires_at]);
   // D1465 (G1): End access now ends the caller's own read on the Worker, then
-  // the reads are read again, so the gate returns. A refusal stays on the
+  // the reads are read again, so the gate returns with RR05's line. A refusal stays on the
   // banner (its "could not be ended" line) and the read stands.
-  const end = useCallback(async () => { await narrativeApi.narrativeEndRead(projectId); setLapsed(null); setTick((n) => n + 1); }, [projectId]);
+  const end = useCallback(async () => { await narrativeApi.narrativeEndRead(projectId); setLapsed(null); setEndedNow(true); setTick((n) => n + 1); }, [projectId]);
   if (!projectId) return children;
   if (reads.status === 'loading' && !mine) return <div className="h-24 w-full animate-pulse rounded-xl bg-axal-ground dark:bg-gray-800" aria-hidden="true" data-testid="narrative-reason-loading" />;
   if (reads.status === 'error') return <Unreadable what="The read log" claim="The narrative stays closed until it can be checked." onRetry={() => setTick((n) => n + 1)} />;
   if (!mine) {
     return (
       <NarrativeReasonForm projectId={projectId} onOpened={opened} venture={reads.venture} viewer={reads.viewer} back={back}
-        notice={lapsed ? endedLine(REASON_HOURS, lapsed) : null} />
+        notice={endedNow ? ENDED_NOW : lapsed ? endedLine(REASON_HOURS, lapsed) : null} />
     );
   }
   return (

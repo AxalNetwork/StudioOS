@@ -178,8 +178,10 @@ test('speakers are assigned with one tap; the receipt and the meter read the Wor
   const session = { channel: 'in_person', live_model: null, final_model: '@cf/openai/whisper-large-v3-turbo' };
   const rail = renderedText(html(React.createElement(SessionRail, { session, models: MODELS, receipt: { items: [{ kind: 'final', model: 'turbo', cost_microusd: 1500, outcome: 'ok' }], total_cost_microusd: 1500, budget: { day_left_microusd: 2000000, month_left_microusd: 9000000 } } })));
   assert.match(rail, /Live: Off/);
-  assert.match(rail, /This session\$0\.0015/);
-  assert.match(rail, /Left today\$2\.0000/);
+  // D1455 (#3710, REC5): two decimals, the full value on hover; a charge under half a cent is never "$0.00".
+  assert.match(rail, /This session(<|&lt;) \$0\.01/);
+  assert.match(rail, /Left today\$2\.00(?!\d)/);
+  assert.match(html(React.createElement(SessionRail, { session, models: MODELS, receipt: { items: [{ kind: 'final', model: 'turbo', cost_microusd: 1500, outcome: 'ok' }], total_cost_microusd: 1500, budget: { day_left_microusd: 2000000, month_left_microusd: 9000000 } } })), /title="\$0\.0015"/);
   const unread = renderedText(html(React.createElement(SessionRail, { session, models: MODELS, receipt: { items: [], total_cost_microusd: 0, budget: null, budget_error: 'Unreadable: your AI allowance and top-up balance could not be read.' } })));
   assert.match(unread, /Unreadable: your AI allowance/);
   assert.doesNotMatch(unread, /Left today/);

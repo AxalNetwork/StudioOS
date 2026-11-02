@@ -6,11 +6,13 @@ disagrees with the code, the document is the thing to fix.
 | File | Answers |
 | --- | --- |
 | `CODEBASE_MAP.md` | Where does anything live? |
-| `ROUTE_MAP.md` | Which design canvas maps to which route, what shipped from it, and what deliberately did not. One row per canvas. |
+| `ROUTE_MAP.md` | A pointer to `route-map/` (D4102). |
+| `route-map/` | Which design canvas maps to which route, what shipped from it, and what deliberately did not: one file per section and one file per canvas row. `node scripts/build-route-map.mjs` joins them into one document. |
 | `SHELL_MIGRATION.md` | The four workspace shell migrations (Founder, Investor/LP, Advisor, Partner): IA rules, zone inventory, shipped vs open, verification commands. |
-| `PROFILE_ROUTING.md` | **Generated.** Which workspace sees each canvas, under which nav section, as what surface, and how it is reached. |
+| Profile routing map | **Generated, not committed** (D4103). Which workspace sees each canvas, under which nav section, as what surface, and how it is reached. `npm run docs:routing` writes it here; CI keeps it as the `routing-docs` artifact. |
 | `AI_MODEL_COVERAGE.md` | **Generated** (D1478). Every Workers AI catalogue model against the 14 platform modules: wired, offered, gap or n/a, with the file and line or page that does it, the picks the run never reads, and Pitch deck v2's models priced per run. `cloudflare-worker/test/ai_model_coverage_d1478.test.ts` fails when it differs from `renderCoverage()`. |
-| `PAGE_INVENTORY.md` | **Generated.** The same projection from the nav side: every destination each role sidebar can reach, and which canvas is behind it. |
+| `MODEL_TERMS.md` | D1504. Every model a run can reach: grandfathered or not, where it is routed from, and what its provider's terms allow (licence, commercial output, attribution, flow-down), "Not recorded" until reviewed. `cloudflare-worker/test/ai_model_terms_d1504.test.ts` holds it equal to `cloudflare-worker/src/services/ai/modelTerms.ts`. |
+| Page inventory | **Generated, not committed** (D4103). The same projection from the nav side: every destination each role sidebar can reach, and which canvas is behind it. Written beside the routing map by the same command. |
 | `UNRESOLVED_ITEMS.md` | The routing decisions that cannot be made from the code, what each blocks, and what a wrong guess would cost. |
 | `ASSUMPTIONS_LOG.md` | Routing calls taken without an explicit instruction, what each was decided from, and what would make it wrong. |
 | `DECISIONS.md` | Why is it built this way and not the obvious way? Numbered, D1…D525, each recording what was decided and what it cost. Takes no new entries. |
@@ -31,14 +33,18 @@ disagrees with the code, the document is the thing to fix.
 **`CLAUDE.md` at the repo root outranks everything here.** Where this folder
 disagrees with it, that file wins.
 
-The two read most often are `ROUTE_MAP.md` (before building any surface) and
+The two read most often are the route map, `route-map/` (before building any surface), and
 `DECISIONS.md` with `decisions/` (before undoing something that looks wrong —
 several entries exist precisely because the obvious fix was tried and was
 worse).
 
-**`PROFILE_ROUTING.md` and `PAGE_INVENTORY.md` are build output.** They are
-emitted by `scripts/build-profile-routing.mjs` from `ROUTE_MAP.md` and
-`frontend/src/sidebarConfig.js`; editing them by hand is pointless because the
-next run overwrites it, and `frontend/test/profile_routing_fresh.test.mjs`
-fails the build if either falls behind its sources. Change the source, then
-re-run the generator.
+**The profile routing map and the page inventory are build output, and are
+not committed (D4103, #4103).** `scripts/build-profile-routing.mjs` emits them
+from the route map (`route-map/`) and `frontend/src/sidebarConfig.js`. Every
+routing change used to rewrite both, so parallel branches conflicted on them;
+now `.gitignore` lists them. To read them, run `npm run docs:routing`, which
+writes them into this folder, or download the `routing-docs` artifact of any CI
+run's `routing docs (artifact)` job. `node scripts/build-profile-routing.mjs --check` (in
+`npm run test:guards`) fails when the projection cannot be built, a canvas
+reaches no workspace, a table is malformed, or either file is committed again.
+Change the sources; never edit or commit the output.

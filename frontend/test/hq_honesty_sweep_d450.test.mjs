@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { codeOnly } from './_codeOnly.mjs';
+import { readRouteMap } from '../../scripts/lib/routeMap.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
@@ -26,7 +27,7 @@ test('admin licences list reason no longer claims no account carries a licence',
 });
 
 test('ROUTE_MAP no longer claims ticket_sync_events is absent', () => {
-  const map = read('documentation/architecture/ROUTE_MAP.md');
+  const map = readRouteMap();
   assert.doesNotMatch(map, /there is no `ticket_sync_events` table/);
   assert.match(map, /readTicketSync/);
 });

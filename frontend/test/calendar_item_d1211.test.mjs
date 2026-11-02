@@ -430,8 +430,8 @@ test('the page: the drawer route, each row opening its item, no browser pop-up, 
   const app = read('frontend/src/App.jsx');
   assert.match(app, /<Route path="\/calendar\/item\/:kind\/:id" element=\{guard\(\['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'\], <CalendarPage \/>\)\} \/>/);
   assert.match(page, /const opened = itemOf\(location\.pathname\);/);
-  // D1212: the connected calendars sit over the view the same way.
-  assert.match(page, /const behind = opened \|\| connected \? \(location\.state\?\.from \|\| '\/calendar'\) : location\.pathname;/, 'the drawer sits over the view it came from');
+  // D1212: the connected calendars sit over the view the same way; D1484 part 2: so does CAL4's sources panel.
+  assert.match(page, /const behind = opened \|\| connected \|\| sourcesPanel \? \(location\.state\?\.from \|\| '\/calendar'\) : location\.pathname;/, 'the drawer sits over the view it came from');
   assert.match(page, /<CalendarItemDrawer kind=\{opened\.kind\} id=\{opened\.id\}/);
   assert.match(page, /onClose=\{\(\) => navigate\(behind\)\}/);
   assert.match(page, /<Link to=\{itemPath\(ev\.kind, ev\.source_id\)\} state=\{\{ from \}\}/, 'each row opens its item');

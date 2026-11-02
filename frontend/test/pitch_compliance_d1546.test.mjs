@@ -76,7 +76,7 @@ test('the print page (PDF and PowerPoint photograph it) draws each card’s chro
   const card = renderToStaticMarkup(React.createElement(StudioPrintCard, { slide: TERMS, index: 2, chrome: { confidential: true, lines: [ROUND_TERMS_NOTE] } }));
   assert.match(card, /data-testid="print-compliance-2"/);
   assert.match(card, /Proposed, subject to counsel/);
-  assert.match(read('../src/pages/PitchDeckPrintPage.jsx'), /<StudioPrintCard key=\{i\} slide=\{s\} index=\{i\} aspect=\{deck\.theme\?\.aspect\} chrome=\{chromeOf\(deck, i\)\} \/>/);
+  assert.match(read('../src/pages/PitchDeckPrintPage.jsx'), /<StudioPrintCard key=\{i\} slide=\{s\} index=\{i\} aspect=\{deck\.theme\?\.aspect\} chrome=\{chromeOf\(deck, i\)\} theme=\{deck\.theme\} \/>/, "D1571: and the deck's language");
   assert.equal((read('../src/pages/raise/pitch/PitchPresent.jsx').match(/chrome=\{chromeOf\(deck, i\)\}/g) || []).length, 2);
   const sheet = read('../src/pages/raise/pitch/DeckSheets.jsx');
   assert.match(sheet, /checked=\{settingsOf\(theme\)\.confidential\}/);

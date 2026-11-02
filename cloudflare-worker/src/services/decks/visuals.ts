@@ -129,6 +129,9 @@ export async function recordDiagrams(env: Env, projectId: number): Promise<{ dia
 
 // ───────────────────────────────────────────────────────────── charts
 
+/** "2026-10" from a point's x ("2026-10", "2026-10-07"), or null: the frontend's `projectionOf` rule. */
+const monthOf = (x: unknown) => (typeof x === 'string' && /^\d{4}-\d{2}/.test(x) ? x.slice(0, 7) : null);
+
 /**
  * D1517 (#3769, dk-auto AUTO-3) — the chart a figure's SHAPE earns, as one
  * rules table. Code reads the shape from the records (how many points, whether
@@ -137,7 +140,7 @@ export async function recordDiagrams(env: Env, projectId: number): Promise<{ dia
  *   time        ≥ 4 points → line; ≤ 3 points → columns
  *   parts       parts of one whole → percent_bar (a stacked bar)
  *   categories  categories compared → ranked_bars (horizontal bars)
- *   market      TAM, SAM, SOM → nested_bars (drawn as circles once #3787 lands)
+ *   market      TAM, SAM, SOM → market_circles (D1538, #3787: drawn as circles)
  *   single      one value → metric_tiles (a big number)
  *   funnel      stages that narrow → funnel
  *
@@ -145,14 +148,14 @@ export async function recordDiagrams(env: Env, projectId: number): Promise<{ dia
  * Every type is one of `slideModel.ts` CHART_TYPES.
  */
 export type ChartShape = { kind: 'time' | 'parts' | 'categories' | 'market' | 'single' | 'funnel'; points: number; projected?: boolean };
-export type ChartRule = { type: 'line' | 'columns' | 'percent_bar' | 'ranked_bars' | 'nested_bars' | 'metric_tiles' | 'funnel'; rule: string; dashed: boolean; label: string | null };
+export type ChartRule = { type: 'line' | 'columns' | 'percent_bar' | 'ranked_bars' | 'market_circles' | 'metric_tiles' | 'funnel'; rule: string; dashed: boolean; label: string | null };
 
 export const CHART_RULES: ReadonlyArray<{ rule: string; when: (s: ChartShape) => boolean; type: ChartRule['type'] }> = Object.freeze([
   { rule: 'time series of four points or more', when: (s) => s.kind === 'time' && s.points >= 4, type: 'line' },
   { rule: 'time series of two or three points', when: (s) => s.kind === 'time' && s.points >= 2 && s.points <= 3, type: 'columns' },
   { rule: 'parts of a whole', when: (s) => s.kind === 'parts' && s.points >= 2, type: 'percent_bar' },
   { rule: 'categories compared', when: (s) => s.kind === 'categories' && s.points >= 2, type: 'ranked_bars' },
-  { rule: 'TAM, SAM and SOM', when: (s) => s.kind === 'market' && s.points === 3, type: 'nested_bars' },
+  { rule: 'TAM, SAM and SOM', when: (s) => s.kind === 'market' && s.points === 3, type: 'market_circles' },
   { rule: 'one value', when: (s) => s.points === 1, type: 'metric_tiles' },
   { rule: 'funnel stages', when: (s) => s.kind === 'funnel' && s.points >= 2, type: 'funnel' },
 ]);
@@ -167,13 +170,41 @@ export function chartRuleFor(shape: ChartShape | null | undefined): ChartRule | 
 }
 
 /**
- * How a bound series reads best, by the rules table: a trend of four points
- * or more is a line, fewer is columns, and a weekly count is columns (each
- * week is its own total). Null when it cannot be drawn honestly (unrecorded,
- * or one point).
+ * D1538 (#3787): TAM, SAM and SOM as a market, when the points are exactly
+ * those three, each positive, with SOM ≤ SAM ≤ TAM. Null otherwise: a market
+ * whose parts do not nest is not drawn as circles.
  */
-export function chartTypeFor(s: Pick<Series, 'state' | 'points' | 'cadence' | 'unit'> | null | undefined): 'line' | 'columns' | null {
-  if (!s || s.state !== 'recorded' || !Array.isArray(s.points) || s.points.length < 2) return null;
+export function marketShape(points: unknown): { tam: number; sam: number; som: number } | null {
+  if (!Array.isArray(points) || points.length !== 3) return null;
+  const by = new Map<string, number>();
+  for (const p of points as any[]) {
+    const k = typeof p?.x === 'string' ? p.x.trim().toUpperCase() : '';
+    if (!['TAM', 'SAM', 'SOM'].includes(k) || by.has(k) || typeof p?.y !== 'number' || !Number.isFinite(p.y) || p.y <= 0) return null;
+    by.set(k, p.y);
+  }
+  const tam = by.get('TAM')!, sam = by.get('SAM')!, som = by.get('SOM')!;
+  return som <= sam && sam <= tam ? { tam, sam, som } : null;
+}
+
+export type ChartPick = 'line' | 'columns' | 'market_circles' | 'projection';
+
+/**
+ * How a series reads best, from its shape alone, with no user edit (the
+ * one-click path, D1538 / dk-auto gap c):
+ *   - TAM, SAM and SOM that nest are market circles;
+ *   - a series with a month after today's is a projection, drawn dashed
+ *     past today with the "Projection" label and its footnote, so a zero-edit
+ *     deck never shows a forecast as a result;
+ *   - otherwise a trend of four points or more is a line, fewer is columns,
+ *     and a weekly count is columns (each week is its own total).
+ * Null when it cannot be drawn honestly (unrecorded, or one point).
+ */
+export function chartTypeFor(s: Pick<Series, 'state' | 'points' | 'cadence' | 'unit'> | null | undefined, today = new Date().toISOString().slice(0, 10)): ChartPick | null {
+  if (!s || s.state !== 'recorded' || !Array.isArray(s.points)) return null;
+  if (marketShape(s.points)) return 'market_circles';
+  if (s.points.length < 2) return null;
+  const now = monthOf(today);
+  if (now && s.points.some((p) => { const m = monthOf(p?.x); return m != null && m > now; })) return 'projection';
   if (s.cadence === 'weekly' && s.unit === 'count') return 'columns';
   return chartRuleFor({ kind: 'time', points: s.points.length })?.type === 'line' ? 'line' : 'columns';
 }

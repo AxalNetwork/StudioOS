@@ -300,5 +300,5 @@ test('wiring: migration 620, a scan never reopens a decided case, and the client
   assert.match(route, /SET status = 'in_review', updated_at = CURRENT_TIMESTAMP WHERE id = \$\{caseId\} AND status IN \('open', 'in_review'\)/);
   const client = read('../../frontend/src/lib/api/ddLifecycle.js');
   for (const path of ['/dd/cases/${enc(uid)}/decision', '/dd/cases/${enc(uid)}/memo', '/dd/cases/${enc(uid)}/reports', '/dd/cases/${enc(uid)}/ic']) assert.ok(client.includes(path), path);
-  assert.match(read('../../frontend/src/lib/api.js'), /export \* from '\.\/api\/ddLifecycle\.js';/);
+  assert.match(read('../../frontend/src/lib/apiModules.generated.js'), /export \* from '\.\/api\/ddLifecycle\.js';/);
 });

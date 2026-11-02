@@ -34,6 +34,9 @@
  *   GET   /narrative/objections      → { objections: [{ key, text, count, prospects, last_heard, answer, answered }], capped, answers }
  *   PUT   /narrative/objections/:objection/answer  { version, section, how: eadwyn | picked } → { objection, answered }
  *   DELETE /narrative/objections/:objection/answer → { objection, answered: null }   (migration 624)
+ *   D1559 (#3806): the founder's kept answer to a deck's likely investor question (`deck_qa.ts`, migration 736).
+ *   PUT   /narrative/questions/:question/answer  { deck_id, source_keys: [1..6], note? } → { question, kept }
+ *   DELETE /narrative/questions/:question/answer → { question, kept: null }
  *   POST  /narrative/objections/:objection/draft  { version, section, words? }
  *         one metered run under `draft:narrative-objection` → { version, section, objection, text, removed }; writes nothing
  *   D914 (#2698): an admin reads the narrative read only (`services/narrative/adminRead.ts`).
@@ -157,6 +160,8 @@ import { parseJsonLoose } from '../services/decks/autofill';
 import { railFor, refuseRun } from '../util/railContext';
 import { ensureTier } from '../middleware/requireTier';
 import { logCycleWrite } from '../services/cycleActivity';
+import { KEPT_BINDINGS_MAX, NOTE_MAX, QUESTION_KEY, bindingOf, keptText, unboundFigures } from '../services/decks/deckQa';
+import { QA_FOUNDER_ONLY, deckQa, qaDeckRow } from './deck_qa';
 import {
   AcceptError, RAISE_PART_FOR, acceptRaiseProposal, deleteRaiseFact, dismissRaiseProposal, syncRaise,
 } from '../services/mercury/raiseFeeds';
@@ -911,6 +916,85 @@ cycleRaise.delete('/narrative/objections/:objection/answer', async (c) => {
       summary: `An objection no longer marked answered in ${label}, version ${Number(gone.version)}`,
     });
     return c.json({ objection: key, answered: null });
+  } catch (e) { return writeFailed(c, e); }
+});
+
+// D1559 (#3806, deck v2 C11, migration 736): the founder keeps an answer to a
+// likely investor question (`routes/deck_qa.ts`), beside the objections it
+// ranks first. The answer is bindings: each `source_keys` entry must be a deck
+// source recorded now, and is stored with its value and snapshot, so a later
+// read says fresh, stale or gone. A note may state no figure that a kept
+// binding does not carry (422 `unbound_figure`). One row per question; a
+// later answer replaces the earlier. The founder's alone, as D900's check:
+// the answer states the records' figures. The log row names the deck version
+// and the count, never the question's words or a figure.
+async function keptScope(c: any): Promise<{ user: User; projectId: number; key: string } | Response> {
+  const s = await narrativeScope(c, 'write');
+  if (s instanceof Response) return s;
+  if (!(await narrativeFounder(c, s.user, s.projectId))) return refuse(c, 403, { code: 'founder_only', message: QA_FOUNDER_ONLY });
+  const key = String(c.req.param('question') || '');
+  if (!QUESTION_KEY.test(key)) return refuse(c, 404, { code: 'question_not_found', message: 'That question is not one of this deck’s likely questions.' });
+  return { user: s.user, projectId: s.projectId, key };
+}
+
+cycleRaise.put('/narrative/questions/:question/answer', async (c) => {
+  const s = await keptScope(c);
+  if (s instanceof Response) return s;
+  const b = await body(c);
+  const row = await qaDeckRow(c.env, Number(b.deck_id));
+  if (!row || Number(row.project_id) !== s.projectId) return refuse(c, 404, { code: 'deck_not_found', message: 'Say which of this venture’s deck versions the answer is kept on.' });
+  const keys = Array.isArray(b.source_keys) ? [...new Set(b.source_keys.map((k) => String(k)))] : [];
+  if (!keys.length || keys.length > KEPT_BINDINGS_MAX) {
+    return refuse(c, 400, { code: 'source_keys_required', message: `An answer is kept as 1 to ${KEPT_BINDINGS_MAX} records it binds to.` });
+  }
+  const note = typeof b.note === 'string' && b.note.trim() ? b.note.replace(/\s+/g, ' ').trim() : null;
+  if (note && note.length > NOTE_MAX) return refuse(c, 400, { code: 'note_too_long', message: `A note is at most ${NOTE_MAX} characters.` });
+  let qa: Awaited<ReturnType<typeof deckQa>>;
+  try { qa = await deckQa(c, s.user, row); } catch (e) { return unreadable(c, e); }
+  if (!qa.body.questions.some((q) => q.key === s.key)) {
+    return refuse(c, 404, { code: 'question_not_found', message: 'That question is not one of this deck’s likely questions.' });
+  }
+  const bindings = keys.map((k) => qa.items.find((i) => i.source_key === k)).map((i) => (i ? bindingOf(i) : null));
+  if (bindings.some((x) => !x)) {
+    return refuse(c, 422, { code: 'not_recorded', message: 'Each record an answer binds to must hold a value you can read now.' });
+  }
+  const kept = bindings as NonNullable<(typeof bindings)[number]>[];
+  if (note && unboundFigures(note, kept).length) {
+    return refuse(c, 422, { code: 'unbound_figure', message: 'Your note states a figure that none of the kept records carries. Bind the record that holds it, or take the figure out.' });
+  }
+  const version = Number(row.version) >= 1 ? Number(row.version) : null;
+  const userId = Number(s.user.id);
+  try {
+    await c.env.DB.prepare(
+      `INSERT INTO deck_qa_answers (project_id, question_key, deck_id, version, bindings_json, note, kept_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (project_id, question_key) DO UPDATE SET
+         deck_id = excluded.deck_id, version = excluded.version, bindings_json = excluded.bindings_json,
+         note = excluded.note, kept_by = excluded.kept_by, kept_at = datetime('now')`,
+    ).bind(s.projectId, s.key, Number(row.id), version, JSON.stringify(kept), note, userId).run();
+    await logCycleWrite(c.env, {
+      projectId: s.projectId, userId, cycle: 'raise', module: 'pitch-deck', entityId: Number(row.id),
+      action: 'deck_question_answer_kept',
+      summary: `A likely investor question's answer kept on deck version ${version ?? 'unknown'} (${kept.length} record${kept.length === 1 ? '' : 's'})`,
+    });
+    return c.json({ question: s.key, kept: { text: keptText(kept, note), note, bindings: kept, deck_id: Number(row.id), version } });
+  } catch (e) { return writeFailed(c, e); }
+});
+
+cycleRaise.delete('/narrative/questions/:question/answer', async (c) => {
+  const s = await keptScope(c);
+  if (s instanceof Response) return s;
+  try {
+    const gone: any = await c.env.DB.prepare(
+      'DELETE FROM deck_qa_answers WHERE project_id = ? AND question_key = ? RETURNING deck_id, version',
+    ).bind(s.projectId, s.key).first();
+    if (!gone) return refuse(c, 404, { code: 'not_kept', message: 'No answer is kept for this question.' });
+    await logCycleWrite(c.env, {
+      projectId: s.projectId, userId: Number(s.user.id), cycle: 'raise', module: 'pitch-deck', entityId: gone.deck_id == null ? null : Number(gone.deck_id),
+      action: 'deck_question_answer_unkept',
+      summary: `A likely investor question's kept answer removed (deck version ${gone.version ?? 'unknown'})`,
+    });
+    return c.json({ question: s.key, kept: null });
   } catch (e) { return writeFailed(c, e); }
 });
 

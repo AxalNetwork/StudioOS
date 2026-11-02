@@ -15,6 +15,8 @@ import {
   panelChips, proposalCard, refusalState, stateBlock,
 } from '../src/ui/askPanelModel.js';
 import { ASK_OFF_METHODS, askPanelAdapter } from '../src/ui/askPanelAdapter.js';
+import { eadwynApi } from '../src/lib/api/eadwyn.js';
+import { railProposalsApi } from '../src/lib/api/railProposals.js';
 import AskPanel from '../src/ui/AskPanel.jsx';
 import { PageAsk } from '../src/ui/AskButton.jsx';
 import TeamAsk from '../src/pages/team/AskButton.jsx';
@@ -146,18 +148,46 @@ test('the layout by width (AK12): docked from 1024, over the content from 640, a
   assert.equal(askLayout(390), 'sheet');
 });
 
-test('the seam: the quote and the waiting count are off until D1442; everything else goes to routes on main', async () => {
-  assert.deepEqual([...ASK_OFF_METHODS], ['quote', 'waiting']);
-  for (const m of ASK_OFF_METHODS) {
-    const r = await askPanelAdapter[m]('x');
-    assert.equal(r.available, false, m);
-    assert.match(r.reason, /D1442/);
-  }
+test('the seam: D1442 turned the quote and the waiting count on; nothing is off, and a failed read is never a value', async () => {
+  // Mutations checked (D1442): quote sending with no question; a refused quote drawn as a hold; a failed count read as 0.
+  assert.deepEqual([...ASK_OFF_METHODS], [], 'every method goes to a route on main');
   const src = codeOnly(read('frontend/src/ui/askPanelAdapter.js'));
   for (const m of ['start', 'conversation', 'conversations', 'ask', 'run', 'proposals', 'decide']) {
     assert.match(src, new RegExp(`\\b${m}: through\\(`), m);
   }
-  assert.doesNotMatch(src, /\/eadwyn\/conversations\/[^'"]*\/quote/, 'no client path for a route that is not on main');
+  assert.match(src, /quote: guarded\(/);
+  assert.match(src, /waiting: guarded\(/);
+
+  const realQuote = eadwynApi.quote;
+  const realList = railProposalsApi.list;
+  const asked = [];
+  try {
+    eadwynApi.quote = async (uid, body) => { asked.push([uid, body]); return { ai: true, hold_microusd: 31000, model: '@cf/x', model_label: 'X' }; };
+    assert.equal((await askPanelAdapter.quote(null, 'hi')).available, false, 'no conversation yet');
+    assert.equal((await askPanelAdapter.quote('u1', '   ')).available, false, 'no question yet');
+    assert.deepEqual(asked, [], 'a quote was asked for with nothing to price');
+    const q = await askPanelAdapter.quote('u1', 'What is my MRR?', 'Founder · Build');
+    assert.deepEqual([q.available, q.data.hold_microusd], [true, 31000]);
+    assert.deepEqual(asked, [['u1', { question: 'What is my MRR?', page: 'Founder · Build' }]]);
+    eadwynApi.quote = async () => ({ ai: false, reason: 'assist_off', message: 'AI is off on this page.' });
+    assert.deepEqual(await askPanelAdapter.quote('u1', 'hi'), { available: false, reason: 'AI is off on this page.' }, 'a refusal is off, never a hold');
+    eadwynApi.quote = async () => { throw new Error('The quote could not be read.'); };
+    assert.equal((await askPanelAdapter.quote('u1', 'hi')).available, false, 'a failed quote is off');
+
+    railProposalsApi.list = async (q) => { asked.push(q); return { proposals: [{ uid: 'a' }, { uid: 'b' }] }; };
+    assert.deepEqual(await askPanelAdapter.waiting('Founder · Build'), { available: true, data: { count: 2 } });
+    assert.deepEqual(asked.at(-1), { page: 'Founder · Build', status: 'proposed' });
+    railProposalsApi.list = async () => { throw new Error('nope'); };
+    assert.equal((await askPanelAdapter.waiting('Founder · Build')).available, false, 'a failed count is off, never "0 waiting"');
+    assert.equal((await askPanelAdapter.waiting(null)).available, false);
+  } finally { eadwynApi.quote = realQuote; railProposalsApi.list = realList; }
+
+  // PageAsk draws the count it read, and the panel prices once typing pauses.
+  const button = codeOnly(read('frontend/src/ui/AskButton.jsx'));
+  assert.match(button, /askPanelAdapter\.waiting\(ask\.page\)\.then\(\(w\) => \{ if \(live\) setWaiting\(w\.available \? w\.data\?\.count \?\? null : null\); \}\)/);
+  assert.match(button, /<AskButtonView onClick=\{\(\) => openAskPanel\(label\)\} expanded=\{ask\.open\} waiting=\{waiting\}/);
+  const panel = codeOnly(read('frontend/src/ui/AskPanel.jsx'));
+  assert.match(panel, /setTimeout\(\(\) => \{\s*askPanelAdapter\.quote\(convUid, text, page\)/);
 });
 
 test('WorkerRail mounts the panel inside its own aside at desktop, and portals it below 1024', () => {
