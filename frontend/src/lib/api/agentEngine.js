@@ -103,4 +103,22 @@ export const agentEngineApi = {
   addMemoryFact: (agentUid, body) => request(`/teams/agents/${enc(agentUid)}/memory`, { method: 'POST', body: JSON.stringify(body) }),
   forgetMemory: (noteUid) => request(`/teams/memory/${enc(noteUid)}`, { method: 'DELETE' }),
   forgetAllMemory: (agentUid) => request(`/teams/agents/${enc(agentUid)}/memory`, { method: 'DELETE' }),
+  // #3957 (D1613 §10): AI agent work sessions on the Calendar (CAL8–CAL11).
+  //   GET    /api/teams/sessions/agents                  → { agents: [{ uid, name, role_key, role_name, company_name, project_name, model, tools, skills, status }], can_schedule }
+  //   POST   /api/teams/agents/:uid/sessions/estimate    { cadence, run_at? | time, weekday?, day_of_month?, zone?, target_kind?, target_id? }
+  //                                                      → { per_session_cents, month_cents, cap_used_cents, cap_cents } (null when unread, never 0)
+  //   POST   /api/teams/agents/:uid/duties               { skill_id, skill_version?, cadence, run_at | time + weekday / day_of_month, zone,
+  //                                                        target_kind?, target_id?, instruction? } → 201 { session };
+  //                                                      422 skill_not_in_role | target_not_readable | run_at_past | over_cap; 409 agent_paused
+  //   GET    /api/teams/sessions/:uid                    → { session }
+  //   PATCH  /api/teams/sessions/:uid                    the same fields, or { status: 'paused' | 'active' } → { session }
+  //   DELETE /api/teams/sessions/:uid                    → { session } (cancelled)
+  //   POST   /api/teams/sessions/:uid/run                → 202 { run }; 409 agent_paused; 402 out_of_tokens
+  schedulableAgents: () => request('/teams/sessions/agents'),
+  sessionEstimate: (agentUid, body) => request(`/teams/agents/${enc(agentUid)}/sessions/estimate`, { method: 'POST', body: JSON.stringify(body) }),
+  scheduleSession: (agentUid, body) => request(`/teams/agents/${enc(agentUid)}/duties`, { method: 'POST', body: JSON.stringify(body) }),
+  session: (uid) => request(`/teams/sessions/${enc(uid)}`),
+  updateSession: (uid, patch) => request(`/teams/sessions/${enc(uid)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  cancelSession: (uid) => request(`/teams/sessions/${enc(uid)}`, { method: 'DELETE' }),
+  runSession: (uid) => request(`/teams/sessions/${enc(uid)}/run`, { method: 'POST' }),
 };

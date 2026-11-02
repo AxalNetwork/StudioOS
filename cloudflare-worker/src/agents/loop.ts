@@ -44,6 +44,7 @@ import { readOne, READERS, type ReadContext } from '../services/agents/reads';
 import { depsOf, isReady, taskEvent, type TaskRow } from '../services/agents/tasks';
 import { canRead, effectiveBook, scopeOfAgent, type AgentRow } from '../services/agents/teams';
 import { handoffBlockFor, handsOffTo, parseHandoff, proposeHandoff } from '../services/agents/handoffs';
+import { sessionBlock } from '../services/agents/sessions';
 import {
   dailyLimitReached, markRun, moveTask, pauseAgent, runByUid, runsToday, scopeOfRow, scopeSettings, tellTeam,
   type PauseReason, type RunRow, type RunStep,
@@ -180,6 +181,8 @@ export async function buildContext(d: LoopDeps, l: Loaded): Promise<Built> {
   // D1530 (#3849, E5): the roles this agent may hand off to, and how; a handoff task's why and note, as data.
   const handTo = await handsOffTo(d.env, l.agent);
   const handoff = await handoffBlockFor(d.env, l.task);
+  // #3957: a scheduled session's skill, record and instruction: the member's words are data, never the prompt's own lines.
+  const session = await sessionBlock(d.env, l.task);
   const head = [
     `Task: ${l.task.title}`,
     l.task.detail ? `Detail: ${l.task.detail}` : '',
@@ -190,12 +193,13 @@ export async function buildContext(d: LoopDeps, l: Loaded): Promise<Built> {
   const blocks = [
     `<agent_data source="memory" trust="data">${inert({ untrusted: true, data: notes })}</agent_data>`,
     ...(handoff ? [`<agent_data source="handoff" trust="data">${inert({ untrusted: true, data: handoff })}</agent_data>`] : []),
+    ...(session ? [`<agent_data source="session" trust="data">${inert({ untrusted: true, data: session })}</agent_data>`] : []),
     ...reads.map((r) => r.block),
   ];
   // Everything within the run's prompt limit, in order; what does not fit is named, not cut in half.
   let prompt = `${head}\n\n${UNTRUSTED_NOTICE}`;
   const omitted: string[] = [];
-  const names = ['memory', ...(handoff ? ['handoff'] : []), ...reads.map((r) => r.key)];
+  const names = ['memory', ...(handoff ? ['handoff'] : []), ...(session ? ['session'] : []), ...reads.map((r) => r.key)];
   blocks.forEach((b, i) => {
     if (prompt.length + 1 + b.length <= PROMPT_MAX - 200) prompt += `\n${b}`;
     else omitted.push(names[i]);

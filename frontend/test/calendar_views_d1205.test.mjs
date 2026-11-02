@@ -45,13 +45,15 @@ test('the week is Monday to Sunday; the month is the calendar month; the agenda 
 });
 
 test('every kind the page reads is in exactly one family; Deadlines holds the Compliance layer (D1384)', () => {
-  assert.deepEqual(FAMILIES.map((f) => f.label), ['Events', 'Meetings', 'Sessions', 'Deadlines', 'Learning', 'Grow', 'From other calendars']);
+  assert.deepEqual(FAMILIES.map((f) => f.label), ['Events', 'Meetings', 'Sessions', 'Deadlines', 'Learning', 'Grow', 'From other calendars', 'AI agents']);
   assert.deepEqual([...FAMILIES.flatMap((f) => f.kinds)].sort(), [...PAGE_KINDS].sort());
   assert.equal(familyOf('event_ticket'), 'events');
   assert.equal(familyOf('calendly_event'), 'other');
   // D1484 (#3977): the cohort dates and deal closings are deadlines too; #3982: so are a round's close and an NDA's expiry.
   assert.deepEqual(FAMILIES.find((f) => f.key === 'deadlines').kinds, ['compliance_due', 'cohort_date', 'deal_closing', 'round_close', 'nda_expiry', 'workflow_task', 'mvp_task', 'contact_task', 'engagement_milestone']);
-  assert.equal(PAGE_KINDS.length, 26, 'the page kind table parsed'); // #3959: Learning is the fifteenth; D1486 §b's two make seventeen; §c's two, nineteen; §d's four, twenty-four; D1485's two, twenty-six.
+  assert.equal(PAGE_KINDS.length, 27, 'the page kind table parsed'); // #3959: Learning is the fifteenth; D1486 §b's two make seventeen; §c's two, nineteen; §d's four, twenty-four; D1485's two, twenty-six; #3957's agent sessions, twenty-seven.
+  // #3957: AI agent sessions are their own family, teal.
+  assert.deepEqual(FAMILIES.find((f) => f.key === 'agents').kinds, ['agent_session']);
   // D1485 (#3979): Google and Outlook events sit beside Calendly, from other calendars.
   assert.deepEqual(FAMILIES.find((f) => f.key === 'other').kinds, ['calendly_event', 'external_google', 'external_microsoft']);
   assert.deepEqual(FAMILIES.find((f) => f.key === 'grow').kinds, ['publish_send', 'content_planned']);

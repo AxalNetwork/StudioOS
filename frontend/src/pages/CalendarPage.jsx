@@ -159,6 +159,8 @@ const KINDS = [
   // D1485 (#3979): the member's own Google and Outlook events, read-only and page only.
   { id: 'external_google', label: 'Google event', from: 'Google Calendar' },
   { id: 'external_microsoft', label: 'Outlook event', from: 'Outlook' },
+  // #3957: a scheduled AI agent work session; its work comes back as proposals in Approvals.
+  { id: 'agent_session', label: 'AI agent session', from: 'Team › Agents' },
 ];
 const KIND_LABEL = Object.fromEntries(KINDS.map((k) => [k.id, k.label]));
 

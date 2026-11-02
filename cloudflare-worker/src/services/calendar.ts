@@ -434,7 +434,7 @@ export async function fetchMicrosoftUserinfo(accessToken: string): Promise<any> 
 // ===========================================================================
 export interface CalendarEvent {
   id: string;
-  kind: 'ic_meeting' | 'founder_checkin' | 'advisor_booking' | 'partner_office_hour' | 'calendly_event' | 'expert_booking' | 'event_ticket' | 'event_hosted' | 'investor_meeting' | 'compliance_due' | 'interview_call' | 'cohort_date' | 'deal_closing' | 'manual' | 'learning' | 'publish_send' | 'content_planned' | 'bot_call' | 'round_close' | 'nda_expiry' | 'workflow_task' | 'mvp_task' | 'contact_task' | 'engagement_milestone' | 'external_google' | 'external_microsoft';
+  kind: 'ic_meeting' | 'founder_checkin' | 'advisor_booking' | 'partner_office_hour' | 'calendly_event' | 'expert_booking' | 'event_ticket' | 'event_hosted' | 'investor_meeting' | 'compliance_due' | 'interview_call' | 'cohort_date' | 'deal_closing' | 'manual' | 'learning' | 'publish_send' | 'content_planned' | 'bot_call' | 'round_close' | 'nda_expiry' | 'workflow_task' | 'mvp_task' | 'contact_task' | 'engagement_milestone' | 'external_google' | 'external_microsoft' | 'agent_session';
   source_id: number;
   source_uid: string;
   title: string;
@@ -924,6 +924,8 @@ const READERS: Readonly<Record<CalendarEvent['kind'], CalendarReader>> = {
   // D1485 (#3979): the member's own Google and Outlook events, read live, page only, never pushable.
   external_google: async (env, userId, from, to) => (await import('./calendar/externalReaders')).googleEvents(env, userId, from, to),
   external_microsoft: async (env, userId, from, to) => (await import('./calendar/externalReaders')).microsoftEvents(env, userId, from, to),
+  // #3957: the AI agent sessions of the teams the member reads, page only: each live session's slots and the runs it made.
+  agent_session: async (env, userId, from, to) => (await (await import('./agents/sessions')).sessionEvents(env, userId, from, to)) as CalendarEvent[],
 };
 
 export const KNOWN_KINDS = Object.keys(READERS) as readonly CalendarEvent['kind'][];
@@ -1011,7 +1013,9 @@ export const SCOPED_EXCLUDED_KINDS = ['calendly_event', 'expert_booking'] as con
 // D1486 §b (#3981): Publish sends and planned content are the venture team's, never a staff scope's.
 export const PERSONAL_ONLY_KINDS = ['interview_call', 'cohort_date', 'deal_closing', 'manual', 'publish_send', 'content_planned', 'bot_call', 'round_close', 'nda_expiry', 'workflow_task', 'mvp_task', 'contact_task', 'engagement_milestone',
   // D1485 (#3979): a member's own Google or Outlook events are theirs alone, never a staff scope's.
-  'external_google', 'external_microsoft'] as const;
+  'external_google', 'external_microsoft',
+  // #3957: a team's AI agent sessions are read by that team's members, never by a staff scope.
+  'agent_session'] as const;
 export const SCOPED_SOURCE_LIMIT = 1000;
 export function validScopeWindow(from: string, to: string): boolean {
   const start = Date.parse(from), end = Date.parse(to);
