@@ -27,6 +27,8 @@ import { run as aiRun, __resetForTest } from '../src/services/aiRouter.ts';
 import { DeckGenRoom } from '../src/durable-objects/deck-gen-room.ts';
 
 const M716 = readFileSync('cloudflare-worker/sql/migrations/716_deck_area_batches.sql', 'utf8');
+// D1600 (#3879): the run's seen, notice and retry columns, which `admit` writes.
+const M752 = readFileSync('cloudflare-worker/sql/migrations/752_deck_area_batches_seen.sql', 'utf8');
 // The hold's Idempotency-Key (D844) and context (D1278), which the budget fixture predates.
 const HOLD_COLUMNS = ['525_ai_reservation_idempotency.sql', '632_ai_hold_context.sql'].map((n) => readFileSync(`cloudflare-worker/sql/migrations/${n}`, 'utf8')).join('\n');
 const USER = 7, DECK = 50, P = 5;
@@ -39,6 +41,7 @@ function world() {
   f.db.exec(`INSERT INTO pitch_decks (id, project_id, version, slides, title, is_current) VALUES (${DECK}, ${P}, 1, '[]', 'Synthetic', 1), (${DECK + 1}, ${P}, 2, '[]', 'Other', 0)`);
   f.db.exec(M716);
   f.db.exec(M716); // applies twice
+  f.db.exec(M752);
   // Every charge draws on tokens, so a charge is the change in the balance.
   setFixtureAllowance(f.db, 0);
   f.db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(?,?)').run(USER, 50_000_000);
