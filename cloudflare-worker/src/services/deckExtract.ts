@@ -11,7 +11,7 @@
  * always usable.
  */
 import type { Env } from '../types';
-import { run as aiRun, type RailContext } from './aiRouter';
+import { convertToMarkdown, run as aiRun, type RailContext } from './aiRouter';
 import { AI_SURFACE } from './aiSurfaces';
 import { untrustedBlock, withUntrustedRule, withoutUnrecordedLinks } from './ai/untrusted';
 
@@ -104,7 +104,8 @@ function parseJsonLoose<T>(raw: string | undefined): T | null {
  * Extract text from raw deck bytes using Workers AI document conversion.
  * Returns status:'failed' (never throws) so callers can offer manual paste.
  */
-export async function extractDeck(env: Env, bytes: Uint8Array, mime: string, filename: string): Promise<ExtractionResult> {
+export async function extractDeck(env: Env, bytes: Uint8Array, mime: string, filename: string,
+  who: { userId: number; surface?: string | null } = { userId: 0 }): Promise<ExtractionResult> {
   const ai = (env as unknown as { AI?: { toMarkdown?: (docs: unknown) => Promise<unknown> } }).AI;
   if (!ai || typeof ai.toMarkdown !== 'function') {
     // Plain-text / markdown uploads can be decoded directly without the AI binding.
@@ -114,18 +115,14 @@ export async function extractDeck(env: Env, bytes: Uint8Array, mime: string, fil
     }
     return { status: 'failed', markdown: '', chunks: [], error: 'document_conversion_unavailable' };
   }
-  try {
-    const blob = new Blob([bytes], { type: mime || 'application/octet-stream' });
-    const result = (await ai.toMarkdown([{ name: filename || 'deck', blob }])) as Array<{ data?: string }> | { data?: string };
-    let md = '';
-    if (Array.isArray(result)) md = String(result[0]?.data || '');
-    else md = String((result as { data?: string })?.data || '');
-    md = md.slice(0, MAX_MD_CHARS).trim();
-    if (!md) return { status: 'empty', markdown: '', chunks: [] };
-    return { status: 'ok', markdown: md, chunks: chunkMarkdown(md) };
-  } catch (e) {
-    return { status: 'failed', markdown: '', chunks: [], error: (e as Error).message || 'extraction_failed' };
-  }
+  // #3937 (D1478 task 3, part 2): through the router's metered conversion — a paused
+  // member is refused, an image is refused (B (c)), and the read is one usage row.
+  const blob = new Blob([bytes], { type: mime || 'application/octet-stream' });
+  const r = await convertToMarkdown(env, who, [{ name: filename || 'deck', blob }]);
+  if (!r.ok) return { status: 'failed', markdown: '', chunks: [], error: r.error || 'extraction_failed' };
+  const md = String(r.documents[0]?.data || '').slice(0, MAX_MD_CHARS).trim();
+  if (!md) return { status: 'empty', markdown: '', chunks: [] };
+  return { status: 'ok', markdown: md, chunks: chunkMarkdown(md) };
 }
 
 /** Split markdown into traceable chunks (preserve original text order). */

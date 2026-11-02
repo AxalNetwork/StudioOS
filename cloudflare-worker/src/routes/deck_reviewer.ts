@@ -10,6 +10,7 @@
  * editable; the review can be regenerated after edits.
  */
 import { Hono } from 'hono';
+import { AI_SURFACE } from '../services/aiSurfaces';
 import type { Env, User } from '../types';
 import { getSQL } from '../db';
 import { requireAuth } from '../auth';
@@ -183,7 +184,7 @@ deckReviewer.post('/upload', async (c) => {
     VALUES (${id}, ${user.id}, ${projectId}, 'upload', ${file.name || 'deck'}, ${mime}, ${file.size}, ${rawRetained ? r2Key : null}, ${rawRetained}, 'pending', 'processing', ${(file.name || 'Pitch deck').replace(/\.[^.]+$/, '').slice(0, 200)}, ${nowIso()}, ${nowIso()})`;
   if (storage && rawRetained) await noteStorageLanded(c.env, storage);
 
-  const extraction = await extractDeck(c.env, bytes, mime, file.name || 'deck');
+  const extraction = await extractDeck(c.env, bytes, mime, file.name || 'deck', { userId: Number(user.id) || 0, surface: AI_SURFACE.raisePitchReview });
   if (extraction.status !== 'ok') {
     await sql`UPDATE deck_reviews SET extraction_status = ${extraction.status === 'empty' ? 'empty' : 'failed'}, status = 'needs_manual', updated_at = ${nowIso()} WHERE id = ${id}`;
     const full = await loadReview(c.env, user.id, id);
