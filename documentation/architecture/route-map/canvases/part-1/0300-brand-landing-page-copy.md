@@ -1,0 +1,1 @@
+| Brand & Landing Page copy | — | — | — | — | OUT OF SCOPE | **Stale duplicate.** Byte-identical to the above except it is missing three `.bl-root.bl-embedded` CSS rules — the older pre-embed copy. Should not count as a distinct surface; recommend deleting. |

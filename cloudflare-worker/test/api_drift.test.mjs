@@ -3,7 +3,8 @@
  *
  * Parses `frontend/src/lib/api.js` for every `/api/...` path the SPA hits
  * via the `request()` helper (string + template literal), then asserts each
- * is mounted in `cloudflare-worker/src/index.ts` via `app.route('/api/...', …)`.
+ * is mounted in `cloudflare-worker/src/index.ts` via `app.route('/api/...', …)`
+ * or by a route module's own `mount` export (routes/_registry.ts, #4105).
  *
  * This is a PREFIX-level checker — the existing `scripts/check-api-drift.mjs`
  * remains the canonical CLI. This file mirrors it under `node --test` so
@@ -14,6 +15,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { registeredMounts } from '../../scripts/lib/routeRegistry.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '../..');
@@ -58,6 +60,13 @@ function extractWorkerMounts(src) {
   return [...out].sort((a, b) => b.length - a.length);
 }
 
+// #4105 — plus the routers that mount themselves through routes/_registry.ts
+// (each module's `mount` export), which index.ts no longer names.
+function withRegistered(mounts) {
+  const out = new Set([...mounts, ...registeredMounts(ROOT).map((r) => r.path)]);
+  return [...out].sort((a, b) => b.length - a.length);
+}
+
 function isCovered(path, mounts) {
   const full = '/api' + path;
   return mounts.some((p) => full === p || full.startsWith(p + '/'));
@@ -67,7 +76,7 @@ test('every SPA /api path has a mounted worker route', () => {
   const apiSrc = clientSource();
   const workerSrc = readFileSync(WORKER_FILE, 'utf8');
   const clientPaths = extractClientPaths(apiSrc);
-  const workerMounts = extractWorkerMounts(workerSrc);
+  const workerMounts = withRegistered(extractWorkerMounts(workerSrc));
   assert.ok(clientPaths.length > 0, 'expected client paths to parse');
   assert.ok(workerMounts.length > 0, 'expected worker mounts to parse');
   const missing = clientPaths.filter((p) => !isCovered(p, workerMounts)).sort();
@@ -80,7 +89,7 @@ test('every SPA /api path has a mounted worker route', () => {
 
 test('founder_risk, services, public routes are mounted', () => {
   const workerSrc = readFileSync(WORKER_FILE, 'utf8');
-  const mounts = extractWorkerMounts(workerSrc);
+  const mounts = withRegistered(extractWorkerMounts(workerSrc));
   for (const required of ['/api/founder-risk', '/api/services', '/api/public']) {
     assert.ok(
       mounts.includes(required),

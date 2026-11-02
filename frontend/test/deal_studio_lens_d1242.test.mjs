@@ -265,5 +265,5 @@ test('DealsPage is retired: /deals mounts the lens for an admin or a partner, an
   for (const f of ['StudioLens.jsx', 'StudioParts.jsx', 'studioLensModel.js']) {
     assert.ok(!/\b(?:window\.)?(alert|confirm|prompt)\(/.test(read(`frontend/src/pages/investor/dealflow/${f}`)), `a browser pop-up in ${f}`);
   }
-  assert.ok(read('frontend/src/lib/api.js').includes("export * from './api/dealFlow.js';"));
+  assert.ok(read('frontend/src/lib/apiModules.generated.js').includes("export * from './api/dealFlow.js';"));
 });

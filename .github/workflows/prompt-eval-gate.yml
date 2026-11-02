@@ -1,0 +1,37 @@
+name: Prompt eval gate
+
+# D1519 (#3771): a change to a deck prompt
+# (cloudflare-worker/src/services/decks/prompts/) must come with a re-run of
+# the element eval, recorded as ELEMENT_EVAL.md's prompts-hash, or carry the
+# owner's `prompt-eval-waiver` label. scripts/check-prompt-eval.mjs holds the
+# check; this file only decides WHEN it runs. The `labeled` and `unlabeled`
+# types re-run it when the owner adds or removes the waiver.
+#
+# Every value reaches the script through `env:`, never `${{ }}` inside `run:`,
+# so nothing a PR controls is ever parsed as shell.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prompt-eval-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: deck prompts match their eval
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: A changed prompt updates ELEMENT_EVAL.md's hash, or the owner waived it
+        env:
+          PROMPT_EVAL_WAIVER: ${{ contains(github.event.pull_request.labels.*.name, 'prompt-eval-waiver') }}
+        run: node scripts/check-prompt-eval.mjs

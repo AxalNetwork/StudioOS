@@ -221,6 +221,6 @@ test('the source: bound SQL only, one literal row read per registered table, mou
   assert.match(index, /app\.route\('\/api\/fills', fillsRoutes\);/);
   const client = readFileSync('frontend/src/lib/api/fills.js', 'utf8');
   assert.match(client, /\/fills\/sheet\?page=/);
-  assert.match(readFileSync('frontend/src/lib/api.js', 'utf8'), /export \* from '\.\/api\/fills\.js';/);
+  assert.match(readFileSync('frontend/src/lib/apiModules.generated.js', 'utf8'), /export \* from '\.\/api\/fills\.js';/);
   assert.doesNotMatch(route + sources, /\bmodel\b.*json|llama|@cf\//i);
 });

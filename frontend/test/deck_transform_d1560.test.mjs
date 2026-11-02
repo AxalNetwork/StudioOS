@@ -55,5 +55,5 @@ test('the client posts to the transform route; the lightbox quotes and runs it, 
   assert.match(lightbox, /r\.plan\.run === 'notes' \? deckTransformApi\.quote\(deckId, r\.plan\.body\)/);
   assert.match(lightbox, /deckTransformApi\.run\(deckId, plan\.body, railPressHeaders\(plan\.option\)\)/);
   assert.match(src('pages/raise/pitch/AreaResults.jsx'), /r\.kind === 'text' \|\| r\.kind === 'notes'/);
-  assert.match(src('lib/api.js'), /export \* from '\.\/api\/deckTransform\.js';/);
+  assert.match(src('lib/apiModules.generated.js'), /export \* from '\.\/api\/deckTransform\.js';/);
 });
