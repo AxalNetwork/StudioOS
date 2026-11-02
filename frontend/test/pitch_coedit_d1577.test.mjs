@@ -97,6 +97,10 @@ test('the stage, the editor and Studio home read the same model; the area claim 
   for (const s of ['heldAreas(editors, youId, card?.uid ?? null)', 'cursorsOn(editors, youId, card?.uid ?? null)', 'title={ok.ok ? held.get(a.id)?.tooltip : ok.why}', 'data-testid="pitch-editor-lock-line"', 'now - lastPointer.current < 200']) {
     assert.ok(stage.includes(s), s);
   }
+  // CodeQL (#4111): a second onPointerMove on the stage overrode the first, so cursors were never sent.
+  assert.ok(stage.includes('onPointerMove={(e) => { over(e); pointerMoved(e); }}'), 'one handler: the drag and the cursor');
+  const face = stage.slice(stage.indexOf('<div ref={faceRef}'), stage.indexOf('data-testid="pitch-editor-card"'));
+  assert.equal(face.split('onPointerMove=').length - 1, 1, 'the stage has exactly one onPointerMove');
   const editor = read('pages/raise/pitch/PitchEditor.jsx');
   assert.ok(editor.includes("useDeckPresence(current?.id ?? null, { live: !readOnly && !phone })"));
   assert.ok(editor.includes('const claimArea = selection.length === 1 ? selection[0] : null;'));

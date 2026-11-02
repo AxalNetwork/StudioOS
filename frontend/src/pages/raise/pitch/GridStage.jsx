@@ -162,6 +162,15 @@ export default function GridStage({
   const held = useMemo(() => heldAreas(editors, youId, card?.uid ?? null), [editors, youId, card]);
   const cursors = useMemo(() => cursorsOn(editors, youId, card?.uid ?? null), [editors, youId, card]);
   const lastPointer = useRef(0);
+  // D1577: this member's pointer, as fractions of the stage, at most five a second (one handler with the drag's `over`).
+  const pointerMoved = (e) => {
+    if (!onPointer || !card?.uid) return;
+    const now = Date.now();
+    const r = faceRef.current?.getBoundingClientRect?.();
+    if (!r || !r.width || !r.height || now - lastPointer.current < 200) return;
+    lastPointer.current = now;
+    onPointer(card.uid, (e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
+  };
   const byKey = useMemo(() => itemsByKey(items), [items]);
   const changed = useMemo(() => staleFigures(card, items, charts), [card, items, charts]);
   const [hover, setHover] = useState(null);
@@ -387,15 +396,7 @@ export default function GridStage({
         role={areas ? 'group' : undefined} aria-label={areas ? `Card ${index + 1} on the Grid` : undefined}
         onKeyDown={keys} onKeyUp={keyUp}
         onPointerDown={(e) => { if (e.target === faceRef.current) down(e); }}
-        onPointerMove={onPointer && card?.uid ? (e) => {
-          // D1577: this member's pointer, as fractions of the stage, at most five a second.
-          const now = Date.now();
-          const r = faceRef.current?.getBoundingClientRect?.();
-          if (!r || !r.width || !r.height || now - lastPointer.current < 200) return;
-          lastPointer.current = now;
-          onPointer(card.uid, (e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
-        } : undefined}
-        onPointerMove={over} onPointerUp={up} onPointerLeave={() => { if (press.current) up(); }}
+        onPointerMove={(e) => { over(e); pointerMoved(e); }} onPointerUp={up} onPointerLeave={() => { if (press.current) up(); }}
         onDragOver={(e) => dragOver(e, null)} onDrop={(e) => drop(e, null)}
         data-aspect={aspect} {...langAttrs(theme)} data-testid="pitch-editor-card">
         {veil ? <span className="absolute inset-0" style={{ background: veil }} aria-hidden="true" data-testid="pitch-editor-overlay" /> : null}
