@@ -22,7 +22,7 @@ import { voicePreamble } from './prompts/voice';
 
 export const ASSIST_PAGE = 'Founder · Raise · Pitch deck';
 
-export const TEXT_ACTIONS = ['rewrite', 'shorten', 'expand', 'tone', 'translate', 'ask', 'headline'] as const;
+export const TEXT_ACTIONS = ['rewrite', 'shorten', 'expand', 'tone', 'translate', 'ask', 'headline', 'preflight_fix'] as const;
 export const CHART_ACTIONS = ['chart', 'table', 'timeline'] as const;
 export const ACTIONS = [...TEXT_ACTIONS, ...CHART_ACTIONS] as const;
 export type Action = typeof ACTIONS[number];
@@ -33,6 +33,8 @@ export type ChartAction = typeof CHART_ACTIONS[number];
 export const ASSIST_OPTIONS: Record<Action, string> = {
   rewrite: 'deck:rewrite', ask: 'deck:rewrite', headline: 'deck:rewrite',
   shorten: 'deck:shorten', expand: 'deck:expand', tone: 'deck:tone', translate: 'deck:translate',
+  // D4210: a preflight fix is a shorter text for one block, so it is charged as Shorten.
+  preflight_fix: 'deck:shorten',
   chart: 'deck:chart', table: 'deck:table', timeline: 'deck:timeline',
 };
 
@@ -45,6 +47,22 @@ export const TONES = ['confident', 'plain', 'warm', 'formal'] as const;
 export const LANGUAGES = ['French', 'German', 'Spanish', 'Portuguese', 'Italian', 'Dutch', 'Japanese', 'Chinese (Simplified)', 'Korean', 'Arabic', 'Hindi'] as const;
 
 export const TEXT_MAX = 4000;
+
+/**
+ * D4210 (#4210, #3661 P2): the preflight checks Eadwyn may suggest a fix for.
+ * Text checks only, and the fix is a shorter text for that one block. Never
+ * `sources`, `contrast` or `image`, nor any other check: a figure is never
+ * rewritten (D1370 §1), and a colour or a picture is not words.
+ */
+export const PREFLIGHT_FIX_CHECKS = ['overflow', 'density', 'font', 'placeholder'] as const;
+export type PreflightFixCheck = typeof PREFLIGHT_FIX_CHECKS[number];
+export const FINDING_TITLE_MAX = 200;
+const FIX_PROBLEM: Record<PreflightFixCheck, string> = {
+  overflow: 'The text is cut off at export size: it does not fit its block.',
+  density: 'The block holds too much text for one slide.',
+  font: 'The text is drawn too small at export size, because it has too many words for its block.',
+  placeholder: 'The text still holds placeholder words, which would reach the export as they are. Remove them; do not invent what they stand for.',
+};
 export const INSTRUCTION_MAX = 300;
 export const HEADLINE_MAX = 120;
 export const SERIES_MAX = 6;
@@ -57,7 +75,7 @@ const SYSTEM = ASSIST_PROMPT.system;
 /** What every assist reply records (D1519): the prompt that wrote it. */
 export const ASSIST_PROMPT_VERSION = `assist.default@v${ASSIST_PROMPT.version}`;
 
-const ASK: Record<Exclude<TextAction, 'headline'>, (o: { tone?: string; language?: string; instruction?: string }) => string> = {
+const ASK: Record<Exclude<TextAction, 'headline'>, (o: { tone?: string; language?: string; instruction?: string; check?: string; finding?: string }) => string> = {
   rewrite: () => 'Rewrite this text so it reads clearly to an investor.',
   shorten: () => 'Shorten this text to about half its length.',
   expand: () => 'Expand this text by a sentence or two, saying more about what it already says.',
@@ -65,10 +83,14 @@ const ASK: Record<Exclude<TextAction, 'headline'>, (o: { tone?: string; language
   translate: (o) => `Translate this text into ${o.language}.`,
   // D1506: the founder's instruction is read as data; the rule in SYSTEM says so.
   ask: (o) => `Change this text as the founder's instruction asks:\n${untrustedBlock('instruction', o.instruction ?? '')}`,
+  // D4210: the finding's own words are the deck's, read as data.
+  preflight_fix: (o) => `A check before sending found a problem with this block. ${FIX_PROBLEM[o.check as PreflightFixCheck] ?? ''}`
+    + `${o.finding ? `\nThe check said:\n${untrustedBlock('deck_import', o.finding)}` : ''}`
+    + '\nReturn a shorter text for this one block that fixes it, and nothing else.',
 };
 
 /** What a text press asks the model. */
-export function textMessage(action: TextAction, text: string, o: { tone?: string; language?: string; instruction?: string; labels?: string[]; voice?: unknown } = {}): { system: string; user: string } {
+export function textMessage(action: TextAction, text: string, o: { tone?: string; language?: string; instruction?: string; labels?: string[]; voice?: unknown; check?: string; finding?: string } = {}): { system: string; user: string } {
   // D1519: every press opens with the house voice and the deck theme's own (`theme.voice`), whichever model runs it.
   const voiced = `${voicePreamble(o.voice)} ${SYSTEM}`;
   if (action === 'headline') {
@@ -105,6 +127,11 @@ export function wordingProblem(action: TextAction, before: string, after: string
   if (unrecordedLinks(after, [before]).length) return 'Eadwyn’s wording added a link or email address your text did not have, so it was not placed.';
   const had = numbersOf(before);
   for (const n of numbersOf(after)) if (!had.has(n)) return 'Eadwyn’s wording named a figure your text did not, so it was not placed. Figures come from your records.';
+  // D4210: a fix is shorter than the text it fixes, or it fixes nothing.
+  if (action === 'preflight_fix') {
+    if (after.length >= before.length) return 'Eadwyn’s suggestion was not shorter than the text, so it was not proposed.';
+    for (const n of had) if (!numbersOf(after).has(n)) return 'Eadwyn’s suggestion dropped a figure your text had, so it was not proposed. A figure is never rewritten.';
+  }
   return null;
 }
 
