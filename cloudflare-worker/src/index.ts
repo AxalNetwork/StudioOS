@@ -3351,3 +3351,5 @@ export { AiGovernor } from './durable-objects/ai-governor';
 // named in wrangler.toml's [[durable_objects.bindings]] and [[workflows]].
 export { AgentScope } from './agents/doRuntime';
 export { AgentTaskWorkflow } from './agents/taskWorkflow';
+// #3852 (#3742 E0): the `sdk` runtime's Agent, an evaluation behind the same seam; used only while AGENT_RUNTIME is `sdk`.
+export { ScopeAgent } from './agents/sdkRuntime';

@@ -457,6 +457,10 @@ class_name = "AiGovernor"
 [[durable_objects.bindings]]
 name       = "AGENT_SCOPE"
 class_name = "AgentScope"
+# #3852 (E0): the `sdk` runtime's Agent, one per scope; used only while AGENT_RUNTIME is `sdk`.
+[[durable_objects.bindings]]
+name       = "AGENT_SCOPE_SDK"
+class_name = "ScopeAgent"
 
 [[migrations]]
 tag                = "v1-realtime"
@@ -480,6 +484,10 @@ new_sqlite_classes = ["DeckGenRoom", "AiGovernor"]
 [[migrations]]
 tag = "v5-agent-scope"
 new_sqlite_classes = ["AgentScope"]
+# #3852 (E0): the Agents SDK evaluation's own class; append-only.
+[[migrations]]
+tag = "v6-agent-scope-sdk"
+new_sqlite_classes = ["ScopeAgent"]
 
 # D1528: one AgentTaskWorkflow instance per run (id = run uid). State kept 7
 # days on success, 30 on error (owner Q6 A).
@@ -848,6 +856,10 @@ class_name = "AiGovernor"
 [[env.production.durable_objects.bindings]]
 name       = "AGENT_SCOPE"
 class_name = "AgentScope"
+# #3852 (E0): the `sdk` runtime's Agent, one per scope; used only while AGENT_RUNTIME is `sdk`.
+[[env.production.durable_objects.bindings]]
+name       = "AGENT_SCOPE_SDK"
+class_name = "ScopeAgent"
 
 [[env.production.migrations]]
 tag                = "v1-realtime"
@@ -868,6 +880,10 @@ new_sqlite_classes = ["DeckGenRoom", "AiGovernor"]
 [[env.production.migrations]]
 tag = "v5-agent-scope"
 new_sqlite_classes = ["AgentScope"]
+# #3852 (E0): the Agents SDK evaluation's own class; append-only.
+[[env.production.migrations]]
+tag = "v6-agent-scope-sdk"
+new_sqlite_classes = ["ScopeAgent"]
 
 # D1528: one AgentTaskWorkflow instance per run (id = run uid). State kept 7
 # days on success, 30 on error (owner Q6 A).
@@ -1098,6 +1114,10 @@ class_name = "AiGovernor"
 [[env.preview.durable_objects.bindings]]
 name       = "AGENT_SCOPE"
 class_name = "AgentScope"
+# #3852 (E0): the `sdk` runtime's Agent, one per scope; used only while AGENT_RUNTIME is `sdk`.
+[[env.preview.durable_objects.bindings]]
+name       = "AGENT_SCOPE_SDK"
+class_name = "ScopeAgent"
 
 [[env.preview.migrations]]
 tag                = "v1-realtime"
@@ -1118,6 +1138,10 @@ new_sqlite_classes = ["DeckGenRoom", "AiGovernor"]
 [[env.preview.migrations]]
 tag = "v5-agent-scope"
 new_sqlite_classes = ["AgentScope"]
+# #3852 (E0): the Agents SDK evaluation's own class; append-only.
+[[env.preview.migrations]]
+tag = "v6-agent-scope-sdk"
+new_sqlite_classes = ["ScopeAgent"]
 
 # D1528: one AgentTaskWorkflow instance per run (id = run uid). State kept 7
 # days on success, 30 on error (owner Q6 A).
