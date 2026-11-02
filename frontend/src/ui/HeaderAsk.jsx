@@ -33,12 +33,27 @@ const subscribe = (l) => { listeners.add(l); return () => listeners.delete(l); }
 const snapshot = () => claims;
 
 /**
- * Who draws: the first header mount, else the first fallback (the rail's own,
+ * Who draws: a page's own Ask (`useHeaderAskClaim`) first, then the first header mount, else the first fallback (the rail's own,
  * for a page whose header has no mount). Exported for tests and for
  * `WorkerRail`, whose D405 phone button stands down while a header carries Ask.
  */
 export function headerAskWinner(list) {
-  return (list.find((c) => !c.fallback) || list[0] || null)?.id ?? null;
+  return (list.find((c) => c.own) || list.find((c) => !c.fallback) || list[0] || null)?.id ?? null;
+}
+
+/**
+ * A page that draws its own Ask (the Pitch deck's `DeckAsk`, D1604) claims the
+ * place with this instead of mounting `HeaderAsk`. An own claim outranks every
+ * header mount and the rail's fallback, so neither draws a second Ask beside it.
+ */
+export function useHeaderAskClaim(active = true) {
+  const id = useId();
+  useEffect(() => {
+    if (!active) return undefined;
+    claims = [...claims, { id, own: true }];
+    emit();
+    return () => { claims = claims.filter((c) => c.id !== id); emit(); };
+  }, [id, active]);
 }
 
 /** The claims, in mount order, for tests. */

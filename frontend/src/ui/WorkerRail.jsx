@@ -960,8 +960,9 @@ export default function WorkerRail({
 
       {/* D1443 part 5 (#3992): the rail's fallback Ask, drawn only while no
           page header carries one (a header with no mount), so every rail page
-          has its one Ask. Not on the 44px spine. */}
-      {!collapsed && <div className="fwr-ask-entry"><HeaderAsk fallback testId="rail-ask" /></div>}
+          has its one Ask. Not on the 44px spine, and never on a deck rail
+          (`groups`, D1604): the deck's Ask is its page header's. */}
+      {!collapsed && !groups && <div className="fwr-ask-entry"><HeaderAsk fallback testId="rail-ask" /></div>}
       {!sheet.open && !(serves && panel.open) && shown}
       {askPanel && askDocked && <div className="fwr-ask-dock" data-testid="ask-dock">{askPanel}</div>}
     </aside>

@@ -14,7 +14,7 @@ import { installDocument } from './_contracts_dom.mjs';
 import { codeOnly } from './_codeOnly.mjs';
 import { __resetEadwynPanelForTest, useAskRail } from '../src/ui/eadwynPanel.js';
 import { askPanelAdapter } from '../src/ui/askPanelAdapter.js';
-import HeaderAsk, { headerAskClaims, headerAskWinner } from '../src/ui/HeaderAsk.jsx';
+import HeaderAsk, { headerAskClaims, headerAskWinner, useHeaderAskClaim } from '../src/ui/HeaderAsk.jsx';
 import AdminPageHeader from '../src/ui/AdminPageHeader.jsx';
 import ZoneActions from '../src/workspaces/ZoneActions.jsx';
 
@@ -96,6 +96,19 @@ test('the rail\'s fallback draws only while no header claims Ask, whichever moun
     assert.equal(m.asks().length, 1);
     assert.equal(m.props(m.asks()[0])['data-testid'], 'rail-ask', 'no header: the rail carries it');
   } finally { await m.unmount(); }
+});
+
+test('a page that draws its own Ask (the deck\'s DeckAsk) claims the place: no header or rail Ask beside it', async () => {
+  // Mutation checked: headerAskWinner ignoring `own` → the header's Ask beside the deck's.
+  assert.equal(headerAskWinner([{ id: 'h', fallback: false }, { id: 'd', own: true }]), 'd');
+  __resetEadwynPanelForTest();
+  function OwnAsk() { useHeaderAskClaim(); return null; }
+  const m = await mount(h(MemoryRouter, null, h(Rail), h(HeaderAsk, { testId: 'page-ask' }), h(HeaderAsk, { fallback: true, testId: 'rail-ask' }), h(OwnAsk)));
+  try {
+    assert.equal(m.asks().length, 0, 'the deck draws its own; nothing else does');
+  } finally { await m.unmount(); }
+  assert.match(codeOnly(read('pages/raise/pitch/DeckAsk.jsx')), /useHeaderAskClaim\(\);/);
+  assert.match(codeOnly(read('ui/WorkerRail.jsx')), /\{!collapsed && !groups && <div className="fwr-ask-entry">/, 'never on a deck rail (D1604)');
 });
 
 test('AK11: an admin console with no primary draws Ask alone; where Ask does not serve, no actions row at all', async () => {
