@@ -192,7 +192,9 @@ const KNOWN_DUPLICATE_NUMBERS = {
 
 test('the migration numbers are free and in order', () => {
   const files = readdirSync(DIR).filter((f) => f.endsWith('.sql'));
-  const nums = files.map((f) => Number(f.slice(0, 3))).filter(Number.isFinite);
+  // The whole leading number: D4106's stamped files (`YYYYMMDDHHMM_…`) are not numbers 100–999.
+  const lead = (f) => f.match(/^\d+/)?.[0] ?? f;
+  const nums = files.map((f) => Number(lead(f))).filter(Number.isFinite);
   for (const n of [208, 209]) {
     assert.equal(nums.filter((x) => x === n).length, 1,
       `two files numbered ${n} order by filename, which is not a decision anyone made`);
@@ -201,7 +203,7 @@ test('the migration numbers are free and in order', () => {
   // Every number is used once, except the recorded collisions above.
   const byNumber = new Map();
   for (const f of files) {
-    const k = f.slice(0, 3);
+    const k = lead(f);
     if (!byNumber.has(k)) byNumber.set(k, []);
     byNumber.get(k).push(f);
   }
@@ -229,8 +231,11 @@ test('the migration numbers are free and in order', () => {
   // FILENAME, so a number that is not three digits sorts somewhere its author
   // did not intend — `21_x.sql` runs before `208_x.sql`, and a file that
   // depends on an earlier one then runs first and aborts the deploy.
+  // D4106 (#4106): a new migration is stamped with its UTC minute, twelve
+  // digits (`YYYYMMDDHHMM_<slug>.sql`), which `migrationSortKey` orders after
+  // every numbered file. Any other width still sorts where nobody meant it to.
   for (const f of files) {
-    assert.match(f, /^\d{3}_/,
-      `${f}: the runner orders by filename, so every migration needs a 3-digit prefix`);
+    assert.match(f, /^(\d{3}|\d{12})_/,
+      `${f}: every migration needs a 3-digit prefix, or D4106's 12-digit UTC minute`);
   }
 });
