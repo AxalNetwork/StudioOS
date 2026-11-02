@@ -29,6 +29,7 @@ import { deckCheckApi } from '../src/lib/api/deckCheck.js';
 import { deckElementModelsApi } from '../src/lib/api/deckElementModels.js';
 import { deckFiguresApi } from '../src/lib/api/deckFigures.js';
 import { deckCommentsApi } from '../src/lib/api/deckComments.js';
+
 import { deckBatchesApi, parseSse } from '../src/lib/api/deckBatches.js';
 import { deckCoeditApi } from '../src/lib/api/deckCoedit.js';
 import { deckVentureElementsApi } from '../src/lib/api/deckVentureElements.js';
@@ -362,6 +363,7 @@ test('D1570 (#3817): comments is swapped — it answers through deckCommentsApi.
   } finally { deckCommentsApi.list = real; }
   assert.equal(adapter.availability('comments'), null);
 });
+
 
 test('D1543 (#3781): ventureElements is swapped — one element through deckVentureElementsApi.element, all through .list, a gate refusal keeps its code and line', async () => {
   // Mutation checked: ventureElements left as off('ventureElements') → the available answer fails; through() dropping

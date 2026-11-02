@@ -259,6 +259,7 @@ function DeckCard({ project, current, deck, engagement, sources, q, phone, readO
             </span>
           ) : null}
 
+
         </div>
         <dl className="m-0 flex flex-col" data-testid="pitch-studio-deck-facts">
           <Fact k="Audience" testId="pitch-studio-deck-audience">{row.audience}</Fact>
