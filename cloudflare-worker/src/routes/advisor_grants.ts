@@ -42,11 +42,17 @@ const newUid = () => crypto.randomUUID().replace(/-/g, '');
 
 /** An advisor by role, right now — not "was an advisor when the grant was made". */
 const isAdvisorNow = (u: any) => u?.role === 'advisor';
+/**
+ * D1570 (#3817, owner decision Q = B): an Operating Partner may hold a grant
+ * too, but only one that opens nothing but the deck's comments (`scope_deck`).
+ * `routes/deck_comments.ts` re-checks the role on every read, as the brief does.
+ */
+const isPartnerNow = (u: any) => u?.role === 'partner';
 
 interface GrantRow {
   id: number; uid: string; project_id: number; advisor_user_id: number;
   granted_by_user_id: number; status: string; expires_at: string | null;
-  scope_project: number; scope_data_room: number; scope_sessions: number;
+  scope_project: number; scope_data_room: number; scope_sessions: number; scope_deck?: number;
   created_at: string; updated_at: string;
 }
 
@@ -87,6 +93,8 @@ const grantDto = (g: GrantRow, extra: Record<string, unknown> = {}) => ({
   scope_project: !!g.scope_project,
   scope_data_room: !!g.scope_data_room,
   scope_sessions: !!g.scope_sessions,
+  // D1570 (#3817): comment on the venture's deck (migration 741).
+  scope_deck: !!g.scope_deck,
   created_at: g.created_at,
   ...extra,
 });
@@ -113,7 +121,7 @@ grants.get('/:projectUid', async (c) => {
       // longer an advisor is inert, and the founder should see that rather
       // than believe access they revoked is still in force — or that access
       // they left open still is.
-      advisor_is_advisor: r.advisor_role === 'advisor',
+      advisor_is_advisor: r.advisor_role === 'advisor' || (r.advisor_role === 'partner' && !!r.scope_deck && !r.scope_project && !r.scope_data_room && !r.scope_sessions),
     })),
     project: { uid: project.uid, name: project.name },
   });
@@ -134,7 +142,9 @@ grants.post('/:projectUid', async (c) => {
   // rather than implying one was.
   if (!advisor) return c.json({ detail: 'No account with that address' }, 404);
   if (advisor.id === user.id) return c.json({ detail: 'You already own this record' }, 400);
-  if (!isAdvisorNow(advisor)) {
+  // D1570: a grant that opens only the deck's comments may go to an Operating Partner.
+  const deckOnly = body.scope_deck === true && body.scope_project === false && !body.scope_data_room && !body.scope_sessions;
+  if (!isAdvisorNow(advisor) && !(deckOnly && isPartnerNow(advisor))) {
     return c.json({
       detail: 'That account is not an advisor. This grant opens a client record to an '
         + 'advisor specifically; granting it to another licence would not give them access, '
@@ -146,14 +156,15 @@ grants.post('/:projectUid', async (c) => {
     project: body.scope_project === false ? 0 : 1,
     data_room: body.scope_data_room ? 1 : 0,
     sessions: body.scope_sessions ? 1 : 0,
+    deck: body.scope_deck === true ? 1 : 0,
   };
   const uid = newUid();
   const now = nowIso();
   await c.env.DB.prepare(
     `INSERT INTO advisor_client_grants
        (uid, project_id, advisor_user_id, granted_by_user_id, status, expires_at,
-        scope_project, scope_data_room, scope_sessions, created_at, updated_at)
-     VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?)
+        scope_project, scope_data_room, scope_sessions, scope_deck, created_at, updated_at)
+     VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (project_id, advisor_user_id) DO UPDATE SET
        status = 'active',
        granted_by_user_id = excluded.granted_by_user_id,
@@ -161,10 +172,11 @@ grants.post('/:projectUid', async (c) => {
        scope_project = excluded.scope_project,
        scope_data_room = excluded.scope_data_room,
        scope_sessions = excluded.scope_sessions,
+       scope_deck = excluded.scope_deck,
        updated_at = excluded.updated_at`,
   ).bind(
     uid, project.id, advisor.id, user.id, body.expires_at || null,
-    scopes.project, scopes.data_room, scopes.sessions, now, now,
+    scopes.project, scopes.data_room, scopes.sessions, scopes.deck, now, now,
   ).run();
 
   const row = await c.env.DB.prepare(

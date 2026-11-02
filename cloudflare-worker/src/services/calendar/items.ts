@@ -15,7 +15,7 @@ import type { CalendarEvent } from '../calendar';
 import { sourceOf, type ItemSource } from './registry';
 
 /** The canvas's five families (D1205's `FAMILIES`), by kind. */
-export type ItemFamily = 'events' | 'meetings' | 'sessions' | 'deadlines' | 'learning' | 'grow' | 'other';
+export type ItemFamily = 'events' | 'meetings' | 'sessions' | 'deadlines' | 'learning' | 'grow' | 'tasks' | 'other';
 export const FAMILY_OF: Readonly<Record<CalendarEvent['kind'], ItemFamily>> = {
   event_ticket: 'events',
   event_hosted: 'events',
@@ -38,6 +38,16 @@ export const FAMILY_OF: Readonly<Record<CalendarEvent['kind'], ItemFamily>> = {
   // D1486 §b (#3981): Grow's sends and planned pieces.
   publish_send: 'grow',
   content_planned: 'grow',
+  // D1486 §a (#3980): the meeting bot's calls.
+  bot_call: 'meetings',
+  // #3982 (D1486 §c): a round's close and an NDA's expiry are deadlines.
+  round_close: 'deadlines',
+  nda_expiry: 'deadlines',
+  // #3983 (D1486 §d): the member's own tasks and milestones.
+  workflow_task: 'tasks',
+  mvp_task: 'tasks',
+  contact_task: 'tasks',
+  engagement_milestone: 'tasks',
 };
 
 /** The kinds `POST /calendar/push/:kind/:source_id` copies to Google or Outlook. */
@@ -63,6 +73,11 @@ export const ROLE_WORDS: Readonly<Record<string, string>> = {
   learning_plan: 'Your learning plan',
   venture_team: 'Your venture’s team',
   your_send: 'You confirmed this send',
+  bot_sender: 'You sent the bot',
+  venture_round: 'Your venture’s round',
+  nda_party: 'A party to this NDA',
+  your_task: 'Your task',
+  your_firm: 'Your firm’s engagement',
 };
 
 /** The role a kind's reader does not set, because there is only one. */
@@ -80,6 +95,13 @@ const ROLE_BY_KIND: Partial<Record<CalendarEvent['kind'], string>> = {
   learning: 'learning_plan',
   publish_send: 'your_send',
   content_planned: 'venture_team',
+  bot_call: 'bot_sender',
+  round_close: 'venture_round',
+  nda_expiry: 'nda_party',
+  workflow_task: 'your_task',
+  mvp_task: 'your_task',
+  contact_task: 'your_task',
+  engagement_milestone: 'your_firm',
 };
 
 export interface CalendarItem extends Omit<CalendarEvent, 'my_role' | 'advisor_uid'> {
@@ -113,11 +135,18 @@ export function hrefOf(ev: CalendarEvent): string | null {
     case 'investor_meeting': return '/raise/capital-relationships';
     case 'deal_closing': return ev.deal_id ? `/deals/${ev.deal_id}` : null;
     case 'interview_call': return ev.project_id ? `/validate/customer-research?project=${ev.project_id}` : null;
+    case 'bot_call': return ev.project_id ? `/validate/customer-research?project=${ev.project_id}` : null;
     // #3959: the Learning page the plan item names (its course, lesson, video, webinar, exercise or exam).
     case 'learning': return typeof ev.url === 'string' && ev.url.startsWith('/learning') ? ev.url : '/learning';
     // D1486 §b: the send's Grow module, and Distribution for a planned piece.
     case 'publish_send': return typeof ev.url === 'string' && ev.url.startsWith('/grow') ? ev.url : '/grow';
     case 'content_planned': return '/grow/distribution';
+    case 'round_close': return '/raise/capital-relationships';
+    // #3983 (D1486 §d): where each task lives.
+    case 'workflow_task': return '/dashboard';
+    case 'mvp_task': return '/build/board';
+    case 'contact_task': return '/contacts';
+    case 'engagement_milestone': return '/partner/operations/engagements';
     default: return null;
   }
 }

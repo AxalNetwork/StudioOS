@@ -34,6 +34,12 @@
  * `elementModels` (D1503, #3754) answers through `deckElementModelsApi.read`.
  * And `consistency` (D1555, #3802): the free rules ride the deck check's own
  * reply, so it answers through `deckCheckApi.read`.
+ * `presets` (D1549, #3796) answers through `deckModelPresetsApi.read`, and so
+ * does `orgLocks`, from the same reply's `locks` key: #3786 (B10) keyed that
+ * row but has no route on main, so C1 built the read and the row keeps B10's
+ * issue.
+ * `comments` (D1570, #3817)
+ * answers through `deckCommentsApi.list`.
  *
  * Fields on routes that exist (`context.inferred` and `context.freshness`
  * from #3877; the PostHog, HubSpot and Linear source rows from #3880) need
@@ -42,12 +48,15 @@
 
 import { LATER, NOT_ON } from './deckV2Model.js';
 import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks.js';
+import { deckDraftApi } from '../../../lib/api/deckDraft.js';
 import { deckGridApi } from '../../../lib/api/deckGrid.js';
 import { deckStageApi } from '../../../lib/api/deckStage.js';
 import { deckRemixApi } from '../../../lib/api/deckRemix.js';
 import { deckTypedValuesApi } from '../../../lib/api/deckTypedValues.js';
 import { deckCheckApi } from '../../../lib/api/deckCheck.js';
 import { deckElementModelsApi } from '../../../lib/api/deckElementModels.js';
+import { deckModelPresetsApi } from '../../../lib/api/deckModelPresets.js';
+import { deckCommentsApi } from '../../../lib/api/deckComments.js';
 
 export { NOT_ON };
 
@@ -62,6 +71,7 @@ export const SURFACES = Object.freeze({
   grid: { issue: 3749, what: 'The 17 structures, divider drag and the 4:3 slide size' },
   saveCard: { issue: 3751, what: 'Autosave, one card at a time' },
   discardDraft: { issue: 3751, what: 'Discard the unsaved draft' },
+  draft: { issue: 3751, what: 'Restore unsaved changes' },
   batch: { issue: 3753, what: 'Live build progress, per area' },
   cancelBatch: { issue: 3753, what: 'Stop a build' },
   elementModels: { issue: 3754, what: 'A model per element in the AIRail' },
@@ -108,7 +118,8 @@ export const SURFACES = Object.freeze({
 const off = (name) => async () => unavailable(SURFACES[name].issue);
 
 /** The rows whose route is on main: each answers through its real client, never unavailable by default. */
-export const SWAPPED = Object.freeze(['grid', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency']);
+export const SWAPPED = Object.freeze(['grid', 'saveCard', 'discardDraft', 'draft', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'presets', 'orgLocks', 'comments']);
+
 
 /**
  * A client call, as a surface reads it, for the day a method is swapped:
@@ -141,8 +152,11 @@ export function shown(answer, format = String, later = LATER) {
 
 /** D1499 (#3749): the deck version's Grid — its aspect, the 17 structures and each card's areas, each with its box. */
 export const grid = (deckId) => through(() => deckGridApi.grid(deckId), SURFACES.grid.issue);
-export const saveCard = off('saveCard');
-export const discardDraft = off('discardDraft');
+// D1501 (#3751): wired. A card's working copy (`If-Match: <rev>`, 0 for its first), the draft read for
+// "Restore unsaved changes from …", and Discard.
+export const saveCard = (deckId, uid, card, rev, opts) => through(() => deckDraftApi.saveCard(deckId, uid, card, rev, opts), SURFACES.saveCard.issue);
+export const discardDraft = (deckId) => through(() => deckDraftApi.discard(deckId), SURFACES.discardDraft.issue);
+export const draft = (deckId) => through(() => deckDraftApi.draft(deckId), SURFACES.draft.issue);
 export const batch = off('batch');
 export const cancelBatch = off('cancelBatch');
 /** D1503 (#3754): each grid element's models and the pick its next run uses (`GET /api/decks/:id/element-models`). */
@@ -167,8 +181,10 @@ export const saveAsTemplate = off('saveAsTemplate');
 /** D1538 (#3787): the figures typed for the deck, each Stated, with who typed it. */
 export const typedTables = (deckId) => through(() => deckTypedValuesApi.list(deckId), SURFACES.typedTables.issue);
 export const media = off('media');
-export const presets = off('presets');
-export const orgLocks = off('orgLocks');
+/** D1549 (#3796): the deck's preset in force, each group's model per preset, and HQ's locks (`GET /api/decks/:id/model-presets`). */
+export const presets = (deckId) => through(() => deckModelPresetsApi.read(deckId), SURFACES.presets.issue);
+/** D1549 (#3796, the row is #3786's): each element group HQ locked, with "Set by Axal VC HQ" — the same reply's `locks`. */
+export const orgLocks = (deckId) => through(() => deckModelPresetsApi.read(deckId).then((r) => r.locks), SURFACES.orgLocks.issue);
 export const critique = off('critique');
 /** D1553 (#3800): four layouts for one card, and the remove-a-block reflow; free, so it answers with AI paused. */
 export const remix = (deckId, card, opts) => through(() => deckRemixApi.remix(deckId, card, opts), SURFACES.remix.issue);
@@ -184,7 +200,11 @@ export const pptxImport = off('pptxImport');
 // D1565 (#3812): wired. Each body is `through(() => <client>(…), issue)`.
 export const investorLinks = (deckId) => through(() => deckInvestorLinksApi.investorLinks(deckId), SURFACES.investorLinks.issue);
 export const withdrawInvestorLink = (deckId, shareId) => through(() => deckInvestorLinksApi.withdrawInvestorLink(deckId, shareId), SURFACES.withdrawInvestorLink.issue);
-export const comments = off('comments');
+/**
+ * D1570 (#3817): the venture's comment threads, who is reading, the people who can be mentioned and the open count
+ * (`GET /api/decks/:id/comments`). The sheet writes through `deckCommentsApi`; no model is in a thread.
+ */
+export const comments = (deckId) => through(() => deckCommentsApi.list(deckId), SURFACES.comments.issue);
 export const slideAnalytics = off('slideAnalytics');
 export const presence = off('presence');
 export const cardStatus = off('cardStatus');

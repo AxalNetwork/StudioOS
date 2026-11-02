@@ -172,7 +172,8 @@ test('the callers name their surface, and the AI run names its task, never its p
   assert.match(src('mcp/server.ts'), /apiKeyUid, signal, surface: 'mcp' \}/);
   assert.match(src('services/flows.ts'), /STEP_TIMEOUT_MS, now, surface: 'flow',/);
   // D1496 part 2 (#3842): the run's hold is named by `holdOperation`: `ai.<task>`, or `agent.<role>` for a team agent.
-  assert.match(src('services/aiRouter.ts'), /\{ context: \{ operation: holdOperation\(opts\), surface: 'ai' \} \}/);
+  // #3846 (E2): the run also passes its idempotency key and execution id (null for every member's run).
+  assert.match(src('services/aiRouter.ts'), /\{ idempotencyKey: opts\.idempotencyKey \?\? null, context: \{ operation: holdOperation\(opts\), surface: 'ai', executionId: opts\.executionId \?\? null \} \}/);
   assert.match(src('services/aiRouter.ts'), /\? `agent\.\$\{o\.agentRole\}` : `ai\.\$\{String\(o\.task\)\}`/);
   assert.match(src('services/metering.ts'), /context: \{ operation: input\.operation, surface: input\.surface \?\? null, apiKeyUid: keyUid, executionId: input\.executionId \}/);
   const sql = migration('632_ai_hold_context.sql');
@@ -194,4 +195,41 @@ test('D1496 part 2 (#3842): an agent\'s run holds on the ai surface as agent.<ro
     assert.deepEqual(rows, [{ operation: 'agent.cfo', surface: 'ai' }, { operation: 'ai.rail_numbers', surface: 'ai' }]);
     assert.ok(!JSON.stringify(rows).includes('secret'));
   } finally { w.f.db.close(); }
+});
+
+test('#3846 (E2): an agent hold carries its execution id; the same idempotency key twice takes one hold and runs the model once', async () => {
+  // Mutation checked: `idempotencyKey` dropped from run()'s reserveAiBudget call → two holds, two model calls.
+  __resetForTest();
+  const w = world();
+  try {
+    w.f.db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(?,5000000)').run(ME);
+    let calls = 0;
+    w.env.AI = withGuard({ run: async () => { calls++; return { response: 'ok', usage: { prompt_tokens: 5, completion_tokens: 5 } }; } });
+    const ask = {
+      task: 'rail_numbers' as const, userId: ME, text: 'runway', agentId: 9, agentRole: 'cfo',
+      rail: { page: 'Founder · Raise · Use of funds', option: 'draft:raise/use-of-funds-runway' },
+      idempotencyKey: 'agent:run-0001-abcd:run', executionId: 'run-0001-abcd',
+    };
+    const first = await run(w.env, ask);
+    assert.equal(first.ok, true);
+    const again = await run(w.env, ask);
+    assert.deepEqual([again.ok, again.refusal, again.replayedStatus], [false, 'step_replayed', 'settled']);
+    assert.equal(calls, 1, 'the model ran once');
+    const holds = w.f.db.prepare('SELECT operation, surface, execution_id, idempotency_key FROM ai_budget_reservations').all().map((r: any) => ({ ...r }));
+    assert.deepEqual(holds, [{ operation: 'agent.cfo', surface: 'ai', execution_id: 'run-0001-abcd', idempotency_key: 'agent:run-0001-abcd:run' }]);
+    const rows = w.f.db.prepare("SELECT COUNT(*) AS n FROM ai_usage_logs WHERE task = 'rail_numbers'").get() as any;
+    assert.equal(rows.n, 1, 'the replay wrote no usage row');
+    // A member's run still takes its own hold every time, with no key and no execution id.
+    const member = { task: 'rail_numbers' as const, userId: ME, text: 'x', rail: ask.rail };
+    await run(w.env, member); await run(w.env, member);
+    const mine = w.f.db.prepare("SELECT execution_id, idempotency_key FROM ai_budget_reservations WHERE operation = 'ai.rail_numbers'").all().map((r: any) => ({ ...r }));
+    assert.deepEqual(mine, [{ execution_id: null, idempotency_key: null }, { execution_id: null, idempotency_key: null }]);
+  } finally { w.f.db.close(); }
+});
+
+test('#3846: no `agent` hold surface; migration 632\'s CHECK still holds mcp, flow and ai', () => {
+  // Mutation checked: 'agent' added to HOLD_SURFACES → this case fails.
+  const src = readFileSync(new URL('../src/services/aiBudget.ts', import.meta.url), 'utf8');
+  assert.match(src, /HOLD_SURFACES\s*=\s*\[\s*'mcp'\s*,\s*'flow'\s*,\s*'ai'\s*\]/);
+  assert.match(migration('632_ai_hold_context.sql'), /surface IN \('mcp', 'flow', 'ai'\)/);
 });

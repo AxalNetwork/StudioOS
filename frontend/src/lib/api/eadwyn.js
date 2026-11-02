@@ -22,6 +22,11 @@ export const eadwynApi = {
   setConnectors: (uid, keys) => request(`/eadwyn/conversations/${enc(uid)}/connectors`, {
     method: 'PUT', body: body({ keys }),
   }),
+  // D1442 (#3991): what one ask would hold, before Send. Runs nothing, holds nothing:
+  // { ai: true, hold_microusd, model, model_label } or { ai: false, reason, message }.
+  quote: (uid, { question, model, page, file } = {}) => request(`/eadwyn/conversations/${enc(uid)}/quote`, {
+    method: 'POST', body: body({ question, model, page, file, ...railBody() }),
+  }),
   // A model call, so the longer timeout `aiWorkspaceExplain` carries too.
   ask: (uid, { question, model, page, file }) => request(`/eadwyn/conversations/${enc(uid)}/ask`, {
     // D768: the run carries `rail: { page, option, record }` (D765).

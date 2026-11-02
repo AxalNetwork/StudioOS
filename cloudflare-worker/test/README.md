@@ -63,6 +63,11 @@ an assertion that bans a shape fails on the comment explaining why that shape is
 gone, and the argument list of `fetch(url, { headers: { … } })` does not end at
 the first `)`.
 
+`_recorded_ai.mjs` (D1511 part 2) answers a whole one-click build from recordings
+(`fixtures/fake_ai_recordings.json`, venture `fixtures/oneClickVenture.ts`), so the visual-regression
+server (`frontend/tests/visual/server.ts`) draws the accepted deck with no model; `recorded_ai_d1511.test.ts`
+holds it to the one-click bar and runs the seven injected failures through it.
+
 D1119: `admin_programs_d954.test.ts` also checks part 4's six audit actions,
 claim window/kind counts, strategic requests, successful zeroes and independent
 failed reads against the migrated SQLite schema.
@@ -185,5 +190,6 @@ D1169: `usage_storage_d1169.test.ts` holds the grown storage read: thirteen memb
 | `project_deck_hard_delete_3747.test.ts` | #3747: migrated SQLite deck/share/note/image cleanup, venture isolation, 500-object R2 pages, rollback, durable retries and per-sweep schema discovery; synthetic records only. |
 | `deck_atomic_save_3748.test.ts` | #3748: migration 713 preserves duplicate deck payloads and enforces unique version/current rows. |
 | `work_board_3969.test.ts` | D1614 W1 (#3969): authenticated project-only boards, task fields, moves, close reasons, dependency races, actor events, unavailable reads, migration 762 over legacy rows, the engine's own mount and the readiness hook, over real SQLite. |
+| `work_items_3993.test.ts` | D1614 W7 (#3993): per-project numbering and the company 404, cleaned comment Markdown, mentions and their notices, an agent's comment and cost, an agent that cannot close, review (approve, request changes with a comment), drafts that need Accept (and a racing accept), labels and milestones with filters and sort, and migration 763 over legacy rows, over real SQLite. |
 
 D1456 (#4014): the existing record, recovery, bot-control and migration-runner suites cover channel/fact actions, recorded failed steps, creator-only safe bot details and migration 760 replay through the ledger. The engine fixture applies migration 760 from its SQL source.
