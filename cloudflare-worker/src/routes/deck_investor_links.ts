@@ -18,8 +18,11 @@
  * Each row carries the investor, the frozen version or variant, the NDA state
  * (Accepted with its date, Not accepted yet, or not required), the expiry,
  * the view cap ("No cap" is null), the watermark, and the analytics so far.
- * Time per slide (#3820), the walkthrough (#3837) and the 48-hour revisit
- * signal (#3815) are not here.
+ * D1573 (#3820): each row also carries its "Time per slide" consent
+ * (`time_per_slide`, the link's `include_json` key), and its read seconds are
+ * null when that is off or nobody has opened it, never 0. One link's seconds
+ * per card and its visit timeline are `deck_slide_analytics.ts`. The
+ * walkthrough (#3837) and the 48-hour revisit signal (#3815) are not here.
  *
  * WHO. `projectOwned`, as every deck route: reads for the venture's readers,
  * writes with `write: true`; a link needs the studio plan (`createDeckLink`).
@@ -32,6 +35,7 @@ import { requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
 import { getDeckRow, projectOwned, revokeShareLink, rowToDeck } from './decks';
 import { createDeckLink, WriterError } from '../services/raiseWriters';
+import { timePerSlideOn } from '../services/decks/slideAnalytics';
 import { checkVariantFigures, cleanOrder, cleanThesis, tailorMatch, tailorPlan, variantSlides } from '../services/decks/variants';
 
 const deckInvestorLinks = new Hono<{ Bindings: Env }>();
@@ -39,7 +43,7 @@ const deckInvestorLinks = new Hono<{ Bindings: Env }>();
 type LinkRow = {
   id: number; deck_id: number; expires_at: string | null; view_limit: number | null; view_count: number | null; revoked_at: string | null;
   prospect_id: number | null; investor_label: string | null; nda_required: number | null; variant_id: number | null; watermark_text: string | null;
-  created_at: string | null; prospect_name: string | null; prospect_firm: string | null; variant_uid: string | null; variant_name: string | null;
+  created_at: string | null; include_json: string | null; prospect_name: string | null; prospect_firm: string | null; variant_uid: string | null; variant_name: string | null;
 };
 type VariantRow = { id: number; uid: string; deck_id: number; name: string; prospect_id: number | null; thesis_json: string; slide_order_json: string; emphasis_json: string; created_at: string };
 
@@ -47,7 +51,7 @@ const NEVER = '9999';
 const parse = <T>(s: string | null | undefined, d: T): T => { try { return s ? JSON.parse(s) as T : d; } catch { return d; } };
 const newUid = () => crypto.randomUUID().replace(/-/g, '');
 
-async function deckFor(c: any, user: User, write: boolean): Promise<{ row: any } | { refused: Response }> {
+export async function deckFor(c: any, user: User, write: boolean): Promise<{ row: any } | { refused: Response }> {
   const id = Number(c.req.param('id'));
   if (!Number.isSafeInteger(id) || id < 1) return { refused: refuse(c, 400, { code: 'bad_id', message: 'There is no such deck.' }) };
   let row: any;
@@ -59,10 +63,10 @@ async function deckFor(c: any, user: User, write: boolean): Promise<{ row: any }
 }
 
 /** One pd35 row: the link, its NDA, its cap and its analytics so far (kept after a withdraw). */
-async function rowsOf(env: Env, deckId: number) {
+export async function rowsOf(env: Env, deckId: number) {
   const links = (await env.DB.prepare(
     `SELECT t.id, t.deck_id, t.expires_at, t.view_limit, t.view_count, t.revoked_at, t.prospect_id, t.investor_label, t.nda_required,
-            t.variant_id, t.watermark_text, t.created_at, p.name AS prospect_name, p.firm AS prospect_firm, v.uid AS variant_uid, v.name AS variant_name
+            t.variant_id, t.watermark_text, t.created_at, t.include_json, p.name AS prospect_name, p.firm AS prospect_firm, v.uid AS variant_uid, v.name AS variant_name
        FROM pitch_deck_share_tokens t
        LEFT JOIN raise_prospects p ON p.id = t.prospect_id
        LEFT JOIN deck_variants v ON v.id = t.variant_id
@@ -88,6 +92,7 @@ async function rowsOf(env: Env, deckId: number) {
     const usedUp = l.view_limit != null && used >= Number(l.view_limit);
     const signed = ndaOf.get(Number(l.id)) || null;
     const v = viewOf.get(Number(l.id));
+    const timed = timePerSlideOn(l.include_json);
     return {
       id: Number(l.id),
       investor: { label: l.prospect_name || l.investor_label || null, fund: l.prospect_firm || null, prospect_id: l.prospect_id },
@@ -100,7 +105,10 @@ async function rowsOf(env: Env, deckId: number) {
       watermark: l.watermark_text,
       status: l.revoked_at ? 'withdrawn' : expired ? 'expired' : usedUp ? 'used_up' : 'live',
       withdrawn_at: l.revoked_at,
-      analytics: { views: Number(v?.n ?? 0), last_viewed_at: v?.last_at ?? null, read_seconds: Number(v?.seconds ?? 0) },
+      // D1573: a link with Time per slide off stored no seconds, and one nobody has timed yet (no view, or no
+      // heartbeat before the reader left) has none to sum: null, not 0.
+      time_per_slide: timed,
+      analytics: { views: Number(v?.n ?? 0), last_viewed_at: v?.last_at ?? null, read_seconds: timed && Number(v?.seconds) > 0 ? Number(v?.seconds) : null },
       created_at: l.created_at,
     };
   });
