@@ -34,7 +34,8 @@ import { areaTitle, areasOf, askTarget, liveFocus } from './gridSelection';
 import AreaLightbox from './AreaLightbox';
 import InstructionBox from './InstructionBox';
 import { PitchMovedNotice } from './PitchWorkspaceMoved';
-import { refreshCard } from './figuresModel';
+import { acceptUpdate, refreshCard } from './figuresModel';
+import { deckUpdateReuseApi } from '../../../lib/api/deckUpdateReuse.js';
 import { deckRail } from './deckRailGroups';
 import { presentHref } from './presentExportModel';
 import { aspectOf, withAspect } from './gridModel';
@@ -530,7 +531,10 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
                 // D1513: a divider move (both blocks) and its overflow are each one edit.
                 onCard={(next) => { setCard(sel, next); setStructureNote(null); }}
                 onAsk={ask} askOff={askOff} askLine={askLine}
-                items={items} onRefresh={() => { const r = refreshCard(card, items, charts); if (r.moved) setCard(sel, r.card); }} />
+                items={items} onRefresh={() => { const r = refreshCard(card, items, charts); if (r.moved) setCard(sel, r.card); }}
+                // D1584 (#3831): the latest investor update's figures, proposed; Accept places them like Refresh from records.
+                onUpdateDerive={base.deck?.id != null ? () => deckUpdateReuseApi.deriveUpdate(base.deck.id) : null}
+                onUpdateAccept={(proposals) => { const r = acceptUpdate(card, proposals, items); if (r.moved) setCard(sel, r.card); }} />
             )}
             {card && !readOnly && chosen.length ? (
               <InstructionBox deckId={base.deck.id} cardIndex={sel} card={card} areas={chosen} items={items} aiOn={aiOn} onTokens={onTokens}

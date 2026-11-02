@@ -9,7 +9,7 @@ import { areaLabel, askAreaName } from './deckV2Model';
 import { GRID, aspectOf, baselineShare, frameOf, placeOf, ratioOf } from './gridModel';
 import { langAttrs } from './deckLanguage';
 import { SourceChip } from './SourcesBoards';
-import { ChangedNotice, FigureCard } from './FigureCard';
+import { ChangedNotice, FigureCard, UpdateRefresh } from './FigureCard';
 import { faceOf, isFigure, itemsByKey, staleFigures } from './figuresModel';
 import {
   KEYS_LINE, STAGE_HINT, areaTitle, areasOf, cellAt, dividerDelta, dividerReadout, dividersOf, keyStep, liveFocus, marquee,
@@ -152,6 +152,7 @@ export function CardChrome({ chrome, pageLabel = null, colours, logo = null }) {
 export default function GridStage({
   card, index, model, colours, ink, theme, kit, charts, readOnly = false,
   selection, focus, onSelection, onMove, onAsk, askOff = null, askLine = null, items = [], onRefresh = null,
+  onUpdateDerive = null, onUpdateAccept = null,
   pageLabel = null, onCard = null,
 }) {
   const aspect = aspectOf(theme?.aspect);
@@ -493,6 +494,8 @@ export default function GridStage({
         return at?.kind === 'block' && isFigure(at.block) ? <FigureCard block={at.block} items={items} charts={charts} /> : null;
       })()}
       <ChangedNotice changed={changed} readOnly={readOnly} onRefresh={onRefresh} />
+      {/* D1584 (#3831): Refresh from the latest update, beside Refresh from records. */}
+      <UpdateRefresh card={card} cardIndex={index} readOnly={readOnly} derive={onUpdateDerive} onAccept={onUpdateAccept} />
       {many ? (
         <div className="flex flex-wrap items-center gap-3 self-center rounded-full bg-gray-900 px-4 py-1.5 text-[12.5px] text-white shadow-lg dark:bg-gray-100 dark:text-gray-900" role="toolbar" aria-label="Selection" data-testid="pitch-editor-selbar">
           <span className="font-bold">{chosen.length} areas selected</span>

@@ -99,6 +99,7 @@ export * from './api/deckSources.js';
 export * from './api/deckStage.js';
 export * from './api/deckTransform.js';
 export * from './api/deckTypedValues.js';
+export * from './api/deckUpdateReuse.js';
 export * from './api/developerKeys.js';
 export * from './api/developerUsage.js';
 export * from './api/eadwyn.js';
