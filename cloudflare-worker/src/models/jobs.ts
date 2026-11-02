@@ -171,5 +171,13 @@ export const Jobs = {
     await env.DB.prepare(
       `DELETE FROM dead_letter_queue WHERE moved_at < datetime('now','-30 days')`
     ).run();
+    // D1508 (#3759): deck images nothing references leave R2 (discarded ones after 24 hours,
+    // proposals nobody kept after 14 days, 500 at most a day). Its own failure never stops the rest.
+    try {
+      const { sweepDeckImages } = await import('../services/decks/imageSweep');
+      await sweepDeckImages(env);
+    } catch {
+      console.error('[cron] deck image sweep unreadable');
+    }
   },
 };

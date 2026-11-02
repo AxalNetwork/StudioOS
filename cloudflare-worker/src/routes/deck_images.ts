@@ -404,7 +404,8 @@ deckImages.post('/images/:uid/discard', async (c) => {
   if (row instanceof Response) return row;
   // A kept image may already sit in a saved version, which keeps reading it.
   if (row.state === 'kept') return refuse(c, 409, { code: 'image_kept', message: 'A kept image stays: a saved version may show it. Remove it from the card instead.' });
-  await c.env.DB.prepare("UPDATE deck_images SET state = 'discarded' WHERE uid = ? AND state = 'proposed'").bind(row.uid).run();
+  // D1508: the daily cleanup removes it from R2 24 hours after this, unless a version, draft or proposal names it.
+  await c.env.DB.prepare("UPDATE deck_images SET state = 'discarded', discarded_at = datetime('now') WHERE uid = ? AND state = 'proposed'").bind(row.uid).run();
   return c.json({ ok: true, uid: row.uid });
 });
 

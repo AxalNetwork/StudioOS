@@ -3,6 +3,7 @@ import { Unrecorded, Unreadable } from '../../ui';
 import { Chart, Spark } from './CycleCharts';
 import { cardView, cycleOf, cycleTabs, figureDelta, figureValue, isPlainClick, linkSearch, nextHref, safeHref, sparkDrawable } from './cycleModel';
 import { MODULES } from './modules';
+import HeaderAsk from '../../ui/HeaderAsk.jsx';
 
 /**
  * D661 (#1474) — one overview for all four cycles, drawn to
@@ -244,7 +245,9 @@ export default function CycleOverview({ cycle, data, status = data ? 'ready' : '
   const readOnly = data?.read_only === true;
   // A read-only reader gets no primary action and no Ask (RO14); `ask` sits after `more` in the header.
   const action = readOnly ? null : actionIn;
-  const more = readOnly ? null : (moreIn && ask ? <>{moreIn}{ask}</> : moreIn || ask);
+  // D1443 part 5 (#3992): every overview carries the header Ask, Raise's own `lead` Ask or the shared one.
+  const askNode = ask ?? <HeaderAsk label={`${meta?.name ?? cycle} · Overview`} testId={`${cycle}-overview-ask`} />;
+  const more = readOnly ? null : (moreIn ? <>{moreIn}{askNode}</> : askNode);
   const figureCount = status === 'loading' ? figurePlaceholders : figures.length;
   const cardCount = status === 'loading' ? placeholders : cards.length;
   return (
