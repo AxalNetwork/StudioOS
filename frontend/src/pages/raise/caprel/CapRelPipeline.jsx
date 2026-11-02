@@ -328,7 +328,7 @@ export function InvestorLightbox({ projectId, prospect, search = '', onClose, on
             {committed ? <button type="button" className={BTN_S} onClick={() => setDialog('status')} data-testid="caprel-investor-status">Status</button> : null}
             <button type="button" className={BTN_S} onClick={() => setDialog('feedback')} data-testid="caprel-investor-feedback">Add feedback</button>
             {/* D1193 (CRL11): Eadwyn proposes next steps and moves from this investor's newest note. */}
-            <button type="button" className={BTN_S} onClick={() => setDialog('eadwyn')} data-testid="caprel-investor-eadwyn">Ask Eadwyn</button>
+            <button type="button" className={BTN_S} onClick={() => setDialog('eadwyn')} data-testid="caprel-investor-eadwyn">Propose next steps</button>
             <Link className={`${BTN_S} no-underline`} to={recordHref('raise', SLUG, prospect.id, tabSearch(search))} data-testid="caprel-investor-open">Open the full record</Link>
           </div>
           {read.status === 'loading' ? <div className="h-32 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800" data-testid="caprel-investor-loading" /> : null}

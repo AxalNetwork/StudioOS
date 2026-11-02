@@ -39,12 +39,14 @@ test('the page holds both consoles, GitHub Sync as its #github section', () => {
   assert.match(PAGE.slice(PAGE.lastIndexOf('<section', sync), sync), /id="github"/, 'GitHub Sync is not the #github section');
 });
 
-test('the row is the Super Admin\'s, after Platform, and no other profile has it', () => {
+test('the row is the Super Admin\'s, after Platform and AI agents, and no other profile has it', () => {
   const hq = (SIDEBAR_GROUPS.super_admin || []).flatMap((g) => g.items || []);
   const at = hq.findIndex((r) => r.to === '/admin/integration-keys');
   assert.ok(at > 0, 'no Super Admin row');
   assert.equal(hq[at].label, 'Integration keys');
-  assert.equal(hq[at - 1].label, 'Platform');
+  // D4137 (#4137): HQ › AI agents sits between them, where the canvas's nav draws it.
+  assert.equal(hq[at - 1].label, 'AI agents');
+  assert.equal(hq[at - 2].label, 'Platform');
   for (const [role, groups] of Object.entries(SIDEBAR_GROUPS)) {
     if (role === 'super_admin') continue;
     const rows = (groups || []).flatMap((g) => g.items || []);

@@ -171,7 +171,7 @@ test('1: none of 464\'s columns or tables exists in the baseline or an earlier m
   for (const t of ['validation_decision_evidence', 'validation_decision_commitments', 'idx_validation_decisions_scope']) {
     assert.equal(BASELINE.includes(t), false, `${t} in the baseline`);
   }
-  const earlier = readdirSync(join(SQL_DIR, 'migrations')).filter((f) => f.endsWith('.sql') && f < '464');
+  const earlier = readdirSync(join(SQL_DIR, 'migrations')).filter((f) => f.endsWith('.sql') && Number.parseInt(f, 10) < 464);
   for (const f of earlier) {
     const src = sqlOf(f);
     for (const n of names.slice(3)) assert.equal(src.includes(n), false, `${n} in ${f}`);
