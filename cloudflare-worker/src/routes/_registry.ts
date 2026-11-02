@@ -7,6 +7,7 @@
 import type { RegisteredModule } from '../util/routeRegistry';
 import { mount as admin_agentsMount } from './admin_agents';
 import { mount as admin_ai_agentsMount } from './admin_ai_agents';
+import { mount as admin_ai_agents_rosterMount } from './admin_ai_agents_roster';
 import { mount as admin_company_skillsMount } from './admin_company_skills';
 import { mount as admin_hq_skillsMount } from './admin_hq_skills';
 import { mount as company_complianceMount } from './company_compliance';
@@ -25,6 +26,7 @@ import { mount as votesMount } from './votes';
 export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'admin_agents', mount: admin_agentsMount },
   { file: 'admin_ai_agents', mount: admin_ai_agentsMount },
+  { file: 'admin_ai_agents_roster', mount: admin_ai_agents_rosterMount },
   { file: 'admin_company_skills', mount: admin_company_skillsMount },
   { file: 'admin_hq_skills', mount: admin_hq_skillsMount },
   { file: 'company_compliance', mount: company_complianceMount },
