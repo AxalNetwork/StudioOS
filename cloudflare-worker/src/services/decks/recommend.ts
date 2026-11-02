@@ -96,22 +96,51 @@ export async function recommendMethod(
       }
     } catch { /* ignore */ }
 
-    for (const r of SECTOR_OVERRIDES) {
-      if (r.sectorPattern.test(sector) && r.stage === stage) {
-        return { method_id: r.method, sector, stage, source: 'sector' };
-      }
-    }
   }
-  return { method_id: STAGE_DEFAULTS[stage], sector, stage, source: 'stage_default' };
+  const d = engineDefault(sector, stage);
+  return { method_id: d.method_id, sector, stage, source: d.source };
 }
 
-export async function listOverrides(env: Env): Promise<Array<{ sector: string; stage: string; method_id: string; updated_at: string }>> {
+/**
+ * D4155 K4 (#4191): what the engine picks for a sector and stage with no
+ * override — the sector's explicit pick, else the stage's default. One
+ * function, so `recommendMethod` and HQ's grid cannot disagree.
+ */
+export function engineDefault(sector: string, stageInput: string): { method_id: DeckMethodId; source: 'sector' | 'stage_default' } {
+  const stage = normaliseStage(stageInput);
+  if (sector) {
+    for (const r of SECTOR_OVERRIDES) {
+      if (r.sectorPattern.test(sector) && r.stage === stage) return { method_id: r.method, source: 'sector' };
+    }
+  }
+  return { method_id: STAGE_DEFAULTS[stage], source: 'stage_default' };
+}
+
+/** The canvas's grid (HD4): six sectors by four stages, in the engine's stage ids. */
+export const GRID_SECTORS = ['B2B software', 'Fintech', 'Health', 'Climate', 'Consumer', 'Deep tech'] as const;
+export const GRID_STAGES = ['pre_seed', 'seed', 'series_a', 'series_b'] as const;
+export function engineDefaults() {
+  return GRID_SECTORS.flatMap((sector) => GRID_STAGES.map((stage) => ({ sector, stage, ...engineDefault(sector, stage) })));
+}
+
+export type OverrideRow = { sector: string; stage: string; method_id: string; updated_at: string; updated_by: { uid: string; name: string | null } | null };
+/** The overrides, each naming who set it by uid and name; never an email. */
+export async function listOverrides(env: Env): Promise<OverrideRow[]> {
   await ensureOverrideSchema(env);
   const rows = await env.DB.prepare(
-    `SELECT sector, stage, method_id, updated_at FROM deck_recommendation_overrides
-     ORDER BY sector ASC, stage ASC`,
-  ).all<{ sector: string; stage: string; method_id: string; updated_at: string }>();
-  return rows.results || [];
+    `SELECT o.sector, o.stage, o.method_id, o.updated_at, u.uid AS by_uid, u.name AS by_name
+       FROM deck_recommendation_overrides o LEFT JOIN users u ON u.id = o.updated_by
+      ORDER BY o.sector ASC, o.stage ASC`,
+  ).all<{ sector: string; stage: string; method_id: string; updated_at: string; by_uid: string | null; by_name: string | null }>();
+  return (rows.results || []).map((r) => ({ sector: r.sector, stage: r.stage, method_id: r.method_id, updated_at: r.updated_at,
+    updated_by: r.by_uid ? { uid: r.by_uid, name: r.by_name } : null }));
+}
+
+/** One override as stored, for an audit row's before; null when none. */
+export async function overrideOf(env: Env, sector: string, stage: string): Promise<{ method_id: string } | null> {
+  await ensureOverrideSchema(env);
+  return (await env.DB.prepare(`SELECT method_id FROM deck_recommendation_overrides WHERE LOWER(sector) = LOWER(?) AND stage = ? LIMIT 1`)
+    .bind(sector.trim(), normaliseStage(stage)).first<{ method_id: string }>()) ?? null;
 }
 
 export async function setOverride(

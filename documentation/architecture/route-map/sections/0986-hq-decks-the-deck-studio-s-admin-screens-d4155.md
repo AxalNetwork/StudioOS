@@ -9,5 +9,5 @@ codes.
 | `/admin/platform/decks` | HD1 Reports | `GET /api/admin/deck-reports`, `POST /api/admin/deck-reports/:uid/resolve` (D1540). Names, before and after wait for K1 (#4188). |
 | `/admin/platform/decks/flags` | HD2 | `GET /api/admin/feature-flags` (D1509). Writes wait for K2 (#4189). |
 | `/admin/platform/decks/beta` | HD3 | None yet: K3 (#4190). |
-| `/admin/platform/decks/templates` | HD4 | `GET /api/decks/admin/recommend-overrides`, `GET /api/decks/methods` (D905). Writes wait for K4 (#4191). |
+| `/admin/platform/decks/templates` | HD4 | `GET /api/decks/admin/recommend-overrides` (`overrides` and the engine's `defaults`), `GET /api/decks/methods` (D905); the Super Admin's `PUT` and `DELETE` of the same, each with a reason and an audit row (K4 #4191, D4155 §5). |
 | `/admin/platform/decks/norms` | HD5 | None yet: K5 (#4192). |

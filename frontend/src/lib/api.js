@@ -2735,6 +2735,11 @@ export const api = {
   // The Super Admin's default template by sector and stage; an admin reads it.
   deckRecommendOverrides: () => request('/decks/admin/recommend-overrides'),
   deckSetRecommendOverride: (payload) => request('/decks/admin/recommend-overrides', { method: 'PUT', body: JSON.stringify(payload || {}) }),
+  // D4155 K4 (#4191): back to the engine's own pick. The reason rides in the body, never the URL.
+  deckResetRecommendOverride: ({ sector, stage, reason } = {}) => request(
+    `/decks/admin/recommend-overrides?sector=${encodeURIComponent(sector || '')}&stage=${encodeURIComponent(stage || '')}`,
+    { method: 'DELETE', body: JSON.stringify({ reason }) },
+  ),
   // Task #196 — withdraw a share link. Revoking EXPIRES the row rather than
   // deleting it, so the impression history stays attributable to a link the
   // founder can still see they created; idempotent, so a double-click or a

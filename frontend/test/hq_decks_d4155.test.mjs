@@ -8,7 +8,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   BUILD, NOT_RECORDED, OUTCOMES, SECTORS, STAGES, TABS,
-  defaultOnKeys, filterReports, flagLabel, flagRows, notYet, offGridOverrides, reasonOk, reportRow, resolveArmed, scopeLabel, templateGrid, usdMicro, viewFor,
+  defaultOnKeys, filterReports, flagLabel, flagRows, notYet, offGridOverrides, reasonOk, reportRow, resolveArmed, scopeLabel, templateChangeArmed, templateGrid,
+  templatePreview, templateResetArmed, usdMicro, viewFor,
 } from '../src/pages/hq/decks/hqDecksModel.js';
 import { HQ_STRIPS, stripFor } from '../src/lib/hqStrips.js';
 
@@ -34,9 +35,9 @@ test('Decks joins the Platform strip after Promo codes, in the list and in the c
   assert.match(read('App.jsx'), /<StripLink to="\/admin\/platform\/promo-codes">Promo codes<\/StripLink>\n\s+<StripLink to="\/admin\/platform\/decks">Decks<\/StripLink>/);
 });
 
-test('each build task names its issue, and none is live before it lands', () => {
+test('each build task names its issue, and only a landed one is live', () => {
   assert.deepEqual(Object.entries(BUILD).map(([k, b]) => [k, b.issue]), [['K1', 4188], ['K2', 4189], ['K3', 4190], ['K4', 4191], ['K5', 4192]]);
-  for (const b of Object.values(BUILD)) assert.equal(b.live, false);
+  assert.deepEqual(Object.entries(BUILD).filter(([, b]) => b.live).map(([k]) => k), ['K4'], 'K4 (#4191) landed');
   assert.equal(notYet('K3'), 'Not switched on yet. The beta cohort arrives with #4190.');
 });
 
@@ -102,13 +103,54 @@ test('HD4: the sector × stage grid from the overrides; a default is never a gue
   const withDefaults = templateGrid({ overrides: [], defaults: [{ sector: 'B2B software', stage: 'pre_seed', method_id: 'yc_seed' }] }, methods);
   assert.equal(withDefaults[0].cells[0].template, 'Problem-first', 'K4\'s defaults are named once the reply carries them');
   assert.deepEqual(offGridOverrides(reply).map((o) => o.sector), ['Gaming'], 'an override outside the grid is listed, never hidden');
-  assert.match(PAGE, /'Only the Super Admin changes a default template\.'/);
-  assert.doesNotMatch(PAGE, /deckSetRecommendOverride|method: '(PUT|DELETE)'/, 'no template write before K4');
+  assert.match(PAGE, />Only the Super Admin changes a default template\.</);
+  assert.deepEqual([fintech.methodId, b2b.methodId, withDefaults[0].cells[0].methodId], ['series_a_growth', null, 'yc_seed'], 'a cell carries the template it starts on, for its sheet');
 });
 
-test('the page writes only Resolve, reads only mounted routes, and never shows an email', () => {
+test('HD4: the grid draws the same six sectors and four stages the Worker\'s defaults cover', () => {
+  const engine = readFileSync(new URL('../../cloudflare-worker/src/services/decks/recommend.ts', import.meta.url), 'utf8');
+  const list = (name) => JSON.parse(engine.match(new RegExp(`export const ${name} = (\\[[^\\]]*\\])`))[1].replace(/'/g, '"'));
+  assert.deepEqual(list('GRID_SECTORS'), SECTORS);
+  assert.deepEqual(list('GRID_STAGES'), STAGES.map((s) => s.id));
+});
+
+test('HD4b: Save needs a different template and a reason; Reset needs a reason; the preview names the slides', () => {
+  const ok = 'Synthetic: lead with traction.';
+  assert.equal(templateChangeArmed({ methodId: 'yc_seed', current: 'sequoia_classic', reason: ok }), true);
+  assert.equal(templateChangeArmed({ methodId: 'yc_seed', current: 'yc_seed', reason: ok }), false, 'the cell\'s own template is no change');
+  assert.equal(templateChangeArmed({ methodId: '', current: 'yc_seed', reason: ok }), false);
+  assert.equal(templateChangeArmed({ methodId: 'yc_seed', current: null, reason: 'too short' }), false);
+  assert.equal(templateResetArmed({ reason: ok }), true);
+  assert.equal(templateResetArmed({ reason: '  nine ch  ' }), false);
+  const methods = [{ id: 'yc_seed', label: 'Problem-first', best_for: 'Pre-seed', slides: [{ title: 'Problem' }, { title: ' ' }, { title: 'Solution' }] }];
+  assert.deepEqual(templatePreview(methods, 'yc_seed'), { id: 'yc_seed', name: 'Problem-first', bestFor: 'Pre-seed', slides: ['Problem', 'Solution'] });
+  assert.deepEqual(templatePreview(methods, 'gone'), { id: 'gone', name: 'gone', bestFor: null, slides: [] });
+});
+
+test('HD4b/HD6c: only the Super Admin is offered Change and the sheet; anyone else reads the grid', () => {
+  const templates = PAGE.slice(PAGE.indexOf('function Templates('), PAGE.indexOf('// ── HD5'));
+  assert.match(templates, /\{superAdmin && \(\s*<div className="mt-1 flex gap-1\.5">/, 'Change is drawn for the Super Admin only');
+  assert.match(templates, /\{superAdmin && openCell && \(/, 'the sheet opens for the Super Admin only');
+  assert.match(templates, /\{!superAdmin && <p[^>]*data-testid="deck-templates-why">Only the Super Admin changes a default template\.<\/p>\}/);
+  const sheet = PAGE.slice(PAGE.indexOf('function TemplateSheet('), PAGE.indexOf('function Templates('));
+  assert.match(sheet, /api\.deckSetRecommendOverride\(\{ sector, stage: cell\.stage, method_id: methodId, reason: reason\.trim\(\) \}\)/);
+  assert.match(sheet, /api\.deckResetRecommendOverride\(\{ sector, stage: cell\.stage, reason: reason\.trim\(\) \}\)/);
+  assert.match(sheet, /disabled=\{busy \|\| !templateChangeArmed\(\{ methodId, current: cell\.methodId, reason \}\)\}/);
+  assert.match(sheet, /disabled=\{busy \|\| !templateResetArmed\(\{ reason \}\)\}/);
+});
+
+test('the reset client sends its reason in the body, never the URL', async () => {
+  const API = read('lib/api.js');
+  const reset = API.slice(API.indexOf('deckResetRecommendOverride:'), API.indexOf('deckRevokeShare:'));
+  assert.match(reset, /method: 'DELETE', body: JSON\.stringify\(\{ reason \}\)/);
+  const url = reset.match(/`([^`]*)`/)[1];
+  assert.match(url, /^\/decks\/admin\/recommend-overrides\?sector=/);
+  assert.doesNotMatch(url, /reason/, 'the URL carries sector and stage only');
+});
+
+test('the page writes only Resolve and the default templates, reads only mounted routes, and never shows an email', () => {
   const calls = [...PAGE.matchAll(/\b(deckReportsApi|adminFeatureFlagsApi|api)\.(\w+)\(/g)].map((m) => `${m[1]}.${m[2]}`);
-  assert.deepEqual([...new Set(calls)].sort(), ['adminFeatureFlagsApi.list', 'api.deckMethods', 'api.deckRecommendOverrides', 'deckReportsApi.queue', 'deckReportsApi.resolve']);
+  assert.deepEqual([...new Set(calls)].sort(), ['adminFeatureFlagsApi.list', 'api.deckMethods', 'api.deckRecommendOverrides', 'api.deckResetRecommendOverride', 'api.deckSetRecommendOverride', 'deckReportsApi.queue', 'deckReportsApi.resolve']);
   assert.doesNotMatch(PAGE, /\.email\b/);
   assert.doesNotMatch(PAGE.replace(/NORM_RULE/g, ''), /\badvis(or|e)\b/i);
   assert.equal(reasonOk('ten chars!'), true);

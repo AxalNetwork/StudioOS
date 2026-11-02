@@ -10,18 +10,20 @@ import { isSuperAdminUser } from '../../../lib/shellRole';
 import { useAuth } from '../../../hooks/useAuthSync';
 import {
   BETA_COLUMNS, MODELS_LINK, NORM_COLUMNS, NORM_RULE, NOT_RECORDED, NOTE_MAX, OUTCOMES, PROPOSAL_LINE, REASONS, STAGES, SUBTITLE,
-  defaultOnKeys, filterReports, flagLabel, flagRows, notYet, offGridOverrides, reportRow, resolveArmed, templateGrid, viewFor,
+  defaultOnKeys, filterReports, flagLabel, flagRows, notYet, offGridOverrides, reportRow, resolveArmed, templateChangeArmed, templateGrid,
+  templatePreview, templateResetArmed, viewFor,
 } from './hqDecksModel';
 
 /**
  * D4155 (#4155) — HQ › Decks (HD1–HD6), a Platform tab after Promo codes at
  * `/admin/platform/decks`, HQ only (`hqOnly`).
  *
- * THREE READS AND ONE WRITE ARE LIVE, each on a route main already mounts:
+ * THREE READS AND THREE WRITES ARE LIVE, each on a mounted route:
  *   Reports            GET  /api/admin/deck-reports?status=   (requireHqAdmin, D1540)
  *                      POST /api/admin/deck-reports/:uid/resolve  { outcome, note }
  *   Feature flags      GET  /api/admin/feature-flags          (requireAdmin, D1509)
  *   Default templates  GET  /api/decks/admin/recommend-overrides  (any admin, D905)
+ *                      PUT / DELETE the same, { reason }        (Super Admin, K4 #4191)
  * Every other control waits for its build task (K1–K5, #4188–#4192): it is
  * drawn disabled with the reason, so nothing claims an audited change the
  * Worker does not yet record. When a task lands its builder flips
@@ -61,7 +63,7 @@ function useRead(load, deps) {
 const Reading = ({ testId }) => <p className={MUTED} role="status" data-testid={testId}>Reading…</p>;
 
 /** HD6b: a failed read is never an empty list. */
-function Unreadable({ what, claim, onRetry, testId }) {
+function ReadFailed({ what, claim, onRetry, testId }) {
   return (
     <div role="alert" className="flex flex-wrap items-center gap-2 text-[12.5px] text-red-700 dark:text-red-300" data-testid={testId}>
       <span><strong>Could not be read.</strong> {what} did not load. {claim}</span>
@@ -158,7 +160,7 @@ function Reports() {
   const open = rows.find((r) => r.uid === openUid) || null;
   let body;
   if (reply === undefined) body = <Reading testId="deck-reports-reading" />;
-  else if (reply === null) body = <Unreadable what="The reports" claim="That is not the same as no reports." onRetry={retry} testId="deck-reports-unreadable" />;
+  else if (reply === null) body = <ReadFailed what="The reports" claim="That is not the same as no reports." onRetry={retry} testId="deck-reports-unreadable" />;
   else if (!shownRows.length) {
     body = (
       <div className="py-6 text-center" data-testid="deck-reports-empty">
@@ -215,7 +217,7 @@ function Reports() {
 function Flags() {
   const [reply, retry] = useRead(() => adminFeatureFlagsApi.list(), []);
   if (reply === undefined) return <Card><Reading testId="deck-flags-reading" /></Card>;
-  if (reply === null) return <Card><Unreadable what="The feature flags" claim="That is not the same as every feature being off." onRetry={retry} testId="deck-flags-unreadable" /></Card>;
+  if (reply === null) return <Card><ReadFailed what="The feature flags" claim="That is not the same as every feature being off." onRetry={retry} testId="deck-flags-unreadable" /></Card>;
   const rows = flagRows(reply);
   const defaults = defaultOnKeys(reply);
   return (
@@ -264,47 +266,110 @@ function Beta() {
 
 // ── HD4 · Default templates ─────────────────────────────────────────────────
 
+/**
+ * HD4b: one cell's change sheet, the Super Admin's only. Pick a template, see
+ * what it holds, give a reason; or give a reason and reset the cell to the
+ * engine's own pick. Each write is one admin audit row with before and after.
+ */
+function TemplateSheet({ sector, cell, methods, onDone, onClose }) {
+  const [methodId, setMethodId] = useState(cell.methodId || '');
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const preview = templatePreview(methods, methodId);
+  const stageLabel = STAGES.find((s) => s.id === cell.stage)?.label ?? cell.stage;
+  const run = async (write, failed) => {
+    setBusy(true); setError('');
+    try { await write(); onDone(); } catch (e) { setError(e?.message || failed); } finally { setBusy(false); }
+  };
+  const save = () => run(() => api.deckSetRecommendOverride({ sector, stage: cell.stage, method_id: methodId, reason: reason.trim() }), 'The template could not be changed.');
+  const reset = () => run(() => api.deckResetRecommendOverride({ sector, stage: cell.stage, reason: reason.trim() }), 'The template could not be reset.');
+  return (
+    <Card data-testid="deck-template-sheet">
+      <p className={H2}>Default template · {sector} · {stageLabel}</p>
+      <p className={MUTED}>Now: {cell.template}{cell.changed ? ' (changed)' : ' (default)'}</p>
+      <label className="mt-3 block text-[12px] font-semibold text-axal-ink dark:text-gray-200">
+        Template
+        <select className={`${SELECT} mt-1 block`} value={methodId} onChange={(e) => setMethodId(e.target.value)} data-testid="deck-template-select">
+          <option value="">Choose a template</option>
+          {methods.map((m) => <option key={m.id} value={m.id}>{m.label || m.id}</option>)}
+        </select>
+      </label>
+      {methodId && (
+        <div className="mt-2 rounded-md border border-axal-hairline p-2 dark:border-gray-800" data-testid="deck-template-preview">
+          <p className="text-[13px] font-semibold text-axal-ink dark:text-gray-100">{preview.name}</p>
+          {preview.bestFor && <p className={MUTED}>Best for {preview.bestFor}</p>}
+          {preview.slides.length > 0
+            ? <ol className="mt-1 list-decimal pl-5 text-[12.5px] text-axal-ink dark:text-gray-200">{preview.slides.map((t, i) => <li key={`${i}-${t}`}>{t}</li>)}</ol>
+            : <p className={MUTED}>This template’s slides could not be read.</p>}
+        </div>
+      )}
+      <label className="mt-3 block text-[12px] font-semibold text-axal-ink dark:text-gray-200">
+        Reason · required, ten characters or more
+        <textarea className={`${INPUT} mt-1`} rows={2} maxLength={1000} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why this sector and stage should start here" data-testid="deck-template-reason" />
+      </label>
+      <p className={MUTED}>Founders can still pick any template. The change is recorded in the admin audit log with your reason.</p>
+      {error && <p role="alert" className="text-[12.5px] text-red-700 dark:text-red-300">{error}</p>}
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button type="button" className={PRIMARY} disabled={busy || !templateChangeArmed({ methodId, current: cell.methodId, reason })} onClick={save} data-testid="deck-template-save">{busy ? 'Saving…' : 'Save'}</button>
+        {cell.changed && <button type="button" className={BTN} disabled={busy || !templateResetArmed({ reason })} onClick={reset} data-testid="deck-template-reset">Reset to default</button>}
+        <button type="button" className={BTN} disabled={busy} onClick={onClose}>Cancel</button>
+      </div>
+    </Card>
+  );
+}
+
 function Templates({ superAdmin }) {
   const [reply, retry] = useRead(() => Promise.all([api.deckRecommendOverrides(), api.deckMethods().catch(() => null)]), []);
+  const [open, setOpen] = useState(null);
   if (reply === undefined) return <Card><Reading testId="deck-templates-reading" /></Card>;
-  if (reply === null) return <Card><Unreadable what="The default templates" claim="That is not the same as no defaults." onRetry={retry} testId="deck-templates-unreadable" /></Card>;
+  if (reply === null) return <Card><ReadFailed what="The default templates" claim="That is not the same as no defaults." onRetry={retry} testId="deck-templates-unreadable" /></Card>;
   const [overrides, methodsReply] = reply;
   const methods = Array.isArray(methodsReply?.methods) ? methodsReply.methods : Array.isArray(methodsReply?.items) ? methodsReply.items : [];
   const grid = templateGrid(overrides, methods);
   const off = offGridOverrides(overrides);
-  const why = superAdmin ? notYet('K4') : 'Only the Super Admin changes a default template.';
+  const openCell = open ? grid.find((r) => r.sector === open.sector)?.cells.find((c) => c.stage === open.stage) : null;
   return (
-    <Card data-testid="hq-decks-templates">
-      <p className={`${MUTED} mb-1`}>Each sector and stage starts founders on one template. Founders can still pick any template.</p>
-      <p className={`${MUTED} mb-3`} data-testid="deck-templates-why">{why}</p>
-      <div className="overflow-auto">
-        <table className="w-full" data-testid="deck-templates-grid">
-          <thead><tr><th className={TH}>Sector</th>{STAGES.map((s) => <th key={s.id} className={TH}>{s.label}</th>)}</tr></thead>
-          <tbody>
-            {grid.map((row) => (
-              <tr key={row.sector} className="border-t border-axal-hairline dark:border-gray-800">
-                <td className={`${TD} font-semibold`}>{row.sector}</td>
-                {row.cells.map((c) => (
-                  <td key={c.stage} className={TD} data-testid={`deck-template-${row.sector}-${c.stage}`}>
-                    <span className="font-semibold">{c.template}</span><br />
-                    <span className={MUTED}>{c.changed ? <>Changed by <Cell v={c.by} /></> : 'Default'}</span>
-                    <div className="mt-1 flex gap-1.5">
-                      <button type="button" className={BTN} disabled title={why}>Change</button>
-                      {c.changed && <button type="button" className={BTN} disabled title={why}>Reset to default</button>}
-                    </div>
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {off.length > 0 && (
-        <p className={`${MUTED} mt-3`} data-testid="deck-templates-off-grid">
-          Also set, outside this grid: {off.map((o) => `${o.sector} · ${o.stage}`).join(', ')}.
-        </p>
+    <div className="space-y-4">
+      <Card data-testid="hq-decks-templates">
+        <p className={`${MUTED} mb-1`}>Each sector and stage starts founders on one template. Founders can still pick any template.</p>
+        {!superAdmin && <p className={`${MUTED} mb-3`} data-testid="deck-templates-why">Only the Super Admin changes a default template.</p>}
+        <div className="overflow-auto">
+          <table className="w-full" data-testid="deck-templates-grid">
+            <thead><tr><th className={TH}>Sector</th>{STAGES.map((s) => <th key={s.id} className={TH}>{s.label}</th>)}</tr></thead>
+            <tbody>
+              {grid.map((row) => (
+                <tr key={row.sector} className="border-t border-axal-hairline dark:border-gray-800">
+                  <td className={`${TD} font-semibold`}>{row.sector}</td>
+                  {row.cells.map((c) => (
+                    <td key={c.stage} className={TD} data-testid={`deck-template-${row.sector}-${c.stage}`}>
+                      <span className="font-semibold">{c.template}</span><br />
+                      <span className={MUTED}>{c.changed ? <>Changed by <Cell v={c.by} />{c.at ? ` · ${day(c.at)}` : ''}</> : 'Default'}</span>
+                      {superAdmin && (
+                        <div className="mt-1 flex gap-1.5">
+                          <button type="button" className={BTN} onClick={() => setOpen({ sector: row.sector, stage: c.stage })} data-testid={`deck-template-change-${row.sector}-${c.stage}`}>
+                            {c.changed ? 'Change or reset' : 'Change'}
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {off.length > 0 && (
+          <p className={`${MUTED} mt-3`} data-testid="deck-templates-off-grid">
+            Also set, outside this grid: {off.map((o) => `${o.sector} · ${o.stage}`).join(', ')}.
+          </p>
+        )}
+      </Card>
+      {superAdmin && openCell && (
+        <TemplateSheet key={`${open.sector}|${open.stage}`} sector={open.sector} cell={openCell} methods={methods}
+          onClose={() => setOpen(null)} onDone={() => { setOpen(null); retry(); }} />
       )}
-    </Card>
+    </div>
   );
 }
 
