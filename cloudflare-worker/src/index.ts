@@ -2352,6 +2352,18 @@ export default {
             console.error('[cron] grow daily failed', e instanceof Error ? e.message : 'error');
           }
         }
+        // D1539 (#3789) — the deck card blob prune: a blob no version names,
+        // first written over an hour ago, goes (at most 500 a run).
+        if (now.getUTCHours() === 5 && now.getUTCMinutes() === 50) {
+          try {
+            const { pruneCardBlobs } = await import('./services/decks/cardBlobs');
+            const r = await pruneCardBlobs(env);
+            if (r.deleted) console.info(`[cron] deck card blobs pruned=${r.deleted}`);
+            cronSummary.push(`deck card blobs pruned=${r.deleted}`);
+          } catch (e) {
+            console.error('[cron] deck card blob prune failed', e instanceof Error ? e.message : 'error');
+          }
+        }
         // D1058 (#2928) — Reporting's daily step: duties a closing missed, the
         // periods that have come, and the team's reminders, each claimed
         // before it is sent so a second run the same day sends nothing.
