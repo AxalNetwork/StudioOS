@@ -276,6 +276,8 @@ USE_CF_QUEUE      = "true"
 # 200-rpm/account) before deploy; when the slug is missing or unknown
 # Cloudflare silently treats the call as un-gatewayed (no breakage).
 CF_AI_GATEWAY_SLUG_ADVISOR = "advisor-ongoing"
+# D1504 (#3755): the deck's AI Gateway, empty (inert) until the owner creates it (owner question L).
+CF_AI_GATEWAY_SLUG_DECK    = ""
 # Task #4 (CG) — daily turn cap per user for the advisor. Soft-warn at
 # 80%, hard-block at 100%. Counted in KV under
 # `ai_spend:advisor:{user_id}:{yyyy-mm-dd}`. The "USD_DAY" suffix is a
@@ -649,6 +651,8 @@ WORKER_DEPLOY_VERSION = ""
 # Task #4 (CG) — see top-level [vars] for the rationale. Mirrored here
 # because Wrangler env tables don't inherit from the top-level [vars].
 CF_AI_GATEWAY_SLUG_ADVISOR     = "advisor-ongoing"
+# D1504 (#3755): the deck's AI Gateway, empty (inert) until the owner creates it (owner question L).
+CF_AI_GATEWAY_SLUG_DECK        = ""
 WORKERS_AI_ADVISOR_BUDGET_USD_DAY = "100"
 # D538 (#1078) — see top-level [vars]. Mirrored because env tables don't inherit.
 MI_STUB_ROWS           = "off"
@@ -837,6 +841,8 @@ USE_CF_QUEUE      = "true"
 # `advisor-ongoing-preview`) created in the dashboard. Defaults to the
 # prod slug so the binding still works before a preview gateway exists.
 CF_AI_GATEWAY_SLUG_ADVISOR     = "advisor-ongoing"
+# D1504 (#3755): the deck's AI Gateway, empty (inert) until the owner creates it (owner question L).
+CF_AI_GATEWAY_SLUG_DECK        = ""
 WORKERS_AI_ADVISOR_BUDGET_USD_DAY = "100"
 # Preview is allowed to widen CORS so PR review deploys can talk to
 # localhost SPAs and the workers.dev sandbox URL.
