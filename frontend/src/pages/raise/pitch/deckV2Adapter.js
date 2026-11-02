@@ -22,27 +22,13 @@
  * D1603, so `ExportDialog.jsx` calls `api.deckExportOdp` directly and this
  * file no longer lists it.
  *
- * Swapped here (`SWAPPED`): `grid`, whose route `GET /api/decks/:id/grid`
- * merged as D1499 part 1 (#3749), `stagePlan`, whose route
- * `GET /api/decks/:id/stage-plan` is D1522 (#3774), `remix`, whose route
- * `POST /api/decks/:id/remix` is D1553 (#3800), D1565's (#3812)
- * `investorLinks` and `withdrawInvestorLink`, and `typedTables`, whose route
- * `GET /api/decks/:id/typed-values` is D1538 (#3787). Each keeps its row, so
- * the plan's table still reads whole, and answers through its client
- * (`deckGridApi.grid`, `deckStageApi.stagePlan`, `deckRemixApi.remix`,
- * `deckInvestorLinksApi`, `deckTypedValuesApi.list`).
- * `elementModels` (D1503, #3754) answers through `deckElementModelsApi.read`.
- * And `consistency` (D1555, #3802): the free rules ride the deck check's own
- * reply, so it answers through `deckCheckApi.read`.
- * `presets` (D1549, #3796) answers through `deckModelPresetsApi.read`, and so
- * does `orgLocks`, from the same reply's `locks` key: #3786 (B10) keyed that
- * row but has no route on main, so C1 built the read and the row keeps B10's
- * issue.
- * `comments` (D1570, #3817)
- * answers through `deckCommentsApi.list`.
- * `history` (D1515, #3767) is swapped without a route: undo and redo live in
- * the browser, so it answers `gridOps.js` directly, never through().
- * `figures` (D1523, #3775) answers through `deckFiguresApi.list`.
+ * Which rows are swapped is not written down anywhere: `SWAPPED`, at the foot
+ * of this file, is derived (#4134). A row is swapped when its method below
+ * answers through `through()`, and off while it is `off('<name>')`. So a swap
+ * is one line, the row's own, and its decision is named in the comment above
+ * that line. Never add a row to a list here: two branches that each swap a
+ * row then meet only if they swap the same one.
+ * D1515 history is browser-local: it returns gridOps directly, with no API contract.
  *
  * Fields on routes that exist (`context.inferred` and `context.freshness`
  * from #3877; the PostHog, HubSpot and Linear source rows from #3880) need
@@ -50,18 +36,22 @@
  */
 
 import { LATER, NOT_ON } from './deckV2Model.js';
-import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks.js';
-import { deckDraftApi } from '../../../lib/api/deckDraft.js';
-import { deckGridApi } from '../../../lib/api/deckGrid.js';
-import { deckStageApi } from '../../../lib/api/deckStage.js';
-import { deckRemixApi } from '../../../lib/api/deckRemix.js';
-import { deckTypedValuesApi } from '../../../lib/api/deckTypedValues.js';
+// One line per client, in file-name order (pitch_v2_adapter_d1604 holds it), so two swaps add lines at different places.
+import { deckBatchesApi } from '../../../lib/api/deckBatches.js';
 import { deckCheckApi } from '../../../lib/api/deckCheck.js';
-import { deckElementModelsApi } from '../../../lib/api/deckElementModels.js';
-import { deckFiguresApi } from '../../../lib/api/deckFigures.js';
-import { deckModelPresetsApi } from '../../../lib/api/deckModelPresets.js';
-import { deckCommentsApi } from '../../../lib/api/deckComments.js';
 import { deckCoeditApi } from '../../../lib/api/deckCoedit.js';
+import { deckCommentsApi } from '../../../lib/api/deckComments.js';
+import { deckDraftApi } from '../../../lib/api/deckDraft.js';
+import { deckElementModelsApi } from '../../../lib/api/deckElementModels.js';
+import { deckElementsApi } from '../../../lib/api/deckElements.js';
+import { deckFiguresApi } from '../../../lib/api/deckFigures.js';
+import { deckGridApi } from '../../../lib/api/deckGrid.js';
+import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks.js';
+import { deckModelPresetsApi } from '../../../lib/api/deckModelPresets.js';
+import { deckRemixApi } from '../../../lib/api/deckRemix.js';
+import { deckStageApi } from '../../../lib/api/deckStage.js';
+import { deckTypedValuesApi } from '../../../lib/api/deckTypedValues.js';
+import { deckVentureElementsApi } from '../../../lib/api/deckVentureElements.js';
 import * as gridOps from './gridOps.js';
 
 export { NOT_ON };
@@ -93,7 +83,7 @@ export const SURFACES = Object.freeze({
   imageEdit: { issue: 3778, what: 'Crop, focus, filters, upscale and background removal' },
   elementsLibrary: { issue: 3779, what: 'Icons, shapes, dividers and textures' },
   diagrams: { issue: 3780, what: 'Funnel, hierarchy, hub and spoke, and 2×2 diagrams' },
-  ventureElements: { issue: 3781, what: 'Logo wall, use of funds, round terms, cap-table summary and interview quotes' },
+  ventureElements: { issue: 3781, what: 'Team bios, logo wall, use of funds, round terms, cap-table summary and interview quotes' },
   templates: { issue: 3782, what: 'Template filters by stage, audience and style' },
   myTemplates: { issue: 3782, what: 'Your own templates' },
   saveAsTemplate: { issue: 3782, what: 'Save as my template' },
@@ -121,10 +111,12 @@ export const SURFACES = Object.freeze({
   setDeckSource: { issue: 3881, what: 'Tag a data-room file as a deck source' },
 });
 
-const off = (name) => async () => unavailable(SURFACES[name].issue);
-
-/** The rows whose route is on main: each answers through its real client, never unavailable by default. */
-export const SWAPPED = Object.freeze(['grid', 'saveCard', 'discardDraft', 'draft', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'presets', 'orgLocks', 'comments', 'figures', 'presence', 'history']);
+/** The rows still off. `off(name)` records its row, so `SWAPPED` (at the foot) is every other row. */
+const OFF = new Set();
+const off = (name) => {
+  OFF.add(name);
+  return async () => unavailable(SURFACES[name].issue);
+};
 
 
 /**
@@ -143,9 +135,9 @@ export async function through(call, issue) {
     // Worker without its binding) is still "Coming later", with the Worker's own sentence.
     if (status === 503 && typeof e?.code === 'string' && e.code.endsWith('_off')) return unavailable(issue, e.message || NOT_ON);
     const message = typeof e?.message === 'string' && e.message ? e.message : 'could not be read';
-    // D1515: the Worker's status and body ride along (the autosave reads a 409's `server` copy; no status means
-    // the request never reached the Worker, which the autosave reads as offline).
-    return Object.freeze({ available: false, unreadable: true, reason: message, issue, status, data: e?.data ?? null });
+    // D1543: a Worker refusal's code (a gate such as `no_consent`) rides along, so a surface can draw its line.
+    const code = typeof e?.code === 'string' && e.code ? e.code : null;
+    return Object.freeze({ available: false, unreadable: true, reason: message, issue, status, data: e?.data ?? null, ...(code ? { code } : {}) });
   }
 }
 
@@ -168,8 +160,10 @@ export const grid = (deckId) => through(() => deckGridApi.grid(deckId), SURFACES
 export const saveCard = (deckId, uid, card, rev, opts) => through(() => deckDraftApi.saveCard(deckId, uid, card, rev, opts), SURFACES.saveCard.issue);
 export const discardDraft = (deckId) => through(() => deckDraftApi.discard(deckId), SURFACES.discardDraft.issue);
 export const draft = (deckId) => through(() => deckDraftApi.draft(deckId), SURFACES.draft.issue);
-export const batch = off('batch');
-export const cancelBatch = off('cancelBatch');
+// D1502 part 2 (#3753): a run, read to resume it (pd2b, pd2c), and Stop. Follow it live with
+// `deckBatchesApi.events(uid, onEvent)`, the run's Server-Sent Events; `batch` is the read it falls back to.
+export const batch = (uid) => through(() => deckBatchesApi.batch(uid), SURFACES.batch.issue);
+export const cancelBatch = (uid) => through(() => deckBatchesApi.cancel(uid), SURFACES.cancelBatch.issue);
 /** D1503 (#3754): each grid element's models and the pick its next run uses (`GET /api/decks/:id/element-models`). */
 export const elementModels = (deckId) => through(() => deckElementModelsApi.read(deckId), SURFACES.elementModels.issue);
 export const areasQuote = off('areasQuote');
@@ -188,9 +182,19 @@ export const figures = (deckId) => through(() => deckFiguresApi.list(deckId), SU
 export const deckUsage = off('deckUsage');
 export const arrange = off('arrange');
 export const imageEdit = off('imageEdit');
-export const elementsLibrary = off('elementsLibrary');
+/**
+ * D1541 (#3779): the elements library and a page of icons for the pd28
+ * panel, in one answer: `{ licence, decor_max, shapes, dividers, textures,
+ * generate, icons: { total, offset, items } }`.
+ */
+export const elementsLibrary = (opts = {}) => through(() => Promise.all([deckElementsApi.library(), deckElementsApi.icons(opts)]).then(([lib, page]) => ({ ...lib, icons: { total: page?.total ?? 0, offset: page?.offset ?? 0, items: page?.icons ?? [], licence: page?.licence ?? null } })), SURFACES.elementsLibrary.issue);
 export const diagrams = off('diagrams');
-export const ventureElements = off('ventureElements');
+/**
+ * D1543 (#3781): the venture-record elements, from records with their Source and grade, no model.
+ * `ventureElements(deckId, element, opts)` reads one (`GET /api/decks/:id/venture-elements/:element`), refused by its gate;
+ * `ventureElements(deckId, null, opts)` reads them all for the one-click run, each placed or left out.
+ */
+export const ventureElements = (deckId, element, opts) => through(() => (element ? deckVentureElementsApi.element(deckId, element, opts) : deckVentureElementsApi.list(deckId, opts)), SURFACES.ventureElements.issue);
 export const templates = off('templates');
 export const myTemplates = off('myTemplates');
 export const saveAsTemplate = off('saveAsTemplate');
@@ -235,6 +239,13 @@ export const retryFailed = off('retryFailed');
 export const unseenBatches = off('unseenBatches');
 export const markSeen = off('markSeen');
 export const setDeckSource = off('setDeckSource');
+
+/**
+ * #4134: the rows whose route is on main, each answering through its real client, never unavailable by
+ * default. Derived, never listed: every row whose method above is not `off(...)`, in SURFACES order.
+ * pitch_v2_adapter_d1604 holds each one to a `through(() => <client>…)` body.
+ */
+export const SWAPPED = Object.freeze(Object.keys(SURFACES).filter((name) => !OFF.has(name)));
 
 /** Synchronous: whether a surface is on, for a menu that greys its item before any read. */
 export const availability = (name) => (SURFACES[name] && !SWAPPED.includes(name) ? unavailable(SURFACES[name].issue) : null);

@@ -24,6 +24,8 @@ import {
   IDLE_MS, MAX_WAIT_MS, clockOf, createAutosave, idbStore, keyOf, mergeDraft, offlineLine, restoreLine, restoreOffer,
 } from '../src/pages/raise/pitch/deckAutosave.js';
 import { STILL_CHARGED, saveChip } from '../src/pages/raise/pitch/deckV2Model.js';
+import * as adapter from '../src/pages/raise/pitch/deckV2Adapter.js';
+import * as gridOps from '../src/pages/raise/pitch/gridOps.js';
 import { deckDraftApi } from '../src/lib/api/deckDraft.js';
 import { CARD, DECK, mountEditor } from './_pitch_editor_mount.mjs';
 
@@ -504,7 +506,12 @@ test('4. a 409 opens the conflict view: Your version and Their version, then Kee
   } finally { d.restore(); }
 });
 
-test('the seam and the sources: history is swapped without through(), the editor reads it, and no interim line is left', () => {
+test('the seam and the sources: history is swapped without through(), the editor reads it, and no interim line is left', async () => {
+  assert.deepEqual(await adapter.history(), { available: true, value: gridOps });
+  assert.equal(adapter.availability('history'), null);
+  const server = { server: { uid: 'c1', rev: 7 } };
+  const refusal = await adapter.through(async () => { throw Object.assign(new Error('Changed in another tab'), { status: 409, code: 'draft_conflict', data: server }); }, 3751);
+  assert.deepEqual([refusal.status, refusal.code, refusal.data], [409, 'draft_conflict', server]);
   const seam = readFileSync('frontend/src/pages/raise/pitch/deckV2Adapter.js', 'utf8');
   assert.match(seam, /^export const history = async \(\) => Object\.freeze\(\{ available: true, value: gridOps \}\);$/m);
   assert.doesNotMatch(seam, /^export const history = [^\n]*through\(/m, 'no contract: history reaches no route');

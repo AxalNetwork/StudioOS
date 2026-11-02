@@ -706,6 +706,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
                 onMove={(id, grid) => { edit({ type: 'moveArea', index: sel, id, grid }, { label: 'Move block', coalesce: `move:${cardUid(card) ?? sel}:${id}` }); presence?.edit?.(); }}
                 // D1513: a divider move (both blocks) and its overflow are each one edit, so one undo step.
                 onCard={(next, why) => { setCard(sel, next, { label: why === 'overflow' ? 'Move overflow to notes' : 'Move divider' }); setStructureNote(null); }}
+                onDecor={(item) => setCard(sel, { ...card, decor: [...(card.decor || []), item] })}
                 onAsk={ask} askOff={askOff} askLine={askLine}
                 items={items} onRefresh={() => { const r = refreshCard(card, items, charts); if (r.moved) setCard(sel, r.card, { label: 'Refresh figures' }); }} />
             )}
