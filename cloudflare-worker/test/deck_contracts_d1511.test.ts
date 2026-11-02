@@ -29,13 +29,12 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import deckGrid from '../src/routes/deck_grid.ts';
 import deckCheck from '../src/routes/deck_check.ts';
-import deckTypedValues from '../src/routes/deck_typed_values.ts';
+import deckTypedValues, { TYPED_UNITS } from '../src/routes/deck_typed_values.ts';
 import { deckModelPresets } from '../src/routes/deck_model_presets.ts';
 import deckComments from '../src/routes/deck_comments.ts';
-
-import { deckConsistency } from '../src/services/deckConsistency.ts';
 import { CONTRACTS as NAMED } from '../src/contracts/index.ts';
 import { contractErrors } from '../src/contracts/validate.ts';
+import { CONSISTENCY_RULES, deckConsistency } from '../src/services/deckConsistency.ts';
 import { LAYOUTS } from '../src/services/decks/slideModel.ts';
 import { STRUCTURES } from '../src/services/decks/structures.ts';
 import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
@@ -62,6 +61,8 @@ test('1. the validator checks types, required fields, closed objects, items, enu
   assert.deepEqual(contractErrors(s, { a: 4, b: ['k', 'l', 'm'] }), ['$.a: must be at most 3', '$.b: holds at most 2 items']);
   assert.deepEqual(contractErrors(s, { a: 0, b: ['k'] }), ['$.a: must be at least 1']);
   assert.deepEqual(contractErrors({ type: 'number' }, 3), [], 'an integer is a number');
+  assert.deepEqual(contractErrors({ type: ['integer', 'null'] }, null), [], 'a list of types is any one of them');
+  assert.deepEqual(contractErrors({ type: ['integer', 'null'] }, 'x'), ['$: must be integer or null, is string']);
   assert.deepEqual(contractErrors({ type: ['number', 'string'] }, 3), [], 'an integer is also a union number');
   assert.deepEqual(contractErrors({ type: ['object', 'null'], required: ['a'] }, null), [], 'nullable objects accept null');
   assert.deepEqual(contractErrors({ type: ['object', 'null'], required: ['a'] }, {}), ['$: missing a'], 'nullable objects still check their fields');
@@ -125,6 +126,28 @@ test('2. the grid route\'s reply matches its contract, for a deck saved before v
   const { baseline: _b, ...noBaseline } = r.body;
   assert.deepEqual(contractErrors(CONTRACTS.grid.schema, noBaseline), ['$: missing baseline']);
   assert.deepEqual(contractErrors(CONTRACTS.grid.schema, { ...r.body, aspect: '1:1' }), ['$.aspect: must be one of ["16:9","4:3"]']);
+});
+
+test('2. the deck check\'s consistency matches its contract, with a finding and with none, and the contract names every rule', () => {
+  const card = (title: string, text: string) => ({ title, blocks: [{ id: 'b1', kind: 'text', style: 'paragraph', grid: { c1: 1, c2: 12, r1: 1, r2: 6 }, text }] });
+  const found = deckConsistency([card('Traction', 'We have $1.2M ARR.'), card('Team', 'Synthetic team.'), card('Ask', 'Our ARR is $1.5M today.')]);
+  assert.ok(found.findings.length >= 1);
+  assert.deepEqual(contractErrors(CONTRACTS.consistency.schema, found), []);
+  assert.deepEqual(contractErrors(CONTRACTS.consistency.schema, deckConsistency([])), []);
+  assert.deepEqual(contractErrors(CONTRACTS.consistency.schema, deckConsistency(null)), []);
+  assert.deepEqual(CONTRACTS.consistency.schema.properties.findings.items.properties.rule.enum, [...CONSISTENCY_RULES]);
+});
+
+test('2. the typed values\' reply matches its contract, empty and with a figure and a word', async () => {
+  const db = world();
+  const empty = await get(db, '/api/decks/1/typed-values');
+  assert.equal(empty.status, 200, JSON.stringify(empty.body));
+  assert.deepEqual(contractErrors(CONTRACTS.typedTables.schema, empty.body), []);
+  db.prepare("INSERT INTO deck_typed_values (deck_id, project_id, key, label, value_num, value_text, unit, typed_by, typed_at) VALUES (1, 1, 'tam', 'TAM', 4200000000, NULL, 'usd', 10, '2026-11-01 10:00:00'), (1, 1, 'icp', 'Who buys', NULL, 'Finance leads', 'text', NULL, '2026-11-01 10:00:00')").run();
+  const two = await get(db, '/api/decks/1/typed-values');
+  assert.equal(two.body.values.length, 2);
+  assert.deepEqual(contractErrors(CONTRACTS.typedTables.schema, two.body), []);
+  assert.deepEqual(CONTRACTS.typedTables.schema.properties.values.items.properties.unit.enum, [...TYPED_UNITS]);
 });
 
 // ── 3. The adapter's swapped methods ─────────────────────────────────────

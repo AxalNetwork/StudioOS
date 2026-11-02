@@ -19,7 +19,9 @@
  * WHO. `projectOwned`, as every deck route: a search reads (the founder, an
  * accepted member, an admin); indexing writes (`write: true`).
  *
- * Mounted in index.ts BEFORE `decks`, beside the other /api/decks routers.
+ * Mounts itself (#4105): its `mount` export puts it ahead of `decks`, whose
+ * `/:id` routes would otherwise answer `/quotes/…`, beside the other
+ * /api/decks routers that index.ts mounts.
  */
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
@@ -27,6 +29,8 @@ import { requireAuth } from '../auth';
 import { projectOwned } from '../middleware/projectContentAccess';
 import { refuse } from '../util/refusal';
 import { defaultDeps, indexProjectQuotes, retrieveQuotes } from '../services/decks/quoteRetrieval';
+import type { RouteMount } from '../util/routeRegistry';
+import decks from './decks';
 
 const deckQuotes = new Hono<{ Bindings: Env }>();
 
@@ -69,3 +73,6 @@ deckQuotes.post('/quotes/index', async (c) => {
 });
 
 export default deckQuotes;
+
+/** #4105: `/api/decks`, before `decks` so its `/:id` routes cannot answer `/quotes/search` or `/quotes/index`. */
+export const mount: RouteMount = { path: '/api/decks', router: deckQuotes, before: [decks] };

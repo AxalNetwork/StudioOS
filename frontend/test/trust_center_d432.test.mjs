@@ -34,13 +34,14 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { readRouteMap } from '../../scripts/lib/routeMap.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const PAGE = read('frontend/src/pages/TrustCenterPage.jsx');
 const CODE = codeOnly(PAGE);
 const API = codeOnly(read('frontend/src/lib/api.js'));
 const WORKER = codeOnly(read('cloudflare-worker/src/routes/trust.ts'));
-const ROUTE_MAP = read('documentation/architecture/ROUTE_MAP.md');
+const ROUTE_MAP = readRouteMap();
 
 function slice(src, from, to) {
   const a = src.indexOf(from);

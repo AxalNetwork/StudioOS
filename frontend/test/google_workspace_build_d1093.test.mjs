@@ -35,7 +35,7 @@ test('each client call names its route and the venture, and sends only the ventu
 });
 
 test('the client is re-exported by one line in api.js, and the Worker serves its routes', () => {
-  assert.match(readFileSync('frontend/src/lib/api.js', 'utf8'), /^export \* from '\.\/api\/googleWorkspaceBuild\.js';$/m);
+  assert.match(readFileSync('frontend/src/lib/apiModules.generated.js', 'utf8'), /^export \* from '\.\/api\/googleWorkspaceBuild\.js';$/m);
   const routes = readFileSync('cloudflare-worker/src/routes/build_google.ts', 'utf8');
   for (const r of [`build.get('/',`, `build.post('/sync',`, 'build.post(`/proposals/:id/${verb}`']) assert.ok(routes.includes(r), r);
   assert.match(readFileSync('cloudflare-worker/src/index.ts', 'utf8'), /app\.route\('\/api\/cycles\/build\/google', buildGoogleRoutes\);\napp\.route\('\/api\/cycles\/build', cycleBuildRoutes\);/);

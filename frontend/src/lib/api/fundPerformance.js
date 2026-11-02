@@ -1,3 +1,4 @@
+/** D627: fund performance reads (`/api/fund-performance`), with D1158's positions, quarterly history and a position's fund. */
 import { request } from '../api.js';
 export const fundPerformanceApi = {
   list: () => request('/fund-performance'),
