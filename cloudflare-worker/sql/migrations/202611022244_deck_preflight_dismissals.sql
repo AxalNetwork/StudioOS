@@ -7,9 +7,10 @@
 -- here: `routes/deck_preflight.ts` refuses it with 422. A new version has its
 -- own rows, so it starts clean.
 --
--- Additive only: one new table, no existing table changes.
+-- Additive only: one new table, no existing table changes. A row goes with
+-- its deck version (ON DELETE CASCADE, D1508).
 CREATE TABLE IF NOT EXISTS deck_preflight_dismissals (
-  deck_id      INTEGER NOT NULL,
+  deck_id      INTEGER NOT NULL REFERENCES pitch_decks(id) ON DELETE CASCADE,
   version      INTEGER NOT NULL,
   finding_id   TEXT    NOT NULL,
   dismissed_by INTEGER NOT NULL,
