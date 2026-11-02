@@ -330,6 +330,10 @@ const STREAM_ID = /^[a-f0-9]{32}$/i;
 /** The one address an item's uploaded file plays from: D561's gated route for that item. */
 export const itemStreamPath = (uid) => `/api/learning/items/${encodeURIComponent(clean(uid))}/video`;
 
+/** #4176 (D4176): the words the integrated canvas gives a Stream video that is not ready. */
+export const STREAM_PROCESSING = 'This video is still processing.';
+export const STREAM_FAILED = 'This video could not be processed. Ask HQ to upload it again.';
+
 /**
  * How a video item plays here. `{ src, embed: true }` is an iframe in the
  * platform's own embed form; `{ src, embed: false }` is an uploaded file in
@@ -349,9 +353,27 @@ export const itemStreamPath = (uid) => `/api/learning/items/${encodeURIComponent
  *     `player.vimeo.com/video/<id>`;
  *   - Cloudflare Stream (`<customer>.cloudflarestream.com/<id>`,
  *     `videodelivery.net/<id>`) → the `iframe` player for that id.
+ *
+ * Before all of these (#4176, D4176): a ready Stream video the item read sent
+ * in `video_stream` plays in Stream's own iframe, from its signed URL (minted
+ * after the access check); one still processing or failed says so in the
+ * canvas's words (`STREAM_PROCESSING`, `STREAM_FAILED`).
  */
 export function videoPlayback(item) {
   if (!item || item.kind !== 'video') return null;
+  const vs = item.video_stream;
+  if (vs && vs.state === 'ready') {
+    const iframe = clean(vs.iframe_url);
+    let u = null;
+    try { u = new URL(iframe); } catch { u = null; }
+    // The player only embeds Stream's own hosts.
+    if (u && u.protocol === 'https:' && (/^customer-[a-z0-9]+\.cloudflarestream\.com$/.test(u.hostname) || u.hostname === 'iframe.videodelivery.net')) {
+      return { src: iframe, embed: true, stream: { hls: vs.hls_url || null, poster: vs.poster_url || null, captions: Array.isArray(vs.captions) ? vs.captions : [], duration: vs.duration_seconds ?? null } };
+    }
+    return { reason: 'The Stream address sent with this video is not Stream\'s own, so it is not played here.' };
+  }
+  if (vs && vs.state === 'processing') return { reason: STREAM_PROCESSING };
+  if (vs && vs.state === 'error') return { reason: STREAM_FAILED };
   const stream = clean(item.video_stream_url);
   if (stream) {
     // A query string (a version, say) may follow; the path is what decides.
