@@ -569,6 +569,8 @@ IC creation; calendar reads, including the token subscription, remain available
 on every plan. Studio/All studios are separate read-only Admin/Super Admin
 scopes with explicit availability; personal ownership and deal-party gates
 still govern every sync, push and export.
+D4154 C1 (#4196): each scoped item also carries `owner`, `company`, `where`,
+`open_href` and, on `scope=all`, `studio`; `can` stays all false.
 
 D1231: `kyb_admin.ts` mounts at `/api/kyc/businesses` before `kyc.ts`.
 The admin queue and case reads keep sensitive fields masked; each showing and
