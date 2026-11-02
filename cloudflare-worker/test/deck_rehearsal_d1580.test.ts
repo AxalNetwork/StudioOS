@@ -157,6 +157,19 @@ function recording(over: Record<string, string> = {}) {
   return fd;
 }
 
+test('3. deleting a deck removes only its own rehearsal reports', () => {
+  const db = new DatabaseSync(':memory:');
+  try {
+    db.exec('PRAGMA foreign_keys = ON; CREATE TABLE pitch_decks (id INTEGER PRIMARY KEY); INSERT INTO pitch_decks VALUES (1), (2);');
+    db.exec(readFileSync(resolve(M, '743_deck_rehearsals.sql'), 'utf8'));
+    const insert = db.prepare('INSERT INTO deck_rehearsals (uid, deck_id, project_id, user_id, pitch_seconds, duration_ms) VALUES (?, ?, 7, 1, 120, 1000)');
+    insert.run('deleted-deck-report', 1);
+    insert.run('other-deck-report', 2);
+    db.exec('DELETE FROM pitch_decks WHERE id = 1');
+    assert.deepEqual(db.prepare('SELECT uid FROM deck_rehearsals').all().map((r: any) => r.uid), ['other-deck-report']);
+  } finally { db.close(); }
+});
+
 test('3. the rail option is registered on the pitch deck page as a transcription', () => {
   const rows = FOUNDER_OPTIONS.filter((o: any) => o.key === REHEARSE_OPTION);
   assert.equal(rows.length, 1);

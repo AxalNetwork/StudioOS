@@ -95,7 +95,7 @@ test('on the real Worker, the order-sensitive deck routers mount just above `dec
   // No pinned total (#4134): every PR that adds a router used to bump one
   // number here, so any two of them conflicted. The total is derived instead —
   // each `app.route(` line in index.ts, plus each registered descriptor — and
-  // no router answers twice on the same path.
+  // no router answers twice on the same path. D1541's deckElements is one of those lines.
   const index = readFileSync(resolve(ROOT, 'cloudflare-worker/src/index.ts'), 'utf8');
   const handLines = [...index.matchAll(/^app\.route\(/gm)].length;
   const planned = planMounts(ROUTE_MODULES);

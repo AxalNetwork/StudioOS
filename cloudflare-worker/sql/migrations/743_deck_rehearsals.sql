@@ -12,7 +12,7 @@
 CREATE TABLE IF NOT EXISTS deck_rehearsals (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   uid TEXT NOT NULL UNIQUE,
-  deck_id INTEGER NOT NULL,
+  deck_id INTEGER NOT NULL REFERENCES pitch_decks(id) ON DELETE CASCADE,
   project_id INTEGER NOT NULL,
   user_id INTEGER NOT NULL,
   pitch_seconds INTEGER NOT NULL CHECK (pitch_seconds IN (120, 180, 300)),
