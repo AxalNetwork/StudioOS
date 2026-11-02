@@ -835,7 +835,7 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
       <div className="flex items-center gap-2">
         {shareMode ? (
           <button type="button" onClick={() => setCardView((v) => !v)} aria-pressed={cardView}
-            className="inline-flex min-h-[44px] items-center bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-medium px-3 rounded-lg dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+            className="inline-flex min-h-[44px] items-center bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-medium px-3 rounded-lg dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
             data-testid="share-view-toggle">{cardView ? SLIDE_VIEW : CARD_VIEW}</button>
         ) : null}
         {exporting && exportProgress && (
