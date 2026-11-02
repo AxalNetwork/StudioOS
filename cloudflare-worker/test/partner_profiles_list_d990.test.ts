@@ -308,7 +308,12 @@ test('the counts: waiting and its bands leave Drafts out, the weekly series coun
   assert.ok(weeks.every((w: any) => w.verified === null && w.rejected === null), 'part 2\'s figures read as numbers');
   assert.equal(r.body.weekly.verified_available, false);
   assert.ok(weeks.every((w: any) => new Date(w.week_start + 'T00:00:00Z').getUTCDay() === 1), 'a week does not start on Monday');
-  assert.ok(weeks.at(-1).captured >= 1, 'this week\'s capture is missing');
+  // The newest capture (2 hours ago) counts in the week it fell in. That is this week except
+  // from 00:00 to 02:00 UTC on a Monday, when it is last week's, so the week is found from its date.
+  const newest = new Date(NOW - 2 * 3_600_000);
+  const monday = new Date(Date.UTC(newest.getUTCFullYear(), newest.getUTCMonth(), newest.getUTCDate() - ((newest.getUTCDay() + 6) % 7)));
+  const held = weeks.find((w: any) => w.week_start === monday.toISOString().slice(0, 10));
+  assert.ok(held && held.captured >= 1, 'the newest capture\'s week is missing it');
   // An unreadable store costs its block, not the others, and never reads as zero.
   const broken: any = { DB: { prepare: () => { throw new Error('D1_ERROR: no such table'); } } };
   const b = await partnerProfileCounts(broken);
