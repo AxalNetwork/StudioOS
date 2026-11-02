@@ -13,7 +13,8 @@
  *   6. a crash between steps repeats nothing, and `rebuild` restores from D1;
  *   7. a long run keeps its hold alive past the five-minute rule;
  *   8. the events carry what pd2b draws: card, element, model or free, state,
- *      seconds, cost and the running charged-of-held.
+ *      seconds, cost and the running charged-of-held;
+ *   9. each step keeps its request and what it wrote.
  * Plus the router: a step under `parentHold` takes no hold of its own.
  */
 import test from 'node:test';
@@ -269,6 +270,22 @@ for (const [name, make] of IMPLEMENTATIONS) {
       assert.equal(done[2].model_label, FREE_LABEL, 'No model · free');
       assert.ok(done.every((e) => typeof e.seconds === 'number'));
       assert.deepEqual(events.at(-1), { type: 'batch_done', batch_uid: a.uid, state: 'done', charged_microusd: 2000, held_microusd: 2000 });
+    } finally { f.db.close(); }
+  });
+
+  test(`${name}: each step keeps its request and what it wrote, so a closed tab's proposals wait`, async () => {
+    // Mutation checked: the step's update not writing `result` → the proposals read back null.
+    const f = world();
+    try {
+      const rt = make({ DB: f.DB }, executorFor(f.db).execute, []);
+      const lines = plan(2).map((l, i) => ({ ...l, input: { text: `area ${i} brief` } }));
+      const a = await admit(rt, 'key-keep-0001', lines);
+      if (!a.ok) return assert.fail('admit');
+      await rt.startBatch(a.uid);
+      const st = (await rt.status(a.uid))!;
+      assert.deepEqual(st.steps.map((s) => [JSON.parse(s.input!), JSON.parse(s.result!)]), [[{ text: 'area 0 brief' }, { text: 'area 0' }], [{ text: 'area 1 brief' }, { text: 'area 1' }]]);
+      const big = await admit(rt, 'key-keep-0002', [{ ...plan(1)[0], input: { text: 'x'.repeat(20_000) } }]);
+      assert.deepEqual(big.ok ? null : big.refusal, 'step_input_too_large');
     } finally { f.db.close(); }
   });
 }

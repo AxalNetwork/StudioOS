@@ -43,6 +43,8 @@ import { modelById } from '../ai/catalogue';
 
 export const FREE_LABEL = 'No model · free';
 export const MAX_LINES = 400;
+export const MAX_INPUT_CHARS = 16_000;
+export const MAX_RESULT_CHARS = 64_000;
 
 export type RunClass = 'areas' | 'deck_build';
 export type PlanLine = {
@@ -54,6 +56,8 @@ export type PlanLine = {
   task?: string | null;
   model?: string | null;
   quote_microusd: number;
+  /** The step's request, kept as JSON (at most `MAX_INPUT_CHARS`): what the executor sends the model. */
+  input?: Record<string, unknown> | null;
 };
 export type AdmitInput = {
   deckId: number; projectId: number; userId: number; cls: RunClass;
@@ -69,7 +73,7 @@ export type StepRow = {
   batch_uid: string; seq: number; card_uid: string | null; area_id: string | null; element: string; kind: string;
   task: string | null; model: string | null; state: StepState; quote_microusd: number; charged_microusd: number;
   model_used: string | null; fallback_used: number; usage_log_id: number | null; error_code: string | null;
-  started_at: string | null; ended_at: string | null;
+  started_at: string | null; ended_at: string | null; input: string | null; result: string | null;
 };
 export type BatchRow = {
   uid: string; deck_id: number; project_id: number; class: RunClass; state: BatchState; quote_uid: string | null;
@@ -107,6 +111,12 @@ const ACTIVE: readonly BatchState[] = ['queued', 'running', 'cancelling'];
 const nowSql = () => new Date().toISOString().slice(0, 19).replace('T', ' ');
 const KEY = /^[A-Za-z0-9._:-]{8,120}$/;
 
+/** What a done step wrote, as JSON; null when it wrote nothing or more than a run keeps. */
+function resultJson(r: StepResult): string | null {
+  if (!r.ok || r.variant === undefined) return null;
+  try { const s = JSON.stringify(r.variant); return s.length <= MAX_RESULT_CHARS ? s : null; } catch { return null; }
+}
+
 export function quoteOf(lines: readonly PlanLine[]): number {
   return lines.reduce((s, l) => s + Math.max(0, Math.ceil(Number(l.quote_microusd) || 0)), 0);
 }
@@ -141,6 +151,8 @@ export class D1GenRuntime implements DeckGenRuntime {
     const lines = Array.isArray(input.lines) ? input.lines : [];
     if (!lines.length) return { ok: false, refusal: 'empty_plan', message: 'Nothing to generate.' };
     if (lines.length > MAX_LINES) return { ok: false, refusal: 'plan_too_large', message: `A run holds at most ${MAX_LINES} steps.` };
+    const inputs = lines.map((l) => (l.input == null ? null : JSON.stringify(l.input)));
+    if (inputs.some((x) => x !== null && x.length > MAX_INPUT_CHARS)) return { ok: false, refusal: 'step_input_too_large', message: 'A step asks for more than a run can keep.' };
     // A retried request is the same run: one hold, one charge.
     const same = await this.env.DB.prepare('SELECT * FROM deck_area_batches WHERE idem_key = ?1').bind(input.idemKey).first<BatchRow>();
     if (same) {
@@ -166,9 +178,9 @@ export class D1GenRuntime implements DeckGenRuntime {
           AND NOT EXISTS (SELECT 1 FROM deck_area_batches WHERE idem_key = ?8)`,
     ).bind(uid, input.deckId, input.projectId, input.cls, input.quoteUid ?? null, quote, reservation?.uid ?? null, input.idemKey, input.userId);
     const insertSteps = lines.map((l, seq) => this.env.DB.prepare(
-      `INSERT INTO deck_area_batch_steps (batch_uid, seq, card_uid, area_id, element, kind, task, model, quote_microusd)
-       SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9 WHERE EXISTS (SELECT 1 FROM deck_area_batches WHERE uid = ?1)`,
-    ).bind(uid, seq, l.card_uid ?? null, l.area_id ?? null, String(l.element), String(l.kind), l.task ?? null, l.model ?? null, Math.max(0, Math.ceil(Number(l.quote_microusd) || 0))));
+      `INSERT INTO deck_area_batch_steps (batch_uid, seq, card_uid, area_id, element, kind, task, model, quote_microusd, input)
+       SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10 WHERE EXISTS (SELECT 1 FROM deck_area_batches WHERE uid = ?1)`,
+    ).bind(uid, seq, l.card_uid ?? null, l.area_id ?? null, String(l.element), String(l.kind), l.task ?? null, l.model ?? null, Math.max(0, Math.ceil(Number(l.quote_microusd) || 0)), inputs[seq]));
     const wrote = await this.env.DB.batch([insertRun, ...insertSteps]).catch(() => null);
     if (!wrote || !Number(wrote[0]?.meta?.changes)) {
       // Another request with the same key won the race: that run is this one.
@@ -210,9 +222,9 @@ export class D1GenRuntime implements DeckGenRuntime {
       // Never more than the step's line: the quote stays the settled maximum.
       const charged = Math.min(Math.max(0, Math.ceil(Number(r.charged_microusd) || 0)), Number(step.quote_microusd));
       await this.env.DB.prepare(
-        `UPDATE deck_area_batch_steps SET state = ?3, charged_microusd = ?4, model_used = ?5, fallback_used = ?6, usage_log_id = ?7, error_code = ?8, ended_at = ?9
+        `UPDATE deck_area_batch_steps SET state = ?3, charged_microusd = ?4, model_used = ?5, fallback_used = ?6, usage_log_id = ?7, error_code = ?8, ended_at = ?9, result = ?10
           WHERE batch_uid = ?1 AND seq = ?2 AND state = 'running'`,
-      ).bind(uid, step.seq, r.ok ? 'done' : 'failed', charged, r.model_used ?? step.model, r.fallback_used ? 1 : 0, r.usage_log_id ?? null, r.ok ? null : (r.error_code ?? 'step_failed'), nowSql()).run();
+      ).bind(uid, step.seq, r.ok ? 'done' : 'failed', charged, r.model_used ?? step.model, r.fallback_used ? 1 : 0, r.usage_log_id ?? null, r.ok ? null : (r.error_code ?? 'step_failed'), nowSql(), resultJson(r)).run();
       const seconds = Math.round((Date.now() - started) / 100) / 10;
       const so = await this.chargedSoFar(uid);
       const base = { batch_uid: uid, seq: step.seq, card_uid: step.card_uid, area_id: step.area_id, element: step.element, model_label: modelLabel(r.model_used ?? step.model), seconds, cost_microusd: charged, charged_microusd: so, held_microusd: Number(b.quote_microusd) };
