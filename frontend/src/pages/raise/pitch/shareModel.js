@@ -42,8 +42,11 @@ export const INCLUDE_ROWS = [
   { key: 'sources', label: 'Sources appendix' },
   { key: 'notes', label: 'Speaker notes' },
   { key: 'bands', label: 'Scorecard and Product-market fit bands' },
+  // D1507 (#3758): both off by default (pd9r). The cap table goes out as its totals only, never a holder's row.
+  { key: 'cap_table', label: 'Cap-table totals' },
+  { key: 'team_photos', label: 'Team photos' },
 ];
-export const DEFAULT_INCLUDE = Object.freeze({ figures: true, sources: true, notes: false, bands: false });
+export const DEFAULT_INCLUDE = Object.freeze({ figures: true, sources: true, notes: false, bands: false, cap_table: false, team_photos: false });
 
 /** The canvas's defaults: 14 days, Download and Forwarding off, the NDA on. */
 export const DEFAULT_SHARE = Object.freeze({

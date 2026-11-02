@@ -222,12 +222,15 @@ test('every member call of run() passes rail context; system callers are an expl
   for (const [key, why] of Object.entries(SYSTEM)) assert.ok(why.length > 40, `${key} needs its reason`);
 });
 
-test('D1496 part 2 (#3842): the team agent run path calls run() once, with rail context and the agent named', () => {
-  // Mutation checked: `rail` dropped from agentRun.ts's options → the listing reports it and this case fails.
-  const agent = runCalls().filter((c) => c.where.startsWith('services/agents/agentRun.ts:'));
+test('D1496 part 2 (#3842) and #3846: every run() reached from services/agents/ passes rail; agentRun.ts calls it once, with the agent and its run key', () => {
+  // Mutations checked: `rail` dropped from agentRun.ts's options, or the idempotency key dropped → this case fails.
+  const fromAgents = runCalls().filter((c) => c.where.startsWith('services/agents/'));
+  assert.ok(fromAgents.length >= 1);
+  for (const c of fromAgents) assert.match(c.options, /\brail\s*[:,]|\brail\s*\}/, `${c.where} runs without rail`);
+  const agent = fromAgents.filter((c) => c.where.startsWith('services/agents/agentRun.ts:'));
   assert.equal(agent.length, 1, 'one run() call');
   const src = readFileSync(join(SRC, 'services/agents/agentRun.ts'), 'utf8');
-  assert.match(agent[0].options, /^run\(env, \{ \.\.\.c\.opts, rail: c\.rail, surface: c\.surface \}\)$/);
+  assert.match(agent[0].options, /^run\(env, \{ \.\.\.c\.opts, rail: c\.rail, surface: c\.surface, idempotencyKey: holdKeyOf\(runKey\), executionId: runUid \}\)$/);
   assert.match(src, /const rail: RailContext = \{ page: row\.pageKey, option: row\.optionKey, record: input\.record \?\? null \}/);
   assert.match(src, /agentId: a\.id,\s*agentRole: a\.role_key/);
 });
