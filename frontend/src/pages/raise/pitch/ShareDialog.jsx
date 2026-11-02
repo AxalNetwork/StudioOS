@@ -5,6 +5,7 @@ import { cardStatus } from './deckV2Adapter';
 import { reportError } from '../../../lib/log';
 import { Lightbox } from '../../../ui';
 import InvestorLinksTable from './InvestorLinksTable.jsx';
+import PublishPanel from './PublishPanel.jsx';
 import { preShareGate } from './commentsModel';
 import { statusLabel } from './cardStatusModel';
 import {
@@ -16,7 +17,8 @@ import {
  * D902 (#2681) — the share dialog (PD18), from Share in the editor and from
  * "New link" on Share & analytics. It writes through the one link writer,
  * `POST /api/cycles/raise/deck-links`, and says what it writes before it
- * writes it. The link is shown once, with Copy.
+ * writes it. The link is shown once, with Copy. D1564 (#3811): under it,
+ * the one publish control (`PublishPanel.jsx`).
  *
  * D1570 (#3817): Share opens a single gate. Before the link is written, the
  * pre-share confirm (pd34's, which pd33's inset joins) reads who must approve
@@ -191,6 +193,8 @@ export default function ShareDialog({ projectId, deck, onClose, onCreated, onRev
             </div>
           ) : <p className={`m-0 ${MUTED}`}>The link was made, but its address was not returned. Withdraw it from Share &amp; analytics and make another.</p>}
           <p className={`m-0 ${MUTED}`}>{SHOWN_ONCE}</p>
+          {/* D1564 (#3811): publishing this link as a web page lives here only, never in the header. */}
+          <PublishPanel deck={deck} made={made} />
         </div>
       ) : (
         <div className="flex flex-col gap-3.5">

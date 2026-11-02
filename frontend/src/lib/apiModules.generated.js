@@ -91,6 +91,7 @@ export * from './api/deckImageEdits.js';
 export * from './api/deckImages.js';
 export * from './api/deckInvestorLinks.js';
 export * from './api/deckModelPresets.js';
+export * from './api/deckPublish.js';
 export * from './api/deckRehearsals.js';
 export * from './api/deckRemix.js';
 export * from './api/deckReports.js';
