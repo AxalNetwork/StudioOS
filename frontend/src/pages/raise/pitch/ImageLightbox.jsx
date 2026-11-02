@@ -7,7 +7,7 @@ import useAssistMode from '../../../hooks/useAssistMode';
 import { useRailOption } from '../../../ui/railCrumbs';
 import { aiTokens, refusalOf } from './newDeckModel';
 import {
-  ALT_HELP, ASPECT_OPTIONS, CONSENT_LINE, COUNT_OPTIONS, FIGURES_LINE, NO_REFERENCES, OVERLAY_OPTIONS, PALETTE_OPTIONS, REAL_PERSON,
+  ALT_HELP, ASPECT_OPTIONS, CONSENT_LINE, COUNT_OPTIONS, FIGURES_LINE, NO_REFERENCES, TAKES_REFERENCES, takesReferences, OVERLAY_OPTIONS, PALETTE_OPTIONS, REAL_PERSON,
   STYLE_OPTIONS, USE_LINES, USE_OPTIONS, askBody, contrastLine, costLine, defaultDescription, imageTag, keepLabel, overlayStyle, placeImage,
 } from './imageModel';
 import { COST, EYE, FIELD, GHOST, INK, LAV, MUTED, PRIMARY, RefusalLine } from './AssistParts';
@@ -242,7 +242,10 @@ export default function ImageLightbox({ deckId, cardIndex, card, theme, model, i
                 ))}
               </fieldset>
             )) : <span className={MUTED}>No data points are recorded yet.</span>}
-            <span className={`${MUTED} opacity-70`} data-testid="pitch-image-no-references">{NO_REFERENCES}</span>
+            {/* D1544 (#3784): the references line follows the quoted model, not a fixed one. */}
+            {takesReferences(quote?.model)
+              ? <span className={MUTED} data-testid="pitch-image-takes-references">{TAKES_REFERENCES}</span>
+              : <span className={`${MUTED} opacity-70`} data-testid="pitch-image-no-references">{NO_REFERENCES}</span>}
           </div>
         ) : null}
         {options ? (

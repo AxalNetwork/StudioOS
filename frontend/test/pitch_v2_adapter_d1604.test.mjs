@@ -27,6 +27,7 @@ import { deckRemixApi } from '../src/lib/api/deckRemix.js';
 import { deckTypedValuesApi } from '../src/lib/api/deckTypedValues.js';
 import { deckCheckApi } from '../src/lib/api/deckCheck.js';
 import { deckElementModelsApi } from '../src/lib/api/deckElementModels.js';
+import { deckRehearsalsApi } from '../src/lib/api/deckRehearsals.js';
 import { deckFiguresApi } from '../src/lib/api/deckFigures.js';
 import { deckCommentsApi } from '../src/lib/api/deckComments.js';
 import { deckBatchesApi, parseSse } from '../src/lib/api/deckBatches.js';
@@ -43,15 +44,20 @@ test('every adapter method answers unavailable, with the reason and the issue th
   // swapped row back to `off(...)` (or wire an off row) and the two sets part.
   const body = (src, name) => (src.match(new RegExp(`^export const ${name} = ([^\\n]*)$`, 'm')) || [])[1] || '';
   const code = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
-  const wired = methods.filter((n) => /\bthrough\(\(\) => [^\n]*deck[A-Za-z]+Api\./.test(body(code, n)));
-  assert.match(body(code, 'arrange'), /arrangeCard\(card, selection, op, opts\)/, 'arrange edits locally before the existing card save');
+  const wired = methods.filter((n) => /\bthrough\(\(\) => [^\n]*\b[a-z][A-Za-z]*Api\./.test(body(code, n)));
+  const local = methods.filter((n) =>
+    (n === 'history' && body(code, n) === 'async () => Object.freeze({ available: true, value: gridOps });')
+    || (n === 'arrange' && /arrangeCard\(card, selection, op, opts\)/.test(body(code, n))));
   const offRows = methods.filter((n) => body(code, n) === `off('${n}');`);
-  assert.deepEqual([...adapter.SWAPPED].sort(), [...wired, 'arrange'].sort(), 'SWAPPED is the client rows plus the local Arrange operation');
-  assert.deepEqual([...wired, 'arrange', ...offRows].sort(), [...methods].sort(), 'every row is a client, local Arrange, or off');
+  assert.deepEqual([...adapter.SWAPPED].sort(), [...wired, ...local].sort(), 'SWAPPED is exactly the remote and browser-local rows');
+  assert.deepEqual([...wired, ...local, ...offRows].sort(), [...methods].sort(), 'every row is remote, browser-local history or Arrange, or off(\'<row>\')');
+  assert.match(body(code, 'arrange'), /arrangeCard\(card, selection, op, opts\)/, 'arrange edits locally before the existing card save');
   for (const n of wired) assert.match(body(code, n), new RegExp(`SURFACES\\.${n}\\.issue\\);$`), `${n} keys its own row's issue`);
   // A floor, so a parser that stopped matching cannot pass on two empty lists. D1541 (#3779) elementsLibrary is one of them.
   for (const n of ['grid', 'saveCard', 'stagePlan', 'remix', 'comments', 'ventureElements', 'elementsLibrary']) assert.ok(adapter.SWAPPED.includes(n), `${n} is swapped on main`);
   const seam = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
+  // D1544 (#3784): imageVary prices an image edit through deckImageEditsApi.quote.
+  assert.match(seam, /export const imageVary = [^\n]*through\(\(\) => deckImageEditsApi\.quote\(/);
   for (const name of ['investorLinks', 'withdrawInvestorLink']) {
     assert.match(seam, new RegExp(`export const ${name} = [^\\n]*through\\(\\(\\) => deckInvestorLinksApi\\.${name}\\(`), `${name} is wired to its client`);
     assert.equal(adapter.availability(name), null, `${name} is on`);
@@ -146,6 +152,20 @@ test('D1538 (#3787): typedTables is swapped — it answers through deckTypedValu
   assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckTypedValues\)/, 'the route is mounted');
 });
 
+test('D1580 (#3827): rehearse is swapped — it answers through deckRehearsalsApi.list, and a refusal is never an empty list', async () => {
+  // Mutation checked: rehearse left as off('rehearse') → the available answer fails; the issue key changed → the 404 answer fails.
+  const real = deckRehearsalsApi.list;
+  try {
+    deckRehearsalsApi.list = async (id) => ({ deck_id: id, rehearsals: [] });
+    assert.deepEqual(await adapter.rehearse(7), { available: true, value: { deck_id: 7, rehearsals: [] } });
+    deckRehearsalsApi.list = async () => { throw Object.assign(new Error('Not found'), { status: 404 }); };
+    assert.deepEqual(await adapter.rehearse(7), { available: false, reason: NOT_ON, issue: 3827 });
+    deckRehearsalsApi.list = async () => { throw Object.assign(new Error('The rehearsals could not be read.'), { status: 500 }); };
+    assert.equal((await adapter.rehearse(7)).unreadable, true, 'unreadable, never an empty list');
+  } finally { deckRehearsalsApi.list = real; }
+  assert.equal(adapter.availability('rehearse'), null);
+});
+
 test('D1523 (#3775): figures is swapped — it answers through deckFiguresApi.list, and a refusal is never a row of zeros', async () => {
   // Mutation checked: figures left as off('figures') → the available answer fails; the issue key changed → the 404 answer fails.
   const real = deckFiguresApi.list;
@@ -189,7 +209,7 @@ test('the adapter keys each surface to the plan’s issue (§6.2)', () => {
   const want = {
     grid: 3749, saveCard: 3751, discardDraft: 3751, draft: 3751, batch: 3753, cancelBatch: 3753, elementModels: 3754,
     areasQuote: 3764, areasGenerate: 3764, history: 3767, narrativeOutline: 3768, instruct: 3773,
-    stagePlan: 3774, figures: 3775, deckUsage: 3776, arrange: 3777, imageEdit: 3778, elementsLibrary: 3779,
+    stagePlan: 3774, figures: 3775, deckUsage: 3776, arrange: 3777, imageEdit: 3778, imageVary: 3784, elementsLibrary: 3779,
     diagrams: 3780, ventureElements: 3781, templates: 3782, myTemplates: 3782, saveAsTemplate: 3782, typedTables: 3787,
     media: 3788, presets: 3796, orgLocks: 3786, critique: 3799, remix: 3800, consistency: 3802, deckActions: 3808,
     brandLocks: 3819, pptxImport: 3809, investorLinks: 3812, withdrawInvestorLink: 3812, comments: 3817, slideAnalytics: 3820,
@@ -208,11 +228,11 @@ test('the seam reaches no network, and no client method exists for a route that 
   const src = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
   assert.doesNotMatch(src, /request\(|fetch\(|XMLHttpRequest/);
   // A swapped row's client is the only `lib/api` the seam may import (#4134: a rule, not a list). Each import names
-  // one `deck<Name>Api` from `lib/api/deck<Name>.js`, the imports stand in file-name order (so two swaps add lines
+  // one `<name>Api` from `lib/api/<name>.js` (a deck client, or #3881's `dataRoomApi`), the imports stand in file-name order (so two swaps add lines
   // at different places), and every one is used by a swapped row's body. Mutation checked: an unused client import,
   // or two imports out of order, fails here. D1541's `deckElements.js` is one of those lines.
-  const imports = [...src.matchAll(/^import \{ (deck[A-Za-z]+Api) \} from '\.\.\/\.\.\/\.\.\/lib\/api\/(deck[A-Za-z]+)\.js';$/gm)].map((x) => ({ name: x[1], file: x[2] }));
-  assert.equal(imports.length, [...src.matchAll(/from '([^']*lib\/api[^']*)'/g)].length, 'every lib/api import is one `import { deck<Name>Api } from .../lib/api/deck<Name>.js` line');
+  const imports = [...src.matchAll(/^import \{ ([a-z][A-Za-z]*Api) \} from '\.\.\/\.\.\/\.\.\/lib\/api\/([a-z][A-Za-z]*)\.js';$/gm)].map((x) => ({ name: x[1], file: x[2] }));
+  assert.equal(imports.length, [...src.matchAll(/from '([^']*lib\/api[^']*)'/g)].length, 'every lib/api import is one `import { <name>Api } from .../lib/api/<name>.js` line');
   assert.ok(imports.length >= 10, 'the seam imports the clients of its swapped rows');
   const files = imports.map((i) => i.file);
   assert.deepEqual(files, [...files].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())), 'the lib/api imports stand in file-name order');
@@ -239,6 +259,9 @@ test('the seam reaches no network, and no client method exists for a route that 
   // D1503 (#3754): the element models route is on main, with its client.
   assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_element_models.ts')), /deckElementModels\.get\(['"]\/:id\{\[0-9\]\+\}\/element-models['"]/);
   assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckElementModels\)/);
+  // D1580 (#3827): the rehearsals route is on main, with its client.
+  assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_rehearsals.ts')), /deckRehearsals\.get\(['"]\/:id\{\[0-9\]\+\}\/rehearsals['"]/);
+  assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckRehearsals\)/);
   // D1523 (#3775): the figures route is on main, with its client.
   assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_figures.ts')), /r\.get\(['"]\/:id\{\[0-9\]\+\}\/figures['"]/);
   // D1501 (#3751): the working copy has its routes (`/:id/draft`, `/:id/cards/:uid`) and its client.
@@ -256,7 +279,8 @@ test('the seam reaches no network, and no client method exists for a route that 
 
 test('an unavailable answer is never printed as a zero, "$0.00" or "none"', async () => {
   const money = (v) => `$${Number(v).toFixed(2)}`;
-  const off = await adapter.deckUsage('deck');
+  // D1524 (#3776) swapped deckUsage; `slideAnalytics` is still on the seam.
+  const off = await adapter.slideAnalytics('deck');
   assert.equal(adapter.shown(off, money), LATER);
   assert.equal(adapter.shown(off, () => '0'), LATER, 'the formatter never runs on an unavailable answer');
   assert.equal(adapter.shown(undefined, money), LATER);
@@ -422,7 +446,7 @@ test('D1502 (#3753): batch and cancelBatch answer through deckBatchesApi; the st
     assert.deepEqual(asked, [['batch', 'run-1'], ['cancel', 'run-1']]);
     assert.equal(adapter.availability('batch'), null);
     deckBatchesApi.cancel = async () => { throw Object.assign(new Error('Only the member who started this run can stop it.'), { status: 403 }); };
-    assert.deepEqual(await adapter.cancelBatch('run-1'), { available: false, unreadable: true, reason: 'Only the member who started this run can stop it.', issue: 3753 });
+    assert.deepEqual(await adapter.cancelBatch('run-1'), { available: false, unreadable: true, reason: 'Only the member who started this run can stop it.', issue: 3753, status: 403, data: null });
   } finally { Object.assign(deckBatchesApi, real); }
   const { events, rest } = parseSse('event: snapshot\ndata: {"state":"running"}\n\nevent: step_done\ndata: {"seq":0}\n\nevent: area_busy\ndata: {"att');
   assert.deepEqual(events, [{ event: 'snapshot', data: { state: 'running' } }, { event: 'step_done', data: { seq: 0 } }]);
