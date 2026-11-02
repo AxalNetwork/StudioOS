@@ -6,6 +6,7 @@ reply against its schema, not only that the route exists.
 
 | File | What it is |
 |---|---|
+| `deckBatch.schema.json` | `GET /api/decks/areas/batches/:uid` and `POST …/cancel` (D1502, #3753): the run, its counts and each step's row as pd2b draws it. |
 | `deckComments.schema.json` | `GET /api/decks/:id/comments` (D1570, #3817): the venture's comment threads, who is reading, the people who can be mentioned and the open count. |
 | `deckConsistency.schema.json` | `GET /api/decks/:id/check`'s `consistency` key (D1555, #3802): the free consistency rules' state and findings, or null for a reader who is not the founder. |
 | `deckDiscardDraft.schema.json` | `DELETE /api/decks/:id/draft` (D1501, #3751): ok, the deck and how many card copies were discarded. |
@@ -19,6 +20,7 @@ reply against its schema, not only that the route exists.
 | `deckRemix.schema.json` | `POST /api/decks/:id/remix` (D1553, #3800): the card's structure, the card and its layout options. |
 | `deckSaveCard.schema.json` | `PATCH /api/decks/:id/cards/:uid` (D1501, #3751): the card's working copy with its new revision. |
 | `deckStagePlan.schema.json` | `GET /api/decks/:id/stage-plan` (D1522, #3774): the keys the route adds to `stagePlan()`'s plan. |
+| `deckVentureElements.schema.json` | `GET /api/decks/:id/venture-elements` and `/venture-elements/:element` (D1543, #3781): every venture-record element placed or refused by its gate, or one placed element, with its blocks and bindings. |
 | `deckTypedTables.schema.json` | `GET /api/decks/:id/typed-values` (D1538, #3787): the deck and the venture's typed figures, graded Stated. |
 | `deckWithdrawInvestorLink.schema.json` | `POST /api/decks/:id/investor-links/:shareId/withdraw` (D1565, #3812): ok and the withdrawn link. |
 | `index.ts` | `CONTRACTS`: each adapter method with a route, its issue, its route and its schema file. The tests read the schemas; the Worker never loads one. |

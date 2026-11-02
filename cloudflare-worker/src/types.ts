@@ -464,6 +464,9 @@ export interface Env {
   // D1577 (#3824): the `DeckPresence` room, bound in all three wrangler.toml tables (the owner
   // approved its cost, decision L). Optional so a test env without it answers 503 `presence_off`.
   DECK_PRESENCE?: DurableObjectNamespace;
+  // D1502 part 2 (#3753): one room per deck that drives its generation runs, and one governor per account that throttles their steps.
+  DECK_GEN_ROOM?: DurableObjectNamespace;
+  AI_GOVERNOR?: DurableObjectNamespace;
   // Vectorize index `axal-search` (768-dim, cosine) for semantic search.
   // Optional so unit-test envs without the binding still type-check; the
   // search service no-ops gracefully when undefined.

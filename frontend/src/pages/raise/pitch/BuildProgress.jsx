@@ -19,6 +19,11 @@ import { LIVE_LATER, buildingLine, elapsedLine } from './oneClickModel';
  * The per-area rows, Stop (Esc) and "You can close this page" come with the
  * batch runtime (`deckV2Adapter.batch`, #3753); until then that line is
  * greyed "Coming later", titled with the adapter's reason.
+ *
+ * D1502 part 2 (#3753): `batch` now reads a run, but the build drawn here
+ * starts none (`POST /api/decks/generate` is still synchronous), so the line
+ * stays greyed until a route admits runs (`areasGenerate`, #3764), and its
+ * title names that route's issue.
  */
 
 const MUTED = 'text-[12.5px] leading-[1.45] text-axal-muted dark:text-gray-400';
@@ -36,7 +41,7 @@ export default function BuildProgress({ cards = null, titles = [], startedAt = n
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, [startedAt]);
-  const live = availability('batch');
+  const live = availability('batch') ?? availability('areasGenerate');
   return (
     <section className="flex flex-col gap-2.5" data-testid={testId}>
       <span className={`text-[14px] font-extrabold ${INK}`}>Building your deck</span>

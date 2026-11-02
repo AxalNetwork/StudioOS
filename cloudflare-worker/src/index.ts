@@ -256,6 +256,7 @@ import deckReview from './routes/deck_review';
 import deckSources from './routes/deck_sources';
 import deckCheck from './routes/deck_check';
 import deckGrid from './routes/deck_grid';
+import deckBatches from './routes/deck_batches';
 import deckDraft from './routes/deck_draft';
 import deckCoedit from './routes/deck_coedit';
 import deckElementModels from './routes/deck_element_models';
@@ -264,6 +265,8 @@ import deckElements from './routes/deck_elements';
 import deckStage from './routes/deck_stage';
 import deckRemix from './routes/deck_remix';
 import deckTypedValues from './routes/deck_typed_values';
+// D1543 (#3781): the venture-record elements and the logos store (migration 732).
+import deckVentureElements from './routes/deck_venture_elements';
 import deckFigures from './routes/deck_figures';
 import deckNew from './routes/deck_new';
 import deckAssist from './routes/deck_assist';
@@ -1403,6 +1406,8 @@ app.route('/api/decks', deckReview);
 app.route('/api/decks', deckCheck);
 // D1499 (#3749): The Grid of one deck version — geometry, the 17 structures and each card's areas.
 app.route('/api/decks', deckGrid);
+// D1502 part 2 (#3753): a generation run's status, its event stream, and Stop.
+app.route('/api/decks', deckBatches);
 // D1501 (#3751): a version's working copy, card by card (`/:id/cards/:uid`, `/:id/draft`), before `decks`.
 app.route('/api/decks', deckDraft);
 // D1577 (#3824): area saves (`/:id/cards/:uid/areas/:area`), single-slide restore (`/:id/restore-card`) and presence, before `decks`.
@@ -1419,6 +1424,8 @@ app.route('/api/decks', deckStage);
 app.route('/api/decks', deckRemix);
 // D1538 (#3787): the figures a founder types for a deck, Stated (`/:id/typed-values`).
 app.route('/api/decks', deckTypedValues);
+// D1543 (#3781): `/:id/venture-elements[/:element]` and `/:id/logos…`, before `decks` so its `/:id` routes cannot answer them.
+app.route('/api/decks', deckVentureElements);
 // D1523 (#3775): each figure's provenance, Linked, Stated, Uncited or Not recorded (`/:id/figures`), editor-only.
 app.route('/api/decks', deckFigures);
 // D896: `/sources` and `/:id/refresh`, before `decks` so its `GET /:id` cannot answer `/sources`.
@@ -3281,3 +3288,5 @@ export { DeckPresence } from './durable-objects/deck-presence';
 export { HqEntrypoint, BranchEntrypoint } from './rpc';
 
 export { MeetingBotRun } from './durable-objects/meeting-bot-run';
+export { DeckGenRoom } from './durable-objects/deck-gen-room';
+export { AiGovernor } from './durable-objects/ai-governor';
