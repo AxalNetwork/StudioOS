@@ -248,6 +248,7 @@ test('the layers list selects decor; its handle nudges by 8 px with "Moved 8 px"
     await m.fire(m.by('pitch-editor-decor-handle-d1'), 'onKeyDown', { key: 'ArrowRight' });
     assert.equal(m.text(m.by('pitch-editor-decor-moved')), 'Moved 8 px');
     assert.equal(m.pr(m.by('pitch-editor-decor-handle-d1')).style.left, `${(168 / 1920) * 100}%`, 'x 160 → 168');
+    assert.equal(m.pr(m.by('pitch-editor-decor-d1')).style.left, `${(168 / 1920) * 100}%`, 'the library artwork moves with its handle');
     assert.ok(m.by('pitch-editor-save'), 'held until Save');
     // d1 (x 168…264) and d2 (x 400) share rows 200…256: a marker to d2.
     assert.ok(m.walk(m.container).some((n) => m.pr(n)['data-testid'] === 'pitch-editor-spacing' && m.text(n) === '136 px'));

@@ -47,7 +47,8 @@ export async function load(url, context, nextLoad) {
     }
     // D764 — the rail's model matrix as a JSON module, the way wrangler
     // bundles an imported `.json`. Only that file, so no other JSON changes.
-    if (u.pathname.endsWith('/services/ai/railMatrix.json')) {
+    // D1541 — the deck icon set (`services/decks/iconSet.json`), the same way.
+    if (u.pathname.endsWith('/services/ai/railMatrix.json') || u.pathname.endsWith('/services/decks/iconSet.json')) {
       const text = readFileSync(fileURLToPath(new URL(u.pathname, 'file://')), 'utf8');
       return { format: 'module', source: `export default ${text};`, shortCircuit: true };
     }

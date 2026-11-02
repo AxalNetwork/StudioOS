@@ -29,17 +29,28 @@ import { deckCheckApi } from '../src/lib/api/deckCheck.js';
 import { deckElementModelsApi } from '../src/lib/api/deckElementModels.js';
 import { deckFiguresApi } from '../src/lib/api/deckFigures.js';
 import { deckCommentsApi } from '../src/lib/api/deckComments.js';
+import { deckBatchesApi, parseSse } from '../src/lib/api/deckBatches.js';
 import { deckCoeditApi } from '../src/lib/api/deckCoedit.js';
+import { deckVentureElementsApi } from '../src/lib/api/deckVentureElements.js';
 
 test('every adapter method answers unavailable, with the reason and the issue that brings its route', async () => {
   const methods = Object.keys(adapter).filter((k) => !HELPERS.has(k));
   assert.deepEqual(methods.sort(), Object.keys(adapter.SURFACES).sort(), 'a method with no SURFACES row, or a row with no method');
   assert.ok(methods.length >= 40);
-  // D1499 (#3749) swapped grid, D1522 (#3774) stagePlan, D1553 (#3800) remix, D1503 (#3754) elementModels; D1565 (#3812)
-  // the investor links; D1538 (#3787) typedTables; D1555 (#3802) consistency rides the check read. A swapped
-  // surface's body calls its client through().
-  assert.deepEqual([...adapter.SWAPPED], ['grid', 'saveCard', 'discardDraft', 'draft', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'presets', 'orgLocks', 'comments', 'figures', 'presence', 'arrange'], 'the rows whose routes are on main');
-  // D1523 (#3775): figures also reads its mounted route through its client.
+  // #4134: SWAPPED is derived, never listed. A row is swapped exactly when its method's body answers through
+  // its client (`through(() => <client>Api.<method>(…), SURFACES.<row>.issue)`), and off exactly when the body is
+  // `off('<row>')`. D1543's ventureElements chooses `.element` or `.list` inside that call. Mutation checked: turn a
+  // swapped row back to `off(...)` (or wire an off row) and the two sets part.
+  const body = (src, name) => (src.match(new RegExp(`^export const ${name} = ([^\\n]*)$`, 'm')) || [])[1] || '';
+  const code = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
+  const wired = methods.filter((n) => /\bthrough\(\(\) => [^\n]*deck[A-Za-z]+Api\./.test(body(code, n)));
+  assert.match(body(code, 'arrange'), /arrangeCard\(card, selection, op, opts\)/, 'arrange edits locally before the existing card save');
+  const offRows = methods.filter((n) => body(code, n) === `off('${n}');`);
+  assert.deepEqual([...adapter.SWAPPED].sort(), [...wired, 'arrange'].sort(), 'SWAPPED is the client rows plus the local Arrange operation');
+  assert.deepEqual([...wired, 'arrange', ...offRows].sort(), [...methods].sort(), 'every row is a client, local Arrange, or off');
+  for (const n of wired) assert.match(body(code, n), new RegExp(`SURFACES\\.${n}\\.issue\\);$`), `${n} keys its own row's issue`);
+  // A floor, so a parser that stopped matching cannot pass on two empty lists. D1541 (#3779) elementsLibrary is one of them.
+  for (const n of ['grid', 'saveCard', 'stagePlan', 'remix', 'comments', 'ventureElements', 'elementsLibrary']) assert.ok(adapter.SWAPPED.includes(n), `${n} is swapped on main`);
   const seam = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
   for (const name of ['investorLinks', 'withdrawInvestorLink']) {
     assert.match(seam, new RegExp(`export const ${name} = [^\\n]*through\\(\\(\\) => deckInvestorLinksApi\\.${name}\\(`), `${name} is wired to its client`);
@@ -196,8 +207,20 @@ test('the adapter keys each surface to the plan’s issue (§6.2)', () => {
 test('the seam reaches no network, and no client method exists for a route that is not on main', () => {
   const src = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
   assert.doesNotMatch(src, /request\(|fetch\(|XMLHttpRequest/);
-  // A swapped row's client is the only `lib/api` the seam may import (D1499's `deckGrid.js`, D1522's `deckStage.js`, D1553's `deckRemix.js`, D1503's `deckElementModels.js`, D1565's `deckInvestorLinks.js`, D1538's `deckTypedValues.js`, D1555's `deckCheck.js`, D1549's `deckModelPresets.js`).
-  assert.deepEqual([...src.matchAll(/from '([^']*lib\/api[^']*)'/g)].map((x) => x[1]).sort(), ['../../../lib/api/deckCheck.js', '../../../lib/api/deckCoedit.js', '../../../lib/api/deckComments.js', '../../../lib/api/deckDraft.js', '../../../lib/api/deckElementModels.js', '../../../lib/api/deckFigures.js', '../../../lib/api/deckGrid.js', '../../../lib/api/deckInvestorLinks.js', '../../../lib/api/deckModelPresets.js', '../../../lib/api/deckRemix.js', '../../../lib/api/deckStage.js', '../../../lib/api/deckTypedValues.js']);
+  // A swapped row's client is the only `lib/api` the seam may import (#4134: a rule, not a list). Each import names
+  // one `deck<Name>Api` from `lib/api/deck<Name>.js`, the imports stand in file-name order (so two swaps add lines
+  // at different places), and every one is used by a swapped row's body. Mutation checked: an unused client import,
+  // or two imports out of order, fails here. D1541's `deckElements.js` is one of those lines.
+  const imports = [...src.matchAll(/^import \{ (deck[A-Za-z]+Api) \} from '\.\.\/\.\.\/\.\.\/lib\/api\/(deck[A-Za-z]+)\.js';$/gm)].map((x) => ({ name: x[1], file: x[2] }));
+  assert.equal(imports.length, [...src.matchAll(/from '([^']*lib\/api[^']*)'/g)].length, 'every lib/api import is one `import { deck<Name>Api } from .../lib/api/deck<Name>.js` line');
+  assert.ok(imports.length >= 10, 'the seam imports the clients of its swapped rows');
+  const files = imports.map((i) => i.file);
+  assert.deepEqual(files, [...files].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())), 'the lib/api imports stand in file-name order');
+  const bodies = adapter.SWAPPED.map((n) => (src.match(new RegExp(`^export const ${n} = ([^\\n]*)$`, 'm')) || [])[1] || '').join('\n');
+  for (const { name, file } of imports) {
+    assert.equal(name, `${file}Api`, `${file}.js exports ${file}Api`);
+    assert.ok(bodies.includes(`${name}.`), `${name} is imported but no swapped row calls it`);
+  }
   // D1549 (#3796): the presets route is on main, with its client; orgLocks reads the same reply.
   assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_model_presets.ts')), /deckModelPresets\.get\(['"]\/:id\{\[0-9\]\+\}\/model-presets['"]/);
   assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckModelPresets\)/);
@@ -221,6 +244,10 @@ test('the seam reaches no network, and no client method exists for a route that 
   // D1501 (#3751): the working copy has its routes (`/:id/draft`, `/:id/cards/:uid`) and its client.
   assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_draft.ts')), /deckDraft\.get\(['"]\/:id\{\[0-9\]\+\}\/draft['"]/);
   assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckDraft\)/);
+  // D1502 part 2 (#3753): a generation run's read, stream and Stop have their routes and client.
+  assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_batches.ts')), /deckBatches\.get\(`\/areas\/batches\/:uid\$\{UID\}`/);
+  assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_batches.ts')), /deckBatches\.post\(`\/areas\/batches\/:uid\$\{UID\}\/cancel`/);
+  assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckBatches\)/);
   for (const path of ['/areas', '/areas/instruct']) {
     assert.ok(!new RegExp(`['"\`]/decks/[^'"\`\\n]*${path.replace(/[$/{]/g, (c) => `\\${c}`)}`).test(client), `a client path for ${path} before its route is on main`);
   }
@@ -268,7 +295,16 @@ test('the element picker: 8 groups, each item on main or on the seam, and the th
   assert.equal(PEND, '(pending owner)');
   const on = new Set(ELEMENTS.filter(elementOnMain).map((e) => e.id));
   for (const id of ['title', 'body', 'bullets', 'chart', 'table', 'timeline', 'metric', 'photo', 'upload', 'video', 'team_grid']) assert.ok(on.has(id), id);
-  for (const id of ['use_of_funds', 'round_terms', 'flow', 'funnel', 'icons']) assert.ok(!on.has(id), id);
+  for (const id of ['flow', 'funnel', 'icons']) assert.ok(!on.has(id), id);
+  // D1543 (#3781): the six venture-record items are keyed to their route and on main. Only the logo wall is
+  // free: the others carry a model job in DECK_ELEMENT_JOBS (model_use_cases_3934 holds that a free item has none).
+  const venture = ['team_bios', 'logo_wall', 'use_of_funds', 'round_terms', 'interview_quote', 'cap_table'];
+  for (const id of venture) {
+    const e = ELEMENTS.find((x) => x.id === id);
+    assert.deepEqual([e.adapter, e.issue, e.free, e.route, e.option], [undefined, undefined, id === 'logo_wall' ? true : undefined, 'GET /api/decks/:id/venture-elements/:element', null], id);
+    assert.ok(on.has(id), id);
+  }
+  assert.ok(!ELEMENTS.some((e) => e.adapter === 'ventureElements'), 'no item waits on the swapped row');
 });
 
 test('area labels and the hold line', () => {
@@ -328,6 +364,37 @@ test('D1570 (#3817): comments is swapped — it answers through deckCommentsApi.
   assert.equal(adapter.availability('comments'), null);
 });
 
+test('D1543 (#3781): ventureElements is swapped — one element through deckVentureElementsApi.element, all through .list, a gate refusal keeps its code and line', async () => {
+  // Mutation checked: ventureElements left as off('ventureElements') → the available answer fails; through() dropping
+  // the code → the gate assert fails; element and list swapped → the asked assert fails.
+  const real = { ...deckVentureElementsApi };
+  const asked = [];
+  try {
+    const one = { deck_id: 7, element: 'round_terms', available: true, blocks: [], bindings: [], model: null, label: 'Proposed, subject to counsel' };
+    deckVentureElementsApi.element = async (...a) => { asked.push(['element', ...a]); return one; };
+    deckVentureElementsApi.list = async (...a) => { asked.push(['list', ...a]); return { deck_id: 7, elements: {} }; };
+    assert.deepEqual(await adapter.ventureElements(7, 'round_terms', { final: false }), { available: true, value: one });
+    assert.deepEqual(await adapter.ventureElements(7, null, { includeCapTable: true }), { available: true, value: { deck_id: 7, elements: {} } });
+    assert.deepEqual(asked, [['element', 7, 'round_terms', { final: false }], ['list', 7, { includeCapTable: true }]]);
+    for (const [code, line] of [
+      ['no_consent', 'Only quotes from sessions with recorded consent can be used.'],
+      ['no_permission', "Harbor Synth hasn't given permission to show their logo."],
+      ['not_included', 'Totals only · never shown in shared links unless you include it'],
+      ['subject_to_counsel', 'Proposed, subject to counsel'],
+    ]) {
+      deckVentureElementsApi.element = async () => { throw Object.assign(new Error(line), { status: 409, code }); };
+      const a = await adapter.ventureElements(7, 'logo_wall');
+      assert.deepEqual([a.available, a.code, a.reason, a.issue], [false, code, line, 3781], code);
+    }
+    deckVentureElementsApi.element = async () => { throw Object.assign(new Error('nope'), { status: 404 }); };
+    assert.deepEqual(await adapter.ventureElements(7, 'team_bios'), { available: false, reason: NOT_ON, issue: 3781 }, 'a 404 is still off');
+  } finally { Object.assign(deckVentureElementsApi, real); }
+  assert.equal(adapter.availability('ventureElements'), null);
+  assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckVentureElements\)/, 'the route is mounted');
+  assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_venture_elements.ts')), /\.get\(['"]\/:id\{\[0-9\]\+\}\/venture-elements\/:element['"]/);
+  assert.match(read('frontend/src/lib/apiModules.generated.js'), /^export \* from '\.\/api\/deckVentureElements\.js';$/m, 'one line in the generated D527 block (#4105)');
+});
+
 test('D1577 (#3824): presence is swapped — it answers through deckCoeditApi.presence; 503 presence_off and a 404 are still off', async () => {
   const real = deckCoeditApi.presence;
   try {
@@ -341,4 +408,24 @@ test('D1577 (#3824): presence is swapped — it answers through deckCoeditApi.pr
     deckCoeditApi.presence = async () => { throw Object.assign(new Error('nope'), { status: 404 }); };
     assert.deepEqual(await adapter.presence(7), { available: false, reason: NOT_ON, issue: 3824 });
   } finally { deckCoeditApi.presence = real; }
+});
+
+test('D1502 (#3753): batch and cancelBatch answer through deckBatchesApi; the stream parser keeps what has not ended', async () => {
+  // Mutation checked: cancelBatch left off(…) → its answer is unavailable and this fails.
+  const real = { batch: deckBatchesApi.batch, cancel: deckBatchesApi.cancel };
+  const asked = [];
+  deckBatchesApi.batch = async (uid) => { asked.push(['batch', uid]); return { uid, state: 'running' }; };
+  deckBatchesApi.cancel = async (uid) => { asked.push(['cancel', uid]); return { uid, state: 'cancelled' }; };
+  try {
+    assert.deepEqual(await adapter.batch('run-1'), { available: true, value: { uid: 'run-1', state: 'running' } });
+    assert.deepEqual(await adapter.cancelBatch('run-1'), { available: true, value: { uid: 'run-1', state: 'cancelled' } });
+    assert.deepEqual(asked, [['batch', 'run-1'], ['cancel', 'run-1']]);
+    assert.equal(adapter.availability('batch'), null);
+    deckBatchesApi.cancel = async () => { throw Object.assign(new Error('Only the member who started this run can stop it.'), { status: 403 }); };
+    assert.deepEqual(await adapter.cancelBatch('run-1'), { available: false, unreadable: true, reason: 'Only the member who started this run can stop it.', issue: 3753 });
+  } finally { Object.assign(deckBatchesApi, real); }
+  const { events, rest } = parseSse('event: snapshot\ndata: {"state":"running"}\n\nevent: step_done\ndata: {"seq":0}\n\nevent: area_busy\ndata: {"att');
+  assert.deepEqual(events, [{ event: 'snapshot', data: { state: 'running' } }, { event: 'step_done', data: { seq: 0 } }]);
+  assert.equal(rest, 'event: area_busy\ndata: {"att');
+  assert.deepEqual(parseSse('event: x\ndata: not json\n\n').events, [], 'a malformed event is skipped');
 });

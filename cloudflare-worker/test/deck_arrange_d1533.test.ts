@@ -106,16 +106,10 @@ function unzip(bytes: Uint8Array): Map<string, string> {
 }
 const BRAND = { show_footer: false, footer_text: '', watermark_url: null, can_remove_footer: true } as any;
 
-/**
- * The saved card as the exports read it. The shape each item draws is its
- * `ref` and `tone`, the elements library's fields (#3779, D1541's `decorOf`
- * keeps them). Until that merges, a save drops them, so they are put back here
- * the way #3779 stores them: a circle, a square and a divider line.
- */
+/** The export reads the actual saved library metadata and Arrange fields together. */
 function exported() {
-  const kept = sanitizeModel(SAVED, url) as any;
   const lib: Record<string, { ref: string; tone: string }> = { d1: { ref: 'circle', tone: 'accent' }, d2: { ref: 'rect', tone: 'muted' }, d3: { ref: 'line', tone: 'ink' } };
-  return { ...SAVED, ...kept, decor: kept.decor.map((d: any) => ({ ...d, ...lib[d.id] })) };
+  return sanitizeModel({ ...SAVED, decor: SAVED.decor.map((d) => ({ ...d, ...lib[d.id] })) }, url) as any;
 }
 
 test('the editable PowerPoint: decor under the blocks in layer order, pinned items locked, each group one group shape', async () => {

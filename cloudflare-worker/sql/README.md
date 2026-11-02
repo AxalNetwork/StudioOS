@@ -10,8 +10,10 @@ and is not kept in sync.
 | `migrations/` | **Forward-only, numbered (up to 799) or stamped `YYYYMMDDHHMM_` (D4106), and the thing that actually runs.** |
 | `historical/` | Legacy one-off schema scripts, kept for archaeology only. Nothing builds from them. |
 | `migrations/713_pitch_decks_unique_version.sql` | #3748: preserve and renumber duplicate deck versions, choose one current row per project, and enforce unique versions/current rows. |
+| `migrations/716_deck_area_batches.sql` | D1502 (#3753): a deck generation run (`deck_area_batches`, one active per deck, `idem_key` unique) and its steps (`deck_area_batch_steps`), under one quote and one parent hold. |
 
 | `migrations/728_agent_engine.sql` | D1528 (#3847, E3 of #3742): the agent engine's six tables (runs, duties, handoffs, memory notes, custom roles, scope settings). All new tables, re-runnable; the runtime that uses them follows. |
+| `migrations/730_pitch_card_blobs.sql` | D1539 (#3789, deck v2 B13): `pitch_card_blobs(hash, json, created_at)`, each card's JSON once under the SHA-256 of its canonical JSON, and `pitch_decks.card_hashes`, a version's cards as an ordered hash list. Additive; nothing backfilled; `slides` is still written during the transition. |
 | `migrations/760_interview_processing_failed_stage.sql` | D1456 (#4014): nullable, constrained failed processing step; existing migration ledger prevents replay. |
 
 ## Adding a change
