@@ -43,7 +43,7 @@ import { areasOf } from '../src/pages/raise/pitch/gridSelection.js';
 import { FOUNDER_OPTIONS } from '../src/lib/railOptions/founder.js';
 import {
   CHART_MIN_LINE, EMPTY_TEXT_WHAT, NOT_RUN, TEXT_CHANGES, TEXT_ELEMENTS, aspectFor, batchMode, chargedLine, defaultElement, holdLine, modelChip,
-  placeResult, rowPlan, runSequence, validLine, variantWhy,
+  placeResult, rowPlan, runSequence, validLine, variantWhy, VENTURE_ELEMENTS, VENTURE_LINE,
 } from '../src/pages/raise/pitch/areaLightboxModel.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -59,7 +59,8 @@ const WHOLE = { id: 'free:whole', kind: 'free', grid: { c1: 1, c2: 12, r1: 1, r2
  * ------------------------------------------------------------------ */
 
 test('every element maps to a route on main, a free placement, or its adapter issue', () => {
-  const runs = new Set(['assist', 'image', 'metric', 'upload', 'dialog']);
+  // D1560 (#3807): Speaker notes is a transform run for the card's notes.
+  const runs = new Set(['assist', 'image', 'metric', 'upload', 'dialog', 'notes']);
   for (const el of ELEMENTS) {
     const on = TEXT_ELEMENTS.includes(el.id) ? area('b2') : WHOLE;
     const plan = rowPlan({ area: on, element: el.id, card: CARD, cardIndex: 0, items: ITEMS });
@@ -67,10 +68,13 @@ test('every element maps to a route on main, a free placement, or its adapter is
       assert.equal(plan.run, 'later', el.id);
       assert.equal(plan.adapter, el.adapter, el.id);
       assert.equal(plan.issue, SURFACES[el.adapter].issue, `${el.id}: keyed to the issue that brings it`);
+    } else if (VENTURE_ELEMENTS.includes(el.id)) {
+      // D1543 (#3781): a record-bound element is read from the records, never generated here.
+      assert.deepEqual([plan.run, plan.why], ['refused', VENTURE_LINE], el.id);
     } else {
       assert.ok(runs.has(plan.run), `${el.id} runs on main (${plan.run})`);
     }
-    if (plan.run === 'assist' || plan.run === 'image') {
+    if (plan.run === 'assist' || plan.run === 'image' || plan.run === 'notes') {
       assert.ok(FOUNDER_OPTIONS.some((o) => o.key === plan.option && o.page === 'Founder · Raise · Pitch deck'), `${el.id}: ${plan.option} is a deck rail option`);
     }
   }

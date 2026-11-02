@@ -38,7 +38,7 @@ import { canAccessProject } from '../services/projectAccess';
 import { run as aiRun, quoteRun, type RunOptions, type RunResult } from '../services/aiRouter';
 import { loadAiBudget } from '../services/aiBudget';
 import { proposeRail } from '../services/railProposals';
-import { fieldsOf, type FillField } from '../services/fills/fields';
+import { FORM_TEXT_JOBS, fieldsOf, type FillField } from '../services/fills/fields';
 import { MAX_RUN_ROWS, fieldsToAsk, formMessages, gatherForm, gatherScoped, parseFields, parseRows, type Dropped } from '../services/fills/formRun';
 import { isExplorer, parentKey, scopeOf } from '../services/fills/scopes';
 import { runRefusalView } from '../util/railContext';
@@ -281,11 +281,13 @@ export function railRunRoutes(deps: { run?: Runner; quote?: Quoter } = {}) {
     const asked = rowsWanted ? fields.filter((f) => fieldsToAsk([f]).length) : fieldsToAsk(fields, input.values ?? {}, row);
     if (!asked.length) return refuse(c, 400, 'nothing_to_fill');
 
-    const gather = recordScope ? await gatherScoped(c.env, Number(user.id), table, row, scopedParent) : await gatherForm(c.env, projectId as number, asked);
+    const gather = recordScope ? await gatherScoped(c.env, Number(user.id), table, row, scopedParent, { activeCompany: () => activeCompanyFor(c, user), claimed: () => !!c.req.header('X-Company-Id') }) : await gatherForm(c.env, projectId as number, asked);
     const { messages, guardText } = formMessages(asked, gather, { text: typeof input.text === 'string' ? input.text : '', rows: rowsWanted || undefined });
     const runInput: RunOptions = {
       task: 'rail_write', userId: Number(user.id), messages, guardText, maxTokens: rowsWanted ? 1200 : 600, temperature: 0.2,
       model: typeof body?.model === 'string' && body.model ? body.model : undefined,
+      // #3937 (§4.2 fix 7): the form's plan job decides the model, not the page row's kind.
+      ...(FORM_TEXT_JOBS[form] ? { textJob: FORM_TEXT_JOBS[form] } : {}),
       rail: { page, option, record: recordRef },
     };
 

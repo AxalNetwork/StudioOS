@@ -19,6 +19,7 @@ import { asList, currentVersion, isReadOnly, ventureQuery } from './pitchStudioM
 import { NEW_PATH } from './newDeckModel';
 import PitchPage from './PitchPage';
 import DeckToolbar from './DeckToolbar';
+import useDeckPresence from './useDeckPresence';
 import CardsStrip from './CardsStrip';
 import GridStage from './GridStage';
 import BlockTools, { SpeakerNotes } from './BlockTools';
@@ -26,6 +27,8 @@ import ShareDialog from './ShareDialog';
 import CommentsSheet from './CommentsSheet';
 import ExportDialog from './ExportDialog';
 import { BackgroundSheet, BrandKitSheet, CheckSheet, RemixSheet, SizeSheet, SourcesSheet, StructureSheet, ThemeSheet, VersionsSheet } from './DeckSheets';
+// D1583 (#3830): ⋯ › This deck › Teaser, one-pager or memo.
+import DeriveSheet from './DeriveSheet.jsx';
 import { EDITOR_WAITING, aiOffState, editIndex, placeTextEdit, saveChip } from './deckV2Model';
 import { AiOffBanner } from './DeckAsk';
 import { areaTitle, areasOf, askTarget, liveFocus } from './gridSelection';
@@ -37,6 +40,7 @@ import { deckRail } from './deckRailGroups';
 import { presentHref } from './presentExportModel';
 import { aspectOf, withAspect } from './gridModel';
 import { reflowCards } from './deckReflow';
+import { movedLine } from './structureModel';
 import { scriptOfTheme } from './deckLanguage';
 import {
   ADDABLE_KINDS, KIND_LABELS, MODEL_FAILED, NOTES_PLACEHOLDER, NO_CARDS,
@@ -209,13 +213,17 @@ export default function PitchEditor() {
   // Share and Export need only the version on screen, so the page opens them
   // itself, editor or not; every other ⋯ item is the editor's.
   const [shareDialog, setShareDialog] = useState(null);
+  // D1577 (#3824): the other members on the deck. Null (nothing drawn) until presence is switched on.
+  const presence = useDeckPresence(current?.id ?? null, { live: !readOnly && !phone });
+  const youId = presence.you?.user_id ?? user?.id ?? null;
   const onAction = useCallback((id) => {
     if (id === 'share' || id === 'export') { if (!readOnly) setShareDialog(id); return; }
     actionRef.current?.(id);
   }, [readOnly]);
   const tools = current?.id ? (
     <DeckToolbar chip={chrome?.chip ?? null} presentTo={presentHref(projectId, current.id)} readOnly={readOnly} phone={phone}
-      onAction={onAction} labels={chrome?.labels} outOfTokens={Boolean(chrome?.outOfTokens)} waiting={chrome ? null : EDITOR_WAITING} />
+      onAction={onAction} labels={chrome?.labels} outOfTokens={Boolean(chrome?.outOfTokens)} waiting={chrome ? null : EDITOR_WAITING}
+      editors={presence.editors} youId={youId} />
   ) : null;
   const overlay = shareDialog === 'share' && projectId != null && current ? (
     <ShareDialog projectId={projectId} deck={current} onClose={() => setShareDialog(null)} onCreated={() => {}} />
@@ -251,6 +259,8 @@ export default function PitchEditor() {
     <Shell {...shell}>
       <Editor
         key={deck.data.id}
+        presence={presence}
+        youId={youId}
         project={project}
         deck={deck.data}
         model={model.data}
@@ -312,7 +322,7 @@ export function sourcesCard(model, lines) {
 // D1500: a duplicate is a new card, with its own uid.
 const copyCard = (c) => withNewUid(JSON.parse(JSON.stringify(c)));
 
-function Editor({ project, deck, model, kit, refresh, sources, charts, versions, readOnly, phone, narrow = false, onTitle, onSaved, placeRef, onProposals, onChrome, actionRef }) {
+function Editor({ project, deck, model, kit, refresh, sources, charts, versions, readOnly, phone, narrow = false, onTitle, onSaved, placeRef, onProposals, onChrome, actionRef, presence = null, youId = null }) {
   const [aiOn] = useAssistMode('raise');
   const navigate = useNavigate();
   const [base, setBase] = useState(() => ({ deck, cards: cardsOf(deck), theme: deck.theme ?? null, audience: deck.audience ?? null }));
@@ -324,6 +334,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   const [askLine, setAskLine] = useState(null);
   const [dialog, setDialog] = useState(null);
   const [sheet, setSheet] = useState(null);
+  // D1513 (#3765): what the last structure moved to the speaker notes, until the card changes.
+  const [structureNote, setStructureNote] = useState(null);
   const [compare, setCompare] = useState(null);
   // PD-9: a run or a quote refused for tokens (a 402) turns Ask off for the
   // session; adding tokens leaves the page, so the next visit starts on.
@@ -352,6 +364,12 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   // range filled) drop out of it on their own.
   const areas = useMemo(() => areasOf(card, model), [card, model]);
   const selection = pickState.selection.filter((id) => (areas || []).some((a) => a.id === id));
+  // D1577 (#3824): the area this member is in is theirs (a soft lock) while they edit it; the room says
+  // "Wait or ask [Name]" when another member holds it. One area, or none when several or none are picked.
+  const claimArea = selection.length === 1 ? selection[0] : null;
+  const claimCard = card?.uid ?? null;
+  const claim = presence?.claim;
+  useEffect(() => { if (claim && !readOnly) claim(claimCard, claimArea); }, [claim, claimCard, claimArea, readOnly]);
   const chosen = (areas || []).filter((a) => selection.includes(a.id));
   const one = chosen.length === 1 ? chosen[0] : null;
   // The focus too: a free range a block now covers hands it to that block.
@@ -361,7 +379,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   const choose = (i) => { setSel(i); setPickState(NO_PICK); };
   const selectBlock = (id) => setPickState({ selection: id == null ? [] : [String(id)], focus: id == null ? null : String(id) });
 
-  const setCard = (i, c) => setCards((cs) => cs.map((x, j) => (j === i ? c : x)));
+  const setCard = (i, c) => { setCards((cs) => cs.map((x, j) => (j === i ? c : x))); presence?.edit?.(); };
   // D1500: a result goes back onto the card it was made for, by its uid,
   // wherever that card sits now; a card with no uid falls back to the selection.
   const placeCard = (c) => setCards((cs) => replaceCard(cs, c, sel) ?? cs);
@@ -466,7 +484,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     if (id === 'appendix') { if (!readOnly) toggleAppendix(sel); return; }
     if (id === 'notes') { navigate(`/raise/pitch/notes${ventureQuery(project?.id)}`); return; }
     // D1553 (#3800): ⋯ › This card › Remix this slide, the only way in (pd13).
-    if (['theme', 'size', 'brand', 'sources', 'versions', 'check', 'structure', 'background', 'remix', 'comments'].includes(id)) setSheet(id);
+    if (['theme', 'size', 'brand', 'sources', 'versions', 'check', 'structure', 'background', 'remix', 'derive', 'comments'].includes(id)) setSheet(id);
   };
   if (actionRef) actionRef.current = act;
   const cardAction = (id, i) => {
@@ -516,11 +534,16 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
             {refresh.status === 'error' ? <ReadFailed text="Which figures have changed could not be read." onRetry={refresh.retry} testId="pitch-editor-refresh-error" /> : null}
           </div>
           <div className="flex min-w-0 flex-col gap-3">
+            {structureNote ? <span className={MUTED} role="status" data-testid="pitch-editor-structure-note">{structureNote} The speaker notes keep each one.</span> : null}
             {cards.length === 0 ? <div className={`${CARD} p-6 ${MUTED}`}>{NO_CARDS}</div> : (
               <GridStage card={card} index={sel} model={model} colours={colours} ink={ink} theme={theme} kit={kit} charts={charts} pageLabel={pageNumberOf(cards, sel)}
                 readOnly={readOnly} selection={selection} focus={focus}
                 onSelection={setPickState}
+                editors={presence?.editors ?? null} youId={youId} lockLine={presence?.locked ?? null} onPointer={presence?.cursor ?? null}
                 onMove={(id, grid) => setCard(sel, updateBlock(card, id, { grid }))}
+                // D1513: a divider move (both blocks) and its overflow are each one edit.
+                onCard={(next) => { setCard(sel, next); setStructureNote(null); }}
+                onDecor={(item) => setCard(sel, { ...card, decor: [...(card.decor || []), item] })}
                 onAsk={ask} askOff={askOff} askLine={askLine}
                 items={items} onRefresh={() => { const r = refreshCard(card, items, charts); if (r.moved) setCard(sel, r.card); }} />
             )}
@@ -555,11 +578,18 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
       {sheet === 'size' ? <SizeSheet theme={theme} readOnly={readOnly} onSize={changeSize} moved={sizeUndo?.count ?? 0} onUndo={undoSize}
         onClose={() => { setSizeUndo(null); setSheet(null); }} /> : null}
       {sheet === 'structure' && card ? (
-        <StructureSheet model={model} card={card} index={sel} readOnly={readOnly} onLayout={(layout) => setDialog({ kind: 'layout', layout })} onClose={() => setSheet(null)} />
+        <StructureSheet model={model} card={card} index={sel} readOnly={readOnly} onLayout={(layout) => setDialog({ kind: 'layout', layout })}
+          // D1513 (#3765): a structure is one edit; what has no area is already in the notes.
+          onStructure={(r) => { setCard(sel, r.card); setPickState(NO_PICK); setSheet(null); setStructureNote(r.count ? `${movedLine(r.count)}.` : null); }}
+          onClose={() => setSheet(null)} />
       ) : null}
       {sheet === 'background' && card ? (
         <BackgroundSheet card={card} index={sel} readOnly={readOnly} onBackground={(bg) => setCard(sel, { ...card, background: bg })}
           onImage={() => { setSheet(null); setDialog({ kind: 'image', use: 'card' }); }} onClose={() => setSheet(null)} />
+      ) : null}
+      {sheet === 'derive' && base.deck?.id ? (
+        <DeriveSheet deckId={base.deck.id} version={base.deck.version ?? null} dirty={dirty} readOnly={readOnly} aiOn={aiOn} outOfTokens={outOfTokens}
+          onProposed={onProposals} onClose={() => setSheet(null)} />
       ) : null}
       {sheet === 'brand' ? <BrandKitSheet projectId={project?.id ?? null} kit={kit} readOnly={readOnly} onClose={() => setSheet(null)} /> : null}
       {sheet === 'versions' ? (

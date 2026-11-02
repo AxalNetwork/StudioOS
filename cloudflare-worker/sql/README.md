@@ -7,17 +7,23 @@ and is not kept in sync.
 | Path | What it is |
 | --- | --- |
 | `schema_baseline.sql` | The production-derived schema for bootstrapping a fresh database. |
-| `migrations/` | **Forward-only, numbered, and the thing that actually runs.** |
+| `migrations/` | **Forward-only, numbered (up to 799) or stamped `YYYYMMDDHHMM_` (D4106), and the thing that actually runs.** |
 | `historical/` | Legacy one-off schema scripts, kept for archaeology only. Nothing builds from them. |
 | `migrations/713_pitch_decks_unique_version.sql` | #3748: preserve and renumber duplicate deck versions, choose one current row per project, and enforce unique versions/current rows. |
+| `migrations/716_deck_area_batches.sql` | D1502 (#3753): a deck generation run (`deck_area_batches`, one active per deck, `idem_key` unique) and its steps (`deck_area_batch_steps`), under one quote and one parent hold. |
 
 | `migrations/728_agent_engine.sql` | D1528 (#3847, E3 of #3742): the agent engine's six tables (runs, duties, handoffs, memory notes, custom roles, scope settings). All new tables, re-runnable; the runtime that uses them follows. |
+| `migrations/730_pitch_card_blobs.sql` | D1539 (#3789, deck v2 B13): `pitch_card_blobs(hash, json, created_at)`, each card's JSON once under the SHA-256 of its canonical JSON, and `pitch_decks.card_hashes`, a version's cards as an ordered hash list. Additive; nothing backfilled; `slides` is still written during the transition. |
 | `migrations/760_interview_processing_failed_stage.sql` | D1456 (#4014): nullable, constrained failed processing step; existing migration ledger prevents replay. |
 
 ## Adding a change
 
-1. Write a new numbered file in `migrations/` — `NNN_short_name.sql`, one higher
-   than the current maximum.
+1. Write a new file in `migrations/` named by the UTC minute you write it:
+   YYYYMMDDHHMM_short_name.sql (D4106), for example
+   202611021015_add_widgets.sql. No number to pick, so two parallel PRs never
+   collide; it sorts after every numbered file (they stop at 799) and the
+   ledger applies it once. `scripts/check-sql-migrations.mjs` refuses a
+   malformed name and two files sharing a number or a stamp, naming both.
 2. Prefer idempotent statements: `CREATE TABLE IF NOT EXISTS`,
    `CREATE INDEX IF NOT EXISTS`. `node scripts/migrate-d1.mjs --audit` reports
    which files are safely re-runnable. `ALTER TABLE ... ADD COLUMN` is not (SQLite

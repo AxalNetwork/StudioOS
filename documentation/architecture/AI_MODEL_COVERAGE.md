@@ -77,7 +77,7 @@ Prices are Cloudflare's printed USD per unit (per 1M tokens, per 1k characters, 
 | `@cf/zai-org/glm-5.3-flash` | Text Generation | ga | tokens_in 0.150, tokens_cached 0.030, tokens_out 0.500 | 1048576 | paid | O | G | O | O | O | G | G | · | G | G | G | O | · | O |
 | `@cf/openai/gpt-oss-120b` | Text Generation | ga | tokens_in 0.350, tokens_out 0.750 | 128000 | all | W | G | O | W | O | O | O | · | G | G | O | W | · | W |
 | `@cf/openai/gpt-oss-20b` | Text Generation | ga | tokens_in 0.200, tokens_out 0.300 | 128000 | all | O | G | O | O | O | G | G | · | G | G | O | O | · | O |
-| `@cf/ibm-granite/granite-4.0-h-micro` | Text Generation | ga | tokens_in 0.017, tokens_out 0.112 | 131000 | all | O | G | O | O | O | G | O | · | G | G | O | O | · | O |
+| `@cf/ibm-granite/granite-4.0-h-micro` | Text Generation | ga | tokens_in 0.017, tokens_out 0.112 | 131000 | all | O | G | O | O | O | G | W | · | G | G | O | O | · | O |
 | `@hf/nousresearch/hermes-2-pro-mistral-7b` | Text Generation | deprecated | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/ai4bharat/indictrans2-en-indic-1B` | Translation | ga | tokens_in 0.342, tokens_out 0.342 | Not recorded | all | O | O | · | · | O | · | O | · | G | G | G | · | · | O |
 | `@cf/moonshotai/kimi-k2.5` | Text Generation | deprecated | tokens_in 0.600, tokens_cached 0.100, tokens_out 3.000 | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
@@ -111,7 +111,7 @@ Prices are Cloudflare's printed USD per unit (per 1M tokens, per 1k characters, 
 | `@cf/mistral/mistral-7b-instruct-v0.2-lora` | Text Generation | beta | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/mistralai/mistral-small-3.1-24b-instruct` | Text Generation | ga | tokens_in 0.351, tokens_out 0.555 | 128000 | all | O | G | O | O | O | O | O | · | G | G | G | O | · | O |
 | `@cf/moondream/moondream3.1-9B-A2B` | Image-to-Text | ga | tokens_in 0.300, tokens_out 1.000 | Not recorded | all | · | · | G | O | · | · | O | · | · | · | G | O | · | G |
-| `@cf/nvidia/nemotron-3-120b-a12b` | Text Generation | ga | tokens_in 0.500, tokens_out 1.500 | Not recorded | all | O | G | O | O | O | G | O | · | G | G | G | O | · | O |
+| `@cf/nvidia/nemotron-3-120b-a12b` | Text Generation | ga | tokens_in 0.500, tokens_out 1.500 | Not recorded | all | O | G | O | W | O | G | O | · | G | G | G | O | · | O |
 | `@cf/deepgram/nova-3` | Automatic Speech Recognition | partner | audio_minutes 0.0052, audio_minutes_websocket 0.0092 | Not recorded | all | O | W | · | G | · | · | · | · | · | · | O | · | · | O |
 | `@cf/microsoft/phi-2` | Text Generation | deprecated | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/leonardo/phoenix-1.0` | Text-to-Image | partner | tiles 0.005830, steps 0.000110 | Not recorded | all, partner gate | · | · | O | O | O | · | · | · | G | · | · | O | · | G |
@@ -474,7 +474,7 @@ chat: Interactive explanations, evidence summaries and planning drafts.
 - Validate: **offered**, `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Ideal customer profile"`; `/api/ai/modules on "Founder · Validate · Problem discovery"`; `/api/ai/modules on "Founder · Validate · Verdict"`; and 7 more
 - Record a Session: **gap**, `#3721`
 - Build: **wired**, `railMatrix.json "Founder · Build · Founding team"`; `railMatrix.json "Founder · Build · Operating systems"`; `railMatrix.json "Founder · Build · Product roadmap"`; `railMatrix.json "Founder · Build · Solution design"`; and 1 more
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise · Investor narrative"`; `/api/ai/modules on "Founder · Raise"`; `railMatrix.json "Founder · Raise · Investor narrative"`; and 18 more
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise · Investor narrative"`; `/api/ai/modules on "Founder · Raise"`; `railMatrix.json "Founder · Raise · Investor narrative"`; and 19 more
 - Grow: **wired**, `railMatrix.json "Founder · Grow · Team expansion"`; `railMatrix.json "Founder · Grow"`
 - Network: **offered**, `railMatrix.json option draft:network/intro-email`; `railMatrix.json option draft:network/re-engagement`; `railMatrix.json option draft:single-contact-exposure`
 - Research: **offered**, `railMatrix.json option draft:checkpoint-brief`; `railMatrix.json option draft:index-gaps`; `railMatrix.json option draft:session-brief`
@@ -530,7 +530,7 @@ chat: Research synthesis, evidence comparison and detailed planning.
 - Validate: **wired**, `railMatrix.json "Founder · Validate · Experiments and evidence"`; `railMatrix.json "Founder · Validate · Verdict"`
 - Record a Session: **gap**, `#3721`
 - Build: **offered**, `/api/ai/modules on "Founder · Build · Company creation"`; `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; and 12 more
-- Raise: **wired**, `railMatrix.json "Founder · Raise · Fundraising readiness"`; `railMatrix.json "Founder · Raise"`
+- Raise: **wired**, `railMatrix.json "Founder · Raise · Fundraising readiness"`; `railMatrix.json "Founder · Raise"`; `routes/deck_derive.ts (memo_write)`
 - Grow: **offered**, `/api/ai/modules on "Founder · Grow · Durable company-building"`; `/api/ai/modules on "Founder · Grow · Product improvement"`; `/api/ai/modules on "Founder · Grow · Revenue and traction"`; `/api/ai/modules on "Founder · Grow · Team expansion"`; and 7 more
 - Network: **offered**, `railMatrix.json option draft:single-contact-exposure`
 - Research: **offered**, `/api/ai/modules on "Advisor · Research · Ask"`; `/api/ai/modules on "Advisor · Research · Client prep"`; `/api/ai/modules on "Advisor · Research · Companies"`; `/api/ai/modules on "Advisor · Research · Markets"`; and 50 more
@@ -567,7 +567,7 @@ chat: Short summaries, labels and lightweight record explanations.
 - Raise: **offered**, `/api/ai/modules on "Founder · Raise · Cap table"`; `/api/ai/modules on "Founder · Raise · Use of funds"`; `railMatrix.json "Founder · Raise · Cap table"`; `railMatrix.json "Founder · Raise · Use of funds"`; and 3 more
 - Grow: **offered**, `/api/ai/modules on "Founder · Grow · Product improvement"`; `/api/ai/modules on "Founder · Grow · Revenue and traction"`; `railMatrix.json "Founder · Grow · Revenue and traction"`
 - Network: **gap**, `#3721`
-- Research: **offered**, `/api/ai/modules on "Investor · Research · Benchmarking"`; `railMatrix.json "Investor · Research · Benchmarking"`
+- Research: **wired**, `services/market_intel/extractors/index.ts (paraphrase)`
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`
@@ -721,7 +721,7 @@ chat: Summarise research, explain records and draft member communications.
 - Raise: **wired**, `railMatrix.json "Founder · Raise · Investor narrative"`
 - Grow: **wired**, `railMatrix.json "Founder · Grow · Distribution"`; `railMatrix.json "Founder · Grow · Product improvement"`; `routes/brand.ts (brand_autofill)`; `routes/brand.ts (brand_palette)`; and 2 more
 - Network: **offered**, `/api/ai/modules on "Advisor · Network · Introductions"`; `/api/ai/modules on "Advisor · Network · Organizations"`; `/api/ai/modules on "Advisor · Network · Relationships"`; `/api/ai/modules on "Advisor · Network"`; and 35 more
-- Research: **wired**, `routes/research.ts (research_ask)`; `routes/research.ts (workspace_explain)`; `services/market_intel/extractors/index.ts (paraphrase)`
+- Research: **wired**, `routes/research.ts (research_ask)`; `routes/research.ts (workspace_explain)`
 - Articles: **gap**, `#3721`
 - Email: **wired**, `services/mail/drafts.ts (mail_draft)`
 - Studio / Eadwyn: **wired**, `routes/advisor.ts (advisor_explain)`; `routes/advisor.ts (tool_call)`; `routes/ai.ts (workspace_explain)`; `routes/profiling.ts (onboarding_chat)`; and 1 more
@@ -794,7 +794,7 @@ chat: Investor narratives, distribution copy and multilingual summaries.
 - Validate: **offered**, `/api/ai/modules on "Founder · Validate · Ideal customer profile"`; `/api/ai/modules on "Founder · Validate · Problem discovery"`; `/api/ai/modules on "Founder · Validate"`
 - Record a Session: **gap**, `#3721`
 - Build: **offered**, `railMatrix.json option draft:build/plan`
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Investor narrative"`; `railMatrix.json "Founder · Raise · Investor narrative"`; `railMatrix.json option deck:build`; `railMatrix.json option deck:chart`; and 16 more
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Investor narrative"`; `railMatrix.json "Founder · Raise · Investor narrative"`; `railMatrix.json option deck:build`; `railMatrix.json option deck:chart`; and 17 more
 - Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`; `/api/ai/modules on "Founder · Grow · Market expansion"`; `/api/ai/modules on "Founder · Grow · Product improvement"`; `railMatrix.json "Founder · Grow · Distribution"`; and 6 more
 - Network: **offered**, `railMatrix.json option draft:network/intro-email`; `railMatrix.json option draft:network/re-engagement`
 - Research: **offered**, `/api/ai/modules on "Founder · Research · Geographies"`; `railMatrix.json "Founder · Research · Geographies"`
@@ -822,7 +822,7 @@ chat: Compare evidence, work through scenarios and explain planning assumptions.
 - Validate: **offered**, `/api/ai/modules on "Founder · Validate · Demand and urgency signals"`; `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Verdict"`
 - Record a Session: **gap**, `#3721`
 - Build: **offered**, `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; `/api/ai/modules on "Founder · Build · Solution design"`; and 1 more
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Cap table"`; `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise · Use of funds"`; `/api/ai/modules on "Founder · Raise"`
+- Raise: **wired**, `routes/deck_derive.ts (memo_write)`
 - Grow: **offered**, `/api/ai/modules on "Founder · Grow · Revenue and traction"`; `/api/ai/modules on "Founder · Grow · Team expansion"`; `/api/ai/modules on "Founder · Grow"`
 - Network: **gap**, `#3721`
 - Research: **offered**, `/api/ai/modules on "Investor · Research · Benchmarking"`

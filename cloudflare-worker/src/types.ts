@@ -240,6 +240,8 @@ export interface Env {
   // simply mix in with the onboarding traffic, but no functionality
   // breaks. Default: `advisor-ongoing` once wrangler.toml is deployed.
   CF_AI_GATEWAY_SLUG_ADVISOR?: string;
+  /** D1504 (#3755): the deck's AI Gateway; empty until the owner creates it. */
+  CF_AI_GATEWAY_SLUG_DECK?: string;
   // Task #4 (CG) — per-user daily advisor turn cap. Counts /api/advisor
   // turns (chat completions, not /explain) in KV bucket
   // `ai_spend:advisor:{user_id}:{yyyy-mm-dd}` and hard-blocks at this
@@ -459,6 +461,12 @@ export interface Env {
   MEETING_BOT_RUNTIME?: import('./services/meetingBots').BotRuntime;
   PIPELINE_ROOM?: DurableObjectNamespace;
   ONBOARDING_CHAT?: DurableObjectNamespace;
+  // D1577 (#3824): the `DeckPresence` room, bound in all three wrangler.toml tables (the owner
+  // approved its cost, decision L). Optional so a test env without it answers 503 `presence_off`.
+  DECK_PRESENCE?: DurableObjectNamespace;
+  // D1502 part 2 (#3753): one room per deck that drives its generation runs, and one governor per account that throttles their steps.
+  DECK_GEN_ROOM?: DurableObjectNamespace;
+  AI_GOVERNOR?: DurableObjectNamespace;
   // Vectorize index `axal-search` (768-dim, cosine) for semantic search.
   // Optional so unit-test envs without the binding still type-check; the
   // search service no-ops gracefully when undefined.
@@ -467,6 +475,10 @@ export interface Env {
   // until the owner approves its monthly cost (decision L); absent, quote
   // retrieval answers "not switched on yet".
   DECK_QUOTES?: VectorizeIndex;
+  // D1540 (#3791, owner decision AA): the owner's daily ceiling on deck
+  // generation, in micro-USD across every member per UTC day
+  // (`services/decks/runQuotes.ts`). Not in wrangler.toml: unset is off.
+  DECK_DAILY_CEILING_MICROUSD?: string;
   // Task #13 — Workers Analytics Engine binding (`studioos_requests` dataset).
   // observability middleware writes one data point per HTTP request so the
   // Admin Analytics → Technical sub-tab can serve true edge-level traffic

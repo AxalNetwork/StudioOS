@@ -557,7 +557,7 @@ test('the wiring: the drawer\'s route, the client in api.js\'s block, dialogs ne
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.match(route, /instrument: instrumentId(?:, scenario: scenarioId)? \} = useParams\(\)/);
   assert.match(route, /<CapTableTabPage tab=\{capTableTab\} proposal=\{proposalId\} instrument=\{instrumentId\}/);
-  assert.match(read('frontend/src/lib/api.js'), /export \* from '\.\/api\/capTableRegister\.js';\nexport \* from '\.\/api\/capTableScenarios\.js';\n/);
+  assert.match(read('frontend/src/lib/apiModules.generated.js'), /export \* from '\.\/api\/capTableRegister\.js';\nexport \* from '\.\/api\/capTableScenarios\.js';\n/);
   const client = read('frontend/src/lib/api/capTableScenarios.js');
   assert.match(client, /today: \(projectId\) => request\(`\$\{base\(projectId\)\}\/today`\)/);
   assert.match(client, /simulate: \(projectId, body\) => request\(`\$\{base\(projectId\)\}\/simulate`, \{ method: 'POST'/);

@@ -19,11 +19,11 @@
  *                             an admin reads
  *   perks                     D1595: a partner's own listing (routes/perks.ts, `myPerk`);
  *                             an admin reads
- *   deal_notes                #4046: an investor's note on a deal they hold for their firm
- *                             (routes/deal_context.ts `context`: `dealFirm`, `investorDeal`);
- *                             the firm reads, the author alone writes; an admin gets nothing
+ *   deal_notes                #4046: a firm's private note on a deal (routes/deal_context.ts,
+ *                             `context`): an investor who may open the deal for that firm reads
+ *                             the firm's notes; only the note's author fills it. No staff bypass.
  *
- * The D1595 three are CONCEALED: a caller who may not read the record is
+ * The D1595 three and the deal note are CONCEALED: a caller who may not read the record is
  * answered as if it did not exist, and each reads the request's verified
  * active company (`ScopeContext`), as its route does; without one it answers
  * nothing.
@@ -44,7 +44,7 @@
  */
 import type { Env, User } from '../../types';
 import { inSupportBook, myPerk, offeringOwned, supportBookIds } from '../profileWriteGates';
-import { dealFirm, investorDeal } from '../../routes/deal_context';
+import { noteFirm, visibleDeal } from '../dealNotes';
 
 export interface ScopeAccess { read: boolean; write: boolean }
 export type ParentKind = 'advisor' | 'engagement' | 'event' | 'project' | 'owner' | 'deal';
@@ -52,7 +52,7 @@ export type ParentKind = 'advisor' | 'engagement' | 'event' | 'project' | 'owner
 /** What a scope may need from the request: the caller's verified active company (`activeCompanyFor`). */
 export interface ScopeContext {
   activeCompany(): Promise<number | null>;
-  /** #4046: whether the request names a company (`X-Company-Id`), as the deal routes ask (`dealFirm`). */
+  /** #4046: whether the request named a company (`X-Company-Id`); a claim that does not verify never falls back. */
   claimed?(): boolean;
 }
 
@@ -167,26 +167,6 @@ export const RECORD_SCOPES: Readonly<Record<string, RecordScope>> = Object.freez
       return { read: true, write: Number(row.created_by) === Number(user.id) && row.status !== 'decided' };
     },
   },
-  // #4046 (Group A2): a deal page's note. The route's own rule (`context`): an investor, the firm the request is for,
-  // and a deal they hold an invitation or a commitment on. The firm reads a note; only its author changes it.
-  // No staff bypass, as on the route: an admin gets nothing.
-  deal_notes: {
-    read: 'SELECT * FROM deal_notes WHERE id = ?',
-    parent: { kind: 'deal', column: 'deal_id' },
-    concealed: true,
-    async access(env, user, row, parentId, ctx) {
-      if (role(user) !== 'investor' || !ctx) return NONE;
-      const firm = await dealFirm(env, user, await ctx.activeCompany(), !!ctx.claimed?.());
-      if (firm === 'invalid' || firm === 'ambiguous') return NONE;
-      const dealId = Number(row ? row.deal_id : parentId);
-      if (!Number.isSafeInteger(dealId) || dealId <= 0 || !(await investorDeal(env, user, dealId, firm.company))) return NONE;
-      if (!row) return BOTH;
-      // The notes list's own predicate: this firm's notes, or the author's own when there is no firm.
-      const sameFirm = (row.company_id ?? null) === (firm.company ?? null);
-      if (!sameFirm || (row.company_id == null && Number(row.author_user_id) !== Number(user.id))) return NONE;
-      return { read: true, write: Number(row.author_user_id) === Number(user.id) };
-    },
-  },
   // D1595 (#3868): Value-add's Log support. `canViewLpData`, then the book the route writes against.
   // No admin trigger (D1329, #2431 question 5): an admin reads every entry and fills none.
   portfolio_support_entries: {
@@ -226,6 +206,26 @@ export const RECORD_SCOPES: Readonly<Record<string, RecordScope>> = Object.freez
         if (await myPerk(env, String(row.uid ?? ''), Number(user.id), await ctx.activeCompany())) return BOTH;
       }
       return isAdminUser(user) && row ? READ_ONLY : NONE;
+    },
+  },
+  // #4046 (#3740 2b): Deal notes' New note. The firm and the deal by `context`'s own rule (routes/deal_context.ts);
+  // a note is read by the firm it is filed under (a firm-less note by its author alone) and filled by its author.
+  // No admin and no staff bypass: the route has none, so a caller who may not read it is told it does not exist.
+  deal_notes: {
+    read: 'SELECT * FROM deal_notes WHERE id = ?',
+    parent: { kind: 'deal', column: 'deal_id' },
+    concealed: true,
+    async access(env, user, row, parentId, ctx) {
+      if (role(user) !== 'investor' || !ctx) return NONE;
+      const firm = await noteFirm(env.DB, Number(user.id), await ctx.activeCompany(), !!ctx.claimed?.());
+      if (firm === undefined) return NONE;
+      const dealId = Number(row ? row.deal_id : parentId);
+      if (!Number.isSafeInteger(dealId) || dealId <= 0 || !(await visibleDeal(env.DB, dealId, Number(user.id), firm))) return NONE;
+      if (!row) return BOTH;
+      const noteFirmId = row.company_id == null ? null : Number(row.company_id);
+      const author = Number(row.author_user_id) === Number(user.id);
+      if (noteFirmId !== firm || (noteFirmId == null && !author)) return NONE;
+      return author ? BOTH : READ_ONLY;
     },
   },
 });

@@ -98,7 +98,7 @@ export function runRefusalStatus(r: RefusalReason | undefined): number {
   switch (r) {
     case 'assist_off': case 'ai_paused': return 403;
     case 'budget_user_day': case 'budget_user_month': case 'budget_review': case 'spend_limit': return 402;
-    case 'model_not_offered': case 'model_unpriced': case 'guard_blocked': case 'guard_blocked_output': case 'safety_block': return 422;
+    case 'model_not_offered': case 'model_unpriced': case 'model_terms_unreviewed': case 'guard_blocked': case 'guard_blocked_output': case 'safety_block': return 422;
     case 'invalid_input': return 400;
     default: return 503;
   }

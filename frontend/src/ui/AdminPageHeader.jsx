@@ -3,6 +3,8 @@ import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { Info } from 'lucide-react';
 import Lightbox from './Lightbox';
 import { usePhoneWidth } from './phone/usePhoneWidth';
+import HeaderAsk from './HeaderAsk.jsx';
+import { useAskPanel } from './eadwynPanel.js';
 
 /**
  * D936 (#2375) — the one header every admin page shares, built to the owner's
@@ -21,6 +23,13 @@ import { usePhoneWidth } from './phone/usePhoneWidth';
  *      node, drawn in the same place;
  *   5. the moved notice, only after an old address forwarded here;
  *   6. the tab bar, only when the page has tabs: `HeaderTab`s, passed as `tabs`.
+ *
+ * ASK (D1443 part 5, #3992, canvas AK11). Every admin console draws Eadwyn's
+ * Ask in its actions, after the page's one primary, or alone when the page has
+ * none ("Approvals · no primary, so Ask stands alone"). It is `HeaderAsk`, so it
+ * draws only while the page's rail serves Ask to this viewer. When Ask does not
+ * serve and the page has no actions, the row is not drawn, so those headers keep
+ * their layout to the pixel.
  *
  * The title row's right side ends with the More menu (SHL1) when the page
  * passes `more`: `HeaderMenuItem`s, each a literal link (`to`) or an action
@@ -208,6 +217,7 @@ export default function AdminPageHeader({
   'data-testid': testId = 'admin-page-header',
 }) {
   const titleRef = useRef(null);
+  const askOn = useAskPanel().available;
   const onDismiss = () => {
     notice?.onDismiss?.();
     // SHL3: Dismiss returns focus to the title, never to the top of the page.
@@ -233,8 +243,8 @@ export default function AdminPageHeader({
             <span key={p.label} title={p.title} data-testid={p.testId} className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11.5px] font-bold ${PILL_TONES[p.tone] || PILL_TONES.hq}`}>{p.label}</span>
           ))}
       </div>
-      {actions || more ? <div className={`contents sm:col-start-2 sm:flex sm:items-start sm:gap-2 ${crumb ? 'sm:row-start-2' : 'sm:row-start-1'}`} data-testid="admin-page-actions">
-        {actions ? <div className={`col-span-2 flex min-w-0 flex-col gap-2 [&>*]:w-full sm:flex-row sm:[&>*]:w-auto ${crumb ? 'row-start-4' : 'row-start-3'}`}>{actions}</div> : null}
+      {actions || askOn || more ? <div className={`contents sm:col-start-2 sm:flex sm:items-start sm:gap-2 ${crumb ? 'sm:row-start-2' : 'sm:row-start-1'}`} data-testid="admin-page-actions">
+        {actions || askOn ? <div className={`col-span-2 flex min-w-0 flex-col gap-2 [&>*]:w-full sm:flex-row sm:[&>*]:w-auto ${crumb ? 'row-start-4' : 'row-start-3'}`}>{actions}<HeaderAsk testId="admin-page-ask" /></div> : null}
         {more ? <MoreMenu hasCrumb={Boolean(crumb)}>{more}</MoreMenu> : null}
       </div> : null}
       {line ? <p className={`col-span-2 m-0 max-w-[72ch] text-[13px] leading-normal text-axal-muted dark:text-gray-400 ${crumb ? 'row-start-3' : 'row-start-2'}`}>{line}</p> : null}

@@ -33,6 +33,7 @@ import { CARDS, RECORDS, MODULES as VALIDATE_MODULES } from '../src/pages/cycles
 import { createPdfStub } from './_pdf-stub.mjs';
 import { h, mountForm } from './_form_d695.mjs';
 import { sourceModule, mutate, mutationCheck } from './_record_d696.mjs';
+import { apiModulesBlock } from './_apiModulesBlock.mjs';
 
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 const stamp = new Date('2026-10-15T12:00:00.000Z');
@@ -386,10 +387,11 @@ test('22: verdictApi holds record alone, a POST to the mounted decisions route, 
   assert.match(src, /request\(`\/cycles\/validate\/decisions\?project=\$\{encodeURIComponent\(projectId\)\}`, \{ method: 'POST', body: JSON\.stringify\(body\) \}\)/);
   assert.match(read('../cloudflare-worker/src/index.ts'), /app\.route\('\/api\/cycles\/validate\/decisions', cycleVerdict\);/);
   assert.match(read('../cloudflare-worker/src/routes/cycle_verdict.ts'), /\.post\('\/'/);
-  const api = read('src/lib/api.js');
-  const block = api.slice(api.indexOf('// api-modules:begin'), api.indexOf('// api-modules:end'));
+  assert.match(read('src/lib/api.js'), /^export \* from '\.\/apiModules\.generated\.js';$/m);
+  const block = apiModulesBlock();
   // D1256 and D1259: ventureScoreModels.js and ventureScores.js sort between useOfFunds.js and verdict.js.
-  assert.match(block, /export \* from '\.\/api\/usage\.js';\nexport \* from '\.\/api\/useOfFunds\.js';\nexport \* from '\.\/api\/ventureScoreModels\.js';\nexport \* from '\.\/api\/ventureScores\.js';\nexport \* from '\.\/api\/verdict\.js';\n$/);
+  // D1614 §8 (#3970): work.js sorts after verdict.js, and ends the block.
+  assert.match(block, /export \* from '\.\/api\/usage\.js';\nexport \* from '\.\/api\/useOfFunds\.js';\nexport \* from '\.\/api\/ventureScoreModels\.js';\nexport \* from '\.\/api\/ventureScores\.js';\nexport \* from '\.\/api\/verdict\.js';\nexport \* from '\.\/api\/work\.js';\n$/);
   const sent = [];
   const mod = await sourceModule(mutate(src, "import { request } from '../api.js';", 'const request = (...a) => { globalThis.__d693Sent.push(a); return Promise.resolve({ ok: true }); };'), 'lib/api/verdict.js');
   globalThis.__d693Sent = sent;

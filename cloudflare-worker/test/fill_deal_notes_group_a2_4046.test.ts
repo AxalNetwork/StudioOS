@@ -1,7 +1,7 @@
 /**
  * #4046 Group A2 — Ask on a deal page's note (`deal_notes.body`): a scoped
  * record under its deal, by the notes route's own rule (routes/deal_context.ts
- * `context`, shared as `dealFirm` and `investorDeal`). An investor, for the
+ * `context`, shared as `noteFirm` and `visibleDeal`). An investor, for the
  * firm the request is for, on a deal they hold an invitation or a commitment
  * on. The firm reads a note's marks; only its author fills it. No staff
  * bypass: an admin is answered as if the record did not exist.
@@ -26,7 +26,7 @@ import { FILL_FIELDS as SPA_FIELDS } from '../../frontend/src/lib/fillFields.js'
 const SECRET = 'synthetic-fill-deal-notes-4046-'.repeat(3);
 test.after(() => removeMigratedDatabases());
 
-const PAGE = 'Investor · Deals · Deal page';
+const PAGE = 'Investor · Deals · Deal room';
 const MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 
 // 41 investor (firm 5, invited to deal 4), 42 colleague (firm 5, invited too), 43 investor of firm 6 (no invitation),
@@ -47,7 +47,7 @@ function fixture(output: unknown = { fields: [] }) {
     INSERT INTO deal_invitations(deal_id,investor_user_id,company_id) VALUES (4,41,5),(4,42,5),(4,44,5),(4,45,6);
     INSERT INTO deal_notes(id,uid,deal_id,author_user_id,company_id,tag,body) VALUES
       (501,'n-1',4,41,5,'Thesis','Pilots convert in a quarter'),
-      (502,'n-2',4,42,5,'','Colleague private words, never sent to the model');
+      (502,'n-2',4,43,6,'','Other firm private words, never sent to the model');
   `);
   const runs: any[] = [];
   const run = async (_env: any, input: any) => {
@@ -92,7 +92,7 @@ test('the registry: one composition field, both copies; the tag is never asked; 
 });
 
 test('who: the author fills, a colleague reads marks, another firm and an admin are told it does not exist', async () => {
-  // Mutation checked: the scope without `investorDeal` lets an uninvited firm add under deal 4; write for any reader
+  // Mutation checked: the scope without `visibleDeal` lets an uninvited firm add under deal 4; write for any reader
   // gives the colleague a trigger; an admin bypass reads the note; the firm match dropped lets firm 6 read firm 5's note.
   const f = fixture();
   const add = await f.sheet(41, { parent: 4 });
@@ -114,14 +114,14 @@ test('who: the author fills, a colleague reads marks, another firm and an admin 
 });
 
 test('the firm: two firms and no claim is refused; a claim that does not verify never falls back', async () => {
-  // Mutation checked: `dealFirm`'s ambiguous branch dropped lets an investor in two firms add with no firm named.
+  // Mutation checked: `noteFirm`'s ambiguous branch dropped lets an investor in two firms add with no firm named.
   const f = fixture();
   assert.equal((await f.sheet(44, { parent: 4 })).status, 404, 'two firms, none named');
   assert.equal((await f.sheet(41, { parent: 4 }, { 'X-Company-Id': '999' })).status, 404, 'an unverified claim');
 });
 
-test('the run reads the company and the author\'s own notes, never a colleague\'s; Save keeps the placed words', async () => {
-  // Mutation checked: the existing read without `author_user_id = ?` sends a colleague's words to the model.
+test('the run reads the company and the firm\'s notes, never another firm\'s; Save keeps the placed words', async () => {
+  // Mutation checked: the existing read without the firm predicate sends another firm's words to the model.
   const f = fixture({ fields: [{ field: 'body', value: 'Ask how pilots convert after the first quarter.' }, { field: 'tag', value: 'Risk' }] });
   const r = await f.runForm(41, { parent: 4 });
   assert.equal(r.status, 200, r.text);
@@ -129,7 +129,7 @@ test('the run reads the company and the author\'s own notes, never a colleague\'
   const text = prompt(f.runs[0]);
   assert.match(text, /Company: Acme Field/);
   assert.match(text, /Pilots convert in a quarter/, 'the author\'s own notes, so a note is not repeated');
-  assert.doesNotMatch(text, /Colleague private words/);
+  assert.doesNotMatch(text, /Other firm private words/);
   // The route's own Save, which now answers the row's id; then the record step keeps the placed words.
   const saved = await f.call(41, 'POST', '/api/deals/4/notes', { body: r.done.proposals[0].value, tag: 'Thesis' });
   assert.equal(saved.status, 201, saved.text);

@@ -48,6 +48,14 @@ export const RAIL_PAGE = 'Founder · Raise · Pitch deck';
 export const TEXT_ELEMENTS = Object.freeze(['title', 'kicker', 'body', 'bullets', 'callout', 'caption']);
 const CHARTS = Object.freeze({ chart: 'chart', table: 'table', timeline: 'timeline' });
 const IMAGES = Object.freeze({ photo: 'scene', illustration: 'flat' });
+/**
+ * D1543 (#3781): the venture-record elements. Their route is on main
+ * (`deckV2Adapter.ventureElements`): each is read from the records with no
+ * model, or refused by its gate. This dialog generates; it does not insert a
+ * record-bound element, so the row says so instead of "Coming later".
+ */
+export const VENTURE_ELEMENTS = Object.freeze(['team_bios', 'logo_wall', 'use_of_funds', 'round_terms', 'interview_quote', 'cap_table']);
+export const VENTURE_LINE = 'Placed from your records, with no model. This dialog does not insert it yet.';
 /** Free elements the editor's existing dialogs place (Add a block, ⋯ › Structure). */
 const DIALOGS = Object.freeze({
   quote_founder: { open: 'add-block', kind: 'text' },
@@ -154,6 +162,9 @@ export function rowPlan({ area, element, card, cardIndex, items = [], choice = {
   const block = area?.kind === 'block' ? area.block : null;
   if (!el || !area) return { run: 'refused', why: 'Pick an element for this area.' };
   if (el.adapter) return { run: 'later', adapter: el.adapter, issue: el.issue, why: LATER };
+  if (VENTURE_ELEMENTS.includes(element)) return { run: 'refused', why: VENTURE_LINE };
+  // D1560 (#3807): speaker notes are the card's, written from its own words; the area is not replaced.
+  if (element === 'speaker_notes') return { run: 'notes', action: 'speaker_notes', option: 'deck:notes', cardKey, body: { action: 'speaker_notes', cards: [cardKey] } };
   // A figure bound to a record is the record's: only another recorded figure replaces it.
   if (bound(block) && element !== 'metric') {
     const module = items.find((i) => i.source_key === block.binding?.source_key)?.module ?? null;
@@ -195,9 +206,9 @@ export function rowPlan({ area, element, card, cardIndex, items = [], choice = {
 }
 
 /** True for a plan Generate runs (a model run, or a free element that needs nothing more). */
-export const runnable = (plan) => (plan.run === 'assist' || plan.run === 'image') || ((plan.run === 'metric' || plan.run === 'upload') && !plan.why);
+export const runnable = (plan) => (plan.run === 'assist' || plan.run === 'image' || plan.run === 'notes') || ((plan.run === 'metric' || plan.run === 'upload') && !plan.why);
 /** True for a plan that runs a model and so is quoted and charged. */
-export const charged = (plan) => plan.run === 'assist' || plan.run === 'image';
+export const charged = (plan) => plan.run === 'assist' || plan.run === 'image' || plan.run === 'notes';
 
 /** A quote's hold in micro-dollars: the assist route's `hold_microusd`, the image route's `total_microusd`. */
 export function holdOf(quote) {
@@ -303,6 +314,11 @@ export function placeResult(card, result, model = null) {
   const area = result?.area;
   if (!card || !area) return { error: 'This card is no longer open. Discard this proposal.' };
   const blocks = Array.isArray(card.blocks) ? card.blocks : [];
+  // D1560: notes land only while the card's notes are still the proposal's `before`.
+  if (result.kind === 'notes') {
+    if (String(card.notes ?? '').trim() !== String(result.before ?? '').trim()) return { error: 'This card’s speaker notes changed since Eadwyn proposed these. Ask again.' };
+    return { card: { ...card, notes: result.after }, blockId: null };
+  }
   if (result.kind === 'text') {
     const hit = blocks.find((b) => String(b.id) === String(area.block?.id) && b.kind === 'text' && String(b.text ?? '') === result.before);
     if (!hit) return { error: `${areaLabel(area.grid) || 'This area'} changed since Eadwyn proposed this. Select it and ask again.` };

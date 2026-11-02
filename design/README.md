@@ -21,13 +21,14 @@ made *from*, plus the record of what was made from it.
 
 ```
 design/incoming/          a new export lands
-      ↓ triage            grade it, add a ROUTE_MAP row
+      ↓ triage            grade it, add its route-map row file
 design/canvases/backlog/  triaged, not built yet
       ↓ build             worker route first, then the page
 design/canvases/integrated/   a route is live for it
 ```
 
-`documentation/architecture/ROUTE_MAP.md` is the authority on *what* shipped
+The route map (`documentation/architecture/route-map/`, one file per canvas row,
+D4102) is the authority on *what* shipped
 from each canvas and what deliberately did not. This folder answers the coarser
 question — is there a route for it at all — by where the file sits.
 

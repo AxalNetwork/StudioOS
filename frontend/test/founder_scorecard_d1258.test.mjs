@@ -24,6 +24,7 @@ import {
   advisorHref, bandWord, coverageText, equalWeights, inputRow, isEqual, messageProblem, openCorrection, previewRow, reviewBody, reviewLine,
   reviewPreview, reviewProblem, scopeRow, sharingChange, trajectoryOf, trajectoryRows, weightsProblem,
 } from '../src/components/scoring/scorecard/founderModel.js';
+import { readRouteMap } from '../../scripts/lib/routeMap.mjs';
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -388,5 +389,5 @@ test('the wiring: both founder addresses, the advisor address, Deal flow’s wei
   assert.match(read('frontend/src/lib/api/ventureScores.js'), /trajectory: \(projectId\) => request\(`\/venture-scores\/\$\{enc\(projectId\)\}\/trajectory`\)/);
   assert.match(read('cloudflare-worker/src/services/ventureScoring/access.ts'), /link: `\/practice\/scorecards\/\$\{projectId\}`/, 'the advisor’s notice opens SC21');
   assert.match(read('documentation/architecture/decisions/D1258.md'), /## D1258/);
-  assert.match(read('documentation/architecture/ROUTE_MAP.md'), /D1258/);
+  assert.match(readRouteMap(), /D1258/);
 });

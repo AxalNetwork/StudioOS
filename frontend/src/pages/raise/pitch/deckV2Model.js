@@ -55,6 +55,14 @@ export function areaLabel(grid) {
  */
 const R = (route, option = null) => ({ route, option });
 const A = (adapter, issue) => ({ adapter, issue });
+/**
+ * D1543 (#3781): a venture-record element, read from the records (`deckV2Adapter.ventureElements`).
+ * Only the logo wall is `free`: team bios run a model (#3781's "Team bios [Model A]"), and the venture
+ * items keep their DK3 job in `modelUseCases.ts`'s DECK_ELEMENT_JOBS (D1503, D1549), which a free
+ * placement may not carry.
+ */
+const V = Object.freeze(R('GET /api/decks/:id/venture-elements/:element'));
+const VF = Object.freeze({ free: true, ...V });
 
 export const ELEMENT_GROUPS = Object.freeze([
   { id: 'text', label: 'Text', items: [
@@ -65,8 +73,9 @@ export const ELEMENT_GROUPS = Object.freeze([
     { id: 'callout', label: 'Call-out', ...R('POST /api/decks/:id/cards/:card/assist', 'deck:rewrite') },
     { id: 'caption', label: 'Caption', ...R('POST /api/decks/:id/cards/:card/assist', 'deck:rewrite') },
     { id: 'quote_founder', label: 'Quote · founder’s own', free: true },
-    { id: 'team_bios', label: 'Team bios', ...A('ventureElements', 3781) },
-    { id: 'speaker_notes', label: 'Speaker notes', ...A('media', 3788) },
+    { id: 'team_bios', label: 'Team bios', ...V },
+    // D1560 (#3807): the card's speaker notes, written from its own words by the transform route.
+    { id: 'speaker_notes', label: 'Speaker notes', ...R('POST /api/decks/:id/transform', 'deck:notes') },
   ] },
   { id: 'images', label: 'Images', items: [
     { id: 'photo', label: 'Generated photo', ...R('POST /api/decks/:id/images', 'deck:image') },
@@ -81,7 +90,7 @@ export const ELEMENT_GROUPS = Object.freeze([
     { id: 'icons', label: 'Icons', ...A('elementsLibrary', 3779) },
     { id: 'shapes', label: 'Shapes and dividers', ...A('elementsLibrary', 3779) },
     { id: 'textures', label: 'Backgrounds and textures', ...A('elementsLibrary', 3779) },
-    { id: 'logo_wall', label: 'Logo wall', ...A('ventureElements', 3781) },
+    { id: 'logo_wall', label: 'Logo wall', ...VF },
   ] },
   { id: 'data', label: 'Data', items: [
     { id: 'chart', label: 'Chart from records', ...R('POST /api/decks/:id/cards/:card/assist', 'deck:chart') },
@@ -106,10 +115,10 @@ export const ELEMENT_GROUPS = Object.freeze([
   ] },
   { id: 'venture', label: 'Venture records', items: [
     { id: 'team_grid', label: 'Team grid', free: true },
-    { id: 'use_of_funds', label: 'Use of funds', ...A('ventureElements', 3781) },
-    { id: 'round_terms', label: 'Round terms', ...A('ventureElements', 3781) },
-    { id: 'interview_quote', label: 'Interview quote', ...A('ventureElements', 3781) },
-    { id: 'cap_table', label: 'Cap-table summary', ...A('ventureElements', 3781) },
+    { id: 'use_of_funds', label: 'Use of funds', ...V },
+    { id: 'round_terms', label: 'Round terms', ...V },
+    { id: 'interview_quote', label: 'Interview quote', ...V },
+    { id: 'cap_table', label: 'Cap-table summary', ...V },
   ] },
   { id: 'media', label: 'Media & links', items: [
     { id: 'video', label: 'Video', free: true, ...R('POST /api/decks/video-link') },
@@ -231,7 +240,8 @@ export const cardEditLine = (edit) => `Card ${edit.card + 1} · ${edit.what}`;
  */
 export function waitingCount({ deck, edits }) {
   if (deck?.status !== 'ready' || edits?.status !== 'ready') return null;
-  return (deck.proposal ? 1 : 0) + edits.items.length;
+  // D1583 (#3830): a teaser, one-pager or memo waiting counts like a card edit.
+  return (deck.proposal ? 1 : 0) + edits.items.length + (Array.isArray(edits.derived) ? edits.derived.length : 0);
 }
 
 /**
@@ -305,6 +315,8 @@ export const MORE_MENU = Object.freeze([
     { id: 'sources', label: 'Sources and coverage' },
     { id: 'versions', label: 'Versions…' },
     { id: 'save_named', label: 'Save as a named version…', write: true },
+    // D1583 (#3830): a teaser, a one-pager or a memo from the saved version, each a proposal Ask lists.
+    { id: 'derive', label: 'Teaser, one-pager or memo…', write: true },
     // Kept from v1's editor bar and Notes tab: the thread with the venture's admins (D905).
     { id: 'notes', label: 'Notes from your admins' },
   ] },

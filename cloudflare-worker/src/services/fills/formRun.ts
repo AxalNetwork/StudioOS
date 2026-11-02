@@ -27,6 +27,8 @@ import type { Env } from '../../types';
 import { offeredToEadwyn, type FillField } from './fields';
 import { neverFillReason } from './neverFill';
 import type { Citation } from './types';
+import type { ScopeContext } from './scopes';
+import { noteFirm } from '../dealNotes';
 
 /** The most rows one run may propose, and the most Accept all takes at once (#2431 question 3, A). */
 export const MAX_RUN_ROWS = 10;
@@ -111,8 +113,9 @@ export async function gatherForm(env: Env, projectId: number, fields: readonly F
  * services, the event's sessions. Never an amount, a term, a vote or a decision.
  * D1595 (#3868): a support entry's company and the caller's own last entries
  * on it; the caller's own offering titles; the caller's own perk offers.
+ * #4046: a deal note reads the deal's company and stage and its firm's last notes.
  */
-export async function gatherScoped(env: Env, userId: number, table: string, row: Record<string, unknown> | null, parentId: number | null = null): Promise<FormGather> {
+export async function gatherScoped(env: Env, userId: number, table: string, row: Record<string, unknown> | null, parentId: number | null = null, ctx?: ScopeContext): Promise<FormGather> {
   const out: FormGather = { choices: new Map(), existing: [], context: [] };
   const list = async (sql: string, ...binds: unknown[]) => ((((await env.DB.prepare(sql).bind(...binds).all<{ value: string }>()).results) || []).map((r) => String(r.value)));
   if (table === 'advisor_services') {
@@ -140,12 +143,17 @@ export async function gatherScoped(env: Env, userId: number, table: string, row:
   } else if (table === 'perks') {
     out.existing = await list('SELECT offer AS value FROM perks WHERE partner_user_id = ? ORDER BY id DESC LIMIT 40', userId);
   } else if (table === 'deal_notes') {
-    // #4046: the company the deal is for, and the caller's own last notes on it (never a colleague's, never a figure).
+    // #4046: the deal's company and stage, and the firm's own last notes on it (what the caller already reads).
+    // Never a figure: no amount, valuation, commitment or vote is read here.
     const dealId = row ? row.deal_id : parentId;
-    const company = await env.DB.prepare('SELECT p.name FROM deals d JOIN projects p ON p.id = d.project_id AND p.deleted_at IS NULL WHERE d.id = ?')
-      .bind(dealId ?? null).first<{ name: string }>();
-    out.context = [`Company: ${company?.name ?? 'not recorded'}`];
-    out.existing = await list('SELECT body AS value FROM deal_notes WHERE deal_id = ? AND author_user_id = ? ORDER BY id DESC LIMIT 10', dealId ?? null, userId);
+    const deal = await env.DB.prepare(`SELECT p.name, d.status FROM deals d JOIN projects p ON p.id = d.project_id
+      WHERE d.id = ? AND p.deleted_at IS NULL`).bind(dealId ?? null).first<{ name: string; status: string }>();
+    out.context = deal ? [`Company: ${deal.name}`, `Deal stage: ${deal.status ?? 'not recorded'}`] : [];
+    // The firm the note is (or will be) filed under, by the route's rule; none resolvable reads no notes.
+    const firm = row ? row.company_id ?? null : ctx ? await noteFirm(env.DB, userId, await ctx.activeCompany(), !!ctx.claimed?.()) : undefined;
+    if (firm === undefined) return out;
+    out.existing = await list(`SELECT substr(body, 1, 300) AS value FROM deal_notes
+      WHERE deal_id = ? AND company_id IS ? AND (company_id IS NOT NULL OR author_user_id = ?) ORDER BY id DESC LIMIT 10`, dealId ?? null, firm, userId);
   } else if (table === 'admin_publications' && row) {
     out.context = [`Publication: ${String(row.title ?? 'title not recorded')}`, `Section: ${String(row.section ?? 'not recorded')}`];
   }

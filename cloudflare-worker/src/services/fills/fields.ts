@@ -50,6 +50,8 @@ const PUBLICATIONS = 'Super Admin · Content · Publications';
 const VALUE_ADD = 'Investor · Portfolio · Value-add';
 const CATALOG = 'Operating Partner · Offers · Catalog';
 const PERK_DEALS = 'Operating Partner · Offers · Perk deals';
+// #4046 (#3740 2b): the deal page's Notes tab.
+const DEAL_ROOM = 'Investor · Deals · Deal room';
 const SOLUTION_DESIGN = 'Founder · Build · Solution design';
 const REVENUE = 'Founder · Grow · Revenue and traction';
 const PROBLEM = 'Founder · Validate · Problem discovery';
@@ -60,6 +62,22 @@ const PROTOTYPE = 'Founder · Build · Prototype / MVP';
 const ROADMAP = 'Founder · Build · Product roadmap';
 const CAPITAL = 'Founder · Raise · Capital relationships';
 const TEAM = 'Founder · Grow · Team expansion';
+
+/**
+ * #3937 (D1478 task 3, part 2; §4.2 fix 7): the plan's text job for a form's
+ * Eadwyn fill, so its model is the job's (`ai/textJobs.ts`), not whatever kind
+ * the page's rail row is. Prototype's must-have fill read the page's Code row
+ * (kimi-k2.7-code or qwen-coder); BU4 is Plan (glm-4.7-flash). A form with no
+ * entry keeps its page's rail row. A ladder model no route runs yet is passed
+ * over until its spend is approved (`AWAITING_SPEND_APPROVAL`).
+ */
+export const FORM_TEXT_JOBS: Readonly<Record<string, string>> = Object.freeze({
+  feature: 'BU4', 'must-have': 'BU4',
+  'status-report': 'IN11', service: 'IN11',
+  theme: 'VA11', segment: 'VA12', hypothesis: 'VA15',
+  'ic-memo': 'IN1',
+  event: 'EV1', 'agenda-item': 'EV1',
+});
 
 export const FILL_FIELDS: readonly FillField[] = Object.freeze([
   // AF1, AF3: Add feature. Impact is the founder's call, so it has no entry.
@@ -91,9 +109,6 @@ export const FILL_FIELDS: readonly FillField[] = Object.freeze([
   { page: ROADMAP, form: 'item', field: 'title', label: 'Item', table: 'roadmap_okrs', column: 'objective', class: 'composition', sources: ['eadwyn'] },
   { page: CAPITAL, form: 'investor', field: 'notes', label: 'Notes', table: 'raise_prospects', column: 'notes', class: 'composition', sources: ['eadwyn'] },
   { page: TEAM, form: 'role', field: 'title', label: 'Role', table: 'job_postings', column: 'title', class: 'composition', sources: ['eadwyn'] },
-  // #4046 (Group A2): a deal page's note, an investor's own words on a deal their firm holds. Its tag is the
-  // member's call; an amount, a term or a decision is never written into a note by Eadwyn (D777, D1325).
-  { page: 'Investor · Deals · Deal page', form: 'deal-note', field: 'body', label: 'Note', table: 'deal_notes', column: 'body', class: 'composition', sources: ['eadwyn'] },
   // D1329 (#3490, #2431 part 6): every other profile. These records are not a
   // venture's; `scopes.ts` holds each one's own write check. No amount, legal
   // name, approval, decision, outcome, term or member's record is listed.
@@ -117,6 +132,8 @@ export const FILL_FIELDS: readonly FillField[] = Object.freeze([
   { page: VALUE_ADD, form: 'support', field: 'summary', label: 'What happened', table: 'portfolio_support_entries', column: 'summary', class: 'composition', sources: ['eadwyn'] },
   { page: CATALOG, form: 'offering', field: 'summary', label: 'Summary (what the founder gets)', table: 'service_offerings', column: 'summary', class: 'composition', sources: ['eadwyn'] },
   { page: PERK_DEALS, form: 'perk', field: 'blurb', label: 'One line founders see on the card', table: 'perks', column: 'blurb', class: 'composition', sources: ['eadwyn'] },
+  // #4046: a firm's private note on a deal, its words only. Its tag is the investor's own call, so it has no entry.
+  { page: DEAL_ROOM, form: 'deal-note', field: 'body', label: 'Note', table: 'deal_notes', column: 'body', class: 'composition', sources: ['eadwyn'] },
 ].map((f) => Object.freeze({ ...f, sources: Object.freeze([...f.sources]) })) as FillField[]);
 
 /** The fields of one form, in the form's order. */

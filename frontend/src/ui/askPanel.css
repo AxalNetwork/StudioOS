@@ -133,6 +133,32 @@
   .fwr-ask-dock > .ead-ask { pointer-events: auto; position: sticky; top: 0; height: min(calc(100dvh - 56px), 100%); }
 }
 
+/*
+ * NARROWED (1440px and up, AK12, #3992): "From 1440px the content narrows
+ * beside the panel." While the panel is docked open at that width,
+ * `WorkerRail` sets `data-eadwyn-ask-at="dock"` on <html>, and `--fwr-ask`
+ * becomes the panel's width. Every host's rail track reads
+ * `calc(var(--fwr-track, <own width>) + var(--fwr-ask, 0px))`, so its rail
+ * column widens by 420px and the content column gives that width up. Nothing
+ * is covered.
+ *
+ * The rail's own cards then move clear of the panel, but only where the track
+ * really widened. The aside is a size container in this state only, and a rail
+ * column is never 400px wide unless it took the panel's width (at most 288px
+ * open, 44px on the spine; 464px and up once widened). A host that
+ * does not read the track keeps the overlay, rather than a rail squeezed to
+ * nothing. `frontend/test/header_ask_d1443p5.test.mjs` fails on any track
+ * read without `--fwr-ask`.
+ */
+@media (min-width: 1440px) {
+  :root[data-eadwyn-ask-at="dock"] { --fwr-ask: 420px; }
+  :root[data-eadwyn-ask-at="dock"] aside.fwr:has(> .fwr-ask-dock) { container: fwr-col / inline-size; }
+  @container fwr-col (min-width: 400px) {
+    .fwr-ask-dock { right: auto; left: 0; }
+    aside.fwr > :not(.fwr-ask-dock) { margin-left: 420px; }
+  }
+}
+
 /* OVER and SHEET: portalled below 1024px. */
 .ead-ask-layer { position: fixed; inset: 56px 0 0 0; z-index: 55; display: flex; justify-content: flex-end; pointer-events: none; }
 .ead-ask-layer > .ead-ask { pointer-events: auto; width: min(420px, 100%); height: 100%; }
@@ -142,3 +168,7 @@
 .ead-ask-layer[data-layout="sheet"] .ead-ask-btn,
 .ead-ask-layer[data-layout="sheet"] .ead-ask-close { min-height: 44px; min-width: 44px; }
 @media (min-width: 1024px) { .ead-ask-layer, .ead-ask-scrim { display: none; } }
+
+/* D1443 part 5 (#3992): a desk's hero title with its header Ask beside it. */
+.ask-hero-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.ask-hero-top > h1 { min-width: 0; }

@@ -25,8 +25,14 @@
  *                     group keeps the rail options on main it read before
  *                     (`lib/railOptions/founder.js`, `PUT /api/ai/rail/pick`),
  *                     and one with none reads "Not set up yet".
- *   PRESETS           Fast · Balanced · Best · Custom, greyed "Coming later"
- *                     until #3796 (and the HQ lock with #3786)
+ *   PRESETS           Fast · Balanced · Best · Custom. D1549 (#3796): on a
+ *                     deck (`presetsFor`) they read the preset in force through
+ *                     `deckV2Adapter.presets` (`GET /api/decks/:id/model-
+ *                     presets`) and a press stores it (`PUT`); with no deck
+ *                     they are greyed, since models are picked per deck.
+ *   locks             D1549: on a deck, each group HQ locked, through
+ *                     `deckV2Adapter.orgLocks` (the same reply's `locks`); the
+ *                     rail draws "🔒 Set by Axal VC HQ" on it (aird5).
  *   deckRail(deckId)  the `groups` prop: the groups, the presets and the
  *                     usage rows. "Held now" is on main (`GET
  *                     /api/ai-budget/holds`); "Estimated for this deck" and
@@ -37,7 +43,8 @@
 
 import { aiBudgetApi } from '../../../lib/api/aiBudget.js';
 import { deckElementModelsApi } from '../../../lib/api/deckElementModels.js';
-import { deckUsage, elementModels, presets as presetsRead } from './deckV2Adapter.js';
+import { deckModelPresetsApi } from '../../../lib/api/deckModelPresets.js';
+import { SURFACES, deckUsage, elementModels, orgLocks, presets as presetsRead, unavailable } from './deckV2Adapter.js';
 import { ELEMENT_GROUPS, LATER } from './deckV2Model.js';
 
 /** The page key the pitch pages' rail reads (`lib/railOptions/founder.js`). */
@@ -105,12 +112,18 @@ export function railItems(deckId) {
   })));
 }
 
-/** The four presets (aird1), drawn greyed until #3796. */
+/** The four presets (aird1). With no deck there is nothing to set them on, so they are greyed and say why; nothing is read. */
 export const PRESETS = Object.freeze({
   options: Object.freeze(['Fast', 'Balanced', 'Best', 'Custom']),
   later: LATER,
-  read: presetsRead,
+  read: async () => unavailable(SURFACES.presets.issue, NO_DECK.reason),
 });
+
+/** D1549 (#3796): the presets on a deck — the preset in force, and a press that stores one (`pick('fast' | 'balanced' | 'best' | 'custom')`). */
+export function presetsFor(deckId) {
+  if (deckId == null) return PRESETS;
+  return Object.freeze({ ...PRESETS, read: () => presetsRead(deckId), pick: (preset) => deckModelPresetsApi.set(deckId, preset) });
+}
 
 const money = (micro) => `$${(Math.max(0, Number(micro) || 0) / 1e6).toFixed(2)}`;
 
@@ -136,7 +149,8 @@ export function deckRail(deckId = null) {
   return {
     page: DECK_RAIL_PAGE,
     items: railItems(deckId),
-    presets: PRESETS,
+    presets: presetsFor(deckId),
+    ...(deckId == null ? {} : { locks: () => orgLocks(deckId) }),
     usage: [
       {
         id: 'held', label: 'Held now',

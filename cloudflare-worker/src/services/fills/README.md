@@ -46,17 +46,17 @@ wait for a later part: the competitor's row is keyed by name and the
 feedback's by uid, which `ROW_READS` and `fillRecordId` do not take. An
 obligation's title waits for its Edit form to draw one.
 
-
-**#4046 Group A2.** A deal page's note joins as a scoped record
-(`scopes.ts` `deal_notes`, parent `deal`): `deal_notes.body`, composition, its tag
-never. Its rule is the notes route's own (`../../routes/deal_context.ts` `context`, now
-`dealFirm` and `investorDeal`, shared): an investor, the firm the request is for
-(`ScopeContext.claimed` carries whether one was named, so an unverified claim never
-falls back), and a deal they hold an invitation or a commitment on. The firm reads a
-note's marks; only its author fills it; an admin is answered as if it did not exist.
-The run reads the deal's company and the author's own notes, never a colleague's.
-Not built in A2, with the reason recorded on #4046: the DD memo (its parts are
-encrypted at rest, and Fill's provenance and proposals keep values in plaintext), the
-closing paper's open fields (legal merge fields an Admin types into a document to be
-signed: identity and terms, with no stored row) and the data room's "Eadwyn
-proposals" (checklist matches and folders, a new Eadwyn handler, not a form field).
+**#4046 (#3740 2b), the deal page's New note.** `deal_notes.body` joins as
+one composition field (`Investor · Deals · Deal room` / `deal-note`), under
+a `deal_notes` scope in `scopes.ts` that reads the notes route's own rule
+from `../dealNotes.ts` (`noteFirm`, `visibleDeal`): the firm is the request's
+verified active company, else the caller's only firm, and a claim that does
+not verify never falls back; a firm's note is read by that firm, a firm-less
+note by its author alone, and only the author fills it. No admin and no staff
+bypass, so the scope is concealed. The tag is the investor's own call and has
+no entry. No rows are offered. The other three 2b screens are not built here:
+the DD memo's parts are encrypted at rest (`dd_case_memos.*_enc`) while
+`fill_provenance` keeps proposed and written values in plaintext; a closing
+paper's open fields are merge values of a preview, not a stored column, and
+the non-money ones are names and dates; the data room's "Eadwyn proposals"
+are actions (a match, a folder), not field values.

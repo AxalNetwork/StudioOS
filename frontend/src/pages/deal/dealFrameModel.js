@@ -175,10 +175,10 @@ export const EMPTY = {
 };
 
 /**
- * Eadwyn's draft (DL14): #4046 puts Ask on the new note, so a draft arrives
- * through Ask as a proposal, placed in the box "Not saved" until you save it.
+ * Eadwyn's draft (DL14) is AUTOFILL's proposal (#2431). #4046: it arrives through Ask on New note, drawn
+ * from the deal's company and stage and your firm's notes; a summary of the deal's whole record is not read yet.
  */
-export const EADWYN_DRAFT_WAITS = 'Ask Eadwyn to draft a note on this deal: it arrives through Ask as a proposal, placed in your new note, and nothing lands until you save it as your note.';
+export const EADWYN_DRAFT_WAITS = 'Ask on New note drafts a note from this deal’s company and stage and your firm’s notes. Nothing lands until you save it as your note. A summary of the deal’s whole record is not read here yet.';
 
 /** DL24a: the scorecard strip's slot until SCORING's per-deal read exists (#2428). */
 export const DECK_SLOT = {

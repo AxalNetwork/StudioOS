@@ -87,7 +87,8 @@ function Notes({ dealId, userId }) {
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const [dialog, setDialog] = useState(null); // { mode, note }
-  // #4046 (Group A2): Ask on a new note's words, under this deal (`parent`); Save then keeps what was placed.
+  // #4046 (#3740 2b): Ask on the new note's words, under this deal. The firm and who may fill are the
+  // notes route's own rule (the Worker's deal_notes scope); the Save stays the route's, then the record step.
   const fill = useScopedFill({
     scope: SCOPED_FORMS.dealNote, parent: Number(dealId) > 0 ? Number(dealId) : null, enabled: Number(dealId) > 0,
     values: { body }, onValues: (v) => { if (v.body != null) setBody(v.body); },
@@ -115,12 +116,12 @@ function Notes({ dealId, userId }) {
           <h3 className={H3}>Your notes</h3>
           {read.status === 'ready' && <span className={SUB}>{read.data?.total ?? items.length}</span>}
         </div>
-        <label className="flex flex-col gap-1.5">
-          <FillLabel fill={fill} name="body" label="New note" value={body}><span className={EYE}>New note</span></FillLabel>
-          <textarea rows={3} maxLength={NOTE_MAX} value={body} onChange={(e) => setBody(e.target.value)} className={FIELD} placeholder="Write a note…" data-testid="deal-note-body" />
-        </label>
-        <div className="flex flex-col gap-1.5"><span className={EYE}>Tag</span><TagPicker value={tag} onChange={setTag} /></div>
         <FillFormBar fill={fill} />
+        <div className="flex flex-col gap-1.5">
+          <FillLabel fill={fill} name="body" label="Note" value={body}><label htmlFor="deal-note-body" className={EYE}>New note</label></FillLabel>
+          <textarea id="deal-note-body" rows={3} maxLength={NOTE_MAX} value={body} onChange={(e) => setBody(e.target.value)} className={FIELD} placeholder="Write a note…" data-testid="deal-note-body" />
+        </div>
+        <div className="flex flex-col gap-1.5"><span className={EYE}>Tag</span><TagPicker value={tag} onChange={setTag} /></div>
         {err && <p role="alert" className="m-0 text-[12.5px] text-axal-destructive dark:text-red-300" data-testid="deal-note-error">{err}</p>}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <span className={SUB}>Visible to you and your firm.</span>

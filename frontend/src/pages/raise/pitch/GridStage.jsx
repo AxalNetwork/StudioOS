@@ -1,5 +1,5 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Grid3x3 } from 'lucide-react';
+import { Grid3x3, Shapes } from 'lucide-react';
 import { BlockView } from './BlockGrid';
 import { ChartBlock } from './ChartTools';
 import { overlayStyle } from './imageModel';
@@ -11,9 +11,13 @@ import { langAttrs } from './deckLanguage';
 import { SourceChip } from './SourcesBoards';
 import { ChangedNotice, FigureCard } from './FigureCard';
 import { faceOf, isFigure, itemsByKey, staleFigures } from './figuresModel';
+import { elementsLibrary } from './deckV2Adapter.js';
 import {
-  KEYS_LINE, STAGE_HINT, areaTitle, areasOf, cellAt, keyStep, liveFocus, marquee, moveTo, nudge, pick, selectable, spanOf,
+  KEYS_LINE, STAGE_HINT, areaTitle, areasOf, cellAt, dividerDelta, dividerReadout, dividersOf, keyStep, liveFocus, marquee,
+  moveDivider, moveTo, nudge, pick, selectable, spanOf,
 } from './gridSelection';
+import { minSizeProblem, moveOverflow, overLine, overflowOf } from './structureModel';
+import { cursorsOn, heldAreas } from './presenceModel';
 
 /**
  * D1604 (#3716, pd0, pd3, pd3b, pd11) — the card on The Grid, the editor's
@@ -50,9 +54,59 @@ import {
  * a figure's store has moved on, the card says so with Refresh from records
  * (`onRefresh`). None of it is drawn on Present, share or print.
  *
- * Nothing here writes: a move is the editor's `onMove`, a refresh its
- * `onRefresh`, each held until a version is saved like every other edit.
+ * Dividers (D1513, #3765, pd12): where two blocks meet edge to edge, a violet
+ * divider (role separator) moves the edge between them by whole cells, both
+ * blocks resized in one edit (`onCard`). Arrow keys move it one cell; a
+ * pointer drags it, snapped to cells, with the readout "7 | 5 → 6 | 6".
+ * A move that would break a block's minimum ("A chart needs at least 4 × 3
+ * cells.") or overlap another block (`placementProblem`) is refused with its
+ * sentence and changes nothing. When a text block then holds fewer words than
+ * it has, the stage says "N words over" with Move overflow to notes, one edit.
+ *
+ * Nothing here writes: a move is the editor's `onMove`, a divider or an
+ * overflow its `onCard`, a refresh its `onRefresh`, each held until a version
+ * is saved like every other edit.
+ *
+ * D1541 (#3779, pd28): with one area selected, "Graphics" in the selection
+ * tools opens the elements library: Icons · Shapes · Dividers · Textures,
+ * "Search icons", "Open licence · recorded", and "Generate an icon" greyed
+ * "Coming later". A pick is the editor's `onDecor`, placed on the selected
+ * area's cells, so it sits on the 8 px baseline ("Snapped to the baseline");
+ * "[n] of 16 decor items on this card" counts them, and the 17th is refused.
+ * Decor is drawn under the areas from the Worker's sanitised SVG, as an image,
+ * so nothing in it can run.
  */
+export const DECOR_MAX = 16;
+const DECOR_KINDS = ['icon', 'shape', 'divider', 'texture'];
+const SEGMENT_KIND = { icons: 'icon', shapes: 'shape', dividers: 'divider', textures: 'texture' };
+const SEGMENT_LABEL = { icons: 'Icons', shapes: 'Shapes', dividers: 'Dividers', textures: 'Textures' };
+/** The Worker's SVG with the card's own tones in place of the theme variables, as an image source. */
+export function decorSrc(svg, colours = {}) {
+  if (typeof svg !== 'string' || !svg) return null;
+  const tone = { ink: colours.ink, accent: colours.accent || colours.ink, muted: colours.muted || colours.ink, surface: colours.bg || '#ffffff' };
+  const filled = svg.replace(/var\(--deck-(ink|accent|muted|surface)\)/g, (_, t) => tone[t] || '#111111');
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(filled)}`;
+}
+/** A card's library decor: the items `onDecor` placed and the Worker keeps. */
+export const libraryDecor = (card) => (Array.isArray(card?.decor) ? card.decor.filter((d) => DECOR_KINDS.includes(d?.kind) && d?.ref) : []);
+/** The next free decor id on the card. */
+export function decorId(card) {
+  const used = new Set((card?.decor || []).map((d) => d?.id));
+  let n = (card?.decor || []).length + 1;
+  while (used.has(`d${n}`)) n += 1;
+  return `d${n}`;
+}
+/** Where a divider's handle sits: the two cells either side of it, over the rows (or columns) both blocks share. */
+export function dividerBox(card, div) {
+  const a = (card?.blocks || []).find((x) => String(x.id) === div.a)?.grid;
+  const b = (card?.blocks || []).find((x) => String(x.id) === div.b)?.grid;
+  if (!a || !b) return null;
+  return div.axis === 'v'
+    ? { c1: a.c2, c2: b.c1, r1: Math.max(a.r1, b.r1), r2: Math.min(a.r2, b.r2) }
+    : { c1: Math.max(a.c1, b.c1), c2: Math.min(a.c2, b.c2), r1: a.r2, r2: b.r1 };
+}
+
+const DIVIDER_KEYS = Object.freeze({ v: { ArrowLeft: -1, ArrowRight: 1 }, h: { ArrowUp: -1, ArrowDown: 1 } });
 
 const MUTED = 'text-[12.5px] leading-[1.45] text-axal-muted dark:text-gray-400';
 const MONO = 'font-mono text-[10.5px] text-axal-muted dark:text-gray-400';
@@ -128,10 +182,24 @@ export function CardChrome({ chrome, pageLabel = null, colours, logo = null }) {
 export default function GridStage({
   card, index, model, colours, ink, theme, kit, charts, readOnly = false,
   selection, focus, onSelection, onMove, onAsk, askOff = null, askLine = null, items = [], onRefresh = null,
-  pageLabel = null,
+  pageLabel = null, onCard = null, onDecor = null,
+  editors = null, youId = null, lockLine = null, onPointer = null,
 }) {
   const aspect = aspectOf(theme?.aspect);
   const areas = useMemo(() => areasOf(card, model), [card, model]);
+  // D1577 (#3824, pd32): the areas another member is in, outlined in their colour, and their cursors.
+  const held = useMemo(() => heldAreas(editors, youId, card?.uid ?? null), [editors, youId, card]);
+  const cursors = useMemo(() => cursorsOn(editors, youId, card?.uid ?? null), [editors, youId, card]);
+  const lastPointer = useRef(0);
+  // D1577: this member's pointer, as fractions of the stage, at most five a second (one handler with the drag's `over`).
+  const pointerMoved = (e) => {
+    if (!onPointer || !card?.uid) return;
+    const now = Date.now();
+    const r = faceRef.current?.getBoundingClientRect?.();
+    if (!r || !r.width || !r.height || now - lastPointer.current < 200) return;
+    lastPointer.current = now;
+    onPointer(card.uid, (e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
+  };
   const byKey = useMemo(() => itemsByKey(items), [items]);
   const changed = useMemo(() => staleFigures(card, items, charts), [card, items, charts]);
   const [hover, setHover] = useState(null);
@@ -145,6 +213,10 @@ export default function GridStage({
   const [ghost, setGhost] = useState(null);
   const [refused, setRefused] = useState(null);
   const [box, setBox] = useState(null);
+  // Dividers: the one being dragged ({ id, delta, error }), the last readout or refusal, and a text block's overflow.
+  const [sliding, setSliding] = useState(null);
+  const [divLine, setDivLine] = useState(null);
+  const [overflow, setOverflow] = useState(null);
   const faceRef = useRef(null);
   const layer = useRef(null);
   const buttons = useRef(new Map());
@@ -160,7 +232,8 @@ export default function GridStage({
   const stop = live ?? first;
   const uid = useId();
 
-  useEffect(() => { setRefused(null); setGhost(null); }, [index]);
+  useEffect(() => { setRefused(null); setGhost(null); setSliding(null); setDivLine(null); setOverflow(null); }, [index]);
+  const dividers = useMemo(() => (areas && onCard && !readOnly ? dividersOf(card) : []), [areas, card, onCard, readOnly]);
   // The DOM focus follows the keyboard on the stage; a focus the card changed
   // under (a block now covers the focused range) never pulls it from a field.
   useEffect(() => {
@@ -171,6 +244,32 @@ export default function GridStage({
     if (active && active !== node && box && typeof box.contains === 'function' && !box.contains(active)) return;
     node?.focus?.();
   }, [live]);
+
+  // D1541: the library, read when the panel opens or the card holds decor; each item's SVG by kind and ref.
+  const [library, setLibrary] = useState(null);
+  const [panel, setPanel] = useState(false);
+  const [snapped, setSnapped] = useState(false);
+  const decor = libraryDecor(card);
+  const decorKey = decor.map((d) => `${d.kind}:${d.ref}`).join('|');
+  useEffect(() => {
+    if (!panel && !decor.length) return undefined;
+    let alive = true;
+    const refs = decor.filter((d) => d.kind === 'icon').map((d) => d.ref);
+    elementsLibrary(refs.length && !panel ? { refs } : {}).then((a) => { if (alive) setLibrary(a); });
+    return () => { alive = false; };
+  }, [panel, decorKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setPanel(false); setSnapped(false); }, [index]);
+  const svgFor = (d) => {
+    const v = library?.available ? library.value : null;
+    if (!v) return null;
+    const list = d.kind === 'icon' ? v.icons?.items : v[`${d.kind}s`];
+    return (list || []).find((x) => x.ref === d.ref)?.svg ?? null;
+  };
+  const placeDecor = (item) => {
+    if (!onDecor || !one || (card?.decor || []).length >= DECOR_MAX) return;
+    onDecor({ id: decorId(card), kind: item.kind, ref: item.ref, tone: 'ink', grid: { ...one.grid } });
+    setSnapped(true);
+  };
 
   const bg = card?.background?.color || theme?.background?.color || colours.bg;
   const bgImage = card?.background?.image_url || theme?.background?.image_url || null;
@@ -261,6 +360,53 @@ export default function GridStage({
     if (!r.same) onMove?.(id, r.grid);
   };
 
+  // A divider moved by `delta` cells: one edit through `onCard`, then the overflow the smaller block now has.
+  const slide = (div, delta) => {
+    const r = moveDivider(card, div, delta, model, minSizeProblem);
+    if (r.error) { setDivLine({ error: true, text: r.error }); return; }
+    if (r.same) return;
+    setDivLine({ error: false, text: dividerReadout(card, div, delta) });
+    const over = overflowOf(r.card, div.a, aspect) || overflowOf(r.card, div.b, aspect);
+    setOverflow(over ? { id: over.id, words: over.words } : null);
+    onCard?.(r.card);
+  };
+  const divKeys = (e, div) => {
+    const step = DIVIDER_KEYS[div.axis][e.key];
+    if (!step) return;
+    e.preventDefault?.();
+    e.stopPropagation?.();
+    slide(div, step);
+  };
+  const divAt = (e, div) => {
+    const at = cellAt(e?.clientX, e?.clientY, rect(), model, { aspect });
+    return at ? dividerDelta(div, div.axis === 'v' ? at.c : at.r) : null;
+  };
+  const divDown = (e, div) => {
+    if (e?.button > 0) return;
+    e.stopPropagation?.();
+    try { e.currentTarget?.setPointerCapture?.(e.pointerId); } catch { /* the drag still works without capture */ }
+    setSliding({ id: div.id, delta: 0, error: null });
+  };
+  const divMove = (e, div) => {
+    if (sliding?.id !== div.id) return;
+    const delta = divAt(e, div);
+    if (delta == null || delta === sliding.delta) return;
+    const r = moveDivider(card, div, delta, model, minSizeProblem);
+    setSliding({ id: div.id, delta, error: r.error || null });
+  };
+  const divUp = (div) => {
+    const s = sliding;
+    setSliding(null);
+    if (s?.id !== div.id || !s.delta) return;
+    slide(div, s.delta);
+  };
+  const moveOver = () => {
+    if (!overflow) return;
+    const r = moveOverflow(card, overflow.id, aspect);
+    setOverflow(null);
+    if (!r.same) { setDivLine(null); onCard?.(r.card); }
+  };
+
   const one = chosen.length === 1 ? chosen[0] : null;
   const many = chosen.length > 1;
   const askButton = (n, testId) => (
@@ -281,6 +427,12 @@ export default function GridStage({
         {one && !readOnly ? (
           <span className="flex min-w-0 flex-wrap items-center gap-2" data-testid="pitch-editor-htb">
             {askButton(1, 'pitch-editor-ask-area')}
+            {onDecor ? (
+              <button type="button" aria-pressed={panel} aria-expanded={panel} onClick={() => setPanel((p) => !p)}
+                className={`${CHIP} border-axal-hairline bg-white text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100`} data-testid="pitch-editor-graphics">
+                <Shapes size={13} aria-hidden="true" /> Graphics
+              </button>
+            ) : null}
             <span className={MONO}>{areaTitle(one, areas.indexOf(one), areas.length)}</span>
           </span>
         ) : one ? (
@@ -297,6 +449,7 @@ export default function GridStage({
         ) : null}
       </div>
       {askLine ? <span className={MUTED} role="status" data-testid="pitch-editor-ask-line">{askLine}</span> : null}
+      {lockLine ? <span className="text-[12.5px] font-semibold text-amber-800 dark:text-amber-200" role="status" data-testid="pitch-editor-lock-line">{lockLine}</span> : null}
 
       <div ref={faceRef}
         className="relative w-full select-none overflow-hidden rounded-[12px] border border-axal-hairline shadow-sm dark:border-gray-700"
@@ -304,11 +457,26 @@ export default function GridStage({
         role={areas ? 'group' : undefined} aria-label={areas ? `Card ${index + 1} on the Grid` : undefined}
         onKeyDown={keys} onKeyUp={keyUp}
         onPointerDown={(e) => { if (e.target === faceRef.current) down(e); }}
-        onPointerMove={over} onPointerUp={up} onPointerLeave={() => { if (press.current) up(); }}
+        onPointerMove={(e) => { over(e); pointerMoved(e); }} onPointerUp={up} onPointerLeave={() => { if (press.current) up(); }}
         onDragOver={(e) => dragOver(e, null)} onDrop={(e) => drop(e, null)}
         data-aspect={aspect} {...langAttrs(theme)} data-testid="pitch-editor-card">
         {veil ? <span className="absolute inset-0" style={{ background: veil }} aria-hidden="true" data-testid="pitch-editor-overlay" /> : null}
         {grid ? <GridOverlay aspect={aspect} /> : null}
+        {decor.length ? (
+          <div className={`pointer-events-none ${LAYER}`} aria-hidden="true" data-testid="pitch-editor-decor">
+            {decor.map((d) => {
+              const src = decorSrc(svgFor(d), colours);
+              const at = d.grid ? placeOf(d.grid, aspect) : { left: 0, top: 0, width: '100%', height: '100%' };
+              return src
+                ? <img key={d.id} alt="" src={src} className="absolute object-contain" style={at} data-testid={`pitch-editor-decor-${d.id}`} />
+                : <span key={d.id} className="absolute rounded-[6px] border border-dashed border-black/15 dark:border-white/20" style={at} data-testid={`pitch-editor-decor-${d.id}`} />;
+            })}
+          </div>
+        ) : null}
+        {cursors.map((k) => (
+          <span key={k.id} className="pointer-events-none absolute z-20 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white" title={k.name}
+            style={{ left: k.left, top: k.top, background: k.colour }} aria-hidden="true" data-testid={`pitch-editor-cursor-${k.id}`} />
+        ))}
         {areas ? (
           <div ref={layer} className={LAYER}
             onPointerDown={(e) => { if (e.target === e.currentTarget) down(e); }} data-testid="pitch-editor-blocks">
@@ -336,7 +504,7 @@ export default function GridStage({
                   aria-describedby={worded ? nameId : undefined}
                   aria-pressed={on}
                   aria-disabled={ok.ok ? undefined : true}
-                  title={ok.ok ? undefined : ok.why}
+                  title={ok.ok ? held.get(a.id)?.tooltip : ok.why}
                   draggable={block && ok.ok && !readOnly}
                   onDragStart={(e) => { setDrag(a.id); try { e.dataTransfer?.setData?.('text/plain', a.id); } catch { /* the drag still works */ } }}
                   onDragEnd={() => { setDrag(null); setGhost(null); }}
@@ -354,11 +522,46 @@ export default function GridStage({
                     ? <BlockView block={a.block} colours={colours} renderFace={face} renderChart={(b) => <ChartBlock block={b} charts={charts} colours={colours} />} />
                     : on ? <span className="font-mono text-[10px]" style={{ color: colours.muted }}>Empty · {areaLabel(a.grid)}</span> : null}
                 </button>
+                {held.get(a.id) ? (
+                  <span className="pointer-events-none relative rounded-[8px]" style={{ ...at, outline: `2px solid ${held.get(a.id).colour}` }} data-testid={`pitch-editor-held-${a.id}`}>
+                    <span className="absolute -top-2.5 left-1 whitespace-nowrap rounded-[6px] px-1.5 py-0.5 text-[10px] font-bold text-white" style={{ background: held.get(a.id).colour }}>{held.get(a.id).label}</span>
+                  </span>
+                ) : null}
                 </React.Fragment>
               );
             })}
           </div>
         ) : <FieldedCard card={card} index={index} colours={colours} />}
+        {dividers.map((d) => {
+          const at = dividerBox(card, d);
+          if (!at) return null;
+          const v = d.axis === 'v';
+          const act = sliding?.id === d.id ? sliding : null;
+          const readout = dividerReadout(card, d, act?.delta || 0);
+          const a = (card.blocks || []).find((x) => String(x.id) === d.a);
+          const b = (card.blocks || []).find((x) => String(x.id) === d.b);
+          const size = v ? a.grid.c2 - a.grid.c1 + 1 : a.grid.r2 - a.grid.r1 + 1;
+          const total = size + (v ? b.grid.c2 - b.grid.c1 + 1 : b.grid.r2 - b.grid.r1 + 1);
+          return (
+            <span key={d.id} className="pointer-events-none z-10" style={placeOf(at, aspect)}>
+              <span role="separator" tabIndex={0} aria-orientation={v ? 'vertical' : 'horizontal'}
+                aria-label={`Divider between ${areaLabel(a.grid)} and ${areaLabel(b.grid)}`}
+                aria-valuenow={size} aria-valuemin={1} aria-valuemax={total - 1} aria-valuetext={readout}
+                onKeyDown={(e) => divKeys(e, d)}
+                onPointerDown={(e) => divDown(e, d)} onPointerMove={(e) => divMove(e, d)}
+                onPointerUp={() => divUp(d)} onPointerCancel={() => setSliding(null)}
+                className={`group pointer-events-auto absolute flex items-center justify-center outline-none ${v ? 'left-1/2 top-0 h-full w-6 -translate-x-1/2 cursor-col-resize' : 'left-0 top-1/2 h-6 w-full -translate-y-1/2 cursor-row-resize'}`}
+                data-testid={`pitch-editor-divider-${d.id}`}>
+                <span aria-hidden="true" className={`rounded-full ${act?.error ? 'bg-gray-400' : 'bg-violet-500'} ${act ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100'} ${v ? 'h-full w-[3px]' : 'h-[3px] w-full'}`} />
+                {act ? (
+                  <span className="absolute whitespace-nowrap rounded-full bg-violet-600 px-2 py-0.5 font-mono text-[10px] text-white" data-testid="pitch-editor-divider-readout">
+                    {act.error || readout}
+                  </span>
+                ) : null}
+              </span>
+            </span>
+          );
+        })}
         <CardChrome chrome={chromeOf(theme)} pageLabel={pageLabel} colours={colours} logo={kit?.data?.kit?.logo_url || null} />
         {box || ghost ? (
           <div className={`pointer-events-none ${LAYER}`} aria-hidden="true" data-testid="pitch-editor-drag-layer">
@@ -374,6 +577,18 @@ export default function GridStage({
       </div>
 
       {refused ? <span className={MUTED} role="status" data-testid="pitch-editor-drop-refused">{refused}</span> : null}
+      {panel && one && onDecor && !readOnly ? (
+        <DecorPanel library={library} count={(card?.decor || []).length} snapped={snapped} onPick={placeDecor}
+          onSearch={(q) => elementsLibrary({ q }).then(setLibrary)} onClose={() => setPanel(false)} />
+      ) : null}
+      {divLine ? <span className={divLine.error ? MUTED : MONO} role="status" data-testid={divLine.error ? 'pitch-editor-divider-refused' : 'pitch-editor-divider-line'}>{divLine.text}</span> : null}
+      {overflow && !readOnly ? (
+        <span className={`${MUTED} flex flex-wrap items-center gap-2`} role="status" data-testid="pitch-editor-overflow">
+          <span>{overLine(overflow.words)}</span> ·
+          <button type="button" className="min-h-[36px] font-bold underline" onClick={moveOver} data-testid="pitch-editor-overflow-move">Move overflow to notes</button>
+          <span className={MONO}>One edit</span>
+        </span>
+      ) : null}
       {(() => {
         const at = (areas || []).find((x) => x.id === hover) || one;
         return at?.kind === 'block' && isFigure(at.block) ? <FigureCard block={at.block} items={items} charts={charts} /> : null;
@@ -388,5 +603,55 @@ export default function GridStage({
       ) : null}
       {areas ? <span className={MONO}>{KEYS_LINE}</span> : null}
     </div>
+  );
+}
+
+/** pd28: the elements library, 300 px, opened from the selection tools. */
+export function DecorPanel({ library, count, snapped, onPick, onSearch, onClose }) {
+  const [segment, setSegment] = useState('icons');
+  const [q, setQ] = useState('');
+  const v = library?.available ? library.value : null;
+  const full = count >= DECOR_MAX;
+  const list = !v ? [] : segment === 'icons' ? (v.icons?.items || []) : (v[segment] || []);
+  return (
+    <section className="flex w-full max-w-[300px] flex-col gap-2 rounded-[12px] border border-axal-hairline bg-white p-3 text-axal-ink shadow-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+      aria-label="Elements library" data-testid="pitch-decor-panel">
+      <div className="flex items-center justify-between">
+        <b className="text-[13px]">Elements</b>
+        <button type="button" className="min-h-[32px] text-[12.5px] underline" onClick={onClose} data-testid="pitch-decor-close">Close</button>
+      </div>
+      <div className="flex flex-wrap gap-1" role="tablist" aria-label="Elements">
+        {Object.keys(SEGMENT_KIND).map((k) => (
+          <button key={k} type="button" role="tab" aria-selected={segment === k} onClick={() => setSegment(k)}
+            className={`min-h-[32px] rounded-full px-2.5 text-[12px] font-bold ${segment === k ? 'bg-axal-lavender text-axal-violet dark:bg-violet-950/40 dark:text-violet-300' : 'text-axal-muted dark:text-gray-400'}`}
+            data-testid={`pitch-decor-seg-${k}`}>{SEGMENT_LABEL[k]}</button>
+        ))}
+      </div>
+      {segment === 'icons' ? (
+        <input type="search" value={q} placeholder="Search icons" aria-label="Search icons"
+          onChange={(e) => { setQ(e.target.value); onSearch(e.target.value); }}
+          className="min-h-[36px] rounded-[8px] border border-axal-hairline bg-white px-2 text-[12.5px] dark:border-gray-700 dark:bg-gray-950" data-testid="pitch-decor-search" />
+      ) : null}
+      {!library ? <span className={MUTED}>Reading the library…</span>
+        : !v ? <span className={MUTED} data-testid="pitch-decor-unread">{library.unreadable ? 'The library could not be read.' : 'Not switched on yet.'}</span>
+          : (
+            <div className="grid grid-cols-5 gap-1.5" data-testid="pitch-decor-grid">
+              {list.map((x) => (
+                <button key={`${x.kind}:${x.ref}`} type="button" title={x.label} aria-label={x.label} disabled={full} onClick={() => onPick(x)}
+                  className="flex aspect-square items-center justify-center rounded-[8px] border border-axal-hairline p-1.5 hover:bg-axal-ground disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800"
+                  data-testid={`pitch-decor-item-${x.kind}-${x.ref}`}>
+                  <img alt="" src={decorSrc(x.svg, { ink: 'currentColor' }) || undefined} className="h-full w-full object-contain" />
+                </button>
+              ))}
+            </div>
+          )}
+      {v ? <span className={MONO} data-testid="pitch-decor-licence">{`Open licence · recorded · ${v.licence?.name || 'Icons'} ${v.licence?.spdx || ''}`.trim()}</span> : null}
+      <span className={MUTED} data-testid="pitch-decor-count">{full ? `This card holds ${DECOR_MAX} decor items, the most it can.` : `${count} of ${DECOR_MAX} decor items on this card`}</span>
+      {snapped ? <span className={`${MONO} w-fit rounded-full bg-axal-lavender px-2 py-0.5 text-axal-violet dark:bg-violet-950/40 dark:text-violet-300`} role="status" data-testid="pitch-decor-snapped">Snapped to the baseline</span> : null}
+      <button type="button" disabled aria-disabled="true" className="flex min-h-[36px] flex-col items-start rounded-[8px] border border-dashed border-axal-hairline px-2 py-1 text-start opacity-60 dark:border-gray-700" data-testid="pitch-decor-generate">
+        <b className="text-[12.5px]">Generate an icon · Coming later</b>
+        <span className={MUTED}>It will show what it holds before it runs. Its model is picked in the rail's Graphics group.</span>
+      </button>
+    </section>
   );
 }

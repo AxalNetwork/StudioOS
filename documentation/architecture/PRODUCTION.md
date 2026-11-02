@@ -290,6 +290,10 @@ git push
 Rollback reverts the worker (and with it the SPA), not D1 — see
 [DEPLOY.md §3](../operations/DEPLOY.md#3-capture-a-rollback-point-first).
 
+## Deck co-editing room (D1577, #3824)
+
+`DECK_PRESENCE` binds class `DeckPresence` in the default, production and preview environments, with the appended `v3-deck-presence` Durable Object migration (`new_sqlite_classes`). Keep `v1-realtime` and `v2-meeting-bot` as they are. The owner approved its monthly cost on 2026-11-02 (decision L; estimate in `decisions/D1577.md`). It needs no secret and no storage. A Worker without it answers 503 `presence_off` on `/api/decks/:id/presence`.
+
 ## Meeting bot control plane (D886 B1, #2579)
 
 Before any canary, apply migration 531 and the appended `v2-meeting-bot` Durable
