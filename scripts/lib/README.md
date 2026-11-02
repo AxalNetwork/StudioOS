@@ -8,6 +8,7 @@ can be read to find out what a rule actually is.
 
 | File | What it decides |
 | --- | --- |
+| `deckEval.mjs` | D1518 (#3770): the deck harness's data and decisions: the golden briefs (records, never a prompt), rubric v0 (named, D1517's), the investor rubric (recorded, not gated), editing tasks v0, the competitor arms (waiting on decision F), the zero-edit verdict, the live-run refusal, and the readers of `documentation/product/ELEMENT_EVAL.md` and `DECK_BENCHMARK.md`. Owned by `../eval-elements.mjs`. |
 | `migrationPlan.mjs` | The migration ledger's shape, the baseline cutoff, and what to do with each file — apply, mark, or skip. Owned by `../migrate-d1.mjs`. |
 | `migrationTargets.mjs` | Which database a migration run touches, and which database may never be bootstrapped. One `--branch <code>` target per subsidiary, each naming the config that declares it. |
 | `branchConfig.mjs` | A branch Worker's whole `wrangler.toml`, derived from HQ's `[env.production]` table, plus what a registry entry must contain and what a rendered config must never say. Owned by `../gen-branch-wrangler.mjs` and `../check-branch-config.mjs`. |
