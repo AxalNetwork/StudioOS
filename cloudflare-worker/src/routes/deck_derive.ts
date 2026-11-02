@@ -277,7 +277,10 @@ function derivativeOf(r: any, full: boolean) {
     let figures: unknown = [];
     try { cards = JSON.parse(r.slides || '[]'); } catch { cards = []; }
     try { figures = JSON.parse(r.figures_json || '[]'); } catch { figures = []; }
-    Object.assign(out, { cards, memo: r.memo ?? null, figures });
+    // Three fixed keys, set one by one: the reply's shape never comes from the row or the request.
+    out.cards = cards;
+    out.memo = r.memo ?? null;
+    out.figures = figures;
   }
   return out;
 }
