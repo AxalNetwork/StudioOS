@@ -29,6 +29,7 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { projectOwned } from '../middleware/projectContentAccess';
 import { refuse } from '../util/refusal';
+import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 import type { RouteMount } from '../util/routeRegistry';
 import { VIDEO_FILE_PATH } from '../services/decks/slideModel';
 import decks, { sanitizeSlides } from './decks';
@@ -69,6 +70,10 @@ deckMedia.post('/:id{[0-9]+}/videos/upload', async (c) => {
   if (file.size > VIDEO_MAX_BYTES) return refuse(c, 413, { code: 'video_too_large', message: 'A video is at most 50 MB.' });
   const bytes = new Uint8Array(await file.arrayBuffer());
   if (!isMp4(bytes)) return refuse(c, 415, { code: 'not_mp4', message: 'Only MP4 videos can be uploaded.' });
+  // D1170: a video is the member's own file; the venture's room is checked before it lands.
+  let ticket;
+  try { ticket = await assertStorageRoom(c.env, { projectId: Number(got.deck.project_id) }, bytes.byteLength, user); }
+  catch (e) { if (e instanceof Response) return e; throw e; }
   const uid = crypto.randomUUID();
   try {
     await c.env.FILES.put(videoKey(uid), bytes, {
@@ -79,6 +84,7 @@ deckMedia.post('/:id{[0-9]+}/videos/upload', async (c) => {
     console.warn('[deck_media] video not stored', { outcome: 'store_failed' });
     return refuse(c, 503, { code: 'store_failed', message: 'The video could not be stored. Nothing was added. Try again.' });
   }
+  await noteStorageLanded(c.env, ticket);
   return c.json({ video: { provider: 'mp4', video_id: uid, url: new URL(VIDEO_FILE_PATH(uid), c.req.url).toString() } }, 201);
 });
 
