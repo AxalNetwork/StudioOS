@@ -40,6 +40,7 @@
  * issue.
  * `comments` (D1570, #3817)
  * answers through `deckCommentsApi.list`.
+ * `figures` (D1523, #3775) answers through `deckFiguresApi.list`.
  *
  * Fields on routes that exist (`context.inferred` and `context.freshness`
  * from #3877; the PostHog, HubSpot and Linear source rows from #3880) need
@@ -55,6 +56,7 @@ import { deckRemixApi } from '../../../lib/api/deckRemix.js';
 import { deckTypedValuesApi } from '../../../lib/api/deckTypedValues.js';
 import { deckCheckApi } from '../../../lib/api/deckCheck.js';
 import { deckElementModelsApi } from '../../../lib/api/deckElementModels.js';
+import { deckFiguresApi } from '../../../lib/api/deckFigures.js';
 import { deckModelPresetsApi } from '../../../lib/api/deckModelPresets.js';
 import { deckCommentsApi } from '../../../lib/api/deckComments.js';
 import { deckCoeditApi } from '../../../lib/api/deckCoedit.js';
@@ -119,7 +121,7 @@ export const SURFACES = Object.freeze({
 const off = (name) => async () => unavailable(SURFACES[name].issue);
 
 /** The rows whose route is on main: each answers through its real client, never unavailable by default. */
-export const SWAPPED = Object.freeze(['grid', 'saveCard', 'discardDraft', 'draft', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'presets', 'orgLocks', 'comments', 'presence']);
+export const SWAPPED = Object.freeze(['grid', 'saveCard', 'discardDraft', 'draft', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'presets', 'orgLocks', 'comments', 'figures', 'presence']);
 
 
 /**
@@ -172,7 +174,8 @@ export const narrativeOutline = off('narrativeOutline');
 export const instruct = off('instruct');
 /** D1522 (#3774): the deck's stage plan — the order for its stage, a why line per card, and missing-proof warnings. */
 export const stagePlan = (deckId, opts) => through(() => deckStageApi.stagePlan(deckId, opts), SURFACES.stagePlan.issue);
-export const figures = off('figures');
+/** D1523 (#3775): every figure on the version, Linked, Stated, Uncited or Not recorded, and the counts Check claims shows. Editor-only. */
+export const figures = (deckId) => through(() => deckFiguresApi.list(deckId), SURFACES.figures.issue);
 export const deckUsage = off('deckUsage');
 export const arrange = off('arrange');
 export const imageEdit = off('imageEdit');
