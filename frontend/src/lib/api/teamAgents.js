@@ -6,9 +6,13 @@
 // `team_agents_off` until TEAM_AGENTS_ENABLED is on.
 //   GET    /api/teams/roles                               → { roles: [{ key, name, mission, works_in: [{ key, label }], default_rules }],
 //                                                           models: [{ id, label, kind, beta, plan_locked }] }
+// D4117 (#4117): the 16 personas an agent wears (fixed; no route edits one). Agent DTOs carry `persona`
+// and no job title (`role_name` is gone).
+//   GET    /api/teams/personas                            → { personas: [{ key, name, gender, tagline, goal, personality, story, risk,
+//                                                           values, top_values, natural_fit, avatar }], values: [{ key, label, description }], areas }
 //   GET    /api/teams/:scope/:id/agents?include=&module=  → { can_manage, plan_ok, agents: [Agent] }
-//   POST   /api/teams/:scope/:id/agents                   { role_key, first_name?, last_name?, model_id, tool_grants?, monthly_cap_microusd }
-//                                                         → 201 { agent }; 403 not_manager | plan_required; 409 role_taken;
+//   POST   /api/teams/:scope/:id/agents                   { role_key, persona_key?, first_name?, last_name?, model_id, tool_grants?, monthly_cap_microusd }
+//                                                         → 201 { agent }; 400 invalid_persona; 403 not_manager | plan_required; 409 role_taken | persona_on_team;
 //                                                           422 model_not_offered | tool_not_approved
 //   GET    /api/teams/agents/:uid                         → { agent, can_manage, rulebook, matrix, cap_microusd, month_spend, proposals, events }
 //   PATCH  /api/teams/agents/:uid                         { status?, monthly_cap_microusd?, first_name?, last_name? } → { agent }
@@ -43,7 +47,7 @@
 //   GET  /api/teams/agents/:uid/skills            → { can_manage, skills: [{ uid, name, pinned_version, current_version, status,
 //                                                    tools: [{ key, label, approved }], taxonomy }], radar: { axes } | null, values: null }
 //   PUT  /api/teams/agents/:uid/skills            { skills: [{ uid, version? }] } → the same; 403 not_manager; 422 role_mismatch |
-//                                                    tool_not_approved { tool } | version_not_published; 409 skill_retired
+//                                                    tool_not_approved { tool } | version_not_published; 409 skill_retired | skill_suspended
 //   GET  /api/teams/agents/:uid/skills/available  → { skills: [SkillCard + { assigned, pinned_version, blocked }] }
 //   GET  /api/teams/skills/:uid/agents            → { agents: [{ uid, name, role_key, pinned_version, scope }] }
 //   GET  /api/teams/skills/:uid/assignable        → { agents: [{ uid, name, role_key, skill_count, assigned, blocked, scope }] }
@@ -60,6 +64,7 @@ const base = (scope, id) => `/teams/${enc(scope)}/${enc(id)}`;
 
 export const teamAgentsApi = {
   roles: () => request('/teams/roles'),
+  personas: () => request('/teams/personas'),
   listAgents: (scope, id, { include, module } = {}) => {
     const q = new URLSearchParams();
     if (include) q.set('include', include);
@@ -82,6 +87,10 @@ export const teamAgentsApi = {
   runAgent: (uid, { module, option, record, prompt, toolReads } = {}) =>
     request(`/teams/agents/${enc(uid)}/run`, { method: 'POST', body: JSON.stringify({ module, option, record: record ?? null, prompt, ...(toolReads ? { tool_reads: toolReads } : {}) }) }),
   toolChoices: () => request('/teams/tools'),
+  // D4137 (#4137): the "From Axal" skills, the `hq` list of D1612 A1's
+  // `GET /api/teams/skills` (no company), for HQ › AI agents › Skills library.
+  // The company-scoped library stays behind `agentsAdapter.skillLibrary`.
+  axalSkills: () => request('/teams/skills'),
   // D1612 A2 (#3956): an agent's skills, assigning a skill, team coverage.
   agentSkills: (uid) => request(`/teams/agents/${enc(uid)}/skills`),
   setAgentSkills: (uid, skills) => request(`/teams/agents/${enc(uid)}/skills`, { method: 'PUT', body: JSON.stringify({ skills }) }),

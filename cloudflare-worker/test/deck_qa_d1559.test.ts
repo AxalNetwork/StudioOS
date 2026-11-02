@@ -224,7 +224,7 @@ test('GET /api/decks/:id/qa: real objections first, most heard first, then the c
       assertBound(q.said, q.answer.bindings, `${q.key} said`);
       for (const b of q.answer.bindings) assert.ok(b.source_key && b.grade && b.snapshot_hash, 'every binding carries its source key, grade and snapshot');
     }
-    assert.deepEqual(r.body.reads, { objections: 'ok', objections_capped: false, sources: 'ok', claims: 'ok', kept: 'ok' });
+    assert.deepEqual(r.body.reads, { objections: 'ok', objections_capped: false, sources: 'ok', claims: 'ok', kept: 'ok', prospects: 'ok' }); // D1582 adds the prospects read
     assert.equal(r.body.stage, 'seed');
   } finally { f.close(); }
 });

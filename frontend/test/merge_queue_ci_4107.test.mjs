@@ -14,6 +14,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 
+import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 const DIR = '.github/workflows';
 const REQUIRED = Object.freeze({
   'test:drift (full suite)': 'ci.yml',
@@ -79,7 +80,7 @@ const SKIPS_IN_QUEUE = Object.freeze([
   "github.event_name == 'push'",
 ]);
 
-const FILES = readdirSync(DIR).filter((f) => /\.ya?ml$/.test(f)).sort();
+const FILES = readdirSync(DIR).filter((f) => /\.ya?ml$/.test(f)).sort(compareMigrations);
 
 test('every required check comes from a job in its workflow, which listens for merge_group and runs there', () => {
   for (const [check, file] of Object.entries(REQUIRED)) {

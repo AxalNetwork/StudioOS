@@ -14,6 +14,8 @@ import {
   cardsOf, clock, countLabel, dotsOf, exitHref, moveTo, notesOf, stepFor, swipeLine, swipeStep,
 } from './presentExportModel';
 import { REHEARSE } from './rehearseModel';
+import { DEFAULT_PITCH_SECONDS, PITCH_CHOICES, PITCH_LENGTH, presentBudget, remoteMove, remoteSocketPath } from './presentTimingModel';
+import { useWebSocket } from '../../../hooks/useWebSocket';
 
 // D1580 F1 (#3827): Present › Rehearse, loaded when it is opened.
 const RehearsePanel = lazy(() => import('./RehearsePanel'));
@@ -30,6 +32,11 @@ const RehearsePanel = lazy(() => import('./RehearsePanel'));
  *
  * Keys: ← → (and Page Up / Page Down, Space, Home, End); Esc leaves for the
  * studio. Present reads; it writes nothing.
+ *
+ * D1581 F2 (#3828): the presenter view times each card against its share of
+ * the pitch length (2, 3 or 5 minutes, Rehearse's own split, `cardBudgetsMs`),
+ * amber when over. A phone paired by code (`DeckRemote`) moves the cards
+ * through Present's socket, as the keys do; pairing is not drawn yet.
  *
  * D1580 F1 (#3827): Rehearse, beside the two views, times the founder card by
  * card against the pitch length and writes a rehearsal and its report
@@ -89,6 +96,9 @@ export default function PitchPresent() {
   const [view, setView] = useState('presenter');
   const [sources, setSources] = useState(false);
   const [seconds, setSeconds] = useState(0);
+  // D1581: the pitch length, and when each card came up (Rehearse's marks).
+  const [pitchSeconds, setPitchSeconds] = useState(DEFAULT_PITCH_SECONDS);
+  const [marks, setMarks] = useState([]);
   const touch = useRef(null);
   const cards = status === 'ok' ? cardsOf(deck) : [];
   // D1499: the deck's slide size, from its theme; 16:9 unless the theme says 4:3.
@@ -117,6 +127,19 @@ export default function PitchPresent() {
     const t = setInterval(() => setSeconds((s) => s + 1), 1000);
     return () => clearInterval(t);
   }, []);
+
+  // D1581: a mark each time a card comes up, so each card's time is its own.
+  useEffect(() => {
+    if (!n) return;
+    setMarks((m) => (m.length && m[m.length - 1].card === i + 1 ? m : [...m, { card: i + 1, at_ms: Date.now() }]));
+  }, [i, n]);
+
+  // D1581: the phone remote. Its steps are Present's keys, or a card by number; Rehearse keeps its own keys.
+  const onRemote = useCallback((frame) => {
+    if (frame?.type !== 'step' || view === 'rehearse') return;
+    setI((at) => remoteMove(at, frame.step, n));
+  }, [view, n]);
+  useWebSocket(status === 'ok' && deck?.id && !phone ? remoteSocketPath(deck.id) : null, { enabled: status === 'ok' && !!deck?.id && !phone, onMessage: onRemote });
 
   if (status !== 'ok' || !n) {
     const line = status === 'loading' ? null : status === 'error' ? READ_FAILED : status === 'none' ? NO_VERSION : NO_CARDS;
@@ -197,6 +220,7 @@ export default function PitchPresent() {
               <span className="font-mono text-[11px] font-bold tracking-[.07em] text-gray-400">NOTES</span>
               <span className={`whitespace-pre-line text-[14px] leading-[1.55] ${card.notes ? 'text-gray-100' : 'text-gray-400'}`}>{notesOf(card)}</span>
             </div>
+            <Budget marks={marks} seconds={seconds} n={n} i={i} pitchSeconds={pitchSeconds} setPitchSeconds={setPitchSeconds} />
           </div>
         </div>
       ) : (
@@ -205,6 +229,24 @@ export default function PitchPresent() {
           {dots}
         </div>
       )}
+    </div>
+  );
+}
+
+/** D1581: the pitch length and this card's time against its share; `seconds` ticks it. */
+function Budget({ marks, seconds, n, i, pitchSeconds, setPitchSeconds }) {
+  const b = presentBudget(marks, Date.now(), n, i, pitchSeconds);
+  return (
+    <div className="flex flex-col gap-2 rounded-[10px] bg-[#111827] p-3.5" data-testid="pitch-present-budget" data-tick={seconds}>
+      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={PITCH_LENGTH}>
+        <span className="me-1 font-mono text-[11px] font-bold tracking-[.07em] text-gray-400">{PITCH_LENGTH.toUpperCase()}</span>
+        {PITCH_CHOICES.map((c) => (
+          <button key={c.seconds} type="button" className={pitchSeconds === c.seconds ? ON : OFF} aria-pressed={pitchSeconds === c.seconds} onClick={() => setPitchSeconds(c.seconds)} data-testid={`pitch-present-length-${c.seconds}`}>{c.label}</button>
+        ))}
+      </div>
+      {b ? (
+        <span className={`font-mono text-[15px] font-bold ${b.over ? 'text-amber-400' : 'text-gray-100'}`} data-testid="pitch-present-card-time" data-over={b.over ? 'true' : 'false'}>{b.line}</span>
+      ) : null}
     </div>
   );
 }

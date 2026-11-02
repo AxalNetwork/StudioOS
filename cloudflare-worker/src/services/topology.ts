@@ -113,6 +113,8 @@ export const BINDINGS: readonly BindingSpec[] = [
   // D1502 part 2 (#3753): a deck's generation runs, and the per-account step throttles.
   { name: 'DECK_GEN_ROOM', kind: 'Durable Object namespace', hq: 'DeckGenRoom', branch: () => 'DeckGenRoom', shared: false },
   { name: 'AI_GOVERNOR', kind: 'Durable Object namespace', hq: 'AiGovernor', branch: () => 'AiGovernor', shared: false },
+  // D1581 (#3828): the phone remote for Present.
+  { name: 'DECK_REMOTE', kind: 'Durable Object namespace', hq: 'DeckRemote', branch: () => 'DeckRemote', shared: false },
   { name: 'VECTORIZE', kind: 'Vectorize index', hq: 'axal-search', branch: (c) => branchResourceNames(c).vectorize, shared: false },
   { name: 'ANALYTICS', kind: 'Analytics Engine dataset', hq: 'studioos_metrics', branch: () => 'studioos_metrics', shared: true },
   { name: 'AI', kind: 'Workers AI', hq: null, branch: () => null, shared: true },

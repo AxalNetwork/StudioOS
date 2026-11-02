@@ -362,6 +362,8 @@ export interface Env {
   AGENT_RUNTIME?: string;
   /** D1528: the `agents` AI Gateway id agent runs pass. Unset = no gateway. Set only by `agentRun`. */
   AGENT_AI_GATEWAY?: string;
+  /** #3851 (E7): the `agents` gateway's monthly limit in micro-USD, mirrored from its dashboard; at 70% HQ ops hear once a month. Unset = no alert. */
+  AGENT_GATEWAY_MONTHLY_LIMIT_MICROUSD?: string;
   /** D1528: one `AgentScope` Durable Object per scope, named `project:{id}` or `company:{id}`. */
   AGENT_SCOPE?: DurableObjectNamespace;
   /** #3852 (E0): the `sdk` runtime's `ScopeAgent` namespace. Used only while `AGENT_RUNTIME` is `sdk`. */
@@ -484,6 +486,8 @@ export interface Env {
   // D1502 part 2 (#3753): one room per deck that drives its generation runs, and one governor per account that throttles their steps.
   DECK_GEN_ROOM?: DurableObjectNamespace;
   AI_GOVERNOR?: DurableObjectNamespace;
+  // D1581 (#3828): the phone remote for Present, paired by code. Optional: without it the remote routes answer 503 `remote_off`.
+  DECK_REMOTE?: DurableObjectNamespace;
   // Vectorize index `axal-search` (768-dim, cosine) for semantic search.
   // Optional so unit-test envs without the binding still type-check; the
   // search service no-ops gracefully when undefined.
