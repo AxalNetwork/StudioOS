@@ -149,6 +149,11 @@ const KINDS = [
   // #3982 (D1486 §c): Raise's dated stores, page only.
   { id: 'round_close', label: 'Round close', from: 'Raise › Round' },
   { id: 'nda_expiry', label: 'NDA expiry', from: 'Raise › NDAs' },
+  // #3983 (D1486 §d): tasks and milestones, page only.
+  { id: 'workflow_task', label: 'Task', from: 'Dashboard › My tasks' },
+  { id: 'mvp_task', label: 'Board card', from: 'Build › Board' },
+  { id: 'contact_task', label: 'Contact task', from: 'Network › Contacts' },
+  { id: 'engagement_milestone', label: 'Milestone', from: 'Operations › Engagements' },
 ];
 const KIND_LABEL = Object.fromEntries(KINDS.map((k) => [k.id, k.label]));
 
