@@ -42,7 +42,7 @@ import { OWNERSHIP_NOTICE, LEGAL_LINKS } from '../lib/legalNotice';
  * two-column licence grid and would leave one column of prose stranded in an
  * 840px card.
  */
-export default function AcceptTermsPage({ email, onDecline }) {
+export default function AcceptTermsPage({ email, onDecline, updated = false }) {
   useForcedLightTheme();
   const [accepted, setAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -72,18 +72,30 @@ export default function AcceptTermsPage({ email, onDecline }) {
     >
       <AuthCard>
         <h1 className="m-0 text-[25px] font-extrabold tracking-tight leading-tight text-[#241f38] sm:text-[29px]">
-          One thing we never asked you properly
+          {updated ? 'Our Terms of Service have changed' : 'One thing we never asked you properly'}
         </h1>
         {/* The honest version of why an existing member is being interrupted.
             It names the platform's own failure rather than implying the terms
             changed — they did not, and saying they had would be the same kind
-            of convenient untruth as the passing notice this replaces. */}
-        <p className="mt-3 text-[13.5px] leading-relaxed text-[#6b6577] sm:text-[14.5px]">
-          Axal VC keeps a record of every member&rsquo;s agreement to its Terms of
-          Service and Privacy Policy. Yours is missing. Nothing about the
-          documents has changed &mdash; the platform simply used to mention them in
-          passing instead of asking, and a mention is not an agreement.
-        </p>
+            of convenient untruth as the passing notice this replaces.
+            D1548: `updated` is the other case, a member who accepted an
+            earlier Terms (`terms_acceptance_reason: 'updated'` on /me). Then
+            the documents did change, and the screen says so and no more: the
+            changes are on /terms, in counsel's words, not summarised here. */}
+        {updated ? (
+          <p className="mt-3 text-[13.5px] leading-relaxed text-[#6b6577] sm:text-[14.5px]">
+            Axal VC has published new Terms of Service since you last agreed to
+            them, and we need your agreement to the current Terms before you
+            continue.
+          </p>
+        ) : (
+          <p className="mt-3 text-[13.5px] leading-relaxed text-[#6b6577] sm:text-[14.5px]">
+            Axal VC keeps a record of every member&rsquo;s agreement to its Terms of
+            Service and Privacy Policy. Yours is missing. Nothing about the
+            documents has changed &mdash; the platform simply used to mention them in
+            passing instead of asking, and a mention is not an agreement.
+          </p>
+        )}
         <p className="mt-3 text-[13.5px] leading-relaxed text-[#6b6577] sm:text-[14.5px]">
           Please read them and tell us where you stand. It takes one click, and
           we would rather ask than assume.

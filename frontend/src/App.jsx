@@ -1590,6 +1590,9 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   // such key at all. Absent must read as "do not gate" in every one of them —
   // the inverse would lock a Replit session out of its own product.
   const [termsPending, setTermsPending] = useState(false);
+  // D1548 (#3793): true when the debt is a newer Terms version, not a missing
+  // acceptance, so the screen does not say the documents are unchanged.
+  const [termsUpdated, setTermsUpdated] = useState(false);
   // Set when the licence picker announces a choice, so an in-flight
   // progress read — started before the click, answering `flow: 'licence'` —
   // cannot put the gate back after the click has already moved the account on.
@@ -1641,6 +1644,7 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
           // on any older worker, and `undefined` must land on "do not gate"
           // rather than on whatever a loose check would make of it.
           setTermsPending(me.terms_acceptance_pending === true);
+          setTermsUpdated(me.terms_acceptance_reason === 'updated');
         }
         const stored = safeReadJSON('user', {});
         const suggestedRole = licenceChosen.current
@@ -1831,7 +1835,7 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     !isImpersonating &&
     accessLevel !== 'limited'
   ) {
-    return <AcceptTermsPage email={user.email} onDecline={onLogout} />;
+    return <AcceptTermsPage email={user.email} onDecline={onLogout} updated={termsUpdated} />;
   }
 
   // Phase 0.2 / Task #23 — wizard resume gate.

@@ -164,3 +164,28 @@ test('the accept call carries no identity of its own', () => {
     'the call sends a body; an acceptance must be attributable to the session and '
     + 'to nothing the caller can choose');
 });
+
+test('D1548: a member asked again over new Terms is told they changed, and nothing more', () => {
+  // The default screen says "Nothing about the documents has changed". Shown to
+  // a member re-accepting a new Terms version (`terms_acceptance_reason:
+  // 'updated'`), that sentence would be false. The updated screen says the
+  // Terms changed and links to them; it neither summarises counsel's text nor
+  // claims a version number.
+  const html = render({ updated: true });
+  assert.match(html, /Our Terms of Service have changed/);
+  assert.match(html, /published new Terms of Service since you last agreed/);
+  assert.doesNotMatch(html, /Nothing about the\s+documents has changed/);
+  assert.doesNotMatch(html, /\bv(ersion)?\s*\d/i);
+  const box = html.match(/<input[^>]*data-testid="checkbox-accept-terms"[^>]*>/);
+  assert.doesNotMatch(box[0], /\bchecked\b/, 'the re-acceptance checkbox renders pre-ticked');
+
+  const plain = render();
+  assert.match(plain, /One thing we never asked you properly/);
+  assert.doesNotMatch(plain, /have changed/);
+});
+
+test('D1548: the shell passes the reason only on an explicit "updated"', () => {
+  assert.match(APP, /const \[termsUpdated, setTermsUpdated\] = useState\(false\)/);
+  assert.match(APP, /setTermsUpdated\(me\.terms_acceptance_reason === 'updated'\)/);
+  assert.match(APP, /<AcceptTermsPage email=\{user\.email\} onDecline=\{onLogout\} updated=\{termsUpdated\} \/>/);
+});

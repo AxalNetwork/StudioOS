@@ -18,12 +18,17 @@
  *   node --experimental-strip-types --no-warnings \
  *     --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/terms_reacceptance_gate.test.ts
+ *
+ * D1548 (#3793) adds the re-acceptance of a new Terms version (the v4 slot,
+ * owner decision Y) at the end of this file.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+
+import { recordTermsAcceptance, LEGAL_DOCUMENT_VERSIONS, TERMS_REACCEPT_FROM } from '../src/services/trust.ts';
 
 const AUTH = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/auth.ts'), 'utf8');
 const BASELINE = readFileSync(
@@ -174,4 +179,144 @@ test('the accept route takes no user id, so nothing can be accepted on somebody\
   assert.match(route, /surface: 'reacceptance_interstitial'/);
   assert.match(route, /source: 'reacceptance_interstitial'/,
     'without its own source the Trust Center renders "Accepted at signup" over this act');
+});
+
+/* ------------------------------------------------------------------ *
+ * D1548 (#3793): re-acceptance of a new Terms version through this gate.
+ *
+ * Owner decision Y ships the Terms' AI-output clause (A19's v4 draft) with
+ * re-acceptance. Counsel's text has not been given, so `TERMS_REACCEPT_FROM`
+ * ships null. These cases run the route's own second query with a version
+ * set, as it will be when the text lands, and the real accept writer.
+ * ------------------------------------------------------------------ */
+
+const MIGRATIONS = ['245_legal_acceptances.sql', '583_legal_acceptance_version.sql'].map((f) => readFileSync(
+  resolve(process.cwd(), `cloudflare-worker/sql/migrations/${f}`), 'utf8',
+)).join('\n');
+
+/** Both SQL strings in the flag, in order: the never-accepted one and the stale-version one. */
+function flagSqls(): string[] {
+  const block = flagBlock();
+  const out: string[] = [];
+  for (let i = block.indexOf('`'); i >= 0; i = block.indexOf('`', block.indexOf('`', i + 1) + 1)) {
+    out.push(block.slice(i + 1, block.indexOf('`', i + 1)));
+  }
+  return out;
+}
+
+/** legal_obligations from the baseline, legal_acceptances from its migrations, and a D1-shaped env over them. */
+function dbWithAcceptances() {
+  const d = db();
+  const sql = MIGRATIONS.split('\n').filter((l) => !l.trim().startsWith('--')).join('\n');
+  for (const stmt of sql.split(';')) { const s = stmt.trim(); if (s) d.exec(`${s};`); }
+  const DB = {
+    prepare(q: string) {
+      let b: any[] = [];
+      const api: any = {
+        bind: (...x: any[]) => { b = x.map((v) => (v === undefined ? null : v)); return api; },
+        async first() { return d.prepare(q).get(...b) ?? null; },
+        async all() { return { results: d.prepare(q).all(...b) }; },
+        async run() { const r = d.prepare(q).run(...b); return { meta: { changes: Number(r.changes) } }; },
+      };
+      return api;
+    },
+  };
+  return { d, env: { DB } as any };
+}
+
+/** The route's decision, step for step: the first query, then the second only when a version is set. */
+function reason(d: InstanceType<typeof DatabaseSync>, userId: number, from: string | null): 'missing' | 'updated' | null {
+  const [never, stale] = flagSqls();
+  if (d.prepare(never).get(userId)) return 'missing';
+  if (!from) return null;
+  return d.prepare(stale).get(userId, from) ? 'updated' : null;
+}
+
+function accepted(d: InstanceType<typeof DatabaseSync>, userId: number, version: string | null) {
+  d.prepare(
+    `INSERT INTO legal_acceptances (user_id, obligation_key, accepted_at, surface, document_version)
+     VALUES (?, 'tos_v1', '2026-08-01T00:00:00Z', 'onboarding_licence', ?)`,
+  ).run(userId, version);
+}
+
+const V3 = LEGAL_DOCUMENT_VERSIONS.tos_v1;
+const V4 = '2099-01-01'; // a stand-in: v4's date is the day counsel's text goes on /terms
+
+test('the re-acceptance gate passes with v4: an earlier acceptance is asked again, a v4 one is not', () => {
+  const { d } = dbWithAcceptances();
+  seed(d, 20, [['tos_v1', 1, 'satisfied'], ['privacy_v1', 1, 'satisfied']]);
+  accepted(d, 20, V3);
+  assert.equal(reason(d, 20, null), null, 'with no version set, an accepted member is not asked');
+  assert.equal(reason(d, 20, V4), 'updated', 'a member who accepted v3 must be asked to accept v4');
+
+  accepted(d, 20, V4);
+  assert.equal(reason(d, 20, V4), null, 'a member who accepted v4 is asked again');
+
+  // Only a Terms acceptance counts: a newer Privacy Policy row is not one.
+  seed(d, 28, [['tos_v1', 1, 'satisfied'], ['privacy_v1', 1, 'satisfied']]);
+  accepted(d, 28, V3);
+  d.prepare(
+    `INSERT INTO legal_acceptances (user_id, obligation_key, accepted_at, surface, document_version)
+     VALUES (28, 'privacy_v1', '2026-08-01T00:00:00Z', 'onboarding_licence', ?)`,
+  ).run(V4);
+  assert.equal(reason(d, 28, V4), 'updated', 'a Privacy Policy acceptance counted as the Terms');
+
+  // Accepted before migration 583 recorded a version: nothing says it was v4.
+  seed(d, 21, [['tos_v1', 1, 'satisfied'], ['privacy_v1', 1, 'satisfied']]);
+  accepted(d, 21, null);
+  assert.equal(reason(d, 21, V4), 'updated', 'an acceptance with no recorded version counted as v4');
+});
+
+test('re-acceptance keeps the gate\'s own exclusions and scope', () => {
+  const { d } = dbWithAcceptances();
+  seed(d, 22, [['tos_v1', 1, 'waived'], ['privacy_v1', 1, 'waived']]);
+  assert.equal(reason(d, 22, V4), null, 'a waived obligation was asked again');
+  seed(d, 23, [['tos_v1', 0, 'satisfied'], ['privacy_v1', 0, 'satisfied']]);
+  assert.equal(reason(d, 23, V4), null, 'a not-required obligation was asked again');
+  assert.equal(reason(d, 24, V4), null, 'an account with no rows was asked');
+  seed(d, 25, [['tos_v1', 1, 'satisfied'], ['privacy_v1', 1, 'satisfied']]);
+  accepted(d, 25, V4);
+  seed(d, 26, [['tos_v1', 1, 'satisfied'], ['privacy_v1', 1, 'satisfied']]);
+  accepted(d, 26, V3);
+  assert.equal(reason(d, 25, V4), null, 'another account\'s old acceptance reached this one');
+  assert.equal(reason(d, 26, V4), 'updated');
+  // Never accepted at all stays "missing", whatever the version.
+  seed(d, 27, [['tos_v1', 1, 'pending'], ['privacy_v1', 1, 'pending']]);
+  assert.equal(reason(d, 27, V4), 'missing');
+});
+
+test('accepting through the real writer clears the re-acceptance, so the gate cannot loop', async () => {
+  // On go-live the version required is the page's own date, which is what the
+  // writer records. A member who accepted the earlier page is asked; one click
+  // through `recordTermsAcceptance` (the interstitial's route) ends it.
+  const { d, env } = dbWithAcceptances();
+  seed(d, 30, [['tos_v1', 1, 'satisfied'], ['privacy_v1', 1, 'satisfied']]);
+  accepted(d, 30, '2026-01-01');
+  assert.equal(reason(d, 30, V3), 'updated');
+  await recordTermsAcceptance(env, 30, { surface: 'reacceptance_interstitial', source: 'reacceptance_interstitial' });
+  assert.equal(reason(d, 30, V3), null, 'the accept route did not clear the re-acceptance');
+});
+
+test('the switch is off and can only be set to a version the writer can satisfy', () => {
+  // Off until counsel's text is on /terms: nobody is asked to accept text that
+  // does not exist. When set, it must not be later than the page's date, or
+  // accepting would record an earlier version and the screen would never clear.
+  assert.equal(TERMS_REACCEPT_FROM, null, 'TERMS_REACCEPT_FROM is set: is counsel\'s text on /terms?');
+  if (TERMS_REACCEPT_FROM !== null) assert.ok(TERMS_REACCEPT_FROM <= V3);
+});
+
+test('the route asks the second question only when a version is set, bound, and reports why', () => {
+  const block = flagBlock();
+  const sqls = flagSqls();
+  assert.equal(sqls.length, 2, 'the flag should hold exactly the two queries');
+  assert.match(sqls[1], /a\.document_version >= \?/);
+  assert.match(sqls[1], /o\.status = 'satisfied'/);
+  assert.match(sqls[1], /o\.required = 1/);
+  const guard = block.indexOf('if (!TERMS_REACCEPT_FROM) return false;');
+  assert.ok(guard >= 0 && guard < block.indexOf(sqls[1]),
+    'the second query must not run while the switch is off');
+  assert.match(block, /\.bind\(user\.id, TERMS_REACCEPT_FROM\)/);
+  assert.match(block, /termsReason = 'missing'; return true;/);
+  assert.match(block, /termsReason = 'updated'; return true;/);
+  assert.match(AUTH, /terms_acceptance_reason: termsReason,/);
 });
