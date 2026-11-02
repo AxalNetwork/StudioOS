@@ -20,6 +20,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SCHEMA_OPTIONS, buildSchema, copySchemaTo, loadSchema, schemaKey, schemaPath } from './_schema_once.mjs';
+import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 
 const HELPER = fileURLToPath(new URL('./_schema_once.mjs', import.meta.url));
 const SQL = fileURLToPath(new URL('../sql/', import.meta.url));
@@ -82,7 +83,7 @@ test('a changed migration, a new migration or another bound changes the key', ()
     cpSync(SQL, dir, { recursive: true, filter: (p) => !p.includes('/historical') });
     const base = schemaKey({ sqlDir: dir });
     assert.equal(schemaKey({ sqlDir: dir }), base, 'the same inputs, the same key');
-    const last = readdirSync(join(dir, 'migrations')).filter((n) => n.endsWith('.sql')).sort().at(-1)!;
+    const last = readdirSync(join(dir, 'migrations')).filter((n) => n.endsWith('.sql')).sort(compareMigrations).at(-1)!;
     appendFileSync(join(dir, 'migrations', last), '\n-- one more line\n');
     const edited = schemaKey({ sqlDir: dir });
     assert.notEqual(edited, base, 'an edited migration is a new build');

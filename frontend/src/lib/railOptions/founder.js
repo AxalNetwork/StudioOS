@@ -131,7 +131,7 @@ export const FOUNDER_OPTIONS = [
   // ── Build.
   // D1071 (#2941): Plan the build's "Word with Eadwyn" — the rules' items worded, kept only by an item's Save.
   {
-    page: 'Founder · Build', key: 'draft:build/plan', route: '/build/plan', label: 'Word with Eadwyn', kind: 'write', handler: 'draft',
+    page: 'Founder · Build', key: 'draft:build/plan', route: '/build/plan', label: 'Word the plan', kind: 'write', handler: 'draft',
     at: [['frontend/src/pages/cycles/BuildPlan.jsx', 'buildPlanApi.word(']],
   },
   {

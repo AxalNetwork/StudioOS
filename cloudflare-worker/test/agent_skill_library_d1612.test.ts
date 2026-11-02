@@ -20,6 +20,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { READ_KEYS, ROLES } from '../src/services/agents/catalogue.ts';
 
+import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 const DIR = new URL('../src/services/agents/skills/', import.meta.url);
 const LEVELS = ['aware', 'working', 'proficient', 'advanced', 'expert'];
 const OUTPUTS = ['draft', 'record_change', 'brief'];
@@ -56,7 +57,7 @@ const map = (v: string) => {
   return Object.fromEntries(m![1].split(',').map((p) => p.split(':').map((x) => x.trim())).filter((p) => p[0]));
 };
 
-const files = readdirSync(DIR).filter((f) => f.endsWith('.md') && f !== 'README.md').sort();
+const files = readdirSync(DIR).filter((f) => f.endsWith('.md') && f !== 'README.md').sort(compareMigrations);
 const skills = files.map((f) => parseSkill(f, readFileSync(new URL(f, DIR), 'utf8')));
 
 test('the library holds about twelve skills, one file each, named by slug, none twice', () => {
@@ -120,7 +121,7 @@ test('each skill has numbered steps, says "Not recorded" for a missing figure, a
 });
 
 test('each skill has one golden case, naming the skill, its output and what the proposal must say', () => {
-  const cases = readdirSync(new URL('cases/', DIR)).filter((f) => f.endsWith('.json')).sort();
+  const cases = readdirSync(new URL('cases/', DIR)).filter((f) => f.endsWith('.json')).sort(compareMigrations);
   assert.deepEqual(cases, files.map((f) => f.replace(/\.md$/, '.json')), 'a skill without a case, or a case without a skill');
   for (const s of skills) {
     const c = JSON.parse(readFileSync(new URL(`cases/${s.front.name}.json`, DIR), 'utf8'));

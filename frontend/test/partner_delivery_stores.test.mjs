@@ -27,6 +27,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { migrationStamp } from '../../scripts/lib/migrationPlan.mjs';
 
 const ROOT = resolve(process.cwd());
 const DIR = join(ROOT, 'cloudflare-worker', 'sql', 'migrations');
@@ -191,9 +192,11 @@ const KNOWN_DUPLICATE_NUMBERS = {
 };
 
 test('the migration numbers are free and in order', () => {
-  // D4106: a stamped file (YYYYMMDDHHMM_) is not numbered; check-sql-migrations keeps those unique.
-  const files = readdirSync(DIR).filter((f) => f.endsWith('.sql') && /^\d{1,3}_/.test(f));
-  const nums = files.map((f) => Number(f.slice(0, 3))).filter(Number.isFinite);
+  const files = readdirSync(DIR).filter((f) => f.endsWith('.sql'));
+  // A migration's number is every digit before its first underscore: three for a
+  // numbered file, twelve for a D4106 stamp (`202611021724_…` is not 202).
+  const numberOf = (f) => (/^(\d+)_/.exec(f) || [])[1] ?? f;
+  const nums = files.map((f) => Number(numberOf(f))).filter(Number.isFinite);
   for (const n of [208, 209]) {
     assert.equal(nums.filter((x) => x === n).length, 1,
       `two files numbered ${n} order by filename, which is not a decision anyone made`);
@@ -202,7 +205,7 @@ test('the migration numbers are free and in order', () => {
   // Every number is used once, except the recorded collisions above.
   const byNumber = new Map();
   for (const f of files) {
-    const k = f.slice(0, 3);
+    const k = numberOf(f);
     if (!byNumber.has(k)) byNumber.set(k, []);
     byNumber.get(k).push(f);
   }
@@ -230,8 +233,12 @@ test('the migration numbers are free and in order', () => {
   // FILENAME, so a number that is not three digits sorts somewhere its author
   // did not intend — `21_x.sql` runs before `208_x.sql`, and a file that
   // depends on an earlier one then runs first and aborts the deploy.
+  // D4106 added the second form: a file named by its UTC minute
+  // (`YYYYMMDDHHMM_<slug>.sql`), which the runner's numeric sort puts after
+  // every numbered file. Anything else is still refused.
   for (const f of files) {
-    assert.match(f, /^\d{3}_/,
-      `${f}: the runner orders by filename, so every migration needs a 3-digit prefix`);
+    // D4106: or a 12-digit UTC-minute stamp, a real minute, which compareMigrations orders after every numbered file.
+    assert.ok(/^\d{3}_/.test(f) || migrationStamp(f),
+      `${f}: every migration needs a 3-digit prefix or a D4106 UTC-minute stamp`);
   }
 });

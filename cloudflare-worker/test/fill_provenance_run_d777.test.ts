@@ -30,10 +30,10 @@ import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { run as aiRun, __resetForTest } from '../src/services/aiRouter.ts';
 import { recordFill, fillsForRow, claimFills } from '../src/services/fills/provenance.ts';
 import founderValidate from '../src/routes/founder_validate.ts';
-
+import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 const SQL = new URL('../sql/', import.meta.url);
 const BASELINE = readFileSync(new URL('schema_baseline.sql', SQL), 'utf8');
-const MIGRATIONS = readdirSync(new URL('migrations/', SQL)).filter((f) => f.endsWith('.sql')).sort();
+const MIGRATIONS = readdirSync(new URL('migrations/', SQL)).filter((f) => f.endsWith('.sql')).sort(compareMigrations);
 const migration = (name: string) => readFileSync(new URL(`migrations/${name}`, SQL), 'utf8');
 const ADMIN = 1;
 

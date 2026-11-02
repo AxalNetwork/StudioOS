@@ -2,7 +2,8 @@
  * D1564 (#3811, deck builder v2 D3) — a share link published as a web page.
  *
  *   1. A 506(b) round cannot publish (409 `exemption_506b`), and nothing is written; 506(c) can, with the email gate.
- *   2. An unstated exemption is refused; a stored state that is not 506(c) never reads as published.
+ *      Since D4086 the exemption is the round's (`raise_rounds.exemption`), not the request's.
+ *   2. A round with no recorded exemption is refused; a stored state that is not 506(c) never reads as published.
  *   3. Public (un-gated) views are off until T: an un-gated publish is refused, and a published link's read
  *      sends no card and uses no view until this browser gives an email, even when the stored gate says none.
  *   4. `/embed/:token` answers only a frame from a listed origin, with `frame-ancestors` and no X-Frame-Options;
@@ -18,24 +19,25 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import deckInvestorLinks from '../src/routes/deck_investor_links.ts';
 import deckPublish, { serveDeckEmbed, serveDeckShareCard } from '../src/routes/deck_publish.ts';
 import decks from '../src/routes/decks.ts';
 import {
-  PUBLIC_VIEWS_ON, cleanEmail, cleanEmbedOrigins, embedAllowed, gateFor, linkOgImage, publishOf, publishRefusal, withPublish,
+  PUBLIC_VIEWS_ON, cleanEmail, cleanEmbedOrigins, embedAllowed, gateFor, linkOgImage, publishOf, publishRefusal, roundRefusal, withPublish,
 } from '../src/services/decks/publish.ts';
 import { parseShareInclude } from '../src/services/decks/shareInclude.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-d1564-publish-0123456789abcdef';
 const BASELINE = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
 const DIR = 'cloudflare-worker/sql/migrations';
-const MIGRATIONS = readdirSync(DIR).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort().map((n) => readFileSync(`${DIR}/${n}`, 'utf8'));
+const MIGRATIONS = readdirSync(DIR).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations).map((n) => readFileSync(`${DIR}/${n}`, 'utf8'));
 const ADMIN = 1, FOUNDER = 3, OTHER = 4;
 const P = 5, OTHER_P = 6, DECK = 6, PROSPECT = 7;
 const SITE = 'https://partner.example.test';
+const ROUND = 'r-seed-0001';
 
 const SLIDES = [
   { title: 'Kestrel Labs', blocks: [
@@ -56,8 +58,10 @@ function fixture() {
   for (const id of [ADMIN, FOUNDER, OTHER]) ss.run(id, `j-${id}`);
   db.prepare('INSERT INTO super_admins (user_id) VALUES (?)').run(ADMIN);
   db.exec(`INSERT INTO projects (id, name, founder_id, sector, stage) VALUES (${P}, 'Kestrel Labs', 1001, 'Fintech', 'seed'), (${OTHER_P}, 'Other', 1002, 'Health', 'seed')`);
-  db.prepare('INSERT INTO pitch_decks (id, project_id, version, slides, title, is_current, created_at) VALUES (?, ?, 2, ?, ?, 1, ?)')
-    .run(DECK, P, JSON.stringify(SLIDES), 'Seed deck', '2026-10-21 09:00:00');
+  // D4086: the deck is for a round recorded under 506(c).
+  db.prepare("INSERT INTO raise_rounds (uid, project_id, name, status, exemption) VALUES (?, ?, 'Seed', 'active', '506c')").run(ROUND, P);
+  db.prepare('INSERT INTO pitch_decks (id, project_id, version, slides, title, is_current, created_at, round_ref) VALUES (?, ?, 2, ?, ?, 1, ?, ?)')
+    .run(DECK, P, JSON.stringify(SLIDES), 'Seed deck', '2026-10-21 09:00:00', ROUND);
   db.prepare("INSERT INTO raise_prospects (id, uid, project_id, name, firm) VALUES (?, 'p-7', ?, 'Pat Partner', 'Fund A')").run(PROSPECT, P);
   return db;
 }
@@ -88,6 +92,7 @@ const make = (db: DatabaseSync, body: Record<string, unknown> = {}) =>
   req(db, 'POST', `/api/decks/${DECK}/investor-links`, ADMIN, { prospect_id: PROSPECT, expires_days: 14, view_limit: null, ...body });
 const publish = (db: DatabaseSync, id: number, body: Record<string, unknown>, as = ADMIN) => req(db, 'PUT', `/api/decks/${DECK}/investor-links/${id}/publish`, as, body);
 const stored = (db: DatabaseSync, id: number) => (db.prepare('SELECT include_json FROM pitch_deck_share_tokens WHERE id = ?').get(id) as any).include_json as string | null;
+const setExemption = (db: DatabaseSync, v: string | null) => db.prepare('UPDATE raise_rounds SET exemption = ? WHERE uid = ?').run(v, ROUND);
 const views = (db: DatabaseSync, id: number) => Number((db.prepare('SELECT view_count FROM pitch_deck_share_tokens WHERE id = ?').get(id) as any).view_count);
 
 test('D1564: a 506(b) round cannot publish, and nothing is written', async () => {
@@ -95,16 +100,19 @@ test('D1564: a 506(b) round cannot publish, and nothing is written', async () =>
   const made = await make(db);
   assert.equal(made.status, 201, JSON.stringify(made.body));
   const before = stored(db, made.body.link.id);
-  const no = await publish(db, made.body.link.id, { on: true, exemption: '506b', gate: 'email' });
+  setExemption(db, '506b');
+  // The round says 506(b): refused, whatever the request states.
+  const no = await publish(db, made.body.link.id, { on: true, exemption: '506c', gate: 'email' });
   assert.equal(no.status, 409);
   assert.equal(no.body.error, 'exemption_506b');
   assert.match(no.body.message, /506\(b\)/);
   assert.equal(stored(db, made.body.link.id), before, 'a refused publish writes nothing');
   assert.equal((await req(db, 'GET', `/api/decks/${DECK}/investor-links/${made.body.link.id}/publish`, ADMIN)).body.publish, null);
-  // The pure rule, whatever the gate or the switch.
-  assert.equal(publishRefusal({ exemption: '506b', gate: 'email' }, true)?.code, 'exemption_506b');
+  // The pure rule.
+  assert.equal(roundRefusal({ uid: ROUND, name: 'Seed', exemption: '506b' })?.code, 'exemption_506b');
   // 506(c) publishes, with the email gate.
-  const yes = await publish(db, made.body.link.id, { on: true, exemption: '506c' });
+  setExemption(db, '506c');
+  const yes = await publish(db, made.body.link.id, { on: true });
   assert.equal(yes.status, 200, JSON.stringify(yes.body));
   assert.equal(yes.body.publish.exemption, '506c');
   assert.equal(yes.body.gate, 'email');
@@ -112,12 +120,15 @@ test('D1564: a 506(b) round cannot publish, and nothing is written', async () =>
   assert.match(yes.body.note, /counsel/);
 });
 
-test('D1564: an unstated exemption is refused; a stored state that is not 506(c) never reads as published', async () => {
+test('D1564: a round with no recorded exemption is refused; a stored state that is not 506(c) never reads as published', async () => {
   const db = fixture();
   const made = await make(db);
-  const no = await publish(db, made.body.link.id, { on: true });
-  assert.equal(no.status, 422);
-  assert.equal(no.body.error, 'exemption_missing');
+  setExemption(db, null);
+  const no = await publish(db, made.body.link.id, { on: true, exemption: '506c' });
+  assert.equal(no.status, 409);
+  assert.equal(no.body.error, 'exemption_not_recorded');
+  assert.match(no.body.message, /Raise/);
+  setExemption(db, '506c');
   assert.equal(publishOf(JSON.stringify({ publish: { on: true, exemption: '506b', gate: 'email' } })), null);
   assert.equal(publishOf(JSON.stringify({ publish: { on: true, gate: 'email' } })), null);
   assert.equal(publishOf('not json'), null);

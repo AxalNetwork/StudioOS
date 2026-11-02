@@ -18,6 +18,7 @@
  * Nothing here builds a packet or files anything: it records what an admin did.
  */
 import type { Env } from '../types';
+import { afterMove } from './agents/transfer';
 import { ensureIncorporationsSchema } from './incorporations';
 import { isCalendarDate } from './section83b';
 import { LAB_PARTICIPANT_IDS } from './labParticipants';
@@ -85,6 +86,11 @@ export async function markFiled(
   const { statements, outcome } = await filingCompanyStatements(env, facts, filedOn, adminId);
   const results = await env.DB.batch([env.DB.prepare(SET_FILED).bind(filedOn, adminId, id), ...statements]);
   if (!(Number(results[0]?.meta?.changes ?? 0) > 0)) return { ok: false, status: 409, error: 'packet_not_ready' };
+  // #3850 (E6): the venture moved into its new company in that batch; its in-flight agent runs end `scope_moved`.
+  if (outcome && (outcome as { created?: boolean }).created && facts?.project_id) {
+    const made = await env.DB.prepare('SELECT id FROM company_profiles WHERE uid = ?').bind((outcome as { uid: string }).uid).first<{ id: number }>();
+    if (made) await afterMove(env, { projectId: Number(facts.project_id), from: null, to: Number(made.id), actorUserId: adminId });
+  }
   return { ok: true, id, status: 'filed', company: outcome };
 }
 

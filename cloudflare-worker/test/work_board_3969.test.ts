@@ -46,10 +46,12 @@ function world() {
   const {DB,db}=makeD1(['users','company_profiles','user_company_links','projects','roadmap_okrs'].map(t=>stripForeignKeys(tableFromBaseline(baseline,t))).join('\n')+AI_LOG_SCHEMA+sql('migrations/506_ai_rail_proposals.sql'));
   addColumnsFrom(db,sql('migrations/597_company_archive_and_events.sql'),'company_profiles');
   db.exec(sql('migrations/712_team_agents.sql'));
+  db.exec(sql('migrations/202611021724_team_agents_persona.sql')); // D4117: persona_key
   db.exec(stripForeignKeys(sql('migrations/727_scope_goals_and_tasks.sql')));
   db.exec(sql('migrations/762_scope_task_work_board.sql'));
   // D1614 W7 (#3993): the board reads 763's milestone, author and draft columns.
   db.exec(sql('migrations/763_task_comments_labels_milestones.sql'));
+  db.exec(sql('migrations/202611022205_work_workload.sql')); // D1614 W4: the board reads the time block
   db.exec(`CREATE TABLE project_members (id INTEGER PRIMARY KEY,project_id INTEGER,user_id INTEGER,role TEXT,status TEXT,created_at TEXT,updated_at TEXT)`);
   for(const [id,name,role,founder] of [[OWNER,'Pat Owner','founder',100],[MEMBER,'Max Member','founder',101],[OTHER,'Ali Other','founder',102],[STRANGER,'Sam Stranger','founder',103]])
     db.prepare("INSERT INTO users (id,uid,email,name,role,founder_id,subscription_tier,subscription_status) VALUES (?,?,?,?,?,?,'growth','active')").run(id,`u-${id}`,`fixture-${id}@example.test`,name,role,founder);
@@ -74,6 +76,17 @@ async function create(w:W,b:any={},project=7) {
 const raw=async(w:W,uid:string)=>(await taskByUid(w.env,uid)) as WorkTask;
 const user=(w:W,id=OWNER)=>w.db.prepare('SELECT * FROM users WHERE id = ?').get(id) as any;
 const close=(w:W,uid:string,reason='completed',extra={})=>call(w,OWNER,'PATCH',`/tasks/${uid}`,{state:'closed',close_reason:reason,...extra});
+
+test('#3973: the board says who is reading, so the page offers a move only where the Worker allows one',async()=>{
+  const w=world();try{
+    // Mutation checked: answer can_manage true for everyone → the member's read says true and this fails.
+    const own=await call(w,OWNER,'GET','/project/7/work/board');
+    assert.deepEqual(own.body.viewer,{can_manage:true,user_uid:'u-10'});
+    const member=await call(w,MEMBER,'GET','/project/7/work/board');
+    assert.deepEqual(member.body.viewer,{can_manage:false,user_uid:'u-11'});
+    assert.doesNotMatch(JSON.stringify(member.body.viewer),/@|"id"/,'a uid, never an email or a numeric id');
+  }finally{w.db.close();}
+});
 
 test('board gates, engine flags and project-only boundary; company E1 tasks still work',async()=>{
   const w=world();try{

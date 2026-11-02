@@ -215,6 +215,8 @@ test('Ask: an instruction that states a figure is refused with its module and co
     assert.equal(ok.status, 200, JSON.stringify(ok.body));
     assert.equal(f.runs()[0].rail_option, 'deck:rewrite');
     assert.ok(f.calls.some((c) => /less like marketing/.test(c.prompt)));
+    // #4188: the instruction is kept on the proposal, so HQ's report queue reads what was asked.
+    assert.equal(JSON.parse(f.proposals()[0].payload_json).instruction, 'Make it sound less like marketing');
   } finally { f.close(); }
 });
 

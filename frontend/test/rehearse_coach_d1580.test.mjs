@@ -2,7 +2,7 @@
  * D1580 part 2 (#3827) — Rehearse's coaching, and kept audio on the storage page.
  *
  *   1. The coaching's hold line, and its words.
- *   2. The report draws the coaching block between Figures and Likely questions:
+ *   2. The report draws the coaching block between Figures and Likely questions (#3829's `LikelyQuestions`):
  *      the points when written, else the note, the hold and "Coach me", which
  *      calls the client; the rail option names that call.
  *   3. The client's coach paths are the Worker's; the storage page names the
@@ -27,7 +27,7 @@ test('2. the report draws the coaching block, and Coach me calls the client the 
   // Mutation checked: the button not calling onCoach → the deckRehearsalsApi.coach( call site is gone from the panel.
   const src = read('frontend/src/pages/raise/pitch/RehearsePanel.jsx');
   const at = (s) => src.indexOf(s);
-  assert.ok(at('data-testid="rehearse-figures"') < at('data-testid="rehearse-coaching"') && at('data-testid="rehearse-coaching"') < at('data-testid="rehearse-questions"'));
+  assert.ok(at('data-testid="rehearse-figures"') < at('data-testid="rehearse-coaching"') && at('data-testid="rehearse-coaching"') < at('<LikelyQuestions'), 'between Figures and Likely questions (#3829)');
   assert.match(src, /deckRehearsalsApi\.coach\(deckId, report\.uid\)/);
   assert.match(src, /deckRehearsalsApi\.coachQuote\(deckId, report\.uid\)/);
   assert.match(src, /onClick=\{onCoach\}/);
