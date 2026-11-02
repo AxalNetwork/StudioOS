@@ -205,7 +205,7 @@ async function priceGate(c: any, user: User, projectId: number, step: QuoteStep 
   }
   if (dailyCeiling(c.env) != null) {
     let next = quote?.hold_microusd ?? 0;
-    if (!quote) { const q = await quoteRun(c.env, ask); next = q.ok ? q.hold_microusd : 0; }
+    if (!quote) { const q = await quoteRun(c.env, { ...ask, surface: AI_SURFACE.raisePitch, rail: ask.rail }); next = q.ok ? q.hold_microusd : 0; }
     const stop = await ceilingRefusal(c.env, NEW_DECK_RAIL.page, next);
     if (stop) {
       if (quote) await returnQuote(c.env, quote.uid);
@@ -215,9 +215,8 @@ async function priceGate(c: any, user: User, projectId: number, step: QuoteStep 
   return { quote };
 }
 
-/** The run's options with its pinned quote, if it has one. */
-const pinnedRun = (ask: RunOptions, quote: TakenQuote | null): RunOptions =>
-  ({ ...ask, surface: AI_SURFACE.raisePitch, rail: ask.rail, ...(quote ? { pinMicrousd: quote.hold_microusd } : {}) });
+/** The run's pinned quote, as options for the run, if it has one. */
+const pinOf = (quote: TakenQuote | null): Pick<RunOptions, 'pinMicrousd'> => (quote ? { pinMicrousd: quote.hold_microusd } : {});
 
 /** What the answer says about the quote a run settled under. */
 const quoteView = (env: Env, quote: TakenQuote | null) =>
@@ -419,7 +418,7 @@ deckNew.post('/outline', async (c) => {
   const gate = await priceGate(c, user, projectId, 'outline', body, ask);
   if ('refused' in gate) return gate.refused;
   // D552 and D765: the page and the rail context are named at the call, as every run() names them.
-  const res = await run(c.env, pinnedRun(ask, gate.quote));
+  const res = await run(c.env, { ...ask, surface: AI_SURFACE.raisePitch, rail: ask.rail, ...pinOf(gate.quote) });
   if (!res.ok && gate.quote) await returnQuote(c.env, gate.quote.uid);
   let rows: OutlineRow[] | null = null;
   let reason: string | null = null;
@@ -512,7 +511,7 @@ deckNew.post('/generate', async (c) => {
   const ask = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows, items, ventureName: name, exclude, visuals }), rows.length, element);
   const gate = await priceGate(c, user, projectId, 'build', body, ask);
   if ('refused' in gate) return gate.refused;
-  const res = await run(c.env, pinnedRun(ask, gate.quote));
+  const res = await run(c.env, { ...ask, surface: AI_SURFACE.raisePitch, rail: ask.rail, ...pinOf(gate.quote) });
   if (!res.ok && gate.quote) await returnQuote(c.env, gate.quote.uid);
   let wording: Wording[] = rows.map(() => ({ headline: null, body: null }));
   let dropped = 0;
