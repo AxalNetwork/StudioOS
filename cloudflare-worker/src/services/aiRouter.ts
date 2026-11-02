@@ -334,6 +334,10 @@ export interface RunOptions {
    * the parent once, at the sum of its steps. Only `genRuntime` sets it.
    */
   parentHold?: { uid: string; userId: number };
+  // D1528 (#3847, #3742 E3): the `agents` AI Gateway id (`AGENT_AI_GATEWAY`).
+  // Only `agentRun` sets it. A gatewayed agent call is never retried without
+  // its gateway: the gateway's limit is the platform's circuit breaker.
+  gatewayId?: string | null;
   // D1540 (#3791): a pinned quote. The most this run may charge the member, in
   // micro-USD, from a quote the Worker stored before the run (New deck's
   // `deck_run_quotes`). The hold is no larger, and the settlement is capped at
@@ -1493,6 +1497,15 @@ function gatewayOptionFor(env: Env, task: TaskClass, userId?: number | null): Ga
   return { gateway: { id: slug, metadata } };
 }
 
+/** D1528: an agent run's own gateway, with the same metadata keys (D261). */
+function agentGatewayOption(env: Env, opts: RunOptions): GatewayOption {
+  const branch = branchOf(env) ?? 'hq';
+  const metadata: Record<string, string> = { branch };
+  if (Number.isInteger(opts.userId) && opts.userId > 0) metadata.account = `${branch}:${opts.userId}`;
+  metadata.task = opts.task;
+  return { gateway: { id: String(opts.gatewayId), metadata } };
+}
+
 /**
  * D1504 (#3755, deck v2 A11) — the deck's AI Gateway, inert until the owner
  * creates it (owner question L): `CF_AI_GATEWAY_SLUG_DECK` is empty in every
@@ -1546,7 +1559,7 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
   if (!ai || typeof ai.run !== 'function') {
     return { ok: false, status: 0, error: 'AI binding not configured' };
   }
-  const gatewayOpt = bypassGateway ? undefined : (gatewayOptionFor(env, opts.task, opts.userId) ?? deckGatewayOptionFor(env, opts));
+  const gatewayOpt = opts.gatewayId ? agentGatewayOption(env, opts) : bypassGateway ? undefined : (gatewayOptionFor(env, opts.task, opts.userId) ?? deckGatewayOptionFor(env, opts));
   // D761: cache affinity, so a member's next turn on the same page earns cached
   // input. The member's id and the page key only, never an email or a name.
   const affinity = shapes.sessionAffinity(opts.userId, normaliseSurface(opts.surface) ?? opts.task);
@@ -2485,7 +2498,7 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
   // reasoning and long context 30 s, images 60 s). A streamed run gets the
   // same limit for the handshake and its first chunk; the body after that
   // may legitimately run longer, so it is not timed.
-  const gatewayRouted = isGatewayRouted(env, opts.task);
+  const gatewayRouted = !opts.gatewayId && isGatewayRouted(env, opts.task);
   const inputTokens = route.isAudio ? 0
     : opts.rerank ? estTokens([opts.rerank.query, ...opts.rerank.contexts].join('\n'))
     : estTokens(route.isEmbed || opts.translate ? (opts.text ?? defaultContentBlob(opts)) : chatMessagesFor(opts).map((m) => m.content).join('\n'));
