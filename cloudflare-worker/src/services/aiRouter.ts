@@ -318,6 +318,12 @@ export interface RunOptions {
   // out and behaves as before.
   idempotencyKey?: string;
   executionId?: string;
+  // D1540 (#3791): a pinned quote. The most this run may charge the member, in
+  // micro-USD, from a quote the Worker stored before the run (New deck's
+  // `deck_run_quotes`). The hold is no larger, and the settlement is capped at
+  // it, so a price that changed after the quote never charges more than it
+  // said. Never from a request body: the route reads it from its own row.
+  pinMicrousd?: number;
 }
 
 /**
@@ -2276,6 +2282,9 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
   }
 
   let reservation: {uid:string;userId:number} | undefined;
+  // D1540 (#3791): a pinned quote caps the hold and every settlement of it.
+  const pin = Number.isSafeInteger(opts.pinMicrousd) && opts.pinMicrousd! >= 0 ? opts.pinMicrousd! : null;
+  const pinned = (micro: number) => (pin == null ? micro : Math.min(micro, pin));
   // D762: what this run is settled at over its cost, from the member's licence.
   // Cost (est_cost_usd, the KV buckets, the organisation cap) stays cost.
   let multiplier = 1;
@@ -2283,7 +2292,8 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
     try {
       multiplier = await aiBudget.memberChargeMultiplier(env, opts.userId);
       // D1278: the hold names the run's task, never its prompt.
-      const held = await aiBudget.reserveAiBudget(env, opts.userId, holdQuoteMicro(opts, route, [primaryModel, ...fallbacks], guardOn, guardInput, multiplier),
+      // D1540: a pinned quote holds no more than it said.
+      const held = await aiBudget.reserveAiBudget(env, opts.userId, pinned(holdQuoteMicro(opts, route, [primaryModel, ...fallbacks], guardOn, guardInput, multiplier)),
         new Date(), { idempotencyKey: opts.idempotencyKey ?? null, context: { operation: holdOperation(opts), surface: 'ai', executionId: opts.executionId ?? null } });
       if (!held.ok) {
         const usage:UsageMeta={task:opts.task,model:primaryModel,latency_ms:0,prompt_tokens:0,completion_tokens:0,est_cost_usd:0,fallback_used:false,cached:false,safety_score:null};
@@ -2321,6 +2331,8 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
    * False when the settlement could not be written.
    */
   const settleHold = async (micro: number, usd: number, answered: boolean): Promise<boolean> => {
+    // D1540: never more than the pinned quote, whatever the run cost at today's prices.
+    micro = pinned(micro);
     if (reservation) {
       try { await aiBudget.settleAiReservation(env, reservation, micro, !answered && micro === 0); }
       catch { return false; }
@@ -2522,7 +2534,9 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
    * written.
    */
   const settle = async (u: UsageMeta, ok: boolean): Promise<RunCharge | null> => {
-    const charged = ok ? aiBudget.billedUsdToMicro(u.est_cost_usd, multiplier) : 0;
+    // D1540: the run's own row records its share of a pinned quote, after the guard's.
+    const billed = ok ? aiBudget.billedUsdToMicro(u.est_cost_usd, multiplier) : 0;
+    const charged = pin == null ? billed : Math.min(billed, Math.max(0, pin - guardMicro()));
     if (!await settleHold(charged + guardMicro(), (ok ? u.est_cost_usd : 0) + guardUsd(), ok)) return null;
     // A run with no hold (a system run) charged nobody.
     return { charged: reservation ? charged : 0, reservationUid: reservation?.uid ?? null, units: unitsFor(u) };
