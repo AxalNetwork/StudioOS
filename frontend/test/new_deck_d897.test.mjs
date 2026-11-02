@@ -372,6 +372,6 @@ test('the route is static, the studio opens it, and the fast path builds a propo
     assert.doesNotMatch(src, /\[\$[\d.,]+\]|\[Northwind|\[Seed\]|\[\d+\] runs/, `${f}: no canvas sample reaches the page`);
     assert.doesNotMatch(src, /\bcredits?\b/i, `${f}: AI tokens, never credits`);
   }
-  const api = read('frontend/src/lib/api.js');
+  const api = read('frontend/src/lib/apiModules.generated.js');
   assert.match(api, /export \* from '\.\/api\/newDeck\.js';/);
 });

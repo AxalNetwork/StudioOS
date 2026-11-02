@@ -26,15 +26,16 @@ import RouteErrorBoundary from './components/RouteErrorBoundary';
 // ── Route modules (D528) ──────────────────────────────────────────────────
 // A NEW area's routes live in frontend/src/routes/<area>.jsx, not here: this
 // file changed in 109 of the last 624 commits and any two PRs that add a page
-// collide in it. One import per module, alphabetical by file name, and one
-// composition line per module in the block of the same name inside the Routes
-// element below. The 409 routes already here stay here (156 tests read this
-// file by path, and several slice it at the Routes element's opening tag, so
-// that tag is not written in prose here). See frontend/src/routes/README.md;
-// routes_modules_d528.test.mjs fails the build for a module that is not wired in.
-import learningRoutes from './routes/learning';
-import portfolioRoutes from './routes/portfolio';
-import teamRoutes from './routes/team';
+// collide in it. Since #4105 nothing here names a module: ROUTE_MODULES is
+// every file in that folder, collected by an eager import.meta.glob (eager
+// because React Router needs the elements now; each module's pages stay lazy),
+// and the block of the same name inside the Routes element below composes them
+// in each module's `order`, then file-name order. The 409 routes already here
+// stay here (156 tests read this file by path, and several slice it at the
+// Routes element's opening tag, so that tag is not written in prose here). See
+// frontend/src/routes/README.md; routes_modules_d528.test.mjs holds the wiring.
+import { collectRouteModules } from './lib/routeModules';
+const ROUTE_MODULES = collectRouteModules(import.meta.glob('./routes/*.jsx', { eager: true }));
 import BranchDigestRedirect from './pages/branch/BranchDigestRedirect';
 import HqCreditsRedirect from './pages/hq/HqCreditsRedirect';
 import { useRedirectBeacon } from './lib/redirectBeacon';
@@ -4135,13 +4136,12 @@ function AppInner() {
       <Route path="/lp/investor" element={<Navigate to="/for-investors" replace />} />
       <Route path="/lp/partner" element={<Navigate to="/for-service-partners" replace />} />
       <Route path="/lp/spinout-demo-day" element={<SpinoutDemoDayPage />} />
-      {/* ── Route modules (D528) ── one line per frontend/src/routes/<area>.jsx,
-          alphabetical, each `{<area>Routes(routeTools)}`; the imports sit in
-          the block of the same name at the top of this file. Above the
-          catch-all, so a module's routes are matched before it. */}
-      {learningRoutes(routeTools)}
-      {portfolioRoutes(routeTools)}
-      {teamRoutes(routeTools)}
+      {/* ── Route modules (D528) ── every frontend/src/routes/<area>.jsx, as
+          ROUTE_MODULES (the block of the same name at the top of this file)
+          collects them (#4105): each module's routes(routeTools), in its
+          `order`, then file-name order. Above the catch-all, so a module's
+          routes are matched before it. */}
+      {ROUTE_MODULES.map(({ file, routes }) => <React.Fragment key={file}>{routes(routeTools)}</React.Fragment>)}
       {/* ── end route modules ── */}
       {/* Task #11 — Catch-all 404. Must stay LAST so it only matches when no
           other route (public, alias, or guarded) does. */}

@@ -4,9 +4,12 @@
  *
  * Statically analyses `frontend/src/lib/api.js` and every domain module under
  * `frontend/src/lib/api/` (D527) against the production worker
- * (`cloudflare-worker/src/index.ts` + everything it mounts) and fails on drift.
- * It also fails when api.js's re-export block does not name exactly the
- * modules on disk, in alphabetical order.
+ * (`cloudflare-worker/src/index.ts` + everything it mounts, including the
+ * route modules that mount themselves through `routes/_registry.ts`, #4105)
+ * and fails on drift. It also fails when the generated re-export index
+ * (`frontend/src/lib/apiModules.generated.js`, #4105) does not name exactly
+ * the modules on disk, in alphabetical order, or is stale, and when `api.js`
+ * does not re-export it with its one line.
  *
  * Why static and not curl-based?
  * - The production worker runs on Cloudflare; we don't always have a deployed
@@ -61,12 +64,15 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve, relative } from 'node:path';
 import {
   API_MODULES_DIR_REL,
+  apiJsProblems,
   classifyCalls,
   clientSources,
   extractClientCalls,
   listModules,
+  readApiIndex,
   reexportProblems,
 } from './lib/apiModules.mjs';
+import { registeredMounts } from './lib/routeRegistry.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -235,6 +241,13 @@ function buildRouteTable() {
     else unresolved.push(`${m[1]} -> ${m[2]}`);
   }
 
+  // #4105 — routers that mount themselves through routes/_registry.ts: each
+  // module's `mount` export names the path and the router, read statically.
+  for (const r of registeredMounts(ROOT)) {
+    mounts.push(r.path);
+    crawl(resolve(ROOT, r.file), r.path, 0, r.router);
+  }
+
   return { routes, mounts, unresolved };
 }
 
@@ -312,7 +325,10 @@ function findEnvelopeViolations() {
 // D527 — api.js and every domain module under lib/api/. A call cannot hide
 // from this check by living in a module instead of api.js.
 const sources = clientSources(ROOT);
-const reexport = reexportProblems(sources[0].src, listModules(resolve(ROOT, API_MODULES_DIR_REL)));
+const reexport = [
+  ...apiJsProblems(sources[0].src),
+  ...reexportProblems(readApiIndex(ROOT), listModules(resolve(ROOT, API_MODULES_DIR_REL))),
+];
 const { routes, mounts, unresolved } = buildRouteTable();
 const calls = sources.flatMap(({ src }) => extractClientCalls(src));
 const { missingRoute, missingMethod, allowlisted } = classifyCalls(calls, routes, KNOWN_DRIFT_ALLOWLIST);
@@ -376,7 +392,7 @@ if (unresolved.length) {
 let failed = false;
 if (reexport.length) {
   failed = true;
-  console.error(`\n❌ api.js re-export block disagrees with frontend/src/lib/api/ (${reexport.length}):\n`);
+  console.error(`\n❌ the API index (api.js → apiModules.generated.js) disagrees with frontend/src/lib/api/ (${reexport.length}):\n`);
   for (const x of reexport) console.error(`   - ${x}`);
 }
 const SECTIONS = [
