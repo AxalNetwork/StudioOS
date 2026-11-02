@@ -189,6 +189,20 @@ twice within a few lines (D1279). So:
 - A feature's notes go in its decision file, not in a shared README.
 - If rule 4 fails after a merge, keep the newer version and delete the other.
 
+### The route map is one file per canvas (D1615)
+
+`documentation/architecture/ROUTE_MAP.md` is only a pointer now. The map lives
+in `documentation/architecture/route-map/`: one file per section and one file
+per canvas row (its README has the rules). So:
+
+- Adding a canvas is adding one file under `route-map/canvases/part-N/`, holding
+  its one table row. Never write a canvas row into a section or into
+  `ROUTE_MAP.md`.
+- Changing a canvas is editing only its file. If another branch changed the
+  same canvas, git stops on that one line: combine the two, keep one row.
+- Run `node scripts/build-route-map.mjs --check` before pushing. It fails on a
+  canvas with two rows and names both files.
+
 ### The repository is public
 
 Never put secrets, tokens, personal data or security-sensitive operational

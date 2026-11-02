@@ -6,7 +6,8 @@ disagrees with the code, the document is the thing to fix.
 | File | Answers |
 | --- | --- |
 | `CODEBASE_MAP.md` | Where does anything live? |
-| `ROUTE_MAP.md` | Which design canvas maps to which route, what shipped from it, and what deliberately did not. One row per canvas. |
+| `ROUTE_MAP.md` | A pointer to `route-map/` (D1615). |
+| `route-map/` | Which design canvas maps to which route, what shipped from it, and what deliberately did not: one file per section and one file per canvas row. `node scripts/build-route-map.mjs` joins them into one document. |
 | `SHELL_MIGRATION.md` | The four workspace shell migrations (Founder, Investor/LP, Advisor, Partner): IA rules, zone inventory, shipped vs open, verification commands. |
 | `PROFILE_ROUTING.md` | **Generated.** Which workspace sees each canvas, under which nav section, as what surface, and how it is reached. |
 | `AI_MODEL_COVERAGE.md` | **Generated** (D1478). Every Workers AI catalogue model against the 14 platform modules: wired, offered, gap or n/a, with the file and line or page that does it, the picks the run never reads, and Pitch deck v2's models priced per run. `cloudflare-worker/test/ai_model_coverage_d1478.test.ts` fails when it differs from `renderCoverage()`. |
@@ -32,13 +33,13 @@ disagrees with the code, the document is the thing to fix.
 **`CLAUDE.md` at the repo root outranks everything here.** Where this folder
 disagrees with it, that file wins.
 
-The two read most often are `ROUTE_MAP.md` (before building any surface) and
+The two read most often are the route map, `route-map/` (before building any surface), and
 `DECISIONS.md` with `decisions/` (before undoing something that looks wrong —
 several entries exist precisely because the obvious fix was tried and was
 worse).
 
 **`PROFILE_ROUTING.md` and `PAGE_INVENTORY.md` are build output.** They are
-emitted by `scripts/build-profile-routing.mjs` from `ROUTE_MAP.md` and
+emitted by `scripts/build-profile-routing.mjs` from the route map (`route-map/`) and
 `frontend/src/sidebarConfig.js`; editing them by hand is pointless because the
 next run overwrites it, and `frontend/test/profile_routing_fresh.test.mjs`
 fails the build if either falls behind its sources. Change the source, then

@@ -84,6 +84,13 @@ const DOCUMENTED = new Map([
   ['design/canvases',                 'the 107 canvases, sorted by whether a route exists'],
   ['documentation/architecture',      'the maintained architecture set'],
   ['documentation/architecture/decisions', 'one file per decision from D526 on — how to name and head one'],
+  ['documentation/architecture/route-map', 'the route map (D1615): one file per section and per canvas row, and the rules'],
+  ['documentation/architecture/route-map/canvases', 'one folder per canvas table, one file per row (D1615)'],
+  ['documentation/architecture/route-map/canvases/part-1', 'one route-map canvas row per file (D1615)'],
+  ['documentation/architecture/route-map/canvases/part-2', 'one route-map canvas row per file (D1615)'],
+  ['documentation/architecture/route-map/canvases/part-3', 'one route-map canvas row per file (D1615)'],
+  ['documentation/architecture/route-map/canvases/part-4', 'one route-map canvas row per file (D1615)'],
+  ['documentation/architecture/route-map/canvases/part-5', 'one route-map canvas row per file (D1615)'],
   ['documentation/audits',            'dated snapshots — true on their date only'],
   ['documentation/operations',        'runbooks — the steps to ship, check and recover production'],
   // Nested folders heavy enough to be opaque from their parent alone.

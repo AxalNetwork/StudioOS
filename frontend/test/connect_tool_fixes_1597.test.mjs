@@ -26,6 +26,7 @@ import { useProject } from '../src/pages/cycles/CycleRoute.jsx';
 import GithubSyncSheet from '../src/pages/account/GithubSyncSheet.jsx';
 import ToolsHistory from '../src/pages/cycles/ToolsHistory.jsx';
 import { systemOptions, UNMAP } from '../src/pages/cycles/forms.js';
+import { readRouteMap } from '../../scripts/lib/routeMap.mjs';
 
 const h = React.createElement;
 const DAY = 86400000;
@@ -337,7 +338,7 @@ test('13. mounted CycleRoute: Operating systems draws the Worker\'s parts.tools,
 
 test('14–15. ROUTE_MAP says the venture rides in the signed state and both keys go in one write; the account README names the lightbox, /build/connect, ?tool= and the return', async () => {
   const { readFileSync } = await import('node:fs');
-  const row = readFileSync('documentation/architecture/ROUTE_MAP.md', 'utf8').split('\n').find((l) => l.startsWith('| `Cycle Action.dc.html` · `connect`'));
+  const row = readRouteMap().split('\n').find((l) => l.startsWith('| `Cycle Action.dc.html` · `connect`'));
   assert.match(row, /which ride in the signed OAuth state, so a return through the callback host \(`OAUTH_CALLBACK_BASE_URL`\) still lands on `\/build\/connect\?…&project_id=<id>`/);
   assert.match(row, /`oauth` and `provider` are stripped in the same address write that keeps `project_id`/);
   assert.match(row, /a plan-locked tool on `pro`, a coming-soon or unavailable one on nothing/);

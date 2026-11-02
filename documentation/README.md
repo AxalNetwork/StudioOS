@@ -24,7 +24,7 @@ nothing here is served.
 | Question | File |
 | --- | --- |
 | Where does anything live? | [architecture/CODEBASE_MAP.md](architecture/CODEBASE_MAP.md) |
-| Which canvas maps to which route, and what shipped? | [architecture/ROUTE_MAP.md](architecture/ROUTE_MAP.md) |
+| Which canvas maps to which route, and what shipped? | [architecture/route-map/](architecture/route-map/README.md) (one file per canvas; D1615) |
 | Which AI model runs, or can be picked, in which module? | [architecture/AI_MODEL_COVERAGE.md](architecture/AI_MODEL_COVERAGE.md) (generated) |
 | May this model run, and what do its provider's terms allow? | [architecture/MODEL_TERMS.md](architecture/MODEL_TERMS.md) |
 | Who sees a surface, where in their nav, and how do they reach it? | [architecture/PROFILE_ROUTING.md](architecture/PROFILE_ROUTING.md) |

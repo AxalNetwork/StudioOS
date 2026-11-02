@@ -35,11 +35,13 @@
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { readRouteMap } from './lib/routeMap.mjs';
 
 const ROOT = resolve(process.cwd());
 const read = (p) => readFileSync(resolve(ROOT, p), 'utf8');
 
-const ROUTE_MAP = 'documentation/architecture/ROUTE_MAP.md';
+// D1615 (#4102): the map is a folder of fragments; readRouteMap() joins them.
+const ROUTE_MAP = 'documentation/architecture/route-map/';
 const SIDEBAR = 'frontend/src/sidebarConfig.js';
 const OUT_ROUTING = 'documentation/architecture/PROFILE_ROUTING.md';
 const OUT_INVENTORY = 'documentation/architecture/PAGE_INVENTORY.md';
@@ -288,7 +290,7 @@ export const esc = (s) => String(s).replace(/\\\|/g, '|').replace(/([\\|])/g, '\
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 export function build() {
-  const recs = parseRouteMap(read(ROUTE_MAP));
+  const recs = parseRouteMap(readRouteMap());
   const roles = parseSidebar(read(SIDEBAR));
 
   const rows = [];
