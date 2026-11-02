@@ -43,6 +43,18 @@
  * binding. With the engine off or paused, #3727's own
  * `POST /agents/:uid/run` (team_agents.ts) still runs an agent by hand.
  *
+ * D1530 (#3849, E5 of #3742) — duties, handoffs and memory, behind the same flag and gates:
+ *
+ *   GET    /agents/:uid/duties        read     { duties: [Duty] }
+ *   POST   /agents/:uid/duties        manage   201 { duty }; 422 template_not_in_role; 409 duty_exists | too_many_duties
+ *   PATCH  /duties/:uid               manage   { duty } (cadence, weekday, day_of_month, hour_utc, title, status)
+ *   DELETE /duties/:uid               manage   { ok }
+ *   GET    /:scope/:id/handoffs       read     { chains: [{ uid, steps: [...], refused: [{ reason }] }] }
+ *   GET    /agents/:uid/memory        read     { notes, retention: { days_after_removal, run_summaries_days, text } }
+ *   POST   /agents/:uid/memory        manage   201 { note } (a fact); 422 note_too_long
+ *   DELETE /memory/:uid               manage   { ok } ("Forget this")
+ *   DELETE /agents/:uid/memory        manage   { ok, forgotten } ("Forget everything")
+ *
  * NEVER AN EMAIL, NEVER A NUMERIC USER ID. A person is `{ uid, name }`; an
  * agent `{ uid, role_key, first_name, last_name }`. `cost` is
  * `{ available: false }` until E3 records task runs, never 0.
@@ -72,6 +84,9 @@ import { terminateRun, trackRun } from '../agents/doRuntime';
 import { workItemRoutes } from './work_items';
 import { memberTimeZone, projectBurnup } from '../services/agents/workBurnup';
 import { WorkRefusal } from '../services/agents/workBoard';
+import { addDuty, dutiesOf, dutyByUid, dutyDto, removeDuty, runsPerMonth, updateDuty, type DutyRow } from '../services/agents/duties';
+import { chainsOf } from '../services/agents/handoffs';
+import { RETENTION, addFact, forgetAll, forgetNote, noteByUid, noteDto, notesOf, retentionText } from '../services/agents/memory';
 
 type C = Context<{ Bindings: Env }>;
 
@@ -580,6 +595,158 @@ router.get('/:scope/:id/suggested-team', async (c) => {
       });
     }
     return c.json({ stage, suggestions });
+  } catch (e) { return mapError(c, e); }
+});
+
+// ── D1530 (#3849, E5): duties, handoffs and memory ─────────────────────────
+
+/** The agent by uid and its scope, when the caller may read it (and manage it, when asked). */
+async function agentFor(c: C, user: User, uid: string, manage: boolean): Promise<{ a: AgentRow; s: Scope } | Response> {
+  const a = await agentByUid(c.env, uid);
+  const s = a && a.status !== 'removed' ? await scopeOfAgent(c.env, a) : null;
+  if (!a || !s || !(await canRead(c.env, s, user))) return refuse(c, 404, { code: 'not_found', message: 'There is no such agent.' });
+  if (manage && !(await canManage(c.env, s, user))) return refuse(c, 403, { code: 'not_manager', message: 'Only the team’s editors can change its agents.' });
+  return { a, s };
+}
+
+/** A duty's month at its schedule: one run's quote × its runs. Unknown when the quote is. */
+async function dutyOut(env: Env, user: User, d: DutyRow) {
+  let est: { available: false } | { available: true; value: number } = { available: false };
+  try {
+    const m = d.module ? MODULES.find((x) => x.key === d.module) : null;
+    const { optionRowIn } = await import('../services/agents/agentRun');
+    const row = d.module && d.option ? optionRowIn(d.module, d.option) : null;
+    if (m && row) {
+      const q = await quoteRun(env, {
+        task: row.routeTask as TaskClass, userId: Number(user.id), role: user.role ?? null, messages: [{ role: 'user', content: ' ' }],
+        rail: { page: row.pageKey, option: row.optionKey, record: null }, surface: moduleSurface(m),
+      });
+      if (q.ok && Number.isFinite(q.hold_microusd)) est = { available: true, value: q.hold_microusd * runsPerMonth(d) };
+    }
+  } catch { est = { available: false }; }
+  return dutyDto(d, est);
+}
+
+router.get('/agents/:uid/duties', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const got = await agentFor(c, user, c.req.param('uid') ?? '', false);
+    if (got instanceof Response) return got;
+    const duties = [];
+    for (const d of await dutiesOf(c.env, got.a.id)) duties.push(await dutyOut(c.env, user, d));
+    return c.json({ duties });
+  } catch (e) { return mapError(c, e); }
+});
+
+router.post('/agents/:uid/duties', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const got = await agentFor(c, user, c.req.param('uid') ?? '', true);
+    if (got instanceof Response) return got;
+    const b = await readBody(c);
+    if (!b) return refuse(c, 400, { code: 'invalid_duty', message: 'Send the duty as JSON.' });
+    const r = await addDuty(c.env, got.a, b as any, user.id);
+    if (!r.ok) return say(c, r.refusal);
+    return c.json({ duty: await dutyOut(c.env, user, r.duty) }, 201);
+  } catch (e) { return mapError(c, e); }
+});
+
+/** The duty by uid and its agent's scope, for a manager. */
+async function dutyFor(c: C, user: User): Promise<{ d: DutyRow } | Response> {
+  const d = await dutyByUid(c.env, c.req.param('uid') ?? '');
+  const a = d && d.status !== 'removed' ? await c.env.DB.prepare('SELECT * FROM team_agents WHERE id = ?').bind(d.agent_id).first<AgentRow>() : null;
+  if (!d || !a) return refuse(c, 404, { code: 'not_found', message: 'There is no such duty.' });
+  const got = await agentFor(c, user, a.uid, true);
+  return got instanceof Response ? got : { d };
+}
+
+router.patch('/duties/:uid', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const got = await dutyFor(c, user);
+    if (got instanceof Response) return got;
+    const b = await readBody(c);
+    if (!b) return refuse(c, 400, { code: 'invalid_duty', message: 'Send the change as JSON.' });
+    const r = await updateDuty(c.env, got.d, b as any);
+    if (!r.ok) return say(c, r.refusal);
+    return c.json({ duty: await dutyOut(c.env, user, r.duty) });
+  } catch (e) { return mapError(c, e); }
+});
+
+router.delete('/duties/:uid', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const got = await dutyFor(c, user);
+    if (got instanceof Response) return got;
+    await removeDuty(c.env, got.d);
+    return c.json({ ok: true });
+  } catch (e) { return mapError(c, e); }
+});
+
+router.get('/:scope/:id/handoffs', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
+    if (!s) return noScope(c);
+    if (!(await canRead(c.env, s, user))) return notMember(c);
+    return c.json({ chains: await chainsOf(c.env, s) });
+  } catch (e) { return mapError(c, e); }
+});
+
+const retentionOut = () => ({ days_after_removal: RETENTION.notes_days_after_removal, run_summaries_days: RETENTION.run_summaries_days, text: retentionText() });
+
+router.get('/agents/:uid/memory', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const got = await agentFor(c, user, c.req.param('uid') ?? '', false);
+    if (got instanceof Response) return got;
+    const notes = [];
+    for (const n of await notesOf(c.env, got.a)) notes.push(await noteDto(c.env, n));
+    return c.json({ notes, retention: retentionOut() });
+  } catch (e) { return mapError(c, e); }
+});
+
+router.post('/agents/:uid/memory', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const got = await agentFor(c, user, c.req.param('uid') ?? '', true);
+    if (got instanceof Response) return got;
+    const b = await readBody(c);
+    const r = await addFact(c.env, got.a, b?.body, user.id);
+    if (!r.ok) return say(c, r.refusal);
+    return c.json({ note: await noteDto(c.env, r.note) }, 201);
+  } catch (e) { return mapError(c, e); }
+});
+
+router.delete('/agents/:uid/memory', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const got = await agentFor(c, user, c.req.param('uid') ?? '', true);
+    if (got instanceof Response) return got;
+    return c.json({ ok: true, forgotten: await forgetAll(c.env, got.a) });
+  } catch (e) { return mapError(c, e); }
+});
+
+router.delete('/memory/:uid', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const n = await noteByUid(c.env, c.req.param('uid') ?? '');
+    const a = n ? await c.env.DB.prepare('SELECT * FROM team_agents WHERE id = ?').bind(n.agent_id).first<AgentRow>() : null;
+    if (!n || !a) return refuse(c, 404, { code: 'not_found', message: 'There is no such note.' });
+    const s = await scopeOfAgent(c.env, a);
+    if (!s || !(await canRead(c.env, s, user))) return refuse(c, 404, { code: 'not_found', message: 'There is no such note.' });
+    if (!(await canManage(c.env, s, user))) return refuse(c, 403, { code: 'not_manager', message: 'Only the team’s editors can forget an agent’s notes.' });
+    await forgetNote(c.env, n);
+    return c.json({ ok: true });
   } catch (e) { return mapError(c, e); }
 });
 

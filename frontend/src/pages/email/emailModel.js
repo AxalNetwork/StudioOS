@@ -12,6 +12,7 @@
  *   · each state's words (EM8).
  */
 import { INTENTS, LENGTHS, TONES } from '../../../../cloudflare-worker/src/services/mail/intents.ts';
+import { costLine } from '../../ui/askPanelModel.js';
 
 export { INTENTS, LENGTHS, TONES };
 
@@ -103,6 +104,30 @@ export function estimateLine(estimate) {
   if (!hold) return null;
   return `Draft with Eadwyn · holds up to ${hold} in AI tokens. Nothing is charged until you press Draft.`;
 }
+
+/** The live update blocks a draft may carry (D1344), as chips. */
+export const BLOCKS = Object.freeze([
+  { value: 'kpis', label: 'KPIs' }, { value: 'raise_status', label: 'Raise status' }, { value: 'project_progress', label: 'Project progress' },
+  { value: 'interview_insights', label: 'Interview insights' }, { value: 'one_liner', label: 'Company one-liner' },
+]);
+export const cap = (w) => w.charAt(0).toUpperCase() + w.slice(1);
+/** A body's words, whitespace folded: what "unchanged" and "blank" compare. */
+export const bodyText = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
+
+/**
+ * #4017 (IV-D3): the record Sheet's cost line before a draft, D1442's words
+ * ("Holds up to $X · you pay what it uses"). Until the estimate answers it
+ * says so, never "$0.00".
+ */
+export function draftHoldLine(estimate) {
+  const n = Number(estimate?.hold_microusd);
+  if (estimate?.hold_microusd == null || !Number.isFinite(n) || n <= 0) return null;
+  return costLine(n);
+}
+export const HOLD_READING = 'Reading what this draft holds…';
+
+/** The field trigger shows on a blank Body only, and never for a reader (#4017). */
+export const showBodyTrigger = ({ body, readOnly = false, open = false } = {}) => !readOnly && !open && bodyText(body) === '';
 
 /** The Draft button is pressable only once its estimate is on screen, and the intent is chosen. */
 export function canDraft({ estimate, intent, busy = false } = {}) {

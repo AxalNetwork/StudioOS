@@ -7,8 +7,10 @@
  *
  *   do   `doRuntime.ts`: one `AgentScope` Durable Object per scope plus the
  *        `AgentTaskWorkflow`. The only runtime built; the default.
- *   sdk  `sdkRuntime.ts`: NOT BUILT (E0 evaluates it). Asking for it falls
- *        back to `do`, loudly, rather than running nothing.
+ *   sdk  `sdkRuntime.ts`: one Agents SDK `ScopeAgent` per scope over the same
+ *        `AgentTaskWorkflow` (#3852, E0: an evaluation). Named only when
+ *        a person switches it; without its `AGENT_SCOPE_SDK` binding it
+ *        falls back to `do`, loudly, rather than running nothing.
  *
  * Only `sdkRuntime.ts` may import the `agents` package; a test fails on any
  * other import of it.
@@ -24,6 +26,7 @@
  *                  while set the engine reads `paused`. Cleared by a person.
  */
 import type { Env } from '../types';
+import type { ScopeCaller } from './doRuntime';
 
 export type ScopeKind = 'company' | 'project';
 /** A scope by its immutable id, never a name. */
@@ -98,12 +101,26 @@ export async function haltedAll(env: Pick<Env, 'RATE_LIMITS'>): Promise<boolean>
 /** `manual` unless the var says exactly `self_start`. */
 export const autonomy = (env: Pick<Env, 'AGENT_AUTONOMY'>): Autonomy => (env.AGENT_AUTONOMY === 'self_start' ? 'self_start' : 'manual');
 
-/** `do` unless the var names another runtime that exists. Only `do` exists. */
+/** `do` unless the var names another runtime that exists. */
 export const runtimeName = (env: Pick<Env, 'AGENT_RUNTIME'>): RuntimeName => (env.AGENT_RUNTIME === 'sdk' ? 'sdk' : 'do');
 
-/** The runtime behind the seam. `sdk` is not built, so it falls back to `do`. */
+/** The runtime in force: `sdk` only when named AND its binding is there; otherwise `do`. */
+const sdkInForce = (env: Pick<Env, 'AGENT_RUNTIME' | 'AGENT_SCOPE_SDK'>): boolean => {
+  if (runtimeName(env) !== 'sdk') return false;
+  if (env.AGENT_SCOPE_SDK) return true;
+  console.warn('[agents] AGENT_RUNTIME=sdk without its AGENT_SCOPE_SDK binding; using do');
+  return false;
+};
+
+/** The runtime behind the seam. */
 export async function agentRuntime(env: Env): Promise<AgentRuntime> {
-  if (runtimeName(env) === 'sdk') console.warn('[agents] AGENT_RUNTIME=sdk is not built; using do');
+  if (sdkInForce(env)) return (await import('./sdkRuntime')).sdkRuntime(env);
   const { doRuntime } = await import('./doRuntime');
   return doRuntime(env);
+}
+
+/** The scope object of the runtime in force, for a run's live status (`trackRun`). */
+export async function runtimeCaller(env: Env): Promise<ScopeCaller | null> {
+  if (sdkInForce(env)) return (await import('./sdkRuntime')).sdkBindingCaller(env);
+  return (await import('./doRuntime')).bindingCaller(env);
 }

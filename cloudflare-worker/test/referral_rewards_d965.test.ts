@@ -13,7 +13,6 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
@@ -28,11 +27,10 @@ import { ruleReason } from '../src/services/creditGrants.ts';
 import { mapError } from '../src/routes/_t13t14t15_helpers.ts';
 import { ensureReferralSubmissionsSchema, rewardLine, REFERRAL_REWARD_RULES } from '../src/services/referralSubmissions.ts';
 import { splitStatements } from './_baseline.mjs';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '../..');
-const MIGRATIONS = resolve(ROOT, 'cloudflare-worker/sql/migrations');
 const M566 = MIG('566_referral_reward_rules.sql');
 const SUPER = 30;
 const ROLES: Record<number, string> = { [SUPER]: 'admin', [ADMIN]: 'admin', [FOUNDER]: 'founder', [PARTNER]: 'partner' };
@@ -256,13 +254,7 @@ test('the member overview promises only the rules that are on, and none when the
 
 function beforeM566(): DatabaseSync {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  db.exec(readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8'));
-  for (const f of readdirSync(MIGRATIONS).filter((x) => x.endsWith('.sql')).sort(compareMigrations)
-    .filter((x) => migrationNumber(x) > BASELINE_CUTOFF && migrationNumber(x) < 566)) {
-    for (const stmt of splitStatements(readFileSync(resolve(MIGRATIONS, f), 'utf8'))) {
-      try { db.exec(stmt); } catch { /* already present on the baseline */ }
-    }
-  }
+  loadSchema(db, { below: 566 });
   return db;
 }
 

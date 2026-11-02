@@ -21,7 +21,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import { isFramed } from '../src/services/ai/untrusted.ts';
@@ -32,8 +31,8 @@ import { exportAllowPatterns, renderUrl } from '../src/services/browserRun.ts';
 import deckImages from '../src/routes/deck_images.ts';
 import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
+import { loadSchema } from './_schema_once.mjs';
 
 // ─────────────────────────────────────────────────────────── the batch autofill
 
@@ -124,14 +123,11 @@ test('over 50 megapixels is refused, from the header', () => {
 // ─────────────────────────────────────────────────────────── the routes
 
 const root = new URL('../sql/', import.meta.url);
-const baseline = readFileSync(new URL('schema_baseline.sql', root), 'utf8');
-const migrations = readdirSync(new URL('migrations/', root)).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations)
-  .map((n) => readFileSync(new URL('migrations/' + n, root), 'utf8'));
 const JWT_SECRET = 'synthetic-d1506-only-not-a-real-credential'.repeat(2);
 
 async function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  db.exec(baseline); for (const sql of migrations) db.exec(sql);
+  loadSchema(db);
   db.prepare("INSERT INTO users(id, role, founder_id, name, email, is_active, subscription_tier) VALUES (2, 'founder', 100, 'Ada Quill', 'synthetic-2@example.invalid', 1, 'studio')").run();
   db.exec("INSERT INTO projects(id,name,founder_id) VALUES (1,'Synthetic venture',100)");
   db.prepare('INSERT INTO pitch_decks (id, project_id, version, slides, is_current) VALUES (7, 1, 3, ?, 1)').run(JSON.stringify([{ uid: 'card-a', title: 'Solution' }, { uid: 'card-b', title: 'Traction' }]));

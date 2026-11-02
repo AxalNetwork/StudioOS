@@ -17,7 +17,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, readdirSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -27,12 +27,10 @@ import { enterKpi } from '../src/services/growKpis.ts';
 import { setKpiAlert } from '../src/services/growWriters.ts';
 import { ensureProjectMetricsSchema } from '../src/routes/progress.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
 const ROOT = process.cwd();
-const MIGRATIONS = resolve(ROOT, 'cloudflare-worker/sql/migrations');
 const BASELINE = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
-const FILES = readdirSync(MIGRATIONS).filter((f) => /^\d+_.*\.sql$/.test(f)).sort(compareMigrations);
 
 const FOUNDER = 10, OWNER = 11;
 const A = 1;
@@ -44,8 +42,7 @@ const BUILT = join(mkdtempSync(join(tmpdir(), 'grow-daily-')), 'built.db');
 function fixture() {
   if (!existsSync(BUILT)) {
     const db = new DatabaseSync(BUILT, { enableDoubleQuotedStringLiterals: true });
-    db.exec(BASELINE);
-    for (const f of FILES.filter((n) => migrationNumber(n) > BASELINE_CUTOFF)) db.exec(readFileSync(resolve(MIGRATIONS, f), 'utf8'));
+    loadSchema(db);
     db.close();
   }
   const copy = join(mkdtempSync(join(tmpdir(), 'grow-daily-')), 'test.db');
