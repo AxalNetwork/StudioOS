@@ -68,7 +68,8 @@ test('the table reads the version\'s links; Withdraw asks first and keeps the ro
   const v = await mount(h(InvestorLinksTable, { deck: DECK }), handle);
   try {
     const text = v.text();
-    for (const words of ['[Pat Partner]', '[Fund A]', 'Prepared for [Pat Partner] · [Fund A]', 'v3', 'Accepted 2026-10-30', 'Until 2026-11-14', '2 of 5', '2 views']) {
+    // D1573 (#3820): the Analytics cell is pd35's "Views 2 · Time 2 m · Last seen …".
+    for (const words of ['[Pat Partner]', '[Fund A]', 'Prepared for [Pat Partner] · [Fund A]', 'v3', 'Accepted 2026-10-30', 'Until 2026-11-14', '2 of 5', 'Views 2 · Time 2 m']) {
       assert.ok(text.includes(words), words);
     }
     await v.click('investor-link-withdraw-11');
@@ -79,7 +80,7 @@ test('the table reads the version\'s links; Withdraw asks first and keeps the ro
     await v.click('investor-link-withdraw-yes');
     assert.ok(v.seen.includes('POST /api/decks/6/investor-links/11/withdraw'));
     assert.match(v.text(), /Withdrawn/);
-    assert.ok(v.text().includes('2 views'), 'the analytics stay');
+    assert.ok(v.text().includes('Views 2 · Time 2 m'), 'the analytics stay');
   } finally { await v.close(); }
 });
 
