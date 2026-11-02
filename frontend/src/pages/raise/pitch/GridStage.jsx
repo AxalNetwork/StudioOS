@@ -6,15 +6,18 @@ import { overlayStyle } from './imageModel';
 import { SOURCE_NOT_RECORDED, cardOf } from './presentExportModel';
 import { KIT_FAILED, NO_KIT, chromeOf } from './editorModel';
 import { areaLabel, askAreaName } from './deckV2Model';
-import { GRID, aspectOf, baselineShare, frameOf, placeOf, ratioOf } from './gridModel';
+import { GRID, SLIDE_SIZES, aspectOf, baselineShare, boxOf, frameOf, placeOf, ratioOf } from './gridModel';
 import { langAttrs } from './deckLanguage';
 import { SourceChip } from './SourcesBoards';
 import { ChangedNotice, FigureCard } from './FigureCard';
 import { faceOf, isFigure, itemsByKey, staleFigures } from './figuresModel';
 import {
   KEYS_LINE, STAGE_HINT, areaTitle, areasOf, cellAt, dividerDelta, dividerReadout, dividersOf, keyStep, liveFocus, marquee,
-  moveDivider, moveTo, nudge, pick, selectable, spanOf,
+  moveDivider, moveTo, nudge, pickGroup, selectable, spanOf,
 } from './gridSelection';
+import {
+  NUDGE_LINE, decorLabel, decorPlan, guidesFor, isDecorSel, itemsOf, moveDecor, nudgeStep, placeBox, spacingOf,
+} from './arrangeModel';
 import { minSizeProblem, moveOverflow, overLine, overflowOf } from './structureModel';
 
 /**
@@ -61,9 +64,18 @@ import { minSizeProblem, moveOverflow, overLine, overflowOf } from './structureM
  * sentence and changes nothing. When a text block then holds fewer words than
  * it has, the stage says "N words over" with Move overflow to notes, one edit.
  *
- * Nothing here writes: a move is the editor's `onMove`, a divider or an
- * overflow its `onCard`, a refresh its `onRefresh`, each held until a version
- * is saved like every other edit.
+ * Decor (D1533, #3777, pd26): a decor item selected from the layers list
+ * (`decor:<id>`) gets a violet handle on the card, over the areas. Arrow keys
+ * nudge it by 8 px ("Moved 8 px"; Shift, 24); a pointer drags it, snapped to
+ * the 8 px baseline. While it is selected the stage draws its violet guides
+ * (an edge or centre meeting another item's, or the slide's centre) and its
+ * spacing markers ("24 px") to the nearest item each way. A click on a
+ * grouped area selects its group (`pickGroup`). The item itself is drawn by
+ * the elements library (#3779); the handle is only the selection.
+ *
+ * Nothing here writes: a move is the editor's `onMove`, a divider, an
+ * overflow or a decor move its `onCard`, a refresh its `onRefresh`, each held
+ * until a version is saved like every other edit.
  */
 /** Where a divider's handle sits: the two cells either side of it, over the rows (or columns) both blocks share. */
 export function dividerBox(card, div) {
@@ -188,7 +200,9 @@ export default function GridStage({
   const stop = live ?? first;
   const uid = useId();
 
-  useEffect(() => { setRefused(null); setGhost(null); setSliding(null); setDivLine(null); setOverflow(null); }, [index]);
+  // D1533: the last decor move's line ("Moved 8 px").
+  const [moved, setMoved] = useState(null);
+  useEffect(() => { setRefused(null); setGhost(null); setSliding(null); setDivLine(null); setOverflow(null); setMoved(null); }, [index]);
   const dividers = useMemo(() => (areas && onCard && !readOnly ? dividersOf(card) : []), [areas, card, onCard, readOnly]);
   // The DOM focus follows the keyboard on the stage; a focus the card changed
   // under (a block now covers the focused range) never pulls it from a field.
@@ -218,7 +232,7 @@ export default function GridStage({
     if (keyed.current && Date.now() - keyed.current < 600) { keyed.current = 0; return; }
     keyed.current = 0;
     const shift = Boolean(e?.shiftKey || e?.metaKey || e?.ctrlKey);
-    set({ selection: pick(selection, areas, area.id, { shift }), focus: area.id });
+    set({ selection: pickGroup(selection, areas, area.id, { shift }, card), focus: area.id });
   };
   const keys = (e) => {
     if (!areas) return;
@@ -465,6 +479,10 @@ export default function GridStage({
             </span>
           );
         })}
+        {areas && selection.some(isDecorSel) ? (
+          <DecorHandles card={card} selection={selection} aspect={aspect} readOnly={readOnly || !onCard} rect={rect}
+            onCard={(next, line) => { setMoved(line); onCard?.(next); }} onLine={setMoved} />
+        ) : null}
         <CardChrome chrome={chromeOf(theme)} pageLabel={pageLabel} colours={colours} logo={kit?.data?.kit?.logo_url || null} />
         {box || ghost ? (
           <div className={`pointer-events-none ${LAYER}`} aria-hidden="true" data-testid="pitch-editor-drag-layer">
@@ -480,6 +498,12 @@ export default function GridStage({
       </div>
 
       {refused ? <span className={MUTED} role="status" data-testid="pitch-editor-drop-refused">{refused}</span> : null}
+      {selection.some(isDecorSel) && !readOnly ? (
+        <span className={`${MUTED} flex flex-wrap items-center gap-2`} data-testid="pitch-editor-decor-line">
+          {moved ? <span className={`${MONO} rounded-full bg-axal-lavender px-2 py-0.5 text-axal-violet dark:bg-violet-950/40 dark:text-violet-300`} role="status" data-testid="pitch-editor-decor-moved">{moved}</span> : null}
+          <span>{NUDGE_LINE}</span>
+        </span>
+      ) : null}
       {divLine ? <span className={divLine.error ? MUTED : MONO} role="status" data-testid={divLine.error ? 'pitch-editor-divider-refused' : 'pitch-editor-divider-line'}>{divLine.text}</span> : null}
       {overflow && !readOnly ? (
         <span className={`${MUTED} flex flex-wrap items-center gap-2`} role="status" data-testid="pitch-editor-overflow">
@@ -501,6 +525,83 @@ export default function GridStage({
         </div>
       ) : null}
       {areas ? <span className={MONO}>{KEYS_LINE}</span> : null}
+    </div>
+  );
+}
+
+/**
+ * D1533 (#3777, pd26): the selected decor's handles, guides and spacing
+ * markers. Every position comes from `arrangeModel` (slide pixels, 8 px);
+ * a move is one edit through `onCard`, with its line.
+ */
+function DecorHandles({ card, selection, aspect, readOnly, rect, onCard, onLine }) {
+  const plan = decorPlan(card);
+  const [drag, setDrag] = useState(null);
+  // While dragging, the card as it would be; the guides and markers read that.
+  const shown = drag?.next || card;
+  const boxes = itemsOf(shown, selection, aspect).filter((i) => i.tier === 'decor');
+  const lead = boxes[0]?.box || null;
+  const others = [
+    ...itemsOf(shown, plan.map((p) => `decor:${p.id}`), aspect).filter((i) => i.id !== boxes[0]?.id).map((i) => i.box),
+    ...itemsOf(shown, (card.blocks || []).map((b) => String(b.id)), aspect).map((i) => boxOf(i.grid, aspect)),
+  ];
+  const guides = lead ? guidesFor(lead, others, aspect) : { v: [], h: [] };
+  const gaps = lead ? spacingOf(lead, others) : [];
+  const size = SLIDE_SIZES[aspectOf(aspect)];
+  const pc = (v, of) => `${(v / of) * 100}%`;
+  const keys = (e) => {
+    const step = nudgeStep(e.key, e.shiftKey);
+    if (!step || readOnly) return;
+    e.preventDefault?.();
+    e.stopPropagation?.();
+    const r = moveDecor(card, selection, step[0], step[1], aspect);
+    if (r.error) onLine(r.error);
+    else if (r.card) onCard(r.card, r.line);
+  };
+  const toSlide = (e) => {
+    const box = rect();
+    if (!box || !(box.width > 0)) return null;
+    return { x: ((e.clientX - box.left) / box.width) * size.width, y: ((e.clientY - box.top) / box.height) * size.height };
+  };
+  const down = (e) => {
+    if (readOnly || e?.button > 0) return;
+    e.stopPropagation?.();
+    try { e.currentTarget?.setPointerCapture?.(e.pointerId); } catch { /* the drag still works without capture */ }
+    const at = toSlide(e);
+    if (at) setDrag({ from: at, next: null });
+  };
+  const move = (e) => {
+    if (!drag) return;
+    const at = toSlide(e);
+    if (!at) return;
+    const r = moveDecor(card, selection, at.x - drag.from.x, at.y - drag.from.y, aspect);
+    setDrag({ ...drag, next: r.card || null, line: r.line || r.error || null });
+  };
+  const up = () => {
+    const d = drag;
+    setDrag(null);
+    if (d?.next) onCard(d.next, d.line);
+  };
+  return (
+    <div className="pointer-events-none absolute inset-0 z-20" data-testid="pitch-editor-decor-handles">
+      {guides.v.map((x) => <span key={`v${x}`} aria-hidden="true" className="absolute top-0 h-full w-px bg-violet-500" style={{ left: pc(x, size.width) }} data-testid="pitch-editor-guide-v" />)}
+      {guides.h.map((y) => <span key={`h${y}`} aria-hidden="true" className="absolute left-0 h-px w-full bg-violet-500" style={{ top: pc(y, size.height) }} data-testid="pitch-editor-guide-h" />)}
+      {gaps.map((g, i) => (
+        <span key={i} aria-hidden="true" className={`absolute flex items-center justify-center ${g.axis === 'h' ? 'h-px bg-violet-500' : 'w-px bg-violet-500'}`}
+          style={{ left: pc(Math.min(g.x1, g.x2), size.width), top: pc(Math.min(g.y1, g.y2), size.height), width: g.axis === 'h' ? pc(Math.abs(g.x2 - g.x1), size.width) : undefined, height: g.axis === 'v' ? pc(Math.abs(g.y2 - g.y1), size.height) : undefined }}>
+          <span className="whitespace-nowrap rounded-full bg-violet-600 px-1.5 font-mono text-[9.5px] text-white" data-testid="pitch-editor-spacing">{`${g.px} px`}</span>
+        </span>
+      ))}
+      {boxes.map((i) => {
+        const p = plan.find((x) => x.id === i.id);
+        return (
+          <button key={i.sel} type="button" tabIndex={0}
+            aria-label={`${decorLabel(i.item)} · decor, layer ${p?.layer ?? '?'} of ${plan.length}${i.pinned ? ' · locked' : ''}`}
+            onKeyDown={keys} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={() => setDrag(null)}
+            className={`pointer-events-auto absolute rounded-[4px] outline outline-2 outline-violet-500 ${i.pinned ? 'cursor-not-allowed outline-dashed' : 'cursor-move'}`}
+            style={placeBox(i.box, aspect)} data-testid={`pitch-editor-decor-handle-${i.id}`} />
+        );
+      })}
     </div>
   );
 }

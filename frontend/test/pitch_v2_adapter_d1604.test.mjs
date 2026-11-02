@@ -36,7 +36,7 @@ test('every adapter method answers unavailable, with the reason and the issue th
   // D1499 (#3749) swapped grid, D1522 (#3774) stagePlan, D1553 (#3800) remix, D1503 (#3754) elementModels; D1565 (#3812)
   // the investor links; D1538 (#3787) typedTables; D1555 (#3802) consistency rides the check read. A swapped
   // surface's body calls its client through().
-  assert.deepEqual([...adapter.SWAPPED], ['grid', 'saveCard', 'discardDraft', 'draft', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'presets', 'orgLocks', 'comments'], 'the rows whose routes are on main');
+  assert.deepEqual([...adapter.SWAPPED], ['grid', 'saveCard', 'discardDraft', 'draft', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'presets', 'orgLocks', 'comments', 'arrange'], 'the rows whose routes are on main, and arrange, which needs none (D1533)');
 
 
   const seam = codeOnly(read(`${PITCH}/deckV2Adapter.js`));

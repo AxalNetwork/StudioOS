@@ -40,6 +40,11 @@
  * issue.
  * `comments` (D1570, #3817)
  * answers through `deckCommentsApi.list`.
+ * `arrange` (D1533, #3777) needs no route: align, distribute, group, lock and
+ * layers edit the card document, which the editor's save and autosave
+ * already write (`PATCH /api/decks/:id/cards/:uid`, `POST /api/decks/:id/versions`),
+ * so it answers locally from `arrangeModel.arrange`, with no `through()` and
+ * so no contract.
  *
  * Fields on routes that exist (`context.inferred` and `context.freshness`
  * from #3877; the PostHog, HubSpot and Linear source rows from #3880) need
@@ -57,6 +62,7 @@ import { deckCheckApi } from '../../../lib/api/deckCheck.js';
 import { deckElementModelsApi } from '../../../lib/api/deckElementModels.js';
 import { deckModelPresetsApi } from '../../../lib/api/deckModelPresets.js';
 import { deckCommentsApi } from '../../../lib/api/deckComments.js';
+import { arrange as arrangeCard } from './arrangeModel.js';
 
 export { NOT_ON };
 
@@ -118,7 +124,7 @@ export const SURFACES = Object.freeze({
 const off = (name) => async () => unavailable(SURFACES[name].issue);
 
 /** The rows whose route is on main: each answers through its real client, never unavailable by default. */
-export const SWAPPED = Object.freeze(['grid', 'saveCard', 'discardDraft', 'draft', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'presets', 'orgLocks', 'comments']);
+export const SWAPPED = Object.freeze(['grid', 'saveCard', 'discardDraft', 'draft', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'presets', 'orgLocks', 'comments', 'arrange']);
 
 
 /**
@@ -170,7 +176,11 @@ export const instruct = off('instruct');
 export const stagePlan = (deckId, opts) => through(() => deckStageApi.stagePlan(deckId, opts), SURFACES.stagePlan.issue);
 export const figures = off('figures');
 export const deckUsage = off('deckUsage');
-export const arrange = off('arrange');
+/**
+ * D1533 (#3777): one Arrange operation on a card (`arrangeModel.arrange`): `{ card, line }`,
+ * `{ same, line }` or `{ error }`. Local and synchronous underneath; the edited card is saved with every other edit.
+ */
+export const arrange = async (card, selection, op, opts) => ({ available: true, value: arrangeCard(card, selection, op, opts) });
 export const imageEdit = off('imageEdit');
 export const elementsLibrary = off('elementsLibrary');
 export const diagrams = off('diagrams');

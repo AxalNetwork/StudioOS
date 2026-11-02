@@ -36,6 +36,10 @@
  * corner, confidential), `voice`, `art_direction`, `lang` and `dir`.
  * A card is at most 256 KB and 12 areas.
  *
+ * D1533 (#3777) — direct manipulation: a block and a decor item keep a group
+ * id and a pin (the Arrange set's Lock), and a decor item its layer and an
+ * 8 px box (`arrange.ts`). Decor stays in the card's one `decor` list.
+ *
  * A binding is D896's: `{ source_key, record_ref, as_of, grade, snapshot_hash }`
  * (`services/decks/sources.ts`). A metric tile with no value is `value: null`,
  * which every reader shows as "Not recorded", never 0.
@@ -46,6 +50,7 @@ import { cellText, tableLines } from './tableCells';
 export { cellText, tableLines };
 import { diagramProblem, sanitizeDiagram } from './diagramModel';
 import { CUSTOM, STRUCTURE_IDS, areasProblem, sanitizeAreas } from './structures';
+import { BASELINE, atOf, blockArrange, decorArrange, decorHoldsContent, groupOf, layered } from './arrange';
 
 export const GRID_COLS = 12;
 export const GRID_ROWS = 6;
@@ -287,6 +292,8 @@ function decorOf(v: unknown): Array<{ id: string; kind: string; grid?: Grid }> |
     const item: { id: string; kind: string; grid?: Grid } = { id: typeof d.id === 'string' && ID.test(d.id) ? d.id : `d${i + 1}`, kind };
     const grid = gridOf(d.grid);
     if (grid) item.grid = grid;
+    // D1533 (#3777): its group, its pin (the Arrange set's Lock), its layer and its 8 px box (`arrange.ts`).
+    Object.assign(item, decorArrange(d));
     return [item];
   });
   return out.length ? out : null;
@@ -376,6 +383,8 @@ export function sanitizeBlocks(input: unknown, url: UrlGuard, ground = '#ffffff'
     if (typeof v.element === 'string' && ELEMENT_ID.test(v.element)) block.element = v.element;
     if (typeof v.session_uid === 'string' && GATE_REF.test(v.session_uid)) block.session_uid = v.session_uid;
     if (typeof v.logo_key === 'string' && GATE_REF.test(v.logo_key)) block.logo_key = v.logo_key;
+    // D1533 (#3777): the area's group and its pin (the Arrange set's Lock, not #3819's brand-kit `locked`).
+    Object.assign(block, blockArrange(v));
     out.push(block);
   }
   return out;
@@ -395,7 +404,8 @@ export function sanitizeModel(s: any, url: UrlGuard): Record<string, unknown> {
   if (s?.hidden === true) out.hidden = true;
   const section = str(s?.section, SECTION_MAX);
   if (section) out.section = section;
-  const decor = decorOf(s?.decor);
+  // D1533 (#3777): the decor in its layer order, bottom first; an item that claims a block's kind is not decor.
+  const decor = layered(decorOf(s?.decor), BLOCK_KINDS);
   if (decor) out.decor = decor;
   const bd = bindingOf(s?.binding);
   if (bd) out.binding = bd;
@@ -456,6 +466,12 @@ export function modelProblems(slides: unknown, url: UrlGuard): string[] {
     if (ap) out.push(`${card}: ${ap}`);
     // D1500: the caps a card is refused past, each with its sentence.
     if (s?.decor != null && (!Array.isArray(s.decor) || s.decor.length > MAX_DECOR)) out.push(`${card}: a card holds at most ${MAX_DECOR} decor items.`);
+    // D1533 (#3777): decor never holds a figure or body text; its box sits on the 8 px baseline; a group id is a plain id.
+    for (const d of Array.isArray(s?.decor) ? s.decor : []) {
+      if (decorHoldsContent(d, BLOCK_KINDS)) out.push(`${card}: decor never holds a figure or body text.`);
+      if (d?.at != null && !atOf(d.at)) out.push(`${card}: a decor item's box sits on the ${BASELINE} px baseline, inside the slide.`);
+      if (d?.group != null && !groupOf(d.group)) out.push(`${card}: a group id is at most 40 letters, digits, - or _.`);
+    }
     if (cardBytes(s) > CARD_BYTES_MAX) out.push(`${card}: the card is larger than 256 KB. Remove an image or some text, then save.`);
     if (s?.section != null && (typeof s.section !== 'string' || s.section.length > SECTION_MAX)) out.push(`${card}: the section name is at most ${SECTION_MAX} characters.`);
     if (s?.blocks == null) return;
@@ -479,6 +495,7 @@ export function modelProblems(slides: unknown, url: UrlGuard): string[] {
         out.push(`${where}: a table holds at most ${TABLE_COLS} columns and ${TABLE_ROWS} rows.`);
       }
       if (v?.binding != null && !bindingOf(v.binding)) out.push(`${where}: the binding is not a source.`);
+      if (v?.group != null && !groupOf(v.group)) out.push(`${where}: a group id is at most 40 letters, digits, - or _.`);
       const dp = kind === 'graphic' ? diagramProblem(v?.diagram) : null;
       if (dp) out.push(`${where}: ${dp}`);
       const pp = kind === 'text' ? parasProblem(v?.paras, groundOf(s)) : null;

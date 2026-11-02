@@ -21,7 +21,8 @@ import PitchPage from './PitchPage';
 import DeckToolbar from './DeckToolbar';
 import CardsStrip from './CardsStrip';
 import GridStage from './GridStage';
-import BlockTools, { SpeakerNotes } from './BlockTools';
+import BlockTools, { ArrangeSet, DecorLayers, SpeakerNotes } from './BlockTools';
+import { isDecorOn } from './arrangeModel';
 import ShareDialog from './ShareDialog';
 import CommentsSheet from './CommentsSheet';
 import ExportDialog from './ExportDialog';
@@ -356,7 +357,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   // The selection on The Grid: ids that left the card (a block removed, a free
   // range filled) drop out of it on their own.
   const areas = useMemo(() => areasOf(card, model), [card, model]);
-  const selection = pickState.selection.filter((id) => (areas || []).some((a) => a.id === id));
+  // D1533: a decor item (`decor:<id>`, from the layers list) stays selected while it is on the card.
+  const selection = pickState.selection.filter((id) => (areas || []).some((a) => a.id === id) || isDecorOn(card, id));
   const chosen = (areas || []).filter((a) => selection.includes(a.id));
   const one = chosen.length === 1 ? chosen[0] : null;
   // The focus too: a free range a block now covers hands it to that block.
@@ -532,6 +534,11 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
                 onAsk={ask} askOff={askOff} askLine={askLine}
                 items={items} onRefresh={() => { const r = refreshCard(card, items, charts); if (r.moved) setCard(sel, r.card); }} />
             )}
+            {/* D1533 (#3777, pd26): the Arrange set, only while an area or decor item is selected; then the card's decor layers. */}
+            {card && !readOnly && selection.length ? (
+              <ArrangeSet card={card} selection={selection} aspect={aspectOf(theme?.aspect)} model={model} onCard={(next) => setCard(sel, next)} />
+            ) : null}
+            {card ? <DecorLayers card={card} selection={selection} readOnly={readOnly} onSelection={setPickState} /> : null}
             {card && !readOnly && chosen.length ? (
               <InstructionBox deckId={base.deck.id} cardIndex={sel} card={card} areas={chosen} items={items} aiOn={aiOn} onTokens={onTokens}
                 onRemove={(id) => setPickState((p) => ({ selection: p.selection.filter((x) => x !== id), focus: p.focus }))}
