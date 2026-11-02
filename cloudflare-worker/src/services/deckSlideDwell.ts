@@ -7,7 +7,8 @@
  * them (`services/raiseCycle.ts`).
  */
 import type { Env } from '../types';
-import { cardUidAt } from './decks/cardUids';
+import { assignCardUids } from './decks/cardUids';
+import { parseShareInclude, shareSlides } from './decks/shareInclude';
 
 /** Highest slide index the heartbeat accepts (the store's CHECK). */
 export const MAX_SLIDE_INDEX = 199;
@@ -64,7 +65,7 @@ export async function recordSlideSeconds(env: Env, viewId: number, deckId: numbe
  * founder reorders it. Best effort: a database without 714, or a version that
  * cannot be read, keeps the seconds by place as before.
  */
-export async function recordSlideCardUids(env: Env, viewId: number, deckId: number, slides: number[]): Promise<void> {
+export async function recordSlideCardUids(env: Env, viewId: number, deckId: number, slides: number[], tokenId: number | null = null): Promise<void> {
   if (!slides.length) return;
   try {
     // Only the slides still unnamed: a heartbeat after the first reads nothing more.
@@ -73,10 +74,14 @@ export async function recordSlideCardUids(env: Env, viewId: number, deckId: numb
     const wanted = slides.filter((s) => todo.has(s));
     if (!wanted.length) return;
     const row = await env.DB.prepare('SELECT slides FROM pitch_decks WHERE id = ?').bind(deckId).first<{ slides: string | null }>();
-    const cards = JSON.parse(row?.slides || '[]');
+    // D1545 (#3788): a slide's index is its place in what the link sent: uids first, on the whole
+    // deck, then the link's own list (no hidden card, and no appendix unless the link includes it).
+    const link = tokenId == null ? null
+      : await env.DB.prepare('SELECT include_json FROM pitch_deck_share_tokens WHERE id = ?').bind(tokenId).first<{ include_json: string | null }>();
+    const sent = shareSlides(assignCardUids(JSON.parse(row?.slides || '[]')), parseShareInclude(link?.include_json));
     for (const slide of wanted) {
-      const uid = cardUidAt(cards, slide);
-      if (!uid) continue;
+      const uid = sent[slide]?.uid;
+      if (typeof uid !== 'string' || !uid) continue;
       await env.DB.prepare('UPDATE deck_view_slides SET card_uid = ? WHERE view_id = ? AND slide_index = ? AND card_uid IS NULL').bind(uid, viewId, slide).run();
     }
   } catch (e) {

@@ -43,7 +43,7 @@ import { sanitizeBinding } from '../services/decks/sources';
 import { saveGateRefusal } from '../services/decks/saveGates';
 import {
   AUDIENCES, BLOCK_KINDS, CHART_RANGES, LIBRARY_CHART_TYPES, TYPED_CHART_TYPES, GRID_COLS, GRID_ROWS, IMAGE_FITS, IMAGE_TAGS, LAYOUTS, MAX_BLOCKS, NOTES_MAX, OVERLAYS,
-  TEXT_STYLES, THEME_KINDS, VIDEO_RATIOS, contentHash, modelProblems, sanitizeModel, sanitizeTheme, assignCardUids, MODEL_VERSION,
+  TEXT_STYLES, THEME_KINDS, VIDEO_RATIOS, contentHash, modelProblems, sanitizeModel, sanitizeTheme, assignCardUids, MODEL_VERSION, visibleCards,
 } from '../services/decks/slideModel';
 import { checkVideoLink } from '../services/decks/videoLink';
 import { ensureDeckVersionColumns, ensureProposalOutlineColumns } from '../services/decks/deckVersionColumns';
@@ -525,7 +525,8 @@ export function rowToDeck(row: any, withSlides = true): any {
 export function publicDeckOf(row: any): any {
   const { audience, round, by, content_hash, ...deck } = rowToDeck(row);
   void audience; void round; void by; void content_hash;
-  deck.slides = (deck.slides || []).map((s: any) => {
+  // D1545 (#3788): a hidden card reaches no reader: not Present, the share page or the print page.
+  deck.slides = visibleCards(deck.slides || []).map((s: any) => {
     // D1579 (#3826): a card's status and assignee are the venture's working state, never an outside reader's.
     const { notes, status, assignee, ...card } = s || {};
     void notes; void status; void assignee;
@@ -824,13 +825,16 @@ export function printDeckOf(row: any, opts: PrintOptions): any {
   const deck = publicDeckOf(row);
   const full = rowToDeck(row);
   if (opts.notes) {
-    deck.slides = deck.slides.map((card: any, i: number) => {
-      const notes = String(full.slides?.[i]?.notes ?? '').trim();
+    // D1545: by uid, so a hidden card left out of the public deck never shifts a card's notes onto the next.
+    const byUid = new Map((full.slides || []).map((s: any) => [s?.uid, s]));
+    deck.slides = deck.slides.map((card: any) => {
+      const notes = String((byUid.get(card?.uid) as any)?.notes ?? '').trim();
       return { ...card, notes: notes || null };
     });
   }
   deck.export_options = { notes: opts.notes, sources: opts.sources };
-  if (opts.sources) deck.sources_appendix = { lines: sourceLines(full.slides || []), ai: aiCards(full.slides || []) };
+  const shown = visibleCards(full.slides || []);
+  if (opts.sources) deck.sources_appendix = { lines: sourceLines(shown), ai: aiCards(shown) };
   return deck;
 }
 
@@ -1059,7 +1063,8 @@ decks.post('/share/:token/heartbeat', async (c) => {
   if (!viewId || !seconds) return c.json({ ok: true });
   await ensureSchema(c.env);
   // D691 decision 5 — the same live-link predicate as the share read.
-  if (!(await shareLinkLive(c.env, await sha256Hex(token), await viewerHashOf(c)))) return c.json({ ok: false }, 200);
+  const live = await shareLinkLive(c.env, await sha256Hex(token), await viewerHashOf(c));
+  if (!live) return c.json({ ok: false }, 200);
   try {
     await c.env.DB.prepare(
       `UPDATE deck_share_views
@@ -1075,7 +1080,8 @@ decks.post('/share/:token/heartbeat', async (c) => {
     try { await recordSlideSeconds(c.env, viewId, parseInt(m[1]), slide, slideSeconds); } catch {}
   }
   // D1500: and the card each slide is, by uid.
-  await recordSlideCardUids(c.env, viewId, parseInt(m[1]), totals.map(([slide]) => slide));
+  // D1545: through the link's own list of cards, so a hidden or left-out card never shifts the names.
+  await recordSlideCardUids(c.env, viewId, parseInt(m[1]), totals.map(([slide]) => slide), live.id);
   return c.json({ ok: true });
 });
 
@@ -2187,7 +2193,8 @@ export function exportDeckOf(row: any, opts: PrintOptions): { slides: any[]; ren
   if (!Array.isArray(slides)) slides = [];
   // Re-sanitize persisted slides (defence-in-depth against legacy rows
   // pre-dating sanitizeImageUrl) before they reach Browser Rendering.
-  slides = founderPitchSlides(sanitizeSlides(slides));
+  // D1545 (#3788): a hidden card is in no export (PowerPoint, .odp, Google Slides).
+  slides = visibleCards(founderPitchSlides(sanitizeSlides(slides)));
   const notesOf = (s: any) => (opts.notes ? String(s?.notes ?? '').trim() || NO_SPEAKER_NOTES : undefined);
   const renderable: RenderableDeck = {
     title: row.title || 'Pitch deck',

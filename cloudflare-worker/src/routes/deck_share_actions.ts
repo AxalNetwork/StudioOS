@@ -8,7 +8,8 @@
  * cannot create accounts or impersonate the deck owner.
  */
 import { Hono } from 'hono';
-import { cardUidAt } from '../services/decks/cardUids';
+import { assignCardUids, cardUidAt } from '../services/decks/cardUids';
+import { parseShareInclude, shareSlides } from '../services/decks/shareInclude';
 import type { Env } from '../types';
 import { verifySignedToken, shareLinkLive, viewerHashOf } from './decks';
 import { createJWT, setAuthCookies, generateCsrfToken, requireAuth } from '../auth';
@@ -135,6 +136,13 @@ async function logConversion(
         `SELECT id FROM deck_share_conversions
           WHERE deck_id = ? AND user_id = ? AND type = 'deal_signed' LIMIT 1`
       ).bind(opts.deckId, opts.userId).first<any>();
+      if (exists?.id) return;
+    } else if (opts.viewId && opts.type === 'button_click') {
+      // D1545 (#3788): once per view per button, so a button's clicks count the people who pressed it.
+      const exists = await env.DB.prepare(
+        `SELECT id FROM deck_share_conversions
+          WHERE deck_id = ? AND view_id = ? AND type = 'button_click' AND ref_id = ? LIMIT 1`
+      ).bind(opts.deckId, opts.viewId, opts.refId ?? null).first<any>();
       if (exists?.id) return;
     } else if (opts.viewId && opts.type !== 'deal_pack_opened') {
       const exists = await env.DB.prepare(
@@ -502,6 +510,38 @@ deckShareActions.post('/share/:token/nda', async (c) => {
   });
 
   return c.json({ ok: true, document_id: docId, template_key: DECK_SHARE_NDA_SLUG, data_room_access_granted: false, message: 'NDA recorded with the venture founder. This does not grant data-room access; a separate founder grant is required.' });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// D1545 (#3788): POST /click — a viewer pressed a button block. The card
+// and block are checked against the cards this link sends, so a click
+// names only a real button; it stores their ids, never the viewer.
+// ─────────────────────────────────────────────────────────────────────
+const CLICK_ID = /^[A-Za-z0-9_-]{1,40}$/;
+deckShareActions.post('/share/:token/click', async (c) => {
+  const tok = await verifyShareToken(c.env, c.req.param('token'), c);
+  if (!tok) return c.json({ error: 'invalid_token' }, 401);
+  const body = await c.req.json().catch(() => ({} as any));
+  const cardUid = typeof body?.card_uid === 'string' && CLICK_ID.test(body.card_uid) ? body.card_uid : null;
+  const blockId = typeof body?.block_id === 'string' && CLICK_ID.test(body.block_id) ? body.block_id : null;
+  const viewId = Number.isSafeInteger(Number(body?.view_id)) && Number(body.view_id) > 0 ? Number(body.view_id) : null;
+  if (!cardUid || !blockId) return refuse(c, 400, { code: 'button_required', message: 'Say which button was pressed.' });
+  await ensureDeckShareConversionSchema(c.env);
+  const deck = await c.env.DB.prepare('SELECT project_id, slides FROM pitch_decks WHERE id = ?').bind(tok.deckId).first<any>();
+  const link = tok.tokenId == null ? null : await c.env.DB.prepare('SELECT include_json FROM pitch_deck_share_tokens WHERE id = ?').bind(tok.tokenId).first<any>();
+  let cards: any[] = [];
+  try { cards = shareSlides(assignCardUids(JSON.parse(deck?.slides || '[]')), parseShareInclude(link?.include_json)); } catch { cards = []; }
+  const card = cards.find((s: any) => s?.uid === cardUid);
+  const isButton = Array.isArray(card?.blocks) && card.blocks.some((b: any) => b?.id === blockId && b?.kind === 'button');
+  if (!isButton) return refuse(c, 404, { code: 'button_not_found', message: 'That button is not on this deck.' });
+  // A view id from another link or deck is not this viewer's: the click is kept without one.
+  const view = viewId == null ? null
+    : await c.env.DB.prepare('SELECT id FROM deck_share_views WHERE id = ? AND deck_id = ?').bind(viewId, tok.deckId).first<any>();
+  await logConversion(c.env, {
+    deckId: tok.deckId, tokenId: tok.tokenId, viewId: view ? Number(view.id) : null,
+    projectId: deck?.project_id ?? null, type: 'button_click', refId: `${cardUid}:${blockId}`,
+  });
+  return c.json({ ok: true });
 });
 
 // ─────────────────────────────────────────────────────────────────────

@@ -140,7 +140,8 @@ function withSharedBinding<T extends Record<string, any>>(x: T): T {
 export function shareSlides(slides: unknown, include: ShareInclude, gates: ShareGates = NO_GATES): any[] {
   if (!Array.isArray(slides)) return [];
   return slides
-    .filter((s) => s && typeof s === 'object' && (include.sources || !(s as any).appendix))
+    // D1545 (#3788): a hidden card never leaves in a link.
+    .filter((s) => s && typeof s === 'object' && (s as any).hidden !== true && (include.sources || !(s as any).appendix))
     .map((s: any) => {
       const out: any = withSharedBinding({ ...s });
       if (!include.notes) delete out.notes;
@@ -200,7 +201,7 @@ export const ELEMENT_GATES: Readonly<Record<string, ShareGate>> = Object.freeze(
 
 /** A block that names no element is judged by its kind (`slideModel.BLOCK_KINDS`). The test fails on a kind with no row here. */
 export const BLOCK_KIND_GATES: Readonly<Record<string, ShareGate>> = Object.freeze({
-  text: 'none', chart: 'figures', graphic: 'none', image: 'none', video: 'none', audio: 'none', link: 'none', metric: 'figures', table: 'figures',
+  text: 'none', chart: 'figures', graphic: 'none', image: 'none', video: 'none', audio: 'none', link: 'none', metric: 'figures', table: 'figures', button: 'none',
 });
 
 /** A connected CRM's source keys (`hubspot.*`, #3880): a logo from one needs the customer's permission. */

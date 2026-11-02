@@ -21,7 +21,7 @@ import PitchPage from './PitchPage';
 import DeckToolbar from './DeckToolbar';
 import useDeckPresence from './useDeckPresence';
 import CardsStrip from './CardsStrip';
-import { cardStatus } from './deckV2Adapter';
+import { cardStatus, media as uploadVideoAdapter } from './deckV2Adapter';
 import { withAssignee, withStatus } from './cardStatusModel';
 import GridStage from './GridStage';
 import BlockTools, { SpeakerNotes } from './BlockTools';
@@ -52,7 +52,7 @@ import { createAutosave, clockOf, idbStore, keyOf, restoreOffer } from './deckAu
 import { discardDraft as discardDraftAdapter, draft as draftAdapter, saveCard as saveCardAdapter } from './deckV2Adapter';
 import { ConflictView, FindReplaceSheet, RestoreBanner, StillCharged, SyncLine } from './EditingParts';
 import {
-  ADDABLE_KINDS, KIND_LABELS, MODEL_FAILED, NOTES_PLACEHOLDER, NO_CARDS,
+  ADDABLE_KINDS, BUTTON_LABEL_MAX, KIND_LABELS, MODEL_FAILED, SECTION_MAX, VIDEO_PROVIDER_LABELS, sectionsOf, NOTES_PLACEHOLDER, NO_CARDS,
   NOT_RECORDED, PHONE_NOTE, READ_FAILED, THEME_LABELS,
   addBlock, applyLayout, blockLabel, cardColours, cardTitle, cardsOf, changesOf, firstFree, isDarkTheme,
   placementProblem, removeBlock, saveState, standardSizes, staleCards, updateBlock, withFieldBlocks,
@@ -663,6 +663,9 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     else if (id === 'up' && i > 0) move(i, i - 1);
     else if (id === 'down' && i < cards.length - 1) move(i, i + 1);
     else if (id === 'appendix') toggleAppendix(i);
+    // D1545 (#3788): Hide / Show and Move to section, each through its own in-page dialog, held until a version is saved.
+    else if (id === 'hide' && cards[i]) setDialog({ kind: 'hide', index: i });
+    else if (id === 'section' && cards[i]) setDialog({ kind: 'section', index: i });
     // D1570 (#3817, pd33): the card's threads, on that card.
     else if (id === 'comments' && cards[i]) { choose(i); setSheet('comments'); }
   };
@@ -826,6 +829,22 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
         <SaveDialog changes={changes} named={Boolean(dialog.named)} initialName={base.deck.title || ''} onClose={() => setDialog(null)} onSaved={saved}
           save={(name) => api.deckUpdate(base.deck.id, { slides: cards, title: name ?? base.deck.title, theme, audience })} />
       ) : null}
+      {dialog?.kind === 'hide' && cards[dialog.index] ? (() => {
+        const i = dialog.index;
+        const hidden = cards[i].hidden === true;
+        return (
+          <ConfirmDialog title={hidden ? `Show card ${i + 1} again?` : `Hide card ${i + 1}?`} testId="pitch-editor-hide-dialog"
+            lines={hidden
+              ? ['Present, the share link, the PDF and every export include it again.', 'Nothing is saved until you save a version.']
+              : ['Present, the share link, the PDF and every export leave it out. It stays here in the editor, dimmed and tagged Hidden.', 'Nothing is saved until you save a version.']}
+            confirm={hidden ? 'Show card' : 'Hide card'} onClose={() => setDialog(null)}
+            onConfirm={() => { edit({ type: 'hideCard', index: i, hidden: !hidden }, { label: hidden ? 'Show card' : 'Hide card' }); setDialog(null); }} />
+        );
+      })() : null}
+      {dialog?.kind === 'section' && cards[dialog.index] ? (
+        <SectionDialog index={dialog.index} current={cards[dialog.index].section || ''} sections={sectionsOf(cards)} onClose={() => setDialog(null)}
+          onMove={(name) => { edit({ type: 'setFlag', index: dialog.index, key: 'section', value: name || undefined }, { label: 'Section' }); setDialog(null); }} />
+      ) : null}
       {dialog?.kind === 'layout' && card ? (() => {
         const r = applyLayout(card, dialog.layout);
         if (r.error) {
@@ -876,7 +895,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
           onDialog={(plan, area) => {
             if (plan.open === 'structure') { setDialog(null); setSheet('structure'); return; }
             // "Add it here": the area's own range; a block that holds it gives way when Add places the new one.
-            setDialog({ kind: 'add-block', range: area.grid, replace: area.kind === 'block' ? area.block.id : null, initial: plan.kind });
+            setDialog({ kind: 'add-block', range: area.grid, replace: area.kind === 'block' ? area.block.id : null, initial: plan.kind, from: plan.from || null });
           }}
           onImageOptions={(area) => setDialog({ kind: 'image', use: 'content', replace: area.kind === 'block' ? area.block.id : null })} />
       ) : null}
@@ -890,7 +909,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
           }} />
       ) : null}
       {dialog?.kind === 'add-block' && card ? (
-        <AddBlockDialog card={dialog.replace ? removeBlock(card, dialog.replace) : card} model={model} sources={sources} initialKind={dialog.initial} range={dialog.range} onClose={() => setDialog(null)}
+        <AddBlockDialog deckId={deckId} initialFrom={dialog.from} card={dialog.replace ? removeBlock(card, dialog.replace) : card} model={model} sources={sources} initialKind={dialog.initial} range={dialog.range} onClose={() => setDialog(null)}
           onAdd={(c) => { setCard(sel, c, { label: 'Add block' }); const last = c.blocks?.[c.blocks.length - 1]; selectBlock(last?.id ?? null); setDialog(null); }} />
       ) : null}
     </>
@@ -901,13 +920,25 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
 // Add a block (PD8c)
 // ---------------------------------------------------------------------------
 
-function AddBlockDialog({ card: given, model, sources, initialKind, range = null, onClose, onAdd }) {
+function AddBlockDialog({ deckId = null, initialFrom = null, card: given, model, sources, initialKind, range = null, onClose, onAdd }) {
   // #3656: a field-based card is placed against as it will be, its fields' content as blocks.
   const ready = useMemo(() => withFieldBlocks(given, model), [given, model]);
   const card = ready.card || given;
   const [kind, setKind] = useState(ADDABLE_KINDS.includes(initialKind) ? initialKind : 'text');
   const [fields, setFields] = useState({ style: 'paragraph', text: '', ratio: '16:9' });
   const [video, setVideo] = useState(idle);
+  // D1545 (#3788): a video is a link to check, or an MP4 uploaded to this deck (`deckV2Adapter.media`).
+  const [videoFrom, setVideoFrom] = useState(initialFrom === 'file' && deckId != null ? 'file' : 'link');
+  const upload = (file) => {
+    if (!file || deckId == null) return;
+    setVideo(loading);
+    // `through` never throws: an answer is `{ available, value }`, or the Worker's reason. Nothing is added on a refusal.
+    uploadVideoAdapter(deckId, file).then((r) => {
+      const v = r?.available ? r.value?.video : null;
+      setVideo(v ? { status: 'ok', data: { ...v, poster_url: null, title: fields.title || '' } }
+        : { status: 'error', data: null, error: { message: r?.reason ? `The video was not added: ${r.reason}` : 'The video could not be uploaded. Nothing was added.' } });
+    });
+  };
   // D1604: from a selected empty range, that range is the first size and place.
   const own = range ? { label: 'This range', cols: range.c2 - range.c1 + 1, rows: range.r2 - range.r1 + 1 } : null;
   const sizesOf = (k) => (own ? [own, ...standardSizes(k)] : standardSizes(k));
@@ -941,7 +972,19 @@ function AddBlockDialog({ card: given, model, sources, initialKind, range = null
       case 'text': return { style: fields.style, text: fields.text };
       case 'graphic': return { graphic: fields.graphic || '', ratio: size.cols === 2 ? '2x2' : '1x1' };
       case 'image': return { image_url: fields.url || null, alt: fields.alt || '', tag: 'photo' };
-      case 'video': return video.status === 'ok' ? { url: video.data.url, poster_url: video.data.poster_url, title: video.data.title || '', ratio: size.label.startsWith('9:16') ? '9:16' : '16:9' } : null;
+      case 'video': {
+        if (video.status !== 'ok') return null;
+        const ratio = size.label.startsWith('9:16') ? '9:16' : '16:9';
+        if (video.data.provider === 'mp4') {
+          const poster = /^https:\/\//.test(fields.poster || '') ? fields.poster : null;
+          return { provider: 'mp4', video_id: video.data.video_id, url: video.data.url, poster_url: poster, title: fields.title || '', ratio, ...(fields.loop ? { loop: true } : {}) };
+        }
+        return { url: video.data.url, poster_url: video.data.poster_url, title: video.data.title || '', ratio };
+      }
+      case 'button': {
+        const label = (fields.label || '').trim();
+        return /^https:\/\//.test(fields.url || '') && label && label.length <= BUTTON_LABEL_MAX ? { url: fields.url, label, style: fields.buttonStyle === 'secondary' ? 'secondary' : 'primary' } : null;
+      }
       case 'audio': case 'link': return /^https:\/\//.test(fields.url || '') ? { url: fields.url, label: fields.label || '' } : null;
       case 'metric': return source ? {
         label: source.label, value: source.value == null ? null : String(source.value),
@@ -951,7 +994,8 @@ function AddBlockDialog({ card: given, model, sources, initialKind, range = null
     }
   })();
   const missing = !body ? ({
-    video: 'Check the link first.', audio: 'Paste an https link.', link: 'Paste an https link.', metric: 'Pick a recorded figure from your sources.',
+    video: videoFrom === 'file' ? 'Upload an MP4 first.' : 'Check the link first.',
+    button: `Give the button its words (at most ${BUTTON_LABEL_MAX} characters) and an https link.`, audio: 'Paste an https link.', link: 'Paste an https link.', metric: 'Pick a recorded figure from your sources.',
   })[kind] : null;
   const add = () => {
     const r = addBlock(card, { kind, grid, ...body }, model);
@@ -992,18 +1036,49 @@ function AddBlockDialog({ card: given, model, sources, initialKind, range = null
         ) : null}
         {kind === 'video' ? (
           <div className="flex flex-col gap-2">
-            <div className="flex gap-2">
-              <input className={FIELD} placeholder="Paste a YouTube or Vimeo link" value={fields.url || ''} onChange={(e) => { set('url', e.target.value); setVideo(idle); }} aria-label="Video link" data-testid="pitch-editor-video-url" />
-              <button type="button" className={GHOST} onClick={check} disabled={!fields.url || video.status === 'loading'} data-testid="pitch-editor-video-check">{video.status === 'loading' ? 'Checking…' : 'Check link'}</button>
+            <div className="flex gap-1.5" role="radiogroup" aria-label="Video from">
+              {[['link', 'A link'], ['file', 'Upload an MP4']].map(([k, label]) => (
+                <button key={k} type="button" role="radio" aria-checked={videoFrom === k} className={`${videoFrom === k ? PILL_VIO : PILL_MU} min-h-[32px]`}
+                  onClick={() => { setVideoFrom(k); setVideo(idle); }} disabled={k === 'file' && deckId == null} data-testid={`pitch-editor-video-from-${k}`}>{label}</button>
+              ))}
             </div>
-            {video.status === 'error' ? <span className="text-[12px] font-semibold text-axal-destructive dark:text-red-400" role="alert" data-testid="pitch-editor-video-error">{video.error?.message || 'The link could not be checked.'}</span> : null}
+            {videoFrom === 'link' ? (
+              <div className="flex gap-2">
+                <input className={FIELD} placeholder="Paste a YouTube, Vimeo or Loom link" value={fields.url || ''} onChange={(e) => { set('url', e.target.value); setVideo(idle); }} aria-label="Video link" data-testid="pitch-editor-video-url" />
+                <button type="button" className={GHOST} onClick={check} disabled={!fields.url || video.status === 'loading'} data-testid="pitch-editor-video-check">{video.status === 'loading' ? 'Checking…' : 'Check link'}</button>
+              </div>
+            ) : (
+              <>
+                <label className="flex flex-col gap-1 text-[11.5px]"><span className={EYE}>MP4 file, at most 50 MB</span>
+                  <input type="file" accept="video/mp4" className="text-[12.5px]" onChange={(e) => upload(e.target.files?.[0])} disabled={video.status === 'loading'} data-testid="pitch-editor-video-file" />
+                </label>
+                <input className={FIELD} placeholder="Title (optional)" value={fields.title || ''} maxLength={200} onChange={(e) => set('title', e.target.value)} aria-label="Video title" />
+                <input className={FIELD} placeholder="Poster image: https://… (optional)" value={fields.poster || ''} onChange={(e) => set('poster', e.target.value)} aria-label="Poster image" data-testid="pitch-editor-video-poster" />
+                <label className="flex items-center gap-2 text-[12.5px]">
+                  <input type="checkbox" checked={Boolean(fields.loop)} onChange={(e) => set('loop', e.target.checked)} data-testid="pitch-editor-video-loop" /> Play it on a loop
+                </label>
+                {video.status === 'loading' ? <span className={MUTED} role="status">Uploading…</span> : null}
+              </>
+            )}
+            {video.status === 'error' ? <span className="text-[12px] font-semibold text-axal-destructive dark:text-red-400" role="alert" data-testid="pitch-editor-video-error">{video.error?.message || (videoFrom === 'file' ? 'The video could not be uploaded.' : 'The link could not be checked.')}</span> : null}
             {video.status === 'ok' ? (
               <span className="flex items-center gap-2" data-testid="pitch-editor-video-ok">
                 {video.data.poster_url ? <img src={video.data.poster_url} alt="" className="h-12 w-20 rounded object-cover" /> : null}
-                <span className={MUTED}>{video.data.title || 'Untitled video'} · {video.data.provider === 'youtube' ? 'YouTube' : 'Vimeo'}. It plays in present mode, HTML and shared links; PDF and PowerPoint get the poster with the link.</span>
+                <span className={MUTED}>{video.data.title || (video.data.provider === 'mp4' ? 'Uploaded video' : 'Untitled video')} · {VIDEO_PROVIDER_LABELS[video.data.provider] || 'Video'}. It plays in present mode, HTML and shared links; PDF and PowerPoint get the poster with the link.</span>
               </span>
             ) : null}
           </div>
+        ) : null}
+        {kind === 'button' ? (
+          <>
+            <input className={FIELD} placeholder="The button's words, e.g. Book a call" value={fields.label || ''} maxLength={BUTTON_LABEL_MAX} onChange={(e) => set('label', e.target.value)} aria-label="Button words" data-testid="pitch-editor-button-label" />
+            <input className={FIELD} placeholder="https://… where it opens" value={fields.url || ''} onChange={(e) => set('url', e.target.value)} aria-label="Button link" data-testid="pitch-editor-button-url" />
+            <select className={FIELD} value={fields.buttonStyle || 'primary'} onChange={(e) => set('buttonStyle', e.target.value)} aria-label="Button style" data-testid="pitch-editor-button-style">
+              <option value="primary">Filled</option>
+              <option value="secondary">Outline</option>
+            </select>
+            <span className={MUTED}>On a shared link each press is counted; PDF and PowerPoint show the words with the link.</span>
+          </>
         ) : null}
         {kind === 'audio' || kind === 'link' ? (
           <>
@@ -1064,6 +1139,43 @@ function ConfirmDialog({ title, lines, confirm, onConfirm, onClose, testId }) {
 }
 
 /** Save says what it changes before it writes, and shows the Worker's sentence when it is refused. */
+/** D1545 (#3788): Move to section: one of the deck's sections, a new one, or none. */
+function SectionDialog({ index, current, sections, onMove, onClose }) {
+  const [pick, setPick] = useState(current || '');
+  const [fresh, setFresh] = useState('');
+  const name = pick === '__new' ? fresh.trim() : pick;
+  const tooLong = name.length > SECTION_MAX;
+  const same = name === (current || '');
+  const says = pick === '__new' && !name ? 'Name the new section.'
+    : tooLong ? `A section name is at most ${SECTION_MAX} characters.`
+      : same ? 'That is where the card is now.'
+        : name ? `Card ${index + 1} moves to "${name}". Nothing is saved until you save a version.`
+          : `Card ${index + 1} leaves its section. Nothing is saved until you save a version.`;
+  const off = (pick === '__new' && !name) || tooLong || same;
+  return (
+    <Lightbox label="Move to section" title={`Move card ${index + 1} to a section`} width={480} onClose={onClose} testId="pitch-editor-section-dialog"
+      footer={(
+        <div className="flex items-center justify-end gap-2">
+          <span className={`${MUTED} mr-auto`} data-testid="pitch-editor-section-says">{says}</span>
+          <button type="button" className={GHOST} onClick={onClose}>Cancel</button>
+          <button type="button" className={PRIMARY} disabled={off} onClick={() => onMove(name)} data-testid="pitch-editor-section-run">Move</button>
+        </div>
+      )}>
+      <div className="flex flex-col gap-1.5" role="radiogroup" aria-label="Section">
+        {[...sections, '__new', ''].map((sec) => (
+          <label key={sec || '__none'} className="flex items-center gap-2 text-[13px]">
+            <input type="radio" name="section" checked={pick === sec} onChange={() => setPick(sec)} data-testid={`pitch-editor-section-${sec === '__new' ? 'new' : sec ? `pick-${sec}` : 'none'}`} />
+            {sec === '__new' ? 'A new section' : sec || 'No section'}
+          </label>
+        ))}
+        {pick === '__new' ? (
+          <input className={FIELD} autoFocus placeholder="Section name" value={fresh} maxLength={SECTION_MAX + 20} onChange={(e) => setFresh(e.target.value)} aria-label="New section name" data-testid="pitch-editor-section-name" />
+        ) : null}
+      </div>
+    </Lightbox>
+  );
+}
+
 function SaveDialog({ changes, save, onSaved, onClose, named = false, initialName = '' }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);

@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom';
 import { useParams, useSearchParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import { ChevronLeft, ChevronRight, Download, Loader2, Maximize2, Minimize2, Printer, X } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, deckMediaApi } from '../lib/api';
 import { reportError } from '../lib/log';
 import { downloadDeckPdf } from '../lib/deckPdf.jsx';
 import { downloadRasterDeckPdf } from '../lib/deckRasterPdf';
@@ -338,6 +338,11 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
     || (typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia(`(max-width: ${PHONE_WIDTH + 250}px)`).matches)));
   const overlayTimerRef = useRef(null);
   const viewIdRef = useRef(null);
+  // D1545 (#3788): a press on a button block, counted on a share link (once per view per button); never on the print page.
+  const onButton = useCallback((slide, block) => {
+    if (!shareMode || !token || !slide?.uid || !block?.id) return;
+    deckMediaApi.click(token, { cardUid: slide.uid, blockId: block.id, viewId: viewIdRef.current }).catch(() => {});
+  }, [shareMode, token]);
   const startedAtRef = useRef(null);
   const stageRef = useRef(null);
 
@@ -735,8 +740,8 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
               <SourcesPage appendix={deck.sources_appendix} />
             ) : studioDeck ? (
               (singleSlideIdx != null
-                ? (deck.slides || []).slice(singleSlideIdx, singleSlideIdx + 1).map((s) => <StudioPrintCard key={singleSlideIdx} slide={s} index={singleSlideIdx} aspect={deck.theme?.aspect} chrome={chromeOf(deck, singleSlideIdx)} theme={deck.theme} />)
-                : (deck.slides || []).map((s, i) => <StudioPrintCard key={i} slide={s} index={i} aspect={deck.theme?.aspect} chrome={chromeOf(deck, i)} theme={deck.theme} />))
+                ? (deck.slides || []).slice(singleSlideIdx, singleSlideIdx + 1).map((s) => <StudioPrintCard key={singleSlideIdx} slide={s} index={singleSlideIdx} aspect={deck.theme?.aspect} chrome={chromeOf(deck, singleSlideIdx)} theme={deck.theme} onButton={onButton} />)
+                : (deck.slides || []).map((s, i) => <StudioPrintCard key={i} slide={s} index={i} aspect={deck.theme?.aspect} chrome={chromeOf(deck, i)} theme={deck.theme} onButton={onButton} />))
             ) : isAdvanced ? (
               singleSlideIdx != null ? (
                 <SingleSlideStage Template={Template} data={templateData} slideIdx={singleSlideIdx} />

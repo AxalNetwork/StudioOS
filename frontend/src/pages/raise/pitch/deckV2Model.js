@@ -125,8 +125,9 @@ export const ELEMENT_GROUPS = Object.freeze([
     { id: 'video', label: 'Video', free: true, ...R('POST /api/decks/video-link') },
     { id: 'audio', label: 'Audio', free: true },
     { id: 'link', label: 'Link', free: true },
-    { id: 'recorded_video', label: 'Recorded video', ...A('media', 3788) },
-    { id: 'button', label: 'Button', ...A('media', 3788) },
+    // D1545 (#3788): on main: an MP4 uploaded to the deck (`deckV2Adapter.media`), and a call to action.
+    { id: 'recorded_video', label: 'Recorded video', ...R('POST /api/decks/:id/videos/upload') },
+    { id: 'button', label: 'Button', free: true },
     { id: 'embeds', label: 'Embeds', ...A('media', 3788) },
   ] },
 ]);
