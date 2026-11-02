@@ -8,6 +8,7 @@ import ZoneNav from '../../workspaces/ZoneNav';
 import ResearchOverviewPanel from '../research/ResearchOverviewPanel';
 import { bucketForPath } from '../../workspaces/shellConfig';
 import './investorResearchWorkspace.css';
+import HeaderAsk from '../../ui/HeaderAsk.jsx';
 
 const arrayOf = (value, keys = []) => Array.isArray(value) ? value : keys.reduce((found, key) => found.length ? found : (Array.isArray(value?.[key]) ? value[key] : []), []);
 const stamp = (value) => { if (!value) return 'Freshness not supplied'; const date = new Date(value); return Number.isNaN(date.getTime()) ? 'Freshness not supplied' : `Updated ${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`; };
@@ -100,7 +101,7 @@ export default function InvestorResearchWorkspace() {
     <div className="ir-layout">
       <section className="ir-main">
         <header className="ir-hero">
-          <h1 data-testid="heading-investor-research">Go deep before money moves</h1>
+          <div className="ask-hero-top"><h1 data-testid="heading-investor-research">Go deep before money moves</h1><HeaderAsk /></div>
           <p>The page opens as a question. Evidence remains attached to its source, permission, freshness, and uncertainty.</p>
           <form className="ir-question" id="research-ask" onSubmit={(event) => { event.preventDefault(); runAsk(); }} data-testid="form-research-question">
             <Search size={15} aria-hidden="true" />

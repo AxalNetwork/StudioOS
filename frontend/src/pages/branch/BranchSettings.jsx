@@ -44,6 +44,7 @@ import { reportError } from '../../lib/log';
 import { Card, Unrecorded, Unreadable } from '../../ui';
 import { TopologyTag, RpcSide } from '../../components/TopologyParts';
 import BranchZone from './BranchZone';
+import HeaderAsk from '../../ui/HeaderAsk.jsx';
 
 const UNAVAILABLE = Symbol('unavailable');
 const stamp = (v) => (v ? String(v).replace('T', ' ').slice(0, 16) : null);
@@ -396,7 +397,8 @@ export default function BranchSettings({ user }) {
       ]}
     >
       <div className="min-w-0">
-        <header>
+        <header className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
           <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
             <Settings size={13} /> Branch · Settings
           </div>
@@ -405,6 +407,8 @@ export default function BranchSettings({ user }) {
             Every row says who decides it. An HQ-owned row shows where to ask rather than a field that would
             refuse — a greyed input invites a ticket asking to enable it, and there is nothing to enable.
           </p>
+          </div>
+          <HeaderAsk />
         </header>
 
         {licence === UNAVAILABLE && (

@@ -5,7 +5,8 @@
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/header_ask_d1443p5.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
@@ -13,7 +14,8 @@ import { installDocument } from './_contracts_dom.mjs';
 import { codeOnly } from './_codeOnly.mjs';
 import { __resetEadwynPanelForTest, useAskRail } from '../src/ui/eadwynPanel.js';
 import { askPanelAdapter } from '../src/ui/askPanelAdapter.js';
-import HeaderAsk, { headerAskClaims } from '../src/ui/HeaderAsk.jsx';
+import HeaderAsk, { headerAskClaims, headerAskWinner } from '../src/ui/HeaderAsk.jsx';
+import AdminPageHeader from '../src/ui/AdminPageHeader.jsx';
 import ZoneActions from '../src/workspaces/ZoneActions.jsx';
 
 const h = React.createElement;
@@ -79,11 +81,78 @@ test('ZoneActions (the action row ~70 pages draw) carries the Ask beside the pri
   } finally { await m.unmount(); }
 });
 
+test('the rail\'s fallback draws only while no header claims Ask, whichever mounted first', async () => {
+  // Mutation checked: headerAskWinner taking the first claim regardless of rank → the rail's Ask beside the header's.
+  assert.equal(headerAskWinner([{ id: 'r', fallback: true }, { id: 'h', fallback: false }]), 'h');
+  assert.equal(headerAskWinner([{ id: 'r', fallback: true }]), 'r');
+  assert.equal(headerAskWinner([]), null);
+  __resetEadwynPanelForTest();
+  const page = (header) => h(MemoryRouter, null, h(Rail), h(HeaderAsk, { fallback: true, testId: 'rail-ask' }), header ? h(HeaderAsk, { testId: 'page-ask' }) : null);
+  const m = await mount(page(true));
+  try {
+    assert.equal(m.asks().length, 1);
+    assert.equal(m.props(m.asks()[0])['data-testid'], 'page-ask', 'the header wins over the rail that claimed first');
+    await m.render(page(false));
+    assert.equal(m.asks().length, 1);
+    assert.equal(m.props(m.asks()[0])['data-testid'], 'rail-ask', 'no header: the rail carries it');
+  } finally { await m.unmount(); }
+});
+
+test('AK11: an admin console with no primary draws Ask alone; where Ask does not serve, no actions row at all', async () => {
+  // Mutation checked: the row gated on `actions || more` only → no Ask on a page with no primary.
+  __resetEadwynPanelForTest();
+  const header = (serves) => h(MemoryRouter, null, h(Rail, { serves }), h(AdminPageHeader, { title: 'Approvals', line: 'Eadwyn proposes; the admin decides.' }));
+  let m = await mount(header(true));
+  try {
+    assert.equal(m.asks().length, 1);
+    assert.equal(m.props(m.asks()[0])['data-testid'], 'admin-page-ask');
+  } finally { await m.unmount(); }
+  __resetEadwynPanelForTest();
+  m = await mount(header(false));
+  try {
+    assert.equal(m.asks().length, 0);
+    assert.equal(m.walk(m.container).filter((n) => m.props(n)['data-testid'] === 'admin-page-actions').length, 0, 'no empty row');
+  } finally { await m.unmount(); }
+});
+
+test('AK12: every host\'s rail track reads the panel\'s width, which is 420px only while docked open at 1440px and up', () => {
+  // Mutation checked: one host left on the bare var(--fwr-track, Npx) → named here.
+  const root = new URL('../src/', import.meta.url).pathname;
+  const css = [];
+  const walkDir = (d) => { for (const n of readdirSync(d)) { const p = join(d, n); if (statSync(p).isDirectory()) walkDir(p); else if (p.endsWith('.css')) css.push(p); } };
+  walkDir(root);
+  let reads = 0;
+  for (const f of css) {
+    const src = readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    for (const m of src.matchAll(/var\(--fwr-track[^)]*\)/g)) {
+      reads += 1;
+      const after = src.slice(m.index - 5, m.index + m[0].length + 26);
+      assert.match(after, /calc\(var\(--fwr-track, \d+px\) \+ var\(--fwr-ask, 0px\)\)/, `${f.slice(root.length)} reads the rail track without the Ask width`);
+    }
+  }
+  assert.ok(reads >= 17, `every host: ${reads}`);
+  const ask = codeOnly(read('ui/askPanel.css'));
+  assert.match(ask, /@media \(min-width: 1440px\) \{\s*:root\[data-eadwyn-ask-at="dock"\] \{ --fwr-ask: 420px; \}/);
+  assert.match(ask, /@container fwr-col \(min-width: 400px\)/, 'the rail moves clear only where its track widened');
+  const rail = codeOnly(read('ui/WorkerRail.jsx'));
+  assert.match(rail, /if \(askState\.open && askAt === 'dock'\) root\.setAttribute\('data-eadwyn-ask-at', 'dock'\);/);
+});
+
 test('the source: every shared header mounts HeaderAsk, and the pages that drew PageAsk directly go through it', () => {
   assert.match(codeOnly(read('ui/HeaderAsk.jsx')), /return <PageAsk label=\{label\} testId=\{testId\} \/>;/);
   assert.match(codeOnly(read('workspaces/ZoneActions.jsx')), /<HeaderAsk testId="zone-actions-ask" \/>/);
   assert.match(codeOnly(read('workspaces/ProfileHeaderAsk.jsx')), /return <HeaderAsk testId="zone-header-ask" \/>;/);
   assert.match(codeOnly(read('pages/cycles/CycleOverview.jsx')), /const askNode = ask \?\? <HeaderAsk label=/);
+  // Part 5b: the admin header (AK11), the investor portfolio header, the bespoke HQ and desk headers, and the rail's fallback.
+  assert.match(codeOnly(read('ui/AdminPageHeader.jsx')), /\{actions\}<HeaderAsk testId="admin-page-ask" \/>/);
+  assert.match(codeOnly(read('ui/WorkerRail.jsx')), /<HeaderAsk fallback testId="rail-ask" \/>/);
+  for (const f of ['components/WorkspaceTabs.jsx', 'pages/admin/AdminTeam.jsx', 'pages/admin/AdminTelegram.jsx', 'pages/admin/contracts/ContractsDesk.jsx', 'pages/branch/BranchSettings.jsx',
+    'pages/hq/AccountsPage.jsx', 'pages/hq/ContentPage.jsx', 'pages/hq/CreditRulesRegistryPage.jsx', 'pages/hq/HqBranchOverlay.jsx', 'pages/hq/HqFundsPage.jsx', 'pages/hq/HqHomePage.jsx',
+    'pages/hq/HqSupportPage.jsx', 'pages/hq/MeetingBotsPage.jsx', 'pages/hq/MemberCreditsPage.jsx', 'pages/hq/PlatformPage.jsx', 'pages/hq/RevenuePage.jsx', 'pages/hq/ReviewQueuePage.jsx',
+    'pages/hq/SecurityPage.jsx', 'pages/hq/TrustObligationsPage.jsx', 'pages/founder/FounderNetworkDesk.jsx', 'pages/founder/FounderResearchDesk.jsx',
+    'pages/investor/InvestorResearchWorkspace.jsx', 'pages/raise/pitch/NewDeck.jsx', 'pages/raise/pitch/TemplatesGallery.jsx']) {
+    assert.match(codeOnly(read(f)), /<HeaderAsk \/>/, f);
+  }
   for (const f of ['pages/cycles/CycleRoute.jsx', 'pages/cycles/RaiseOverviewLead.jsx', 'pages/work/CompliancePage.jsx', 'pages/work/WorkPage.jsx', 'pages/team/AskButton.jsx']) {
     const src = codeOnly(read(f));
     assert.match(src, /<HeaderAsk\b/, f);

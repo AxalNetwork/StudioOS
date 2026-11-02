@@ -19,6 +19,7 @@ import { useRailCrumbs, useRailPage } from './railCrumbs.js';
 import { openEadwynPanel, useEadwynPanel, useEadwynRailServes, eadwynPanelEvent, askPanelEvent, useAskPanel, useAskRail } from './eadwynPanel.js';
 import AskPanel from './AskPanel.jsx';
 import { askLayout, askServes } from './askPanelModel.js';
+import HeaderAsk, { useHeaderCarriesAsk } from './HeaderAsk.jsx';
 import { activeSupportSession } from '../lib/supportSession.js';
 import { EadwynPanel } from './EadwynPanel.jsx';
 import { Unreadable } from './Honesty';
@@ -616,6 +617,10 @@ export default function WorkerRail({
   const askLabel = module ? `${section} · ${module}` : section;
   useAskRail(!founderRecord && askServes({ page: pageKey, supportSession: supportOn, viewer, host: role }), pageKey, askLabel);
   const askState = useAskPanel();
+  // D405's phone button stands down while Ask serves here and a page header
+  // (not this rail's own fallback) carries it.
+  const headerCarriesAsk = useHeaderCarriesAsk();
+  const d405Retired = askState.available && headerCarriesAsk;
   const [askWidth, setAskWidth] = useState(() => (typeof window === 'undefined' ? 1440 : window.innerWidth));
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -634,6 +639,16 @@ export default function WorkerRail({
     else root.removeAttribute('data-eadwyn-ask');
     return () => root.removeAttribute('data-eadwyn-ask');
   }, [askState.open]);
+  // AK12 (#3992): docked open at 1440px and up, the hosts' rail track widens
+  // by the panel's width (`--fwr-ask`, askPanel.css), so the content narrows
+  // beside the panel instead of sitting under it.
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    const root = document.documentElement;
+    if (askState.open && askAt === 'dock') root.setAttribute('data-eadwyn-ask-at', 'dock');
+    else root.removeAttribute('data-eadwyn-ask-at');
+    return () => root.removeAttribute('data-eadwyn-ask-at');
+  }, [askState.open, askAt]);
   const askPanel = askState.open ? (
     <AskPanel
       page={askState.page}
@@ -943,6 +958,10 @@ export default function WorkerRail({
         </button>
       </div>
 
+      {/* D1443 part 5 (#3992): the rail's fallback Ask, drawn only while no
+          page header carries one (a header with no mount), so every rail page
+          has its one Ask. Not on the 44px spine. */}
+      {!collapsed && <div className="fwr-ask-entry"><HeaderAsk fallback testId="rail-ask" /></div>}
       {!sheet.open && !(serves && panel.open) && shown}
       {askPanel && askDocked && <div className="fwr-ask-dock" data-testid="ask-dock">{askPanel}</div>}
     </aside>
@@ -973,15 +992,19 @@ export default function WorkerRail({
         </>
       ) : (
         <>
-          <RailFab
+          {/* D405 retires where the page header carries Ask (S1's E = a): Ask
+              is the phone's Eadwyn there, a bottom sheet at 92%. It stays where
+              Ask does not serve (a support session, an Explorer, staff on a
+              member's page) and on a page whose header has no Ask mount. */}
+          {!d405Retired && <RailFab
             workspace={workspace}
             aiOn={aiOn}
             onOpen={() => dispatchSheet({ type: 'open' })}
             buttonRef={fabRef}
             controls={sheetId}
             style={accentStyle}
-          />
-          {sheet.open && (
+          />}
+          {sheet.open && !d405Retired && (
             <RailSheet id={sheetId} workspace={workspace} onEvent={dispatchSheet} closeRef={sheetCloseRef} style={accentStyle}>
               {body}
             </RailSheet>
