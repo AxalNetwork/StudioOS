@@ -78,6 +78,13 @@ const LFS_EXEMPT_PATHS = new Set([
   "cloudflare-worker/src/templates/legal/paper/roboto-mono-400.woff2",
   "cloudflare-worker/src/templates/legal/paper/roboto-mono-700.woff2",
   "cloudflare-worker/src/templates/legal/paper/space-grotesk-700.woff2",
+  // D1511 (#3762): the editor's visual suite serves these in place of Google
+  // Fonts (frontend/tests/visual/_editor.mjs). As LFS pointers the CI checkout
+  // would serve pointer text, every screen would draw a fallback face and
+  // every baseline would differ. Three variable latin files, 103 KB together.
+  "frontend/tests/visual/fonts/inter-latin-wght-normal.woff2",
+  "frontend/tests/visual/fonts/roboto-mono-latin-wght-normal.woff2",
+  "frontend/tests/visual/fonts/space-grotesk-latin-wght-normal.woff2",
 ]);
 
 const args = new Set(process.argv.slice(2));
