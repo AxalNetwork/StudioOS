@@ -30,7 +30,7 @@ function fixture(upgrade = true) {
   db.exec("INSERT INTO users(id,role,name,email,is_active) VALUES(5,'admin','Synthetic inviter','inviter@example.invalid',1),(8,'admin','Synthetic resender','resender@example.invalid',1),(9,'founder','Synthetic outsider','outsider@example.invalid',1)");
   if (upgrade) {
     db.exec(migration);
-    for (const name of readdirSync('cloudflare-worker/sql/migrations').filter(n => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > 547).sort()) db.exec(read('cloudflare-worker/sql/migrations/'+name));
+    for (const name of readdirSync('cloudflare-worker/sql/migrations').filter(n => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > 547).sort(compareMigrations)) db.exec(read('cloudflare-worker/sql/migrations/'+name));
   }
   const env: any = envFor(db);
   const app = new Hono<any>().route('/', adminPartners);

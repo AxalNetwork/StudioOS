@@ -14,13 +14,13 @@ import { boundVenture } from '../src/integrations/providers/carta.ts';
 import { updateHolder, HolderError } from '../src/services/capTableWrites.ts';
 import { csvCell, knownSum, withOwnership } from '../src/services/capTableRegister.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 import { loadSchema } from './_schema_once.mjs';
 
 const read = (p: string) => readFileSync(p, 'utf8');
 const DIR = 'cloudflare-worker/sql/migrations';
 const MIGRATION = read(`${DIR}/574_cap_table_pools_vesting_per_venture.sql`);
-const chain = (pred: (n: number) => boolean) => readdirSync(DIR).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF && pred(migrationNumber(n))).sort();
+const chain = (pred: (n: number) => boolean) => readdirSync(DIR).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF && pred(migrationNumber(n))).sort(compareMigrations);
 
 const scratch = mkdtempSync(join(tmpdir(), 'cap-d1020-'));
 const seed = join(scratch, 'before-574.sqlite');
