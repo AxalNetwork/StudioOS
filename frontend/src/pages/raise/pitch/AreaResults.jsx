@@ -63,7 +63,9 @@ export default function AreaResults({ results, card, cards = null, model, items 
 
   const open = (results || []).filter((r) => r.status === 'proposed' && !state[r.key]);
 
-  const accept = async (r) => {
+  // D1515: a placement is one undo step; Accept all's placements share one `group`, so they are one step together,
+  // and a step that placed a charged run is marked so undoing it says "Still charged".
+  const accept = async (r, group = null) => {
     const placed = placeResult(working.current, r, model);
     if (placed.error) return { error: { message: placed.error } };
     try {
@@ -76,7 +78,7 @@ export default function AreaResults({ results, card, cards = null, model, items 
     working.current = placed.card;
     placedLast.current = placed.card;
     setState((s) => ({ ...s, [r.key]: 'accepted' }));
-    onPlace(placed.card);
+    onPlace(placed.card, { charged: Boolean(r.charges), group, label: ACCEPT });
     return { ok: true };
   };
 
@@ -90,9 +92,10 @@ export default function AreaResults({ results, card, cards = null, model, items 
 
   const all = async () => {
     setBusy(true); setError(null);
+    const group = `accept-all:${Date.now()}`;
     for (const r of open) {
       // eslint-disable-next-line no-await-in-loop
-      const out = await accept(r);
+      const out = await accept(r, group);
       if (out.error) { setError({ key: r.key, ...out.error }); break; }
     }
     setBusy(false);

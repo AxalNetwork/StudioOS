@@ -27,6 +27,7 @@ import { deckRemixApi } from '../src/lib/api/deckRemix.js';
 import { deckTypedValuesApi } from '../src/lib/api/deckTypedValues.js';
 import { deckCheckApi } from '../src/lib/api/deckCheck.js';
 import { deckElementModelsApi } from '../src/lib/api/deckElementModels.js';
+import { deckRehearsalsApi } from '../src/lib/api/deckRehearsals.js';
 import { deckFiguresApi } from '../src/lib/api/deckFigures.js';
 import { deckCommentsApi } from '../src/lib/api/deckComments.js';
 import { deckBatchesApi, parseSse } from '../src/lib/api/deckBatches.js';
@@ -44,9 +45,10 @@ test('every adapter method answers unavailable, with the reason and the issue th
   const body = (src, name) => (src.match(new RegExp(`^export const ${name} = ([^\\n]*)$`, 'm')) || [])[1] || '';
   const code = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
   const wired = methods.filter((n) => /\bthrough\(\(\) => [^\n]*deck[A-Za-z]+Api\./.test(body(code, n)));
+  const local = methods.filter((n) => n === 'history' && body(code, n) === 'async () => Object.freeze({ available: true, value: gridOps });');
   const offRows = methods.filter((n) => body(code, n) === `off('${n}');`);
-  assert.deepEqual([...adapter.SWAPPED].sort(), wired.sort(), 'SWAPPED is exactly the rows whose body answers through a client');
-  assert.deepEqual([...wired, ...offRows].sort(), [...methods].sort(), 'every row is either through(...) or off(\'<row>\'), nothing else');
+  assert.deepEqual([...adapter.SWAPPED].sort(), [...wired, ...local].sort(), 'SWAPPED is exactly the remote and browser-local rows');
+  assert.deepEqual([...wired, ...local, ...offRows].sort(), [...methods].sort(), 'every row is remote, browser-local history, or off(\'<row>\'), nothing else');
   for (const n of wired) assert.match(body(code, n), new RegExp(`SURFACES\\.${n}\\.issue\\);$`), `${n} keys its own row's issue`);
   // A floor, so a parser that stopped matching cannot pass on two empty lists. D1541 (#3779) elementsLibrary is one of them.
   for (const n of ['grid', 'saveCard', 'stagePlan', 'remix', 'comments', 'ventureElements', 'elementsLibrary']) assert.ok(adapter.SWAPPED.includes(n), `${n} is swapped on main`);
@@ -147,6 +149,20 @@ test('D1538 (#3787): typedTables is swapped — it answers through deckTypedValu
   assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckTypedValues\)/, 'the route is mounted');
 });
 
+test('D1580 (#3827): rehearse is swapped — it answers through deckRehearsalsApi.list, and a refusal is never an empty list', async () => {
+  // Mutation checked: rehearse left as off('rehearse') → the available answer fails; the issue key changed → the 404 answer fails.
+  const real = deckRehearsalsApi.list;
+  try {
+    deckRehearsalsApi.list = async (id) => ({ deck_id: id, rehearsals: [] });
+    assert.deepEqual(await adapter.rehearse(7), { available: true, value: { deck_id: 7, rehearsals: [] } });
+    deckRehearsalsApi.list = async () => { throw Object.assign(new Error('Not found'), { status: 404 }); };
+    assert.deepEqual(await adapter.rehearse(7), { available: false, reason: NOT_ON, issue: 3827 });
+    deckRehearsalsApi.list = async () => { throw Object.assign(new Error('The rehearsals could not be read.'), { status: 500 }); };
+    assert.equal((await adapter.rehearse(7)).unreadable, true, 'unreadable, never an empty list');
+  } finally { deckRehearsalsApi.list = real; }
+  assert.equal(adapter.availability('rehearse'), null);
+});
+
 test('D1523 (#3775): figures is swapped — it answers through deckFiguresApi.list, and a refusal is never a row of zeros', async () => {
   // Mutation checked: figures left as off('figures') → the available answer fails; the issue key changed → the 404 answer fails.
   const real = deckFiguresApi.list;
@@ -240,6 +256,9 @@ test('the seam reaches no network, and no client method exists for a route that 
   // D1503 (#3754): the element models route is on main, with its client.
   assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_element_models.ts')), /deckElementModels\.get\(['"]\/:id\{\[0-9\]\+\}\/element-models['"]/);
   assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckElementModels\)/);
+  // D1580 (#3827): the rehearsals route is on main, with its client.
+  assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_rehearsals.ts')), /deckRehearsals\.get\(['"]\/:id\{\[0-9\]\+\}\/rehearsals['"]/);
+  assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckRehearsals\)/);
   // D1523 (#3775): the figures route is on main, with its client.
   assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_figures.ts')), /r\.get\(['"]\/:id\{\[0-9\]\+\}\/figures['"]/);
   // D1501 (#3751): the working copy has its routes (`/:id/draft`, `/:id/cards/:uid`) and its client.
@@ -423,7 +442,7 @@ test('D1502 (#3753): batch and cancelBatch answer through deckBatchesApi; the st
     assert.deepEqual(asked, [['batch', 'run-1'], ['cancel', 'run-1']]);
     assert.equal(adapter.availability('batch'), null);
     deckBatchesApi.cancel = async () => { throw Object.assign(new Error('Only the member who started this run can stop it.'), { status: 403 }); };
-    assert.deepEqual(await adapter.cancelBatch('run-1'), { available: false, unreadable: true, reason: 'Only the member who started this run can stop it.', issue: 3753 });
+    assert.deepEqual(await adapter.cancelBatch('run-1'), { available: false, unreadable: true, reason: 'Only the member who started this run can stop it.', issue: 3753, status: 403, data: null });
   } finally { Object.assign(deckBatchesApi, real); }
   const { events, rest } = parseSse('event: snapshot\ndata: {"state":"running"}\n\nevent: step_done\ndata: {"seq":0}\n\nevent: area_busy\ndata: {"att');
   assert.deepEqual(events, [{ event: 'snapshot', data: { state: 'running' } }, { event: 'step_done', data: { seq: 0 } }]);

@@ -36,6 +36,7 @@ export const CONTRACTS = Object.freeze({
   orgLocks: { issue: 3786, route: 'GET /api/decks/:id/model-presets (its locks key)', schema: 'deckOrgLocks.schema.json' },
   presence: { issue: 3824, route: 'GET /api/decks/:id/presence', schema: 'deckPresence.schema.json' },
   presets: { issue: 3796, route: 'GET /api/decks/:id/model-presets', schema: 'deckModelPresets.schema.json' },
+  rehearse: { issue: 3827, route: 'GET /api/decks/:id/rehearsals', schema: 'deckRehearsals.schema.json' },
   remix: { issue: 3800, route: 'POST /api/decks/:id/remix', schema: 'deckRemix.schema.json' },
   saveAsTemplate: { issue: 3782, route: 'POST /api/decks/:id/save-as-template', schema: 'deckSaveAsTemplate.schema.json' },
   saveCard: { issue: 3751, route: 'PATCH /api/decks/:id/cards/:uid', schema: 'deckSaveCard.schema.json' },

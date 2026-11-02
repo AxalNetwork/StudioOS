@@ -28,6 +28,7 @@
  * is one line, the row's own, and its decision is named in the comment above
  * that line. Never add a row to a list here: two branches that each swap a
  * row then meet only if they swap the same one.
+ * D1515 history is browser-local: it returns gridOps directly, with no API contract.
  *
  * Fields on routes that exist (`context.inferred` and `context.freshness`
  * from #3877; the PostHog, HubSpot and Linear source rows from #3880) need
@@ -48,11 +49,13 @@ import { deckGridApi } from '../../../lib/api/deckGrid.js';
 import { deckImageEditsApi } from '../../../lib/api/deckImageEdits.js';
 import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks.js';
 import { deckModelPresetsApi } from '../../../lib/api/deckModelPresets.js';
+import { deckRehearsalsApi } from '../../../lib/api/deckRehearsals.js';
 import { deckRemixApi } from '../../../lib/api/deckRemix.js';
 import { deckStageApi } from '../../../lib/api/deckStage.js';
 import { deckTemplatesApi } from '../../../lib/api/deckTemplates.js';
 import { deckTypedValuesApi } from '../../../lib/api/deckTypedValues.js';
 import { deckVentureElementsApi } from '../../../lib/api/deckVentureElements.js';
+import * as gridOps from './gridOps.js';
 
 export { NOT_ON };
 
@@ -138,7 +141,7 @@ export async function through(call, issue) {
     const message = typeof e?.message === 'string' && e.message ? e.message : 'could not be read';
     // D1543: a Worker refusal's code (a gate such as `no_consent`) rides along, so a surface can draw its line.
     const code = typeof e?.code === 'string' && e.code ? e.code : null;
-    return Object.freeze({ available: false, unreadable: true, reason: message, issue, ...(code ? { code } : {}) });
+    return Object.freeze({ available: false, unreadable: true, reason: message, issue, status, data: e?.data ?? null, ...(code ? { code } : {}) });
   }
 }
 
@@ -169,7 +172,11 @@ export const cancelBatch = (uid) => through(() => deckBatchesApi.cancel(uid), SU
 export const elementModels = (deckId) => through(() => deckElementModelsApi.read(deckId), SURFACES.elementModels.issue);
 export const areasQuote = off('areasQuote');
 export const areasGenerate = off('areasGenerate');
-export const history = off('history');
+/**
+ * D1515 (#3767): undo and redo, frontend-only. No Worker route stores the history, so this row answers at once with
+ * `gridOps.js` (its reducers and the 100-step history) and is not a client call: it has no contract.
+ */
+export const history = async () => Object.freeze({ available: true, value: gridOps });
 export const narrativeOutline = off('narrativeOutline');
 export const instruct = off('instruct');
 /** D1522 (#3774): the deck's stage plan — the order for its stage, a why line per card, and missing-proof warnings. */
@@ -235,7 +242,11 @@ export const slideAnalytics = off('slideAnalytics');
  */
 export const presence = (deckId) => through(() => deckCoeditApi.presence(deckId), SURFACES.presence.issue);
 export const cardStatus = off('cardStatus');
-export const rehearse = off('rehearse');
+/**
+ * D1580 F1 (#3827): the founder's rehearsals of this version, newest first; the surface runs and reads them through
+ * `deckRehearsalsApi`. Present's Rehearse panel runs, reads and keeps through the same client.
+ */
+export const rehearse = (deckId) => through(() => deckRehearsalsApi.list(deckId), SURFACES.rehearse.issue);
 export const walkthrough = off('walkthrough');
 export const retryFailed = off('retryFailed');
 export const unseenBatches = off('unseenBatches');
