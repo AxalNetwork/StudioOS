@@ -43,6 +43,7 @@ import { chargedFor } from './agentRun';
 import { grantsOf } from './agentTools';
 import { personaOf } from './personas';
 import type { AgentRow, Spend } from './teams';
+import { skillOfUsage } from './skillEval';
 
 const parse = <T>(json: string | null | undefined, fallback: T): T => { try { const v = JSON.parse(json ?? ''); return v ?? fallback; } catch { return fallback; } };
 const all = async <T>(env: Env, sql: string, ...binds: unknown[]) => ((await env.DB.prepare(sql).bind(...binds).all<T>()).results ?? []) as T[];
@@ -159,8 +160,8 @@ export async function runDetail(env: Env, r: RunRow, a: AgentRow) {
   const usage = await usageOf(env, r.usage_log_id);
   return {
     agent: { ...agentRef(a), model: a.model_id },
-    // Skill runs are recorded from #3954 on; until then no run names a skill.
-    skill: null,
+    // D1612 part D (#3954): the skill and pinned version the run's usage row names; null when it used none.
+    skill: await skillOfUsage(env, r.usage_log_id),
     work: t ? { task: { uid: t.uid, title: t.title }, instruction: t.detail ?? null, module: t.module, option: t.option } : null,
     sources: sourcesOf(steps),
     tools: grantsOf(a.tool_grants_json).map((g) => g.tool),

@@ -58,7 +58,9 @@
  *
  * #3851 (E7 of #3742) — the evaluation board (TM14), behind the same flag and gates:
  *
- *   GET    /:scope/:id/evaluation?days=30|90   read   { days, roles: [RoleEvaluation] }; 400 invalid_days
+ *   GET    /:scope/:id/evaluation?days=30|90   read   { days, roles: [RoleEvaluation], skills }; 400 invalid_days
+ *     D1612 part D (#3954): `skills` is the golden-case board of the Axal skills this scope's agents use
+ *     (`skillEval.ts` `skillBoard`: pass / total on the current version, regressions); null when unreadable.
  *
  * Task and goal costs are now read (`services/agents/evaluation.ts` `runCostReader`):
  * the sum of a task's runs' charges, `{ available: false }` when any is unrecorded.
@@ -112,6 +114,7 @@ import { movesOf } from '../services/agents/transfer';
 import { addDuty, dutiesOf, dutyByUid, dutyDto, removeDuty, runsPerMonth, updateDuty, type DutyRow } from '../services/agents/duties';
 import { chainsOf } from '../services/agents/handoffs';
 import { daysOf, evaluateScope, runCostReader } from '../services/agents/evaluation';
+import { scopeSkillIds, skillBoard } from '../services/agents/skillEval';
 import { RETENTION, addFact, forgetAll, forgetNote, noteByUid, noteDto, notesOf, retentionText } from '../services/agents/memory';
 import { isLatestAttempt, outcomeOf, projectActivity, runDetail } from '../services/agents/runActivity';
 import { WEEKS_DEFAULT, WEEKS_MAX, projectWorkload, setCapacity } from '../services/agents/workWorkload';
@@ -596,7 +599,9 @@ router.get('/:scope/:id/evaluation', async (c) => {
     if (!(await canRead(c.env, s, user))) return notMember(c);
     const days = daysOf(c.req.query('days'));
     if (!days) return say(c, { status: 400, code: 'invalid_days', message: 'Choose 30 or 90 days.' });
-    return c.json(await evaluateScope(c.env, s, days));
+    // D1612 part D (#3954): the golden-case results of the Axal skills this scope's agents use; null when unreadable, never [].
+    const skills = await scopeSkillIds(c.env, s).then((ids) => skillBoard(c.env, ids)).catch(() => null);
+    return c.json({ ...(await evaluateScope(c.env, s, days)), skills });
   } catch (e) { return mapError(c, e); }
 });
 
