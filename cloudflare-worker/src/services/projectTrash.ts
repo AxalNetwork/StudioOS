@@ -91,6 +91,11 @@ async function hardDeleteWithSchema(env: Env, projectId: number, discovered?: Cl
     const { eraseScopeRuntime } = await import('../agents/erasure');
     await eraseScopeRuntime(env, { kind: 'project', id: projectId });
   } catch { console.warn('[agents] erase_scope_failed'); }
+  // D1530 (#3849, E5): the project's agents' memory notes, run summaries and queued tasks go with it.
+  if ((await tables(env)).has('agent_memory_notes')) {
+    const { eraseAgentData } = await import('./agents/memory');
+    await eraseAgentData(env, { scope: { kind: 'project', id: projectId } });
+  }
   const schema = discovered ?? { present: await tables(env), columns: new Map<string, boolean>() };
   const { present } = schema;
   const statements: D1PreparedStatement[] = [];

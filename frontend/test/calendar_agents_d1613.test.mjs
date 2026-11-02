@@ -49,7 +49,14 @@ test('the seam: every #3957 method is off, in Team’s words, and no client path
   const src = codeOnly(read('frontend/src/pages/calendarAgentsAdapter.js'));
   assert.doesNotMatch(src, /lib\/api|fetch\(|request\(/, 'no client call until #3957 adds its routes');
   const client = [read('frontend/src/lib/api.js'), ...readdirSync('frontend/src/lib/api').filter((f) => f.endsWith('.js')).map((f) => read(`frontend/src/lib/api/${f}`))].join('\n');
-  assert.doesNotMatch(client, /\/duties\b/, 'a client path for agent duties before #3957 puts the route on main');
+  // #3849 (D1530) put the duty routes #3957 extends on main; a client path for
+  // duties is allowed only where the Worker mounts that very route.
+  const routes = read('cloudflare-worker/src/routes/agent_engine.ts');
+  for (const m of client.matchAll(/request\(`\/teams((?:\/[^`]*)?\/duties\b[^`]*)`(?:, \{ method: '(\w+)')?/g)) {
+    const path = m[1].replace(/\$\{[^}]+\}/g, ':uid');
+    const method = (m[2] || 'GET').toLowerCase();
+    assert.ok(routes.includes(`router.${method}('${path}'`), `a client path for agent duties (${method} ${path}) with no Worker route on main`);
+  }
 });
 
 test('the kind and the family stay out of KINDS and FAMILIES until #3957 adds the kind to the calendar read', () => {

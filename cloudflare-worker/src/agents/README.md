@@ -20,8 +20,8 @@ to switch runtimes.
 | `loop.ts` | The loop's steps as plain functions (`load`, `context`, `run`, `propose`, `after`), `runTaskLoop` over a step interface, and `deliverDecision`. |
 | `taskWorkflow.ts` | `AgentTaskWorkflow`: the Workflow class, a binding around `loop.ts` and nothing else. |
 | `agentQueue.ts` | The agent queue's producer and consumers, and `dispatchQueue`, the `queue()` handler's routing (the agent branch before the `dlq` test). |
-| `sweep.ts` | The every-minute dispatcher's agent sweep (`% 5 === 1`): resend lost messages; with `self_start`, offer each idle agent its next ready task. At most 60 a minute. |
-| `erasure.ts` | The product amendment: an agent removed, a scope deleted or an account erased ends its runs and empties its object. |
+| `sweep.ts` | The every-minute dispatcher's agent sweep (`% 5 === 1`): resend lost messages; with `self_start`, offer each idle agent its next ready task. At most 60 a minute. D1530 (#3849, E5): `sweepAgentDuties` claims the due duties (claim before act) and applies the memory retention. |
+| `erasure.ts` | The product amendment: an agent removed, a scope deleted or an account erased ends its runs and empties its object. D1530 (E5): `eraseAccountAgents` adds the D1 half (notes, run summaries, queued tasks) for the manual account erasure. |
 
 **The rule for adding here.** Only the sdk runtime's own file, sdkRuntime.ts,
 may import the `agents` package; `agent_runtime_contract.test.ts` fails on
