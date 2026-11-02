@@ -30,6 +30,7 @@ import { deckElementModelsApi } from '../src/lib/api/deckElementModels.js';
 import { deckRehearsalsApi } from '../src/lib/api/deckRehearsals.js';
 import { deckFiguresApi } from '../src/lib/api/deckFigures.js';
 import { deckCommentsApi } from '../src/lib/api/deckComments.js';
+
 import { deckBatchesApi, parseSse } from '../src/lib/api/deckBatches.js';
 import { deckCoeditApi } from '../src/lib/api/deckCoedit.js';
 import { deckVentureElementsApi } from '../src/lib/api/deckVentureElements.js';
@@ -44,11 +45,14 @@ test('every adapter method answers unavailable, with the reason and the issue th
   // swapped row back to `off(...)` (or wire an off row) and the two sets part.
   const body = (src, name) => (src.match(new RegExp(`^export const ${name} = ([^\\n]*)$`, 'm')) || [])[1] || '';
   const code = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
-  const wired = methods.filter((n) => /\bthrough\(\(\) => [^\n]*deck[A-Za-z]+Api\./.test(body(code, n)));
-  const local = methods.filter((n) => n === 'history' && body(code, n) === 'async () => Object.freeze({ available: true, value: gridOps });');
+  const wired = methods.filter((n) => /\bthrough\(\(\) => [^\n]*\b[a-z][A-Za-z]*Api\./.test(body(code, n)));
+  const local = methods.filter((n) =>
+    (n === 'history' && body(code, n) === 'async () => Object.freeze({ available: true, value: gridOps });')
+    || (n === 'arrange' && /arrangeCard\(card, selection, op, opts\)/.test(body(code, n))));
   const offRows = methods.filter((n) => body(code, n) === `off('${n}');`);
   assert.deepEqual([...adapter.SWAPPED].sort(), [...wired, ...local].sort(), 'SWAPPED is exactly the remote and browser-local rows');
-  assert.deepEqual([...wired, ...local, ...offRows].sort(), [...methods].sort(), 'every row is remote, browser-local history, or off(\'<row>\'), nothing else');
+  assert.deepEqual([...wired, ...local, ...offRows].sort(), [...methods].sort(), 'every row is remote, browser-local history or Arrange, or off(\'<row>\')');
+  assert.match(body(code, 'arrange'), /arrangeCard\(card, selection, op, opts\)/, 'arrange edits locally before the existing card save');
   for (const n of wired) assert.match(body(code, n), new RegExp(`SURFACES\\.${n}\\.issue\\);$`), `${n} keys its own row's issue`);
   // A floor, so a parser that stopped matching cannot pass on two empty lists. D1541 (#3779) elementsLibrary is one of them.
   for (const n of ['grid', 'saveCard', 'stagePlan', 'remix', 'comments', 'ventureElements', 'elementsLibrary']) assert.ok(adapter.SWAPPED.includes(n), `${n} is swapped on main`);
@@ -225,11 +229,11 @@ test('the seam reaches no network, and no client method exists for a route that 
   const src = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
   assert.doesNotMatch(src, /request\(|fetch\(|XMLHttpRequest/);
   // A swapped row's client is the only `lib/api` the seam may import (#4134: a rule, not a list). Each import names
-  // one `deck<Name>Api` from `lib/api/deck<Name>.js`, the imports stand in file-name order (so two swaps add lines
+  // one `<name>Api` from `lib/api/<name>.js` (a deck client, or #3881's `dataRoomApi`), the imports stand in file-name order (so two swaps add lines
   // at different places), and every one is used by a swapped row's body. Mutation checked: an unused client import,
   // or two imports out of order, fails here. D1541's `deckElements.js` is one of those lines.
-  const imports = [...src.matchAll(/^import \{ (deck[A-Za-z]+Api) \} from '\.\.\/\.\.\/\.\.\/lib\/api\/(deck[A-Za-z]+)\.js';$/gm)].map((x) => ({ name: x[1], file: x[2] }));
-  assert.equal(imports.length, [...src.matchAll(/from '([^']*lib\/api[^']*)'/g)].length, 'every lib/api import is one `import { deck<Name>Api } from .../lib/api/deck<Name>.js` line');
+  const imports = [...src.matchAll(/^import \{ ([a-z][A-Za-z]*Api) \} from '\.\.\/\.\.\/\.\.\/lib\/api\/([a-z][A-Za-z]*)\.js';$/gm)].map((x) => ({ name: x[1], file: x[2] }));
+  assert.equal(imports.length, [...src.matchAll(/from '([^']*lib\/api[^']*)'/g)].length, 'every lib/api import is one `import { <name>Api } from .../lib/api/<name>.js` line');
   assert.ok(imports.length >= 10, 'the seam imports the clients of its swapped rows');
   const files = imports.map((i) => i.file);
   assert.deepEqual(files, [...files].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())), 'the lib/api imports stand in file-name order');
@@ -276,7 +280,8 @@ test('the seam reaches no network, and no client method exists for a route that 
 
 test('an unavailable answer is never printed as a zero, "$0.00" or "none"', async () => {
   const money = (v) => `$${Number(v).toFixed(2)}`;
-  const off = await adapter.deckUsage('deck');
+  // D1524 (#3776) swapped deckUsage; `slideAnalytics` is still on the seam.
+  const off = await adapter.slideAnalytics('deck');
   assert.equal(adapter.shown(off, money), LATER);
   assert.equal(adapter.shown(off, () => '0'), LATER, 'the formatter never runs on an unavailable answer');
   assert.equal(adapter.shown(undefined, money), LATER);
@@ -383,6 +388,7 @@ test('D1570 (#3817): comments is swapped — it answers through deckCommentsApi.
   } finally { deckCommentsApi.list = real; }
   assert.equal(adapter.availability('comments'), null);
 });
+
 
 test('D1543 (#3781): ventureElements is swapped — one element through deckVentureElementsApi.element, all through .list, a gate refusal keeps its code and line', async () => {
   // Mutation checked: ventureElements left as off('ventureElements') → the available answer fails; through() dropping
