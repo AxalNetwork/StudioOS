@@ -95,7 +95,17 @@ export function areasOf(card, model = null) {
       if (blocks.some((g) => touches(g, grid))) continue;
       areas.push({ id: freeId(grid), kind: 'free', grid });
     }
-    return areas;
+    // D1513 (#3765): the reading order is the structure's (`area.order`): each area takes the order of the
+    // structure area its top-left cell sits in, so the tab order, the screen reader and `nearest` follow it.
+    // An area outside every structure area keeps its place after them.
+    const orderOf = (g) => {
+      const i = structured.findIndex((s) => s.c1 <= g.c1 && g.c1 <= s.c2 && s.r1 <= g.r1 && g.r1 <= s.r2);
+      return i < 0 ? structured.length : i;
+    };
+    return areas
+      .map((a, i) => ({ a: { ...a, order: orderOf(a.grid) + 1 }, i }))
+      .sort((x, y) => x.a.order - y.a.order || x.i - y.i)
+      .map((x) => x.a);
   }
   for (let r = 1; r <= rows; r += 1) {
     for (let c = 1; c <= cols; c += 1) {
@@ -223,7 +233,8 @@ export function nearest(areas, fromId, key) {
     if (gap < 1) continue;
     const shares = across ? g.r1 <= f.r2 && f.r1 <= g.r2 : g.c1 <= f.c2 && f.c1 <= g.c2;
     const off = across ? Math.abs(centre(g).y - centre(f).y) : Math.abs(centre(g).x - centre(f).x);
-    const rank = [shares ? 0 : 1, gap, a.kind === 'block' ? 0 : 1, off];
+    // D1513: a tie keeps the reading order (`order`, the structure's) before the distance across.
+    const rank = [shares ? 0 : 1, gap, a.kind === 'block' ? 0 : 1, a.order ?? 0, off];
     if (!best || before(rank, best.rank)) best = { id: a.id, rank };
   }
   return best ? best.id : null;
@@ -306,3 +317,71 @@ export function askTarget(areas, selection, { aiOn = true, items = [] } = {}) {
   }
   return { kind: 'areas', ids: chosen.map((a) => a.id) };
 }
+
+// ─────────────────────────────────────────────────────────── D1513: dividers
+
+/**
+ * D1513 (#3765, pd12) — the dividers between two blocks that share an edge:
+ * a vertical one where one block ends a column before the next begins, rows
+ * overlapping; a horizontal one the same way down. `{ id, axis, a, b, at }`,
+ * `at` the first column (or row) of `b`.
+ */
+export function dividersOf(card) {
+  const blocks = (Array.isArray(card?.blocks) ? card.blocks : []).filter((x) => validGrid(x?.grid));
+  const out = [];
+  for (const a of blocks) {
+    for (const b of blocks) {
+      if (a === b) continue;
+      const rows = a.grid.r1 <= b.grid.r2 && b.grid.r1 <= a.grid.r2;
+      const cols = a.grid.c1 <= b.grid.c2 && b.grid.c1 <= a.grid.c2;
+      if (rows && a.grid.c2 + 1 === b.grid.c1) out.push({ id: `v:${a.id}|${b.id}`, axis: 'v', a: String(a.id), b: String(b.id), at: b.grid.c1 });
+      if (cols && a.grid.r2 + 1 === b.grid.r1) out.push({ id: `h:${a.id}|${b.id}`, axis: 'h', a: String(a.id), b: String(b.id), at: b.grid.r1 });
+    }
+  }
+  return out;
+}
+
+const blockOf = (card, id) => (card?.blocks || []).find((x) => String(x.id) === String(id)) || null;
+const sizeOf = (g, axis) => (axis === 'v' ? g.c2 - g.c1 + 1 : g.r2 - g.r1 + 1);
+
+/** The two ranges after the divider moves by `delta` cells (right or down is positive). */
+function moved(div, a, b, delta) {
+  if (div.axis === 'v') return [{ ...a.grid, c2: a.grid.c2 + delta }, { ...b.grid, c1: b.grid.c1 + delta }];
+  return [{ ...a.grid, r2: a.grid.r2 + delta }, { ...b.grid, r1: b.grid.r1 + delta }];
+}
+
+/** pd12's readout, "7 | 5 → 6 | 6": the two sizes across the divider, before and after. */
+export function dividerReadout(card, div, delta = 0) {
+  const a = blockOf(card, div?.a);
+  const b = blockOf(card, div?.b);
+  if (!a || !b) return '';
+  const [ga, gb] = moved(div, a, b, delta);
+  const before = `${sizeOf(a.grid, div.axis)} | ${sizeOf(b.grid, div.axis)}`;
+  return delta ? `${before} → ${sizeOf(ga, div.axis)} | ${sizeOf(gb, div.axis)}` : before;
+}
+
+/**
+ * The card with the divider moved by `delta` whole cells, both blocks resized
+ * together (one edit), or `{ error }` with the sentence the stage shows:
+ * neither block may vanish, each keeps its kind's minimum (`minSize`, pd12's
+ * "A chart needs at least 4 × 3 cells."), and both still pass
+ * `placementProblem` against the rest of the card.
+ */
+export function moveDivider(card, div, delta, model = null, minSize = () => null) {
+  const a = blockOf(card, div?.a);
+  const b = blockOf(card, div?.b);
+  if (!a || !b) return { error: 'Those blocks are no longer on this card.' };
+  if (!Number.isInteger(delta) || delta === 0) return { card, same: true };
+  const [ga, gb] = moved(div, a, b, delta);
+  if (sizeOf(ga, div.axis) < 1 || sizeOf(gb, div.axis) < 1) return { error: 'Each side keeps at least one cell.' };
+  const small = minSize(a, ga) || minSize(b, gb);
+  if (small) return { error: small };
+  const next = { ...card, blocks: card.blocks.map((x) => (x === a ? { ...a, grid: ga } : x === b ? { ...b, grid: gb } : x)) };
+  const problem = placementProblem(next, ga, model, a.id) || placementProblem(next, gb, model, b.id);
+  if (problem) return { error: problem };
+  return { card: next, grids: { [String(a.id)]: ga, [String(b.id)]: gb } };
+}
+
+/** The divider moved to the cell `at` (a pointer's column or row), as a whole-cell delta. */
+export const dividerDelta = (div, at) => (Number.isInteger(at) ? at - div.at : 0);
+
