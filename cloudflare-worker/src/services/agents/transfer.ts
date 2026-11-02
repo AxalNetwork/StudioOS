@@ -39,7 +39,6 @@ export type Move = { projectId: number; from: number | null; to: number | null; 
 export function transferStatements(env: Pick<Env, 'DB'>, m: Move): D1PreparedStatement[] {
   if (m.from == null || m.from === m.to) return [];
   const detail = JSON.stringify({ reason: 'project_left', project_id: m.projectId, from: m.from, to: m.to });
-  const leaving = `scope_kind = 'company' AND company_id = ? AND context_project_id = ? AND status NOT IN ('done', 'cancelled', 'blocked')`;
   return [
     // The project's goals stop rolling up to the old company's goals.
     env.DB.prepare(
@@ -50,11 +49,11 @@ export function transferStatements(env: Pick<Env, 'DB'>, m: Move): D1PreparedSta
     // The event first, while the tasks still name the project and their status.
     env.DB.prepare(
       `INSERT INTO scope_task_events (task_id, actor_user_id, kind, detail_json)
-       SELECT id, ?, 'status', json_set(?, '$.status_from', status, '$.status_to', 'blocked') FROM scope_tasks WHERE ${leaving}`,
+       SELECT id, ?, 'status', json_set(?, '$.status_from', status, '$.status_to', 'blocked') FROM scope_tasks WHERE scope_kind = 'company' AND company_id = ? AND context_project_id = ? AND status NOT IN ('done', 'cancelled', 'blocked')`,
     ).bind(m.actorUserId, detail, m.from, m.projectId),
     env.DB.prepare(
       `UPDATE scope_tasks SET status = 'blocked', blocked_reason = 'project_left', context_project_id = NULL, updated_at = CURRENT_TIMESTAMP
-        WHERE ${leaving}`,
+        WHERE scope_kind = 'company' AND company_id = ? AND context_project_id = ? AND status NOT IN ('done', 'cancelled', 'blocked')`,
     ).bind(m.from, m.projectId),
     // A task already blocked or finished keeps its status, but no longer names the project.
     env.DB.prepare(
@@ -68,8 +67,6 @@ export function transferStatements(env: Pick<Env, 'DB'>, m: Move): D1PreparedSta
 export type MoveTell = (scope: ScopeRef, move: { project_id: number; from: number | null; to: number | null; ended: string[] }) => Promise<void>;
 export type MovedDeps = { tell: MoveTell; notify: (env: Env, agentId: number, body: string) => Promise<void> };
 
-const LIVE = `('admitted', 'running')`;
-
 /**
  * After the move's batch commits. Ends the in-flight runs `scope_moved`, tells
  * the boards and the teams. Every part is best effort: the move has happened,
@@ -80,7 +77,7 @@ export async function onProjectMoved(env: Env, m: Move, deps: MovedDeps): Promis
   if (m.from === m.to) return { ended: 0 };
   const runs = (await env.DB.prepare(
     `SELECT r.uid, r.agent_id, r.task_id, a.scope_kind FROM agent_task_runs r JOIN team_agents a ON a.id = r.agent_id JOIN scope_tasks t ON t.id = r.task_id
-      WHERE r.status IN ${LIVE}
+      WHERE r.status IN ('admitted', 'running')
         AND ((a.scope_kind = 'project' AND a.project_id = ?)
           OR (? IS NOT NULL AND a.scope_kind = 'company' AND a.company_id = ? AND t.status = 'blocked' AND t.blocked_reason = 'project_left'))`,
   ).bind(m.projectId, m.from, m.from).all<{ uid: string; agent_id: number; task_id: number; scope_kind: string }>()).results ?? [];
@@ -92,7 +89,7 @@ export async function onProjectMoved(env: Env, m: Move, deps: MovedDeps): Promis
       `UPDATE agent_task_runs
           SET status = 'scope_moved', refusal = 'scope_moved', steps_json = json_insert(steps_json, '$[#]', json(?)),
               ended_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-        WHERE uid = ? AND status IN ${LIVE}`,
+        WHERE uid = ? AND status IN ('admitted', 'running')`,
     ).bind(line, r.uid).run();
     if (Number(res.meta?.changes ?? 0) > 0) {
       ended += 1;
@@ -165,10 +162,8 @@ export type MoveRow = {
  * the old company's tasks the move blocked (`project_left`).
  */
 export async function movesOf(env: Pick<Env, 'DB'>, scope: ScopeRef, limit: number): Promise<MoveRow[]> {
-  const where = scope.kind === 'project'
-    ? 'e.project_id = ?'
-    : `(json_extract(e.before_json, '$.company_id') = ? OR json_extract(e.after_json, '$.company_id') = ?)`;
-  const binds = scope.kind === 'project' ? [scope.id] : [scope.id, scope.id];
+  // One query for both: a project matches its own id; a company matches either side of the move.
+  const [projectId, companyId] = scope.kind === 'project' ? [scope.id, null] : [null, scope.id];
   const rows = (await env.DB.prepare(
     `SELECT e.project_id, p.name AS project_name, e.created_at,
             json_extract(e.before_json, '$.company_id') AS from_id, json_extract(e.after_json, '$.company_id') AS to_id,
@@ -183,9 +178,11 @@ export async function movesOf(env: Pick<Env, 'DB'>, scope: ScopeRef, limit: numb
        LEFT JOIN company_profiles cf ON cf.id = json_extract(e.before_json, '$.company_id')
        LEFT JOIN company_profiles ct ON ct.id = json_extract(e.after_json, '$.company_id')
        LEFT JOIN users u ON u.id = e.actor_user_id
-      WHERE e.kind = 'project_move' AND ${where}
+      WHERE e.kind = 'project_move'
+        AND ((? IS NOT NULL AND e.project_id = ?)
+          OR (? IS NOT NULL AND (json_extract(e.before_json, '$.company_id') = ? OR json_extract(e.after_json, '$.company_id') = ?)))
       ORDER BY e.created_at DESC, e.id DESC LIMIT ?`,
-  ).bind(...binds, limit).all<any>()).results ?? [];
+  ).bind(projectId, projectId, companyId, companyId, companyId, limit).all<any>()).results ?? [];
   return rows.map((r) => ({
     // A company: did the project come in or go out? A project: did it move into a company, or out of every company?
     direction: scope.kind === 'company' ? (Number(r.from_id) === scope.id ? 'out' : 'in') : (r.to_id != null ? 'in' : 'out'),
