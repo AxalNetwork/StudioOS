@@ -149,6 +149,7 @@ test('2. the one-click run on the fake binding: no placeholder, no fit problem, 
     const g = await call(f, 2, 'POST', '/api/decks/generate', { ...BUILD, exclude });
     assert.equal(g.status, 201, JSON.stringify(g.body));
     assert.equal(g.body.wording.by, 'Eadwyn');
+    assert.match(g.body.wording.prompt_version, /^build\.(default|llama|mistral|glm)@v\d+$/, 'D1519: the reply names the prompt that wrote it');
     const slides = g.body.proposal.slides;
     assert.equal(slides.length, 12);
     assert.equal(placeholders(slides), 0, 'no Not recorded placeholder');

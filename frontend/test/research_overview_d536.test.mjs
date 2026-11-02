@@ -9,6 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { apiModulesBlock } from './_apiModulesBlock.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const DESK = read('frontend/src/pages/founder/FounderResearchDesk.jsx');
@@ -16,8 +17,8 @@ const DESK = read('frontend/src/pages/founder/FounderResearchDesk.jsx');
 test('researchOverview.js calls the one Worker route, and api.js re-exports it in its block', () => {
   const mod = read('frontend/src/lib/api/researchOverview.js');
   assert.match(mod, /request\(`\/research\/overview\$\{top \? `\?top=\$\{encodeURIComponent\(top\)\}` : ''\}`\)/);
-  const api = read('frontend/src/lib/api.js');
-  const block = api.slice(api.indexOf('// api-modules:begin'), api.indexOf('// api-modules:end'));
+  assert.match(read('frontend/src/lib/api.js'), /^export \* from '\.\/apiModules\.generated\.js';$/m);
+  const block = apiModulesBlock();
   assert.match(block, /^export \* from '\.\/api\/researchOverview\.js';$/m);
   const index = read('cloudflare-worker/src/index.ts');
   assert.ok(index.indexOf("app.route('/api/research/overview', researchOverview)") >= 0);

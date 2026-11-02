@@ -851,7 +851,7 @@ test('22 · the client names the three Worker routes, each path written out, wit
   assert.match(src, /read: \(\) => request\('\/ai\/rail-preferences'\)/);
   assert.match(src, /setMode: \(section, mode\) =>\s+request\(`\/ai\/rail-preferences\/\$\{encodeURIComponent\(section\)\}`, \{\s+method: 'PUT'/);
   assert.match(src, /setModel: \(section, task, model\) =>\s+request\(`\/ai\/rail-preferences\/\$\{encodeURIComponent\(section\)\}\/\$\{encodeURIComponent\(task\)\}`, \{\s+method: 'PUT'/);
-  const apiSrc = read('frontend/src/lib/api.js');
+  const apiSrc = read('frontend/src/lib/apiModules.generated.js');
   assert.equal(apiSrc.split("export * from './api/railPrefs.js';").length - 1, 1, 'api.js has exactly one railPrefs.js line');
 });
 

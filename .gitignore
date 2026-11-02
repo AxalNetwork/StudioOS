@@ -114,3 +114,11 @@ users/*/activity.md
 # D1511 (#3762): Playwright results and traces from the visual suite; only CI-made baselines are committed.
 frontend/test-results/
 frontend/playwright-report/
+
+# D4103 (#4103): the route map's two projections are build output. Every
+# routing change rewrote them and parallel branches conflicted on them. CI
+# builds them and keeps them as the `routing-docs` artifact of its
+# `routing docs (artifact)` job; `npm run docs:routing` writes them here. `node
+# scripts/build-profile-routing.mjs --check` fails if either is committed again.
+documentation/architecture/PROFILE_ROUTING.md
+documentation/architecture/PAGE_INVENTORY.md

@@ -211,6 +211,12 @@ per canvas row (its README has the rules). So:
   same canvas, git stops on that one line: combine the two, keep one row.
 - Run `node scripts/build-route-map.mjs --check` before pushing. It fails on a
   canvas with two rows and names both files.
+- The map's two projections, `PROFILE_ROUTING.md` and `PAGE_INVENTORY.md`, are
+  not committed (D4103). Never commit them and never regenerate them in a task
+  PR: CI builds them, keeps them as the `routing-docs` artifact of the
+  `routing docs (artifact)` job, and `node scripts/build-profile-routing.mjs --check` fails a
+  routing inconsistency or a committed copy. `npm run docs:routing` writes them
+  locally if you want to read them.
 
 ### The repository is public
 
@@ -233,7 +239,16 @@ documents it indexes.
   there first. `backend/` (FastAPI) is never deployed. Never add a method to
   `frontend/src/lib/api.js`, or to a module under `frontend/src/lib/api/`,
   without a mounted Worker route. A new API domain goes in its own module
-  there, re-exported by one line in `api.js`'s alphabetical block (D527).
+  there (D527), and `node scripts/build-api-index.mjs` lists it in the
+  generated `frontend/src/lib/apiModules.generated.js`; `api.js` is not edited.
+- **New modules register themselves (#4105).** A new Worker router is one file,
+  `cloudflare-worker/src/routes/<name>.ts`, exporting `mount` (`{ path, router,
+  before? }`), plus `node scripts/build-route-registry.mjs`, which rewrites the
+  generated `routes/_registry.ts`; never add an `app.route(...)` to
+  `index.ts`. A new route area is one file, `frontend/src/routes/<area>.jsx`,
+  which `App.jsx` collects by itself. Commit the generated files; `npm run
+  test:drift` fails while either is stale. If two branches both add a line to
+  a generated file, rerun its script instead of resolving the conflict by hand.
 - **Migrations.** A migration is a new file under
   `cloudflare-worker/sql/migrations/`, named `YYYYMMDDHHMM_<slug>.sql` by the
   UTC minute you write it (D4106); an issue written before D4106 may still give
