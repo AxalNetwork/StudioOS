@@ -29,6 +29,7 @@ import { deckCheckApi } from '../src/lib/api/deckCheck.js';
 import { deckElementModelsApi } from '../src/lib/api/deckElementModels.js';
 import { deckFiguresApi } from '../src/lib/api/deckFigures.js';
 import { deckCommentsApi } from '../src/lib/api/deckComments.js';
+import { deckCoeditApi } from '../src/lib/api/deckCoedit.js';
 import { deckVentureElementsApi } from '../src/lib/api/deckVentureElements.js';
 
 test('every adapter method answers unavailable, with the reason and the issue that brings its route', async () => {
@@ -38,7 +39,7 @@ test('every adapter method answers unavailable, with the reason and the issue th
   // D1499 (#3749) swapped grid, D1522 (#3774) stagePlan, D1553 (#3800) remix, D1503 (#3754) elementModels; D1565 (#3812)
   // the investor links; D1538 (#3787) typedTables; D1555 (#3802) consistency rides the check read. A swapped
   // surface's body calls its client through().
-  assert.deepEqual([...adapter.SWAPPED], ['grid', 'saveCard', 'discardDraft', 'draft', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'presets', 'orgLocks', 'comments', 'figures', 'ventureElements'], 'the rows whose routes are on main');
+  assert.deepEqual([...adapter.SWAPPED], ['grid', 'saveCard', 'discardDraft', 'draft', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'presets', 'orgLocks', 'comments', 'figures', 'presence', 'ventureElements'], 'the rows whose routes are on main');
   // D1523 (#3775): figures also reads its mounted route through its client.
   const seam = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
   for (const name of ['investorLinks', 'withdrawInvestorLink']) {
@@ -197,7 +198,7 @@ test('the seam reaches no network, and no client method exists for a route that 
   const src = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
   assert.doesNotMatch(src, /request\(|fetch\(|XMLHttpRequest/);
   // A swapped row's client is the only `lib/api` the seam may import (D1499's `deckGrid.js`, D1522's `deckStage.js`, D1553's `deckRemix.js`, D1503's `deckElementModels.js`, D1565's `deckInvestorLinks.js`, D1538's `deckTypedValues.js`, D1555's `deckCheck.js`, D1549's `deckModelPresets.js`).
-  assert.deepEqual([...src.matchAll(/from '([^']*lib\/api[^']*)'/g)].map((x) => x[1]).sort(), ['../../../lib/api/deckCheck.js', '../../../lib/api/deckComments.js', '../../../lib/api/deckDraft.js', '../../../lib/api/deckElementModels.js', '../../../lib/api/deckFigures.js', '../../../lib/api/deckGrid.js', '../../../lib/api/deckInvestorLinks.js', '../../../lib/api/deckModelPresets.js', '../../../lib/api/deckRemix.js', '../../../lib/api/deckStage.js', '../../../lib/api/deckTypedValues.js', '../../../lib/api/deckVentureElements.js']);
+  assert.deepEqual([...src.matchAll(/from '([^']*lib\/api[^']*)'/g)].map((x) => x[1]).sort(), ['../../../lib/api/deckCheck.js', '../../../lib/api/deckCoedit.js', '../../../lib/api/deckComments.js', '../../../lib/api/deckDraft.js', '../../../lib/api/deckElementModels.js', '../../../lib/api/deckFigures.js', '../../../lib/api/deckGrid.js', '../../../lib/api/deckInvestorLinks.js', '../../../lib/api/deckModelPresets.js', '../../../lib/api/deckRemix.js', '../../../lib/api/deckStage.js', '../../../lib/api/deckTypedValues.js', '../../../lib/api/deckVentureElements.js']);
   // D1549 (#3796): the presets route is on main, with its client; orgLocks reads the same reply.
   assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_model_presets.ts')), /deckModelPresets\.get\(['"]\/:id\{\[0-9\]\+\}\/model-presets['"]/);
   assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckModelPresets\)/);
@@ -366,4 +367,19 @@ test('D1543 (#3781): ventureElements is swapped — one element through deckVent
   assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckVentureElements\)/, 'the route is mounted');
   assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_venture_elements.ts')), /\.get\(['"]\/:id\{\[0-9\]\+\}\/venture-elements\/:element['"]/);
   assert.match(read('frontend/src/lib/apiModules.generated.js'), /^export \* from '\.\/api\/deckVentureElements\.js';$/m, 'one line in the generated D527 block (#4105)');
+});
+
+test('D1577 (#3824): presence is swapped — it answers through deckCoeditApi.presence; 503 presence_off and a 404 are still off', async () => {
+  const real = deckCoeditApi.presence;
+  try {
+    const asked = [];
+    const reply = { deck_id: 7, editors: [{ user_id: 2, name: 'Synthetic member', colour: '#2563eb', card: 'c1', area: 'b1', cursor: null }] };
+    deckCoeditApi.presence = async (id) => { asked.push(id); return reply; };
+    assert.deepEqual(await adapter.presence(7), { available: true, value: reply });
+    assert.deepEqual(asked, [7]);
+    deckCoeditApi.presence = async () => { throw Object.assign(new Error('Seeing who else is editing is not switched on yet.'), { status: 503, code: 'presence_off' }); };
+    assert.deepEqual(await adapter.presence(7), { available: false, reason: 'Seeing who else is editing is not switched on yet.', issue: 3824 }, 'a Worker without the binding');
+    deckCoeditApi.presence = async () => { throw Object.assign(new Error('nope'), { status: 404 }); };
+    assert.deepEqual(await adapter.presence(7), { available: false, reason: NOT_ON, issue: 3824 });
+  } finally { deckCoeditApi.presence = real; }
 });

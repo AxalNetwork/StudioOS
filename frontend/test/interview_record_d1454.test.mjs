@@ -80,7 +80,7 @@ test('IV-D1: the record header puts "‹ <Module>" above the eyebrow, no tab say
 test('IV-D1: the lone Email row is gone; Email and Ask ride in the record header\'s provider', () => {
   const route = read('src/pages/cycles/CycleRoute.jsx');
   assert.doesNotMatch(route, /<div className="flex justify-end">\s*<EmailAction/);
-  assert.match(route, /<RecordHeaderProvider[\s\S]*?ask=\{<PageAsk /);
+  assert.match(route, /<RecordHeaderProvider[\s\S]*?ask=\{<HeaderAsk /);
   assert.match(route, /slots=\{\{ pills: pillsSlot, actions: actionsSlot \}\}/);
 });
 

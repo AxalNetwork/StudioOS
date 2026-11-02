@@ -7,6 +7,7 @@ import { reportError } from '../../../lib/log';
 import useAssistMode from '../../../hooks/useAssistMode';
 import Sheet from '../../../ui/Sheet.jsx';
 import { AskButtonView } from '../../../ui/AskButton.jsx';
+import { useHeaderAskClaim } from '../../../ui/HeaderAsk.jsx';
 import { EDIT_PATH, asList, currentVersion, ventureQuery } from './pitchStudioModel';
 import { NEW_PATH, refusalOf } from './newDeckModel';
 import { ADD_TOKENS_PATH } from '../../../lib/aiTokens';
@@ -117,6 +118,9 @@ async function readEdits(source, deckId) {
 
 export default function DeckAsk({ projectId, versions, readOnly = false, onPlace = null, onChanged, editsKey = 0, source = SOURCE }) {
   const [aiOn] = useAssistMode('raise');
+  // D1443 part 5 (#3992): the deck's Ask is this page's one Ask, so the shared
+  // header and the rail's fallback draw none beside it.
+  useHeaderAskClaim();
   const [own, setOwn] = useState({ status: 'loading', data: null });
   const [edits, setEdits] = useState({ status: 'loading', items: [], derived: [] });
   const [tick, setTick] = useState(0);

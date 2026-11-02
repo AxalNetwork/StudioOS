@@ -5,6 +5,7 @@ import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { Card, Unrecorded } from '../../ui';
 import { ROLES, rowsFor } from '../../lib/trustObligations';
+import HeaderAsk from '../../ui/HeaderAsk.jsx';
 
 /**
  * D633 (#1391, Q3) — HQ · Security → trust obligations by role, the Ops
@@ -69,7 +70,8 @@ export default function TrustObligationsPage({ read = api.trustMatrix }) {
   useEffect(() => { ROLES.forEach((role) => load(role.id)); }, [load]);
   return (
     <div className="space-y-4" data-testid="trust-obligations-page">
-      <header>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
         <Link to="/admin/security" className="inline-flex items-center gap-1 text-[12px] font-semibold text-axal-muted hover:underline"><ArrowLeft size={12} aria-hidden="true" /> Security</Link>
         <div className="mt-1 flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint"><ShieldCheck size={13} aria-hidden="true" /> HQ · Security</div>
         <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-axal-ink dark:text-white">Trust obligations by role</h1>
@@ -77,6 +79,8 @@ export default function TrustObligationsPage({ read = api.trustMatrix }) {
           What each role must sign or prove, whether it is required, and how long it stays valid before renewal.
           Read-only. These are the defaults a new account starts with; one member&apos;s list can differ from them.
         </p>
+        </div>
+        <HeaderAsk />
       </header>
       <div className="grid gap-4 md:grid-cols-2">
         {ROLES.map((role) => <RoleCard key={role.id} role={role} read={reads[role.id]} onRetry={() => load(role.id)} />)}

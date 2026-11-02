@@ -12,6 +12,7 @@ import {
   tabCount, tabFromSearch, taskReward,
 } from '../../lib/eadwynTickets';
 import CounselQueue from './CounselQueue';
+import HeaderAsk from '../../ui/HeaderAsk.jsx';
 
 /**
  * D606 (#1107) — HQ · Review queue, the Eadwyn Tickets canvas's T1 and T1b
@@ -374,7 +375,8 @@ export default function ReviewQueuePage() {
       data-testid="review-queue-page"
     >
       <div className="min-w-0">
-        <header>
+        <header className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
           <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
             <Inbox size={13} aria-hidden="true" /> HQ · Support
           </div>
@@ -386,6 +388,8 @@ export default function ReviewQueuePage() {
             {' · '}
             <Link to="/admin/credit-rules" className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">Credit rules</Link>
           </p>
+          </div>
+          <HeaderAsk />
         </header>
 
         <div role="tablist" aria-label="Review queue" className="mt-4 flex gap-1 border-b border-axal-hairline dark:border-gray-800">
