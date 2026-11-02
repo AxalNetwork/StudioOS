@@ -65,6 +65,25 @@ export async function canManage(env: Env, s: Scope, user: User): Promise<boolean
   return isProjectManager(user, s);
 }
 
+/**
+ * D1614 W8 (#3994): true when the user holds a seat on this scope's Team — a
+ * project's accepted `project_members` or its founder-owner, a company's
+ * `user_company_links`. Not the read gate: an admin reads from HQ without a seat.
+ */
+export async function onTeam(env: Env, s: Scope, userId: number): Promise<boolean> {
+  if (s.kind === 'company') {
+    const r = await env.DB.prepare('SELECT 1 AS ok FROM user_company_links WHERE company_id = ? AND user_id = ?').bind(s.id, userId).first<{ ok: number }>();
+    return !!r;
+  }
+  const r = await env.DB.prepare(
+    `SELECT 1 AS ok FROM project_members WHERE project_id = ? AND user_id = ? AND status = 'accepted'
+     UNION ALL
+     SELECT 1 FROM users u WHERE u.id = ? AND u.role = 'founder' AND u.founder_id IS NOT NULL AND u.founder_id = ?
+     LIMIT 1`,
+  ).bind(s.id, userId, userId, s.founder_id ?? -1).first<{ ok: number }>();
+  return !!r;
+}
+
 export const scopeCols = (s: Scope): [number | null, number | null] => (s.kind === 'company' ? [s.id, null] : [null, s.id]);
 
 // ── Rule books ──────────────────────────────────────────────────────────────

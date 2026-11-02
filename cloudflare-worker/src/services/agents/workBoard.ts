@@ -21,6 +21,8 @@ export type WorkTask = TaskRow & {
   work_version: number; work_change_uid: string | null;
   // D1614 W7 (#3993, migration 763).
   milestone_id: number | null; drafted_by_agent_id: number | null; review_state: 'approved' | 'changes_requested' | null;
+  // D1614 W8 (#3994): the assignee's seat on the Team ended; cleared by any reassignment.
+  needs_reassignment?: number;
 };
 export type WorkActor = { user: User; agentId?: never } | { agentId: number; user?: never };
 type Blocker = { uid: string; task_number: number | null; title: string };
@@ -179,12 +181,14 @@ export async function updateWorkTask(env: Env, t: WorkTask, b: Record<string, an
     throw new WorkRefusal(403, 'agent_cannot_close', 'A named person reviews and closes an agent’s work.');
   }
   const n = { ...t, ...w }, change = newUid();
+  const reassigned = 'assignee' in b;
   const starting = n.board_column === 'ready' || n.board_column === 'in_progress' || ('assignee' in b && n.assignee_kind === 'agent');
   const moved = columnOf(t) !== n.board_column;
   const statements = [env.DB.prepare(
     `UPDATE scope_tasks SET title = ?, detail = ?, body = ?, type = ?, parent_task_id = ?, goal_id = ?, module = ?, option = ?, kind = ?,
       assignee_kind = ?, assignee_user_id = ?, assignee_agent_id = ?, status = ?, blocked_reason = ?, priority = ?, due_at = ?,
       source_kind = ?, source_ref = ?, board_column = ?, estimate_points = ?, position = ?, labels_json = ?, close_reason = ?, duplicate_of = ?,
+      needs_reassignment = CASE WHEN ? = 1 THEN 0 ELSE needs_reassignment END,
       work_version = work_version + 1, work_change_uid = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND work_version = ? AND (? = 0 OR NOT EXISTS (SELECT 1 FROM scope_task_deps d JOIN scope_tasks b ON b.id = d.depends_on_task_id WHERE d.task_id = scope_tasks.id AND NOT (b.status = 'done' AND (b.close_reason = 'completed' OR b.close_reason IS NULL))))
         AND NOT EXISTS (WITH parents(id) AS (SELECT ? WHERE ? IS NOT NULL UNION
@@ -192,7 +196,7 @@ export async function updateWorkTask(env: Env, t: WorkTask, b: Record<string, an
           SELECT 1 FROM parents WHERE id = scope_tasks.id OR (SELECT COUNT(*) FROM parents) > 200)`,
   ).bind(n.title,n.detail,n.body,n.type,n.parent_task_id,n.goal_id,n.module,n.option,n.kind,n.assignee_kind,n.assignee_user_id,n.assignee_agent_id,
     n.status,n.blocked_reason,n.priority,n.due_at,n.source_kind,n.source_ref,n.board_column,n.estimate_points,n.position,n.labels_json,n.close_reason,n.duplicate_of,
-    change,t.id,t.work_version,starting ? 1 : 0,n.parent_task_id,n.parent_task_id),
+    reassigned ? 1 : 0,change,t.id,t.work_version,starting ? 1 : 0,n.parent_task_id,n.parent_task_id),
   eventStmt(env,t.id,actor,moved ? 'moved' : 'updated',{ change,from:columnOf(t),to:n.board_column,from_status:t.status,to_status:n.status,close_reason:n.close_reason,fields:Object.keys(b) },change)];
   // D1614 W7 (#3993): labels named here become the project's labels and links, in this batch.
   if ('labels' in b || 'labels_json' in b) statements.push(...labelSyncStatements(env,t.uid,t.project_id!,JSON.parse(n.labels_json),change));
@@ -228,12 +232,26 @@ export async function updateWorkTask(env: Env, t: WorkTask, b: Record<string, an
         link:`/projects/${t.project_id}/work?item=${r.uid}`,category:'proactive_nudges',channels:['in_app'],payload:{ task_uid:r.uid,agent_uid:r.agent_uid } });
     }
   }
+  if (n.assignee_kind === 'person' && n.assignee_user_id && n.assignee_user_id !== t.assignee_user_id) {
+    await notifyAssigned(env,publish,n.assignee_user_id,actor.user?.id ?? null,{ uid:t.uid,title:n.title,project_id:t.project_id });
+  }
   return (await taskByUid(env,t.uid)) as WorkTask;
+}
+
+/** D1614 W8 (#3994): a person given a task hears it in their own inbox; never for assigning yourself. */
+async function notifyAssigned(env: Env, publish: (env: Env, args: NotifyArgs) => Promise<unknown>, userId: number, byUserId: number | null,
+  t: { uid: string; title: string; project_id: number | null }) {
+  if (byUserId === userId) return;
+  try {
+    await publish(env,{ userId,type:'task_assigned',title:'A task was assigned to you',body:t.title,
+      link:`/projects/${t.project_id}/work?item=${t.uid}`,category:'proactive_nudges',channels:['in_app'],payload:{ task_uid:t.uid } });
+  } catch { /* the assignment stands; a notice that fails to send is not a failed assignment */ }
 }
 
 /** D1614 W7 (#3993): a task created by accepting an agent's draft names that agent. */
 export type CreateOptions = { draftedByAgentId?: number | null };
-export async function createWorkTask(env: Env, scope: Project, b: Record<string, any>, user: User, opts: CreateOptions = {}): Promise<WorkTask> {
+export async function createWorkTask(env: Env, scope: Project, b: Record<string, any>, user: User, opts: CreateOptions = {},
+  publish: (env: Env, args: NotifyArgs) => Promise<unknown> = notify): Promise<WorkTask> {
   if (!(await canRead(env,scope,user)) || !(await canManage(env,scope,user))) throw new WorkRefusal(403,'not_manager','Only a project editor can create tasks.');
   const w = await boardWrite(env,scope,b,null), uid = newUid(), change = newUid();
   await env.DB.batch([env.DB.prepare(
@@ -249,6 +267,7 @@ export async function createWorkTask(env: Env, scope: Project, b: Record<string,
   env.DB.prepare(`INSERT INTO scope_task_events (task_id,actor_user_id,kind,detail_json) SELECT id,?,'created',? FROM scope_tasks WHERE uid = ?`)
     .bind(user.id,JSON.stringify({ change,column:w.board_column,...(opts.draftedByAgentId?{draft:true}:{}) }),uid),
   ...('labels' in b || 'labels_json' in b ? labelSyncStatements(env,uid,scope.id,JSON.parse(w.labels_json??'[]'),change) : [])]);
+  if (w.assignee_kind === 'person' && w.assignee_user_id) await notifyAssigned(env,publish,w.assignee_user_id,user.id,{ uid,title:w.title!,project_id:scope.id });
   return (await taskByUid(env,uid)) as WorkTask;
 }
 
@@ -370,6 +389,7 @@ export async function workCards(env: Env, tasks: WorkTask[], readRuns: WorkRunRe
       run:run?{uid:run.uid,status:({done:'completed',waiting_decision:'waiting',admitted:'running'} as Record<string,string>)[run.status]??run.status,
         recorded_status:run.status,charged_microusd:cost.available?cost.value_microusd:null,cost,started_at:run.started_at,ended_at:run.ended_at}:null,
       cost:run&&!run.missing_cost&&run.total_cost!=null?{available:true,value_microusd:run.total_cost}:{available:false},created_at:t.created_at,updated_at:t.updated_at,version:t.work_version,
+      needs_reassignment:Number(t.needs_reassignment??0)===1,
     });
   }
   return cards;

@@ -76,6 +76,7 @@ import {
   TASK_STATUSES, depsOf, insertTask, isReady, setDeps, statusWrite, taskByUid, taskCosts, taskWrite, tasksOf, updateTask, type TaskRow,
 } from '../services/agents/tasks';
 import { workBoardRoutes } from './work_board';
+import { assignable, myTasks } from '../services/agents/teamRoster';
 import { agentQuote } from '../services/agents/agentRun';
 import { agentByUid, type AgentRow } from '../services/agents/teams';
 import { agentRuntime, autonomy, engineMode, haltedAll, type AgentRuntime, type ScopeRef } from '../agents/runtime';
@@ -101,6 +102,32 @@ let deps: EngineRouteDeps = DEFAULT_DEPS;
 export function __setEngineRouteDeps(d: Partial<EngineRouteDeps> | null) { deps = d ? { ...DEFAULT_DEPS, ...d } : DEFAULT_DEPS; }
 
 const router = new Hono<{ Bindings: Env }>();
+// D1614 W8 (#3994): who may be given a project task (one `team` list, people and agents),
+// and every task given to you. Declared here, ahead of the factory mounts, so `/me/tasks`
+// never reaches a `/:scope/:id` handler and scripts/check-api-drift.mjs resolves both.
+router.get('/project/:id/assignable', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return c.json({ error: 'agent_engine_off' }, 404);
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, 'project', c.req.param('id') ?? '');
+    if (!s || s.kind !== 'project') return refuse(c, 404, { code: 'not_found', message: 'There is no project here.' });
+    if (!(await canRead(c.env, s, user))) return refuse(c, 403, { code: 'not_member', message: 'Only the project team can read who works on it.' });
+    return c.json(await assignable(c.env, s));
+  } catch (e) {
+    if (e instanceof WorkRefusal) return refuse(c, e.status, { code: e.code, message: e.sentence });
+    return mapError(c, e);
+  }
+});
+router.get('/me/tasks', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return c.json({ error: 'agent_engine_off' }, 404);
+    const user = await requireAuth(c);
+    return c.json(await myTasks(c.env, user, { state: c.req.query('state') ?? null, project: c.req.query('project') ?? null, due: c.req.query('due') ?? null }));
+  } catch (e) {
+    if (e instanceof WorkRefusal) return refuse(c, e.status, { code: e.code, message: e.sentence });
+    return mapError(c, e);
+  }
+});
 // D1614 W1 (#3969): a project's Work board, its moves and its task fields, ahead of E1's
 // handlers. Project scope only; a company task falls through to E1 unchanged.
 router.route('/', workBoardRoutes(agentEngineEnabled));

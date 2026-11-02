@@ -1,0 +1,9 @@
+### Work W8: a task goes to the Team, and My tasks (D1614 §9, #3994)
+
+- **Worker:** declared on `agent_engine.ts`'s router (the engine's flag), served by `services/agents/teamRoster.ts`.
+  - `GET /api/teams/project/:id/assignable`: one `team` list, this Team only. People first: the owner, then seats by age, each `{ kind: 'person', uid, name, team_role, licence, open_tasks, capacity }` (`capacity` is null, "Not recorded", until W4 #3972). Then the project's live and paused agents, each `{ kind: 'agent', uid, name, role, status, open_tasks }`. No email. 403 `not_member` without the project's read; a company path has no route.
+  - `GET /api/teams/me/tasks?state=open|closed|all&project=&due=overdue|today|week|none`: the caller's project tasks, `{ projects: [{ project, tasks }], compliance: [], has_more }`. A task carries `uid`, `task_number`, `title`, `type`, `column`, `state`, `due_at`, `blocked`, `needs_reassignment` and its board link. Only projects the caller still reads or sits on. `compliance` stays empty until #3976. 400 `invalid_filter`.
+- **The gate, on every assignment** (E1's `taskWrite`, so W1's create and PATCH and E1's company tasks alike): a person must hold a seat on the Team, else 422 `assignee_not_member`, or 422 `read_only_admin` for an admin without one; an agent of another project, of the company or removed is 422 `assignee_not_member`; this Team's paused agent stays 409 `agent_not_live`.
+- **Seat end:** `DELETE /api/projects/:id/members/:userId` flags the member's open tasks `needs_reassignment` with an `updated` event, in the removal's batch. Reassigning clears it; nothing is reassigned automatically.
+- **Notices:** a person given a task gets `task_assigned` in their own inbox (not for assigning yourself). Mentions, requested changes and unblocks already notify (W7, W1).
+- **Client:** none yet. The picker groups and My tasks in each workspace wait for the WK13 and extended WK10 boards (#3968).

@@ -22,12 +22,16 @@ import projects from '../src/routes/projects.ts';
 import { resolveActiveCompany } from '../src/middleware/activeCompany.ts';
 import { membershipEvent, MEMBERSHIP_EVENT_KINDS } from '../src/services/companyMembershipEvents.ts';
 import { tableFromBaseline } from './_baseline.mjs';
+import { AI_LOG_SCHEMA } from './_ai_budget_fixture.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const M597 = readFileSync(new URL('../sql/migrations/597_company_archive_and_events.sql', import.meta.url), 'utf8');
 const M685 = readFileSync(new URL('../sql/migrations/685_company_legal_record_and_slugs.sql', import.meta.url), 'utf8');
+// D1614 W8 (#3994): a seat's removal flags its Work, so the venture's task store is here too.
+const WORK = ['506_ai_rail_proposals.sql', '712_team_agents.sql', '727_scope_goals_and_tasks.sql', '762_scope_task_work_board.sql', '763_task_comments_labels_milestones.sql', '202611022015_scope_task_needs_reassignment.sql']
+  .map((f) => readFileSync(new URL(`../sql/migrations/${f}`, import.meta.url), 'utf8'));
 
 // People: Ada is the primary admin of Northwind (company 1) and owns the venture; Ben is a member of
 // Northwind and a co-founder of the venture with a founder account; Cy is a co-founder with no founder
@@ -42,6 +46,8 @@ function fixture() {
   for (const t of ['users', 'founders', 'projects', 'company_profiles', 'user_company_links', 'activity_logs', 'incorporations']) db.exec(tableFromBaseline(BASELINE, t));
   db.exec(M597);
   db.exec(M685); // D1415: projects.slug, which a move checks
+  db.exec(AI_LOG_SCHEMA);
+  for (const m of WORK) db.exec(m);
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');
   u.run(ADA, 'founder', 'Ada Made-up', 'ada@example.test', 101);
   u.run(BEN, 'founder', 'Ben Made-up', 'ben@example.test', 102);
@@ -251,8 +257,12 @@ test('a venture\'s seat changes write their events, and the event writer refuses
   const db = fixture(); const env = envOf(db); await seats(db, env);
   const add = await call(db, env, ADA, 'POST', `/api/projects/${VENTURE}/members`, { user_id: DEE, role: 'advisor' });
   assert.equal(add.status, 200, JSON.stringify(add.body));
+  // D1614 W8 (#3994): Dee's open task on the venture is flagged when the seat ends; nothing is reassigned.
+  db.prepare("INSERT INTO scope_tasks (uid, scope_kind, project_id, title, assignee_kind, assignee_user_id, status, board_column, task_number) VALUES ('t-dee', 'project', ?, 'Dee''s task', 'person', ?, 'open', 'ready', 1)").run(VENTURE, DEE);
   assert.equal((await call(db, env, ADA, 'DELETE', `/api/projects/${VENTURE}/members/${DEE}`)).status, 200);
+  assert.deepEqual({ ...(db.prepare("SELECT needs_reassignment, assignee_user_id FROM scope_tasks WHERE uid = 't-dee'").get() as any) }, { needs_reassignment: 1, assignee_user_id: DEE });
   assert.equal((await call(db, env, ADA, 'DELETE', `/api/projects/${VENTURE}/members/${DEE}`)).status, 200, 'removing again changes nothing');
+  assert.equal((db.prepare("SELECT COUNT(*) AS n FROM scope_task_events WHERE detail_json LIKE '%seat_ended%'").get() as any).n, 1, 'one event, not one per removal');
   assert.deepEqual(events(db).map((e) => [e.kind, e.project_id, e.target_user_id]), [['seat_add', VENTURE, DEE], ['seat_remove', VENTURE, DEE]]);
 
   assert.deepEqual([...MEMBERSHIP_EVENT_KINDS].sort(), ['archive', 'join', 'leave', 'project_move', 'project_transfer', 'remove', 'rename', 'restore', 'role_change', 'seat_add', 'seat_remove', 'transfer', 'currency_change'].sort());
