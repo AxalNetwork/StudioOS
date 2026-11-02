@@ -13,17 +13,17 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 import routes from '../src/routes/venture_scores.ts';
 import { mapError } from '../src/routes/_t13t14t15_helpers.ts';
 import { scoreVenture } from '../src/services/ventureScoring/store.ts';
 import { ACCESS_STATEMENTS, REVIEW_CAP } from '../src/services/ventureScoring/access.ts';
 import { JOB_STATEMENTS, FAIRNESS_MIN_CELL, aggregate, nightlyRecompute, previousQuarter, runFairness, syncRecompute } from '../src/services/ventureScoring/jobs.ts';
 import { NEVER_FILL_RULES } from '../src/services/fills/neverFill.ts';
+import { loadSchema } from './_schema_once.mjs';
 
 const realFetch = globalThis.fetch;
 globalThis.fetch = async () => { throw new Error('Network disabled in D1256 fixtures'); };
@@ -35,10 +35,7 @@ const read = (p: string) => readFileSync(new URL(p, import.meta.url), 'utf8');
 
 const ddl = (() => {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  db.exec(read('../sql/schema_baseline.sql'));
-  for (const name of readdirSync(new URL('../sql/migrations/', import.meta.url)).filter((n) => /^\d+_.*\.sql$/.test(n)).sort(compareMigrations)) {
-    if (migrationNumber(name) > BASELINE_CUTOFF) db.exec(read(`../sql/migrations/${name}`));
-  }
+  loadSchema(db);
   const sql = (db.prepare("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END").all() as any[]).map((r) => r.sql).join(';\n');
   db.close();
   return sql;

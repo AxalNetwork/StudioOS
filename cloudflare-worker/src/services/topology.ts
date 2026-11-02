@@ -100,6 +100,8 @@ export const BINDINGS: readonly BindingSpec[] = [
   { name: 'JOB_QUEUE', kind: 'Queue', hq: 'studioos-job-queue', branch: (c) => branchResourceNames(c).queue, shared: false },
   { name: 'AGENT_QUEUE', kind: 'Queue', hq: 'studioos-agent-queue', branch: (c) => branchResourceNames(c).agentQueue, shared: false },
   { name: 'AGENT_SCOPE', kind: 'Durable Object namespace', hq: 'AgentScope', branch: () => 'AgentScope', shared: false },
+  // #3852 (E0): the `sdk` runtime's Agent, an evaluation behind the same seam.
+  { name: 'AGENT_SCOPE_SDK', kind: 'Durable Object namespace', hq: 'ScopeAgent', branch: () => 'ScopeAgent', shared: false },
   // A Workflow is per script like a DO class; its name is the branch's own (`agentTask`).
   { name: 'AGENT_TASK', kind: 'Workflow', hq: 'AgentTaskWorkflow', branch: () => 'AgentTaskWorkflow', shared: false },
   { name: 'PIPELINE_ROOM', kind: 'Durable Object namespace', hq: 'PipelineRoom', branch: () => 'PipelineRoom', shared: false },
