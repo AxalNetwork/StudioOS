@@ -232,7 +232,8 @@ export const cardEditLine = (edit) => `Card ${edit.card + 1} · ${edit.what}`;
  */
 export function waitingCount({ deck, edits }) {
   if (deck?.status !== 'ready' || edits?.status !== 'ready') return null;
-  return (deck.proposal ? 1 : 0) + edits.items.length;
+  // D1583 (#3830): a teaser, one-pager or memo waiting counts like a card edit.
+  return (deck.proposal ? 1 : 0) + edits.items.length + (Array.isArray(edits.derived) ? edits.derived.length : 0);
 }
 
 /**
@@ -306,6 +307,8 @@ export const MORE_MENU = Object.freeze([
     { id: 'sources', label: 'Sources and coverage' },
     { id: 'versions', label: 'Versions…' },
     { id: 'save_named', label: 'Save as a named version…', write: true },
+    // D1583 (#3830): a teaser, a one-pager or a memo from the saved version, each a proposal Ask lists.
+    { id: 'derive', label: 'Teaser, one-pager or memo…', write: true },
     // Kept from v1's editor bar and Notes tab: the thread with the venture's admins (D905).
     { id: 'notes', label: 'Notes from your admins' },
   ] },
@@ -317,6 +320,8 @@ export const MORE_MENU = Object.freeze([
     { id: 'section', label: 'Move to section', adapter: 'media' },
     { id: 'appendix', label: 'Mark as appendix', write: true },
     { id: 'background', label: 'Background image', write: true },
+    // D1570 (#3817, pd33): the card's threads; opened here or from the card's ⋯, never from the header.
+    { id: 'comments', label: 'Comments', adapter: 'comments' },
   ] },
   { id: 'ai', label: 'Whole deck · uses AI', items: [
     { id: 'replace_images', label: 'Replace all images', adapter: 'deckActions', ai: true },

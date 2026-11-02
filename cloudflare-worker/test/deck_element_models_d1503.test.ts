@@ -30,7 +30,7 @@ import { billedMicro } from '../src/services/ai/pricing.ts';
 import { canRun, railOptionsOn, resolveRailOption, rowOffers } from '../src/services/ai/railMatrix.ts';
 import {
   ELEMENTS, ELEMENT_ROUTES, FREE_LINE, LEVELS, ROUTED_ELEMENTS, choicesFor, estimateDeck, expected_ms, gridOptionRows,
-  lockFor, resolveElementModel, sizeFor, type PickRow,
+  lockFor, presetModelFor, resolveElementModel, sizeFor, type PickRow,
 } from '../src/services/decks/elementModels.ts';
 import { OUTPUT_RULES, inputRefusal, outputProblems } from '../src/services/decks/elementOutputRules.ts';
 import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';
@@ -117,7 +117,7 @@ test('every Phase A default is a model main already routes, on the element\'s ow
 
 const row = (scope: PickRow['scope'], scope_id: string, key: string, model: string, locked = 0): PickRow => ({ scope, scope_id, key, model, locked, plan_min: null, set_by: 9 });
 
-test('the 8 levels, in order: HQ lock, area, deck element, deck group, member element, member group, HQ default, row default', () => {
+test('the 9 levels, in order: HQ lock, area, deck element, deck group, deck preset (D1549), member element, member group, HQ default, row default', () => {
   // Mutation checked: resolveElementModel skipping the pick rows (ignoring the pick) → every level but the last fails.
   const wrote = choicesFor('body');
   const seven = [...wrote.suggested, ...wrote.more].map((m) => m.id).slice(0, 7);
@@ -127,15 +127,19 @@ test('the 8 levels, in order: HQ lock, area, deck element, deck group, member el
     row('area', '1/3/a2', 'body', seven[1]),
     row('deck', '1', 'body', seven[2]),
     row('deck', '1', 'group:text', seven[3]),
+    // D1549 (#3796): the deck's preset, stored by name; Best runs body on its job's Best row.
+    row('deck', '1', 'preset', 'best'),
     row('member', '2', 'body', seven[4]),
     row('member', '2', 'group:text', seven[5]),
     row('org', 'hq', 'group:text', seven[6], 0),
   ];
-  assert.deepEqual([...LEVELS], ['org_lock', 'area', 'deck_element', 'deck_group', 'member_element', 'member_group', 'org_default', 'default']);
+  assert.deepEqual([...LEVELS], ['org_lock', 'area', 'deck_element', 'deck_group', 'deck_preset', 'member_element', 'member_group', 'org_default', 'default']);
+  const expected = [...seven.slice(0, 4), presetModelFor('body', 'best'), ...seven.slice(4)];
+  assert.equal(expected[4], MISTRAL, 'body\'s Best is its job\'s best row');
   for (let i = 0; i <= rows.length; i++) {
     const r = resolveElementModel({ element: 'body', rows: rows.slice(i), deck: '1', member: '2', area: { card: 3, area: 'a2' }, planRank: 2, env: {} });
     assert.equal(r.source, LEVELS[i], `with the first ${i} levels gone`);
-    assert.equal(r.model, i < rows.length ? seven[i] : LLAMA);
+    assert.equal(r.model, i < rows.length ? expected[i] : LLAMA);
     assert.equal(r.locked, i === 0);
     assert.equal(r.notice, null);
   }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { cyclesApi } from '../../../lib/api/cycles';
 import { Unreadable } from '../../../ui';
@@ -13,6 +13,9 @@ import CapRelOutreach from './CapRelOutreach';
 import CapRelCommitments from './CapRelCommitments';
 import CapRelActivity from './CapRelActivity';
 import { CapRelOverviewBlocks, MovedNotice } from './CapRelOverview';
+import CapRelSupport from './CapRelSupport';
+import SupportReadsCard from '../SupportReadsCard';
+import { capitalRelationshipsApi } from '../../../lib/api/capitalRelationships.js';
 
 /**
  * D1188 (#2457) — the Capital relationships tool's tab bar and tab pages.
@@ -23,6 +26,8 @@ import { CapRelOverviewBlocks, MovedNotice } from './CapRelOverview';
  * above the module page's own. D1193 (#3127): Match, Outreach, Commitments and
  * Activity each draw their own read (`CapRelMatch.jsx`, `CapRelOutreach.jsx`,
  * `CapRelCommitments.jsx`, `CapRelActivity.jsx`), so no tab waits any more.
+ * D1464 (#4021): an admin meets the per-open reason gate on every tab
+ * (`CapRelSupport.jsx`), and the founder's Activity carries the support reads.
  */
 
 /** The tool's own tabs, a second level under the Raise modules. */
@@ -79,19 +84,32 @@ function Calls({ projectId }) {
   return <div data-testid="caprel-calls"><CallsTab calls={read.data?.parts?.calls} status={read.status} projectId={projectId} onRetry={read.retry} /></div>;
 }
 
-export function CapRelTabPage({ tab, projectId, projectStatus = 'ready', onRetryProject, search = '', cards, action, phone = false }) {
+/** D1464 (#4021, RR09): the founder's Activity carries who read the pipeline with a reason. */
+function ActivityWithReads({ projectId }) {
+  const load = useCallback((page) => capitalRelationshipsApi.supportReads(projectId, page), [projectId]);
+  return (
+    <div className="flex flex-col gap-4">
+      <CapRelActivity projectId={projectId} />
+      <SupportReadsCard record="capital-relationships" load={load} testId="caprel-support-reads" />
+    </div>
+  );
+}
+
+export function CapRelTabPage({ tab, projectId, projectStatus = 'ready', onRetryProject, search = '', cards, action, phone = false, admin = false, venture = null, viewer = 'admin', onSupportRead }) {
   const here = TABS.find((t) => t.id === tab) || (tab === CLOSING.id ? CLOSING : TABS[0]);
   let body;
   // No venture means no read is made: say the venture list failed, never a skeleton.
   if (projectStatus === 'unreadable') body = <Unreadable what="Your ventures" claim="This is not a claim that you have none." onRetry={onRetryProject} />;
   else if (!projectId) body = <div className="h-24 animate-pulse rounded-xl bg-axal-ground dark:bg-gray-800" data-testid="caprel-loading" />;
+  // D1464 (#4021, RR12): staff get one private response per reason, on every tab, never the founder's reads.
+  else if (admin) body = <CapRelSupport key={projectId} projectId={projectId} venture={venture} viewer={viewer} onOpen={onSupportRead} />;
   else if (tab === 'pipeline') body = <CapRelPipeline projectId={projectId} search={search} />;
   else if (tab === 'calls') body = <Calls projectId={projectId} />;
   // D1193 (#3127): Match, Outreach, Commitments and Activity, each from its own read.
   else if (tab === 'commitments') body = <CapRelCommitments projectId={projectId} search={search} />;
   else if (tab === 'match') body = <CapRelMatch projectId={projectId} search={search} />;
   else if (tab === 'outreach') body = <CapRelOutreach projectId={projectId} search={search} />;
-  else if (tab === 'activity') body = <CapRelActivity projectId={projectId} />;
+  else if (tab === 'activity') body = <ActivityWithReads projectId={projectId} />;
   else if (tab === 'closing') body = <FounderClosing projectId={projectId} search={search} />;
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid={`caprel-${tab}-page`}>
