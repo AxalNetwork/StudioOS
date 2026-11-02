@@ -1,24 +1,8 @@
 /**
- * #3983 (D1486 §d, source 5d of #3723): tasks and engagement milestones on
- * the calendar.
- *
- *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/calendar_tasks_d1486d.test.ts
- *
- *   1. workflow_task: assigned to the member, or unassigned in a workflow the
- *      member owns; a second user sees none of the first's.
- *   2. mvp_task: assigned to the member who can read the board, or unassigned
- *      on the member's own venture; an assignee who cannot read the board, and
- *      another founder, see none.
- *   3. contact_task: created by the member on a contact of their own venture,
- *      named by the contact's name and never an email.
- *   4. engagement_milestone: the member's partner firm only, on an engagement
- *      that is not cancelled.
- *   5. Done, cancelled and completed rows are hidden, and a due date that is not
- *      a date is skipped.
- *   6. All day on the due day, the Tasks family and plain-word sources; never in
- *      an .ics file, a feed or a staff scope.
- *
- * In-memory SQLite: the baseline and every post-cutoff migration; synthetic rows.
+ * D1486 §d: regression coverage retained from the earlier implementation.
+ * The owner chose PR #4050's alternate rules on 2026-11-02: assigned tasks,
+ * all follow-ups on a founder's own venture, task-only titles and deadline
+ * grouping. These tests use independent synthetic rows beside the PR's suite.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -95,32 +79,32 @@ const page = async (env: any, user: number, role: string, kind: (typeof KINDS)[n
   return r.events.map((e) => e.title);
 };
 
-test('workflow_task: assigned to the member, or unassigned in a workflow they own; a second user sees none of theirs', async () => {
+test('workflow_task: only assigned rows, including when the member owns the workflow', async () => {
   const { db, env } = fixture();
   try {
-    assert.deepEqual(await page(env, FOUNDER, 'founder', 'workflow_task'), ['Draft the data room', 'Unassigned in my workflow', 'Timed task']);
-    assert.deepEqual(await page(env, SECOND, 'founder', 'workflow_task'), ['For the second member'], 'their own assignment only');
-    assert.deepEqual(await page(env, ADMIN, 'admin', 'workflow_task'), ['Studio task'], 'an admin sees their own workflow, not the venture\'s');
+    assert.deepEqual(await page(env, FOUNDER, 'founder', 'workflow_task'), ['Due · Draft the data room', 'Due · Timed task']);
+    assert.deepEqual(await page(env, SECOND, 'founder', 'workflow_task'), ['Due · For the second member'], 'their own assignment only');
+    assert.deepEqual(await page(env, ADMIN, 'admin', 'workflow_task'), [], 'owning an unassigned workflow does not assign its task');
     assert.deepEqual(await page(env, OTHER_FOUNDER, 'founder', 'workflow_task'), []);
   } finally { db.close(); }
 });
 
-test('mvp_task: assigned to the member who can read the board, or unassigned on their own venture', async () => {
+test('mvp_task: the assignee sees their card; unassigned cards are not assigned to a founder', async () => {
   const { db, env } = fixture();
   try {
-    assert.deepEqual(await page(env, FOUNDER, 'founder', 'mvp_task'), ['Ship the login', 'Unassigned card']);
-    assert.deepEqual(await page(env, SECOND, 'founder', 'mvp_task'), [], 'an assignee who cannot read the board sees none');
-    assert.deepEqual(await page(env, ADMIN, 'admin', 'mvp_task'), ['Card for the admin'], 'an admin reads the board; only their own card');
-    assert.deepEqual(await page(env, OTHER_FOUNDER, 'founder', 'mvp_task'), ['Other venture card'], 'their own venture only');
+    assert.deepEqual(await page(env, FOUNDER, 'founder', 'mvp_task'), ['Due · Ship the login']);
+    assert.deepEqual(await page(env, SECOND, 'founder', 'mvp_task'), ['Due · Card for the second member'], 'their assigned task is visible');
+    assert.deepEqual(await page(env, ADMIN, 'admin', 'mvp_task'), ['Due · Card for the admin'], 'an admin reads the board; only their own card');
+    assert.deepEqual(await page(env, OTHER_FOUNDER, 'founder', 'mvp_task'), [], 'the founder does not inherit an unassigned task');
   } finally { db.close(); }
 });
 
-test('contact_task: created by the member on their own venture\'s contact, by the contact\'s name and never an email', async () => {
+test('contact_task: the founder sees all follow-ups on their venture, with no contact identity in the title', async () => {
   const { db, env } = fixture();
   try {
-    assert.deepEqual(await page(env, FOUNDER, 'founder', 'contact_task'), ['Call back · Fixture customer']);
+    assert.deepEqual(await page(env, FOUNDER, 'founder', 'contact_task'), ['Follow up · Call back', 'Follow up · Second member note']);
     assert.deepEqual(await page(env, SECOND, 'founder', 'contact_task'), [], 'a task on a venture that is not theirs');
-    assert.deepEqual(await page(env, OTHER_FOUNDER, 'founder', 'contact_task'), [], 'another founder sees no task they did not create');
+    assert.deepEqual(await page(env, OTHER_FOUNDER, 'founder', 'contact_task'), ['Follow up · Not my venture'], 'the venture owner sees a follow-up created by another member');
     const { events } = await fetchUserEventsWithSources(env, FOUNDER, 'founder', FROM, TO, ['contact_task'], { withCancelled: true });
     assert.ok(!/@example\.test/.test(JSON.stringify(events)), 'no email reaches the item');
   } finally { db.close(); }
@@ -129,9 +113,11 @@ test('contact_task: created by the member on their own venture\'s contact, by th
 test('engagement_milestone: the member\'s partner firm only, on an engagement that is not cancelled', async () => {
   const { db, env } = fixture();
   try {
-    assert.deepEqual(await page(env, PARTNER, 'partner', 'engagement_milestone'), ['Kickoff report']);
-    assert.deepEqual(await page(env, OTHER_PARTNER, 'partner', 'engagement_milestone'), ['Other firm milestone']);
+    assert.deepEqual(await page(env, PARTNER, 'partner', 'engagement_milestone'), ['Milestone · Kickoff report']);
+    assert.deepEqual(await page(env, OTHER_PARTNER, 'partner', 'engagement_milestone'), ['Milestone · Other firm milestone']);
     assert.deepEqual(await page(env, FOUNDER, 'founder', 'engagement_milestone'), [], 'the client founder reads no firm\'s milestones');
+    db.exec('UPDATE users SET partner_id = 7 WHERE id = 1');
+    assert.deepEqual(await page(env, FOUNDER, 'founder', 'engagement_milestone'), [], 'a partner id without a partner/admin role grants no milestone access');
   } finally { db.close(); }
 });
 
@@ -139,30 +125,31 @@ test('done, cancelled, archived and completed rows are hidden, and a due date th
   const { db, env } = fixture();
   try {
     const all = (await fetchUserEventsWithSources(env, FOUNDER, 'founder', FROM, TO, [...KINDS], { withCancelled: true })).events.map((e) => e.title);
-    for (const t of ['Already done', 'Cancelled task', 'Shipped card', 'Archived card', 'Done call', 'Not a date']) assert.ok(!all.includes(t), t);
+    for (const t of ['Already done', 'Cancelled task', 'Shipped card', 'Archived card', 'Done call', 'Not a date']) assert.ok(!all.some(title => title === t || title.endsWith(' · ' + t)), t);
     const firm = (await fetchUserEventsWithSources(env, PARTNER, 'partner', FROM, TO, [...KINDS], { withCancelled: true })).events.map((e) => e.title);
-    for (const t of ['Completed milestone', 'Cancelled engagement milestone']) assert.ok(!firm.includes(t), t);
+    for (const t of ['Completed milestone', 'Cancelled engagement milestone']) assert.ok(!firm.some(title => title === t || title.endsWith(' · ' + t)), t);
   } finally { db.close(); }
 });
 
-test('all day on the due day, in the Tasks family, with plain-word sources and their own pages', async () => {
+test('all day on the due day, grouped under Deadlines, with task source labels and chosen links', async () => {
   const { db, env } = fixture();
   try {
     const { events } = await fetchUserEventsWithSources(env, FOUNDER, 'founder', FROM, TO, [...KINDS], { withCancelled: true });
     const items = await describeItems(env, { id: FOUNDER, role: 'founder' }, events);
     const by = (title: string) => items.find((i) => i.title === title)!;
-    const timed = by('Timed task');
+    const timed = by('Due · Timed task');
     assert.deepEqual([timed.all_day, timed.start_at, timed.end_at], [true, '2026-11-10', '2026-11-11'], 'a time on the due date is still its day');
     for (const i of items) assert.equal(i.all_day, true, i.title);
-    assert.deepEqual(by('Draft the data room').source, { family: 'tasks', module: 'Dashboard › My tasks', label: 'Task', account: null });
-    assert.deepEqual(by('Ship the login').source, { family: 'tasks', module: 'Build › Board', label: 'Board card', account: null });
-    assert.deepEqual(by('Call back · Fixture customer').source, { family: 'tasks', module: 'Network › Contacts', label: 'Contact task', account: null });
-    assert.deepEqual([by('Draft the data room').href, by('Ship the login').href, by('Call back · Fixture customer').href], ['/dashboard', '/build/board', '/contacts']);
-    assert.ok(items.every((i) => i.family === 'tasks'));
+    assert.deepEqual(by('Due · Draft the data room').source, { family: 'tasks', module: 'Workflows › Tasks', label: 'Workflow task', account: null });
+    assert.deepEqual(by('Due · Ship the login').source, { family: 'tasks', module: 'Build › Board', label: 'Build task', account: null });
+    assert.deepEqual(by('Follow up · Call back').source, { family: 'tasks', module: 'Contacts › Follow-ups', label: 'Contact follow-up', account: null });
+    assert.deepEqual([by('Due · Draft the data room').href, by('Due · Ship the login').href, by('Follow up · Call back').href], [null, '/build/board', '/contacts']);
+    assert.ok(items.every((i) => i.family === 'deadlines'));
     const firm = await describeItems(env, { id: PARTNER, role: 'partner' },
       (await fetchUserEventsWithSources(env, PARTNER, 'partner', FROM, TO, ['engagement_milestone'], { withCancelled: true })).events);
-    assert.deepEqual(firm[0].source, { family: 'tasks', module: 'Operations › Engagements', label: 'Milestone', account: null });
-    assert.equal(firm[0].href, '/partner/operations/engagements');
+    assert.deepEqual(firm[0].source, { family: 'tasks', module: 'Engagements › Milestones', label: 'Engagement milestone', account: null });
+    assert.equal(firm[0].href, '/delivery/health');
+    assert.equal(firm[0].family, 'deadlines');
     assert.deepEqual([firm[0].start_at, firm[0].end_at], ['2026-11-23', '2026-11-24']);
   } finally { db.close(); }
 });

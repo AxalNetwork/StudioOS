@@ -36,7 +36,8 @@ export const CONTRACTS = Object.freeze({
 
   // D1570 (#3817): the venture's comment threads, the people who can be mentioned, and the open count.
   comments: { issue: 3817, route: 'GET /api/decks/:id/comments', schema: 'deckComments.schema.json' },
-
+  // D1523 (#3775): every figure on the version and where it comes from.
+  figures: { issue: 3775, route: 'GET /api/decks/:id/figures', schema: 'deckFigures.schema.json' },
 });
 
 export type ContractMethod = keyof typeof CONTRACTS;

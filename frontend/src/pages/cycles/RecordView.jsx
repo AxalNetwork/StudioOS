@@ -89,13 +89,13 @@ function RecordAction({ action, quiet = false, onLink, onForm, onWrite, onClient
 
 export function RecordActions({ actions = [], ...handlers }) {
   const phone = useRecordPhone();
-  const { emailTo } = useRecordHeader();
+  const { emailTo, onEmail } = useRecordHeader();
   if (phone) {
     const rows = actions.filter((action) => dispatchOf(action)).map((action) => ({
       key: action.key, title: action.tone === 'danger' ? danger(action.label) : action.label, ...runOf(action, handlers),
     }));
     // D1454 (#3710): Email is one of the record's actions on a phone too, never a row of its own above the page.
-    if (emailTo) rows.splice(rows.findIndex((r) => r.key === 'delete') < 0 ? rows.length : rows.findIndex((r) => r.key === 'delete'), 0, { key: 'email', title: 'Email', href: emailTo });
+    if (emailTo) rows.splice(rows.findIndex((r) => r.key === 'delete') < 0 ? rows.length : rows.findIndex((r) => r.key === 'delete'), 0, { key: 'email', title: 'Email', ...(onEmail ? { onClick: onEmail } : { href: emailTo }) });
     return rows.length ? <PhoneGroup testid="record-actions" label="Actions" rows={rows} /> : null;
   }
   return <div className="flex flex-wrap items-center gap-1.5" data-testid="record-actions">

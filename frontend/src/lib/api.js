@@ -88,6 +88,7 @@ export * from './api/deckDerive.js';
 export * from './api/deckDraft.js';
 export * from './api/deckEditor.js';
 export * from './api/deckElementModels.js';
+export * from './api/deckFigures.js';
 export * from './api/deckGrants.js';
 export * from './api/deckGrid.js';
 export * from './api/deckImages.js';
