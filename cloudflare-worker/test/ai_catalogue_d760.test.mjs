@@ -290,15 +290,15 @@ function makeAI() {
   return withGuard({ calls, async run(model) { calls.push(model); return { response: 'ok', usage: { prompt_tokens: 1, completion_tokens: 1 } }; } });
 }
 
-/** Run `tool_call` with its fallback chain swapped for one model, then put it back. */
+/** Run `advisor_turn` (no text job: its route's chain) with its fallback chain swapped for one model, then put it back. */
 async function runWithFallback(model, env) {
-  const saved = ROUTE.tool_call.fallbackChain;
-  ROUTE.tool_call.fallbackChain = [model];
+  const saved = ROUTE.advisor_turn.fallbackChain;
+  ROUTE.advisor_turn.fallbackChain = [model];
   try {
     __resetForTest();
-    return await run(env, { task: 'tool_call', userId: 0, messages: [{ role: 'user', content: 'hi' }] });
+    return await run(env, { task: 'advisor_turn', userId: 0, messages: [{ role: 'user', content: 'hi' }] });
   } finally {
-    ROUTE.tool_call.fallbackChain = saved;
+    ROUTE.advisor_turn.fallbackChain = saved;
   }
 }
 
@@ -330,8 +330,8 @@ test('refusals: model_unpriced, and model_not_offered for a beta model', async (
   const aiStub = makeAI();
   const ok = await runWithFallback('@cf/meta/llama-3.1-8b-instruct-fp8', routerEnv(aiStub));
   assert.equal(ok.ok, true);
-  // D1478 §3937 fix 1: `tool_call` runs glm-4.7-flash first.
-  assert.deepEqual(aiStub.calls, ['@cf/zai-org/glm-4.7-flash']);
+  // #3937 part 3: `tool_call` runs ST3's ladder now, so the sample is `advisor_turn`, which runs the 70B first.
+  assert.deepEqual(aiStub.calls, ['@cf/meta/llama-3.3-70b-instruct-fp8-fast']);
 });
 
 // ── the reads ────────────────────────────────────────────────────────────────
