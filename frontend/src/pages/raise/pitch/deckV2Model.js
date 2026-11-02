@@ -55,8 +55,14 @@ export function areaLabel(grid) {
  */
 const R = (route, option = null) => ({ route, option });
 const A = (adapter, issue) => ({ adapter, issue });
-/** D1543 (#3781): a venture-record element, read from the records with no model (`deckV2Adapter.ventureElements`). */
-const V = Object.freeze({ free: true, ...R('GET /api/decks/:id/venture-elements/:element') });
+/**
+ * D1543 (#3781): a venture-record element, read from the records (`deckV2Adapter.ventureElements`).
+ * Only the logo wall is `free`: team bios run a model (#3781's "Team bios [Model A]"), and the venture
+ * items keep their DK3 job in `modelUseCases.ts`'s DECK_ELEMENT_JOBS (D1503, D1549), which a free
+ * placement may not carry.
+ */
+const V = Object.freeze(R('GET /api/decks/:id/venture-elements/:element'));
+const VF = Object.freeze({ free: true, ...V });
 
 export const ELEMENT_GROUPS = Object.freeze([
   { id: 'text', label: 'Text', items: [
@@ -84,7 +90,7 @@ export const ELEMENT_GROUPS = Object.freeze([
     { id: 'icons', label: 'Icons', ...A('elementsLibrary', 3779) },
     { id: 'shapes', label: 'Shapes and dividers', ...A('elementsLibrary', 3779) },
     { id: 'textures', label: 'Backgrounds and textures', ...A('elementsLibrary', 3779) },
-    { id: 'logo_wall', label: 'Logo wall', ...V },
+    { id: 'logo_wall', label: 'Logo wall', ...VF },
   ] },
   { id: 'data', label: 'Data', items: [
     { id: 'chart', label: 'Chart from records', ...R('POST /api/decks/:id/cards/:card/assist', 'deck:chart') },

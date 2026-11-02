@@ -269,11 +269,12 @@ test('the element picker: 8 groups, each item on main or on the seam, and the th
   const on = new Set(ELEMENTS.filter(elementOnMain).map((e) => e.id));
   for (const id of ['title', 'body', 'bullets', 'chart', 'table', 'timeline', 'metric', 'photo', 'upload', 'video', 'team_grid']) assert.ok(on.has(id), id);
   for (const id of ['flow', 'funnel', 'icons']) assert.ok(!on.has(id), id);
-  // D1543 (#3781): the six venture-record items are keyed to their route, free (no model), and on main.
+  // D1543 (#3781): the six venture-record items are keyed to their route and on main. Only the logo wall is
+  // free: the others carry a model job in DECK_ELEMENT_JOBS (model_use_cases_3934 holds that a free item has none).
   const venture = ['team_bios', 'logo_wall', 'use_of_funds', 'round_terms', 'interview_quote', 'cap_table'];
   for (const id of venture) {
     const e = ELEMENTS.find((x) => x.id === id);
-    assert.deepEqual([e.adapter, e.issue, e.free, e.route, e.option], [undefined, undefined, true, 'GET /api/decks/:id/venture-elements/:element', null], id);
+    assert.deepEqual([e.adapter, e.issue, e.free, e.route, e.option], [undefined, undefined, id === 'logo_wall' ? true : undefined, 'GET /api/decks/:id/venture-elements/:element', null], id);
     assert.ok(on.has(id), id);
   }
   assert.ok(!ELEMENTS.some((e) => e.adapter === 'ventureElements'), 'no item waits on the swapped row');
