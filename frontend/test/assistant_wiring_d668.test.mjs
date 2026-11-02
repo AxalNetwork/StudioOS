@@ -136,5 +136,5 @@ test('/connect/assistant is mounted, signed in, with sign-in and back for a visi
   assert.match(readFileSync('frontend/src/pages/account/builder/BuilderSection.jsx', 'utf8'), /<McpServicesPage view=\{view\}/);
   assert.match(readFileSync('frontend/src/pages/account/builder/McpServicesPage.jsx', 'utf8'), /<CallersCard grants=\{grants\}[^>]*onRevoke=\{revoke\}/);
   assert.match(readFileSync('frontend/src/pages/account/AccountConnectors.jsx', 'utf8'), /<BuilderHandoff \/>/);
-  assert.match(readFileSync('frontend/src/lib/api.js', 'utf8'), /export \* from '\.\/api\/assistants\.js';/);
+  assert.match(readFileSync('frontend/src/lib/apiModules.generated.js', 'utf8'), /export \* from '\.\/api\/assistants\.js';/);
 });

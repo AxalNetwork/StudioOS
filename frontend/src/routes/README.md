@@ -5,9 +5,10 @@ PRs that add a page collide there. Measured on `main` from 2 August to 3
 October 2026 (624 commits): `App.jsx` changed in 109 of them, and together with
 `DECISIONS.md`, `api.js` and the built `docs/` it is where nearly every merge
 conflict happens. Since D528 a **new area's routes live here**, one module per
-area, and `App.jsx` composes each module in one block. The 409 routes already
-in `App.jsx` stay there: 156 tests read that file by path, so moving a route
-is a change to the tests that pin it, not a tidy-up.
+area, and since #4105 `App.jsx` collects every module in this folder by itself:
+a new area is one new file here and **no edit to `App.jsx`**. The 409 routes
+already in `App.jsx` stay there: 156 tests read that file by path, so moving a
+route is a change to the tests that pin it, not a tidy-up.
 
 ## The module
 
@@ -49,23 +50,34 @@ Three things keep a module's route identical to one written in `App.jsx`:
 
 ## Wiring it in
 
-`App.jsx` has one block for route modules, marked `Route modules (D528)`: one
-import and one composition line per module, alphabetical by file name. The
-**first** module also adds `routeTools` itself, on the line the comment above
-`return (` reserves for it, because a declared-but-unread `routeTools` is a
-dead variable until a module exists:
+There is nothing to wire (#4105). `App.jsx` collects this folder with one eager
+Vite glob and composes the list in one line, inside the block marked
+`Route modules (D528)` above the catch-all:
 
 ```jsx
-import adminLabsRoutes from './routes/admin-labs';
+import { collectRouteModules } from './lib/routeModules';
+const ROUTE_MODULES = collectRouteModules(import.meta.glob('./routes/*.jsx', { eager: true }));
 …
-  const routeTools = { guard, hqOnly, authOnly, labRoles, effectiveRole, user, location };
-…
-      {adminLabsRoutes(routeTools)}
+      {ROUTE_MODULES.map(({ file, routes }) => <React.Fragment key={file}>{routes(routeTools)}</React.Fragment>)}
 ```
 
-`frontend/test/routes_modules_d528.test.mjs` fails the build for a module that
-exists here and is not both imported and composed, and for a block that is out
-of alphabetical order.
+- **Order.** Modules compose in file-name order. A module whose routes must
+  come before or after another module's exports `order`, a number (0 when
+  absent; lower composes first): `export const order = -1;`. React Router
+  ranks routes by specificity, so order matters only between equally specific
+  paths.
+- **Lazy stays lazy.** The glob is eager because `<Route>` elements are needed
+  at once, and a module is a few lines. Its pages are not: each module loads
+  its pages with its own `lazy(() => import('../pages/…'))`, so every page is
+  still its own chunk. Never import a page statically in a module;
+  `routes_modules_d528.test.mjs` fails on one.
+- **Tests.** The node test loader expands the same glob
+  (`frontend/test/_importMetaGlob.mjs`, used by `_deck-loader-hook.mjs`), so a
+  test that renders `App.jsx` sees every module as the build does.
+
+`frontend/test/routes_modules_d528.test.mjs` fails the build when `App.jsx`
+loses the glob or the compose line, when a module's default export is not the
+function its file name implies, or when a module imports a page eagerly.
 
 ## Rules
 
@@ -81,7 +93,8 @@ of alphabetical order.
   must not name a different page than `App.jsx`'s `SettingsPage`. The guard
   fails on a collision and names both files; pick a name that says which
   page it is (`AdminSettingsPage`).
-- The catch-all `*` route stays last in `App.jsx`; the block sits above it.
+- The catch-all `*` route stays last in `App.jsx`; the module block sits
+  above it, so no module's `order` can put a route below it.
 
 ## The modules
 

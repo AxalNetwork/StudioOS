@@ -7,6 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { apiModulesBlock } from './_apiModulesBlock.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const seen = [];
@@ -34,8 +35,8 @@ test('overview calls GET /api/admin/community/overview, with weeks only when it 
 });
 
 test('the module is one line in api.js\'s alphabetical block, and calls only Community\'s two routes (D931, D932)', () => {
-  const api = read('frontend/src/lib/api.js');
-  const block = api.slice(api.indexOf('// api-modules:begin'), api.indexOf('// api-modules:end'));
+  assert.match(read('frontend/src/lib/api.js'), /^export \* from '\.\/apiModules\.generated\.js';$/m);
+  const block = apiModulesBlock();
   const lines = block.split('\n').filter((l) => l.startsWith('export * from'));
   assert.ok(lines.includes("export * from './api/community.js';"));
   assert.deepEqual(lines, [...lines].sort(), 'alphabetical');

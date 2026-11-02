@@ -1,4 +1,4 @@
-// Fixture module: wired into the fixture App.jsx. One admin-only route.
+// Fixture module: collected by the fixture App.jsx's glob. One admin-only route.
 import React, { lazy } from 'react';
 import { Route } from 'react-router-dom';
 

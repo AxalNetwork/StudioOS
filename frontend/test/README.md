@@ -43,9 +43,15 @@ also exercises a `project_id` deep link.
   `readRoutesSource()` from `_routesSource.mjs`, never `App.jsx` alone: since
   D528 a new area's routes live in `frontend/src/routes/` and the helper is
   `App.jsx` plus every module. `fixtures/` holds the small trees such helpers
-  are exercised against (`fixtures/routes_modules/`, a wired and an unwired
-  module; `fixtures/routes_lazy_conflict/`, two sources declaring one lazy
+  are exercised against (`fixtures/routes_modules/`, modules collected by a
+  glob, one of them with an `order` and one whose export is misnamed;
+  `fixtures/routes_lazy_conflict/`, two sources declaring one lazy
   name for different pages), never real pages.
+- `App.jsx` collects its route modules with Vite's `import.meta.glob`
+  (#4105); `_importMetaGlob.mjs` expands it for the node loader, so a test that
+  renders `App.jsx` sees every module. A test that pins an API module's line
+  in the re-export block reads `apiModulesBlock()` from `_apiModulesBlock.mjs`:
+  the block is generated into `frontend/src/lib/apiModules.generated.js`, not `api.js`.
 
 D1604's editor suites (`pitch_v2_chrome_d1604.test.mjs`,
 `pitch_v2_selection_d1604.test.mjs`) mount the Pitch deck editor through

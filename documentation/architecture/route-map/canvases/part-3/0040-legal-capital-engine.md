@@ -1,0 +1,1 @@
+| Legal & Capital Engine | shared (founder + GP/admin) | `/legal-capital` | **Removed (#2354, #2297 §3):** `/legal-capital` only redirects to Raise › Legal now; the Worker's legalcap routes stay. | `legalcap.ts`, `legal.ts`, `esign.ts`, `capital.ts`, `lp_reports.ts`, `dd.ts` | REMOVED | One of four legal surfaces; the owner ticked it under Remove. |
