@@ -264,6 +264,7 @@ import deckRemix from './routes/deck_remix';
 import deckTypedValues from './routes/deck_typed_values';
 import deckNew from './routes/deck_new';
 import deckAssist from './routes/deck_assist';
+import deckDerive from './routes/deck_derive';
 import deckCritic from './routes/deck_critic';
 import deckImages from './routes/deck_images';
 // D1565 (#3812): one link per investor, and tailored variants.
@@ -1413,6 +1414,8 @@ app.route('/api/decks', deckSources);
 app.route('/api/decks', deckNew);
 // D899 (#2678): Eadwyn's card tools, before `decks` with the other /api/decks routers.
 app.route('/api/decks', deckAssist);
+// D1583 (#3830): teaser, one-pager and memo from one version; before `decks` so its `/:id` routes cannot answer them.
+app.route('/api/decks', deckDerive);
 // D1557 (#3804): the investor critic: rule findings, and one run on a model of another family than the writer's.
 app.route('/api/decks', deckCritic);
 // D903 (#2682): card and background images (`/:id/images…`, `/images/:uid/…`), before `decks` so `GET /:id` cannot answer `/images/…`.

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { railProposalsApi } from '../../../lib/api/railProposals';
+import { deckDeriveApi } from '../../../lib/api/deckDerive';
 import { reportError } from '../../../lib/log';
 import useAssistMode from '../../../hooks/useAssistMode';
 import Sheet from '../../../ui/Sheet.jsx';
@@ -13,6 +14,7 @@ import {
   ACCEPT, ACCEPT_ALL, ASK_OFF, ASK_UNREADABLE, CHARGED_LINE, DECK_ASK_OPTIONS, DISCARD, STILL_WORKS, WAITING_NONE, WAITING_TITLE,
   cardEdit, cardEditLine, waitingCount,
 } from './deckV2Model';
+import { DERIVE_ASK_OPTIONS, DERIVED_SECTION, FORMAT_LABELS, derivedProposal } from './deriveModel';
 
 /**
  * D1604 (#3716, pd40) — the Pitch deck studio's header Ask and its sheet,
@@ -38,6 +40,11 @@ import {
  *                   every edit), then records the decision, and takes the
  *                   placement back when the decision is refused; elsewhere,
  *                   "Open in the editor ›". Discard records the decision.
+ *                3. a teaser, one-pager or memo (D1583, #3830; `derive:*`,
+ *                   `record=deck:<id>`): Accept is its own route, which stores
+ *                   it and accepts the proposal together
+ *                   (`POST /api/decks/:id/derive/:uid/accept`); Accept all
+ *                   keeps each in turn; Discard records the decision.
  *                The edits are read again each time the sheet opens, and
  *                whenever the page says they changed (`editsKey`: the
  *                editor's own bar ran or decided one).
@@ -80,26 +87,38 @@ const SOURCE = Object.freeze({
   versions: (projectId) => api.deckListVersions(projectId),
   discardDeck: (proposalId) => api.deckDiscardProposal(proposalId),
   proposals: railProposalsApi,
+  derive: deckDeriveApi,
 });
 
-/** Every card edit waiting on this deck version, one read per deck option. Throws when any read fails. */
+/**
+ * Every card edit, teaser, one-pager and memo waiting on this deck version,
+ * one read per deck option. Throws when any read fails.
+ */
 async function readEdits(source, deckId) {
-  const replies = await Promise.all(DECK_ASK_OPTIONS.map((option) => source.proposals.list({ option, record: `deck:${deckId}`, status: 'proposed' })));
+  const options = [...DECK_ASK_OPTIONS, ...DERIVE_ASK_OPTIONS];
+  const replies = await Promise.all(options.map((option) => source.proposals.list({ option, record: `deck:${deckId}`, status: 'proposed' })));
   const seen = new Set();
   const items = [];
+  const derived = [];
   for (const reply of replies) {
     for (const row of asList(reply, 'proposals', 'items')) {
+      if (seen.has(row?.uid)) continue;
       const edit = cardEdit(row, deckId);
-      if (edit && !seen.has(edit.uid)) { seen.add(edit.uid); items.push(edit); }
+      if (edit) { seen.add(edit.uid); items.push(edit); continue; }
+      const made = derivedProposal(row, deckId);
+      if (made) { seen.add(made.uid); derived.push(made); }
     }
   }
-  return items.sort((a, b) => a.card - b.card || String(a.at || '').localeCompare(String(b.at || '')));
+  return {
+    items: items.sort((a, b) => a.card - b.card || String(a.at || '').localeCompare(String(b.at || ''))),
+    derived: derived.sort((a, b) => String(a.at || '').localeCompare(String(b.at || ''))),
+  };
 }
 
 export default function DeckAsk({ projectId, versions, readOnly = false, onPlace = null, onChanged, editsKey = 0, source = SOURCE }) {
   const [aiOn] = useAssistMode('raise');
   const [own, setOwn] = useState({ status: 'loading', data: null });
-  const [edits, setEdits] = useState({ status: 'loading', items: [] });
+  const [edits, setEdits] = useState({ status: 'loading', items: [], derived: [] });
   const [tick, setTick] = useState(0);
   const [editsTick, setEditsTick] = useState(0);
   const [open, setOpen] = useState(false);
@@ -129,12 +148,12 @@ export default function DeckAsk({ projectId, versions, readOnly = false, onPlace
   }, [read.status, read.data]);
 
   useEffect(() => {
-    if (deck.status !== 'ready') { setEdits({ status: deck.status === 'unreadable' ? 'unreadable' : 'loading', items: [] }); return undefined; }
-    if (deck.deckId == null) { setEdits({ status: 'ready', items: [] }); return undefined; }
+    if (deck.status !== 'ready') { setEdits({ status: deck.status === 'unreadable' ? 'unreadable' : 'loading', items: [], derived: [] }); return undefined; }
+    if (deck.deckId == null) { setEdits({ status: 'ready', items: [], derived: [] }); return undefined; }
     let live = true;
     readEdits(source, deck.deckId).then(
-      (items) => { if (live) setEdits({ status: 'ready', items }); },
-      (e) => { reportError('pitch-ask:proposals', e); if (live) setEdits({ status: 'unreadable', items: [] }); },
+      ({ items, derived }) => { if (live) setEdits({ status: 'ready', items, derived }); },
+      (e) => { reportError('pitch-ask:proposals', e); if (live) setEdits({ status: 'unreadable', items: [], derived: [] }); },
     );
     return () => { live = false; };
   }, [deck.status, deck.deckId, source, editsTick, editsKey]);
@@ -168,7 +187,8 @@ export function WaitingSheet({ projectId, deck, edits, aiOn = true, onPlace = nu
   const q = ventureQuery(projectId);
   const proposal = deck.status === 'ready' ? deck.proposal : null;
   const items = edits.status === 'ready' ? edits.items : [];
-  const nothing = deck.status === 'ready' && edits.status === 'ready' && !proposal && !items.length;
+  const derived = edits.status === 'ready' && Array.isArray(edits.derived) ? edits.derived : [];
+  const nothing = deck.status === 'ready' && edits.status === 'ready' && !proposal && !items.length && !derived.length;
 
   const act = async (key, fn) => {
     if (busy) return;
@@ -205,6 +225,17 @@ export function WaitingSheet({ projectId, deck, edits, aiOn = true, onPlace = nu
       try { await place(edit); } catch (e) {
         reportError('pitch-ask:accept', e);
         refuse(edit.uid, refusalOf(e)?.message || 'That did not work. Nothing was changed.');
+      }
+    }
+  });
+
+  // D1583: keeping a teaser, one-pager or memo is its own route, which stores it with the decision.
+  const keep = (made) => act(made.uid, () => source.derive.accept(deck.deckId, made.uid));
+  const keepAll = () => act('derived', async () => {
+    for (const made of derived) {
+      try { await source.derive.accept(deck.deckId, made.uid); } catch (e) {
+        reportError('pitch-ask:derive-accept', e);
+        refuse(made.uid, refusalOf(e)?.message || 'That did not work. Nothing was kept.');
       }
     }
   });
@@ -281,6 +312,31 @@ export function WaitingSheet({ projectId, deck, edits, aiOn = true, onPlace = nu
               ))}
             </ul>
             {problem.all ? <p className={BAD} role="alert">{problem.all}</p> : null}
+          </section>
+        ) : null}
+
+        {derived.length && deck.deckId != null ? (
+          <section className="flex flex-col gap-2" aria-label={DERIVED_SECTION} data-testid="pitch-ask-derived">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className={EYE}>{DERIVED_SECTION}</span>
+              {derived.length > 1 ? (
+                <button type="button" className={GHOST} disabled={Boolean(busy)} onClick={keepAll} data-testid="pitch-ask-derived-accept-all">{ACCEPT_ALL} ({derived.length})</button>
+              ) : null}
+            </div>
+            <ul className="m-0 flex list-none flex-col gap-2 p-0">
+              {derived.map((made) => (
+                <li key={made.uid} className={`${CARD} flex flex-col gap-2`} data-testid="pitch-ask-derived-item">
+                  <span className={`text-[13px] font-bold ${INK}`}>{made.title}</span>
+                  <span className={MUTED}>{FORMAT_LABELS[made.format]}{made.blind ? ' · Blind' : ''}{made.summary ? ` · ${made.summary}` : ''}</span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button type="button" className={BTN} disabled={Boolean(busy)} onClick={() => keep(made)} data-testid="pitch-ask-derived-accept">{ACCEPT}</button>
+                    <button type="button" className={GHOST} disabled={Boolean(busy)} onClick={() => act(made.uid, () => source.proposals.decide(made.uid, 'discard'))} data-testid="pitch-ask-derived-discard">{DISCARD}</button>
+                  </div>
+                  {problem[made.uid] ? <p className={BAD} role="alert">{problem[made.uid]}</p> : null}
+                </li>
+              ))}
+            </ul>
+            {problem.derived ? <p className={BAD} role="alert">{problem.derived}</p> : null}
           </section>
         ) : null}
       </div>
