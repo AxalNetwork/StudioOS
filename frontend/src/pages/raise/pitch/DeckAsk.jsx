@@ -205,10 +205,11 @@ export function WaitingSheet({ projectId, deck, edits, aiOn = true, onPlace = nu
    * record the decision; a refused decision takes the placement back. A
    * placement that fails records nothing. True when it was placed and decided.
    */
-  const place = async (edit) => {
+  const place = async (edit, group = null) => {
     const plan = onPlace?.(edit);
     if (!plan || plan.error) { refuse(edit.uid, plan?.error || 'Open the editor to accept this.'); return false; }
-    const placed = plan.commit();
+    // D1515: Accept all's placements share a group, so the editor undoes them as one step.
+    const placed = plan.commit(group);
     if (!placed || placed.error) { refuse(edit.uid, placed?.error || 'That did not work. Nothing was changed.'); return false; }
     try {
       await source.proposals.decide(edit.uid, 'accept');
@@ -221,8 +222,9 @@ export function WaitingSheet({ projectId, deck, edits, aiOn = true, onPlace = nu
   const acceptEdit = (edit) => act(edit.uid, () => place(edit));
   const acceptAll = () => act('all', async () => {
     // One decision per proposal (D777 part 3): there is no bulk decision.
+    const group = `ask-all:${Date.now()}`;
     for (const edit of items) {
-      try { await place(edit); } catch (e) {
+      try { await place(edit, group); } catch (e) {
         reportError('pitch-ask:accept', e);
         refuse(edit.uid, refusalOf(e)?.message || 'That did not work. Nothing was changed.');
       }

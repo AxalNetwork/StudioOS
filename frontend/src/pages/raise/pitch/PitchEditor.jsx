@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowDown, ArrowUp, RefreshCw } from 'lucide-react';
 import { api } from '../../../lib/api';
@@ -41,12 +41,16 @@ import { aspectOf, withAspect } from './gridModel';
 import { reflowCards } from './deckReflow';
 import { movedLine } from './structureModel';
 import { scriptOfTheme } from './deckLanguage';
+import { apply as applyOp, editKey, emptyHistory, findIn, historyCounts, perform, redo as redoStep, undo as undoStep } from './gridOps';
+import { createAutosave, clockOf, idbStore, keyOf, restoreOffer } from './deckAutosave';
+import { discardDraft as discardDraftAdapter, draft as draftAdapter, saveCard as saveCardAdapter } from './deckV2Adapter';
+import { ConflictView, FindReplaceSheet, RestoreBanner, StillCharged, SyncLine } from './EditingParts';
 import {
   ADDABLE_KINDS, KIND_LABELS, MODEL_FAILED, NOTES_PLACEHOLDER, NO_CARDS,
   NOT_RECORDED, PHONE_NOTE, READ_FAILED, THEME_LABELS,
-  addBlock, applyLayout, applyToAll, blockLabel, cardColours, cardTitle, cardsOf, changesOf, firstFree, isDarkTheme,
-  moveCard, placementProblem, removeBlock, saveState, standardSizes, staleCards, updateBlock, withFieldBlocks,
-  replaceCard, withNewUid, pageNumberOf,
+  addBlock, applyLayout, blockLabel, cardColours, cardTitle, cardsOf, changesOf, firstFree, isDarkTheme,
+  placementProblem, removeBlock, saveState, standardSizes, staleCards, updateBlock, withFieldBlocks,
+  withNewUid, pageNumberOf, cardIndexByUid, cardUid, newCardUid,
 } from './editorModel';
 
 /**
@@ -98,6 +102,16 @@ import {
  * D900 (#2679, part 6): ⋯ › Check claims (`CheckPanel.jsx`, PD13) checks this
  * version against the founder's pinned evidence. "Use [X]'s figure" saves a
  * new version, which the editor then opens as it opens a Save.
+ *
+ * D1515 (#3767, A4c): every edit is an op of `gridOps.js`, recorded in a
+ * 100-step history (`editReducer`): Undo and Redo in the header and ⋯, and
+ * Cmd/Ctrl+Z, Shift+Cmd/Ctrl+Z (a text field keeps its own undo); Cmd/Ctrl+F
+ * opens ⋯ › Find and replace. Apply theme, a structure or layout, Move
+ * overflow to notes, Slide size and Accept all are one step each; undoing a
+ * step that placed a charged run says it is still charged. The working deck
+ * autosaves (`deckAutosave.js`): to the device at once, to the version's
+ * draft 1.5 s after the last edit (at most 10 s while typing goes on), with
+ * the restore banner on open, the offline line and the conflict view.
  */
 
 const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
@@ -218,7 +232,7 @@ export default function PitchEditor() {
   }, [readOnly]);
   const tools = current?.id ? (
     <DeckToolbar chip={chrome?.chip ?? null} presentTo={presentHref(projectId, current.id)} readOnly={readOnly} phone={phone}
-      onAction={onAction} labels={chrome?.labels} outOfTokens={Boolean(chrome?.outOfTokens)} waiting={chrome ? null : EDITOR_WAITING} />
+      onAction={onAction} labels={chrome?.labels} outOfTokens={Boolean(chrome?.outOfTokens)} waiting={chrome ? null : EDITOR_WAITING} history={chrome?.history ?? null} />
   ) : null;
   const overlay = shareDialog === 'share' && projectId != null && current ? (
     <ShareDialog projectId={projectId} deck={current} onClose={() => setShareDialog(null)} onCreated={() => {}} />
@@ -311,17 +325,50 @@ export function sourcesCard(model, lines) {
   return text ? updateBlock(card, text.id, { style: 'list', text: lines.join('\n') }) : { ...card, notes: lines.join('\n') };
 }
 
-/** A copy of a card with its own block ids kept (ids are per card). */
-// D1500: a duplicate is a new card, with its own uid.
-const copyCard = (c) => withNewUid(JSON.parse(JSON.stringify(c)));
+/**
+ * D1515: the working deck and its history. `perform` takes ops (or a function
+ * of the deck as it is at that moment, answering ops or null for no change)
+ * and records them as one step; `undone` is the step Undo just took back, so
+ * the stage can say a charged run stays charged.
+ */
+export function editReducer(state, action) {
+  switch (action.type) {
+    case 'perform': {
+      const ops = typeof action.ops === 'function' ? action.ops(state.doc) : action.ops;
+      if (!ops || (Array.isArray(ops) && !ops.length)) return state;
+      const r = perform(state.doc, state.history, ops, action.meta);
+      if (r.error) return state;
+      return { doc: r.doc, history: r.history, undone: null };
+    }
+    case 'undo': {
+      const u = undoStep(state.doc, state.history);
+      return u ? { doc: u.doc, history: u.history, undone: u.step } : state;
+    }
+    case 'redo': {
+      const u = redoStep(state.doc, state.history);
+      return u ? { doc: u.doc, history: u.history, undone: null } : state;
+    }
+    case 'reset': return { doc: action.doc, history: emptyHistory(), undone: null };
+    case 'seen': return state.undone ? { ...state, undone: null } : state;
+    default: return state;
+  }
+}
 
 function Editor({ project, deck, model, kit, refresh, sources, charts, versions, readOnly, phone, narrow = false, onTitle, onSaved, placeRef, onProposals, onChrome, actionRef }) {
   const [aiOn] = useAssistMode('raise');
   const navigate = useNavigate();
   const [base, setBase] = useState(() => ({ deck, cards: cardsOf(deck), theme: deck.theme ?? null, audience: deck.audience ?? null }));
-  const [cards, setCards] = useState(base.cards);
-  const [theme, setTheme] = useState(base.theme);
-  const [audience, setAudience] = useState(base.audience);
+  // D1515: the working deck lives in one reducer with its 100-step history; every edit below is an op.
+  const [ed, dispatch] = useReducer(editReducer, base, (b) => ({ doc: { cards: b.cards, theme: b.theme, audience: b.audience }, history: emptyHistory(), undone: null }));
+  const { cards, theme, audience } = ed.doc;
+  const edit = useCallback((ops, meta = {}) => dispatch({ type: 'perform', ops, meta: { ...meta, at: Date.now() } }), []);
+  /** `next` is the cards, or a function of the cards as they are now; the same cards back record nothing. */
+  const setCards = (next, meta) => edit((doc) => {
+    const to = typeof next === 'function' ? next(doc.cards) : next;
+    return to === doc.cards ? null : { type: 'setCards', cards: to };
+  }, meta);
+  const setTheme = (t) => edit({ type: 'setTheme', theme: t }, { label: 'Theme' });
+  const setAudience = (a) => edit({ type: 'setAudience', audience: a }, { label: 'Audience' });
   const [sel, setSel] = useState(0);
   const [pickState, setPickState] = useState(NO_PICK);
   const [askLine, setAskLine] = useState(null);
@@ -366,10 +413,15 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   const choose = (i) => { setSel(i); setPickState(NO_PICK); };
   const selectBlock = (id) => setPickState({ selection: id == null ? [] : [String(id)], focus: id == null ? null : String(id) });
 
-  const setCard = (i, c) => setCards((cs) => cs.map((x, j) => (j === i ? c : x)));
+  const setCard = (i, c, meta) => edit((doc) => (doc.cards[i] && doc.cards[i] !== c ? { type: 'setCard', index: i, card: c } : null), meta);
   // D1500: a result goes back onto the card it was made for, by its uid,
   // wherever that card sits now; a card with no uid falls back to the selection.
-  const placeCard = (c) => setCards((cs) => replaceCard(cs, c, sel) ?? cs);
+  // D1515: an accepted proposal is `insertProposal`, one step (Accept all's share a group), marked when it was charged.
+  const placeCard = (c, meta = {}) => edit((doc) => {
+    const uid = cardUid(c);
+    const i = uid ? cardIndexByUid(doc.cards, uid) : sel;
+    return i >= 0 && i < doc.cards.length && doc.cards[i] !== c ? { type: 'insertProposal', index: i, card: c } : null;
+  }, { label: 'Accept', ...meta });
 
   // D1604: a card edit accepted from the header Ask. Checked against the cards
   // on screen first; `commit()` then places it, synchronously, against the
@@ -379,6 +431,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   // other edit.
   const cardsNow = useRef(cards);
   cardsNow.current = cards;
+  const setCardsRef = useRef(setCards);
+  setCardsRef.current = setCards;
   useEffect(() => {
     if (!placeRef) return undefined;
     placeRef.current = readOnly ? null : (edit) => {
@@ -393,7 +447,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
       const check = place(cardsNow.current);
       if (check.error) return { error: check.error };
       return {
-        commit: () => {
+        commit: (group = null) => {
           const r = place(cardsNow.current);
           if (r.error) return { error: r.error };
           // D1500: the card the edit was made for, by uid, wherever it sits now.
@@ -402,41 +456,138 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
           const put = (from, to) => (cs) => cs.map((x) => (x === from ? to : x));
           // The next check (Accept all's next edit) sees this one at once.
           cardsNow.current = put(was, r.card)(cardsNow.current);
-          setCards(put(was, r.card));
+          // D1515: one undo step (Accept all's share `group`), and the run behind it was charged.
+          setCardsRef.current(put(was, r.card), { label: 'Accept', charged: true, group });
           setSel(where); setPickState(NO_PICK);
           return {
             // Back to the card as it was, unless something changed it since.
-            undo: () => { cardsNow.current = put(r.card, was)(cardsNow.current); setCards(put(r.card, was)); },
+            undo: () => { cardsNow.current = put(r.card, was)(cardsNow.current); setCardsRef.current(put(r.card, was), { label: 'Accept refused' }); },
           };
         },
       };
     };
     return () => { placeRef.current = null; };
   }, [placeRef, readOnly, model]);
-  const move = (from, to) => { setCards((cs) => moveCard(cs, from, to)); setSel(to); setPickState(NO_PICK); };
+  const move = (from, to) => { edit({ type: 'moveCard', from, to }, { label: 'Move card' }); setSel(to); setPickState(NO_PICK); };
 
   // D1554 (#3801): ⋯ › Slide size reflows the draft; what no longer fits moves
   // to each card's notes (`deckReflow.js`). One Undo, while the sheet is open,
   // puts the cards and the size back as they were.
+  // D1515: the size and its reflow are one op (`setDoc`), so one step; the sheet's Undo is the history's.
   const [sizeUndo, setSizeUndo] = useState(null);
   const changeSize = (aspect) => {
     if (aspectOf(theme?.aspect) === aspect) return;
     const r = reflowCards(cards, aspect, scriptOfTheme(theme));
-    setSizeUndo(r.count ? { cards, theme, count: r.count } : null);
-    setCards(r.cards);
-    setTheme(withAspect(theme, aspect));
+    setSizeUndo(r.count ? { count: r.count } : null);
+    edit({ type: 'setDoc', parts: { cards: r.cards, theme: withAspect(theme, aspect) } }, { label: 'Slide size' });
   };
   const undoSize = () => {
     if (!sizeUndo) return;
-    setCards(sizeUndo.cards);
-    setTheme(sizeUndo.theme);
+    dispatch({ type: 'undo' });
     setSizeUndo(null);
   };
+
+  // D1515: the autosave client (`deckAutosave.js`) on D1501's draft routes, through the adapter.
+  const autosave = useRef(null);
+  const [sync, setSync] = useState(null);
+  const [offer, setOffer] = useState(null);
+  const [restoring, setRestoring] = useState(false);
+  const deckId = base.deck.id;
+  useEffect(() => {
+    if (readOnly || deckId == null) return undefined;
+    const store = idbStore();
+    const a = createAutosave({ deckId, save: saveCardAdapter, store, onChange: setSync });
+    a.base(cardsOf(deck));
+    // Nothing is sent until the restore question, if any, is answered.
+    a.hold(true);
+    autosave.current = a;
+    let live = true;
+    const opened = { cards: cardsOf(deck), theme: deck.theme ?? null, audience: deck.audience ?? null };
+    Promise.all([store ? store.get(keyOf(deckId)) : null, draftAdapter(deckId)]).then(([local, d]) => {
+      if (!live) return;
+      const draftRead = d?.available ? d.value : null;
+      if (draftRead) a.prime(draftRead.cards);
+      const o = restoreOffer({ doc: opened, local, draft: draftRead });
+      if (o) setOffer(o); else a.hold(false);
+    }, (e) => { reportError('pitch-editor:draft', e); if (live) a.hold(false); });
+    const online = () => a.retry();
+    // Unsent edits: the browser asks before the tab closes (the device copy keeps them either way).
+    const leaving = (e) => { if (a.pending()) { e.preventDefault?.(); e.returnValue = ''; } };
+    globalThis.addEventListener?.('online', online);
+    globalThis.addEventListener?.('beforeunload', leaving);
+    return () => {
+      live = false; a.dispose(); autosave.current = null;
+      globalThis.removeEventListener?.('online', online);
+      globalThis.removeEventListener?.('beforeunload', leaving);
+    };
+    // The version read once: a new version remounts the editor.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deckId, readOnly]);
+  useEffect(() => { autosave.current?.edit(ed.doc); }, [ed.doc]);
+  const restore = () => {
+    if (!offer) return;
+    autosave.current?.revisions(offer.revs);
+    autosave.current?.hold(false);
+    edit({ type: 'setDoc', parts: offer.doc }, { label: 'Restore unsaved changes' });
+    setOffer(null); setPickState(NO_PICK);
+  };
+  const discardOffer = () => {
+    if (!offer) return;
+    setRestoring(true);
+    discardDraftAdapter(deckId).then(() => autosave.current?.discard(cardsOf(deck))).then(() => {
+      setRestoring(false); setOffer(null); autosave.current?.hold(false);
+    });
+  };
+  // pd9q: the card another tab or member saved first.
+  const conflict = sync?.conflict ?? null;
+  const conflictAt = conflict ? cardIndexByUid(cards, conflict.uid) : -1;
+  const keepTheirs = (copy) => {
+    const a = autosave.current;
+    if (!a || !conflict) return;
+    const theirs = a.resolve(copy ? 'copy' : 'theirs');
+    if (!theirs) return;
+    edit((doc) => {
+      const i = cardIndexByUid(doc.cards, conflict.uid);
+      if (i < 0) return null;
+      const placed = { type: 'setCard', index: i, card: { ...theirs, uid: conflict.uid } };
+      return copy ? [placed, { type: 'insertCard', index: i + 1, card: withNewUid(conflict.mine) }] : placed;
+    }, { label: copy ? 'Copy mine to a new card' : 'Keep theirs' });
+  };
+
+  // D1515: Undo, Redo and Find, from the header, ⋯ and the keyboard.
+  const undo = () => dispatch({ type: 'undo' });
+  const redo = () => dispatch({ type: 'redo' });
+  const counts = historyCounts(ed.history);
+  const docNow = useRef(ed.doc);
+  docNow.current = ed.doc;
+  const findReplace = (q) => {
+    const op = { type: 'findReplace', ...q };
+    const r = applyOp(docNow.current, op);
+    if (r.error) return { error: r.error };
+    const count = findIn(docNow.current, q).matches;
+    edit(op, { label: 'Find and replace' });
+    return { count };
+  };
+  useEffect(() => {
+    if (readOnly || phone) return undefined;
+    const onKey = (e) => {
+      const k = editKey(e);
+      if (!k) return;
+      e.preventDefault?.();
+      if (k === 'find') setSheet('find');
+      else dispatch({ type: k });
+    };
+    globalThis.addEventListener?.('keydown', onKey);
+    return () => globalThis.removeEventListener?.('keydown', onKey);
+  }, [readOnly, phone]);
 
   const saved = (fresh) => {
     const d = fresh?.deck || fresh;
     const b = { deck: d, cards: cardsOf(d), theme: d.theme ?? null, audience: d.audience ?? null };
-    setBase(b); setCards(b.cards); setTheme(b.theme); setAudience(b.audience); setDialog(null); setSheet(null);
+    // D1515: this version's draft and its device copy are no longer needed once it is saved as a version.
+    autosave.current?.forget();
+    if (base.deck?.id != null) discardDraftAdapter(base.deck.id);
+    setBase(b); dispatch({ type: 'reset', doc: { cards: b.cards, theme: b.theme, audience: b.audience } }); setDialog(null); setSheet(null);
     onSaved?.();
   };
 
@@ -446,23 +597,23 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
 
   // The header's toolbar (`DeckToolbar`, drawn by the page) reads this state and
   // calls back here for Save, Share, Export and the ⋯ items.
-  const chip = saveChip({ dirty, readOnly, when: state, version: base.deck.version });
+  const chip = saveChip({ dirty, readOnly, when: state, version: base.deck.version, sync: sync ? { ...sync, clock: clockOf(sync.at) } : null });
   const appendixLabel = card?.appendix ? 'Not an appendix' : 'Mark as appendix';
   useEffect(() => {
-    onChrome?.({ chip, outOfTokens, labels: { appendix: appendixLabel, ...(readOnly ? { notes: 'Leave a note' } : {}) } });
-  }, [chip.text, chip.title, chip.save, appendixLabel, readOnly, outOfTokens]); // eslint-disable-line react-hooks/exhaustive-deps
+    onChrome?.({ chip, outOfTokens, history: readOnly ? null : counts, labels: { appendix: appendixLabel, ...(readOnly ? { notes: 'Leave a note' } : {}) } });
+  }, [chip.text, chip.title, chip.save, appendixLabel, readOnly, outOfTokens, counts.undo, counts.redo]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => onChrome?.(null), [onChrome]);
 
+  // D1500: a duplicate is a new card, with its own uid (`duplicateCard` copies it whole).
   const duplicate = (i) => {
     if (!cards[i]) return;
-    setCards((cs) => [...cs.slice(0, i + 1), copyCard(cs[i]), ...cs.slice(i + 1)]);
+    edit({ type: 'duplicateCard', index: i, uid: newCardUid() }, { label: 'Duplicate' });
     setSel(i + 1); setPickState(NO_PICK);
   };
   const toggleAppendix = (i) => {
     const c = cards[i];
     if (!c) return;
-    const { appendix, ...rest } = c;
-    setCard(i, appendix ? rest : { ...c, appendix: true });
+    edit({ type: 'setFlag', index: i, key: 'appendix', value: c.appendix ? undefined : true }, { label: 'Appendix' });
   };
   const act = (id) => {
     if (id === 'save') { if (!readOnly && dirty) setDialog({ kind: 'save' }); return; }
@@ -470,8 +621,10 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     if (id === 'duplicate') { if (!readOnly) duplicate(sel); return; }
     if (id === 'appendix') { if (!readOnly) toggleAppendix(sel); return; }
     if (id === 'notes') { navigate(`/raise/pitch/notes${ventureQuery(project?.id)}`); return; }
+    if (id === 'undo') { if (!readOnly) undo(); return; }
+    if (id === 'redo') { if (!readOnly) redo(); return; }
     // D1553 (#3800): ⋯ › This card › Remix this slide, the only way in (pd13).
-    if (['theme', 'size', 'brand', 'sources', 'versions', 'check', 'structure', 'background', 'remix', 'derive', 'comments'].includes(id)) setSheet(id);
+    if (['theme', 'size', 'brand', 'sources', 'versions', 'check', 'structure', 'background', 'remix', 'derive', 'comments', 'find'].includes(id)) setSheet(id);
   };
   if (actionRef) actionRef.current = act;
   const cardAction = (id, i) => {
@@ -506,7 +659,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
       {!readOnly ? <AiOffBanner state={off} /> : null}
       {phone ? (
         <PhoneEditor cards={cards} sel={sel} setSel={choose} move={move} card={card} readOnly={readOnly}
-          onNotes={(v) => setCard(sel, { ...card, notes: v })} notesMax={model.notes_max}
+          onNotes={(v) => edit({ type: 'setFlag', index: sel, key: 'notes', value: v }, { label: 'Notes', coalesce: `notes:${cardUid(card) ?? sel}` })} notesMax={model.notes_max}
           deckId={base.deck.id} items={items} aiOn={aiOn} off={off} onTokens={onTokens} model={model} onPlace={placeCard} onProposals={onProposals} />
       ) : (
         <div className={`grid gap-3 ${narrow ? '' : 'lg:grid-cols-[150px_minmax(0,1fr)]'}`} data-testid="pitch-editor-body">
@@ -516,21 +669,30 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
               onAdd={() => {
                 const layout = model.layouts.find((l) => l.id === 'statement') || model.layouts[0];
                 const fresh = withNewUid(applyLayout({ title: 'New card' }, layout).card);
-                setCards((cs) => [...cs, fresh]); setSel(cards.length); setPickState(NO_PICK);
+                edit({ type: 'insertCard', index: cards.length, card: fresh }, { label: 'New card' }); setSel(cards.length); setPickState(NO_PICK);
               }} />
             {refresh.status === 'error' ? <ReadFailed text="Which figures have changed could not be read." onRetry={refresh.retry} testId="pitch-editor-refresh-error" /> : null}
           </div>
           <div className="flex min-w-0 flex-col gap-3">
+            {/* D1515: the restore question, the offline line, the conflict view and "Still charged", above the stage. */}
+            {offer && !readOnly ? <RestoreBanner at={offer.at} busy={restoring} onRestore={restore} onDiscard={discardOffer} /> : null}
+            {!readOnly ? <SyncLine sync={sync} /> : null}
+            {conflict && conflictAt >= 0 && !readOnly ? (
+              <ConflictView conflict={conflict} index={conflictAt} onMine={() => autosave.current?.resolve('mine')}
+                onTheirs={() => keepTheirs(false)} onCopy={() => keepTheirs(true)} />
+            ) : null}
+            {ed.undone?.charged ? <StillCharged onClose={() => dispatch({ type: 'seen' })} /> : null}
             {structureNote ? <span className={MUTED} role="status" data-testid="pitch-editor-structure-note">{structureNote} The speaker notes keep each one.</span> : null}
             {cards.length === 0 ? <div className={`${CARD} p-6 ${MUTED}`}>{NO_CARDS}</div> : (
               <GridStage card={card} index={sel} model={model} colours={colours} ink={ink} theme={theme} kit={kit} charts={charts} pageLabel={pageNumberOf(cards, sel)}
                 readOnly={readOnly} selection={selection} focus={focus}
                 onSelection={setPickState}
-                onMove={(id, grid) => setCard(sel, updateBlock(card, id, { grid }))}
-                // D1513: a divider move (both blocks) and its overflow are each one edit.
-                onCard={(next) => { setCard(sel, next); setStructureNote(null); }}
+                // D1515: a drag is one step; a nudge burst on one block is one step (800 ms).
+                onMove={(id, grid) => edit({ type: 'moveArea', index: sel, id, grid }, { label: 'Move block', coalesce: `move:${cardUid(card) ?? sel}:${id}` })}
+                // D1513: a divider move (both blocks) and its overflow are each one edit, so one undo step.
+                onCard={(next, why) => { setCard(sel, next, { label: why === 'overflow' ? 'Move overflow to notes' : 'Move divider' }); setStructureNote(null); }}
                 onAsk={ask} askOff={askOff} askLine={askLine}
-                items={items} onRefresh={() => { const r = refreshCard(card, items, charts); if (r.moved) setCard(sel, r.card); }} />
+                items={items} onRefresh={() => { const r = refreshCard(card, items, charts); if (r.moved) setCard(sel, r.card, { label: 'Refresh figures' }); }} />
             )}
             {card && !readOnly && chosen.length ? (
               <InstructionBox deckId={base.deck.id} cardIndex={sel} card={card} areas={chosen} items={items} aiOn={aiOn} onTokens={onTokens}
@@ -539,18 +701,25 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
             ) : null}
             {card && !readOnly && (one || !areas) ? (
               <BlockTools card={card} cardIndex={sel} area={one} model={model} charts={charts} images={images} items={items}
-                deckId={base.deck.id}
-                onPatch={(patch) => setCard(sel, updateBlock(card, one.block.id, patch))}
+                deckId={base.deck.id} accent={colours.accent}
+                // D1515: typing in one block is one step per 800 ms pause; `paras: null` makes the block plain again.
+                onPatch={(patch, how) => {
+                  const { paras, ...rest } = patch;
+                  const typed = how?.typed === true;
+                  edit({ type: 'updateBlock', index: sel, id: one.block.id, patch: paras === null ? rest : patch, ...(paras === null ? { drop: ['paras'] } : {}) },
+                    { label: typed ? 'Typing' : 'Block', ...(typed ? { coalesce: `text:${cardUid(card) ?? sel}:${one.block.id}` } : {}) });
+                }}
                 onRemove={() => setDialog({ kind: 'remove-block', id: one.block.id })}
                 onChartLibrary={(edit, range) => setDialog({ kind: 'charts', edit: edit || null, range: range || null })}
                 onAddBlock={(range, kind) => setDialog({ kind: 'add-block', range: range || null, initial: kind })}
                 onImage={(use, replace) => setDialog({ kind: 'image', use, replace: replace || null })}
                 onDesign={() => setSheet('structure')}
                 onPlace={placeCard}
-                onAddCard={(c) => { setCards((cs) => [...cs, withNewUid(c)]); setSel(cards.length); setPickState(NO_PICK); }} />
+                onAddCard={(c) => { edit({ type: 'insertCard', index: cards.length, card: withNewUid(c) }, { label: 'New card' }); setSel(cards.length); setPickState(NO_PICK); }} />
             ) : null}
             {card && (one || !areas) ? (
-              <SpeakerNotes card={card} index={sel} readOnly={readOnly} notesMax={model.notes_max} onNotes={(v) => setCard(sel, { ...card, notes: v })} />
+              <SpeakerNotes card={card} index={sel} readOnly={readOnly} notesMax={model.notes_max}
+                onNotes={(v) => edit({ type: 'setFlag', index: sel, key: 'notes', value: v }, { label: 'Notes', coalesce: `notes:${cardUid(card) ?? sel}` })} />
             ) : null}
           </div>
         </div>
@@ -560,16 +729,19 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
         <ThemeSheet model={model} theme={theme} audience={audience} kit={kit} readOnly={readOnly}
           onTheme={setTheme} onAudience={setAudience} onApplyAll={() => setDialog({ kind: 'apply-all' })} onClose={() => setSheet(null)} />
       ) : null}
+      {sheet === 'find' ? (
+        <FindReplaceSheet doc={ed.doc} readOnly={readOnly} onReplace={findReplace} onClose={() => setSheet(null)} />
+      ) : null}
       {sheet === 'size' ? <SizeSheet theme={theme} readOnly={readOnly} onSize={changeSize} moved={sizeUndo?.count ?? 0} onUndo={undoSize}
         onClose={() => { setSizeUndo(null); setSheet(null); }} /> : null}
       {sheet === 'structure' && card ? (
         <StructureSheet model={model} card={card} index={sel} readOnly={readOnly} onLayout={(layout) => setDialog({ kind: 'layout', layout })}
           // D1513 (#3765): a structure is one edit; what has no area is already in the notes.
-          onStructure={(r) => { setCard(sel, r.card); setPickState(NO_PICK); setSheet(null); setStructureNote(r.count ? `${movedLine(r.count)}.` : null); }}
+          onStructure={(r) => { edit({ type: 'setStructure', index: sel, structure: r.card.structure }, { label: 'Structure' }); setPickState(NO_PICK); setSheet(null); setStructureNote(r.count ? `${movedLine(r.count)}.` : null); }}
           onClose={() => setSheet(null)} />
       ) : null}
       {sheet === 'background' && card ? (
-        <BackgroundSheet card={card} index={sel} readOnly={readOnly} onBackground={(bg) => setCard(sel, { ...card, background: bg })}
+        <BackgroundSheet card={card} index={sel} readOnly={readOnly} onBackground={(bg) => edit({ type: 'setFlag', index: sel, key: 'background', value: bg }, { label: 'Background' })}
           onImage={() => { setSheet(null); setDialog({ kind: 'image', use: 'card' }); }} onClose={() => setSheet(null)} />
       ) : null}
       {sheet === 'derive' && base.deck?.id ? (
@@ -587,7 +759,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
           <SourcesPanel items={items} status={sources.status} onRetry={sources.retry} stale={staleMap} />
           {/* D1267 (#3290, VR7): the claims this slide states, and the optional Sources on Axal card. */}
           <SlideEvidence projectId={project?.id} version={base.deck.version} slide={sel + 1} readOnly={readOnly}
-            onAddSources={(lines) => { const c = withNewUid(sourcesCard(model, lines)); setCards((cs) => [...cs, c]); setSel(cards.length); setPickState(NO_PICK); setSheet(null); }} />
+            onAddSources={(lines) => { const c = withNewUid(sourcesCard(model, lines)); edit({ type: 'insertCard', index: cards.length, card: c }, { label: 'Sources card' }); setSel(cards.length); setPickState(NO_PICK); setSheet(null); }} />
         </SourcesSheet>
       ) : null}
       {sheet === 'remix' && card && base.deck?.id ? (
@@ -596,9 +768,9 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
             // One edit, one undo step: Undo puts the card back as it was, unless something changed it since.
             const i = sel;
             const was = cardsNow.current[i];
-            setCards((cs) => cs.map((x, j) => (j === i && x === was ? next : x)));
+            setCards((cs) => cs.map((x, j) => (j === i && x === was ? next : x)), { label: 'Remix' });
             setPickState(NO_PICK);
-            return () => setCards((cs) => cs.map((x, j) => (j === i && x === next ? was : x)));
+            return () => setCards((cs) => cs.map((x, j) => (j === i && x === next ? was : x)), { label: 'Remix undone' });
           }}
           onClose={() => setSheet(null)} />
       ) : null}
@@ -628,34 +800,34 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
               'Nothing is saved until you save a version.',
             ]}
             confirm="Use this layout" onClose={() => setDialog(null)}
-            onConfirm={() => { setCard(sel, r.card); setPickState(NO_PICK); setDialog(null); setSheet(null); }} />
+            onConfirm={() => { setCard(sel, r.card, { label: 'Layout' }); setPickState(NO_PICK); setDialog(null); setSheet(null); }} />
         );
       })() : null}
       {dialog?.kind === 'remove-block' && card ? (
         <ConfirmDialog title="Remove this block?" testId="pitch-editor-remove-dialog"
           lines={[`The ${blockLabel(card.blocks.find((b) => b.id === dialog.id))} leaves card ${sel + 1}.`, 'Nothing is saved until you save a version.']}
           confirm="Remove" onClose={() => setDialog(null)}
-          onConfirm={() => { setCard(sel, removeBlock(card, dialog.id)); setPickState(NO_PICK); setDialog(null); }} />
+          onConfirm={() => { edit({ type: 'removeBlock', index: sel, id: dialog.id }, { label: 'Remove block' }); setPickState(NO_PICK); setDialog(null); }} />
       ) : null}
       {dialog?.kind === 'apply-all' ? (
         <ConfirmDialog title="Apply the theme to every card?" testId="pitch-editor-apply-dialog"
           lines={[`Every card draws on ${THEME_LABELS[theme?.kind || 'brand']}.`, "Each card's own background is cleared.", 'Nothing is saved until you save a version.']}
           confirm="Apply to all" onClose={() => setDialog(null)}
-          onConfirm={() => { setCards((cs) => applyToAll(cs)); setDialog(null); }} />
+          onConfirm={() => { edit({ type: 'applyBrand' }, { label: 'Apply theme to all cards' }); setDialog(null); }} />
       ) : null}
       {dialog?.kind === 'charts' && card ? (
         <ChartLibrary charts={charts} cards={cards} colours={colours} problem={dialog.problem || null}
           initial={dialog.edit ? (card.blocks || []).find((b) => b.id === dialog.edit) || null : null}
           onClose={() => setDialog(null)}
           onInsert={(body) => {
-            if (dialog.edit) { setCard(sel, updateBlock(card, dialog.edit, body)); setDialog(null); return; }
+            if (dialog.edit) { setCard(sel, updateBlock(card, dialog.edit, body), { label: 'Chart' }); setDialog(null); return; }
             // The selected empty range when a chart fits it (3 × 2 or more), else 8 × 4 where it fits, else 6 × 3.
             const r0 = dialog.range;
             const inRange = r0 && r0.c2 - r0.c1 >= 2 && r0.r2 - r0.r1 >= 1 && !placementProblem(card, r0, model) ? r0 : null;
             const grid = inRange || firstFree(card, 8, 4, model) || firstFree(card, 6, 3, model);
             const r = grid ? addBlock(card, { ...body, grid }, model) : { error: 'This card has no free 6 × 3 range for a chart. Remove or resize a block first.' };
             if (r.error) { setDialog({ ...dialog, problem: r.error }); return; }
-            setCard(sel, r.card); selectBlock(r.card.blocks[r.card.blocks.length - 1].id); setDialog(null);
+            setCard(sel, r.card, { label: 'Chart' }); selectBlock(r.card.blocks[r.card.blocks.length - 1].id); setDialog(null);
           }} />
       ) : null}
       {dialog?.kind === 'areas' && card ? (
@@ -672,13 +844,14 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
         <ImageLightbox deckId={base.deck.id} cardIndex={sel} card={dialog.replace ? removeBlock(card, dialog.replace) : card} theme={theme} model={model}
           items={items} colours={{ ...colours, ink }} initialUse={dialog.use} onClose={() => setDialog(null)}
           onPlace={(placed) => {
-            setCard(sel, placed.card); if (placed.theme !== theme) setTheme(placed.theme);
+            // One step: the card and, for a card background, the theme it needs.
+            edit([{ type: 'setCard', index: sel, card: placed.card }, ...(placed.theme !== theme ? [{ type: 'setTheme', theme: placed.theme }] : [])], { label: 'Image' });
             selectBlock(placed.block?.id ?? null); setDialog(null); loadImages();
           }} />
       ) : null}
       {dialog?.kind === 'add-block' && card ? (
         <AddBlockDialog card={dialog.replace ? removeBlock(card, dialog.replace) : card} model={model} sources={sources} initialKind={dialog.initial} range={dialog.range} onClose={() => setDialog(null)}
-          onAdd={(c) => { setCard(sel, c); const last = c.blocks?.[c.blocks.length - 1]; selectBlock(last?.id ?? null); setDialog(null); }} />
+          onAdd={(c) => { setCard(sel, c, { label: 'Add block' }); const last = c.blocks?.[c.blocks.length - 1]; selectBlock(last?.id ?? null); setDialog(null); }} />
       ) : null}
     </>
   );
@@ -767,7 +940,7 @@ function AddBlockDialog({ card: given, model, sources, initialKind, range = null
             <select className={FIELD} value={fields.style} onChange={(e) => set('style', e.target.value)} aria-label="Text style">
               {model.text_styles.map((s) => <option key={s} value={s}>{s[0].toUpperCase() + s.slice(1)}</option>)}
             </select>
-            <textarea className={`${FIELD} min-h-[72px]`} value={fields.text} onChange={(e) => set('text', e.target.value)} aria-label="Text" maxLength={4000} />
+            <textarea className={`${FIELD} min-h-[72px]`} value={fields.text} spellCheck onChange={(e) => set('text', e.target.value)} aria-label="Text" maxLength={4000} />
           </>
         ) : null}
         {kind === 'graphic' ? <input className={FIELD} placeholder="An icon or a shape, by name" value={fields.graphic || ''} onChange={(e) => set('graphic', e.target.value)} aria-label="Graphic" /> : null}
@@ -928,7 +1101,7 @@ function PhoneEditor({ cards, sel, setSel, move, card, readOnly, onNotes, notesM
       {card ? (
         <label className={`${CARD} flex flex-col gap-1.5 p-3`}>
           <span className={EYE}>Speaker notes · card {sel + 1}</span>
-          <textarea className={`${FIELD} min-h-[110px]`} value={card.notes || ''} placeholder={NOTES_PLACEHOLDER} readOnly={readOnly} maxLength={notesMax} onChange={(e) => onNotes(e.target.value)} />
+          <textarea className={`${FIELD} min-h-[110px]`} value={card.notes || ''} placeholder={NOTES_PLACEHOLDER} readOnly={readOnly} maxLength={notesMax} spellCheck onChange={(e) => onNotes(e.target.value)} />
         </label>
       ) : null}
       {card && !readOnly && all.length ? (

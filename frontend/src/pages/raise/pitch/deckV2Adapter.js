@@ -40,6 +40,8 @@
  * issue.
  * `comments` (D1570, #3817)
  * answers through `deckCommentsApi.list`.
+ * `history` (D1515, #3767) is swapped without a route: undo and redo live in
+ * the browser, so it answers `gridOps.js` directly, never through().
  *
  * Fields on routes that exist (`context.inferred` and `context.freshness`
  * from #3877; the PostHog, HubSpot and Linear source rows from #3880) need
@@ -57,6 +59,7 @@ import { deckCheckApi } from '../../../lib/api/deckCheck.js';
 import { deckElementModelsApi } from '../../../lib/api/deckElementModels.js';
 import { deckModelPresetsApi } from '../../../lib/api/deckModelPresets.js';
 import { deckCommentsApi } from '../../../lib/api/deckComments.js';
+import * as gridOps from './gridOps.js';
 
 export { NOT_ON };
 
@@ -118,7 +121,7 @@ export const SURFACES = Object.freeze({
 const off = (name) => async () => unavailable(SURFACES[name].issue);
 
 /** The rows whose route is on main: each answers through its real client, never unavailable by default. */
-export const SWAPPED = Object.freeze(['grid', 'saveCard', 'discardDraft', 'draft', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'presets', 'orgLocks', 'comments']);
+export const SWAPPED = Object.freeze(['grid', 'saveCard', 'discardDraft', 'draft', 'history', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'presets', 'orgLocks', 'comments']);
 
 
 /**
@@ -134,7 +137,9 @@ export async function through(call, issue) {
     const status = e?.status ?? e?.response?.status ?? null;
     if (status === 404) return unavailable(issue);
     const message = typeof e?.message === 'string' && e.message ? e.message : 'could not be read';
-    return Object.freeze({ available: false, unreadable: true, reason: message, issue });
+    // D1515: the Worker's status and body ride along (the autosave reads a 409's `server` copy; no status means
+    // the request never reached the Worker, which the autosave reads as offline).
+    return Object.freeze({ available: false, unreadable: true, reason: message, issue, status, data: e?.data ?? null });
   }
 }
 
@@ -163,7 +168,11 @@ export const cancelBatch = off('cancelBatch');
 export const elementModels = (deckId) => through(() => deckElementModelsApi.read(deckId), SURFACES.elementModels.issue);
 export const areasQuote = off('areasQuote');
 export const areasGenerate = off('areasGenerate');
-export const history = off('history');
+/**
+ * D1515 (#3767): undo and redo, frontend-only. No Worker route stores the history, so this row answers at once with
+ * `gridOps.js` (its reducers and the 100-step history) and is not a client call: it has no contract.
+ */
+export const history = async () => Object.freeze({ available: true, value: gridOps });
 export const narrativeOutline = off('narrativeOutline');
 export const instruct = off('instruct');
 /** D1522 (#3774): the deck's stage plan — the order for its stage, a why line per card, and missing-proof warnings. */
