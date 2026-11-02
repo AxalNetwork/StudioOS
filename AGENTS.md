@@ -187,10 +187,30 @@ wrong for a line two branches rewrote: union keeps both versions.
 marker, two rows for one backticked name in one table, or the same long line
 twice within a few lines (D1279). So:
 
-- Add one row per new file or folder, at the end of its table. Never rewrite
-  another feature's row or paragraph in a task PR.
+- In a folder whose README holds a generated file list (`<!-- files:begin -->`:
+  routes, services, `frontend/src/lib/api`), add no row at all: open the new
+  file with a header comment whose first sentence says what it is and which
+  decision or issue it belongs to. The list is generated from it and never
+  committed; `node scripts/check-folder-docs.mjs --write` shows it locally, and
+  `--clean` empties it before you stage the README (#4104).
+- Elsewhere, add one row per new file or folder, at the end of its table. Never
+  rewrite another feature's row or paragraph in a task PR.
 - A feature's notes go in its decision file, not in a shared README.
 - If rule 4 fails after a merge, keep the newer version and delete the other.
+
+### The route map is one file per canvas (D4102)
+
+`documentation/architecture/ROUTE_MAP.md` is only a pointer now. The map lives
+in `documentation/architecture/route-map/`: one file per section and one file
+per canvas row (its README has the rules). So:
+
+- Adding a canvas is adding one file under `route-map/canvases/part-N/`, holding
+  its one table row. Never write a canvas row into a section or into
+  `ROUTE_MAP.md`.
+- Changing a canvas is editing only its file. If another branch changed the
+  same canvas, git stops on that one line: combine the two, keep one row.
+- Run `node scripts/build-route-map.mjs --check` before pushing. It fails on a
+  canvas with two rows and names both files.
 
 ### The repository is public
 

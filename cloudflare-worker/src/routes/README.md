@@ -112,6 +112,14 @@ Where it mounts:
 is stale or a descriptor is unsound (a `before` naming a router nobody mounts, a
 cycle, a router mounted both ways), and holds the deck pair's order on the real
 Worker. The mounts already in `index.ts` stay there.
+## Files
+
+Every route module in this folder, one row each. The list below is generated, not written: `node scripts/check-folder-docs.mjs --write` fills it in your working tree from each file's own header comment (its first line), and `--clean` empties it again. It is never committed, so adding a file never edits this README (#4104), and `check-folder-docs` fails a file here that has no header comment.
+
+**The rule for a new file:** open it with a header comment whose first line says what it is and which decision or issue it belongs to. Write nothing here. The per-file notes elsewhere in this README predate #4104; they are kept as they are and take no new entries.
+
+<!-- files:begin -->
+<!-- files:end -->
 
 ## Mount map
 
