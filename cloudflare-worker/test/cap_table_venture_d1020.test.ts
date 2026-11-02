@@ -14,7 +14,7 @@ import { boundVenture } from '../src/integrations/providers/carta.ts';
 import { updateHolder, HolderError } from '../src/services/capTableWrites.ts';
 import { csvCell, knownSum, withOwnership } from '../src/services/capTableRegister.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { loadSchema } from './_schema_once.mjs';
 
 const read = (p: string) => readFileSync(p, 'utf8');
