@@ -136,7 +136,7 @@ function Person({ refId, api, account, shares, params, onCloseCompose, onSent, o
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-col"><h2 className="m-0 text-[17px] font-extrabold text-axal-ink dark:text-gray-100">{person.name}</h2>
           <span className={`text-[12.5px] ${MUTED}`} data-testid="thread-address">{to ?? (person.kind === 'member' ? 'Address not shared yet' : 'No email address on record')}</span></div>
-        {!blocked && <button type="button" className={PRIMARY} onClick={write} data-testid="write-with-eadwyn">Write with Eadwyn</button>}
+        {!blocked && <button type="button" className={PRIMARY} onClick={write} data-testid="write-with-eadwyn">Draft an email</button>}
       </div>
       {person.kind === 'member' && share && !share.ready && <NetworkCard share={share} api={api} onShared={onShared} />}
       {!to && person.kind !== 'member' && <StateCard state={stateFor('no_address', { name: person.name, module: MODULE_OF_KIND[person.kind] ?? 'their record' })} />}

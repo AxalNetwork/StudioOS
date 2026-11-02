@@ -253,3 +253,4 @@ binding targets and branch isolation.
 | Script | What it does |
 | --- | --- |
 | `pitch-reference-preview.mjs` | D898 §8.6 (#3658): draws the synthetic reference decks (`cloudflare-worker/test/fixtures/pitchReferenceDecks.ts`) in the three themes at 16:9 and as the phone card list, and screenshots them, for design review. Not the product renderer; run with the TypeScript loader, `node --experimental-strip-types --import ./cloudflare-worker/test/_ts-loader.mjs scripts/pitch-reference-preview.mjs <out-dir>`. |
+| `remote-latency.mjs` | D1581 (#3828): the staging test that the phone remote advances Present within 300 ms. It pairs a deck, joins as the phone, and times each step from the request to the frame on Present's socket. It needs `STUDIOOS_BASE`, `STUDIOOS_TOKEN` and a deck id; exits 1 at 300 ms or more. Not in CI. |

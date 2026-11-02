@@ -17,7 +17,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { KNOWN_KINDS, PAGE_ONLY_KINDS, FEED_KINDS, PERSONAL_ONLY_KINDS, fetchUserEvents, fetchUserEventsWithSources, eventsToIcs } from '../src/services/calendar.ts';
 import { SOURCES, SOURCE_FAMILIES, pageOnlyKinds, pushableKinds } from '../src/services/calendar/registry.ts';
@@ -28,7 +28,7 @@ const BASELINE = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8
 const SERVICE = readFileSync('cloudflare-worker/src/services/calendar.ts', 'utf8');
 const ROUTE = readFileSync('cloudflare-worker/src/routes/calendar.ts', 'utf8');
 const DIR = 'cloudflare-worker/sql/migrations';
-const MIGRATIONS = readdirSync(DIR).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort().map((n) => readFileSync(`${DIR}/${n}`, 'utf8'));
+const MIGRATIONS = readdirSync(DIR).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations).map((n) => readFileSync(`${DIR}/${n}`, 'utf8'));
 const FROM = '2026-11-01T00:00:00.000Z', TO = '2026-12-01T00:00:00.000Z';
 const NEW_KINDS = ['interview_call', 'cohort_date', 'deal_closing', 'manual'] as const;
 
@@ -56,7 +56,7 @@ function fixture() {
 
 test('D1484: registry keys equal READERS keys equal the union, and every derived list agrees with it', () => {
   const union = [...(SERVICE.match(/\n {2}kind: ((?:'\w+'(?:\s*\|\s*)?)+);/)?.[1] || '').matchAll(/'(\w+)'/g)].map((m) => m[1]).sort();
-  assert.equal(union.length, 26); // #3959: Learning joined; D1486 §b (#3981): Publish sends and planned content; §c (#3982): round_close and nda_expiry; §d (#3983): four task stores; D1485 (#3979): external_google and external_microsoft.
+  assert.equal(union.length, 27); // D1614 W4 (#3972): work_item. #3959: Learning joined; D1486 §b (#3981): Publish sends and planned content; §c (#3982): round_close and nda_expiry; §d (#3983): four task stores; D1485 (#3979): external_google and external_microsoft.
   assert.deepEqual(Object.keys(SOURCES).sort(), union);
   assert.deepEqual([...KNOWN_KINDS].sort(), union);
   assert.deepEqual(Object.keys(FAMILY_OF).sort(), union);

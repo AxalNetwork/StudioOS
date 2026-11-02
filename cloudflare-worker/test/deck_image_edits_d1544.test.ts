@@ -33,11 +33,12 @@ import { __resetForTest } from '../src/services/aiRouter.ts';
 import { FACE_MODEL } from '../src/services/ai/postDraw.ts';
 import { PERSON_EDIT_MESSAGE, editAskOf, editPrompt, EditRefusal } from '../src/services/decks/imageEdits.ts';
 import { sanitizeArtDirection, artDirectionOfTheme, seedFor } from '../src/services/decks/artDirection.ts';
+import { seedOf } from '../src/services/decks/pipelines.ts';
 import { sanitizeTheme } from '../src/services/decks/slideModel.ts';
 import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withGuard } from './_guard_stub.mjs';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { CONTRACTS } from '../src/contracts/index.ts';
 import { contractErrors } from '../src/contracts/validate.ts';
@@ -46,7 +47,7 @@ const VARY_SCHEMA = JSON.parse(readFileSync(new URL('../src/contracts/' + CONTRA
 
 const root = new URL('../sql/', import.meta.url);
 const baseline = readFileSync(new URL('schema_baseline.sql', root), 'utf8');
-const migrations = readdirSync(new URL('migrations/', root)).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort()
+const migrations = readdirSync(new URL('migrations/', root)).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations)
   .map((n) => readFileSync(new URL('migrations/' + n, root), 'utf8'));
 const JWT_SECRET = 'synthetic-d1544-only-not-a-real-credential'.repeat(2);
 const ORIGIN = 'https://axal.vc';
@@ -109,10 +110,14 @@ async function fixture({ partner = true, images = true, theme = null as any, fac
     run: async (model: string, input: any) => {
       if (model === FACE_MODEL) { calls.push({ model, what: 'face', input }); return { answer: face }; }
       if (model === SCOUT) {
-        const what = /nudity/.test(JSON.stringify(input ?? {})) ? 'screen' : 'alt';
+        // D1505 (#3756): a drawn deck image also asks the style check (YES: on the deck's style).
+        const text = JSON.stringify(input ?? {});
+        const what = /nudity/.test(text) ? 'screen' : /illustration, in /.test(text) ? 'style' : 'alt';
         calls.push({ model, what, input });
-        return { response: what === 'screen' ? 'NO' : 'A tidy desk at dusk.', usage: { prompt_tokens: 40, completion_tokens: 8 } };
+        return { response: what === 'screen' ? 'NO' : what === 'style' ? 'YES' : 'A tidy desk at dusk.', usage: { prompt_tokens: 40, completion_tokens: 8 } };
       }
+      // D1505: the pipeline's expand run is a text model; an empty rewrite draws the description as written.
+      if (!/flux|phoenix|lucid|stable-diffusion/i.test(model)) { calls.push({ model, what: 'expand', input }); return { response: '' }; }
       calls.push({ model, what: 'draw', input });
       return { image: PNG1 };
     },
@@ -322,7 +327,10 @@ test('every image request inherits the deck\'s art direction: its style, its see
     assert.equal(r.status, 200, JSON.stringify(r.body));
     assert.deepEqual(r.body.images.map((i: any) => i.style), ['line', 'line'], 'the request named no style');
     const ds = draws(f);
-    assert.deepEqual(ds.map((d) => d.input?.seed), [100, 101], 'image n draws with seed_base + n');
+    // D1505 (#3756): a deck image's seed is hash(seed base, card, area, variant), from the theme's seed_base.
+    const rows = f.db.prepare("SELECT seed, card_uid, variant_index FROM deck_images WHERE source = 'generated' AND pipeline_uid IS NOT NULL ORDER BY id").all() as any[];
+    assert.deepEqual(ds.map((d) => d.input?.seed), rows.map((r) => seedOf('seed:100', r.card_uid, null, r.variant_index)), 'each image draws with the seed its pipeline records');
+    assert.equal(new Set(ds.map((d) => d.input?.seed)).size, 2, 'two images, two seeds');
     assert.ok(ds.every((d) => /Art direction: Muted watercolour\./.test(String(d.input?.prompt ?? ''))));
     const own = await call(f, FOUNDER, '/api/decks/7/images', { use: 'content', description: 'A calm month-end close at a tidy desk', count: 1, card: 0, style: 'flat' });
     assert.equal(own.body.images[0].style, 'flat', 'a request\'s own style wins');

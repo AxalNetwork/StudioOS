@@ -39,6 +39,20 @@
  *   GET    /:scope/:id/engine         read               { engine, halted, scope_paused, max_parallel_runs, autonomy }
  *   PUT    /:scope/:id/engine         manage             body { paused?, max_parallel_runs? }; 400 invalid_engine
  *
+ * D1614 W4 (#3972) — a project's workload (`services/agents/workWorkload.ts`):
+ *
+ *   GET    /project/:id/work/workload?weeks=1..12   read   { weeks, people: [{ person, capacity, weeks, unscheduled }], agents: [...] }
+ *   PUT    /project/:id/work/capacity/:personUid    self or manage   { weekly_capacity_points: number | null } → { person, capacity }
+ *   A task's time block is W1's `PATCH /tasks/:uid` { scheduled_start, scheduled_end }; reassignment is the same PATCH's
+ *   `assignee`, under E1's agent checks (works_in, may_propose, live). Projects only: a company path has no route.
+ *
+ * #3851 (E7 of #3742) — the evaluation board (TM14), behind the same flag and gates:
+ *
+ *   GET    /:scope/:id/evaluation?days=30|90   read   { days, roles: [RoleEvaluation] }; 400 invalid_days
+ *
+ * Task and goal costs are now read (`services/agents/evaluation.ts` `runCostReader`):
+ * the sum of a task's runs' charges, `{ available: false }` when any is unrecorded.
+ *
  * A start goes through the runtime's seam (`src/agents/runtime.ts`), never a
  * binding. With the engine off or paused, #3727's own
  * `POST /agents/:uid/run` (team_agents.ts) still runs an agent by hand.
@@ -57,7 +71,7 @@
  *
  * NEVER AN EMAIL, NEVER A NUMERIC USER ID. A person is `{ uid, name }`; an
  * agent `{ uid, role_key, first_name, last_name }`. `cost` is
- * `{ available: false }` until E3 records task runs, never 0.
+ * `{ available: false }` when a charge is unrecorded or unreadable, never 0.
  */
 import { Hono } from 'hono';
 import type { Context } from 'hono';
@@ -84,9 +98,12 @@ import { terminateRun, trackRun } from '../agents/doRuntime';
 import { workItemRoutes } from './work_items';
 import { memberTimeZone, projectBurnup } from '../services/agents/workBurnup';
 import { WorkRefusal } from '../services/agents/workBoard';
+import { movesOf } from '../services/agents/transfer';
 import { addDuty, dutiesOf, dutyByUid, dutyDto, removeDuty, runsPerMonth, updateDuty, type DutyRow } from '../services/agents/duties';
 import { chainsOf } from '../services/agents/handoffs';
+import { daysOf, evaluateScope, runCostReader } from '../services/agents/evaluation';
 import { RETENTION, addFact, forgetAll, forgetNote, noteByUid, noteDto, notesOf, retentionText } from '../services/agents/memory';
+import { WEEKS_DEFAULT, WEEKS_MAX, projectWorkload, setCapacity } from '../services/agents/workWorkload';
 
 type C = Context<{ Bindings: Env }>;
 
@@ -126,6 +143,44 @@ router.get('/project/:id/work/burnup', async (c) => {
   }
 });
 
+// D1614 W4 (#3972): a project's workload per person, agent and week, and a person's weekly
+// capacity on it. Projects only (owner revision, 2026-11-01): a company path has no route (404).
+router.get('/project/:id/work/workload', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return c.json({ error: 'agent_engine_off' }, 404);
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, 'project', c.req.param('id') ?? '');
+    if (!s || s.kind !== 'project') return refuse(c, 404, { code: 'not_found', message: 'There is no project board here.' });
+    if (!(await canRead(c.env, s, user))) return refuse(c, 403, { code: 'not_member', message: 'Only the project team can read its Work.' });
+    const raw = c.req.query('weeks') ?? String(WEEKS_DEFAULT);
+    const weeks = /^[0-9]{1,2}$/.test(raw) ? Number(raw) : NaN;
+    if (!(weeks >= 1 && weeks <= WEEKS_MAX)) return refuse(c, 400, { code: 'invalid_weeks', message: `Show 1 to ${WEEKS_MAX} weeks.` });
+    return c.json(await projectWorkload(c.env, s.id, weeks, new Date()));
+  } catch (e) { return mapError(c, e); }
+});
+
+router.put('/project/:id/work/capacity/:person', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return c.json({ error: 'agent_engine_off' }, 404);
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, 'project', c.req.param('id') ?? '');
+    if (!s || s.kind !== 'project') return refuse(c, 404, { code: 'not_found', message: 'There is no project board here.' });
+    if (!(await canRead(c.env, s, user))) return refuse(c, 403, { code: 'not_member', message: 'Only the project team can read its Work.' });
+    const target = /^[A-Za-z0-9_-]{1,64}$/.test(c.req.param('person') ?? '')
+      ? await c.env.DB.prepare('SELECT * FROM users WHERE uid = ?').bind(c.req.param('person')).first<User>() : null;
+    // A capacity belongs to someone on the project's team; a stranger has none to set.
+    if (!target || !(await canRead(c.env, s, target))) return refuse(c, 404, { code: 'not_found', message: 'That person is not on this project.' });
+    // One's own, or a project editor's for anyone on it.
+    if (target.id !== user.id && !(await canManage(c.env, s, user))) return refuse(c, 403, { code: 'not_manager', message: 'Set your own capacity, or ask a project editor.' });
+    const b = await readBody(c);
+    const v = b?.weekly_capacity_points;
+    if (!b || !('weekly_capacity_points' in b) || !(v === null || (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1000))) {
+      return refuse(c, 400, { code: 'invalid_capacity', message: 'A weekly capacity is 0 to 1,000 points, or null to clear it.' });
+    }
+    return c.json({ person: { uid: target.uid, name: target.name }, capacity: await setCapacity(c.env, s.id, target.id, v, user.id) });
+  } catch (e) { return mapError(c, e); }
+});
+
 const say = (c: C, r: Refusal) => refuse(c, r.status, { code: r.code, message: r.message });
 const off = (c: C) => c.json({ error: 'agent_engine_off' }, 404);
 const noScope = (c: C) => refuse(c, 404, { code: 'not_found', message: 'There is no such team.' });
@@ -150,7 +205,7 @@ async function personOf(env: Env, id: number | null) {
 async function tasksDto(env: Env, rows: TaskRow[]) {
   const ids = rows.map((t) => t.id);
   const deps = await depsOf(env, ids);
-  const costs = await taskCosts(env, ids);
+  const costs = await taskCosts(env, ids, runCostReader);
   const out = [];
   for (const t of rows) {
     const goal = t.goal_id ? await env.DB.prepare('SELECT uid, title FROM scope_goals WHERE id = ?').bind(t.goal_id).first<{ uid: string; title: string }>() : null;
@@ -185,7 +240,7 @@ async function oneTask(env: Env, t: TaskRow) {
 async function goalsDto(env: Env, s: Scope) {
   const goals = await goalsOf(env, s);
   const tasks = await tasksOf(env, s);
-  const costs = await taskCosts(env, tasks.map((t) => t.id));
+  const costs = await taskCosts(env, tasks.map((t) => t.id), runCostReader);
   const out = [];
   for (const g of goals) {
     const mine = tasks.filter((t) => t.goal_id === g.id).map((t) => ({ status: t.status, cost: costs.get(t.id)! }));
@@ -195,6 +250,20 @@ async function goalsDto(env: Env, s: Scope) {
 }
 
 // ── Goals ───────────────────────────────────────────────────────────────────
+
+// #3850 (E6): the moves a team saw, newest first (TM18's banner). Read gate; at most 20.
+router.get('/:scope/:id/moves', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
+    if (!s) return noScope(c);
+    if (!(await canRead(c.env, s, user))) return notMember(c);
+    const asked = Number(c.req.query('limit') ?? 5);
+    const limit = Number.isSafeInteger(asked) && asked > 0 ? Math.min(asked, 20) : 5;
+    return c.json({ moves: await movesOf(c.env, { kind: s.kind, id: s.id }, limit) });
+  } catch (e) { return mapError(c, e); }
+});
 
 router.get('/:scope/:id/goals', async (c) => {
   try {
@@ -238,7 +307,7 @@ router.patch('/goals/:uid', async (c) => {
     if (!w.ok) return say(c, w.refusal);
     const fresh = await updateGoal(c.env, g, w.write);
     const tasks = (await tasksOf(c.env, s, { goalId: g.id }));
-    const costs = await taskCosts(c.env, tasks.map((t) => t.id));
+    const costs = await taskCosts(c.env, tasks.map((t) => t.id), runCostReader);
     return c.json({ goal: await goalDto(c.env, s, fresh, tasks.map((t) => ({ status: t.status, cost: costs.get(t.id)! }))) });
   } catch (e) { return mapError(c, e); }
 });
@@ -447,6 +516,20 @@ router.get('/:scope/:id/engine', async (c) => {
     if (!s) return noScope(c);
     if (!(await canRead(c.env, s, user))) return notMember(c);
     return c.json(await engineDto(c.env, s));
+  } catch (e) { return mapError(c, e); }
+});
+
+// #3851 (E7): the evaluation board (TM14), per role, read-only. Rates are null under 10 decisions.
+router.get('/:scope/:id/evaluation', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
+    if (!s) return noScope(c);
+    if (!(await canRead(c.env, s, user))) return notMember(c);
+    const days = daysOf(c.req.query('days'));
+    if (!days) return say(c, { status: 400, code: 'invalid_days', message: 'Choose 30 or 90 days.' });
+    return c.json(await evaluateScope(c.env, s, days));
   } catch (e) { return mapError(c, e); }
 });
 

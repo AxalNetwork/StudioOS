@@ -20,11 +20,16 @@ the engine is down. The decision is
 
 ## Stop every agent now
 
-1. Set the halt key on the deployment (HQ shown; a branch uses its own namespace id):
+1. Halt from HQ (#3851): a platform admin sends `POST /api/admin/agents/halt`
+   `{ "halted": true, "reason": "incident" }` (the client's
+   `agentEngineApi.setHalt`). It records who halted and when, and every HQ admin
+   hears it. Without the route, set the key on the deployment (HQ shown; a
+   branch uses its own namespace id):
    `npx wrangler kv key put --binding RATE_LIMITS --env production agents:halt "incident"`
-   Every run ends at its next step and nothing is admitted. Proposals already
-   in the approvals queue stay there and can still be decided.
-2. To resume, delete the key:
+   Either way every run ends at its next step and nothing is admitted.
+   Proposals already in the approvals queue stay there and can still be
+   decided. `GET /api/admin/agents/halt` shows the state.
+2. To resume, send `{ "halted": false }`, or delete the key:
    `npx wrangler kv key delete --binding RATE_LIMITS --env production agents:halt`
 
 The circuit breaker is cleared the same way (`agents:paused`), once the
@@ -48,10 +53,12 @@ Switching from `sdk` to `do`, or back, is the same runbook. Both are built
    - No class is deleted in the same deploy.
 3. Run `rebuild(scope)` for every scope with an active agent. It recreates
    the admission view, the duty timers and the scope's pause from D1 alone.
-   E7 (#3851) owns the admin route that calls it; until then, a scope's
-   `PUT …/engine { paused: false }` rebuilds that one scope.
-4. Set `AGENT_ENGINE = "on"`, deploy, and watch the evaluation board and the
-   alerts for 24 hours.
+   A platform admin calls `POST /api/admin/agents/rebuild/project:<id>` (or
+   `company:<id>`; the client's `agentEngineApi.rebuildScope`), which answers
+   `{ ok, schedules, status }`. A scope's `PUT …/engine { paused: false }` also
+   rebuilds that one scope.
+4. Set `AGENT_ENGINE = "on"`, deploy, and watch the evaluation board
+   (`GET /api/teams/:scope/:id/evaluation`, TM14) and the alerts for 24 hours.
 5. Remove the unused class only in a later PR, with a `deleted_classes`
    migration tag, once the owner agrees.
 
@@ -96,6 +103,10 @@ The owner's account steps, none of which this repository can do:
   `studioos-<code>-agent-queue` and `studioos-<code>-agent-queue-dlq`);
 - create the `agents` AI Gateway with its spend limits, then set
   `AGENT_AI_GATEWAY` to its id. No secret is added.
+- optionally set `AGENT_GATEWAY_MONTHLY_LIMIT_MICROUSD` to the gateway's
+  monthly limit in micro-USD (the Worker cannot read the dashboard's), so HQ
+  ops hear once a month when agent runs reach 70% of it (#3851). Unset, that
+  alert is off; the gateway still stops runs at its limit.
 
 Until then `AGENT_ENGINE` stays `off`. A deploy that declares a queue the
 account does not have fails at deploy time, so the queues must exist before

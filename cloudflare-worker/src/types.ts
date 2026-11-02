@@ -362,6 +362,8 @@ export interface Env {
   AGENT_RUNTIME?: string;
   /** D1528: the `agents` AI Gateway id agent runs pass. Unset = no gateway. Set only by `agentRun`. */
   AGENT_AI_GATEWAY?: string;
+  /** #3851 (E7): the `agents` gateway's monthly limit in micro-USD, mirrored from its dashboard; at 70% HQ ops hear once a month. Unset = no alert. */
+  AGENT_GATEWAY_MONTHLY_LIMIT_MICROUSD?: string;
   /** D1528: one `AgentScope` Durable Object per scope, named `project:{id}` or `company:{id}`. */
   AGENT_SCOPE?: DurableObjectNamespace;
   /** #3852 (E0): the `sdk` runtime's `ScopeAgent` namespace. Used only while `AGENT_RUNTIME` is `sdk`. */
@@ -487,13 +489,15 @@ export interface Env {
   // (`services/decks/queueRuntime.ts`); `"do"` (and unset) keeps every run on DECK_GEN_ROOM.
   DECK_GEN_RUNTIME?: string;
   AI_GOVERNOR?: DurableObjectNamespace;
+  // D1581 (#3828): the phone remote for Present, paired by code. Optional: without it the remote routes answer 503 `remote_off`.
+  DECK_REMOTE?: DurableObjectNamespace;
   // Vectorize index `axal-search` (768-dim, cosine) for semantic search.
   // Optional so unit-test envs without the binding still type-check; the
   // search service no-ops gracefully when undefined.
   VECTORIZE?: VectorizeIndex;
-  // D1556 (#3803): `axal-deck-quotes` (bge-m3, 1024 dimensions). Not in wrangler.toml
-  // until the owner approves its monthly cost (decision L); absent, quote
-  // retrieval answers "not switched on yet".
+  // D1556 (#3803): `axal-deck-quotes` (bge-m3, 1024 dimensions), bound in
+  // wrangler.toml once the owner approved its monthly cost (decision L).
+  // Optional for test envs; absent, quote retrieval answers "not switched on yet".
   DECK_QUOTES?: VectorizeIndex;
   // #3938 part 2: `axal-dataroom` (qwen3-embedding-0.6b, 1024 dimensions, cosine). Not in
   // wrangler.toml until the owner creates the index (#1008); absent, data room
