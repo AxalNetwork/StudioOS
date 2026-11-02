@@ -9,11 +9,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { readRouteMap } from '../../scripts/lib/routeMap.mjs';
 
 const read = (f) => readFileSync(resolve(process.cwd(), f), 'utf8');
 const index = read('cloudflare-worker/src/index.ts');
 const routesReadme = read('cloudflare-worker/src/routes/README.md');
-const routeMap = read('documentation/architecture/ROUTE_MAP.md');
+const routeMap = readRouteMap();
 const service = read('cloudflare-worker/src/services/storageUsage.ts');
 
 // The area keys, as the service types them: D642's five, then D1169's eight.

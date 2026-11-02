@@ -100,7 +100,12 @@ each significant directory saying what lives there and the rule for adding to
 it, and `scripts/check-folder-docs.mjs` fails the build if one is missing, if it
 does not name its own subfolders, or if it cites a file that does not exist —
 the first run caught a route README documenting a mount for a file that has
-never existed. Start at the README of whatever folder you land in.
+never existed. Start at the README of whatever folder you land in. A README
+whose folder lists its files (routes, services, `frontend/src/lib/api`) holds
+a **generated** list between `<!-- files:begin -->` and `<!-- files:end -->`:
+each file's header comment describes it, the list is never committed
+(`--write` fills it locally, `--clean` empties it), and a file there without a
+header comment fails the build (#4104). Adding such a file edits no README.
 
 ## Rules for new work
 
@@ -122,10 +127,18 @@ never existed. Start at the README of whatever folder you land in.
   one. It covers slots, the `state:*` labels, STATUS comments, and who gives
   instructions.
 - **A new decision is its own file.** From D526 on, each decision is
-  `documentation/architecture/decisions/D<n>.md`, with the number its issue
-  gives. `DECISIONS.md` keeps D1 to D525 and takes no new entries.
+  `documentation/architecture/decisions/D<n>.md`.
+  `DECISIONS.md` keeps D1 to D525 and takes no new entries. From D4106 on, `<n>` is the issue's number
+  (the decision for issue #4102 is D4102), so parallel PRs never pick the same
+  one; the heading cites it, `## D4102 — <title> (#4102)`. Numbers below D4000
+  are the ones issues handed out before that, and keep them.
   `node scripts/check-decision-ids.mjs` reads both places and fails on a
-  number used twice.
+  number used twice, or a D4000+ heading that does not cite its own issue.
+- **A new migration is named by its UTC minute** (D4106):
+  `cloudflare-worker/sql/migrations/YYYYMMDDHHMM_<slug>.sql`. It sorts after
+  every numbered file and applies once like any other; numbered files stop at
+  799. `scripts/check-sql-migrations.mjs` fails on a shared number or stamp,
+  naming both files.
 
 ## Why this doc exists
 
@@ -139,7 +152,8 @@ If a doc disagrees with this file, **this file wins** — fix the doc.
 
 Everything else worth reading is indexed in
 [documentation/README.md](documentation/README.md): the architecture set
-(`CODEBASE_MAP`, `ROUTE_MAP`, `DECISIONS` with the per-decision files in
+(`CODEBASE_MAP`, the route map in `route-map/` (one file per canvas row, D4102),
+`DECISIONS` with the per-decision files in
 `decisions/` from D526 on, `GOTCHAS`) under `documentation/architecture/`;
 dated snapshots under `documentation/audits/`, which are true as of their
 date and are **not** maintained afterwards — never

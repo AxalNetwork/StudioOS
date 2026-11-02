@@ -21,6 +21,11 @@ yarn-error.log*
 .npm/
 .yarn/
 
+# The route map as one document (D4102, #4102): built from the fragments in
+# documentation/architecture/route-map/ by `node scripts/build-route-map.mjs`.
+# Nothing reads it back; every script and test reads the fragments.
+documentation/architecture/route-map/ROUTE_MAP.combined.md
+
 # Vite / build output. `docs/` is NOT committed (D529): the Cloudflare Worker
 # serves it from its `[assets]` binding on both axal.vc and app.axal.vc, and
 # every job that needs it builds it from `frontend/` first — the deploy, the PR
@@ -105,3 +110,7 @@ frontend/*.sqlite3
 
 # ---- Per-user activity exports (contain PII; regenerable by the backend) ----
 users/*/activity.md
+
+# D1511 (#3762): Playwright results and traces from the visual suite; only CI-made baselines are committed.
+frontend/test-results/
+frontend/playwright-report/
