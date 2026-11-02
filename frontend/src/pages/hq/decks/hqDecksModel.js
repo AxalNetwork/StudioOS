@@ -36,7 +36,7 @@ export const BUILD = {
   K2: { issue: 4189, live: false, what: 'A reason and an audit row on every flag change' },
   K3: { issue: 4190, live: false, what: 'The beta cohort' },
   K4: { issue: 4191, live: false, what: 'A reason and an audit row on every default template change' },
-  K5: { issue: 4192, live: false, what: 'HQ stage norms' },
+  K5: { issue: 4192, live: true, what: 'HQ stage norms' },
 };
 export const notYet = (key) => {
   const b = BUILD[key];
@@ -211,6 +211,53 @@ export function offGridOverrides(reply) {
 
 export const NORM_COLUMNS = ['Metric', 'Typical range', 'Source', 'Last reviewed'];
 export const NORM_RULE = 'The deck critic quotes the norm, its range and its source beside a founder’s figure. It never rates the company. A norm with no source is never cited.';
+
+/** The page's stage ids are the canvas's; HQ norms are stored by the critic's (`series_b_plus`, D1589). */
+export const NORM_STAGE_OF = { pre_seed: 'pre_seed', seed: 'seed', series_a: 'series_a', series_b: 'series_b_plus' };
+export const NORM_ADD_LINE = 'The critic starts citing it on the next deck it reads.';
+export const NORM_RETIRE_LINE = 'The critic stops citing it at once. Decks it was cited on keep the old note until they are read again.';
+export const NORM_SOURCE_HELP = 'Required. A norm with no source is never cited.';
+export const PROJECT_NORMS_NOTE = 'The founders set these. The critic cites them before HQ’s norms for this project. HQ cannot change them.';
+
+const bound = (v) => {
+  if (v === null || v === undefined || String(v).trim() === '') return null;
+  const n = Number(String(v).trim());
+  return Number.isFinite(n) ? n : NaN;
+};
+/** The Worker's own wording (`rangeText`): "100–120%", "5+ logos", "up to 18 months". */
+export function normRangeText(range) {
+  const low = range?.low ?? null, high = range?.high ?? null, unit = String(range?.unit ?? '');
+  const u = !unit ? '' : /^[%x×]/.test(unit) ? unit : ` ${unit}`;
+  if (low !== null && high !== null) return low === high ? `${low}${u}` : `${low}–${high}${u}`;
+  if (low !== null) return `${low}+${u}`;
+  if (high !== null) return `up to ${high}${u}`;
+  return NOT_RECORDED;
+}
+
+/** One HD5 row. A retired norm says who retired it, when and why; a person is a name, never an email. */
+export function normRow(n) {
+  const retired = n?.status === 'retired';
+  const who = textOf(n?.retired_by?.name) ?? NOT_RECORDED;
+  return {
+    uid: n?.uid, metric: textOf(n?.metric) ?? NOT_RECORDED, range: normRangeText(n?.range), source: textOf(n?.source) ?? NOT_RECORDED,
+    reviewed: textOf(n?.last_reviewed) ?? NOT_RECORDED, retired,
+    retiredLine: retired ? `Retired ${textOf(n?.retired_at)?.slice(0, 10) ?? NOT_RECORDED} by ${who} · “${textOf(n?.retired_reason) ?? NOT_RECORDED}”` : null,
+  };
+}
+
+/** HD5b: Add (and Save on an edit) is armed by a metric, a range with a bound and low ≤ high, a source and a reason. */
+export function normDraftArmed({ metric, low, high, source, reason }) {
+  const lo = bound(low), hi = bound(high);
+  if (Number.isNaN(lo) || Number.isNaN(hi) || (lo === null && hi === null) || (lo !== null && hi !== null && lo > hi)) return false;
+  return !!String(metric ?? '').trim() && !!String(source ?? '').trim() && reasonOk(reason);
+}
+/** The body the Worker takes; empty bounds are null. */
+export const normBody = ({ stage, metric, low, high, unit, source, reason }) => ({
+  stage: NORM_STAGE_OF[stage] ?? stage, metric: String(metric ?? '').trim(),
+  range: { low: bound(low), high: bound(high), unit: String(unit ?? '').trim() }, source: String(source ?? '').trim(), reason: String(reason ?? '').trim(),
+});
+/** HD5b: Retire is armed by a reason alone. */
+export const normRetireArmed = ({ reason }) => reasonOk(reason);
 
 // ── HD3 · Beta cohort ───────────────────────────────────────────────────────
 

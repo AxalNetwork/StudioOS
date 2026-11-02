@@ -34,9 +34,9 @@ test('Decks joins the Platform strip after Promo codes, in the list and in the c
   assert.match(read('App.jsx'), /<StripLink to="\/admin\/platform\/promo-codes">Promo codes<\/StripLink>\n\s+<StripLink to="\/admin\/platform\/decks">Decks<\/StripLink>/);
 });
 
-test('each build task names its issue, and none is live before it lands', () => {
+test('each build task names its issue, and only a landed one is live', () => {
   assert.deepEqual(Object.entries(BUILD).map(([k, b]) => [k, b.issue]), [['K1', 4188], ['K2', 4189], ['K3', 4190], ['K4', 4191], ['K5', 4192]]);
-  for (const b of Object.values(BUILD)) assert.equal(b.live, false);
+  assert.deepEqual(Object.entries(BUILD).filter(([, b]) => b.live).map(([k]) => k), ['K5'], 'K5 (#4192) landed');
   assert.equal(notYet('K3'), 'Not switched on yet. The beta cohort arrives with #4190.');
 });
 
@@ -106,9 +106,10 @@ test('HD4: the sector × stage grid from the overrides; a default is never a gue
   assert.doesNotMatch(PAGE, /deckSetRecommendOverride|method: '(PUT|DELETE)'/, 'no template write before K4');
 });
 
-test('the page writes only Resolve, reads only mounted routes, and never shows an email', () => {
-  const calls = [...PAGE.matchAll(/\b(deckReportsApi|adminFeatureFlagsApi|api)\.(\w+)\(/g)].map((m) => `${m[1]}.${m[2]}`);
-  assert.deepEqual([...new Set(calls)].sort(), ['adminFeatureFlagsApi.list', 'api.deckMethods', 'api.deckRecommendOverrides', 'deckReportsApi.queue', 'deckReportsApi.resolve']);
+test('the page writes only Resolve and the stage norms, reads only mounted routes, and never shows an email', () => {
+  const calls = [...PAGE.matchAll(/\b(deckReportsApi|adminFeatureFlagsApi|hqDeckStageNormsApi|api)\.(\w+)\(/g)].map((m) => `${m[1]}.${m[2]}`);
+  assert.deepEqual([...new Set(calls)].sort(), ['adminFeatureFlagsApi.list', 'api.deckMethods', 'api.deckRecommendOverrides', 'deckReportsApi.queue', 'deckReportsApi.resolve',
+    'hqDeckStageNormsApi.add', 'hqDeckStageNormsApi.edit', 'hqDeckStageNormsApi.list', 'hqDeckStageNormsApi.projectNorms', 'hqDeckStageNormsApi.retire']);
   assert.doesNotMatch(PAGE, /\.email\b/);
   assert.doesNotMatch(PAGE.replace(/NORM_RULE/g, ''), /\badvis(or|e)\b/i);
   assert.equal(reasonOk('ten chars!'), true);
