@@ -428,7 +428,8 @@ export const FOUNDER_QUIET_PAGES = {
   'Founder · Build · Founding team': 'Its tool is the cap table, which runs no model.',
   'Founder · Build · Company creation': 'Its legal and e-signature doors run no model; the legal generator refuses founders.',
   'Founder · Raise': 'Call for Capital matches by rule.',
-  'Founder · Raise · Data room': 'The Data room tool runs no model; the room is read on Fundraising readiness.',
+  // #3938 part 2: search runs on the room's own index, whose embedder is fixed (D1478 retrieve_index), so nothing is offered to pick.
+  'Founder · Raise · Data room': 'Search runs on the room’s own index with fixed models, so there is nothing to pick; the room is read on Fundraising readiness.',
   'Founder · Raise · Capital relationships': 'The pipeline, the investor match and Match to my Mercury run no model.',
   'Founder · Grow · Revenue and traction': 'The metric log runs no model.',
   'Founder · Grow · Partner network': 'Its records only.',

@@ -181,6 +181,7 @@ const FORWARDED: Record<string, string[]> = {
   'routes/research.ts': ['page'],               // the zone draft's app path (D404, D510)
   'services/advisor/guardrails.ts': ['surface'], // classifyInput's required parameter
   'services/agents/agentRun.ts': ['c.surface'],  // D1496 part 2: the agent's module app path (moduleSurface), both the quote and the run
+  'services/ai/decide.ts': ['charge.surface'],   // #3938: decisions, rankings and sentiment run on the caller's page (pipeline, studio, research, interviews)
 };
 
 /** Every call site's fixed name, by file — the table D552.md lists. */
@@ -213,6 +214,7 @@ const EXPECTED: Record<string, string[]> = {
   'routes/cycle_raise.ts': ['AI_SURFACE.raiseNarrative', 'AI_SURFACE.raiseNarrative', 'AI_SURFACE.raiseNarrative'], // D911: the narrative's positioning proposal; D1114: Story's Ask Eadwyn; D913: Answer it
   'routes/build_plan.ts': ['AI_SURFACE.buildPlan'], // D1071: Eadwyn words the build plan
   'services/capTableDocumentRead.ts': ['AI_SURFACE.raiseCapTable'], // D1021: Eadwyn's read of a signed document
+  'services/dataRoomSearch.ts': ['AI_SURFACE.raiseDataRoom'], // #3938: a data room search's embedding (its rerank goes through decide.ts)
   'services/capRelTabs.ts': ['AI_SURFACE.raiseCapitalRelationships', 'AI_SURFACE.raiseCapitalRelationships'], // D1193: proposals from a note, message drafts
   'services/publications.ts': ['AI_SURFACE.adminPublications'],
   // D766 (#2094) — system calls moved into the router.
@@ -226,8 +228,7 @@ const EXPECTED: Record<string, string[]> = {
   'services/updateShare.ts': ['AI_SURFACE.growUpdate'],
   'services/fills/citations.ts': ['AI_SURFACE.validate'],
   'services/interviewStructuring.ts': ['AI_SURFACE.validateInterviews', 'AI_SURFACE.validateInterviews', 'AI_SURFACE.validateInterviews'], // D658: structure, ask; D685: summarise
-  'services/sessionTranslation.ts': ['AI_SURFACE.validateInterviews', 'AI_SURFACE.validateInterviews'], // D857: detect a language, translate a segment
-  'services/advisor/rerank.ts': ['AI_SURFACE.studio'],
+  'services/sessionTranslation.ts': ['AI_SURFACE.validateInterviews'], // D857: translate a segment; #3938: detection runs through ai/decide.ts on this page
   'routes/profiling.ts': ['AI_SURFACE.onboardingChat', 'AI_SURFACE.onboardingChat'],
   'routes/advisor.ts': ['AI_SURFACE.studio', 'AI_SURFACE.studio', 'AI_SURFACE.studio'],
 };

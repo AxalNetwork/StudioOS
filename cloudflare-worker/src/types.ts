@@ -475,6 +475,10 @@ export interface Env {
   // until the owner approves its monthly cost (decision L); absent, quote
   // retrieval answers "not switched on yet".
   DECK_QUOTES?: VectorizeIndex;
+  // #3938 part 2: `axal-dataroom` (qwen3-embedding-0.6b, 1024 dimensions, cosine). Not in
+  // wrangler.toml until the owner creates the index (#1008); absent, data room
+  // search answers "not switched on yet".
+  DATAROOM_INDEX?: VectorizeIndex;
   // D1540 (#3791, owner decision AA): the owner's daily ceiling on deck
   // generation, in micro-USD across every member per UTC day
   // (`services/decks/runQuotes.ts`). Not in wrangler.toml: unset is off.

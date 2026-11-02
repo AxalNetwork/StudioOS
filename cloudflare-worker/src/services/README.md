@@ -424,6 +424,13 @@ opens nothing.
 batch under its claim), `dealPageRequestStatement()` (for DEAL's DL9) and
 `readRequests()`. One open request per investor and venture, and none for an
 investor who already has the room.
+`dataRoomSearch.ts` (#3938, D1478 task 4) is search inside a data room, on its
+own Vectorize index `axal-dataroom` (`env.DATAROOM_INDEX`, qwen3-embedding-0.6b,
+1024 dimensions; migration 765 keeps the passages and each file's index
+state). The embedder is fixed and a vector of any other length is refused
+(`dimension_mismatch`). A hit is re-checked against D1 and the reader's files
+(an investor's listing), then reranked. Unbound, it answers "not switched on
+yet".
 `deckSlideDwell.ts` stores a share-link view's seconds per slide, bounded so
 they never add up to more than the view's read time.
 `peerBenchmark.ts` (#1524) is the peer-group benchmark for every founder:
