@@ -266,6 +266,7 @@ import deckNew from './routes/deck_new';
 import deckAssist from './routes/deck_assist';
 import deckDerive from './routes/deck_derive';
 import deckCritic from './routes/deck_critic';
+import deckQaRoutes from './routes/deck_qa';
 import deckImages from './routes/deck_images';
 // D1565 (#3812): one link per investor, and tailored variants.
 import deckInvestorLinks from './routes/deck_investor_links';
@@ -1418,6 +1419,8 @@ app.route('/api/decks', deckAssist);
 app.route('/api/decks', deckDerive);
 // D1557 (#3804): the investor critic: rule findings, and one run on a model of another family than the writer's.
 app.route('/api/decks', deckCritic);
+// D1559 (#3806): likely investor questions, real objections first, answers bound to records; before `decks`.
+app.route('/api/decks', deckQaRoutes);
 // D903 (#2682): card and background images (`/:id/images…`, `/images/:uid/…`), before `decks` so `GET /:id` cannot answer `/images/…`.
 app.route('/api/decks', deckImages);
 // D1565 (#3812): `/:id/investor-links…` and `/:id/variants`, before `decks` so its `/:id` routes cannot answer them.
