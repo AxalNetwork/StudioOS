@@ -45,6 +45,7 @@ import { context as workspaceContext, member } from './google_workspace';
 import { WorkspaceError } from '../services/google/workspace';
 import { createPresentation, driveName } from '../services/google/driveCreate';
 import { writeEditableDeck, type ChartShot } from '../services/decks/pptxEditable';
+import { dirOf } from '../services/decks/designSystem';
 import { ODP_MIMETYPE, writeOdp } from '../services/decks/odp';
 import { stripTrailingSlashes } from '../util/url';
 import { DECK_PAGE_LOAD_MS, MAX_SLIDE_PNG_BYTES, renderUrl } from '../services/browserRun';
@@ -174,6 +175,9 @@ deckExports.post('/:id/export/html', async (c) => {
     notes: body?.notes === true,
     sources: body?.sources === true,
     compliance: deckCompliance(slides, themeOfRow(row)),
+    // D1571 (#3818): the deck's language and direction on every card of the file.
+    lang: typeof themeOfRow(row)?.lang === 'string' ? themeOfRow(row).lang : null,
+    dir: dirOf(themeOfRow(row)?.lang, themeOfRow(row)?.dir),
   });
   const bytes = new TextEncoder().encode(html);
   const hash = await sha256Hex(bytes);
@@ -307,7 +311,8 @@ deckExports.post('/:id/export/google-slides', async (c) => {
   const images = await fetchImages(imageUrlsOf(slides));
 
   const chartShot = await chartShotFor(c, row, opts, copied.imageCopies);
-  const deck = await writeEditableDeck({ slides, renderable: renderable.slides, brand, notes: opts.notes, images, chartShot, compliance: deckCompliance(slides, themeOfRow(row)) });
+  // D1571 (#3818): an Arabic or Hebrew deck's words read right to left in the editable file too.
+  const deck = await writeEditableDeck({ slides, renderable: renderable.slides, brand, notes: opts.notes, images, chartShot, compliance: deckCompliance(slides, themeOfRow(row)), dir: dirOf(themeOfRow(row)?.lang, themeOfRow(row)?.dir) });
   const hash = await sha256Hex(deck.bytes);
 
   let created;

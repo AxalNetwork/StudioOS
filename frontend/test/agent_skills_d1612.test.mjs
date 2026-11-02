@@ -10,6 +10,7 @@
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/agent_skills_d1612.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { installDocument } from './_contracts_dom.mjs';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -231,8 +232,8 @@ test('SK4, SK9b: the agent\'s skills with pinned versions, Update to v3, a retir
 
 // ---------------------------------------------------------------- the seam
 
-test('every skill read and write is unavailable until A1 and A2 land, and no client method exists for them', async () => {
-  const methods = ['skillLibrary', 'skill', 'createSkill', 'updateSkill', 'publishSkill', 'importSkill', 'agentSkills', 'setAgentSkills', 'availableSkills', 'skillAgents', 'assignable', 'assignSkill', 'coverage'];
+test('A1\'s library reads stay unavailable behind the seam; A2\'s agent reads are wired to their routes (#3956)', async () => {
+  const methods = ['skillLibrary', 'skill', 'createSkill', 'updateSkill', 'publishSkill', 'importSkill'];
   for (const m of methods) {
     assert.equal(typeof adapter[m], 'function', m);
     const out = await adapter[m]('company', 'nw1', {});
@@ -240,9 +241,31 @@ test('every skill read and write is unavailable until A1 and A2 land, and no cli
     assert.equal(out.reason, adapter.AGENTS_OFF_REASON, m);
   }
   const client = [read('frontend/src/lib/api.js'), ...readdirSync('frontend/src/lib/api').filter((f) => f.endsWith('.js')).map((f) => read(`frontend/src/lib/api/${f}`))].join('\n');
-  assert.doesNotMatch(codeOnly(client), /\/teams\/[^'"`\n]*\/(skills|coverage)\b|\/teams\/skills\b/, 'no client path for a skill route before it is on main');
+  for (const m of methods) assert.doesNotMatch(codeOnly(client), new RegExp(`\\b${m}\\s*:`), `no client method ${m} until its adapter is wired`);
   const src = codeOnly(read(`${TEAM}/agentsAdapter.js`));
   for (const m of methods) assert.match(src, new RegExp(`export const ${m} = \\([^)]*\\) => off\\(\\);`), `${m} stays a one-line off()`);
+  // A2: each body calls its client method, and each client method is on the Worker's path.
+  const a2 = ['agentSkills', 'setAgentSkills', 'availableSkills', 'skillAgents', 'assignable', 'assignSkill', 'coverage'];
+  for (const m of a2) assert.match(src, new RegExp(`export const ${m} = [^\\n]*throughSkill\\(\\(\\) => teamAgentsApi\\.${m}\\(`), `${m} is wired`);
+  const api = read('frontend/src/lib/api/teamAgents.js');
+  for (const [m, path] of [['agentSkills', '/teams/agents/${enc(uid)}/skills`'], ['availableSkills', '/skills/available`'], ['skillAgents', '/teams/skills/${enc(skillUid)}/agents`'],
+    ['assignable', '/assignable`'], ['assignSkill', '/assign`, { method: \'POST\', body: JSON.stringify({ agent_uids: agentUids })'], ['coverage', '${base(scope, id)}/coverage`']]) {
+    assert.ok(api.includes(path), `${m}: ${path}`);
+  }
+  const restore = installDocument();
+  const previous = globalThis.fetch;
+  const seen = [];
+  const body = { added: 1, refused: [] };
+  globalThis.fetch = async (u, init = {}) => {
+    seen.push(`${(init.method || 'GET').toUpperCase()} ${new URL(String(u), 'http://x').pathname}`);
+    return { ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => body, text: async () => JSON.stringify(body) };
+  };
+  try {
+    const out = await adapter.assignSkill('s1', ['a1']);
+    assert.deepEqual(out, { available: true, value: { added: 1, refused: [] } });
+    await adapter.coverage('company', 'nw1');
+    assert.deepEqual(seen, ['POST /api/teams/skills/s1/assign', 'GET /api/teams/company/nw1/coverage']);
+  } finally { globalThis.fetch = previous; restore(); }
   const refused = await adapter.throughSkill(async () => { const e = new Error('x'); e.status = 422; e.code = 'role_mismatch'; throw e; });
   assert.equal(refused.reason, 'An agent can only be given skills of its own role.');
 });

@@ -1,0 +1,1 @@
+| Incorporate · Boards | founder | — (the board grid INC1–INC7, INC5p) | — | as Incorporate Flow Page | UPGRADE | D1414. The grid imports `Incorporate Flow Page` by name. Its board → file map is D1414 §2. |

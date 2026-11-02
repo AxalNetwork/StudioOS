@@ -347,6 +347,9 @@ test('a card\'s ⋯ keeps a menu\'s keyboard, and its button closes it', async (
     await t.key(menu, 'ArrowDown');
     assert.equal(document.activeElement, t.by('pitch-editor-card-up-1'));
     await t.key(menu, 'End');
+    // D1570 (#3817): Comments is the card menu's last item (pd33).
+    assert.equal(document.activeElement, t.by('pitch-editor-card-comments-1'), 'the last item, Comments');
+    await t.key(menu, 'ArrowUp');
     assert.equal(document.activeElement, t.by('pitch-editor-card-section-1'), 'a Coming later item is still reached');
     await t.key(menu, 'Escape');
     assert.ok(!t.by('pitch-editor-card-menu-1'));

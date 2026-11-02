@@ -15,6 +15,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { readRouteMap } from '../../scripts/lib/routeMap.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 
@@ -54,7 +55,7 @@ test('labels.yml says it also holds Dependabot\'s labels', () => {
 });
 
 test('the AIRail row names the three mounted reads and does not call them missing', () => {
-  const line = row(read('documentation/architecture/ROUTE_MAP.md'), 'AIRail');
+  const line = row(readRouteMap(), 'AIRail');
   assert.match(line, /GET \/api\/ai\/me\/spend/);
   assert.match(line, /GET \/api\/ai\/pricing/);
   assert.match(line, /POST \/api\/ai\/workspace\/explain/);
@@ -63,7 +64,7 @@ test('the AIRail row names the three mounted reads and does not call them missin
 });
 
 test('the founder workspace row records the Friday retro and page attribution as done', () => {
-  const line = row(read('documentation/architecture/ROUTE_MAP.md'), 'Founder Workspaces Canvas');
+  const line = row(readRouteMap(), 'Founder Workspaces Canvas');
   assert.match(line, /D510/);
   assert.match(line, /build\/retro/);
   assert.doesNotMatch(line, /zone-draft route sends none/);
@@ -71,7 +72,7 @@ test('the founder workspace row records the Friday retro and page attribution as
 });
 
 test('the investor LP row records the model card, estimate and receipt as done', () => {
-  const line = row(read('documentation/architecture/ROUTE_MAP.md'), 'Investor LP Canvas');
+  const line = row(readRouteMap(), 'Investor LP Canvas');
   assert.match(line, /D400, D402/);
   assert.match(line, /RunEstimate\.jsx/);
   assert.match(line, /ZoneDraft/);

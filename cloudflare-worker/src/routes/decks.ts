@@ -38,7 +38,7 @@ import { slideTotals, recordSlideSeconds, recordSlideCardUids } from '../service
 import { logCycleWrite } from '../services/cycleActivity';
 import { shareAnalytics, type LinkAnalytics } from '../services/decks/shareAnalytics';
 import { gateFor, publishOf } from '../services/decks/publish';
-import { DEFAULT_SHARE_INCLUDE, parseShareInclude, shareSlides, shareSpinoutFields, type ShareInclude } from '../services/decks/shareInclude';
+import { DEFAULT_SHARE_INCLUDE, parseShareInclude, shareGatesFor, shareSlides, shareSpinoutFields, type ShareInclude } from '../services/decks/shareInclude';
 import { sanitizeBinding } from '../services/decks/sources';
 import {
   AUDIENCES, BLOCK_KINDS, CHART_RANGES, LIBRARY_CHART_TYPES, TYPED_CHART_TYPES, GRID_COLS, GRID_ROWS, IMAGE_FITS, IMAGE_TAGS, LAYOUTS, MAX_BLOCKS, NOTES_MAX, OVERLAYS,
@@ -49,6 +49,8 @@ import { ensureDeckVersionColumns, ensureProposalOutlineColumns } from '../servi
 import { isSupportSession } from '../integrations/providers/mercury';
 import { deckShareMetrics, LEGACY_SHARE_NO_VIEW_LIMIT } from '../services/deckShareUse';
 import { cleanOrder, variantSlides } from '../services/decks/variants';
+import { revOf } from '../services/decks/ifMatch';
+import { approvalRefusal, pendingApprovers } from '../services/decks/deckApproval';
 
 /** D895 applies only to deck operations, not other project-content routes. */
 export async function projectOwned(c: any, user: any, projectId: number, opts: { write?: boolean; audit?: boolean; contactData?: boolean } = {}) {
@@ -589,6 +591,22 @@ async function withNames(env: Env, rows: any[]): Promise<any[]> {
 /** #3748: the current row the caller read, not a client-supplied version. */
 type DeckVersionBase = { id: number; version: number };
 
+/**
+ * D1501 (#3751): the one 409 body for a save that is not on the current
+ * version, whether #3748's stale base found it or a stale `If-Match` did: the
+ * current version's id, version and `rev`, the server's copy of it, and a plain
+ * sentence (`SaveDialog` shows `message`).
+ */
+export async function versionConflictBody(env: Env, projectId: number) {
+  const row = await env.DB.prepare('SELECT * FROM pitch_decks WHERE project_id = ? AND is_current = 1').bind(projectId).first<any>();
+  const current: DeckVersionBase | null = row ? { id: Number(row.id), version: Number(row.version) } : null;
+  return {
+    error: 'deck_version_conflict', code: 'deck_version_conflict',
+    message: 'This deck was saved somewhere else. Reload to see the current version.',
+    current, rev: current ? current.version : null, server: row ? rowToDeck(row) : null,
+  };
+}
+
 export async function insertVersion(env: Env, projectId: number, slides: any[], title: string, userId: number | null, meta: VersionMeta = {}, expectedBase?: DeckVersionBase | null): Promise<number> {
   const base = expectedBase === undefined
     ? await env.DB.prepare('SELECT id, version FROM pitch_decks WHERE project_id = ? AND is_current = 1').bind(projectId).first<DeckVersionBase>()
@@ -609,9 +627,7 @@ export async function insertVersion(env: Env, projectId: number, slides: any[], 
         theme ? JSON.stringify(theme) : null, hash, projectId, base?.id ?? null),
   ]);
   if (Number(results[1]?.meta?.changes) !== 1) {
-    const current = await env.DB.prepare('SELECT id, version FROM pitch_decks WHERE project_id = ? AND is_current = 1')
-      .bind(projectId).first<DeckVersionBase>();
-    throw Response.json({ error: 'deck_version_conflict', message: 'This deck was saved somewhere else. Reload to see the current version.', current }, { status: 409 });
+    throw Response.json(await versionConflictBody(env, projectId), { status: 409 });
   }
   return Number(results[1]?.meta?.last_row_id || 0);
 }
@@ -919,7 +935,8 @@ decks.get('/share/:token', async (c) => {
   }
   return c.json({
     ...publicDeckOf(row),
-    slides: shareSlides(cards, included),
+    // D1507: quotes and logos go out only with the consent or permission the venture's records hold.
+    slides: shareSlides(cards, included, await shareGatesFor(c.env, Number(row.project_id))),
     // D1565: who the link was made for, drawn over every card ("Prepared for …").
     watermark: link?.watermark_text ?? null,
     view_id: viewId,
@@ -1292,6 +1309,14 @@ decks.put('/:id', async (c) => {
     try { ensureMethodAllowed(user, persistedMethod, PREMIUM_METHOD_IDS); }
     catch { return c.json({ error: 'paywall', code: 'PAYWALL_PREMIUM_METHOD', method_id: persistedMethod, required_tier: 'studio' }, 402); }
   }
+  // D1501 (#3751): `If-Match: <rev>` names the version the editor read (a deck's rev is its version).
+  // A stale one is refused before anything is read or written, with the server's copy.
+  const ifMatch = c.req.header('if-match');
+  if (ifMatch != null) {
+    const rev = revOf(ifMatch);
+    if (rev == null) return c.json({ error: 'invalid_if_match', code: 'invalid_if_match', message: 'If-Match must be the version you edited, a whole number.' }, 400);
+    if (rev !== Number(row.version) || Number(row.is_current) !== 1) return c.json(await versionConflictBody(c.env, Number(row.project_id)), 409);
+  }
   const body = await c.req.json().catch(() => ({} as any));
   // D1500: a save in another model's shape is refused, never stripped: an
   // older editor would drop v2 fields, and a newer one would lose its own.
@@ -1423,6 +1448,9 @@ decks.post('/:id/share', async (c) => {
   try { row = await getDeckRow(c.env, id); } catch { return c.json({ error: 'not found' }, 404); }
   try { await projectOwned(c, user, Number(row.project_id), { write: true }); }
   catch { return c.json({ error: 'forbidden' }, 403); }
+  // D1570 (#3817): no link until every approver on the deck has signed off this version.
+  const waiting = await pendingApprovers(c.env, Number(row.project_id), id);
+  if (waiting.length) return c.json(approvalRefusal(waiting), 409);
   const body = await c.req.json().catch(() => ({} as any));
   const ttlHours = Math.min(
     24 * 30,

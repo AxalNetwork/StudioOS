@@ -1,7 +1,7 @@
 import React from 'react';
 import { NOT_RECORDED, blockLabel, runsOf, tileValue } from './editorModel';
 import { SOURCE_NOT_RECORDED, chartLabel, objectPosition, sourceOf } from './presentExportModel';
-import { STATED_CHIP, TYPED_LINE, faceOf, projectionOf } from './figuresModel';
+import { STATED_CHIP, TYPED_LINE, UNCITED_CHIP, UNCITED_LINE, faceOf, numbersIn, projectionOf } from './figuresModel';
 import { isTypedChart, marketCircles, projectionLines, tableView } from './typedChartsModel';
 import { aspectOf, placeOf } from './gridModel';
 
@@ -26,6 +26,10 @@ export { gridBlocks } from './presentExportModel';
  * words in plain text). Present, share and print draw no such badge: only
  * "Show sources"' line, as before. A chart that reaches past today carries
  * "Projection" and its footnote in every format (`projectionOf`).
+ *
+ * D1523 (#3775, pd24): in the editor a typed tile reads "✎ Stated" and a
+ * number in free text "! Uncited" (`badgeOf`'s rule). `live` (Present, the
+ * print page and so every export) draws neither.
  */
 
 /** The Projection label and footnote under a chart (pd6), wherever the card is drawn. */
@@ -75,7 +79,7 @@ function TableView({ block, colours, para }) {
   const { head, body } = tableView(block);
   return (
     <table className={`w-full border-collapse ${para}`} data-testid={`deck-table-${block.id}`}>
-      {head ? <thead><tr>{head.map((c, i) => <th key={i} scope="col" className="border px-1 text-left font-bold" style={{ borderColor: colours.muted }}>{c}</th>)}</tr></thead> : null}
+      {head ? <thead><tr>{head.map((c, i) => <th key={i} scope="col" className="border px-1 text-start font-bold" style={{ borderColor: colours.muted }}>{c}</th>)}</tr></thead> : null}
       <tbody>{body.map((row, r) => <tr key={r}>{row.map((c, i) => <td key={i} className="border px-1" style={{ borderColor: colours.muted }}>{c}</td>)}</tr>)}</tbody>
     </table>
   );
@@ -119,10 +123,18 @@ export function BlockView({ block: b, colours, live = false, sources = false, si
     if (!String(b.text || '').trim()) return live ? null : <span className="text-[11px] italic" style={{ color: colours.muted }}>Text · empty</span>;
     // D1500: rich text is drawn as its runs, read-only (editing them is A4c's).
     const paras = runsOf(b);
-    if (paras) return <RichText paras={paras} className={b.style === 'heading' ? `${heading} font-extrabold leading-tight` : `${para} leading-snug`} />;
-    if (b.style === 'heading') return <span className={`${heading} font-extrabold leading-tight`}>{b.text}</span>;
-    if (b.style === 'list') return <ul className={`m-0 list-disc pl-4 ${para}`}>{String(b.text).split('\n').filter(Boolean).map((l, i) => <li key={i}>{l}</li>)}</ul>;
-    return <span className={`${para} leading-snug`}>{b.text}</span>;
+    const body = paras ? <RichText paras={paras} className={b.style === 'heading' ? `${heading} font-extrabold leading-tight` : `${para} leading-snug`} />
+      : b.style === 'heading' ? <span className={`${heading} font-extrabold leading-tight`}>{b.text}</span>
+        : b.style === 'list' ? <ul className={`m-0 list-disc pl-4 ${para}`}>{String(b.text).split('\n').filter(Boolean).map((l, i) => <li key={i}>{l}</li>)}</ul>
+          : <span className={`${para} leading-snug`}>{b.text}</span>;
+    // D1523 (#3775): in the editor a number in free text carries "! Uncited"; Present and print (`live`) never do.
+    if (live || !numbersIn(b.text).length) return body;
+    return (
+      <span className="flex flex-col gap-0.5">
+        {body}
+        <span className="self-start text-[10px] font-bold text-amber-700 dark:text-amber-300" title={UNCITED_LINE} data-testid={`deck-block-uncited-${b.id}`}>{UNCITED_CHIP}</span>
+      </span>
+    );
   }
   if (b.kind === 'metric') {
     const v = tileValue(b);
@@ -199,16 +211,17 @@ export function BlockView({ block: b, colours, live = false, sources = false, si
  * print. `onSelect` makes each block a button (the editor); without it each
  * block is a plain cell.
  */
-export function BlockGrid({ blocks, colours, live = false, sources = false, size = 'card', selected = null, onSelect = null, testId = 'deck-blocks', renderChart = null, aspect = '16:9' }) {
+export function BlockGrid({ blocks, colours, live = false, sources = false, size = 'card', selected = null, onSelect = null, testId = 'deck-blocks', renderChart = null, aspect = '16:9', lang = undefined, dir = undefined }) {
+  // D1571 (#3818): the deck's language and direction (`deckLanguage.langAttrs`); text aligns to the start, so it mirrors.
   return (
-    <div className="absolute inset-0" data-aspect={aspectOf(aspect)} data-testid={testId}>
+    <div className="absolute inset-0" data-aspect={aspectOf(aspect)} lang={lang} dir={dir} data-testid={testId}>
       {blocks.map((b) => {
         const at = placeOf(b.grid, aspect);
         const inner = <BlockView block={b} colours={colours} live={live} sources={sources} size={size} renderChart={renderChart} />;
         if (onSelect) {
           return (
             <button type="button" key={b.id}
-              className={`min-h-0 min-w-0 overflow-hidden rounded-[8px] p-1.5 text-left ${selected === b.id ? 'outline outline-2 outline-violet-500' : 'outline outline-1 outline-dashed outline-black/10'}`}
+              className={`min-h-0 min-w-0 overflow-hidden rounded-[8px] p-1.5 text-start ${selected === b.id ? 'outline outline-2 outline-violet-500' : 'outline outline-1 outline-dashed outline-black/10'}`}
               style={at} onClick={() => onSelect(b.id)} aria-label={blockLabel(b)} data-testid={`pitch-editor-block-${b.id}`}>
               {inner}
             </button>

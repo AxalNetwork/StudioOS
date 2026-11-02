@@ -109,7 +109,7 @@ test('what leaves: no provenance, no internal score, bank field, unconsented quo
   assert.ok(!r.text.includes('$40k'), 'figures unticked: the figure field is gone');
   assert.ok(!r.text.includes('SOURCE LIST'), 'sources unticked: the appendix is gone');
   assert.ok(!/Not recorded/.test(r.text), 'no placeholder for a card the founder did not tick');
-  assert.deepEqual(r.body.included, { figures: false, sources: false, notes: true, bands: false });
+  assert.deepEqual(r.body.included, { figures: false, sources: false, notes: true, bands: false, cap_table: false, team_photos: false });
   const all = world(); await grant(all, 1);
   const d = await all.call(1, '9/deck');
   assert.match(d.text, /\$40k/, 'figures on by default');

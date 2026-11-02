@@ -296,6 +296,8 @@ export const UNDO_WRITES: Readonly<Record<string, { read: string; write: string;
   'portfolio_support_entries.summary': { read: 'SELECT NULL AS project_id, summary AS value FROM portfolio_support_entries WHERE id = ?', write: "UPDATE portfolio_support_entries SET summary = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL", int: false, required: true, scoped: true },
   'service_offerings.summary': { read: 'SELECT NULL AS project_id, summary AS value FROM service_offerings WHERE id = ?', write: "UPDATE service_offerings SET summary = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL", int: false, required: false, scoped: true },
   'perks.blurb': { read: 'SELECT NULL AS project_id, blurb AS value FROM perks WHERE id = ?', write: "UPDATE perks SET blurb = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL", int: false, required: false, scoped: true },
+  // #4046: a deal note's words. The body is required, so an Undo with no prior value is refused (`no_prior`).
+  'deal_notes.body': { read: 'SELECT NULL AS project_id, body AS value FROM deal_notes WHERE id = ?', write: "UPDATE deal_notes SET body = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL", int: false, required: true, scoped: true },
 });
 
 export type UndoResult = { ok: true; value: string | number | null } | { ok: false; status: 404 | 409; code: 'fill_not_found' | 'not_undoable' | 'already_undone' | 'edited' | 'no_prior' };
