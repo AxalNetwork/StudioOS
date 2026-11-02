@@ -19,7 +19,7 @@
  * no key to land in.
  */
 import type { Env } from '../types';
-import { run as aiRun, type RunResult } from './aiRouter';
+import { convertToMarkdown, run as aiRun, type RunResult } from './aiRouter';
 import { AI_SURFACE } from './aiSurfaces';
 import { proposeRail, withdrawRail } from './railProposals';
 import { RecordError } from './capTableRecord';
@@ -148,7 +148,7 @@ function parseJson(s: string): unknown {
 
 type Converter = { toMarkdown?: (docs: unknown, opts?: unknown) => Promise<unknown> };
 
-async function documentPages(env: Env, file: { r2_key: string; name: string; content_type: string | null }): Promise<Page[]> {
+async function documentPages(env: Env, file: { r2_key: string; name: string; content_type: string | null }, userId: number): Promise<Page[]> {
   const ai = (env as unknown as { AI?: Converter }).AI;
   if (!env.FILES || !ai || typeof ai.toMarkdown !== 'function') {
     throw new RecordError(503, 'document_read_unavailable', 'Reading documents is not configured here.');
@@ -157,12 +157,16 @@ async function documentPages(env: Env, file: { r2_key: string; name: string; con
   if (!obj) throw new RecordError(404, 'unknown_document', 'That document’s file is no longer in the data room.');
   const bytes = await obj.arrayBuffer();
   if (bytes.byteLength > MAX_FILE_BYTES) throw new RecordError(413, 'too_large', 'That document is larger than Eadwyn reads.');
-  const out = await ai.toMarkdown(
+  // #3937 (D1478 task 3, part 2): the conversion is metered like a run (`convertToMarkdown`).
+  const out = await convertToMarkdown(env, { userId, surface: AI_SURFACE.raiseCapTable },
     [{ name: file.name, blob: new Blob([bytes], { type: file.content_type || 'application/pdf' }) }],
-    { conversionOptions: { pdf: { metadata: false } } },
-  );
-  const md = Array.isArray(out) ? String((out[0] as { data?: string })?.data ?? '') : String((out as { data?: string })?.data ?? '');
-  return pagesOf(md).slice(0, MAX_PAGES);
+    { conversionOptions: { pdf: { metadata: false } } });
+  if (!out.ok) {
+    if (out.refusal === 'ai_paused') throw new RecordError(403, 'ai_paused', out.error);
+    if (out.refusal === 'model_unpriced') throw new RecordError(415, 'image_not_read', out.error);
+    throw new RecordError(503, 'document_read_unavailable', 'The document could not be read. Nothing was run.');
+  }
+  return pagesOf(String(out.documents[0]?.data ?? '')).slice(0, MAX_PAGES);
 }
 
 export const documentRecord = (projectId: number) => `project:${projectId}`;
@@ -179,7 +183,7 @@ export async function readDocumentTerms(env: Env, projectId: number, userId: num
   const file = await env.DB.prepare('SELECT id, name, r2_key, content_type FROM data_room_files WHERE id = ? AND project_id = ?')
     .bind(Number(m[1]), projectId).first<{ id: number; name: string; r2_key: string; content_type: string | null }>();
   if (!file) throw new RecordError(400, 'unknown_document', 'That document is not this venture’s.', { field: 'document_ref' });
-  const pages = await documentPages(env, file);
+  const pages = await documentPages(env, file, userId);
   if (!pages.length) throw new RecordError(422, 'nothing_to_read', 'Eadwyn found no text in that document.');
 
   const prompt = promptOf(file.name, pages);
