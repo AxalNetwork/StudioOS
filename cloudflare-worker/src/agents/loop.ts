@@ -93,6 +93,8 @@ async function end(d: LoopDeps, l: Loaded, step: RunStep, status: string, refusa
 
 /** Read at every step: the engine off, or the halt key, ends the run here. */
 async function gate(d: LoopDeps, l: Loaded, step: RunStep): Promise<StepOut | null> {
+  // #3850 (E6): a run ended from outside (a project's move: `scope_moved`) stops at its next step, as it stands.
+  if (!['admitted', 'running', 'waiting_decision'].includes(l.run.status)) return stop(l.run.status, l.run.refusal);
   if (await haltedAll(d.env)) return end(d, l, step, 'halted', 'halted', 'The platform halted agents.');
   if (await engineMode(d.env) === 'off') return end(d, l, step, 'halted', 'engine_off', 'The agent engine is off.');
   return null;
@@ -150,6 +152,12 @@ export async function buildContext(d: LoopDeps, l: Loaded): Promise<Built> {
   const sponsor = await sponsorOf(d.env, l.agent);
   if (!sponsor || !(await canRead(d.env, s, sponsor))) {
     return { ok: false, status: 'refused', refusal: 'sponsor_lost_access', summary: 'The sponsor can no longer see this team.', pause: 'sponsor_left' };
+  }
+  if (s.kind === 'project') {
+    // #3850 (E6): checked again here, so a run admitted before a move ends at this step too.
+    const moved = await d.env.DB.prepare('SELECT 1 AS ok FROM projects WHERE id = ? AND NOT (company_id IS ?)')
+      .bind(s.id, l.run.admitted_company_id).first<{ ok: number }>();
+    if (moved) return { ok: false, status: 'scope_moved', refusal: 'scope_moved', summary: 'The project moved to another company.' };
   }
   let projectId: number | null = s.kind === 'project' ? s.id : null;
   if (s.kind === 'company' && l.task.context_project_id) {

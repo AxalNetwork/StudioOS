@@ -154,6 +154,7 @@ const KINDS = [
   // #3983 (D1486 §d): the dated task stores, page only.
   { id: 'workflow_task', label: 'Workflow task', from: 'Workflows › Tasks' },
   { id: 'mvp_task', label: 'Build task', from: 'Build › Board' },
+  { id: 'work_item', label: 'Work item', from: 'Work › Board' },
   { id: 'contact_task', label: 'Contact follow-up', from: 'Contacts › Follow-ups' },
   { id: 'engagement_milestone', label: 'Milestone', from: 'Engagements › Milestones' },
   // D1485 (#3979): the member's own Google and Outlook events, read-only and page only.

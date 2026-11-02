@@ -27,6 +27,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { migrationStamp } from '../../scripts/lib/migrationPlan.mjs';
 
 const ROOT = resolve(process.cwd());
 const DIR = join(ROOT, 'cloudflare-worker', 'sql', 'migrations');
@@ -232,9 +233,12 @@ test('the migration numbers are free and in order', () => {
   // FILENAME, so a number that is not three digits sorts somewhere its author
   // did not intend — `21_x.sql` runs before `208_x.sql`, and a file that
   // depends on an earlier one then runs first and aborts the deploy.
+  // D4106 added the second form: a file named by its UTC minute
+  // (`YYYYMMDDHHMM_<slug>.sql`), which the runner's numeric sort puts after
+  // every numbered file. Anything else is still refused.
   for (const f of files) {
-    // D4106: or a 12-digit UTC-minute stamp, which compareMigrations orders after every numbered file.
-    assert.match(f, /^(\d{3}|\d{12})_/,
-      `${f}: every migration needs a 3-digit number or a D4106 stamp (YYYYMMDDHHMM_)`);
+    // D4106: or a 12-digit UTC-minute stamp, a real minute, which compareMigrations orders after every numbered file.
+    assert.ok(/^\d{3}_/.test(f) || migrationStamp(f),
+      `${f}: every migration needs a 3-digit prefix or a D4106 UTC-minute stamp`);
   }
 });

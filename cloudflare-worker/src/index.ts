@@ -3376,6 +3376,7 @@ export { HqEntrypoint, BranchEntrypoint } from './rpc';
 export { MeetingBotRun } from './durable-objects/meeting-bot-run';
 export { DeckGenRoom } from './durable-objects/deck-gen-room';
 export { AiGovernor } from './durable-objects/ai-governor';
+export { DeckRemote } from './durable-objects/deck-remote';
 
 // D1528 (#3847, #3742 E3): the agent engine's scope object and task Workflow,
 // named in wrangler.toml's [[durable_objects.bindings]] and [[workflows]].

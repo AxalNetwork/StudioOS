@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import Sheet from '../../../ui/Sheet.jsx';
 import Pill from '../../../ui/Pill.jsx';
+import { FillFormBar, FillLabel, useScopedFill } from '../../../ui/useScopedFill.jsx';
+import { SCOPED_FORMS } from '../../../lib/fillScoped.js';
 import {
   AVAILABILITY, answerPairs, applicationRow as rowFor, applyBody, canLeave, dateRange, fmtDate, isOpenApplication, joinBody,
   placesLine, refusalText, testerCard, withdrawQuestion, withdrawnNote,
@@ -175,10 +177,22 @@ export function ProgrammeSheet({ programme: p, consent, api, onClose, onApplied 
   const applied = p?.my_status != null && p.my_status !== 'withdrawn';
   const body = applyBody(p, answers, emailOk);
   const firm = p?.owner_name || 'the firm';
+  // #4046 (B2): Ask on the answers, under the programme, before Apply. Each answer is the member's own
+  // words; Ask proposes, and the member keeps or types over it. Availability and the consent are never filled.
+  const values = Object.fromEntries(qs.map((_, i) => [`answer_${i + 1}`, answers[i] || '']));
+  const fill = useScopedFill({
+    scope: SCOPED_FORMS.testingAnswers, parent: Number(p?.id) > 0 ? Number(p.id) : null, enabled: !applied && qs.length > 0 && Number(p?.id) > 0,
+    values, only: Object.keys(values), onValues: (v) => setAnswers((prev) => prev.map((a, i) => (v[`answer_${i + 1}`] != null ? v[`answer_${i + 1}`] : a))),
+  });
   const apply = async () => {
     if (!body || busy) return;
     setBusy(true); setRefusal('');
-    try { const r = await api.apply(p.uid, body); onApplied?.(r?.application || null); } catch (e) { setRefusal(refusalText(e, 'Your application could not be sent. Try again.')); } finally { setBusy(false); }
+    try {
+      const r = await api.apply(p.uid, body);
+      // The record step: what Ask placed and the member kept is filed against the new application.
+      await fill.afterSave(r?.application?.id);
+      onApplied?.(r?.application || null);
+    } catch (e) { setRefusal(refusalText(e, 'Your application could not be sent. Try again.')); } finally { setBusy(false); }
   };
   const closes = fmtDate(p?.closes_at);
   return (
@@ -197,9 +211,10 @@ export function ProgrammeSheet({ programme: p, consent, api, onClose, onApplied 
         </Section>
         {qs.length > 0 && !applied && (
           <Section label="Questions">
+            <FillFormBar fill={fill} />
             {qs.map((q, i) => (
               <label key={i} className="flex flex-col gap-1.5 text-[13px] font-semibold text-axal-ink dark:text-gray-100">
-                {q}
+                <FillLabel fill={fill} name={`answer_${i + 1}`} label={`Answer ${i + 1}`} value={answers[i] || ''}><span>{q}</span></FillLabel>
                 <textarea rows={3} maxLength={2000} className={FIELD} value={answers[i] || ''} placeholder="Write a few lines" data-testid={`pt-programme-answer-${i}`}
                   onChange={(e) => setAnswers((prev) => prev.map((a, j) => (j === i ? e.target.value : a)))} />
               </label>

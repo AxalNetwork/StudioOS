@@ -490,13 +490,15 @@ export interface Env {
   /** D1536: a read-only Cloudflare API token (Workers AI · Read) for the weekly catalogue drift job, with CLOUDFLARE_ACCOUNT_ID. Unset: the job skips with a logged reason and raises no alert. */
   CF_AI_CATALOGUE_TOKEN?: string;
   AI_GOVERNOR?: DurableObjectNamespace;
+  // D1581 (#3828): the phone remote for Present, paired by code. Optional: without it the remote routes answer 503 `remote_off`.
+  DECK_REMOTE?: DurableObjectNamespace;
   // Vectorize index `axal-search` (768-dim, cosine) for semantic search.
   // Optional so unit-test envs without the binding still type-check; the
   // search service no-ops gracefully when undefined.
   VECTORIZE?: VectorizeIndex;
-  // D1556 (#3803): `axal-deck-quotes` (bge-m3, 1024 dimensions). Not in wrangler.toml
-  // until the owner approves its monthly cost (decision L); absent, quote
-  // retrieval answers "not switched on yet".
+  // D1556 (#3803): `axal-deck-quotes` (bge-m3, 1024 dimensions), bound in
+  // wrangler.toml once the owner approved its monthly cost (decision L).
+  // Optional for test envs; absent, quote retrieval answers "not switched on yet".
   DECK_QUOTES?: VectorizeIndex;
   // #3938 part 2: `axal-dataroom` (qwen3-embedding-0.6b, 1024 dimensions, cosine). Not in
   // wrangler.toml until the owner creates the index (#1008); absent, data room
