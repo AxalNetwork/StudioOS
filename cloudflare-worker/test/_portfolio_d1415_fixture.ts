@@ -25,6 +25,7 @@ import projects from '../src/routes/projects.ts';
 import accountPortfolio from '../src/routes/account_portfolio.ts';
 import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
+import { addAgentEngineTables } from './_agent_engine_tables.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
@@ -47,6 +48,7 @@ export function fixture(opts: { migration685?: string } = {}) {
   db.exec(M597);
   db.exec(opts.migration685 ?? M685);
   db.exec(M749);
+  addAgentEngineTables(db); // #3850 (E6): a move changes the engine's goals and tasks in its own batch
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');
   u.run(ADA, 'founder', 'Ada Made-up', 'ada@example.test', 101);
   u.run(BEN, 'founder', 'Ben Made-up', 'ben@example.test', 102);
