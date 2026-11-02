@@ -1,13 +1,14 @@
 /**
  * D1508 (#3759, deck v2 A15) — deck images nothing references leave R2.
  *
- * Once a day (the 03:00 cleanup, `index.ts`), `sweepDeckImages` removes:
+ * Once a day (the 03:00 cleanup, `models/jobs.ts` `Jobs.cleanup`), `sweepDeckImages` removes:
  *   · a discarded image 24 hours after Discard (`discarded_at`);
  *   · a proposal nobody kept, 14 days after it was made (`created_at`).
  * A kept image is never removed here.
  *
- * NOTHING THAT IS NAMED GOES. Before an object is deleted, the rule `NAMED`
- * looks for the image's uid in every store of its venture that can hold a
+ * NOTHING THAT IS NAMED GOES. Before an object is deleted, the view
+ * `deck_images_named` (migration 722, the one copy of the rule) looks for
+ * the image's uid in every store of its venture that can hold a
  * card: every saved version (`pitch_decks.slides` and `theme_json`), every
  * card draft (`pitch_deck_cards.json`), every proposed deck
  * (`pitch_deck_proposals.slides`) and every derivative
@@ -40,24 +41,10 @@ type Candidate = { id: number; uid: string; project_id: number; r2_key: string; 
 /** SQLite's own timestamp form, `YYYY-MM-DD HH:MM:SS`, for `now`. */
 const sqlTime = (d: Date) => d.toISOString().slice(0, 19).replace('T', ' ');
 
-/**
- * The one reference rule, as SQL over the row `deck_images` it sits in: some
- * version, card draft, proposed deck or derivative of the image's venture
- * holds its uid. The claim repeats it, so a save that names the image after
- * the check still keeps it.
- */
-const NAMED = `(
-     EXISTS (SELECT 1 FROM pitch_decks d WHERE d.project_id = deck_images.project_id
-             AND (instr(COALESCE(d.slides, ''), deck_images.uid) > 0 OR instr(COALESCE(d.theme_json, ''), deck_images.uid) > 0))
-  OR EXISTS (SELECT 1 FROM pitch_deck_cards c JOIN pitch_decks d ON d.id = c.deck_id
-             WHERE d.project_id = deck_images.project_id AND instr(c.json, deck_images.uid) > 0)
-  OR EXISTS (SELECT 1 FROM pitch_deck_proposals p WHERE p.project_id = deck_images.project_id AND instr(COALESCE(p.slides, ''), deck_images.uid) > 0)
-  OR EXISTS (SELECT 1 FROM deck_derivatives v WHERE v.project_id = deck_images.project_id AND instr(COALESCE(v.slides, ''), deck_images.uid) > 0))`;
-
 /** Whether any version, draft, proposal or derivative of the image's venture names it. Unreadable reads as named. */
 export async function imageReferenced(env: Pick<Env, 'DB'>, imageId: number): Promise<boolean> {
   try {
-    const row = await env.DB.prepare(`SELECT ${NAMED} AS named FROM deck_images WHERE id = ?`).bind(imageId).first<{ named: number }>();
+    const row = await env.DB.prepare('SELECT EXISTS (SELECT 1 FROM deck_images_named WHERE id = ?) AS named').bind(imageId).first<{ named: number }>();
     return !row || Number(row.named) !== 0;
   } catch {
     return true;
@@ -95,8 +82,10 @@ export async function sweepDeckImages(env: Env, now: Date = new Date()): Promise
     try {
       const [, del] = await env.DB.batch([
         env.DB.prepare(`INSERT OR IGNORE INTO deck_r2_tombstones (key, project_id, bytes, reason, deleted_at)
-          SELECT r2_key, project_id, size_bytes, ?, ? FROM deck_images WHERE id = ? AND state = ? AND NOT ${NAMED}`).bind(reason, sqlTime(now), img.id, img.state),
-        env.DB.prepare(`DELETE FROM deck_images WHERE id = ? AND state = ? AND NOT ${NAMED}`).bind(img.id, img.state),
+          SELECT r2_key, project_id, size_bytes, ?, ? FROM deck_images WHERE id = ? AND state = ?
+            AND NOT EXISTS (SELECT 1 FROM deck_images_named n WHERE n.id = deck_images.id)`).bind(reason, sqlTime(now), img.id, img.state),
+        env.DB.prepare(`DELETE FROM deck_images WHERE id = ? AND state = ?
+          AND NOT EXISTS (SELECT 1 FROM deck_images_named n WHERE n.id = deck_images.id)`).bind(img.id, img.state),
       ]);
       claimed = Number((del as any)?.meta?.changes ?? 0) === 1;
     } catch { out.failed++; continue; }

@@ -12,6 +12,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import deckImages from '../src/routes/deck_images.ts';
 import { MAX_DELETES, imageReferenced, sweepDeckImages } from '../src/services/decks/imageSweep.ts';
+import { Jobs } from '../src/models/jobs.ts';
 import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
@@ -105,7 +106,7 @@ test('a save that names the image after the check still keeps it: the claim repe
   // Right after the first check reads "not named", a save names the image.
   f.env.DB = { ...real, prepare: (sql: string) => {
     const st = real.prepare(sql);
-    if (!sql.includes('AS named FROM deck_images')) return st;
+    if (!sql.includes('FROM deck_images_named WHERE id = ?) AS named')) return st;
     return { bind: (...a: unknown[]) => { const b = st.bind(...a); return { ...b, first: async () => {
       const out = await b.first();
       f.db.prepare('UPDATE pitch_decks SET slides = ? WHERE id = 7').run(JSON.stringify([{ image_id: img.uid }]));
@@ -163,4 +164,11 @@ test('Discard records when it was pressed', async () => {
   const row = f.row(img.uid);
   assert.equal(row.state, 'discarded');
   assert.ok(row.discarded_at, 'no discard time recorded');
+});
+
+test('the daily cleanup (Jobs.cleanup, 03:00) runs the sweep', async () => {
+  const f = fixture();
+  const img = f.image({ state: 'discarded', createdHoursAgo: 24 * 10, discardedHoursAgo: 24 * 9 });
+  await Jobs.cleanup(f.env);
+  assert.ok(gone(f, img), 'the daily cleanup did not remove an unreferenced discarded image');
 });
