@@ -49,6 +49,7 @@ import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks.js';
 import { deckModelPresetsApi } from '../../../lib/api/deckModelPresets.js';
 import { deckRemixApi } from '../../../lib/api/deckRemix.js';
 import { deckStageApi } from '../../../lib/api/deckStage.js';
+import { deckTemplatesApi } from '../../../lib/api/deckTemplates.js';
 import { deckTypedValuesApi } from '../../../lib/api/deckTypedValues.js';
 import { deckVentureElementsApi } from '../../../lib/api/deckVentureElements.js';
 
@@ -189,9 +190,12 @@ export const diagrams = off('diagrams');
  * `ventureElements(deckId, null, opts)` reads them all for the one-click run, each placed or left out.
  */
 export const ventureElements = (deckId, element, opts) => through(() => (element ? deckVentureElementsApi.element(deckId, element, opts) : deckVentureElementsApi.list(deckId, opts)), SURFACES.ventureElements.issue);
-export const templates = off('templates');
-export const myTemplates = off('myTemplates');
-export const saveAsTemplate = off('saveAsTemplate');
+/** D1535 (#3782): HQ's Gallery templates, filtered by stage, New deck's seven audiences and style. */
+export const templates = (filters = {}) => through(() => deckTemplatesApi.templates(filters), SURFACES.templates.issue);
+/** D1535: the caller's own templates. */
+export const myTemplates = () => through(() => deckTemplatesApi.myTemplates(), SURFACES.myTemplates.issue);
+/** D1535: a deck saved as the caller's template, text and figures removed. */
+export const saveAsTemplate = (deckId, name) => through(() => deckTemplatesApi.saveAsTemplate(deckId, name), SURFACES.saveAsTemplate.issue);
 /** D1538 (#3787): the figures typed for the deck, each Stated, with who typed it. */
 export const typedTables = (deckId) => through(() => deckTypedValuesApi.list(deckId), SURFACES.typedTables.issue);
 export const media = off('media');
