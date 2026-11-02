@@ -96,6 +96,15 @@ invokes it, with step-up and count-only auditing. An explicit rescan restarts
 completed discovery to recover later retained uploads; an active scan keeps its
 cursor. No object content or deletion.
 
+## Files
+
+Every service module directly in this folder, one row each; each subfolder has its own README. The list below is generated, not written: `node scripts/check-folder-docs.mjs --write` fills it in your working tree from each file's own header comment (its first line), and `--clean` empties it again. It is never committed, so adding a file never edits this README (#4104), and `check-folder-docs` fails a file here that has no header comment.
+
+**The rule for a new file:** open it with a header comment whose first line says what it is and which decision or issue it belongs to. Write nothing here. The per-file notes elsewhere in this README predate #4104; they are kept as they are and take no new entries.
+
+<!-- files:begin -->
+<!-- files:end -->
+
 ## The ones worth knowing
 
 `segmentMembership.ts` (D1128, #3008) resolves stored segment identities,

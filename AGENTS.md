@@ -184,8 +184,14 @@ wrong for a line two branches rewrote: union keeps both versions.
 marker, two rows for one backticked name in one table, or the same long line
 twice within a few lines (D1279). So:
 
-- Add one row per new file or folder, at the end of its table. Never rewrite
-  another feature's row or paragraph in a task PR.
+- In a folder whose README holds a generated file list (`<!-- files:begin -->`:
+  routes, services, `frontend/src/lib/api`), add no row at all: open the new
+  file with a header comment whose first sentence says what it is and which
+  decision or issue it belongs to. The list is generated from it and never
+  committed; `node scripts/check-folder-docs.mjs --write` shows it locally, and
+  `--clean` empties it before you stage the README (#4104).
+- Elsewhere, add one row per new file or folder, at the end of its table. Never
+  rewrite another feature's row or paragraph in a task PR.
 - A feature's notes go in its decision file, not in a shared README.
 - If rule 4 fails after a merge, keep the newer version and delete the other.
 
