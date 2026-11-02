@@ -225,7 +225,7 @@ test('the panel says public pages are off until counsel\'s wording, has no defau
     assert.equal(m.pr(m.by('pitch-publish-save')).disabled, true, 'no exemption is chosen for the founder');
     await m.change('pitch-publish-exemption-506b', true);
     assert.equal(m.pr(m.by('pitch-publish-save')).disabled, true, 'a 506(b) round does not publish');
-    assert.match(m.text(), new RegExp(EXEMPTION_506B_NOTE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    assert.ok(m.text().includes(EXEMPTION_506B_NOTE), 'the full 506(b) note is shown verbatim');
     assert.equal(m.calls.filter((c) => c[0] === 'save').length, 0, 'nothing is written');
     await m.change('pitch-publish-exemption-506c', true);
     await m.change('pitch-publish-origins', 'https://partner.example.test');
