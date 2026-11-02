@@ -9,8 +9,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
-import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { readFileSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import kycGovernance from '../src/routes/kyc_governance.ts';
@@ -19,9 +18,9 @@ import { DEFAULT_PERIOD_MONTHS, RENEWAL_PERIOD_KEYS, ensureTrustSchema, monthsTo
 import { auditDetail, caseIdOf } from '../src/services/kycGovernance.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { d1Over } from './_d1_sqlite.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-kyc-d1232';
-const BASELINE = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
 const DAY = 86_400_000;
 const iso = (ms: number) => new Date(ms).toISOString();
 
@@ -30,10 +29,7 @@ const REASON_TEXT = 'Photo shows a private address on Secret Road';
 
 async function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
-  db.exec(BASELINE);
-  for (const file of readdirSync('cloudflare-worker/sql/migrations').filter(f => /^\d+_.*\.sql$/.test(f)).sort(compareMigrations)) {
-    if (migrationNumber(file) > BASELINE_CUTOFF) db.exec(readFileSync('cloudflare-worker/sql/migrations/' + file, 'utf8'));
-  }
+  loadSchema(db);
   // Keep the explicit missing-store cases below while using real KYB tables.
   db.exec('DROP TABLE IF EXISTS kyc_case_events; DROP TABLE IF EXISTS sanctions_screenings;');
   const u = db.prepare('INSERT INTO users (id, email, name, role, kyc_status) VALUES (?, ?, ?, ?, ?)');

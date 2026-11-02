@@ -2,13 +2,12 @@
 // assigns the production migration. No external providers or production rows.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
 import { Hono } from 'hono';
 import { makeD1 } from './_d1_sqlite.mjs';
-import { addColumnsFrom, splitStatements, stripForeignKeys, tableFromBaseline } from './_baseline.mjs';
-import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { addColumnsFrom, stripForeignKeys, tableFromBaseline } from './_baseline.mjs';
 import { AI_LOG_SCHEMA } from './_ai_budget_fixture.mjs';
 import engine, { agentEngineEnabled } from '../src/routes/agent_engine.ts';
 import teamAgents from '../src/routes/team_agents.ts';
@@ -17,6 +16,7 @@ import { projectBoard, setWorkDeps, updateWorkTask, WorkRefusal, type WorkRunRea
 import { taskByUid } from '../src/services/agents/tasks.ts';
 import { loadScope } from '../src/services/agents/teams.ts';
 import { removeMigratedDatabases } from './_storage_schema.ts';
+import { loadSchema } from './_schema_once.mjs';
 
 const sql = (f: string) => readFileSync(new URL(`../sql/${f}`,import.meta.url),'utf8');
 const baseline = sql('schema_baseline.sql');
@@ -39,11 +39,7 @@ const runReader: WorkRunReader = async (env,taskIds) => {
 /** The schema every migration before 762 builds, so 762 meets real legacy rows (the deploy's order). */
 function builtBefore762(): DatabaseSync {
   const db=new DatabaseSync(':memory:',{enableDoubleQuotedStringLiterals:true});
-  db.exec(baseline);
-  const dir=new URL('../sql/migrations/',import.meta.url);
-  for(const f of readdirSync(dir).filter((x)=>x.endsWith('.sql')).sort(compareMigrations).filter((x)=>migrationNumber(x)>BASELINE_CUTOFF&&migrationNumber(x)<762)){
-    for(const stmt of splitStatements(readFileSync(new URL(f,dir),'utf8'))){ try{db.exec(stmt);}catch{/* already on the baseline */} }
-  }
+  loadSchema(db, { below: 762 });
   return db;
 }
 function world() {

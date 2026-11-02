@@ -8,11 +8,10 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync, mkdtempSync, copyFileSync, rmSync } from 'node:fs';
+import { readFileSync, mkdtempSync, copyFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SignJWT } from 'jose';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import {
   FEED_KINDS, KNOWN_KINDS, PAGE_ONLY_KINDS, fetchCalendarScope, fetchUserEvents, fetchUserEventsWithSources,
@@ -21,13 +20,12 @@ import { describeItems } from '../src/services/calendar/items.ts';
 import { readItem } from '../src/services/calendar/itemRead.ts';
 import { complianceState } from '../src/services/calendar/sourceReaders.ts';
 import calendar from '../src/routes/calendar.ts';
+import { loadSchema } from './_schema_once.mjs';
 
 const root = mkdtempSync(join(tmpdir(), 'calendar-d1384-'));
 const seed = join(root, 'seed.sqlite');
 const initial = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
-initial.exec(readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8'));
-const dir = 'cloudflare-worker/sql/migrations';
-for (const n of readdirSync(dir).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort()) initial.exec(readFileSync(`${dir}/${n}`, 'utf8'));
+loadSchema(initial);
 initial.prepare('VACUUM INTO ?').run(seed); initial.close();
 after(() => rmSync(root, { recursive: true, force: true }));
 

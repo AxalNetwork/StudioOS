@@ -1,19 +1,14 @@
 /** D1262 (#3285): landed stores, source provenance and independent money states. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { cards, checkInputs, computeReadiness, dataRoomCard, figures, loadReadiness, latestScores, mismatchSentence, readinessCard, teamReadiness } from '../src/services/raiseCycle.ts';
 import { runCheck, scoreReadinessItem, rescoreReadiness } from '../src/services/raiseWriters.ts';
-const migrations = new URL('../sql/migrations/', import.meta.url);
+import { loadSchema } from './_schema_once.mjs';
 const ddl = (() => {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  db.exec(readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8'));
-  for (const n of readdirSync(migrations).filter(n => /^\d+_.*\.sql$/.test(n)).sort(compareMigrations)) {
-    if (migrationNumber(n) > BASELINE_CUTOFF) db.exec(readFileSync(new URL(n, migrations), 'utf8'));
-  }
+  loadSchema(db);
   const sql = (db.prepare("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END").all() as any[]).map(r => r.sql).join(';\n');
   db.close(); return sql;
 })();

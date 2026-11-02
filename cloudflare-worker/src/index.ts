@@ -2295,6 +2295,16 @@ export default {
           } catch {
             console.error('[cron] agent sweep unreadable');
           }
+          // D1530 (#3849, E5): the due duties, claim before act.
+          try {
+            const { sweepAgentDuties } = await import('./agents/sweep');
+            const d = await sweepAgentDuties(env, now);
+            if (d && (d.task_created || d['skipped:agent_paused'] || d['skipped:no_tokens'])) {
+              cronSummary.push(`agent duties tasks=${d.task_created} skipped=${d['skipped:agent_paused'] + d['skipped:no_tokens'] + d['skipped:scope_gone']}`);
+            }
+          } catch {
+            console.error('[cron] agent duties unreadable');
+          }
         }
         // D1259: a published venture model rescores the next batch of ventures
         // each minute until every venture has its new rows. HQ only: only HQ
@@ -3351,3 +3361,5 @@ export { AiGovernor } from './durable-objects/ai-governor';
 // named in wrangler.toml's [[durable_objects.bindings]] and [[workflows]].
 export { AgentScope } from './agents/doRuntime';
 export { AgentTaskWorkflow } from './agents/taskWorkflow';
+// #3852 (#3742 E0): the `sdk` runtime's Agent, an evaluation behind the same seam; used only while AGENT_RUNTIME is `sdk`.
+export { ScopeAgent } from './agents/sdkRuntime';

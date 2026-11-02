@@ -37,7 +37,8 @@ import { fillKind } from '../src/services/fills/registry.ts';
 import { markFeedbackTold, updateFeedback } from '../src/services/growWriters.ts';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
 const ROOT = process.cwd();
 const MIGRATIONS = resolve(ROOT, 'cloudflare-worker/sql/migrations');
@@ -69,8 +70,7 @@ let copies = 0;
 function fresh(): DatabaseSync {
   if (!existsSync(BUILT)) {
     const db = new DatabaseSync(BUILT, { enableDoubleQuotedStringLiterals: true });
-    db.exec(BASELINE);
-    for (const f of FILES.filter((n) => migrationNumber(n) > BASELINE_CUTOFF)) db.exec(readFileSync(resolve(MIGRATIONS, f), 'utf8'));
+    loadSchema(db);
     db.close();
   }
   const copy = join(SCRATCH, `case-${++copies}.db`);

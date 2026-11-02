@@ -35,12 +35,18 @@ which is the whole point: D1 rejects the entire statement, so one bad column
 name silently empties a screen in production.
 
 `_ts-loader.mjs` strips types at import; `fixtures/` holds shared rows.
-D1528 (#3847): `_agent_engine_fixture.ts` is the agent engine's world: the real migrated schema, the scope objects as `ScopeCore`s over in-memory storage, a fake Workflow binding and queue, a step harness that memoises by step name and can crash before a result is saved, and a fake `agentRun` that keeps E2's one-hold promise. `agent_engine_d1528.test.ts` (the loop, the queue, the routes, erasure), `agent_runtime_contract.test.ts` (the runtime contract, by runtime) and `agent_engine_bindings_d1528.test.ts` (wrangler.toml's three tables and a branch's config) run on it; each case removes its copy of the template as it closes.
+D1528 (#3847): `_agent_engine_fixture.ts` is the agent engine's world: the real migrated schema, the scope objects as `ScopeCore`s over in-memory storage, a fake Workflow binding and queue, a step harness that memoises by step name and can crash before a result is saved, and a fake `agentRun` that keeps E2's one-hold promise. `agent_engine_d1528.test.ts` (the loop, the queue, the routes, erasure), `agent_runtime_contract.test.ts` (the runtime contract, every case on `do` and on `sdk`, whose Agent the fixture fakes as `FakeSdkHost`, and the `do` → `sdk` → `do` switch) and `agent_engine_bindings_d1528.test.ts` (wrangler.toml's three tables and a branch's config) run on it; each case removes its copy of the template as it closes. #3852: `agents_sdk_rules_3852.test.ts` holds the Agents SDK runtime to its three rules (no model call but through `run()`, no SDK tool, no approval but the approvals queue), the exact pin and the wiring.
 `_baseline.mjs` pulls one table's `CREATE TABLE` out of `schema_baseline.sql` so a
 fixture is the schema production has rather than a hand-copy that drifts from it —
 three tests had each grown their own copy of that reader, and one of the copies
 had already been caught reading a column name production does not use.
 `baseline_reader.test.mjs` holds it to what the regex it replaced returned.
+`_schema_once.mjs` (D4133) builds the whole schema (the baseline and every
+migration above `BASELINE_CUTOFF`) once per run into `node_modules/.cache/studioos-schema/`, keyed by a hash of those files,
+and `loadSchema(db)` fills a test's own database from it; `loadSchema(db, { below: N })`
+is the schema as it stood before migration N. A test that needs the migrated
+schema calls it rather than replaying the files, which took 4–10 s per file.
+`schema_once_d4133.test.ts` holds the copy to a fresh build.
 D1174 regressions live in the use-of-funds, Raise card/record, financial
 integrity and access suites. Synthetic Mercury rows prove accepted mappings,
 private owner/session/company scope, missing versus zero, and local read
