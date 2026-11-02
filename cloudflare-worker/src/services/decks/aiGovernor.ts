@@ -24,6 +24,7 @@
  * local dev Worker).
  */
 import type { Env } from '../../types';
+import { doNamespace } from '../../util/doNamespace';
 
 export const KIND_CAPS: Readonly<Record<'image' | 'text' | 'vision', number>> = Object.freeze({ image: 3, text: 6, vision: 4 });
 export const ACCOUNT_RUNS = 2;
@@ -123,11 +124,12 @@ export function __resetGovernorsForTest() { LOCAL.clear(); }
 
 /** The account's governor: its Durable Object where bound, else one in this isolate. */
 export function governorFor(env: Env, account: number): GovernorClient {
-  const ns = env.AI_GOVERNOR;
-  if (!ns) {
+  if (!env.AI_GOVERNOR) {
     const g = localGovernor(account);
     return { acquire: async (i) => g.acquire(i), release: async (id) => { g.release(id); } };
   }
+  // D264: under the branch's Durable Object jurisdiction, never an unrestricted one.
+  const ns = doNamespace(env, env.AI_GOVERNOR);
   const stub = ns.get(ns.idFromName(`account:${account}`));
   const call = async (path: string, body: unknown) => {
     const r = await stub.fetch(`https://ai-governor${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });

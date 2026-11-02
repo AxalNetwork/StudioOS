@@ -10,6 +10,7 @@
  * member's allowance and never finish.
  */
 import type { Env } from '../../types';
+import { doNamespace } from '../../util/doNamespace';
 import type { AdmitInput, Admitted } from './genRuntime';
 
 /** The HTTP status a refused admission answers with. */
@@ -22,8 +23,9 @@ export function admitStatus(refusal: string): number {
 
 /** The deck's room, or null where the binding is absent. */
 export function roomFor(env: Env, deckId: number): DurableObjectStub | null {
-  const ns = env.DECK_GEN_ROOM;
-  if (!ns) return null;
+  if (!env.DECK_GEN_ROOM) return null;
+  // D264: under the branch's Durable Object jurisdiction, never an unrestricted one.
+  const ns = doNamespace(env, env.DECK_GEN_ROOM);
   return ns.get(ns.idFromName(`deck:${deckId}`));
 }
 
