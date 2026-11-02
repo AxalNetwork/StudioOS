@@ -1,0 +1,1 @@
+| Studio Modularity · Boards | founder, investor, advisor, partner | — (the board grid SM0–SM15) | — | as Studio Modularity Page | UPGRADE | D1419. The grid imports `Studio Modularity Page` by name; its `RENAME` and `NOTES` overrides are the final titles. Its board → file map is D1419 §3. |

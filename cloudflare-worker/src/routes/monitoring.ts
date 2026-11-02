@@ -1,3 +1,4 @@
+/** `/api/monitoring`: admin monitoring, its analytics sub-router (Task #3) and the AI router's observability (Task #1). */
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';

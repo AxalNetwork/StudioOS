@@ -25,6 +25,7 @@ import {
   ownerRows, queueQuery, reasonProblem, refusalOf, requestText, rowOf, tiles, waitingFor,
 } from '../src/pages/admin/kyc/businessModel.js';
 import { viewOf } from '../src/pages/admin/kyc/kycModel.js';
+import { readRouteMap } from '../../scripts/lib/routeMap.mjs';
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -442,6 +443,6 @@ test('the wiring: the tab, the case route, the door, the docs', () => {
   assert.match(read('frontend/test/admin_route_reachability.test.mjs'), /kyc\/KycBusinesses\.jsx/);
   assert.match(read('frontend/src/lib/api/kycPeople.js'), /export const businessDocumentBlob = \(uid, documentId, \{ signal \} = \{\}\) =>\n  fetchKycDocument\(`\/api\/kyc\/businesses\//);
   assert.match(read('documentation/architecture/decisions/D1234.md'), /## D1234/);
-  assert.match(read('documentation/architecture/ROUTE_MAP.md'), /D1234/);
+  assert.match(readRouteMap(), /D1234/);
   assert.match(read('frontend/src/pages/admin/kyc/README.md'), /BusinessCase\.jsx/);
 });

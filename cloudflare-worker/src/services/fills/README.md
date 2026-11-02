@@ -46,3 +46,17 @@ wait for a later part: the competitor's row is keyed by name and the
 feedback's by uid, which `ROW_READS` and `fillRecordId` do not take. An
 obligation's title waits for its Edit form to draw one.
 
+**#4046 (#3740 2b), the deal page's New note.** `deal_notes.body` joins as
+one composition field (`Investor · Deals · Deal room` / `deal-note`), under
+a `deal_notes` scope in `scopes.ts` that reads the notes route's own rule
+from `../dealNotes.ts` (`noteFirm`, `visibleDeal`): the firm is the request's
+verified active company, else the caller's only firm, and a claim that does
+not verify never falls back; a firm's note is read by that firm, a firm-less
+note by its author alone, and only the author fills it. No admin and no staff
+bypass, so the scope is concealed. The tag is the investor's own call and has
+no entry. No rows are offered. The other three 2b screens are not built here:
+the DD memo's parts are encrypted at rest (`dd_case_memos.*_enc`) while
+`fill_provenance` keeps proposed and written values in plaintext; a closing
+paper's open fields are merge values of a preview, not a stored column, and
+the non-money ones are names and dates; the data room's "Eadwyn proposals"
+are actions (a match, a folder), not field values.

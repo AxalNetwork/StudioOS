@@ -366,5 +366,5 @@ test('the route is mounted, and the client calls it from its own module re-expor
   assert.match(index, /import adminAccountsOverview from '\.\/routes\/admin_accounts_overview';/);
   assert.match(index, /app\.route\('\/api\/admin\/accounts\/overview', adminAccountsOverview\);/);
   assert.match(read('frontend/src/lib/api/adminAccounts.js'), /accountsOverview: \(\) => request\('\/admin\/accounts\/overview'\)/);
-  assert.match(read('frontend/src/lib/api.js'), /^export \* from '\.\/api\/adminAccounts\.js';$/m);
+  assert.match(read('frontend/src/lib/apiModules.generated.js'), /^export \* from '\.\/api\/adminAccounts\.js';$/m);
 });

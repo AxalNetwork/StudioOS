@@ -56,8 +56,8 @@ async function deckRow(c: any, id: number): Promise<Row | null> {
   try { return await getDeckRow(c.env, id) as Row; } catch { return null; }
 }
 
-/** May this reader read the deck at all; and is it the venture's founder, who alone runs the check. */
-async function reader(c: any, user: User, projectId: number): Promise<{ founder: boolean } | Response> {
+/** May this reader read the deck at all; and is it the venture's founder, who alone runs the check (and reads D1559's questions). */
+export async function reader(c: any, user: User, projectId: number): Promise<{ founder: boolean } | Response> {
   try { await projectOwned(c, user, projectId); } catch (e: any) {
     return e?.message === 'NotFound' ? c.json({ error: 'not found' }, 404) : c.json({ error: 'forbidden' }, 403);
   }

@@ -312,5 +312,5 @@ test('wiring: migration 623, and the client names every new route through one li
   assert.match(sql, /UNIQUE \(depth, version\)/);
   const client = read('../../frontend/src/lib/api/ddDesk.js');
   for (const path of ['/dd/overview', '/dd/my-reviews', '/dd/subjects?type=', '/dd/people?q=', '/conflicts`', '/reviewers/${enc(userId)}', '/widen`', "'/dd/templates'"]) assert.ok(client.includes(path), path);
-  assert.match(read('../../frontend/src/lib/api.js'), /export \* from '\.\/api\/ddDesk\.js';/);
+  assert.match(read('../../frontend/src/lib/apiModules.generated.js'), /export \* from '\.\/api\/ddDesk\.js';/);
 });

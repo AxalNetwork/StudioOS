@@ -49,7 +49,7 @@ test('paths, verbs and bodies; profile only when given', async () => {
 
 test('api.js re-exports the module, in alphabetical position (D527)', () => {
   assert.equal(viaApi, studioLayoutApi);
-  const lines = readFileSync(new URL('../src/lib/api.js', import.meta.url), 'utf8').split('\n').filter((l) => /^export \* from '\.\/api\//.test(l));
+  const lines = readFileSync(new URL('../src/lib/apiModules.generated.js', import.meta.url), 'utf8').split('\n').filter((l) => /^export \* from '\.\/api\//.test(l));
   const at = lines.indexOf("export * from './api/studioLayout.js';");
   assert.ok(at > 0);
   assert.ok(lines[at - 1] < lines[at] && lines[at] < lines[at + 1], `${lines[at - 1]} / ${lines[at + 1]}`);
