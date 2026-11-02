@@ -113,6 +113,22 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-11-02 — AI agents and skills, v2 (#4116, #3945)
+
+The owner's four artifacts were decoded by `scripts/read-canvas.mjs`:
+- **`FvMdLdoYQbW4rRNQwwo29t`, the AI agents page.**
+  - `Agents Skills Page v2.dc.html` is the page. It has one frame per `v` value: `ag1` to `ag7f` and `sk0` to `sk6g`. A `-d` suffix is dark.
+  - `Agents Skills v2 · Boards.dc.html` is its board grid, "AI agents and skills". It holds Prompt A, AG1 to AG7: the agent card at three sizes, Add an AI agent (choose who, skills, model and cap), the agent profile, Team › AI agents and its states. It holds Prompt B, SK0 to SK6: the eight areas, the skill directory, the skill page, Assign to agents, New or edit skill, the cost explainer and the states. The grid imports the page by name.
+- **`Lrm34Kx7eZcCDL7KLcFoh3`, the Skills boards.** It decodes to the same page as the agents artifact, apart from markup formatting, so it is not kept twice.
+- **`7HhixL1bTg8Z16wyJZz5Fe`, the skill page.** It replaces `Agent Skills Page.dc.html` (D1612). The frame ids are unchanged, sk0 to sk9j, so `Agent Skills · Boards.dc.html` still imports it. The skills are no longer grouped by agent role: "Natural fit is a hint; any agent can take this skill", and every card carries its run cost.
+- **`JYqNSRQiSPQCs5fXab9VKk`, SkillEnergy.** `Skill Energy Page.dc.html` holds EN1 to EN6: three styles, the 8 × 5 grid, uniqueness, in context, motion and the spec sheet. Style B is built (D4120).
+
+**What wins over the canvases:**
+- **Values:** the canvases still draw the older eight values (Courage, Craft, Empathy, …). Build with the six Axal values instead: Integrity, Stewardship, Curiosity, Resilience, Collaboration and Ambition (D4117 §1).
+- **Removed from the persona:** no philosophy, no Schwartz bars and no trade-offs.
+
+Logo paths are `/axal-mark.png` and `/eadwyn-ai.png`. The decision is `documentation/architecture/decisions/D4116.md`.
+
 ## Landed 2026-11-02 — Learning on Stream (#3726)
 
 The owner's two artifacts for #3726 (boards LR1–LR21), decoded by
