@@ -174,7 +174,8 @@ deckCritic.post('/:id/critic', async (c) => {
   else if (!writer) critic = { state: 'refused', code: 'writer_unknown', message: NO_WRITER };
   else if (!model) critic = { state: 'refused', code: 'no_other_family', message: NO_FAMILY, writer_family: familyOf(writer) };
   else {
-    const res = await run(c.env, { ...criticRun(c, user, a, model, read), surface: AI_SURFACE.raisePitch });
+    const opts = criticRun(c, user, a, model, read);
+    const res = await run(c.env, { ...opts, rail: opts.rail, surface: AI_SURFACE.raisePitch });
     if (!res.ok) {
       if (res.refusal === 'assist_off') critic = { state: 'off', message: AI_OFF };
       else {
