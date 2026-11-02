@@ -19,6 +19,7 @@ import type { Env } from '../../types';
 import { getSQL } from '../../db';
 import type { CalendarEvent } from '../calendar';
 import { clearSyncError, recordSyncError } from './syncState';
+import { readCopyTarget, type CopyTarget } from './prefs';
 import {
   loadRefreshTokenExport as loadRefreshToken,
   refreshGoogleAccessToken,
@@ -61,6 +62,22 @@ async function attendeeUserIds(env: Env, ev: CalendarEvent): Promise<number[]> {
     console.warn('[calendar/sync] attendeeUserIds failed', e);
     return [];
   }
+}
+
+/**
+ * D1485 (#3979): "Copy new Axal sessions to…". A provider the member's
+ * `copy_target` leaves out gets no new copy, and is not even asked for a token;
+ * a copy it already holds keeps being updated. An unreadable setting is the
+ * default, 'all', which is today's behaviour.
+ */
+async function copyAllowed(env: Env, userId: number, ev: CalendarEvent, provider: 'google' | 'microsoft'): Promise<boolean> {
+  let target: CopyTarget = 'all';
+  try { target = await readCopyTarget(env, userId); } catch { /* no settings store yet: the default */ }
+  if (target === 'all' || target === provider) return true;
+  const held = await env.DB.prepare(
+    'SELECT 1 AS held FROM calendar_sync_records WHERE user_id = ? AND provider = ? AND source_kind = ? AND source_id = ? LIMIT 1',
+  ).bind(userId, provider, ev.kind, ev.source_id).first<{ held: number }>();
+  return Boolean(held);
 }
 
 async function pushOneUserOneProvider(
@@ -133,9 +150,12 @@ export async function onAxalSessionCreated(env: Env, ev: CalendarEvent): Promise
     if (userIds.length === 0) return;
     const googleOn = googleOAuthAvailable(env);
     const msOn = microsoftOAuthAvailable(env);
+    const push = async (uid: number, provider: 'google' | 'microsoft') => {
+      if (await copyAllowed(env, uid, ev, provider)) await pushOneUserOneProvider(env, uid, ev, provider);
+    };
     await Promise.all(userIds.flatMap(uid => [
-      googleOn ? pushOneUserOneProvider(env, uid, ev, 'google') : Promise.resolve(),
-      msOn    ? pushOneUserOneProvider(env, uid, ev, 'microsoft') : Promise.resolve(),
+      googleOn ? push(uid, 'google') : Promise.resolve(),
+      msOn    ? push(uid, 'microsoft') : Promise.resolve(),
     ]));
   } catch (e) {
     console.warn('[calendar/sync] onAxalSessionCreated failed', e);

@@ -434,7 +434,7 @@ export async function fetchMicrosoftUserinfo(accessToken: string): Promise<any> 
 // ===========================================================================
 export interface CalendarEvent {
   id: string;
-  kind: 'ic_meeting' | 'founder_checkin' | 'advisor_booking' | 'partner_office_hour' | 'calendly_event' | 'expert_booking' | 'event_ticket' | 'event_hosted' | 'investor_meeting' | 'compliance_due' | 'interview_call' | 'cohort_date' | 'deal_closing' | 'manual' | 'learning' | 'publish_send' | 'content_planned' | 'bot_call' | 'round_close' | 'nda_expiry' | 'workflow_task' | 'mvp_task' | 'contact_task' | 'engagement_milestone';
+  kind: 'ic_meeting' | 'founder_checkin' | 'advisor_booking' | 'partner_office_hour' | 'calendly_event' | 'expert_booking' | 'event_ticket' | 'event_hosted' | 'investor_meeting' | 'compliance_due' | 'interview_call' | 'cohort_date' | 'deal_closing' | 'manual' | 'learning' | 'publish_send' | 'content_planned' | 'bot_call' | 'round_close' | 'nda_expiry' | 'workflow_task' | 'mvp_task' | 'contact_task' | 'engagement_milestone' | 'external_google' | 'external_microsoft';
   source_id: number;
   source_uid: string;
   title: string;
@@ -477,6 +477,16 @@ export interface CalendarEvent {
   my_role?: string;
   cancel_reason?: string | null;
   time_zone?: string | null;
+  /**
+   * D1485 (#3979): an external Google or Outlook event's provider, its iCalUID
+   * and the member's own account (`calendar/externalReaders.ts`). Set on the
+   * owner's own page read only; never in a feed, a copy or a staff scope.
+   */
+  external?: { provider: 'google' | 'microsoft'; ical_uid: string | null; account: { provider: 'google' | 'microsoft'; address: string | null } };
+  /** D1485: the providers this Axal item also shows on, from the dedupe (CAL6). */
+  also_on?: string[];
+  /** D1485: an external event that starts within a minute of an Axal item with an overlapping title. Flagged, never merged. */
+  possible_duplicate?: boolean;
   /** D1207 — the booked advisor's uid, for the booking's page. */
   advisor_uid?: string | null;
   /** D1384 — a compliance deadline's own facts (`compliance_due` only). */
@@ -911,6 +921,9 @@ const READERS: Readonly<Record<CalendarEvent['kind'], CalendarReader>> = {
   mvp_task: async (env, userId, from, to) => (await (await import('./calendar/taskDates')).mvpTaskEvents(env, userId, from, to)),
   contact_task: async (env, userId, from, to) => (await (await import('./calendar/taskDates')).contactTaskEvents(env, userId, from, to)),
   engagement_milestone: async (env, userId, from, to) => (await (await import('./calendar/taskDates')).engagementMilestoneEvents(env, userId, from, to)),
+  // D1485 (#3979): the member's own Google and Outlook events, read live, page only, never pushable.
+  external_google: async (env, userId, from, to) => (await import('./calendar/externalReaders')).googleEvents(env, userId, from, to),
+  external_microsoft: async (env, userId, from, to) => (await import('./calendar/externalReaders')).microsoftEvents(env, userId, from, to),
 };
 
 export const KNOWN_KINDS = Object.keys(READERS) as readonly CalendarEvent['kind'][];
@@ -930,7 +943,10 @@ export const FEED_KINDS = KNOWN_KINDS.filter((k) => !PAGE_ONLY_KINDS.includes(k)
 export interface CalendarSourceStatus {
   kind: CalendarEvent['kind'];
   ok: boolean;
-  error: 'unreadable' | 'not_configured' | null;
+  /** D1485: `reconnect` (an expired or revoked connection) and `rate_limited` are the connected calendars'. */
+  error: 'unreadable' | 'not_configured' | 'reconnect' | 'rate_limited' | null;
+  /** D1485: a connected calendar that stopped at its page cap. */
+  truncated?: true;
 }
 
 /**
@@ -958,13 +974,18 @@ async function gather(
   const wanted = new Set<string>(kinds && kinds.length ? kinds : KNOWN_KINDS);
   const events: CalendarEvent[] = [];
   const sources: CalendarSourceStatus[] = [];
+  const external = await import('./calendar/externalReaders');
   for (const kind of KNOWN_KINDS) {
     if (!wanted.has(kind)) continue;
     try {
-      events.push(...await READERS[kind](env, userId, fromIso, toIso, opts));
-      sources.push({ kind, ok: true, error: null });
+      const read = await READERS[kind](env, userId, fromIso, toIso, opts) as CalendarEvent[] & { truncated?: boolean };
+      events.push(...read);
+      sources.push({ kind, ok: true, error: null, ...(read.truncated ? { truncated: true as const } : {}) });
     } catch (e) {
-      const error = isMissingTableError(e) || isMissingColumnError(e) ? 'not_configured' : 'unreadable';
+      // D1485: a member with no Google or Outlook connection has no such source at all.
+      if (e instanceof external.NoSource) continue;
+      const error = e instanceof external.ExternalReadError ? e.code
+        : isMissingTableError(e) || isMissingColumnError(e) ? 'not_configured' : 'unreadable';
       console.warn('[calendar] source failed', { kind, outcome: error });
       sources.push({ kind, ok: false, error });
     }
@@ -988,7 +1009,9 @@ export async function fetchUserEventsWithSources(
 export const SCOPED_EXCLUDED_KINDS = ['calendly_event', 'expert_booking'] as const;
 /** D1484: read for their owner alone; a staff scope has no reader for them, so it does not list them. */
 // D1486 §b (#3981): Publish sends and planned content are the venture team's, never a staff scope's.
-export const PERSONAL_ONLY_KINDS = ['interview_call', 'cohort_date', 'deal_closing', 'manual', 'publish_send', 'content_planned', 'bot_call', 'round_close', 'nda_expiry', 'workflow_task', 'mvp_task', 'contact_task', 'engagement_milestone'] as const;
+export const PERSONAL_ONLY_KINDS = ['interview_call', 'cohort_date', 'deal_closing', 'manual', 'publish_send', 'content_planned', 'bot_call', 'round_close', 'nda_expiry', 'workflow_task', 'mvp_task', 'contact_task', 'engagement_milestone',
+  // D1485 (#3979): a member's own Google or Outlook events are theirs alone, never a staff scope's.
+  'external_google', 'external_microsoft'] as const;
 export const SCOPED_SOURCE_LIMIT = 1000;
 export function validScopeWindow(from: string, to: string): boolean {
   const start = Date.parse(from), end = Date.parse(to);
@@ -1195,7 +1218,8 @@ export async function fetchCalendarScope(
   }
   const byId = new Map<string, CalendarEvent>();
   const truncated: CalendarEvent['kind'][] = [];
-  const sources: CalendarSourceStatus[] = [];
+  // A staff scope reads only Axal tables, so its sources fail only as not configured or unreadable.
+  const sources: Array<CalendarSourceStatus & { error: 'not_configured' | 'unreadable' | null }> = [];
   for (const kind of wanted) {
     try {
       const result = await scopedRows(env, actor, scope === 'all', kind, fromIso, toIso);

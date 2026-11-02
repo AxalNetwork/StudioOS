@@ -12,6 +12,7 @@
  */
 import { NOT_RECORDED } from '../../../lib/absence.js';
 import { fieldBlocks, renderableFields } from './presentExportModel.js';
+import { statusChanges } from './cardStatusModel.js';
 
 export { NOT_RECORDED };
 
@@ -329,8 +330,10 @@ export function changesOf(base, next, model = null) {
     for (const x of added) out.push(`${name}: adds a ${blockLabel(x)}.`);
     for (const x of removed) out.push(`${name}: removes the ${blockLabel(x)}.`);
     for (const x of kept) if (!same(x, oldIds.get(x.id))) out.push(`${name}: changes the ${blockLabel(x)}.`);
-    const restA = { ...was, notes: undefined, layout: undefined, background: undefined, blocks: undefined };
-    const restB = { ...card, notes: undefined, layout: undefined, background: undefined, blocks: undefined };
+    // D1579 (#3826): a status or assignee is said on its own line, never as "its words change".
+    out.push(...statusChanges(was, card, name));
+    const restA = { ...was, notes: undefined, layout: undefined, background: undefined, blocks: undefined, status: undefined, assignee: undefined };
+    const restB = { ...card, notes: undefined, layout: undefined, background: undefined, blocks: undefined, status: undefined, assignee: undefined };
     if (!same(restA, restB)) out.push(`${name}: its words change.`);
   });
   return withVersion(out, base, next);

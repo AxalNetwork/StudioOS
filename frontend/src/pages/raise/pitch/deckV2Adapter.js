@@ -39,6 +39,7 @@ import { LATER, NOT_ON } from './deckV2Model.js';
 // One line per client, in file-name order (pitch_v2_adapter_d1604 holds it), so two swaps add lines at different places.
 import { dataRoomApi } from '../../../lib/api/dataRoom.js';
 import { deckBatchesApi } from '../../../lib/api/deckBatches.js';
+import { deckCardStatusApi } from '../../../lib/api/deckCardStatus.js';
 import { deckCheckApi } from '../../../lib/api/deckCheck.js';
 import { deckCoeditApi } from '../../../lib/api/deckCoedit.js';
 import { deckCommentsApi } from '../../../lib/api/deckComments.js';
@@ -57,6 +58,7 @@ import { deckTemplatesApi } from '../../../lib/api/deckTemplates.js';
 import { deckTypedValuesApi } from '../../../lib/api/deckTypedValues.js';
 import { deckUsageApi } from '../../../lib/api/deckUsage.js';
 import { deckVentureElementsApi } from '../../../lib/api/deckVentureElements.js';
+import { arrange as arrangeCard } from './arrangeModel.js';
 import * as gridOps from './gridOps.js';
 
 export { NOT_ON };
@@ -192,7 +194,11 @@ export const figures = (deckId) => through(() => deckFiguresApi.list(deckId), SU
  * figure the Worker could not read is null, never $0.00.
  */
 export const deckUsage = (deckId) => through(() => deckUsageApi.rail(deckId), SURFACES.deckUsage.issue);
-export const arrange = off('arrange');
+/**
+ * D1533 (#3777): one Arrange operation on a card (`arrangeModel.arrange`): `{ card, line }`,
+ * `{ same, line }` or `{ error }`. Local and synchronous underneath; the edited card is saved with every other edit.
+ */
+export const arrange = async (card, selection, op, opts) => ({ available: true, value: arrangeCard(card, selection, op, opts) });
 export const imageEdit = off('imageEdit');
 /** D1544 (#3784): an edit's price (vary, edit, erase, expand) before it runs: one hold for the edit and its checks. */
 export const imageVary = (uid, ask) => through(() => deckImageEditsApi.quote(uid, ask), SURFACES.imageVary.issue);
@@ -249,7 +255,12 @@ export const slideAnalytics = off('slideAnalytics');
  * "Coming later" and no avatar, "N editing" or Suggest switch is drawn. Suggest mode waits on its store.
  */
 export const presence = (deckId) => through(() => deckCoeditApi.presence(deckId), SURFACES.presence.issue);
-export const cardStatus = off('cardStatus');
+/**
+ * D1579 (#3826): each card's status and assignee on the saved version, filtered by status and assignee, the cards
+ * not Done, and who a card can be assigned to (`GET /api/decks/:id/card-status`). Status and assignee are written
+ * by saving a version.
+ */
+export const cardStatus = (deckId, filter) => through(() => deckCardStatusApi.read(deckId, filter), SURFACES.cardStatus.issue);
 /**
  * D1580 F1 (#3827): the founder's rehearsals of this version, newest first; the surface runs and reads them through
  * `deckRehearsalsApi`. Present's Rehearse panel runs, reads and keeps through the same client.

@@ -196,6 +196,8 @@ export function isPublicPath(pathname) {
     || currentPath.startsWith('/esign/')
     || currentPath.startsWith('/deck/share/')
     || currentPath.startsWith('/share/deck/')
+    // D1564 (#3811): a published deck framed on a site its founder listed.
+    || currentPath.startsWith('/embed/')
     || currentPath.startsWith('/share/captable/')
     || currentPath.startsWith('/insights')
     // ROUTE literals, not API paths — this whole predicate reads

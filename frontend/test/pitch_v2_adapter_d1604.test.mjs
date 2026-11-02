@@ -30,6 +30,7 @@ import { deckElementModelsApi } from '../src/lib/api/deckElementModels.js';
 import { deckRehearsalsApi } from '../src/lib/api/deckRehearsals.js';
 import { deckFiguresApi } from '../src/lib/api/deckFigures.js';
 import { deckCommentsApi } from '../src/lib/api/deckComments.js';
+
 import { deckBatchesApi, parseSse } from '../src/lib/api/deckBatches.js';
 import { deckCoeditApi } from '../src/lib/api/deckCoedit.js';
 import { deckVentureElementsApi } from '../src/lib/api/deckVentureElements.js';
@@ -45,10 +46,13 @@ test('every adapter method answers unavailable, with the reason and the issue th
   const body = (src, name) => (src.match(new RegExp(`^export const ${name} = ([^\\n]*)$`, 'm')) || [])[1] || '';
   const code = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
   const wired = methods.filter((n) => /\bthrough\(\(\) => [^\n]*\b[a-z][A-Za-z]*Api\./.test(body(code, n)));
-  const local = methods.filter((n) => n === 'history' && body(code, n) === 'async () => Object.freeze({ available: true, value: gridOps });');
+  const local = methods.filter((n) =>
+    (n === 'history' && body(code, n) === 'async () => Object.freeze({ available: true, value: gridOps });')
+    || (n === 'arrange' && /arrangeCard\(card, selection, op, opts\)/.test(body(code, n))));
   const offRows = methods.filter((n) => body(code, n) === `off('${n}');`);
   assert.deepEqual([...adapter.SWAPPED].sort(), [...wired, ...local].sort(), 'SWAPPED is exactly the remote and browser-local rows');
-  assert.deepEqual([...wired, ...local, ...offRows].sort(), [...methods].sort(), 'every row is remote, browser-local history, or off(\'<row>\'), nothing else');
+  assert.deepEqual([...wired, ...local, ...offRows].sort(), [...methods].sort(), 'every row is remote, browser-local history or Arrange, or off(\'<row>\')');
+  assert.match(body(code, 'arrange'), /arrangeCard\(card, selection, op, opts\)/, 'arrange edits locally before the existing card save');
   for (const n of wired) assert.match(body(code, n), new RegExp(`SURFACES\\.${n}\\.issue\\);$`), `${n} keys its own row's issue`);
   // A floor, so a parser that stopped matching cannot pass on two empty lists. D1541 (#3779) elementsLibrary is one of them.
   for (const n of ['grid', 'saveCard', 'stagePlan', 'remix', 'comments', 'ventureElements', 'elementsLibrary']) assert.ok(adapter.SWAPPED.includes(n), `${n} is swapped on main`);
@@ -384,6 +388,7 @@ test('D1570 (#3817): comments is swapped — it answers through deckCommentsApi.
   } finally { deckCommentsApi.list = real; }
   assert.equal(adapter.availability('comments'), null);
 });
+
 
 test('D1543 (#3781): ventureElements is swapped — one element through deckVentureElementsApi.element, all through .list, a gate refusal keeps its code and line', async () => {
   // Mutation checked: ventureElements left as off('ventureElements') → the available answer fails; through() dropping
