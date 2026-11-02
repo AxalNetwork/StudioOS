@@ -23,7 +23,6 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
@@ -36,11 +35,10 @@ import { deckCheckView, deckCheckSummaries, staleClaims, swapFigure, swapInSlide
 import { checkClaims } from '../src/services/raiseClaims.ts';
 import { ClaimNoteError, noteText, setClaimNote } from '../src/services/raiseClaimNotes.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SQL = resolve(here, '../sql');
-const M = resolve(SQL, 'migrations');
 const JWT_SECRET = 'unit-test-jwt-secret-d900-deck-check-0123456789-abcdef';
 
 const OWNER = 1, COFOUNDER = 2, ADMIN = 4, OTHER = 5;
@@ -55,10 +53,7 @@ const SLIDES_V2 = [
 
 function fixture() {
   const db = new DatabaseSync(':memory:');
-  db.exec(readFileSync(resolve(SQL, 'schema_baseline.sql'), 'utf8'));
-  for (const name of readdirSync(M).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort()) {
-    db.exec(readFileSync(resolve(M, name), 'utf8'));
-  }
+  loadSchema(db);
   db.exec(`INSERT INTO founders (id, name, email) VALUES (10, 'Synthetic Founder', 'f@example.test'), (11, 'Synthetic Other', 'o@example.test');
     INSERT INTO users (id, email, name, role, founder_id) VALUES
       (${OWNER}, 'owner@example.test', 'Synthetic Owner', 'founder', 10),

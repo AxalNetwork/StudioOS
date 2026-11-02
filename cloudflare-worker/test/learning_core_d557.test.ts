@@ -27,8 +27,8 @@ import learning from '../src/routes/learning.ts';
 import adminLearning from '../src/routes/admin_learning.ts';
 import { allowedVideoUrl, canSeeLearning } from '../src/services/learningAccess.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { splitStatements } from './_baseline.mjs';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '../..');
@@ -41,14 +41,7 @@ const ROLE: Record<number, string> = { [SUPER]: 'admin', [PLAIN_ADMIN]: 'admin',
 
 function builtFromMigrations(): DatabaseSync {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  db.exec(readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8'));
-  const files = readdirSync(MIGRATIONS).filter((f) => f.endsWith('.sql')).sort(compareMigrations)
-    .filter((f) => migrationNumber(f) > BASELINE_CUTOFF && migrationNumber(f) < 388);
-  for (const f of files) {
-    for (const stmt of splitStatements(readFileSync(resolve(MIGRATIONS, f), 'utf8'))) {
-      try { db.exec(stmt); } catch { /* already present on the baseline */ }
-    }
-  }
+  loadSchema(db, { below: 388 });
   db.exec(SQL_388);
   // The Learning migrations after 388 (D559's 390, …), whole, as the deploy applies them.
   for (const f of readdirSync(MIGRATIONS).filter((x) => x.endsWith('.sql')).sort(compareMigrations)

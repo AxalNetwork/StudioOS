@@ -53,18 +53,14 @@ import { SignJWT } from 'jose';
 import recover from '../src/routes/auth_recover.ts';
 import notifications from '../src/routes/notifications.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { splitStatements } from './_baseline.mjs';
 import { codeOnly } from './_codeOnly.mjs';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SQL_DIR = resolve(HERE, '../sql');
 const SRC_DIR = resolve(HERE, '../src');
-const MIGRATIONS = resolve(SQL_DIR, 'migrations');
 const JWT_SECRET = 'd189-test-secret-at-least-32-bytes-long!!';
 
-const migrationNames = () =>
-  readdirSync(MIGRATIONS).filter((n) => /^\d+_.*\.sql$/.test(n)).sort(compareMigrations);
 
 /**
  * A freshly provisioned database, exactly as `migrate-d1 --bootstrap` leaves
@@ -75,13 +71,7 @@ const migrationNames = () =>
  */
 function freshDb(skip: string[] = []) {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  db.exec(readFileSync(resolve(SQL_DIR, 'schema_baseline.sql'), 'utf8'));
-  for (const name of migrationNames()) {
-    if (migrationNumber(name) <= BASELINE_CUTOFF || skip.includes(name)) continue;
-    for (const stmt of splitStatements(readFileSync(resolve(MIGRATIONS, name), 'utf8'))) {
-      try { db.exec(stmt); } catch { /* error-tolerant, as the runner is */ }
-    }
-  }
+  loadSchema(db);
   return db;
 }
 

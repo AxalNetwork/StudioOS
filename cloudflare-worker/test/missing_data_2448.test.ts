@@ -15,10 +15,9 @@ test('2448: DD excludes unknown sections and retains measured failure and pass',
 });
 
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { SignJWT } from 'jose';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 import { runFullScore } from '../src/services/scoring.ts';
 import { REQUIRED_OFFICIAL_INPUTS } from '../src/services/scoreIntegrity.ts';
 import { computeAutoLayers, mergeLayers, overallFromLayers } from '../src/services/ventureRisk.ts';
@@ -27,12 +26,11 @@ import { rescoreReadiness } from '../src/services/raiseWriters.ts';
 import trust from '../src/routes/trust.ts';
 import projects from '../src/routes/projects.ts';
 import pipeline from '../src/routes/pipeline.ts';
+import { loadSchema } from './_schema_once.mjs';
 const secret = 'synthetic-2448-test-only-'.repeat(3);
 const ddl = (() => {
  const db=new DatabaseSync(':memory:',{enableForeignKeyConstraints:false,enableDoubleQuotedStringLiterals:true});
- db.exec(readFileSync(new URL('../sql/schema_baseline.sql',import.meta.url),'utf8'));
- for(const n of readdirSync(new URL('../sql/migrations/',import.meta.url)).filter(n=>/^\d+_.*\.sql$/.test(n)).sort(compareMigrations))
-  if(migrationNumber(n)>BASELINE_CUTOFF) db.exec(readFileSync(new URL('../sql/migrations/'+n,import.meta.url),'utf8'));
+ loadSchema(db);
  const ddl=(db.prepare("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END").all() as any[]).map(x=>x.sql).join(';\n');db.close();return ddl;
 })();
 function fixture() {
@@ -120,9 +118,7 @@ test('2448: narrative readiness without a comparison is unscored and omitted fro
 test('2448: migration 558 preserves rows, defaults, indexes and deleted ID high-water marks',()=>{
  for(const empty of [false,true]) {
  const db=new DatabaseSync(':memory:',{enableForeignKeyConstraints:false,enableDoubleQuotedStringLiterals:true});try{
- db.exec(readFileSync(new URL('../sql/schema_baseline.sql',import.meta.url),'utf8'));
- for(const n of readdirSync(new URL('../sql/migrations/',import.meta.url)).filter(n=>/^\d+_.*\.sql$/.test(n)).sort(compareMigrations))
-  if(migrationNumber(n)>BASELINE_CUTOFF && !n.startsWith('558_')) db.exec(readFileSync(new URL('../sql/migrations/'+n,import.meta.url),'utf8'));
+ loadSchema(db);
  db.exec("INSERT INTO users(id,name,email,role) VALUES(1,'Synthetic','migration@example.test','admin'); INSERT INTO projects(id,name) VALUES(1,'Synthetic'); INSERT INTO readiness_items(id,project_id,item_key,label) VALUES(1,1,'narrative','Narrative'); INSERT INTO readiness_scores(id,item_id,project_id,score,evidence,source,scored_by,scored_at,missing) VALUES(41,1,1,0,'stated','computed',1,'2026-09-02','Synthetic reason'),(900,1,1,10,'measured','manual',1,'2026-09-03',NULL); DELETE FROM readiness_scores WHERE id=900;");
  if(empty) db.exec('DELETE FROM readiness_scores');
  const before=db.prepare('SELECT * FROM readiness_scores').all();

@@ -40,6 +40,12 @@ fixture is the schema production has rather than a hand-copy that drifts from it
 three tests had each grown their own copy of that reader, and one of the copies
 had already been caught reading a column name production does not use.
 `baseline_reader.test.mjs` holds it to what the regex it replaced returned.
+`_schema_once.mjs` (D4133) builds the whole schema (the baseline and every
+migration above `BASELINE_CUTOFF`) once per run, keyed by a hash of those files,
+and `loadSchema(db)` fills a test's own database from it; `loadSchema(db, { below: N })`
+is the schema as it stood before migration N. A test that needs the migrated
+schema calls it rather than replaying the files, which took 4–10 s per file.
+`schema_once_d4133.test.ts` holds the copy to a fresh build.
 D1174 regressions live in the use-of-funds, Raise card/record, financial
 integrity and access suites. Synthetic Mercury rows prove accepted mappings,
 private owner/session/company scope, missing versus zero, and local read

@@ -22,7 +22,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
@@ -30,8 +30,8 @@ import { SignJWT } from 'jose';
 import plan from '../src/routes/learning_plan.ts';
 import { learningEvents, occurrences, sendPlanReminders } from '../src/services/learningPlan.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { splitStatements } from './_baseline.mjs';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '../..');
@@ -44,13 +44,7 @@ const MIN = 60_000;
 
 function builtFromMigrations(): DatabaseSync {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  db.exec(readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8'));
-  const files = readdirSync(MIGRATIONS).filter((x) => x.endsWith('.sql')).sort(compareMigrations);
-  for (const f of files.filter((x) => migrationNumber(x) > BASELINE_CUTOFF && !(migrationNumber(x) >= 388 && /^\d+_learning_/.test(x)))) {
-    for (const stmt of splitStatements(readFileSync(resolve(MIGRATIONS, f), 'utf8'))) {
-      try { db.exec(stmt); } catch { /* already present on the baseline */ }
-    }
-  }
+  loadSchema(db);
   // The Learning migrations, whole and in order, as the deploy applies them (758 among them).
   for (const f of files.filter((x) => migrationNumber(x) >= 388 && /^\d+_learning_/.test(x))) {
     db.exec(readFileSync(resolve(MIGRATIONS, f), 'utf8'));

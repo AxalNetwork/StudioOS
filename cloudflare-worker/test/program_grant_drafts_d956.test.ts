@@ -12,7 +12,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
@@ -27,9 +27,8 @@ import { NO_COPY_REASON, GRANTS_UNREADABLE, grantStates } from '../src/services/
 import { termsFor } from '../src/services/programGrants.ts';
 import { PROGRAM_KEYS } from '../src/services/programRegistry.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { splitStatements } from './_baseline.mjs';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
+import { loadSchema } from './_schema_once.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '../..');
@@ -42,20 +41,11 @@ const SUPER = 1, LIS = 2, NAI = 3, LONE = 4, PLAIN = 5;
 const ROLE: Record<number, string> = { [SUPER]: 'admin', [LIS]: 'admin', [NAI]: 'admin', [LONE]: 'admin', [PLAIN]: 'admin' };
 const TODAY = new Date().toISOString().slice(0, 10);
 
-const files = () => readdirSync(MIGRATIONS).filter((x) => /^\d+_.*\.sql$/.test(x)).sort(compareMigrations)
-  .filter((x) => migrationNumber(x) > BASELINE_CUTOFF);
 
 /** The baseline and every migration, `upTo` excluded; the three above applied whole. */
 function built(upTo = Infinity): DatabaseSync {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  db.exec(readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8'));
-  for (const f of files().filter((x) => migrationNumber(x) < upTo)) {
-    const sql = readFileSync(resolve(MIGRATIONS, f), 'utf8');
-    if (WHOLE.includes(f)) { db.exec(sql); continue; }
-    for (const stmt of splitStatements(sql)) {
-      try { db.exec(stmt); } catch { /* already present on the baseline */ }
-    }
-  }
+  loadSchema(db);
   return db;
 }
 const BUILT = built();

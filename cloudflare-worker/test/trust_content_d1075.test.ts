@@ -12,7 +12,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
@@ -26,13 +26,13 @@ import { obligationsForRole } from '../src/services/trust.ts';
 import { sendSubprocessorNotices } from '../src/services/subprocessorNotices.ts';
 import { REPORTS_PER_DAY } from '../src/services/securityReports.ts';
 import { parseTicketCategory, SECURITY_CATEGORY, TICKET_CATEGORIES } from '../src/services/ticketCategories.ts';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
+import { loadSchema } from './_schema_once.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef'; // synthetic test fixture
 const BASE = 'https://axal.example.test';
-const BASELINE = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
 const MIGRATIONS = resolve(process.cwd(), 'cloudflare-worker/sql/migrations');
 const SUPER = 1, PLAIN_ADMIN = 2, MEMBER = 3, STALE_SUPER = 4, OTHER_MEMBER = 5;
 const NOTE = 'Security: passkeys added to sign-in.';
@@ -41,8 +41,7 @@ const PDF = new TextEncoder().encode('%PDF-1.7\n% synthetic auditor report\n%%EO
 const FILES = readdirSync(MIGRATIONS).filter((f) => /^\d+_.*\.sql$/.test(f)).sort(compareMigrations);
 const BUILT_DDL = (() => {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  db.exec(BASELINE);
-  for (const f of FILES.filter((n) => migrationNumber(n) > BASELINE_CUTOFF)) db.exec(readFileSync(resolve(MIGRATIONS, f), 'utf8'));
+  loadSchema(db);
   return (db.prepare(`SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'
     ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END`).all() as any[]).map((r) => r.sql as string);
 })();

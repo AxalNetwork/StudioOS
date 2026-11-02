@@ -44,7 +44,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
@@ -61,7 +61,7 @@ import {
 import { loadOverrides, upsertOverride } from '../src/services/ventureRisk.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { splitStatements } from './_baseline.mjs';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SQL_DIR = resolve(HERE, '../sql');
@@ -69,8 +69,6 @@ const MIGRATIONS = resolve(SQL_DIR, 'migrations');
 const JWT_SECRET = 'd190-test-secret-at-least-32-bytes-long!!';
 const M278 = '278_sub_cutoff_restores.sql';
 
-const migrationNames = () =>
-  readdirSync(MIGRATIONS).filter((n) => /^\d+_.*\.sql$/.test(n)).sort(compareMigrations);
 
 /**
  * A freshly provisioned database, exactly as `migrate-d1 --bootstrap` leaves
@@ -79,13 +77,7 @@ const migrationNames = () =>
  */
 function freshDb(skip: string[] = []) {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  db.exec(readFileSync(resolve(SQL_DIR, 'schema_baseline.sql'), 'utf8'));
-  for (const name of migrationNames()) {
-    if (migrationNumber(name) <= BASELINE_CUTOFF || skip.includes(name)) continue;
-    for (const stmt of splitStatements(readFileSync(resolve(MIGRATIONS, name), 'utf8'))) {
-      try { db.exec(stmt); } catch { /* error-tolerant, as the runner is */ }
-    }
-  }
+  loadSchema(db);
   return db;
 }
 

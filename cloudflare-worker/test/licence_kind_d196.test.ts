@@ -26,30 +26,21 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 
-import { splitStatements } from './_baseline.mjs';
 import { codeOnly } from './_codeOnly.mjs';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SQL_DIR = resolve(HERE, '../sql');
 const MIGRATIONS = resolve(SQL_DIR, 'migrations');
 const M279 = '279_licence_kind.sql';
 
-const migrationNames = () =>
-  readdirSync(MIGRATIONS).filter((n) => /^\d+_.*\.sql$/.test(n)).sort(compareMigrations);
 
 /** A freshly provisioned database: the baseline, then every migration above
  *  the cutoff. `skip` drops one by filename, which is how the before-half of
  *  each pair below is built. */
 function freshDb(skip: string[] = []) {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  db.exec(readFileSync(resolve(SQL_DIR, 'schema_baseline.sql'), 'utf8'));
-  for (const name of migrationNames()) {
-    if (migrationNumber(name) <= BASELINE_CUTOFF || skip.includes(name)) continue;
-    for (const stmt of splitStatements(readFileSync(resolve(MIGRATIONS, name), 'utf8'))) {
-      try { db.exec(stmt); } catch { /* error-tolerant, as the runner is */ }
-    }
-  }
+  loadSchema(db);
   return db;
 }
 

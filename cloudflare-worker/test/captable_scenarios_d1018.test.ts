@@ -9,21 +9,20 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
 
 import captable from '../src/routes/captable.ts';
-import { simulate, validateInputs, type Inputs } from '../src/services/captable.ts';
+import { simulate, validateInputs } from '../src/services/captable.ts';
 import { readCapTable, MODEL_SCENARIO_NAME, NO_PRICE_SENTENCE, priceOnRecord } from '../src/services/capTableToday.ts';
 import { capTableCard, loadCap } from '../src/services/raiseCycle.ts';
 import { unallocated } from '../src/routes/cycle_build.ts';
 import { loadSimSegments } from '../src/services/decks/axalSpinoutDemoDay.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { splitStatements } from './_baseline.mjs';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
 function ok(r: ReturnType<typeof simulate>): any {
   assert.ok(!('errors' in r && r.errors), `simulate returned errors: ${JSON.stringify((r as any).errors)}`);
@@ -239,13 +238,7 @@ const USERS: Array<[number, string, number | null]> = [[1, 'admin', null], [3, '
 
 function built(): DatabaseSync {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  db.exec(readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8'));
-  for (const f of readdirSync(MIGRATIONS).filter((x) => x.endsWith('.sql') && x !== RECORD).sort(compareMigrations)
-    .filter((x) => migrationNumber(x) > BASELINE_CUTOFF)) {
-    for (const stmt of splitStatements(readFileSync(resolve(MIGRATIONS, f), 'utf8'))) {
-      try { db.exec(stmt); } catch { /* already present on the baseline */ }
-    }
-  }
+  loadSchema(db);
   db.exec(readFileSync(resolve(MIGRATIONS, RECORD), 'utf8'));
   return db;
 }

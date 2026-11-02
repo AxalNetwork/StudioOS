@@ -16,7 +16,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import events from '../src/routes/events.ts';
@@ -27,13 +26,10 @@ import { REAL_PERSON_MESSAGE } from '../src/services/aiImages.ts';
 import { FACE_MODEL } from '../src/services/ai/postDraw.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withGuard } from './_guard_stub.mjs';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
+import { loadSchema } from './_schema_once.mjs';
 
 const root = new URL('../sql/', import.meta.url);
-const baseline = readFileSync(new URL('schema_baseline.sql', root), 'utf8');
-const migrations = readdirSync(new URL('migrations/', root)).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort()
-  .map((n) => readFileSync(new URL('migrations/' + n, root), 'utf8'));
 const JWT_SECRET = 'synthetic-3935-only-not-a-real-credential'.repeat(2);
 const ORIGIN = 'https://axal.vc';
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
@@ -46,7 +42,7 @@ const COURSE = 'crs_synthetic_1';
 async function fixture({ face = 'NO', screen = 'NO', partner = false } = {}) {
   __resetForTest();
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  db.exec(baseline); for (const sql of migrations) db.exec(sql);
+  loadSchema(db);
   const insert = db.prepare('INSERT INTO users(id, role, founder_id, name, email, is_active, subscription_tier) VALUES (?, ?, ?, ?, ?, 1, ?)');
   for (const [id, role] of [[HOST, 'founder'], [OTHER, 'founder'], [ADMIN, 'admin']] as const) insert.run(id, role, null, `Synthetic ${id}`, `synthetic-${id}@example.invalid`, 'studio');
   db.prepare('INSERT INTO super_admins (user_id) VALUES (?)').run(ADMIN);

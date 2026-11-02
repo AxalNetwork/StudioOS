@@ -11,7 +11,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
@@ -23,7 +23,7 @@ import { createCycleRecords } from '../src/routes/cycle_records.ts';
 import jobsPublic from '../src/routes/jobs_public.ts';
 import { publicCompensation } from '../src/services/jobBoardCommon.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SQL = resolve(here, '../sql');
@@ -32,16 +32,11 @@ const M507 = '507_job_postings_comp_public.sql';
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const FOUNDER = 1; const PA = 7;
 
-const newer = readdirSync(M).filter((n) => /^\d+_.*\.sql$/.test(n)).filter((n) => migrationNumber(n) > BASELINE_CUTOFF).sort();
 
 function build(upTo?: string): DatabaseSync {
   const db = new DatabaseSync(':memory:');
   db.exec('PRAGMA foreign_keys = ON;');
-  db.exec(readFileSync(resolve(SQL, 'schema_baseline.sql'), 'utf8'));
-  for (const name of newer) {
-    if (upTo && name >= upTo) break;
-    db.exec(readFileSync(resolve(M, name), 'utf8'));
-  }
+  loadSchema(db);
   return db;
 }
 

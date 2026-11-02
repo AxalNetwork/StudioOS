@@ -16,7 +16,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
@@ -26,9 +26,9 @@ import deckStage from '../src/routes/deck_stage.ts';
 import { ARCS, LEFT_OUT_LINE, STAGES, cardOfSlide, cutUnproven, planFor, proofOf, stageFrom } from '../src/services/narrative/arcs.ts';
 import { backsOf, deckStage as stageOfDeck } from '../src/services/decks/stagePlan.ts';
 import { CARD_CATALOGUE } from '../src/services/decks/newDeck.ts';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
+import { loadSchema } from './_schema_once.mjs';
 
 const item = (source_key: string, state: 'recorded' | 'not_recorded' | 'withheld' | 'unreadable') => ({ source_key, state }) as any;
 const recorded = (...keys: string[]) => keys.map((k) => item(k, 'recorded'));
@@ -118,12 +118,9 @@ test('the deck\'s stage: asked, else its audience, else the venture, else seed; 
 
 // 3 ───────────────────────────────────────────────────────────────────────────
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef'; // synthetic test fixture
-const BASELINE_SQL = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
-const MIGRATIONS = resolve(process.cwd(), 'cloudflare-worker/sql/migrations');
 const BUILT_DDL = (() => {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
-  db.exec(BASELINE_SQL);
-  for (const f of readdirSync(MIGRATIONS).filter((n) => /^\d+_.*\.sql$/.test(n)).sort(compareMigrations).filter((n) => migrationNumber(n) > BASELINE_CUTOFF)) db.exec(readFileSync(resolve(MIGRATIONS, f), 'utf8'));
+  loadSchema(db);
   return (db.prepare(`SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END`).all() as any[]).map((r) => r.sql as string);
 })();
 const FOUNDER = 10, OTHER = 20, P = 1;

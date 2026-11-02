@@ -17,24 +17,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import decks, { ensureSchema } from '../src/routes/decks.ts';
 import deckDraft from '../src/routes/deck_draft.ts';
 import deckCoedit, { AREA_RETRIES, PRESENCE_OFF } from '../src/routes/deck_coedit.ts';
-import {
-  AREA_TITLE, CURSOR_MIN_MS, LOCK_TTL_MS, colourOf, editorView, lockHolder, mergeArea, restoreOneCard, stable, step, type Editor,
-} from '../src/services/decks/coedit.ts';
+import { AREA_TITLE, CURSOR_MIN_MS, LOCK_TTL_MS, colourOf, editorView, lockHolder, mergeArea, restoreOneCard, stable, step } from '../src/services/decks/coedit.ts';
 import { DeckPresence } from '../src/durable-objects/deck-presence.ts';
 import { contractErrors } from '../src/contracts/validate.ts';
+import { loadSchema } from './_schema_once.mjs';
 
-const BASELINE = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
-const DIR = 'cloudflare-worker/sql/migrations';
-const MIGRATIONS = readdirSync(DIR).filter((n) => /^\d+_.*\.sql$/.test(n)).sort(compareMigrations).filter((n) => migrationNumber(n) > BASELINE_CUTOFF).map((n) => readFileSync(`${DIR}/${n}`, 'utf8'));
 const SECRET = 'synthetic-deck-coedit-d1577-secret-'.repeat(2);
 const FOUNDER = 1, OTHER = 2, P = 10, V1 = 100, V2 = 101;
 
@@ -45,8 +40,7 @@ const CARD = { title: 'Traction', blocks: [text('b1', 'First area'), text('b2', 
 async function world() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: true, enableDoubleQuotedStringLiterals: true });
   db.exec('PRAGMA foreign_keys = OFF');
-  db.exec(BASELINE);
-  for (const m of MIGRATIONS) { try { db.exec(m); } catch { /* a view naming an object replayed later */ } }
+  loadSchema(db);
   const v1 = [{ uid: 'c1', title: 'One (v1)' }, { uid: 'c2', title: 'Two (v1)' }, { uid: 'c3', title: 'Three (v1)' }];
   const v2 = [{ uid: 'c1', title: 'One (v2)' }, { uid: 'c3', title: 'Three (v2)' }, { uid: 'c2', title: 'Two (v2)' }];
   const q = (v: unknown) => JSON.stringify(v).replace(/'/g, "''");

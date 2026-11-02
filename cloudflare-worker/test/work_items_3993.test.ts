@@ -4,23 +4,23 @@
 // that records what it was asked to send.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
 import { Hono } from 'hono';
 import { makeD1 } from './_d1_sqlite.mjs';
 import { addColumnsFrom, splitStatements, stripForeignKeys, tableFromBaseline } from './_baseline.mjs';
-import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 import { AI_LOG_SCHEMA } from './_ai_budget_fixture.mjs';
 import engine, { agentEngineEnabled } from '../src/routes/agent_engine.ts';
 import teamAgents from '../src/routes/team_agents.ts';
 import { workBoardRoutes } from '../src/routes/work_board.ts';
 import { workItemRoutes } from '../src/routes/work_items.ts';
-import { updateWorkTask, WorkRefusal, type WorkTask } from '../src/services/agents/workBoard.ts';
-import { acceptDraft, agentComment, cleanMarkdown, proposeTaskDraft, safeTarget } from '../src/services/agents/workItems.ts';
+import { updateWorkTask, WorkRefusal } from '../src/services/agents/workBoard.ts';
+import { acceptDraft, agentComment, cleanMarkdown, proposeTaskDraft } from '../src/services/agents/workItems.ts';
 import { taskByUid } from '../src/services/agents/tasks.ts';
 import { loadScope } from '../src/services/agents/teams.ts';
 import { removeMigratedDatabases } from './_storage_schema.ts';
+import { loadSchema } from './_schema_once.mjs';
 
 const sql = (f: string) => readFileSync(new URL(`../sql/${f}`, import.meta.url), 'utf8');
 const baseline = sql('schema_baseline.sql');
@@ -330,11 +330,7 @@ test('migration 763 on real legacy rows: labels_json becomes labels and links; e
   // Mutations checked: the back-fill INSERTs removed → no link rows; the events copy dropped → the old event is gone.
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
   db.exec('PRAGMA foreign_keys = OFF');
-  db.exec(baseline);
-  const dir = new URL('../sql/migrations/', import.meta.url);
-  for (const f of readdirSync(dir).filter((x) => x.endsWith('.sql')).sort(compareMigrations).filter((x) => migrationNumber(x) > BASELINE_CUTOFF && migrationNumber(x) < 763)) {
-    for (const stmt of splitStatements(readFileSync(new URL(f, dir), 'utf8'))) { try { db.exec(stmt); } catch { /* already on the baseline */ } }
-  }
+  loadSchema(db, { below: 763 });
   try {
     db.exec("INSERT INTO users (id,uid,email,name,role) VALUES (1,'u-1','legacy@example.test','Legacy','founder')");
     db.exec("INSERT INTO projects (id,uid,name,founder_id) VALUES (5,'p-five','Five',1)");

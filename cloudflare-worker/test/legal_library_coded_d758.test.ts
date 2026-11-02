@@ -22,6 +22,7 @@ import { extractMergeFields } from '../src/services/legalTemplateStore.ts';
 import { COUNSEL_DRAFT_SLUGS, derivedFormat, validateFormat } from '../src/services/templateFormat.ts';
 import { templateBodyFor } from '../src/routes/esign.ts';
 import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { loadSchema } from './_schema_once.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(here, '../..');
@@ -206,8 +207,7 @@ test('D758 a fresh build: 484 applies over the baseline and later migrations, ad
   assert.ok(files.includes('484_library_coded_templates.sql'));
   const db = new DatabaseSync(':memory:');
   db.exec('PRAGMA foreign_keys = ON;');
-  db.exec(baseline);
-  for (const f of files) { if (f >= '484_') break; db.exec(readFileSync(resolve(MIG, f), 'utf8')); }
+  loadSchema(db);
   const before = rows(db);
   const histBefore = history(db);
   db.exec(M484);

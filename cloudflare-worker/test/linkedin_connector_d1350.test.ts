@@ -23,9 +23,9 @@ import { finishImportJob, recordSource, startImportJob } from '../src/services/l
 import { d1Over } from './_d1_sqlite.mjs';
 import { BASELINE_CUTOFF, migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
+import { loadSchema } from './_schema_once.mjs';
 
 const root = new URL('../sql/', import.meta.url);
-const baseline = readFileSync(new URL('schema_baseline.sql', root), 'utf8');
 const names = readdirSync(new URL('migrations/', root)).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort();
 const read = (n: string) => readFileSync(new URL('migrations/' + n, root), 'utf8');
 const JWT_SECRET = 'synthetic-d1350-only-not-a-real-credential'.repeat(2);
@@ -34,8 +34,7 @@ const TOKEN = 'SYNTHETIC-LINKEDIN-ACCESS-TOKEN-d1350';
 /** The schema up to (not including) 651, so a test can seed `users.linkedin_*` before the copy runs. */
 function schema(upTo651 = true) {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  db.exec(baseline);
-  for (const n of names) if (!upTo651 || migrationNumber(n) < 651) db.exec(read(n));
+  loadSchema(db, { below: 651 });
   return db;
 }
 // 651 alone: a later migration (652's ALTER TABLE, D1351) is not written to be applied twice.
