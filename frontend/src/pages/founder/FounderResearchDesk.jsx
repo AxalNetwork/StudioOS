@@ -10,6 +10,7 @@ import './founderResearchDesk.css';
 import { LensNavLink } from '../../workspaces/lens';
 import { useRailOption } from '../../ui/railCrumbs';
 import { railPressHeaders } from '../../lib/railPage.js';
+import HeaderAsk from '../../ui/HeaderAsk.jsx';
 
 export const asList = (value, key) => Array.isArray(value) ? value : (Array.isArray(value?.[key]) ? value[key] : []);
 const firstText = (...values) => values.find((value) => value !== null && value !== undefined && String(value).trim() !== '');
@@ -189,7 +190,7 @@ export default function FounderResearchDesk() {
   return <main className="a7-research" data-testid="founder-research-desk">
     <div className="a7-canvas">
       <div className="a7-main">
-        <header className="a7-hero"><h1>Go deep on a market or company</h1><p>The page opens as a question, not a menu.</p>
+        <header className="a7-hero"><div className="ask-hero-top"><h1>Go deep on a market or company</h1><HeaderAsk /></div><p>The page opens as a question, not a menu.</p>
           <form className="a7-question" onSubmit={ask}><Search size={16} /><input data-testid="input-research-question" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask a question about a market or company" maxLength={1000} /><button type="submit" data-testid="button-research-ask" disabled={asking || !question.trim()}>{asking ? 'Asking…' : 'Ask'}</button></form>
           <div className="a7-honesty">Eadwyn answers only from the documents in your research library, and cites each one. Every question joins your thread on the Ask page.</div>
           <AskResult asked={asked} error={askError} />

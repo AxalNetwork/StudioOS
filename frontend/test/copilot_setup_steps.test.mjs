@@ -5,12 +5,15 @@
  * session whose "the suite passed" means nothing.
  *
  * WHAT IT MIRRORS, stated because the obvious reading is wrong: the job in
- * ci.yml that runs `npm run test:drift`. That job is keyed `gate`. The job
- * keyed `drift` is the api ↔ worker check, and it installs nothing — a guard
- * that compared against it by name would compare against an empty list. So
- * the job is found by what it RUNS, not by its key, and the comparison is
- * derived from it rather than typed here: the pins, the node version and the
- * install order are read out of ci.yml on every run.
+ * ci.yml that runs the suite. Since D4130 (#4130) that is the `suite` matrix,
+ * whose one test step is `node scripts/test-drift-parts.mjs <part>` — each
+ * part a slice of `npm run test:drift`, run in parallel. The job keyed `gate`
+ * now only reads the parts' results, and the job keyed `drift` is the
+ * api ↔ worker check; neither installs anything, so a guard that compared
+ * against either by name would compare against an empty list. So the job is
+ * found by what it RUNS, not by its key, and the comparison is derived from it
+ * rather than typed here: the pins, the node version and the install order are
+ * read out of ci.yml on every run.
  *
  * The failures it exists for:
  *   1. the job is renamed — GitHub ignores any job not named
@@ -120,15 +123,18 @@ const installOf = (step) => ({ where: step.workingDirectory || '(root)', run: st
 const setupJobs = jobsOf(at(SETUP));
 const ciJobs = jobsOf(at(CI));
 
+/** The command that runs one part of `npm run test:drift` in CI (D4130). */
+const SUITE_RUN = 'node scripts/test-drift-parts.mjs ${{ matrix.part }}';
+
 /** The ci.yml job that runs the suite, found by what it runs rather than by its key. */
 function suiteJob() {
   const runners = [...ciJobs].filter(([, lines]) =>
-    stepsOf(lines).some((s) => s.run === 'npm run test:drift'),
+    stepsOf(lines).some((s) => s.run === SUITE_RUN || s.run === 'npm run test:drift'),
   );
   assert.equal(
     runners.length,
     1,
-    `exactly one ci.yml job must run \`npm run test:drift\`; found ${runners.map(([k]) => k).join(', ') || 'none'} — the setup steps mirror that job, so without exactly one there is nothing to compare against`,
+    `exactly one ci.yml job must run the suite (\`${SUITE_RUN}\`); found ${runners.map(([k]) => k).join(', ') || 'none'} — the setup steps mirror that job, so without exactly one there is nothing to compare against`,
   );
   return { key: runners[0][0], steps: stepsOf(runners[0][1]) };
 }

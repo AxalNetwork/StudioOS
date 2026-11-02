@@ -87,11 +87,20 @@ test('the workflow deploys the preview config under the per-PR name, never wrang
   assert.doesNotMatch(wf, /--config (?:\.\.\/)?wrangler\.toml/, 'the preview workflow must never deploy the production config');
   assert.doesNotMatch(wf, /--env production/);
   assert.match(wf, /studioos-pr-\$\{\{ github\.event\.pull_request\.number \}\}/, 'the Worker is named after the PR number');
-  assert.match(wf, /types: \[opened, synchronize, reopened, closed\]/);
+  assert.match(wf, /types: \[opened, synchronize, reopened, ready_for_review, closed\]/);
   assert.match(wf, /wrangler@[\d.]+ delete "\$PREVIEW_NAME"/, 'a closed PR must delete its Worker');
   assert.match(wf, /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/, 'forks have no secrets; same-repository PRs only');
   assert.match(wf, /pull-requests: write/, 'the sticky comment needs pull-requests: write');
   assert.doesNotMatch(wf, /migrate-d1|d1 execute|d1_databases/, 'a preview never migrates or touches D1');
+});
+
+test('D4130: a draft gets no preview; marking it ready deploys one; closing always cleans up', () => {
+  const wf = at(WORKFLOW).split('\n').filter((l) => !l.trimStart().startsWith('#')).join('\n');
+  const deploy = wf.slice(wf.indexOf('\n  deploy:\n'), wf.indexOf('\n    runs-on:', wf.indexOf('\n  deploy:\n')));
+  assert.match(deploy, /github\.event\.action != 'closed' &&\n\s+github\.event\.pull_request\.draft == false &&/, 'the deploy skips drafts');
+  const del = wf.slice(wf.indexOf('\n  delete:\n'), wf.indexOf('\n    runs-on:', wf.indexOf('\n  delete:\n')));
+  assert.doesNotMatch(del, /draft/, 'a PR closed as a draft still has its preview deleted');
+  assert.match(wf, /\bready_for_review\b/, 'marking a draft ready is what deploys its first preview');
 });
 
 test('the login-e2e job runs the D722 spec against the preview it just deployed, and holds no secret', () => {

@@ -55,6 +55,7 @@ import { BrandIcon, Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '
 import { SWITCH_TONE, setByLabel, operatorLine } from '../../lib/platformSwitches';
 import { liveChip, residencyLine } from '../../lib/deployTimeline';
 import { ConsoleLinkBody, CONSOLE_LINK, CONSOLE_TILE } from './ConsoleLink';
+import HeaderAsk from '../../ui/HeaderAsk.jsx';
 
 // Re-exported, not redeclared: Platform → Switches draws the same tones, and
 // the list lives once in lib/platformSwitches.js (D203).
@@ -945,7 +946,8 @@ export default function PlatformPage() {
           </span>
         </div>
 
-        <header className="mt-4">
+        <header className="mt-4 flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
           <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
             <SlidersHorizontal size={13} /> HQ · Platform
           </div>
@@ -956,6 +958,8 @@ export default function PlatformPage() {
             and changes are made there; the switches HQ can throw are thrown on Switches. No key material and
             no chat id reaches this page, and nothing on it changes a setting.
           </p>
+          </div>
+          <HeaderAsk />
         </header>
 
         {data === UNAVAILABLE && (
