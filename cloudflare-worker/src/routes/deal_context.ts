@@ -4,6 +4,7 @@ import type { Env } from '../types';
 import { requireAuth, selectJwt } from '../auth';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { receivedCommitment } from '../services/raiseCycle';
+import { noteFirm, visibleDeal } from '../services/dealNotes';
 
 const r = new Hono<{ Bindings: Env }>();
 const guard = async (c: any, next: () => Promise<void>) => {
@@ -26,20 +27,14 @@ export async function context(c: any) {
   if (user.role !== 'investor') return { error: c.json({ error: 'investor_only' }, 403) };
   const raw = c.req.param('id');
   if (!/^[1-9][0-9]{0,14}$/.test(raw)) return { error: c.json({ error: 'invalid_deal' }, 400) };
-  let company = await activeCompanyFor(c, user);
-  // An invalid explicit claim never falls back to another firm.
-  if (c.req.header('X-Company-Id') && company == null) return { error: c.json({ error: 'firm_required' }, 403) };
-  if (company == null) {
-    const links = await c.env.DB.prepare('SELECT DISTINCT company_id FROM user_company_links WHERE user_id = ? LIMIT 2').bind(user.id).all();
-    if (links.results.length > 1) return { error: c.json({ error: 'firm_required', message: 'Choose the firm this deal is for.' }, 409) };
-    company = links.results.length ? Number(links.results[0].company_id) : null;
+  const company = await noteFirm(c.env.DB, user.id, await activeCompanyFor(c, user), !!c.req.header('X-Company-Id'));
+  if (company === undefined) {
+    return { error: c.req.header('X-Company-Id')
+      ? c.json({ error: 'firm_required' }, 403)
+      : c.json({ error: 'firm_required', message: 'Choose the firm this deal is for.' }, 409) };
   }
   const id = Number(raw);
-  const deal = await c.env.DB.prepare(`SELECT d.id, d.project_id, d.status, d.created_at, d.updated_at FROM deals d
-    WHERE d.id = ? AND EXISTS (SELECT 1 FROM projects p WHERE p.id = d.project_id AND p.deleted_at IS NULL)
-    AND (EXISTS (SELECT 1 FROM deal_invitations i WHERE i.deal_id = d.id AND i.investor_user_id = ? AND (i.company_id = ? OR i.company_id IS NULL))
-      OR EXISTS (SELECT 1 FROM commitments k WHERE k.deal_id = d.id AND k.investor_user_id = ? AND (k.company_id = ? OR k.company_id IS NULL)))`)
-    .bind(id, user.id, company, user.id, company).first();
+  const deal = await visibleDeal(c.env.DB, id, user.id, company);
   if (!deal) return { error: c.json({ error: 'deal_not_found' }, 404) };
   return { user, company, id, deal };
 }
@@ -141,7 +136,7 @@ r.get('/:id/notes', async c => {
     const limit = Math.min(100, Math.max(1, Number(c.req.query('limit')) || 25));
     const offset = Math.max(0, Number(c.req.query('offset')) || 0);
     if (!Number.isSafeInteger(limit) || !Number.isSafeInteger(offset)) return c.json({error:'invalid_page'},400);
-    const rows = await c.env.DB.prepare(`SELECT uid, author_user_id, company_id, tag, body, created_at, updated_at FROM deal_notes
+    const rows = await c.env.DB.prepare(`SELECT id, uid, author_user_id, company_id, tag, body, created_at, updated_at FROM deal_notes
       WHERE deal_id = ? AND company_id IS ? AND (company_id IS NOT NULL OR author_user_id = ?) ORDER BY id DESC LIMIT ? OFFSET ?`).bind(x.id,x.company,x.user.id,limit,offset).all();
     const count = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM deal_notes WHERE deal_id = ? AND company_id IS ? AND (company_id IS NOT NULL OR author_user_id = ?)').bind(x.id,x.company,x.user.id).first<{n:number}>();
     return c.json({ items: rows.results, total: count!.n });
@@ -161,11 +156,13 @@ r.post('/:id/notes', async c => {
     const x = await context(c); if ('error' in x) return x.error;
     const b = noteInput(await c.req.json().catch(() => null)); if (!b) return c.json({error:'invalid_note'},400);
     const uid = crypto.randomUUID();
-    await c.env.DB.batch([
+    const done = await c.env.DB.batch([
       c.env.DB.prepare('INSERT INTO deal_notes (uid,deal_id,author_user_id,company_id,tag,body) VALUES (?,?,?,?,?,?)').bind(uid,x.id,x.user.id,x.company,b.tag,b.body),
       audit(c.env.DB,x,'deal_note_added',uid),
     ]);
-    return c.json({uid},201);
+    // #4046: the row's id, so a fill Ask placed can be recorded against the saved note (POST /api/fills/record).
+    const id = Number(done[0]?.meta?.last_row_id);
+    return c.json({ uid, ...(Number.isSafeInteger(id) && id > 0 ? { id } : {}) },201);
   } catch { return c.json({error:'note_write_failed',message:'The note could not be saved. Try again.'},503); }
 });
 function changeNote(method: 'put' | 'delete') {
