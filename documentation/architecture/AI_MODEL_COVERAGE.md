@@ -474,7 +474,7 @@ chat: Interactive explanations, evidence summaries and planning drafts.
 - Validate: **offered**, `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Ideal customer profile"`; `/api/ai/modules on "Founder · Validate · Problem discovery"`; `/api/ai/modules on "Founder · Validate · Verdict"`; and 7 more
 - Record a Session: **gap**, `#3721`
 - Build: **wired**, `railMatrix.json "Founder · Build · Founding team"`; `railMatrix.json "Founder · Build · Operating systems"`; `railMatrix.json "Founder · Build · Product roadmap"`; `railMatrix.json "Founder · Build · Solution design"`; and 1 more
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise · Investor narrative"`; `/api/ai/modules on "Founder · Raise"`; `railMatrix.json "Founder · Raise · Investor narrative"`; and 18 more
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise · Investor narrative"`; `/api/ai/modules on "Founder · Raise"`; `railMatrix.json "Founder · Raise · Investor narrative"`; and 19 more
 - Grow: **wired**, `railMatrix.json "Founder · Grow · Team expansion"`; `railMatrix.json "Founder · Grow"`
 - Network: **offered**, `railMatrix.json option draft:network/intro-email`; `railMatrix.json option draft:network/re-engagement`; `railMatrix.json option draft:single-contact-exposure`
 - Research: **offered**, `railMatrix.json option draft:checkpoint-brief`; `railMatrix.json option draft:index-gaps`; `railMatrix.json option draft:session-brief`
@@ -794,7 +794,7 @@ chat: Investor narratives, distribution copy and multilingual summaries.
 - Validate: **offered**, `/api/ai/modules on "Founder · Validate · Ideal customer profile"`; `/api/ai/modules on "Founder · Validate · Problem discovery"`; `/api/ai/modules on "Founder · Validate"`
 - Record a Session: **gap**, `#3721`
 - Build: **offered**, `railMatrix.json option draft:build/plan`
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Investor narrative"`; `railMatrix.json "Founder · Raise · Investor narrative"`; `railMatrix.json option deck:build`; `railMatrix.json option deck:chart`; and 16 more
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Investor narrative"`; `railMatrix.json "Founder · Raise · Investor narrative"`; `railMatrix.json option deck:build`; `railMatrix.json option deck:chart`; and 17 more
 - Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`; `/api/ai/modules on "Founder · Grow · Market expansion"`; `/api/ai/modules on "Founder · Grow · Product improvement"`; `railMatrix.json "Founder · Grow · Distribution"`; and 6 more
 - Network: **offered**, `railMatrix.json option draft:network/intro-email`; `railMatrix.json option draft:network/re-engagement`
 - Research: **offered**, `/api/ai/modules on "Founder · Research · Geographies"`; `railMatrix.json "Founder · Research · Geographies"`

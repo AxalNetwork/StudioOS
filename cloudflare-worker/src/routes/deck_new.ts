@@ -173,7 +173,8 @@ function runOptions(c: any, user: User, projectId: number, step: 'outline' | 'bu
     systemPrompt: step === 'outline' ? OUTLINE_SYSTEM : BUILD_SYSTEM,
     messages: [{ role: 'user', content: message }],
     temperature: 0.4,
-    maxTokens: step === 'outline' ? 900 : Math.min(2400, 200 + rows * 110),
+    // D1560 (#3807): the build run also writes each card's speaker notes, so its room (and its quote) holds them.
+    maxTokens: step === 'outline' ? 900 : Math.min(4000, 200 + rows * 190),
   };
 }
 

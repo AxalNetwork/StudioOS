@@ -59,7 +59,8 @@ const WHOLE = { id: 'free:whole', kind: 'free', grid: { c1: 1, c2: 12, r1: 1, r2
  * ------------------------------------------------------------------ */
 
 test('every element maps to a route on main, a free placement, or its adapter issue', () => {
-  const runs = new Set(['assist', 'image', 'metric', 'upload', 'dialog']);
+  // D1560 (#3807): Speaker notes is a transform run for the card's notes.
+  const runs = new Set(['assist', 'image', 'metric', 'upload', 'dialog', 'notes']);
   for (const el of ELEMENTS) {
     const on = TEXT_ELEMENTS.includes(el.id) ? area('b2') : WHOLE;
     const plan = rowPlan({ area: on, element: el.id, card: CARD, cardIndex: 0, items: ITEMS });
@@ -70,7 +71,7 @@ test('every element maps to a route on main, a free placement, or its adapter is
     } else {
       assert.ok(runs.has(plan.run), `${el.id} runs on main (${plan.run})`);
     }
-    if (plan.run === 'assist' || plan.run === 'image') {
+    if (plan.run === 'assist' || plan.run === 'image' || plan.run === 'notes') {
       assert.ok(FOUNDER_OPTIONS.some((o) => o.key === plan.option && o.page === 'Founder · Raise · Pitch deck'), `${el.id}: ${plan.option} is a deck rail option`);
     }
   }
