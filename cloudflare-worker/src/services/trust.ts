@@ -752,6 +752,25 @@ export const LEGAL_DOCUMENT_VERSIONS: Readonly<Record<'tos_v1' | 'privacy_v1', s
   privacy_v1: '2026-10-29',
 });
 
+/**
+ * D1548 (#3793): the Terms of Service version every member must have accepted,
+ * as a `LEGAL_DOCUMENT_VERSIONS` date. A member whose obligation is satisfied
+ * but whose latest Terms acceptance predates it is asked again, through the
+ * same interstitial and the same accept route (`/auth/me`'s
+ * `terms_acceptance_pending`, with `terms_acceptance_reason: 'updated'`).
+ *
+ * NULL, AND IT STAYS NULL UNTIL COUNSEL'S TEXT IS ON THE PAGE. Owner decision Y
+ * (2026-11-01) ships the Terms' AI-output clause before the beta, with
+ * re-acceptance; the clause itself is counsel's and has not been given (A19's
+ * draft for counsel is in `templates/legal/`, LEGAL_REVIEW.md section G). To go
+ * live: put counsel's text on `/terms`, move `TERMS_UPDATED`, this map's
+ * `tos_v1` and the template module's import to it, then set this to that same
+ * date. It must never be later than `LEGAL_DOCUMENT_VERSIONS.tos_v1`: accepting
+ * records that date, so a later one would ask forever
+ * (`terms_reacceptance_gate.test.ts` fails if it is).
+ */
+export const TERMS_REACCEPT_FROM: string | null = null;
+
 export interface AcceptanceRecord {
   obligation_key: 'tos_v1' | 'privacy_v1';
   accepted_at: string | null;

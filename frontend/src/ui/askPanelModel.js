@@ -120,9 +120,11 @@ export function askServes({ page, supportSession, viewer, host }) {
  * and come back as proposal cards. Today two exist (D1420 `studio:layout`,
  * D1596 `sessions:block`); `studio:layout` lives in Studio's own chat (AK9),
  * which has no AIRail, so the panel runs `sessions:block` only. A new run
- * chip is added here with the page it runs on.
+ * chip is added here with the page it runs on. D1530's `propose:goal-plan`
+ * runs on a goal's own plan route (`POST /api/teams/goals/:uid/plan`), never
+ * in the panel, so it is no chip either.
  */
-const STUDIO_CHAT_ONLY = new Set(['studio:layout']);
+const STUDIO_CHAT_ONLY = new Set(['studio:layout', 'propose:goal-plan']);
 export const RUN_CHIPS = Object.freeze(
   [...FOUNDER_ASK_CHIPS, ...INVESTOR_ASK_CHIPS, ...ADVISOR_ASK_CHIPS, ...PARTNER_ASK_CHIPS]
     .filter((c) => !STUDIO_CHAT_ONLY.has(c.key))

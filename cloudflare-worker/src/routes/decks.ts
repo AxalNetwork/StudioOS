@@ -37,7 +37,7 @@ import { railFor } from '../util/railContext';
 import { slideTotals, recordSlideSeconds, recordSlideCardUids } from '../services/deckSlideDwell';
 import { logCycleWrite } from '../services/cycleActivity';
 import { shareAnalytics, type LinkAnalytics } from '../services/decks/shareAnalytics';
-import { DEFAULT_SHARE_INCLUDE, parseShareInclude, shareSlides, shareSpinoutFields, type ShareInclude } from '../services/decks/shareInclude';
+import { DEFAULT_SHARE_INCLUDE, parseShareInclude, shareGatesFor, shareSlides, shareSpinoutFields, type ShareInclude } from '../services/decks/shareInclude';
 import { sanitizeBinding } from '../services/decks/sources';
 import {
   AUDIENCES, BLOCK_KINDS, CHART_RANGES, LIBRARY_CHART_TYPES, TYPED_CHART_TYPES, GRID_COLS, GRID_ROWS, IMAGE_FITS, IMAGE_TAGS, LAYOUTS, MAX_BLOCKS, NOTES_MAX, OVERLAYS,
@@ -49,6 +49,7 @@ import { isSupportSession } from '../integrations/providers/mercury';
 import { deckShareMetrics, LEGACY_SHARE_NO_VIEW_LIMIT } from '../services/deckShareUse';
 import { cleanOrder, variantSlides } from '../services/decks/variants';
 import { revOf } from '../services/decks/ifMatch';
+import { approvalRefusal, pendingApprovers } from '../services/decks/deckApproval';
 
 /** D895 applies only to deck operations, not other project-content routes. */
 export async function projectOwned(c: any, user: any, projectId: number, opts: { write?: boolean; audit?: boolean; contactData?: boolean } = {}) {
@@ -922,7 +923,8 @@ decks.get('/share/:token', async (c) => {
   }
   return c.json({
     ...publicDeckOf(row),
-    slides: shareSlides(cards, included),
+    // D1507: quotes and logos go out only with the consent or permission the venture's records hold.
+    slides: shareSlides(cards, included, await shareGatesFor(c.env, Number(row.project_id))),
     // D1565: who the link was made for, drawn over every card ("Prepared for …").
     watermark: link?.watermark_text ?? null,
     view_id: viewId,
@@ -1432,6 +1434,9 @@ decks.post('/:id/share', async (c) => {
   try { row = await getDeckRow(c.env, id); } catch { return c.json({ error: 'not found' }, 404); }
   try { await projectOwned(c, user, Number(row.project_id), { write: true }); }
   catch { return c.json({ error: 'forbidden' }, 403); }
+  // D1570 (#3817): no link until every approver on the deck has signed off this version.
+  const waiting = await pendingApprovers(c.env, Number(row.project_id), id);
+  if (waiting.length) return c.json(approvalRefusal(waiting), 409);
   const body = await c.req.json().catch(() => ({} as any));
   const ttlHours = Math.min(
     24 * 30,

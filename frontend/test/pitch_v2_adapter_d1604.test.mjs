@@ -27,15 +27,16 @@ import { deckRemixApi } from '../src/lib/api/deckRemix.js';
 import { deckTypedValuesApi } from '../src/lib/api/deckTypedValues.js';
 import { deckCheckApi } from '../src/lib/api/deckCheck.js';
 import { deckElementModelsApi } from '../src/lib/api/deckElementModels.js';
+import { deckCommentsApi } from '../src/lib/api/deckComments.js';
 
 test('every adapter method answers unavailable, with the reason and the issue that brings its route', async () => {
   const methods = Object.keys(adapter).filter((k) => !HELPERS.has(k));
   assert.deepEqual(methods.sort(), Object.keys(adapter.SURFACES).sort(), 'a method with no SURFACES row, or a row with no method');
   assert.ok(methods.length >= 40);
   // D1499 (#3749) swapped grid, D1522 (#3774) stagePlan, D1553 (#3800) remix, D1503 (#3754) elementModels; D1565 (#3812)
-  // the investor links; D1538 (#3787) typedTables; D1555 (#3802) consistency rides the check read. A swapped
-  // surface's body calls its client through().
-  assert.deepEqual([...adapter.SWAPPED], ['grid', 'saveCard', 'discardDraft', 'draft', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency'], 'the rows whose routes are on main');
+  // the investor links; D1538 (#3787) typedTables; D1555 (#3802) consistency rides the check read; D1570 (#3817)
+  // comments. A swapped surface's body calls its client through().
+  assert.deepEqual([...adapter.SWAPPED], ['grid', 'saveCard', 'discardDraft', 'draft', 'stagePlan', 'remix', 'elementModels', 'investorLinks', 'withdrawInvestorLink', 'typedTables', 'consistency', 'comments'], 'the rows whose routes are on main');
   const seam = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
   for (const name of ['investorLinks', 'withdrawInvestorLink']) {
     assert.match(seam, new RegExp(`export const ${name} = [^\\n]*through\\(\\(\\) => deckInvestorLinksApi\\.${name}\\(`), `${name} is wired to its client`);
@@ -167,8 +168,8 @@ test('the adapter keys each surface to the plan’s issue (§6.2)', () => {
 test('the seam reaches no network, and no client method exists for a route that is not on main', () => {
   const src = codeOnly(read(`${PITCH}/deckV2Adapter.js`));
   assert.doesNotMatch(src, /request\(|fetch\(|XMLHttpRequest/);
-  // A swapped row's client is the only `lib/api` the seam may import (D1499's `deckGrid.js`, D1522's `deckStage.js`, D1553's `deckRemix.js`, D1503's `deckElementModels.js`, D1565's `deckInvestorLinks.js`, D1538's `deckTypedValues.js`, D1555's `deckCheck.js`, D1501's `deckDraft.js`).
-  assert.deepEqual([...src.matchAll(/from '([^']*lib\/api[^']*)'/g)].map((x) => x[1]).sort(), ['../../../lib/api/deckCheck.js', '../../../lib/api/deckDraft.js', '../../../lib/api/deckElementModels.js', '../../../lib/api/deckGrid.js', '../../../lib/api/deckInvestorLinks.js', '../../../lib/api/deckRemix.js', '../../../lib/api/deckStage.js', '../../../lib/api/deckTypedValues.js']);
+  // A swapped row's client is the only `lib/api` the seam may import (D1499's `deckGrid.js`, D1522's `deckStage.js`, D1553's `deckRemix.js`, D1503's `deckElementModels.js`, D1565's `deckInvestorLinks.js`, D1538's `deckTypedValues.js`, D1555's `deckCheck.js`, D1570's `deckComments.js`, D1501's `deckDraft.js`).
+  assert.deepEqual([...src.matchAll(/from '([^']*lib\/api[^']*)'/g)].map((x) => x[1]).sort(), ['../../../lib/api/deckCheck.js', '../../../lib/api/deckComments.js', '../../../lib/api/deckDraft.js', '../../../lib/api/deckElementModels.js', '../../../lib/api/deckGrid.js', '../../../lib/api/deckInvestorLinks.js', '../../../lib/api/deckRemix.js', '../../../lib/api/deckStage.js', '../../../lib/api/deckTypedValues.js']);
   assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckInvestorLinks\)/);
   assert.doesNotMatch(codeOnly(read(`${PITCH}/deckV2Model.js`)), /request\(|fetch\(|lib\/api|from 'react'/);
   const client = [read('frontend/src/lib/api.js'), ...readdirSync('frontend/src/lib/api').filter((f) => f.endsWith('.js')).map((f) => read(`frontend/src/lib/api/${f}`))].join('\n');
@@ -276,4 +277,20 @@ test('D1501 (#3751): saveCard, discardDraft and draft are swapped — each answe
     assert.deepEqual(await adapter.draft(7), { available: false, reason: NOT_ON, issue: 3751 }, 'unavailable on a 404, like the others');
   } finally { Object.assign(deckDraftApi, real); }
   for (const name of ['saveCard', 'discardDraft', 'draft']) assert.equal(adapter.availability(name), null, `${name} greys nothing`);
+});
+
+test('D1570 (#3817): comments is swapped — it answers through deckCommentsApi.list, and a 404 is still off', async () => {
+  const real = deckCommentsApi.list;
+  const asked = [];
+  try {
+    const reply = { deck_id: 7, version: 2, viewer: { user_id: 3, kind: 'founder', can_manage: true }, people: [], comments: [], open: 0 };
+    deckCommentsApi.list = async (id) => { asked.push(id); return reply; };
+    assert.deepEqual(await adapter.comments(7), { available: true, value: reply });
+    assert.deepEqual(asked, [7]);
+    deckCommentsApi.list = async () => { throw Object.assign(new Error('nope'), { status: 404 }); };
+    assert.deepEqual(await adapter.comments(7), { available: false, reason: NOT_ON, issue: 3817 }, 'a reader the route does not admit sees it off');
+    deckCommentsApi.list = async () => { throw Object.assign(new Error('The comments could not be read.'), { status: 500 }); };
+    assert.equal((await adapter.comments(7)).unreadable, true, 'anything else is unreadable, never an empty thread');
+  } finally { deckCommentsApi.list = real; }
+  assert.equal(adapter.availability('comments'), null);
 });

@@ -6,6 +6,7 @@ reply against its schema, not only that the route exists.
 
 | File | What it is |
 |---|---|
+| `deckComments.schema.json` | `GET /api/decks/:id/comments` (D1570, #3817): the venture's comment threads, who is reading, the people who can be mentioned and the open count. |
 | `deckConsistency.schema.json` | `GET /api/decks/:id/check`'s `consistency` key (D1555, #3802): the free consistency rules' state and findings, or null for a reader who is not the founder. |
 | `deckDiscardDraft.schema.json` | `DELETE /api/decks/:id/draft` (D1501, #3751): ok, the deck and how many card copies were discarded. |
 | `deckDraft.schema.json` | `GET /api/decks/:id/draft` (D1501, #3751): the version, its rev and each card's working copy. |

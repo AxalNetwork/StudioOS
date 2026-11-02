@@ -26,7 +26,7 @@
  *   gridOptionRows     the `grid:<element>` rail rows `railMatrix.ts` answers
  */
 import { DECK_ELEMENT_JOBS, MODEL_LOCKS, jobStep, lockLabel, offerable, selectorFor, type Lock, type UseJob, type UseKind } from '../ai/modelUseCases';
-import { isOffered, modelById, type CatalogueSwitches } from '../ai/catalogue';
+import { isOffered, modelById, switchedOff, type CatalogueSwitches } from '../ai/catalogue';
 import { fitsRailKind } from '../ai/moduleConnections';
 import { billedMicro, type RunUnits } from '../ai/pricing';
 import { TIMEOUT_MS, drawRequest, imageUnits, type TimeoutClass } from '../ai/shapes';
@@ -212,10 +212,14 @@ export type Resolved = {
   plan_blocked: Array<{ level: Level; model: string; plan: string | null }>;
   /** "A model retired · Using <model>" when a stale pick was dropped; null otherwise. */
   notice: string | null;
+  /** D1509: picks naming a model HQ switched off, skipped and kept (never cleared): aird5's "<C> is unavailable. Using <B>." */
+  switched_off: Array<{ level: Level; model: string }>;
 };
 
 /** Why a model cannot be the element's: stale (gone from the catalogue or the element's list) or the caller's plan. */
-function refusalOf(element: string, model: string, row: PickRow | null, input: ResolveInput, viaGroup: boolean): 'stale' | 'plan' | 'n/a' | null {
+function refusalOf(element: string, model: string, row: PickRow | null, input: ResolveInput, viaGroup: boolean): 'off' | 'stale' | 'plan' | 'n/a' | null {
+  // D1509: switched off is not retired: the pick is skipped and kept, so it comes back when the flag does.
+  if (switchedOff(model, input.env)) return 'off';
   const m = modelById(model);
   if (!m || !isOffered(m, input.env) || !offerable(model)) return 'stale';
   if (!choiceIds(element).includes(model)) return viaGroup ? 'n/a' : 'stale';
@@ -240,7 +244,7 @@ const modelName = (id: string | null): string => (id ? modelById(id)?.name ?? id
 export function resolveElementModel(input: ResolveInput): Resolved {
   const { element } = input;
   const e = elementOf(element);
-  const out: Resolved = { element, model: null, source: 'none', locked: false, set_by: null, stale: [], plan_blocked: [], notice: null };
+  const out: Resolved = { element, model: null, source: 'none', locked: false, set_by: null, stale: [], plan_blocked: [], notice: null, switched_off: [] };
   if (!e || !isRouted(element)) return out;
   const g = groupKey(e.group);
   const find = (scope: PickScope, id: string | null, keys: string[], locked?: boolean): PickRow | null => {
@@ -264,6 +268,7 @@ export function resolveElementModel(input: ResolveInput): Resolved {
   for (const [level, row, viaGroup] of candidates) {
     if (!row) continue;
     const why = refusalOf(element, row.model, row, input, viaGroup || row.key === g);
+    if (why === 'off') { out.switched_off.push({ level, model: row.model }); continue; }
     if (why === 'stale') { out.stale.push(row); dropped = true; continue; }
     if (why === 'plan') { out.plan_blocked.push({ level, model: row.model, plan: lockLabel(row.model) }); continue; }
     if (why === 'n/a') continue;
@@ -275,6 +280,7 @@ export function resolveElementModel(input: ResolveInput): Resolved {
     if (first) Object.assign(out, { model: first, source: 'default' });
   }
   if (dropped) out.notice = `A model retired · Using ${modelName(out.model)}`;
+  else if (out.switched_off.length) out.notice = `${modelName(out.switched_off[0].model)} is unavailable. Using ${modelName(out.model)}.`;
   return out;
 }
 

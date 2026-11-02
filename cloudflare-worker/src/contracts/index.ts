@@ -27,6 +27,8 @@ export const CONTRACTS = Object.freeze({
   saveCard: { issue: 3751, route: 'PATCH /api/decks/:id/cards/:uid', schema: 'deckSaveCard.schema.json' },
   discardDraft: { issue: 3751, route: 'DELETE /api/decks/:id/draft', schema: 'deckDiscardDraft.schema.json' },
   draft: { issue: 3751, route: 'GET /api/decks/:id/draft', schema: 'deckDraft.schema.json' },
+  // D1570 (#3817): the venture's comment threads, the people who can be mentioned, and the open count.
+  comments: { issue: 3817, route: 'GET /api/decks/:id/comments', schema: 'deckComments.schema.json' },
 });
 
 export type ContractMethod = keyof typeof CONTRACTS;
