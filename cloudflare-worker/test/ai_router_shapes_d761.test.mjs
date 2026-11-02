@@ -564,7 +564,9 @@ test('voice: the audio is never cached; a live stream reports WebSocket minutes'
   assert.deepEqual(shapes.websocketUnits(2.5), { audio_minutes_websocket: 2.5 });
   assert.deepEqual(shapes.websocketUnits(Number.NaN), { audio_minutes_websocket: 0 });
   const live = readFileSync('cloudflare-worker/src/services/liveTranscription.ts', 'utf8');
-  assert.match(live, /return \{ minutes, cost_microusd: charged, units: websocketUnits\(minutes\) \};/);
+  // #3936: the stream's units are WebSocket minutes, returned with the guard's outcome.
+  assert.match(live, /const units = websocketUnits\(minutes\);/);
+  assert.match(live, /return \{ minutes, cost_microusd: charged, units, guard: guardState \};/);
 });
 
 test('readSpeech: base64 flat or under result, bytes, a buffer or a stream; WAV is told apart; too large is none', async () => {

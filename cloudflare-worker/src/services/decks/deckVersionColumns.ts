@@ -23,6 +23,8 @@ export async function ensureDeckVersionColumns(env: Env): Promise<void> {
       // D1583 (#3830) — migration 744: a deck row is always a deck; teasers,
       // one-pagers and memos live in `deck_derivatives`.
       ['format', `ALTER TABLE pitch_decks ADD COLUMN format TEXT NOT NULL DEFAULT 'deck' CHECK (format = 'deck')`],
+      // D1539 (#3789) — migration 730: the version's ordered card hashes.
+      ['card_hashes', 'ALTER TABLE pitch_decks ADD COLUMN card_hashes TEXT CHECK (card_hashes IS NULL OR json_valid(card_hashes))'],
     ];
     for (const [col, ddl] of add539) {
       if (!have.has(col)) {

@@ -1,0 +1,52 @@
+{
+  "$id": "deckBatch",
+  "title": "GET /api/decks/areas/batches/:uid and POST …/cancel (D1502, #3753)",
+  "description": "A deck generation run, as the deck v2 adapter's `batch` and `cancelBatch` methods pass it through: what pd2b draws per row, and the running charged-of-held. D1511 (#3762).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["uid", "deck_id", "class", "state", "quote_microusd", "held_microusd", "charged_microusd", "created_at", "started_at", "settled_at", "counts", "steps"],
+  "properties": {
+    "uid": { "type": "string" },
+    "deck_id": { "type": "integer", "minimum": 1 },
+    "class": { "enum": ["areas", "deck_build"] },
+    "state": { "enum": ["queued", "running", "cancelling", "done", "cancelled", "failed"] },
+    "quote_microusd": { "type": "integer", "minimum": 0 },
+    "held_microusd": { "type": "integer", "minimum": 0 },
+    "charged_microusd": { "type": "integer", "minimum": 0 },
+    "created_at": { "type": "string" },
+    "started_at": { "description": "Null until the run starts. No `type`, so null holds." },
+    "settled_at": { "description": "Null until the run ends. No `type`, so null holds." },
+    "counts": {
+      "type": "object", "additionalProperties": false,
+      "required": ["done", "running", "waiting", "failed", "stopped"],
+      "properties": {
+        "done": { "type": "integer", "minimum": 0 },
+        "running": { "type": "integer", "minimum": 0 },
+        "waiting": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 },
+        "stopped": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["seq", "card_uid", "area_id", "element", "kind", "model_label", "state", "seconds", "cost_microusd", "fallback_used", "error_code", "result"],
+        "properties": {
+          "seq": { "type": "integer", "minimum": 0 },
+          "card_uid": { "description": "The card, or null for a deck-wide step." },
+          "area_id": { "description": "The area, or null." },
+          "element": { "type": "string" },
+          "kind": { "type": "string" },
+          "model_label": { "type": "string", "description": "The model's name, or \"No model · free\"." },
+          "state": { "enum": ["waiting", "running", "done", "failed", "stopped"] },
+          "seconds": { "description": "Null until the step ends: never 0 for a step that has not run." },
+          "cost_microusd": { "type": "integer", "minimum": 0 },
+          "fallback_used": { "type": "boolean" },
+          "error_code": { "description": "Why the step failed, or null." },
+          "result": { "description": "What the step wrote (its proposal), or null." }
+        }
+      }
+    }
+  }
+}

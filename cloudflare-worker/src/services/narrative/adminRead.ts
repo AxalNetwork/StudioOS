@@ -25,6 +25,7 @@
 import type { Env, User } from '../../types';
 import { hydrateSuperAdmin, isSuperAdmin } from '../../auth';
 import { logCycleWriteStatement } from '../cycleActivity';
+import { notifyReasonedRead } from '../reasonedReadNotice';
 
 export const READ_REASON_HOURS = 8;
 export const REASON_MIN = 3;
@@ -120,7 +121,13 @@ export async function giveReason(env: Env, projectId: number, user: User, raw: u
       action: 'narrative_read_opened', summary: kind === 'super_admin' ? 'HQ opened the narrative to read it' : 'An admin opened the narrative to read it',
     }),
   ]);
-  return readOne(env, projectId, Number(insert?.meta?.last_row_id));
+  const view = await readOne(env, projectId, Number(insert?.meta?.last_row_id));
+  // D1465 § Notifications (#4022): the founder is told, after the read is recorded. Never throws.
+  await notifyReasonedRead(env, {
+    surface: 'narrative', projectId, admin: { id: Number(user.id), role: user.role }, reason,
+    link: `/raise/investor-narrative?project_id=${projectId}`,
+  });
+  return view;
 }
 
 async function readOne(env: Env, projectId: number, id: number) {
