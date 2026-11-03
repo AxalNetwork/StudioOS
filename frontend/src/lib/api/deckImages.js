@@ -10,6 +10,9 @@
 //        → { capability, direction, cards: [{ index, card, description, style, palette, use }] }
 //   POST /api/decks/images/:uid/keep   { use?, overlay?, ink?, alt? } → { image }
 //   POST /api/decks/images/:uid/discard
+//   POST /api/decks/:id/images/replace-all/quote   D1561 (#3808): every image area as one quote
+//        → { ai, count, total_microusd, hold_microusd, areas, left_out, balance }
+//   POST /api/decks/:id/images/replace-all         `Idempotency-Key` → { images, refused, left_out, hold_microusd, charged_microusd, stopped? }
 // A real person (422 `real_person`), a figure and a chart are refused before
 // anything is quoted or held; the balance before the hold (402). Nothing
 // reaches a card until Keep places it and Save writes the version.
@@ -26,6 +29,8 @@ export const deckImagesApi = {
   plan: (deckId) => request(`/decks/${enc(deckId)}/images/plan`),
   keep: (uid, body) => post(`/decks/images/${enc(uid)}/keep`, body),
   discard: (uid) => post(`/decks/images/${enc(uid)}/discard`),
+  replaceAllQuote: (deckId, body) => post(`/decks/${enc(deckId)}/images/replace-all/quote`, body),
+  replaceAll: (deckId, body, headers) => post(`/decks/${enc(deckId)}/images/replace-all`, body, headers),
   /** `fields`: { use, card?, alt?, shows_person?, consent? }; the file goes as multipart. */
   upload: (deckId, file, fields = {}) => {
     const form = new FormData();

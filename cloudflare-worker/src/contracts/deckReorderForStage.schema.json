@@ -1,0 +1,18 @@
+{
+  "$id": "deckReorderForStage",
+  "title": "POST /api/decks/:id/reorder-for-stage (D1561, #3808)",
+  "description": "What the deck v2 adapter's `deckActions` method passes through: Reorder for stage (`routes/deck_actions.ts`). Either the new version (`deck`) with the stage it was ordered for, how many cards moved and `one_undo_step: true`; or `unchanged: true` with `moved: 0` when the cards were already in that order and nothing was written. D1511 (#3762).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["stage", "stage_label", "stage_source", "moved"],
+  "properties": {
+    "deck": { "type": "object" },
+    "deck_id": { "type": "integer", "minimum": 1 },
+    "unchanged": { "enum": [true] },
+    "one_undo_step": { "enum": [true] },
+    "stage": { "enum": ["pre_seed", "seed", "series_a", "series_b_plus"] },
+    "stage_label": { "type": "string" },
+    "stage_source": { "enum": ["asked", "audience", "venture", "default"] },
+    "moved": { "type": "integer", "minimum": 0 }
+  }
+}

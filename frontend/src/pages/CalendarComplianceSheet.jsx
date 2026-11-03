@@ -6,6 +6,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
+import { companyComplianceApi } from '../lib/api/companyCompliance.js';
+import { companyCompliancePath } from '../lib/settingsScope.js';
 import { Lightbox, Sheet, actionDanger, actionGhost, actionPrimary } from '../ui';
 import {
   REPEAT_WORDS, SAYS, TYPE_WORDS, createError, dayWords, doneSays, ownerLine, refusalOf, sourceLine, stateLine, stateOf,
@@ -45,7 +47,11 @@ function ChangeDialog({ change, item, onClose, onDone }) {
   const save = async () => {
     setBusy(true); setSaid(null);
     try {
-      if (change === 'delete') await api.complianceDelete(item.source_id);
+      const co = item.compliance?.company_task ? item.compliance.company : null;
+      // D1614 CO4 (#3976): a company-level task changes through its company's own routes (a company admin's).
+      if (co && change === 'done') await companyComplianceApi.markDone(co.uid, item.source_uid);
+      else if (co && change === 'reopen') await companyComplianceApi.reopen(co.uid, item.source_uid);
+      else if (change === 'delete') await api.complianceDelete(item.source_id);
       else await api.complianceUpdate(item.source_id, { completion_status: change === 'done' ? 'completed' : 'pending' });
       onDone(change);
     } catch (e) { setSaid(refusalOf(e)); }
@@ -89,6 +95,7 @@ export default function CalendarComplianceSheet({ item, onClose, onChanged, relo
       <span className="flex flex-wrap gap-1.5">
         <span className={`${PILL} ${STATE_PILL[state]}`} data-testid="cal-compliance-state">{stateLine(item)}</span>
         {c.event_type ? <span className={PILL}>{TYPE_WORDS[c.event_type] || c.event_type}</span> : null}
+        {c.company?.name ? <span className={PILL} data-testid="cal-compliance-company">{c.company.name}</span> : null}
       </span>
     </span>
   );
@@ -97,7 +104,9 @@ export default function CalendarComplianceSheet({ item, onClose, onChanged, relo
       {state === 'done'
         ? <button type="button" className={actionGhost} onClick={() => setChange('reopen')} data-testid="cal-compliance-reopen">Reopen</button>
         : <button type="button" className={actionPrimary} onClick={() => setChange('done')} data-testid="cal-compliance-done">Mark done</button>}
-      <button type="button" className={actionDanger} onClick={() => setChange('delete')} data-testid="cal-compliance-delete">Delete</button>
+      {c.company_task
+        ? <Link className={actionGhost} to={companyCompliancePath(c.company.uid)} data-testid="cal-compliance-open-company">Open in Compliance</Link>
+        : <button type="button" className={actionDanger} onClick={() => setChange('delete')} data-testid="cal-compliance-delete">Delete</button>}
     </span>
   );
   return (
@@ -107,6 +116,12 @@ export default function CalendarComplianceSheet({ item, onClose, onChanged, relo
           <Row title="Due" testId="cal-compliance-due">
             <p className={`m-0 font-mono text-[12.5px] font-semibold ${INK}`}>{dayWords(c.due_date || item.start_at)} · all day</p>
           </Row>
+          {c.company_task ? (
+            <Row title="Company" testId="cal-compliance-company-row">
+              <span className={`text-[13px] font-semibold ${INK}`}>{c.company.name || 'Not recorded'}</span>
+              {c.jurisdiction ? <span className={`text-[12px] ${MUTED}`}>Jurisdiction: {c.jurisdiction}</span> : null}
+            </Row>
+          ) : (
           <Row title="Venture" testId="cal-compliance-venture">
             <span className="flex flex-wrap items-center justify-between gap-2">
               <span className={`text-[13px] font-semibold ${INK}`}>{item.project_name || 'Not recorded'}</span>
@@ -114,6 +129,7 @@ export default function CalendarComplianceSheet({ item, onClose, onChanged, relo
             </span>
             {c.jurisdiction ? <span className={`text-[12px] ${MUTED}`}>Jurisdiction: {c.jurisdiction}</span> : null}
           </Row>
+          )}
           <Row title="Repeats" testId="cal-compliance-repeats">
             <p className={`m-0 text-[13px] ${INK}`}>{REPEAT_WORDS[c.recurrence] || 'Not recorded'}</p>
           </Row>

@@ -1,0 +1,8 @@
+### Team agents: the roster on screen (D4119, #4119, Roster R3 of #4116)
+
+Frontend only; no new route. The screens read R1's `GET /api/teams/personas` (D4117, section 0795) through `pages/team/agentsAdapter.js`'s `personas()` (`teamAgentsApi.personas`, already in `lib/api/teamAgents.js`).
+
+- **The agent card** (`pages/team/AgentCard.jsx`, AG1): full, compact and chip, used on Team › AI agents, in the Add sheet, in Compare and on the profile. Until R2's portraits land (#4118) the portrait is the agent mark with initials, alt "[Name], [tagline] (portrait not added yet)".
+- **Add an AI agent** (`AddAgentSheet.jsx`, AG2–AG4): Who (the 16 personas, search by name, Top core value, Natural fit and Risk, Compare up to three; a persona on the team shows "On your team" and cannot be chosen), Skills (D1612's step, coverage and the cost line "Not recorded" until R5 #4121), Model and cap (model, read-only tools, the area of work the rule book starts from, sponsor, cap). It posts `POST /api/teams/:scope/:id/agents` with `persona_key` and a `role_key` named on screen by its work (`personaModel.js` `workLabel`), never a job title.
+- **The agent profile** (`AgentProfileSheet.jsx`, AG5): the full card with status and sponsor, Story and goal, Values (the six Axal values through `components/profile/AxalValuesBars.jsx`, the same block the people profile's Axal behavioral values now use, top 3 highlighted, "Fixed · part of who [Name] is"), risk, skills, permissions, budget, proposals and activity. The first-name and surname fields are gone: the persona is the name.
+- **No job title on any agent surface:** Team rows, Approvals (its filter is by agent), Settings, Working here, rule books and the skills screens draw the persona's tagline or the area of work.

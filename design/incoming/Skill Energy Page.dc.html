@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>body{margin:0;background:#e9e7ee}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9;text-decoration:underline}</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:72px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1100px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Axal VC · Team › AI agents › Skills</span>
+<h1 style="margin:0;font-size:42px;font-weight:800;letter-spacing:-0.03em">SkillEnergy</h1>
+<p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">A small generative SVG that gives every skill its own energy image. The area sets the hue, the stroke rhythm and the direction it points on the radar. The level sets density, and the slug makes each skill unique. Every image on this page is drawn live by the generator shown in EN6.</p>
+<p style="margin:0;font-size:14px;font-weight:600;color:#6d28d9">{{ pickLine }}</p>
+</header>
+<sc-for list="{{ boards }}" as="b" hint-placeholder-count="6">
+<section id="{{ b.id }}" style="display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">{{ b.id }}</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">{{ b.t }}</h2></div>
+<sc-if value="{{ b.note }}" hint-placeholder-val="{{ false }}"><p style="margin:0;max-width:1000px;font-size:14px;line-height:1.55;color:#3f3a47;text-wrap:pretty">{{ b.note }}</p></sc-if>
+<div style="width:max-content" dangerouslySetInnerHTML="{{ b.html }}"></div>
+</section>
+</sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;style&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;A&quot;,&quot;B&quot;,&quot;C&quot;],&quot;default&quot;:&quot;A&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const PICK = ['A', 'B', 'C'].indexOf(this.props.style) >= 0 ? this.props.style : 'A';
+    const OKL = (L, C, H) => {
+      const q = H * Math.PI / 180, a = C * Math.cos(q), b = C * Math.sin(q);
+      const l = Math.pow(L + 0.3963377774 * a + 0.2158037573 * b, 3), m = Math.pow(L - 0.1055613458 * a - 0.0638541728 * b, 3), s = Math.pow(L - 0.0894841775 * a - 1.291485548 * b, 3);
+      return [4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s, -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s, -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s];
+    };
+    const HEX = (L, C, H) => { let c = C, rgb = OKL(L, c, H); while (c > 0.005 && rgb.some(v => v < -0.0005 || v > 1.0005)) { c *= 0.96; rgb = OKL(L, c, H); } return '#' + rgb.map(v => { v = Math.min(1, Math.max(0, v)); v = v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055; return Math.round(v * 255).toString(16).padStart(2, '0'); }).join(''); };
+    const SE_AREAS = [
+      ['product', 'Product', 0, 293, 'Violet', '', 'solid'],
+      ['engineering', 'Engineering', 45, 262, 'Blue', '5 2.5', 'long dash'],
+      ['design', 'Design', 90, 231, 'Sky', '0.1 2.6', 'dotted'],
+      ['gtm', 'GTM', 135, 200, 'Cyan', '7 2 1.2 2', 'dash-dot'],
+      ['marketing', 'Marketing', 180, 160, 'Emerald', '2.4 1.8', 'short dash'],
+      ['finance', 'Finance', 225, 70, 'Amber', '10 2', 'long rule'],
+      ['legal', 'Legal', 270, 355, 'Pink', '4 1.5 4 4', 'paired dash'],
+      ['capital', 'Capital', 315, 324, 'Fuchsia', '0.1 2.4 5 2.4', 'dot-dash']
+    ].map(([key, name, angle, h, hue, dash, form]) => ({ key, name, angle, hue, oklchHue: h, light: key === 'product' ? '#7c3aed' : HEX(0.54, 0.2, h), dark: key === 'product' ? '#a78bfa' : HEX(0.71, 0.16, h), dash, form }));
+    const SE_LEVELS = [
+      { level: 1, name: 'Aware', n: 0.32, op: 0.42, w: 0.9, layers: 1, glow: 0.05 },
+      { level: 2, name: 'Working', n: 0.48, op: 0.55, w: 1, layers: 1, glow: 0.08 },
+      { level: 3, name: 'Proficient', n: 0.66, op: 0.68, w: 1.05, layers: 2, glow: 0.11 },
+      { level: 4, name: 'Advanced', n: 0.84, op: 0.8, w: 1.1, layers: 2, glow: 0.14 },
+      { level: 5, name: 'Expert', n: 1, op: 0.92, w: 1.15, layers: 3, glow: 0.18 }
+    ];
+
+    function skillEnergy({ slug = 'skill', area = 'Product', level = 3, size = 96, theme = 'light', style = 'A', t = 0, motion = false } = {}) {
+      const A = SE_AREAS.find(a => a.name === area || a.key === area) || SE_AREAS[0];
+      const L = SE_LEVELS[Math.min(5, Math.max(1, Math.round(level))) - 1];
+      const sl = String(slug);
+      let h = 2166136261;                                    // FNV-1a hash of the slug seeds every random choice
+      for (let i = 0; i < sl.length; i++) { h ^= sl.charCodeAt(i); h = Math.imul(h, 16777619); }
+      let sd = h >>> 0;
+      const rnd = () => { sd = (sd + 0x6d2b79f5) | 0; let x = Math.imul(sd ^ (sd >>> 15), 1 | sd); x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x; return ((x ^ (x >>> 14)) >>> 0) / 4294967296; };
+      const r = (a, b) => a + (b - a) * rnd();
+      const dark = theme === 'dark', col = dark ? A.dark : A.light;
+      const k = 100 / size, small = size <= 64;              // viewBox units per pixel: strokes stay crisp at every size
+      const sw = (small ? 1.15 : size <= 120 ? 1.3 : 1.5) * k * L.w;
+      const count = (base) => Math.max(3, Math.round(base * L.n * (small ? 0.7 : 1)));
+      const ang = A.angle * Math.PI / 180, dx = Math.sin(ang), dy = -Math.cos(ang), px = -dy, py = dx;  // the area's radar angle, clockwise from the top
+      const f = (v) => Math.round(v * 10) / 10;
+      const curve = (P, closed) => {                          // Catmull-Rom through the points, as cubic Béziers
+        const m = P.length, g = (i) => closed ? P[(i + m) % m] : P[Math.max(0, Math.min(m - 1, i))];
+        let d = 'M' + f(P[0][0]) + ' ' + f(P[0][1]);
+        for (let i = 0; i < (closed ? m : m - 1); i++) {
+          const a = g(i - 1), b = g(i), c = g(i + 1), e = g(i + 2);
+          d += 'C' + f(b[0] + (c[0] - a[0]) / 6) + ' ' + f(b[1] + (c[1] - a[1]) / 6) + ' ' + f(c[0] - (e[0] - b[0]) / 6) + ' ' + f(c[1] - (e[1] - b[1]) / 6) + ' ' + f(c[0]) + ' ' + f(c[1]);
+        }
+        return d + (closed ? 'Z' : '');
+      };
+      const out = [];
+      const add = (d, op, wf) => out.push('<path d="' + d + '" stroke-opacity="' + Math.round(op * 100) / 100 + '" stroke-width="' + Math.round(sw * (wf || 1) * 100) / 100 + '"/>');
+      if (style === 'A') {                                     // A · waves from a source moving toward the angle: they crowd on that side
+        const N = count(16), gap = r(6.2, 7.6), lean = r(0.5, 0.66), lobes = 2 + Math.floor(rnd() * 4), amp = r(0.012, 0.035), ph = r(0, 6.28), tw = r(0.2, 0.6), side = r(-7, 7);
+        const sx = 50 + dx * 16 + px * side, sy = 50 + dy * 16 + py * side;
+        const ring = (i, op, wf) => {
+          const rad = gap * (i + 0.8), cx = sx - dx * gap * lean * i, cy = sy - dy * gap * lean * i, P = [];
+          const near = Math.hypot(Math.max(0, -cx, cx - 100), Math.max(0, -cy, cy - 100)), far = Math.max(Math.hypot(cx, cy), Math.hypot(100 - cx, cy), Math.hypot(cx, 100 - cy), Math.hypot(100 - cx, 100 - cy));
+          if (near > rad * (1 + amp) + 2 || far < rad * (1 - amp) - 2) return;   // ring never crosses the tile
+          for (let j = 0; j < 16; j++) { const a = j / 16 * 6.2832, rr = rad * (1 + amp * Math.sin(lobes * a + ph + i * tw)); P.push([cx + Math.cos(a) * rr, cy + Math.sin(a) * rr]); }
+          add(curve(P, true), op, wf);
+        };
+        for (let i = 0; i < N; i++) ring(i, L.op * (1 - 0.6 * i / N), 1);
+        if (L.layers > 1) for (let i = 0; i < N - 1; i += (L.layers > 2 ? 1 : 2)) ring(i + 0.5, L.op * 0.3, 0.6);
+      } else if (style === 'B') {                              // B · strokes radiate from one point; the longest point at the angle
+        const M = count(52), ox = 50 - dx * 20 + px * r(-6, 6), oy = 50 - dy * 20 + py * r(-6, 6), sharp = r(1.4, 2.8), reach = r(80, 98), base = r(4, 8), rin = r(5, 8), spin = r(0, 6.28);
+        for (let j = 0; j < M; j++) {
+          const a = spin + j / M * 6.2832 + r(-0.05, 0.05), ux = Math.sin(a), uy = -Math.cos(a), c = Math.pow(Math.max(0, ux * dx + uy * dy), sharp), len = base + reach * c * r(0.7, 1);
+          add('M' + f(ox + ux * rin) + ' ' + f(oy + uy * rin) + 'L' + f(ox + ux * (rin + len)) + ' ' + f(oy + uy * (rin + len)), L.op * (0.3 + 0.7 * Math.sqrt(c)), 1);
+          if (L.layers > 1 && c > 0.35) { const s0 = rin + len + 3, s1 = s0 + len * r(0.12, 0.28); add('M' + f(ox + ux * s0) + ' ' + f(oy + uy * s0) + 'L' + f(ox + ux * s1) + ' ' + f(oy + uy * s1), L.op * 0.4, 0.7); }
+        }
+        if (L.layers > 2) { const P = []; for (let j = 0; j < 24; j++) { const a = j / 24 * 6.2832; P.push([ox + Math.cos(a) * rin * 1.7, oy + Math.sin(a) * rin * 1.7]); } add(curve(P, true), L.op * 0.35, 0.7); }
+      } else {                                                 // C · field lines flow across the tile and gather toward the angle
+        const N = count(22), fx = 50 + dx * 64 + px * r(-12, 12), fy = 50 + dy * 64 + py * r(-12, 12), q1 = r(0.035, 0.07), q2 = r(0.03, 0.06), p1 = r(0, 6.28), p2 = r(0, 6.28), bend = r(0.35, 0.75), pull = r(0.25, 0.5);
+        const line = (off, op, wf) => {
+          let x = 50 - dx * 70 + px * off, y = 50 - dy * 70 + py * off; const P = [[x, y]];
+          for (let s = 1; s <= 40; s++) {
+            const al = (x - 50) * dx + (y - 50) * dy, ac = (x - 50) * px + (y - 50) * py, dv = bend * Math.sin(ac * q1 + p1) * Math.cos(al * q2 + p2), gx = fx - x, gy = fy - y, gl = Math.hypot(gx, gy) || 1;
+            const vx = dx * Math.cos(dv) - dy * Math.sin(dv) + pull * gx / gl, vy = dx * Math.sin(dv) + dy * Math.cos(dv) + pull * gy / gl, vl = Math.hypot(vx, vy) || 1;
+            x += vx / vl * 4.2; y += vy / vl * 4.2; if (s % 4 === 0) P.push([x, y]);
+          }
+          add(curve(P, false), op, wf);
+        };
+        for (let i = 0; i < N; i++) line((i + 0.5) / N * 140 - 70 + r(-2, 2), L.op * r(0.45, 1), r(0.85, 1.2));
+        if (L.layers > 1) { const Q = Math.round(N * (L.layers > 2 ? 0.6 : 0.35)); for (let i = 0; i < Q; i++) line((i + 0.5) / Q * 140 - 70 + r(-5, 5), L.op * 0.3, 0.6); }
+      }
+      const uid = 'se' + (h >>> 0).toString(36) + style + size + (dark ? 'd' : 'l') + L.level + '_' + (skillEnergy.n = (skillEnergy.n || 0) + 1);
+      const rx = f((small ? 10 : size <= 120 ? 14 : 16) * k), gx = f(50 + dx * 46), gy = f(50 + dy * 46), D = 3.5;
+      const still = t ? ' style="transform:translate(' + f(dx * D * t) + 'px,' + f(dy * D * t) + 'px);opacity:' + Math.round((1 - 0.18 * t) * 100) / 100 + '"' : '';
+      const css = motion ? '<style>@keyframes ' + uid + 'k{0%,100%{transform:translate(0px,0px);opacity:1}50%{transform:translate(' + f(dx * D) + 'px,' + f(dy * D) + 'px);opacity:.82}}.' + uid + 'm{animation:' + uid + 'k 6s ease-in-out infinite}@media (prefers-reduced-motion:reduce){.' + uid + 'm{animation:none}}</style>' : '';
+      const dash = A.dash ? ' stroke-dasharray="' + A.dash.split(' ').map(v => f(v * k)).join(' ') + '"' : '';
+      return '<svg xmlns="http://www.w3.org/2000/svg" width="' + size + '" height="' + size + '" viewBox="0 0 100 100" aria-hidden="true" focusable="false" style="display:block;flex:none">' + css +
+        '<defs><clipPath id="' + uid + 'c"><rect width="100" height="100" rx="' + rx + '"/></clipPath><radialGradient id="' + uid + 'g" cx="' + gx + '" cy="' + gy + '" r="72" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="' + col + '" stop-opacity="' + Math.round(L.glow * (dark ? 1.5 : 1) * 100) / 100 + '"/><stop offset="1" stop-color="' + col + '" stop-opacity="0"/></radialGradient></defs>' +
+        '<g clip-path="url(#' + uid + 'c)"><rect width="100" height="100" fill="' + col + '" fill-opacity="' + (dark ? 0.12 : 0.07) + '"/><rect width="100" height="100" fill="url(#' + uid + 'g)"/>' +
+        '<g' + (motion ? ' class="' + uid + 'm"' : still) + ' fill="none" stroke="' + col + '" stroke-linecap="round" stroke-linejoin="round"' + dash + '>' + out.join('') + '</g></g></svg>';
+    }
+
+    const SG = "font-family:'Space Grotesk',system-ui,sans-serif", MO = "font-family:'Roboto Mono',ui-monospace,monospace";
+    const TH = (d) => d ? { page: '#0b1220', card: '#111827', ink: '#e5e7eb', mut: '#9ca3af', line: '#374151', line2: '#4b5563', raised: '#1f2937', body: '#d1d5db', lav: 'rgba(167,139,250,.14)', lavE: 'rgba(167,139,250,.42)', vd: '#c4b5fd' } : { page: '#f4f3f7', card: '#ffffff', ink: '#18181b', mut: '#6b6577', line: '#ececf1', line2: '#e2dfe8', raised: '#faf9fc', body: '#3f3a47', lav: '#f4f0fe', lavE: '#ddd0fb', vd: '#6d28d9' };
+    const EB = (t, c) => '<span style="' + MO + ';font-size:10.5px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:' + c + '">' + t + '</span>';
+    const BOX = (d, inner, x) => { const T = TH(d); return '<div style="background:' + T.card + ';color:' + T.ink + ';border:1px solid ' + (d ? '#1f2937' : '#dedbe5') + ';border-radius:16px;padding:24px 26px;display:flex;flex-direction:column;gap:18px;box-sizing:border-box;' + SG + ';' + (x || '') + '">' + inner + '</div>'; };
+    const E = (o) => skillEnergy(Object.assign({ style: PICK, theme: 'light', level: 3, size: 96 }, o));
+    const AR = (n) => SE_AREAS.find(a => a.name === n);
+    const REP = { Product: 'problem-framing', Engineering: 'architecture-review', Design: 'design-critique', GTM: 'pipeline-review', Marketing: 'launch-plan', Finance: 'runway-model', Legal: 'contract-review', Capital: 'round-strategy' };
+    const ACHIP = (a, d) => { const T = TH(d); return '<span style="display:inline-flex;align-items:center;gap:6px;min-height:22px;padding:0 9px;border-radius:999px;border:1px solid ' + T.line + ';background:' + T.card + ';font-size:12px;font-weight:600;color:' + T.ink + ';white-space:nowrap;box-sizing:border-box"><span style="width:8px;height:8px;border-radius:2px;background:' + (d ? a.dark : a.light) + ';display:block"></span>' + a.name + '</span>'; };
+    const LCHIP = (t, d) => { const T = TH(d); return '<span style="display:inline-flex;align-items:center;min-height:22px;padding:0 9px;border-radius:999px;background:' + T.lav + ';border:1px solid ' + T.lavE + ';font-size:12px;font-weight:600;color:' + T.vd + ';white-space:nowrap;box-sizing:border-box">' + t + '</span>'; };
+    const RADAR = (hi, z, d, full) => {
+      const T = TH(d), R = 40, P = (deg, rr) => { const q = deg * Math.PI / 180; return [50 + Math.sin(q) * rr, 50 - Math.cos(q) * rr]; }, S = (p) => p[0].toFixed(1) + ' ' + p[1].toFixed(1), thin = z < 80 ? 1.6 : 1;
+      let s = '<svg width="' + z + '" height="' + z + '" viewBox="0 0 100 100" aria-hidden="true" style="display:block;flex:none">';
+      [0.34, 0.67, 1].forEach(q => { s += '<polygon points="' + SE_AREAS.map(a => S(P(a.angle, R * q)).replace(' ', ',')).join(' ') + '" fill="none" stroke="' + T.line + '" stroke-width="' + thin + '"/>'; });
+      SE_AREAS.forEach(a => { const p = P(a.angle, R), c = d ? a.dark : a.light; s += '<line x1="50" y1="50" x2="' + p[0].toFixed(1) + '" y2="' + p[1].toFixed(1) + '" stroke="' + (full ? c : T.line) + '" stroke-width="' + (full ? 1.4 : thin) + '"/>'; if (full) { const e = P(a.angle, R + 6); s += '<circle cx="' + e[0].toFixed(1) + '" cy="' + e[1].toFixed(1) + '" r="3" fill="' + c + '"/>'; } });
+      if (hi != null) { const a = SE_AREAS[hi], c = d ? a.dark : a.light; s += '<path d="M50 50L' + S(P(a.angle - 22.5, R)) + 'A' + R + ' ' + R + ' 0 0 1 ' + S(P(a.angle + 22.5, R)) + 'Z" fill="' + c + '" fill-opacity=".3" stroke="' + c + '" stroke-width="' + (z < 80 ? 2 : 1.4) + '"/>'; }
+      return s + '</svg>';
+    };
+
+    const STY = [['A', 'Concentric waves', 'Rings from a source moving toward the area’s angle. They crowd on that side, like a ripple in motion.'], ['B', 'Radiating strokes', 'Strokes burst from one point. The longest point at the area’s angle.'], ['C', 'Flowing field lines', 'Field lines cross the tile and gather toward the area’s angle.']];
+    const en1 = '<div style="display:flex;flex-direction:column;gap:20px;width:1060px">' + STY.map(([k, nm, d]) => BOX(false,
+      '<div style="display:flex;align-items:center;gap:14px"><span style="width:36px;height:36px;flex:none;border-radius:9px;background:#18181b;color:#fff;display:grid;place-items:center;font-size:17px;font-weight:800">' + k + '</span><div style="flex:1;display:flex;flex-direction:column;gap:3px"><span style="font-size:17px;font-weight:800;letter-spacing:-0.02em">' + nm + '</span><span style="font-size:13px;color:#6b6577">' + d + '</span></div>' + (k === PICK ? LCHIP('Drawn on EN2 to EN5 · pending owner', false) : '') + '</div>' +
+      '<div style="display:grid;grid-template-columns:52px repeat(8,96px);gap:14px 20px;align-items:start">' + EB('96 px', '#6b6577') + SE_AREAS.map(a => '<div style="display:flex;flex-direction:column;gap:7px">' + E({ slug: REP[a.name], area: a.name, style: k }) + '<span style="display:flex;flex-direction:column;gap:1px"><span style="font-size:12.5px;font-weight:700">' + a.name + '</span><span style="' + MO + ';font-size:11px;color:#6b6577">' + a.angle + '°</span></span></div>').join('') +
+      EB('48 px', '#6b6577') + SE_AREAS.map(a => E({ slug: REP[a.name], area: a.name, style: k, size: 48 })).join('') + '</div>')).join('') + '</div>';
+
+    const grid = (d) => { const T = TH(d); return BOX(d, '<div style="display:flex;justify-content:space-between;align-items:center">' + EB(d ? 'Dark · on #111827' : 'Light · on #ffffff', T.mut) + EB('Style ' + PICK, T.mut) + '</div><div style="display:grid;grid-template-columns:128px repeat(5,96px);gap:14px 16px;align-items:center"><span></span>' + SE_LEVELS.map(l => '<span style="display:flex;flex-direction:column;gap:2px">' + EB('Level ' + l.level, T.mut) + '<span style="font-size:12.5px;font-weight:700;color:' + T.ink + '">' + l.name + '</span></span>').join('') + SE_AREAS.map(a => '<div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:13px;font-weight:700">' + a.name + '</span><span style="' + MO + ';font-size:11px;color:' + T.mut + '">' + a.angle + '° · ' + a.form + '</span></div>' + SE_LEVELS.map(l => E({ slug: REP[a.name], area: a.name, level: l.level, theme: d ? 'dark' : 'light' })).join('')).join('') + '</div>', 'flex:none'); };
+    const en2 = '<div style="display:flex;gap:28px;align-items:flex-start">' + grid(false) + grid(true) + '</div>';
+
+    const SIX = [['runway-model', 'Runway model'], ['unit-economics', 'Unit economics'], ['burn-review', 'Burn review'], ['pricing-model', 'Pricing model'], ['cash-forecast', 'Cash forecast'], ['budget-variance', 'Budget variance']];
+    const en3 = BOX(false, '<div style="display:grid;grid-template-columns:repeat(6,160px);gap:24px">' + SIX.map(([s, n]) => '<div style="display:flex;flex-direction:column;gap:8px">' + E({ slug: s, area: 'Finance', size: 160 }) + '<span style="display:flex;flex-direction:column;gap:2px"><span style="font-size:13.5px;font-weight:700">' + n + '</span><span style="' + MO + ';font-size:11px;color:#6b6577">' + s + '</span></span>' + E({ slug: s, area: 'Finance', size: 48 }) + '</div>').join('') + '</div>', 'width:1140px');
+
+    const AVA = (fl, n, z, rr) => '<img src="assets/agents/' + fl + '.png" alt="' + n + '" title="' + n + '" style="display:block;flex:none;width:' + z + 'px;height:' + z + 'px;border-radius:' + rr + 'px;image-rendering:pixelated;object-fit:cover;background:#2e1065">';
+    const STK = (as, T) => '<span style="display:flex">' + as.slice(0, 3).map(([fl, n], i) => '<span style="margin-left:' + (i ? -6 : 0) + 'px;border:2px solid ' + T.card + ';border-radius:8px;display:block">' + AVA(fl, n, 20, 6) + '</span>').join('') + '</span>';
+    const ACH2 = (a, li, T, d) => '<span style="display:inline-flex;align-items:center;gap:6px;min-height:22px;padding:0 9px;border-radius:999px;border:1px solid ' + T.line2 + ';background:' + T.card + ';font-size:12px;font-weight:600;color:' + T.ink + ';white-space:nowrap;box-sizing:border-box"><span aria-hidden="true" style="width:7px;height:7px;border-radius:999px;background:' + (d ? a.dark : a.light) + ';display:block;flex:none"></span>' + a.name + (li != null ? ' · ' + SE_LEVELS[li].name : '') + '</span>';
+    const TOOL = (t, T) => '<span style="display:inline-flex;align-items:center;min-height:20px;padding:0 7px;border-radius:6px;background:' + T.raised + ';border:1px solid ' + T.line + ';font-size:11px;color:' + T.body + ';white-space:nowrap;box-sizing:border-box">' + t + '</span>';
+    const VB = (v, T) => '<span style="' + MO + ';font-size:10.5px;padding:1px 6px;border-radius:5px;border:1px solid ' + T.line2 + ';color:' + T.mut + ';white-space:nowrap">v' + v + '</span>';
+    const RAD2 = (vals, z, col, T) => {
+      const c = z / 2, R = z / 2 - 3, pt = (i, q) => { const an = (-90 + i * 45) * Math.PI / 180; return [c + Math.cos(an) * R * q, c + Math.sin(an) * R * q]; }, P8 = (q) => [0, 1, 2, 3, 4, 5, 6, 7].map(i => pt(i, typeof q === 'number' ? q : Math.max(0.05, q[i])).map(v => v.toFixed(1)).join(',')).join(' ');
+      const ring = (q) => '<polygon points="' + P8(q) + '" style="fill:none;stroke:' + T.line2 + ';stroke-width:1"></polygon>';
+      const spk = [0, 1, 2, 3, 4, 5, 6, 7].map(i => { const p = pt(i, 1); return '<line x1="' + c + '" y1="' + c + '" x2="' + p[0].toFixed(1) + '" y2="' + p[1].toFixed(1) + '" style="stroke:' + T.line + ';stroke-width:1"></line>'; }).join('');
+      const sum = SE_AREAS.map((a, i) => vals[i] >= 0.2 ? a.name + ' ' + SE_LEVELS[Math.round(vals[i] * 5) - 1].name : '').filter(Boolean).join(', ');
+      return '<div role="img" aria-label="Skill coverage: ' + sum + '" style="width:' + z + 'px;height:' + z + 'px;flex:none"><svg width="' + z + '" height="' + z + '" viewBox="0 0 ' + z + ' ' + z + '" aria-hidden="true" style="display:block;overflow:visible">' + ring(1) + ring(0.66) + ring(0.33) + spk + '<polygon points="' + P8(vals) + '" style="fill:' + col + ';fill-opacity:.2;stroke:' + col + ';stroke-width:1.5;stroke-linejoin:round"></polygon></svg></div>';
+    };
+    const SV8 = (ai, li) => SE_AREAS.map((x, i) => i === ai ? (li + 1) / 5 : ((i - ai + 8) % 8 === 1 || (ai - i + 8) % 8 === 1) ? 0.12 : 0);
+    const ctx = (d) => {
+      const T = TH(d), th = d ? 'dark' : 'light', fi = 5, fin = SE_AREAS[fi], col = d ? fin.dark : fin.light;
+      const card = '<article aria-label="Runway model" style="width:320px;box-sizing:border-box;display:flex;flex-direction:column;gap:10px;padding:12px;border-radius:12px;background:' + T.card + ';border:1px solid ' + T.line + '">' + E({ slug: 'runway-model', area: 'Finance', theme: th }) + '<div style="display:flex;gap:10px;align-items:flex-start"><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px"><div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap"><a href="#" style="font-size:14.5px;font-weight:800;color:' + T.ink + ';text-decoration:none">Runway model</a>' + VB(2, T) + '</div><span style="font-size:12.5px;line-height:1.45;color:' + T.mut + '">Turns your bank and revenue records into a runway note.</span></div>' + RAD2(SV8(fi, 2), 46, col, T) + '</div><div style="display:flex;gap:5px;flex-wrap:wrap">' + ACH2(fin, 2, T, d) + TOOL('Mercury', T) + TOOL('Stripe', T) + '</div><div style="font-size:12.5px;color:' + T.body + '"><span style="color:' + T.mut + '">Proposes · </span>A runway note for Raise › Use of funds</div><div style="display:flex;align-items:center;gap:8px;padding-top:9px;border-top:1px solid ' + T.line + '"><span style="' + MO + ';font-size:11px;color:' + T.mut + '">+≈1.2k tokens per run</span><span style="margin-left:auto;display:flex;align-items:center;gap:6px">' + STK([['guardian_m', 'Tomas Reyes'], ['builder_f', 'Lin Wei']], T) + '<span style="font-size:12px;color:' + T.mut + '">Used by [14] agents</span></span></div></article>';
+      const tile = '<a href="#" style="width:186px;box-sizing:border-box;display:flex;flex-direction:column;gap:10px;padding:12px;border-radius:12px;background:' + T.card + ';border:1px solid ' + T.line + ';text-decoration:none;color:' + T.ink + '">' + E({ slug: 'area-finance', area: 'Finance', level: 4, size: 160, theme: th }) + '<div style="display:flex;align-items:center;gap:8px"><span aria-hidden="true" style="width:9px;height:9px;border-radius:999px;background:' + col + ';display:block"></span><span style="font-size:15px;font-weight:800">Finance</span><span aria-hidden="true" style="margin-left:auto;color:' + T.mut + '">›</span></div><span style="' + MO + ';font-size:11.5px;color:' + T.mut + '">12 skills · used by 3 agents</span></a>';
+      const chips = [['runway-model', 'Runway model', 'Finance', 3, 'v2'], ['launch-plan', 'Launch plan', 'Marketing', 2, 'v1'], ['contract-review', 'Contract review', 'Legal', 4, 'v2']].map(([sg, n, ar, lv, v]) => '<div style="display:flex;align-items:center;gap:12px;width:300px;box-sizing:border-box;padding:8px 12px 8px 8px;border-radius:12px;border:1px solid ' + T.line + ';background:' + T.card + '">' + E({ slug: sg, area: ar, level: lv, size: 48, theme: th }) + '<span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:13.5px;font-weight:700">' + n + '</span><span style="font-size:12px;color:' + T.mut + '">' + ar + ' · ' + SE_LEVELS[lv - 1].name + '</span></span>' + VB(v.slice(1), T) + '</div>').join('');
+      return '<div style="background:' + T.page + ';border-radius:16px;border:1px solid ' + (d ? '#1f2937' : '#dedbe5') + ';padding:24px 26px;display:flex;gap:28px;align-items:flex-start;' + SG + ';color:' + T.ink + '"><div style="display:flex;flex-direction:column;gap:8px">' + EB('Skill card · SK1 · 96 px', T.mut) + card + '</div><div style="display:flex;flex-direction:column;gap:8px">' + EB('Area tile · SK0 · 160 px', T.mut) + tile + '</div><div style="display:flex;flex-direction:column;gap:8px">' + EB('Skill chips · 48 px', T.mut) + chips + '</div></div>';
+    };
+    const en4 = '<div style="display:flex;flex-direction:column;gap:24px">' + ctx(false) + ctx(true) + '</div>';
+
+    const fr = (lab, svg, d) => { const T = TH(d); return '<div style="width:192px;box-sizing:border-box;display:flex;flex-direction:column;gap:8px;padding:16px;border-radius:12px;background:' + T.card + ';border:1px solid ' + T.line + '">' + svg + '<span style="font-size:12.5px;line-height:1.4;font-weight:600;color:' + T.ink + '">' + lab + '</span></div>'; };
+    const MS = { slug: 'launch-plan', area: 'Marketing', level: 4, size: 160 };
+    const en5 = BOX(false, '<div style="display:flex;gap:20px;align-items:stretch">' + fr('0 s · at rest', E(MS)) + fr('3 s · drifted toward 180°, strokes at 82%', E(Object.assign({ t: 1 }, MS))) + fr('Live · 6 s loop', E(Object.assign({ motion: true }, MS))) + fr('Live · dark', E(Object.assign({ motion: true, theme: 'dark' }, MS)), true) + '</div><div style="display:flex;flex-direction:column;gap:6px;max-width:800px;font-size:13px;line-height:1.55;color:#3f3a47"><span>The strokes drift 3.5 units toward the area’s angle and soften to 82%, then return. One loop takes 6 s, easing in and out. It is optional: pass motion: true.</span><span>Under prefers-reduced-motion it stays on the 0 s frame. The static frame is the design, so nothing depends on the motion.</span></div>', 'width:max-content');
+
+    const lum = (hx) => { const c = [1, 3, 5].map(i => parseInt(hx.slice(i, i + 2), 16) / 255).map(v => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+    const CR = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+    const RAT = (fg, bg) => { const v = CR(fg, bg); return '<span style="' + MO + ';font-size:12px;font-weight:600">' + v.toFixed(2) + ':1</span><span style="font-size:11.5px;font-weight:600;color:' + (v >= 3 ? '#047857' : '#b91c1c') + '">' + (v >= 4.5 ? 'Pass' : v >= 3 ? 'Pass for graphics' : 'Below 3:1') + '</span>'; };
+    const minR = Math.min.apply(null, SE_AREAS.map(a => Math.min(CR(a.light, '#ffffff'), CR(a.dark, '#111827'))));
+    const COLS = 'display:grid;grid-template-columns:170px 56px 150px 120px 230px 250px;gap:14px;align-items:center;';
+    const table = '<div role="table" aria-label="Hue tokens" style="display:flex;flex-direction:column"><div role="row" style="' + COLS + 'padding-bottom:8px;border-bottom:1px solid #ececf1">' + ['Area', 'Angle', 'Form', 'Hue', 'Light · on #ffffff', 'Dark · on #111827'].map(x => EB(x, '#6b6577')).join('') + '</div>' + SE_AREAS.map((a, i) => '<div role="row" style="' + COLS + 'padding:8px 0;' + (i ? 'border-top:1px solid #ececf1' : '') + '"><span style="display:flex;align-items:center;gap:10px;font-size:13.5px;font-weight:700">' + E({ slug: REP[a.name], area: a.name, size: 48 }) + a.name + '</span><span style="' + MO + ';font-size:12.5px">' + a.angle + '°</span><span style="display:flex;flex-direction:column;gap:4px"><svg width="96" height="8" viewBox="0 0 96 8" aria-hidden="true"><line x1="2" y1="4" x2="94" y2="4" stroke="' + a.light + '" stroke-width="1.6" stroke-linecap="round"' + (a.dash ? ' stroke-dasharray="' + a.dash + '"' : '') + '/></svg><span style="font-size:12px;color:#6b6577">' + a.form + '</span></span><span style="font-size:12.5px">' + a.hue + ' <span style="' + MO + ';font-size:11.5px;color:#6b6577">h ' + a.oklchHue + '</span></span><span style="display:flex;align-items:center;gap:8px"><span style="width:18px;height:18px;border-radius:5px;background:' + a.light + ';flex:none"></span><span style="' + MO + ';font-size:12px">' + a.light + '</span>' + RAT(a.light, '#ffffff') + '</span><span style="display:flex;align-items:center;gap:8px"><span style="display:inline-flex;align-items:center;gap:7px;padding:4px 8px;border-radius:7px;background:#111827"><span style="width:16px;height:16px;border-radius:4px;background:' + a.dark + ';flex:none"></span><span style="' + MO + ';font-size:12px;color:#e5e7eb">' + a.dark + '</span></span>' + RAT(a.dark, '#111827') + '</span></div>').join('') + '</div><span style="font-size:12px;color:#6b6577">Non-text graphics need 3:1 (WCAG 1.4.11). ' + (minR >= 4.5 ? 'Every token clears 4.5:1; the lowest is ' + minR.toFixed(2) + ':1.' : minR >= 3 ? 'Every token clears 3:1; the lowest is ' + minR.toFixed(2) + ':1.' : 'One token is below 3:1 and needs a darker value.') + ' Ratios are computed from the hex values on this page. Strokes at lower levels are fainter by design; the visual is decorative and the card carries the label.</span>';
+    const dens = '<div style="display:grid;grid-template-columns:130px repeat(3,84px) repeat(4,58px);gap:10px 14px;align-items:center;font-size:13px">' + ['Level', 'A rings', 'B strokes', 'C lines', 'Opacity', 'Width', 'Layers', 'Glow'].map(x => EB(x, '#6b6577')).join('') + SE_LEVELS.map(l => '<span style="font-weight:700">' + l.level + ' · ' + l.name + '</span>' + [16, 52, 22].map(b => '<span style="' + MO + '">' + Math.max(3, Math.round(b * l.n)) + ' <span style="color:#6b6577">· ' + Math.max(3, Math.round(b * l.n * 0.7)) + '</span></span>').join('') + ['op', 'w', 'layers', 'glow'].map(key => '<span style="' + MO + '">' + l[key] + '</span>').join('')).join('') + '</div><span style="font-size:12px;line-height:1.5;color:#6b6577;max-width:620px">Stroke counts at 96 and 160 px, then at 48 px (×0.7, never under 3). Opacity is the main strokes’ strength; echo layers sit at 30–40% of it.</span>';
+    const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const src = 'const SE_AREAS = [\n' + SE_AREAS.map(a => '  ' + JSON.stringify({ key: a.key, name: a.name, angle: a.angle, hue: a.hue, light: a.light, dark: a.dark, dash: a.dash, form: a.form })).join(',\n') + '\n];\nconst SE_LEVELS = [\n' + SE_LEVELS.map(l => '  ' + JSON.stringify(l)).join(',\n') + '\n];\n\n' + skillEnergy.toString();
+    const en6 = BOX(false,
+      '<div style="display:flex;flex-direction:column;gap:6px">' + EB('Hue tokens · SE_AREAS', '#6b6577') + '<span style="font-size:13px;line-height:1.55;color:#3f3a47;max-width:900px">Violet anchors Product at the top. Clockwise, the hue cools through blue, sky and cyan to emerald at the bottom; counter-clockwise it warms through fuchsia and pink to amber. Light tokens share violet’s lightness (OKLCH L 0.54); dark tokens share #a78bfa’s (L 0.71). Each area also has its own direction and stroke rhythm, so it reads without colour.</span></div>' + table +
+      '<div style="display:flex;gap:40px;align-items:flex-start;flex-wrap:wrap"><div style="display:flex;flex-direction:column;gap:10px">' + EB('One table, three uses', '#6b6577') + '<div style="display:flex;gap:16px;align-items:center">' + RADAR(null, 180, false, true) + '<div style="display:flex;flex-direction:column;gap:8px"><div style="display:flex;flex-wrap:wrap;gap:6px;max-width:300px">' + SE_AREAS.map(a => ACHIP(a, false)).join('') + '</div><div style="display:flex;flex-wrap:wrap;gap:6px;max-width:300px;padding:10px;border-radius:10px;background:#111827">' + SE_AREAS.map(a => ACHIP(a, true)).join('') + '</div><span style="font-size:12px;line-height:1.5;color:#6b6577;max-width:300px">SkillRadar axes, area chips and SkillEnergy read the same SE_AREAS table, in the same order.</span></div></div></div><div style="display:flex;flex-direction:column;gap:10px">' + EB('Density curve · SE_LEVELS', '#6b6577') + dens + '</div></div>' +
+      '<div style="display:flex;flex-direction:column;gap:10px">' + EB('Generator · skillEnergy({ slug, area, level, size, theme })', '#6b6577') + '<span style="font-size:13px;line-height:1.5;color:#3f3a47">Optional: style (A, B or C), t (a still drift frame, 0 to 1) and motion. It returns an SVG string. Same input, same picture: the slug’s hash seeds every random choice. Nothing inside it is text.</span><pre style="margin:0;padding:18px 20px;border-radius:12px;background:#18181b;color:#e5e7eb;' + MO + ';font-size:12px;line-height:1.6;white-space:pre-wrap;word-break:break-word">' + esc(src) + '</pre></div>', 'width:1120px');
+
+    const H = (s) => ({ __html: s });
+    return {
+      pickLine: 'EN2 to EN5 are drawn in style ' + PICK + ' (pending owner). Switch the style in Tweaks to redraw them.',
+      tok: SE_AREAS.map(a => [a.light, a.dark]),
+      boards: [
+        { id: 'EN1', t: 'Three styles · all 8 areas at level 3', note: 'Pick one. In every style an area points the same way, so it reads by direction and stroke rhythm as well as colour, even at 48 px.', html: H(en1) },
+        { id: 'EN2', t: 'The grid · 8 areas × 5 levels at 96 px', note: 'Level sets density, from a few faint strokes at Aware to a layered field at Expert. Each row keeps one slug, so only the level changes.', html: H(en2) },
+        { id: 'EN3', t: 'Uniqueness · 6 Finance skills at Proficient', note: 'Same hue, angle and stroke rhythm. The slug sets the phase, wave count and small offsets: same slug, same picture.', html: H(en3) },
+        { id: 'EN4', t: 'In context', note: 'The SK1 card and SK0 tile from the AI agents and skills canvas, unchanged except that SkillEnergy replaces their energy banner. The visual is decorative (aria-hidden); the card carries the label.', html: H(en4) },
+        { id: 'EN5', t: 'Motion (optional)', note: '', html: H(en5) },
+        { id: 'EN6', t: 'Spec sheet', note: '', html: H(en6) }
+      ]
+    };
+  }
+}
+</script>
+</body></html>

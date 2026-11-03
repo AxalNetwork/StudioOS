@@ -1,0 +1,33 @@
+{
+  "skill": "api-change-note",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "github.repos": {
+        "merged": [
+          {
+            "title": "Rename /appointments to /bookings",
+            "labels": [
+              "api",
+              "breaking"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "draft",
+    "must_include": [
+      "/bookings",
+      "/appointments"
+    ],
+    "must_say_not_recorded": [
+      "removal date"
+    ],
+    "must_not_include": [
+      "no action needed"
+    ]
+  }
+}

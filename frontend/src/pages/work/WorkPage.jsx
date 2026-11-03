@@ -9,8 +9,9 @@ import { workAdapter } from './workAdapter.js';
 import { NOT_RECORDED as NOT_RECORDED_WORD } from '../../lib/absence';
 import {
   BACKLOG_COLUMNS, BURN_RANGES, BURN_SPLITS, WORK_PURPOSE, WORK_TABS,
-  assigneeLine, backlogRows, boardColumns, burnup, canMove, columnLabel, dueLine, moveTargets, needsYou, runChip, runCost, runOutcome,
+  assigneeLine, backlogRows, boardColumns, burnup, canMove, columnLabel, dueLine, moveTargets, needsYou, runChip, runCost, runOutcome, runSheet,
 } from './workModel.js';
+import WorkloadView from './WorkloadView.jsx';
 import './work.css';
 
 /**
@@ -131,6 +132,7 @@ export default function WorkPage() {
       {board.status === 'ready' && tab === 'backlog' ? <Backlog items={board.items} onOpen={setItemUid} /> : null}
       {tab === 'burnup' && burn.status === 'ready' ? <Burnup series={burn.series} /> : null}
       {tab === 'mine' && board.status === 'ready' ? <p className={MUTED} data-testid="work-mine-later">My items arrive with #3994 (W8).</p> : null}
+      {tab === 'workload' ? <WorkloadView projectId={id} onOpenItem={setItemUid} onNotice={setNotice} /> : null}
 
       {itemUid ? <ItemSheet uid={itemUid} onClose={() => setItemUid(null)} onRun={setRunUid} /> : null}
       {runUid ? <RunSheet uid={runUid} onClose={() => setRunUid(null)} /> : null}
@@ -310,28 +312,48 @@ export function ItemSheet({ uid, onClose, onRun }) {
   );
 }
 
-/** WK5: what a run read, produced and cost, named by source and tool, never a raw prompt. */
-export function RunSheet({ uid, onClose }) {
+/**
+ * WK5: what a run worked on, read, produced and decided, its outcome, timing and
+ * cost, named by source and tool, never a raw prompt. D1614 W6 (#3974): W3's
+ * `detail` (#4183); a Failed run that may be retried has Retry; a cost that was
+ * never recorded reads "Not recorded", never $0.
+ */
+export function RunSheet({ uid, onClose, onRetried }) {
   const [state, setState] = useState({ status: 'loading' });
+  const [retry, setRetry] = useState({ status: 'idle' });
   useEffect(() => {
     let live = true;
     workAdapter.run(uid).then((r) => { if (live) setState(r.available ? { status: 'ready', run: r.data } : { status: 'off', reason: r.reason }); }, () => { if (live) setState({ status: 'error' }); });
     return () => { live = false; };
   }, [uid]);
-  const run = state.run;
-  const out = run ? runOutcome(run) : null;
+  const sheet = state.run ? runSheet(state.run) : null;
+  const doRetry = async () => {
+    setRetry({ status: 'busy' });
+    try {
+      const r = await workAdapter.retry(uid);
+      setRetry(r.available ? { status: 'done' } : { status: 'off', message: r.reason });
+      if (r.available) onRetried?.(r.data);
+    } catch (e) {
+      setRetry({ status: 'error', message: e?.data?.message || e?.message || 'The run could not be retried. Try again.' });
+    }
+  };
   return (
-    <Sheet title={out ? out.title : 'Run'} onClose={onClose} width={560} testId="work-run-sheet"
-      footer={run?.status === 'failed' ? <button type="button" className={BTN_PRIMARY}>Retry</button> : null}>
+    <Sheet title={sheet ? sheet.title : 'Run'} onClose={onClose} width={560} testId="work-run-sheet"
+      footer={sheet?.retryable ? (
+        <button type="button" className={BTN_PRIMARY} disabled={retry.status === 'busy' || retry.status === 'done'} onClick={doRetry} data-testid="work-run-retry">
+          {retry.status === 'busy' ? 'Retrying…' : retry.status === 'done' ? 'Retry started' : 'Retry'}
+        </button>
+      ) : null}>
       {state.status === 'off' ? <HonestBlock>{state.reason}</HonestBlock> : null}
-      {run ? (
-        <dl className="wk-fields">
-          <dt>Skill</dt><dd>{run.skill || NOT_RECORDED_WORD}</dd>
-          <dt>Worked on</dt><dd>{run.worked_on || NOT_RECORDED_WORD}</dd>
-          <dt>Read</dt><dd>{(run.read || []).join(' · ') || NOT_RECORDED_WORD}</dd>
-          <dt>Outcome</dt><dd data-tone={out.tone}>{out.title}{out.reason ? `. ${out.reason}` : ''}</dd>
-          <dt>Cost</dt><dd>{runCost(run)}</dd>
-        </dl>
+      {state.status === 'error' ? <HonestBlock>The run could not be read. That is not the same as it not existing.</HonestBlock> : null}
+      {sheet ? (
+        <>
+          <p className={MUTED} data-testid="work-run-agent">{sheet.agent}</p>
+          <dl className="wk-fields" data-testid="work-run-fields">
+            {sheet.rows.map(([k, v]) => (<React.Fragment key={k}><dt>{k}</dt><dd data-tone={k === 'Outcome' ? sheet.tone : undefined}>{v}</dd></React.Fragment>))}
+          </dl>
+          {retry.message ? <p role="status" className={MUTED} data-testid="work-run-retry-said">{retry.message}</p> : null}
+        </>
       ) : null}
     </Sheet>
   );

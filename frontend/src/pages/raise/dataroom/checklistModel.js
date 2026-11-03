@@ -10,15 +10,22 @@
  *     with the Worker's reason;
  *   - `no_file`: nothing answers it yet.
  *
- * EADWYN'S PROPOSALS (DR14) are not read here yet: they wait for AUTOFILL's
- * provenance (#2431), so the block says so and offers nothing to accept.
+ * EADWYN'S PROPOSALS (DR14, D4170 #4170) are the member's own, from
+ * `GET /api/data-room/:p/proposals`: a checklist match, a folder for a
+ * top-level file, or a gap. Each reads with its reason, Accept and Dismiss;
+ * an accepted match or move offers Undo. Asking costs a quoted run, shown
+ * before it runs. An empty list is "No proposals"; a failed read says so and
+ * is never an empty list.
  * THE READINESS FIGURE the canvas draws ("Data room [7] of 10") has no read
  * that carries it to this page, so it says so and links Fundraising readiness.
  */
 
 import { NOT_RECORDED } from '../../../lib/absence.js';
+import { aiTokens } from '../pitch/newDeckModel.js';
 
-export const PROPOSALS_WAIT = 'Not read here yet. Eadwyn proposes three kinds of change only: a checklist match, a folder for a top-level file, and a reading of gaps. Each waits until Ask can record where a proposal came from. Nothing here changes a file, a match or who can open it.';
+export const PROPOSALS_NOTE = 'Eadwyn reads file and folder names only, never a file. Each proposal changes one thing when you accept it: a checklist match or a folder. A gap is a note. Nothing here deletes a file or changes who can open it.';
+export const PROPOSALS_EMPTY = 'No proposals';
+export const PROPOSALS_UNREADABLE = 'Proposals could not be read';
 export const READINESS_WAIT = 'Not read here yet. Fundraising readiness scores the data room; its figure is not carried to this page.';
 export const READINESS_PATH = '/raise/fundraising-readiness';
 export const MATCH_NOTE = 'Matching changes nothing about who can open a file.';
@@ -82,4 +89,37 @@ export function summaryLine(read) {
   const g = Number(read?.grants_in_force);
   const who = Number.isFinite(g) ? ` · ${g} investor${g === 1 ? '' : 's'} with access` : '';
   return `${Number(t.answered) || 0} of ${Number(t.items) || 0} items answered · ${Number(t.openable) || 0} an investor can open${who}`;
+}
+
+/** One proposal as the group draws it: what it changes, why, and what can be pressed. */
+export function proposalView(p) {
+  const file = p?.file?.name || NOT_RECORDED;
+  const item = p?.item?.label || NOT_RECORDED;
+  let title;
+  if (p?.type === 'match') title = `Match ${file} to ${item}`;
+  else if (p?.type === 'folder') title = `Move ${file} into ${p?.folder?.name || NOT_RECORDED}`;
+  else if (p?.type === 'gap') title = `${item} has no file. ${p?.would_satisfy || ''}`.trim();
+  else return null;
+  const open = p?.status === 'proposed';
+  return {
+    uid: p.uid,
+    type: p.type,
+    title,
+    reason: p?.reason || NOT_RECORDED,
+    accepted: p?.status === 'accepted',
+    actions: open ? ['accept', 'dismiss'] : p?.undoable ? ['undo'] : [],
+    done: open ? null : p.type === 'gap' ? 'Noted' : 'Accepted',
+  };
+}
+
+/** The read's proposals as views, or null when the read is not a list (drawn as unreadable, never as empty). */
+export function proposalsOf(read) {
+  if (!read || !Array.isArray(read.proposals)) return null;
+  return read.proposals.map(proposalView).filter(Boolean);
+}
+
+/** "Holds up to $0.0500 · you pay what it uses", or null before the quote is read. */
+export function proposalsHoldLine(quote) {
+  const hold = aiTokens(quote?.hold_microusd);
+  return hold ? `Holds up to ${hold} · you pay what it uses` : null;
 }

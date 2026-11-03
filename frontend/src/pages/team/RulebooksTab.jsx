@@ -7,6 +7,7 @@ import * as agents from './agentsAdapter.js';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, FIELD, HonestBlock, MONO, MUTED, PendingOwner } from './teamUi.jsx';
 import { day } from '../account/companies/companiesModel.js';
 import { AUTO_NOTE, FLOOR, FLOOR_EDIT_NOTE, FLOOR_NOTE, FLOOR_TIP, RULEBOOK_SECTIONS, agentName, refusalWords } from './teamModel.js';
+import { workLabel } from './personaModel.js';
 
 /**
  * D1497 (#3727, TM4a, TM4b, TM4b2, TM4c) — Roles and rule books.
@@ -68,7 +69,7 @@ export function RoleLibrary({ roles, agentsList, onOpen }) {
           const held = holder(r.key);
           return (
             <article key={r.key} className="flex flex-col gap-2 rounded-axal-lg border border-axal-hairline bg-white p-4 dark:border-gray-700 dark:bg-gray-900" data-testid={`role-${r.key}`}>
-              <span className="flex items-center gap-2"><AgentTile size={30} /><b className="text-[14px] text-axal-ink dark:text-gray-100">{r.name}</b></span>
+              <span className="flex items-center gap-2"><AgentTile size={30} /><b className="text-[14px] text-axal-ink dark:text-gray-100">{workLabel(r.key, r.name)}</b></span>
               <p className={`m-0 ${MUTED}`}>{r.mission}</p>
               {r.version > 1 ? <Pill tone="info">Edited for this company · v{r.version}</Pill> : r.version === 1 || r.version === 0 ? <Pill>Default</Pill> : null}
               <span className="mt-auto flex items-center justify-between gap-2 border-t border-axal-hairline pt-2 dark:border-gray-800">
@@ -123,7 +124,7 @@ export function RulebookView({ book, role, onBack, onEdit, onRestore, canManage,
       <header className="flex flex-wrap items-start gap-3">
         <AgentTile size={40} />
         <div className="min-w-0 flex-1">
-          <h2 className="m-0 text-[18px] font-extrabold text-axal-ink dark:text-gray-100">{role?.name || book.role_key} · Rule book · {book.version === 0 ? 'Default' : `v${book.version ?? 1}`}</h2>
+          <h2 className="m-0 text-[18px] font-extrabold text-axal-ink dark:text-gray-100">{workLabel(role?.key || book.role_key, role?.name)} · Rule book · {book.version === 0 ? 'Default' : `v${book.version ?? 1}`}</h2>
           {versions.length ? (
             <p className={`m-0 ${MONO}`} data-testid="rulebook-history">
               {versions.map((v, i) => (
@@ -178,7 +179,7 @@ export function EditRulebookSheet({ book, role, onClose, onSave }) {
   };
   const set = (k) => (e) => { setDraft({ ...draft, [k]: e.target.value }); setRefusal(null); };
   return (
-    <Sheet title="Edit rule book" sub={`${role?.name || book.role_key} · draft of v${(book.version ?? 1) + 1}`} width={520} onClose={onClose} testId="rulebook-edit-sheet"
+    <Sheet title="Edit rule book" sub={`${workLabel(role?.key || book.role_key, role?.name)} · draft of v${(book.version ?? 1) + 1}`} width={520} onClose={onClose} testId="rulebook-edit-sheet"
       footer={(
         <div className="flex justify-end gap-2">
           <button type="button" className={BTN_SECONDARY} onClick={onClose}>Cancel</button>

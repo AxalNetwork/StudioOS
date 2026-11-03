@@ -1,0 +1,36 @@
+{
+  "skill": "service-blueprint-outline",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "validate.records": {
+        "journey": "New patient booking",
+        "problems": [
+          {
+            "text": "Forms filled twice",
+            "step": "Check-in"
+          }
+        ]
+      },
+      "build.records": {
+        "steps": [
+          "Online booking",
+          "Reminder",
+          "Check-in"
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Forms filled twice",
+      "Check-in"
+    ],
+    "must_say_not_recorded": [],
+    "must_not_include": [
+      "seamless"
+    ]
+  }
+}
