@@ -13,6 +13,7 @@ import { mount as admin_ai_element_modelsMount } from './admin_ai_element_models
 import { mount as admin_company_skillsMount } from './admin_company_skills';
 import { mount as admin_deck_betaMount } from './admin_deck_beta';
 import { mount as admin_deck_generationMount } from './admin_deck_generation';
+import { mount as admin_deck_gridMount } from './admin_deck_grid';
 import { mount as admin_deck_stage_normsMount } from './admin_deck_stage_norms';
 import { mount as admin_hq_skillsMount } from './admin_hq_skills';
 import { mount as admin_influencersMount } from './admin_influencers';
@@ -36,9 +37,11 @@ import { mount as deck_stage_normsMount } from './deck_stage_norms';
 import { mount as deck_update_reuseMount } from './deck_update_reuse';
 import { mount as influencerMount } from './influencer';
 import { mount as influencer_analyticsMount } from './influencer_analytics';
+import { mount as influencer_offersMount } from './influencer_offers';
 import { mount as influencer_payoutsMount } from './influencer_payouts';
 import { mount as learning_listsMount } from './learning_lists';
 import { mount as learning_streamMount } from './learning_stream';
+import { mount as public_handleMount } from './public_handle';
 import { mount as team_platform_statusMount } from './team_platform_status';
 import { mount as votesMount } from './votes';
 
@@ -51,6 +54,7 @@ export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'admin_company_skills', mount: admin_company_skillsMount },
   { file: 'admin_deck_beta', mount: admin_deck_betaMount },
   { file: 'admin_deck_generation', mount: admin_deck_generationMount },
+  { file: 'admin_deck_grid', mount: admin_deck_gridMount },
   { file: 'admin_deck_stage_norms', mount: admin_deck_stage_normsMount },
   { file: 'admin_hq_skills', mount: admin_hq_skillsMount },
   { file: 'admin_influencers', mount: admin_influencersMount },
@@ -74,9 +78,11 @@ export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'deck_update_reuse', mount: deck_update_reuseMount },
   { file: 'influencer', mount: influencerMount },
   { file: 'influencer_analytics', mount: influencer_analyticsMount },
+  { file: 'influencer_offers', mount: influencer_offersMount },
   { file: 'influencer_payouts', mount: influencer_payoutsMount },
   { file: 'learning_lists', mount: learning_listsMount },
   { file: 'learning_stream', mount: learning_streamMount },
+  { file: 'public_handle', mount: public_handleMount },
   { file: 'team_platform_status', mount: team_platform_statusMount },
   { file: 'votes', mount: votesMount },
 ];

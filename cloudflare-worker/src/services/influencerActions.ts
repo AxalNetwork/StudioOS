@@ -17,4 +17,7 @@ export const INFLUENCER_ACTIONS = {
   resumed: 'influencer.resumed',
   ended: 'influencer.ended',
   defaults: 'influencer.tier_defaults_updated',
+  // D4289 P2 (#4291).
+  takedown: 'influencer.handle_taken_down',
+  flag: 'influencer.referral_flag_decided',
 } as const;

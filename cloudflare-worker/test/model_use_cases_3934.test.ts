@@ -23,6 +23,7 @@ import { MODEL_CONNECTIONS } from '../src/services/ai/moduleConnections.ts';
 import { railOptionRows, railOptionsOn, railRows, resolveRail } from '../src/services/ai/railMatrix.ts';
 import { CANVAS_RAIL_KINDS, RAIL_KINDS, ROUTE } from '../src/services/aiRouter.ts';
 import { ELEMENT_GROUPS } from '../../frontend/src/pages/raise/pitch/deckV2Model.js';
+import { railOptionTextJob, textJob } from '../src/services/ai/textJobs.ts';
 
 const ids = (xs: readonly { id: string }[] | undefined) => (xs ?? []).map((m) => m.id);
 const short = (id: string) => id.split('/').pop();
@@ -70,7 +71,9 @@ test('the rail reads the table: one selector per kind for each page, at most 3 s
     if ((row as any).noModel || row.kind === 'image' || (row as any).handler === 'transcribe') continue;
     const ref = RAIL_KIND_JOBS[row.kind];
     assert.ok(ref, `${row.pageKey}: kind ${row.kind} reads a job`);
-    const job = jobStep(ref.id, ref.step)!;
+    // #4313 (D4313): an option whose job writes text reads that job; a page row, and any other option, its kind's.
+    const own = (row as any).optionKey ? railOptionTextJob(row.pageKey, (row as any).optionKey) : null;
+    const job = own ? textJob(own)! : jobStep(ref.id, ref.step)!;
     assert.ok(row.models.length >= 1 && row.models.length <= 3, row.pageKey);
     assert.deepEqual(row.models.map((m) => m.role), ['Default', 'Alternative', 'Deeper'].slice(0, row.models.length));
     assert.equal(row.models[0].id, job.default, `${row.pageKey}: the Default is ${job.id}'s`);
@@ -135,7 +138,8 @@ test('snapshot: Record a Session shows exactly turbo, nova-3 and whisper; its st
   assert.deepEqual([page.models.map((m) => `${m.role}:${short(m.id)}`), ids(page.more).map(short)], [['Default:whisper-large-v3-turbo', 'Alternative:nova-3'], ['whisper']]);
   const options = Object.fromEntries(railOptionsOn(page.pageKey).map((o) => [o.optionKey, [ids(o.models).map(short), ids(o.more).map(short)]]));
   for (const key of ['transcribe:interview', 'transcribe:session', 'transcribe:recording']) assert.deepEqual(options[key], [['whisper-large-v3-turbo', 'nova-3', 'whisper'], []]);
-  assert.deepEqual(options['structure:transcript'][0], ['llama-3.3-70b-instruct-fp8-fast', 'glm-4.7-flash', 'mistral-small-3.1-24b-instruct']);
+  // #4313: structuring runs VA5 (Structure, summarise and extract items), so it lists VA5's own three.
+  assert.deepEqual(options['structure:transcript'][0], ['llama-3.3-70b-instruct-fp8-fast', 'llama-3.1-8b-instruct-fp8-fast', 'mistral-small-3.1-24b-instruct']);
   assert.ok(![...Object.entries(options)].some(([k, [m, x]]) => k.startsWith('transcribe:') && [...m, ...x].some((id) => /llama|phonellm/.test(id!))), 'no text model under Listen');
 });
 
