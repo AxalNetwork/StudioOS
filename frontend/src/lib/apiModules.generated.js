@@ -104,6 +104,7 @@ export * from './api/deckGrants.js';
 export * from './api/deckGrid.js';
 export * from './api/deckImageEdits.js';
 export * from './api/deckImages.js';
+export * from './api/deckInstruct.js';
 export * from './api/deckInvestorLinks.js';
 export * from './api/deckJudge.js';
 export * from './api/deckLayouts.js';

@@ -235,3 +235,15 @@ d6f46b997d07d2fbd18d64c190b29b2437dc3d71:cloudflare-worker/test/admin_deck_beta_
 # own tokens and was never a credential. The next commit replaces it with 48
 # x's (no entropy), so no later commit carries it. Pin only the published finding.
 07050caffc38bcb858fa119db6faf9276d1e04fe:cloudflare-worker/test/segment_hints_3938.test.ts:generic-api-key:30
+# D4292 (#4292): four findings, one per line, in commit 2691f4fecc. The
+# generic rule read the four milestone-bonus trigger names in the terms
+# editor's FIRING_TRIGGERS list as secrets. They are the same enum names as the
+# Worker's FIRING_RULES, not credentials, and there is nothing to rotate.
+# Scoped to the exact fingerprints so nothing else in that commit is hidden.
+# The fifth entry is this comment's first wording, in commit b3d19c7c66, which
+# quoted one of those names and was read the same way.
+2691f4fecc089d1e6766ab49b0a7eeea8364af46:frontend/src/pages/admin/programs/referralPartnersModel.js:generic-api-key:299
+2691f4fecc089d1e6766ab49b0a7eeea8364af46:frontend/src/pages/admin/programs/referralPartnersModel.js:generic-api-key:300
+2691f4fecc089d1e6766ab49b0a7eeea8364af46:frontend/src/pages/admin/programs/referralPartnersModel.js:generic-api-key:301
+2691f4fecc089d1e6766ab49b0a7eeea8364af46:frontend/src/pages/admin/programs/referralPartnersModel.js:generic-api-key:302
+b3d19c7c669f45d69fe79a4f690b1e4c5bded6a8:.gitleaksignore:generic-api-key:234

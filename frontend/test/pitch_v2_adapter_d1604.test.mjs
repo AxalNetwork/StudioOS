@@ -34,6 +34,7 @@ import { deckCommentsApi } from '../src/lib/api/deckComments.js';
 import { deckBatchesApi, parseSse } from '../src/lib/api/deckBatches.js';
 import { deckCoeditApi } from '../src/lib/api/deckCoedit.js';
 import { deckVentureElementsApi } from '../src/lib/api/deckVentureElements.js';
+import { deckInstructApi } from '../src/lib/api/deckInstruct.js';
 import { deckNarrativeApi } from '../src/lib/api/deckNarrative.js';
 
 test('every adapter method answers unavailable, with the reason and the issue that brings its route', async () => {
@@ -283,10 +284,11 @@ test('the seam reaches no network, and no client method exists for a route that 
   assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_areas.ts')), /deckAreas\.post\(['"]\/:id\{\[0-9\]\+\}\/areas\/quote['"]/);
   assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_areas.ts')), /deckAreas\.post\(['"]\/:id\{\[0-9\]\+\}\/areas['"]/);
   assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckAreas\)/);
-  for (const path of ['/areas/instruct']) {
-    assert.ok(!new RegExp(`['"\`]/decks/[^'"\`\\n]*${path.replace(/[$/{]/g, (c) => `\\${c}`)}`).test(client), `a client path for ${path} before its route is on main`);
-  }
-  assert.ok(!readdirSync('frontend/src/lib/api').some((f) => /^deckInstruct\.js$/.test(f)));
+  // D1521 (#3773): an instruction on the selection has its quote and run routes and its client.
+  assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_instruct.ts')), /deckInstruct\.post\(['"]\/:id\{\[0-9\]\+\}\/areas\/instruct\/quote['"]/);
+  assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_instruct.ts')), /deckInstruct\.post\(['"]\/:id\{\[0-9\]\+\}\/areas\/instruct['"]/);
+  assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckInstruct\)/);
+  assert.match(client, /\/decks\/\$\{enc\(deckId\)\}\/areas\/instruct\/quote/);
 });
 
 test('an unavailable answer is never printed as a zero, "$0.00" or "none"', async () => {
@@ -467,6 +469,24 @@ test('D1502 (#3753): batch and cancelBatch answer through deckBatchesApi; the st
   assert.deepEqual(events, [{ event: 'snapshot', data: { state: 'running' } }, { event: 'step_done', data: { seq: 0 } }]);
   assert.equal(rest, 'event: area_busy\ndata: {"att');
   assert.deepEqual(parseSse('event: x\ndata: not json\n\n').events, [], 'a malformed event is skipped');
+});
+
+test('D1521 (#3773): instruct quotes the selection, runs it only when asked, and carries the quote and the key', async () => {
+  const real = { ...deckInstructApi };
+  const calls = [];
+  try {
+    deckInstructApi.quote = async (...a) => { calls.push(['quote', ...a]); return { class: 'areas', hold_microusd: 2400 }; };
+    deckInstructApi.run = async (...a) => { calls.push(['run', ...a]); return { batch_uid: 'b', replayed: false }; };
+    const q = await adapter.instruct({ deckId: 7, card: 0, areas: ['b1', 2], instruction: 'warmer' });
+    assert.deepEqual(q, { available: true, value: { class: 'areas', hold_microusd: 2400 } });
+    assert.deepEqual(calls[0], ['quote', 7, { card: 0, selection: [{ area_id: 'b1' }, { area_id: '2' }], instruction: 'warmer' }]);
+    await adapter.instruct({ deckId: 7, card: 0, areas: ['b1'], action: 'shorten', variants: 3, run: true, quoteUid: 'q1', idempotencyKey: 'k1' });
+    assert.deepEqual(calls[1], ['run', 7, { card: 0, selection: [{ area_id: 'b1' }], action: 'shorten', variants: 3, quote_uid: 'q1' }, 'k1']);
+    assert.equal(calls.length, 2, 'a quote never runs');
+    deckInstructApi.quote = async () => { throw Object.assign(new Error('Figures come from your records.'), { status: 422, code: 'names_figure' }); };
+    const refused = await adapter.instruct({ deckId: 7, card: 0, areas: ['b1'], instruction: 'say $2M' });
+    assert.deepEqual([refused.available, refused.unreadable, refused.code], [false, true, 'names_figure']);
+  } finally { Object.assign(deckInstructApi, real); }
 });
 
 test('D1516 (#3768): narrativeOutline reads the outline, builds only when asked, and carries the quote and the key', async () => {
