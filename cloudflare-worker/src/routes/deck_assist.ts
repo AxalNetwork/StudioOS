@@ -3,6 +3,7 @@
  *
  *   POST /api/decks/:id/cards/:card/assist/quote
  *        { project_id, action, block?, text?, tone?, language?, instruction?, source_keys? }
+ *        or { tool: 'preflight_fix', finding: { check, block, title? }, block, text } (D4210)
  *        → { action, option, ai: true, hold_microusd, model } | { action, option, ai: false, reason, message }
  *   POST /api/decks/:id/cards/:card/assist
  *        (the same body)
@@ -24,6 +25,9 @@
  *   · an instruction that states a figure: 422 `figure_in_prompt`;
  *   · a chart, table or timeline with nothing recorded to show: 422
  *     `nothing_recorded`.
+ *   · a `preflight_fix` (D4210) for a check other than overflow, density,
+ *     font or placeholder: 422 `fix_not_offered`. Its reply must be shorter
+ *     than the text and keep every figure the text had, or it is not proposed.
  * AFTER the run, a wording that names a number the founder's text did not is
  * not placed (422 `figure_in_output`, with what the run charged), and a chart
  * shows only the recorded sources the model named, each series a binding.
@@ -38,7 +42,8 @@ import { quoteRun, run, type RunOptions } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { parseJsonLoose } from '../services/decks/autofill';
 import {
-  ACTIONS, ASSIST_OPTIONS, ASSIST_PAGE, ASSIST_PROMPT_VERSION, CHART_ACTIONS, FIGURE_LINE, INSTRUCTION_MAX, LANGUAGES, TEXT_MAX, TONES,
+  ACTIONS, ASSIST_OPTIONS, ASSIST_PAGE, ASSIST_PROMPT_VERSION, CHART_ACTIONS, FIGURE_LINE, FINDING_TITLE_MAX, INSTRUCTION_MAX, LANGUAGES,
+  PREFLIGHT_FIX_CHECKS, TEXT_MAX, TONES, type PreflightFixCheck,
   chartBlock, chartMessage, chartable, textMessage, wordingOf, wordingProblem, type Action, type ChartAction, type TextAction,
 } from '../services/decks/assist';
 import { figureRefusal } from '../services/decks/newDeck';
@@ -60,7 +65,30 @@ type Press = {
   tone?: string; language?: string; instruction?: string; labels?: string[]; items: SourceItem[]; heading: string;
   /** D1519: the deck theme's voice (`theme.voice`), read from the saved version. */
   voice: string | null;
+  /** D4210: the preflight finding a `preflight_fix` press fixes. */
+  finding?: Finding;
 };
+
+type Finding = { check: PreflightFixCheck; block: string; title: string };
+
+/**
+ * D4210: the finding a `preflight_fix` press names, checked before anything
+ * runs, so a refusal costs nothing. Only a text check may be fixed
+ * (`PREFLIGHT_FIX_CHECKS`): `sources`, `contrast`, `image` and every other
+ * check are 422 `fix_not_offered`. The finding names one block, and it is the
+ * block the press sends.
+ */
+function findingOf(c: any, body: any): { finding: Finding } | { refused: Response } {
+  const f = body?.finding;
+  const check = typeof f?.check === 'string' ? f.check : '';
+  if (!(PREFLIGHT_FIX_CHECKS as readonly string[]).includes(check)) {
+    return { refused: refuse(c, 422, { code: 'fix_not_offered', message: 'Eadwyn suggests fixes for text that is too long, too dense, too small or a placeholder. Fix this one on the card. Nothing was run.', extra: { check: check || null } }) };
+  }
+  const block = typeof f?.block === 'string' ? f.block : '';
+  if (!block || block !== body?.block?.id) return { refused: c.json({ error: 'the finding names the block the press sends' }, 400) };
+  const title = typeof f?.title === 'string' ? f.title.replace(/\s+/g, ' ').trim().slice(0, FINDING_TITLE_MAX) : '';
+  return { finding: { check: check as PreflightFixCheck, block, title } };
+}
 
 /** The press a request asks for, checked, or the response that refuses it. */
 async function pressOf(c: any, user: User): Promise<{ press: Press } | { refused: Response }> {
@@ -71,7 +99,9 @@ async function pressOf(c: any, user: User): Promise<{ press: Press } | { refused
   // D1500: `:card` is the card's uid, or (an older editor) its place from 0.
   const byPlace = /^(0|[1-9][0-9]?)$/.test(cardParam);
   if (!byPlace && !/^[A-Za-z0-9_-]{1,40}$/.test(cardParam)) return { refused: c.json({ error: 'card must be a card of the deck' }, 400) };
-  const action = String(body?.action || '') as Action;
+  // D4210: the preflight panel names its tool; every other press names its action.
+  if (body?.tool !== undefined && body.tool !== 'preflight_fix') return { refused: c.json({ error: 'tool must be preflight_fix' }, 400) };
+  const action = (body?.tool === 'preflight_fix' ? 'preflight_fix' : String(body?.action || '')) as Action;
   if (!(ACTIONS as readonly string[]).includes(action)) return { refused: c.json({ error: `action must be one of ${ACTIONS.join(', ')}` }, 400) };
 
   let row: any;
@@ -81,6 +111,8 @@ async function pressOf(c: any, user: User): Promise<{ press: Press } | { refused
   try { project = await projectOwned(c, user, projectId, { write: true }); } catch (e: any) {
     return { refused: e?.message === 'NotFound' ? c.json({ error: 'not found' }, 404) : c.json({ error: 'forbidden' }, 403) };
   }
+  const fix = action === 'preflight_fix' ? findingOf(c, body) : null;
+  if (fix && 'refused' in fix) return fix;
   let savedCards: unknown[] = [];
   try { const parsed = JSON.parse(row.slides || '[]'); if (Array.isArray(parsed)) savedCards = parsed; } catch { savedCards = []; }
   // A uid the saved version does not hold yet (a card added since) keeps the place the editor sends.
@@ -110,6 +142,7 @@ async function pressOf(c: any, user: User): Promise<{ press: Press } | { refused
   const heading = typeof body?.heading === 'string' ? body.heading.trim().slice(0, 120) : '';
   const voice = typeof themeOfRow(row)?.voice === 'string' ? String(themeOfRow(row).voice) : null;
   const press: Press = { action, option: ASSIST_OPTIONS[action], deckId, card, card_uid: cardUid, projectId, text, items, heading, voice };
+  if (fix) press.finding = fix.finding;
   if (!isChart(action) && action !== 'headline') {
     if (!text) return { refused: c.json({ error: 'text required: select the words to change' }, 400) };
     if (text.length > TEXT_MAX) return { refused: c.json({ error: `the text is at most ${TEXT_MAX} characters` }, 400) };
@@ -146,7 +179,7 @@ async function pressOf(c: any, user: User): Promise<{ press: Press } | { refused
 function runOptions(c: any, user: User, p: Press): RunOptions {
   const msg = isChart(p.action)
     ? chartMessage(p.action, chartable(p.items), p.heading)
-    : textMessage(p.action as TextAction, p.text, { tone: p.tone, language: p.language, instruction: p.instruction, labels: p.labels, voice: p.voice });
+    : textMessage(p.action as TextAction, p.text, { tone: p.tone, language: p.language, instruction: p.instruction, labels: p.labels, voice: p.voice, check: p.finding?.check, finding: p.finding?.title });
   // The press names its own option: a header can name the page, never another option's price.
   const rail = { ...railFor(c, { page: ASSIST_PAGE, option: p.option }, `deck:${p.deckId}`), option: p.option };
   return {
@@ -207,7 +240,9 @@ deckAssist.post('/:id/cards/:card/assist', async (c) => {
     const problem = wordingProblem(p.action as TextAction, p.text, after);
     if (problem) return refuse(c, 422, { code: 'figure_in_output', message: `${problem} It was charged for the run.`, extra: { cost } });
     // #4188: what was asked rides along when the press carried it, so HQ's report queue reads it.
-    const asked = { ...(p.tone ? { tone: p.tone } : {}), ...(p.language ? { language: p.language } : {}), ...(p.instruction ? { instruction: p.instruction } : {}) };
+    const asked = { ...(p.tone ? { tone: p.tone } : {}), ...(p.language ? { language: p.language } : {}), ...(p.instruction ? { instruction: p.instruction } : {}),
+      // D4210: which finding the fix answers, by check and block; never its words.
+      ...(p.finding ? { finding: { check: p.finding.check, block: p.finding.block } } : {}) };
     payload = { deck_id: p.deckId, card: p.card, card_uid: p.card_uid, action: p.action, ...asked, before: p.text, after };
     answer = { before: p.text, after };
   }

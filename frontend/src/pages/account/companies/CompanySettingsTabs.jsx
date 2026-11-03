@@ -3,15 +3,15 @@ import { Link, NavLink, useParams } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { teamsApi } from '../../../lib/api/teams';
 import { companyActionsApi } from '../../../lib/api/companyActions.js';
-import { companyProjectTeamPath, scopeFor, usePublishScope } from '../../../lib/settingsScope.js';
+import { companyProjectTeamPath, companyTeamPath, scopeFor, usePublishScope } from '../../../lib/settingsScope.js';
 import { ActionDialog } from './LifecycleDialogs.jsx';
 import { moveOutCopy } from '../../team/teamModel.js';
 import { BTN_DANGER, BTN_SECONDARY, BTN_TEXT } from '../../team/teamUi.jsx';
 import * as portfolio from './portfolioAdapter.js';
 import {
-  BASE_PATH, companyLegalPath, companyPathFor, companyProjectsPath, companySettingsPathFor, legalFacts, stageWord, unreadFact, valueFact,
+  BASE_PATH, companyLegalPath, companyProjectsPath, companySettingsPathFor, legalFacts, stageWord, valueFact,
 } from './companiesModel';
-import { CompanyMark, EYEBROW, Fact, FactList, Failed, INK, LINK, MUTED, PCard, ProjectMark, Reading, SlugChip } from './portfolioUi.jsx';
+import { CompanyMark, EYEBROW, Fact, FactList, Failed, INK, LINK, MUTED, PCard, ProjectMark, Reading } from './portfolioUi.jsx';
 import LegalSheet from './LegalSheet.jsx';
 import ComplianceCard from '../../work/ComplianceCard.jsx';
 
@@ -19,15 +19,15 @@ import ComplianceCard from '../../work/ComplianceCard.jsx';
  * D1413 (#3696, PF6a, PF6c, PF8a) — Company settings, by tab, under
  * `/account/portfolio/<uid>/settings`:
  *
- *   General   `…/settings`           the company's display facts and the
- *                                    full editor (`CompanySettingsAt`, D1140)
+ *   General   `…/settings`           one form (`CompanyGeneralForm`, D4152)
  *   Legal     `…/settings/legal`     the legal facts (D1415, D1593) and
  *                                    "Edit legal facts" (`LegalSheet`)
  *   Projects  `…/settings/projects[/<id>]`  each project's settings inside the
  *                                    company: name, address, stage, Team,
  *                                    Agents, and "Move out of the company"
  *
- * Billing is not a tab: it is per account, linked under the sidebar's block.
+ * Billing is not a tab: it is per account, in the Account menu (D4152). Team is
+ * the first tab and opens the company's Team page (D1497).
  * A standalone project has no Legal anywhere: its settings are Project
  * settings › General (`/projects/<id>/settings`, Team's D1497).
  *
@@ -50,52 +50,30 @@ function useBlock(load, tick) {
   return s;
 }
 
-/** The settings page's head and its two tabs (no tabs under Projects, PF6c). */
-export function SettingsHead({ uid, name, path, tab }) {
-  const tabCls = ({ isActive }) => `border-b-2 px-1 pb-2 text-[13.5px] font-semibold ${isActive ? 'border-axal-violet text-axal-ink dark:border-violet-400 dark:text-gray-100' : 'border-transparent text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`;
+/**
+ * D4152 (#4152 §4, ST2) — the settings page's one header: the company's mark,
+ * its name and a small "Settings" eyebrow, and the four tabs every tab shows,
+ * Team · General · Legal · Projects. No ID, no internal path, no banner.
+ * Team opens the company's Team page (D1497); the other three are this page.
+ */
+export function SettingsHead({ uid, name, tab }) {
+  const tabCls = ({ isActive }) => `whitespace-nowrap border-b-2 px-1 pb-2 text-[13.5px] font-semibold ${isActive ? 'border-axal-violet text-axal-ink dark:border-violet-400 dark:text-gray-100' : 'border-transparent text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`;
   return (
     <header className="flex flex-col gap-3" data-testid="company-settings-head">
-      <Link to={companyPathFor(uid)} className={`w-fit ${LINK}`}>‹ {name || 'The company'}</Link>
-      <span className={EYEBROW}>{tab === 'projects' ? 'Company settings › Projects' : 'Company settings'}</span>
       <span className="flex flex-wrap items-center gap-3">
         <CompanyMark name={name} size={36} />
-        <h1 className={`m-0 text-[24px] font-extrabold tracking-[-.02em] ${INK}`}>{name || 'Company settings'}</h1>
-        <SlugChip path={path} />
+        <span className="flex min-w-0 flex-col">
+          <span className={EYEBROW}>Settings</span>
+          <h1 className={`m-0 text-[24px] font-extrabold tracking-[-.02em] ${INK}`}>{name || 'Company settings'}</h1>
+        </span>
       </span>
-      {tab !== 'projects' ? (
-        <nav role="tablist" aria-label="Company settings" className="flex gap-5 border-b border-axal-hairline dark:border-gray-700" data-testid="company-settings-tabs">
-          <NavLink end to={companySettingsPathFor(uid)} role="tab" aria-selected={tab === 'general'} className={tabCls}>General</NavLink>
-          <NavLink end to={companyLegalPath(uid)} role="tab" aria-selected={tab === 'legal'} className={tabCls}>Legal</NavLink>
-        </nav>
-      ) : null}
+      <nav role="tablist" aria-label="Company settings" className="flex gap-5 overflow-x-auto border-b border-axal-hairline dark:border-gray-700" data-testid="company-settings-tabs">
+        <NavLink end to={companyTeamPath(uid)} role="tab" aria-selected={tab === 'team'} className={tabCls}>Team</NavLink>
+        <NavLink end to={companySettingsPathFor(uid)} role="tab" aria-selected={tab === 'general'} className={tabCls}>General</NavLink>
+        <NavLink end to={companyLegalPath(uid)} role="tab" aria-selected={tab === 'legal'} className={tabCls}>Legal</NavLink>
+        <NavLink to={companyProjectsPath(uid)} role="tab" aria-selected={tab === 'projects'} className={() => tabCls({ isActive: tab === 'projects' })}>Projects</NavLink>
+      </nav>
     </header>
-  );
-}
-
-/** PF6a's General card: display name, address, website, logo and default currency (#3932). */
-export function GeneralCard({ uid, detail, path, pathRead = true, status = null, onRetry = null }) {
-  const [currency, setCurrency] = useState(null);
-  useEffect(() => {
-    let alive = true;
-    portfolio.defaultCurrency(uid).then((out) => { if (alive) setCurrency(out); });
-    return () => { alive = false; };
-  }, [uid]);
-  return (
-    <PCard title="General" testId="company-general">
-      {status === 'error' || status === 'notFound' ? <Failed what="The company’s details" onRetry={onRetry} testId="company-general-unread" />
-        : !detail ? <Reading lines={3} /> : (
-        <FactList testId="company-general-facts" rows={[
-          ['Display name', <Fact key="n" fact={valueFact(detail.company_name)} />],
-          ['Address', <Fact key="s" fact={pathRead ? valueFact(path) : unreadFact('The address')} mono />],
-          ['Website', <Fact key="w" fact={valueFact(detail.website)} />],
-          ['Logo', <Fact key="l" fact={valueFact(detail.logo_url ? 'Recorded' : null)} />],
-          ['Default currency', currency == null ? <span key="c" className={MUTED}>Reading…</span>
-            : currency.available ? <Fact key="c" fact={valueFact(currency.value)} />
-              : <span key="c" className={MUTED} data-testid="company-currency-later">{currency.reason}</span>],
-        ]} />
-      )}
-      <p className={`m-0 mt-3 ${MUTED}`}>A company is a legal entity and governs every project under it. Billing is in Account › Billing.</p>
-    </PCard>
   );
 }
 
@@ -222,11 +200,9 @@ function ProjectsTab({ uid, name, projectId }) {
 export default function CompanySettingsTabs({ tab }) {
   const { uid, id } = useParams();
   const load = useCallback(() => portfolio.through(() => teamsApi.getCompany(uid)), [uid]);
-  const loadLegal = useCallback(() => portfolio.legal(uid), [uid]);
   const [tick, setTick] = useState(0);
   const reread = useCallback(() => setTick((n) => n + 1), []);
   const detail = useBlock(load, tick);
-  const legal = useBlock(loadLegal, tick);
   const name = String(detail.value?.company_name || '').trim();
   usePublishScope(detail.status === 'ready' ? scopeFor({ company: { uid, name } }) : null);
   if (detail.status === 'notFound') {
@@ -239,7 +215,7 @@ export default function CompanySettingsTabs({ tab }) {
   }
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-4 px-4 pb-8 pt-6 md:px-7" data-testid={`company-settings-${tab}`}>
-      <SettingsHead uid={uid} name={name} path={legal.value?.path || null} tab={tab} />
+      <SettingsHead uid={uid} name={name} tab={tab} />
       {detail.status === 'error' ? <Failed what="This company" onRetry={reread} testId="company-settings-unread" /> : null}
       {/* D1614 (#3976): the company's compliance tasks sit under Legal, a block that fails alone. */}
       {tab === 'legal' ? <><LegalTab uid={uid} name={name} /><ComplianceCard uid={uid} /></> : null}

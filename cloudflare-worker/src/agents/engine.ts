@@ -19,6 +19,7 @@
  * that cannot be read is `{ available: false }`, never 0.
  */
 import type { Env } from '../types';
+import { PLATFORM_PAUSED_MESSAGE, platformPaused } from '../services/agents/aiPolicy';
 import { notify } from '../services/notify';
 import { chargedFor } from '../services/agents/agentRun';
 import { depsOf, isReady, taskEvent, type TaskRow } from '../services/agents/tasks';
@@ -36,8 +37,8 @@ export const OPEN_STATUSES = ['admitted', 'running', 'waiting_decision'] as cons
 /** The reasons a run ends without a proposal that do not count toward the daily limit. */
 const UNCOUNTED = ['refused', 'cancelled', 'halted', 'scope_moved'] as const;
 
-/** #3727's `paused_reason` vocabulary with D1528's four added. 712 holds no CHECK, so none needs a migration. */
-export const PAUSE_REASONS = ['cap', 'sponsor_left', 'tool_disconnected', 'spend_limit', 'ai_paused', 'daily_limit', 'scope_archived'] as const;
+/** #3727's `paused_reason` vocabulary with D1528's four and D4158's `persona_retired` (HQ retired the persona) added. 712 holds no CHECK, so none needs a migration. */
+export const PAUSE_REASONS = ['cap', 'sponsor_left', 'tool_disconnected', 'spend_limit', 'ai_paused', 'daily_limit', 'scope_archived', 'persona_retired'] as const;
 export type PauseReason = (typeof PAUSE_REASONS)[number];
 
 export type RunRow = {
@@ -105,6 +106,8 @@ const inScope = (a: AgentRow, s: ScopeRef) =>
 
 /** The engine and the halt, as admission reads them. */
 export async function engineRefusal(env: Env, by: number | null): Promise<Refusal | null> {
+  // D4162 (#4162): HQ's kill switch first, on every admission path of both runtimes; an unreadable policy counts as on.
+  if (await platformPaused(env)) return no(403, 'platform_paused', PLATFORM_PAUSED_MESSAGE);
   const mode = await engineMode(env);
   const paused = no(403, 'engine_paused', 'Agents are paused on the platform. You can still run them yourself.');
   if (mode === 'off' || mode === 'paused' || await haltedAll(env)) return paused;
@@ -324,6 +327,7 @@ const PAUSE_WORDS: Record<PauseReason, string> = {
   ai_paused: 'AI is paused for its sponsor',
   daily_limit: `it ran ${DAILY_LIMIT} times today`,
   scope_archived: 'its team was archived',
+  persona_retired: 'Axal VC HQ retired it',
 };
 
 /** Pause an active agent with a reason, and tell the team once per agent, reason and UTC day. */

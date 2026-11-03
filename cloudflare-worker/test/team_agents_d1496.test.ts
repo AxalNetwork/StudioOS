@@ -924,3 +924,51 @@ test('disconnect: a granted server that is down or whose schema changed pauses t
     assert.equal((await call(w, EDITOR, 'GET', `/agents/${uid}`)).body.agent.paused_reason, 'tool_disconnected');
   } finally { w.db.close(); }
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// D4162 (#4162, H4 of #4137): HQ's AI policy on an agent's run and on its cap.
+// ═════════════════════════════════════════════════════════════════════════════
+
+test('D4162: the kill switch, a locked model and the per-run ceiling each refuse the run before anything is held or charged; a cap over the platform maximum is refused', async () => {
+  // Mutations checked: the pause check removed from agentRun → platform_paused never answers; the ceiling compared with >= 0 → a
+  // ceiling run is admitted; capOverPlatform removed from POST → the over-max agent is created.
+  const w = runWorld();
+  try {
+    w.db.exec(sql('migrations/202611022046_ai_admin_audit.sql') + sql('migrations/202611022114_ai_agent_policy.sql'));
+    const uid = await addCfo(w);
+    const agent = () => agentRow(w, uid);
+    const step = { module: 'use-of-funds', option: 'draft:raise/use-of-funds-runway', prompt: 'How long is our cash horizon?' };
+    const calls = () => w.calls.filter((m) => m !== '@cf/meta/llama-guard-3-8b').length;
+    const holds = () => (w.db.prepare('SELECT COUNT(*) AS n FROM ai_budget_reservations').get() as any).n;
+    const runs = () => (w.db.prepare("SELECT COUNT(*) AS n FROM ai_usage_logs WHERE task = 'rail_numbers'").get() as any).n;
+    const nothing = (why: string) => assert.deepEqual([calls(), holds(), runs()], [0, 0, 0], `${why}: nothing ran, was held or charged`);
+
+    w.db.exec("UPDATE ai_agent_policy SET paused = 1, paused_at = datetime('now'), paused_by = 1, paused_reason = 'Provider incident' WHERE id = 1");
+    const paused = await agentRun(w.env, { agent: agent(), ...step });
+    assert.deepEqual([paused.ok, (paused as any).status, (paused as any).code], [false, 403, 'platform_paused']);
+    nothing('paused');
+    w.db.exec('UPDATE ai_agent_policy SET paused = 0, paused_at = NULL, paused_by = NULL, paused_reason = NULL WHERE id = 1');
+
+    w.db.exec('UPDATE ai_agent_policy SET per_run_ceiling_microusd = 1 WHERE id = 1');
+    const ceiling = await agentRun(w.env, { agent: agent(), ...step });
+    assert.deepEqual([(ceiling as any).status, (ceiling as any).code], [402, 'run_ceiling'], JSON.stringify(ceiling));
+    nothing('over the ceiling');
+    w.db.exec('UPDATE ai_agent_policy SET per_run_ceiling_microusd = NULL WHERE id = 1');
+
+    w.db.prepare('INSERT INTO ai_model_locks (model, reason, locked_by) VALUES (?, ?, 1)').run(RUN_MODEL, 'Pricing changed');
+    const locked = await agentRun(w.env, { agent: agent(), ...step });
+    assert.deepEqual([(locked as any).status, (locked as any).code], [403, 'model_locked'], 'no area default to fail over to');
+    nothing('a locked model');
+    w.db.exec('DELETE FROM ai_model_locks');
+
+    const ok = await agentRun(w.env, { agent: agent(), ...step });
+    assert.equal(ok.ok, true, `with nothing set the run goes ahead: ${JSON.stringify(ok)}`);
+
+    w.db.exec('UPDATE ai_agent_policy SET max_team_cap_microusd = 1000000 WHERE id = 1');
+    const over = await call(w, EDITOR, 'POST', `${CO}/agents`, cfo({ role_key: 'cmo', model_id: RUN_MODEL, monthly_cap_microusd: 2_000_000 }));
+    assert.deepEqual([over.status, over.body.error], [422, 'cap_over_platform_max'], over.text);
+    const raise = await call(w, EDITOR, 'PATCH', `/agents/${uid}`, { monthly_cap_microusd: 3_000_000 });
+    assert.deepEqual([raise.status, raise.body.error], [422, 'cap_over_platform_max'], raise.text);
+    assert.equal((await call(w, EDITOR, 'PATCH', `/agents/${uid}`, { monthly_cap_microusd: 900_000 })).status, 200, 'a cap within the maximum is set');
+  } finally { w.db.close(); }
+});

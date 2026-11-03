@@ -1,0 +1,32 @@
+{
+  "skill": "brand-identity-brief",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "company.profile": {
+        "name": "Brightsmile Health",
+        "brand": {
+          "logo": true
+        }
+      },
+      "project.summary": {
+        "audience": "Independent dental clinics",
+        "positioning": "Bookings that never double up"
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Independent dental clinics",
+      "Bookings that never double up"
+    ],
+    "must_say_not_recorded": [
+      "typeface"
+    ],
+    "must_not_include": [
+      "award-winning"
+    ]
+  }
+}

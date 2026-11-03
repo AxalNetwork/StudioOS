@@ -22,7 +22,6 @@ import { aiBudgetFixture, setFixtureAllowance } from './_ai_budget_fixture.mjs';
 import { withGuard } from './_guard_stub.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { ROUTE, ASSIST_OFF_MESSAGE, budgetRefusalMessage, __resetForTest } from '../src/services/aiRouter.ts';
-import { resolveRail, resolveRailOption } from '../src/services/ai/railMatrix.ts';
 import legalcap from '../src/routes/legalcap.ts';
 import pipeline from '../src/routes/pipeline.ts';
 import networkfx from '../src/routes/networkfx.ts';
@@ -76,33 +75,56 @@ async function call(w: any, method: string, path: string, body?: unknown, header
 const rows = (w: any) => w.f.db.prepare('SELECT user_id, task, surface, rail_page, rail_option, record_ref, charged_microusd FROM ai_usage_logs WHERE guard_for IS NULL ORDER BY id').all().map((r: any) => ({ ...r }));
 const modelCalls = (ai: any) => ai.calls;
 
+/** Two members on the marketplace, so a match has something to rank. */
+function profiles(w: any) {
+  // The marketplace's own table (networkfx's ensureSchema makes the same) and two members on it.
+  w.f.db.exec(`CREATE TABLE IF NOT EXISTS marketplace_profiles (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL UNIQUE, title TEXT, bio TEXT,
+    skills TEXT, hourly_rate_cents INTEGER, availability TEXT DEFAULT 'available', rating REAL DEFAULT 0, review_count INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
+  for (const [id, name, title, skills] of [[31, 'Lena Ops', 'Logistics operator', '["fleet","routing"]'], [32, 'Dev Design', 'Brand designer', '["brand"]']] as const) {
+    w.f.db.prepare("INSERT OR IGNORE INTO users (id, email, name, role) VALUES (?, ?, ?, 'partner')").run(id, `m${id}@example.test`, name);
+    w.f.db.prepare('INSERT INTO marketplace_profiles (user_id, title, skills, rating) VALUES (?, ?, ?, 4)').run(id, title, skills);
+  }
+}
+const embedReply = { data: [Array(1024).fill(0.01)] };
+
 // 1 ───────────────────────────────────────────────────────────────────────────
-test('marketplace match: the member\'s run on rail_match, with the browser\'s page and its option, charged to the member', async () => {
+test('marketplace match (#3938 NE1): retrieve, rank, then one line each — every run the member\'s, on rail_match\'s page and option', async () => {
   // Mutations checked: userId 0 passed (a system run); the rail dropped; the surface dropped; the guard handed the profiles.
-  const ai = makeAI(() => reply('{"recommendations":[]}'));
+  const ai = makeAI((model) => {
+    if (model === '@cf/baai/bge-reranker-base') return { response: [{ id: 0, score: 0.9 }, { id: 1, score: 0.2 }] };
+    if (model.includes('bge')) return embedReply;
+    return reply('1. Runs fleets and routing, which a logistics need asks for.\n2. A brand designer.');
+  });
   const w = world(ai);
+  profiles(w);
   const r = await call(w, 'POST', '/api/networkfx/marketplace/match', { need: 'A logistics operator' }, { 'X-Rail-Page': encodeURIComponent('Founder · Network') });
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  // #3934: the page's row (the option has none of its own, as in chooseModels) runs its job's Default (the use-case table), not the route's own default.
-  const matchRow = resolveRailOption('Founder · Network', 'match:marketplace') ?? resolveRail('Founder · Network');
-  assert.ok(matchRow?.models[0]?.id, 'the page has a row with a Default');
-  assert.deepEqual(modelCalls(ai).map((c: any) => c.model), [matchRow!.models[0].id]);
-  const [row] = rows(w);
-  assert.equal(row.user_id, MEMBER);
-  assert.equal(row.task, 'rail_match');
-  assert.equal(row.surface, '/network-effects');
-  assert.deepEqual([row.rail_page, row.rail_option, row.record_ref], ['Founder · Network', 'match:marketplace', null]);
-  assert.ok(row.charged_microusd > 0, 'the member who pressed was charged');
+  // The plan's NE1 steps: bge-m3 for the need and each profile, the reranker, then the job's write model.
+  const models = modelCalls(ai).map((c: any) => c.model);
+  assert.deepEqual(models.slice(0, 3), ['@cf/baai/bge-m3', '@cf/baai/bge-m3', '@cf/baai/bge-m3']);
+  assert.equal(models[3], '@cf/baai/bge-reranker-base');
+  assert.equal(models.length, 5, 'one write after the rank');
+  assert.deepEqual(r.body.steps, { retrieved: true, ranked: true, written: true });
+  assert.equal(r.body.recommendations[0].reason, 'Runs fleets and routing, which a logistics need asks for.');
+  assert.ok(!JSON.stringify(r.body).includes('@example.test'), 'a person is named, never emailed');
+  for (const row of rows(w)) {
+    assert.equal(row.user_id, MEMBER);
+    assert.equal(row.surface, '/network-effects');
+    assert.deepEqual([row.rail_page, row.rail_option, row.record_ref], ['Founder · Network', 'match:marketplace', null]);
+  }
+  assert.ok(rows(w).some((row: any) => row.charged_microusd > 0), 'the member who pressed was charged');
   const { guarded } = w;
   assert.ok(guarded.some((p: string) => p.includes('A logistics operator')), 'the guard read the need');
-  assert.ok(!guarded.some((p: string) => p.includes('Available profiles')), 'and not the other members\' profiles');
+  assert.ok(!guarded.some((p: string) => p.includes('Brand designer')), 'and not the other members\' profiles');
 });
 
 // 2 ───────────────────────────────────────────────────────────────────────────
 test('the switch: a page turned off answers 403 in its words, with no model called and nothing held', async () => {
-  // Mutations checked: refuseRun answering assist_off as a fallback; the route ignoring `refused`.
+  // Mutations checked: refuseRun answering assist_off as a fallback; the route ignoring `refused` (MatchRefused).
   const ai = makeAI(() => reply('x'));
   const w = world(ai);
+  profiles(w);
   w.f.db.prepare("INSERT INTO ai_rail_preferences(uid,user_id,section,task,mode) VALUES('off',?,'network-effects','','manual')").run(MEMBER);
   const r = await call(w, 'POST', '/api/networkfx/marketplace/match', { need: 'A designer' });
   assert.equal(r.status, 403);

@@ -32,7 +32,7 @@ import type { Env } from '../types';
 import { branchOf } from '../util/branch';
 import * as aiBudget from './aiBudget';
 import { spendLimitMessage } from './aiSpendLimit';
-import { audioInputFor, parseAudioOutput, type SttTranscript } from './sttFormats';
+import { audioInputFor, mipOptOut, mipPriceFactor, parseAudioOutput, type SttTranscript } from './sttFormats';
 import * as shapes from './ai/shapes';
 import * as catalogue from './ai/catalogue';
 import { termsCleared } from './ai/modelTerms';
@@ -1202,6 +1202,8 @@ async function setKillSwitch(store: MinimalKV, ttlSec: number): Promise<void> {
 // ---------------------------------------------------------------------------
 export function estimateCostUsd(
   model: string, promptTok: number, completionTok: number, audioMinutes = 0, cachedTok = 0, characters = 0, image: shapes.Units = {},
+  /** #3936 part 3: the factor on a per-minute price (`mipPriceFactor`: Deepgram's opt-out rate, or 1). */
+  minuteFactor = 1,
 ): number {
   if (model === '@cf/microsoft/resnet-50') return costMicro(model, { images: image.images ?? 0 }) / 1_000_000;
   // D761 PR 4: an image model is priced on its image units, at the catalogue's figure.
@@ -1215,7 +1217,7 @@ export function estimateCostUsd(
   // Audio first: a model priced by the minute has no token rate, and asking
   // the token table for one would answer 0.
   const perMinute = PRICE_USD_PER_AUDIO_MINUTE[model];
-  if (perMinute != null) return Math.max(0, audioMinutes) * perMinute;
+  if (perMinute != null) return Math.max(0, audioMinutes) * perMinute * minuteFactor;
   const p = PRICE_USD_PER_1M_TOKENS[model];
   // D760: there is no zero path. `run()` refuses a model with no row before it
   // is called (`model_unpriced`), so arriving here without one is a coding
@@ -1326,7 +1328,7 @@ async function ensureLogSchema(env: Env): Promise<void> {
   if (LOG_SCHEMA_READY.get(env.DB as unknown as object)) return;
   try {
     await env.DB.exec(
-      "CREATE TABLE IF NOT EXISTS ai_usage_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, task TEXT NOT NULL, model TEXT NOT NULL, latency_ms INTEGER NOT NULL DEFAULT 0, prompt_tokens INTEGER NOT NULL DEFAULT 0, completion_tokens INTEGER NOT NULL DEFAULT 0, est_cost_usd REAL NOT NULL DEFAULT 0, safety_score REAL, fallback_used INTEGER NOT NULL DEFAULT 0, cached INTEGER NOT NULL DEFAULT 0, refusal TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), surface TEXT, charged_microusd INTEGER CHECK (charged_microusd IS NULL OR charged_microusd >= 0), reservation_uid TEXT, rail_page TEXT, rail_option TEXT, record_ref TEXT, guard_for INTEGER, units_json TEXT, agent_id INTEGER)",
+      "CREATE TABLE IF NOT EXISTS ai_usage_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, task TEXT NOT NULL, model TEXT NOT NULL, latency_ms INTEGER NOT NULL DEFAULT 0, prompt_tokens INTEGER NOT NULL DEFAULT 0, completion_tokens INTEGER NOT NULL DEFAULT 0, est_cost_usd REAL NOT NULL DEFAULT 0, safety_score REAL, fallback_used INTEGER NOT NULL DEFAULT 0, cached INTEGER NOT NULL DEFAULT 0, refusal TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), surface TEXT, charged_microusd INTEGER CHECK (charged_microusd IS NULL OR charged_microusd >= 0), reservation_uid TEXT, rail_page TEXT, rail_option TEXT, record_ref TEXT, guard_for INTEGER, units_json TEXT, agent_id INTEGER, skill_id INTEGER, skill_version INTEGER)",
     );
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_ai_usage_user_created ON ai_usage_logs(user_id, created_at DESC)");
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_ai_usage_task_created ON ai_usage_logs(task, created_at DESC)");
@@ -1351,6 +1353,9 @@ async function addLogColumns493(env: Env): Promise<void> {
   }
   // Migration 712's column (D1496 part 2): the agent a run was for.
   if (!have.has('agent_id')) await env.DB.exec('ALTER TABLE ai_usage_logs ADD COLUMN agent_id INTEGER');
+  // D1612 part D (#3954), migration 202611022313: the skill and pinned version an agent's run used (`skillEval.tagUsage`).
+  if (!have.has('skill_id')) await env.DB.exec('ALTER TABLE ai_usage_logs ADD COLUMN skill_id INTEGER');
+  if (!have.has('skill_version')) await env.DB.exec('ALTER TABLE ai_usage_logs ADD COLUMN skill_version INTEGER');
   await env.DB.exec(LOG_PAGE_INDEX_493);
 }
 
@@ -1588,7 +1593,8 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
       // See `MAX_RECORDING_BYTES` in `routes/founder_validate.ts`.
       const bytes = opts.audio;
       if (!bytes || !bytes.byteLength) return { ok: false, status: 400, error: 'no audio' };
-      const out = await ai.run(model, audioInputFor(model, bytes, opts.audioMime || '', opts.language ?? null), runOpt);
+      // #3936 part 3: interview, meeting and data-room audio opts out of Deepgram's program.
+      const out = await ai.run(model, audioInputFor(model, bytes, opts.audioMime || '', opts.language ?? null, mipOptOut(model, normaliseSurface(opts.surface))), runOpt);
       // Silence and non-speech transcribe to an empty string. That is an
       // answer, not a failure: the clip contained no words, and reporting it
       // as an error would have the caller retry and pay again.
@@ -2004,12 +2010,15 @@ async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Prom
 
   // ---- #3937 (D1478 task 3, part 2): a text job's model ----------------------
   // A text run that names its job (or whose task `TASK_TEXT_JOBS` maps, when no
-  // model is named): the job's ladder, each model offered, unlocked and able to
+  // model is named and no page row decides): the job's ladder, each model offered, unlocked and able to
   // hold the input. A rail pick the job lists is honoured; a named model the job
   // does not list is refused. Too long for every model: refused, naming the
   // longest-window one, before anything is held.
   const textShaped = !route.isAudio && !route.isEmbed && !opts.rerank && !opts.translate && !opts.speak && !opts.draw && !opts.specialist && !(opts.images?.length);
-  const textJobId = opts.textJob ?? (!opts.model ? TASK_TEXT_JOBS[opts.task] : undefined);
+  // #3937 part 3: a task's own job (`TASK_TEXT_JOBS`) yields to a rail run's page row: a press on a page
+  // the matrix lists runs that page's models (D764), as before. A job the caller names always applies.
+  const pageRowed = !!opts.rail && !!(resolveRailOption(opts.rail.page, opts.rail.option ?? null) ?? resolveRail(opts.rail.page));
+  const textJobId = opts.textJob ?? (!opts.model && !pageRowed ? TASK_TEXT_JOBS[opts.task] : undefined);
   if (textJobId && textShaped) {
     let pick: string | null = null;
     let tier: PlanTier;
@@ -2124,7 +2133,8 @@ function holdQuoteMicro(opts: RunOptions, route: RouteEntry, models: string[], g
     const req = opts.draw ? shapes.drawRequest(model, opts.text ?? '', opts.draw) : null;
     return req ? shapes.imageUnits(model, req.sent.width, req.sent.height, req.sent.steps, req.sent.references) : {};
   };
-  const quote = Math.max(...models.map((model) => estimateCostUsd(model, promptBound, outputBound, quoteMinutes, 0, quoteChars, quoteImage(model))));
+  const surfaceKey = normaliseSurface(opts.surface);
+  const quote = Math.max(...models.map((model) => estimateCostUsd(model, promptBound, outputBound, quoteMinutes, 0, quoteChars, quoteImage(model), mipPriceFactor(model, surfaceKey))));
   // D763: the guard is held inside this hold, never in one of its own: every
   // input slice, and every output slice the run's maximum output allows.
   const outputChars = !guardOn || route.isEmbed || opts.speak || opts.draw ? 0
@@ -2609,7 +2619,7 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
     latency_ms: Date.now() - startedAt,
     prompt_tokens: promptTok,
     completion_tokens: completionTok,
-    est_cost_usd: estimateCostUsd(modelUsed, promptTok, completionTok, audioMinutes || attempt.units?.audio_minutes || 0, attempt.units?.tokens_cached ?? 0, attempt.units?.characters ?? 0, attempt.units ?? {}),
+    est_cost_usd: estimateCostUsd(modelUsed, promptTok, completionTok, audioMinutes || attempt.units?.audio_minutes || 0, attempt.units?.tokens_cached ?? 0, attempt.units?.characters ?? 0, attempt.units ?? {}, mipPriceFactor(modelUsed, normaliseSurface(opts.surface))),
     fallback_used: fallbackUsed,
     cached: false,
     safety_score: safetyScore,

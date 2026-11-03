@@ -90,8 +90,9 @@ test('Keep places a content image as a block, a card background on the card, the
 
 test('a placed image draws with its fit, its crop and its alt text, everywhere BlockView draws', () => {
   const html = renderToStaticMarkup(h(BlockView, { block: { kind: 'image', image_url: IMAGE.url, alt: 'A tidy desk', fit: 'contain', crop: { x: 20, y: 80 } }, colours: {}, live: true, size: 'print' }));
-  assert.match(html, /alt="A tidy desk"/); assert.match(html, /object-contain/); assert.match(html, /object-position:20% 80%/);
-  assert.match(renderToStaticMarkup(h(BlockView, { block: { kind: 'image', image_url: IMAGE.url }, colours: {} })), /object-cover.*object-position:50% 50%/);
+  // D1534 (#3778): the fit and focus are the image's style (`imageLook.js`), the one rule every renderer reads.
+  assert.match(html, /alt="A tidy desk"/); assert.match(html, /object-fit:contain/); assert.match(html, /object-position:20% 80%/);
+  assert.match(renderToStaticMarkup(h(BlockView, { block: { kind: 'image', image_url: IMAGE.url }, colours: {} })), /object-fit:cover;object-position:50% 50%/);
 });
 
 // ── Mounted ─────────────────────────────────────────────────────────────────
@@ -194,9 +195,14 @@ test('an upload showing a person waits until their agreement is ticked', async (
     assert.equal(m.pr(m.by('pitch-image-upload-run')).disabled, true, 'no agreement, no upload');
     await act(async () => { m.pr(m.by('pitch-image-consent')).onChange({ target: { checked: true } }); });
     await m.settle();
+    // D1534 (#3778): pd27, no alt text, no upload.
+    assert.equal(m.pr(m.by('pitch-image-upload-run')).disabled, true, 'no alt text, no upload');
+    assert.ok(m.by('pitch-image-alt-needed'));
+    await act(async () => { m.pr(m.by('pitch-image-upload-alt')).onChange({ target: { value: 'The founding team' } }); });
+    await m.settle();
     await m.press(m.by('pitch-image-upload-run'));
     const up = m.calls.find((c) => c[0] === 'upload');
-    assert.deepEqual(up[3], { use: 'content', card: 3, alt: '', shows_person: true, consent: true });
+    assert.deepEqual(up[3], { use: 'content', card: 3, alt: 'The founding team', shows_person: true, consent: true });
   } finally { await m.unmount(); }
 });
 
@@ -219,6 +225,32 @@ test('PD12d: Crop, Fit and Alt text patch the block; the line under the card nam
     assert.equal(up.by('pitch-image-regenerate'), undefined, 'an upload has nothing to regenerate');
     assert.match(up.text(up.by('pitch-image-placed')), /Alt text: None yet/);
   } finally { await up.unmount(); }
+});
+
+test('D1534 (#3778, pd27): Filters patch one of eight presets, Crop zooms and pans a locked window, Coming later is greyed, a flagged upload says so', async () => {
+  const patches = [];
+  const block = { id: 'i1', kind: 'image', grid: { c1: 1, r1: 1, c2: 6, r2: 4 }, image_url: IMAGE.url, image_id: IMAGE.uid, alt: 'A tidy desk', tag: 'photo', fit: 'cover', crop: { x: 50, y: 50 } };
+  const image = { source: 'upload', created_at: '2026-10-22 10:00:00', screen: { flagged: true, line: 'The image screen flagged this upload. It was kept; look at it again before you share the deck.' } };
+  const m = await mount(h(ImageToolbar, { block, image, onPatch: (p) => patches.push(p), onReplace() {}, onUpload() {}, onRegenerate() {}, onRemove() {} }));
+  try {
+    assert.match(m.text(m.by('pitch-image-screen')), /flagged this upload\. It was kept/);
+    await m.press(m.by('pitch-image-filters'));
+    for (const k of ['original', 'warm', 'cool', 'mono', 'soft', 'vivid', 'fade', 'brand']) assert.ok(m.by(`pitch-image-filter-${k}`), k);
+    assert.equal(m.text(m.by('pitch-image-filter-brand')), 'Brand tint');
+    await m.press(m.by('pitch-image-filter-mono'));
+    await m.press(m.by('pitch-image-filter-original'));
+    assert.match(m.text(m.by('pitch-image-coming-later')), /Erase.*Expand.*Vary.*Remove background.*Upscale/);
+    await m.press(m.by('pitch-image-crop'));
+    assert.match(m.text(m.by('pitch-image-aspect')), /Aspect locked · 4:3 · Replace image keeps the crop\./);
+    await m.type(m.by('pitch-image-zoom-range'), '50');
+    // Mutation checked: the zoom writing the rect's height from the slider alone → h is not w and this fails.
+    assert.deepEqual(patches, [{ filter: 'mono' }, { filter: undefined }, { crop: { x: 50, y: 50, rect: { x: 25, y: 25, w: 50, h: 50 } } }]);
+  } finally { await m.unmount(); }
+  // A placed image draws its window and filter in the browser.
+  const html = renderToStaticMarkup(h(BlockView, { block: { ...block, crop: { x: 50, y: 50, rect: { x: 25, y: 25, w: 50, h: 50 } }, filter: 'warm' }, colours: {}, live: true, size: 'print' }));
+  assert.match(html, /width:200%;height:200%;left:-50%;top:-50%/);
+  assert.match(html, /filter:saturate\(1\.1\)/);
+  assert.match(html, /background:rgba\(245, 158, 11, 0\.12\)/);
 });
 
 // ── D1604: the area lightbox's Generated photo ───────────────────────────────

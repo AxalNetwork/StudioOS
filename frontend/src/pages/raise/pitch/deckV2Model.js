@@ -84,8 +84,9 @@ export const ELEMENT_GROUPS = Object.freeze([
     { id: 'brand_assets', label: 'Brand assets', ...A('brandLocks', 3819) },
     // D1544 (#3784): erase, expand, vary and edit are #3784's; crop, focus, filters, upscale and background removal stay #3778's.
     { id: 'edit_vary', label: 'Edit or vary', ...A('imageVary', 3784) },
-    { id: 'remove_bg', label: 'Background removal', pending: true, ...A('imageEdit', 3778) },
-    { id: 'upscale', label: 'Upscale', ...A('imageEdit', 3778) },
+    // D1534: crop, focus and filters are on the placed image's toolbar; these two are phase 2 (owner decision M).
+    { id: 'remove_bg', label: 'Background removal', pending: true, ...A('imageEditAi', 3778) },
+    { id: 'upscale', label: 'Upscale', ...A('imageEditAi', 3778) },
   ] },
   { id: 'graphics', label: 'Graphics', items: [
     { id: 'icons', label: 'Icons', ...A('elementsLibrary', 3779) },
@@ -125,8 +126,9 @@ export const ELEMENT_GROUPS = Object.freeze([
     { id: 'video', label: 'Video', free: true, ...R('POST /api/decks/video-link') },
     { id: 'audio', label: 'Audio', free: true },
     { id: 'link', label: 'Link', free: true },
-    { id: 'recorded_video', label: 'Recorded video', ...A('media', 3788) },
-    { id: 'button', label: 'Button', ...A('media', 3788) },
+    // D1545 (#3788): on main: an MP4 uploaded to the deck (`deckV2Adapter.media`), and a call to action.
+    { id: 'recorded_video', label: 'Recorded video', ...R('POST /api/decks/:id/videos/upload') },
+    { id: 'button', label: 'Button', free: true },
     { id: 'embeds', label: 'Embeds', ...A('media', 3788) },
   ] },
 ]);
@@ -324,7 +326,7 @@ export const STEPS_LINE = (n) => `${n} steps`;
 export const STILL_CHARGED = 'Still charged: undo takes the accepted run off the card, but what it cost stays spent.';
 
 /**
- * The ⋯ menu, in its three sections (plan §2.2). An item is wired on main
+ * The ⋯ menu, in its four sections (plan §2.2; Before you send is D1370's). An item is wired on main
  * (`write` when it changes the deck, so a reader sees it greyed), or it names
  * the `deckV2Adapter.js` method (`adapter`) that answers unavailable until its
  * issue merges: drawn greyed "Coming later", titled with the adapter's
@@ -362,6 +364,10 @@ export const MORE_MENU = Object.freeze([
     { id: 'background', label: 'Background image', write: true },
     // D1570 (#3817, pd33): the card's threads; opened here or from the card's ⋯, never from the header.
     { id: 'comments', label: 'Comments', adapter: 'comments' },
+  ] },
+  // D1370 (#3661, pd13 and pf1a): the preflight, free and read-only, between This card and the AI items.
+  { id: 'before', label: 'Before you send', items: [
+    { id: 'preflight', label: 'Check before you send', note: 'Free' },
   ] },
   { id: 'ai', label: 'Whole deck · uses AI', items: [
     { id: 'replace_images', label: 'Replace all images', adapter: 'replaceImages', ai: true },

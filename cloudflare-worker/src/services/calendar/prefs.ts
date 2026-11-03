@@ -20,7 +20,7 @@ export type CopyTarget = typeof COPY_TARGETS[number];
 
 export const FAMILY_LABELS: Readonly<Record<SourceFamily, string>> = Object.freeze({
   meetings: 'Meetings', events: 'Events', validate: 'Validate', grow: 'Grow', deadlines: 'Deadlines',
-  raise: 'Raise', tasks: 'Tasks', learning: 'Learning', external: 'From other calendars',
+  raise: 'Raise', tasks: 'Tasks', learning: 'Learning', external: 'From other calendars', agents: 'AI agents',
 });
 
 export const isSourceKey = (v: unknown): v is string => typeof v === 'string' && (SOURCE_KINDS as readonly string[]).includes(v);

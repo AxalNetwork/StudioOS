@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { MATCH_DEPS, MatchRefused, matchRows } from '../services/ai/matchRows';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth, requireApprovedKyc } from '../auth';
@@ -444,30 +445,31 @@ networkfx.post('/marketplace/match', async (c) => {
   try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
   const need = (data?.need || '').toString().slice(0, 1000);
   if (!need) return c.json({ error: '"need" required (free-text description)' }, 400);
-  // Pull all available marketplace profiles
-  const result = await c.env.DB.prepare(`SELECT mp.*, u.name, u.email, u.role FROM marketplace_profiles mp JOIN users u ON u.id = mp.user_id WHERE mp.availability = 'available' ORDER BY mp.rating DESC LIMIT 30`).all();
+  // Pull all available marketplace profiles. A person is named, never emailed.
+  const result = await c.env.DB.prepare(`SELECT mp.*, u.name, u.role FROM marketplace_profiles mp JOIN users u ON u.id = mp.user_id WHERE mp.availability = 'available' ORDER BY mp.rating DESC LIMIT 30`).all();
   const profiles = (result.results || []).map((r: any) => ({ ...r, skills: safeJson(r.skills, []) }));
-  const compact = profiles.map((p: any) => ({ id: p.user_id, name: p.name, role: p.role, title: p.title, skills: p.skills, rating: p.rating }));
-  // The guard reads the member's need; the profiles are other members' own words, already on the platform.
-  const out = await llmText(c, user.id, 'match:marketplace', null,
-    'Recommend the top 3 operators/advisors for a stated need. Output JSON {"recommendations":[{"user_id":number,"reason":"1 sentence"}]}.',
-    `Need: ${need}\n\nAvailable profiles: ${JSON.stringify(compact)}`,
-    need,
-  );
-  if (out.refused) return out.refused;
-  const ai = out.text;
-  await logAction(c.env, 'ai_call', user.id, { kind: 'marketplace_match' });
-  let recs: any[] = [];
-  if (ai) {
-    const m = ai.match(/\{[\s\S]*\}/);
-    if (m) { try { recs = JSON.parse(m[0]).recommendations || []; } catch {} }
+  // #3938 part 2 (D1478 task 4, job NE1, §4.2 fix 15): retrieve (bge-m3), rank (the reranker),
+  // then one line each on why (`services/ai/matchRows.ts`). The guard reads the member's need;
+  // the profiles are other members' own words, already on the platform.
+  const rail = railFor(c, { page: 'network-effects', option: 'match:marketplace' }, null);
+  const deps = MATCH_DEPS.make(c.env, { userId: user.id, surface: AI_SURFACE.networkEffects, rail, guardText: need }, 'NE1');
+  const candidates = profiles.map((p: any) => ({
+    key: String(p.user_id),
+    text: [p.name, p.title, p.role, Array.isArray(p.skills) && p.skills.length ? `Skills: ${p.skills.join(', ')}` : null].filter(Boolean).join('. '),
+  }));
+  let res;
+  try { res = await matchRows(need, candidates, deps, { top: 3 }); } catch (e) {
+    if (e instanceof MatchRefused) return refuseRun(c, e.result)!;
+    throw e;
   }
-  // Fallback: top 3 by rating
+  await logAction(c.env, 'ai_call', user.id, { kind: 'marketplace_match' });
+  const byId = new Map(profiles.map((p: any) => [String(p.user_id), p]));
+  // Fallback when nothing could be matched: top 3 by rating, with the rule-based line.
+  let recs: any[] = res.rows.map((r) => ({ user_id: Number(r.key), reason: r.line }));
   if (!recs.length) recs = profiles.slice(0, 3).map((p: any) => ({ user_id: p.user_id, reason: `Top-rated ${p.role}: ${p.title || ''}` }));
-  // Hydrate
-  const byId = new Map(profiles.map((p: any) => [p.user_id, p]));
-  const hydrated = recs.map((r: any) => ({ ...r, profile: byId.get(r.user_id) || null })).filter((r: any) => r.profile);
-  return c.json({ need, recommendations: hydrated, model: ai ? out.model : 'rule-based' });
+  const hydrated = recs.map((r: any) => ({ ...r, profile: byId.get(String(r.user_id)) || null })).filter((r: any) => r.profile);
+  const model = res.steps.ranked || res.steps.written ? 'retrieve, rank, write' : 'rule-based';
+  return c.json({ need, recommendations: hydrated, steps: res.steps, model });
 });
 
 // ============================================================

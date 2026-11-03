@@ -45,6 +45,7 @@
   --k-workflow_task: #3f6212; --k-mvp_task: #c2410c; --k-contact_task: #0c4a6e; --k-engagement_milestone: #9f1239;
   --k-external_google: #1e40af; --k-external_microsoft: #0369a1;
   --k-work_item: #155e75;
+  --k-agent_session: #0f766e;
   background: var(--cal-shell);
   color: var(--cal-ink);
   min-height: 100%;
@@ -84,6 +85,7 @@
   --k-workflow_task: #d9f99d; --k-mvp_task: #fdba74; --k-contact_task: #bae6fd; --k-engagement_milestone: #fecdd3;
   --k-external_google: #bfdbfe; --k-external_microsoft: #7dd3fc;
   --k-work_item: #a5f3fc;
+  --k-agent_session: #2dd4bf;
 }
 
 .cal-mono { font-family:var(--font-mono); font-variant-numeric: tabular-nums; }

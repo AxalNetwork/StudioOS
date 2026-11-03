@@ -96,3 +96,101 @@ are actions (a match, a folder), not field values.
   - After Apply, the record step keeps what still equals each placed answer. An
     Undo is always refused (`no_prior`), because the firm reads what was sent.
   - Availability and the email consent are never listed.
+
+## #4046 Group B4
+
+- **Propose a program** (`Admin · Programs` / `program-proposal`): a studio's
+  program proposal's Name, One-line purpose and Eligibility on
+  `program_proposals`, composition only. Who it is for, group, join method,
+  cycle, weeks, seats, rewards, templates, what HQ receives, tools and HQ's
+  note and decision are the studio's or HQ's call and are never listed; HQ's
+  New program dialog draws the same fields with no Fill.
+  - The scope is `requireAdmin` then `ownRow`'s studio rule
+    (`../programProposals.ts`): a licence's admins share its proposals, an
+    admin bound to no licence holds only their own. A new proposal hangs under
+    the caller (`owner`, `ownUserId`). It is filled while `draft` or
+    `sent_back`, and never by a frozen admin: the scope asks `adminWritesFrozen`
+    (`../../auth.ts`, D135's rule), so an Undo through `/api/fills` cannot write
+    what Save could not. A Super Admin reads a proposal that is not a draft and
+    fills none of another studio's. Anyone else is told it does not exist
+    (concealed), as the route answers `unknown_proposal`.
+  - The run reads the studio's own other proposal names, the program names its
+    admins can see (never HQ's `proposed` drafts) and this proposal's own name
+    and choices (who, group, join method, cycle). Never HQ's note or decision,
+    seats, rewards, templates, what HQ receives, a sender or another studio's
+    proposal.
+  - `proposalView` now answers the integer `id`, so the page records after Save
+    (between the Save's answer and the move to `?proposal=<uid>`). An Undo may
+    put back a blank, since a draft may hold one; the undo statements carry no
+    status clause, because the scope refuses a proposal that is no longer
+    editable before `undoFill` runs.
+- **New invitation's message** (`Admin · Community · Partner invitations` /
+  `partner-invitation`): `partner_invitations.personal_message`, the admin's
+  note shown in the email and at the start of the onboarding chat,
+  composition only. The invitee's email and name, what to offer and the terms
+  are never listed.
+  - A new invitation hangs under the caller (`owner`, `ownUserId`), as `POST
+    /api/admin/partners/invitations` (`requireAdmin`) binds the caller as
+    `invited_by_user_id`. Any admin drafts one; a sent one is read by any admin
+    and filled by its inviter alone. No partner or member reaches one, so the
+    scope is concealed. The frozen-admin and suspended-branch refusals stay with
+    the POST, the only write of the row.
+  - The run reads the inviter's own last five messages (`gatherScoped`) and
+    nothing else: never the invitee's email or name, the lookup, what to offer,
+    the terms or another admin's invitation.
+  - The dialog records against the 201's `id` before the result replaces the
+    form. An Undo is always refused (`no_prior`): the message left in the email
+    as the row was made, and a resend reads it again. The table has no
+    `updated_at`, so the undo statement stamps nothing. Add only: no form or
+    route rewrites a sent message (the #3740 guard's Edit is exempt).
+- **A reviewer's comment** (`Super Admin · Content · Content queue` /
+  `review-comment`): the review drawer's new comment to the article's author,
+  `article_review_comments.body`, composition only. The paragraph it points
+  at, a reply, Resolve, every stage change and its reason are never listed.
+  - A new comment hangs under the article (a new parent kind, `article`, on
+    `article_id`). `POST /api/admin/articles/:id/comments` is `requireAdmin`
+    and checks no article, so the scope does: any admin drafts one under an
+    article that exists. Any admin reads a sent comment (the drawer lists them
+    all); only its author fills one, so a Super Admin, whom the route lets
+    rewrite another admin's words, gets no trigger on them. Not concealed: the
+    route conceals nothing from an admin and refuses everyone else.
+  - The run reads the article's own title, subtitle, sector and first 4000
+    characters, and its last ten first comments, so a note is not a repeat.
+    Never a reply, the author's name or email, a revision's or rejection's
+    reason, the stage or another article. It adds a reviewer's voice line
+    (`FormGather.guide`): what to clarify, cut or check, never a verdict, a
+    stage or a deadline.
+  - Send records against the 201's `id` inside the drawer's `run`, before the
+    comments are read again. The hook sits before the tab's early return for
+    an unreadable list, and is off while the list is unreadable. An Undo is
+    always refused (`no_prior`): the comment reached the author's editor as it
+    was made. The table has no `updated_at`; the undo statement stamps
+    `edited_at` as PUT `/comments/:cid` does.
+- **HQ's New segment** (`Super Admin · Content · Personas` / `segment-profile`):
+  a segment profile's Name and Who they are on `segment_profiles`,
+  composition only. The key (the segment's permanent identity), its profile
+  and status (HQ's decisions; status gates sign-up), its typical, needs and
+  offers (the segment page's edit), a reason and the expected version are
+  never listed.
+  - The scope is `requireSuperAdmin`'s rule exactly: an admin with the Super
+    Admin elevation, on HQ (`isSuperAdmin` and `!branchOf`, a second lock
+    beside `hydrateSuperAdmin`'s branch answer). A plain Admin, or any admin
+    on a branch, reads with no trigger (the GETs are `requireAdmin`); anyone
+    else is refused. Not concealed: the route conceals nothing from an admin.
+    `requireAdmin`'s D135 freeze never applies, since it exempts a Super
+    Admin. A segment hangs under no record, so a new one hangs under the
+    caller (`owner` on `updated_by`, which `createProfile` stamps).
+  - The key is TEXT, so the fill keys a segment by its rowid: `POST
+    /api/personas/segments` now answers `segment.id` (the rowid, read back by
+    key), and the page records after Confirm creation, before the result
+    replaces the form. `segmentProfiles.ts`' header says a rebuild must keep
+    the rowid; no route deletes a segment.
+  - The run reads the segment names already on file and nothing else: never a
+    key, another segment's who, a member, a count, a suggestion or a history
+    row. No rows are offered (`ROW_REQUIRED` has no entry).
+  - An Undo is always refused (`no_prior`, both entries `required`): every
+    segment write adds a version, a `segment_profile_history` row and an
+    admin audit copy (`writeProfile`), and one statement cannot add the last
+    two, so HQ revises the words in the segment's own edit. The statements
+    still bump `version`. The Edit side is exempt in the #3740 guard for the
+    same reason.

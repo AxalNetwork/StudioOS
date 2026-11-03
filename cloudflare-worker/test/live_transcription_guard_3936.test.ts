@@ -23,6 +23,10 @@ import { GUARD_MODEL } from './_guard_stub.mjs';
 import { __resetForTest, PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET } from '../src/services/aiRouter.ts';
 import { LIVE_JOB, blockGuardMicro, blockHoldMicro, blockQuoteMicro, holdBlock, liveChoice, settleStream } from '../src/services/liveTranscription.ts';
 import { usdToMicro } from '../src/services/aiBudget.ts';
+import { MIP_OPT_OUT_PRICE_FACTOR } from '../src/services/sttFormats.ts';
+
+/** #3936 part 3: the live transcript is interview audio, so a Deepgram minute is at the opt-out rate. */
+const LIVE_MINUTE = (m: string) => PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET[m] * MIP_OPT_OUT_PRICE_FACTOR;
 
 const NOVA = '@cf/deepgram/nova-3';
 const FLUX = '@cf/deepgram/flux';
@@ -84,7 +88,7 @@ test('safe: the draft stays; one stream row on Interviews\' surface, the guard\'
     const [stream, ...guards] = w.rows();
     assert.deepEqual([stream.task, stream.model, stream.surface, stream.user_id, stream.guard_for, stream.safety_score], ['transcribe', NOVA, '/validate/customer-research', MEMBER, null, 1]);
     assert.deepEqual(JSON.parse(stream.units_json), { audio_minutes_websocket: 2 });
-    const minutes = usdToMicro(2 * PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET[NOVA]);
+    const minutes = usdToMicro(2 * LIVE_MINUTE(NOVA));
     assert.equal(stream.charged_microusd, minutes, 'the stream row is charged its minutes');
     assert.equal(guards.length, 1);
     assert.deepEqual([guards[0].task, guards[0].guard_for], ['safety', stream.id], 'the guard row names the stream');
@@ -104,7 +108,7 @@ test('unsafe: the live draft is removed and the receipt says the guard blocked i
     assert.equal(w.drafts(), 0);
     assert.equal(w.receipt().refusal, 'guard_blocked');
     assert.equal(w.rows()[0].safety_score, 0);
-    assert.ok(w.reservations()[0].charged >= usdToMicro(PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET[NOVA]));
+    assert.ok(w.reservations()[0].charged >= usdToMicro(LIVE_MINUTE(NOVA)));
   } finally { w.f.db.close(); }
 });
 
@@ -116,7 +120,7 @@ test('a guard that cannot answer fails closed: the draft goes, "guard_unavailabl
     assert.equal(out.guard, 'unavailable');
     assert.equal(w.drafts(), 0);
     assert.equal(w.receipt().refusal, 'guard_unavailable');
-    assert.equal(w.reservations()[0].charged, usdToMicro(PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET[NOVA]), 'only the minutes');
+    assert.equal(w.reservations()[0].charged, usdToMicro(LIVE_MINUTE(NOVA)), 'only the minutes');
     assert.equal(w.rows()[0].safety_score, null);
   } finally { w.f.db.close(); }
 });
@@ -141,8 +145,3 @@ test('the live model follows Record a Session\'s live job (VA2): offered, live, 
   assert.match(live, /outcome: 'refused', refusal/);
 });
 
-test('Deepgram mip_opt_out stays off until answer C\'s price effect is confirmed', () => {
-  const src = ['../src/services/sttFormats.ts', '../src/services/liveTranscription.ts', '../src/services/aiRouter.ts', '../src/services/ai/shapes.ts']
-    .map((p) => readFileSync(new URL(p, import.meta.url), 'utf8')).join('\n');
-  assert.doesNotMatch(src, /mip_opt_out\s*:\s*true/);
-});

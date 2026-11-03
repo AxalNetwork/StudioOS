@@ -20,10 +20,12 @@
  */
 export const CONTRACTS = Object.freeze({
   batch: { issue: 3753, route: 'GET /api/decks/areas/batches/:uid', schema: 'deckBatch.schema.json' },
+  buttonClicks: { issue: 3788, route: 'GET /api/decks/:id/button-clicks', schema: 'deckButtonClicks.schema.json' },
   cancelBatch: { issue: 3753, route: 'POST /api/decks/areas/batches/:uid/cancel', schema: 'deckBatch.schema.json' },
   cardStatus: { issue: 3826, route: 'GET /api/decks/:id/card-status', schema: 'deckCardStatus.schema.json' },
   comments: { issue: 3817, route: 'GET /api/decks/:id/comments', schema: 'deckComments.schema.json' },
   consistency: { issue: 3802, route: 'GET /api/decks/:id/check (its consistency key)', schema: 'deckConsistency.schema.json' },
+  critique: { issue: 3799, route: 'POST /api/decks/:id/critique/quote, or POST /api/decks/:id/critique (the adapter\'s `run`)', schema: 'deckCritique.schema.json' },
   deckActions: { issue: 3808, route: 'POST /api/decks/:id/reorder-for-stage', schema: 'deckReorderForStage.schema.json' },
   deckUsage: { issue: 3776, route: 'GET /api/decks/:id/usage', schema: 'deckUsage.schema.json' },
   discardDraft: { issue: 3751, route: 'DELETE /api/decks/:id/draft', schema: 'deckDiscardDraft.schema.json' },
@@ -35,8 +37,10 @@ export const CONTRACTS = Object.freeze({
   grid: { issue: 3749, route: 'GET /api/decks/:id/grid', schema: 'deckGrid.schema.json' },
   imageVary: { issue: 3784, route: 'POST /api/decks/images/:uid/edit/quote', schema: 'deckImageVary.schema.json' },
   investorLinks: { issue: 3812, route: 'GET /api/decks/:id/investor-links', schema: 'deckInvestorLinks.schema.json' },
+  media: { issue: 3788, route: 'POST /api/decks/:id/videos/upload', schema: 'deckMediaVideo.schema.json' },
   myTemplates: { issue: 3782, route: 'GET /api/decks/templates/mine', schema: 'deckMyTemplates.schema.json' },
   orgLocks: { issue: 3786, route: 'GET /api/decks/:id/model-presets (its locks key)', schema: 'deckOrgLocks.schema.json' },
+  pasteCards: { issue: 3788, route: 'POST /api/decks/:id/paste', schema: 'deckPasteCards.schema.json' },
   presence: { issue: 3824, route: 'GET /api/decks/:id/presence', schema: 'deckPresence.schema.json' },
   presets: { issue: 3796, route: 'GET /api/decks/:id/model-presets', schema: 'deckModelPresets.schema.json' },
   rehearse: { issue: 3827, route: 'GET /api/decks/:id/rehearsals', schema: 'deckRehearsals.schema.json' },

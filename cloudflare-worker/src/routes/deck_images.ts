@@ -14,8 +14,10 @@
  *        → { ai, count, total_microusd, hold_microusd, areas, left_out, balance }
  *   POST /api/decks/:id/images/replace-all         { slide_aspect? }, Idempotency-Key optional → { images, refused, left_out,
  *        hold_microusd, charged_microusd, stopped? }: every area through the pipeline under one hold, one redraw each.
- *   POST /api/decks/:id/images/upload    multipart: file, use, card?, alt?, shows_person?, consent?
- *   POST /api/decks/:id/images/import    D1506: { url, use?, card?, alt?, shows_person?, consent? }, an external image copied into R2
+ *   POST /api/decks/:id/images/upload    multipart: file, use, card?, alt, shows_person?, consent?
+ *   POST /api/decks/:id/images/import    D1506: { url, use?, card?, alt, shows_person?, consent? }, an external image copied into R2
+ *        D1534 (#3778): both need alt text (422 `alt_required`), and each stored image is screened once
+ *        (`uploadScreen.ts`): the screen flags (`image.screen`), it never blocks.
  *   GET  /api/decks/:id/images           the venture's kept images, generated or uploaded (PD12d's Design list)
  *   GET  /api/decks/:id/images/plan      D903 §10 (#3660): whether this Worker can draw, the deck's one art
  *        direction, and the words-only cards an illustration would help → { capability, direction, cards }.
@@ -76,6 +78,10 @@ import type { Aspect } from '../services/ai/shapes';
 import { artDirectionOfTheme, seedFor, type ArtDirection } from '../services/decks/artDirection';
 import { asReference } from '../services/decks/imageEdits';
 import { IMAGE_SPECS, type DrawReference } from '../services/ai/shapes';
+import { screenOf, screenUpload } from '../services/decks/uploadScreen';
+
+/** D1534 (#3778): pd27's words. */
+export const ALT_REQUIRED_MESSAGE = 'Alt text is needed before this image can be inserted.';
 
 const deckImages = new Hono<{ Bindings: Env }>();
 
@@ -154,6 +160,8 @@ function view(c: any, r: any) {
     // D1505 (#3756): the pipeline's step lines, seed and provenance.
     seed: r.seed ?? null, pipeline_uid: r.pipeline_uid ?? null, variant_index: r.variant_index ?? null,
     steps: parseJson(r.steps, null), provenance: parseJson(r.provenance_json, null),
+    // D1534 (#3778): an upload's screen — flagged, not flagged, or not screened — never a block.
+    screen: screenOf(r.qa_json),
   };
 }
 
@@ -466,6 +474,9 @@ async function landImage(c: any, user: User, deck: Deck, raw: Uint8Array, l: Lan
       use === 'content' ? new Date().toISOString() : null, use === 'content' ? userId : null).run();
   await recordCardUid(c.env, uid, l.cardUid);
   await noteStorageLanded(c.env, ticket);
+  // D1534 (#3778): the image screen flags an upload; it never blocks one.
+  const rail = { ...railFor(c, { page: IMAGE_PAGE, option: IMAGE_OPTION }, `deck:${deck.deckId}`), option: IMAGE_OPTION };
+  await screenUpload(c.env, { userId, rail, imageUid: uid, mime, bytes });
   await auditDeckWrite(c, user, deck.projectId, 'deck_image_uploaded', `${card == null ? 'The deck' : `Card ${card + 1}`}: ${l.audit}${showsPerson ? ', with the person’s agreement recorded' : ''}`);
   return c.json({ image: view(c, await c.env.DB.prepare('SELECT * FROM deck_images WHERE uid = ?').bind(uid).first()) }, 201);
 }
@@ -476,6 +487,8 @@ function landingOf(c: any, deck: Deck, get: (k: string) => unknown): Omit<Landin
   const ref = cardRefOf(deck.slides, { card: get('card'), card_uid: get('card_uid') });
   if ('error' in ref) return c.json({ error: ref.error }, 400);
   const alt = String(get('alt') ?? '').replace(/\s+/g, ' ').trim().slice(0, ALT_MAX);
+  // D1534 (#3778): an upload or import is described before it is inserted.
+  if (!alt) return refuse(c, 422, { code: 'alt_required', message: ALT_REQUIRED_MESSAGE });
   return { use, card: ref.index, cardUid: ref.uid, alt };
 }
 

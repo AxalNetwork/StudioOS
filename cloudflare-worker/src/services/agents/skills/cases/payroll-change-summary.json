@@ -1,0 +1,41 @@
+{
+  "skill": "payroll-change-summary",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "team.roster": {
+        "joined": [
+          {
+            "name": "Lena Ortiz",
+            "start": "2026-11-03"
+          }
+        ],
+        "left": [
+          {
+            "name": "Sam Reid"
+          }
+        ]
+      },
+      "mercury.balances": {
+        "payroll": {
+          "this_month_usd": 61000,
+          "last_month_usd": 58000
+        }
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Lena Ortiz",
+      "Sam Reid"
+    ],
+    "must_say_not_recorded": [
+      "effective date"
+    ],
+    "must_not_include": [
+      "payroll approved"
+    ]
+  }
+}
