@@ -17,6 +17,13 @@
  *                is sent any other way.
  *
  * The `/email` page keeps D1344's "Compose with Eadwyn" (`ComposeSheet`).
+ *
+ * D1357 (#3572, RI4e): "Write the intro" opens this composer with `introUid`,
+ * a subject and a body to start from. The send carries `intro_uid`, so the
+ * Worker records the introduction as made only once this mailbox has sent it
+ * (D4329), and refuses it before anything leaves when the request is not the
+ * sender's, or not accepted. `ask={false}` keeps Eadwyn's Body trigger off
+ * until its intro drafts land (part 8b).
  */
 import { useState } from 'react';
 import Sheet from '../../ui/Sheet';
@@ -29,11 +36,11 @@ import { BODY, BTN, ERROR, EYEBROW, INPUT, MUTED, PRIMARY } from './emailParts.j
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export default function RecordCompose({ pack, refs, project = null, to, account, from = null, readOnly = false, onClose, onSent, api = mailApi }) {
+export default function RecordCompose({ pack, refs, project = null, to, account, from = null, readOnly = false, onClose, onSent, api = mailApi, introUid = null, initialSubject = '', initialBody = '', ask = true, title = 'Email' }) {
   const person = pack.person;
   const [address, setAddress] = useState(to ?? '');
-  const [subject, setSubject] = useState('');
-  const [body, setBody] = useState('');
+  const [subject, setSubject] = useState(initialSubject);
+  const [body, setBody] = useState(initialBody);
   const [asking, setAsking] = useState(false);
   const [placed, setPlaced] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -50,7 +57,7 @@ export default function RecordCompose({ pack, refs, project = null, to, account,
     setBusy(true); setError(null);
     try {
       const { nonce } = await api.confirmSend(account.uid);
-      const r = await api.send({ account_uid: account.uid, to: address.trim(), subject, body, ...(placed ? { draft_uid: placed.uid } : {}), nonce });
+      const r = await api.send({ account_uid: account.uid, to: address.trim(), subject, body, ...(placed ? { draft_uid: placed.uid } : {}), ...(introUid ? { intro_uid: introUid } : {}), nonce });
       setConfirm(false);
       setPlaced(null);
       onSent?.(r?.sent ?? null);
@@ -62,7 +69,7 @@ export default function RecordCompose({ pack, refs, project = null, to, account,
   const questionOpening = person.kind === 'fund_gp' && placed?.intent === 'ask_question';
   const questionNeedsEdit = !!(questionOpening && bodyText(body) === bodyText(placed?.body));
   const sendable = !readOnly && !!(subject.trim() && body.trim() && account && EMAIL.test(address.trim()) && !questionNeedsEdit);
-  const trigger = showBodyTrigger({ body, readOnly, open: asking });
+  const trigger = ask && showBodyTrigger({ body, readOnly, open: asking });
 
   const footer = (
     <div className="flex flex-wrap items-center gap-2">
@@ -73,7 +80,7 @@ export default function RecordCompose({ pack, refs, project = null, to, account,
     </div>
   );
 
-  return <Sheet title="Email" eyebrow="Email" sub={`Email to ${person.name}`} onClose={onClose} footer={readOnly ? null : footer} width={560} testId="record-compose">
+  return <Sheet title={title} eyebrow="Email" sub={`Email to ${person.name}`} onClose={onClose} footer={readOnly ? null : footer} width={560} testId="record-compose">
     <div className="flex flex-col gap-4">
       {from && <p className="rounded-axal-md bg-axal-lavender px-3 py-2 text-[12.5px] text-axal-violet-deep dark:bg-violet-950/40 dark:text-violet-300">Opened from {from}.</p>}
       <label className="flex flex-col gap-1">
