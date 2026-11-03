@@ -5,10 +5,16 @@ import { BlockGrid } from './BlockGrid';
 import { cardColours } from './editorModel';
 import { SLIDE_SIZES, aspectOf } from './gridModel';
 import { measureBlocks } from './preflightMeasure';
+import { deckAssistApi } from '../../../lib/api/deckAssist';
+import { ADD_TOKENS_PATH } from '../../../lib/aiTokens';
+import { reportError } from '../../../lib/log';
+import { railPressHeaders } from '../../../lib/railPage';
+import { refusalOf } from './newDeckModel';
 import {
-  ASK_FIX, BUILD, DIRTY_LINE, DISMISS, FIX_FIRST, FREE_LINE, GROUPS, GROUP_NOTES, HELD_HERE, KEEP_EDITING, LATER, NOTHING_TO_FIX,
-  NOT_A_PASS, OUT_OF_DATE, READER_LINE, RECHECK, RECHECK_NOW, SHOW_ME, STALE_LINE, TITLE, TRY_AGAIN, UNDO, checkingLine, countsLine,
-  fixedLine, fixedSince, notYet, passedLine, percent, slideState, stepOf, subLine, uncheckedBanner,
+  ADD_TOKENS, ASK_FIX, BUILD, DIRTY_LINE, DISMISS, FIX_FIRST, FIX_WAITING, FREE_LINE, GROUPS, GROUP_NOTES, HELD_HERE, KEEP_EDITING, LATER,
+  NOTHING_TO_FIX, NOT_A_PASS, NOT_KEPT, OUT_OF_DATE, READER_LINE, RECHECK, RECHECK_NOW, RETRYING, SHOW_ME, STALE_LINE, TITLE, TOKENS_OUT, TRY_AGAIN, UNDO,
+  canAskFix, chargedLine, checkingLine, countsLine, fixBody, fixedLine, fixedSince, holdLine, notYet, passedLine, percent, retryLabel, slideState, stepOf,
+  subLine, uncheckedBanner,
 } from './preflightUiModel';
 
 /**
@@ -20,9 +26,11 @@ import {
  * `usePreflight.js`'s.
  *
  * Nothing here changes a slide. "Show me" selects the card and the block;
- * Dismiss (warnings only) is held in the open editor until P1 (#4208);
- * "Ask Eadwyn to suggest a fix" is greyed until P2 (#4210). A reader sees
- * the findings with neither (pf5d).
+ * Dismiss (warnings only) is kept for the version (D4208); "Ask Eadwyn to
+ * suggest a fix" (D4210, text checks only) shows its hold from the quote,
+ * runs D899's card tool, and opens Ask, where the suggestion waits until
+ * Accept places it. Out of tokens it reads "Not enough AI tokens · Add
+ * tokens". A reader sees the findings with neither (pf5d).
  */
 
 const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-1.5 whitespace-nowrap rounded-[9px] px-3 text-[12.5px] font-bold max-sm:min-h-[44px]';
@@ -33,7 +41,7 @@ const EYE = 'font-mono text-[10px] font-bold uppercase tracking-[.07em] text-axa
 const MUTED = 'text-[12.5px] leading-[1.45] text-axal-muted dark:text-gray-400';
 const INK = 'text-axal-ink dark:text-gray-100';
 const BOX = 'rounded-[12px] border border-axal-hairline bg-white p-3 dark:border-gray-700 dark:bg-gray-900';
-const TEXT_CHECKS = new Set(['overflow', 'density', 'font', 'placeholder']);
+const FIX_OPTION = 'deck:shorten';
 
 const TONE = {
   fix: 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200',
@@ -45,9 +53,76 @@ function Count({ n, word, tone, testId }) {
   return <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[12px] font-bold ${TONE[tone]}`} data-testid={testId}>{n} {word}</span>;
 }
 
+/**
+ * pf2 / pf2b / pf5e: "Ask Eadwyn to suggest a fix" on one finding. Its quote
+ * gives the hold line; Run makes one proposal (D899's card tool, `tool:
+ * 'preflight_fix'`), which waits in Ask: nothing is placed until Accept.
+ */
+function FixAction({ fix, testId }) {
+  const { deckId, card, body, tokensOut, onTokens, onProposals, onOpenAsk } = fix;
+  const [quote, setQuote] = useState(null);
+  const [state, setState] = useState({ kind: 'idle' });
+  useEffect(() => {
+    if (tokensOut) return undefined;
+    let live = true;
+    Promise.resolve(deckAssistApi.quote(deckId, card, body)).then(
+      (q) => { if (live) setQuote(q || null); },
+      (e) => {
+        const refusal = refusalOf(e);
+        if (refusal?.topUp) onTokens?.();
+        if (live) setState({ kind: 'refused', refusal });
+      },
+    );
+    return () => { live = false; };
+  }, [deckId, card, tokensOut]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Out of tokens is the editor's (`onTokens` from a 402 here or on any other press), so every row says it at once.
+  if (tokensOut) {
+    return (
+      <span className="flex flex-wrap items-center gap-1.5 text-[12px] font-bold text-axal-muted dark:text-gray-400" role="status" data-testid={`${testId}-tokens`}>
+        {TOKENS_OUT} · <a className="text-violet-700 underline dark:text-violet-300" href={ADD_TOKENS_PATH}>{ADD_TOKENS}</a>
+      </span>
+    );
+  }
+  const run = () => {
+    if (!quote || quote.ai === false || state.kind === 'running') return;
+    setState({ kind: 'running' });
+    Promise.resolve(deckAssistApi.run(deckId, card, body, railPressHeaders(FIX_OPTION))).then(
+      (r) => {
+        if (!r?.proposal?.uid) { setState({ kind: 'refused', refusal: { message: 'Eadwyn returned nothing to suggest. Nothing was charged for a proposal.' } }); return; }
+        setState({ kind: 'done', charged: chargedLine(r.cost?.charged_microusd, quote.hold_microusd) });
+        onProposals?.();
+        onOpenAsk?.();
+      },
+      (e) => {
+        const refusal = refusalOf(e);
+        if (refusal?.topUp) onTokens?.();
+        setState({ kind: 'refused', refusal });
+        reportError('pitch-preflight:fix', e);
+      },
+    );
+  };
+  if (state.kind === 'done') {
+    return (
+      <span className="flex flex-col gap-0.5" role="status" data-testid={`${testId}-waiting`}>
+        <span className={`text-[12.5px] font-bold ${INK}`}>{FIX_WAITING}</span>
+        {state.charged ? <span className="font-mono text-[10.5px] font-bold text-violet-700 dark:text-violet-300" data-testid={`${testId}-charged`}>{state.charged}</span> : null}
+      </span>
+    );
+  }
+  return (
+    <span className="flex flex-col gap-0.5">
+      <button type="button" className={GHOST} onClick={run} aria-disabled={!quote || quote.ai === false || state.kind === 'running' || undefined} data-testid={`${testId}-ask`}>
+        {state.kind === 'running' ? 'Asking Eadwyn…' : ASK_FIX}
+      </button>
+      <span className="font-mono text-[10.5px] font-bold text-violet-700 dark:text-violet-300" data-testid={`${testId}-hold`}>{holdLine(quote)}</span>
+      {state.kind === 'refused' && state.refusal?.message ? <span role="alert" className="text-[12px] font-semibold text-rose-700 dark:text-rose-300" data-testid={`${testId}-refused`}>{state.refusal.message}</span> : null}
+    </span>
+  );
+}
+
 /** One finding (pf2): the slide number, where, the defect, why it matters, and its actions. */
-function FindingRow({ row, n, stale = false, readOnly = false, compact = false, onShow, onDismiss, testId }) {
-  const askable = !readOnly && TEXT_CHECKS.has(row.check);
+function FindingRow({ row, n, stale = false, readOnly = false, compact = false, fix = null, onShow, onDismiss, onRetry = null, retrying = false, testId }) {
+  const askable = !readOnly && Boolean(fix);
   return (
     <li className={`${BOX} flex gap-3`} aria-label={row.label} data-testid={testId}>
       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-axal-ground font-mono text-[12px] font-bold text-axal-ink dark:bg-gray-800 dark:text-gray-100" aria-hidden="true">{row.slide ?? '—'}</span>
@@ -63,6 +138,12 @@ function FindingRow({ row, n, stale = false, readOnly = false, compact = false, 
         <span className="mt-1 flex flex-wrap items-center gap-1.5">
           {onShow && (row.card != null || row.firstCard != null) ? <button type="button" className={GHOST} onClick={() => onShow(row)} data-testid={`${testId}-show`}>{SHOW_ME}</button> : null}
           {!compact && onDismiss && row.dismissible && !readOnly ? <button type="button" className={GHOST} onClick={() => onDismiss(row)} data-testid={`${testId}-dismiss`}>{DISMISS}</button> : null}
+          {/* #3661 pf5c: a slide that couldn't be checked is tried again on its own. */}
+          {onRetry && row.slide != null ? (
+            <button type="button" className={GHOST} disabled={retrying} aria-busy={retrying || undefined} aria-label={retryLabel(row.slide)}
+              onClick={() => onRetry(row)} data-testid={`${testId}-retry`}>{retrying ? RETRYING : TRY_AGAIN}</button>
+          ) : null}
+          {!compact && askable && BUILD.P2.live && !stale ? <FixAction fix={fix} testId={testId} /> : null}
           {!compact && askable && !BUILD.P2.live ? (
             <button type="button" className={OFF} aria-disabled="true" title={notYet()} data-testid={`${testId}-ask`}>
               {ASK_FIX}<span className="font-mono text-[10px] font-normal">{LATER}</span>
@@ -112,7 +193,7 @@ function Checking({ progress, testId = 'pitch-preflight-checking' }) {
  * The results panel (PF2, PF4, PF5). `pf` is `usePreflight()`'s; `onShow(row)`
  * selects the finding's card and block and closes the panel.
  */
-export function PreflightPanel({ pf, version, readOnly = false, onShow, onClose }) {
+export function PreflightPanel({ pf, version, readOnly = false, deckId = null, tokensOut = false, onTokens, onProposals, onOpenAsk, onShow, onClose }) {
   const [openPassed, setOpenPassed] = useState(false);
   const [lastDismissed, setLastDismissed] = useState(null);
   const g = pf.groups;
@@ -122,7 +203,13 @@ export function PreflightPanel({ pf, version, readOnly = false, onShow, onClose 
   const fixed = fixedLine(fixedSince(pf.previous, g));
   const banner = uncheckedBanner(g);
   const nothing = g && !g.fix.length && !g.look.length && !g.unchecked.length;
-  const dismiss = (row) => { pf.dismiss(row.id); setLastDismissed(row); };
+  const dismiss = (row) => { pf.dismiss(row.id, row.severity); setLastDismissed(row); };
+  // D4210: a text finding on one text block can ask for a fix, on the slides as they were checked.
+  const fixOf = (row) => {
+    if (deckId == null) return null;
+    const block = ((pf.snapshot?.slides || [])[row.card]?.blocks || []).find((b) => b?.id === row.block) || null;
+    return canAskFix(row, block) ? { deckId, card: row.card, body: fixBody(row, block), tokensOut, onTokens, onProposals, onOpenAsk } : null;
+  };
   const recheck = !readOnly && !pf.running ? <button type="button" className={GHOST} onClick={pf.run} data-testid="pitch-preflight-recheck">{RECHECK}</button> : null;
 
   return (
@@ -160,7 +247,7 @@ export function PreflightPanel({ pf, version, readOnly = false, onShow, onClose 
             )}
             {g.fix.length ? (
               <Group title={GROUPS.fix} note={GROUP_NOTES.fix} count={g.fix.length} testId="pitch-preflight-fix">
-                {g.fix.map((r, i) => <FindingRow key={r.id} row={r} n={i + 1} stale={stale} readOnly={readOnly} onShow={onShow} testId={`pitch-preflight-row-${r.id}`} />)}
+                {g.fix.map((r, i) => <FindingRow key={r.id} row={r} n={i + 1} stale={stale} readOnly={readOnly} fix={fixOf(r)} onShow={onShow} testId={`pitch-preflight-row-${r.id}`} />)}
               </Group>
             ) : null}
             {lastDismissed && pf.dismissed.has(lastDismissed.id) ? (
@@ -171,15 +258,18 @@ export function PreflightPanel({ pf, version, readOnly = false, onShow, onClose 
             ) : null}
             {g.look.length ? (
               <Group title={GROUPS.look} note={readOnly ? null : GROUP_NOTES.look} count={g.look.length} testId="pitch-preflight-look">
-                {g.look.map((r, i) => <FindingRow key={r.id} row={r} n={g.fix.length + i + 1} stale={stale} readOnly={readOnly} onShow={onShow} onDismiss={dismiss} testId={`pitch-preflight-row-${r.id}`} />)}
+                {g.look.map((r, i) => <FindingRow key={r.id} row={r} n={g.fix.length + i + 1} stale={stale} readOnly={readOnly} fix={fixOf(r)} onShow={onShow} onDismiss={dismiss} testId={`pitch-preflight-row-${r.id}`} />)}
               </Group>
             ) : null}
+            {pf.notKept ? <span role="alert" className="text-[12.5px] font-semibold text-rose-700 dark:text-rose-300" data-testid="pitch-preflight-not-kept">{NOT_KEPT}</span> : null}
             {g.dismissed > 0 ? (
               <span className={MUTED} data-testid="pitch-preflight-dismissed-count">{g.dismissed} dismissed{BUILD.P1.live ? '' : ` · ${HELD_HERE}`}</span>
             ) : null}
             {g.unchecked.length ? (
               <Group title={GROUPS.unchecked} count={g.unchecked.length} tag={NOT_A_PASS} testId="pitch-preflight-unchecked">
-                {g.unchecked.map((r) => <FindingRow key={r.id} row={{ ...r, dismissible: false }} stale={stale} readOnly compact={false} onShow={onShow} testId={`pitch-preflight-row-${r.id.replace(':', '-')}`} />)}
+                {g.unchecked.map((r) => <FindingRow key={r.id} row={{ ...r, dismissible: false }} stale={stale} readOnly compact={false} onShow={onShow}
+                  onRetry={!readOnly && !pf.running && pf.retry ? (x) => pf.retry(x.card) : null} retrying={pf.retrying?.index === r.card}
+                  testId={`pitch-preflight-row-${r.id.replace(':', '-')}`} />)}
               </Group>
             ) : null}
             {g.passed.length ? (
@@ -259,7 +349,8 @@ export function FindingStrip({ rows, id, onStep, onBack, onClose }) {
   return (
     <div className="mb-2 flex flex-wrap items-center gap-2 rounded-[12px] border border-violet-200 bg-violet-50 px-3 py-2 dark:border-violet-900 dark:bg-violet-950/40" role="region" aria-label={s.line} data-testid="pitch-preflight-strip">
       <button type="button" className={GHOST} onClick={onBack} data-testid="pitch-preflight-strip-back"><ChevronLeft size={14} aria-hidden="true" />{TITLE}</button>
-      <span className="flex min-w-0 flex-1 flex-col">
+      {/* #3661 (pf5g): on a phone the finding takes its own row above the buttons. */}
+      <span className="flex min-w-0 flex-1 flex-col max-sm:order-first max-sm:basis-full">
         <span className={EYE}>{s.line} · {row.where}</span>
         <span className={`truncate text-[12.5px] font-bold ${INK}`} aria-live="polite">{row.headline}</span>
       </span>

@@ -6,6 +6,7 @@ import { titleCase } from '../../lib/absence';
 import { SectionCard, stateBlock } from './LearningStates';
 import { CONTENT_STATUS_TONE, NOT_LIVE, formatDay } from './learningModel';
 import { STORAGE_BANNER_LINE, STREAM_COPY_FIELD, storageBanner, stillOnStorage, streamCopyOf, videoColumn } from './videoUpload';
+import { hasAnalytics } from './videoAnalyticsModel';
 
 /** The canvas's five filters, each a predicate over a row. */
 export const STUDIO_FILTERS = [
@@ -63,8 +64,11 @@ function CopyToStream({ row, onCopy }) {
  * file, Link, None; "Not recorded" where the read cannot say), and, only when
  * the read carries L4's copy state, Copy to Stream per uploaded file and the
  * banner "[n] uploaded videos still play from storage."
+ *
+ * `onAnalytics(row)` (D4181, lr17) puts "Analytics" on a video's row, which
+ * opens its analytics Sheet. A reading has no positions, so it has none.
  */
-export default function StudioContentTable({ status, rows, reason = NOT_LIVE.studio, onRetry, onCopyToStream = null }) {
+export default function StudioContentTable({ status, rows, reason = NOT_LIVE.studio, onRetry, onCopyToStream = null, onAnalytics = null }) {
   const [filter, setFilter] = useState('all');
   const all = rows || [];
   const active = STUDIO_FILTERS.find((f) => f.key === filter) || STUDIO_FILTERS[0];
@@ -117,6 +121,13 @@ export default function StudioContentTable({ status, rows, reason = NOT_LIVE.stu
                     {r.href
                       ? <Link to={r.href} className="hover:text-axal-violet-deep dark:hover:text-violet-300" data-testid={`link-studio-open-${r.uid}`}>{r.title || 'Untitled'}</Link>
                       : (r.title || 'Untitled')}
+                    {onAnalytics && hasAnalytics(r) ? (
+                      <button type="button" onClick={() => onAnalytics(r)}
+                        className="ml-2 text-[11.5px] font-bold text-axal-violet-deep underline hover:text-axal-violet dark:text-violet-300"
+                        aria-label={`Analytics for ${r.title || 'this video'}`} data-testid={`studio-analytics-open-${r.uid}`}>
+                        Analytics
+                      </button>
+                    ) : null}
                   </span>
                   <span><Pill tone={CONTENT_STATUS_TONE[r.status] || 'neutral'}>{titleCase(r.status) || 'Status not recorded'}</Pill></span>
                   <span className="text-axal-muted dark:text-gray-400">{r.visibility ? titleCase(r.visibility) : <Unrecorded>Not recorded</Unrecorded>}</span>

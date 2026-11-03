@@ -61,6 +61,7 @@ export { cellText, tableLines };
 import { diagramProblem, sanitizeDiagram } from './diagramModel';
 import { CUSTOM, STRUCTURE_IDS, areasProblem, sanitizeAreas } from './structures';
 import { BASELINE, atOf, blockArrange, decorArrange, decorHoldsContent, groupOf, layered } from './arrange';
+import { entranceOf, motionProblems, transitionOf } from './motion';
 import { DECOR_KINDS, MAX_DECOR as LIBRARY_MAX_DECOR, cleanDecorItem } from './elements';
 import { filterOf, rectOf, type Crop } from './imageLook';
 
@@ -467,6 +468,9 @@ export function sanitizeBlocks(input: unknown, url: UrlGuard, ground = '#ffffff'
     if (typeof v.logo_key === 'string' && GATE_REF.test(v.logo_key)) block.logo_key = v.logo_key;
     // D1533 (#3777): the area's group and its pin (the Arrange set's Lock, not #3819's brand-kit `locked`).
     Object.assign(block, blockArrange(v));
+    // D1576 (#3823): the area's entrance, kept only when set, so a block saved before E3 hashes as it did.
+    const entrance = entranceOf(v.entrance);
+    if (entrance) block.entrance = entrance;
     out.push(block);
   }
   return out;
@@ -499,6 +503,9 @@ export function sanitizeModel(s: any, url: UrlGuard): Record<string, unknown> {
   if (typeof s?.structure === 'string' && (s.structure === CUSTOM || STRUCTURE_IDS.includes(s.structure))) out.structure = s.structure;
   const areas = s?.areas != null ? sanitizeAreas(s.areas) : null;
   if (areas) out.areas = areas;
+  // D1576 (#3823): the card's transition, kept only when set.
+  const transition = transitionOf(s?.transition);
+  if (transition) out.transition = transition;
   return out;
 }
 
@@ -568,6 +575,8 @@ export function modelProblems(slides: unknown, url: UrlGuard): string[] {
     // D1579: a status is one of the three; an assignee is a person's id (whether they may work on the deck is the save's check).
     if (s?.status != null && !oneOf(s.status, CARD_STATUSES)) out.push(`${card}: the status is To do, In progress or Done.`);
     if (s?.assignee != null && !(Number.isSafeInteger(s.assignee) && s.assignee > 0)) out.push(`${card}: the assignee must be a person on the deck.`);
+    // D1576 (#3823): an entrance or transition that is not one of the list is refused, never dropped.
+    out.push(...motionProblems(s, card));
     if (s?.blocks == null) return;
     if (!Array.isArray(s.blocks)) { out.push(`${card}: blocks must be a list.`); return; }
     if (s.blocks.length > MAX_BLOCKS) out.push(`${card}: a card holds at most ${MAX_BLOCKS} blocks.`);

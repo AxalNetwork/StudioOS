@@ -208,6 +208,8 @@ export const DECK_ASK_OPTIONS = Object.freeze(['deck:rewrite', 'deck:shorten', '
 const ACTION_WORDS = {
   rewrite: 'Rewrite', shorten: 'Shorter', expand: 'Longer', headline: 'Headline', tone: 'New tone', translate: 'Translation',
   ask: 'Your instruction', chart: 'Chart from records', table: 'Table from records', timeline: 'Timeline from records',
+  // D4210: a fix Eadwyn suggested for one preflight finding.
+  preflight_fix: 'Suggested fix',
 };
 const CHART_ACTIONS = new Set(['chart', 'table', 'timeline']);
 const CHART_SIZE = { chart: { cols: 6, rows: 3 }, table: { cols: 6, rows: 3 }, timeline: { cols: 12, rows: 2 } };
@@ -362,6 +364,8 @@ export const MORE_MENU = Object.freeze([
     { id: 'section', label: 'Move to section', adapter: 'media' },
     { id: 'appendix', label: 'Mark as appendix', write: true },
     { id: 'background', label: 'Background image', write: true },
+    // D1576 (#3823): how this card comes up in Present and the PowerPoint; a sheet, never a toolbar button.
+    { id: 'transition', label: 'Transition', write: true },
     // D1570 (#3817, pd33): the card's threads; opened here or from the card's ⋯, never from the header.
     { id: 'comments', label: 'Comments', adapter: 'comments' },
   ] },

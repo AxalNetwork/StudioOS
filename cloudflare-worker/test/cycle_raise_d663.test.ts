@@ -111,7 +111,7 @@ test('the overview: the cycle, its question, six figures (D1610) and the seven c
   assert.equal(r.body.question, 'What resources does this venture need?');
   assert.deepEqual(r.body.figures.map((f: any) => f.key), ['readiness_score', 'committed', 'investors_in_conversation', 'runway_months', 'deck_views_8w', 'data_room_files']);
   assert.deepEqual(r.body.cards.map((c: any) => c.slug), MODULES.map((m) => m.slug));
-  assert.deepEqual(r.body.cards.map((c: any) => c.name), ['Fundraising readiness', 'Investor narrative', 'Pitch deck', 'Data room', 'Cap table', 'Use of funds', 'Capital relationships']);
+  assert.deepEqual(r.body.cards.map((c: any) => c.name), ['Fundraising readiness', 'Investor narrative', 'Pitch', 'Data room', 'Cap table', 'Use of funds', 'Capital relationships']);
   for (const c of r.body.cards) {
     assert.ok((CARD_STATES as readonly string[]).includes(c.state), `${c.slug}: ${c.state}`);
     // A new venture: every card is empty and names the one action that starts it, in the app.

@@ -461,7 +461,9 @@ test('the route is static, the studio opens it, and the fast path builds a propo
   const app = read('frontend/src/App.jsx');
   assert.ok(app.indexOf('path="/raise/pitch/new"') > 0 && app.indexOf('path="/raise/pitch/new"') < app.indexOf('path="/raise/:slug/new"'));
   const studio = read('frontend/src/pages/raise/pitch/PitchStudio.jsx');
-  assert.match(studio, /to=\{`\$\{NEW_PATH\}\$\{q\}`\} className=\{PRIMARY\} data-testid="pitch-studio-new"/);
+  // D4254: the header primary is built per tile; New deck still opens NEW_PATH with the venture.
+  assert.match(studio, /return \{ to: `\$\{NEW_PATH\}\$\{q\}`, label: noDeck \? BUILD_YOUR_DECK : PRIMARY_OF\[tab\], testId: 'pitch-studio-new' \};/);
+  assert.match(studio, /<Link to=\{primary\.to\} className=\{PRIMARY\} data-testid=\{primary\.testId\}>\{primary\.label\}<\/Link>/);
   // D1604 (#3716, pd1): the empty state is the home's (`StudioHome.jsx`); its one-click is `OneClickBuild.jsx`.
   const home = read('frontend/src/pages/raise/pitch/StudioHome.jsx');
   assert.match(home, /to=\{`\$\{NEW_PATH\}\$\{q\}`\} className=\{PRIMARY\} data-testid="pitch-studio-empty-new"/);

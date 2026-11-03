@@ -114,7 +114,7 @@ test.describe('the integrated editor', () => {
 
   test('Studio home', async ({ page, request }) => {
     const m = await prepare(page, request);
-    await page.goto(`/raise/pitch?project_id=${m.oneClick.projectId}`);
+    await page.goto(`/raise/pitch/decks?project_id=${m.oneClick.projectId}`); // D4254: the Decks tile; /raise/pitch is the Overview
     await expect(page.getByTestId('pitch-studio-home')).toBeVisible();
     await page.waitForLoadState('networkidle');
     await page.evaluate(() => document.fonts.ready.then(() => undefined));

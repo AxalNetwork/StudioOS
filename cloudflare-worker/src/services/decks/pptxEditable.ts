@@ -55,6 +55,7 @@ import { DEFAULT_INK } from './images';
 import { diagramLayout, diagramName, type DiagramLayout } from './diagramLayout';
 import { SLIDE, boxOf } from './designSystem';
 import { decorSvg } from './elements';
+import { ENTRANCES, MOTION_MS, entranceOf, entranceSequence, transitionOf, type Entrance, type Transition } from './motion';
 import { chartFrameXml, chartHeading, chartPartXml, chartPlan, chartWorkbook, type ResolvedSeries } from './pptxChart';
 
 /** The card the block geometry is measured on: 1920 × 1080 slide pixels. */
@@ -436,6 +437,68 @@ export function readingOrder(blocks: any[]): any[] {
   return placed.map((b, i) => ({ b, i })).sort((a, z) => (a.b.grid.r1 - z.b.grid.r1) || (a.b.grid.c1 - z.b.grid.c1) || (a.i - z.i)).map((o) => o.b);
 }
 
+/**
+ * D1576 (#3823): an entrance as PowerPoint's own entrance preset — its preset
+ * id and the behaviour that draws it. Each shape is set visible, then drawn
+ * in over MOTION_MS, the time Present takes.
+ */
+const PRESET: Record<Entrance, { id: number; subtype: number; draw: (ctn: () => number, spid: number) => string }> = {
+  fade: { id: 10, subtype: 0, draw: (ctn, spid) => `<p:animEffect transition="in" filter="fade"><p:cBhvr><p:cTn id="${ctn()}" dur="${MOTION_MS}"/><p:tgtEl><p:spTgt spid="${spid}"/></p:tgtEl></p:cBhvr></p:animEffect>` },
+  wipe: { id: 22, subtype: 8, draw: (ctn, spid) => `<p:animEffect transition="in" filter="wipe(left)"><p:cBhvr><p:cTn id="${ctn()}" dur="${MOTION_MS}"/><p:tgtEl><p:spTgt spid="${spid}"/></p:tgtEl></p:cBhvr></p:animEffect>` },
+  rise: {
+    id: 42, subtype: 0,
+    draw: (ctn, spid) => `<p:animEffect transition="in" filter="fade"><p:cBhvr><p:cTn id="${ctn()}" dur="${MOTION_MS}"/><p:tgtEl><p:spTgt spid="${spid}"/></p:tgtEl></p:cBhvr></p:animEffect>`
+      + `<p:anim calcmode="lin" valueType="num"><p:cBhvr><p:cTn id="${ctn()}" dur="${MOTION_MS}" fill="hold"/><p:tgtEl><p:spTgt spid="${spid}"/></p:tgtEl><p:attrNameLst><p:attrName>ppt_y</p:attrName></p:attrNameLst></p:cBhvr>`
+      + '<p:tavLst><p:tav tm="0"><p:val><p:strVal val="#ppt_y+.1"/></p:val></p:tav><p:tav tm="100000"><p:val><p:strVal val="#ppt_y"/></p:val></p:tav></p:tavLst></p:anim>',
+  },
+  zoom: {
+    id: 53, subtype: 16,
+    draw: (ctn, spid) => ['ppt_w', 'ppt_h'].map((a) => `<p:anim calcmode="lin" valueType="num"><p:cBhvr><p:cTn id="${ctn()}" dur="${MOTION_MS}" fill="hold"/><p:tgtEl><p:spTgt spid="${spid}"/></p:tgtEl><p:attrNameLst><p:attrName>${a}</p:attrName></p:attrNameLst></p:cBhvr>`
+      + `<p:tavLst><p:tav tm="0"><p:val><p:fltVal val="0"/></p:val></p:tav><p:tav tm="100000"><p:val><p:strVal val="#${a}"/></p:val></p:tav></p:tavLst></p:anim>`).join('')
+      + `<p:animEffect transition="in" filter="fade"><p:cBhvr><p:cTn id="${ctn()}" dur="${MOTION_MS}"/><p:tgtEl><p:spTgt spid="${spid}"/></p:tgtEl></p:cBhvr></p:animEffect>`,
+  },
+};
+/** The entrance presets PowerPoint plays, one per effect (D1576), in `ENTRANCES`' order. */
+export const ENTRANCE_PRESETS = Object.freeze(Object.fromEntries(ENTRANCES.map((e) => [e, PRESET[e].id])) as Record<Entrance, number>);
+
+/** D1576: a card's transition as PowerPoint's `p:transition`; empty for none. */
+export function transitionXml(v: unknown): string {
+  const t: Transition | null = transitionOf(v);
+  if (!t) return '';
+  const inner = t === 'fade' ? '<p:fade/>' : t === 'push' ? '<p:push dir="u"/>' : '<p:wipe dir="r"/>';
+  return `<p:transition spd="med">${inner}</p:transition>`;
+}
+
+/**
+ * D1576: the card's entrances as PowerPoint's main sequence, one click each,
+ * in `entranceSequence` order — the order Present reveals them in. An area
+ * the writer drew no shape for is skipped, as Present skips it.
+ */
+export function timingXml(card: any, spidOf: Map<string, number>): string {
+  const steps = entranceSequence(card).filter((id) => spidOf.has(id));
+  if (!steps.length) return '';
+  let n = 2; // 1 is the root, 2 the main sequence
+  const ctn = () => ++n;
+  const byId = new Map((Array.isArray(card?.blocks) ? card.blocks : []).map((b: any) => [b.id, b]));
+  const clicks = steps.map((id) => {
+    const spid = spidOf.get(id)!;
+    const effect = entranceOf((byId.get(id) as any)?.entrance)!.effect;
+    const p = PRESET[effect];
+    const outer = ctn(), mid = ctn(), eff = ctn(), set = ctn();
+    return `<p:par><p:cTn id="${outer}" fill="hold"><p:stCondLst><p:cond delay="indefinite"/></p:stCondLst><p:childTnLst>`
+      + `<p:par><p:cTn id="${mid}" fill="hold"><p:stCondLst><p:cond delay="0"/></p:stCondLst><p:childTnLst>`
+      + `<p:par><p:cTn id="${eff}" presetID="${p.id}" presetClass="entr" presetSubtype="${p.subtype}" fill="hold" nodeType="clickEffect"><p:stCondLst><p:cond delay="0"/></p:stCondLst><p:childTnLst>`
+      + `<p:set><p:cBhvr><p:cTn id="${set}" dur="1" fill="hold"><p:stCondLst><p:cond delay="0"/></p:stCondLst></p:cTn><p:tgtEl><p:spTgt spid="${spid}"/></p:tgtEl><p:attrNameLst><p:attrName>style.visibility</p:attrName></p:attrNameLst></p:cBhvr><p:to><p:strVal val="visible"/></p:to></p:set>`
+      + p.draw(ctn, spid)
+      + '</p:childTnLst></p:cTn></p:par></p:childTnLst></p:cTn></p:par></p:childTnLst></p:cTn></p:par>';
+  }).join('');
+  return '<p:timing><p:tnLst><p:par><p:cTn id="1" dur="indefinite" restart="never" nodeType="tmRoot"><p:childTnLst>'
+    + `<p:seq concurrent="1" nextAc="seek"><p:cTn id="2" dur="indefinite" nodeType="mainSeq"><p:childTnLst>${clicks}</p:childTnLst></p:cTn>`
+    + '<p:prevCondLst><p:cond evt="onPrev" delay="0"><p:tgtEl><p:sldTgt/></p:tgtEl></p:cond></p:prevCondLst>'
+    + '<p:nextCondLst><p:cond evt="onNext" delay="0"><p:tgtEl><p:sldTgt/></p:tgtEl></p:cond></p:nextCondLst></p:seq>'
+    + '</p:childTnLst></p:cTn></p:par></p:tnLst></p:timing>';
+}
+
 async function blockSlideXml(slide: any, idx: number, total: number, input: EditableInput, media: Media[], charts: ChartPart[], counts: Counts, shots: { left: number }): Promise<{ xml: string; rels: string[] }> {
   const shapes: string[] = [];
   const rels: string[] = [];
@@ -470,7 +533,13 @@ async function blockSlideXml(slide: any, idx: number, total: number, input: Edit
     counts.svg += 1;
   }
   const placed: Placed[] = [];
-  const put = (b: any, r: Rect, xml: string) => placed.push({ xml, rect: r, group: typeof b.group === 'string' ? b.group : null, pinned: b.pinned === true });
+  // D1576: each block's shape id (the first shape written for it), which its entrance targets.
+  const spidOf = new Map<string, number>();
+  const put = (b: any, r: Rect, xml: string) => {
+    const m = /<p:cNvPr id="(\d+)"/.exec(xml);
+    if (m && typeof b.id === 'string' && !spidOf.has(b.id)) spidOf.set(b.id, Number(m[1]));
+    placed.push({ xml, rect: r, group: typeof b.group === 'string' ? b.group : null, pinned: b.pinned === true });
+  };
   for (const b of readingOrder(slide.blocks)) {
     const r = blockRect(b.grid);
     if (b.kind === 'image') {
@@ -538,7 +607,7 @@ async function blockSlideXml(slide: any, idx: number, total: number, input: Edit
     <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
     <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
     ${shapes.join('\n')}
-  </p:spTree></p:cSld>
+  </p:spTree></p:cSld>${transitionXml(slide?.transition)}${timingXml(slide, spidOf)}
 </p:sld>`;
   return { xml, rels };
 }

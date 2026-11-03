@@ -52,7 +52,7 @@ export const QUESTION = 'What resources does this venture need?';
 export const MODULES = [
   { slug: 'fundraising-readiness', name: 'Fundraising readiness', records_title: 'Readiness items' },
   { slug: 'investor-narrative', name: 'Investor narrative', records_title: 'Versions' },
-  { slug: 'pitch-deck', name: 'Pitch deck', records_title: 'Investor links' },
+  { slug: 'pitch-deck', name: 'Pitch', records_title: 'Investor links' },
   { slug: 'data-room', name: 'Data room', records_title: 'Files' },
   { slug: 'cap-table', name: 'Cap table', records_title: 'Holders' },
   { slug: 'use-of-funds', name: 'Use of funds', records_title: 'Categories' },

@@ -23,7 +23,8 @@ import { autofillDeck, toEditorSlides } from '../services/decks/autofill';
 import { fillAxalSpinoutDemoDay, buildAxalSpinoutDemoDaySlides, buildAxalSpinoutCoverage } from '../services/decks/axalSpinoutDemoDay';
 import { assembleSpinoutDeckData } from '../services/decks/spinoutDeckData';
 import { applySpinoutOverrides, loadSpinoutDeckOverrides } from '../services/decks/spinoutDeckOverrides';
-import { recommendMethod, listOverrides, setOverride, deleteOverride } from '../services/decks/recommend';
+import { recommendMethod, listOverrides, setOverride, deleteOverride, engineDefault, engineDefaults, overrideOf } from '../services/decks/recommend';
+import { logAdminAction } from '../services/adminAudit';
 import { getDeckBrand, setStudioWatermark, ensureMethodAllowed, fetchLandingPageForProject, applyBrandKitToSlides } from '../services/decks/branding';
 import { type RenderableDeck } from '../services/decks/render';
 import { NO_NOTES as NO_SPEAKER_NOTES, NO_SOURCES as NO_SOURCES_RECORDED, aiCards, sourceLines } from '../services/decks/offlineHtml';
@@ -2434,8 +2435,14 @@ decks.get('/admin/recommend-overrides', async (c) => {
   const user = await requireAuth(c);
   if (String(user.role) !== 'admin') return c.json({ error: 'forbidden' }, 403);
   const overrides = await listOverrides(c.env);
-  return c.json({ overrides });
+  // D4155 K4 (#4191): the engine's own pick for each cell of HQ's grid, so a cell with no override names it.
+  return c.json({ overrides, defaults: engineDefaults() });
 });
+
+/** D4155 K4 (#4191): every default-template change carries a reason of at least ten characters. */
+const TEMPLATE_REASON_MIN = 10;
+const templateReason = (v: unknown): string | null => (typeof v === 'string' && v.trim().length >= TEMPLATE_REASON_MIN ? v.trim().slice(0, 1000) : null);
+const reasonRequired = (c: any) => c.json({ error: 'reason_required', message: `Say why, in at least ${TEMPLATE_REASON_MIN} characters.` }, 400);
 
 decks.put('/admin/recommend-overrides', async (c) => {
   const user = await requireAuth(c);
@@ -2448,9 +2455,15 @@ decks.put('/admin/recommend-overrides', async (c) => {
   const methodId = String(body?.method_id || '').trim();
   if (!sector || !stage || !methodId) return c.json({ error: 'sector, stage, method_id required' }, 400);
   if (!getMethod(methodId)) return c.json({ error: 'unknown method_id' }, 400);
+  const reason = templateReason(body?.reason);
+  if (!reason) return reasonRequired(c);
+  const before = (await overrideOf(c.env, sector, stage))?.method_id ?? null;
   await setOverride(c.env, sector, stage, methodId, Number(user.id) || null);
+  await logAdminAction(c.env, Number(user.id), String(user.email || ''), 'deck_default_template_set', {
+    sector, stage, before: { method_id: before, engine_default: engineDefault(sector, stage).method_id }, after: { method_id: methodId }, reason,
+  });
   const overrides = await listOverrides(c.env);
-  return c.json({ overrides });
+  return c.json({ overrides, defaults: engineDefaults() });
 });
 
 decks.delete('/admin/recommend-overrides', async (c) => {
@@ -2461,9 +2474,17 @@ decks.delete('/admin/recommend-overrides', async (c) => {
   const sector = c.req.query('sector') || '';
   const stage = c.req.query('stage') || '';
   if (!sector || !stage) return c.json({ error: 'sector + stage query required' }, 400);
+  // The reason rides in the body: a DELETE's query string lands in access logs, a reason should not.
+  const body = await c.req.json().catch(() => ({} as any));
+  const reason = templateReason(body?.reason);
+  if (!reason) return reasonRequired(c);
+  const before = (await overrideOf(c.env, sector, stage))?.method_id ?? null;
   await deleteOverride(c.env, sector, stage);
+  await logAdminAction(c.env, Number(user.id), String(user.email || ''), 'deck_default_template_reset', {
+    sector, stage, before: { method_id: before }, after: { method_id: null, engine_default: engineDefault(sector, stage).method_id }, reason,
+  });
   const overrides = await listOverrides(c.env);
-  return c.json({ overrides });
+  return c.json({ overrides, defaults: engineDefaults() });
 });
 
 export default decks;

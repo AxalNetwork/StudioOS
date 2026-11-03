@@ -30,6 +30,7 @@ import { isDecorOn } from './arrangeModel';
 import ShareDialog from './ShareDialog';
 import CommentsSheet from './CommentsSheet';
 import ExportDialog from './ExportDialog';
+import TransitionSheet from './TransitionSheet';
 import { BackgroundSheet, BrandKitSheet, CheckSheet, RemixSheet, ReplaceImagesSheet, SizeSheet, SourcesSheet, StageSheet, StructureSheet, ThemeSheet, VersionsSheet } from './DeckSheets';
 // D1583 (#3830): ⋯ › This deck › Teaser, one-pager or memo.
 import DeriveSheet from './DeriveSheet.jsx';
@@ -54,7 +55,8 @@ import { discardDraft as discardDraftAdapter, draft as draftAdapter, saveCard as
 import { ConflictView, FindReplaceSheet, RestoreBanner, StillCharged, SyncLine } from './EditingParts';
 import usePreflight from './usePreflight';
 import { FindingStrip, PreflightGate, PreflightMeasure, PreflightPanel } from './PreflightPanel';
-import { gateOf, workingDeck } from './preflightUiModel';
+import { gateOf, overlayOf, stepOf, workingDeck } from './preflightUiModel';
+import PreflightOverlay from './PreflightOverlay';
 import {
   ADDABLE_KINDS, BUTTON_LABEL_MAX, KIND_LABELS, MODEL_FAILED, SECTION_MAX, VIDEO_PROVIDER_LABELS, sectionsOf, NOTES_PLACEHOLDER, NO_CARDS,
   NOT_RECORDED, PHONE_NOTE, READ_FAILED, THEME_LABELS,
@@ -230,6 +232,9 @@ export default function PitchEditor() {
   // A card run or a decision in the editor's own bar changes what waits: the header reads it again.
   const [proposalsTick, setProposalsTick] = useState(0);
   const onProposals = useCallback(() => setProposalsTick((t) => t + 1), []);
+  // D4210: a fix asked from the preflight panel opens the header Ask, where it waits.
+  const [askOpenKey, setAskOpenKey] = useState(0);
+  const onOpenAsk = useCallback(() => setAskOpenKey((t) => t + 1), []);
   // D1604: the header's toolbar reports the open editor's state and calls back into it.
   const [chrome, setChrome] = useState(null);
   const actionRef = useRef(null);
@@ -266,7 +271,7 @@ export default function PitchEditor() {
   // open Editor (keyed to the version) keeps its unsaved cards.
   const shell = {
     query: ventureQuery(projectId || requested), title, tools, overlay, heading: deck.status === 'ok' ? title : null, deckId: current?.id ?? null,
-    ask: { projectId, readOnly, onPlace, versions, onChanged: versions.refresh, editsKey: proposalsTick },
+    ask: { projectId, readOnly, onPlace, versions, onChanged: versions.refresh, editsKey: proposalsTick, openKey: askOpenKey },
   };
 
   if (projects.status === 'error') return <Shell {...shell}><ReadFailed text="Your ventures could not be read." onRetry={projects.retry} testId="pitch-editor-ventures-error" /></Shell>;
@@ -308,6 +313,7 @@ export default function PitchEditor() {
         onSaved={() => versions.retry()}
         placeRef={placeRef}
         onProposals={onProposals}
+        onOpenAsk={onOpenAsk}
         onChrome={setChrome}
         actionRef={actionRef}
         onSend={setShareDialog}
@@ -380,7 +386,7 @@ export function editReducer(state, action) {
   }
 }
 
-function Editor({ project, deck, model, kit, refresh, sources, charts, versions, readOnly, phone, narrow = false, onTitle, onSaved, placeRef, onProposals, onChrome, actionRef, onSend = null, presence = null, youId = null }) {
+function Editor({ project, deck, model, kit, refresh, sources, charts, versions, readOnly, phone, narrow = false, onTitle, onSaved, placeRef, onProposals, onOpenAsk = null, onChrome, actionRef, onSend = null, presence = null, youId = null }) {
   const [aiOn] = useAssistMode('raise');
   const navigate = useNavigate();
   const [base, setBase] = useState(() => ({ deck, cards: cardsOf(deck), theme: deck.theme ?? null, audience: deck.audience ?? null }));
@@ -417,7 +423,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   const kitData = kit.status === 'ok' ? kit.data?.kit ?? null : null;
   // D1370 (#3661): Check before you send, on the deck as it is on screen; a result for another state reads "Out of date".
   const working = useMemo(() => workingDeck(base.deck, cards, theme), [base.deck, cards, theme]);
-  const pf = usePreflight({ deck: working, kit: kitData, refresh: refresh.status === 'ok' ? refresh.data : null });
+  const pf = usePreflight({ deck: working, kit: kitData, refresh: refresh.status === 'ok' ? refresh.data : null, readOnly });
   const [gate, setGate] = useState(null);
   const [finding, setFinding] = useState(null);
   const colours = cardColours(theme, kitData);
@@ -678,7 +684,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     // D1561 (#3808): ⋯ › Stage and ⋯ › Reorder for stage open the same stage sheet (pd23).
     if (id === 'stage' || id === 'reorder') { setSheet('stage'); return; }
     if (id === 'replace_images') { if (!readOnly) setSheet('replace_images'); return; }
-    if (['theme', 'size', 'brand', 'sources', 'versions', 'check', 'structure', 'background', 'remix', 'derive', 'comments', 'find'].includes(id)) setSheet(id);
+    if (['theme', 'size', 'brand', 'sources', 'versions', 'check', 'structure', 'background', 'transition', 'remix', 'derive', 'comments', 'find'].includes(id)) setSheet(id);
   };
   if (actionRef) actionRef.current = act;
   const cardAction = (id, i, value) => {
@@ -737,6 +743,13 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
       {finding && !sheet && !gate ? (
         <FindingStrip rows={stripRows} id={finding} onStep={show} onBack={() => { setFinding(null); setSheet('preflight'); }} onClose={() => setFinding(null)} />
       ) : null}
+      {/* D1370 (#3661, PF3): the finding drawn on its slide, as it was checked. */}
+      {finding && !sheet && !gate && pf.snapshot ? (() => {
+        const step = stepOf(stripRows, finding);
+        const row = stripRows[step.index];
+        const ov = overlayOf(row, { n: step.index + 1, aspect: pf.snapshot.theme?.aspect === '4:3' ? '4:3' : '16:9', current: pf.current });
+        return ov ? <PreflightOverlay overlay={ov} card={pf.snapshot.slides?.[ov.card]} theme={pf.snapshot.theme} kit={kitData} /> : null;
+      })() : null}
       {phone ? (
         <PhoneEditor cards={cards} sel={sel} setSel={choose} move={move} card={card} readOnly={readOnly}
           onNotes={(v) => edit({ type: 'setFlag', index: sel, key: 'notes', value: v }, { label: 'Notes', coalesce: `notes:${cardUid(card) ?? sel}` })} notesMax={model.notes_max}
@@ -834,6 +847,9 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
         <BackgroundSheet card={card} index={sel} readOnly={readOnly} onBackground={(bg) => edit({ type: 'setFlag', index: sel, key: 'background', value: bg }, { label: 'Background' })}
           onImage={() => { setSheet(null); setDialog({ kind: 'image', use: 'card' }); }} onClose={() => setSheet(null)} />
       ) : null}
+      {sheet === 'transition' && card ? (
+        <TransitionSheet card={card} index={sel} readOnly={readOnly} onTransition={(t) => edit({ type: 'setFlag', index: sel, key: 'transition', value: t ?? undefined }, { label: 'Transition' })} onClose={() => setSheet(null)} />
+      ) : null}
       {sheet === 'derive' && base.deck?.id ? (
         <DeriveSheet deckId={base.deck.id} version={base.deck.version ?? null} dirty={dirty} readOnly={readOnly} aiOn={aiOn} outOfTokens={outOfTokens}
           onProposed={onProposals} onClose={() => setSheet(null)} />
@@ -874,7 +890,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
         <StageSheet deckId={base.deck.id} readOnly={readOnly} dirty={dirty} onReordered={saved} onClose={() => setSheet(null)} />
       ) : null}
       {sheet === 'preflight' ? (
-        <PreflightPanel pf={pf} version={base.deck.version ?? null} readOnly={readOnly} onShow={show} onClose={() => setSheet(null)} />
+        <PreflightPanel pf={pf} version={base.deck.version ?? null} readOnly={readOnly} deckId={aiOn ? base.deck.id : null} tokensOut={outOfTokens}
+          onTokens={onTokens} onProposals={onProposals} onOpenAsk={onOpenAsk} onShow={show} onClose={() => setSheet(null)} />
       ) : null}
       {gate && (pf.running || gateView?.open) ? (
         <PreflightGate gate={gateView} progress={pf.running ? pf.progress : null} version={base.deck.version ?? null} dirty={dirty} onShow={show}
@@ -882,6 +899,10 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
       ) : null}
       {pf.running && pf.running.done < pf.running.total ? (
         <PreflightMeasure key={pf.running.done} card={pf.running.snapshot.slides[pf.running.done]} index={pf.running.done} theme={pf.running.snapshot.theme} kit={kitData} onMeasured={pf.onMeasured} />
+      ) : null}
+      {/* #3661 pf5c: one slide that couldn't be checked, measured again on its own. */}
+      {!pf.running && pf.retrying && pf.snapshot ? (
+        <PreflightMeasure key={`retry-${pf.retrying.index}`} card={pf.snapshot.slides[pf.retrying.index]} index={pf.retrying.index} theme={pf.snapshot.theme} kit={kitData} onMeasured={pf.onRetried} />
       ) : null}
       {sheet === 'check' && base.deck?.id ? (
         <CheckSheet deck={base.deck} projectId={project?.id} readOnly={readOnly} dirty={dirty} onReplaced={saved}

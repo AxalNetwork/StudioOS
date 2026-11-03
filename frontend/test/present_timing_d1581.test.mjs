@@ -50,7 +50,7 @@ test('3. the wiring: the presenter view draws the budget and obeys the remote; n
   assert.match(src, /<Budget marks=\{marks\}/);
   assert.match(src, /presentBudget\(marks, Date\.now\(\), n, i, pitchSeconds\)/);
   assert.match(src, /frame\?\.type !== 'step' \|\| view === 'rehearse'/);
-  assert.match(src, /setI\(\(at\) => remoteMove\(at, frame\.step, n\)\)/);
+  assert.match(src, /remoteMove\(at\.card, frame\.step, n\)/);
   assert.match(src, /useWebSocket\(status === 'ok' && deck\?\.id && !phone \? remoteSocketPath\(deck\.id\)/);
   assert.doesNotMatch(src, /deckRemoteApi|remote\/pair|Pair a phone/i, 'the pairing screen waits on design');
   assert.doesNotMatch(read('frontend/src/pages/raise/pitch/presentTimingModel.js'), /\/ n\b|Math\.round\(pitch/, 'no second split');

@@ -6,20 +6,42 @@
  * the deck as it was when the run started. The founder can keep editing; the
  * result then reads "Out of date" (`currentResult`), never silently re-run.
  *
- * It reads and measures only: no fetch, no write, nothing on the slides
- * changes. Dismissals are held here, per version, until P1 (#4208) keeps them
- * on the Worker (`BUILD.P1` in `preflightUiModel.js`).
+ * The check reads and measures only: nothing on the slides changes.
+ *
+ * Dismissals (D4208, `BUILD.P1`) are the version's, kept on the Worker:
+ * read when the editor opens a version, and written on Dismiss and Undo, so
+ * every editor of that version sees them and a reload keeps them. The set is
+ * changed at once; a write the Worker refuses takes the change back and says
+ * so (`notKept`). A reader (`readOnly`) reads them and writes nothing.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { deckPreflightApi } from '../../../lib/api/deckPreflight';
+import { reportError } from '../../../lib/log';
 import { currentResult, runPreflight } from './preflightModel.js';
-import { chipOf, groupsOf } from './preflightUiModel.js';
+import { BUILD, chipOf, groupsOf } from './preflightUiModel.js';
 
-export default function usePreflight({ deck, kit = null, refresh = null }) {
+export default function usePreflight({ deck, kit = null, refresh = null, readOnly = false, api = deckPreflightApi }) {
   const [running, setRunning] = useState(null);
   const [done, setDone] = useState(null);
   const doneRef = useRef(null);
   const [previous, setPrevious] = useState(null);
   const [dismissed, setDismissed] = useState(() => new Set());
+  const [notKept, setNotKept] = useState(null);
+  const deckId = deck?.id ?? null;
+  const version = deck?.version ?? null;
+
+  // P1: the version's dismissals, read when it opens. Another version starts clean.
+  useEffect(() => {
+    setDismissed(new Set());
+    setNotKept(null);
+    if (!BUILD.P1.live || deckId == null || version == null) return undefined;
+    let live = true;
+    Promise.resolve(api.dismissals(deckId, version)).then(
+      (r) => { if (live && Array.isArray(r?.dismissed)) setDismissed(new Set(r.dismissed.filter((x) => typeof x === 'string'))); },
+      (e) => reportError('pitch-preflight:dismissals', e),
+    );
+    return () => { live = false; };
+  }, [deckId, version, api]);
 
   const run = useCallback(() => {
     setRunning((r) => r || { snapshot: deck, done: 0, total: Array.isArray(deck?.slides) ? deck.slides.length : 0, measurements: {}, failed: [] });
@@ -37,7 +59,7 @@ export default function usePreflight({ deck, kit = null, refresh = null }) {
     if (!running || running.done < running.total) return;
     const result = runPreflight(running.snapshot, { kit, refresh, measurements: running.measurements, now: Date.now() });
     const was = doneRef.current;
-    const next = { result, snapshot: running.snapshot, failed: running.failed, at: Date.now() };
+    const next = { result, snapshot: running.snapshot, failed: running.failed, measurements: running.measurements, at: Date.now() };
     doneRef.current = next;
     setPrevious(was ? groupsOf(was.result, { slides: was.snapshot.slides, dismissed: new Set(), failed: was.failed }) : null);
     setDone(next);
@@ -50,11 +72,45 @@ export default function usePreflight({ deck, kit = null, refresh = null }) {
   const progress = running ? { done: running.done, total: running.total } : null;
   const chip = chipOf({ groups, current, running: progress });
 
-  const dismiss = useCallback((id) => setDismissed((s) => new Set(s).add(id)), []);
-  const undismiss = useCallback((id) => setDismissed((s) => { const n = new Set(s); n.delete(id); return n; }), []);
+  // #3661 pf5c: a slide that couldn't be checked is tried again on its own, on the same snapshot, while the
+  // result is still current. Once the deck changed, Try again runs the whole check: results are only ever
+  // for one version. A slide that fails again stays "Couldn't check", never a pass.
+  const [retrying, setRetrying] = useState(null);
+  const retry = useCallback((index) => {
+    const d = doneRef.current;
+    if (!d || !current || !Number.isInteger(index) || !d.failed.includes(index)) { run(); return; }
+    setRetrying((r) => r || { index });
+  }, [current, run]);
+  const onRetried = useCallback((index, m, failed) => {
+    const d = doneRef.current;
+    setRetrying(null);
+    if (!d) return;
+    const measurements = { ...(d.measurements || {}), ...(m || {}) };
+    const stillFailed = failed ? d.failed : d.failed.filter((i) => i !== index);
+    const result = runPreflight(d.snapshot, { kit, refresh, measurements, now: Date.now() });
+    const next = { ...d, result, failed: stillFailed, measurements, at: Date.now() };
+    doneRef.current = next;
+    setDone(next);
+  }, [kit, refresh]);
+
+  const add = (id) => (s) => new Set(s).add(id);
+  const drop = (id) => (s) => { const n = new Set(s); n.delete(id); return n; };
+  /** Dismiss (`on`) or Undo: changed here at once, then kept for the version; a refusal takes it back. */
+  const keep = useCallback((id, on, severity) => {
+    setNotKept(null);
+    setDismissed(on ? add(id) : drop(id));
+    if (!BUILD.P1.live || readOnly || deckId == null || version == null) return;
+    Promise.resolve(api.setDismissed(deckId, { version, finding_id: id, dismissed: on, ...(severity ? { severity } : {}) })).then(
+      () => {},
+      (e) => { reportError('pitch-preflight:dismiss', e); setDismissed(on ? drop(id) : add(id)); setNotKept(id); },
+    );
+  }, [deckId, version, readOnly, api]);
+  const dismiss = useCallback((id, severity) => keep(id, true, severity), [keep]);
+  const undismiss = useCallback((id) => keep(id, false), [keep]);
 
   return {
     run, onMeasured, running, progress, result: done?.result ?? null, snapshot: done?.snapshot ?? null, at: done?.at ?? null,
-    failed: done?.failed ?? [], current, groups, previous: current ? previous : null, chip, dismissed, dismiss, undismiss,
+    failed: done?.failed ?? [], current, groups, previous: current ? previous : null, chip, dismissed, dismiss, undismiss, notKept,
+    retry, retrying, onRetried,
   };
 }
