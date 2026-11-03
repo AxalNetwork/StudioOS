@@ -369,11 +369,18 @@ jobs:
     # Full history (fetch-depth: 0 below) so `git diff base...HEAD` has a
     # merge base. That checkout has exceeded this job's old 5-minute limit
     # before the gate ran (#3514, 2026-10-27), so the job allows 15.
+    #
+    # BLOBLESS (`filter: blob:none`, 2026-11-03). The full clone of every
+    # blob still ran past 15 minutes on a busy day, and a cancelled gate is a
+    # red check on every open PR. The gate needs the commits and trees for the
+    # merge base and the name-only diff, and the bytes of the files HEAD
+    # checks out (which the checkout fetches); it never reads an old blob.
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+          filter: blob:none
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'

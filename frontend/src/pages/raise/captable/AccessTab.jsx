@@ -5,8 +5,9 @@ import { actionGhost } from '../../../ui';
 import { INK, LINK, MONO, MUTED, EYEBROW, ReadState, Section, TD, Table, useRead } from './CapTableTool';
 import CapTableDialog, { useWrite } from './CapTableDialog';
 import {
-  ATTESTATION, ATTESTED, COFOUNDER_NOTE, DEFAULT_ACCESS, LEVELS, LINK_HOURS, LINK_LEVELS, LINK_VIEWS,
-  grantRows, recordedHolderChoices, levelLabel, levelRows, linkBody, linkProblems, linkRows, logRows,
+  ASK_LEVELS, ATTESTATION, ATTESTED, COFOUNDER_NOTE, DEFAULT_ACCESS, LEVELS, LINK_HOURS, LINK_LEVELS, LINK_VIEWS,
+  REQUESTS_NONE, REQUESTS_NOTE,
+  grantRows, recordedHolderChoices, levelLabel, levelRows, linkBody, linkProblems, linkRows, logRows, requestRows,
 } from './capTableAccess';
 
 /**
@@ -14,11 +15,16 @@ import {
  * and the access log, on D1019's reads. The owner changes a level, revokes a
  * grant, makes and revokes a link, each in a dialog; a co-founder reads it all
  * and changes nothing (CT16a), because the grants read says `can_change`.
+ *
+ * D1130 (#3010): "Asked for access" lists the investors' pending asks (CT15n).
+ * The owner approves one at a level (the asked level is preselected) or
+ * declines it, each in a dialog that says what it changes.
  */
 
 const readGrants = (id) => capTableAccessApi.grants(id);
 const readLinks = (id) => capTableAccessApi.links(id);
 const readModel = (id) => capTableRecordApi.read(id);
+const readRequests = (id) => capTableAccessApi.requests(id);
 const INPUT = 'w-full rounded-[8px] border border-axal-hairline bg-white px-2.5 py-1.5 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200';
 
 
@@ -58,9 +64,9 @@ function LevelDialog({ projectId, row, holders, scope, onClose, onDone }) {
   );
 }
 
-function RevokeDialog({ title, sub, onClose, onDone, write: doWrite, testId }) {
+function RevokeDialog({ title, sub, action = 'Revoke', onClose, onDone, write: doWrite, testId }) {
   const w = useWrite(onDone);
-  return <CapTableDialog title={title} sub={sub} action="Revoke" tone="danger" write={w} onClose={onClose} onAction={() => w.run(doWrite)} testId={testId} />;
+  return <CapTableDialog title={title} sub={sub} action={action} tone="danger" write={w} onClose={onClose} onAction={() => w.run(doWrite)} testId={testId} />;
 }
 
 function NewLinkDialog({ projectId, scope, onClose, onDone }) {
@@ -99,6 +105,58 @@ function NewLinkDialog({ projectId, scope, onClose, onDone }) {
       ) : null}
       {problems.length ? <ul className={`m-0 list-disc pl-5 text-[12px] ${MUTED}`} data-testid="captable-link-problems">{problems.map((p) => <li key={p}>{p}</li>)}</ul> : null}
     </CapTableDialog>
+  );
+}
+
+function ApproveDialog({ projectId, row, scope, onClose, onDone }) {
+  const [level, setLevel] = useState(row.level);
+  const w = useWrite(onDone);
+  return (
+    <CapTableDialog title={`Share with ${row.who}?`} testId="captable-request-approve-dialog"
+      sub={`${row.who} asked for ${row.levelLabel}. They see the level you choose from their next open, and the grant joins Who sees what.`}
+      action="Approve" disabled={!ASK_LEVELS.includes(level)} write={w} onClose={onClose}
+      onAction={() => w.run(() => capTableAccessApi.approveRequest(projectId, row.uid, level))}>
+      <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0" data-testid="captable-request-levels">
+        {levelRows(scope).filter((l) => ASK_LEVELS.includes(l.id)).map((l) => (
+          <label key={l.id} className="flex items-start gap-2.5 rounded-[8px] border border-axal-hairline px-3 py-2 dark:border-gray-700">
+            <input type="radio" name="request-level" value={l.id} checked={level === l.id} onChange={() => setLevel(l.id)} data-testid={`captable-request-level-${l.id}`} />
+            <span className="flex flex-col"><span className="font-bold">{l.label}{l.id === row.level ? ' · asked for' : ''}</span><span className={`text-[12px] ${MUTED}`}>{l.sees}</span></span>
+          </label>
+        ))}
+      </fieldset>
+    </CapTableDialog>
+  );
+}
+
+function AccessRequests({ projectId, read, canChange, scope, retry, onAnswer }) {
+  const rows = read.status === 'ready' ? requestRows(read.data) : [];
+  return (
+    <Section title="Asked for access" testId="captable-requests">
+      <ReadState read={read} what="Who asked for access" claim="This is not a claim that nobody asked." onRetry={retry} testId="captable-requests">
+        {rows.length === 0 ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-requests-none">{REQUESTS_NONE}</p> : (
+          <Table testId="captable-requests-table"
+            cols={[{ key: 'p', label: 'Person or firm' }, { key: 'r', label: 'Relationship' }, { key: 'l', label: 'Asked for' }, { key: 'n', label: 'Note' }, { key: 'w', label: 'Asked' }, { key: 'x', label: '' }]}
+            rows={rows.map((q) => (
+              <tr key={q.uid} className="border-b border-axal-ground last:border-b-0 dark:border-gray-700" data-testid="captable-request-row">
+                <td className={`${TD} font-bold`}>{q.who}</td>
+                <td className={TD}>{q.role}</td>
+                <td className={TD}>{q.levelLabel}</td>
+                <td className={TD}>{q.note || <span className={MUTED}>No note</span>}</td>
+                <td className={`${TD} ${MONO}`}>{q.asked}</td>
+                <td className={TD}>
+                  {canChange ? (
+                    <span className="flex flex-wrap gap-2">
+                      <button type="button" className={LINK} onClick={() => onAnswer({ kind: 'approve', row: q })} data-testid="captable-request-approve">Approve</button>
+                      <button type="button" className={LINK} onClick={() => onAnswer({ kind: 'decline', row: q })} data-testid="captable-request-decline">Decline</button>
+                    </span>
+                  ) : null}
+                </td>
+              </tr>
+            ))} />
+        )}
+        <p className={`m-0 mt-2 text-[11.5px] ${MUTED}`} data-testid="captable-requests-note">{REQUESTS_NOTE}</p>
+      </ReadState>
+    </Section>
   );
 }
 
@@ -142,6 +200,7 @@ export default function AccessTab({ projectId, reload: outer, retry: outerRetry 
   const grants = useRead(readGrants, projectId, reload);
   const links = useRead(readLinks, projectId, reload);
   const model = useRead(readModel, projectId, reload);
+  const asked = useRead(readRequests, projectId, reload);
   const [dialog, setDialog] = useState(null);
   const canChange = grants.status === 'ready' && grants.data?.can_change === true;
   const scope = grants.status === 'ready' ? grants.data?.levels : null;
@@ -154,6 +213,7 @@ export default function AccessTab({ projectId, reload: outer, retry: outerRetry 
       {grants.status === 'ready' && !canChange
         ? <p className={`m-0 rounded-[10px] border border-axal-hairline bg-axal-ground px-3 py-2 text-[12.5px] ${INK} dark:border-gray-700 dark:bg-gray-800`} data-testid="captable-access-readonly">{COFOUNDER_NOTE}</p>
         : null}
+      <AccessRequests projectId={projectId} read={asked} canChange={canChange} scope={scope} retry={retry} onAnswer={setDialog} />
       <Section title="Who sees what" testId="captable-who"
         aside={canChange ? <button type="button" className={actionGhost} onClick={() => setDialog({ kind: 'grant' })} data-testid="captable-grant-new">Share with a holder</button> : null}>
         <ReadState read={grants} what="Who sees your cap table" claim="This is not a claim that nobody does." onRetry={retry} testId="captable-who">
@@ -214,6 +274,10 @@ export default function AccessTab({ projectId, reload: outer, retry: outerRetry 
       {dialog?.kind === 'unlink'
         ? <RevokeDialog title={`Revoke “${dialog.row.label}”?`} sub="Anyone holding the link sees nothing from now on. Its views stay in the log."
             write={() => capTableAccessApi.revokeLink(projectId, dialog.row.id)} onClose={() => setDialog(null)} onDone={done} testId="captable-unlink-dialog" /> : null}
+      {dialog?.kind === 'approve' ? <ApproveDialog projectId={projectId} row={dialog.row} scope={scope} onClose={() => setDialog(null)} onDone={done} /> : null}
+      {dialog?.kind === 'decline'
+        ? <RevokeDialog title={`Decline ${dialog.row.who}'s ask?`} sub={`Nothing is shared. ${dialog.row.who} is told, and can ask again after a day.`} action="Decline"
+            write={() => capTableAccessApi.declineRequest(projectId, dialog.row.uid)} onClose={() => setDialog(null)} onDone={done} testId="captable-request-decline-dialog" /> : null}
       {dialog?.kind === 'link' ? <NewLinkDialog projectId={projectId} scope={scope} onClose={() => setDialog(null)} onDone={refresh} /> : null}
     </div>
   );

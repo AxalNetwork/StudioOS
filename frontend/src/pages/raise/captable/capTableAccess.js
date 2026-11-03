@@ -219,3 +219,24 @@ export function recordedHolderChoices(read) {
   }
   return [...rows.values()];
 }
+
+/**
+ * D1130 (#3010): the founder's queue of asks for access (CT15n). One row per
+ * pending ask: who asked (name and role, never an email), the level they asked
+ * for, their note, and when. Approve grants a level; Decline grants nothing.
+ */
+export const ASK_LEVELS = ['own_position', 'summary', 'investor', 'full'];
+export const REQUESTS_NONE = 'Nobody is waiting for an answer.';
+export const REQUESTS_NOTE = 'Approving grants the level you choose; the asker reads it from their next open. Declining grants nothing, and they can ask again after a day.';
+export function requestRows(read) {
+  const list = Array.isArray(read?.requests) ? read.requests : [];
+  return list.map((q) => ({
+    uid: q.uid,
+    who: String(q.name || '').trim() || NOT_RECORDED,
+    role: q.role ? String(q.role).charAt(0).toUpperCase() + String(q.role).slice(1) : NOT_RECORDED,
+    level: ASK_LEVELS.includes(q.requested_level) ? q.requested_level : 'investor',
+    levelLabel: levelLabel(q.requested_level),
+    note: String(q.note || '').trim() || null,
+    asked: when(q.asked_at),
+  }));
+}
