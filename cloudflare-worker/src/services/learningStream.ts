@@ -20,6 +20,11 @@
  *       error  → error_code and error_message.
  *   · `captionReady` — a generated caption that is ready fills the item's
  *     transcript only when there is none: it never overwrites an author's.
+ *   · D4179 (#4179, part 4): `signSourceToken` / `verifySourceToken`, the
+ *     purpose-scoped one-hour URL a copy hands Stream; `copyStates`, each
+ *     item's copy as the studio draws it. An `r2_copy` is verified (and the
+ *     item moves to it) only when it is ready with a duration above 0, and only
+ *     while the item still plays the copied object.
  *   · `playback` — the member's `video_stream`, every URL carrying a token from
  *     `generateToken()`. The caller mints it ONLY after `canSeeLearning`; it is
  *     never cached and never logged.
@@ -31,6 +36,8 @@ import type { Env } from '../types';
 /** What the Workers binding is used for here; tolerant of the field names the binding and the REST API each use. */
 export type StreamBinding = {
   createDirectUpload(opts: Record<string, unknown>): Promise<any>;
+  /** D4179: copy a video Stream fetches from a URL (`env.STREAM.upload(url, opts)`). */
+  upload?(url: string, opts?: Record<string, unknown>): Promise<any>;
   video(uid: string): {
     details(): Promise<any>;
     update(patch: Record<string, unknown>): Promise<any>;
@@ -110,8 +117,8 @@ const nowIso = () => new Date().toISOString();
 export async function applyStatus(env: Env, details: any): Promise<'ready' | 'error' | 'processing' | 'ignored'> {
   const uid = String(details?.uid ?? details?.id ?? '');
   if (!STREAM_UID_RE.test(uid)) return 'ignored';
-  const row = await env.DB.prepare('SELECT id, item_uid, origin, state FROM learning_stream_videos WHERE stream_uid = ?')
-    .bind(uid).first<{ id: number; item_uid: string; origin: string; state: string }>();
+  const row = await env.DB.prepare('SELECT id, item_uid, origin, state, source_r2_key FROM learning_stream_videos WHERE stream_uid = ?')
+    .bind(uid).first<{ id: number; item_uid: string; origin: string; state: string; source_r2_key: string | null }>();
   if (!row || row.state === 'superseded') return 'ignored';
   const state = String(details?.status?.state ?? '');
   const t = nowIso();
@@ -130,13 +137,20 @@ export async function applyStatus(env: Env, details: any): Promise<'ready' | 'er
     ).bind(seconds, Number.isFinite(size) && size >= 0 ? Math.round(size) : null, Number.isFinite(width) && width > 0 ? width : null,
       Number.isFinite(height) && height > 0 ? height : null, hostOf(details), t, t, seconds ?? 0, t, row.id).run();
     if (row.origin === 'upload' || seconds) {
+      // D4179: a copy moves the item only while the item still plays the R2 object that was copied;
+      // a copy of a file the item has since replaced is verified, but plays nothing.
+      const still = row.origin === 'upload' || !!(await env.DB.prepare(
+        `SELECT 1 AS yes FROM learning_items WHERE uid = ? AND video_source = 'r2' AND r2_key = ?`,
+      ).bind(row.item_uid, row.source_r2_key ?? '').first<{ yes: number }>());
       // The item now plays this video; its previous ready video is superseded (the sweep deletes it at Stream after 30 days).
-      await env.DB.batch([
-        env.DB.prepare(`UPDATE learning_items SET stream_uid = ?, duration_seconds = COALESCE(?, duration_seconds), updated_at = ? WHERE uid = ?`)
-          .bind(uid, seconds, t, row.item_uid),
-        env.DB.prepare(`UPDATE learning_stream_videos SET state = 'superseded', updated_at = ? WHERE item_uid = ? AND state = 'ready' AND stream_uid != ?`)
-          .bind(t, row.item_uid, uid),
-      ]);
+      if (still) {
+        await env.DB.batch([
+          env.DB.prepare(`UPDATE learning_items SET stream_uid = ?, duration_seconds = COALESCE(?, duration_seconds), updated_at = ? WHERE uid = ?`)
+            .bind(uid, seconds, t, row.item_uid),
+          env.DB.prepare(`UPDATE learning_stream_videos SET state = 'superseded', updated_at = ? WHERE item_uid = ? AND state = 'ready' AND stream_uid != ?`)
+            .bind(t, row.item_uid, uid),
+        ]);
+      }
     }
     return 'ready';
   }
@@ -280,5 +294,105 @@ export function parseChapters(v: unknown): { start_seconds: number; title: strin
     out.push({ start_seconds: start, title });
     last = start;
   }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// #4179 (D4179, part 4 of #3726) — copying an R2 upload to Stream.
+// ---------------------------------------------------------------------------
+
+/** The source URL a copy hands Stream lives this long. */
+export const SOURCE_TOKEN_TTL_SECONDS = 3600;
+/** A source token's own purpose: no other signed token of this Worker reads as one. */
+export const SOURCE_TOKEN_PURPOSE = 'learning-stream-source';
+/**
+ * Owner step F (S1's pick (a), until the owner answers): a verified copy's R2
+ * original is deleted this many days after the copy was verified.
+ */
+export const R2_KEPT_AFTER_COPY_DAYS = 30;
+/** A superseded Stream video is deleted at Stream after this many days. */
+export const SUPERSEDED_KEPT_DAYS = 30;
+
+const enc = new TextEncoder();
+const b64url = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+function unb64url(s: string): Uint8Array | null {
+  if (!/^[A-Za-z0-9_-]+$/.test(s)) return null;
+  try {
+    const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (s.length % 4)) % 4));
+    return Uint8Array.from(bin, (ch) => ch.charCodeAt(0));
+  } catch { return null; }
+}
+
+async function sourceKey(env: Env): Promise<CryptoKey | null> {
+  const secret = String((env as any).JWT_SECRET ?? '');
+  if (secret.length < 16) return null;
+  return crypto.subtle.importKey('raw', enc.encode(`${SOURCE_TOKEN_PURPOSE}:${secret}`), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
+}
+
+/**
+ * A one-hour token naming one item's one R2 object, for
+ * `GET /api/learning/stream/source/:token`. Its payload starts with its own
+ * purpose and its key is derived for that purpose, so a token minted for any
+ * other use of the Worker's secret never verifies here. Null without a secret.
+ */
+export async function signSourceToken(env: Env, itemUid: string, r2Key: string, nowMs = Date.now()): Promise<string | null> {
+  const key = await sourceKey(env);
+  if (!key) return null;
+  const exp = Math.floor(nowMs / 1000) + SOURCE_TOKEN_TTL_SECONDS;
+  const payload = enc.encode(`${SOURCE_TOKEN_PURPOSE}|${itemUid}|${r2Key}|${exp}`);
+  const sig = new Uint8Array(await crypto.subtle.sign('HMAC', key, payload));
+  return `${b64url(payload)}.${b64url(sig)}`;
+}
+
+/** The item and object a source token names, or null: a bad signature, another purpose, a malformed payload or an expired token. */
+export async function verifySourceToken(env: Env, token: string, nowMs = Date.now()): Promise<{ itemUid: string; r2Key: string } | null> {
+  const parts = String(token ?? '').split('.');
+  if (parts.length !== 2 || parts[0].length > 1200) return null;
+  const payload = unb64url(parts[0]);
+  const sig = unb64url(parts[1]);
+  const key = await sourceKey(env);
+  if (!payload || !sig || !key) return null;
+  if (!(await crypto.subtle.verify('HMAC', key, sig, payload))) return null;
+  const fields = new TextDecoder().decode(payload).split('|');
+  if (fields.length !== 4 || fields[0] !== SOURCE_TOKEN_PURPOSE) return null;
+  const [, itemUid, r2Key, exp] = fields;
+  if (!itemUid || !r2Key || !/^\d{1,12}$/.test(exp) || Math.floor(nowMs / 1000) > Number(exp)) return null;
+  return { itemUid, r2Key };
+}
+
+/** A copy's state as the studio content table draws it: Copy to Stream, Copying…, Verified, Copy failed. */
+export type CopyState =
+  | { state: 'none' }
+  | { state: 'copying'; stream_uid: string }
+  | { state: 'verified'; stream_uid: string; verified_at: string }
+  | { state: 'failed'; stream_uid: string; error_code: string | null; error_message: string | null };
+
+/** One r2_copy row read as its state. A ready copy with no duration is still copying: it is verified only with one. */
+export function copyStateOf(row: { stream_uid: string; state: string; verified_at: string | null; error_code?: string | null; error_message?: string | null } | null): CopyState {
+  if (!row || row.state === 'superseded') return { state: 'none' };
+  if (row.verified_at) return { state: 'verified', stream_uid: row.stream_uid, verified_at: row.verified_at };
+  if (row.state === 'error') return { state: 'failed', stream_uid: row.stream_uid, error_code: row.error_code ?? null, error_message: row.error_message ?? null };
+  return { state: 'copying', stream_uid: row.stream_uid };
+}
+
+/**
+ * Each item's copy state, for the items given, from each one's newest r2_copy
+ * of the R2 object it plays now. Read in its own guarded query: a store
+ * without the Stream table reads as no copies.
+ */
+export async function copyStates(env: Env, items: { uid: string; video_source?: string | null; r2_key?: string | null }[]): Promise<Map<string, CopyState>> {
+  const out = new Map<string, CopyState>();
+  const uploaded = items.filter((i) => i.video_source === 'r2' && i.r2_key);
+  if (!uploaded.length) return out;
+  try {
+    const rows = (await env.DB.prepare(
+      `SELECT item_uid, source_r2_key, stream_uid, state, verified_at, error_code, error_message, id FROM learning_stream_videos
+        WHERE origin = 'r2_copy' AND state != 'superseded' ORDER BY id DESC`,
+    ).all<any>()).results ?? [];
+    for (const i of uploaded) {
+      const row = rows.find((r: any) => r.item_uid === i.uid && r.source_r2_key === i.r2_key) ?? null;
+      out.set(i.uid, copyStateOf(row));
+    }
+  } catch { /* no Stream table yet: no copies */ }
   return out;
 }

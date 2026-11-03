@@ -15,9 +15,15 @@
  *   DELETE /items/:uid/stream/captions/:lang       { deleted: true }
  *   PATCH  /items/:uid/stream/thumbnail            { thumbnail_pct: 0..1 } → { video }
  *
+ *   POST   /stream/migrations                      { item_uid } → 202 { copy: { stream_uid, state: 'copying' } }
+ *          D4179 (#4179, part 4): copy the item's R2 upload to Stream, one item a call;
+ *          404 not_found, 409 not_r2, 409 already_copied, 502 stream_copy_failed
+ *
  * STREAM, at /api/learning:
  *   POST   /stream/webhook   signature only (`Webhook-Signature`, STREAM_WEBHOOK_SECRET, five minutes);
  *          → { ok: true } | { ignored: true }; 401 bad_signature; 503 webhook_unconfigured
+ *   GET    /stream/source/:token   D4179: the R2 object a copy names, for Stream to fetch; the token
+ *          is its only key (purpose-scoped HMAC, one hour), and the object must still be the item's
  *
  * Every route answers 503 `stream_unavailable` while `env.STREAM` is absent.
  * Every write is recorded through `record`. No token, upload URL or secret is
@@ -30,8 +36,9 @@ import { refuse } from '../util/refusal';
 import { gate, record } from './admin_learning';
 import {
   BASIC_UPLOAD_MAX_BYTES, LANGUAGE_RE, MAX_DURATION_SECONDS, STALE_MS, STREAM_UID_RE, UPLOAD_WINDOW_MS, VIDEO_TYPES, VTT_MAX_BYTES,
-  applyStatus, captionReady, streamOf, verifyWebhook,
+  applyStatus, captionReady, signSourceToken, streamOf, verifySourceToken, verifyWebhook,
 } from '../services/learningStream';
+import { keyBelongsTo, parseRange } from '../services/learningVideo';
 
 type C = Context<{ Bindings: Env }>;
 const unavailable = (c: C) => refuse(c, 503, { code: 'stream_unavailable', message: 'Video on Stream is not switched on yet.' });
@@ -239,7 +246,80 @@ admin.patch('/items/:uid/stream/thumbnail', async (c) => {
   return c.json({ video: { stream_uid: v.stream_uid, thumbnail_pct: pct } });
 });
 
+/**
+ * D4179 — copy one item's R2 upload to Stream. Stream fetches the object
+ * from a one-hour source URL; the copy is an `r2_copy` row, verified by the
+ * webhook once it is ready with a duration above 0. The R2 object is kept.
+ */
+admin.post('/stream/migrations', async (c) => {
+  const who = await gate(c); if (who instanceof Response) return who;
+  const stream = streamOf(c.env); if (!stream) return unavailable(c);
+  const b = await c.req.json().catch(() => ({} as any));
+  const itemUid = typeof b?.item_uid === 'string' ? b.item_uid : '';
+  const item = itemUid ? await c.env.DB.prepare('SELECT uid, kind, video_source, r2_key FROM learning_items WHERE uid = ?')
+    .bind(itemUid).first<{ uid: string; kind: string; video_source: string | null; r2_key: string | null }>() : null;
+  if (!item) return refuse(c, 404, { code: 'not_found', message: 'No such item.' });
+  if (item.kind !== 'video' || item.video_source !== 'r2' || !keyBelongsTo(item.uid, item.r2_key)) {
+    return refuse(c, 409, { code: 'not_r2', message: 'This item has no uploaded file to copy.' });
+  }
+  const open = await c.env.DB.prepare(
+    `SELECT stream_uid FROM learning_stream_videos
+      WHERE item_uid = ? AND origin = 'r2_copy' AND source_r2_key = ? AND state IN ('awaiting_upload', 'processing', 'ready') LIMIT 1`,
+  ).bind(item.uid, item.r2_key).first<{ stream_uid: string }>();
+  if (open) return refuse(c, 409, { code: 'already_copied', message: 'This file is already copied, or its copy is still running.' });
+  if (typeof stream.upload !== 'function') return unavailable(c);
+  const token = await signSourceToken(c.env, item.uid, item.r2_key!);
+  if (!token) return refuse(c, 503, { code: 'stream_copy_unavailable', message: 'Copies cannot be signed here yet.' });
+  const source = new URL(`/api/learning/stream/source/${token}`, c.req.url).toString();
+  let made: any;
+  try {
+    made = await stream.upload(source, { requireSignedURLs: true, meta: { item_uid: item.uid, origin: 'r2_copy' } });
+  } catch {
+    console.warn('[learning-stream] copy refused', { outcome: 'upload_failed' });
+    return refuse(c, 502, { code: 'stream_copy_failed', message: 'Stream did not take the copy. Nothing was recorded. Try again.' });
+  }
+  const uid = String(made?.uid ?? made?.id ?? '');
+  if (!STREAM_UID_RE.test(uid)) return refuse(c, 502, { code: 'stream_copy_failed', message: 'Stream did not take the copy. Nothing was recorded. Try again.' });
+  await c.env.DB.prepare(
+    `INSERT INTO learning_stream_videos (item_uid, stream_uid, origin, state, source_r2_key, created_by)
+     VALUES (?, ?, 'r2_copy', 'processing', ?, ?)`,
+  ).bind(item.uid, uid, item.r2_key, who.id).run();
+  await record(c, who, 'learning.stream.copy', { uid: item.uid, stream_uid: uid });
+  return c.json({ copy: { stream_uid: uid, state: 'copying' } }, 202);
+});
+
 const hooks = new Hono<{ Bindings: Env }>();
+
+/**
+ * D4179 — the object a copy names, for Stream to fetch. No session: the token
+ * is the only key, it names one item's one object, and that object must still
+ * be the upload the item plays. Anything else is 404, as an unknown path is.
+ */
+hooks.get('/stream/source/:token', async (c) => {
+  const missing = () => refuse(c, 404, { code: 'not_found', message: 'No such video.' });
+  const named = await verifySourceToken(c.env, c.req.param('token') ?? '');
+  if (!named || !c.env.FILES) return missing();
+  const item = await c.env.DB.prepare('SELECT video_source, r2_key FROM learning_items WHERE uid = ?')
+    .bind(named.itemUid).first<{ video_source: string | null; r2_key: string | null }>();
+  if (!item || item.video_source !== 'r2' || item.r2_key !== named.r2Key) return missing();
+  const head = await c.env.FILES.head(named.r2Key);
+  if (!head) return missing();
+  const range = parseRange(c.req.header('range'), head.size);
+  const headers = new Headers({
+    'Accept-Ranges': 'bytes', 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff',
+    'Content-Type': head.httpMetadata?.contentType || 'application/octet-stream',
+  });
+  if (range === 'unsatisfiable') { headers.set('Content-Range', `bytes */${head.size}`); return new Response(null, { status: 416, headers }); }
+  const obj = await c.env.FILES.get(named.r2Key, range ? { range: { offset: range.start, length: range.end - range.start + 1 } } : undefined);
+  if (!obj) return missing();
+  if (range) {
+    headers.set('Content-Range', `bytes ${range.start}-${range.end}/${head.size}`);
+    headers.set('Content-Length', String(range.end - range.start + 1));
+    return new Response(obj.body, { status: 206, headers });
+  }
+  headers.set('Content-Length', String(head.size));
+  return new Response(obj.body, { status: 200, headers });
+});
 
 hooks.post('/stream/webhook', async (c) => {
   if (!streamOf(c.env)) return unavailable(c);
