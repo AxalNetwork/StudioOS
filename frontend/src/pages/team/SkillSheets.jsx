@@ -150,7 +150,7 @@ export function AddSkillsSheet({ agent, current, radar, onClose, onSaved }) {
   };
   const preview = previewRadar(radar, chosen);
   return (
-    <Sheet title="Add skills to this agent" sub={`${agent.role_name || 'Its role'}’s skills, most used first`} width={560} onClose={onClose} testId="add-skills-sheet"
+    <Sheet title="Add skills to this agent" sub="Any skill can go to any agent. Most used first." width={560} onClose={onClose} testId="add-skills-sheet"
       footer={(
         <div className="flex justify-end gap-2">
           <button type="button" className={BTN_SECONDARY} onClick={onClose}>Cancel</button>
@@ -159,7 +159,7 @@ export function AddSkillsSheet({ agent, current, radar, onClose, onSaved }) {
       )}>
       <div className="flex flex-col gap-3 px-5 py-5">
         <AgentRadar vector={chosen.length ? preview : radarVector(radar)} radar={radar} height={180} label={chosen.length ? 'With your picks.' : 'Now.'} />
-        {!block?.available ? <ReadState block={block} what="Its role’s skills" /> : !list.length ? <HonestBlock>No other skill of this role yet.</HonestBlock>
+        {!block?.available ? <ReadState block={block} what="The skills" /> : !list.length ? <HonestBlock>No other skill to add yet.</HonestBlock>
           : list.map((s) => {
             const why = blockedWords(s.blocked);
             const on = picked.has(s.uid);
