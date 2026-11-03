@@ -208,6 +208,8 @@ export const DECK_ASK_OPTIONS = Object.freeze(['deck:rewrite', 'deck:shorten', '
 const ACTION_WORDS = {
   rewrite: 'Rewrite', shorten: 'Shorter', expand: 'Longer', headline: 'Headline', tone: 'New tone', translate: 'Translation',
   ask: 'Your instruction', chart: 'Chart from records', table: 'Table from records', timeline: 'Timeline from records',
+  // D4210: a fix Eadwyn suggested for one preflight finding.
+  preflight_fix: 'Suggested fix',
 };
 const CHART_ACTIONS = new Set(['chart', 'table', 'timeline']);
 const CHART_SIZE = { chart: { cols: 6, rows: 3 }, table: { cols: 6, rows: 3 }, timeline: { cols: 12, rows: 2 } };
