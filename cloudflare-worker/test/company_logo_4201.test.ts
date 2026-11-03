@@ -1,6 +1,6 @@
 /**
  * #4201 (#4152 G1) — a company's uploaded logo, on real SQLite: the
- * baseline's tables, migrations 597, 685 and 757 over them, and `company.ts`
+ * baseline's tables, migrations 597, 685, 757 and 202611031619 over them, and `company.ts`
  * mounted at /api as `index.ts` mounts it. R2 `COMPANY_LOGOS` is an in-memory
  * stand-in. Every person, company and image below is made up.
  *
@@ -10,8 +10,9 @@
  *   · replace deletes the old object; DELETE clears logo_url and the object;
  *   · GET serves members only, with nosniff, and a CSP for SVG;
  *   · an outside-host logo_url is never touched by a read;
- *   · no membership event is written: logo_change waits on a migration that
- *     widens company_membership_events.kind (#4201).
+ *   · each upload, replace and remove writes one logo_change membership event
+ *     (migration 202611031619) saying the logo's kind before and after, never a URL;
+ *     removing a company with no logo writes none.
  *
  * Run: node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *        --test cloudflare-worker/test/company_logo_4201.test.ts
@@ -33,6 +34,7 @@ const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.
 const M597 = readFileSync(new URL('../sql/migrations/597_company_archive_and_events.sql', import.meta.url), 'utf8');
 const M685 = readFileSync(new URL('../sql/migrations/685_company_legal_record_and_slugs.sql', import.meta.url), 'utf8');
 const M757 = readFileSync(new URL('../sql/migrations/757_company_default_currency.sql', import.meta.url), 'utf8');
+const M4201 = readFileSync(new URL('../sql/migrations/202611031619_company_logo_change_event.sql', import.meta.url), 'utf8');
 
 // Ada is Northwind's primary admin; Ben a plain member; Fay a Founder by role; Cy runs Southwind only; Eve a platform admin.
 const ADA = 1, BEN = 2, CY = 3, EVE = 4, FAY = 5;
@@ -42,7 +44,7 @@ const ROLE: Record<number, string> = { [ADA]: 'founder', [BEN]: 'founder', [CY]:
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   for (const t of ['users', 'projects', 'company_profiles', 'user_company_links', 'activity_logs', 'incorporations']) db.exec(tableFromBaseline(BASELINE, t));
-  db.exec(M597); db.exec(M685); db.exec(M757);
+  db.exec(M597); db.exec(M685); db.exec(M757); db.exec(M4201);
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)');
   for (const [id, n] of [[ADA, 'Ada'], [BEN, 'Ben'], [CY, 'Cy'], [EVE, 'Eve'], [FAY, 'Fay']] as const) u.run(id, ROLE[id], `${n} Made-up`, `${n.toLowerCase()}@example.test`);
   const c = db.prepare("INSERT INTO company_profiles (id, uid, company_name, logo_url, created_at, updated_at) VALUES (?, ?, ?, ?, '2026-01-01', '2026-01-01')");
@@ -257,7 +259,10 @@ test('edit rule: a support session acts as the person it impersonates, as PATCH 
 
 // ── Replace, remove, events ─────────────────────────────────────────────────
 
-test('replace deletes the old object; DELETE clears logo_url and the object; no membership event is written', async () => {
+const logoEvents = (db: DatabaseSync) => db.prepare("SELECT actor_user_id, before_json, after_json FROM company_membership_events WHERE kind = 'logo_change' AND company_id = ? ORDER BY id").all(NORTH)
+  .map((r: any) => [r.actor_user_id, JSON.parse(r.before_json ?? 'null'), JSON.parse(r.after_json ?? 'null')]);
+
+test('replace deletes the old object; DELETE clears logo_url and the object; each writes one logo_change event', async () => {
   const db = fixture(); const logos = r2(); const env = envOf(db, logos);
   const before = eventCount(db);
   await call(env, ADA, 'POST', LOGO, form(png(64, 64)));
@@ -275,8 +280,16 @@ test('replace deletes the old object; DELETE clears logo_url and the object; no 
   assert.equal(logos.store.size, 0);
   assert.deepEqual(logos.deleted, [first, second]);
   assert.equal((await call(env, BEN, 'GET', LOGO)).body.error, 'no_stored_logo');
-  // logo_change waits on a migration that widens company_membership_events.kind (#4201).
-  assert.equal(eventCount(db), before, 'no event row: the kind is not admitted yet');
+  assert.equal(eventCount(db), before + 3, 'upload, replace, remove: one event each');
+  assert.deepEqual(logoEvents(db), [
+    [ADA, { logo: null }, { logo: 'stored' }],
+    [ADA, { logo: 'stored' }, { logo: 'stored' }],
+    [ADA, { logo: 'stored' }, { logo: null }],
+  ]);
+  assert.doesNotMatch(JSON.stringify(db.prepare('SELECT before_json, after_json FROM company_membership_events').all()), /co-north|companies\/|\?v=/, 'never a URL or a key');
+  // Removing again, with no logo, changes nothing and records nothing.
+  assert.equal((await call(env, ADA, 'DELETE', LOGO)).status, 200);
+  assert.equal(eventCount(db), before + 3);
 });
 
 test('an outside-host logo_url: reads leave it alone; GET says there is no stored logo; DELETE never deletes an object for it', async () => {
@@ -301,6 +314,7 @@ test('an outside-host logo_url: reads leave it alone; GET says there is no store
   db.prepare('UPDATE company_profiles SET logo_url = ? WHERE id = ?').run(outside, NORTH);
   assert.equal((await call(env, ADA, 'DELETE', LOGO)).status, 200);
   assert.equal(logoUrl(db), null, 'Remove clears an outside URL too');
+  assert.deepEqual(logoEvents(db).at(-1), [ADA, { logo: 'outside' }, { logo: null }], 'the event says it was an outside logo, not which');
   assert.deepEqual(logos.deleted, [], 'and deletes no object for it');
 });
 

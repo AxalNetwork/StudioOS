@@ -224,18 +224,17 @@ test('GET /api/decks/:id/qa: real objections first, most heard first, then the c
       assertBound(q.said, q.answer.bindings, `${q.key} said`);
       for (const b of q.answer.bindings) assert.ok(b.source_key && b.grade && b.snapshot_hash, 'every binding carries its source key, grade and snapshot');
     }
-    assert.deepEqual(r.body.reads, { objections: 'ok', objections_capped: false, sources: 'ok', claims: 'ok', kept: 'ok', prospects: 'ok' }); // D1582 adds the prospects read
+    assert.deepEqual(r.body.reads, { objections: 'ok', objections_capped: false, sources: 'ok', claims: 'ok', kept: 'ok', prospects: 'ok', written: 'ok' }); // D1582 adds the prospects read, D4270 the written answers
     assert.equal(r.body.stage, 'seed');
   } finally { f.close(); }
 });
 
-test('GET /api/decks/:id/qa: the founder\'s alone; an admin and another founder are refused, as is a bad stage', async () => {
+test('GET /api/decks/:id/qa: the founder\'s, and an HQ admin reads (D4270); a support session and another founder are refused, as is a bad stage', async () => {
   const f = await fixture();
   try {
     const admin = await call(f, ADMIN, 'GET', '/api/decks/7/qa');
-    assert.equal(admin.status, 403);
-    assert.equal(admin.body.error, 'founder_only');
-    assert.equal(admin.body.questions, undefined, 'a refusal carries no question');
+    assert.equal(admin.status, 200, 'D4270: an HQ admin reads the questions and their answers');
+    assert.ok(admin.body.questions.length > 0);
     const support = await call(f, FOUNDER, 'GET', '/api/decks/7/qa', undefined, { impersonated_by: ADMIN });
     assert.deepEqual([support.status, support.body?.error], [403, 'founder_only'], 'a support session reads no deck figure');
     const other = await call(f, OTHER, 'GET', '/api/decks/7/qa');

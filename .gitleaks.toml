@@ -132,6 +132,12 @@ regexes = [
   # Worker's JWT_SECRET. The test now uses a low-entropy seed, but the commit
   # that added this one stays in the pull request's scan range, so it is pinned.
   '''\bsynthetic-fill-partner-invitation-4046-''',
+  # D1588 (#3835): the synthetic JWT signing seed in
+  # cloudflare-worker/test/eadwyn_deck_tools_d1588.test.ts, which signs that
+  # test's own tokens against an in-memory database. Not a credential and not
+  # the Worker's JWT_SECRET. The commit that added it stays in this pull
+  # request's scan range, so the literal is pinned here rather than rewritten.
+  '''\bsynthetic-d1588-secret-0123456789abcdef\b''',
   '''dG9rZW4tMjAxNw''',
   '''webgate\.ec\.europa\.eu/fsd/fsf/public/files/jsonFullSanctionsList[^'"\s]+''',
 ]

@@ -8,9 +8,14 @@
  * Founder), mirrored here only to draw the fields disabled — the Worker
  * decides.
  *
- * NOT HERE, ON PURPOSE: the logo (there is no image store for logos yet; the
- * field is hidden, not a URL box, until #4201 lands the upload), the internal
- * `/c/<uid>` path, and any sentence about how the app works.
+ * THE LOGO (#4201, ST2/ST2b/ST2c) is not a text field: it is a tile with
+ * Replace and Remove over `POST`/`DELETE /api/company/:uid/logo` (R2
+ * `COMPANY_LOGOS`). A picked or removed logo is held as a pending change and
+ * saved with the form's one Save, like the fields; `logoProblem` checks a
+ * file before it is held (the Worker checks the bytes again).
+ *
+ * NOT HERE, ON PURPOSE: a "paste a URL" box, the internal `/c/<uid>` path, and
+ * any sentence about how the app works.
  */
 
 export const EDIT_ROLES = ['Owner', 'Admin', 'Founder'];
@@ -83,11 +88,38 @@ export function problemOf(form) {
   return null;
 }
 
-/** "1 unsaved change", "3 unsaved changes". */
-export const unsavedLine = (patch) => {
-  const n = Object.keys(patch || {}).length;
+/** "1 unsaved change", "3 unsaved changes". A pending logo counts as one change. */
+export const unsavedLine = (patch, logo = null) => {
+  const n = Object.keys(patch || {}).length + (logo ? 1 : 0);
   return n ? `${n} unsaved change${n === 1 ? '' : 's'}` : null;
 };
+
+// ── The logo tile (#4201, ST2) ────────────────────────────────────────────────
+
+export const LOGO_HINT = 'PNG or SVG, square, up to 2 MB. Drop a file on the tile.';
+export const LOGO_MAX_BYTES = 2 * 1024 * 1024;
+const LOGO_TYPES = new Set(['image/png', 'image/svg+xml']);
+
+/** Why a picked file cannot be held as the logo, or null. Shape and SVG safety are the Worker's to judge. */
+export function logoProblem(file) {
+  if (!file) return 'Choose a PNG or SVG file.';
+  const named = String(file.name || '').toLowerCase();
+  const typed = LOGO_TYPES.has(String(file.type || '').toLowerCase()) || /\.(png|svg)$/.test(named);
+  if (!typed) return 'The logo must be a PNG or SVG file.';
+  if (!(Number(file.size) > 0)) return 'That file is empty.';
+  if (Number(file.size) > LOGO_MAX_BYTES) return 'The logo must be 2 MB or smaller.';
+  return null;
+}
+
+/**
+ * What the tile and the preview draw: the pending logo when one is held
+ * (`{ upload: File, preview }` or `{ remove: true }`), else the row's own.
+ */
+export function shownLogo(row, pending) {
+  if (pending?.remove) return null;
+  if (pending?.upload) return pending.preview || null;
+  return row?.logo_url || null;
+}
 
 /** Whether this viewer may edit, mirroring the route's `canEdit`, from the row's members. */
 export function canEditCompany(row, me) {

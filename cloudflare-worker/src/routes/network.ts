@@ -7,6 +7,7 @@ import { generateUniqueShortReferralCode } from '../services/referrals/codes';
 import { resolveReferralCode } from '../services/referrals/resolveCode';
 import { bindingKey } from '../util/schemaBootstrap';
 import { refuse } from '../util/refusal';
+import { isInfluencer, payoutGate, payoutReadiness } from '../services/influencer/payoutReadiness';
 import { logAdminAction } from '../services/adminAudit';
 import { FIRING_RULES, termsPayment } from '../services/referralPartnerTerms';
 
@@ -824,6 +825,13 @@ network.post('/payout/request', async (c) => {
       });
     } else {
       cur = held[0] || 'USD';
+    }
+    // D4294 (#4294, D4289 P5) — an influencer's payout waits on identity, the
+    // tax form, the current terms, the $50 minimum and one request a month.
+    // Each refusal names its reason; anyone else's request is unchanged.
+    if (await isInfluencer(c.env, user.id)) {
+      const gate = payoutGate(await payoutReadiness(c.env, user.id), amt, cur);
+      if (gate) return refuse(c, gate.status, { code: gate.code, message: gate.message, extra: gate.extra });
     }
     const pool = accrued.filter((r) => (r.currency || 'USD') === cur);
     const balance = pool.reduce((s, r) => s + (Number(r.amount_cents) || 0), 0);

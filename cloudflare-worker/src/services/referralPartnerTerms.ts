@@ -13,11 +13,15 @@
  */
 import type { Env } from '../types';
 
-export const SEGMENTS = ['event_organisers', 'venture_scouts', 'deal_makers'] as const;
+// D4289 P1 (#4290): `influencers` is the segment an admitted influencer joins (migration 202611031502);
+// it comes only from admission (routes/admin_influencers.ts), never from Add partner.
+export const SEGMENTS = ['event_organisers', 'venture_scouts', 'deal_makers', 'influencers'] as const;
 export type Segment = typeof SEGMENTS[number];
 export const SEGMENT_LABEL: Record<Segment, string> = {
-  event_organisers: 'Event organisers', venture_scouts: 'Venture scouts', deal_makers: 'Deal makers',
+  event_organisers: 'Event organisers', venture_scouts: 'Venture scouts', deal_makers: 'Deal makers', influencers: 'Influencers',
 };
+/** The segments HQ may add a partner to by hand; an influencer joins by application. */
+export const ADDABLE_SEGMENTS: readonly Segment[] = ['event_organisers', 'venture_scouts', 'deal_makers'];
 export const isSegment = (v: unknown): v is Segment => typeof v === 'string' && (SEGMENTS as readonly string[]).includes(v);
 
 export const STORED_STATES = ['draft', 'submitted', 'approved', 'sent', 'signed', 'ended'] as const;

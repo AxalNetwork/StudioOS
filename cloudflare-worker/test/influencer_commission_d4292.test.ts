@@ -21,6 +21,7 @@ import {
   CUSTOM_MILESTONE, HOLD_DAYS, INVOICES_PER_MEMBER, invoiceNet, onChargeRefunded, onDispute, onInvoicePaid,
   onSubscriptionEnded, paidCustomers, paymentEarnedInfluencerCommission, sweepPendingCommissions,
 } from '../src/services/influencerCommission.ts';
+import { INFLUENCER_RULE } from '../src/services/influencerActions.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { loadSchema } from './_schema_once.mjs';
 
@@ -29,7 +30,7 @@ const SUPER = 1, JANE = 10, OTHER = 11;
 const MEMBER0 = 100;
 const T0 = Date.UTC(2026, 0, 15, 12, 0, 0); // the first invoice's payment
 
-function world(opts: { bps?: number; bonus10?: number | null; currency?: string; overallCap?: number | null; noTerms?: boolean } = {}) {
+function world(opts: { bps?: number; bonus10?: number | null; currency?: string; overallCap?: number | null; noTerms?: boolean; rule?: string } = {}) {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   loadSchema(db);
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, email_verified) VALUES (?, ?, ?, ?, 1, 1)');
@@ -45,7 +46,7 @@ function world(opts: { bps?: number; bonus10?: number | null; currency?: string;
       VALUES (1, 'terms-jane', 1, 'venture_scouts', 'signed', '2025-01-01', ?, ?, ?, ?, '2025-01-01', ?, '2025-01-01', 9, ?, '2025-01-01', '2025-01-01')`)
       .run(opts.currency ?? 'USD', opts.overallCap ?? null, SUPER, SUPER, SUPER, SUPER);
     const g = db.prepare('INSERT INTO referral_partner_term_triggers (terms_id, rule_key, amount_cents, percentage_bps) VALUES (1, ?, ?, ?)');
-    g.run('subscription_invoice', null, opts.bps ?? 2500);
+    g.run(opts.rule ?? 'subscription_invoice', null, opts.bps ?? 2500);
     if (opts.bonus10 !== null) g.run('influencer_bonus_10', opts.bonus10 ?? 10000, null);
   }
   const p = db.prepare("INSERT INTO stripe_products (id, name, kind, active, metadata_json) VALUES (?, ?, 'subscription', 1, ?)");
@@ -74,6 +75,14 @@ function invoice(m: number, paidAtMs: number, o: { sub?: string; amount?: number
 }
 const commissions = (db: DatabaseSync) => db.prepare("SELECT * FROM commissions WHERE source_type IN ('subscription_invoice', 'influencer_bonus') ORDER BY id").all() as any[];
 const ledger = (db: DatabaseSync) => db.prepare('SELECT * FROM influencer_commission_invoices ORDER BY id').all() as any[];
+
+test('P1’s drafted influencer trigger pays the same share as subscription_invoice', async () => {
+  const { db, env } = world({ bps: 2000, bonus10: null, rule: INFLUENCER_RULE });
+  const r = await onInvoicePaid(env, invoice(MEMBER0, T0, { amount: 5000 }), T0);
+  assert.equal(r.outcome, 'paid');
+  assert.equal(commissions(db)[0].amount_cents, 1000, '20% of 5,000');
+  assert.equal(commissions(db)[0].source_type, 'subscription_invoice');
+});
 
 test('a paid invoice writes one pending commission at the terms rate, net of tax; the sweep makes it payable after 30 days', async () => {
   const { db, env } = world({ bps: 2500 });

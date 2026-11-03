@@ -11,7 +11,8 @@
  *     partner (`planOf` over the product mirror's metadata). LP access, deals,
  *     funds and anything else are never paid on;
  *   - the referrer holds active signed terms with the `subscription_invoice`
- *     trigger (`activeTermsFor`, D958). The rate is the trigger's
+ *     trigger, or P1's drafted `influencer_subscription_invoice_paid` key
+ *     (`activeTermsFor`, D958). The rate is the trigger's
  *     `percentage_bps` (or its flat amount per invoice, when the terms set
  *     one); no rate is typed here (D1050);
  *   - the invoice is among the member's first INVOICES_PER_MEMBER paid
@@ -46,6 +47,7 @@
  * Every function takes `now` (ms) so tests never read the clock.
  */
 import type { Env } from '../types';
+import { INFLUENCER_RULE } from './influencerActions';
 import { activeTermsFor, termsAmount, todayUtc } from './referralPartnerTerms';
 import { clawbackReferralCommissionForRefund } from './referralCommissions';
 
@@ -182,7 +184,10 @@ export async function onInvoicePaid(env: Env, inv: Obj, now: number = Date.now()
   if (!planKey) return { outcome: 'not_software' };
 
   const paidAtMs = posInt(inv?.status_transitions?.paid_at) ? Number(inv.status_transitions.paid_at) * 1000 : now;
-  const terms = await activeTermsFor(env, referrerId, INVOICE_RULE, todayUtc(paidAtMs));
+  const day = todayUtc(paidAtMs);
+  // P1 (#4290) drafts `influencer_subscription_invoice_paid`; HQ may also name `subscription_invoice`. Either share pays.
+  const terms = await activeTermsFor(env, referrerId, INVOICE_RULE, day)
+    ?? await activeTermsFor(env, referrerId, INFLUENCER_RULE, day);
   if (!terms) return { outcome: 'no_terms' };
 
   const net = invoiceNet(inv);

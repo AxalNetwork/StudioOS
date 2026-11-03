@@ -101,8 +101,8 @@ test('the prompt is flagged as the Worker would refuse it, and "one" is not a fi
   assert.ok(promptWarning('Say we have 200 customers'));
   assert.ok(promptWarning('Fourteen of twenty-three said yes'));
   assert.equal(promptWarning('Lead with one ledger and the team'), null);
-  // The same rule as services/decks/newDeck.ts: the word list is copied, so both must change together.
-  const worker = read('cloudflare-worker/src/services/decks/newDeck.ts');
+  // The same rule as services/decks/numbers.ts (D1588 moved it out of newDeck.ts): the word list is copied, so both must change together.
+  const worker = read('cloudflare-worker/src/services/decks/numbers.ts');
   const words = (src) => JSON.stringify(src.match(/NUMBER_WORDS = \[([^\]]+)\]/)[1].match(/'[a-z]+'/g));
   assert.equal(words(read('frontend/src/pages/raise/pitch/newDeckModel.js')), words(worker));
   for (const t of ['$5', '40%', 'a dozen', '3x']) assert.ok(numberIn(t), t);

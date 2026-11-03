@@ -71,6 +71,13 @@ test('each check names its product or price and says what goes wrong', () => {
   // A subscription that makes no card.
   assert.deepEqual(codes([product('prod_ra', 'Registered Agent', 'subscription', {}, [{ id: 'price_rayear', unit_amount: 9900, interval: 'year' }])]),
     [['subscription_no_card', 'warning', 'prod_ra', null]]);
+  // D1434: the registered agent the incorporation flow sells (found by its category) is not a missing plan,
+  // and a plan checkout never sells (Institutional, custom pricing) needs no yearly price.
+  // Mutation checked: drop either exception → its warning comes back.
+  assert.deepEqual(codes([product('prod_ra', 'Registered Agent (annual)', 'subscription', { category: 'registered_agent' }, [{ id: 'price_rayear', unit_amount: 10000, interval: 'year' }])]), []);
+  assert.deepEqual(codes([product('prod_inst', 'Investor — Institutional', 'subscription', { investor_tier: 'institutional' }, [{ id: 'price_inst_m', unit_amount: 59900, interval: 'month' }])]), []);
+  assert.deepEqual(codes([product('prod_plus', 'Investor — Plus', 'subscription', { investor_tier: 'plus' }, [{ id: 'price_plus_m', unit_amount: 5000, interval: 'month' }])]),
+    [['plan_no_yearly', 'warning', 'prod_plus', null]], 'a plan checkout sells still needs its yearly price');
   // A price charged every three months, a weekly one, a euro one.
   const odd = product('prod_growth', 'Validate + Build', 'subscription', { tier: 'growth' }, [
     { id: 'price_gmonth', unit_amount: 2000, interval: 'month' }, { id: 'price_g_y', unit_amount: 20400, interval: 'year' },

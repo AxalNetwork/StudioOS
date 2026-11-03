@@ -177,7 +177,9 @@ const rowOf = (cat: any, key: string) => cat.programs.rows.find((r: any) => r.ke
 
 test('560 seeds the nine programs in order, with no bracketed sample and AI-native Venture unrecorded', () => {
   const rows = BUILT.prepare('SELECT key, grp, name, purpose, who, join_method, status, position FROM programs ORDER BY position').all() as any[];
-  assert.deepEqual(rows.map((r) => r.key), [...PROGRAM_KEYS]);
+  // D4289 P1 (#4290): the tenth, Influencers, is migration 202611031502's row, after these nine.
+  assert.deepEqual(rows.map((r) => r.key), PROGRAM_KEYS.filter((k) => k !== 'influencer'));
+  assert.equal(PROGRAM_KEYS.at(-1), 'influencer');
   assert.deepEqual(rows.map((r) => r.status), ['live', 'proposed', 'live', 'not_built', 'partly_built', 'live', 'live', 'live', 'live']);
   const ain = rows.find((r) => r.key === 'ai-native-venture');
   assert.equal(ain.purpose, null);

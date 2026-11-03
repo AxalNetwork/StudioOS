@@ -81,7 +81,7 @@ export const REFUSED_CALLS = Object.freeze([
   ['401', 'revoked_key', 'The key was revoked.'],
   ['401', 'expired_key', 'The key has expired.'],
   ['403', 'insufficient_scope', 'The key lacks the permission for this tool.'],
-  ['402', 'insufficient_tokens', 'Not enough AI tokens. Add tokens in Usage › AI tokens.'],
+  ['402', 'insufficient_tokens', 'Not enough AI tokens. Add tokens from API usage or Usage › AI tokens, any amount.'],
   ['429', 'rate_limited', 'Too many calls. Wait for the time in Retry-After.'],
 ]);
 

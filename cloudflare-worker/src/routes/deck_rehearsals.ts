@@ -12,6 +12,8 @@
  *        quoted and held, then the report worked out in code
  *        (`services/decks/rehearsal.ts`).
  *   GET  /api/decks/:id/rehearsals        → { deck_id, rehearsals: [summary] }
+ *        D4270 (ps4c): each summary also carries wpm, fillers, cards_over of
+ *        cards, and notes_covered of notes_total, from its report (null without one).
  *   GET  /api/decks/:id/rehearsals/:uid   → { rehearsal }
  *   PUT  /api/decks/:id/rehearsals/:uid/keep-audio { keep } → { rehearsal }
  *        Off deletes the audio now; on keeps it, while it is still held, and
@@ -112,11 +114,19 @@ type Row = {
 const audioState = (r: Row): 'kept' | 'held' | 'deleted' => (r.audio_r2_key ? (r.keep_audio ? 'kept' : 'held') : 'deleted');
 const parse = <T,>(s: string | null): T | null => { try { return s ? JSON.parse(s) as T : null; } catch { return null; } };
 
+/**
+ * D4270 (#4270, ps4c): a run as the Rehearsals list draws it. The figures are
+ * the report's own; a run without a report reads null for each, never 0.
+ */
 function summary(r: Row) {
   const report = parse<RehearsalReport>(r.report_json);
+  const t = report?.totals;
   return {
     uid: r.uid, deck_id: Number(r.deck_id), pitch_seconds: Number(r.pitch_seconds), duration_ms: Number(r.duration_ms), status: r.status,
     time_line: report?.time_line ?? null, figures: report ? report.figures.length : null,
+    wpm: t?.wpm ?? null, fillers: t ? t.fillers : null,
+    cards_over: report ? report.cards.filter((x) => x.over).length : null, cards: report ? report.cards.length : null,
+    notes_covered: t ? t.notes_covered : null, notes_total: t ? t.notes_total : null,
     audio: audioState(r), created_at: r.created_at,
   };
 }
