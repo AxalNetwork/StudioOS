@@ -490,6 +490,8 @@ export const RAIL_KIND_JOBS: Readonly<Record<string, { id: string; step: number 
   decide: { id: 'VA14', step: 0 }, sentiment: { id: 'ON5', step: 0 }, translate: { id: 'VA7', step: 0 },
   // D1583 (#3830): `derive:memo`'s option kind reads the IC memo job.
   memo: { id: 'IN1', step: 0 },
+  // D1580 part 2b (#3827): `transcribe:rehearsal-live`'s option kind reads the live transcript job, whose rules `liveChoice` applies.
+  live: { id: 'VA2', step: 0 },
 });
 
 /**

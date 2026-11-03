@@ -60,7 +60,7 @@ Prices are Cloudflare's printed USD per unit (per 1M tokens, per 1k characters, 
 | `@cf/huggingface/distilbert-sst-2-int8` | Text Classification | ga | tokens_in 0.026 | Not recorded | all | O | G | · | · | O | · | · | · | · | G | · | O | · | O |
 | `@cf/lykon/dreamshaper-8-lcm` | Text-to-Image | ga | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/google/embeddinggemma-300m` | Text Embeddings | ga | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
-| `@cf/deepgram/flux` | Automatic Speech Recognition | partner | audio_minutes_websocket 0.0077 | Not recorded | all | O | O | · | · | · | · | · | · | · | · | G | · | · | O |
+| `@cf/deepgram/flux` | Automatic Speech Recognition | partner | audio_minutes_websocket 0.0077 | Not recorded | all | O | O | · | O | · | · | · | · | · | · | G | · | · | O |
 | `@cf/black-forest-labs/flux-1-schnell` | Text-to-Image | ga | tiles 0.0000528, steps 0.0001056 | Not recorded | all | · | · | O | W | W | · | · | · | W | · | · | O | · | G |
 | `@cf/black-forest-labs/flux-2-dev` | Text-to-Image | partner | input_tile_steps 0.00021, output_tile_steps 0.00041 | Not recorded | all, partner gate | · | · | O | O | O | · | · | · | G | · | · | O | · | G |
 | `@cf/black-forest-labs/flux-2-klein-4b` | Text-to-Image | partner | input_tiles 0.000059, output_tiles 0.000287 | Not recorded | all, partner gate | · | · | O | O | O | · | · | · | G | · | · | O | · | G |
@@ -389,6 +389,7 @@ stream: Live conversational transcription in recorded sessions.
 
 - Validate: **offered**, `railMatrix.json "Founder · Validate · Customer research"`
 - Record a Session: **offered**, `services/sttModels.ts (STT_MODELS), live`
+- Raise: **offered**, `railMatrix.json option transcribe:rehearsal-live`
 - Studio / Eadwyn: **gap**, `#3721`
 - Investor, Advisor and Partner workspaces: **offered**, `railMatrix.json "Advisor · Practice · Sessions"`
 
@@ -841,7 +842,7 @@ transcribe: Transcribe member-supplied recordings and interview audio.
 
 - Validate: **offered**, `/api/ai/modules on "Founder · Validate · Customer research"`; `railMatrix.json "Founder · Validate · Customer research"`; `railMatrix.json option transcribe:interview`; `railMatrix.json option transcribe:recording`; and 2 more
 - Record a Session: **wired**, `services/sttModels.ts (STT_MODELS), live`
-- Raise: **offered**, `railMatrix.json option transcribe:rehearsal`
+- Raise: **offered**, `railMatrix.json option transcribe:rehearsal`; `railMatrix.json option transcribe:rehearsal-live`
 - Studio / Eadwyn: **offered**, `railMatrix.json option transcribe:voice-answer`; `routes/advisor.ts (transcribe)`
 - Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Practice · Sessions"`; `railMatrix.json "Advisor · Practice · Sessions"`
 
@@ -1016,7 +1017,7 @@ An offered model is n/a where its operation does not fit:
 | rerank | Validate, Raise, Grow, Network, Research, Studio / Eadwyn, Admin consoles, Investor, Advisor and Partner workspaces | no ranked list here |
 | sentiment | Validate, Record a Session, Grow, Email, Admin consoles, Investor, Advisor and Partner workspaces | no feedback text to score here |
 | translate | Validate, Record a Session, Grow, Research, Articles, Email, Studio / Eadwyn, Investor, Advisor and Partner workspaces | no text crosses languages here |
-| stream | Validate, Record a Session, Studio / Eadwyn, Investor, Advisor and Partner workspaces | no live audio here |
+| stream | Validate, Record a Session, Raise, Studio / Eadwyn, Investor, Advisor and Partner workspaces | no live audio here |
 | transcribe | Validate, Record a Session, Raise, Studio / Eadwyn, Investor, Advisor and Partner workspaces | no audio enters here |
 | turn | Validate, Record a Session, Studio / Eadwyn, Investor, Advisor and Partner workspaces | no live conversation here |
 | voice | Validate, Raise, Grow, Articles, Studio / Eadwyn, Admin consoles, Investor, Advisor and Partner workspaces | nothing is read aloud here |

@@ -76,6 +76,10 @@
     "memo": { "defaultNeeds": "text", "allow": ["text"], "models": [
       { "t": "GPT-OSS 120B", "line": "A full memo from a long deck" },
       { "t": "Nemotron 3 120B", "line": "A second reading, at a lower price" }
+    ] },
+    "live": { "defaultNeeds": "speech", "allow": ["speech"], "models": [
+      { "t": "Deepgram Flux", "line": "Words as you say them, turn by turn" },
+      { "t": "Deepgram Nova-3", "line": "Steadier words, a little slower" }
     ] }
   },
   "transcribeModels": [

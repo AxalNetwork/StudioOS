@@ -136,7 +136,8 @@ export const FITS: Readonly<Record<ModuleOperation, readonly ModuleKey[]>> = Obj
   rerank: ['validate', 'raise', 'grow', 'network', 'research', 'studio', 'admin', 'workspaces'],
   sentiment: ['validate', 'record', 'grow', 'email', 'admin', 'workspaces'],
   translate: ['validate', 'record', 'grow', 'research', 'articles', 'email', 'studio', 'workspaces'],
-  stream: ['validate', 'record', 'studio', 'workspaces'],
+  // D1580 part 2b (#3827): Rehearse streams the founder's pitch for live words a minute.
+  stream: ['validate', 'record', 'raise', 'studio', 'workspaces'],
   transcribe: ['validate', 'record', 'raise', 'studio', 'workspaces'],
   turn: ['validate', 'record', 'studio', 'workspaces'],
   voice: ['validate', 'raise', 'grow', 'articles', 'studio', 'admin', 'workspaces'],
