@@ -4,6 +4,8 @@ import { SOURCE_NOT_RECORDED, chartLabel, objectPosition, sourceOf } from './pre
 import { STATED_CHIP, TYPED_LINE, UNCITED_CHIP, UNCITED_LINE, faceOf, numbersIn, projectionOf } from './figuresModel';
 import { isTypedChart, marketCircles, projectionLines, tableView } from './typedChartsModel';
 import { aspectOf, placeOf } from './gridModel';
+import { diagramLayout } from './diagramLayout';
+import DiagramView from './DiagramView';
 
 export { gridBlocks } from './presentExportModel';
 
@@ -169,6 +171,11 @@ export function BlockView({ block: b, colours, live = false, sources = false, si
       ? <span className={`flex items-center gap-1 ${para}`}><span aria-hidden="true">▶</span>{label}</span>
       : <span className={`inline-flex rounded-[8px] px-2 py-1 ${para} font-bold text-white`} style={{ background: colours.accent }}>{label}</span>;
     return live && b.url ? <a href={b.url} target="_blank" rel="noopener noreferrer" className="no-underline" style={{ color: 'inherit' }}>{face}</a> : face;
+  }
+  // D903 §11 (#3660): a typed diagram draws itself, in every format the print page feeds; any other graphic is its name.
+  if (b.kind === 'graphic') {
+    const layout = diagramLayout(b.diagram);
+    if (layout) return <DiagramView layout={layout} colours={colours} big={big} blockId={b.id} />;
   }
   if (b.kind === 'graphic') return <span className={big ? 'text-[24px]' : 'text-[11px]'} style={{ color: colours.muted }}>Graphic · {b.graphic || 'none chosen'}</span>;
   if (b.kind === 'table') return <TableView block={b} colours={colours} para={para} />;

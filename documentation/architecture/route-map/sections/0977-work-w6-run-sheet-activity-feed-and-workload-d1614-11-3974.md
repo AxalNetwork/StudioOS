@@ -1,4 +1,4 @@
-## Work W6 — the run sheet, the activity feed and Workload (D1614 §11, #3974)
+## Work W6 — the run sheet, the activity feed and Workload (D1614 §12, #3974)
 
 WK5 to WK7 on the routes W3 and W4 added. Agent sessions on the Calendar (CAL10) wait for #3957.
 
