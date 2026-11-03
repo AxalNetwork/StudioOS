@@ -52,6 +52,8 @@ function world() {
   // D1614 W1 (#3969): the project board's columns on the same task store; project tasks now go through it.
   db.exec(stripForeignKeys(sql('migrations/762_scope_task_work_board.sql')));
   db.exec(stripForeignKeys(sql('migrations/763_task_comments_labels_milestones.sql')));
+  // D1614 W8 (#3994): W1's write clears needs_reassignment.
+  db.exec(sql('migrations/202611022015_scope_task_needs_reassignment.sql'));
   db.exec(stripForeignKeys(sql('migrations/202611022205_work_workload.sql'))); // D1614 W4: the board reads the time block
   db.exec(`CREATE TABLE IF NOT EXISTS project_members (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
     role TEXT NOT NULL DEFAULT 'cofounder', status TEXT NOT NULL DEFAULT 'accepted', source TEXT, invited_by INTEGER, created_at TEXT, updated_at TEXT)`);
@@ -207,7 +209,7 @@ test('tasks: an agent only within its works_in and may_propose and only while li
     assert.deepEqual([paused.status, paused.body.error], [409, 'agent_not_live']);
     const projectAgent = await cfo(w, `/project/${ALONE}`);
     assert.equal((await call(w, EDITOR, 'POST', `${CO}/tasks`, { title: 'x', module: 'use-of-funds', assignee: { kind: 'agent', uid: projectAgent } })).body.error,
-      'agent_not_live', 'another scope\'s agent is not this team\'s');
+      'assignee_not_member', 'another scope\'s agent is not on this Team (D1614 W8, #3994)');
     const person = await task(w, { title: 'Call the bank', assignee: { kind: 'person', uid: 'u-member' } });
     assert.deepEqual(person.assignee, { kind: 'person', person: { uid: 'u-member', name: 'Max Member' } });
     const outsider = await call(w, EDITOR, 'POST', `${CO}/tasks`, { title: 'x', assignee: { kind: 'person', uid: 'u-stranger' } });

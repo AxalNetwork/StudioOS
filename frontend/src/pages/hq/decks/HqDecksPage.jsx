@@ -12,8 +12,8 @@ import { isSuperAdminUser } from '../../../lib/shellRole';
 import AiModelsTab from './AiModelsTab';
 import { useAuth } from '../../../hooks/useAuthSync';
 import {
-  BETA_ADD_LINE, BETA_COLUMNS, BETA_REMOVE_LINE, MODELS_LINK, addArmed, betaChoices, cohortRow, reasonOk, NORM_ADD_LINE, NORM_COLUMNS, NORM_RETIRE_LINE, NORM_RULE, NORM_SOURCE_HELP, NORM_STAGE_OF, NOT_RECORDED, PROJECT_NORMS_NOTE, NOTE_MAX, OUTCOMES, PROPOSAL_LINE, REASONS, STAGES, SUBTITLE,
-  defaultOnKeys, filterReports, flagLabel, flagRows, normBody, normDraftArmed, normRetireArmed, normRow, notYet, offGridOverrides, reportRow, resolveArmed, templateGrid, viewFor,
+  BETA_ADD_LINE, BETA_COLUMNS, BETA_REMOVE_LINE, BUILD, MODELS_LINK, NORM_ADD_LINE, NORM_COLUMNS, NORM_RETIRE_LINE, NORM_RULE, NORM_SOURCE_HELP, NORM_STAGE_OF, NOTE_MAX, NOT_RECORDED, OUTCOMES, PROJECT_NORMS_NOTE, PROPOSAL_LINE, REASONS, STAGES, SUBTITLE,
+  addArmed, betaChoices, cohortRow, defaultOnKeys, filterReports, flagLabel, flagRows, normBody, normDraftArmed, normRetireArmed, normRow, notYet, offGridOverrides, reasonOk, reportRow, resolveArmed, templateChangeArmed, templateGrid, templatePreview, templateResetArmed, viewFor,
 } from './hqDecksModel';
 
 /**
@@ -26,6 +26,7 @@ import {
  *   Feature flags      GET  /api/admin/feature-flags          (requireAdmin, D1509)
  *   Beta cohort        GET/POST /api/admin/deck-beta, GET /people, DELETE /:uid (requireHqAdmin, K3 #4190)
  *   Default templates  GET  /api/decks/admin/recommend-overrides  (any admin, D905)
+ *                      PUT / DELETE the same, { reason }        (Super Admin, K4 #4191)
  *   Stage norms        GET/POST /api/admin/deck-stage-norms, PUT /:uid, POST /:uid/retire,
  *                      GET /projects/:id (requireHqAdmin, K5 #4192)
  *   AI models          GET/PUT /api/admin/ai/element-models (a Super Admin on HQ, D4251 #4251)
@@ -131,7 +132,7 @@ function ReportSheet({ row, onResolved }) {
         <dt className="text-axal-muted dark:text-gray-400">Founder’s reason</dt><dd>{row.reason}{row.note ? ` · “${row.note}”` : ''}</dd>
       </dl>
       {PROPOSAL_LINE[row.proposal] && <p className={`${MUTED} mt-2`}>{PROPOSAL_LINE[row.proposal]}</p>}
-      {(isNR(row.founder) || isNR(row.before)) && <p className={`${MUTED} mt-2`} data-testid="deck-report-k1">{notYet('K1')}</p>}
+      {!BUILD.K1.live && (isNR(row.founder) || isNR(row.before)) && <p className={`${MUTED} mt-2`} data-testid="deck-report-k1">{notYet('K1')}</p>}
       <div className="mt-3 border-t border-axal-hairline pt-3 dark:border-gray-800">
         {row.open
           ? <ResolveForm row={row} onDone={onResolved} />
@@ -388,47 +389,110 @@ function Beta() {
 
 // ── HD4 · Default templates ─────────────────────────────────────────────────
 
+/**
+ * HD4b: one cell's change sheet, the Super Admin's only. Pick a template, see
+ * what it holds, give a reason; or give a reason and reset the cell to the
+ * engine's own pick. Each write is one admin audit row with before and after.
+ */
+function TemplateSheet({ sector, cell, methods, onDone, onClose }) {
+  const [methodId, setMethodId] = useState(cell.methodId || '');
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const preview = templatePreview(methods, methodId);
+  const stageLabel = STAGES.find((s) => s.id === cell.stage)?.label ?? cell.stage;
+  const run = async (write, failed) => {
+    setBusy(true); setError('');
+    try { await write(); onDone(); } catch (e) { setError(e?.message || failed); } finally { setBusy(false); }
+  };
+  const save = () => run(() => api.deckSetRecommendOverride({ sector, stage: cell.stage, method_id: methodId, reason: reason.trim() }), 'The template could not be changed.');
+  const reset = () => run(() => api.deckResetRecommendOverride({ sector, stage: cell.stage, reason: reason.trim() }), 'The template could not be reset.');
+  return (
+    <Card data-testid="deck-template-sheet">
+      <p className={H2}>Default template · {sector} · {stageLabel}</p>
+      <p className={MUTED}>Now: {cell.template}{cell.changed ? ' (changed)' : ' (default)'}</p>
+      <label className="mt-3 block text-[12px] font-semibold text-axal-ink dark:text-gray-200">
+        Template
+        <select className={`${SELECT} mt-1 block`} value={methodId} onChange={(e) => setMethodId(e.target.value)} data-testid="deck-template-select">
+          <option value="">Choose a template</option>
+          {methods.map((m) => <option key={m.id} value={m.id}>{m.label || m.id}</option>)}
+        </select>
+      </label>
+      {methodId && (
+        <div className="mt-2 rounded-md border border-axal-hairline p-2 dark:border-gray-800" data-testid="deck-template-preview">
+          <p className="text-[13px] font-semibold text-axal-ink dark:text-gray-100">{preview.name}</p>
+          {preview.bestFor && <p className={MUTED}>Best for {preview.bestFor}</p>}
+          {preview.slides.length > 0
+            ? <ol className="mt-1 list-decimal pl-5 text-[12.5px] text-axal-ink dark:text-gray-200">{preview.slides.map((t, i) => <li key={`${i}-${t}`}>{t}</li>)}</ol>
+            : <p className={MUTED}>This template’s slides could not be read.</p>}
+        </div>
+      )}
+      <label className="mt-3 block text-[12px] font-semibold text-axal-ink dark:text-gray-200">
+        Reason · required, ten characters or more
+        <textarea className={`${INPUT} mt-1`} rows={2} maxLength={1000} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why this sector and stage should start here" data-testid="deck-template-reason" />
+      </label>
+      <p className={MUTED}>Founders can still pick any template. The change is recorded in the admin audit log with your reason.</p>
+      {error && <p role="alert" className="text-[12.5px] text-red-700 dark:text-red-300">{error}</p>}
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button type="button" className={PRIMARY} disabled={busy || !templateChangeArmed({ methodId, current: cell.methodId, reason })} onClick={save} data-testid="deck-template-save">{busy ? 'Saving…' : 'Save'}</button>
+        {cell.changed && <button type="button" className={BTN} disabled={busy || !templateResetArmed({ reason })} onClick={reset} data-testid="deck-template-reset">Reset to default</button>}
+        <button type="button" className={BTN} disabled={busy} onClick={onClose}>Cancel</button>
+      </div>
+    </Card>
+  );
+}
+
 function Templates({ superAdmin }) {
   const [reply, retry] = useRead(() => Promise.all([api.deckRecommendOverrides(), api.deckMethods().catch(() => null)]), []);
+  const [open, setOpen] = useState(null);
   if (reply === undefined) return <Card><Reading testId="deck-templates-reading" /></Card>;
   if (reply === null) return <Card><ReadFailed what="The default templates" claim="That is not the same as no defaults." onRetry={retry} testId="deck-templates-unreadable" /></Card>;
   const [overrides, methodsReply] = reply;
   const methods = Array.isArray(methodsReply?.methods) ? methodsReply.methods : Array.isArray(methodsReply?.items) ? methodsReply.items : [];
   const grid = templateGrid(overrides, methods);
   const off = offGridOverrides(overrides);
-  const why = superAdmin ? notYet('K4') : 'Only the Super Admin changes a default template.';
+  const openCell = open ? grid.find((r) => r.sector === open.sector)?.cells.find((c) => c.stage === open.stage) : null;
   return (
-    <Card data-testid="hq-decks-templates">
-      <p className={`${MUTED} mb-1`}>Each sector and stage starts founders on one template. Founders can still pick any template.</p>
-      <p className={`${MUTED} mb-3`} data-testid="deck-templates-why">{why}</p>
-      <div className="overflow-auto">
-        <table className="w-full" data-testid="deck-templates-grid">
-          <thead><tr><th className={TH}>Sector</th>{STAGES.map((s) => <th key={s.id} className={TH}>{s.label}</th>)}</tr></thead>
-          <tbody>
-            {grid.map((row) => (
-              <tr key={row.sector} className="border-t border-axal-hairline dark:border-gray-800">
-                <td className={`${TD} font-semibold`}>{row.sector}</td>
-                {row.cells.map((c) => (
-                  <td key={c.stage} className={TD} data-testid={`deck-template-${row.sector}-${c.stage}`}>
-                    <span className="font-semibold">{c.template}</span><br />
-                    <span className={MUTED}>{c.changed ? <>Changed by <Cell v={c.by} /></> : 'Default'}</span>
-                    <div className="mt-1 flex gap-1.5">
-                      <button type="button" className={BTN} disabled title={why}>Change</button>
-                      {c.changed && <button type="button" className={BTN} disabled title={why}>Reset to default</button>}
-                    </div>
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {off.length > 0 && (
-        <p className={`${MUTED} mt-3`} data-testid="deck-templates-off-grid">
-          Also set, outside this grid: {off.map((o) => `${o.sector} · ${o.stage}`).join(', ')}.
-        </p>
+    <div className="space-y-4">
+      <Card data-testid="hq-decks-templates">
+        <p className={`${MUTED} mb-1`}>Each sector and stage starts founders on one template. Founders can still pick any template.</p>
+        {!superAdmin && <p className={`${MUTED} mb-3`} data-testid="deck-templates-why">Only the Super Admin changes a default template.</p>}
+        <div className="overflow-auto">
+          <table className="w-full" data-testid="deck-templates-grid">
+            <thead><tr><th className={TH}>Sector</th>{STAGES.map((s) => <th key={s.id} className={TH}>{s.label}</th>)}</tr></thead>
+            <tbody>
+              {grid.map((row) => (
+                <tr key={row.sector} className="border-t border-axal-hairline dark:border-gray-800">
+                  <td className={`${TD} font-semibold`}>{row.sector}</td>
+                  {row.cells.map((c) => (
+                    <td key={c.stage} className={TD} data-testid={`deck-template-${row.sector}-${c.stage}`}>
+                      <span className="font-semibold">{c.template}</span><br />
+                      <span className={MUTED}>{c.changed ? <>Changed by <Cell v={c.by} />{c.at ? ` · ${day(c.at)}` : ''}</> : 'Default'}</span>
+                      {superAdmin && (
+                        <div className="mt-1 flex gap-1.5">
+                          <button type="button" className={BTN} onClick={() => setOpen({ sector: row.sector, stage: c.stage })} data-testid={`deck-template-change-${row.sector}-${c.stage}`}>
+                            {c.changed ? 'Change or reset' : 'Change'}
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {off.length > 0 && (
+          <p className={`${MUTED} mt-3`} data-testid="deck-templates-off-grid">
+            Also set, outside this grid: {off.map((o) => `${o.sector} · ${o.stage}`).join(', ')}.
+          </p>
+        )}
+      </Card>
+      {superAdmin && openCell && (
+        <TemplateSheet key={`${open.sector}|${open.stage}`} sector={open.sector} cell={openCell} methods={methods}
+          onClose={() => setOpen(null)} onDone={() => { setOpen(null); retry(); }} />
       )}
-    </Card>
+    </div>
   );
 }
 

@@ -20,6 +20,23 @@ test deck only.
 | Offline harness | `cloudflare-worker/test/pitch_acceptance_exports_3662.test.ts`, `frontend/test/pitch_acceptance_render_3662.test.mjs` | In CI. Each fixture goes the way a stored version goes (the read's `sanitizeSlides`, then the offline HTML writer and the editable PowerPoint writer, unzipped) and every word a reader should see must be in each file; the print page (`BlockGrid` at `size="print"`, what the PDF photographs) must keep the same words. |
 | Live run | `scripts/pitch-acceptance-live.mjs` | By hand, from a machine that can reach the host (an agent sandbox cannot: its proxy answers `403 CONNECT` for `axal.vc`). Screenshots of the five studio pages at 1440×900 and 390×844, and with `PITCH_EXPORTS=1` the PDF, PowerPoint and HTML exports of the test deck, each checked to be the file it claims. Writes `results.json` and `matrix.md`. Exit 0 passed, 1 a step failed, **2 not configured: nothing verified, never 0**. Its pure helpers are unit-tested in `frontend/test/pitch_acceptance_live_3662.test.mjs`. |
 
+### The preflight in a real browser (#3661, D1370)
+
+`scripts/pitch-preflight-acceptance.mjs` runs "Check before you send" — the product's own preflight code — on the deliberately defective synthetic deck (`frontend/test/fixtures/pitch_preflight_defective.mjs`) in the pre-installed Playwright Chromium, with the built stylesheet. It runs in the sandbox (it reaches no host).
+
+It checks:
+- that the long body on slide 1 is measured cut off by the browser's real layout and blocks the export;
+- that Show me draws it on its slide (PF3, outlined, the overflowing edge marked) and the contrast finding with its colour pair;
+- that the gate before Export holds Export anyway back;
+- keyboard order and accessible names;
+- each finding's spoken name.
+
+It runs at 1440×900 and 390×844, light and dark, and writes screenshots, `results.json` and `matrix.md`. It exports no file: the fixed deck's export is `cloudflare-worker/test/pitch_preflight_export_3661.test.ts`, and the live exports are the live run's.
+
+```text
+npm run build && node scripts/pitch-preflight-acceptance.mjs [out-dir]
+```
+
 ### Running the live part
 
 ```text

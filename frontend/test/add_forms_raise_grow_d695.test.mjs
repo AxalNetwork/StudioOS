@@ -415,7 +415,8 @@ test('10: Enter a KPI and Open a role call #1697\'s spelled-out routes, with the
 // PR 2: Raise's seven canvas forms (CO:317-323), their Edits and client writes
 // =============================================================================
 
-const RAISE_SLUGS = ['fundraising-readiness', 'investor-narrative', 'pitch-deck', 'data-room', 'cap-table', 'use-of-funds', 'capital-relationships'];
+// D4254 P4 (#4272, D-d): Pitch deck has no Add form; ShareDialog is the only way to create a link.
+const RAISE_SLUGS = ['fundraising-readiness', 'investor-narrative', 'data-room', 'cap-table', 'use-of-funds', 'capital-relationships'];
 const SECTION_LABELS = ['Product & engineering', 'GTM: sales and marketing', 'Infrastructure & data', 'Operations, legal & compliance', 'Hiring / runway reserve'];
 /** What each module's `form-options` answers (D691.md "The closing PR"), with made-up names. */
 const REPLIES = {
@@ -478,7 +479,7 @@ async function mountRaise(f, slug, { replies = REPLIES, answer, id = null, curre
   return { ...ui, calls, sends, w, inputs, radios, checks, pick, typeIn, tick: (name, value) => ui.choose(name, value) };
 }
 const raiseForm = (m, slug) => m.FORMS.raise[slug][0];
-const RAISE_NAMES = { 'fundraising-readiness': 'Fundraising readiness', 'investor-narrative': 'Investor narrative', 'pitch-deck': 'Pitch deck', 'data-room': 'Data room',
+const RAISE_NAMES = { 'fundraising-readiness': 'Fundraising readiness', 'investor-narrative': 'Investor narrative', 'pitch-deck': 'Pitch', 'data-room': 'Data room',
   'cap-table': 'Cap table', 'use-of-funds': 'Use of funds', 'capital-relationships': 'Capital relationships' };
 const file = (name, size = 4) => new File([new Uint8Array(size).fill(37)], name, { type: 'application/pdf' });
 
@@ -506,14 +507,6 @@ const RAISE_COPY = {
     checks: { check_against: [['Pitch deck', true], ['Metrics', true]] },
     // NAR11's line: what the dialog creates, and that the version it starts from does not change.
     metas: ['Creates v4 for seed funds. Nothing in v3 changes.'], placeholders: ['One line', 'Line', '$1.5M for n months'],
-  },
-  'pitch-deck': {
-    title: 'New link', cta: 'Create link', button: 'New link',
-    sub: 'A link per investor, with an expiry. Views are tracked per slide.', foot: 'Expired links stop opening; their views stay.',
-    labels: ['Investor', 'Deck version', 'Expires', 'Allow'],
-    chips: { prospect_id: [['Northwind Capital', 'Type a name'], '5'], deck_id: [['v4 · current', 'v3'], '41'], expires_days: [['7 days', '14 days', '30 days', 'Never'], '30'] },
-    checks: { allow: [['Download as PDF', false], ['Forwarding', false]] },
-    metas: ['views by others are tracked too'], placeholders: [],
   },
   'data-room': {
     title: 'Upload', cta: 'Upload', button: 'Upload',
@@ -590,7 +583,6 @@ test('1 (Raise): each Raise form draws the canvas copy, with D691.md decision 11
     ["foot: 'Scores now, from what is recorded. Earlier scores are kept.',", "foot: 'Takes about a minute. Earlier scores are kept.',"],
     ["foot: 'Access is per investor, per file.',", "foot: 'Access is per investor, per folder.',"],
     ["foot: 'Fit is read from their sector focus only.',", "foot: 'Fit is read from their thesis and cheque size.',"],
-    ["{ kind: 'CH', name: 'expires_days', k: 'Expires', opts: EXPIRES, def: 2 },", "{ kind: 'CH', name: 'expires_days', k: 'Expires', opts: EXPIRES, def: 0 },"],
     ["{ kind: 'CH', name: 'group', k: 'Group', opts: GROUP, def: 1, required: true },", "{ kind: 'CH', name: 'group', k: 'Group', opts: GROUP, def: 0, required: true },"],
     ["{ kind: 'CH', name: 'runway', k: 'Runway it buys', opts: RUNWAY, def: 1 },", "{ kind: 'CH', name: 'runway', k: 'Runway it buys', opts: RUNWAY, def: 0 },"],
     ["def: 'seed_fund', required: true },", "def: 0, required: true },"],
@@ -654,34 +646,8 @@ async function assertNarrative(m) {
 }
 
 async function assertLink(m) {
-  const answer = (name) => (name === 'deckLink' ? { id: 41, share_path: '/share/deck/tok.abc-1' } : { ok: true });
-  let ui = await mountRaise(raiseForm(m, 'pitch-deck'), 'pitch-deck', { answer });
-  try {
-    await ui.choose('prospect_id', 'typed');
-    await ui.submit();
-    assert.equal(ui.sends('deckLink').length, 0, 'an empty Investor is refused');
-    assert.ok(ui.text().includes('Fund or name is required.'));
-    await ui.input('investor_label', 'Juno Angels');
-    await ui.choose('expires_days', 'never'); await ui.choose('deck_id', '40'); await ui.tick('allow', 'forwarding');
-    await ui.submit();
-    assert.deepEqual(ui.sends('deckLink'), [['deckLink', P, { deck_id: 40, investor_label: 'Juno Angels', expires_days: null, allow_download: false, allow_forwarding: true }]]);
-    assert.ok(ui.by('cycle-form-done'), 'the done view');
-    assert.ok(ui.text().includes('Copy the link now. It is shown only once.'));
-    assert.ok(ui.text().includes('/share/deck/tok.abc-1'));
-    assert.ok(ui.nodes().some((n) => n.tagName === 'BUTTON' && textOf(n).trim() === 'Copy link'));
-  } finally { await ui.unmount(); }
-  ui = await mountRaise(raiseForm(m, 'pitch-deck'), 'pitch-deck', { answer });
-  try { assert.ok(!ui.text().includes('/share/deck/'), 'reopened, no link is shown'); } finally { await ui.unmount(); }
-  // With no deck: "No deck yet.", a link to build one, and a CTA that cannot be pressed.
-  ui = await mountRaise(raiseForm(m, 'pitch-deck'), 'pitch-deck', { replies: { ...REPLIES, 'pitch-deck': { decks: [], prospects: [] } } });
-  try {
-    assert.ok(ui.text().includes('No deck yet.'));
-    const build = ui.nodes().find((n) => n.tagName === 'A' && textOf(n).trim() === 'Build your deck');
-    assert.equal(propsOf(build).href, '/raise/pitch');
-    assert.ok(propsOf(ui.by('cycle-form-save')).disabled, 'the CTA is disabled');
-    await ui.submit();
-    assert.equal(ui.sends('deckLink').length, 0);
-  } finally { await ui.unmount(); }
+  // D4254 P4 (#4272, D-d): no New link form on the module; links are made in ShareDialog only.
+  assert.ok(!Object.hasOwn(m.FORMS.raise, 'pitch-deck'), 'Pitch deck has no Add form');
   const edit = m.EDITS.raise['pitch-deck'];
   assert.ok(!edit.fields.some((f) => f.name === 'deck_id'), 'Edit link has no Deck version');
   assert.deepEqual(edit.fields.find((f) => f.name === 'expires_days').opts.map((o) => o.value), ['7', '14', '30'], 'no Never: an edit never extends the expiry');
@@ -786,8 +752,6 @@ test('2-6 (Raise): Re-score, New version, New link, Upload, Edit split, Add hold
     ["since: v.since === 'all' ? 'all' : 'last'", "since: 'all'"],
     ["? { value, label, meta: `${when} · scored on its record`, checked: false, disabled: true }", "? { value, label, meta: `${when} · scored on its record`, checked: true }"],
     ["start_from: based ? 'version' : from === BLANK ? BLANK : LIVE,", "start_from: based ? 'version' : LIVE,"],
-    ["expires_days: v.expires_days === NEVER ? null : Number(v.expires_days || 30),", "expires_days: Number(v.expires_days || 30),"],
-    ["blocked: (fields) => !fields.find((f) => f.name === 'deck_id')?.options?.length,", ''],
     ["name, data, visibility: 'nda',", 'name, data,'],
     ['if (why) { refused.push(`${file.name}: ${why}.`); continue; }', ''],
     ["...(folder.startsWith(NEW_FOLDER) ? { folder_name: folder.slice(NEW_FOLDER.length) } : folder ? { folder_uid: folder } : {}),", '...(folder ? { folder_uid: folder } : {}),'],

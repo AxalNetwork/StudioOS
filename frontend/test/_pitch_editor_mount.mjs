@@ -14,6 +14,7 @@ import { deckCheckApi } from '../src/lib/api/deckCheck.js';
 import { railProposalsApi } from '../src/lib/api/railProposals.js';
 import { deckAssistApi } from '../src/lib/api/deckAssist.js';
 import { railPrefsApi } from '../src/lib/api/railPrefs.js';
+import { deckPreflightApi } from '../src/lib/api/deckPreflight.js';
 import { deckAreasApi } from '../src/lib/api/deckAreas.js';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import PitchEditor from '../src/pages/raise/pitch/PitchEditor.jsx';
@@ -47,7 +48,7 @@ export const ADMIN = { id: 21, role: 'admin', name: 'Synthetic Admin' };
 const SOURCES = { project_id: 7, items: [{ source_key: 'revenue.mrr', label: 'MRR', value: 4200, unit: 'usd', as_of: '2026-10-01', grade: 'Measured', source: 'Connector', state: 'recorded', module: 'Grow › Revenue' }], coverage: { slots: 1, filled: 1, by_grade: {}, not_recorded: 0, unreadable: 0 } };
 const VERSIONS = { versions: [{ id: 31, version: 3, is_current: true, title: 'Synthetic deck', created_at: '2026-10-24 10:00:00' }, { id: 30, version: 2, title: 'Synthetic deck', created_at: '2026-10-20 10:00:00' }] };
 
-const groups = { api, deckEditorApi, deckSourcesApi, deckImagesApi, deckCheckApi, railProposalsApi, deckAssistApi, railPrefsApi, deckAreasApi };
+const groups = { api, deckEditorApi, deckSourcesApi, deckImagesApi, deckCheckApi, railProposalsApi, deckAssistApi, railPrefsApi, deckPreflightApi, deckAreasApi };
 
 /**
  * `onDocument` (D1515) runs once the synthetic document is installed and before
@@ -73,9 +74,12 @@ export async function mountEditor({ user = FOUNDER, answers = {}, onDocument = n
     'check.read': async () => ({ checked: false, claims: [], can_check: false }),
     'check.versions': async () => ({ versions: [] }),
     'proposals.list': async () => ({ proposals: [] }),
+    // D4208: a version's preflight dismissals, none by default; a write is answered with the set it asked for.
+    'preflight.dismissals': async () => ({ dismissed: [] }),
+    'preflight.setDismissed': async (_id, b) => ({ dismissed: b?.dismissed ? [b.finding_id] : [] }),
     ...answers,
   };
-  const prefix = { editor: deckEditorApi, sources: deckSourcesApi, images: deckImagesApi, check: deckCheckApi, proposals: railProposalsApi, assist: deckAssistApi, prefs: railPrefsApi, areas: deckAreasApi };
+  const prefix = { editor: deckEditorApi, sources: deckSourcesApi, images: deckImagesApi, check: deckCheckApi, proposals: railProposalsApi, assist: deckAssistApi, prefs: railPrefsApi, preflight: deckPreflightApi, areas: deckAreasApi };
   for (const [name, fn] of Object.entries(reads)) {
     const [p, k] = name.includes('.') ? name.split('.') : [null, name];
     (p ? prefix[p] : api)[k] = stub(name, fn);

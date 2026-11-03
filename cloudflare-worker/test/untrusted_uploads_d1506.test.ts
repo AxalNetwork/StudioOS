@@ -18,6 +18,9 @@
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/untrusted_uploads_d1506.test.ts
  */
 import test from 'node:test';
+import { deckPdf } from './_deck_pdf.ts';
+/** D1575 (#3822): the export checks the PDF it is answered, so the browser stand-in answers one that passes. */
+const GOOD_PDF = await deckPdf({ width: 1920, height: 1080 });
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
@@ -383,7 +386,7 @@ test('browser exports use signed transient copies without rewriting deck history
       const r = await f.app.request(`${ORIGIN}/api/decks/print-export/${printToken}`, {}, f.env);
       assert.equal(r.status, 200);
       printed = await r.json();
-      return new Response(_action === 'pdf' ? enc('%PDF-1.7 synthetic') : new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7, 7]), { status: 200 });
+      return new Response(_action === 'pdf' ? GOOD_PDF : new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7, 7]), { status: 200 });
     } };
     for (const format of ['pdf', 'pptx']) {
       const r = await call(f, '/api/decks/7/export', { json: { format } });

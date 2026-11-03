@@ -1,5 +1,8 @@
 /** D895 (#2674): synthetic data, mounted Worker routes and the real migrated schema. */
 import test, { after } from 'node:test';
+import { deckPdf } from './_deck_pdf.ts';
+/** D1575 (#3822): the export checks the PDF it is answered, so the browser stand-in answers one that passes. */
+const GOOD_PDF = await deckPdf({ width: 1920, height: 1080 });
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdtempSync, copyFileSync, rmSync } from 'node:fs';
@@ -229,7 +232,7 @@ test('D895: editor withdrawal logs one link activity; repeating the withdrawal p
 for(const format of ['pdf','pptx'])test(`D895: successful browser ${format} export logs once; failed rendering logs no completed export`,async()=>{
  const f=await fixture();try{
   // #3655: the documented quickAction, and a checked PDF or PNG.
-  f.env.BROWSER={fetch:async()=>{throw new Error('never fetch')},quickAction:async(action:string)=>new Response(action==='pdf'?new TextEncoder().encode('%PDF-1.4'):new Uint8Array([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a,1]),{status:200})};
+  f.env.BROWSER={fetch:async()=>{throw new Error('never fetch')},quickAction:async(action:string)=>new Response(action==='pdf'?GOOD_PDF:new Uint8Array([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a,1]),{status:200})};
   assert.equal((await call(f,2,'POST','/api/decks/10/export',{format})).status,200);
   assert.equal(f.db.prepare("SELECT count(*) AS n FROM activity_logs WHERE entity_type='raise.pitch-deck' AND action='deck_exported'").get()!.n,1);
   f.env.BROWSER={fetch:async()=>{throw new Error('never fetch')},quickAction:async()=>new Response('synthetic failure',{status:502})};

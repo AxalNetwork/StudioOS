@@ -5,7 +5,7 @@
 //   node --test frontend/test/model_coverage_check_3939.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { checkCoverage, indexOfWhole, stripComments } from '../../scripts/check-model-coverage.mjs';
+import { checkCoverage, indexOfWhole, jobsOf, stripComments } from '../../scripts/check-model-coverage.mjs';
 
 const CATALOGUE = [
   { id: '@cf/zai-org/glm-4.7-flash', kind: 'Text Generation', status: 'ga' },
@@ -131,4 +131,29 @@ test('indexOfWhole finds an id only where it ends, past an earlier longer match'
   assert.equal(indexOfWhole("'a/x-1-fp8' 'a/x-1'", 'a/x-1'), 13);
   assert.equal(indexOfWhole("'a/x-1.5'", 'a/x-1'), -1);
   assert.equal(indexOfWhole('a/x-1', 'a/x-1'), 0, 'at the end of the text');
+});
+
+// Part 2: modelUseCases.ts's JOBS has one row per step, the job id repeated across its steps.
+test("jobsOf: a job's step rows become one job with its steps in order; a step declared twice is two Defaults", () => {
+  const rows = [
+    { id: 'ST5', step: 1, kind: 'decide', default: '@cf/cloudflare/clef-flash' },
+    { id: 'ST5', step: 0, kind: 'rank', default: '@cf/baai/bge-reranker-base' },
+    { id: 'ST1', step: 0, kind: 'chat', default: '@cf/zai-org/glm-4.7-flash' },
+  ];
+  assert.deepEqual(jobsOf(rows), [
+    { id: 'ST5', steps: [{ kind: 'rank', default: '@cf/baai/bge-reranker-base' }, { kind: 'decide', default: '@cf/cloudflare/clef-flash' }] },
+    { id: 'ST1', steps: [{ kind: 'chat', default: '@cf/zai-org/glm-4.7-flash' }] },
+  ], 'a multi-step job is one job, not two declarations');
+  const twice = jobsOf([...rows, { id: 'ST1', step: 0, kind: 'chat', default: '@cf/openai/gpt-oss-120b' }]);
+  const kinds = { chat: ['@cf/zai-org/glm-4.7-flash'], rank: ['@cf/baai/bge-reranker-base'], decide: ['@cf/cloudflare/clef-flash'] };
+  const findings = checkCoverage({ catalogue: [], models: [], jobs: twice, kindModels: kinds });
+  assert.deepEqual(findings.map((f) => f.rule), ['two-defaults'], 'ST1 step 0 declared twice is caught');
+  assert.deepEqual(checkCoverage({ catalogue: [], models: [], jobs: jobsOf(rows), kindModels: kinds }), [], 'the grouped rows pass');
+});
+
+test('the repository run is wired into test:guards, with the TypeScript loader it needs', async () => {
+  const { readFileSync } = await import('node:fs');
+  const pkg = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
+  assert.match(pkg.scripts['test:guards'], /--import \.\/cloudflare-worker\/test\/_ts-loader\.mjs scripts\/check-model-coverage\.mjs/);
+  assert.match(pkg.scripts['test:drift'], /npm run test:guards/, 'and test:guards runs in test:drift');
 });

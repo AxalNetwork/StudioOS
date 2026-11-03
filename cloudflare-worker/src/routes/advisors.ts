@@ -12,6 +12,11 @@ import type { Env, User } from '../types';
 import { getCurrentUser, requireAdmin, requireAuth, requireBranchNotSuspended } from '../auth';
 import { programRefusal } from '../services/programEnforcement';
 import { refuse } from '../util/refusal';
+import { railFor, refuseRun } from '../util/railContext';
+import { AI_SURFACE } from '../services/aiSurfaces';
+import { MATCH_DEPS, MatchRefused, matchRows } from '../services/ai/matchRows';
+/** The request's execution context, or none where the runtime gives none (a test's request). */
+const execCtx = (c: any) => { try { return c.executionCtx; } catch { return undefined; } };
 import { logAdminAction } from '../services/adminAudit';
 import { ensureTier, type TierUser } from '../middleware/requireTier';
 import {
@@ -561,6 +566,40 @@ advisors.get('/match', async (c) => {
       filters: { gap: gapParam || null, focus: focusParam || null },
       total_before_filters: scored.length,
     });
+  } catch (e) { return mapError(c, e); }
+});
+
+// #3938 part 4 (D1478 task 4, job NE1, the advisor surface): the founder's press
+// orders the advisors `GET /match` answers (same query string, so the same
+// directory, pause and refinement rules) by fit with a need they type: retrieve
+// (bge-m3), rank (the reranker), one line each (`services/ai/matchRows.ts`). The
+// text is the advisor's own profile, never an email. Nothing here books a call.
+advisors.post('/match/rank', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const b = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const query = typeof b?.query === 'string' ? b.query.replace(/\s+/g, ' ').trim().slice(0, 300) : '';
+    if (!query) return refuse(c, 422, { code: 'query_missing', message: 'Say what you need an advisor for.' });
+    const match = await advisors.request(`/match${new URL(c.req.url).search}`, { headers: c.req.raw.headers }, c.env, execCtx(c));
+    if (!match.ok) return match;
+    const items = ((await match.json()) as { items?: any[] }).items || [];
+    const candidates = items.map((it) => it?.advisor).filter((a) => a?.uid).map((a) => ({
+      key: String(a.uid),
+      text: [
+        a.headline ? String(a.headline).slice(0, 200) : null,
+        Array.isArray(a.expertise) && a.expertise.length ? `Expertise: ${a.expertise.slice(0, 12).join(', ')}` : null,
+        Array.isArray(a.sectors) && a.sectors.length ? `Sectors: ${a.sectors.slice(0, 8).join(', ')}` : null,
+        a.bio ? String(a.bio).slice(0, 400) : null,
+      ].filter(Boolean).join('. '),
+    }));
+    const rail = railFor(c, { page: 'Founder · Build · Advisors', option: null });
+    const deps = MATCH_DEPS.make(c.env, { userId: Number(user.id), surface: AI_SURFACE.advisorMatch, rail, guardText: query }, 'NE1');
+    let res;
+    try { res = await matchRows(query, candidates, deps, { top: 10 }); } catch (e) {
+      if (e instanceof MatchRefused) return refuseRun(c, e.result)!;
+      throw e;
+    }
+    return c.json({ job: 'NE1', steps: res.steps, rows: res.rows.map((r) => ({ uid: r.key, position: r.position, line: r.line })) });
   } catch (e) { return mapError(c, e); }
 });
 

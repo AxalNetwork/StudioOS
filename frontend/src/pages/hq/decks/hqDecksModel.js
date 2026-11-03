@@ -34,10 +34,10 @@ export function viewFor(pathname = '') {
 
 /** The build tasks behind the boards (#4155 K1–K5). `live: false` until each lands. */
 export const BUILD = {
-  K1: { issue: 4188, live: false, what: 'The founder, deck and card by name, and the area before and after' },
+  K1: { issue: 4188, live: true, what: 'The founder, deck and card by name, and the area before and after' },
   K2: { issue: 4189, live: false, what: 'A reason and an audit row on every flag change' },
   K3: { issue: 4190, live: true, what: 'The beta cohort' },
-  K4: { issue: 4191, live: false, what: 'A reason and an audit row on every default template change' },
+  K4: { issue: 4191, live: true, what: 'A reason and an audit row on every default template change' },
   K5: { issue: 4192, live: true, what: 'HQ stage norms' },
 };
 export const notYet = (key) => {
@@ -117,10 +117,14 @@ export function filterReports(rows, { model = '', reason = '', q = '' } = {}) {
 }
 
 /** What the proposal's status means for the deck, in the canvas's words. */
+// Keyed by `ai_rail_proposals.status` (migration 506: proposed, accepted, edited, discarded, withdrawn).
+// An edited proposal was accepted with the founder's changes, so it was written too; withdrawn has no canvas line.
+const ACCEPTED_LINE = 'The founder accepted the proposal. It was written to the deck.';
 export const PROPOSAL_LINE = {
   discarded: 'The founder discarded the proposal. Nothing was written to the deck.',
-  accepted: 'The founder accepted the proposal. It was written to the deck.',
-  pending: 'The proposal is still open on the founder’s deck.',
+  accepted: ACCEPTED_LINE,
+  edited: ACCEPTED_LINE,
+  proposed: 'The proposal is still open on the founder’s deck.',
 };
 
 // ── HD2 · Feature flags ─────────────────────────────────────────────────────
@@ -196,12 +200,29 @@ export function templateGrid(reply, methods = []) {
     sector,
     cells: STAGES.map((st) => {
       const o = overrides.find((x) => norm(x.sector) === norm(sector) && (STAGE_OF[norm(x.stage)] ?? norm(x.stage)) === st.id);
-      if (o) return { stage: st.id, template: label(o.method_id), changed: true, by: textOf(o?.updated_by?.name) ?? NOT_RECORDED, at: o.updated_at ?? null };
+      if (o) return { stage: st.id, methodId: o.method_id, template: label(o.method_id), changed: true, by: textOf(o?.updated_by?.name) ?? NOT_RECORDED, at: o.updated_at ?? null };
       const d = defaultOf(reply, sector, st.id);
-      return { stage: st.id, template: d ? label(d) : 'The engine’s own pick', changed: false, by: null, at: null };
+      return { stage: st.id, methodId: d, template: d ? label(d) : 'The engine’s own pick', changed: false, by: null, at: null };
     }),
   }));
 }
+
+/**
+ * HD4b: what a template is, for the change sheet's preview — its name, who it
+ * is for and its slides in order, from `GET /api/decks/methods`. A template the
+ * list did not carry is named by its id with no preview, never invented.
+ */
+export function templatePreview(methods = [], id) {
+  const m = (methods || []).find((x) => x?.id === id);
+  if (!m) return { id, name: id ?? null, bestFor: null, slides: [] };
+  const slides = (Array.isArray(m.slides) ? m.slides : []).map((s) => String(s?.title ?? s?.label ?? '').trim()).filter(Boolean);
+  return { id, name: m.label || id, bestFor: m.best_for ? String(m.best_for) : null, slides };
+}
+
+/** HD4b: Save is armed by a template other than the cell's own and a reason of ten characters or more. */
+export const templateChangeArmed = ({ methodId, current, reason }) => !!methodId && methodId !== current && reasonOk(reason);
+/** HD4b: Reset is armed by a reason alone; it returns the cell to the engine's own pick. */
+export const templateResetArmed = ({ reason }) => reasonOk(reason);
 
 /** Overrides saved under a sector the grid does not draw, listed so none is hidden. */
 export function offGridOverrides(reply) {
