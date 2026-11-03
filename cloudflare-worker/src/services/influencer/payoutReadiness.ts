@@ -25,6 +25,9 @@
  * NOTHING IDENTIFYING IS LOGGED, and every statement is bound.
  */
 import type { Env } from '../../types';
+import { isInfluencer } from './membership';
+
+export { isInfluencer };
 
 /** The Influencer terms in force. A new version is accepted again before the next payout. */
 export const INFLUENCER_TERMS_VERSION = '2026-11-03';
@@ -55,20 +58,6 @@ export interface Readiness {
 }
 
 const FORM_WORD: Record<TaxFormType, string> = { w9: 'W-9', w8ben: 'W-8BEN' };
-
-/** An admitted influencer: a referral partner in the `influencers` segment. */
-export async function isInfluencer(env: Env, userId: number): Promise<boolean> {
-  try {
-    const row = await env.DB.prepare(
-      `SELECT 1 AS yes FROM referral_partners WHERE user_id = ? AND segment = 'influencers'`,
-    ).bind(userId).first<{ yes: number }>();
-    return !!row;
-  } catch (e) {
-    // A store from before migration 563 has no referral partners, so no influencers. Any other failure is thrown.
-    if (/no such table: referral_partners/.test(String((e as Error)?.message))) return false;
-    throw e;
-  }
-}
 
 /** The currency of the influencer's terms: the newest signed (or later) terms, else USD. */
 export async function termsCurrency(env: Env, userId: number): Promise<string> {
