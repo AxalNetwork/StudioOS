@@ -28,10 +28,12 @@ import { mount as deck_proofMount } from './deck_proof';
 import { mount as deck_quotesMount } from './deck_quotes';
 import { mount as deck_remoteMount } from './deck_remote';
 import { mount as deck_reportsMount } from './deck_reports';
+import { mount as deck_scriptMount } from './deck_script';
 import { mount as deck_slide_analyticsMount } from './deck_slide_analytics';
 import { mount as deck_stage_normsMount } from './deck_stage_norms';
 import { mount as deck_update_reuseMount } from './deck_update_reuse';
 import { mount as influencerMount } from './influencer';
+import { mount as influencer_analyticsMount } from './influencer_analytics';
 import { mount as influencer_payoutsMount } from './influencer_payouts';
 import { mount as learning_listsMount } from './learning_lists';
 import { mount as learning_streamMount } from './learning_stream';
@@ -62,10 +64,12 @@ export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'deck_quotes', mount: deck_quotesMount },
   { file: 'deck_remote', mount: deck_remoteMount },
   { file: 'deck_reports', mount: deck_reportsMount },
+  { file: 'deck_script', mount: deck_scriptMount },
   { file: 'deck_slide_analytics', mount: deck_slide_analyticsMount },
   { file: 'deck_stage_norms', mount: deck_stage_normsMount },
   { file: 'deck_update_reuse', mount: deck_update_reuseMount },
   { file: 'influencer', mount: influencerMount },
+  { file: 'influencer_analytics', mount: influencer_analyticsMount },
   { file: 'influencer_payouts', mount: influencer_payoutsMount },
   { file: 'learning_lists', mount: learning_listsMount },
   { file: 'learning_stream', mount: learning_streamMount },
