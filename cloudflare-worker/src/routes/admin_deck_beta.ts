@@ -135,8 +135,8 @@ r.get('/people', async (c) => {
               WHERE l.user_id = u.id ORDER BY l.is_primary_admin DESC, l.id LIMIT 1) AS company
        FROM users u
       WHERE u.is_active = 1 AND u.deletion_requested_at IS NULL AND u.name LIKE ?1 ESCAPE '\\'
-      ORDER BY u.name, u.id LIMIT ${PEOPLE_MAX}`,
-  ).bind(like).all<{ uid: string; name: string | null; role: string | null; company: string | null }>()).results ?? [];
+      ORDER BY u.name, u.id LIMIT ?2`,
+  ).bind(like, PEOPLE_MAX).all<{ uid: string; name: string | null; role: string | null; company: string | null }>()).results ?? [];
   return c.json({ people: rows.map((p) => ({ uid: p.uid, name: p.name || 'A member', company: p.company || null, role: p.role || null })) });
 });
 
