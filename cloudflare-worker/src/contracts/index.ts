@@ -19,6 +19,8 @@
  * Which decision added a row is in its issue, and in `git log -L` here.
  */
 export const CONTRACTS = Object.freeze({
+  areasGenerate: { issue: 3764, route: 'POST /api/decks/:id/areas, then GET /api/decks/:id/areas/proposals?batch=', schema: 'deckAreasProposals.schema.json' },
+  areasQuote: { issue: 3764, route: 'POST /api/decks/:id/areas/quote', schema: 'deckAreasQuote.schema.json' },
   batch: { issue: 3753, route: 'GET /api/decks/areas/batches/:uid', schema: 'deckBatch.schema.json' },
   buttonClicks: { issue: 3788, route: 'GET /api/decks/:id/button-clicks', schema: 'deckButtonClicks.schema.json' },
   cancelBatch: { issue: 3753, route: 'POST /api/decks/areas/batches/:uid/cancel', schema: 'deckBatch.schema.json' },
@@ -35,6 +37,7 @@ export const CONTRACTS = Object.freeze({
   elementsLibrary: { issue: 3779, route: 'GET /api/decks/elements', schema: 'deckElements.schema.json' },
   figures: { issue: 3775, route: 'GET /api/decks/:id/figures', schema: 'deckFigures.schema.json' },
   grid: { issue: 3749, route: 'GET /api/decks/:id/grid', schema: 'deckGrid.schema.json' },
+  imageEditAi: { issue: 3778, route: 'GET /api/decks/images/tools', schema: 'deckImageTools.schema.json' },
   imageVary: { issue: 3784, route: 'POST /api/decks/images/:uid/edit/quote', schema: 'deckImageVary.schema.json' },
   investorLinks: { issue: 3812, route: 'GET /api/decks/:id/investor-links', schema: 'deckInvestorLinks.schema.json' },
   markSeen: { issue: 3879, route: 'POST /api/decks/areas/batches/:uid/seen', schema: 'deckMarkSeen.schema.json' },

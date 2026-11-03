@@ -334,6 +334,8 @@ export interface Env {
   STRIPE_PRICE_AI_TOPUP?: string;
   /** D1366: the $1 one-time USD price a custom-amount top-up buys N of. */
   STRIPE_PRICE_AI_TOPUP_UNIT?: string;
+  /** D1434: the $1 unit price on the live Stripe account, read when STRIPE_SECRET_KEY is live. */
+  STRIPE_PRICE_AI_TOPUP_UNIT_LIVE?: string;
   STRIPE_PRICE_GROWTH?: string;
   STRIPE_PRICE_STUDIO?: string;
   // Task #6 (W-1) — investor paywall price ids. Institutional supports
@@ -436,6 +438,9 @@ export interface Env {
   // Worker secret: never in D1, never a member's key, and not ANTHROPIC_API_KEY
   // above, which is dev-only (Task #31).
   AI_PROVIDER_ANTHROPIC?: string;
+  // #3778 phase 2 (D1534): the deck's Bria image tools (background removal) through AI Gateway,
+  // offered only when exactly 'on' (`imageToolsOn`). Off until the owner's steps on #1008.
+  AI_PROVIDER_BRIA?: string;
   AI_PROVIDER_ANTHROPIC_KEY?: string;
   // R2 bucket for KYC documents and other large/private blobs.
   // Optional so unit-test envs without R2 bindings still type-check.

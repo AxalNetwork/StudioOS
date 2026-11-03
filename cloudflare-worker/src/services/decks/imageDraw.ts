@@ -53,7 +53,7 @@ export function deckArtOf(theme: Pick<D1544Art, 'seed_base' | 'reference_uid'> |
 }
 
 /** The art of the deck version a generation run draws on (its theme's art direction), for a step with no request. */
-async function artOfDeck(env: Env, deckId: number | null, projectId: number): Promise<DeckArt> {
+export async function artOfDeck(env: Env, deckId: number | null, projectId: number): Promise<DeckArt> {
   let theme: D1544Art = {};
   if (deckId) {
     try {
@@ -131,6 +131,54 @@ export function inputFor(a: DrawArgs, art: DeckArt, variant: number, parentHold:
   };
 }
 
+/** What a drawn image is stored with: the ask it answers and the pipeline that made it. */
+export type StoreArgs = {
+  userId: number; projectId: number; deckId: number | null; card: number | null; cardUid: string | null;
+  ask: Pick<ImageAsk, 'description' | 'style' | 'aspect' | 'use'>;
+  image: NonNullable<RunResult['image']>; model: string; alt: string | null; usageLogId: number | null;
+  prompt: string; expanded: boolean; steps: StepLine[]; qa: unknown; seed: number; size: { width: number; height: number } | null;
+  pipelineUid: string; variantIndex: number; art: ArtDirection;
+};
+export type Stored = { row: any } | { code: 'image_unreadable' | 'image_unsaved'; message: string };
+
+/**
+ * D1512 (#3764): one drawn image kept as a proposal: metadata stripped, the
+ * AI XMP packet added, the bytes in R2 and a `proposed` row in `deck_images`
+ * with its seed, steps and provenance. The press (`drawDeckImages`) and a
+ * generation run's image step (`pipelineStep`) store through this one path,
+ * so a run's image is a proposal the founder keeps or discards like any other.
+ */
+export async function storeDrawn(env: Env, a: StoreArgs): Promise<Stored> {
+  const promptSha = await sha256Hex(new TextEncoder().encode(a.prompt));
+  const mime = ((MIMES as readonly string[]).includes(a.image.mime) ? a.image.mime : sniffMime(a.image.bytes)) as ImageMime | null;
+  if (!mime) return { code: 'image_unreadable', message: 'The image came back in a format the deck cannot show. Nothing was placed.' };
+  const stripped = stripMetadata(a.image.bytes, mime);
+  const marked = withXmp(stripped, mime, aiXmpPacket(a.model));
+  const bytes = marked ?? stripped;
+  const size = dataSize(bytes, mime);
+  const sha = await sha256Hex(stripped);
+  const taken = await env.DB.prepare('SELECT 1 FROM deck_images WHERE project_id = ? AND sha256 = ?').bind(a.projectId, sha).first();
+  const uid = crypto.randomUUID();
+  const key = `deck-images/${a.projectId}/${uid}.${EXTENSION[mime]}`;
+  try {
+    await env.FILES!.put(key, bytes, { httpMetadata: { contentType: mime }, customMetadata: { projectId: String(a.projectId), userId: String(a.userId) } });
+  } catch {
+    return { code: 'image_unsaved', message: 'Eadwyn drew the image, but it could not be stored. It was charged for the run; try again in a moment.' };
+  }
+  const total = a.steps.reduce((s, x) => (s == null || x.charged_microusd == null ? null : s + x.charged_microusd), 0 as number | null);
+  const provenance = {
+    pipeline_uid: a.pipelineUid, model: a.model, seed: a.seed, size: a.size, prompt_sha256: promptSha, expanded: a.expanded,
+    art_direction: a.art, xmp: marked ? { DigitalSourceType: 'trainedAlgorithmicMedia', CreatorTool: a.model } : null,
+  };
+  await env.DB.prepare(`INSERT INTO deck_images (uid, project_id, deck_id, card, card_uid, r2_key, mime, size_bytes, width, height, sha256, source, prompt, style, aspect, use,
+      state, model, alt, ai_usage_log_id, charged_microusd, created_by, seed, steps, prompt_sha256, pipeline_uid, variant_index, qa_json, provenance_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated', ?, ?, ?, ?, 'proposed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(uid, a.projectId, a.deckId, a.card, a.cardUid, key, mime, bytes.byteLength, size?.width ?? a.image.width, size?.height ?? a.image.height, taken ? null : sha,
+      a.ask.description, a.ask.style, a.ask.aspect, a.ask.use, a.model, a.alt ?? '', a.usageLogId, total, a.userId,
+      a.seed, JSON.stringify(a.steps), promptSha, a.pipelineUid, a.variantIndex, JSON.stringify(a.qa), JSON.stringify(provenance)).run();
+  return { row: await env.DB.prepare('SELECT * FROM deck_images WHERE uid = ?').bind(uid).first() };
+}
+
 /**
  * A generation run's image step (#3753, the one-click run): the same pipeline,
  * under the run's parent hold, with no press. A refused image settles at zero
@@ -142,9 +190,17 @@ export type PipelineStepArgs = {
   base: string; draw: RunOptions; model: string | null; size: { width: number; height: number } | null;
   parentHold: { uid: string; userId: number } | null; rail: RailContext;
   run: (o: RunOptions) => Promise<RunResult>;
+  /**
+   * D1512 (#3764): which of the area's variants this is (0, 1 or 2). Variant k
+   * draws at seeds 2k and 2k+1 (its redraw), so three variants of one area are
+   * three pictures, and variant 0 draws exactly as before.
+   */
+  variant?: number;
+  /** D1512: keep what was drawn as a `proposed` deck image (`storeDrawn`), for the ask it answers. */
+  store?: { card: number | null; ask: Pick<ImageAsk, 'description' | 'style' | 'aspect' | 'use'> } | null;
 };
 export type PipelineStepResult =
-  | { ok: true; image: NonNullable<RunResult['image']>; model: string; alt: string | null; seed: number; variant_index: number; pipeline_uid: string; steps: StepLine[]; qa: unknown; refused: Refused[]; usage_log_id: number | null }
+  | { ok: true; image: NonNullable<RunResult['image']>; model: string; alt: string | null; seed: number; variant_index: number; pipeline_uid: string; steps: StepLine[]; qa: unknown; refused: Refused[]; usage_log_id: number | null; stored?: any }
   | { ok: false; code: string; message: string; refused: Refused[] };
 export async function pipelineStep(env: Env, a: PipelineStepArgs): Promise<PipelineStepResult> {
   const art = await artOfDeck(env, a.deckId, a.projectId);
@@ -155,7 +211,8 @@ export async function pipelineStep(env: Env, a: PipelineStepArgs): Promise<Pipel
   };
   const refused: Refused[] = [];
   let last: { code: string; message: string } = { code: 'image_refused', message: 'The image was not used. You were not charged for it.' };
-  for (let v = 0; v < 2; v += 1) {
+  const first = 2 * Math.max(0, Math.min(2, Math.floor(Number(a.variant) || 0)));
+  for (let v = first; v < first + 2; v += 1) {
     const pipelineUid = crypto.randomUUID();
     const seed = seedOf(art.seed_base, a.cardUid, a.area, v);
     const r = await runPipeline({
@@ -163,7 +220,17 @@ export async function pipelineStep(env: Env, a: PipelineStepArgs): Promise<Pipel
       ...(a.parentHold ? { parentHold: a.parentHold } : {}),
     }, { run: a.run, quoteRun: (o) => quoteRun(env, o) as any, charged });
     if (r.ok) {
-      return { ok: true, image: r.image, model: r.model, alt: r.alt, seed, variant_index: v, pipeline_uid: pipelineUid, steps: r.steps, qa: r.qa, refused, usage_log_id: r.draw_usage_log_id };
+      let stored: any;
+      if (a.store) {
+        const kept = await storeDrawn(env, {
+          userId: a.userId, projectId: a.projectId, deckId: a.deckId, card: a.store.card, cardUid: a.cardUid, ask: a.store.ask,
+          image: r.image, model: r.model, alt: r.alt, usageLogId: r.draw_usage_log_id, prompt: r.prompt, expanded: r.expanded,
+          steps: r.steps, qa: r.qa, seed, size: a.size, pipelineUid, variantIndex: v, art: art.art,
+        });
+        if ('code' in kept) return { ok: false, code: kept.code, message: kept.message, refused };
+        stored = kept.row;
+      }
+      return { ok: true, image: r.image, model: r.model, alt: r.alt, seed, variant_index: v, pipeline_uid: pipelineUid, steps: r.steps, qa: r.qa, refused, usage_log_id: r.draw_usage_log_id, ...(stored ? { stored } : {}) };
     }
     last = { code: r.code, message: r.message };
     if (!r.image) break; // the draw itself failed: nothing to check, nothing to redraw
@@ -230,34 +297,13 @@ export async function drawDeckImages(env: Env, a: DrawArgs): Promise<Drawn | { r
           if (willRedraw) continue;
           break;
         }
-        const mime = ((MIMES as readonly string[]).includes(r.image.mime) ? r.image.mime : sniffMime(r.image.bytes)) as ImageMime | null;
-        if (!mime) { stopped = { code: 'image_unreadable', message: 'The image came back in a format the deck cannot show. Nothing was placed.' }; break; }
-        const stripped = stripMetadata(r.image.bytes, mime);
-        const marked = withXmp(stripped, mime, aiXmpPacket(r.model));
-        const bytes = marked ?? stripped;
-        const size = dataSize(bytes, mime);
-        const sha = await sha256Hex(stripped);
-        const taken = await env.DB.prepare('SELECT 1 FROM deck_images WHERE project_id = ? AND sha256 = ?').bind(a.projectId, sha).first();
-        const uid = crypto.randomUUID();
-        const key = `deck-images/${a.projectId}/${uid}.${EXTENSION[mime]}`;
-        try {
-          await env.FILES!.put(key, bytes, { httpMetadata: { contentType: mime }, customMetadata: { projectId: String(a.projectId), userId: String(a.userId) } });
-        } catch {
-          stopped = { code: 'image_unsaved', message: 'Eadwyn drew the image, but it could not be stored. It was charged for the run; try again in a moment.' };
-          break;
-        }
-        const total = r.steps.reduce((s, x) => (s == null || x.charged_microusd == null ? null : s + x.charged_microusd), 0 as number | null);
-        const provenance = {
-          pipeline_uid: pipelineUid, model: r.model, seed: input.seed, size: input.size, prompt_sha256: promptSha, expanded: r.expanded,
-          art_direction: art.art, xmp: marked ? { DigitalSourceType: 'trainedAlgorithmicMedia', CreatorTool: r.model } : null,
-        };
-        await env.DB.prepare(`INSERT INTO deck_images (uid, project_id, deck_id, card, card_uid, r2_key, mime, size_bytes, width, height, sha256, source, prompt, style, aspect, use,
-            state, model, alt, ai_usage_log_id, charged_microusd, created_by, seed, steps, prompt_sha256, pipeline_uid, variant_index, qa_json, provenance_json)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated', ?, ?, ?, ?, 'proposed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-          .bind(uid, a.projectId, a.deckId, a.ask.card, a.cardUid, key, mime, bytes.byteLength, size?.width ?? r.image.width, size?.height ?? r.image.height, taken ? null : sha,
-            a.ask.description, a.ask.style, a.ask.aspect, a.ask.use, r.model, r.alt ?? '', r.draw_usage_log_id, total, a.userId,
-            input.seed, JSON.stringify(r.steps), promptSha, pipelineUid, v, JSON.stringify(r.qa), JSON.stringify(provenance)).run();
-        rows.push(await env.DB.prepare('SELECT * FROM deck_images WHERE uid = ?').bind(uid).first());
+        const stored = await storeDrawn(env, {
+          userId: a.userId, projectId: a.projectId, deckId: a.deckId, card: a.ask.card, cardUid: a.cardUid, ask: a.ask,
+          image: r.image, model: r.model, alt: r.alt, usageLogId: r.draw_usage_log_id, prompt: r.prompt, expanded: r.expanded,
+          steps: r.steps, qa: r.qa, seed: input.seed, size: input.size, pipelineUid, variantIndex: v, art: art.art,
+        });
+        if ('code' in stored) { stopped = { code: stored.code, message: stored.message }; break; }
+        rows.push(stored.row);
         break;
       }
       if (stopped) break;

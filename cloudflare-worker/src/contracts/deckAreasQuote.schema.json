@@ -1,0 +1,57 @@
+{
+  "$id": "deckAreasQuote",
+  "title": "POST /api/decks/:id/areas/quote (D1512, #3764)",
+  "description": "What the deck v2 adapter's `areasQuote` method passes through: one quote for several areas (pd4, pd14). Each area's lines sum to its hold, the areas' holds sum to the total, and an area the server refuses carries its own sentence and holds nothing. The quote runs nothing and holds nothing; it expires after 10 minutes. D1511 (#3762).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["class", "quote_uid", "expires_at", "hold_microusd", "areas", "runs", "refused"],
+  "properties": {
+    "class": { "enum": ["areas", "deck_build"] },
+    "quote_uid": { "type": "string" },
+    "expires_at": { "type": "string" },
+    "hold_microusd": { "type": "integer", "minimum": 0 },
+    "runs": { "type": "integer", "minimum": 0 },
+    "refused": { "type": "integer", "minimum": 0 },
+    "areas": {
+      "type": "array", "maxItems": 60,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["key", "card_uid", "area_id", "element", "kind", "model", "model_label", "variants", "gates", "refusal", "lines", "hold_microusd"],
+        "properties": {
+          "key": { "type": "string" },
+          "card_uid": { "type": "string" },
+          "area_id": { "type": "string" },
+          "element": { "type": "string" },
+          "kind": { "type": ["string", "null"] },
+          "model": { "type": ["string", "null"] },
+          "model_label": { "type": ["string", "null"] },
+          "variants": { "type": "integer", "minimum": 1, "maximum": 3 },
+          "gates": {
+            "type": "object", "additionalProperties": false, "required": ["image_check", "plan", "records"],
+            "properties": {
+              "image_check": { "type": "boolean" },
+              "plan": { "type": ["string", "null"] },
+              "records": { "type": ["string", "null"] }
+            }
+          },
+          "refusal": { "description": "Null when the area runs; else `{ code, message }`. No `type`, so null holds." },
+          "lines": {
+            "type": "array",
+            "items": {
+              "type": "object", "additionalProperties": false, "required": ["label", "count", "per_microusd", "microusd"],
+              "properties": {
+                "label": { "type": "string" },
+                "count": { "type": "integer", "minimum": 1 },
+                "per_microusd": { "type": ["integer", "null"] },
+                "microusd": { "type": "integer", "minimum": 0 },
+                "free": { "const": true },
+                "included": { "const": true }
+              }
+            }
+          },
+          "hold_microusd": { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  }
+}

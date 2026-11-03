@@ -18,6 +18,9 @@ export const learningApi = {
   catalog: (params) => request(`/learning/catalog${qs(params)}`),
   course: (slug) => request(`/learning/courses/${encodeURIComponent(slug)}`),
   item: (uid) => request(`/learning/items/${encodeURIComponent(uid)}`),
+  // #4178 (D4178): one ready caption of the item's Stream video, for the player's timed transcript.
+  //   itemCaption(uid, language) → { language, vtt }; 404 when not ready, 503 stream_captions_unavailable
+  itemCaption: (uid, language) => request(`/learning/items/${encodeURIComponent(uid)}/captions/${encodeURIComponent(language)}`),
   // { subject_kind: 'item'|'lesson'|'course', subject_uid, status: 'started'|'completed', percent?, position_seconds? }
   recordProgress: (body) => request('/learning/progress', { method: 'POST', body: JSON.stringify(body) }),
   me: () => request('/learning/me'),
