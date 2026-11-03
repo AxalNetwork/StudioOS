@@ -47,6 +47,7 @@
 import type { Env } from '../../types';
 import { extendAiReservation, reserveAiBudget, settleAiReservation } from '../aiBudget';
 import { modelById } from '../ai/catalogue';
+import { noteCeilingAlerts, runPoint } from './observability';
 
 export const FREE_LABEL = 'No model · free';
 export const MAX_LINES = 400;
@@ -298,7 +299,19 @@ export class D1GenRuntime implements DeckGenRuntime {
       await settleAiReservation(this.env, { uid: b.reservation_uid, userId: Number(b.created_by) }, charged, charged === 0);
     }
     await this.emit({ type: 'batch_done', batch_uid: uid, state: end, charged_microusd: charged, held_microusd: Number(b.quote_microusd) });
-    return this.status(uid);
+    // D1510 (#3761): one Analytics Engine point per run, from the driver that closed it, and HQ's ceiling alerts.
+    const st = await this.status(uid);
+    if (st) {
+      const started = Date.parse(`${String(b.created_at ?? '').replace(' ', 'T')}Z`);
+      const seconds = Number.isFinite(started) ? Math.max(0, Math.round((Date.now() - started) / 1000)) : null;
+      runPoint(this.env, {
+        uid, deck_id: Number(b.deck_id), project_id: Number(b.project_id), class: b.class, runtime: b.runtime ?? null, state: end,
+        quote_microusd: Number(b.quote_microusd), charged_microusd: charged, steps: st.steps.length,
+        done: st.steps.filter((x) => x.state === 'done').length, failed: st.steps.filter((x) => x.state === 'failed').length, seconds,
+      });
+    }
+    await noteCeilingAlerts(this.env).catch(() => null);
+    return st;
   }
 
   async cancel(uid: string, userId: number): Promise<BatchStatus | null> {

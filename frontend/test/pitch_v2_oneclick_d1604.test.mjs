@@ -263,7 +263,8 @@ test('the review: the cut, Left out with its links, the brand theme named and wr
     assert.equal(m.text(m.by('pitch-review-accept-line')), ACCEPT_THEME_LINE);
     await m.press(m.by('pitch-review-accept-present'));
     // Mutation checked: send every card (or `all: true`) → the kept list is [0, 1, 2] and this fails.
-    assert.deepEqual(m.named('newDeck.keepSlides')[0].slice(1), [77, { indexes: [0, 1], save: true }]);
+    // D1510 (#3761): Accept all and present says so, for the funnel's last step.
+    assert.deepEqual(m.named('newDeck.keepSlides')[0].slice(1), [77, { indexes: [0, 1], save: true, present: true }]);
     const [, id, body] = m.named('api.deckUpdate')[0];
     assert.equal(id, 12);
     assert.deepEqual(body.theme, { kind: 'brand', background: null }, 'the theme the review named');

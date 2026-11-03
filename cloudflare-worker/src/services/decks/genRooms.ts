@@ -12,12 +12,14 @@
  */
 import type { Env } from '../../types';
 import { doNamespace } from '../../util/doNamespace';
-import type { AdmitInput, Admitted, BatchStatus } from './genRuntime';
+import { quoteOf, type AdmitInput, type Admitted, type BatchStatus } from './genRuntime';
+import { deckCeilingRefusal, noteCeilingAlerts } from './observability';
 import { QueueGenRuntime, eventsFromD1, runtimeFor } from './queueRuntime';
 
 /** The HTTP status a refused admission answers with. */
 export function admitStatus(refusal: string): number {
   if (refusal === 'deck_busy' || refusal === 'idempotency_key_reused') return 409;
+  if (refusal === 'deck_ceiling_reached') return 429;
   if (refusal === 'ai_paused' || refusal === 'runtime_unavailable') return 503;
   if (refusal === 'spend_limit' || refusal === 'hold_exhausted' || refusal.startsWith('budget_')) return 402;
   return 400;
@@ -32,6 +34,15 @@ export function roomFor(env: Env, deckId: number): DurableObjectStub | null {
 }
 
 export async function admitDeckRun(env: Env, input: AdmitInput): Promise<{ status: number; body: Admitted }> {
+  // D1510 (#3761): the owner's daily ceiling, before any hold. Every run starts here (area runs,
+  // the whole-deck build, a retry, an autopilot run), so none passes it. A replay of a run already
+  // admitted holds nothing new, so it is answered as before.
+  const replay = await env.DB.prepare('SELECT 1 AS x FROM deck_area_batches WHERE idem_key = ?1').bind(String(input.idemKey ?? '')).first().catch(() => null);
+  if (!replay) {
+    await noteCeilingAlerts(env).catch(() => null);
+    const stop = await deckCeilingRefusal(env, quoteOf(Array.isArray(input.lines) ? input.lines : []));
+    if (stop) return { status: 429, body: { ok: false, refusal: stop.code, message: stop.message } };
+  }
   // D1536 (#3785): the room takes every run but a large one, which the Queue
   // fallback takes (decision Z); `DECK_GEN_RUNTIME = "queue"` sends every run there.
   const kind = runtimeFor(env, input.lines ?? []);

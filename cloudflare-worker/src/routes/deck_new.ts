@@ -71,6 +71,7 @@ import { ensureTier } from '../middleware/requireTier';
 import { quoteRun, railOptionKey, run, type RunOptions } from '../services/aiRouter';
 import { pricingVersion } from '../services/ai/pricing';
 import { QUOTE_STALE, ceilingRefusal, dailyCeiling, pinQuote, returnQuote, takeQuote, type QuoteStep, type TakenQuote } from '../services/decks/runQuotes';
+import { funnelPoint } from '../services/decks/observability';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { parseJsonLoose } from '../services/decks/autofill';
 import { readSources, type SourceItem } from '../services/decks/sources';
@@ -600,6 +601,8 @@ deckNew.post('/generate', async (c) => {
     id = await writeProposal(c.env, projectId, typeof base === 'number' ? base : 0, title, stored, outline, userId);
   }
   await auditDeckWrite(c, user, projectId, 'deck_built', 'Deck proposal built from records');
+  // D1510 (#3761): the one-click funnel's first step, by id.
+  funnelPoint(c.env, 'build', { projectId, proposalId: id, oneClick: body?.one_click === true });
   const written = await proposalRow(c.env, id);
   return c.json({
     proposal: rowToProposal(written),
@@ -724,6 +727,11 @@ deckNew.post('/proposals/:id/keep-slides', async (c) => {
     const deckId = await insertVersion(c.env, projectId, kept.map((i) => slides[i]), row.title || 'Pitch deck', Number(user.id) || null, meta);
     await c.env.DB.prepare('DELETE FROM pitch_deck_proposals WHERE id = ?').bind(row.id).run();
     await auditDeckWrite(c, user, projectId, 'deck_kept', `Kept ${kept.length} of ${slides.length} cards as a new version`);
+    // D1510 (#3761): every card kept is Accept all; `present: true` is Accept all and present.
+    if (kept.length === slides.length) {
+      funnelPoint(c.env, 'accept_all', { deckId, projectId, proposalId: Number(row.id) });
+      if (body?.present === true) funnelPoint(c.env, 'accept_all_present', { deckId, projectId, proposalId: Number(row.id) });
+    }
     return c.json({ deck: rowToDeck(await getDeckRow(c.env, deckId)), kept });
   }
 

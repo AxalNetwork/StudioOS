@@ -11,6 +11,7 @@ import { mount as admin_ai_agents_policyMount } from './admin_ai_agents_policy';
 import { mount as admin_ai_agents_rosterMount } from './admin_ai_agents_roster';
 import { mount as admin_ai_element_modelsMount } from './admin_ai_element_models';
 import { mount as admin_company_skillsMount } from './admin_company_skills';
+import { mount as admin_deck_generationMount } from './admin_deck_generation';
 import { mount as admin_deck_stage_normsMount } from './admin_deck_stage_norms';
 import { mount as admin_hq_skillsMount } from './admin_hq_skills';
 import { mount as company_complianceMount } from './company_compliance';
@@ -39,6 +40,7 @@ export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'admin_ai_agents_roster', mount: admin_ai_agents_rosterMount },
   { file: 'admin_ai_element_models', mount: admin_ai_element_modelsMount },
   { file: 'admin_company_skills', mount: admin_company_skillsMount },
+  { file: 'admin_deck_generation', mount: admin_deck_generationMount },
   { file: 'admin_deck_stage_norms', mount: admin_deck_stage_normsMount },
   { file: 'admin_hq_skills', mount: admin_hq_skillsMount },
   { file: 'company_compliance', mount: company_complianceMount },
