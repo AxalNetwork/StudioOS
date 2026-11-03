@@ -17,7 +17,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import {
   BOUNDARY_ROLES, BOUNDARY_TITLE, NOTE_MAX, NOTES_EYEBROW, NOT_RECORDED, READ_ONLY,
-  boundaryFor, cardLabel, noteRows, overrideRows, postNoteSentence,
+  boundaryFor, cardLabel, noteRows, postNoteSentence,
 } from '../src/pages/raise/pitch/pitchStudioModel.js';
 import PitchBoundary from '../src/pages/raise/pitch/PitchBoundary.jsx';
 
@@ -71,13 +71,6 @@ test('PD22: an Advisor, an Operating Partner and an Explorer read a boundary; th
   assert.equal(renderToStaticMarkup(React.createElement(PitchBoundary, { role: 'partner' })).includes('NDA'), false);
 });
 
-test("the Super Admin's defaults name each template, or its id when the list was not read", () => {
-  const overrides = { overrides: [{ sector: 'Fintech', stage: 'seed', method_id: 'yc_seed' }, { sector: 'Health', stage: 'pre-seed', method_id: 'sequoia' }] };
-  assert.deepEqual(overrideRows(overrides, { methods: [{ id: 'yc_seed', label: 'YC Seed' }] }).map((r) => [r.sector, r.stage, r.template]), [['Fintech', 'seed', 'YC Seed'], ['Health', 'pre-seed', 'sequoia']]);
-  assert.deepEqual(overrideRows(overrides, null).map((r) => r.template), ['yc_seed', 'sequoia']);
-  assert.deepEqual(overrideRows(null, null), []);
-});
-
 test('the wiring: the Notes tab and its route, the boundary inside the shell, and the help surface moved with the guard', () => {
   const app = read('frontend/src/App.jsx');
   assert.ok(app.includes(`<Route path="/raise/pitch" element={guard(labRoles(['admin', 'founder', 'advisor', 'partner', 'exploring'])`));
@@ -95,7 +88,11 @@ test('the wiring: the Notes tab and its route, the boundary inside the shell, an
   const notesSrc = read('frontend/src/pages/raise/pitch/PitchNotes.jsx');
   assert.match(notesSrc, /api\.deckNotes\(deckId\)/);
   assert.match(notesSrc, /api\.deckPostNote\(deckId,/);
-  assert.match(notesSrc, /viewer === 'super_admin' \?/, 'the defaults card is the Super Admin\'s, by the Worker\'s answer');
+  // D4155 K4 (#4191): the default template is set on HQ › Decks only; the Notes tab points the Super Admin there and writes no override.
+  assert.match(notesSrc, /viewer === 'super_admin' \?/, 'the pointer is the Super Admin\'s, by the Worker\'s answer');
+  assert.match(notesSrc, /to="\/admin\/platform\/decks\/templates"/);
+  assert.match(notesSrc, /viewer === 'super_admin' \? \(\s*<aside[^>]*data-testid="pitch-default-templates-moved"/, 'the pointer is the Super Admin\'s only');
+  assert.equal(/deckSetRecommendOverride|deckRecommendOverrides|recommend-overrides/.test(notesSrc), false, 'PitchNotes no longer reads or writes overrides');
   assert.match(notesSrc, /title="Post this note\?"/, 'posting opens a dialog');
   assert.equal(/deckUpdate|deckShare\(|deckRestore/.test(notesSrc), false, 'the Notes tab writes nothing on the deck');
   const api = read('frontend/src/lib/api.js');

@@ -429,11 +429,3 @@ export function boundaryFor(role, labActive = false) {
     : { title: BOUNDARY_TITLE, line: 'Ask them to share a link.' };
 }
 
-/** The Super Admin's defaults, one row per sector and stage, with the template's name when the list was read. */
-export function overrideRows(overrides, methods) {
-  const names = new Map(asList(methods, 'methods', 'items').map((m) => [m.id, m.label]));
-  return asList(overrides, 'overrides').map((o) => ({
-    key: `${o.sector}|${o.stage}`, sector: o.sector, stage: o.stage, methodId: o.method_id,
-    template: names.get(o.method_id) || o.method_id,
-  }));
-}

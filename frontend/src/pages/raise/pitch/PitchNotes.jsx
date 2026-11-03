@@ -1,11 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
 import { Lightbox } from '../../../ui';
 import {
   NOTES_EMPTY, NOTES_EYEBROW, NOTE_MAX, NOTE_PLACEHOLDER_ADMIN, NOTE_PLACEHOLDER_FOUNDER,
-  asList, cardLabel, currentVersion, noteRows, overrideRows, postNoteSentence, versionLabel,
+  asList, cardLabel, currentVersion, noteRows, postNoteSentence, versionLabel,
 } from './pitchStudioModel';
 
 /**
@@ -15,7 +16,9 @@ import {
  * An Admin and the Super Admin leave notes; the founders read and answer. Who
  * may post is the Worker's answer (`viewer` on GET /api/decks/:id/notes), not a
  * guess from the role here. Posting opens a dialog that says what it changes.
- * The Super Admin also sets the default template by sector and stage.
+ * The default template by sector and stage is set on HQ › Decks › Default
+ * templates (D4155 K4, #4191), the one place it changes, with a reason and an
+ * audit row; this tab only points the Super Admin there.
  */
 
 const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
@@ -71,7 +74,13 @@ export default function PitchNotes({ reads }) {
           <Composer deckId={deckId} slideCount={slideCount} viewer={viewer} onPosted={() => setTick((t) => t + 1)} />
         ) : null}
       </section>
-      {viewer === 'super_admin' ? <aside aria-label="Super Admin"><DefaultTemplates /></aside> : null}
+      {viewer === 'super_admin' ? (
+        <aside aria-label="Super Admin" className={`${CARD} flex flex-col gap-1 bg-axal-ground p-4 dark:bg-gray-800`} data-testid="pitch-default-templates-moved">
+          <span className={EYE}>Super Admin</span>
+          <span className={MUTED}>The default template by sector and stage is set on HQ.</span>
+          <Link to="/admin/platform/decks/templates" className="text-[12.5px] font-semibold text-axal-violet-deep underline dark:text-violet-300">HQ › Decks › Default templates</Link>
+        </aside>
+      ) : null}
     </div>
   );
 }
@@ -167,91 +176,5 @@ function Composer({ deckId, slideCount, viewer, onPosted }) {
         </Lightbox>
       ) : null}
     </div>
-  );
-}
-
-/** The Super Admin's default template by sector and stage (`/api/decks/admin/recommend-overrides`). */
-function DefaultTemplates() {
-  const [state, setState] = useState({ status: 'loading', overrides: null, methods: null });
-  const [change, setChange] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const [tick, setTick] = useState(0);
-
-  useEffect(() => {
-    let live = true;
-    Promise.all([
-      api.deckRecommendOverrides(),
-      // The template names are a nicety: without them each row names its template by id.
-      api.deckMethods().catch(() => null),
-    ]).then(
-      ([overrides, methods]) => { if (live) setState({ status: 'ok', overrides, methods }); },
-      (e) => { if (live) setState({ status: 'error', overrides: null, methods: null }); reportError('pitch-studio:overrides', e); },
-    );
-    return () => { live = false; };
-  }, [tick]);
-
-  const rows = useMemo(() => (state.status === 'ok' ? overrideRows(state.overrides, state.methods) : []), [state]);
-  const methods = asList(state.methods, 'methods', 'items');
-
-  const save = useCallback(async () => {
-    setBusy(true); setFailed(false);
-    try {
-      await api.deckSetRecommendOverride({ sector: change.sector, stage: change.stage, method_id: change.methodId });
-      setChange(null);
-      setTick((t) => t + 1);
-    } catch (e) {
-      reportError('pitch-studio:set-override', e);
-      setFailed(true);
-    } finally {
-      setBusy(false);
-    }
-  }, [change]);
-
-  return (
-    <section className={`${CARD} flex flex-col gap-2 bg-axal-ground p-4 dark:bg-gray-800`} data-testid="pitch-default-templates">
-      <span className={EYE}>Super Admin</span>
-      <span className={`text-[12.5px] font-bold ${INK}`}>Default template by sector and stage</span>
-      {state.status === 'loading' ? <div className={`${SKEL} h-12`} aria-hidden="true" /> : state.status === 'error' ? (
-        <Failed text="The defaults could not be read." onRetry={() => setTick((t) => t + 1)} />
-      ) : !rows.length ? (
-        <p className={`m-0 ${MUTED}`}>No default set. Each new deck starts from the recommended template.</p>
-      ) : (
-        <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
-          {rows.map((r) => (
-            <li key={r.key} className="flex flex-wrap items-center justify-between gap-2 text-[12px]">
-              <span className={INK}>{r.sector} · {r.stage}</span>
-              {methods.length ? (
-                <select
-                  aria-label={`Template for ${r.sector} · ${r.stage}`}
-                  className={`${FIELD} w-auto py-1`}
-                  value={r.methodId}
-                  onChange={(e) => { setFailed(false); setChange({ ...r, methodId: e.target.value, template: methods.find((m) => m.id === e.target.value)?.label || e.target.value }); }}
-                >
-                  {methods.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-                </select>
-              ) : <span className="font-mono text-axal-muted dark:text-gray-400">{r.template}</span>}
-            </li>
-          ))}
-        </ul>
-      )}
-      {change ? (
-        <Lightbox
-          label="Change the default template"
-          title="Change the default template?"
-          width={480}
-          onClose={() => !busy && setChange(null)}
-          footer={(
-            <div className="flex justify-end gap-2">
-              <button type="button" className={GHOST} onClick={() => setChange(null)} disabled={busy}>Cancel</button>
-              <button type="button" className={PRIMARY} onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Change'}</button>
-            </div>
-          )}
-        >
-          <p className={`m-0 text-[13px] leading-[1.55] ${INK}`}>New decks for {change.sector} · {change.stage} start from {change.template}, on every studio. Decks already made keep theirs.</p>
-          {failed ? <p role="alert" className="m-0 mt-2 text-[12.5px] font-semibold text-axal-destructive dark:text-red-400">The default could not be changed. Try again.</p> : null}
-        </Lightbox>
-      ) : null}
-    </section>
   );
 }
