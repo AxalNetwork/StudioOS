@@ -54,6 +54,8 @@ import { refuse } from '../util/refusal';
 import { auditDeckWrite, getDeckRow, projectOwned, themeOfRow } from './decks';
 import { cardRefOf } from '../services/decks/cardUids';
 import { mercuryFor } from './deck_sources';
+import { deckCeilingRefusal } from '../services/decks/observability';
+import { dailyCeiling } from '../services/decks/runQuotes';
 
 const deckAssist = new Hono<{ Bindings: Env }>();
 
@@ -218,6 +220,12 @@ deckAssist.post('/:id/cards/:card/assist', async (c) => {
   const p = got.press;
   const userId = Number(user.id) || 0;
   const opts = runOptions(c, user, p);
+  // D1510 (#3761): the owner's daily ceiling, before any hold; priced only once a ceiling is set.
+  if (dailyCeiling(c.env) != null) {
+    const q = await quoteRun(c.env, opts);
+    const ceiling = await deckCeilingRefusal(c.env, q.ok ? q.hold_microusd : 0);
+    if (ceiling) return refuse(c, 429, ceiling);
+  }
   const res = await run(c.env, { ...opts, surface: AI_SURFACE.raisePitch, rail: opts.rail });
   if (!res.ok) {
     const stop = refuseRun(c, res);

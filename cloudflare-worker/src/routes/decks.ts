@@ -56,6 +56,7 @@ import { revOf } from '../services/decks/ifMatch';
 import { approvalRefusal, pendingApprovers } from '../services/decks/deckApproval';
 import { newAssignments, notifyAssignments } from '../services/decks/cardStatus';
 import { peopleOf } from '../services/decks/deckPeople';
+import { funnelPoint, structuresChanged } from '../services/decks/observability';
 
 /** D895 applies only to deck operations, not other project-content routes. */
 export async function projectOwned(c: any, user: any, projectId: number, opts: { write?: boolean; audit?: boolean; contactData?: boolean } = {}) {
@@ -1444,6 +1445,8 @@ decks.put('/:id', async (c) => {
   if (!copy.ok) return refuse(c, 422, { code: 'image_not_copied', message: copyRefusalMessage(copy.code), extra: { image_url: copy.image_url, reason: copy.code } });
   slides.splice(0, slides.length, ...copy.slides);
   const title = String(body?.title || row.title || 'Pitch deck').slice(0, 200);
+  // D1510 (#3761): a save that changes any card's structure is the editor funnel's first step.
+  const structureChanged = structuresChanged(priorSlides, slides);
   const newId = await insertVersion(c.env, Number(row.project_id), slides, title, Number(user.id) || null, meta,
     { id: Number(row.id), version: Number(row.version) });
   // Only the save whose version won reaches here: each new assignment is told once.
@@ -1521,6 +1524,7 @@ decks.put('/:id', async (c) => {
     }
   }
 
+  if (structureChanged) funnelPoint(c.env, 'structure_change', { deckId: Number(newId), projectId: Number(row.project_id) });
   await auditDeckWrite(c, user, Number(row.project_id), 'deck_saved', 'Deck saved');
   return c.json(rowToDeck(await getDeckRow(c.env, Number(newId))));
 });
@@ -1752,6 +1756,8 @@ export async function createShareLink(env: Env, a: CreateShareLinkArgs): Promise
   // (DELETE /:id/shares/:shareId) when the founder replaces it. Null if the
   // driver did not report one; the sheet then says it could not withdraw.
   const id = Number(ins?.meta?.last_row_id) || null;
+  // D1510 (#3761): the editor funnel's last step, by id, whichever route made the link.
+  funnelPoint(env, 'share', { deckId: a.deckId, projectId: a.projectId ?? null });
   // D691 decision 12 — every link logs one row on the link's record, whichever
   // route made it. The summary names no investor.
   if (id != null && a.projectId) {

@@ -273,8 +273,10 @@ export function ProposalReview({ projectId, q = '', proposal, items = [], versio
   const flip = (i) => setTicks((s) => flipTick(s, i, locked));
 
   const accept = async (present) => {
-    const body = acceptBody(ticks);
-    if (!body) return;
+    const asked = acceptBody(ticks);
+    if (!asked) return;
+    // D1510 (#3761): Accept all and present says so, for the funnel's last step.
+    const body = present ? { ...asked, present: true } : asked;
     setBusy(present ? 'present' : 'accept'); setRefusal(null);
     try {
       const r = await newDeckApi.keepSlides(proposal.id, body);
