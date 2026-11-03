@@ -129,6 +129,11 @@ test('defaults is the engine\'s own pick for every cell of the grid, and the eng
   }
   assert.deepEqual(read.body.defaults.find((d: any) => d.sector === 'Consumer' && d.stage === 'seed'), { sector: 'Consumer', stage: 'seed', method_id: 'narrative_brand', source: 'sector' });
   assert.deepEqual(read.body.defaults.find((d: any) => d.sector === 'Fintech' && d.stage === 'pre_seed'), { sector: 'Fintech', stage: 'pre_seed', method_id: 'yc_seed', source: 'stage_default' });
+  // Owner decision: "Deep tech", as the grid writes it, is deep tech.
+  assert.deepEqual(['seed', 'series_a', 'series_b', 'pre_seed'].map((stage) => read.body.defaults.find((d: any) => d.sector === 'Deep tech' && d.stage === stage)).map((d: any) => [d.method_id, d.source]),
+    [['sequoia_classic', 'sector'], ['investor_appendix', 'sector'], ['series_b_diligence', 'sector'], ['yc_seed', 'stage_default']]);
+  for (const spelling of ['deeptech', 'Deep-tech', 'DEEP TECH']) assert.equal((await recommendMethod(f.env, { sector: spelling, stage: 'series_a' })).method_id, 'investor_appendix', spelling);
+  assert.equal((await recommendMethod(f.env, { sector: 'Deep sea fishing tech', stage: 'series_a' })).method_id, 'series_a_growth', 'only deep tech, not any phrase with both words');
   await call(f, SUPER, 'PUT', PATH, { sector: 'Consumer', stage: 'seed', method_id: 'yc_seed', reason: REASON });
   assert.deepEqual(await recommendMethod(f.env, { sector: 'Consumer', stage: 'Seed' }), { method_id: 'yc_seed', sector: 'Consumer', stage: 'seed', source: 'override' });
   const after = await call(f, ADMIN, 'GET', PATH);

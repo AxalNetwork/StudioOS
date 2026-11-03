@@ -41,13 +41,14 @@ const STAGE_DEFAULTS: Record<Stage, DeckMethodId> = {
 };
 
 // Sector overrides — explicit picks beat the stage default.
+// D4155 K4 (#4191, owner decision): "deep tech" with a space or a hyphen is deep tech too, as HQ's grid writes it.
 const SECTOR_OVERRIDES: Array<{ sectorPattern: RegExp; stage: Stage; method: DeckMethodId }> = [
   { sectorPattern: /(consumer|d2c|brand|fashion)/i, stage: 'seed', method: 'narrative_brand' },
   { sectorPattern: /(consumer|d2c|brand|fashion)/i, stage: 'series_a', method: 'narrative_brand' },
   { sectorPattern: /(saas|enterprise|b2b)/i, stage: 'series_a', method: 'series_a_growth' },
-  { sectorPattern: /(deeptech|biotech|hardware|robotics)/i, stage: 'seed', method: 'sequoia_classic' },
-  { sectorPattern: /(deeptech|biotech|hardware|robotics)/i, stage: 'series_a', method: 'investor_appendix' },
-  { sectorPattern: /(deeptech|biotech|hardware|robotics)/i, stage: 'series_b', method: 'series_b_diligence' },
+  { sectorPattern: /(deep[\s-]?tech|biotech|hardware|robotics)/i, stage: 'seed', method: 'sequoia_classic' },
+  { sectorPattern: /(deep[\s-]?tech|biotech|hardware|robotics)/i, stage: 'series_a', method: 'investor_appendix' },
+  { sectorPattern: /(deep[\s-]?tech|biotech|hardware|robotics)/i, stage: 'series_b', method: 'series_b_diligence' },
 ];
 
 const OV_SCHEMA_READY = new WeakMap<object, boolean>();
