@@ -40,6 +40,7 @@ import { LEGAL_FACES, bytesToBase64 } from '../legalPaperCss';
 import { DECK_SOURCES, bindingsOf } from './sources';
 import { cellText } from './slideModel';
 import { diagramLayout, diagramName, type DiagramLayout } from './diagramLayout';
+import { chartHeading } from './pptxChart';
 
 export const NOT_RECORDED = 'Not recorded';
 export const NO_NOTES = 'No notes on this card.';
@@ -212,7 +213,8 @@ function block(b: any, images: OfflineDeck['images']): string {
           ? `<li>${label}: ${pts.map((p: any) => `${text(p?.x)} ${text(p?.y)}`).join(' · ')}</li>`
           : `<li>${label}</li>`;
       });
-      return `<div class="chart"><b>${esc(chartLabel(b.chart_type))} chart</b>${series.length ? `<ul>${series.join('')}</ul>` : `<p class="nr">${NOT_RECORDED}</p>`}</div>`;
+      // D1574 (pd8b): a projection keeps its label here too.
+      return `<div class="chart"><b>${esc(chartHeading(`${chartLabel(b.chart_type)} chart`, b, new Date().toISOString().slice(0, 10)))}</b>${series.length ? `<ul>${series.join('')}</ul>` : `<p class="nr">${NOT_RECORDED}</p>`}</div>`;
     }
     case 'image': return image(b.image_url, images, b.alt || '');
     // The file asks for nothing (D901), so a link is its label and its address as text, never an href.

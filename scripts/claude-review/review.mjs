@@ -183,6 +183,55 @@ async function gh(apiUrl, token, path) {
   return res.json();
 }
 
+/**
+ * The listing's page cap: 5,000 artifacts. The repository keeps about 17 days
+ * of artifacts, near 190 a day (3,272 on 2026-11-03), so a month's listing
+ * reads at most about 34 pages; the cap is the backstop for a listing whose
+ * order cannot be trusted.
+ */
+export const LEDGER_MAX_PAGES = 50;
+
+/**
+ * #4281: how far before the month's start a listing reads before it stops.
+ * GitHub lists a repository's artifacts by id, newest first, but an
+ * artifact's `created_at` (when its upload began) drifts from that order by
+ * up to about 47 minutes (measured 2026-11-03). A day is far beyond that, so
+ * no record of the month can follow the stopping point.
+ */
+export const LEDGER_SKEW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The review records created since `sinceIso`, from a listing read one page
+ * of 100 at a time (`fetchPage(page)` resolves to the API's reply). Complete
+ * when the listing ends, or when, in id order newest first, it reaches an
+ * artifact created a day before `sinceIso`; incomplete when the page cap cuts
+ * it off, or when the ids come out of order (then it reads on to the cap).
+ */
+export async function listMonthRecords(fetchPage, sinceIso, maxPages = LEDGER_MAX_PAGES) {
+  const artifacts = [];
+  const stopBefore = new Date(Date.parse(sinceIso) - LEDGER_SKEW_MS).toISOString().replace('.000', '');
+  let previousId = null;
+  let newestFirst = true;
+  for (let page = 1; page <= maxPages; page += 1) {
+    const data = await fetchPage(page);
+    // A reply with no list is not the end of the listing: an error must not read as a month with no spend.
+    if (!Array.isArray(data?.artifacts)) throw new Error('GitHub returned no artifact list');
+    const list = data.artifacts;
+    let pastStop = false;
+    for (const a of list) {
+      const id = Number(a.id);
+      if (!Number.isFinite(id) || (previousId !== null && id >= previousId)) newestFirst = false;
+      previousId = id;
+      const at = String(a.created_at || '');
+      if (at < stopBefore) pastStop = true;
+      if (at >= sinceIso && String(a.name || '').startsWith(RECORD_PREFIX)) artifacts.push({ name: a.name, created_at: a.created_at, expired: !!a.expired });
+    }
+    if (list.length < 100) return { artifacts, complete: true };
+    if (pastStop && newestFirst) return { artifacts, complete: true };
+  }
+  return { artifacts, complete: false };
+}
+
 /** The two GitHub REST reads: the merge base, and this repository's review records. */
 export function githubClient({ apiUrl, token, repository }) {
   return {
@@ -193,23 +242,18 @@ export function githubClient({ apiUrl, token, repository }) {
       if (!SHA.test(sha || '')) throw new Error('GitHub returned no merge base');
       return sha;
     },
-    // Every page, up to a cap, rather than stopping at the month's start:
-    // the ledger must not depend on the order the API lists artifacts in. A
-    // listing cut off by the cap is incomplete, and with a monthly budget set
-    // the runner then refuses rather than under-count the spend.
+    // #4281: the month's records. GitHub lists a repository's artifacts by
+    // id, newest first, so once the listing is a day past the month's start
+    // every record of the month has been seen, and the listing is complete.
+    // That holds only while the order holds: each id must be lower than the
+    // one before it. Should the API ever list out of order, the
+    // listing reads every page up to the cap instead, and one cut off by the
+    // cap is incomplete, so with a monthly budget set the runner refuses
+    // rather than under-count the spend. The cap alone was the whole rule
+    // before: once the repository held 3,000 artifacts, every review in every
+    // month was refused as "spend unreadable", and none ran.
     async listArtifacts(sinceIso) {
-      const artifacts = [];
-      for (let page = 1; page <= 30; page += 1) {
-        const data = await gh(apiUrl, token, `/repos/${repository}/actions/artifacts?per_page=100&page=${page}`);
-        const list = Array.isArray(data?.artifacts) ? data.artifacts : [];
-        for (const a of list) {
-          if (String(a.name || '').startsWith(RECORD_PREFIX) && String(a.created_at || '') >= sinceIso) {
-            artifacts.push({ name: a.name, created_at: a.created_at, expired: !!a.expired });
-          }
-        }
-        if (list.length < 100) return { artifacts, complete: true };
-      }
-      return { artifacts, complete: false };
+      return listMonthRecords((page) => gh(apiUrl, token, `/repos/${repository}/actions/artifacts?per_page=100&page=${page}`), sinceIso);
     },
   };
 }

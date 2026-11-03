@@ -560,8 +560,9 @@ export async function findCatalogPriceById(
 export async function findCatalogProductByPriceId(
   env: Env,
   priceId: string,
+  opts?: { sync?: boolean },
 ): Promise<{ product: CatalogProduct; price: CatalogPrice } | null> {
-  const products = await getCatalog(env);
+  const products = await getCatalog(env, undefined, undefined, opts);
   for (const product of products) {
     const price = product.prices.find((pr) => pr.id === priceId);
     if (price) return { product, price };

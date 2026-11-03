@@ -410,10 +410,6 @@ button.fwr-add-tokens:disabled { cursor: not-allowed; opacity: .55; }
     flex-direction: column-reverse; gap: 12px; height: 100%; justify-content: flex-start;
   }
   aside.fwr[data-collapsed="true"] .fwr-toggle { margin: 0; }
-  /* The shared frame draws the padding for the rail it wraps (RailFrame.jsx,
-     D556), so it has to give that padding up too — 18px either side of a 44px
-     column leaves 8px for the control. */
-  :root[data-worker-rail="collapsed"] .fwr-frame-rail { padding-left: 0; padding-right: 0; }
   /* The label turns with the column instead of disappearing: a 44px spine with
      no word on it is a mystery button, and the rail's whole job is to say what
      it is. Bottom-to-top so it reads with the head at the top, matching the
@@ -549,10 +545,16 @@ button.fwr-add-tokens:disabled { cursor: not-allowed; opacity: .55; }
 @media (min-width: 1024px) {
   .fwr-frame { display: flex; align-items: stretch; min-height: 100%; }
   .fwr-frame-main { flex: 1 1 auto; min-width: 0; }
+  /* #4260: the column draws the seam and the ground; the inset is the rail's.
+     The frame once padded this column 18px 18px 28px around the rail, so the
+     Ask panel, docked to the rail's own box, started 18px under the header,
+     stopped 28px above the column's foot and stood 18px off the seam; and a
+     collapsed rail was only as tall as its spine, so the panel was too. Now
+     the column, the dock and the rail are one height, and the rail carries
+     the inset, so the panel's box is the column's. */
   .fwr-frame-rail {
-    display: block; flex: none;
+    display: flex; flex-direction: column; flex: none;
     width: calc(var(--fwr-track, 280px) + var(--fwr-ask, 0px));
-    padding: 18px 18px 28px;
     border-left: 1px solid #ececf1;
     background: #fff;
   }
@@ -560,7 +562,13 @@ button.fwr-add-tokens:disabled { cursor: not-allowed; opacity: .55; }
      and `overflow-y: auto`, which gave the panel a second scrollbar beside
      the page's whenever its cards ran taller than the window. The rail now
      flows with the page: the page's one scrollbar reaches every card. */
-  .fwr-frame-dock { position: static; overflow: visible; }
+  .fwr-frame-dock { position: static; overflow: visible; flex: 1 0 auto; display: flex; flex-direction: column; }
+  .fwr-frame-dock > aside.fwr { flex: 1 0 auto; box-sizing: border-box; padding: 18px 18px 28px; }
+  /* 18px either side of a 44px column leaves 8px for the control. */
+  .fwr-frame-dock > aside.fwr[data-collapsed="true"] { padding-left: 0; padding-right: 0; }
+  /* The spine stays at the top of the now column-high rail: its title is a
+     reversed column, and at 100% of that height it would pack to the foot. */
+  .fwr-frame-dock > aside.fwr[data-collapsed="true"] > .fwr-title { height: auto; }
   /* Docked to the edge. The page container pads its content 24px at this
      width (App.jsx, `md:p-6`); a frame that is a direct child of it takes
      that padding back with an equal negative margin on the right and the
@@ -588,6 +596,17 @@ button.fwr-add-tokens:disabled { cursor: not-allowed; opacity: .55; }
     max-width: none; margin-left: 0; margin-right: 0;
     flex: 1 0 auto; display: flex; flex-direction: column;
   }
+  /* #4260: an edge-to-edge page (the cycle pages, the founder desks, the
+     investor workspaces) has no padding to take back, but its rail still has
+     to reach the footer, or the rail column, and the Ask panel docked in it,
+     end where the page's content does. The container grows to the footer and
+     the child that holds the rail grows with it. Once flexed, that child's
+     height is definite, so a host shell's own `min-height: 100%` (`.fb-board`,
+     `.a6-network`, `.i4-shell` …) resolves at last instead of meaning nothing. */
+  [data-app-main].edge-to-edge-surface:has(aside.fwr) {
+    flex: 1 0 auto; display: flex; flex-direction: column;
+  }
+  [data-app-main].edge-to-edge-surface:has(aside.fwr) > :has(aside.fwr) { flex: 1 0 auto; }
 }
 
 /*

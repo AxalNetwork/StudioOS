@@ -44,6 +44,8 @@ import LearningPage from '../src/pages/learning/LearningPage.jsx';
 
 process.env.TZ = 'UTC';
 
+// #4177: a stored video's editor reads Stream first; with Stream off (503 stream_unavailable) it draws D561's R2 field.
+const STREAM_OFF = { status: 'unavailable', message: 'Video on Stream is not switched on yet.' };
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (p) => readFileSync(resolve(ROOT, p), 'utf8');
 const html = (el, path = '/learning') => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [path] }, el));
@@ -186,7 +188,8 @@ test('the reads and writes call the routes D557 mounted, in the shapes those rou
   const lessonSelect = member.slice(member.indexOf('SELECT l.uid, l.module_id'), member.indexOf('FROM learning_lessons l JOIN'));
   assert.match(lessonSelect, /i\.duration_seconds/);
   const admin = read('cloudflare-worker/src/routes/admin_learning.ts');
-  for (const reply of ["return c.json({ items: res.results || [] });", "return c.json({ courses: (res.results || []).map", "c.json({ course: await courseTree(", "c.json({ item: await c.env.DB.prepare(ITEM_SELECT"]) {
+  // D4179 (#4179): the items reply keeps its `items` key; an uploaded item adds its `stream_copy`.
+  for (const reply of ["return c.json({ items: items.map((i: any) => (i.video_source === 'r2' ? { ...i, stream_copy: ", "return c.json({ courses: (res.results || []).map", "c.json({ course: await courseTree(", "c.json({ item: await c.env.DB.prepare(ITEM_SELECT"]) {
     assert.ok(admin.includes(reply), `admin_learning.ts no longer answers ${reply}`);
   }
   // A webinar lesson names an event by its slug.
@@ -360,7 +363,7 @@ test('a refusal reaches the studio in the route\'s own words, and a bad length i
   });
   assert.deepEqual(sent, [], 'a length the page cannot read went to the route anyway');
   // And the studio draws the sentence it got, as it got it.
-  const editor = html(h(StudioItemEditor, { item: STUDIO_ITEMS[0], kind: 'video', onSave: () => {}, onStatus: () => {}, error: refusal.message }));
+  const editor = html(h(StudioItemEditor, { item: STUDIO_ITEMS[0], kind: 'video', onSave: () => {}, onStatus: () => {}, initialStream: STREAM_OFF, error: refusal.message }));
   assert.match(tagOf(editor, 'studio-error'), /role="alert"/);
   assert.ok(flat(editor).includes(refusal.message));
   const builder = html(h(StudioCourseBuilder, { course: TREE, items: STUDIO_ITEMS, handlers: {}, error: { where: 'modules', message: notEmpty.message } }));
@@ -601,8 +604,8 @@ test('the studio: the table from both lists, a failed list named, each row openi
   assert.ok(rows.every((r) => r.programs === null), 'programs read as "None" before #1159 exists');
   const markup = html(h(StudioView, { items: { status: 'ready', rows: STUDIO_ITEMS }, courses: { status: 'ready', rows: STUDIO_COURSES } }), '/learning/studio');
   assert.match(tagOf(markup, 'link-studio-open-c1'), /href="\/learning\/studio\?course=c1"/);
-  assert.match(flat(markup), /Course Seed basics Draft Open Not recorded 4 Oct 2026/);
-  assert.match(flat(markup), /Reading Term sheet glossary Draft Program Not recorded 3 Oct 2026/);
+  assert.match(flat(markup), /Course Seed basics Draft Open Not recorded — 4 Oct 2026/);
+  assert.match(flat(markup), /Reading Term sheet glossary Draft Program Not recorded — 3 Oct 2026/);
   const oneFailed = flat(html(h(StudioView, { items: { status: 'unreadable' }, courses: { status: 'ready', rows: STUDIO_COURSES }, onRetryItems: () => {} }), '/learning/studio'));
   assert.match(oneFailed, /The item list could not be read\. This is not a claim that there are no videos or readings\./);
   assert.match(oneFailed, /Seed basics/);
@@ -622,7 +625,7 @@ test('the item editor: a link or an upload, the fields the route takes, the stat
   const fresh = html(h(StudioItemEditor, { item: null, kind: 'video', onSave: () => {}, onStatus: () => {} }));
   assert.match(tagOf(fresh, 'input-item-upload'), /disabled=""/);
   assert.match(flat(fresh), /Create the draft first, then upload its file\./);
-  const stored = html(h(StudioItemEditor, { item: STUDIO_ITEMS[0], kind: 'video', onSave: () => {}, onStatus: () => {} }));
+  const stored = html(h(StudioItemEditor, { item: STUDIO_ITEMS[0], kind: 'video', onSave: () => {}, onStatus: () => {}, initialStream: STREAM_OFF }));
   assert.doesNotMatch(tagOf(stored, 'input-item-upload'), /disabled=""/);
   assert.match(flat(stored), /MP4 or WebM, at most 2 GB\./);
   assert.match(fresh, /data-testid="input-item-video-url"/);
@@ -632,7 +635,7 @@ test('the item editor: a link or an upload, the fields the route takes, the stat
   assert.match(reading, /data-testid="input-item-body"/);
   assert.doesNotMatch(reading, /input-item-video-url|input-item-upload/);
   // A stored item: its fields, the length as m:ss, and the actions its status allows.
-  const published = html(h(StudioItemEditor, { item: STUDIO_ITEMS[0], kind: 'video', onSave: () => {}, onStatus: () => {} }));
+  const published = html(h(StudioItemEditor, { item: STUDIO_ITEMS[0], kind: 'video', onSave: () => {}, onStatus: () => {}, initialStream: STREAM_OFF }));
   assert.match(tagOf(published, 'input-item-title'), /value="What a seed round is"/);
   assert.match(tagOf(published, 'input-item-length'), /value="12:05"/);
   assert.doesNotMatch(published, /button-studio-publish/);
@@ -641,7 +644,7 @@ test('the item editor: a link or an upload, the fields the route takes, the stat
   const draft = html(h(StudioItemEditor, { item: STUDIO_ITEMS[1], kind: 'reading', onSave: () => {}, onStatus: () => {} }));
   assert.match(draft, /button-studio-publish/);
   assert.doesNotMatch(draft, /button-studio-unpublish/);
-  const archived = html(h(StudioItemEditor, { item: STUDIO_ITEMS[2], kind: 'video', onSave: () => {}, onStatus: () => {} }));
+  const archived = html(h(StudioItemEditor, { item: STUDIO_ITEMS[2], kind: 'video', onSave: () => {}, onStatus: () => {}, initialStream: STREAM_OFF }));
   assert.match(archived, /button-studio-publish/);
   assert.doesNotMatch(archived, /button-studio-archive/);
   assert.deepEqual([parseLength('12'), parseLength('12:05'), parseLength(''), parseLength('12:60'), parseLength('soon')], [720, 725, null, undefined, undefined]);

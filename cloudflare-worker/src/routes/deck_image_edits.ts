@@ -8,6 +8,15 @@
  *   POST /api/decks/images/:uid/edit         (the same body) → { image, parent_uid, op, cost }
  *   POST /api/decks/images/:uid/revert       → { parent, discarded }
  *
+ * D1534 (#3778 phase 2): the AI image tools, whose result is a child image too
+ * (`services/decks/imageTools.ts`, migration 766):
+ *   GET  /api/decks/images/tools                  → { tools: [{ tool, on, model, model_label, usd_per_image, message }] }
+ *   POST /api/decks/images/:uid/tools/:tool/quote → { ai: true, tool, model, model_label, hold_microusd, balance }
+ *                                                 | { ai: false, reason, message }
+ *   POST /api/decks/images/:uid/tools/:tool       → { image, parent_uid, tool, cost }
+ * `:tool` is 'remove_background' or 'upscale'. Off (the switch, or no model) is
+ * 503 `image_tool_off` and calls nothing; a ledger refusal is 402 and holds nothing.
+ *
  * `:uid` is the image being edited (the parent) for a quote or an edit, and
  * the child for a revert. Every press needs write access to the image's
  * venture, as every deck image write does.
@@ -45,6 +54,8 @@ import {
 } from '../services/decks/imageEdits';
 import { imageSize, sha256Hex, stripMetadata, type ImageMime } from '../services/decks/imageBytes';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
+import { isImageTool, runImageTool, toolQuoteMicro, toolState, toolStates, TOOL_WORDS, type ToolDeps } from '../services/decks/imageTools';
+import { gatewayImageModelFor } from '../services/ai/catalogue';
 import { railFor, refuseRun } from '../util/railContext';
 import { refuse } from '../util/refusal';
 import { auditDeckWrite, getDeckRow, projectOwned, themeOfRow } from './decks';
@@ -74,7 +85,7 @@ function view(c: any, r: any) {
     uid: r.uid, url: imageUrl(c.req.url, r.uid), state: r.state, use: r.use, source: r.source, card: r.card ?? null, card_uid: r.card_uid ?? null,
     style: r.style ?? null, aspect: r.aspect ?? null, alt: r.alt ?? '', width: r.width ?? null, height: r.height ?? null,
     model: r.model ?? null, model_label: imageModelLabel(r.model), usage_log_id: r.ai_usage_log_id ?? null, charged_microusd: r.charged_microusd ?? null,
-    parent_uid: r.parent_uid ?? null, edit_op: r.edit_op ?? null, created_at: r.created_at,
+    parent_uid: r.parent_uid ?? null, edit_op: r.edit_op ?? null, image_tool: r.image_tool ?? null, created_at: r.created_at,
   };
 }
 
@@ -230,6 +241,97 @@ deckImageEdits.post('/images/:uid/revert', async (c) => {
   await c.env.DB.prepare("UPDATE deck_images SET state = 'discarded' WHERE uid = ? AND parent_uid = ?").bind(child.uid, parent.uid).run();
   await auditDeckWrite(c, user, Number(child.project_id), 'deck_image_reverted', `${child.card == null ? 'The deck' : `Card ${Number(child.card) + 1}`}: an edit reverted`);
   return c.json({ parent: view(c, parent), discarded: child.uid });
+});
+
+// ── D1534 (#3778 phase 2): the AI image tools ───────────────────────────────
+
+let toolDeps: ToolDeps | undefined;
+export function __setToolDepsForTest(d: ToolDeps | undefined): void { toolDeps = d; }
+
+/** The deck-image option a tool press is recorded with. */
+const TOOL_OPTION = 'deck:image-tool';
+
+deckImageEdits.get('/images/tools', async (c) => {
+  await requireAuth(c);
+  return c.json({ tools: toolStates(c.env) });
+});
+
+/** The parent and the tool, checked, or the response that refuses them. Nothing is held here. */
+async function toolPlan(c: any, user: User): Promise<{ parent: any; tool: 'remove_background' | 'upscale' } | Response> {
+  const tool = c.req.param('tool');
+  if (!isImageTool(tool)) return c.json({ error: 'not found' }, 404);
+  const parent = await imageOf(c, user);
+  if (parent instanceof Response) return parent;
+  if (parent.state === 'discarded') return refuse(c, 422, { code: 'image_discarded', message: 'That image was discarded. Nothing was run.' });
+  const state = toolState(c.env, tool);
+  if (!state.on) return refuse(c, 503, { code: 'image_tool_off', message: state.message ?? 'Coming later.' });
+  if (!c.env.FILES) return refuse(c, 503, { code: 'storage_unavailable', message: NO_STORAGE });
+  return { parent, tool };
+}
+
+deckImageEdits.post('/images/:uid/tools/:tool/quote', async (c) => {
+  const user = await requireAuth(c);
+  const p = await toolPlan(c, user);
+  if (p instanceof Response) {
+    // Off is an answer for a quote, not an error: the toolbar draws "Coming later".
+    if (p.status === 503) { const b = await p.clone().json().catch(() => ({})) as any; return c.json({ ai: false, reason: b.error ?? 'image_tool_off', message: b.message ?? '' }); }
+    return p;
+  }
+  const m = gatewayImageModelFor(p.tool)!;
+  const hold = await toolQuoteMicro(c.env, Number(user.id), m);
+  const short = await balanceRefusal(c.env, Number(user.id), hold);
+  return c.json({
+    ai: true, tool: p.tool, label: TOOL_WORDS[p.tool], model: m.id, model_label: m.name, hold_microusd: hold,
+    balance: short ? { ok: false, code: short.code, message: short.message } : { ok: true },
+  });
+});
+
+deckImageEdits.post('/images/:uid/tools/:tool', async (c) => {
+  const user = await requireAuth(c);
+  const p = await toolPlan(c, user);
+  if (p instanceof Response) return p;
+  const userId = Number(user.id);
+  const projectId = Number(p.parent.project_id);
+  const obj = await c.env.FILES!.get(p.parent.r2_key).catch(() => null);
+  if (!obj) return refuse(c, 404, { code: 'image_missing', message: 'That image\'s file is not stored any more. Nothing was run.' });
+  const bytes = new Uint8Array(await new Response(obj.body).arrayBuffer());
+  const mime = (MIMES as readonly string[]).includes(p.parent.mime) ? p.parent.mime : sniffMime(bytes);
+  if (mime !== 'image/png' && mime !== 'image/jpeg') {
+    return refuse(c, 422, { code: 'image_unreadable', message: 'Background removal takes a PNG or a JPEG. Nothing was run.' });
+  }
+  let ticket;
+  try { ticket = await assertStorageRoom(c.env, { projectId }, IMAGE_BYTES_ESTIMATE, user); }
+  catch (e) { if (e instanceof Response) return e; throw e; }
+  // One press is one execution: a retried request with the same key is not charged twice.
+  const executionId = String(c.req.header('Idempotency-Key') || crypto.randomUUID()).replace(/[^A-Za-z0-9._:-]/g, '').slice(0, 120) || crypto.randomUUID();
+  const r = await runImageTool(c.env, { tool: p.tool, userId, bytes, mime, executionId, surface: AI_SURFACE.raisePitch, option: TOOL_OPTION }, toolDeps);
+  if (!r.ok) return refuse(c, r.status, { code: r.code, message: r.message });
+  const cut = stripMetadata(r.bytes, 'image/png');
+  const size = imageSize(cut, 'image/png');
+  const sha = await sha256Hex(cut);
+  const taken = await c.env.DB.prepare('SELECT 1 FROM deck_images WHERE project_id = ? AND sha256 = ?').bind(projectId, sha).first();
+  const uid = crypto.randomUUID();
+  const key = `deck-images/${projectId}/${uid}.${EXTENSION['image/png']}`;
+  try {
+    await c.env.FILES!.put(key, cut, { httpMetadata: { contentType: 'image/png' }, customMetadata: { projectId: String(projectId), userId: String(userId), parent: String(p.parent.uid) } });
+  } catch {
+    return refuse(c, 503, { code: 'image_unsaved', message: 'The background was removed but the result could not be stored. It was charged for the run; try again in a moment.' });
+  }
+  // A child, as an edit's is: `parent_uid` and `image_tool` together, never `edit_op` (migration 766).
+  await c.env.DB.prepare(`INSERT INTO deck_images (uid, project_id, deck_id, card, card_uid, r2_key, mime, size_bytes, width, height, sha256, source, prompt, style, aspect, use,
+      overlay, alt, state, model, ai_usage_log_id, charged_microusd, created_by, parent_uid, image_tool)
+    VALUES (?, ?, ?, ?, ?, ?, 'image/png', ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, 'proposed', ?, ?, ?, ?, ?, ?)`)
+    .bind(uid, projectId, p.parent.deck_id ?? null, p.parent.card ?? null, p.parent.card_uid ?? null, key, cut.byteLength, size?.width ?? null, size?.height ?? null,
+      taken ? null : sha, p.parent.source, p.parent.style ?? null, p.parent.aspect ?? null, p.parent.use, p.parent.overlay ?? null, p.parent.alt ?? null,
+      r.model, r.usage_log_id ?? null, r.charged_microusd, userId, p.parent.uid, p.tool).run();
+  await noteStorageLanded(c.env, ticket);
+  const where = p.parent.card == null ? 'The deck' : `Card ${Number(p.parent.card) + 1}`;
+  await auditDeckWrite(c, user, projectId, 'deck_image_tool', `${where}: an image's background removed`);
+  const row = await c.env.DB.prepare('SELECT * FROM deck_images WHERE uid = ?').bind(uid).first();
+  return c.json({
+    image: view(c, row), parent_uid: p.parent.uid, tool: p.tool,
+    cost: { hold_microusd: r.hold_microusd, charged_microusd: r.charged_microusd, usage_log_id: r.usage_log_id },
+  });
 });
 
 export default deckImageEdits;
