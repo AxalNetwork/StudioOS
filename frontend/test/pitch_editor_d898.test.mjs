@@ -311,12 +311,12 @@ test('Add a block: a video link is checked with the Worker before it is placed; 
     await m.type(m.by('pitch-editor-video-url'), 'https://youtu.be/AbCdEfGhIjK');
     await m.press(m.by('pitch-editor-video-check'));
     assert.match(m.text(m.by('pitch-editor-video-ok')), /Synthetic demo · YouTube/);
-    assert.match(m.text(m.by('pitch-editor-add-says')), /Adds a 9 × 2 video link at column 4, row 5/, 'the selected range is the size and place');
+    assert.match(m.text(m.by('pitch-editor-add-says')), /Adds a 9 × 2 video at column 4, row 5/, 'the selected range is the size and place');
     await m.press(m.by('pitch-editor-add-run'));
     assert.ok(!m.by('pitch-editor-add-dialog'));
     assert.match(m.text(m.by('pitch-editor-card')), /Synthetic demo/);
     await m.press(m.by('pitch-editor-save'));
-    assert.match(m.text(m.by('pitch-editor-save-changes')), /adds a 9 × 2 video link/);
+    assert.match(m.text(m.by('pitch-editor-save-changes')), /adds a 9 × 2 video\b/);
   } finally { await m.unmount(); }
 });
 

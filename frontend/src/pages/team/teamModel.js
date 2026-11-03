@@ -483,6 +483,8 @@ const PAUSE = {
     return { reason: server ? `A connected tool was disconnected: ${server} is disconnected` : 'A connected tool was disconnected', fix: 'Reconnect' };
   },
   ai_paused: () => ({ reason: 'Eadwyn is paused for this account', fix: null }),
+  // D4158 (#4158): HQ retired the persona. Nothing on the team resumes it; its open proposals stay decidable.
+  persona_retired: () => ({ reason: 'Axal VC HQ retired this agent. Its open proposals can still be decided.', fix: null }),
 };
 /** Why an agent is paused, and the one link that fixes it (TM9b). */
 export function pauseWords(a) {

@@ -33,6 +33,18 @@ export function holdLine(quote) {
   return hold ? `Transcript · Holds up to ${hold} · you pay what it uses` : null;
 }
 
+// D1580 part 2 (#3827): rehearse_coach, a model's coaching on the report, pressed and held like the transcript.
+export const COACHING = 'Coaching';
+export const COACH_ME = 'Coach me';
+export const COACH_NOTE = 'The coach reads this rehearsal and names what to change, card by card. The audio is then held for an hour more unless you keep it.';
+export const COACH_EMPTY = 'The coach had nothing to add that this report could support.';
+
+/** "Coaching · Holds up to $0.0040 · you pay what it uses", or null before the quote is read. */
+export function coachHoldLine(quote) {
+  const hold = aiTokens(quote?.hold_microusd);
+  return hold ? `Coaching · Holds up to ${hold} · you pay what it uses` : null;
+}
+
 /** "0:42", "1:05". */
 export function clock(ms) {
   const s = Math.max(0, Math.round((Number(ms) || 0) / 1000));

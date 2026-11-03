@@ -86,11 +86,13 @@ test('the seam: an item is Coming later only while its adapter surface answers u
   assert.equal(paused.sections.find((s) => s.id === 'ai').items.find((i) => i.id === 'critique').why, 'AI is paused for your studio.', 'once wired, AI paused greys it like any AI item');
   assert.equal(paused.off, 2, 'and it counts into the name');
   assert.equal(moreState(MORE_MENU, { availability: () => ({ available: false, reason: 'Synthetic reason.' }) }).sections[0].items[0].why, 'Synthetic reason.');
-  // The card ⋯ reads the same seam.
-  const later = cardMenuItems(1, 3, {}, availability).find((i) => i.id === 'hide');
-  assert.deepEqual([later.later, later.why], [true, 'Not switched on yet.']);
-  const merged = cardMenuItems(1, 3, {}, on).find((i) => i.id === 'hide');
-  assert.deepEqual([merged.later, merged.why], [false, null]);
+  // The card ⋯ read the same seam until #3788 (D1545) swapped `media`: Hide and Move to section are wired either way.
+  for (const avail of [availability, on]) {
+    const hide = cardMenuItems(1, 3, {}, avail).find((i) => i.id === 'hide');
+    assert.deepEqual([hide.later, hide.why, hide.label], [false, null, 'Hide']);
+  }
+  assert.equal(cardMenuItems(1, 3, { hidden: true }, on).find((i) => i.id === 'hide').label, 'Show', 'a hidden card offers Show');
+  assert.equal(cardMenuItems(1, 3, {}, availability).some((i) => i.later), false, 'no card item waits on the seam now');
   assert.equal(cardMenuItems(0, 3, {}, on).find((i) => i.id === 'up').why, 'It is the first card.');
 });
 

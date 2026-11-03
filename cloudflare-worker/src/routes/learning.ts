@@ -34,6 +34,7 @@ import {
   canSeeLearning, enrolledSql, LEARNING_LEVELS, PROGRESS_KINDS,
 } from '../services/learningAccess';
 import { streamUrl } from '../services/learningVideo';
+import { signedPlayback, streamOf, streamState, type VideoStream } from '../services/learningStream';
 import { COURSE_UID, courseCoverPrefix, readCover } from '../services/coverDraws';
 import { getCurrentUser } from '../auth';
 
@@ -332,10 +333,20 @@ r.get('/items/:uid', async (c) => {
     const k = await c.env.DB.prepare('SELECT r2_key FROM learning_items WHERE uid = ?').bind(item.uid).first<{ r2_key: string | null }>();
     if (k?.r2_key) videoStreamUrl = await streamUrl(item.uid, k.r2_key);
   }
+  // #4176 (D4176): a ready Stream video plays first. Its URLs are signed here, only after the visibility check
+  // above, and never cached or logged. Without the binding the item plays as before.
+  const s = await streamState(c.env, item.uid);
+  const binding = streamOf(c.env);
+  let videoStream: VideoStream = null;
+  if (s.ready && binding) {
+    try { videoStream = await signedPlayback(c.env, binding, s.ready); } catch { videoStream = null; }
+  } else if (s.pending) videoStream = { state: s.pending };
   return c.json({
     item: {
       ...shown,
       transcript: item.transcript ?? null,
+      video_stream: videoStream,
+      chapters: s.chapters,
       // D561 — an uploaded video plays from the gated stream route; the
       // bucket key is never sent. Null when the item plays a link or nothing,
       // or has no object recorded (the stream route would answer 404). The

@@ -1,9 +1,10 @@
 import React from 'react';
-import { NOT_RECORDED, blockLabel, runsOf, tileValue } from './editorModel';
-import { SOURCE_NOT_RECORDED, chartLabel, objectPosition, sourceOf } from './presentExportModel';
+import { NOT_RECORDED, VIDEO_PROVIDER_LABELS, blockLabel, runsOf, tileValue } from './editorModel';
+import { SOURCE_NOT_RECORDED, chartLabel, sourceOf } from './presentExportModel';
 import { STATED_CHIP, TYPED_LINE, UNCITED_CHIP, UNCITED_LINE, faceOf, numbersIn, projectionOf } from './figuresModel';
 import { isTypedChart, marketCircles, projectionLines, tableView } from './typedChartsModel';
 import { aspectOf, placeOf } from './gridModel';
+import { imageLookStyle } from './imageLook';
 import { diagramLayout } from './diagramLayout';
 import DiagramView from './DiagramView';
 
@@ -116,7 +117,7 @@ function RichText({ paras, className }) {
   );
 }
 
-export function BlockView({ block: b, colours, live = false, sources = false, size = 'card', renderChart = null, renderFace = null }) {
+export function BlockView({ block: b, colours, live = false, sources = false, size = 'card', renderChart = null, renderFace = null, onButton = null }) {
   const big = size === 'print';
   const heading = big ? 'text-[64px]' : 'text-[20px]';
   const para = big ? 'text-[30px]' : 'text-[12.5px]';
@@ -152,7 +153,16 @@ export function BlockView({ block: b, colours, live = false, sources = false, si
   }
   if (b.kind === 'image') {
     // D903: the image keeps its fit and its crop (the point that stays in view); its alt text travels everywhere it is drawn.
-    if (b.image_url) return <img src={b.image_url} alt={b.alt || ''} className={`h-full w-full rounded ${b.fit === 'contain' ? 'object-contain' : 'object-cover'}`} style={{ objectPosition: objectPosition(b.crop) }} />;
+    // D1534 (#3778): its zoom window and filter, the one rule the editable PowerPoint reads too (`imageLook.js`).
+    if (b.image_url) {
+      const look = imageLookStyle(b);
+      return (
+        <span className="relative block h-full w-full overflow-hidden rounded" data-testid={live ? undefined : `deck-block-image-${b.id}`}>
+          <img src={b.image_url} alt={b.alt || ''} className="block" style={look.img} />
+          {look.wash ? <span aria-hidden="true" className="pointer-events-none absolute inset-0" style={{ background: look.wash }} /> : null}
+        </span>
+      );
+    }
     return live ? null : <span className="text-[11px] italic">Image · none chosen</span>;
   }
   if (b.kind === 'video') {
@@ -160,10 +170,22 @@ export function BlockView({ block: b, colours, live = false, sources = false, si
       <span className="relative flex h-full w-full items-center justify-center rounded bg-black/80 text-white">
         {b.poster_url ? <img src={b.poster_url} alt="" className="absolute inset-0 h-full w-full rounded object-cover opacity-80" /> : null}
         <span className={`relative ${big ? 'text-[56px]' : 'text-[18px]'}`} aria-hidden="true">▶</span>
-        <span className={`absolute bottom-1 left-1 right-1 truncate ${small}`}>{b.title || b.provider}</span>
+        <span className={`absolute bottom-1 left-1 right-1 truncate ${small}`}>{b.title || VIDEO_PROVIDER_LABELS[b.provider] || 'Video'}</span>
       </span>
     );
+    // D1545 (#3788): an uploaded file plays in place, with its poster and its loop; a provider's video opens its player.
+    if (live && b.provider === 'mp4' && b.url) {
+      return <video src={b.url} poster={b.poster_url || undefined} controls loop={b.loop === true} playsInline preload="metadata" className="h-full w-full rounded bg-black object-contain" aria-label={b.title || 'Video'} data-testid="deck-block-video-file" />;
+    }
     return live && b.url ? <a href={b.url} target="_blank" rel="noopener noreferrer" className="block h-full w-full" aria-label={b.title || 'Watch the video'}>{face}</a> : face;
+  }
+  if (b.kind === 'button') {
+    // D1545: a call to action. On a share link, a press is counted (`onButton`); the link opens either way.
+    const face = (
+      <span className={`inline-flex items-center justify-center rounded-[8px] px-3 py-1 ${para} font-bold ${b.style === 'secondary' ? '' : 'text-white'}`}
+        style={b.style === 'secondary' ? { border: `2px solid ${colours.accent}`, color: colours.accent } : { background: colours.accent }} data-testid="deck-block-button">{b.label || 'Open'}</span>
+    );
+    return live && b.url ? <a href={b.url} target="_blank" rel="noopener noreferrer" className="no-underline" style={{ color: 'inherit' }} onClick={() => { if (onButton) onButton(b); }}>{face}</a> : face;
   }
   if (b.kind === 'audio' || b.kind === 'link') {
     const label = b.label || (b.kind === 'audio' ? 'Audio clip' : 'Open');
@@ -218,13 +240,13 @@ export function BlockView({ block: b, colours, live = false, sources = false, si
  * print. `onSelect` makes each block a button (the editor); without it each
  * block is a plain cell.
  */
-export function BlockGrid({ blocks, colours, live = false, sources = false, size = 'card', selected = null, onSelect = null, testId = 'deck-blocks', renderChart = null, aspect = '16:9', lang = undefined, dir = undefined }) {
+export function BlockGrid({ blocks, colours, live = false, sources = false, size = 'card', selected = null, onSelect = null, testId = 'deck-blocks', renderChart = null, aspect = '16:9', lang = undefined, dir = undefined, onButton = null }) {
   // D1571 (#3818): the deck's language and direction (`deckLanguage.langAttrs`); text aligns to the start, so it mirrors.
   return (
     <div className="absolute inset-0" data-aspect={aspectOf(aspect)} lang={lang} dir={dir} data-testid={testId}>
       {blocks.map((b) => {
         const at = placeOf(b.grid, aspect);
-        const inner = <BlockView block={b} colours={colours} live={live} sources={sources} size={size} renderChart={renderChart} />;
+        const inner = <BlockView block={b} colours={colours} live={live} sources={sources} size={size} renderChart={renderChart} onButton={onButton} />;
         if (onSelect) {
           return (
             <button type="button" key={b.id}

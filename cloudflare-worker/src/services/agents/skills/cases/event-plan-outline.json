@@ -1,0 +1,40 @@
+{
+  "skill": "event-plan-outline",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "event": {
+          "name": "Clinic ops webinar",
+          "goal": "Demo requests"
+        },
+        "past": [
+          {
+            "name": "Spring webinar",
+            "demo_requests": 11
+          }
+        ]
+      },
+      "network.relationships": [
+        {
+          "name": "Dr. Amara Okafor",
+          "topic": "Front-desk workflows"
+        }
+      ]
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Dr. Amara Okafor",
+      "11"
+    ],
+    "must_say_not_recorded": [
+      "date"
+    ],
+    "must_not_include": [
+      "sold out"
+    ]
+  }
+}

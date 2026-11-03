@@ -51,7 +51,9 @@ test('creation confirms its effect before posting, shows a refusal inside the di
   personaSegmentsApi.createSegment = async body => { calls.push(body); if (calls.length === 1) throw new Error('A segment already has that key.'); return { segment: { ...body } }; };
   const v = await mountContracts(h(AuthProvider, null, h(NewSegment)), '/admin/persona-segments/new?profile=advisor', HQ);
   try {
-    await v.fill('Segment key', 'specialist_advisors'); await v.fill('Name', 'Specialist advisors');
+    await v.fill('Segment key', 'specialist_advisors');
+    // #4046 (B4): Name's label names its input (htmlFor), beside Ask Eadwyn's trigger, so it is set by its test id.
+    await change(v, id(v, 'new-segment-name'), 'Specialist advisors');
     assert.equal(v.props(v.nodes().find(n => n.tagName === 'SELECT')).value, 'advisor');
     const form = v.nodes().find(n => n.tagName === 'FORM');
     await act(async () => v.props(form).onSubmit({ preventDefault() {} }));

@@ -1,0 +1,39 @@
+{
+  "skill": "seo-keyword-brief",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "terms": [
+          {
+            "term": "dental scheduling software",
+            "volume": 880,
+            "page": "/pricing"
+          },
+          {
+            "term": "how to reduce no-shows"
+          }
+        ]
+      },
+      "research.library": [
+        {
+          "title": "Competitor: Dentrix blog"
+        }
+      ]
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "dental scheduling software",
+      "880"
+    ],
+    "must_say_not_recorded": [
+      "how to reduce no-shows"
+    ],
+    "must_not_include": [
+      "rank first"
+    ]
+  }
+}

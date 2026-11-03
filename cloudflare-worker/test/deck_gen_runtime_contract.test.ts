@@ -2,7 +2,7 @@
  * D1502 (#3753, deck v2 A3a) — the contract every `DeckGenRuntime` passes.
  *
  * Run against each implementation of the seam (`IMPLEMENTATIONS`): the D1 core
- * now; `DeckGenRoom` (part 2) and B9's Queue fallback join this list.
+ * now; `DeckGenRoom` (part 2) and B9's Queue fallback (`QueueGenRuntime`, D1536).
  *
  *   1. quote = parent hold = sum of the lines, and quote = the settled maximum;
  *   2. the same Idempotency-Key twice is one run, one hold, one charge;
@@ -25,8 +25,11 @@ import { withGuard } from './_guard_stub.mjs';
 import { D1GenRuntime, FREE_LABEL, quoteOf, stepRecordRef, type DeckGenRuntime, type GenEvent, type PlanLine, type StepExecutor } from '../src/services/decks/genRuntime.ts';
 import { run as aiRun, __resetForTest } from '../src/services/aiRouter.ts';
 import { DeckGenRoom } from '../src/durable-objects/deck-gen-room.ts';
+import { QueueGenRuntime } from '../src/services/decks/queueRuntime.ts';
 
 const M716 = readFileSync('cloudflare-worker/sql/migrations/716_deck_area_batches.sql', 'utf8');
+// D1536: which runtime drives a run.
+const RUNTIME_COLUMN = readFileSync('cloudflare-worker/sql/migrations/202611022120_deck_batch_runtime.sql', 'utf8');
 // The hold's Idempotency-Key (D844) and context (D1278), which the budget fixture predates.
 const HOLD_COLUMNS = ['525_ai_reservation_idempotency.sql', '632_ai_hold_context.sql'].map((n) => readFileSync(`cloudflare-worker/sql/migrations/${n}`, 'utf8')).join('\n');
 const USER = 7, DECK = 50, P = 5;
@@ -39,6 +42,7 @@ function world() {
   f.db.exec(`INSERT INTO pitch_decks (id, project_id, version, slides, title, is_current) VALUES (${DECK}, ${P}, 1, '[]', 'Synthetic', 1), (${DECK + 1}, ${P}, 2, '[]', 'Other', 0)`);
   f.db.exec(M716);
   f.db.exec(M716); // applies twice
+  f.db.exec(RUNTIME_COLUMN);
   // Every charge draws on tokens, so a charge is the change in the balance.
   setFixtureAllowance(f.db, 0);
   f.db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(?,?)').run(USER, 50_000_000);
@@ -87,6 +91,8 @@ const IMPLEMENTATIONS: Array<[string, (env: any, execute: StepExecutor, events: 
     room.onEvent((e) => { events.push(e); });
     return room;
   }],
+  // The queue's messages are only recorded here: the contract drives the run through `startBatch`.
+  ['QueueGenRuntime', (env, execute, events) => new QueueGenRuntime({ ...env, JOB_QUEUE: { send: async () => {} } }, execute, (e) => { events.push(e); })],
 ];
 
 const admit = (rt: DeckGenRuntime, key: string, lines = plan(), cls: 'areas' | 'deck_build' = 'areas') =>

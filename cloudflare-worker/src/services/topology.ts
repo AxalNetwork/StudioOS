@@ -79,6 +79,8 @@ export function branchResourceNames(code: string) {
       FILES: `studioos-${code}-files`,
       PUBLICATIONS: `studioos-${code}-publications`,
       BACKUPS: `studioos-${code}-backups`,
+      // #4201: company logos (COMPANY_LOGOS).
+      COMPANY_LOGOS: `studioos-${code}-company-logos`,
     },
     // One branch index per Vectorize binding, as scripts/lib/branchConfig.mjs names them.
     vectorize: {
@@ -102,6 +104,8 @@ export const BINDINGS: readonly BindingSpec[] = [
   { name: 'FILES', kind: 'R2 bucket', hq: 'studioos-files', branch: (c) => branchResourceNames(c).r2.FILES, shared: false },
   { name: 'PUBLICATIONS', kind: 'R2 bucket', hq: 'studioos-publications', branch: (c) => branchResourceNames(c).r2.PUBLICATIONS, shared: false },
   { name: 'BACKUPS', kind: 'R2 bucket', hq: 'studioos-backups', branch: (c) => branchResourceNames(c).r2.BACKUPS, shared: false },
+  // #4201 (#4152 G1): the company logo store.
+  { name: 'COMPANY_LOGOS', kind: 'R2 bucket', hq: 'studioos-company-logos', branch: (c) => branchResourceNames(c).r2.COMPANY_LOGOS, shared: false },
   { name: 'JOB_QUEUE', kind: 'Queue', hq: 'studioos-job-queue', branch: (c) => branchResourceNames(c).queue, shared: false },
   { name: 'AGENT_QUEUE', kind: 'Queue', hq: 'studioos-agent-queue', branch: (c) => branchResourceNames(c).agentQueue, shared: false },
   { name: 'AGENT_SCOPE', kind: 'Durable Object namespace', hq: 'AgentScope', branch: () => 'AgentScope', shared: false },
@@ -128,6 +132,8 @@ export const BINDINGS: readonly BindingSpec[] = [
   { name: 'BROWSER', kind: 'Browser Rendering', hq: null, branch: () => null, shared: true },
   // D1544 (#3784): resizes a deck image to a model's reference size before an edit.
   { name: 'IMAGES', kind: 'Images', hq: null, branch: () => null, shared: true },
+  // D4176 (#4176): Learning video on Cloudflare Stream, account-wide like Images.
+  { name: 'STREAM', kind: 'Stream', hq: null, branch: () => null, shared: true },
   { name: 'ASSETS', kind: 'Static assets', hq: './docs', branch: () => './docs', shared: false },
 ];
 

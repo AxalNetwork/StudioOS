@@ -196,7 +196,7 @@ test('a pick of a switched-off model is kept, never cleared, and reads "<C> is u
   try {
     assert.equal((await call(f, 2, 'PUT', URL7, { scope: 'deck', key: 'body', model: MISTRAL })).status, 200);
     assert.equal((await call(f, 2, 'PUT', '/api/ai/rail/pick', { page: PAGE, option: 'deck:rewrite', model: MISTRAL })).status, 200);
-    assert.equal((await call(f, 9, 'PUT', '/api/admin/feature-flags', { key: `model:${MISTRAL}`, scope: 'global', enabled: false })).status, 200);
+    assert.equal((await call(f, 9, 'PUT', '/api/admin/feature-flags', { key: `model:${MISTRAL}`, scope: 'global', enabled: false, reason: 'Synthetic test reason.' })).status, 200);
     const e = await call(f, 2, 'GET', URL7);
     const body = e.body.elements.find((x: any) => x.element === 'body');
     assert.notEqual(body.resolved.model, MISTRAL);
@@ -210,7 +210,7 @@ test('a pick of a switched-off model is kept, never cleared, and reads "<C> is u
     assert.equal((await call(f, 2, 'PUT', URL7, { scope: 'member', key: 'body', model: MISTRAL })).body.error, 'model_not_offered');
     assert.equal((await call(f, 2, 'PUT', '/api/ai/rail/pick', { page: PAGE, model: MISTRAL })).status, 400);
     // Back on: the pick runs again, nothing to redo.
-    assert.equal((await call(f, 9, 'PUT', '/api/admin/feature-flags', { key: `model:${MISTRAL}`, scope: 'global', enabled: null })).status, 200);
+    assert.equal((await call(f, 9, 'PUT', '/api/admin/feature-flags', { key: `model:${MISTRAL}`, scope: 'global', enabled: null, reason: 'Synthetic test reason.' })).status, 200);
     assert.equal((await call(f, 2, 'GET', URL7)).body.elements.find((x: any) => x.element === 'body').resolved.model, MISTRAL);
   } finally { f.close(); }
 });
@@ -221,7 +221,7 @@ test('an element switched off reads "Not switched on yet.", leaves its group, ca
   // Mutations checked: the element still resolved, the quote still holding for Body, the build still running the words — each red.
   const f = await fixture();
   try {
-    assert.equal((await call(f, 9, 'PUT', '/api/admin/feature-flags', { key: 'element:body', scope: 'global', enabled: false })).status, 200);
+    assert.equal((await call(f, 9, 'PUT', '/api/admin/feature-flags', { key: 'element:body', scope: 'global', enabled: false, reason: 'Synthetic test reason.' })).status, 200);
     const e = await call(f, 2, 'GET', URL7);
     const body = e.body.elements.find((x: any) => x.element === 'body');
     assert.deepEqual([body.switched_on, body.reason, body.resolved, body.suggested], [false, NOT_SWITCHED_ON, null, []]);
@@ -292,11 +292,12 @@ test('only an admin writes a flag; an unknown key, scope or value is refused wit
     }
     assert.equal((f.db.prepare('SELECT COUNT(*) AS n FROM feature_flags').get() as any).n, 0);
     await call(f, 2, 'GET', '/api/decks/new/context?project_id=1'); // primes the cache
-    const w = await call(f, 9, 'PUT', '/api/admin/feature-flags', { key: 'grid_generate', scope: 'user', scope_id: 2, enabled: false });
+    const w = await call(f, 9, 'PUT', '/api/admin/feature-flags', { key: 'grid_generate', scope: 'user', scope_id: 2, enabled: false, reason: 'Synthetic test reason.' });
     assert.deepEqual(w.body, { ok: true, key: 'grid_generate', scope: 'user', scope_id: '2', enabled: false });
     assert.equal((await call(f, 2, 'GET', '/api/decks/new/context?project_id=1')).body.grid_generate, false, 'the write dropped the cache');
     const list = await call(f, 9, 'GET', '/api/admin/feature-flags');
-    assert.equal(list.body.flags.length, 1); assert.equal(list.body.flags[0].updated_by, 9); assert.equal(list.body.cache_s, 60);
+    // #4189 (D4155 K2): the writer by name, never a bare id.
+    assert.equal(list.body.flags.length, 1); assert.deepEqual(list.body.flags[0].updated_by?.name, 'Synthetic member 9'); assert.equal(list.body.cache_s, 60);
   } finally { f.close(); }
 });
 
