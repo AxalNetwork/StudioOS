@@ -19,6 +19,8 @@ export const MEMBERSHIP_EVENT_KINDS = [
   'project_move', 'project_transfer', 'seat_add', 'seat_remove',
   // #3932 (migration 757): a change to the company's default currency, recorded beside 'rename'.
   'currency_change',
+  // #4201 (migration 202611031619): an uploaded, replaced or removed logo; before/after say 'stored', 'outside' or null.
+  'logo_change',
 ] as const;
 export type MembershipEventKind = (typeof MEMBERSHIP_EVENT_KINDS)[number];
 
