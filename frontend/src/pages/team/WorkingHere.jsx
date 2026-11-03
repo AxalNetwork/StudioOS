@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Pill, Sheet, Unrecorded } from '../../ui';
 import { AgentIdentity, PersonAvatar } from './AgentMark.jsx';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, FIELD, HonestBlock, MONO, MUTED } from './teamUi.jsx';
-import { agentName, budgetLine, refusalWords } from './teamModel.js';
+import { agentName, budgetLine, refusalWords, agentLine } from './teamModel.js';
 
 /**
  * D1497 (#3727, TM6c, TM6b) — who works on a module page, and "Assign this
@@ -41,7 +41,7 @@ export function WorkingHereSheet({ moduleLabel, people, agentsBlock, onClose, on
         <p className="m-0 font-mono text-[11px] uppercase tracking-[.11em] text-axal-muted dark:text-gray-400">AI agents{list ? ` · ${list.length}` : ''}</p>
         {list === null ? <HonestBlock>{agentsBlock?.reason || 'The agents could not be read.'} That is not the same as having none.</HonestBlock> : list.map((a) => (
           <article key={a.uid} className="flex flex-col gap-1.5 rounded-axal-md border border-axal-hairline p-3 dark:border-gray-700">
-            <span className="flex items-center justify-between gap-2"><AgentIdentity name={agentName(a)} role={a.role_name} size={34} /><button type="button" className={BTN_TEXT} onClick={() => onProfile?.(a)}>Profile</button></span>
+            <span className="flex items-center justify-between gap-2"><AgentIdentity name={agentName(a)} role={agentLine(a)} size={34} /><button type="button" className={BTN_TEXT} onClick={() => onProfile?.(a)}>Profile</button></span>
             <span className={MUTED}>Platform model · {a.model_label || a.model_id || <Unrecorded />} · sponsored by {a.sponsor?.name || <Unrecorded />}{a.month_spend?.available && budgetLine(a.month_spend.value_microusd, a.monthly_cap_microusd) ? ` · ${budgetLine(a.month_spend.value_microusd, a.monthly_cap_microusd)}` : ''}</span>
             <span className="rounded-md bg-axal-ground px-2 py-1.5 dark:bg-gray-900"><span className={`${MONO} mr-1`}>Working on</span><WorkingOn value={a.working_on} /></span>
           </article>
@@ -78,7 +78,7 @@ export function AssignPopover({ task, people, agentsList, moduleLabel, onPick, o
               onClick={() => { if (inModules) onPick({ kind: 'agent', uid: a.uid }); }}
               className={`flex flex-col rounded-md px-2 py-1.5 ${inModules ? 'cursor-pointer hover:bg-axal-ground dark:hover:bg-gray-800' : 'opacity-55'}`}>
               <AgentIdentity name={agentName(a)} size={26} />
-              <span className={MUTED}>{a.role_name} · {inModules ? `In its modules: ${moduleLabel}` : refusalWords('module_not_allowed')}</span>
+              <span className={MUTED}>{agentLine(a) || 'AI agent'} · {inModules ? `In its modules: ${moduleLabel}` : refusalWords('module_not_allowed')}</span>
             </div>
           );
         })}

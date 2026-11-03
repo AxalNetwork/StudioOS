@@ -26,13 +26,13 @@ import { applySpinoutOverrides, loadSpinoutDeckOverrides } from '../services/dec
 import { recommendMethod, listOverrides, setOverride, deleteOverride } from '../services/decks/recommend';
 import { getDeckBrand, setStudioWatermark, ensureMethodAllowed, fetchLandingPageForProject, applyBrandKitToSlides } from '../services/decks/branding';
 import { type RenderableDeck } from '../services/decks/render';
-import { renderDeckPPTX, renderDeckPPTXWithImages } from '../services/decks/pptx';
 import { NO_NOTES as NO_SPEAKER_NOTES, NO_SOURCES as NO_SOURCES_RECORDED, aiCards, sourceLines } from '../services/decks/offlineHtml';
 import { stripTrailingSlashes } from '../util/url';
+import { BRAND_FONTS, brandKitPick, deckBrandKitFor } from '../services/decks/brandKit';
 import { bindingKey } from '../util/schemaBootstrap';
 import { applyExportImageCopies, checkedExportImageCopies, copyExternalImages, copyRefusalMessage, type ExportImageCopies } from '../services/decks/imageCopy';
 import { refuse } from '../util/refusal';
-import { DECK_PAGE_LOAD_MS, MAX_DECK_PDF_BYTES, MAX_SLIDE_PNG_BYTES, renderUrl, type RenderFailure } from '../services/browserRun';
+import { DECK_PAGE_LOAD_MS, MAX_DECK_PDF_BYTES, renderUrl, type RenderFailure } from '../services/browserRun';
 import { railFor } from '../util/railContext';
 import { slideTotals, recordSlideSeconds, recordSlideCardUids } from '../services/deckSlideDwell';
 import { logCycleWrite } from '../services/cycleActivity';
@@ -44,7 +44,7 @@ import { sanitizeBinding } from '../services/decks/sources';
 import { saveGateRefusal } from '../services/decks/saveGates';
 import {
   AUDIENCES, BLOCK_KINDS, CHART_RANGES, LIBRARY_CHART_TYPES, TYPED_CHART_TYPES, GRID_COLS, GRID_ROWS, IMAGE_FITS, IMAGE_TAGS, LAYOUTS, MAX_BLOCKS, NOTES_MAX, OVERLAYS,
-  TEXT_STYLES, THEME_KINDS, VIDEO_RATIOS, contentHash, modelProblems, sanitizeModel, sanitizeTheme, assignCardUids, MODEL_VERSION,
+  TEXT_STYLES, THEME_KINDS, VIDEO_RATIOS, contentHash, modelProblems, sanitizeModel, sanitizeTheme, assignCardUids, MODEL_VERSION, visibleCards,
 } from '../services/decks/slideModel';
 import { checkVideoLink } from '../services/decks/videoLink';
 import { ensureDeckVersionColumns, ensureProposalOutlineColumns } from '../services/decks/deckVersionColumns';
@@ -535,7 +535,8 @@ export function rowToDeck(row: any, withSlides = true): any {
 export function publicDeckOf(row: any): any {
   const { audience, round, by, content_hash, ...deck } = rowToDeck(row);
   void audience; void round; void by; void content_hash;
-  deck.slides = (deck.slides || []).map((s: any) => {
+  // D1545 (#3788): a hidden card reaches no reader: not Present, the share page or the print page.
+  deck.slides = visibleCards(deck.slides || []).map((s: any) => {
     // D1579 (#3826): a card's status and assignee are the venture's working state, never an outside reader's.
     const { notes, status, assignee, ...card } = s || {};
     void notes; void status; void assignee;
@@ -835,13 +836,16 @@ export function printDeckOf(row: any, opts: PrintOptions): any {
   const deck = publicDeckOf(row);
   const full = rowToDeck(row);
   if (opts.notes) {
-    deck.slides = deck.slides.map((card: any, i: number) => {
-      const notes = String(full.slides?.[i]?.notes ?? '').trim();
+    // D1545: by uid, so a hidden card left out of the public deck never shifts a card's notes onto the next.
+    const byUid = new Map((full.slides || []).map((s: any) => [s?.uid, s]));
+    deck.slides = deck.slides.map((card: any) => {
+      const notes = String((byUid.get(card?.uid) as any)?.notes ?? '').trim();
       return { ...card, notes: notes || null };
     });
   }
   deck.export_options = { notes: opts.notes, sources: opts.sources };
-  if (opts.sources) deck.sources_appendix = { lines: sourceLines(full.slides || []), ai: aiCards(full.slides || []) };
+  const shown = visibleCards(full.slides || []);
+  if (opts.sources) deck.sources_appendix = { lines: sourceLines(shown), ai: aiCards(shown) };
   return deck;
 }
 
@@ -875,7 +879,10 @@ decks.get('/share/:token', async (c) => {
   // D1564 (#3811): a published link asks for the reader's email first, and
   // sends no card and uses no view until this browser has given one. While
   // public views are off (owner decision T) the gate is always on.
-  const published = publishOf(link?.include_json);
+  // D4086: a published link stands only while its round allows it; a round
+  // recorded under any exemption but 506(c) leaves it a private link.
+  const storedPublish = publishOf(link?.include_json);
+  const published = storedPublish && await (await import('./deck_publish')).linkStandsFor(c.env, parseInt(m[1])) ? storedPublish : null;
   if (link && published && gateFor(published) === 'email' && await shareLinkLive(c.env, await sha256Hex(token), bind.viewerHash)) {
     const { emailGatePassed, emailGateAnswer } = await import('./deck_publish');
     if (!(await emailGatePassed(c.env, c.req.header('cookie'), Number(link.id)))) {
@@ -1289,7 +1296,17 @@ decks.get('/brand-kit', async (c) => {
     console.warn('[decks] brand kit unreadable', (e as Error)?.message);
     return c.json({ error: 'Your brand kit could not be read.', code: 'unreadable' }, 503);
   }
-  if (!row) return c.json({ project_id: pid, kit: null });
+  // D1562 (#3809): the deck's own kit (fonts, palette roles, image style, references, logo), and the fonts it may name.
+  let deckKit: Awaited<ReturnType<typeof deckBrandKitFor>> = null;
+  try { deckKit = await deckBrandKitFor(c.env, pid); }
+  catch (e) {
+    console.warn('[decks] deck brand kit unreadable', (e as Error)?.message);
+    return c.json({ error: 'Your brand kit could not be read.', code: 'unreadable' }, 503);
+  }
+  if (!row && !deckKit) return c.json({ project_id: pid, kit: null, font_options: BRAND_FONTS });
+  // D1562: the theme a one-click run applies first when a kit exists (AUTO-2), worked out here so the page never re-derives it.
+  const pick = brandKitPick(row ? { palette_bg: row.palette_bg, palette_ink: row.palette_ink, palette_accent: row.palette_accent, theme_color: row.theme_color, palette_secondary: row.palette_secondary } : null, deckKit);
+  if (!row) return c.json({ project_id: pid, font_options: BRAND_FONTS, pick, kit: { name: null, palette: { bg: null, ink: null, accent: null, secondary: null }, fonts: null, voice: [], logo: { light: null, dark: null, inline: false }, updated_at: deckKit!.updated_at, deck: deckKit } });
   const hex = (v: unknown) => (typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v.trim()) ? v.trim().toLowerCase() : null);
   let voice: string[] = [];
   try {
@@ -1306,7 +1323,10 @@ decks.get('/brand-kit', async (c) => {
       voice,
       logo: { light: sanitizeImageUrl(row.logo_url), dark: sanitizeImageUrl(row.logo_dark_url), inline: Boolean(row.logo_svg || row.logo_dark_svg) },
       updated_at: row.updated_at ?? null,
+      deck: deckKit,
     },
+    font_options: BRAND_FONTS,
+    pick,
   });
 });
 
@@ -2233,7 +2253,8 @@ export function exportDeckOf(row: any, opts: PrintOptions): { slides: any[]; ren
   if (!Array.isArray(slides)) slides = [];
   // Re-sanitize persisted slides (defence-in-depth against legacy rows
   // pre-dating sanitizeImageUrl) before they reach Browser Rendering.
-  slides = founderPitchSlides(sanitizeSlides(slides));
+  // D1545 (#3788): a hidden card is in no export (PowerPoint, .odp, Google Slides).
+  slides = visibleCards(founderPitchSlides(sanitizeSlides(slides)));
   const notesOf = (s: any) => (opts.notes ? String(s?.notes ?? '').trim() || NO_SPEAKER_NOTES : undefined);
   const renderable: RenderableDeck = {
     title: row.title || 'Pitch deck',
@@ -2266,13 +2287,9 @@ export function exportDeckOf(row: any, opts: PrintOptions): { slides: any[]; ren
 }
 
 const SLIDE_VIEWPORT = { width: 1920, height: 1080, deviceScaleFactor: 1 };
-/** #3655: at most three slide pictures at once, and four minutes for the whole PowerPoint. */
-export const PPTX_RENDER_CONCURRENCY = 3;
-export const PPTX_RENDER_BUDGET_MS = 240_000;
 
-const RENDER_FAILED: Record<'pdf' | 'pptx', { code: string; message: string }> = {
+const RENDER_FAILED: Record<'pdf', { code: string; message: string }> = {
   pdf: { code: 'pdf_render_failed', message: 'The PDF could not be produced. Try again in a moment.' },
-  pptx: { code: 'pptx_render_failed', message: 'The PowerPoint file could not be produced. Try again in a moment.' },
 };
 
 /**
@@ -2280,7 +2297,7 @@ const RENDER_FAILED: Record<'pdf' | 'pptx', { code: string; message: string }> =
  * reason, its status, the attempts and the slide. Never the print URL (it
  * carries a signed token), the page's text or the deck's content.
  */
-function renderRefusal(c: any, format: 'pdf' | 'pptx', f: RenderFailure & { slide?: number }) {
+function renderRefusal(c: any, format: 'pdf', f: RenderFailure & { slide?: number }) {
   const diagnostic: Record<string, unknown> = { reason: f.code, attempts: f.attempts };
   if (f.status != null) diagnostic.status = f.status;
   if (f.slide != null) diagnostic.slide = f.slide;
@@ -2291,20 +2308,18 @@ function renderRefusal(c: any, format: 'pdf' | 'pptx', f: RenderFailure & { slid
 /**
  * POST /api/decks/:id/export — { format: 'pdf' | 'pptx' } → file bytes.
  *
- * Task #2 rewrite:
  *  - PDF: Browser Rendering navigates to the live React SPA print
  *    template at /deck/print-export/:hmacToken with print_mode=pdf so
  *    every slide renders at native 1920×1080. Matches the in-app
  *    preview investors see.
- *  - PPTX: For each slide, screenshot the same SPA URL with slide=N
- *    (single-slide mode), then embed each PNG full-bleed in the .pptx
- *    via renderDeckPPTXWithImages(). Falls back to the text-only
- *    renderer when BROWSER is unavailable so dev still gets a download.
- *  - PNG cover removed end-to-end (UI + handler + validator).
+ *  - PPTX: D1574 (#3821) — answered by `deck_exports.ts`, mounted before
+ *    this router, as the editable PowerPoint (`pptxEditable.ts`): native
+ *    text, shapes and charts on The Grid's placement. It no longer
+ *    photographs each slide, so it never reaches this handler.
  *
- * #3655: both renders go through `renderUrl` (`services/browserRun.ts`), the
+ * #3655: the render goes through `renderUrl` (`services/browserRun.ts`), the
  * documented `BROWSER.quickAction`, with a bounded retry; a failure answers a
- * code-only `diagnostic`, and only a checked PDF or PNG is ever handed out.
+ * code-only `diagnostic`, and only a checked PDF is ever handed out.
  */
 decks.post('/:id/export', async (c) => {
   const user = await requireAuth(c);
@@ -2316,7 +2331,8 @@ decks.post('/:id/export', async (c) => {
   catch { return c.json({ error: 'forbidden' }, 403); }
   const body = await c.req.json().catch(() => ({} as any));
   const format = String(body?.format || 'pdf').toLowerCase();
-  if (!['pdf', 'pptx'].includes(format)) {
+  // D1574: 'pptx' is answered by deck_exports.ts before this handler runs.
+  if (format !== 'pdf') {
     return c.json({ error: 'format must be pdf | pptx' }, 400);
   }
   const copied = await copyStoredDeckImages(c, user, row);
@@ -2324,8 +2340,6 @@ decks.post('/:id/export', async (c) => {
   row = copied.row;
   // D1112 (#2992): PD17's two options apply to every format, not only HTML.
   const opts: PrintOptions = { notes: body?.notes === true, sources: body?.sources === true };
-  const { renderable } = exportDeckOf(row, opts);
-  const brand = await deckOwnerBrand(c.env, Number(row.project_id));
   const fname = (row.title || 'pitch-deck').replace(/[^A-Za-z0-9_-]+/g, '-').slice(0, 80);
 
   // #3655: the documented `quickAction`, never `BROWSER.fetch` to a made-up host.
@@ -2338,96 +2352,38 @@ decks.post('/:id/export', async (c) => {
     (c.env as any).PUBLIC_BASE_URL || (c.env as any).APP_URL || 'https://axal.vc'
   );
 
-  if (format === 'pdf') {
-    if (!browserAvailable) {
-      // Dev / unprovisioned env — let the client fall back to its
-      // existing html2canvas + jsPDF pipeline.
-      return c.json({
-        error: 'browser_binding_unavailable',
-        message: 'Server-side PDF export requires Cloudflare Browser Rendering. Use the client print fallback.',
-        fallback: 'client_render',
-      }, 503);
-    }
-    const token = await signDeckPrintToken(c.env, id, 180, opts, copied.imageCopies);
-    const r = await renderUrl(c.env, 'pdf', {
-      url: `${publicBase}/deck/print-export/${token}?print_mode=pdf`,
-      viewport: SLIDE_VIEWPORT,
-      gotoOptions: { waitUntil: 'networkidle0', timeout: DECK_PAGE_LOAD_MS },
-      addStyleTag: [{
-        content: '@page { size: 1920px 1080px; margin: 0; } html, body { background: #ffffff !important; margin: 0 !important; padding: 0 !important; }',
-      }],
-      pdfOptions: {
-        printBackground: true,
-        preferCSSPageSize: true,
-        width: '1920px',
-        height: '1080px',
-        margin: { top: '0', right: '0', bottom: '0', left: '0' },
-      },
-    }, { kind: 'pdf', maxBytes: MAX_DECK_PDF_BYTES });
-    if (!r.ok) return renderRefusal(c, 'pdf', r);
-    await auditDeckWrite(c, user, Number(row.project_id), 'deck_exported', 'Deck exported');
-    return new Response(r.bytes, {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${fname}.pdf"`,
-        'Cache-Control': 'no-store',
-      },
-    });
-  }
-
-  // -------------------- PPTX --------------------
   if (!browserAvailable) {
-    // No headless browser — fall back to the legacy text-only writer
-    // so a download still works in dev. Production always has the
-    // BROWSER binding.
-    const bytes = renderDeckPPTX(renderable, brand);
-    await auditDeckWrite(c, user, Number(row.project_id), 'deck_exported', 'Deck exported');
-    return new Response(bytes, {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-        'Content-Disposition': `attachment; filename="${fname}.pptx"`,
-        'Cache-Control': 'no-store',
-        'X-Deck-Export-Mode': 'text-only-fallback',
-      },
-    });
+    // Dev / unprovisioned env — let the client fall back to its
+    // existing html2canvas + jsPDF pipeline.
+    return c.json({
+      error: 'browser_binding_unavailable',
+      message: 'Server-side PDF export requires Cloudflare Browser Rendering. Use the client print fallback.',
+      fallback: 'client_render',
+    }, 503);
   }
-
-  // Browser Rendering available — capture one full-bleed PNG per slide
-  // by navigating the SPA print template with slide=N. 5-minute TTL
-  // comfortably covers the longest deck (60-slide cap). #3655: a few at a
-  // time under one deadline; the first slide that cannot be pictured stops
-  // the export, and nothing is handed out or recorded.
-  const token = await signDeckPrintToken(c.env, id, 300, opts, copied.imageCopies);
-  // With sources, the last index is the appendix page the print page draws after the cards.
-  const slideCount = renderable.slides.length;
-  const deadline = Date.now() + PPTX_RENDER_BUDGET_MS;
-  const images: Uint8Array[] = new Array(slideCount);
-  const out: { failure: (RenderFailure & { slide: number }) | null } = { failure: null };
-  let next = 0;
-  const worker = async () => {
-    while (!out.failure && next < slideCount) {
-      const i = next++;
-      const r = await renderUrl(c.env, 'screenshot', {
-        url: `${publicBase}/deck/print-export/${token}?print_mode=single&slide=${i}`,
-        viewport: SLIDE_VIEWPORT,
-        gotoOptions: { waitUntil: 'networkidle0', timeout: DECK_PAGE_LOAD_MS },
-        screenshotOptions: { type: 'png', omitBackground: false, fullPage: false },
-      }, { kind: 'png', maxBytes: MAX_SLIDE_PNG_BYTES, deadline });
-      if (!r.ok) { out.failure = out.failure || { ...r, slide: i }; return; }
-      images[i] = r.bytes;
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(PPTX_RENDER_CONCURRENCY, slideCount) }, worker));
-  if (out.failure) return renderRefusal(c, 'pptx', out.failure);
-  const bytes = renderDeckPPTXWithImages(renderable, brand, images);
+  const token = await signDeckPrintToken(c.env, id, 180, opts, copied.imageCopies);
+  const r = await renderUrl(c.env, 'pdf', {
+    url: `${publicBase}/deck/print-export/${token}?print_mode=pdf`,
+    viewport: SLIDE_VIEWPORT,
+    gotoOptions: { waitUntil: 'networkidle0', timeout: DECK_PAGE_LOAD_MS },
+    addStyleTag: [{
+      content: '@page { size: 1920px 1080px; margin: 0; } html, body { background: #ffffff !important; margin: 0 !important; padding: 0 !important; }',
+    }],
+    pdfOptions: {
+      printBackground: true,
+      preferCSSPageSize: true,
+      width: '1920px',
+      height: '1080px',
+      margin: { top: '0', right: '0', bottom: '0', left: '0' },
+    },
+  }, { kind: 'pdf', maxBytes: MAX_DECK_PDF_BYTES });
+  if (!r.ok) return renderRefusal(c, 'pdf', r);
   await auditDeckWrite(c, user, Number(row.project_id), 'deck_exported', 'Deck exported');
-  return new Response(bytes, {
+  return new Response(r.bytes, {
     status: 200,
     headers: {
-      'Content-Type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-      'Content-Disposition': `attachment; filename="${fname}.pptx"`,
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="${fname}.pdf"`,
       'Cache-Control': 'no-store',
     },
   });

@@ -20,6 +20,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
@@ -258,4 +259,14 @@ test('D1556: the two models are the catalogue\'s, reached through the module tas
   assert.equal(modelById(QUOTE_RERANK_MODEL)?.name, 'bge-reranker-base');
   assert.ok((MODULE_ROUTES as any).module_embed.alternates.includes(QUOTE_EMBED_MODEL));
   assert.ok((MODULE_ROUTES as any).module_rerank.alternates.includes(QUOTE_RERANK_MODEL));
+});
+
+test('D1556: wrangler.toml binds DECK_QUOTES to axal-deck-quotes, at the top level and under production', () => {
+  const toml = readFileSync(resolve(here, '../../wrangler.toml'), 'utf8');
+  const blocks = (header: string) => toml.split(/\n(?=\[)/).filter((b) => b.startsWith(header));
+  for (const header of ['[[vectorize]]', '[[env.production.vectorize]]']) {
+    const quotes = blocks(header).filter((b) => /binding\s*=\s*"DECK_QUOTES"/.test(b));
+    assert.equal(quotes.length, 1, header);
+    assert.match(quotes[0], /index_name\s*=\s*"axal-deck-quotes"/, header);
+  }
 });

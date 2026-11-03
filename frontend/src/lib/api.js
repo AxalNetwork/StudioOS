@@ -4346,6 +4346,11 @@ export const api = {
   // passed), the passes with their reasons, and — by their absence — the needs
   // this firm already quoted on, which are proposals.
   listPartnerLeads: () => request('/partner/pipeline/leads'),
+  // #3938 IN10, the firm's press: open leads ranked by fit with its own audience fit
+  // (bge-m3, then the reranker). Rows `{ need_id, position, line: null }`; 409 when
+  // the firm wrote no fit, no service and typed nothing.
+  rankPartnerLeads: (query = '') =>
+    request('/partner/pipeline/leads/rank', { method: 'POST', body: JSON.stringify(query ? { query } : {}) }),
   // A pass is not a loss: a lost bid is a bid, and this is the record of a bid
   // never made. `reason` is a closed set; the note is what makes it useful to
   // the next person who reads the same lead.
@@ -4592,6 +4597,8 @@ export const api = {
     if (opts.from) qs.set('from', opts.from);
     if (opts.to) qs.set('to', opts.to);
     if (opts.kinds) qs.set('kinds', opts.kinds);
+    // D4154 (#4154): an admin's read-only staff scope, `studio` or `all` (D1206).
+    if (opts.scope && opts.scope !== 'mine') qs.set('scope', opts.scope);
     const s = qs.toString();
     return request(`/calendar/events${s ? `?${s}` : ''}`);
   },

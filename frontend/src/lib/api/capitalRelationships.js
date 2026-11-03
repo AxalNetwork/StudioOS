@@ -13,6 +13,8 @@ import { request } from '../api.js';
 //   match(p, q)      GET /cycles/raise/capital-relationships/match?project=&q=&hq_country=&focus=&size_band=&fit=&warm=1&sort=&limit=&offset=
 //                    → the fund directory's answer, each fund with { fit, warm_paths, in_pipeline, stage: null };
 //                      verified_investors: { count }, never names. `stage` is refused (400).
+//   matchRank(p, q, query?)  POST …/match/rank?project=&<the match filters> { query? }   #3938 RA11, the member's press:
+//                    → { job, steps: { retrieved, ranked, written }, rows: [{ uid, position, line }] }; a null line is none given.
 // D1193 (#3127) — part 5: Outreach, Activity and Eadwyn's proposals (`services/capRelTabs.ts`).
 //   activity(p, q)        GET  …/activity?project=&q=&kind=&investor=&page=   → { items, total, page, page_size, kinds, not_here }
 //   materials(p)          GET  …/materials?project=   → { items: [{ prospect_id, name, deck, data_room, call }], basis }
@@ -39,6 +41,9 @@ export const capitalRelationshipsApi = {
   supportReads: (projectId, page = 1) => request(`/cycles/raise/capital-relationships/support-reads?${project(projectId)}&page=${encodeURIComponent(String(page))}`),
   commitments: (projectId) => request(`/cycles/raise/capital-relationships/commitments?${project(projectId)}`),
   match: (projectId, q) => request(`/cycles/raise/capital-relationships/match?${project(projectId)}${matchQuery(q)}`),
+  matchRank: (projectId, q = {}, query = '') => request(`/cycles/raise/capital-relationships/match/rank?${project(projectId)}${matchQuery(q)}`, {
+    method: 'POST', body: JSON.stringify(query ? { query } : {}),
+  }),
   activity: (projectId, q = {}) => request(`/cycles/raise/capital-relationships/activity?${project(projectId)}${pick(q, ACTIVITY_KEYS)}`),
   materials: (projectId) => request(`/cycles/raise/capital-relationships/materials?${project(projectId)}`),
   proposals: (projectId) => request(`/cycles/raise/capital-relationships/proposals?${project(projectId)}`),

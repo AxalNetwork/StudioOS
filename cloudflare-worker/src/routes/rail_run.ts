@@ -279,10 +279,13 @@ export function railRunRoutes(deps: { run?: Runner; quote?: Quoter } = {}) {
     const rowsWanted = !recordId && Number.isSafeInteger(Number(input.rows)) ? Math.max(0, Math.min(MAX_RUN_ROWS, Number(input.rows))) : 0;
     // D1595 (#3868): an Add form that offers no "add several rows" (no ROW_REQUIRED entry) refuses them, before any quote.
     if (rowsWanted && !Object.hasOwn(ROW_REQUIRED, table)) return refuse(c, 400, 'rows_not_offered');
-    const asked = rowsWanted ? fields.filter((f) => fieldsToAsk([f]).length) : fieldsToAsk(fields, input.values ?? {}, row);
+    let asked = rowsWanted ? fields.filter((f) => fieldsToAsk([f]).length) : fieldsToAsk(fields, input.values ?? {}, row);
     if (!asked.length) return refuse(c, 400, 'nothing_to_fill');
 
     const gather = recordScope ? await gatherScoped(c.env, Number(user.id), table, row, scopedParent, { activeCompany: () => activeCompanyFor(c, user), claimed: () => !!c.req.header('X-Company-Id') }) : await gatherForm(c.env, projectId as number, asked);
+    // #4046 (B2): a record that offers fewer fields than its form (a programme with two questions) asks only those, before any quote.
+    if (gather.only) { const only = new Set(gather.only); asked = asked.filter((f) => only.has(f.field)); }
+    if (!asked.length) return refuse(c, 400, 'nothing_to_fill');
     const { messages, guardText } = formMessages(asked, gather, { text: typeof input.text === 'string' ? input.text : '', rows: rowsWanted || undefined });
     const runInput: RunOptions = {
       task: 'rail_write', userId: Number(user.id), messages, guardText, maxTokens: rowsWanted ? 1200 : 600, temperature: 0.2,

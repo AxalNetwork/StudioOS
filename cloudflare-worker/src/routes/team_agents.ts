@@ -3,7 +3,7 @@
  * books. Mounted at `/api/teams`.
  *
  *   GET    /roles                              the catalogue: eleven roles, their default rule books, and the models an agent may run on
- *   GET    /personas                           D4117: the 16 personas an agent wears, the 6 value labels and the 8 areas
+ *   GET    /personas                           D4117: the personas an agent wears (D4158: the ones HQ offers, as HQ named them), the 6 value labels and the 8 areas
  *   GET    /:scope/:id/agents?include=projects&module=
  *   POST   /:scope/:id/agents                  add one (manage + paid plan)
  *   GET    /agents/:uid                        its profile: rule book, matrix, spend, proposals, events
@@ -41,6 +41,7 @@
  * Part 5 (#3844, owner Q3 = A) adds the sponsor's approved read tools
  * (D852), through `services/agents/agentTools.ts`.
  */
+import { maxTeamCap } from '../services/agents/aiPolicy';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
@@ -60,7 +61,8 @@ import { neverFillMessage } from '../services/fills/neverFill';
 import { NeverFillRefusal, type RailDecision, type RailProposalStatus } from '../services/railProposals';
 import { QUEUE_STATUSES, queueCount, queueDecide, queueItem, queueList, type QueueRefusal } from '../services/agents/queue';
 import { ALWAYS_ASKS_FLOOR, MODULES, ROLES, moduleOf, optionsIn, roleOf } from '../services/agents/catalogue';
-import { AREAS, PERSONAS, ROLE_PERSONA, VALUE_LEGEND, personaDto, personaOf } from '../services/agents/personas';
+import { AREAS, ROLE_PERSONA, VALUE_LEGEND, personaOf } from '../services/agents/personas';
+import { PLATFORM_CAP_MAX_MICROUSD, RETIRED_PAUSE, galleryPersonas, loadPersonaSettings, maxCapOf, personaView, statusOf, unavailable } from '../services/agents/rosterAdmin';
 import { checkRules, diffRules } from '../services/agents/rulebook';
 import {
   agentByUid, bookRows, canManage, canRead, effectiveBook, loadScope, logEvent, monthSpend, scopeCols, scopeOfAgent,
@@ -71,7 +73,7 @@ type C = Context<{ Bindings: Env }>;
 
 export const teamAgentsEnabled = (env: Env) => env.TEAM_AGENTS_ENABLED === 'true';
 export const NAME_MAX = 40;
-export const CAP_MAX_MICROUSD = 1_000_000_000_000;
+export const CAP_MAX_MICROUSD = PLATFORM_CAP_MAX_MICROUSD;
 const PROPOSAL_STATUSES = ['proposed', 'accepted', 'edited', 'discarded', 'withdrawn'] as const;
 
 const router = new Hono<{ Bindings: Env }>();
@@ -83,6 +85,14 @@ router.use('*', async (c, next) => {
 
 const say = (c: C, status: number, code: string, message: string, extra?: Record<string, unknown>) =>
   refuse(c, status, { code, message, extra });
+
+/** D4162 (#4162): HQ's maximum team cap. A cap above it is refused; a policy that cannot be read sets no new cap. */
+async function capOverPlatform(c: any, cap: number): Promise<Response | null> {
+  const m = await maxTeamCap(c.env);
+  if (!m.ok) return say(c, 503, 'policy_unreadable', 'The platform\'s AI policy could not be read, so the cap was not changed. Try again shortly.');
+  if (m.max != null && cap > m.max) return say(c, 422, 'cap_over_platform_max', `The platform allows a monthly cap of at most $${(m.max / 1e6).toFixed(2)} per agent.`);
+  return null;
+}
 const notFound = (c: C) => say(c, 404, 'not_found', 'There is no such team.');
 
 // ── Gates ───────────────────────────────────────────────────────────────────
@@ -114,11 +124,13 @@ async function agentDto(env: Env, a: AgentRow) {
     ? await env.DB.prepare('SELECT id, name FROM projects WHERE id = ?').bind(a.project_id).first<{ id: number; name: string }>()
     : null;
   const persona = personaOf(a.persona_key);
+  // D4158: the persona as HQ named it; its values, risk and natural fit are always the catalogue's.
+  const settings = persona ? await loadPersonaSettings(env) : null;
   return {
     uid: a.uid,
     // D4117: the role keys the rule book only; no job title reaches the client.
     role_key: a.role_key,
-    persona: persona ? personaDto(persona) : null,
+    persona: persona ? personaView(persona, settings!.get(persona.key)) : null,
     first_name: a.first_name,
     last_name: a.last_name,
     model_id: a.model_id,
@@ -166,6 +178,7 @@ const SKILL_WORDS = {
   not_found: 'There is no such skill.',
   version_not_published: 'Only a published version can be pinned.',
   skill_retired: 'This skill is retired and cannot be added again.',
+  skill_suspended: 'HQ suspended this skill, so it cannot be added. The company can publish a fixed version.',
   role_mismatch: 'An agent can only be given skills of its own role.',
   tool_not_approved: 'That skill needs a read tool its sponsor has not approved.',
 } as const;
@@ -195,11 +208,15 @@ router.get('/roles', async (c) => {
 
 // ── Personas (D4117) ────────────────────────────────────────────────────────
 
-/** The 16 personas, fixed: no route edits one. Readable by any signed-in member, like the roles. */
+/**
+ * The Add-agent gallery: the personas HQ offers (D4158: a hidden or retired one
+ * is left out), with HQ's identity and team defaults. Values, risk and natural
+ * fit are fixed. Readable by any signed-in member, like the roles.
+ */
 router.get('/personas', async (c) => {
   try {
     await requireAuth(c);
-    return c.json({ personas: PERSONAS.map(personaDto), values: VALUE_LEGEND, areas: AREAS });
+    return c.json({ personas: galleryPersonas(await loadPersonaSettings(c.env)), values: VALUE_LEGEND, areas: AREAS });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -261,6 +278,8 @@ router.post('/agents/:uid/run', async (c) => {
     const r = await agentRun(c.env, {
       agent: got.agent, module: typeof b.module === 'string' ? b.module : '', option: typeof b.option === 'string' ? b.option : '',
       record, prompt: b.prompt, toolReads: b.tool_reads,
+      // D1612 part D (#3954): one of the agent's skills, by uid; it runs at the pinned version.
+      skill: b.skill == null ? null : String(b.skill),
     });
     if (!r.ok) return answer(c, r);
     return c.json({ proposal: r.proposal, charged: r.charged });
@@ -381,12 +400,23 @@ router.patch('/agents/:uid', async (c) => {
     if ('status' in b) {
       if (b.status !== 'active' && b.status !== 'paused') return say(c, 400, 'invalid_status', 'An agent is active or paused.');
       if (b.status !== a.status) {
+        // D4158: an agent HQ paused by retiring its persona resumes only once HQ offers or hides it again.
+        if (b.status === 'active' && a.paused_reason === RETIRED_PAUSE && a.persona_key
+          && statusOf((await loadPersonaSettings(c.env)).get(a.persona_key)) === 'retired') {
+          return say(c, 409, 'persona_retired', 'Axal VC HQ retired this agent. It cannot be resumed.');
+        }
         next.status = b.status; next.paused_reason = b.status === 'paused' ? 'manual' : null;
         events.push([b.status === 'paused' ? 'paused' : 'resumed', b.status === 'paused' ? { reason: 'manual' } : undefined]);
       }
     }
     if ('monthly_cap_microusd' in b) {
       if (!validCap(b.monthly_cap_microusd)) return say(c, 400, 'invalid_cap', 'The monthly cap is a whole number of micro-dollars above zero.');
+      const over = await capOverPlatform(c, b.monthly_cap_microusd);
+      if (over) return over;
+      const maxCap = a.persona_key ? maxCapOf((await loadPersonaSettings(c.env)).get(a.persona_key)) : null;
+      if (maxCap != null && b.monthly_cap_microusd > maxCap && b.monthly_cap_microusd > a.monthly_cap_microusd) {
+        return say(c, 422, 'cap_above_max', 'That cap is above the most a team may set for this agent.', { max_cap_microusd: maxCap });
+      }
       if (b.monthly_cap_microusd !== a.monthly_cap_microusd) {
         next.cap = b.monthly_cap_microusd;
         events.push(['cap_changed', { from_microusd: a.monthly_cap_microusd, to_microusd: b.monthly_cap_microusd }]);
@@ -488,7 +518,15 @@ router.post('/:scope/:id/agents', async (c) => {
     // D4117: who the agent is. Sent, or the role's default persona while the screens still send a role alone.
     if (b.persona_key !== undefined && !personaOf(b.persona_key)) return say(c, 400, 'invalid_persona', 'Choose one of the agents.');
     const persona = personaOf(b.persona_key ?? ROLE_PERSONA[role.key])!;
+    // D4158: HQ's roster. A hidden or retired persona is not offered to a new team, and HQ's maximum cap holds.
+    const setting = (await loadPersonaSettings(c.env)).get(persona.key);
+    const gone = unavailable(setting);
+    if (gone) return say(c, 409, 'persona_unavailable', 'That agent is not offered to teams now. Choose another.', { persona_key: persona.key, status: gone });
     if (!validCap(b.monthly_cap_microusd)) return say(c, 400, 'invalid_cap', 'The monthly cap is a whole number of micro-dollars above zero.');
+    const over = await capOverPlatform(c, b.monthly_cap_microusd);
+    if (over) return over;
+    const maxCap = maxCapOf(setting);
+    if (maxCap != null && b.monthly_cap_microusd > maxCap) return say(c, 422, 'cap_above_max', 'That cap is above the most a team may set for this agent.', { max_cap_microusd: maxCap });
     const first = namePart(b.first_name); const last = namePart(b.last_name);
     if (!first.ok || !last.ok) return say(c, 400, 'invalid_name', `A name is at most ${NAME_MAX} characters.`);
     if (typeof b.model_id !== 'string' || !b.model_id || modelRefusal(c.env, b.model_id)) {

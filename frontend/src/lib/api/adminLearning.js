@@ -44,6 +44,30 @@ export const adminLearningApi = {
   completeVideoUpload: (uid, b) => request(`/admin/learning/items/${enc(uid)}/video/uploads/complete`, { method: 'POST', body: body(b) }),
   abortVideoUpload: (uid, b) => request(`/admin/learning/items/${enc(uid)}/video/uploads/abort`, { method: 'POST', body: body(b) }),
 
+  // #4176 (D4176) — the item's video on Cloudflare Stream (routes/learning_stream.ts). Every call answers
+  // 503 stream_unavailable until the owner turns Stream on. A file up to 200 MB is POSTed to `upload_url`;
+  // a larger one goes through tus at `streamTusEndpoint(uid)` (503 stream_tus_unavailable without the API token).
+  //   startStreamUpload(uid, { size_bytes, content_type, name? }) → 201 { stream_uid, protocol: 'post', upload_url, expires_at }
+  //   streamStatus(uid)            → { current, videos: [{ stream_uid, origin, state, error_code, error_message, duration_seconds, captions }] }
+  //   abandonStreamUpload(uid, s)  → { abandoned: true }; 409 stream_in_use for the video members watch
+  //   generateCaptions(uid, lang)  → 202 { caption }; uploadCaptions(uid, lang, vttText); deleteCaptions(uid, lang)
+  //   setStreamThumbnail(uid, pct) → { video }; chapters are `updateItem(uid, { chapters: [{ start_seconds, title }] })`
+  startStreamUpload: (uid, b) => request(`/admin/learning/items/${enc(uid)}/stream/uploads`, { method: 'POST', body: body(b) }),
+  streamTusEndpoint: (uid) => `/api/admin/learning/items/${enc(uid)}/stream/uploads/tus`,
+  streamStatus: (uid) => request(`/admin/learning/items/${enc(uid)}/stream`),
+  abandonStreamUpload: (uid, streamUid) => request(`/admin/learning/items/${enc(uid)}/stream/${enc(streamUid)}/abandon`, { method: 'POST' }),
+  generateCaptions: (uid, language) => request(`/admin/learning/items/${enc(uid)}/stream/captions/generate`, { method: 'POST', body: body({ language }) }),
+  uploadCaptions: (uid, language, vtt) => request(`/admin/learning/items/${enc(uid)}/stream/captions/${enc(language)}`, {
+    method: 'PUT', body: vtt, headers: { 'Content-Type': 'text/vtt' },
+  }),
+  deleteCaptions: (uid, language) => request(`/admin/learning/items/${enc(uid)}/stream/captions/${enc(language)}`, { method: 'DELETE' }),
+  setStreamThumbnail: (uid, pct) => request(`/admin/learning/items/${enc(uid)}/stream/thumbnail`, { method: 'PATCH', body: body({ thumbnail_pct: pct }) }),
+  // #4179 (D4179) — copy an item's uploaded file to Stream, one item a call. The content read (`listItems`) carries
+  // each uploaded item's `stream_copy`: { state: 'none' | 'copying' | 'verified' | 'failed', … } for Copy to Stream,
+  // Copying…, Verified and Copy failed (with the route's words). 409 not_r2 / already_copied; 502 stream_copy_failed.
+  //   migrateVideoToStream(uid) → 202 { copy: { stream_uid, state: 'copying' } }
+  migrateVideoToStream: (uid) => request('/admin/learning/stream/migrations', { method: 'POST', body: body({ item_uid: uid }) }),
+
   listCourses: () => request('/admin/learning/courses'),
   createCourse: (b) => request('/admin/learning/courses', { method: 'POST', body: body(b) }),
   getCourse: (uid) => request(`/admin/learning/courses/${enc(uid)}`),

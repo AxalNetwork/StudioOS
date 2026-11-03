@@ -333,7 +333,7 @@ function OnePage({ ctx, projectId, q, sources, items, versions, methods, recomme
   const estimate = estimateLine(quote.build, ctx.averages?.build);
   const warning = rowWarning(rows);
   const stagePlan = availability('stagePlan');
-  const reorder = availability('deckActions');
+  const reorder = availability('outlineReorder');
   const inferredStage = ctx.inferred?.stage || null;
   const templateStart = start.kind === 'template';
 

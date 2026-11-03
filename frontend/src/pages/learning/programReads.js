@@ -7,6 +7,7 @@
  *   A member (`routes/learning_programs.ts`, /api/learning):
  *     learningApi.myEnrolledPrograms → GET  /programs/enrolled    (each with its contents and my completion)
  *     learningApi.programs           → GET  /programs             (open to self-enrolment)
+ *     learningApi.program            → GET  /programs/:uid        (one program, D3726 LR13)
  *     learningApi.enrolInProgram     → POST /programs/:uid/enrol
  *   An assigned admin, read-only (same file):
  *     learningApi.assignedPrograms   → GET  /programs/mine
@@ -68,6 +69,23 @@ export async function readMyPrograms() {
         ? { program, detail: { status: 'ready', contents, completion: Array.isArray(completion) ? completion : null } }
         : { program, detail: { status: 'unreadable', message: failed ? 'The route could not read what this program holds.' : 'The program came back in a shape this page cannot read.' } }
     )),
+  };
+}
+
+/**
+ * D3726 LR13: one program as its member sees it (`GET /programs/:uid`): the
+ * program, its contents described, whether the caller is enrolled, and their
+ * completion when they are. A program the caller may not see is the route's
+ * 404, which `useLearningRead` calls "missing".
+ */
+export async function readMemberProgram(uid) {
+  const reply = await learningApi.program(uid);
+  if (!reply?.program) throw new Error('The program came back in a shape this page cannot read.');
+  return {
+    program: reply.program,
+    contents: listOf(reply, 'contents', 'The program'),
+    enrolled: reply.enrolled === true,
+    completion: Array.isArray(reply.my_completion) ? reply.my_completion : null,
   };
 }
 

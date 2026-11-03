@@ -181,12 +181,15 @@ const FORWARDED: Record<string, string[]> = {
   'routes/research.ts': ['page'],               // the zone draft's app path (D404, D510)
   'services/advisor/guardrails.ts': ['surface'], // classifyInput's required parameter
   'services/agents/agentRun.ts': ['c.surface'],  // D1496 part 2: the agent's module app path (moduleSurface), both the quote and the run
+  'services/decks/imageDraw.ts': ['a.surface'],  // D1505: the deck image pipeline's seven runs, on the page its caller names (deck_images.ts: AI_SURFACE.raisePitch)
   'services/ai/decide.ts': ['charge.surface'],   // #3938: decisions, rankings and sentiment run on the caller's page (pipeline, studio, research, interviews)
+  'services/ai/matchRows.ts': ['charge.surface', 'charge.surface'], // #3938 part 2b: a match row's embeddings and its line, on the caller's page (networkfx, cycle_raise, events, research)
 };
 
 /** Every call site's fixed name, by file — the table D552.md lists. */
 const EXPECTED: Record<string, string[]> = {
   'services/decks/dataroomExtract.ts': ['AI_SURFACE.raiseDataRoom'], // D1602: owner-approved document extraction
+  'routes/data_room_proposals.ts': ['AI_SURFACE.raiseDataRoom'], // D4170 (#4170): Eadwyn's data room proposals, a quoted run over file names
   'routes/founder_validate.ts': ['AI_SURFACE.validate', 'AI_SURFACE.validateInterviews'],
   // D657 — a session's final transcript, on the same page as the interview log.
   // D685 (#1584) moved the call into the processing service the route and the job share.
@@ -204,10 +207,11 @@ const EXPECTED: Record<string, string[]> = {
   'routes/deck_new.ts': ['AI_SURFACE.raisePitch', 'AI_SURFACE.raisePitch', 'AI_SURFACE.raisePitch'], // D897: the outline and the build; /generate moved here; D897 §9 (#3659): one card's regeneration
   'routes/deck_assist.ts': ['AI_SURFACE.raisePitch'], // D899: the card tools
   'routes/deck_derive.ts': ['AI_SURFACE.raisePitch'], // D1583: the memo from a deck
+  'routes/deck_actions.ts': ['AI_SURFACE.raisePitch'], // D1561: Check wording
   'routes/deck_critic.ts': ['AI_SURFACE.raisePitch'], // D1557: the investor critic
+  'routes/deck_critique.ts': ['AI_SURFACE.raisePitch', 'AI_SURFACE.raisePitch'], // D1552: the design critic's vision pass and its shortenings
   'routes/deck_transform.ts': ['AI_SURFACE.raisePitch'], // D1560: notes, proofread, fix this slide, translate
-  'routes/deck_images.ts': ['AI_SURFACE.raisePitch'], // D903: the card and background images
-  'routes/deck_rehearsals.ts': ['AI_SURFACE.raisePitch'], // D1580 F1 (#3827): a rehearsal's transcript
+  'routes/deck_rehearsals.ts': ['AI_SURFACE.raisePitch', 'AI_SURFACE.raisePitch'], // D1580 F1 (#3827): a rehearsal's transcript; part 2a: its coaching
   'routes/article_assist.ts': ['AI_SURFACE.articles', 'AI_SURFACE.articles'], // D1409: Eadwyn's writing options on an article, and its images
   'routes/event_syndication_assist.ts': ['AI_SURFACE.eventSyndication'], // D1493: Eadwyn's proposed copy for a syndication channel
   'services/mail/drafts.ts': ['AI_SURFACE.mailDraft'], // D1341: Eadwyn's email drafts and revisions; D1343 moved the call into `runDraft`, shared by the route and the MCP tool

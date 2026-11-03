@@ -29,6 +29,8 @@
  * (a typed series with its points), images, video, audio and link buttons by
  * their label and address as text (the file asks for nothing, so no href),
  * and graphics by name. A card with no blocks is drawn from its fields.
+ * D903 §11 (#3660): a graphic that holds a typed diagram is drawn from its
+ * layout (`diagramLayout.ts`): an inline SVG for its lines, its words as text.
  *
  * `services/decks/render.ts` was not this file: it loaded Tailwind from a CDN
  * and had no caller. Its renderer is gone; its slide types stay for pptx.ts.
@@ -37,6 +39,8 @@ import { CONFIDENTIAL, type DeckCompliance } from './compliance';
 import { LEGAL_FACES, bytesToBase64 } from '../legalPaperCss';
 import { DECK_SOURCES, bindingsOf } from './sources';
 import { cellText } from './slideModel';
+import { diagramLayout, diagramName, type DiagramLayout } from './diagramLayout';
+import { chartHeading } from './pptxChart';
 
 export const NOT_RECORDED = 'Not recorded';
 export const NO_NOTES = 'No notes on this card.';
@@ -160,6 +164,33 @@ export const chartLabel = (t: unknown) => {
 /** A block's address, as text: the scheme dropped, so nothing reads it as a link to load. */
 const addr = (u: unknown) => (typeof u === 'string' && /^https:\/\//.test(u) ? `<p class="addr">${esc(u.replace(/^https:\/\//, ''))}</p>` : '');
 
+const pc = (n: number) => `${Math.round(n * 10000) / 100}%`;
+const vb = (n: number) => Math.round(n * 10000) / 100;
+
+/**
+ * D903 §11 (#3660): a diagram as the file draws it. Its lines are an inline
+ * SVG (nothing to load); its words are positioned text, selectable and read
+ * in order by a screen reader, never a picture.
+ */
+export function diagramHtml(layout: DiagramLayout, blockId: unknown): string {
+  const mark = `dga-${String(blockId ?? 'd').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40) || 'd'}`;
+  const lines: string[] = [];
+  const parts: string[] = [];
+  for (const s of layout.shapes) {
+    if (s.kind === 'line') {
+      lines.push(`<line x1="${vb(s.x1)}" y1="${vb(s.y1)}" x2="${vb(s.x2)}" y2="${vb(s.y2)}"${s.arrow ? ` marker-end="url(#${mark})"` : ''}/>`);
+    } else if (s.kind === 'dot') {
+      parts.push(`<i class="dot" style="left:${pc(s.x + s.w / 2)};top:${pc(s.y + s.h / 2)}"></i>`);
+    } else {
+      const at = `left:${pc(s.x)};top:${pc(s.y)};width:${pc(s.w)};height:${pc(s.h)}`;
+      const words = `${s.date ? `<span class="when">${esc(s.date)}</span>` : ''}<b>${esc(s.label)}</b>${s.detail ? `<span>${esc(s.detail)}</span>` : ''}`;
+      parts.push(`<div class="${s.role === 'axis' ? `ax${s.vertical ? ' v' : ''}` : 'dn'}" style="${at}">${words}</div>`);
+    }
+  }
+  const svg = `<svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs><marker id="${mark}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"/></marker></defs>${lines.join('')}</svg>`;
+  return `<figure class="dg dg-${layout.type}" aria-label="${diagramName(layout.type)} diagram">${svg}${parts.join('')}</figure>`;
+}
+
 /** One D898 block's markup, or '' for an empty text block. */
 function block(b: any, images: OfflineDeck['images']): string {
   switch (b?.kind) {
@@ -182,7 +213,8 @@ function block(b: any, images: OfflineDeck['images']): string {
           ? `<li>${label}: ${pts.map((p: any) => `${text(p?.x)} ${text(p?.y)}`).join(' · ')}</li>`
           : `<li>${label}</li>`;
       });
-      return `<div class="chart"><b>${esc(chartLabel(b.chart_type))} chart</b>${series.length ? `<ul>${series.join('')}</ul>` : `<p class="nr">${NOT_RECORDED}</p>`}</div>`;
+      // D1574 (pd8b): a projection keeps its label here too.
+      return `<div class="chart"><b>${esc(chartHeading(`${chartLabel(b.chart_type)} chart`, b, new Date().toISOString().slice(0, 10)))}</b>${series.length ? `<ul>${series.join('')}</ul>` : `<p class="nr">${NOT_RECORDED}</p>`}</div>`;
     }
     case 'image': return image(b.image_url, images, b.alt || '');
     // The file asks for nothing (D901), so a link is its label and its address as text, never an href.
@@ -195,7 +227,11 @@ function block(b: any, images: OfflineDeck['images']): string {
       const label = text(b.label || (b.kind === 'audio' ? 'Audio clip' : 'Open'));
       return `<p class="btn">${b.kind === 'audio' ? '▶ ' : ''}${label}</p>${addr(b.url)}`;
     }
-    case 'graphic': return `<p class="nr">Graphic · ${text(b.graphic || 'none chosen')}</p>`;
+    // D903 §11 (#3660): a typed diagram is drawn from its layout, its words as text; any other graphic by name.
+    case 'graphic': {
+      const layout = diagramLayout(b.diagram);
+      return layout ? diagramHtml(layout, b.id) : `<p class="nr">Graphic · ${text(b.graphic || 'none chosen')}</p>`;
+    }
     // D1538: a typed table, one row per line; the file asks for nothing, so it is text.
     case 'table': {
       const rows = (Array.isArray(b.rows) ? b.rows : []).map((row: any[], i: number) => {
@@ -331,6 +367,13 @@ const CSS = [
   "h3{margin:0;font:700 clamp(18px,2.6vw,32px)/1.2 'Space Grotesk','Public Sans',sans-serif}",
   ".tile{display:flex;flex-direction:column;gap:2px;border:1px solid #e5e7eb;border-radius:9px;padding:10px;height:100%;box-sizing:border-box}.tile span{font-size:12px;color:#475569}.tile b{font-size:clamp(16px,2vw,26px)}.tile b.nr{font-size:14px;font-weight:600}",
   ".chart{border:1px solid #e5e7eb;border-radius:9px;padding:10px;height:100%;box-sizing:border-box}.chart li{font-size:13px}",
+  // D903 §11: a diagram's box, its connectors, and its words.
+  ".dg{position:relative;margin:0;height:100%;min-height:280px}.dg svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}",
+  ".dg line{stroke:#94a3b8;stroke-width:2;vector-effect:non-scaling-stroke}.dg marker path{fill:#94a3b8}",
+  ".dg .dn{position:absolute;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;gap:2px;padding:6px 8px;border:1px solid #e5e7eb;border-radius:9px;background:#f8fafc;overflow:hidden;font-size:13px}",
+  ".dg .dn b{font-size:14px;line-height:1.2}.dg .dn span{color:#475569;line-height:1.25}.dg .dn .when{font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b}",
+  ".dg .ax{position:absolute;display:flex;align-items:center;justify-content:center;font-size:12px;color:#64748b;text-align:center}.dg .ax.v{writing-mode:vertical-rl;transform:rotate(180deg)}",
+  ".dg .dot{position:absolute;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;background:#64748b}",
   "table.typed{border-collapse:collapse;width:100%;font-size:13px}table.typed th,table.typed td{border:1px solid #e5e7eb;padding:4px 6px;text-align:start}table.typed th{background:#f8fafc}",
   ".btn{display:inline-block;background:#6d28d9;color:#fff;border-radius:8px;padding:6px 12px;font-weight:700;font-size:14px}.addr{font-size:12px;color:#475569;word-break:break-all}",
   ".sources{display:flex;flex-direction:column;gap:6px;margin:0}.sources dd{font-weight:400;font-size:13px}",

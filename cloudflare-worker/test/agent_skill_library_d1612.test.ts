@@ -20,13 +20,17 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { READ_KEYS, ROLES } from '../src/services/agents/catalogue.ts';
 
+import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 const DIR = new URL('../src/services/agents/skills/', import.meta.url);
 const LEVELS = ['aware', 'working', 'proficient', 'advanced', 'expert'];
 const OUTPUTS = ['draft', 'record_change', 'brief'];
 const MAX_BYTES = 32 * 1024;
 
-const TAXONOMY = new Set([...readFileSync(new URL('../sql/migrations/090_seed_skills_values_taxonomy.sql', import.meta.url), 'utf8')
-  .matchAll(/^\s*\('([a-z_]+)',\s*'([a-z_]+)',/gm)].filter((m) => m[2] !== m[1]).map((m) => m[1]));
+const TAXONOMY_ROWS = [...readFileSync(new URL('../sql/migrations/090_seed_skills_values_taxonomy.sql', import.meta.url), 'utf8')
+  .matchAll(/^\s*\('([a-z_]+)',\s*'([a-z_]+)',/gm)].filter((m) => m[2] !== m[1]);
+const TAXONOMY = new Set(TAXONOMY_ROWS.map((m) => m[1]));
+/** D4225: a taxonomy slug's area (its `category_slug` in migration 090). */
+const AREA_OF = new Map(TAXONOMY_ROWS.map((m) => [m[1], m[2]]));
 const ROLE_KEYS = new Set(ROLES.map((r) => r.key));
 const READ_SOURCES = new Set(READ_KEYS.map((k) => k.split('.')[0]));
 
@@ -56,11 +60,11 @@ const map = (v: string) => {
   return Object.fromEntries(m![1].split(',').map((p) => p.split(':').map((x) => x.trim())).filter((p) => p[0]));
 };
 
-const files = readdirSync(DIR).filter((f) => f.endsWith('.md') && f !== 'README.md').sort();
+const files = readdirSync(DIR).filter((f) => f.endsWith('.md') && f !== 'README.md').sort(compareMigrations);
 const skills = files.map((f) => parseSkill(f, readFileSync(new URL(f, DIR), 'utf8')));
 
-test('the library holds about twelve skills, one file each, named by slug, none twice', () => {
-  assert.ok(skills.length >= 10 && skills.length <= 16, `${skills.length} skills`);
+test('the library holds about eighty skills (D4225), one file each, named by slug, none twice', () => {
+  assert.ok(skills.length >= 70 && skills.length <= 100, `${skills.length} skills`);
   const names = skills.map((s) => s.front.name);
   assert.equal(new Set(names).size, names.length, 'a duplicate slug');
   for (const s of skills) {
@@ -120,7 +124,7 @@ test('each skill has numbered steps, says "Not recorded" for a missing figure, a
 });
 
 test('each skill has one golden case, naming the skill, its output and what the proposal must say', () => {
-  const cases = readdirSync(new URL('cases/', DIR)).filter((f) => f.endsWith('.json')).sort();
+  const cases = readdirSync(new URL('cases/', DIR)).filter((f) => f.endsWith('.json')).sort(compareMigrations);
   assert.deepEqual(cases, files.map((f) => f.replace(/\.md$/, '.json')), 'a skill without a case, or a case without a skill');
   for (const s of skills) {
     const c = JSON.parse(readFileSync(new URL(`cases/${s.front.name}.json`, DIR), 'utf8'));
@@ -132,7 +136,29 @@ test('each skill has one golden case, naming the skill, its output and what the 
     for (const k of ['must_say_not_recorded', 'must_not_include']) assert.ok(Array.isArray(c.expect[k]), `${s.file}: ${k}`);
     // The case's records come from reads the skill is given (catalogue read keys, by source).
     const sources = new Set(list(s.front.tools).map((t) => t.slice(0, -'.read'.length)));
-    for (const key of Object.keys(c.input.records)) assert.ok(sources.has(key.split('.')[0]), `${s.file}: the case feeds ${key}, which the skill does not read`);
+    for (const key of Object.keys(c.input.records)) {
+      assert.ok(READ_KEYS.includes(key as never), `${s.file}: the case feeds ${key}, which is no catalogue read`);
+      assert.ok(sources.has(key.split('.')[0]), `${s.file}: the case feeds ${key}, which the skill does not read`);
+    }
     assert.doesNotMatch(JSON.stringify(c), /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[a-z]{2,}/, `${s.file}: an email address in a case`);
   }
+});
+
+test('D4225: every area of the taxonomy has at least ten skills, by the area of its first tag', () => {
+  const areas = new Set(AREA_OF.values());
+  assert.equal(areas.size, 8, 'the eight areas of migration 090');
+  const count = new Map([...areas].map((a) => [a, 0]));
+  for (const s of skills) {
+    const first = Object.keys(map(s.front.taxonomy))[0];
+    const area = AREA_OF.get(first);
+    assert.ok(area, `${s.file}: its first tag has no area`);
+    count.set(area!, count.get(area!)! + 1);
+  }
+  for (const [a, n] of count) assert.ok(n >= 10, `${a}: only ${n} skills`);
+});
+
+test('D4225: the generated library module is current with these files', async () => {
+  const { render } = await import('../../scripts/build-skill-library.mjs');
+  const now = readFileSync(new URL('../src/services/agents/skillLibrary.generated.ts', import.meta.url), 'utf8');
+  assert.equal(now, render(), 'stale: run node scripts/build-skill-library.mjs');
 });

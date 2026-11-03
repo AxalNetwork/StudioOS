@@ -13,10 +13,13 @@
  * A lease that is never released expires after `LEASE_TTL_MS`, so a driver
  * that died holds nothing for long.
  *
- * Busy models: a 429, or Workers AI's 3040 ("capacity temporarily exceeded"),
- * backs off with jitter (`backoffMs`) and retries `MAX_BUSY_RETRIES` times;
- * then the step falls back within the same tier, the element's other
- * suggestions (D1503's `chain`), and the step records `fallback_used`.
+ * Busy models: a 429, a 503, or Workers AI's 3040 ("capacity temporarily
+ * exceeded"), backs off with jitter (`backoffMs`) and retries `MAX_BUSY_RETRIES`
+ * times; then the step falls back within the same tier, the element's other
+ * suggestions (D1503's `chain`), and the step records `fallback_used`. D1600
+ * (#3879): a step makes at most `MAX_AREA_RETRIES` automatic retries in all,
+ * counted across that fallback; then it fails (`area_failed`), and the founder
+ * retries the area through `POST …/retry-failed`.
  *
  * `Governor` is pure and in memory. The `AiGovernor` Durable Object
  * (`durable-objects/ai-governor.ts`) holds one per account; `governorFor`
@@ -32,6 +35,8 @@ export const BUCKET_CAPACITY = 20;
 export const BUCKET_REFILL_PER_S = 20 / 60;
 export const LEASE_TTL_MS = 120_000;
 export const MAX_BUSY_RETRIES = 2;
+/** D1600 (#3879): a step's automatic retries in all, across its same-tier fallback ("Busy, retrying", pd9n). */
+export const MAX_AREA_RETRIES = 3;
 export const BACKOFF_BASE_MS = 1_000;
 export const BACKOFF_MAX_MS = 20_000;
 
@@ -103,9 +108,9 @@ export function backoffMs(attempt: number, random: () => number = Math.random): 
   return Math.round(step / 2 + random() * (step / 2));
 }
 
-/** A model that said "busy": an HTTP 429, or Workers AI's 3040. */
+/** A model that said "busy": an HTTP 429 or 503 (D1600), or Workers AI's 3040. */
 export function isBusy(f: { status?: number | null; code?: number | null } | null | undefined): boolean {
-  return !!f && (f.status === 429 || f.code === 3040);
+  return !!f && (f.status === 429 || f.status === 503 || f.code === 3040);
 }
 
 export type GovernorClient = {

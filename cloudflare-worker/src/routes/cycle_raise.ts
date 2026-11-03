@@ -64,6 +64,8 @@
  *   PATCH /prospects/:id             the same fields
  *   PUT   /data-room/files/:id/checklist  { item | null }
  *   PUT   /prospects/:id/next-step   { next_step, next_step_due, warm_path }
+ *   GET   /prospects/:id/brief?project=&event=   D1585 (#3832): the meeting brief, no model run
+ *         → { prospect, meeting, last_met, timeline, deck, objections, basis } (`services/prospectBrief.ts`)
  *
  *   D840 part 2 (#2347): the founder's own Mercury feeds the modules.
  *   POST   /mercury/sync                  reads Mercury; writes facts and proposals → { counts }
@@ -177,6 +179,7 @@ import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activ
 import { projectInActiveCompany } from '../services/tenancyScope';
 import { HolderError } from '../services/capTableWrites';
 import { MatchQueryError, commitmentsRead, matchRead } from '../services/capRelReads';
+import { MATCH_DEPS, MatchRefused, matchRows } from '../services/ai/matchRows';
 import { CapRelTabError, DRAFT_OPTION, NOTE_OPTION, PROPOSAL_PAGE, acceptProposal, activityRead, draftMessage, materialsRead, proposalsRead, proposeFromNote, prospectRecord } from '../services/capRelTabs';
 import { recomputePmf, pmfHistory, pmfModelRead } from '../services/scoring/pmfStore';
 import { dataRoomOwner, roomSummary } from './data_room';
@@ -187,6 +190,7 @@ import {
   capitalSummary, capitalSupportDetails, capitalSupportHistory, recordCapitalSupport,
 } from '../services/capRelAccess';
 import useOfFunds from './cycle_use_of_funds';
+import { prospectBrief } from '../services/prospectBrief';
 import { RaiseEvidenceError, raiseEvidenceContext, readRaiseEvidence, acceptItem as acceptEvidenceItem, dismissItem as dismissEvidenceItem, setSharing as setEvidenceSharing, linkClaim as linkEvidenceClaim, previewEvidence, type RaiseEvidenceContext } from '../services/raiseEvidence';
 
 const cycleRaise = new Hono<{ Bindings: Env }>();
@@ -488,6 +492,39 @@ cycleRaise.get('/capital-relationships/match', async (c) => {
   } catch (e) {
     if (e instanceof MatchQueryError) return c.json({ detail: e.sentence, field: e.field }, 400);
     console.error('[cycle_raise] match unreadable:', (e as Error)?.name || 'error');
+    return c.json({ state: 'unreadable', detail: 'The fund directory could not be read. Try again.' }, 500);
+  }
+});
+
+// #3938 part 2 (D1478 task 4, job RA11): the member's press ranks the funds on the
+// current Match page: retrieve (bge-m3), rank (the reranker), then one line each on
+// why it fits (`services/ai/matchRows.ts`). Each step is a run on this page's rail,
+// charged to the member. A line the writer did not give is null; the page keeps
+// its own Fit and warm-path sentences beside it.
+cycleRaise.post('/capital-relationships/match/rank', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  if (capitalStaff(s.user)) return refuse(c, 403, { code: 'support_read_required', message: 'Give a reason for a read-only support view.' });
+  const b = await body(c);
+  const extra = typeof b.query === 'string' ? b.query.replace(/\s+/g, ' ').trim().slice(0, 300) : '';
+  try {
+    const read = await matchRead(c.env, { projectId: s.projectId, callerUserId: Number(s.user.id), get: (k) => c.req.query(k) });
+    const query = [extra, `Investors for a venture in ${read.sector ?? 'a sector not recorded yet'}`].filter(Boolean).join('. ');
+    const candidates = read.items.map((f: any) => ({
+      key: String(f.uid),
+      text: [f.name, f.sector_focus ? `Focus: ${f.sector_focus}` : 'Focus not recorded', f.fit?.label, f.location ? `Based in ${f.location}` : null].filter(Boolean).join('. '),
+    }));
+    const rail = railFor(c, { page: PROPOSAL_PAGE, option: null });
+    const deps = MATCH_DEPS.make(c.env, { userId: Number(s.user.id), surface: AI_SURFACE.raiseCapitalRelationships, rail, guardText: query }, 'RA11');
+    let res;
+    try { res = await matchRows(query, candidates, deps, { top: 10 }); } catch (e) {
+      if (e instanceof MatchRefused) return refuseRun(c, e.result)!;
+      throw e;
+    }
+    return c.json({ job: 'RA11', steps: res.steps, rows: res.rows.map((r) => ({ uid: r.key, position: r.position, line: r.line })) });
+  } catch (e) {
+    if (e instanceof MatchQueryError) return c.json({ detail: e.sentence, field: e.field }, 400);
+    console.error('[cycle_raise] match rank failed:', (e as Error)?.name || 'error');
     return c.json({ state: 'unreadable', detail: 'The fund directory could not be read. Try again.' }, 500);
   }
 });
@@ -1321,6 +1358,21 @@ cycleRaise.put('/prospects/:id/next-step', async (c) => {
       next_step: b.next_step, next_step_due: b.next_step_due, warm_path: b.warm_path,
     }));
   } catch (e) { return writeFailed(c, e); }
+});
+
+// D1585 (#3832, deck v2 F6): "Prep" on an investor meeting. Reads only; no model runs.
+cycleRaise.get('/prospects/:id/brief', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  const id = idParam(c.req.param('id'));
+  if (id == null) return c.json({ detail: 'Prospect not found' }, 404);
+  const ev = c.req.query('event');
+  const eventId = ev != null && ev !== '' ? idParam(ev) : null;
+  try {
+    const brief = await prospectBrief(c.env, s.projectId, id, { eventId });
+    if (!brief) return c.json({ detail: 'Prospect not found' }, 404);
+    return c.json(brief);
+  } catch (e) { return capitalFailure(c, e); }
 });
 
 // ---------------------------------------------------------------------------

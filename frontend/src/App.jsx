@@ -334,6 +334,8 @@ const HqPlatformTopologyPage = lazy(() => import('./pages/hq/PlatformTopologyPag
 // The owner's ruling (2026-10-20): the providers' keys and GitHub Sync, one
 // Super Admin page and its own HQ row, no longer Admin Console tabs.
 const HqIntegrationKeysPage = lazy(() => import('./pages/hq/IntegrationKeysPage'));
+// D4137 (#4137): HQ › AI agents, the control panel for the agent roster and the skills library.
+const HqAiAgentsPage = lazy(() => import('./pages/hq/aiAgents/HqAiAgentsPage'));
 const HqAnalyticsPage = lazy(() => import('./pages/hq/HqAnalyticsPage'));
 const HqSecurityPage = lazy(() => import('./pages/hq/SecurityPage'));
 const HqSupportPage = lazy(() => import('./pages/hq/HqSupportPage'));
@@ -875,6 +877,11 @@ function UserDropdown({ user, onLogout }) {
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
             Trust Center
           </Link>
+          {/* D4152 (#4152 §2): Billing leaves the sidebar's settings block for the Account menu. */}
+          <Link to="/account/billing" onClick={() => setOpen(false)}
+            className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
+            Billing
+          </Link>
           {/*
             THE ONLY ROLE-CONDITIONAL ENTRY IN THIS MENU, and the asymmetry is
             deliberate. Every other item above and below relies on its route
@@ -1200,6 +1207,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           <StripLink to="/admin/platform/product-testing">Product testing</StripLink>
           <StripLink to="/admin/platform/scoring">Scoring</StripLink>
           <StripLink to="/admin/platform/promo-codes">Promo codes</StripLink>
+          <StripLink to="/admin/platform/decks">Decks</StripLink>
           <StripLink to="/monitoring">Monitoring</StripLink>
           <StripLink to="/admin/telegram">Telegram</StripLink>
         </HqSubNavStrip>
@@ -3128,6 +3136,17 @@ function AppInner() {
           its second section (#github), is a Super Admin row of its own. The
           old Admin Console tab links (integration-keys, github) redirect here. */}
       <Route path="/admin/integration-keys" element={guard(['admin'], hqOnly(<HqIntegrationKeysPage />))} />
+      {/* D4137 (#4137): HQ › AI agents (SA0–SA9). Super Admin only; one page at each tab's address. */}
+      <Route path="/hq/ai-agents" element={guard(['admin'], hqOnly(<HqAiAgentsPage />))} />
+      <Route path="/hq/ai-agents/roster" element={guard(['admin'], hqOnly(<HqAiAgentsPage />))} />
+      <Route path="/hq/ai-agents/roster/:agent" element={guard(['admin'], hqOnly(<HqAiAgentsPage />))} />
+      <Route path="/hq/ai-agents/skills" element={guard(['admin'], hqOnly(<HqAiAgentsPage />))} />
+      <Route path="/hq/ai-agents/skills/companies" element={guard(['admin'], hqOnly(<HqAiAgentsPage />))} />
+      <Route path="/hq/ai-agents/skills/:skillUid/edit" element={guard(['admin'], hqOnly(<HqAiAgentsPage />))} />
+      <Route path="/hq/ai-agents/operations" element={guard(['admin'], hqOnly(<HqAiAgentsPage />))} />
+      <Route path="/hq/ai-agents/operations/spend" element={guard(['admin'], hqOnly(<HqAiAgentsPage />))} />
+      <Route path="/hq/ai-agents/operations/policies" element={guard(['admin'], hqOnly(<HqAiAgentsPage />))} />
+      <Route path="/hq/ai-agents/operations/audit" element={guard(['admin'], hqOnly(<HqAiAgentsPage />))} />
       <Route path="/admin/hq-support" element={guard(['admin'], hqOnly(<HqSupportPage />))} />
       <Route path="/hq/review" element={guard(['admin'], hqOnly(<ReviewQueuePage />))} />
       {/* D638 (#1384, #1412) — the one page for the reward rules and grants, Super Admin only.

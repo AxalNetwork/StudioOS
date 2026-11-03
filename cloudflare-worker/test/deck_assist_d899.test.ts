@@ -108,6 +108,7 @@ test('each press is one rail option on the Pitch deck page; Ask and the headline
   assert.deepEqual(ASSIST_OPTIONS, {
     rewrite: 'deck:rewrite', ask: 'deck:rewrite', headline: 'deck:rewrite', shorten: 'deck:shorten', expand: 'deck:expand',
     tone: 'deck:tone', translate: 'deck:translate', chart: 'deck:chart', table: 'deck:table', timeline: 'deck:timeline',
+    preflight_fix: 'deck:shorten',
   });
   assert.match(textMessage('tone', 'x', { tone: 'warm' }).user, /in a warm tone/);
   assert.match(textMessage('translate', 'x', { language: 'French' }).user, /into French/);
@@ -215,6 +216,8 @@ test('Ask: an instruction that states a figure is refused with its module and co
     assert.equal(ok.status, 200, JSON.stringify(ok.body));
     assert.equal(f.runs()[0].rail_option, 'deck:rewrite');
     assert.ok(f.calls.some((c) => /less like marketing/.test(c.prompt)));
+    // #4188: the instruction is kept on the proposal, so HQ's report queue reads what was asked.
+    assert.equal(JSON.parse(f.proposals()[0].payload_json).instruction, 'Make it sound less like marketing');
   } finally { f.close(); }
 });
 

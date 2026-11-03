@@ -48,7 +48,7 @@
  */
 import { teamAgentsApi } from '../../lib/api/teamAgents.js';
 import { FLOOR, RULEBOOK_SECTIONS, refusalWords } from './teamModel.js';
-import { skillRefusalWords } from './skillsModel.js';
+import { fromWorkerLibrary, fromWorkerSkillPage, skillRefusalWords } from './skillsModel.js';
 
 export const AGENTS_OFF_REASON = 'AI agents aren’t switched on yet.';
 
@@ -104,6 +104,8 @@ export async function through(call, sent = null) {
 
 /** `GET /api/teams/roles` → `{ roles: [{ key, name, mission, works_in: [{ key, label }], default_rules }] }`. No model list. */
 export const roles = () => through(() => teamAgentsApi.roles());
+/** D4119: `GET /api/teams/personas` (D4117) → `{ personas, values, areas }`, the 16 fixed personas for the gallery. */
+export const personas = () => through(() => teamAgentsApi.personas());
 /** `GET /api/teams/:scope/:id/agents?include=&module=` → `{ can_manage, plan_ok, agents }`. */
 export const listAgents = (scope, id, opts = {}) => through(() => teamAgentsApi.listAgents(scope, id, opts));
 /** `POST /api/teams/:scope/:id/agents` → 201 `{ agent }`. */
@@ -155,10 +157,15 @@ export async function throughSkill(call) {
 }
 
 // A1 #3951 — the library
-/** `GET /api/teams/:scope/:id/skills?role=&category=&q=&sort=` → `{ can_edit, figures, roles, skills }`. */
-export const skillLibrary = (/* scope, id, { role, category, q, sort } */) => off();
-/** `GET /api/teams/skills/:uid` → `{ skill (with steps, markdown, versions), can_edit }`. */
-export const skill = (/* uid */) => off();
+/** An answer's value through a pure shape, leaving every unavailable answer as it was. */
+const shaped = (out, fn) => (out.available ? { ...out, value: fn(out.value) } : out);
+/**
+ * `GET /api/teams/skills?company=<uid>` (wired by #4224) → `{ can_edit, figures, skills }`.
+ * Axal's skills, and the company's when `companyUid` is one the member belongs to.
+ */
+export const skillLibrary = async (companyUid) => shaped(await throughSkill(() => teamAgentsApi.skillLibrary(companyUid)), fromWorkerLibrary);
+/** `GET /api/teams/skills/:uid` (wired by #4224) → `{ skill (with steps, markdown, versions), can_edit }`. */
+export const skill = async (uid) => shaped(await throughSkill(() => teamAgentsApi.skill(uid)), fromWorkerSkillPage);
 /** `POST /api/teams/:scope/:id/skills` → 201 `{ skill }`, a draft. */
 export const createSkill = (/* scope, id, body */) => off();
 /** `PATCH /api/teams/skills/:uid` → `{ skill }`. */
@@ -183,3 +190,7 @@ export const assignable = (uid) => throughSkill(() => teamAgentsApi.assignable(u
 export const assignSkill = (uid, agentUids) => throughSkill(() => teamAgentsApi.assignSkill(uid, agentUids));
 /** `GET /api/teams/:scope/:id/coverage` → `{ axes: [{ slug, label, people_level, agent_level }] }`. */
 export const coverage = (scope, id) => throughSkill(() => teamAgentsApi.coverage(scope, id));
+/** D4121 (#4121): the agent's cost per run with `add` skills added and `remove` taken off; `{ available: false }` when pricing cannot be read. */
+export const costEstimate = (uid, change = {}) => throughSkill(() => teamAgentsApi.costEstimate(uid, change));
+/** D4121: the same for an agent not yet added (AG3, the Add-an-agent Skills step). */
+export const draftCostEstimate = (scope, id, draft) => throughSkill(() => teamAgentsApi.draftCostEstimate(scope, id, draft));

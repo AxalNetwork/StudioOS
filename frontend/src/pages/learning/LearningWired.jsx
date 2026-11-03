@@ -7,8 +7,8 @@ import LessonPlayer from './LessonPlayer';
 import MyLearning from './MyLearning';
 import { LearningEmpty, LearningHeader, NotLiveYet, SectionCard } from './LearningStates';
 import { AssessmentLesson } from './LearningAssessments';
-import { findLesson, lessonHref, videoPlayback } from './learningModel';
-import { markItemComplete, markLessonComplete, readCourse, readItem, readMe } from './learningReads';
+import { findLesson, lessonHref, resumeAt, videoPlayback } from './learningModel';
+import { markItemComplete, markLessonComplete, readCourse, readItem, readItemCaption, readMe, readMyAttempts, readMySubmissions, recordItemPosition } from './learningReads';
 import useLearningRead from './useLearningRead';
 
 /**
@@ -135,6 +135,9 @@ export function LessonView({ courseState, itemState, lessonUid, onMark, marking,
         prev={step(found.prev)}
         next={step(found.next)}
         completed={found.lesson.progress?.status === 'completed'}
+        resumeFrom={resumeAt(itemState.progress?.position_seconds, item.duration_seconds)}
+        onPosition={(s, p) => recordItemPosition(item.uid, s, p)}
+        loadCaption={(language) => readItemCaption(item.uid, language)}
         onMarkComplete={onMark}
         marking={marking}
         markError={markError}
@@ -219,6 +222,9 @@ export function ItemView({ state, onRetry, onMark, marking, markError }) {
       video={videoPlayback(item)}
       transcript={item?.transcript ?? null}
       completed={state.progress?.status === 'completed'}
+      resumeFrom={item ? resumeAt(state.progress?.position_seconds, item.duration_seconds) : null}
+      onPosition={item ? (s, p) => recordItemPosition(item.uid, s, p) : null}
+      loadCaption={item ? (language) => readItemCaption(item.uid, language) : null}
       onMarkComplete={item ? onMark : undefined}
       marking={marking}
       markError={markError}
@@ -261,8 +267,13 @@ export function ItemPage({ uid }) {
 
 // ── /learning/me ──────────────────────────────────────────────────────────
 
-/** My learning from `GET /api/learning/me`; no route lists exercises or exams across them (`UNLISTED`). */
-export function MeView({ state, onRetry }) {
+/**
+ * My learning from `GET /api/learning/me`, with your exercises and exam
+ * results from #4180's `/me/submissions` and `/me/attempts`. Each read has its
+ * own state, so one failure never blanks the others.
+ */
+export function MeView({ state, onRetry, submissions = { status: 'unrecorded' }, attempts = { status: 'unrecorded' } }) {
+  const part = (s) => ({ status: statusOf(s), data: s.status === 'ready' ? s.rows : null, onRetry: s.onRetry });
   return (
     <MyLearning
       progress={{
@@ -270,12 +281,16 @@ export function MeView({ state, onRetry }) {
         data: state.status === 'ready' ? { in_progress: state.in_progress, completed: state.completed } : null,
         onRetry,
       }}
+      exercises={part(submissions)}
+      exams={part(attempts)}
     />
   );
 }
 
 export function MePage({ sub }) {
   const [state, retry] = useLearningRead(readMe, [], { scope: 'me' });
+  const [submissions, retrySubmissions] = useLearningRead(readMySubmissions, [], { scope: 'me-submissions' });
+  const [attempts, retryAttempts] = useLearningRead(readMyAttempts, [], { scope: 'me-attempts' });
   const coverage = state.status === 'ready'
     ? [`${state.in_progress.length} started and ${state.completed.length} completed`]
     : [];
@@ -283,7 +298,7 @@ export function MePage({ sub }) {
     <RailFrame rail={<LearnerRail coverage={coverage} />} data-testid="learning-me">
       <div className="space-y-4">
         <LearningHeader title="My learning" sub={sub} back={LEARNING} />
-        <MeView state={state} onRetry={retry} />
+        <MeView state={state} onRetry={retry} submissions={{ ...submissions, onRetry: retrySubmissions }} attempts={{ ...attempts, onRetry: retryAttempts }} />
       </div>
     </RailFrame>
   );

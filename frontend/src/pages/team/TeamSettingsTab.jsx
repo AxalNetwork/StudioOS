@@ -3,7 +3,7 @@ import { Lock } from 'lucide-react';
 import { Unrecorded } from '../../ui';
 import { AgentIdentity } from './AgentMark.jsx';
 import { BTN_TEXT, HeadRow, HonestBlock, MUTED, PendingOwner, TeamCard } from './teamUi.jsx';
-import { WHO_PAYS, agentName, money, whoMayAddAgents } from './teamModel.js';
+import { WHO_PAYS, agentName, money, whoMayAddAgents, agentLine } from './teamModel.js';
 
 /**
  * D1497 (#3727, TM8a, TM9a5) — the Team's Settings tab.
@@ -44,7 +44,7 @@ export default function TeamSettingsTab({ scope, agentsBlock, canManage, onEditC
               <HeadRow grid="md:grid-cols-[minmax(0,1.6fr)_110px_minmax(0,1.4fr)_minmax(0,1fr)_80px]" cols={['Agent', 'Monthly cap', 'This month', 'Sponsor']} />
               {list.map((a) => (
                 <div key={a.uid} role="row" className="grid grid-cols-1 items-center gap-3 border-b border-axal-hairline py-2.5 last:border-b-0 md:grid-cols-[minmax(0,1.6fr)_110px_minmax(0,1.4fr)_minmax(0,1fr)_80px] dark:border-gray-800">
-                  <span role="cell"><AgentIdentity name={agentName(a)} role={a.role_name} size={28} /></span>
+                  <span role="cell"><AgentIdentity name={agentName(a)} role={agentLine(a)} size={28} /></span>
                   <span role="cell" className="font-mono text-[12.5px] text-axal-ink dark:text-gray-200">{money(a.monthly_cap_microusd, { whole: true }) || <Unrecorded />}</span>
                   <span role="cell" className="font-mono text-[12.5px] text-axal-ink dark:text-gray-200">
                     {a.month_spend?.available ? `${money(a.month_spend.value_microusd)}${a.status === 'paused' && a.paused_reason === 'cap' ? ' · paused at its cap' : ''}` : <Unrecorded />}
@@ -68,7 +68,7 @@ export default function TeamSettingsTab({ scope, agentsBlock, canManage, onEditC
             <ul className="m-0 flex list-none flex-col p-0">
               {list.map((a) => (
                 <li key={a.uid} className="grid grid-cols-1 items-center gap-2 border-b border-axal-hairline py-2 last:border-b-0 md:grid-cols-[minmax(0,1.4fr)_minmax(0,2fr)_auto] dark:border-gray-800">
-                  <AgentIdentity name={agentName(a)} role={a.role_name} size={24} />
+                  <AgentIdentity name={agentName(a)} role={agentLine(a)} size={24} />
                   <span className="text-[13px] text-axal-ink dark:text-gray-200">{a.reads_line || <Unrecorded />}</span>
                   {a.role_key ? <button type="button" className={BTN_TEXT} onClick={() => onOpenRulebook?.(a)} data-testid={`team-settings-rulebook-${a.uid}`}>Open rule book</button> : null}
                 </li>

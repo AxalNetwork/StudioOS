@@ -6,14 +6,15 @@ import { AccountPhonePage, phonePending } from '../account/AccountPhonePage';
 import { ACCOUNT_PHONE_PAGES } from '../account/accountPhone';
 import { COMING_SOON_LINE } from './learningAccess';
 import {
-  ALL_LIMIT, ARTICLES_PAGE_SIZE, EVENTS_PAGE_SIZE, LEARNING_TABS, TAB_KIND, TAB_NOT_LIVE,
+  ALL_LIMIT, ARTICLES_PAGE_SIZE, EVENTS_PAGE_SIZE, LEARNING_TABS, RECOMMENDED_FUTURE, SUBMISSION_STATUS, TAB_KIND,
+  newThisWeek,
   durationLabel, formatDay, formatWhen, kindLabel, matchesQuery, minutesLabel, rangeLabel, resolveTab, sourceStates, tabMode, webinarPhase,
 } from './learningModel';
-import { readArticles, readCatalog, readEvents, readMe, readPublications } from './learningReads';
+import { readArticles, readCatalog, readEvents, readExams, readExercises, readItemPreview, readMe, readMyStats, readPublications } from './learningReads';
 import { readWebinars } from './webinarReads';
 import {
   ComingSoonCard, LearningEmpty, LearningLoading, LearningUnreadable, NotLiveYet,
-  RouteUnreadable, SectionCard,
+  RouteUnreadable, SectionCard, stateBlock,
 } from './LearningStates';
 import { MyProgramsSection, OpenPrograms, useMyPrograms } from './MyPrograms';
 import { UpcomingWebinarsList, WebinarsTabPanel, useNow } from './LearningWebinars';
@@ -38,6 +39,42 @@ const ROW_TITLE = 'text-[14px] font-semibold text-axal-ink hover:text-axal-viole
 const ROW_META = 'mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px] text-axal-muted dark:text-gray-400';
 const PAGER = 'inline-flex items-center gap-1 rounded-axal-sm border border-axal-hairline px-2.5 py-1 text-[12px] font-medium text-axal-ink hover:border-axal-violet/40 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:text-gray-200';
 const isLoading = (state) => state.status === 'loading' || state.status === 'idle';
+
+/**
+ * lr7: a video card's hover preview. A pointer that rests on the card for
+ * 400 ms reads the item once (`readItemPreview`) and, when Stream has a ready
+ * preview, shows it above the card's text; nothing is drawn otherwise, and a
+ * touch never triggers it. The preview is decoration: it is hidden from
+ * assistive technology and says nothing the card does not.
+ */
+export function HoverPreview({ uid, read = readItemPreview, delay = 400 }) {
+  const [url, setUrl] = useState(null);
+  const [shown, setShown] = useState(false);
+  const timer = React.useRef(null);
+  const host = React.useRef(null);
+  useEffect(() => {
+    const card = host.current?.parentElement;
+    if (!card) return undefined;
+    let live = true;
+    const enter = (e) => {
+      if (e.pointerType === 'touch') return;
+      clearTimeout(timer.current);
+      timer.current = setTimeout(async () => {
+        const u = await read(uid);
+        if (live && u) { setUrl(u); setShown(true); }
+      }, delay);
+    };
+    const leave = () => { clearTimeout(timer.current); setShown(false); };
+    card.addEventListener('pointerenter', enter);
+    card.addEventListener('pointerleave', leave);
+    return () => { live = false; clearTimeout(timer.current); card.removeEventListener('pointerenter', enter); card.removeEventListener('pointerleave', leave); };
+  }, [uid, read, delay]);
+  return (
+    <span ref={host} aria-hidden="true" className={shown && url ? 'block overflow-hidden rounded-axal-sm bg-black' : 'hidden'} data-testid="catalog-row-preview">
+      {shown && url ? <img src={url} alt="" className="aspect-video w-full object-cover" data-testid="img-catalog-preview" /> : null}
+    </span>
+  );
+}
 
 function RowTitle({ href, children, testid }) {
   return href
@@ -241,12 +278,14 @@ export function CatalogList({ state, kind = null, q = '', onPage, onRetry }) {
             {rows.map((row) => {
               const inner = (
                 <>
+                  {row.kind === 'video' && row.uid ? <HoverPreview uid={row.uid} /> : null}
                   <span className="flex flex-wrap gap-1.5">
                     <Pill tone="info">{kindLabel(row.kind)}</Pill>
                     {row.draft && <Pill tone="warn">{row.draft}</Pill>}
                   </span>
                   <span className="line-clamp-2 text-[13.5px] font-semibold text-axal-ink dark:text-gray-100">{row.title}</span>
                   <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{catalogMeta(row) || <Unrecorded>Not recorded</Unrecorded>}</span>
+                  {row.found ? <span className="line-clamp-2 text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="catalog-row-found">{row.found}</span> : null}
                 </>
               );
               return row.href
@@ -266,6 +305,71 @@ export function CatalogList({ state, kind = null, q = '', onPage, onRetry }) {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * D3726 (#3726) LR1 — "Your progress": the four figures of #4180's
+ * `GET /api/learning/me/stats` (`statsTiles`). A figure the route does not
+ * record reads "Not recorded", never 0; a failed read says so and is never
+ * a row of zeros.
+ */
+export function ProgressStrip({ state = IDLE, onRetry }) {
+  if (isLoading(state)) return <LearningLoading rows={1} what="your progress figures" />;
+  if (state.status !== 'ready') {
+    return <LearningUnreadable what="Your progress figures" claim="This is not a claim that they are zero." onRetry={onRetry} />;
+  }
+  return (
+    <div data-testid="section-progress">
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        {(state.tiles || []).map((t) => (
+          <Card key={t.key} padding="sm" className="flex flex-col gap-0.5" data-testid="progress-figure">
+            <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{t.label}</span>
+            <span className="text-[13px] font-bold">{t.value === 'Not recorded' ? <Unrecorded reason="Not recorded for this month yet.">Not recorded</Unrecorded> : t.value}</span>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * D3726 LR1 — "New this week": courses, videos and readings dated in the last
+ * seven days, newest first, from the catalog the All tab reads. A failed read
+ * is Unreadable, never an empty week.
+ */
+export function NewThisWeek({ state, now = Date.now(), onRetry }) {
+  let body;
+  if (isLoading(state)) body = <LearningLoading rows={2} what="what is new" />;
+  else if (state.status !== 'ready') body = <LearningUnreadable what="What is new this week" claim="This is not a claim that nothing is new." onRetry={onRetry} />;
+  else {
+    const rows = newThisWeek(state.rows, now);
+    body = rows.length === 0 ? (
+      <LearningEmpty title="Nothing new this week" body="Courses, videos and readings HQ publishes appear here in their first week." />
+    ) : (
+      <ul className="divide-y divide-axal-hairline dark:divide-gray-800" data-testid="list-new-this-week">
+        {rows.map((row) => (
+          <li key={row.key} className="flex flex-wrap items-center justify-between gap-2 py-2 first:pt-0" data-testid={`new-row-${row.kind}`}>
+            <span className="flex min-w-0 items-center gap-2">
+              <Pill tone="info">{kindLabel(row.kind)}</Pill>
+              <RowTitle href={row.href}>{row.title}</RowTitle>
+            </span>
+            <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{catalogMeta(row) || <Unrecorded>Length not recorded</Unrecorded>}</span>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  return <SectionCard title="New this week" meta="Newest first" testid="section-new-this-week">{body}</SectionCard>;
+}
+
+/** D3726 LR1 — "Recommended for you": a dashed future block, with no rows (#3724). */
+export function RecommendedFuture() {
+  return (
+    <div className="rounded-axal border border-dashed border-axal-hairline px-4 py-3 dark:border-gray-700" data-testid="section-recommended">
+      <p className="text-[13px] font-semibold text-axal-ink dark:text-gray-100">Recommended for you <span className="ml-1 rounded-full bg-axal-ground px-2 py-0.5 text-[11px] font-semibold text-axal-muted dark:bg-gray-800 dark:text-gray-400">Future</span></p>
+      <p className="mt-0.5 text-[12px] text-axal-muted dark:text-gray-400">{RECOMMENDED_FUTURE}</p>
     </div>
   );
 }
@@ -365,9 +469,57 @@ function AdminLinks({ links }) {
 }
 
 /** The catalogue card: the tab bar, the search and the open tab's list. */
+/**
+ * #4180 (lr2a, lr2b): the Exercises and Exams tabs, from their own list
+ * routes. A failed read says so; an exam whose best score is not recorded says
+ * "Score not recorded", never 0%.
+ */
+export function AssessmentList({ state = IDLE, kind, onPage, onRetry }) {
+  const what = kind === 'exam' ? 'the exams' : 'the exercises';
+  const rows = state.status === 'ready' ? state.rows || [] : [];
+  const block = stateBlock({
+    status: state.status, what, onRetry, claim: `This is not a claim that there are no ${kind}s.`, isEmpty: rows.length === 0,
+    empty: { title: kind === 'exam' ? 'No exams published yet' : 'No exercises published yet', body: 'They appear here when HQ publishes them.' },
+  });
+  if (block) return <div data-testid={`${kind}-list`}>{block}</div>;
+  const range = rangeLabel(state.offset || 0, rows.length, state.total);
+  return (
+    <div className="space-y-3" data-testid={`${kind}-list`}>
+      <ul className="m-0 list-none divide-y divide-axal-hairline p-0 dark:divide-gray-800">
+        {rows.map((row) => (
+          <li key={row.key} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5" data-testid={`${kind}-row`}>
+            <RowTitle href={row.href} testid={`${kind}-row-title`}>{row.title}</RowTitle>
+            <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{row.where || <Unrecorded>Not in a course or programme</Unrecorded>}</span>
+            {kind === 'exercise' ? (
+              <span className="ml-auto inline-flex items-center gap-2 text-[11.5px] text-axal-muted dark:text-gray-400">
+                {row.status ? <Pill tone={SUBMISSION_STATUS[row.status].tone}>{SUBMISSION_STATUS[row.status].label}</Pill> : <Pill tone="neutral">Not started</Pill>}
+                <span className="tabular-nums">{formatDay(row.updated) || 'date not recorded'}</span>
+              </span>
+            ) : (
+              <span className="ml-auto inline-flex flex-wrap items-center gap-2 text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="exam-row-meta">
+                <span className="tabular-nums">{row.questions == null ? 'Questions not recorded' : `${row.questions} question${row.questions === 1 ? '' : 's'}`}</span>
+                <span>· {row.limit}</span>
+                {row.passMark ? <span>· {row.passMark}</span> : null}
+                <span>· {row.attemptsLeft}</span>
+                <span>· {row.best ? `Your best ${row.best}` : <Unrecorded>Score not recorded</Unrecorded>}</span>
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+      {range ? (
+        <div className="flex items-center justify-between gap-2 text-[11.5px] text-axal-muted dark:text-gray-400">
+          <span className="tabular-nums">{range}</span>
+          <Pager prevDisabled={!state.offset} nextDisabled={state.total == null || (state.offset || 0) + rows.length >= state.total} onPage={onPage} testid={`${kind}-pager`} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function LearningCatalogue({
   gated, tab, onTab, query, onQuery, q, catalog, articles, publications, events, upcoming, past, now,
-  onCatalogPage, onArticlesPage, onRetry,
+  onCatalogPage, onArticlesPage, onRetry, exercises = IDLE, exams = IDLE, onAssessmentPage = () => {},
 }) {
   const mode = tabMode(tab, gated);
   return (
@@ -392,7 +544,7 @@ function LearningCatalogue({
       )}
       <div id="learning-panel" role="tabpanel" aria-labelledby={`learning-tab-${tab}`} className="p-4" data-testid={`panel-${tab}`} data-mode={mode}>
         {mode === 'coming_soon' && <ComingSoonCard />}
-        {mode === 'not_live' && <NotLiveYet line={TAB_NOT_LIVE[tab]} />}
+        {mode === 'not_live' && <NotLiveYet />}
         {mode === 'live' && tab === 'all' && <CatalogList state={catalog} q={q} onRetry={onRetry.catalog} />}
         {mode === 'live' && TAB_KIND[tab] && <CatalogList state={catalog} kind={TAB_KIND[tab]} q={q} onPage={onCatalogPage} onRetry={onRetry.catalog} />}
         {mode === 'live' && tab === 'webinars' && (
@@ -401,6 +553,8 @@ function LearningCatalogue({
         {mode === 'live' && tab === 'articles' && <ArticleList state={articles} q={q} onPage={onArticlesPage} onRetry={onRetry.article} />}
         {mode === 'live' && tab === 'publications' && <PublicationList state={publications} q={q} onRetry={onRetry.publication} />}
         {mode === 'live' && tab === 'events' && <EventList state={events} q={q} onRetry={onRetry.event} />}
+        {mode === 'live' && tab === 'exercises' && <AssessmentList state={exercises} kind="exercise" onPage={onAssessmentPage} onRetry={onRetry.exercises} />}
+        {mode === 'live' && tab === 'exams' && <AssessmentList state={exams} kind="exam" onPage={onAssessmentPage} onRetry={onRetry.exams} />}
       </div>
     </Card>
   );
@@ -441,8 +595,9 @@ export function LearningHero({ phoneBar = null }) {
 export function LearningHomeView({
   gated, tab, onTab = () => {}, query = '', onQuery = () => {}, q = '',
   catalog = IDLE, articles = IDLE, publications = IDLE, events = IDLE, me = IDLE,
-  upcoming = IDLE, past = IDLE, programs = PROGRAMS_IDLE, now = Date.now(),
+  upcoming = IDLE, past = IDLE, programs = PROGRAMS_IDLE, now = Date.now(), fresh = IDLE, stats = IDLE,
   onCatalogPage = () => {}, onArticlesPage = () => {}, onRetry = {}, links = [],
+  exercises = IDLE, exams = IDLE, onAssessmentPage = () => {},
 }) {
   return (
     <>
@@ -452,15 +607,21 @@ export function LearningHomeView({
         {gated ? (
           <ComingSoonCard articlesLink={false} testid="learning-coming-soon-sections" />
         ) : (
-          <div className="grid gap-4 lg:grid-cols-2">
-            <SectionCard title="Continue learning" testid="section-continue"><ContinueLearning state={me} onRetry={onRetry.me} /></SectionCard>
-            <MyProgramsSection {...programs} />
-          </div>
+          <>
+            <ProgressStrip state={stats} onRetry={onRetry.stats} />
+            <div className="grid gap-4 lg:grid-cols-2">
+              <SectionCard title="Continue learning" testid="section-continue"><ContinueLearning state={me} onRetry={onRetry.me} /></SectionCard>
+              <MyProgramsSection {...programs} />
+            </div>
+            <NewThisWeek state={fresh} now={now} onRetry={onRetry.fresh} />
+            <RecommendedFuture />
+          </>
         )}
         <LearningCatalogue
           gated={gated} tab={tab} onTab={onTab} query={query} onQuery={onQuery} q={q}
           catalog={catalog} articles={articles} publications={publications} events={events}
           upcoming={upcoming} past={past} now={now} onCatalogPage={onCatalogPage} onArticlesPage={onArticlesPage} onRetry={onRetry}
+          exercises={exercises} exams={exams} onAssessmentPage={onAssessmentPage}
         />
         {!gated && (
           <SectionCard title="Upcoming webinars" testid="section-webinars">
@@ -491,7 +652,7 @@ export function browseGroup({ gated }) {
     rows: BROWSE.map((b) => ({
       key: b.tab,
       title: b.title,
-      description: b.tab === 'exercises' ? TAB_NOT_LIVE.exercises : '',
+      description: b.tab === 'exercises' ? 'Your exercises and exams, with your status and best score.' : '',
       pill: gated && b.tab !== 'articles' ? { label: 'Coming soon', tone: 'neutral' } : null,
       to: `/learning?tab=${b.tab}`,
       chevron: true,
@@ -621,20 +782,32 @@ export default function LearningHome({ gated, links = [] }) {
   const [upcoming, retryUpcoming] = useLearningRead(() => readWebinars('upcoming'), [], { enabled: !gated, scope: 'webinars-upcoming' });
   const [past, retryPast] = useLearningRead(() => readWebinars('past'), [],
     { enabled: live && tab === 'webinars', scope: 'webinars-past' });
+  // #4180: the Exercises and Exams tabs read their own lists, a page at a time.
+  const [assessmentOffset, setAssessmentOffset] = useState(0);
+  const [exercises, retryExercises] = useLearningRead(() => readExercises({ offset: assessmentOffset }), [assessmentOffset],
+    { enabled: live && tab === 'exercises', scope: 'exercises' });
+  const [exams, retryExams] = useLearningRead(() => readExams({ offset: assessmentOffset }), [assessmentOffset],
+    { enabled: live && tab === 'exams', scope: 'exams' });
+  const onAssessmentPage = (step) => setAssessmentOffset((o) => Math.max(0, o + step * ALL_LIMIT));
   const programs = useMyPrograms(!gated);
   const now = useNow(60 * 1000);
+  // D3726 LR1: New this week reads the catalog's newest rows across every kind.
+  const [fresh, retryFresh] = useLearningRead(() => readCatalog({}), [], { enabled: !gated, scope: 'catalog-new' });
+  // D3726 LR1: Your progress, from #4180's stats read.
+  const [stats, retryStats] = useLearningRead(readMyStats, [], { enabled: !gated, scope: 'me-stats' });
 
   // A new tab starts from its first page.
   const onTab = useCallback((key) => {
     setPage(0);
     setCatalogOffset(0);
+    setAssessmentOffset(0);
     setParams((old) => { const next = new URLSearchParams(old); next.set('tab', key); return next; }, { replace: true });
   }, [setParams]);
   const onCatalogPage = (step) => setCatalogOffset((o) => Math.max(0, o + step * ALL_LIMIT));
   const onArticlesPage = (step) => setPage((p) => Math.max(0, p + step));
   const onRetry = {
     catalog: retryCatalog, article: retryArticles, publication: retryPublications, event: retryEvents, me: retryMe,
-    upcoming: retryUpcoming, past: retryPast,
+    upcoming: retryUpcoming, past: retryPast, exercises: retryExercises, exams: retryExams, fresh: retryFresh, stats: retryStats,
   };
   // The Learning home has no AI rail; the shared frame keeps its body layout.
   const phone = usePhoneWidth();
@@ -649,6 +822,7 @@ export default function LearningHome({ gated, links = [] }) {
             gated={gated} tab={tab} onTab={onTab} query={query} onQuery={setQuery} q={q}
             catalog={catalog} articles={articles} publications={publications} events={events}
             upcoming={upcoming} past={past} now={now} onCatalogPage={onCatalogPage} onArticlesPage={onArticlesPage} onRetry={onRetry}
+            exercises={exercises} exams={exams} onAssessmentPage={onAssessmentPage}
           />
         </LearningPhoneView>
       ) : (
@@ -669,10 +843,15 @@ export default function LearningHome({ gated, links = [] }) {
             past={past}
             programs={programs}
             now={now}
+            fresh={fresh}
+            stats={stats}
             onCatalogPage={onCatalogPage}
             onArticlesPage={onArticlesPage}
             onRetry={onRetry}
             links={links}
+            exercises={exercises}
+            exams={exams}
+            onAssessmentPage={onAssessmentPage}
           />
         </div>
       )}

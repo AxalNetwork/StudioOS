@@ -37,6 +37,8 @@ import StudioItemEditor, {
 import { VideoUnreadable } from '../src/pages/learning/LessonPlayer.jsx';
 import { ItemView, LessonView } from '../src/pages/learning/LearningWired.jsx';
 
+// #4177: a stored video's editor reads Stream first; with Stream off (503 stream_unavailable) it draws D561's R2 field.
+const STREAM_OFF = { status: 'unavailable', message: 'Video on Stream is not switched on yet.' };
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (p) => readFileSync(resolve(ROOT, p), 'utf8');
 const html = (el) => renderToStaticMarkup(h(MemoryRouter, { initialEntries: ['/learning'] }, el));
@@ -413,14 +415,14 @@ test('the field: what the item plays, the limits, progress by part, attaching, c
 });
 
 test('the editor with an uploaded file: a saved link replaces it, an empty link leaves it, and a video with neither is refused in the route\'s words', async () => {
-  const markup = html(h(StudioItemEditor, { item: STORED, kind: 'video', onSave: () => {}, onStatus: () => {} }));
+  const markup = html(h(StudioItemEditor, { item: STORED, kind: 'video', onSave: () => {}, onStatus: () => {}, initialStream: STREAM_OFF }));
   assert.match(flat(markup), /Video file Uploaded file This video plays its uploaded file\./);
   assert.match(flat(markup), /Or paste a link https, from YouTube, Vimeo or Cloudflare Stream\. Saving a link replaces the uploaded file\./);
   assert.match(tagOf(markup, 'input-item-video-url'), /value=""/);
   assert.doesNotMatch(tagOf(markup, 'input-item-upload'), /disabled=""/, 'a stored video takes a file');
   // The file is offered before the link, as the canvas's Source row is.
   assert.ok(markup.indexOf('data-testid="input-item-upload"') < markup.indexOf('data-testid="input-item-video-url"'));
-  const linked = flat(html(h(StudioItemEditor, { item: LINKED, kind: 'video', onSave: () => {}, onStatus: () => {} })));
+  const linked = flat(html(h(StudioItemEditor, { item: LINKED, kind: 'video', onSave: () => {}, onStatus: () => {}, initialStream: STREAM_OFF })));
   assert.match(linked, /Link This video plays its link\. Uploading a file replaces the link\./);
   assert.doesNotMatch(linked, /Saving a link replaces the uploaded file/);
   // What a save sends for it, and the route's two rules that make that safe.
@@ -434,7 +436,7 @@ test('the editor with an uploaded file: a saved link replaces it, an empty link 
   let err;
   await withFetch([{ status: 409, body: refusal('no_video', noVideo) }], async () => { err = await setItemStatus('v-new', 'publish').catch((e) => e); });
   assert.deepEqual([err.message, err.code, err.status], [noVideo, 'no_video', 409]);
-  const bare = html(h(StudioItemEditor, { item: { ...LINKED, video_source: null, video_url: null }, kind: 'video', onSave: () => {}, onStatus: () => {}, error: err.message }));
+  const bare = html(h(StudioItemEditor, { item: { ...LINKED, video_source: null, video_url: null }, kind: 'video', onSave: () => {}, onStatus: () => {}, initialStream: STREAM_OFF, error: err.message }));
   assert.match(flat(bare), /No video yet Upload a file or save a link: a video with neither cannot be published\./);
   assert.match(tagOf(bare, 'studio-error'), /role="alert"/);
   assert.ok(flat(bare).includes(noVideo));
@@ -461,7 +463,8 @@ test('playback: an uploaded file plays in the browser\'s own player from its str
   assert.match(video, /preload="metadata"/);
   assert.match(video, /aria-label="Cap tables in ten minutes, 10 min"/);
   assert.doesNotMatch(view, /<iframe|lesson-video-absent/);
-  assert.match(flat(view), /Transcript A cap table lists who owns what\./);
+  // D3726 LR4b: the stored transcript has no caption cues, and the card says so above it.
+  assert.match(flat(view), /Transcript No caption cues, so the plain transcript is shown\. A cap table lists who owns what\./);
   // A lesson whose item is the upload plays the same way.
   const course = {
     status: 'ready',

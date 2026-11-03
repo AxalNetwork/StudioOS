@@ -153,14 +153,54 @@ function tooLongMessage(job: UseJob, named: string | null): string {
 
 /**
  * The text jobs a route task runs, when its caller names none. Each maps a
- * task whose route the plan already sets to its job, so the job's ladder and
- * receipt apply without changing the model it runs first. `tool_call` (ST3)
- * keeps its route's chain for now: the router's own fallback tests use it as
- * their sample task, and ST3's ladder would change that chain.
+ * task to the job its callers serve, so the job's ladder and receipt apply.
+ * A rail press on a page the matrix lists keeps that page's row (D764): the
+ * router applies a task's job only when no page row decides, so Research's
+ * drafts, Readiness and Use of funds (all `workspace_explain`) run their pages'
+ * rows, and a caller that names `RunOptions.textJob` still gets its job.
+ *
+ * Part 3 (#3937): most rows keep the model the task ran first (the job's
+ * Default is the route's model). `TASK_MODEL_MOVES` names the rows whose
+ * Default is another model the platform already runs; none wires a new one.
  */
 export const TASK_TEXT_JOBS: Readonly<Record<string, string>> = Object.freeze({
   paraphrase: 'MI1', // snippets de-identified (fix 5)
   system_job: 'IN5', // valuation and equity queue jobs (fix 14)
   system_legal: 'IN6', // LPA drafting (fix 14)
   ops_summary: 'AD3', // the monitoring summary: the one system job on the 8B
+  // Part 3: the remaining single-purpose text tasks.
+  tool_call: 'ST3', // Studio interview, Send: tool calls (glm-4.7-flash, fix 1)
+  workspace_explain: 'ST2', // "Read this page back" on every workspace and Research
+  advisor_explain: 'ST4', // the Personal Advisor's "Explain this question"
+  onboarding_chat: 'ON1', // an onboarding chat turn
+  structure_interview: 'VA5', // structure, summarise and extract items
+  summarise_interview: 'VA5',
+  extract_conversation_items: 'VA5',
+  validate_tag_pains: 'VA11', // problem discovery: tag phrases
+  validate_draft_hypotheses: 'VA15', // experiments: draft a hypothesis
+  market_sizing_inputs: 'VA13', // market sizing
+  competitor_scan: 'VA13', // competitor scan
+  memo_write: 'IN1', // the IC memo (`derive:memo`)
+  dd_synthesis: 'DK8', // map a deck's text to sections; review the deck or a version
+  publication: 'AD1', // a publication summary
+  brand_autofill: 'GR2', // landing auto-fill, palette and taglines
+  brand_palette: 'GR2',
+  brand_taglines: 'GR2',
+  grow_theme_feedback: 'GR1', // feedback themes
+  mail_draft: 'EM1', // a draft from ticked records
+});
+
+/**
+ * The tasks whose job's Default is not the model the route ran first. Every
+ * model here already runs elsewhere, so none is newly wired; each moves the
+ * task's first model to the plan's Default. A test holds this list equal to
+ * the table, so a row that silently changes a member's model is red.
+ */
+export const TASK_MODEL_MOVES: Readonly<Record<string, { from: string; to: string }>> = Object.freeze({
+  advisor_explain: { from: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', to: '@cf/zai-org/glm-4.7-flash' },
+  onboarding_chat: { from: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', to: '@cf/zai-org/glm-4.7-flash' },
+  validate_draft_hypotheses: { from: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', to: '@cf/openai/gpt-oss-120b' },
+  market_sizing_inputs: { from: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', to: '@cf/openai/gpt-oss-120b' },
+  competitor_scan: { from: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', to: '@cf/openai/gpt-oss-120b' },
+  dd_synthesis: { from: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', to: '@cf/openai/gpt-oss-120b' },
 });

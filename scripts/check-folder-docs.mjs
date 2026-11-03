@@ -69,6 +69,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages',              'one file per route; the biggest folder in the repo'],
   ['frontend/src/components',         'shared presentational pieces'],
   ['frontend/src/ui',                 'the design-system primitives everything else composes'],
+  ['frontend/src/pages/work',         'Work and company compliance (D1614): the board, backlog, burn-up, run sheet, activity feed and Workload, and the one adapter seam'],
   ['frontend/src/pages/hq',           'the Super Admin tier — one page per HQ sidebar row, and which canvas each draws'],
   ['frontend/src/pages/branch',       'the subsidiary tier — the frame its eight rows share, and the one AI rail mount in it'],
   ['frontend/src/lib',                'API client, formatting, and browser-side helpers'],

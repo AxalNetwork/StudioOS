@@ -165,8 +165,8 @@ test('6. every save sends model version 2, and the card list keys on the card ui
   assert.equal(DECK_MODEL_VERSION, 2);
   assert.match(read('src/lib/api.js'), /deckUpdate: \(id, payload\) => request\(`\/decks\/\$\{id\}`, \{ method: 'PUT', body: JSON\.stringify\(\{ model_version: 2, \.\.\.payload \}\) \}\)/);
   const strip = read('src/pages/raise/pitch/CardsStrip.jsx');
-  // Mutation checked: `key={i}` turns this red.
-  assert.match(strip, /<li key=\{c\?\.uid \?\? `card-\$\{i\}`\}/);
+  // Mutation checked: `key={i}` turns this red. D1545: `Tag` is the <li>, or a row of the virtual list.
+  assert.match(strip, /<Tag key=\{c\?\.uid \?\? `card-\$\{i\}`\}/);
   const editor = read('src/pages/raise/pitch/PitchEditor.jsx');
   // D1515 (#3767): a duplicate is `gridOps.duplicateCard` with a fresh uid, and a result is placed by its uid (`insertProposal`).
   assert.match(editor, /edit\(\{ type: 'duplicateCard', index: i, uid: newCardUid\(\) \}/);

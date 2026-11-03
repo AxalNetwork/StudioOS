@@ -19,6 +19,10 @@
  *   carries its label and source line. A series with no recorded points reads
  *   "Not recorded", never a 0 bar. Nothing here redraws a chart, so nothing
  *   here can plot a figure the deck does not hold.
+ * - **Diagrams** (D903 §11, #3660): a typed timeline, flow, cycle or matrix is
+ *   one `draw:g` from `diagramLayout`: each item a rounded `draw:rect` with
+ *   its words as real paragraphs, each connector a `draw:line` (the `Arrow`
+ *   marker where the layout has one), each timeline marker a `draw:ellipse`.
  * - **Speaker notes** are each page's `presentation:notes`, only when asked for.
  * - **Brand**: the venture owner's footer and watermark (`ventureBrand`).
  *
@@ -33,6 +37,8 @@ import { boxOf, SLIDE } from './designSystem';
 import { IMAGE_MISSING, NOT_RECORDED, NO_NOTES, chartLabel, type ImageKind } from './offlineHtml';
 import type { ChartShot, PlacedImage } from './pptxEditable';
 import { tableLines } from './slideModel';
+import { diagramLayout, diagramName, type DiagramLayout } from './diagramLayout';
+import { chartHeading } from './pptxChart';
 
 export const ODP_MIMETYPE = 'application/vnd.oasis.opendocument.presentation';
 /** The page, at 16:9. */
@@ -72,6 +78,46 @@ function frame(id: string, b: Box, inner: string, extra = ''): string {
 const textFrame = (id: string, b: Box, paras: Para[]) =>
   frame(id, b, `<draw:text-box>${paras.map(paraXml).join('')}</draw:text-box>`, ' draw:style-name="gr1"');
 
+/**
+ * D903 §11 (#3660): a diagram as a group of editable shapes in the block's
+ * box. Item words are paragraphs (`PD` date, `PI` label, `PX` detail, `PA`
+ * an axis name); the shape styles are `grN` (item), `grA` (axis), `grL` (a
+ * connector with the `Arrow` marker), `grP` (a plain connector), `grD` (dot).
+ */
+export function diagramShapes(name: string, b: Box, layout: DiagramLayout): string {
+  const X = (f: number) => b.x + f * b.w;
+  const Y = (f: number) => b.y + f * b.h;
+  const out: string[] = [];
+  for (const s of layout.shapes) {
+    if (s.kind === 'line') {
+      out.push(`<draw:line draw:style-name="${s.arrow ? 'grL' : 'grP'}" svg:x1="${cm(X(s.x1))}" svg:y1="${cm(Y(s.y1))}" svg:x2="${cm(X(s.x2))}" svg:y2="${cm(Y(s.y2))}"><text:p/></draw:line>`);
+      continue;
+    }
+    const at = `svg:x="${cm(X(s.x))}" svg:y="${cm(Y(s.y))}" svg:width="${cm(s.w * b.w)}" svg:height="${cm(s.h * b.h)}"`;
+    if (s.kind === 'dot') { out.push(`<draw:ellipse draw:style-name="grD" ${at}><text:p/></draw:ellipse>`); continue; }
+    const words = s.role === 'axis'
+      ? `<text:p text:style-name="PA">${xmlEsc(s.label)}</text:p>`
+      : `${s.date ? `<text:p text:style-name="PD">${xmlEsc(s.date)}</text:p>` : ''}<text:p text:style-name="PI">${xmlEsc(s.label)}</text:p>${s.detail ? `<text:p text:style-name="PX">${xmlEsc(s.detail)}</text:p>` : ''}`;
+    out.push(`<draw:rect draw:style-name="${s.role === 'axis' ? 'grA' : 'grN'}"${s.role === 'axis' ? '' : ` draw:corner-radius="${cm(12)}"`} ${at}>${words}</draw:rect>`);
+  }
+  return `<draw:g draw:name="${xmlEsc(name)}"><svg:title>${xmlEsc(`${diagramName(layout.type)} diagram`)}</svg:title>${out.join('')}</draw:g>`;
+}
+
+/** The styles a diagram's shapes and words use: automatic styles of content.xml. */
+const DIAGRAM_STYLES = [
+  `<style:style style:name="PD" style:family="paragraph"><style:paragraph-properties fo:text-align="center"/><style:text-properties fo:font-size="${pt(18)}" fo:font-weight="bold" fo:color="#64748B"/></style:style>`,
+  `<style:style style:name="PI" style:family="paragraph"><style:paragraph-properties fo:text-align="center"/><style:text-properties fo:font-size="${pt(26)}" fo:font-weight="bold" fo:color="#0F172A"/></style:style>`,
+  `<style:style style:name="PX" style:family="paragraph"><style:paragraph-properties fo:text-align="center"/><style:text-properties fo:font-size="${pt(20)}" fo:color="#475569"/></style:style>`,
+  `<style:style style:name="PA" style:family="paragraph"><style:paragraph-properties fo:text-align="center"/><style:text-properties fo:font-size="${pt(22)}" fo:color="#64748B"/></style:style>`,
+  '<style:style style:name="grN" style:family="graphic"><style:graphic-properties draw:fill="solid" draw:fill-color="#F8FAFC" draw:stroke="solid" svg:stroke-color="#E5E7EB" svg:stroke-width="0.03cm" draw:textarea-vertical-align="middle" draw:auto-grow-height="false" fo:padding="0.15cm"/></style:style>',
+  '<style:style style:name="grA" style:family="graphic"><style:graphic-properties draw:fill="none" draw:stroke="none" draw:textarea-vertical-align="middle" draw:auto-grow-height="false" fo:padding="0cm"/></style:style>',
+  '<style:style style:name="grL" style:family="graphic"><style:graphic-properties draw:stroke="solid" svg:stroke-color="#94A3B8" svg:stroke-width="0.05cm" draw:marker-end="Arrow" draw:marker-end-width="0.3cm"/></style:style>',
+  '<style:style style:name="grP" style:family="graphic"><style:graphic-properties draw:stroke="solid" svg:stroke-color="#94A3B8" svg:stroke-width="0.05cm"/></style:style>',
+  '<style:style style:name="grD" style:family="graphic"><style:graphic-properties draw:fill="solid" draw:fill-color="#64748B" draw:stroke="none"/></style:style>',
+].join('');
+/** The arrowhead `grL` names: a common style, so it lives in styles.xml. */
+const ARROW_MARKER = '<draw:marker draw:name="Arrow" svg:viewBox="0 0 20 30" svg:d="M10 0l-10 30h20z"/>';
+
 /** A chart's type and series as paragraphs; a series with no points is named, an empty chart is "Not recorded". */
 export function chartParas(b: any): Para[] {
   const series = Array.isArray(b?.series) ? b.series : [];
@@ -83,15 +129,15 @@ export function chartParas(b: any): Para[] {
   });
 }
 
-/** The line under a chart: its label, then where its series come from. */
-export function chartCaption(b: any): Para[] {
+/** The line under a chart: its label ("Projection · …" past today, pd8b), then where its series come from. */
+export function chartCaption(b: any, today: string = new Date().toISOString().slice(0, 10)): Para[] {
   const series = Array.isArray(b?.series) ? b.series : [];
   const sources = [...new Set(series.map((sr: any) => {
     const k = sr?.binding?.source_key;
     const at = sr?.binding?.as_of;
     return typeof k === 'string' && k ? `${k}${typeof at === 'string' && at ? `, as of ${at}` : ''}` : null;
   }).filter(Boolean))] as string[];
-  return [para('M', `${chartLabel(b?.chart_type)} chart`), para('S', sources.length ? `Source: ${sources.join(' · ')}` : `Source: ${NOT_RECORDED}`)];
+  return [para('M', chartHeading(`${chartLabel(b?.chart_type)} chart`, b, today)), para('S', sources.length ? `Source: ${sources.join(' · ')}` : `Source: ${NOT_RECORDED}`)];
 }
 
 /** One block's paragraphs, or null when it draws nothing (an empty text block). */
@@ -155,6 +201,8 @@ export type OdpInput = {
   chartShot?: ChartShot | null;
   /** D1546: Confidential and each card's footnotes (`compliance.ts`). */
   compliance?: DeckCompliance;
+  /** D1574: today's date (YYYY-MM-DD), which decides what is a projection; today when not given. */
+  today?: string;
 };
 export type OdpReport = { bytes: Uint8Array; charts: { pictured: number; as_text: number }; images: { placed: number; not_placed: number } };
 
@@ -208,8 +256,12 @@ export async function writeOdp(input: OdpInput): Promise<OdpReport> {
           if (input.chartShot && shotsLeft > 0) { shotsLeft -= 1; png = await input.chartShot(i, chartBox).catch(() => null); }
           if (png) { shapes.push(imageFrame(id('Chart'), chartBox, picture('png', png), `${chartLabel(b.chart_type)} chart`)); counts.pictured += 1; }
           else { shapes.push(textFrame(id('Chart'), chartBox, chartParas(b))); counts.as_text += 1; }
-          shapes.push(textFrame(id('Chart caption'), capBox, chartCaption(b)));
+          shapes.push(textFrame(id('Chart caption'), capBox, chartCaption(b, input.today)));
           continue;
+        }
+        if (b.kind === 'graphic') {
+          const layout = diagramLayout(b.diagram);
+          if (layout) { shapes.push(diagramShapes(id('Diagram'), box, layout)); continue; }
         }
         const paras = blockParas(b);
         if (paras) shapes.push(textFrame(id(String(b.kind)), box, paras));
@@ -242,9 +294,9 @@ export async function writeOdp(input: OdpInput): Promise<OdpReport> {
     return `<style:style style:name="P${k}" style:family="paragraph"><style:paragraph-properties fo:margin-bottom="0.1cm"/><style:text-properties fo:font-size="${pt(s.size)}" fo:color="${s.color}"${s.bold ? ' fo:font-weight="bold"' : ''}${s.italic ? ' fo:font-style="italic"' : ''}/></style:style>`;
   }).join('');
   const content = `<?xml version="1.0" encoding="UTF-8"?>
-<office:document-content ${NS} office:version="1.3"><office:automatic-styles>${paraStyles}<style:style style:name="dp1" style:family="drawing-page"/>${pageStyles.join('')}<style:style style:name="gr1" style:family="graphic"><style:graphic-properties draw:stroke="none" draw:fill="none" draw:textarea-vertical-align="top" draw:auto-grow-height="false" fo:padding="0cm"/></style:style></office:automatic-styles><office:body><office:presentation>${pages.join('')}</office:presentation></office:body></office:document-content>`;
+<office:document-content ${NS} office:version="1.3"><office:automatic-styles>${paraStyles}${DIAGRAM_STYLES}<style:style style:name="dp1" style:family="drawing-page"/>${pageStyles.join('')}<style:style style:name="gr1" style:family="graphic"><style:graphic-properties draw:stroke="none" draw:fill="none" draw:textarea-vertical-align="top" draw:auto-grow-height="false" fo:padding="0cm"/></style:style></office:automatic-styles><office:body><office:presentation>${pages.join('')}</office:presentation></office:body></office:document-content>`;
   const styles = `<?xml version="1.0" encoding="UTF-8"?>
-<office:document-styles ${NS} office:version="1.3"><office:styles><style:default-style style:family="graphic"><style:text-properties fo:font-family="Inter, Helvetica, Arial, sans-serif"/></style:default-style></office:styles><office:automatic-styles><style:page-layout style:name="PM1"><style:page-layout-properties fo:margin-top="0cm" fo:margin-bottom="0cm" fo:margin-left="0cm" fo:margin-right="0cm" fo:page-width="${PAGE_CM.width}cm" fo:page-height="${PAGE_CM.height}cm" style:print-orientation="landscape"/></style:page-layout><style:style style:name="Mdp1" style:family="drawing-page"><style:drawing-page-properties draw:fill="solid" draw:fill-color="#FFFFFF"/></style:style></office:automatic-styles><office:master-styles><style:master-page style:name="Default" style:page-layout-name="PM1" draw:style-name="Mdp1"/></office:master-styles></office:document-styles>`;
+<office:document-styles ${NS} office:version="1.3"><office:styles>${ARROW_MARKER}<style:default-style style:family="graphic"><style:text-properties fo:font-family="Inter, Helvetica, Arial, sans-serif"/></style:default-style></office:styles><office:automatic-styles><style:page-layout style:name="PM1"><style:page-layout-properties fo:margin-top="0cm" fo:margin-bottom="0cm" fo:margin-left="0cm" fo:margin-right="0cm" fo:page-width="${PAGE_CM.width}cm" fo:page-height="${PAGE_CM.height}cm" style:print-orientation="landscape"/></style:page-layout><style:style style:name="Mdp1" style:family="drawing-page"><style:drawing-page-properties draw:fill="solid" draw:fill-color="#FFFFFF"/></style:style></office:automatic-styles><office:master-styles><style:master-page style:name="Default" style:page-layout-name="PM1" draw:style-name="Mdp1"/></office:master-styles></office:document-styles>`;
   const meta = `<?xml version="1.0" encoding="UTF-8"?>
 <office:document-meta ${NS} office:version="1.3"><office:meta><meta:generator>StudioOS</meta:generator><dc:title>${xmlEsc(input.version == null ? input.title : `${input.title} · v${input.version}`)}</dc:title></office:meta></office:document-meta>`;
   const manifest = `<?xml version="1.0" encoding="UTF-8"?>

@@ -9,7 +9,15 @@
  *   GET  /skills/:uid                    one skill: its SKILL.md, versions and the agents using it
  *   POST /skills                         a new draft { scope, company?, ...fields } or { scope, company?, skill_md }
  *   PATCH /skills/:uid                   edit the draft, or retire it
- *   POST /skills/:uid/publish            a new immutable version
+ *   POST /skills/:uid/publish            a new immutable version (`services/agents/skillPublish.ts`); an HQ
+ *                                        skill needs a second Super Admin's approval and its golden cases
+ *                                        at 9 of 10 (D4160: 409 `needs_approval`, `golden_cases_failing`)
+ *
+ * D4121 (#4121): what an agent's runs cost, skill by skill (a run carries one skill, #3954).
+ *   GET  /agents/:uid/cost-estimate?add=&remove=   the agent with skills added or removed:
+ *        { tokens_per_run, est_usd_per_run (the dearest run), cheapest, baseline, runs, monthly_at_cap, delta, hint },
+ *        or { available: false }
+ *   GET  /:scope/:id/cost-estimate?model=&role=&persona=&skills=&cap_microusd=   an agent not yet added (AG3)
  *
  * A2 (#3956): an agent's skills, assigning a skill, the radar, coverage.
  *   GET  /agents/:uid/skills             { can_manage, skills, radar: { axes } | null, values: null }
@@ -25,13 +33,17 @@
  *    that company's members (`user_company_links`) and HQ's admins. A draft
  *    is seen only by those who may write it.
  *  - Write: an HQ skill by a Super Admin only; a company skill by that
- *    company's editors (`canEdit`).
+ *    company's editors only (`canEditAsMember`): HQ's admins moderate a
+ *    company's skill (D4161, `admin_company_skills.ts`) and never write it.
+ *  - Publish clears HQ's open flag or suspension on a company skill: the new
+ *    version starts clean, and the versions a suspension covered stay off at
+ *    the run gate (`services/agents/skillModeration.ts`).
  *  - An agent's skills: changed only by those who manage the agent's company
  *    or project (`services/agents/teams.ts`'s `canManage`, called, never copied).
  *  - Attach (`services/agents/skillLinks.ts`'s `attachCheck`): readable from
  *    the agent's company (404 `not_found`), a published version (422
  *    `version_not_published`), not retired (409 `skill_retired`; one already
- *    pinned stays), of the agent's role (422 `role_mismatch`), and its tools in
+ *    pinned stays), not suspended by HQ (409 `skill_suspended`, D4161), of the agent's role (422 `role_mismatch`), and its tools in
  *    the agent's `tool_grants_json` (422 `tool_not_approved`, `{ tool }`).
  *    Changing an agent's skills is 403 `not_manager` for anyone else.
  *
@@ -43,18 +55,24 @@ import type { Env, User } from '../types';
 import { requireAuth, isSuperAdmin } from '../auth';
 import { refuse } from '../util/refusal';
 import { activeCompanyFor } from '../middleware/activeCompany';
-import { canEdit } from '../services/companyAccess';
+import { canEditAsMember } from '../services/companyAccess';
+import { skillRunRefusal } from '../services/agents/skillModeration';
 import { isAdmin, newUid } from './_t13t14t15_helpers';
 import { ROLES, roleOf } from '../services/agents/catalogue';
 import { personaOf } from '../services/agents/personas';
 import { RADAR_AXES } from '../services/skillsTaxonomySchema';
 import {
-  OUTPUT_LABELS, SKILL_MESSAGES, checkDraft, parseSkillMd, toSkillMd,
+  OUTPUT_LABELS, SKILL_MESSAGES, checkDraft, parseSkillMd,
   type OutputKind, type SkillDraft, type Tag,
 } from '../services/agents/skills';
 import { teamAgentsEnabled } from './team_agents';
+import { publishDraft } from '../services/agents/skillPublish';
 import { grantsOf } from '../services/agents/agentTools';
-import { agentByUid, canManage, canRead, loadScope, scopeCols, scopeOfAgent, type AgentRow } from '../services/agents/teams';
+import { agentByUid, canManage, canRead, effectiveBook, loadScope, scopeCols, scopeOfAgent, type AgentRow, type Scope } from '../services/agents/teams';
+import { moduleOf } from '../services/agents/catalogue';
+import { systemPrompt } from '../services/agents/agentRun';
+import { RUN_COST_CONFIG, deltaOf, estimate, pinTokens, skillRunChangeMicro, specialistHint, type Estimate, type Pin } from '../services/agents/runCost';
+import { modelRefusal } from '../services/aiRouter';
 import {
   ATTACH_STATUS, agentCompanyId, agentValues, attachCheck, axesOf, checkSkillList, linkStatement, peopleAxes, teamUserIds, toolLabel, versionTags,
   type AttachCode, type Blocked,
@@ -103,7 +121,7 @@ async function isMember(env: Env, companyId: number, user: User): Promise<boolea
 }
 async function mayWrite(env: Env, s: Pick<SkillRow, 'scope' | 'company_id'>, user: User): Promise<boolean> {
   if (s.scope === 'hq') return isSuperAdmin(user as any);
-  return s.company_id != null && canEdit(env, { id: s.company_id }, user);
+  return s.company_id != null && canEditAsMember(env, { id: s.company_id }, user);
 }
 async function mayRead(env: Env, s: SkillRow, user: User): Promise<boolean> {
   if (!(s.scope === 'hq' || (s.company_id != null && await isMember(env, s.company_id, user)))) return false;
@@ -159,6 +177,8 @@ async function cardOf(env: Env, s: SkillRow, user: User, tax: Taxonomy, authorNa
     author: s.scope === 'hq' ? 'Axal' : authorName,
     ...partsDto(shown, tax),
     used_by: await usedBy(env, s.id),
+    // D4121: what the current version adds to every run, in tokens; null for a draft never published.
+    context_tokens: current ? (await pinTokens(env, [{ skill_id: s.id, version: s.current_version }]))?.[0] ?? null : null,
     updated_at: s.updated_at,
     can_write: writer,
     ...(writer ? { draft: partsDto(await draftParts(env, s), tax) } : {}),
@@ -207,7 +227,7 @@ router.get('/skills', async (c) => {
   return c.json({
     roles,
     hq: list.filter((k) => k.scope === 'hq'),
-    company: company ? { uid: company.uid, name: company.company_name, skills: list.filter((k) => k.scope === 'company'), can_write: await canEdit(c.env, { id: company.id }, user) } : null,
+    company: company ? { uid: company.uid, name: company.company_name, skills: list.filter((k) => k.scope === 'company'), can_write: await canEditAsMember(c.env, { id: company.id }, user) } : null,
     can_write_hq: isSuperAdmin(user as any),
   });
 });
@@ -290,7 +310,7 @@ router.post('/skills', async (c) => {
     fields = parsed;
   }
   const checked = checkDraft(fields, { taxonomy: (await taxonomy(c.env)).slugs, roleKeys: ROLE_KEYS });
-  if (!checked.ok) return say(c, 400, checked.code, checked.message);
+  if (!checked.ok) return say(c, 400, checked.code, checked.message, checked.tool ? { tool: checked.tool } : undefined);
   const d = checked.draft;
   const clash = await c.env.DB.prepare('SELECT 1 AS ok FROM agent_skills WHERE scope = ? AND IFNULL(company_id, 0) = ? AND slug = ?')
     .bind(b.scope, companyId ?? 0, d.slug).first();
@@ -315,6 +335,8 @@ router.patch('/skills/:uid', async (c) => {
   if (!b) return say(c, 400, 'body_invalid', 'Send the changes as a JSON object.');
   if (b.status !== undefined) {
     if (b.status !== 'retired') return say(c, 400, 'status_invalid', 'A skill can be retired here; publishing makes a new version.');
+    // D4160: an Axal skill is retired with its replacement and a reason, from HQ › AI agents.
+    if (s.scope === 'hq') return say(c, 409, 'replacement_required', 'Retire an Axal skill from HQ › AI agents, naming the skill that replaces it.');
     await c.env.DB.prepare(`UPDATE agent_skills SET status = 'retired', updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(user.id, s.id).run();
   } else {
     const cur = await draftParts(c.env, s);
@@ -325,7 +347,7 @@ router.patch('/skills/:uid', async (c) => {
       output_kind: has('output_kind') ? b.output_kind : cur.output_kind, tags: has('tags') ? b.tags : cur.tags, roles: has('roles') ? b.roles : cur.roles,
     };
     const checked = checkDraft(merged, { taxonomy: (await taxonomy(c.env)).slugs, roleKeys: ROLE_KEYS });
-    if (!checked.ok) return say(c, 400, checked.code, checked.message);
+    if (!checked.ok) return say(c, 400, checked.code, checked.message, checked.tool ? { tool: checked.tool } : undefined);
     const d = checked.draft;
     await c.env.DB.batch([
       c.env.DB.prepare(`UPDATE agent_skills SET name = ?, purpose = ?, steps_json = ?, allowed_tools_json = ?, output_kind = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
@@ -342,24 +364,13 @@ router.post('/skills/:uid/publish', async (c) => {
   const s = await skillByUid(c.env, c.req.param('uid'));
   if (!s || !(await mayRead(c.env, s, user))) return noSkill(c);
   if (!(await mayWrite(c.env, s, user))) return say(c, 403, 'not_editor', 'Only this skill\'s editors can publish it.');
-  if (s.status === 'retired') return say(c, 409, 'retired', 'A retired skill cannot be published again.');
-  const d = await draftParts(c.env, s);
-  const checked = checkDraft({ ...d, slug: s.slug }, { taxonomy: (await taxonomy(c.env)).slugs, roleKeys: ROLE_KEYS });
-  if (!checked.ok) return say(c, 400, checked.code, checked.message);
-  const version = s.current_version + 1;
-  const md = toSkillMd(checked.draft, version);
-  // The version row and the pointer land together, or neither does; the
-  // `current_version = ?` guard refuses a concurrent publish of the same number.
-  const res = await c.env.DB.batch([
-    c.env.DB.prepare(`UPDATE agent_skills SET status = 'published', current_version = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ? AND current_version = ?`).bind(version, user.id, s.id, s.current_version),
-    c.env.DB.prepare(`INSERT INTO agent_skill_versions (skill_id, version, skill_md, name, purpose, steps_json, allowed_tools_json, output_kind, taxonomy_json, roles_json, published_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(s.id, version, md, d.name, d.purpose, JSON.stringify(d.steps), JSON.stringify(d.tools), d.output_kind,
-      JSON.stringify(checked.draft.tags), JSON.stringify(checked.draft.roles), user.id),
-  ]).catch(() => null);
-  if (!res || Number(res[0]?.meta?.changes ?? 0) !== 1) return say(c, 409, 'publish_conflict', 'This skill was published by someone else just now. Reload it and try again.');
+  // D4160: one publish for this route and HQ's bulk publish. An HQ skill needs a
+  // second admin's approval and its golden cases at the bar. A company skill's
+  // new version clears HQ's open flag or suspension in the same batch (D4161).
+  const done = await publishDraft(c.env, s, user);
+  if (!done.ok) return say(c, done.status, done.code, done.message, done.extra);
   const tax = await taxonomy(c.env);
-  return c.json({ skill: { ...(await cardOf(c.env, (await skillByUid(c.env, s.uid))!, user, tax, '')), skill_md: md } });
+  return c.json({ skill: { ...(await cardOf(c.env, (await skillByUid(c.env, s.uid))!, user, tax, '')), skill_md: done.skill_md } });
 });
 
 // ── An agent's skills (A2, #3956) ───────────────────────────────────────────
@@ -383,6 +394,7 @@ const refusalWords: Record<AttachCode, string> = {
   not_found: 'There is no such skill.',
   version_not_published: 'Only a published version can be pinned.',
   skill_retired: 'This skill is retired and cannot be added again. An agent that has it keeps it at its pinned version.',
+  skill_suspended: 'HQ suspended this skill, so it cannot be added. The company can publish a fixed version.',
   role_mismatch: 'An agent can only be given skills of its own role.',
   tool_not_approved: 'That skill needs a read tool its sponsor has not approved.',
 };
@@ -406,6 +418,8 @@ async function agentSkillsDto(env: Env, a: AgentRow) {
       uid: s.uid, scope: s.scope, name: p.name, purpose: p.purpose, steps: p.steps, status: s.status,
       pinned_version: s.pinned, current_version: s.current_version,
       update_available: s.status !== 'retired' && s.pinned < s.current_version,
+      // D4161: HQ suspended the pinned version; the run gate refuses it.
+      suspended: !!(await skillRunRefusal(env, s.id, s.pinned)),
       tools: p.tools.map((k) => ({ key: k, label: toolLabel(k), approved: granted.has(k) })),
       taxonomy: p.tags.map((t) => ({ slug: t.slug, label: tax.label.get(t.slug) ?? t.slug, level: t.level })),
     });
@@ -475,6 +489,130 @@ router.put('/agents/:uid/skills', async (c) => {
   return c.json({ can_manage: true, ...(await agentSkillsDto(c.env, a)) });
 });
 
+// ── Run cost (D4121, #4121) ─────────────────────────────────────────────────
+
+const COST_LIST_MAX = 40;
+/** A comma-separated list of skill uids from a query parameter (repeatable), or null when it is malformed. */
+function uidsOf(c: C, key: string): string[] | null {
+  const all = c.req.queries(key) ?? [];
+  const out = all.flatMap((v) => v.split(',')).map((v) => v.trim()).filter(Boolean);
+  if (out.length > COST_LIST_MAX || out.some((u) => !/^[a-f0-9]{32}$/.test(u))) return null;
+  return [...new Set(out)];
+}
+
+/** The published skills these uids name that the caller may read, as pins at their current version; null when one is not. */
+async function readablePins(c: C, user: User, uids: readonly string[]): Promise<Array<Pin & { uid: string }> | null> {
+  const out: Array<Pin & { uid: string }> = [];
+  for (const uid of uids) {
+    const s = await c.env.DB.prepare('SELECT * FROM agent_skills WHERE uid = ?').bind(uid).first<SkillRow>();
+    if (!s || s.status !== 'published' || !s.current_version || !(await mayRead(c.env, s, user))) return null;
+    out.push({ uid, skill_id: s.id, version: s.current_version });
+  }
+  return out;
+}
+
+/** The personas live on a team, for the specialist hint (one not already there). */
+async function teamPersonas(c: C, scope: Scope): Promise<Set<string>> {
+  const [companyId, projectId] = scopeCols(scope);
+  const rows = await all<{ persona_key: string | null }>(c.env,
+    `SELECT persona_key FROM team_agents WHERE status <> 'removed' AND scope_kind = ? AND IFNULL(company_id, 0) = ? AND IFNULL(project_id, 0) = ?`,
+    scope.kind, companyId ?? 0, projectId ?? 0);
+  return new Set(rows.map((r) => r.persona_key).filter((k): k is string => !!k));
+}
+
+const shape = (e: Estimate) => (e.available ? { skills: e.skills, tokens_per_run: e.tokens_per_run, est_usd_per_run: e.est_usd_per_run } : null);
+const THRESHOLDS = { max_skills: RUN_COST_CONFIG.specialistMaxSkills };
+
+/**
+ * The answer both estimate routes give, never a 0 for an unknown price. A run
+ * carries one skill (#3954), so `tokens_per_run` / `est_usd_per_run` are the
+ * dearest run (with its largest skill), `cheapest` the cheapest, `baseline` a
+ * run with no skill, and `runs` a run with each skill, by its uid.
+ */
+async function costAnswer(c: C, input: {
+  model: string; sponsorId: number; prompt: string; capMicro: number | null; before: Pin[]; after: Pin[]; scope: Scope; uids: Map<number, string>;
+}) {
+  const base = { model: input.model, sponsorId: input.sponsorId, systemPrompt: input.prompt, capMicro: input.capMicro };
+  const after = await estimate(c.env, { ...base, pins: input.after });
+  if (!after.available) return c.json({ available: false, reason: after.reason });
+  const before = await estimate(c.env, { ...base, pins: input.before });
+  const hint = await specialistHint(c.env, input.after.map((p) => p.skill_id), await teamPersonas(c, input.scope));
+  return c.json({
+    available: true,
+    model: input.model,
+    skills: after.skills,
+    tokens_per_run: after.tokens_per_run,
+    est_usd_per_run: after.est_usd_per_run,
+    cheapest: after.cheapest,
+    baseline: after.baseline,
+    runs: after.runs.map((r) => ({ skill_uid: input.uids.get(r.skill_id) ?? null, tokens_per_run: r.tokens_per_run, est_usd_per_run: r.est_usd_per_run })),
+    monthly_at_cap: after.monthly_at_cap,
+    cap_usd: input.capMicro == null ? null : input.capMicro / 1_000_000,
+    before: shape(before),
+    delta: deltaOf(before, after),
+    hint,
+    thresholds: THRESHOLDS,
+  });
+}
+
+/**
+ * D4121: what this agent costs per run, with `add` skills added and `remove`
+ * skills taken off (uids, comma-separated). Any team member may read it.
+ */
+router.get('/agents/:uid/cost-estimate', async (c) => {
+  const user = await requireAuth(c);
+  const got = await readableAgent(c, user);
+  if (!got) return say(c, 404, 'not_found', 'There is no such agent.');
+  const { a, scope } = got;
+  const add = uidsOf(c, 'add'); const remove = uidsOf(c, 'remove');
+  if (!add || !remove) return say(c, 400, 'skills_invalid', `Name up to ${COST_LIST_MAX} skills by their ids.`);
+  const pinned = await all<{ skill_id: number; version: number; uid: string }>(c.env,
+    'SELECT l.skill_id, l.version, s.uid FROM agent_skill_links l JOIN agent_skills s ON s.id = l.skill_id WHERE l.agent_id = ? ORDER BY l.skill_id', a.id);
+  const adding = await readablePins(c, user, add.filter((u) => !pinned.some((p) => p.uid === u)));
+  if (!adding) return say(c, 404, 'skill_not_found', 'One of those skills is not one this agent can be given.');
+  const before = pinned.map((p) => ({ skill_id: p.skill_id, version: p.version }));
+  const after = [...pinned.filter((p) => !remove.includes(p.uid)).map((p) => ({ skill_id: p.skill_id, version: p.version })), ...adding.map((p) => ({ skill_id: p.skill_id, version: p.version }))];
+  const { rules } = await effectiveBook(c.env, scope, a.role_key);
+  const label = moduleOf(rules.works_in[0] ?? '')?.label ?? 'its modules';
+  return costAnswer(c, {
+    model: a.model_id, sponsorId: a.sponsor_user_id ?? user.id, prompt: systemPrompt(a, rules, scope, label),
+    capMicro: a.monthly_cap_microusd, before, after, scope,
+    uids: new Map([...pinned, ...adding].map((p) => [p.skill_id, p.uid])),
+  });
+});
+
+/**
+ * D4121: what an agent not yet added would cost per run (AG3): its model,
+ * role, persona, skills and cap, as the Add-an-agent sheet has them.
+ */
+router.get('/:scope/:id/cost-estimate', async (c) => {
+  const user = await requireAuth(c);
+  const scope = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
+  if (!scope) return say(c, 404, 'not_found', 'There is no such team.');
+  if (!(await canRead(c.env, scope, user))) return say(c, 403, 'not_member', 'Only the team can see what its agents cost.');
+  const model = c.req.query('model') ?? '';
+  if (!model || modelRefusal(c.env, model)) return say(c, 422, 'model_not_offered', 'That model is not offered. Choose one from the list.');
+  const role = roleOf(c.req.query('role') ?? '');
+  if (!role) return say(c, 400, 'role_unknown', SKILL_MESSAGES.role_unknown);
+  const personaKey = c.req.query('persona') ?? null;
+  if (personaKey && !personaOf(personaKey)) return say(c, 400, 'persona_unknown', 'Choose one of the agents.');
+  const capRaw = c.req.query('cap_microusd');
+  const cap = capRaw == null || capRaw === '' ? null : Number(capRaw);
+  if (cap != null && (!Number.isSafeInteger(cap) || cap <= 0)) return say(c, 400, 'cap_invalid', 'The monthly cap is a whole number of micro-dollars above zero.');
+  const uids = uidsOf(c, 'skills');
+  if (!uids) return say(c, 400, 'skills_invalid', `Name up to ${COST_LIST_MAX} skills by their ids.`);
+  const pins = await readablePins(c, user, uids);
+  if (!pins) return say(c, 404, 'skill_not_found', 'One of those skills is not one this agent can be given.');
+  const { rules } = await effectiveBook(c.env, scope, role.key);
+  const label = moduleOf(rules.works_in[0] ?? '')?.label ?? 'its modules';
+  const draft = { persona_key: personaKey, first_name: null, last_name: null } as Pick<AgentRow, 'persona_key' | 'first_name' | 'last_name'>;
+  return costAnswer(c, {
+    model, sponsorId: user.id, prompt: systemPrompt(draft, rules, scope, label), capMicro: cap,
+    before: [], after: pins.map((p) => ({ skill_id: p.skill_id, version: p.version })), scope,
+    uids: new Map(pins.map((p) => [p.skill_id, p.uid])),
+  });
+});
+
 router.get('/skills/:uid/agents', async (c) => {
   const user = await requireAuth(c);
   const s = await skillByUid(c.env, c.req.param('uid'));
@@ -529,9 +667,19 @@ router.get('/skills/:uid/assignable', async (c) => {
     if (s.scope === 'company' && s.company_id !== await agentCompanyId(c.env, a)) continue;
     const blocked = pinned ? null : await attachCheck(c.env, a, s, s.current_version);
     const count = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM agent_skill_links WHERE agent_id = ?').bind(a.id).first<{ n: number }>();
+    // D4121: what a run with this skill would cost this agent over a run with none (#4224 draws it), never a 0 for an unknown price.
+    let change: number | null = null;
+    if (current) {
+      const { rules } = await effectiveBook(c.env, scope, a.role_key);
+      change = await skillRunChangeMicro(c.env, {
+        model: a.model_id, sponsorId: a.sponsor_user_id ?? user.id,
+        systemPrompt: systemPrompt(a, rules, scope, moduleOf(rules.works_in[0] ?? '')?.label ?? 'its modules'),
+      }, { skill_id: s.id, version: s.current_version });
+    }
     agents.push({
       uid: a.uid, name: agentName(a), role_key: a.role_key, skill_count: Number(count?.n ?? 0), assigned: !!pinned,
       blocked: blocked ? { code: blocked.code, tool: blocked.tool ?? null } : null, scope: await scopeLine(c.env, a),
+      run_cost_change_microusd: change,
     });
   }
   return c.json({ agents });

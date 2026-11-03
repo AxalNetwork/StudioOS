@@ -22,9 +22,9 @@
  * STAGE 3 READS THE REST, each through its own module: programs
  * (`programReads.js`, D558), exercises and exams (`assessmentReads.js`,
  * D559), webinars (`webinarReads.js`, D560), and an uploaded video's upload
- * and playback (`videoUpload.js`, `studioActions.js`, D561). What no route
- * serves still says so in one line rather than drawing a row: no route lists
- * exercises or exams on their own (`UNLISTED`).
+ * and playback (`videoUpload.js`, `studioActions.js`, D561). Exercises and
+ * exams are listed on their own, and a member's submissions and attempts
+ * across them, since #4180 (D4180, `routes/learning_lists.ts`).
  */
 import { titleCase } from '../../lib/absence';
 
@@ -47,22 +47,10 @@ export const NOT_LIVE = {
 };
 
 /**
- * What stays "Not recorded" with every store live: D559 serves one exercise or
- * exam at a time, with the caller's own submissions and attempts on its page,
- * and no route LISTS them, for the home's tabs or for My learning.
- */
-export const UNLISTED = {
-  exercises: 'Exercises open from the courses and programs that hold them. No route lists them on their own yet.',
-  exams: 'Exams open from the courses and programs that hold them. No route lists them on their own yet.',
-  submissions: 'No route lists your submissions across exercises yet. Each exercise shows yours on its own page.',
-  attempts: 'No route lists your attempts across exams yet. Each exam shows yours on its own page.',
-};
-
-/**
  * The canvas's nine tabs, in its order. `live` marks the ones a route fills:
  * All, Courses and Videos read D557's catalog; Webinars D560's list (stage
- * 3); Articles, Publications and Events their own routes. Exercises and
- * Exams have no list route (`UNLISTED`).
+ * 3); Articles, Publications and Events their own routes; Exercises and
+ * Exams their own lists (#4180).
  */
 export const LEARNING_TABS = [
   { key: 'all', label: 'All', live: true },
@@ -72,15 +60,9 @@ export const LEARNING_TABS = [
   { key: 'articles', label: 'Articles', live: true },
   { key: 'publications', label: 'Publications', live: true },
   { key: 'events', label: 'Events', live: true },
-  { key: 'exercises', label: 'Exercises', live: false },
-  { key: 'exams', label: 'Exams', live: false },
+  { key: 'exercises', label: 'Exercises', live: true },
+  { key: 'exams', label: 'Exams', live: true },
 ];
-
-/** The line each tab no route fills says, and why. */
-export const TAB_NOT_LIVE = {
-  exercises: UNLISTED.exercises,
-  exams: UNLISTED.exams,
-};
 
 export const ARTICLES_PAGE_SIZE = 20;
 export const EVENTS_PAGE_SIZE = 20;
@@ -291,7 +273,7 @@ export function catalogRow(r) {
       return { ...base, href: id ? `/learning/courses/${enc(id)}` : null, level, minutes: r.estimated_minutes ?? null };
     case 'video':
     case 'reading':
-      return { ...base, href: itemHref({ kind: r.kind, uid: id }), level, topic: clean(r.topic) || null, seconds: r.duration_seconds ?? null };
+      return { ...base, uid: id || null, href: itemHref({ kind: r.kind, uid: id }), level, topic: clean(r.topic) || null, seconds: r.duration_seconds ?? null, found: transcriptLine(r.match) };
     case 'article': {
       const minutes = Number(r.read_minutes);
       return {
@@ -330,6 +312,10 @@ const STREAM_ID = /^[a-f0-9]{32}$/i;
 /** The one address an item's uploaded file plays from: D561's gated route for that item. */
 export const itemStreamPath = (uid) => `/api/learning/items/${encodeURIComponent(clean(uid))}/video`;
 
+/** #4176 (D4176): the words the integrated canvas gives a Stream video that is not ready. */
+export const STREAM_PROCESSING = 'This video is still processing.';
+export const STREAM_FAILED = 'This video could not be processed. Ask HQ to upload it again.';
+
 /**
  * How a video item plays here. `{ src, embed: true }` is an iframe in the
  * platform's own embed form; `{ src, embed: false }` is an uploaded file in
@@ -349,9 +335,32 @@ export const itemStreamPath = (uid) => `/api/learning/items/${encodeURIComponent
  *     `player.vimeo.com/video/<id>`;
  *   - Cloudflare Stream (`<customer>.cloudflarestream.com/<id>`,
  *     `videodelivery.net/<id>`) → the `iframe` player for that id.
+ *
+ * Before all of these (#4176, D4176): a ready Stream video the item read sent
+ * in `video_stream` plays in Stream's own iframe, from its signed URL (minted
+ * after the access check); one still processing or failed says so in the
+ * canvas's words (`STREAM_PROCESSING`, `STREAM_FAILED`).
  */
 export function videoPlayback(item) {
   if (!item || item.kind !== 'video') return null;
+  const vs = item.video_stream;
+  if (vs && vs.state === 'ready') {
+    const iframe = clean(vs.iframe_url);
+    let u = null;
+    try { u = new URL(iframe); } catch { u = null; }
+    // The player only embeds Stream's own hosts.
+    if (u && u.protocol === 'https:' && (/^customer-[a-z0-9]+\.cloudflarestream\.com$/.test(u.hostname) || u.hostname === 'iframe.videodelivery.net')) {
+      return {
+        src: iframe, embed: true,
+        // #4178 (D4178): the Stream player's own source, so it can be seeked and timed; null keeps the plain iframe.
+        player: streamSourceOf(iframe),
+        stream: { hls: vs.hls_url || null, poster: vs.poster_url || null, preview: vs.preview_url || null, captions: Array.isArray(vs.captions) ? vs.captions : [], duration: vs.duration_seconds ?? null },
+      };
+    }
+    return { reason: 'The Stream address sent with this video is not Stream\'s own, so it is not played here.' };
+  }
+  if (vs && vs.state === 'processing') return { reason: STREAM_PROCESSING };
+  if (vs && vs.state === 'error') return { reason: STREAM_FAILED };
   const stream = clean(item.video_stream_url);
   if (stream) {
     // A query string (a version, say) may follow; the path is what decides.
@@ -563,3 +572,304 @@ export const SUBMISSION_STATUS = {
 
 /** A content row's status, as a pill tone. */
 export const CONTENT_STATUS_TONE = { published: 'ok', draft: 'warn', archived: 'neutral', cancelled: 'danger' };
+
+// ---------------------------------------------------------------------------
+// D3726 (#3726) — the Learning on Stream canvas (`Learning Stream Page.dc.html`),
+// what the screens draw before the Stream and list tasks land.
+// ---------------------------------------------------------------------------
+
+/** The build tasks behind the boards this integration cannot fill yet. */
+export const LEARNING_STREAM_TASKS = {
+  stream: 4176, studio: 4177, player: 4178, copy: 4179, lists: 4180, analytics: 4181,
+};
+
+/** LR1 "New this week": the kinds it lists, and how far back a week reaches. */
+export const NEW_THIS_WEEK_KINDS = ['course', 'video', 'reading'];
+const WEEK_MS = 7 * 24 * 3600 * 1000;
+
+/**
+ * LR1 "New this week", newest first, from the catalog rows the All tab already
+ * reads (`catalogRow`): only courses, videos and readings dated within the
+ * last seven days, at most `max`. A row with no date is never "new".
+ */
+export function newThisWeek(rows, now = Date.now(), max = 4) {
+  const since = now - WEEK_MS;
+  return (rows || [])
+    .filter((r) => NEW_THIS_WEEK_KINDS.includes(r?.kind))
+    .map((r) => ({ r, t: Date.parse(r.date ?? '') }))
+    .filter(({ t }) => Number.isFinite(t) && t >= since && t <= now + 60_000)
+    .sort((a, b) => b.t - a.t)
+    .slice(0, max)
+    .map(({ r }) => r);
+}
+
+/** LR1 "Recommended for you": a marked future block, never rows. */
+export const RECOMMENDED_FUTURE = 'Waits on recommendations (#3724). Nothing is drawn here until then.';
+
+/** LR4 chapters: the item has none recorded. */
+export const NO_CHAPTERS = 'No chapters';
+
+/** LR4b: a transcript with no caption cues is the plain text, and says so. */
+export const PLAIN_TRANSCRIPT_LINE = 'No caption cues, so the plain transcript is shown.';
+
+/**
+ * LR4's "Resume from [12:05]": the stored position, when there is one worth
+ * resuming — at least 5 s in and, when the length is known, more than 5 s
+ * before the end. Null otherwise.
+ */
+export function resumeAt(positionSeconds, durationSeconds = null) {
+  const p = Number(positionSeconds);
+  if (!Number.isFinite(p) || p < 5) return null;
+  const d = Number(durationSeconds);
+  if (Number.isFinite(d) && d > 0 && p >= d - 5) return null;
+  return Math.floor(p);
+}
+
+/**
+ * The player's position writes (LR4 resume): at most one every `every` ms
+ * while playing, and one on pause or end. `write(seconds, percent)` is the
+ * caller's; a write in flight is never doubled.
+ */
+export function positionWriter(write, { every = 15_000, now = () => Date.now() } = {}) {
+  let last = -Infinity;
+  let busy = false;
+  const send = (seconds, duration) => {
+    const s = Math.floor(Number(seconds));
+    if (!Number.isFinite(s) || s < 0 || busy) return false;
+    const d = Number(duration);
+    const percent = Number.isFinite(d) && d > 0 ? Math.min(100, Math.max(0, Math.floor((100 * s) / d))) : null;
+    busy = true;
+    last = now();
+    Promise.resolve().then(() => write(s, percent)).catch(() => {}).finally(() => { busy = false; });
+    return true;
+  };
+  return {
+    tick: (seconds, duration) => (now() - last >= every ? send(seconds, duration) : false),
+    flush: (seconds, duration) => send(seconds, duration),
+  };
+}
+
+// ── #4178 (D4178): the Stream player — its source, chapters and timed cues ──
+
+/**
+ * The Stream player's own source, from the signed `iframe_url` the item read
+ * sends (D4176): `{ src, customerCode }` for `@cloudflare/stream-react`, where
+ * `src` is the signed token. `customer-<code>.cloudflarestream.com/<token>/iframe`
+ * and `iframe.videodelivery.net/<token>` are read; anything else is null, so the
+ * page falls back to the plain iframe it already validated.
+ */
+export function streamSourceOf(iframeUrl) {
+  let u;
+  try { u = new URL(clean(iframeUrl)); } catch { return null; }
+  if (u.protocol !== 'https:') return null;
+  const seg = u.pathname.split('/').filter(Boolean);
+  const token = /^[A-Za-z0-9._-]{16,4096}$/;
+  const m = /^customer-([a-z0-9]+)\.cloudflarestream\.com$/.exec(u.hostname);
+  if (m && seg.length === 2 && seg[1] === 'iframe' && token.test(seg[0])) return { src: seg[0], customerCode: m[1] };
+  if (u.hostname === 'iframe.videodelivery.net' && seg.length === 1 && token.test(seg[0])) return { src: seg[0], customerCode: null };
+  return null;
+}
+
+/** Chapters as the item read sends them, in time order, each with a title and a whole start second; anything else is dropped. */
+export function chaptersOf(item) {
+  const raw = Array.isArray(item?.chapters) ? item.chapters : [];
+  return raw
+    .map((c) => ({ start: Math.floor(Number(c?.start_seconds)), title: clean(c?.title) }))
+    .filter((c) => Number.isFinite(c.start) && c.start >= 0 && c.title)
+    .sort((a, b) => a.start - b.start);
+}
+
+/** The index of the chapter playing at `t` seconds: the last one that has started. -1 before the first. */
+export function chapterAt(chapters, t) {
+  const now = Number(t);
+  if (!Array.isArray(chapters) || !Number.isFinite(now)) return -1;
+  let at = -1;
+  for (let i = 0; i < chapters.length; i += 1) if (chapters[i].start <= now) at = i;
+  return at;
+}
+
+const VTT_TIME = /^(?:(\d{1,3}):)?(\d{1,2}):(\d{2})[.,](\d{1,3})$/;
+
+/** A WebVTT timestamp (`01:02:03.500` or `02:03.500`) as seconds, or null. */
+export function vttSeconds(stamp) {
+  const m = VTT_TIME.exec(String(stamp ?? '').trim());
+  if (!m) return null;
+  const [, h, min, sec, ms] = m;
+  if (Number(min) > 59 || Number(sec) > 59) return null;
+  return Number(h || 0) * 3600 + Number(min) * 60 + Number(sec) + Number(ms.padEnd(3, '0')) / 1000;
+}
+
+const ENTITIES = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&nbsp;': ' ', '&lrm;': '', '&rlm;': '' };
+
+/**
+ * A cue's words as plain text: entities decoded first, then every tag stripped
+ * until none is left, so an encoded `&lt;b&gt;` cannot come back as markup.
+ * (The page draws the text as text either way; this keeps it plain.)
+ */
+function cueText(raw) {
+  let text = String(raw).replace(/&(?:amp|lt|gt|quot|#39|nbsp|lrm|rlm);/g, (e) => ENTITIES[e]);
+  for (let before = ''; before !== text;) {
+    before = text;
+    text = text.replace(/<[^<>]*>/g, '');
+  }
+  return text.replace(/[<>]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * A caption file's cues, `[{ start, end, text }]` in time order, for the
+ * click-to-seek transcript. Tolerant by design: a block whose timing line is
+ * missing or unreadable, whose end is before its start, or whose text is empty
+ * is skipped, and the rest are kept. NOTE, STYLE and REGION blocks are not
+ * cues. Voice and styling tags are stripped. A file that does not start with
+ * WEBVTT has no cues.
+ */
+export function parseVtt(text) {
+  const src = String(text ?? '').replace(/^﻿/, '').replace(/\r\n?/g, '\n');
+  if (!/^WEBVTT(?:[ \t].*)?(?:\n|$)/.test(src)) return [];
+  const cues = [];
+  for (const block of src.split(/\n[ \t]*\n+/).slice(1)) {
+    const lines = block.split('\n').filter((l) => l.trim() !== '');
+    if (!lines.length || /^(NOTE|STYLE|REGION)\b/.test(lines[0])) continue;
+    const at = lines.findIndex((l) => l.includes('-->'));
+    if (at < 0 || at > 1) continue;
+    const [left, right = ''] = lines[at].split('-->');
+    const start = vttSeconds(left);
+    const end = vttSeconds(right.trim().split(/\s+/)[0]);
+    if (start == null || end == null || end < start) continue;
+    const words = cueText(lines.slice(at + 1).join(' '));
+    if (words) cues.push({ start, end, text: words });
+  }
+  return cues.sort((a, b) => a.start - b.start || a.end - b.end);
+}
+
+/** The index of the cue showing at `t` seconds, or -1 between cues. */
+export function cueAt(cues, t) {
+  const now = Number(t);
+  if (!Array.isArray(cues) || !Number.isFinite(now)) return -1;
+  let at = -1;
+  for (let i = 0; i < cues.length; i += 1) {
+    if (cues[i].start > now) break;
+    if (now < cues[i].end) at = i;
+  }
+  return at;
+}
+
+/** The ready captions the item read sends, as `{ language, label }` with a label to show. */
+export function captionChoices(video) {
+  const list = Array.isArray(video?.stream?.captions) ? video.stream.captions : [];
+  const seen = new Set();
+  return list
+    .map((c) => ({ language: clean(c?.language), label: clean(c?.label) }))
+    .filter((c) => c.language && !seen.has(c.language) && seen.add(c.language))
+    .map((c) => ({ ...c, label: c.label || c.language }));
+}
+
+/**
+ * lr7: a ready Stream video's hover preview (the signed `preview_url` the item
+ * read sends), or null — for anything not ready, or an address not on Stream's
+ * own hosts.
+ */
+export function previewOf(item) {
+  const vs = item?.video_stream;
+  if (!vs || vs.state !== 'ready') return null;
+  let u;
+  try { u = new URL(clean(vs.preview_url)); } catch { return null; }
+  if (u.protocol !== 'https:') return null;
+  return /^customer-[a-z0-9]+\.cloudflarestream\.com$/.test(u.hostname) || u.hostname === 'videodelivery.net' ? u.toString() : null;
+}
+
+/** LR4b: the transcript panel's words when the captions could not be timed. */
+export const CUES_UNREADABLE = 'The captions could not be read, so the plain transcript is shown.';
+
+// ── #4180 (D4180): the list reads ───────────────────────────────────────────
+
+/** "04:12", or "1:02:03" past the hour; null when the time is not recorded. */
+export function clockLabel(seconds) {
+  const n = Number(seconds);
+  if (seconds === null || seconds === undefined || seconds === '' || !Number.isFinite(n) || n < 0) return null;
+  const s = Math.floor(n);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = String(s % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${String(m).padStart(2, '0')}:${sec}`;
+}
+
+/** lr7: "Found in a transcript … at 04:12", or without the time when the transcript carries none; null when not a transcript match. */
+export function transcriptLine(match) {
+  if (!match || match.in !== 'transcript') return null;
+  const at = clockLabel(match.at_seconds);
+  return `Found in a transcript${match.snippet ? ` “${clean(match.snippet)}”` : ''}${at ? ` at ${at}` : ''}`;
+}
+
+const whereLine = (w) => (w && clean(w.title) ? `${w.kind === 'program' ? 'Programme' : 'Course'} · ${clean(w.title)}` : null);
+
+/** lr2a: an exercise row — title, the course or programme, your status, updated. */
+export function exerciseRow(x) {
+  return {
+    key: `exercise:${clean(x?.uid)}`,
+    uid: clean(x?.uid),
+    title: clean(x?.title) || 'Untitled exercise',
+    where: whereLine(x?.where),
+    status: SUBMISSION_STATUS[x?.status] ? x.status : null,
+    updated: x?.updated_at || null,
+    href: x?.uid ? `/learning/exercises/${encodeURIComponent(x.uid)}` : null,
+  };
+}
+
+/** lr2b: an exam row. A best score not recorded is null ("Score not recorded"), never 0; null attempts left is unlimited. */
+export function examRow(x) {
+  const best = x?.best_score_percent;
+  return {
+    key: `exam:${clean(x?.uid)}`,
+    uid: clean(x?.uid),
+    title: clean(x?.title) || 'Untitled exam',
+    where: whereLine(x?.where),
+    questions: Number.isFinite(Number(x?.question_count)) ? Number(x.question_count) : null,
+    limit: minutesLabel(x?.time_limit_minutes) || 'Untimed',
+    passMark: x?.pass_mark_percent == null ? null : `${Number(x.pass_mark_percent)}% to pass`,
+    attemptsLeft: x?.attempts_left == null ? 'Unlimited attempts' : `${Number(x.attempts_left)} attempt${Number(x.attempts_left) === 1 ? '' : 's'} left`,
+    best: best === null || best === undefined || !Number.isFinite(Number(best)) ? null : `${Math.round(Number(best))}%`,
+    href: x?.uid ? `/learning/exams/${encodeURIComponent(x.uid)}` : null,
+  };
+}
+
+/** lr12: My learning's exercises, one per exercise, the latest submission's status. */
+export function mySubmissionRows(submissions) {
+  const seen = new Set();
+  const out = [];
+  for (const s of Array.isArray(submissions) ? submissions : []) {
+    const uid = clean(s?.exercise?.uid);
+    if (!uid || seen.has(uid)) continue;
+    seen.add(uid);
+    out.push({ exercise_uid: uid, title: clean(s.exercise.title) || 'Untitled exercise', status: s.status ?? null, href: `/learning/exercises/${encodeURIComponent(uid)}` });
+  }
+  return out;
+}
+
+/** lr12: My learning's exam results, one per exam: the best submitted score, else the latest attempt with no score. */
+export function myAttemptRows(attempts) {
+  const by = new Map();
+  for (const a of Array.isArray(attempts) ? attempts : []) {
+    const uid = clean(a?.exam?.uid);
+    if (!uid) continue;
+    const score = a.score_percent == null ? null : Number(a.score_percent);
+    const was = by.get(uid);
+    if (!was || (score !== null && (was.score_percent === null || score > was.score_percent))) {
+      by.set(uid, { exam_uid: uid, title: clean(a.exam.title) || 'Untitled exam', score_percent: score, passed: a.passed ?? null, href: `/learning/exams/${encodeURIComponent(uid)}` });
+    }
+  }
+  return [...by.values()];
+}
+
+/** lr1: the "Your progress" strip's four figures; a figure not recorded reads "Not recorded", never 0. */
+export function statsTiles(stats) {
+  const nr = 'Not recorded';
+  const n = (v) => (v === null || v === undefined || !Number.isFinite(Number(v)) ? nr : String(Number(v)));
+  const exams = stats?.exams;
+  return [
+    { key: 'courses', label: 'Courses in progress', value: n(stats?.courses_in_progress) },
+    { key: 'lessons', label: 'Lessons completed this month', value: n(stats?.lessons_completed_this_month) },
+    { key: 'watch', label: 'Watch time this month', value: durationLabel(stats?.watch_seconds_this_month) || nr },
+    { key: 'exams', label: 'Exams passed', value: exams && Number.isFinite(Number(exams.sat)) && Number.isFinite(Number(exams.passed)) ? `${Number(exams.passed)} of ${Number(exams.sat)}` : nr },
+  ];
+}

@@ -53,10 +53,14 @@ test('every name is derived from the code, and the shared dataset is not', () =>
     `database_name = "${n.d1}"`,
     `queue = "${n.queue}"`,
     `dead_letter_queue = "${n.dlq}"`,
-    `index_name = "${n.vectorize}"`,
+    `index_name = "${n.vectorize.VECTORIZE}"`,
+    // D1556 (#3803): each Vectorize binding gets its own branch index.
+    `index_name = "${n.vectorize.DECK_QUOTES}"`,
     `bucket_name = "${n.r2.FILES}"`,
     `bucket_name = "${n.r2.PUBLICATIONS}"`,
     `bucket_name = "${n.r2.BACKUPS}"`,
+    // #4201: the company logo bucket is the branch's own too.
+    `bucket_name = "${n.r2.COMPANY_LOGOS}"`,
     'BRANCH_CODE = "fr"',
     'BRANCH_TERRITORY = "FR,BE,LU"',
     'CF_WORKER_SCRIPT_NAME = "studioos-fr"',

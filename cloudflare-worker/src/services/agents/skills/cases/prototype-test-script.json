@@ -1,0 +1,32 @@
+{
+  "skill": "prototype-test-script",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "build.records": {
+        "prototype": "Recall reminders v1",
+        "flows": [
+          {
+            "name": "Set a reminder",
+            "goal": "Under one minute"
+          },
+          {
+            "name": "Edit a template"
+          }
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "draft",
+    "must_include": [
+      "Set a reminder",
+      "Edit a template"
+    ],
+    "must_say_not_recorded": [],
+    "must_not_include": [
+      "click the blue button"
+    ]
+  }
+}

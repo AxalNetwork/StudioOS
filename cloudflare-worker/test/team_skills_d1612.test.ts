@@ -26,6 +26,7 @@ import { readFileSync } from 'node:fs';
 import { SignJWT } from 'jose';
 import { Hono } from 'hono';
 import { makeD1 } from './_d1_sqlite.mjs';
+import { passHqGate } from './_hq_skill_gate.ts';
 import { addColumnsFrom, stripForeignKeys, tableFromBaseline } from './_baseline.mjs';
 import { AI_LOG_SCHEMA } from './_ai_budget_fixture.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
@@ -50,6 +51,9 @@ function world() {
   db.exec(sql('migrations/712_team_agents.sql'));
   db.exec(sql('migrations/202611021724_team_agents_persona.sql')); // D4117: persona_key
   db.exec(sql('migrations/759_agent_skills.sql'));
+  db.exec(sql('migrations/202611022326_agent_skill_context_tokens.sql')); // D4121: publishing stores each version's context_tokens
+  db.exec(sql('migrations/202611022055_agent_skill_moderation.sql')); // D4161: the attach gate reads it
+  db.exec(sql('migrations/202611022140_hq_skill_lifecycle.sql')); // D4160: the HQ publish gate reads it
   const user = db.prepare("INSERT INTO users (id, uid, email, name, role, founder_id, subscription_tier, subscription_status) VALUES (?, ?, ?, ?, ?, ?, 'growth', 'active')");
   user.run(SUPER, 'u-super', 'super@example.test', 'Sue Super', 'admin', null);
   user.run(ADMIN, 'u-admin', 'admin@example.test', 'Ada Admin', 'admin', null);
@@ -107,6 +111,7 @@ const update = (over: Record<string, unknown> = {}) => ({
 async function published(w: W, body: Record<string, unknown>, who = SUPER) {
   const made = await call(w, who, 'POST', '/skills', body);
   assert.equal(made.status, 201, made.text);
+  await passHqGate(w.db, made.body.skill.uid); // D4160: HQ's approval and golden cases, as HQ's process gives them
   const pub = await call(w, who, 'POST', `/skills/${made.body.skill.uid}/publish`);
   assert.equal(pub.status, 200, pub.text);
   return made.body.skill.uid as string;
@@ -186,6 +191,7 @@ test('D1612: a published version is immutable; a pinned agent stays on it until 
   assert.equal((await call(w, EDITOR, 'PATCH', `/skills/${uid}`, { name: 'Taken over' })).status, 403);
   const reader = await call(w, MEMBER, 'GET', `/skills/${uid}`);
   assert.equal(reader.body.skill.steps.length, 2, 'readers see the published version, not the edit');
+  await passHqGate(w.db, uid);
   assert.equal((await call(w, SUPER, 'POST', `/skills/${uid}/publish`)).body.skill.version, 2);
   let mine = await call(w, MEMBER, 'GET', `/agents/${CFO}/skills`);
   // A2 (#3956) names them pinned_version and current_version.
@@ -206,7 +212,9 @@ test('D1612: a published version is immutable; a pinned agent stays on it until 
   assert.match(detail.body.skill.skill_md, /version: 2/);
 
   // Retired: it stays where it is pinned and cannot be added again.
-  assert.equal((await call(w, SUPER, 'PATCH', `/skills/${uid}`, { status: 'retired' })).body.skill.status, 'retired');
+  // D4160: an Axal skill is retired from HQ with its replacement (`admin_hq_skills.ts`), not here.
+  assert.equal((await call(w, SUPER, 'PATCH', `/skills/${uid}`, { status: 'retired' })).body.error, 'replacement_required');
+  w.db.prepare("UPDATE agent_skills SET status = 'retired' WHERE uid = ?").run(uid);
   assert.equal((await call(w, EDITOR, 'PUT', `/agents/${CFO}/skills`, { skills: [uid] })).status, 200, 'kept at its version');
   assert.equal((await call(w, EDITOR, 'PUT', `/agents/${PROJECT_CFO}/skills`, { skills: [uid] })).body.error, 'skill_retired');
   assert.equal((await call(w, SUPER, 'POST', `/skills/${uid}/publish`)).body.error, 'retired');

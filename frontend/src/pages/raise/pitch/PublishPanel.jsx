@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { deckPublishApi } from '../../../lib/api/deckPublish.js';
 import { reportError } from '../../../lib/log';
+import { TABS, tabHref } from '../caprel/capRelModel';
+import { EXEMPTION_NOT_RECORDED, exemptionLabel } from '../caprel/capRelTabsModel';
 
 /**
  * D1564 (#3811, deck builder v2 D3) — the publish control. It lives ONLY in
@@ -13,9 +15,15 @@ import { reportError } from '../../../lib/log';
  * says, and the gate cannot be turned off. The Worker enforces both
  * (`routes/deck_publish.ts`); a refusal is shown in its own words.
  *
- * Nothing is written until Publish is pressed. The exemption has no default:
- * the founder states it. A published link can also be embedded on the sites
- * listed (https addresses, at most five).
+ * Nothing is written until Publish is pressed. A published link can also be
+ * embedded on the sites listed (https addresses, at most five).
+ *
+ * D4086 (#4086): THE EXEMPTION IS THE ROUND'S. The panel shows the deck's
+ * round and the exemption recorded on it, read-only, and links to Raise ›
+ * Capital relationships › Commitments (Round settings) when it is not
+ * recorded or does not allow a page. There is no per-link picker: the Worker
+ * reads the round and refuses anything but 506(c), and the read carries its
+ * reason (`refusal`), which is shown verbatim.
  */
 
 const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
@@ -28,12 +36,16 @@ const FIELD = 'min-h-[34px] rounded-[8px] border border-axal-hairline bg-white p
 
 export const PUBLISH_TITLE = 'Publish as a web page';
 export const PUBLIC_OFF = 'Public pages are off until counsel\'s wording is in. A published link asks for the reader\'s email first.';
-export const EXEMPTION_ASK = 'Which exemption is this round offered under?';
-export const EXEMPTION_506B_NOTE = 'A 506(b) round cannot be published. Share it one investor at a time.';
-export const EXEMPTION_OPTIONS = Object.freeze([
-  { id: '506b', label: 'Rule 506(b)' },
-  { id: '506c', label: 'Rule 506(c)' },
-]);
+export const ROUND_LINE = 'Round';
+export const NO_ROUND = 'This deck is not written for a round';
+export const RAISE_LINK = 'Open Round settings in Raise';
+export const ROUND_UNREAD = 'The round this deck is for could not be read.';
+
+/** Raise › Capital relationships › Commitments, where Round settings records the exemption. */
+export function raiseHref(projectId) {
+  const tab = TABS.find((t) => t.id === 'commitments');
+  return tabHref(tab, projectId ? `?project_id=${projectId}` : '');
+}
 
 /** The origins typed, one per line or comma-separated. The Worker checks each. */
 export const originsOf = (text) => String(text || '').split(/[\s,]+/).map((s) => s.trim()).filter(Boolean);
@@ -44,19 +56,27 @@ export function embedUrl(made, origin = globalThis.location?.origin ?? '') {
   return m ? `${origin}/embed/${m[1]}` : null;
 }
 
-/** What publishing would do, before it does it. */
-export function whatPublishDoes(state) {
-  if (state.exemption === '506b') return EXEMPTION_506B_NOTE;
-  if (state.exemption !== '506c') return 'Say which exemption the round is offered under before publishing.';
+/** What publishing would do, before it does it: the round's reason when it cannot, else the gate and the embeds. */
+export function whatPublishDoes(state, value) {
+  if (value && value.round_readable === false) return ROUND_UNREAD;
+  if (value?.refusal?.message) return value.refusal.message;
   const sites = originsOf(state.origins);
   return `Anyone with this link sees the cards after giving their email.${sites.length ? ` It can be embedded on ${sites.length === 1 ? 'one site' : `${sites.length} sites`}.` : ''}`;
+}
+
+/** The round line: its name and recorded exemption, "Not recorded" when there is none. */
+export function roundLine(value) {
+  if (!value || value.round_readable === false) return null;
+  const r = value.round;
+  if (!r) return NO_ROUND;
+  return `${r.name || 'Unnamed round'} · ${r.exemption ? exemptionLabel(r.exemption) : EXEMPTION_NOT_RECORDED}`;
 }
 
 const failureOf = (e) => e?.data?.message || e?.data?.detail || (typeof e?.data?.error === 'string' && !/^[a-z_]+$/.test(e.data.error) ? e.data.error : null) || 'It could not be saved. Try again.';
 
 export default function PublishPanel({ deck, made }) {
   const [read, setRead] = useState({ status: 'loading', value: null });
-  const [state, setState] = useState({ exemption: null, origins: '' });
+  const [state, setState] = useState({ origins: '' });
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(null);
 
@@ -84,7 +104,9 @@ export default function PublishPanel({ deck, made }) {
       setFailed(failureOf(e));
     } finally { setBusy(false); }
   };
-  const publish = () => save({ on: true, exemption: state.exemption, gate: 'email', embed_origins: originsOf(state.origins) });
+  const blocked = !value || value.round_readable === false || !!value.refusal;
+  // The round's reason stands: nothing is sent while it blocks a page.
+  const publish = () => (blocked ? undefined : save({ on: true, gate: 'email', embed_origins: originsOf(state.origins) }));
   const embed = embedUrl(made);
 
   return (
@@ -112,16 +134,13 @@ export default function PublishPanel({ deck, made }) {
       ) : null}
       {read.status === 'ok' && !published ? (
         <div className="flex flex-col gap-2.5">
-          <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0">
-            <legend className={`mb-1 ${INK} text-[12.5px]`}>{EXEMPTION_ASK}</legend>
-            {EXEMPTION_OPTIONS.map((o) => (
-              <label key={o.id} className={`flex items-center gap-2 text-[12.5px] ${INK}`}>
-                <input type="radio" name="pitch-publish-exemption" value={o.id} checked={state.exemption === o.id}
-                  onChange={() => setState((s) => ({ ...s, exemption: o.id }))} data-testid={`pitch-publish-exemption-${o.id}`} />
-                {o.label}
-              </label>
-            ))}
-          </fieldset>
+          <div className="flex flex-col gap-1" data-testid="pitch-publish-round">
+            <span className={EYE}>{ROUND_LINE}</span>
+            <span className={`${INK} text-[12.5px]`}>{roundLine(value) ?? ROUND_UNREAD}</span>
+            {value?.refusal || value?.round_readable === false ? (
+              <a className="w-fit text-[12.5px] font-semibold text-axal-violet underline dark:text-violet-300" href={raiseHref(deck.project_id)} data-testid="pitch-publish-raise">{RAISE_LINK}</a>
+            ) : null}
+          </div>
           <label className={`flex items-center justify-between gap-3 text-[12.5px] ${INK}`}>
             <span>Ask for the reader&apos;s email</span>
             <input type="checkbox" checked readOnly disabled={!publicOn} aria-describedby={publicOn ? undefined : 'pitch-publish-public-off'} data-testid="pitch-publish-gate" />
@@ -131,8 +150,8 @@ export default function PublishPanel({ deck, made }) {
             <textarea className={`${FIELD} min-h-[56px] py-1.5 font-mono`} value={state.origins} onChange={(e) => setState((s) => ({ ...s, origins: e.target.value }))}
               placeholder="https://example.com" data-testid="pitch-publish-origins" />
           </label>
-          <p className={`m-0 ${MUTED}`} data-testid="pitch-publish-what">{whatPublishDoes(state)}</p>
-          <button type="button" className={`w-fit ${PRIMARY}`} onClick={publish} disabled={busy || state.exemption !== '506c'} data-testid="pitch-publish-save">
+          <p className={`m-0 ${MUTED}`} data-testid="pitch-publish-what">{whatPublishDoes(state, value)}</p>
+          <button type="button" className={`w-fit ${PRIMARY}`} onClick={publish} disabled={busy || blocked} data-testid="pitch-publish-save">
             {busy ? 'Publishing…' : 'Publish'}
           </button>
         </div>
