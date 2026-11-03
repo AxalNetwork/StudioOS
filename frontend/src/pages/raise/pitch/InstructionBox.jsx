@@ -86,21 +86,7 @@ export default function InstructionBox({
     setProposal(null); setPlaceError(null);
     // A figure is refused here, before anything is quoted or held.
     if (instructionField(words).figure) { setStep({ kind: 'refused', refusal: { message: FIGURE_REFUSAL } }); return; }
-    if (plan.kind === 'several') {
-      // D1527: one quote for the whole selection; nothing runs until Run.
-      const sent = severalBody({ cardIndex, areas, instruction: words, variants });
-      setResults(null);
-      setStep({ kind: 'several-quote', quote: null, body: sent });
-      deckInstructApi.quote(deckId, sent).then(
-        (q) => setStep((s) => (s?.kind === 'several-quote' && s.body === sent ? { ...s, quote: q } : s)),
-        (e) => {
-          const refusal = refusalOf(e);
-          if (refusal?.topUp) onTokens?.();
-          setStep((s) => (s?.kind === 'several-quote' && s.body === sent ? { kind: 'refused', refusal } : s));
-        },
-      );
-      return;
-    }
+    if (plan.kind === 'several') { quoteSeveral(words, variants); return; }
     const change = typedChange(words);
     const sent = body(change);
     setStep({ kind: 'quote', quote: null, change, body: sent });
@@ -110,6 +96,25 @@ export default function InstructionBox({
         const refusal = refusalOf(e);
         if (refusal?.topUp) onTokens?.();
         setStep((s) => (s?.kind === 'quote' && s.body === sent ? { kind: 'refused', refusal } : s));
+      },
+    );
+  };
+
+  /**
+   * D1527: one quote for the whole selection; nothing runs until Run. The
+   * variants picker sits in the quote's step (the at-rest box stays as pd19
+   * draws it), and changing it quotes again with the same words.
+   */
+  const quoteSeveral = (words, n) => {
+    const sent = severalBody({ cardIndex, areas, instruction: words, variants: n });
+    setResults(null);
+    setStep({ kind: 'several-quote', quote: null, body: sent });
+    deckInstructApi.quote(deckId, sent).then(
+      (q) => setStep((s) => (s?.kind === 'several-quote' && s.body === sent ? { ...s, quote: q } : s)),
+      (e) => {
+        const refusal = refusalOf(e);
+        if (refusal?.topUp) onTokens?.();
+        setStep((s) => (s?.kind === 'several-quote' && s.body === sent ? { kind: 'refused', refusal } : s));
       },
     );
   };
@@ -214,12 +219,6 @@ export default function InstructionBox({
           onChange={(e) => { setText(e.target.value); if (step?.kind !== 'running') setStep(null); }}
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault?.(); send(); } }}
           data-testid="pitch-instruction-field" />
-        {plan.kind === 'several' ? (
-          <select className={`${GHOST} ${tap}`} aria-label="Variants per area" value={variants} disabled={waiting}
-            onChange={(e) => { setVariants(Number(e.target.value)); if (step?.kind === 'several-quote') setStep(null); }} data-testid="pitch-instruction-variants">
-            {VARIANT_CHOICES.map((n) => <option key={n} value={n}>{n === 1 ? '1 variant' : `${n} variants`}</option>)}
-          </select>
-        ) : null}
         <button type="button" className={`${PRIMARY} ${tap}`} disabled={disabled || !text.trim() || waiting} onClick={send} data-testid="pitch-instruction-send">Send</button>
       </div>
       {plan.kind === 'off' ? <span className={MUTED} data-testid="pitch-instruction-off">{INSTRUCTION_OFF}</span> : null}
@@ -238,6 +237,10 @@ export default function InstructionBox({
         <div className="flex flex-col gap-1.5" data-testid="pitch-instruction-several-quote">
           <span className="flex flex-wrap items-center gap-2">
             <span className={COST} data-testid="pitch-instruction-hold">{severalHold(step.quote, aiTokens)}</span>
+            <select className={`${GHOST} ${tap}`} aria-label="Variants per area" value={variants} disabled={!step.quote}
+              onChange={(e) => { const n = Number(e.target.value); setVariants(n); quoteSeveral(step.body.instruction, n); }} data-testid="pitch-instruction-variants">
+              {VARIANT_CHOICES.map((n) => <option key={n} value={n}>{n === 1 ? '1 variant' : `${n} variants`}</option>)}
+            </select>
             <button type="button" className={`${PRIMARY} ${tap}`} disabled={!step.quote?.quote_uid || severalHold(step.quote, aiTokens).startsWith('None')} onClick={runSeveral} data-testid="pitch-instruction-run">Run</button>
             <button type="button" className={`${GHOST} ${tap}`} onClick={() => setStep(null)}>Cancel</button>
           </span>

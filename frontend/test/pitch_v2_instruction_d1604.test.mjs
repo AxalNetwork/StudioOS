@@ -186,11 +186,18 @@ test('D1527: an instruction on a 3-area selection quotes those areas, runs once,
     await m.press(m.by('pitch-editor-block-b3'), { shiftKey: true });
     assert.equal(m.pr(node(m, 'pitch-instruction-field')).placeholder, 'Tell Eadwyn what to change in these 3 areas');
     await m.type(node(m, 'pitch-instruction-field'), 'shorter');
-    await m.fire(node(m, 'pitch-instruction-variants'), 'onChange', { target: { value: '2' } });
+    assert.ok(!m.by('pitch-instruction-variants'), 'the at-rest box draws no picker (pd19, the pd11 screenshot)');
     await m.press(node(m, 'pitch-instruction-send'));
-    const asked = m.calls.filter((c) => c[0] === 'instruct.quote');
+    await m.settle();
+    let asked = m.calls.filter((c) => c[0] === 'instruct.quote');
     assert.equal(asked.length, 1);
-    assert.deepEqual(asked[0][2], { card: 0, selection: [{ area_id: 'b1' }, { area_id: 'b2' }, { area_id: 'b3' }], instruction: 'shorter', variants: 2 });
+    assert.deepEqual(asked[0][2], { card: 0, selection: [{ area_id: 'b1' }, { area_id: 'b2' }, { area_id: 'b3' }], instruction: 'shorter', variants: 1 });
+    // Picking 2 variants quotes again, with the same words.
+    await m.fire(node(m, 'pitch-instruction-variants'), 'onChange', { target: { value: '2' } });
+    await m.settle();
+    asked = m.calls.filter((c) => c[0] === 'instruct.quote');
+    assert.equal(asked.length, 2, 'the picker re-quotes');
+    assert.deepEqual(asked[1][2], { card: 0, selection: [{ area_id: 'b1' }, { area_id: 'b2' }, { area_id: 'b3' }], instruction: 'shorter', variants: 2 });
     assert.match(m.text(node(m, 'pitch-instruction-hold')), /^Holds up to .+ · you pay what it uses · 2 areas · 1 cannot run$/);
     assert.match(m.text(node(m, 'pitch-instruction-area-refused-b3')), /A figure tile changes from its own tools\./);
     assert.equal(m.calls.filter((c) => c[0] === 'instruct.run').length, 0, 'nothing runs until Run');
@@ -201,6 +208,7 @@ test('D1527: an instruction on a 3-area selection quotes those areas, runs once,
     const ran = m.calls.filter((c) => c[0] === 'instruct.run');
     assert.equal(ran.length, 1, 'one run');
     assert.equal(ran[0][2].quote_uid, 'q-sev', 'the run is the quoted one');
+    assert.equal(ran[0][2].variants, 2, 'the run asks for the variants that were quoted');
     assert.ok(m.by('pitch-area-result-b1') && m.by('pitch-area-result-b2'), 'a proposal for each area that could run');
     assert.ok(!m.by('pitch-area-result-b3') || m.pr(m.by('pitch-area-result-b3'))['data-state'] === 'refused', 'b3 proposes nothing');
     assert.match(m.text(node(m, 'pitch-area-result-b2')), /Synthetic shorter body/);
