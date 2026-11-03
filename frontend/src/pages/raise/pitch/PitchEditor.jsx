@@ -29,6 +29,7 @@ import { ArrangeSet, DecorLayers } from './BlockTools';
 import { isDecorOn } from './arrangeModel';
 import ShareDialog from './ShareDialog';
 import CommentsSheet from './CommentsSheet';
+import { editorCardOf } from './reviewTileModel';
 import ExportDialog from './ExportDialog';
 import TransitionSheet from './TransitionSheet';
 import { BackgroundSheet, BrandKitSheet, CheckSheet, RemixSheet, ReplaceImagesSheet, SizeSheet, SourcesSheet, StageSheet, StructureSheet, ThemeSheet, VersionsSheet } from './DeckSheets';
@@ -401,11 +402,13 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   }, meta);
   const setTheme = (t) => edit({ type: 'setTheme', theme: t }, { label: 'Theme' });
   const setAudience = (a) => edit({ type: 'setAudience', audience: a }, { label: 'Audience' });
-  const [sel, setSel] = useState(0);
+  // D4271 (#4271): `?card=<n>` (from 1) opens on that card, and `&comments=1` with its comments, as the Review tile links them.
+  const [deepLink] = useSearchParams();
+  const [sel, setSel] = useState(() => editorCardOf(deepLink.get('card'), cardsOf(deck).length));
   const [pickState, setPickState] = useState(NO_PICK);
   const [askLine, setAskLine] = useState(null);
   const [dialog, setDialog] = useState(null);
-  const [sheet, setSheet] = useState(null);
+  const [sheet, setSheet] = useState(() => (deepLink.get('comments') === '1' && deepLink.get('card') ? 'comments' : null));
   // D1513 (#3765): what the last structure moved to the speaker notes, until the card changes.
   const [structureNote, setStructureNote] = useState(null);
   const [compare, setCompare] = useState(null);
