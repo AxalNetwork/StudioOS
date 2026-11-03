@@ -18,6 +18,8 @@ The retention periods for generated assets are owner decision W (#3716), pending
 | `deck_r2_tombstones` | one row per deck image the cleanup deleted: key, venture, bytes, reason, day (D1508) | venture cascade | none (each names an object already deleted) |
 | `deck_exports` | the record of each export: version, format, hash, Drive id | no cascade | none stored (an export is sent, not kept) |
 | `deck_brand_kits` | a venture's deck brand kit: font pair, palette roles, image style, reference and logo image uids (D1562) | venture cascade; one row per venture, replaced whole on save | none (it names kept `deck_images` rows by uid) |
+| `deck_brand_locks` | which parts of a venture's brand kit (fonts, palette, logo) are locked, by whom and when (D1572) | venture cascade; a row is deleted when its part is unlocked | none |
+| `deck_custom_layouts` | a venture's own layouts saved from a .pptx template: a name, the file's name, and the areas on the 12 × 6 grid (D1572) | venture cascade; removed one by one by a writer | none (the template file is never stored) |
 | `deck_checks` | claim-check runs on a version (D900) | deck and venture cascade | none |
 | `deck_notes` | notes on a version's cards (D905) | no cascade | none |
 | `deck_comments` | comment threads on a deck (D1570) | deck and venture cascade | none |
