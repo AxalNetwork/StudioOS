@@ -48,9 +48,13 @@ export const FAMILY_OF: Readonly<Record<CalendarEvent['kind'], ItemFamily>> = {
   mvp_task: 'deadlines',
   contact_task: 'deadlines',
   engagement_milestone: 'deadlines',
+  // D1614 W4 (#3972): a project's work item.
+  work_item: 'deadlines',
   // D1485 (#3979): the member's own connected calendars.
   external_google: 'other',
   external_microsoft: 'other',
+  // #3957: AI agent sessions sit with the team's tasks.
+  agent_session: 'tasks',
 };
 
 /** The kinds `POST /calendar/push/:kind/:source_id` copies to Google or Outlook. */
@@ -74,6 +78,7 @@ export const ROLE_WORDS: Readonly<Record<string, string>> = {
   investor_in_room: 'In your deal room',
   yours: 'Your event',
   learning_plan: 'Your learning plan',
+  team_agent: 'Your team’s AI agent',
   venture_team: 'Your venture’s team',
   your_send: 'You confirmed this send',
   bot_sender: 'You sent the bot',
@@ -84,6 +89,7 @@ export const ROLE_WORDS: Readonly<Record<string, string>> = {
   delivering: 'You deliver this',
   from_google: 'On your Google Calendar',
   from_outlook: 'On your Outlook calendar',
+  project_work: 'On your project’s Work board',
 };
 
 /** The role a kind's reader does not set, because there is only one. */
@@ -108,6 +114,8 @@ const ROLE_BY_KIND: Partial<Record<CalendarEvent['kind'], string>> = {
   mvp_task: 'assigned_to_you',
   contact_task: 'venture_follow_up',
   engagement_milestone: 'delivering',
+  work_item: 'project_work',
+  agent_session: 'team_agent',
   external_google: 'from_google',
   external_microsoft: 'from_outlook',
 };
@@ -154,6 +162,9 @@ export function hrefOf(ev: CalendarEvent): string | null {
     case 'mvp_task': return '/build/board';
     case 'contact_task': return '/contacts';
     case 'engagement_milestone': return '/delivery/health';
+    // D1614 W4: the project's Work board.
+    case 'work_item': return ev.project_id ? `/projects/${ev.project_id}/work` : null;
+    case 'agent_session': return typeof ev.url === 'string' && ev.url.startsWith('/calendar') ? ev.url : '/calendar';
     default: return null;
   }
 }

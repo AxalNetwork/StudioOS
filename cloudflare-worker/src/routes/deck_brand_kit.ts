@@ -1,46 +1,28 @@
 /**
- * D1562 (#3809, deck v2 D1) — the deck brand kit's write, and Apply brand.
+ * D1562 (#3809, deck v2 D1) — the deck brand kit's writer and Apply brand.
  *
- *   PUT  /api/decks/brand-kit?project_id=
- *        { fonts: { heading, body } | null, logo_url, palette: { ground?, ink?,
- *          accent?, secondary?, muted? }, image_style, library: [{ url, alt?, reference? }] }
- *        → { project_id, kit }   the same view `GET /api/decks/brand-kit` answers
- *   POST /api/decks/:id/apply-brand  { cards?, theme? }
- *        → { deck_id, theme, cards, changed, tokens, problems: [], reason, adjustments }
+ *   PUT  /api/decks/brand-kit?project_id=   { fonts?, palette?, image_style?, references?, logo_uid? }
+ *        the venture's deck brand kit (migration 737), replaced whole. Fonts are
+ *        two of `BRAND_FONTS` (Google Fonts under the OFL, decision K); palette
+ *        roles are #rrggbb; references (at most three) and the logo are kept deck
+ *        images of this venture, or the save is refused, naming the one that is not.
+ *   POST /api/decks/:id/apply-brand
+ *        the deck restyled with the kit as ONE new version (one undo step):
+ *        theme `brand`, the font pair, the logo corner, and the art direction from
+ *        the image style. Never a model, never a charge. A palette colour that
+ *        would fail contrast is left out and named in `adjustments`.
  *
- * The read stays `GET /api/decks/brand-kit` in `decks.ts`; both answer the
- * view of `services/decks/brandKit.ts`.
- *
- * THE WRITE replaces the whole deck kit in one D1 batch (the row and its
- * library), so a failed write leaves the kit as it was. Fonts are a pair from
- * the Google Fonts (OFL) list only (owner decision K = A); the logo and every
- * library image pass the deck image guard. Nothing about a person, an email
- * or a figure is logged.
- *
- * APPLY BRAND never calls a model and writes nothing. `cards` and `theme` are
- * the deck as the editor holds it (its unsaved edits included), sanitised as
- * a save would be; without them it restyles the stored version. It answers
- * the whole restyled deck at once, which the editor applies as ONE edit, so
- * one Undo puts every card and the theme back. A deck it cannot restyle
- * without a contrast failure is refused (`problems` is [] on every 200).
- * With no kit recorded it refuses with `no_kit`, never a sample kit.
- *
- * Who: writing the kit, and applying it, need write access to the venture
- * (`projectOwned` with `write`); a support session may not write the kit.
- * All SQL is bound (in `brandKit.ts`).
+ * `GET /api/decks/brand-kit` (D898, `decks.ts`) reads the kit, with these
+ * fields under `kit.deck`. Writers of the venture only, as the deck save.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
-import decks, { ensureSchema, getDeckRow, projectOwned, sanitizeImageUrl, themeOfRow } from './decks';
-import type { RouteMount } from '../util/routeRegistry';
-import { isSupportSession } from '../integrations/providers/mercury';
 import { refuse } from '../util/refusal';
-import { sanitizeModel, sanitizeTheme } from '../services/decks/slideModel';
-import { KIT_CHOICES, applyBrandToDeck, kitBody, readKitView, writeDeckKit } from '../services/decks/brandKit';
-
-/** The most cards one Apply brand restyles; a deck past it is refused, never cut. */
-export const APPLY_MAX_CARDS = 100;
+import decks, { auditDeckWrite, ensureSchema, getDeckRow, insertVersion, projectOwned, rowToDeck, sanitizeSlides, themeOfRow } from './decks';
+import type { RouteMount } from '../util/routeRegistry';
+import { fetchLandingPageForProject } from '../services/decks/branding';
+import { applyBrand, deckBrandKitFor, keptImagesOf, sanitizeBrandKit, saveDeckBrandKit } from '../services/decks/brandKit';
 
 const deckBrandKit = new Hono<{ Bindings: Env }>();
 
@@ -49,46 +31,46 @@ deckBrandKit.put('/brand-kit', async (c) => {
   const pid = Number(c.req.query('project_id'));
   if (!Number.isSafeInteger(pid) || pid <= 0) return c.json({ error: 'project_id required' }, 400);
   try { await projectOwned(c, user, pid, { write: true }); } catch { return c.json({ error: 'forbidden' }, 403); }
-  if (await isSupportSession(c)) return refuse(c, 403, { code: 'support_session_refused', message: 'A support session cannot change this member\'s brand kit.' });
-  const body = kitBody(await c.req.json().catch(() => null), sanitizeImageUrl);
-  if ('code' in body) return refuse(c, body.status, { code: body.code, message: body.message });
-  try {
-    await writeDeckKit(c.env, pid, Number(user.id), body);
-    return c.json({ project_id: pid, kit: await readKitView(c.env, pid, sanitizeImageUrl), choices: KIT_CHOICES });
-  } catch (e) {
-    console.warn('[deck_brand_kit] write failed', (e as Error)?.message);
-    return refuse(c, 503, { code: 'unwritten', message: 'Your brand kit could not be saved. Nothing was changed. Try again.' });
-  }
+  const body = await c.req.json().catch(() => null) as any;
+  if (!body || typeof body !== 'object') return c.json({ error: 'A brand kit is required.' }, 400);
+  if (body.fonts != null && (typeof body.fonts !== 'object')) return c.json({ error: 'fonts must be { display, body }.' }, 400);
+  const kit = sanitizeBrandKit(body);
+  if (body.fonts && !kit.fonts) return refuse(c, 422, { code: 'font_not_offered', message: 'Choose two fonts from the list: Google Fonts under the open font licence.' });
+  const named = [...kit.references, ...(kit.logo_uid ? [kit.logo_uid] : [])];
+  const kept = await keptImagesOf(c.env, pid, named);
+  const missing = named.find((u) => !kept.has(u));
+  if (missing) return refuse(c, 422, { code: 'image_not_kept', message: 'A reference image or the logo is not a kept image of this venture. Keep it in the image library first.', extra: { image_uid: missing } });
+  await saveDeckBrandKit(c.env, pid, kit, Number(user.id) || null);
+  await auditDeckWrite(c, user, pid, 'deck_brand_kit_saved', 'Deck brand kit saved');
+  return c.json({ project_id: pid, deck: await deckBrandKitFor(c.env, pid) });
 });
 
 deckBrandKit.post('/:id{[0-9]+}/apply-brand', async (c) => {
   const user = await requireAuth(c);
   const id = Number(c.req.param('id'));
-  const body = await c.req.json().catch(() => ({})) as { cards?: unknown; theme?: unknown } | null;
-  if (body?.cards != null && !Array.isArray(body.cards)) return c.json({ error: 'cards must be the deck\'s cards' }, 400);
-  if (Array.isArray(body?.cards) && body!.cards.length > APPLY_MAX_CARDS) return refuse(c, 400, { code: 'too_many_cards', message: `Apply brand restyles at most ${APPLY_MAX_CARDS} cards at once.` });
   await ensureSchema(c.env);
   let row: any;
   try { row = await getDeckRow(c.env, id); } catch { return c.json({ error: 'not found' }, 404); }
   const pid = Number(row.project_id);
-  try { await projectOwned(c, user, pid, { write: true, audit: false }); } catch { return c.json({ error: 'forbidden' }, 403); }
+  try { await projectOwned(c, user, pid, { write: true }); } catch { return c.json({ error: 'forbidden' }, 403); }
   let kit;
-  try { kit = await readKitView(c.env, pid, sanitizeImageUrl); } catch (e) {
-    console.warn('[deck_brand_kit] kit unreadable', (e as Error)?.message);
-    return refuse(c, 503, { code: 'unreadable', message: 'Your brand kit could not be read, so nothing was applied. Try again.' });
-  }
-  if (!kit) return refuse(c, 409, { code: 'no_kit', message: 'No brand kit is recorded yet. Add a logo, a palette or a font pair under Brand kit, then apply it.' });
-  let raw: unknown[];
-  if (Array.isArray(body?.cards)) raw = body!.cards;
-  else { try { raw = JSON.parse(row.slides || '[]'); } catch { raw = []; } }
-  const cards = raw.map((s: any) => (s && typeof s === 'object' && !Array.isArray(s) ? { ...s, ...sanitizeModel(s, sanitizeImageUrl) } : s));
-  const theme = body && 'theme' in body ? sanitizeTheme(body.theme, sanitizeImageUrl) : themeOfRow(row);
-  const r = applyBrandToDeck(cards, theme, kit);
-  // The applied theme passes the save's own sanitiser, so the editor can save what it is handed.
-  const saved = sanitizeTheme(r.theme, sanitizeImageUrl);
-  if (r.problems.length || !saved) return refuse(c, 422, { code: 'unreadable_result', message: 'Apply brand would leave text that cannot be read, so nothing was applied.' });
-  return c.json({ deck_id: Number(row.id), theme: saved, cards: r.cards, changed: r.changed, tokens: r.tokens, problems: r.problems, reason: r.reason, adjustments: r.adjustments });
+  try { kit = await deckBrandKitFor(c.env, pid); }
+  catch { return refuse(c, 503, { code: 'unreadable', message: 'Your brand kit could not be read. Nothing was changed.' }); }
+  const landing = await fetchLandingPageForProject(c.env, pid).catch(() => null);
+  if (!kit && !landing) return refuse(c, 409, { code: 'no_brand_kit', message: 'There is no brand kit to apply yet. Add one under ⋯ › Brand kit.' });
+  const applied = applyBrand(themeOfRow(row), landing, kit ?? sanitizeBrandKit({}));
+  if (applied.problems.length) return refuse(c, 409, { code: 'contrast', message: applied.problems[0] });
+  // Cards that cannot be read are refused, never saved over with an empty deck.
+  let slides: any[];
+  try { slides = sanitizeSlides(JSON.parse(row.slides || '[]')); }
+  catch { return refuse(c, 503, { code: 'unreadable', message: 'This deck could not be read. Nothing was changed.' }); }
+  const newId = await insertVersion(c.env, pid, slides, row.title, Number(user.id) || null,
+    { audience: row.audience ?? null, round_ref: row.round_ref ?? null, theme: applied.theme });
+  await auditDeckWrite(c, user, pid, 'deck_brand_applied', 'Brand kit applied to the deck');
+  return c.json({ deck: rowToDeck(await getDeckRow(c.env, Number(newId))), adjustments: applied.adjustments, one_undo_step: true });
 });
 
+// Ahead of `decks`, whose `/:id` routes would otherwise take these paths.
 export const mount: RouteMount = { path: '/api/decks', router: deckBrandKit, before: [decks] };
+
 export default deckBrandKit;

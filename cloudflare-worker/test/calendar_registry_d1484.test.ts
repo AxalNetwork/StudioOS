@@ -56,7 +56,7 @@ function fixture() {
 
 test('D1484: registry keys equal READERS keys equal the union, and every derived list agrees with it', () => {
   const union = [...(SERVICE.match(/\n {2}kind: ((?:'\w+'(?:\s*\|\s*)?)+);/)?.[1] || '').matchAll(/'(\w+)'/g)].map((m) => m[1]).sort();
-  assert.equal(union.length, 26); // #3959: Learning joined; D1486 §b (#3981): Publish sends and planned content; §c (#3982): round_close and nda_expiry; §d (#3983): four task stores; D1485 (#3979): external_google and external_microsoft.
+  assert.equal(union.length, 28); // #3957: agent_session. D1614 W4 (#3972): work_item. #3959: Learning joined; D1486 §b (#3981): Publish sends and planned content; §c (#3982): round_close and nda_expiry; §d (#3983): four task stores; D1485 (#3979): external_google and external_microsoft.
   assert.deepEqual(Object.keys(SOURCES).sort(), union);
   assert.deepEqual([...KNOWN_KINDS].sort(), union);
   assert.deepEqual(Object.keys(FAMILY_OF).sort(), union);

@@ -1,6 +1,7 @@
-# `services/agents/skills/` — the Axal starter skill library (#3953, D1612)
+# `services/agents/skills/` — the "From Axal" skill library (#3953, D1612; #4225, D4225)
 
-HQ skills an agent can be given, each one SKILL.md file named by its slug, in
+About eighty HQ skills an agent can be given, ten or more in each of the eight
+areas (a skill's area and level are those of its first taxonomy tag), each one SKILL.md file named by its slug, in
 the format #3951 fixes:
 
 ```
@@ -31,3 +32,15 @@ say is "Not recorded", and must never say. Part D (#3954) runs them.
 - **Text, not HTML,** under 32 KB. A1 parses it as data and never executes it.
 - **One case per skill**, fed only from reads the skill is given.
 - `cloudflare-worker/test/agent_skill_library_d1612.test.ts` checks all of this.
+
+## How the library reaches the store (D4225)
+
+The Worker reads no file at run time. `node scripts/build-skill-library.mjs`
+embeds every file here in `../skillLibrary.generated.ts`, which is never edited
+by hand. Run it after adding or changing a skill; the library test fails while
+the module is stale.
+
+`POST /api/admin/ai-agents/skills/library/seed { reason }` (Super Admin) creates
+each skill not yet in the store as an Axal **draft** with its golden case. It
+publishes nothing: each draft goes through D4160's review, evals and publish.
+Running it again creates nothing. `skill_library_seed_d4225.test.ts` checks it.

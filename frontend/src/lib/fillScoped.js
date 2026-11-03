@@ -27,6 +27,16 @@ export const SCOPED_FORMS = Object.freeze({
   perk: Object.freeze({ page: 'Operating Partner · Offers · Perk deals', form: 'perk', table: 'perks' }),
   // #4046 (#3740 2b): the deal page's New note, a firm's private note; its words only.
   dealNote: Object.freeze({ page: 'Investor · Deals · Deal room', form: 'deal-note', table: 'deal_notes' }),
+  // #4046 (B2): a member's answers to a product-testing programme's questions, in their own words.
+  testingAnswers: Object.freeze({ page: 'Member · Studio · Product testing', form: 'testing-answers', table: 'testing_applications' }),
+  // #4046 (B4): Admin · Programs' Propose a program, a studio's proposal: its name, purpose and eligibility.
+  programProposal: Object.freeze({ page: 'Admin · Programs', form: 'program-proposal', table: 'program_proposals' }),
+  // #4046 (B4): New invitation on Admin · Community · Partner invitations: the admin's message to the invitee.
+  partnerInvitation: Object.freeze({ page: 'Admin · Community · Partner invitations', form: 'partner-invitation', table: 'partner_invitations' }),
+  // #4046 (B4): the review drawer's new comment to an article's author, on Super Admin · Content · Content queue.
+  reviewComment: Object.freeze({ page: 'Super Admin · Content · Content queue', form: 'review-comment', table: 'article_review_comments' }),
+  // #4046 (B4): HQ's New segment on Super Admin · Content · Personas: its name and who they are.
+  segment: Object.freeze({ page: 'Super Admin · Content · Personas', form: 'segment-profile', table: 'segment_profiles' }),
 });
 
 export const SUPPORT_OFF = 'Ask is off in a support session.';
@@ -54,6 +64,11 @@ export const NOT_FILLED_HERE = Object.freeze({
   offering: Object.freeze(['Price · Eadwyn never fills what you charge.']),
   perk: Object.freeze(['Value, credits, cap and conditions · they are yours to set.']),
   'deal-note': Object.freeze(['Tag · it is yours to choose.']),
+  'testing-answers': Object.freeze(['Availability and email consent · they are yours to give.']),
+  'program-proposal': Object.freeze(['Who it is for, group, join method, cycle, seats, rewards, contract templates, what HQ receives and tools · they are yours to set.']),
+  'partner-invitation': Object.freeze(['Email, name, what to offer and terms · they are yours to set.']),
+  'review-comment': Object.freeze(['Where it points and whether to approve · those are yours to decide.']),
+  'segment-profile': Object.freeze(['Key, profile and status · they are HQ’s call.']),
 });
 
 /** The values a scoped form's Save should still treat as Eadwyn's: placed and not typed over. */

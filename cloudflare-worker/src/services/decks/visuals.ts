@@ -28,7 +28,6 @@ import { IMAGE_MODEL, IMAGE_MODEL_LABEL, PALETTES, STYLES, type Style } from './
 import type { Series } from './chartSeries';
 import type { Diagram } from './diagramModel';
 import { isDarkTheme, themeTokens, type BrandKit } from './designSystem';
-import { imageStyleOf, type BrandImageStyle } from './brandKitLists';
 import { snapshotHash } from './sources';
 
 const all = async <T>(env: Env, sql: string, ...binds: unknown[]) => ((await env.DB.prepare(sql).bind(...binds).all<T>()).results || []) as T[];
@@ -227,35 +226,18 @@ export function imageCapability(env: Pick<Env, 'AI'> | null | undefined, catalog
 }
 
 /**
- * D1562 (#3809, dk-auto gap d): the brand kit's image style, as the image
- * route's style and the words the prompt carries. Every image stays an
- * illustration (`images.ts`): "Photo" is a photographic-looking scene, never
- * a photograph of a real person or place; "Screenshot" is clean product line
- * art with no legible text. "Illustration" keeps the theme's own style.
- */
-export const IMAGE_STYLE_DIRECTION: Readonly<Record<BrandImageStyle, { style: Style | null; words: string }>> = Object.freeze({
-  photo: { style: 'scene', words: 'with a photographic look, natural light and depth of field' },
-  illustration: { style: null, words: 'as an illustration' },
-  screenshot: { style: 'line', words: 'in the manner of a clean product screenshot, with no legible text' },
-});
-
-/**
  * One art direction per deck, so every illustration in it belongs together:
  * one style, the theme's palette, and the same prompt suffix. A brand theme
  * draws in the brand's colours (only those that stay legible, D898 §8.2).
- * D1562: a kit's image style decides the style, whatever the theme, and the
- * direction says it came from the brand kit (pd31's "From Brand kit · image style").
  */
-export function artDirection(themeKind: unknown, kit: BrandKit | null = null): { style: Style; palette: typeof PALETTES[number]; colours: string[]; suffix: string; image_style: BrandImageStyle | null; from: 'brand_kit' | 'theme' } {
+export function artDirection(themeKind: unknown, kit: BrandKit | null = null): { style: Style; palette: typeof PALETTES[number]; colours: string[]; suffix: string } {
   const { tokens } = themeTokens(themeKind, kit);
-  const kitStyle = imageStyleOf(kit?.image_style);
-  const fromKit = kitStyle ? IMAGE_STYLE_DIRECTION[kitStyle] : null;
-  const style: Style = fromKit?.style ?? (isDarkTheme(tokens.kind) ? 'isometric' : 'flat');
+  const style: Style = isDarkTheme(tokens.kind) ? 'isometric' : 'flat';
   const palette = tokens.kind === 'brand' ? 'brand' : 'neutral';
   const colours = [tokens.colours.accent, tokens.chart[1], tokens.colours.ground];
   return {
-    style, palette, colours, image_style: kitStyle, from: kitStyle ? 'brand_kit' : 'theme',
-    suffix: `Consistent ${style} illustration style across the deck${fromKit ? `, ${fromKit.words}` : ''}, in a palette of ${colours.join(', ')}. No text, no numbers, no charts, no logos, no people.`,
+    style, palette, colours,
+    suffix: `Consistent ${style} illustration style across the deck, in a palette of ${colours.join(', ')}. No text, no numbers, no charts, no logos, no people.`,
   };
 }
 

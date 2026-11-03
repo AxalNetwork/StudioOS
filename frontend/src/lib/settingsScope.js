@@ -42,6 +42,8 @@ export const companyTeamPath = (uid) => `/account/companies/${enc(uid)}/settings
 export const companySettingsPath = (uid) => `/account/portfolio/${enc(uid)}/settings`;
 /** D1413 (#3696, PF6a/PF8): Company settings › Legal and › Projects, under Portfolio. */
 export const companyLegalPath = (uid) => `/account/portfolio/${enc(uid)}/settings/legal`;
+/** D1614 CO2 (#3976): the company's compliance tasks, under Legal. */
+export const companyCompliancePath = (uid) => `/account/companies/${enc(uid)}/settings/compliance`;
 export const companyProjectsPath = (uid, id = null) => `/account/portfolio/${enc(uid)}/settings/projects${id != null ? `/${enc(id)}` : ''}`;
 export const companyProjectTeamPath = (uid, id) => `/account/companies/${enc(uid)}/settings/projects/${enc(id)}/team`;
 export const projectTeamPath = (id) => `/projects/${enc(id)}/settings/team`;
@@ -147,9 +149,11 @@ function companyEntries(c, project, projects) {
   });
   return [
     { key: 'team', label: 'Team', path: companyTeamPath(c.uid) },
-    { key: 'company', label: COMPANY_SETTINGS, path: companySettingsPath(c.uid), activeOnly: true, sub: 'General · Legal', children: [
+    { key: 'company', label: COMPANY_SETTINGS, path: companySettingsPath(c.uid), activeOnly: true, sub: 'General · Legal · Compliance', children: [
       { key: 'general', label: 'General', path: companySettingsPath(c.uid), activeOnly: true },
       { key: 'legal', label: 'Legal', path: companyLegalPath(c.uid) },
+      // D1614 CO2 (#3976): the compliance task list, under Legal; a standalone project has no company, so no entry.
+      { key: 'compliance', label: 'Compliance', path: companyCompliancePath(c.uid) },
     ] },
     { key: 'projects', label: 'Projects', path: companyProjectsPath(c.uid), count: listed ? listed.length : null, children: rows },
   ];
@@ -271,4 +275,66 @@ export function useScopeInView(activeCompany, activeProject = null) {
   if (published) return published;
   if (activeProject && activeProject.id != null) return scopeFor({ project: activeProject });
   return scopeFor({ company: activeCompany || null });
+}
+
+// ---------------------------------------------------------------- D4152: one "Settings" entry
+
+/** The sidebar's single entry (D4152, ST1): a gear, "Settings", and the scope under it. */
+export const SETTINGS = 'Settings';
+
+/**
+ * What the one "Settings" entry opens and names, for a scope (D4152 §1):
+ *   company          the company's settings (General), "Acme"
+ *   company_project  the project's settings inside its company, "Acme › Pilot app"
+ *   project          the standalone project's settings, "Pilot app"
+ * `prefixes` are the addresses that light it: any settings tab of that scope.
+ */
+export function settingsEntry(scope) {
+  if (!scope) return null;
+  const c = scope.company;
+  const p = scope.project;
+  if (scope.kind === 'company' && c?.uid) {
+    return {
+      path: companySettingsPath(c.uid), where: c.name, title: `${SETTINGS} · ${c.name}`,
+      prefixes: [`/account/companies/${enc(c.uid)}/settings`, companySettingsPath(c.uid)],
+    };
+  }
+  if (scope.kind === 'company_project' && p) {
+    const where = c?.name ? `${c.name} › ${p.name}` : p.name;
+    const path = c?.uid ? companyProjectsPath(c.uid, p.id) : projectTeamPath(p.id);
+    const prefixes = [projectSettingsPath(p.id)];
+    if (c?.uid) prefixes.push(companyProjectsPath(c.uid, p.id), `/account/companies/${enc(c.uid)}/settings/projects/${enc(p.id)}`);
+    return { path, where, title: `${SETTINGS} · ${where}`, prefixes };
+  }
+  if (scope.kind === 'project' && p) {
+    return { path: projectSettingsPath(p.id), where: p.name, title: `${SETTINGS} · ${p.name}`, prefixes: [projectSettingsPath(p.id)] };
+  }
+  return null;
+}
+
+/** Whether a location is one of the scope's settings pages (the entry is lit). */
+export const settingsActive = (entry, pathname = '') => !!entry && entry.prefixes.some((pre) => pathname === pre || pathname.startsWith(`${pre}/`));
+
+/** Portfolio as a main-navigation row (D4152 §3): a place, not a setting. */
+export const PORTFOLIO_ROW = Object.freeze({ to: '/account/portfolio', label: 'Portfolio', match: ['/account/portfolio', '/account/companies'] });
+
+/**
+ * The role's groups with Portfolio in the main navigation, right after the
+ * Studio row (D4152 §3). A shell with no Studio row (the HQ shell) is left as
+ * it is and keeps Portfolio at the foot (`portfolioInNav` false). A shell
+ * that already has a "Portfolio" row (an investor's holdings, `/portfolio`)
+ * gets this one as "Companies", so two rows never share a name.
+ */
+export function withPortfolioRow(groups, icon = null) {
+  const list = Array.isArray(groups) ? groups : [];
+  const items = list.flatMap((g) => g.items || []);
+  if (items.some((i) => i.to === PORTFOLIO_ROW.to)) return { groups: list, portfolioInNav: true };
+  const at = list.findIndex((g) => (g.items || []).some((i) => i.label === 'Studio'));
+  if (at < 0) return { groups: list, portfolioInNav: false };
+  const row = { ...PORTFOLIO_ROW, icon, label: items.some((i) => i.label === 'Portfolio') ? 'Companies' : 'Portfolio' };
+  const g = list[at];
+  const i = g.items.findIndex((x) => x.label === 'Studio');
+  const next = list.slice();
+  next[at] = { ...g, items: [...g.items.slice(0, i + 1), row, ...g.items.slice(i + 1)] };
+  return { groups: next, portfolioInNav: true };
 }

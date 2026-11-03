@@ -24,7 +24,10 @@
 //   GET    /api/teams/tasks/:uid/quote             → { quote: { available, value_microusd } }
 //   POST   /api/teams/tasks/:uid/start             → 202 { run }; 409 agent_busy | scope_busy | queue_full | not_ready; 403 engine_paused | scope_paused
 //   GET    /api/teams/agents/:uid/runs             → { runs: [Run] }
-//   GET    /api/teams/runs/:uid                    → { run, steps: [{ name, status, at, summary }], cost }
+//   GET    /api/teams/runs/:uid                    → { run, steps: [{ name, status, at, summary }], cost, detail } (D1614 W3, #3971:
+//                                                     detail = agent, skill, work, sources, tools, proposals, outcome, times, cost { held, charged, model, tokens })
+//   POST   /api/teams/runs/:uid/retry              → 202 { run }; 409 not_retryable, and every start refusal (W3)
+//   GET    /api/teams/project/:id/activity?who=&person=&agent=&task=&before= → { items, next_cursor, lists? } (W3; projects only)
 //   POST   /api/teams/runs/:uid/cancel             → { run }; 409 not_running
 //   GET    /api/teams/:scope/:id/engine            → { engine: 'off'|'paused'|'canary'|'on', halted, scope_paused, max_parallel_runs, autonomy: 'manual'|'self_start' }
 //   PUT    /api/teams/:scope/:id/engine            { paused?, max_parallel_runs? } → the same; 400 invalid_engine
@@ -75,6 +78,11 @@ export const agentEngineApi = {
   agentRuns: (agentUid) => request(`/teams/agents/${enc(agentUid)}/runs`),
   run: (uid) => request(`/teams/runs/${enc(uid)}`),
   cancelRun: (uid) => request(`/teams/runs/${enc(uid)}/cancel`, { method: 'POST' }),
+  retryRun: (uid) => request(`/teams/runs/${enc(uid)}/retry`, { method: 'POST' }),
+  projectActivity: (projectId, { who, person, agent, task, before } = {}) => {
+    const q = new URLSearchParams(Object.entries({ who, person, agent, task, before }).filter(([, v]) => v)).toString();
+    return request(`/teams/project/${enc(projectId)}/activity${q ? `?${q}` : ''}`);
+  },
   engine: (scope, id) => request(`${base(scope, id)}/engine`),
   setEngine: (scope, id, body) => request(`${base(scope, id)}/engine`, { method: 'PUT', body: JSON.stringify(body) }),
   planQuote: (goalUid) => request(`/teams/goals/${enc(goalUid)}/plan/quote`),
@@ -107,6 +115,24 @@ export const agentEngineApi = {
   addMemoryFact: (agentUid, body) => request(`/teams/agents/${enc(agentUid)}/memory`, { method: 'POST', body: JSON.stringify(body) }),
   forgetMemory: (noteUid) => request(`/teams/memory/${enc(noteUid)}`, { method: 'DELETE' }),
   forgetAllMemory: (agentUid) => request(`/teams/agents/${enc(agentUid)}/memory`, { method: 'DELETE' }),
+  // #3957 (D1613 §10): AI agent work sessions on the Calendar (CAL8–CAL11).
+  //   GET    /api/teams/sessions/agents                  → { agents: [{ uid, name, role_key, role_name, company_name, project_name, model, tools, skills, status }], can_schedule }
+  //   POST   /api/teams/agents/:uid/sessions/estimate    { cadence, run_at? | time, weekday?, day_of_month?, zone?, target_kind?, target_id? }
+  //                                                      → { per_session_cents, month_cents, cap_used_cents, cap_cents } (null when unread, never 0)
+  //   POST   /api/teams/agents/:uid/duties               { skill_id, skill_version?, cadence, run_at | time + weekday / day_of_month, zone,
+  //                                                        target_kind?, target_id?, instruction? } → 201 { session };
+  //                                                      422 skill_not_in_role | target_not_readable | run_at_past | over_cap; 409 agent_paused
+  //   GET    /api/teams/sessions/:uid                    → { session }
+  //   PATCH  /api/teams/sessions/:uid                    the same fields, or { status: 'paused' | 'active' } → { session }
+  //   DELETE /api/teams/sessions/:uid                    → { session } (cancelled)
+  //   POST   /api/teams/sessions/:uid/run                → 202 { run }; 409 agent_paused; 402 out_of_tokens
+  schedulableAgents: () => request('/teams/sessions/agents'),
+  sessionEstimate: (agentUid, body) => request(`/teams/agents/${enc(agentUid)}/sessions/estimate`, { method: 'POST', body: JSON.stringify(body) }),
+  scheduleSession: (agentUid, body) => request(`/teams/agents/${enc(agentUid)}/duties`, { method: 'POST', body: JSON.stringify(body) }),
+  session: (uid) => request(`/teams/sessions/${enc(uid)}`),
+  updateSession: (uid, patch) => request(`/teams/sessions/${enc(uid)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  cancelSession: (uid) => request(`/teams/sessions/${enc(uid)}`, { method: 'DELETE' }),
+  runSession: (uid) => request(`/teams/sessions/${enc(uid)}/run`, { method: 'POST' }),
   // #3851 (E7 of #3742): the evaluation board (TM14), and HQ's halt and rebuild.
   //   GET    /api/teams/:scope/:id/evaluation?days=30|90 → { days, roles: [{ role_key, decided, rated, note, acceptance, edit, discard,
   //                                              median_decision_h, open_past_3d, expired, cost_per_accepted: { available, value_microusd },

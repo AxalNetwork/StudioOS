@@ -9,8 +9,9 @@ import { workAdapter } from './workAdapter.js';
 import { NOT_RECORDED as NOT_RECORDED_WORD } from '../../lib/absence';
 import {
   BACKLOG_COLUMNS, BURN_RANGES, BURN_SPLITS, WORK_PURPOSE, WORK_TABS,
-  assigneeLine, backlogRows, boardColumns, burnup, columnLabel, dueLine, moveTargets, needsYou, runChip, runCost, runOutcome,
+  assigneeLine, backlogRows, boardColumns, burnup, canMove, columnLabel, dueLine, moveTargets, needsYou, runChip, runCost, runOutcome, runSheet,
 } from './workModel.js';
+import WorkloadView from './WorkloadView.jsx';
 import './work.css';
 
 /**
@@ -18,10 +19,11 @@ import './work.css';
  * `/projects/:id/work`.
  *
  * Only projects have Work (the owner, 2026-11-01). Every read and write goes
- * through `workAdapter.js`, which is off until the Worker parts land (W1 #3969,
- * W2 #3970, W3 #3971): until then the page draws its header, its views and the
- * honest "not switched on yet" block, never an invented board. The views take
- * the shapes the Worker parts answer, so turning a method on is the only change.
+ * through `workAdapter.js`. W1's board, item, move, assign and create and W2's
+ * burn-up are live (#3973); an engine that is off answers the honest "not
+ * switched on yet" block, never an invented board. A card moves (Move to ▾, or
+ * dragged to a column) only where the Worker allows it: a project editor, or
+ * the card's own assignee (`canMove`, from the board's `viewer`).
  */
 export default function WorkPage() {
   const { id } = useParams();
@@ -43,7 +45,7 @@ export default function WorkPage() {
     setBoard({ status: 'loading' });
     try {
       const r = await workAdapter.board(id);
-      setBoard(r.available ? { status: 'ready', items: r.data?.items || [] } : { status: 'off', reason: r.reason });
+      setBoard(r.available ? { status: 'ready', items: r.data?.items || [], viewer: r.data?.viewer || null } : { status: 'off', reason: r.reason });
     } catch {
       setBoard({ status: 'error' });
     }
@@ -55,6 +57,30 @@ export default function WorkPage() {
     }
   }, [id]);
   useEffect(() => { load(); }, [load]);
+
+  const [notice, setNotice] = useState(null);
+  const [adding, setAdding] = useState(false);
+  const move = useCallback(async (uid, column) => {
+    setNotice(null);
+    try {
+      const r = await workAdapter.move(uid, column);
+      if (!r.available) setNotice(r.reason);
+    } catch (e) {
+      setNotice(e?.message || 'That move did not go through. Nothing changed.');
+    }
+    load();
+  }, [load]);
+  const create = useCallback(async (title) => {
+    setNotice(null);
+    try {
+      const r = await workAdapter.create(id, { title });
+      if (!r.available) setNotice(r.reason);
+      setAdding(false);
+    } catch (e) {
+      setNotice(e?.message || 'The item was not created.');
+    }
+    load();
+  }, [id, load]);
 
   const name = project?.name || 'this project';
   const company = project?.company_name || project?.company?.name || null;
@@ -69,7 +95,9 @@ export default function WorkPage() {
           <p className={`m-0 ${MUTED}`}>{WORK_PURPOSE}</p>
         </div>
         <div className="wk-head-actions">
-          <button type="button" className={BTN_PRIMARY} disabled={off} title={off ? board.reason : undefined} data-testid="work-new-item">+ New item</button>
+          <button type="button" className={BTN_PRIMARY} disabled={off || board.status !== 'ready' || !board.viewer?.can_manage}
+            title={off ? board.reason : board.viewer && !board.viewer.can_manage ? 'Only a project editor can add items.' : undefined}
+            onClick={() => setAdding(true)} data-testid="work-new-item">+ New item</button>
           <HeaderAsk label={`Work · ${name}`} />
         </div>
       </header>
@@ -98,10 +126,13 @@ export default function WorkPage() {
         </HonestBlock>
       ) : null}
 
-      {board.status === 'ready' && tab === 'board' ? <Board items={board.items} onOpen={setItemUid} /> : null}
+      {adding ? <NewItem onCreate={create} onCancel={() => setAdding(false)} /> : null}
+      {notice ? <p className="wk-notice" role="status" data-testid="work-notice">{notice}</p> : null}
+      {board.status === 'ready' && tab === 'board' ? <Board items={board.items} viewer={board.viewer} onOpen={setItemUid} onMove={move} /> : null}
       {board.status === 'ready' && tab === 'backlog' ? <Backlog items={board.items} onOpen={setItemUid} /> : null}
       {tab === 'burnup' && burn.status === 'ready' ? <Burnup series={burn.series} /> : null}
       {tab === 'mine' && board.status === 'ready' ? <p className={MUTED} data-testid="work-mine-later">My items arrive with #3994 (W8).</p> : null}
+      {tab === 'workload' ? <WorkloadView projectId={id} onOpenItem={setItemUid} onNotice={setNotice} /> : null}
 
       {itemUid ? <ItemSheet uid={itemUid} onClose={() => setItemUid(null)} onRun={setRunUid} /> : null}
       {runUid ? <RunSheet uid={runUid} onClose={() => setRunUid(null)} /> : null}
@@ -109,8 +140,24 @@ export default function WorkPage() {
   );
 }
 
-/** WK1: the six columns, the "Needs you" strip, cards with "Move to ▾". */
-export function Board({ items, onOpen, readOnly = false }) {
+/** "+ New item": a title, then the project's To triage column. */
+function NewItem({ onCreate, onCancel }) {
+  const [title, setTitle] = useState('');
+  return (
+    <form className="wk-new" onSubmit={(e) => { e.preventDefault(); if (title.trim()) onCreate(title.trim()); }} data-testid="work-new-form">
+      <input aria-label="Item title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} data-testid="work-new-title" />
+      <button type="submit" className={BTN_PRIMARY} disabled={!title.trim()} data-testid="work-new-create">Add</button>
+      <button type="button" className={BTN_TEXT} onClick={onCancel}>Cancel</button>
+    </form>
+  );
+}
+
+/**
+ * WK1: the six columns, the "Needs you" strip, cards with "Move to ▾". A card
+ * this reader may move is draggable to a column; any other card is not, and
+ * has no Move menu. Without `viewer` (a board read before #3973) nothing moves.
+ */
+export function Board({ items, onOpen, onMove, viewer = null }) {
   const cols = boardColumns(items);
   const needs = needsYou(items);
   return (
@@ -124,13 +171,20 @@ export function Board({ items, onOpen, readOnly = false }) {
       ) : null}
       <div className="wk-board" data-testid="work-board">
         {cols.map((c) => (
-          <section key={c.key} className="wk-col" data-tone={c.tone} aria-label={`${c.label}, ${c.count}`} data-testid={`work-col-${c.key}`}>
+          <section key={c.key} className="wk-col" data-tone={c.tone} aria-label={`${c.label}, ${c.count}`} data-testid={`work-col-${c.key}`}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              const uid = e.dataTransfer?.getData('text/plain');
+              const card = (items || []).find((i) => i?.uid === uid);
+              if (card && card.column !== c.key && canMove(card, viewer)) onMove?.(uid, c.key);
+            }}>
             <header className="wk-col-head">
               <span className="wk-dot" aria-hidden="true" /><b>{c.label}</b><span className="wk-count">{c.count}</span>
             </header>
             <p className="wk-col-est">Estimate: {c.estimate}</p>
             <p className="wk-col-line">{c.line}</p>
-            {c.cards.map((card) => <Card key={card.uid} card={card} onOpen={onOpen} readOnly={readOnly} />)}
+            {c.cards.map((card) => <Card key={card.uid} card={card} onOpen={onOpen} onMove={onMove} readOnly={!canMove(card, viewer)} />)}
           </section>
         ))}
       </div>
@@ -138,13 +192,14 @@ export function Board({ items, onOpen, readOnly = false }) {
   );
 }
 
-function Card({ card, onOpen, readOnly }) {
+function Card({ card, onOpen, onMove, readOnly }) {
   const [menu, setMenu] = useState(false);
   const who = assigneeLine(card);
   const due = dueLine(card.due);
   const chip = runChip(card.run);
   return (
     <article className="wk-card" tabIndex={0} aria-label={card.title} onClick={() => onOpen?.(card.uid)}
+      draggable={!readOnly} onDragStart={readOnly ? undefined : (e) => e.dataTransfer?.setData('text/plain', card.uid)}
       onKeyDown={(e) => { if (e.key === 'Enter') onOpen?.(card.uid); }} data-testid={`work-card-${card.uid}`}>
       <b className="wk-card-title">{card.title}</b>
       {card.source ? <span className="wk-chip">{card.source}</span> : null}
@@ -160,7 +215,12 @@ function Card({ card, onOpen, readOnly }) {
           <button type="button" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(!menu)}>Move to ▾</button>
           {menu ? (
             <ul role="menu" className="wk-menu">
-              {moveTargets(card).map((t) => <li key={t.key} role="menuitem" data-tone={t.tone}>{t.label}</li>)}
+              {moveTargets(card).map((t) => (
+                <li key={t.key} role="none">
+                  <button type="button" role="menuitem" data-tone={t.tone} onClick={() => { setMenu(false); onMove?.(card.uid, t.key); }}
+                    data-testid={`work-move-${card.uid}-${t.key}`}>{t.label}</button>
+                </li>
+              ))}
             </ul>
           ) : null}
         </span>
@@ -252,28 +312,48 @@ export function ItemSheet({ uid, onClose, onRun }) {
   );
 }
 
-/** WK5: what a run read, produced and cost, named by source and tool, never a raw prompt. */
-export function RunSheet({ uid, onClose }) {
+/**
+ * WK5: what a run worked on, read, produced and decided, its outcome, timing and
+ * cost, named by source and tool, never a raw prompt. D1614 W6 (#3974): W3's
+ * `detail` (#4183); a Failed run that may be retried has Retry; a cost that was
+ * never recorded reads "Not recorded", never $0.
+ */
+export function RunSheet({ uid, onClose, onRetried }) {
   const [state, setState] = useState({ status: 'loading' });
+  const [retry, setRetry] = useState({ status: 'idle' });
   useEffect(() => {
     let live = true;
     workAdapter.run(uid).then((r) => { if (live) setState(r.available ? { status: 'ready', run: r.data } : { status: 'off', reason: r.reason }); }, () => { if (live) setState({ status: 'error' }); });
     return () => { live = false; };
   }, [uid]);
-  const run = state.run;
-  const out = run ? runOutcome(run) : null;
+  const sheet = state.run ? runSheet(state.run) : null;
+  const doRetry = async () => {
+    setRetry({ status: 'busy' });
+    try {
+      const r = await workAdapter.retry(uid);
+      setRetry(r.available ? { status: 'done' } : { status: 'off', message: r.reason });
+      if (r.available) onRetried?.(r.data);
+    } catch (e) {
+      setRetry({ status: 'error', message: e?.data?.message || e?.message || 'The run could not be retried. Try again.' });
+    }
+  };
   return (
-    <Sheet title={out ? out.title : 'Run'} onClose={onClose} width={560} testId="work-run-sheet"
-      footer={run?.status === 'failed' ? <button type="button" className={BTN_PRIMARY}>Retry</button> : null}>
+    <Sheet title={sheet ? sheet.title : 'Run'} onClose={onClose} width={560} testId="work-run-sheet"
+      footer={sheet?.retryable ? (
+        <button type="button" className={BTN_PRIMARY} disabled={retry.status === 'busy' || retry.status === 'done'} onClick={doRetry} data-testid="work-run-retry">
+          {retry.status === 'busy' ? 'Retrying…' : retry.status === 'done' ? 'Retry started' : 'Retry'}
+        </button>
+      ) : null}>
       {state.status === 'off' ? <HonestBlock>{state.reason}</HonestBlock> : null}
-      {run ? (
-        <dl className="wk-fields">
-          <dt>Skill</dt><dd>{run.skill || NOT_RECORDED_WORD}</dd>
-          <dt>Worked on</dt><dd>{run.worked_on || NOT_RECORDED_WORD}</dd>
-          <dt>Read</dt><dd>{(run.read || []).join(' · ') || NOT_RECORDED_WORD}</dd>
-          <dt>Outcome</dt><dd data-tone={out.tone}>{out.title}{out.reason ? `. ${out.reason}` : ''}</dd>
-          <dt>Cost</dt><dd>{runCost(run)}</dd>
-        </dl>
+      {state.status === 'error' ? <HonestBlock>The run could not be read. That is not the same as it not existing.</HonestBlock> : null}
+      {sheet ? (
+        <>
+          <p className={MUTED} data-testid="work-run-agent">{sheet.agent}</p>
+          <dl className="wk-fields" data-testid="work-run-fields">
+            {sheet.rows.map(([k, v]) => (<React.Fragment key={k}><dt>{k}</dt><dd data-tone={k === 'Outcome' ? sheet.tone : undefined}>{v}</dd></React.Fragment>))}
+          </dl>
+          {retry.message ? <p role="status" className={MUTED} data-testid="work-run-retry-said">{retry.message}</p> : null}
+        </>
       ) : null}
     </Sheet>
   );

@@ -7,7 +7,7 @@ canonical SQLite tables with Stripe stubbed.
 
 `deck_qa_d1559.test.ts` mounts `deck_qa.ts` and `cycle_raise.ts` over the real migrated schema (migration 736) and checks that no likely-question answer, founder's answer or kept note states a figure no binding carries, that real objections rank first, the founder-only gates, and the kept answers' write-back, staleness and refusals.
 
-`deck_brand_kit_d1562.test.ts` mounts `deck_brand_kit.ts` and `decks.ts` over the real migrated schema (migration 737) and checks the kit's write and refusals, who may read, write and apply, the pure pick and its reason, the issue's test (a 12-card deck restyled in one answer with zero contrast failures, no model, nothing written), `themeTokens` passing `themeProblems` for seeded random kits, the OFL-only font list, and the image style feeding the art direction.
+`deck_brand_kit_d1562.test.ts` mounts `deck_brand_kit.ts` and `decks.ts` over the real migrated schema (migration 737) and checks the kit write, a font that is not offered, an image that is not a kept image of the venture, the kit read (`kit.deck`, `font_options`, `pick`), Apply brand as one new version with no model, and a contrast failure that writes nothing.
 
 `program_usage_d1156.test.ts` exercises migration 601, count-only branch reports,
 newest-wins HQ storage, monthly source counts, partial failures, roles,
@@ -194,6 +194,7 @@ D1231 concurrency tests cover displayed If-Match tokens, source edits during a r
 | --- | --- |
 | `deal_insights_d1151.test.ts` | Real SQLite tests of D1151 deal access, NDA masks, publication, aggregates and sourced sharing. |
 | `messages_retirement_d1345.test.ts` | Phase 1: real mounted 410s and own-LP / own-advisor Email recipient scopes on migrated SQLite. |
+| `messages_drop_d1345.test.ts` | Post-rollout phase: migration `202611022352_retire_messages` asserts all four retired Messages stores are empty before dropping them, preserving Email. Release only after the retirement Worker is confirmed live. |
 D1169: `usage_storage_d1169.test.ts` holds the grown storage read: thirteen member stores, company files counted to the company owner, kinds, companies, the ten largest files, the allowance and its state, and that fund, legal, identity, 83(b) and HQ stores are never read. It and `usage_storage_d642.test.ts` run on `_storage_schema.ts`, which replays the baseline and every later migration once into a template database and copies it for each case. Rows are synthetic.
 
 | File | Purpose |

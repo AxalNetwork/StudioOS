@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Lightbox, Pill, Sheet, Unrecorded } from '../../ui';
-import { AgentPill, AgentTile } from './AgentMark.jsx';
+import { AgentPill } from './AgentMark.jsx';
+import AgentCard, { RiskScale } from './AgentCard.jsx';
+import AxalValuesBars from '../../components/profile/AxalValuesBars.jsx';
+import { agentValueBars, fixedCaption } from './personaModel.js';
 import * as agents from './agentsAdapter.js';
 import AgentSkillsCard from './AgentSkillsCard.jsx';
 import { BTN_DANGER, BTN_PRIMARY, BTN_SECONDARY, FIELD, HonestBlock, MONO, MUTED } from './teamUi.jsx';
@@ -25,6 +28,13 @@ import { agentName, budgetLine, dayTime, eventWords, pauseWords } from './teamMo
  *
  * D1612 (#3952, SK4): below the profile, its Skills and Values
  * (`AgentSkillsCard`, A2 #3956 through the adapter).
+ *
+ * D4119 (#4119, AG5): the profile opens on the persona (D4117): its full
+ * card with the status line, its Story and goal, and its Values, the same
+ * block a person's Axal behavioral values use (`AxalValuesBars`), the top 3
+ * highlighted and captioned "Fixed · part of who [Name] is", with the risk
+ * scale. The persona is the agent's name, so the first-name and surname
+ * fields are gone; no job title is drawn (the Worker sends none).
  */
 
 const PROPOSAL_KEYS = [['proposed', 'Proposed'], ['accepted', 'Accepted'], ['edited', 'Edited'], ['discarded', 'Discarded'], ['withdrawn', 'Withdrawn']];
@@ -45,39 +55,37 @@ export function Confirm({ title, body, button, danger, onCancel, onConfirm, refu
 }
 
 /** The profile body, from one `GET /api/teams/agents/:uid` answer. */
-export function AgentProfile({ data, canManage, onAsk, onSaveName }) {
+export function AgentProfile({ data, canManage, onAsk, legend = [] }) {
   const a = data.agent || {};
+  const persona = a.persona || null;
   const used = data.month_spend?.available ? data.month_spend.value_microusd : null;
   const cap = a.monthly_cap_microusd ?? data.cap_microusd ?? null;
   const pct = used != null && cap ? Math.min(100, (used / cap) * 100) : null;
   const counts = data.proposals && typeof data.proposals === 'object' ? data.proposals : null;
-  const [first, setFirst] = useState(a.first_name || '');
-  const [last, setLast] = useState(a.last_name || '');
-  const [nameNote, setNameNote] = useState('');
-  const editable = !!(canManage && onSaveName);
-  const changed = first.trim() !== (a.first_name || '') || last.trim() !== (a.last_name || '');
-  const saveName = async () => {
-    setNameNote('');
-    const out = await onSaveName({ first_name: first.trim() || null, last_name: last.trim() || null });
-    setNameNote(out?.available ? 'Saved.' : (out?.reason || 'It could not be saved. Try again.'));
-  };
   const resets = day(data.resets_at, { year: false });
   return (
     <div className="flex flex-col gap-5 px-5 py-5" data-testid="agent-profile">
-      <section className="flex flex-col gap-1.5">
-        <h3 className="m-0 text-[13px] font-bold text-axal-ink dark:text-gray-100">Name</h3>
-        <div className="grid grid-cols-2 gap-2">
-          <label className="flex flex-col gap-1"><span className={MUTED}>First name</span><input className={FIELD} value={first} onChange={(e) => setFirst(e.target.value)} readOnly={!editable} maxLength={40} data-testid="agent-first" /></label>
-          <label className="flex flex-col gap-1"><span className={MUTED}>Surname</span><input className={FIELD} value={last} onChange={(e) => setLast(e.target.value)} readOnly={!editable} maxLength={40} data-testid="agent-last" /></label>
-        </div>
-        <span className={MUTED}>Shown on the team and in every proposal. It keeps the AI agent mark.</span>
-        {editable ? (
-          <span className="flex items-center gap-2">
-            <button type="button" className={BTN_SECONDARY} disabled={!changed} onClick={saveName} data-testid="agent-save-name">Save name</button>
-            {nameNote ? <span role="status" className={MUTED}>{nameNote}</span> : null}
-          </span>
-        ) : null}
-      </section>
+      {persona ? (
+        <>
+          <AgentCard persona={persona} legend={legend} testId="agent-profile-card"
+            footer={(
+              <span className="flex flex-wrap items-center gap-1.5 text-[12.5px] text-axal-ink dark:text-gray-200" data-testid="agent-profile-status">
+                {a.status === 'paused' ? <span className="rounded-axal-pill bg-axal-amber px-2 py-0.5 text-[11px] font-semibold text-axal-amber-deep">Paused</span> : <Pill tone="ok">Active</Pill>}
+                <span>Sponsor: {a.sponsor?.name || <Unrecorded />}</span>
+              </span>
+            )} />
+          <section className="flex flex-col gap-1.5" data-testid="agent-story">
+            <h3 className="m-0 text-[13px] font-bold text-axal-ink dark:text-gray-100">Story</h3>
+            <p className="m-0 text-[13px] leading-[1.55] text-axal-ink dark:text-gray-200">{persona.story || <Unrecorded />}</p>
+            <p className={`m-0 ${MUTED}`}>Goal · {persona.goal || <Unrecorded />}</p>
+          </section>
+          <section className="flex flex-col gap-2" data-testid="agent-values">
+            <h3 className="m-0 text-[13px] font-bold text-axal-ink dark:text-gray-100">Values</h3>
+            <AxalValuesBars testId="agent-value" highlight bars={agentValueBars(persona, legend)} caption={fixedCaption(persona.name)} />
+            <div className="border-t border-axal-hairline pt-2 dark:border-gray-800"><RiskScale risk={persona.risk} /></div>
+          </section>
+        </>
+      ) : <Unrecorded>Who this agent is was not recorded</Unrecorded>}
       <section>
         <h3 className="m-0 mb-1.5 text-[13px] font-bold text-axal-ink dark:text-gray-100">Permissions</h3>
         <div role="table" aria-label="Permissions" className="rounded-axal-md border border-axal-hairline dark:border-gray-700">
@@ -138,11 +146,11 @@ export function AgentProfile({ data, canManage, onAsk, onSaveName }) {
 }
 
 /** Edit cap: a new monthly cap above $0, through `updateAgent(uid, { monthly_cap_microusd })`. */
-function CapEditor({ name, role, current, refusal, onCancel, onSave }) {
+function CapEditor({ name, current, refusal, onCancel, onSave }) {
   const [value, setValue] = useState(current != null ? String(Number(current) / 1e6) : '');
   const ok = Number(value) > 0;
   return (
-    <Lightbox label={`Edit the cap of ${name}`} title={`Edit the cap of ${name}, the ${role} agent`} onClose={onCancel} width={480} testId="agent-cap-editor"
+    <Lightbox label={`Edit the cap of ${name}`} title={`Edit the cap of ${name}`} onClose={onCancel} width={480} testId="agent-cap-editor"
       footer={(
         <div className="flex justify-end gap-2">
           <button type="button" className={BTN_SECONDARY} onClick={onCancel}>Cancel</button>
@@ -163,7 +171,10 @@ export default function AgentProfileSheet({ uid, canManage, editCap = false, onC
   const [block, setBlock] = useState(null);
   const [confirm, setConfirm] = useState(editCap ? 'cap' : null);
   const [refusal, setRefusal] = useState('');
+  const [legend, setLegend] = useState([]);
   useEffect(() => { let alive = true; agents.agent(uid).then((b) => { if (alive) setBlock(b); }); return () => { alive = false; }; }, [uid]);
+  // The six values' labels and meanings (D4117's legend), for the Values block.
+  useEffect(() => { let alive = true; agents.personas().then((b) => { if (alive && b?.available) setLegend(b.value?.values || []); }); return () => { alive = false; }; }, []);
   const a = block?.available ? block.value.agent : null;
   const name = a ? agentName(a) : 'AI agent';
   const act = async (kind, patch) => {
@@ -173,20 +184,15 @@ export default function AgentProfileSheet({ uid, canManage, editCap = false, onC
     if (!out.available) { setRefusal(out.reason); return; }
     setConfirm(null); onChanged?.();
   };
-  const saveName = async (patch) => {
-    const out = await agents.updateAgent(uid, patch);
-    if (out.available) setBlock((b) => (b?.available ? { ...b, value: { ...b.value, agent: { ...b.value.agent, ...patch } } } : b));
-    return out;
-  };
   const manage = !!(a && (canManage || block?.value?.can_manage));
   const pause = a ? pauseWords(a) : null;
-  const role = a?.role_name || null;
+  const tagline = a?.persona?.tagline || null;
   return (
     <>
       <Sheet width={640} onClose={onClose} testId="agent-profile-sheet"
-        title={a ? <>{name}<span className="sr-only">{`, ${role || 'AI'} agent`}</span></> : 'AI agent'}
-        sub={a ? <>{role || <Unrecorded />} · Platform model · {a.model_label || a.model_id || <Unrecorded />} · sponsored by {a.sponsor?.name || <Unrecorded />}</> : undefined}
-        headerActions={a ? <span className="flex items-center gap-1.5"><AgentTile size={28} /><AgentPill />{pause ? <span className="rounded-axal-pill bg-axal-amber px-2 py-0.5 text-[11px] font-semibold text-axal-amber-deep">Paused</span> : <Pill tone="ok">Active</Pill>}</span> : null}
+        title={a ? <>{name}<span className="sr-only">{tagline ? `, AI agent: ${tagline}` : ', AI agent'}</span></> : 'AI agent'}
+        sub={a ? <>AI agent · Platform model · {a.model_label || a.model_id || <Unrecorded />}</> : undefined}
+        headerActions={a ? <span className="flex items-center gap-1.5"><AgentPill />{pause ? <span className="rounded-axal-pill bg-axal-amber px-2 py-0.5 text-[11px] font-semibold text-axal-amber-deep">Paused</span> : null}</span> : null}
         footer={manage ? (
           <div className="flex justify-end gap-2">
             <button type="button" className={BTN_SECONDARY} onClick={() => setConfirm('pause')} data-testid="agent-pause">{a.status === 'paused' ? 'Resume' : 'Pause'}</button>
@@ -198,22 +204,22 @@ export default function AgentProfileSheet({ uid, canManage, editCap = false, onC
           : !block.available ? <div className="px-5 py-5"><HonestBlock>{block.unreadable ? 'This agent could not be read.' : block.reason}{block.refused ? '' : ' That is not the same as having none.'}</HonestBlock></div>
             : (
               <>
-                <AgentProfile data={block.value} canManage={manage} onSaveName={saveName} />
-                <div className="px-5 pb-5"><AgentSkillsCard agent={{ uid: a?.uid || uid, role_key: a?.role_key, role_name: role, scope: a?.scope || null }} canManage={manage} /></div>
+                <AgentProfile data={block.value} canManage={manage} legend={legend} />
+                <div className="px-5 pb-5"><AgentSkillsCard agent={{ uid: a?.uid || uid, role_key: a?.role_key, scope: a?.scope || null }} canManage={manage} /></div>
               </>
             )}
       </Sheet>
       {confirm === 'pause' ? (
-        <Confirm testId="agent-pause-confirm" title={a?.status === 'paused' ? `Resume ${name}, the ${a?.role_name} agent?` : `Pause ${name}, the ${a?.role_name} agent?`}
+        <Confirm testId="agent-pause-confirm" title={a?.status === 'paused' ? `Resume ${name}?` : `Pause ${name}?`}
           body={a?.status === 'paused' ? 'It can run again in its modules, up to its monthly cap.' : 'It stops running until you resume it. Open proposals stay in Approvals for people to decide.'}
           button={a?.status === 'paused' ? 'Resume' : 'Pause'} refusal={refusal} onCancel={() => setConfirm(null)} onConfirm={() => act('pause')} />
       ) : null}
       {confirm === 'cap' && a && manage ? (
-        <CapEditor name={name} role={role || 'AI'} current={a.monthly_cap_microusd} refusal={refusal}
+        <CapEditor name={name} current={a.monthly_cap_microusd} refusal={refusal}
           onCancel={() => setConfirm(null)} onSave={(micro) => act('cap', { monthly_cap_microusd: micro })} />
       ) : null}
       {confirm === 'remove' ? (
-        <Confirm testId="agent-remove-confirm" danger title={`Remove ${name}, the ${a?.role_name} agent?`} body="Its open proposals are withdrawn. Its history is kept."
+        <Confirm testId="agent-remove-confirm" danger title={`Remove ${name}?`} body="Its open proposals are withdrawn. Its history is kept."
           button="Remove" refusal={refusal} onCancel={() => setConfirm(null)} onConfirm={() => act('remove')} />
       ) : null}
     </>

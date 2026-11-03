@@ -11,6 +11,15 @@
 //        charged_microusd of held_microusd. 503 runtime_unavailable where no room runs: read the run instead.
 //   POST /api/decks/areas/batches/:uid/cancel → the run, as GET answers it. Steps that started are charged; the rest are
 //        released. 403 not_your_run for anyone but its starter.
+// D1600 (#3879) — what follows a run (pd2b's retry row, pd2c's return banner, pd9n's "Busy, retrying"):
+//   POST /api/decks/areas/batches/:uid/retry-failed  (Idempotency-Key: 8–64 chars; body { areas?: [area_id] })
+//        → { batch_uid, retried: [area_id], quote: { microusd } }: a new run of only the failed areas, followed like any
+//        other. 409 nothing_to_retry; 402 hold_exhausted with { quote: { microusd }, hold_remaining_microusd } (confirm a
+//        new quote through the start route); 404 for anyone but the run's starter. The same key again is the first answer.
+//   GET  /api/decks/:id/batches?state=done&unseen=1 → { batches: [{ batch_uid, finished_at, cards_waiting }] }, newest
+//        first, at most 5. The deck's writers only.
+//   POST /api/decks/areas/batches/:uid/seen → { ok: true }, when the banner's Review is opened. Repeatable.
+//   The stream also carries `area_retrying` { area_id, attempt, next_at } before each automatic retry (at most 3).
 // The stream is read with fetch, not EventSource, because EventSource cannot send the Authorization header.
 import { request, refusalError } from '../api.js';
 
@@ -44,6 +53,11 @@ function authHeaders() {
 export const deckBatchesApi = {
   batch: (uid) => request(runPath(uid)),
   cancel: (uid) => request(`${runPath(uid)}/cancel`, { method: 'POST' }),
+  retryFailed: (uid, { areas } = {}, idempotencyKey) => request(`${runPath(uid)}/retry-failed`, {
+    method: 'POST', headers: { 'Idempotency-Key': idempotencyKey }, body: JSON.stringify(areas ? { areas } : {}),
+  }),
+  unseenBatches: (deckId) => request(`/decks/${encodeURIComponent(deckId)}/batches?state=done&unseen=1`),
+  markSeen: (uid) => request(`${runPath(uid)}/seen`, { method: 'POST' }),
   /**
    * Follows the run: calls `onEvent({ event, data })` for the snapshot and each event, and resolves when the
    * stream ends (the run ended, or `signal` aborted it). Throws the Worker's refusal, e.g. 503 runtime_unavailable.

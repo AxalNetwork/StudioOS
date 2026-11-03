@@ -29,6 +29,7 @@ import { type RenderableDeck } from '../services/decks/render';
 import { renderDeckPPTX, renderDeckPPTXWithImages } from '../services/decks/pptx';
 import { NO_NOTES as NO_SPEAKER_NOTES, NO_SOURCES as NO_SOURCES_RECORDED, aiCards, sourceLines } from '../services/decks/offlineHtml';
 import { stripTrailingSlashes } from '../util/url';
+import { BRAND_FONTS, brandKitPick, deckBrandKitFor } from '../services/decks/brandKit';
 import { bindingKey } from '../util/schemaBootstrap';
 import { applyExportImageCopies, checkedExportImageCopies, copyExternalImages, copyRefusalMessage, type ExportImageCopies } from '../services/decks/imageCopy';
 import { refuse } from '../util/refusal';
@@ -44,7 +45,7 @@ import { sanitizeBinding } from '../services/decks/sources';
 import { saveGateRefusal } from '../services/decks/saveGates';
 import {
   AUDIENCES, BLOCK_KINDS, CHART_RANGES, LIBRARY_CHART_TYPES, TYPED_CHART_TYPES, GRID_COLS, GRID_ROWS, IMAGE_FITS, IMAGE_TAGS, LAYOUTS, MAX_BLOCKS, NOTES_MAX, OVERLAYS,
-  TEXT_STYLES, THEME_KINDS, VIDEO_RATIOS, contentHash, modelProblems, sanitizeModel, sanitizeTheme, assignCardUids, MODEL_VERSION,
+  TEXT_STYLES, THEME_KINDS, VIDEO_RATIOS, contentHash, modelProblems, sanitizeModel, sanitizeTheme, assignCardUids, MODEL_VERSION, visibleCards,
 } from '../services/decks/slideModel';
 import { checkVideoLink } from '../services/decks/videoLink';
 import { ensureDeckVersionColumns, ensureProposalOutlineColumns } from '../services/decks/deckVersionColumns';
@@ -56,7 +57,6 @@ import { revOf } from '../services/decks/ifMatch';
 import { approvalRefusal, pendingApprovers } from '../services/decks/deckApproval';
 import { newAssignments, notifyAssignments } from '../services/decks/cardStatus';
 import { peopleOf } from '../services/decks/deckPeople';
-import { KIT_CHOICES, readKitView } from '../services/decks/brandKit';
 
 /** D895 applies only to deck operations, not other project-content routes. */
 export async function projectOwned(c: any, user: any, projectId: number, opts: { write?: boolean; audit?: boolean; contactData?: boolean } = {}) {
@@ -527,7 +527,8 @@ export function rowToDeck(row: any, withSlides = true): any {
 export function publicDeckOf(row: any): any {
   const { audience, round, by, content_hash, ...deck } = rowToDeck(row);
   void audience; void round; void by; void content_hash;
-  deck.slides = (deck.slides || []).map((s: any) => {
+  // D1545 (#3788): a hidden card reaches no reader: not Present, the share page or the print page.
+  deck.slides = visibleCards(deck.slides || []).map((s: any) => {
     // D1579 (#3826): a card's status and assignee are the venture's working state, never an outside reader's.
     const { notes, status, assignee, ...card } = s || {};
     void notes; void status; void assignee;
@@ -826,13 +827,16 @@ export function printDeckOf(row: any, opts: PrintOptions): any {
   const deck = publicDeckOf(row);
   const full = rowToDeck(row);
   if (opts.notes) {
-    deck.slides = deck.slides.map((card: any, i: number) => {
-      const notes = String(full.slides?.[i]?.notes ?? '').trim();
+    // D1545: by uid, so a hidden card left out of the public deck never shifts a card's notes onto the next.
+    const byUid = new Map((full.slides || []).map((s: any) => [s?.uid, s]));
+    deck.slides = deck.slides.map((card: any) => {
+      const notes = String((byUid.get(card?.uid) as any)?.notes ?? '').trim();
       return { ...card, notes: notes || null };
     });
   }
   deck.export_options = { notes: opts.notes, sources: opts.sources };
-  if (opts.sources) deck.sources_appendix = { lines: sourceLines(full.slides || []), ai: aiCards(full.slides || []) };
+  const shown = visibleCards(full.slides || []);
+  if (opts.sources) deck.sources_appendix = { lines: sourceLines(shown), ai: aiCards(shown) };
   return deck;
 }
 
@@ -866,7 +870,10 @@ decks.get('/share/:token', async (c) => {
   // D1564 (#3811): a published link asks for the reader's email first, and
   // sends no card and uses no view until this browser has given one. While
   // public views are off (owner decision T) the gate is always on.
-  const published = publishOf(link?.include_json);
+  // D4086: a published link stands only while its round allows it; a round
+  // recorded under any exemption but 506(c) leaves it a private link.
+  const storedPublish = publishOf(link?.include_json);
+  const published = storedPublish && await (await import('./deck_publish')).linkStandsFor(c.env, parseInt(m[1])) ? storedPublish : null;
   if (link && published && gateFor(published) === 'email' && await shareLinkLive(c.env, await sha256Hex(token), bind.viewerHash)) {
     const { emailGatePassed, emailGateAnswer } = await import('./deck_publish');
     if (!(await emailGatePassed(c.env, c.req.header('cookie'), Number(link.id)))) {
@@ -1264,20 +1271,54 @@ decks.get('/model', async (c) => {
 // logos and voice. `kit: null` is a venture with no brand kit yet; a read that
 // fails is 503, never an empty kit. The inline logo SVG is not sent (the page
 // would have to inject it); its URL forms are, through the image guard.
-// D1562 (#3809): the deck kit of migration 737 is read over the page's, and the
-// view adds its roles, font pair, image style, references, library and the
-// pure pick (`services/decks/brandKit.ts`). Its write is `routes/deck_brand_kit.ts`.
 decks.get('/brand-kit', async (c) => {
   const user = await requireAuth(c);
   const pid = Number(c.req.query('project_id'));
   if (!Number.isSafeInteger(pid) || pid <= 0) return c.json({ error: 'project_id required' }, 400);
   try { await projectOwned(c, user, pid); } catch { return c.json({ error: 'forbidden' }, 403); }
+  let row: any;
   try {
-    return c.json({ project_id: pid, kit: await readKitView(c.env, pid, sanitizeImageUrl), choices: KIT_CHOICES });
+    row = await c.env.DB.prepare(
+      `SELECT name, theme_color, palette_bg, palette_ink, palette_secondary, palette_accent, font_pairing, voice_json,
+              logo_url, logo_dark_url, logo_svg, logo_dark_svg, updated_at
+         FROM landing_pages WHERE project_id = ? AND archived_at IS NULL ORDER BY id DESC LIMIT 1`,
+    ).bind(pid).first<any>();
   } catch (e) {
     console.warn('[decks] brand kit unreadable', (e as Error)?.message);
     return c.json({ error: 'Your brand kit could not be read.', code: 'unreadable' }, 503);
   }
+  // D1562 (#3809): the deck's own kit (fonts, palette roles, image style, references, logo), and the fonts it may name.
+  let deckKit: Awaited<ReturnType<typeof deckBrandKitFor>> = null;
+  try { deckKit = await deckBrandKitFor(c.env, pid); }
+  catch (e) {
+    console.warn('[decks] deck brand kit unreadable', (e as Error)?.message);
+    return c.json({ error: 'Your brand kit could not be read.', code: 'unreadable' }, 503);
+  }
+  if (!row && !deckKit) return c.json({ project_id: pid, kit: null, font_options: BRAND_FONTS });
+  // D1562: the theme a one-click run applies first when a kit exists (AUTO-2), worked out here so the page never re-derives it.
+  const pick = brandKitPick(row ? { palette_bg: row.palette_bg, palette_ink: row.palette_ink, palette_accent: row.palette_accent, theme_color: row.theme_color, palette_secondary: row.palette_secondary } : null, deckKit);
+  if (!row) return c.json({ project_id: pid, font_options: BRAND_FONTS, pick, kit: { name: null, palette: { bg: null, ink: null, accent: null, secondary: null }, fonts: null, voice: [], logo: { light: null, dark: null, inline: false }, updated_at: deckKit!.updated_at, deck: deckKit } });
+  const hex = (v: unknown) => (typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v.trim()) ? v.trim().toLowerCase() : null);
+  let voice: string[] = [];
+  try {
+    const parsed = JSON.parse(row.voice_json || '[]');
+    const list = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.tags) ? parsed.tags : [];
+    voice = list.filter((t: unknown) => typeof t === 'string' && t.trim()).map((t: string) => t.trim().slice(0, 40)).slice(0, 8);
+  } catch { voice = []; }
+  return c.json({
+    project_id: pid,
+    kit: {
+      name: typeof row.name === 'string' ? row.name.slice(0, 120) : null,
+      palette: { bg: hex(row.palette_bg), ink: hex(row.palette_ink), accent: hex(row.palette_accent) ?? hex(row.theme_color), secondary: hex(row.palette_secondary) },
+      fonts: typeof row.font_pairing === 'string' && row.font_pairing.trim() ? row.font_pairing.trim().slice(0, 120) : null,
+      voice,
+      logo: { light: sanitizeImageUrl(row.logo_url), dark: sanitizeImageUrl(row.logo_dark_url), inline: Boolean(row.logo_svg || row.logo_dark_svg) },
+      updated_at: row.updated_at ?? null,
+      deck: deckKit,
+    },
+    font_options: BRAND_FONTS,
+    pick,
+  });
 });
 
 // D898, PD8c — a video link, checked with its provider before it is placed.
@@ -2203,7 +2244,8 @@ export function exportDeckOf(row: any, opts: PrintOptions): { slides: any[]; ren
   if (!Array.isArray(slides)) slides = [];
   // Re-sanitize persisted slides (defence-in-depth against legacy rows
   // pre-dating sanitizeImageUrl) before they reach Browser Rendering.
-  slides = founderPitchSlides(sanitizeSlides(slides));
+  // D1545 (#3788): a hidden card is in no export (PowerPoint, .odp, Google Slides).
+  slides = visibleCards(founderPitchSlides(sanitizeSlides(slides)));
   const notesOf = (s: any) => (opts.notes ? String(s?.notes ?? '').trim() || NO_SPEAKER_NOTES : undefined);
   const renderable: RenderableDeck = {
     title: row.title || 'Pitch deck',

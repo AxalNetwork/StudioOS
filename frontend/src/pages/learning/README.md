@@ -18,6 +18,7 @@ routes live in the D528 module `frontend/src/routes/learning.jsx`, which
 | `LearningPrograms.jsx` | The assigned admin's `/learning/programs` and `/learning/programs/:program` (D558): read-only, each enrolled member against the program's content. |
 | `ProgramStudio.jsx` | The Super Admin's `/learning/studio/programs` and `/learning/studio/programs/:program`: a program's fields, status, content, admins and members. |
 | `MyPrograms.jsx` | The home's My programs: the member's programs with their progress, and the ones open to join. |
+| `MemberProgram.jsx` | `/learning/my-programs/:program` (D3726 LR13): one program as its member sees it, the curriculum with their progress, Continue, Join, and the enrolment card. |
 | `programModel.js`, `programReads.js` | Programs' pure half, and every program call. |
 | `LearningAssessments.jsx` | Exercises and exams (D559): their pages, the card an exercise or exam lesson shows, the studio's container for them, and the read-only review of learners' work. |
 | `StudioAssessmentEditors.jsx` | The studio's exercise editor and exam builder, and the submissions and attempts reviews, drawn from props. |

@@ -71,6 +71,9 @@ export const eventsApi = {
   // Task #7 cross-system wiring:
   // GET /suggested — archetype/track-aware upcoming event suggestions for the caller.
   suggested: () => request('/events/suggested'),
+  // POST /suggested/rank { query? } — #3938 LE10, the member's press: the same events ordered by fit,
+  // → { job, steps, rows: [{ event_id, position, line }] }; a null line is none given.
+  suggestedRank: (query = '') => request('/events/suggested/rank', { method: 'POST', body: JSON.stringify(query ? { query } : {}) }),
   // GET /:id/invite-suggestions — matching-ranked people to invite (host/admin).
   inviteSuggestions: (id) => request(`/events/${id}/invite-suggestions`),
   // Direct file URLs (opened in a new tab / anchor href, not fetched via request()).

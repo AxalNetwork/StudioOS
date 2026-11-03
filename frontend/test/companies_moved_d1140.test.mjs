@@ -160,7 +160,7 @@ test('Profile and identity\'s moved notice shows once: dismissed, it does not co
   assert.ok(!pane.includes('<YourCompaniesSection'));
 });
 
-test('the settings address: the active company\'s page, another company says so, and the bare address forwards', async () => {
+test('the settings address: any company\'s own page (D4152), and the bare address forwards', async () => {
   const restore = installDocument();
   try {
     setReadState({ loading: false, failed: false });
@@ -173,9 +173,10 @@ test('the settings address: the active company\'s page, another company says so,
     let view = await mount(at(ROWS[0], h(Where)), '/account/portfolio/settings?tab=billing');
     assert.equal(seen, '/account/portfolio/acme/settings?tab=billing');
     await view.unmount();
+    // D4152 (#4152): any company's settings open at its own address, one header and one form, active here or not.
     view = await mount(at(ROWS[0]), '/account/portfolio/beta-co/settings');
-    assert.ok(view.by('company-settings-not-active'), 'another company\'s settings are drawn as the active one\'s');
-    assert.equal(view.pr(view.by('company-settings-not-active')).children?.length > 0, true);
+    assert.ok(view.by('company-settings-general'), 'another company\'s settings are its own page');
+    assert.equal(view.by('company-settings-not-active'), undefined, 'no "make it active first" detour');
     await view.unmount();
     setReadState({ loading: true, failed: false });
     seen = null;
@@ -185,9 +186,9 @@ test('the settings address: the active company\'s page, another company says so,
     await view.unmount();
   } finally { setReadState({ loading: true, failed: false }); restore(); }
   const page = read('frontend/src/pages/account/companies/CompanySettingsAt.jsx');
-  // D1413 (PF6a): the General tab's head and card sit above the full editor, which is still the active company's only.
-  assert.match(page, /\{company\?\.uid === uid \? <CompanySettingsPage \/> : \(/);
-  assert.match(page, /to=\{companyPathFor\(uid\)\}/);
+  // D4152 (#4152 §4–§5): one header and one General form; the old page is never drawn under the tabs.
+  assert.match(page, /<SettingsHead uid=\{uid\} name=\{name\} tab="general" \/>\s*<CompanyGeneralForm uid=\{uid\} \/>/);
+  assert.doesNotMatch(page.slice(page.indexOf('data-testid="company-settings-general"')), /<CompanySettingsPage/);
 });
 
 // ── D1415 part 4 (#3856): /account/portfolio ─────────────────────────────

@@ -110,12 +110,18 @@ test('on the real Worker, the order-sensitive deck routers mount just above `dec
   // with deckQuotes and deckStageNorms above them. Each now mounts through its
   // `before: [decks]`, in file-name order, directly above `decks`. The line
   // above them is whatever index.ts mounts there; it is not pinned (#4134).
-  assert.deepEqual(mounts.slice(at - 4, at + 1).map((m) => [m.path, m.router]), [
+  // The block is derived from the registry (#4134): every descriptor naming
+  // `before: [decks]`, in plan order, so a new one (D1581's deckRemote) joins
+  // it without editing a list here. The four that replaced hand-written lines
+  // must be in it, in their file order.
+  const aboveDecks = planned.filter((d) => d.before.includes(decks)).map((d) => [d.path, d.router]);
+  assert.deepEqual(mounts.slice(at - aboveDecks.length, at + 1).map((m) => [m.path, m.router]), [...aboveDecks, ['/api/decks', decks]]);
+  const named = aboveDecks.filter(([, r]) => [deckQuotes, deckReports, hqDeckReports, deckStageNorms].includes(r));
+  assert.deepEqual(named, [
     ['/api/decks', deckQuotes],
     ['/api/decks', deckReports],
     ['/api/admin/deck-reports', hqDeckReports],
     ['/api/decks', deckStageNorms],
-    ['/api/decks', decks],
   ]);
   // No other mount of these routers anywhere.
   for (const r of [deckQuotes, deckReports, hqDeckReports, deckStageNorms]) {
@@ -130,11 +136,13 @@ test('on the real Worker, the order-sensitive deck routers mount just above `dec
   const slot = planned.filter((d) => !d.before.length);
   assert.deepEqual(mounts.slice(-slot.length).map((m) => [m.path, m.router]), slot.map((d) => [d.path, d.router]), 'the registry slot is every descriptor without a `before`, in order');
   assert.equal(registeredRouters.has(mounts[mounts.length - slot.length - 1].router), false, 'the mount above the slot is index.ts\'s last line');
-  assert.deepEqual(mounts.slice(-3).map((m) => [m.path, m.router]), [
-    ['/api/decks', deckUpdateReuse],
+  // votes.ts sorts last, so its two mounts close the slot. deck_update_reuse is in the slot, but a
+  // registered file between the two names (#4180's learning_lists) sits between them, so it is not pinned to -3.
+  assert.deepEqual(mounts.slice(-2).map((m) => [m.path, m.router]), [
     ['/api/pipeline/votes', votes],
     ['/api/pipeline/vote', votes],
   ]);
+  assert.ok(mounts.slice(-slot.length).some((m) => m.path === '/api/decks' && m.router === deckUpdateReuse), 'deck_update_reuse mounts in the registry slot');
 });
 
 const JWT_SECRET = randomBytes(32).toString('hex');

@@ -47,13 +47,16 @@
 //   GET  /api/teams/agents/:uid/skills            → { can_manage, skills: [{ uid, name, pinned_version, current_version, status,
 //                                                    tools: [{ key, label, approved }], taxonomy }], radar: { axes } | null, values: null }
 //   PUT  /api/teams/agents/:uid/skills            { skills: [{ uid, version? }] } → the same; 403 not_manager; 422 role_mismatch |
-//                                                    tool_not_approved { tool } | version_not_published; 409 skill_retired
+//                                                    tool_not_approved { tool } | version_not_published; 409 skill_retired | skill_suspended
 //   GET  /api/teams/agents/:uid/skills/available  → { skills: [SkillCard + { assigned, pinned_version, blocked }] }
 //   GET  /api/teams/skills/:uid/agents            → { agents: [{ uid, name, role_key, pinned_version, scope }] }
 //   GET  /api/teams/skills/:uid/assignable        → { agents: [{ uid, name, role_key, skill_count, assigned, blocked, scope }] }
 //   POST /api/teams/skills/:uid/assign            { agent_uids } → { added, refused: [{ agent_uid, code }] }, partial
 //   GET  /api/teams/:scope/:id/coverage           → { axes: [{ slug, label, people_level, agent_level }] }
 //   POST …/agents also takes skills: [{ uid, version? }] through the same gates.
+// D1612 A1 (#3951), read by Team › Skills since #4224:
+//   GET  /api/teams/skills?company=<uid>          → { roles, hq: [SkillCard], company: { uid, name, skills, can_write } | null, can_write_hq }
+//   GET  /api/teams/skills/:uid                   → { skill: SkillCard + { skill_md }, versions, agents }
 // `:scope` is 'company' (its uid) or 'project' (its id). A person is { uid, name },
 // never an email. `month_spend` is { available: false } when it cannot be read:
 // the page says "Not recorded", never 0.
@@ -87,6 +90,15 @@ export const teamAgentsApi = {
   runAgent: (uid, { module, option, record, prompt, toolReads } = {}) =>
     request(`/teams/agents/${enc(uid)}/run`, { method: 'POST', body: JSON.stringify({ module, option, record: record ?? null, prompt, ...(toolReads ? { tool_reads: toolReads } : {}) }) }),
   toolChoices: () => request('/teams/tools'),
+  // D4137 (#4137): the "From Axal" skills, the `hq` list of D1612 A1's
+  // `GET /api/teams/skills` (no company), for HQ › AI agents › Skills library.
+  // The company-scoped library stays behind `agentsAdapter.skillLibrary`.
+  axalSkills: () => request('/teams/skills'),
+  // #4224 (D4116, SK-v2): the Team's library — Axal's skills and, with a
+  // company, that company's — and one skill's page. Team › Skills reads them
+  // through `agentsAdapter.skillLibrary` and `agentsAdapter.skill`.
+  skillLibrary: (companyUid) => request(companyUid ? `/teams/skills?company=${enc(companyUid)}` : '/teams/skills'),
+  skill: (uid) => request(`/teams/skills/${enc(uid)}`),
   // D1612 A2 (#3956): an agent's skills, assigning a skill, team coverage.
   agentSkills: (uid) => request(`/teams/agents/${enc(uid)}/skills`),
   setAgentSkills: (uid, skills) => request(`/teams/agents/${enc(uid)}/skills`, { method: 'PUT', body: JSON.stringify({ skills }) }),

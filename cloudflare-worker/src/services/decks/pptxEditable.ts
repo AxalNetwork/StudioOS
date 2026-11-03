@@ -19,6 +19,10 @@
  *     never redrawn here, so nothing here can plot a figure the deck does not
  *     hold;
  *   - video, audio and link blocks are their label and address as text;
+ *   - D903 §11 (#3660): a typed diagram (timeline, flow, cycle, matrix) is
+ *     one group of native shapes from `diagramLayout`: each item a rounded
+ *     box with its words as editable text, each connector a line (an arrow
+ *     where the layout says so), each timeline marker a dot;
  *   - a card made of fields (D897), and the Sources appendix, are the text
  *     writer's stacked text frames.
  *
@@ -27,6 +31,11 @@
  * (`EXPORT_GEOMETRY`), the print page's way; a pinned block or decor item
  * (the Arrange set's Lock) is written with PowerPoint's move and resize locks,
  * and the members of a group are one group shape.
+ *
+ * D1534 (#3778): an image is drawn as the browser draws it — its cover fit at
+ * its focus point and its zoom window as the picture's `<a:srcRect>`, its
+ * filter as the picture's own effects and its colour wash as a filled
+ * rectangle over it (`imageLook.ts`, one table for every renderer).
  *
  * Speaker notes are each card's notes when they were asked for, and empty
  * otherwise. Nothing here logs a title, a figure or a URL.
@@ -38,6 +47,10 @@ import { buildNotesSlideXml, buildSlideXml, buildZip, notesPackageParts, tf, xml
 import { IMAGE_MISSING, NOT_RECORDED, NO_NOTES, chartLabel, type ImageKind } from './offlineHtml';
 import { tableLines } from './slideModel';
 import { decorPlan, type DecorDraw } from './arrange';
+import { FILTER_SPECS, blipEffectsXml, filterOf, srcRectXml, visibleSource, washColour } from './imageLook';
+import { imageSize } from './imageBytes';
+import { DEFAULT_INK } from './images';
+import { diagramLayout, diagramName, type DiagramLayout } from './diagramLayout';
 
 /** The print card (D1112) the block geometry is measured on. */
 export const CARD_W = 1920;
@@ -87,12 +100,42 @@ function textBox(id: number, name: string, r: Rect, paragraphs: string[], anchor
 </p:sp>`;
 }
 
-function picture(id: number, name: string, r: Rect, rid: string, alt: string, pinned = false): string {
+function picture(id: number, name: string, r: Rect, rid: string, alt: string, pinned = false, look: { src?: string; effects?: string } = {}): string {
+  const blip = look.effects ? `<a:blip r:embed="${rid}">${look.effects}</a:blip>` : `<a:blip r:embed="${rid}"/>`;
   return `<p:pic>
   <p:nvPicPr><p:cNvPr id="${id}" name="${xmlEsc(name)}" descr="${xmlEsc(alt)}"/><p:cNvPicPr><a:picLocks noChangeAspect="1"${pinned ? ` ${LOCKS}` : ''}/></p:cNvPicPr><p:nvPr/></p:nvPicPr>
-  <p:blipFill><a:blip r:embed="${rid}"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>
+  <p:blipFill>${blip}${look.src ?? ''}<a:stretch><a:fillRect/></a:stretch></p:blipFill>
   <p:spPr><a:xfrm><a:off x="${emu(r.x)}" y="${emu(r.y)}"/><a:ext cx="${emu(r.w)}" cy="${emu(r.h)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
 </p:pic>`;
+}
+
+/** D1534 (#3778): a filter's colour wash, a filled rectangle over the picture at the preset's alpha (`imageLook.ts`). */
+function wash(id: number, name: string, r: Rect, colour: string, alpha: number): string {
+  return `<p:sp>
+  <p:nvSpPr><p:cNvPr id="${id}" name="${xmlEsc(name)}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+  <p:spPr><a:xfrm><a:off x="${emu(r.x)}" y="${emu(r.y)}"/><a:ext cx="${emu(r.w)}" cy="${emu(r.h)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="${colour.slice(1).toUpperCase()}"><a:alpha val="${Math.round(alpha * 100_000)}"/></a:srgbClr></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr>
+</p:sp>`;
+}
+
+/** D1534: an embedded picture's pixel size, from its own header; null when it cannot be read. */
+export function pixelSize(kind: ImageKind, bytes: Uint8Array): { w: number; h: number } | null {
+  if (kind === 'gif') return bytes.length >= 10 ? { w: bytes[6] | (bytes[7] << 8), h: bytes[8] | (bytes[9] << 8) } : null;
+  const s = imageSize(bytes, kind === 'png' ? 'image/png' : 'image/jpeg');
+  return s ? { w: s.width, h: s.height } : null;
+}
+
+/**
+ * D1534: the picture's look as the browser draws it — the cover fit at its
+ * focus point and its zoom window (as `<a:srcRect>`), its filter (as blip
+ * effects) — and its wash, when its filter has one.
+ */
+export function imageLookParts(b: any, r: Rect, img: { kind: ImageKind; bytes: Uint8Array }, ink: string = DEFAULT_INK) {
+  const size = pixelSize(img.kind, img.bytes);
+  const src = size ? srcRectXml(visibleSource(b.crop ?? null, b.fit ?? null, { w: r.w, h: r.h }, size)) : '';
+  const filter = filterOf(b.filter);
+  const spec = FILTER_SPECS[filter ?? 'original'];
+  const colour = washColour(spec, ink);
+  return { src, effects: blipEffectsXml(filter), wash: colour && spec.wash ? { colour, alpha: spec.wash.alpha } : null };
 }
 
 /** D1533: a decor item's box on the card: its 8 px `at` (slide pixels), else its cell range, else the whole card. */
@@ -118,6 +161,51 @@ export function decorShape(id: number, d: DecorDraw): string | null {
   <p:nvSpPr><p:cNvPr id="${id}" name="${name}"/>${d.pinned ? `<p:cNvSpPr><a:spLocks ${LOCKS}/></p:cNvSpPr>` : '<p:cNvSpPr/>'}<p:nvPr/></p:nvSpPr>
   <p:spPr><a:xfrm><a:off x="${emu(r.x)}" y="${emu(r.y)}"/><a:ext cx="${emu(r.w)}" cy="${emu(r.h)}"/></a:xfrm><a:prstGeom prst="${d.geometry}"><a:avLst/></a:prstGeom>${fill}<a:ln><a:noFill/></a:ln></p:spPr>
 </p:sp>`;
+}
+
+/**
+ * D903 §11 (#3660): a diagram as one group shape of native, editable shapes,
+ * laid out in the block's rectangle. Every word stays a text run.
+ */
+export function diagramGroup(nextId: () => number, name: string, r: Rect, layout: DiagramLayout, pinned = false, rtl = false): string {
+  const X = (f: number) => r.x + f * r.w;
+  const Y = (f: number) => r.y + f * r.h;
+  const fill = (hex: string) => `<a:solidFill><a:srgbClr val="${hex}"/></a:solidFill>`;
+  const kids: string[] = [];
+  for (const s of layout.shapes) {
+    const id = nextId();
+    if (s.kind === 'line') {
+      const x = Math.min(s.x1, s.x2), y = Math.min(s.y1, s.y2);
+      const flip = `${s.x2 < s.x1 ? ' flipH="1"' : ''}${s.y2 < s.y1 ? ' flipV="1"' : ''}`;
+      kids.push(`<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="Connector ${id}"/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr>`
+        + `<p:spPr><a:xfrm${flip}><a:off x="${emu(X(x))}" y="${emu(Y(y))}"/><a:ext cx="${emu(Math.abs(s.x2 - s.x1) * r.w)}" cy="${emu(Math.abs(s.y2 - s.y1) * r.h)}"/></a:xfrm>`
+        + `<a:prstGeom prst="line"><a:avLst/></a:prstGeom><a:ln w="${emu(3)}">${fill('94A3B8')}${s.arrow ? '<a:tailEnd type="triangle" w="med" len="med"/>' : ''}</a:ln></p:spPr></p:cxnSp>`);
+      continue;
+    }
+    const box = `<a:xfrm><a:off x="${emu(X(s.x))}" y="${emu(Y(s.y))}"/><a:ext cx="${emu(s.w * r.w)}" cy="${emu(s.h * r.h)}"/></a:xfrm>`;
+    if (s.kind === 'dot') {
+      kids.push(`<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="Marker ${id}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr>${box}<a:prstGeom prst="ellipse"><a:avLst/></a:prstGeom>${fill('64748B')}<a:ln><a:noFill/></a:ln></p:spPr></p:sp>`);
+      continue;
+    }
+    const paras = s.role === 'axis'
+      ? [`<a:pPr algn="ctr"/>${run(s.label, { size: pt(22), color: MUTED })}`]
+      : [
+        ...(s.date ? [run(s.date, { size: pt(18), bold: true, color: MUTED })] : []),
+        run(s.label, { size: pt(26), bold: true }),
+        ...(s.detail ? [run(s.detail, { size: pt(20), color: MUTED })] : []),
+      ];
+    const body = (rtl ? paras.map(rtlParagraph) : paras).map((p) => `<a:p>${p}</a:p>`).join('');
+    const look = s.role === 'axis' ? '<a:noFill/><a:ln><a:noFill/></a:ln>' : `${fill('F8FAFC')}<a:ln w="${emu(2)}">${fill('E5E7EB')}</a:ln>`;
+    kids.push(`<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${s.role === 'axis' ? 'Axis' : 'Item'} ${id}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>`
+      + `<p:spPr>${box}<a:prstGeom prst="${s.role === 'axis' ? 'rect' : 'roundRect'}"><a:avLst/></a:prstGeom>${look}</p:spPr>`
+      + `<p:txBody><a:bodyPr wrap="square" lIns="${emu(10)}" rIns="${emu(10)}" tIns="${emu(6)}" bIns="${emu(6)}" anchor="ctr"${s.vertical ? ' vert="vert270"' : ''}><a:normAutofit/></a:bodyPr><a:lstStyle/>${body}</p:txBody></p:sp>`);
+  }
+  const at = `<a:off x="${emu(r.x)}" y="${emu(r.y)}"/><a:ext cx="${emu(r.w)}" cy="${emu(r.h)}"/>`;
+  return `<p:grpSp>
+  <p:nvGrpSpPr><p:cNvPr id="${nextId()}" name="${xmlEsc(name)}" descr="${xmlEsc(`${diagramName(layout.type)} diagram`)}"/>${pinned ? `<p:cNvGrpSpPr><a:grpSpLocks ${LOCKS}/></p:cNvGrpSpPr>` : '<p:cNvGrpSpPr/>'}<p:nvPr/></p:nvGrpSpPr>
+  <p:grpSpPr><a:xfrm>${at}${at.replace('a:off', 'a:chOff').replace('a:ext', 'a:chExt')}</a:xfrm></p:grpSpPr>
+  ${kids.join('\n  ')}
+</p:grpSp>`;
 }
 
 type Placed = { xml: string; rect: Rect; group: string | null; pinned: boolean };
@@ -264,7 +352,9 @@ async function blockSlideXml(slide: any, idx: number, total: number, input: Edit
       if (!b.image_url) continue;
       const img = input.images.get(b.image_url) ?? null;
       if (img && MEDIA[img.kind]) {
-        put(b, r, picture(id++, `Image ${b.id}`, r, embed(img.kind, img.bytes), String(b.alt || ''), b.pinned === true));
+        const look = imageLookParts(b, r, img);
+        put(b, r, picture(id++, `Image ${b.id}`, r, embed(img.kind, img.bytes), String(b.alt || ''), b.pinned === true, look));
+        if (look.wash) put(b, r, wash(id++, `Image ${b.id} filter`, r, look.wash.colour, look.wash.alpha));
         counts.placed += 1;
       } else {
         put(b, r, textBox(id++, `Image ${b.id}`, r, [run(IMAGE_MISSING, { size: pt(22), italic: true, color: MUTED })], 'ctr', b.pinned === true));
@@ -278,6 +368,13 @@ async function blockSlideXml(slide: any, idx: number, total: number, input: Edit
       if (png) {
         put(b, r, picture(id++, `Chart ${b.id}`, r, embed('png', png), `${chartLabel(b.chart_type)} chart`, b.pinned === true));
         counts.pictured += 1;
+        continue;
+      }
+    }
+    if (b.kind === 'graphic') {
+      const layout = diagramLayout(b.diagram);
+      if (layout) {
+        put(b, r, diagramGroup(() => id++, `Diagram ${b.id}`, r, layout, b.pinned === true, input.dir === 'rtl'));
         continue;
       }
     }

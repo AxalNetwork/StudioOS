@@ -85,8 +85,15 @@ export function derivedNames(code) {
       FILES: `studioos-${code}-files`,
       PUBLICATIONS: `studioos-${code}-publications`,
       BACKUPS: `studioos-${code}-backups`,
+      // #4201: company logos (COMPANY_LOGOS).
+      COMPANY_LOGOS: `studioos-${code}-company-logos`,
     },
-    vectorize: `axal-search-${code}`,
+    // One branch index per Vectorize binding, as R2 is keyed by binding.
+    // DECK_QUOTES (D1556, #3803) is the consented interview quotes index.
+    vectorize: {
+      VECTORIZE: `axal-search-${code}`,
+      DECK_QUOTES: `axal-deck-quotes-${code}`,
+    },
   };
 }
 
@@ -375,9 +382,13 @@ export function renderBranchConfig(tomlSrc, entry) {
       case 'workflows':
         kv.set('name', q(branchWorkflow(n, JSON.parse(kv.get('name')))));
         break;
-      case 'vectorize':
-        kv.set('index_name', q(n.vectorize));
+      case 'vectorize': {
+        const binding = JSON.parse(kv.get('binding'));
+        const name = n.vectorize[binding];
+        if (!name) throw new Error(`no branch index name for Vectorize binding ${binding} — add it to derivedNames`);
+        kv.set('index_name', q(name));
         break;
+      }
       case 'r2_buckets': {
         const binding = JSON.parse(kv.get('binding'));
         const name = n.r2[binding];
@@ -389,7 +400,7 @@ export function renderBranchConfig(tomlSrc, entry) {
         kv.set('crons', arr(BRANCH_CRONS));
         break;
       default:
-        break; // analytics_engine_datasets, ai, browser, images, assets, DOs, migrations, tail_consumers
+        break; // analytics_engine_datasets, ai, browser, images, stream, assets, DOs, migrations, tail_consumers
     }
     push(table, s.double, kv);
   }
@@ -462,6 +473,8 @@ export function checkRendered(tomlSrc, entry, rendered) {
     browser: 'binding',
     // D1544 (#3784): Cloudflare Images, account-wide like Browser Rendering: the same name on every branch.
     images: 'binding',
+    // #4176 (D4176): Cloudflare Stream, account-wide like Images: the same name on every branch.
+    stream: 'binding',
     ai: 'binding',
     'queues.producers': 'binding',
     'queues.consumers': 'queue',
@@ -532,8 +545,10 @@ export function checkRendered(tomlSrc, entry, rendered) {
   }
   const d1 = byName('d1_databases')[0];
   if (d1 && d1.kv.get('database_name') !== q(n.d1)) bad.push(`database_name must be ${q(n.d1)}`);
-  const vec = byName('vectorize')[0];
-  if (vec && vec.kv.get('index_name') !== q(n.vectorize)) bad.push(`vectorize index must be ${q(n.vectorize)}`);
+  for (const s of byName('vectorize')) {
+    const binding = JSON.parse(s.kv.get('binding'));
+    if (s.kv.get('index_name') !== q(n.vectorize[binding])) bad.push(`Vectorize ${binding} must be ${n.vectorize[binding]}`);
+  }
   for (const s of byName('r2_buckets')) {
     const binding = JSON.parse(s.kv.get('binding'));
     if (s.kv.get('bucket_name') !== q(n.r2[binding])) bad.push(`R2 ${binding} must be ${n.r2[binding]}`);

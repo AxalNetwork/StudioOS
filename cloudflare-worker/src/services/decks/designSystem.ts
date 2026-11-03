@@ -28,7 +28,6 @@
  */
 import { BLOCK_KINDS, GRID_COLS, GRID_ROWS, LAYOUTS, LAYOUT_IDS, THEME_KINDS, type Grid } from './slideModel';
 import { aspectOf, boxOfAt, type Aspect } from './structures';
-import { fontPairOf } from './brandKitLists';
 
 export const DESIGN_SYSTEM_VERSION = 1;
 
@@ -319,32 +318,12 @@ export const BASE_THEMES: Record<ThemeKind, ThemeTokens> = {
 export const DARK_THEMES: readonly ThemeKind[] = Object.freeze(['neutral_dark', 'ocean']);
 export const isDarkTheme = (kind: unknown) => (DARK_THEMES as readonly unknown[]).includes(kind);
 
-/**
- * A venture's brand kit, as `landing_pages` holds it (`branding.ts` BrandKitRow's palette).
- * D1562 (#3809) extends it beyond colours with the deck kit of migration 737
- * (`brandKit.ts` `mergeKit`): a muted role, a font pair from the Google Fonts
- * (OFL) list, and the image style every illustration is drawn in.
- */
-export type BrandKit = {
-  palette_bg?: string | null; palette_ink?: string | null; palette_accent?: string | null; theme_color?: string | null; palette_secondary?: string | null;
-  palette_muted?: string | null;
-  font_heading?: string | null; font_body?: string | null;
-  image_style?: string | null;
-};
+/** A venture's brand kit, as `landing_pages` holds it (`branding.ts` BrandKitRow's palette). */
+export type BrandKit = { palette_bg?: string | null; palette_ink?: string | null; palette_accent?: string | null; theme_color?: string | null; palette_secondary?: string | null };
 
 /**
  * A theme's tokens. For `brand`, the kit's colours replace the base where they
  * stay legible; each one left out is named. The neutral themes ignore the kit.
- *
- * D1562 (#3809): a brand theme never draws a pair under its minimum. After the
- * kit's colours are placed, the pairs they made unreadable are repaired: the
- * muted text (the kit's muted role, else the theme's, else the ink), the
- * surface (the ground), the accent (a readable one of the themes' chart
- * colours, else the ink), the text on the accent (white, the ink or the ground,
- * whichever reads) and each chart colour (an unused one from the themes' own
- * charts). If any pair still fails, the deck keeps the base brand colours and
- * says so: `themeProblems` of what this returns for `brand` is always [].
- * The kit's font pair replaces the display and body families.
  */
 export function themeTokens(kind: unknown, kit: BrandKit | null = null): { tokens: ThemeTokens; adjustments: string[] } {
   const k: ThemeKind = (THEME_KINDS as readonly string[]).includes(kind as string) ? kind as ThemeKind : 'brand';
@@ -352,8 +331,6 @@ export function themeTokens(kind: unknown, kit: BrandKit | null = null): { token
   const tokens: ThemeTokens = { ...base, colours: { ...base.colours }, chart: [...base.chart], fonts: { ...base.fonts }, image: { ...base.image } };
   const adjustments: string[] = [];
   if (k !== 'brand' || !kit) return { tokens, adjustments };
-  const pair = fontPairOf({ heading: kit.font_heading, body: kit.font_body });
-  if (pair) { tokens.fonts.display = pair.heading; tokens.fonts.body = pair.body; }
   const hex = (v: unknown) => (typeof v === 'string' && HEX.test(v.trim()) ? v.trim().toLowerCase() : null);
   const ground = hex(kit.palette_bg);
   const ink = hex(kit.palette_ink);
@@ -379,51 +356,17 @@ export function themeTokens(kind: unknown, kit: BrandKit | null = null): { token
   if (second && contrast(second, tokens.colours.ground) >= LARGE_CONTRAST) tokens.chart[1] = second;
   // Every chart colour stays a readable mark on the ground; one that is not takes the ink.
   tokens.chart = tokens.chart.map((c) => (contrast(c, tokens.colours.ground) >= LARGE_CONTRAST ? c : tokens.colours.ink));
-  repairBrand(tokens, hex(kit.palette_muted), adjustments);
-  if (themeProblems(tokens).length) {
-    const fonts = { ...tokens.fonts };
-    const kept: ThemeTokens = { ...base, colours: { ...base.colours }, chart: [...base.chart], fonts, image: { ...base.image } };
-    adjustments.push('The brand colours could not all be made readable together, so the deck keeps its own colours.');
-    return { tokens: kept, adjustments };
-  }
-  return { tokens, adjustments };
-}
-
-/** Every chart colour the themes draw, the pool a brand chart's repair takes from (D1562). */
-const CHART_POOL: readonly string[] = Object.freeze([...new Set(Object.values(BASE_THEMES).flatMap((t) => t.chart))]);
-
-/**
- * D1562: the pairs the kit's ground and ink left unreadable, repaired in place
- * (see `themeTokens`), each one named in `adjustments` when the founder chose
- * the colour that moved.
- */
-function repairBrand(tokens: ThemeTokens, muted: string | null, adjustments: string[]): void {
-  const c = tokens.colours;
-  if (muted && contrast(muted, c.ground) >= BODY_CONTRAST) c.muted = muted;
-  else {
-    if (muted) adjustments.push(`The brand's muted colour reads ${contrast(muted, c.ground)}:1 on the background, under ${BODY_CONTRAST}:1, so secondary text keeps a readable one.`);
-    if (contrast(c.muted, c.ground) < BODY_CONTRAST) c.muted = c.ink;
-  }
-  if (contrast(c.ink, c.surface) < BODY_CONTRAST) c.surface = c.ground;
-  // An accent the kit's ground made unreadable (the theme's own, on a dark ground) takes the first of the
-  // themes' chart colours that reads on it and carries readable text, else the ink.
-  if (contrast(c.accent, c.ground) < LARGE_CONTRAST) {
-    const carries = (x: string) => ['#ffffff', c.ink, c.ground].some((y) => contrast(y, x) >= BODY_CONTRAST);
-    c.accent = CHART_POOL.find((x) => contrast(x, c.ground) >= LARGE_CONTRAST && carries(x)) ?? c.ink;
-    tokens.chart[0] = c.accent;
-  }
-  if (contrast(c.accent_ink, c.accent) < BODY_CONTRAST) {
-    const on = ['#ffffff', c.ink, c.ground].find((x) => contrast(x, c.accent) >= BODY_CONTRAST);
-    if (on) c.accent_ink = on;
-  }
-  // The chart: each colour readable and none twice; a colour that is not takes an unused one from the pool.
+  // Every series stays its own colour: a brand colour that matches a base series
+  // (or two that both fell back to the ink) takes the next readable unused one.
+  const readable = (c: string) => contrast(c, tokens.colours.ground) >= LARGE_CONTRAST;
+  const pool = [...base.chart, ...Object.values(BASE_THEMES).flatMap((t) => t.chart), tokens.colours.muted].filter(readable);
   const used = new Set<string>();
-  tokens.chart = tokens.chart.map((x) => {
-    const ok = (y: string) => contrast(y, c.ground) >= LARGE_CONTRAST && !used.has(y);
-    const pick = ok(x) ? x : CHART_POOL.find(ok) ?? x;
+  tokens.chart = tokens.chart.map((c) => {
+    const pick = used.has(c) ? pool.find((x) => !used.has(x) && !tokens.chart.includes(x)) ?? c : c;
     used.add(pick);
     return pick;
   });
+  return { tokens, adjustments };
 }
 
 /** Problems with a theme's tokens, or []: every pair a slide draws is legible. */

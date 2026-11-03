@@ -6,9 +6,18 @@
  *        { use, description, style, palette, aspect, count, card?, points?, colours? }
  *        → { ai: true, models: [{ id, label, per_image_microusd }], model, per_image_microusd, count,
  *            total_microusd, balance: { ok, code?, message? } } | { ai: false, reason, message }
- *   POST /api/decks/:id/images           (the same body) → { images: [image], stopped? }
- *   POST /api/decks/:id/images/upload    multipart: file, use, card?, alt?, shows_person?, consent?
- *   POST /api/decks/:id/images/import    D1506: { url, use?, card?, alt?, shows_person?, consent? }, an external image copied into R2
+ *   POST /api/decks/:id/images           (the same body, plus area?, slide_aspect?) → { images: [image], refused: [line], stopped? };
+ *        D1505: each image is the pipeline (expand · draw at its area's size and seed · image check · style ·
+ *        alt text · provenance) under one hold, the quote above prices every step (`steps`), and a press whose
+ *        every image was refused is 422 in the first one's words, with `refused` and `charged_microusd: 0`.
+ *   POST /api/decks/:id/images/replace-all/quote   D1561 (#3808): every image area of the deck, priced as one quote
+ *        → { ai, count, total_microusd, hold_microusd, areas, left_out, balance }
+ *   POST /api/decks/:id/images/replace-all         { slide_aspect? }, Idempotency-Key optional → { images, refused, left_out,
+ *        hold_microusd, charged_microusd, stopped? }: every area through the pipeline under one hold, one redraw each.
+ *   POST /api/decks/:id/images/upload    multipart: file, use, card?, alt, shows_person?, consent?
+ *   POST /api/decks/:id/images/import    D1506: { url, use?, card?, alt, shows_person?, consent? }, an external image copied into R2
+ *        D1534 (#3778): both need alt text (422 `alt_required`), and each stored image is screened once
+ *        (`uploadScreen.ts`): the screen flags (`image.screen`), it never blocks.
  *   GET  /api/decks/:id/images           the venture's kept images, generated or uploaded (PD12d's Design list)
  *   GET  /api/decks/:id/images/plan      D903 §10 (#3660): whether this Worker can draw, the deck's one art
  *        direction, and the words-only cards an illustration would help → { capability, direction, cards }.
@@ -42,10 +51,10 @@
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
-import { quoteRun, run, type RunOptions } from '../services/aiRouter';
+import { quoteRun, type RunOptions } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import {
-  ALT_MAX, EXTENSION, IMAGE_BYTES_ESTIMATE, IMAGE_MODEL, IMAGE_OPTION, IMAGE_PAGE, MIMES, NOT_ILLUSTRATIVE_MESSAGE, imageModelLabel,
+  ALT_MAX, EXTENSION, IMAGE_BYTES_ESTIMATE, IMAGE_OPTION, IMAGE_PAGE, NOT_ILLUSTRATIVE_MESSAGE, imageModelLabel,
   OVERLAYS, PERSON_CONSENT_MESSAGE, REAL_PERSON_MESSAGE, UPLOAD_MAX_BYTES, USES, asksForChart, askOf, balanceRefusal, overlayContrast,
   personIn, promptOf, readable, sniffMime, ventureNames, type ImageAsk, type Overlay, type Use,
 } from '../services/decks/images';
@@ -53,18 +62,26 @@ import { figureRefusal } from '../services/decks/newDeck';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 import { railFor, refuseRun } from '../util/railContext';
 import { refuse } from '../util/refusal';
-import { auditDeckWrite, getDeckRow, projectOwned, sanitizeImageUrl, themeOfRow } from './decks';
+import { auditDeckWrite, getDeckRow, projectOwned, themeOfRow } from './decks';
 import { cardRefOf } from '../services/decks/cardUids';
 import { imageCapability, imagePlan } from '../services/decks/visuals';
-import { brandKitFor } from '../services/decks/brandKit';
+import { fetchLandingPageForProject } from '../services/decks/branding';
 import { ElementOffError, elementModelFor, lockedOutRefusal, runPickOf } from './deck_element_models';
 import { lockedOut, type Resolved } from '../services/decks/elementModels';
 import { notSwitchedOn } from '../services/featureFlags';
 import { imageSize, sha256Hex, stripMetadata, tooManyPixels, type ImageMime } from '../services/decks/imageBytes';
 import { fetchExternalImage } from '../services/decks/imageFetch';
+import { deckArtOf, drawDeckImages, quoteDeckImage, type DrawArgs, type Refused } from '../services/decks/imageDraw';
+import { reserveAiBudget, settleAiReservation } from '../services/aiBudget';
+import { replaceAreasOf, type ReplaceArea } from '../services/decks/deckActions';
+import type { Aspect } from '../services/ai/shapes';
 import { artDirectionOfTheme, seedFor, type ArtDirection } from '../services/decks/artDirection';
 import { asReference } from '../services/decks/imageEdits';
 import { IMAGE_SPECS, type DrawReference } from '../services/ai/shapes';
+import { screenOf, screenUpload } from '../services/decks/uploadScreen';
+
+/** D1534 (#3778): pd27's words. */
+export const ALT_REQUIRED_MESSAGE = 'Alt text is needed before this image can be inserted.';
 
 const deckImages = new Hono<{ Bindings: Env }>();
 
@@ -140,8 +157,15 @@ function view(c: any, r: any) {
     model_label: imageModelLabel(r.model),
     usage_log_id: r.ai_usage_log_id ?? null, charged_microusd: r.charged_microusd ?? null,
     shows_person: r.shows_person === 1, created_at: r.created_at, kept_at: r.kept_at ?? null,
+    // D1505 (#3756): the pipeline's step lines, seed and provenance.
+    seed: r.seed ?? null, pipeline_uid: r.pipeline_uid ?? null, variant_index: r.variant_index ?? null,
+    steps: parseJson(r.steps, null), provenance: parseJson(r.provenance_json, null),
+    // D1534 (#3778): an upload's screen — flagged, not flagged, or not screened — never a block.
+    screen: screenOf(r.qa_json),
   };
 }
+
+const parseJson = <T>(s: unknown, d: T): T => { try { return typeof s === 'string' && s ? JSON.parse(s) : d; } catch { return d; } };
 
 /** What a description is refused for before anything is quoted or held, or null. */
 async function refusedAsk(c: any, ask: ImageAsk, projectId: number): Promise<Response | null> {
@@ -169,18 +193,15 @@ export const imageElementOf = (ask: ImageAsk): 'photo' | 'illustration' => (ask.
 
 const coloursOf = (body: any): string[] => (Array.isArray(body?.colours) ? body.colours : []).filter((x: unknown): x is string => typeof x === 'string' && HEX.test(x)).slice(0, 4);
 
-/** What a run charged, from its usage row; null when it is not known. */
-async function chargedOf(env: Env, usageLogId: number | null | undefined, userId: number): Promise<number | null> {
-  if (!usageLogId) return null;
-  const row = await env.DB.prepare('SELECT charged_microusd FROM ai_usage_logs WHERE id = ? AND user_id = ?').bind(usageLogId, userId).first<any>().catch(() => null);
-  return row?.charged_microusd == null ? null : Number(row.charged_microusd);
-}
-
-type Priced = { ask: ImageAsk; colours: string[]; opts: RunOptions; model: string; per: number; total: number; element: Resolved };
+type Priced = { ask: ImageAsk; colours: string[]; opts: RunOptions; model: string; per: number; total: number; element: Resolved; args: DrawArgs; steps: Array<{ step: string; label: string; hold_microusd: number }> };
 
 /** The checked request and its price, or the response that refuses it. Shared by the quote and the run. */
 async function priced(c: any, user: User, deck: Deck): Promise<Priced | Response> {
-  const body = await c.req.json().catch(() => ({} as any));
+  return pricedAsk(c, user, deck, await c.req.json().catch(() => ({} as any)));
+}
+
+/** One image request's checks and price, from its body. D1561's Replace all images prices each area through it. */
+async function pricedAsk(c: any, user: User, deck: Deck, body: any): Promise<Priced | Response> {
   // D1544 (#3784): a request that names no style or palette takes the deck's art direction's.
   const read = askOf({ ...body, style: body?.style ?? deck.art.style, palette: body?.palette ?? deck.art.palette });
   if ('error' in read) return c.json({ error: read.error }, 400);
@@ -209,7 +230,24 @@ async function priced(c: any, user: User, deck: Deck): Promise<Priced | Response
     const stop = refuseRun(c, { refusal: q.refusal, error: q.error });
     return stop ?? refuse(c, 503, { code: 'model_unavailable', message: 'The image model is not available. Nothing was run.' });
   }
-  return { ask: read.ask, colours, opts, model: q.model, per: q.hold_microusd, total: q.hold_microusd * read.ask.count, element };
+  // D1505 (#3756): one image is every step of the pipeline, priced step by step under one figure (pd14).
+  const ref = cardRefOf(deck.slides, { card: read.ask.card, card_uid: read.ask.card_uid });
+  const args: DrawArgs = {
+    userId: Number(user.id), deckId: deck.deckId, projectId: deck.projectId, slides: deck.slides, ask: read.ask,
+    // D1544's note is in the prompt the pipeline draws, and its reference image in the draw's options.
+    base: String(opts.text ?? promptOf(read.ask, colours)).slice(0, 2048), colours, draw: opts, model: q.model,
+    area: typeof body?.area === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(body.area) ? body.area : null,
+    slideAspect: (body?.slide_aspect === '4:3' ? '4:3' : '16:9') as Aspect,
+    cardUid: 'error' in ref ? null : ref.uid, surface: AI_SURFACE.raisePitch, rail: opts.rail!,
+    // The deck's one art direction (D1544, on the version's theme): the request's style and palette already default to it.
+    art: deckArtOf(deck.art, deck.projectId, { style: read.ask.style, palette: read.ask.palette, colours: colours.slice(0, 4) }),
+  };
+  const pq = await quoteDeckImage(c.env, args);
+  if (!pq.ok) {
+    const stop = refuseRun(c, { refusal: pq.refusal, error: pq.error });
+    return stop ?? refuse(c, 503, { code: 'model_unavailable', message: 'The image model is not available. Nothing was run.' });
+  }
+  return { ask: read.ask, colours, opts, model: q.model, per: pq.hold_microusd, total: pq.hold_microusd * read.ask.count, element, args, steps: pq.steps };
 }
 
 deckImages.post('/:id/images/quote', async (c) => {
@@ -229,6 +267,8 @@ deckImages.post('/:id/images/quote', async (c) => {
     ai: true, model: p.model, model_label: imageModelLabel(p.model),
     models: [{ id: p.model, label: imageModelLabel(p.model), per_image_microusd: p.per }],
     per_image_microusd: p.per, count: p.ask.count, total_microusd: p.total,
+    // D1505: expand prompt · draw · image check · style check · alt text, each priced (pd14).
+    steps: p.steps,
     // D1549 (#3796): the element the image runs as, the model it resolved to and why.
     element_models: { [p.element.element]: { model: p.model, source: p.element.source, notice: p.element.notice, ...(p.element.locked ? { locked: true } : {}) } },
     balance: short ? { ok: false, code: short.code, message: short.message } : { ok: true },
@@ -249,49 +289,151 @@ deckImages.post('/:id/images', async (c) => {
   try { ticket = await assertStorageRoom(c.env, { projectId: deck.projectId }, IMAGE_BYTES_ESTIMATE * p.ask.count, user); }
   catch (e) { if (e instanceof Response) return e; throw e; }
 
-  const ref = cardRefOf(deck.slides, { card: p.ask.card, card_uid: p.ask.card_uid });
-  const cardUid = 'error' in ref ? null : ref.uid;
-  const images: any[] = [];
-  let stopped: { code: string; message: string } | null = null;
-  for (let i = 0; i < p.ask.count; i += 1) {
-    // D1544: image i of the run draws with the deck's seed base + i, so a deck's images share one seed family.
-    const seed = seedFor(deck.art, i);
-    const r = await run(c.env, { ...p.opts, surface: AI_SURFACE.raisePitch, rail: p.opts.rail, draw: { ...(p.opts.draw ?? {}), ...(seed != null ? { seed } : {}) } });
-    if (!r.ok || !r.image) {
-      const answer = refuseRun(c, r);
-      if (!images.length) return answer ?? refuse(c, 503, { code: 'model_unavailable', message: 'Eadwyn could not draw the image. Nothing was charged and nothing changed.' });
-      const body: any = await answer?.clone().json().catch(() => null);
-      stopped = { code: body?.error || 'model_unavailable', message: body?.message || 'Eadwyn stopped before drawing every image. What it drew is below.' };
-      break;
-    }
-    const mime = (MIMES as readonly string[]).includes(r.image.mime) ? r.image.mime as typeof MIMES[number] : sniffMime(r.image.bytes);
-    const charged = await chargedOf(c.env, r.usageLogId, userId);
-    if (!mime) { stopped = { code: 'image_unreadable', message: 'The image came back in a format the deck cannot show. It was charged; nothing was placed.' }; break; }
-    // D1506: a drawn image is stripped, measured and hashed like an upload. The same picture twice keeps no hash the second time.
-    const drawn = stripMetadata(r.image.bytes, mime as ImageMime);
-    const drawnSize = imageSize(drawn, mime as ImageMime);
-    const drawnSha = await sha256Hex(drawn);
-    const taken = await c.env.DB.prepare('SELECT 1 FROM deck_images WHERE project_id = ? AND sha256 = ?').bind(deck.projectId, drawnSha).first();
-    const uid = crypto.randomUUID();
-    const key = `deck-images/${deck.projectId}/${uid}.${EXTENSION[mime]}`;
-    try {
-      await c.env.FILES!.put(key, drawn, { httpMetadata: { contentType: mime }, customMetadata: { projectId: String(deck.projectId), userId: String(userId) } });
-    } catch {
-      stopped = { code: 'image_unsaved', message: 'Eadwyn drew the image, but it could not be stored. It was charged for the run; try again in a moment.' };
-      break;
-    }
-    await c.env.DB.prepare(`INSERT INTO deck_images (uid, project_id, deck_id, card, r2_key, mime, size_bytes, width, height, sha256, source, prompt, style, aspect, use,
-        state, model, ai_usage_log_id, charged_microusd, created_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'generated', ?, ?, ?, ?, 'proposed', ?, ?, ?, ?)`)
-      .bind(uid, deck.projectId, deck.deckId, p.ask.card, key, mime, drawn.byteLength, drawnSize?.width ?? r.image.width, drawnSize?.height ?? r.image.height, taken ? null : drawnSha,
-        p.ask.description, p.ask.style, p.ask.aspect, p.ask.use, r.usage?.model ?? IMAGE_MODEL, r.usageLogId ?? null, charged, userId).run();
-    await recordCardUid(c.env, uid, cardUid);
-    images.push(await c.env.DB.prepare('SELECT * FROM deck_images WHERE uid = ?').bind(uid).first());
+  // D1505 (#3756): every image runs the pipeline under one hold; a refused one is kept as discarded, settled at zero.
+  const drawn = await drawDeckImages(c.env, p.args);
+  if ('refusal' in drawn) {
+    await noteStorageLanded(c.env, ticket);
+    const stop = refuseRun(c, { refusal: drawn.refusal, error: drawn.error });
+    return stop ?? refuse(c, 503, { code: 'model_unavailable', message: 'Eadwyn could not draw the image. Nothing was charged and nothing changed.' });
   }
+  if (!drawn.rows.length && !drawn.refused.length && drawn.stopped) {
+    await noteStorageLanded(c.env, ticket);
+    return refuse(c, 503, { code: drawn.stopped.code, message: drawn.stopped.message });
+  }
+  if (!drawn.rows.length && drawn.refused.length) {
+    // Every image was refused: a refusal in the words of the first one (pd15's
+    // refused card), with the refused lines and the zero settle beside it, so
+    // `refusalOf` draws it as the sentence and not "could not draw".
+    await noteStorageLanded(c.env, ticket);
+    const [first] = drawn.refused;
+    return refuse(c, 422, { code: first.code, message: first.message, extra: { refused: drawn.refused, charged_microusd: 0, redraw: first.redraw } });
+  }
+  const images = drawn.rows;
+  const stopped = drawn.stopped;
   await noteStorageLanded(c.env, ticket);
   const where = p.ask.card == null ? 'The deck' : `Card ${p.ask.card + 1}`;
   await auditDeckWrite(c, user, deck.projectId, 'deck_image_proposed', `${where}: ${images.length} image${images.length === 1 ? '' : 's'} proposed`);
-  return c.json({ images: images.map((r) => view(c, r)), ...(stopped ? { stopped } : {}) });
+  return c.json({ images: images.map((r) => view(c, r)), refused: drawn.refused, ...(stopped ? { stopped } : {}) });
+});
+
+// ───────────────────────────────────────────── D1561 (#3808): Replace all images
+
+type LeftOut = { card: number; block: string; code: string; message: string };
+type Planned = { area: ReplaceArea; p: Priced };
+
+/**
+ * Every image area of the deck (`replaceAreasOf`), each checked and priced as
+ * its own press would be. An area whose description is refused (a person, a
+ * figure, a chart: 422) is left out and named; any other refusal stops the
+ * whole action before anything is held.
+ */
+async function replacePlan(c: any, user: User, deck: Deck, body: any): Promise<{ planned: Planned[]; leftOut: LeftOut[] } | Response> {
+  const slideAspect = body?.slide_aspect === '4:3' ? '4:3' : '16:9';
+  const areas = replaceAreasOf(deck.slides, slideAspect);
+  if (!areas.length) return refuse(c, 409, { code: 'no_image_areas', message: 'This deck has no image areas to replace. Nothing was run.' });
+  const planned: Planned[] = [];
+  const leftOut: LeftOut[] = [];
+  for (const area of areas) {
+    const p = await pricedAsk(c, user, deck, {
+      use: 'content', description: area.description, aspect: area.aspect, count: 1,
+      card: area.card, card_uid: area.card_uid, area: area.area, slide_aspect: slideAspect,
+    });
+    if (p instanceof Response) {
+      if (p.status !== 422) return p;
+      const why: any = await p.clone().json().catch(() => ({}));
+      leftOut.push({ card: area.card, block: area.block, code: String(why?.error || 'refused'), message: String(why?.message || 'This area was left out.') });
+      continue;
+    }
+    planned.push({ area, p });
+  }
+  return { planned, leftOut };
+}
+
+/** One quote for every area: what each draw holds, and the hold with one redraw each (pd13's "Holds up to"). */
+const replaceQuote = (planned: Planned[]) => {
+  const total = planned.reduce((n, x) => n + x.p.per, 0);
+  return { total, hold: total * 2 };
+};
+
+deckImages.post('/:id/images/replace-all/quote', async (c) => {
+  const user = await requireAuth(c);
+  const deck = await deckOf(c, user);
+  if (deck instanceof Response) return deck;
+  const plan = await replacePlan(c, user, deck, await c.req.json().catch(() => ({})));
+  if (plan instanceof Response) {
+    const body: any = await plan.clone().json().catch(() => null);
+    if (body?.error === 'assist_off') return c.json({ ai: false, reason: 'assist_off', message: body.message });
+    return plan;
+  }
+  const q = replaceQuote(plan.planned);
+  const short = plan.planned.length ? await balanceRefusal(c.env, Number(user.id), q.hold) : null;
+  return c.json({
+    ai: true, count: plan.planned.length, total_microusd: q.total, hold_microusd: q.hold,
+    areas: plan.planned.map(({ area, p }) => ({ card: area.card, block: area.block, area: area.area, aspect: area.aspect, model: p.model, per_image_microusd: p.per })),
+    left_out: plan.leftOut,
+    balance: short ? { ok: false, code: short.code, message: short.message } : { ok: true },
+  });
+});
+
+/**
+ * Replace all images: every area drawn through #3756's pipeline under ONE hold,
+ * one redraw each when the image check refuses it, a refused image charged
+ * zero. The images are proposals, kept card by card as any other. An
+ * `Idempotency-Key` makes a second press of the same key run nothing.
+ */
+deckImages.post('/:id/images/replace-all', async (c) => {
+  const user = await requireAuth(c);
+  const deck = await deckOf(c, user);
+  if (deck instanceof Response) return deck;
+  const plan = await replacePlan(c, user, deck, await c.req.json().catch(() => ({})));
+  if (plan instanceof Response) return plan;
+  if (!plan.planned.length) {
+    const [first] = plan.leftOut;
+    return refuse(c, 422, { code: first?.code || 'refused', message: first?.message || 'No image area could be drawn. Nothing was run.', extra: { left_out: plan.leftOut } });
+  }
+  const userId = Number(user.id);
+  const q = replaceQuote(plan.planned);
+  // The one hold refuses a balance that cannot cover it (402, the router's words) before anything is drawn.
+  let ticket;
+  try { ticket = await assertStorageRoom(c.env, { projectId: deck.projectId }, IMAGE_BYTES_ESTIMATE * plan.planned.length, user); }
+  catch (e) { if (e instanceof Response) return e; throw e; }
+  const key = c.req.header('Idempotency-Key');
+  const idem = typeof key === 'string' && /^[A-Za-z0-9._:-]{8,64}$/.test(key) ? `deck-replace-all:${deck.deckId}:${key}` : null;
+  const held = await reserveAiBudget(c.env, userId, q.hold, new Date(), { idempotencyKey: idem });
+  if (!held.ok) {
+    await noteStorageLanded(c.env, ticket);
+    return refuseRun(c, { refusal: held.refusal, error: 'The images could not be held.' }) ?? refuse(c, 402, { code: 'hold_refused', message: 'The images could not be held. Nothing was run.' });
+  }
+  if ('replayed' in held && held.replayed) {
+    await noteStorageLanded(c.env, ticket);
+    return refuse(c, 409, { code: 'already_pressed', message: 'This Replace all images was already pressed. Its images are in the results.' });
+  }
+  const parent = held.reservation;
+  const images: any[] = [];
+  const refused: Array<Refused & { card: number }> = [];
+  let stopped: { code: string; message: string } | null = null;
+  let cost = 0;
+  try {
+    for (const { area, p } of plan.planned) {
+      const drawn = await drawDeckImages(c.env, { ...p.args, parentHold: parent, autoRedraw: true });
+      if ('refusal' in drawn) { stopped = { code: drawn.refusal, message: 'Eadwyn stopped before drawing every image. What it drew is below.' }; break; }
+      images.push(...drawn.rows);
+      refused.push(...drawn.refused.map((r) => ({ ...r, card: area.card })));
+      if (drawn.stopped) { stopped = drawn.stopped; break; }
+    }
+  } finally {
+    // The one hold settles once, at what the passed images cost; a refused image's runs were set to zero.
+    const sum = await c.env.DB.prepare('SELECT COALESCE(SUM(charged_microusd), 0) AS c FROM ai_usage_logs WHERE reservation_uid = ? AND user_id = ?')
+      .bind(parent.uid, userId).first<{ c: number }>();
+    cost = Number(sum?.c ?? 0);
+    await settleAiReservation(c.env, parent, cost, cost === 0);
+    await noteStorageLanded(c.env, ticket);
+  }
+  await auditDeckWrite(c, user, deck.projectId, 'deck_images_replaced', `The deck: ${images.length} image${images.length === 1 ? '' : 's'} proposed for ${plan.planned.length} area${plan.planned.length === 1 ? '' : 's'}`);
+  return c.json({
+    images: images.map((r) => view(c, r)), refused, left_out: plan.leftOut, hold_microusd: q.hold, charged_microusd: cost,
+    ...(stopped ? { stopped } : {}),
+  });
 });
 
 type Landing = { use: Use; card: number | null; cardUid: string | null; alt: string; showsPerson: boolean; audit: string };
@@ -332,6 +474,9 @@ async function landImage(c: any, user: User, deck: Deck, raw: Uint8Array, l: Lan
       use === 'content' ? new Date().toISOString() : null, use === 'content' ? userId : null).run();
   await recordCardUid(c.env, uid, l.cardUid);
   await noteStorageLanded(c.env, ticket);
+  // D1534 (#3778): the image screen flags an upload; it never blocks one.
+  const rail = { ...railFor(c, { page: IMAGE_PAGE, option: IMAGE_OPTION }, `deck:${deck.deckId}`), option: IMAGE_OPTION };
+  await screenUpload(c.env, { userId, rail, imageUid: uid, mime, bytes });
   await auditDeckWrite(c, user, deck.projectId, 'deck_image_uploaded', `${card == null ? 'The deck' : `Card ${card + 1}`}: ${l.audit}${showsPerson ? ', with the person’s agreement recorded' : ''}`);
   return c.json({ image: view(c, await c.env.DB.prepare('SELECT * FROM deck_images WHERE uid = ?').bind(uid).first()) }, 201);
 }
@@ -342,6 +487,8 @@ function landingOf(c: any, deck: Deck, get: (k: string) => unknown): Omit<Landin
   const ref = cardRefOf(deck.slides, { card: get('card'), card_uid: get('card_uid') });
   if ('error' in ref) return c.json({ error: ref.error }, 400);
   const alt = String(get('alt') ?? '').replace(/\s+/g, ' ').trim().slice(0, ALT_MAX);
+  // D1534 (#3778): an upload or import is described before it is inserted.
+  if (!alt) return refuse(c, 422, { code: 'alt_required', message: ALT_REQUIRED_MESSAGE });
   return { use, card: ref.index, cardUid: ref.uid, alt };
 }
 
@@ -407,8 +554,7 @@ deckImages.get('/:id/images/plan', async (c) => {
   let slides: any[] = [];
   try { slides = JSON.parse(row?.slides || '[]'); } catch { slides = []; }
   const theme = themeOfRow(row);
-  // D1562 (#3809): the deck kit over the landing page's, so the kit's image style sets the art direction.
-  const kit = await brandKitFor(c.env, deck.projectId, sanitizeImageUrl);
+  const kit = await fetchLandingPageForProject(c.env, deck.projectId);
   return c.json(imagePlan(slides, theme?.kind ?? 'brand', kit, imageCapability(c.env)));
 });
 
