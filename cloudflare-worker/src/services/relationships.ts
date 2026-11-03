@@ -161,23 +161,124 @@ export async function whoKnows(env: Env, user: User, q: WhoKnowsQuery) {
 }
 
 // ---------------------------------------------------------------- introductions
+//
+// D4329 (#4329, D1357 part 8a): the request lifecycle.
+//
+//   pending ──accept──▶ accepted ──the intro sent from the Email composer──▶ made
+//      │                    (decision_note)                (mail_sent_uid)
+//      ├──Not now──▶ declined (decision_note, which the asker reads)
+//      └──the asker withdraws──▶ withdrawn
+//
+// Only the two people on a request ever read it: the asker and the teammate
+// they asked. Every read and write names the caller in its WHERE clause, so a
+// request between two other members is 404 in the same words as one that does
+// not exist, and is in no list and no count. A request exists only because the
+// teammate shared with that team when it was asked (D1356 §6), so a teammate
+// who never shared is in no request, no log row and no count. No route here
+// contacts the person: the intro goes from the introducer's own mailbox.
 
 type Interaction = {
   uid: string; kind: string; requester_user_id: number; teammate_user_id: number; team_key: string; person_name: string;
-  person_company: string | null; note: string | null; status: string; parent_uid: string | null; decided_at: string | null; created_at: string;
+  person_company: string | null; note: string | null; context_note: string | null; decision_note: string | null; status: string;
+  parent_uid: string | null; decided_at: string | null; accepted_at: string | null; made_at: string | null; withdrawn_at: string | null;
+  mail_sent_uid: string | null; created_at: string; contact_id: number | null; person_key: string | null;
 };
-const interactionView = (r: Interaction) => ({
-  uid: r.uid, kind: r.kind, requester_user_id: r.requester_user_id, teammate_user_id: r.teammate_user_id, team_key: r.team_key,
-  person: { name: r.person_name, company: r.person_company }, note: r.note, status: r.status, parent_uid: r.parent_uid,
-  decided_at: r.decided_at, created_at: r.created_at,
-});
+type Outcome = { parent_uid: string; outcome: string; outcome_note: string | null; recorded_by_user_id: number | null; created_at: string };
+type FollowUp = { request_uid: string; due_on: string; done_at: string | null; snoozed_until: string | null };
+
+export const OUTCOMES = ['meeting_held', 'replied', 'no_reply', 'not_a_fit'] as const;
+export const OUTCOME_LABEL: Record<string, string> = { meeting_held: 'Meeting held', replied: 'Replied', no_reply: 'No reply', not_a_fit: 'Not a fit' };
+/** What the log reads until someone records an outcome: never "no reply". */
+export const NOT_RECORDED = 'Not recorded';
+export const LOG_STATUSES = ['pending', 'accepted', 'declined', 'made', 'withdrawn'] as const;
+const UID = /^[a-f0-9]{32}$/;
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const today = () => new Date().toISOString().slice(0, 10);
+
+const textOf = (v: unknown, max: number, code: string, what: string): string | null => {
+  if (v == null || v === '') return null;
+  if (typeof v !== 'string') throw new RelationshipRefusal(400, code, `${what} must be text.`);
+  const t = v.trim();
+  if (t.length > max) throw new RelationshipRefusal(400, code, `Keep ${what.toLowerCase()} under ${max.toLocaleString('en-US')} characters.`);
+  return t || null;
+};
+const dayOf = (v: unknown, code: string, what: string): string => {
+  const s = typeof v === 'string' ? v.trim() : '';
+  if (!DAY.test(s) || Number.isNaN(Date.parse(`${s}T00:00:00Z`)) || new Date(`${s}T00:00:00Z`).toISOString().slice(0, 10) !== s) {
+    throw new RelationshipRefusal(400, code, `Give ${what} as a date, YYYY-MM-DD.`);
+  }
+  return s;
+};
+
+/** A follow-up is due once its date (or the date it was snoozed to) has come, until it is done. */
+export const followUpState = (f: FollowUp | null, on = today()) => {
+  if (!f) return null;
+  const until = f.snoozed_until && f.snoozed_until > f.due_on ? f.snoozed_until : null;
+  const state = f.done_at ? 'done' : until && until > on ? 'snoozed' : (until ?? f.due_on) <= on ? 'due' : 'scheduled';
+  return { due_on: f.due_on, snoozed_until: until, done_at: f.done_at, state };
+};
+
+function interactionView(r: Interaction, caller: number, outcome: Outcome | null, followUp: FollowUp | null) {
+  const asker = r.requester_user_id === caller;
+  return {
+    uid: r.uid, kind: r.kind, requester_user_id: r.requester_user_id, teammate_user_id: r.teammate_user_id, team_key: r.team_key,
+    person: { name: r.person_name, company: r.person_company }, note: r.note,
+    // The context for the person is the asker's note to the teammate, to forward if they choose: only the two of them read it.
+    context_note: r.context_note, decision_note: r.decision_note,
+    status: r.status, parent_uid: r.parent_uid, decided_at: r.decided_at, accepted_at: r.accepted_at, made_at: r.made_at, withdrawn_at: r.withdrawn_at,
+    outcome: outcome
+      ? { value: outcome.outcome, label: OUTCOME_LABEL[outcome.outcome] ?? outcome.outcome, note: outcome.outcome_note, recorded_by_user_id: outcome.recorded_by_user_id, recorded_at: outcome.created_at }
+      : { value: null, label: NOT_RECORDED, note: null, recorded_by_user_id: null, recorded_at: null },
+    follow_up: followUpState(followUp),
+    // The send that made it, to the introducer who sent it only: the asker never reads the introducer's mailbox.
+    mail_sent_uid: asker ? null : r.mail_sent_uid,
+    created_at: r.created_at,
+  };
+}
+
+/** One request, only when the caller is on it (`side`: the asker, the teammate, or either). Else 404 "Not found.". */
+async function requestOf(env: Env, user: User, requestUid: string, side: 'asker' | 'teammate' | 'either'): Promise<Interaction> {
+  if (!UID.test(String(requestUid))) throw new RelationshipRefusal(404, 'not_found', NOT_FOUND);
+  const sql = side === 'asker'
+    ? "SELECT * FROM relationship_interactions WHERE uid = ? AND kind = 'intro_requested' AND requester_user_id = ?"
+    : side === 'teammate'
+      ? "SELECT * FROM relationship_interactions WHERE uid = ? AND kind = 'intro_requested' AND teammate_user_id = ?"
+      : "SELECT * FROM relationship_interactions WHERE uid = ? AND kind = 'intro_requested' AND ? IN (requester_user_id, teammate_user_id)";
+  const row = await env.DB.prepare(sql).bind(requestUid, user.id).first<Interaction>();
+  if (!row) throw new RelationshipRefusal(404, 'not_found', NOT_FOUND);
+  return row;
+}
+
+async function viewOf(env: Env, user: User, requestUid: string) {
+  const row = (await env.DB.prepare('SELECT * FROM relationship_interactions WHERE uid = ?').bind(requestUid).first<Interaction>())!;
+  const outcome = await env.DB.prepare(
+    "SELECT parent_uid, outcome, outcome_note, recorded_by_user_id, created_at FROM relationship_interactions WHERE parent_uid = ? AND kind = 'outcome' ORDER BY id DESC LIMIT 1",
+  ).bind(requestUid).first<Outcome>();
+  const fu = await env.DB.prepare('SELECT request_uid, due_on, done_at, snoozed_until FROM relationship_follow_ups WHERE request_uid = ? AND user_id = ?')
+    .bind(requestUid, user.id).first<FollowUp>();
+  return interactionView(row, user.id, outcome ?? null, fu ?? null);
+}
+
+/** The event row a step writes under its request (653's intro_made/intro_declined shape). */
+async function event(env: Env, ask: Interaction, kind: string, status: string, at: string, extra: { outcome?: string; outcome_note?: string | null; recorded_by?: number; mail_sent_uid?: string | null } = {}) {
+  await env.DB.prepare(
+    `INSERT INTO relationship_interactions (uid, kind, requester_user_id, teammate_user_id, team_key, contact_id, person_key, person_name, person_company,
+       status, parent_uid, decided_at, outcome, outcome_note, recorded_by_user_id, mail_sent_uid)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(uid(), kind, ask.requester_user_id, ask.teammate_user_id, ask.team_key, ask.contact_id, ask.person_key, ask.person_name, ask.person_company,
+    status, ask.uid, at, extra.outcome ?? null, extra.outcome_note ?? null, extra.recorded_by ?? null, extra.mail_sent_uid ?? null).run();
+}
+
+const personLine = (r: { person_name: string; person_company: string | null }) => `${r.person_name}${r.person_company ? `, ${r.person_company}` : ''}`;
+const introLink = (u: string) => `/network/introductions?intro=${u}`;
 
 /** Asks a teammate for an introduction. It sends nothing to the contact: the teammate decides. */
-export async function requestIntro(env: Env, user: User, b: { teammate?: unknown; ref?: unknown; note?: unknown }) {
+export async function requestIntro(env: Env, user: User, b: { teammate?: unknown; ref?: unknown; note?: unknown; context_note?: unknown }) {
   const teammate = Number(b.teammate), ref = Number(b.ref);
   if (!Number.isSafeInteger(teammate) || teammate < 1 || !Number.isSafeInteger(ref) || ref < 1) throw new RelationshipRefusal(404, 'not_found', NOT_FOUND);
   const note = typeof b.note === 'string' && b.note.trim() ? b.note.trim() : null;
   if (note && note.length > 1000) throw new RelationshipRefusal(400, 'note_too_long', 'Keep the note under 1,000 characters.');
+  const contextNote = textOf(b.context_note, 1000, 'context_note_too_long', 'The context for the person');
   const row = await env.DB.prepare(ONE_VISIBLE).bind(user.id, ref, teammate).first<Known & { person_key: string | null }>();
   if (!row) throw new RelationshipRefusal(404, 'not_found', NOT_FOUND);
   const since = new Date(Date.now() - 86400_000).toISOString().replace('T', ' ').slice(0, 19);
@@ -186,53 +287,192 @@ export async function requestIntro(env: Env, user: User, b: { teammate?: unknown
   if (Number(asked?.n ?? 0) >= INTRO_REQUESTS_PER_DAY) throw new RelationshipRefusal(429, 'intro_rate_limited', `You have asked for ${INTRO_REQUESTS_PER_DAY} introductions today. Try again tomorrow.`);
   const id = uid();
   await env.DB.prepare(
-    `INSERT INTO relationship_interactions (uid, kind, requester_user_id, teammate_user_id, team_key, contact_id, person_key, person_name, person_company, note)
-     VALUES (?, 'intro_requested', ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(id, user.id, teammate, row.team_key, ref, row.person_key, row.name, row.company, note).run();
+    `INSERT INTO relationship_interactions (uid, kind, requester_user_id, teammate_user_id, team_key, contact_id, person_key, person_name, person_company, note, context_note)
+     VALUES (?, 'intro_requested', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(id, user.id, teammate, row.team_key, ref, row.person_key, row.name, row.company, note, contextNote).run();
   await audit(env, user.id, teammate, 'access', `intro_request:${id}`);
   await notify(env, {
     userId: teammate, type: 'relationship_intro_requested', category: 'mentions',
     title: `${user.name || 'A teammate'} asks for an introduction`,
-    body: `To ${row.name}${row.company ? `, ${row.company}` : ''}. Nothing is sent until you decide.`,
-    link: `/network/relationships?intro=${id}`, payload: { uid: id },
+    body: `To ${personLine({ person_name: row.name, person_company: row.company })}. Nothing is sent until you decide.`,
+    link: introLink(id), payload: { uid: id },
   }).catch(() => null);
-  return interactionView((await env.DB.prepare('SELECT * FROM relationship_interactions WHERE uid = ?').bind(id).first<Interaction>())!);
+  return viewOf(env, user, id);
 }
 
-export async function introRequests(env: Env, user: User) {
+export type LogFilter = { team?: string | null; status?: string | null };
+
+/** The member's own requests, sent and received, filtered by team and status, with their follow-ups due. */
+export async function introRequests(env: Env, user: User, filter: LogFilter = {}) {
+  const team = filter.team ? String(filter.team) : null;
+  const status = filter.status ? String(filter.status) : null;
+  if (status && !(LOG_STATUSES as readonly string[]).includes(status)) {
+    throw new RelationshipRefusal(400, 'status_invalid', 'Filter by pending, accepted, declined, made or withdrawn.');
+  }
+  // A team filter names one of the caller's own teams; any other key is 404, so the log never confirms another team exists.
+  if (team && (team === '*' || !TEAM_KEY.test(team) || !await env.DB.prepare('SELECT 1 FROM team_memberships WHERE user_id = ? AND team_key = ?').bind(user.id, team).first())) {
+    throw new RelationshipRefusal(404, 'not_found', NOT_FOUND);
+  }
   const rows = (await env.DB.prepare(
-    `SELECT * FROM relationship_interactions WHERE (requester_user_id = ? OR teammate_user_id = ?) AND kind = 'intro_requested'
+    `SELECT * FROM relationship_interactions
+      WHERE ? IN (requester_user_id, teammate_user_id) AND kind = 'intro_requested'
+        AND (? IS NULL OR team_key = ?) AND (? IS NULL OR status = ?)
       ORDER BY created_at DESC, id DESC LIMIT 100`,
-  ).bind(user.id, user.id).all<Interaction>()).results || [];
+  ).bind(user.id, team, team, status, status).all<Interaction>()).results || [];
+  const uids = rows.map((r) => r.uid);
+  const outcomes = new Map<string, Outcome>();
+  const followUps = new Map<string, FollowUp>();
+  if (uids.length) {
+    const marks = uids.map(() => '?').join(',');
+    for (const o of (await env.DB.prepare(
+      `SELECT parent_uid, outcome, outcome_note, recorded_by_user_id, created_at FROM relationship_interactions
+        WHERE kind = 'outcome' AND parent_uid IN (${marks}) ORDER BY id`,
+    ).bind(...uids).all<Outcome>()).results || []) outcomes.set(o.parent_uid, o);
+    for (const f of (await env.DB.prepare(
+      `SELECT request_uid, due_on, done_at, snoozed_until FROM relationship_follow_ups WHERE user_id = ? AND request_uid IN (${marks})`,
+    ).bind(user.id, ...uids).all<FollowUp>()).results || []) followUps.set(f.request_uid, f);
+  }
+  const view = (r: Interaction) => interactionView(r, user.id, outcomes.get(r.uid) ?? null, followUps.get(r.uid) ?? null);
   return {
-    sent: rows.filter((r) => r.requester_user_id === user.id).map(interactionView),
-    received: rows.filter((r) => r.teammate_user_id === user.id).map(interactionView),
+    sent: rows.filter((r) => r.requester_user_id === user.id).map(view),
+    received: rows.filter((r) => r.teammate_user_id === user.id).map(view),
+    follow_ups_due: await followUpsDue(env, user),
   };
 }
 
-/** The teammate's answer: made or declined. Only they decide, and once. */
-export async function decideIntro(env: Env, user: User, requestUid: string, decision: unknown) {
-  if (decision !== 'made' && decision !== 'declined') throw new RelationshipRefusal(400, 'decision_invalid', 'Choose made or declined.');
-  if (!/^[a-f0-9]{32}$/.test(requestUid)) throw new RelationshipRefusal(404, 'not_found', NOT_FOUND);
+/** The caller's own follow-ups that are due today, on requests they are still on. Never anyone else's. */
+export async function followUpsDue(env: Env, user: User, on = today()): Promise<number> {
+  const r = await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM relationship_follow_ups f
+       JOIN relationship_interactions r ON r.uid = f.request_uid AND r.kind = 'intro_requested'
+      WHERE f.user_id = ? AND ? IN (r.requester_user_id, r.teammate_user_id) AND r.status IN ('accepted', 'made')
+        AND f.done_at IS NULL AND COALESCE(CASE WHEN f.snoozed_until > f.due_on THEN f.snoozed_until END, f.due_on) <= ?`,
+  ).bind(user.id, user.id, on).first<{ n: number }>();
+  return Number(r?.n ?? 0);
+}
+
+/**
+ * The teammate's answer: accepted or declined ("Not now"), once, with an optional note the
+ * asker reads. Made is not an answer: it is recorded when the intro is sent (`markMadeOnSend`).
+ */
+export async function decideIntro(env: Env, user: User, requestUid: string, decision: unknown, noteIn?: unknown) {
+  if (decision !== 'accepted' && decision !== 'declined') {
+    throw new RelationshipRefusal(400, 'decision_invalid', 'Choose accepted or declined. An introduction is made when you send it from the Email composer.');
+  }
+  const note = textOf(noteIn, 1000, 'decision_note_too_long', 'The note');
+  const ask = await requestOf(env, user, requestUid, 'teammate');
+  if (ask.status !== 'pending') throw new RelationshipRefusal(409, 'decided', 'This request has already been answered.');
   const at = now();
   const r = await env.DB.prepare(
-    "UPDATE relationship_interactions SET status = ?, decided_at = ? WHERE uid = ? AND teammate_user_id = ? AND kind = 'intro_requested' AND status = 'pending'",
-  ).bind(decision, at, requestUid, user.id).run();
-  if (!(r.meta?.changes ?? 0)) {
-    const exists = await env.DB.prepare('SELECT 1 FROM relationship_interactions WHERE uid = ? AND teammate_user_id = ?').bind(requestUid, user.id).first();
-    throw exists ? new RelationshipRefusal(409, 'decided', 'This request has already been answered.') : new RelationshipRefusal(404, 'not_found', NOT_FOUND);
-  }
-  const ask = (await env.DB.prepare('SELECT * FROM relationship_interactions WHERE uid = ?').bind(requestUid).first<Interaction & { contact_id: number | null; person_key: string | null }>())!;
-  await env.DB.prepare(
-    `INSERT INTO relationship_interactions (uid, kind, requester_user_id, teammate_user_id, team_key, contact_id, person_key, person_name, person_company, status, parent_uid, decided_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(uid(), decision === 'made' ? 'intro_made' : 'intro_declined', ask.requester_user_id, user.id, ask.team_key, ask.contact_id, ask.person_key,
-    ask.person_name, ask.person_company, decision, requestUid, at).run();
+    `UPDATE relationship_interactions SET status = ?, decided_at = ?, decision_note = ?, accepted_at = CASE WHEN ? = 'accepted' THEN ? END
+      WHERE uid = ? AND teammate_user_id = ? AND kind = 'intro_requested' AND status = 'pending'`,
+  ).bind(decision, at, note, decision, at, requestUid, user.id).run();
+  if (!(r.meta?.changes ?? 0)) throw new RelationshipRefusal(409, 'decided', 'This request has already been answered.');
+  await event(env, ask, decision === 'accepted' ? 'intro_accepted' : 'intro_declined', decision, at);
   await audit(env, user.id, ask.requester_user_id, 'access', `intro_${decision}:${requestUid}`);
   await notify(env, {
     userId: ask.requester_user_id, type: 'relationship_intro_answered', category: 'mentions',
-    title: decision === 'made' ? 'Your introduction was made' : 'Your introduction request was declined',
-    body: `${ask.person_name}${ask.person_company ? `, ${ask.person_company}` : ''}.`, link: `/network/relationships?intro=${requestUid}`, payload: { uid: requestUid },
+    title: decision === 'accepted' ? 'Your introduction request was accepted' : 'Your introduction request was declined',
+    body: `${personLine(ask)}.${note ? ' There is a note for you.' : ''}`, link: introLink(requestUid), payload: { uid: requestUid },
   }).catch(() => null);
-  return interactionView((await env.DB.prepare('SELECT * FROM relationship_interactions WHERE uid = ?').bind(requestUid).first<Interaction>())!);
+  return viewOf(env, user, requestUid);
+}
+
+/** The asker withdraws a request the teammate has not answered yet. */
+export async function withdrawIntro(env: Env, user: User, requestUid: string) {
+  const ask = await requestOf(env, user, requestUid, 'asker');
+  if (ask.status !== 'pending') throw new RelationshipRefusal(409, 'not_pending', 'Only a request that has not been answered can be withdrawn.');
+  const at = now();
+  const r = await env.DB.prepare(
+    "UPDATE relationship_interactions SET status = 'withdrawn', withdrawn_at = ? WHERE uid = ? AND requester_user_id = ? AND kind = 'intro_requested' AND status = 'pending'",
+  ).bind(at, requestUid, user.id).run();
+  if (!(r.meta?.changes ?? 0)) throw new RelationshipRefusal(409, 'not_pending', 'Only a request that has not been answered can be withdrawn.');
+  await event(env, ask, 'intro_withdrawn', 'withdrawn', at);
+  await audit(env, user.id, ask.teammate_user_id, 'access', `intro_withdrawn:${requestUid}`);
+  await notify(env, {
+    userId: ask.teammate_user_id, type: 'relationship_intro_withdrawn', category: 'mentions',
+    title: `${user.name || 'A teammate'} withdrew an introduction request`, body: `${personLine(ask)}. Nothing more is needed from you.`,
+    link: introLink(requestUid), payload: { uid: requestUid },
+  }).catch(() => null);
+  return viewOf(env, user, requestUid);
+}
+
+/**
+ * Before the Email composer sends an intro: the caller must be the teammate on an accepted request.
+ * Checked before anything goes out, so a send for someone else's request never leaves.
+ */
+export async function introForSend(env: Env, user: User, requestUid: unknown) {
+  const ask = await requestOf(env, user, String(requestUid ?? ''), 'teammate');
+  if (ask.status === 'made') throw new RelationshipRefusal(409, 'intro_already_made', 'This introduction has already been made.');
+  if (ask.status !== 'accepted') throw new RelationshipRefusal(409, 'intro_not_accepted', 'Accept the request before writing the intro.');
+  return ask;
+}
+
+/** The intro left the introducer's own mailbox (`mail_sent.uid`): the request is made. */
+export async function markMadeOnSend(env: Env, user: User, requestUid: string, sentUid: string) {
+  const sent = await env.DB.prepare('SELECT 1 FROM mail_sent WHERE uid = ? AND user_id = ? AND sent_at IS NOT NULL AND error IS NULL').bind(sentUid, user.id).first();
+  if (!sent) throw new RelationshipRefusal(409, 'intro_not_sent', 'The intro was not sent, so it is not recorded as made.');
+  const ask = await requestOf(env, user, requestUid, 'teammate');
+  const at = now();
+  const r = await env.DB.prepare(
+    `UPDATE relationship_interactions SET status = 'made', made_at = ?, mail_sent_uid = ?
+      WHERE uid = ? AND teammate_user_id = ? AND kind = 'intro_requested' AND status = 'accepted'`,
+  ).bind(at, sentUid, requestUid, user.id).run();
+  if (!(r.meta?.changes ?? 0)) return null;
+  await event(env, ask, 'intro_made', 'made', at, { mail_sent_uid: sentUid });
+  await audit(env, user.id, ask.requester_user_id, 'access', `intro_made:${requestUid}`);
+  await notify(env, {
+    userId: ask.requester_user_id, type: 'relationship_intro_answered', category: 'mentions',
+    title: 'Your introduction was made', body: `${personLine(ask)}.`, link: introLink(requestUid), payload: { uid: requestUid },
+  }).catch(() => null);
+  return viewOf(env, user, requestUid);
+}
+
+/** Either side records what came of a made introduction. The latest recorded outcome is the one the log reads. */
+export async function recordOutcome(env: Env, user: User, requestUid: string, b: { outcome?: unknown; note?: unknown }) {
+  if (!(OUTCOMES as readonly unknown[]).includes(b.outcome)) {
+    throw new RelationshipRefusal(400, 'outcome_invalid', 'Choose meeting held, replied, no reply or not a fit.');
+  }
+  const note = textOf(b.note, 500, 'outcome_note_too_long', 'The note');
+  const ask = await requestOf(env, user, requestUid, 'either');
+  if (ask.status !== 'made') throw new RelationshipRefusal(409, 'intro_not_made', 'An outcome is recorded once the introduction has been made.');
+  await event(env, ask, 'outcome', 'made', now(), { outcome: String(b.outcome), outcome_note: note, recorded_by: user.id });
+  const other = user.id === ask.requester_user_id ? ask.teammate_user_id : ask.requester_user_id;
+  await audit(env, user.id, other, 'access', `intro_outcome:${requestUid}`);
+  return viewOf(env, user, requestUid);
+}
+
+async function followUpOf(env: Env, user: User, requestUid: string) {
+  const ask = await requestOf(env, user, requestUid, 'either');
+  if (ask.status !== 'accepted' && ask.status !== 'made') throw new RelationshipRefusal(409, 'follow_up_unavailable', 'A follow-up is set on an accepted or made introduction.');
+  return ask;
+}
+
+/** Sets (or moves) the caller's own follow-up on a request. It reopens a done one. */
+export async function setFollowUp(env: Env, user: User, requestUid: string, b: { due_on?: unknown }) {
+  const due = dayOf(b.due_on, 'due_on_invalid', 'the follow-up date');
+  await followUpOf(env, user, requestUid);
+  const at = now();
+  await env.DB.prepare(
+    `INSERT INTO relationship_follow_ups (uid, request_uid, user_id, due_on, updated_at) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT (request_uid, user_id) DO UPDATE SET due_on = excluded.due_on, done_at = NULL, snoozed_until = NULL, updated_at = excluded.updated_at`,
+  ).bind(uid(), requestUid, user.id, due, at).run();
+  return viewOf(env, user, requestUid);
+}
+
+async function changeFollowUp(env: Env, user: User, requestUid: string, sql: string, binds: unknown[]) {
+  await followUpOf(env, user, requestUid);
+  const r = await env.DB.prepare(sql).bind(...binds, now(), requestUid, user.id).run();
+  if (!(r.meta?.changes ?? 0)) throw new RelationshipRefusal(404, 'follow_up_not_found', 'There is no follow-up on this introduction. Set one first.');
+  return viewOf(env, user, requestUid);
+}
+
+export const followUpDone = (env: Env, user: User, requestUid: string) =>
+  changeFollowUp(env, user, requestUid, 'UPDATE relationship_follow_ups SET done_at = ?2, updated_at = ?2 WHERE request_uid = ?3 AND user_id = ?4', [now()]);
+
+export function snoozeFollowUp(env: Env, user: User, requestUid: string, b: { until?: unknown }) {
+  const until = dayOf(b.until, 'until_invalid', 'the date to snooze to');
+  if (until <= today()) throw new RelationshipRefusal(400, 'until_not_future', 'Snooze to a date after today.');
+  return changeFollowUp(env, user, requestUid,
+    'UPDATE relationship_follow_ups SET snoozed_until = ?1, done_at = NULL, updated_at = ?2 WHERE request_uid = ?3 AND user_id = ?4', [until]);
 }

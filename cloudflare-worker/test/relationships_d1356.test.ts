@@ -195,14 +195,16 @@ test('an introduction request reaches the teammate alone, sends nothing to the c
     const uid = ask.body.request.uid;
     assert.equal((await call(f, 4, 'GET', '/api/relationships/intro-requests')).body.sent[0].uid, uid);
     assert.equal((await call(f, 2, 'GET', '/api/relationships/intro-requests')).body.received[0].uid, uid);
-    assert.deepEqual((await call(f, 3, 'GET', '/api/relationships/intro-requests')).body, { sent: [], received: [] });
-    assert.equal((await call(f, 4, 'POST', `/api/relationships/intro-requests/${uid}/decide`, { decision: 'made' })).status, 404, 'the asker cannot answer for the teammate');
+    assert.deepEqual((await call(f, 3, 'GET', '/api/relationships/intro-requests')).body, { sent: [], received: [], follow_ups_due: 0 });
+    assert.equal((await call(f, 4, 'POST', `/api/relationships/intro-requests/${uid}/decide`, { decision: 'accepted' })).status, 404, 'the asker cannot answer for the teammate');
     assert.equal((await call(f, 2, 'POST', `/api/relationships/intro-requests/${uid}/decide`, { decision: 'maybe' })).status, 400);
-    const made = await call(f, 2, 'POST', `/api/relationships/intro-requests/${uid}/decide`, { decision: 'made' });
-    assert.deepEqual([made.status, made.body.request.status], [200, 'made']);
+    // D4329: Accept and Made are two steps; Made is recorded when the intro is sent (relationships_intro_lifecycle_d4329).
+    assert.equal((await call(f, 2, 'POST', `/api/relationships/intro-requests/${uid}/decide`, { decision: 'made' })).body.error, 'decision_invalid');
+    const made = await call(f, 2, 'POST', `/api/relationships/intro-requests/${uid}/decide`, { decision: 'accepted' });
+    assert.deepEqual([made.status, made.body.request.status], [200, 'accepted']);
     assert.equal((await call(f, 2, 'POST', `/api/relationships/intro-requests/${uid}/decide`, { decision: 'declined' })).body.error, 'decided');
     assert.deepEqual(f.db.prepare('SELECT kind, status, parent_uid FROM relationship_interactions ORDER BY id').all().map((r: any) => [r.kind, r.status, r.parent_uid]),
-      [['intro_requested', 'made', null], ['intro_made', 'made', uid]]);
+      [['intro_requested', 'accepted', null], ['intro_accepted', 'accepted', uid]]);
     assert.equal((await call(f, 4, 'POST', '/api/relationships/intro-request', { teammate: 2, ref: 21, note: 'x'.repeat(1001) })).body.error, 'note_too_long');
     await share(f, 2, false);
     assert.equal((await call(f, 4, 'POST', '/api/relationships/intro-request', { teammate: 2, ref: 21 })).status, 404, 'withdrawn: no new request');
