@@ -164,6 +164,8 @@ test('every Learning route resolves, behind the narrowest guard it needs', () =>
     ['/learning/exercises/e1', '/learning/exercises/:slug', 'exercise', MEMBERS],
     ['/learning/exams/x1', '/learning/exams/:slug', 'exam', MEMBERS],
     ['/learning/me', '/learning/me', 'me', MEMBERS],
+    // D3959 (#3959): the member's own learning plan.
+    ['/learning/plan', '/learning/plan', 'plan', MEMBERS],
     // D3726 LR13: a member's own program page, beside the assigned admin's read-only one.
     ['/learning/my-programs/p1', '/learning/my-programs/:program', 'myProgram', MEMBERS],
     ['/learning/programs', '/learning/programs', 'programs', "guard(['admin'], <LearningPage"],
@@ -527,8 +529,9 @@ test('Learning home has no AI rail; subpage rails keep their accent and voice', 
   const mounts = [...codeOnly(rails).matchAll(/<WorkerRail[\s\S]*?\/>/g)].map((m) => m[0]);
   // The three tiers of a page that waits on its store, the learner pages that read, the studio,
   // and, in stage 3, the assigned admin's program pages and the studio's program pages (D558),
-  // the exercise and exam pages (D559), the webinar page (D560), and a member's own program page (D3726 LR13).
-  assert.equal(mounts.length, 10);
+  // the exercise and exam pages (D559), the webinar page (D560), a member's own program page (D3726 LR13),
+  // and the learning plan (D3959).
+  assert.equal(mounts.length, 11);
   for (const tier of ['founder', 'admin', 'super_admin']) assert.ok(mounts.some((m) => m.includes(`role="${tier}"`)), `no ${tier} rail`);
   for (const mount of mounts) {
     assert.match(mount, /workspace="Learning[^"]*"/);
@@ -801,7 +804,8 @@ test('every presentational component draws loading, empty, Not recorded and Unre
 });
 
 test('the pages use the app’s own styling: no font, no canvas colour, no new client method', () => {
-  const CLIENT_FILES = ['learningReads.js', 'studioActions.js', 'programReads.js', 'assessmentReads.js', 'webinarReads.js'];
+  // D3959 (#3959): planReads.js, the learning plan's calls.
+  const CLIENT_FILES = ['learningReads.js', 'studioActions.js', 'programReads.js', 'assessmentReads.js', 'webinarReads.js', 'planReads.js'];
   const dir = resolve(ROOT, 'frontend/src/pages/learning');
   const files = readdirSync(dir).filter((f) => /\.(jsx?|js)$/.test(f));
   assert.ok(files.length >= 15, `only ${files.length} files read`);

@@ -5,7 +5,8 @@
  * (markdown body) + image fields, version history, restore, and
  * ONE-TIME signed share URLs (HMAC + DB-tracked single-use).
  */
-import { checkDeckPdf, expectedLinks, hasWords, pdfRenderOptions, printPageOf } from '../services/decks/pdfExport';
+import { checkDeckPdf, expectedLinks, finishTaggedPdf, hasWords, pdfLangOf, pdfRenderOptions, printPageOf } from '../services/decks/pdfExport';
+import { aiImagesOf } from '../services/decks/aiMarking';
 import { deckCompliance } from '../services/decks/compliance';
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -2387,10 +2388,14 @@ decks.post('/:id/export', async (c) => {
   const r = await renderUrl(c.env, 'pdf', pdfRenderOptions(`${publicBase}/deck/print-export/${token}?print_mode=pdf`, page, DECK_PAGE_LOAD_MS),
     { kind: 'pdf', maxBytes: MAX_DECK_PDF_BYTES });
   if (!r.ok) return renderRefusal(c, 'pdf', r);
-  const checked = await checkDeckPdf(r.bytes, page, { links: expectedLinks(printed), words: hasWords(printed) });
+  // D1578 (#3825): the tagged PDF finished for PDF/UA (title, language, XMP) and its AI pictures marked,
+  // then checked with the rest; a PDF that fails is refused, never handed out.
+  const ai = await aiImagesOf(c.env, Number(row.project_id), printed);
+  const pdf = await finishTaggedPdf(r.bytes, { title: row.title || 'Pitch deck', lang: pdfLangOf(themeOfRow(row)), ai });
+  const checked = await checkDeckPdf(pdf, page, { links: expectedLinks(printed), words: hasWords(printed), ua: { ai: ai.length } });
   if (!checked.ok) return fidelityRefusal(c, checked.codes, checked.pages);
   await auditDeckWrite(c, user, Number(row.project_id), 'deck_exported', 'Deck exported');
-  return new Response(r.bytes, {
+  return new Response(pdf, {
     status: 200,
     headers: {
       'Content-Type': 'application/pdf',

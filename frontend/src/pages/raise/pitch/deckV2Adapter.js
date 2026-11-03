@@ -56,9 +56,11 @@ import { deckGridApi } from '../../../lib/api/deckGrid.js';
 import { deckImageEditsApi } from '../../../lib/api/deckImageEdits.js';
 import { deckImagesApi } from '../../../lib/api/deckImages.js';
 import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks.js';
+import { deckJudgeApi } from '../../../lib/api/deckJudge.js';
 import { deckLayoutsApi } from '../../../lib/api/deckLayouts.js';
 import { deckMediaApi } from '../../../lib/api/deckMedia.js';
 import { deckModelPresetsApi } from '../../../lib/api/deckModelPresets.js';
+import { deckNarrativeApi } from '../../../lib/api/deckNarrative.js';
 import { deckRehearsalsApi } from '../../../lib/api/deckRehearsals.js';
 import { deckRemixApi } from '../../../lib/api/deckRemix.js';
 import { deckSlideAnalyticsApi } from '../../../lib/api/deckSlideAnalytics.js';
@@ -91,6 +93,7 @@ export const SURFACES = Object.freeze({
   elementModels: { issue: 3754, what: 'A model per element in the AIRail' },
   areasQuote: { issue: 3764, what: 'One quote and one hold for several areas' },
   areasGenerate: { issue: 3764, what: 'Generate into several areas, with variants' },
+  judge: { issue: 3783, what: 'Rank the variants' },
   history: { issue: 3767, what: 'Undo and redo' },
   narrativeOutline: { issue: 3768, what: 'An outline from the investor narrative' },
   instruct: { issue: 3773, what: 'An instruction on several areas' },
@@ -199,7 +202,18 @@ export const areasGenerate = ({ deckId, card, areas, variants, cls, quoteUid, on
  * `gridOps.js` (its reducers and the 100-step history) and is not a client call: it has no contract.
  */
 export const history = async () => Object.freeze({ available: true, value: gridOps });
-export const narrativeOutline = off('narrativeOutline');
+// D1525 (#3783): one area's variants, ranked blind by a judge of another family than the writers'. Without `run`,
+// its quote (runs nothing); with it, the ranking. It never accepts: Accept stays the founder's.
+export const judge = (proposalUid, { run = false } = {}) => through(() => (run ? deckJudgeApi.rank(proposalUid) : deckJudgeApi.quote(proposalUid)), SURFACES.judge.issue);
+/**
+ * D1516 (#3768): New deck from the narrative. Without `run`, the outline: the stage's cards with their grid plan, what
+ * was left out and why ("Problem not evidenced"), the theme and template picked, and the quote. With `run` (and the
+ * outline's `quoteUid`), the one build: a version that is not current, under one deck_build run and one hold.
+ */
+const narrativeBody = ({ projectId, audience, stage, sector, run, quoteUid } = {}) => ({
+  project_id: projectId, ...(audience ? { audience } : {}), ...(stage ? { stage } : {}), ...(sector ? { sector } : {}), ...(run && quoteUid ? { quote_uid: quoteUid } : {}),
+});
+export const narrativeOutline = (o = {}) => through(() => (o.run ? deckNarrativeApi.build(narrativeBody(o), o.idempotencyKey) : deckNarrativeApi.outline(narrativeBody(o))), SURFACES.narrativeOutline.issue);
 export const instruct = off('instruct');
 /** D1522 (#3774): the deck's stage plan — the order for its stage, a why line per card, and missing-proof warnings. */
 export const stagePlan = (deckId, opts) => through(() => deckStageApi.stagePlan(deckId, opts), SURFACES.stagePlan.issue);

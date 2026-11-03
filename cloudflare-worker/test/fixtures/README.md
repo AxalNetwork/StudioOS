@@ -13,6 +13,7 @@ a public price list: no real person, venture, figure or credential.
 | `workers_ai_pricing_rows_2026-10-31.md` | Workers AI price rows on 2026-10-31 | `ai_catalogue_d760.test.mjs` |
 | `fake_ai_recordings.json` | D1511: the fake AI binding's recorded outputs (`../_recorded_ai.mjs`) | `recorded_ai_d1511.test.ts`, `frontend/tests/visual/server.ts` |
 | `oneClickVenture.ts` | D1511: a venture whose records fill every card of the one-click deck, written into the migrated schema | `recorded_ai_d1511.test.ts`, `frontend/tests/visual/server.ts` |
+| `chromiumTaggedDeck.ts` | D1578: a synthetic page printed by Chromium with `tagged: true`, as base64 | `deck_tagged_exports_d1578.test.ts` |
 
 ## Rules
 

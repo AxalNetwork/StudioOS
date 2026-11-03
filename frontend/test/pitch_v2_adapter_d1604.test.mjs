@@ -34,6 +34,7 @@ import { deckCommentsApi } from '../src/lib/api/deckComments.js';
 import { deckBatchesApi, parseSse } from '../src/lib/api/deckBatches.js';
 import { deckCoeditApi } from '../src/lib/api/deckCoedit.js';
 import { deckVentureElementsApi } from '../src/lib/api/deckVentureElements.js';
+import { deckNarrativeApi } from '../src/lib/api/deckNarrative.js';
 
 test('every adapter method answers unavailable, with the reason and the issue that brings its route', async () => {
   const methods = Object.keys(adapter).filter((k) => !HELPERS.has(k));
@@ -211,7 +212,7 @@ test('D1555 (#3802): consistency is swapped — the check read\'s `consistency`,
 test('the adapter keys each surface to the plan’s issue (§6.2)', () => {
   const want = {
     grid: 3749, saveCard: 3751, discardDraft: 3751, draft: 3751, batch: 3753, cancelBatch: 3753, elementModels: 3754,
-    areasQuote: 3764, areasGenerate: 3764, history: 3767, narrativeOutline: 3768, instruct: 3773,
+    areasQuote: 3764, areasGenerate: 3764, judge: 3783, history: 3767, narrativeOutline: 3768, instruct: 3773,
     stagePlan: 3774, figures: 3775, deckUsage: 3776, arrange: 3777, imageEdit: 3778, imageEditAi: 3778, imageVary: 3784, elementsLibrary: 3779,
     diagrams: 3780, ventureElements: 3781, templates: 3782, myTemplates: 3782, saveAsTemplate: 3782, typedTables: 3787,
     media: 3788, pasteCards: 3788, buttonClicks: 3788, presets: 3796, orgLocks: 3786, critique: 3799, remix: 3800, consistency: 3802, deckActions: 3808, replaceImages: 3808, outlineReorder: 3808,
@@ -466,4 +467,23 @@ test('D1502 (#3753): batch and cancelBatch answer through deckBatchesApi; the st
   assert.deepEqual(events, [{ event: 'snapshot', data: { state: 'running' } }, { event: 'step_done', data: { seq: 0 } }]);
   assert.equal(rest, 'event: area_busy\ndata: {"att');
   assert.deepEqual(parseSse('event: x\ndata: not json\n\n').events, [], 'a malformed event is skipped');
+});
+
+test('D1516 (#3768): narrativeOutline reads the outline, builds only when asked, and carries the quote and the key', async () => {
+  const real = { ...deckNarrativeApi };
+  const calls = [];
+  try {
+    deckNarrativeApi.outline = async (...a) => { calls.push(['outline', ...a]); return { stage: 'seed', cards: [] }; };
+    deckNarrativeApi.build = async (...a) => { calls.push(['build', ...a]); return { deck_id: 9, replayed: false }; };
+    assert.deepEqual(await adapter.narrativeOutline({ projectId: 7, audience: 'seed_fund' }), { available: true, value: { stage: 'seed', cards: [] } });
+    assert.deepEqual(calls[0], ['outline', { project_id: 7, audience: 'seed_fund' }]);
+    await adapter.narrativeOutline({ projectId: 7, stage: 'pre_seed', run: true, quoteUid: 'q1', idempotencyKey: 'k1' });
+    assert.deepEqual(calls[1], ['build', { project_id: 7, stage: 'pre_seed', quote_uid: 'q1' }, 'k1']);
+    assert.equal(calls.length, 2, 'an outline never builds');
+    assert.equal(adapter.availability('narrativeOutline'), null, 'the row is swapped');
+  } finally { Object.assign(deckNarrativeApi, real); }
+  const src = codeOnly(read('cloudflare-worker/src/routes/deck_narrative.ts'));
+  assert.match(src, /deckNarrative\.post\(['"]\/narrative\/outline['"]/);
+  assert.match(src, /deckNarrative\.post\(['"]\/narrative\/build['"]/);
+  assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckNarrative\)/);
 });

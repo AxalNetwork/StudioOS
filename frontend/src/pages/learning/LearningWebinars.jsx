@@ -5,6 +5,7 @@ import { Pill, RailFrame, Unrecorded, WorkerRail } from '../../ui';
 import { reportError } from '../../lib/log';
 import WebinarPanel from './WebinarPanel';
 import { LearningEmpty, LearningHeader, LearningLoading, LearningUnreadable, SectionCard } from './LearningStates';
+import { AddToPlan } from './PlanSheet';
 import { statusOf } from './LearningWired';
 import { webinarPhase } from './learningModel';
 import {
@@ -135,7 +136,8 @@ export function WebinarPage({ uid }) {
       data-testid="learning-webinar"
     >
       <div className="space-y-4">
-        <LearningHeader eyebrow="Learning · Webinar" title={webinar?.title || 'Webinar'} back={WEBINARS} />
+        <LearningHeader eyebrow="Learning · Webinar" title={webinar?.title || 'Webinar'} back={WEBINARS}
+          action={webinar?.uid ? <AddToPlan subject={{ kind: 'webinar', uid: webinar.uid, title: webinar.title, startsAt: webinar.starts_at }} /> : null} />
         <WebinarView
           state={state}
           now={now}
