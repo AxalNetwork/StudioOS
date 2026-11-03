@@ -26,6 +26,7 @@ import { agentModels } from '../src/routes/team_agents.ts';
 import { mount } from '../src/routes/admin_hq_skills.ts';
 import { EVAL_DEPS, diffSteps, meetsBar } from '../src/services/agents/skillLifecycle.ts';
 import { isReadOnlyTool } from '../src/services/agents/skills.ts';
+import { contextTokensOf } from '../src/services/agents/runCost.ts';
 
 const sql = (f: string) => readFileSync(new URL(`../sql/${f}`, import.meta.url), 'utf8');
 const BASELINE = sql('schema_baseline.sql');
@@ -45,6 +46,7 @@ function world() {
   db.exec(sql('migrations/089_skills_values_taxonomy.sql'));
   db.exec(sql('migrations/712_team_agents.sql'));
   db.exec(sql('migrations/759_agent_skills.sql'));
+  db.exec(sql('migrations/202611022326_agent_skill_context_tokens.sql')); // D4121: publishing stores each version's context_tokens
   db.exec(sql('migrations/202611022055_agent_skill_moderation.sql')); // D4161: assign reads the moderation table
   db.exec(sql('migrations/202611022140_hq_skill_lifecycle.sql'));
   const user = db.prepare("INSERT INTO users (id, uid, email, name, role, founder_id, subscription_tier, subscription_status) VALUES (?, ?, ?, ?, ?, ?, 'growth', 'active')");
@@ -293,7 +295,9 @@ test('D4160: a reason is required, every change is audited with it, and no email
     assert.doesNotMatch((await call(w, SUPER, 'GET', path)).text, /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\.[A-Za-z]{2,}/, `no email in ${path}`);
   }
   const list = (await call(w, SUPER, 'GET', HQ)).body.skills[0];
-  assert.deepEqual([list.status, list.version, list.agents, list.tokens_per_run, list.area?.slug, list.level], ['published', 1, 0, null, 'finance_ops', 'proficient']);
+  // D4121 (#4121): what the published version adds to every run, its SKILL.md by the AI budget's estimate.
+  const md = (w.db.prepare('SELECT v.skill_md FROM agent_skill_versions v JOIN agent_skills s ON s.id = v.skill_id WHERE s.uid = ? AND v.version = 1').get(uid) as any).skill_md;
+  assert.deepEqual([list.status, list.version, list.agents, list.tokens_per_run, list.area?.slug, list.level], ['published', 1, 0, contextTokensOf(md), 'finance_ops', 'proficient']);
 });
 
 test('D4160: the diff between versions and the draft; bulk items done or refused one by one', async () => {

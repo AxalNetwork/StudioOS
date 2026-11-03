@@ -250,10 +250,11 @@ export function skillFileName(s) {
 export const updateLabel = (s) => (Number.isFinite(s?.pinned_version) && Number.isFinite(s?.current_version) && s.current_version > s.pinned_version ? `Update to v${s.current_version}` : null);
 
 // ── Run cost (D4121, #4121) ───────────────────────────────────────────────────
-// More skills make an agent more capable and dearer per run: each skill's
-// SKILL.md is context every run carries. An estimate the Worker could not price
-// is `{ available: false }` and reads "Not recorded"; no figure here is ever
-// "$0.00" for a price nobody read.
+// A run carries one skill (#3954): a skill costs its tokens on each run that
+// uses it, and more skills never make one run dearer. So an agent's cost per
+// run is a range, from its cheapest skill's run to its dearest. An estimate the
+// Worker could not price is `{ available: false }` and reads "Not recorded";
+// no figure here is ever "$0.00" for a price nobody read.
 
 const NOT_RECORDED_COST = 'Not recorded';
 /** A persona area key (`personas.ts` AREAS) in words. */
@@ -265,8 +266,8 @@ export function tokensWord(n) {
   if (!Number.isFinite(n) || n < 0) return null;
   return n >= 1000 ? `${(Math.round(n / 100) / 10).toString()}k` : String(Math.round(n));
 }
-/** A skill card's line: "+≈1.2k tokens per run", or null when it was never measured. */
-export const skillTokensLine = (t) => (Number.isFinite(t) ? `+≈${tokensWord(t)} tokens per run` : null);
+/** A skill card's line: "+≈1.2k tokens on each run that uses it", or null when it was never measured. */
+export const skillTokensLine = (t) => (Number.isFinite(t) ? `+≈${tokensWord(t)} tokens on each run that uses it` : null);
 
 /** A per-run figure: "$0.05", "< $0.01" for a real fraction of a cent, "Not recorded" when unknown. */
 export function perRunUsd(v) {
@@ -277,63 +278,45 @@ export function perRunUsd(v) {
 const capWord = (cap) => (Number.isFinite(cap) ? ` · cap $${Number.isInteger(cap) ? cap : cap.toFixed(2)}/month` : '');
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
+/** "$0.03–$0.05", or one figure when the cheapest and dearest runs cost the same. */
+export function perRunRange(est) {
+  const lo = perRunUsd(est?.cheapest?.est_usd_per_run);
+  const hi = perRunUsd(est?.est_usd_per_run);
+  return lo === hi ? hi : `${lo}–${hi}`;
+}
+
 /**
- * The cost line. AG3 and SK5 ("With 4 skills ≈ $0.05 per run · cap $20/month")
- * and the profile ("6 skills ≈ $0.05 per run · cap $20/month").
+ * The cost line. AG3 and SK5 ("With 4 skills ≈ $0.03–$0.05 per run · cap
+ * $20/month") and the profile ("6 skills ≈ $0.03–$0.05 per run · cap $20/month").
  */
 export function costLine(est, { lead = 'with' } = {}) {
   if (!est?.available) return `Cost per run: ${NOT_RECORDED_COST}`;
   const n = Number(est.skills) || 0;
   const head = lead === 'with' ? (n ? `With ${plural(n, 'skill')}` : 'With no skills') : (n ? plural(n, 'skill') : 'No skills');
-  return `${head} ≈ ${perRunUsd(est.est_usd_per_run)} per run${capWord(est.cap_usd)}`;
+  return `${head} ≈ ${perRunRange(est)} per run${capWord(est.cap_usd)}`;
 }
 
-/** SK3: "Ilyse: $0.03 → $0.04 per run", from an estimate with `before`. */
-export function changeLine(name, est) {
-  if (!est?.available || !est.before) return `${name}: ${NOT_RECORDED_COST}`;
-  return `${name}: ${perRunUsd(est.before.est_usd_per_run)} → ${perRunUsd(est.est_usd_per_run)} per run`;
+/** SK3: "Ilyse: $0.02 → $0.04 per run with this skill": a run without a skill, then a run with it. */
+export function changeLine(name, est, skillUid) {
+  const run = (est?.runs || []).find((r) => r.skill_uid === skillUid);
+  if (!est?.available || !est.baseline || !run) return `${name}: ${NOT_RECORDED_COST}`;
+  return `${name}: ${perRunUsd(est.baseline.est_usd_per_run)} → ${perRunUsd(run.est_usd_per_run)} per run with this skill`;
 }
 
-/** How many times the baseline (the same agent with no skills) a run costs, to one decimal; null when unknown. */
-export function costRatio(est) {
-  const base = est?.baseline?.est_usd_per_run;
-  if (!est?.available || !Number.isFinite(base) || base <= 0) return null;
-  return Math.round((est.est_usd_per_run / base) * 10) / 10;
-}
+const spread = (h) => (Number.isFinite(h?.areas) && h.areas > 1 ? ` across ${h.areas} areas` : '');
 
-/** AG3 and SK5: "Specialists are cheaper. Consider adding Ilyse for GTM instead." */
+/** AG3 and SK5: "9 skills across 3 areas. Consider adding Ilyse for GTM: a specialist keeps each agent focused." */
 export function hintLine(est) {
   const h = est?.hint;
   if (!h) return null;
   const area = areaWord(h.area);
-  if (h.suggest?.name && area) return `Specialists are cheaper. Consider adding ${h.suggest.name} for ${area} instead.`;
-  return area ? `Specialists are cheaper. Consider a specialist for ${area}.` : 'Specialists are cheaper. Consider a specialist.';
+  const head = `${plural(est.skills, 'skill')}${spread(h)}.`;
+  if (h.suggest?.name && area) return `${head} Consider adding ${h.suggest.name} for ${area}: a specialist keeps each agent focused.`;
+  return `${head} Consider a specialist${area ? ` for ${area}` : ''}: it keeps each agent focused.`;
 }
 
-/** SK3: "Kade now has 9 skills: more capable, but ≈ 2× the cost per run. Consider a specialist." */
+/** SK3: "Kade would have 9 skills across 3 areas. Consider a specialist." */
 export function warningLine(name, est) {
   if (!est?.hint) return null;
-  const r = costRatio(est);
-  return `${name} now has ${plural(est.skills, 'skill')}: more capable, but ${r == null ? 'dearer' : `≈ ${r}×`} the cost per run. Consider a specialist.`;
-}
-
-/**
- * SK6, the explainer: one generalist with `generalist` skills against
- * `specialists` specialists with `each` skills, for the same week of work
- * (`runs` runs, shared out among the specialists). From one estimate: its
- * baseline and its price per token. Null when the estimate is unknown.
- */
-export function explainer(est, { skillTokens, generalist = 8, specialists = 3, each = 3, runs = 30 } = {}) {
-  if (!est?.available || !est.baseline || !(est.tokens_per_run > 0)) return null;
-  const perSkill = Number.isFinite(skillTokens) && skillTokens > 0 ? skillTokens
-    : est.skills > 0 ? (est.tokens_per_run - est.baseline.tokens_per_run) / est.skills : null;
-  if (!(perSkill > 0)) return null;
-  const usdPerToken = est.est_usd_per_run / est.tokens_per_run;
-  const g = est.baseline.tokens_per_run + generalist * perSkill;
-  const s = est.baseline.tokens_per_run + each * perSkill;
-  return {
-    generalist: { skills: generalist, tokens: Math.round(g), week_usd: g * usdPerToken * runs },
-    specialists: { count: specialists, skills: each, tokens: Math.round(s), week_usd: s * usdPerToken * runs },
-    runs,
-  };
+  return `${name} would have ${plural(est.skills, 'skill')}${spread(est.hint)}. Consider a specialist.`;
 }

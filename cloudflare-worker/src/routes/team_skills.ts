@@ -13,9 +13,10 @@
  *                                        skill needs a second Super Admin's approval and its golden cases
  *                                        at 9 of 10 (D4160: 409 `needs_approval`, `golden_cases_failing`)
  *
- * D4121 (#4121): what skills cost per run.
+ * D4121 (#4121): what an agent's runs cost, skill by skill (a run carries one skill, #3954).
  *   GET  /agents/:uid/cost-estimate?add=&remove=   the agent with skills added or removed:
- *        { tokens_per_run, est_usd_per_run, monthly_at_cap, delta, hint }, or { available: false }
+ *        { tokens_per_run, est_usd_per_run (the dearest run), cheapest, baseline, runs, monthly_at_cap, delta, hint },
+ *        or { available: false }
  *   GET  /:scope/:id/cost-estimate?model=&role=&persona=&skills=&cap_microusd=   an agent not yet added (AG3)
  *
  * A2 (#3956): an agent's skills, assigning a skill, the radar, coverage.
@@ -520,26 +521,34 @@ async function teamPersonas(c: C, scope: Scope): Promise<Set<string>> {
 }
 
 const shape = (e: Estimate) => (e.available ? { skills: e.skills, tokens_per_run: e.tokens_per_run, est_usd_per_run: e.est_usd_per_run } : null);
-const THRESHOLDS = { max_skills: RUN_COST_CONFIG.specialistMaxSkills, cost_ratio: RUN_COST_CONFIG.specialistCostRatio };
+const THRESHOLDS = { max_skills: RUN_COST_CONFIG.specialistMaxSkills };
 
-/** The answer both estimate routes give: never a 0 for an unknown price. */
-async function costAnswer(c: C, input: { model: string; sponsorId: number; prompt: string; capMicro: number | null; before: Pin[]; after: Pin[]; scope: Scope }) {
+/**
+ * The answer both estimate routes give, never a 0 for an unknown price. A run
+ * carries one skill (#3954), so `tokens_per_run` / `est_usd_per_run` are the
+ * dearest run (with its largest skill), `cheapest` the cheapest, `baseline` a
+ * run with no skill, and `runs` a run with each skill, by its uid.
+ */
+async function costAnswer(c: C, input: {
+  model: string; sponsorId: number; prompt: string; capMicro: number | null; before: Pin[]; after: Pin[]; scope: Scope; uids: Map<number, string>;
+}) {
   const base = { model: input.model, sponsorId: input.sponsorId, systemPrompt: input.prompt, capMicro: input.capMicro };
   const after = await estimate(c.env, { ...base, pins: input.after });
   if (!after.available) return c.json({ available: false, reason: after.reason });
   const before = await estimate(c.env, { ...base, pins: input.before });
-  const baseline = await estimate(c.env, { ...base, pins: [] });
-  const hint = await specialistHint(c.env, after, baseline, input.after.map((p) => p.skill_id), await teamPersonas(c, input.scope));
+  const hint = await specialistHint(c.env, input.after.map((p) => p.skill_id), await teamPersonas(c, input.scope));
   return c.json({
     available: true,
     model: input.model,
     skills: after.skills,
     tokens_per_run: after.tokens_per_run,
     est_usd_per_run: after.est_usd_per_run,
+    cheapest: after.cheapest,
+    baseline: after.baseline,
+    runs: after.runs.map((r) => ({ skill_uid: input.uids.get(r.skill_id) ?? null, tokens_per_run: r.tokens_per_run, est_usd_per_run: r.est_usd_per_run })),
     monthly_at_cap: after.monthly_at_cap,
     cap_usd: input.capMicro == null ? null : input.capMicro / 1_000_000,
     before: shape(before),
-    baseline: shape(baseline),
     delta: deltaOf(before, after),
     hint,
     thresholds: THRESHOLDS,
@@ -568,6 +577,7 @@ router.get('/agents/:uid/cost-estimate', async (c) => {
   return costAnswer(c, {
     model: a.model_id, sponsorId: a.sponsor_user_id ?? user.id, prompt: systemPrompt(a, rules, scope, label),
     capMicro: a.monthly_cap_microusd, before, after, scope,
+    uids: new Map([...pinned, ...adding].map((p) => [p.skill_id, p.uid])),
   });
 });
 
@@ -599,6 +609,7 @@ router.get('/:scope/:id/cost-estimate', async (c) => {
   return costAnswer(c, {
     model, sponsorId: user.id, prompt: systemPrompt(draft, rules, scope, label), capMicro: cap,
     before: [], after: pins.map((p) => ({ skill_id: p.skill_id, version: p.version })), scope,
+    uids: new Map(pins.map((p) => [p.skill_id, p.uid])),
   });
 });
 

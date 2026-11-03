@@ -5,7 +5,7 @@ import SkillRadar from '../../components/play/SkillRadar.jsx';
 import SkillEnergy from '../../ui/SkillEnergy.jsx';
 import { areaVars } from '../../lib/skillAreas.js';
 import { BTN_SECONDARY, MONO, MUTED } from './teamUi.jsx';
-import { authorLine, costLine, energyOf, explainer, hintLine, outputWords, perRunUsd, radarLines, skillTokensLine, tagChip, tokensWord, usedBy } from './skillsModel.js';
+import { authorLine, costLine, energyOf, hintLine, outputWords, radarLines, skillTokensLine, tagChip, usedBy } from './skillsModel.js';
 
 /**
  * D1612 (#3952, SK1, SK4, SK5) — the pieces every skill screen shares: the
@@ -134,8 +134,9 @@ export function AgentRadar({ vector, radar, height = 200, label = 'Computed from
 }
 
 /**
- * D4121 (#4121): the run-cost line under the radar (AG3, SK4, SK5), and the
- * specialist hint when the skills grow. `est` is `null` while it is read.
+ * D4121 (#4121): the run-cost line under the radar (AG3, SK4, SK5): a run
+ * carries one skill, so it is a range from the cheapest skill's run to the
+ * dearest. The specialist hint shows past 6 skills. `est` is `null` while it is read.
  */
 export function CostLine({ est, lead = 'with' }) {
   if (est === null) return <p className={`m-0 ${MUTED}`} data-testid="run-cost-line">Working out the cost per run…</p>;
@@ -145,29 +146,5 @@ export function CostLine({ est, lead = 'with' }) {
       <p className={`m-0 ${MONO} text-[12.5px] text-axal-ink dark:text-gray-100`} data-testid="run-cost-line">{costLine(est, { lead })}</p>
       {hint ? <p role="note" className="m-0 rounded-axal-md bg-axal-lavender px-3 py-2 text-[12.5px] text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-300" data-testid="run-cost-hint">{hint}</p> : null}
     </div>
-  );
-}
-
-/** D4121 SK6: one generalist against three specialists for the same week of work. Nothing is drawn when the estimate is unknown. */
-export function CostExplainer({ est, skillTokens }) {
-  const x = explainer(est, { skillTokens });
-  if (!x) return null;
-  const row = (label, tokens, usd) => (
-    <tr className="border-t border-axal-hairline dark:border-gray-800">
-      <td className="py-1.5 pr-3 text-axal-ink dark:text-gray-100">{label}</td>
-      <td className={`py-1.5 pr-3 ${MONO}`}>≈{tokensWord(tokens)} tokens per run</td>
-      <td className={`py-1.5 ${MONO}`}>{perRunUsd(usd)} a week</td>
-    </tr>
-  );
-  return (
-    <aside className="rounded-axal-md border border-axal-hairline px-3 py-2.5 text-[12.5px] dark:border-gray-700" data-testid="run-cost-explainer">
-      <b className="text-axal-ink dark:text-gray-100">Why specialists are cheaper</b>
-      <p className={`m-0 mt-0.5 ${MUTED}`}>Every skill is read on every run. The same {x.runs} runs a week, done by one agent with {x.generalist.skills} skills or shared by {x.specialists.count} agents with {x.specialists.skills} each:</p>
-      <table className="mt-1.5 w-full text-[12px]"><tbody>
-        {row(`One generalist · ${x.generalist.skills} skills`, x.generalist.tokens, x.generalist.week_usd)}
-        {row(`${x.specialists.count} specialists · ${x.specialists.skills} skills each`, x.specialists.tokens, x.specialists.week_usd)}
-      </tbody></table>
-      <p className={`m-0 mt-1 ${MUTED}`}>An estimate: real runs vary with what each one is asked.</p>
-    </aside>
   );
 }

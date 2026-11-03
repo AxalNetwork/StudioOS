@@ -5,7 +5,7 @@ import { api } from '../../lib/api';
 import { AgentTile } from './AgentMark.jsx';
 import * as agents from './agentsAdapter.js';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, EYEBROW, FIELD, HonestBlock, MONO, MUTED } from './teamUi.jsx';
-import { AgentRadar, CostExplainer, CostLine, SkillRow, TaxChips } from './SkillParts.jsx';
+import { AgentRadar, CostLine, SkillRow, TaxChips } from './SkillParts.jsx';
 import {
   LEVELS, OUTPUT_KINDS, assignGroups, blockedWords, changeLine, directory, parseSkillMd, previewRadar, problemWords, radarVector, scopeLine, warningLine,
 } from './skillsModel.js';
@@ -77,7 +77,7 @@ export function AssignSkillSheet({ skill, onClose, onDone }) {
   useEffect(() => { let alive = true; agents.assignable(skill.uid).then((b) => { if (alive) setBlock(b); }); return () => { alive = false; }; }, [skill.uid]);
   const list = block?.available && Array.isArray(block.value?.agents) ? block.value.agents : [];
   const free = list.filter((a) => !a.blocked && !a.assigned);
-  // D4121: each agent's run-cost change if the skill is added.
+  // D4121: what a run with this skill costs each agent, against a run with none.
   const [costs, setCosts] = useState({});
   const freeKey = free.slice(0, ASSIGN_COST_MAX).map((a) => a.uid).join(',');
   useEffect(() => {
@@ -87,7 +87,6 @@ export function AssignSkillSheet({ skill, onClose, onDone }) {
     }
     return () => { alive = false; };
   }, [freeKey, skill.uid]); // eslint-disable-line react-hooks/exhaustive-deps
-  const anyCost = Object.values(costs).find((e) => e?.available) || null;
   const tick = (uid) => setPicked((s) => { const n = new Set(s); if (n.has(uid)) n.delete(uid); else n.add(uid); return n; });
   const save = async () => {
     setRefusal('');
@@ -126,7 +125,7 @@ export function AssignSkillSheet({ skill, onClose, onDone }) {
                         <b className="text-[13.5px] text-axal-ink dark:text-gray-100">{a.name}</b>
                         <span className={MUTED}>{scopeLine(a.scope)}{Number.isFinite(a.skill_count) ? ` · ${a.skill_count} skills` : ''}</span>
                         {why ? <span className="text-[12px] text-amber-800 dark:text-amber-200" data-testid="assign-why">{why}</span> : null}
-                        {!off && costs[a.uid] ? <span className={`${MONO} text-[12px] text-axal-ink dark:text-gray-200`} data-testid="assign-cost">{changeLine(a.name, costs[a.uid])}</span> : null}
+                        {!off && costs[a.uid] ? <span className={`${MONO} text-[12px] text-axal-ink dark:text-gray-200`} data-testid="assign-cost">{changeLine(a.name, costs[a.uid], skill.uid)}</span> : null}
                         {!off && warningLine(a.name, costs[a.uid]) ? <span className="text-[12px] text-amber-800 dark:text-amber-200" data-testid="assign-cost-warning">{warningLine(a.name, costs[a.uid])}</span> : null}
                       </span>
                     </label>
@@ -134,7 +133,6 @@ export function AssignSkillSheet({ skill, onClose, onDone }) {
                 })}
               </div>
             ))}
-            <CostExplainer est={anyCost} skillTokens={skill.context_tokens} />
           </>
         )}
         <Refusal text={refusal} />
@@ -189,7 +187,6 @@ export function AddSkillsSheet({ agent, current, radar, onClose, onSaved }) {
               </label>
             );
           })}
-        <CostExplainer est={cost} />
         <Refusal text={refusal} />
       </div>
     </Sheet>

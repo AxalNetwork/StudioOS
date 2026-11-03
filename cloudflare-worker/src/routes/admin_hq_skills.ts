@@ -40,7 +40,7 @@ import { newUid } from './_t13t14t15_helpers';
 import { agentModels } from './team_agents';
 import { skillByUid, taxonomyMaps, versionOf, type SkillRow, type VersionRow } from '../services/agents/skillLinks';
 import { draftPartsOf, publishDraft } from '../services/agents/skillPublish';
-import { contextTokensOf } from '../services/agents/runCost';
+import { pinTokens } from '../services/agents/runCost';
 import {
   CASES_MAX, PASS_BAR, approvalFor, checkCase, diffParts, draftHash, evalSummary, lifecycleStatus, openReview, pinnedAgents, runCase,
   type CaseExpect, type CaseInput, type DraftParts, type ReviewRow,
@@ -104,18 +104,10 @@ async function reviewDto(env: Env, r: ReviewRow | null, hash: string) {
   };
 }
 
-/** D4121: a published version's `context_tokens`, or null when there is no version or it cannot be read. */
+/** D4121: what a published version adds to a run that uses it (`context_tokens`), or null when there is no version or it cannot be read. */
 async function versionTokens(env: Env, skillId: number, version: number): Promise<number | null> {
   if (!version) return null;
-  try {
-    const r = await env.DB.prepare(
-      `SELECT c.context_tokens, v.skill_md FROM agent_skill_versions v
-         LEFT JOIN agent_skill_version_costs c ON c.skill_id = v.skill_id AND c.version = v.version
-        WHERE v.skill_id = ? AND v.version = ?`,
-    ).bind(skillId, version).first<{ context_tokens: number | null; skill_md: string }>();
-    if (!r) return null;
-    return r.context_tokens ?? contextTokensOf(r.skill_md);
-  } catch { return null; }
+  return (await pinTokens(env, [{ skill_id: skillId, version }]))?.[0] ?? null;
 }
 
 // ── The library ─────────────────────────────────────────────────────────────
@@ -134,7 +126,7 @@ adminHqSkills.get('/', async (c) => {
       status: lifecycleStatus(s.status, await openReview(c.env, s.id), hash),
       version: s.current_version || null,
       agents: await pinnedAgents(c.env, s.id),
-      // D4121: what the current version adds to every run (its SKILL.md, estimated as the AI budget does); null for a skill never published.
+      // D4121: what the current version adds to a run that uses it (its prompt, by the AI budget's estimate); null for a skill never published.
       tokens_per_run: await versionTokens(c.env, s.id, s.current_version),
       golden: { pass: evals.pass, total: evals.total, meets_bar: evals.meets_bar },
       last_eval: evals.last_run,
