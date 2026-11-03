@@ -6,6 +6,7 @@ reply against its schema, not only that the route exists.
 
 | File | What it is |
 |---|---|
+| `deckBrandLocks.schema.json` | `GET /api/decks/brand-kit/locks` (D1572, #3819): the brand kit's three locks, each with who locked it and when, whether this member may lock, and "Only the venture’s admins can lock." |
 | `deckAreasProposals.schema.json` | `GET /api/decks/:id/areas/proposals?batch=` (D1512, #3764): the run's charged-of-held, whether every area settled, and each area's proposal with its variants (model, seed, cost, seconds, error, critique). |
 | `deckAreasQuote.schema.json` | `POST /api/decks/:id/areas/quote` (D1512, #3764): per-area lines that sum to the area's hold, each row's gates and refusal, the total hold and its expiry. |
 | `deckCardStatus.schema.json` | `GET /api/decks/:id/card-status` (D1579, #3826): each card's status and assignee under the filter, every card's count, the cards not Done, and who a card can be assigned to. |
@@ -37,6 +38,7 @@ reply against its schema, not only that the route exists.
 | `deckStagePlan.schema.json` | `GET /api/decks/:id/stage-plan` (D1522, #3774): the keys the route adds to `stagePlan()`'s plan. |
 | `deckUnseenBatches.schema.json` | `GET /api/decks/:id/batches?state=done&unseen=1` (D1600, #3879): the finished runs nobody opened, newest first, at most five, each with its count of cards waiting. |
 | `deckUsage.schema.json` | `GET /api/decks/:id/usage` (D1524, #3776): the deck's estimate, its spend from the ledger and the per-run unit prices; unread is `{ available: false }`, never 0. |
+| `deckTemplateImport.schema.json` | `POST /api/decks/templates/import` (D1572, #3819): pd30's mapping report for a .pptx template: colours, fonts with their OFL stand-in, each layout on whole cells or with its reason, and the counts. |
 | `deckTemplates.schema.json` | `GET /api/decks/templates` (D1535, #3782): HQ's Gallery templates, filtered, with New deck's seven audiences. |
 | `deckVentureElements.schema.json` | `GET /api/decks/:id/venture-elements` and `/venture-elements/:element` (D1543, #3781): every venture-record element placed or refused by its gate, or one placed element, with its blocks and bindings. |
 | `deckTypedTables.schema.json` | `GET /api/decks/:id/typed-values` (D1538, #3787): the deck and the venture's typed figures, graded Stated. |
