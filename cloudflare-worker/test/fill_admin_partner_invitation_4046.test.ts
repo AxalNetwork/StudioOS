@@ -32,7 +32,7 @@ import { UNDO_WRITES } from '../src/services/fills/keep.ts';
 import { RECORD_SCOPES } from '../src/services/fills/scopes.ts';
 import { FILL_FIELDS as SPA_FIELDS } from '../../frontend/src/lib/fillFields.js';
 
-const SECRET = 'synthetic-fill-partner-invitation-4046-'.repeat(3);
+const SECRET = 'test-secret-test-secret-'.repeat(3);
 test.after(() => removeMigratedDatabases());
 
 const PAGE = 'Admin · Community · Partner invitations';
