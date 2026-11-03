@@ -10,7 +10,7 @@ import {
   newThisWeek,
   durationLabel, formatDay, formatWhen, kindLabel, matchesQuery, minutesLabel, rangeLabel, resolveTab, sourceStates, tabMode, webinarPhase,
 } from './learningModel';
-import { readArticles, readCatalog, readEvents, readExams, readExercises, readMe, readMyStats, readPublications } from './learningReads';
+import { readArticles, readCatalog, readEvents, readExams, readExercises, readItemPreview, readMe, readMyStats, readPublications } from './learningReads';
 import { readWebinars } from './webinarReads';
 import {
   ComingSoonCard, LearningEmpty, LearningLoading, LearningUnreadable, NotLiveYet,
@@ -39,6 +39,42 @@ const ROW_TITLE = 'text-[14px] font-semibold text-axal-ink hover:text-axal-viole
 const ROW_META = 'mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px] text-axal-muted dark:text-gray-400';
 const PAGER = 'inline-flex items-center gap-1 rounded-axal-sm border border-axal-hairline px-2.5 py-1 text-[12px] font-medium text-axal-ink hover:border-axal-violet/40 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:text-gray-200';
 const isLoading = (state) => state.status === 'loading' || state.status === 'idle';
+
+/**
+ * lr7: a video card's hover preview. A pointer that rests on the card for
+ * 400 ms reads the item once (`readItemPreview`) and, when Stream has a ready
+ * preview, shows it above the card's text; nothing is drawn otherwise, and a
+ * touch never triggers it. The preview is decoration: it is hidden from
+ * assistive technology and says nothing the card does not.
+ */
+export function HoverPreview({ uid, read = readItemPreview, delay = 400 }) {
+  const [url, setUrl] = useState(null);
+  const [shown, setShown] = useState(false);
+  const timer = React.useRef(null);
+  const host = React.useRef(null);
+  useEffect(() => {
+    const card = host.current?.parentElement;
+    if (!card) return undefined;
+    let live = true;
+    const enter = (e) => {
+      if (e.pointerType === 'touch') return;
+      clearTimeout(timer.current);
+      timer.current = setTimeout(async () => {
+        const u = await read(uid);
+        if (live && u) { setUrl(u); setShown(true); }
+      }, delay);
+    };
+    const leave = () => { clearTimeout(timer.current); setShown(false); };
+    card.addEventListener('pointerenter', enter);
+    card.addEventListener('pointerleave', leave);
+    return () => { live = false; clearTimeout(timer.current); card.removeEventListener('pointerenter', enter); card.removeEventListener('pointerleave', leave); };
+  }, [uid, read, delay]);
+  return (
+    <span ref={host} aria-hidden="true" className={shown && url ? 'block overflow-hidden rounded-axal-sm bg-black' : 'hidden'} data-testid="catalog-row-preview">
+      {shown && url ? <img src={url} alt="" className="aspect-video w-full object-cover" data-testid="img-catalog-preview" /> : null}
+    </span>
+  );
+}
 
 function RowTitle({ href, children, testid }) {
   return href
@@ -242,6 +278,7 @@ export function CatalogList({ state, kind = null, q = '', onPage, onRetry }) {
             {rows.map((row) => {
               const inner = (
                 <>
+                  {row.kind === 'video' && row.uid ? <HoverPreview uid={row.uid} /> : null}
                   <span className="flex flex-wrap gap-1.5">
                     <Pill tone="info">{kindLabel(row.kind)}</Pill>
                     {row.draft && <Pill tone="warn">{row.draft}</Pill>}
