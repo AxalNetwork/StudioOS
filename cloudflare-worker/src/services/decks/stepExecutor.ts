@@ -54,6 +54,13 @@ export function candidatesFor(step: Pick<StepRow, 'model' | 'element' | 'kind'>)
   return out.length ? out : [undefined];
 }
 
+/** D1512 (#3764): a stored deck image as a run's result names it: its uid, file URL, size, alt and model. */
+export const storedView = (row: any) => ({
+  uid: String(row.uid), url: `/api/decks/images/${row.uid}/file`, width: row.width == null ? null : Number(row.width),
+  height: row.height == null ? null : Number(row.height), alt: row.alt ?? '', model: row.model ?? null,
+  charged_microusd: row.charged_microusd == null ? null : Number(row.charged_microusd),
+});
+
 /** What the run's answer is, as the proposal the step leaves: text, or an image's reference. */
 function variantOf(r: RunResult): unknown {
   if (r.image) return { image: r.image };
@@ -99,13 +106,17 @@ export function stepExecutor(env: Env, deps: ExecutorDeps = {}): StepExecutor {
           base: String(passed.text ?? ''), draw: { ...passed, task: 'deck_image', userId: account, ...(step.model ? { model: step.model } : {}) } as RunOptions,
           model: step.model, size: d.width && d.height ? { width: d.width, height: d.height } : null,
           parentHold: ctx.parentHold ?? null, rail: { page: GRID_PAGE, option, record: ref },
+          // D1512 (#3764): the area's variant, and the ask the stored proposal answers.
+          variant: Number(input.variant) || 0,
+          store: input.store && typeof input.store === 'object' ? input.store as any : null,
           run: (o) => run(env, { ...o, userId: account, parentHold: ctx.parentHold ?? undefined, idempotencyKey: `${ref}:p${n++}`, executionId: step.batch_uid, rail: { page: GRID_PAGE, option, record: ref } }),
         });
         const charged = await chargedFor(env, parentUid, ref);
         if (!r.ok) return { ok: false, charged_microusd: charged, error_code: r.code };
         return {
           ok: true, charged_microusd: charged, model_used: r.model, usage_log_id: r.usage_log_id,
-          variant: { image: r.image, alt: r.alt, seed: r.seed, variant_index: r.variant_index, pipeline_uid: r.pipeline_uid, steps: r.steps, qa: r.qa, refused: r.refused },
+          // D1512: the stored proposal, never the bytes (a run's result is JSON, at most MAX_RESULT_CHARS).
+          variant: { image: r.stored ? storedView(r.stored) : null, alt: r.alt, seed: r.seed, variant_index: r.variant_index, pipeline_uid: r.pipeline_uid, steps: r.steps, qa: r.qa, refused: r.refused },
         };
       } finally {
         await gov.release(lease.id).catch(() => {});

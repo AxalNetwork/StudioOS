@@ -135,7 +135,8 @@ test('the shared rail frame reads the same property', () => {
   assert.match(codeOnly(SHELL), /<RailFrame rail=\{rail\}>/,
     'WorkspaceShell must put its rail in the shared frame, not draw a slot of its own again');
   // The inset goes with the width: 18px either side of a 44px column leaves 8px.
-  assert.match(FRAME, /:root\[data-worker-rail="collapsed"\] \.fwr-frame-rail \{ padding-left: 0; padding-right: 0; \}/);
+  // #4260: the inset is the rail's own now, so the rail gives it up.
+  assert.match(FRAME, /\.fwr-frame-dock > aside\.fwr\[data-collapsed="true"\] \{ padding-left: 0; padding-right: 0; \}/);
 });
 
 test('the rail row has a height, so align-items: stretch has something to stretch to', () => {

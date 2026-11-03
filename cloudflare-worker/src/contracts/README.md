@@ -6,6 +6,8 @@ reply against its schema, not only that the route exists.
 
 | File | What it is |
 |---|---|
+| `deckAreasProposals.schema.json` | `GET /api/decks/:id/areas/proposals?batch=` (D1512, #3764): the run's charged-of-held, whether every area settled, and each area's proposal with its variants (model, seed, cost, seconds, error, critique). |
+| `deckAreasQuote.schema.json` | `POST /api/decks/:id/areas/quote` (D1512, #3764): per-area lines that sum to the area's hold, each row's gates and refusal, the total hold and its expiry. |
 | `deckCardStatus.schema.json` | `GET /api/decks/:id/card-status` (D1579, #3826): each card's status and assignee under the filter, every card's count, the cards not Done, and who a card can be assigned to. |
 | `deckBatch.schema.json` | `GET /api/decks/areas/batches/:uid` and `POST …/cancel` (D1502, #3753): the run, its counts and each step's row as pd2b draws it. |
 | `deckCritique.schema.json` | `POST /api/decks/:id/critique/quote` and `POST /api/decks/:id/critique` (D1552, #3799): the critique's quote (score, blocks to shorten, the vision check of another family than the writer's, the hold), or its run (scores, findings, fixes kept as proposals, what was fixed, what is left). |
@@ -17,6 +19,7 @@ reply against its schema, not only that the route exists.
 | `deckElements.schema.json` | `GET /api/decks/elements` (D1541, #3779): the icon set's licence record, the decor cap, the shapes, dividers and textures with their sanitised SVG, and Generate (Coming later). |
 | `deckFigures.schema.json` | `GET /api/decks/:id/figures` (D1523, #3775): every figure on the version with its state (Linked, Stated, Uncited, Not recorded) and source, and the counts. |
 | `deckGrid.schema.json` | `GET /api/decks/:id/grid` (D1499, #3749): the geometry, the 17 structures and each card's areas with their boxes. |
+| `deckImageTools.schema.json` | `GET /api/decks/images/tools` (D1534, #3778 phase 2): the AI image tools (background removal through AI Gateway, Upscale with no model), each with whether it can run, its model, its per-image price and why not. |
 | `deckImageVary.schema.json` | `POST /api/decks/images/:uid/edit/quote` (D1544, #3784): an image edit's model, its one hold for the edit and its checks, the references it sends, or why it cannot run. |
 | `deckInvestorLinks.schema.json` | `GET /api/decks/:id/investor-links` (D1565, #3812): the deck, its version and its per-investor links. |
 | `deckMarkSeen.schema.json` | `POST /api/decks/areas/batches/:uid/seen` (D1600, #3879): `{ ok: true }` when the return banner's Review is opened. |

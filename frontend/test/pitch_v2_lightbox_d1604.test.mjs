@@ -37,12 +37,12 @@ import { fileURLToPath } from 'node:url';
 import { CARD, MODEL, mountEditor } from './_pitch_editor_mount.mjs';
 import { FIGURE_LINE } from '../src/pages/raise/pitch/deckAssistModel.js';
 import { SURFACES } from '../src/pages/raise/pitch/deckV2Adapter.js';
-import { ELEMENTS, ELEMENT_GROUPS, HOLD, NOT_ON, elementOnMain } from '../src/pages/raise/pitch/deckV2Model.js';
+import { ELEMENTS, ELEMENT_GROUPS, HOLD, elementOnMain } from '../src/pages/raise/pitch/deckV2Model.js';
 import { __resetAssistModeForTest, seedAssistModes } from '../src/hooks/useAssistMode.js';
 import { areasOf } from '../src/pages/raise/pitch/gridSelection.js';
 import { FOUNDER_OPTIONS } from '../src/lib/railOptions/founder.js';
 import {
-  CHART_MIN_LINE, EMPTY_TEXT_WHAT, NOT_RUN, TEXT_CHANGES, TEXT_ELEMENTS, aspectFor, batchMode, chargedLine, defaultElement, holdLine, modelChip,
+  CHART_MIN_LINE, NOT_RUN, TEXT_CHANGES, TEXT_ELEMENTS, aspectFor, batchMode, chargedLine, defaultElement, holdLine, modelChip,
   placeResult, rowPlan, runSequence, validLine, variantWhy, VENTURE_ELEMENTS, VENTURE_LINE,
 } from '../src/pages/raise/pitch/areaLightboxModel.js';
 
@@ -78,9 +78,9 @@ test('every element maps to a route on main, a free placement, or its adapter is
       assert.ok(FOUNDER_OPTIONS.some((o) => o.key === plan.option && o.page === 'Founder · Raise · Pitch deck'), `${el.id}: ${plan.option} is a deck rail option`);
     }
   }
-  // Words for an empty area are #3764's: nothing on main writes them.
+  // D1512 (#3764): words for an empty area are the batch's, written from the card's own words.
   const empty = rowPlan({ area: area('free:8-4'), element: 'body', card: CARD, cardIndex: 0 });
-  assert.deepEqual([empty.run, empty.adapter, empty.issue, empty.what], ['later', 'areasGenerate', 3764, EMPTY_TEXT_WHAT]);
+  assert.deepEqual([empty.run, empty.option], ['area', 'deck:rewrite']);
   // A bound figure: only another recorded figure replaces it.
   assert.equal(rowPlan({ area: area('b3'), element: 'chart', card: CARD, cardIndex: 0, items: ITEMS }).why, FIGURE_LINE('Grow › Revenue'));
   assert.equal(rowPlan({ area: area('b3'), element: 'metric', card: CARD, cardIndex: 0, items: ITEMS }).run, 'metric');
@@ -133,12 +133,14 @@ test('the model chip is the AIRail\'s pick, read-only, and says where it is set'
   assert.match(modelChip(real), /^Synthetic C · \$0\.58.* · set in the AIRail$/);
 });
 
-test('several areas run in sequence until #3764: the adapter is asked first; variants 2 and 3 are off', () => {
-  assert.equal(batchMode(), 'sequence');
-  assert.equal(batchMode(() => ({ available: true })), 'batch', 'the day the adapter answers, the batch');
+test('several areas run as one batch since #3764 (D1512): the adapter is asked first; variants 2 and 3 are on', () => {
+  // Mutation checked: put `areasGenerate` back to off('areasGenerate') → the dialog is in sequence again and this fails.
+  assert.equal(batchMode(), 'batch');
+  assert.equal(batchMode(() => ({ available: false })), 'sequence', 'a seam that answers unavailable runs the areas one after another');
   assert.equal(batchMode((n) => (n === 'areasQuote' ? { available: true } : { available: false })), 'sequence', 'both routes, or none');
   assert.equal(variantWhy(1), null);
-  assert.equal(variantWhy(2), NOT_ON);
+  assert.equal(variantWhy(2), null);
+  assert.ok(variantWhy(2, 'sequence'), 'in sequence, variants 2 and 3 say why they are off');
   assert.equal(variantWhy(3, 'batch'), null);
 });
 
@@ -202,62 +204,101 @@ const RAIL = async (_page, option) => ({ ok: true, models: [{ id: 'synthetic/m',
 const QUOTE = async (_id, _card, body) => ({ ai: true, action: body.action, hold_microusd: { rewrite: 1200, chart: 800 }[body.action] ?? 1000 });
 const node = (m, id) => { const n = m.by(id); assert.ok(n, `no ${id}`); return n; };
 
-test('several areas: their sum across N runs, one after another under each area\'s option, then Accept all', async () => {
+/** D1512 (#3764): the area routes, stubbed: one quote, a run that settles at the first read, and Accept by the area. */
+const BATCH = '00000000-0000-4000-8000-000000000b01';
+const AREA_ROUTES = (variants = 1, refuse = null) => ({
+  'areas.quote': async (_id, body) => ({
+    class: 'areas', quote_uid: `q1.${'a'.repeat(32)}`, expires_at: new Date(Date.now() + 600_000).toISOString(),
+    hold_microusd: 1200 * body.variants,
+    areas: body.areas.map((a) => ({ key: a.id, card_uid: 'c-0', area_id: a.id, element: a.element, refusal: refuse?.[a.id] ?? null, hold_microusd: 1200 * body.variants, lines: [{ label: `${body.variants} variant · Synthetic`, microusd: 1200 * body.variants }] })),
+  }),
+  'areas.start': async (_id, body) => ({
+    batch_uid: BATCH, class: 'areas', hold_microusd: 1200 * body.variants, replayed: false, refused: [],
+    proposals: body.areas.map((a) => ({ uid: `p-${a.id}`, card_uid: 'c-0', area_id: a.id, element: a.element, kind: 'text', state: 'running', variants: [] })),
+  }),
+  'areas.proposals': async () => ({
+    batch: { uid: BATCH, state: 'done', held_microusd: 1200 * variants, charged_microusd: 700 * variants }, done: true,
+    proposals: [{
+      uid: 'p-b2', card_uid: 'c-0', area_id: 'b2', element: 'body', kind: 'text', state: 'ready',
+      variants: Array.from({ length: variants }, (_, k) => (k === 1
+        ? { n: 2, seed: 12, model_label: 'Synthetic M', cost_microusd: 0, seconds: null, state: 'failed', error: { code: 'model_failed', message: 'This variant failed. You were charged only for what ran.' }, payload: null, critique: null }
+        : { n: k + 1, seed: 11 + k, model_label: 'Synthetic M', cost_microusd: 700, seconds: 1.2, state: 'ready', error: null, payload: { kind: 'text', before: 'Synthetic body words', after: `Synthetic b2 after ${k + 1}` }, critique: { fits: true, contrast_aa: true, density_ok: true } })),
+    }],
+  }),
+  'areas.accept': async () => ({ proposal: { uid: 'p-b2', state: 'accepted' } }),
+  'areas.discard': async () => ({ proposal: { uid: 'p-b2', state: 'discarded' } }),
+});
+
+test('several areas (D1512): the batch\'s areas share one quote and one run; a headline keeps its own route; Accept all places one variant per area', async () => {
   const m = await mountEditor({ answers: {
     'assist.quote': QUOTE,
     'assist.run': async (_id, _card, body) => ({ proposal: { uid: `u-${body.block.id}` }, before: body.text, after: `Synthetic ${body.block.id} after`, cost: { charged_microusd: 700 } }),
     'prefs.page': RAIL,
     'proposals.decide': async () => ({ ok: true }),
+    ...AREA_ROUTES(3),
   } });
   try {
     await m.press(m.by('pitch-editor-block-b1'));
     await m.press(m.by('pitch-editor-block-b2'), { shiftKey: true });
     await m.press(node(m, 'pitch-editor-selbar-ask'));
     assert.match(m.text(node(m, 'pitch-areas')), /Generate into 2 areas/);
-    // The Title leads with its headline (quoted at 1000), the body with Rewrite (1200).
-    assert.equal(m.pr(node(m, 'pitch-areas-row-b1-change-headline'))['aria-checked'], true);
-    assert.equal(m.text(node(m, 'pitch-areas-hold')), 'Holds up to $0.0022 across 2 runs · you pay what each uses');
-    assert.match(m.text(node(m, 'pitch-areas-row-b1-hold')), /Holds up to \$0\.0010/, 'each area\'s own quote');
-    assert.match(m.text(node(m, 'pitch-areas-sequence')), /one after another, and is charged on its own/);
-    assert.equal(m.pr(node(m, 'pitch-areas-variants-2'))['aria-disabled'], true);
-    assert.equal(m.pr(node(m, 'pitch-areas-variants-2')).title, NOT_ON);
-    assert.equal(m.text(node(m, 'pitch-areas-row-b2-model')), 'Synthetic deck:rewrite · $0.0004 per variant · set in the AIRail');
-    assert.ok(!m.walk(node(m, 'pitch-areas-row-b2-model')).some((n) => /^(BUTTON|SELECT|INPUT)$/.test(n.tagName || '')), 'the chip is text only');
+    // One area with one variant keeps its own route: the batch takes variants 2 and 3.
+    assert.equal(m.calls.filter((c) => c[0] === 'areas.quote').length, 0, 'one batchable area, one variant: no batch');
+    assert.notEqual(m.pr(node(m, 'pitch-areas-variants-3'))['aria-disabled'], true, 'variants 2 and 3 are on');
     await m.press(node(m, 'pitch-areas-variants-3'));
-    assert.equal(m.pr(node(m, 'pitch-areas-variants-1'))['aria-checked'], true, 'an off variant count is not picked');
+    assert.equal(m.pr(node(m, 'pitch-areas-variants-3'))['aria-checked'], true);
+    // The Title leads with its headline (its own route, quoted at 1000); the body's Rewrite is the batch's (3 × 1200).
+    assert.equal(m.pr(node(m, 'pitch-areas-row-b1-change-headline'))['aria-checked'], true);
+    assert.equal(m.text(node(m, 'pitch-areas-hold')), 'Holds up to $0.0046 across 2 runs · you pay what each uses · Valid for 10 min', 'pd4: the batch quote says how long it holds');
+    assert.match(m.text(node(m, 'pitch-areas-row-b1-hold')), /Holds up to \$0\.0010/, 'the headline\'s own quote');
+    assert.match(m.text(node(m, 'pitch-areas-row-b2-hold')), /Holds up to \$0\.0036/, 'the batch row\'s hold, from the one quote');
+    const quoted = m.calls.filter((c) => c[0] === 'areas.quote').at(-1)[2];
+    assert.deepEqual(quoted.areas, [{ id: 'b2', grid: { c1: 1, c2: 7, r1: 2, r2: 6 }, element: 'body', action: 'rewrite' }], 'the client names the element and the change, never a model');
+    assert.ok(!m.by('pitch-areas-sequence'), 'the batch is one run, not one after another');
+    assert.equal(m.calls.filter((c) => c[0] === 'areas.quote').at(-1)[2].variants, 3, 'the quote holds three variants');
     await m.press(node(m, 'pitch-areas-generate'));
     const runs = m.calls.filter((c) => c[0] === 'assist.run');
-    assert.deepEqual(runs.map((c) => c[3].block.id), ['b1', 'b2'], 'in order, one run per area');
-    assert.deepEqual(runs.map((c) => c[3].action), ['headline', 'rewrite']);
-    assert.deepEqual(runs[0][3].source_keys, ['revenue.mrr'], 'the headline is written from the card\'s recorded figure');
-    assert.ok(runs.every((c) => decodeURIComponent(c[4]['X-Rail-Option']) === 'deck:rewrite'));
-    assert.match(m.text(node(m, 'pitch-area-results-charged')), /Charged \$0\.0014 for 2 runs/);
-    assert.ok(!m.by('pitch-area-results-charged') || !/\$0\.00\b/.test(m.text(m.by('pitch-area-results-charged'))));
+    assert.deepEqual(runs.map((c) => c[3].action), ['headline'], 'only the headline ran on its own route');
+    const start = m.calls.filter((c) => c[0] === 'areas.start');
+    assert.equal(start.length, 1, 'one run for the batch');
+    assert.equal(start[0][2].variants, 3);
+    assert.equal(start[0][2].quote_uid, `q1.${'a'.repeat(32)}`, 'the run is held to the quote the dialog drew');
+    // A 3-variant batch: each variant labelled by its model and cost; the failed one says so, the others stay acceptable.
+    assert.match(m.text(node(m, 'pitch-area-result-b2~1-pill')), /Synthetic M · variant 1 · 1\.2 s/);
+    assert.match(m.text(node(m, 'pitch-area-result-b2~2-refused')), /You were charged only for what ran/);
+    assert.match(m.text(node(m, 'pitch-area-result-b2~3-after')), /Synthetic b2 after 3/);
     await m.press(node(m, 'pitch-area-results-accept-all'));
-    assert.deepEqual(m.calls.filter((c) => c[0] === 'proposals.decide').map((c) => c.slice(1)), [['u-b1', 'accept'], ['u-b2', 'accept']]);
+    assert.deepEqual(m.calls.filter((c) => c[0] === 'proposals.decide').map((c) => c.slice(1)), [['u-b1', 'accept']]);
+    // Mutation checked: drop Accept all's one-per-area skip → variant 3 is accepted too and this fails.
+    assert.deepEqual(m.calls.filter((c) => c[0] === 'areas.accept').map((c) => c.slice(1)), [[31, 'c-0', 'b2', 'p-b2', 1]], 'Accept by the area, one variant');
+    assert.match(m.text(node(m, 'pitch-area-result-b2~3-decided')), /Another variant was placed in this area/);
+    assert.ok(!m.by('pitch-area-result-b2~3-error'), 'Accept all does not try the area\'s other variants, so it stops on nothing');
     assert.match(m.text(node(m, 'pitch-editor-block-b1')), /Synthetic b1 after/);
-    assert.match(m.text(node(m, 'pitch-editor-block-b2')), /Synthetic b2 after/, 'Accept all placed both');
+    assert.match(m.text(node(m, 'pitch-editor-block-b2')), /Synthetic b2 after 1/, 'Accept all placed both areas');
     assert.match(m.text(node(m, 'pitch-editor-save-state')), /Unsaved changes/);
   } finally { await m.close(); }
 });
 
-test('a refused area stops the rest; an empty area\'s words come later; adapter elements cannot be picked', async () => {
+test('a refused area stops the rest; an empty area\'s words are the batch\'s (D1512); adapter elements cannot be picked', async () => {
   const m = await mountEditor({ answers: {
     'assist.quote': QUOTE,
     'assist.run': async () => { throw Object.assign(new Error('Synthetic: Eadwyn cannot run this now.'), { status: 422, code: 'synthetic' }); },
     'prefs.page': RAIL,
+    ...AREA_ROUTES(1),
   } });
   try {
     await m.press(m.by('pitch-editor-block-b1'));
     await m.press(m.by('pitch-editor-block-b2'), { shiftKey: true });
     await m.press(node(m, 'pitch-editor-selbar-ask'));
     await m.press(node(m, 'pitch-areas-generate'));
+    // One batchable area with one variant: no batch, so the areas run in sequence and a refusal stops the rest.
     assert.equal(m.calls.filter((c) => c[0] === 'assist.run').length, 1, 'the refusal stopped the second run');
     assert.match(m.text(node(m, 'pitch-area-result-b1-refused')), /Eadwyn cannot run this now/);
     assert.equal(m.text(node(m, 'pitch-area-result-b2-not-run')), NOT_RUN);
     assert.ok(!m.by('pitch-area-results-charged'), 'nothing charged is claimed');
+    assert.equal(m.calls.filter((c) => c[0] === 'areas.start').length, 0);
   } finally { await m.close(); }
-  const n = await mountEditor({ answers: { 'assist.quote': QUOTE, 'prefs.page': RAIL } });
+  const n = await mountEditor({ answers: { 'assist.quote': QUOTE, 'prefs.page': RAIL, ...AREA_ROUTES(1) } });
   try {
     await n.press(n.by('pitch-editor-area-free:8-4'));
     await n.press(node(n, 'pitch-editor-ask-area'));
@@ -267,6 +308,7 @@ test('a refused area stops the rest; an empty area\'s words come later; adapter 
     assert.equal(n.calls.filter((c) => c[0] === 'assist.quote').length, 0, 'a refused chart is not even quoted');
     await n.press(node(n, `${row}-element`));
     await n.press(node(n, `${row}-pick-table`));
+    // D1512: one area with one variant keeps its own route.
     assert.deepEqual(n.calls.filter((c) => c[0] === 'assist.quote').at(-1)[3], { action: 'table', heading: 'Synthetic traction' });
     await n.press(node(n, `${row}-element`));
     assert.equal(n.pr(node(n, `${row}-picker`)).role, 'listbox');
@@ -275,8 +317,10 @@ test('a refused area stops the rest; an empty area\'s words come later; adapter 
     await n.press(node(n, `${row}-pick-icons`));
     assert.match(n.text(node(n, `${row}-element`)), /Table from records/, 'a Coming later element is not picked');
     await n.press(node(n, `${row}-pick-body`));
-    assert.equal(n.text(node(n, `${row}-later`)), `Coming later: ${EMPTY_TEXT_WHAT}. Not switched on yet.`);
-    assert.equal(n.pr(node(n, 'pitch-areas-generate')).disabled, true, 'nothing here runs on main');
+    // D1512: words for an empty area are written by the batch, from the card's own words; no change to pick.
+    assert.ok(!n.by(`${row}-later`), 'no longer Coming later');
+    assert.deepEqual(n.calls.filter((c) => c[0] === 'areas.quote').at(-1)[2].areas, [{ id: 'free:8-4', grid: area('free:8-4').grid, element: 'body' }]);
+    assert.equal(n.pr(node(n, 'pitch-areas-generate')).disabled, false, 'it runs');
   } finally { await n.close(); }
 });
 
@@ -335,6 +379,7 @@ test('Accept all stops at the first proposal it cannot place, and says why', asy
     'assist.run': async (_id, _card, body) => ({ proposal: { uid: `u-${body.block.id}` }, before: body.text, after: `Synthetic ${body.block.id} after`, cost: { charged_microusd: 700 } }),
     'prefs.page': RAIL,
     'proposals.decide': async (uid) => { if (uid === 'u-b1') throw Object.assign(new Error('Synthetic: that proposal is no longer open.'), { status: 409 }); return { ok: true }; },
+    ...AREA_ROUTES(1),
   } });
   try {
     await m.press(m.by('pitch-editor-block-b1'));
@@ -346,6 +391,7 @@ test('Accept all stops at the first proposal it cannot place, and says why', asy
     assert.match(m.text(node(m, 'pitch-area-result-b1-error')), /no longer open/);
     assert.match(m.text(node(m, 'pitch-editor-block-b2')), /Synthetic body words/, 'nothing placed past the stop');
     assert.ok(m.by('pitch-area-result-b2-accept'), 'still waiting for its own Accept');
+    assert.equal(m.calls.filter((c) => c[0] === 'areas.accept').length, 0, 'the batch\'s area is not accepted past the stop');
   } finally { await m.close(); }
 });
 
@@ -460,6 +506,7 @@ test('the element picker and the variant count work from the keyboard', async ()
     assert.equal(n.pr(document.activeElement)['data-testid'], 'pitch-areas-row-b2-change-shorten');
     const variants = n.walk(node(n, 'pitch-areas')).find((x) => n.pr(x)['aria-label'] === 'Variants per area');
     await n.fire(variants, 'onKeyDown', { key: 'ArrowRight' });
-    assert.equal(n.pr(node(n, 'pitch-areas-variants-1'))['aria-checked'], true, 'the arrows skip the variant counts still to come');
+    // D1512 (#3764): variants 2 and 3 are on, so the arrows reach them.
+    assert.equal(n.pr(node(n, 'pitch-areas-variants-2'))['aria-checked'], true, 'the arrows move to the next variant count');
   } finally { await n.close(); }
 });
