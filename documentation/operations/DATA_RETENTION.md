@@ -10,7 +10,7 @@ The retention periods for generated assets are owner decision W (#3716), pending
 
 | Store | Holds | Leaves when | R2 objects |
 |---|---|---|---|
-| `pitch_decks` | every saved version of a deck: its cards, theme and title | no cascade; a version is never deleted by the app | none (its images are `deck_images` rows) |
+| `pitch_decks` | every saved version of a deck: its cards, theme and title, and for a build from the narrative (D1516) the narrative version it read (a number, never the words) | no cascade; a version is never deleted by the app | none (its images are `deck_images` rows) |
 | `pitch_deck_cards` | the per-card autosave drafts of a deck (D1501) | deck cascade; a draft is replaced on save and cleared by Discard draft | none |
 | `pitch_deck_proposals` | proposed decks from New deck and Fill from project, before Accept | no cascade | none |
 | `pitch_deck_share_tokens` | share links: a token hash, its expiry and options | no cascade; an expired or withdrawn link stops opening, its row stays for its analytics | none |

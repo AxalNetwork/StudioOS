@@ -46,6 +46,7 @@ reply against its schema, not only that the route exists.
 | `index.ts` | `CONTRACTS`: each adapter method with a route, its issue, its route and its schema file. The tests read the schemas; the Worker never loads one. |
 | `validate.ts` | `contractErrors`, the subset of JSON Schema the contracts use. A keyword it does not check is an error, never skipped. |
 | `deckModelPresets.schema.json` | `GET /api/decks/:id/model-presets` (D1549, #3796): the preset in force, the stored one, and per element group each preset's model, the resolved model and HQ's lock. |
+| `deckNarrativeOutline.schema.json` | `POST /api/decks/narrative/outline` and `POST /api/decks/narrative/build` (D1516, #3768): the outline from the narrative (its version, the stage's cards with their grid plan, the cards left out, the theme and template picked, the `deck_build` quote), or the build (the version, not current, bound to its narrative version; the one run, its hold and its proposals). |
 | `deckOrgLocks.schema.json` | The same reply's `locks` key (D1549; the adapter row is #3786's): each element group HQ locked, with "Set by Axal VC HQ". |
 
 ## Rule for adding here

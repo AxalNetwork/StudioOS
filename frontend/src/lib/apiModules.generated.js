@@ -106,6 +106,7 @@ export * from './api/deckInvestorLinks.js';
 export * from './api/deckLayouts.js';
 export * from './api/deckMedia.js';
 export * from './api/deckModelPresets.js';
+export * from './api/deckNarrative.js';
 export * from './api/deckPreflight.js';
 export * from './api/deckPublish.js';
 export * from './api/deckQa.js';
