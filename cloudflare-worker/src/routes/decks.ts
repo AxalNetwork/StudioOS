@@ -5,6 +5,7 @@
  * (markdown body) + image fields, version history, restore, and
  * ONE-TIME signed share URLs (HMAC + DB-tracked single-use).
  */
+import { checkDeckPdf, expectedLinks, hasWords, pdfRenderOptions, printPageOf } from '../services/decks/pdfExport';
 import { deckCompliance } from '../services/decks/compliance';
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -2276,11 +2277,20 @@ export function exportDeckOf(row: any, opts: PrintOptions): { slides: any[]; ren
   return { slides, renderable };
 }
 
-const SLIDE_VIEWPORT = { width: 1920, height: 1080, deviceScaleFactor: 1 };
-
 const RENDER_FAILED: Record<'pdf', { code: string; message: string }> = {
   pdf: { code: 'pdf_render_failed', message: 'The PDF could not be produced. Try again in a moment.' },
 };
+
+/**
+ * D1575 (#3822): a PDF the browser answered that does not match the screen —
+ * the wrong page size, a font not embedded, words flattened to a picture or a
+ * link that is not live. Refused with the check's codes, never handed out.
+ */
+function fidelityRefusal(c: any, codes: string[], pages: number) {
+  const diagnostic = { reason: 'pdf_fidelity', checks: codes, pages };
+  console.error('[decks/export] pdf check failed', JSON.stringify(diagnostic));
+  return refuse(c, 502, { code: 'pdf_fidelity_failed', message: 'The PDF did not come out as the deck shows. Try again in a moment.', extra: { diagnostic } });
+}
 
 /**
  * #3655: a failed render, with what failed as codes only — the renderer's
@@ -2299,9 +2309,11 @@ function renderRefusal(c: any, format: 'pdf', f: RenderFailure & { slide?: numbe
  * POST /api/decks/:id/export — { format: 'pdf' | 'pptx' } → file bytes.
  *
  *  - PDF: Browser Rendering navigates to the live React SPA print
- *    template at /deck/print-export/:hmacToken with print_mode=pdf so
- *    every slide renders at native 1920×1080. Matches the in-app
- *    preview investors see.
+ *    template at /deck/print-export/:hmacToken with print_mode=pdf.
+ *    D1575 (#3822): a studio deck prints at its aspect, 1920×1080 at 16:9
+ *    and 1440×1080 at 4:3 (a template deck stays 16:9), and the PDF is
+ *    checked before it is handed out: its page size, fonts embedded, words
+ *    as text and every link live (`services/decks/pdfExport.ts`).
  *  - PPTX: D1574 (#3821) — answered by `deck_exports.ts`, mounted before
  *    this router, as the editable PowerPoint (`pptxEditable.ts`): native
  *    text, shapes and charts on The Grid's placement. It no longer
@@ -2351,23 +2363,15 @@ decks.post('/:id/export', async (c) => {
       fallback: 'client_render',
     }, 503);
   }
+  // D1575 (#3822): the deck's own page, and what its PDF must carry.
+  const { slides: printed } = exportDeckOf(row, opts);
+  const page = printPageOf({ slides: printed, theme: themeOfRow(row), methodId: extractDeckMethodId(row) });
   const token = await signDeckPrintToken(c.env, id, 180, opts, copied.imageCopies);
-  const r = await renderUrl(c.env, 'pdf', {
-    url: `${publicBase}/deck/print-export/${token}?print_mode=pdf`,
-    viewport: SLIDE_VIEWPORT,
-    gotoOptions: { waitUntil: 'networkidle0', timeout: DECK_PAGE_LOAD_MS },
-    addStyleTag: [{
-      content: '@page { size: 1920px 1080px; margin: 0; } html, body { background: #ffffff !important; margin: 0 !important; padding: 0 !important; }',
-    }],
-    pdfOptions: {
-      printBackground: true,
-      preferCSSPageSize: true,
-      width: '1920px',
-      height: '1080px',
-      margin: { top: '0', right: '0', bottom: '0', left: '0' },
-    },
-  }, { kind: 'pdf', maxBytes: MAX_DECK_PDF_BYTES });
+  const r = await renderUrl(c.env, 'pdf', pdfRenderOptions(`${publicBase}/deck/print-export/${token}?print_mode=pdf`, page, DECK_PAGE_LOAD_MS),
+    { kind: 'pdf', maxBytes: MAX_DECK_PDF_BYTES });
   if (!r.ok) return renderRefusal(c, 'pdf', r);
+  const checked = await checkDeckPdf(r.bytes, page, { links: expectedLinks(printed), words: hasWords(printed) });
+  if (!checked.ok) return fidelityRefusal(c, checked.codes, checked.pages);
   await auditDeckWrite(c, user, Number(row.project_id), 'deck_exported', 'Deck exported');
   return new Response(r.bytes, {
     status: 200,
