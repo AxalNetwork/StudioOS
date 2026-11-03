@@ -355,6 +355,16 @@ export function weekLabel(start) {
   return `W${week} · ${d.getUTCDate()}${mon(d) === mon(end) ? '' : ` ${mon(d)}`}–${end.getUTCDate()} ${mon(end)}`;
 }
 
+/** #3972: an agent's scheduled session slot in the workload read carries `session`; a task never does. */
+export const isSession = (item) => !!item?.session;
+
+/** #3972: each agent's scheduled session slots from the workload read, `[{ agent, items }]`, agents with none left out. */
+export function workloadSessions(data) {
+  return (data?.agents || [])
+    .map((r) => ({ agent: r.agent, items: (r.weeks || []).flatMap((w) => (w.items || []).filter(isSession)) }))
+    .filter((r) => r.items.length);
+}
+
 /** WK7: the rows, people first then agents, each with its weekly cells; amber only when over a recorded capacity. */
 export function workloadRows(data) {
   const row = (r, kind) => ({

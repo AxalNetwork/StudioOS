@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { capitalRelationshipsApi } from '../../../lib/api/capitalRelationships';
 import { Unreadable } from '../../../ui';
+import RankByFit from '../../../ui/RankByFit';
+import { applyRank } from '../../../lib/rankByFit';
 import { AddDialog } from './CapRelPipeline';
 import { DraftDialog } from './CapRelOutreach';
 import { tabHref, TABS } from './capRelModel';
@@ -15,6 +17,9 @@ import { FIT_FILTERS, FIT_WORDS, MATCH_PAGE, MATCH_SORTS, fundSize, matchQuery, 
  *
  * Add to pipeline opens Add investor with the fund filled in. "Not for us"
  * is not built: hiding a fund needs a store of its own (D1193 §5).
+ *
+ * #3938 (RA11): Rank by fit orders the funds on this page by meaning against
+ * the venture and what the founder types, with one line each, as a view.
  */
 
 const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
@@ -47,6 +52,7 @@ export default function CapRelMatch({ projectId, search = '' }) {
   const [read, setRead] = useState({ status: 'loading', data: null, error: '' });
   const [adding, setAdding] = useState(null);
   const [asking, setAsking] = useState(null);
+  const [rank, setRank] = useState(null);
   useEffect(() => {
     let alive = true;
     setRead((r) => ({ status: 'loading', data: r.data, error: '' }));
@@ -55,9 +61,12 @@ export default function CapRelMatch({ projectId, search = '' }) {
       .catch((e) => { if (alive) setRead({ status: e?.status === 400 ? 'refused' : 'unreadable', data: null, error: e?.message || '' }); });
     return () => { alive = false; };
   }, [projectId, f, n]);
+  // A new read (filters, page, retry) is a new list: its order is the read's again.
+  useEffect(() => { setRank(null); }, [projectId, f, n]);
   const set = (k, v) => setF((x) => ({ ...x, [k]: v, offset: 0 }));
   const d = read.data;
-  const items = d?.items || [];
+  const shown = applyRank(d?.items || [], (fund) => fund.uid, rank);
+  const items = shown.list;
   const network = items.flatMap((fund) => (fund.warm_paths || []).map((w) => ({ ...w, fund: fund.name, fundRow: fund, prospectId: fund.in_pipeline?.prospect_id ?? null, key: `${fund.uid}:${w.name}` })));
   const outreach = TABS.find((t) => t.id === 'outreach');
   return (
@@ -89,6 +98,12 @@ export default function CapRelMatch({ projectId, search = '' }) {
                 {MATCH_SORTS.map((o) => <option key={o.value} value={o.value}>Sort: {o.label}</option>)}
               </select>
             </div>
+            {d && (d.items || []).length > 1 ? (
+              <div className="border-b border-axal-hairline px-4 py-3 dark:border-gray-800">
+                <RankByFit run={(query) => capitalRelationshipsApi.matchRank(projectId, matchQuery(f), query)} onRanked={setRank}
+                  ranked={rank ? shown.ranked : null} total={items.length} label="What kind of investor? (optional)" testid="caprel-match-rank" />
+              </div>
+            ) : null}
             {d?.sector_reason ? <p className="m-0 px-4 pt-3 text-[12.5px] text-amber-800 dark:text-amber-300" data-testid="caprel-match-no-sector">{d.sector_reason}</p> : null}
             {read.status === 'refused' ? <p role="alert" className="m-0 px-4 py-3 text-[12.5px] text-red-700 dark:text-red-300">{read.error || 'That filter is not one the directory takes.'}</p> : null}
             {read.status === 'unreadable' ? <div className="px-4 py-3"><Unreadable what="The fund directory" claim="This is not a claim that no fund fits." onRetry={() => setN((x) => x + 1)} /></div> : null}
@@ -102,7 +117,8 @@ export default function CapRelMatch({ projectId, search = '' }) {
                   <tbody>
                     {items.map((fund) => (
                       <tr key={fund.uid} className="border-b border-axal-hairline align-top last:border-0 dark:border-gray-800" data-testid="caprel-match-row">
-                        <td className="px-3 py-2.5"><div className={`font-bold ${INK}`}>{fund.name}</div><div className={MUTED}>Focus: {fund.sector_focus || 'Not recorded'}</div></td>
+                        <td className="px-3 py-2.5"><div className={`font-bold ${INK}`}>{fund.name}</div><div className={MUTED}>Focus: {fund.sector_focus || 'Not recorded'}</div>
+                          {shown.lineFor(fund) ? <div className="mt-1 text-[11.5px] text-violet-800 dark:text-violet-300" data-testid="caprel-match-rank-line">{shown.lineFor(fund)}</div> : null}</td>
                         <td className={`px-3 py-2.5 ${INK}`}>{fund.hq || 'Not recorded'}</td>
                         <td className={`px-3 py-2.5 font-mono ${fund.fund_size_cents != null ? INK : MUTED}`} data-testid="caprel-match-size">{fundSize(fund)}</td>
                         <td className="px-3 py-2.5">
