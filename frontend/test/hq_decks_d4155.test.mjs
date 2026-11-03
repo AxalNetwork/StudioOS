@@ -111,9 +111,9 @@ test('HD4: the sector × stage grid from the overrides; a default is never a gue
 
 test('HD4: the grid draws the same six sectors and four stages the Worker\'s defaults cover', () => {
   const engine = readFileSync(new URL('../../cloudflare-worker/src/services/decks/recommend.ts', import.meta.url), 'utf8');
-  const list = (name) => JSON.parse(engine.match(new RegExp(`export const ${name} = (\\[[^\\]]*\\])`))[1].replace(/'/g, '"'));
-  assert.deepEqual(list('GRID_SECTORS'), SECTORS);
-  assert.deepEqual(list('GRID_STAGES'), STAGES.map((s) => s.id));
+  const list = (m) => JSON.parse(m[1].replace(/'/g, '"'));
+  assert.deepEqual(list(engine.match(/export const GRID_SECTORS = (\[[^\]]*\])/)), SECTORS);
+  assert.deepEqual(list(engine.match(/export const GRID_STAGES = (\[[^\]]*\])/)), STAGES.map((s) => s.id));
 });
 
 test('HD4b: Save needs a different template and a reason; Reset needs a reason; the preview names the slides', () => {
