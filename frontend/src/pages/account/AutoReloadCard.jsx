@@ -6,7 +6,7 @@ import { BTN, INPUT, Outcome, PanelCard, useAccountRead } from './AccountCenter'
 // Stripe's element loads only when a card is being added.
 const AutoReloadCardSetup = lazy(() => import('./AutoReloadCardSetup'));
 import { refusalText } from './accountCenterModel';
-import { cardText, lastSkipped, limitLine, packOptions, parseThreshold, pausedLine, stateLine } from './autoReloadModel';
+import { cardText, gateLine, lastSkipped, limitLine, packOptions, parseThreshold, pausedLine, stateLine } from './autoReloadModel';
 import { Link } from 'react-router-dom';
 
 /**
@@ -34,6 +34,12 @@ export default function AutoReloadCard({ api = aiBudgetApi }) {
     <div id="auto-reload" className="scroll-mt-4">
       <PanelCard title="Auto-reload" data-testid="card-auto-reload">
         {read.status === 'loading' ? <p className="px-4 py-3 text-[12.5px] text-axal-muted">Reading auto-reload…</p>
+          : read.status !== 'ready' && gateLine(read) ? (
+            <div className="flex flex-wrap items-center gap-2 px-4 py-3 text-[12.5px]" data-testid="auto-reload-gate">
+              <span>{gateLine(read)}</span>
+              <button type="button" className="underline" onClick={read.reload}>Confirm</button>
+            </div>
+          )
           : read.status !== 'ready' ? <div className="px-4 py-3"><Unreadable what="Auto-reload" claim="This is not a claim that it is off." onRetry={read.reload} /></div>
             : <AutoReloadForm key={JSON.stringify(read.data)} settings={read.data} packs={packs} limit={limit.status === 'ready' ? limit.data : null} api={api} onSaved={read.reload} />}
       </PanelCard>

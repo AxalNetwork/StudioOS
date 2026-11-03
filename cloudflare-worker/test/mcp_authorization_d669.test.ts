@@ -72,9 +72,9 @@ const checks:any = {
 
   async registry(m:any) {
     assert.deepEqual(m.server.registeredTools().map((t:any)=>[t.name,t.requiredScope]).sort(),[
-      ['assign_chat_to_interview','validate:write'],['extract_action_items','validate:write'],['get_build_progress','build:read'],['get_interview_guide','validate:read'],['get_meeting_transcript','validate:read'],
+      ['assign_chat_to_interview','validate:write'],['decks.propose_area','raise:write'],['decks.propose_variant','raise:write'],['decks.read_outline','raise:read'],['extract_action_items','validate:write'],['get_build_progress','build:read'],['get_interview_guide','validate:read'],['get_meeting_transcript','validate:read'],
       ['get_session_insights','validate:read'],['get_validate_context','validate:read'],['list_channel_chats','validate:read'],['list_companies','validate:read'],
-      ['list_connections','connectors:read'],['list_meetings','validate:read'],['mail_context','mail:read'],['mail_draft','mail:write'],['propose_placements','validate:write'],['structure_with_axalvc','validate:write'],
+      ['list_connections','connectors:read'],['list_meetings','validate:read'],['mail_context','mail:read'],['mail_draft','mail:write'],['propose_placements','validate:write'],['raise.draft_follow_up','raise:write'],['raise.prospect_brief','raise:read'],['raise.qa_prep','raise:read'],['structure_with_axalvc','validate:write'],
       ['submit_interview','validate:write'],['summarize_meeting','validate:write']]);
   },
   async scope(m:any) {

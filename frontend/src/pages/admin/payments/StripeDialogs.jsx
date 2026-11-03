@@ -173,7 +173,7 @@ export function MoveToLiveDialog({ view, wouldClear, onClose, onDone }) {
   const [typed, setTyped] = useState('');
   const lines = clearLines(wouldClear);
   const { busy, error, run } = useWrite(
-    () => stripeCutoverApi.run('live', reason.trim(), typed.trim()),
+    () => stripeCutoverApi.run('live', reason.trim(), typed.trim().toLowerCase()),
     (out) => onDone({ text: `${movedText(out)} ${RECORDED}` }),
   );
   return (

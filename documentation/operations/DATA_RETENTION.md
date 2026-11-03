@@ -10,7 +10,7 @@ The retention periods for generated assets are owner decision W (#3716), pending
 
 | Store | Holds | Leaves when | R2 objects |
 |---|---|---|---|
-| `pitch_decks` | every saved version of a deck: its cards, theme and title | no cascade; a version is never deleted by the app | none (its images are `deck_images` rows) |
+| `pitch_decks` | every saved version of a deck: its cards, theme and title, and for a build from the narrative (D1516) the narrative version it read (a number, never the words) | no cascade; a version is never deleted by the app | none (its images are `deck_images` rows) |
 | `pitch_deck_cards` | the per-card autosave drafts of a deck (D1501) | deck cascade; a draft is replaced on save and cleared by Discard draft | none |
 | `pitch_deck_proposals` | proposed decks from New deck and Fill from project, before Accept | no cascade | none |
 | `pitch_deck_share_tokens` | share links: a token hash, its expiry and options | no cascade; an expired or withdrawn link stops opening, its row stays for its analytics | none |
@@ -47,6 +47,7 @@ The retention periods for generated assets are owner decision W (#3716), pending
 | `deck_share_conversions` | what a viewer did after a view | no cascade | none |
 | `deck_share_feedback` | feedback a viewer left on a shared deck | no cascade | none |
 | `deck_qa_answers` | the answer a founder kept for each investor question: its bindings and their values when kept, a note, the version (D1559) | venture cascade; the deck is set null when its version goes | none |
+| `deck_qa_written` | the founder's own written answers to the likely questions, and the questions the founder adds; never shown to investors (D4270) | venture cascade; the deck is set null when its version goes; a typed question is removed with its answer | none |
 | `deck_area_batches` | one generation run on a deck's areas or a whole-deck build: its state, quote, hold and what it charged (D1502) | deck cascade | none |
 | `deck_area_batch_steps` | each step of a run: the area, element, model, state, charge, input and result (D1502) | cascade from its run | none |
 | `deck_logos` | a venture's customer logos for the logo wall: the customer's name, the image, and the permission to show it (D1543) | venture cascade | none of its own (the image is a `deck_images` row) |

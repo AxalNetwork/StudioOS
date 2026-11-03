@@ -13,6 +13,8 @@
  *   DELETE /accounts/:uid                  revoke at the provider where it can, forget the credentials; sent rows stay
  *   POST   /send/confirm                   { account_uid } → a one-use nonce for the composer's pressed Send
  *   POST   /send                           { account_uid, to, subject, body, draft_uid?, nonce } → one `mail_sent` row
+ *                                          `intro_uid?` (D4329): the intro for an accepted introduction request;
+ *                                          only its teammate may send it, and the send records it as made
  *   GET    /sent?page=&person=             D1344: the member's own sent log, newest first, 20 a page, with the refs each quoted;
  *                                          `person` keeps the rows sent from that person's drafts
  *
@@ -36,6 +38,7 @@ import {
 import { indexHmac } from '../services/columnCipher';
 import { configOf, customMcpEnabled, customRowFor, isConnectionUid } from '../integrations/customMcp';
 import { refuse } from '../util/refusal';
+import { introForSend, markMadeOnSend, RelationshipRefusal } from '../services/relationships';
 
 const mailAccounts = new Hono<{ Bindings: Env }>();
 
@@ -224,6 +227,15 @@ mailAccounts.post('/send', async (c) => {
     if (!got) return refuse(c, 404, { code: 'draft_not_found', message: 'Draft not found.' });
     refs = got;
   }
+  // D4329 (#4329): an intro written for an accepted introduction request. Checked before anything goes
+  // out: only the teammate on that request, while it is accepted. The send then records it as made.
+  const introUid = b.intro_uid == null || b.intro_uid === '' ? null : String(b.intro_uid);
+  if (introUid) {
+    try { await introForSend(c.env, user, introUid); } catch (e) {
+      if (e instanceof RelationshipRefusal) return refuse(c, e.status, { code: e.code, message: e.sentence });
+      throw e;
+    }
+  }
   const since = new Date(Date.now() - 3600_000).toISOString().replace('T', ' ').slice(0, 19);
   const sent = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM mail_sent WHERE user_id = ? AND created_at > ?').bind(user.id, since).first<{ n: number }>();
   if (Number(sent?.n ?? 0) >= SENDS_PER_HOUR) return refuse(c, 429, { code: 'send_rate_limited', message: `You have sent ${SENDS_PER_HOUR} emails in the last hour. Try again later.` });
@@ -248,7 +260,12 @@ mailAccounts.post('/send', async (c) => {
     const out = await adapter.send(c.env, creds, { from: row.address, fromName: row.display_name, to, subject, body: text });
     await markUsed(c.env, row, out.creds);
     await log(out.messageId, null);
-    return c.json({ sent: { uid, account_uid: row.uid, to, subject, provider_message_id: out.messageId, draft_uid: draftUid, refs } }, 201);
+    // The email has gone, so the reply says so whatever the record does next; a failed record leaves the request accepted.
+    const intro = introUid ? await markMadeOnSend(c.env, user, introUid, uid).catch(() => null) : null;
+    return c.json({
+      sent: { uid, account_uid: row.uid, to, subject, provider_message_id: out.messageId, draft_uid: draftUid, refs, intro_uid: introUid },
+      ...(introUid ? { intro: intro ? { uid: introUid, status: intro.status } : { uid: introUid, status: 'accepted', recorded: false } } : {}),
+    }, 201);
   } catch (e) {
     await afterUse(c.env, row, e);
     await log(null, e instanceof AdapterError ? e.sentence : 'The email could not be sent.');

@@ -10,6 +10,7 @@ import { api } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
 import { isSuperAdminUser } from '../../../lib/shellRole';
 import AiModelsTab from './AiModelsTab';
+import DeckGridTab from './DeckGridTab';
 import { useAuth } from '../../../hooks/useAuthSync';
 import {
   BETA_ADD_LINE, BETA_COLUMNS, BETA_REMOVE_LINE, BUILD, MODELS_LINK, NORM_ADD_LINE, NORM_COLUMNS, NORM_RETIRE_LINE, NORM_RULE, NORM_SOURCE_HELP, NORM_STAGE_OF, NOTE_MAX, NOT_RECORDED, OUTCOMES, PROJECT_NORMS_NOTE, PROPOSAL_LINE, REASONS, STAGES, SUBTITLE,
@@ -694,6 +695,8 @@ export default function HqDecksPage() {
       <HeaderTab to="/admin/platform/decks/templates" end data-testid="hq-decks-tab-templates">Default templates</HeaderTab>
       <HeaderTab to="/admin/platform/decks/norms" end data-testid="hq-decks-tab-norms">Stage norms</HeaderTab>
       <HeaderTab to="/admin/platform/decks/models" end data-testid="hq-decks-tab-ai-models">AI models</HeaderTab>
+      <HeaderTab to="/admin/platform/decks/grid" end data-testid="hq-decks-tab-grid">Grid health</HeaderTab>
+      <HeaderTab to="/admin/platform/decks/funnel" end data-testid="hq-decks-tab-funnel">Funnel</HeaderTab>
     </>
   );
   return (
@@ -705,6 +708,7 @@ export default function HqDecksPage() {
       {view === 'templates' ? <Templates superAdmin={superAdmin} /> : null}
       {view === 'norms' ? <Norms /> : null}
       {view === 'models' ? <AiModelsTab /> : null}
+      {view === 'grid' || view === 'funnel' ? <DeckGridTab view={view} /> : null}
       <p className={MUTED}>The deck model defaults and locks stay on <Link to={MODELS_LINK.to} className="font-semibold text-axal-violet-deep underline dark:text-violet-300">AI usage</Link>.</p>
     </div>
   );

@@ -101,6 +101,11 @@ deckTemplates.get('/templates/mine', async (c) => {
   return c.json({ templates: (r.results ?? []).map(metaRow) });
 });
 
+/** D1516 (#3768): the one-click pick over HQ's templates, for the narrative build. */
+export async function pickHqTemplate(env: Env, q: { stage?: string | null; audience?: string | null; sector?: string | null }) {
+  return pickTemplate((await hqRows(env)).map(metaRow), q);
+}
+
 deckTemplates.get('/templates/pick', async (c) => {
   await requireAuth(c);
   const rows = await hqRows(c.env);
