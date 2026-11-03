@@ -99,7 +99,7 @@ test('Likely questions: the header counts, each question shows its card and stat
 
     await t.press('pitch-questions-ask');
     assert.equal(t.m.props(t.byTest('pitch-question-state-objection-aaaaaaaaaaaaaaaa')).children, 'Not saved');
-    assert.match(t.m.text(), new RegExp(DRAFT.replace(/[()]/g, '\\$&')));
+    assert.ok(t.m.text().includes(DRAFT), 'the placed draft is on screen');
     assert.deepEqual(t.calls.filter((c) => c[0] !== 'questions'), [], 'Ask places text and writes nothing');
     assert.equal(Boolean(t.byTest('pitch-question-save-typed-0000000000000001')), false, 'a typed question gets no draft');
 

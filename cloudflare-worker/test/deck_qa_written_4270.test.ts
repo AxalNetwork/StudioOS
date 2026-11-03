@@ -10,7 +10,7 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { mkdtempSync, copyFileSync, rmSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { mkdtempSync, copyFileSync, rmSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -229,10 +229,10 @@ test('the founder\'s alone: no share, export or public read selects the written 
   const src = fileURLToPath(new URL('../src/', import.meta.url));
   const hits: string[] = [];
   const walk = (dir: string) => {
-    for (const name of readdirSync(dir)) {
-      const p = join(dir, name);
-      if (statSync(p).isDirectory()) walk(p);
-      else if (/\.(ts|js|mjs)$/.test(name) && readFileSync(p, 'utf8').includes('deck_qa_written')) hits.push(p.slice(src.length));
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (/\.(ts|js|mjs)$/.test(e.name) && readFileSync(p, 'utf8').includes('deck_qa_written')) hits.push(p.slice(src.length));
     }
   };
   walk(src);
