@@ -37,12 +37,12 @@ import { fileURLToPath } from 'node:url';
 import { CARD, MODEL, mountEditor } from './_pitch_editor_mount.mjs';
 import { FIGURE_LINE } from '../src/pages/raise/pitch/deckAssistModel.js';
 import { SURFACES } from '../src/pages/raise/pitch/deckV2Adapter.js';
-import { ELEMENTS, ELEMENT_GROUPS, HOLD, NOT_ON, elementOnMain } from '../src/pages/raise/pitch/deckV2Model.js';
+import { ELEMENTS, ELEMENT_GROUPS, HOLD, elementOnMain } from '../src/pages/raise/pitch/deckV2Model.js';
 import { __resetAssistModeForTest, seedAssistModes } from '../src/hooks/useAssistMode.js';
 import { areasOf } from '../src/pages/raise/pitch/gridSelection.js';
 import { FOUNDER_OPTIONS } from '../src/lib/railOptions/founder.js';
 import {
-  CHART_MIN_LINE, EMPTY_TEXT_WHAT, NOT_RUN, TEXT_CHANGES, TEXT_ELEMENTS, aspectFor, batchMode, chargedLine, defaultElement, holdLine, modelChip,
+  CHART_MIN_LINE, NOT_RUN, TEXT_CHANGES, TEXT_ELEMENTS, aspectFor, batchMode, chargedLine, defaultElement, holdLine, modelChip,
   placeResult, rowPlan, runSequence, validLine, variantWhy, VENTURE_ELEMENTS, VENTURE_LINE,
 } from '../src/pages/raise/pitch/areaLightboxModel.js';
 
