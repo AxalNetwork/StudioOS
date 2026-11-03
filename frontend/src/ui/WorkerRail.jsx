@@ -546,8 +546,8 @@ export default function WorkerRail({
 
   // THE PAGE'S MODELS (D769 PR 2): the shell's page key (D768) and the open
   // option, read from the Worker's matrix. A pick made here shows at once and
-  // is stored per page, or per option while one is open; the re-read after it
-  // is the Worker's answer.
+  // is stored for the open option (#4313: the page itself has no pick); the
+  // re-read after it is the Worker's answer.
   const railPage = useRailPage();
   const pageKey = railPage?.offCanvas ? null : railPage?.page ?? null;
   const optionKey = railPage?.option?.key ?? null;
@@ -562,7 +562,7 @@ export default function WorkerRail({
   const rates = railRates(useRailRates());
   const allGroups = priceGroups(rail.groups, rates);
   const pick = useCallback((id) => {
-    if (!pageKey) return;
+    if (!pageKey || !optionKey) return;
     setPicked(id);
     Promise.resolve()
       .then(() => railPrefsApi.setPagePick(pageKey, id, optionKey))
@@ -851,8 +851,9 @@ export default function WorkerRail({
         {rail.state === 'ready' && (
           <p className="fwr-models-note" data-testid="text-worker-rail-model-note">
             {rail.pickable
-              ? `Remembered for ${optionKey ? 'this option' : 'this page'}. Switching changes nothing already accepted.`
-              : 'The model for this work. It is not chosen here.'}
+              ? 'Remembered for this option. Switching changes nothing already accepted.'
+              : optionKey ? 'The model for this work. It is not chosen here.'
+                : 'The models this page\'s work runs on. Open one of its options to choose the model for it.'}
           </p>
         )}
         {rail.options.length > 0 && (
