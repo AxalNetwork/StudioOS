@@ -184,6 +184,7 @@ const FORWARDED: Record<string, string[]> = {
   'services/decks/imageDraw.ts': ['a.surface'],  // D1505: the deck image pipeline's seven runs, on the page its caller names (deck_images.ts: AI_SURFACE.raisePitch)
   'services/ai/decide.ts': ['charge.surface'],   // #3938: decisions, rankings and sentiment run on the caller's page (pipeline, studio, research, interviews)
   'services/ai/matchRows.ts': ['charge.surface', 'charge.surface'], // #3938 part 2b: a match row's embeddings and its line, on the caller's page (networkfx, cycle_raise, events, research)
+  'services/ai/themeHints.ts': ['charge.surface'], // #3938 part 6: GR1 and VA11's embeddings, on the fill's page (founder_validate.ts: AI_SURFACE.validate)
 };
 
 /** Every call site's fixed name, by file — the table D552.md lists. */

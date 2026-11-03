@@ -244,7 +244,7 @@ test('APIK1: the list, each key as its preview, its state, its month, and the ru
     assert.ok(m.has('apik-replace-u-trial'), 'an expired key offers a replacement');
     assert.equal(m.has('apik-refusals'), false);
     await m.click('apik-refusals-toggle');
-    assert.match(m.textOf('apik-refusals'), /402 insufficient_tokens.*Add tokens in Usage › AI tokens\..*A refusal never says whether a key exists\./s);
+    assert.match(m.textOf('apik-refusals'), /402 insufficient_tokens.*Add tokens from API usage or Usage › AI tokens, any amount\..*A refusal never says whether a key exists\./s);
     assert.doesNotMatch(t, /credits/i);
   } finally { await m.close(); }
 });
