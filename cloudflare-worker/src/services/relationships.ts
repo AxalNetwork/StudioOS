@@ -144,6 +144,17 @@ const ONE_VISIBLE = `SELECT sr.contact_id, sr.owner_user_id, u.name AS teammate_
    AND sr.contact_id = ? AND theirs.user_id = ?
  GROUP BY sr.contact_id`;
 
+/**
+ * D4330 (#4330): one teammate's relationship, only when the caller may see it now: the same statement an
+ * introduction request checks, so a row the caller cannot see is null whatever the reason.
+ */
+export async function visibleRelationship(env: Env, user: User, teammate: unknown, ref: unknown) {
+  const t = Number(teammate), r = Number(ref);
+  if (!Number.isSafeInteger(t) || t < 1 || !Number.isSafeInteger(r) || r < 1) return null;
+  const row = await env.DB.prepare(ONE_VISIBLE).bind(user.id, r, t).first<Known>();
+  return row ? knownView(row) : null;
+}
+
 const knownView = (r: Known) => ({
   ref: r.contact_id,
   teammate: { id: r.owner_user_id, name: r.teammate_name },
@@ -177,13 +188,13 @@ export async function whoKnows(env: Env, user: User, q: WhoKnowsQuery) {
 // who never shared is in no request, no log row and no count. No route here
 // contacts the person: the intro goes from the introducer's own mailbox.
 
-type Interaction = {
+export type Interaction = {
   uid: string; kind: string; requester_user_id: number; teammate_user_id: number; team_key: string; person_name: string;
   person_company: string | null; note: string | null; context_note: string | null; decision_note: string | null; status: string;
   parent_uid: string | null; decided_at: string | null; accepted_at: string | null; made_at: string | null; withdrawn_at: string | null;
   mail_sent_uid: string | null; created_at: string; contact_id: number | null; person_key: string | null;
 };
-type Outcome = { parent_uid: string; outcome: string; outcome_note: string | null; recorded_by_user_id: number | null; created_at: string };
+export type Outcome = { parent_uid: string; outcome: string; outcome_note: string | null; recorded_by_user_id: number | null; created_at: string };
 type FollowUp = { request_uid: string; due_on: string; done_at: string | null; snoozed_until: string | null };
 
 export const OUTCOMES = ['meeting_held', 'replied', 'no_reply', 'not_a_fit'] as const;
@@ -237,7 +248,7 @@ function interactionView(r: Interaction, caller: number, outcome: Outcome | null
 }
 
 /** One request, only when the caller is on it (`side`: the asker, the teammate, or either). Else 404 "Not found.". */
-async function requestOf(env: Env, user: User, requestUid: string, side: 'asker' | 'teammate' | 'either'): Promise<Interaction> {
+export async function requestOf(env: Env, user: User, requestUid: string, side: 'asker' | 'teammate' | 'either'): Promise<Interaction> {
   if (!UID.test(String(requestUid))) throw new RelationshipRefusal(404, 'not_found', NOT_FOUND);
   const sql = side === 'asker'
     ? "SELECT * FROM relationship_interactions WHERE uid = ? AND kind = 'intro_requested' AND requester_user_id = ?"
