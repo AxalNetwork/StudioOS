@@ -54,7 +54,8 @@ import { discardDraft as discardDraftAdapter, draft as draftAdapter, saveCard as
 import { ConflictView, FindReplaceSheet, RestoreBanner, StillCharged, SyncLine } from './EditingParts';
 import usePreflight from './usePreflight';
 import { FindingStrip, PreflightGate, PreflightMeasure, PreflightPanel } from './PreflightPanel';
-import { gateOf, workingDeck } from './preflightUiModel';
+import { gateOf, overlayOf, stepOf, workingDeck } from './preflightUiModel';
+import PreflightOverlay from './PreflightOverlay';
 import {
   ADDABLE_KINDS, BUTTON_LABEL_MAX, KIND_LABELS, MODEL_FAILED, SECTION_MAX, VIDEO_PROVIDER_LABELS, sectionsOf, NOTES_PLACEHOLDER, NO_CARDS,
   NOT_RECORDED, PHONE_NOTE, READ_FAILED, THEME_LABELS,
@@ -737,6 +738,13 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
       {finding && !sheet && !gate ? (
         <FindingStrip rows={stripRows} id={finding} onStep={show} onBack={() => { setFinding(null); setSheet('preflight'); }} onClose={() => setFinding(null)} />
       ) : null}
+      {/* D1370 (#3661, PF3): the finding drawn on its slide, as it was checked. */}
+      {finding && !sheet && !gate && pf.snapshot ? (() => {
+        const step = stepOf(stripRows, finding);
+        const row = stripRows[step.index];
+        const ov = overlayOf(row, { n: step.index + 1, aspect: pf.snapshot.theme?.aspect === '4:3' ? '4:3' : '16:9', current: pf.current });
+        return ov ? <PreflightOverlay overlay={ov} card={pf.snapshot.slides?.[ov.card]} theme={pf.snapshot.theme} kit={kitData} /> : null;
+      })() : null}
       {phone ? (
         <PhoneEditor cards={cards} sel={sel} setSel={choose} move={move} card={card} readOnly={readOnly}
           onNotes={(v) => edit({ type: 'setFlag', index: sel, key: 'notes', value: v }, { label: 'Notes', coalesce: `notes:${cardUid(card) ?? sel}` })} notesMax={model.notes_max}
@@ -882,6 +890,10 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
       ) : null}
       {pf.running && pf.running.done < pf.running.total ? (
         <PreflightMeasure key={pf.running.done} card={pf.running.snapshot.slides[pf.running.done]} index={pf.running.done} theme={pf.running.snapshot.theme} kit={kitData} onMeasured={pf.onMeasured} />
+      ) : null}
+      {/* #3661 pf5c: one slide that couldn't be checked, measured again on its own. */}
+      {!pf.running && pf.retrying && pf.snapshot ? (
+        <PreflightMeasure key={`retry-${pf.retrying.index}`} card={pf.snapshot.slides[pf.retrying.index]} index={pf.retrying.index} theme={pf.snapshot.theme} kit={kitData} onMeasured={pf.onRetried} />
       ) : null}
       {sheet === 'check' && base.deck?.id ? (
         <CheckSheet deck={base.deck} projectId={project?.id} readOnly={readOnly} dirty={dirty} onReplaced={saved}

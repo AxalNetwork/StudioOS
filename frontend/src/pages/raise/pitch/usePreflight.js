@@ -37,7 +37,7 @@ export default function usePreflight({ deck, kit = null, refresh = null }) {
     if (!running || running.done < running.total) return;
     const result = runPreflight(running.snapshot, { kit, refresh, measurements: running.measurements, now: Date.now() });
     const was = doneRef.current;
-    const next = { result, snapshot: running.snapshot, failed: running.failed, at: Date.now() };
+    const next = { result, snapshot: running.snapshot, failed: running.failed, measurements: running.measurements, at: Date.now() };
     doneRef.current = next;
     setPrevious(was ? groupsOf(was.result, { slides: was.snapshot.slides, dismissed: new Set(), failed: was.failed }) : null);
     setDone(next);
@@ -50,11 +50,33 @@ export default function usePreflight({ deck, kit = null, refresh = null }) {
   const progress = running ? { done: running.done, total: running.total } : null;
   const chip = chipOf({ groups, current, running: progress });
 
+  // #3661 pf5c: a slide that couldn't be checked is tried again on its own, on the same snapshot, while the
+  // result is still current. Once the deck changed, Try again runs the whole check: results are only ever
+  // for one version. A slide that fails again stays "Couldn't check", never a pass.
+  const [retrying, setRetrying] = useState(null);
+  const retry = useCallback((index) => {
+    const d = doneRef.current;
+    if (!d || !current || !Number.isInteger(index) || !d.failed.includes(index)) { run(); return; }
+    setRetrying((r) => r || { index });
+  }, [current, run]);
+  const onRetried = useCallback((index, m, failed) => {
+    const d = doneRef.current;
+    setRetrying(null);
+    if (!d) return;
+    const measurements = { ...(d.measurements || {}), ...(m || {}) };
+    const stillFailed = failed ? d.failed : d.failed.filter((i) => i !== index);
+    const result = runPreflight(d.snapshot, { kit, refresh, measurements, now: Date.now() });
+    const next = { ...d, result, failed: stillFailed, measurements, at: Date.now() };
+    doneRef.current = next;
+    setDone(next);
+  }, [kit, refresh]);
+
   const dismiss = useCallback((id) => setDismissed((s) => new Set(s).add(id)), []);
   const undismiss = useCallback((id) => setDismissed((s) => { const n = new Set(s); n.delete(id); return n; }), []);
 
   return {
     run, onMeasured, running, progress, result: done?.result ?? null, snapshot: done?.snapshot ?? null, at: done?.at ?? null,
     failed: done?.failed ?? [], current, groups, previous: current ? previous : null, chip, dismissed, dismiss, undismiss,
+    retry, retrying, onRetried,
   };
 }
