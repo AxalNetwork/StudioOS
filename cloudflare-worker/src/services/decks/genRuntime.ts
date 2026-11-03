@@ -34,6 +34,12 @@
  * `running` is `done` if its usage row exists (the charge happened), else back
  * to `waiting` (nothing was charged). Then `startBatch` resumes it.
  *
+ * RETRY (D1600, #3879). A run admitted with `parentBatchUid` retries the failed
+ * areas of that family (`services/decks/batchFollowUp.ts`). It is written only
+ * while its quote fits what the family has not charged of the first run's
+ * quote (`hold_exhausted` otherwise), in the same insert that checks the deck
+ * is free, so two retries can never both spend the same remainder.
+ *
  * Caps are throttles, not ceilings: a whole-deck run of 30–45 areas is admitted
  * and queues its steps; the `AiGovernor` (part 2) paces them per model and
  * account. One active run per deck (migration 716's partial unique index).
@@ -63,6 +69,12 @@ export type PlanLine = {
 export type AdmitInput = {
   deckId: number; projectId: number; userId: number; cls: RunClass;
   idemKey: string; lines: PlanLine[]; quoteUid?: string | null;
+  /**
+   * D1600 (#3879): the first run of the family this run retries. The run is
+   * written only while its quote fits what that family has not charged of the
+   * first run's quote; otherwise `hold_exhausted`.
+   */
+  parentBatchUid?: string | null;
 };
 export type Admitted =
   | { ok: true; uid: string; quote_microusd: number; reservation_uid: string | null; replayed: boolean }
@@ -80,6 +92,8 @@ export type BatchRow = {
   uid: string; deck_id: number; project_id: number; class: RunClass; state: BatchState; quote_uid: string | null;
   quote_microusd: number; reservation_uid: string | null; charged_microusd: number; idem_key: string; created_by: number;
   created_at: string; started_at: string | null; settled_at: string | null;
+  /** D1600 (migration 752): when the return banner was opened, when the one notice went out, and the run this retries. */
+  seen_at?: string | null; notified_at?: string | null; parent_batch_uid?: string | null;
   /** D1536 (#3785): which runtime drives the run (migration 202611022120); absent before it ran. */
   runtime?: 'do' | 'queue';
 };
@@ -92,9 +106,12 @@ export type StepExecutor = (step: StepRow, ctx: { batch: BatchRow; parentHold: {
 
 /** What pd2b draws per row, plus the running "charged so far of held". */
 export type GenEvent = {
-  type: 'area_started' | 'area_busy' | 'step_done' | 'variant_ready' | 'area_failed' | 'batch_done';
-  /** `area_busy`: the retry this is (1, 2 …) and how long the step waits before it. */
-  attempt?: number; wait_ms?: number;
+  type: 'area_started' | 'area_busy' | 'area_retrying' | 'step_done' | 'variant_ready' | 'area_failed' | 'batch_done';
+  /**
+   * `area_busy` and `area_retrying` (D1600, pd9n's "Busy, retrying"): the retry this is (1, 2 or 3, counted
+   * across the step's same-tier fallback), how long the step waits before it and, on `area_retrying`, when it runs.
+   */
+  attempt?: number; wait_ms?: number; next_at?: string;
   batch_uid: string; seq?: number; card_uid?: string | null; area_id?: string | null; element?: string;
   model_label?: string; state: StepState | BatchState; seconds?: number; cost_microusd?: number;
   charged_microusd: number; held_microusd: number; variant?: unknown;
@@ -177,12 +194,17 @@ export class D1GenRuntime implements DeckGenRuntime {
     }
     // The run and its steps land together or not at all (one D1 batch is one
     // transaction): a replayed request never sees a run without its plan.
+    // D1600: a retry is written only while its quote fits what its family has not charged of the first run's quote.
+    const parentUid = input.parentBatchUid ?? null;
     const insertRun = this.env.DB.prepare(
-      `INSERT INTO deck_area_batches (uid, deck_id, project_id, class, state, quote_uid, quote_microusd, reservation_uid, idem_key, created_by)
-       SELECT ?1, ?2, ?3, ?4, 'queued', ?5, ?6, ?7, ?8, ?9
+      `INSERT INTO deck_area_batches (uid, deck_id, project_id, class, state, quote_uid, quote_microusd, reservation_uid, idem_key, created_by, parent_batch_uid)
+       SELECT ?1, ?2, ?3, ?4, 'queued', ?5, ?6, ?7, ?8, ?9, ?10
         WHERE NOT EXISTS (SELECT 1 FROM deck_area_batches WHERE deck_id = ?2 AND state IN ('queued','running','cancelling'))
-          AND NOT EXISTS (SELECT 1 FROM deck_area_batches WHERE idem_key = ?8)`,
-    ).bind(uid, input.deckId, input.projectId, input.cls, input.quoteUid ?? null, quote, reservation?.uid ?? null, input.idemKey, input.userId);
+          AND NOT EXISTS (SELECT 1 FROM deck_area_batches WHERE idem_key = ?8)
+          AND (?10 IS NULL OR ?6 <= (SELECT quote_microusd FROM deck_area_batches WHERE uid = ?10 AND deck_id = ?2)
+            - (SELECT COALESCE(SUM(s.charged_microusd), 0) FROM deck_area_batch_steps s
+                WHERE s.batch_uid IN (SELECT uid FROM deck_area_batches WHERE deck_id = ?2 AND (uid = ?10 OR parent_batch_uid = ?10))))`,
+    ).bind(uid, input.deckId, input.projectId, input.cls, input.quoteUid ?? null, quote, reservation?.uid ?? null, input.idemKey, input.userId, parentUid);
     const insertSteps = lines.map((l, seq) => this.env.DB.prepare(
       `INSERT INTO deck_area_batch_steps (batch_uid, seq, card_uid, area_id, element, kind, task, model, quote_microusd, input)
        SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10 WHERE EXISTS (SELECT 1 FROM deck_area_batches WHERE uid = ?1)`,
@@ -199,6 +221,9 @@ export class D1GenRuntime implements DeckGenRuntime {
       // of a run under the same key is that run's, and stays.
       if (reservation && raced?.reservation_uid !== reservation.uid) await settleAiReservation(this.env, reservation, 0, true).catch(() => {});
       if (raced) return { ok: false, refusal: 'idempotency_key_reused', message: 'That Idempotency-Key belongs to another run.' };
+      if (parentUid && !(await this.env.DB.prepare(`SELECT uid FROM deck_area_batches WHERE deck_id = ?1 AND state IN ('queued','running','cancelling')`).bind(input.deckId).first())) {
+        return { ok: false, refusal: 'hold_exhausted', message: 'What is left of the first run\'s hold cannot cover this retry.' };
+      }
       return { ok: false, refusal: 'deck_busy', message: 'This deck is already generating. Stop it or wait for it to finish.' };
     }
     return { ok: true, uid, quote_microusd: quote, reservation_uid: reservation?.uid ?? null, replayed: false };
