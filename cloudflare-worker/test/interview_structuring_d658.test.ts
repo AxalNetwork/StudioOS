@@ -46,7 +46,8 @@ const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const ME = 2, OTHER = 3, LAB = 4, FOUNDER = 9, LAB_FOUNDER = 19;
 const PROJECT = 7, LAB_PROJECT = 8;
 const MID = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
-const SMALL = '@cf/meta/llama-3.1-8b-instruct-fp8';
+// #3937 part 3: structuring runs VA5's ladder, whose Alternative is the 8B fp8-fast (the route ran the 8B fp8).
+const SMALL = '@cf/meta/llama-3.1-8b-instruct-fp8-fast';
 const mig = (name: string) => readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8');
 
 const SEGMENTS: Segment[] = [

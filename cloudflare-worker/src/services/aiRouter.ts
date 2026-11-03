@@ -2007,12 +2007,15 @@ async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Prom
 
   // ---- #3937 (D1478 task 3, part 2): a text job's model ----------------------
   // A text run that names its job (or whose task `TASK_TEXT_JOBS` maps, when no
-  // model is named): the job's ladder, each model offered, unlocked and able to
+  // model is named and no page row decides): the job's ladder, each model offered, unlocked and able to
   // hold the input. A rail pick the job lists is honoured; a named model the job
   // does not list is refused. Too long for every model: refused, naming the
   // longest-window one, before anything is held.
   const textShaped = !route.isAudio && !route.isEmbed && !opts.rerank && !opts.translate && !opts.speak && !opts.draw && !opts.specialist && !(opts.images?.length);
-  const textJobId = opts.textJob ?? (!opts.model ? TASK_TEXT_JOBS[opts.task] : undefined);
+  // #3937 part 3: a task's own job (`TASK_TEXT_JOBS`) yields to a rail run's page row: a press on a page
+  // the matrix lists runs that page's models (D764), as before. A job the caller names always applies.
+  const pageRowed = !!opts.rail && !!(resolveRailOption(opts.rail.page, opts.rail.option ?? null) ?? resolveRail(opts.rail.page));
+  const textJobId = opts.textJob ?? (!opts.model && !pageRowed ? TASK_TEXT_JOBS[opts.task] : undefined);
   if (textJobId && textShaped) {
     let pick: string | null = null;
     let tier: PlanTier;
