@@ -19,7 +19,7 @@ const CARD = 'rounded-[12px] border border-axal-hairline bg-white p-5 dark:borde
 const INK = 'text-axal-ink dark:text-gray-100';
 const MUTED = 'text-[12.5px] leading-[1.45] text-axal-muted dark:text-gray-400';
 const BTN = 'inline-flex min-h-[36px] items-center justify-center rounded-[9px] px-3.5 text-[12.5px] font-bold';
-const GHOST = `${BTN} border border-axal-hairline bg-white text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100`;
+const GHOST = `${BTN} border border-axal-hairline bg-white text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800`;
 const DANGER = `${BTN} bg-axal-destructive text-white hover:opacity-90`;
 
 export default function SharingCard({ testId = 'relationships-sharing' }) {
