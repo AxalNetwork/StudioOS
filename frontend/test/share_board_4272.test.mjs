@@ -138,8 +138,8 @@ test('#4272 the mounted board\'s states: unreadable with Try again, no links, no
   } finally { await m.unmount(); }
   const none = { ...DAILY, days: [], funnels: { nda: { sent: 0 }, open: { sent: 0 } } };
   const n = await mount({ daily: async () => none });
-  try { assert.match(n.text(), new RegExp(NO_LINKS.replace(/\./g, '\\.'))); } finally { await n.unmount(); }
+  try { assert.ok(n.text().includes(NO_LINKS), 'no links'); } finally { await n.unmount(); }
   const quiet = { ...DAILY, days: DAILY.days.map((d) => ({ ...d, nda: 0, open: 0 })) };
   const q = await mount({ daily: async () => quiet });
-  try { assert.match(q.text(), new RegExp(NO_VIEWS)); } finally { await q.unmount(); }
+  try { assert.ok(q.text().includes(NO_VIEWS), 'no views'); } finally { await q.unmount(); }
 });
