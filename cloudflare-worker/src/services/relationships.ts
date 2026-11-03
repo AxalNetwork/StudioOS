@@ -323,14 +323,15 @@ export async function introRequests(env: Env, user: User, filter: LogFilter = {}
   const outcomes = new Map<string, Outcome>();
   const followUps = new Map<string, FollowUp>();
   if (uids.length) {
-    const marks = uids.map(() => '?').join(',');
+    // The page's uids, bound as one JSON array: nothing is written into the statement.
+    const list = JSON.stringify(uids);
     for (const o of (await env.DB.prepare(
       `SELECT parent_uid, outcome, outcome_note, recorded_by_user_id, created_at FROM relationship_interactions
-        WHERE kind = 'outcome' AND parent_uid IN (${marks}) ORDER BY id`,
-    ).bind(...uids).all<Outcome>()).results || []) outcomes.set(o.parent_uid, o);
+        WHERE kind = 'outcome' AND parent_uid IN (SELECT value FROM json_each(?)) ORDER BY id`,
+    ).bind(list).all<Outcome>()).results || []) outcomes.set(o.parent_uid, o);
     for (const f of (await env.DB.prepare(
-      `SELECT request_uid, due_on, done_at, snoozed_until FROM relationship_follow_ups WHERE user_id = ? AND request_uid IN (${marks})`,
-    ).bind(user.id, ...uids).all<FollowUp>()).results || []) followUps.set(f.request_uid, f);
+      'SELECT request_uid, due_on, done_at, snoozed_until FROM relationship_follow_ups WHERE user_id = ? AND request_uid IN (SELECT value FROM json_each(?))',
+    ).bind(user.id, list).all<FollowUp>()).results || []) followUps.set(f.request_uid, f);
   }
   const view = (r: Interaction) => interactionView(r, user.id, outcomes.get(r.uid) ?? null, followUps.get(r.uid) ?? null);
   return {
