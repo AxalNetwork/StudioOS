@@ -32,7 +32,7 @@ import type { Env } from '../types';
 import { branchOf } from '../util/branch';
 import * as aiBudget from './aiBudget';
 import { spendLimitMessage } from './aiSpendLimit';
-import { audioInputFor, parseAudioOutput, type SttTranscript } from './sttFormats';
+import { audioInputFor, mipOptOut, mipPriceFactor, parseAudioOutput, type SttTranscript } from './sttFormats';
 import * as shapes from './ai/shapes';
 import * as catalogue from './ai/catalogue';
 import { termsCleared } from './ai/modelTerms';
@@ -1202,6 +1202,8 @@ async function setKillSwitch(store: MinimalKV, ttlSec: number): Promise<void> {
 // ---------------------------------------------------------------------------
 export function estimateCostUsd(
   model: string, promptTok: number, completionTok: number, audioMinutes = 0, cachedTok = 0, characters = 0, image: shapes.Units = {},
+  /** #3936 part 3: the factor on a per-minute price (`mipPriceFactor`: Deepgram's opt-out rate, or 1). */
+  minuteFactor = 1,
 ): number {
   if (model === '@cf/microsoft/resnet-50') return costMicro(model, { images: image.images ?? 0 }) / 1_000_000;
   // D761 PR 4: an image model is priced on its image units, at the catalogue's figure.
@@ -1215,7 +1217,7 @@ export function estimateCostUsd(
   // Audio first: a model priced by the minute has no token rate, and asking
   // the token table for one would answer 0.
   const perMinute = PRICE_USD_PER_AUDIO_MINUTE[model];
-  if (perMinute != null) return Math.max(0, audioMinutes) * perMinute;
+  if (perMinute != null) return Math.max(0, audioMinutes) * perMinute * minuteFactor;
   const p = PRICE_USD_PER_1M_TOKENS[model];
   // D760: there is no zero path. `run()` refuses a model with no row before it
   // is called (`model_unpriced`), so arriving here without one is a coding
@@ -1591,7 +1593,8 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
       // See `MAX_RECORDING_BYTES` in `routes/founder_validate.ts`.
       const bytes = opts.audio;
       if (!bytes || !bytes.byteLength) return { ok: false, status: 400, error: 'no audio' };
-      const out = await ai.run(model, audioInputFor(model, bytes, opts.audioMime || '', opts.language ?? null), runOpt);
+      // #3936 part 3: interview, meeting and data-room audio opts out of Deepgram's program.
+      const out = await ai.run(model, audioInputFor(model, bytes, opts.audioMime || '', opts.language ?? null, mipOptOut(model, normaliseSurface(opts.surface))), runOpt);
       // Silence and non-speech transcribe to an empty string. That is an
       // answer, not a failure: the clip contained no words, and reporting it
       // as an error would have the caller retry and pay again.
@@ -2130,7 +2133,8 @@ function holdQuoteMicro(opts: RunOptions, route: RouteEntry, models: string[], g
     const req = opts.draw ? shapes.drawRequest(model, opts.text ?? '', opts.draw) : null;
     return req ? shapes.imageUnits(model, req.sent.width, req.sent.height, req.sent.steps, req.sent.references) : {};
   };
-  const quote = Math.max(...models.map((model) => estimateCostUsd(model, promptBound, outputBound, quoteMinutes, 0, quoteChars, quoteImage(model))));
+  const surfaceKey = normaliseSurface(opts.surface);
+  const quote = Math.max(...models.map((model) => estimateCostUsd(model, promptBound, outputBound, quoteMinutes, 0, quoteChars, quoteImage(model), mipPriceFactor(model, surfaceKey))));
   // D763: the guard is held inside this hold, never in one of its own: every
   // input slice, and every output slice the run's maximum output allows.
   const outputChars = !guardOn || route.isEmbed || opts.speak || opts.draw ? 0
@@ -2615,7 +2619,7 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
     latency_ms: Date.now() - startedAt,
     prompt_tokens: promptTok,
     completion_tokens: completionTok,
-    est_cost_usd: estimateCostUsd(modelUsed, promptTok, completionTok, audioMinutes || attempt.units?.audio_minutes || 0, attempt.units?.tokens_cached ?? 0, attempt.units?.characters ?? 0, attempt.units ?? {}),
+    est_cost_usd: estimateCostUsd(modelUsed, promptTok, completionTok, audioMinutes || attempt.units?.audio_minutes || 0, attempt.units?.tokens_cached ?? 0, attempt.units?.characters ?? 0, attempt.units ?? {}, mipPriceFactor(modelUsed, normaliseSurface(opts.surface))),
     fallback_used: fallbackUsed,
     cached: false,
     safety_score: safetyScore,
