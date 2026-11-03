@@ -7,7 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  BUILD, NOT_RECORDED, OUTCOMES, SECTORS, STAGES, TABS,
+  BUILD, NOT_RECORDED, OUTCOMES, PROPOSAL_LINE, SECTORS, STAGES, TABS,
   defaultOnKeys, filterReports, flagLabel, flagRows, notYet, offGridOverrides, reasonOk, reportRow, resolveArmed, scopeLabel, templateChangeArmed, templateGrid,
   templatePreview, templateResetArmed, usdMicro, viewFor,
 } from '../src/pages/hq/decks/hqDecksModel.js';
@@ -39,7 +39,7 @@ test('Decks joins the Platform strip after Promo codes, in the list and in the c
 
 test('each build task names its issue, and only a landed one is live', () => {
   assert.deepEqual(Object.entries(BUILD).map(([k, b]) => [k, b.issue]), [['K1', 4188], ['K2', 4189], ['K3', 4190], ['K4', 4191], ['K5', 4192]]);
-  assert.deepEqual(Object.entries(BUILD).filter(([, b]) => b.live).map(([k]) => k), ['K4', 'K5'], 'K4 (#4191) and K5 (#4192) landed');
+  assert.deepEqual(Object.entries(BUILD).filter(([, b]) => b.live).map(([k]) => k), ['K1', 'K4', 'K5'], 'K1 (#4188), K4 (#4191) and K5 (#4192) landed');
   assert.equal(notYet('K3'), 'Not switched on yet. The beta cohort arrives with #4190.');
 });
 
@@ -62,6 +62,14 @@ test('HD1: a report row from the route, with K1\'s columns "Not recorded" and th
   const rows = [r, reportRow({ uid: 'r2', model: 'Model B', reason: 'other', status: 'open' })];
   assert.deepEqual(filterReports(rows, { model: 'Model B' }).map((x) => x.uid), ['r2']);
   assert.deepEqual(filterReports(rows, { q: 'dropped' }).map((x) => x.uid), ['r1']);
+});
+
+test('HD1 (#4188): K1 is live, so the "not switched on" line goes, and the proposal line reads the table\'s own statuses', () => {
+  assert.equal(BUILD.K1.live, true);
+  assert.match(PAGE, /\{!BUILD\.K1\.live && \(isNR\(row\.founder\) \|\| isNR\(row\.before\)\) && <p[^>]*data-testid="deck-report-k1"/);
+  assert.deepEqual(Object.keys(PROPOSAL_LINE).sort(), ['accepted', 'discarded', 'edited', 'proposed']);
+  assert.equal(PROPOSAL_LINE.edited, PROPOSAL_LINE.accepted, 'an edited proposal was written to the deck too');
+  assert.equal(PROPOSAL_LINE.pending, undefined, 'migration 506 has no pending status');
 });
 
 test('HD1: Resolve arms on an outcome and a note of at least 10 characters, and calls the mounted route', () => {

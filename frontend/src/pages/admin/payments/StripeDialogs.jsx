@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { api } from '../../../lib/api';
+import { stripeCutoverApi } from '../../../lib/api/stripeCutover';
+import { CONFIRM_WORD, canMove, clearLines, movedText } from './cutoverModel';
 import { RECORDED, STEP_UP_NEXT, keyCheck, reasonProblem, refusalOf, syncDiff } from './dialogModel';
 import { ReasonField, Refusal } from './ProductDialogs';
 import { EYE, FIELD, GHOST, MONO, PRIMARY, SUB, PayDialog } from './payUi';
@@ -156,6 +158,41 @@ export function SyncDialog({ onClose, onDone }) {
           <Refusal error={{ ...state.error, message: '' }} />
         </div>
       )}
+    </PayDialog>
+  );
+}
+
+/**
+ * D1434 (#3703 part 3): Move to live. It says what changes, takes a reason
+ * and the word "live" typed, and sends once. The Worker refuses again on its
+ * own (keys first, already done, a count it cannot read), and the refusal is
+ * drawn as it came.
+ */
+export function MoveToLiveDialog({ view, wouldClear, onClose, onDone }) {
+  const [reason, setReason] = useState('');
+  const [typed, setTyped] = useState('');
+  const lines = clearLines(wouldClear);
+  const { busy, error, run } = useWrite(
+    () => stripeCutoverApi.run('live', reason.trim(), typed.trim()),
+    (out) => onDone({ text: `${movedText(out)} ${RECORDED}` }),
+  );
+  return (
+    <PayDialog title="Move production to live?" sub="Checkout, plans and AI top-ups move from the sandbox to the live Stripe account. This cannot be undone." onClose={onClose} testId="pay-move-live"
+      footer={<Footer onClose={onClose} busy={busy} disabled={!canMove(view, reason, typed) || !lines} label="Move to live" form="pay-move-live-form" testId="pay-move-live-send" />}>
+      <form id="pay-move-live-form" onSubmit={run} className="flex flex-col gap-3" data-testid="pay-move-live-form" autoComplete="off">
+        {lines ? (
+          <ul className="m-0 flex list-disc flex-col gap-1 pl-5 text-[13px] text-axal-ink dark:text-gray-100" data-testid="pay-move-live-lines">
+            {lines.map((l) => <li key={l}>{l}</li>)}
+          </ul>
+        ) : <span className={SUB} data-testid="pay-move-live-unread">What the move would change could not be counted, so it cannot run.</span>}
+        <ReasonField value={reason} onChange={setReason} testId="pay-move-live-reason" />
+        <label className="flex flex-col gap-1">
+          <span className={EYE}>Type {CONFIRM_WORD} to confirm</span>
+          <input value={typed} onChange={(e) => setTyped(e.target.value)} spellCheck={false} autoComplete="off" className={`${FIELD} ${MONO}`} data-testid="pay-move-live-confirm" />
+        </label>
+        <span className={SUB}>{RECORDED} {STEP_UP_NEXT}</span>
+        <Refusal error={error} testId="pay-move-live-error" />
+      </form>
     </PayDialog>
   );
 }

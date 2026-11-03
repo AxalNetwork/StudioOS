@@ -490,6 +490,15 @@ export function rowToProposal(row: any): any {
   };
 }
 
+/**
+ * D897 §9 (#3659): what a proposal holds now, as one hash: its cards, what is
+ * kept and its outline. A write that sends it back as `base_hash` is refused
+ * 409 `proposal_changed` when another tab moved the proposal since.
+ */
+export async function proposalHash(row: any): Promise<string> {
+  return contentHash(String(row?.slides ?? '[]'), `${row?.kept_slides_json ?? ''}|${row?.outline_json ?? ''}`);
+}
+
 export function founderPitchSlides(slides: any[]): any[] {
   return slides.filter((slide) => slide && typeof slide === 'object').map((slide) => ({ ...slide, fields: Array.isArray(slide.fields) ? slide.fields.map((field: any) => {
     if (!String(field?.key || '').startsWith('vr_')) return field;
@@ -718,7 +727,8 @@ decks.get('/by-project/:pid', async (c) => {
       shared_links: links ? links.get(Number(r.id)) ?? 0 : null,
     })),
     shared_links_readable: links !== null,
-    proposal: proposal ? rowToProposal(proposal) : null,
+    // D897 §9 (#3659): a reopened proposal carries its hash, so its writes can say which one they read.
+    proposal: proposal ? { ...rowToProposal(proposal), proposal_hash: await proposalHash(proposal) } : null,
   });
 });
 

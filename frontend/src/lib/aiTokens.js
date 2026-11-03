@@ -125,10 +125,24 @@ export function topUpLine(data) {
  * `loading`, `unreadable`, `not_ready` or `ready`.
  * `reading` is `{ loading, error, data }`: `data` is the route's answer.
  */
+/**
+ * D1366 / D1434: the custom amount the top-up read sends beside the packs
+ * (`custom`: $N of tokens as N of one $1 USD price, from `min_cents` to
+ * `max_cents`). The same test as the checkout sheet's `customOffer`.
+ */
+export function sellableCustom(c) {
+  if (!c || typeof c !== 'object' || !/^price_[A-Za-z0-9]+$/.test(String(c.price_id ?? '')) || c.unit_amount !== 100 || c.currency !== 'usd') return false;
+  const whole = (n) => Number.isSafeInteger(n) && n > 0 && n % 100 === 0;
+  return whole(c.min_cents) && whole(c.max_cents) && c.min_cents <= c.max_cents;
+}
+
 export function aiTokenState(reading) {
   const { loading = false, error = false, data } = reading || {};
   if (loading) return 'loading';
   if (error || !data || typeof data !== 'object') return 'unreadable';
+  // D1434: with no pack on sale, the custom amount alone is a top-up the member
+  // can buy, so Add tokens (the AIRail, Usage) opens the sheet on it.
+  if (sellableCustom(data.custom) && !topUpLine(data)) return 'ready';
   // CR2 answers `unset`; D750 answers `{configured:false}`. Both: nothing is on sale.
   if (data.state === 'unset' || (!Array.isArray(data.packs) && data.configured === false) || data.state === 'not_ready') return 'not_ready';
   if (data.state !== 'ready') return 'unreadable';

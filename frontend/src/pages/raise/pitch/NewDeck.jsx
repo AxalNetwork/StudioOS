@@ -14,8 +14,8 @@ import OneClickBuild, { FreshnessLines, ProposalReview } from './OneClickBuild';
 import { CoverageMeter, SourcesStep, useDeckSources } from './SourcesBoards';
 import { EDIT_PATH, READ_ONLY, STUDIO_PATH, asList, isReadOnly, ventureQuery } from './pitchStudioModel';
 import {
-  NOT_ON_STUDIOOS, NO_ROUND, PROPOSED_BY_EADWYN, ROUND_LINK, addRow, aiTokens, buildSentence, chipsFor, editRow, estimateLine,
-  fastBrief, moveRow, outlineSentence, refusalOf, removeRow, roundLine, rowWarning, startOptions,
+  MESSAGE_HINT, MESSAGE_LABEL, MESSAGE_MAX, NOT_ON_STUDIOOS, NO_ROUND, PROPOSED_BY_EADWYN, RELOAD_LATEST, ROUND_LINK, addRow, aiTokens,
+  buildSentence, chipsFor, editRow, estimateLine, fastBrief, moveRow, outlineSentence, refusalOf, removeRow, roundLine, rowWarning, startOptions, withBase,
 } from './newDeckModel';
 import { ONE_CLICK_LINE, ONE_CLICK_TITLE, audienceLabel, buildingLine } from './oneClickModel';
 import { templateStartLine, templateSentence } from './templatesModel';
@@ -44,9 +44,13 @@ import HeaderAsk from '../../../ui/HeaderAsk.jsx';
  *                           unticked record is on no card. The connectors'
  *                           freshness with Sync now (#3877).
  *   Outline                 the length's standard outline, free, at once; each
- *                           row with its why line, its records, drag and Move
- *                           up / down; Regenerate outline runs Eadwyn (cost
- *                           first); Reorder for stage waits on #3808.
+ *                           row with its message (D897 §9, #3659: the one
+ *                           takeaway its card leaves, editable, words only),
+ *                           its records, drag and Move up / down; Regenerate
+ *                           outline runs Eadwyn (cost first); Reorder for
+ *                           stage waits on #3808. Build deck sends the
+ *                           outline's `proposal_hash` back, so a tab that
+ *                           read an older outline is refused, not obeyed.
  *
  * There is no prompt field: typed instructions live only in the editor, scoped
  * to the Grid selection (owner rule). Build deck shows its cost first, then
@@ -167,6 +171,7 @@ function Refusal({ refusal }) {
       <span className="flex flex-wrap gap-3">
         {refusal.link ? <Link to={refusal.link.href} className={LINK}>{refusal.link.text}</Link> : null}
         {refusal.topUp ? <a href={refusal.topUp.href} className={LINK}>{refusal.topUp.text}</a> : null}
+        {refusal.reload ? <button type="button" className={LINK} onClick={() => window.location.reload()} data-testid="pitch-new-reload">{RELOAD_LATEST}</button> : null}
       </span>
     </div>
   );
@@ -261,6 +266,8 @@ function OnePage({ ctx, projectId, q, sources, items, versions, methods, recomme
   const [proposedBy, setProposedBy] = useState(o?.proposed_by || null);
   const [reason, setReason] = useState(null);
   const [outlineId, setOutlineId] = useState(outlineProposal?.id ?? null);
+  // D897 §9 (#3659): the outline proposal as this page read it; Build sends it back.
+  const [outlineHash, setOutlineHash] = useState(outlineProposal?.proposal_hash ?? null);
   const [quote, setQuote] = useState({ outline: null, build: null });
   const [dialog, setDialog] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -308,11 +315,11 @@ function OnePage({ ctx, projectId, q, sources, items, versions, methods, recomme
 
   const proposeOutline = () => run(async () => {
     const r = await newDeckApi.outline(body({ start: start.kind === 'version' ? { kind: 'version', deck_id: start.id } : { kind: 'blank' } }), railPressHeaders(RAIL.outline));
-    setOutlineId(r.proposal?.id ?? null); setRows(r.outline.rows); setTouched(true); setProposedBy(r.outline.proposed_by); setReason(r.outline.reason || null);
+    setOutlineId(r.proposal?.id ?? null); setOutlineHash(r.proposal_hash ?? null); setRows(r.outline.rows); setTouched(true); setProposedBy(r.outline.proposed_by); setReason(r.outline.reason || null);
   }, 'outline');
 
   const buildDeck = () => run(async () => {
-    const r = await newDeckApi.build(body({ proposal_id: outlineId ?? undefined, outline: rows, exclude }), railPressHeaders(RAIL.build));
+    const r = await newDeckApi.build(withBase(body({ proposal_id: outlineId ?? undefined, outline: rows, exclude }), outlineId != null ? outlineHash : null), railPressHeaders(RAIL.build));
     onLanded(r);
   }, 'build');
 
@@ -453,7 +460,7 @@ function OnePage({ ctx, projectId, q, sources, items, versions, methods, recomme
         {reason ? <span className={MUTED}>{reason}</span> : null}
         <ol className="m-0 flex list-none flex-col gap-1.5 p-0">
           {rows.map((r, i) => {
-            const why = String(r.message || r.purpose || '').trim();
+            const why = String(r.purpose || '').trim();
             return (
               <li key={`${r.card}-${i}`} draggable onDragStart={() => setDrag(i)} onDragOver={(e) => e.preventDefault()} onDrop={() => { if (drag != null) change(moveRow(rows, drag, i)); setDrag(null); }}
                 className={`${CARD} grid grid-cols-[20px_28px_minmax(0,1fr)] items-start gap-2 p-2.5 sm:grid-cols-[20px_28px_minmax(0,1fr)_auto]`} data-testid={`pitch-new-row-${i}`}>
@@ -462,6 +469,8 @@ function OnePage({ ctx, projectId, q, sources, items, versions, methods, recomme
                 <div className="flex min-w-0 flex-col gap-1">
                   <input className={INPUT} aria-label={`Title of card ${i + 1}`} value={r.title} maxLength={80} onChange={(e) => change(editRow(rows, i, { title: e.target.value }))} />
                   {why ? <span className={SMALL} data-testid={`pitch-new-why-${i}`}>{why}</span> : null}
+                  <input className={INPUT} aria-label={`${MESSAGE_LABEL} of card ${i + 1}`} title={MESSAGE_HINT} placeholder={`${MESSAGE_LABEL}: the one thing this card says`}
+                    value={r.message || ''} maxLength={MESSAGE_MAX} onChange={(e) => change(editRow(rows, i, { message: e.target.value }))} data-testid={`pitch-new-message-${i}`} />
                   <span className="flex flex-wrap gap-1">
                     {chipsFor(r, ctx.cards, items, excludedSet).map((c) => (
                       <span key={c.key} className={c.recorded ? PILL_VIO : PILL_MU}>{c.label}{c.recorded ? '' : ` · ${NOT_ON_STUDIOOS}`}</span>

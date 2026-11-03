@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { stripeCutoverApi } from '../../../lib/api/stripeCutover';
+import { cutoverView } from './cutoverModel';
 import SecretWriteGate from '../../../components/SecretWriteGate';
 import { Columns } from '../../../ui/Charts';
 import {
@@ -8,7 +10,7 @@ import {
 import {
   AMBER, BIG, CARD, EYE, GHOST, H2, MONO, PILL, SUB, WRITE_HOLDER_NOTE, Reading, Unread, useCanWrite, usePayPhone,
 } from './payUi';
-import { AddEventsDialog, RegisterEndpointDialog, ReplaceKeyDialog, SyncDialog } from './StripeDialogs';
+import { AddEventsDialog, MoveToLiveDialog, RegisterEndpointDialog, ReplaceKeyDialog, SyncDialog } from './StripeDialogs';
 
 /**
  * D1008 / D1014 (#2833) — PAY5, Stripe connection, complete: the account, the
@@ -123,6 +125,42 @@ function Deliveries({ deliveries, summary, reload }) {
   );
 }
 
+/**
+ * D1434 (#3703 part 3): Move to live. Its own read of `GET /cutover`; the
+ * button is on only when the keys are live and the stored records are not.
+ */
+function useCutover() {
+  const [state, setState] = useState({ status: 'loading', data: null });
+  const load = useCallback(() => {
+    let live = true;
+    setState({ status: 'loading', data: null });
+    stripeCutoverApi.read().then((data) => { if (live) setState({ status: 'ready', data }); }, (e) => { if (live) setState({ status: e?.status === 403 ? 'forbidden' : 'error', data: null }); });
+    return () => { live = false; };
+  }, []);
+  useEffect(() => load(), [load]);
+  return { ...state, reload: load };
+}
+
+function MoveToLive({ cutover, canWrite, onOpen }) {
+  const view = cutoverView(cutover.status === 'ready' ? cutover.data : null);
+  return (
+    <section className={`${CARD} col-span-12 flex flex-col gap-2 px-[18px] py-4`} aria-labelledby="pay-h-live" data-testid="pay-move-live-block">
+      <h2 id="pay-h-live" className={H2}>Move to live</h2>
+      {cutover.status === 'loading' ? <Reading /> : cutover.status === 'forbidden' ? (
+        <span className={SUB} data-testid="pay-move-live-forbidden">Only the Super Admin moves production to live.</span>
+      ) : cutover.status === 'error' ? (
+        <Unread text="Could not be read. The move was not checked." onRetry={cutover.reload} testId="pay-move-live-block-unread" />
+      ) : (
+        <>
+          <span className={view.state === 'keys_test' || view.state === 'unconfigured' ? AMBER : BIG} data-testid="pay-move-live-state">{view.title}</span>
+          <span className={SUB} data-testid="pay-move-live-line">{view.line}</span>
+          {view.state === 'ready' ? <Opens canWrite={canWrite} onClick={onOpen} testId="pay-move-live-open">Move to live…</Opens> : null}
+        </>
+      )}
+    </section>
+  );
+}
+
 export default function StripeConnection({ reads, reload }) {
   const { config, summary, webhook, deliveries } = reads;
   const k = keysMatch(config?.data, summary?.data);
@@ -132,11 +170,13 @@ export default function StripeConnection({ reads, reload }) {
   const [dialog, setDialog] = useState(null);
   const [saved, setSaved] = useState(null);
   const holdsSecretWrites = useCanWrite();
+  const cutover = useCutover();
   const open = (d) => { setSaved(null); setDialog(d); };
-  const done = (out) => { setDialog(null); if (out?.text) setSaved(out.text); reload(); };
+  const done = (out) => { setDialog(null); if (out?.text) setSaved(out.text); reload(); cutover.reload(); };
   return (
     <div className="grid grid-cols-12 gap-3.5">
       {saved && <span role="status" className="col-span-12 text-[12.5px] text-emerald-700 dark:text-emerald-300" data-testid="pay-saved">{saved}</span>}
+      <MoveToLive cutover={cutover} canWrite={holdsSecretWrites} onOpen={() => open({ type: 'live' })} />
       <section className={`${CARD} col-span-12 flex flex-col gap-2 px-[18px] py-4 lg:col-span-6`} data-testid="pay-account">
         <h2 className={H2}>Account</h2>
         {config?.status === 'loading' && <Reading />}
@@ -222,6 +262,7 @@ export default function StripeConnection({ reads, reload }) {
       {dialog?.type === 'register' && <RegisterEndpointDialog ourUrl={webhook?.data?.our_url} events={webhook?.data?.required_events} onClose={() => setDialog(null)} onDone={done} />}
       {dialog?.type === 'events' && <AddEventsDialog endpoint={dialog.endpoint} onClose={() => setDialog(null)} onDone={done} />}
       {dialog?.type === 'sync' && <SyncDialog onClose={() => setDialog(null)} onDone={done} />}
+      {dialog?.type === 'live' && <MoveToLiveDialog view={cutoverView(cutover.data)} wouldClear={cutover.data?.would_clear} onClose={() => setDialog(null)} onDone={done} />}
     </div>
   );
 }
