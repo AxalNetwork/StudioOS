@@ -83,6 +83,13 @@ export const METERING_POLICY: MeteringPolicy = Object.freeze({
     // tokens through aiRouter (runDraft), so its tool fee is 0 (the composite rule).
     [toolOperation('mail_context')]: { price_microusd: 0, unit: 'call' },
     [toolOperation('mail_draft')]: { price_microusd: 0, unit: 'call' },
+    // D1588's deck and raise tools: reads of the venture's records, and proposals. None runs a model.
+    [toolOperation('decks.read_outline')]: { price_microusd: 0, unit: 'call' },
+    [toolOperation('decks.propose_area')]: { price_microusd: 0, unit: 'call' },
+    [toolOperation('decks.propose_variant')]: { price_microusd: 0, unit: 'call' },
+    [toolOperation('raise.prospect_brief')]: { price_microusd: 0, unit: 'call' },
+    [toolOperation('raise.qa_prep')]: { price_microusd: 0, unit: 'call' },
+    [toolOperation('raise.draft_follow_up')]: { price_microusd: 0, unit: 'call' },
   }) as Record<string, MeteredOperation>,
 });
 
@@ -113,6 +120,12 @@ export const OPERATION_INFO: Readonly<Record<string, { label: string; source: Pr
   [toolOperation('extract_action_items')]: { label: 'Extract action items', source: 'axal', ai: true },
   [toolOperation('mail_context')]: { label: 'Read an email’s context', source: 'axal', ai: false },
   [toolOperation('mail_draft')]: { label: 'Draft an email with Eadwyn', source: 'axal', ai: true },
+  [toolOperation('decks.read_outline')]: { label: 'Read a deck’s outline', source: 'axal', ai: false },
+  [toolOperation('decks.propose_area')]: { label: 'Propose new words for a deck area', source: 'axal', ai: false },
+  [toolOperation('decks.propose_variant')]: { label: 'Propose a variant of a deck', source: 'axal', ai: false },
+  [toolOperation('raise.prospect_brief')]: { label: 'Read an investor meeting brief', source: 'axal', ai: false },
+  [toolOperation('raise.qa_prep')]: { label: 'Prepare for investor questions', source: 'axal', ai: false },
+  [toolOperation('raise.draft_follow_up')]: { label: 'Draft a follow-up to an investor', source: 'axal', ai: false },
 });
 
 /**
