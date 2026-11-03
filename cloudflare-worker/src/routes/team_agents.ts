@@ -262,6 +262,8 @@ router.post('/agents/:uid/run', async (c) => {
     const r = await agentRun(c.env, {
       agent: got.agent, module: typeof b.module === 'string' ? b.module : '', option: typeof b.option === 'string' ? b.option : '',
       record, prompt: b.prompt, toolReads: b.tool_reads,
+      // D1612 part D (#3954): one of the agent's skills, by uid; it runs at the pinned version.
+      skill: b.skill == null ? null : String(b.skill),
     });
     if (!r.ok) return answer(c, r);
     return c.json({ proposal: r.proposal, charged: r.charged });
