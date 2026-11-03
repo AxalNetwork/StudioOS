@@ -22,7 +22,7 @@ import { mountContracts } from './_contracts_dom.mjs';
 
 const read = (p) => readFileSync(new URL(`../src/${p}`, import.meta.url), 'utf8');
 const html = (el) => renderToStaticMarkup(h(MemoryRouter, { initialEntries: ['/learning'] }, el));
-const TOKEN = 'eyJhbGciOiJSUzI1NiJ9.synthetic-token-4178.signature';
+const TOKEN = 'synthetic-signed-token-4178-not-a-jwt';
 const IFRAME = `https://customer-abc123.cloudflarestream.com/${TOKEN}/iframe`;
 const READY = {
   state: 'ready', iframe_url: IFRAME, hls_url: `https://customer-abc123.cloudflarestream.com/${TOKEN}/manifest/video.m3u8`,
