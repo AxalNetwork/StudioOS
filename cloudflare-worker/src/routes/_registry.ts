@@ -36,9 +36,11 @@ import { mount as deck_stage_normsMount } from './deck_stage_norms';
 import { mount as deck_update_reuseMount } from './deck_update_reuse';
 import { mount as influencerMount } from './influencer';
 import { mount as influencer_analyticsMount } from './influencer_analytics';
+import { mount as influencer_offersMount } from './influencer_offers';
 import { mount as influencer_payoutsMount } from './influencer_payouts';
 import { mount as learning_listsMount } from './learning_lists';
 import { mount as learning_streamMount } from './learning_stream';
+import { mount as public_handleMount } from './public_handle';
 import { mount as team_platform_statusMount } from './team_platform_status';
 import { mount as votesMount } from './votes';
 
@@ -74,9 +76,11 @@ export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'deck_update_reuse', mount: deck_update_reuseMount },
   { file: 'influencer', mount: influencerMount },
   { file: 'influencer_analytics', mount: influencer_analyticsMount },
+  { file: 'influencer_offers', mount: influencer_offersMount },
   { file: 'influencer_payouts', mount: influencer_payoutsMount },
   { file: 'learning_lists', mount: learning_listsMount },
   { file: 'learning_stream', mount: learning_streamMount },
+  { file: 'public_handle', mount: public_handleMount },
   { file: 'team_platform_status', mount: team_platform_statusMount },
   { file: 'votes', mount: votesMount },
 ];

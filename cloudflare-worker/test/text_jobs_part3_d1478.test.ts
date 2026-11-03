@@ -101,7 +101,7 @@ test('a task\'s job yields to a rail press\'s page row; a job the caller names a
   try {
     const r: any = await run(pressed.env, { task: 'workspace_explain', userId: 4, rail, messages: [{ role: 'user', content: 'Explain.' }] });
     assert.equal(r.ok, true, JSON.stringify(r));
-    assert.equal(pressed.ran()[0], OSS120, 'the page row\'s Default');
+    assert.equal(pressed.ran()[0], OSS120, 'the press\'s own job (#4313: RA6, its option\'s), not the task\'s ST2');
   } finally { pressed.f.db.close(); }
   const named = world();
   try {

@@ -8,9 +8,16 @@
  *   GET  /who-knows?person=|company=|fund= the teammates who shared and know them, and how
  *   POST /who-knows/rank?person=|company=|fund= { query } — #3938 NE1: ranks exactly the people that
  *        read answers against what the member needs; each row is { ref, position, line }
- *   POST /intro-request                    { teammate, ref, note? } — asks the teammate; sends nothing to the contact
- *   GET  /intro-requests                   the requests I sent and received
- *   POST /intro-requests/:uid/decide       { decision: made | declined } — the teammate's answer
+ *   POST /intro-request                    { teammate, ref, note?, context_note? } — asks the teammate; sends nothing to the contact
+ *   GET  /intro-requests[?team=&status=]   the requests I sent and received, and my follow-ups due (D4329)
+ *   POST /intro-requests/:uid/decide       { decision: accepted | declined, note? } — the teammate's answer, once
+ *   POST /intro-requests/:uid/withdraw     the asker withdraws a request not yet answered
+ *   POST /intro-requests/:uid/outcome      { outcome, note? } — either side, once it is made
+ *   PUT  /intro-requests/:uid/follow-up    { due_on } — my own follow-up on it
+ *   POST /intro-requests/:uid/follow-up/done
+ *   POST /intro-requests/:uid/follow-up/snooze { until }
+ * Made is recorded when the teammate sends the intro from the Email composer
+ * (`POST /api/mail/send` with `intro_uid`, D4329), never by a press here.
  *
  * Private by default: the access rule is in each statement (`services/relationships.ts`).
  * A support session is refused: what a member shares is theirs to choose.
@@ -18,7 +25,10 @@
 import { Hono, type Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, selectJwt } from '../auth';
-import { decideIntro, introRequests, myTeams, RelationshipRefusal, requestIntro, setShare, whoKnows, whoKnowsQuery } from '../services/relationships';
+import {
+  decideIntro, followUpDone, introRequests, myTeams, recordOutcome, RelationshipRefusal, requestIntro, setFollowUp, setShare, snoozeFollowUp,
+  whoKnows, whoKnowsQuery, withdrawIntro,
+} from '../services/relationships';
 import { refuse } from '../util/refusal';
 import { railFor, refuseRun } from '../util/railContext';
 import { AI_SURFACE } from '../services/aiSurfaces';
@@ -122,13 +132,43 @@ relationships.post('/intro-request', async (c) => {
 relationships.get('/intro-requests', async (c) => {
   const user = await member(c);
   if (user instanceof Response) return user;
-  try { return c.json(await introRequests(c.env, user)); } catch (e) { return failure(c, e); }
+  try { return c.json(await introRequests(c.env, user, { team: c.req.query('team') || null, status: c.req.query('status') || null })); } catch (e) { return failure(c, e); }
 });
 
 relationships.post('/intro-requests/:uid/decide', async (c) => {
   const user = await member(c);
   if (user instanceof Response) return user;
-  try { return c.json({ request: await decideIntro(c.env, user, c.req.param('uid'), (await body(c)).decision) }); } catch (e) { return failure(c, e); }
+  try { const b = await body(c); return c.json({ request: await decideIntro(c.env, user, c.req.param('uid'), b.decision, b.note) }); } catch (e) { return failure(c, e); }
+});
+
+relationships.post('/intro-requests/:uid/withdraw', async (c) => {
+  const user = await member(c);
+  if (user instanceof Response) return user;
+  try { return c.json({ request: await withdrawIntro(c.env, user, c.req.param('uid')) }); } catch (e) { return failure(c, e); }
+});
+
+relationships.post('/intro-requests/:uid/outcome', async (c) => {
+  const user = await member(c);
+  if (user instanceof Response) return user;
+  try { return c.json({ request: await recordOutcome(c.env, user, c.req.param('uid'), await body(c)) }); } catch (e) { return failure(c, e); }
+});
+
+relationships.put('/intro-requests/:uid/follow-up', async (c) => {
+  const user = await member(c);
+  if (user instanceof Response) return user;
+  try { return c.json({ request: await setFollowUp(c.env, user, c.req.param('uid'), await body(c)) }); } catch (e) { return failure(c, e); }
+});
+
+relationships.post('/intro-requests/:uid/follow-up/done', async (c) => {
+  const user = await member(c);
+  if (user instanceof Response) return user;
+  try { return c.json({ request: await followUpDone(c.env, user, c.req.param('uid')) }); } catch (e) { return failure(c, e); }
+});
+
+relationships.post('/intro-requests/:uid/follow-up/snooze', async (c) => {
+  const user = await member(c);
+  if (user instanceof Response) return user;
+  try { return c.json({ request: await snoozeFollowUp(c.env, user, c.req.param('uid'), await body(c)) }); } catch (e) { return failure(c, e); }
 });
 
 export default relationships;

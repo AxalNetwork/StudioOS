@@ -9,6 +9,7 @@ import useForcedLightTheme from '../hooks/useForcedLightTheme';
 import { loadTurnstile } from '../lib/turnstile';
 import AxalLogo from '../components/AxalLogo';
 import AuthShell, { AuthCard } from '../components/auth/AuthShell';
+import { normaliseRef, readRefCookie } from '../lib/referralRef';
 
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
 
@@ -73,13 +74,11 @@ export default function RegisterPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const r = params.get('ref');
-    if (r) {
-      // Task #4 (DH) — Normalise to the new short form for display.
-      // Both formats still work server-side via resolveReferralCode().
-      const normalised = r.trim().toUpperCase().replace(/^AXAL[-_]?/, '').replace(/[^A-Z0-9]/g, '');
-      setRefCode(normalised || r.toUpperCase());
-    }
+    // D4289 P2 (#4291): `?ref` first, then the first-touch cookie (a handle's `h:jane`, or a code), so a
+    // visitor who arrived through a link and came back later still signs up attributed. A handle is never
+    // upper-cased into a code.
+    const r = params.get('ref') || readRefCookie();
+    if (r) setRefCode(normaliseRef(r) || r.toUpperCase());
     const l = params.get('lane');
     if (l && ['partner', 'investor', 'lp', 'founder'].includes(l)) {
       setLane(l);
