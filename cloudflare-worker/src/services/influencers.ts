@@ -438,7 +438,7 @@ export async function decideApplication(env: Env, adminId: number, uid: string, 
   }
 }
 
-export type Change = { tier?: Tier; status?: MemberStatus; reason: string };
+export type Change = { tier?: Tier; status?: MemberStatus; handle_takedown?: true; reason: string };
 
 /** `{ tier?, status?, reason }`: at least one change, always a reason. */
 export function readChange(b: any): Change {
@@ -452,7 +452,12 @@ export function readChange(b: any): Change {
     if (!(MEMBER_STATUSES as readonly string[]).includes(b.status)) throw refusal(400, 'unknown_status', 'The status is active, paused or ended.');
     out.status = b.status;
   }
-  if (out.tier === undefined && out.status === undefined) throw refusal(400, 'nothing_to_change', 'Change the tier, the status, or both.');
+  // D4289 P2 (#4291): HQ takes the handle down (D-c).
+  if (b.handle_takedown !== undefined) {
+    if (b.handle_takedown !== true) throw refusal(400, 'invalid_takedown', 'Send handle_takedown: true to take the handle down.');
+    out.handle_takedown = true;
+  }
+  if (out.tier === undefined && out.status === undefined && !out.handle_takedown) throw refusal(400, 'nothing_to_change', 'Change the tier, the status, or both, or take the handle down.');
   out.reason = reasonOf(b.reason, 'A change');
   return out;
 }
@@ -469,8 +474,22 @@ export async function changeInfluencer(env: Env, adminId: number, uid: string, c
   if (m.status === 'ended') throw refusal(409, 'influencer_ended', 'This membership has ended. The member can apply again.');
   const tier = change.tier ?? m.tier;
   const status = change.status ?? m.status;
-  if (tier === m.tier && status === m.status) throw refusal(409, 'nothing_changed', 'That is already this influencer\'s tier and status.');
+  if (change.handle_takedown && !m.handle) throw refusal(409, 'no_handle', 'This influencer has no handle to take down.');
+  if (tier === m.tier && status === m.status && !change.handle_takedown) throw refusal(409, 'nothing_changed', 'That is already this influencer\'s tier and status.');
   const at = sqlTime(now);
+  if (change.handle_takedown) {
+    const { takedownStatements } = await import('./influencerHandles');
+    const stmts = takedownStatements(env, m, adminId, now)!;
+    const out = await env.DB.batch([
+      ...stmts,
+      event(env, { userId: Number(m.user_id), influencerId: m.id, event: 'handle_taken_down', actor: adminId, at, detail: { handle: m.handle, reason: change.reason } }),
+    ]);
+    if (!Number(out[stmts.length - 1]?.meta?.changes)) throw refusal(409, 'influencer_changed', 'This influencer changed while you were looking. Read them again.');
+    if (tier === m.tier && status === m.status) {
+      return { membership: memberView((await memberOf(env, Number(m.user_id)))!), events: ['handle_taken_down'], before: { tier: m.tier, status: m.status, handle: m.handle } };
+    }
+    m.handle = null;
+  }
   const moved = await env.DB.prepare(
     'UPDATE influencers SET tier = ?, status = ?, updated_at = ? WHERE id = ? AND tier = ? AND status = ?',
   ).bind(tier, status, at, m.id, m.tier, m.status).run();
@@ -487,6 +506,7 @@ export async function changeInfluencer(env: Env, adminId: number, uid: string, c
       detail: ev === 'tier_changed' ? { from: m.tier, to: tier, reason: change.reason } : { from: m.status, to: status, reason: change.reason },
     })),
   ]);
+  if (change.handle_takedown) events.unshift('handle_taken_down');
   return { membership: memberView((await memberOf(env, userId))!), events, before: { tier: m.tier, status: m.status } };
 }
 

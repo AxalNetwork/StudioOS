@@ -188,6 +188,7 @@ export * from './api/programs.js';
 export * from './api/promoUsage.js';
 export * from './api/prospectBrief.js';
 export * from './api/publicAiModels.js';
+export * from './api/publicHandles.js';
 export * from './api/publicPricing.js';
 export * from './api/publish.js';
 export * from './api/railPrefs.js';
