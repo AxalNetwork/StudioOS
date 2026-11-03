@@ -10,4 +10,4 @@ codes.
 | `/admin/platform/decks/flags` | HD2 | `GET /api/admin/feature-flags` (D1509). Writes wait for K2 (#4189). |
 | `/admin/platform/decks/beta` | HD3 | None yet: K3 (#4190). |
 | `/admin/platform/decks/templates` | HD4 | `GET /api/decks/admin/recommend-overrides` (`overrides` and the engine's `defaults`), `GET /api/decks/methods` (D905); the Super Admin's `PUT` and `DELETE` of the same, each with a reason and an audit row (K4 #4191, D4155 §5). |
-| `/admin/platform/decks/norms` | HD5 | None yet: K5 (#4192). |
+| `/admin/platform/decks/norms` | HD5 | `GET`/`POST /api/admin/deck-stage-norms`, `PUT /:uid`, `POST /:uid/retire`, `GET /projects/:id` (`admin_deck_stage_norms.ts`, `requireHqAdmin`, migration `202611022230`; K5 #4192, D4155 §6). |

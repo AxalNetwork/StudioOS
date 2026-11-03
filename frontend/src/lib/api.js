@@ -4597,6 +4597,8 @@ export const api = {
     if (opts.from) qs.set('from', opts.from);
     if (opts.to) qs.set('to', opts.to);
     if (opts.kinds) qs.set('kinds', opts.kinds);
+    // D4154 (#4154): an admin's read-only staff scope, `studio` or `all` (D1206).
+    if (opts.scope && opts.scope !== 'mine') qs.set('scope', opts.scope);
     const s = qs.toString();
     return request(`/calendar/events${s ? `?${s}` : ''}`);
   },

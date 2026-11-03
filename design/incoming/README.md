@@ -113,6 +113,22 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-11-02 — Calendar admin scopes (#4154)
+
+The owner's two artifacts for #4154 (boards CA1–CA5), decoded by
+`scripts/read-canvas.mjs`:
+- `Calendar Admin Page.dc.html` is the page, one frame per `v` value (`ca1` to
+  `ca5d`; a `-d` suffix is dark);
+- `Calendar Admin · Boards.dc.html` is the board grid, CA1 to CA5. It imports
+  the page by name.
+
+**One edit, named.** The Axal VC mark (`uploads/axal-logo-200x200.png`) points
+at `/axal-mark.png`, as in the earlier intakes. No other value was edited.
+
+**Grade: EXTENDS the Calendar (D4154).** The Mine · Studio · Platform switcher
+and the read-only staff views over the scoped read D1206 already serves. Each
+item's owner, company, studio and link wait for C1 (#4196) and say so.
+
 ## Landed 2026-11-01 — One interview, and its session (#3710)
 
 The owner's artifacts `CoQEhHr637iFdxgpe2WKx9` (the page, `Interview Record Page.dc.html`)

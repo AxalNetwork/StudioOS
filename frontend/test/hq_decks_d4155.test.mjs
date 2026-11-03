@@ -37,7 +37,7 @@ test('Decks joins the Platform strip after Promo codes, in the list and in the c
 
 test('each build task names its issue, and only a landed one is live', () => {
   assert.deepEqual(Object.entries(BUILD).map(([k, b]) => [k, b.issue]), [['K1', 4188], ['K2', 4189], ['K3', 4190], ['K4', 4191], ['K5', 4192]]);
-  assert.deepEqual(Object.entries(BUILD).filter(([, b]) => b.live).map(([k]) => k), ['K4'], 'K4 (#4191) landed');
+  assert.deepEqual(Object.entries(BUILD).filter(([, b]) => b.live).map(([k]) => k), ['K4', 'K5'], 'K4 (#4191) and K5 (#4192) landed');
   assert.equal(notYet('K3'), 'Not switched on yet. The beta cohort arrives with #4190.');
 });
 
@@ -148,9 +148,11 @@ test('the reset client sends its reason in the body, never the URL', async () =>
   assert.doesNotMatch(url, /reason/, 'the URL carries sector and stage only');
 });
 
-test('the page writes only Resolve and the default templates, reads only mounted routes, and never shows an email', () => {
-  const calls = [...PAGE.matchAll(/\b(deckReportsApi|adminFeatureFlagsApi|api)\.(\w+)\(/g)].map((m) => `${m[1]}.${m[2]}`);
-  assert.deepEqual([...new Set(calls)].sort(), ['adminFeatureFlagsApi.list', 'api.deckMethods', 'api.deckRecommendOverrides', 'api.deckResetRecommendOverride', 'api.deckSetRecommendOverride', 'deckReportsApi.queue', 'deckReportsApi.resolve']);
+test('the page writes only Resolve, the default templates and the stage norms, reads only mounted routes, and never shows an email', () => {
+  const calls = [...PAGE.matchAll(/\b(deckReportsApi|adminFeatureFlagsApi|hqDeckStageNormsApi|api)\.(\w+)\(/g)].map((m) => `${m[1]}.${m[2]}`);
+  assert.deepEqual([...new Set(calls)].sort(), ['adminFeatureFlagsApi.list', 'api.deckMethods', 'api.deckRecommendOverrides', 'api.deckResetRecommendOverride', 'api.deckSetRecommendOverride',
+    'deckReportsApi.queue', 'deckReportsApi.resolve',
+    'hqDeckStageNormsApi.add', 'hqDeckStageNormsApi.edit', 'hqDeckStageNormsApi.list', 'hqDeckStageNormsApi.projectNorms', 'hqDeckStageNormsApi.retire']);
   assert.doesNotMatch(PAGE, /\.email\b/);
   assert.doesNotMatch(PAGE.replace(/NORM_RULE/g, ''), /\badvis(or|e)\b/i);
   assert.equal(reasonOk('ten chars!'), true);
