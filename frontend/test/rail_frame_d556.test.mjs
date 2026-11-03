@@ -158,7 +158,10 @@ test('the frame is the founder panel: docked, stretched, seamed, grounded, colla
   assert.match(col, /width:\s*calc\(var\(--fwr-track,\s*280px\) \+ var\(--fwr-ask, 0px\)\)/, 'the column must collapse to the spine (and widen for the Ask panel, D1443 AK12)');
   assert.match(col, /border-left:\s*1px solid/, 'the seam against the body');
   assert.match(col, /background:\s*#fff/, 'the panel ground');
-  assert.match(col, /padding:\s*18px 18px 28px/, 'the panel inset');
+  // #4260: the inset is the rail's own, so the Ask panel docked to the rail's box meets the column's top, foot and seam.
+  assert.doesNotMatch(col, /padding:/, 'a padded column insets the docked Ask panel from the header, the foot and the seam');
+  assert.match(col, /display:\s*flex;\s*flex-direction:\s*column/, 'the column is a flex column, so the rail fills its height');
+  assert.match(rule('.fwr-frame-dock > aside.fwr'), /flex:\s*1 0 auto;[^}]*padding:\s*18px 18px 28px/, 'the panel inset, on the rail that fills the column');
   const dock = rule('.fwr-frame-dock');
   // The rail has no scrollbar of its own: it flows with the page, so a rail
   // taller than the window is read with the page's one scrollbar.
