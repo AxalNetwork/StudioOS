@@ -22,9 +22,11 @@ import { LIVE_LATER, buildingLine, elapsedLine } from './oneClickModel';
  *
  * D1502 part 2 (#3753): `batch` now reads a run, but the build drawn here
  * starts none (`POST /api/decks/generate` is still synchronous), so the line
- * stays greyed until a route admits runs (`areasGenerate`, #3764), and its
- * title names that route's issue.
+ * stays greyed. D1512 (#3764) admits runs for areas, but this build is still
+ * not one of them: the line stays greyed until the one-click build starts a
+ * run (#3768), and its title says so.
  */
+export const BUILD_NOT_A_RUN = 'The one-click build is not a generation run yet; live progress per card arrives with #3768.';
 
 const MUTED = 'text-[12.5px] leading-[1.45] text-axal-muted dark:text-gray-400';
 const INK = 'text-axal-ink dark:text-gray-100';
@@ -41,7 +43,7 @@ export default function BuildProgress({ cards = null, titles = [], startedAt = n
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, [startedAt]);
-  const live = availability('batch') ?? availability('areasGenerate');
+  const live = availability('batch') ?? { available: false, reason: BUILD_NOT_A_RUN };
   return (
     <section className="flex flex-col gap-2.5" data-testid={testId}>
       <span className={`text-[14px] font-extrabold ${INK}`}>Building your deck</span>
