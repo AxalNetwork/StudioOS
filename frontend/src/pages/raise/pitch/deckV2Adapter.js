@@ -56,6 +56,7 @@ import { deckGridApi } from '../../../lib/api/deckGrid.js';
 import { deckImageEditsApi } from '../../../lib/api/deckImageEdits.js';
 import { deckImagesApi } from '../../../lib/api/deckImages.js';
 import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks.js';
+import { deckJudgeApi } from '../../../lib/api/deckJudge.js';
 import { deckLayoutsApi } from '../../../lib/api/deckLayouts.js';
 import { deckMediaApi } from '../../../lib/api/deckMedia.js';
 import { deckModelPresetsApi } from '../../../lib/api/deckModelPresets.js';
@@ -91,6 +92,7 @@ export const SURFACES = Object.freeze({
   elementModels: { issue: 3754, what: 'A model per element in the AIRail' },
   areasQuote: { issue: 3764, what: 'One quote and one hold for several areas' },
   areasGenerate: { issue: 3764, what: 'Generate into several areas, with variants' },
+  judge: { issue: 3783, what: 'Rank the variants' },
   history: { issue: 3767, what: 'Undo and redo' },
   narrativeOutline: { issue: 3768, what: 'An outline from the investor narrative' },
   instruct: { issue: 3773, what: 'An instruction on several areas' },
@@ -199,6 +201,9 @@ export const areasGenerate = ({ deckId, card, areas, variants, cls, quoteUid, on
  * `gridOps.js` (its reducers and the 100-step history) and is not a client call: it has no contract.
  */
 export const history = async () => Object.freeze({ available: true, value: gridOps });
+// D1525 (#3783): one area's variants, ranked blind by a judge of another family than the writers'. Without `run`,
+// its quote (runs nothing); with it, the ranking. It never accepts: Accept stays the founder's.
+export const judge = (proposalUid, { run = false } = {}) => through(() => (run ? deckJudgeApi.rank(proposalUid) : deckJudgeApi.quote(proposalUid)), SURFACES.judge.issue);
 export const narrativeOutline = off('narrativeOutline');
 export const instruct = off('instruct');
 /** D1522 (#3774): the deck's stage plan — the order for its stage, a why line per card, and missing-proof warnings. */
