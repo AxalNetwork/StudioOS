@@ -51,6 +51,8 @@ import { dirOf } from '../services/decks/designSystem';
 import { ODP_MIMETYPE, writeOdp } from '../services/decks/odp';
 import { visibleCards } from '../services/decks/slideModel';
 import { stripTrailingSlashes } from '../util/url';
+import { aiImagesOf, markImages } from '../services/decks/aiMarking';
+import { pdfLangOf } from '../services/decks/pdfExport';
 import { DECK_PAGE_LOAD_MS, MAX_SLIDE_PNG_BYTES, renderUrl } from '../services/browserRun';
 
 const deckExports = new Hono<{ Bindings: Env }>();
@@ -137,12 +139,17 @@ export async function fetchImages(urls: string[]): Promise<Map<string, { kind: I
   return out;
 }
 
-/** Each URL → a `data:` URI, or null when it could not be fetched, was too large, or is not a raster image. */
-export async function inlineImages(urls: string[]): Promise<Map<string, string | null>> {
-  const out = new Map<string, string | null>();
-  for (const [u, g] of await fetchImages(urls)) out.set(u, g ? imageDataUri(g.kind, g.bytes) : null);
-  return out;
+/**
+ * D1578 (#3825): the images an export embeds, each AI-drawn one marked in its
+ * own file (IPTC DigitalSourceType and the model id, `aiMarking.markImages`),
+ * so the mark survives the PowerPoint, .odp, HTML and Google Slides files.
+ */
+export async function markedImages(env: Env, projectId: number, slides: any[], urls: string[] = imageUrlsOf(slides)): Promise<Map<string, { kind: ImageKind; bytes: Uint8Array } | null>> {
+  const images = await fetchImages(urls);
+  markImages(images, await aiImagesOf(env, projectId, slides));
+  return images;
 }
+
 
 /** At most this many distinct bound series are read for one file. */
 export const BOUND_SERIES_MAX = 24;
@@ -194,7 +201,8 @@ deckExports.post('/:id/export/html', async (c) => {
   const brand = await ventureBrand(c.env, Number(row.project_id));
   const urls = imageUrlsOf(slides);
   if (brand.watermark_url) urls.push(brand.watermark_url);
-  const images = await inlineImages(urls);
+  // D1578: the HTML file's pictures are its embedded bytes, each AI-drawn one marked.
+  const images = new Map([...(await markedImages(c.env, Number(row.project_id), slides, urls))].map(([u, g]) => [u, g ? imageDataUri(g.kind, g.bytes) : null] as const));
   const html = await writeOfflineDeck({
     title: row.title || 'Pitch deck',
     version: row.version ?? null,
@@ -277,7 +285,7 @@ deckExports.post('/:id/export/odp', async (c) => {
   const brand = await ventureBrand(c.env, Number(row.project_id));
   const urls = imageUrlsOf(slides);
   if (brand.watermark_url) urls.push(brand.watermark_url);
-  const images = await fetchImages(urls);
+  const images = await markedImages(c.env, Number(row.project_id), slides, urls);
   const odp = await writeOdp({
     title: row.title || 'Pitch deck', version: row.version ?? null, slides, renderable: pages, images, brand, compliance: deckCompliance(slides, themeOfRow(row)),
     notes: opts.notes, chartShot: await chartShotFor(c, row, opts, copied.imageCopies),
@@ -338,13 +346,14 @@ deckExports.post('/:id/export/google-slides', async (c) => {
   const opts = { notes: body?.notes === true, sources: body?.sources === true };
   const { slides, renderable } = exportDeckOf(row, opts);
   const brand = await ventureBrand(c.env, Number(row.project_id));
-  const images = await fetchImages(imageUrlsOf(slides));
+  const images = await markedImages(c.env, Number(row.project_id), slides);
 
   const chartShot = await chartShotFor(c, row, opts, copied.imageCopies);
   // D1571 (#3818): an Arabic or Hebrew deck's words read right to left in the editable file too.
   // D1574 (#3821): the same writer as the PowerPoint download — native charts from the stores' points.
   const series = await boundSeries(c.env, Number(row.project_id), slides);
-  const deck = await writeEditableDeck({ slides, renderable: renderable.slides, brand, notes: opts.notes, images, chartShot, compliance: deckCompliance(slides, themeOfRow(row)), dir: dirOf(themeOfRow(row)?.lang, themeOfRow(row)?.dir), series });
+  const deck = await writeEditableDeck({ slides, renderable: renderable.slides, brand, notes: opts.notes, images, chartShot, compliance: deckCompliance(slides, themeOfRow(row)), dir: dirOf(themeOfRow(row)?.lang, themeOfRow(row)?.dir), series,
+    meta: { title: row.title || 'Pitch deck', lang: pdfLangOf(themeOfRow(row)) } });
   const hash = await sha256Hex(deck.bytes);
 
   let created;
@@ -449,8 +458,9 @@ deckExports.post('/:id/export', async (c, next) => {
   const theme = themeOfRow(row);
   const deck = await writeEditableDeck({
     slides, renderable: renderable.slides, brand: await deckOwnerBrand(c.env, projectId), notes: opts.notes,
-    images: await fetchImages(imageUrlsOf(slides)), chartShot: await chartShotFor(c, row, opts, copied.imageCopies),
+    images: await markedImages(c.env, projectId, slides), chartShot: await chartShotFor(c, row, opts, copied.imageCopies),
     compliance: deckCompliance(slides, theme), dir: dirOf(theme?.lang, theme?.dir), series: await boundSeries(c.env, projectId, slides),
+    meta: { title: row.title || 'Pitch deck', lang: pdfLangOf(theme) },
   });
   await auditDeckWrite(c, user, projectId, 'deck_exported', 'Deck exported');
   const fname = (row.title || 'pitch-deck').replace(/[^A-Za-z0-9_-]+/g, '-').slice(0, 80);
