@@ -51,6 +51,7 @@ import { deckFiguresApi } from '../../../lib/api/deckFigures.js';
 import { deckGridApi } from '../../../lib/api/deckGrid.js';
 import { deckImageEditsApi } from '../../../lib/api/deckImageEdits.js';
 import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks.js';
+import { deckMediaApi } from '../../../lib/api/deckMedia.js';
 import { deckModelPresetsApi } from '../../../lib/api/deckModelPresets.js';
 import { deckRehearsalsApi } from '../../../lib/api/deckRehearsals.js';
 import { deckRemixApi } from '../../../lib/api/deckRemix.js';
@@ -102,6 +103,8 @@ export const SURFACES = Object.freeze({
   saveAsTemplate: { issue: 3782, what: 'Save as my template' },
   typedTables: { issue: 3787, what: 'Data sheet, market circles and projection charts' },
   media: { issue: 3788, what: 'Sections, hide, appendix, buttons and recorded video' },
+  pasteCards: { issue: 3788, what: 'Paste cards from another deck' },
+  buttonClicks: { issue: 3788, what: 'Clicks on a deck\'s buttons' },
   presets: { issue: 3796, what: 'Fast, Balanced, Best and Custom presets' },
   orgLocks: { issue: 3786, what: 'A model pick locked by HQ' },
   critique: { issue: 3799, what: 'Fix with critique' },
@@ -233,7 +236,16 @@ export const myTemplates = () => through(() => deckTemplatesApi.myTemplates(), S
 export const saveAsTemplate = (deckId, name) => through(() => deckTemplatesApi.saveAsTemplate(deckId, name), SURFACES.saveAsTemplate.issue);
 /** D1538 (#3787): the figures typed for the deck, each Stated, with who typed it. */
 export const typedTables = (deckId) => through(() => deckTypedValuesApi.list(deckId), SURFACES.typedTables.issue);
-export const media = off('media');
+/**
+ * D1545 (#3788): recorded video. `media(deckId, file)` uploads an MP4 and answers the video a block names
+ * (`{ video: { provider: 'mp4', video_id, url } }`). Its row being swapped turns on Hide and Move to section,
+ * Recorded video and Button, which have no route of their own.
+ */
+export const media = (deckId, file) => through(() => deckMediaApi.uploadVideo(deckId, file), SURFACES.media.issue);
+/** D1545: another deck's cards, as a save keeps them, for the editor to place (`{ cards, missing }`); nothing is saved. */
+export const pasteCards = (deckId, fromDeckId, cardUids) => through(() => deckMediaApi.paste(deckId, fromDeckId, cardUids), SURFACES.pasteCards.issue);
+/** D1545: each pressed button's clicks and viewers (`{ buttons: [{ card_uid, block_id, clicks, viewers }] }`). */
+export const buttonClicks = (deckId) => through(() => deckMediaApi.buttonClicks(deckId), SURFACES.buttonClicks.issue);
 /** D1549 (#3796): the deck's preset in force, each group's model per preset, and HQ's locks (`GET /api/decks/:id/model-presets`). */
 export const presets = (deckId) => through(() => deckModelPresetsApi.read(deckId), SURFACES.presets.issue);
 /** D1549 (#3796, the row is #3786's): each element group HQ locked, with "Set by Axal VC HQ" — the same reply's `locks`. */

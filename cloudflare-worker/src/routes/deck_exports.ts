@@ -47,6 +47,7 @@ import { createPresentation, driveName } from '../services/google/driveCreate';
 import { writeEditableDeck, type ChartShot } from '../services/decks/pptxEditable';
 import { dirOf } from '../services/decks/designSystem';
 import { ODP_MIMETYPE, writeOdp } from '../services/decks/odp';
+import { visibleCards } from '../services/decks/slideModel';
 import { stripTrailingSlashes } from '../util/url';
 import { DECK_PAGE_LOAD_MS, MAX_SLIDE_PNG_BYTES, renderUrl } from '../services/browserRun';
 
@@ -159,7 +160,8 @@ deckExports.post('/:id/export/html', async (c) => {
   let slides: any[] = [];
   try { slides = JSON.parse(row.slides || '[]'); } catch { slides = []; }
   if (!Array.isArray(slides)) slides = [];
-  slides = slides.slice(0, 60);
+  // D1545 (#3788): a hidden card is not in the HTML file.
+  slides = visibleCards(slides).slice(0, 60);
 
   const brand = await ventureBrand(c.env, Number(row.project_id));
   const urls = imageUrlsOf(slides);

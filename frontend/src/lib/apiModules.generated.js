@@ -97,6 +97,7 @@ export * from './api/deckGrid.js';
 export * from './api/deckImageEdits.js';
 export * from './api/deckImages.js';
 export * from './api/deckInvestorLinks.js';
+export * from './api/deckMedia.js';
 export * from './api/deckModelPresets.js';
 export * from './api/deckPreflight.js';
 export * from './api/deckPublish.js';

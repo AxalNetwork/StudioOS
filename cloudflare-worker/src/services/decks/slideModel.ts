@@ -86,7 +86,8 @@ export const ACCENT_CONTRAST = 4.5;
 
 export type Grid = { c1: number; c2: number; r1: number; r2: number };
 
-export const BLOCK_KINDS = ['text', 'chart', 'graphic', 'image', 'video', 'audio', 'link', 'metric', 'table'] as const;
+// D1545 (#3788): `button`, a call to action whose clicks a share link counts.
+export const BLOCK_KINDS = ['text', 'chart', 'graphic', 'image', 'video', 'audio', 'link', 'metric', 'table', 'button'] as const;
 export type BlockKind = typeof BLOCK_KINDS[number];
 
 /** The chart library (PD9b), in the canvas's order. */
@@ -156,8 +157,15 @@ export function gridOf(v: any): Grid | null {
 
 const overlaps = (a: Grid, z: Grid) => a.c1 <= z.c2 && z.c1 <= a.c2 && a.r1 <= z.r2 && z.r1 <= a.r2;
 
-/** A YouTube or Vimeo link, read without a fetch; null for anything else. */
-export function videoOf(raw: unknown): { provider: 'youtube' | 'vimeo'; video_id: string; url: string } | null {
+/** D1545 (#3788): the providers a video block names. `mp4` is a file uploaded to the deck (`deck_media.ts`). */
+export const VIDEO_PROVIDERS = ['youtube', 'vimeo', 'loom', 'mp4'] as const;
+export type VideoProvider = typeof VIDEO_PROVIDERS[number];
+const VIDEO_UID = /^[0-9a-f-]{36}$/;
+/** D1545: an uploaded video's file path, on the app's own host. */
+export const VIDEO_FILE_PATH = (uid: string) => `/api/decks/videos/${uid}/file`;
+
+/** A YouTube, Vimeo or Loom link, read without a fetch; null for anything else. */
+export function videoOf(raw: unknown): { provider: 'youtube' | 'vimeo' | 'loom'; video_id: string; url: string } | null {
   if (typeof raw !== 'string' || raw.length > 500) return null;
   let u: URL;
   try { u = new URL(raw.trim()); } catch { return null; }
@@ -171,10 +179,39 @@ export function videoOf(raw: unknown): { provider: 'youtube' | 'vimeo'; video_id
   } else if (host === 'vimeo.com') {
     id = /^\/(\d{6,12})(?:\/|$)/.exec(u.pathname)?.[1] ?? null;
     return id ? { provider: 'vimeo', video_id: id, url: `https://vimeo.com/${id}` } : null;
+  } else if (host === 'loom.com') {
+    // D1545 (#3788): a Loom share or embed link; its id is 32 hex characters.
+    id = /^\/(?:share|embed)\/([0-9a-f]{32})(?:\/|$)/.exec(u.pathname)?.[1] ?? null;
+    return id ? { provider: 'loom', video_id: id, url: `https://www.loom.com/share/${id}` } : null;
   }
   if (!id || !/^[A-Za-z0-9_-]{11}$/.test(id)) return null;
   return { provider: 'youtube', video_id: id, url: `https://www.youtube.com/watch?v=${id}` };
 }
+
+/**
+ * D1545: a video uploaded to the deck: its uid and its file on the app's own
+ * host (`deck_media.ts` serves it). Any other address is refused, so a block
+ * never plays a file from elsewhere under the deck's name.
+ */
+function uploadedVideoOf(v: any, url: UrlGuard): { provider: 'mp4'; video_id: string; url: string } | null {
+  const uid = typeof v?.video_id === 'string' ? v.video_id.toLowerCase() : '';
+  if (!VIDEO_UID.test(uid) || typeof v?.url !== 'string') return null;
+  const safe = url(v.url);
+  if (!safe) return null;
+  try { if (new URL(safe).pathname !== VIDEO_FILE_PATH(uid)) return null; } catch { return null; }
+  return { provider: 'mp4', video_id: uid, url: safe };
+}
+
+export const BUTTON_STYLES = ['primary', 'secondary'] as const;
+export const BUTTON_LABEL_MAX = 60;
+
+/**
+ * D1545 (#3788): the cards a reader sees. A hidden card stays in the
+ * founder's own deck and in every version, and is left out of Present, the
+ * share page, the print page the PDF and PowerPoint photograph, and every
+ * export.
+ */
+export const visibleCards = <T>(cards: T[]): T[] => (Array.isArray(cards) ? cards.filter((c: any) => !(c && typeof c === 'object' && c.hidden === true)) : []);
 
 const IMAGE_ID = /^[0-9a-f-]{36}$/;
 type Background = { color: string | null; image_url: string | null; image_id?: string; overlay?: string };
@@ -387,8 +424,18 @@ function blockBody(kind: BlockKind, v: any, url: UrlGuard, ground = '#ffffff'): 
       return out;
     }
     case 'video': {
-      const vid = videoOf(v.url);
-      return vid ? { ...vid, poster_url: typeof v.poster_url === 'string' ? url(v.poster_url) : null, ratio: oneOf(v.ratio, VIDEO_RATIOS) ?? '16:9', title: str(v.title, 200) } : null;
+      const vid = v?.provider === 'mp4' ? uploadedVideoOf(v, url) : videoOf(v.url);
+      if (!vid) return null;
+      const out: Record<string, unknown> = { ...vid, poster_url: typeof v.poster_url === 'string' ? url(v.poster_url) : null, ratio: oneOf(v.ratio, VIDEO_RATIOS) ?? '16:9', title: str(v.title, 200) };
+      // D1545: an uploaded file may loop; a provider's player decides for itself.
+      if (vid.provider === 'mp4' && v.loop === true) out.loop = true;
+      return out;
+    }
+    case 'button': {
+      // D1545: a call to action: its words, where it goes (https on a public host) and its weight.
+      const u = typeof v.url === 'string' ? url(v.url) : null;
+      const label = str(v.label, BUTTON_LABEL_MAX);
+      return u && label ? { url: u, label, style: oneOf(v.style, BUTTON_STYLES) ?? 'primary' } : null;
     }
     case 'audio':
     case 'link': {
@@ -534,9 +581,10 @@ export function modelProblems(slides: unknown, url: UrlGuard): string[] {
       if (placed.some((p) => overlaps(p, grid))) out.push(`${where}: it overlaps another block.`);
       placed.push(grid);
       if (!blockBody(kind, v, url, groundOf(s))) {
-        out.push(kind === 'video' ? `${where}: the video must be a YouTube or Vimeo link.`
+        out.push(kind === 'video' ? `${where}: the video must be a YouTube, Vimeo or Loom link, or a video uploaded to this deck.`
           : kind === 'table' ? `${where}: a table needs at least one row and one cell.`
-            : `${where}: the link must be https on a public host.`);
+            : kind === 'button' ? `${where}: a button needs its words (at most ${BUTTON_LABEL_MAX} characters) and a link that is https on a public host.`
+              : `${where}: the link must be https on a public host.`);
       }
       if (kind === 'table' && Array.isArray(v?.rows) && (v.rows.length > TABLE_ROWS || v.rows.some((row: unknown) => Array.isArray(row) && row.length > TABLE_COLS))) {
         out.push(`${where}: a table holds at most ${TABLE_COLS} columns and ${TABLE_ROWS} rows.`);
