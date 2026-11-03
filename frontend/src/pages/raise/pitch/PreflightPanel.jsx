@@ -12,8 +12,8 @@ import { railPressHeaders } from '../../../lib/railPage';
 import { refusalOf } from './newDeckModel';
 import {
   ADD_TOKENS, ASK_FIX, BUILD, DIRTY_LINE, DISMISS, FIX_FIRST, FIX_WAITING, FREE_LINE, GROUPS, GROUP_NOTES, HELD_HERE, KEEP_EDITING, LATER,
-  NOTHING_TO_FIX, NOT_A_PASS, NOT_KEPT, OUT_OF_DATE, READER_LINE, RECHECK, RECHECK_NOW, SHOW_ME, STALE_LINE, TITLE, TOKENS_OUT, TRY_AGAIN, UNDO,
-  canAskFix, chargedLine, checkingLine, countsLine, fixBody, fixedLine, fixedSince, holdLine, notYet, passedLine, percent, slideState, stepOf,
+  NOTHING_TO_FIX, NOT_A_PASS, NOT_KEPT, OUT_OF_DATE, READER_LINE, RECHECK, RECHECK_NOW, RETRYING, SHOW_ME, STALE_LINE, TITLE, TOKENS_OUT, TRY_AGAIN, UNDO,
+  canAskFix, chargedLine, checkingLine, countsLine, fixBody, fixedLine, fixedSince, holdLine, notYet, passedLine, percent, retryLabel, slideState, stepOf,
   subLine, uncheckedBanner,
 } from './preflightUiModel';
 
@@ -121,7 +121,7 @@ function FixAction({ fix, testId }) {
 }
 
 /** One finding (pf2): the slide number, where, the defect, why it matters, and its actions. */
-function FindingRow({ row, n, stale = false, readOnly = false, compact = false, fix = null, onShow, onDismiss, testId }) {
+function FindingRow({ row, n, stale = false, readOnly = false, compact = false, fix = null, onShow, onDismiss, onRetry = null, retrying = false, testId }) {
   const askable = !readOnly && Boolean(fix);
   return (
     <li className={`${BOX} flex gap-3`} aria-label={row.label} data-testid={testId}>
@@ -138,6 +138,11 @@ function FindingRow({ row, n, stale = false, readOnly = false, compact = false, 
         <span className="mt-1 flex flex-wrap items-center gap-1.5">
           {onShow && (row.card != null || row.firstCard != null) ? <button type="button" className={GHOST} onClick={() => onShow(row)} data-testid={`${testId}-show`}>{SHOW_ME}</button> : null}
           {!compact && onDismiss && row.dismissible && !readOnly ? <button type="button" className={GHOST} onClick={() => onDismiss(row)} data-testid={`${testId}-dismiss`}>{DISMISS}</button> : null}
+          {/* #3661 pf5c: a slide that couldn't be checked is tried again on its own. */}
+          {onRetry && row.slide != null ? (
+            <button type="button" className={GHOST} disabled={retrying} aria-busy={retrying || undefined} aria-label={retryLabel(row.slide)}
+              onClick={() => onRetry(row)} data-testid={`${testId}-retry`}>{retrying ? RETRYING : TRY_AGAIN}</button>
+          ) : null}
           {!compact && askable && BUILD.P2.live && !stale ? <FixAction fix={fix} testId={testId} /> : null}
           {!compact && askable && !BUILD.P2.live ? (
             <button type="button" className={OFF} aria-disabled="true" title={notYet()} data-testid={`${testId}-ask`}>
@@ -262,7 +267,9 @@ export function PreflightPanel({ pf, version, readOnly = false, deckId = null, t
             ) : null}
             {g.unchecked.length ? (
               <Group title={GROUPS.unchecked} count={g.unchecked.length} tag={NOT_A_PASS} testId="pitch-preflight-unchecked">
-                {g.unchecked.map((r) => <FindingRow key={r.id} row={{ ...r, dismissible: false }} stale={stale} readOnly compact={false} onShow={onShow} testId={`pitch-preflight-row-${r.id.replace(':', '-')}`} />)}
+                {g.unchecked.map((r) => <FindingRow key={r.id} row={{ ...r, dismissible: false }} stale={stale} readOnly compact={false} onShow={onShow}
+                  onRetry={!readOnly && !pf.running && pf.retry ? (x) => pf.retry(x.card) : null} retrying={pf.retrying?.index === r.card}
+                  testId={`pitch-preflight-row-${r.id.replace(':', '-')}`} />)}
               </Group>
             ) : null}
             {g.passed.length ? (
@@ -342,7 +349,8 @@ export function FindingStrip({ rows, id, onStep, onBack, onClose }) {
   return (
     <div className="mb-2 flex flex-wrap items-center gap-2 rounded-[12px] border border-violet-200 bg-violet-50 px-3 py-2 dark:border-violet-900 dark:bg-violet-950/40" role="region" aria-label={s.line} data-testid="pitch-preflight-strip">
       <button type="button" className={GHOST} onClick={onBack} data-testid="pitch-preflight-strip-back"><ChevronLeft size={14} aria-hidden="true" />{TITLE}</button>
-      <span className="flex min-w-0 flex-1 flex-col">
+      {/* #3661 (pf5g): on a phone the finding takes its own row above the buttons. */}
+      <span className="flex min-w-0 flex-1 flex-col max-sm:order-first max-sm:basis-full">
         <span className={EYE}>{s.line} · {row.where}</span>
         <span className={`truncate text-[12.5px] font-bold ${INK}`} aria-live="polite">{row.headline}</span>
       </span>

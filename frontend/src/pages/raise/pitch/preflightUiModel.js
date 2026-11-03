@@ -139,8 +139,47 @@ export function rowOf(finding, slides) {
     detail: finding.detail,
     fix: finding.fix,
     label: `Slide ${finding.card + 1}, ${name.toLowerCase()}, ${line.replace(/\.$/, '').replace(/^./, (c) => c.toLowerCase())}`,
+    // #3661 PF3: a contrast finding's colour pair, for the card beside the slide.
+    pair: finding.pair ?? null,
   };
 }
+
+// ── #3661 PF3: the finding drawn on its slide ───────────────────────────────
+
+export const CLIP_LEGEND = 'The red line is the edge of the block. The greyed words past it are hidden in the export.';
+export const PAIR_TITLE = 'The contrast pair';
+export const PAIR_LEGEND = 'Shown with its colour pair. It is a warning: the text can still be read up close, not from the back of the room.';
+// The model's own figure (two places), so the card and the finding's line agree.
+const ratioWords = (n) => `${Number(n)} : 1`;
+
+/**
+ * What the slide overlay draws for a finding, or null when it has no slide:
+ *   · `clip`: cut-off text, drawn as exported, the hidden words greyed past the block's edge;
+ *   · `contrast`: the block outlined, beside it the text and background colours and their ratio;
+ *   · `outline`: any other finding about a block, outlined and numbered.
+ * `n` is the finding's number in the strip. `current` false means the deck was edited after the
+ * check: the overlay draws the slide as it was checked, and says so.
+ */
+export function overlayOf(row, { n = 1, aspect = '16:9', current = true } = {}) {
+  if (!row || !Number.isInteger(row.card)) return null;
+  const tone = row.severity === SEVERITY.blocking ? 'fix' : 'look';
+  const kind = row.check === 'overflow' ? 'clip' : row.check === 'contrast' && row.pair ? 'contrast' : 'outline';
+  const as = kind === 'clip' ? ' · as exported' : '';
+  return {
+    kind, tone, n, card: row.card, block: row.block ?? null,
+    eyebrow: `Slide ${row.slide} · ${aspect}${as}${current ? '' : ' · as checked, before your edit'}`,
+    legend: { title: row.headline, detail: kind === 'clip' ? CLIP_LEGEND : kind === 'contrast' ? PAIR_LEGEND : (row.detail || '') },
+    pair: kind === 'contrast' ? {
+      fg: row.pair.fg, bg: row.pair.bg, ratio: ratioWords(row.pair.ratio), reads: `${ratioWords(row.pair.min)} reads reliably`,
+      label: `Text ${row.pair.fg} on ${row.pair.bg}: contrast ${ratioWords(row.pair.ratio)}, ${ratioWords(row.pair.min)} needed`,
+    } : null,
+    label: `${row.label}. ${kind === 'clip' ? CLIP_LEGEND : ''}`.trim(),
+  };
+}
+
+/** pf5c: a slide that couldn't be checked is tried again on its own. */
+export const RETRYING = 'Checking…';
+export const retryLabel = (slide) => `Try again to check slide ${slide}`;
 
 const UNMEASURED_LINES = {
   overflow: 'Cut-off text needs the slide drawn at export size, and it was not measured.',

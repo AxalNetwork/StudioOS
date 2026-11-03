@@ -162,9 +162,11 @@ export function runPreflight(deck, { kit = null, refresh = null, measurements = 
   const slides = Array.isArray(deck?.slides) ? deck.slides : [];
   const colours = cardColours(deck?.theme, kit);
   const findings = [];
-  const add = (check, severity, card, block, title, detail, fix) => findings.push({
+  // `extra` carries what the slide overlay draws (#3661 PF3): a contrast finding's colour pair.
+  const add = (check, severity, card, block, title, detail, fix, extra = null) => findings.push({
     id: `${check}:${card}:${block ?? '-'}:${findings.filter((f) => f.check === check && f.card === card && f.block === (block ?? null)).length}`,
     check, severity, card, block: block ?? null, title, detail, fix, dismissible: severity === SEVERITY.warning,
+    ...(extra ? extra : {}),
   });
   const measured = measurements && typeof measurements === 'object' ? measurements : null;
   const stale = new Map();
@@ -211,7 +213,7 @@ export function runPreflight(deck, { kit = null, refresh = null, measurements = 
         if (bg) {
           const ratio = contrast(colours.ink, bg);
           const min = b.style === 'heading' ? CONTRAST_LARGE : CONTRAST_BODY;
-          if (ratio !== null && ratio < min) add('contrast', SEVERITY.warning, i, b.id, `${where}: the text contrast is ${ratio}:1.`, `It needs ${min}:1 on this background.`, 'Change the card background or the theme.');
+          if (ratio !== null && ratio < min) add('contrast', SEVERITY.warning, i, b.id, `${where}: the text contrast is ${ratio}:1.`, `It needs ${min}:1 on this background.`, 'Change the card background or the theme.', { pair: { fg: colours.ink, bg, ratio, min } });
         }
       }
       if (b.kind === 'image') {
