@@ -1,0 +1,13 @@
+### Influencer offers Worker contract (D4293, #4293)
+
+These are Worker routes in `routes/influencer_offers.ts`, backed by `services/influencerOffers.ts` and migration `202611031420_influencer_offers.sql`. An offer is a Promos code (D1270) with an owning influencer, a budget in one currency and a status. Checkout applies it to a member the influencer referred, when no code is typed; a typed code always wins and only one code is ever sent. The budget is spent from `promo_redemptions.discount_cents`, per currency. No frontend method yet: P7 (#4296) and P9 (#4298) add them with their screens.
+
+| Route | Who | What it answers |
+| --- | --- | --- |
+| `GET /api/admin/influencers/:uid/offers` | Super Admin | The influencer's offers, as their own read below. `:uid` is the influencer's account uid; an account with no `referral_partners` row is 404 `influencer_not_found`. |
+| `POST /api/admin/influencers/:uid/offers` | Super Admin, write bar | `{ promo_id, budget_cents, currency, featured?, reason }` links a Promos code (201 `{ offer }`). Refusals: 400 `reason_required` (under 10 characters), `promo_required`, `budget_required`, `currency_required`, `currency_mismatch` (an amount-off code in another currency); 404 `promo_not_found`; 409 `promo_ended`, `promo_owned` (a code has one owner), `terms_budget_exceeded` (the terms' `offer_budget_cents`). Audited `influencer_offer_linked`. |
+| `PATCH /api/admin/influencers/:uid/offers/:offerUid` | Super Admin, write bar | `{ status?, budget_cents?, featured?, reason }`: pause, resume, end, re-budget, feature (one featured offer per influencer). 409 `offer_ended` once ended; 400 `invalid_status`. Audited `influencer_offer_changed`, with before and after. |
+| `GET /api/influencer/me/offers` | signed in | `{ offers }`, the caller's own: `plans` ("Every plan" or names), `intervals`, `discount` in words, `who_for`, `uses`, `discount_given` per currency, `uses_without_recorded_discount`, `budget`, `remaining_budget` (`budget_used`), `ends_at` ("No end date"), `status` and `code_state` (live, paused, ended, expired, unreadable). A value nothing records reads "Not recorded". No member name or email. |
+| `POST /api/influencer/me/offers/request` | an influencer | `{ message }` (1 to 2,000 characters): "Ask HQ for an offer" (201 `{ uid }`); each Super Admin is notified (`influencer_offer_requested`). Anyone else is 403 `not_influencer`. |
+
+**Checkout (`routes/billing_checkout.ts`).** For a new subscriber with no code typed, `POST /api/billing/checkout/quote` carries `influencer_offer: { uid }` beside the offer's `discount`, and `/start` sends the code with `metadata[influencer_offer_uid]`. `featuredOffer` is exported for P2's public `@handle` read.
