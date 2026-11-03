@@ -120,7 +120,7 @@ test('a deck with AI pictures says so in its PDF, each with its model and card; 
   assert.deepEqual(await ua(marked, 1), []);
   const xmp = pdfXmp({ title: 'Synthetic deck', lang: 'en', ai });
   assert.ok(xmp.includes(AI_COMPOSITE_TYPE) && xmp.includes(AI_SOURCE_TYPE));
-  assert.match(xmp, new RegExp(`<xmp:CreatorTool>${MODEL.replace(/[/.]/g, '\\$&')}</xmp:CreatorTool><axal:card>3</axal:card>`));
+  assert.ok(xmp.includes(`<xmp:CreatorTool>${MODEL}</xmp:CreatorTool><axal:card>3</axal:card>`), 'the model id and the 1-based card');
   // Mutation checked: drop the ai_unmarked rule → this fails.
   const unmarked = await finishTaggedPdf(CHROME, { title: 'Synthetic deck', lang: 'en' });
   assert.ok((await ua(unmarked, 1)).includes('ai_unmarked'));
