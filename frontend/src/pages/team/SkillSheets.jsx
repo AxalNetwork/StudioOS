@@ -9,6 +9,7 @@ import { AgentRadar, CostExplainer, SkillRow, TaxChips } from './SkillParts.jsx'
 import {
   LEVELS, OUTPUT_KINDS, assignGroups, assignRows, blockedWords, costChangeWords, directory, parseSkillMd, previewRadar, problemWords, radarVector, scopeLine,
 } from './skillsModel.js';
+import { workLabel } from './personaModel.js';
 
 /**
  * D1612 (#3952), v2 boards by #4224 (D4116) — the skill sheets: SK3 Assign
@@ -150,7 +151,7 @@ export function AddSkillsSheet({ agent, current, radar, onClose, onSaved }) {
   };
   const preview = previewRadar(radar, chosen);
   return (
-    <Sheet title="Add skills to this agent" sub={`${agent.role_name || 'Its role'}’s skills, most used first`} width={560} onClose={onClose} testId="add-skills-sheet"
+    <Sheet title="Add skills to this agent" sub={`Skills for ${workLabel(agent.role_key)}, most used first`} width={560} onClose={onClose} testId="add-skills-sheet"
       footer={(
         <div className="flex justify-end gap-2">
           <button type="button" className={BTN_SECONDARY} onClick={onClose}>Cancel</button>
