@@ -303,6 +303,7 @@ const ADMIN = [
   alias('/admin/programs/referral-partners', key(AD, 'Programs'), 'Referral partners, one program page under Programs (D953).'),
   alias('/admin/programs/investor-cohorts', key(AD, 'Programs'), 'Investor cohort access, one program page under Programs (D953).'),
   alias('/admin/programs/ai-native-venture', key(AD, 'Programs'), 'AI-native Venture, one program page under Programs (D953).'),
+  alias('/admin/programs/influencer', key(AD, 'Programs'), 'Influencers, one program page under Programs (D4298).'),
   alias('/admin/programs/propose', key(AD, 'Programs'), 'Programs › Propose a program, a studio’s proposal (D964).'),
   alias('/admin/programs/proposals', key(AD, 'Programs'), 'Programs › Proposals, HQ’s queue of studio proposals (D964).'),
   own('/admin/programs/spinout-lab', key(AD, 'Programs', 'Spin-Out Lab')),

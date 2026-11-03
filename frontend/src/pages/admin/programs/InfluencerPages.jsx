@@ -53,13 +53,13 @@ function StatusPill({ status, testId }) {
 }
 
 /** A reason dialog: what the action does, the reason, and the write. */
-function ReasonDialog({ title, sub, action, tone = 'primary', extra = null, onSubmit, onClose, testId }) {
+function ReasonDialog({ title, sub, action, tone = 'primary', extra = null, check = null, onSubmit, onClose, testId }) {
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState(null);
   const [done, setDone] = useState(null);
   async function go() {
-    const err = reasonError(reason);
+    const err = reasonError(reason) || (check ? check(reason.trim()) : null);
     if (err) { setRefusal(err); return; }
     setBusy(true); setRefusal(null);
     try { setDone(await onSubmit(reason.trim())); } catch (e) { setRefusal(say(e)); } finally { setBusy(false); }
@@ -246,10 +246,9 @@ export function ChangeDialog({ m, action, onClose, onChanged }) {
   return (
     <ReasonDialog title={`${action.label.replace('…', '')} · ${m.handle ? `@${m.handle}` : m.person?.name || ''}`} sub={ACTION_SUB[action.key]} action={action.label.replace('…', '')}
       tone={action.danger ? 'danger' : 'primary'} extra={extra} onClose={onClose} testId="influencers-change"
+      check={(reason) => changeBody(action.key, { tier, reason }).error || null}
       onSubmit={async (reason) => {
-        const out = changeBody(action.key, { tier, reason });
-        if (out.error) throw new Error(out.error);
-        await adminInfluencersApi.change(m.uid, out.body);
+        await adminInfluencersApi.change(m.uid, changeBody(action.key, { tier, reason }).body);
         onChanged();
         return 'Saved. The member is told.';
       }} />
@@ -396,10 +395,9 @@ export function LinkOfferDialog({ influencers, onClose, onLinked }) {
   );
   return (
     <ReasonDialog title="Link an offer" sub="The code keeps its own rules from Promo codes; the offer adds its owner and a budget." action="Link" extra={extra} onClose={onClose} testId="influencers-link"
+      check={() => (Math.round(Number(budget) * 100) > 0 ? null : 'Give the budget as an amount above 0.')}
       onSubmit={async (reason) => {
-        const cents = Math.round(Number(budget) * 100);
-        if (!Number.isFinite(cents) || cents <= 0) throw new Error('Give the budget as an amount above 0.');
-        await adminInfluencersApi.linkOffer(who, { promo_id: promo.trim(), budget_cents: cents, currency, featured, reason });
+        await adminInfluencersApi.linkOffer(who, { promo_id: promo.trim(), budget_cents: Math.round(Number(budget) * 100), currency, featured, reason });
         onLinked();
         return 'Linked. It applies at checkout for the members this influencer brings.';
       }} />

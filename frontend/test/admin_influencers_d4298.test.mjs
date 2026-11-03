@@ -276,8 +276,11 @@ test('Offers: an admin reads them; the Super Admin links one and pauses one, eac
   try {
     await link.click('influencers-offers-new');
     await link.change('influencers-link-promo', { value: 'promo_abc' });
-    await link.change('influencers-link-budget', { value: '250' });
     await link.change('influencers-link-reason', { value: REASON });
+    await link.click('influencers-link-submit');
+    assert.match(link.textOf('influencers-link-submit-refusal'), /budget as an amount above 0/);
+    assert.equal(writes(link, 'POST', /\/offers$/).length, 0, 'no budget, no write');
+    await link.change('influencers-link-budget', { value: '250' });
     await link.click('influencers-link-submit');
     assert.deepEqual(bodyOf(writes(link, 'POST', /\/api\/admin\/influencers\/u-jane\/offers$/)[0]),
       { promo_id: 'promo_abc', budget_cents: 25000, currency: 'USD', featured: false, reason: REASON });
