@@ -34,7 +34,7 @@ export function viewFor(pathname = '') {
 export const BUILD = {
   K1: { issue: 4188, live: false, what: 'The founder, deck and card by name, and the area before and after' },
   K2: { issue: 4189, live: false, what: 'A reason and an audit row on every flag change' },
-  K3: { issue: 4190, live: false, what: 'The beta cohort' },
+  K3: { issue: 4190, live: true, what: 'The beta cohort' },
   K4: { issue: 4191, live: false, what: 'A reason and an audit row on every default template change' },
   K5: { issue: 4192, live: true, what: 'HQ stage norms' },
 };
@@ -262,6 +262,33 @@ export const normRetireArmed = ({ reason }) => reasonOk(reason);
 // ── HD3 · Beta cohort ───────────────────────────────────────────────────────
 
 export const BETA_COLUMNS = ['Name', 'Features on', 'Added'];
+
+// ── HD3 · the cohort, live (#4190, K3) ──────────────────────────────────────
+
+/** The cohort's keys HQ picks from in the sheet: the deck features and one-click; "All grid elements" stands for every element key. */
+export const ALL_ELEMENTS = 'element:*';
+export function betaChoices(keys = []) {
+  const top = (Array.isArray(keys) ? keys : []).filter((k) => k && !String(k.key).startsWith('element:'));
+  return [...top, { key: ALL_ELEMENTS, label: 'All grid elements' }];
+}
+
+/** A cohort row as the table draws it: the person by name (never an email), their features by label, who added them and when. */
+export function cohortRow(p, keys = []) {
+  const label = new Map((Array.isArray(keys) ? keys : []).map((k) => [k.key, k.label]));
+  const feats = Array.isArray(p?.features) ? p.features : [];
+  const elements = feats.filter((k) => String(k).startsWith('element:')).length;
+  const named = feats.filter((k) => !String(k).startsWith('element:')).map((k) => label.get(k) || k);
+  return {
+    uid: p?.user?.uid ?? null, name: textOf(p?.user?.name) || NOT_RECORDED, company: textOf(p?.company),
+    features: [...named, ...(elements ? [`${elements} grid element${elements === 1 ? '' : 's'}`] : [])],
+    by: textOf(p?.added_by?.name) || NOT_RECORDED, at: p?.added_at ?? null,
+  };
+}
+
+/** Add arms with at least one person, one feature and a reason of 10 characters. */
+export const addArmed = ({ people = [], features = [], reason = '' }) => people.length > 0 && features.length > 0 && reasonOk(reason);
+export const BETA_ADD_LINE = 'They get these deck features before everyone else. Each person is one audit row with your reason.';
+export const BETA_REMOVE_LINE = 'Their early features switch back to everyone\'s setting. What they already made stays: decks, logo walls on slides, recordings.';
 
 /** Every change on this page takes a reason (the dialogs' shared rule). */
 export const REASON_MIN = 10;
