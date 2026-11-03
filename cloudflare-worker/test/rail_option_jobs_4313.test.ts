@@ -30,10 +30,8 @@ import { FORM_TEXT_JOBS } from '../src/services/fills/fields.ts';
 import { JOBS, RAIL_KIND_JOBS, jobChoices, jobStep } from '../src/services/ai/modelUseCases.ts';
 import { railOptionRows } from '../src/services/ai/railMatrix.ts';
 
-const OSS120 = '@cf/openai/gpt-oss-120b';
 const GLM = '@cf/zai-org/glm-4.7-flash';
 const LLAMA70 = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
-const QWEN30 = '@cf/qwen/qwen3-30b-a3b-fp8';
 /** The kinds whose presses write text; transcription, image, upload and no-model options keep their own path. */
 const writesText = (o: { kind: string; handler: string }) => !['speech', 'image', 'live', 'vision'].includes(o.kind) && !['upload', 'none', 'transcribe'].includes(o.handler)
   && !(o.kind === 'search' && o.handler !== 'draft'); // a re-index runs the index, not a writer
