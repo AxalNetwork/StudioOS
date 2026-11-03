@@ -23,6 +23,8 @@ import { encryptString, decryptString } from './cryptoBox';
 import { hostedEvents, staleMyEventCopies, ticketEvents, placeOf } from './calendar/myEvents';
 import { investorMeetingEvents } from './calendar/investorMeetings';
 import { describeItems, type CalendarItem } from './calendar/items';
+import { HQ_STUDIO, companyOf, personName, scopeCompanies, scopeOpenHref, scopeRowFacts, scopeWhere,
+  type ScopeCompany, type ScopeOwner, type ScopeRowFacts, type ScopeStudio } from './calendar/scopeFacts';
 
 /**
  * Refresh tokens were originally written in plaintext and migrated to
@@ -434,7 +436,7 @@ export async function fetchMicrosoftUserinfo(accessToken: string): Promise<any> 
 // ===========================================================================
 export interface CalendarEvent {
   id: string;
-  kind: 'ic_meeting' | 'founder_checkin' | 'advisor_booking' | 'partner_office_hour' | 'calendly_event' | 'expert_booking' | 'event_ticket' | 'event_hosted' | 'investor_meeting' | 'compliance_due' | 'interview_call' | 'cohort_date' | 'deal_closing' | 'manual' | 'learning' | 'publish_send' | 'content_planned' | 'bot_call' | 'round_close' | 'nda_expiry' | 'workflow_task' | 'mvp_task' | 'contact_task' | 'engagement_milestone' | 'external_google' | 'external_microsoft' | 'agent_session';
+  kind: 'ic_meeting' | 'founder_checkin' | 'advisor_booking' | 'partner_office_hour' | 'calendly_event' | 'expert_booking' | 'event_ticket' | 'event_hosted' | 'investor_meeting' | 'compliance_due' | 'interview_call' | 'cohort_date' | 'deal_closing' | 'manual' | 'learning' | 'publish_send' | 'content_planned' | 'bot_call' | 'round_close' | 'nda_expiry' | 'workflow_task' | 'mvp_task' | 'contact_task' | 'engagement_milestone' | 'external_google' | 'external_microsoft' | 'work_item' | 'agent_session';
   source_id: number;
   source_uid: string;
   title: string;
@@ -919,6 +921,8 @@ const READERS: Readonly<Record<CalendarEvent['kind'], CalendarReader>> = {
   // #3983 (D1486 §d): tasks and engagement milestones, page only, all day, the member's own rows alone.
   workflow_task: async (env, userId, from, to) => (await (await import('./calendar/taskDates')).workflowTaskEvents(env, userId, from, to)),
   mvp_task: async (env, userId, from, to) => (await (await import('./calendar/taskDates')).mvpTaskEvents(env, userId, from, to)),
+  // D1614 W4 (#3972): the open tasks of the projects the member can read, in their time block or on their due day.
+  work_item: async (env, userId, from, to) => (await (await import('./calendar/workItems')).workItemEvents(env, userId, from, to)),
   contact_task: async (env, userId, from, to) => (await (await import('./calendar/taskDates')).contactTaskEvents(env, userId, from, to)),
   engagement_milestone: async (env, userId, from, to) => (await (await import('./calendar/taskDates')).engagementMilestoneEvents(env, userId, from, to)),
   // D1485 (#3979): the member's own Google and Outlook events, read live, page only, never pushable.
@@ -1014,6 +1018,8 @@ export const SCOPED_EXCLUDED_KINDS = ['calendly_event', 'expert_booking'] as con
 export const PERSONAL_ONLY_KINDS = ['interview_call', 'cohort_date', 'deal_closing', 'manual', 'publish_send', 'content_planned', 'bot_call', 'round_close', 'nda_expiry', 'workflow_task', 'mvp_task', 'contact_task', 'engagement_milestone',
   // D1485 (#3979): a member's own Google or Outlook events are theirs alone, never a staff scope's.
   'external_google', 'external_microsoft',
+  // D1614 W4 (#3972): a project's work items, on the member's own page only.
+  'work_item',
   // #3957: a team's AI agent sessions are read by that team's members, never by a staff scope.
   'agent_session'] as const;
 export const SCOPED_SOURCE_LIMIT = 1000;
@@ -1034,16 +1040,17 @@ async function scopedRows(env: Env, actor: User, all: boolean, kind: CalendarEve
     case 'ic_meeting':
       query = `WITH members AS (SELECT id FROM users WHERE is_active = 1 AND (role <> 'admin' OR id = ? OR ? = 1))
         SELECT m.id AS id, m.uid, m.title, m.start_at AS start_at, m.duration_min, m.status, m.location_kind, m.deal_id, m.cancel_reason,
+          o.uid AS owner_user_uid, o.name AS owner_user_name,
           (SELECT json_group_array(json_object('name',u.name,'role','attendee','rsvp',a.rsvp))
              FROM ic_meeting_attendees a LEFT JOIN users u ON u.id = a.user_id WHERE a.meeting_id = m.id) AS people_json
-        FROM ic_meetings m WHERE m.start_at >= ? AND m.start_at <= ?
+        FROM ic_meetings m LEFT JOIN users o ON o.id = m.organizer_user_id WHERE m.start_at >= ? AND m.start_at <= ?
           AND (m.organizer_user_id IN (SELECT id FROM members)
             OR EXISTS (SELECT 1 FROM ic_meeting_attendees a WHERE a.meeting_id = m.id AND a.user_id IN (SELECT id FROM members)))`;
       break;
     case 'founder_checkin':
       query = `WITH members AS (SELECT id FROM users WHERE is_active = 1 AND (role <> 'admin' OR id = ? OR ? = 1))
         SELECT c.id AS id,c.uid,c.title,c.start_at AS start_at,c.duration_min,c.status,c.location_kind,c.project_id,
-               f.name AS founder_name,p.name AS counterpart_name
+               f.name AS founder_name,p.name AS counterpart_name,f.uid AS owner_user_uid,f.name AS owner_user_name
         FROM founder_checkins c LEFT JOIN users f ON f.id = c.founder_user_id LEFT JOIN users p ON p.id = c.counterpart_user_id
         WHERE c.start_at >= ? AND c.start_at <= ?
           AND (c.founder_user_id IN (SELECT id FROM members) OR c.counterpart_user_id IN (SELECT id FROM members))`;
@@ -1051,7 +1058,7 @@ async function scopedRows(env: Env, actor: User, all: boolean, kind: CalendarEve
     case 'advisor_booking':
       query = `WITH members AS (SELECT id FROM users WHERE is_active = 1 AND (role <> 'admin' OR id = ? OR ? = 1))
         SELECT b.id AS id,b.uid,b.topic,b.status,b.cancel_reason,s.starts_at AS start_at,s.ends_at AS end_at,
-               a.display_name AS host_name,a.timezone AS time_zone,u.name AS requester_name
+               a.display_name AS host_name,a.timezone AS time_zone,u.name AS requester_name,u.uid AS owner_user_uid,u.name AS owner_user_name
         FROM advisor_bookings b JOIN advisor_office_hour_slots s ON s.id = b.slot_id
           LEFT JOIN advisors a ON a.id = b.advisor_id LEFT JOIN users u ON u.id = b.founder_user_id
         WHERE s.starts_at >= ? AND s.starts_at <= ?
@@ -1061,7 +1068,7 @@ async function scopedRows(env: Env, actor: User, all: boolean, kind: CalendarEve
     case 'partner_office_hour':
       query = `WITH members AS (SELECT id,partner_id FROM users WHERE is_active = 1 AND (role <> 'admin' OR id = ? OR ? = 1))
         SELECT b.id AS id,b.uid,b.topic,b.status,b.cancel_reason,s.starts_at AS start_at,s.ends_at AS end_at,
-               p.name AS host_name,u.name AS requester_name
+               p.name AS host_name,u.name AS requester_name,u.uid AS owner_user_uid,u.name AS owner_user_name
         FROM partner_bookings b JOIN partner_office_hour_slots s ON s.id = b.slot_id
           LEFT JOIN partners p ON p.id = b.partner_id LEFT JOIN users u ON u.id = b.founder_user_id
         WHERE s.starts_at >= ? AND s.starts_at <= ?
@@ -1071,23 +1078,26 @@ async function scopedRows(env: Env, actor: User, all: boolean, kind: CalendarEve
     case 'event_ticket':
       query = `WITH members AS (SELECT id FROM users WHERE is_active = 1 AND (role <> 'admin' OR id = ? OR ? = 1))
         SELECT r.id AS id, r.status AS reg_status,r.payment_status,r.waitlist_position,e.id AS event_id,e.title,
-               e.starts_at AS start_at,e.ends_at AS end_at,e.project_id,e.location_kind
-        FROM event_registrations r JOIN events e ON e.id = r.event_id
+               e.starts_at AS start_at,e.ends_at AS end_at,e.project_id,e.location_kind,e.slug AS event_slug,e.status AS event_status,
+               o.uid AS owner_user_uid,o.name AS owner_user_name
+        FROM event_registrations r JOIN events e ON e.id = r.event_id LEFT JOIN users o ON o.id = r.user_id
         WHERE e.starts_at >= ? AND e.starts_at <= ? AND r.user_id IN (SELECT id FROM members)
           AND r.status IN ('registered','confirmed','attended','waitlisted') AND e.status <> 'cancelled'
           AND COALESCE(e.host_user_id,0) <> r.user_id`;
       break;
     case 'event_hosted':
       query = `WITH members AS (SELECT id FROM users WHERE is_active = 1 AND (role <> 'admin' OR id = ? OR ? = 1))
-        SELECT e.id AS id,e.title,e.starts_at AS start_at,e.ends_at AS end_at,e.status,e.project_id,e.location_kind
-        FROM events e WHERE e.starts_at >= ? AND e.starts_at <= ?
+        SELECT e.id AS id,e.title,e.starts_at AS start_at,e.ends_at AS end_at,e.status,e.project_id,e.location_kind,
+               e.slug AS event_slug,e.status AS event_status,o.uid AS owner_user_uid,o.name AS owner_user_name
+        FROM events e LEFT JOIN users o ON o.id = e.host_user_id WHERE e.starts_at >= ? AND e.starts_at <= ?
           AND e.host_user_id IN (SELECT id FROM members) AND e.status <> 'cancelled'`;
       break;
     case 'investor_meeting':
       query = `WITH members AS (SELECT id,founder_id FROM users WHERE is_active = 1 AND (role <> 'admin' OR id = ? OR ? = 1))
         SELECT ev.id AS id,ev.kind,ev.starts_at AS start_at,ev.calendar_item_uid AS uid,p.name AS prospect_name,p.firm AS prospect_firm,
-               pr.id AS project_id
+               pr.id AS project_id,o.uid AS owner_user_uid,o.name AS owner_user_name
         FROM raise_prospect_events ev JOIN raise_prospects p ON p.id = ev.prospect_id JOIN projects pr ON pr.id = p.project_id
+          LEFT JOIN users o ON o.id = ev.created_by
         WHERE ev.starts_at >= ? AND ev.starts_at <= ? AND ev.kind IN ('meeting','call') AND ev.calendar_item_uid IS NOT NULL
           AND pr.founder_id IN (SELECT founder_id FROM members WHERE founder_id IS NOT NULL)`;
       break;
@@ -1095,8 +1105,10 @@ async function scopedRows(env: Env, actor: User, all: boolean, kind: CalendarEve
     case 'compliance_due':
       query = `WITH members AS (SELECT id,founder_id FROM users WHERE is_active = 1 AND (role <> 'admin' OR id = ? OR ? = 1))
         SELECT e.id AS id,e.uid,e.title,date(e.due_date) AS start_at,date(e.due_date,'+1 day') AS end_at,
-               e.completion_status,e.project_id,e.event_type,e.jurisdiction,e.recurrence,e.source,e.owner_name
+               e.completion_status,e.project_id,e.event_type,e.jurisdiction,e.recurrence,e.source,e.owner_name,
+               o.uid AS owner_user_uid,o.name AS owner_user_name
         FROM compliance_events e JOIN projects pr ON pr.id = e.project_id AND pr.deleted_at IS NULL
+          LEFT JOIN users o ON o.id = e.owner_user_id
         WHERE julianday(date(e.due_date), '+1 day') > julianday(?) AND julianday(date(e.due_date)) < julianday(?)
           AND pr.founder_id IN (SELECT founder_id FROM members WHERE founder_id IS NOT NULL)`;
       break;
@@ -1111,7 +1123,9 @@ async function scopedRows(env: Env, actor: User, all: boolean, kind: CalendarEve
 function scopedEvent(kind: CalendarEvent['kind'], row: ScopedRow): CalendarEvent {
   const people: CalendarEvent['attendees'] = [];
   const person = (name: unknown, role: string, rsvp?: string) => {
-    if (typeof name === 'string' && name.trim()) people.push({ name, email: null, role, ...(rsvp ? { rsvp } : {}) });
+    // D4154 C1: a name that is itself an address is not shown; a staff scope names people, never emails.
+    const shown = personName(name);
+    if (shown) people.push({ name: shown, email: null, role, ...(rsvp ? { rsvp } : {}) });
   };
   if (row.people_json) for (const p of JSON.parse(row.people_json)) person(p.name,p.role,p.rsvp);
   person(row.founder_name,'founder'); person(row.counterpart_name,'counterpart');
@@ -1136,6 +1150,10 @@ function scopedEvent(kind: CalendarEvent['kind'], row: ScopedRow): CalendarEvent
     due_date: String(row.start_at), event_type: row.event_type ?? null, jurisdiction: row.jurisdiction ?? null,
     recurrence: row.recurrence ?? null, owner: typeof row.owner_name === 'string' && row.owner_name.trim() ? row.owner_name.trim() : null,
     source: row.source ?? null,
+    // D1614 CO4 (#3976): a staff scope reads venture rows only, so never a company-level task.
+    // The company badge is filled from the one batched lookup in fetchCalendarScope (D4154), not a second join here.
+    company: null,
+    company_task: false,
   } : undefined;
   return {
     id: `${kind}:${row.id}`, kind, source_id: Number(row.id), source_uid: String(uid),
@@ -1163,6 +1181,16 @@ export interface CalendarScopeCoverage {
 export interface CalendarScopeItem extends CalendarItem {
   read_only: true;
   can: { rsvp: false; reschedule: false; cancel: false; copy: false };
+  /** D4154 C1 (#4196, `calendar/scopeFacts.ts`): who it belongs to, by name, never an email. */
+  owner: ScopeOwner | null;
+  /** C1: the company its venture sits in; null when none is recorded or the lookup failed. */
+  company: ScopeCompany | null;
+  /** C1: `scope=all` only, on every row: HQ's rows are HQ-held. */
+  studio?: ScopeStudio;
+  /** C1: the item's page inside its company — a link, never a write — or null. */
+  open_href: string | null;
+  /** C1: "<company> › <module>", or null when the company is not known. */
+  where: string | null;
 }
 export async function fetchCalendarScope(
   env: Env, actor: User, scope: 'studio' | 'all', fromIso: string, toIso: string, kinds?: string[],
@@ -1221,6 +1249,7 @@ export async function fetchCalendarScope(
     return unavailable('unreadable', 'Unreadable: studio membership could not be read. Try again.');
   }
   const byId = new Map<string, CalendarEvent>();
+  const facts = new Map<string, ScopeRowFacts>();
   const truncated: CalendarEvent['kind'][] = [];
   // A staff scope reads only Axal tables, so its sources fail only as not configured or unreadable.
   const sources: Array<CalendarSourceStatus & { error: 'not_configured' | 'unreadable' | null }> = [];
@@ -1228,7 +1257,7 @@ export async function fetchCalendarScope(
     try {
       const result = await scopedRows(env, actor, scope === 'all', kind, fromIso, toIso);
       if (result.truncated) truncated.push(kind);
-      for (const row of result.rows) { const event = scopedEvent(kind,row); byId.set(event.id,event); }
+      for (const row of result.rows) { const event = scopedEvent(kind,row); byId.set(event.id,event); facts.set(event.id,scopeRowFacts(kind,row)); }
       sources.push({ kind, ok: true, error: null });
     } catch (e) {
       const error = isMissingTableError(e) || isMissingColumnError(e) ? 'not_configured' : 'unreadable';
@@ -1253,12 +1282,27 @@ export async function fetchCalendarScope(
     ok: !sourceFailure, error: sourceFailure?.error || null,
     reason: sourceReason });
   const described = await describeItems(env, actor, [...byId.values()].sort((a, b) => a.start_at.localeCompare(b.start_at)));
-  const events = described.map(event => ({
-    ...event, organizer_email: null, attendees: event.attendees.map(attendee => ({ ...attendee, email: null })),
-    location_uri: null, notes: null, url: undefined, pushed_to: [], read_only: true as const,
-    my_role: { code: 'read_only', words: 'Read only' }, href: null,
-    can: { rsvp: false as const, reschedule: false as const, cancel: false as const, copy: false as const },
-  }));
+  // D4154 C1: one batched company lookup for the whole read; a failure leaves each company null.
+  const companies = await scopeCompanies(env, described);
+  const events: CalendarScopeItem[] = described.map(event => {
+    const company = companyOf(event, companies);
+    // D1614 CO4: the deadline's own company badge is the same company the scope item names.
+    const compliance = event.kind === 'compliance_due' && event.compliance
+      ? { ...event.compliance, company: company ? { uid: company.uid, name: company.name } : null }
+      : undefined;
+    return {
+      ...event, ...(compliance ? { compliance } : {}),
+      organizer_email: null, attendees: event.attendees.map(attendee => ({ ...attendee, email: null })),
+      location_uri: null, notes: null, url: undefined, pushed_to: [], read_only: true as const,
+      my_role: { code: 'read_only', words: 'Read only' }, href: null,
+      can: { rsvp: false as const, reschedule: false as const, cancel: false as const, copy: false as const },
+      owner: facts.get(event.id)?.owner ?? null,
+      company,
+      ...(scope === 'all' ? { studio: { ...HQ_STUDIO } } : {}),
+      open_href: scopeOpenHref(event, facts.get(event.id), company),
+      where: scopeWhere(company, event.source?.module),
+    };
+  });
   return { events, sources, coverage };
 }
 

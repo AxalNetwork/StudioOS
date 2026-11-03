@@ -160,13 +160,40 @@ export function roundBody(projectId, f) {
   const target = String(f.target ?? '').replace(/[$,\s]/g, '');
   if (target !== '' && !(Number.isFinite(Number(target)) && Number(target) >= 0)) return { error: 'Type the target as an amount, such as 1500000.' };
   if (f.currency && !/^[A-Z]{3}$/.test(f.currency)) return { error: 'The currency is three capital letters, such as USD.' };
+  if (f.exemption && !ROUND_EXEMPTIONS.some((e) => e.value === f.exemption)) return { error: 'Choose the exemption from the list, or Not recorded.' };
   return {
     body: {
       project_id: projectId, name: String(f.name ?? '').trim() || null,
       target_amount: target === '' ? null : Number(target), currency: f.currency || 'USD',
       close_date: f.close_date || null, notes: String(f.notes ?? '').trim() || null,
+      // D4086: sent only when the form holds it; an empty choice is "Not recorded" (null), never a default.
+      ...(f.exemption !== undefined ? { exemption: f.exemption || null } : {}),
     },
   };
+}
+
+/*
+ * D4086 (#4086, #4087): the securities exemption the round is offered under,
+ * the founder's own statement. The list is migration 202611022116's CHECK, a
+ * proposal for counsel. Only a 506(c) round's deck can be published as a page.
+ */
+export const ROUND_EXEMPTIONS = Object.freeze([
+  { value: '506b', label: 'Rule 506(b)' },
+  { value: '506c', label: 'Rule 506(c)' },
+  { value: 'reg_cf', label: 'Regulation Crowdfunding' },
+  { value: 'reg_s', label: 'Regulation S' },
+  { value: 'other', label: 'Another exemption' },
+]);
+export const EXEMPTION_NOT_RECORDED = 'Not recorded';
+/** The exemption's words, or "Not recorded"; never a guess. */
+export const exemptionLabel = (v) => ROUND_EXEMPTIONS.find((e) => e.value === v)?.label ?? EXEMPTION_NOT_RECORDED;
+export const EXEMPTION_HELP = 'Your own statement of the exemption this round is offered under. Only a Rule 506(c) round\'s deck can be published as a web page.';
+export const EXEMPTION_TAKES_DOWN = 'Saving takes down every deck link published as a page for this round. The links still open privately for the people who have them.';
+/** What saving the exemption does to published links: the warning, or null when it changes nothing. */
+export function exemptionNote(prev, next) {
+  const p = prev || null;
+  const n = next || null;
+  return n && n !== '506c' && n !== p ? EXEMPTION_TAKES_DOWN : null;
 }
 
 export const CLOSE_STATES = [{ value: 'planned', label: 'Planned' }, { value: 'open', label: 'Open' }, { value: 'closed', label: 'Closed' }];

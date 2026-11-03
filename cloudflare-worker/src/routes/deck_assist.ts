@@ -206,7 +206,9 @@ deckAssist.post('/:id/cards/:card/assist', async (c) => {
     if (promised && !after.trim()) return refuse(c, 422, { code: 'guarantee_language', message: 'Eadwyn’s words promised a return, which a deck may not, so nothing was proposed. It was charged for the run.', extra: { cost } });
     const problem = wordingProblem(p.action as TextAction, p.text, after);
     if (problem) return refuse(c, 422, { code: 'figure_in_output', message: `${problem} It was charged for the run.`, extra: { cost } });
-    payload = { deck_id: p.deckId, card: p.card, card_uid: p.card_uid, action: p.action, before: p.text, after };
+    // #4188: what was asked rides along when the press carried it, so HQ's report queue reads it.
+    const asked = { ...(p.tone ? { tone: p.tone } : {}), ...(p.language ? { language: p.language } : {}), ...(p.instruction ? { instruction: p.instruction } : {}) };
+    payload = { deck_id: p.deckId, card: p.card, card_uid: p.card_uid, action: p.action, ...asked, before: p.text, after };
     answer = { before: p.text, after };
   }
   let proposal = null;

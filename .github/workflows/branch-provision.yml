@@ -229,6 +229,13 @@ jobs:
           tolerate npx --yes wrangler@4.131.0 vectorize create "axal-search-${BRANCH}" \
             --dimensions 768 --metric cosine \
             || { echo "::error::vectorize create failed"; exit 1; }
+          # D1556 (#3803): the branch's own consented-quotes index (bge-m3, 1024 dimensions), filtered by project_id.
+          tolerate npx --yes wrangler@4.131.0 vectorize create "axal-deck-quotes-${BRANCH}" \
+            --dimensions 1024 --metric cosine \
+            || { echo "::error::vectorize create failed for axal-deck-quotes"; exit 1; }
+          tolerate npx --yes wrangler@4.131.0 vectorize create-metadata-index "axal-deck-quotes-${BRANCH}" \
+            --property-name project_id --type number \
+            || { echo "::error::vectorize metadata index failed for axal-deck-quotes"; exit 1; }
 
       # ── the registry entry, then the config it is the input to ───────────
       - name: Write the registry entry

@@ -98,6 +98,8 @@ import { ACCOUNT_PHONE_PAGES } from './account/accountPhone';
 import { NOT_YET, VIEWS, WAITS, chipCount, viewOf, windowFor } from './calendarViews';
 import CalendarItemDrawer, { CancelDialog, ExternalItemSheet } from './CalendarItemDrawer';
 import { NewCheckinDialog, NewIcDialog, NewMenu } from './CalendarNewDialogs';
+import CalendarScopeView, { ScopeSwitch } from './calendarScope/CalendarScopeView';
+import { scopeOf, scopesFor } from './calendarScope/calendarScopeModel';
 import { NewComplianceDialog } from './CalendarComplianceSheet';
 import { COMPLIANCE_KIND, stateLine, stateOf } from './calendarComplianceModel';
 import { externalItemOf, itemOf, openPath } from './calendarItemModel';
@@ -154,6 +156,7 @@ const KINDS = [
   // #3983 (D1486 §d): the dated task stores, page only.
   { id: 'workflow_task', label: 'Workflow task', from: 'Workflows › Tasks' },
   { id: 'mvp_task', label: 'Build task', from: 'Build › Board' },
+  { id: 'work_item', label: 'Work item', from: 'Work › Board' },
   { id: 'contact_task', label: 'Contact follow-up', from: 'Contacts › Follow-ups' },
   { id: 'engagement_milestone', label: 'Milestone', from: 'Engagements › Milestones' },
   // D1485 (#3979): the member's own Google and Outlook events, read-only and page only.
@@ -389,7 +392,30 @@ export function CalendarPhoneView({ events, providers, now, children = null }) {
   );
 }
 
+/**
+ * D4154 (#4154): the page, with the admin scopes in front of it. A viewer with
+ * a staff scope (`scopesFor`) gets the switcher; `?scope=studio|platform`
+ * renders the read-only scoped view instead of the personal calendar, so no
+ * personal control (New, RSVP, push) is ever drawn over another company's
+ * events. Everyone else gets the personal calendar unchanged.
+ */
 export default function CalendarPage() {
+  const location = useLocation();
+  const phone = usePhoneWidth();
+  const me = safeReadJSON('user', {});
+  const scopes = scopesFor(me);
+  const scope = scopeOf(location.search, scopes);
+  if (scope === 'mine') return <PersonalCalendar scopes={scopes} />;
+  const pathname = location.pathname;
+  const range = phone ? 'agenda' : viewOf(pathname);
+  const win = windowFor(range, anchorOf(location.search));
+  return (
+    <CalendarScopeView scope={scope} user={me} window={win} range={range} label={rangeLabel(range, win.from, win.to)}
+      pathname={pathname} search={location.search} scopes={scopes} phone={phone} />
+  );
+}
+
+function PersonalCalendar({ scopes = [] }) {
   const [items, setItems] = useState(null);        // null = not read yet
   const [sources, setSources] = useState([]);       // per-source answer, from the worker
   const [loading, setLoading] = useState(true);
@@ -603,6 +629,8 @@ export default function CalendarPage() {
           </div>
         )}
         <div className="cal-head-actions">
+          {/* D4154 (CA1): Mine · Studio · Platform, only for a viewer with a staff scope. */}
+          <ScopeSwitch scopes={scopes} scope="mine" pathname={pathname} search={search} />
           {/* D1211 (CAL8 A): one New menu. IC meeting is in it only where
               canScheduleIc allows (`newMenu`), so the gate strip below says why. */}
           {!explorer && <NewMenu role={role} onPick={(k) => (k === 'agent' ? setShowAgent(true) : k === 'compliance' ? setShowCompliance(true) : k === 'ic' && canIC ? setShowIc(true) : setShowCk(true))} />}
