@@ -19,6 +19,8 @@
  * Which decision added a row is in its issue, and in `git log -L` here.
  */
 export const CONTRACTS = Object.freeze({
+  areasGenerate: { issue: 3764, route: 'POST /api/decks/:id/areas, then GET /api/decks/:id/areas/proposals?batch=', schema: 'deckAreasProposals.schema.json' },
+  areasQuote: { issue: 3764, route: 'POST /api/decks/:id/areas/quote', schema: 'deckAreasQuote.schema.json' },
   batch: { issue: 3753, route: 'GET /api/decks/areas/batches/:uid', schema: 'deckBatch.schema.json' },
   buttonClicks: { issue: 3788, route: 'GET /api/decks/:id/button-clicks', schema: 'deckButtonClicks.schema.json' },
   cancelBatch: { issue: 3753, route: 'POST /api/decks/areas/batches/:uid/cancel', schema: 'deckBatch.schema.json' },

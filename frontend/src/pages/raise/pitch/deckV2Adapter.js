@@ -39,6 +39,7 @@ import { LATER, NOT_ON } from './deckV2Model.js';
 // One line per client, in file-name order (pitch_v2_adapter_d1604 holds it), so two swaps add lines at different places.
 import { dataRoomApi } from '../../../lib/api/dataRoom.js';
 import { deckActionsApi } from '../../../lib/api/deckActions.js';
+import { deckAreasApi } from '../../../lib/api/deckAreas.js';
 import { deckBatchesApi } from '../../../lib/api/deckBatches.js';
 import { deckCardStatusApi } from '../../../lib/api/deckCardStatus.js';
 import { deckCheckApi } from '../../../lib/api/deckCheck.js';
@@ -64,6 +65,7 @@ import { deckTypedValuesApi } from '../../../lib/api/deckTypedValues.js';
 import { deckUsageApi } from '../../../lib/api/deckUsage.js';
 import { deckVentureElementsApi } from '../../../lib/api/deckVentureElements.js';
 import { arrange as arrangeCard } from './arrangeModel.js';
+import { areaRunResults } from './areaRunResults.js';
 import * as gridOps from './gridOps.js';
 import { FILTERS } from './imageLook';
 
@@ -186,8 +188,9 @@ export const batch = (uid) => through(() => deckBatchesApi.batch(uid), SURFACES.
 export const cancelBatch = (uid) => through(() => deckBatchesApi.cancel(uid), SURFACES.cancelBatch.issue);
 /** D1503 (#3754): each grid element's models and the pick its next run uses (`GET /api/decks/:id/element-models`). */
 export const elementModels = (deckId) => through(() => deckElementModelsApi.read(deckId), SURFACES.elementModels.issue);
-export const areasQuote = off('areasQuote');
-export const areasGenerate = off('areasGenerate');
+// D1512 (#3764): one quote and one hold for several areas, and the run that fills them with 1–3 variants each.
+export const areasQuote = ({ deckId, card, areas, variants, cls } = {}) => through(() => deckAreasApi.quote(deckId, { card, areas, variants, ...(cls ? { class: cls } : {}) }), SURFACES.areasQuote.issue);
+export const areasGenerate = ({ deckId, card, areas, variants, cls, quoteUid, onProgress } = {}) => through(() => deckAreasApi.generate(deckId, { card, areas, variants, ...(cls ? { class: cls } : {}), ...(quoteUid ? { quote_uid: quoteUid } : {}) }, { onProgress }).then((run) => areaRunResults(deckId, run)), SURFACES.areasGenerate.issue);
 /**
  * D1515 (#3767): undo and redo, frontend-only. No Worker route stores the history, so this row answers at once with
  * `gridOps.js` (its reducers and the 100-step history) and is not a client call: it has no contract.
