@@ -27,6 +27,11 @@ import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 after(removeMigratedDatabases);
 const JWT_SECRET = 'synthetic-d1348-only-not-a-real-credential'.repeat(2);
 const NOW = Date.parse('2026-10-28T12:00:00Z');
+// The routes read the wall clock (`peopleFor`, `profileRecord`: now = Date.now()). Pin it to NOW, so a fixture
+// date in "the future" (the 2026-11-03 session) stays in the future whatever day the suite runs on.
+const REAL_NOW = Date.now;
+Date.now = () => NOW;
+after(() => { Date.now = REAL_NOW; });
 const ADMIN = 1, FOUNDER = 2, FOUNDER_B = 3, PARTNER = 5, INVESTOR = 6, ADVISOR = 7, EXPLORER = 8,
   OTHER_INVESTOR = 10, OTHER_ADVISOR = 11, OTHER_PARTNER = 12, OTHER_ADMIN = 13;
 
