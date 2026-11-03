@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { seatEndStatements } from '../services/agents/teamRoster';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { schedulePush } from '../integrations/autopush';
@@ -1784,6 +1785,8 @@ projects.delete('/:id/members/:userId', async (c) => {
       c.env.DB.prepare(`UPDATE project_member_invitations SET status='revoked', updated_at=datetime('now')
         WHERE project_id = ? AND invitee_user_id = ? AND status='pending'`).bind(id, memberUserId),
       ...(seat.length ? [membershipEvent(c.env, { kind: 'seat_remove', projectId: id, actorUserId: user.id, targetUserId: memberUserId, before: { role: seat[0].role } })] : []),
+      // D1614 W8 (#3994): their open Work on this project waits for an editor to reassign it. Never auto-reassigned.
+      ...(seat.length ? seatEndStatements(c.env, id, memberUserId, user.id) : []),
     ]);
     return c.json({ ok: true });
   } finally {

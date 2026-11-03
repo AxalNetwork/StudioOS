@@ -9,19 +9,23 @@
  * size, or a check that had nothing measured, is its own group and its own
  * count, and "All checks passed" is said only when nothing is in it.
  *
- * What is not switched on yet (`BUILD`, each item greyed with `notYet()`):
- *   · P1 (#4208): dismissals kept per version on the Worker. Until then a
- *     dismissal lives in the open editor only, and the panel says so.
- *   · P2 (#4210): "Ask Eadwyn to suggest a fix", a quoted proposal in Ask.
+ * What each later part switches on (`BUILD`; an item not live is greyed with `notYet()`):
+ *   · P1 (D4208, #4208): dismissals kept per version on the Worker
+ *     (`GET`/`PUT /api/decks/:id/preflight/dismissals`), read when the editor
+ *     opens and written on Dismiss and Undo, so every editor sees them.
+ *   · P2 (D4210, #4210): "Ask Eadwyn to suggest a fix", D899's card tools
+ *     with `tool: 'preflight_fix'`: quoted first (its hold), run as one
+ *     proposal, which waits in Ask until Accept places it and Save keeps it.
  * The UI never prints an issue number (`pitch_v2_chrome_d1604`), so the line
  * is the adapter's own "Not switched on yet."
  */
 import { cardTitle } from './editorModel.js';
 import { SEVERITY } from './preflightModel.js';
+import { aiTokens } from './newDeckModel.js';
 
 export const BUILD = Object.freeze({
-  P1: { issue: 4208, live: false, what: 'Dismissals kept for every editor of this version' },
-  P2: { issue: 4210, live: false, what: 'Ask Eadwyn to suggest a fix' },
+  P1: { issue: 4208, live: true, what: 'Dismissals kept for every editor of this version' },
+  P2: { issue: 4210, live: true, what: 'Ask Eadwyn to suggest a fix' },
 });
 export const notYet = () => 'Not switched on yet.';
 export const LATER = 'Coming later';
@@ -38,6 +42,51 @@ export const FREE_LINE = 'Checks are free. They change nothing on your slides.';
 export const READER_LINE = 'You can see what needs fixing. Editors of this deck dismiss findings and ask for fixes.';
 export const KEEP_EDITING = 'You can keep editing. Results appear when every slide is checked.';
 export const HELD_HERE = 'Dismissed here only: reloading the page brings them back.';
+/** P1: a Dismiss or Undo the Worker did not keep is taken back, and says so. */
+export const NOT_KEPT = 'That was not kept. Try again.';
+
+/**
+ * P2 (D4210): the checks Eadwyn may suggest a fix for, the Worker's
+ * `PREFLIGHT_FIX_CHECKS`. Text only: never sources, contrast or an image, and
+ * a figure is never rewritten.
+ */
+export const FIX_CHECKS = Object.freeze(['overflow', 'density', 'font', 'placeholder']);
+export const TOKENS_OUT = 'Not enough AI tokens';
+export const ADD_TOKENS = 'Add tokens';
+export const FIX_WAITING = 'A suggestion is waiting in Ask. Accept places it on the slide; Save keeps it.';
+
+/** Whether a finding can ask for a fix: a text check, on one text block with words, not a figure bound to a record. */
+export function canAskFix(row, block) {
+  if (!row || !FIX_CHECKS.includes(row.check) || row.block == null) return false;
+  if (!block || block.kind !== 'text' || block.binding?.source_key) return false;
+  return Boolean(String(block.text ?? '').trim());
+}
+
+/** The body a fix press sends (D899's quote and run): the finding, the block, and its words as checked. */
+export function fixBody(row, block) {
+  return {
+    tool: 'preflight_fix',
+    finding: { check: row.check, block: String(row.block), title: String(row.headline || '').slice(0, 200) },
+    block: { id: block.id, kind: block.kind },
+    text: String(block.text ?? ''),
+  };
+}
+
+/** pf2: the line under the action, from its quote. */
+export function holdLine(quote) {
+  if (!quote) return 'Reading the cost…';
+  if (quote.ai === false) return quote.message || 'Eadwyn cannot run this now.';
+  const held = aiTokens(quote.hold_microusd);
+  return held ? `Holds up to ${held} · you pay what it uses` : 'You pay what it uses';
+}
+
+/** pf2b: "Charged $x of $y held"; null when the charge is not known. */
+export function chargedLine(charged, held) {
+  const c = aiTokens(charged);
+  if (!c) return null;
+  const h = aiTokens(held);
+  return h ? `Charged ${c} of ${h} held` : `Charged ${c}`;
+}
 export const NOTHING_TO_FIX = 'Nothing to fix';
 export const ALL_PASSED = 'All checks passed';
 export const NOT_SINCE_EDIT = 'Not checked since your last edit';
