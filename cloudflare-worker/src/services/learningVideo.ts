@@ -14,6 +14,7 @@
  * is why the upload needs no table of its own.
  */
 import type { Env } from '../types';
+import { R2_KEPT_AFTER_COPY_DAYS, SUPERSEDED_KEPT_DAYS, streamOf } from './learningStream';
 
 export const VIDEO_PREFIX = 'learning/videos/';
 /** 2 GB, the issue's limit, in bytes. */
@@ -133,10 +134,24 @@ export const ARCHIVED_GRACE_DAYS = 30;
  * Incomplete multipart uploads are not listed by `list()`; R2's own lifecycle
  * aborts them after seven days.
  *
+ * D4179 (#4179, part 4): a copy to Stream changes what is kept.
+ *   - An object with a copy that is not verified is NEVER deleted, whatever
+ *     else holds: the copy may still be fetching it, or may need a retry.
+ *   - The object an item plays is deleted once its copy has been verified for
+ *     `R2_KEPT_AFTER_COPY_DAYS` (owner step F, S1's pick: 30) and the item
+ *     plays that copy. The item then forgets the object and plays Stream.
+ *   - At Stream (when bound): a video superseded for more than
+ *     `SUPERSEDED_KEPT_DAYS`, and an upload link never used past its expiry,
+ *     are deleted, with their rows.
+ *
  * Returns the counts, so the cron line says what it did.
  */
-export async function sweepLearningVideos(env: Env, now: Date = new Date()): Promise<{ checked: number; deleted: number }> {
-  if (!env.FILES) return { checked: 0, deleted: 0 };
+export async function sweepLearningVideos(env: Env, now: Date = new Date()): Promise<{ checked: number; deleted: number; copied_deleted: number; kept_unverified: number; stream_deleted: number }> {
+  const stream = await sweepStreamVideos(env, now);
+  if (!env.FILES) return { checked: 0, deleted: 0, copied_deleted: 0, kept_unverified: 0, stream_deleted: stream };
+  let copiedDeleted = 0;
+  let keptUnverified = 0;
+  const copiedBefore = new Date(now.getTime() - R2_KEPT_AFTER_COPY_DAYS * 86400_000).toISOString();
   let cursor: string | undefined;
   let checked = 0;
   let deleted = 0;
@@ -153,6 +168,20 @@ export async function sweepLearningVideos(env: Env, now: Date = new Date()): Pro
       const old = now.getTime() - new Date(obj.uploaded).getTime() > ORPHAN_GRACE_MS;
       const longArchived = !!item && inUse && item.status === 'archived'
         && !!item.updated_at && String(item.updated_at) < archivedBefore;
+      const copy = await copyOf(env, itemUid, obj.key);
+      // A copy that is not verified holds its object, whatever else is true.
+      if (copy && !copy.verified_at) { keptUnverified++; continue; }
+      // Owner step F: the original goes once the copy has been verified long enough and the item plays it.
+      const copiedLongAgo = !!item && inUse && !!copy?.verified_at && Date.parse(copy.verified_at) < Date.parse(copiedBefore) && copy.playing;
+      if (copiedLongAgo) {
+        await env.FILES.delete(obj.key);
+        deleted++;
+        copiedDeleted++;
+        await env.DB.prepare(
+          `UPDATE learning_items SET video_source = NULL, r2_key = NULL WHERE uid = ? AND r2_key = ? AND stream_uid = ?`,
+        ).bind(itemUid, obj.key, copy!.stream_uid).run();
+        continue;
+      }
       if (!item || (!inUse && old) || longArchived) {
         await env.FILES.delete(obj.key);
         deleted++;
@@ -168,5 +197,53 @@ export async function sweepLearningVideos(env: Env, now: Date = new Date()): Pro
     }
     cursor = page.truncated ? page.cursor : undefined;
   } while (cursor);
-  return { checked, deleted };
+  return { checked, deleted, copied_deleted: copiedDeleted, kept_unverified: keptUnverified, stream_deleted: stream };
+}
+
+/**
+ * The newest copy of one R2 object, and whether the item plays it. A store
+ * without the Stream table has no copies.
+ */
+async function copyOf(env: Env, itemUid: string, key: string): Promise<{ stream_uid: string; verified_at: string | null; playing: boolean } | null> {
+  try {
+    const row = await env.DB.prepare(
+      `SELECT v.stream_uid, v.verified_at, (i.stream_uid = v.stream_uid) AS playing
+         FROM learning_stream_videos v LEFT JOIN learning_items i ON i.uid = v.item_uid
+        WHERE v.item_uid = ? AND v.source_r2_key = ? AND v.origin = 'r2_copy' AND v.state != 'superseded'
+        ORDER BY v.verified_at IS NULL DESC, v.id DESC LIMIT 1`,
+    ).bind(itemUid, key).first<{ stream_uid: string; verified_at: string | null; playing: number | null }>();
+    return row ? { stream_uid: row.stream_uid, verified_at: row.verified_at ?? null, playing: Number(row.playing) === 1 } : null;
+  } catch { return null; }
+}
+
+/**
+ * D4179 — Stream videos nobody plays: superseded for more than
+ * `SUPERSEDED_KEPT_DAYS`, or an upload link past its expiry that was never
+ * used. Each is deleted at Stream, then its row (and its captions). A video
+ * Stream says is already gone still closes its row. Never the item's current
+ * video. Without the binding, nothing.
+ */
+export async function sweepStreamVideos(env: Env, now: Date = new Date()): Promise<number> {
+  const stream = streamOf(env);
+  if (!stream) return 0;
+  const supersededBefore = new Date(now.getTime() - SUPERSEDED_KEPT_DAYS * 86400_000).toISOString();
+  let rows: { id: number; stream_uid: string }[] = [];
+  try {
+    rows = (await env.DB.prepare(
+      `SELECT v.id, v.stream_uid FROM learning_stream_videos v LEFT JOIN learning_items i ON i.uid = v.item_uid
+        WHERE (i.stream_uid IS NULL OR i.stream_uid != v.stream_uid)
+          AND ((v.state = 'superseded' AND julianday(v.updated_at) < julianday(?)) OR (v.state = 'awaiting_upload' AND v.upload_expires_at IS NOT NULL AND julianday(v.upload_expires_at) < julianday(?)))
+        ORDER BY v.id LIMIT 200`,
+    ).bind(supersededBefore, now.toISOString()).all<{ id: number; stream_uid: string }>()).results ?? [];
+  } catch { return 0; }
+  let deleted = 0;
+  for (const r of rows) {
+    try { await stream.video(r.stream_uid).delete(); } catch { /* already gone at Stream: the row still closes */ }
+    await env.DB.batch([
+      env.DB.prepare('DELETE FROM learning_stream_captions WHERE stream_video_id = ?').bind(r.id),
+      env.DB.prepare('DELETE FROM learning_stream_videos WHERE id = ?').bind(r.id),
+    ]);
+    deleted++;
+  }
+  return deleted;
 }

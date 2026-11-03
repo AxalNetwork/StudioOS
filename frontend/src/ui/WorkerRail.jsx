@@ -18,7 +18,7 @@ import { syncRailPrefs } from './railModelChoice';
 import { useRailCrumbs, useRailPage } from './railCrumbs.js';
 import { openEadwynPanel, useEadwynPanel, useEadwynRailServes, eadwynPanelEvent, askPanelEvent, useAskPanel, useAskRail } from './eadwynPanel.js';
 import AskPanel from './AskPanel.jsx';
-import { askLayout, askServes } from './askPanelModel.js';
+import { askDock, askLayout, askServes } from './askPanelModel.js';
 import HeaderAsk, { useHeaderCarriesAsk } from './HeaderAsk.jsx';
 import { activeSupportSession } from '../lib/supportSession.js';
 import { EadwynPanel } from './EadwynPanel.jsx';
@@ -649,6 +649,55 @@ export default function WorkerRail({
     else root.removeAttribute('data-eadwyn-ask-at');
     return () => root.removeAttribute('data-eadwyn-ask-at');
   }, [askState.open, askAt]);
+  // #4260: THE DOCKED PANEL IS PLACED, NOT NESTED. It was drawn inside the
+  // rail's <aside>, so its box was the rail's: 18px under the header and 28px
+  // above the foot inside RailFrame's padding, as short as a collapsed spine,
+  // and styled by every host rule written for the rail's own children
+  // (`.inw-rail section` boxed it, `.a6-rail>div` pushed it down). It is now
+  // drawn fixed at the document's level and placed from the rail's measured
+  // box (`askDock`): under the header to the footer, at the column's seam when
+  // the column took the panel's width (`data-ask-room`, which moves the rail's
+  // own cards clear), or against the column's outer edge, over the content.
+  // Placed on scroll, resize and the rail's resize, as style, not React state,
+  // so scrolling re-renders nothing. This also replaces a container query the
+  // owner's collapsed rail showed unmet.
+  const asideRef = useRef(null);
+  const dockRef = useRef(null);
+  const placeRef = useRef(null);
+  const [askHasRoom, setAskHasRoom] = useState(false);
+  const setDock = useCallback((node) => { dockRef.current = node; if (node) placeRef.current?.(); }, []);
+  useEffect(() => {
+    const el = asideRef.current;
+    if (!el || !askState.open || !askDocked) { setAskHasRoom(false); placeRef.current = null; return undefined; }
+    const scroller = el.closest('[data-app-scroll]');
+    const target = scroller || window;
+    let frame = 0;
+    const place = () => {
+      frame = 0;
+      const view = scroller ? scroller.getBoundingClientRect() : { top: 0, left: 0 };
+      const foot = scroller ? [...scroller.children].find((n) => n.tagName === 'FOOTER') : null;
+      const at = askDock(el.getBoundingClientRect(), el.clientLeft, {
+        scrollTop: view.top, scrollLeft: view.left, footTop: foot ? foot.getBoundingClientRect().top : null, viewHeight: window.innerHeight,
+      }, askAt);
+      setAskHasRoom(at.room);
+      const dock = dockRef.current;
+      if (dock) Object.assign(dock.style, { top: `${at.top}px`, left: `${at.left}px`, height: `${at.height}px` });
+    };
+    placeRef.current = place;
+    const queue = () => { if (!frame) frame = requestAnimationFrame(place); };
+    place();
+    target.addEventListener('scroll', queue, { passive: true });
+    window.addEventListener('resize', queue);
+    const watch = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(queue);
+    watch?.observe(el);
+    return () => {
+      placeRef.current = null;
+      target.removeEventListener('scroll', queue);
+      window.removeEventListener('resize', queue);
+      watch?.disconnect();
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [askState.open, askDocked, askAt]);
   const askPanel = askState.open ? (
     <AskPanel
       page={askState.page}
@@ -917,9 +966,11 @@ export default function WorkerRail({
   return (
     <>
     <aside
+      ref={asideRef}
       className={`fwr ${className}`.trim()}
       aria-label={`Eadwyn AI · ${workspace}`}
       data-collapsed={collapsed ? 'true' : 'false'}
+      {...(askPanel && askDocked && askHasRoom ? { 'data-ask-room': 'true' } : {})}
       data-sheet-keep=""
       {...(founderRecord ? { 'data-founder-record': 'true' } : {})}
       {...(railPage?.page ? { 'data-page-key': railPage.page } : {})}
@@ -964,8 +1015,11 @@ export default function WorkerRail({
           (`groups`, D1604): the deck's Ask is its page header's. */}
       {!collapsed && !groups && <div className="fwr-ask-entry"><HeaderAsk fallback testId="rail-ask" /></div>}
       {!sheet.open && !(serves && panel.open) && shown}
-      {askPanel && askDocked && <div className="fwr-ask-dock" data-testid="ask-dock">{askPanel}</div>}
     </aside>
+    {portalReady && askPanel && askDocked && createPortal(
+      <div ref={setDock} className="ead-ask-dock" data-testid="ask-dock" data-sheet-keep="">{askPanel}</div>,
+      document.body,
+    )}
     {portalReady && askPanel && !askDocked && createPortal(
       <>
         {askAt === 'sheet' && <button type="button" className="ead-ask-scrim" aria-label="Close Eadwyn" onClick={() => askPanelEvent({ type: 'scrim' })} />}

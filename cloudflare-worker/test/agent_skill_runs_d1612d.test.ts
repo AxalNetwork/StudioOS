@@ -41,7 +41,7 @@ function world() {
   addColumnsFrom(db, sql('migrations/597_company_archive_and_events.sql'), 'company_profiles');
   for (const m of ['712_team_agents.sql', '202611021724_team_agents_persona.sql']) db.exec(sql(`migrations/${m}`));
   db.exec(stripForeignKeys(sql('migrations/727_scope_goals_and_tasks.sql')));
-  for (const m of ['759_agent_skills.sql', '202611022055_agent_skill_moderation.sql', '202611022140_hq_skill_lifecycle.sql']) db.exec(sql(`migrations/${m}`));
+  for (const m of ['759_agent_skills.sql', '202611022326_agent_skill_context_tokens.sql', '202611022055_agent_skill_moderation.sql', '202611022140_hq_skill_lifecycle.sql']) db.exec(sql(`migrations/${m}`));
   db.exec(AI_BUDGET_MIGRATION + sql('migrations/465_ai_rail_preferences.sql') + sql('migrations/510_member_ai_pauses.sql')
     + sql('migrations/525_ai_reservation_idempotency.sql') + sql('migrations/632_ai_hold_context.sql'));
   // The migration under test, over the AI log schema's ai_usage_logs.

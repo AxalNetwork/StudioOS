@@ -1,11 +1,11 @@
 /*
  * D1443 (#3706, canvas AK) — the Ask panel.
  *
- * DOCKED (1024px and up). `WorkerRail` draws `.fwr-ask-dock` inside its own
- * <aside>, which runs from under the app header to the footer. The dock spans
- * that column's height at the rail's left edge (`right: 100%`); the panel is
- * sticky inside it, as tall as the window under the header and never taller
- * than the column, so it can pass neither the header nor the footer. It
+ * DOCKED (1024px and up). `WorkerRail` draws `.ead-ask-dock` fixed at the
+ * document's level and places it from its rail's box (#4260): from under the
+ * app header to the footer's top, at the rail column's seam (1440px and up,
+ * where the column widened for it) or against the column's outer edge, over
+ * the content. It can pass neither the header nor the footer. It
  * overlays the content column only: never the header, the sidebar, the rail or
  * the footer (AK12). This is the one sticky element in the rail's column
  * (workerRail.css keeps the rail itself without a scroll of its own).
@@ -32,6 +32,9 @@
   --ask-amb-edge: #fcd34d;
   --ask-amb: #92400e;
   display: flex; flex-direction: column; min-height: 0; box-sizing: border-box;
+  /* #4260: the body scrolls and the composer is fixed at the foot, so nothing
+     is ever drawn outside the panel's own ground. */
+  overflow: hidden;
   width: 420px; background: var(--ask-card); color: var(--ask-ink);
   border-left: 1px solid var(--ask-line);
   box-shadow: -10px 0 28px rgba(24, 24, 27, .08);
@@ -125,12 +128,19 @@
 .ead-ask-foot { font-size: 11.5px; color: var(--ask-mut); }
 .ead-ask-grip { align-self: center; flex: none; width: 40px; height: 4px; margin-top: 8px; border-radius: 999px; background: var(--ask-line2); }
 
-/* DOCKED: inside the rail's <aside>, at its left edge, header to footer. */
-.fwr-ask-dock { display: none; }
+/*
+ * DOCKED (1024px and up). #4260: drawn fixed at the document's level, never
+ * inside the rail, and placed by `WorkerRail` from the rail's measured box
+ * (`askDock` in askPanelModel.js): from under the header to the footer's top,
+ * at the rail column's seam or against its outer edge. Inside the rail it took
+ * the rail's box (RailFrame's padding, a collapsed spine's height) and every
+ * host rule written for the rail's children. The figures below are where it
+ * sits before the first measurement; the inline placement replaces them.
+ */
+.ead-ask-dock { display: none; }
 @media (min-width: 1024px) {
-  aside.fwr:has(> .fwr-ask-dock) { position: relative; }
-  .fwr-ask-dock { display: block; position: absolute; top: 0; bottom: 0; right: 100%; width: 420px; z-index: 30; pointer-events: none; }
-  .fwr-ask-dock > .ead-ask { pointer-events: auto; position: sticky; top: 0; height: min(calc(100dvh - 56px), 100%); }
+  .ead-ask-dock { display: block; position: fixed; top: 56px; right: 0; height: calc(100dvh - 56px); width: 420px; z-index: 40; }
+  .ead-ask-dock > .ead-ask { height: 100%; }
 }
 
 /*
@@ -143,20 +153,17 @@
  * is covered.
  *
  * The rail's own cards then move clear of the panel, but only where the track
- * really widened. The aside is a size container in this state only, and a rail
- * column is never 400px wide unless it took the panel's width (at most 288px
- * open, 44px on the spine; 464px and up once widened). A host that
- * does not read the track keeps the overlay, rather than a rail squeezed to
- * nothing. `frontend/test/header_ask_d1443p5.test.mjs` fails on any track
- * read without `--fwr-ask`.
+ * really widened: `WorkerRail` sets `data-ask-room` when its aside is 400px
+ * wide or more (a rail column is never that wide unless it took the panel's
+ * width: at most 288px open, 44px on the spine; 464px and up once widened),
+ * and places the panel at the column's seam. A host that does not read the
+ * track keeps the overlay, rather than a rail squeezed to nothing.
+ * `frontend/test/header_ask_d1443p5.test.mjs` fails on any track read without
+ * `--fwr-ask`.
  */
 @media (min-width: 1440px) {
   :root[data-eadwyn-ask-at="dock"] { --fwr-ask: 420px; }
-  :root[data-eadwyn-ask-at="dock"] aside.fwr:has(> .fwr-ask-dock) { container: fwr-col / inline-size; }
-  @container fwr-col (min-width: 400px) {
-    .fwr-ask-dock { right: auto; left: 0; }
-    aside.fwr > :not(.fwr-ask-dock) { margin-left: 420px; }
-  }
+  aside.fwr[data-ask-room="true"] > * { margin-left: 420px; }
 }
 
 /* OVER and SHEET: portalled below 1024px. */

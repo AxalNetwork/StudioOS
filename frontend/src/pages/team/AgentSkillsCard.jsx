@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import * as agents from './agentsAdapter.js';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, EYEBROW, HonestBlock, MUTED } from './teamUi.jsx';
-import { AgentRadar, SkillRow } from './SkillParts.jsx';
+import { AgentRadar, RunCostLine, SkillRow } from './SkillParts.jsx';
 import { AddSkillsSheet } from './SkillSheets.jsx';
 import { radarVector, scopeChip, updateLabel } from './skillsModel.js';
 
@@ -49,7 +49,7 @@ export function ValuesCard({ values }) {
 }
 
 /** The Skills card's body, from one A2 answer. Pure on its props, so the test renders every state. */
-export function AgentSkillsView({ value, agent, canManage, onAdd, onUpdate, onRemove, busy }) {
+export function AgentSkillsView({ value, agent, canManage, onAdd, onUpdate, onRemove, busy, cost }) {
   const skills = Array.isArray(value?.skills) ? value.skills : [];
   const vector = radarVector(value?.radar);
   const chip = scopeChip(agent?.scope);
@@ -61,6 +61,7 @@ export function AgentSkillsView({ value, agent, canManage, onAdd, onUpdate, onRe
         </span>
       ) : null}
       <AgentRadar vector={vector} radar={value?.radar} />
+      {cost !== undefined ? <RunCostLine est={cost} lead="count" /> : null}
       <div className="flex items-center">
         <span className={`flex-1 ${EYEBROW}`}>Skills{skills.length ? ` · ${skills.length}` : ''}</span>
         {canManage ? <button type="button" className={`${BTN_PRIMARY} h-8 px-3 text-[12.5px]`} onClick={onAdd} data-testid="agent-skills-add">Add skills</button> : null}
@@ -106,6 +107,16 @@ export default function AgentSkillsCard({ agent, canManage }) {
     } finally { setBusy(false); }
   };
   const list = (value?.skills || []).map((s) => ({ uid: s.uid, version: s.pinned_version }));
+  // D4121 SK4: "6 skills ≈ $0.05 per run · cap $20/month", read again whenever its skills change.
+  const [cost, setCost] = useState(null);
+  const pinKey = list.map((x) => `${x.uid}@${x.version}`).join(',');
+  useEffect(() => {
+    if (!value) return undefined;
+    let alive = true;
+    setCost(null);
+    agents.costEstimate(agent.uid).then((b) => { if (alive) setCost(b?.available ? b.value : { available: false }); });
+    return () => { alive = false; };
+  }, [agent.uid, pinKey, !!value]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <section className="flex flex-col gap-2 rounded-axal-lg border border-axal-hairline bg-white px-4 py-3.5 dark:border-gray-700 dark:bg-gray-900" data-testid="agent-skills-card">
       <h3 className="m-0 text-[14px] font-bold text-axal-ink dark:text-gray-100">Skills and values</h3>
@@ -114,7 +125,7 @@ export default function AgentSkillsCard({ agent, canManage }) {
           ? <div role="alert" className="flex items-center gap-2 text-[13px] font-semibold text-axal-destructive dark:text-red-300">Skills could not be read.<button type="button" className={BTN_TEXT} onClick={load}>Try again</button></div>
           : <HonestBlock testId="agent-skills-off">{block.reason} Its skills appear here once they are switched on.</HonestBlock>)
           : (
-            <AgentSkillsView value={value} agent={agent} canManage={manage} busy={busy} onAdd={() => setAdding(true)}
+            <AgentSkillsView value={value} agent={agent} canManage={manage} busy={busy} cost={cost} onAdd={() => setAdding(true)}
               onUpdate={(s) => write(list.map((x) => (x.uid === s.uid ? { uid: s.uid, version: s.current_version } : x)))}
               onRemove={(s) => write(list.filter((x) => x.uid !== s.uid))} />
           )}

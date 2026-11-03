@@ -785,8 +785,8 @@ test('the studio\'s table: exercises and exams as rows opening their editors, me
   const merged = withAssessmentRows(studioRows(items, []), STUDIO_EXERCISES, STUDIO_EXAMS);
   assert.deepEqual(merged.map((r) => r.uid), ['e2', 'v-yt', 'e1', 'x1', 'x0', 'e0']);
   const table = flat(html(h(StudioContentTable, { status: 'ready', rows: merged }), '/learning/studio'));
-  assert.match(table, /Exercise Before you raise Draft Program Not recorded 6 Oct 2026/);
-  assert.match(table, /Exam Seed basics check Published Open Not recorded 4 Oct 2026/);
+  assert.match(table, /Exercise Before you raise Draft Program Not recorded — 6 Oct 2026/);
+  assert.match(table, /Exam Seed basics check Published Open Not recorded — 4 Oct 2026/);
 });
 
 // ── The rules every Learning file keeps ────────────────────────────────────

@@ -284,6 +284,48 @@ export const PROVIDER_MODELS: readonly ProviderModel[] = Object.freeze([
 
 export type ProviderSwitches = Partial<Record<'AI_PROVIDER_ANTHROPIC', string>>;
 
+/**
+ * #3778 phase 2 (D1534; owner decision M = B, 2026-11-03): third-party image
+ * tools. They run through AI Gateway's unified models on the Workers AI binding
+ * (`env.AI.run('bria/remove-background', …)`) and Cloudflare bills them per
+ * image against the account's AI Gateway credits, so they are not neurons and
+ * not in `CATALOGUE`. Each row carries its price as the model page prints it,
+ * with the page and the date it was read.
+ *
+ * OFF BY DEFAULT, like the provider rows above: a tool runs only while
+ * `AI_PROVIDER_BRIA` is exactly 'on'. The owner turns it on after buying
+ * AI Gateway credits and sending Bria's sub-processor notice (#1008).
+ *
+ * Bria only (M = B). Cloudflare lists no Bria upscale model, so Upscale has no
+ * row: it stays "Coming later" until a model is chosen.
+ */
+export type ImageToolId = 'remove_background' | 'upscale';
+export interface GatewayImageModel {
+  id: string;
+  provider: 'bria';
+  name: string;
+  tool: ImageToolId;
+  /** USD per image, exactly as printed. */
+  usdPerImage: string;
+  source: string;
+  read: string;
+}
+export const IMAGE_TOOL_SWITCH = 'AI_PROVIDER_BRIA' as const;
+export const GATEWAY_IMAGE_MODELS: readonly GatewayImageModel[] = Object.freeze([
+  {
+    id: 'bria/remove-background',
+    provider: 'bria',
+    name: 'Bria RMBG 2.0',
+    tool: 'remove_background',
+    usdPerImage: '0.018',
+    source: 'https://developers.cloudflare.com/ai/models/bria/remove-background/',
+    read: '2026-11-03',
+  },
+]);
+export const gatewayImageModelFor = (tool: ImageToolId): GatewayImageModel | null => GATEWAY_IMAGE_MODELS.find((m) => m.tool === tool) ?? null;
+export const imageToolsOn = (env: Partial<Record<typeof IMAGE_TOOL_SWITCH, string>>): boolean => env[IMAGE_TOOL_SWITCH] === 'on';
+
+
 export const providerModelById = (id: string): ProviderModel | null => PROVIDER_MODELS.find((m) => m.id === id) ?? null;
 
 /** Offered only while its provider's switch is exactly 'on'. */
