@@ -48,7 +48,7 @@ import {
  *   Start from      Standard outline (New deck), Build a standard deck now
  *                   (the one-click, from your records: `OneClickBuild.jsx`),
  *                   Browse templates (the gallery, `TemplatesGallery.jsx`) and
- *                   Import a .pptx template, greyed "Coming later" (#3809).
+ *                   Import a .pptx template, greyed "Coming later" (#3819).
  *                   A reader gets no Start from: the deck card takes the row
  *   Data ready      `DataReady.jsx`: each area's share and "Add in … ›"
  *   Investor links  shared links, unique viewers, median time, views by

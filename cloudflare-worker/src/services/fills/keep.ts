@@ -310,6 +310,27 @@ export const UNDO_WRITES: Readonly<Record<string, { read: string; write: string;
   'testing_applications.answer_3': { read: "SELECT NULL AS project_id, json_extract(answers, '$[2]') AS value FROM testing_applications WHERE id = ?", write: "UPDATE testing_applications SET answers = json_set(answers, '$[2]', ?), updated_at = datetime('now') WHERE id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL", int: false, required: true, scoped: true },
   'testing_applications.answer_4': { read: "SELECT NULL AS project_id, json_extract(answers, '$[3]') AS value FROM testing_applications WHERE id = ?", write: "UPDATE testing_applications SET answers = json_set(answers, '$[3]', ?), updated_at = datetime('now') WHERE id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL", int: false, required: true, scoped: true },
   'testing_applications.answer_5': { read: "SELECT NULL AS project_id, json_extract(answers, '$[4]') AS value FROM testing_applications WHERE id = ?", write: "UPDATE testing_applications SET answers = json_set(answers, '$[4]', ?), updated_at = datetime('now') WHERE id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL", int: false, required: true, scoped: true },
+  // #4046 (B4): a program proposal's words. A draft may hold each one blank (Send asks for a name and a purpose
+  // later), so an Undo may put back nothing. No status clause: the scope refuses a proposal that is no longer a draft
+  // or sent back before this runs, and a clause here would mark the fill undone while writing no row.
+  'program_proposals.name': { read: 'SELECT NULL AS project_id, name AS value FROM program_proposals WHERE id = ?', write: "UPDATE program_proposals SET name = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL", int: false, required: false, scoped: true },
+  'program_proposals.purpose': { read: 'SELECT NULL AS project_id, purpose AS value FROM program_proposals WHERE id = ?', write: "UPDATE program_proposals SET purpose = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL", int: false, required: false, scoped: true },
+  'program_proposals.eligibility': { read: 'SELECT NULL AS project_id, eligibility AS value FROM program_proposals WHERE id = ?', write: "UPDATE program_proposals SET eligibility = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL", int: false, required: false, scoped: true },
+  // #4046 (B4): an invitation's message is emailed by the same POST that makes the row, so there is never a prior
+  // value and an Undo is refused (`no_prior`): the invitee reads what was sent, and a resend would send the blank.
+  // partner_invitations has no updated_at column, so nothing is stamped.
+  'partner_invitations.personal_message': { read: 'SELECT NULL AS project_id, personal_message AS value FROM partner_invitations WHERE id = ?', write: 'UPDATE partner_invitations SET personal_message = ? WHERE id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL', int: false, required: true, scoped: true },
+  // #4046 (B4): a reviewer's comment is made by the POST that sends it to the author's editor, so there is never a prior
+  // value and an Undo is refused (`no_prior`): the author may already have read it. The table has no updated_at; a text
+  // change stamps edited_at (PUT /comments/:cid's ISO time), so the statement stamps it the same way.
+  'article_review_comments.body': { read: 'SELECT NULL AS project_id, body AS value FROM article_review_comments WHERE id = ?', write: "UPDATE article_review_comments SET body = ?, edited_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL", int: false, required: true, scoped: true },
+  // #4046 (B4): a segment's name and who they are, on its rowid (the table's key is TEXT). Every write of the segment store
+  // adds a version, a segment_profile_history row and an admin audit copy (`writeProfile`); one statement cannot add the
+  // last two, so an Undo is always refused (`no_prior`, as New segment is Add only and its prior is blank) and HQ revises
+  // the words through the segment's edit, which records them. The statement still bumps the version, as `writeProfile`
+  // does, so an editor holding the old one is told to reload.
+  'segment_profiles.name': { read: 'SELECT NULL AS project_id, name AS value FROM segment_profiles WHERE rowid = ?', write: "UPDATE segment_profiles SET name = ?, version = version + 1, updated_at = datetime('now') WHERE rowid = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL", int: false, required: true, scoped: true },
+  'segment_profiles.who': { read: 'SELECT NULL AS project_id, who AS value FROM segment_profiles WHERE rowid = ?', write: "UPDATE segment_profiles SET who = ?, version = version + 1, updated_at = datetime('now') WHERE rowid = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL", int: false, required: true, scoped: true },
   'deal_notes.body': { read: 'SELECT NULL AS project_id, body AS value FROM deal_notes WHERE id = ?', write: "UPDATE deal_notes SET body = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND (SELECT undone_at FROM fill_provenance WHERE id = ?) IS NULL", int: false, required: true, scoped: true },
 });
 

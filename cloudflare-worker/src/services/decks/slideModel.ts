@@ -52,8 +52,9 @@
  * (`services/decks/sources.ts`). A metric tile with no value is `value: null`,
  * which every reader shows as "Not recorded", never 0.
  */
-import { sanitizeBinding } from './sources';
+import { sanitizeBinding } from './binding';
 import { sanitizeArtDirection } from './artDirection';
+import { fontPairOf } from './brandFonts';
 import { cellText, tableLines } from './tableCells';
 
 export { cellText, tableLines };
@@ -61,6 +62,7 @@ import { diagramProblem, sanitizeDiagram } from './diagramModel';
 import { CUSTOM, STRUCTURE_IDS, areasProblem, sanitizeAreas } from './structures';
 import { BASELINE, atOf, blockArrange, decorArrange, decorHoldsContent, groupOf, layered } from './arrange';
 import { DECOR_KINDS, MAX_DECOR as LIBRARY_MAX_DECOR, cleanDecorItem } from './elements';
+import { filterOf, rectOf, type Crop } from './imageLook';
 
 export const GRID_COLS = 12;
 export const GRID_ROWS = 6;
@@ -190,12 +192,17 @@ function backgroundOf(v: any, url: UrlGuard): Background | null {
   return out;
 }
 
-/** D903: the point an image keeps in view when it is cropped to its range, in percent of each side. */
-function cropOf(v: any): { x: number; y: number } | null {
+/**
+ * D903: the point an image keeps in view when it is cropped to its range, in percent of each side.
+ * D1534 (#3778): with an optional zoom window (`rect`, `imageLook.ts` `rectOf`): aspect locked, inside the frame.
+ */
+function cropOf(v: any): Crop | null {
   if (!v || typeof v !== 'object') return null;
   const n = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) ? Math.round(Math.min(100, Math.max(0, x))) : null);
   const x = n(v.x), y = n(v.y);
-  return x === null || y === null ? null : { x, y };
+  if (x === null || y === null) return null;
+  const rect = rectOf(v.rect);
+  return rect ? { x, y, rect } : { x, y };
 }
 
 function pointsOf(v: unknown): Array<{ x: string; y: number }> | null {
@@ -374,6 +381,9 @@ function blockBody(kind: BlockKind, v: any, url: UrlGuard, ground = '#ffffff'): 
       if (fit) out.fit = fit;
       const crop = cropOf(v.crop);
       if (crop) out.crop = crop;
+      // D1534 (#3778): one of the eight filter presets; Original is no key.
+      const filter = filterOf(v.filter);
+      if (filter) out.filter = filter;
       return out;
     }
     case 'video': {
@@ -474,6 +484,9 @@ export function sanitizeTheme(v: any, url: UrlGuard): Record<string, unknown> & 
   // D1544 (#3784): a sentence (D1500) or the structured direction every image inherits.
   const art = sanitizeArtDirection(v.art_direction);
   if (art) out.art_direction = art;
+  // D1562 (#3809): the brand kit's font pair, two Google Fonts under the OFL; kept only when set.
+  const fonts = fontPairOf(v.fonts);
+  if (fonts) out.fonts = fonts;
   if (typeof v.lang === 'string' && LANG.test(v.lang)) out.lang = v.lang;
   const dir = oneOf(v.dir, DIRS);
   if (dir) out.dir = dir;

@@ -48,7 +48,9 @@ test('every adapter method answers unavailable, with the reason and the issue th
   const wired = methods.filter((n) => /\bthrough\(\(\) => [^\n]*\b[a-z][A-Za-z]*Api\./.test(body(code, n)));
   const local = methods.filter((n) =>
     (n === 'history' && body(code, n) === 'async () => Object.freeze({ available: true, value: gridOps });')
-    || (n === 'arrange' && /arrangeCard\(card, selection, op, opts\)/.test(body(code, n))));
+    || (n === 'arrange' && /arrangeCard\(card, selection, op, opts\)/.test(body(code, n)))
+    // D1534 (#3778): crop, focus and filters are the block's own fields, saved with the deck; no route runs.
+    || (n === 'imageEdit' && body(code, n) === "async () => ({ available: true, value: { crop: 'rect', filters: [...FILTERS] } });"));
   const offRows = methods.filter((n) => body(code, n) === `off('${n}');`);
   assert.deepEqual([...adapter.SWAPPED].sort(), [...wired, ...local].sort(), 'SWAPPED is exactly the remote and browser-local rows');
   assert.deepEqual([...wired, ...local, ...offRows].sort(), [...methods].sort(), 'every row is remote, browser-local history or Arrange, or off(\'<row>\')');
@@ -210,10 +212,10 @@ test('the adapter keys each surface to the plan’s issue (§6.2)', () => {
   const want = {
     grid: 3749, saveCard: 3751, discardDraft: 3751, draft: 3751, batch: 3753, cancelBatch: 3753, elementModels: 3754,
     areasQuote: 3764, areasGenerate: 3764, history: 3767, narrativeOutline: 3768, instruct: 3773,
-    stagePlan: 3774, figures: 3775, deckUsage: 3776, arrange: 3777, imageEdit: 3778, imageVary: 3784, elementsLibrary: 3779,
+    stagePlan: 3774, figures: 3775, deckUsage: 3776, arrange: 3777, imageEdit: 3778, imageEditAi: 3778, imageVary: 3784, elementsLibrary: 3779,
     diagrams: 3780, ventureElements: 3781, templates: 3782, myTemplates: 3782, saveAsTemplate: 3782, typedTables: 3787,
     media: 3788, presets: 3796, orgLocks: 3786, critique: 3799, remix: 3800, consistency: 3802, deckActions: 3808,
-    brandLocks: 3819, pptxImport: 3809, investorLinks: 3812, withdrawInvestorLink: 3812, comments: 3817, slideAnalytics: 3820,
+    brandLocks: 3819, pptxImport: 3819, investorLinks: 3812, withdrawInvestorLink: 3812, comments: 3817, slideAnalytics: 3820,
     presence: 3824, cardStatus: 3826, rehearse: 3827, walkthrough: 3837, retryFailed: 3879, unseenBatches: 3879,
     markSeen: 3879, setDeckSource: 3881,
   };
@@ -257,6 +259,10 @@ test('the seam reaches no network, and no client method exists for a route that 
   // D1553 (#3800): Remix has its route and client.
   assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_remix.ts')), /deckRemix\.post\(['"]\/:id\{\[0-9\]\+\}\/remix['"]/);
   assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckRemix\)/);
+  // D1552 (#3799): Fix with critique has its quote and run routes and client.
+  assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_critique.ts')), /deckCritique\.post\(['"]\/:id\{\[0-9\]\+\}\/critique\/quote['"]/);
+  assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_critique.ts')), /deckCritique\.post\(['"]\/:id\{\[0-9\]\+\}\/critique['"]/);
+  assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckCritique\)/);
   // D1503 (#3754): the element models route is on main, with its client.
   assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_element_models.ts')), /deckElementModels\.get\(['"]\/:id\{\[0-9\]\+\}\/element-models['"]/);
   assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckElementModels\)/);

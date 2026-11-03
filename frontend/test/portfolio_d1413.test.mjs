@@ -19,7 +19,8 @@ import { codeOnly } from './_codeOnly.mjs';
 import { readDecision } from './_decisions.mjs';
 import { renderedText } from './_renderedText.mjs';
 import CompaniesProjects from '../src/pages/account/companies/CompaniesProjects.jsx';
-import CompanySettingsTabs, { GeneralCard } from '../src/pages/account/companies/CompanySettingsTabs.jsx';
+import CompanySettingsTabs from '../src/pages/account/companies/CompanySettingsTabs.jsx';
+import CompanyGeneralForm from '../src/pages/account/companies/CompanyGeneralForm.jsx';
 import PortfolioAddress, { portfolioTarget } from '../src/pages/account/companies/PortfolioAddress.jsx';
 import { ActiveCompanyContext } from '../src/contexts/ActiveCompanyContext.js';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
@@ -348,12 +349,12 @@ test('PF1: while the projects read, a card says Reading…, never "· 0" or "No 
   } finally { release(); await v.close(); }
 });
 
-test('PF6a: the General card says a failed company read with Try again, and a failed address read is not "Not recorded"', () => {
-  const failed = renderedText(renderToStaticMarkup(h(MemoryRouter, null, h(GeneralCard, { uid: 'nl', detail: null, path: null, status: 'error', onRetry: () => {} }))));
-  assert.match(failed, /The company’s details could not be read\..*Try again/);
-  assert.doesNotMatch(failed, /Reading…/);
-  const noPath = renderedText(renderToStaticMarkup(h(MemoryRouter, null, h(GeneralCard, { uid: 'nl', detail: COMPANY, path: null, pathRead: false, status: 'ready' }))));
-  assert.match(noPath, /The address could not be read/);
+test('PF6a, D4152: General says a failed company read with Try again, never an empty form', async () => {
+  const v = await mount('founder', { element: h(CompanyGeneralForm, { uid: 'nl' }), handle: worker({ 'GET /api/company/nl': () => response({ detail: 'boom' }, 500) }) });
+  try {
+    assert.match(v.of('company-general-unread'), /Settings could not be read\..*Try again/);
+    assert.equal(v.count('company-general-form'), 0);
+  } finally { await v.close(); }
 });
 
 test('PF5: signing out forgets the picked project; a company made or switched to elsewhere clears a project of another company', () => {
@@ -408,14 +409,16 @@ test('PF3: a standalone project offers Make it a company (Incorporate, prefilled
 
 // ---------------------------------------------------------------- PF6, PF8
 
-test('PF6a: Default currency reads "Coming later" through the seam (#3932), never USD', async () => {
+test('PF6a: Default currency reads "Coming later" through the seam (#3932), never USD; D4152: General shows no such row', async () => {
   const out = await adapter.defaultCurrency('nl');
   assert.deepEqual(out, { available: false, reason: 'Coming later', waitsOn: '#3932' });
-  const v = await mount('founder', { element: h(GeneralCard, { uid: 'nl', detail: COMPANY, path: '/c/northwind-labs' }) });
+  const v = await mount('founder', { element: h(CompanyGeneralForm, { uid: 'nl' }) });
   try {
-    assert.match(v.of('company-general-facts'), /Default currencyComing later/);
-    assert.doesNotMatch(v.text(), /USD/);
-    assert.match(v.of('company-general-facts'), /LogoNot recorded/);
+    const form = v.of('company-general-form');
+    assert.match(form, /Company name · required/);
+    // D4152 §5–§7: no "Coming later" row, no internal path, no logo URL box.
+    assert.doesNotMatch(v.text(), /Coming later|Default currency|\/c\/|Logo URL|USD/);
+    assert.equal(v.count('company-general-savebar'), 0, 'nothing changed, so there is nothing to save');
   } finally { await v.close(); }
 });
 

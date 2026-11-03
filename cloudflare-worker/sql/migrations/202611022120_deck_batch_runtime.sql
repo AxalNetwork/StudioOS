@@ -1,0 +1,12 @@
+-- D1536 (#3785, deck v2 B9): which runtime drives a deck generation run.
+-- Named by its UTC minute (D4106); #3785 named 731, which D4106 retired for new files.
+--
+-- `do`: the deck's `DeckGenRoom` Durable Object drives the run (D1502, the
+-- default). `queue`: the Queue fallback drives it, slice by slice, from
+-- `JOB_QUEUE` (a run of more than 18 variant steps, or `DECK_GEN_RUNTIME =
+-- "queue"`). The routes read it to send Stop and the live progress to the
+-- runtime that has the run. Every run made before this file is a room's run.
+--
+-- Additive: one ADD COLUMN. NON-IDEMPOTENT (D1's ALTER TABLE has no IF NOT
+-- EXISTS); the migration runner applies each file once.
+ALTER TABLE deck_area_batches ADD COLUMN runtime TEXT NOT NULL DEFAULT 'do' CHECK (runtime IN ('do', 'queue'));
