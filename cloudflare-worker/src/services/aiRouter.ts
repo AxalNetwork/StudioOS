@@ -45,7 +45,8 @@ import { MODEL_CONNECTIONS, MODULE_ROUTES, type ModuleTask } from './ai/moduleCo
 import { SPECIALIST_OUTPUT_MAX, specialistRefusal, specialistRequest, specialistOutput, pcmBytes, pcmMinutes, type SpecialistInput } from './ai/moduleShapes';
 import { drawChoice, memberPlanTier, type DrawSkip, type DrawSource, type PlanTier } from './ai/drawJobs';
 import { speechChoice, type SpeechSkip, type SpeechSource } from './ai/speechJobs';
-import { TASK_TEXT_JOBS, railOptionTextJob, textChoice, type TextSkip, type TextSource } from './ai/textJobs';
+import { TASK_TEXT_JOBS, TEXT_KINDS as TEXT_JOB_KINDS, isTextJob, railOptionTextJob, textChoice, type TextSkip, type TextSource } from './ai/textJobs';
+import { RAIL_KIND_JOBS, jobStep } from './ai/modelUseCases';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -1973,6 +1974,21 @@ function pinnedChoice(choice: ModelChoice, opts: RunOptions): ModelChoice {
   return { ...choice, chain: [] };
 }
 
+/**
+ * #4313 (D4313): the text job a rail press runs, and the option row whose pick applies.
+ * A registered option runs its own job (or none, when its job writes no text); anything
+ * else on a listed page runs the page's kind's job. Null when the page is not listed.
+ */
+export function railTextJob(page: string, option: string | null): { job: string | null; optionRow: ReturnType<typeof resolveRailOption> } | null {
+  const optionRow = option ? resolveRailOption(page, option) : null;
+  if (optionRow) return { job: railOptionTextJob(page, option), optionRow };
+  const row = resolveRail(page);
+  if (!row) return null;
+  const ref = RAIL_KIND_JOBS[row.kind];
+  const step = ref ? jobStep(ref.id, ref.step) : null;
+  return { job: ref && step && TEXT_JOB_KINDS.has(step.kind) && isTextJob(ref.id) ? ref.id : null, optionRow: null };
+}
+
 async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Promise<ModelChoice> {
   // D1509 (#3760): the models HQ switched off for this member are not offered, here as in every reply.
   const switches = catalogueSwitchesFor(env as catalogue.CatalogueSwitches, { modelsOff: await modelsOffFor(env, opts.userId) });
@@ -2015,19 +2031,26 @@ async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Prom
   // does not list is refused. Too long for every model: refused, naming the
   // longest-window one, before anything is held.
   const textShaped = !route.isAudio && !route.isEmbed && !opts.rerank && !opts.translate && !opts.speak && !opts.draw && !opts.specialist && !(opts.images?.length);
-  // #3937 part 3: a task's own job (`TASK_TEXT_JOBS`) yields to a rail run's page row: a press on a page
-  // the matrix lists runs that page's models (D764), as before. A job the caller names always applies.
-  const pageRowed = !!opts.rail && !!(resolveRailOption(opts.rail.page, opts.rail.option ?? null) ?? resolveRail(opts.rail.page));
-  // #4313 (D4313): a rail press whose option the table maps runs that option's job through
-  // `textChoice`, not its page's row. A press with no option, or whose option writes no text,
-  // keeps the path above until it moves.
-  const optionJob = opts.rail ? railOptionTextJob(opts.rail.page, opts.rail.option ?? null) : null;
-  const textJobId = opts.textJob ?? (!opts.model ? optionJob ?? (!pageRowed ? TASK_TEXT_JOBS[opts.task] : undefined) : undefined);
+  // #4313 (D4313): every rail text press runs a job through `textChoice`, never its page's row.
+  //   * a registered option the table maps runs that option's job (part 1);
+  //   * a press with no option, or an option the page does not register, runs the page's job:
+  //     its kind's job (`RAIL_KIND_JOBS`), the same job the page's model list is built from (part 2);
+  //   * a registered option whose job writes no text (a recording, an image, an upload) keeps its own path.
+  // A caller that names a model is checked against the job, as a pick is (part 2). A job the caller
+  // names (`textJob`) always applies. A run with no rail context runs its task's job (#3937 part 3).
+  const railText = opts.rail ? railTextJob(opts.rail.page, opts.rail.option ?? null) : null;
+  // A caller that names a model (an All models choice, a persona module's connection, #3626) is
+  // checked against the option's or page's list below. That list is the job's own selector
+  // (`withModuleModels` builds it from the same job's step and kind), so the check is the job's;
+  // the list never chooses a model by itself.
+  const railJob = railText?.job && !opts.model ? railText.job : undefined;
+  const textJobId = opts.textJob ?? (opts.rail ? railJob : (!opts.model ? TASK_TEXT_JOBS[opts.task] : undefined));
   if (textJobId && textShaped) {
     let pick: string | null = null;
     let tier: PlanTier;
     try {
-      const optionRow = opts.rail?.option ? resolveRailOption(opts.rail.page, opts.rail.option) : null;
+      // Only an option carries a member's pick; the page-level pick is gone with the page rows (part 2).
+      const optionRow = railText?.optionRow ?? null;
       if (optionRow && !opts.model) pick = (await railPicks(env, opts.userId, optionRow.pageKey, optionRow.optionKey)).option;
       tier = await memberPlanTier(env, opts.userId);
     } catch { return { ok: false, refusal: 'misconfigured', error: 'Unreadable: your plan or your model picks could not be read. Nothing was run.', record: false }; }
@@ -2050,8 +2073,13 @@ async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Prom
   // run leaves the route in charge too.
   let railed: { primary: string; chain: string[] } | null = null;
   const railShaped = !route.isAudio && !route.isEmbed && !opts.rerank && !opts.translate && !opts.speak && !opts.draw && !opts.specialist && opts.task !== 'module_vision';
+  // #4313 part 2: a registered option's row (a vision press, or an option whose job writes no text);
+  // the page's list to check a model the caller named; and the page's list on a page whose own job
+  // writes no text (a vision or speech page, `railText.job` null). That list is the page job's own
+  // selector (`withModuleModels`), so no model is read from the matrix's page row.
+  const pageJobless = !!railText && !railText.optionRow && !railText.job;
   const railRow = opts.rail && railShaped
-    ? resolveRailOption(opts.rail.page, opts.rail.option ?? null) ?? resolveRail(opts.rail.page)
+    ? resolveRailOption(opts.rail.page, opts.rail.option ?? null) ?? (opts.model || pageJobless ? resolveRail(opts.rail.page) : null)
     : null;
   if (opts.rail && railRow) {
     let picks: { page: string | null; option: string | null };
