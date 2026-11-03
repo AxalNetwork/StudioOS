@@ -147,9 +147,12 @@ test('the PDF and the PowerPoint draw the same decor: the print page\'s plan is 
   const xml = unzip((await writeEditableDeck({ slides: [card], renderable: [{ title: 'x', fields: [] }], brand: BRAND, notes: false, images: new Map() })).bytes).get('ppt/slides/slide1.xml')!;
   const drawn = [...xml.matchAll(/name="Decor (d\d)"/g)].map((m) => m[1]);
   assert.deepEqual(drawn, plan.filter((d) => d.geometry).map((d) => d.id), 'the PowerPoint stacks every planned shape in the plan\'s order');
-  // An item with no native shape (an icon, until #3779's art reaches the exports) is drawn by neither.
+  // An item with no native shape (an icon) has no geometry in either plan; D1574 (#3821) writes #3779's art
+  // into the PowerPoint as SVG, the icon the editor draws, never as a native shape.
   const icon = { ...card, decor: [{ id: 'd7', kind: 'icon', ref: 'rocket' }] };
   assert.equal(decorPlan(icon)[0].geometry, null);
   assert.equal(front.decorPlan(icon)[0].geometry, null);
-  assert.doesNotMatch(unzip((await writeEditableDeck({ slides: [icon], renderable: [{ title: 'x', fields: [] }], brand: BRAND, notes: false, images: new Map() })).bytes).get('ppt/slides/slide1.xml')!, /Decor d7/);
+  const iconXml = unzip((await writeEditableDeck({ slides: [icon], renderable: [{ title: 'x', fields: [] }], brand: BRAND, notes: false, images: new Map() })).bytes).get('ppt/slides/slide1.xml')!;
+  assert.match(iconXml, /name="Decor d7"[\s\S]*asvg:svgBlip/);
+  assert.doesNotMatch(iconXml, /<p:sp>\s*<p:nvSpPr><p:cNvPr id="\d+" name="Decor d7"/);
 });

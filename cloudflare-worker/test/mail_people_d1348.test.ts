@@ -27,11 +27,6 @@ import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 after(removeMigratedDatabases);
 const JWT_SECRET = 'synthetic-d1348-only-not-a-real-credential'.repeat(2);
 const NOW = Date.parse('2026-10-28T12:00:00Z');
-// The routes read the wall clock (`peopleFor`, `profileRecord`: now = Date.now()). Pin it to NOW, so a fixture
-// date in "the future" (the 2026-11-03 session) stays in the future whatever day the suite runs on.
-const REAL_NOW = Date.now;
-Date.now = () => NOW;
-after(() => { Date.now = REAL_NOW; });
 const ADMIN = 1, FOUNDER = 2, FOUNDER_B = 3, PARTNER = 5, INVESTOR = 6, ADVISOR = 7, EXPLORER = 8,
   OTHER_INVESTOR = 10, OTHER_ADVISOR = 11, OTHER_PARTNER = 12, OTHER_ADMIN = 13;
 
@@ -160,11 +155,14 @@ test('investor: deal flow, portfolio, co-investors and Network matches, each und
 });
 
 test('advisor: clients from sessions, cohort founders and Network matches; notes, the next session, the week plan, their services', async () => {
+  // The 2026-11-03 slot is the next session: the test reads the module as of 2026-11-02, not today's clock.
+  const realNow = Date.now;
+  Date.now = () => Date.parse('2026-11-02T12:00:00Z');
   const f = await fixture();
   try {
     f.db.exec(`
       INSERT INTO advisors(id,uid,user_id,display_name) VALUES (70,'adv70',${ADVISOR},'Synthetic Advisor'),(71,'adv71',${OTHER_ADVISOR},'Other Advisor');
-      INSERT INTO advisor_office_hour_slots(id,uid,advisor_id,starts_at,ends_at) VALUES (1,'sl1',70,'2026-10-20T10:00:00Z','2026-10-20T11:00:00Z'),(2,'sl2',70,'2026-11-03T10:00:00Z','2026-11-03T11:00:00Z'),(3,'sl3',71,'2026-10-21T10:00:00Z','2026-10-21T11:00:00Z');
+      INSERT INTO advisor_office_hour_slots(id,uid,advisor_id,starts_at,ends_at) VALUES (1,'sl1',70,'2026-10-20T10:00:00Z','2026-10-20T11:00:00Z'),(2,'sl2',70,'2099-11-03T10:00:00Z','2099-11-03T11:00:00Z'),(3,'sl3',71,'2026-10-21T10:00:00Z','2026-10-21T11:00:00Z');
       INSERT INTO advisor_bookings(uid,slot_id,advisor_id,founder_user_id,topic,status) VALUES ('b1',1,70,${FOUNDER},'Pricing','completed'),('b2',2,70,${FOUNDER},'Hiring','confirmed'),('b3',3,71,${FOUNDER_B},'GTM','completed');
       INSERT INTO advisor_engagements(uid,client_name,advisor_id,founder_user_id,lane,shape,term_ends_at) VALUES ('ae1','Synthetic client',70,${FOUNDER},'signed','retainer','2026-10-25');
       INSERT INTO advisor_client_notes(uid,advisor_user_id,client_user_id,body,updated_at) VALUES ('n1',${ADVISOR},${FOUNDER},'Synthetic session note: pricing tiers','2026-10-20');
@@ -187,7 +185,7 @@ test('advisor: clients from sessions, cohort founders and Network matches; notes
     assert.equal(cl.status, 200, JSON.stringify(cl.body));
     assert.deepEqual(cl.body.items.map((i: any) => i.kind), ['client', 'session_notes', 'next_session', 'service']);
     assert.match(cl.body.items[1].text, /pricing tiers/);
-    assert.equal(cl.body.items[2].as_of, '2026-11-03');
+    assert.equal(cl.body.items[2].as_of, '2099-11-03', 'the next session stays in the future whatever today is');
     assert.doesNotMatch(JSON.stringify(cl.body), /Retired/, 'an inactive service is absent');
     assert.equal((await pack(f, ADVISOR, `client:${FOUNDER_B}`)).status, 404, 'another advisor\'s client');
     assert.equal((await pack(f, OTHER_ADVISOR, `client:${FOUNDER}`)).status, 404);
@@ -203,7 +201,8 @@ test('advisor: clients from sessions, cohort founders and Network matches; notes
     f.db.exec(`UPDATE advisor_cohort_assignments SET is_active = 0`);
     assert.equal((await pack(f, ADVISOR, `cohort:9-${FOUNDER_B}`)).status, 404, 'an assignment ended');
     assert.deepEqual(refsOf(await people(f, ADVISOR), 'cohort'), []);
-  } finally { f.close(); }
+  } finally {
+    Date.now = realNow; f.close(); }
 });
 
 test('operating partner: clients from Delivery, leads from Pipeline; status reports, milestones, proposals and Offers', async () => {

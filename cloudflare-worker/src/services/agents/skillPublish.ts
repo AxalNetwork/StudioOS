@@ -20,6 +20,7 @@ import { checkDraft, toSkillMd, type OutputKind, type Tag } from './skills';
 import { publishRefusal, type DraftParts } from './skillLifecycle';
 import { clearOnRepublish } from './skillModeration';
 import type { SkillRow } from './skillLinks';
+import { contextTokensOf } from './runCost';
 import { logAdminAction } from '../adminAudit';
 
 const parse = <T>(json: string | null | undefined, fallback: T): T => { try { const v = JSON.parse(json ?? ''); return v ?? fallback; } catch { return fallback; } };
@@ -60,6 +61,11 @@ export async function publishDraft(env: Env, s: SkillRow, user: User, reason: st
     env.DB.prepare(`INSERT INTO agent_skill_versions (skill_id, version, skill_md, name, purpose, steps_json, allowed_tools_json, output_kind, taxonomy_json, roles_json, published_by)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(s.id, version, md, d.name, d.purpose, JSON.stringify(d.steps), JSON.stringify(d.tools), d.output_kind,
       JSON.stringify(checked.draft.tags), JSON.stringify(checked.draft.roles), user.id),
+    // D4121: what the version adds to a run that uses it: its prompt, as the run path joins it.
+    env.DB.prepare('INSERT OR REPLACE INTO agent_skill_version_costs (skill_id, version, context_tokens) VALUES (?, ?, ?)').bind(s.id, version, contextTokensOf({
+      version, name: d.name, purpose: d.purpose, steps_json: JSON.stringify(d.steps), allowed_tools_json: JSON.stringify(d.tools),
+      output_kind: d.output_kind, roles_json: JSON.stringify(checked.draft.roles),
+    })),
     // D4161: a company's new version starts clean of HQ's flag or suspension.
     ...(s.scope === 'company' ? [clearOnRepublish(env, s.id, version, user.id)] : []),
   ]).catch(() => null);

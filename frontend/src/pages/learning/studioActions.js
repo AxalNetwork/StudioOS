@@ -10,8 +10,13 @@
  * message, and the studio shows that sentence as it is.
  */
 import { adminLearningApi } from '../../lib/api/adminLearning.js';
+import { learningApi } from '../../lib/api/learning.js';
+import { rawRequestHeaders, readRefusal } from '../../lib/api.js';
 import { byPosition, formatLength, moveInOrder, parseLength } from './learningModel';
-import { UPLOAD_CANCELLED, VIDEO_UPLOAD, videoFileProblem, videoTypeOf } from './videoUpload';
+import {
+  STREAM_COPY_FIELD, STREAM_UNAVAILABLE, STREAM_UPLOAD, UPLOAD_CANCELLED, VIDEO_UPLOAD, chaptersBody, streamFileProblem, streamProtocolFor,
+  streamTypeOf, videoFileProblem, videoTypeOf, vttProblem,
+} from './videoUpload';
 
 const listOf = (reply, key, what) => {
   const list = reply?.[key];
@@ -48,6 +53,11 @@ export function studioRows(items, courses) {
     ...(items || []).map((i) => ({
       kind: i.kind, uid: i.uid, title: i.title, status: i.status, visibility: i.visibility, programs: null,
       updated_at: i.updated_at, href: `/learning/studio?item=${enc(i.uid)}`,
+      // #4177 (lr16): the Video column. `stream_uid` and the copy state are copied only when the read carries
+      // them, so a field the read does not send stays absent rather than reading as "none" (videoUpload.js).
+      video_source: i.video_source ?? null, video_url: i.video_url ?? null,
+      ...(Object.hasOwn(i, 'stream_uid') ? { stream_uid: i.stream_uid } : {}),
+      ...(Object.hasOwn(i, STREAM_COPY_FIELD) ? { [STREAM_COPY_FIELD]: i[STREAM_COPY_FIELD] } : {}),
     })),
     ...(courses || []).map((c) => ({
       kind: 'course', uid: c.uid, title: c.title, status: c.status, visibility: c.visibility, programs: null,
@@ -189,6 +199,194 @@ export async function uploadVideo({ uid, file, onProgress = () => {}, isCancelle
   let item = null;
   try { item = (await adminLearningApi.getItem(uid))?.item || null; } catch { /* attached either way; the editor draws the completion reply */ }
   return { attached, item };
+}
+
+// ── A video on Cloudflare Stream (#4177, L2 of #3726; `routes/learning_stream.ts`, D4176) ──
+
+/**
+ * The item's Stream videos (`GET …/items/:uid/stream`), as the editor holds
+ * the read: `{ status: 'ready', data }`, or `{ status: 'unavailable' }` for the
+ * 503 `stream_unavailable` the routes answer while Stream is off (the editor
+ * then draws D561's R2 field). Any other failure is thrown: the editor draws
+ * it as unreadable, never as "no video".
+ */
+export async function readStreamStatus(uid) {
+  try {
+    const data = await adminLearningApi.streamStatus(uid);
+    if (!Array.isArray(data?.videos)) throw new Error('The video\'s Stream state came back in a shape this page cannot read.');
+    return { status: 'ready', data };
+  } catch (err) {
+    if (err?.code === STREAM_UNAVAILABLE) return { status: 'unavailable', message: err.message };
+    throw err;
+  }
+}
+
+/**
+ * The item's stored chapters, and the poster address for the thumbnail
+ * picker. The studio's own item read does not send `chapters_json`, so they
+ * come from the item read (`GET /api/learning/items/:uid`), which a Super
+ * Admin may read for any status and which sends `chapters` and the signed
+ * `video_stream`. Throws when the reply carries no chapters list.
+ */
+export async function readItemChapters(uid) {
+  const item = (await learningApi.item(uid))?.item;
+  if (!Array.isArray(item?.chapters)) throw new Error('The chapters came back in a shape this page cannot read.');
+  return { chapters: item.chapters, poster_url: item.video_stream?.state === 'ready' ? item.video_stream.poster_url || null : null };
+}
+
+/** Save the chapters: `PATCH …/items/:uid` with `chapters` alone. Checked before anything is sent; resolves to what was saved. */
+export async function saveChapters(uid, rows) {
+  const chapters = chaptersBody(rows);
+  await adminLearningApi.updateItem(uid, { chapters });
+  return chapters;
+}
+
+export const generateCaptions = (uid, language) => adminLearningApi.generateCaptions(uid, language);
+export const deleteCaptions = (uid, language) => adminLearningApi.deleteCaptions(uid, language);
+export const setStreamThumbnail = (uid, pct) => adminLearningApi.setStreamThumbnail(uid, pct);
+
+/** Upload a WebVTT file: read, checked (WebVTT only, at most 1 MB), then `PUT …/captions/:lang`. */
+export async function uploadCaptionFile(uid, language, file) {
+  const text = typeof file?.text === 'function' ? await file.text() : '';
+  const problem = vttProblem(file, text);
+  if (problem) throw new Error(problem);
+  return adminLearningApi.uploadCaptions(uid, language, text);
+}
+
+function cancelledUpload() {
+  const err = new Error('The upload was cancelled, so nothing was attached.');
+  err.code = UPLOAD_CANCELLED;
+  return err;
+}
+
+/**
+ * The basic upload: the file as multipart `file` to Stream's one-time
+ * `upload_url`, by XHR so its bytes report progress. The URL is Stream's and
+ * carries no session: none of the page's headers is sent to it.
+ */
+export function postToStream(url, file, { onProgress = () => {}, signal } = {}) {
+  return new Promise((resolve, reject) => {
+    if (!/^https:\/\//.test(String(url))) { reject(new Error('Stream did not give an upload link. Nothing was recorded.')); return; }
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded, e.total); };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) { resolve(); return; }
+      let said = '';
+      try { said = JSON.parse(xhr.responseText)?.errors?.[0]?.message || ''; } catch { /* not JSON */ }
+      reject(new Error(said ? `Stream did not take the file: ${said}` : `Stream did not take the file (HTTP ${xhr.status}).`));
+    };
+    xhr.onerror = () => reject(new Error('The file could not reach Stream. Check the connection and try again.'));
+    xhr.onabort = () => reject(cancelledUpload());
+    signal?.addEventListener('abort', () => xhr.abort(), { once: true });
+    const form = new FormData();
+    form.append('file', file, file.name || 'video');
+    xhr.send(form);
+  });
+}
+
+/** A tus failure in the route's own words: the Worker's refusal on the creation request, or the client's. */
+export function tusFailure(err) {
+  const res = err?.originalResponse;
+  let body = null;
+  try { body = JSON.parse(res?.getBody?.() || 'null'); } catch { /* not JSON */ }
+  const { message, code } = readRefusal(body);
+  const e = new Error(message || 'The resumable upload could not be finished.');
+  if (code) e.code = code;
+  const status = res?.getStatus?.();
+  if (status) e.status = status;
+  return e;
+}
+
+/**
+ * The resumable upload, by `tus-js-client` (loaded only when a file over
+ * 200 MB is chosen): the creation request goes to the Worker's tus route with
+ * the session's headers, which answers Stream's one-time Location; every
+ * chunk after it goes to Stream with none of them. Resolves to the video's
+ * `stream_uid`, from the creation reply's `stream-media-id`.
+ */
+export async function tusToStream({ endpoint, file, onProgress = () => {}, signal }) {
+  const { Upload } = await import('tus-js-client');
+  return new Promise((resolve, reject) => {
+    let streamUid = null;
+    const ours = (url) => {
+      try { return new URL(url, window.location.origin).origin === window.location.origin; } catch { return false; }
+    };
+    const upload = new Upload(file, {
+      endpoint,
+      chunkSize: STREAM_UPLOAD.tusChunkBytes,
+      retryDelays: [0, 3000, 10000, 30000],
+      metadata: { name: file.name || 'video' },
+      storeFingerprintForResuming: false,
+      onBeforeRequest: (req) => {
+        if (req.getMethod() !== 'POST' || !ours(req.getURL())) return;
+        for (const [k, v] of Object.entries(rawRequestHeaders('POST'))) req.setHeader(k, v);
+      },
+      onAfterResponse: (req, res) => {
+        const id = res.getHeader('stream-media-id');
+        if (id) streamUid = id;
+      },
+      onProgress: (sent, total) => onProgress(sent, total),
+      onError: (err) => { const e = tusFailure(err); e.stream_uid = streamUid; reject(e); },
+      onSuccess: () => resolve({ stream_uid: streamUid }),
+    });
+    signal?.addEventListener('abort', () => {
+      upload.abort(false).catch(() => {}).finally(() => { const e = cancelledUpload(); e.stream_uid = streamUid; reject(e); });
+    }, { once: true });
+    upload.start();
+  });
+}
+
+/**
+ * Upload one file to the item's video on Stream. THE 200 MB SWITCH: up to
+ * and including 200 MB, `POST …/stream/uploads` answers a one-time
+ * `upload_url` and the file goes there by basic POST (`postFile`); above it,
+ * the file goes by tus through `streamTusEndpoint(uid)` (`tusUpload`). A file
+ * the route would refuse is refused before anything is sent. A cancel or a
+ * failure after Stream made the video abandons it
+ * (`POST …/stream/:streamUid/abandon`), and the refusal it stopped with is
+ * thrown as it came. Resolves to `{ stream_uid, protocol }`; the video is then
+ * processing, which the editor polls.
+ *
+ *   onProgress({ sent, total, protocol })
+ *   signal       an AbortSignal: "Cancel upload"
+ *   postFile, tusUpload   the two transports, replaceable in a test
+ */
+export async function uploadToStream({ uid, file, onProgress = () => {}, signal, postFile = postToStream, tusUpload = tusToStream }) {
+  const problem = streamFileProblem(file);
+  if (problem) throw new Error(problem);
+  const total = file.size;
+  const protocol = streamProtocolFor(total);
+  const progress = (sent) => onProgress({ sent: Math.min(Number(sent) || 0, total), total, protocol });
+  const abandon = async (streamUid) => {
+    if (!streamUid) return;
+    try { await adminLearningApi.abandonStreamUpload(uid, streamUid); } catch { /* the sentence it stopped with stands; the row expires */ }
+  };
+  progress(0);
+  if (protocol === 'post') {
+    const start = await adminLearningApi.startStreamUpload(uid, { size_bytes: total, content_type: streamTypeOf(file), name: file.name || undefined });
+    if (typeof start?.stream_uid !== 'string' || typeof start?.upload_url !== 'string') {
+      throw new Error('The upload could not start: the reply came back in a shape this page cannot read.');
+    }
+    try {
+      if (signal?.aborted) throw cancelledUpload();
+      await postFile(start.upload_url, file, { onProgress: progress, signal });
+    } catch (err) {
+      await abandon(start.stream_uid);
+      throw signal?.aborted ? cancelledUpload() : err;
+    }
+    progress(total);
+    return { stream_uid: start.stream_uid, protocol };
+  }
+  let made;
+  try {
+    made = await tusUpload({ endpoint: adminLearningApi.streamTusEndpoint(uid), file, onProgress: progress, signal });
+  } catch (err) {
+    await abandon(err?.stream_uid);
+    throw signal?.aborted ? cancelledUpload() : err;
+  }
+  progress(total);
+  return { stream_uid: made?.stream_uid ?? null, protocol };
 }
 
 /** A course form as the studio holds it. */

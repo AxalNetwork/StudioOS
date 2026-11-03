@@ -2374,7 +2374,7 @@ export default {
           try {
             const { sweepLearningVideos } = await import('./services/learningVideo');
             const r = await sweepLearningVideos(env, now);
-            if (r.deleted) console.info(`[cron] learning video sweep checked=${r.checked} deleted=${r.deleted}`);
+            if (r.deleted || r.stream_deleted || r.kept_unverified) console.info(`[cron] learning video sweep checked=${r.checked} deleted=${r.deleted} copied_deleted=${r.copied_deleted} kept_unverified=${r.kept_unverified} stream_deleted=${r.stream_deleted}`);
           } catch (e) {
             console.error('[cron] learning video sweep failed', e);
           }
