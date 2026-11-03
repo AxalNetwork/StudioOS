@@ -177,6 +177,7 @@ A grant older than a raised session floor is also refused on every tool call (`g
 - [ ] `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN` – outbound email.
 - [ ] `STRIPE_ATLAS_API_KEY`, `STRIPE_WEBHOOK_SECRET` – spin-out incorporation.
 - [ ] `AI_PROVIDER_ANTHROPIC_KEY` – the platform's Anthropic API key for model-provider runs (D851, `services/aiProviders.ts`). Used only while the wrangler var `AI_PROVIDER_ANTHROPIC` is exactly `"on"` (unset is off). It is not `ANTHROPIC_API_KEY`, which stays dev-only (Task #31). Never stored in D1 and never logged. Set it with `npx wrangler secret put AI_PROVIDER_ANTHROPIC_KEY --config wrangler.toml --env production`.
+- [ ] `AI_PROVIDER_BRIA` – a wrangler var, not a secret (D1534, #3778 phase 2): the deck's background removal (Bria RMBG 2.0 on the Workers AI binding, billed per image from AI Gateway credits). Off unless exactly `"on"`. Set it only after the owner's steps on #1008: AI Gateway prepaid credits bought, and Bria's 10-day sub-processor notice sent (DPA §6.1). No key: the binding carries the account.
 - [ ] AI token packs (D755). Packs are made on HQ, never as a variable:
       the Super Admin presses **New pack** on HQ › AI allowances › Token
       packs, and the Worker creates the Stripe product and its one-time USD
