@@ -32,9 +32,9 @@ function world() {
   f.db.exec('CREATE TABLE IF NOT EXISTS pitch_decks (id INTEGER PRIMARY KEY, project_id INTEGER, version INTEGER, slides TEXT, title TEXT, is_current INTEGER)');
   f.db.exec(`INSERT INTO pitch_decks (id, project_id, version, slides, title, is_current) VALUES (${DECK}, ${P}, 1, '[]', 'Synthetic', 1)`);
   f.db.exec(MIG('716_deck_area_batches.sql'));
-  f.db.exec(MIG('202611022120_deck_batch_runtime.sql'));
-  // D1600 (#3879): the run insert writes parent_batch_uid, which migration 752 adds.
+  // D1600 (#4235, migration 752): admit writes parent_batch_uid, so the fixture needs it.
   f.db.exec(MIG('752_deck_area_batches_seen.sql'));
+  f.db.exec(MIG('202611022120_deck_batch_runtime.sql'));
   setFixtureAllowance(f.db, 0);
   f.db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(?,?)').run(USER, 50_000_000);
   return f;
