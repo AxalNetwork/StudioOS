@@ -40,6 +40,7 @@ export const CONTRACTS = Object.freeze({
   grid: { issue: 3749, route: 'GET /api/decks/:id/grid', schema: 'deckGrid.schema.json' },
   imageEditAi: { issue: 3778, route: 'GET /api/decks/images/tools', schema: 'deckImageTools.schema.json' },
   imageVary: { issue: 3784, route: 'POST /api/decks/images/:uid/edit/quote', schema: 'deckImageVary.schema.json' },
+  instruct: { issue: 3773, route: 'POST /api/decks/:id/areas/instruct/quote, or POST /api/decks/:id/areas/instruct (the adapter\'s `run`)', schema: 'deckInstruct.schema.json' },
   investorLinks: { issue: 3812, route: 'GET /api/decks/:id/investor-links', schema: 'deckInvestorLinks.schema.json' },
   markSeen: { issue: 3879, route: 'POST /api/decks/areas/batches/:uid/seen', schema: 'deckMarkSeen.schema.json' },
   media: { issue: 3788, route: 'POST /api/decks/:id/videos/upload', schema: 'deckMediaVideo.schema.json' },

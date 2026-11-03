@@ -48,9 +48,10 @@ const deckAreas = new Hono<{ Bindings: Env }>();
 const UID = '{[0-9a-f-]{36}}';
 const ACTIVE = new Set(['queued', 'running', 'cancelling']);
 
-type Deck = { deckId: number; projectId: number; cards: any[]; aspect: DeckAspect; voice: unknown; contrastAa: boolean | null };
+export type Deck = { deckId: number; projectId: number; cards: any[]; aspect: DeckAspect; voice: unknown; contrastAa: boolean | null };
 
-async function deckFor(c: any, user: User): Promise<Deck | Response> {
+/** The deck the caller may write, its saved cards, aspect, voice and the theme's contrast (shared by `deck_instruct.ts`). */
+export async function deckFor(c: any, user: User): Promise<Deck | Response> {
   const d = await deckOf(c, user, true);
   if (d instanceof Response) return d;
   const row = await getDeckRow(c.env, d.deckId);
@@ -66,7 +67,7 @@ async function deckFor(c: any, user: User): Promise<Deck | Response> {
   return { deckId: d.deckId, projectId: d.projectId, cards: Array.isArray(cards) ? cards : [], aspect, voice: theme?.voice ?? null, contrastAa };
 }
 
-function planCtx(c: any, user: User, deck: Deck): PlanCtx {
+export function planCtx(c: any, user: User, deck: Deck): PlanCtx {
   const env = c.env as Env;
   const userId = Number(user.id) || 0;
   let sources: Promise<any[]> | null = null;
@@ -84,7 +85,7 @@ function planCtx(c: any, user: User, deck: Deck): PlanCtx {
   };
 }
 
-async function bodyOf(c: any): Promise<any> { try { return await c.req.json(); } catch { return null; } }
+export async function bodyOf(c: any): Promise<any> { try { return await c.req.json(); } catch { return null; } }
 
 deckAreas.post('/:id{[0-9]+}/areas/quote', async (c) => {
   const user = await requireAuth(c);

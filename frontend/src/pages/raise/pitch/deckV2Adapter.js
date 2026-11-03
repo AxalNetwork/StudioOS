@@ -54,6 +54,7 @@ import { deckFiguresApi } from '../../../lib/api/deckFigures.js';
 import { deckGridApi } from '../../../lib/api/deckGrid.js';
 import { deckImageEditsApi } from '../../../lib/api/deckImageEdits.js';
 import { deckImagesApi } from '../../../lib/api/deckImages.js';
+import { deckInstructApi } from '../../../lib/api/deckInstruct.js';
 import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks.js';
 import { deckLayoutsApi } from '../../../lib/api/deckLayouts.js';
 import { deckMediaApi } from '../../../lib/api/deckMedia.js';
@@ -199,7 +200,16 @@ export const areasGenerate = ({ deckId, card, areas, variants, cls, quoteUid, on
  */
 export const history = async () => Object.freeze({ available: true, value: gridOps });
 export const narrativeOutline = off('narrativeOutline');
-export const instruct = off('instruct');
+/**
+ * D1521 (#3773): an instruction on the selected areas of one card. Without `run`, the quote (#3764's areas quote);
+ * with `run` (and the quote's `quoteUid`), the one run under one hold, answered as one proposal per area. `areas`
+ * are the selection's area ids; the Worker refuses one that is not words, and a figure in the words, before any quote.
+ */
+const instructBody = ({ card, areas = [], instruction, action, variants, run, quoteUid } = {}) => ({
+  card, selection: areas.map((id) => ({ area_id: String(id) })), ...(instruction ? { instruction } : {}), ...(action ? { action } : {}),
+  ...(variants ? { variants } : {}), ...(run && quoteUid ? { quote_uid: quoteUid } : {}),
+});
+export const instruct = (o = {}) => through(() => (o.run ? deckInstructApi.run(o.deckId, instructBody(o), o.idempotencyKey) : deckInstructApi.quote(o.deckId, instructBody(o))), SURFACES.instruct.issue);
 /** D1522 (#3774): the deck's stage plan — the order for its stage, a why line per card, and missing-proof warnings. */
 export const stagePlan = (deckId, opts) => through(() => deckStageApi.stagePlan(deckId, opts), SURFACES.stagePlan.issue);
 /** D1523 (#3775): every figure on the version, Linked, Stated, Uncited or Not recorded, and the counts Check claims shows. Editor-only. */

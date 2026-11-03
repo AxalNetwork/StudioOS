@@ -67,7 +67,7 @@ const TEXT_LABEL: Readonly<Record<string, string>> = Object.freeze({
 export const CHART_ACTION: Readonly<Record<string, ChartAction>> = Object.freeze({ chart: 'chart', table: 'table', timeline: 'timeline' });
 export const IMAGE_STYLE: Readonly<Record<string, 'scene' | 'flat'>> = Object.freeze({ photo: 'scene', illustration: 'flat' });
 /** Each variant's temperature: one model, three seeds, three wordings. */
-const TEMPERATURES = [0.4, 0.7, 0.9] as const;
+export const TEMPERATURES = [0.4, 0.7, 0.9] as const;
 
 export type AreaKind = 'text' | 'chart' | 'image' | 'records';
 export function kindOf(element: string): AreaKind | null {
@@ -313,9 +313,10 @@ async function sha256Hex(s: string): Promise<string> {
   const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
   return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
-/** What a quote is for: every line's area, model and price. A plan that differs from it is a different quote. */
+/** What a quote is for: every line's area, model, change and price. A plan that differs from it is a different quote. */
 export async function planSignature(plan: AreasPlan): Promise<string> {
-  const parts = plan.areas.map((a) => [a.card_uid, a.area_id, a.element, a.model, a.refusal?.code ?? null, (a.payload as any)?.action ?? null, a.lines.map((l) => l.quote_microusd)]);
+  // D1521: an instruction's hash is part of what was priced, so changed words are a different quote.
+  const parts = plan.areas.map((a) => [a.card_uid, a.area_id, a.element, a.model, a.refusal?.code ?? null, (a.payload as any)?.action ?? null, (a.payload as any)?.instruction_sha256 ?? null, a.lines.map((l) => l.quote_microusd)]);
   return (await sha256Hex(JSON.stringify([plan.cls, parts]))).slice(0, 32);
 }
 /** `<expiry in base 36>.<signature>`: the quote needs no row, and a changed plan or a late Generate is `quote_stale`. */
