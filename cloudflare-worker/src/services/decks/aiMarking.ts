@@ -55,8 +55,9 @@ export async function aiImagesOf(env: Env, projectId: number, slides: any[]): Pr
   const uids = [...new Set(refs.map((r) => r.uid))].slice(0, 200);
   try {
     const rows = (await env.DB.prepare(
-      `SELECT uid, model FROM deck_images WHERE project_id = ? AND source = 'generated' AND uid IN (${uids.map(() => '?').join(', ')})`,
-    ).bind(projectId, ...uids).all<{ uid: string; model: string | null }>()).results ?? [];
+      // The ids go in as one bound JSON array: nothing is written into the query text.
+      "SELECT uid, model FROM deck_images WHERE project_id = ? AND source = 'generated' AND uid IN (SELECT value FROM json_each(?))",
+    ).bind(projectId, JSON.stringify(uids)).all<{ uid: string; model: string | null }>()).results ?? [];
     const model = new Map(rows.map((r) => [r.uid, (r.model && String(r.model).trim()) || UNKNOWN_MODEL]));
     return refs.filter((r) => model.has(r.uid)).map((r) => ({ url: r.url, model: model.get(r.uid)!, card: r.card }));
   } catch {
