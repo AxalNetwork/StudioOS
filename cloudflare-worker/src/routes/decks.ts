@@ -1437,7 +1437,7 @@ decks.put('/:id', async (c) => {
     if (stray) return refuse(c, 400, { code: 'assignee_not_on_deck', message: `Card ${stray.index + 1}: assign someone who can work on this deck. Nothing was saved.` });
   }
   // D1543 (#3781): a logo without its customer's permission, or a quote without recorded consent, is refused; nothing is written.
-  const gate = await saveGateRefusal(c.env, Number(row.project_id), slides);
+  const gate = await saveGateRefusal(c.env, Number(row.project_id), slides, { prior: priorSlides });
   if (gate) return refuse(c, 409, gate);
   // D1506: an outside image is copied into the venture's storage and the slide names the copy;
   // one that cannot be copied refuses the save, naming it.
