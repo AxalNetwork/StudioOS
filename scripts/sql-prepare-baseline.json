@@ -1,6 +1,10 @@
 {
   "note": "Interpolations inside DB.prepare(`…`) present when this ledger was written, each reviewed and none an injection. The gate fails on NEW entries only. Removing a site is always allowed. Regenerate with: node scripts/check-sql-prepare.mjs --write",
   "sites": {
+    "FOUNDER_PAID @ services/stripeCutover.ts": 2,
+    "INVESTOR_PAID @ services/stripeCutover.ts": 2,
+    "INVESTOR_SEATS @ services/stripeCutover.ts": 2,
+    "SIDE_PAID @ services/stripeCutover.ts": 4,
     "bandSql @ routes/research_overview.ts": 1,
     "base @ routes/admin_cohort.ts": 2,
     "BILLED @ services/fundCallLedger.ts": 2,

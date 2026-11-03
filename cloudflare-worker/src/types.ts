@@ -334,6 +334,8 @@ export interface Env {
   STRIPE_PRICE_AI_TOPUP?: string;
   /** D1366: the $1 one-time USD price a custom-amount top-up buys N of. */
   STRIPE_PRICE_AI_TOPUP_UNIT?: string;
+  /** D1434: the $1 unit price on the live Stripe account, read when STRIPE_SECRET_KEY is live. */
+  STRIPE_PRICE_AI_TOPUP_UNIT_LIVE?: string;
   STRIPE_PRICE_GROWTH?: string;
   STRIPE_PRICE_STUDIO?: string;
   // Task #6 (W-1) — investor paywall price ids. Institutional supports
