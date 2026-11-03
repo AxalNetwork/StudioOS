@@ -371,7 +371,9 @@ test('an admin reads; everyone else the route admits works here', () => {
   assert.doesNotMatch(decks(empty, true), /pitch-studio-empty-new/);
   assert.match(decks(empty), /pitch-studio-empty-new/);
   const src = read('frontend/src/pages/raise/pitch/PitchStudio.jsx');
-  assert.match(src, /showNew=\{tab === 'decks' && !readOnly && Boolean\(projectId\)\}/, 'an admin is offered New deck in the header (PD21)');
+  // D4254 §1.4: the primary follows the tile; a reader, or no venture, gets none.
+  assert.match(src, /if \(readOnly \|\| projectId == null\) return null;/, 'a reader is offered no New deck in the header (PD21)');
+  assert.match(src, /if \(tab === 'overview' \|\| tab === 'decks'\) \{\s*return \{ to: `\$\{NEW_PATH\}\$\{q\}`/, 'an admin who may write is offered New deck in the header (PD21)');
 });
 
 test('the old ?mode=workspace address opens the editor with the moved notice drawn, the venture and the hash kept', () => {
@@ -392,10 +394,10 @@ test('the old ?mode=workspace address opens the editor with the moved notice dra
   assert.deepEqual(builderTarget('?project_id=12&method_id=yc_seed', '#x'), { pathname: STUDIO_PATH, search: `?project_id=12&method_id=yc_seed&moved=${BUILDER_MOVED_KEY}`, hash: '#x' });
   assert.equal(ventureQuery(12), '?project_id=12');
   assert.equal(ventureQuery(null), '');
-  // D905 (#2684) adds the Notes tab (PD21).
-  assert.deepEqual(TABS.map((t) => [t.label, t.path]), [['Decks', STUDIO_PATH], ['Review', REVIEW_PATH], ['Share & analytics', ANALYTICS_PATH], ['Notes', '/raise/pitch/notes']]);
-  assert.equal(TITLE, 'Pitch deck studio');
-  assert.equal(LINE, 'Build your deck from what StudioOS already knows. Every figure shows its source.', 'the canvas line, restored with the source chips (D896)');
+  // D905 (#2684) adds the Notes tab (PD21). D4254: the tile row; the Overview at STUDIO_PATH lights no tile.
+  assert.deepEqual(TABS.map((t) => [t.label, t.path]), [['Decks', '/raise/pitch/decks'], ['Script & rehearsal', '/raise/pitch/script'], ['Review', REVIEW_PATH], ['Share & analytics', '/raise/pitch/share'], ['Notes', '/raise/pitch/notes']]);
+  assert.equal(TITLE, 'Pitch');
+  assert.equal(LINE, 'Your deck, what to say, and who has seen it, in one place.', 'the canvas line (D4254)');
   assert.equal(NOT_RECORDED, 'Not recorded');
 });
 
@@ -486,11 +488,11 @@ test('Review mounts the reviewer whatever the ventures read says, and draws no "
 test('the tabs keep the venture in the address while the ventures read is loading, and after it fails', async () => {
   const hrefs = (html) => [...html.matchAll(/data-testid="pitch-studio-tab-\w+" href="([^"]*)"/g)].map((x) => x[1]);
   const loading = renderToStaticMarkup(h(MemoryRouter, { initialEntries: ['/raise/pitch?project_id=12'] }, h(PitchStudio, { tab: 'decks' })));
-  assert.deepEqual(hrefs(loading), ['/raise/pitch?project_id=12', '/raise/pitch/review?project_id=12', '/raise/pitch/analytics?project_id=12', '/raise/pitch/notes?project_id=12']);
+  assert.deepEqual(hrefs(loading), ['/raise/pitch/decks?project_id=12', '/raise/pitch/script?project_id=12', '/raise/pitch/review?project_id=12', '/raise/pitch/share?project_id=12', '/raise/pitch/notes?project_id=12']);
   const m = await mount(h(PitchStudio, { tab: 'analytics' }), '/raise/pitch/analytics?project_id=12', { listProjects: async () => { throw new Error('read failed'); } });
   try {
     assert.match(m.text(), /Your ventures could not be read/);
-    assert.equal(m.pr(m.by('pitch-studio-tab-decks')).href, '/raise/pitch?project_id=12', 'a tab drops the venture after a failed read');
+    assert.equal(m.pr(m.by('pitch-studio-tab-decks')).href, '/raise/pitch/decks?project_id=12', 'a tab never drops the venture after a failed read');
   } finally { await m.unmount(); }
 });
 
@@ -674,18 +676,20 @@ test('the routes: the studio\'s three tabs, the editor at its new address, and t
   const app = read('frontend/src/App.jsx');
   // A literal search, not a RegExp built from the path: nothing here needs a pattern.
   const route = (path) => `<Route path="${path}" element={guard(labRoles(['admin', 'founder'])`;
-  for (const p of ['/raise/pitch/edit', '/raise/pitch/analytics', '/raise/pitch/review', '/raise/pitch/notes']) assert.ok(app.includes(route(p)), p);
+  for (const p of ['/raise/pitch/edit', '/raise/pitch/decks', '/raise/pitch/script', '/raise/pitch/share', '/raise/pitch/review', '/raise/pitch/notes']) assert.ok(app.includes(route(p)), p);
+  // D4254: the old Share & analytics address redirects, venture kept.
+  assert.ok(app.includes('<Route path="/raise/pitch/analytics" element={<KeepQueryRedirect to="/raise/pitch/share" />} />'));
   // D905 (#2684), PD22: the studio's home also admits the roles it is not for, to tell them so.
   // D911 (#2695): positioning moved into Investor narrative › Positioning; its old address redirects.
   assert.ok(app.includes('<Route path="/raise/pitch/positioning" element={<PitchPositioningRedirect />} />'));
   assert.ok(app.includes(`<Route path="/raise/pitch" element={guard(labRoles(['admin', 'founder', 'advisor', 'partner', 'exploring'])`), '/raise/pitch');
-  assert.match(app, /get\('mode'\) === 'workspace'\s*\?\s*<PitchWorkspaceMoved \/>\s*:\s*<PitchStudio tab="decks" \/>/);
+  assert.match(app, /get\('mode'\) === 'workspace'\s*\?\s*<PitchWorkspaceMoved \/>\s*:\s*<PitchStudio tab="overview" \/>/);
   // D898 (#2676): the canvas's editor at /raise/pitch/edit; the template builder retired (group E) and its address opens the studio.
   assert.match(app, /<Route path="\/raise\/pitch\/edit" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <PitchEditor \/>\)\} \/>/);
   assert.ok(app.includes('<Route path="/raise/pitch/builder" element={<PitchBuilderMoved />} />'), 'the builder\'s address opens the studio');
   assert.doesNotMatch(app, /PitchWorkspacePage|[^b]PitchDeckPage\b/);
   for (const f of ['frontend/src/pages/PitchWorkspacePage.jsx', 'frontend/src/pages/PitchDeckPage.jsx']) assert.ok(!existsSync(resolve(root, f)), `${f} is back`);
-  assert.match(app, /<Route path="\/raise\/pitch\/analytics" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <PitchStudio tab="analytics" \/>\)\} \/>/);
+  assert.match(app, /<Route path="\/raise\/pitch\/share" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <PitchStudio tab="analytics" \/>\)\} \/>/);
   assert.match(app, /<Route path="\/raise\/pitch\/review" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <PitchStudio tab="review" \/>\)\} \/>/);
   assert.ok(!existsSync(resolve(root, 'frontend/src/pages/founder/FounderRaisePitch.jsx')), 'the read-only Pitch page is still on disk');
   assert.doesNotMatch(app, /FounderRaisePitch/);
@@ -858,7 +862,7 @@ test('D1604 home: the deck card, Start from, Data ready and Investor links; Vers
   const links = renderedText(between(html, 'pitch-studio-links-summary', 'pitch-studio-weekly'));
   assert.match(links, /Shared links\s*6\s*Unique viewers\s*4\s*Median time per view\s*1:00/);
   assert.ok(links.includes(OPEN_ANALYTICS));
-  assert.match(html, /data-testid="pitch-studio-open-analytics" href="\/raise\/pitch\/analytics\?project_id=7"/);
+  assert.match(html, /data-testid="pitch-studio-open-analytics" href="\/raise\/pitch\/share\?project_id=7"/);
   // A reader: Present stays; no one-click, no outline or template links.
   const reader = decks(reads(), true);
   assert.match(reader, /data-testid="pitch-studio-present"/);

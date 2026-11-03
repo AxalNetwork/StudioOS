@@ -6,7 +6,7 @@ import './PitchPage.css';
 import { STUDIO_PATH, ventureQuery } from './pitchStudioModel';
 import DeckAsk from './DeckAsk';
 
-// #3717: Raise is the overview; the studio remains the Pitch deck destination.
+// #3717: Raise is the overview. D4254: the module is "Pitch", at /raise/pitch.
 export const PITCH_RAISE_PATH = '/raise';
 
 /**
@@ -31,9 +31,9 @@ export function PitchCrumb({ trail = null, query, ask = null, heading = null, to
       <div className="min-w-0">
         <nav aria-label="Breadcrumb" className="hidden min-w-0 flex-wrap items-center gap-1.5 font-mono text-[11px] uppercase tracking-[.07em] text-axal-muted dark:text-gray-400 sm:flex" data-testid="pitch-crumb">
           <Link to={raise} className={link}>Raise</Link><span aria-hidden="true">›</span>
-          {trail ? <><Link to={studio} className={link}>Pitch deck</Link><span aria-hidden="true">›</span><span className="min-w-0 break-words" aria-current="page">{trail}</span></> : <span aria-current="page">Pitch deck</span>}
+          {trail ? <><Link to={studio} className={link}>Pitch</Link><span aria-hidden="true">›</span><span className="min-w-0 break-words" aria-current="page">{trail}</span></> : <span aria-current="page">Pitch</span>}
         </nav>
-        <Link to={trail ? studio : raise} className="inline-flex min-h-[44px] items-center text-[13px] font-bold text-axal-violet dark:text-violet-300 sm:hidden" data-testid="pitch-back">‹ {trail ? 'Pitch deck' : 'Raise'}</Link>
+        <Link to={trail ? studio : raise} className="inline-flex min-h-[44px] items-center text-[13px] font-bold text-axal-violet dark:text-violet-300 sm:hidden" data-testid="pitch-back">‹ {trail ? 'Pitch' : 'Raise'}</Link>
         {heading ? <h1 className="m-0 truncate text-[20px] font-extrabold leading-tight text-axal-ink dark:text-gray-100" data-testid="pitch-heading">{heading}</h1> : null}
       </div>
       {tools || (ask && !ask.readOnly && ask.projectId != null) ? (

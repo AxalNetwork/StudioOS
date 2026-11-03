@@ -59,7 +59,7 @@ async function mount(Component,url,over={}) {
 
 test('pitch routes own their one page frame and keep the existing access boundaries',()=>{
   const app=codeOnly(read('App.jsx'));
-  for(const path of ['/raise/pitch','/raise/pitch/new','/raise/pitch/edit','/raise/pitch/analytics','/raise/pitch/review','/raise/pitch/notes']) {
+  for(const path of ['/raise/pitch','/raise/pitch/new','/raise/pitch/edit','/raise/pitch/decks','/raise/pitch/script','/raise/pitch/share','/raise/pitch/review','/raise/pitch/notes']) {
     const block=routeBlock(app,path);
     assert.ok(block,path);
     assert.doesNotMatch(block,/founderEditor\(|founderWorkspace\(/,path);
@@ -97,7 +97,8 @@ test('the common frame is outermost, with the cycle gutter and responsive back p
 
 test('studio, New deck and editor render one crumb, no nested founder frame, and one rail',async()=>{
   for(const [Component,url,id,current,links]of [
-    [PitchStudio,'/raise/pitch?project_id=7','pitch-studio','Pitch deck',['/raise?project_id=7']],
+    // D4254: the Decks tile is PD-1 (the home this checks); the Overview is /raise/pitch.
+    [function DecksTile(){return h(PitchStudio,{tab:'decks'});},'/raise/pitch/decks?project_id=7','pitch-studio','Pitch',['/raise?project_id=7']],
     [NewDeck,'/raise/pitch/new?project_id=7&proposal=77','pitch-new','New deck',['/raise?project_id=7','/raise/pitch?project_id=7']],
     [PitchEditor,'/raise/pitch/edit?project_id=7','pitch-editor','Synthetic venture · v3',['/raise?project_id=7','/raise/pitch?project_id=7']],
   ]) {
