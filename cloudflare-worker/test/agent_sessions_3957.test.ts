@@ -179,6 +179,10 @@ test('a paused agent skips and says why; a retired skill skips too; the calendar
     w.db.prepare("INSERT INTO agent_task_runs (uid, agent_id, task_id, attempt, status) VALUES ('run-s1', ?, ?, 1, 'waiting_decision')").run(AGENT, task.id);
     const waiting = (await call(w, SPONSOR, 'GET', `/sessions/${s}`)).body.session;
     assert.deepEqual([waiting.state, waiting.proposals_waiting], ['waiting', 2]);
+    // D1614 W6 (#3974, CAL10): each last run names its latest attempt's uid, which opens W3's run sheet.
+    assert.equal(waiting.last_runs[0].uid, 'run-s1');
+    w.db.prepare("INSERT INTO agent_task_runs (uid, agent_id, task_id, attempt, status) VALUES ('run-s1b', ?, ?, 2, 'done')").run(AGENT, task.id);
+    assert.equal((await call(w, SPONSOR, 'GET', `/sessions/${s}`)).body.session.last_runs[0].uid, 'run-s1b', 'the latest attempt, never an older one');
     const events = await sessionEvents(w.env, SPONSOR, new Date(NOW.getTime() - 2 * 86_400_000).toISOString(), new Date(NOW.getTime() + 4 * 86_400_000).toISOString());
     assert.ok(events.length >= 2 && events.every((e: any) => e.kind === 'agent_session' && e.read_only === true));
     assert.ok(events.some((e: any) => e.agent_session.state === 'scheduled'), 'its upcoming slots');
