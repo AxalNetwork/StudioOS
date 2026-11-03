@@ -79,7 +79,12 @@ test('3. the PowerPoint: one click per entrance in that order, each on its shape
   // Mutation checked: the timing written in stored order → the spid order fails; a preset swapped → the presetID check fails;
   // the transition left out → the p:transition check fails.
   const xml = await slideXml(CARD);
-  const spidOf = (name: string) => Number(new RegExp(`<p:cNvPr id="(\\d+)" name="${name}"`).exec(xml)![1]);
+  const spidOf = (name: string) => {
+    const at = xml.indexOf(`" name="${name}"`);
+    assert.ok(at > 0, name);
+    const open = xml.lastIndexOf('<p:cNvPr id="', at) + '<p:cNvPr id="'.length;
+    return Number(xml.slice(open, at));
+  };
   const expected = ['c', 'a', 'h', 'b'].map((id) => ({ text: `text ${id}`, metric: `metric ${id}` })).map((n, k) => spidOf(k === 3 ? n.metric : n.text));
   const effects = [...xml.matchAll(/presetID="(\d+)" presetClass="entr"[^>]*nodeType="clickEffect"/g)].map((m) => Number(m[1]));
   // PowerPoint's own entrance presets: Fade 10, Wipe 22, Ascend 42, Zoom 53.
