@@ -434,7 +434,7 @@ test('§9 another tab moved the proposal: the write is refused, said, and Reload
   });
   try {
     await m.press(m.by('pitch-review-keep-0'));
-    assert.match(m.text(m.by('pitch-review-refusal')), new RegExp(STALE_LINE.replace(/\./g, '\\.')));
+    assert.ok(m.text(m.by('pitch-review-refusal')).includes(STALE_LINE));
     moved = true;
     await m.press(m.by('pitch-review-refusal-reload'));
     assert.match(m.text(m.by('pitch-review-card-0')), /Built in the other tab/);
@@ -449,7 +449,7 @@ test('§9 another tab moved the proposal: the write is refused, said, and Reload
     await g.press(g.by('pitch-review-keep-0'));
     keptThere = true; // the other tab saved it meanwhile
     await g.press(g.by('pitch-review-refusal-reload'));
-    assert.match(g.text(g.by('pitch-review-gone')), new RegExp(STALE_GONE.replace(/\./g, '\\.')));
+    assert.ok(g.text(g.by('pitch-review-gone')).includes(STALE_GONE));
   } finally { await g.unmount(); }
 });
 
