@@ -5,8 +5,8 @@ owner's canvas (`design/incoming/HQ Decks Page.dc.html`, boards HD1–HD6).
 
 | File | What it is |
 | --- | --- |
-| `hqDecksModel.js` | The page's words and rules, pure: the tabs and `viewFor`, `BUILD` (K1–K5, #4188–#4192, each `live: false` until it lands), a report as an HD1 row, the resolve rule (an outcome and a note of at least 10 characters), the flag labels and scopes, and the sector × stage grid. Tested by `frontend/test/hq_decks_d4155.test.mjs`. |
-| `HqDecksPage.jsx` | HD1–HD5 at `/admin/platform/decks` and its sub-paths (HQ only). Live: the reports queue and Resolve (D1540), the feature flags read (D1509) and the default templates read (D905). Every other control is drawn disabled with the task that switches it on. |
+| `hqDecksModel.js` | The page's words and rules, pure: the tabs and `viewFor`, `BUILD` (K1–K5, #4188–#4192, each `live: false` until it lands; K5 is live), a report as an HD1 row, the resolve rule (an outcome and a note of at least 10 characters), the flag labels and scopes, the sector × stage grid, and HD5's norm rows, ranges and Add and Retire rules. Tested by `frontend/test/hq_decks_d4155.test.mjs`. |
+| `HqDecksPage.jsx` | HD1–HD5 at `/admin/platform/decks` and its sub-paths (HQ only). Live: the reports queue and Resolve (D1540), the feature flags read (D1509) the default templates read (D905), and HQ's stage norms with Add, Edit and Retire (K5 #4192, client `lib/api/hqDeckStageNorms.js`). Every other control is drawn disabled with the task that switches it on. |
 
 ## Rules
 

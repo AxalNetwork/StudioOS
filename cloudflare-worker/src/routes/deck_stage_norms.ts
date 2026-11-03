@@ -20,6 +20,10 @@
  * (an advisor reads but does not write). A row of another venture is the same
  * 404 as no row.
  *
+ * HQ READS, NEVER WRITES (D4155 K5, #4192). A venture's norms are its
+ * founders'; HQ curates its own at `/api/admin/deck-stage-norms`. An admin's
+ * POST, PUT or DELETE here answers 403 `hq_read_only` and writes nothing.
+ *
  * Mounts itself (#4105): its `mount` export puts it ahead of `decks`, so
  * `GET /api/decks/:id` cannot answer `/stage-norms`.
  */
@@ -41,6 +45,9 @@ const deckStageNorms = new Hono<{ Bindings: Env }>();
 const newUid = () => crypto.randomUUID().replace(/-/g, '');
 
 async function owned(c: any, user: User, projectId: number, write = false) {
+  if (write && String(user.role || '').toLowerCase() === 'admin') {
+    return { refused: refuse(c, 403, { code: 'hq_read_only', message: 'A venture\'s founders set its stage norms. HQ reads them and curates its own on HQ › Decks.' }) };
+  }
   try {
     return { project: await projectOwned(c, user, projectId, write ? { write: true } : {}) };
   } catch (e: any) {

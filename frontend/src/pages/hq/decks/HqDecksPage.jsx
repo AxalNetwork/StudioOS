@@ -4,24 +4,27 @@ import { Card } from '../../../ui';
 import AdminPageHeader, { HeaderTab } from '../../../ui/AdminPageHeader';
 import { deckReportsApi } from '../../../lib/api/deckReports';
 import { adminFeatureFlagsApi } from '../../../lib/api/adminFeatureFlags';
+import { hqDeckStageNormsApi } from '../../../lib/api/hqDeckStageNorms';
 import { api } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
 import { isSuperAdminUser } from '../../../lib/shellRole';
 import { useAuth } from '../../../hooks/useAuthSync';
 import {
-  BETA_COLUMNS, MODELS_LINK, NORM_COLUMNS, NORM_RULE, NOT_RECORDED, NOTE_MAX, OUTCOMES, PROPOSAL_LINE, REASONS, STAGES, SUBTITLE,
-  defaultOnKeys, filterReports, flagLabel, flagRows, notYet, offGridOverrides, reportRow, resolveArmed, templateGrid, viewFor,
+  BETA_COLUMNS, MODELS_LINK, NORM_ADD_LINE, NORM_COLUMNS, NORM_RETIRE_LINE, NORM_RULE, NORM_SOURCE_HELP, NORM_STAGE_OF, NOT_RECORDED, PROJECT_NORMS_NOTE, NOTE_MAX, OUTCOMES, PROPOSAL_LINE, REASONS, STAGES, SUBTITLE,
+  defaultOnKeys, filterReports, flagLabel, flagRows, normBody, normDraftArmed, normRetireArmed, normRow, notYet, offGridOverrides, reportRow, resolveArmed, templateGrid, viewFor,
 } from './hqDecksModel';
 
 /**
  * D4155 (#4155) — HQ › Decks (HD1–HD6), a Platform tab after Promo codes at
  * `/admin/platform/decks`, HQ only (`hqOnly`).
  *
- * THREE READS AND ONE WRITE ARE LIVE, each on a route main already mounts:
+ * THE LIVE READS AND WRITES, each on a mounted route:
  *   Reports            GET  /api/admin/deck-reports?status=   (requireHqAdmin, D1540)
  *                      POST /api/admin/deck-reports/:uid/resolve  { outcome, note }
  *   Feature flags      GET  /api/admin/feature-flags          (requireAdmin, D1509)
  *   Default templates  GET  /api/decks/admin/recommend-overrides  (any admin, D905)
+ *   Stage norms        GET/POST /api/admin/deck-stage-norms, PUT /:uid, POST /:uid/retire,
+ *                      GET /projects/:id (requireHqAdmin, K5 #4192)
  * Every other control waits for its build task (K1–K5, #4188–#4192): it is
  * drawn disabled with the reason, so nothing claims an audited change the
  * Worker does not yet record. When a task lands its builder flips
@@ -310,15 +313,186 @@ function Templates({ superAdmin }) {
 
 // ── HD5 · Stage norms ───────────────────────────────────────────────────────
 
-function Norms() {
+/** HD5b: add a norm, or edit one; every field but the unit and the review day is required, and so is a reason. */
+function NormForm({ stage, norm, onDone, onClose }) {
+  const stageLabel = STAGES.find((s) => s.id === stage)?.label ?? stage;
+  const [f, setF] = useState(() => ({
+    metric: norm?.metric ?? '', low: norm?.range?.low ?? '', high: norm?.range?.high ?? '', unit: norm?.range?.unit ?? '', source: norm?.source ?? '', reason: '',
+  }));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
+  const armed = normDraftArmed(f);
+  const submit = async () => {
+    setBusy(true); setError('');
+    try {
+      const body = normBody({ stage, ...f });
+      if (norm) await hqDeckStageNormsApi.edit(norm.uid, body); else await hqDeckStageNormsApi.add(body);
+      onDone();
+    } catch (e) {
+      setError(e?.message || 'The norm could not be saved.');
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
-    <Waiting task="K5" columns={NORM_COLUMNS} testId="hq-decks-norms">
-      <div className="mt-3 flex flex-wrap gap-2">
-        {STAGES.map((s) => <span key={s.id} className="rounded-full border border-axal-hairline px-2 py-0.5 text-[12px] text-axal-muted dark:border-gray-700 dark:text-gray-400">{s.label}</span>)}
-        <button type="button" className={PRIMARY} disabled title={notYet('K5')}>Add a norm</button>
+    <Card data-testid="deck-norm-form">
+      <p className={H2}>{norm ? `Edit “${norm.metric}”` : `Add a ${stageLabel} norm`}</p>
+      <p className={MUTED}>{NORM_ADD_LINE}</p>
+      <label className="mt-3 block text-[12px] font-semibold text-axal-ink dark:text-gray-200">
+        Metric
+        <input className={`${INPUT} mt-1`} value={f.metric} onChange={set('metric')} placeholder="Net revenue retention" data-testid="deck-norm-metric" />
+      </label>
+      <fieldset className="mt-3">
+        <legend className="text-[12px] font-semibold text-axal-ink dark:text-gray-200">Typical range · a low, a high or both</legend>
+        <div className="mt-1 flex flex-wrap gap-2">
+          <input className={`${INPUT} w-24`} inputMode="decimal" value={f.low} onChange={set('low')} aria-label="Low" placeholder="100" data-testid="deck-norm-low" />
+          <input className={`${INPUT} w-24`} inputMode="decimal" value={f.high} onChange={set('high')} aria-label="High" placeholder="120" data-testid="deck-norm-high" />
+          <input className={`${INPUT} w-28`} value={f.unit} onChange={set('unit')} aria-label="Unit" placeholder="%" data-testid="deck-norm-unit" />
+        </div>
+      </fieldset>
+      <label className="mt-3 block text-[12px] font-semibold text-axal-ink dark:text-gray-200">
+        Source
+        <input className={`${INPUT} mt-1`} value={f.source} onChange={set('source')} placeholder="Public seed benchmarks report · 2026" data-testid="deck-norm-source" />
+      </label>
+      <p className={MUTED}>{NORM_SOURCE_HELP}</p>
+      <label className="mt-3 block text-[12px] font-semibold text-axal-ink dark:text-gray-200">
+        {norm ? 'Why change it?' : 'Why add it?'} · required, ten characters or more
+        <textarea className={`${INPUT} mt-1`} rows={2} maxLength={500} value={f.reason} onChange={set('reason')} data-testid="deck-norm-reason" />
+      </label>
+      {error && <p role="alert" className="text-[12.5px] text-red-700 dark:text-red-300">{error}</p>}
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button type="button" className={BTN} disabled={busy} onClick={onClose}>Cancel</button>
+        <button type="button" className={PRIMARY} disabled={busy || !armed} onClick={submit} data-testid="deck-norm-save">{busy ? 'Saving…' : norm ? 'Save' : 'Add norm'}</button>
       </div>
-      <p className={`${MUTED} mt-2`}>{NORM_RULE}</p>
-    </Waiting>
+    </Card>
+  );
+}
+
+/** HD5b: retire a norm with a reason. */
+function RetireNorm({ norm, onDone, onClose }) {
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const submit = async () => {
+    setBusy(true); setError('');
+    try { await hqDeckStageNormsApi.retire(norm.uid, { reason: reason.trim() }); onDone(); } catch (e) { setError(e?.message || 'The norm could not be retired.'); } finally { setBusy(false); }
+  };
+  return (
+    <Card data-testid="deck-norm-retire">
+      <p className={H2}>Retire “{norm.metric}”?</p>
+      <p className={MUTED}>{NORM_RETIRE_LINE}</p>
+      <label className="mt-3 block text-[12px] font-semibold text-axal-ink dark:text-gray-200">
+        Why retire it? · required, ten characters or more
+        <textarea className={`${INPUT} mt-1`} rows={2} maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} data-testid="deck-norm-retire-reason" />
+      </label>
+      {error && <p role="alert" className="text-[12.5px] text-red-700 dark:text-red-300">{error}</p>}
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button type="button" className={BTN} disabled={busy} onClick={onClose}>Cancel</button>
+        <button type="button" className="rounded-lg bg-red-700 px-3 py-1.5 text-[12.5px] font-semibold text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-60" disabled={busy || !normRetireArmed({ reason })} onClick={submit} data-testid="deck-norm-retire-button">Retire</button>
+      </div>
+    </Card>
+  );
+}
+
+/** HD5's side panel: one venture's own norms, read-only, the setters by name. */
+function ProjectNorms() {
+  const [id, setId] = useState('');
+  const [reply, setReply] = useState(null);
+  const [error, setError] = useState('');
+  const open = async () => {
+    setError(''); setReply(undefined);
+    try { setReply(await hqDeckStageNormsApi.projectNorms(id.trim())); } catch (e) { setReply(null); setError(e?.message || 'That venture’s norms could not be read.'); }
+  };
+  return (
+    <Card data-testid="deck-project-norms">
+      <p className={H2}>A venture’s own norms</p>
+      <p className={MUTED}>{PROJECT_NORMS_NOTE}</p>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <input className={`${INPUT} w-32`} inputMode="numeric" value={id} onChange={(e) => setId(e.target.value)} aria-label="Venture id" placeholder="Venture id" data-testid="deck-project-norms-id" />
+        <button type="button" className={BTN} disabled={!/^\d+$/.test(id.trim())} onClick={open}>Open · read only</button>
+      </div>
+      {reply === undefined && <Reading testId="deck-project-norms-reading" />}
+      {error && <p role="alert" className="mt-2 text-[12.5px] text-red-700 dark:text-red-300">{error}</p>}
+      {reply && (
+        <div className="mt-3">
+          <p className="text-[13px] font-semibold text-axal-ink dark:text-gray-100">{reply.project?.name ?? NOT_RECORDED}</p>
+          {reply.norms?.length ? (
+            <table className="mt-1 w-full">
+              <thead><tr>{['Metric', 'Their target', 'Source', 'Set by'].map((c) => <th key={c} className={TH}>{c}</th>)}</tr></thead>
+              <tbody>
+                {reply.norms.map((n) => (
+                  <tr key={n.uid} className="border-t border-axal-hairline dark:border-gray-800">
+                    <td className={TD}>{n.metric}</td><td className={TD}>{n.value}</td><td className={TD}>{n.source}</td>
+                    <td className={TD}><Cell v={n.set_by?.name ?? NOT_RECORDED} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : <p className={MUTED}>This venture has recorded no norms of its own.</p>}
+          {reply.last_changed && <p className={`${MUTED} mt-2`}>Last changed by <Cell v={reply.last_changed.by?.name ?? NOT_RECORDED} /> on {day(reply.last_changed.at)}.</p>}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function Norms() {
+  const [stage, setStage] = useState('seed');
+  const [sheet, setSheet] = useState(null);
+  const [reply, retry] = useRead(() => hqDeckStageNormsApi.list({ stage: NORM_STAGE_OF[stage] }), [stage]);
+  const close = () => setSheet(null);
+  const done = () => { setSheet(null); retry(); };
+  const stageLabel = STAGES.find((s) => s.id === stage)?.label ?? stage;
+  const norms = Array.isArray(reply?.norms) ? reply.norms : [];
+  return (
+    <div className="space-y-4">
+      <Card data-testid="hq-decks-norms">
+        <div className="flex flex-wrap items-center gap-2">
+          {STAGES.map((s) => (
+            <button key={s.id} type="button" aria-pressed={s.id === stage} onClick={() => setStage(s.id)} data-testid={`deck-norms-stage-${s.id}`}
+              className={`rounded-full border px-2 py-0.5 text-[12px] ${s.id === stage ? 'border-axal-violet text-axal-violet-deep dark:text-violet-300' : 'border-axal-hairline text-axal-muted dark:border-gray-700 dark:text-gray-400'}`}>{s.label}</button>
+          ))}
+          <button type="button" className={PRIMARY} onClick={() => setSheet({ kind: 'add' })} data-testid="deck-norm-add">Add norm</button>
+        </div>
+        <div className="mt-3 overflow-auto">
+          {reply === undefined ? <Reading testId="deck-norms-reading" />
+            : reply === null ? <ReadFailed what={`The ${stageLabel} norms`} claim="That is not the same as no norms." onRetry={retry} testId="deck-norms-unreadable" />
+              : (
+                <table className="w-full" aria-label={`${stageLabel} norms`} data-testid="deck-norms-table">
+                  <thead><tr>{[...NORM_COLUMNS, ''].map((c) => <th key={c || 'actions'} className={TH}>{c}</th>)}</tr></thead>
+                  <tbody>
+                    {norms.length === 0 && <tr><td className={`${TD} ${MUTED}`} colSpan={5}>No {stageLabel} norms yet. The critic cites none from HQ for this stage.</td></tr>}
+                    {norms.map((n) => {
+                      const r = normRow(n);
+                      return (
+                        <tr key={r.uid} className="border-t border-axal-hairline dark:border-gray-800" data-testid={`deck-norm-${r.uid}`}>
+                          <td className={`${TD} ${r.retired ? 'text-axal-muted line-through dark:text-gray-500' : 'font-semibold'}`}>{r.metric}</td>
+                          <td className={`${TD} font-mono`}><Cell v={r.range} /></td>
+                          <td className={TD}>{r.retired ? <span className={MUTED}>{r.retiredLine}</span> : <Cell v={r.source} />}</td>
+                          <td className={TD}>{r.retired ? <span className="rounded-full border border-axal-hairline px-2 py-0.5 text-[11px] text-axal-muted dark:border-gray-700 dark:text-gray-400">Retired</span> : <Cell v={r.reviewed} />}</td>
+                          <td className={TD}>
+                            {!r.retired && (
+                              <div className="flex gap-1.5">
+                                <button type="button" className={BTN} onClick={() => setSheet({ kind: 'edit', norm: n })} data-testid={`deck-norm-edit-${r.uid}`}>Edit</button>
+                                <button type="button" className={BTN} onClick={() => setSheet({ kind: 'retire', norm: n })} data-testid={`deck-norm-retire-${r.uid}`}>Retire</button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+        </div>
+        <p className={`${MUTED} mt-2`}>{NORM_RULE}</p>
+      </Card>
+      {sheet?.kind === 'add' && <NormForm key={`add-${stage}`} stage={stage} onDone={done} onClose={close} />}
+      {sheet?.kind === 'edit' && <NormForm key={`edit-${sheet.norm.uid}`} stage={stage} norm={sheet.norm} onDone={done} onClose={close} />}
+      {sheet?.kind === 'retire' && <RetireNorm key={`retire-${sheet.norm.uid}`} norm={sheet.norm} onDone={done} onClose={close} />}
+      <ProjectNorms />
+    </div>
   );
 }
 
