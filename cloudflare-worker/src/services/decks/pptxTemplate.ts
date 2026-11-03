@@ -132,8 +132,14 @@ export function readPptxZip(buf: Uint8Array, maxPart = PART_MAX_BYTES): ZipPart[
 
 // ── the XML, read with patterns: only the attributes named here ─────────────
 
-const attr = (tag: string, name: string) => {
-  const m = new RegExp(`\\s${name}="([^"]*)"`).exec(tag);
+/** The attributes this reader takes, each a literal pattern (no pattern is built from input). */
+const ATTR = {
+  x: /\sx="([^"]*)"/, y: /\sy="([^"]*)"/, cx: /\scx="([^"]*)"/, cy: /\scy="([^"]*)"/,
+  val: /\sval="([^"]*)"/, lastClr: /\slastClr="([^"]*)"/, typeface: /\stypeface="([^"]*)"/,
+  type: /\stype="([^"]*)"/, idx: /\sidx="([^"]*)"/, name: /\sname="([^"]*)"/,
+} as const;
+const attr = (tag: string, name: keyof typeof ATTR) => {
+  const m = ATTR[name].exec(tag);
   return m ? m[1] : null;
 };
 const unescape = (s: string) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
@@ -149,8 +155,11 @@ export function cleanName(raw: string | null, fallback: string): string {
 export function themeColours(xml: string): Record<string, string> {
   const out: Record<string, string> = {};
   const scheme = /<a:clrScheme\b[\s\S]*?<\/a:clrScheme>/.exec(xml)?.[0] ?? '';
+  // One element at a time by index, never a pattern built from a name.
   for (const slot of ['dk1', 'lt1', 'dk2', 'lt2', 'accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6']) {
-    const body = new RegExp(`<a:${slot}>([\\s\\S]*?)</a:${slot}>`).exec(scheme)?.[1] ?? '';
+    const open = scheme.indexOf(`<a:${slot}>`);
+    const close = open < 0 ? -1 : scheme.indexOf(`</a:${slot}>`, open);
+    const body = open < 0 || close < 0 ? '' : scheme.slice(open + slot.length + 4, close);
     const srgb = /<a:srgbClr\b[^>]*>/.exec(body)?.[0];
     const sys = /<a:sysClr\b[^>]*>/.exec(body)?.[0];
     const v = (srgb && attr(srgb, 'val')) || (sys && attr(sys, 'lastClr'));
@@ -162,7 +171,9 @@ export function themeColours(xml: string): Record<string, string> {
 /** The theme's heading and body Latin typefaces. */
 export function themeFonts(xml: string): { major: string | null; minor: string | null } {
   const face = (which: string) => {
-    const block = new RegExp(`<a:${which}>([\\s\\S]*?)</a:${which}>`).exec(xml)?.[1] ?? '';
+    const open = xml.indexOf(`<a:${which}>`);
+    const close = open < 0 ? -1 : xml.indexOf(`</a:${which}>`, open);
+    const block = open < 0 || close < 0 ? '' : xml.slice(open + which.length + 4, close);
     const latin = /<a:latin\b[^>]*>/.exec(block)?.[0];
     const t = latin ? attr(latin, 'typeface') : null;
     return t ? cleanName(t, '') || null : null;
