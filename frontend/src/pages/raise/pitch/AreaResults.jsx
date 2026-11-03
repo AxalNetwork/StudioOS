@@ -62,6 +62,8 @@ export default function AreaResults({ results, card, cards = null, model, items 
   if (live !== placedLast.current) working.current = live;
 
   const open = (results || []).filter((r) => r.status === 'proposed' && !state[r.key]);
+  // D1512: the area proposals already accepted here, so Accept all places one variant per area.
+  const taken = useRef(new Set());
 
   // D1515: a placement is one undo step; Accept all's placements share one `group`, so they are one step together,
   // and a step that placed a charged run is marked so undoing it says "Still charged".
@@ -69,7 +71,9 @@ export default function AreaResults({ results, card, cards = null, model, items 
     const placed = placeResult(working.current, r, model);
     if (placed.error) return { error: { message: placed.error } };
     try {
-      if (r.uid) await railProposalsApi.decide(r.uid, 'accept');
+      // D1512 (#3764): a variant of an area run decides itself through the area routes (its images too).
+      if (r.decide) await r.decide('accept');
+      else if (r.uid) await railProposalsApi.decide(r.uid, 'accept');
       else if (r.kind === 'image' && !r.local) await deckImagesApi.keep(r.imageUid, { use: 'content', alt: r.image?.alt || '' });
     } catch (e) {
       reportError('pitch-areas:accept', e);
@@ -77,7 +81,10 @@ export default function AreaResults({ results, card, cards = null, model, items 
     }
     working.current = placed.card;
     placedLast.current = placed.card;
-    setState((s) => ({ ...s, [r.key]: 'accepted' }));
+    // D1512: Accept is by the area, so the area's other variants are superseded.
+    const siblings = r.proposalUid ? (results || []).filter((x) => x.proposalUid === r.proposalUid && x.key !== r.key).map((x) => x.key) : [];
+    setState((s) => ({ ...s, ...Object.fromEntries(siblings.map((k) => [k, s[k] || 'superseded'])), [r.key]: 'accepted' }));
+    taken.current.add(r.proposalUid);
     onPlace(placed.card, { charged: Boolean(r.charges), group, label: ACCEPT });
     return { ok: true };
   };
@@ -94,6 +101,8 @@ export default function AreaResults({ results, card, cards = null, model, items 
     setBusy(true); setError(null);
     const group = `accept-all:${Date.now()}`;
     for (const r of open) {
+      // D1512: Accept all places one variant per area, the first still open.
+      if (r.proposalUid && taken.current.has(r.proposalUid)) continue;
       // eslint-disable-next-line no-await-in-loop
       const out = await accept(r, group);
       if (out.error) { setError({ key: r.key, ...out.error }); break; }
@@ -105,7 +114,10 @@ export default function AreaResults({ results, card, cards = null, model, items 
   const discard = async (r) => {
     setBusy(true); setError(null);
     try {
-      if (r.uid) await railProposalsApi.decide(r.uid, 'discard');
+      // D1512: discarding a variant discards the area's proposal only with its last open variant.
+      const left = r.proposalUid ? open.filter((x) => x.proposalUid === r.proposalUid && x.key !== r.key) : [];
+      if (r.decide) { if (!left.length) await r.decide('discard'); }
+      else if (r.uid) await railProposalsApi.decide(r.uid, 'discard');
       else if (r.kind === 'image' && !r.local) await deckImagesApi.discard(r.imageUid);
     } catch (e) {
       // A discard that could not be recorded is still not placed; the header's Ask still lists it.
@@ -145,7 +157,7 @@ export default function AreaResults({ results, card, cards = null, model, items 
                 </div>
               </>
             ) : null}
-            {decided ? <span className={`text-[12.5px] font-bold ${INK}`} data-testid={`${id}-decided`}>{decided === 'accepted' ? 'Placed on the card. Save writes the version.' : 'Discarded. Nothing was placed.'}</span> : null}
+            {decided ? <span className={`text-[12.5px] font-bold ${INK}`} data-testid={`${id}-decided`}>{decided === 'accepted' ? 'Placed on the card. Save writes the version.' : decided === 'superseded' ? 'Another variant was placed in this area.' : 'Discarded. Nothing was placed.'}</span> : null}
             {error?.key === r.key ? <RefusalLine refusal={error} testId={`${id}-error`} /> : null}
             {r.uid && (r.status === 'proposed' || decided) ? <ReportControl uid={r.uid} id={id} /> : null}
           </div>

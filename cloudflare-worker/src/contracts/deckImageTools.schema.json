@@ -1,0 +1,25 @@
+{
+  "$id": "deckImageTools",
+  "title": "GET /api/decks/images/tools (D1534, #3778 phase 2)",
+  "description": "What the deck v2 adapter's `imageEditAi` method passes through (`deckImageEditsApi.liveTools`): the AI image tools and whether each can run here (`routes/deck_image_edits.ts`). Background removal (Bria RMBG 2.0 through AI Gateway) is on only while AI_PROVIDER_BRIA is exactly 'on'; Upscale has no model. Each tool says its model, its printed per-image price, and, when off, the words to show. Nothing is run or held. D1511 (#3762).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["tools"],
+  "properties": {
+    "tools": {
+      "type": "array", "minItems": 1, "maxItems": 2,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["tool", "on", "model", "model_label", "usd_per_image", "message"],
+        "properties": {
+          "tool": { "enum": ["remove_background", "upscale"] },
+          "on": { "type": "boolean" },
+          "model": { "type": ["string", "null"] },
+          "model_label": { "type": ["string", "null"] },
+          "usd_per_image": { "type": ["string", "null"] },
+          "message": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}
