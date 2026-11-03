@@ -92,6 +92,8 @@ async function fixture() {
   // Migration 399: the brand voice, the dark logo and the archive, which the baseline predates.
   f.db.exec(readFileSync(new URL('../sql/migrations/399_landing_brand_voice_dark_logo_archive.sql', import.meta.url), 'utf8'));
   f.db.exec(MIGRATION);
+  // D1562 (#3809): the deck's own brand kit, which GET /brand-kit reads beside the landing page.
+  f.db.exec(readFileSync(new URL('../sql/migrations/737_deck_brand_kits.sql', import.meta.url), 'utf8'));
   f.db.exec(`CREATE TABLE mi_pro_subscriptions(user_id INTEGER PRIMARY KEY, status TEXT, subscription_id TEXT, plan TEXT, period_end TEXT, stripe_customer_id TEXT);
     CREATE TABLE user_recovery_state(user_id INTEGER PRIMARY KEY, cooling_off_until TEXT, step_up_due_at TEXT);
     CREATE TABLE user_company_links(user_id INTEGER, company_id INTEGER);

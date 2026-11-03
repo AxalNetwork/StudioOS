@@ -788,7 +788,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
         <DeriveSheet deckId={base.deck.id} version={base.deck.version ?? null} dirty={dirty} readOnly={readOnly} aiOn={aiOn} outOfTokens={outOfTokens}
           onProposed={onProposals} onClose={() => setSheet(null)} />
       ) : null}
-      {sheet === 'brand' ? <BrandKitSheet projectId={project?.id ?? null} kit={kit} readOnly={readOnly} onClose={() => setSheet(null)} /> : null}
+      {sheet === 'brand' ? <BrandKitSheet projectId={project?.id ?? null} deckId={base.deck?.id ?? null} kit={kit} readOnly={readOnly} dirty={dirty} onApplied={saved} onClose={() => setSheet(null)} /> : null}
       {sheet === 'versions' ? (
         <VersionsSheet projectId={project?.id ?? null} versions={versions} readOnly={readOnly} dirty={dirty} phone={phone}
           compare={compare} onCompare={setCompare} onRestored={() => { setCompare(null); setSheet(null); onSaved?.(); }} onClose={() => { setCompare(null); setSheet(null); }} />
