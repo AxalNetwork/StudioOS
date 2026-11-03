@@ -34,6 +34,7 @@ routes live in the D528 module `frontend/src/routes/learning.jsx`, which
 | `useLearningRead.js` | One read's state for a container: loading, ready, missing (a 404), unreadable, and a retry. |
 | `LearningStates.jsx` | The frame, the header, and the states every surface draws, plus the coming-soon card. |
 | `CourseOutline.jsx`, `LessonPlayer.jsx`, `WebinarPanel.jsx`, `ExercisePanel.jsx`, `ExamFlow.jsx`, `MyLearning.jsx`, `ProgramLearnersTable.jsx`, `StudioContentTable.jsx`, `ProgramsTable.jsx`, `ProgramDetail.jsx` | The presentational components, one per surface the canvas draws. |
+| `StudioStreamParts.jsx` | #4177 (L2 of #3726): a stored video's file on Cloudflare Stream (lr14, lr14b, lr20e), and under it the thumbnail picker, the captions and the chapters editor (lr15). `StudioItemEditor` mounts it; see "Video on Stream" below. |
 
 ## The rules for adding here
 
@@ -96,3 +97,37 @@ insets. Desktop and phone render the same `LearningHero`; the phone frame's
 optional header wraps its default bar, retaining Back, its subtitle and the
 conditional Eadwyn control, with one heading. The temporary
 coming-soon gate, links, searches and reads are unchanged.
+
+
+## Video on Stream (#4177, L2 of #3726, on L1's routes, D4176)
+
+- **Nothing is drawn before the routes answer.** A stored video's editor reads
+  `GET …/items/:uid/stream` first. A 503 `stream_unavailable` (Stream not on)
+  draws D561's R2 uploader in its place, with the route's sentence; any other
+  failure is unreadable. The R2 uploader stays until L4 (#4179) has copied
+  every R2 video. A new video still waits for its draft.
+- **The 200 MB switch.** Up to and including 200 MB, `POST …/stream/uploads`
+  answers a one-time `upload_url` and the file goes there by basic POST (XHR,
+  for progress); above it, `tus-js-client` (pinned at 4.3.1, loaded only for
+  such a file) goes through the Worker's tus route, and the session's headers
+  reach only that creation request. A cancel or a failure abandons the video
+  Stream made. While a video processes, the read is repeated every 10 s.
+- **Under the field:** the thumbnail (a slider, the frame from the member
+  read's signed poster, Use this frame), captions (Generate ▾ by language,
+  Upload VTT, Delete asked first; "Only WebVTT files are accepted." before
+  anything is sent) and chapters (times must increase, at most 100, saved by
+  the item's PATCH; read from `GET /api/learning/items/:uid`, the only read
+  that sends them).
+- **The content table's Video column** reads Stream · Ready only when the item
+  list carries `stream_uid`, which it does not yet; "None" is claimed only for
+  `stream_uid: null`, else a video with no file or link is "Not recorded".
+- **L4 is not built.** Copy to Stream, Copying…, Verified, "Copy failed · Try
+  again" and the banner "[n] uploaded videos still play from storage." draw
+  only when the list carries `stream_copy`, a name and shape guessed here
+  pending #4179 (`videoUpload.js`), and the buttons only when the page passes
+  `onCopyToStream`. No page does: there is no client method and no route for
+  the copy yet, so today none of it is drawn.
+- **The Ask triggers on a blank Title, Summary and Topic (#3706) are not
+  wired here.** #3706's field triggers come from `GET /api/fills/sheet`, whose
+  `FILL_FIELDS` has no Learning form, and the studio's rail has no page key;
+  wiring them needs that Worker form first.
