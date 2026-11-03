@@ -7,11 +7,13 @@
  * reason ("Not recorded"), never 0. No member is named anywhere: the reply
  * holds counts, a rate, a median and a curve of shares.
  */
+import { NOT_RECORDED } from '../../lib/absence';
 import { clockLabel } from './learningModel';
+
+export { NOT_RECORDED };
 
 export const SHEET_SUB = 'Video · reads the positions the player writes';
 export const NOT_ENOUGH = 'Not enough views to show';
-export const NOT_RECORDED = 'Not recorded';
 export const CURVE_TITLE = 'Drop-off over the video';
 export const CURVE_NOTE = 'Viewers still watching through the video, span by span, with its chapters.';
 
