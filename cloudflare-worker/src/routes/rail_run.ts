@@ -42,6 +42,8 @@ import { FORM_TEXT_JOBS, fieldsOf, type FillField } from '../services/fills/fiel
 import { MAX_RUN_ROWS, fieldsToAsk, formMessages, gatherForm, gatherScoped, parseFields, parseRows, type Dropped } from '../services/fills/formRun';
 import { isExplorer, parentKey, scopeOf } from '../services/fills/scopes';
 import { runRefusalView } from '../util/railContext';
+import { HINT_DEPS, HintRefused } from '../services/ai/themeHints';
+import { SEGMENT_FORM, SEGMENT_JOB, segmentHints, segmentSection, type Interviewee } from '../services/ai/segmentHints';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { ensureAdvisorStoresSchema } from '../services/advisorStoresSchema';
 import { sessionBlockProposals, windowDays } from '../services/sessionsBlock';
@@ -286,6 +288,19 @@ export function railRunRoutes(deps: { run?: Runner; quote?: Quoter } = {}) {
     // #4046 (B2): a record that offers fewer fields than its form (a programme with two questions) asks only those, before any quote.
     if (gather.only) { const only = new Set(gather.only); asked = asked.filter((f) => only.has(f.field)); }
     if (!asked.length) return refuse(c, 400, 'nothing_to_fill');
+    // #3938 part 7 (D1478): VA12 retrieves before it writes. The venture's interviewees are
+    // embedded with its segments, and the writer reads who sits near which segment as a hint.
+    let hintRefusal: RunResult | null = null;
+    if (form === SEGMENT_FORM && !recordScope && projectId) {
+      try {
+        const hint = segmentSection(await segmentHints(await intervieweesOf(c.env, projectId), await segmentsOf(c.env, projectId),
+          HINT_DEPS.make(c.env, { userId: Number(user.id), rail: { page, option, record: recordRef } }, SEGMENT_JOB)));
+        if (hint) gather.hint = hint;
+      } catch (e) {
+        if (!(e instanceof HintRefused)) throw e;
+        hintRefusal = e.result;
+      }
+    }
     const { messages, guardText } = formMessages(asked, gather, { text: typeof input.text === 'string' ? input.text : '', rows: rowsWanted || undefined });
     const runInput: RunOptions = {
       task: 'rail_write', userId: Number(user.id), messages, guardText, maxTokens: rowsWanted ? 1200 : 600, temperature: 0.2,
@@ -303,6 +318,9 @@ export function railRunRoutes(deps: { run?: Runner; quote?: Quoter } = {}) {
       console.warn('[rail-run] refused', option, v.code);
       return finish();
     };
+
+    // A refusal the member must hear about from the retrieval step stops the press before any hold.
+    if (hintRefusal) return refusalDone(hintRefusal);
 
     // meta: what the run will hold, from the same arithmetic as the hold. A refusal here (the switch, a stale pick) is the run's own.
     const q = await quote(c.env, runInput);
@@ -365,3 +383,27 @@ export function railRunRoutes(deps: { run?: Runner; quote?: Quoter } = {}) {
 }
 
 export default railRunRoutes();
+
+/** VA12's interviewees: role, company, ICP fit and logged pains; never a name, note or recording (#3938 part 7). */
+export async function intervieweesOf(env: Env, projectId: number): Promise<Interviewee[]> {
+  const res = await env.DB.prepare(
+    'SELECT id, interviewee_role, interviewee_company, icp_fit, pains_json FROM discovery_interviews WHERE project_id = ? ORDER BY id DESC LIMIT 40',
+  ).bind(projectId).all<{ id: number; interviewee_role: string | null; interviewee_company: string | null; icp_fit: string | null; pains_json: string | null }>()
+    .catch(() => ({ results: [] as any[] }));
+  return (res.results || []).map((r) => {
+    let pains: string[] = [];
+    try {
+      const v = JSON.parse(r.pains_json || '[]');
+      if (Array.isArray(v)) pains = v.map((x: any) => (typeof x === 'string' ? x : String(x?.pain ?? x?.phrase ?? x?.text ?? ''))).filter(Boolean).slice(0, 8);
+    } catch { pains = []; }
+    return { id: Number(r.id), role: r.interviewee_role, company: r.interviewee_company, fit: r.icp_fit, pains };
+  });
+}
+
+/** VA12's segments: the venture's live ones, by name and who they are. */
+export async function segmentsOf(env: Env, projectId: number): Promise<Array<{ name: string; who: string | null }>> {
+  const res = await env.DB.prepare(
+    'SELECT name, who_they_are FROM customer_segments WHERE project_id = ? AND archived_at IS NULL ORDER BY id DESC LIMIT 20',
+  ).bind(projectId).all<{ name: string; who_they_are: string | null }>().catch(() => ({ results: [] as any[] }));
+  return (res.results || []).map((r) => ({ name: String(r.name ?? ''), who: r.who_they_are ?? null }));
+}

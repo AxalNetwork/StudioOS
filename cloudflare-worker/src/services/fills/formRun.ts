@@ -54,6 +54,8 @@ export interface FormGather {
   only?: string[];
   /** #4046 (B2): one line on how this form's words are written (an answer in the member's own voice). */
   guide?: string;
+  /** #3938 part 7: a retrieval step's hint (VA12's interviewees by meaning), read after the facts; never an answer. */
+  hint?: string;
 }
 
 /**
@@ -263,6 +265,7 @@ export function formMessages(asked: readonly FillField[], gather: FormGather, op
     gather.existing.length ? `Already on file, do not repeat: ${JSON.stringify(gather.existing)}` : '',
     gather.context?.length ? `On record: ${JSON.stringify(gather.context)}` : '',
     gather.guide ?? '',
+    gather.hint ?? '',
     words ? `The founder's notes: ${words}` : '',
   ].filter(Boolean).join('\n');
   return {

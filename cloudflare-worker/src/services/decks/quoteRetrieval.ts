@@ -36,13 +36,25 @@
  * yet". The embedding and the rerank go through the AI router's module
  * tasks with their catalogue ids (D760), never a second model list.
  */
+import { jobStep } from '../ai/modelUseCases';
 import type { Env } from '../../types';
 import { run as aiRun } from '../aiRouter';
 import { AI_SURFACE } from '../aiSurfaces';
 
 export const QUOTE_INDEX = 'axal-deck-quotes';
-export const QUOTE_EMBED_MODEL = '@cf/baai/bge-m3';
-export const QUOTE_RERANK_MODEL = '@cf/baai/bge-reranker-base';
+/**
+ * #3938 part 7 (D1478): the plan's DK13 rows ("Grid and research agents") decide both
+ * models: step 0 retrieves, step 1 ranks. Read from the table, never typed here, so a
+ * change to the plan moves the search; the index's 1,024 dimensions are bge-m3's, and
+ * a test holds the two together.
+ */
+const dk13 = (step: number, kind: string): string => {
+  const row = jobStep('DK13', step);
+  if (row?.kind !== kind || !row.default) throw new Error(`DK13 step ${step} is not a ${kind} step`);
+  return row.default;
+};
+export const QUOTE_EMBED_MODEL = dk13(0, 'retrieve');
+export const QUOTE_RERANK_MODEL = dk13(1, 'rank');
 export const QUOTE_DIMENSIONS = 1024;
 
 export const QUOTE_MIN_CHARS = 20;
