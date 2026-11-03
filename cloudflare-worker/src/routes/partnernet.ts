@@ -53,6 +53,8 @@ const COMMISSION_COLUMNS = [
   `ALTER TABLE commissions ADD COLUMN terms_id INTEGER REFERENCES referral_partner_terms(id)`,
   `ALTER TABLE commissions ADD COLUMN reversed_amount_cents INTEGER NOT NULL DEFAULT 0`,
   `ALTER TABLE commissions ADD COLUMN reversed_at TIMESTAMP`,
+  // D4292 (migration 202611031345): when a held subscription commission becomes payable.
+  `ALTER TABLE commissions ADD COLUMN payable_at TEXT`,
 ];
 
 const REL_REQUEST_COLUMNS = [
