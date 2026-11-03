@@ -464,9 +464,5 @@ export async function settleProposals(env: Env, batchUid: string, opts: { aspect
   return n;
 }
 
-/** D1512: A15's daily cleanup. A proposal nobody decided expires; its images go with D1508's sweep. */
-export async function expireAreaProposals(env: Pick<Env, 'DB'>, now: Date = new Date()): Promise<number> {
-  const r = await env.DB.prepare(`UPDATE deck_area_proposals SET state = 'expired', outcome = 'expired', decided_at = ?1
-    WHERE state IN ('running', 'ready', 'failed') AND expires_at < ?1`).bind(sqlTime(now.getTime())).run();
-  return Number(r.meta?.changes ?? 0);
-}
+/** D1512: A15's daily cleanup, in its own module so the cleanup's import graph stays small (`areaExpiry.ts`). */
+export { expireAreaProposals } from './areaExpiry';
