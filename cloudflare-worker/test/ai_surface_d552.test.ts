@@ -207,6 +207,7 @@ const EXPECTED: Record<string, string[]> = {
   'routes/deck_new.ts': ['AI_SURFACE.raisePitch', 'AI_SURFACE.raisePitch', 'AI_SURFACE.raisePitch'], // D897: the outline and the build; /generate moved here; D897 §9 (#3659): one card's regeneration
   'routes/deck_assist.ts': ['AI_SURFACE.raisePitch'], // D899: the card tools
   'routes/deck_derive.ts': ['AI_SURFACE.raisePitch'], // D1583: the memo from a deck
+  'routes/deck_actions.ts': ['AI_SURFACE.raisePitch'], // D1561: Check wording
   'routes/deck_critic.ts': ['AI_SURFACE.raisePitch'], // D1557: the investor critic
   'routes/deck_critique.ts': ['AI_SURFACE.raisePitch', 'AI_SURFACE.raisePitch'], // D1552: the design critic's vision pass and its shortenings
   'routes/deck_transform.ts': ['AI_SURFACE.raisePitch'], // D1560: notes, proofread, fix this slide, translate

@@ -13,6 +13,7 @@ import { mount as admin_company_skillsMount } from './admin_company_skills';
 import { mount as admin_hq_skillsMount } from './admin_hq_skills';
 import { mount as company_complianceMount } from './company_compliance';
 import { mount as data_room_proposalsMount } from './data_room_proposals';
+import { mount as deck_actionsMount } from './deck_actions';
 import { mount as deck_brand_kitMount } from './deck_brand_kit';
 import { mount as deck_card_statusMount } from './deck_card_status';
 import { mount as deck_mediaMount } from './deck_media';
@@ -38,6 +39,7 @@ export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'admin_hq_skills', mount: admin_hq_skillsMount },
   { file: 'company_compliance', mount: company_complianceMount },
   { file: 'data_room_proposals', mount: data_room_proposalsMount },
+  { file: 'deck_actions', mount: deck_actionsMount },
   { file: 'deck_brand_kit', mount: deck_brand_kitMount },
   { file: 'deck_card_status', mount: deck_card_statusMount },
   { file: 'deck_media', mount: deck_mediaMount },
