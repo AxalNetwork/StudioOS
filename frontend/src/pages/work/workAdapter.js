@@ -1,9 +1,10 @@
 /**
  * D1614 (#3968) — Work's and company compliance's one seam to the Worker.
  *
- * A method is OFF until its route is on `main`: it answers
- * `{ available: false, reason }` without a request, so a page draws the honest
- * "not switched on yet" block and never invents a board, a chart or a task.
+ * A method was OFF until its route was on `main`, answering
+ * `{ available: false, reason }` without a request, so a page drew the honest
+ * "not switched on yet" block and never invented a board, a chart or a task.
+ * Since #3972 every method is on.
  * `burnup` is on (#3970), and so are W1's board, item, move, assign and create
  * (#3969, wired by #3973): each goes through `workApi`, and an engine that is
  * off answers the same honest block. The compliance methods are on (#3976),
@@ -17,10 +18,10 @@
  *   burnup                             W2  #3970  the burn-up series
  *   run, retry, feed                   W3  #3971  run detail and the project activity feed
  *   workload, schedule                 W4  #3972  people's and agents' items on the Calendar, a time block
- *   agentSessions                      W4  #3972  agents' scheduled sessions as Workload rows; off until W4's Worker fills
- *                                                  `WORKLOAD_DEPS.agentSessions` (CAL10's run sheet needs no seam: #3974 opens
- *                                                  `RunSheet` from the session's `last_runs[].uid`)
- *   D1614 W6 (#3974) turned on run, retry, feed, workload and schedule.
+ *   agentSessions                      W4  #3972  agents' scheduled sessions as Workload rows, from the workload read now that
+ *                                                  W4's Worker fills `WORKLOAD_DEPS.agentSessions` (CAL10's run sheet needs no
+ *                                                  seam: #3974 opens `RunSheet` from the session's `last_runs[].uid`)
+ *   D1614 W6 (#3974) turned on run, retry, feed, workload and schedule; #3972 turned on agentSessions.
  *   complianceTasks, complianceTask,
  *   markDone, createWork               #3976 (S15)  the company compliance list
  *   complianceCreate, complianceUpdate,
@@ -29,13 +30,12 @@
  *   complianceReopen                   #3976        its task sheet's other changes
  */
 import { workApi } from '../../lib/api/work.js';
+import { workloadSessions } from './workModel.js';
 import { agentEngineApi } from '../../lib/api/agentEngine.js';
 import { companyComplianceApi as cc } from '../../lib/api/companyCompliance.js';
 
 export const WORK_OFF = 'Work is not switched on yet. Its board, backlog and burn-up arrive with the Worker part (#3969).';
 export const COMPLIANCE_OFF = 'Compliance tasks are not switched on yet. They arrive with the company compliance list (#3976).';
-
-const off = (reason) => async () => ({ available: false, reason });
 
 /** A live method: `{ available: true, data }`, or the off block when the engine is off. */
 export async function through(call, reason) {
@@ -62,8 +62,8 @@ export const workAdapter = {
   feed: (projectId, opts) => through(() => agentEngineApi.projectActivity(projectId, opts), WORK_OFF),
   workload: (projectId, opts) => through(() => workApi.workload(projectId, opts), WORK_OFF),
   schedule: (uid, block) => through(async () => (await workApi.schedule(uid, block))?.task ?? null, WORK_OFF),
-  // #3957 merged; agents' sessions join Workload once W4's Worker fills `WORKLOAD_DEPS.agentSessions` (#3972).
-  agentSessions: off('Scheduled agent sessions join Workload once the workload read includes them.'),
+  // #3972: the workload read carries agents' scheduled sessions; this is each agent's session slots from it.
+  agentSessions: (projectId, opts) => through(async () => workloadSessions(await workApi.workload(projectId, opts)), WORK_OFF),
   complianceTasks: (uid, filter) => through(() => cc.list(uid, filter), COMPLIANCE_OFF),
   complianceTask: (uid, taskUid) => through(() => cc.task(uid, taskUid), COMPLIANCE_OFF),
   markDone: (uid, taskUid, note) => through(() => cc.markDone(uid, taskUid, note), COMPLIANCE_OFF),
