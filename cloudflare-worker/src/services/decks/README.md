@@ -96,6 +96,7 @@ Builds the deck payload from the venture's real records and renders it.
 | `chartSeries.ts` | D898 group C (#2676): `CHART_SERIES`, the dated series a deck chart plots (Grow's monthly snapshots, Stripe and typed apart; Validate's interviews per week; D1601's `grow.wau.weekly` from PostHog, not recorded until #3731's feeds store it), each with its points, Source, grade and snapshot; `chartFits`, how many each of the twelve chart types can draw and why not. Read by `GET /api/decks/chart-series` and the refresh. Writes nothing; no model runs. |
 | `dataroomFormats.ts` | D1602: bounded CSV/XLSX/DOCX readers and schema/citation validation; no formula or URL execution. |
 | `dataroomExtract.ts` | D1602: owner-approved, quoted current-version extraction through the existing queue and metered AI router. |
+| `gridHealth.ts` | D1537 (#3786, deck v2 B10): the Grid's health for HQ. `gridMetrics` (per element and model from the run steps: error rate, p95 against its target, cost, fallbacks, drift; eval score not recorded), `errorBudget` and `noteErrorBudgetAlert` (99% of batches over 28 days; a quarter burned in an hour tells each active HQ admin once, from the hourly cron), and `funnelKpis` (decks with 3+ generations, quote conversion by price band, the accept rate, first deck to first share, 4-week retention). Counts and ids only; nothing to count is null. |
 
 ## The rule
 
