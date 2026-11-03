@@ -26,7 +26,7 @@ import { articles, publications, eventsPublic } from '../../lib/api';
 import { learningApi } from '../../lib/api/learning.js';
 import {
   ALL_LIMIT, ARTICLES_PAGE_SIZE, EVENTS_PAGE_SIZE, articleRow, catalogRow, eventRow, examRow, exerciseRow, itemHref, myAttemptRows,
-  mySubmissionRows, publicationRow, statsTiles,
+  mySubmissionRows, parseVtt, previewOf, publicationRow, statsTiles,
 } from './learningModel';
 
 function listOf(reply, key, what) {
@@ -82,6 +82,35 @@ export async function readItem(uid) {
   const reply = await learningApi.item(uid);
   if (!reply?.item) throw new Error('The item came back in a shape this page cannot read.');
   return { item: reply.item, transcriptRecorded: reply.transcript_recorded === true, progress: reply.progress || null };
+}
+
+/**
+ * #4178 (D4178): one ready caption of an item's Stream video, as timed cues
+ * for the click-to-seek transcript. Throws when it cannot be read, so the
+ * panel says so and shows the plain transcript instead of an empty list.
+ */
+export async function readItemCaption(uid, language) {
+  const reply = await learningApi.itemCaption(uid, language);
+  if (typeof reply?.vtt !== 'string') throw new Error('The caption came back in a shape this page cannot read.');
+  return parseVtt(reply.vtt);
+}
+
+const previews = new Map();
+/**
+ * lr7: the hover preview of a video in the library, from the item read (which
+ * signs it after its access check). Read once per video per page and kept for
+ * 30 minutes, inside the signature's hour. Null when there is none; a read that
+ * fails is also null, because a preview is decoration and never a claim.
+ */
+export async function readItemPreview(uid, now = Date.now()) {
+  const key = String(uid || '');
+  if (!key) return null;
+  const hit = previews.get(key);
+  if (hit && hit.until > now) return hit.url;
+  let url = null;
+  try { url = previewOf((await learningApi.item(key))?.item); } catch { url = null; }
+  previews.set(key, { url, until: now + 30 * 60 * 1000 });
+  return url;
 }
 
 /** Where a row of `GET /me` opens: a course, an item, or nowhere for a bare lesson. */

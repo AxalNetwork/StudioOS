@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Pill } from '../../ui';
 import { SectionCard } from './LearningStates';
 import { ErrorLine, Field, INPUT, PRIMARY, SECONDARY, StatusActions } from './studioParts';
+import StreamStudio from './StudioStreamParts';
 import { itemForm, uploadVideo } from './studioActions';
 import {
   IDLE_UPLOAD, VIDEO_ACCEPT, VIDEO_LIMITS_LINE, chooseVideoFile, formAfterUpload, formatBytes, shownItem,
@@ -37,10 +38,20 @@ export const UPLOAD_NEEDS_DRAFT = 'Create the draft first, then upload its file.
  * wait. Publishing a video with neither a link nor a file is the route's
  * refusal (`no_video`), shown in its own words like every other (`error`).
  *
+ * ON CLOUDFLARE STREAM (#4177, L2 of #3726): a stored video's file goes to
+ * Stream (`StreamStudio`, `StudioStreamParts.jsx`): basic POST up to 200 MB,
+ * tus above it, then "processing" polled every 10 s, and the thumbnail,
+ * captions and chapters under it. Nothing of it is drawn until the Stream read
+ * answers. While the routes answer 503 `stream_unavailable` the D561 R2 field
+ * above is drawn in its place, and it stays until L4 (#4179) has copied every
+ * R2 video. A new video still waits for its draft.
+ *
+ *   initialStream  the Stream read's first state, for a test; the page omits it
+ *
  * The page keys this editor on the item, so opening another one starts from
  * that item's stored fields rather than from the last one's edits.
  */
-export default function StudioItemEditor({ item, kind, onSave, onStatus, onUploaded, busy = false, error = '', notice = '' }) {
+export default function StudioItemEditor({ item, kind, onSave, onStatus, onUploaded, busy = false, error = '', notice = '', initialStream = null }) {
   const [form, setForm] = useState(() => itemForm(item));
   const [upload, setUpload] = useState(IDLE_UPLOAD);
   // The item as stored after this editor's own upload, until the page hands
@@ -55,7 +66,8 @@ export default function StudioItemEditor({ item, kind, onSave, onStatus, onUploa
   const current = shownItem(item, uploaded);
   const isVideo = (item?.kind || kind) === 'video';
   const noun = isVideo ? 'video' : 'reading';
-  const sending = upload.phase === 'uploading' || upload.phase === 'cancelling';
+  const [streaming, setStreaming] = useState(false);
+  const sending = upload.phase === 'uploading' || upload.phase === 'cancelling' || streaming;
   const id = (name) => `studio-item-${name}`;
   const set = (name) => (event) => setForm((f) => ({ ...f, [name]: event.target.value }));
 
@@ -77,6 +89,21 @@ export default function StudioItemEditor({ item, kind, onSave, onStatus, onUploa
     setUpload(cancelling);
   };
 
+  // D561's R2 field: a new video's (blocked until the draft exists), and a stored one's while Stream is off.
+  const r2Field = (
+    <VideoFileField
+      id={id('upload')}
+      hasUpload={current?.video_source === 'r2'}
+      hasLink={Boolean(String(current?.video_url ?? '').trim())}
+      upload={upload}
+      blocked={item?.uid ? '' : UPLOAD_NEEDS_DRAFT}
+      busy={busy}
+      onChoose={(file) => setUpload(chooseVideoFile(file))}
+      onStart={startUpload}
+      onCancel={cancelUpload}
+    />
+  );
+
   return (
     <SectionCard title={item ? `Edit ${noun}` : `New ${noun}`} meta={item ? `uid ${item.uid}` : 'created as a draft'} testid="studio-item-editor">
       {item && <div className="mb-4"><StatusActions status={current.status} what={noun} onStatus={onStatus} busy={busy || sending} /></div>}
@@ -93,17 +120,9 @@ export default function StudioItemEditor({ item, kind, onSave, onStatus, onUploa
         </Field>
         {isVideo ? (
           <>
-            <VideoFileField
-              id={id('upload')}
-              hasUpload={current?.video_source === 'r2'}
-              hasLink={Boolean(String(current?.video_url ?? '').trim())}
-              upload={upload}
-              blocked={item?.uid ? '' : UPLOAD_NEEDS_DRAFT}
-              busy={busy}
-              onChoose={(file) => setUpload(chooseVideoFile(file))}
-              onStart={startUpload}
-              onCancel={cancelUpload}
-            />
+            {item?.uid ? (
+              <StreamStudio uid={item.uid} initial={initialStream} onBusy={setStreaming} renderOff={() => r2Field} />
+            ) : r2Field}
             <Field
               id={id('video')}
               label="Or paste a link"
