@@ -116,6 +116,8 @@ on main read `deckV2Adapter.js`.
 | `slideAnalyticsModel.js` | D1573 (#3820): pure words for per-slide investor analytics: pd35's Analytics cell ("Views 4 · Time 6 m 12 s · Last seen yesterday", "Views 1 · visit counts only"), "Off keeps visit counts only", the durations, the NDA pill, the bars (an untimed card is "Not read", never "0 s"), the most-read line and the timeline rows. |
 | `deckRailGroups.js` | D1604 (§5, aird1): the AIRail on the pitch pages, models and consumption only: on a deck, each element group's routes and pick come from `GET`/`PUT /api/decks/:id/element-models` through `deckV2Adapter.elementModels` (D1503, #3754); on a page with no deck yet, the rail options on main; the presets "Coming later" (#3796), and the usage rows (Held now from `GET /api/ai-budget/holds`; the deck's estimate and spend from the adapter, #3776). `deckRail()` is `WorkerRail`'s `groups`. |
 | `PitchPage.css` | #3717: scopes the app-main flex height to PitchPage so its rail reaches the footer on short pages. |
+| `diagramEditModel.js` | D1542 (#3780): a diagram's nodes edited on the canvas, pure: the selected area's diagram block, each node the layout draws with what it edits (an item's label or a matrix axis), one label changed (an empty one refused), and the line from the Worker's check (`deckV2Adapter.diagrams`), never "fits" when unread. |
+| `DiagramNodes.jsx` | D1542 (#3780): the selected diagram's nodes as fields over the block on the Grid, one edit each through `onCard`, and `DiagramCheck`, the check's status line under the card. |
 
 The old template builder retired with D898 group E: its four actions are
 `StudioActions.jsx` and New deck's Recommended mark, and `/raise/pitch/builder`
