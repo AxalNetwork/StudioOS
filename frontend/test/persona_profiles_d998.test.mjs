@@ -4,12 +4,12 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
 import { PERSONA_BY_ID } from '../src/lib/personas.js';
-import { SIDEBAR_GROUPS, filterItemsByTier } from '../src/sidebarConfig.js';
+import { SIDEBAR_GROUPS, filterItemsByTier, influencerActiveOf, withInfluencerRow } from '../src/sidebarConfig.js';
 import { shellRoleFor } from '../src/lib/shellRole.js';
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
 const app = read('../src/App.jsx');
 const source = app.slice(app.indexOf('function getSidebarGroups('), app.indexOf('// Carta-style user dropdown'));
-const groupsFor = vm.runInNewContext('(' + source + ')', { SIDEBAR_GROUPS, PERSONA_LOOKUP: PERSONA_BY_ID, shellRoleFor, filterItemsByTier, Sparkles: 'icon' });
+const groupsFor = vm.runInNewContext('(' + source + ')', { SIDEBAR_GROUPS, PERSONA_LOOKUP: PERSONA_BY_ID, shellRoleFor, filterItemsByTier, Sparkles: 'icon', withInfluencerRow, influencerActiveOf });
 const personaGroup = (role, id) => groupsFor(role, id, { role }).find(g => g.key.startsWith('persona-'));
 test('Investor segment links are drawn for Angel, institutional LP and external GP', () => {
   for (const [id, path] of [['angel_scout', '/refer'], ['lp_institutional', '/funds'], ['gp_external', '/pipeline']]) {

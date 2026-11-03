@@ -20,7 +20,7 @@ import {
   UserCircle, Shield, ShieldCheck, Network, Sparkles, Briefcase,
   TrendingUp, MessageSquare, Package, Calendar,
   Inbox, Radar, Wallet, Landmark, Mail,
-  Map, UserCog, Coins, FileStack, SlidersHorizontal, Banknote, BadgeCheck, KeyRound, Bot,
+  Map, UserCog, Coins, FileStack, SlidersHorizontal, Banknote, BadgeCheck, KeyRound, Bot, Megaphone,
 } from 'lucide-react';
 
 // `workspaces/shellConfig.js` is a pure leaf module — it imports nothing — so
@@ -633,6 +633,30 @@ export function withDiligenceRow(groups, role, involved) {
   });
 }
 
+/**
+ * D4289 P7 (#4296), board IN0 — "Influencer" for an admitted influencer, in
+ * every role's shell: the membership is not a role (a founder, an investor,
+ * an advisor or an operating partner can each be one), so the row follows
+ * `/api/auth/me`'s `influencer_active` (1 while the membership is active; 0
+ * when there is none, it is paused or ended, or it cannot be read) and never
+ * the licence. It sits under the profile's own rows: last in the shell's
+ * first group, never twice. The megaphone is the board's icon.
+ */
+// `label` first: `scripts/build-profile-routing.mjs` reads `{ to: '…'` lines as each role's static rows, and this
+// row is added only for admitted influencers, so it is not one of them.
+export const INFLUENCER_ROW = Object.freeze({ label: 'Influencer', to: '/influencer', icon: Megaphone, match: ['/influencer'] });
+
+/** Whether `/api/auth/me` says the member's influencer membership is active. */
+export function influencerActiveOf(user) {
+  return Number(user?.influencer_active) === 1;
+}
+
+export function withInfluencerRow(groups, role, active) {
+  if (active !== true || typeof role !== 'string' || !role || !Array.isArray(groups) || !groups.length) return groups;
+  if (groups.some((g) => (g.items || []).some((it) => it.to === INFLUENCER_ROW.to))) return groups;
+  return groups.map((g, i) => (i === 0 ? { ...g, items: [...(g.items || []), INFLUENCER_ROW] } : g));
+}
+
 // Decide which group keys should start expanded on a fresh visit:
 // Home + the first non-Home group with items. Returns a Set<string>.
 export function defaultOpenGroups(role) {
@@ -797,6 +821,8 @@ export const SHARED_FULL_BLEED = [
   // Pricing and Learning own their hero and body gutters, like Help.
   '/pricing', '/pricing/', '/learning', '/learning/',
   '/referrals',
+  // D4289 P7 (#4296): the Influencer section's Overview; its tabs are under SHARED_FULL_BLEED_PREFIXES.
+  '/influencer',
   // `/perks` is one page for founder, investor, advisor, admin and exploring
   // (a partner is sent to /offers/perk-deals). Its listing body supplies its
   // own gutters and fills the column, without an AI rail or reserved track.
@@ -857,4 +883,7 @@ export const SHARED_FULL_BLEED_PREFIXES = [
   // already a shell zone; the child is not, and without this prefix the page
   // would sit inside App's padding on top of WorkspaceShell's own.
   '/research/companies/',
+  // D4289 P7 (#4296): the Influencer section's tabs draw their own gutter. `/influencer` itself is
+  // in SHARED_FULL_BLEED; the slash keeps `/influencers` (the public program page) off this rule.
+  '/influencer/',
 ];

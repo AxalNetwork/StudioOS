@@ -46,7 +46,7 @@ import {
   ChevronDown, Eye, Sparkles,
   Gift, Mail, Globe
 } from 'lucide-react';
-import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, withDiligenceRow, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED, ADVISOR_FULL_BLEED, PARTNER_FULL_BLEED, SHARED_FULL_BLEED, SHARED_FULL_BLEED_PREFIXES, ONBOARDING_CANVAS_PATHS } from './sidebarConfig';
+import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, withDiligenceRow, withInfluencerRow, influencerActiveOf, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED, ADVISOR_FULL_BLEED, PARTNER_FULL_BLEED, SHARED_FULL_BLEED, SHARED_FULL_BLEED_PREFIXES, ONBOARDING_CANVAS_PATHS } from './sidebarConfig';
 import { useDiligenceInvolvement } from './pages/duediligence/useDiligenceInvolvement';
 import { isCyclePath } from './pages/cycles/cyclePaths';
 import { BOUNDARY_ROLES as NARRATIVE_BOUNDARY_ROLES } from './pages/raise/narrative/narrativeModel';
@@ -790,6 +790,9 @@ function IntegrationsRedirect() {
 // holder's own choice between the HQ shell and the plain admin one.
 function getSidebarGroups(role, primaryPersonaId, user, hqView = true) {
   const base = SIDEBAR_GROUPS[shellRoleFor(role, user, hqView)] || SIDEBAR_GROUPS.founder;
+  // D4289 P7 (#4296): "Influencer" for an admitted influencer (`/me`'s `influencer_active`), in whichever
+  // shell they are in; beside `withDiligenceRow`, which ProtectedLayout applies to this list.
+  const withRow = (list) => withInfluencerRow(list, shellRoleFor(role, user, hqView), influencerActiveOf(user));
   // Apply tier gating per group (stub passes everything through today;
   // Phase C will swap `hasTier` for the real subscription check).
   const groups = base
@@ -801,24 +804,24 @@ function getSidebarGroups(role, primaryPersonaId, user, hqView = true) {
   // so we never duplicate a row.
   const persona = primaryPersonaId ? PERSONA_LOOKUP[primaryPersonaId] : null;
   if (!persona || !Array.isArray(persona.nav_extras) || persona.nav_extras.length === 0) {
-    return groups;
+    return withRow(groups);
   }
   // Never inject a persona group whose profile differs from the
   // current user — a Founder nav extra has no place in an Investor sidebar.
   if (persona.profile && String(persona.profile) !== String(role)) {
-    return groups;
+    return withRow(groups);
   }
   const existingPaths = new Set();
   groups.forEach((g) => g.items.forEach((it) => existingPaths.add(it.to)));
   const extras = persona.nav_extras.filter((e) => !existingPaths.has(e.to));
-  if (extras.length === 0) return groups;
+  if (extras.length === 0) return withRow(groups);
   const personaGroup = {
     key: `persona-${persona.id || primaryPersonaId}`,
     label: `For ${persona.label}`,
     items: extras.map((e) => ({ to: e.to, icon: Sparkles, label: e.label })),
   };
   // Insert after the Home group (index 0) so personas always sit near the top.
-  return [groups[0], personaGroup, ...groups.slice(1)].filter(Boolean);
+  return withRow([groups[0], personaGroup, ...groups.slice(1)].filter(Boolean));
 }
 
 // Carta-style user dropdown — top-right of the global header.

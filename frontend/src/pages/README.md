@@ -56,7 +56,7 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 | `hq/` | The Super Admin's HQ-only surfaces: the holder console, the HQ framings of Accounts and Contracts, and the notice a plain admin sees instead. |
 | `branch/` | The subsidiary shell's own pages, S1–S11, all eight rows built (D107 for why every row shipped with a route rather than only the built ones; D155 for the last of them). Start at `branch/README.md`. |
 | `insights/` | Insight reader and its public variant. |
-| `influencer/` | The Influencer program's pages (D4289): for now the `axal.vc/@handle` stub (P2, #4291), which P8 draws as IN7, and later the member's Influencer section (P7). |
+| `influencer/` | The Influencer program's pages (D4289): the `axal.vc/@handle` stub (P2, #4291), which P8 draws as IN7, and `section/`, the member's Influencer section at `/influencer` (P7, #4296; its own README). |
 | `learning/` | The Learning center (D562): one routed page for every `/learning` route, its presentational components, and the temporary coming-soon gate. Start at `learning/README.md`. |
 | `docs/` | The Help Center layout and its content sections. |
 | `templates/` | `SpinoutDemoDayPage.jsx`, the public `/lp/spinout-demo-day` page. The four older persona landing pages were removed by #2321; their addresses forward to the door pages. |
