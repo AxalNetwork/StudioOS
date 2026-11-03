@@ -56,7 +56,7 @@ const groups = { api, deckEditorApi, deckSourcesApi, deckImagesApi, deckCheckApi
  * the editor renders: a suite can put a fake IndexedDB or a listener recorder on
  * the window there.
  */
-export async function mountEditor({ user = FOUNDER, answers = {}, onDocument = null } = {}) {
+export async function mountEditor({ user = FOUNDER, answers = {}, onDocument = null, entry = '/raise/pitch/edit?project_id=7' } = {}) {
   const originals = Object.fromEntries(Object.entries(groups).map(([k, v]) => [k, { ...v }]));
   const calls = [];
   const stub = (name, fn) => (...a) => { calls.push([name, ...a]); return fn(...a); };
@@ -95,7 +95,7 @@ export async function mountEditor({ user = FOUNDER, answers = {}, onDocument = n
   const container = document.createElement('div'); document.body.appendChild(container);
   const root = createRoot(container);
   const settle = () => act(async () => { for (let i = 0; i < 8; i += 1) await new Promise((r) => setTimeout(r, 0)); });
-  await act(async () => { root.render(h(MemoryRouter, { initialEntries: ['/raise/pitch/edit?project_id=7'] }, h(AuthProvider, null, h(PitchEditor)))); });
+  await act(async () => { root.render(h(MemoryRouter, { initialEntries: [entry] }, h(AuthProvider, null, h(PitchEditor)))); });
   await settle();
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
   const pr = (n) => Object.entries(n || {}).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};

@@ -29,7 +29,7 @@ import { ArrangeSet, DecorLayers } from './BlockTools';
 import { isDecorOn } from './arrangeModel';
 import ShareDialog from './ShareDialog';
 import CommentsSheet from './CommentsSheet';
-import { editorCardOf } from './reviewTileModel';
+import { areaFromLink, cardFromLink } from './deckLinkModel';
 import ExportDialog from './ExportDialog';
 import TransitionSheet from './TransitionSheet';
 import { BackgroundSheet, BrandKitSheet, CheckSheet, RemixSheet, ReplaceImagesSheet, SizeSheet, SourcesSheet, StageSheet, StructureSheet, ThemeSheet, VersionsSheet } from './DeckSheets';
@@ -404,7 +404,9 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   const setAudience = (a) => edit({ type: 'setAudience', audience: a }, { label: 'Audience' });
   // D4271 (#4271): `?card=<n>` (from 1) opens on that card, and `&comments=1` with its comments, as the Review tile links them.
   const [deepLink] = useSearchParams();
-  const [sel, setSel] = useState(() => editorCardOf(deepLink.get('card'), cardsOf(deck).length));
+  // D1558 (#3805): `card` may also be a card uid, and `&area=c1-6r2-4` (or an area id) selects that Grid area once the card is open.
+  const [sel, setSel] = useState(() => cardFromLink(deepLink.get('card'), cardsOf(deck)));
+  const linkedArea = useRef(deepLink.get('area'));
   const [pickState, setPickState] = useState(NO_PICK);
   const [askLine, setAskLine] = useState(null);
   const [dialog, setDialog] = useState(null);
@@ -448,6 +450,13 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   const areas = useMemo(() => areasOf(card, model), [card, model]);
   // D1533: a decor item (`decor:<id>`, from the layers list) stays selected while it is on the card.
   const selection = pickState.selection.filter((id) => (areas || []).some((a) => a.id === id) || isDecorOn(card, id));
+  // D1558: the linked area is selected once, on the card the link opened; a link that names no area here selects nothing.
+  useEffect(() => {
+    if (linkedArea.current == null || !areas) return;
+    const id = areaFromLink(linkedArea.current, areas);
+    linkedArea.current = null;
+    if (id) setPickState({ selection: [id], focus: id });
+  }, [areas]);
   // D1577 (#3824): the area this member is in is theirs (a soft lock) while they edit it; the room says
   // "Wait or ask [Name]" when another member holds it. One area, or none when several or none are picked;
   // a decor item (D1533) is not an area, so picking one claims none.

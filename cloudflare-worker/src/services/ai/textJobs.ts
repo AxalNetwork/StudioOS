@@ -223,7 +223,7 @@ export const RAIL_OPTION_JOBS: Readonly<Record<string, string>> = Object.freeze(
   'draft:raise/pmf-explain': 'RA6', 'draft:raise/legal': 'RA6',
   'draft:raise/pmf-questions': 'RA1', // nearest: Raise writing on the 70B
   'draft:raise/data-room': 'RA2',
-  'draft:raise/narrative-fix': 'RA1', 'draft:narrative-positioning': 'RA1', 'draft:narrative-section': 'RA1', 'draft:narrative-objection': 'RA1',
+  'draft:raise/narrative-fix': 'RA1', 'draft:narrative-positioning': 'RA1', 'draft:narrative-section': 'RA1', 'draft:narrative-objection': 'RA1', 'review:narrative-coach': 'RA1',
   'draft:raise/capital': 'RA8', 'draft:raise/liquidity': 'RA8', 'draft:update': 'RA12',
   // The deck
   'form:deck': 'DK1', 'form:deck-template': 'DK1', 'deck:outline': 'DK1', 'deck:build': 'DK1',
