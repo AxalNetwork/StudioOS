@@ -77,7 +77,7 @@ export const CHANGES_UNREAD = (deck) => `Changes since v${deck?.version ?? '?'} 
 export const signalTag = (signals) => (Array.isArray(signals) && signals.some((x) => x?.kind === 'revisit') ? 'Revisited after 48 h' : null);
 export const viewsWords = (a) => `${a?.views ?? 0} ${a?.views === 1 ? 'view' : 'views'}${a?.last_viewed_at ? ` · last ${day(a.last_viewed_at)}` : ''}`;
 
-export default function InvestorLinksTable({ deck, refreshKey = 0 }) {
+export default function InvestorLinksTable({ deck, projectId = null, refreshKey = 0 }) {
   const [block, setBlock] = useState(null);
   const [confirm, setConfirm] = useState(null);
   const [refusal, setRefusal] = useState('');
@@ -175,7 +175,7 @@ export default function InvestorLinksTable({ deck, refreshKey = 0 }) {
           </table>
         </div>
       )}
-      {sheet ? <ViewerAnalyticsSheet deck={deck} row={sheet} onClose={() => setSheet(null)} /> : null}
+      {sheet ? <ViewerAnalyticsSheet deck={deck} row={sheet} projectId={projectId} onClose={() => setSheet(null)} /> : null}
       {confirm ? (
         <Lightbox label={WITHDRAW_TITLE} title={WITHDRAW_TITLE} width={480} onClose={() => setConfirm(null)} testId="investor-link-withdraw-confirm"
           footer={(
