@@ -45,6 +45,7 @@ function world() {
   db.exec(sql('migrations/089_skills_values_taxonomy.sql'));
   db.exec(sql('migrations/712_team_agents.sql'));
   db.exec(sql('migrations/759_agent_skills.sql'));
+  db.exec(sql('migrations/202611022326_agent_skill_context_tokens.sql')); // D4121: publishing stores each version's context_tokens
   db.exec(sql('migrations/202611022055_agent_skill_moderation.sql'));
   const user = db.prepare("INSERT INTO users (id, uid, email, name, role, founder_id, subscription_tier, subscription_status) VALUES (?, ?, ?, ?, ?, ?, 'growth', 'active')");
   user.run(SUPER, 'u-super', 'super@example.test', 'Sue Super', 'admin', null);
