@@ -24,6 +24,7 @@ export const CONTRACTS = Object.freeze({
   cardStatus: { issue: 3826, route: 'GET /api/decks/:id/card-status', schema: 'deckCardStatus.schema.json' },
   comments: { issue: 3817, route: 'GET /api/decks/:id/comments', schema: 'deckComments.schema.json' },
   consistency: { issue: 3802, route: 'GET /api/decks/:id/check (its consistency key)', schema: 'deckConsistency.schema.json' },
+  critique: { issue: 3799, route: 'POST /api/decks/:id/critique/quote, or POST /api/decks/:id/critique (the adapter\'s `run`)', schema: 'deckCritique.schema.json' },
   deckUsage: { issue: 3776, route: 'GET /api/decks/:id/usage', schema: 'deckUsage.schema.json' },
   discardDraft: { issue: 3751, route: 'DELETE /api/decks/:id/draft', schema: 'deckDiscardDraft.schema.json' },
   draft: { issue: 3751, route: 'GET /api/decks/:id/draft', schema: 'deckDraft.schema.json' },

@@ -85,6 +85,7 @@ export * from './api/deckCheck.js';
 export * from './api/deckCoedit.js';
 export * from './api/deckComments.js';
 export * from './api/deckCritic.js';
+export * from './api/deckCritique.js';
 export * from './api/deckDerive.js';
 export * from './api/deckDraft.js';
 export * from './api/deckEditor.js';

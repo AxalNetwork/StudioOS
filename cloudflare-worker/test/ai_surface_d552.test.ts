@@ -208,6 +208,7 @@ const EXPECTED: Record<string, string[]> = {
   'routes/deck_assist.ts': ['AI_SURFACE.raisePitch'], // D899: the card tools
   'routes/deck_derive.ts': ['AI_SURFACE.raisePitch'], // D1583: the memo from a deck
   'routes/deck_critic.ts': ['AI_SURFACE.raisePitch'], // D1557: the investor critic
+  'routes/deck_critique.ts': ['AI_SURFACE.raisePitch', 'AI_SURFACE.raisePitch'], // D1552: the design critic's vision pass and its shortenings
   'routes/deck_transform.ts': ['AI_SURFACE.raisePitch'], // D1560: notes, proofread, fix this slide, translate
   'routes/deck_rehearsals.ts': ['AI_SURFACE.raisePitch', 'AI_SURFACE.raisePitch'], // D1580 F1 (#3827): a rehearsal's transcript; part 2a: its coaching
   'routes/article_assist.ts': ['AI_SURFACE.articles', 'AI_SURFACE.articles'], // D1409: Eadwyn's writing options on an article, and its images

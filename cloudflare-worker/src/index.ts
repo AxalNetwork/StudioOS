@@ -274,6 +274,7 @@ import deckNew from './routes/deck_new';
 import deckAssist from './routes/deck_assist';
 import deckDerive from './routes/deck_derive';
 import deckCritic from './routes/deck_critic';
+import deckCritique from './routes/deck_critique';
 import deckQaRoutes from './routes/deck_qa';
 import deckTransform from './routes/deck_transform';
 import deckImages from './routes/deck_images';
@@ -1447,6 +1448,8 @@ app.route('/api/decks', deckAssist);
 app.route('/api/decks', deckDerive);
 // D1557 (#3804): the investor critic: rule findings, and one run on a model of another family than the writer's.
 app.route('/api/decks', deckCritic);
+// D1552 (#3799): ⋯ › Whole deck › Fix with critique (code checks, the vision pass, fixes as proposals).
+app.route('/api/decks', deckCritique);
 // D1559 (#3806): likely investor questions, real objections first, answers bound to records; before `decks`.
 app.route('/api/decks', deckQaRoutes);
 // D1560 (#3807): speaker notes, proofread, fix this slide and the translation pipeline, as proposals.

@@ -37,6 +37,7 @@ import { EDITOR_WAITING, aiOffState, editIndex, placeTextEdit, saveChip } from '
 import { AiOffBanner } from './DeckAsk';
 import { areaTitle, areasOf, askTarget, liveFocus } from './gridSelection';
 import AreaLightbox from './AreaLightbox';
+import CritiqueDialog from './CritiqueDialog';
 import InstructionBox from './InstructionBox';
 import { PitchMovedNotice } from './PitchWorkspaceMoved';
 import { acceptUpdate, refreshCard } from './figuresModel';
@@ -650,6 +651,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     if (id === 'notes') { navigate(`/raise/pitch/notes${ventureQuery(project?.id)}`); return; }
     if (id === 'undo') { if (!readOnly) undo(); return; }
     if (id === 'redo') { if (!readOnly) redo(); return; }
+    // D1552 (#3799): ⋯ › Whole deck · uses AI › Fix with critique.
+    if (id === 'critique') { if (!readOnly) setDialog({ kind: 'critique' }); return; }
     // D1553 (#3800): ⋯ › This card › Remix this slide, the only way in (pd13).
     if (['theme', 'size', 'brand', 'sources', 'versions', 'check', 'structure', 'background', 'remix', 'derive', 'comments', 'find'].includes(id)) setSheet(id);
   };
@@ -870,6 +873,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
             setCard(sel, r.card, { label: 'Chart' }); selectBlock(r.card.blocks[r.card.blocks.length - 1].id); setDialog(null);
           }} />
       ) : null}
+      {dialog?.kind === 'critique' ? <CritiqueDialog deckId={base.deck.id} onProposals={onProposals} onClose={() => setDialog(null)} /> : null}
       {dialog?.kind === 'areas' && card ? (
         <AreaLightbox deckId={base.deck.id} cardIndex={sel} card={card} cards={cards} areas={dialog.areas} model={model} items={items} aiOn={aiOn}
           onTokens={onTokens} onPlace={placeCard} onProposals={onProposals} onClose={() => setDialog(null)}
