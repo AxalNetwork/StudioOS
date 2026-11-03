@@ -113,6 +113,13 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-11-03 — Influencer program (#4289)
+
+The owner's two artifacts were decoded by `scripts/read-canvas.mjs`:
+- **`Influencer · Boards.dc.html`** (artifact `2gkGU5D6PNda3kviywEA6q`) lays out the boards IN0 to IN12, each importing the page below.
+- **`Influencer Page.dc.html`** (artifact `UELC9D8NqGoo7VEcrq5DWj`) draws 28 frames: in0 and in0b (the sidebar row and the section header, as a founder and as an investor), in1 and in1s (Overview and its states), in2 (Links), in3 and in3b (Offers and Ask HQ for an offer), in4 (Earnings), in5 (Audience), in6 (Resources), in7 and in7s (the public @handle page, its states and link preview), in8 (`/influencers`), in9 and in9r (the application and its outcomes), in10 (the Refer & Earn card), in11a to in11d (Admin › Programs › Influencers), and in1p, in4p, in7p and in9p (phone) with in1-d, in4-d, in7-d and in9-d (dark).
+
+The build is D4289 (`documentation/architecture/decisions/D4289.md`), parts P1 to P9 (#4290 to #4298).
 ## Landed 2026-11-03 — Raise › Pitch (#4254)
 
 The owner's artifact `KBaBZ9jqPoEFTSqqS1WzQD` was decoded by `scripts/read-canvas.mjs`. It carries two files:
