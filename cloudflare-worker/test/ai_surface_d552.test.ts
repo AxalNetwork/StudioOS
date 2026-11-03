@@ -214,6 +214,7 @@ const EXPECTED: Record<string, string[]> = {
   'routes/deck_script.ts': ['AI_SURFACE.raisePitch'], // D4268: the Script tab's whole-deck script, card by card
   'routes/deck_transform.ts': ['AI_SURFACE.raisePitch'], // D1560: notes, proofread, fix this slide, translate
   'routes/deck_rehearsals.ts': ['AI_SURFACE.raisePitch', 'AI_SURFACE.raisePitch'], // D1580 F1 (#3827): a rehearsal's transcript; part 2a: its coaching
+  'routes/deck_recordings.ts': ['AI_SURFACE.raisePitch'], // D1590 (#3837): a walkthrough take's captions, on the pitch deck's page
   'routes/article_assist.ts': ['AI_SURFACE.articles', 'AI_SURFACE.articles'], // D1409: Eadwyn's writing options on an article, and its images
   'routes/event_syndication_assist.ts': ['AI_SURFACE.eventSyndication'], // D1493: Eadwyn's proposed copy for a syndication channel
   'services/mail/drafts.ts': ['AI_SURFACE.mailDraft'], // D1341: Eadwyn's email drafts and revisions; D1343 moved the call into `runDraft`, shared by the route and the MCP tool
