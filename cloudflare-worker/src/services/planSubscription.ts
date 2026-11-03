@@ -83,12 +83,12 @@ export function subscriptionItemPriceId(obj: Record<string, unknown>): string | 
 async function catalogPlanOf(
   env: Env,
   obj: Record<string, unknown>,
-  opts: { strict?: boolean; priceId?: string | null } = {},
+  opts: { strict?: boolean; priceId?: string | null; sync?: boolean } = {},
 ): Promise<PlanMeta | null> {
   const priceId = opts.priceId !== undefined ? opts.priceId : subscriptionPriceId(obj);
   if (!priceId) return null;
   try {
-    const found = await findCatalogProductByPriceId(env, priceId);
+    const found = await findCatalogProductByPriceId(env, priceId, opts.sync === false ? { sync: false } : undefined);
     return found ? planMetaForProduct(found.product, found.price) : null;
   } catch (e) {
     if (opts.strict) throw e;
@@ -119,7 +119,8 @@ export async function subscriptionPlanEvent(
     // cannot be read, leaves the metadata as it came.
     const itemPrice = subscriptionItemPriceId(obj);
     if (itemPrice && itemPrice !== meta.price_id) {
-      const current = await catalogPlanOf(env, obj, { priceId: itemPrice });
+      // The mirror only: a webhook never syncs the catalogue from Stripe for this check.
+      const current = await catalogPlanOf(env, obj, { priceId: itemPrice, sync: false });
       if (current && current.kind === meta.kind) {
         return { meta: { ...meta, ...planMetaFields(current), price_id: itemPrice }, fromCatalog: false };
       }

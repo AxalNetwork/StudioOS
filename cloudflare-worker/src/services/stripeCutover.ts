@@ -28,9 +28,6 @@ import { INVESTOR_QUOTAS } from '../middleware/requireInvestorTier';
 
 export type StripeModeName = 'test' | 'live';
 
-/** Statuses under which a paid plan is held (the same set the webhook uses). */
-const HELD = "('active', 'trialing', 'past_due')";
-
 export interface CutoverCounts {
   customers: number;
   subscriptions: number;
@@ -60,13 +57,14 @@ export class CutoverUnreadable extends Error {
   }
 }
 
-// --- The predicates. One definition each, shared by the counts and the batch.
-
-const FOUNDER_PAID = `subscription_tier <> 'free' AND stripe_subscription_id IS NOT NULL`;
-const INVESTOR_PAID = `investor_tier <> 'free' AND investor_stripe_subscription_id IS NOT NULL`;
-const INVESTOR_SEATS = `investor_tier <> 'free' AND investor_stripe_subscription_id IS NULL
-  AND investor_seat_primary_user_id IN (SELECT id FROM users WHERE ${INVESTOR_PAID})`;
-const SIDE_PAID = `subscription_id IS NOT NULL AND status IN ${HELD}`;
+// --- The predicates are written out in each statement, so the SQL guard
+// (schema_guards, check-sql-prepare) reads every one. They are, in words:
+//   a founder plan paid in Stripe: a non-free tier with a subscription id;
+//   an investor plan paid in Stripe: the same on the investor columns;
+//   a seat colleague of such an investor: a non-free tier, no subscription of
+//     their own, and a primary who is one;
+//   a side-table plan held in Stripe (account plans, MI Pro): a subscription
+//     id and a held status (active, trialing, past_due).
 
 async function scalar(env: Env, sql: string): Promise<number> {
   const row = await env.DB.prepare(sql).first<{ n: number | null }>();
@@ -90,11 +88,12 @@ export async function cutoverCounts(env: Env): Promise<CutoverCounts> {
       + (SELECT COUNT(*) FROM account_subscriptions WHERE subscription_id IS NOT NULL)
       + (SELECT COUNT(*) FROM mi_pro_subscriptions WHERE subscription_id IS NOT NULL) AS n`),
       scalar(env, `SELECT
-        (SELECT COUNT(*) FROM users WHERE ${FOUNDER_PAID})
-      + (SELECT COUNT(*) FROM users WHERE ${INVESTOR_PAID})
-      + (SELECT COUNT(*) FROM users WHERE ${INVESTOR_SEATS})
-      + (SELECT COUNT(*) FROM account_subscriptions WHERE ${SIDE_PAID})
-      + (SELECT COUNT(*) FROM mi_pro_subscriptions WHERE ${SIDE_PAID}) AS n`),
+        (SELECT COUNT(*) FROM users WHERE subscription_tier <> 'free' AND stripe_subscription_id IS NOT NULL)
+      + (SELECT COUNT(*) FROM users WHERE investor_tier <> 'free' AND investor_stripe_subscription_id IS NOT NULL)
+      + (SELECT COUNT(*) FROM users WHERE investor_tier <> 'free' AND investor_stripe_subscription_id IS NULL
+  AND investor_seat_primary_user_id IN (SELECT id FROM users WHERE investor_tier <> 'free' AND investor_stripe_subscription_id IS NOT NULL))
+      + (SELECT COUNT(*) FROM account_subscriptions WHERE subscription_id IS NOT NULL AND status IN ('active', 'trialing', 'past_due'))
+      + (SELECT COUNT(*) FROM mi_pro_subscriptions WHERE subscription_id IS NOT NULL AND status IN ('active', 'trialing', 'past_due')) AS n`),
       scalar(env, `SELECT COUNT(*) AS n FROM stripe_products`),
       scalar(env, `SELECT COUNT(*) AS n FROM ai_token_packs WHERE archived_at IS NULL`),
     ]);
@@ -108,9 +107,10 @@ export async function cutoverCounts(env: Env): Promise<CutoverCounts> {
 export async function cutoverMembers(env: Env): Promise<number[]> {
   try {
     const { results } = await env.DB.prepare(
-      `SELECT id AS user_id FROM users WHERE (${FOUNDER_PAID}) OR (${INVESTOR_PAID}) OR (${INVESTOR_SEATS})
-       UNION SELECT user_id FROM account_subscriptions WHERE ${SIDE_PAID}
-       UNION SELECT user_id FROM mi_pro_subscriptions WHERE ${SIDE_PAID}
+      `SELECT id AS user_id FROM users WHERE (subscription_tier <> 'free' AND stripe_subscription_id IS NOT NULL) OR (investor_tier <> 'free' AND investor_stripe_subscription_id IS NOT NULL) OR (investor_tier <> 'free' AND investor_stripe_subscription_id IS NULL
+  AND investor_seat_primary_user_id IN (SELECT id FROM users WHERE investor_tier <> 'free' AND investor_stripe_subscription_id IS NOT NULL))
+       UNION SELECT user_id FROM account_subscriptions WHERE subscription_id IS NOT NULL AND status IN ('active', 'trialing', 'past_due')
+       UNION SELECT user_id FROM mi_pro_subscriptions WHERE subscription_id IS NOT NULL AND status IN ('active', 'trialing', 'past_due')
        ORDER BY user_id`,
     ).all<{ user_id: number }>();
     return (results ?? []).map((r) => Number(r.user_id)).filter((n) => Number.isSafeInteger(n) && n > 0);
@@ -166,17 +166,18 @@ export async function runCutover(
   const plan = [
     // Plans first: their predicates read the subscription ids cleared below.
     db.prepare(`UPDATE users SET subscription_tier = 'free', subscription_status = 'cancelled',
-      subscription_renews_at = NULL WHERE ${FOUNDER_PAID}`),
+      subscription_renews_at = NULL WHERE subscription_tier <> 'free' AND stripe_subscription_id IS NOT NULL`),
     // Seat colleagues before their primary, whose subscription id names them.
     db.prepare(`UPDATE users SET investor_tier = 'free', investor_subscription_status = 'cancelled',
-      investor_subscription_renews_at = NULL WHERE ${INVESTOR_SEATS}`),
+      investor_subscription_renews_at = NULL WHERE investor_tier <> 'free' AND investor_stripe_subscription_id IS NULL
+  AND investor_seat_primary_user_id IN (SELECT id FROM users WHERE investor_tier <> 'free' AND investor_stripe_subscription_id IS NOT NULL)`),
     db.prepare(`UPDATE users SET investor_tier = 'free', investor_subscription_status = 'cancelled',
-      investor_subscription_renews_at = NULL, investor_dealroom_max = ? WHERE ${INVESTOR_PAID}`)
+      investor_subscription_renews_at = NULL, investor_dealroom_max = ? WHERE investor_tier <> 'free' AND investor_stripe_subscription_id IS NOT NULL`)
       .bind(INVESTOR_QUOTAS.free.dealroom_max),
     db.prepare(`UPDATE account_subscriptions SET status = 'free', plan = NULL, period_end = NULL, trial_end = NULL,
-      updated_at = datetime('now') WHERE ${SIDE_PAID}`),
+      updated_at = datetime('now') WHERE subscription_id IS NOT NULL AND status IN ('active', 'trialing', 'past_due')`),
     db.prepare(`UPDATE mi_pro_subscriptions SET status = 'free', plan = NULL, period_end = NULL,
-      updated_at = datetime('now') WHERE ${SIDE_PAID}`),
+      updated_at = datetime('now') WHERE subscription_id IS NOT NULL AND status IN ('active', 'trialing', 'past_due')`),
   ];
   const subs = [
     db.prepare(`UPDATE users SET stripe_subscription_id = NULL WHERE stripe_subscription_id IS NOT NULL`),
