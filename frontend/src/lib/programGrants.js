@@ -30,6 +30,7 @@ export const PROGRAMS = [
   { key: 'investor-cohorts', name: 'Investor cohort access', group: 'Access', grant: 'notready', note: 'Not built yet' },
   { key: 'referral-partners', name: 'Referral partners', group: 'Network and referrals', grant: 'yes' },
   { key: 'refer-and-earn', name: 'Refer & Earn', group: 'Network and referrals', grant: 'yes' },
+  { key: 'influencer', name: 'Influencers', group: 'Network and referrals', grant: 'hq', note: 'HQ only · members apply at HQ' },
   { key: 'perks', name: 'Perks', group: 'Rewards', grant: 'yes' },
   { key: 'learning', name: 'Learning', group: 'Learning', grant: 'yes' },
   { key: 'product-testing', name: 'Product testing', group: 'Product', grant: 'hq', note: 'HQ only · runs in Platform' },

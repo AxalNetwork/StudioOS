@@ -279,15 +279,17 @@ export function buildNotesSlideXml(idx: number, text: string): string {
  * image-mode writer and D904's editable writer share it. `defaults` are extra
  * `<Default Extension=…/>` lines (the media the slides embed).
  */
-export function notesPackageParts(slideCount: number, defaults: string[]): ZipEntry[] {
+export function notesPackageParts(slideCount: number, defaults: string[], meta: { title: string; lang: string } | null = null): ZipEntry[] {
   const enc = new TextEncoder();
   const entries: ZipEntry[] = [];
+  // D1578 (#3825): the file's title and language (docProps/core.xml), which a screen reader announces.
+  const xmlEsc = (v: string) => v.replace(/[<>&"']/g, (ch) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' }[ch] as string));
 
   const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
   <Default Extension="xml" ContentType="application/xml"/>
-${defaults.map((d) => `  ${d}\n`).join('')}  <Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>
+${defaults.map((d) => `  ${d}\n`).join('')}  <Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>${meta ? '\n  <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>' : ''}
   <Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>
   <Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>
   <Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>
@@ -300,9 +302,19 @@ ${defaults.map((d) => `  ${d}\n`).join('')}  <Override PartName="/ppt/presentati
     name: '_rels/.rels',
     data: enc.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/>
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/>${meta ? '\n  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>' : ''}
 </Relationships>`),
   });
+  if (meta) {
+    entries.push({
+      name: 'docProps/core.xml',
+      data: enc.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <dc:title>${xmlEsc(meta.title)}</dc:title>
+  <dc:language>${xmlEsc(meta.lang)}</dc:language>
+</cp:coreProperties>`),
+    });
+  }
 
   const slideIds = Array.from({ length: slideCount }, (_, i) => `<p:sldId id="${256 + i}" r:id="rId${i + 2}"/>`).join('');
   // rId(slides+2) → notesMaster.

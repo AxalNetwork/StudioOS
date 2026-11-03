@@ -27,6 +27,8 @@ export function logoSrcOf(logoUrl) {
   if (typeof logoUrl !== 'string') return null;
   const u = logoUrl.trim();
   if (/^\/api\/company\/[^/?#]+\/logo(?:\?v=[0-9a-f]{32}\.(?:png|svg))?$/.test(u)) return u;
+  // #4201: a picked file's preview before Save (URL.createObjectURL), drawn only on this device.
+  if (/^blob:[^\s]+$/.test(u)) return u;
   return /^https?:\/\/[^\s]+$/i.test(u) ? u : null;
 }
 
@@ -38,7 +40,7 @@ export function CompanyMark({ name, size = 40, logoUrl = null }) {
     return (
       <img src={src} alt="" aria-hidden="true" width={size} height={size} style={{ width: size, height: size }}
         className="inline-block shrink-0 rounded-[24%] border border-axal-hairline bg-white object-contain dark:border-gray-700 dark:bg-gray-100"
-        data-mark="company" data-logo={src.startsWith('/api/') ? 'stored' : 'outside'}
+        data-mark="company" data-logo={src.startsWith('/api/') ? 'stored' : src.startsWith('blob:') ? 'pending' : 'outside'}
         onError={() => setFailed(src)} />
     );
   }

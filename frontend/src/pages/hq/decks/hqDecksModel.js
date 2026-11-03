@@ -23,6 +23,9 @@ export const TABS = [
   { key: 'norms', label: 'Stage norms', to: `${BASE}/norms` },
   // D4251 (#4251): the elements × models grid and the kill switch.
   { key: 'models', label: 'AI models', to: `${BASE}/models` },
+  // D1537 (#3786): the Grid's health (metrics, error budget) and the adoption funnel.
+  { key: 'grid', label: 'Grid health', to: `${BASE}/grid` },
+  { key: 'funnel', label: 'Funnel', to: `${BASE}/funnel` },
 ];
 export const MODELS_LINK = { label: 'Models · existing', to: '/admin/platform/ai-usage' };
 

@@ -47,6 +47,7 @@ import { deckCheckApi } from '../../../lib/api/deckCheck.js';
 import { deckCoeditApi } from '../../../lib/api/deckCoedit.js';
 import { deckCommentsApi } from '../../../lib/api/deckComments.js';
 import { deckCritiqueApi } from '../../../lib/api/deckCritique.js';
+import { deckDiagramsApi } from '../../../lib/api/deckDiagrams.js';
 import { deckDraftApi } from '../../../lib/api/deckDraft.js';
 import { deckElementModelsApi } from '../../../lib/api/deckElementModels.js';
 import { deckElementsApi } from '../../../lib/api/deckElements.js';
@@ -55,9 +56,11 @@ import { deckGridApi } from '../../../lib/api/deckGrid.js';
 import { deckImageEditsApi } from '../../../lib/api/deckImageEdits.js';
 import { deckImagesApi } from '../../../lib/api/deckImages.js';
 import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks.js';
+import { deckJudgeApi } from '../../../lib/api/deckJudge.js';
 import { deckLayoutsApi } from '../../../lib/api/deckLayouts.js';
 import { deckMediaApi } from '../../../lib/api/deckMedia.js';
 import { deckModelPresetsApi } from '../../../lib/api/deckModelPresets.js';
+import { deckNarrativeApi } from '../../../lib/api/deckNarrative.js';
 import { deckRehearsalsApi } from '../../../lib/api/deckRehearsals.js';
 import { deckRemixApi } from '../../../lib/api/deckRemix.js';
 import { deckSlideAnalyticsApi } from '../../../lib/api/deckSlideAnalytics.js';
@@ -90,6 +93,7 @@ export const SURFACES = Object.freeze({
   elementModels: { issue: 3754, what: 'A model per element in the AIRail' },
   areasQuote: { issue: 3764, what: 'One quote and one hold for several areas' },
   areasGenerate: { issue: 3764, what: 'Generate into several areas, with variants' },
+  judge: { issue: 3783, what: 'Rank the variants' },
   history: { issue: 3767, what: 'Undo and redo' },
   narrativeOutline: { issue: 3768, what: 'An outline from the investor narrative' },
   instruct: { issue: 3773, what: 'An instruction on several areas' },
@@ -198,7 +202,18 @@ export const areasGenerate = ({ deckId, card, areas, variants, cls, quoteUid, on
  * `gridOps.js` (its reducers and the 100-step history) and is not a client call: it has no contract.
  */
 export const history = async () => Object.freeze({ available: true, value: gridOps });
-export const narrativeOutline = off('narrativeOutline');
+// D1525 (#3783): one area's variants, ranked blind by a judge of another family than the writers'. Without `run`,
+// its quote (runs nothing); with it, the ranking. It never accepts: Accept stays the founder's.
+export const judge = (proposalUid, { run = false } = {}) => through(() => (run ? deckJudgeApi.rank(proposalUid) : deckJudgeApi.quote(proposalUid)), SURFACES.judge.issue);
+/**
+ * D1516 (#3768): New deck from the narrative. Without `run`, the outline: the stage's cards with their grid plan, what
+ * was left out and why ("Problem not evidenced"), the theme and template picked, and the quote. With `run` (and the
+ * outline's `quoteUid`), the one build: a version that is not current, under one deck_build run and one hold.
+ */
+const narrativeBody = ({ projectId, audience, stage, sector, run, quoteUid } = {}) => ({
+  project_id: projectId, ...(audience ? { audience } : {}), ...(stage ? { stage } : {}), ...(sector ? { sector } : {}), ...(run && quoteUid ? { quote_uid: quoteUid } : {}),
+});
+export const narrativeOutline = (o = {}) => through(() => (o.run ? deckNarrativeApi.build(narrativeBody(o), o.idempotencyKey) : deckNarrativeApi.outline(narrativeBody(o))), SURFACES.narrativeOutline.issue);
 export const instruct = off('instruct');
 /** D1522 (#3774): the deck's stage plan — the order for its stage, a why line per card, and missing-proof warnings. */
 export const stagePlan = (deckId, opts) => through(() => deckStageApi.stagePlan(deckId, opts), SURFACES.stagePlan.issue);
@@ -235,7 +250,12 @@ export const imageVary = (uid, ask) => through(() => deckImageEditsApi.quote(uid
  * generate, icons: { total, offset, items } }`.
  */
 export const elementsLibrary = (opts = {}) => through(() => Promise.all([deckElementsApi.library(), deckElementsApi.icons(opts)]).then(([lib, page]) => ({ ...lib, icons: { total: page?.total ?? 0, offset: page?.offset ?? 0, items: page?.icons ?? [], licence: page?.licence ?? null } })), SURFACES.elementsLibrary.issue);
-export const diagrams = off('diagrams');
+/**
+ * D1542 (#3780): an edited diagram checked in code (`POST /api/decks/:id/diagrams/check`): as it would be saved,
+ * whether it fits its area, the numbers its labels name. Generating one is the `grid_diagram` job, run through
+ * `areasGenerate` and proposed until Accept.
+ */
+export const diagrams = (deckId, { diagram, grid, card } = {}) => through(() => deckDiagramsApi.check(deckId, { diagram, grid, card }), SURFACES.diagrams.issue);
 /**
  * D1543 (#3781): the venture-record elements, from records with their Source and grade, no model.
  * `ventureElements(deckId, element, opts)` reads one (`GET /api/decks/:id/venture-elements/:element`), refused by its gate;

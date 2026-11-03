@@ -15,6 +15,8 @@ const short = (x: unknown, n: number): x is string => typeof x === 'string' && x
 const identifier = (x: string) => /^[A-Za-z0-9_.-]{1,32}$/.test(x) && !['__proto__', 'constructor', 'prototype'].includes(x);
 
 export const CHOICE_OPTIONS_MAX = 16;
+/** The longest answer a specialist run may return (`specialistOutput`); a decision's output guard is held for this, D1525. */
+export const SPECIALIST_OUTPUT_MAX = 8_192;
 
 export function questionsValid(value: unknown): value is Record<string, DecisionQuestion> {
   if (!plain(value) || Object.keys(value).length < 1 || Object.keys(value).length > 8) return false;
@@ -114,5 +116,5 @@ export function specialistOutput(raw: unknown, s: SpecialistInput, text: string)
     units = s.operation === 'image_labels' ? { images: 1 } : { tokens_in: estTokens(text), tokens_out: 0 };
   }
   const output = JSON.stringify(answer);
-  return output.length <= 8_192 ? { output, units } : null;
+  return output.length <= SPECIALIST_OUTPUT_MAX ? { output, units } : null;
 }

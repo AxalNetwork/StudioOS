@@ -45,7 +45,14 @@ const M287 = '287_runtime_schema_declared.sql';
 
 /** The fresh build step 9 compares against production, with and without 287. */
 const withAll = () => buildFresh(BASELINE, LATER.map((m) => m.sql));
-const without287 = () => buildFresh(BASELINE, LATER.filter((m) => m.name !== M287).map((m) => m.sql));
+// "Without 287" is the build 287 was written against: every migration before
+// it. Dropping 287 from the whole list is not a build that can exist once a
+// later migration alters a table 287 declares (D4291's ALTERs of
+// referral_attributions), so the counterfactual stops where 287 starts, and
+// "what 287 adds" compares that prefix with and without it.
+const AT287 = LATER.findIndex((m) => m.name === M287);
+const upTo287 = () => buildFresh(BASELINE, LATER.slice(0, AT287 + 1).map((m) => m.sql));
+const without287 = () => buildFresh(BASELINE, LATER.slice(0, AT287).map((m) => m.sql));
 
 /** The fourteen objects 287 declares, as step 9 names them. */
 const DECLARED = [
@@ -115,7 +122,8 @@ function shapeOf(db: DatabaseSync, type: string, name: string) {
 // Migration 287, on the database step 9 builds
 
 test('287 adds exactly the fourteen objects its header names, and removes nothing', () => {
-  const after = objectNames(withAll()) as Set<string>;
+  assert.ok(AT287 > 0, `${M287} is not among the later migrations`);
+  const after = objectNames(upTo287()) as Set<string>;
   const before = objectNames(without287()) as Set<string>;
   const added = [...after].filter((n) => !before.has(n)).sort();
   const removed = [...before].filter((n) => !after.has(n)).sort();
