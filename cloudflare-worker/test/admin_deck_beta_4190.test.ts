@@ -140,8 +140,8 @@ test('#4190: removing a person clears their deck keys and leaves what they made'
   try {
     w.db.exec(`INSERT INTO feature_flags (key, scope, scope_id, enabled) VALUES ('grid_generate', 'global', '', 0), ('deck:logo_wall', 'global', '', 0);
       INSERT INTO projects (id, name, founder_id) VALUES (10, 'Kestrel', 1010);
-      INSERT INTO pitch_decks (id, project_id, version, slides, title, is_current) VALUES (7, 10, 1, '[{"title":"Customers","blocks":[{"element":"logo_wall","kind":"graphic","logo_key":"logo_0123456789abcdef01234567"}]}]', 'Seed', 1);
-      INSERT INTO deck_logos (project_id, logo_key, customer_name, image_uid, permitted, permitted_at, permission_reference) VALUES (10, 'logo_0123456789abcdef01234567', 'Northwind', 'img-1', 1, '2026-10-01', 'Signed email, 1 Oct');
+      INSERT INTO pitch_decks (id, project_id, version, slides, title, is_current) VALUES (7, 10, 1, '[{"title":"Customers","blocks":[{"element":"logo_wall","kind":"graphic","logo_key":"logo_000000000000000000000001"}]}]', 'Seed', 1);
+      INSERT INTO deck_logos (project_id, logo_key, customer_name, image_uid, permitted, permitted_at, permission_reference) VALUES (10, 'logo_000000000000000000000001', 'Northwind', 'img-1', 1, '2026-10-01', 'Signed email, 1 Oct');
       INSERT INTO deck_rehearsals (uid, deck_id, project_id, user_id, pitch_seconds, duration_ms) VALUES ('reh-1', 7, 10, ${ADA}, 180, 170000);`);
     await w.call(HQ, 'POST', '', { user_uids: ['u-ada'], features: ['deck:logo_wall', 'deck:rehearsal'], reason: REASON });
     const before = await flagsFor(w.env, { id: ADA, role: 'founder' } as any);
@@ -152,7 +152,7 @@ test('#4190: removing a person clears their deck keys and leaves what they made'
     const afterF = await flagsFor(w.env, { id: ADA, role: 'founder' } as any);
     assert.deepEqual([afterF.on('deck:logo_wall'), afterF.on('grid_generate')], [false, false], 'back to everyone\'s setting');
     assert.deepEqual(JSON.parse((w.db.prepare('SELECT feature_flags FROM user_settings WHERE user_id = ?').get(ADA) as any).feature_flags), { theme: 'dark' }, 'other settings kept');
-    for (const [t, where] of [['pitch_decks', 'id = 7'], ['deck_logos', "logo_key = 'logo_0123456789abcdef01234567'"], ['deck_rehearsals', "uid = 'reh-1'"]]) {
+    for (const [t, where] of [['pitch_decks', 'id = 7'], ['deck_logos', "logo_key = 'logo_000000000000000000000001'"], ['deck_rehearsals', "uid = 'reh-1'"]]) {
       assert.equal((w.db.prepare(`SELECT COUNT(*) AS n FROM ${t} WHERE ${where}`).get() as any).n, 1, `${t} stays`);
     }
     assert.match((w.db.prepare('SELECT slides FROM pitch_decks WHERE id = 7').get() as any).slides, /logo_wall/);
