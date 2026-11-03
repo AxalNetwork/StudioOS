@@ -702,6 +702,20 @@ export function vttSeconds(stamp) {
 const ENTITIES = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&nbsp;': ' ', '&lrm;': '', '&rlm;': '' };
 
 /**
+ * A cue's words as plain text: entities decoded first, then every tag stripped
+ * until none is left, so an encoded `&lt;b&gt;` cannot come back as markup.
+ * (The page draws the text as text either way; this keeps it plain.)
+ */
+function cueText(raw) {
+  let text = String(raw).replace(/&(?:amp|lt|gt|quot|#39|nbsp|lrm|rlm);/g, (e) => ENTITIES[e]);
+  for (let before = ''; before !== text;) {
+    before = text;
+    text = text.replace(/<[^<>]*>/g, '');
+  }
+  return text.replace(/[<>]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+/**
  * A caption file's cues, `[{ start, end, text }]` in time order, for the
  * click-to-seek transcript. Tolerant by design: a block whose timing line is
  * missing or unreadable, whose end is before its start, or whose text is empty
@@ -722,11 +736,7 @@ export function parseVtt(text) {
     const start = vttSeconds(left);
     const end = vttSeconds(right.trim().split(/\s+/)[0]);
     if (start == null || end == null || end < start) continue;
-    const words = lines.slice(at + 1).join(' ')
-      .replace(/<[^>]*>/g, '')
-      .replace(/&(?:amp|lt|gt|quot|#39|nbsp|lrm|rlm);/g, (e) => ENTITIES[e])
-      .replace(/\s+/g, ' ')
-      .trim();
+    const words = cueText(lines.slice(at + 1).join(' '));
     if (words) cues.push({ start, end, text: words });
   }
   return cues.sort((a, b) => a.start - b.start || a.end - b.end);

@@ -105,6 +105,11 @@ test('WebVTT: cues in time order, tags and entities stripped, NOTE blocks skippe
   assert.deepEqual(parseVtt(`﻿${VTT.replace(/\n/g, '\r\n')}`), parseVtt(VTT));
   assert.deepEqual(parseVtt('not a caption file\n\n00:00:00.000 --> 00:00:01.000\nHi'), [], 'a file that is not WebVTT has no cues');
   assert.deepEqual(parseVtt(''), []);
+  // An encoded tag never comes back as markup: decoded first, then stripped until none is left.
+  const encoded = parseVtt('WEBVTT\n\n00:00:00.000 --> 00:00:01.000\n&lt;script&gt;alert(1)&lt;/script&gt; Hi <<b>i>x</i>');
+  assert.equal(encoded.length, 1);
+  assert.doesNotMatch(encoded[0].text, /[<>]/);
+  assert.equal(encoded[0].text, 'alert(1) Hi x');
   assert.deepEqual(parseVtt(null), []);
 });
 
