@@ -5832,6 +5832,27 @@
   },
   {
    "pageKey": "Founder · Raise · Pitch deck",
+   "optionKey": "transcribe:rehearsal-live",
+   "optionLabel": "Count words live",
+   "kind": "live",
+   "handler": "draft",
+   "routeTask": "transcribe",
+   "models": [
+    {
+     "id": "@cf/deepgram/flux",
+     "role": "Default",
+     "line": "Words as you say them, turn by turn"
+    },
+    {
+     "id": "@cf/deepgram/nova-3",
+     "role": "Alternative",
+     "line": "Steadier words, a little slower"
+    }
+   ],
+   "more": []
+  },
+  {
+   "pageKey": "Founder · Raise · Pitch deck",
    "optionKey": "rehearse:coach",
    "optionLabel": "Coach me",
    "kind": "reason",

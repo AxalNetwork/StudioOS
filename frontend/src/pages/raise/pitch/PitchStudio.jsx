@@ -10,12 +10,15 @@ import PitchPage from './PitchPage';
 import PitchNotes from './PitchNotes';
 import PitchReview from './PitchReview';
 import {
-  EMPTY_DECK, ENGAGEMENT_VIEW_ROWS, LINE, NOT_RECORDED, NO_VENTURE, NO_VIEWS, READ_ONLY, TABS, TITLE,
+  EDIT_PATH, EMPTY_DECK, ENGAGEMENT_VIEW_ROWS, LINE, NOT_RECORDED, NO_VENTURE, NO_VIEWS, READ_ONLY, TABS, TITLE,
   asList, currentVersion, dayLabel, isReadOnly, linkPage, linkRows, mmss,
   readerStats, ventureQuery, versionLabel, viewsState,
 } from './pitchStudioModel';
 import ShareDialog from './ShareDialog';
 import StudioHome from './StudioHome';
+import PitchOverview from './PitchOverview';
+import { presentHref } from './presentExportModel';
+import { BUILD_YOUR_DECK, PRIMARY_OF } from './pitchOverviewModel';
 import { NEW_PATH } from './newDeckModel';
 import { deckRail } from './deckRailGroups';
 import { PitchMovedNotice } from './PitchWorkspaceMoved';
@@ -155,7 +158,7 @@ function useStudioReads() {
   };
 }
 
-export default function PitchStudio({ tab = 'decks' }) {
+export default function PitchStudio({ tab = 'overview' }) {
   const { user } = useAuth() || {};
   const readOnly = isReadOnly(user);
   const reads = useStudioReads();
@@ -181,7 +184,8 @@ export default function PitchStudio({ tab = 'decks' }) {
   return (
     <PitchPage rail={rail} crumb={{ query: q }} ask={{ projectId, readOnly, versions: reads.versions, onChanged: reads.reload }} testId="pitch-studio">
       <div className="flex flex-col gap-5 pb-24 lg:pb-10" data-testid={`pitch-studio-${tab}`}>
-        <StudioHeader tab={tab} q={q} readOnly={readOnly} showNew={tab === 'decks' && !readOnly && Boolean(projectId)} />
+        <StudioHeader tab={tab} q={q} readOnly={readOnly} projectId={projectId} currentId={currentId}
+          noDeck={reads.versions.status === 'ok' && currentId == null} />
         {tab === 'review' ? (
           // D900: the review of the current version (PD14), and below it the
           // reviewer for an upload or pasted text, which works with no venture
@@ -198,6 +202,10 @@ export default function PitchStudio({ tab = 'decks' }) {
           <StudioAnalytics reads={reads} readOnly={readOnly} />
         ) : tab === 'notes' ? (
           <PitchNotes reads={reads} />
+        ) : tab === 'overview' ? (
+          <PitchOverview reads={reads} readOnly={readOnly} q={q} />
+        ) : tab === 'script' ? (
+          <ScriptComing q={q} projectId={projectId} currentId={currentId} />
         ) : (
           <StudioHome reads={reads} readOnly={readOnly} q={q} />
         )}
@@ -206,7 +214,23 @@ export default function PitchStudio({ tab = 'decks' }) {
   );
 }
 
-function StudioHeader({ tab, q, readOnly, showNew }) {
+/**
+ * D4254 §1.4: the header's primary follows the tile. New deck on the Overview
+ * and Decks ("Build your deck" while there is none), Rehearse on Script &
+ * rehearsal. Share & analytics keeps its New link in its own body; Review and
+ * Notes have Ask only.
+ */
+function headerPrimary({ tab, q, readOnly, projectId, currentId, noDeck }) {
+  if (readOnly || projectId == null) return null;
+  if (tab === 'overview' || tab === 'decks') {
+    return { to: `${NEW_PATH}${q}`, label: noDeck ? BUILD_YOUR_DECK : PRIMARY_OF[tab], testId: 'pitch-studio-new' };
+  }
+  if (tab === 'script' && currentId != null) return { to: presentHref(projectId, currentId), label: PRIMARY_OF.script, testId: 'pitch-studio-rehearse' };
+  return null;
+}
+
+function StudioHeader({ tab, q, readOnly, projectId, currentId, noDeck }) {
+  const primary = headerPrimary({ tab, q, readOnly, projectId, currentId, noDeck });
   return (
     <header className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -215,7 +239,7 @@ function StudioHeader({ tab, q, readOnly, showNew }) {
           <p className="m-0 text-[13px] text-axal-muted dark:text-gray-400">{LINE}</p>
         </div>
         {/* D897 (#2677): New deck is PD3–PD6 at /raise/pitch/new. */}
-        {showNew ? <Link to={`${NEW_PATH}${q}`} className={PRIMARY} data-testid="pitch-studio-new">New deck</Link> : null}
+        {primary ? <Link to={primary.to} className={PRIMARY} data-testid={primary.testId}>{primary.label}</Link> : null}
       </div>
       {/* D898 group E: the retired builder's address lands here and says so once. */}
       <PitchMovedNotice />
@@ -225,7 +249,7 @@ function StudioHeader({ tab, q, readOnly, showNew }) {
           {READ_ONLY}
         </div>
       ) : null}
-      <nav aria-label="Pitch deck studio" className="-mx-1 flex gap-1.5 overflow-x-auto border-b border-axal-hairline px-1 dark:border-gray-700">
+      <nav aria-label="Pitch" className="-mx-1 flex gap-1.5 overflow-x-auto border-b border-axal-hairline px-1 dark:border-gray-700">
         {TABS.map((t) => (
           <Link
             key={t.id}
@@ -239,6 +263,26 @@ function StudioHeader({ tab, q, readOnly, showNew }) {
         ))}
       </nav>
     </header>
+  );
+}
+
+/**
+ * D4254 P2a/P2c (#4268, #4270): Script & rehearsal's own screens are slot
+ * work. Until they land the tile says so, and opens what already works:
+ * Present with Rehearse (D1580), whose report holds the likely questions.
+ */
+function ScriptComing({ q, projectId, currentId }) {
+  return (
+    <div className={`${CARD} flex flex-col items-start gap-2.5 p-6`} data-testid="pitch-studio-script-coming">
+      <span className={`text-[15px] font-extrabold ${INK}`}>The script, card by card, is coming.</span>
+      <span className="text-[12.5px] leading-[1.45] text-axal-muted dark:text-gray-400">
+        Until then, write each card’s notes in the editor and rehearse from Present. The rehearsal report lists the questions investors are likely to ask.
+      </span>
+      <div className="flex flex-wrap gap-2">
+        {currentId != null && projectId != null ? <Link to={presentHref(projectId, currentId)} className={GHOST} data-testid="pitch-studio-script-present">Rehearse in Present</Link> : null}
+        <Link to={`${EDIT_PATH}${q}`} className={GHOST} data-testid="pitch-studio-script-edit">Open the editor</Link>
+      </div>
+    </div>
   );
 }
 

@@ -7,9 +7,12 @@
  *  - an agent must be live in this scope (409 `agent_not_live`), the task's
  *    module must be in its rule book's `works_in` (422 `module_not_allowed`)
  *    and its option, when it has one, in `may_propose` (422 `option_not_allowed`);
- *  - a person must pass the scope's read gate (422 `assignee_not_member`).
- *    Inviting someone stays on the floor (`invite_person`): assigning never
- *    invites.
+ *  - a person must hold a seat on the scope's Team (D1614 W8, #3994: the
+ *    owner's correction of 2026-11-02, not the read gate): 422
+ *    `assignee_not_member`, or 422 `read_only_admin` for an admin who reads
+ *    from HQ without a seat. An agent of another scope is not on this Team
+ *    either (422 `assignee_not_member`). Inviting someone stays on the floor
+ *    (`invite_person`): assigning never invites.
  *  - a company task may be about one of its projects (`context_project_id`,
  *    422 `project_not_in_company`).
  *
@@ -31,7 +34,8 @@
 import type { Env, User } from '../../types';
 import { newUid } from '../../routes/_t13t14t15_helpers';
 import { moduleOf, optionsIn } from './catalogue';
-import { canRead, effectiveBook, scopeCols, scopeOfAgent, type AgentRow, type Scope, type Spend } from './teams';
+import { effectiveBook, onTeam, scopeCols, scopeOfAgent, type AgentRow, type Scope, type Spend } from './teams';
+import { isAdmin } from '../../routes/_t13t14t15_helpers';
 import { text, type Refusal } from './goals';
 
 export const TASK_KINDS = ['work', 'duty', 'handoff', 'review'] as const;
@@ -172,16 +176,18 @@ async function assigneeWrite(env: Env, s: Scope, v: any): Promise<{ ok: true; wr
   if (v === null || v?.kind === 'none') return { ok: true, write: { assignee_kind: 'none', assignee_user_id: null, assignee_agent_id: null } };
   if (v?.kind === 'person' && typeof v.uid === 'string') {
     const u = await env.DB.prepare('SELECT * FROM users WHERE uid = ? AND is_active = 1').bind(v.uid).first<User>();
-    if (!u || !(await canRead(env, s, u))) {
+    if (!u || !(await onTeam(env, s, u.id))) {
+      if (u && isAdmin(u)) return { ok: false, refusal: no(422, 'read_only_admin', 'An admin reads this venture from HQ and is not on its Team. Add them to the Team first.') };
       return { ok: false, refusal: no(422, 'assignee_not_member', 'Only someone on this team can be given a task. Invite them first.') };
     }
     return { ok: true, write: { assignee_kind: 'person', assignee_user_id: u.id, assignee_agent_id: null } };
   }
   if (v?.kind === 'agent' && typeof v.uid === 'string' && /^[a-f0-9]{32}$/.test(v.uid)) {
     const a = await env.DB.prepare('SELECT * FROM team_agents WHERE uid = ?').bind(v.uid).first<AgentRow>();
-    if (!a || !sameScope(a, s) || a.status !== 'active') {
-      return { ok: false, refusal: no(409, 'agent_not_live', 'That agent is not working on this team right now.') };
+    if (!a || !sameScope(a, s) || a.status === 'removed') {
+      return { ok: false, refusal: no(422, 'assignee_not_member', 'Only an agent on this team can be given a task.') };
     }
+    if (a.status !== 'active') return { ok: false, refusal: no(409, 'agent_not_live', 'That agent is not working on this team right now.') };
     return { ok: true, write: { assignee_kind: 'agent', assignee_agent_id: a.id, assignee_user_id: null } };
   }
   return { ok: false, refusal: invalid('An assignee is a person or an agent, by uid, or none.') };

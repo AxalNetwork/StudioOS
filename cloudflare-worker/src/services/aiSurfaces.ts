@@ -68,6 +68,10 @@ export const AI_SURFACE = {
   growPartnerNetwork: '/grow/partner-network',
   /** Partner · Pipeline · Leads — the firm's press ranks its open leads against its audience fit (`POST /api/partner/pipeline/leads/rank`), #3938 IN10. */
   partnerLeads: '/pipeline/leads',
+  /** Spin-Out Lab · Co-founder match — the founder's press ranks the browse cards against what they look for (`POST /api/cofounder/browse/rank`), #3938 NE1. */
+  cofounderMatch: '/spinout-lab/cofounder-match',
+  /** Build · Team › Advisors — the founder's press ranks the matched advisors against a need (`POST /api/advisors/match/rank`), #3938 NE1. */
+  advisorMatch: '/build/team',
   /** Studio — Eadwyn's interview: answers, explain, tool routing, rerank, dictation, and their safety pass. */
   studio: '/studio',
   /** Onboarding · Chat — the profiling conversation and its extraction (`/api/profiling/*`). */

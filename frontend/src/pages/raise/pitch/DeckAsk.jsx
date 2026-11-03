@@ -48,7 +48,9 @@ import { DERIVE_ASK_OPTIONS, DERIVED_SECTION, FORMAT_LABELS, derivedProposal } f
  *                   keeps each in turn; Discard records the decision.
  *                The edits are read again each time the sheet opens, and
  *                whenever the page says they changed (`editsKey`: the
- *                editor's own bar ran or decided one).
+ *                editor's own bar ran or decided one). `openKey` opens the
+ *                sheet from the page (D4210: a fix asked from the preflight
+ *                panel waits here).
  *
  * IT HAS NO INPUT. No thread, no composer, no Run chips: typed instructions
  * live only in the editor, scoped to the selection (the owner's rule). Nothing
@@ -116,7 +118,7 @@ async function readEdits(source, deckId) {
   };
 }
 
-export default function DeckAsk({ projectId, versions, readOnly = false, onPlace = null, onChanged, editsKey = 0, source = SOURCE }) {
+export default function DeckAsk({ projectId, versions, readOnly = false, onPlace = null, onChanged, editsKey = 0, openKey = 0, source = SOURCE }) {
   const [aiOn] = useAssistMode('raise');
   // D1443 part 5 (#3992): the deck's Ask is this page's one Ask, so the shared
   // header and the rail's fallback draw none beside it.
@@ -127,6 +129,8 @@ export default function DeckAsk({ projectId, versions, readOnly = false, onPlace
   const [editsTick, setEditsTick] = useState(0);
   const [open, setOpen] = useState(false);
   const opener = useRef(null);
+  // D4210: the page opens the sheet itself when a run elsewhere left something waiting (`openKey` changes).
+  useEffect(() => { if (openKey) { setOpen(true); setEditsTick((t) => t + 1); } }, [openKey]);
   // The page's own versions read when it has one (`{ status, data }`), so the
   // header never asks for the same thing twice; otherwise Ask reads it.
   const shared = versions !== undefined;

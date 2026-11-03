@@ -2735,6 +2735,11 @@ export const api = {
   // The Super Admin's default template by sector and stage; an admin reads it.
   deckRecommendOverrides: () => request('/decks/admin/recommend-overrides'),
   deckSetRecommendOverride: (payload) => request('/decks/admin/recommend-overrides', { method: 'PUT', body: JSON.stringify(payload || {}) }),
+  // D4155 K4 (#4191): back to the engine's own pick. The reason rides in the body, never the URL.
+  deckResetRecommendOverride: ({ sector, stage, reason } = {}) => request(
+    `/decks/admin/recommend-overrides?sector=${encodeURIComponent(sector || '')}&stage=${encodeURIComponent(stage || '')}`,
+    { method: 'DELETE', body: JSON.stringify({ reason }) },
+  ),
   // Task #196 — withdraw a share link. Revoking EXPIRES the row rather than
   // deleting it, so the impression history stays attributable to a link the
   // founder can still see they created; idempotent, so a double-click or a
@@ -4116,6 +4121,15 @@ export const api = {
     const s = q.toString();
     return request(`/advisors/match${s ? `?${s}` : ''}`);
   },
+  // #3938 NE1, the founder's press: /advisors/match's list ranked against a typed need
+  // (bge-m3, the reranker, one line each). Rows `{ uid, position, line }`; 422 with no query.
+  advisorsMatchRank: (query, params) => {
+    const q = new URLSearchParams();
+    if (params?.gap) q.set('gap', params.gap);
+    if (params?.focus) q.set('focus', params.focus);
+    const s = q.toString();
+    return request(`/advisors/match/rank${s ? `?${s}` : ''}`, { method: 'POST', body: JSON.stringify({ query }) });
+  },
   getAdvisor: (uid) => request(`/advisors/${uid}`),
   openAdvisorBookingLink: (slug) =>
     request('/advisors/booking-links/open', { method: 'POST', body: JSON.stringify({ slug }) }),
@@ -4754,6 +4768,17 @@ export const api = {
     if (opts.limit) qs.set('limit', String(opts.limit));
     const s = qs.toString();
     return request(`/cofounder/browse${s ? `?${s}` : ''}`);
+  },
+  // #3938 NE1, the founder's press: the browse cards (same filters) ranked against what the
+  // founder looks for, or their profile's own words. Rows `{ uid, position, line }`; 422 with neither.
+  cofounderBrowseRank: (query = '', opts = {}) => {
+    const qs = new URLSearchParams();
+    for (const k of ['q', 'skill', 'sector', 'commitment']) {
+      if (opts[k]) qs.set(k, opts[k]);
+    }
+    if (opts.remote_only) qs.set('remote_only', 'true');
+    const s = qs.toString();
+    return request(`/cofounder/browse/rank${s ? `?${s}` : ''}`, { method: 'POST', body: JSON.stringify(query ? { query } : {}) });
   },
   cofounderExpressInterest: (data) =>
     request('/cofounder/interest', { method: 'POST', body: JSON.stringify(data) }),

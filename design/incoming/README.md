@@ -113,6 +113,14 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-11-03 — Raise › Pitch (#4254)
+
+The owner's artifact `KBaBZ9jqPoEFTSqqS1WzQD` was decoded by `scripts/read-canvas.mjs`. It carries two files:
+- **`Pitch · Boards.dc.html`** is new: the MAP (how Raise › Pitch connects to Pitch deck studio v2) and the boards PS0 to PS10.
+- **The page replaces `Pitch Deck Studio v2 Page.dc.html`.** Every earlier frame (pd0 to pd40, aird1 to aird7, pf1a to pf5g) is unchanged. It adds 28 frames, ps0 to ps9d plus ps1-d, ps4-d and ps7-d (Overview, Decks, Script, likely questions, rehearsals, the teleprompter and its phone remote, Review, Share & analytics and its sheets and states, site traffic, Notes, phone, tablet and dark), and the composites psD, psE, psES, psEA, psR1 to psR3 and psS, which reuse PD frames inside the Pitch page.
+
+Logo paths are `/axal-mark.png` and `/eadwyn-ai.png`. The build is D4254 (`documentation/architecture/decisions/D4254.md`), parts P1 to P5.
+
 ## Landed 2026-11-02 — AI agents and skills, v2 (#4116, #3945)
 
 The owner's four artifacts were decoded by `scripts/read-canvas.mjs`:
