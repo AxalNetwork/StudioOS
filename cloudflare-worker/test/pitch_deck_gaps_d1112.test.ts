@@ -19,6 +19,9 @@
  *     --test cloudflare-worker/test/pitch_deck_gaps_d1112.test.ts
  */
 import test from 'node:test';
+import { deckPdf } from './_deck_pdf.ts';
+/** D1575 (#3822): the export checks the PDF it is answered, so the browser stand-in answers one that passes, with the card's two links live. */
+const GOOD_PDF = await deckPdf({ width: 1920, height: 1080, links: ['https://www.youtube.com/watch?v=abc', 'https://example.test/data-room'] });
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
@@ -90,7 +93,7 @@ function browser() {
   const urls: string[] = [];
   return {
     urls,
-    binding: { fetch: async () => { throw new Error('#3655: the documented quickAction, never fetch'); }, quickAction: async (action: string, o: any) => { urls.push(o.url); return new Response(action === 'pdf' ? new TextEncoder().encode('%PDF-1.4') : PNG, { status: 200 }); } },
+    binding: { fetch: async () => { throw new Error('#3655: the documented quickAction, never fetch'); }, quickAction: async (action: string, o: any) => { urls.push(o.url); return new Response(action === 'pdf' ? GOOD_PDF : PNG, { status: 200 }); } },
   };
 }
 const tokenOf = (url: string) => decodeURIComponent(/print-export\/([^?]+)/.exec(url)![1]);
