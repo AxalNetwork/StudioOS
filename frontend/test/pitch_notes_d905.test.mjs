@@ -58,7 +58,7 @@ test('posting opens a dialog that says what it changes, for an admin and for a f
 
 test('PD22: an Advisor, an Operating Partner and an Explorer read a boundary; the Advisor\'s adds the NDA line', () => {
   assert.deepEqual(BOUNDARY_ROLES, ['advisor', 'partner', 'exploring']);
-  assert.equal(BOUNDARY_TITLE, 'The Pitch deck studio is for the venture’s founders.');
+  assert.equal(BOUNDARY_TITLE, 'Pitch is for the venture’s founders.');
   assert.deepEqual(boundaryFor('advisor'), { title: BOUNDARY_TITLE, line: 'Ask them to share a link. A shared deck opens in the viewer, with the NDA if they ask for one.' });
   assert.deepEqual(boundaryFor('partner'), { title: BOUNDARY_TITLE, line: 'Ask them to share a link.' });
   assert.deepEqual(boundaryFor('exploring'), { title: BOUNDARY_TITLE, line: 'Ask them to share a link.' });
@@ -66,7 +66,7 @@ test('PD22: an Advisor, an Operating Partner and an Explorer read a boundary; th
   assert.equal(boundaryFor('exploring', true), null, 'an active Spin-Out Lab member uses the studio');
   const html = renderToStaticMarkup(React.createElement(PitchBoundary, { role: 'advisor' }));
   assert.match(html, /data-testid="pitch-studio-boundary"/);
-  assert.ok(html.includes('The Pitch deck studio is for the venture’s founders.'));
+  assert.ok(html.includes('Pitch is for the venture’s founders.'));
   assert.ok(html.includes('with the NDA if they ask for one'));
   assert.equal(renderToStaticMarkup(React.createElement(PitchBoundary, { role: 'partner' })).includes('NDA'), false);
 });
@@ -78,7 +78,8 @@ test('the wiring: the Notes tab and its route, the boundary inside the shell, an
   assert.match(app, /\(effectiveRole === 'advisor' \|\| effectiveRole === 'partner' \|\| effectiveRole === 'exploring'\) && user\?\.spinout_lab_active !== 1\s*\?\s*<PitchBoundary role=\{effectiveRole\} \/>/);
   for (const role of BOUNDARY_ROLES) assert.ok(app.includes(`effectiveRole === '${role}'`), `${role} matches BOUNDARY_ROLES`);
   assert.ok(app.includes(`<Route path="/raise/pitch/notes" element={guard(labRoles(['admin', 'founder']), <PitchStudio tab="notes" />)} />`));
-  for (const p of ['/raise/pitch/edit', '/raise/pitch/analytics', '/raise/pitch/review']) {
+  // D4254: /raise/pitch/analytics redirects to /raise/pitch/share, which carries the guard.
+  for (const p of ['/raise/pitch/edit', '/raise/pitch/share', '/raise/pitch/review']) {
     assert.ok(app.includes(`<Route path="${p}" element={guard(labRoles(['admin', 'founder'])`), `${p} keeps its guard: the boundary is the studio's home only`);
   }
   const help = read('frontend/src/pages/docs/guidePlacement.js');

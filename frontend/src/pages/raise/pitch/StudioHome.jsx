@@ -26,7 +26,7 @@ import { FAST_TITLE, NEW_PATH } from './newDeckModel';
 import { FAST_LINE } from './oneClickModel';
 import { TEMPLATES_PATH } from './templatesModel';
 import {
-  ANALYTICS_PATH, EDIT_PATH, EMPTY_DECK, NOT_RECORDED, NO_VIEWS, NEW_DATA_FAILED, NOTHING_BOUND, NOTHING_NEW, REFRESH_THE_DECK,
+  SHARE_PATH, EDIT_PATH, EMPTY_DECK, NOT_RECORDED, NO_VIEWS, NEW_DATA_FAILED, NOTHING_BOUND, NOTHING_NEW, REFRESH_THE_DECK,
   asList, coverOf, currentVersion, dayLabel, linkPage, mmss, newInData, readerStats, slideSeconds, versionLabel, versionRows, viewsState, weeklyViews,
 } from './pitchStudioModel';
 
@@ -223,7 +223,7 @@ function Fact({ k, children, testId }) {
   );
 }
 
-function DeckCard({ project, current, deck, engagement, sources, q, phone, readOnly, checks, onMenu, wide = false }) {
+export function DeckCard({ project, current, deck, engagement, sources, q, phone, readOnly, checks, onMenu, wide = false }) {
   const cover = deck.status === 'ok' ? coverOf(deck.data) : null;
   const name = String(project?.name || '').trim() || 'Your venture';
   const row = versionRows([current])[0];
@@ -362,7 +362,7 @@ function InvestorLinks({ reads, hasDeck, q }) {
             <Fact k="Unique viewers">{val(stats ? String(stats.viewers) : null)}</Fact>
             <Fact k="Median time per view">{val(stats ? mmss(stats.medianSeconds) : null)}</Fact>
           </dl>
-          <Link to={`${ANALYTICS_PATH}${q}`} className={LINK} data-testid="pitch-studio-open-analytics">{OPEN_ANALYTICS}</Link>
+          <Link to={`${SHARE_PATH}${q}`} className={LINK} data-testid="pitch-studio-open-analytics">{OPEN_ANALYTICS}</Link>
         </div>
       ) : null}
       <ReadersAside reads={reads} hasDeck={hasDeck} />
