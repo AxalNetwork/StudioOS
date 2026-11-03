@@ -47,12 +47,28 @@ export type Scope = (typeof SCOPES)[number];
 export type FlagRow = { key: string; scope: Scope; scope_id: string; enabled: number | boolean };
 
 export const modelKey = (id: string): string => `model:${id}`;
+
+/**
+ * #4189 (K2 of #4155, D4155): the deck features HQ switches, each with the words
+ * HQ › Decks shows. A key is listed only once its feature's route reads it
+ * (`flagsFor(...).on(key)`): a flag that switches nothing is never offered.
+ * The canvas also names `deck:compare`, `deck:walkthrough` and
+ * `deck:stock_photos`; none has a route on main yet, so each joins this list
+ * in the PR that builds it.
+ */
+export const DECK_FEATURES = Object.freeze([
+  { key: 'deck:rehearsal', label: 'Rehearsal', description: 'Founders record a run-through of their deck and get timing and delivery notes.' },
+  { key: 'deck:pptx_import', label: 'PowerPoint import', description: 'Founders start a deck from a .pptx file they upload.' },
+  { key: 'deck:logo_wall', label: 'Logo wall', description: 'Founders add customer logos, each with its permission recorded, to a logo wall card.' },
+] as const);
+export type DeckFeatureKey = (typeof DECK_FEATURES)[number]['key'];
 export const elementKey = (id: string): string => `element:${id}`;
 
 /** A key a row may be written under: `grid_generate`, `element:<id>` or `model:<id>`, as the route checks it against the catalogues. */
-export function keyShape(key: unknown): 'grid' | 'element' | 'model' | null {
+export function keyShape(key: unknown): 'grid' | 'element' | 'model' | 'deck' | null {
   if (key === GRID_GENERATE) return 'grid';
   if (typeof key !== 'string' || key.length > 200) return null;
+  if (/^deck:[a-z_]{1,40}$/.test(key)) return 'deck';
   if (/^element:[a-z0-9_]{1,60}$/.test(key)) return 'element';
   if (/^model:[@A-Za-z0-9._\-/]{1,180}$/.test(key)) return 'model';
   return null;

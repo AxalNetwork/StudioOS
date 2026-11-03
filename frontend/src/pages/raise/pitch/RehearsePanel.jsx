@@ -7,7 +7,7 @@ import { refusalOf } from './newDeckModel';
 import LikelyQuestions from './LikelyQuestions.jsx';
 import {
   AUDIO_BITS_PER_SECOND, AUDIO_GONE, KEEP_AUDIO, KEEP_AUDIO_OFF, KEEP_AUDIO_ON, MAX_RECORDING_MS, NO_FIGURES, NO_MIC, PITCH_CHOICES,
-  RETENTION, TOO_SHORT, budgetLine, cardBudgetsMs, clock, figureGrade, holdLine, noteItemsOf, rowOf, spentByCard, summaryLine,
+  RETENTION, TOO_SHORT, COACHING, COACH_ME, COACH_NOTE, COACH_EMPTY, coachHoldLine, budgetLine, cardBudgetsMs, clock, figureGrade, holdLine, noteItemsOf, rowOf, spentByCard, summaryLine,
 } from './rehearseModel';
 
 /**
@@ -58,6 +58,8 @@ export default function RehearsePanel({ deck, cards, renderCard, onClose }) {
   const rec = useRef(null);
   // The rail shows this option's models while Rehearse is open; the member's pick is the run's model.
   useRailOption('transcribe:rehearsal', 'Rehearse');
+  // D1580 part 2: the coach's model is the member's pick for this option.
+  useRailOption('rehearse:coach', COACH_ME);
 
   useEffect(() => {
     if (!deckId) return undefined;
@@ -172,6 +174,21 @@ export default function RehearsePanel({ deck, cards, renderCard, onClose }) {
     try { const res = await deckRehearsalsApi.read(deckId, uid); setReport(res?.rehearsal || null); setStage('report'); }
     catch (e) { setProblem(refusalOf(e)); }
   };
+  // D1580 part 2: the coaching's quote, read once the report is open, and the press.
+  const [coachQuote, setCoachQuote] = useState(null);
+  const [coaching, setCoaching] = useState(false);
+  useEffect(() => {
+    if (stage !== 'report' || !report?.uid || report.coaching || report.status !== 'reported') { setCoachQuote(null); return undefined; }
+    let live = true;
+    deckRehearsalsApi.coachQuote(deckId, report.uid).then((q) => { if (live) setCoachQuote(q); }).catch(() => { if (live) setCoachQuote(null); });
+    return () => { live = false; };
+  }, [stage, deckId, report?.uid, report?.coaching, report?.status]);
+  const coach = async () => {
+    setCoaching(true);
+    try { const res = await deckRehearsalsApi.coach(deckId, report.uid); if (res?.rehearsal) setReport(res.rehearsal); }
+    catch (e) { setProblem(refusalOf(e)); }
+    finally { setCoaching(false); }
+  };
   const keep = async (on) => {
     try { const res = await deckRehearsalsApi.keepAudio(deckId, report.uid, on); if (res?.rehearsal) setReport(res.rehearsal); }
     catch (e) { setProblem(refusalOf(e)); }
@@ -234,7 +251,7 @@ export default function RehearsePanel({ deck, cards, renderCard, onClose }) {
     );
   }
 
-  if (stage === 'report' && report) return <Report deckId={deckId} report={report} onKeep={keep} onAgain={() => { setReport(null); setStage('setup'); }} onClose={onClose} problem={problem} />;
+  if (stage === 'report' && report) return <Report deckId={deckId} report={report} onKeep={keep} onAgain={() => { setReport(null); setStage('setup'); }} onClose={onClose} problem={problem} coachQuote={coachQuote} onCoach={coach} coaching={coaching} />;
 
   const hold = holdLine(quote);
   const list = earlier?.available ? earlier.value?.rehearsals || [] : [];
@@ -291,7 +308,7 @@ function Problem({ problem }) {
   );
 }
 
-function Report({ deckId, report, onKeep, onAgain, onClose, problem }) {
+function Report({ deckId, report, onKeep, onAgain, onClose, problem, coachQuote = null, onCoach = null, coaching = false }) {
   const r = report.report;
   const rows = (r?.cards || []).map(rowOf);
   return (
@@ -329,6 +346,19 @@ function Report({ deckId, report, onKeep, onAgain, onClose, problem }) {
             <span className="font-mono text-[11px] text-gray-400">{figureGrade(f)}</span>
           </div>
         )) : <span className="text-[13px] text-gray-400">{NO_FIGURES}</span>}
+      </div>
+      <div className={BOX} data-testid="rehearse-coaching">
+        <span className={LABEL}>{COACHING.toUpperCase()}</span>
+        {report.coaching ? (report.coaching.points?.length ? report.coaching.points.map((p, k) => (
+          <span key={k} className="text-[13.5px] text-gray-100">Card {p.card}: {p.point}</span>
+        )) : <span className="text-[13px] text-gray-400">{COACH_EMPTY}</span>) : (
+          <>
+            <span className="text-[12.5px] text-gray-400">{COACH_NOTE}</span>
+            {coachHoldLine(coachQuote) ? <span className="font-mono text-[11.5px] text-gray-400" data-testid="rehearse-coach-hold">{coachHoldLine(coachQuote)}</span> : null}
+            {onCoach ? <button type="button" className={`${QUIET} self-start`} disabled={coaching || coachQuote?.balance?.ok === false} onClick={onCoach} data-testid="rehearse-coach">{coaching ? 'Coaching…' : COACH_ME}</button> : null}
+            {coachQuote?.balance?.ok === false ? <span className="text-[12.5px] text-amber-300">{coachQuote.balance.message}</span> : null}
+          </>
+        )}
       </div>
       <LikelyQuestions deckId={deckId} />
       <div className={BOX} data-testid="rehearse-keep-audio">

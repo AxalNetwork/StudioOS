@@ -23,6 +23,7 @@ import { AI_MARKUP, billingMode, chargeMultiplier } from '../src/services/ai/pri
 import { catalogueFor } from '../src/routes/ai.ts';
 import { blockHoldMicro, blockQuoteMicro, holdBlock, settleStream } from '../src/services/liveTranscription.ts';
 import { PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET } from '../src/services/aiRouter.ts';
+import { MIP_OPT_OUT_PRICE_FACTOR } from '../src/services/sttFormats.ts';
 
 const MODEL = ROUTE.advisor_turn.model;
 const caps = (db, day = 0, month = 0) => db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('founder:free',?,?,1)").run(day, month);
@@ -299,7 +300,8 @@ test('ensureLogSchema creates migration 493\'s columns on a fresh database, and 
     fresh.db.exec('DROP TABLE ai_usage_logs');
     await run(fresh.env, { task: 'advisor_turn', userId: 0, text: 'x' });
     // In the CREATE's own order: columns added by the pre-493 path would land after `surface` in another order.
-    assert.deepEqual(cols(fresh.db).slice(-9), ['surface', ...want, 'agent_id'], 'the fresh table did not get 493\'s and 712\'s columns from the CREATE');
+    // D1612 part D (#3954, migration 202611022313): the skill and pinned version a run used, last.
+    assert.deepEqual(cols(fresh.db).slice(-11), ['surface', ...want, 'agent_id', 'skill_id', 'skill_version'], 'the fresh table did not get 493\'s, 712\'s and 202611022313\'s columns from the CREATE');
     assert.ok(idx(fresh.db).includes('idx_ai_usage_user_page_created'));
     assert.equal(rows(fresh.db).length, 1);
   } finally { fresh.db.close(); }
@@ -309,7 +311,7 @@ test('ensureLogSchema creates migration 493\'s columns on a fresh database, and 
     old.db.exec('DROP TABLE ai_usage_logs');
     old.db.exec("CREATE TABLE ai_usage_logs(id INTEGER PRIMARY KEY,user_id INTEGER,task TEXT NOT NULL,model TEXT NOT NULL,latency_ms INTEGER DEFAULT 0,prompt_tokens INTEGER DEFAULT 0,completion_tokens INTEGER DEFAULT 0,est_cost_usd REAL DEFAULT 0,safety_score REAL,fallback_used INTEGER DEFAULT 0,cached INTEGER DEFAULT 0,refusal TEXT,surface TEXT,created_at TEXT DEFAULT(datetime('now')))");
     await run(old.env, { task: 'advisor_turn', userId: 0, text: 'x' });
-    for (const c of [...want, 'agent_id']) assert.ok(cols(old.db).includes(c), `the pre-493 table did not gain ${c}`);
+    for (const c of [...want, 'agent_id', 'skill_id', 'skill_version']) assert.ok(cols(old.db).includes(c), `the pre-493 table did not gain ${c}`);
     assert.ok(idx(old.db).includes('idx_ai_usage_user_page_created'));
     assert.equal(rows(old.db).length, 1, 'a run on a pre-493 table was not logged');
     assert.equal(rows(old.db)[0].charged_microusd, 0);
@@ -456,7 +458,8 @@ test('charged: a live transcript is settled at the billed price its blocks were 
       fallback_used INTEGER, audio_minutes REAL, cost_microusd INTEGER, outcome TEXT, refusal TEXT)`);
     const h = await holdBlock(f.env, 2, model);
     const out = await settleStream(f.env, { id: 1 }, model, [h.reservation], 60_000);
-    const charge = usdToMicro(PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET[model] * AI_MARKUP);
+    // #3936 part 3: interview audio, so Nova-3 streams at Deepgram's opt-out rate.
+    const charge = usdToMicro(PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET[model] * MIP_OPT_OUT_PRICE_FACTOR * AI_MARKUP);
     assert.equal(out.cost_microusd, charge);
     const [r] = reservations(f.db);
     assert.equal(r.actual_included_microusd + r.actual_topup_microusd, charge);

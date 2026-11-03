@@ -275,7 +275,7 @@ test('an upload is stripped, measured and hashed; the same picture again is the 
     assert.deepEqual([again.status, again.body.duplicate, again.body.image.uid], [200, true, row.uid]);
     assert.equal(f.rows()[0].alt, 'The first alt', 'a kept picture uploaded again is not rewritten');
     assert.equal(f.rows().length, 1, 'one row per picture per venture');
-    const huge = await call(f, '/api/decks/7/images/upload', { form: upload(png(9000, 9000), 'huge.png') });
+    const huge = await call(f, '/api/decks/7/images/upload', { form: upload(png(9000, 9000), 'huge.png', 'A huge made-up picture') });
     assert.deepEqual([huge.status, huge.body.error], [413, 'image_too_large']);
     assert.equal(f.rows().length, 1);
   } finally { f.close(); }

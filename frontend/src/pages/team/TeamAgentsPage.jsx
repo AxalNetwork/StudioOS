@@ -26,6 +26,7 @@ import TeamCoverageCard from './TeamCoverageCard.jsx';
 import ApprovalsTab from './ApprovalsTab.jsx';
 import ActivityFeed from '../work/ActivityFeed.jsx';
 import TeamSettingsTab from './TeamSettingsTab.jsx';
+import PlatformPausedBanner from './PlatformPausedBanner.jsx';
 import * as agents from './agentsAdapter.js';
 import { BTN_PRIMARY, BTN_TEXT, EYEBROW, FIELD, MUTED, useMenu } from './teamUi.jsx';
 import {
@@ -333,6 +334,8 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
 
   return (
     <div className="flex flex-col gap-[18px] px-4 pb-8 pt-6 md:px-7" data-testid="team-page" data-scope={scope.kind}>
+      {/* D4162 (#4162): HQ's kill switch, as every team sees it. */}
+      <PlatformPausedBanner />
       <header className="flex flex-wrap items-start gap-3">
         <div className="min-w-0 flex-1">
           <p className={`m-0 ${EYEBROW}`} data-testid="team-eyebrow">{reading ? 'Reading…' : scope.eyebrow}</p>
@@ -373,7 +376,7 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
           {kind === 'company' && ['founder', 'admin'].includes(me().role) ? <p className={`m-0 ${MUTED}`}>{ROSTER_LINE} <Link to="/build/team" className={BTN_TEXT}>Open Build › Team</Link></p> : null}
         </>
       ) : null}
-      {tab === 'skills' ? <SkillsTab scope={scope} rolesBlock={rolesBlock} agentsBlock={agentsBlock} onAddAgent={!planLocked && agentsBlock?.value?.can_manage ? () => setSheet({ kind: 'agent' }) : null} /> : null}
+      {tab === 'skills' ? <SkillsTab scope={scope} agentsBlock={agentsBlock} /> : null}
       {tab === 'roles' ? <RulebooksTab scope={scope} canManage={!!agentsBlock?.value?.can_manage} agentsBlock={agentsBlock} /> : null}
       {tab === 'approvals' ? <ApprovalsTab scope={scope} /> : null}
       {tab === 'activity' && kind === 'project' ? <ActivityFeed projectId={id} /> : null}

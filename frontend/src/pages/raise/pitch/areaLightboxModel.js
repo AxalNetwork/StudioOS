@@ -62,6 +62,9 @@ const DIALOGS = Object.freeze({
   video: { open: 'add-block', kind: 'video' },
   audio: { open: 'add-block', kind: 'audio' },
   link: { open: 'add-block', kind: 'link' },
+  // D1545 (#3788): the Add block dialog, on its MP4 upload and its button.
+  recorded_video: { open: 'add-block', kind: 'video', from: 'file' },
+  button: { open: 'add-block', kind: 'button' },
   team_grid: { open: 'structure' },
 });
 

@@ -16,7 +16,7 @@
  * Numbers are not a diagram's business: a figure is a metric or a chart,
  * bound to its record. A diagram's labels are words.
  */
-import { sanitizeBinding } from './sources';
+import { sanitizeBinding } from './binding';
 
 export const DIAGRAM_VERSION = 1;
 export const DIAGRAM_TYPES = ['timeline', 'flow', 'cycle', 'matrix'] as const;

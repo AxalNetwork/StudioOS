@@ -170,8 +170,10 @@ test('immutable: the catalogue is frozen, a DTO is a copy, and no route writes a
   assert.deepEqual(r.body.personas.map((p: any) => p.key), KEYS);
   assert.deepEqual(r.body.values.map((v: any) => v.key), [...FIT_V2_VALUES]);
   assert.deepEqual(r.body.areas, [...AREAS]);
+  // D4158 (#4158): the gallery also carries the team defaults HQ set for each persona (null until set).
   assert.deepEqual(Object.keys(r.body.personas[0]).sort(),
-    ['avatar', 'gender', 'goal', 'key', 'name', 'natural_fit', 'personality', 'risk', 'story', 'tagline', 'top_values', 'values']);
+    ['avatar', 'defaults', 'gender', 'goal', 'key', 'name', 'natural_fit', 'personality', 'risk', 'story', 'tagline', 'top_values', 'values']);
+  assert.deepEqual(r.body.personas[0].defaults, { model: null, start_cap_usd: null, max_cap_usd: null });
   noTitles(r.text, 'GET /personas');
 });
 
