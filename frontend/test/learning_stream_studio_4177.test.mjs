@@ -438,8 +438,9 @@ test('the content table\'s Video column, and Copy to Stream drawn only when the 
   const noRoute = html(h(StudioContentTable, { status: 'ready', rows }));
   assert.doesNotMatch(noRoute, /button-copy-stream|Try again/);
   assert.match(flat(noRoute), /Copy failed/);
-  // No route is invented: the client has no copy method, and the studio passes no handler.
-  assert.doesNotMatch(read('frontend/src/lib/api/adminLearning.js'), /stream\/migrations/);
+  // L4 (#4266, D4179) shipped the copy route, and the client's one copy method posts to it; the
+  // studio still passes no handler until L4 wires the button.
+  assert.match(read('frontend/src/lib/api/adminLearning.js'), /migrateVideoToStream: \(uid\) => request\('\/admin\/learning\/stream\/migrations', \{ method: 'POST'/);
   assert.doesNotMatch(codeOnly(read('frontend/src/pages/learning/LearningStudio.jsx')), /onCopyToStream/);
 });
 
