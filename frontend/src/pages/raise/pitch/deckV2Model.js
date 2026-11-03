@@ -107,10 +107,12 @@ export const ELEMENT_GROUPS = Object.freeze([
     { id: 'projection_chart', label: 'Projection chart', ...A('typedTables', 3787) },
     { id: 'positioning', label: 'Positioning 2×2', ...A('diagrams', 3780) },
   ] },
+  // D1542 (#3780): Flow, Cycle and Matrix generate through the areas route (the `grid_diagram` job), on the model the
+  // rail's Diagrams group resolves on the server, so they name no rail option here; the rest stay later.
   { id: 'diagrams', label: 'Diagrams', items: [
-    { id: 'flow', label: 'Flow', ...A('diagrams', 3780) },
-    { id: 'cycle', label: 'Cycle', ...A('diagrams', 3780) },
-    { id: 'matrix', label: 'Matrix', ...A('diagrams', 3780) },
+    { id: 'flow', label: 'Flow', ...R('POST /api/decks/:id/areas') },
+    { id: 'cycle', label: 'Cycle', ...R('POST /api/decks/:id/areas') },
+    { id: 'matrix', label: 'Matrix', ...R('POST /api/decks/:id/areas') },
     { id: 'funnel', label: 'Funnel', ...A('diagrams', 3780) },
     { id: 'hierarchy', label: 'Hierarchy', ...A('diagrams', 3780) },
     { id: 'hub', label: 'Hub and spoke', ...A('diagrams', 3780) },

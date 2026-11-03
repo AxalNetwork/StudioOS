@@ -1,0 +1,22 @@
+{
+  "$id": "deckDiagramCheck",
+  "title": "POST /api/decks/:id/diagrams/check (D1542, #3780)",
+  "description": "What the deck v2 adapter's `diagrams` method reads when a founder edits a diagram's nodes on the canvas: the diagram as it would be saved (null when it is not one), whether it fits its area at the deck's aspect, each fit problem (`fitProblems` and every node's own box), the numbers the founder's labels name (shown, never removed), and the steps the area holds. Free: no model runs and nothing is saved. D1511 (#3762).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["diagram", "type", "fits", "problems", "figures", "steps"],
+  "properties": {
+    "diagram": { "type": ["object", "null"] },
+    "type": { "enum": ["timeline", "flow", "cycle", "matrix", null] },
+    "fits": { "type": "boolean" },
+    "problems": {
+      "type": "array",
+      "items": { "type": "object", "additionalProperties": false, "required": ["kind", "message"], "properties": { "kind": { "type": "string" }, "message": { "type": "string" } } }
+    },
+    "figures": { "type": "array", "items": { "type": "string" } },
+    "steps": {
+      "type": ["object", "null"], "additionalProperties": false, "required": ["min", "max"],
+      "properties": { "min": { "type": "integer", "minimum": 1 }, "max": { "type": "integer", "minimum": 1 } }
+    }
+  }
+}

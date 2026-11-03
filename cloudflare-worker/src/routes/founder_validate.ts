@@ -67,7 +67,8 @@ import { neverFillReason, neverFillMessage } from '../services/fills/neverFill';
 import { run as aiRun, audioMinutesFromBytes } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { currentDecision } from '../services/verdict';
-import { pageFromPath, railFor, refuseAssistOff } from '../util/railContext';
+import { pageFromPath, railFor, refuseAssistOff, refuseRun } from '../util/railContext';
+import { HINT_DEPS, HintRefused, THEME_JOBS, hintSection, themeHints } from '../services/ai/themeHints';
 import { CUSTOMER_RESEARCH_PAGE, TRANSCRIBE_OPTIONS } from '../services/interviewProcessing';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 
@@ -663,15 +664,32 @@ founderValidate.post('/propose/:projectId', async (c) => {
     try { priors.push(spec.readable(JSON.parse(raw))); } catch { /* a malformed row is not a prior */ }
   }
 
+  // D765: the fill's page (its surface's workspace) and the fill as the option.
+  const rail = railFor(c, { page: FOUNDER_FILL_PAGES[kind] ?? pageFromPath(spec.surface, 'validate'), option: `fill:${kind}` }, `project:${s.project.id}`);
+
+  // #3938 part 6 (D1478): a kind whose plan job retrieves first (GR1, VA11)
+  // embeds its items and themes, and the writer reads each item's nearest
+  // themes as a hint. A refusal the member must hear about stops the press here.
+  let hints = '';
+  const job = THEME_JOBS[spec.task];
+  if (job && spec.hints) {
+    const want = spec.hints(gathered);
+    try {
+      hints = hintSection(await themeHints(want.themes, want.items, HINT_DEPS.make(c.env, { userId: s.user.id, surface: AI_SURFACE.validate, rail }, job)));
+    } catch (e) {
+      if (!(e instanceof HintRefused)) throw e;
+      return refuseRun(c, e.result) ?? json({ detail: 'The retrieval step was refused. Nothing was proposed.' }, 503);
+    }
+  }
+
   const r = await aiRun(c.env, {
     task: spec.task as any,
     userId: s.user.id,
     model,
     surface: AI_SURFACE.validate,
-    // D765: the fill's page (its surface's workspace) and the fill as the option.
-    rail: railFor(c, { page: FOUNDER_FILL_PAGES[kind] ?? pageFromPath(spec.surface, 'validate'), option: `fill:${kind}` }, `project:${s.project.id}`),
+    rail,
     systemPrompt: spec.prompt,
-    messages: [{ role: 'user', content: gathered.facts }],
+    messages: [{ role: 'user', content: gathered.facts + hints }],
     maxTokens: 500,
     temperature: 0.3,
   });
