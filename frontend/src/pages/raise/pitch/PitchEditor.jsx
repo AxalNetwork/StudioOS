@@ -30,6 +30,7 @@ import { isDecorOn } from './arrangeModel';
 import ShareDialog from './ShareDialog';
 import CommentsSheet from './CommentsSheet';
 import ExportDialog from './ExportDialog';
+import TransitionSheet from './TransitionSheet';
 import { BackgroundSheet, BrandKitSheet, CheckSheet, RemixSheet, ReplaceImagesSheet, SizeSheet, SourcesSheet, StageSheet, StructureSheet, ThemeSheet, VersionsSheet } from './DeckSheets';
 // D1583 (#3830): ⋯ › This deck › Teaser, one-pager or memo.
 import DeriveSheet from './DeriveSheet.jsx';
@@ -678,7 +679,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     // D1561 (#3808): ⋯ › Stage and ⋯ › Reorder for stage open the same stage sheet (pd23).
     if (id === 'stage' || id === 'reorder') { setSheet('stage'); return; }
     if (id === 'replace_images') { if (!readOnly) setSheet('replace_images'); return; }
-    if (['theme', 'size', 'brand', 'sources', 'versions', 'check', 'structure', 'background', 'remix', 'derive', 'comments', 'find'].includes(id)) setSheet(id);
+    if (['theme', 'size', 'brand', 'sources', 'versions', 'check', 'structure', 'background', 'transition', 'remix', 'derive', 'comments', 'find'].includes(id)) setSheet(id);
   };
   if (actionRef) actionRef.current = act;
   const cardAction = (id, i, value) => {
@@ -833,6 +834,9 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
       {sheet === 'background' && card ? (
         <BackgroundSheet card={card} index={sel} readOnly={readOnly} onBackground={(bg) => edit({ type: 'setFlag', index: sel, key: 'background', value: bg }, { label: 'Background' })}
           onImage={() => { setSheet(null); setDialog({ kind: 'image', use: 'card' }); }} onClose={() => setSheet(null)} />
+      ) : null}
+      {sheet === 'transition' && card ? (
+        <TransitionSheet card={card} index={sel} readOnly={readOnly} onTransition={(t) => edit({ type: 'setFlag', index: sel, key: 'transition', value: t ?? undefined }, { label: 'Transition' })} onClose={() => setSheet(null)} />
       ) : null}
       {sheet === 'derive' && base.deck?.id ? (
         <DeriveSheet deckId={base.deck.id} version={base.deck.version ?? null} dirty={dirty} readOnly={readOnly} aiOn={aiOn} outOfTokens={outOfTokens}

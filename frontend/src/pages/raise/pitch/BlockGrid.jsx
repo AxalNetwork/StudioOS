@@ -240,7 +240,7 @@ export function BlockView({ block: b, colours, live = false, sources = false, si
  * print. `onSelect` makes each block a button (the editor); without it each
  * block is a plain cell.
  */
-export function BlockGrid({ blocks, colours, live = false, sources = false, size = 'card', selected = null, onSelect = null, testId = 'deck-blocks', renderChart = null, aspect = '16:9', lang = undefined, dir = undefined, onButton = null }) {
+export function BlockGrid({ blocks, colours, live = false, sources = false, size = 'card', selected = null, onSelect = null, testId = 'deck-blocks', renderChart = null, aspect = '16:9', lang = undefined, dir = undefined, onButton = null, motion = null }) {
   // D1571 (#3818): the deck's language and direction (`deckLanguage.langAttrs`); text aligns to the start, so it mirrors.
   return (
     <div className="absolute inset-0" data-aspect={aspectOf(aspect)} lang={lang} dir={dir} data-testid={testId}>
@@ -256,7 +256,10 @@ export function BlockGrid({ blocks, colours, live = false, sources = false, size
             </button>
           );
         }
-        return <div key={b.id} className="min-h-0 min-w-0 overflow-hidden p-1" style={at} data-testid={`deck-block-${b.id}`}>{inner}</div>;
+        // D1576 (#3823): Present's entrances — an area not yet revealed keeps its place but is not drawn.
+        const m = motion ? motion(b) : null;
+        const style = m ? { ...at, ...(m.hidden ? { visibility: 'hidden' } : {}), ...(m.animation ? { animation: m.animation } : {}) } : at;
+        return <div key={b.id} className="min-h-0 min-w-0 overflow-hidden p-1" style={style} aria-hidden={m?.hidden || undefined} data-testid={`deck-block-${b.id}`} data-motion={m ? (m.hidden ? 'hidden' : m.animation ? 'entering' : 'shown') : undefined}>{inner}</div>;
       })}
     </div>
   );
