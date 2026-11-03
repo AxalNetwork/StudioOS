@@ -43,6 +43,7 @@ import { deckCardStatusApi } from '../../../lib/api/deckCardStatus.js';
 import { deckCheckApi } from '../../../lib/api/deckCheck.js';
 import { deckCoeditApi } from '../../../lib/api/deckCoedit.js';
 import { deckCommentsApi } from '../../../lib/api/deckComments.js';
+import { deckCritiqueApi } from '../../../lib/api/deckCritique.js';
 import { deckDraftApi } from '../../../lib/api/deckDraft.js';
 import { deckElementModelsApi } from '../../../lib/api/deckElementModels.js';
 import { deckElementsApi } from '../../../lib/api/deckElements.js';
@@ -62,6 +63,7 @@ import { deckUsageApi } from '../../../lib/api/deckUsage.js';
 import { deckVentureElementsApi } from '../../../lib/api/deckVentureElements.js';
 import { arrange as arrangeCard } from './arrangeModel.js';
 import * as gridOps from './gridOps.js';
+import { FILTERS } from './imageLook';
 
 export { NOT_ON };
 
@@ -89,7 +91,9 @@ export const SURFACES = Object.freeze({
   figures: { issue: 3775, what: 'Linked, Stated and Uncited on every figure' },
   deckUsage: { issue: 3776, what: 'Estimated and spent on this deck' },
   arrange: { issue: 3777, what: 'Align, distribute, group, lock and layers' },
-  imageEdit: { issue: 3778, what: 'Crop, focus, filters, upscale and background removal' },
+  imageEdit: { issue: 3778, what: 'Crop, focus and filters' },
+  // D1534 (#3778 phase 2): upscale and background removal wait on owner decision M.
+  imageEditAi: { issue: 3778, what: 'Upscale and background removal' },
   imageVary: { issue: 3784, what: 'Erase, expand, vary and reference images' },
   elementsLibrary: { issue: 3779, what: 'Icons, shapes, dividers and textures' },
   diagrams: { issue: 3780, what: 'Funnel, hierarchy, hub and spoke, and 2×2 diagrams' },
@@ -108,7 +112,7 @@ export const SURFACES = Object.freeze({
   consistency: { issue: 3802, what: 'Consistency and wording checks' },
   deckActions: { issue: 3808, what: 'Replace all images and Reorder for stage' },
   brandLocks: { issue: 3819, what: 'Brand kit locks' },
-  pptxImport: { issue: 3809, what: 'Start from a .pptx template' },
+  pptxImport: { issue: 3819, what: 'Start from a .pptx template' },
   investorLinks: { issue: 3812, what: 'One link per investor, consent and watermark preview' },
   withdrawInvestorLink: { issue: 3812, what: 'Withdraw one investor\'s link, keeping its analytics' },
   comments: { issue: 3817, what: 'Comments with mentions' },
@@ -203,7 +207,12 @@ export const deckUsage = (deckId) => through(() => deckUsageApi.rail(deckId), SU
  * `{ same, line }` or `{ error }`. Local and synchronous underneath; the edited card is saved with every other edit.
  */
 export const arrange = async (card, selection, op, opts) => ({ available: true, value: arrangeCard(card, selection, op, opts) });
-export const imageEdit = off('imageEdit');
+/**
+ * D1534 (#3778 phase 1): crop, focus and filters are the block's own fields, saved with the deck;
+ * no route runs. The answer is what the toolbar offers.
+ */
+export const imageEdit = async () => ({ available: true, value: { crop: 'rect', filters: [...FILTERS] } });
+export const imageEditAi = off('imageEditAi');
 /** D1544 (#3784): an edit's price (vary, edit, erase, expand) before it runs: one hold for the edit and its checks. */
 export const imageVary = (uid, ask) => through(() => deckImageEditsApi.quote(uid, ask), SURFACES.imageVary.issue);
 /**
@@ -241,7 +250,8 @@ export const buttonClicks = (deckId) => through(() => deckMediaApi.buttonClicks(
 export const presets = (deckId) => through(() => deckModelPresetsApi.read(deckId), SURFACES.presets.issue);
 /** D1549 (#3796, the row is #3786's): each element group HQ locked, with "Set by Axal VC HQ" — the same reply's `locks`. */
 export const orgLocks = (deckId) => through(() => deckModelPresetsApi.read(deckId).then((r) => r.locks), SURFACES.orgLocks.issue);
-export const critique = off('critique');
+// D1552 (#3799): Fix with critique: its quote (the ⋯ item's hold), or the run itself with `{ run: true }`.
+export const critique = (deckId, { run = false, vision = true } = {}) => through(() => (run ? deckCritiqueApi.run(deckId, { vision }) : deckCritiqueApi.quote(deckId)), SURFACES.critique.issue);
 /** D1553 (#3800): four layouts for one card, and the remove-a-block reflow; free, so it answers with AI paused. */
 export const remix = (deckId, card, opts) => through(() => deckRemixApi.remix(deckId, card, opts), SURFACES.remix.issue);
 /**

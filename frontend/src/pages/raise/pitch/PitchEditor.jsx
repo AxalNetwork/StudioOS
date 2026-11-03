@@ -37,6 +37,7 @@ import { EDITOR_WAITING, aiOffState, editIndex, placeTextEdit, saveChip } from '
 import { AiOffBanner } from './DeckAsk';
 import { areaTitle, areasOf, askTarget, liveFocus } from './gridSelection';
 import AreaLightbox from './AreaLightbox';
+import CritiqueDialog from './CritiqueDialog';
 import InstructionBox from './InstructionBox';
 import { PitchMovedNotice } from './PitchWorkspaceMoved';
 import { acceptUpdate, refreshCard } from './figuresModel';
@@ -650,6 +651,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     if (id === 'notes') { navigate(`/raise/pitch/notes${ventureQuery(project?.id)}`); return; }
     if (id === 'undo') { if (!readOnly) undo(); return; }
     if (id === 'redo') { if (!readOnly) redo(); return; }
+    // D1552 (#3799): ⋯ › Whole deck · uses AI › Fix with critique.
+    if (id === 'critique') { if (!readOnly) setDialog({ kind: 'critique' }); return; }
     // D1553 (#3800): ⋯ › This card › Remix this slide, the only way in (pd13).
     if (['theme', 'size', 'brand', 'sources', 'versions', 'check', 'structure', 'background', 'remix', 'derive', 'comments', 'find'].includes(id)) setSheet(id);
   };
@@ -791,7 +794,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
         <DeriveSheet deckId={base.deck.id} version={base.deck.version ?? null} dirty={dirty} readOnly={readOnly} aiOn={aiOn} outOfTokens={outOfTokens}
           onProposed={onProposals} onClose={() => setSheet(null)} />
       ) : null}
-      {sheet === 'brand' ? <BrandKitSheet projectId={project?.id ?? null} kit={kit} readOnly={readOnly} onClose={() => setSheet(null)} /> : null}
+      {sheet === 'brand' ? <BrandKitSheet projectId={project?.id ?? null} deckId={base.deck?.id ?? null} kit={kit} readOnly={readOnly} dirty={dirty} onApplied={saved} onClose={() => setSheet(null)} /> : null}
       {sheet === 'versions' ? (
         <VersionsSheet projectId={project?.id ?? null} versions={versions} readOnly={readOnly} dirty={dirty} phone={phone}
           compare={compare} onCompare={setCompare} onRestored={() => { setCompare(null); setSheet(null); onSaved?.(); }} onClose={() => { setCompare(null); setSheet(null); }} />
@@ -889,6 +892,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
             setCard(sel, r.card, { label: 'Chart' }); selectBlock(r.card.blocks[r.card.blocks.length - 1].id); setDialog(null);
           }} />
       ) : null}
+      {dialog?.kind === 'critique' ? <CritiqueDialog deckId={base.deck.id} onProposals={onProposals} onClose={() => setDialog(null)} /> : null}
       {dialog?.kind === 'areas' && card ? (
         <AreaLightbox deckId={base.deck.id} cardIndex={sel} card={card} cards={cards} areas={dialog.areas} model={model} items={items} aiOn={aiOn}
           onTokens={onTokens} onPlace={placeCard} onProposals={onProposals} onClose={() => setDialog(null)}
@@ -901,6 +905,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
       ) : null}
       {dialog?.kind === 'image' && card ? (
         <ImageLightbox deckId={base.deck.id} cardIndex={sel} card={dialog.replace ? removeBlock(card, dialog.replace) : card} theme={theme} model={model}
+          replacing={dialog.replace ? (card.blocks || []).find((b) => b.id === dialog.replace) || null : null}
           items={items} colours={{ ...colours, ink }} initialUse={dialog.use} onClose={() => setDialog(null)}
           onPlace={(placed) => {
             // One step: the card and, for a card background, the theme it needs.

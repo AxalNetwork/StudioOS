@@ -61,7 +61,7 @@ export function viewFor(pathname = '') {
  * issue, and draws no control the server would only refuse.
  */
 export const BUILD = {
-  H1: { issue: 4158, live: false, what: 'The roster admin API', boards: 'SA1, SA2' },
+  H1: { issue: 4158, live: true, what: 'The roster admin API', boards: 'SA1, SA2' },
   H2: { issue: 4160, live: false, what: 'Review, golden cases and retire for From Axal skills', boards: 'SA3 actions, SA4' },
   H3: { issue: 4161, live: false, what: 'Company skills moderation', boards: 'SA5' },
   H4: { issue: 4162, live: false, what: 'Platform AI policy and the kill switch', boards: 'SA6' },
@@ -171,6 +171,124 @@ export function overviewTiles({ hqSkills = null } = {}) {
 
 /** SA1's columns, in the canvas's order. */
 export const ROSTER_COLUMNS = ['Agent', 'Top values', 'Risk · natural fit', 'Status', 'Teams', 'Runs 30d', 'Spend 30d', 'Accepted'];
+
+// ─── SA1 / SA2 · Roster (H1, #4158) ─────────────────────────────────────────
+
+/** Every change on this panel takes a reason of at least 10 characters (the Worker refuses a shorter one). */
+export const REASON_MIN = 10;
+export const reasonOk = (r) => String(r ?? '').trim().length >= REASON_MIN;
+
+/** Risk 1 (most cautious) … 5 (boldest), the canvas's words. */
+export const RISK_WORDS = ['', 'Cautious', 'Careful', 'Balanced', 'Bold', 'Very bold'];
+export const riskWord = (r) => RISK_WORDS[r] || NOT_RECORDED;
+
+/** The Worker's area keys (`personas.ts` AREAS) with the canvas's short names. */
+const FIT_LABEL = { product: 'Product', engineering: 'Engineering', design: 'Design', gtm: 'GTM', marketing: 'Marketing', finance: 'Finance', legal: 'Legal', capital: 'Capital' };
+export const fitLabel = (k) => FIT_LABEL[k] ?? String(k ?? '');
+export const valueLabel = (k) => (k ? String(k)[0].toUpperCase() + String(k).slice(1) : '');
+/** The 6 Axal values, in `FIT_V2_VALUES` order. */
+export const VALUE_KEYS = ['integrity', 'stewardship', 'curiosity', 'resilience', 'collaboration', 'ambition'];
+
+/** A persona's status chip. Hidden: out of the gallery, teams keep it. Retired: out of the gallery and paused everywhere. */
+export const PERSONA_STATUS = {
+  offered: { label: 'Offered', tone: 'published' },
+  hidden: { label: 'Hidden', tone: 'draft' },
+  retired: { label: 'Retired', tone: 'muted' },
+};
+export const personaStatus = (s) => PERSONA_STATUS[s] ?? { label: NOT_RECORDED, tone: 'muted' };
+
+const pctWord = (v) => `${Number(v).toFixed(Number.isInteger(v) ? 0 : 1)}%`;
+const countWord = (v) => Number(v).toLocaleString('en-US');
+
+/** One SA1 row from `GET /admin/ai-agents/roster`. Every usage figure the Worker sent as null reads "Not recorded". */
+export function rosterRow(p) {
+  const u = p?.usage ?? {};
+  return {
+    key: p.key,
+    name: p.name,
+    tagline: p.tagline,
+    avatar: p.avatar,
+    topValues: (p.top_values ?? []).map(valueLabel),
+    risk: riskWord(p.risk),
+    fit: (p.natural_fit ?? []).map(fitLabel),
+    status: personaStatus(p.status),
+    teams: shown(u.teams, countWord),
+    runs: shown(u.runs, countWord),
+    spend: shown(u.spend_usd, usd),
+    accepted: shown(u.accepted_pct, pctWord),
+    failed: shown(u.failed_pct, pctWord),
+  };
+}
+
+/** SA1's counts line: "16 agents · 15 offered · 1 hidden · 0 retired". */
+export const rosterCounts = (c) => (c ? `${c.total} agents · ${c.offered} offered · ${c.hidden} hidden · ${c.retired} retired` : NOT_RECORDED);
+
+/** SA1's filters: search by name or tagline, status, natural fit and a top value. */
+export function filterRoster(personas = [], { q = '', status = '', fit = '', value = '' } = {}) {
+  const needle = q.trim().toLowerCase();
+  return personas.filter((p) => (!needle || `${p.name} ${p.tagline}`.toLowerCase().includes(needle))
+    && (!status || p.status === status)
+    && (!fit || (p.natural_fit ?? []).includes(fit))
+    && (!value || (p.top_values ?? []).includes(value)));
+}
+
+/** A team in SA2's "Teams using" list: company › project, by name. */
+export const teamLine = (t) => [t?.company || NOT_RECORDED, t?.project].filter(Boolean).join(' › ');
+
+/** SA2's history: what changed, in words, and before → after. */
+const ACTION_WORDS = {
+  'persona.offer': 'Offered in the gallery', 'persona.hide': 'Hidden from the gallery', 'persona.retire': 'Retired',
+  'persona.rename': 'Name changed', 'persona.identity': 'Identity changed', 'persona.defaults': 'Defaults for teams changed',
+};
+export const actionWord = (a) => ACTION_WORDS[a] ?? a;
+const brief = (v) => {
+  if (v == null) return NOT_RECORDED;
+  if (typeof v !== 'object') return String(v);
+  return Object.entries(v).filter(([k]) => k !== 'trademark_checked')
+    .map(([k, x]) => `${k.replace(/_usd$/, '').replace(/_/g, ' ')}: ${x == null ? NOT_RECORDED : /_usd$/.test(k) ? usd(x) : x}`).join(' · ');
+};
+export const historyLine = (h) => `${brief(h?.before)} → ${brief(h?.after)}`;
+
+/** The identity fields SA2 edits. Values, risk and natural fit are shown and never sent. */
+export const IDENTITY_FIELDS = ['name', 'tagline', 'story', 'goal', 'avatar'];
+/** What an identity form would change: only the fields that differ, trimmed. */
+export function identityChanges(persona, draft) {
+  const out = {};
+  for (const k of IDENTITY_FIELDS) {
+    const v = String(draft?.[k] ?? '').trim();
+    if (v && v !== persona?.[k]) out[k] = v;
+  }
+  return out;
+}
+/** SA2b · Save changes: a reason, and the trademark check when the name changes. */
+export const saveArmed = ({ changes, reason, trademark }) => Object.keys(changes ?? {}).length > 0 && reasonOk(reason) && (!('name' in (changes ?? {})) || trademark === true);
+/** Hide or Retire: a reason. */
+export const statusArmed = ({ reason }) => reasonOk(reason);
+/** Defaults: an offered model, two caps above zero, the start no higher than the maximum, and a reason. */
+export function defaultsArmed({ model, start, max, reason }) {
+  const s = Number(start), m = Number(max);
+  return Boolean(model) && Number.isFinite(s) && Number.isFinite(m) && s > 0 && m > 0 && s <= m && reasonOk(reason);
+}
+
+/** SA2b's retire dialog: what retiring does, with the teams that use it. */
+export function retireLines(p) {
+  const n = p?.usage?.teams;
+  const who = n == null ? 'The teams that use this agent' : `${countWord(n)} team${n === 1 ? '' : 's'} use ${p.name}`;
+  return [`${who}. Open proposals stay decidable, and ${p.name} stops running at once.`, `${p.name} leaves the gallery. The history and audit stay.`];
+}
+
+/** The Worker's refusal codes, in the page's words. Anything else shows the Worker's own sentence. */
+const REFUSALS = {
+  values_fixed: 'Values, risk and natural fit cannot be changed.',
+  reason_required: `Say why, in at least ${REASON_MIN} characters.`,
+  trademark_unchecked: 'Tick "Trademark check done" before changing the name.',
+  name_taken: 'Another agent already has that name.',
+  no_change: 'Nothing here differs from what teams see now.',
+  start_above_max: 'Teams cannot start above the maximum cap.',
+  model_not_offered: 'That model is not offered.',
+  cap_above_platform: 'That cap is above the platform maximum.',
+};
+export const rosterRefusal = (e) => REFUSALS[e?.code ?? e?.data?.error] ?? e?.message ?? 'That change was not saved.';
 /** SA5's columns. */
 export const COMPANY_COLUMNS = ['Skill', 'Company', 'Author', 'Area', 'Tools', 'Status'];
 /** SA7's columns. */
@@ -194,8 +312,6 @@ export const CAPS = ['Platform monthly budget', 'Default team cap', 'Maximum tea
  * the Worker).
  */
 export const PAUSE_WORD = 'PAUSE';
-export const REASON_MIN = 10;
-export const reasonOk = (r) => String(r ?? '').trim().length >= REASON_MIN;
 export const pauseArmed = ({ typed, reason }) => typed === PAUSE_WORD && reasonOk(reason);
 
 /** SA6b's banner, the sentence every team sees while agents are paused. */

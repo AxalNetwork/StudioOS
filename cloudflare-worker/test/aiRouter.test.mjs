@@ -96,15 +96,19 @@ function baseEnv({ ai, kv, db, budgets = {}, guard = true }) {
 test('primary 5xx triggers smaller-model fallback (one hop)', async () => {
   const { run, ROUTE, __resetForTest } = await loadRouter();
   __resetForTest();
+  // The route row itself is unchanged: glm-4.7-flash, then the 70B and the 8B `-fp8`
+  // (not the bare 8b: Cloudflare marked `@cf/meta/llama-3.1-8b-instruct` Deprecated
+  // 5/30/2026; `ai_router_prices.test.mjs` bans the deprecated id outright).
   assert.equal(ROUTE.tool_call.model, '@cf/zai-org/glm-4.7-flash');
-  // The small sibling is `-fp8`, not the bare 8b: Cloudflare marked
-  // `@cf/meta/llama-3.1-8b-instruct` Deprecated 5/30/2026, and it terminated
-  // every chain in this table. `ai_router_prices.test.mjs` bans the deprecated
-  // id outright; this one pins the two hops and their order.
   assert.deepEqual(ROUTE.tool_call.fallbackChain, [
     '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
     '@cf/meta/llama-3.1-8b-instruct-fp8',
   ]);
+  // #3937 part 3: `tool_call` now runs ST3's ladder, so the fallback mechanics are
+  // pinned on `rail_plan`, a route chain no text job replaces: glm-4.7-flash,
+  // then gpt-oss-20b, then gpt-oss-120b.
+  assert.deepEqual([ROUTE.rail_plan.model, ...ROUTE.rail_plan.fallbackChain],
+    ['@cf/zai-org/glm-4.7-flash', '@cf/openai/gpt-oss-20b', '@cf/openai/gpt-oss-120b']);
 
   const ai = makeAI([
     () => { throw new Error('500 internal error'); },              // primary fails
@@ -115,45 +119,43 @@ test('primary 5xx triggers smaller-model fallback (one hop)', async () => {
   const env = baseEnv({ ai, kv, db });
 
   const result = await run(env, {
-    task: 'tool_call',
+    task: 'rail_plan',
     userId: 42,
-    text: 'pick a tool',
+    text: 'plan my week',
   });
 
   assert.equal(result.ok, true, `expected ok, got ${JSON.stringify(result)}`);
   assert.equal(result.usage.fallback_used, true);
-  assert.equal(result.usage.model, '@cf/meta/llama-3.3-70b-instruct-fp8-fast');
+  assert.equal(result.usage.model, '@cf/openai/gpt-oss-20b');
   assert.equal(ai.calls.length, 2);
   assert.equal(ai.calls[0].model, '@cf/zai-org/glm-4.7-flash');
-  assert.equal(ai.calls[1].model, '@cf/meta/llama-3.3-70b-instruct-fp8-fast');
+  assert.equal(ai.calls[1].model, '@cf/openai/gpt-oss-20b');
   assert.equal(result.output, 'fallback answer');
   assert.equal(runRows(db).length, 1);
   assert.equal(runRows(db)[0].fallback_used, 1);
   assert.equal(runRows(db)[0].refusal, null);
 });
 
-// Spec step 3: multi-hop fallback "tool_call → advisor_turn → role_detect"
-// (qwen32b → llama-70b → llama-8b). Verifies the second hop is reached
-// when both the primary and the first sibling fail.
+// Multi-hop: the primary and the first sibling both fail, and the second sibling answers.
 test('multi-hop fallback chain reaches second sibling on cascading failure', async () => {
   const { run, __resetForTest } = await loadRouter();
   __resetForTest();
   const ai = makeAI([
-    () => { throw new Error('qwen 502'); },
-    () => { throw new Error('llama-70b 503'); },
-    () => ({ response: 'small-llama saved the day', usage: { prompt_tokens: 5, completion_tokens: 4 } }),
+    () => { throw new Error('glm 502'); },
+    () => { throw new Error('gpt-oss-20b 503'); },
+    () => ({ response: 'the third model saved the day', usage: { prompt_tokens: 5, completion_tokens: 4 } }),
   ]);
   const kv = makeKV();
   const db = makeDB();
   const env = baseEnv({ ai, kv, db });
 
-  const r = await run(env, { task: 'tool_call', userId: 11, text: 'do thing' });
+  const r = await run(env, { task: 'rail_plan', userId: 11, text: 'do thing' });
   assert.equal(r.ok, true);
   assert.equal(r.usage.fallback_used, true);
-  assert.equal(r.usage.model, '@cf/meta/llama-3.1-8b-instruct-fp8');
+  assert.equal(r.usage.model, '@cf/openai/gpt-oss-120b');
   assert.equal(ai.calls.length, 3);
-  assert.equal(ai.calls[2].model, '@cf/meta/llama-3.1-8b-instruct-fp8');
-  assert.equal(r.output, 'small-llama saved the day');
+  assert.equal(ai.calls[2].model, '@cf/openai/gpt-oss-120b');
+  assert.equal(r.output, 'the third model saved the day');
 });
 
 // --------------------------------------------------------------------------

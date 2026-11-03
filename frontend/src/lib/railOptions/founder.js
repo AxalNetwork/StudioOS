@@ -278,6 +278,11 @@ export const FOUNDER_OPTIONS = [
     page: 'Founder · Raise · Pitch deck', key: 'transcribe:rehearsal', route: '/raise/pitch/present', label: 'Rehearse', kind: 'speech', handler: 'transcribe',
     at: [[REHEARSE, 'deckRehearsalsApi.run(']],
   },
+  // D1580 part 2 (#3827): rehearse_coach, the coaching on a rehearsal's report; the member's pick here is its model.
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'rehearse:coach', route: '/raise/pitch/present', label: 'Coach me', kind: 'reason', handler: 'draft',
+    at: [[REHEARSE, 'deckRehearsalsApi.coach(']],
+  },
   {
     page: 'Founder · Raise · Pitch deck', key: 'review:deck-file', route: '/raise/pitch/review', label: 'Drop your deck here or click to browse', kind: 'vision', handler: 'upload',
     at: [[REVIEWER, '/api/deck-reviewer/upload']],
@@ -316,9 +321,9 @@ export const FOUNDER_OPTIONS = [
     page: 'Founder · Grow · Distribution', key: 'draft:grow/customers', route: '/grow/distribution', label: 'Draft a sequence', kind: 'write', handler: 'draft',
     at: [[CYCLE, "surface: 'grow/customers'"]],
   },
-  // The brand builder, Distribution's "Open landing-page builder" door.
+  // The brand builder, Distribution's "Open landing-page builder" door. #4046 B3: its one Ask (was "Auto-fill with AI").
   {
-    page: 'Founder · Grow · Distribution', key: 'form:landing', route: '/build/brand', label: 'Auto-fill with AI', kind: 'write', handler: 'form',
+    page: 'Founder · Grow · Distribution', key: 'form:landing', route: '/build/brand', label: 'Ask', kind: 'write', handler: 'form',
     at: [[BRAND, 'api.brandAutofillLanding(']],
   },
   {

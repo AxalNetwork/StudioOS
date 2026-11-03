@@ -29,6 +29,7 @@ import { type RenderableDeck } from '../services/decks/render';
 import { renderDeckPPTX, renderDeckPPTXWithImages } from '../services/decks/pptx';
 import { NO_NOTES as NO_SPEAKER_NOTES, NO_SOURCES as NO_SOURCES_RECORDED, aiCards, sourceLines } from '../services/decks/offlineHtml';
 import { stripTrailingSlashes } from '../util/url';
+import { BRAND_FONTS, brandKitPick, deckBrandKitFor } from '../services/decks/brandKit';
 import { bindingKey } from '../util/schemaBootstrap';
 import { applyExportImageCopies, checkedExportImageCopies, copyExternalImages, copyRefusalMessage, type ExportImageCopies } from '../services/decks/imageCopy';
 import { refuse } from '../util/refusal';
@@ -1286,7 +1287,17 @@ decks.get('/brand-kit', async (c) => {
     console.warn('[decks] brand kit unreadable', (e as Error)?.message);
     return c.json({ error: 'Your brand kit could not be read.', code: 'unreadable' }, 503);
   }
-  if (!row) return c.json({ project_id: pid, kit: null });
+  // D1562 (#3809): the deck's own kit (fonts, palette roles, image style, references, logo), and the fonts it may name.
+  let deckKit: Awaited<ReturnType<typeof deckBrandKitFor>> = null;
+  try { deckKit = await deckBrandKitFor(c.env, pid); }
+  catch (e) {
+    console.warn('[decks] deck brand kit unreadable', (e as Error)?.message);
+    return c.json({ error: 'Your brand kit could not be read.', code: 'unreadable' }, 503);
+  }
+  if (!row && !deckKit) return c.json({ project_id: pid, kit: null, font_options: BRAND_FONTS });
+  // D1562: the theme a one-click run applies first when a kit exists (AUTO-2), worked out here so the page never re-derives it.
+  const pick = brandKitPick(row ? { palette_bg: row.palette_bg, palette_ink: row.palette_ink, palette_accent: row.palette_accent, theme_color: row.theme_color, palette_secondary: row.palette_secondary } : null, deckKit);
+  if (!row) return c.json({ project_id: pid, font_options: BRAND_FONTS, pick, kit: { name: null, palette: { bg: null, ink: null, accent: null, secondary: null }, fonts: null, voice: [], logo: { light: null, dark: null, inline: false }, updated_at: deckKit!.updated_at, deck: deckKit } });
   const hex = (v: unknown) => (typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v.trim()) ? v.trim().toLowerCase() : null);
   let voice: string[] = [];
   try {
@@ -1303,7 +1314,10 @@ decks.get('/brand-kit', async (c) => {
       voice,
       logo: { light: sanitizeImageUrl(row.logo_url), dark: sanitizeImageUrl(row.logo_dark_url), inline: Boolean(row.logo_svg || row.logo_dark_svg) },
       updated_at: row.updated_at ?? null,
+      deck: deckKit,
     },
+    font_options: BRAND_FONTS,
+    pick,
   });
 });
 

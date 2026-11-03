@@ -11,6 +11,7 @@ import { api } from '../lib/api';
 import { calendarItemsApi } from '../lib/api/calendarItems';
 import { Lightbox, Sheet, Unreadable, actionDanger, actionGhost, actionPrimary } from '../ui';
 import CalendarComplianceSheet from './CalendarComplianceSheet';
+import CalendarPrep from './CalendarPrep';
 import {
   ANSWERS, ANSWER_WORD, KIND_WORDS, LENGTHS, NOT_PARTY, NOT_PARTY_SUB, SAYS,
   copyLines, externalAction, goingLine, joinOpen, minutesOf, noChangeLine, refusalOf, startError, startOf, whenLine, whenShort, zoneLabel,
@@ -372,6 +373,9 @@ export default function CalendarItemDrawer({ kind, id, onClose, onChanged, canCo
           ) : item.href && pageAct ? (
             <Section testId="cal-item-page"><Link className={LINK} to={item.href} data-testid="cal-item-open">{pageAct}</Link></Section>
           ) : null}
+          {/* D1585 (#3832): Prep, the prospect's brief, on an investor meeting. */}
+          {item.kind === 'investor_meeting' && !cancelled && item.prospect_id && item.project_id
+            ? <CalendarPrep projectId={item.project_id} prospectId={item.prospect_id} eventId={item.source_id} /> : null}
           {item.notes ? (
             <Section title={item.kind === 'ic_meeting' ? 'Agenda' : 'Notes'} testId="cal-item-notes">
               <p className={`m-0 whitespace-pre-line text-[13px] leading-relaxed ${INK}`}>{item.notes}</p>

@@ -6,10 +6,11 @@ import { AccountPhonePage, phonePending } from '../account/AccountPhonePage';
 import { ACCOUNT_PHONE_PAGES } from '../account/accountPhone';
 import { COMING_SOON_LINE } from './learningAccess';
 import {
-  ALL_LIMIT, ARTICLES_PAGE_SIZE, EVENTS_PAGE_SIZE, LEARNING_TABS, SUBMISSION_STATUS, TAB_KIND,
+  ALL_LIMIT, ARTICLES_PAGE_SIZE, EVENTS_PAGE_SIZE, LEARNING_TABS, RECOMMENDED_FUTURE, SUBMISSION_STATUS, TAB_KIND,
+  newThisWeek,
   durationLabel, formatDay, formatWhen, kindLabel, matchesQuery, minutesLabel, rangeLabel, resolveTab, sourceStates, tabMode, webinarPhase,
 } from './learningModel';
-import { readArticles, readCatalog, readEvents, readExams, readExercises, readMe, readPublications } from './learningReads';
+import { readArticles, readCatalog, readEvents, readExams, readExercises, readMe, readMyStats, readPublications } from './learningReads';
 import { readWebinars } from './webinarReads';
 import {
   ComingSoonCard, LearningEmpty, LearningLoading, LearningUnreadable, NotLiveYet,
@@ -271,6 +272,71 @@ export function CatalogList({ state, kind = null, q = '', onPage, onRetry }) {
   );
 }
 
+/**
+ * D3726 (#3726) LR1 — "Your progress": the four figures of #4180's
+ * `GET /api/learning/me/stats` (`statsTiles`). A figure the route does not
+ * record reads "Not recorded", never 0; a failed read says so and is never
+ * a row of zeros.
+ */
+export function ProgressStrip({ state = IDLE, onRetry }) {
+  if (isLoading(state)) return <LearningLoading rows={1} what="your progress figures" />;
+  if (state.status !== 'ready') {
+    return <LearningUnreadable what="Your progress figures" claim="This is not a claim that they are zero." onRetry={onRetry} />;
+  }
+  return (
+    <div data-testid="section-progress">
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        {(state.tiles || []).map((t) => (
+          <Card key={t.key} padding="sm" className="flex flex-col gap-0.5" data-testid="progress-figure">
+            <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{t.label}</span>
+            <span className="text-[13px] font-bold">{t.value === 'Not recorded' ? <Unrecorded reason="Not recorded for this month yet.">Not recorded</Unrecorded> : t.value}</span>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * D3726 LR1 — "New this week": courses, videos and readings dated in the last
+ * seven days, newest first, from the catalog the All tab reads. A failed read
+ * is Unreadable, never an empty week.
+ */
+export function NewThisWeek({ state, now = Date.now(), onRetry }) {
+  let body;
+  if (isLoading(state)) body = <LearningLoading rows={2} what="what is new" />;
+  else if (state.status !== 'ready') body = <LearningUnreadable what="What is new this week" claim="This is not a claim that nothing is new." onRetry={onRetry} />;
+  else {
+    const rows = newThisWeek(state.rows, now);
+    body = rows.length === 0 ? (
+      <LearningEmpty title="Nothing new this week" body="Courses, videos and readings HQ publishes appear here in their first week." />
+    ) : (
+      <ul className="divide-y divide-axal-hairline dark:divide-gray-800" data-testid="list-new-this-week">
+        {rows.map((row) => (
+          <li key={row.key} className="flex flex-wrap items-center justify-between gap-2 py-2 first:pt-0" data-testid={`new-row-${row.kind}`}>
+            <span className="flex min-w-0 items-center gap-2">
+              <Pill tone="info">{kindLabel(row.kind)}</Pill>
+              <RowTitle href={row.href}>{row.title}</RowTitle>
+            </span>
+            <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{catalogMeta(row) || <Unrecorded>Length not recorded</Unrecorded>}</span>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  return <SectionCard title="New this week" meta="Newest first" testid="section-new-this-week">{body}</SectionCard>;
+}
+
+/** D3726 LR1 — "Recommended for you": a dashed future block, with no rows (#3724). */
+export function RecommendedFuture() {
+  return (
+    <div className="rounded-axal border border-dashed border-axal-hairline px-4 py-3 dark:border-gray-700" data-testid="section-recommended">
+      <p className="text-[13px] font-semibold text-axal-ink dark:text-gray-100">Recommended for you <span className="ml-1 rounded-full bg-axal-ground px-2 py-0.5 text-[11px] font-semibold text-axal-muted dark:bg-gray-800 dark:text-gray-400">Future</span></p>
+      <p className="mt-0.5 text-[12px] text-axal-muted dark:text-gray-400">{RECOMMENDED_FUTURE}</p>
+    </div>
+  );
+}
+
 /** Continue learning: what the member has started, from `GET /api/learning/me`. */
 export function ContinueLearning({ state, onRetry }) {
   if (isLoading(state)) return <LearningLoading rows={2} what="your progress" />;
@@ -492,7 +558,7 @@ export function LearningHero({ phoneBar = null }) {
 export function LearningHomeView({
   gated, tab, onTab = () => {}, query = '', onQuery = () => {}, q = '',
   catalog = IDLE, articles = IDLE, publications = IDLE, events = IDLE, me = IDLE,
-  upcoming = IDLE, past = IDLE, programs = PROGRAMS_IDLE, now = Date.now(),
+  upcoming = IDLE, past = IDLE, programs = PROGRAMS_IDLE, now = Date.now(), fresh = IDLE, stats = IDLE,
   onCatalogPage = () => {}, onArticlesPage = () => {}, onRetry = {}, links = [],
   exercises = IDLE, exams = IDLE, onAssessmentPage = () => {},
 }) {
@@ -504,10 +570,15 @@ export function LearningHomeView({
         {gated ? (
           <ComingSoonCard articlesLink={false} testid="learning-coming-soon-sections" />
         ) : (
-          <div className="grid gap-4 lg:grid-cols-2">
-            <SectionCard title="Continue learning" testid="section-continue"><ContinueLearning state={me} onRetry={onRetry.me} /></SectionCard>
-            <MyProgramsSection {...programs} />
-          </div>
+          <>
+            <ProgressStrip state={stats} onRetry={onRetry.stats} />
+            <div className="grid gap-4 lg:grid-cols-2">
+              <SectionCard title="Continue learning" testid="section-continue"><ContinueLearning state={me} onRetry={onRetry.me} /></SectionCard>
+              <MyProgramsSection {...programs} />
+            </div>
+            <NewThisWeek state={fresh} now={now} onRetry={onRetry.fresh} />
+            <RecommendedFuture />
+          </>
         )}
         <LearningCatalogue
           gated={gated} tab={tab} onTab={onTab} query={query} onQuery={onQuery} q={q}
@@ -683,6 +754,10 @@ export default function LearningHome({ gated, links = [] }) {
   const onAssessmentPage = (step) => setAssessmentOffset((o) => Math.max(0, o + step * ALL_LIMIT));
   const programs = useMyPrograms(!gated);
   const now = useNow(60 * 1000);
+  // D3726 LR1: New this week reads the catalog's newest rows across every kind.
+  const [fresh, retryFresh] = useLearningRead(() => readCatalog({}), [], { enabled: !gated, scope: 'catalog-new' });
+  // D3726 LR1: Your progress, from #4180's stats read.
+  const [stats, retryStats] = useLearningRead(readMyStats, [], { enabled: !gated, scope: 'me-stats' });
 
   // A new tab starts from its first page.
   const onTab = useCallback((key) => {
@@ -695,7 +770,7 @@ export default function LearningHome({ gated, links = [] }) {
   const onArticlesPage = (step) => setPage((p) => Math.max(0, p + step));
   const onRetry = {
     catalog: retryCatalog, article: retryArticles, publication: retryPublications, event: retryEvents, me: retryMe,
-    upcoming: retryUpcoming, past: retryPast, exercises: retryExercises, exams: retryExams,
+    upcoming: retryUpcoming, past: retryPast, exercises: retryExercises, exams: retryExams, fresh: retryFresh, stats: retryStats,
   };
   // The Learning home has no AI rail; the shared frame keeps its body layout.
   const phone = usePhoneWidth();
@@ -731,6 +806,8 @@ export default function LearningHome({ gated, links = [] }) {
             past={past}
             programs={programs}
             now={now}
+            fresh={fresh}
+            stats={stats}
             onCatalogPage={onCatalogPage}
             onArticlesPage={onArticlesPage}
             onRetry={onRetry}

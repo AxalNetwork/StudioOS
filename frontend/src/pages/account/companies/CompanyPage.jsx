@@ -145,7 +145,7 @@ export default function CompanyPage({
     <div className="flex min-w-0 flex-col gap-4" data-testid="company-page" data-uid={uid}>
       <Link to={BASE_PATH} className={`w-fit ${LINK}`} data-testid="company-back">‹ Portfolio</Link>
       <header className="flex flex-wrap items-start gap-3">
-        <CompanyMark name={name} size={44} />
+        <CompanyMark name={name} logoUrl={detail.value?.logo_url ?? card?.logoUrl ?? null} size={44} />
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           <h2 className={`m-0 text-[22px] font-extrabold tracking-[-.02em] ${INK}`} data-testid="company-page-name">{name}</h2>
           <span className="flex flex-wrap items-center gap-2">
