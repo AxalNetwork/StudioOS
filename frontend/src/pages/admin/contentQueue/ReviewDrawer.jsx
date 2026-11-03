@@ -7,6 +7,11 @@
  *
  * Reads: `GET /api/admin/articles/:id` (D1293 adds thread
  * fields and `saved_by_name`) and `GET /api/admin/articles/:id/revisions/:rev`.
+ *
+ * #4046 (B4): Ask Eadwyn on the new comment's text, and on nothing else: the
+ * paragraph it points at, a reply, Resolve and every stage change are the
+ * reviewer's own. A new comment hangs under the article (`parent`); Send
+ * writes, then the placed text is recorded against the id the 201 names.
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
@@ -16,6 +21,8 @@ import { adminArticles as api } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
 import useRecordCrumb from '../useRecordCrumb';
 import QueueDialog from './QueueDialog';
+import { FillFormBar, FillLabel, useScopedFill } from '../../../ui/useScopedFill.jsx';
+import { SCOPED_FORMS } from '../../../lib/fillScoped.js';
 import {
   ACTION_LABELS, DRAWER_TABS, OWN_NOTE, STAGE_LABEL, STATES, actionsFor, anchorFor, compareLines, dialogFor, ownArticle,
   paragraphsOf, refusalText, stageOf, threadsOf, waitText, when,
@@ -70,6 +77,12 @@ function CommentsTab({ article, comments, onChanged, onDelete, notify }) {
   const [reply, setReply] = useState({});
   const [busy, setBusy] = useState(false);
   const paras = paragraphsOf(article.body_markdown);
+  // #4046 (B4): before the early return below, so the hooks keep their order.
+  const fill = useScopedFill({
+    scope: SCOPED_FORMS.reviewComment, parent: article.id, enabled: Array.isArray(comments),
+    values: { body: text },
+    onValues: (v) => { if (v.body != null) setText(String(v.body)); },
+  });
   if (!Array.isArray(comments)) return <BlockFailed testId="cq-comments-unreadable" />;
   const threads = threadsOf(comments);
   const run = async (fn, okText) => {
@@ -78,7 +91,12 @@ function CommentsTab({ article, comments, onChanged, onDelete, notify }) {
   };
   const send = () => {
     const p = paras.find((x) => String(x.n) === on);
-    return run(async () => { await api.addComment(article.id, text.trim(), p ? anchorFor(p) : null); setText(''); }, 'Comment sent. The author sees it in their editor.');
+    return run(async () => {
+      const r = await api.addComment(article.id, text.trim(), p ? anchorFor(p) : null);
+      setText('');
+      // #4046 (B4): the record step, before `run` reads the comments again.
+      await fill.afterSave(r?.id);
+    }, 'Comment sent. The author sees it in their editor.');
   };
   return (
     <div className="flex flex-col gap-3" data-testid="cq-tab-comments">
@@ -121,7 +139,11 @@ function CommentsTab({ article, comments, onChanged, onDelete, notify }) {
             {paras.map((p) => <option key={p.n} value={String(p.n)}>{anchorFor(p)}</option>)}
           </select>
         </label>
-        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} placeholder="What should the author look at?" aria-label="Comment"
+        <FillFormBar fill={fill} />
+        <FillLabel fill={fill} name="body" label="Comment" value={text}>
+          <label htmlFor="cq-comment-text" className={SUB}>Comment</label>
+        </FillLabel>
+        <textarea id="cq-comment-text" value={text} onChange={(e) => setText(e.target.value)} rows={3} placeholder="What should the author look at?"
           className="rounded border border-slate-300 bg-white px-2 py-1.5 text-[13px] dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100" data-testid="cq-comment-text" />
         <div className="flex items-center justify-between gap-2">
           <span className={SUB}>The author sees this in their editor.</span>
