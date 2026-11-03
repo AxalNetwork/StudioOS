@@ -113,6 +113,7 @@ export * from './api/deckRehearsals.js';
 export * from './api/deckRemix.js';
 export * from './api/deckRemote.js';
 export * from './api/deckReports.js';
+export * from './api/deckScript.js';
 export * from './api/deckSlideAnalytics.js';
 export * from './api/deckSources.js';
 export * from './api/deckStage.js';
