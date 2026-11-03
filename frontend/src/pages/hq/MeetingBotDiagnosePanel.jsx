@@ -15,6 +15,9 @@ const label = (s) => String(s).replaceAll('_', ' ');
 const field = 'mt-1 w-full rounded-lg border border-axal-hairline bg-axal-ground dark:bg-gray-950 dark:border-gray-700 px-3 py-2 text-sm text-axal-ink dark:text-white';
 const button = 'rounded-lg border border-axal-hairline px-3 py-2 text-xs font-bold dark:border-gray-600 hover:bg-axal-ground dark:hover:bg-gray-800 disabled:opacity-50';
 
+// The Worker's bare 'TOTP required' means this session was not signed in with the
+// authenticator (Google, a passkey, an email link or SMS); a step-up code cannot change that.
+export const NEEDS_TOTP_SESSION = 'This needs a session signed in with your authenticator code. Sign out, sign back in with your password and authenticator code (not Google, a passkey, an email link or SMS), then press Diagnose again.';
 export function DiagnosisTable({ diagnosis }) {
   return <div className="mt-4 overflow-x-auto">
     <table className="w-full text-left text-sm" data-testid="diagnosis-table">
@@ -50,7 +53,7 @@ export default function MeetingBotDiagnosePanel() {
   const start = async (event) => {
     event.preventDefault(); setBusy(true); setError(''); setShot(null);
     try { const result = await adminMeetingBotsApi.diagnose(link.trim()); setDiagnosis(result.diagnosis); }
-    catch (e) { setError(e?.message || 'The diagnostic could not start.'); }
+    catch (e) { setError(e?.message === 'TOTP required' ? NEEDS_TOTP_SESSION : (e?.message || 'The diagnostic could not start.')); }
     finally { setBusy(false); }
   };
   const stop = diagnosis?.stops_at;
