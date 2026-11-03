@@ -64,7 +64,7 @@ export const DECK_REMOTE_PAIR = /^\/api\/decks\/\d+\/remote\/pair\/?$/;
 export const DECK_REMOTE_JOIN = /^\/api\/decks\/remote\/join\/?$/;
 // D1512 (#3764): `POST /api/decks/:id/areas` is A3's admission path.
 // D1600 (#3879): retrying a run's failed areas starts a run too.
-export const DECK_GENERATE = /^\/api\/decks\/(?:\d+\/)?(?:areas(?:\/(?:generate|batches(?:\/[0-9a-f-]{36}\/retry-failed)?))?|build)\/?$/;
+export const DECK_GENERATE = /^\/api\/decks\/(?:\d+\/)?(?:areas(?:\/(?:generate|instruct|batches(?:\/[0-9a-f-]{36}\/retry-failed)?))?|build)\/?$/;
 // D1525 (#3783): ranking an area's variants runs one Clef decision; the quote runs nothing.
 export const DECK_JUDGE = /^\/api\/decks\/areas\/[0-9a-f-]{36}\/judge\/?$/;
 // D1516 (#3768): the narrative build admits one run for the whole deck; its outline runs nothing.

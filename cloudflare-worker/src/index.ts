@@ -257,6 +257,7 @@ import deckSources from './routes/deck_sources';
 import deckCheck from './routes/deck_check';
 import deckGrid from './routes/deck_grid';
 import deckAreas from './routes/deck_areas';
+import deckInstruct from './routes/deck_instruct';
 import deckNarrative from './routes/deck_narrative';
 import deckBatches from './routes/deck_batches';
 import deckDraft from './routes/deck_draft';
@@ -1419,6 +1420,8 @@ app.route('/api/decks', deckGrid);
 app.route('/api/decks', deckBatches);
 // D1512 (#3764): Generate into areas (quote, admit, proposals, accept, discard).
 app.route('/api/decks', deckAreas);
+// D1521 (#3773): an instruction on the grid selection (quote, then one run into area proposals).
+app.route('/api/decks', deckInstruct);
 // D1516 (#3768): New deck from the narrative (outline with the grid plan and quote; one deck_build run).
 app.route('/api/decks', deckNarrative);
 // D1501 (#3751): a version's working copy, card by card (`/:id/cards/:uid`, `/:id/draft`), before `decks`.
