@@ -257,6 +257,7 @@ import deckSources from './routes/deck_sources';
 import deckCheck from './routes/deck_check';
 import deckGrid from './routes/deck_grid';
 import deckAreas from './routes/deck_areas';
+import deckNarrative from './routes/deck_narrative';
 import deckBatches from './routes/deck_batches';
 import deckDraft from './routes/deck_draft';
 import deckCoedit from './routes/deck_coedit';
@@ -1418,6 +1419,8 @@ app.route('/api/decks', deckGrid);
 app.route('/api/decks', deckBatches);
 // D1512 (#3764): Generate into areas (quote, admit, proposals, accept, discard).
 app.route('/api/decks', deckAreas);
+// D1516 (#3768): New deck from the narrative (outline with the grid plan and quote; one deck_build run).
+app.route('/api/decks', deckNarrative);
 // D1501 (#3751): a version's working copy, card by card (`/:id/cards/:uid`, `/:id/draft`), before `decks`.
 app.route('/api/decks', deckDraft);
 // D1577 (#3824): area saves (`/:id/cards/:uid/areas/:area`), single-slide restore (`/:id/restore-card`) and presence, before `decks`.
@@ -2334,6 +2337,12 @@ export default {
           }
         }
         // D886 B10: counts-only alerts in the existing HQ notification inbox.
+        // D1537 (#3786): the error budget, once an hour at :17. HQ only:
+        // the alert goes to HQ's admins. It never throws into the tick.
+        if (hqCadences && now.getUTCMinutes() === 17) {
+          const { noteErrorBudgetAlert } = await import('./services/deckErrorBudgetCron');
+          if (await noteErrorBudgetAlert(env, now)) cronSummary.push('error budget alert sent');
+        }
         if (hqCadences && now.getUTCMinutes() % 5 === 3) {
           try {
             const { sweepMeetingBotOperations } = await import('./services/meetingBotOperationsAlerts');

@@ -43,6 +43,7 @@ import { modelById } from '../src/services/ai/catalogue.ts';
 import { billingMode, multiplierFor } from '../src/services/ai/pricing.ts';
 import { unitPrices } from '../src/routes/ai.ts';
 import { MODEL_CONNECTIONS, withModuleModels } from '../src/services/ai/moduleConnections.ts';
+import { railOptionTextJob, textJob } from '../src/services/ai/textJobs.ts';
 
 const read = (p: string) => readFileSync(new URL(`../../${p}`, import.meta.url), 'utf8');
 const CANVAS = JSON.parse(read('design/incoming/airail-every-page-data/canvas.json'));
@@ -303,60 +304,70 @@ test('an unknown page is 404 with its key, a malformed option is 400, and no ses
   assert.equal((await call(env, A, 'PUT', '/rail/mode', { page: 'Founder · Nowhere', mode: 'manual' })).status, 404);
 });
 
-test('a pick and the switch round-trip per page and option, for the caller only', async () => {
+/** #4313 part 2: a page with a registered option of several models, for the pick tests. */
+const STUDIO = 'Founder · Studio';
+
+test('a pick and the switch round-trip per option and page, for the caller only; the page itself has no pick (#4313)', async () => {
   const { env, prefs } = world();
-  const row = resolveRail(MVP)!;
-  const [first, second] = row.models.map((m) => m.id);
-  assert.equal((await call(env, A, 'PUT', '/rail/pick', { page: MVP, model: second })).status, 200);
-  assert.equal((await call(env, A, 'PUT', '/rail/pick', { page: MVP, option: 'draft:build/mvp', model: first })).status, 200);
-  assert.equal((await call(env, A, 'PUT', '/rail/mode', { page: MVP, mode: 'manual' })).status, 200);
+  const opt = resolveRailOption(STUDIO, 'ask:studio')!;
+  const [first] = opt.models.map((m) => m.id);
+  // #4313 part 2 (D4313): the page-level pick went with the page rows; a pick names an option.
+  const pagePick = await call(env, A, 'PUT', '/rail/pick', { page: STUDIO, model: first });
+  assert.deepEqual([pagePick.status, pagePick.body.error], [400, 'option_required']);
+  assert.equal((await call(env, A, 'PUT', '/rail/pick', { page: STUDIO, option: 'fill:other', model: first })).body.error, 'option_required', 'an option the page does not register has no pick');
+  assert.equal((await call(env, A, 'PUT', '/rail/pick', { page: STUDIO, option: 'ask:studio', model: first })).status, 200);
+  assert.equal((await call(env, A, 'PUT', '/rail/mode', { page: STUDIO, mode: 'manual' })).status, 200);
   assert.deepEqual(prefs(A), [
-    { section: MVP.toLowerCase(), task: '', model: null, mode: 'manual' },
-    { section: MVP.toLowerCase(), task: 'draft:build/mvp', model: first, mode: null },
-    { section: MVP.toLowerCase(), task: 'page', model: second, mode: null },
+    { section: STUDIO.toLowerCase(), task: '', model: null, mode: 'manual' },
+    { section: STUDIO.toLowerCase(), task: 'ask:studio', model: first, mode: null },
   ]);
-  let r = await call(env, A, 'GET', q(MVP));
-  assert.equal(r.body.pick, second);
+  let r = await call(env, A, 'GET', q(STUDIO));
+  assert.equal(r.body.pick, null, 'the page has no pick');
   assert.equal(r.body.mode, 'manual');
-  r = await call(env, A, 'GET', q(MVP, 'draft:build/mvp'));
-  assert.equal(r.body.pick, first, 'an option\'s own pick wins');
-  r = await call(env, A, 'GET', q(MVP, 'fill:other'));
-  assert.equal(r.body.pick, second, 'an option with no pick takes the page\'s');
-  const ben = await call(env, B, 'GET', q(MVP));
+  r = await call(env, A, 'GET', q(STUDIO, 'ask:studio'));
+  assert.equal(r.body.pick, first, 'the option\'s own pick');
+  r = await call(env, A, 'GET', q(STUDIO, 'fill:other'));
+  assert.equal(r.body.pick, null, 'an unregistered option takes no pick');
+  const ben = await call(env, B, 'GET', q(STUDIO, 'ask:studio'));
   assert.equal(ben.body.pick, null, 'another member\'s read sees none of it');
   assert.equal(ben.body.mode, null);
-  assert.equal((await call(env, A, 'PUT', '/rail/pick', { page: MVP, model: null })).status, 200);
-  assert.equal((await call(env, A, 'PUT', '/rail/mode', { page: MVP, mode: null })).status, 200);
-  assert.deepEqual(prefs(A).map((p: any) => p.task), ['draft:build/mvp'], 'a null clears its row');
+  assert.equal((await call(env, A, 'PUT', '/rail/pick', { page: STUDIO, option: 'ask:studio', model: null })).status, 200);
+  assert.equal((await call(env, A, 'PUT', '/rail/mode', { page: STUDIO, mode: null })).status, 200);
+  assert.deepEqual(prefs(A), [], 'a null clears its row');
 });
 
-test('a model the page does not offer is refused, and a stale stored pick is cleared by the read', async () => {
+test('a model the option does not offer is refused, a stale option pick is cleared by the read, and a stored page pick is no longer read (#4313)', async () => {
   const { env, db, prefs } = world();
-  const bad = await call(env, A, 'PUT', '/rail/pick', { page: 'Founder · Validate', model: '@cf/qwen/qwen2.5-coder-32b-instruct' });
+  const opt = resolveRailOption(STUDIO, 'ask:studio')!;
+  const bad = await call(env, A, 'PUT', '/rail/pick', { page: STUDIO, option: opt.optionKey, model: '@cf/baai/bge-m3' });
   assert.equal(bad.status, 400);
   assert.equal(bad.body.error, 'model_not_offered');
-  const on = resolveRail('Founder · Validate')!;
-  assert.deepEqual(bad.body.models, [...on.models, ...(on.more ?? [])].map((m) => m.id));
+  assert.deepEqual(bad.body.models, [...opt.models, ...(opt.more ?? [])].map((m) => m.id));
   assert.equal((await call(env, A, 'PUT', '/rail/mode', { page: 'Founder · Validate', mode: 'auto' })).status, 400);
   assert.deepEqual(prefs(A), [], 'a refused write stores nothing');
-  db.prepare("INSERT INTO ai_rail_preferences (uid, user_id, section, task, model) VALUES ('u1', ?, 'founder · validate', 'page', '@cf/retired/model')").run(A);
-  const r = await call(env, A, 'GET', q('Founder · Validate'));
-  assert.equal(r.body.pick, null, 'a model the row no longer offers is no pick');
+  db.prepare("INSERT INTO ai_rail_preferences (uid, user_id, section, task, model) VALUES ('u1', ?, ?, ?, '@cf/retired/model')").run(A, STUDIO.toLowerCase(), opt.optionKey);
+  const r = await call(env, A, 'GET', q(STUDIO, opt.optionKey));
+  assert.equal(r.body.pick, null, 'a model the option no longer offers is no pick');
   assert.deepEqual(prefs(A), [], 'and the read cleared it');
+  // #4313 part 2: a page-level pick stored before part 2 is not read, and not deleted by a read.
+  db.prepare("INSERT INTO ai_rail_preferences (uid, user_id, section, task, model) VALUES ('u2', ?, 'founder · validate', 'page', ?)").run(A, resolveRail('Founder · Validate')!.models[0].id);
+  assert.equal((await call(env, A, 'GET', q('Founder · Validate'))).body.pick, null);
+  assert.equal(prefs(A).length, 1, 'kept, never deleted by the read');
 });
 
-test('the cap is 1,000 rows a member: a new page pick past it is 409, an existing one still updates', async () => {
+test('the cap is 1,000 rows a member: a new row past it is 409, an existing one still updates', async () => {
   assert.equal(RAIL_PREFERENCE_CAP, 1000);
   const { env, db, prefs } = world();
   const ins = db.prepare("INSERT INTO ai_rail_preferences (uid, user_id, section, task, mode) VALUES (?, ?, ?, '', 'manual')");
   for (let i = 0; i < RAIL_PREFERENCE_CAP - 1; i += 1) ins.run(crypto.randomUUID(), A, `section ${i}`);
-  const model = resolveRail(MVP)!.models[0].id;
-  assert.equal((await call(env, A, 'PUT', '/rail/pick', { page: MVP, model })).status, 200, 'the 1,000th row lands');
-  const full = await call(env, A, 'PUT', '/rail/mode', { page: MVP, mode: 'manual' });
+  const opt = resolveRailOption(STUDIO, 'ask:studio')!;
+  const model = opt.models[0].id;
+  assert.equal((await call(env, A, 'PUT', '/rail/pick', { page: STUDIO, option: opt.optionKey, model })).status, 200, 'the 1,000th row lands');
+  const full = await call(env, A, 'PUT', '/rail/mode', { page: STUDIO, mode: 'manual' });
   assert.equal(full.status, 409);
   assert.equal(full.body.error, 'too_many_preferences');
   assert.equal(prefs(A).length, 1000);
-  assert.equal((await call(env, A, 'PUT', '/rail/pick', { page: MVP, model: resolveRail(MVP)!.models[1].id })).status, 200, 'an existing key updates');
+  assert.equal((await call(env, A, 'PUT', '/rail/pick', { page: STUDIO, option: opt.optionKey, model: opt.models[1].id })).status, 200, 'an existing key updates');
 });
 
 // ─────────────────────────────────────────────── PR 3: option rows and the run
@@ -384,6 +395,10 @@ test('every option a profile registers that runs a model has a row, with its own
     // runs; every other option runs its kind's rail task.
     assert.equal(row!.routeTask, OPTION_ONLY_KINDS.has(o.kind) ? o.task : `rail_${o.kind}`);
     if (OPTION_ONLY_KINDS.has(o.kind) || o.handler === 'transcribe') continue; // their own lists, held by the D1478 and D1583 cases
+    // #4313 (D4313): an option whose job writes text lists that job's models (RAIL_OPTION_JOBS), the same
+    // ones textChoice runs; any other option still takes its kind's models and connected alternatives.
+    const own = railOptionTextJob(page.key, o.key);
+    if (own) { assert.deepEqual(row!.models.map((m) => m.id)[0], textJob(own)!.default, `${o.key}: lists ${own}'s Default first`); continue; }
     const kindRow = ROWS.find((r) => r.kind === o.kind)!;
     assert.deepEqual(row!.models, withModuleModels({ ...kindRow, pageKey: page.key }).models, `${o.key}: an option takes its kind's models and connected alternatives`);
   }
@@ -457,38 +472,50 @@ function runWorld(reply: (model: string) => any = () => ({ response: 'answer', u
   return { ...f, calls, env: { DB: f.DB, ENVIRONMENT: 'development', AI: withGuard(ai) } as any };
 }
 
-test('run() with rail context uses the page\'s models: the default, the member\'s pick, the chain on failure, and model_not_offered', async () => {
-  const page = RESEARCH.pageKey;
-  let w = runWorld();
-  try {
-    const r = await aiRun(w.env, { task: 'research_ask', userId: 2, text: 'what moved?', rail: { page } });
-    assert.equal(r.ok, true, JSON.stringify(r));
-    assert.deepEqual(w.calls, ['@cf/openai/gpt-oss-120b'], 'the row\'s free default answered, not the task\'s route model');
-    assert.equal(w.db.prepare("SELECT model FROM ai_usage_logs WHERE task = 'research_ask'").get().model, '@cf/openai/gpt-oss-120b');
-  } finally { w.db.close(); }
+test('run() on a page with no option runs the page\'s job (#4313): the job\'s Default and ladder, no page pick, and model_not_offered', async () => {
+  // #4313 part 2 (D4313): a press that sends only a page runs its kind's job (RAIL_KIND_JOBS)
+  // through textChoice, exactly as a run naming that job does; the page's row decides nothing.
+  const same = async (page: string, task: string, fail?: string) => {
+    const job = RAIL_KIND_JOBS[resolveRail(page)!.kind].id;
+    const calls: string[][] = [];
+    for (const opts of [{ rail: { page } }, { textJob: job }]) {
+      const w = runWorld();
+      try {
+        if (fail) {
+          w.env.AI.run = (orig => async (model: string, input: any, o: any) => {
+            if (model === fail) { w.calls.push(model); throw Object.assign(new Error('5xx'), { status: 503 }); }
+            return orig(model, input, o);
+          })(w.env.AI.run);
+        }
+        const r = await aiRun(w.env, { task: task as any, userId: 2, text: 'what moved?', ...opts });
+        assert.equal(r.ok, true, JSON.stringify(r));
+        calls.push([...w.calls]);
+      } finally { w.db.close(); }
+    }
+    assert.deepEqual(calls[0], calls[1], `${page}: the page press runs what its job runs`);
+    return calls[0];
+  };
+  const [first] = await same(RESEARCH.pageKey, 'research_ask');
+  await same(CHAT.pageKey, 'advisor_turn');
+  // A failure falls down the job's ladder, as the job's own run does.
+  const [chatFirst] = await same(CHAT.pageKey, 'advisor_turn');
+  const fell = await same(CHAT.pageKey, 'advisor_turn', chatFirst);
+  assert.equal(fell[0], chatFirst);
+  assert.ok(fell.length === 2 && fell[1] !== chatFirst, 'the next model of the ladder answered');
+  void first;
 
-  w = runWorld();
+  const w = runWorld();
   try {
-    const [a, b] = CHAT.models.map((m) => m.id);
-    w.db.prepare("INSERT INTO ai_rail_preferences(uid,user_id,section,task,model) VALUES('p1',2,?,'page',?)").run(CHAT.pageKey.toLowerCase(), b);
+    // A page-level pick stored before part 2 is not read.
+    const other = CHAT.models.map((m) => m.id).find((id) => id !== chatFirst)!;
+    w.db.prepare("INSERT INTO ai_rail_preferences(uid,user_id,section,task,model) VALUES('p1',2,?,'page',?)").run(CHAT.pageKey.toLowerCase(), other);
     assert.equal((await aiRun(w.env, { task: 'advisor_turn', userId: 2, text: 'hi', rail: { page: CHAT.pageKey } })).ok, true);
-    assert.deepEqual(w.calls, [b], 'the member\'s pick answered');
+    assert.deepEqual(w.calls, [chatFirst], 'the job\'s model answered, not the old page pick');
+    // A named model the page's list does not offer is refused uncalled.
     const bad = await aiRun(w.env, { task: 'advisor_turn', userId: 2, text: 'hi', model: '@cf/baai/bge-m3', rail: { page: CHAT.pageKey } });
     assert.equal(bad.ok, false);
     assert.equal(bad.refusal, 'model_not_offered');
-    assert.deepEqual(w.calls, [b], 'a refused model was never called');
-    void a;
-  } finally { w.db.close(); }
-
-  w = runWorld((model) => (model === CHAT.models[0].id ? { __fail: true } : { response: 'second', usage: { prompt_tokens: 1, completion_tokens: 1 } }));
-  try {
-    w.env.AI.run = (orig => async (model: string, input: any, o: any) => {
-      if (model === CHAT.models[0].id) { w.calls.push(model); throw Object.assign(new Error('5xx'), { status: 503 }); }
-      return orig(model, input, o);
-    })(w.env.AI.run);
-    const r = await aiRun(w.env, { task: 'advisor_turn', userId: 2, text: 'hi', rail: { page: CHAT.pageKey } });
-    assert.equal(r.ok, true, JSON.stringify(r));
-    assert.deepEqual(w.calls, [CHAT.models[0].id, CHAT.models[1].id], 'a failure falls back down the row, not the route');
+    assert.deepEqual(w.calls, [chatFirst], 'a refused model was never called');
   } finally { w.db.close(); }
 });
 
@@ -601,15 +628,17 @@ test('#3741: every Worker page and option returns only curated roles, with price
   } finally { db.close(); }
 });
 
-test('#3741: page and option overflow picks round-trip and stale picks are refused and cleared', async () => {
+test('#3741: option overflow picks round-trip and stale picks are refused and cleared; the page itself takes none (#4313)', async () => {
   const page = 'Founder · Build · Solution design';
   const { env, db, prefs } = world();
   const model = '@cf/openai/gpt-oss-20b';
   const option = railOptionRows().find(o => o.kind === 'plan' && o.more?.some(m => m.id === model))!;
   assert.ok(option);
   try {
-    for (const key of [undefined, option.optionKey]) {
-      const onPage = key ? option.pageKey : page;
+    // #4313 part 2: the page-level pick went with the page rows.
+    assert.equal((await call(env, A, 'PUT', '/rail/pick', { page, model })).body.error, 'option_required');
+    for (const key of [option.optionKey]) {
+      const onPage = option.pageKey;
       assert.equal((await call(env, A, 'PUT', '/rail/pick', { page: onPage, option: key, model })).status, 200);
       const r = await call(env, A, 'GET', q(onPage, key));
       assert.equal(r.body.pick, model);
@@ -627,7 +656,7 @@ test('#3741: page and option overflow picks round-trip and stale picks are refus
   } finally { db.close(); }
 });
 
-test('#3741: run honours an overflow pick, and never adds connected extras to automatic fallbacks', async () => {
+test('#3741: run honours an option\'s overflow pick, never a page pick (#4313), and never adds connected extras to automatic fallbacks', async () => {
   const page = 'Founder · Build · Solution design';
   const model = '@cf/openai/gpt-oss-20b';
   const opt = railOptionRows().find(o => o.kind === 'plan' && o.more?.some(m => m.id === model))!;
@@ -639,6 +668,11 @@ test('#3741: run honours an overflow pick, and never adds connected extras to au
       w.db.prepare("INSERT INTO ai_rail_preferences(uid,user_id,section,task,model) VALUES('more',2,?,?,?)").run(onPage.toLowerCase(), option ?? 'page', model);
       const r = await aiRun(w.env, { task: 'advisor_turn', userId: 2, text: 'A synthetic question.', rail: { page: onPage, option } });
       assert.equal(r.ok, true, JSON.stringify(r));
+      if (!option) {
+        // #4313 part 2: a stored page pick is not read; the page's job chose the model.
+        assert.notDeepEqual(w.calls, [model], 'a page pick is not honoured');
+        continue;
+      }
       assert.deepEqual(w.calls, [model]);
       assert.equal(w.db.prepare("SELECT model FROM ai_usage_logs WHERE task='advisor_turn'").get().model, model);
       const row = option ? resolveRailOption(onPage, option)! : resolveRail(onPage)!;

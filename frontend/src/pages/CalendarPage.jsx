@@ -112,6 +112,8 @@ import { CONNECTED_PATH, connectedOf, externalReadError, stripLabel, weekStrip }
 import CalendarSourcesPanel from './CalendarSourcesPanel';
 import { SOURCES_PATH, coloursOf, sourcesOpen } from './calendarSourcesModel';
 import { calendarSourcesApi } from '../lib/api/calendarSources';
+import { PlanSheet } from './learning/PlanSheet';
+import { PlanRowActions } from './learning/PlanRowActions';
 import {
   anchorOf, familiesFor, kindsFrom, kindsOfFamilies, needsFrom, needsMe, shiftAnchor, withDate, withKinds, withNeeds,
 } from './calendarGrid';
@@ -452,6 +454,7 @@ function PersonalCalendar({ scopes = [] }) {
   const [showCk, setShowCk] = useState(false);
   const [showAgent, setShowAgent] = useState(false); // D1613 (CAL8): Schedule an AI agent
   const [showCompliance, setShowCompliance] = useState(false);
+  const [showLearning, setShowLearning] = useState(false);
 
   const me = safeReadJSON('user', {});
   const role = String(me?.role || 'founder').toLowerCase();
@@ -633,7 +636,7 @@ function PersonalCalendar({ scopes = [] }) {
           <ScopeSwitch scopes={scopes} scope="mine" pathname={pathname} search={search} />
           {/* D1211 (CAL8 A): one New menu. IC meeting is in it only where
               canScheduleIc allows (`newMenu`), so the gate strip below says why. */}
-          {!explorer && <NewMenu role={role} onPick={(k) => (k === 'agent' ? setShowAgent(true) : k === 'compliance' ? setShowCompliance(true) : k === 'ic' && canIC ? setShowIc(true) : setShowCk(true))} />}
+          {!explorer && <NewMenu role={role} onPick={(k) => (k === 'agent' ? setShowAgent(true) : k === 'compliance' ? setShowCompliance(true) : k === 'learning' ? setShowLearning(true) : k === 'ic' && canIC ? setShowIc(true) : setShowCk(true))} />}
           {/* D1613 (CAL1b): Ask beside New. It draws nothing until #3706's Ask panel exists (Team's D1497 rule). */}
           {!explorer && <AskButton />}
           {/* D1212 (CAL11): Subscribe opens its dialog: the private whole-calendar link, and the one-off .ics. */}
@@ -854,6 +857,7 @@ function PersonalCalendar({ scopes = [] }) {
       {dayOpen && <DayPopover date={dayOpen} items={pool} read={Array.isArray(inRange)} from={pathname} onClose={() => setDayOpen(null)} />}
       {showIc && <NewIcDialog meetAvailable={gState === 'connected'} onClose={() => setShowIc(false)} onSaved={() => { setShowIc(false); load(); }} />}
       {showCompliance && <NewComplianceDialog onClose={() => setShowCompliance(false)} onDone={() => { setShowCompliance(false); load(); }} />}
+      {showLearning && <PlanSheet picker onClose={() => setShowLearning(false)} onDone={() => { setShowLearning(false); load(); }} />}
       {showAgent && <ScheduleAgentSheet zone={Intl.DateTimeFormat().resolvedOptions().timeZone} onClose={() => setShowAgent(false)} onSaved={() => { setShowAgent(false); load(); }} />}
       {showCk && <NewCheckinDialog role={role} meetAvailable={gState === 'connected'} onClose={() => setShowCk(false)} onSaved={() => { setShowCk(false); load(); }} />}
       {connected === 'list' && (
@@ -1049,6 +1053,8 @@ function EventRow({ ev, myEmail, role, from, canPush, pushRemedy, onChanged }) {
             )}
           </div>
         )}
+        {/* D3959 (#3959): a Learning entry is marked done, rescheduled, opened or removed here (CAL19's dialogs). */}
+        {ev.kind === 'learning' && <div className="cal-ev-actions"><PlanRowActions ev={ev} onChanged={onChanged} /></div>}
         {pushNote && <div className="cal-ev-note">{pushNote}</div>}
         {unpushable && (
           <div className="cal-ev-note">

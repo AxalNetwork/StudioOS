@@ -36,6 +36,7 @@ function built(): DatabaseSync {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
   loadSchema(db, { below: 575 });
   db.exec(readFileSync(resolve(MIGRATIONS, '575_cap_table_access.sql'), 'utf8')); // whole: must apply cleanly
+  db.exec(readFileSync(resolve(MIGRATIONS, '202611031740_cap_table_access_requests.sql'), 'utf8')); // D1130: the stored ask
   return db;
 }
 const BUILT = built();
@@ -150,4 +151,90 @@ test('Your position: a grant naming the caller\'s holder marks their rows at Inv
   db.exec(`UPDATE cap_table_access_grants SET holder_ref = NULL WHERE user_id = ${INV}`);
   const none = await call(db, INV, `/${P}`);
   assert.ok(none.body.view.founding.every((row: any) => !('mine' in row)), 'no holder named, no row marked');
+});
+
+// ---------------------------------------------------------------------------
+// D1130 (#3010): the ask is stored, and the founder answers it on Access.
+// ---------------------------------------------------------------------------
+const requestRow = (db: DatabaseSync, who: number) =>
+  db.prepare(`SELECT uid, status, requested_level, granted_level, grant_id, resolved_by, note FROM cap_table_access_requests WHERE requester_user_id = ? ORDER BY id DESC LIMIT 1`).get(who) as any;
+const liveGrant = (db: DatabaseSync, who: number) =>
+  db.prepare(`SELECT id, level, source_ref FROM cap_table_access_grants WHERE project_id = ${P} AND user_id = ? AND revoked_at IS NULL`).all(who) as any[];
+
+test('D1130 ask: stored as one pending request at the asked level, with the note; a bad level or note is refused', async () => {
+  const db = fixture();
+  assert.equal((await call(db, INV_NOGRANT, `/${P}/ask`, 'POST', { level: 'everything' })).body?.code, 'bad_level');
+  assert.equal((await call(db, INV_NOGRANT, `/${P}/ask`, 'POST', { note: 'x'.repeat(501) })).body?.code, 'bad_note');
+  assert.equal(requestRow(db, INV_NOGRANT), undefined, 'a refused ask stores nothing');
+  const r = await call(db, INV_NOGRANT, `/${P}/ask`, 'POST', { level: 'summary', note: '  For our Q4 review.  ' });
+  assert.equal(r.status, 200, r.text);
+  const q = requestRow(db, INV_NOGRANT);
+  assert.deepEqual([q.status, q.requested_level, q.note, q.grant_id], ['pending', 'summary', 'For our Q4 review.', null]);
+  assert.equal(r.body.request.uid, q.uid);
+  const def = fixture();
+  await call(def, INV_NOGRANT, `/${P}/ask`, 'POST');
+  assert.equal(requestRow(def, INV_NOGRANT).requested_level, 'investor', 'no level named: Investor');
+  assert.throws(() => db.prepare(`INSERT INTO cap_table_access_requests (uid, project_id, requester_user_id, requested_level) VALUES ('dup', ${P}, ${INV_NOGRANT}, 'full')`).run(),
+    /UNIQUE/, 'the store itself holds one pending ask per person and venture');
+});
+
+test('D1130 requests: the founders read the pending asks (name and role, no email); others are refused', async () => {
+  const db = fixture();
+  await call(db, INV_NOGRANT, `/${P}/ask`, 'POST', { level: 'summary' });
+  const own = await call(db, OWNER, `/${P}/requests`);
+  assert.equal(own.status, 200, own.text);
+  assert.equal(own.body.can_change, true);
+  assert.deepEqual(own.body.requests.map((x: any) => [x.name, x.role, x.requested_level]), [[`Person ${INV_NOGRANT}`, 'investor', 'summary']]);
+  assert.ok(!own.text.includes('@example.invalid'), 'no email leaves the read');
+  const cof = await call(db, COF, `/${P}/requests`);
+  assert.deepEqual([cof.status, cof.body.can_change, cof.body.requests.length], [200, false, 1]);
+  for (const who of [INV_NOGRANT, INV, ADV, OP]) assert.equal((await call(db, who, `/${P}/requests`)).status, 403, ROLE[who]);
+});
+
+test('D1130 approve: the owner grants a level (the asked one, or another); the request records it; twice grants once', async () => {
+  const db = fixture();
+  await call(db, INV_NOGRANT, `/${P}/ask`, 'POST', { level: 'investor' });
+  const { uid } = requestRow(db, INV_NOGRANT);
+  assert.equal((await call(db, COF, `/${P}/requests/${uid}/approve`, 'POST')).status, 403, 'a co-founder reads and changes nothing');
+  assert.equal(liveGrant(db, INV_NOGRANT).length, 0);
+  assert.equal((await call(db, OWNER, `/${P}/requests/${uid}/approve`, 'POST', { level: 'none' })).body?.code, 'bad_level');
+  const r = await call(db, OWNER, `/${P}/requests/${uid}/approve`, 'POST', { level: 'summary' });
+  assert.equal(r.status, 200, r.text);
+  const q = requestRow(db, INV_NOGRANT);
+  const g = liveGrant(db, INV_NOGRANT);
+  assert.equal(g.length, 1);
+  assert.deepEqual([q.status, q.granted_level, q.grant_id, q.resolved_by], ['approved', 'summary', g[0].id, OWNER]);
+  assert.deepEqual([g[0].level, g[0].source_ref], ['summary', `request:${uid}`]);
+  const audit = db.prepare(`SELECT details FROM activity_logs WHERE action = 'captable_access_granted'`).all() as any[];
+  assert.equal(audit.length, 1);
+  assert.equal(JSON.parse(audit[0].details).request_uid, uid);
+  const view = await call(db, INV_NOGRANT, `/${P}`);
+  assert.deepEqual([view.status, view.body?.level], [200, 'summary'], 'the investor reads at the granted level');
+  const again = await call(db, OWNER, `/${P}/requests/${uid}/approve`, 'POST');
+  assert.deepEqual([again.status, again.body?.code], [409, 'already_answered']);
+  assert.equal(liveGrant(db, INV_NOGRANT).length, 1, 'answered twice, granted once');
+  assert.equal((db.prepare(`SELECT COUNT(*) AS n FROM activity_logs WHERE action = 'captable_access_granted'`).get() as any).n, 1);
+  const told = db.prepare(`SELECT user_id FROM notifications_inbox WHERE type = 'captable_access_approved'`).all() as any[];
+  assert.deepEqual(told.map((n) => n.user_id), [INV_NOGRANT]);
+  const plain = fixture();
+  await call(plain, INV_NOGRANT, `/${P}/ask`, 'POST', { level: 'full' });
+  await call(plain, OWNER, `/${P}/requests/${requestRow(plain, INV_NOGRANT).uid}/approve`, 'POST');
+  assert.equal(liveGrant(plain, INV_NOGRANT)[0].level, 'full', 'no level named: the asked level');
+});
+
+test('D1130 decline: nothing is granted, the asker is told, and can ask again only after a day', async () => {
+  const db = fixture();
+  await call(db, INV_NOGRANT, `/${P}/ask`, 'POST');
+  const { uid } = requestRow(db, INV_NOGRANT);
+  assert.equal((await call(db, OWNER, `/${P}/requests/not-a-uid/decline`, 'POST')).status, 404);
+  const r = await call(db, OWNER, `/${P}/requests/${uid}/decline`, 'POST');
+  assert.equal(r.status, 200, r.text);
+  assert.deepEqual([requestRow(db, INV_NOGRANT).status, liveGrant(db, INV_NOGRANT).length], ['declined', 0]);
+  assert.equal((await call(db, OWNER, `/${P}/requests/${uid}/approve`, 'POST')).body?.code, 'already_answered', 'a declined ask cannot be approved later');
+  assert.equal(liveGrant(db, INV_NOGRANT).length, 0);
+  assert.equal((db.prepare(`SELECT COUNT(*) AS n FROM notifications_inbox WHERE type = 'captable_access_declined' AND user_id = ${INV_NOGRANT}`).get() as any).n, 1);
+  assert.equal((await call(db, INV_NOGRANT, `/${P}/ask`, 'POST')).body?.code, 'already_asked', 'within a day of the decline');
+  db.exec(`UPDATE cap_table_access_requests SET resolved_at = datetime('now', '-2 days') WHERE uid = '${uid}'`);
+  assert.equal((await call(db, INV_NOGRANT, `/${P}/ask`, 'POST')).status, 200, 'a day later, a new ask');
+  assert.equal((await call(db, OWNER, `/${P}/requests`)).body.requests.length, 1);
 });
