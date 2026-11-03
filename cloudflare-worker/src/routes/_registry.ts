@@ -29,6 +29,7 @@ import { mount as deck_mediaMount } from './deck_media';
 import { mount as deck_preflightMount } from './deck_preflight';
 import { mount as deck_proofMount } from './deck_proof';
 import { mount as deck_quotesMount } from './deck_quotes';
+import { mount as deck_recordingsMount } from './deck_recordings';
 import { mount as deck_remoteMount } from './deck_remote';
 import { mount as deck_reportsMount } from './deck_reports';
 import { mount as deck_scriptMount } from './deck_script';
@@ -70,6 +71,7 @@ export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'deck_preflight', mount: deck_preflightMount },
   { file: 'deck_proof', mount: deck_proofMount },
   { file: 'deck_quotes', mount: deck_quotesMount },
+  { file: 'deck_recordings', mount: deck_recordingsMount },
   { file: 'deck_remote', mount: deck_remoteMount },
   { file: 'deck_reports', mount: deck_reportsMount },
   { file: 'deck_script', mount: deck_scriptMount },

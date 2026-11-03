@@ -8,7 +8,8 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
-import { detailOutcome, feedRow, runSheet, scheduleBody, spendWords, weekLabel, workloadRows } from '../src/pages/work/workModel.js';
+import { detailOutcome, feedRow, runSheet, scheduleBody, spendWords, weekLabel, workloadRows, workloadSessions } from '../src/pages/work/workModel.js';
+import { workAdapter } from '../src/pages/work/workAdapter.js';
 import { RunSheet } from '../src/pages/work/WorkPage.jsx';
 import ActivityFeed from '../src/pages/work/ActivityFeed.jsx';
 import WorkloadView from '../src/pages/work/WorkloadView.jsx';
@@ -207,5 +208,37 @@ test('WK7: Workload draws rows and weeks, amber over capacity; a drop reassigns 
     const block = m.calls.find((c) => c.method === 'PATCH' && /\/tasks\/t9$/.test(c.url));
     assert.deepEqual(block?.body, { scheduled_start: '2026-11-17T09:00:00Z', scheduled_end: '2026-11-17T11:00:00Z' });
     assert.doesNotMatch(m.text(), /@/);
+  } finally { await m.unmount(); }
+});
+
+// #3972: the workload read carries agents' scheduled sessions (`WORKLOAD_DEPS.agentSessions`). A session slot is a bar in
+// its week that is never dragged and never opened as a task; a repeat has one per slot; the week counts it as not estimated.
+test('WK7 sessions: an agent\'s session slots are teal bars, not dragged or opened as a task; agentSessions reads them from the workload', async () => {
+  const slot = (at) => ({ uid: 's-weekly', title: 'Weekly brief', estimate_points: null, when: { kind: 'scheduled', at }, session: { uid: 's-weekly', cadence: 'daily' } });
+  const DATA = {
+    weeks: ['2027-03-08'],
+    people: [],
+    agents: [{ agent: { uid: 'a1', name: 'Carla', role_key: 'cfo' }, capacity: null, weeks: [
+      { week_start: '2027-03-08', items: [{ uid: 't1', title: 'Runway note', estimate_points: 2 }, slot('2027-03-11 09:00:00'), slot('2027-03-12 09:00:00')],
+        estimate_points: 2, unestimated: 2, over_capacity: null }], unscheduled: [] },
+    { agent: { uid: 'a2', name: 'Ivo', role_key: 'cto' }, capacity: null, weeks: [{ week_start: '2027-03-08', items: [], estimate_points: 0, unestimated: 0, over_capacity: null }], unscheduled: [] }],
+  };
+  assert.deepEqual(workloadSessions(DATA), [{ agent: DATA.agents[0].agent, items: [slot('2027-03-11 09:00:00'), slot('2027-03-12 09:00:00')] }], 'tasks and agents with no session left out');
+  const opened = [];
+  const m = await mount(h(WorkloadView, { projectId: 7, onOpenItem(uid) { opened.push(uid); }, onNotice() {} }), [
+    [/GET .*\/api\/teams\/project\/7\/work\/workload/, () => json(DATA)],
+  ]);
+  try {
+    // Mutation checked: the session branch dropped → the slots are draggable task buttons (three bars) and this fails.
+    assert.equal(m.all('work-workload-bar').length, 1, 'only the task is a task bar');
+    const sessions = m.all('work-workload-session');
+    assert.deepEqual(sessions.map((n) => m.text(n)), ['Weekly brief · agent session', 'Weekly brief · agent session'], 'one per slot');
+    assert.equal(m.props(sessions[0]).draggable, undefined);
+    assert.equal(m.props(sessions[0]).onClick, undefined, 'never opened as a task');
+    assert.match(m.text(m.all('work-workload-cell')[0]), /2 pts · 2 not estimated/);
+    const r = await workAdapter.agentSessions(7, { weeks: 1 });
+    // Mutation checked: agentSessions answering the off block → available is false and this fails.
+    assert.deepEqual([r.available, r.data.map((x) => [x.agent.uid, x.items.length])], [true, [['a1', 2]]]);
+    assert.ok(m.calls.some((c) => /\/work\/workload\?weeks=1$/.test(c.url)), 'through the workload read');
   } finally { await m.unmount(); }
 });

@@ -52,6 +52,10 @@ when adding a kind.
   `reconnect` and a 429 `rate_limited`, for that source alone. `dedupeExternal`
   drops Axal's own copies (by `calendar_sync_records` and by iCalUID) and
   flags near matches.
+- `workItems.ts`: D1614 W4 (#3972), the "Work items" source (`work_item`):
+  the open tasks of every project the member reads, in their time block or
+  all day on their due date. Agents' scheduled sessions are not in it: they
+  are `agent_session` below, so a slot never shows twice.
 - `agent_session` (#3957, D1613 §6) has no file here: its reader is
   `../agents/sessions.ts` (`sessionEvents`), registered in `READERS`
   and in `registry.ts` as the "AI agents" family. It is page only, and in

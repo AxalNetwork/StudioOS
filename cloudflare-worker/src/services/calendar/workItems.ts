@@ -12,8 +12,12 @@
  * as the project's own Work board reads it (`canAccessProject`). A deleted
  * project is never shown. Done and cancelled tasks are hidden.
  *
- * Agents' scheduled sessions join from #3957 (`WORKLOAD_DEPS.agentSessions`
- * in `services/agents/workWorkload.ts`).
+ * Agents' scheduled sessions are not Work items. #3957 (PR #4238) put them on
+ * the calendar as their own kind, `agent_session` in the "AI agents" family
+ * (`services/agents/sessions.ts` `sessionEvents`), with their state and the
+ * proposals waiting; listing them here too would show each slot twice. They
+ * join the project's workload (`projectAgentSessions` in
+ * `services/agents/workWorkload.ts`), not this source.
  */
 import type { Env } from '../../types';
 import type { CalendarEvent } from '../calendar';

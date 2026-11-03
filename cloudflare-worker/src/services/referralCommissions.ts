@@ -65,18 +65,27 @@ export async function clawbackReferralCommissionForRefund(
     chargeRefundedToDateCents?: number | null;
     adminId?: number;
     refundId: string;
+    /**
+     * D4292: which commission the refund reverses. Defaults to the purchase
+     * commission keyed by the PaymentIntent; a subscription invoice's
+     * commission is keyed by its invoice id (`subscription_invoice`).
+     */
+    sourceType?: 'purchase' | 'subscription_invoice';
+    sourceId?: string;
   },
 ): Promise<ClawbackResult> {
   try {
-    if (!args.paymentIntentId) return { outcome: 'no_commission' };
+    const sourceType = args.sourceType ?? 'purchase';
+    const sourceId = sourceType === 'purchase' ? args.paymentIntentId : args.sourceId;
+    if (!sourceId) return { outcome: 'no_commission' };
     await ensureClawbackColumns(env);
 
     const row = await env.DB.prepare(
       `SELECT id, amount_cents, COALESCE(reversed_amount_cents, 0) AS reversed_amount_cents
          FROM commissions
-        WHERE source_id = ? AND source_type = 'purchase'
+        WHERE source_id = ? AND source_type = ?
         LIMIT 1`,
-    ).bind(args.paymentIntentId).first<{
+    ).bind(sourceId, sourceType).first<{
       id: number; amount_cents: number; reversed_amount_cents: number;
     }>().catch(() => null);
 

@@ -1,6 +1,6 @@
 ## Work W6 — the run sheet, the activity feed and Workload (D1614 §12, #3974)
 
-WK5 to WK7 on the routes W3 and W4 added. A Calendar agent session (CAL10) opens the run sheet from its last runs (D1614 §12.1). Agents' sessions join Workload once W4 fills `WORKLOAD_DEPS.agentSessions` (#3972).
+WK5 to WK7 on the routes W3 and W4 added. A Calendar agent session (CAL10) opens the run sheet from its last runs (D1614 §12.1). Agents' scheduled sessions are teal bars in Workload, from the same read (#3972, D1614 §10.1).
 
 | Address | Board | Backend |
 | --- | --- | --- |

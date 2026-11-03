@@ -42,6 +42,8 @@ import LabPageHeader from '../components/spinout/LabPageHeader';
 import LabPageShell from '../components/spinout/LabPageShell';
 import IncomingLeadsStrip from '../components/IncomingLeadsStrip';
 import { api, spinoutLab, assessment } from '../lib/api';
+import RankByFit from '../ui/RankByFit';
+import { applyRank } from '../lib/rankByFit';
 import { archetypeMeta, SKILL_AXES } from '../lib/assessmentMeta';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import { buildDimensions } from '../lib/scoringViewModel';
@@ -237,6 +239,9 @@ export default function SpinoutLabAdvisorsPage() {
   const [refineFocus, setRefineFocus] = useState('');
   const [refining, setRefining] = useState(false);
   const [refineError, setRefineError] = useState(null);
+  // #3938 (NE1): Rank by fit orders the matched advisors by meaning against what the founder needs, as a view.
+  const [advisorRank, setAdvisorRank] = useState(null);
+  useEffect(() => { setAdvisorRank(null); }, [matches]);
   const [bookings, setBookings] = useState(null); // {items} | {failed} | null
   const [values, setValues] = useState(null); // dto | {unavailable} | {failed}
   const [results, setResults] = useState(null); // [] | {unavailable} | {failed}
@@ -346,7 +351,8 @@ export default function SpinoutLabAdvisorsPage() {
     for (const m of items) for (const s of m.specialties) counts.set(s, (counts.get(s) || 0) + 1);
     return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k]) => k);
   }, [items]);
-  const visible = filter === 'all' ? items : items.filter((m) => m.specialties.includes(filter));
+  const advisorsShown = applyRank(items, (m) => m.uid, advisorRank);
+  const visible = filter === 'all' ? advisorsShown.list : advisorsShown.list.filter((m) => m.specialties.includes(filter));
 
   const gaps = useMemo(() => buildGaps(snapshot), [snapshot]);
   const coverage = useMemo(() => (snapshot ? buildDimensions(snapshot).sort((a, b) => a.label.localeCompare(b.label)) : []), [snapshot]);
@@ -650,6 +656,10 @@ export default function SpinoutLabAdvisorsPage() {
             </div>
           )}
 
+          {!matches?.failed && items.length > 1 ? (
+            <RankByFit run={(query) => api.advisorsMatchRank(query, { gap: refineGap, focus: refineFocus })} onRanked={setAdvisorRank}
+              ranked={advisorRank ? advisorsShown.ranked : null} total={items.length} label="What do you need help with? (optional)" testid="advisors-match-rank" />
+          ) : null}
           {matches?.failed ? (
             <div className={`${CARD} text-center py-10`} data-testid="matches-error">
               <AlertTriangle className="w-7 h-7 text-amber-400 mx-auto mb-2" />
@@ -681,6 +691,7 @@ export default function SpinoutLabAdvisorsPage() {
                       <div className="flex items-baseline gap-2 flex-wrap">
                         <span className="text-[13.5px] font-bold text-gray-900 dark:text-gray-50">{m.name}</span>
                         {m.headline && <span className="text-[11.5px] text-gray-400 dark:text-gray-500">· {m.headline}</span>}
+                        {advisorsShown.lineFor(m) ? <span className="basis-full text-[11.5px] text-violet-800 dark:text-violet-300" data-testid="advisors-match-rank-line">{advisorsShown.lineFor(m)}</span> : null}
                         {m.rating != null && (
                           <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400">
                             <Star size={11} className="fill-current" /> {m.rating.toFixed(1)}

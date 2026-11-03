@@ -123,9 +123,9 @@ export function readTermsInput(b: any, base?: TermsInput): TermsInput | Refusal 
   const triggers: Trigger[] = [];
   for (const t of rawTriggers) {
     const key = t?.rule_key;
-    // D4289 P1 (#4290): an influencer's drafted terms name the subscription-invoice trigger, which P3 (#4292) fires.
+    // D4292 (#4292) pays the rules in FIRING_RULES. D4289 P1 (#4290) also drafts INFLUENCER_RULE; the invoice share is read from either key.
     if (typeof key !== 'string' || !(FIRING_RULES.has(key) || key === INFLUENCER_RULE)) {
-      return { status: 400, code: 'trigger_unknown', message: `Terms can pay only on a referred member’s identity check (referral_kyc_approved) or, for an influencer, their paid subscription invoices (${INFLUENCER_RULE}).` };
+      return { status: 400, code: 'trigger_unknown', message: `Terms can pay only on a trigger an event fires today: a referred member’s identity check (referral_kyc_approved), a paid subscription invoice (subscription_invoice, or the influencer draft ${INFLUENCER_RULE}), or an influencer milestone bonus (influencer_bonus_10, _25, _50 or _100).` };
     }
     if (triggers.some((x) => x.rule_key === key)) return { status: 400, code: 'trigger_repeated', message: 'Name each trigger once.' };
     const amount = t.amount_cents ?? null;

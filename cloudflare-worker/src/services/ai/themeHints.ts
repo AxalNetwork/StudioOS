@@ -26,7 +26,8 @@ import { jobStep } from './modelUseCases';
 import { cosine } from './matchRows';
 import { runRefusalView } from '../../util/railContext';
 
-export type ThemeJob = 'GR1' | 'VA11';
+/** VA12 (part 7) shares the embed step; it is not a founder_validate fill, so it is not in THEME_JOBS. */
+export type ThemeJob = 'GR1' | 'VA11' | 'VA12';
 /** The fill tasks whose job has a retrieve step before its writer. */
 export const THEME_JOBS: Readonly<Record<string, ThemeJob>> = Object.freeze({
   grow_theme_feedback: 'GR1',
