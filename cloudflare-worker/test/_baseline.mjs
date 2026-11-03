@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 /**
  * `schema_baseline.sql`, read table by table — with no regex built from a variable.
  *
@@ -233,5 +235,20 @@ export function addColumnsFrom(db, migrationSql, table) {
     if (!stmt.startsWith(prefix)) continue;
     const column = stmt.slice(prefix.length).trim().split(/\s/)[0];
     if (!have.has(column)) db.exec(stmt);
+  }
+}
+
+/**
+ * D1614 (#3976): a company seat's removal also flags the member's open
+ * compliance tasks, in the same batch, so a fixture that removes a seat needs
+ * the two tables those statements touch. Read from migration 202611021812 itself, never
+ * hand-copied, for the reason at the top of this file.
+ */
+export function addComplianceStore(db, { replace = false } = {}) {
+  const m = readFileSync(new URL('../sql/migrations/202611021812_company_compliance_tasks.sql', import.meta.url), 'utf8');
+  for (const t of ['compliance_events', 'compliance_task_events']) {
+    // A fixture built on the baseline already has the pre-rebuild compliance_events; the migration rebuilt it with every column.
+    if (replace) db.exec(`DROP TABLE IF EXISTS ${t}`);
+    db.exec(stripForeignKeys(tableFromBaseline(m, t)));
   }
 }

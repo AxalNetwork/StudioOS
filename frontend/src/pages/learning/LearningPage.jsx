@@ -11,6 +11,7 @@ import { ExamPage, ExercisePage } from './LearningAssessments';
 import { ProgramPage, ProgramsPage } from './LearningPrograms';
 import { StudioProgramPage, StudioProgramsPage } from './ProgramStudio';
 import { WebinarPage } from './LearningWebinars';
+import MemberProgramPage from './MemberProgram';
 
 /**
  * Every Learning route renders this page (D562), one `view` per route in
@@ -54,6 +55,7 @@ export const LEARNING_VIEWS = {
   exercise: { tier: 'member', title: 'Exercise', back: () => LEARNING },
   exam: { tier: 'member', title: 'Exam', back: () => LEARNING },
   me: { tier: 'member', title: 'My learning', sub: 'Everything you have started, finished, submitted or sat.', back: () => LEARNING },
+  myProgram: { tier: 'member', title: 'Program', back: () => LEARNING },
   programs: { tier: 'admin', title: 'Programs', sub: 'Programs a Super Admin has assigned to you.', back: () => LEARNING },
   program: {
     tier: 'admin', title: 'Program',
@@ -94,6 +96,7 @@ const WIRED = {
   exercise: ({ params }) => <ExercisePage key={params.slug} uid={params.slug} />,
   exam: ({ params }) => <ExamPage key={params.slug} uid={params.slug} />,
   me: ({ config }) => <MePage sub={config.sub} />,
+  myProgram: ({ params }) => <MemberProgramPage key={params.program} uid={params.program} />,
   programs: ({ config }) => <ProgramsPage sub={config.sub} />,
   program: ({ params, config }) => <ProgramPage key={params.program} uid={params.program} sub={config.sub} />,
   studio: ({ config }) => <LearningStudio sub={config.sub} />,

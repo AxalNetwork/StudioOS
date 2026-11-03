@@ -33,7 +33,7 @@ import {
   COMING_SOON_LINE, LEARNING_COMING_SOON, learningComingSoon,
 } from '../src/pages/learning/learningAccess.js';
 import {
-  LEARNING_TABS, TAB_NOT_LIVE, UNLISTED, articleRow, eventRow, publicationRow, resolveTab, tabMode,
+  LEARNING_TABS, articleRow, eventRow, publicationRow, resolveTab, tabMode,
 } from '../src/pages/learning/learningModel.js';
 import { webinarRow } from '../src/pages/learning/webinarModel.js';
 import { readArticles, readEvents, readPublications } from '../src/pages/learning/learningReads.js';
@@ -164,6 +164,8 @@ test('every Learning route resolves, behind the narrowest guard it needs', () =>
     ['/learning/exercises/e1', '/learning/exercises/:slug', 'exercise', MEMBERS],
     ['/learning/exams/x1', '/learning/exams/:slug', 'exam', MEMBERS],
     ['/learning/me', '/learning/me', 'me', MEMBERS],
+    // D3726 LR13: a member's own program page, beside the assigned admin's read-only one.
+    ['/learning/my-programs/p1', '/learning/my-programs/:program', 'myProgram', MEMBERS],
     ['/learning/programs', '/learning/programs', 'programs', "guard(['admin'], <LearningPage"],
     ['/learning/programs/p1', '/learning/programs/:program', 'program', "guard(['admin'], <LearningPage"],
     ['/learning/studio', '/learning/studio', 'studio', "guard(['admin'], hqOnly(<LearningPage"],
@@ -373,22 +375,16 @@ const UPCOMING_ROW = webinarRow({
 }, (uid) => `/api/learning/webinars/${encodeURIComponent(uid)}/ics`);
 const BEFORE_IT = Date.parse('2026-10-19T09:00:00.000Z');
 
-test('an admin: Exercises and Exams, which no route lists, are not recorded with the reason; Webinars and both sections read', () => {
-  // Stage 3: Webinars read D560's list. D559 serves one exercise or exam at a time and lists
-  // neither, so those two tabs say so, and draw no row.
-  assert.deepEqual(LEARNING_TABS.filter((t) => !t.live).map((t) => t.key), ['exercises', 'exams']);
-  assert.equal(UNLISTED.exercises, 'Exercises open from the courses and programs that hold them. No route lists them on their own yet.');
-  assert.equal(UNLISTED.exams, 'Exams open from the courses and programs that hold them. No route lists them on their own yet.');
-  for (const [tab, line] of [['exercises', UNLISTED.exercises], ['exams', UNLISTED.exams]]) {
-    assert.equal(tabMode(tab, false), 'not_live');
-    assert.equal(TAB_NOT_LIVE[tab], line);
+test('an admin: every tab reads, Exercises and Exams included (#4180); Webinars and both sections read', () => {
+  // Stage 3: Webinars read D560's list; #4180 lists exercises and exams on their own, so no tab is "not live".
+  assert.deepEqual(LEARNING_TABS.filter((t) => !t.live).map((t) => t.key), []);
+  for (const tab of ['exercises', 'exams']) {
+    assert.equal(tabMode(tab, false), 'live');
     const markup = html(homeView({ gated: false, tab }));
     const panel = markup.slice(markup.indexOf(`data-testid="panel-${tab}"`));
-    assert.match(panel, /data-mode="not_live"/);
-    assert.ok(flat(panel).includes(`Not recorded ${line}`), `the ${tab} tab does not say it is not recorded`);
-    assert.doesNotMatch(panel, /data-testid="row-|catalog-row-|list-/, `the ${tab} tab draws a row`);
+    assert.match(panel, /data-mode="live"/);
+    assert.doesNotMatch(panel, /No route lists/, `the ${tab} tab still says no route lists it`);
   }
-  assert.equal(TAB_NOT_LIVE.webinars, undefined);
   for (const tab of ['all', 'courses', 'videos', 'webinars']) assert.equal(tabMode(tab, false), 'live');
   // The Webinars tab draws its two lists, loading until each read answers.
   const tabLoading = html(homeView({ gated: false, tab: 'webinars' }));
@@ -531,8 +527,8 @@ test('Learning home has no AI rail; subpage rails keep their accent and voice', 
   const mounts = [...codeOnly(rails).matchAll(/<WorkerRail[\s\S]*?\/>/g)].map((m) => m[0]);
   // The three tiers of a page that waits on its store, the learner pages that read, the studio,
   // and, in stage 3, the assigned admin's program pages and the studio's program pages (D558),
-  // the exercise and exam pages (D559) and the webinar page (D560).
-  assert.equal(mounts.length, 9);
+  // the exercise and exam pages (D559), the webinar page (D560), and a member's own program page (D3726 LR13).
+  assert.equal(mounts.length, 10);
   for (const tier of ['founder', 'admin', 'super_admin']) assert.ok(mounts.some((m) => m.includes(`role="${tier}"`)), `no ${tier} rail`);
   for (const mount of mounts) {
     assert.match(mount, /workspace="Learning[^"]*"/);
