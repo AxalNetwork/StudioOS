@@ -3,7 +3,7 @@
  * 202611022230): the platform defaults a deck critic cites after a venture's
  * own (D1589's `stage_norms`).
  *
- * WHAT A CRITIC MAY CITE, IN ORDER (`citableStageNorms`):
+ * WHAT A CRITIC MAY CITE, IN ORDER (`citableStageNorms`, in `stageNorms.ts`):
  *   1. the venture's own rows for the stage and investor type (`citableNorms`);
  *   2. HQ's ACTIVE rows for the stage. A retired row is never cited, from the
  *      moment it is retired: the read is per run, nothing is cached.
@@ -13,9 +13,18 @@
  *
  * No source, no norm: `checkHqNorm` refuses one, and so does the table.
  * People are `{ uid, name }`, never an email.
+ *
+ * IMPORTS NOTHING FROM `stageNorms.ts`. That module reaches the deck sources
+ * and, through them, member bank data (`mercurySpend`), which no admin route
+ * may reach (D752, `mercury_member_privacy_d752.test.mjs`). So the stages are
+ * restated here (a test holds them equal to D1589's) and the combined read the
+ * critic uses lives in `stageNorms.ts`, which imports this file.
  */
 import type { Env } from '../../types';
-import { STAGES, NO_BENCHMARK, citableNorms, type Block, type Stage } from './stageNorms';
+
+/** D1589's stage ids (`stageNorms.STAGES`), restated; `hq_stage_norms_4192` holds them equal. */
+export const HQ_STAGES = ['pre_seed', 'seed', 'series_a', 'series_b_plus'] as const;
+type Stage = typeof HQ_STAGES[number];
 
 export const HQ_NORM_STATUSES = ['active', 'retired'] as const;
 export type HqNormStatus = typeof HQ_NORM_STATUSES[number];
@@ -68,7 +77,7 @@ const isDay = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date
 export function checkHqNorm(raw: any, today: string): { ok: true; norm: HqNormDraft } | { ok: false; code: HqNormRefusal; message: string } {
   const no = (code: HqNormRefusal) => ({ ok: false as const, code, message: HQ_NORM_MESSAGES[code] });
   const b = raw && typeof raw === 'object' ? raw : {};
-  if (!(STAGES as readonly string[]).includes(b.stage)) return no('stage_invalid');
+  if (!(HQ_STAGES as readonly string[]).includes(b.stage)) return no('stage_invalid');
   const metric = text(b.metric, 200);
   if (!metric) return no('metric_missing');
   const r = b.range && typeof b.range === 'object' ? b.range : {};
@@ -114,39 +123,26 @@ export function hqNormDto(r: Joined): HqNorm {
   };
 }
 
-const SELECT = `SELECT n.*, uu.uid AS upd_uid, uu.name AS upd_name, ru.uid AS ret_uid, ru.name AS ret_name
-  FROM hq_stage_norms n LEFT JOIN users uu ON uu.id = COALESCE(n.updated_by, n.created_by) LEFT JOIN users ru ON ru.id = n.retired_by`;
+// Literal SQL only: the schema guard reads every column, and an interpolated query is one it cannot read.
 
-/** HQ's norms, active first then retired, each by metric; for one stage when given. */
+/** HQ's norms, active first then retired, each by metric; for one stage and one status when given. */
 export async function listHqNorms(env: Env, stage?: Stage, status?: HqNormStatus): Promise<HqNorm[]> {
-  const where: string[] = [], binds: unknown[] = [];
-  if (stage) { where.push('n.stage = ?'); binds.push(stage); }
-  if (status) { where.push('n.status = ?'); binds.push(status); }
-  const rows = await env.DB.prepare(`${SELECT}${where.length ? ` WHERE ${where.join(' AND ')}` : ''}
-    ORDER BY CASE n.status WHEN 'active' THEN 0 ELSE 1 END, n.metric COLLATE NOCASE, n.id LIMIT 500`).bind(...binds).all<Joined>();
+  const rows = await env.DB.prepare(
+    `SELECT n.*, uu.uid AS upd_uid, uu.name AS upd_name, ru.uid AS ret_uid, ru.name AS ret_name
+       FROM hq_stage_norms n LEFT JOIN users uu ON uu.id = COALESCE(n.updated_by, n.created_by) LEFT JOIN users ru ON ru.id = n.retired_by
+      WHERE (? IS NULL OR n.stage = ?) AND (? IS NULL OR n.status = ?)
+      ORDER BY CASE n.status WHEN 'active' THEN 0 ELSE 1 END, n.metric COLLATE NOCASE, n.id LIMIT 500`,
+  ).bind(stage ?? null, stage ?? null, status ?? null, status ?? null).all<Joined>();
   return (rows.results || []).map(hqNormDto);
 }
 
 export async function hqNormByUid(env: Env, uid: string): Promise<{ row: HqNormRow; dto: HqNorm } | null> {
-  const r = await env.DB.prepare(`${SELECT} WHERE n.uid = ?`).bind(uid).first<Joined>();
+  const r = await env.DB.prepare(
+    `SELECT n.*, uu.uid AS upd_uid, uu.name AS upd_name, ru.uid AS ret_uid, ru.name AS ret_name
+       FROM hq_stage_norms n LEFT JOIN users uu ON uu.id = COALESCE(n.updated_by, n.created_by) LEFT JOIN users ru ON ru.id = n.retired_by
+      WHERE n.uid = ?`,
+  ).bind(uid).first<Joined>();
   return r ? { row: r, dto: hqNormDto(r) } : null;
-}
-
-export type Citation = { origin: 'project' | 'hq'; uid: string; citation: string };
-
-/**
- * What a deck critic may cite for this venture, stage and investor type: the
- * venture's own norms first, then HQ's active norms for the stage. No row,
- * no claim: "No stage benchmark recorded".
- */
-export async function citableStageNorms(env: Env, projectId: number, stage: Stage, investorType?: string | null): Promise<Block<Citation[]>> {
-  const own = await citableNorms(env, projectId, stage, investorType);
-  const hq = await listHqNorms(env, stage, 'active');
-  const out: Citation[] = [
-    ...(own.available ? own.value.map((n) => ({ origin: 'project' as const, uid: n.uid, citation: n.citation })) : []),
-    ...hq.map((n) => ({ origin: 'hq' as const, uid: n.uid, citation: n.citation })),
-  ];
-  return out.length ? { available: true, value: out } : { available: false, reason: NO_BENCHMARK };
 }
 
 export type ProjectNorm = {

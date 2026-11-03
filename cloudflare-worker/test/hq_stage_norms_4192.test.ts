@@ -27,9 +27,9 @@ import { SignJWT } from 'jose';
 import adminDeckStageNorms, { mount } from '../src/routes/admin_deck_stage_norms.ts';
 import deckStageNorms from '../src/routes/deck_stage_norms.ts';
 import decks from '../src/routes/decks.ts';
-import { citableStageNorms, checkHqNorm, rangeText } from '../src/services/decks/hqStageNorms.ts';
+import { HQ_STAGES, checkHqNorm, rangeText } from '../src/services/decks/hqStageNorms.ts';
 import { criticMessage, CRITIC_SYSTEM } from '../src/services/decks/critic.ts';
-import { NO_BENCHMARK } from '../src/services/decks/stageNorms.ts';
+import { NO_BENCHMARK, STAGES, citableStageNorms } from '../src/services/decks/stageNorms.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { loadSchema } from './_schema_once.mjs';
 
@@ -113,6 +113,7 @@ test('K5: every write takes a reason and writes one audit row with before and af
   const edited = await call(db, SUPER, 'PUT', `${BASE}/${uid}`, { range: { low: 105, high: 125, unit: '%' }, reason: 'Synthetic: the newer report reads higher.' });
   assert.equal(edited.status, 200, edited.text);
   assert.deepEqual(edited.body.norm.updated_by, { uid: 'u-super', name: 'Synthetic Super Admin' }, 'the last to change it is named');
+  assert.deepEqual((await call(db, ADMIN, 'GET', `${BASE}?stage=seed`)).body.norms[0].updated_by, { uid: 'u-super', name: 'Synthetic Super Admin' }, 'and so on the list');
   await call(db, ADMIN, 'POST', `${BASE}/${uid}/retire`, { reason: 'Synthetic: not a stage signal for seed.' });
   const fields = (low: number, high: number, status: string) => ({ stage: 'seed', metric: 'Net revenue retention', range: { low, high, unit: '%' }, source: NORM.source, last_reviewed: made.last_reviewed, status });
   assert.deepEqual(audits(db), [
@@ -199,6 +200,7 @@ test('K5: an HQ admin and the Super Admin; never a branch admin or a founder', a
   assert.equal((await call(db, SUPER, 'POST', BASE, { ...NORM, metric: 'Runway' })).status, 201);
   assert.equal((await call(db, ADMIN, 'GET', `${BASE}?stage=nope`)).body.error, 'stage_invalid');
   assert.deepEqual([mount.path], [BASE]);
+  assert.deepEqual(HQ_STAGES, STAGES, 'HQ\'s restated stages are D1589\'s');
 });
 
 test('K5: no email in any answer, and people by uid and name', async () => {

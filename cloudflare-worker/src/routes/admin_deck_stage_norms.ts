@@ -32,9 +32,9 @@ import { requireHqAdmin } from '../auth';
 import { refuse } from '../util/refusal';
 import type { RouteMount } from '../util/routeRegistry';
 import { logAdminAction } from '../services/adminAudit';
-import { STAGES, type Stage } from '../services/decks/stageNorms';
+// Never `stageNorms.ts`: it reaches member bank data, which no admin route may (D752).
 import {
-  HQ_NORM_STATUSES, checkHqNorm, hqNormByUid, listHqNorms, projectNormsForHq, type HqNorm, type HqNormStatus,
+  HQ_NORM_STATUSES, HQ_STAGES, checkHqNorm, hqNormByUid, listHqNorms, projectNormsForHq, type HqNorm, type HqNormStatus,
 } from '../services/decks/hqStageNorms';
 
 type C = Context<{ Bindings: Env }>;
@@ -63,10 +63,10 @@ async function audit(env: Env, admin: User, action: string, uid: string, reason:
 adminDeckStageNorms.get('/', async (c) => {
   await requireHqAdmin(c);
   const stage = c.req.query('stage') || '';
-  if (stage && !(STAGES as readonly string[]).includes(stage)) return say(c, 400, 'stage_invalid', 'Choose a stage: Pre-seed, Seed, Series A or Series B+.');
+  if (stage && !(HQ_STAGES as readonly string[]).includes(stage)) return say(c, 400, 'stage_invalid', 'Choose a stage: Pre-seed, Seed, Series A or Series B+.');
   const status = c.req.query('status') || '';
   if (status && !(HQ_NORM_STATUSES as readonly string[]).includes(status)) return say(c, 400, 'status_invalid', 'Choose active or retired.');
-  const norms = await listHqNorms(c.env, (stage || undefined) as Stage | undefined, (status || undefined) as HqNormStatus | undefined);
+  const norms = await listHqNorms(c.env, (stage || undefined) as typeof HQ_STAGES[number] | undefined, (status || undefined) as HqNormStatus | undefined);
   return c.json({ stage: stage || null, norms });
 });
 

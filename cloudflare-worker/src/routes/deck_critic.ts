@@ -35,7 +35,7 @@ import { ASSIST_PAGE } from '../services/decks/assist';
 import { parseJsonLoose } from '../services/decks/autofill';
 import { stagePlan } from '../services/decks/stagePlan';
 import { AUDIENCES } from '../services/decks/slideModel';
-import { citableStageNorms } from '../services/decks/hqStageNorms';
+import { citableStageNorms } from '../services/decks/stageNorms';
 import { cardOfSlide, stageFrom } from '../services/narrative/arcs';
 import { deckVersion } from '../services/raiseClaims';
 import { noteApplies, storedDeckClaims } from '../services/deckCheck';
