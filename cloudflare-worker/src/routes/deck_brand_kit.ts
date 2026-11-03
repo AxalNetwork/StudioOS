@@ -12,6 +12,16 @@
  *        the image style. Never a model, never a charge. A palette colour that
  *        would fail contrast is left out and named in `adjustments`.
  *
+ *   GET  /api/decks/brand-kit/locks?project_id=
+ *   PUT  /api/decks/brand-kit/locks?project_id=   { part: 'fonts'|'palette'|'logo', locked }
+ *        D1572 (#3819, pd31): the kit's locks, each with who locked it, and
+ *        whether this member may lock. "Only the venture’s admins can lock":
+ *        the venture's owner; anyone else is refused 403 `admins_only`.
+ *        While a part is locked, a kit save that changes it is refused 409
+ *        `brand_locked` ("… locked in the brand kit by [name]. Nothing
+ *        changed."), and so is a card save bringing in an off-palette colour
+ *        (`saveGates.ts`).
+ *
  * `GET /api/decks/brand-kit` (D898, `decks.ts`) reads the kit, with these
  * fields under `kit.deck`. Writers of the venture only, as the deck save.
  */
@@ -23,6 +33,7 @@ import decks, { auditDeckWrite, ensureSchema, getDeckRow, insertVersion, project
 import type { RouteMount } from '../util/routeRegistry';
 import { fetchLandingPageForProject } from '../services/decks/branding';
 import { applyBrand, deckBrandKitFor, keptImagesOf, sanitizeBrandKit, saveDeckBrandKit } from '../services/decks/brandKit';
+import { ADMINS_ONLY, brandLocksFor, canLockBrand, isLockPart, lockedKitChange, lockedLine, setBrandLock } from '../services/decks/brandLocks';
 
 const deckBrandKit = new Hono<{ Bindings: Env }>();
 
@@ -40,9 +51,42 @@ deckBrandKit.put('/brand-kit', async (c) => {
   const kept = await keptImagesOf(c.env, pid, named);
   const missing = named.find((u) => !kept.has(u));
   if (missing) return refuse(c, 422, { code: 'image_not_kept', message: 'A reference image or the logo is not a kept image of this venture. Keep it in the image library first.', extra: { image_uid: missing } });
+  // D1572 (#3819): a locked part is never changed, whoever saves; nothing is written.
+  let locks;
+  try { locks = await brandLocksFor(c.env, pid); }
+  catch { return refuse(c, 503, { code: 'unreadable', message: 'Your brand kit could not be read. Nothing was changed.' }); }
+  const locked = lockedKitChange(await deckBrandKitFor(c.env, pid), kit, locks);
+  if (locked) return refuse(c, 409, { code: 'brand_locked', message: lockedLine(locked, locks[locked]?.by ?? null), extra: { part: locked } });
   await saveDeckBrandKit(c.env, pid, kit, Number(user.id) || null);
   await auditDeckWrite(c, user, pid, 'deck_brand_kit_saved', 'Deck brand kit saved');
   return c.json({ project_id: pid, deck: await deckBrandKitFor(c.env, pid) });
+});
+
+/** D1572: the venture's locks and whether this member may set them. */
+async function locksBody(c: any, user: any, pid: number) {
+  return { project_id: pid, locks: await brandLocksFor(c.env, pid), can_lock: await canLockBrand(c.env, user, pid), admins_only: ADMINS_ONLY };
+}
+
+deckBrandKit.get('/brand-kit/locks', async (c) => {
+  const user = await requireAuth(c);
+  const pid = Number(c.req.query('project_id'));
+  if (!Number.isSafeInteger(pid) || pid <= 0) return c.json({ error: 'project_id required' }, 400);
+  try { await projectOwned(c, user, pid); } catch { return c.json({ error: 'forbidden' }, 403); }
+  try { return c.json(await locksBody(c, user, pid)); }
+  catch { return refuse(c, 503, { code: 'unreadable', message: 'Your brand kit could not be read.' }); }
+});
+
+deckBrandKit.put('/brand-kit/locks', async (c) => {
+  const user = await requireAuth(c);
+  const pid = Number(c.req.query('project_id'));
+  if (!Number.isSafeInteger(pid) || pid <= 0) return c.json({ error: 'project_id required' }, 400);
+  try { await projectOwned(c, user, pid, { write: true }); } catch { return c.json({ error: 'forbidden' }, 403); }
+  const body = await c.req.json().catch(() => null) as any;
+  if (!isLockPart(body?.part) || typeof body?.locked !== 'boolean') return refuse(c, 400, { code: 'invalid_lock', message: 'Send { part: fonts, palette or logo, locked: true or false }.' });
+  if (!(await canLockBrand(c.env, user, pid))) return refuse(c, 403, { code: 'admins_only', message: ADMINS_ONLY });
+  await setBrandLock(c.env, pid, body.part, body.locked, Number(user.id) || null);
+  await auditDeckWrite(c, user, pid, body.locked ? 'deck_brand_locked' : 'deck_brand_unlocked', body.locked ? 'Brand kit part locked' : 'Brand kit part unlocked');
+  return c.json(await locksBody(c, user, pid));
 });
 
 deckBrandKit.post('/:id{[0-9]+}/apply-brand', async (c) => {

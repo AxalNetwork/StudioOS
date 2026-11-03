@@ -221,3 +221,12 @@ f9bac90fc12defb775b0759aaf8824dcdc470cac:cloudflare-worker/test/calendar_complia
 # The next commit renames it, so no later commit carries it. Pin only the
 # published finding, as D334's entry does.
 61035d4540e13c69f5357e00bf8375a69fe2f1e7:cloudflare-worker/test/fill_founder_part2a_3740.test.ts:generic-api-key:23
+
+# #4190 (D4190) — two findings, one fixture. gitleaks' generic-api-key rule
+# read the made-up logo key `logo_` + 24 hex characters in
+# cloudflare-worker/test/admin_deck_beta_4190.test.ts as a key. It names a row
+# in the test's in-memory deck_logos table and was never a credential. The
+# next commit replaces it with `logo_` and 23 zeros and a 1 (the schema's shape, no entropy), so no later commit carries
+# it. Pin only the published findings, as D334's entry does.
+d6f46b997d07d2fbd18d64c190b29b2437dc3d71:cloudflare-worker/test/admin_deck_beta_4190.test.ts:generic-api-key:143
+d6f46b997d07d2fbd18d64c190b29b2437dc3d71:cloudflare-worker/test/admin_deck_beta_4190.test.ts:generic-api-key:155

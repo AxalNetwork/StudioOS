@@ -97,7 +97,13 @@ deckDraft.patch('/:id{[0-9]+}/cards/:uid', async (c) => {
   if (problems.length) return refuse(c, 400, { code: 'SLIDE_MODEL', message: problems[0], extra: { problems } });
   const card = sanitizeSlides([{ ...body.card, uid }])[0];
   // D1543 (#3781): the same gates as a save: an unpermitted logo or an unconsented quote is refused, nothing written.
-  const gate = await saveGateRefusal(c.env, Number(got.row.project_id), [card]);
+  // D1572 (#3819): a locked palette checks only colours new to the card (its working copy, else its saved version).
+  let prior: unknown = null;
+  try {
+    const kept = await c.env.DB.prepare('SELECT json FROM pitch_deck_cards WHERE deck_id = ?1 AND card_uid = ?2').bind(deckId, uid).first<{ json: string }>();
+    prior = kept ? JSON.parse(kept.json) : JSON.parse(got.row.slides || '[]');
+  } catch { prior = null; }
+  const gate = await saveGateRefusal(c.env, Number(got.row.project_id), [card], { prior });
   if (gate) return refuse(c, 409, gate);
   const json = JSON.stringify(card);
   const current = async () => (await c.env.DB.prepare(

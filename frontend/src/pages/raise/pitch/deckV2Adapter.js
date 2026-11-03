@@ -41,6 +41,7 @@ import { dataRoomApi } from '../../../lib/api/dataRoom.js';
 import { deckActionsApi } from '../../../lib/api/deckActions.js';
 import { deckAreasApi } from '../../../lib/api/deckAreas.js';
 import { deckBatchesApi } from '../../../lib/api/deckBatches.js';
+import { deckBrandLocksApi } from '../../../lib/api/deckBrandLocks.js';
 import { deckCardStatusApi } from '../../../lib/api/deckCardStatus.js';
 import { deckCheckApi } from '../../../lib/api/deckCheck.js';
 import { deckCoeditApi } from '../../../lib/api/deckCoedit.js';
@@ -54,6 +55,7 @@ import { deckGridApi } from '../../../lib/api/deckGrid.js';
 import { deckImageEditsApi } from '../../../lib/api/deckImageEdits.js';
 import { deckImagesApi } from '../../../lib/api/deckImages.js';
 import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks.js';
+import { deckLayoutsApi } from '../../../lib/api/deckLayouts.js';
 import { deckMediaApi } from '../../../lib/api/deckMedia.js';
 import { deckModelPresetsApi } from '../../../lib/api/deckModelPresets.js';
 import { deckRehearsalsApi } from '../../../lib/api/deckRehearsals.js';
@@ -278,8 +280,10 @@ export const consistency = (deckId) => through(() => deckCheckApi.read(deckId).t
 export const deckActions = (deckId, body) => through(() => deckActionsApi.reorderForStage(deckId, body), SURFACES.deckActions.issue);
 export const replaceImages = (deckId, body) => through(() => deckImagesApi.replaceAllQuote(deckId, body), SURFACES.replaceImages.issue);
 export const outlineReorder = off('outlineReorder');
-export const brandLocks = off('brandLocks');
-export const pptxImport = off('pptxImport');
+// D1572 (#3819): the brand kit's locks (pd31), and a .pptx template read into pd30's mapping report.
+// The lock switches and Save as your layouts write through `deckBrandLocksApi` and `deckLayoutsApi`.
+export const brandLocks = (projectId) => through(() => deckBrandLocksApi.locks(projectId), SURFACES.brandLocks.issue);
+export const pptxImport = (projectId, file) => through(() => deckLayoutsApi.importTemplate(projectId, file), SURFACES.pptxImport.issue);
 // D1565 (#3812): wired. Each body is `through(() => <client>(…), issue)`.
 export const investorLinks = (deckId) => through(() => deckInvestorLinksApi.investorLinks(deckId), SURFACES.investorLinks.issue);
 export const withdrawInvestorLink = (deckId, shareId) => through(() => deckInvestorLinksApi.withdrawInvestorLink(deckId, shareId), SURFACES.withdrawInvestorLink.issue);
