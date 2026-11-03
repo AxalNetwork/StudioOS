@@ -295,9 +295,9 @@ test('D4160: a reason is required, every change is audited with it, and no email
     assert.doesNotMatch((await call(w, SUPER, 'GET', path)).text, /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\.[A-Za-z]{2,}/, `no email in ${path}`);
   }
   const list = (await call(w, SUPER, 'GET', HQ)).body.skills[0];
-  // D4121 (#4121): what the published version adds to every run, its SKILL.md by the AI budget's estimate.
-  const md = (w.db.prepare('SELECT v.skill_md FROM agent_skill_versions v JOIN agent_skills s ON s.id = v.skill_id WHERE s.uid = ? AND v.version = 1').get(uid) as any).skill_md;
-  assert.deepEqual([list.status, list.version, list.agents, list.tokens_per_run, list.area?.slug, list.level], ['published', 1, 0, contextTokensOf(md), 'finance_ops', 'proficient']);
+  // D4121 (#4121): what the published version adds to a run that uses it: its prompt, by the AI budget's estimate.
+  const v1 = w.db.prepare('SELECT v.* FROM agent_skill_versions v JOIN agent_skills s ON s.id = v.skill_id WHERE s.uid = ? AND v.version = 1').get(uid) as any;
+  assert.deepEqual([list.status, list.version, list.agents, list.tokens_per_run, list.area?.slug, list.level], ['published', 1, 0, contextTokensOf(v1), 'finance_ops', 'proficient']);
 });
 
 test('D4160: the diff between versions and the draft; bulk items done or refused one by one', async () => {
