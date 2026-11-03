@@ -4,7 +4,8 @@
  * Routes talk only to `DeckGenRuntime` (`admit`, `startBatch`, `cancel`,
  * `status`, `rebuild`). `D1GenRuntime` is the implementation over D1 that every
  * other one builds on: `DeckGenRoom` (part 2, one Durable Object per deck, so a
- * run survives a closed tab) drives it, and B9's Queue fallback will too. The
+ * run survives a closed tab) drives it, and so does B9's Queue fallback
+ * (`queueRuntime.ts`, D1536). The
  * contract suite (`deck_gen_runtime_contract.test.ts`) runs against every one.
  *
  * ONE QUOTE, ONE HOLD (dk-auto AUTO-6, option (a): a `deck_build` class).
@@ -79,6 +80,8 @@ export type BatchRow = {
   uid: string; deck_id: number; project_id: number; class: RunClass; state: BatchState; quote_uid: string | null;
   quote_microusd: number; reservation_uid: string | null; charged_microusd: number; idem_key: string; created_by: number;
   created_at: string; started_at: string | null; settled_at: string | null;
+  /** D1536 (#3785): which runtime drives the run (migration 202611022120); absent before it ran. */
+  runtime?: 'do' | 'queue';
 };
 export type StepResult = {
   ok: boolean; charged_microusd: number; model_used?: string | null; fallback_used?: boolean;

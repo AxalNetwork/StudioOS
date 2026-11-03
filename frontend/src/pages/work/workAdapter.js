@@ -16,7 +16,9 @@
  *   board, item, move, assign, create  W1  #3969  scope_tasks: columns, estimate, order, labels
  *   burnup                             W2  #3970  the burn-up series
  *   run, retry, feed                   W3  #3971  run detail and the project activity feed
- *   workload                           W4  #3972  people's and agents' items on the Calendar
+ *   workload, schedule                 W4  #3972  people's and agents' items on the Calendar, a time block
+ *   agentSessions                      #3957 (S06)  scheduled agent sessions (CAL10); off until it merges
+ *   D1614 W6 (#3974) turned on run, retry, feed, workload and schedule.
  *   complianceTasks, complianceTask,
  *   markDone, createWork               #3976 (S15)  the company compliance list
  *   complianceCreate, complianceUpdate,
@@ -25,6 +27,7 @@
  *   complianceReopen                   #3976        its task sheet's other changes
  */
 import { workApi } from '../../lib/api/work.js';
+import { agentEngineApi } from '../../lib/api/agentEngine.js';
 import { companyComplianceApi as cc } from '../../lib/api/companyCompliance.js';
 
 export const WORK_OFF = 'Work is not switched on yet. Its board, backlog and burn-up arrive with the Worker part (#3969).';
@@ -51,10 +54,14 @@ export const workAdapter = {
   assign: (uid, assignee) => through(async () => (await workApi.assign(uid, assignee))?.task ?? null, WORK_OFF),
   create: (projectId, body) => through(async () => (await workApi.create(projectId, body))?.task ?? null, WORK_OFF),
   burnup: (projectId, opts) => through(() => workApi.burnup(projectId, opts), WORK_OFF),
-  run: off('Run detail arrives with #3971.'),
-  retry: off('Run detail arrives with #3971.'),
-  feed: off('The project activity feed arrives with #3971.'),
-  workload: off('Workload on the Calendar arrives with #3972.'),
+  // D1614 W6 (#3974): W3's run, retry and feed (#4183) and W4's workload and time block (#4195).
+  run: (uid) => through(() => agentEngineApi.run(uid), WORK_OFF),
+  retry: (uid) => through(async () => (await agentEngineApi.retryRun(uid))?.run ?? null, WORK_OFF),
+  feed: (projectId, opts) => through(() => agentEngineApi.projectActivity(projectId, opts), WORK_OFF),
+  workload: (projectId, opts) => through(() => workApi.workload(projectId, opts), WORK_OFF),
+  schedule: (uid, block) => through(async () => (await workApi.schedule(uid, block))?.task ?? null, WORK_OFF),
+  // #3957 (S06): a Calendar agent session (CAL10) opens the run sheet, and agent sessions join Workload, when it merges.
+  agentSessions: off('Scheduled agent sessions arrive with #3957.'),
   complianceTasks: (uid, filter) => through(() => cc.list(uid, filter), COMPLIANCE_OFF),
   complianceTask: (uid, taskUid) => through(() => cc.task(uid, taskUid), COMPLIANCE_OFF),
   markDone: (uid, taskUid, note) => through(() => cc.markDone(uid, taskUid, note), COMPLIANCE_OFF),
@@ -71,7 +78,7 @@ export const workAdapter = {
 /** Every method, with the issue that turns it on, for the decision file and its test. */
 export const WORK_SEAM = Object.freeze({
   board: '#3969', item: '#3969', move: '#3969', assign: '#3969', create: '#3969',
-  burnup: '#3970', run: '#3971', retry: '#3971', feed: '#3971', workload: '#3972',
+  burnup: '#3970', run: '#3971', retry: '#3971', feed: '#3971', workload: '#3972', schedule: '#3972', agentSessions: '#3957',
   complianceTasks: '#3976', complianceTask: '#3976', markDone: '#3976', createWork: '#3976',
   complianceCreate: '#3976', complianceUpdate: '#3976', complianceAssignable: '#3976', complianceAssign: '#3976',
   complianceComment: '#3976', complianceReady: '#3976', complianceReopen: '#3976',

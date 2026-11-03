@@ -1,0 +1,42 @@
+{
+  "skill": "tech-debt-register",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "build.records": {
+        "debt": [
+          {
+            "item": "Booking service has no retries",
+            "area": "api",
+            "impact": "Double bookings under load"
+          }
+        ]
+      },
+      "github.repos": {
+        "issues": [
+          {
+            "title": "Remove legacy auth middleware",
+            "labels": [
+              "debt"
+            ],
+            "age_days": 120
+          }
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Booking service has no retries",
+      "120"
+    ],
+    "must_say_not_recorded": [
+      "Remove legacy auth middleware"
+    ],
+    "must_not_include": [
+      "critical outage"
+    ]
+  }
+}

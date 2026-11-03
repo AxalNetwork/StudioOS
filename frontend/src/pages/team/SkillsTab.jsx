@@ -6,26 +6,32 @@ import { AgentTile } from './AgentMark.jsx';
 import * as agents from './agentsAdapter.js';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, EYEBROW, FIELD, HonestBlock, MONO, MUTED } from './teamUi.jsx';
 import { day } from '../account/companies/companiesModel.js';
-import { AreaDot, SkillCard, TaxChips, ToolChips, UsedBy } from './SkillParts.jsx';
+import SkillEnergy from '../../ui/SkillEnergy.jsx';
+import { AreaDot, CostLine, SkillCard, SkillImage, TaxChips, ToolChips, UsedBy } from './SkillParts.jsx';
 import { AssignSkillSheet, NewSkillSheet } from './SkillSheets.jsx';
-import { workLabel } from './personaModel.js';
 import {
-  CATEGORIES, SORTS, assignGroups, authorLine, companySkillsTitle, directory, groups, outputWords, scopeLine, skillFileName,
+  AREAS, SORTS, areaCounts, areaFromParam, assignGroups, authorLine, companySkillsTitle, directory, groups, outputWords, scopeLine, skillAreas, skillFileName,
 } from './skillsModel.js';
 
 /**
- * D1612 (#3945, #3952) — Team › Skills, boards SK0 (roles), SK1 (a role's
- * directory), SK2 (the skill page) and SK9 (its states), with SK3 (Assign)
- * and SK7 (New skill) opening from here.
+ * D1612 (#3945, #3952), rebuilt to the v2 boards by #4224 (D4116) — Team ›
+ * Skills: SK0 the 8 areas of the /studio radar, SK1 an area's directory (or
+ * All), SK2 the skill page, and SK6's states (an empty area, loading, could
+ * not be read, read-only, a retired Axal skill still pinned, phone and dark),
+ * with SK3 (Assign to agents) and SK4 (New skill) opening from here.
  *
- * The roles are #3840's catalogue (`agents.roles`, wired, handed in as
- * `rolesBlock`). Everything else is A1's library (`agents.skillLibrary`,
- * `agents.skill`) and A2's agents (`agents.skillAgents`), unavailable until
- * #3951 and #3956 land: the tab then draws the role tiles with "Not recorded"
- * counts and says why, and never invents a skill or a count.
+ * v2 has no roles. A skill sits in the areas of its taxonomy tags (the area
+ * key and hue are `lib/skillAreas.js`'s, the table SkillEnergy and the radar
+ * read); any skill can go to any agent, and natural fit only sorts Assign.
+ * Every card draws its SkillEnergy image (D4120) and its run cost (R5,
+ * #4121), which reads "Not recorded" while no route serves it.
  *
- * `?tab=skills&role=<key>` opens a role's directory, `&role=all` every role's,
- * and `&skill=<uid>` a skill's page, so each view has an address.
+ * The library is A1's `GET /api/teams/skills?company=` and a skill's page
+ * `GET /api/teams/skills/:uid`, through `agents.skillLibrary` and
+ * `agents.skill`; who uses it is A2's `agents.skillAgents`.
+ *
+ * `?tab=skills&area=<key>` opens an area, `&area=all` every area, and
+ * `&skill=<uid>` a skill's page. An old `&role=` link opens All.
  *
  * A SKILL.md is untrusted text: it is drawn in a <pre> as text, never as
  * HTML. "Copy SKILL.md" and "Download" use the markdown the read returned, so
@@ -34,12 +40,7 @@ import {
 
 const SECTION = 'rounded-axal-lg border border-axal-hairline bg-white p-4 dark:border-gray-700 dark:bg-gray-900';
 
-function scopeArgs(scope) {
-  const kind = scope.kind === 'company' ? 'company' : 'project';
-  return [kind, kind === 'company' ? scope.company.uid : scope.project.id];
-}
-
-/** SK9: a block that could not be read, with Try again. */
+/** SK6c: a block that could not be read, with Try again. Never "No skills". */
 export function SkillsUnreadable({ onRetry, what = 'Skills' }) {
   return (
     <div role="alert" className="flex flex-col items-start gap-2 rounded-axal-lg border border-red-200 bg-white p-4 dark:border-red-900 dark:bg-gray-900" data-testid="skills-unreadable">
@@ -83,44 +84,42 @@ export function SkillFigures({ figures }) {
   );
 }
 
-/** SK0: a role tile. Counts come from the library read; without one they are "Not recorded". */
-export function RoleTile({ role, counts, onOpen, onAddAgent }) {
-  const skills = counts ? count(counts.skill_count) : null;
-  const ags = counts ? count(counts.agent_count) : null;
+/** SK0: an area tile. The count comes from the library read; without one it is "Not recorded", never 0. */
+export function AreaTile({ area, count: n, onOpen }) {
+  const skills = count(n);
   return (
-    <article className="flex min-w-0 flex-col gap-2.5 rounded-axal-lg border border-axal-hairline bg-white p-4 dark:border-gray-700 dark:bg-gray-900" data-testid={`skills-role-${role.key}`}>
-      <button type="button" onClick={() => onOpen(role.key)} disabled={!onOpen} className="flex flex-col gap-2.5 text-left disabled:cursor-default" data-testid={`skills-role-open-${role.key}`}>
-        <span className="flex items-center gap-2.5"><AgentTile size={34} /><b className="min-w-0 flex-1 text-[14.5px] leading-tight text-axal-ink dark:text-gray-100">{workLabel(role.key, role.name)}</b>{onOpen ? <span aria-hidden="true" className="text-axal-muted dark:text-gray-400">›</span> : null}</span>
-        {role.mission ? <span className={MUTED}>{role.mission}</span> : null}
+    <article className="flex min-w-0 flex-col rounded-axal-lg border border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900" data-testid={`skills-area-${area.key}`}>
+      <button type="button" onClick={onOpen ? () => onOpen(area.key) : undefined} disabled={!onOpen} className="flex items-center gap-3 p-3.5 text-left disabled:cursor-default" data-testid={`skills-area-open-${area.key}`}>
+        <SkillEnergy slug={`area-${area.key}`} area={area.key} level={4} size={48} />
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <b className="flex items-center gap-1.5 text-[14.5px] leading-tight text-axal-ink dark:text-gray-100"><AreaDot area={area.key} />{area.name}</b>
+          <span className={MUTED}>{skills != null ? `${skills} ${skills === '1' ? 'skill' : 'skills'}` : <>Skills <Unrecorded /></>}</span>
+        </span>
+        {onOpen ? <span aria-hidden="true" className="text-axal-muted dark:text-gray-400">›</span> : null}
       </button>
-      <span className="mt-auto flex flex-wrap items-center gap-1.5">
-        <span className="rounded-axal-pill border border-axal-hairline px-2 py-0.5 text-[11.5px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-200">{skills != null ? `${skills} skills` : <>Skills <Unrecorded /></>}</span>
-        {ags != null && Number(ags) > 0 ? <span className="rounded-axal-pill border border-axal-lavender-edge bg-axal-lavender px-2 py-0.5 text-[11.5px] font-semibold text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300">{ags} agents</span>
-          : ags === '0' ? <span className={MUTED}>No agents yet{onAddAgent ? <> · <button type="button" className={BTN_TEXT} onClick={onAddAgent} data-testid={`skills-role-add-${role.key}`}>Add one</button></> : null}</span> : null}
-      </span>
     </article>
   );
 }
 
-/** SK1: the category row, search and sort. */
-export function Filters({ category, setCategory, q, setQ, sort, setSort }) {
+/** SK1: the area row, search and sort. Picking an area changes the address (`&area=`). */
+export function Filters({ area, onArea, q, setQ, sort, setSort }) {
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-axal-lg border border-axal-hairline bg-white px-3 py-2.5 dark:border-gray-700 dark:bg-gray-900" data-testid="skills-filters">
-      <div role="group" aria-label="Category" className="flex flex-wrap gap-1.5">
-        {[{ slug: null, label: 'All' }, ...CATEGORIES].map((c) => {
-          const on = category === c.slug;
+      <div role="group" aria-label="Area" className="flex flex-wrap gap-1.5">
+        {[{ key: null, name: 'All' }, ...AREAS].map((a) => {
+          const on = (area?.key || null) === a.key;
           return (
-            <button key={c.label} type="button" aria-pressed={on} onClick={() => setCategory(c.slug)}
+            <button key={a.name} type="button" aria-pressed={on} onClick={() => onArea(a.key)}
               className={`inline-flex min-h-[28px] items-center gap-1.5 rounded-axal-pill border px-2.5 text-[12px] ${on ? 'border-axal-lavender-edge bg-axal-lavender font-bold text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300' : 'border-axal-hairline text-axal-ink dark:border-gray-700 dark:text-gray-200'}`}
-              data-testid={`skills-cat-${c.slug || 'all'}`}>{c.slug ? <AreaDot area={c.slug} /> : null}{c.label}</button>
+              data-testid={`skills-cat-${a.key || 'all'}`}>{a.key ? <AreaDot area={a.key} /> : null}{a.name}</button>
           );
         })}
       </div>
-      <div className="ml-auto flex items-center gap-2">
-        <label className="relative flex items-center">
+      <div className="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto">
+        <label className="relative flex min-w-0 flex-1 items-center sm:flex-none">
           <Search size={14} aria-hidden="true" className="pointer-events-none absolute left-2.5 text-axal-muted dark:text-gray-400" />
           <span className="sr-only">Search skills</span>
-          <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search skills" className={`${FIELD} h-8 w-[200px] pl-8 text-[12.5px]`} data-testid="skills-search" />
+          <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search skills" className={`${FIELD} h-8 w-full pl-8 text-[12.5px] sm:w-[200px]`} data-testid="skills-search" />
         </label>
         <label className="flex items-center gap-1.5 text-[12.5px] text-axal-ink dark:text-gray-200">
           <span>Sort</span>
@@ -145,36 +144,37 @@ function Group({ title, list, onOpen, onAssign, canAssign, testId }) {
   );
 }
 
-/** SK1: one role's directory, or every role's. */
-export function Directory({ role, value, companyName, canEdit, onBack, onOpen, onAssign, onNew }) {
-  const [category, setCategory] = useState(null);
+/** SK1: one area's directory, or every area's (`area` null). */
+export function Directory({ area, value, companyName, canNew, canAssign, onArea, onBack, onOpen, onAssign, onNew }) {
   const [q, setQ] = useState('');
   const [sort, setSort] = useState('popular');
-  const list = directory(value.skills, { role: role?.key || null, category, q, sort });
+  const list = directory(value.skills, { area: area?.key || null, q, sort });
   const { axal, company } = groups(list);
-  const counts = role ? (value.roles || []).find((r) => r.key === role.key) : null;
-  const filtered = !!(category || q.trim());
   return (
     <div className="flex flex-col gap-3.5" data-testid="skills-directory">
       <div className="flex flex-wrap items-center gap-2.5">
-        <button type="button" className={BTN_TEXT} onClick={onBack} data-testid="skills-back">‹ Roles</button>
+        <button type="button" className={BTN_TEXT} onClick={onBack} data-testid="skills-back">‹ Areas</button>
         <span className={MUTED}>·</span>
-        <h2 className="m-0 text-[15px] font-extrabold text-axal-ink dark:text-gray-100">{role ? workLabel(role.key, role.name) : 'All areas of work'}</h2>
-        {counts && Number.isFinite(counts.skill_count) ? <span className="rounded-axal-pill border border-axal-hairline px-2 py-0.5 text-[11.5px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-200">{counts.skill_count} skills</span> : null}
-        {counts && Number.isFinite(counts.agent_count) ? <span className="rounded-axal-pill border border-axal-hairline px-2 py-0.5 text-[11.5px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-200">{counts.agent_count} agents</span> : null}
-        {canEdit ? <button type="button" className={`${BTN_PRIMARY} ml-auto h-9`} onClick={onNew} data-testid="skills-new">New skill</button> : null}
+        <h2 className="m-0 flex items-center gap-1.5 text-[15px] font-extrabold text-axal-ink dark:text-gray-100">{area ? <AreaDot area={area.key} /> : null}{area ? area.name : 'All areas'}</h2>
+        <span className="rounded-axal-pill border border-axal-hairline px-2 py-0.5 text-[11.5px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-200" data-testid="skills-dir-count">{list.length} {list.length === 1 ? 'skill' : 'skills'}</span>
+        {canNew ? <button type="button" className={`${BTN_PRIMARY} ml-auto h-9`} onClick={onNew} data-testid="skills-new">New skill</button> : null}
       </div>
-      <Filters category={category} setCategory={setCategory} q={q} setQ={setQ} sort={sort} setSort={setSort} />
+      <Filters area={area} onArea={onArea} q={q} setQ={setQ} sort={sort} setSort={setSort} />
       {!list.length ? (
         <HonestBlock testId="skills-empty">
-          {filtered ? 'No skill matches this filter.' : `No skills for ${role ? workLabel(role.key, role.name) : 'any area of work'} yet. Axal adds skills as roles grow${canEdit ? '; editors can write one' : ''}.`}
+          {q.trim() ? 'No skill matches this search.' : area ? `No skills in ${area.name} yet. Axal adds skills to every area${canNew ? '; editors can write one' : ''}.` : `No skills yet.${canNew ? ' Editors can write one.' : ''}`}
         </HonestBlock>
       ) : null}
-      <Group title="From Axal" list={axal} onOpen={onOpen} onAssign={onAssign} canAssign={canEdit} testId="skills-group-axal" />
-      <Group title={companySkillsTitle(companyName)} list={company} onOpen={onOpen} onAssign={onAssign} canAssign={canEdit} testId="skills-group-company" />
-      {!canEdit ? <p className={`m-0 ${MUTED}`} data-testid="skills-read-only">You can read every skill. Only company editors add skills or assign them.</p> : null}
+      <Group title="From Axal" list={axal} onOpen={onOpen} onAssign={onAssign} canAssign={canAssign} testId="skills-group-axal" />
+      <Group title={companySkillsTitle(companyName)} list={company} onOpen={onOpen} onAssign={onAssign} canAssign={canAssign} testId="skills-group-company" />
+      {!canNew && !canAssign ? <ReadOnlyLine /> : null}
     </div>
   );
+}
+
+/** SK6d: a member who edits no Team here reads every skill, and adds or assigns none. */
+function ReadOnlyLine() {
+  return <p className={`m-0 ${MUTED}`} data-testid="skills-read-only">You can read every skill. Only this Team’s editors add skills or assign them to agents.</p>;
 }
 
 function copyText(text) {
@@ -217,23 +217,26 @@ export function UsingAgents({ block }) {
 }
 
 /** SK2: one skill's page. */
-export function SkillPage({ block, agentsBlock, roleName, roleNames, onBack, onAssign, onRetry, canEdit }) {
+export function SkillPage({ block, agentsBlock, backTo, onBack, onAssign, onRetry, canAssign }) {
   const [copied, setCopied] = useState('');
   if (!block) return <Loading />;
   if (!block.available) return block.unreadable ? <SkillsUnreadable what="This skill" onRetry={onRetry} /> : <HonestBlock>{block.reason}</HonestBlock>;
   const s = block.value?.skill || {};
   const steps = Array.isArray(s.steps) ? s.steps : [];
   const versions = Array.isArray(s.versions) ? s.versions : [];
-  const can = canEdit && block.value?.can_edit !== false && s.status === 'published';
+  const can = !!canAssign && s.status === 'published';
+  const areas = skillAreas(s).map((a) => a.name).join(', ');
   const copy = async () => setCopied((await copyText(s.markdown || '')) ? 'Copied.' : 'It could not be copied. Select the text and copy it.');
   return (
     <div className="flex flex-col gap-3.5" data-testid="skill-page">
-      <button type="button" className={`w-fit ${BTN_TEXT}`} onClick={onBack}>‹ {roleName || 'Areas of work'}</button>
+      <button type="button" className={`w-fit ${BTN_TEXT}`} onClick={onBack} data-testid="skill-back">‹ {backTo || 'Areas'}</button>
       <div className={`${SECTION} flex flex-wrap items-center gap-3`}>
-        <AgentTile size={36} />
+        <SkillImage s={s} size={96} />
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <b className="text-[16px] text-axal-ink dark:text-gray-100">{s.name}</b>
-          <span className={MUTED}>{[s.scope === 'hq' ? 'From Axal' : authorLine(s).replace(/^By /, ''), Number.isFinite(s.version) && s.version > 0 ? `v${s.version}` : 'Draft', roleNames(s.roles)].filter(Boolean).join(' · ')} · <UsedBy n={s.used_by} /></span>
+          <span className={MUTED}>{[s.scope === 'hq' ? 'From Axal' : authorLine(s).replace(/^By /, ''), Number.isFinite(s.version) && s.version > 0 ? `v${s.version}` : 'Draft', areas].filter(Boolean).join(' · ')} · <UsedBy n={s.used_by} /></span>
+          <CostLine s={s} />
+          {s.status === 'retired' ? <span className="text-[12px] text-amber-800 dark:text-amber-200" data-testid="skill-retired-line">{s.scope === 'hq' ? 'Axal retired this skill.' : 'Retired.'} Agents still pinned to it keep working at their version.</span> : null}
         </span>
         {s.markdown ? <button type="button" className={BTN_SECONDARY} onClick={copy} data-testid="skill-copy">Copy SKILL.md</button> : null}
         {can ? <button type="button" className={BTN_PRIMARY} onClick={() => onAssign(s)} data-testid="skill-page-assign">Assign to agents…</button> : null}
@@ -263,9 +266,9 @@ export function SkillPage({ block, agentsBlock, roleName, roleNames, onBack, onA
             {s.markdown ? <button type="button" className={`w-fit ${BTN_SECONDARY} h-8 px-3 text-[12.5px]`} onClick={() => download(s)} data-testid="skill-download">Download SKILL.md</button> : null}
           </section>
           <section className={`${SECTION} flex flex-col gap-2`}>
-            <span className={EYEBROW}>Taxonomy</span><TaxChips tags={s.taxonomy} />
+            <span className={EYEBROW}>Areas</span>{(s.taxonomy || []).length ? <TaxChips tags={s.taxonomy} /> : <Unrecorded />}
             <span className={EYEBROW}>Tools</span>{(s.tools || []).length ? <ToolChips tools={s.tools} /> : <span className={MUTED}>No tools</span>}
-            <span className={EYEBROW}>Areas of work</span><span className="text-[13px] text-axal-ink dark:text-gray-200">{roleNames(s.roles) || <Unrecorded />}</span>
+            <span className={MUTED}>Any agent can take it. An agent whose persona fits its area is listed first.</span>
           </section>
           <section className={`${SECTION} flex flex-col`}>
             <span className={EYEBROW}>Version history</span>
@@ -287,13 +290,15 @@ export function SkillPage({ block, agentsBlock, roleName, roleNames, onBack, onA
   );
 }
 
-export default function SkillsTab({ scope, rolesBlock, agentsBlock, onAddAgent }) {
+export default function SkillsTab({ scope, agentsBlock }) {
   const { pathname, search } = useLocation();
   const navigate = useNavigate();
   const params = new URLSearchParams(search);
-  const roleKey = params.get('role');
+  // v2: `&area=<key>` opens an area; `&area=all`, an unknown area, or an old `&role=` link opens All.
+  const inDirectory = params.has('area') || params.has('role');
+  const area = areaFromParam(params.get('area'));
   const skillUid = params.get('skill');
-  const [kind, id] = scopeArgs(scope);
+  const companyUid = scope.company?.uid || null;
   const companyName = scope.company?.name || null;
   const [lib, setLib] = useState(null);
   const [page, setPage] = useState(null);
@@ -301,7 +306,7 @@ export default function SkillsTab({ scope, rolesBlock, agentsBlock, onAddAgent }
   const [sheet, setSheet] = useState(null);
   const [notice, setNotice] = useState('');
 
-  const load = useCallback(() => { setLib(null); agents.skillLibrary(kind, id, {}).then(setLib); }, [kind, id]);
+  const load = useCallback(() => { setLib(null); agents.skillLibrary(companyUid).then(setLib); }, [companyUid]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
     if (!skillUid) { setPage(null); setUsing(null); return undefined; }
@@ -312,49 +317,48 @@ export default function SkillsTab({ scope, rolesBlock, agentsBlock, onAddAgent }
     return () => { alive = false; };
   }, [skillUid]);
 
-  const roles = rolesBlock?.available && Array.isArray(rolesBlock.value?.roles) ? rolesBlock.value.roles : [];
-  const roleNames = useMemo(() => (keys) => (Array.isArray(keys) ? keys.map((k) => workLabel(k, roles.find((r) => r.key === k)?.name)).join(', ') : ''), [roles]);
   const go = (next) => {
     const p = new URLSearchParams(search);
     p.set('tab', 'skills');
+    p.delete('role');
     for (const [k, v] of Object.entries(next)) { if (v == null) p.delete(k); else p.set(k, v); }
     navigate(`${pathname}?${p.toString()}`);
   };
   const value = lib?.available ? lib.value || {} : null;
-  const canEdit = !!value?.can_edit && agentsBlock?.value?.plan_ok !== false;
-  const role = roleKey && roleKey !== 'all' ? roles.find((r) => r.key === roleKey) || { key: roleKey, name: roleKey } : null;
+  const planOk = agentsBlock?.value?.plan_ok !== false;
+  const canNew = !!value?.can_edit && planOk;
+  const canAssign = !!value && (!!value.can_edit || !!agentsBlock?.value?.can_manage) && planOk;
+  const counts = useMemo(() => (value ? areaCounts(value.skills) : null), [value]);
+  const teamAgents = agentsBlock?.available && Array.isArray(agentsBlock.value?.agents) ? agentsBlock.value.agents : [];
+  const personaOf = (uid) => teamAgents.find((a) => a.uid === uid)?.persona || null;
 
   let body;
   if (skillUid) {
-    body = <SkillPage block={page} agentsBlock={using} canEdit={canEdit} roleName={role ? workLabel(role.key, role.name) : null} roleNames={roleNames}
+    body = <SkillPage block={page} agentsBlock={using} canAssign={canAssign} backTo={inDirectory ? (area ? area.name : 'All areas') : 'Areas'}
       onBack={() => go({ skill: null })} onAssign={(s) => setSheet({ kind: 'assign', skill: s })}
       onRetry={() => { setPage(null); agents.skill(skillUid).then(setPage); }} />;
   } else if (!lib) {
     body = <Loading />;
   } else if (lib.unreadable) {
     body = <SkillsUnreadable onRetry={load} />;
-  } else if (roleKey && value) {
-    body = <Directory role={role} value={value} companyName={companyName} canEdit={canEdit}
-      onBack={() => go({ role: null })} onOpen={(s) => go({ skill: s.uid })}
-      onAssign={(s) => setSheet({ kind: 'assign', skill: s })} onNew={() => setSheet({ kind: 'new', role: role?.key || null })} />;
+  } else if (inDirectory && value) {
+    body = <Directory area={area} value={value} companyName={companyName} canNew={canNew} canAssign={canAssign}
+      onArea={(k) => go({ area: k || 'all' })} onBack={() => go({ area: null })} onOpen={(s) => go({ skill: s.uid })}
+      onAssign={(s) => setSheet({ kind: 'assign', skill: s })} onNew={() => setSheet({ kind: 'new' })} />;
   } else {
     body = (
-      <div className="flex flex-col gap-3.5" data-testid="skills-roles">
-        {value ? <SkillFigures figures={value.figures} /> : <HonestBlock testId="skills-off">{lib.reason} Skills open here once they are switched on; the roles below are the agent roles they belong to.</HonestBlock>}
+      <div className="flex flex-col gap-3.5" data-testid="skills-areas">
+        {value ? <SkillFigures figures={value.figures} /> : <HonestBlock testId="skills-off">{lib.reason} Skills open here once they are switched on; the areas below are where they sit.</HonestBlock>}
         <div className="flex flex-wrap items-center gap-2.5">
-          <h2 className="m-0 text-[15px] font-extrabold text-axal-ink dark:text-gray-100">Roles</h2>
-          {value ? <button type="button" className={BTN_TEXT} onClick={() => go({ role: 'all' })} data-testid="skills-all-roles">All roles</button> : null}
-          <span className={`ml-auto ${MUTED}`}>{value ? 'Pick a role to see its skills' : ''}</span>
-          {canEdit ? <button type="button" className={`${BTN_PRIMARY} h-9`} onClick={() => setSheet({ kind: 'new', role: null })} data-testid="skills-new">New skill</button> : null}
+          <h2 className="m-0 text-[15px] font-extrabold text-axal-ink dark:text-gray-100">Areas</h2>
+          {value ? <button type="button" className={BTN_TEXT} onClick={() => go({ area: 'all' })} data-testid="skills-all-areas">All areas</button> : null}
+          <span className={`ml-auto ${MUTED}`}>{value ? 'Pick an area to see its skills. Any skill can go to any agent.' : ''}</span>
+          {canNew ? <button type="button" className={`${BTN_PRIMARY} h-9`} onClick={() => setSheet({ kind: 'new' })} data-testid="skills-new">New skill</button> : null}
         </div>
-        {!rolesBlock ? <Loading />
-          : !rolesBlock.available ? <HonestBlock>{rolesBlock.unreadable ? 'The agent roles could not be read.' : rolesBlock.reason}</HonestBlock>
-            : (
-              <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
-                {roles.map((r) => <RoleTile key={r.key} role={r} counts={value ? (value.roles || []).find((x) => x.key === r.key) || null : null}
-                  onOpen={value ? (k) => go({ role: k }) : null} onAddAgent={canEdit ? onAddAgent : null} />)}
-              </div>
-            )}
+        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
+          {AREAS.map((a) => <AreaTile key={a.key} area={a} count={counts ? counts[a.key] : null} onOpen={value ? (k) => go({ area: k }) : null} />)}
+        </div>
+        {value && !canNew && !canAssign ? <ReadOnlyLine /> : null}
       </div>
     );
   }
@@ -363,8 +367,8 @@ export default function SkillsTab({ scope, rolesBlock, agentsBlock, onAddAgent }
     <div className="flex flex-col gap-3.5" data-testid="team-skills">
       {notice ? <p role="status" className="m-0 w-fit rounded-axal-md bg-axal-ink px-3 py-2 text-[13px] text-white dark:bg-gray-100 dark:text-gray-900" data-testid="skills-notice">{notice}</p> : null}
       {body}
-      {sheet?.kind === 'assign' ? <AssignSkillSheet skill={sheet.skill} onClose={() => setSheet(null)} onDone={(words) => { setSheet(null); setNotice(words); load(); }} /> : null}
-      {sheet?.kind === 'new' ? <NewSkillSheet scope={scope} roles={roles} role={sheet.role} onClose={() => setSheet(null)} onSaved={(s) => { setSheet(null); load(); if (s?.uid) go({ skill: s.uid }); }} /> : null}
+      {sheet?.kind === 'assign' ? <AssignSkillSheet skill={sheet.skill} personaOf={personaOf} onClose={() => setSheet(null)} onDone={(words) => { setSheet(null); setNotice(words); load(); }} /> : null}
+      {sheet?.kind === 'new' ? <NewSkillSheet scope={scope} onClose={() => setSheet(null)} onSaved={(s) => { setSheet(null); load(); if (s?.uid) go({ skill: s.uid }); }} /> : null}
     </div>
   );
 }

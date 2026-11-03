@@ -45,6 +45,8 @@ export const workApi = {
     method: 'PATCH', body: JSON.stringify(position == null ? { column } : { column, position }),
   }),
   assign: (uid, assignee) => request(`/teams/tasks/${enc(uid)}`, { method: 'PATCH', body: JSON.stringify({ assignee: assignee ?? null }) }),
+  // D1614 W6 (#3974): WK7's "Schedule work", the task's time block on the same PATCH (W4).
+  schedule: (uid, block) => request(`/teams/tasks/${enc(uid)}`, { method: 'PATCH', body: JSON.stringify({ scheduled_start: block?.scheduled_start ?? null, scheduled_end: block?.scheduled_end ?? null }) }),
   create: (projectId, body) => request(`/teams/${SCOPE}/${enc(projectId)}/tasks`, { method: 'POST', body: JSON.stringify(body || {}) }),
   burnup: (projectId, { range, from, to, filter } = {}) => {
     const q = new URLSearchParams();

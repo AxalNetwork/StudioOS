@@ -143,6 +143,7 @@ tables matter. `npm run deploy` uses `--env production`, which makes the
 | R2 `FILES` | ✅ L478 | ✅ L906 | `studioos-files` |
 | R2 `PUBLICATIONS` | ✅ L487 | ✅ L910 | `studioos-publications` |
 | R2 `BACKUPS` | ✅ L500 | ✅ L916 | `studioos-backups`; object-lock 365d compliance mode + IA-after-30d are **dashboard-configured, not in the TOML**. Binding is optional at runtime — `services/backup.ts` no-ops when absent. |
+| R2 `COMPANY_LOGOS` | ✅ L564 | ✅ L957 | `studioos-company-logos` (#4201, #4152 G1): one uploaded PNG or SVG per company, served to members by `GET /api/company/:uid/logo`. **Created by an operator** before the deploy that binds it (`npx wrangler r2 bucket create studioos-company-logos`); the logo routes answer 503 `storage_unconfigured` when the binding is absent. |
 | Analytics Engine `ANALYTICS` | ✅ L513 | ✅ L920 | dataset `studioos_metrics` |
 | Browser Rendering `BROWSER` | ✅ L522 | ✅ L924 | — |
 | Static Assets `ASSETS` | ✅ L291 | ✅ L929 | `./docs`, SPA fallback, `run_worker_first = ["/api/*","/landing/*","/p/*","/assets/*"]` |

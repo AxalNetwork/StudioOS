@@ -32,6 +32,40 @@ export const WHISPER = '@cf/openai/whisper';
 export const WHISPER_TURBO = '@cf/openai/whisper-large-v3-turbo';
 export const WHISPER_TINY_EN = '@cf/openai/whisper-tiny-en';
 
+/**
+ * #3936 part 3 (owner answer C, A on 2026-11-02): Deepgram's Model Improvement
+ * Program. Interview, meeting and data-room audio opts out (`mip_opt_out`),
+ * at Deepgram's higher rate; every other recording keeps the default.
+ *
+ * The surfaces are the pages that audio is transcribed on (`AI_SURFACE`, kept
+ * as literals so this file stays import-free; a test holds them equal):
+ *   /validate/customer-research  interview recordings, the live transcript,
+ *                                and meeting-bot / Zoom, Meet and Teams calls
+ *                                (all transcribed as the interview's)
+ *   /raise/data-room             a data room's audio
+ * Only Deepgram's speech models take the flag; Whisper ignores it.
+ */
+export const DEEPGRAM_LISTEN: ReadonlySet<string> = new Set([NOVA_3, FLUX]);
+export const MIP_OPT_OUT_SURFACES: ReadonlySet<string> = new Set(['/validate/customer-research', '/raise/data-room']);
+/**
+ * What an opted-out Deepgram minute costs against the published rate. Neither
+ * Cloudflare nor Deepgram prints the opted-out Workers AI rate; Deepgram's own
+ * pricing drops its program discount, reported as twice the rate. Quote, hold
+ * and charge use it, so a member is never charged less than the minute costs.
+ * Confirm against the first Cloudflare bill and change it here alone.
+ */
+export const MIP_OPT_OUT_PRICE_FACTOR = 2;
+
+/** Does this request opt out of Deepgram's program? */
+export function mipOptOut(model: string, surface: string | null | undefined): boolean {
+  return DEEPGRAM_LISTEN.has(model) && !!surface && MIP_OPT_OUT_SURFACES.has(surface);
+}
+
+/** The factor on this model's per-minute price for this surface: the opt-out rate, or 1. */
+export function mipPriceFactor(model: string, surface: string | null | undefined): number {
+  return mipOptOut(model, surface) ? MIP_OPT_OUT_PRICE_FACTOR : 1;
+}
+
 /** One passage. `speaker` is the model's own label (Nova-3: 0, 1, …), or null. */
 export interface SttSegment { start_ms: number | null; end_ms: number | null; text: string; speaker: number | null }
 export interface SttTranscript { text: string; language: string | null; segments: SttSegment[] }
@@ -46,10 +80,12 @@ const str = (v: unknown): string => (typeof v === 'string' ? v : '');
  * The request body a batch model takes for this clip. `language` (D685) is an
  * ISO-639-1 code or null for Detect. Nova-3 takes it instead of detecting;
  * Whisper Large v3 Turbo takes it as `language`; Whisper v1 is given none.
+ * `optOut` (`mipOptOut`) adds Nova-3's `mip_opt_out`; no other batch model takes it.
  */
-export function audioInputFor(model: string, bytes: Uint8Array, mime: string, language: string | null = null): Record<string, unknown> {
+export function audioInputFor(model: string, bytes: Uint8Array, mime: string, language: string | null = null, optOut = false): Record<string, unknown> {
   if (model === NOVA_3) {
     return {
+      ...(optOut ? { mip_opt_out: true } : {}),
       // A stream, as the binding's examples pass it; never a number[] copy.
       audio: { body: new Response(bytes).body, contentType: mime || 'audio/webm' },
       diarize: true,
@@ -70,12 +106,14 @@ export function audioInputFor(model: string, bytes: Uint8Array, mime: string, la
   return { audio: Array.from(bytes) };
 }
 
-/** The options a live socket opens with. Nova-3 takes the language; Flux is English-only and takes none. */
-export function liveInputFor(model: string, language: string | null): Record<string, string> {
+/** The options a live socket opens with. Nova-3 takes the language; Flux is English-only and takes none. `optOut`: `mipOptOut`. */
+export function liveInputFor(model: string, language: string | null, optOut = false): Record<string, string> {
   return {
     encoding: 'linear16',
     sample_rate: '16000',
     ...(model === NOVA_3 && language ? { language } : {}),
+    // The socket's options are query parameters, so strings.
+    ...(optOut && DEEPGRAM_LISTEN.has(model) ? { mip_opt_out: 'true' } : {}),
   };
 }
 

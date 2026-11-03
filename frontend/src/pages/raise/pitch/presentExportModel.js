@@ -236,7 +236,8 @@ export function fieldBlocks(slide, model = null) {
   return { blocks: blocks.map((b, i) => ({ id: `f${i + 1}`, ...b })) };
 }
 
-export const cardsOf = (deck) => (Array.isArray(deck?.slides) ? deck.slides.map(cardOf) : []);
+// D1545 (#3788): a hidden card is not presented, and is in no export; the cards are numbered as shown.
+export const cardsOf = (deck) => (Array.isArray(deck?.slides) ? deck.slides.filter((s) => !(s && typeof s === 'object' && s.hidden === true)).map(cardOf) : []);
 
 /**
  * D1112 (#2992): the blocks a card lays out on D898's 12 × 6 grid, those with

@@ -281,6 +281,7 @@ export const AREA_PLACE = Object.freeze({
   interview_recordings: ['the interview', '/validate/customer-research'],
   session_audio: ['the interview', '/validate/customer-research'],
   deck_reviews: ['the deck review', '/raise/pitch/review'],
+  deck_rehearsals: ['the rehearsal', '/raise/pitch/present'],
   validate_evidence: ['Validate › Demand signals', '/validate/demand-signals'],
   build_proofs: ['Build', '/build'],
   grow_minutes: ['Grow', '/grow'],

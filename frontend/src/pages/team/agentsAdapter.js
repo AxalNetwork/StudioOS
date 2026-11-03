@@ -48,7 +48,7 @@
  */
 import { teamAgentsApi } from '../../lib/api/teamAgents.js';
 import { FLOOR, RULEBOOK_SECTIONS, refusalWords } from './teamModel.js';
-import { skillRefusalWords } from './skillsModel.js';
+import { fromWorkerLibrary, fromWorkerSkillPage, skillRefusalWords } from './skillsModel.js';
 
 export const AGENTS_OFF_REASON = 'AI agents aren’t switched on yet.';
 
@@ -157,10 +157,15 @@ export async function throughSkill(call) {
 }
 
 // A1 #3951 — the library
-/** `GET /api/teams/:scope/:id/skills?role=&category=&q=&sort=` → `{ can_edit, figures, roles, skills }`. */
-export const skillLibrary = (/* scope, id, { role, category, q, sort } */) => off();
-/** `GET /api/teams/skills/:uid` → `{ skill (with steps, markdown, versions), can_edit }`. */
-export const skill = (/* uid */) => off();
+/** An answer's value through a pure shape, leaving every unavailable answer as it was. */
+const shaped = (out, fn) => (out.available ? { ...out, value: fn(out.value) } : out);
+/**
+ * `GET /api/teams/skills?company=<uid>` (wired by #4224) → `{ can_edit, figures, skills }`.
+ * Axal's skills, and the company's when `companyUid` is one the member belongs to.
+ */
+export const skillLibrary = async (companyUid) => shaped(await throughSkill(() => teamAgentsApi.skillLibrary(companyUid)), fromWorkerLibrary);
+/** `GET /api/teams/skills/:uid` (wired by #4224) → `{ skill (with steps, markdown, versions), can_edit }`. */
+export const skill = async (uid) => shaped(await throughSkill(() => teamAgentsApi.skill(uid)), fromWorkerSkillPage);
 /** `POST /api/teams/:scope/:id/skills` → 201 `{ skill }`, a draft. */
 export const createSkill = (/* scope, id, body */) => off();
 /** `PATCH /api/teams/skills/:uid` → `{ skill }`. */

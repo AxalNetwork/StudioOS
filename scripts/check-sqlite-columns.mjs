@@ -337,6 +337,19 @@ export function knownColumns() {
       if (!schema.get(t)) schema.set(t, new Set());
       schema.get(t).add(c);
     }
+    // `ALTER TABLE x RENAME TO y`: a rebuild (create `x_new` with the wider
+    // shape, copy, drop the old table, rename) leaves its columns under the
+    // temporary name unless the rename carries them over. 762 and 763 rebuilt
+    // with the same columns, so it never mattered; #3957's rebuild of
+    // agent_duties adds columns, and they are the renamed table's.
+    for (const m of text.matchAll(/\bALTER\s+TABLE\s+([`"[]?\w+[`"\]]?)\s+RENAME\s+TO\s+([`"[]?\w+[`"\]]?)/gi)) {
+      const from = schema.get(norm(m[1]));
+      const to = norm(m[2]);
+      if (from === undefined) continue;
+      if (from === null) { schema.set(to, null); continue; }   // unparseable stays never-reported
+      if (!schema.get(to)) schema.set(to, new Set());
+      for (const c of from) schema.get(to).add(c);
+    }
     // A view's columns are whatever it selects; treat as unparseable.
     for (const m of text.matchAll(/\bCREATE\s+(?:\w+\s+)?VIEW\s+(?:IF\s+NOT\s+EXISTS\s+)?([`"[]?[\w.]+[`"\]]?)/gi)) {
       if (!schema.has(norm(m[1]))) schema.set(norm(m[1]), null);

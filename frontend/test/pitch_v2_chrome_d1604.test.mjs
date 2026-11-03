@@ -5,7 +5,7 @@
  *     nothing else; Save version renders only while there is something to
  *     save; a reader keeps Present and has no Share; the tablet keeps the same
  *     row and a phone moves Share's two items into ⋯;
- *   · ⋯ lists its three sections; an item whose route is not on main reads
+ *   · ⋯ lists its four sections (Before you send is D1370's); an item whose route is not on main reads
  *     the adapter (greyed, "Coming later", titled with its reason, still
  *     focusable); items off for AI count into the name ", N off: <why>";
  *   · Share ▾ opens the existing ShareDialog and ExportDialog; ⋯ opens the
@@ -47,8 +47,8 @@ test('the save state: ✓ Saved with its time, ● Unsaved changes with Save ver
   assert.deepEqual([saveChip({ readOnly: true, dirty: true, version: 3 }).text, saveChip({ readOnly: true, version: 3 }).save], ['Read only · v3', false]);
 });
 
-test('⋯: three sections; adapter items are Coming later with the adapter\'s reason; AI-off items count into the name', () => {
-  assert.deepEqual(MORE_MENU.map((s) => s.label), ['This deck', 'This card', 'Whole deck · uses AI']);
+test('⋯: four sections; adapter items are Coming later with the adapter\'s reason; AI-off items count into the name', () => {
+  assert.deepEqual(MORE_MENU.map((s) => s.label), ['This deck', 'This card', 'Before you send', 'Whole deck · uses AI']);
   const all = MORE_MENU.flatMap((s) => s.items);
   // D1499 (#3749): Slide size is wired on main, a theme write held until a version is saved.
   for (const id of ['theme', 'size', 'brand', 'sources', 'versions', 'save_named', 'structure', 'duplicate', 'appendix', 'background', 'check']) {
@@ -80,17 +80,19 @@ test('the seam: an item is Coming later only while its adapter surface answers u
   const st = moreState(MORE_MENU, { availability: on });
   const stage = st.sections[0].items.find((i) => i.id === 'stage');
   assert.deepEqual([stage.disabled, Boolean(stage.later), stage.why], [false, false, null], 'merged: wired like any other item');
-  const crit = st.sections[2].items.find((i) => i.id === 'critique');
+  const crit = st.sections.find((s) => s.id === 'ai').items.find((i) => i.id === 'critique');
   assert.deepEqual([crit.disabled, Boolean(crit.later)], [false, false]);
   const paused = moreState(MORE_MENU, { availability: on, aiOn: false });
-  assert.equal(paused.sections[2].items.find((i) => i.id === 'critique').why, 'AI is paused for your studio.', 'once wired, AI paused greys it like any AI item');
+  assert.equal(paused.sections.find((s) => s.id === 'ai').items.find((i) => i.id === 'critique').why, 'AI is paused for your studio.', 'once wired, AI paused greys it like any AI item');
   assert.equal(paused.off, 2, 'and it counts into the name');
   assert.equal(moreState(MORE_MENU, { availability: () => ({ available: false, reason: 'Synthetic reason.' }) }).sections[0].items[0].why, 'Synthetic reason.');
-  // The card ⋯ reads the same seam.
-  const later = cardMenuItems(1, 3, {}, availability).find((i) => i.id === 'hide');
-  assert.deepEqual([later.later, later.why], [true, 'Not switched on yet.']);
-  const merged = cardMenuItems(1, 3, {}, on).find((i) => i.id === 'hide');
-  assert.deepEqual([merged.later, merged.why], [false, null]);
+  // The card ⋯ read the same seam until #3788 (D1545) swapped `media`: Hide and Move to section are wired either way.
+  for (const avail of [availability, on]) {
+    const hide = cardMenuItems(1, 3, {}, avail).find((i) => i.id === 'hide');
+    assert.deepEqual([hide.later, hide.why, hide.label], [false, null, 'Hide']);
+  }
+  assert.equal(cardMenuItems(1, 3, { hidden: true }, on).find((i) => i.id === 'hide').label, 'Show', 'a hidden card offers Show');
+  assert.equal(cardMenuItems(1, 3, {}, availability).some((i) => i.later), false, 'no card item waits on the seam now');
   assert.equal(cardMenuItems(0, 3, {}, on).find((i) => i.id === 'up').why, 'It is the first card.');
 });
 
@@ -130,7 +132,7 @@ test('the header holds the save state, ⋯, Present, Share and Ask, and nothing 
   } finally { await m.close(); }
 });
 
-test('⋯ draws its three sections; an adapter item is greyed, reachable, titled, and does nothing', async () => {
+test('⋯ draws its four sections; an adapter item is greyed, reachable, titled, and does nothing', async () => {
   const m = await mountEditor();
   try {
     await m.press(m.by('deck-more-open'));

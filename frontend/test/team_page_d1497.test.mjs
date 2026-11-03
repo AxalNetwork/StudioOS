@@ -332,6 +332,8 @@ function worker(over = {}) {
     if (path === '/api/projects/5') return response(PROJECT);
     if (path === '/api/projects/5/members') return response(MEMBERS);
     if (path === '/api/account/projects') return response({ projects: [] });
+    // D4162 (#4162): the platform status mounts above the team routers, so it answers even with their flag off.
+    if (path === '/api/teams/platform-status') return response({ paused: false, since: null, by_name: null });
     // #3840's routes, as the Worker answers them while TEAM_AGENTS_ENABLED is off (both wrangler blocks).
     if (path.startsWith('/api/teams/')) return response({ error: 'team_agents_off' }, 404);
     return response({ ok: true });
@@ -375,7 +377,8 @@ const COMPANY_ROUTE = '/account/companies/:uid/settings/team';
 test('company Team: people and invitations on the routes that exist; agents unavailable; Resend and Revoke wired', async () => {
   const v = await mount('/account/companies/nw1/settings/team', COMPANY_ROUTE, h(TeamAgentsPage, { form: 'company' }));
   try {
-    assert.deepEqual(v.keys().filter((k) => k.startsWith('GET ')).sort(), ['GET /api/account/projects', 'GET /api/company/nw1', 'GET /api/company/nw1/invitations', 'GET /api/company/team-vocabulary', 'GET /api/teams/company/nw1/agents', 'GET /api/teams/company/nw1/coverage', 'GET /api/teams/roles'], 'D1612 A2 (#3956): the coverage card reads its route');
+    assert.deepEqual(v.keys().filter((k) => k.startsWith('GET ')).sort(), ['GET /api/account/projects', 'GET /api/company/nw1', 'GET /api/company/nw1/invitations', 'GET /api/company/team-vocabulary', 'GET /api/teams/company/nw1/agents', 'GET /api/teams/company/nw1/coverage', 'GET /api/teams/platform-status', 'GET /api/teams/roles'], 'D1612 A2 (#3956): the coverage card reads its route; D4162: and the platform status');
+    assert.equal(v.has('platform-paused-banner'), false, 'nothing paused: no banner');
     const text = v.text();
     assert.match(text, /Company settings/);
     assert.match(text, /The people and AI agents working on \[Northwind Labs\]\. Agents propose; people decide\./);
@@ -924,3 +927,13 @@ function walkRadio() {
   const props = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1];
   return walk(document.body).map(props).find((p) => p?.type === 'radio' && p?.name === 'model');
 }
+
+test('D4162 (#4162): while Axal HQ has paused all AI agents, the Team page says so at the top, naming who paused it', async () => {
+  const v = await mount('/account/companies/nw1/settings/team', COMPANY_ROUTE, h(TeamAgentsPage, { form: 'company' }), {
+    handle: worker({ 'GET /api/teams/platform-status': () => response({ paused: true, since: '2026-11-02 21:30:00', by_name: 'Ada Admin' }) }),
+  });
+  try {
+    assert.equal(v.has('platform-paused-banner'), true);
+    assert.match(v.text(), /Axal has paused all AI agents on the platform since 2026-11-02 21:30 UTC by Ada Admin\. Agents start no new work; proposals already made can still be decided\./);
+  } finally { await v.close(); }
+});

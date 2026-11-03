@@ -1,4 +1,6 @@
-// D1612 (#3945, #3952) — Team › Agents › Skills, boards SK0–SK9.
+// D1612 (#3945, #3952) — Team › Agents › Skills, boards SK0–SK9, with the
+// pins #4224 (SK-v2, D4116) moved where the roles went: the tab is drawn by
+// area now, and its v2 behaviour is pinned in skills_v2_4224.test.mjs.
 //
 // The model (levels, categories, sort, radar, coverage, the SKILL.md preview),
 // each board's view in its states, the seam (every skill read and write is
@@ -23,7 +25,7 @@ import {
   radarVector, scopeChip, skillFileName, skillRefusalWords, tagChip, updateLabel, usedBy,
 } from '../src/pages/team/skillsModel.js';
 import { TABS, tabFrom } from '../src/pages/team/teamModel.js';
-import { Directory, RoleTile, SkillFigures, SkillPage, SkillsUnreadable, UsingAgents } from '../src/pages/team/SkillsTab.jsx';
+import { AreaTile, Directory, SkillFigures, SkillPage, SkillsUnreadable, UsingAgents } from '../src/pages/team/SkillsTab.jsx';
 import { AgentSkillsView, ValuesCard } from '../src/pages/team/AgentSkillsCard.jsx';
 import { CoverageTable } from '../src/pages/team/TeamCoverageCard.jsx';
 import { PastePreview, assignedWords } from '../src/pages/team/SkillSheets.jsx';
@@ -43,8 +45,8 @@ const AX = [
   { uid: 's3', scope: 'hq', author: { kind: 'axal' }, name: 'Cap table summary for diligence', description: 'Writes a one-page ownership summary.', roles: ['fo'], taxonomy: [tag('finance_ops', 'Finance / Ops', 3)], tools: [], output_kind: 'brief', version: 1, status: 'published', used_by: null },
 ];
 const CO = [{ uid: 'c1', scope: 'company', author: { kind: 'company', name: '[Northwind Labs]' }, name: '[Northwind] board pack', description: 'Assembles the quarterly board pack outline.', roles: ['ir'], taxonomy: [tag('finance_ops', 'Finance / Ops', 3)], tools: [{ key: 'notion.read', label: 'Notion' }], output_kind: 'draft', version: 1, status: 'published', used_by: 2 }];
-const LIB = { can_edit: true, figures: { skills: { axal: 52, company: 16 }, updates_available: 3 }, roles: [{ key: 'ir', skill_count: 12, agent_count: 3 }, { key: 'sd', skill_count: 8, agent_count: 0 }], skills: [...AX, ...CO] };
-const ROLE = { key: 'ir', name: 'Investor relations', mission: 'Investor updates, data rooms and follow-ups.' };
+const LIB = { can_edit: true, figures: { skills: { axal: 52, company: 16 }, updates_available: 3 }, skills: [...AX, ...CO] };
+const FINANCE = { key: 'finance', axis: 'finance_ops', name: 'Finance' };
 
 // ---------------------------------------------------------------- the model
 
@@ -66,10 +68,11 @@ test('"Used by N agents" is the install count; no count is null, never 0', () =>
   assert.equal(usedBy(undefined), null);
 });
 
-test('SK1: role, category and search filter; Popular puts an uncounted skill last; groups split Axal from the company', () => {
+test('SK1: area and search filter; Popular puts an uncounted skill last; groups split Axal from the company', () => {
   const all = [...AX, ...CO];
-  assert.deepEqual(directory(all, { role: 'ir' }).map((s) => s.uid), ['s1', 's2', 'c1']);
-  assert.deepEqual(directory(all, { category: 'legal_compliance' }).map((s) => s.uid), ['s2']);
+  assert.deepEqual(directory(all, { area: 'finance' }).map((s) => s.uid), ['s1', 'c1', 's3'], 'an area key');
+  assert.deepEqual(directory(all, { area: 'legal_compliance' }).map((s) => s.uid), ['s2'], 'or the radar slug');
+  assert.deepEqual(directory(all, { area: 'ir' }).map((s) => s.uid), [], 'an old role key is no area');
   assert.deepEqual(directory(all, { q: 'board' }).map((s) => s.uid), ['c1']);
   assert.deepEqual(directory(all, { sort: 'popular' }).map((s) => s.uid), ['s1', 's2', 'c1', 's3']);
   assert.deepEqual(directory(all, { sort: 'az' }).map((s) => s.name)[0], '[Northwind] board pack');
@@ -119,15 +122,17 @@ test('SK3: agents are grouped by company, each company\'s own agents before its 
 });
 
 test('SK7 Paste: the preview parses the frontmatter and the steps, and flags a write tool before anything is saved', () => {
-  const md = '---\nname: board-meeting-prep\nroles: [investor-relations]\ntools: [notion.read, hubspot.write]\noutput: draft\n---\n1. Read the last board notes.\n2. Outline the agenda.\n';
+  const md = '---\nname: board-meeting-prep\ntaxonomy: {capital-network: proficient}\ntools: [notion.read, hubspot.write]\noutput: draft\n---\n1. Read the last board notes.\n2. Outline the agenda.\n';
   const p = parseSkillMd(md);
   assert.equal(p.front.name, 'board-meeting-prep');
-  assert.deepEqual(p.front.roles, ['investor-relations']);
+  assert.deepEqual(p.front.taxonomy, { 'capital-network': 'proficient' });
+  assert.equal(p.rows.find((r) => r.key === 'taxonomy').ok, true);
+  assert.equal(p.rows.some((r) => r.key === 'roles'), false, 'v2: no roles row');
   assert.deepEqual(p.steps, ['Read the last board notes.', 'Outline the agenda.']);
   assert.deepEqual(p.problems, ['write_tool']);
   assert.equal(p.rows.find((r) => r.key === 'tools').ok, false);
   assert.equal(problemWords('write_tool', p), 'Write tools aren’t allowed: agents only read. Replace hubspot.write with hubspot.read, or remove it.');
-  assert.deepEqual(parseSkillMd('just text').problems, ['missing_name', 'unknown_role', 'no_steps']);
+  assert.deepEqual(parseSkillMd('just text').problems, ['missing_name', 'missing_taxonomy', 'no_steps']);
   assert.ok(parseSkillMd(`---\nname: x\nroles: [a]\n---\n1. y\n${'z'.repeat(33 * 1024)}`).problems.includes('too_long'));
   const out = html(h(PastePreview, { parsed: p }));
   assert.match(out, /data-testid="paste-problem-write_tool"/);
@@ -137,7 +142,7 @@ test('SK7 Paste: the preview parses the frontmatter and the steps, and flags a w
 
 test('a pasted SKILL.md is drawn as text: markup in it is escaped, never rendered', () => {
   const evil = { available: true, value: { skill: { ...AX[0], markdown: '---\nname: x\n---\n<img src=x onerror=alert(1)>', steps: ['<b>bold</b>'], versions: [] } } };
-  const out = html(h(SkillPage, { block: evil, agentsBlock: { available: true, value: { agents: [] } }, roleNames: () => 'Investor relations', onBack() {}, onAssign() {}, canEdit: true }));
+  const out = html(h(SkillPage, { block: evil, agentsBlock: { available: true, value: { agents: [] } }, onBack() {}, onAssign() {}, canAssign: true }));
   assert.doesNotMatch(out, /<img src=x/);
   assert.match(out, /&lt;img src=x onerror=alert\(1\)&gt;/);
   assert.match(out, /&lt;b&gt;bold&lt;\/b&gt;/);
@@ -145,7 +150,7 @@ test('a pasted SKILL.md is drawn as text: markup in it is escaped, never rendere
 });
 
 test('refusals come back in words, and update/file helpers', () => {
-  assert.equal(skillRefusalWords('role_mismatch'), 'An agent can only be given skills of its own role.');
+  assert.equal(skillRefusalWords('role_mismatch'), 'This agent could not take it yet: the skill is still held to the agents it was written for.');
   assert.equal(skillRefusalWords('tool_not_approved', 'HubSpot'), 'Needs the HubSpot read tool, which its sponsor hasn’t approved.');
   assert.equal(skillRefusalWords('nope'), 'It could not be saved. Try again.');
   assert.equal(updateLabel({ pinned_version: 2, current_version: 3 }), 'Update to v3');
@@ -156,44 +161,47 @@ test('refusals come back in words, and update/file helpers', () => {
 
 // ---------------------------------------------------------------- the boards
 
-test('SK0: the Skills tab sits after People and agents; the figures and role tiles say "Not recorded" for a count not read', () => {
-  assert.deepEqual(TABS.map((t) => t.key), ['people', 'skills', 'roles', 'approvals', 'settings']);
+test('SK0: the Skills tab sits after People and agents; the figures and area tiles say "Not recorded" for a count not read', () => {
+  // D1614 W6 (#3974): Activity is a project's tab only (`projectOnly`).
+  assert.deepEqual(TABS.map((t) => t.key), ['people', 'skills', 'roles', 'approvals', 'activity', 'settings']);
+  assert.deepEqual(TABS.filter((t) => t.projectOnly).map((t) => t.key), ['activity']);
   assert.equal(tabFrom('?tab=skills'), 'skills');
   const figs = text(h(SkillFigures, { figures: LIB.figures }));
   assert.match(figs, /Skills available\s*68/);
   assert.match(figs, /From Axal 52 · yours 16/);
   assert.match(figs, /Agents with skills\s*Not recorded/);
   assert.match(figs, /Updates available\s*3/);
-  assert.match(text(h(RoleTile, { role: ROLE, counts: LIB.roles[0], onOpen() {} })), /12 skills\s*3 agents/);
-  const none = text(h(RoleTile, { role: { key: 'sd', name: 'Sales development' }, counts: LIB.roles[1], onOpen() {}, onAddAgent() {} }));
-  assert.match(none, /No agents yet · Add one/);
-  assert.match(text(h(RoleTile, { role: ROLE, counts: null, onOpen: null })), /Skills\s*Not recorded/);
-  assert.doesNotMatch(text(h(RoleTile, { role: ROLE, counts: null, onOpen: null })), /\b0 skills/);
+  assert.match(text(h(AreaTile, { area: FINANCE, count: 12, onOpen() {} })), /Finance\s*12 skills/);
+  assert.match(text(h(AreaTile, { area: FINANCE, count: 0, onOpen() {} })), /0 skills/, 'a counted zero is a zero');
+  assert.match(text(h(AreaTile, { area: FINANCE, count: null, onOpen: null })), /Skills\s*Not recorded/);
+  assert.doesNotMatch(text(h(AreaTile, { area: FINANCE, count: null, onOpen: null })), /\b0 skills/);
 });
 
 test('SK1: the directory groups From Axal and the company\'s skills, with Assign only for an editor', () => {
-  const out = html(h(Directory, { role: ROLE, value: LIB, companyName: '[Northwind Labs]', canEdit: true, onBack() {}, onOpen() {}, onAssign() {}, onNew() {} }));
+  const props = { value: LIB, companyName: '[Northwind Labs]', onArea() {}, onBack() {}, onOpen() {}, onAssign() {}, onNew() {} };
+  const out = html(h(Directory, { ...props, area: null, canNew: true, canAssign: true }));
   const t = renderedText(out);
-  assert.match(t, /From Axal\s*2/);
+  assert.match(t, /From Axal\s*3/);
   assert.match(t, /\[Northwind Labs\]’s skills\s*1/);
   assert.match(t, /Capital \/ Network · Proficient/);
+  assert.match(t, /All areas/);
   assert.match(t, /Mercury · read/);
   assert.match(t, /Used by\s*214 agents/);
   assert.match(t, /By \[Northwind Labs\]/);
   assert.match(out, /data-testid="skill-assign-s1"/);
   assert.match(out, /data-testid="skills-new"/);
-  for (const c of ['All', 'Product', 'Engineering', 'Design', 'GTM / Sales', 'Marketing / Brand', 'Finance / Ops', 'Legal / Compliance', 'Capital / Network']) assert.ok(t.includes(c), `category ${c}`);
-  const ro = html(h(Directory, { role: ROLE, value: { ...LIB, can_edit: false }, companyName: '[Northwind Labs]', canEdit: false, onBack() {}, onOpen() {}, onAssign() {}, onNew() {} }));
+  for (const id of ['all', 'product', 'engineering', 'design', 'gtm', 'marketing', 'finance', 'legal', 'capital']) assert.ok(out.includes(`data-testid="skills-cat-${id}"`), `area ${id}`);
+  const ro = html(h(Directory, { ...props, value: { ...LIB, can_edit: false }, area: null, canNew: false, canAssign: false }));
   assert.doesNotMatch(ro, /skill-assign-|skills-new/);
-  assert.match(renderedText(ro), /Only company editors add skills or assign them/);
-  const empty = text(h(Directory, { role: { key: 'sd', name: 'Sales development' }, value: LIB, canEdit: true, onBack() {}, onOpen() {}, onAssign() {}, onNew() {} }));
-  assert.match(empty, /No skills for Sales development yet\. Axal adds skills as roles grow; editors can write one\./);
+  assert.match(renderedText(ro), /Only this Team’s editors add skills or assign them to agents/);
+  const empty = text(h(Directory, { ...props, area: { key: 'design', axis: 'design', name: 'Design' }, canNew: true, canAssign: true }));
+  assert.match(empty, /No skills in Design yet\. Axal adds skills to every area; editors can write one\./);
 });
 
 test('SK2: the skill page shows steps, tags, tools, output, versions and the agents using it, grouped', () => {
   const block = { available: true, value: { can_edit: true, skill: { ...AX[0], markdown: '---\nname: monthly-investor-update\n---\n1. Read', steps: ['Read last month’s figures.', 'Draft highlights.'], versions: [{ version: 3, published_at: '2026-10-28', note: 'Adds the “Not recorded” step.' }] } } };
   const usingIt = { available: true, value: { agents: [{ uid: 'a1', name: 'Investor relations', pinned_version: 3, scope: { kind: 'company', company_name: '[Northwind Labs]' } }, { uid: 'a2', name: 'Investor relations', pinned_version: 2, scope: { kind: 'project', company_name: '[Northwind Labs]', project_name: '[Pilot app]' } }] } };
-  const out = html(h(SkillPage, { block, agentsBlock: usingIt, canEdit: true, roleName: 'Investor relations', roleNames: () => 'Investor relations', onBack() {}, onAssign() {} }));
+  const out = html(h(SkillPage, { block, agentsBlock: usingIt, canAssign: true, backTo: 'Capital', onBack() {}, onAssign() {} }));
   const t = renderedText(out);
   for (const w of ['Monthly investor update', 'Read last month’s figures.', 'Draft highlights.', 'Adds the “Not recorded” step.', '[Pilot app] · project', 'A named person accepts it']) assert.ok(t.includes(w), w);
   for (const id of ['skill-copy', 'skill-download', 'skill-page-assign', 'skill-md']) assert.ok(out.includes(`data-testid="${id}"`), id);
@@ -232,8 +240,8 @@ test('SK4, SK9b: the agent\'s skills with pinned versions, Update to v3, a retir
 
 // ---------------------------------------------------------------- the seam
 
-test('A1\'s library reads stay unavailable behind the seam; A2\'s agent reads are wired to their routes (#3956)', async () => {
-  const methods = ['skillLibrary', 'skill', 'createSkill', 'updateSkill', 'publishSkill', 'importSkill'];
+test('A1\'s writes stay unavailable behind the seam; its two reads (#4224) and A2\'s agent reads are wired to their routes (#3956)', async () => {
+  const methods = ['createSkill', 'updateSkill', 'publishSkill', 'importSkill'];
   for (const m of methods) {
     assert.equal(typeof adapter[m], 'function', m);
     const out = await adapter[m]('company', 'nw1', {});
@@ -245,10 +253,10 @@ test('A1\'s library reads stay unavailable behind the seam; A2\'s agent reads ar
   const src = codeOnly(read(`${TEAM}/agentsAdapter.js`));
   for (const m of methods) assert.match(src, new RegExp(`export const ${m} = \\([^)]*\\) => off\\(\\);`), `${m} stays a one-line off()`);
   // A2: each body calls its client method, and each client method is on the Worker's path.
-  const a2 = ['agentSkills', 'setAgentSkills', 'availableSkills', 'skillAgents', 'assignable', 'assignSkill', 'coverage'];
+  const a2 = ['skillLibrary', 'skill', 'agentSkills', 'setAgentSkills', 'availableSkills', 'skillAgents', 'assignable', 'assignSkill', 'coverage'];
   for (const m of a2) assert.match(src, new RegExp(`export const ${m} = [^\\n]*throughSkill\\(\\(\\) => teamAgentsApi\\.${m}\\(`), `${m} is wired`);
   const api = read('frontend/src/lib/api/teamAgents.js');
-  for (const [m, path] of [['agentSkills', '/teams/agents/${enc(uid)}/skills`'], ['availableSkills', '/skills/available`'], ['skillAgents', '/teams/skills/${enc(skillUid)}/agents`'],
+  for (const [m, path] of [['skillLibrary', '`/teams/skills?company=${enc(companyUid)}`'], ['skill', '`/teams/skills/${enc(uid)}`'], ['agentSkills', '/teams/agents/${enc(uid)}/skills`'], ['availableSkills', '/skills/available`'], ['skillAgents', '/teams/skills/${enc(skillUid)}/agents`'],
     ['assignable', '/assignable`'], ['assignSkill', '/assign`, { method: \'POST\', body: JSON.stringify({ agent_uids: agentUids })'], ['coverage', '${base(scope, id)}/coverage`']]) {
     assert.ok(api.includes(path), `${m}: ${path}`);
   }
@@ -267,7 +275,7 @@ test('A1\'s library reads stay unavailable behind the seam; A2\'s agent reads ar
     assert.deepEqual(seen, ['POST /api/teams/skills/s1/assign', 'GET /api/teams/company/nw1/coverage']);
   } finally { globalThis.fetch = previous; restore(); }
   const refused = await adapter.throughSkill(async () => { const e = new Error('x'); e.status = 422; e.code = 'role_mismatch'; throw e; });
-  assert.equal(refused.reason, 'An agent can only be given skills of its own role.');
+  assert.equal(refused.reason, 'This agent could not take it yet: the skill is still held to the agents it was written for.');
 });
 
 test('the Add-an-agent sheet has a Skills step, and sends `skills` only when some were picked', () => {

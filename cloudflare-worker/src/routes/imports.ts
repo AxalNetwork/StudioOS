@@ -22,6 +22,7 @@
  * enforced separately for the portfolio importer).
  */
 
+import { flagsFor, notSwitchedOn } from '../services/featureFlags';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
@@ -885,6 +886,8 @@ imports.post('/deck', async (c) => {
   const bytes = new Uint8Array(await f.arrayBuffer());
   if (bytes.byteLength > 25 * 1024 * 1024) return c.json({ error: 'file_too_large', max_mb: 25 }, 413);
 
+  // #4189 (D4155 K2): HQ › Decks switches PowerPoint import (`deck:pptx_import`); a PDF is not affected.
+  if (name.endsWith('.pptx') && !(await flagsFor(c.env, user)).on('deck:pptx_import')) return refuse(c, 404, notSwitchedOn);
   const importId = await startImport(c.env, user.id, name.endsWith('.pptx') ? 'deck_pptx' : 'deck_pdf', 'pitch_decks', null);
   let slides: { index: number; text: string }[] = [];
   try {
