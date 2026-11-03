@@ -51,7 +51,7 @@ test('1b. railTextJob: a page press runs its page\'s job; a registered option it
 
 test('2. the router: every rail text press resolves through textChoice; only an option carries a pick; a page list never chooses', () => {
   const r = src('services/aiRouter.ts');
-  assert.match(r, /const textJobId = opts\.textJob \?\? \(opts\.rail \? railJob : \(!opts\.model \? TASK_TEXT_JOBS\[opts\.task\] : undefined\)\);/);
+  assert.match(r, /const textJobId = opts\.textJob \?\? \(railText \? railJob : \(!opts\.model \? TASK_TEXT_JOBS\[opts\.task\] : undefined\)\);/, 'an unlisted page runs the task\'s job');
   assert.match(r, /const optionRow = railText\?\.optionRow \?\? null;/, 'the pick is the option\'s alone');
   assert.match(r, /resolveRailOption\(opts\.rail\.page, opts\.rail\.option \?\? null\) \?\? \(opts\.model \|\| pageJobless \? resolveRail\(opts\.rail\.page\) : null\)/,
     'the page\'s list is read only to check a named model, or on a page whose job writes no text');

@@ -2044,7 +2044,8 @@ async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Prom
   // (`withModuleModels` builds it from the same job's step and kind), so the check is the job's;
   // the list never chooses a model by itself.
   const railJob = railText?.job && !opts.model ? railText.job : undefined;
-  const textJobId = opts.textJob ?? (opts.rail ? railJob : (!opts.model ? TASK_TEXT_JOBS[opts.task] : undefined));
+  // A page the matrix does not list (`railText` null) is no rail page: the task's own job applies, as with no rail context.
+  const textJobId = opts.textJob ?? (railText ? railJob : (!opts.model ? TASK_TEXT_JOBS[opts.task] : undefined));
   if (textJobId && textShaped) {
     let pick: string | null = null;
     let tier: PlanTier;
