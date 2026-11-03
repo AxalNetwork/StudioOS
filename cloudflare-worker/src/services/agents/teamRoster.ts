@@ -35,7 +35,7 @@ export type TeamPerson = {
   /** The account's licence, for the role badge in its accent. */
   licence: string;
   open_tasks: number;
-  /** `weekly_capacity_points` once W4 (#3972) records it; null is "Not recorded", never 0. */
+  /** W4's `work_capacity.weekly_capacity_points` (#4195) on this project; null is "Not recorded", never 0. */
   capacity: number | null;
 };
 export type TeamAgent = {
@@ -64,10 +64,12 @@ export async function assignable(env: Env, p: Project): Promise<{ team: Array<Te
       WHERE u.role = 'founder' AND u.founder_id IS NOT NULL AND u.founder_id = ? AND u.is_active = 1
         AND NOT EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = ? AND pm.user_id = u.id AND pm.status = 'accepted')`,
   ).bind(p.id, p.founder_id ?? -1, p.id).all<{ id: number; uid: string; name: string | null; licence: string; team_role: string; since: string | null }>();
+  const caps = new Map(((await env.DB.prepare('SELECT user_id, weekly_capacity_points FROM work_capacity WHERE project_id = ?').bind(p.id)
+    .all<{ user_id: number; weekly_capacity_points: number }>()).results ?? []).map((r) => [Number(r.user_id), Number(r.weekly_capacity_points)]));
   const rank = (r: string) => (r === 'owner' ? 0 : r === 'cofounder' ? 1 : 2);
   const persons: TeamPerson[] = (people.results ?? [])
     .sort((a, b) => rank(a.team_role) - rank(b.team_role) || String(a.since ?? '').localeCompare(String(b.since ?? '')) || a.id - b.id)
-    .map((r) => ({ kind: 'person', uid: r.uid, name: r.name, team_role: r.team_role, licence: r.licence, open_tasks: personOpen.get(r.id) ?? 0, capacity: null }));
+    .map((r) => ({ kind: 'person', uid: r.uid, name: r.name, team_role: r.team_role, licence: r.licence, open_tasks: personOpen.get(r.id) ?? 0, capacity: caps.get(r.id) ?? null }));
   const agents = await env.DB.prepare(
     `SELECT id, uid, first_name, last_name, role_key, status FROM team_agents
       WHERE scope_kind = 'project' AND project_id = ? AND status IN ('active','paused') ORDER BY id`,
@@ -105,8 +107,14 @@ export type MyTasksQuery = { state?: string | null; project?: string | null; due
  * Every project task assigned to the caller, grouped by project. A project the
  * caller no longer reads and is no longer on the Team of is left out, so a
  * task given to someone whose seat ended is the editors' to reassign, not
- * theirs to see. `compliance` is #3976's company tasks: an empty list until
- * that store is on main, so the shape is fixed now.
+ * theirs to see.
+ *
+ * `compliance` is #3976's company tasks given to the caller, grouped by
+ * company, on a company where they still hold a seat (`user_company_links`):
+ * a seat that ended leaves the task to its admins, flagged
+ * `needs_reassignment`, as a project's does. The same `state` and `due`
+ * filters apply (done is closed); `project` narrows it to tasks naming that
+ * project. HQ's read of every company is not a reason to list its tasks here.
  */
 export async function myTasks(env: Env, user: User, q: MyTasksQuery, now = new Date()) {
   const state = q.state ?? 'open';
@@ -154,5 +162,42 @@ export async function myTasks(env: Env, user: User, q: MyTasksQuery, now = new D
       link: `/projects/${pid}/work?item=${t.uid}`,
     });
   }
-  return { projects: [...groups.values()], compliance: [] as unknown[], has_more };
+  const compliance = await myComplianceTasks(env, user, { state, due, project, today, week });
+  return { projects: [...groups.values()], compliance: compliance.groups, has_more: has_more || compliance.has_more };
+}
+
+type ComplianceQuery = { state: string; due: string | null; project: string | null; today: string; week: string };
+async function myComplianceTasks(env: Env, user: User, q: ComplianceQuery) {
+  const rows = await env.DB.prepare(
+    `SELECT e.uid, e.title, e.event_type, e.due_date, e.completion_status, e.needs_reassignment, e.project_id,
+            c.uid AS company_uid, c.company_name
+       FROM compliance_events e
+       JOIN company_profiles c ON c.id = e.company_id
+       JOIN user_company_links l ON l.company_id = e.company_id AND l.user_id = ?
+      WHERE e.assignee_kind = 'person' AND e.assignee_user_id = ?
+        AND (? = 'all' OR (? = 'open' AND e.completion_status <> 'completed') OR (? = 'closed' AND e.completion_status = 'completed'))
+        AND (? IS NULL OR e.project_id = ?)
+        AND (? IS NULL
+          OR (? = 'none' AND e.due_date IS NULL)
+          OR (? = 'overdue' AND e.due_date IS NOT NULL AND substr(e.due_date, 1, 10) < ?)
+          OR (? = 'today' AND substr(e.due_date, 1, 10) = ?)
+          OR (? = 'week' AND e.due_date IS NOT NULL AND substr(e.due_date, 1, 10) BETWEEN ? AND ?))
+      ORDER BY e.company_id, e.due_date IS NULL, e.due_date, e.id
+      LIMIT ?`,
+  ).bind(user.id, user.id, q.state, q.state, q.state, q.project, q.project ? Number(q.project) : null,
+    q.due, q.due, q.due, q.today, q.due, q.today, q.due, q.today, q.week, MY_TASKS_MAX + 1)
+    .all<Record<string, any>>();
+  const all = rows.results ?? [];
+  const groups = new Map<string, { company: { uid: string; name: string | null }; tasks: unknown[] }>();
+  for (const e of all.slice(0, MY_TASKS_MAX)) {
+    const key = String(e.company_uid);
+    if (!groups.has(key)) groups.set(key, { company: { uid: key, name: e.company_name ?? null }, tasks: [] });
+    groups.get(key)!.tasks.push({
+      uid: e.uid, title: e.title, type: e.event_type,
+      state: e.completion_status === 'completed' ? 'closed' : 'open', due_at: e.due_date,
+      needs_reassignment: Number(e.needs_reassignment) === 1, project_id: e.project_id ?? null,
+      link: `/account/companies/${encodeURIComponent(key)}/settings/compliance`,
+    });
+  }
+  return { groups: [...groups.values()], has_more: all.length > MY_TASKS_MAX };
 }

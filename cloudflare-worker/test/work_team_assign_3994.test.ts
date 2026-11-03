@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { SignJWT } from 'jose';
 import { Hono } from 'hono';
 import { makeD1 } from './_d1_sqlite.mjs';
-import { addColumnsFrom, stripForeignKeys, tableFromBaseline } from './_baseline.mjs';
+import { addColumnsFrom, addComplianceStore, stripForeignKeys, tableFromBaseline } from './_baseline.mjs';
 import { AI_LOG_SCHEMA } from './_ai_budget_fixture.mjs';
 import engine from '../src/routes/agent_engine.ts';
 import { updateWorkTask, createWorkTask, type WorkTask } from '../src/services/agents/workBoard.ts';
@@ -33,6 +33,7 @@ function world() {
   db.exec(sql('migrations/763_task_comments_labels_milestones.sql'));
   db.exec(sql('migrations/202611022015_scope_task_needs_reassignment.sql'));
   db.exec(sql('migrations/202611022205_work_workload.sql')); // D1614 W4 (#4195): the board writes the time block
+  addComplianceStore(db); // #3976: My tasks' compliance group
   db.exec(`CREATE TABLE project_members (id INTEGER PRIMARY KEY, project_id INTEGER, user_id INTEGER, role TEXT, status TEXT, removed_at TEXT, created_at TEXT, updated_at TEXT)`);
   const people: Array<[number, string, string, number | null]> = [
     [OWNER, 'Pat Owner', 'founder', 100], [COFOUNDER, 'Cleo Cofounder', 'founder', 101], [ADVISOR, 'Ada Advisor', 'advisor', null],
@@ -124,6 +125,10 @@ test('the assignable read is one team list of this Team only, with role, licence
     ], 'owner first, then seats by age, then live and paused agents; no removed seat, no HQ admin, no other scope\'s agent');
     const advisor = r.body.team.find((m: any) => m.uid === 'u-12');
     assert.deepEqual(advisor, { kind: 'person', uid: 'u-12', name: 'Ada Advisor', team_role: 'advisor', licence: 'advisor', open_tasks: 2, capacity: null });
+    // W4 (#4195): a recorded capacity is this project's; one recorded on another project, or a 0, is never mistaken for it.
+    w.db.exec(`INSERT INTO work_capacity (project_id, user_id, weekly_capacity_points) VALUES (7, ${ADVISOR}, 13), (8, ${COFOUNDER}, 40), (7, ${PARTNER}, 0)`);
+    const caps = Object.fromEntries((await call(w, OWNER, 'GET', '/project/7/assignable')).body.team.filter((m: any) => m.kind === 'person').map((m: any) => [m.uid, m.capacity]));
+    assert.deepEqual([caps['u-12'], caps['u-11'], caps['u-13'], caps['u-10']], [13, null, 0, null]);
     assert.deepEqual(r.body.team.find((m: any) => m.uid === AGENT), { kind: 'agent', uid: AGENT, name: 'Carla Cash', role: 'cfo', status: 'active', open_tasks: 1 });
     assert.equal(r.body.team.find((m: any) => m.uid === 'u-10').team_role, 'owner');
     assert.ok(!JSON.stringify(r.body).includes('@example.test'), 'no email');
@@ -133,7 +138,7 @@ test('the assignable read is one team list of this Team only, with role, licence
   } finally { w.db.close(); }
 });
 
-test('My tasks: every project task given to me, grouped by project, filtered, only where I still read or sit; compliance fixed empty', async () => {
+test('My tasks: every project task given to me, grouped by project, filtered, only where I still read or sit', async () => {
   const w = world(); try {
     const a = await create(w, { title: 'Due soon', assignee: person(ADVISOR), due_at: '2026-11-03' });
     const b = await create(w, { title: 'Overdue', assignee: person(ADVISOR), due_at: '2026-10-01' });
@@ -145,7 +150,7 @@ test('My tasks: every project task given to me, grouped by project, filtered, on
     assert.equal(r.status, 200, JSON.stringify(r.body));
     assert.deepEqual(r.body.projects.map((g: any) => [g.project.id, g.tasks.map((t: any) => t.title)]),
       [[7, ['Overdue', 'Due soon', 'No date']], [8, ['Elsewhere']]]);
-    assert.deepEqual(r.body.compliance, [], 'the compliance group is empty until #3976');
+    assert.deepEqual(r.body.compliance, [], 'no compliance task is given to the advisor');
     const nd = r.body.projects[0].tasks.find((t: any) => t.uid === c.uid);
     assert.deepEqual([nd.column, nd.state, nd.blocked, nd.needs_reassignment, nd.due_at], ['backlog', 'open', true, false, null]);
     assert.ok(!JSON.stringify(r.body).includes('@example.test') && !JSON.stringify(r.body).includes('assignee_user_id'));
@@ -211,5 +216,35 @@ test('assigning a person notifies them in their own inbox, never yourself; a fai
     const failing = async () => { throw new Error('inbox down'); };
     const kept = await updateWorkTask(w.env, mine, { assignee: person(PARTNER) }, { user: owner }, failing);
     assert.equal(kept.assignee_user_id, PARTNER);
+  } finally { w.db.close(); }
+});
+
+test('My tasks: compliance tasks given to me, grouped by company, only where I hold a seat, with the same filters', async () => {
+  const w = world(); try {
+    w.db.exec(`INSERT INTO company_profiles (id,uid,company_name) VALUES (2,'co-two','Company Two');
+      INSERT INTO compliance_events (uid,company_id,project_id,jurisdiction,event_type,title,due_date,completion_status,assignee_kind,assignee_user_id,needs_reassignment) VALUES
+        ('ce-late',1,NULL,'DE','filing','Annual report','2026-01-15','pending','person',${OWNER},0),
+        ('ce-next',1,7,'DE','payment','Franchise tax','2099-03-01','pending','person',${OWNER},1),
+        ('ce-done',1,NULL,'DE','renewal','Registered agent','2026-02-01','completed','person',${OWNER},0),
+        ('ce-noseat',2,NULL,'DE','filing','Other company filing','2026-01-20','pending','person',${OWNER},0),
+        ('ce-theirs',1,NULL,'DE','filing','Someone else','2026-01-10','pending','person',${ADVISOR},0),
+        ('ce-agent',1,NULL,'DE','filing','An agent task','2026-01-11','pending',NULL,NULL,0)`);
+    const titles = async (q: string, who = OWNER) => (await call(w, who, 'GET', `/me/tasks${q}`)).body.compliance
+      .map((g: any) => [g.company.uid, g.tasks.map((t: any) => t.title)]);
+    const r = await call(w, OWNER, 'GET', '/me/tasks');
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.deepEqual(r.body.compliance.map((g: any) => g.company), [{ uid: 'co-one', name: 'Company One' }], 'only the company I sit on');
+    assert.deepEqual(r.body.compliance[0].tasks.map((t: any) => [t.uid, t.state, t.due_at, t.needs_reassignment, t.project_id, t.type]),
+      [['ce-late', 'open', '2026-01-15', false, null, 'filing'], ['ce-next', 'open', '2099-03-01', true, 7, 'payment']], 'open by default, by due date');
+    assert.equal(r.body.compliance[0].tasks[0].link, '/account/companies/co-one/settings/compliance');
+    assert.deepEqual(await titles('?state=closed'), [['co-one', ['Registered agent']]]);
+    assert.deepEqual(await titles('?state=all'), [['co-one', ['Annual report', 'Registered agent', 'Franchise tax']]]);
+    assert.deepEqual(await titles('?due=overdue'), [['co-one', ['Annual report']]]);
+    assert.deepEqual(await titles('?project=7'), [['co-one', ['Franchise tax']]], 'a project narrows it to tasks naming that project');
+    assert.deepEqual(await titles('', ADVISOR), [], 'a task given to someone without a seat is not listed to them');
+    assert.deepEqual(await titles('', ADMIN_OFF), [], 'HQ reads no one else\'s');
+    w.db.exec(`DELETE FROM user_company_links WHERE user_id = ${OWNER}`);
+    assert.deepEqual(await titles(''), [], 'a seat that ended leaves its tasks to the company');
+    assert.ok(!JSON.stringify(r.body.compliance).includes('@example.test'));
   } finally { w.db.close(); }
 });
