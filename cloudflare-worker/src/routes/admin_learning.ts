@@ -36,6 +36,7 @@ import { logAdminAction } from '../services/adminAudit';
 import { COURSE_COVER, COURSE_UID, courseCoverPrefix, coverAsk, coverRunOptions, drawCover, quoteCover } from '../services/coverDraws';
 import { mapError, newUid } from './_t13t14t15_helpers';
 import { parseChapters } from '../services/learningStream';
+import { videoAnalytics, type Chapter } from '../services/learningAnalytics';
 import {
   allowedVideoUrl, httpsUrl, parseResources, SLUG_RE,
   ITEM_KINDS, LESSON_KINDS, LEARNING_LEVELS, LEARNING_VISIBILITIES,
@@ -194,6 +195,35 @@ r.get('/items/:uid', async (c) => {
   const admin = await gate(c); if (admin instanceof Response) return admin;
   const item = await c.env.DB.prepare(ITEM_SELECT + ' WHERE uid = ?').bind(c.req.param('uid')).first();
   return item ? c.json({ item }) : refuse(c, 404, { code: 'not_found', message: 'No such item.' });
+});
+
+/**
+ * D4181 (#4181, lr17): one video's analytics, from the positions the player
+ * writes (`services/learningAnalytics.ts`). Views, completion, the median
+ * watch time and the drop-off over 20 spans of the video; fewer than five
+ * viewers reads "Not enough views to show", and no member is named: the
+ * query reads no user id.
+ */
+r.get('/items/:uid/analytics', async (c) => {
+  const admin = await gate(c); if (admin instanceof Response) return admin;
+  const uid = c.req.param('uid');
+  const item = await c.env.DB.prepare('SELECT uid, kind, title, duration_seconds FROM learning_items WHERE uid = ?').bind(uid).first<any>();
+  if (!item) return refuse(c, 404, { code: 'not_found', message: 'No such item.' });
+  if (item.kind !== 'video') return refuse(c, 422, { code: 'not_a_video', message: 'Analytics are for videos: a reading has no positions to read.' });
+  // Chapters (D4176) mark the curve; a store without the column has none.
+  let chapters: Chapter[] = [];
+  try {
+    const row = await c.env.DB.prepare('SELECT chapters_json FROM learning_items WHERE uid = ?').bind(uid).first<{ chapters_json: string | null }>();
+    const parsed = row?.chapters_json ? parseChapters(JSON.parse(row.chapters_json)) : null;
+    chapters = parsed ?? [];
+  } catch (e) {
+    if (!/no such column|has no column|JSON/i.test(String((e as Error)?.message))) throw e;
+  }
+  const rows = (await c.env.DB.prepare(
+    `SELECT status, percent, position_seconds FROM learning_progress WHERE subject_kind = 'item' AND subject_uid = ?`,
+  ).bind(uid).all<{ status: string; percent: number | null; position_seconds: number | null }>()).results ?? [];
+  const duration = item.duration_seconds == null ? null : Number(item.duration_seconds);
+  return c.json({ item: { uid: item.uid, title: item.title, duration_seconds: duration }, analytics: videoAnalytics(rows, duration, chapters) });
 });
 
 /** Apply the defined fields of `f` to one row, by a fixed column list. */

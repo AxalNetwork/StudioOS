@@ -15,6 +15,7 @@ routes live in the D528 module `frontend/src/routes/learning.jsx`, which
 | `StudioItemEditor.jsx` | Creates and edits a video (a link or an uploaded file) or a reading, with publish, unpublish and archive. |
 | `StudioCourseBuilder.jsx` | A course's fields and resources, its modules and its lessons: add, edit, delete, and reorder with up and down. |
 | `videoUpload.js` | The pure half of a video's upload (D561): the route's limits, the check made before anything is sent, and the upload field's states. `uploadVideo` in `studioActions.js` makes the calls. |
+| `videoAnalyticsModel.js`, `VideoAnalyticsSheet.jsx` | D4181 (#4181, lr17): one video's analytics in the studio's right Sheet, opened by "Analytics" on a video's row of the content table. Views, completion rate, median watch time, and the drop-off over 20 spans of the video with chapter markers and the biggest drop. Under five viewers it says only "Not enough views to show"; a figure the route cannot give reads its reason, never 0. It reads only, and names no member. |
 | `LearningPrograms.jsx` | The assigned admin's `/learning/programs` and `/learning/programs/:program` (D558): read-only, each enrolled member against the program's content. |
 | `ProgramStudio.jsx` | The Super Admin's `/learning/studio/programs` and `/learning/studio/programs/:program`: a program's fields, status, content, admins and members. |
 | `MyPrograms.jsx` | The home's My programs: the member's programs with their progress, and the ones open to join. |

@@ -24,6 +24,11 @@ export async function readStudioItems() {
   return { rows: listOf(await adminLearningApi.listItems(), 'items', 'The item list') };
 }
 
+/** D4181 (#4181, lr17): one video's analytics, as the route answers it (`videoAnalyticsModel.js` reads it). */
+export async function readItemAnalytics(uid) {
+  return adminLearningApi.itemAnalytics(uid);
+}
+
 /** Every course, without its modules (the list does not send them). */
 export async function readStudioCourses() {
   return { rows: listOf(await adminLearningApi.listCourses(), 'courses', 'The course list') };

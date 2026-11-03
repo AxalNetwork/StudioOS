@@ -23,6 +23,8 @@ export const adminLearningApi = {
   listItems: () => request('/admin/learning/items'),
   createItem: (b) => request('/admin/learning/items', { method: 'POST', body: body(b) }),
   getItem: (uid) => request(`/admin/learning/items/${enc(uid)}`),
+  // D4181 (#4181, lr17): one video's analytics — views, completion, median watch time, drop-off; under five viewers, none.
+  itemAnalytics: (uid) => request(`/admin/learning/items/${enc(uid)}/analytics`),
   updateItem: (uid, b) => request(`/admin/learning/items/${enc(uid)}`, { method: 'PATCH', body: body(b) }),
   publishItem: (uid) => request(`/admin/learning/items/${enc(uid)}/publish`, { method: 'POST' }),
   unpublishItem: (uid) => request(`/admin/learning/items/${enc(uid)}/unpublish`, { method: 'POST' }),
