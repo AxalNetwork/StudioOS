@@ -35,7 +35,7 @@ export function viewFor(pathname = '') {
 /** The build tasks behind the boards (#4155 K1–K5). `live: false` until each lands. */
 export const BUILD = {
   K1: { issue: 4188, live: true, what: 'The founder, deck and card by name, and the area before and after' },
-  K2: { issue: 4189, live: false, what: 'A reason and an audit row on every flag change' },
+  K2: { issue: 4189, live: true, what: 'A reason and an audit row on every flag change' },
   K3: { issue: 4190, live: true, what: 'The beta cohort' },
   K4: { issue: 4191, live: true, what: 'A reason and an audit row on every default template change' },
   K5: { issue: 4192, live: true, what: 'HQ stage norms' },
@@ -129,9 +129,15 @@ export const PROPOSAL_LINE = {
 
 // ── HD2 · Feature flags ─────────────────────────────────────────────────────
 
-/** A flag key in plain words. `grid_generate`, `element:<id>` and `model:<id>` are D1509's. */
-export function flagLabel(key) {
+/**
+ * A flag key in plain words. `grid_generate`, `element:<id>` and `model:<id>`
+ * are D1509's; a deck feature (`deck:<id>`) is named by the reply's `labels`
+ * (K2, #4189), and one the reply did not label reads by its key, never a guess.
+ */
+export function flagLabel(key, labels = null) {
   const k = String(key ?? '');
+  const l = labels && typeof labels === 'object' ? labels[k] : null;
+  if (textOf(l?.label)) return { name: l.label.trim(), what: textOf(l?.description) };
   if (k === 'grid_generate') return { name: 'Generate with The Grid', what: 'Founders generate cards and areas on The Grid.' };
   if (k.startsWith('element:')) return { name: `Element · ${k.slice(8)}`, what: 'One grid element founders can generate.' };
   if (k.startsWith('model:')) return { name: `Model · ${k.slice(6)}`, what: 'One model founders can choose for a deck element.' };
@@ -146,21 +152,44 @@ export function scopeLabel({ scope, scope_id: id } = {}) {
   return NOT_RECORDED;
 }
 
-/** HD2's rows from `GET /api/admin/feature-flags`. `updated_by` is an id until K2 names it. */
+/** How many members a row reaches (K2's `affected`); "Not recorded" when the route could not count, never 0. */
+export const reachLabel = (n) => (n == null || !Number.isFinite(Number(n)) || typeof n === 'boolean' ? NOT_RECORDED
+  : `${Number(n)} ${Number(n) === 1 ? 'member' : 'members'}`);
+
+/**
+ * HD2's rows from `GET /api/admin/feature-flags`. The writer is K2's
+ * `updated_by: { uid, name }`, read by name only: a bare id or an email is
+ * never drawn. `target` is the row the toggle writes (`set`'s first argument).
+ */
 export function flagRows(reply) {
   const flags = Array.isArray(reply?.flags) ? reply.flags : [];
   return flags.map((f) => {
-    const { name, what } = flagLabel(f.key);
+    const { name, what } = flagLabel(f.key, reply?.labels);
     return {
       id: `${f.key}|${f.scope}|${f.scope_id ?? ''}`,
       key: String(f.key), name, what,
       scope: scopeLabel(f),
+      reaches: reachLabel(f.affected),
       on: f.enabled === 1 || f.enabled === true,
       by: textOf(f?.updated_by?.name) ?? NOT_RECORDED,
       at: f.updated_at ?? null,
+      target: { key: String(f.key), scope: f.scope, scope_id: f.scope_id ?? '' },
     };
   });
 }
+
+/** A key with no row is on for everyone (D1509); switching it writes the global row. */
+export const defaultRow = (key, labels = null) => ({
+  id: `${key}|default`, key: String(key), ...flagLabel(key, labels), scope: 'Everyone · the default', reaches: NOT_RECORDED,
+  on: true, by: NOT_RECORDED, at: null, target: { key: String(key), scope: 'global', scope_id: '' },
+});
+
+/** HD2b: what Save writes for a toggled row: the same row, the other way. */
+export const flagChange = (row) => ({ ...row.target, enabled: !row.on });
+export const flagChangeTitle = (row) => `Switch ${row.name} ${row.on ? 'off' : 'on'}`;
+export const FLAG_CHANGE_LINE = 'It applies within a minute, everywhere the scope reaches. The change is one admin audit row with your reason.';
+/** HD2b: Save is armed by a reason of ten characters or more; nothing is written before it. */
+export const flagChangeArmed = ({ reason }) => reasonOk(reason);
 
 /** "No row is the default, on" (D1509): the keys with no row, so HQ sees them too. */
 export function defaultOnKeys(reply) {

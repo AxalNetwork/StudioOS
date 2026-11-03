@@ -12,8 +12,8 @@ import { isSuperAdminUser } from '../../../lib/shellRole';
 import AiModelsTab from './AiModelsTab';
 import { useAuth } from '../../../hooks/useAuthSync';
 import {
-  BETA_ADD_LINE, BETA_COLUMNS, BETA_REMOVE_LINE, BUILD, MODELS_LINK, NORM_ADD_LINE, NORM_COLUMNS, NORM_RETIRE_LINE, NORM_RULE, NORM_SOURCE_HELP, NORM_STAGE_OF, NOTE_MAX, NOT_RECORDED, OUTCOMES, PROJECT_NORMS_NOTE, PROPOSAL_LINE, REASONS, STAGES, SUBTITLE,
-  addArmed, betaChoices, cohortRow, defaultOnKeys, filterReports, flagLabel, flagRows, normBody, normDraftArmed, normRetireArmed, normRow, notYet, offGridOverrides, reasonOk, reportRow, resolveArmed, templateChangeArmed, templateGrid, templatePreview, templateResetArmed, viewFor,
+  BETA_ADD_LINE, BETA_COLUMNS, BETA_REMOVE_LINE, BUILD, FLAG_CHANGE_LINE, MODELS_LINK, NORM_ADD_LINE, NORM_COLUMNS, NORM_RETIRE_LINE, NORM_RULE, NORM_SOURCE_HELP, NORM_STAGE_OF, NOTE_MAX, NOT_RECORDED, OUTCOMES, PROJECT_NORMS_NOTE, PROPOSAL_LINE, REASONS, STAGES, SUBTITLE,
+  addArmed, betaChoices, cohortRow, defaultOnKeys, defaultRow, filterReports, flagChange, flagChangeArmed, flagChangeTitle, flagRows, normBody, normDraftArmed, normRetireArmed, normRow, notYet, offGridOverrides, reasonOk, reportRow, resolveArmed, templateChangeArmed, templateGrid, templatePreview, templateResetArmed, viewFor,
 } from './hqDecksModel';
 
 /**
@@ -24,6 +24,7 @@ import {
  *   Reports            GET  /api/admin/deck-reports?status=   (requireHqAdmin, D1540)
  *                      POST /api/admin/deck-reports/:uid/resolve  { outcome, note }
  *   Feature flags      GET  /api/admin/feature-flags          (requireAdmin, D1509)
+ *                      PUT  the same, { key, scope, scope_id, enabled, reason }  (K2 #4189)
  *   Beta cohort        GET/POST /api/admin/deck-beta, GET /people, DELETE /:uid (requireHqAdmin, K3 #4190)
  *   Default templates  GET  /api/decks/admin/recommend-overrides  (any admin, D905)
  *                      PUT / DELETE the same, { reason }        (Super Admin, K4 #4191)
@@ -207,39 +208,88 @@ function Reports() {
 
 // ── HD2 · Feature flags ─────────────────────────────────────────────────────
 
+/**
+ * HD2b: one toggle's reason step. Pressing On or Off opens this, in the page;
+ * nothing is written until Save, which sends the same row the other way with
+ * the reason (one admin audit row, K2 #4189).
+ */
+function FlagSheet({ row, onDone, onClose }) {
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const armed = flagChangeArmed({ reason });
+  const save = async () => {
+    if (!armed) return;
+    setBusy(true); setFailed(false);
+    try { await adminFeatureFlagsApi.set(flagChange(row), reason.trim()); onDone(); }
+    catch (e) { setFailed(true); reportError('hq-decks:flag-set', e); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Lightbox label={flagChangeTitle(row)} title={flagChangeTitle(row)} width={520} onClose={() => !busy && onClose()} testId="deck-flag-sheet"
+      footer={(
+        <div className="flex justify-end gap-2">
+          <button type="button" className={BTN} onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="button" className={PRIMARY} onClick={save} disabled={busy || !armed} data-testid="deck-flag-save">{busy ? 'Saving…' : failed ? 'Try again' : 'Save'}</button>
+        </div>
+      )}>
+      <div className="flex flex-col gap-3">
+        <p className="text-[13px] text-axal-ink dark:text-gray-100"><span className="font-semibold">{row.name}</span> · {row.scope} · {row.on ? 'On → Off' : 'Off → On'}</p>
+        <p className={MUTED}>{FLAG_CHANGE_LINE}</p>
+        <label className="flex flex-col gap-1 text-[13px]">
+          <span className="font-semibold">Reason <span className={MUTED}>(required, ten characters or more; kept in the admin audit)</span></span>
+          <textarea className={INPUT} rows={2} maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} data-testid="deck-flag-reason" />
+        </label>
+        {failed ? <p role="alert" className="text-[12.5px] text-red-700 dark:text-red-300" data-testid="deck-flag-failed"><strong>Could not be saved.</strong> Nothing was changed. Try again.</p> : null}
+      </div>
+    </Lightbox>
+  );
+}
+
+function FlagToggle({ row, onOpen }) {
+  return (
+    <button type="button" className={BTN} disabled={!BUILD.K2.live} title={BUILD.K2.live ? undefined : notYet('K2')} aria-pressed={row.on}
+      aria-label={flagChangeTitle(row)} onClick={() => onOpen(row)} data-testid={`deck-flag-toggle-${row.id}`}>
+      {row.on ? 'On' : 'Off'}
+    </button>
+  );
+}
+
 function Flags() {
   const [reply, retry] = useRead(() => adminFeatureFlagsApi.list(), []);
+  const [open, setOpen] = useState(null);
   if (reply === undefined) return <Card><Reading testId="deck-flags-reading" /></Card>;
   if (reply === null) return <Card><ReadFailed what="The feature flags" claim="That is not the same as every feature being off." onRetry={retry} testId="deck-flags-unreadable" /></Card>;
   const rows = flagRows(reply);
-  const defaults = defaultOnKeys(reply);
+  const defaults = defaultOnKeys(reply).map((k) => defaultRow(k, reply?.labels));
   return (
     <Card data-testid="hq-decks-flags">
-      <p className={`${MUTED} mb-3`} data-testid="deck-flags-not-yet">{notYet('K2')}</p>
+      {!BUILD.K2.live && <p className={`${MUTED} mb-3`} data-testid="deck-flags-not-yet">{notYet('K2')}</p>}
       <div className="max-h-[32rem] overflow-auto">
         <table className="w-full" data-testid="deck-flags-table">
           <thead><tr>{['Feature', 'Scope', 'Last changed', 'On'].map((c) => <th key={c} className={TH}>{c}</th>)}</tr></thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.id} className="border-t border-axal-hairline dark:border-gray-800">
+              <tr key={r.id} className="border-t border-axal-hairline dark:border-gray-800" data-testid={`deck-flag-row-${r.id}`}>
                 <td className={TD}><span className="font-semibold">{r.name}</span>{r.what && <><br /><span className={MUTED}>{r.what}</span></>}</td>
-                <td className={TD}>{r.scope}</td>
+                <td className={TD}>{r.scope}<br /><span className={MUTED}>Reaches <Cell v={r.reaches} /></span></td>
                 <td className={TD}><Cell v={r.by} /> · {r.at ? day(r.at) : <Cell v={NOT_RECORDED} />}</td>
-                <td className={TD}><button type="button" className={BTN} disabled title={notYet('K2')} aria-pressed={r.on}>{r.on ? 'On' : 'Off'}</button></td>
+                <td className={TD}><FlagToggle row={r} onOpen={setOpen} /></td>
               </tr>
             ))}
-            {defaults.map((k) => (
-              <tr key={k} className="border-t border-axal-hairline dark:border-gray-800" data-testid="deck-flag-default">
-                <td className={TD}><span className="font-semibold">{flagLabel(k).name}</span></td>
-                <td className={TD}>Everyone · the default</td>
+            {defaults.map((r) => (
+              <tr key={r.id} className="border-t border-axal-hairline dark:border-gray-800" data-testid="deck-flag-default">
+                <td className={TD}><span className="font-semibold">{r.name}</span>{r.what && <><br /><span className={MUTED}>{r.what}</span></>}</td>
+                <td className={TD}>{r.scope}</td>
                 <td className={TD}><Cell v={NOT_RECORDED} /></td>
-                <td className={TD}><button type="button" className={BTN} disabled title={notYet('K2')} aria-pressed>On</button></td>
+                <td className={TD}><FlagToggle row={r} onOpen={setOpen} /></td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
       <p className={`${MUTED} mt-3`}>Scope is Everyone, one role, or named people. With no row a feature is on for everyone. A change applies within a minute.</p>
+      {open ? <FlagSheet key={open.id} row={open} onClose={() => setOpen(null)} onDone={() => { setOpen(null); retry(); }} /> : null}
     </Card>
   );
 }
