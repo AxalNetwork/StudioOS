@@ -36,10 +36,10 @@ import type { Env } from '../types';
 import { logAdminAction } from './adminAudit';
 import { listTemplates } from './legalTemplateStore';
 
-/** The nine programs, in the canvas's order (dc:341-349). */
+/** The nine programs, in the canvas's order (dc:341-349), then Influencers (D4289 P1, #4290), in registry position. */
 export const PROGRAM_KEYS = [
   'spinout-lab', 'ai-native-venture', 'mentor-cohorts', 'investor-cohorts', 'referral-partners',
-  'refer-and-earn', 'perks', 'learning', 'product-testing',
+  'refer-and-earn', 'perks', 'learning', 'product-testing', 'influencer',
 ] as const;
 export type ProgramKey = typeof PROGRAM_KEYS[number];
 
