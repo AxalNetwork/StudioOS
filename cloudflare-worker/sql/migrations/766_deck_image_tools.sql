@@ -1,0 +1,21 @@
+-- 766 — D1534 (#3778 phase 2, deck builder v2 B2): an image made by a tool.
+--
+--   deck_images.image_tool  the tool that made this image from its parent
+--                           ('remove_background', or 'upscale' once it has a
+--                           model), or NULL. A tool's result is a child image
+--                           like an edit's (migration 735): `parent_uid` is
+--                           set, the founder keeps it or reverts it, and the
+--                           parent row is never changed.
+--
+-- A child carries exactly one of `edit_op` (an edit, 735) or `image_tool`
+-- (this column). 735's CHECK lists the four edits, and SQLite cannot widen a
+-- CHECK on an existing column, hence a column of its own. The pairing is the
+-- route's and the test's (`deck_image_tools_d1534.test.ts`).
+--
+-- Grep first (D689 D-t): no `image_tool` column exists on deck_images in
+-- schema_baseline.sql or any migration (543, 714, 718, 735).
+--
+-- Additive: one ADD COLUMN. NON-IDEMPOTENT (D1's ALTER TABLE has no
+-- IF NOT EXISTS): the ledger runner applies it once.
+
+ALTER TABLE deck_images ADD COLUMN image_tool TEXT CHECK (image_tool IS NULL OR image_tool IN ('remove_background', 'upscale'));

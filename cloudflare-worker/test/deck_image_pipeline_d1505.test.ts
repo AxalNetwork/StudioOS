@@ -309,3 +309,40 @@ test('the one-click run\'s image step runs the pipeline under its parent hold: o
     assert.equal(twice.seen.filter((o) => o.task === 'image_alt_text').length, 0, 'nothing unchecked was described or placed');
   } finally { f.close(); }
 });
+
+// ─────────────────────────────────────────────────────────── D1512: a run's image is a stored proposal
+
+test('D1512: an area run\'s image step keeps what it drew as a proposed deck image, at the variant\'s own seeds, and returns no bytes', async () => {
+  // Mutation checked: return the raw image in the step's variant → the JSON check fails; ignore `variant` → the seed pair is 0/1 and this fails.
+  const f = await fixture();
+  try {
+    const governor = { acquire: async () => ({ ok: true, lease: { id: 'lease-1512' } } as any), release: async () => {} };
+    const x = stepExecutor(f.env, {
+      governor, sleep: async () => {},
+      run: (async (_e: any, o: RunOptions) => {
+        if (o.task === 'deck_image') return { ok: true, image: { bytes: Uint8Array.from(Buffer.from(PIPELINE_PNG, 'base64')), mime: 'image/png', width: 1, height: 1 }, usageLogId: null, usage: { model: '@cf/black-forest-labs/flux-1-schnell' } };
+        if (/illustration, in /.test(String(o.text))) return ok('YES');
+        if (o.task === 'image_alt_text') return ok('A desk.');
+        return ok('NO');
+      }) as any,
+    });
+    const step: any = {
+      batch_uid: '00000000-0000-4000-8000-0000000015aa', seq: 1, card_uid: 'card-9', area_id: 'a1', element: 'illustration', kind: 'image', task: 'deck_image', model: null,
+      input: JSON.stringify({ text: 'A calm desk.', variant: 1, store: { card: 0, ask: { description: 'A calm desk', style: 'flat', aspect: '16:9', use: 'content' } } }),
+    };
+    const r = await x(step, { batch: { created_by: 2, uid: 'r', project_id: 1, deck_id: null }, parentHold: { uid: 'hold-1512', userId: 2 } } as any);
+    assert.equal(r.ok, true, JSON.stringify(r));
+    const v: any = r.variant;
+    assert.equal(v.variant_index, 2, 'variant 1 draws at seeds 2 and 3');
+    assert.ok(v.image?.uid && v.image.url === `/api/decks/images/${v.image.uid}/file`, 'the stored proposal is named');
+    assert.ok(JSON.stringify(v).length < 4000, 'no bytes ride in the run\'s result');
+    const row = f.rows().find((x: any) => x.uid === v.image.uid) as any;
+    assert.deepEqual([row.state, row.use, row.variant_index, row.card_uid], ['proposed', 'content', 2, 'card-9']);
+    assert.ok(f.r2.get(row.r2_key), 'the bytes are in R2');
+    // A step that asks for no store still returns no bytes: its image is null, never the drawn image.
+    const bare = await x({ ...step, seq: 2, input: JSON.stringify({ text: 'A calm desk.' }) }, { batch: { created_by: 2, uid: 'r', project_id: 1, deck_id: null }, parentHold: { uid: 'hold-1512', userId: 2 } } as any);
+    assert.equal(bare.ok, true);
+    assert.equal((bare.variant as any).image, null);
+    assert.ok(JSON.stringify(bare.variant).length < 4000);
+  } finally { f.close(); }
+});
