@@ -3,6 +3,7 @@ import { ArrowDown, ArrowUp, Check, TriangleAlert, X } from 'lucide-react';
 import { Sheet, Unrecorded } from '../../ui';
 import { api } from '../../lib/api';
 import { AgentTile } from './AgentMark.jsx';
+import { WORK_LABEL } from './personaModel.js';
 import * as agents from './agentsAdapter.js';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, EYEBROW, FIELD, HonestBlock, MONO, MUTED } from './teamUi.jsx';
 import { AgentRadar, CostExplainer, SkillRow, TaxChips } from './SkillParts.jsx';
@@ -150,7 +151,7 @@ export function AddSkillsSheet({ agent, current, radar, onClose, onSaved }) {
   };
   const preview = previewRadar(radar, chosen);
   return (
-    <Sheet title="Add skills to this agent" sub={`${agent.role_name || 'Its role'}’s skills, most used first`} width={560} onClose={onClose} testId="add-skills-sheet"
+    <Sheet title="Add skills to this agent" sub={WORK_LABEL[agent.role_key] ? `${WORK_LABEL[agent.role_key]} skills, most used first` : 'Skills, most used first'} width={560} onClose={onClose} testId="add-skills-sheet"
       footer={(
         <div className="flex justify-end gap-2">
           <button type="button" className={BTN_SECONDARY} onClick={onClose}>Cancel</button>
