@@ -5,10 +5,10 @@
  *
  *   · `renderUrl`: only a checked PDF or PNG is an answer; one retry, only for
  *     what can pass on a second try; a deadline no attempt starts after;
- *   · the PDF and PowerPoint routes: never `BROWSER.fetch`; a failed render is
- *     a 502 with `diagnostic` codes (never the signed print URL) and no ledger
- *     row; a retried render records one export, not two; at most three slide
- *     pictures at once.
+ *   · the PDF route: never `BROWSER.fetch`; a failed render is a 502 with
+ *     `diagnostic` codes (never the signed print URL) and no ledger row;
+ *   · D1574 (#3821): the PowerPoint is the editable file, which photographs
+ *     no slide, so it records one export whatever the browser answers.
  *
  * Every venture, person and figure is made up.
  *
@@ -25,7 +25,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
 import deckExports from '../src/routes/deck_exports.ts';
-import decks, { PPTX_RENDER_CONCURRENCY } from '../src/routes/decks.ts';
+import decks from '../src/routes/decks.ts';
 import { DECK_RENDER_ATTEMPTS, renderUrl } from '../src/services/browserRun.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
@@ -177,30 +177,25 @@ test('3. PDF: the documented call with pdfOptions; a failed render is a code-onl
   assert.deepEqual(ledger(f), ['pdf']);
 });
 
-test('4. PowerPoint: a retried slide records one export; a failed slide names itself and records nothing', async () => {
-  // Mutation checked: unbounded parallelism → the peak check fails; the failure's slide dropped → the diagnostic fails.
+test('4. D1574: the PowerPoint is the editable file — no slide photographed, one export recorded, whatever the browser answers', async () => {
+  // Mutation checked: the per-slide screenshots kept → the no-call check fails; the ledger skipped → the ['pptx'] check fails.
   const f = fixture();
-  let b = browser((a, o, n) => (n === 2 ? new Response('busy', { status: 503 }) : ok(a)));
+  let b = browser((a) => ok(a));
   let r = await exportDeck(f, { format: 'pptx', sources: true }, b.binding);
   assert.equal(r.status, 200);
   assert.ok(r.bytes.length > 0 && r.text.includes('ppt/slides/slide4.xml'), 'three cards and the Sources appendix');
-  assert.equal(b.calls.length, 5, 'four slides, one of them twice');
-  assert.deepEqual([...new Set(b.calls.map((c) => /slide=(\d+)/.exec(c.o.url)![1]))].sort(), ['0', '1', '2', '3']);
-  assert.ok(b.calls.every((c) => c.action === 'screenshot' && c.o.viewport.width === 1920));
-  assert.deepEqual(ledger(f), ['pptx'], 'one export, never two, after a retry');
-  assert.equal(PPTX_RENDER_CONCURRENCY, 3);
-  assert.ok(b.peak.n <= 3 && b.peak.n > 1, `a few at a time (peak ${b.peak.n})`);
+  assert.ok(r.text.includes('Raising $2M'), 'the words are text in the file');
+  assert.equal(b.calls.length, 0, 'no slide is photographed');
+  assert.deepEqual(ledger(f), ['pptx']);
 
-  b = browser((a, o) => (/slide=1$/.test(o.url) ? new Response('nope', { status: 400 }) : ok(a)));
+  b = browser(() => new Response('nope', { status: 400 }));
   r = await exportDeck(f, { format: 'pptx' }, b.binding);
-  assert.equal(r.status, 502);
-  assert.equal(r.json.error, 'pptx_render_failed');
-  assert.deepEqual(r.json.diagnostic, { reason: 'browser_refused', attempts: 1, status: 400, slide: 1 });
+  assert.equal(r.status, 200, 'a refusing browser does not stop the editable file');
+  assert.deepEqual(ledger(f), ['pptx', 'pptx']);
   assert.doesNotMatch(r.text, /print-export|axal\.test/);
-  assert.deepEqual(ledger(f), ['pptx'], 'the failed export is not recorded');
 });
 
-test('5. a binding without quickAction is unavailable: PDF says so, PowerPoint is the text-only file, and fetch is never called', async () => {
+test('5. a binding without quickAction is unavailable: PDF says so, PowerPoint is the editable file, and fetch is never called', async () => {
   // Mutation checked: availability read from fetch → NEVER_FETCH throws and the PDF answers 500.
   const f = fixture();
   let r = await exportDeck(f, { format: 'pdf' }, { fetch: NEVER_FETCH });

@@ -190,3 +190,7 @@ export const assignable = (uid) => throughSkill(() => teamAgentsApi.assignable(u
 export const assignSkill = (uid, agentUids) => throughSkill(() => teamAgentsApi.assignSkill(uid, agentUids));
 /** `GET /api/teams/:scope/:id/coverage` → `{ axes: [{ slug, label, people_level, agent_level }] }`. */
 export const coverage = (scope, id) => throughSkill(() => teamAgentsApi.coverage(scope, id));
+/** D4121 (#4121): the agent's cost per run with `add` skills added and `remove` taken off; `{ available: false }` when pricing cannot be read. */
+export const costEstimate = (uid, change = {}) => throughSkill(() => teamAgentsApi.costEstimate(uid, change));
+/** D4121: the same for an agent not yet added (AG3, the Add-an-agent Skills step). */
+export const draftCostEstimate = (scope, id, draft) => throughSkill(() => teamAgentsApi.draftCostEstimate(scope, id, draft));

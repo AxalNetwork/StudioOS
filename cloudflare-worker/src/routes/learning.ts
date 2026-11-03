@@ -34,7 +34,7 @@ import {
   canSeeLearning, enrolledSql, LEARNING_LEVELS, PROGRESS_KINDS,
 } from '../services/learningAccess';
 import { streamUrl } from '../services/learningVideo';
-import { signedPlayback, streamOf, streamState, type VideoStream } from '../services/learningStream';
+import { LANGUAGE_RE, VTT_MAX_BYTES, signedPlayback, streamOf, streamState, type VideoStream } from '../services/learningStream';
 import { COURSE_UID, courseCoverPrefix, readCover } from '../services/coverDraws';
 import { getCurrentUser } from '../auth';
 
@@ -358,6 +358,41 @@ r.get('/items/:uid', async (c) => {
     transcript_recorded: item.transcript != null && item.transcript !== '',
     progress: p ?? null,
   });
+});
+
+// #4178 (D4178): one ready caption of the item's Stream video, { language, vtt } (WebVTT text), so the player can time its
+// transcript cues (click-to-seek). Asked the same question as the item read, before anything is fetched.
+// Stream's binding has no caption read, so the file comes from Stream's API with STREAM_API_TOKEN; the
+// token is never sent or logged. 503 `stream_captions_unavailable` without the binding or the token;
+// 404 for an item the member cannot see, a video not ready on Stream, or a language with no ready caption.
+r.get('/items/:uid/captions/:lang', async (c) => {
+  let user: any;
+  try { user = await requireAuth(c); } catch (e) { return mapError(c, e); }
+  const lang = c.req.param('lang') ?? '';
+  if (!LANGUAGE_RE.test(lang)) return refuse(c, 400, { code: 'bad_language', message: 'A caption language is a tag such as en or pt-BR.' });
+  const item = await c.env.DB.prepare('SELECT uid, kind, status, visibility, ' + ITEM_ENROLLED + ' AS enrolled FROM learning_items WHERE uid = ?')
+    .bind(user.id, c.req.param('uid')).first<any>();
+  if (!item || !canSeeLearning(user, item)) return refuse(c, 404, { code: 'not_found', message: 'No such item.' });
+  const token = (c.env as any).STREAM_API_TOKEN as string | undefined;
+  const account = c.env.CLOUDFLARE_ACCOUNT_ID;
+  if (!streamOf(c.env) || !token || !account) {
+    return refuse(c, 503, { code: 'stream_captions_unavailable', message: 'Caption files cannot be read until Stream is set up.' });
+  }
+  const s = await streamState(c.env, item.uid);
+  if (!s.ready) return refuse(c, 404, { code: 'not_found', message: 'This video has no ready captions.' });
+  const ready = await c.env.DB.prepare(
+    `SELECT 1 AS ok FROM learning_stream_captions WHERE stream_video_id = ? AND language = ? AND state = 'ready'`,
+  ).bind(s.ready.id, lang).first<{ ok: number }>();
+  if (!ready) return refuse(c, 404, { code: 'not_found', message: 'No ready caption in that language.' });
+  const res = await fetch(
+    `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(account)}/stream/${encodeURIComponent(s.ready.stream_uid)}/captions/${encodeURIComponent(lang)}/vtt`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  ).catch(() => null);
+  const vtt = res && res.ok ? await res.text() : null;
+  if (vtt == null || !/^\uFEFF?WEBVTT/.test(vtt) || new TextEncoder().encode(vtt).length > VTT_MAX_BYTES) {
+    return refuse(c, 502, { code: 'caption_unreadable', message: 'Stream did not send the caption file.' });
+  }
+  return c.json({ language: lang, vtt }, 200, { 'Cache-Control': 'private, no-store' });
 });
 
 /** The subject a progress write names, or null when it does not exist or the caller cannot see it. */

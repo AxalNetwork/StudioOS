@@ -497,6 +497,7 @@ D1051 adds `billingCheckout.js`: `checkoutApi.quote`, `.start(…, nonce)` and `
 | `deckCardStatus.js` | D1579: a deck version's card status and assignees, filtered by status and assignee, with the cards not Done and who can be assigned, under `/api/decks/:id/card-status`. Reads only: status and assignee are saved with the version. |
 | `deckRehearsals.js` | D1580 F1: rehearse a deck version — quote, run (the recording as a form), list, read and keep-audio under `/api/decks/:id/rehearsals`. |
 | `deckReports.js` | D1540: a founder's report of a bad deck result (`POST /api/decks/proposals/:uid/report`), and HQ's queue and resolve under `/api/admin/deck-reports`. A report refunds nothing. |
+| `hqDeckStageNorms.js` | D4155 K5 (#4192): HQ's stage norms under `/api/admin/deck-stage-norms` (list, add, edit, retire, each write with a reason) and a venture's own norms read-only (`projectNorms`). |
 | `deckComments.js` | D1570: a deck's comments (list, post, assign, resolve) and its approval (read, set approvers, approve) under `/api/decks/:id/comments…`, `/approval`, `/approvers` and `/approve`. |
 | `deckBrandKit.js` | D1562 (#3809): the deck brand kit's writer — `save` (`PUT /api/decks/brand-kit`, the whole kit: fonts `{ display, body }`, palette roles, image style, reference uids and a logo uid) and `applyBrand` (`POST /api/decks/:id/apply-brand`, one new version). The read stays `deckEditorApi.brandKit`. |
 | `deckTypedValues.js` | D1538: the figures a founder types for a deck, Stated — list, set and remove under `/api/decks/:id/typed-values`. |

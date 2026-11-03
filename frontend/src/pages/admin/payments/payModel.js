@@ -294,6 +294,7 @@ export const WHAT_WORDS = {
   token_pack: 'Token packs',
   webhook: 'Webhook',
   key: 'Publishable key',
+  mode: 'Stripe mode',
 };
 export const whatWord = (k) => WHAT_WORDS[k] || 'Not recorded';
 
@@ -314,6 +315,7 @@ const ACTION_WORDS = {
   stripe_webhook_register: 'Registered the webhook endpoint',
   stripe_webhook_update: 'Changed the webhook endpoint',
   stripe_pk_update: 'Replaced the publishable key',
+  stripe_mode_cutover: 'Moved the stored Stripe records to another mode',
 };
 export const actionWord = (a) => ACTION_WORDS[a] || String(a || 'Not recorded');
 export const isFailure = (a) => a === 'catalog_sync_failed';
@@ -339,6 +341,9 @@ export function detailText(entry) {
       return typeof d.on_sale === 'boolean' ? (d.on_sale ? 'On sale' : 'Off sale') : null;
     case 'stripe_pk_update':
       return d.mode ? `Now ${modeWord(d.mode)}` : null;
+    case 'stripe_mode_cutover':
+      if (!d.from_mode || !d.to_mode) return null;
+      return `${modeWord(d.from_mode)} to ${modeWord(d.to_mode)}${isCount(d.plans_reset) ? ` · ${d.plans_reset} plan${d.plans_reset === 1 ? '' : 's'} back to free` : ''}`;
     case 'stripe_webhook_register':
       return d.secret_stored === false ? 'Signing secret not stored' : (typeof d.url === 'string' ? d.url : null);
     case 'stripe_webhook_update':

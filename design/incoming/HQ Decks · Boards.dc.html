@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e9e7ee}
+a{color:#7c3aed;text-decoration:none}
+a:hover{color:#6d28d9;text-decoration:underline}
+</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:84px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1080px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Axal VC HQ · Platform</span>
+<h1 style="margin:0;font-size:42px;font-weight:800;letter-spacing:-0.03em">HQ › Platform › Decks</h1>
+<p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">HD1 to HD6. Decks sits in the Platform strip. Its tabs start with Models, the existing deck model defaults (drawn on the Pitch deck studio canvas), then Reports, Feature flags, Beta cohort, Default templates and Stage norms. Every change asks for a reason and lands in the audit log.</p>
+</header>
+<sc-for list="{{ groups }}" as="g" hint-placeholder-count="6">
+<section id="{{ g.id }}" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">{{ g.id }}</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">{{ g.t }}</h2><span style="font-family:'Roboto Mono',monospace;font-size:12px;color:#6b6577">{{ g.addr }}</span></div>
+<sc-if value="{{ g.note }}" hint-placeholder-val="{{ false }}"><p style="margin:0;max-width:1100px;font-size:14px;line-height:1.55;color:#3f3a47;text-wrap:pretty">{{ g.note }}</p></sc-if>
+<div style="display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start">
+<sc-for list="{{ g.fr }}" as="f" hint-placeholder-count="1">
+<div style="display:flex;flex-direction:column;gap:8px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">{{ f.cap }}</span>
+<div style="{{ f.wst }}"><dc-import name="HQ Decks Page" v="{{ f.v }}" hint-size="{{ f.hs }}"></dc-import></div>
+</div>
+</sc-for>
+</div>
+</section>
+</sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const H = { hd1: 1327, hd1e: 640, hd2: 760, hd2b: 545, hd3: 1045, hd3b: 380, hd4: 1652, hd4b: 1100, hd5: 997, hd5b: 534, hd6a: 700, hd6b: 640, hd6c: 1689, hd6d: 844 };
+    const F = (v, cap, w) => { const d = /-d$/.test(v); const h = H[v.replace(/-d$/, '')]; return { v, cap, wst: `width:${w}px;height:${h}px;border-radius:${w < 500 ? 28 : 14}px;overflow:hidden;border:1px solid ${d ? '#374151' : '#dedbe5'};box-shadow:0 20px 50px rgba(24,24,27,.10);background:${d ? '#0b1220' : '#f4f3f7'}`, hs: `${w}px,${h}px` }; };
+    return { groups: [
+      { id: 'HD1', t: 'Reports queue', addr: '/hq/platform/decks/reports', note: 'Founders’ “this result was bad” reports. Opening one shows the area before and after, the founder’s note, and Resolve with a required note.', fr: [F('hd1', 'Queue · a report open', 1440), F('hd1e', 'No open reports', 1440)] },
+      { id: 'HD2', t: 'Feature flags', addr: '/hq/platform/decks/flags', fr: [F('hd2', 'Features and their scope', 1440), F('hd2b', 'Turn off · change scope', 1440)] },
+      { id: 'HD3', t: 'Beta cohort', addr: '/hq/platform/decks/beta', note: 'People by name and company. Emails are never shown, in the list or the search.', fr: [F('hd3', 'Cohort · Add people open', 1440), F('hd3b', 'Remove', 1440)] },
+      { id: 'HD4', t: 'Default templates', addr: '/hq/platform/decks/templates', fr: [F('hd4', 'Sector × stage', 1440), F('hd4b', 'Change · template preview', 1440)] },
+      { id: 'HD5', t: 'Stage norms', addr: '/hq/platform/decks/norms', note: 'The norms the deck critic cites, per stage. A project’s own norms open read-only beside them when HQ arrives from the critic.', fr: [F('hd5', 'Seed norms · a project’s own norms open', 1440), F('hd5b', 'Add · retire', 1440)] },
+      { id: 'HD6', t: 'States', addr: '', fr: [F('hd6a', 'Loading', 1440), F('hd6b', 'Could not be read', 1440), F('hd6c', 'HQ admin without super-admin rights · Default templates read only', 1440), F('hd6d', 'Phone · read only', 390), F('hd1-d', 'Dark · Reports', 1440), F('hd4-d', 'Dark · Default templates', 1440)] }
+    ] };
+  }
+}
+</script>
+</body></html>

@@ -8,6 +8,8 @@ import { join } from 'node:path';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import deckNew from '../src/routes/deck_new.ts';
+// D1574 (#3821): the PowerPoint is deck_exports.ts's, mounted before decks.ts as in index.ts.
+import deckExports from '../src/routes/deck_exports.ts';
 import decks, { createShareLink, deckOwnerBrand, founderPitchSlides, deckShareMetrics, founderSpinoutFields } from '../src/routes/decks.ts';
 import brand from '../src/routes/brand.ts';
 import shareActions from '../src/routes/deck_share_actions.ts';
@@ -47,7 +49,7 @@ async function fixture() {
   db.prepare('INSERT INTO pitch_decks(id,project_id,version,slides,title,is_current,created_by) VALUES(10,1,1,?,?,1,2)').run(JSON.stringify(SLIDES),'Synthetic deck');
   db.prepare("INSERT INTO pitch_deck_proposals(id,project_id,base_deck_id,slides,title,method_id,created_by) VALUES(20,1,10,?,'Synthetic proposal','yc_seed',2)").run(JSON.stringify(SLIDES));
   db.exec("INSERT INTO integrations(id,uid,user_id,provider_key,status,auth_type) VALUES(99,'synthetic-mercury',2,'mercury','active','oauth_mcp')");
-  const app = new Hono<any>().route('/api/decks',deckNew).route('/api/decks',decks).route('/api/brand',brand).route('/api/deck-share',shareActions).route('/api/cycles/raise',cycleRaise).route('/api/cycles',cycleRecords);
+  const app = new Hono<any>().route('/api/decks',deckNew).route('/api/decks',deckExports).route('/api/decks',decks).route('/api/brand',brand).route('/api/deck-share',shareActions).route('/api/cycles/raise',cycleRaise).route('/api/cycles',cycleRecords);
   app.onError((err,c) => c.json({detail:err.message}, (AUTH_ERROR_STATUSES[err.message] || 500) as any));
   return {db, env, app};
 }
@@ -231,8 +233,9 @@ for(const format of ['pdf','pptx'])test(`D895: successful browser ${format} expo
   assert.equal((await call(f,2,'POST','/api/decks/10/export',{format})).status,200);
   assert.equal(f.db.prepare("SELECT count(*) AS n FROM activity_logs WHERE entity_type='raise.pitch-deck' AND action='deck_exported'").get()!.n,1);
   f.env.BROWSER={fetch:async()=>{throw new Error('never fetch')},quickAction:async()=>new Response('synthetic failure',{status:502})};
-  assert.equal((await call(f,2,'POST','/api/decks/10/export',{format})).status,502);
-  assert.equal(f.db.prepare("SELECT count(*) AS n FROM activity_logs WHERE entity_type='raise.pitch-deck' AND action='deck_exported'").get()!.n,1);
+  // D1574 (#3821): the PowerPoint is the editable file, which needs no picture of a slide, so a failing browser does not stop it.
+  assert.equal((await call(f,2,'POST','/api/decks/10/export',{format})).status,format==='pdf'?502:200);
+  assert.equal(f.db.prepare("SELECT count(*) AS n FROM activity_logs WHERE entity_type='raise.pitch-deck' AND action='deck_exported'").get()!.n,format==='pdf'?1:2);
  }finally{f.db.close()}
 });
 test('D895: admin deck-link records are read-only, including their action metadata and form options',async()=>{

@@ -18,9 +18,11 @@
  * id's family; `criticModelFor` picks the first candidate of another family;
  * none, or a writer that cannot be read, means no critic run.
  *
- * BENCHMARKS (owner decision S): a finding may cite a stage norm only when
- * the venture recorded one (`citableNorms`); otherwise the answer says "No
- * stage benchmark recorded" and the run is told to cite none.
+ * BENCHMARKS (owner decision S; D4155 K5, #4192): a finding may cite a stage
+ * norm only from `citableStageNorms`: the venture's own first, then HQ's
+ * active norms (a retired one is never cited). Otherwise the answer says "No
+ * stage benchmark recorded" and the run is told to cite none. A citation
+ * quotes the norm, its range and its source; it never rates the company.
  */
 import type { Warning } from '../narrative/arcs';
 import { untrustedBlock, withUntrustedRule } from '../ai/untrusted';
@@ -142,6 +144,7 @@ export const CRITIC_SYSTEM = withUntrustedRule([
   'You read an investor pitch deck before a first meeting and name the red flags you would raise.',
   'Each finding names one card by its uid, a severity (deal_breaker, will_be_asked or polish) and what you would say, in one sentence.',
   'Never state a number that is not on the card or in the benchmarks given. Never promise or predict a return.',
+  'When you cite a benchmark, quote the norm, its range and its source beside the card\'s figure. Never rate, score or grade the company against it.',
   'Return only JSON.',
 ].join(' '));
 
@@ -153,7 +156,7 @@ export function criticMessage(o: { persona: string; stageLabel: string; cards: C
     `Cards:\n${untrustedBlock('deck_import', JSON.stringify(data))}`,
     o.already.length ? `Already found, do not repeat: ${JSON.stringify(o.already.map((f) => f.message))}.` : '',
     o.benchmarks?.length
-      ? `Stage benchmarks the founder recorded, each with its source (you may cite these and only these):\n${untrustedBlock('record_text', JSON.stringify(o.benchmarks))}`
+      ? `Stage benchmarks, each with its source, the venture's own first and then Axal HQ's (you may cite these and only these):\n${untrustedBlock('record_text', JSON.stringify(o.benchmarks))}`
       : 'No stage benchmark is recorded for this stage: do not cite any benchmark or typical figure.',
     `Return at most ${FINDINGS_MAX} findings: {"findings":[{"card":"<card uid>","severity":"deal_breaker|will_be_asked|polish","finding":"..."}]}.`,
   ].filter(Boolean).join('\n');

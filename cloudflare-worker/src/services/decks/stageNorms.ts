@@ -18,6 +18,7 @@
  */
 import type { Env } from '../../types';
 import { AUDIENCES } from './slideModel';
+import { listHqNorms } from './hqStageNorms';
 
 export const STAGES = ['pre_seed', 'seed', 'series_a', 'series_b_plus'] as const;
 export type Stage = typeof STAGES[number];
@@ -161,4 +162,24 @@ export function citableBenchmark(b: { metric?: unknown; value?: unknown; source?
   if (!metric || !value || !source || !Number.isSafeInteger(n) || n < 1) return { available: false, reason: NO_BENCHMARK };
   const asOf = typeof b.as_of === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(b.as_of) ? b.as_of : null;
   return { available: true, value: citationLine({ metric, value, source, sample_size: n, as_of: asOf }) };
+}
+
+export type Citation = { origin: 'project' | 'hq'; uid: string; citation: string };
+
+/**
+ * D4155 K5 (#4192): what a deck critic may cite for this venture, stage and
+ * investor type: the venture's own norms first (`citableNorms`), then HQ's
+ * ACTIVE norms for the stage (`hqStageNorms.ts`). A retired HQ norm is never
+ * cited, from the moment it is retired: this is read on every run. Each
+ * citation quotes the norm, its range or value, and its source. No row, no
+ * claim: "No stage benchmark recorded".
+ */
+export async function citableStageNorms(env: Env, projectId: number, stage: Stage, investorType?: string | null): Promise<Block<Citation[]>> {
+  const own = await citableNorms(env, projectId, stage, investorType);
+  const hq = await listHqNorms(env, stage, 'active');
+  const out: Citation[] = [
+    ...(own.available ? own.value.map((n) => ({ origin: 'project' as const, uid: n.uid, citation: n.citation })) : []),
+    ...hq.map((n) => ({ origin: 'hq' as const, uid: n.uid, citation: n.citation })),
+  ];
+  return out.length ? { available: true, value: out } : { available: false, reason: NO_BENCHMARK };
 }
