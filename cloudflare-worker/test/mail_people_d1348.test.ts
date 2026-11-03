@@ -159,7 +159,7 @@ test('advisor: clients from sessions, cohort founders and Network matches; notes
   try {
     f.db.exec(`
       INSERT INTO advisors(id,uid,user_id,display_name) VALUES (70,'adv70',${ADVISOR},'Synthetic Advisor'),(71,'adv71',${OTHER_ADVISOR},'Other Advisor');
-      INSERT INTO advisor_office_hour_slots(id,uid,advisor_id,starts_at,ends_at) VALUES (1,'sl1',70,'2026-10-20T10:00:00Z','2026-10-20T11:00:00Z'),(2,'sl2',70,'2026-11-03T10:00:00Z','2026-11-03T11:00:00Z'),(3,'sl3',71,'2026-10-21T10:00:00Z','2026-10-21T11:00:00Z');
+      INSERT INTO advisor_office_hour_slots(id,uid,advisor_id,starts_at,ends_at) VALUES (1,'sl1',70,'2026-10-20T10:00:00Z','2026-10-20T11:00:00Z'),(2,'sl2',70,'2099-11-03T10:00:00Z','2099-11-03T11:00:00Z'),(3,'sl3',71,'2026-10-21T10:00:00Z','2026-10-21T11:00:00Z');
       INSERT INTO advisor_bookings(uid,slot_id,advisor_id,founder_user_id,topic,status) VALUES ('b1',1,70,${FOUNDER},'Pricing','completed'),('b2',2,70,${FOUNDER},'Hiring','confirmed'),('b3',3,71,${FOUNDER_B},'GTM','completed');
       INSERT INTO advisor_engagements(uid,client_name,advisor_id,founder_user_id,lane,shape,term_ends_at) VALUES ('ae1','Synthetic client',70,${FOUNDER},'signed','retainer','2026-10-25');
       INSERT INTO advisor_client_notes(uid,advisor_user_id,client_user_id,body,updated_at) VALUES ('n1',${ADVISOR},${FOUNDER},'Synthetic session note: pricing tiers','2026-10-20');
@@ -182,7 +182,7 @@ test('advisor: clients from sessions, cohort founders and Network matches; notes
     assert.equal(cl.status, 200, JSON.stringify(cl.body));
     assert.deepEqual(cl.body.items.map((i: any) => i.kind), ['client', 'session_notes', 'next_session', 'service']);
     assert.match(cl.body.items[1].text, /pricing tiers/);
-    assert.equal(cl.body.items[2].as_of, '2026-11-03');
+    assert.equal(cl.body.items[2].as_of, '2099-11-03', 'the next session stays in the future whatever today is');
     assert.doesNotMatch(JSON.stringify(cl.body), /Retired/, 'an inactive service is absent');
     assert.equal((await pack(f, ADVISOR, `client:${FOUNDER_B}`)).status, 404, 'another advisor\'s client');
     assert.equal((await pack(f, OTHER_ADVISOR, `client:${FOUNDER}`)).status, 404);
