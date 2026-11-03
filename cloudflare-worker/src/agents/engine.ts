@@ -36,8 +36,8 @@ export const OPEN_STATUSES = ['admitted', 'running', 'waiting_decision'] as cons
 /** The reasons a run ends without a proposal that do not count toward the daily limit. */
 const UNCOUNTED = ['refused', 'cancelled', 'halted', 'scope_moved'] as const;
 
-/** #3727's `paused_reason` vocabulary with D1528's four added. 712 holds no CHECK, so none needs a migration. */
-export const PAUSE_REASONS = ['cap', 'sponsor_left', 'tool_disconnected', 'spend_limit', 'ai_paused', 'daily_limit', 'scope_archived'] as const;
+/** #3727's `paused_reason` vocabulary with D1528's four and D4158's `persona_retired` (HQ retired the persona) added. 712 holds no CHECK, so none needs a migration. */
+export const PAUSE_REASONS = ['cap', 'sponsor_left', 'tool_disconnected', 'spend_limit', 'ai_paused', 'daily_limit', 'scope_archived', 'persona_retired'] as const;
 export type PauseReason = (typeof PAUSE_REASONS)[number];
 
 export type RunRow = {
@@ -324,6 +324,7 @@ const PAUSE_WORDS: Record<PauseReason, string> = {
   ai_paused: 'AI is paused for its sponsor',
   daily_limit: `it ran ${DAILY_LIMIT} times today`,
   scope_archived: 'its team was archived',
+  persona_retired: 'Axal VC HQ retired it',
 };
 
 /** Pause an active agent with a reason, and tell the team once per agent, reason and UTC day. */

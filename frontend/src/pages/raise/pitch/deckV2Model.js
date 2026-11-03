@@ -84,8 +84,9 @@ export const ELEMENT_GROUPS = Object.freeze([
     { id: 'brand_assets', label: 'Brand assets', ...A('brandLocks', 3819) },
     // D1544 (#3784): erase, expand, vary and edit are #3784's; crop, focus, filters, upscale and background removal stay #3778's.
     { id: 'edit_vary', label: 'Edit or vary', ...A('imageVary', 3784) },
-    { id: 'remove_bg', label: 'Background removal', pending: true, ...A('imageEdit', 3778) },
-    { id: 'upscale', label: 'Upscale', ...A('imageEdit', 3778) },
+    // D1534: crop, focus and filters are on the placed image's toolbar; these two are phase 2 (owner decision M).
+    { id: 'remove_bg', label: 'Background removal', pending: true, ...A('imageEditAi', 3778) },
+    { id: 'upscale', label: 'Upscale', ...A('imageEditAi', 3778) },
   ] },
   { id: 'graphics', label: 'Graphics', items: [
     { id: 'icons', label: 'Icons', ...A('elementsLibrary', 3779) },
@@ -125,8 +126,9 @@ export const ELEMENT_GROUPS = Object.freeze([
     { id: 'video', label: 'Video', free: true, ...R('POST /api/decks/video-link') },
     { id: 'audio', label: 'Audio', free: true },
     { id: 'link', label: 'Link', free: true },
-    { id: 'recorded_video', label: 'Recorded video', ...A('media', 3788) },
-    { id: 'button', label: 'Button', ...A('media', 3788) },
+    // D1545 (#3788): on main: an MP4 uploaded to the deck (`deckV2Adapter.media`), and a call to action.
+    { id: 'recorded_video', label: 'Recorded video', ...R('POST /api/decks/:id/videos/upload') },
+    { id: 'button', label: 'Button', free: true },
     { id: 'embeds', label: 'Embeds', ...A('media', 3788) },
   ] },
 ]);

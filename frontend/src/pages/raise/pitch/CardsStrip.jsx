@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { MoreHorizontal, Plus } from 'lucide-react';
+import VirtualList from '../../../components/VirtualList';
 import { availability } from './deckV2Adapter';
 import { LATER } from './deckV2Model';
 import { cardTitle, keyMove } from './editorModel';
@@ -20,8 +21,10 @@ import {
  * own). Past `SHOWN` cards the rest fold under "+ N more cards" (the current
  * card always shows). Each card has its menu, the card's ⋯ (pd13): Duplicate,
  * Move up, Move down and Mark as appendix are local edits held until a
- * version is saved; Comments opens the card's threads (pd33, D1570); Hide and Move to section read the adapter (#3788) and are
- * drawn "Coming later" while their surface answers unavailable. A reader
+ * version is saved; Comments opens the card's threads (pd33, D1570). D1545 (#3788): Hide (Show
+ * on a hidden card) and Move to section are local edits too; a hidden card is
+ * dimmed and tagged "Hidden" (Present, the share link, the PDF and every export
+ * skip it), and a card in a section carries its name. A reader
  * reads the strip and moves nothing. The card menu keeps the keyboard a menu
  * promises (`useMenuFocus.js`).
  *
@@ -44,6 +47,12 @@ import {
 export const SHOWN = 8;
 
 const MUTED = 'text-[12px] leading-[1.45] text-axal-muted dark:text-gray-400';
+/** D1545 (#3788): from this many cards on screen the column strip renders only the cards in view. */
+export const VIRTUALIZE_AT = 24;
+/** A column card's height in the virtual list: the thumbnail and title, plus its pill and tag lines. */
+export const cardHeight = (card, tracked) => 122 + ((statusOf(card, tracked) || card?.assignee != null) ? 22 : 0)
+  + ((card?.appendix || card?.hidden || card?.section) ? 16 : 0);
+
 const GHOST = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] border border-axal-hairline bg-white px-3 text-[12.5px] font-bold text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
 
 /** The card's blocks as outlines on a 16:9 face, positioned on the 12 × 6 Grid. */
@@ -56,7 +65,10 @@ export function Thumb({ card }) {
           style={{
             left: `${3 + ((b.grid.c1 - 1) / 12) * 94}%`, width: `${((b.grid.c2 - b.grid.c1 + 1) / 12) * 94 - 1}%`,
             top: `${3 + ((b.grid.r1 - 1) / 6) * 94}%`, height: `${((b.grid.r2 - b.grid.r1 + 1) / 6) * 94 - 2}%`,
-          }} />
+          }}>
+          {/* D1545: an image block shows its picture, fetched only once the card scrolls into view. */}
+          {b.kind === 'image' && b.image_url ? <img src={b.image_url} alt="" loading="lazy" decoding="async" className="h-full w-full rounded-[2px] object-cover" data-testid="pitch-editor-thumb-image" /> : null}
+        </span>
       ))}
       {!Array.isArray(card?.blocks) ? <span className="absolute inset-[12%] rounded-[2px] bg-axal-hairline dark:bg-gray-700" /> : null}
     </span>
@@ -74,8 +86,9 @@ export function cardMenuItems(index, count, card, avail = availability, people =
     { id: 'up', label: 'Move up', off: index === 0 ? 'It is the first card.' : null },
     { id: 'down', label: 'Move down', off: index === count - 1 ? 'It is the last card.' : null },
     { id: 'appendix', label: card?.appendix ? 'Not an appendix' : 'Mark as appendix' },
-    { id: 'hide', label: 'Hide', adapter: 'media' },
-    { id: 'section', label: 'Move to section', adapter: 'media' },
+    // D1545 (#3788): wired on main (`deckV2Adapter.media` is swapped); both are local edits held until a save.
+    { id: 'hide', label: card?.hidden ? 'Show' : 'Hide' },
+    { id: 'section', label: card?.section ? 'Change section' : 'Move to section' },
     // D1570 (#3817, pd33): wired on main (`deckV2Adapter.comments` is swapped), so it reads no adapter here.
     { id: 'comments', label: 'Comments' },
   ].map((it) => {
@@ -205,59 +218,79 @@ export default function CardsStrip({ cards, sel, stale, readOnly, onSelect, move
     <CardMenu key={i} index={i} count={cards.length} card={c} onAction={onCardAction} onClose={() => setMenu(null)} menu={focus}
       row={row} left={row ? menuLeft() : 0} people={people} tracked={tracked} />
   );
+  const shown = visible.slice(0, limit);
+  // D1545 (#3788): the column strip virtualises past VIRTUALIZE_AT cards; the row stays one scrolling row.
+  const virtual = !row && shown.length >= VIRTUALIZE_AT;
+  const Tag = virtual ? 'div' : 'li';
+  const renderCard = ({ card: c, index: i }, at = null) => (
+      // D1500: keyed on the card's uid, so React keeps each card's own row through a reorder.
+      <Tag key={c?.uid ?? `card-${i}`} className={`relative ${row ? 'w-[120px] shrink-0' : ''} ${virtual ? 'pb-1.5' : ''}`} style={at?.style} {...(at?.aria || {})}
+        data-hidden={c?.hidden ? 'true' : undefined}
+        ref={(n) => { if (n) slots.current.set(i, n); else slots.current.delete(i); }}
+        draggable={!readOnly}
+        onDragStart={() => setDrag(i)}
+        onDragOver={(e) => { if (drag != null) e.preventDefault(); }}
+        onDrop={() => { if (drag != null && drag !== i) move(drag, i); setDrag(null); }}>
+        <button type="button"
+          className={`flex w-full flex-col gap-1 rounded-[9px] border p-1.5 text-start text-[12px] ${i === sel ? 'border-axal-violet bg-axal-lavender font-bold text-axal-violet dark:border-violet-500 dark:bg-violet-950/40 dark:text-violet-300' : 'border-transparent text-axal-ink hover:bg-axal-ground dark:text-gray-100 dark:hover:bg-gray-800'}`}
+          aria-current={i === sel ? 'true' : undefined}
+          lang={words.lang} dir={words.dir}
+          aria-keyshortcuts={readOnly ? undefined : row ? 'Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown' : 'Alt+ArrowUp Alt+ArrowDown'}
+          onClick={() => onSelect(i)}
+          onKeyDown={(e) => {
+            if (readOnly) return;
+            const key = row ? ({ ArrowLeft: 'ArrowUp', ArrowRight: 'ArrowDown' })[e.key] || e.key : e.key;
+            const to = keyMove(key, i, cards.length);
+            if (to != null && (e.altKey || e.metaKey)) { e.preventDefault(); move(i, to); }
+          }}
+          data-testid={`pitch-editor-rail-${i}`}>
+          <span className="flex items-center gap-1.5">
+            <span className="font-mono text-[10.5px] text-axal-muted dark:text-gray-400">{String(i + 1).padStart(2, '0')}</span>
+            <span className="min-w-0 flex-1 truncate">{cardTitle(c, i)}</span>
+            {stale.has(i) ? <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500 dark:bg-amber-400" title="A figure on this card has changed in its store" data-testid={`pitch-editor-stale-${i}`} /> : null}
+          </span>
+          <span className={c?.hidden ? 'opacity-50' : undefined}><Thumb card={c} /></span>
+          {/* D1579 (pd34): the status pill and the assignee's avatar, once the deck is tracked or the card assigned. */}
+          {statusOf(c, tracked) || c?.assignee != null ? (
+            <span className="flex items-center justify-between gap-1">
+              <StatusPill status={statusOf(c, tracked)} testId={`pitch-editor-card-pill-${i}`} />
+              <Avatar person={assigneeOfCard(c, people)} testId={`pitch-editor-card-avatar-${i}`} />
+            </span>
+          ) : null}
+          {c?.appendix || c?.hidden || c?.section ? (
+            <span className="flex min-w-0 flex-wrap items-center gap-1 font-mono text-[10px] uppercase text-axal-muted dark:text-gray-400">
+              {c?.appendix ? <span>Appendix</span> : null}
+              {c?.hidden ? <span data-testid={`pitch-editor-card-hidden-${i}`}>Hidden</span> : null}
+              {c?.section ? <span className="min-w-0 truncate normal-case" title={`Section: ${c.section}`} data-testid={`pitch-editor-card-section-${i}`}>{c.section}</span> : null}
+            </span>
+          ) : null}
+        </button>
+        {!readOnly ? (
+          <button type="button" ref={menu === i ? focus.opener : undefined} aria-haspopup="menu" aria-expanded={menu === i} aria-label={`Card ${i + 1} menu`}
+            className="absolute right-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded-[6px] text-axal-muted hover:bg-axal-ground dark:text-gray-400 dark:hover:bg-gray-800"
+            onClick={() => setMenu((m) => (m === i ? null : i))} data-testid={`pitch-editor-card-menu-open-${i}`}>
+            <MoreHorizontal size={13} aria-hidden="true" />
+          </button>
+        ) : null}
+        {menu === i && !row && !virtual ? cardMenu(i, c) : null}
+      </Tag>
+  );
   return (
     <nav className={`relative flex min-w-0 gap-1.5 rounded-[12px] border border-axal-hairline bg-white p-2 dark:border-gray-700 dark:bg-gray-900 ${row ? 'flex-row items-center' : 'flex-col'}`}
       aria-label="Cards" data-orientation={orientation} data-testid="pitch-editor-cards">
       {showFilter ? <FilterCard filter={filter} onFilter={setFilter} people={people} shown={visible.length} total={cards.length} row={row} /> : null}
-      <ol ref={list} className={`m-0 flex min-w-0 list-none gap-1.5 p-0 ${row ? 'flex-1 flex-row overflow-x-auto' : 'flex-col'}`} data-testid="pitch-editor-cards-list">
-        {visible.slice(0, limit).map(({ card: c, index: i }) => (
-          // D1500: keyed on the card's uid, so React keeps each card's own row through a reorder.
-          <li key={c?.uid ?? `card-${i}`} className={`relative ${row ? 'w-[120px] shrink-0' : ''}`}
-            ref={(n) => { if (n) slots.current.set(i, n); else slots.current.delete(i); }}
-            draggable={!readOnly}
-            onDragStart={() => setDrag(i)}
-            onDragOver={(e) => { if (drag != null) e.preventDefault(); }}
-            onDrop={() => { if (drag != null && drag !== i) move(drag, i); setDrag(null); }}>
-            <button type="button"
-              className={`flex w-full flex-col gap-1 rounded-[9px] border p-1.5 text-start text-[12px] ${i === sel ? 'border-axal-violet bg-axal-lavender font-bold text-axal-violet dark:border-violet-500 dark:bg-violet-950/40 dark:text-violet-300' : 'border-transparent text-axal-ink hover:bg-axal-ground dark:text-gray-100 dark:hover:bg-gray-800'}`}
-              aria-current={i === sel ? 'true' : undefined}
-              lang={words.lang} dir={words.dir}
-              aria-keyshortcuts={readOnly ? undefined : row ? 'Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown' : 'Alt+ArrowUp Alt+ArrowDown'}
-              onClick={() => onSelect(i)}
-              onKeyDown={(e) => {
-                if (readOnly) return;
-                const key = row ? ({ ArrowLeft: 'ArrowUp', ArrowRight: 'ArrowDown' })[e.key] || e.key : e.key;
-                const to = keyMove(key, i, cards.length);
-                if (to != null && (e.altKey || e.metaKey)) { e.preventDefault(); move(i, to); }
-              }}
-              data-testid={`pitch-editor-rail-${i}`}>
-              <span className="flex items-center gap-1.5">
-                <span className="font-mono text-[10.5px] text-axal-muted dark:text-gray-400">{String(i + 1).padStart(2, '0')}</span>
-                <span className="min-w-0 flex-1 truncate">{cardTitle(c, i)}</span>
-                {stale.has(i) ? <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500 dark:bg-amber-400" title="A figure on this card has changed in its store" data-testid={`pitch-editor-stale-${i}`} /> : null}
-              </span>
-              <Thumb card={c} />
-              {/* D1579 (pd34): the status pill and the assignee's avatar, once the deck is tracked or the card assigned. */}
-              {statusOf(c, tracked) || c?.assignee != null ? (
-                <span className="flex items-center justify-between gap-1">
-                  <StatusPill status={statusOf(c, tracked)} testId={`pitch-editor-card-pill-${i}`} />
-                  <Avatar person={assigneeOfCard(c, people)} testId={`pitch-editor-card-avatar-${i}`} />
-                </span>
-              ) : null}
-              {c?.appendix ? <span className="font-mono text-[10px] uppercase text-axal-muted dark:text-gray-400">Appendix</span> : null}
-            </button>
-            {!readOnly ? (
-              <button type="button" ref={menu === i ? focus.opener : undefined} aria-haspopup="menu" aria-expanded={menu === i} aria-label={`Card ${i + 1} menu`}
-                className="absolute right-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded-[6px] text-axal-muted hover:bg-axal-ground dark:text-gray-400 dark:hover:bg-gray-800"
-                onClick={() => setMenu((m) => (m === i ? null : i))} data-testid={`pitch-editor-card-menu-open-${i}`}>
-                <MoreHorizontal size={13} aria-hidden="true" />
-              </button>
-            ) : null}
-            {menu === i && !row ? cardMenu(i, c) : null}
-          </li>
-        ))}
-      </ol>
-      {row && menu != null && cards[menu] ? cardMenu(menu, cards[menu]) : null}
+      {virtual ? (
+        <VirtualList items={shown} threshold={0} height={Math.min(720, shown.reduce((h, v) => h + cardHeight(v.card, tracked) + 6, 0))}
+          itemHeight={(n) => cardHeight(shown[n]?.card, tracked) + 6} ariaLabel="Cards" className="min-w-0" testId="pitch-editor-cards-list"
+          virtualRow={(v, n, style, aria) => renderCard(v, { style, aria })}>
+          {() => null}
+        </VirtualList>
+      ) : (
+        <ol ref={list} className={`m-0 flex min-w-0 list-none gap-1.5 p-0 ${row ? 'flex-1 flex-row overflow-x-auto' : 'flex-col'}`} data-testid="pitch-editor-cards-list">
+          {shown.map((v) => renderCard(v))}
+        </ol>
+      )}
+      {(row || virtual) && menu != null && cards[menu] ? cardMenu(menu, cards[menu]) : null}
       {more > 0 ? (
         <button type="button" className={`min-h-[32px] rounded-[8px] text-[12px] font-bold text-axal-violet hover:bg-axal-ground dark:text-violet-300 dark:hover:bg-gray-800 ${row ? 'shrink-0 px-2' : ''}`} onClick={() => setAll(true)} data-testid="pitch-editor-more-cards">
           + {more} more card{more === 1 ? '' : 's'}

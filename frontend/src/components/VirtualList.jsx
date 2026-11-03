@@ -20,6 +20,10 @@ import { List } from 'react-window';
 // wrapper and the virtualRow uses a CSS grid that lines up with the
 // header columns; we accept slight markup drift in the >300-row branch
 // since it's a pure scroll-perf optimisation.
+//
+// D1545 (#3788): `threshold` lets a short list virtualise sooner (the deck
+// editor's Cards strip does at 24 cards, each a thumbnail); `itemHeight` may
+// be react-window's function of the row's index.
 export const VIRTUALIZE_THRESHOLD = 300;
 
 // Stable row adapter — defined once at module load so react-window can
@@ -35,15 +39,20 @@ export default function VirtualList({
   virtualRow,
   ariaLabel,
   children,
+  threshold = VIRTUALIZE_THRESHOLD,
+  className,
+  testId,
 }) {
   if (!Array.isArray(items)) return null;
-  if (items.length < VIRTUALIZE_THRESHOLD) {
+  if (items.length < threshold) {
     return children(items);
   }
 
   return (
     <List
       style={{ height }}
+      className={className}
+      data-testid={testId}
       rowCount={items.length}
       rowHeight={itemHeight}
       defaultHeight={height}

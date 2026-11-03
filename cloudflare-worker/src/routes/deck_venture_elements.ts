@@ -29,6 +29,7 @@
  * record a customer's permission for the member it is looking at. No DTO
  * carries an email or a user id. Every statement is a bound literal.
  */
+import { flagsFor, notSwitchedOn } from '../services/featureFlags';
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
@@ -134,6 +135,8 @@ r.get('/:id{[0-9]+}/logos', async (c) => {
 });
 
 r.post('/:id{[0-9]+}/logos', async (c) => {
+  // #4189 (D4155 K2): HQ › Decks switches the logo wall (`deck:logo_wall`). Off stops new logos; the ones already on slides stay.
+  if (!(await flagsFor(c.env, await requireAuth(c))).on('deck:logo_wall')) return refuse(c, 404, notSwitchedOn);
   const at = await deckProject(c, true);
   if (at instanceof Response) return at;
   const body = await c.req.json<any>().catch(() => null);

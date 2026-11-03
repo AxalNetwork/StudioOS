@@ -62,6 +62,8 @@ const IDENTITY = {
   assets: 'binding',
   browser: 'binding',
   images: 'binding',
+  // #4176: Cloudflare Stream, account-wide like Images.
+  stream: 'binding',
   ai: 'binding',
   'queues.producers': 'binding',
   'queues.consumers': 'queue',

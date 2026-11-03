@@ -40,11 +40,24 @@ export const AUDIENCE_LABELS = {
 export const THEME_LABELS = { brand: 'From your brand kit', neutral_light: 'Neutral light', neutral_dark: 'Neutral dark', sand: 'Sand', ocean: 'Ocean', forest: 'Forest' };
 
 export const KIND_LABELS = {
-  text: 'Text', chart: 'Chart', graphic: 'Graphic', image: 'Image', video: 'Video link', audio: 'Audio link', link: 'Link button', metric: 'Metric tile',
+  text: 'Text', chart: 'Chart', graphic: 'Graphic', image: 'Image', video: 'Video', audio: 'Audio link', link: 'Link button', metric: 'Metric tile',
+  // D1545 (#3788): a call to action whose clicks a share link counts.
+  button: 'Button',
 };
 
 /** PD8c's picker, in the canvas's order. Charts are placed from the chart library (PD9b), not this picker. */
-export const ADDABLE_KINDS = ['text', 'graphic', 'image', 'video', 'audio', 'link', 'metric'];
+export const ADDABLE_KINDS = ['text', 'graphic', 'image', 'video', 'audio', 'link', 'button', 'metric'];
+/** D1545 (#3788): the Worker's caps (slideModel.ts SECTION_MAX, BUTTON_LABEL_MAX). */
+export const SECTION_MAX = 60;
+export const BUTTON_LABEL_MAX = 60;
+
+/** D1545: where a video comes from, in words. */
+export const VIDEO_PROVIDER_LABELS = Object.freeze({ youtube: 'YouTube', vimeo: 'Vimeo', loom: 'Loom', mp4: 'Uploaded video' });
+
+/** D1545: the deck's section names, in the order they first appear. */
+export const sectionsOf = (cards) => [...new Set((Array.isArray(cards) ? cards : []).map((c) => (typeof c?.section === 'string' ? c.section.trim() : '')).filter(Boolean))];
+/** D1545: the cards a reader sees: Present and every export leave a hidden card out. */
+export const visibleCards = (cards) => (Array.isArray(cards) ? cards.filter((c) => !(c && typeof c === 'object' && c.hidden === true)) : []);
 
 /** Read from localStorage, wrapped: a private window or blocked storage reads as "not seen". */
 export function firstRunSeen(storage = globalThis.localStorage) {
@@ -175,7 +188,7 @@ export function standardSizes(kind, ratio = null) {
     const cols = Math.max(1, Math.min(12, Math.round(rows * want)));
     return [{ label: "The file's ratio", cols, rows }];
   }
-  if (kind === 'audio' || kind === 'link') return [{ label: '3 × 1', cols: 3, rows: 1 }];
+  if (kind === 'audio' || kind === 'link' || kind === 'button') return [{ label: '3 × 1', cols: 3, rows: 1 }];
   if (kind === 'metric') return [{ label: '3 × 2', cols: 3, rows: 2 }];
   return [{ label: '6 × 1', cols: 6, rows: 1 }, { label: '6 × 2', cols: 6, rows: 2 }];
 }

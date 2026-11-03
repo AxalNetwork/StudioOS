@@ -129,6 +129,14 @@ The owner's four artifacts were decoded by `scripts/read-canvas.mjs`:
 
 Logo paths are `/axal-mark.png` and `/eadwyn-ai.png`. The decision is `documentation/architecture/decisions/D4116.md`.
 
+## Landed 2026-11-02 — Settings, simplified (#4152)
+
+The owner's two artifacts for #4152 (boards ST1–ST6), decoded by
+`scripts/read-canvas.mjs`:
+- `Settings Page.dc.html` is the page, one frame per `v` value (`st1a` to
+  `st6f`; a `-d` suffix is dark);
+- `Settings · Boards.dc.html` is the board grid, ST1 to ST6. It imports the
+  page by name.
 ## Landed 2026-11-02 — Learning on Stream (#3726)
 
 The owner's two artifacts for #3726 (boards LR1–LR21), decoded by
@@ -149,6 +157,10 @@ The owner's two artifacts for #4154 (boards CA1–CA5), decoded by
 **One edit, named.** The Axal VC mark (`uploads/axal-logo-200x200.png`) points
 at `/axal-mark.png`, as in the earlier intakes. No other value was edited.
 
+**Grade: REPLACES D1497's sidebar block and D1413's settings head (D4152).**
+One "Settings" entry, Portfolio in the main navigation, Billing in the Account
+menu, and one header and one General form per company. The logo upload waits
+for G1 (#4201).
 **Grade: EXTENDS D562 (D3726).** The home's progress strip, New this week and
 Recommended; the player's resume, position writes, chapters and plain
 transcript; and a member's own program page at

@@ -13,6 +13,8 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import Lightbox from '../../../ui/Lightbox';
 import { contractsApi } from '../../../lib/api/contracts';
 import { programProposalsApi } from '../../../lib/api/programProposals';
+import { FillFormBar, useScopedFill } from '../../../ui/useScopedFill.jsx';
+import { SCOPED_FORMS } from '../../../lib/fillScoped.js';
 import AdminBoardFrame from '../AdminBoardFrame';
 import { BlockFailed, CARD, EYE, H2, INPUT, LINK, Refusal, SUB, Skeleton } from './parts';
 import { ProposalPill } from './ProposalTables';
@@ -140,6 +142,17 @@ function ProposeBody() {
 
   const set = (patch) => { setForm((f) => ({ ...f, ...patch })); setSaveRefusal(null); setSendRefusal(null); };
 
+  // #4046 (B4): Fill with Eadwyn on the proposal's Name, One-line purpose and Eligibility. A new one hangs under
+  // the caller (the scope's own parent); a stored one fills by its id while it is a draft or sent back. Off while
+  // a stored proposal loads, so the empty form never reads as a new draft. The rest is the studio's to set.
+  const FILLED = ['name', 'purpose', 'eligibility'];
+  const fill = useScopedFill({
+    scope: SCOPED_FORMS.programProposal, record: proposal?.id ?? null,
+    enabled: (read.state === 'new' || read.state === 'ready') && (!proposal || isEditable(proposal.status)),
+    values: { name: form.name, purpose: form.purpose, eligibility: form.eligibility },
+    onValues: (v) => set(Object.fromEntries(Object.entries(v).filter(([k, x]) => FILLED.includes(k) && x != null))),
+  });
+
   /** Saves the form to part 2: a new draft first, then the same draft. Answers the stored proposal. */
   async function save() {
     setSaving(true); setSaveRefusal(null);
@@ -149,6 +162,8 @@ function ProposeBody() {
         : await programProposalsApi.start(fieldsFrom(form));
       const stored = res?.proposal;
       setProposal(stored);
+      // #4046 (B4): the record step, after the Save wrote the proposal: what still equals a placed value is kept.
+      if (stored?.id) await fill.afterSave(stored.id);
       if (!proposal?.uid && stored?.uid) navigate(proposalHref(stored.uid), { replace: true });
       return stored;
     } catch (e) {
@@ -232,8 +247,9 @@ function ProposeBody() {
       <section className={`${CARD} flex flex-col gap-3 px-[18px] py-4`} data-testid={`propose-step-body-${step}`}>
         <span className={EYE}>{`Step ${step + 1} of ${STEPS.length}`}</span>
         <h2 className={H2}>{STEPS[step]}</h2>
-        {step === 0 ? <BasicsFields form={form} set={set} prefix="propose" /> : null}
-        {step === 1 ? <HowItRunsFields form={form} set={set} prefix="propose" /> : null}
+        {step <= 1 ? <FillFormBar fill={fill} /> : null}
+        {step === 0 ? <BasicsFields form={form} set={set} prefix="propose" fill={fill} /> : null}
+        {step === 1 ? <HowItRunsFields form={form} set={set} prefix="propose" fill={fill} /> : null}
         {step === 2 ? (
           <div className="flex flex-col gap-3">
             <ChipGroup label="Rewards" options={REWARDS} value={form.rewards} multi toggle={toggleReward} onChange={(rewards) => set({ rewards })} testId="propose-rewards" />
