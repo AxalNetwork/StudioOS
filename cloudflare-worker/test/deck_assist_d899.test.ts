@@ -108,6 +108,7 @@ test('each press is one rail option on the Pitch deck page; Ask and the headline
   assert.deepEqual(ASSIST_OPTIONS, {
     rewrite: 'deck:rewrite', ask: 'deck:rewrite', headline: 'deck:rewrite', shorten: 'deck:shorten', expand: 'deck:expand',
     tone: 'deck:tone', translate: 'deck:translate', chart: 'deck:chart', table: 'deck:table', timeline: 'deck:timeline',
+    preflight_fix: 'deck:shorten',
   });
   assert.match(textMessage('tone', 'x', { tone: 'warm' }).user, /in a warm tone/);
   assert.match(textMessage('translate', 'x', { language: 'French' }).user, /into French/);
