@@ -9,20 +9,23 @@ import { Lightbox, WorkerRail } from '../../../ui';
 import PitchPage from './PitchPage';
 import PitchNotes from './PitchNotes';
 import PitchReview from './PitchReview';
+import ReviewTile from './ReviewTile';
 import {
-  EDIT_PATH, EMPTY_DECK, ENGAGEMENT_VIEW_ROWS, LINE, NOT_RECORDED, NO_VENTURE, NO_VIEWS, READ_ONLY, TABS, TITLE,
-  asList, currentVersion, dayLabel, isReadOnly, linkPage, linkRows, mmss,
-  readerStats, ventureQuery, versionLabel, viewsState,
+  EMPTY_DECK, LINE, NOT_RECORDED, NO_VENTURE, READ_ONLY, TABS, TITLE,
+  asList, currentVersion, dayLabel, isReadOnly, linkPage, linkRows, ventureQuery,
 } from './pitchStudioModel';
 import ShareDialog from './ShareDialog';
+import ShareBoard from './ShareBoard';
 import StudioHome from './StudioHome';
+import ScriptTab from './ScriptTab';
 import PitchOverview from './PitchOverview';
+import ScriptTile from './ScriptTile';
 import { presentHref } from './presentExportModel';
 import { BUILD_YOUR_DECK, PRIMARY_OF } from './pitchOverviewModel';
 import { NEW_PATH } from './newDeckModel';
 import { deckRail } from './deckRailGroups';
 import { PitchMovedNotice } from './PitchWorkspaceMoved';
-import { NEW_LINK, analyticsOf, cardSeries, ndaCell, settingsLine, shareFunnel } from './shareModel';
+import { NEW_LINK, ndaCell, settingsLine } from './shareModel';
 
 /**
  * D894 (#2434) — the Pitch deck studio's shell and the two tabs whose reads are
@@ -38,10 +41,11 @@ import { NEW_LINK, analyticsOf, cardSeries, ndaCell, settingsLine, shareFunnel }
  *                           point pointing to a card, and the reviews per
  *                           version (D900, `PitchReview.jsx`); the reviewer for
  *                           an upload or pasted text below it.
- *   /raise/pitch/analytics  Share & analytics (PD19): one version's readers,
- *                           seconds per slide, and every investor link, a page
- *                           at a time, with Withdraw on every link not
- *                           known to be dead.
+ *   /raise/pitch/share      Share & analytics: D4254 P4 (#4272, ps7) puts the
+ *                           board on top (`ShareBoard.jsx`, the daily read:
+ *                           views per day, the two funnels, drop-off); below it
+ *                           every investor link, a page at a time, with
+ *                           Withdraw on every link not known to be dead.
  *   /raise/pitch/notes      Notes (PD21, D905): the thread from the venture's
  *                           admins to its founders, and the composer.
  *   /raise/pitch/new        New deck (PD3–PD6, D897): `NewDeck.jsx`. The Decks
@@ -63,7 +67,6 @@ const GHOST = `${BTN} border border-axal-hairline bg-white text-axal-ink hover:b
 const PRIMARY = `${BTN} bg-axal-violet text-white hover:bg-axal-violet-deep`;
 const DANGER_TEXT = 'inline-flex min-h-[32px] items-center px-2 text-[12px] font-bold text-axal-destructive hover:underline dark:text-red-400';
 const CARD = 'rounded-[12px] border border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900';
-const EYE = 'font-mono text-[10px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 const MUTED = 'text-[12.5px] leading-[1.45] text-axal-muted dark:text-gray-400';
 const INK = 'text-axal-ink dark:text-gray-100';
 const PILL = 'inline-flex items-center rounded-full border px-2 py-0.5 text-[10.5px] font-bold';
@@ -168,7 +171,8 @@ export default function PitchStudio({ tab = 'overview' }) {
   const q = ventureQuery(projectId || reads.requested);
 
   // D1604 (§5): the rail is the element groups' models and the deck's usage.
-  const currentId = currentVersion(asList(reads.versions.data, 'versions', 'decks'))?.id ?? null;
+  const currentDeck = currentVersion(asList(reads.versions.data, 'versions', 'decks'));
+  const currentId = currentDeck?.id ?? null;
   const railGroups = useMemo(() => deckRail(currentId), [currentId]);
   const rail = (
     <WorkerRail
@@ -190,7 +194,11 @@ export default function PitchStudio({ tab = 'overview' }) {
           // D900: the review of the current version (PD14), and below it the
           // reviewer for an upload or pasted text, which works with no venture
           // as it did before D894: the ventures read never stands in its way.
-          <PitchReview reads={reads} readOnly={readOnly} />
+          // D4271 (#4271): the comments across the deck, approvals and figures, above the AI review.
+          <>
+            <ReviewTile reads={reads} readOnly={readOnly} projectId={projectId} />
+            <PitchReview reads={reads} readOnly={readOnly} />
+          </>
         ) : reads.projects.status === 'error' ? (
           <ReadFailed text="Your ventures could not be read." onRetry={reads.reload} testId="pitch-studio-projects-error" />
         ) : reads.projects.status === 'ok' && !reads.project ? (
@@ -205,7 +213,8 @@ export default function PitchStudio({ tab = 'overview' }) {
         ) : tab === 'overview' ? (
           <PitchOverview reads={reads} readOnly={readOnly} q={q} />
         ) : tab === 'script' ? (
-          <ScriptComing q={q} projectId={projectId} currentId={currentId} />
+          // D4268 is the Script view; D4270 keeps Likely questions and Rehearsals.
+          <ScriptTile deck={currentDeck} readOnly={readOnly} script={<ScriptTab reads={reads} readOnly={readOnly} />} />
         ) : (
           <StudioHome reads={reads} readOnly={readOnly} q={q} />
         )}
@@ -266,26 +275,6 @@ function StudioHeader({ tab, q, readOnly, projectId, currentId, noDeck }) {
   );
 }
 
-/**
- * D4254 P2a/P2c (#4268, #4270): Script & rehearsal's own screens are slot
- * work. Until they land the tile says so, and opens what already works:
- * Present with Rehearse (D1580), whose report holds the likely questions.
- */
-function ScriptComing({ q, projectId, currentId }) {
-  return (
-    <div className={`${CARD} flex flex-col items-start gap-2.5 p-6`} data-testid="pitch-studio-script-coming">
-      <span className={`text-[15px] font-extrabold ${INK}`}>The script, card by card, is coming.</span>
-      <span className="text-[12.5px] leading-[1.45] text-axal-muted dark:text-gray-400">
-        Until then, write each card’s notes in the editor and rehearse from Present. The rehearsal report lists the questions investors are likely to ask.
-      </span>
-      <div className="flex flex-wrap gap-2">
-        {currentId != null && projectId != null ? <Link to={presentHref(projectId, currentId)} className={GHOST} data-testid="pitch-studio-script-present">Rehearse in Present</Link> : null}
-        <Link to={`${EDIT_PATH}${q}`} className={GHOST} data-testid="pitch-studio-script-edit">Open the editor</Link>
-      </div>
-    </div>
-  );
-}
-
 function ReadFailed({ text, onRetry, testId }) {
   return (
     <div className={`${CARD} flex flex-col items-start gap-2.5 p-5`} data-testid={testId}>
@@ -317,21 +306,11 @@ export function StudioAnalytics({ reads, readOnly }) {
   const root = useRef(null);
   const versions = asList(reads.versions.data, 'versions', 'decks');
   const current = currentVersion(versions);
-  const card = reads.module.data?.card;
   const records = reads.module.data?.records;
   const links = useMemo(() => linkRows(records, reads.engagement.data), [records, reads.engagement.data]);
   const pager = linkPage(records);
-  const stats = reads.engagement.status === 'ok' ? readerStats(reads.engagement.data) : null;
-  // D902 — PD19 for this version: the Worker's per-viewer median, seconds per
-  // card against the version before, the ask, and each link's settings.
-  const analytics = reads.engagement.status === 'ok' ? analyticsOf(reads.engagement.data) : null;
-  const series = useMemo(() => cardSeries(analytics), [analytics]);
   const shares = useMemo(() => new Map(asList(reads.engagement.data, 'shares').map((x) => [String(x.id), x])), [reads.engagement.data]);
   const [sharing, setSharing] = useState(false);
-  // Engagement is read once the versions read names a current version, so a
-  // failed versions read is a failed engagement read here, never a skeleton
-  // waiting on a read that was never made.
-  const engState = reads.versions.status === 'error' ? 'error' : reads.versions.status === 'ok' && !current ? 'ok' : reads.engagement.status;
   // D902 — New link opens the share dialog (PD18), the one link writer.
   const canShare = !readOnly && Boolean(current?.id) && Boolean(reads.project?.id);
 
@@ -367,7 +346,6 @@ export function StudioAnalytics({ reads, readOnly }) {
     }
   }, [withdraw, reads]);
 
-  const views = viewsState(card, reads.module.status);
   let body;
   if (reads.projects.status === 'loading' || reads.module.status === 'loading' || reads.module.status === 'idle') {
     body = <><Skeleton h="h-24" testId="pitch-studio-loading" /><Skeleton h="h-56" /></>;
@@ -376,30 +354,16 @@ export function StudioAnalytics({ reads, readOnly }) {
   } else {
     body = (
       <>
-        {views === 'failed' ? (
-          <ReadFailed text="Views on your links could not be read." onRetry={reads.reload} testId="pitch-studio-views-error" />
-        ) : views === 'unopened' || views === 'no-deck' ? (
-          <div className={`${CARD} p-6 text-center text-[13px] text-axal-muted dark:text-gray-400`} data-testid={views === 'unopened' ? 'pitch-studio-no-views' : 'pitch-studio-empty'}>
-            {views === 'unopened' ? NO_VIEWS : EMPTY_DECK}
-          </div>
+        {/* D4254 P4 (#4272, ps7): the board reads the daily read; with no deck there is nothing to share yet. */}
+        {reads.versions.status === 'error' ? (
+          // A failed versions read is a failed read, never "No deck yet".
+          <ReadFailed text="Your deck's versions could not be read." onRetry={reads.reload} testId="pitch-studio-versions-error" />
+        ) : reads.versions.status !== 'ok' ? (
+          <Skeleton h="h-40" testId="pitch-studio-board-loading" />
+        ) : current?.id ? (
+          <ShareBoard deckId={current.id} projectId={reads.project?.id ?? null} versions={versions} />
         ) : (
-          <>
-            <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4" data-testid="pitch-studio-tiles">
-              <Tile label="Views" value={stats ? `${stats.views}${stats.capped ? '+' : ''}` : null} note={current ? `on ${versionLabel(current)}` : ''} state={engState} />
-              <Tile label="Unique viewers" value={stats ? String(stats.viewers) : null} note={stats?.capped ? `one per browser, in the latest ${ENGAGEMENT_VIEW_ROWS} views` : 'one per browser'} state={engState} />
-              <Tile
-                label="Median time"
-                value={analytics ? mmss(analytics.median_seconds_per_viewer) : stats ? mmss(stats.medianSeconds) : null}
-                note={analytics ? 'per viewer, every view of this version' : stats?.capped ? `per view, over the latest ${ENGAGEMENT_VIEW_ROWS}` : 'per view'}
-                state={engState}
-              />
-              <Tile label="NDA signed" value={stats && stats.ndaSigned != null ? String(stats.ndaSigned) : null} note="signatures on this version's links" state={engState} />
-            </div>
-            <div className="grid gap-3.5 lg:grid-cols-[1.6fr_1fr]">
-              <SecondsPerCard series={series} unreadable={engState === 'ok' && !analytics} />
-              <Funnel stats={stats} analytics={analytics} state={engState} />
-            </div>
-          </>
+          <div className={`${CARD} p-6 text-center text-[13px] text-axal-muted dark:text-gray-400`} data-testid="pitch-studio-empty">{EMPTY_DECK}</div>
         )}
         <section className={`${CARD} overflow-hidden`} data-testid="pitch-studio-links">
           <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
@@ -500,83 +464,5 @@ export function StudioAnalytics({ reads, readOnly }) {
         <ShareDialog projectId={reads.project.id} deck={current} onClose={() => setSharing(false)} onCreated={() => reads.reload()} />
       ) : null}
     </div>
-  );
-}
-
-function Tile({ label, value, note, state }) {
-  return (
-    <div className={`${CARD} flex flex-col gap-1 p-4`}>
-      <span className={EYE}>{label}</span>
-      {state === 'loading' || state === 'idle' ? <Skeleton h="h-7" /> : state === 'error' ? (
-        <span className={MUTED}>Could not be read</span>
-      ) : (
-        value == null ? <span className={MUTED}>{NOT_RECORDED}</span> : <span className={`font-mono text-[22px] font-semibold ${INK}`}>{value}</span>
-      )}
-      <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{note}</span>
-    </div>
-  );
-}
-
-function SecondsPerCard({ series, unreadable }) {
-  // D902 — this version only, with the version before it dotted. The Raise
-  // module's card summed every version together.
-  if (unreadable || !series) {
-    return (
-      <section className={`${CARD} flex min-w-0 flex-col gap-2 p-4`} data-testid="pitch-studio-seconds">
-        <span className={`text-[14px] font-extrabold ${INK}`}>Seconds per card</span>
-        <span className={MUTED}>{unreadable ? 'Seconds per card on this version could not be read.' : 'Reading…'}</span>
-      </section>
-    );
-  }
-  const { rows, max, version, previousVersion } = series;
-  return (
-    // min-w-0: a grid item, so a long deck's bars scroll inside the card rather
-    // than widening the column, and the page, at phone width.
-    <section className={`${CARD} flex min-w-0 flex-col gap-2 p-4`} data-testid="pitch-studio-seconds">
-      <span className={`text-[14px] font-extrabold ${INK}`}>Seconds per card</span>
-      <span className="text-[12px] text-axal-muted dark:text-gray-400" data-testid="pitch-studio-seconds-legend">
-        {previousVersion == null ? `v${version}. No version before it to compare.` : `v${version}, with v${previousVersion} dotted.`}
-      </span>
-      {rows.length ? (
-        <div className="flex h-40 items-end gap-2 overflow-x-auto pt-4" role="img"
-          aria-label={rows.map((r) => `Card ${r.label}: ${r.seconds} seconds${r.previous == null ? '' : `, ${r.previous} on v${previousVersion}`}`).join(', ')}>
-          {rows.map((r) => (
-            <div key={r.index} className="flex flex-1 flex-col items-center gap-1">
-              <span className="font-mono text-[10px] text-axal-muted dark:text-gray-400">{Math.round(r.seconds)}</span>
-              <div className="flex w-full max-w-[34px] items-end gap-0.5">
-                <span className="flex-1 rounded-t-[3px] bg-axal-violet dark:bg-violet-400" style={{ height: `${Math.max(4, Math.round((r.seconds / max) * 110))}px` }} />
-                {r.previous == null ? null : (
-                  <span className="flex-1 rounded-t-[3px] border border-dashed border-axal-violet dark:border-violet-400" style={{ height: `${Math.max(4, Math.round((r.previous / max) * 110))}px` }} data-testid={`pitch-studio-previous-${r.index}`} />
-                )}
-              </div>
-              <span className="font-mono text-[10px] text-axal-muted dark:text-gray-400">{r.label}</span>
-            </div>
-          ))}
-        </div>
-      ) : <span className={MUTED}>No card on this version has been read yet.</span>}
-    </section>
-  );
-}
-
-function Funnel({ stats, analytics, state }) {
-  const rows = shareFunnel(stats, analytics);
-  return (
-    <section className={`${CARD} flex flex-col gap-3 p-4`} data-testid="pitch-studio-funnel">
-      <span className={`text-[14px] font-extrabold ${INK}`}>Funnel</span>
-      {state === 'error' ? <span className={MUTED}>Could not be read.</span> : rows.map(({ label, n, width, reason }, i) => (
-        <div key={label} className="flex flex-col gap-1">
-          <div className="flex justify-between text-[12.5px]"><span className={INK}>{label}</span><span className="font-mono text-axal-muted dark:text-gray-400">{n == null ? (state === 'ok' ? NOT_RECORDED : 'Reading…') : String(n)}</span></div>
-          <div className="h-2.5 overflow-hidden rounded-full bg-axal-ground dark:bg-gray-800">
-            <div className="h-2.5 rounded-full bg-axal-violet dark:bg-violet-400" style={{ width: `${width}%` }} data-testid={`pitch-studio-funnel-bar-${i}`} />
-          </div>
-          {reason ? <span className="text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="pitch-studio-funnel-no-ask">{reason}</span> : null}
-        </div>
-      ))}
-      <span className="text-[11.5px] text-axal-muted dark:text-gray-400">
-        {!analytics && stats?.capped
-          ? `On the current version, as a share of the unique viewers in its latest ${ENGAGEMENT_VIEW_ROWS} views; the NDA count is every signature.`
-          : 'On the current version, as a share of its unique viewers; the NDA count is every signature.'}
-      </span>
-    </section>
   );
 }

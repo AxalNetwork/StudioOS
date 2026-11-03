@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { aiBudgetApi } from '../../lib/api/aiBudget';
-import { TOPUP_UNAVAILABLE, openAddTokens } from '../../lib/aiTokens';
+import { CUSTOM_PACK, TOPUP_UNAVAILABLE, customRangeLine, openAddTokens } from '../../lib/aiTokens';
 import { api } from '../../lib/api';
 import { Pill, Unreadable } from '../../ui';
 import { BTN, LoadingRows, Outcome, PanelCard, useAccountRead } from './AccountCenter';
@@ -79,12 +79,14 @@ export function PlanAllowanceCard({ me, now }) {
 /** Buy tokens: the packs on sale, each with its live offer (D790), Buy opening the sheet on that pack (D1288), and the footnote. */
 export function BuyTokensCard({ topUp }) {
   const cards = topUp.status === 'ready' ? packCards(topUp.data) : [];
+  // D1434: the custom amount ($5–$500) is a top-up on sale even when no pack is.
+  const anyAmount = topUp.status === 'ready' ? customRangeLine(topUp.data?.custom) : null;
   return (
     <div id="buy-tokens" className="scroll-mt-4">
       <PanelCard title="Buy tokens" data-testid="card-buy-tokens">
         {topUp.status === 'loading' ? <LoadingRows lines={2} />
           : topUp.status !== 'ready' ? <Unreadable what="The token packs" claim="This is not a claim that none is on sale." onRetry={topUp.reload} />
-            : cards.length === 0 ? <p className="m-0 text-[13px] text-axal-muted dark:text-gray-400" data-testid="buy-tokens-none">{TOPUP_UNAVAILABLE}</p>
+            : cards.length === 0 && !anyAmount ? <p className="m-0 text-[13px] text-axal-muted dark:text-gray-400" data-testid="buy-tokens-none">{TOPUP_UNAVAILABLE}</p>
               : (
                 <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4" data-testid="buy-tokens-packs">
                   {cards.map((p) => (
@@ -96,6 +98,13 @@ export function BuyTokensCard({ topUp }) {
                       <button type="button" className={`${BTN.ghost} mt-auto`} onClick={() => openAddTokens({ from: 'Billing', pack_uid: p.key })} data-testid={`pack-buy-${p.key}`}>Buy</button>
                     </div>
                   ))}
+                  {anyAmount && (
+                    <div className="flex flex-col gap-1.5 rounded-axal-sm border border-axal-hairline p-3 dark:border-gray-800" data-testid="pack-custom">
+                      <span className="font-mono text-[22px] font-medium text-axal-ink dark:text-gray-100">Any amount</span>
+                      <span className="text-[12px] text-axal-muted dark:text-gray-400">{anyAmount}</span>
+                      <button type="button" className={`${BTN.ghost} mt-auto`} onClick={() => openAddTokens({ from: 'Billing', pack_uid: CUSTOM_PACK })} data-testid="pack-buy-custom">Choose an amount</button>
+                    </div>
+                  )}
                 </div>
               )}
         <p className="m-0 mt-3 text-[11.5px] text-axal-muted dark:text-gray-400">{TOKENS_FOOTNOTE}</p>

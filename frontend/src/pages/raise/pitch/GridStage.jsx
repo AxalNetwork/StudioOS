@@ -21,6 +21,8 @@ import {
 } from './arrangeModel';
 import { minSizeProblem, moveOverflow, overLine, overflowOf } from './structureModel';
 import { cursorsOn, heldAreas } from './presenceModel';
+import { DiagramCheck, DiagramNodes } from './DiagramNodes';
+import { diagramOf } from './diagramEditModel';
 
 /**
  * D1604 (#3716, pd0, pd3, pd3b, pd11) — the card on The Grid, the editor's
@@ -194,7 +196,7 @@ export default function GridStage({
   card, index, model, colours, ink, theme, kit, charts, readOnly = false,
   selection, focus, onSelection, onMove, onAsk, askOff = null, askLine = null, items = [], onRefresh = null,
   onUpdateDerive = null, onUpdateAccept = null,
-  pageLabel = null, onCard = null, onDecor = null,
+  pageLabel = null, onCard = null, onDecor = null, onDiagramCheck = null,
   editors = null, youId = null, lockLine = null, onPointer = null,
 }) {
   const aspect = aspectOf(theme?.aspect);
@@ -229,6 +231,7 @@ export default function GridStage({
   const [sliding, setSliding] = useState(null);
   const [divLine, setDivLine] = useState(null);
   const [overflow, setOverflow] = useState(null);
+  const [diagramError, setDiagramError] = useState(null);
   const faceRef = useRef(null);
   const layer = useRef(null);
   const buttons = useRef(new Map());
@@ -424,6 +427,8 @@ export default function GridStage({
 
   const one = chosen.length === 1 ? chosen[0] : null;
   const many = chosen.length > 1;
+  // D1542 (#3780): the one selected area's diagram, its nodes editable on the canvas.
+  const diagram = one && !readOnly && onCard ? diagramOf(one) : null;
   const askButton = (n, testId) => (
     <button type="button" aria-label={askAreaName(n)} aria-disabled={askOff ? true : undefined}
       title={askOff || 'Generate, change or check this area'}
@@ -577,6 +582,12 @@ export default function GridStage({
             </span>
           );
         })}
+        {diagram ? (
+          <div className={`pointer-events-none ${LAYER}`} data-testid="pitch-editor-diagram-layer">
+            <DiagramNodes block={diagram} card={card} aspect={aspect} onError={setDiagramError}
+              onCard={(next) => onCard?.(next, 'diagram')} />
+          </div>
+        ) : null}
         {areas && selection.some(isDecorSel) ? (
           <DecorHandles card={card} selection={selection} aspect={aspect} readOnly={readOnly || !onCard} rect={rect}
             onCard={(next, line) => { setMoved(line); onCard?.(next); }} onLine={setMoved} />
@@ -596,6 +607,7 @@ export default function GridStage({
       </div>
 
       {refused ? <span className={MUTED} role="status" data-testid="pitch-editor-drop-refused">{refused}</span> : null}
+      {diagram ? <DiagramCheck block={diagram} check={onDiagramCheck} error={diagramError} /> : null}
       {selection.some(isDecorSel) && !readOnly ? (
         <span className={`${MUTED} flex flex-wrap items-center gap-2`} data-testid="pitch-editor-decor-line">
           {moved ? <span className={`${MONO} rounded-full bg-axal-lavender px-2 py-0.5 text-axal-violet dark:bg-violet-950/40 dark:text-violet-300`} role="status" data-testid="pitch-editor-decor-moved">{moved}</span> : null}

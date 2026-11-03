@@ -208,3 +208,45 @@ export async function getResume(env: Env, fileKey: string): Promise<R2ObjectBody
   if (!fileKey.startsWith('resumes/')) return null; // hard guard: never serve outside resumes/ prefix
   return await env.FILES.get(fileKey);
 }
+
+// ---------------------------------------------------------------------------
+// D4294 (#4294, D4289 P5) — influencer tax forms (W-9 / W-8BEN), private,
+// under taxforms/{user_id}/{uuid}.{ext}. Same private-bucket model as KYC:
+// no public URL, and only the Super Admin's route streams the bytes back.
+// ---------------------------------------------------------------------------
+
+const TAX_FORM_MIME: Record<string, string> = {
+  'application/pdf': 'pdf',
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+};
+export const TAX_FORM_MAX_BYTES = 5 * 1024 * 1024;
+export const TAX_FORM_PREFIX = 'taxforms/';
+
+export interface TaxFormMeta { file_key: string; content_type: string; size: number; sha256: string }
+
+/** Decode the data URI and store it. Throws a short reason for a type or size the form does not take. */
+export async function putTaxFormFromDataUri(env: Env, userId: number, dataUri: string): Promise<TaxFormMeta> {
+  if (!env.FILES) throw new Error('storage_unavailable');
+  const commaIdx = dataUri.indexOf(',');
+  if (commaIdx < 0 || !dataUri.startsWith('data:') || !dataUri.slice(0, commaIdx).endsWith(';base64')) throw new Error('not_a_file');
+  const contentType = dataUri.slice(5, commaIdx).replace(';base64', '').trim();
+  const ext = TAX_FORM_MIME[contentType];
+  if (!ext) throw new Error('unsupported_type');
+  const b64 = dataUri.slice(commaIdx + 1);
+  if (Math.floor((b64.length * 3) / 4) > TAX_FORM_MAX_BYTES) throw new Error('too_large');
+  let bytes: Uint8Array;
+  try { bytes = bytesFromBase64(b64); } catch { throw new Error('not_a_file'); }
+  if (!bytes.byteLength) throw new Error('not_a_file');
+  if (bytes.byteLength > TAX_FORM_MAX_BYTES) throw new Error('too_large');
+  const sha256 = await sha256Hex(bytes);
+  const fileKey = `${TAX_FORM_PREFIX}${userId}/${crypto.randomUUID()}.${ext}`;
+  await env.FILES.put(fileKey, bytes, { httpMetadata: { contentType }, customMetadata: { user_id: String(userId), sha256 } });
+  return { file_key: fileKey, content_type: contentType, size: bytes.byteLength, sha256 };
+}
+
+export async function getTaxForm(env: Env, fileKey: string): Promise<R2ObjectBody | null> {
+  if (!env.FILES) return null;
+  if (!fileKey.startsWith(TAX_FORM_PREFIX)) return null; // hard guard: never serve outside taxforms/
+  return await env.FILES.get(fileKey);
+}

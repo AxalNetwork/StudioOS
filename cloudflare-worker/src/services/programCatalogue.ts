@@ -259,6 +259,15 @@ async function testingFigures(env: Env) {
   return { open: n(r?.open), applications: n(r?.applied) };
 }
 
+/** D4289 P1 (#4290): active influencers, and the applications waiting on HQ (not those waiting on the applicant). */
+async function influencerFigures(env: Env) {
+  const r = await env.DB.prepare(
+    `SELECT (SELECT COUNT(*) FROM influencers WHERE status = 'active') AS active,
+            (SELECT COUNT(*) FROM influencer_applications WHERE status = 'applied') AS applications`,
+  ).first<{ active: number; applications: number }>();
+  return { active: n(r?.active), applications: n(r?.applications) };
+}
+
 // ---------------------------------------------------------------------------
 // People taking part (S-PPL)
 // ---------------------------------------------------------------------------
@@ -482,6 +491,7 @@ function cardFigures(key: string, viewer: Viewer, q: Queues, b: {
   claims: Read<{ count: number }>;
   learning: Read<Awaited<ReturnType<typeof learningFigures>>>;
   testing: Read<{ open: number; applications: number }> | null;
+  influencers: Read<{ active: number; applications: number }>;
 }): { figures: Record<string, unknown> | null; needs_you: Record<string, unknown> | null } {
   switch (key) {
     case 'spinout-lab':
@@ -517,6 +527,11 @@ function cardFigures(key: string, viewer: Viewer, q: Queues, b: {
       };
     case 'learning':
       return { figures: { programs: b.learning }, needs_you: null };
+    case 'influencer':
+      return {
+        figures: { influencers: b.influencers.available ? { available: true, count: b.influencers.active } : b.influencers },
+        needs_you: needs([b.influencers.available ? { available: true, count: b.influencers.applications } : b.influencers], 'Influencer applications'),
+      };
     case 'product-testing':
       return viewer.superAdmin && b.testing
         ? { figures: { programs: b.testing }, needs_you: null }
@@ -555,7 +570,7 @@ export async function programCatalogue(env: Env, viewer: Viewer, weeks: ProgramW
   const [
     registry, cohort, referrals, perks, hosts, strategic, claims,
     mentors, coverage, notAdvisor, live, learning, testing,
-    people, joinsReferrals, joinsLearning, joinsLab, credits,
+    people, joinsReferrals, joinsLearning, joinsLab, credits, influencers,
   ] = await Promise.all([
     block('The program registry', async () => ({ rows: await listPrograms(env, { superAdmin: viewer.superAdmin, licenceUid: viewer.licenceUid ?? null }) })),
     block('Cohort applications', () => cohortQueue(env, nowMs)),
@@ -587,6 +602,7 @@ export async function programCatalogue(env: Env, viewer: Viewer, weeks: ProgramW
     block('Learning enrolments per week', () => learningWeekly(env, viewer, axis, before)),
     block('Lab applications per week', () => labWeekly(env, axis, before)),
     viewer.superAdmin ? block('The credit ledger', () => creditsByMonth(env, axis)) : Promise.resolve(null),
+    block('Influencers', () => influencerFigures(env)),
   ]);
 
   const q: Queues = { cohort, referrals, perks, hosts, strategic };
@@ -630,6 +646,7 @@ export async function programCatalogue(env: Env, viewer: Viewer, weeks: ProgramW
           ...cardFigures(r.key, viewer, q, {
             mentors, coverage, notAdvisor, live, learning, claims: claims.available ? { available: true, count: claims.count } : claims,
             testing: testing as Read<{ open: number; applications: number }> | null,
+            influencers,
           }),
         })),
       }

@@ -96,10 +96,20 @@ export interface McpTool {
   company: boolean;
   /** Read-only tools are annotated so; a write tool (#1497) sets false. */
   readOnly?: boolean;
+  /**
+   * D1588: a write tool whose run only leaves a proposal (or a draft) the
+   * member decides, never a saved change. Eadwyn runs it as it is, instead of
+   * wrapping its call as a generic proposal, so the proposal lands where the
+   * member already decides it (the deck's Ask, Email's drafts).
+   */
+  proposes?: boolean;
   /** D842: how long a call may run before it answers `timeout`; `TOOL_TIMEOUT_MS` when unset. */
   timeoutMs?: number;
   run: (r: ToolRun) => Promise<unknown>;
 }
+
+/** The scopes whose tools need the company writable, not only readable (D1588 adds raise:write). */
+export const WRITE_SCOPES: ReadonlySet<string> = new Set(['validate:write', 'raise:write']);
 
 /** D842 (#2470): a tool call's default time limit. */
 export const TOOL_TIMEOUT_MS = 20_000;
@@ -294,7 +304,7 @@ export async function callTool(env: Env, props: GrantProps, grantId: string | nu
     stage = 'company';
     let company: ToolRun['company'] = null;
     if (tool.company) {
-      company = await grantCompany(env, props, user, args.company, tool.requiredScope === 'validate:write');
+      company = await grantCompany(env, props, user, args.company, WRITE_SCOPES.has(tool.requiredScope));
       companyId = company.id;
     }
     // The granted companies that still pass the check; one the user has lost drops out.
@@ -444,3 +454,7 @@ registerMcpTools(MEETING_TOOLS);
 // D1343: Email's context and drafts. Neither sends; sending stays a press in Axal.
 import { MAIL_TOOLS } from './tools/mail';
 registerMcpTools(MAIL_TOOLS);
+
+// D1588: the deck and raise tools. The write ones only propose; nothing is saved without the founder's press.
+import { DECK_TOOLS } from './tools/decks';
+registerMcpTools(DECK_TOOLS);

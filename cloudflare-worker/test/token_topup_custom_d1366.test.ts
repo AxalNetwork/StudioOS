@@ -106,3 +106,16 @@ test('migration 654 puts four packs on sale, and a pack price the mirror lacks i
   assert.deepEqual([sale.state, sale.packs.map((p) => p.unit_amount)], ['ready', [1000, 2500, 5000, 10000]]);
   f.db.close();
 });
+
+test('D1434: the public plans-and-packs read carries the custom amount, so /pricing offers a top-up with no pack on sale', async () => {
+  // Mutation checked: drop `custom` from plansAndPacks → the visitor's read has no top-up and /pricing says it isn't available.
+  const { plansAndPacks } = await import('../src/services/aiCredits.ts');
+  const f = await shop();
+  const body: any = await plansAndPacks(f.env);
+  assert.deepEqual(body.packs, [], 'no pack on sale');
+  assert.deepEqual(body.custom, { price_id: UNIT, unit_amount: 100, currency: 'usd', min_cents: 500, max_cents: 50_000 }, 'the $5 minimum comes from the Worker');
+  f.db.close();
+  const unset = await shop(100, { STRIPE_PRICE_AI_TOPUP_UNIT: undefined });
+  assert.equal(((await plansAndPacks(unset.env)) as any).custom, null, 'no custom price: no offer, never a refusal of the read');
+  unset.db.close();
+});

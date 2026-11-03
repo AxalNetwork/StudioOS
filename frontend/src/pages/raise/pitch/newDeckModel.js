@@ -28,7 +28,7 @@ export function aiTokens(micro) {
   return `$${usd.toFixed(usd < 1 ? 4 : 2)}`;
 }
 
-// The Worker's `numberIn` (services/decks/newDeck.ts), so the prompt is flagged as it is typed.
+// The Worker's `numberIn` (services/decks/numbers.ts), so the prompt is flagged as it is typed.
 const NUMBER_WORDS = ['zero', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve',
   'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty', 'thirty', 'forty', 'fifty',
   'sixty', 'seventy', 'eighty', 'ninety', 'hundred', 'hundreds', 'thousand', 'thousands', 'million', 'millions', 'billion',

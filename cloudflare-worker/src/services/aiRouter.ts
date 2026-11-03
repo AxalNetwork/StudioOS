@@ -42,7 +42,7 @@ import { costMicro, unitPrice } from './ai/pricing';
 import * as guard from './ai/guard';
 import { resolveRail, resolveRailChain, resolveRailOption, rowOffers } from './ai/railMatrix';
 import { MODEL_CONNECTIONS, MODULE_ROUTES, type ModuleTask } from './ai/moduleConnections';
-import { specialistRefusal, specialistRequest, specialistOutput, pcmBytes, pcmMinutes, type SpecialistInput } from './ai/moduleShapes';
+import { SPECIALIST_OUTPUT_MAX, specialistRefusal, specialistRequest, specialistOutput, pcmBytes, pcmMinutes, type SpecialistInput } from './ai/moduleShapes';
 import { drawChoice, memberPlanTier, type DrawSkip, type DrawSource, type PlanTier } from './ai/drawJobs';
 import { speechChoice, type SpeechSkip, type SpeechSource } from './ai/speechJobs';
 import { TASK_TEXT_JOBS, textChoice, type TextSkip, type TextSource } from './ai/textJobs';
@@ -2134,12 +2134,18 @@ function holdQuoteMicro(opts: RunOptions, route: RouteEntry, models: string[], g
     return req ? shapes.imageUnits(model, req.sent.width, req.sent.height, req.sent.steps, req.sent.references) : {};
   };
   const surfaceKey = normaliseSurface(opts.surface);
+  // D1525 (#3783): a decision answers bounded JSON (`specialistOutput`), and
+  // Clef is priced on input tokens only (`prices: { tokens_in }`, so its
+  // output rate is 0 here): the guard's output slice is held for that answer,
+  // never for an output allowance, so the hold moves with the input alone.
+  const decision = opts.specialist?.operation === 'decision';
   const quote = Math.max(...models.map((model) => estimateCostUsd(model, promptBound, outputBound, quoteMinutes, 0, quoteChars, quoteImage(model), mipPriceFactor(model, surfaceKey))));
   // D763: the guard is held inside this hold, never in one of its own: every
   // input slice, and every output slice the run's maximum output allows.
   const outputChars = !guardOn || route.isEmbed || opts.speak || opts.draw ? 0
     : route.isAudio ? Math.ceil((opts.audioMinutes || 0) * TRANSCRIPT_CHARS_PER_MINUTE)
-      : outputBound * GUARD_CHARS_PER_OUTPUT_TOKEN;
+      : decision ? SPECIALIST_OUTPUT_MAX
+        : outputBound * GUARD_CHARS_PER_OUTPUT_TOKEN;
   const guardQuote = guardOn ? guardQuoteMicro(guardInput, outputChars, multiplier) : 0;
   return aiBudget.billedUsdToMicro(quote, multiplier) + guardQuote;
 }

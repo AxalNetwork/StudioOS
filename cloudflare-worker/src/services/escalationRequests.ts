@@ -65,7 +65,7 @@ export const isProgramRequestKind = (kind: string) => (PROGRAM_REQUEST_KINDS as 
  */
 export const REQUESTABLE_PROGRAMS = [
   'spinout-lab', 'ai-native-venture', 'mentor-cohorts', 'investor-cohorts', 'referral-partners',
-  'refer-and-earn', 'perks', 'learning', 'product-testing',
+  'refer-and-earn', 'influencer', 'perks', 'learning', 'product-testing',
 ] as const;
 
 export const isRequestKind = (kind: string): kind is RequestKind =>
