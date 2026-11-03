@@ -329,12 +329,13 @@ const SKIPS: Record<string, string> = {
   'skipped:agent_paused': 'agent_paused', 'skipped:no_tokens': 'out_of_tokens', 'skipped:skill_retired': 'skill_retired', 'skipped:tool_disconnected': 'tool_disconnected',
 };
 
-type RunLine = { task_id: number; created_at: string; status: string | null; refusal: string | null; usage_log_id: number | null; waiting: number; proposals: number };
+type RunLine = { task_id: number; created_at: string; run_uid: string | null; status: string | null; refusal: string | null; usage_log_id: number | null; waiting: number; proposals: number };
 
 /** The tasks a session made, newest first, each with its latest run and its proposals. */
 async function runsOf(env: Env, uid: string, limit = 10): Promise<RunLine[]> {
   return (await env.DB.prepare(
     `SELECT t.id AS task_id, t.created_at,
+            (SELECT r.uid FROM agent_task_runs r WHERE r.task_id = t.id ORDER BY r.attempt DESC LIMIT 1) AS run_uid,
             (SELECT r.status FROM agent_task_runs r WHERE r.task_id = t.id ORDER BY r.attempt DESC LIMIT 1) AS status,
             (SELECT r.refusal FROM agent_task_runs r WHERE r.task_id = t.id ORDER BY r.attempt DESC LIMIT 1) AS refusal,
             (SELECT r.usage_log_id FROM agent_task_runs r WHERE r.task_id = t.id ORDER BY r.attempt DESC LIMIT 1) AS usage_log_id,
@@ -389,7 +390,8 @@ export async function sessionDto(env: Env, r: SessionRow, a: AgentRow, s: Scope,
   const est = place && manage ? await sessionEstimate(env, a, place, sched, now, r.uid) : null;
   const lastRuns = [];
   for (const l of runs.slice(0, 5)) {
-    lastRuns.push({ date: l.created_at.slice(0, 10), state: runState(l), proposals: Number(l.proposals), cost_cents: await charged(env, l.usage_log_id) });
+    // D1614 W6 (#3974, CAL10): the latest run's uid, so the session sheet opens W3's run sheet (GET /api/teams/runs/:uid); null before any run.
+    lastRuns.push({ uid: l.run_uid ?? null, date: l.created_at.slice(0, 10), state: runState(l), proposals: Number(l.proposals), cost_cents: await charged(env, l.usage_log_id) });
   }
   const live = r.status === 'active' || r.status === 'paused' || r.status === 'done';
   return {
