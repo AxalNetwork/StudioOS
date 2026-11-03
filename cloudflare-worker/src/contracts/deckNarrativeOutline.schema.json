@@ -1,0 +1,583 @@
+{
+  "$id": "deckNarrativeOutline",
+  "title": "POST /api/decks/narrative/outline and POST /api/decks/narrative/build (D1516, #3768)",
+  "description": "What the deck v2 adapter's `narrativeOutline` method passes through. Without `run`, the outline: the narrative version it binds (or null with why) and how many figure sentences were dropped per slot, the stage, each card the stage's arc keeps with its why, its proof and its grid plan (structure, areas, element per area), the cards left out (\"Problem not evidenced\"), the theme and template picked (\"Picked … because …\") and the quote of every area under the `deck_build` class. With `run`, the build: the new version (not current) and the narrative version it is bound to, the one run's uid and hold, whether this was a replay, and one proposal per area. A model id never rides on either reply. D1511 (#3762).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {
+    "project_id": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "narrative": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "ref",
+        "reason",
+        "dropped"
+      ],
+      "properties": {
+        "version": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dropped": {
+          "type": "object",
+          "description": "Sentences dropped for naming a figure, by slot key."
+        }
+      }
+    },
+    "stage": {
+      "enum": [
+        "pre_seed",
+        "seed",
+        "series_a",
+        "series_b_plus"
+      ]
+    },
+    "stage_label": {
+      "type": "string"
+    },
+    "stage_source": {
+      "enum": [
+        "asked",
+        "audience",
+        "venture",
+        "default"
+      ]
+    },
+    "cards": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "card",
+          "uid",
+          "title",
+          "why",
+          "proof",
+          "structure",
+          "areas"
+        ],
+        "properties": {
+          "card": {
+            "type": "string"
+          },
+          "uid": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "why": {
+            "type": "string"
+          },
+          "proof": {
+            "enum": [
+              "recorded",
+              "missing",
+              "unchecked"
+            ]
+          },
+          "structure": {
+            "type": "string"
+          },
+          "areas": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 12,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "element"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "element": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "left_out": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "card",
+          "title",
+          "line"
+        ],
+        "properties": {
+          "card": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "line": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "card",
+          "message"
+        ],
+        "properties": {
+          "card": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "theme": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "reason"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "brand",
+            "neutral_light",
+            "neutral_dark",
+            "sand",
+            "ocean",
+            "forest"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        }
+      }
+    },
+    "template": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "template_id",
+        "reason"
+      ],
+      "properties": {
+        "template_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        }
+      }
+    },
+    "quote": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "class",
+        "quote_uid",
+        "expires_at",
+        "hold_microusd",
+        "areas",
+        "runs",
+        "refused"
+      ],
+      "properties": {
+        "class": {
+          "enum": [
+            "areas",
+            "deck_build"
+          ]
+        },
+        "quote_uid": {
+          "type": "string"
+        },
+        "expires_at": {
+          "type": "string"
+        },
+        "hold_microusd": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "runs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "refused": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "areas": {
+          "type": "array",
+          "maxItems": 60,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "key",
+              "card_uid",
+              "area_id",
+              "element",
+              "kind",
+              "model",
+              "model_label",
+              "variants",
+              "gates",
+              "refusal",
+              "lines",
+              "hold_microusd"
+            ],
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "card_uid": {
+                "type": "string"
+              },
+              "area_id": {
+                "type": "string"
+              },
+              "element": {
+                "type": "string"
+              },
+              "kind": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "model": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "model_label": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "variants": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 3
+              },
+              "gates": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "image_check",
+                  "plan",
+                  "records"
+                ],
+                "properties": {
+                  "image_check": {
+                    "type": "boolean"
+                  },
+                  "plan": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "records": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              },
+              "refusal": {
+                "description": "Null when the area runs; else `{ code, message }`. No `type`, so null holds."
+              },
+              "lines": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "label",
+                    "count",
+                    "per_microusd",
+                    "microusd"
+                  ],
+                  "properties": {
+                    "label": {
+                      "type": "string"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "per_microusd": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "microusd": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "free": {
+                      "const": true
+                    },
+                    "included": {
+                      "const": true
+                    }
+                  }
+                }
+              },
+              "hold_microusd": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        }
+      }
+    },
+    "deck_id": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "version": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "narrative_version": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "batch_uid": {
+      "type": "string"
+    },
+    "class": {
+      "const": "deck_build"
+    },
+    "hold_microusd": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "replayed": {
+      "type": "boolean"
+    },
+    "proposals": {
+      "type": "array",
+      "maxItems": 60,
+      "items": {
+        "$ref": "#/$defs/proposal"
+      }
+    },
+    "refused": {
+      "type": "array",
+      "description": "Each area refused on its own: `{ key, card_uid, area_id, element, gates, refusal }`."
+    }
+  },
+  "$defs": {
+    "proposal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "uid",
+        "card_uid",
+        "area_id",
+        "element",
+        "mode",
+        "kind",
+        "batch_uid",
+        "state",
+        "outcome",
+        "accepted_variant",
+        "replaces_block",
+        "variants",
+        "created_at",
+        "decided_at",
+        "expires_at"
+      ],
+      "properties": {
+        "uid": {
+          "type": "string"
+        },
+        "card_uid": {
+          "type": "string"
+        },
+        "area_id": {
+          "type": "string"
+        },
+        "element": {
+          "type": "string"
+        },
+        "mode": {
+          "enum": [
+            "variants",
+            "records"
+          ]
+        },
+        "kind": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "batch_uid": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "enum": [
+            "running",
+            "ready",
+            "failed",
+            "accepted",
+            "discarded",
+            "expired"
+          ]
+        },
+        "outcome": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "accepted_variant": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "replaces_block": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "variants": {
+          "type": "array",
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/variant"
+          }
+        },
+        "created_at": {
+          "type": "string"
+        },
+        "decided_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "expires_at": {
+          "type": "string"
+        }
+      }
+    },
+    "variant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "n",
+        "seed",
+        "model_label",
+        "cost_microusd",
+        "seconds",
+        "state",
+        "error",
+        "payload",
+        "critique"
+      ],
+      "properties": {
+        "n": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3
+        },
+        "seed": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "model_label": {
+          "type": "string"
+        },
+        "cost_microusd": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "seconds": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "state": {
+          "enum": [
+            "ready",
+            "failed",
+            "stopped",
+            "waiting",
+            "running"
+          ]
+        },
+        "error": {
+          "description": "Null when the variant is ready; else `{ code, message }`. No `type`, so null holds."
+        },
+        "payload": {
+          "description": "What Accept places: `{ kind: 'text', before, after }`, `{ kind: 'block', block }`, `{ kind: 'image', image }` or `{ kind: 'blocks', blocks, bindings }`; null when it failed. No `type`, so null holds."
+        },
+        "critique": {
+          "description": "The free code critique of a text variant (`fits`, `contrast_aa`, `density_ok`, each true, false or null when not checked); null otherwise. No `type`, so null holds."
+        }
+      }
+    }
+  }
+}
