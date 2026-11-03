@@ -3448,3 +3448,145 @@ export async function convertToMarkdown(env: Env, who: { userId: number; surface
   await recordUsage(env, logWho, usage(), null, { charged: 0, units: { documents: docs.length, bytes } });
   return { ok: true, documents: list.map((r, i) => ({ name: String(r?.name ?? docs[i]?.name ?? ''), data: String(r?.data ?? ''), tokens: Number.isFinite(r?.tokens) ? Number(r?.tokens) : null })) };
 }
+
+// ---------------------------------------------------------------------------
+// D1551 (#3798, deck v2 C3): text ensembles.
+//
+// Today a run is one call (`run`). An ensemble is a few calls of the same text
+// job, each one an ordinary `run`, so each is guarded, metered, recorded and
+// settled the way every run is:
+//   - `draft-refine`: one draft, then one refine of that draft by the routed
+//     model (or the plan's `refineModel`). The refine asks only to tighten the
+//     draft and add nothing. A refine that fails or comes back empty keeps the
+//     draft (`refined: false`): an ensemble never loses an answer it had.
+//   - `best-of-n`: n drafts (2 or 3) at rising temperatures, and the caller's
+//     judge picks one. With no judge, a judge that refuses, or one answer only,
+//     the first answered draft stands (`judged: false`).
+// `onDraft` hears the first answered draft as soon as it lands, so a page can
+// show a first draft before the refine or the judge has run.
+//
+// The money: an ensemble runs where its caller's hold is (a deck run passes
+// `parentHold`, so every call is a step of that one hold), and `quoteEnsemble`
+// is the sum of every call's own quote, the refine's input counted at the
+// draft's longest answer. The judge's quote is the caller's to add, since the
+// judge is another job (`decide`). An ensemble therefore never needs a second
+// hold, and what it settles never passes what it quoted.
+// ---------------------------------------------------------------------------
+
+export const ENSEMBLE_MODES = ['single', 'draft-refine', 'best-of-n'] as const;
+export type EnsembleMode = typeof ENSEMBLE_MODES[number];
+export type EnsemblePlan = { mode: EnsembleMode; n?: number; refineModel?: string | null };
+export const ENSEMBLE_N_MIN = 2;
+export const ENSEMBLE_N_MAX = 3;
+/** The temperature each best-of-n draft adds to the plan's own, so the drafts differ. */
+export const BEST_OF_STEP = 0.2;
+
+export const REFINE_INSTRUCTION = 'Refine your draft above: make it clearer and tighter, keep its meaning and its length limit, and keep every fact it states. Do not add a number, a name or a claim. Answer in the same form as the draft, with the refined words only.';
+
+/** How many model calls a plan makes, the judge apart. */
+export function ensembleCalls(plan: EnsemblePlan): number {
+  if (plan.mode === 'draft-refine') return 2;
+  if (plan.mode === 'best-of-n') return ensembleN(plan);
+  return 1;
+}
+export const ensembleN = (plan: EnsemblePlan) => Math.min(ENSEMBLE_N_MAX, Math.max(ENSEMBLE_N_MIN, Math.floor(Number(plan.n) || ENSEMBLE_N_MAX)));
+
+/** The refine call: the draft as the model's own turn, then the instruction. */
+export function refineOptions(opts: RunOptions, draft: string, model: string | null | undefined): RunOptions {
+  const messages = [...(opts.messages ?? []), { role: 'assistant' as const, content: draft }, { role: 'user' as const, content: REFINE_INSTRUCTION }];
+  return { ...opts, ...(model ? { model } : {}), messages, temperature: Math.min(0.3, Number(opts.temperature ?? 0.3)) };
+}
+
+/** The n best-of-n calls: the same ask at rising temperatures. */
+export function bestOfOptions(opts: RunOptions, n: number): RunOptions[] {
+  const t0 = Number(opts.temperature ?? 0.5);
+  return Array.from({ length: n }, (_, i) => ({ ...opts, temperature: Math.min(1, Math.round((t0 + i * BEST_OF_STEP) * 100) / 100) }));
+}
+
+export type EnsembleCall = { role: 'draft' | 'refine' | 'candidate'; index: number; ok: boolean; model: string | null; refusal: string | null; usageLogId: number | null };
+export type EnsembleJudge = (answers: Array<{ index: number; text: string; model: string | null }>) => Promise<{ index: number; probability: number | null; model: string | null } | null>;
+export type EnsembleResult = {
+  ok: boolean; mode: EnsembleMode; output: string; model: string | null; usageLogId: number | null;
+  calls: EnsembleCall[]; refined: boolean | null; pick: number | null; judged: boolean | null; judge_model: string | null; probability: number | null;
+  /** The first call's result when nothing answered, so the caller can read its refusal. */
+  failed?: RunResult;
+};
+export type EnsembleHooks = {
+  run?: (env: Env, opts: RunOptions) => Promise<RunResult>;
+  judge?: EnsembleJudge;
+  onDraft?: (text: string, model: string | null) => void | Promise<void>;
+};
+
+const callOf = (role: EnsembleCall['role'], index: number, r: RunResult, asked: string | null | undefined): EnsembleCall => ({
+  role, index, ok: !!r.ok, model: r.usage?.model ?? asked ?? null, refusal: r.ok ? null : (r.refusal ?? 'step_failed'), usageLogId: r.usageLogId ?? null,
+});
+const answered = (r: RunResult) => r.ok && typeof r.output === 'string' && r.output.trim().length > 0;
+
+/** Run one text ask as its plan says. Every call is an ordinary `run`, under the caller's hold. */
+export async function runEnsemble(env: Env, opts: RunOptions, plan: EnsemblePlan, hooks: EnsembleHooks = {}): Promise<EnsembleResult> {
+  const call = hooks.run ?? run;
+  const blank = { refined: null, pick: null, judged: null, judge_model: null, probability: null };
+  if (plan.mode === 'best-of-n') {
+    const asks = bestOfOptions(opts, ensembleN(plan));
+    let told = false;
+    const results = await Promise.all(asks.map(async (o) => {
+      const r = await call(env, o);
+      if (!told && answered(r)) { told = true; await hooks.onDraft?.(r.output!, r.usage?.model ?? null); }
+      return r;
+    }));
+    const calls = results.map((r, i) => callOf('candidate', i, r, opts.model));
+    const good = results.map((r, i) => ({ r, i })).filter((x) => answered(x.r));
+    if (!good.length) return { ok: false, mode: plan.mode, output: '', model: null, usageLogId: null, calls, ...blank, failed: results[0] };
+    let pick = good[0].i;
+    let judged = false;
+    let judgeModel: string | null = null;
+    let probability: number | null = null;
+    if (good.length >= 2 && hooks.judge) {
+      const verdict = await hooks.judge(good.map((x) => ({ index: x.i, text: x.r.output!, model: x.r.usage?.model ?? null }))).catch(() => null);
+      if (verdict && good.some((x) => x.i === verdict.index)) { pick = verdict.index; judged = true; judgeModel = verdict.model; probability = verdict.probability; }
+    }
+    const chosen = results[pick];
+    return { ok: true, mode: plan.mode, output: chosen.output!, model: chosen.usage?.model ?? null, usageLogId: chosen.usageLogId ?? null, calls, refined: null, pick, judged, judge_model: judgeModel, probability };
+  }
+  const draft = await call(env, opts);
+  const calls: EnsembleCall[] = [callOf('draft', 0, draft, opts.model)];
+  if (!answered(draft)) return { ok: false, mode: plan.mode, output: '', model: null, usageLogId: null, calls, ...blank, failed: draft };
+  if (plan.mode !== 'draft-refine') {
+    return { ok: true, mode: plan.mode, output: draft.output!, model: draft.usage?.model ?? null, usageLogId: draft.usageLogId ?? null, calls, ...blank };
+  }
+  await hooks.onDraft?.(draft.output!, draft.usage?.model ?? null);
+  const refineModel = plan.refineModel ?? draft.usage?.model ?? opts.model ?? null;
+  const refine = await call(env, refineOptions(opts, draft.output!, refineModel));
+  calls.push(callOf('refine', 1, refine, refineModel));
+  const kept = answered(refine) ? refine : draft;
+  return {
+    ok: true, mode: plan.mode, output: kept.output!, model: kept.usage?.model ?? null, usageLogId: kept.usageLogId ?? null, calls,
+    refined: kept === refine, pick: null, judged: null, judge_model: null, probability: null,
+  };
+}
+
+/**
+ * What an ensemble holds at most: every call's own quote, summed. The refine
+ * is quoted with the draft's longest answer in its input; best-of-n quotes
+ * each draft at its own temperature. The judge's quote is the caller's.
+ */
+export async function quoteEnsemble(env: Env, opts: RunOptions, plan: EnsemblePlan, quote: (env: Env, o: RunOptions) => Promise<RunQuote> = quoteRun): Promise<RunQuote & { calls?: number }> {
+  if (plan.mode === 'best-of-n') {
+    let hold = 0;
+    let model = '';
+    for (const o of bestOfOptions(opts, ensembleN(plan))) {
+      const q = await quote(env, o);
+      if (!q.ok) return q;
+      hold += q.hold_microusd;
+      model = model || q.model;
+    }
+    return { ok: true, hold_microusd: hold, model, calls: ensembleN(plan) };
+  }
+  const first = await quote(env, opts);
+  if (!first.ok || plan.mode !== 'draft-refine') return first.ok ? { ...first, calls: 1 } : first;
+  // The longest draft the first call may write, as characters, stands in for the draft the refine will read.
+  const longest = 'x'.repeat(Math.max(1, Number(opts.maxTokens ?? 800)) * 4);
+  const second = await quote(env, refineOptions(opts, longest, plan.refineModel ?? opts.model ?? first.model));
+  if (!second.ok) return second;
+  return { ok: true, hold_microusd: first.hold_microusd + second.hold_microusd, model: first.model, calls: 2 };
+}

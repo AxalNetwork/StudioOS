@@ -38,6 +38,7 @@ import { GRID_COLS, GRID_ROWS, type Grid } from './slideModel';
 import { assignCardUids } from './cardUids';
 import { ELEMENT_ROUTES, GRID_PAGE, lockedOut, type Resolved } from './elementModels';
 import { modelLabel, type PlanLine, type RunClass, type StepRow } from './genRuntime';
+import { ensembleFor, ensembleLabel, quoteAreaEnsemble } from './ensembles';
 import { ASSIST_OPTIONS, chartBlock, chartMessage, chartable, textMessage, wordingOf, wordingProblem, type ChartAction } from './assist';
 import { parseJsonLoose } from './autofill';
 import { isVentureElement, type ElementAnswer, type VentureElement } from './ventureElements';
@@ -178,7 +179,7 @@ function refused(base: Omit<PlannedArea, 'refusal' | 'lines' | 'quote_lines' | '
   return { ...base, refusal: { code, message }, lines: [], quote_lines: [], hold_microusd: 0, payload: {} };
 }
 
-async function planOne(ctx: PlanCtx, ask: AreaAsk, variants: number, uids: Array<Record<string, any>>): Promise<PlannedArea> {
+async function planOne(ctx: PlanCtx, ask: AreaAsk, variants: number, uids: Array<Record<string, any>>, cls: RunClass = 'areas'): Promise<PlannedArea> {
   const index = typeof ask.card === 'string' ? uids.findIndex((c) => c.uid === ask.card) : Number(ask.card);
   const card = index >= 0 ? uids[index] : undefined;
   const kind = kindOf(ask.element);
@@ -319,6 +320,29 @@ async function planOne(ctx: PlanCtx, ask: AreaAsk, variants: number, uids: Array
   }
   const maxTokens = Math.min(800, Math.ceil(limit / 3) + 40);
   const content = (k: number) => (k ? `${user}\n\n(Variant ${k + 1}: a different wording from the others.)` : user);
+  // D1551 (#3798): a whole-deck run writes each text area through its element's ensemble, all of it in this one line of the quote.
+  const ensemble = ensembleFor(ask.element, cls, variants);
+  if (ensemble.mode !== 'single') {
+    const asked = { task: 'rail_write', userId: ctx.userId, model: r.model, rail, systemPrompt: system, messages: [{ role: 'user', content: user }], maxTokens, temperature: TEMPERATURES[0] } as RunOptions;
+    const eq = await quoteAreaEnsemble(ctx.quote, asked, ensemble, ask.element, limit);
+    if (!eq.ok) return refused(base, eq.refusal, eq.error);
+    const line: PlanLine = {
+      card_uid: card.uid, area_id: ask.id, element: ask.element, kind: 'text', task: 'rail_write', model: r.model, quote_microusd: eq.hold_microusd,
+      input: {
+        systemPrompt: system, messages: [{ role: 'user', content: user }], maxTokens, temperature: TEMPERATURES[0], option: before ? ASSIST_OPTIONS[ask.action] : `grid:${ask.element}`,
+        variant: 0, seed: textSeed(ctx.deckId, card.uid, ask.id, 0),
+        ensemble: { ...ensemble, judge_model: eq.judge_model, judge_microusd: eq.judge_microusd },
+      },
+    };
+    return {
+      ...base, refusal: null, lines: [line], hold_microusd: eq.hold_microusd,
+      quote_lines: [
+        { label: ensembleLabel(ensemble, eq.calls, base.model_label, eq.judge_model), count: 1, per_microusd: eq.hold_microusd, microusd: eq.hold_microusd },
+        { label: 'Safety check on every text run', count: eq.calls, per_microusd: null, microusd: 0, included: true },
+      ],
+      payload: { kind, role, limit, grid: ask.grid, action: before ? ask.action : 'rewrite', before: before || null, source: before || narrative, replaces_block: replaces, ensemble: ensemble.mode },
+    };
+  }
   const q = await ctx.quote({ task: 'rail_write', userId: ctx.userId, model: r.model, rail, systemPrompt: system, messages: [{ role: 'user', content: content(MAX_VARIANTS - 1) }], maxTokens, temperature: TEMPERATURES[0] } as RunOptions);
   if (!q.ok) return refused(base, q.refusal, q.error);
   const lines: PlanLine[] = Array.from({ length: variants }, (_, k) => ({
@@ -339,7 +363,7 @@ async function planOne(ctx: PlanCtx, ask: AreaAsk, variants: number, uids: Array
 export async function planAreas(ctx: PlanCtx, req: AreasRequest): Promise<AreasPlan> {
   const uids = assignCardUids(Array.isArray(ctx.cards) ? ctx.cards : []);
   const areas: PlannedArea[] = [];
-  for (const ask of req.areas) areas.push(await planOne(ctx, ask, req.variants, uids));
+  for (const ask of req.areas) areas.push(await planOne(ctx, ask, req.variants, uids, req.cls));
   const lines = areas.flatMap((a) => a.lines);
   return { cls: req.cls, areas, lines, hold_microusd: areas.reduce((n, a) => n + a.hold_microusd, 0) };
 }
