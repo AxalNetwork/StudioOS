@@ -31,6 +31,7 @@ import { mount as deck_slide_analyticsMount } from './deck_slide_analytics';
 import { mount as deck_stage_normsMount } from './deck_stage_norms';
 import { mount as deck_update_reuseMount } from './deck_update_reuse';
 import { mount as influencer_analyticsMount } from './influencer_analytics';
+import { mount as influencer_payoutsMount } from './influencer_payouts';
 import { mount as learning_listsMount } from './learning_lists';
 import { mount as learning_streamMount } from './learning_stream';
 import { mount as team_platform_statusMount } from './team_platform_status';
@@ -63,6 +64,7 @@ export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'deck_stage_norms', mount: deck_stage_normsMount },
   { file: 'deck_update_reuse', mount: deck_update_reuseMount },
   { file: 'influencer_analytics', mount: influencer_analyticsMount },
+  { file: 'influencer_payouts', mount: influencer_payoutsMount },
   { file: 'learning_lists', mount: learning_listsMount },
   { file: 'learning_stream', mount: learning_streamMount },
   { file: 'team_platform_status', mount: team_platform_statusMount },
