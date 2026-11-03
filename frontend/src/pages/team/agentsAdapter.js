@@ -104,6 +104,8 @@ export async function through(call, sent = null) {
 
 /** `GET /api/teams/roles` → `{ roles: [{ key, name, mission, works_in: [{ key, label }], default_rules }] }`. No model list. */
 export const roles = () => through(() => teamAgentsApi.roles());
+/** D4119: `GET /api/teams/personas` (D4117) → `{ personas, values, areas }`, the 16 fixed personas for the gallery. */
+export const personas = () => through(() => teamAgentsApi.personas());
 /** `GET /api/teams/:scope/:id/agents?include=&module=` → `{ can_manage, plan_ok, agents }`. */
 export const listAgents = (scope, id, opts = {}) => through(() => teamAgentsApi.listAgents(scope, id, opts));
 /** `POST /api/teams/:scope/:id/agents` → 201 `{ agent }`. */

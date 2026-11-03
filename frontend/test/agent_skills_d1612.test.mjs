@@ -280,7 +280,8 @@ test('A1\'s writes stay unavailable behind the seam; its two reads (#4224) and A
 
 test('the Add-an-agent sheet has a Skills step, and sends `skills` only when some were picked', () => {
   const src = read(`${TEAM}/AddAgentSheet.jsx`);
-  assert.match(src, /const STEPS = \['Role', 'Agent', 'Skills', 'Review'\];/);
+  // D4119 (AG2–AG4): the steps are Who, Skills, Model and cap; the Skills step is kept.
+  assert.match(src, /const STEPS = \['Who', 'Skills', 'Model and cap'\];/);
   assert.match(src, /chosenSkills\.length \? \{ skills:/);
   assert.match(src, /<SkillsStep /);
   assert.match(read(`${TEAM}/TeamAgentsPage.jsx`), /tab === 'skills' \? <SkillsTab /);

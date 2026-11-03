@@ -71,10 +71,10 @@ const MEMBERS = {
 };
 /** #3840's Agent DTO, as the canvas draws TM1a's rows. */
 const AGENTS = [
-  { uid: 'a1', role_key: 'cfo', role_name: 'CFO', first_name: '[Nora]', last_name: '[Vale]', model_id: 'm-a', model_label: '[Model A]', tools: [{ tool: 'get_balance', server_name: '[Finance MCP]' }, { tool: 'list_transactions', server_name: '[Finance MCP]' }], sponsor: { uid: 'u1', name: '[Avery Stone]' }, status: 'active', paused_reason: null, monthly_cap_microusd: 25_000_000, month_spend: { available: true, value_microusd: 3_840_000 }, last_activity_at: '2026-10-31T10:00:00Z', project: null },
-  { uid: 'a2', role_key: 'cmo', role_name: 'CMO / Growth', first_name: '[Iris]', last_name: '[Cole]', model_id: 'm-a', model_label: '[Model A]', tools: [], sponsor: { uid: 'u1', name: '[Avery Stone]' }, status: 'paused', paused_reason: 'cap', monthly_cap_microusd: 10_000_000, month_spend: { available: true, value_microusd: 10_000_000 }, last_activity_at: '2026-10-28T12:00:00Z', project: null },
-  { uid: 'a3', role_key: 'research', role_name: 'Research analyst', first_name: '[Milo]', last_name: '[Hart]', model_id: 'm-c', model_label: '[Model C]', tools: [], sponsor: { uid: 'u3', name: '[Sam Okafor]' }, status: 'active', paused_reason: null, monthly_cap_microusd: 10_000_000, month_spend: { available: false }, last_activity_at: null, project: null },
-  { uid: 'a4', role_key: 'cto', role_name: 'CTO', first_name: '[Ada]', last_name: '[Quinn]', model_id: 'm-a', model_label: '[Model A]', tools: [], sponsor: { uid: 'u1', name: '[Avery Stone]' }, status: 'active', paused_reason: null, monthly_cap_microusd: 20_000_000, month_spend: { available: true, value_microusd: 2_100_000 }, last_activity_at: '2026-10-31T08:00:00Z', project: { id: 7, name: '[Atlas Pilot]' } },
+  { uid: 'a1', role_key: 'cfo', persona: { key: 'orrin', tagline: '[Every road ends at a market.]' }, first_name: '[Nora]', last_name: '[Vale]', model_id: 'm-a', model_label: '[Model A]', tools: [{ tool: 'get_balance', server_name: '[Finance MCP]' }, { tool: 'list_transactions', server_name: '[Finance MCP]' }], sponsor: { uid: 'u1', name: '[Avery Stone]' }, status: 'active', paused_reason: null, monthly_cap_microusd: 25_000_000, month_spend: { available: true, value_microusd: 3_840_000 }, last_activity_at: '2026-10-31T10:00:00Z', project: null },
+  { uid: 'a2', role_key: 'cmo', persona: { key: 'kade', tagline: '[Light ten lanterns.]' }, first_name: '[Iris]', last_name: '[Cole]', model_id: 'm-a', model_label: '[Model A]', tools: [], sponsor: { uid: 'u1', name: '[Avery Stone]' }, status: 'paused', paused_reason: 'cap', monthly_cap_microusd: 10_000_000, month_spend: { available: true, value_microusd: 10_000_000 }, last_activity_at: '2026-10-28T12:00:00Z', project: null },
+  { uid: 'a3', role_key: 'research', persona: { key: 'ryssa', tagline: '[If the plan survives me.]' }, first_name: '[Milo]', last_name: '[Hart]', model_id: 'm-c', model_label: '[Model C]', tools: [], sponsor: { uid: 'u3', name: '[Sam Okafor]' }, status: 'active', paused_reason: null, monthly_cap_microusd: 10_000_000, month_spend: { available: false }, last_activity_at: null, project: null },
+  { uid: 'a4', role_key: 'cto', persona: { key: 'corvane', tagline: '[Ask the right question.]' }, first_name: '[Ada]', last_name: '[Quinn]', model_id: 'm-a', model_label: '[Model A]', tools: [], sponsor: { uid: 'u1', name: '[Avery Stone]' }, status: 'active', paused_reason: null, monthly_cap_microusd: 20_000_000, month_spend: { available: true, value_microusd: 2_100_000 }, last_activity_at: '2026-10-31T08:00:00Z', project: { id: 7, name: '[Atlas Pilot]' } },
 ];
 const render = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
 
@@ -219,10 +219,12 @@ test('TM9d1: below md an agent row keeps its role, this month and its status on 
   const html = render(h(AgentsCard, { block: { available: true, value: { agents: [AGENTS[0], AGENTS[1], AGENTS[2]] } }, kind: 'project', companyName: 'x', now: NOW }));
   const lines = html.split('data-testid="agent-phone-line"').slice(1).map((x) => renderedText(`<span ${x.split('role="cell"')[0]}`));
   assert.equal(lines.length, 3);
-  assert.match(lines[0], /CFO · \$3\.84 of \$25 capActive/);
-  assert.match(lines[1], /CMO \/ Growth · \$10\.00 of \$10 capPaused/, 'a paused agent shows Paused on a phone');
-  assert.match(lines[2], /Research analyst · this month Not recordedActive/, 'never $0');
-  assert.match(html, /class="hidden md:block truncate[^"]*">CFO</, 'the role under the name is the desktop form only');
+  // D4119: the line under an agent is its persona's tagline, never a job title.
+  assert.match(lines[0], /\[Every road ends at a market\.\] · \$3\.84 of \$25 capActive/);
+  assert.match(lines[1], /\[Light ten lanterns\.\] · \$10\.00 of \$10 capPaused/, 'a paused agent shows Paused on a phone');
+  assert.match(lines[2], /\[If the plan survives me\.\] · this month Not recordedActive/, 'never $0');
+  assert.match(html, /class="hidden md:block truncate[^"]*">\[Every road ends at a market\.\]</, 'the line under the name is the desktop form only');
+  assert.doesNotMatch(renderedText(html), /\bCFO\b|\bCMO\b|Research analyst/, 'no job title');
 });
 
 // ---------------------------------------------------------------- emails
@@ -553,9 +555,8 @@ test('TM2c: the member who joined through an invitation accepted this week is hi
   assert.ok(!html.includes('sam@example.com'), 'the address is matched, never drawn');
 });
 
-test('TM3a–TM3c: held roles read "A CMO", tools are granted from #3844\'s servers, the rule book opens row by row', () => {
+test('TM3a–TM3c (D4119 AG4): tools are granted from #3844\'s servers, the rule book opens row by row, and an area held here is off', () => {
   assert.equal(heldLabel({ key: 'cmo', name: 'CMO / Growth' }), 'A CMO');
-  assert.equal(heldLabel({ key: 'research', name: 'Research analyst' }), 'A research analyst');
   const src = read(`${TEAM}/AddAgentSheet.jsx`);
   assert.doesNotMatch(src, /tool_grants: \[\]/, 'the ticked tools are sent');
   assert.match(src, /tool_grants: grants/);
@@ -563,15 +564,17 @@ test('TM3a–TM3c: held roles read "A CMO", tools are granted from #3844\'s serv
   assert.match(src, /Before each run it shows the hold/);
   assert.match(src, /aria-expanded=\{open\}/);
   assert.match(src, /Edit for this company/);
-  const roles = [{ key: 'cto', name: 'CTO', mission: 'Watches build health.' }, { key: 'cmo', name: 'CMO / Growth', mission: 'Drafts campaigns.' }];
-  const html = render(h(AddAgentSheet, { scope: { kind: 'company', company: { uid: 'nw1' } }, roles, held: ['cmo'], onClose() {} }));
-  assert.match(renderedText(html), /A CMO already works here\. One agent per role\./);
+  assert.match(src, /rolesFor\(persona, roleKeys\)\.filter\(\(k\) => !held\.includes\(k\)\)/, 'an area held here is never offered');
+  assert.match(src, /One agent per area/);
+  const html = render(h(AddAgentSheet, { scope: { kind: 'company', company: { uid: 'nw1', name: '[Northwind Labs]' } }, roles: [], held: ['cmo'], onClose() {} }));
+  assert.match(renderedText(html), /Step 1 of 3 · Choose who joins \[Northwind Labs\]/);
+  assert.match(renderedText(html), /1Who2Skills3Model and cap/);
 });
 
 test('TM7a, TM7b2, TM9b1: four filters, Accept decides from the row, and the decision and pause words in full', () => {
   const value = { items: [{ uid: 'p1', title: 'Weekly runway note draft', module_label: 'Raise › Runway', status: 'proposed', agent: AGENTS[0], cost: { available: true, value_microusd: 40_000 }, sponsor: { name: '[Avery Stone]' } }], decided: [] };
   const html = render(h(ApprovalsBoard, { value, onOpen() {}, onAccept() {} }));
-  for (const l of ['Role', 'Module', 'Status', 'Cost']) assert.match(html, new RegExp(`aria-label="${l}"`), l);
+  for (const l of ['Agent', 'Module', 'Status', 'Cost']) assert.match(html, new RegExp(`aria-label="${l}"`), l);
   assert.match(html, /data-testid="approval-accept-p1"/);
   assert.equal(decidedLine({ decision: 'accept', by: '[Jordan Reyes]', at: '2026-10-31 09:40:00' }), 'Accepted 31 Oct 09:40 by [Jordan Reyes].');
   assert.equal(pauseWords({ status: 'paused', paused_reason: 'cap', resumes_at: '2026-11-01' }).reason, 'Reached its monthly cap. Resumes 1 Nov.');
@@ -810,7 +813,7 @@ test('#3840 switched on: the agents card draws the list with the AI agent pill, 
     assert.match(text, /\[Nora\] \[Vale\]AI agent/);
     assert.match(text, /\[Milo\] \[Hart\]AI agent/);
     assert.match(text, /Platform model · m-a/, 'the model the Worker names, with no invented label');
-    assert.match(text, /Research analyst · this month Not recorded/, 'unread spend is Not recorded');
+    assert.match(text, /\[If the plan survives me\.\] · this month Not recorded/, 'unread spend is Not recorded');
     assert.doesNotMatch(text, /\$0\.00|aren’t switched on/);
     await v.click('team-add');
     assert.equal(v.prop('team-add-agent', 'disabled'), false, 'an editor on a paid plan may add');
@@ -864,7 +867,7 @@ test('#3840 rule books: the default reads "Default", a floor refusal outlines th
     handle: agentsOn({ 'GET /api/teams/company/nw1/rulebooks/cfo': () => response(broken), 'PUT /api/teams/company/nw1/rulebooks/cfo': () => refusal(422, 'rule_floor', { section: 'always_asks_human' }) }),
   });
   try {
-    assert.match(v.text(), /CFO · Rule book · Default/);
+    assert.match(v.text(), /Finance · Rule book · Default/, 'the area of work, never the job title');
     await v.click('rulebook-edit');
     await v.click('rulebook-save');
     assert.match(v.text(), /This change can’t be saved\. Sending an email always needs a person\./);
@@ -883,30 +886,38 @@ test('#3840 rule books: the default reads "Default", a floor refusal outlines th
     await w.click('rulebook-save');
     assert.deepEqual(Object.keys(w.seen.find((s) => s.key === 'PUT /api/teams/company/nw1/rulebooks/cfo').body), ['rules']);
     assert.equal(reads, 2, 'the history is read again after a save');
-    assert.match(w.text(), /CFO · Rule book · v1v1 by \[Avery Stone\] · 31 Oct/);
+    assert.match(w.text(), /Finance · Rule book · v1v1 by \[Avery Stone\] · 31 Oct/);
   } finally { await w.close(); }
 });
 
-test('#3840 Add agent: the sheet posts the role, names, model and cap, and a refusal comes back in words', async () => {
+test('#3840 Add agent (D4119): the sheet posts who, the area of work, the model and the cap, and a refusal comes back in words', async () => {
   const models = [{ id: 'm-a', label: '[Model A]' }];
-  const sheet = h(AddAgentSheet, { scope: { kind: 'company', company: { uid: 'nw1' } }, roles: ROLES.roles, models, held: [], me: { name: '[Avery Stone]' }, onClose() {} });
-  const v = await mount('/x', '/x', sheet, { handle: worker({ 'POST /api/teams/company/nw1/agents': () => refusal(409, 'role_taken') }) });
+  const personas = { personas: [
+    { key: 'orrin', name: 'Orrin', gender: 'man', tagline: '[Every road ends at a market.]', risk: 3, values: {}, top_values: ['stewardship', 'integrity', 'resilience'], natural_fit: ['finance', 'legal'] },
+    { key: 'kade', name: 'Kade', gender: 'man', tagline: '[Light ten lanterns.]', risk: 5, values: {}, top_values: ['curiosity', 'ambition', 'collaboration'], natural_fit: ['product', 'marketing'] },
+  ], values: [], areas: [] };
+  const sheet = h(AddAgentSheet, { scope: { kind: 'company', company: { uid: 'nw1', name: '[Northwind Labs]' } }, roles: ROLES.roles, models, held: [], team: [{ uid: 'a2', persona: { key: 'kade' }, status: 'active' }], me: { name: '[Avery Stone]' }, onClose() {} });
+  const v = await mount('/x', '/x', sheet, { handle: worker({ 'GET /api/teams/personas': () => response(personas), 'POST /api/teams/company/nw1/agents': () => refusal(409, 'role_taken') }) });
   try {
-    await v.click('add-agent-role-cfo');
+    assert.match(v.text(), /Kade[^]*✓ On your team/, 'a persona on the team is marked');
+    await v.click('agent-pick-kade');
+    assert.equal(v.prop('add-agent-next', 'disabled'), true, 'a persona on the team cannot be chosen twice');
+    await v.click('agent-pick-orrin');
+    await v.click('add-agent-next');
+    // D1612 (SK6): the Skills step. Skills aren't open yet, so nothing is picked and no \`skills\` is sent.
+    assert.match(v.text(), /Skills aren’t open yet/);
+    assert.match(v.text(), /Coverage with these skillsNot recorded/);
     await v.click('add-agent-next');
     const radio = walkRadio();
     assert.ok(radio, 'the model radio');
     await act(async () => { radio.onChange(); });
-    await v.click('add-agent-next');
-    // D1612 (SK6): the Skills step. Skills aren't open yet, so nothing is picked and no \`skills\` is sent.
-    assert.match(v.text(), /Skills aren’t open yet/);
-    await v.click('add-agent-next');
-    await v.change('add-agent-first', '[Nora]');
     await v.change('add-agent-cap', '25');
+    assert.match(v.text(), /Add Orrin to \[Northwind Labs\]/);
     await v.click('add-agent-next');
-    assert.deepEqual(v.seen.find((s) => s.key === 'POST /api/teams/company/nw1/agents').body, { role_key: 'cfo', first_name: '[Nora]', last_name: null, model_id: 'm-a', tool_grants: [], monthly_cap_microusd: 25_000_000 });
+    assert.deepEqual(v.seen.find((s) => s.key === 'POST /api/teams/company/nw1/agents').body, { role_key: 'cfo', persona_key: 'orrin', model_id: 'm-a', tool_grants: [], monthly_cap_microusd: 25_000_000 });
     assert.match(v.text(), /An agent already holds this role here\. One agent per role\./);
     assert.ok(!v.text().includes('role_taken'));
+    assert.doesNotMatch(v.text(), /\bCFO\b/, 'no job title in the sheet');
   } finally { await v.close(); }
 });
 

@@ -388,7 +388,7 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
 
       {sheet?.kind === 'invite' ? <InviteSheet kind={kind} target={target} pending={invitations?.ok ? invitations.list : null} onClose={() => setSheet(null)} onDone={(out) => { if (out?.invitations?.[0]?.uid) setFresh(out.invitations[0].uid); invited(out); }} /> : null}
       {sheet?.kind === 'agent' && rolesBlock?.available ? (
-        <AddAgentSheet scope={scope} roles={rolesBlock.value?.roles} models={rolesBlock.value?.models} held={agentList.map((a) => a.role_key)}
+        <AddAgentSheet scope={scope} roles={rolesBlock.value?.roles} models={rolesBlock.value?.models} held={agentList.map((a) => a.role_key)} team={agentList}
           me={{ name: me().name }} onClose={() => setSheet(null)} onAdded={() => { setSheet(null); loadAgents(); }}
           onEditRulebook={(key) => { setSheet(null); navigate(`${pathname}?tab=roles&role=${encodeURIComponent(key)}`); }} />
       ) : null}
