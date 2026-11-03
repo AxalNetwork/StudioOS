@@ -224,6 +224,7 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/admin/spinout-lab/preview' }, // D937 (#2374): the preview moved with the Lab
   { path: '/admin/network-profiles' }, // D972 (#2369): the roster is Advisors & Partners › Deck roster
   { path: '/admin/partner-invitations/firm-links' }, // D952 (#2728): Firm links moved to Advisors & Partners › Firms
+  { path: '/admin/ai/deck-grid' }, // D1537 (#3786): the plan's address for the Grid's dashboard; opens HQ › Decks › Grid health
   ...ADMIN_TAB_REDIRECTS,
   ...ROLE_REDIRECTS,
   ...FORWARD_REDIRECTS,
