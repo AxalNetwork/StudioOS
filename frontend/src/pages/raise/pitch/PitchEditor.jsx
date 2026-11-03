@@ -21,7 +21,7 @@ import PitchPage from './PitchPage';
 import DeckToolbar from './DeckToolbar';
 import useDeckPresence from './useDeckPresence';
 import CardsStrip from './CardsStrip';
-import { cardStatus, media as uploadVideoAdapter } from './deckV2Adapter';
+import { cardStatus, diagrams, media as uploadVideoAdapter } from './deckV2Adapter';
 import { withAssignee, withStatus } from './cardStatusModel';
 import GridStage from './GridStage';
 import BlockTools, { SpeakerNotes } from './BlockTools';
@@ -784,7 +784,9 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
                 // D1515: a drag is one step; a nudge burst on one block is one step (800 ms).
                 onMove={(id, grid) => { edit({ type: 'moveArea', index: sel, id, grid }, { label: 'Move block', coalesce: `move:${cardUid(card) ?? sel}:${id}` }); presence?.edit?.(); }}
                 // D1513: a divider move (both blocks) and its overflow are each one edit, so one undo step.
-                onCard={(next, why) => { setCard(sel, next, { label: why === 'overflow' ? 'Move overflow to notes' : 'Move divider' }); setStructureNote(null); }}
+                onCard={(next, why) => { setCard(sel, next, { label: why === 'overflow' ? 'Move overflow to notes' : why === 'diagram' ? 'Edit diagram' : 'Move divider' }); setStructureNote(null); }}
+                // D1542 (#3780): an edited diagram checked in code (fit, figures); free, nothing saved.
+                onDiagramCheck={base.deck?.id != null ? (diagram, grid) => diagrams(base.deck.id, { diagram, grid, card: sel }) : null}
                 onDecor={(item) => setCard(sel, { ...card, decor: [...(card.decor || []), item] })}
                 onAsk={ask} askOff={askOff} askLine={askLine}
                 items={items} onRefresh={() => { const r = refreshCard(card, items, charts); if (r.moved) setCard(sel, r.card, { label: 'Refresh figures' }); }}
