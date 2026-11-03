@@ -6,6 +6,7 @@ import { AgentTile } from './AgentMark.jsx';
 import * as agents from './agentsAdapter.js';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, EYEBROW, FIELD, HonestBlock, MONO, MUTED } from './teamUi.jsx';
 import { AgentRadar, CostExplainer, SkillRow, TaxChips } from './SkillParts.jsx';
+import { workLabel } from './personaModel.js';
 import {
   LEVELS, OUTPUT_KINDS, assignGroups, assignRows, blockedWords, costChangeWords, directory, parseSkillMd, previewRadar, problemWords, radarVector, scopeLine,
 } from './skillsModel.js';
@@ -150,7 +151,7 @@ export function AddSkillsSheet({ agent, current, radar, onClose, onSaved }) {
   };
   const preview = previewRadar(radar, chosen);
   return (
-    <Sheet title="Add skills to this agent" sub={`${agent.role_name || 'Its role'}’s skills, most used first`} width={560} onClose={onClose} testId="add-skills-sheet"
+    <Sheet title="Add skills to this agent" sub={`${agent.role_key ? workLabel(agent.role_key) : 'Its role'}’s skills, most used first`} width={560} onClose={onClose} testId="add-skills-sheet"
       footer={(
         <div className="flex justify-end gap-2">
           <button type="button" className={BTN_SECONDARY} onClick={onClose}>Cancel</button>
