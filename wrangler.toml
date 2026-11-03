@@ -556,6 +556,17 @@ bucket_name = "studioos-publications"
 binding     = "BACKUPS"
 bucket_name = "studioos-backups"
 
+# #4201 (#4152 G1) — company logos. Holds one uploaded PNG or SVG per company
+# under `companies/<uid>/logo-<random>.<ext>`; `company_profiles.logo_url`
+# names the served path `/api/company/<uid>/logo?v=<random>.<ext>`. Private:
+# `GET /api/company/:uid/logo` serves it to the company's members only. The
+# routes answer 503 `storage_unconfigured` while the binding is absent.
+# The bucket must exist before this deploys (an operator creates it):
+#   npx wrangler r2 bucket create studioos-company-logos
+[[r2_buckets]]
+binding     = "COMPANY_LOGOS"
+bucket_name = "studioos-company-logos"
+
 # ---------- Workers Analytics Engine ----------
 # Task #13 — write a data point per HTTP request from the observability
 # middleware (cloudflare-worker/src/middleware/observability.ts) so the
@@ -954,6 +965,11 @@ bucket_name = "studioos-publications"
 binding     = "BACKUPS"
 bucket_name = "studioos-backups"
 
+# #4201 — mirror of the top-level COMPANY_LOGOS binding; see it for setup.
+[[env.production.r2_buckets]]
+binding     = "COMPANY_LOGOS"
+bucket_name = "studioos-company-logos"
+
 [[env.production.analytics_engine_datasets]]
 binding = "ANALYTICS"
 dataset = "studioos_metrics"
@@ -1216,6 +1232,11 @@ bucket_name = "studioos-files-preview"
 [[env.preview.r2_buckets]]
 binding     = "PUBLICATIONS"
 bucket_name = "studioos-publications-preview"
+
+# #4201 — company logos on preview; created like the other preview buckets.
+[[env.preview.r2_buckets]]
+binding     = "COMPANY_LOGOS"
+bucket_name = "studioos-company-logos-preview"
 
 [[env.preview.analytics_engine_datasets]]
 binding = "ANALYTICS"

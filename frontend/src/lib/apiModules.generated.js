@@ -55,6 +55,7 @@ export * from './api/companyCompliance.js';
 export * from './api/companyDocuments.js';
 export * from './api/companyEin.js';
 export * from './api/companyLegal.js';
+export * from './api/companyLogo.js';
 export * from './api/companyReceivingAccounts.js';
 export * from './api/companySheet.js';
 export * from './api/connectorClients.js';

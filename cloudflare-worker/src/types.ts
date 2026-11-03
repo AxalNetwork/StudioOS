@@ -660,6 +660,10 @@ export interface Env {
   // D200 — `studioos-backups`, declared in both wrangler.toml tables; optional
   // at runtime, which is why services/backup.ts treats its absence as a state.
   BACKUPS?: R2Bucket;
+  // #4201 (#4152 G1) — `studioos-company-logos`, declared in both wrangler.toml
+  // tables. One PNG or SVG per company; served to members by
+  // `GET /api/company/:uid/logo`. Optional: the logo routes answer 503 without it.
+  COMPANY_LOGOS?: R2Bucket;
 
   // Wide allowlist for preview/dev CORS, see middleware/cors guard.
   EXTRA_DEV_ORIGINS?: string;

@@ -85,6 +85,8 @@ export function derivedNames(code) {
       FILES: `studioos-${code}-files`,
       PUBLICATIONS: `studioos-${code}-publications`,
       BACKUPS: `studioos-${code}-backups`,
+      // #4201: company logos (COMPANY_LOGOS).
+      COMPANY_LOGOS: `studioos-${code}-company-logos`,
     },
     // One branch index per Vectorize binding, as R2 is keyed by binding.
     // DECK_QUOTES (D1556, #3803) is the consented interview quotes index.
