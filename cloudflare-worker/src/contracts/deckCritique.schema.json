@@ -1,0 +1,45 @@
+{
+  "$id": "deckCritique",
+  "title": "POST /api/decks/:id/critique/quote and POST /api/decks/:id/critique (D1552, #3799)",
+  "description": "What the deck v2 adapter's `critique` method passes through. Without `run`, the quote: `ai` with the score now, the blocks to shorten and their price, the vision check (its model of another family than the writer's, or why it cannot run) and the total hold; or `ai: false` with the reason. With `run`, the critique: the score before and once the fixes are accepted, every finding, each fix kept as a rail proposal (Accept in the Ask), what was fixed, what is left and why, the vision check and what it charged. A model id never rides on the reply: the vision check names only its family and the writer's. D1511 (#3762).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {
+    "ai": { "type": "boolean" },
+    "reason": { "type": ["string", "null"] },
+    "message": { "type": "string" },
+    "cards": { "type": "integer", "minimum": 0 },
+    "score": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "rubric": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "findings": { "description": "The quote: how many findings. The run: each finding `{ card, card_uid, block_id, check, detail, fix }`. No `type`, so both hold." },
+    "fixes": { "description": "The quote: `{ count, per_microusd, microusd }`. The run: each fix `{ proposal_uid, card, card_uid, check, before, after }`. No `type`, so both hold." },
+    "vision": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "available": { "type": "boolean" },
+        "ran": { "type": "boolean" },
+        "reason": { "type": ["string", "null"] },
+        "family": { "type": ["string", "null"] },
+        "writer_family": { "type": ["string", "null"] },
+        "cards": { "type": "integer", "minimum": 0 },
+        "cards_read": { "type": "integer", "minimum": 0 },
+        "per_card_microusd": { "type": ["integer", "null"] },
+        "microusd": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "hold_microusd": { "type": "integer", "minimum": 0 },
+    "score_before": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "score_if_accepted": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "threshold": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "what_we_fixed": { "type": "array", "items": { "type": "string" } },
+    "not_fixed": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["card", "check", "detail", "reason"],
+        "properties": { "card": { "type": "integer" }, "check": { "enum": ["fit", "density", "contrast", "vision", "style"] }, "detail": { "type": "string" }, "reason": { "type": "string" } }
+      }
+    },
+    "charged_microusd": { "type": "integer", "minimum": 0 }
+  }
+}

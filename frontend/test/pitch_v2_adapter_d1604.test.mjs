@@ -257,6 +257,10 @@ test('the seam reaches no network, and no client method exists for a route that 
   // D1553 (#3800): Remix has its route and client.
   assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_remix.ts')), /deckRemix\.post\(['"]\/:id\{\[0-9\]\+\}\/remix['"]/);
   assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckRemix\)/);
+  // D1552 (#3799): Fix with critique has its quote and run routes and client.
+  assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_critique.ts')), /deckCritique\.post\(['"]\/:id\{\[0-9\]\+\}\/critique\/quote['"]/);
+  assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_critique.ts')), /deckCritique\.post\(['"]\/:id\{\[0-9\]\+\}\/critique['"]/);
+  assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckCritique\)/);
   // D1503 (#3754): the element models route is on main, with its client.
   assert.match(codeOnly(read('cloudflare-worker/src/routes/deck_element_models.ts')), /deckElementModels\.get\(['"]\/:id\{\[0-9\]\+\}\/element-models['"]/);
   assert.match(codeOnly(read('cloudflare-worker/src/index.ts')), /app\.route\(['"]\/api\/decks['"],\s*deckElementModels\)/);
