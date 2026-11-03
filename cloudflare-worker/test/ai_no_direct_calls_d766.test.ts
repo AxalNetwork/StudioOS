@@ -27,6 +27,7 @@ const SRC = fileURLToPath(new URL('../src/', import.meta.url));
 const ALLOWED: Record<string, string> = {
   'services/aiRouter.ts': 'The router itself: every run, and the Llama Guard check inside it (D763), is called here.',
   'services/liveTranscription.ts': 'A live WebSocket session, not a call: it is held in blocks and settled on its minutes by its own path (D658), which the router has no shape for.',
+  'services/decks/imageTools.ts': 'A third-party image tool priced per image (Bria RMBG 2.0 through AI Gateway, D1534), held and settled through `meteredCall` with its own usage row; the router has no per-image third-party price.',
 };
 
 function sources(dir: string, out: string[] = []): string[] {
