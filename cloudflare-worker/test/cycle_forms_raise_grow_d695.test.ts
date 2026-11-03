@@ -33,7 +33,7 @@ import { saveScenario } from '../src/services/capTableWrites.ts';
 import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { FORMS, EDITS, formFor, editFor, initialValues, validate } from '../../frontend/src/pages/cycles/forms.js';
+import { FORMS, EDITS, formFor, editFor, initialValues, shareLinkUrl, validate } from '../../frontend/src/pages/cycles/forms.js';
 import { makeCycleWrites } from '../../frontend/src/lib/api/cycleWrites.js';
 import { loadSchema } from './_schema_once.mjs';
 
@@ -204,18 +204,14 @@ test('11: New version starts from the live deck with none saved, then from the n
   for (const t of choices(fields, 'investor_type')) assert.ok((await form.submit(w, P, { ...values, start_from: 'blank', investor_type: t })).version > 2, t);
 });
 
-test('11: New link names its investor, its expiry and its settings; the raw link it shows once opens the deck', async () => {
+// D4254 P4 (#4272, D-d): the module's New link form is retired; ShareDialog writes through the same route.
+test('11: a link names its investor, its expiry and its settings; the raw link it answers once opens the deck', async () => {
   const db = await fixture();
   const { w } = writesAs(db);
-  const form = formFor('raise', 'pitch-deck');
-  const { values, fields } = await opened(form, w);
-  assert.deepEqual(choices(fields, 'deck_id'), ['5'], 'this venture\'s deck only');
-  assert.deepEqual(choices(fields, 'prospect_id'), ['5', 'typed']);
-  assert.equal(form.blocked(fields.map((f: any) => ({ ...f, options: f.opts }))), false);
-  const result = await form.submit(w, P, { ...values, allow: ['download'] });
-  const done = form.done(result);
-  assert.equal(done.text, 'Copy the link now. It is shown only once.');
-  const token = /\/share\/deck\/(.+)$/.exec(done.copy)?.[1];
+  assert.ok(!Object.hasOwn(FORMS.raise, 'pitch-deck'), 'no Add form on Pitch deck');
+  const result = await w.raise.deckLink(P, { deck_id: 5, prospect_id: 5, expires_days: 30, allow_download: true, allow_forwarding: false });
+  const copy = shareLinkUrl(result.share_path, 'https://axal.vc');
+  const token = /\/share\/deck\/(.+)$/.exec(copy ?? '')?.[1];
   assert.ok(token);
   const row = db.prepare('SELECT prospect_id, investor_label, allow_download, allow_forwarding, expires_at, token_hash FROM pitch_deck_share_tokens WHERE id = ?').get(result.id) as any;
   assert.deepEqual([row.prospect_id, row.investor_label, row.allow_download, row.allow_forwarding], [5, null, 1, 0]);
@@ -224,11 +220,11 @@ test('11: New link names its investor, its expiry and its settings; the raw link
   assert.equal(viewer.status, 200, 'the raw link opens the deck through the share viewer');
   // Every other expiry, and a typed name. (A second link to one deck with the same expiry in the
   // same second mints the same token, which the store refuses: reported on the PR, not changed here.)
-  for (const e of choices(fields, 'expires_days').filter((x: string) => x !== values.expires_days)) {
-    const r = await form.submit(w, P, { ...values, prospect_id: 'typed', investor_label: 'Juno Angels', expires_days: e });
+  for (const e of [7, 14, null]) {
+    const r = await w.raise.deckLink(P, { deck_id: 5, investor_label: 'Juno Angels', expires_days: e, allow_download: true, allow_forwarding: false });
     const t = db.prepare('SELECT investor_label, expires_at FROM pitch_deck_share_tokens WHERE id = ?').get(r.id) as any;
     assert.equal(t.investor_label, 'Juno Angels');
-    assert.equal(e === 'never', String(t.expires_at).startsWith('9999'), e);
+    assert.equal(e === null, String(t.expires_at).startsWith('9999'), String(e));
   }
 });
 
@@ -337,7 +333,7 @@ test('11: each Raise Edit saves through its PATCH and moves only what it sends',
   assert.equal((db.prepare('SELECT why_now FROM narrative_version_meta WHERE project_id = ? AND version = 1').get(P) as any).why_now, 'Later');
   assert.deepEqual(calls.at(-1), { path: '/cycles/raise/narrative-versions/1?project=1', method: 'PATCH', body: { investor_type: 'seed_fund', one_liner: 'One', why_now: 'Later', ask: 'Ask', check_against: ['deck', 'metrics'] } });
 
-  const link = await formFor('raise', 'pitch-deck').submit(w, P, { prospect_id: '5', deck_id: '5', expires_days: '30', allow: [] });
+  const link = await w.raise.deckLink(P, { deck_id: 5, prospect_id: 5, expires_days: 30, allow_download: false, allow_forwarding: false });
   const editLink = editFor('raise', 'pitch-deck');
   await editLink.submit(w, P, editLink.idOf({ id: link.id, edit: { id: link.id } }), { prospect_id: '', investor_label: '', expires_days: '', allow_download: 'yes', allow_forwarding: '' });
   const t = db.prepare('SELECT prospect_id, allow_download, allow_forwarding FROM pitch_deck_share_tokens WHERE id = ?').get(link.id) as any;
@@ -425,7 +421,7 @@ test('12: a partner, an advisor member and an investor get the Worker\'s refusal
 });
 
 test('11: every Raise form and Edit is registered, and every chip it draws before its read is one its route accepts', () => {
-  assert.deepEqual(Object.keys(FORMS.raise).sort(), ['cap-table', 'capital-relationships', 'data-room', 'fundraising-readiness', 'investor-narrative', 'pitch-deck', 'use-of-funds']);
+  assert.deepEqual(Object.keys(FORMS.raise).sort(), ['cap-table', 'capital-relationships', 'data-room', 'fundraising-readiness', 'investor-narrative', 'use-of-funds']);
   assert.deepEqual(Object.keys(EDITS.raise).sort(), ['cap-table', 'capital-relationships', 'data-room', 'investor-narrative', 'pitch-deck', 'use-of-funds']);
   const start = initialValues(formFor('raise', 'cap-table'));
   assert.deepEqual([start.group, start.instrument, start.vesting], ['investors', 'safe', 'none'], 'Investors and SAFE, as the canvas chooses them');
