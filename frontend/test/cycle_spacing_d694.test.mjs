@@ -50,7 +50,7 @@ test('literal cycle routes mount a cycle page or a redirect', () => {
   for (const [index, route] of routes.entries()) {
     if (!isCyclePath(route[1]) || exceptions.has(route[1])) continue;
     const section = app.slice(route.index, routes[index + 1]?.index ?? app.length);
-    assert.match(section, /<CycleRoute\b|<Navigate\b|<HistoryRedirect\b|<CapTableMovedRedirect\b/, route[1]);
+    assert.match(section, /<CycleRoute\b|<Navigate\b|<HistoryRedirect\b|<CapTableMovedRedirect\b|<KeepQueryRedirect\b/, route[1]);
   }
 });
 

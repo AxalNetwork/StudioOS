@@ -100,6 +100,9 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/onboarding/licence' },
   { path: '/build/deck' },
   { path: '/raise/pitch/positioning' }, // D911: Investor narrative › Positioning
+  // D4254 (#4254): Pitch's old addresses. The Worker's Raise links still name /raise/pitch-deck, so it is kept.
+  { path: '/raise/pitch-deck', keep: true },
+  { path: '/raise/pitch/analytics' }, // → /raise/pitch/share
   { path: '/build/deck-reviewer' },
   { path: '/validate/customer-research/new' },
   { path: '/validate/interviews' },

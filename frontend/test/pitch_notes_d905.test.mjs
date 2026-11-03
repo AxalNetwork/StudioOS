@@ -17,7 +17,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import {
   BOUNDARY_ROLES, BOUNDARY_TITLE, NOTE_MAX, NOTES_EYEBROW, NOT_RECORDED, READ_ONLY,
-  boundaryFor, cardLabel, noteRows, overrideRows, postNoteSentence,
+  boundaryFor, cardLabel, noteRows, postNoteSentence,
 } from '../src/pages/raise/pitch/pitchStudioModel.js';
 import PitchBoundary from '../src/pages/raise/pitch/PitchBoundary.jsx';
 
@@ -58,7 +58,7 @@ test('posting opens a dialog that says what it changes, for an admin and for a f
 
 test('PD22: an Advisor, an Operating Partner and an Explorer read a boundary; the Advisor\'s adds the NDA line', () => {
   assert.deepEqual(BOUNDARY_ROLES, ['advisor', 'partner', 'exploring']);
-  assert.equal(BOUNDARY_TITLE, 'The Pitch deck studio is for the venture’s founders.');
+  assert.equal(BOUNDARY_TITLE, 'Pitch is for the venture’s founders.');
   assert.deepEqual(boundaryFor('advisor'), { title: BOUNDARY_TITLE, line: 'Ask them to share a link. A shared deck opens in the viewer, with the NDA if they ask for one.' });
   assert.deepEqual(boundaryFor('partner'), { title: BOUNDARY_TITLE, line: 'Ask them to share a link.' });
   assert.deepEqual(boundaryFor('exploring'), { title: BOUNDARY_TITLE, line: 'Ask them to share a link.' });
@@ -66,16 +66,9 @@ test('PD22: an Advisor, an Operating Partner and an Explorer read a boundary; th
   assert.equal(boundaryFor('exploring', true), null, 'an active Spin-Out Lab member uses the studio');
   const html = renderToStaticMarkup(React.createElement(PitchBoundary, { role: 'advisor' }));
   assert.match(html, /data-testid="pitch-studio-boundary"/);
-  assert.ok(html.includes('The Pitch deck studio is for the venture’s founders.'));
+  assert.ok(html.includes('Pitch is for the venture’s founders.'));
   assert.ok(html.includes('with the NDA if they ask for one'));
   assert.equal(renderToStaticMarkup(React.createElement(PitchBoundary, { role: 'partner' })).includes('NDA'), false);
-});
-
-test("the Super Admin's defaults name each template, or its id when the list was not read", () => {
-  const overrides = { overrides: [{ sector: 'Fintech', stage: 'seed', method_id: 'yc_seed' }, { sector: 'Health', stage: 'pre-seed', method_id: 'sequoia' }] };
-  assert.deepEqual(overrideRows(overrides, { methods: [{ id: 'yc_seed', label: 'YC Seed' }] }).map((r) => [r.sector, r.stage, r.template]), [['Fintech', 'seed', 'YC Seed'], ['Health', 'pre-seed', 'sequoia']]);
-  assert.deepEqual(overrideRows(overrides, null).map((r) => r.template), ['yc_seed', 'sequoia']);
-  assert.deepEqual(overrideRows(null, null), []);
 });
 
 test('the wiring: the Notes tab and its route, the boundary inside the shell, and the help surface moved with the guard', () => {
@@ -85,7 +78,8 @@ test('the wiring: the Notes tab and its route, the boundary inside the shell, an
   assert.match(app, /\(effectiveRole === 'advisor' \|\| effectiveRole === 'partner' \|\| effectiveRole === 'exploring'\) && user\?\.spinout_lab_active !== 1\s*\?\s*<PitchBoundary role=\{effectiveRole\} \/>/);
   for (const role of BOUNDARY_ROLES) assert.ok(app.includes(`effectiveRole === '${role}'`), `${role} matches BOUNDARY_ROLES`);
   assert.ok(app.includes(`<Route path="/raise/pitch/notes" element={guard(labRoles(['admin', 'founder']), <PitchStudio tab="notes" />)} />`));
-  for (const p of ['/raise/pitch/edit', '/raise/pitch/analytics', '/raise/pitch/review']) {
+  // D4254: /raise/pitch/analytics redirects to /raise/pitch/share, which carries the guard.
+  for (const p of ['/raise/pitch/edit', '/raise/pitch/share', '/raise/pitch/review']) {
     assert.ok(app.includes(`<Route path="${p}" element={guard(labRoles(['admin', 'founder'])`), `${p} keeps its guard: the boundary is the studio's home only`);
   }
   const help = read('frontend/src/pages/docs/guidePlacement.js');
@@ -95,7 +89,11 @@ test('the wiring: the Notes tab and its route, the boundary inside the shell, an
   const notesSrc = read('frontend/src/pages/raise/pitch/PitchNotes.jsx');
   assert.match(notesSrc, /api\.deckNotes\(deckId\)/);
   assert.match(notesSrc, /api\.deckPostNote\(deckId,/);
-  assert.match(notesSrc, /viewer === 'super_admin' \?/, 'the defaults card is the Super Admin\'s, by the Worker\'s answer');
+  // D4155 K4 (#4191): the default template is set on HQ › Decks only; the Notes tab points the Super Admin there and writes no override.
+  assert.match(notesSrc, /viewer === 'super_admin' \?/, 'the pointer is the Super Admin\'s, by the Worker\'s answer');
+  assert.match(notesSrc, /to="\/admin\/platform\/decks\/templates"/);
+  assert.match(notesSrc, /viewer === 'super_admin' \? \(\s*<aside[^>]*data-testid="pitch-default-templates-moved"/, 'the pointer is the Super Admin\'s only');
+  assert.equal(/deckSetRecommendOverride|deckRecommendOverrides|recommend-overrides/.test(notesSrc), false, 'PitchNotes no longer reads or writes overrides');
   assert.match(notesSrc, /title="Post this note\?"/, 'posting opens a dialog');
   assert.equal(/deckUpdate|deckShare\(|deckRestore/.test(notesSrc), false, 'the Notes tab writes nothing on the deck');
   const api = read('frontend/src/lib/api.js');

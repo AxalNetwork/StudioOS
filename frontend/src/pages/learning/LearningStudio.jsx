@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
 import { RailFrame, WorkerRail } from '../../ui';
 import StudioContentTable from './StudioContentTable';
+import VideoAnalyticsSheet from './VideoAnalyticsSheet';
 import StudioItemEditor from './StudioItemEditor';
 import StudioCourseBuilder from './StudioCourseBuilder';
 import { StudioAssessment, useStudioAssessments } from './LearningAssessments';
@@ -49,6 +50,8 @@ export function StudioView({
   items, courses, exercises = null, exams = null, editor,
   onRetryItems, onRetryCourses, onRetryExercises, onRetryExams,
 }) {
+  // D4181 (lr17): the video whose analytics Sheet is open, or null.
+  const [analytics, setAnalytics] = useState(null);
   if (editor) {
     return (
       <>
@@ -77,7 +80,9 @@ export function StudioView({
         status={all ? 'unreadable' : loading ? 'loading' : 'ready'}
         rows={rows}
         onRetry={() => { for (const l of lists) l.retry?.(); }}
+        onAnalytics={(row) => setAnalytics({ uid: row.uid, title: row.title })}
       />
+      {analytics ? <VideoAnalyticsSheet uid={analytics.uid} fallbackTitle={analytics.title} onClose={() => setAnalytics(null)} /> : null}
       <p className="text-[12.5px] text-axal-muted dark:text-gray-400">
         <Link to="/learning/studio/programs" className="font-semibold text-axal-violet-deep underline hover:text-axal-violet dark:text-violet-300" data-testid="link-studio-programs">
           Regional programs

@@ -577,6 +577,30 @@ test('§9 regenerate one card: one run, only that card changes, a kept card is r
   } finally { f.close(); }
 });
 
+test('§9 (#3659 frontend) keep-slides says which proposal it read: a stale keep changes nothing; the versions read hands a reopened proposal its hash', async () => {
+  // Mutation checked: keep-slides without staleRefusal → the stale keep lands; the versions read without proposal_hash → the reopen check fails.
+  const f = await fixture({ cards: { cards: [{ n: 1, headline: 'Words', body: 'One.' }] } });
+  try {
+    const g = await call(f, 2, 'POST', '/api/decks/generate', { project_id: 1, audience: 'angel', length: 'short' });
+    const id = g.body.proposal.id;
+    const read = await call(f, 2, 'GET', '/api/decks/by-project/1');
+    assert.equal(read.status, 200, JSON.stringify(read.body));
+    assert.equal(read.body.proposal.proposal_hash, g.body.proposal_hash, 'a reopened proposal names the hash its writes send back');
+    const k = await call(f, 2, 'POST', `/api/decks/proposals/${id}/keep-slides`, { indexes: [0], base_hash: g.body.proposal_hash });
+    assert.equal(k.status, 200, JSON.stringify(k.body));
+    assert.deepEqual(k.body.proposal.kept, [0]);
+    assert.ok(k.body.proposal_hash && k.body.proposal_hash !== g.body.proposal_hash, 'keeping moves the hash');
+    // Another tab still holds the build's hash: its keep changes nothing.
+    const stale = await call(f, 2, 'POST', `/api/decks/proposals/${id}/keep-slides`, { indexes: [1], base_hash: g.body.proposal_hash });
+    assert.deepEqual([stale.status, stale.body.error], [409, 'proposal_changed']);
+    const save = await call(f, 2, 'POST', `/api/decks/proposals/${id}/keep-slides`, { all: true, save: true, base_hash: g.body.proposal_hash });
+    assert.deepEqual([save.status, save.body.error], [409, 'proposal_changed'], 'nor does a stale save');
+    assert.deepEqual(JSON.parse((f.db.prepare('SELECT kept_slides_json FROM pitch_deck_proposals WHERE id = ?').get(id) as any).kept_slides_json), [0]);
+    // A keep that does not say keeps working as before.
+    assert.equal((await call(f, 2, 'POST', `/api/decks/proposals/${id}/keep-slides`, { indexes: [1] })).status, 200);
+  } finally { f.close(); }
+});
+
 test('§9 a rebuild keeps the cards the founder kept; AI off rebuilds a card from records at no cost; out of tokens changes nothing', async () => {
   const f = await fixture({ cards: { cards: [{ n: 1, headline: 'First words', body: 'One.' }, { n: 2, headline: 'Second words', body: 'Two.' }] } });
   try {

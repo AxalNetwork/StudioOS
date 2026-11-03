@@ -32,7 +32,8 @@ test('New deck reopens the proposal and keeps or discards it, Discard behind its
   // D1604 (#3716, §3.2 step 7): the review keeps the ticked cards as the version in one press, and
   // Discard is the one write behind a dialog.
   const review = codeOnly(read('src/pages/raise/pitch/OneClickBuild.jsx'));
-  assert.match(review, /await newDeckApi\.keepSlides\(proposal\.id, body\)/);
+  // D897 §10 (#3659): with the proposal_hash the review last read, so another tab's move is refused, not overwritten.
+  assert.match(review, /await newDeckApi\.keepSlides\(proposal\.id, withBase\(body, hash\)\)/);
   assert.match(review, /await api\.deckDiscardProposal\(proposal\.id\);/);
   assert.match(review, /onClick=\{\(\) => setDiscarding\(true\)\}/);
   assert.match(review, /data-testid="pitch-review-discard-confirm"/);

@@ -47,16 +47,25 @@ export const BUILDER_MOVED_NOTICE = 'The template builder is now part of the stu
 /** Every moved notice the studio's pages draw, by its `?moved=` key. */
 export const MOVED_NOTICES = Object.freeze({ [MOVED_KEY]: MOVED_NOTICE, [BUILDER_MOVED_KEY]: BUILDER_MOVED_NOTICE });
 
-export const TITLE = 'Pitch deck studio';
-// D896 (#2675): the second sentence is back now that every source read carries its chip.
-export const LINE = 'Build your deck from what StudioOS already knows. Every figure shows its source.';
+// D4254 (#4254): the module is "Pitch". It prepares the deck and what to say, so
+// "Pitch deck" names only the deck itself.
+export const TITLE = 'Pitch';
+export const LINE = 'Your deck, what to say, and who has seen it, in one place.';
 // PD21: an admin reads the studio and leaves notes (D905).
 export const READ_ONLY = 'Read only. Notes are visible to the founder.';
 
+/**
+ * D4254 (#4254): the tile row. The Overview (`STUDIO_PATH`) is not a tile; it
+ * lights none. Share & analytics lives at /share; /analytics redirects there.
+ */
+export const DECKS_PATH = '/raise/pitch/decks';
+export const SCRIPT_PATH = '/raise/pitch/script';
+export const SHARE_PATH = '/raise/pitch/share';
 export const TABS = [
-  { id: 'decks', label: 'Decks', path: STUDIO_PATH },
+  { id: 'decks', label: 'Decks', path: DECKS_PATH },
+  { id: 'script', label: 'Script & rehearsal', path: SCRIPT_PATH },
   { id: 'review', label: 'Review', path: REVIEW_PATH },
-  { id: 'analytics', label: 'Share & analytics', path: ANALYTICS_PATH },
+  { id: 'analytics', label: 'Share & analytics', path: SHARE_PATH },
   { id: 'notes', label: 'Notes', path: NOTES_PATH },
 ];
 
@@ -421,7 +430,7 @@ export function postNoteSentence(viewer, cardIndex) {
  * of an active Spin-Out Lab cohort uses the studio as a founder does.
  */
 export const BOUNDARY_ROLES = ['advisor', 'partner', 'exploring'];
-export const BOUNDARY_TITLE = 'The Pitch deck studio is for the venture\u2019s founders.';
+export const BOUNDARY_TITLE = 'Pitch is for the venture\u2019s founders.';
 export function boundaryFor(role, labActive = false) {
   if (labActive || !BOUNDARY_ROLES.includes(String(role || ''))) return null;
   return role === 'advisor'
@@ -429,11 +438,3 @@ export function boundaryFor(role, labActive = false) {
     : { title: BOUNDARY_TITLE, line: 'Ask them to share a link.' };
 }
 
-/** The Super Admin's defaults, one row per sector and stage, with the template's name when the list was read. */
-export function overrideRows(overrides, methods) {
-  const names = new Map(asList(methods, 'methods', 'items').map((m) => [m.id, m.label]));
-  return asList(overrides, 'overrides').map((o) => ({
-    key: `${o.sector}|${o.stage}`, sector: o.sector, stage: o.stage, methodId: o.method_id,
-    template: names.get(o.method_id) || o.method_id,
-  }));
-}

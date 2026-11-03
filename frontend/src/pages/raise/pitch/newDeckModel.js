@@ -54,6 +54,8 @@ export function refusalOf(e) {
     ? { text: data.module ? `Open ${data.module} ›` : 'Open your sources ›', href: data.href }
     : code === 'tier_required' ? { text: SEE_PLANS, href: PLANS_PATH } : null;
   const topUp = e.status === 402 && code !== 'tier_required' ? { text: 'Add tokens', href: ADD_TOKENS_PATH } : null;
+  // D897 §9 (#3659): another tab moved the proposal; the page offers to read the latest, never to retry blind.
+  if (code === 'proposal_changed') return { code, message: STALE_LINE, link: null, topUp: null, reload: true };
   return { code, message, link, topUp };
 }
 
@@ -102,9 +104,67 @@ export function addRow(rows, card, catalogue = []) {
 
 /** The first outline row whose words name a number, as the Worker would refuse it; null when none does. */
 export function rowWarning(rows) {
-  const i = rows.findIndex((r) => numberIn(`${r.title} ${r.purpose}`));
-  return i < 0 ? null : `Row ${i + 1} names a figure. Figures come from your records; take it out of the title or the purpose.`;
+  const i = rows.findIndex((r) => numberIn(`${r.title} ${r.purpose} ${r.message || ''}`));
+  return i < 0 ? null : `Row ${i + 1} names a figure. Figures come from your records; take it out of the title, the purpose or the message.`;
 }
+
+/** D897 §9 (#3659): a row's message, the one takeaway its card leaves; the Worker's cap. */
+export const MESSAGE_MAX = 160;
+export const MESSAGE_LABEL = 'Message';
+export const MESSAGE_HINT = 'The one thing this card should leave the reader with. Words only: figures come from your records.';
+
+// ─────────────────────────────────────────────────────────── one card, and other tabs
+
+/** D897 §9 (#3659): the refusal a write gets when another tab moved the proposal since this page read it. */
+export const STALE_CODE = 'proposal_changed';
+export const STALE_LINE = 'This deck changed in another tab or window. Nothing was changed here.';
+export const RELOAD_LATEST = 'Reload the latest';
+export const STALE_GONE = 'The other tab kept or discarded this proposal, so it is no longer open.';
+export const isStale = (e) => (e?.code || e?.data?.error) === STALE_CODE;
+
+/** The hash a write sends back, or undefined when the page holds none (the Worker then does not check, as before). */
+export const baseHash = (h) => (typeof h === 'string' && h ? h : undefined);
+/** A write's body with `base_hash` when the page holds one, and without the key when it does not. */
+export const withBase = (body, h) => (baseHash(h) ? { ...body, base_hash: h } : body);
+
+/**
+ * Whether the review may regenerate one card: a New deck proposal's card (its
+ * outline has a row at that place, for the same card), not one already kept.
+ * The Worker refuses the rest (`card_kept`, `outline_changed`); the button is
+ * simply not offered for them.
+ */
+export function canRegenerate(proposal, index) {
+  const rows = proposal?.outline?.rows;
+  if (!Array.isArray(rows) || !rows[index]?.card) return false;
+  if ((Array.isArray(proposal.kept) ? proposal.kept : []).includes(index)) return false;
+  return proposal?.slides?.[index]?.spec_id === `new:${rows[index].card}`;
+}
+
+/** The card's quote: one row of the proposal's own outline, priced as that row's build run. */
+export function cardQuoteBody(projectId, proposal, index) {
+  const o = proposal?.outline || {};
+  const exclude = Array.isArray(o.exclude) ? o.exclude : [];
+  return { project_id: projectId, step: 'card', index, audience: o.audience, length: o.length, outline: o.rows, ...(exclude.length ? { exclude } : {}) };
+}
+
+export function regenerateSentence(quote, title) {
+  const price = quote?.ai ? `Eadwyn rewrites its wording, holding up to ${aiTokens(quote.hold_microusd)} in AI tokens and charging for what it uses.`
+    : quote?.ai === false ? (quote.reason === 'assist_off' ? 'AI is off on this page, so the card is rebuilt from your records with its title, at no cost.' : (quote.message || 'The price could not be worked out.'))
+      : 'Reading the price…';
+  return `StudioOS rebuilds “${title}” from your records. ${price} Every other card stays as it is, and nothing is saved until you accept.`;
+}
+
+/** The line under a card after its regeneration: who wrote it, or why not, and what it used. */
+export function regeneratedLine(r) {
+  if (!r) return null;
+  const spent = r.cost?.charged_microusd != null && Number(r.cost.charged_microusd) > 0 ? ` It used ${aiTokens(r.cost.charged_microusd)} in AI tokens.` : '';
+  if (r.wording?.reason) return `${r.wording.reason}${spent}`;
+  return `Eadwyn rewrote this card.${spent}`;
+}
+
+/** Keep one card now: it survives a rebuild, a regeneration and a reload, and Accept saves it. */
+export const KEEP_ONE = 'Keep';
+export const KEPT_LINE = 'Kept: a rebuild or a regeneration leaves it as it is.';
 
 /** The chips one outline row will use: each source slot of its card, as the records hold it now. */
 export function chipsFor(row, catalogue = [], items = [], excluded = new Set()) {

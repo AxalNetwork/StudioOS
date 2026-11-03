@@ -231,6 +231,9 @@ export default function PitchEditor() {
   // A card run or a decision in the editor's own bar changes what waits: the header reads it again.
   const [proposalsTick, setProposalsTick] = useState(0);
   const onProposals = useCallback(() => setProposalsTick((t) => t + 1), []);
+  // D4210: a fix asked from the preflight panel opens the header Ask, where it waits.
+  const [askOpenKey, setAskOpenKey] = useState(0);
+  const onOpenAsk = useCallback(() => setAskOpenKey((t) => t + 1), []);
   // D1604: the header's toolbar reports the open editor's state and calls back into it.
   const [chrome, setChrome] = useState(null);
   const actionRef = useRef(null);
@@ -267,7 +270,7 @@ export default function PitchEditor() {
   // open Editor (keyed to the version) keeps its unsaved cards.
   const shell = {
     query: ventureQuery(projectId || requested), title, tools, overlay, heading: deck.status === 'ok' ? title : null, deckId: current?.id ?? null,
-    ask: { projectId, readOnly, onPlace, versions, onChanged: versions.refresh, editsKey: proposalsTick },
+    ask: { projectId, readOnly, onPlace, versions, onChanged: versions.refresh, editsKey: proposalsTick, openKey: askOpenKey },
   };
 
   if (projects.status === 'error') return <Shell {...shell}><ReadFailed text="Your ventures could not be read." onRetry={projects.retry} testId="pitch-editor-ventures-error" /></Shell>;
@@ -309,6 +312,7 @@ export default function PitchEditor() {
         onSaved={() => versions.retry()}
         placeRef={placeRef}
         onProposals={onProposals}
+        onOpenAsk={onOpenAsk}
         onChrome={setChrome}
         actionRef={actionRef}
         onSend={setShareDialog}
@@ -381,7 +385,7 @@ export function editReducer(state, action) {
   }
 }
 
-function Editor({ project, deck, model, kit, refresh, sources, charts, versions, readOnly, phone, narrow = false, onTitle, onSaved, placeRef, onProposals, onChrome, actionRef, onSend = null, presence = null, youId = null }) {
+function Editor({ project, deck, model, kit, refresh, sources, charts, versions, readOnly, phone, narrow = false, onTitle, onSaved, placeRef, onProposals, onOpenAsk = null, onChrome, actionRef, onSend = null, presence = null, youId = null }) {
   const [aiOn] = useAssistMode('raise');
   const navigate = useNavigate();
   const [base, setBase] = useState(() => ({ deck, cards: cardsOf(deck), theme: deck.theme ?? null, audience: deck.audience ?? null }));
@@ -418,7 +422,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   const kitData = kit.status === 'ok' ? kit.data?.kit ?? null : null;
   // D1370 (#3661): Check before you send, on the deck as it is on screen; a result for another state reads "Out of date".
   const working = useMemo(() => workingDeck(base.deck, cards, theme), [base.deck, cards, theme]);
-  const pf = usePreflight({ deck: working, kit: kitData, refresh: refresh.status === 'ok' ? refresh.data : null });
+  const pf = usePreflight({ deck: working, kit: kitData, refresh: refresh.status === 'ok' ? refresh.data : null, readOnly });
   const [gate, setGate] = useState(null);
   const [finding, setFinding] = useState(null);
   const colours = cardColours(theme, kitData);
@@ -882,7 +886,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
         <StageSheet deckId={base.deck.id} readOnly={readOnly} dirty={dirty} onReordered={saved} onClose={() => setSheet(null)} />
       ) : null}
       {sheet === 'preflight' ? (
-        <PreflightPanel pf={pf} version={base.deck.version ?? null} readOnly={readOnly} onShow={show} onClose={() => setSheet(null)} />
+        <PreflightPanel pf={pf} version={base.deck.version ?? null} readOnly={readOnly} deckId={aiOn ? base.deck.id : null} tokensOut={outOfTokens}
+          onTokens={onTokens} onProposals={onProposals} onOpenAsk={onOpenAsk} onShow={show} onClose={() => setSheet(null)} />
       ) : null}
       {gate && (pf.running || gateView?.open) ? (
         <PreflightGate gate={gateView} progress={pf.running ? pf.progress : null} version={base.deck.version ?? null} dirty={dirty} onShow={show}
