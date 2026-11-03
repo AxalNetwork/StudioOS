@@ -23,7 +23,7 @@
 import type { Env } from '../../types';
 import { GATEWAY_IMAGE_MODELS, gatewayImageModelFor, imageToolsOn, type GatewayImageModel, type ImageToolId } from '../ai/catalogue';
 import * as aiBudget from '../aiBudget';
-import { deckGatewaySlug, recordUsage, type RefusalReason, type UsageMeta } from '../aiRouter';
+import { deckGatewayOptionFor, recordUsage, type RefusalReason, type UsageMeta } from '../aiRouter';
 import { MeteringRefused, meteredCall } from '../metering';
 
 export const IMAGE_TOOLS: readonly ImageToolId[] = Object.freeze(['remove_background', 'upscale']);
@@ -99,8 +99,8 @@ export async function runImageTool(env: Env, input: {
     task: TASK, model: m.id, latency_ms: latency, prompt_tokens: 0, completion_tokens: 0, est_cost_usd: cost, fallback_used: false, cached: false, safety_score: null,
   });
   const who = { userId: input.userId, surface: input.surface, railOption: input.option };
-  const slug = deckGatewaySlug(env);
-  const gateway = slug ? { gateway: { id: slug, skipCache: true, collectLog: false, metadata: { task: TASK, option: input.option.slice(0, 64) } } } : undefined;
+  // The deck's own AI Gateway (D1504), built by the router as every gateway option is: a `deck:` option is a deck run.
+  const gateway = deckGatewayOptionFor(env, { task: TASK, userId: input.userId, rail: { page: 'Founder · Raise · Pitch deck', option: input.option } });
   const get = deps.fetch ?? fetch;
   const started = Date.now();
   let done;
