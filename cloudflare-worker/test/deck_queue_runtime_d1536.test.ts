@@ -33,6 +33,8 @@ function world() {
   f.db.exec(`INSERT INTO pitch_decks (id, project_id, version, slides, title, is_current) VALUES (${DECK}, ${P}, 1, '[]', 'Synthetic', 1)`);
   f.db.exec(MIG('716_deck_area_batches.sql'));
   f.db.exec(MIG('202611022120_deck_batch_runtime.sql'));
+  // D1600 (#3879): the run insert writes parent_batch_uid, which migration 752 adds.
+  f.db.exec(MIG('752_deck_area_batches_seen.sql'));
   setFixtureAllowance(f.db, 0);
   f.db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(?,?)').run(USER, 50_000_000);
   return f;
