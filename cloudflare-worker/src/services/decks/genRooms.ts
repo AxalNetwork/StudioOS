@@ -19,7 +19,7 @@ import { QueueGenRuntime, eventsFromD1, runtimeFor } from './queueRuntime';
 export function admitStatus(refusal: string): number {
   if (refusal === 'deck_busy' || refusal === 'idempotency_key_reused') return 409;
   if (refusal === 'ai_paused' || refusal === 'runtime_unavailable') return 503;
-  if (refusal === 'spend_limit' || refusal.startsWith('budget_')) return 402;
+  if (refusal === 'spend_limit' || refusal === 'hold_exhausted' || refusal.startsWith('budget_')) return 402;
   return 400;
 }
 

@@ -63,7 +63,8 @@ export const DECK_SHARE_SIGNUP = /^\/api\/decks\/share\/[^/]+\/signup$/;
 export const DECK_REMOTE_PAIR = /^\/api\/decks\/\d+\/remote\/pair\/?$/;
 export const DECK_REMOTE_JOIN = /^\/api\/decks\/remote\/join\/?$/;
 // D1512 (#3764): `POST /api/decks/:id/areas` is A3's admission path.
-export const DECK_GENERATE = /^\/api\/decks\/(?:\d+\/)?(?:areas(?:\/(?:generate|batches))?|build)\/?$/;
+// D1600 (#3879): retrying a run's failed areas starts a run too.
+export const DECK_GENERATE = /^\/api\/decks\/(?:\d+\/)?(?:areas(?:\/(?:generate|batches(?:\/[0-9a-f-]{36}\/retry-failed)?))?|build)\/?$/;
 
 // D810 — three of the four public newsletter routes, and nothing else under
 // the word. Unsubscribe is left out on purpose (S1's review): RFC 8058
