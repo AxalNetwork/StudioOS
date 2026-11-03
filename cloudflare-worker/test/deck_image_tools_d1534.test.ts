@@ -33,6 +33,10 @@ import { d1Over } from './_d1_sqlite.mjs';
 import { withGuard } from './_guard_stub.mjs';
 import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
+import { CONTRACTS } from '../src/contracts/index.ts';
+import { contractErrors } from '../src/contracts/validate.ts';
+
+const TOOLS_SCHEMA = JSON.parse(readFileSync(new URL('../src/contracts/' + CONTRACTS.imageEditAi.schema, import.meta.url), 'utf8'));
 
 const root = new URL('../sql/', import.meta.url);
 const baseline = readFileSync(new URL('schema_baseline.sql', root), 'utf8');
@@ -124,6 +128,7 @@ test('the switch off means no call: "Coming later", the quote is not ai, a press
   const f = await fixture({ on: false });
   try {
     const tools = await call(f, FOUNDER, '/api/decks/images/tools');
+    assert.deepEqual(contractErrors(TOOLS_SCHEMA, tools.body), [], 'the adapter\'s imageEditAi contract (D1511)');
     assert.deepEqual(tools.body.tools.map((t: any) => [t.tool, t.on, t.message]),
       [['remove_background', false, OFF_MESSAGE], ['upscale', false, NO_MODEL_MESSAGE]]);
     const q = await call(f, FOUNDER, `/api/decks/images/${P_PHOTO}/tools/remove_background/quote`, {});
