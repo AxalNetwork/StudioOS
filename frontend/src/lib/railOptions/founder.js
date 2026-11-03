@@ -240,6 +240,11 @@ export const FOUNDER_OPTIONS = [
     page: 'Founder · Raise · Pitch deck', key: 'deck:critic', route: '/raise/pitch/edit', label: 'Read as an investor', kind: 'reason', handler: 'draft',
     at: [['frontend/src/pages/raise/pitch/CriticSection.jsx', 'deckCriticApi.run(']],
   },
+  // D1561 (#3808, pd25): Check wording in the Check claims sheet, charged only when pressed.
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'deck:wording', route: '/raise/pitch/edit', label: 'Check wording', kind: 'reason', handler: 'draft',
+    at: [['frontend/src/pages/raise/pitch/WordingSection.jsx', 'deckActionsApi.wording(']],
+  },
   // D1604 (#3716, plan §0): Change tone and Translate are typed in the instruction box ("warmer", "in French"),
   // which runs words that are only a tone or a language under these two options (`instructionModel.typedChange`).
   {
