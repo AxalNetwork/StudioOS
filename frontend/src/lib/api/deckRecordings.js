@@ -1,6 +1,6 @@
 // D1590 F11 (#3837) — the recorded walkthrough: a take per card, captioned, attached to an investor link.
 // Worker: routes/deck_recordings.ts, mounted at /api/decks.
-//   POST   /api/decks/:id/recordings/quote           { duration_ms } → { model, hold_microusd, minutes, balance }
+//   POST   /api/decks/:id/recordings/quote           { duration_ms } → { model, job, hold_microusd, minutes, balance }
 //   POST   /api/decks/:id/recordings                 form: card, duration_ms, media, audio?, model? → { take, walkthrough }
 //   GET    /api/decks/:id/recordings                 → { deck_id, cards: [take | null], recorded, links }
 //   GET    /api/decks/:id/recordings/:uid/media      → the take's file (mediaUrl)

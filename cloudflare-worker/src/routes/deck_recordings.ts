@@ -1,7 +1,7 @@
 /**
  * D1590 (#3837, deck v2 F11) — the recorded walkthrough (pd36 "Record a pitch").
  *
- *   POST   /api/decks/:id/recordings/quote           { duration_ms } → { model, hold_microusd, minutes, balance }
+ *   POST   /api/decks/:id/recordings/quote           { duration_ms } → { model, job, hold_microusd, minutes, balance }
  *   POST   /api/decks/:id/recordings                 form: card, duration_ms, media, audio?, model? → { take, walkthrough }
  *          A take of one card: the file in R2, its captions from the Listen job
  *          (WALKTHROUGH_CAPTIONS, the DK11 class, through run(): quoted, held,
@@ -103,7 +103,8 @@ deckRecordings.post('/:id{[0-9]+}/recordings/quote', async (c) => {
   const q = await quoteRun(c.env, captionOptions(c, user, deck, minutes, modelOf(body?.model)));
   if (!q.ok) return refuseRun(c, { refusal: q.refusal, error: q.error }) ?? refuse(c, 503, { code: 'model_unavailable', message: 'Captions are not available. Nothing was run.' });
   const short = await balanceRefusal(c.env, Number(user.id), q.hold_microusd);
-  return c.json({ model: q.model, hold_microusd: q.hold_microusd, minutes, balance: short ? { ok: false, code: short.code, message: short.message } : { ok: true } });
+  // `job`: the Listen job that chose the model (DK11 for WALKTHROUGH_CAPTIONS), or null when no job did.
+  return c.json({ model: q.model, job: q.speech?.job ?? null, hold_microusd: q.hold_microusd, minutes, balance: short ? { ok: false, code: short.code, message: short.message } : { ok: true } });
 });
 
 deckRecordings.post('/:id{[0-9]+}/recordings', async (c) => {
@@ -225,7 +226,7 @@ deckRecordings.put('/:id{[0-9]+}/recordings/links/:shareId{[0-9]+}', async (c) =
   if (body.attach) {
     // A link of this version that has not been withdrawn or run out.
     const link = await c.env.DB.prepare(
-      "SELECT id FROM pitch_deck_share_tokens WHERE id = ? AND deck_id = ? AND (revoked_at IS NULL) AND expires_at > datetime('now')",
+      "SELECT id FROM pitch_deck_share_tokens WHERE id = ? AND deck_id = ? AND (revoked_at IS NULL) AND datetime(expires_at) > datetime('now')",
     ).bind(shareId, deck.deckId).first<{ id: number }>().catch(() => null);
     if (!link) return c.json({ error: 'not found' }, 404);
     const recorded = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM deck_recordings WHERE deck_id = ? AND user_id = ?').bind(deck.deckId, userId).first<{ n: number }>();
