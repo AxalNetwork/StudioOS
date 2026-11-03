@@ -19,6 +19,10 @@
  *     never redrawn here, so nothing here can plot a figure the deck does not
  *     hold;
  *   - video, audio and link blocks are their label and address as text;
+ *   - D903 §11 (#3660): a typed diagram (timeline, flow, cycle, matrix) is
+ *     one group of native shapes from `diagramLayout`: each item a rounded
+ *     box with its words as editable text, each connector a line (an arrow
+ *     where the layout says so), each timeline marker a dot;
  *   - a card made of fields (D897), and the Sources appendix, are the text
  *     writer's stacked text frames.
  *
@@ -46,6 +50,7 @@ import { decorPlan, type DecorDraw } from './arrange';
 import { FILTER_SPECS, blipEffectsXml, filterOf, srcRectXml, visibleSource, washColour } from './imageLook';
 import { imageSize } from './imageBytes';
 import { DEFAULT_INK } from './images';
+import { diagramLayout, diagramName, type DiagramLayout } from './diagramLayout';
 
 /** The print card (D1112) the block geometry is measured on. */
 export const CARD_W = 1920;
@@ -156,6 +161,51 @@ export function decorShape(id: number, d: DecorDraw): string | null {
   <p:nvSpPr><p:cNvPr id="${id}" name="${name}"/>${d.pinned ? `<p:cNvSpPr><a:spLocks ${LOCKS}/></p:cNvSpPr>` : '<p:cNvSpPr/>'}<p:nvPr/></p:nvSpPr>
   <p:spPr><a:xfrm><a:off x="${emu(r.x)}" y="${emu(r.y)}"/><a:ext cx="${emu(r.w)}" cy="${emu(r.h)}"/></a:xfrm><a:prstGeom prst="${d.geometry}"><a:avLst/></a:prstGeom>${fill}<a:ln><a:noFill/></a:ln></p:spPr>
 </p:sp>`;
+}
+
+/**
+ * D903 §11 (#3660): a diagram as one group shape of native, editable shapes,
+ * laid out in the block's rectangle. Every word stays a text run.
+ */
+export function diagramGroup(nextId: () => number, name: string, r: Rect, layout: DiagramLayout, pinned = false, rtl = false): string {
+  const X = (f: number) => r.x + f * r.w;
+  const Y = (f: number) => r.y + f * r.h;
+  const fill = (hex: string) => `<a:solidFill><a:srgbClr val="${hex}"/></a:solidFill>`;
+  const kids: string[] = [];
+  for (const s of layout.shapes) {
+    const id = nextId();
+    if (s.kind === 'line') {
+      const x = Math.min(s.x1, s.x2), y = Math.min(s.y1, s.y2);
+      const flip = `${s.x2 < s.x1 ? ' flipH="1"' : ''}${s.y2 < s.y1 ? ' flipV="1"' : ''}`;
+      kids.push(`<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="Connector ${id}"/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr>`
+        + `<p:spPr><a:xfrm${flip}><a:off x="${emu(X(x))}" y="${emu(Y(y))}"/><a:ext cx="${emu(Math.abs(s.x2 - s.x1) * r.w)}" cy="${emu(Math.abs(s.y2 - s.y1) * r.h)}"/></a:xfrm>`
+        + `<a:prstGeom prst="line"><a:avLst/></a:prstGeom><a:ln w="${emu(3)}">${fill('94A3B8')}${s.arrow ? '<a:tailEnd type="triangle" w="med" len="med"/>' : ''}</a:ln></p:spPr></p:cxnSp>`);
+      continue;
+    }
+    const box = `<a:xfrm><a:off x="${emu(X(s.x))}" y="${emu(Y(s.y))}"/><a:ext cx="${emu(s.w * r.w)}" cy="${emu(s.h * r.h)}"/></a:xfrm>`;
+    if (s.kind === 'dot') {
+      kids.push(`<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="Marker ${id}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr>${box}<a:prstGeom prst="ellipse"><a:avLst/></a:prstGeom>${fill('64748B')}<a:ln><a:noFill/></a:ln></p:spPr></p:sp>`);
+      continue;
+    }
+    const paras = s.role === 'axis'
+      ? [`<a:pPr algn="ctr"/>${run(s.label, { size: pt(22), color: MUTED })}`]
+      : [
+        ...(s.date ? [run(s.date, { size: pt(18), bold: true, color: MUTED })] : []),
+        run(s.label, { size: pt(26), bold: true }),
+        ...(s.detail ? [run(s.detail, { size: pt(20), color: MUTED })] : []),
+      ];
+    const body = (rtl ? paras.map(rtlParagraph) : paras).map((p) => `<a:p>${p}</a:p>`).join('');
+    const look = s.role === 'axis' ? '<a:noFill/><a:ln><a:noFill/></a:ln>' : `${fill('F8FAFC')}<a:ln w="${emu(2)}">${fill('E5E7EB')}</a:ln>`;
+    kids.push(`<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${s.role === 'axis' ? 'Axis' : 'Item'} ${id}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>`
+      + `<p:spPr>${box}<a:prstGeom prst="${s.role === 'axis' ? 'rect' : 'roundRect'}"><a:avLst/></a:prstGeom>${look}</p:spPr>`
+      + `<p:txBody><a:bodyPr wrap="square" lIns="${emu(10)}" rIns="${emu(10)}" tIns="${emu(6)}" bIns="${emu(6)}" anchor="ctr"${s.vertical ? ' vert="vert270"' : ''}><a:normAutofit/></a:bodyPr><a:lstStyle/>${body}</p:txBody></p:sp>`);
+  }
+  const at = `<a:off x="${emu(r.x)}" y="${emu(r.y)}"/><a:ext cx="${emu(r.w)}" cy="${emu(r.h)}"/>`;
+  return `<p:grpSp>
+  <p:nvGrpSpPr><p:cNvPr id="${nextId()}" name="${xmlEsc(name)}" descr="${xmlEsc(`${diagramName(layout.type)} diagram`)}"/>${pinned ? `<p:cNvGrpSpPr><a:grpSpLocks ${LOCKS}/></p:cNvGrpSpPr>` : '<p:cNvGrpSpPr/>'}<p:nvPr/></p:nvGrpSpPr>
+  <p:grpSpPr><a:xfrm>${at}${at.replace('a:off', 'a:chOff').replace('a:ext', 'a:chExt')}</a:xfrm></p:grpSpPr>
+  ${kids.join('\n  ')}
+</p:grpSp>`;
 }
 
 type Placed = { xml: string; rect: Rect; group: string | null; pinned: boolean };
@@ -318,6 +368,13 @@ async function blockSlideXml(slide: any, idx: number, total: number, input: Edit
       if (png) {
         put(b, r, picture(id++, `Chart ${b.id}`, r, embed('png', png), `${chartLabel(b.chart_type)} chart`, b.pinned === true));
         counts.pictured += 1;
+        continue;
+      }
+    }
+    if (b.kind === 'graphic') {
+      const layout = diagramLayout(b.diagram);
+      if (layout) {
+        put(b, r, diagramGroup(() => id++, `Diagram ${b.id}`, r, layout, b.pinned === true, input.dir === 'rtl'));
         continue;
       }
     }

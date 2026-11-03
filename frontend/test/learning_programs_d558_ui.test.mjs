@@ -919,6 +919,8 @@ test('the calls stay in one file, through methods the clients already declare', 
     'adminLearningApi.unenrolFromProgram', 'adminLearningApi.updateProgram',
     'api.adminListUsers',
     'learningApi.assignedPrograms', 'learningApi.enrolInProgram', 'learningApi.myEnrolledPrograms',
+    // D3726 LR13: a member's own program page reads `GET /programs/:uid`, which already answered a member.
+    'learningApi.program',
     'learningApi.programLearner', 'learningApi.programLearners', 'learningApi.programs',
   ]);
   for (const [client, method] of called) assert.ok(declared[client].includes(`  ${method}: (`), `${client}.${method} is not a method the client declares`);

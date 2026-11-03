@@ -546,6 +546,83 @@ export const SUBMISSION_STATUS = {
 /** A content row's status, as a pill tone. */
 export const CONTENT_STATUS_TONE = { published: 'ok', draft: 'warn', archived: 'neutral', cancelled: 'danger' };
 
+// ---------------------------------------------------------------------------
+// D3726 (#3726) — the Learning on Stream canvas (`Learning Stream Page.dc.html`),
+// what the screens draw before the Stream and list tasks land.
+// ---------------------------------------------------------------------------
+
+/** The build tasks behind the boards this integration cannot fill yet. */
+export const LEARNING_STREAM_TASKS = {
+  stream: 4176, studio: 4177, player: 4178, copy: 4179, lists: 4180, analytics: 4181,
+};
+
+/** LR1 "New this week": the kinds it lists, and how far back a week reaches. */
+export const NEW_THIS_WEEK_KINDS = ['course', 'video', 'reading'];
+const WEEK_MS = 7 * 24 * 3600 * 1000;
+
+/**
+ * LR1 "New this week", newest first, from the catalog rows the All tab already
+ * reads (`catalogRow`): only courses, videos and readings dated within the
+ * last seven days, at most `max`. A row with no date is never "new".
+ */
+export function newThisWeek(rows, now = Date.now(), max = 4) {
+  const since = now - WEEK_MS;
+  return (rows || [])
+    .filter((r) => NEW_THIS_WEEK_KINDS.includes(r?.kind))
+    .map((r) => ({ r, t: Date.parse(r.date ?? '') }))
+    .filter(({ t }) => Number.isFinite(t) && t >= since && t <= now + 60_000)
+    .sort((a, b) => b.t - a.t)
+    .slice(0, max)
+    .map(({ r }) => r);
+}
+
+/** LR1 "Recommended for you": a marked future block, never rows. */
+export const RECOMMENDED_FUTURE = 'Waits on recommendations (#3724). Nothing is drawn here until then.';
+
+/** LR4 chapters: none is stored until #4176 adds them. */
+export const NO_CHAPTERS = 'No chapters';
+export const CHAPTERS_NOT_YET = 'Chapters arrive with the Stream videos (#4176).';
+
+/** LR4b: a transcript with no caption cues is the plain text, and says so. */
+export const PLAIN_TRANSCRIPT_LINE = 'No caption cues, so the plain transcript is shown.';
+
+/**
+ * LR4's "Resume from [12:05]": the stored position, when there is one worth
+ * resuming — at least 5 s in and, when the length is known, more than 5 s
+ * before the end. Null otherwise.
+ */
+export function resumeAt(positionSeconds, durationSeconds = null) {
+  const p = Number(positionSeconds);
+  if (!Number.isFinite(p) || p < 5) return null;
+  const d = Number(durationSeconds);
+  if (Number.isFinite(d) && d > 0 && p >= d - 5) return null;
+  return Math.floor(p);
+}
+
+/**
+ * The player's position writes (LR4 resume): at most one every `every` ms
+ * while playing, and one on pause or end. `write(seconds, percent)` is the
+ * caller's; a write in flight is never doubled.
+ */
+export function positionWriter(write, { every = 15_000, now = () => Date.now() } = {}) {
+  let last = -Infinity;
+  let busy = false;
+  const send = (seconds, duration) => {
+    const s = Math.floor(Number(seconds));
+    if (!Number.isFinite(s) || s < 0 || busy) return false;
+    const d = Number(duration);
+    const percent = Number.isFinite(d) && d > 0 ? Math.min(100, Math.max(0, Math.floor((100 * s) / d))) : null;
+    busy = true;
+    last = now();
+    Promise.resolve().then(() => write(s, percent)).catch(() => {}).finally(() => { busy = false; });
+    return true;
+  };
+  return {
+    tick: (seconds, duration) => (now() - last >= every ? send(seconds, duration) : false),
+    flush: (seconds, duration) => send(seconds, duration),
+  };
+}
+
 // ── #4180 (D4180): the list reads ───────────────────────────────────────────
 
 /** "04:12", or "1:02:03" past the hour; null when the time is not recorded. */

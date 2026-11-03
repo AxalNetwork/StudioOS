@@ -162,6 +162,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/company/…     → company_lifecycle.ts (D1137: archive, restore and the primary-admin transfer in one batch, primary admin only, each with its membership event; mounted at /api before company.ts)
 /api/company/…     → company_legal.ts (D1415: the legal record, sealed tax ID, officers (ceased, never deleted), locations (one open registered address; closed, never deleted) and the company slug with its history; member reads, editor writes; mounted at /api after company_lifecycle.ts, before company.ts)
 /api/company/…     → company_documents.ts (D1592: a company's documents, `GET`/`POST /company/:uid/documents` and `GET /company/:uid/documents/:docUid/file`; the four named slots, other, and the ventures' documents the caller may already read; R2 before the row; member reads, editor uploads; mounted at /api after company_legal.ts, before company.ts)
+/api/company/…     → company_compliance.ts (D1614 CO2–CO5, #3976: a company's compliance tasks, `/company/:uid/compliance`, its assignee picker, each task's timeline, comments, ready for review, mark done and reopen, and "Create work in a project…"; a seat reads, a company admin changes, an agent never closes; mounted at /api/company before company.ts)
 /api/projects      → project_lifecycle.ts (D1137: POST /:id/move to a company the owner belongs to, or out of one; POST /:id/transfer the owner seat to a co-founder with a founder account; each with its membership event; mounted before projects.ts)
 /api/projects      → projects.ts
 /api/cycles/build  → cycle_build.ts      (Build overview, six module reads, D662 field writes, and D686 system mappings)
@@ -569,6 +570,8 @@ IC creation; calendar reads, including the token subscription, remain available
 on every plan. Studio/All studios are separate read-only Admin/Super Admin
 scopes with explicit availability; personal ownership and deal-party gates
 still govern every sync, push and export.
+D4154 C1 (#4196): each scoped item also carries `owner`, `company`, `where`,
+`open_href` and, on `scope=all`, `studio`; `can` stays all false.
 
 D1231: `kyb_admin.ts` mounts at `/api/kyc/businesses` before `kyc.ts`.
 The admin queue and case reads keep sensitive fields masked; each showing and
