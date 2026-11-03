@@ -9,4 +9,4 @@ Worker routes in `routes/agent_engine.ts` (mounted at `/api/teams`), behind E3's
 | `PATCH /api/teams/tasks/:uid` | W1's gates; the assignee for their own block | Also `{ scheduled_start, scheduled_end }`: both or neither, the end after the start, within 7 days (400 `invalid_task`). Its `assignee` keeps E1's agent checks. |
 | `GET /api/calendar/events?kinds=work_item` | signed in | The `work_item` source: the open tasks of the projects the member reads, in their block or all day on their due date. Page only. |
 
-A capacity that is not set is `{ available: false, reason: 'Not recorded' }`, never 0, and never over. Agents' sessions join from #3957 through `WORKLOAD_DEPS.agentSessions`.
+A capacity that is not set is `{ available: false, reason: 'Not recorded' }`, never 0, and never over. Agents' active scheduled sessions (#3957) sit in their weeks as items with `session`, counted as not estimated, for a viewer who reads the agent's team (D1614 §10.1).

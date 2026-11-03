@@ -3,11 +3,12 @@
 // due. A week over a person's recorded capacity is amber; a person with no
 // capacity recorded is never "over". Drag a bar to another row to reassign it
 // (W1's PATCH); "Schedule work" gives a person's item a time block (W4's
-// PATCH). Agents' scheduled sessions join when #3957 merges (`workAdapter.agentSessions`).
+// PATCH). An agent's scheduled sessions (#3957) come in the same read (#3972): each slot is a
+// teal bar in its week, never dragged and never opened as a task, and counts as not estimated.
 import React, { useCallback, useEffect, useState } from 'react';
 import { BTN_PRIMARY, BTN_SECONDARY, MUTED, HonestBlock } from '../team/teamUi.jsx';
 import { workAdapter } from './workAdapter.js';
-import { scheduleBody, weekLabel, workloadRows } from './workModel.js';
+import { isSession, scheduleBody, weekLabel, workloadRows } from './workModel.js';
 
 export const WORKLOAD_LINE = 'Bars sit in the week they are scheduled or due; their label is the estimate. Drag a bar to another row to reassign it.';
 
@@ -57,12 +58,16 @@ export default function WorkloadView({ projectId, onOpenItem, onNotice }) {
               <span key={c.week} role="cell" className="wk-wl-cell" data-over={c.over ? 'true' : undefined} data-testid="work-workload-cell"
                 onDragOver={(e) => { e.preventDefault(); }} onDrop={(e) => { e.preventDefault(); reassign(drag, r); setDrag(null); }}>
                 <span className={MUTED}>{c.load}{c.over ? ' · over capacity' : ''}</span>
-                {c.items.map((it) => (
+                {c.items.map((it) => (isSession(it) ? (
+                  <span key={`${it.uid}:${it.when?.at ?? ''}`} className="wk-wl-bar wk-wl-session" data-testid="work-workload-session">
+                    {it.title} · agent session
+                  </span>
+                ) : (
                   <button key={it.uid} type="button" draggable className="wk-wl-bar" onDragStart={() => setDrag({ ...it, from: r.key })}
                     onClick={() => onOpenItem?.(it.uid)} data-testid="work-workload-bar">
                     {it.title}{it.estimate_points == null ? '' : ` · ${it.estimate_points} pts`}
                   </button>
-                ))}
+                )))}
               </span>
             ))}
           </div>
