@@ -103,6 +103,29 @@ function ladder(job: UseJob): Array<{ model: string; source: TextSource }> {
   return rows.filter((r): r is { model: string; source: TextSource } => !!r.model && !seen.has(r.model) && !!seen.add(r.model));
 }
 
+/**
+ * #4351 (D4351): the plan-lock and input-fit checks `textChoice` applies to its
+ * own picks, for a model the caller names (an All models choice, a persona
+ * module) on a page whose job is `jobId`. Whether the model is on the page's
+ * list is the caller's check; this one never chooses another model. Null when
+ * the model may run; otherwise the refusal, in words that say why and what to do.
+ */
+export function namedModelCheck(jobId: string, model: string, ctx: TextContext):
+  | null
+  | { code: 'plan_locked'; message: string }
+  | { code: 'input_too_long'; message: string } {
+  const why = textBlock(model, ctx);
+  if (why === 'plan_locked') {
+    return { code: 'plan_locked', message: (lockedRefusal(model) as { message: string }).message };
+  }
+  if (why === 'too_long') {
+    const job = textJob(jobId);
+    const name = modelById(model)?.name ?? model;
+    return { code: 'input_too_long', message: job ? `${tooLongMessage(job, model)} Or pick another model.` : `This material is too long for ${name}. Pick another model, or shorten it. Nothing was run.` };
+  }
+  return null;
+}
+
 /** The model a text job runs, and the chain after it. See the file header for the order. */
 export function textChoice(jobId: string, ctx: TextContext): TextChoice {
   const job = textJob(jobId);
