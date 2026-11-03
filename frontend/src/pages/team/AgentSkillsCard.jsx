@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import * as agents from './agentsAdapter.js';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, EYEBROW, HonestBlock, MUTED } from './teamUi.jsx';
-import { AgentRadar, CostLine, SkillRow } from './SkillParts.jsx';
+import { AgentRadar, RunCostLine, SkillRow } from './SkillParts.jsx';
 import { AddSkillsSheet } from './SkillSheets.jsx';
 import { radarVector, scopeChip, updateLabel } from './skillsModel.js';
 
@@ -55,14 +55,13 @@ export function AgentSkillsView({ value, agent, canManage, onAdd, onUpdate, onRe
   const chip = scopeChip(agent?.scope);
   return (
     <div className="flex flex-col gap-3" data-testid="agent-skills">
-      {chip || agent?.role_name ? (
+      {chip ? (
         <span className="flex flex-wrap gap-1.5">
           {chip ? <span className="rounded-axal-pill border border-axal-hairline px-2 py-0.5 text-[11.5px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-200" data-testid="agent-scope-chip">{chip}</span> : null}
-          {agent?.role_name ? <span className="rounded-axal-pill border border-axal-hairline px-2 py-0.5 text-[11.5px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-200">{agent.role_name}</span> : null}
         </span>
       ) : null}
       <AgentRadar vector={vector} radar={value?.radar} />
-      {cost !== undefined ? <CostLine est={cost} lead="count" /> : null}
+      {cost !== undefined ? <RunCostLine est={cost} lead="count" /> : null}
       <div className="flex items-center">
         <span className={`flex-1 ${EYEBROW}`}>Skills{skills.length ? ` · ${skills.length}` : ''}</span>
         {canManage ? <button type="button" className={`${BTN_PRIMARY} h-8 px-3 text-[12.5px]`} onClick={onAdd} data-testid="agent-skills-add">Add skills</button> : null}

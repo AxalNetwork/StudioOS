@@ -5,7 +5,7 @@
  *     nothing else; Save version renders only while there is something to
  *     save; a reader keeps Present and has no Share; the tablet keeps the same
  *     row and a phone moves Share's two items into ⋯;
- *   · ⋯ lists its three sections; an item whose route is not on main reads
+ *   · ⋯ lists its sections (Before you send is D1370's); an item whose route is not on main reads
  *     the adapter (greyed, "Coming later", titled with its reason, still
  *     focusable); items off for AI count into the name ", N off: <why>";
  *   · Share ▾ opens the existing ShareDialog and ExportDialog; ⋯ opens the
@@ -39,6 +39,9 @@ const read = (rel) => readFileSync(new URL(`../src/pages/raise/pitch/${rel}`, im
  * The words
  * ------------------------------------------------------------------ */
 
+/** A ⋯ section by its id. */
+const section = (state, id) => state.sections.find((x) => x.id === id);
+
 test('the save state: ✓ Saved with its time, ● Unsaved changes with Save version, and a reader\'s line', () => {
   assert.deepEqual(saveChip({ dirty: false, when: 'Saved · 2 min ago' }), { text: SAVED, title: 'All changes saved · 2 min ago', save: false });
   assert.equal(saveChip({ dirty: false, when: 'Saved · v3' }).title, 'All changes saved', 'no time recorded: no time drawn');
@@ -47,20 +50,26 @@ test('the save state: ✓ Saved with its time, ● Unsaved changes with Save ver
   assert.deepEqual([saveChip({ readOnly: true, dirty: true, version: 3 }).text, saveChip({ readOnly: true, version: 3 }).save], ['Read only · v3', false]);
 });
 
-test('⋯: three sections; adapter items are Coming later with the adapter\'s reason; AI-off items count into the name', () => {
-  assert.deepEqual(MORE_MENU.map((s) => s.label), ['This deck', 'This card', 'Whole deck · uses AI']);
+test('⋯: its sections; adapter items are live once wired; AI-off items count into the name', () => {
+  assert.deepEqual(MORE_MENU.map((s) => s.label), ['This deck', 'This card', 'Before you send', 'Whole deck · uses AI']);
   const all = MORE_MENU.flatMap((s) => s.items);
   // D1499 (#3749): Slide size is wired on main, a theme write held until a version is saved.
   for (const id of ['theme', 'size', 'brand', 'sources', 'versions', 'save_named', 'structure', 'duplicate', 'appendix', 'background', 'check']) {
     assert.ok(all.find((i) => i.id === id && !i.adapter), `${id} is wired on main`);
   }
-  for (const [id, adapter] of [['stage', 'deckActions'], ['reorder', 'deckActions'], ['remix', 'remix'], ['hide', 'media'], ['section', 'media'], ['replace_images', 'deckActions'], ['critique', 'critique']]) {
+  for (const [id, adapter] of [['stage', 'deckActions'], ['reorder', 'deckActions'], ['remix', 'remix'], ['hide', 'media'], ['section', 'media'], ['replace_images', 'replaceImages'], ['critique', 'critique']]) {
     assert.equal(all.find((i) => i.id === id).adapter, adapter, id);
   }
   assert.equal(MORE_MENU[0].items.findIndex((i) => i.id === 'reorder') >= 0, true, 'Reorder for stage sits under This deck');
   const on = moreState(MORE_MENU, { availability });
-  const stage = on.sections[0].items.find((i) => i.id === 'stage');
-  assert.deepEqual([stage.disabled, stage.later, stage.why], [true, true, 'Not switched on yet.']);
+  // D1561 (#3808): Stage, Reorder for stage and Replace all images are live; D1552 (#3799) wired Fix with critique.
+  // D1370 (#3661) put Before you send between This card and the AI items, so sections are found by id, not by place.
+  for (const [s, id] of [['deck', 'stage'], ['deck', 'reorder'], ['ai', 'replace_images'], ['ai', 'critique']]) {
+    const it = section(on, s).items.find((i) => i.id === id);
+    assert.deepEqual([it.disabled, it.later ?? false], [false, false], `${id} is on`);
+  }
+  const readerReorder = moreState(MORE_MENU, { readOnly: true, availability }).sections[0].items.find((i) => i.id === 'reorder');
+  assert.deepEqual([readerReorder.disabled, readerReorder.why], [true, 'Read only'], 'a reader cannot reorder the deck');
   assert.equal(on.off, 0, 'nothing wired runs a model today, so nothing is off');
   assert.equal(moreName(on.off, on.why), MORE_NAME);
   const read = moreState(MORE_MENU, { readOnly: true, availability });
@@ -80,17 +89,19 @@ test('the seam: an item is Coming later only while its adapter surface answers u
   const st = moreState(MORE_MENU, { availability: on });
   const stage = st.sections[0].items.find((i) => i.id === 'stage');
   assert.deepEqual([stage.disabled, Boolean(stage.later), stage.why], [false, false, null], 'merged: wired like any other item');
-  const crit = st.sections[2].items.find((i) => i.id === 'critique');
+  const crit = st.sections.find((s) => s.id === 'ai').items.find((i) => i.id === 'critique');
   assert.deepEqual([crit.disabled, Boolean(crit.later)], [false, false]);
   const paused = moreState(MORE_MENU, { availability: on, aiOn: false });
-  assert.equal(paused.sections[2].items.find((i) => i.id === 'critique').why, 'AI is paused for your studio.', 'once wired, AI paused greys it like any AI item');
+  assert.equal(paused.sections.find((s) => s.id === 'ai').items.find((i) => i.id === 'critique').why, 'AI is paused for your studio.', 'once wired, AI paused greys it like any AI item');
   assert.equal(paused.off, 2, 'and it counts into the name');
   assert.equal(moreState(MORE_MENU, { availability: () => ({ available: false, reason: 'Synthetic reason.' }) }).sections[0].items[0].why, 'Synthetic reason.');
-  // The card ⋯ reads the same seam.
-  const later = cardMenuItems(1, 3, {}, availability).find((i) => i.id === 'hide');
-  assert.deepEqual([later.later, later.why], [true, 'Not switched on yet.']);
-  const merged = cardMenuItems(1, 3, {}, on).find((i) => i.id === 'hide');
-  assert.deepEqual([merged.later, merged.why], [false, null]);
+  // The card ⋯ read the same seam until #3788 (D1545) swapped `media`: Hide and Move to section are wired either way.
+  for (const avail of [availability, on]) {
+    const hide = cardMenuItems(1, 3, {}, avail).find((i) => i.id === 'hide');
+    assert.deepEqual([hide.later, hide.why, hide.label], [false, null, 'Hide']);
+  }
+  assert.equal(cardMenuItems(1, 3, { hidden: true }, on).find((i) => i.id === 'hide').label, 'Show', 'a hidden card offers Show');
+  assert.equal(cardMenuItems(1, 3, {}, availability).some((i) => i.later), false, 'no card item waits on the seam now');
   assert.equal(cardMenuItems(0, 3, {}, on).find((i) => i.id === 'up').why, 'It is the first card.');
 });
 
@@ -98,7 +109,7 @@ test('while the editor is not on screen, the ⋯ items it carries out wait; Shar
   const st = moreState([{ id: 'share', label: 'Share', items: [{ id: 'share', label: 'Share link…' }, { id: 'export', label: 'Export…' }] }, ...MORE_MENU], { availability, waiting: EDITOR_WAITING });
   assert.deepEqual(st.sections[0].items.map((i) => i.disabled), [false, false]);
   assert.equal(st.sections[1].items.find((i) => i.id === 'versions').why, EDITOR_WAITING);
-  assert.equal(st.sections[1].items.find((i) => i.id === 'stage').why, 'Not switched on yet.', 'an adapter item keeps its own reason');
+  assert.equal(section(st, 'ai').items.find((i) => i.id === 'critique').why, EDITOR_WAITING, 'a wired AI item waits for the editor too');
 });
 
 /* ------------------------------------------------------------------ *
@@ -130,21 +141,18 @@ test('the header holds the save state, ⋯, Present, Share and Ask, and nothing 
   } finally { await m.close(); }
 });
 
-test('⋯ draws its three sections; an adapter item is greyed, reachable, titled, and does nothing', async () => {
+test('⋯ draws its sections, and a wired adapter item is live (an unwired one is greyed: the availability test above)', async () => {
   const m = await mountEditor();
   try {
     await m.press(m.by('deck-more-open'));
     const menu = m.by('deck-more-menu');
     assert.equal(m.pr(menu).role, 'menu');
-    assert.deepEqual(['deck', 'card', 'ai'].map((s) => m.pr(m.by(`deck-more-section-${s}`))['aria-label']), ['This deck', 'This card', 'Whole deck · uses AI']);
-    const stage = m.by('deck-more-stage');
-    assert.equal(m.pr(stage)['aria-disabled'], true);
-    assert.equal(m.pr(stage).disabled, undefined, 'still focusable, so the reason is read out');
-    assert.equal(m.pr(stage).title, 'Not switched on yet.');
-    assert.match(m.text(stage), /Coming later/);
+    assert.deepEqual(['deck', 'card', 'before', 'ai'].map((s) => m.pr(m.by(`deck-more-section-${s}`))['aria-label']), ['This deck', 'This card', 'Before you send', 'Whole deck · uses AI']);
+    // D1552 (#3799) wired Fix with critique: it is no longer greyed, nor Coming later.
+    const critique = m.by('deck-more-critique');
+    assert.notEqual(m.pr(critique)['aria-disabled'], true);
+    assert.doesNotMatch(m.text(critique), /Coming later/);
     assert.doesNotMatch(m.text(menu), /#\d{4}/, 'no issue number in the UI');
-    await m.press(stage);
-    assert.ok(m.by('deck-more-menu'), 'an adapter item does nothing');
     assert.match(m.text(m.by('deck-more-check')), /Check claims · Free checks/);
   } finally { await m.close(); }
 });

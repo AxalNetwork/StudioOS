@@ -244,3 +244,18 @@ test('6: HQ\'s library and the team library carry each skill\'s tokens per run',
   const lib = await call(w, MEMBER, 'GET', '/api/teams/skills');
   assert.equal(lib.body.hq.find((s: any) => s.uid === uid).context_tokens, tokens);
 });
+
+test('7: SK3 — each agent on the assignable read carries what a run with the skill adds, on its own model, never a 0 for an unknown price', async () => {
+  // Mutation checked: run_cost_change_microusd sent as the whole run's price → it no longer equals with-skill minus no-skill and this fails.
+  const w = world();
+  const s = skill(w, 701, 6000);
+  const r = await call(w, EDITOR, 'GET', `/api/teams/skills/${s.uid}/assignable`);
+  assert.equal(r.status, 200, r.text);
+  const cfo = r.body.agents.find((a: any) => a.uid === CFO);
+  const est = (await call(w, EDITOR, 'GET', `/api/teams/agents/${CFO}/cost-estimate?add=${s.uid}`)).body;
+  const withIt = est.runs.find((x: any) => x.skill_uid === s.uid).est_usd_per_run;
+  assert.equal(cfo.run_cost_change_microusd, Math.round((withIt - est.baseline.est_usd_per_run) * 1_000_000));
+  assert.ok(cfo.run_cost_change_microusd > 0);
+  const unpriced = r.body.agents.find((a: any) => a.uid === UNPRICED);
+  if (unpriced) assert.equal(unpriced.run_cost_change_microusd, null, 'an unpriced model is not a 0');
+});

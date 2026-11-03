@@ -71,7 +71,7 @@ import { grantsOf } from '../services/agents/agentTools';
 import { agentByUid, canManage, canRead, effectiveBook, loadScope, scopeCols, scopeOfAgent, type AgentRow, type Scope } from '../services/agents/teams';
 import { moduleOf } from '../services/agents/catalogue';
 import { systemPrompt } from '../services/agents/agentRun';
-import { RUN_COST_CONFIG, deltaOf, estimate, pinTokens, specialistHint, type Estimate, type Pin } from '../services/agents/runCost';
+import { RUN_COST_CONFIG, deltaOf, estimate, pinTokens, skillRunChangeMicro, specialistHint, type Estimate, type Pin } from '../services/agents/runCost';
 import { modelRefusal } from '../services/aiRouter';
 import {
   ATTACH_STATUS, agentCompanyId, agentValues, attachCheck, axesOf, checkSkillList, linkStatement, peopleAxes, teamUserIds, toolLabel, versionTags,
@@ -667,9 +667,19 @@ router.get('/skills/:uid/assignable', async (c) => {
     if (s.scope === 'company' && s.company_id !== await agentCompanyId(c.env, a)) continue;
     const blocked = pinned ? null : await attachCheck(c.env, a, s, s.current_version);
     const count = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM agent_skill_links WHERE agent_id = ?').bind(a.id).first<{ n: number }>();
+    // D4121: what a run with this skill would cost this agent over a run with none (#4224 draws it), never a 0 for an unknown price.
+    let change: number | null = null;
+    if (current) {
+      const { rules } = await effectiveBook(c.env, scope, a.role_key);
+      change = await skillRunChangeMicro(c.env, {
+        model: a.model_id, sponsorId: a.sponsor_user_id ?? user.id,
+        systemPrompt: systemPrompt(a, rules, scope, moduleOf(rules.works_in[0] ?? '')?.label ?? 'its modules'),
+      }, { skill_id: s.id, version: s.current_version });
+    }
     agents.push({
       uid: a.uid, name: agentName(a), role_key: a.role_key, skill_count: Number(count?.n ?? 0), assigned: !!pinned,
       blocked: blocked ? { code: blocked.code, tool: blocked.tool ?? null } : null, scope: await scopeLine(c.env, a),
+      run_cost_change_microusd: change,
     });
   }
   return c.json({ agents });

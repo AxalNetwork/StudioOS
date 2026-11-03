@@ -57,8 +57,12 @@
 // D4121 (#4121), behind the same flag: what skills cost per run.
 //   GET  /api/teams/agents/:uid/cost-estimate?add=&remove=   → { available, skills, tokens_per_run, est_usd_per_run,
 //                                                    monthly_at_cap, cap_usd, before, baseline, delta, hint, thresholds }
-//                                                    or { available: false, reason }; skill cards carry `context_tokens`
+//                                                    or { available: false, reason }; skill cards carry `context_tokens`, and
+//                                                    `…/assignable` rows carry `run_cost_change_microusd` (null when unknown)
 //   GET  /api/teams/:scope/:id/cost-estimate?model=&role=&persona=&skills=&cap_microusd=   the same, for an agent not yet added
+// D1612 A1 (#3951), read by Team › Skills since #4224:
+//   GET  /api/teams/skills?company=<uid>          → { roles, hq: [SkillCard], company: { uid, name, skills, can_write } | null, can_write_hq }
+//   GET  /api/teams/skills/:uid                   → { skill: SkillCard + { skill_md }, versions, agents }
 // `:scope` is 'company' (its uid) or 'project' (its id). A person is { uid, name },
 // never an email. `month_spend` is { available: false } when it cannot be read:
 // the page says "Not recorded", never 0.
@@ -96,6 +100,11 @@ export const teamAgentsApi = {
   // `GET /api/teams/skills` (no company), for HQ › AI agents › Skills library.
   // The company-scoped library stays behind `agentsAdapter.skillLibrary`.
   axalSkills: () => request('/teams/skills'),
+  // #4224 (D4116, SK-v2): the Team's library — Axal's skills and, with a
+  // company, that company's — and one skill's page. Team › Skills reads them
+  // through `agentsAdapter.skillLibrary` and `agentsAdapter.skill`.
+  skillLibrary: (companyUid) => request(companyUid ? `/teams/skills?company=${enc(companyUid)}` : '/teams/skills'),
+  skill: (uid) => request(`/teams/skills/${enc(uid)}`),
   // D1612 A2 (#3956): an agent's skills, assigning a skill, team coverage.
   agentSkills: (uid) => request(`/teams/agents/${enc(uid)}/skills`),
   setAgentSkills: (uid, skills) => request(`/teams/agents/${enc(uid)}/skills`, { method: 'PUT', body: JSON.stringify({ skills }) }),

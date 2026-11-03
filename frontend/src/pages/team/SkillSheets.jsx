@@ -1,14 +1,27 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, Check, TriangleAlert, X } from 'lucide-react';
-import { Sheet } from '../../ui';
+import { Sheet, Unrecorded } from '../../ui';
 import { api } from '../../lib/api';
 import { AgentTile } from './AgentMark.jsx';
 import * as agents from './agentsAdapter.js';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, EYEBROW, FIELD, HonestBlock, MONO, MUTED } from './teamUi.jsx';
-import { AgentRadar, CostLine, SkillRow, TaxChips } from './SkillParts.jsx';
+import { AgentRadar, CostExplainer, RunCostLine, SkillRow, TaxChips } from './SkillParts.jsx';
 import {
-  LEVELS, OUTPUT_KINDS, assignGroups, blockedWords, changeLine, directory, parseSkillMd, previewRadar, problemWords, radarVector, scopeLine, warningLine,
+  LEVELS, OUTPUT_KINDS, assignGroups, assignRows, blockedWords, costChangeWords, directory, parseSkillMd, previewRadar, problemWords, radarVector, scopeLine,
 } from './skillsModel.js';
+
+/**
+ * D1612 (#3952), v2 boards by #4224 (D4116) — the skill sheets: SK3 Assign
+ * to agents (every agent the read answers, natural fit first, each with its
+ * run-cost change and SK5's cost explainer), Add skills to this agent, the
+ * Add-an-agent Skills step, and SK4 New skill (Write, or Paste a SKILL.md).
+ *
+ * Every read and write goes through `agentsAdapter` (A1 #3951, A2 #3956), and
+ * every refusal comes back in words. An agent or a skill that can't be picked
+ * says why ("Needs the HubSpot read tool, which its sponsor hasn’t
+ * approved."). Nothing a skill does is saved without a named person: these
+ * sheets only choose which recipes an agent may follow.
+ */
 
 /**
  * D4121 (#4121): an estimate that follows a changing pick, read again only
@@ -25,21 +38,6 @@ function useCost(key, read) {
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
   return cost;
 }
-
-/** SK3: the cost change of each agent the skill could be added to, at most this many read. */
-const ASSIGN_COST_MAX = 20;
-
-/**
- * D1612 (#3952) — the skill sheets: SK3 Assign to agents, SK5 Add skills to
- * this agent, SK6 the Add-an-agent Skills step, and SK7 New skill (Write, or
- * Paste a SKILL.md).
- *
- * Every read and write goes through `agentsAdapter` (A1 #3951, A2 #3956), and
- * every refusal comes back in words. An agent or a skill that can't be picked
- * says why ("Needs the HubSpot read tool, which its sponsor hasn’t
- * approved."). Nothing a skill does is saved without a named person: these
- * sheets only choose which recipes an agent may follow.
- */
 
 function Box({ on, disabled }) {
   return (
@@ -70,23 +68,50 @@ export function assignedWords(out) {
   return refused ? `${head}. ${refused} could not be added.` : head;
 }
 
-export function AssignSkillSheet({ skill, onClose, onDone }) {
+/**
+ * SK3: the agents as rows, grouped by company. `rows` is `assignRows`'s:
+ * natural fit first, nobody left out. An agent outside its natural fit can be
+ * ticked like any other; only an agent that already has the skill, or that a
+ * real gate refuses (a tool its sponsor has not approved, a retired skill),
+ * cannot.
+ */
+export function AssignList({ rows, picked, onTick }) {
+  return assignGroups(rows).map((g) => (
+    <div key={g.company} className="flex flex-col">
+      <span className={EYEBROW}>{g.company}</span>
+      {g.agents.map((a) => {
+        const why = a.assigned ? 'Already has this skill.' : blockedWords(a.blocked);
+        const off = !!(a.assigned || a.blocked);
+        const on = a.assigned || picked.has(a.uid);
+        const change = costChangeWords(a);
+        return (
+          <label key={a.uid} className={`flex items-start gap-2.5 border-t border-axal-hairline py-2.5 dark:border-gray-800 ${a.scope?.kind === 'project' ? 'pl-6' : ''} ${off ? 'opacity-75' : 'cursor-pointer'}`} data-testid={`assign-agent-${a.uid}`} data-fit={a.fit ? '1' : '0'}>
+            <input type="checkbox" className="sr-only" checked={on} disabled={off} onChange={() => onTick(a.uid)} data-testid={`assign-tick-${a.uid}`} />
+            <Box on={on} disabled={off} />
+            <AgentTile size={26} />
+            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="flex flex-wrap items-center gap-1.5">
+                <b className="text-[13.5px] text-axal-ink dark:text-gray-100">{a.name}</b>
+                {a.fit ? <span className="inline-flex min-h-[20px] items-center rounded-axal-pill border border-axal-lavender-edge bg-axal-lavender px-2 text-[11px] font-semibold text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300" data-testid="assign-fit">Natural fit</span> : null}
+              </span>
+              <span className={MUTED}>{scopeLine(a.scope)}{Number.isFinite(a.skill_count) ? ` · ${a.skill_count} skills` : ''}</span>
+              <span className={MUTED} data-testid="assign-cost">Run cost change · {change ? <b className="text-axal-ink dark:text-gray-100">{change}</b> : <Unrecorded />}</span>
+              {why ? <span className="text-[12px] text-amber-800 dark:text-amber-200" data-testid="assign-why">{why}</span> : null}
+            </span>
+          </label>
+        );
+      })}
+    </div>
+  ));
+}
+
+export function AssignSkillSheet({ skill, personaOf, onClose, onDone }) {
   const [block, setBlock] = useState(null);
   const [picked, setPicked] = useState(() => new Set());
   const [refusal, setRefusal] = useState('');
   useEffect(() => { let alive = true; agents.assignable(skill.uid).then((b) => { if (alive) setBlock(b); }); return () => { alive = false; }; }, [skill.uid]);
-  const list = block?.available && Array.isArray(block.value?.agents) ? block.value.agents : [];
-  const free = list.filter((a) => !a.blocked && !a.assigned);
-  // D4121: what a run with this skill costs each agent, against a run with none.
-  const [costs, setCosts] = useState({});
-  const freeKey = free.slice(0, ASSIGN_COST_MAX).map((a) => a.uid).join(',');
-  useEffect(() => {
-    let alive = true;
-    for (const a of free.slice(0, ASSIGN_COST_MAX)) {
-      agents.costEstimate(a.uid, { add: [skill.uid] }).then((b) => { if (alive) setCosts((c) => ({ ...c, [a.uid]: b?.available ? b.value : { available: false } })); });
-    }
-    return () => { alive = false; };
-  }, [freeKey, skill.uid]); // eslint-disable-line react-hooks/exhaustive-deps
+  const rows = block?.available ? assignRows(block.value?.agents, skill, personaOf) : [];
+  const free = rows.filter((a) => !a.blocked && !a.assigned);
   const tick = (uid) => setPicked((s) => { const n = new Set(s); if (n.has(uid)) n.delete(uid); else n.add(uid); return n; });
   const save = async () => {
     setRefusal('');
@@ -95,7 +120,7 @@ export function AssignSkillSheet({ skill, onClose, onDone }) {
     onDone?.(assignedWords(out.value));
   };
   return (
-    <Sheet title="Assign to agents" sub={`${skill.name}${Number.isFinite(skill.version) ? ` · v${skill.version}` : ''} · agents of its role you can edit`} width={560} onClose={onClose} testId="assign-skill-sheet"
+    <Sheet title="Assign to agents" sub={`${skill.name}${Number.isFinite(skill.version) ? ` · v${skill.version}` : ''} · every agent on the Teams you edit`} width={560} onClose={onClose} testId="assign-skill-sheet"
       footer={(
         <div className="flex justify-end gap-2">
           <button type="button" className={BTN_SECONDARY} onClick={onClose}>Cancel</button>
@@ -103,38 +128,17 @@ export function AssignSkillSheet({ skill, onClose, onDone }) {
         </div>
       )}>
       <div className="flex flex-col gap-3 px-5 py-5">
-        {!block?.available ? <ReadState block={block} what="The agents" /> : !list.length ? <HonestBlock>No agent of this skill’s role that you can edit.</HonestBlock> : (
+        {!block?.available ? <ReadState block={block} what="The agents" /> : !rows.length ? <HonestBlock>No agent on a Team you edit yet.</HonestBlock> : (
           <>
-            <div className="flex items-center gap-2 rounded-axal-md border border-axal-lavender-edge bg-axal-lavender px-3 py-2 text-[12.5px] font-semibold text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300">
+            <div className="flex flex-wrap items-center gap-2 rounded-axal-md border border-axal-lavender-edge bg-axal-lavender px-3 py-2 text-[12.5px] font-semibold text-axal-violet-deep dark:border-violet-800 dark:bg-violet-900/30 dark:text-violet-300">
               {picked.size} of {free.length} agents selected
               {free.length ? <button type="button" className={`ml-auto ${BTN_TEXT}`} onClick={() => setPicked(new Set(free.map((a) => a.uid)))} data-testid="assign-skill-all">Select all you can edit</button> : null}
             </div>
-            {assignGroups(list).map((g) => (
-              <div key={g.company} className="flex flex-col">
-                <span className={EYEBROW}>{g.company}</span>
-                {g.agents.map((a) => {
-                  const why = a.assigned ? 'Already has this skill.' : blockedWords(a.blocked);
-                  const off = !!(a.assigned || a.blocked);
-                  const on = a.assigned || picked.has(a.uid);
-                  return (
-                    <label key={a.uid} className={`flex items-start gap-2.5 border-t border-axal-hairline py-2.5 dark:border-gray-800 ${a.scope?.kind === 'project' ? 'pl-6' : ''} ${off ? 'opacity-75' : 'cursor-pointer'}`} data-testid={`assign-agent-${a.uid}`}>
-                      <input type="checkbox" className="sr-only" checked={on} disabled={off} onChange={() => tick(a.uid)} />
-                      <Box on={on} disabled={off} />
-                      <AgentTile size={26} />
-                      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                        <b className="text-[13.5px] text-axal-ink dark:text-gray-100">{a.name}</b>
-                        <span className={MUTED}>{scopeLine(a.scope)}{Number.isFinite(a.skill_count) ? ` · ${a.skill_count} skills` : ''}</span>
-                        {why ? <span className="text-[12px] text-amber-800 dark:text-amber-200" data-testid="assign-why">{why}</span> : null}
-                        {!off && costs[a.uid] ? <span className={`${MONO} text-[12px] text-axal-ink dark:text-gray-200`} data-testid="assign-cost">{changeLine(a.name, costs[a.uid], skill.uid)}</span> : null}
-                        {!off && warningLine(a.name, costs[a.uid]) ? <span className="text-[12px] text-amber-800 dark:text-amber-200" data-testid="assign-cost-warning">{warningLine(a.name, costs[a.uid])}</span> : null}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            ))}
+            <span className={MUTED}>Agents whose persona fits this skill’s area come first. Any agent can take it.</span>
+            <AssignList rows={rows} picked={picked} onTick={tick} />
           </>
         )}
+        <CostExplainer />
         <Refusal text={refusal} />
       </div>
     </Sheet>
@@ -165,7 +169,7 @@ export function AddSkillsSheet({ agent, current, radar, onClose, onSaved }) {
   const pickKey = chosen.map((s) => s.uid).join(',');
   const cost = useCost(`${agent.uid}|${pickKey}`, () => agents.costEstimate(agent.uid, { add: chosen.map((s) => s.uid) }));
   return (
-    <Sheet title="Add skills to this agent" sub={`${agent.role_name || 'Its role'}’s skills, most used first`} width={560} onClose={onClose} testId="add-skills-sheet"
+    <Sheet title="Add skills to this agent" sub="The skills written for this agent, most used first" width={560} onClose={onClose} testId="add-skills-sheet"
       footer={(
         <div className="flex justify-end gap-2">
           <button type="button" className={BTN_SECONDARY} onClick={onClose}>Cancel</button>
@@ -174,7 +178,7 @@ export function AddSkillsSheet({ agent, current, radar, onClose, onSaved }) {
       )}>
       <div className="flex flex-col gap-3 px-5 py-5">
         <AgentRadar vector={chosen.length ? preview : radarVector(radar)} radar={radar} height={180} label={chosen.length ? 'With your picks.' : 'Now.'} />
-        <CostLine est={cost} />
+        <RunCostLine est={cost} />
         {!block?.available ? <ReadState block={block} what="Its role’s skills" /> : !list.length ? <HonestBlock>No other skill of this role yet.</HonestBlock>
           : list.map((s) => {
             const why = blockedWords(s.blocked);
@@ -195,23 +199,22 @@ export function AddSkillsSheet({ agent, current, radar, onClose, onSaved }) {
 
 // ---------------------------------------------------------------- SK6
 
-/** SK6: the Add-an-agent Skills step. Its role's published skills, the three most used picked for you. */
-export function SkillsStep({ scope, role, model, picked, setPicked, onList }) {
+/** The Add-an-agent Skills step: the published skills written for its role (the Worker still holds an agent to them), the three most used picked for you. */
+export function SkillsStep({ scope, role, model, persona, picked, setPicked, onList }) {
   const [block, setBlock] = useState(null);
   // D4121 AG3: what the agent would cost per run with these skills, before it is added (its cap comes at Review).
   const kind = scope.kind === 'company' ? 'company' : 'project';
   const scopeId = kind === 'company' ? scope.company?.uid : scope.project?.id;
   const pickList = [...(picked || [])];
-  const cost = useCost(`${kind}|${scopeId}|${model}|${role}|${pickList.join(',')}`,
-    () => (model ? agents.draftCostEstimate(kind, scopeId, { model, role, skills: pickList }) : { available: false }));
+  const cost = useCost(`${kind}|${scopeId}|${model}|${role}|${persona}|${pickList.join(',')}`,
+    () => (model ? agents.draftCostEstimate(kind, scopeId, { model, role, persona, skills: pickList }) : { available: false }));
   useEffect(() => {
     let alive = true;
-    const kind = scope.kind === 'company' ? 'company' : 'project';
-    agents.skillLibrary(kind, kind === 'company' ? scope.company.uid : scope.project.id, { role }).then((b) => {
+    agents.skillLibrary(scope.company?.uid || null).then((b) => {
       if (!alive) return;
       setBlock(b);
       if (!b.available) return;
-      const list = directory(b.value?.skills, { role, sort: 'popular' }).filter((s) => s.status === 'published');
+      const list = directory(b.value?.skills, { fit: role, sort: 'popular' }).filter((s) => s.status === 'published');
       onList?.(list);
       if (picked == null) setPicked(new Set(list.slice(0, 3).map((s) => s.uid)));
     });
@@ -224,7 +227,7 @@ export function SkillsStep({ scope, role, model, picked, setPicked, onList }) {
       </div>
     );
   }
-  const list = directory(block.value?.skills, { role, sort: 'popular' }).filter((s) => s.status === 'published');
+  const list = directory(block.value?.skills, { fit: role, sort: 'popular' }).filter((s) => s.status === 'published');
   const set = picked || new Set();
   const tick = (uid) => { const n = new Set(set); if (n.has(uid)) n.delete(uid); else n.add(uid); setPicked(n); };
   return (
@@ -237,12 +240,12 @@ export function SkillsStep({ scope, role, model, picked, setPicked, onList }) {
             <SkillRow s={s} version={s.version} check={<Box on={set.has(s.uid)} />} />
           </label>
         ))}
-      <CostLine est={cost} />
+      <RunCostLine est={cost} />
     </div>
   );
 }
 
-// ---------------------------------------------------------------- SK7
+// ---------------------------------------------------------------- SK4 (D1612's SK7)
 
 function useTaxonomy() {
   const [tax, setTax] = useState(null);
@@ -254,7 +257,7 @@ function useTaxonomy() {
   return tax;
 }
 
-/** SK7 Write: the taxonomy picker over the /studio skills, a level for each. */
+/** SK4 Write: the taxonomy picker over the /studio skills, a level for each. */
 export function TaxonomyPicker({ tax, tags, setTags }) {
   const [skillSlug, setSkillSlug] = useState('');
   const [level, setLevel] = useState(3);
@@ -293,7 +296,7 @@ export function TaxonomyPicker({ tax, tags, setTags }) {
   );
 }
 
-/** SK7 Write: the ordered steps, moved with buttons (keyboard first). */
+/** SK4 Write: the ordered steps, moved with buttons (keyboard first). */
 export function StepsEditor({ steps, setSteps }) {
   const move = (i, d) => { const n = [...steps]; const j = i + d; if (j < 0 || j >= n.length) return; [n[i], n[j]] = [n[j], n[i]]; setSteps(n); };
   return (
@@ -314,7 +317,7 @@ export function StepsEditor({ steps, setSteps }) {
   );
 }
 
-/** SK7 Paste: the parsed frontmatter row by row, and what will be refused. */
+/** SK4 Paste: the parsed frontmatter row by row, and what will be refused. */
 export function PastePreview({ parsed }) {
   return (
     <div className="flex flex-col gap-2" data-testid="skill-paste-preview">
@@ -338,9 +341,8 @@ export function PastePreview({ parsed }) {
   );
 }
 
-export function NewSkillSheet({ scope, roles, role: initialRole, onClose, onSaved }) {
+export function NewSkillSheet({ scope, onClose, onSaved }) {
   const [mode, setMode] = useState('write');
-  const [role, setRole] = useState(initialRole || '');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [steps, setSteps] = useState(['']);
@@ -357,9 +359,9 @@ export function NewSkillSheet({ scope, roles, role: initialRole, onClose, onSave
   const kind = scope.kind === 'company' ? 'company' : 'project';
   const id = kind === 'company' ? scope.company.uid : scope.project.id;
   const cleanSteps = steps.map((s) => s.trim()).filter(Boolean);
-  const writeReady = !!role && !!name.trim() && cleanSteps.length > 0;
+  const writeReady = !!name.trim() && cleanSteps.length > 0 && tags.length > 0;
   const body = () => ({
-    role_keys: [role], name: name.trim(), description: description.trim() || null, steps: cleanSteps,
+    name: name.trim(), description: description.trim() || null, steps: cleanSteps,
     taxonomy: tags.map((t) => ({ skill_slug: t.skill_slug, level: t.level })), tools: [], output_kind: outputKind, output_label: outputLabel.trim() || null,
   });
   const save = async (publish) => {
@@ -406,12 +408,6 @@ export function NewSkillSheet({ scope, roles, role: initialRole, onClose, onSave
         </div>
         {mode === 'write' ? (
           <>
-            <label className="flex flex-col gap-1"><span className="text-[12.5px] font-bold text-axal-ink dark:text-gray-100">Role · required</span>
-              <select className={FIELD} value={role} onChange={(e) => setRole(e.target.value)} data-testid="new-skill-role">
-                <option value="">Pick a role</option>
-                {(roles || []).map((r) => <option key={r.key} value={r.key}>{r.name}</option>)}
-              </select>
-            </label>
             <label className="flex flex-col gap-1"><span className="text-[12.5px] font-bold text-axal-ink dark:text-gray-100">Name</span>
               <input className={FIELD} value={name} onChange={(e) => setName(e.target.value)} maxLength={80} data-testid="new-skill-name" />
             </label>
@@ -419,7 +415,7 @@ export function NewSkillSheet({ scope, roles, role: initialRole, onClose, onSave
               <input className={FIELD} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={200} data-testid="new-skill-description" />
             </label>
             <div className="flex flex-col gap-1"><span className="text-[12.5px] font-bold text-axal-ink dark:text-gray-100">Steps</span><StepsEditor steps={steps} setSteps={setSteps} /></div>
-            <div className="flex flex-col gap-1"><span className="text-[12.5px] font-bold text-axal-ink dark:text-gray-100">Taxonomy</span><TaxonomyPicker tax={tax} tags={tags} setTags={setTags} /></div>
+            <div className="flex flex-col gap-1"><span className="text-[12.5px] font-bold text-axal-ink dark:text-gray-100">Taxonomy · required, sets its area</span><TaxonomyPicker tax={tax} tags={tags} setTags={setTags} /></div>
             <div className="flex flex-col gap-1">
               <span className="text-[12.5px] font-bold text-axal-ink dark:text-gray-100">Tools · read only, from your connected tools</span>
               <span className={MUTED} data-testid="new-skill-tools">{servers ? 'Tools are picked per agent by its sponsor; a skill names the read tools it needs.' : 'Read-only tools are not open for agents yet. This skill uses none.'}</span>

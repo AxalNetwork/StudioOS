@@ -147,7 +147,7 @@ async function post(f: Awaited<ReturnType<typeof fixture>>, path: string, body: 
   const res = await f.app.request('https://axal.vc' + path, { method: 'POST', headers, body: body instanceof FormData ? body : JSON.stringify(body) }, f.env);
   return { status: res.status, body: await res.json() as any };
 }
-const fileForm = (bytes: Uint8Array, type: string) => { const fd = new FormData(); fd.append('file', new Blob([bytes], { type }), 'x'); fd.append('use', 'content'); return fd; };
+const fileForm = (bytes: Uint8Array, type: string) => { const fd = new FormData(); fd.append('file', new Blob([bytes], { type }), 'x'); fd.append('use', 'content'); fd.append('alt', 'A made-up chart of growth'); return fd; }; // D1534: an upload carries its alt text
 
 test('an upload is stored stripped, measured from its header, hashed, and once per venture (718)', async () => {
   // Mutation checked: storing the raw bytes keeps the EXIF in R2; skipping the hash lookup stores the picture twice.
@@ -191,19 +191,19 @@ test('an external image is copied in through the safe fetcher; private hosts and
   }) as any;
   const f = await fixture();
   try {
-    const ok = await post(f, '/api/decks/7/images/import', { url: 'https://cdn.example.com/logo.png', use: 'content', card: 1, card_uid: 'card-a' });
+    const ok = await post(f, '/api/decks/7/images/import', { url: 'https://cdn.example.com/logo.png', use: 'content', card: 1, card_uid: 'card-a', alt: 'The logo' });
     assert.equal(ok.status, 201, JSON.stringify(ok.body));
     assert.deepEqual([ok.body.image.card, ok.body.image.card_uid], [0, 'card-a'], 'imported images keep the stable card reference');
     assert.ok(!has(f.r2.get(f.rows()[0].r2_key)!, MARK));
     for (const url of ['http://cdn.example.com/logo.png', 'https://10.0.0.5/x.png', 'https://localhost/x.png', ['https:/', '/u', ':', 'p', '@cdn.example.com/x.png'].join('')]) {
-      const r = await post(f, '/api/decks/7/images/import', { url });
+      const r = await post(f, '/api/decks/7/images/import', { url, alt: 'An image' });
       assert.equal(r.status, 422, url);
       assert.equal(r.body.error, 'unsafe_url');
     }
-    const hop = await post(f, '/api/decks/7/images/import', { url: 'https://cdn.example.com/hop' });
+    const hop = await post(f, '/api/decks/7/images/import', { url: 'https://cdn.example.com/hop', alt: 'An image' });
     assert.equal(hop.status, 422, 'a redirect to the metadata address is refused');
     assert.ok(!asked.some((u) => u.includes('169.254')), 'the metadata address is never fetched');
-    assert.equal((await post(f, '/api/decks/7/images/import', { url: 'https://cdn.example.com/big' })).status, 413);
+    assert.equal((await post(f, '/api/decks/7/images/import', { url: 'https://cdn.example.com/big', alt: 'An image' })).status, 413);
     assert.equal(f.rows().length, 1);
   } finally { globalThis.fetch = real; f.db.close(); }
   const direct = await fetchExternalImage('https://a.example/x', 10, (async () => new Response(new Uint8Array(20))) as any);
@@ -225,4 +225,18 @@ test('the export browser loads only the page\'s own origin, the font hosts, data
   const r = await renderUrl(env, 'pdf', { url: 'https://axal.vc/deck/print-export/t' }, { kind: 'pdf', maxBytes: 1000, attempts: 1 });
   assert.equal(r.ok, true);
   assert.deepEqual(seen.allowRequestPattern, patterns);
+});
+
+test('D1534 (#3778): an upload or import with no alt text is refused before anything is stored', async () => {
+  // Mutation checked: the alt check dropped from `landingOf` → the upload is stored and this fails.
+  const f = await fixture();
+  try {
+    const form = new FormData(); form.append('file', new Blob([jpeg(30, 20)], { type: 'image/jpeg' }), 'x'); form.append('use', 'content');
+    const up = await post(f, '/api/decks/7/images/upload', form);
+    assert.deepEqual([up.status, up.body.error, up.body.message], [422, 'alt_required', 'Alt text is needed before this image can be inserted.']);
+    const im = await post(f, '/api/decks/7/images/import', { url: 'https://cdn.example.com/logo.png', alt: '   ' });
+    assert.deepEqual([im.status, im.body.error], [422, 'alt_required']);
+    assert.equal(f.rows().length, 0);
+    assert.equal(f.r2.size, 0);
+  } finally { f.db.close(); }
 });

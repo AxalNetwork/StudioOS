@@ -68,19 +68,21 @@ test('4: the client and adapter call the two estimate routes', () => {
   assert.match(adapter, /export const draftCostEstimate = \(scope, id, draft\) => throughSkill\(\(\) => teamAgentsApi\.draftCostEstimate\(scope, id, draft\)\);/);
 });
 
-test('5: drawn on AG3, SK3, SK4 (the profile), SK5 and every skill row; no generalist-versus-specialists sum', () => {
-  // Mutation checked: the profile's CostLine removed → the AgentSkillsCard assert fails.
+test('5: drawn on AG3, SK3, SK4 (the profile), SK5 and every skill row', () => {
+  // Mutation checked: the profile's RunCostLine removed → the AgentSkillsCard assert fails.
   const sheets = read(`${TEAM}/SkillSheets.jsx`);
-  assert.match(sheets, /agents\.costEstimate\(a\.uid, \{ add: \[skill\.uid\] \}\)/, 'SK3: each agent with the skill added');
-  assert.match(sheets, /data-testid="assign-cost">\{changeLine\(a\.name, costs\[a\.uid\], skill\.uid\)\}/);
+  // SK3 is #4224's list: the Worker serves each agent's run_cost_change_microusd on the assignable read, and costChangeWords draws it.
+  assert.match(sheets, /const change = costChangeWords\(a\);/);
+  assert.match(read(`${TEAM}/skillsModel.js`), /const m = agent\?\.run_cost_change_microusd;/);
   assert.match(sheets, /agents\.costEstimate\(agent\.uid, \{ add: chosen\.map\(\(s\) => s\.uid\) \}\)/, 'SK5: the picks');
-  assert.match(sheets, /agents\.draftCostEstimate\(kind, scopeId, \{ model, role, skills: pickList \}\)/, 'AG3: an agent not yet added');
-  assert.match(read(`${TEAM}/AddAgentSheet.jsx`), /<SkillsStep scope=\{scope\} role=\{role\} model=\{model\}/);
-  assert.match(read(`${TEAM}/AgentSkillsCard.jsx`), /<CostLine est=\{cost\} lead="count" \/>/);
+  assert.match(sheets, /agents\.draftCostEstimate\(kind, scopeId, \{ model, role, persona, skills: pickList \}\)/, 'AG3: an agent not yet added');
+  assert.equal((sheets.match(/<RunCostLine est=\{cost\} \/>/g) || []).length, 2, 'SK5 and AG3');
+  assert.match(read(`${TEAM}/AddAgentSheet.jsx`), /<SkillsStep scope=\{scope\} role=\{roleKey\} model=\{model\} persona=\{chosen\}/);
+  assert.match(read(`${TEAM}/AgentSkillsCard.jsx`), /<RunCostLine est=\{cost\} lead="count" \/>/);
   assert.match(read(`${TEAM}/SkillParts.jsx`), /data-testid="skill-tokens">\{skillTokensLine\(s\.context_tokens\)\}/);
   for (const f of ['SkillSheets.jsx', 'SkillParts.jsx', 'AgentSkillsCard.jsx', 'skillsModel.js']) {
     const src = read(`${TEAM}/${f}`);
     assert.doesNotMatch(src, /\badvis(or|e)\b/i, f);
-    assert.doesNotMatch(src, /CostExplainer|generalist/, `${f}: the explainer's sum no longer holds when a run carries one skill`);
+    assert.doesNotMatch(src, /generalist/, `${f}: no generalist-versus-specialists sum when a run carries one skill`);
   }
 });

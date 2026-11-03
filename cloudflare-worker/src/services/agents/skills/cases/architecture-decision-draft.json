@@ -1,0 +1,38 @@
+{
+  "skill": "architecture-decision-draft",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "build.records": {
+        "design": {
+          "topic": "Queue for reminder sends",
+          "options": [
+            "Cloudflare Queues",
+            "Cron polling"
+          ]
+        }
+      },
+      "github.repos": {
+        "repos": [
+          {
+            "name": "clinic-api"
+          }
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "draft",
+    "must_include": [
+      "Cloudflare Queues",
+      "Cron polling"
+    ],
+    "must_say_not_recorded": [
+      "decision"
+    ],
+    "must_not_include": [
+      "we chose"
+    ]
+  }
+}

@@ -143,6 +143,22 @@ export async function estimate(env: Env, i: EstimateInput, multiplier?: number):
   };
 }
 
+/**
+ * SK3 (#4224's `run_cost_change_microusd`): what a run with this skill costs
+ * the agent over a run with none, on the agent's model at its sponsor's
+ * price, in micro-USD; null when the price or the skill cannot be read.
+ */
+export async function skillRunChangeMicro(env: Env, i: Omit<EstimateInput, 'pins' | 'capMicro'>, pin: Pin, multiplier?: number): Promise<number | null> {
+  const tokens = await pinTokens(env, [pin]);
+  if (!tokens) return null;
+  let mult = multiplier;
+  if (mult == null) { try { mult = await memberChargeMultiplier(env, i.sponsorId); } catch { return null; } }
+  const base = estTokens(i.systemPrompt) + RUN_COST_CONFIG.requestTokens;
+  const without = priceMicro(i.model, base, RUN_COST_CONFIG.outputTokens, mult);
+  const withIt = priceMicro(i.model, base + tokens[0], RUN_COST_CONFIG.outputTokens, mult);
+  return without == null || withIt == null ? null : withIt - without;
+}
+
 /** The areas these skills' tags fall in, most skills first (ties in the radar's order). */
 export async function skillAreas(env: Env, skillIds: readonly number[]): Promise<AreaKey[] | null> {
   if (!skillIds.length) return [];
