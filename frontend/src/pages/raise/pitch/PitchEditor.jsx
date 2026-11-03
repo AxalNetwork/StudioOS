@@ -52,6 +52,9 @@ import { apply as applyOp, editKey, emptyHistory, findIn, historyCounts, perform
 import { createAutosave, clockOf, idbStore, keyOf, restoreOffer } from './deckAutosave';
 import { discardDraft as discardDraftAdapter, draft as draftAdapter, saveCard as saveCardAdapter } from './deckV2Adapter';
 import { ConflictView, FindReplaceSheet, RestoreBanner, StillCharged, SyncLine } from './EditingParts';
+import usePreflight from './usePreflight';
+import { FindingStrip, PreflightGate, PreflightMeasure, PreflightPanel } from './PreflightPanel';
+import { gateOf, workingDeck } from './preflightUiModel';
 import {
   ADDABLE_KINDS, BUTTON_LABEL_MAX, KIND_LABELS, MODEL_FAILED, SECTION_MAX, VIDEO_PROVIDER_LABELS, sectionsOf, NOTES_PLACEHOLDER, NO_CARDS,
   NOT_RECORDED, PHONE_NOTE, READ_FAILED, THEME_LABELS,
@@ -236,12 +239,20 @@ export default function PitchEditor() {
   // D1577 (#3824): the other members on the deck. Null (nothing drawn) until presence is switched on.
   const presence = useDeckPresence(current?.id ?? null, { live: !readOnly && !phone });
   const youId = presence.you?.user_id ?? user?.id ?? null;
+  // D1370 (#3661, pf1c/pf1d): with the editor on screen, Share and Export run the preflight first (its gate),
+  // which opens the dialog itself when there is nothing to fix or look at.
+  const editorOn = Boolean(chrome);
   const onAction = useCallback((id) => {
-    if (id === 'share' || id === 'export') { if (!readOnly) setShareDialog(id); return; }
+    if (id === 'share' || id === 'export') {
+      if (readOnly) return;
+      if (editorOn && actionRef.current) actionRef.current('gate', id);
+      else setShareDialog(id);
+      return;
+    }
     actionRef.current?.(id);
-  }, [readOnly]);
+  }, [readOnly, editorOn]);
   const tools = current?.id ? (
-    <DeckToolbar chip={chrome?.chip ?? null} presentTo={presentHref(projectId, current.id)} readOnly={readOnly} phone={phone}
+    <DeckToolbar chip={chrome?.chip ?? null} presentTo={presentHref(projectId, current.id)} preflight={chrome?.preflight ?? null} readOnly={readOnly} phone={phone}
       onAction={onAction} labels={chrome?.labels} outOfTokens={Boolean(chrome?.outOfTokens)} waiting={chrome ? null : EDITOR_WAITING} history={chrome?.history ?? null}
       editors={presence.editors} youId={youId} />
   ) : null;
@@ -299,6 +310,7 @@ export default function PitchEditor() {
         onProposals={onProposals}
         onChrome={setChrome}
         actionRef={actionRef}
+        onSend={setShareDialog}
       />
     </Shell>
   );
@@ -368,7 +380,7 @@ export function editReducer(state, action) {
   }
 }
 
-function Editor({ project, deck, model, kit, refresh, sources, charts, versions, readOnly, phone, narrow = false, onTitle, onSaved, placeRef, onProposals, onChrome, actionRef, presence = null, youId = null }) {
+function Editor({ project, deck, model, kit, refresh, sources, charts, versions, readOnly, phone, narrow = false, onTitle, onSaved, placeRef, onProposals, onChrome, actionRef, onSend = null, presence = null, youId = null }) {
   const [aiOn] = useAssistMode('raise');
   const navigate = useNavigate();
   const [base, setBase] = useState(() => ({ deck, cards: cardsOf(deck), theme: deck.theme ?? null, audience: deck.audience ?? null }));
@@ -403,6 +415,11 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   const stale = useMemo(() => staleCards(refresh.data), [refresh.data]);
   const card = cards[sel] || null;
   const kitData = kit.status === 'ok' ? kit.data?.kit ?? null : null;
+  // D1370 (#3661): Check before you send, on the deck as it is on screen; a result for another state reads "Out of date".
+  const working = useMemo(() => workingDeck(base.deck, cards, theme), [base.deck, cards, theme]);
+  const pf = usePreflight({ deck: working, kit: kitData, refresh: refresh.status === 'ok' ? refresh.data : null });
+  const [gate, setGate] = useState(null);
+  const [finding, setFinding] = useState(null);
   const colours = cardColours(theme, kitData);
   // D903: a background's overlay is in the brand ink, never the dark theme's light text colour.
   const ink = isDarkTheme(theme?.kind) ? undefined : colours.ink;
@@ -626,8 +643,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   const chip = saveChip({ dirty, readOnly, when: state, version: base.deck.version, sync: sync ? { ...sync, clock: clockOf(sync.at) } : null });
   const appendixLabel = card?.appendix ? 'Not an appendix' : 'Mark as appendix';
   useEffect(() => {
-    onChrome?.({ chip, outOfTokens, history: readOnly ? null : counts, labels: { appendix: appendixLabel, ...(readOnly ? { notes: 'Leave a note' } : {}) } });
-  }, [chip.text, chip.title, chip.save, appendixLabel, readOnly, outOfTokens, counts.undo, counts.redo]); // eslint-disable-line react-hooks/exhaustive-deps
+    onChrome?.({ chip, preflight: pf.chip, outOfTokens, history: readOnly ? null : counts, labels: { appendix: appendixLabel, ...(readOnly ? { notes: 'Leave a note' } : {}) } });
+  }, [chip.text, chip.title, chip.save, appendixLabel, readOnly, outOfTokens, counts.undo, counts.redo, pf.chip?.text, pf.chip?.tone]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => onChrome?.(null), [onChrome]);
 
   // D1500: a duplicate is a new card, with its own uid (`duplicateCard` copies it whole).
@@ -651,6 +668,10 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     if (id === 'notes') { navigate(`/raise/pitch/notes${ventureQuery(project?.id)}`); return; }
     if (id === 'undo') { if (!readOnly) undo(); return; }
     if (id === 'redo') { if (!readOnly) redo(); return; }
+    // D1370 (#3661): ⋯ › Before you send › Check before you send, and the toolbar chip. The first open runs it.
+    if (id === 'preflight') { setFinding(null); setSheet('preflight'); if (!pf.result && !pf.running) pf.run(); return; }
+    // D1370 (pf1c/pf1d): Share and Export from the page: check first, then the gate or the dialog.
+    if (id === 'gate') { if (readOnly || (arg !== 'share' && arg !== 'export')) return; setGate(arg); if (!pf.current && !pf.running) pf.run(); return; }
     // D1552 (#3799): ⋯ › Whole deck · uses AI › Fix with critique.
     if (id === 'critique') { if (!readOnly) setDialog({ kind: 'critique' }); return; }
     // D1553 (#3800): ⋯ › This card › Remix this slide, the only way in (pd13).
@@ -684,6 +705,23 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     setDialog({ kind: 'areas', areas: (areas || []).filter((a) => t.ids.includes(a.id)) });
   };
 
+  // D1370 (#3661): Show me selects the finding's card and block and leaves the strip over the slide (pf5g).
+  const show = (row) => {
+    const i = row?.card ?? row?.firstCard;
+    if (!Number.isInteger(i) || i < 0 || i >= cards.length) return;
+    choose(i);
+    if (row.block != null) selectBlock(row.block);
+    setSheet(null); setGate(null); setFinding(row.id);
+  };
+  const stripRows = pf.groups ? [...pf.groups.fix, ...pf.groups.look, ...pf.groups.unchecked] : [];
+  const gateView = gate && !pf.running && pf.current ? gateOf(pf.groups, gate) : null;
+  useEffect(() => {
+    if (!gate || pf.running) return;
+    // A check that finished on an older state of the deck runs again on this one.
+    if (!pf.current) { pf.run(); return; }
+    if (gateView && !gateView.open) { setGate(null); onSend?.(gate); }
+  }, [gate, pf.running, pf.current, gateView?.open]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const staleMap = useMemo(() => {
     const m = new Map();
     for (const r of Array.isArray(refresh.data?.rows) ? refresh.data.rows : []) if (r.state === 'stale') m.set(r.source_key, r.bound?.as_of || null);
@@ -693,6 +731,9 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   return (
     <>
       {!readOnly ? <AiOffBanner state={off} /> : null}
+      {finding && !sheet && !gate ? (
+        <FindingStrip rows={stripRows} id={finding} onStep={show} onBack={() => { setFinding(null); setSheet('preflight'); }} onClose={() => setFinding(null)} />
+      ) : null}
       {phone ? (
         <PhoneEditor cards={cards} sel={sel} setSel={choose} move={move} card={card} readOnly={readOnly}
           onNotes={(v) => edit({ type: 'setFlag', index: sel, key: 'notes', value: v }, { label: 'Notes', coalesce: `notes:${cardUid(card) ?? sel}` })} notesMax={model.notes_max}
@@ -822,6 +863,16 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
       ) : null}
       {sheet === 'comments' && card && base.deck?.id ? (
         <CommentsSheet deckId={base.deck.id} card={card} index={sel} area={chosen.length === 1 ? chosen[0].id : null} admin={readOnly} onClose={() => setSheet(null)} />
+      ) : null}
+      {sheet === 'preflight' ? (
+        <PreflightPanel pf={pf} version={base.deck.version ?? null} readOnly={readOnly} onShow={show} onClose={() => setSheet(null)} />
+      ) : null}
+      {gate && (pf.running || gateView?.open) ? (
+        <PreflightGate gate={gateView} progress={pf.running ? pf.progress : null} version={base.deck.version ?? null} dirty={dirty} onShow={show}
+          onFix={() => { setGate(null); setSheet('preflight'); }} onAnyway={() => { const k = gate; setGate(null); onSend?.(k); }} onClose={() => setGate(null)} />
+      ) : null}
+      {pf.running && pf.running.done < pf.running.total ? (
+        <PreflightMeasure key={pf.running.done} card={pf.running.snapshot.slides[pf.running.done]} index={pf.running.done} theme={pf.running.snapshot.theme} kit={kitData} onMeasured={pf.onMeasured} />
       ) : null}
       {sheet === 'check' && base.deck?.id ? (
         <CheckSheet deck={base.deck} projectId={project?.id} readOnly={readOnly} dirty={dirty} onReplaced={saved}

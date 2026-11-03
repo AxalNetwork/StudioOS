@@ -169,6 +169,24 @@ the list reads wait for L1–L6 (#4176–#4181) and say so.
 **Grade: EXTENDS the Calendar (D4154).** The Mine · Studio · Platform switcher
 and the read-only staff views over the scoped read D1206 already serves. Each
 item's owner, company, studio and link wait for C1 (#4196) and say so.
+## Landed 2026-11-02 — Check before you send (#3661)
+
+The owner's artifacts `UJXCEzoW75JuqpM2njFxQH` (the page) and `AByWUAWjZT6e6VbeDWp5HN`
+(the board grid) were decoded by `scripts/read-canvas.mjs`.
+- **The page replaces `Pitch Deck Studio v2 Page.dc.html`.** Every earlier frame (pd0 to pd40, aird1 to aird7) is
+  unchanged except pd13, whose ⋯ menu gains a fourth section, **Before you send › Check before you
+  send · Free**, between This card and Whole deck · uses AI. It adds frames pf1a to pf5g:
+  - **PF1:** the ⋯ item; the toolbar chip in its five states; the gate before Share and the gate before Export.
+  - **PF2:** the 400px results panel: To fix, Worth a look, Couldn't check and Passed. Show me, Dismiss
+    with Undo, and "Ask Eadwyn to suggest a fix" as a quoted proposal.
+  - **PF3:** the clipped title at export size, and the contrast pair.
+  - **PF4:** out of date after an edit, then re-checked.
+  - **PF5:** checking slide by slide, nothing to fix, couldn't check, a reader, out of tokens, and the phone.
+- **The grid is the new `Pitch Deck Studio v2 · Preflight Boards.dc.html`.** It imports the same page.
+  The existing `Pitch Deck Studio v2 · Boards.dc.html` is kept as it was.
+
+Logo paths are `/axal-mark.png` and `/eadwyn-ai.png`. The build is D1370 part 2
+(`documentation/architecture/decisions/D1370.md`).
 
 ## Landed 2026-11-01 — One interview, and its session (#3710)
 

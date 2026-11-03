@@ -326,7 +326,7 @@ export const STEPS_LINE = (n) => `${n} steps`;
 export const STILL_CHARGED = 'Still charged: undo takes the accepted run off the card, but what it cost stays spent.';
 
 /**
- * The ⋯ menu, in its three sections (plan §2.2). An item is wired on main
+ * The ⋯ menu, in its four sections (plan §2.2; Before you send is D1370's). An item is wired on main
  * (`write` when it changes the deck, so a reader sees it greyed), or it names
  * the `deckV2Adapter.js` method (`adapter`) that answers unavailable until its
  * issue merges: drawn greyed "Coming later", titled with the adapter's
@@ -364,6 +364,10 @@ export const MORE_MENU = Object.freeze([
     { id: 'background', label: 'Background image', write: true },
     // D1570 (#3817, pd33): the card's threads; opened here or from the card's ⋯, never from the header.
     { id: 'comments', label: 'Comments', adapter: 'comments' },
+  ] },
+  // D1370 (#3661, pd13 and pf1a): the preflight, free and read-only, between This card and the AI items.
+  { id: 'before', label: 'Before you send', items: [
+    { id: 'preflight', label: 'Check before you send', note: 'Free' },
   ] },
   { id: 'ai', label: 'Whole deck · uses AI', items: [
     { id: 'replace_images', label: 'Replace all images', adapter: 'deckActions', ai: true },
