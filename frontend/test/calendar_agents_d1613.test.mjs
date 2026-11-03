@@ -56,7 +56,10 @@ test('the seam: every #3957 method goes through its client, and every client pat
     const method = (m[2] || 'GET').toLowerCase();
     assert.ok(routes.includes(`router.${method}('${path}'`), `a client path (${method} ${path}) with no Worker route`);
   }
-  for (const p of ['/sessions/agents', '/sessions/:uid', '/sessions/:uid/run', '/agents/:uid/sessions/estimate']) assert.match(routes, new RegExp(`router\\.\\w+\\('${p.replace(/\//g, '\\/')}'`), p);
+  // Plain text, not a regex built from the path: each route is mounted by one of these methods.
+  for (const p of ['/sessions/agents', '/sessions/:uid', '/sessions/:uid/run', '/agents/:uid/sessions/estimate']) {
+    assert.ok(['get', 'post', 'patch', 'delete'].some((m) => routes.includes(`router.${m}('${p}'`)), p);
+  }
 });
 
 test('the kind and the family are in KINDS and FAMILIES once #3957 puts the kind on the calendar read', () => {
