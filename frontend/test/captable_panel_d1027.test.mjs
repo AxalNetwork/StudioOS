@@ -180,5 +180,6 @@ test('the wiring: the deal\'s Terms tab and the company page\'s Terms mount it f
     assert.ok(!/#[0-9a-fA-F]{3,8}\b/.test(src.replace(/(^|[\s(,])#\d{4}\b/g, '')), f);
     assert.ok(!src.includes('/raise/cap-table'), `${f}: the investor never opens the founder's tool`);
   }
-  assert.ok(read('frontend/src/lib/api/capTableAccess.js').includes("ask: (projectId) => request(`${base(projectId)}/ask`, json('POST')),"));
+  // D1130: the ask carries an optional { level, note }, sent as the body.
+  assert.ok(read('frontend/src/lib/api/capTableAccess.js').includes("ask: (projectId, body) => request(`${base(projectId)}/ask`, json('POST', body)),"));
 });

@@ -9,6 +9,10 @@
  *         → { application, membership | null, terms_uid? }
  *   PATCH /:uid  { tier?, status?: active|paused|ended, reason }  → { membership, events }
  *   GET   /tier-defaults                → { tiers }  (Settings; new terms copy them)
+ *   GET   /flags?outcome=held|refused|cleared|upheld|all&limit=   D4289 P2 (#4291): the flagged sign-ups
+ *         (self-referral, loops, a handle's daily cap) → { flags }
+ *   POST  /flags/:uid/decision  { decision: clear|uphold, reason }  a held sign-up: clear makes its
+ *         attribution active, uphold refuses it → { flag }
  *   PUT   /tier-defaults/:tier  { percentage_bps?, duration_invoices?, offer_budget_cents?, currency? }
  *         the Super Admin only, behind the write bar → { tier }
  *
@@ -23,8 +27,9 @@ import { isSuperAdmin, requireHqAdmin, requireSuperAdminWriteBar } from '../auth
 import { refuse } from '../util/refusal';
 import { logAdminAction } from '../services/adminAudit';
 import { notify } from '../services/notify';
+import { decideFlag, listFlags } from '../services/referrals/handleAttribution';
 import {
-  APPLICATION_FILTERS, INFLUENCER_ACTIONS, InfluencerRefusal, TIER_LABEL, changeInfluencer, decideApplication, isTier,
+  APPLICATION_FILTERS, REASON_MAX, REASON_MIN, INFLUENCER_ACTIONS, InfluencerRefusal, TIER_LABEL, changeInfluencer, decideApplication, isTier,
   listApplications, readChange, readDecision, tierDefaults, writeTierDefault,
 } from '../services/influencers';
 
@@ -83,6 +88,33 @@ r.post('/applications/:uid/decision', async (c) => {
   } catch (e) { return answer(c, e); }
 });
 
+const FLAG_OUTCOMES = ['held', 'refused', 'cleared', 'upheld', 'all'] as const;
+
+r.get('/flags', async (c) => {
+  await requireHqAdmin(c);
+  const outcome = c.req.query('outcome') || 'held';
+  if (!(FLAG_OUTCOMES as readonly string[]).includes(outcome)) return refuse(c, 400, { code: 'invalid_outcome', message: `outcome is one of ${FLAG_OUTCOMES.join(', ')}.` });
+  const raw = c.req.query('limit');
+  const limit = raw == null || raw === '' ? 100 : Number(raw);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 200) return refuse(c, 400, { code: 'invalid_limit', message: 'limit is from 1 to 200.' });
+  try { return c.json(await listFlags(c.env, outcome, limit)); } catch (e) { return answer(c, e); }
+});
+
+r.post('/flags/:uid/decision', async (c) => {
+  const admin = await requireHqAdmin(c);
+  const b = await c.req.json().catch(() => null) as any;
+  const decision = b?.decision;
+  if (decision !== 'clear' && decision !== 'uphold') return refuse(c, 400, { code: 'invalid_decision', message: 'decision is clear or uphold.' });
+  const reason = typeof b?.reason === 'string' ? b.reason.trim() : '';
+  if (reason.length < REASON_MIN || reason.length > REASON_MAX) return refuse(c, 400, { code: 'reason_required', message: `A decision needs a reason of ${REASON_MIN} to ${REASON_MAX} characters.` });
+  try {
+    const out = await decideFlag(c.env, Number(admin.id), c.req.param('uid'), decision, reason);
+    if (out.status !== 200) return refuse(c, out.status, { code: out.code, message: out.sentence });
+    await logAdminAction(c.env, Number(admin.id), admin.email, INFLUENCER_ACTIONS.flag, { program_key: 'influencer', flag_uid: c.req.param('uid'), decision, reason });
+    return c.json({ flag: out.flag });
+  } catch (e) { return answer(c, e); }
+});
+
 r.get('/tier-defaults', async (c) => {
   await requireHqAdmin(c);
   try { return c.json({ tiers: await tierDefaults(c.env) }); } catch (e) { return answer(c, e); }
@@ -111,7 +143,8 @@ r.patch('/:uid', async (c) => {
     const out = await changeInfluencer(c.env, Number(admin.id), c.req.param('uid'), change);
     const userId = Number((await c.env.DB.prepare('SELECT user_id FROM influencers WHERE uid = ?').bind(c.req.param('uid')).first<{ user_id: number }>())?.user_id);
     for (const ev of out.events) {
-      const action = ev === 'tier_changed' ? INFLUENCER_ACTIONS.tier : ev === 'paused' ? INFLUENCER_ACTIONS.paused : ev === 'resumed' ? INFLUENCER_ACTIONS.resumed : INFLUENCER_ACTIONS.ended;
+      const action = ev === 'handle_taken_down' ? INFLUENCER_ACTIONS.takedown : ev === 'tier_changed' ? INFLUENCER_ACTIONS.tier
+        : ev === 'paused' ? INFLUENCER_ACTIONS.paused : ev === 'resumed' ? INFLUENCER_ACTIONS.resumed : INFLUENCER_ACTIONS.ended;
       await logAdminAction(c.env, Number(admin.id), admin.email, action, {
         program_key: 'influencer', influencer_uid: c.req.param('uid'), target_user_id: userId, before: out.before,
         after: { tier: out.membership.tier, status: out.membership.status }, reason: change.reason,
@@ -119,6 +152,7 @@ r.patch('/:uid', async (c) => {
     }
     const m = out.membership;
     const what = out.events.includes('ended') ? 'HQ ended your influencer membership.'
+      : out.events.includes('handle_taken_down') && out.events.length === 1 ? 'HQ took your handle down. Choose a new one in your Influencer section.'
       : out.events.includes('paused') ? 'HQ paused your influencer membership. Your link does not earn while paused.'
         : out.events.includes('resumed') ? 'HQ resumed your influencer membership.'
           : `HQ changed your tier to ${m.tier_label}.`;
