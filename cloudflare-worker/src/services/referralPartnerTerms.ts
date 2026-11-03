@@ -33,7 +33,7 @@ export type ReadState = typeof READ_STATES[number];
  */
 export const FIRING_RULES: ReadonlySet<string> = new Set([
   'referral_kyc_approved',
-  // D4292 (#4292): an influencer's share of each paid subscription invoice
+  // D4292 (#4292): the influencer share of each paid subscription invoice
   // (services/influencerCommission.ts), and the flat milestone bonuses.
   'subscription_invoice',
   'influencer_bonus_10', 'influencer_bonus_25', 'influencer_bonus_50', 'influencer_bonus_100',

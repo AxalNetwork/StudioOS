@@ -12,7 +12,8 @@
  *     funds and anything else are never paid on;
  *   - the referrer holds active signed terms with the `subscription_invoice`
  *     trigger (`activeTermsFor`, D958). The rate is the trigger's
- *     `percentage_bps`; no rate is typed here (D1050);
+ *     `percentage_bps` (or its flat amount per invoice, when the terms set
+ *     one); no rate is typed here (D1050);
  *   - the invoice is among the member's first INVOICES_PER_MEMBER paid
  *     invoices on that subscription (D4289 §1.1: invoices, not months);
  *   - no other referral commission was paid on the same payment (no stacking).
@@ -182,7 +183,7 @@ export async function onInvoicePaid(env: Env, inv: Obj, now: number = Date.now()
 
   const paidAtMs = posInt(inv?.status_transitions?.paid_at) ? Number(inv.status_transitions.paid_at) * 1000 : now;
   const terms = await activeTermsFor(env, referrerId, INVOICE_RULE, todayUtc(paidAtMs));
-  if (!terms || terms.percentage_bps == null) return { outcome: 'no_terms' };
+  if (!terms) return { outcome: 'no_terms' };
 
   const net = invoiceNet(inv);
   if (net <= 0) return { outcome: 'nothing_due' };
@@ -212,7 +213,6 @@ export async function onInvoicePaid(env: Env, inv: Obj, now: number = Date.now()
   const pay = termsAmount({
     ...terms,
     paid_so_far_cents: paidInCurrency,
-    amount_cents: null,
     cap_per_intro_cents: sameCurrency ? terms.cap_per_intro_cents : null,
     overall_cap_cents: sameCurrency ? terms.overall_cap_cents : null,
   }, net);
@@ -362,12 +362,12 @@ export async function fireMilestones(env: Env, referrerId: number, now: number =
     ).bind(referrerId, pay.amount_cents, pay.currency, BONUS_SOURCE_TYPE, String(m), `Bonus for ${m} paid customers`, pay.terms_id, sqlTime(now)).run();
     if (!Number(ins.meta?.changes ?? 0)) continue;
     const c = await env.DB.prepare('SELECT id FROM commissions WHERE user_id = ? AND source_type = ? AND source_id = ?').bind(referrerId, BONUS_SOURCE_TYPE, String(m)).first<{ id: number }>();
-    await env.DB.prepare(`INSERT OR IGNORE INTO influencer_milestones (referrer_user_id, milestone, kind, commission_id, customers_counted, reached_at) VALUES (?, ?, 'bonus', ?, ?, ?)`)
+    await env.DB.prepare(`INSERT OR IGNORE INTO influencer_milestones (referrer_user_id, milestone, kind, commission_id, customers_counted, achieved_at) VALUES (?, ?, 'bonus', ?, ?, ?)`)
       .bind(referrerId, m, c?.id ?? null, count, sqlTime(now)).run();
     bonuses++;
   }
   if (count >= CUSTOM_MILESTONE) {
-    const ins = await env.DB.prepare(`INSERT OR IGNORE INTO influencer_milestones (referrer_user_id, milestone, kind, commission_id, customers_counted, reached_at) VALUES (?, ?, 'custom', NULL, ?, ?)`)
+    const ins = await env.DB.prepare(`INSERT OR IGNORE INTO influencer_milestones (referrer_user_id, milestone, kind, commission_id, customers_counted, achieved_at) VALUES (?, ?, 'custom', NULL, ?, ?)`)
       .bind(referrerId, CUSTOM_MILESTONE, count, sqlTime(now)).run();
     if (Number(ins.meta?.changes ?? 0)) {
       custom = 1;

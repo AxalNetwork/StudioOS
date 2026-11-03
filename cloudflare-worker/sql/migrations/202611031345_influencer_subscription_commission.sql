@@ -60,6 +60,6 @@ CREATE TABLE IF NOT EXISTS influencer_milestones (
   -- The bonus commission; NULL for a custom-partnership notice.
   commission_id INTEGER REFERENCES commissions(id),
   customers_counted INTEGER NOT NULL,
-  reached_at TEXT NOT NULL,
+  achieved_at TEXT NOT NULL,
   UNIQUE (referrer_user_id, milestone)
 );

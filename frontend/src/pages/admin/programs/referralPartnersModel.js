@@ -293,7 +293,13 @@ export function rowActions(row, superAdmin) {
  * An identity check carries no amount, so it pays a flat amount only.
  */
 export const FIRING_TRIGGERS = Object.freeze([
-  { key: 'referral_kyc_approved', label: 'A referred member completes KYC', flatOnly: true },
+  { key: 'referral_kyc_approved', label: 'A referred member completes KYC', flatOnly: true, flatWhy: 'An identity check carries no amount, so it pays a flat amount.' },
+  // D4292 (#4292): an influencer's share of a referred member's paid software invoice (their first 12), and the milestone bonuses.
+  { key: 'subscription_invoice', label: 'A referred member pays a subscription invoice (first 12)' },
+  { key: 'influencer_bonus_10', label: 'Bonus at 10 paid customers', flatOnly: true, flatWhy: 'A milestone bonus is a flat amount: a share has nothing to be a share of.' },
+  { key: 'influencer_bonus_25', label: 'Bonus at 25 paid customers', flatOnly: true, flatWhy: 'A milestone bonus is a flat amount: a share has nothing to be a share of.' },
+  { key: 'influencer_bonus_50', label: 'Bonus at 50 paid customers', flatOnly: true, flatWhy: 'A milestone bonus is a flat amount: a share has nothing to be a share of.' },
+  { key: 'influencer_bonus_100', label: 'Bonus at 100 paid customers', flatOnly: true, flatWhy: 'A milestone bonus is a flat amount: a share has nothing to be a share of.' },
 ]);
 export const triggerLabel = (key) => FIRING_TRIGGERS.find((t) => t.key === key)?.label || key;
 
@@ -359,7 +365,7 @@ export function termsBody(form) {
     const def = FIRING_TRIGGERS.find((t) => t.key === g.rule_key);
     if (!def) return { error: 'Choose a trigger an event pays today.' };
     if (g.kind === 'share') {
-      if (def.flatOnly) return { error: 'An identity check carries no amount, so it pays a flat amount.' };
+      if (def.flatOnly) return { error: def.flatWhy };
       const bps = toBps(g.value);
       if (bps === 'bad') return { error: 'A share is a percent from 0.01 to 100.' };
       triggers.push({ rule_key: g.rule_key, amount_cents: null, percentage_bps: bps });

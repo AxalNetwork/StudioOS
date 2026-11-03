@@ -140,6 +140,13 @@ test('the commission is in the invoice currency; the terms caps bind only their 
   assert.deepEqual(commissions(db).map((c) => [c.currency, c.amount_cents, /capped/.test(c.description)]), [['EUR', 5000, false], ['USD', 3000, true]]);
 });
 
+test('terms that set a flat amount per invoice pay that amount, whatever the invoice', async () => {
+  const { db, env } = world({ bps: 2500 });
+  db.prepare("UPDATE referral_partner_term_triggers SET amount_cents = 700, percentage_bps = NULL WHERE rule_key = 'subscription_invoice'").run();
+  await onInvoicePaid(env, invoice(MEMBER0, T0, { amount: 50000 }), T0);
+  assert.deepEqual(commissions(db).map((c) => c.amount_cents), [700]);
+});
+
 test('no stacking: a payment that earned a purchase commission earns no influencer commission, and the reverse is visible', async () => {
   const { db, env } = world();
   db.prepare("INSERT INTO commissions (user_id, amount_cents, currency, source_type, source_id, status) VALUES (?, 500, 'USD', 'purchase', 'pi_stacked', 'accrued')").run(OTHER);
