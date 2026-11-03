@@ -12,6 +12,7 @@ import { mount as admin_hq_skillsMount } from './admin_hq_skills';
 import { mount as company_complianceMount } from './company_compliance';
 import { mount as data_room_proposalsMount } from './data_room_proposals';
 import { mount as deck_card_statusMount } from './deck_card_status';
+import { mount as deck_preflightMount } from './deck_preflight';
 import { mount as deck_proofMount } from './deck_proof';
 import { mount as deck_quotesMount } from './deck_quotes';
 import { mount as deck_remoteMount } from './deck_remote';
@@ -31,6 +32,7 @@ export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'company_compliance', mount: company_complianceMount },
   { file: 'data_room_proposals', mount: data_room_proposalsMount },
   { file: 'deck_card_status', mount: deck_card_statusMount },
+  { file: 'deck_preflight', mount: deck_preflightMount },
   { file: 'deck_proof', mount: deck_proofMount },
   { file: 'deck_quotes', mount: deck_quotesMount },
   { file: 'deck_remote', mount: deck_remoteMount },
