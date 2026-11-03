@@ -148,7 +148,6 @@ it. Codes, counts and one screenshot; no link, name, page text or audio.
 
 | File | Why it matters |
 | --- | --- |
-| `influencer/` | D4289 (#4289): the Influencer program's Worker rules, one file per part. `payoutReadiness.ts` (D4294, P5) is when an influencer may request a payout: identity, the tax form, the current terms, the $50 minimum and once a month. Its README has the rule for adding here. |
 | `deckErrorBudgetCron.ts` | D1537 (#3786): the hourly deck error-budget check as the cron imports it (a re-export of `decks/gridHealth.ts`'s `noteErrorBudgetAlert`), so the scheduled handler names no `decks` path; `mercury_member_privacy_d752` reads that handler's words. |
 | `influencer/` | D4289 (#4289): the Influencer program's Worker rules, one file per part. `analytics.ts` (D4295, P6) is the influencer's figures, totals only, with "Fewer than 5", Not recorded and Unreadable. `payoutReadiness.ts` (D4294, P5) is when an influencer may request a payout: identity, the tax form, the current terms, the $50 minimum and once a month. Its README has the rule for adding here. |
 | `lovable/` | D1082 (#2947): Build in Lovable — the prompt templates, the cap, the launch link, the privacy check and the four launch routes' handler. See its README. |
