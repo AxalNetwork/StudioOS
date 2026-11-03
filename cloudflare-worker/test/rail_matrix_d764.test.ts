@@ -43,6 +43,7 @@ import { modelById } from '../src/services/ai/catalogue.ts';
 import { billingMode, multiplierFor } from '../src/services/ai/pricing.ts';
 import { unitPrices } from '../src/routes/ai.ts';
 import { MODEL_CONNECTIONS, withModuleModels } from '../src/services/ai/moduleConnections.ts';
+import { railOptionTextJob, textJob } from '../src/services/ai/textJobs.ts';
 
 const read = (p: string) => readFileSync(new URL(`../../${p}`, import.meta.url), 'utf8');
 const CANVAS = JSON.parse(read('design/incoming/airail-every-page-data/canvas.json'));
@@ -384,6 +385,10 @@ test('every option a profile registers that runs a model has a row, with its own
     // runs; every other option runs its kind's rail task.
     assert.equal(row!.routeTask, OPTION_ONLY_KINDS.has(o.kind) ? o.task : `rail_${o.kind}`);
     if (OPTION_ONLY_KINDS.has(o.kind) || o.handler === 'transcribe') continue; // their own lists, held by the D1478 and D1583 cases
+    // #4313 (D4313): an option whose job writes text lists that job's models (RAIL_OPTION_JOBS), the same
+    // ones textChoice runs; any other option still takes its kind's models and connected alternatives.
+    const own = railOptionTextJob(page.key, o.key);
+    if (own) { assert.deepEqual(row!.models.map((m) => m.id)[0], textJob(own)!.default, `${o.key}: lists ${own}'s Default first`); continue; }
     const kindRow = ROWS.find((r) => r.kind === o.kind)!;
     assert.deepEqual(row!.models, withModuleModels({ ...kindRow, pageKey: page.key }).models, `${o.key}: an option takes its kind's models and connected alternatives`);
   }

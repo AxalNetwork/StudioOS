@@ -10,6 +10,7 @@ import { BTN, LoadingRows, PanelCard, useAccountRead } from './AccountCenter';
 import { overviewScopeFor } from './BillingCards';
 import { allowanceView, balanceText } from './billingModel';
 import { limitView, packOrdersCard } from './limitsModel';
+import { gateLine } from './autoReloadModel';
 import { USAGE_SUBTITLE, costReadable, monthIsEmpty, recentInvoices } from './costModel';
 import { DailyCostChart, TokenUsageChart } from './UsageCharts';
 import { allowanceView as storageAllowance } from './storagePageModel';
@@ -61,11 +62,15 @@ export function BalanceOverview({ me, overview, autoReload }) {
       <p className="mt-2 text-xs"><Link to={OVERVIEW_LINKS.aiTokens} className={OPEN} data-testid="overview-ai-tokens">Holds and prices ›</Link></p>
     </UsageCardState>
     <div className="mt-2 flex flex-wrap gap-2">
-      <UsageCardState read={autoReload} what="Auto-reload">
+      {gateLine(autoReload) ? (
+        <span className="inline-flex items-center gap-1.5 text-xs" data-testid="overview-auto-reload-gate">
+          {gateLine(autoReload)} <button type="button" className="underline" onClick={autoReload.reload}>Confirm</button>
+        </span>
+      ) : <UsageCardState read={autoReload} what="Auto-reload">
         {typeof autoReload.data?.enabled === 'boolean'
           ? <Pill tone={autoReload.data.enabled ? 'info' : 'neutral'}>{autoReload.data.enabled ? 'Auto-reload on' : 'Auto-reload off'}</Pill>
           : <Unrecorded reason="The auto-reload state was not returned.">Not recorded</Unrecorded>}
-      </UsageCardState>
+      </UsageCardState>}
       <UsageCardState read={overview} what="Payment methods">
         {methods == null || overview.data?.degraded?.includes('payment_methods')
           ? <Unreadable what="Payment methods" claim="No absence of a card is assumed." onRetry={overview.reload} />

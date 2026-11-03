@@ -28,7 +28,11 @@ test('the move needs a reason and the word typed exactly', () => {
   assert.equal(CONFIRM_WORD, 'live');
   assert.equal(canMove(ready, 'Owner approved', 'live'), true);
   assert.equal(canMove(ready, '  ', 'live'), false, 'no reason');
-  assert.equal(canMove(ready, 'x', 'Live'), false, 'the word exactly');
+  // D1434: the word in any case (the owner typed LIVE), still nothing else.
+  assert.equal(canMove(ready, 'x', 'Live'), true, 'any case');
+  assert.equal(canMove(ready, 'x', ' LIVE '), true, 'any case, trimmed');
+  assert.equal(canMove(ready, 'x', 'lives'), false, 'the word, not a longer one');
+  assert.equal(canMove(ready, 'x', 'test'), false, 'not the other mode');
   assert.equal(canMove(ready, 'x', ''), false);
 });
 
