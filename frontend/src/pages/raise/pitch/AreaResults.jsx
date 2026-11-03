@@ -10,6 +10,8 @@ import { NOT_RECORDED, cardUid } from './editorModel';
 import { EYE, GHOST, INK, LAV, MUTED, PRIMARY, RefusalLine } from './AssistParts';
 import { SourceChip } from './SourcesBoards';
 import { chipOf } from './sourcesModel';
+import { judge as judgeArea } from './deckV2Adapter';
+import { rankedOf, rankGroups } from './areaRankModel';
 
 const PILL = 'inline-flex items-center rounded-full border border-axal-lavender-edge bg-white px-2 py-0.5 font-mono text-[10px] font-bold text-axal-violet dark:border-violet-800 dark:bg-violet-950/60 dark:text-violet-300';
 
@@ -43,6 +45,13 @@ const CHECKS = {
  * deck's sources `items`); a value, a grade or a source that is not recorded
  * says so, never a zero.
  *
+ * D1525 (#3783, pd15): an area with two or three variants can be ranked.
+ * "Rank the variants" reads the judge's quote (its model, of another family
+ * than the writer's, and what it holds: input tokens only); Rank runs it, and
+ * each variant then reads "Ranked n of m" with whether the checks agree.
+ * Ranking never accepts: Accept stays the founder's. The judge's model is the
+ * rail's (Vision and checks); there is no model control here.
+ *
  * D1540 (#3791): a result Eadwyn proposed (one with a rail proposal uid) can
  * be reported, before or after it is decided: Report opens a reason and an
  * optional short note in place, and Send records it for HQ. A report refunds
@@ -62,6 +71,24 @@ export default function AreaResults({ results, card, cards = null, model, items 
   if (live !== placedLast.current) working.current = live;
 
   const open = (results || []).filter((r) => r.status === 'proposed' && !state[r.key]);
+  // D1525: each area's ranking, by its proposal: { step, quote?, value?, message? }.
+  const [ranks, setRanks] = useState({});
+  const groups = rankGroups(results);
+  const setRank = (uid, next) => setRanks((s) => ({ ...s, [uid]: { ...(s[uid] || {}), ...next } }));
+  const quoteRank = async (uid) => {
+    setRank(uid, { step: 'quoting', message: null });
+    const a = await judgeArea(uid);
+    if (!a.available) return setRank(uid, { step: a.unreadable ? 'refused' : 'later', message: a.unreadable ? a.reason : null });
+    if (!a.value?.ai) return setRank(uid, { step: 'refused', message: a.value?.message || 'The variants cannot be ranked.' });
+    return setRank(uid, { step: 'quoted', quote: a.value });
+  };
+  const runRank = async (uid) => {
+    setRank(uid, { step: 'ranking', message: null });
+    const a = await judgeArea(uid, { run: true });
+    if (!a.available) return setRank(uid, { step: a.unreadable ? 'refused' : 'later', message: a.unreadable ? a.reason : null });
+    if (!a.value?.ranked) return setRank(uid, { step: 'refused', message: a.value?.message || 'The variants were not ranked.', value: a.value });
+    return setRank(uid, { step: 'ranked', value: a.value });
+  };
   // D1512: the area proposals already accepted here, so Accept all places one variant per area.
   const taken = useRef(new Set());
 
@@ -145,6 +172,9 @@ export default function AreaResults({ results, card, cards = null, model, items 
                 </span>
               ) : null}
             </span>
+            {r.proposalUid && groups[r.proposalUid] && r.status === 'proposed' ? (
+              <RankedLine line={rankedOf(ranks[r.proposalUid], r.variant, groups[r.proposalUid].of)} id={id} />
+            ) : null}
             {r.status === 'refused' ? <RefusalLine refusal={refusalOf(r.error)} testId={`${id}-refused`} /> : null}
             {r.status === 'not_run' ? <span className={MUTED} data-testid={`${id}-not-run`}>{r.line}</span> : null}
             {r.status === 'proposed' ? <Body result={r} id={id} items={items} /> : null}
@@ -160,6 +190,9 @@ export default function AreaResults({ results, card, cards = null, model, items 
             {decided ? <span className={`text-[12.5px] font-bold ${INK}`} data-testid={`${id}-decided`}>{decided === 'accepted' ? 'Placed on the card. Save writes the version.' : decided === 'superseded' ? 'Another variant was placed in this area.' : 'Discarded. Nothing was placed.'}</span> : null}
             {error?.key === r.key ? <RefusalLine refusal={error} testId={`${id}-error`} /> : null}
             {r.uid && (r.status === 'proposed' || decided) ? <ReportControl uid={r.uid} id={id} /> : null}
+            {r.proposalUid && groups[r.proposalUid]?.lastKey === r.key ? (
+              <RankControl uid={r.proposalUid} rank={ranks[r.proposalUid]} onQuote={quoteRank} onRank={runRank} onCancel={(uid) => setRank(uid, { step: null, quote: null })} id={`pitch-area-rank-${r.areaKey}`} />
+            ) : null}
           </div>
         );
       })}
@@ -168,6 +201,48 @@ export default function AreaResults({ results, card, cards = null, model, items 
       ) : null}
       {money ? <span className={MUTED} data-testid={`${testId}-charged`}>{money} {CHARGED_LINE}</span> : null}
     </div>
+  );
+}
+
+/** pd15's line under a variant: "Ranked 1 of 3" once ranked, greyed until then. */
+function RankedLine({ line, id }) {
+  return (
+    <span className={`font-mono text-[10.5px] ${line.ranked ? `font-bold ${INK}` : 'text-axal-muted dark:text-gray-400'}`} data-testid={`${id}-ranked`} data-ranked={line.ranked ? 'true' : 'false'}>
+      {line.text}
+    </span>
+  );
+}
+
+/** D1525: Rank the variants → the judge's quote → Rank. Never Accept. */
+function RankControl({ uid, rank, onQuote, onRank, onCancel, id }) {
+  const step = rank?.step ?? null;
+  if (step === 'later') return <span className={MUTED} data-testid={`${id}-later`}>Ranking · Coming later</span>;
+  if (step === 'ranked') {
+    const v = rank.value;
+    return (
+      <span className={MUTED} data-testid={`${id}-done`}>
+        Ranked by {v.model_label || 'the judge'}, blind. {v.panel?.line}{' '}
+        {v.charged_microusd == null ? `Charged: ${NOT_RECORDED}.` : `Charged ${aiTokens(v.charged_microusd)}.`} Accept stays yours.
+      </span>
+    );
+  }
+  if (step === 'quoted') {
+    const q = rank.quote;
+    return (
+      <span className="flex flex-wrap items-center gap-2" data-testid={`${id}-quote`}>
+        <span className={MUTED}>{`Rank ${q.of} variants with ${q.model_label}, of another family than the writer's. Holds ${aiTokens(q.hold_microusd)}.`}</span>
+        <button type="button" className={PRIMARY} onClick={() => onRank(uid)} data-testid={`${id}-run`}>Rank</button>
+        <button type="button" className={GHOST} onClick={() => onCancel(uid)} data-testid={`${id}-cancel`}>Cancel</button>
+      </span>
+    );
+  }
+  return (
+    <span className="flex flex-col gap-1">
+      <button type="button" className={`${GHOST} self-start`} disabled={step === 'quoting' || step === 'ranking'} onClick={() => onQuote(uid)} data-testid={`${id}-open`}>
+        {step === 'ranking' ? 'Ranking…' : 'Rank the variants'}
+      </button>
+      {step === 'refused' && rank?.message ? <RefusalLine refusal={{ message: rank.message }} testId={`${id}-refused`} /> : null}
+    </span>
   );
 }
 
