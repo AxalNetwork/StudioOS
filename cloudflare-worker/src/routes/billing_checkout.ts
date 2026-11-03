@@ -323,9 +323,19 @@ checkout.post('/checkout/start', async (c) => {
   if (pm && !PM_RE.test(pm)) return refuse(c, 400, { code: 'invalid_payment_method', message: 'That card could not be used. Choose another or add a new one.', audience: 'member' });
   if (pm) { await requireFactor(c, 'totp'); await requireStepUp(c); }
   const customer = (await familyCustomer(c.env, user, meta, 'create'))!;
+  let cardFingerprint: string | null = null;
   if (pm) {
-    const card = await stripeCall<{ id: string; customer?: string | null }>(c.env, `/payment_methods/${pm}`, {}, { method: 'GET' }).catch(() => null);
+    const card = await stripeCall<{ id: string; customer?: string | null; card?: { fingerprint?: string | null } | null }>(c.env, `/payment_methods/${pm}`, {}, { method: 'GET' }).catch(() => null);
     if (!card || card.customer !== customer) return refuse(c, 404, { code: 'payment_method_not_found', message: 'That card could not be used. Choose another or add a new one.', audience: 'member' });
+    cardFingerprint = card.card?.fingerprint ?? null;
+  }
+  // D4289 P2 (#4291): the member's locked referral rides on the subscription (P3 reads these keys). A saved card
+  // that is one of the referrer's own refuses it (self_card); a new card is checked by P3 on the paid invoice.
+  const { activeAttribution, referralMetadata, selfCardRefusal } = await import('../services/referrals/handleAttribution');
+  let attribution = await activeAttribution(c.env, user.id);
+  if (attribution && cardFingerprint
+    && await selfCardRefusal(c.env, user.id, attribution, cardFingerprint, (path) => stripeCall<any>(c.env, path, {}, { method: 'GET' }))) {
+    attribution = null;
   }
   const promoCode = typeof body.promo_code === 'string' ? body.promo_code.trim() : '';
   let promo: PromoRow | undefined;
@@ -347,6 +357,8 @@ checkout.post('/checkout/start', async (c) => {
     'metadata[plan_key]': entry.key,
     ...planMetaParams(meta),
     ...automaticTaxParams(stripeTaxEnabled(c.env)),
+    ...referralMetadata(attribution),
+    ...(attribution && !cardFingerprint ? { 'metadata[referral_card_check]': 'on_payment' } : {}),
   };
   if (pm) params.default_payment_method = pm;
   if (promo) { params['discounts[0][promotion_code]'] = promo.id; params['metadata[promo_code_id]'] = promo.id; }
