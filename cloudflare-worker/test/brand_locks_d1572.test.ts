@@ -36,6 +36,9 @@ import { lockedLine } from '../src/services/decks/brandLocks.ts';
 import { cardColours, saveGateRefusal } from '../src/services/decks/saveGates.ts';
 import { boxOf, CELL, FRAME } from '../src/services/decks/designSystem.ts';
 import { isFramed } from '../src/services/ai/untrusted.ts';
+import { contractErrors } from '../src/contracts/validate.ts';
+
+const SCHEMA = (f: string) => JSON.parse(readFileSync(resolve(ROOT, 'cloudflare-worker/src/contracts', f), 'utf8'));
 import { d1Over } from './_d1_sqlite.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { loadSchema } from './_schema_once.mjs';
@@ -185,6 +188,7 @@ test('2. the import reports and stores nothing; Save as your layouts keeps whole
     assert.equal(r.status, 200, JSON.stringify(r.body));
     assert.equal(r.body.source_name, 'Company template.pptx');
     assert.deepEqual(r.body.counts, { found: 10, placed: 8, not_placed: 2 });
+    assert.deepEqual(contractErrors(SCHEMA('deckTemplateImport.schema.json'), r.body), [], 'the reply matches the pptxImport contract (D1511)');
     assert.equal((f.db.prepare('SELECT COUNT(*) AS n FROM deck_custom_layouts').get() as any).n, 0, 'the report stores nothing');
     assert.equal((await call(f, 3, 'POST', '/api/decks/templates/import?project_id=1', enc.encode('x'), { 'x-file-name': 'notes.docx' })).body.error, 'not_a_pptx');
     const placed = r.body.layouts.filter((l: any) => l.placed);
@@ -213,6 +217,7 @@ test('3a. only the venture’s admin locks; a locked part of the kit is not chan
     assert.equal(locked.status, 200);
     assert.equal(locked.body.locks.palette.by, 'Olu Owner');
     assert.equal(locked.body.locks.fonts, null);
+    assert.deepEqual(contractErrors(SCHEMA('deckBrandLocks.schema.json'), locked.body), [], 'the reply matches the brandLocks contract (D1511)');
     assert.equal((await call(f, 3, 'GET', '/api/decks/brand-kit/locks?project_id=1')).body.can_lock, false);
     const change = await call(f, 3, 'PUT', '/api/decks/brand-kit?project_id=1', { palette: { ink: '#0f172a', accent: '#dc2626' } });
     assert.deepEqual([change.status, change.body.error, change.body.message], [409, 'brand_locked', 'This colour is locked in the brand kit by Olu Owner. Nothing changed.']);
