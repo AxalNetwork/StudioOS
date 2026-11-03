@@ -759,5 +759,8 @@ export async function plansAndPacks(env: Env) {
       yearly: keys.state === 'ready' && planPriceReady(products, entry, 'year', mode) ? 'ready' : 'not_ready',
     };
   }
-  return { plans, packs: (await packsOnSale(env)).packs, covers: PLAN_COVERS, resets: PLAN_RESETS, catalogue: publicCatalogue() };
+  // D1434: the custom amount ($5–$500 of a $1 price) beside the packs, so a visitor sees a top-up when no pack is on sale.
+  // Read failure is no offer, never a refusal of the whole read.
+  const custom = await customTopUp(env).catch((e: unknown) => { console.warn('[aiCredits] custom amount unreadable', (e as Error)?.message); return null; });
+  return { plans, packs: (await packsOnSale(env)).packs, custom, covers: PLAN_COVERS, resets: PLAN_RESETS, catalogue: publicCatalogue() };
 }

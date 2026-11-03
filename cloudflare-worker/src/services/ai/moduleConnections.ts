@@ -5,6 +5,7 @@
 import assignments from './moduleModels';
 import { isOffered, modelById, type CatalogueSwitches } from './catalogue';
 import { RAIL_KIND_JOBS, USE_KINDS, jobStep, selectorFor } from './modelUseCases';
+import { railOptionTextJob, textJob } from './textJobs';
 
 export type ModuleOperation = 'chat' | 'vision' | 'decision' | 'image_labels' | 'embed' | 'rerank' | 'sentiment' | 'translate' | 'stream' | 'transcribe' | 'turn' | 'voice' | 'draw' | 'guard';
 export type ModelConnection = { operation: ModuleOperation; kinds: string[]; purpose: string };
@@ -75,8 +76,13 @@ export function withModuleModels<T extends Page>(row: T): T & { more: Array<{ id
     const imageJob = jobStep(IMAGE_OPTION_JOBS[optionKey] ?? 'DK4', 0);
     if (imageJob) return { ...row, ...selectorFor(imageJob, (id) => MODEL_CONNECTIONS[id]?.operation === 'draw') };
   }
+  // #4313: an option lists its own job's models (RAIL_OPTION_JOBS), the same ones `textChoice`
+  // runs, so the rail never offers a model the press would pass over. A page row, and an option
+  // with no text job, read their kind's job as before.
+  const optionKey = (row as { optionKey?: string }).optionKey;
+  const ownJob = optionKey ? railOptionTextJob(row.pageKey, optionKey) : null;
   const ref = RAIL_KIND_JOBS[row.kind];
-  const job = ref ? jobStep(ref.id, ref.step) : null;
+  const job = ownJob ? textJob(ownJob) : ref ? jobStep(ref.id, ref.step) : null;
   if (job) return { ...row, ...selectorFor(job, (id) => fitsRailKind(row.kind, id)) };
   for (const [id, c] of Object.entries(MODEL_CONNECTIONS)) {
     if (c.operation !== 'chat' || !connectionOnPage(id, row) || [...models, ...more].some(m => m.id === id)) continue;

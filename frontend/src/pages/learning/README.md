@@ -36,6 +36,11 @@ routes live in the D528 module `frontend/src/routes/learning.jsx`, which
 | `LearningStates.jsx` | The frame, the header, and the states every surface draws, plus the coming-soon card. |
 | `CourseOutline.jsx`, `LessonPlayer.jsx`, `WebinarPanel.jsx`, `ExercisePanel.jsx`, `ExamFlow.jsx`, `MyLearning.jsx`, `ProgramLearnersTable.jsx`, `StudioContentTable.jsx`, `ProgramsTable.jsx`, `ProgramDetail.jsx` | The presentational components, one per surface the canvas draws. |
 | `StudioStreamParts.jsx` | #4177 (L2 of #3726): a stored video's file on Cloudflare Stream (lr14, lr14b, lr20e), and under it the thumbnail picker, the captions and the chapters editor (lr15). `StudioItemEditor` mounts it; see "Video on Stream" below. |
+| `learningPlanModel.js` | D3959 (#3959): the learning plan's words and rules, pure. The sheet's body and its refusals (a webinar sends no time, a study block needs a name, an exam only reserves time), the reschedule body, Upcoming and Past, goals with no percent, and what a Learning entry on the Calendar offers. |
+| `planReads.js` | D3959: every client call the plan's pages make: `learningPlanApi`, and the picker's lists from Learning's own reads (a course resolves its uid on pick). |
+| `PlanSheet.jsx` | D3959: the "Add to my plan" sheet (from the Calendar's create dialog, CAL7), the button on each course, lesson, video, webinar, exercise and exam page, and the picker the Calendar's New › Plan learning opens. |
+| `PlanRowActions.jsx` | D3959: a plan item's Mark done, Reschedule, Open in Learning and Remove, with the Calendar's Reschedule and Cancel dialogs (CAL19). On `/learning/plan` and on a Learning entry in the Calendar. |
+| `LearningPlanPage.jsx` | D3959: `/learning/plan`, My learning plan: goals, Upcoming and the past 30 days, and Add a study block (from LR12 "My learning" and LR1's "Your progress"). |
 
 ## The rules for adding here
 

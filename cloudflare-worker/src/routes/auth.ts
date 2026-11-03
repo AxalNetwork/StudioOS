@@ -451,7 +451,21 @@ auth.post('/register', safe('register', 'Registration failed. Please try again i
   await sql.end();
   try { const { Jobs } = await import('../models/jobs'); await Jobs.enqueue(c.env, 'embed_entity', { type: role === 'investor' ? 'investor' : 'partner', id: user.id }); } catch {}
 
-  if (ref_code) {
+  // D4289 P2 (#4291): a handle reference (`h:jane`, `@jane`) is never upper-cased into a code: the handle path
+  // takes it, with its own window and checks. With no ref_code, the first-touch cookie is the referral.
+  const { attachSignupReferral, parseHandleRef } = await import('../services/referrals/handleAttribution');
+  const cookieRef = ref_code ? null : (await import('../services/referralAttribution')).readRefCookie(c.req.header('cookie'));
+  if (parseHandleRef(ref_code ?? cookieRef)) {
+    const linked = await attachSignupReferral(c.env, user.id, String(ref_code ?? cookieRef));
+    if (linked) {
+      try {
+        await c.env.DB.prepare(`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('referral_attached', ?, ?, ?)`)
+          .bind('Joined through an influencer handle', await hashEmail(email), user.id).run();
+      } catch (e) { console.error('[auth] handle referral log failed', e); }
+    }
+  } else if (cookieRef) {
+    await attachSignupReferral(c.env, user.id, cookieRef);
+  } else if (ref_code) {
     try {
       const code = String(ref_code).toUpperCase();
       // Task #8 (X-1) — partner referral codes (PART-XXXXXXXX) grant tier
@@ -987,6 +1001,9 @@ auth.get('/me', async (c) => {
   }
   // D1548: set by `terms_acceptance_pending` below, read by the key after it.
   let termsReason: 'missing' | 'updated' | null = null;
+  // D4289 P1 (#4290): an active influencer membership; 0 when there is none or it cannot be read.
+  const { influencerActive } = await import('../services/influencers');
+  const influencer_active = await influencerActive(c.env, Number(user.id));
 
   return c.json({
     id: user.id, email: user.email, name: user.name, role: user.role,
@@ -1004,6 +1021,8 @@ auth.get('/me', async (c) => {
     // across auth refreshes.
     spinout_lab_active: Number((user as any).spinout_lab_active ?? 0),
     spinout_lab_week: Number((user as any).spinout_lab_week ?? 0),
+    // D4289 P1 (#4290): the Influencer sidebar row reads this, as the Lab's reads spinout_lab_active.
+    influencer_active,
     is_incorporated: Number((user as any).is_incorporated ?? 0),
     kyc_status: (user as any).kyc_status || 'not_started',
     // 'limited' lets the user past the KYC gate to browse the app, but
@@ -1361,6 +1380,10 @@ auth.get('/magic/verify', safe('magic-verify', 'Could not complete your sign-in 
            VALUES (?, 'licence', 0, 0, NULL)`
         ).bind(user.id).run();
       } catch (e) { console.error('[AUTH:magic-verify] onboarding_progress seed failed', e); }
+      // D4289 P2 (#4291): a magic-link sign-up keeps the first-touch referral, as /register and Google do.
+      const { readRefCookie } = await import('../services/referralAttribution');
+      const { attachSignupReferral } = await import('../services/referrals/handleAttribution');
+      await attachSignupReferral(c.env, Number(user.id), readRefCookie(c.req.header('cookie')));
     }
 
     const eh = await hashEmail(user.email);

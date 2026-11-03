@@ -522,8 +522,9 @@ ai.get('/rail', async (c) => {
     stale.add(task);
     return null;
   };
-  const pagePick = pickFor('page', row);
-  const pick = (option ? pickFor(option, active) : null) ?? (rowOffers(active, pagePick ?? '') ? pagePick : null);
+  // #4313 part 2 (D4313): a pick belongs to an option. The page-level pick went with the page rows;
+  // a stored one is no longer read (and never deleted here).
+  const pick = option && optionRow ? pickFor(option, active) : null;
   // #3934 (A (c)): a locked model shows its plan label, `lock`, null when every plan runs it.
   const view = (r: RailRow) => r.models.filter((m) => !off.has(m.id)).map((m) => ({
     id: m.id, name: MODEL_NAMES[m.id] ?? modelById(m.id)?.name ?? null, role: m.role, line: m.line, price: unitPrices(m.id, multiplier), lock: lockLabel(m.id),
@@ -574,8 +575,12 @@ ai.put('/rail/pick', async (c) => {
   const { row, body } = got;
   const option = railOption(body.option);
   if (option === null) return refuseRailOption(c);
-  // PR 3: a registered option's pick is checked against its own row.
-  const on = (option ? resolveRailOption(row.pageKey, option) : null) ?? row;
+  // #4313 part 2 (D4313): a pick is an option's, checked against that option's row. The page-level
+  // pick went with the page rows, so a pick with no option, or an option the page does not register, is refused.
+  const on = option ? resolveRailOption(row.pageKey, option) : null;
+  if (!on) {
+    return refuse(c, 400, { code: 'option_required', message: 'Choose a model for one of this page\'s presses. The page itself has no pick.' });
+  }
   const model = body.model;
   const off = (await flagsFor(c.env, user)).modelsOff;
   if (model !== null && !(typeof model === 'string' && rowOffers(on, model) && !off.has(model))) {
@@ -585,7 +590,7 @@ ai.put('/rail/pick', async (c) => {
       extra: { models: [...on.models, ...(on.more ?? [])].map((m) => m.id).filter((id) => !off.has(id)) },
     });
   }
-  const task = option ?? 'page';
+  const task = option as string;
   const ok = await writeRailPreference(c.env, Number(user.id), railSectionOf(row), task, { model: model as string | null, mode: null }, model === null);
   if (!ok) return refuseCap(c);
   return c.json({ ok: true, page: row.pageKey, option: option ?? null, model });

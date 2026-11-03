@@ -44,6 +44,8 @@ export const HQ_STRIPS = {
     ['Promo codes', '/admin/platform/promo-codes'],
     // D4155 (#4155): HQ › Decks, the deck studio's admin screens.
     ['Decks', '/admin/platform/decks'],
+    // #3588: the meeting-bot runs and Diagnose Eadwyn AI had no strip link, only a card the owner could not find.
+    ['Meeting bots', '/admin/platform/meeting-bots'],
     ['Monitoring', '/monitoring'],
     ['Telegram', '/admin/telegram'],
   ]),

@@ -444,10 +444,10 @@ r.get('/companies', async (c) => {
 // GET (it is not ours to serve, so GET answers 404 `no_stored_logo` and the
 // client keeps rendering the URL itself); POST replaces it and DELETE clears it.
 //
-// No membership event yet: logo_change waits on a migration that widens
-// company_membership_events.kind; #4201. Its CHECK (migration 757) admits only
-// the kinds in services/companyMembershipEvents.ts, and the owner chose to
-// ship without one.
+// Each upload, replace and remove writes one `logo_change` membership event
+// (migration 202611031619) in the same batch as the update. It records what
+// kind of logo the company had before and after ('stored', 'outside' or null),
+// never a URL or a key. Removing a company with no logo writes nothing.
 
 const logoStore = (env: Env) => env.COMPANY_LOGOS ?? null;
 const storageUnconfigured = (c: any) => refuse(c, 503, { code: 'storage_unconfigured', message: 'Logo storage is not configured on this deployment.' });
@@ -462,6 +462,10 @@ async function logoEditGate(c: any): Promise<{ user: User; company: Company } | 
   }
   return { user, company };
 }
+
+/** What kind of logo a row holds, for the event: never the URL itself. */
+const logoKind = (uid: string, url: string | null | undefined): 'stored' | 'outside' | null =>
+  url == null || url === '' ? null : storedLogoOf(uid, url) ? 'stored' : 'outside';
 
 /** Best effort: a stored object left behind is an orphan, never a wrong logo. */
 async function dropStoredLogo(store: R2Bucket, key: string) {
@@ -502,9 +506,11 @@ r.post('/company/:uid/logo', async (c) => {
     }
     const previous = storedLogoOf(company.uid, company.logo_url);
     try {
-      // logo_change membership event: waits on a migration that widens company_membership_events.kind; #4201.
-      await c.env.DB.prepare('UPDATE company_profiles SET logo_url = ?, updated_at = ? WHERE id = ?')
-        .bind(logoUrlFor(company.uid, token, check.kind), nowIso(), company.id).run();
+      await c.env.DB.batch([
+        c.env.DB.prepare('UPDATE company_profiles SET logo_url = ?, updated_at = ? WHERE id = ?')
+          .bind(logoUrlFor(company.uid, token, check.kind), nowIso(), company.id),
+        membershipEvent(c.env, { kind: 'logo_change', companyId: company.id, actorUserId: user.id, before: { logo: logoKind(company.uid, company.logo_url) }, after: { logo: 'stored' } }),
+      ]);
     } catch (e) {
       await dropStoredLogo(store, key);
       throw e;
@@ -524,9 +530,10 @@ r.delete('/company/:uid/logo', async (c) => {
     const store = logoStore(c.env);
     if (previous && !store) return storageUnconfigured(c);
     if (company.logo_url != null) {
-      // logo_change membership event: waits on a migration that widens company_membership_events.kind; #4201.
-      await c.env.DB.prepare('UPDATE company_profiles SET logo_url = NULL, updated_at = ? WHERE id = ?')
-        .bind(nowIso(), company.id).run();
+      await c.env.DB.batch([
+        c.env.DB.prepare('UPDATE company_profiles SET logo_url = NULL, updated_at = ? WHERE id = ?').bind(nowIso(), company.id),
+        membershipEvent(c.env, { kind: 'logo_change', companyId: company.id, actorUserId: user.id, before: { logo: logoKind(company.uid, company.logo_url) }, after: { logo: null } }),
+      ]);
     }
     if (previous && store) await dropStoredLogo(store, previous.key);
     const fresh = await c.env.DB.prepare('SELECT * FROM company_profiles WHERE id = ?').bind(company.id).first<Company>();

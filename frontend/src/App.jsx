@@ -85,6 +85,7 @@ import { clearActiveProject } from './lib/activeProject.js';
 // surface on mount; a lazy chunk could load AFTER the background settings 401
 // returns, racing the flag and still bouncing logged-out visitors to /login.
 import NotFoundPage from './pages/NotFoundPage';
+import { keepFirstTouch } from './lib/referralRef';
 import { ParamRedirect } from './pages/cycles/ParamRedirect.jsx';
 import { BuilderRedirect } from './pages/account/builder/BuilderRedirect.jsx';
 import { ValidateZoneRedirect } from './pages/cycles/ValidateZoneRedirect.jsx';
@@ -1214,6 +1215,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           <StripLink to="/admin/platform/scoring">Scoring</StripLink>
           <StripLink to="/admin/platform/promo-codes">Promo codes</StripLink>
           <StripLink to="/admin/platform/decks">Decks</StripLink>
+          <StripLink to="/admin/platform/meeting-bots">Meeting bots</StripLink>
           <StripLink to="/monitoring">Monitoring</StripLink>
           <StripLink to="/admin/telegram">Telegram</StripLink>
         </HqSubNavStrip>
@@ -2349,12 +2351,8 @@ function AppInner() {
     try {
       const code = new URLSearchParams(window.location.search).get('ref');
       if (!code) return;
-      const normalized = code.trim().toUpperCase().replace(/^AXAL[-_]?/, '').replace(/[^A-Z0-9]/g, '');
-      if (!normalized) return;
-      const already = document.cookie.split(';').some((c) => c.trim().startsWith('axal_ref='));
-      if (already) return; // first-touch wins
-      const secure = window.location.protocol === 'https:' ? '; Secure' : '';
-      document.cookie = `axal_ref=${encodeURIComponent(normalized)}; path=/; max-age=2592000; SameSite=Lax${secure}`;
+      // D4289 P2 (#4291): a handle reference stays a handle (h:jane, 90 days); a code is normalised as before (30 days).
+      keepFirstTouch(code); // first-touch wins: an existing cookie is never replaced
     } catch { /* attribution must never break navigation */ }
   }, []);
 

@@ -79,7 +79,8 @@ export const DECK_RAIL_GROUPS = Object.freeze([
   G('data', 'Data', ['deck:chart', 'deck:table', 'deck:timeline'], ['data'], { elements: true }),
   G('diagrams', 'Diagrams', [], ['diagrams'], { elements: true }),
   G('venture', 'Venture records', [], ['venture'], { elements: true }),
-  G('vision', 'Vision and checks', ['review:deck-file'], [], { usedBy: 'Deck review' }),
+  // D1525 (#3783): the judge that ranks an area's variants is this group's; the results view has no model control.
+  G('vision', 'Vision and checks', ['review:deck-file'], [], { usedBy: 'Deck review, Rank the variants' }),
   G('safety', 'Safety', [], [], { safety: true, usedBy: null }),
 ]);
 
