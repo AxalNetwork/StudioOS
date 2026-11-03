@@ -23,6 +23,7 @@ reply against its schema, not only that the route exists.
 | `deckImageTools.schema.json` | `GET /api/decks/images/tools` (D1534, #3778 phase 2): the AI image tools (background removal through AI Gateway, Upscale with no model), each with whether it can run, its model, its per-image price and why not. |
 | `deckImageVary.schema.json` | `POST /api/decks/images/:uid/edit/quote` (D1544, #3784): an image edit's model, its one hold for the edit and its checks, the references it sends, or why it cannot run. |
 | `deckInvestorLinks.schema.json` | `GET /api/decks/:id/investor-links` (D1565, #3812): the deck, its version and its per-investor links. |
+| `deckJudge.schema.json` | `POST /api/decks/areas/:uid/judge/quote` and `POST /api/decks/areas/:uid/judge` (D1525, #3783): the judge's input-only hold and family, or its blind ranking of an area's variants (rank, probability, "Ranked n of m"), the score AUTO-5 reads and the panel's agreement. |
 | `deckMarkSeen.schema.json` | `POST /api/decks/areas/batches/:uid/seen` (D1600, #3879): `{ ok: true }` when the return banner's Review is opened. |
 | `deckRehearsals.schema.json` | `GET /api/decks/:id/rehearsals` (D1580 F1, #3827): the founder's own rehearsals of the version, newest first, each a summary. |
 | `deckMyTemplates.schema.json` | `GET /api/decks/templates/mine` (D1535, #3782): the caller's own templates. |
@@ -47,6 +48,7 @@ reply against its schema, not only that the route exists.
 | `validate.ts` | `contractErrors`, the subset of JSON Schema the contracts use. A keyword it does not check is an error, never skipped. |
 | `deckModelPresets.schema.json` | `GET /api/decks/:id/model-presets` (D1549, #3796): the preset in force, the stored one, and per element group each preset's model, the resolved model and HQ's lock. |
 | `deckOrgLocks.schema.json` | The same reply's `locks` key (D1549; the adapter row is #3786's): each element group HQ locked, with "Set by Axal VC HQ". |
+| `deckDiagramCheck.schema.json` | `POST /api/decks/:id/diagrams/check` (D1542, #3780): an edited diagram as it would be saved, whether it fits its area, each fit problem, the numbers its labels name and the steps the area holds. |
 
 ## Rule for adding here
 

@@ -28,6 +28,8 @@ Entry point: `cloudflare-worker/src/index.ts`. This is the live API at
 | `data/`                  |     2 | `sectors.ts`, `expertCategories.ts`. |
 | `durable-objects/`       |     2 | `pipeline-room.ts`, `onboarding-chat.ts`. |
 
+**Deck builder v2 (the Grid).** Its routes are the `routes/deck_*.ts` files, nearly all mounted at `/api/decks` (the route map's deck sections list them, one per decision); its engine is `services/decks/` (`genRuntime.ts`, `queueRuntime.ts`, `elementModels.ts`, …) with the `DeckGenRoom` Durable Object; its operations runbook is `documentation/operations/DECK_GRID.md` (D1547).
+
 Tests live in `cloudflare-worker/test/` — **122** files.
 
 ### 1.2 `frontend/` — React 19 + Vite 8 SPA

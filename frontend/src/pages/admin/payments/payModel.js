@@ -404,6 +404,9 @@ export const CHECKS_UNREAD = 'The catalogue’s checks could not be read, so the
  * from the webhook read either way; part 2's checks do not judge the webhook.
  * Blockers come before warnings, then the webhook's.
  */
+/** HQ › AI allowances, where the Token packs card archives and adds packs. */
+export const TOKEN_PACKS_ADMIN_PATH = '/admin/platform/allowances';
+
 export function needsYouAll({ config, summary, webhook, catalog }) {
   const checks = Array.isArray(catalog?.checks) ? catalog.checks : null;
   const names = Object.fromEntries((catalog?.products || []).map((p) => [p.id, p.name]));
@@ -416,6 +419,10 @@ export function needsYouAll({ config, summary, webhook, catalog }) {
   }
   const rank = (c) => (c.severity === 'blocker' ? 0 : 1);
   const fromChecks = checks.slice().sort((a, b) => rank(a) - rank(b)).map((c, i) => {
+    // D1434: a token pack is fixed where the packs are (Archive, New pack), not in Stripe connection.
+    if (c.code === 'pack_not_ready') {
+      return { id: `check-${i}`, code: c.code, severity: c.severity, text: c.message, action: 'Open Token packs', href: TOKEN_PACKS_ADMIN_PATH };
+    }
     if (!c.product_id) {
       return { id: `check-${i}`, code: c.code, severity: c.severity, text: c.message, action: 'Open Stripe connection', href: PAY_STRIPE_PATH };
     }

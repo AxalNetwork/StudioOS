@@ -1,6 +1,6 @@
 ### Influencer offers Worker contract (D4293, #4293)
 
-These are Worker routes in `routes/influencer_offers.ts`, backed by `services/influencerOffers.ts` and migration `202611031420_influencer_offers.sql`. An offer is a Promos code (D1270) with an owning influencer, a budget in one currency and a status. Checkout applies it to a member the influencer referred, when no code is typed; a typed code always wins and only one code is ever sent. The budget is spent from `promo_redemptions.discount_cents`, per currency. No frontend method yet: P7 (#4296) and P9 (#4298) add them with their screens.
+These are Worker routes in `routes/influencer_offers.ts`, backed by `services/influencerOffers.ts` and migration `202611031620_influencer_offers.sql`. An offer is a Promos code (D1270) with an owning influencer, a budget in one currency and a status. Checkout applies it to a member the influencer referred, when no code is typed; a typed code always wins and only one code is ever sent. The budget is spent from `promo_redemptions.discount_cents`, per currency. No frontend method yet: P7 (#4296) and P9 (#4298) add them with their screens.
 
 | Route | Who | What it answers |
 | --- | --- | --- |

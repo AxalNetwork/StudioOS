@@ -36,7 +36,7 @@ import type { RunOptions, RunQuote } from '../aiRouter';
 import { DENSITY_MAX, boxOf, fitText, textCapacity, type TypeRole } from './designSystem';
 import { GRID_COLS, GRID_ROWS, type Grid } from './slideModel';
 import { assignCardUids } from './cardUids';
-import { GRID_PAGE, lockedOut, type Resolved } from './elementModels';
+import { ELEMENT_ROUTES, GRID_PAGE, lockedOut, type Resolved } from './elementModels';
 import { modelLabel, type PlanLine, type RunClass, type StepRow } from './genRuntime';
 import { ASSIST_OPTIONS, chartBlock, chartMessage, chartable, textMessage, wordingOf, wordingProblem, type ChartAction } from './assist';
 import { parseJsonLoose } from './autofill';
@@ -47,6 +47,7 @@ import type { DeckArt } from './imageDraw';
 import type { SourceItem } from './sources';
 import { untrustedBlock, withUntrustedRule } from '../ai/untrusted';
 import { voicePreamble } from './prompts/voice';
+import { GRID_DIAGRAM_JOB, LATER_LINE, diagramMessage, diagramVariant, drawnTypeOf, isDiagramElement, stepsFor, type DiagramPayload } from './gridDiagram';
 
 /** A deck's own aspect (D1554): what a text area's capacity is measured at. */
 export type DeckAspect = '16:9' | '4:3';
@@ -69,12 +70,14 @@ export const IMAGE_STYLE: Readonly<Record<string, 'scene' | 'flat'>> = Object.fr
 /** Each variant's temperature: one model, three seeds, three wordings. */
 const TEMPERATURES = [0.4, 0.7, 0.9] as const;
 
-export type AreaKind = 'text' | 'chart' | 'image' | 'records';
+/** D1542 (#3780): `diagram` is the `grid_diagram` job (`gridDiagram.ts`): structure from the model, numbers stripped, drawn and fitted in code. */
+export type AreaKind = 'text' | 'chart' | 'image' | 'records' | 'diagram';
 export function kindOf(element: string): AreaKind | null {
   if (TEXT_ROLE[element]) return 'text';
   if (CHART_ACTION[element]) return 'chart';
   if (IMAGE_STYLE[element]) return 'image';
   if (isVentureElement(element)) return 'records';
+  if (isDiagramElement(element)) return 'diagram';
   return null;
 }
 
@@ -186,6 +189,13 @@ async function planOne(ctx: PlanCtx, ask: AreaAsk, variants: number, uids: Array
   };
   if (!card) return refused(base, 'card_not_found', 'This card is not on the saved version. Save the deck, then generate.');
   if (!kind) return refused(base, 'element_not_generated', 'This element is placed from its own dialog, not generated into an area.');
+  // D1542: a diagram whose type is "(later)" (funnel, hierarchy, hub and spoke, 2×2) is refused before any model is resolved or quoted.
+  const drawn = kind === 'diagram' ? drawnTypeOf(ask.element) : null;
+  if (kind === 'diagram' && !drawn) return refused(base, 'coming_later', LATER_LINE);
+  if (drawn) {
+    const steps = stepsFor(drawn, ask.grid);
+    if (steps.min > steps.max) return refused(base, 'area_too_small', `A ${ask.element} needs at least ${steps.min * 2} columns. Select a wider area. Nothing was charged.`);
+  }
   const block = (Array.isArray(card.blocks) ? card.blocks : []).find((b: any) => sameGrid(b?.grid, ask.grid)) ?? null;
   const replaces = block?.id != null ? String(block.id) : null;
 
@@ -237,6 +247,33 @@ async function planOne(ctx: PlanCtx, ask: AreaAsk, variants: number, uids: Array
       ...base, refusal: null, lines, hold_microusd: q.hold_microusd * variants,
       quote_lines: q.steps.map((s) => ({ label: s.label, count: variants, per_microusd: s.hold_microusd, microusd: s.hold_microusd * variants })),
       payload: { kind, replaces_block: replaces },
+    };
+  }
+
+  if (kind === 'diagram' && drawn) {
+    // D1542 (#3780): the grid_diagram job. The model writes structure only, from the card's own words; code strips, draws and fits it.
+    const narrative = narrativeOf(card);
+    if (!narrative) return refused(base, 'nothing_to_draw_from', 'Give this card a title first: the diagram is drawn from its words.');
+    const msg = diagramMessage(drawn, ask.grid, narrative, ctx.voice);
+    const maxTokens = ELEMENT_ROUTES[ask.element]?.maxTokens ?? 700;
+    const opts = (k: number): RunOptions => ({
+      task: 'rail_write', userId: ctx.userId, model: r.model!, rail, systemPrompt: msg.system,
+      messages: [{ role: 'user', content: msg.user }], maxTokens, temperature: TEMPERATURES[k],
+    } as RunOptions);
+    const q = await ctx.quote(opts(0));
+    if (!q.ok) return refused(base, q.refusal, q.error);
+    const lines: PlanLine[] = Array.from({ length: variants }, (_, k) => ({
+      card_uid: card.uid, area_id: ask.id, element: ask.element, kind: 'text', task: 'rail_write', model: r.model, quote_microusd: q.hold_microusd,
+      input: { systemPrompt: msg.system, messages: [{ role: 'user', content: msg.user }], maxTokens, temperature: TEMPERATURES[k], option: rail.option, job: GRID_DIAGRAM_JOB, variant: k, seed: textSeed(ctx.deckId, card.uid, ask.id, k) },
+    }));
+    const payload: DiagramPayload = { kind: 'diagram', job: GRID_DIAGRAM_JOB, element: ask.element, type: drawn, grid: ask.grid, card_index: index, replaces_block: replaces };
+    return {
+      ...base, refusal: null, lines, hold_microusd: q.hold_microusd * variants,
+      quote_lines: [
+        { label: `${variants} variant${variants === 1 ? '' : 's'} · ${base.model_label}`, count: variants, per_microusd: q.hold_microusd, microusd: q.hold_microusd * variants },
+        { label: 'Numbers removed, drawn and fitted in code', count: variants, per_microusd: null, microusd: 0, included: true },
+      ],
+      payload,
     };
   }
 
@@ -391,6 +428,14 @@ export function variantsOf(payload: any, steps: readonly StepRow[], opts: { aspe
       const image = result?.image;
       if (!image?.uid) return fail('image_not_stored', 'The image was not stored. You were charged only for what ran.');
       v.payload = { kind: 'image', image };
+      return v;
+    }
+    if (payload?.kind === 'diagram') {
+      // D1542: sanitized, numbers stripped, drawn and held to its area; an overflow is refused, never placed broken.
+      const d = diagramVariant(payload, result?.text, opts.aspect);
+      if (!d.ok) return fail(d.code, d.message);
+      v.payload = { kind: 'block', block: d.block, title: d.title, stripped: d.stripped };
+      v.critique = { fits: true, contrast_aa: opts.contrastAa, density_ok: true };
       return v;
     }
     if (payload?.kind === 'chart') {

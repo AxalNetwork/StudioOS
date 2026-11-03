@@ -19,6 +19,10 @@
 -- `referral_partner_terms.offer_budget_cents` (D-b: a tier's rate, duration and
 -- offer budget are terms) caps the total discount across all of an
 -- influencer's offers. NULL is no cap beyond each offer's own budget.
+--
+-- This file is stamped 202611031620 so it runs after
+-- `202611031502_influencer_program.sql`, which rebuilds referral_partner_terms.
+-- An earlier stamp would add the column and then lose it in that rebuild.
 
 CREATE TABLE IF NOT EXISTS influencer_offers (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
