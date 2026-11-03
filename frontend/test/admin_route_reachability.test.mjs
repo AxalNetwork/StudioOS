@@ -568,7 +568,9 @@ test('a redirect-only /admin route is excluded, and its target is reachable', ()
   // Derived, not hardcoded: a route whose element is <Navigate> is not a surface.
   // But a redirect INTO an orphan is still a dead end, so the target is checked.
   // D953's Programs redirects and D937/D972's Lab/network redirects coexist.
-  assert.deepEqual(REDIRECTS, ['/admin', '/admin/refer-earn', '/admin/partners', '/admin/partner-invitations/firm-links', '/admin/held/accounts', '/admin/held/programs', '/admin/held/approvals', '/admin/held/community', '/admin/held/insights', '/admin/network-profiles', '/admin/spinout-lab', '/admin/spinout-lab/preview', '/admin/news', '/admin/advisor-cohorts'],
+  assert.deepEqual(REDIRECTS, ['/admin', '/admin/refer-earn', '/admin/partners', '/admin/partner-invitations/firm-links', '/admin/held/accounts', '/admin/held/programs', '/admin/held/approvals', '/admin/held/community', '/admin/held/insights', '/admin/network-profiles', '/admin/spinout-lab', '/admin/spinout-lab/preview', '/admin/news', '/admin/advisor-cohorts',
+    // D1537 (#3786): the plan's address for the Grid's dashboard opens HQ › Decks › Grid health.
+    '/admin/ai/deck-grid'],
 
     'the set of /admin redirect routes changed; confirm each is still a redirect and not a page');
   // A `*Redirect` component names its target in its own file, not in App.jsx

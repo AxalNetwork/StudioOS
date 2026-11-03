@@ -48,7 +48,7 @@ function useRead(load, deps) {
   return [reply, retry];
 }
 
-function Unreadable({ what, retry, testId }) {
+function ReadFailed({ what, retry, testId }) {
   return (
     <div role="alert" className="flex flex-wrap items-center gap-2 text-[12.5px] text-red-700 dark:text-red-300" data-testid={testId}>
       <span><strong>Could not be read.</strong> {what} did not load. That is not the same as there being none.</span>
@@ -73,7 +73,7 @@ function GridHealth() {
   const [reply, retry] = useRead(() => adminDeckGridApi.grid(days), [days]);
   const [gen] = useRead(() => adminDeckGridApi.generation(days), [days]);
   if (reply === undefined) return <Card><p className={MUTED} role="status" data-testid="hq-deck-grid-reading">Reading…</p></Card>;
-  if (reply === null) return <Card><Unreadable what="The Grid's health" retry={retry} testId="hq-deck-grid-unreadable" /></Card>;
+  if (reply === null) return <Card><ReadFailed what="The Grid's health" retry={retry} testId="hq-deck-grid-unreadable" /></Card>;
   if (reply.refused) return <Card><p className={MUTED} data-testid="hq-deck-grid-refused">Only an HQ admin can see the Grid's health.</p></Card>;
   const rows = gridRows(reply);
   const budget = budgetCard(reply.budget);
@@ -103,7 +103,7 @@ function GridHealth() {
           <p className={MUTED}>{GRID_LINE}</p>
           <Days days={days} setDays={setDays} />
         </div>
-        {rows === null ? <Unreadable what="The metrics" retry={retry} testId="hq-deck-grid-rows-unreadable" />
+        {rows === null ? <ReadFailed what="The metrics" retry={retry} testId="hq-deck-grid-rows-unreadable" />
           : !rows.length ? <p className={MUTED} data-testid="hq-deck-grid-empty">No generation step finished in this window.</p>
             : (
               <div className="max-h-[36rem] overflow-auto">
@@ -140,7 +140,7 @@ function Funnel() {
   const [days, setDays] = useState(30);
   const [reply, retry] = useRead(() => adminDeckGridApi.funnel(days), [days]);
   if (reply === undefined) return <Card><p className={MUTED} role="status" data-testid="hq-deck-funnel-reading">Reading…</p></Card>;
-  if (reply === null) return <Card><Unreadable what="The funnel" retry={retry} testId="hq-deck-funnel-unreadable" /></Card>;
+  if (reply === null) return <Card><ReadFailed what="The funnel" retry={retry} testId="hq-deck-funnel-unreadable" /></Card>;
   if (reply.refused) return <Card><p className={MUTED} data-testid="hq-deck-funnel-refused">Only an HQ admin can see the funnel.</p></Card>;
   const tiles = kpiTiles(reply);
   const bands = quoteBands(reply);
