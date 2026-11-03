@@ -64,6 +64,8 @@
  *   PATCH /prospects/:id             the same fields
  *   PUT   /data-room/files/:id/checklist  { item | null }
  *   PUT   /prospects/:id/next-step   { next_step, next_step_due, warm_path }
+ *   GET   /prospects/:id/brief?project=&event=   D1585 (#3832): the meeting brief, no model run
+ *         → { prospect, meeting, last_met, timeline, deck, objections, basis } (`services/prospectBrief.ts`)
  *
  *   D840 part 2 (#2347): the founder's own Mercury feeds the modules.
  *   POST   /mercury/sync                  reads Mercury; writes facts and proposals → { counts }
@@ -188,6 +190,7 @@ import {
   capitalSummary, capitalSupportDetails, capitalSupportHistory, recordCapitalSupport,
 } from '../services/capRelAccess';
 import useOfFunds from './cycle_use_of_funds';
+import { prospectBrief } from '../services/prospectBrief';
 import { RaiseEvidenceError, raiseEvidenceContext, readRaiseEvidence, acceptItem as acceptEvidenceItem, dismissItem as dismissEvidenceItem, setSharing as setEvidenceSharing, linkClaim as linkEvidenceClaim, previewEvidence, type RaiseEvidenceContext } from '../services/raiseEvidence';
 
 const cycleRaise = new Hono<{ Bindings: Env }>();
@@ -1355,6 +1358,21 @@ cycleRaise.put('/prospects/:id/next-step', async (c) => {
       next_step: b.next_step, next_step_due: b.next_step_due, warm_path: b.warm_path,
     }));
   } catch (e) { return writeFailed(c, e); }
+});
+
+// D1585 (#3832, deck v2 F6): "Prep" on an investor meeting. Reads only; no model runs.
+cycleRaise.get('/prospects/:id/brief', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  const id = idParam(c.req.param('id'));
+  if (id == null) return c.json({ detail: 'Prospect not found' }, 404);
+  const ev = c.req.query('event');
+  const eventId = ev != null && ev !== '' ? idParam(ev) : null;
+  try {
+    const brief = await prospectBrief(c.env, s.projectId, id, { eventId });
+    if (!brief) return c.json({ detail: 'Prospect not found' }, 404);
+    return c.json(brief);
+  } catch (e) { return capitalFailure(c, e); }
 });
 
 // ---------------------------------------------------------------------------
