@@ -61,10 +61,10 @@ board → file map and what waits for which issue are in
 | `ApprovalsTab.jsx` | Approvals with its four filters, and one proposal (TM7a, TM7b, TM7b2). |
 | `TeamSettingsTab.jsx` | Settings: who pays, who may add agents, caps (Edit cap opens the profile's editor), models and tools, data sharing (Open rule book opens the role's book) (TM8a; TM9a5's lock line). |
 | `SkillsTab.jsx` | Skills (D1612, v2 by #4224): the 8 areas (SK0), an area's directory or All, with search and sort (SK1), the skill page with its SKILL.md drawn as text, Copy and Download (SK2), and the states (SK6). |
-| `SkillSheets.jsx` | Assign to agents (SK3, natural fit first, each agent's run-cost change, SK5's explainer), Add skills to this agent, the Add-an-agent Skills step and New skill: Write, or Paste a SKILL.md with a preview (SK4). |
+| `SkillSheets.jsx` | Assign to agents (SK3, natural fit first, each agent's run-cost change as the Worker serves it (D4121), SK5's explainer), Add skills to this agent and the Add-an-agent Skills step (each with the per-run cost range, D4121), and New skill: Write, or Paste a SKILL.md with a preview (SK4). |
 | `AgentSkillsCard.jsx` | The agent profile's Skills and Values (SK4, SK9b): the radar computed by the Worker, pinned versions, Update to vN, Remove, and values "Set by [Company]". |
 | `TeamCoverageCard.jsx` | Team coverage (SK8): people and agents on the 8 /studio axes; a category covered only by agents reads as a people gap. Not drawn while its read is off. |
-| `SkillParts.jsx` | The taxonomy and tool chips, the energy image, the run cost line and its explainer, the directory card, a skill row and the agent radar the skill screens share. |
+| `SkillParts.jsx` | The taxonomy and tool chips, the energy image, the card's run cost line and its explainer, D4121's per-run cost range (`RunCostLine`) and a skill row's tokens per run, the directory card, a skill row and the agent radar the skill screens share. |
 | `skillsModel.js` | The skill words and pure derivations: levels and the 8 areas, filter and sort, run cost, natural fit and the Assign order, the radar and coverage, assignment groups, refusals, A1's answers as the screens draw them, and the client-side SKILL.md preview. |
 | `WorkingHere.jsx` | Working here (TM6c) and Assign this task to… (TM6b). Built, not mounted: module headers mount them with the Ask panel (#3706) and the task store (#3845). |
 
@@ -84,9 +84,11 @@ Team › Skills has no roles. These hold for every skill screen here:
   approved or a retired skill.
 - **Every card draws its energy image and its run cost.** The image is
   `SkillEnergy`, decorative and `aria-hidden`. A skill with no tag that has
-  both an area and a level gets an empty frame, never a made-up area. The run
-  cost (R5, #4121) reads "Not recorded" until a route serves it, never "$0".
-  The same goes for each agent's run-cost change on Assign.
+  both an area and a level gets an empty frame, never a made-up area. A card's
+  run cost reads "Not recorded" (a card has no agent, so no model to price it
+  on; D4121), never "$0", and its row says the tokens it adds to a run. Each
+  agent's run-cost change on Assign is served (D4121): a run with the skill
+  over a run with none, on that agent's model.
 - **Values belong to agents.** No skill screen draws a value. An agent's
   values are the six Axal values (D4117 §1), on its profile.
 - **Read-only members** read every skill, and see no New and no Assign.

@@ -21,6 +21,8 @@ export const TABS = [
   { key: 'beta', label: 'Beta cohort', to: `${BASE}/beta` },
   { key: 'templates', label: 'Default templates', to: `${BASE}/templates` },
   { key: 'norms', label: 'Stage norms', to: `${BASE}/norms` },
+  // D4251 (#4251): the elements × models grid and the kill switch.
+  { key: 'models', label: 'AI models', to: `${BASE}/models` },
 ];
 export const MODELS_LINK = { label: 'Models · existing', to: '/admin/platform/ai-usage' };
 

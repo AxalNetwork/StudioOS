@@ -256,6 +256,7 @@ import deckReview from './routes/deck_review';
 import deckSources from './routes/deck_sources';
 import deckCheck from './routes/deck_check';
 import deckGrid from './routes/deck_grid';
+import deckAreas from './routes/deck_areas';
 import deckBatches from './routes/deck_batches';
 import deckDraft from './routes/deck_draft';
 import deckCoedit from './routes/deck_coedit';
@@ -1415,6 +1416,8 @@ app.route('/api/decks', deckCheck);
 app.route('/api/decks', deckGrid);
 // D1502 part 2 (#3753): a generation run's status, its event stream, and Stop.
 app.route('/api/decks', deckBatches);
+// D1512 (#3764): Generate into areas (quote, admit, proposals, accept, discard).
+app.route('/api/decks', deckAreas);
 // D1501 (#3751): a version's working copy, card by card (`/:id/cards/:uid`, `/:id/draft`), before `decks`.
 app.route('/api/decks', deckDraft);
 // D1577 (#3824): area saves (`/:id/cards/:uid/areas/:area`), single-slide restore (`/:id/restore-card`) and presence, before `decks`.
@@ -2371,7 +2374,7 @@ export default {
           try {
             const { sweepLearningVideos } = await import('./services/learningVideo');
             const r = await sweepLearningVideos(env, now);
-            if (r.deleted) console.info(`[cron] learning video sweep checked=${r.checked} deleted=${r.deleted}`);
+            if (r.deleted || r.stream_deleted || r.kept_unverified) console.info(`[cron] learning video sweep checked=${r.checked} deleted=${r.deleted} copied_deleted=${r.copied_deleted} kept_unverified=${r.kept_unverified} stream_deleted=${r.stream_deleted}`);
           } catch (e) {
             console.error('[cron] learning video sweep failed', e);
           }

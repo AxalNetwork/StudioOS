@@ -10,13 +10,13 @@ import { reportError } from '../../../lib/log';
 import { useRailOption } from '../../../ui/railCrumbs';
 import { aiTokens, refusalOf } from './newDeckModel';
 import { ELEMENT_GROUPS, LATER, NOT_ON, PEND, elementOnMain } from './deckV2Model';
-import { SURFACES, areasGenerate, elementModels } from './deckV2Adapter';
+import { SURFACES, areasGenerate, areasQuote, elementModels } from './deckV2Adapter';
 import { SourceChip } from './SourcesBoards';
 import { CONSENT_LINE } from './imageModel';
 import AreaResults from './AreaResults';
 import {
   HEADLINE_WHY, NO_MODEL, RAIL_PAGE, SEQUENCE_LINE, TEXT_ELEMENTS, VARIANTS,
-  assistBody, batchMode, cardFigures, cardKeyOf, changesFor, charged, defaultElement, holdLine, holdOf, imageBlock, metricBlock, modelChip, rowLabel, rowPlan, runSequence, runnable, validLine, variantWhy,
+  assistBody, batchArea, batchMode, batchable, cardFigures, cardKeyOf, changesFor, charged, defaultElement, holdLine, holdOf, imageBlock, metricBlock, modelChip, rowLabel, rowPlan, runSequence, runnable, validLine, variantWhy,
 } from './areaLightboxModel';
 import { COST, EYE, FIELD, GHOST, INK, MUTED, PRIMARY, RefusalLine } from './AssistParts';
 
@@ -83,13 +83,32 @@ export default function AreaLightbox({
     chart: 'deck:chart', table: 'deck:table', timeline: 'deck:timeline', image: 'deck:image', speaker_notes: 'deck:notes',
   })[busy.action] ?? null : null, 'Generate');
 
+  // D1512 (#3764): the batch takes what only it can do — several areas under one hold, variants 2 and 3,
+  // words for an empty area — and its rows share one quote; one area with one variant keeps its own route.
+  const batchKeys = new Set(mode === 'batch' ? plans.filter((r) => batchable(r.plan)).map((r) => r.key) : []);
+  const useBatch = batchKeys.size > 1 || (batchKeys.size > 0 && variants > 1) || plans.some((r) => batchKeys.has(r.key) && r.plan.run === 'area');
+  const inBatch = (r) => useBatch && batchKeys.has(r.key);
+  const [batchQuote, setBatchQuote] = useState(null);
+  const batchKey = plans.filter((r) => inBatch(r)).map((r) => JSON.stringify(batchArea(r))).join('\n');
+  useEffect(() => {
+    if (!aiOn || !batchKey) { setBatchQuote(null); return undefined; }
+    let live = true;
+    setBatchQuote({ sig: batchKey, status: 'loading' });
+    areasQuote({ deckId, card: cardKeyOf(card, cardIndex), areas: batchKey.split('\n').map((x) => JSON.parse(x)), variants }).then((a) => {
+      if (!live) return;
+      setBatchQuote(a?.available ? { sig: batchKey, status: 'ok', data: a.value } : { sig: batchKey, status: 'error', refusal: { message: a?.reason || 'Eadwyn cannot run this now.' } });
+    });
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batchKey, variants, aiOn, deckId]);
+
   // Each charged row is quoted as its plan settles; a quote runs nothing and charges nothing.
-  const quoteKeys = plans.filter((r) => charged(r.plan)).map((r) => `${r.key}|${r.plan.run}|${JSON.stringify(r.plan.body)}`).join('\n');
+  const quoteKeys = plans.filter((r) => charged(r.plan) && !inBatch(r)).map((r) => `${r.key}|${r.plan.run}|${JSON.stringify(r.plan.body)}`).join('\n');
   useEffect(() => {
     if (!aiOn) return undefined;
     let live = true;
     for (const r of plans) {
-      if (!charged(r.plan)) continue;
+      if (!charged(r.plan) || inBatch(r)) continue;
       const sig = `${r.plan.run}|${JSON.stringify(r.plan.body)}`;
       setQuotes((q) => ({ ...q, [r.key]: { sig, status: 'loading' } }));
       const ask = r.plan.run === 'image' ? deckImagesApi.quote(deckId, r.plan.body)
@@ -148,10 +167,17 @@ export default function AreaLightbox({
   const held = aiOn ? [] : plans.filter((r) => runnable(r.plan) && charged(r.plan));
   const paid = ready.filter((r) => charged(r.plan));
   const quoteOf = (r) => {
+    // D1512: a batch row's own hold (its lines' sum) or its refusal, from the one quote.
+    if (inBatch(r)) {
+      if (batchQuote?.sig !== batchKey || batchQuote.status !== 'ok') return batchQuote?.sig === batchKey ? batchQuote : null;
+      const a = (batchQuote.data?.areas || []).find((x) => x.key === r.key);
+      if (!a) return null;
+      return a.refusal ? { status: 'error', refusal: { message: a.refusal.message, code: a.refusal.code } } : { status: 'ok', data: { hold_microusd: a.hold_microusd, lines: a.lines, gates: a.gates } };
+    }
     const q = quotes[r.key];
     return q && q.sig === `${r.plan.run}|${JSON.stringify(r.plan.body)}` ? q : null;
   };
-  const paidQuotes = paid.map((r) => quoteOf(r));
+  const paidQuotes = [...paid.filter((r) => !inBatch(r)).map((r) => quoteOf(r)), ...(paid.some(inBatch) ? [batchQuote?.sig === batchKey ? batchQuote : null] : [])];
   const quoteRefusal = paidQuotes.find((q) => q?.status === 'error')?.refusal
     || paidQuotes.map((q) => q?.data).find((d) => d?.ai === false) || null;
   const blocked = paid.length > 0 && paidQuotes.some((q) => q?.status !== 'ok' || holdOf(q.data) == null);
@@ -195,18 +221,25 @@ export default function AreaLightbox({
   const generate = async () => {
     const list = ready.map((r) => ({ ...r }));
     let out;
-    if (mode === 'batch') {
-      // #3764 / #3766: one quote and one hold for every area. The adapter answers unavailable on main.
-      const a = await areasGenerate({ deckId, card: cardKeyOf(card, cardIndex), areas: list.map((r) => ({ id: r.key, grid: r.area.grid, element: r.element })), variants });
-      out = a?.available ? { results: a.value?.results || [], refusal: null } : await runSequence(list, runOne);
+    if (list.some(inBatch)) {
+      // D1512 (#3764): one run and one hold for the batch's areas; a headline, notes, a figure or an upload keep their own route.
+      const inRun = list.filter(inBatch);
+      const rest = list.filter((r) => !inBatch(r));
+      const a = await areasGenerate({ deckId, card: cardKeyOf(card, cardIndex), areas: inRun.map(batchArea), variants, quoteUid: batchQuote?.data?.quote_uid });
+      const batch = a?.available ? { results: a.value?.results || [], refusal: null } : { results: inRun.map((r) => ({ key: r.key, status: 'refused', error: { message: a?.reason || 'Eadwyn cannot run this now.', code: a?.code ?? null } })), refusal: { key: inRun[0].key, error: { message: a?.reason, code: a?.code } } };
+      const seq = rest.length ? await runSequence(rest, runOne) : { results: [], refusal: null };
+      // In the rows' order, so Accept all goes top to bottom as before.
+      const at = (res) => list.findIndex((r) => r.key === (res.areaKey ?? res.key));
+      out = { results: [...batch.results, ...seq.results].sort((a, b) => at(a) - at(b)), refusal: batch.refusal || seq.refusal };
     } else {
       out = await runSequence(list, runOne);
     }
     setBusy(null);
     const byKey = new Map(list.map((r) => [r.key, r]));
     setResults(out.results.map((res) => {
-      const r = byKey.get(res.key);
-      const i = rows.findIndex((x) => x.key === res.key);
+      // D1512: a batch answers one result per variant, each naming its area.
+      const r = byKey.get(res.areaKey ?? res.key);
+      const i = rows.findIndex((x) => x.key === (res.areaKey ?? res.key));
       return { ...res, area: r.area, label: rowLabel(r.area, i), elementLabel: ELEMENT_LABEL[r.element] || null };
     }));
     if (out.refusal) {

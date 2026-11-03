@@ -251,7 +251,7 @@ export default function AddAgentSheet({ scope, roles, models, held = [], team = 
           <>
             {persona ? <AgentCard persona={persona} legend={personasBlock?.value?.values} size="compact" /> : null}
             <p className={`m-0 ${MUTED}`}>{`Skills are added separately from who ${name} is. Every skill is read on every run, so add only what this team needs.`}</p>
-            <SkillsStep scope={scope} role={roleKey} picked={skillPicks} setPicked={setSkillPicks} onList={setSkillList} />
+            <SkillsStep scope={scope} role={roleKey} model={model} persona={chosen} picked={skillPicks} setPicked={setSkillPicks} onList={setSkillList} />
             <CoverageLines skills={chosenSkills} />
           </>
         ) : null}

@@ -7,6 +7,8 @@
  *   POST /webhook        register (create) or update events on an existing endpoint
  *   GET  /config         publishable key (masked) + Test/Live mode
  *   PUT  /config         set/update the publishable key (stored in KV)
+ *   GET  /cutover        D1434: what a move to the other Stripe mode would clear
+ *   POST /cutover        D1434: the owner-run move from test to live (or back)
  *
  * The STRIPE_WEBHOOK_SECRET Worker secret is pushed via cloudflareSecrets.setSecret
  * on successful webhook registration so it takes effect on the next isolate boot.
@@ -23,6 +25,12 @@
  * write bar as register, plus a written reason included in its audit details.
  * Register keeps D223's bar; it does not require the new config-change reason.
  *
+ * D1434 (#3703) — THE CUTOVER. Production ran on Stripe's sandbox, so every
+ * stored customer, subscription and mirrored price is a test-mode object. POST
+ * /cutover clears them in one batch (`services/stripeCutover.ts`) once the keys
+ * are already in the target mode, behind the write bar, a reason and a typed
+ * confirmation. Members whose sandbox plan went back to free get one notice.
+ *
  * Every write is audited once through `logAdminAction` (D159), which replaced a
  * hand-written INSERT here. The `report_type='billing'` it set was read by
  * nothing.
@@ -31,7 +39,9 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 import { stripeCall } from './billing';
-import { stripeMode, getPublishableKey, setPublishableKey, maskPublishableKey, paymentChangeReason } from '../services/catalog';
+import { stripeMode, getPublishableKey, setPublishableKey, maskPublishableKey, paymentChangeReason, syncCatalog } from '../services/catalog';
+import { CUTOVER_NOTICE, CutoverUnreadable, cutoverCounts, cutoverMembers, lastCutover, runCutover, storedMode, type StripeModeName } from '../services/stripeCutover';
+import { notify } from '../services/notify';
 import { setSecret } from '../services/cloudflareSecrets';
 import { logAdminAction } from '../services/adminAudit';
 import { refuse } from '../util/refusal';
@@ -268,6 +278,100 @@ r.put('/config', async (c) => {
     mode: pk.startsWith('pk_live_') ? 'live' : 'test',
   });
   return c.json({ ok: true, mode: pk.startsWith('pk_live_') ? 'live' : 'test' });
+});
+
+// --- D1434 (#3703): the move from one Stripe mode to the other -------------
+
+const CUTOVER_UNREADABLE = { code: 'cutover_unreadable', message: 'The records this move would change could not be counted. Nothing was changed. Try again in a moment.', audience: 'admin' as const };
+const CATALOG_KV = ['cache:catalog:live:test', 'cache:catalog:live:live'];
+
+// GET /api/admin/stripe/cutover
+// The keys' mode, the last cutover, and what a cutover would clear now. A count
+// that cannot be read is a 503, never 0.
+r.get('/cutover', async (c) => {
+  await requireSuperAdmin(c);
+  try {
+    const [last, wouldClear] = await Promise.all([lastCutover(c.env), cutoverCounts(c.env)]);
+    return c.json({ mode: stripeMode(c.env), stored_mode: storedMode(last), last_cutover: last, would_clear: wouldClear });
+  } catch (e) {
+    if (e instanceof CutoverUnreadable) return refuse(c, 503, { ...CUTOVER_UNREADABLE, raw: e.cause });
+    throw e;
+  }
+});
+
+// POST /api/admin/stripe/cutover   { to_mode: 'live', reason, confirm: 'live' }
+r.post('/cutover', async (c) => {
+  const admin = await requireSuperAdminWriteBar(c);
+  let body: { to_mode?: unknown; confirm?: unknown; reason?: unknown } = {};
+  try { body = await c.req.json(); } catch { /* empty body → 400 below */ }
+  const reason = paymentChangeReason(body);
+  if (!reason) return c.json({ error: 'reason_required', message: 'Give a reason of 1 to 500 characters for this payment change.' }, 400);
+  const toMode = body.to_mode === 'live' || body.to_mode === 'test' ? (body.to_mode as StripeModeName) : null;
+  if (!toMode) return c.json({ error: 'invalid_mode', message: 'Choose live or test.' }, 400);
+  if (body.confirm !== toMode) {
+    return c.json({ error: 'confirm_mismatch', message: `Type ${toMode} to confirm. Nothing was changed.` }, 400);
+  }
+  const keyMode = stripeMode(c.env);
+  if (keyMode === 'unconfigured') {
+    return c.json({ error: 'stripe_not_configured', message: 'No Stripe secret key is set. Nothing was changed.' }, 503);
+  }
+  // Keys go first: the stored objects are cleared only once checkout already
+  // runs in the target mode, so nothing is left pointing at the old one.
+  if (keyMode !== toMode) {
+    return c.json({ error: 'cutover_keys_not_live', message: `The Stripe keys are in ${keyMode} mode. Set the ${toMode} keys first. Nothing was changed.`, mode: keyMode }, 409);
+  }
+  let last, expected, members: number[];
+  try {
+    [last, expected, members] = await Promise.all([lastCutover(c.env), cutoverCounts(c.env), cutoverMembers(c.env)]);
+  } catch (e) {
+    if (e instanceof CutoverUnreadable) return refuse(c, 503, { ...CUTOVER_UNREADABLE, raw: e.cause });
+    throw e;
+  }
+  const fromMode = storedMode(last);
+  if (fromMode === toMode) {
+    return c.json({ error: 'cutover_already_done', message: `The stored Stripe records are already in ${toMode} mode. Nothing was changed.`, last_cutover: last }, 409);
+  }
+
+  let result;
+  try {
+    result = await runCutover(c.env, { fromMode, toMode, actorUserId: admin.id, reason, expected });
+  } catch (e) {
+    return refuse(c, 503, { code: 'cutover_failed', message: 'The move did not run. Nothing was changed. Try again in a moment.', raw: e, audience: 'admin' });
+  }
+
+  // The catalogue cache for both modes, then a fresh mirror in the new mode.
+  for (const k of CATALOG_KV) {
+    try { await c.env.RATE_LIMITS.delete(k); } catch (e) { console.warn('[cutover] catalogue cache not cleared:', (e as Error).message); }
+  }
+  let synced: number | null = null;
+  try { synced = (await syncCatalog(c.env)).synced; } catch (e) { console.warn('[cutover] catalogue sync failed:', (e as Error).message); }
+
+  // One notice per member whose sandbox plan went back to free (Q1 = A).
+  let noticesSent = 0;
+  for (const userId of members) {
+    try {
+      await notify(c.env, { userId, type: CUTOVER_NOTICE.type, category: CUTOVER_NOTICE.category, title: CUTOVER_NOTICE.title,
+        body: CUTOVER_NOTICE.body, link: CUTOVER_NOTICE.link, payload: { cutover_id: result.id, to_mode: toMode } });
+      noticesSent += 1;
+    } catch (e) {
+      console.warn('[cutover] member notice not sent:', (e as Error).message);
+    }
+  }
+
+  await logAdminAction(c.env, admin.id, admin.email, 'stripe_mode_cutover', {
+    reason, from_mode: fromMode, to_mode: toMode, cutover_id: result.id,
+    customers_cleared: result.customers_cleared, subscriptions_cleared: result.subscriptions_cleared,
+    plans_reset: result.plans_reset, mirror_rows_dropped: result.mirror_rows_dropped,
+    cards_cleared: result.cards_cleared, alerts_closed: result.alerts_closed, packs_archived: result.packs_archived,
+    members_notified: noticesSent, members_to_notify: members.length, catalog_synced: synced,
+  });
+
+  const payload = { ok: true, from_mode: fromMode, to_mode: toMode, ...result, members_notified: noticesSent, members_to_notify: members.length, catalog_synced: synced };
+  if (synced === null) {
+    // The cutover is recorded; the next catalogue read rebuilds the mirror.
+    return c.json({ ...payload, error: 'cutover_sync_failed', message: 'The move is done, but the price list could not be read from Stripe. It refreshes on the next read.' }, 502);
+  }
+  return c.json(payload);
 });
 
 export default r;
