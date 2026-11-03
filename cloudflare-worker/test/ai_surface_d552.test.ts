@@ -236,6 +236,7 @@ const EXPECTED: Record<string, string[]> = {
   'services/updateShare.ts': ['AI_SURFACE.growUpdate'],
   'services/fills/citations.ts': ['AI_SURFACE.validate'],
   'services/interviewStructuring.ts': ['AI_SURFACE.validateInterviews', 'AI_SURFACE.validateInterviews', 'AI_SURFACE.validateInterviews'], // D658: structure, ask; D685: summarise
+  'services/relationshipDrafts.ts': ['AI_SURFACE.networkIntroductions'], // D4330: Eadwyn's drafts for an introduction (RI3, RI4, RI6)
   'services/sessionTranslation.ts': ['AI_SURFACE.validateInterviews'], // D857: translate a segment; #3938: detection runs through ai/decide.ts on this page
   'routes/profiling.ts': ['AI_SURFACE.onboardingChat', 'AI_SURFACE.onboardingChat'],
   'routes/advisor.ts': ['AI_SURFACE.studio', 'AI_SURFACE.studio', 'AI_SURFACE.studio'],
