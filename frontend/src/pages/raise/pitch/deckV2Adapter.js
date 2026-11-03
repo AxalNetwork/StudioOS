@@ -63,6 +63,7 @@ import { deckUsageApi } from '../../../lib/api/deckUsage.js';
 import { deckVentureElementsApi } from '../../../lib/api/deckVentureElements.js';
 import { arrange as arrangeCard } from './arrangeModel.js';
 import * as gridOps from './gridOps.js';
+import { FILTERS } from './imageLook';
 
 export { NOT_ON };
 
@@ -90,7 +91,9 @@ export const SURFACES = Object.freeze({
   figures: { issue: 3775, what: 'Linked, Stated and Uncited on every figure' },
   deckUsage: { issue: 3776, what: 'Estimated and spent on this deck' },
   arrange: { issue: 3777, what: 'Align, distribute, group, lock and layers' },
-  imageEdit: { issue: 3778, what: 'Crop, focus, filters, upscale and background removal' },
+  imageEdit: { issue: 3778, what: 'Crop, focus and filters' },
+  // D1534 (#3778 phase 2): upscale and background removal wait on owner decision M.
+  imageEditAi: { issue: 3778, what: 'Upscale and background removal' },
   imageVary: { issue: 3784, what: 'Erase, expand, vary and reference images' },
   elementsLibrary: { issue: 3779, what: 'Icons, shapes, dividers and textures' },
   diagrams: { issue: 3780, what: 'Funnel, hierarchy, hub and spoke, and 2×2 diagrams' },
@@ -204,7 +207,12 @@ export const deckUsage = (deckId) => through(() => deckUsageApi.rail(deckId), SU
  * `{ same, line }` or `{ error }`. Local and synchronous underneath; the edited card is saved with every other edit.
  */
 export const arrange = async (card, selection, op, opts) => ({ available: true, value: arrangeCard(card, selection, op, opts) });
-export const imageEdit = off('imageEdit');
+/**
+ * D1534 (#3778 phase 1): crop, focus and filters are the block's own fields, saved with the deck;
+ * no route runs. The answer is what the toolbar offers.
+ */
+export const imageEdit = async () => ({ available: true, value: { crop: 'rect', filters: [...FILTERS] } });
+export const imageEditAi = off('imageEditAi');
 /** D1544 (#3784): an edit's price (vary, edit, erase, expand) before it runs: one hold for the edit and its checks. */
 export const imageVary = (uid, ask) => through(() => deckImageEditsApi.quote(uid, ask), SURFACES.imageVary.issue);
 /**
