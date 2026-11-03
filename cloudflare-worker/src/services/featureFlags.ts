@@ -22,6 +22,10 @@
  * once. A table that cannot be read (not migrated yet) reads as no rows:
  * every flag at its default, never a refusal.
  *
+ * D4251 (#4251): HQ's model policy (`ai/modelPolicy.ts`) joins `modelsOff`
+ * in `flagsFor` and `modelsOffFor`, read on each call (no cache), so a model
+ * HQ switches off there is refused on the next call, as a model flag is.
+ *
  * WHAT A FLAG DOES (D1509 §3):
  *   model off    `catalogueSwitchesFor` adds it to `MODELS_OFF`, so
  *                `catalogue.isOffered` refuses it everywhere the catalogue is
@@ -36,6 +40,7 @@
  */
 import type { Env, User } from '../types';
 import type { CatalogueSwitches } from './ai/catalogue';
+import { loadPolicy, policyOff, policyOffFor } from './ai/modelPolicy';
 
 export const NOT_SWITCHED_ON = 'Not switched on yet.';
 export const GRID_GENERATE = 'grid_generate';
@@ -144,11 +149,13 @@ export function flagsOf(rows: readonly FlagRow[], who: Who, beta: Record<string,
   return { on, modelsOff, elementOn: (id) => on(elementKey(id)), gridGenerate: on(GRID_GENERATE) };
 }
 
-/** The flags for this member, read through the cache. */
+/** The flags for this member, read through the cache; D4251's model policy, read on each call, joins its switched-off models. */
 export async function flagsFor(env: Env, who: Who): Promise<Flags> {
   const rows = await loadFlagRows(env);
   const beta = who?.id ? await betaColumn(env, Number(who.id)) : {};
-  return flagsOf(rows, who, beta);
+  const flags = flagsOf(rows, who, beta);
+  const policy = policyOff(await loadPolicy(env), (who as User) ?? null);
+  return policy.size ? { ...flags, modelsOff: new Set([...flags.modelsOff, ...policy]) } : flags;
 }
 
 /**
@@ -157,13 +164,16 @@ export async function flagsFor(env: Env, who: Who): Promise<Flags> {
  * Never throws: an unreadable table is no flag.
  */
 export async function modelsOffFor(env: Env, userId: number): Promise<ReadonlySet<string>> {
+  // D4251: HQ's model policy first, read on every call, so a model switched off is refused on the next run.
+  const policy = await policyOffFor(env, userId);
   const rows = (await loadFlagRows(env)).filter((r) => r.key.startsWith('model:'));
-  if (!rows.length) return new Set();
+  if (!rows.length) return policy;
   let role: string | null = null;
   if (userId > 0 && rows.some((r) => r.scope === 'role')) {
     try { role = (await env.DB.prepare('SELECT role FROM users WHERE id = ?1').bind(userId).first<{ role: string | null }>())?.role ?? null; } catch { role = null; }
   }
-  return flagsOf(rows, { id: userId > 0 ? userId : (null as any), role: role as any }).modelsOff;
+  const off = flagsOf(rows, { id: userId > 0 ? userId : (null as any), role: role as any }).modelsOff;
+  return policy.size ? new Set([...off, ...policy]) : off;
 }
 
 /** The owner's catalogue switches with this member's switched-off models: what every `isOffered` call is handed. */
