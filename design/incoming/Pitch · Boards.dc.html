@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e9e7ee}
+a{color:#7c3aed;text-decoration:none}
+a:hover{color:#6d28d9;text-decoration:underline}
+</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:84px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1100px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">StudioOS · Raise › Pitch · /raise/pitch</span>
+<h1 style="margin:0;font-size:42px;font-weight:800;letter-spacing:-0.03em">Pitch</h1>
+<p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">The founder’s home for the pitch. Pitch deck studio v2 is the design for the deck screens; this canvas adds the Overview, the tile row, Script &amp; rehearsal and Notes. Pitch deck at /raise/pitch-deck becomes Pitch.</p>
+</header>
+<section id="MAP" style="display:flex;flex-direction:column;gap:16px;max-width:1440px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#7c3aed;color:#fff">MAP</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">How Raise › Pitch connects to Pitch deck studio v2</h2></div>
+<div style="background:#ffffff;border:1px solid #dedbe5;border-radius:14px;padding:28px 30px;display:flex;flex-direction:column;gap:24px;box-shadow:0 20px 50px rgba(24,24,27,.08)">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:14px">
+<span style="padding:9px 14px;border-radius:10px;border:1px solid #ddd0fb;background:#f4f0fe;color:#6d28d9;font-weight:700">Raise module pill “Pitch”</span>
+<span style="color:#6b6577;font-weight:700">→</span>
+<span style="padding:9px 14px;border-radius:10px;border:1px solid #ececf1;background:#faf9fc;font-weight:700">/raise/pitch</span>
+<span style="color:#6b6577;font-weight:700">→</span>
+<span style="padding:9px 14px;border-radius:10px;border:1px solid #ececf1;background:#faf9fc;font-weight:700">Tile row: Decks · Script &amp; rehearsal · Review · Share &amp; analytics · Notes</span>
+<span style="color:#6b6577;font-weight:700">→</span>
+<span style="padding:9px 14px;border-radius:10px;border:1px solid #ececf1;background:#faf9fc;font-weight:700">Opens on the Overview</span>
+</div>
+<div role="table" aria-label="Where each tile leads" style="border:1px solid #ececf1;border-radius:12px;overflow:hidden">
+<div role="row" style="display:grid;grid-template-columns:200px minmax(0,1.5fr) minmax(0,1.4fr) 210px;gap:16px;padding:10px 18px;background:#faf9fc;border-bottom:1px solid #ececf1;font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577"><span role="columnheader">Tile</span><span role="columnheader">What it opens</span><span role="columnheader">Designed in</span><span role="columnheader">Route</span></div>
+<div role="row" style="display:grid;grid-template-columns:200px minmax(0,1.5fr) minmax(0,1.4fr) 210px;gap:16px;padding:12px 18px;font-size:13.5px;line-height:1.5"><b>Overview <span style="font-weight:500;color:#6b6577">(no tile)</span></b><span>The deck at a glance, what to fix, and where script, review and sharing stand. Each status card opens its tile.</span><span><b>This canvas</b> · PS0, PS1</span><span style="font-family:'Roboto Mono',monospace;font-size:12.5px">/raise/pitch</span></div>
+<div role="row" style="display:grid;grid-template-columns:200px minmax(0,1.5fr) minmax(0,1.4fr) 210px;gap:16px;padding:12px 18px;border-top:1px solid #ececf1;font-size:13.5px;line-height:1.5"><b>Decks</b><span>Studio home: every deck, Start from, Data ready, investor links</span><span><b style="color:#6d28d9">Pitch deck studio v2</b> · PD-1, inside the Pitch page</span><span style="font-family:'Roboto Mono',monospace;font-size:12.5px">/raise/pitch/decks <span style="color:#6b6577">(proposed)</span></span></div>
+<div role="row" style="display:grid;grid-template-columns:200px minmax(0,1.5fr) minmax(0,1.4fr) 210px;gap:16px;padding:12px 18px;border-top:1px solid #ececf1;font-size:13.5px;line-height:1.5;background:#fcfbfe"><span style="color:#6b6577">Decks › New deck</span><span>Audience, sources, outline, then the build</span><span><b style="color:#6d28d9">Pitch deck studio v2</b> · PD-2, PD-2b</span><span style="font-family:'Roboto Mono',monospace;font-size:12.5px">/raise/pitch/new</span></div>
+<div role="row" style="display:grid;grid-template-columns:200px minmax(0,1.5fr) minmax(0,1.4fr) 210px;gap:16px;padding:12px 18px;border-top:1px solid #ececf1;font-size:13.5px;line-height:1.5;background:#fcfbfe"><span style="color:#6b6577">Decks › Open</span><span>The editor on The Grid, with Present, Share and Export</span><span><b style="color:#6d28d9">Pitch deck studio v2</b> · PD-0, PD-3 to PD-16, PD-8</span><span style="font-family:'Roboto Mono',monospace;font-size:12.5px">/raise/pitch/edit</span></div>
+<div role="row" style="display:grid;grid-template-columns:200px minmax(0,1.5fr) minmax(0,1.4fr) 210px;gap:16px;padding:12px 18px;border-top:1px solid #ececf1;font-size:13.5px;line-height:1.5"><b>Script &amp; rehearsal</b><span>Script per card, likely questions, rehearsals; teleprompter inside Present</span><span><b>This canvas</b> · PS4, PS5. Rehearsal live and its report: v2 PD-38, PD-39</span><span style="font-family:'Roboto Mono',monospace;font-size:12.5px">/raise/pitch/script <span style="color:#6b6577">(proposed)</span></span></div>
+<div role="row" style="display:grid;grid-template-columns:200px minmax(0,1.5fr) minmax(0,1.4fr) 210px;gap:16px;padding:12px 18px;border-top:1px solid #ececf1;font-size:13.5px;line-height:1.5"><b>Review</b><span>Comments with mentions, assignees and status, Check claims</span><span><b style="color:#6d28d9">Pitch deck studio v2</b> · PD-33, PD-34, PD-25</span><span style="font-family:'Roboto Mono',monospace;font-size:12.5px">/raise/pitch/review <span style="color:#6b6577">(proposed)</span></span></div>
+<div role="row" style="display:grid;grid-template-columns:200px minmax(0,1.5fr) minmax(0,1.4fr) 210px;gap:16px;padding:12px 18px;border-top:1px solid #ececf1;font-size:13.5px;line-height:1.5"><b>Share &amp; analytics</b><span>One link per investor, walkthroughs, analytics per investor</span><span><b style="color:#6d28d9">Pitch deck studio v2</b> · PD-35, PD-36, PD-37</span><span style="font-family:'Roboto Mono',monospace;font-size:12.5px">/raise/pitch/share <span style="color:#6b6577">(proposed)</span></span></div>
+<div role="row" style="display:grid;grid-template-columns:200px minmax(0,1.5fr) minmax(0,1.4fr) 210px;gap:16px;padding:12px 18px;border-top:1px solid #ececf1;font-size:13.5px;line-height:1.5"><b>Notes</b><span>Notes on the pitch, from the team and from Axal HQ</span><span><b>This canvas</b> · PS8</span><span style="font-family:'Roboto Mono',monospace;font-size:12.5px">/raise/pitch/notes <span style="color:#6b6577">(proposed)</span></span></div>
+</div>
+<ul style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:13.5px;line-height:1.55;color:#3f3a47">
+<li>The tile row replaces Pitch deck studio v2’s tab bar (Decks · Review · Share &amp; analytics · Notes). Decks, Review and Share &amp; analytics show v2’s content inside the Pitch page header.</li>
+<li>While a deck is open (Decks › Open, and Review), the page header, module pills and tile row collapse into one deck bar. ‹ Pitch returns to the page. The AIRail and the Eadwyn chat stay.</li>
+<li>Screens marked <b style="color:#6d28d9">Pitch deck studio v2</b> are reused unchanged: build them from that canvas, not from this one.</li>
+<li>/raise/pitch opens on the Overview. The Overview is not a tile: the tile row sits on it with no tile lit, and each status card opens its tile.</li>
+</ul>
+</div>
+</section>
+<sc-for list="{{ groups }}" as="g" hint-placeholder-count="11">
+<section id="{{ g.id }}" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">{{ g.id }}</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">{{ g.t }}</h2></div>
+<sc-if value="{{ g.note }}" hint-placeholder-val="{{ false }}"><p style="margin:0;max-width:1100px;font-size:14px;line-height:1.55;color:#3f3a47;text-wrap:pretty">{{ g.note }}</p></sc-if>
+<div style="display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start">
+<sc-for list="{{ g.fr }}" as="f" hint-placeholder-count="1">
+<div style="display:flex;flex-direction:column;gap:8px">
+<sc-if value="{{ f.cap }}" hint-placeholder-val="{{ false }}"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">{{ f.cap }}</span></sc-if>
+<div style="{{ f.wst }}"><dc-import name="Pitch Deck Studio v2 Page" v="{{ f.v }}" hint-size="{{ f.hs }}"></dc-import></div>
+</div>
+</sc-for>
+</div>
+</section>
+</sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const F = (v, cap, w, h) => { const d = /-d$/.test(v); return { v, cap: cap || '', wst: `width:${w}px;border-radius:${w < 500 ? 28 : 14}px;overflow:hidden;border:1px solid ${d ? '#374151' : '#dedbe5'};box-shadow:0 20px 50px rgba(24,24,27,.10);background:${d ? '#0b1220' : '#f4f3f7'}`, hs: `${w}px,${h || 900}px` }; };
+    const G = (id, t, fr, note) => ({ id, t, fr, note: note || '' });
+    return { groups: [
+      G('PS0', 'Overview · /raise/pitch · the page shell with the tile row', [F('ps1', 'The Raise header · module pills with Pitch lit · the tile row, none lit', 1440, 1460)], 'The landing page. The header follows every Raise page; the primary changes with the page: New deck here and on Decks, Rehearse on Script & rehearsal, New link on Share & analytics; Review and Notes have Ask only. The deck is the hero, with Edit deck in its card, and every status card opens its tile.'),
+      G('PS1', 'Overview, no deck yet', [F('ps2', '', 1440, 900)]),
+      G('PS2', 'Decks · Pitch deck studio v2 content (PD-1, unchanged)', [F('psD', 'Studio home inside the Pitch page', 1440, 1356)], 'Only the header is the Pitch page’s; everything under the tile row is PD-1 as drawn on the Pitch deck studio v2 canvas.'),
+      G('PS3', 'Decks › Open · the editor in the deck bar (PD-0 content, unchanged)', [F('psE', 'The page header collapses to the deck bar · AIRail open', 1440, 1148), F('psES', 'AIRail collapsed to its spine, no chat · the slide grows into the freed width', 1440, 1200), F('psEA', 'Ask open · the Eadwyn chat docks beside the AIRail; the bar goes compact (‹, ⋯ for Present and Share)', 1440, 1100)], 'While a deck is open, the page header, module pills and tile row collapse into one deck bar: ‹ Pitch, the deck and its version, the current section (a menu of the five tiles), Edit or Comment, Present, Share, Save version and Ask. The AIRail and the Eadwyn chat stay as on every page. The full editor is on the Pitch deck studio v2 canvas: PD-3 to PD-16, the docked Eadwyn chat in PD-21, Present and Export in PD-8.'),
+      G('PS4', 'Script & rehearsal (new)', [F('ps4', 'Script · one placed section not saved, one out of date, one failed', 1440, 1500), F('ps4b', 'Likely questions', 1440, 1120), F('ps4c', 'Rehearsals', 1440, 1180), F('pd38', 'Rehearsal live · v2 PD-38, unchanged', 1280, 760), F('pd39', 'Rehearsal report · v2 PD-39, unchanged', 1180, 576)], 'The script uses only the figures on each card. Generated text is placed as “Not saved” until Save script.'),
+      G('PS5', 'Teleprompter, inside Present (new)', [F('ps5', 'Present · teleprompter', 1440, 900), F('ps5b', 'Phone remote', 390, 844)]),
+      G('PS6', 'Review · in the deck bar (PD-33, PD-34, PD-25 content, unchanged)', [F('psR1', 'Comments and mentions · PD-33', 1440, 1027), F('psR2', 'Assignees and status · PD-34', 1440, 980), F('psR3', 'Check claims · PD-25', 1440, 1026)], 'Review opens the deck in Comment mode, so it uses the deck bar. Three states of one screen, side by side.'),
+      G('PS7', 'Share & analytics · Pitch deck studio v2 content (unchanged)', [F('psS', 'One link per investor (PD-35) · analytics per investor (PD-37)', 1440, 1799), F('pd36', 'Recording a walkthrough · PD-36', 1280, 800)]),
+      G('PS8', 'Notes (new)', [F('ps8', '', 1440, 860)]),
+      G('PS9', 'Phone and tablet', [F('ps9a', 'Overview', 390, 844), F('pd9k', 'Decks and editor on the phone · v2 PD-9k', 2094, 912), F('ps9b', 'Script (new)', 390, 844), F('ps5b', 'Teleprompter remote (new)', 390, 844), F('ps9d', 'Tablet · Overview', 768, 1671)], 'Sheets are full height on the phone. Every tap target is at least 44px.'),
+      G('PS10', 'Dark', [F('ps1-d', 'Overview', 1440, 1460), F('psD-d', 'Decks', 1440, 1356), F('ps4-d', 'Script', 1440, 1517)])
+    ] };
+  }
+}
+</script>
+</body></html>
