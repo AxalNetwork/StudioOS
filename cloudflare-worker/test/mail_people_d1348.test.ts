@@ -155,6 +155,9 @@ test('investor: deal flow, portfolio, co-investors and Network matches, each und
 });
 
 test('advisor: clients from sessions, cohort founders and Network matches; notes, the next session, the week plan, their services', async () => {
+  // The 2026-11-03 slot is the next session: the test reads the module as of 2026-11-02, not today's clock.
+  const realNow = Date.now;
+  Date.now = () => Date.parse('2026-11-02T12:00:00Z');
   const f = await fixture();
   try {
     f.db.exec(`
@@ -198,7 +201,8 @@ test('advisor: clients from sessions, cohort founders and Network matches; notes
     f.db.exec(`UPDATE advisor_cohort_assignments SET is_active = 0`);
     assert.equal((await pack(f, ADVISOR, `cohort:9-${FOUNDER_B}`)).status, 404, 'an assignment ended');
     assert.deepEqual(refsOf(await people(f, ADVISOR), 'cohort'), []);
-  } finally { f.close(); }
+  } finally {
+    Date.now = realNow; f.close(); }
 });
 
 test('operating partner: clients from Delivery, leads from Pipeline; status reports, milestones, proposals and Offers', async () => {
