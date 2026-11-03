@@ -23,6 +23,8 @@ test('six tabs at their own addresses, each an HQ-only route', () => {
     ['Default templates', '/admin/platform/decks/templates'], ['Stage norms', '/admin/platform/decks/norms'],
     // D4251 (#4251): the elements × models grid and the kill switch.
     ['AI models', '/admin/platform/decks/models'],
+    // D1537 (#3786): the Grid's health and the adoption funnel.
+    ['Grid health', '/admin/platform/decks/grid'], ['Funnel', '/admin/platform/decks/funnel'],
   ]);
   for (const { to } of TABS) assert.ok(ROUTES.includes(`<Route path="${to}" element={guard(['admin'], hqOnly(<HqDecksPage />))} />`), to);
   assert.equal(viewFor('/admin/platform/decks'), 'reports');

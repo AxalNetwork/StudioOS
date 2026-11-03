@@ -2334,6 +2334,12 @@ export default {
           }
         }
         // D886 B10: counts-only alerts in the existing HQ notification inbox.
+        // D1537 (#3786): the deck error budget, once an hour at :17. HQ only:
+        // the alert goes to HQ's admins. It never throws into the tick.
+        if (hqCadences && now.getUTCMinutes() === 17) {
+          const { noteErrorBudgetAlert } = await import('./services/decks/gridHealth');
+          if (await noteErrorBudgetAlert(env, now)) cronSummary.push('deck error budget alert sent');
+        }
         if (hqCadences && now.getUTCMinutes() % 5 === 3) {
           try {
             const { sweepMeetingBotOperations } = await import('./services/meetingBotOperationsAlerts');
