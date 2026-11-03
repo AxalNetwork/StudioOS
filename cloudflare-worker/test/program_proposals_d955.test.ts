@@ -42,6 +42,9 @@ function built(): DatabaseSync {
   db.exec(readFileSync(resolve(MIGRATIONS, '561_program_proposals.sql'), 'utf8'));
   // D956: an approval for one studio opens a draft grant, which 562's store holds.
   db.exec(readFileSync(resolve(MIGRATIONS, '562_program_grants_draft.sql'), 'utf8'));
+  // D4289 P1 (#4290): the deploy applies the Influencers row after these (it rebuilds 563's tables, so 563 first).
+  db.exec(readFileSync(resolve(MIGRATIONS, '563_referral_partner_terms.sql'), 'utf8'));
+  db.exec(readFileSync(resolve(MIGRATIONS, '202611031502_influencer_program.sql'), 'utf8'));
   return db;
 }
 const BUILT = built();

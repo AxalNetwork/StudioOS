@@ -31,6 +31,7 @@ export const CONTRACTS = Object.freeze({
   critique: { issue: 3799, route: 'POST /api/decks/:id/critique/quote, or POST /api/decks/:id/critique (the adapter\'s `run`)', schema: 'deckCritique.schema.json' },
   deckActions: { issue: 3808, route: 'POST /api/decks/:id/reorder-for-stage', schema: 'deckReorderForStage.schema.json' },
   deckUsage: { issue: 3776, route: 'GET /api/decks/:id/usage', schema: 'deckUsage.schema.json' },
+  diagrams: { issue: 3780, route: 'POST /api/decks/:id/diagrams/check', schema: 'deckDiagramCheck.schema.json' },
   discardDraft: { issue: 3751, route: 'DELETE /api/decks/:id/draft', schema: 'deckDiscardDraft.schema.json' },
   draft: { issue: 3751, route: 'GET /api/decks/:id/draft', schema: 'deckDraft.schema.json' },
   elementModels: { issue: 3754, route: 'GET /api/decks/:id/element-models', schema: 'deckElementModels.schema.json' },

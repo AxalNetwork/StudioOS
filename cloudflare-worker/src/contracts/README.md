@@ -48,6 +48,7 @@ reply against its schema, not only that the route exists.
 | `validate.ts` | `contractErrors`, the subset of JSON Schema the contracts use. A keyword it does not check is an error, never skipped. |
 | `deckModelPresets.schema.json` | `GET /api/decks/:id/model-presets` (D1549, #3796): the preset in force, the stored one, and per element group each preset's model, the resolved model and HQ's lock. |
 | `deckOrgLocks.schema.json` | The same reply's `locks` key (D1549; the adapter row is #3786's): each element group HQ locked, with "Set by Axal VC HQ". |
+| `deckDiagramCheck.schema.json` | `POST /api/decks/:id/diagrams/check` (D1542, #3780): an edited diagram as it would be saved, whether it fits its area, each fit problem, the numbers its labels name and the steps the area holds. |
 
 ## Rule for adding here
 

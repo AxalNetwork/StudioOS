@@ -93,7 +93,9 @@ export function catalogChecks(
   }
 
   for (const p of active) {
-    if (p.kind === 'subscription' && !planKey(p)) {
+    // D1434: a subscription sold by its own flow (the registered agent, which legal.ts finds by
+    // `metadata.category`) is not a membership plan, so it is not one that "makes no card".
+    if (p.kind === 'subscription' && !planKey(p) && (p.metadata || {}).category !== 'registered_agent') {
       out.push({
         code: 'subscription_no_card', severity: 'warning', product_id: p.id, price_id: null,
         message: `“${p.name}” is a subscription that makes no card: its metadata names no plan, so /pricing never shows it and no plan checkout sells it.`,
@@ -103,7 +105,9 @@ export function catalogChecks(
     const k = planKey(p);
     if (!k) continue;
     const prices = p.prices.filter((x) => x.active && x.type === 'recurring');
-    if (!prices.some((x) => x.interval === 'year' && isCountOne(x))) {
+    // D1434: a plan checkout never sells (Institutional is custom pricing) needs no yearly price.
+    const notSold = PLAN_CATALOGUE.some((e) => (e.licence_key ?? e.key) === k.key && e.sellable === false);
+    if (!notSold && !prices.some((x) => x.interval === 'year' && isCountOne(x))) {
       out.push({
         code: 'plan_no_yearly', severity: 'warning', product_id: p.id, price_id: null,
         message: `“${p.name}” has no yearly price, so /pricing offers it monthly only and a yearly checkout for it is refused.`,

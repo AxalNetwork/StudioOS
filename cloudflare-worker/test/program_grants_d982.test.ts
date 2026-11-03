@@ -36,11 +36,14 @@ const BUILT_DDL = (() => {
     ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END`).all() as any[]).map((r) => r.sql as string);
 })();
 
-/** Migration 553's seed rows, which a schema-only replay leaves out. */
+/** The defaults' seed rows, which a schema-only replay leaves out: 553's nine and D4289 P1's Influencers (202611031502). */
 const SEED = (() => {
-  const sql = readFileSync(resolve(MIGRATIONS, '553_program_grants.sql'), 'utf8');
-  const at = sql.indexOf('INSERT OR IGNORE INTO program_grant_defaults');
-  return sql.slice(at, sql.indexOf(';', at) + 1);
+  const seedOf = (file: string) => {
+    const sql = readFileSync(resolve(MIGRATIONS, file), 'utf8');
+    const at = sql.indexOf('INSERT OR IGNORE INTO program_grant_defaults');
+    return sql.slice(at, sql.indexOf(';', at) + 1);
+  };
+  return seedOf('553_program_grants.sql') + '\n' + seedOf('202611031502_influencer_program.sql');
 })();
 
 function fixture() {
@@ -84,27 +87,29 @@ const grant = (db: DatabaseSync, uid: string, key: string, body: Record<string, 
 const events = (db: DatabaseSync) => (db.prepare("SELECT licence_id, detail_json, note, actor_user_id FROM licence_events WHERE event = 'program_changed' ORDER BY id").all() as any[])
   .map((e) => ({ ...e, detail: JSON.parse(e.detail_json) }));
 
-test('the programs are the frontend grid\'s nine, in its order and readiness', () => {
+test('the programs are the frontend grid\'s ten, in its order and readiness', () => {
   const src = readFileSync(resolve(process.cwd(), 'frontend/src/lib/programGrants.js'), 'utf8');
   const fe = [...src.matchAll(/\{ key: '([a-z-]+)', name: '([^']+)', group: '([^']+)', grant: '(yes|hq|notready)'/g)].map((m) => [m[1], m[2], m[3], m[4]]);
-  assert.equal(fe.length, 9);
+  // D4289 P1 (#4290) added Influencers, the tenth, which HQ runs.
+  assert.equal(fe.length, 10);
   assert.deepEqual(PROGRAMS.map((p) => [p.key, p.name, p.group, p.readiness]), fe);
-  // The migration's CHECK names the same keys.
+  // 553's CHECK named the first nine; 562 widened it to any registry slug, which the tenth passes.
   const sql = readFileSync(resolve(MIGRATIONS, '553_program_grants.sql'), 'utf8');
-  for (const p of PROGRAMS) assert.ok(sql.includes(`'${p.key}'`), p.key);
+  for (const p of PROGRAMS.filter((x) => x.key !== 'influencer')) assert.ok(sql.includes(`'${p.key}'`), p.key);
+  assert.match(readFileSync(resolve(MIGRATIONS, '562_program_grants_draft.sql'), 'utf8'), /program_key NOT GLOB '\*\[\^a-z0-9-\]\*'/);
 });
 
 test('the written-out SQL names the term columns in TERM_KEYS order', () => {
   assert.equal(SQL_TERM_COLUMNS, TERM_KEYS.join(', '));
 });
 
-test('a fresh store: every program\'s defaults are Not recorded but the flag and the schedule rule, and the locked three are off', async () => {
+test('a fresh store: every program\'s defaults are Not recorded but the flag and the schedule rule, and the locked four are off', async () => {
   const db = fixture();
   const { status, body } = await call(db, SUPER, 'GET', '/defaults');
   assert.equal(status, 200);
   assert.deepEqual(body.programs.map((p: any) => p.program_key), PROGRAMS.map((p) => p.key));
   for (const p of body.programs) {
-    const locked = ['product-testing', 'ai-native-venture', 'investor-cohorts'].includes(p.program_key);
+    const locked = ['product-testing', 'ai-native-venture', 'investor-cohorts', 'influencer'].includes(p.program_key);
     assert.equal(p.grantable, !locked, p.program_key);
     assert.equal(Boolean(p.locked_reason), locked, p.program_key);
     for (const [k, v] of Object.entries(p.terms)) {
@@ -273,7 +278,7 @@ test('the grid: rows leave out drafts and terminated licences, and the tiles and
   assert.deepEqual([perks.granted, perks.paused], [2, 0]);
   const lab = body.series.holding.find((h: any) => h.program_key === 'spinout-lab');
   assert.deepEqual([lab.granted, lab.paused], [0, 1]);
-  assert.equal(body.programs.length, 9);
+  assert.equal(body.programs.length, 10, 'the nine and Influencers (D4289 P1)');
 });
 
 test('history: one licence\'s program events, newest first, filterable by program; defaults go to the admin audit log', async () => {

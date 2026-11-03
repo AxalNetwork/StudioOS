@@ -25,6 +25,8 @@ export const PROGRAMS: Array<{ key: string; name: string; group: string; readine
   { key: 'investor-cohorts', name: 'Investor cohort access', group: 'Access', readiness: 'notready' },
   { key: 'referral-partners', name: 'Referral partners', group: 'Network and referrals', readiness: 'yes' },
   { key: 'refer-and-earn', name: 'Refer & Earn', group: 'Network and referrals', readiness: 'yes' },
+  // D4289 P1 (#4290): HQ runs it; a branch's members apply at HQ. Beside its group, so the grid's span stays whole.
+  { key: 'influencer', name: 'Influencers', group: 'Network and referrals', readiness: 'hq' },
   { key: 'perks', name: 'Perks', group: 'Rewards', readiness: 'yes' },
   { key: 'learning', name: 'Learning', group: 'Learning', readiness: 'yes' },
   { key: 'product-testing', name: 'Product testing', group: 'Product', readiness: 'hq' },

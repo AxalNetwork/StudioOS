@@ -12,6 +12,8 @@ import { SourceChip } from './SourcesBoards';
 import { chipOf } from './sourcesModel';
 import { judge as judgeArea } from './deckV2Adapter';
 import { rankedOf, rankGroups } from './areaRankModel';
+import { diagramLayout } from './diagramLayout';
+import DiagramView from './DiagramView';
 
 const PILL = 'inline-flex items-center rounded-full border border-axal-lavender-edge bg-white px-2 py-0.5 font-mono text-[10px] font-bold text-axal-violet dark:border-violet-800 dark:bg-violet-950/60 dark:text-violet-300';
 
@@ -22,6 +24,8 @@ const CHECKS = {
   block: 'Checked: every series is bound to its record; no value was written by a model.',
   image: 'Checked: no real person and no figures in the picture.',
   metric: 'The value is the record’s, with its source and grade.',
+  // D1542 (#3780): a generated diagram (the `grid_diagram` job).
+  diagram: 'Checked: every number removed; drawn and fitted to its area in code.',
 };
 
 /**
@@ -180,7 +184,7 @@ export default function AreaResults({ results, card, cards = null, model, items 
             {r.status === 'proposed' ? <Body result={r} id={id} items={items} /> : null}
             {r.status === 'proposed' && !decided ? (
               <>
-                <span className={MUTED}>{r.kind === 'block' && r.local ? CHECKS.metric : CHECKS[r.kind]}</span>
+                <span className={MUTED}>{r.kind === 'block' && r.local ? CHECKS.metric : r.kind === 'block' && r.block?.kind === 'graphic' ? CHECKS.diagram : CHECKS[r.kind]}</span>
                 <div className="flex gap-2">
                   <button type="button" className={PRIMARY} disabled={busy} onClick={() => one(r)} data-testid={`${id}-accept`}>{ACCEPT}</button>
                   <button type="button" className={GHOST} disabled={busy} onClick={() => discard(r)} data-testid={`${id}-discard`}>{DISCARD}</button>
@@ -259,6 +263,16 @@ function Body({ result: r, id, items }) {
     return <img src={r.image?.url} alt={r.image?.alt || ''} className="max-h-[140px] w-auto self-start rounded-[8px] object-cover" data-testid={`${id}-image`} />;
   }
   const b = r.block || {};
+  // D1542 (#3780): a proposed diagram is drawn as it would sit on the card; nothing is placed until Accept.
+  if (b.kind === 'graphic') {
+    const layout = diagramLayout(b.diagram);
+    if (!layout) return <span className={MUTED} data-testid={`${id}-body`}>This diagram cannot be drawn. Discard it.</span>;
+    return (
+      <span className="block h-[140px] w-full max-w-[320px] rounded-[8px] bg-white/70 p-1.5 dark:bg-violet-950/60" data-testid={`${id}-diagram`}>
+        <DiagramView layout={layout} colours={{}} blockId={`${id}-d`} />
+      </span>
+    );
+  }
   if (b.kind === 'metric') {
     const item = (items || []).find((i) => i.source_key && i.source_key === b.binding?.source_key) || null;
     return (

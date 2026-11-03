@@ -47,6 +47,7 @@ import { deckCheckApi } from '../../../lib/api/deckCheck.js';
 import { deckCoeditApi } from '../../../lib/api/deckCoedit.js';
 import { deckCommentsApi } from '../../../lib/api/deckComments.js';
 import { deckCritiqueApi } from '../../../lib/api/deckCritique.js';
+import { deckDiagramsApi } from '../../../lib/api/deckDiagrams.js';
 import { deckDraftApi } from '../../../lib/api/deckDraft.js';
 import { deckElementModelsApi } from '../../../lib/api/deckElementModels.js';
 import { deckElementsApi } from '../../../lib/api/deckElements.js';
@@ -240,7 +241,12 @@ export const imageVary = (uid, ask) => through(() => deckImageEditsApi.quote(uid
  * generate, icons: { total, offset, items } }`.
  */
 export const elementsLibrary = (opts = {}) => through(() => Promise.all([deckElementsApi.library(), deckElementsApi.icons(opts)]).then(([lib, page]) => ({ ...lib, icons: { total: page?.total ?? 0, offset: page?.offset ?? 0, items: page?.icons ?? [], licence: page?.licence ?? null } })), SURFACES.elementsLibrary.issue);
-export const diagrams = off('diagrams');
+/**
+ * D1542 (#3780): an edited diagram checked in code (`POST /api/decks/:id/diagrams/check`): as it would be saved,
+ * whether it fits its area, the numbers its labels name. Generating one is the `grid_diagram` job, run through
+ * `areasGenerate` and proposed until Accept.
+ */
+export const diagrams = (deckId, { diagram, grid, card } = {}) => through(() => deckDiagramsApi.check(deckId, { diagram, grid, card }), SURFACES.diagrams.issue);
 /**
  * D1543 (#3781): the venture-record elements, from records with their Source and grade, no model.
  * `ventureElements(deckId, element, opts)` reads one (`GET /api/decks/:id/venture-elements/:element`), refused by its gate;
