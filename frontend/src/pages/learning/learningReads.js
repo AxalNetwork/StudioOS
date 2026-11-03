@@ -9,6 +9,8 @@
  *   learningApi.item         → GET  /api/learning/items/:uid
  *   learningApi.me           → GET  /api/learning/me
  *   learningApi.recordProgress → POST /api/learning/progress
+ *   learningApi.exercises / exams / mySubmissions / myAttempts → GET /api/learning/exercises, /exams,
+ *                              /me/submissions, /me/attempts (routes/learning_lists.ts, #4180)
  *
  * The Articles, Publications and Events tabs keep the three routes they were
  * built on: they send more per row than the catalog does (an event's own time
@@ -23,7 +25,8 @@ import { articles, publications, eventsPublic } from '../../lib/api';
 // D527: a domain module is imported from its own file, as research's are.
 import { learningApi } from '../../lib/api/learning.js';
 import {
-  ALL_LIMIT, ARTICLES_PAGE_SIZE, EVENTS_PAGE_SIZE, articleRow, catalogRow, eventRow, itemHref, publicationRow,
+  ALL_LIMIT, ARTICLES_PAGE_SIZE, EVENTS_PAGE_SIZE, articleRow, catalogRow, eventRow, examRow, exerciseRow, itemHref, myAttemptRows,
+  mySubmissionRows, publicationRow, statsTiles,
 } from './learningModel';
 
 function listOf(reply, key, what) {
@@ -122,4 +125,47 @@ export async function markLessonComplete({ course, lessonUid, slug }) {
 export async function markItemComplete(uid) {
   const reply = await learningApi.recordProgress({ subject_kind: 'item', subject_uid: uid, status: 'completed' });
   return reply?.progress || null;
+}
+
+/**
+ * D3726 LR4 — the player's resume position on a standalone video or a lesson's
+ * item: `status: 'started'` with the second it reached (a completed item stays
+ * completed, and the percent never goes backwards — the route's own rules).
+ */
+export async function recordItemPosition(uid, seconds, percent = null) {
+  const reply = await learningApi.recordProgress({
+    subject_kind: 'item',
+    subject_uid: uid,
+    status: 'started',
+    position_seconds: seconds,
+    ...(Number.isInteger(percent) ? { percent } : {}),
+  });
+  return reply?.progress || null;
+}
+
+/** #4180: one page of the exercises a member may open, with the route's total. */
+export async function readExercises({ offset = 0 } = {}) {
+  const reply = await learningApi.exercises({ limit: ALL_LIMIT, offset });
+  return { rows: listOf(reply, 'items', 'The exercise list').map(exerciseRow), total: Number.isFinite(Number(reply.total)) ? Number(reply.total) : null, offset };
+}
+
+/** #4180: one page of the exams a member may open, with the route's total. */
+export async function readExams({ offset = 0 } = {}) {
+  const reply = await learningApi.exams({ limit: ALL_LIMIT, offset });
+  return { rows: listOf(reply, 'items', 'The exam list').map(examRow), total: Number.isFinite(Number(reply.total)) ? Number(reply.total) : null, offset };
+}
+
+/** #4180: My learning's exercises, one row per exercise. */
+export async function readMySubmissions() {
+  return { rows: mySubmissionRows(listOf(await learningApi.mySubmissions(), 'submissions', 'Your submissions')) };
+}
+
+/** #4180: My learning's exam results, one row per exam. */
+export async function readMyAttempts() {
+  return { rows: myAttemptRows(listOf(await learningApi.myAttempts(), 'attempts', 'Your exam attempts')) };
+}
+
+/** D3726 LR1 (#4180's `GET /api/learning/me/stats`): the "Your progress" strip's four figures, "Not recorded" never 0. */
+export async function readMyStats() {
+  return { tiles: statsTiles(await learningApi.myStats()) };
 }

@@ -11,7 +11,9 @@ import { mountContracts, installDocument } from './_contracts_dom.mjs';
 const textOf = n => n.nodeType === 3 ? n.textContent || '' : n.childNodes?.length ? n.childNodes.map(textOf).join('') : n.textContent || '';
 const PAGE = 'Founder · Grow · Distribution';
 const cases = [
-  { key: 'form:landing', method: 'brandAutofillLanding', button: 'Auto-fill with AI', result: { name: 'Harbour', headline: 'Generated headline', content: {} }, field: 'headline', value: 'Generated headline' },
+  // #4046 B3: the page's one Ask; it fills open fields only, so the saved landing's headline stays the founder's
+  // and the blank subheadline takes Ask's words.
+  { key: 'form:landing', method: 'brandAutofillLanding', button: 'Ask', result: { name: 'Harbour', headline: 'Generated headline', subheadline: 'Generated subheadline', content: {} }, field: 'subheadline', value: 'Generated subheadline' },
   { key: 'form:palette', method: 'brandSuggestPalette', button: 'Suggest AI palette', result: { palette: { primary: '#123456', background: '#eeeeee' } }, field: 'theme_color', value: '#123456' },
   { key: 'draft:taglines', method: 'brandSuggestTaglines', button: 'Iterate', result: { taglines: ['Generated tagline'] }, field: 'tagline', value: 'Generated tagline' },
 ];
@@ -86,7 +88,8 @@ for (const c of cases) {
       await m.click('Save');
       assert.equal(m.saves.length, 1);
       assert.equal(m.saves[0][0], projects.at(-1));
-      assert.equal(m.saves[0][1][c.field], c.key === 'form:palette' ? '#7c3aed' : c.key === 'form:landing' ? 'Founder headline' : 'Founder tagline');
+      if (c.key === 'form:landing') assert.notEqual(m.saves[0][1][c.field], c.value, 'a late Ask never fills another venture\'s page');
+      else assert.equal(m.saves[0][1][c.field], c.key === 'form:palette' ? '#7c3aed' : 'Founder tagline');
     } finally { await m.close(); }
   });
 }

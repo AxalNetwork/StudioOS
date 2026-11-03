@@ -78,6 +78,18 @@ export function dueLine(due, now = new Date()) {
 }
 
 /** "Move to ▾": every column but the card's own. */
+/**
+ * #3973: whether this reader may move this card, by the Worker's own rule
+ * (`workPermission`): a project editor moves any card; anyone else moves only
+ * a card assigned to them by name. Without a viewer, nothing moves.
+ */
+export function canMove(card, viewer) {
+  if (!viewer) return false;
+  if (viewer.can_manage === true) return true;
+  const a = card?.assignee;
+  return !!(a && a.kind === 'person' && viewer.user_uid && a.uid === viewer.user_uid);
+}
+
 export function moveTargets(item) {
   return COLUMNS.filter((c) => c.key !== item?.column);
 }
@@ -238,3 +250,100 @@ export function complianceCan(viewer) {
 export const STANDALONE_LINE = 'No company, so no Legal and no Compliance anywhere for this project.';
 export const NO_PROJECTS_LINE = 'Add a project to this company first.';
 export const CREATE_WORK_LINE = (task) => `The item lands in that project’s Backlog, linked back here as “For: ${task}”. The task stays with the company.`;
+
+// ---------------------------------------------------------------------------
+// #3976 — the list's filters, its Month view, and the words for a refusal.
+// ---------------------------------------------------------------------------
+
+/** The filters' choices, from the tasks read (never invented): status, jurisdiction, owner and type. */
+export function filterOptions(tasks) {
+  const list = Array.isArray(tasks) ? tasks : [];
+  const uniq = (xs) => [...new Set(xs.filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b)));
+  const owners = new Map();
+  for (const t of list) if (t?.owner?.uid) owners.set(t.owner.uid, t.owner.name || 'Not recorded');
+  return {
+    status: [['open', 'Due'], ['done', 'Done'], ['all', 'All']],
+    jurisdiction: uniq(list.map((t) => t?.jurisdiction)),
+    owner: [['none', 'No owner'], ...[...owners.entries()].sort((a, b) => a[1].localeCompare(b[1]))],
+    type: COMPLIANCE_TYPES.filter((ty) => list.some((t) => t?.type === ty)),
+  };
+}
+
+/** The list narrowed by the filters; `status` defaults to open (due or snoozed). */
+export function filterTasks(tasks, f = {}) {
+  const list = Array.isArray(tasks) ? tasks : [];
+  return list.filter((t) => {
+    if (!t) return false;
+    const st = f.status || 'open';
+    if (st === 'open' && t.status === 'done') return false;
+    if (st === 'done' && t.status !== 'done') return false;
+    if (f.jurisdiction && t.jurisdiction !== f.jurisdiction) return false;
+    if (f.owner === 'none' && t.owner) return false;
+    if (f.owner && f.owner !== 'none' && t.owner?.uid !== f.owner) return false;
+    if (f.type && t.type !== f.type) return false;
+    return true;
+  });
+}
+
+/**
+ * The Month view: the weeks (Monday first) of `month` ("YYYY-MM"), each day
+ * with the tasks due on it. A task without a date is never placed.
+ */
+export function monthGrid(tasks, month) {
+  const [y, m] = String(month).split('-').map(Number);
+  if (!y || !m) return null;
+  const first = Date.UTC(y, m - 1, 1);
+  const days = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const lead = (new Date(first).getUTCDay() + 6) % 7;
+  const byDay = new Map();
+  for (const t of Array.isArray(tasks) ? tasks : []) {
+    const d = String(t?.due || '').slice(0, 10);
+    if (!d.startsWith(`${y}-${String(m).padStart(2, '0')}-`)) continue;
+    const n = Number(d.slice(8, 10));
+    byDay.set(n, [...(byDay.get(n) || []), t]);
+  }
+  const cells = [...Array(lead).fill(null), ...Array.from({ length: days }, (_, i) => ({ day: i + 1, tasks: byDay.get(i + 1) || [] }))];
+  while (cells.length % 7) cells.push(null);
+  const weeks = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+  return { label: new Date(first).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }), weeks };
+}
+
+/** The month the Month view opens on: the first open task's, else this month. */
+export function firstMonth(tasks, now = new Date()) {
+  const open = (Array.isArray(tasks) ? tasks : []).filter((t) => t?.due && t.status !== 'done').map((t) => String(t.due).slice(0, 7)).sort();
+  return open[0] || `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+/** The sentence a refused change is shown with: the Worker's own, else ours. Never a code. */
+export function refusalLine(e) {
+  const said = e?.data?.message || e?.data?.detail;
+  return typeof said === 'string' && said.trim() ? said : 'That could not be saved. Try again.';
+}
+
+/** A task's flags, in words. */
+export function taskFlags(t) {
+  const out = [];
+  if (t?.needs_reassignment) out.push('Needs a new owner');
+  if (t?.review_state === 'ready_for_review') out.push('Ready for review');
+  return out;
+}
+
+/** A timeline entry in words: who, what, and an agent's cost when one was recorded. */
+export function timelineLine(e) {
+  const who = e?.actor?.kind === 'system' ? 'Axal' : e?.actor?.name || 'Not recorded';
+  const what = {
+    created: 'created this task', updated: 'edited it', assigned: 'changed the owner', comment: 'commented',
+    ready_for_review: 'marked it ready for review', done: 'marked it done', reopened: 'reopened it',
+    needs_reassignment: 'flagged it for a new owner: the owner’s seat ended', work_linked: 'created work in a project',
+  }[e?.kind] || 'changed it';
+  const cost = e?.actor?.kind === 'agent' ? (Number.isSafeInteger(e?.cost_microusd) ? ` · ${money(e.cost_microusd)}` : ' · cost not recorded') : '';
+  return `${who} ${what}${cost}`;
+}
+
+/** The Compliance card (CO1, and Company settings › Legal): the next open tasks, overdue first, at most `n`. */
+export function nextTasks(tasks, n = 5) {
+  return (Array.isArray(tasks) ? tasks : []).filter((t) => t && t.status !== 'done' && t.due)
+    .sort((a, b) => String(a.due).localeCompare(String(b.due)) || String(a.uid).localeCompare(String(b.uid))).slice(0, n);
+}
+export const NO_TASKS_RECORDED = 'Not recorded: no compliance task is recorded for this company yet.';

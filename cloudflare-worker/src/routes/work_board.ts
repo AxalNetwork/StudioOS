@@ -7,7 +7,7 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
 import { mapError } from './_t13t14t15_helpers';
-import { canRead, loadScope, scopeOfAgent } from '../services/agents/teams';
+import { canManage, canRead, loadScope, scopeOfAgent } from '../services/agents/teams';
 import { taskByUid } from '../services/agents/tasks';
 import { createWorkTask, projectBoard, setWorkDeps, updateWorkTask, workCards, WorkRefusal, NO_WORK_RUNS_RECORDED, type WorkRunReader, type WorkTask } from '../services/agents/workBoard';
 
@@ -41,7 +41,9 @@ export function workBoardRoutes(enabled: (env: Env) => boolean, readRuns: WorkRu
       const s=await loadScope(c.env,'project',c.req.param('id'));
       if(!s||s.kind!=='project') throw absent();
       if(!(await canRead(c.env,s,user))) return refuse(c,403,{code:'not_member',message:'Only the project team can read its Work.'});
-      return c.json(await projectBoard(c.env,s,c.req.query('filter')??'',readRuns,c.req.query('sort')??''));
+      const board=await projectBoard(c.env,s,c.req.query('filter')??'',readRuns,c.req.query('sort')??'');
+      // #3973: who is reading, so the page offers a move only where the Worker allows one (an editor, or a task's own assignee).
+      return c.json({...board,viewer:{can_manage:await canManage(c.env,s,user),user_uid:user.uid??null}});
     }catch(e){return failure(c,e);}
   });
   // Only project tasks are intercepted. Company E1 handlers are unchanged.
