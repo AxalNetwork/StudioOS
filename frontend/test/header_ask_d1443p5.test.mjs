@@ -146,7 +146,9 @@ test('AK12: every host\'s rail track reads the panel\'s width, which is 420px on
   assert.ok(reads >= 17, `every host: ${reads}`);
   const ask = codeOnly(read('ui/askPanel.css'));
   assert.match(ask, /@media \(min-width: 1440px\) \{\s*:root\[data-eadwyn-ask-at="dock"\] \{ --fwr-ask: 420px; \}/);
-  assert.match(ask, /@container fwr-col \(min-width: 400px\)/, 'the rail moves clear only where its track widened');
+  // #4260: measured on the aside (data-ask-room), not a container query the owner's browser left unmet.
+  assert.doesNotMatch(ask, /@container/, 'the move into the column hangs on a measured attribute, not a container query');
+  assert.match(ask, /aside\.fwr\[data-ask-room="true"\] > \.fwr-ask-dock \{ right: auto; left: 0; \}/, 'the rail moves clear only where its track widened');
   const rail = codeOnly(read('ui/WorkerRail.jsx'));
   assert.match(rail, /if \(askState\.open && askAt === 'dock'\) root\.setAttribute\('data-eadwyn-ask-at', 'dock'\);/);
 });

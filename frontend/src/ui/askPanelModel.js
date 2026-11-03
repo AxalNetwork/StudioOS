@@ -199,6 +199,32 @@ export function acceptAllLabel(cards) {
  *   640–1023   over the content, under the header
  *   < 640      a bottom sheet, 92% of the screen
  */
+/**
+ * #4260: the width the rail's column must reach before the docked panel moves
+ * into it (the panel is 420px; a rail column is never 400px wide unless it
+ * took that width: at most 288px open, 44px on the spine, 464px and up once
+ * widened). `WorkerRail` measures its aside against it.
+ */
+export const ASK_ROOM_MIN = 400;
+
+/** #4260: whether a rail column this wide took the panel's width. */
+export function askRoom(width) {
+  const w = Number(width);
+  return Number.isFinite(w) && w >= ASK_ROOM_MIN;
+}
+
+/**
+ * #4260: the docked panel's height, the part of the rail's column the reader
+ * can see: from the scroll area's top (under the header) or the column's top,
+ * whichever is lower, to the window's foot or the column's foot, whichever is
+ * higher. Never negative; whole pixels.
+ */
+export function askFit({ top, bottom }, scrollTop, viewHeight) {
+  const from = Math.max(Number(scrollTop) || 0, Number(top) || 0);
+  const to = Math.min(Number(viewHeight) || 0, Number(bottom) || 0);
+  return Math.max(0, Math.round(to - from));
+}
+
 export function askLayout(width) {
   const w = Number(width);
   if (!Number.isFinite(w)) return 'dock';

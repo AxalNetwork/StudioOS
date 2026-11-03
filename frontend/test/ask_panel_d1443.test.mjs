@@ -205,7 +205,7 @@ test('the CSS: sticky in the rail\'s column at 1024px and up, never fixed there;
   const desk = css.slice(css.indexOf('@media (min-width: 1024px) {\n  aside.fwr'));
   const block = desk.slice(0, desk.indexOf('\n}\n'));
   assert.match(block, /\.fwr-ask-dock \{[^}]*position: absolute;[^}]*right: 100%;/);
-  assert.match(block, /\.fwr-ask-dock > \.ead-ask \{[^}]*position: sticky;[^}]*height: min\(calc\(100dvh - 56px\), 100%\)/);
+  assert.match(block, /\.fwr-ask-dock > \.ead-ask \{[^}]*position: sticky;[^}]*height: min\(var\(--ask-fit, calc\(100dvh - 56px\)\), 100%\)/);
   assert.doesNotMatch(block, /position: fixed/);
   assert.match(css, /\.dark \.ead-ask \{/);
   assert.match(css, /@media \(min-width: 1024px\) \{ \.ead-ask-layer, \.ead-ask-scrim \{ display: none; \} \}/);

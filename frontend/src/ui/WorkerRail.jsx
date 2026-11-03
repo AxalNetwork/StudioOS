@@ -18,7 +18,7 @@ import { syncRailPrefs } from './railModelChoice';
 import { useRailCrumbs, useRailPage } from './railCrumbs.js';
 import { openEadwynPanel, useEadwynPanel, useEadwynRailServes, eadwynPanelEvent, askPanelEvent, useAskPanel, useAskRail } from './eadwynPanel.js';
 import AskPanel from './AskPanel.jsx';
-import { askLayout, askServes } from './askPanelModel.js';
+import { askFit, askLayout, askRoom, askServes } from './askPanelModel.js';
 import HeaderAsk, { useHeaderCarriesAsk } from './HeaderAsk.jsx';
 import { activeSupportSession } from '../lib/supportSession.js';
 import { EadwynPanel } from './EadwynPanel.jsx';
@@ -649,6 +649,55 @@ export default function WorkerRail({
     else root.removeAttribute('data-eadwyn-ask-at');
     return () => root.removeAttribute('data-eadwyn-ask-at');
   }, [askState.open, askAt]);
+  // #4260: whether the rail's own column took the panel's width at 1440px and
+  // up, measured on the aside itself rather than asked of a CSS container
+  // query (the owner's collapsed rail showed the query unmet: the panel over
+  // the content and the spine centred in an empty 464px column). A host whose
+  // track reads `--fwr-ask` widens past `askRoom`'s 400px; one that does not keeps
+  // the overlay, rather than a rail squeezed to nothing.
+  const asideRef = useRef(null);
+  const [askHasRoom, setAskHasRoom] = useState(false);
+  useEffect(() => {
+    const el = asideRef.current;
+    if (!el || !askState.open || askAt !== 'dock') { setAskHasRoom(false); return undefined; }
+    const measure = () => setAskHasRoom(askRoom(el.getBoundingClientRect().width));
+    measure();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const watch = new ResizeObserver(measure);
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, [askState.open, askAt]);
+  // #4260: the docked panel is the part of its column the reader can see:
+  // from the scroll area's top (under the header) or the column's top, to the
+  // window's foot or the column's foot, whichever is nearer. A fixed window
+  // height let the head slide under the header once the footer came into
+  // view at the end of a long page. Written as a property on the aside, not
+  // React state, so scrolling re-renders nothing.
+  useEffect(() => {
+    const el = asideRef.current;
+    if (!el || !askState.open || !askDocked) return undefined;
+    const scroller = el.closest('[data-app-scroll]');
+    const target = scroller || window;
+    let frame = 0;
+    const fit = () => {
+      frame = 0;
+      const fitted = askFit(el.getBoundingClientRect(), scroller ? scroller.getBoundingClientRect().top : 0, window.innerHeight);
+      el.style.setProperty('--ask-fit', `${fitted}px`);
+    };
+    const queue = () => { if (!frame) frame = requestAnimationFrame(fit); };
+    fit();
+    target.addEventListener('scroll', queue, { passive: true });
+    window.addEventListener('resize', queue);
+    const watch = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(queue);
+    watch?.observe(el);
+    return () => {
+      target.removeEventListener('scroll', queue);
+      window.removeEventListener('resize', queue);
+      watch?.disconnect();
+      if (frame) cancelAnimationFrame(frame);
+      el.style.removeProperty('--ask-fit');
+    };
+  }, [askState.open, askDocked]);
   const askPanel = askState.open ? (
     <AskPanel
       page={askState.page}
@@ -917,9 +966,12 @@ export default function WorkerRail({
   return (
     <>
     <aside
+      ref={asideRef}
       className={`fwr ${className}`.trim()}
       aria-label={`Eadwyn AI · ${workspace}`}
       data-collapsed={collapsed ? 'true' : 'false'}
+      {...(askPanel && askDocked ? { 'data-ask-docked': 'true' } : {})}
+      {...(askPanel && askDocked && askHasRoom ? { 'data-ask-room': 'true' } : {})}
       data-sheet-keep=""
       {...(founderRecord ? { 'data-founder-record': 'true' } : {})}
       {...(railPage?.page ? { 'data-page-key': railPage.page } : {})}
