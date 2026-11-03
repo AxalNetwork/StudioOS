@@ -199,6 +199,46 @@ export function acceptAllLabel(cards) {
  *   640–1023   over the content, under the header
  *   < 640      a bottom sheet, 92% of the screen
  */
+/**
+ * #4260: the width the rail's column must reach before the docked panel moves
+ * into it (the panel is 420px; a rail column is never 400px wide unless it
+ * took that width: at most 288px open, 44px on the spine, 464px and up once
+ * widened). `WorkerRail` measures its aside against it.
+ */
+export const ASK_ROOM_MIN = 400;
+
+/** #4260: whether a rail column this wide took the panel's width. */
+export function askRoom(width) {
+  const w = Number(width);
+  return Number.isFinite(w) && w >= ASK_ROOM_MIN;
+}
+
+/** The docked panel's width, which the hosts' rail track also gains (`--fwr-ask`). */
+export const ASK_WIDTH = 420;
+
+/**
+ * #4260: where the docked panel sits, in window pixels. It is drawn fixed at
+ * the document's level (`WorkerRail`), never inside the rail, so no host's
+ * rail stylesheet (`.inw-rail section`, `.fb-cadence-rail span` …) reaches it,
+ * and its height is the page's, not the rail column's:
+ *   - from the scroll area's top, under the header, to the footer's top or
+ *     the window's foot, whichever is higher, so neither the head nor the
+ *     composer is ever covered;
+ *   - inside the rail's column from its seam (`room`, the column took the
+ *     panel's width at 1440px and up), or against the column's outer edge,
+ *     over the content (the overlay, 1024 to 1439px or a host whose track
+ *     does not widen), never left of the scroll area.
+ * `box` is the rail's bounding box and `seam` its left border's width.
+ */
+export function askDock(box, seam, { scrollTop = 0, scrollLeft = 0, footTop = null, viewHeight = 0 } = {}, layout = 'dock') {
+  const room = layout === 'dock' && askRoom(box?.width);
+  const top = Math.round(Number(scrollTop) || 0);
+  const foot = Number.isFinite(Number(footTop)) && footTop !== null ? Math.min(Number(viewHeight) || 0, Number(footTop)) : Number(viewHeight) || 0;
+  const edge = Number(box?.left) || 0;
+  const left = room ? edge + (Number(seam) || 0) : Math.max(Number(scrollLeft) || 0, edge - ASK_WIDTH);
+  return { room, top, left: Math.round(left), height: Math.max(0, Math.round(foot - top)) };
+}
+
 export function askLayout(width) {
   const w = Number(width);
   if (!Number.isFinite(w)) return 'dock';
