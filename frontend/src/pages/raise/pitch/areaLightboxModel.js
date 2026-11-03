@@ -175,8 +175,8 @@ export function rowPlan({ area, element, card, cardIndex, items = [], choice = {
   }
   if (TEXT_ELEMENTS.includes(element)) {
     const words = block?.kind === 'text' ? String(block.text ?? '').trim() : '';
-    // Words for an empty area are the several-area route's (#3764): nothing on main writes them.
-    if (!words) return { run: 'later', adapter: 'areasGenerate', issue: 3764, why: LATER, what: EMPTY_TEXT_WHAT };
+    // Words for an empty area are the several-area route's (#3764, D1512): written by the batch, from the card's own words.
+    if (!words) return batchMode() === 'batch' ? { run: 'area', option: 'deck:rewrite', cardKey } : { run: 'later', adapter: 'areasGenerate', issue: 3764, why: LATER, what: EMPTY_TEXT_WHAT };
     const figures = element === 'title' ? cardFigures(card, items) : [];
     const offered = figures.length ? changesFor(element) : TEXT_CHANGES;
     const change = offered.find((c) => c.action === choice.change) || offered[0];
@@ -209,9 +209,19 @@ export function rowPlan({ area, element, card, cardIndex, items = [], choice = {
 }
 
 /** True for a plan Generate runs (a model run, or a free element that needs nothing more). */
-export const runnable = (plan) => (plan.run === 'assist' || plan.run === 'image' || plan.run === 'notes') || ((plan.run === 'metric' || plan.run === 'upload') && !plan.why);
+export const runnable = (plan) => (plan.run === 'assist' || plan.run === 'image' || plan.run === 'notes' || plan.run === 'area') || ((plan.run === 'metric' || plan.run === 'upload') && !plan.why);
 /** True for a plan that runs a model and so is quoted and charged. */
-export const charged = (plan) => plan.run === 'assist' || plan.run === 'image' || plan.run === 'notes';
+export const charged = (plan) => plan.run === 'assist' || plan.run === 'image' || plan.run === 'notes' || plan.run === 'area';
+
+/** D1512 (#3764): the text changes and chart presses the several-area batch runs (a headline and notes keep their own routes). */
+const BATCH_ACTIONS = new Set(['rewrite', 'shorten', 'expand', 'chart', 'table', 'timeline']);
+/** True for a row the batch takes: words for an empty area, a text change, a chart or a picture. */
+export const batchable = (plan) => plan.run === 'area' || plan.run === 'image' || (plan.run === 'assist' && BATCH_ACTIONS.has(plan.action));
+/** A batch row as the area routes read it: the client names the element and the change, never a model. */
+export const batchArea = (row) => ({
+  id: row.key, grid: row.area.grid, element: row.element,
+  ...(row.plan.run === 'assist' && ['rewrite', 'shorten', 'expand'].includes(row.plan.action) ? { action: row.plan.action } : {}),
+});
 
 /** A quote's hold in micro-dollars: the assist route's `hold_microusd`, the image route's `total_microusd`. */
 export function holdOf(quote) {
@@ -264,9 +274,9 @@ export function modelChip(rail) {
  * answers unavailable, so several areas run in sequence.
  */
 export function batchMode(check = availability) {
-  const q = check('areasQuote');
-  const g = check('areasGenerate');
-  return q?.available === true && g?.available === true ? 'batch' : 'sequence';
+  // `availability` answers null for a swapped row (D1512: both are, since #3764) and the reason for one still off.
+  const on = (a) => a == null || a.available === true;
+  return on(check('areasQuote')) && on(check('areasGenerate')) ? 'batch' : 'sequence';
 }
 
 /** Why a variant count is off, or null: 2 and 3 wait for the batch (#3764). */

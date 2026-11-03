@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { FIELD, GHOST, INK, MUTED } from './AssistParts';
 import { ALT_HELP, FIT_OPTIONS, placedLine } from './imageModel';
 import { COMING_LATER, CROP_WORDS as CROP_LINES, FILTERS, FILTER_WORDS, ZOOM_MIN_W, panTo, rectOf, zoomTo } from './imageLook';
+import { TOOL_OF_LABEL, toolCostLine, toolRunnable } from './imageToolsModel';
 
 const CROPS = [[0, 0], [50, 0], [100, 0], [0, 50], [50, 50], [100, 50], [0, 100], [50, 100], [100, 100]];
 const CROP_WORDS = ['Top left', 'Top', 'Top right', 'Left', 'Centre', 'Right', 'Bottom left', 'Bottom', 'Bottom right'];
@@ -21,9 +22,28 @@ const CROP_WORDS = ['Top left', 'Top', 'Top right', 'Left', 'Centre', 'Right', '
  * flagged says so; Erase, Expand, Vary, Remove background and Upscale are
  * listed greyed under "Coming later". Every renderer reads the same rule
  * (`imageLook.js`).
+ *
+ * D1534 phase 2: a tool the Worker has on (`live`, a Set of tool ids) is a live
+ * button there instead. Its press is quoted first (`tools.quote(tool)`), then
+ * run (`tools.run(tool)`), which keeps and places the result; nothing runs
+ * without the quote, and a refusal is shown in the Worker's own words.
  */
-export default function ImageToolbar({ block, image, onPatch, onReplace, onUpload, onRegenerate, onRemove }) {
+export default function ImageToolbar({ block, image, onPatch, onReplace, onUpload, onRegenerate, onRemove, live = null, tools = null }) {
   const [tool, setTool] = useState(null);
+  const [press, setPress] = useState(null); // { tool, quote, busy, error }
+  const startTool = (id) => {
+    if (!tools) return;
+    setPress({ tool: id, quote: null, busy: true, error: null });
+    Promise.resolve(tools.quote(id)).then((quote) => setPress({ tool: id, quote, busy: false, error: null }),
+      (e) => setPress({ tool: id, quote: null, busy: false, error: e?.message || 'The price could not be read. Nothing was run.' }));
+  };
+  const runTool = () => {
+    if (!press || !toolRunnable(press.quote)) return;
+    const id = press.tool;
+    setPress({ ...press, busy: true, error: null });
+    Promise.resolve(tools.run(id)).then(() => setPress(null),
+      (e) => setPress((p) => ({ ...(p || { tool: id }), busy: false, error: e?.message || 'Nothing was run.' })));
+  };
   const toggle = (t) => setTool((x) => (x === t ? null : t));
   const crop = block.crop || { x: 50, y: 50 };
   return (
@@ -80,8 +100,22 @@ export default function ImageToolbar({ block, image, onPatch, onReplace, onUploa
           </div>
           <span className={`text-[10.5px] font-extrabold uppercase tracking-[.07em] ${MUTED}`}>{CROP_LINES.comingLater}</span>
           <span className="flex flex-wrap gap-1.5" data-testid="pitch-image-coming-later">
-            {COMING_LATER.map((t) => <button key={t} type="button" className={`${GHOST} opacity-50`} disabled aria-disabled="true">{t}</button>)}
+            {COMING_LATER.map((t) => (live?.has(TOOL_OF_LABEL[t]) && tools
+              ? <button key={t} type="button" className={GHOST} onClick={() => startTool(TOOL_OF_LABEL[t])} disabled={Boolean(press?.busy)}
+                  data-testid={`pitch-image-tool-${TOOL_OF_LABEL[t]}`}>{t}</button>
+              : <button key={t} type="button" className={`${GHOST} opacity-50`} disabled aria-disabled="true">{t}</button>))}
           </span>
+          {press ? (
+            <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Image tool" data-testid="pitch-image-tool-press">
+              <span className={MUTED} data-testid="pitch-image-tool-cost">{press.error ? '' : toolCostLine(press.quote)}</span>
+              {press.error ? <span className="text-[12px] font-semibold text-axal-destructive dark:text-red-400" role="alert" data-testid="pitch-image-tool-error">{press.error}</span> : null}
+              {press.quote?.balance?.ok === false ? <span className="text-[12px] font-semibold text-axal-destructive dark:text-red-400" role="alert">{press.quote.balance.message}</span> : null}
+              <button type="button" className={GHOST} disabled={press.busy || !toolRunnable(press.quote)} onClick={runTool} data-testid="pitch-image-tool-run">
+                {press.busy && press.quote ? 'Working…' : (press.quote?.label || 'Run')}
+              </button>
+              <button type="button" className={GHOST} disabled={press.busy && Boolean(press.quote)} onClick={() => setPress(null)} data-testid="pitch-image-tool-cancel">Cancel</button>
+            </div>
+          ) : null}
         </div>
       ) : null}
       {tool === 'fit' ? (

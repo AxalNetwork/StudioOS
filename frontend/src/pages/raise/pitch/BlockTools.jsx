@@ -4,7 +4,7 @@ import {
   AlignStartVertical, AlignVerticalDistributeCenter, BringToFront, Group, Lock, Paintbrush, Plus, SendToBack, Trash2, Ungroup, Unlock,
 } from 'lucide-react';
 import AddMenu from './AddMenu';
-import ImageToolbar from './ImageToolbar';
+import ImageToolbarLive from './ImageToolbarLive';
 import { ChartToolbar } from './ChartTools';
 import { FIGURE_LINE } from './deckAssistModel';
 import { areaLabel } from './deckV2Model';
@@ -135,7 +135,7 @@ export default function BlockTools({
           <ChartToolbar block={block} charts={charts} onPatch={onPatch} onLibrary={() => onChartLibrary(block.id)} onRemove={onRemove} />
         ) : null}
         {block.kind === 'image' ? (
-          <ImageToolbar block={block} image={images.find((x) => x.uid === block.image_id) || null} onPatch={onPatch}
+          <ImageToolbarLive block={block} image={images.find((x) => x.uid === block.image_id) || null} onPatch={onPatch}
             onReplace={() => onImage('content', block.id)} onUpload={() => onImage('content', block.id)} onRegenerate={() => onImage('content', block.id)} onRemove={onRemove} />
         ) : null}
       </div>

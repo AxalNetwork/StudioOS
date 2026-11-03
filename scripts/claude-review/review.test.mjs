@@ -18,7 +18,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
 import { WorkloadIdentityError } from '@anthropic-ai/sdk/lib/credentials/types';
-import { GithubIdentityError, OIDC_AUDIENCE, anthropicClient, classifyError, clientFor, errorDetail, githubClient, githubIdentityToken, main, safePath } from './review.mjs';
+import { GithubIdentityError, LEDGER_MAX_PAGES, OIDC_AUDIENCE, anthropicClient, classifyError, clientFor, errorDetail, githubClient, githubIdentityToken, listMonthRecords, main, safePath } from './review.mjs';
 
 const headers = new Headers({ 'request-id': 'req_test' });
 const gen = (status) => Anthropic.APIError.generate(status, { type: 'error', error: { type: 'x', message: 'm' } }, 'm', headers);
@@ -131,6 +131,42 @@ test('the ledger reads every page whatever order the API lists in, and says when
   } finally {
     globalThis.fetch = saved;
   }
+});
+
+// #4281: with more than 3,000 artifacts in the repository, the cap alone cut
+// every listing off, and every review in every month was refused as "spend
+// unreadable". A newest-first listing now ends at the month's start.
+test('the ledger ends a newest-first listing at the month\'s start, however many artifacts the repository holds', async () => {
+  // Mutation checked: the early stop dropped → the 40-page listing reads 30 pages and is incomplete.
+  const since = '2026-11-01T00:00:00Z';
+  const record = (iso, n) => ({ name: `claude-review_v1_2026-11_pr${n}_${'b'.repeat(16)}_ok_250000`, created_at: iso, expired: false });
+  // 40 pages, newest first: page 1 holds this month's two records and 98 other artifacts; page 2 starts in October.
+  const pages = Array.from({ length: 40 }, (_, p) => Array.from({ length: 100 }, (_, i) => {
+    if (p === 0 && i === 0) return record('2026-11-03T11:00:00Z', 1);
+    if (p === 0 && i === 1) return record('2026-11-02T09:00:00Z', 2);
+    const minutes = p * 100 + i;
+    const iso = p === 0 ? `2026-11-01T${String(Math.floor(minutes / 60) % 24).padStart(2, '0')}:00:00Z` : new Date(Date.UTC(2026, 9, 31) - minutes * 60_000).toISOString().replace('.000', '');
+    return { name: 'test-results', created_at: iso };
+  }));
+  // Page 1 must itself be newest first: sort it.
+  pages[0].sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+  const seen = [];
+  const listing = await listMonthRecords(async (page) => { seen.push(page); return { artifacts: pages[page - 1] }; }, since);
+  assert.equal(listing.complete, true, 'the month is read in full, so the budget can be applied');
+  assert.deepEqual(seen, [1, 2], 'it stops at the first page that reaches before the month');
+  assert.deepEqual(listing.artifacts.map((a) => a.created_at), ['2026-11-03T11:00:00Z', '2026-11-02T09:00:00Z']);
+  assert.ok(pages.length > LEDGER_MAX_PAGES, 'more artifacts than the cap would ever read');
+});
+
+test('the ledger does not trust an order it has not seen: an out-of-order listing reads on to the cap', async () => {
+  // Mutation checked: the order check dropped → this listing stops at page 1 and calls itself complete.
+  const since = '2026-11-01T00:00:00Z';
+  const page1 = [{ name: 'x', created_at: '2026-10-01T00:00:00Z' }, ...Array.from({ length: 99 }, () => ({ name: 'y', created_at: '2026-11-02T00:00:00Z' }))];
+  const seen = [];
+  const full = Array.from({ length: 100 }, () => ({ name: 'z', created_at: '2026-11-02T00:00:00Z' }));
+  const listing = await listMonthRecords(async (page) => { seen.push(page); return { artifacts: page === 1 ? page1 : full }; }, since);
+  assert.equal(seen.length, LEDGER_MAX_PAGES, 'read on to the cap');
+  assert.equal(listing.complete, false, 'and a listing the cap cut off is still incomplete, so the budget refuses');
 });
 
 test('a federation failure, from GitHub or from the exchange, is classified as such wherever it is wrapped', () => {

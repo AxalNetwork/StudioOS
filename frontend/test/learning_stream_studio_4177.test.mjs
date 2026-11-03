@@ -438,9 +438,11 @@ test('the content table\'s Video column, and Copy to Stream drawn only when the 
   const noRoute = html(h(StudioContentTable, { status: 'ready', rows }));
   assert.doesNotMatch(noRoute, /button-copy-stream|Try again/);
   assert.match(flat(noRoute), /Copy failed/);
-  // L4 (#4266, D4179) shipped the copy route, and the client's one copy method posts to it; the
-  // studio still passes no handler until L4 wires the button.
-  assert.match(read('frontend/src/lib/api/adminLearning.js'), /migrateVideoToStream: \(uid\) => request\('\/admin\/learning\/stream\/migrations', \{ method: 'POST'/);
+  // No route is invented: L4 (#4179) mounted `POST /stream/migrations` with its client method, so the
+  // client's copy path must be the Worker's own route; the studio still passes no handler.
+  if (/stream\/migrations/.test(read('frontend/src/lib/api/adminLearning.js'))) {
+    assert.match(read('cloudflare-worker/src/routes/learning_stream.ts'), /admin\.post\('\/stream\/migrations'/, 'a client copy path with no Worker route');
+  }
   assert.doesNotMatch(codeOnly(read('frontend/src/pages/learning/LearningStudio.jsx')), /onCopyToStream/);
 });
 
