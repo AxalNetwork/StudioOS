@@ -16,6 +16,7 @@
  *     --test cloudflare-worker/test/deck_export_render_3655.test.ts
  */
 import test from 'node:test';
+import { deckPdf } from './_deck_pdf.ts';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
@@ -37,6 +38,8 @@ const JWT_SECRET = 'unit-test-jwt-secret-3655-0123456789-abcdef';
 const TABLES = ['users', 'projects', 'pitch_decks', 'activity_logs'];
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7, 7]);
 const PDF = new TextEncoder().encode('%PDF-1.7 synthetic');
+/** D1575 (#3822): a PDF that passes the export's check — 16:9 pages, an embedded font. */
+const GOOD_PDF = await deckPdf({ width: 1920, height: 1080, pages: 3 });
 const SLIDES = [
   { title: 'Problem', fields: [{ key: 'p', label: 'Problem', kind: 'paragraph', value: 'Ledgers drift', source: 'data' }] },
   { title: 'Traction', fields: [{ key: 't', label: 'Pilots', kind: 'paragraph', value: 'Three pilots', source: 'data' }] },
@@ -150,7 +153,7 @@ test('3. PDF: the documented call with pdfOptions; a failed render is a code-onl
   // Mutation checked: printOptions kept → the pdfOptions check fails; the diagnostic carries the URL → the token scan fails;
   // an HTML answer handed out → the not_pdf status fails and a ledger row appears.
   const f = fixture();
-  let b = browser((a) => ok(a));
+  let b = browser((a) => (a === 'pdf' ? new Response(GOOD_PDF) : ok(a)));
   let r = await exportDeck(f, { format: 'pdf' }, b.binding);
   assert.equal(r.status, 200);
   assert.equal(r.type, 'application/pdf');
