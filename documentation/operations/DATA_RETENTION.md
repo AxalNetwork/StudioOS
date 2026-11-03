@@ -17,10 +17,12 @@ The retention periods for generated assets are owner decision W (#3716), pending
 | `deck_images` | uploaded, copied and generated deck images, proposed, kept or discarded | venture cascade. The daily cleanup (D1508) removes a discarded image 24 hours after Discard and a proposal nobody kept 14 days after it was made, unless a version, draft, proposal or derivative names it. A kept image stays | one per row, `deck-images/<project>/<uid>.<ext>`; deleted with its row by the cleanup |
 | `deck_r2_tombstones` | one row per deck image the cleanup deleted: key, venture, bytes, reason, day (D1508) | venture cascade | none (each names an object already deleted) |
 | `deck_exports` | the record of each export: version, format, hash, Drive id | no cascade | none stored (an export is sent, not kept) |
+| `deck_brand_kits` | a venture's deck brand kit: font pair, palette roles, image style, reference and logo image uids (D1562) | venture cascade; one row per venture, replaced whole on save | none (it names kept `deck_images` rows by uid) |
 | `deck_checks` | claim-check runs on a version (D900) | deck and venture cascade | none |
 | `deck_notes` | notes on a version's cards (D905) | no cascade | none |
 | `deck_comments` | comment threads on a deck (D1570) | deck and venture cascade | none |
 | `deck_comment_mentions` | who a comment mentions | cascade from its comment | none |
+| `deck_preflight_dismissals` | which preflight warnings an editor dismissed on a version: the finding's id, who and when, never its words (D4208) | deck cascade | none |
 | `deck_area_batches` | a deck generation run (D1502): its areas or whole-deck build, its quote and parent hold, and its state | deck cascade | none |
 | `deck_area_batch_steps` | a generation run's plan and progress, one row per quoted line (D1502) | cascade from its run | none (its images are `deck_images` rows) |
 | `deck_area_proposals` | what Generate into areas proposed, one row per area of a run (D1512): its variants' words, chart blocks or image references, and the decision (Accept, Discard, superseded) | deck cascade; its run is set null when the run goes. The daily cleanup (D1512) expires a proposal nobody decided 14 days after it was made; the row stays, with its outcome, for the accept rate | none (its images are `deck_images` rows) |
@@ -47,6 +49,7 @@ The retention periods for generated assets are owner decision W (#3716), pending
 | `deck_area_batch_steps` | each step of a run: the area, element, model, state, charge, input and result (D1502) | cascade from its run | none |
 | `deck_logos` | a venture's customer logos for the logo wall: the customer's name, the image, and the permission to show it (D1543) | venture cascade | none of its own (the image is a `deck_images` row) |
 | `deck_rehearsals` | a founder’s rehearsal transcript, card timings and counted report (D1580) | deck cascade | rehearsal audio: removed after an hour unless its maker keeps it; turning Keep the audio off removes it immediately |
+| `deck_rehearsal_extras` | a rehearsal’s audio size and its coaching points (D1580 part 2a) | rehearsal cascade (and so deck cascade) | none: the coaching restarts the audio’s hour, which `deck_rehearsals` removes |
 
 ## Not covered yet
 

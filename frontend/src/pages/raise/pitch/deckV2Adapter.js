@@ -38,19 +38,23 @@
 import { LATER, NOT_ON } from './deckV2Model.js';
 // One line per client, in file-name order (pitch_v2_adapter_d1604 holds it), so two swaps add lines at different places.
 import { dataRoomApi } from '../../../lib/api/dataRoom.js';
+import { deckActionsApi } from '../../../lib/api/deckActions.js';
 import { deckAreasApi } from '../../../lib/api/deckAreas.js';
 import { deckBatchesApi } from '../../../lib/api/deckBatches.js';
 import { deckCardStatusApi } from '../../../lib/api/deckCardStatus.js';
 import { deckCheckApi } from '../../../lib/api/deckCheck.js';
 import { deckCoeditApi } from '../../../lib/api/deckCoedit.js';
 import { deckCommentsApi } from '../../../lib/api/deckComments.js';
+import { deckCritiqueApi } from '../../../lib/api/deckCritique.js';
 import { deckDraftApi } from '../../../lib/api/deckDraft.js';
 import { deckElementModelsApi } from '../../../lib/api/deckElementModels.js';
 import { deckElementsApi } from '../../../lib/api/deckElements.js';
 import { deckFiguresApi } from '../../../lib/api/deckFigures.js';
 import { deckGridApi } from '../../../lib/api/deckGrid.js';
 import { deckImageEditsApi } from '../../../lib/api/deckImageEdits.js';
+import { deckImagesApi } from '../../../lib/api/deckImages.js';
 import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks.js';
+import { deckMediaApi } from '../../../lib/api/deckMedia.js';
 import { deckModelPresetsApi } from '../../../lib/api/deckModelPresets.js';
 import { deckRehearsalsApi } from '../../../lib/api/deckRehearsals.js';
 import { deckRemixApi } from '../../../lib/api/deckRemix.js';
@@ -63,6 +67,7 @@ import { deckVentureElementsApi } from '../../../lib/api/deckVentureElements.js'
 import { arrange as arrangeCard } from './arrangeModel.js';
 import { areaRunResults } from './areaRunResults.js';
 import * as gridOps from './gridOps.js';
+import { FILTERS } from './imageLook';
 
 export { NOT_ON };
 
@@ -90,7 +95,9 @@ export const SURFACES = Object.freeze({
   figures: { issue: 3775, what: 'Linked, Stated and Uncited on every figure' },
   deckUsage: { issue: 3776, what: 'Estimated and spent on this deck' },
   arrange: { issue: 3777, what: 'Align, distribute, group, lock and layers' },
-  imageEdit: { issue: 3778, what: 'Crop, focus, filters, upscale and background removal' },
+  imageEdit: { issue: 3778, what: 'Crop, focus and filters' },
+  // D1534 (#3778 phase 2): upscale and background removal wait on owner decision M.
+  imageEditAi: { issue: 3778, what: 'Upscale and background removal' },
   imageVary: { issue: 3784, what: 'Erase, expand, vary and reference images' },
   elementsLibrary: { issue: 3779, what: 'Icons, shapes, dividers and textures' },
   diagrams: { issue: 3780, what: 'Funnel, hierarchy, hub and spoke, and 2×2 diagrams' },
@@ -100,14 +107,18 @@ export const SURFACES = Object.freeze({
   saveAsTemplate: { issue: 3782, what: 'Save as my template' },
   typedTables: { issue: 3787, what: 'Data sheet, market circles and projection charts' },
   media: { issue: 3788, what: 'Sections, hide, appendix, buttons and recorded video' },
+  pasteCards: { issue: 3788, what: 'Paste cards from another deck' },
+  buttonClicks: { issue: 3788, what: 'Clicks on a deck\'s buttons' },
   presets: { issue: 3796, what: 'Fast, Balanced, Best and Custom presets' },
   orgLocks: { issue: 3786, what: 'A model pick locked by HQ' },
   critique: { issue: 3799, what: 'Fix with critique' },
   remix: { issue: 3800, what: 'Remix this slide' },
   consistency: { issue: 3802, what: 'Consistency and wording checks' },
-  deckActions: { issue: 3808, what: 'Replace all images and Reorder for stage' },
+  deckActions: { issue: 3808, what: 'Reorder for stage, as one undo step' },
+  replaceImages: { issue: 3808, what: 'Replace all images, under one quote' },
+  outlineReorder: { issue: 3808, what: 'Reorder the New deck outline for a stage' },
   brandLocks: { issue: 3819, what: 'Brand kit locks' },
-  pptxImport: { issue: 3809, what: 'Start from a .pptx template' },
+  pptxImport: { issue: 3819, what: 'Start from a .pptx template' },
   investorLinks: { issue: 3812, what: 'One link per investor, consent and watermark preview' },
   withdrawInvestorLink: { issue: 3812, what: 'Withdraw one investor\'s link, keeping its analytics' },
   comments: { issue: 3817, what: 'Comments with mentions' },
@@ -203,7 +214,12 @@ export const deckUsage = (deckId) => through(() => deckUsageApi.rail(deckId), SU
  * `{ same, line }` or `{ error }`. Local and synchronous underneath; the edited card is saved with every other edit.
  */
 export const arrange = async (card, selection, op, opts) => ({ available: true, value: arrangeCard(card, selection, op, opts) });
-export const imageEdit = off('imageEdit');
+/**
+ * D1534 (#3778 phase 1): crop, focus and filters are the block's own fields, saved with the deck;
+ * no route runs. The answer is what the toolbar offers.
+ */
+export const imageEdit = async () => ({ available: true, value: { crop: 'rect', filters: [...FILTERS] } });
+export const imageEditAi = off('imageEditAi');
 /** D1544 (#3784): an edit's price (vary, edit, erase, expand) before it runs: one hold for the edit and its checks. */
 export const imageVary = (uid, ask) => through(() => deckImageEditsApi.quote(uid, ask), SURFACES.imageVary.issue);
 /**
@@ -227,12 +243,22 @@ export const myTemplates = () => through(() => deckTemplatesApi.myTemplates(), S
 export const saveAsTemplate = (deckId, name) => through(() => deckTemplatesApi.saveAsTemplate(deckId, name), SURFACES.saveAsTemplate.issue);
 /** D1538 (#3787): the figures typed for the deck, each Stated, with who typed it. */
 export const typedTables = (deckId) => through(() => deckTypedValuesApi.list(deckId), SURFACES.typedTables.issue);
-export const media = off('media');
+/**
+ * D1545 (#3788): recorded video. `media(deckId, file)` uploads an MP4 and answers the video a block names
+ * (`{ video: { provider: 'mp4', video_id, url } }`). Its row being swapped turns on Hide and Move to section,
+ * Recorded video and Button, which have no route of their own.
+ */
+export const media = (deckId, file) => through(() => deckMediaApi.uploadVideo(deckId, file), SURFACES.media.issue);
+/** D1545: another deck's cards, as a save keeps them, for the editor to place (`{ cards, missing }`); nothing is saved. */
+export const pasteCards = (deckId, fromDeckId, cardUids) => through(() => deckMediaApi.paste(deckId, fromDeckId, cardUids), SURFACES.pasteCards.issue);
+/** D1545: each pressed button's clicks and viewers (`{ buttons: [{ card_uid, block_id, clicks, viewers }] }`). */
+export const buttonClicks = (deckId) => through(() => deckMediaApi.buttonClicks(deckId), SURFACES.buttonClicks.issue);
 /** D1549 (#3796): the deck's preset in force, each group's model per preset, and HQ's locks (`GET /api/decks/:id/model-presets`). */
 export const presets = (deckId) => through(() => deckModelPresetsApi.read(deckId), SURFACES.presets.issue);
 /** D1549 (#3796, the row is #3786's): each element group HQ locked, with "Set by Axal VC HQ" — the same reply's `locks`. */
 export const orgLocks = (deckId) => through(() => deckModelPresetsApi.read(deckId).then((r) => r.locks), SURFACES.orgLocks.issue);
-export const critique = off('critique');
+// D1552 (#3799): Fix with critique: its quote (the ⋯ item's hold), or the run itself with `{ run: true }`.
+export const critique = (deckId, { run = false, vision = true } = {}) => through(() => (run ? deckCritiqueApi.run(deckId, { vision }) : deckCritiqueApi.quote(deckId)), SURFACES.critique.issue);
 /** D1553 (#3800): four layouts for one card, and the remove-a-block reflow; free, so it answers with AI paused. */
 export const remix = (deckId, card, opts) => through(() => deckRemixApi.remix(deckId, card, opts), SURFACES.remix.issue);
 /**
@@ -241,7 +267,12 @@ export const remix = (deckId, card, opts) => through(() => deckRemixApi.remix(de
  * The Wording half stays with #3808 C13.
  */
 export const consistency = (deckId) => through(() => deckCheckApi.read(deckId).then((r) => r?.consistency ?? null), SURFACES.consistency.issue);
-export const deckActions = off('deckActions');
+// D1561 (#3808): Reorder for stage saves the stage plan's order as one new version; Replace all images quotes every
+// image area as one figure on #3756's pipeline. The New deck outline's reorder waits on a stage order the browser
+// can read, and stays off.
+export const deckActions = (deckId, body) => through(() => deckActionsApi.reorderForStage(deckId, body), SURFACES.deckActions.issue);
+export const replaceImages = (deckId, body) => through(() => deckImagesApi.replaceAllQuote(deckId, body), SURFACES.replaceImages.issue);
+export const outlineReorder = off('outlineReorder');
 export const brandLocks = off('brandLocks');
 export const pptxImport = off('pptxImport');
 // D1565 (#3812): wired. Each body is `through(() => <client>(…), issue)`.

@@ -27,6 +27,14 @@ const PERK_DEALS = 'Operating Partner · Offers · Perk deals';
 const DEAL_ROOM = 'Investor · Deals · Deal room';
 // #4046 (B2): a member's answers to a product-testing programme's questions, in Studio.
 const TESTING = 'Member · Studio · Product testing';
+// #4046 (B4): a studio's program proposal, on Admin · Programs' Propose a program.
+const PROGRAMS = 'Admin · Programs';
+// #4046 (B4): an admin's note to a partner they invite, in New invitation on Admin · Community · Partner invitations.
+const PARTNER_INVITATIONS = 'Admin · Community · Partner invitations';
+// #4046 (B4): an admin's comment to an article's author, in the review drawer on Super Admin · Content · Content queue.
+const CONTENT_QUEUE = 'Super Admin · Content · Content queue';
+// #4046 (B4): HQ's New segment on Super Admin · Content · Personas (/admin/persona-segments/new).
+const PERSONAS = 'Super Admin · Content · Personas';
 const SOLUTION_DESIGN = 'Founder · Build · Solution design';
 const REVENUE = 'Founder · Grow · Revenue and traction';
 const PROBLEM = 'Founder · Validate · Problem discovery';
@@ -104,6 +112,19 @@ export const FILL_FIELDS = Object.freeze([
   { page: DEAL_ROOM, form: 'deal-note', field: 'body', label: 'Note', table: 'deal_notes', column: 'body', class: 'composition', sources: ['eadwyn'] },
   // #4046 (B2): a member's answers to a programme's questions (at most five), their own words; never availability or consent.
   ...[1, 2, 3, 4, 5].map((n) => ({ page: TESTING, form: 'testing-answers', field: `answer_${n}`, label: `Answer ${n}`, table: 'testing_applications', column: `answer_${n}`, class: 'composition', sources: ['eadwyn'] })),
+  // #4046 (B4): a program proposal's words: its working name, its one-line purpose and who it suits, in the
+  // studio's prose. Who it is for, its group, join method, cycle, seats, rewards, templates, what HQ receives,
+  // its tools and HQ's note and decision are the studio's or HQ's call, so none is listed.
+  { page: PROGRAMS, form: 'program-proposal', field: 'name', label: 'Name', table: 'program_proposals', column: 'name', class: 'composition', sources: ['eadwyn'] },
+  { page: PROGRAMS, form: 'program-proposal', field: 'purpose', label: 'One-line purpose', table: 'program_proposals', column: 'purpose', class: 'composition', sources: ['eadwyn'] },
+  { page: PROGRAMS, form: 'program-proposal', field: 'eligibility', label: 'Eligibility', table: 'program_proposals', column: 'eligibility', class: 'composition', sources: ['eadwyn'] },
+  // #4046 (B4): the admin's own note to the partner they invite; never the email, name, what to offer or the terms.
+  { page: PARTNER_INVITATIONS, form: 'partner-invitation', field: 'personal_message', label: 'Message to the invitee', table: 'partner_invitations', column: 'personal_message', class: 'composition', sources: ['eadwyn'] },
+  // #4046 (B4): a reviewer's comment to the article's author; never the paragraph it points at, a reply, Resolve or a stage change.
+  { page: CONTENT_QUEUE, form: 'review-comment', field: 'body', label: 'Comment', table: 'article_review_comments', column: 'body', class: 'composition', sources: ['eadwyn'] },
+  // #4046 (B4): HQ's words about a new segment, its name and who they are; never its key, profile, status, typical, needs or offers.
+  { page: PERSONAS, form: 'segment-profile', field: 'name', label: 'Name', table: 'segment_profiles', column: 'name', class: 'composition', sources: ['eadwyn'] },
+  { page: PERSONAS, form: 'segment-profile', field: 'who', label: 'Who they are', table: 'segment_profiles', column: 'who', class: 'composition', sources: ['eadwyn'] },
 ].map((f) => Object.freeze({ ...f, sources: Object.freeze([...f.sources]) })));
 
 /** The fields of one form, in the form's order. */

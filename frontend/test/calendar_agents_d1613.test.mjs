@@ -4,7 +4,7 @@
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/calendar_agents_d1613.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
@@ -42,28 +42,34 @@ const SESSION = {
   run_hold_cents: 45,
 };
 
-test('the seam: every #3957 method is off, in Team’s words, and no client path exists for a route that is not on main', async () => {
+test('the seam: every #3957 method goes through its client, and every client path has its Worker route', async () => {
   const names = Object.keys(seam).filter((k) => typeof seam[k] === 'function' && !['through'].includes(k));
   assert.deepEqual(names.sort(), ['agentSkills', 'cancel', 'estimate', 'pause', 'reschedule', 'runNow', 'schedulable', 'schedule', 'session']);
-  for (const n of names) assert.deepEqual(await seam[n](1, {}), { available: false, reason: 'AI agents aren’t switched on yet.' }, n);
   const src = codeOnly(read('frontend/src/pages/calendarAgentsAdapter.js'));
-  assert.doesNotMatch(src, /lib\/api|fetch\(|request\(/, 'no client call until #3957 adds its routes');
-  const client = [read('frontend/src/lib/api.js'), ...readdirSync('frontend/src/lib/api').filter((f) => f.endsWith('.js')).map((f) => read(`frontend/src/lib/api/${f}`))].join('\n');
-  // #3849 (D1530) put the duty routes #3957 extends on main; a client path for
-  // duties is allowed only where the Worker mounts that very route.
+  for (const n of names) assert.match(src, new RegExp(`export const ${n} = [^\\n]*through\\(`), `${n} goes through \`through\``);
+  assert.doesNotMatch(src, /fetch\(|request\(/, 'the seam calls the client, never the network itself');
+  const client = read('frontend/src/lib/api/agentEngine.js');
+  // #3957 (D1613 §10): each session path the client names is a route the Worker mounts.
   const routes = read('cloudflare-worker/src/routes/agent_engine.ts');
-  for (const m of client.matchAll(/request\(`\/teams((?:\/[^`]*)?\/duties\b[^`]*)`(?:, \{ method: '(\w+)')?/g)) {
+  for (const m of client.matchAll(/request\(`\/teams((?:\/[^`]*)?\/(?:duties|sessions)\b[^`]*)`(?:, \{ method: '(\w+)')?/g)) {
     const path = m[1].replace(/\$\{[^}]+\}/g, ':uid');
     const method = (m[2] || 'GET').toLowerCase();
-    assert.ok(routes.includes(`router.${method}('${path}'`), `a client path for agent duties (${method} ${path}) with no Worker route on main`);
+    assert.ok(routes.includes(`router.${method}('${path}'`), `a client path (${method} ${path}) with no Worker route`);
+  }
+  // Plain text, not a regex built from the path: each route is mounted by one of these methods.
+  for (const p of ['/sessions/agents', '/sessions/:uid', '/sessions/:uid/run', '/agents/:uid/sessions/estimate']) {
+    assert.ok(['get', 'post', 'patch', 'delete'].some((m) => routes.includes(`router.${m}('${p}'`)), p);
   }
 });
 
-test('the kind and the family stay out of KINDS and FAMILIES until #3957 adds the kind to the calendar read', () => {
+test('the kind and the family are in KINDS and FAMILIES once #3957 puts the kind on the calendar read', () => {
   assert.equal(AGENT_KIND, 'agent_session');
   assert.deepEqual(AGENT_FAMILY, { key: 'agents', label: 'AI agents' });
-  assert.doesNotMatch(read('frontend/src/pages/CalendarPage.jsx'), /id: 'agent_session'/);
-  assert.doesNotMatch(read('frontend/src/pages/calendarViews.js'), /agent_session/);
+  assert.match(read('frontend/src/pages/CalendarPage.jsx'), /id: 'agent_session'/);
+  assert.match(read('frontend/src/pages/calendarViews.js'), /\{ key: 'agents', label: 'AI agents', kinds: \['agent_session'\] \}/);
+  assert.match(read('frontend/src/pages/calendarPage.css'), /--k-agent_session: #0f766e;/, 'teal, light');
+  assert.match(read('frontend/src/pages/calendarPage.css'), /--k-agent_session: #2dd4bf;/, 'teal, dark');
+  assert.match(read('cloudflare-worker/src/services/calendar.ts'), /agent_session: async \(env, userId, from, to\)/, 'the Worker reads the kind');
 });
 
 test('state chips: words for every state, a count only when the read counted one, never colour alone', () => {

@@ -669,6 +669,8 @@ export function portfolioCard(c, { activeUid = null, paths = null } = {}) {
   return {
     uid: c.uid,
     name: String(c.company_name || '').trim() || NOT_RECORDED,
+    // #4201: the mark draws it (a stored logo's served path, or an outside URL).
+    logoUrl: c.logo_url || null,
     path: paths?.get?.(c.uid) || null,
     active: activeUid != null && c.uid === activeUid,
     role: c.is_primary_admin ? 'Primary admin' : roleWord(c.my_role),

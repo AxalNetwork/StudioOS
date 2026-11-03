@@ -356,6 +356,16 @@ export function themeTokens(kind: unknown, kit: BrandKit | null = null): { token
   if (second && contrast(second, tokens.colours.ground) >= LARGE_CONTRAST) tokens.chart[1] = second;
   // Every chart colour stays a readable mark on the ground; one that is not takes the ink.
   tokens.chart = tokens.chart.map((c) => (contrast(c, tokens.colours.ground) >= LARGE_CONTRAST ? c : tokens.colours.ink));
+  // Every series stays its own colour: a brand colour that matches a base series
+  // (or two that both fell back to the ink) takes the next readable unused one.
+  const readable = (c: string) => contrast(c, tokens.colours.ground) >= LARGE_CONTRAST;
+  const pool = [...base.chart, ...Object.values(BASE_THEMES).flatMap((t) => t.chart), tokens.colours.muted].filter(readable);
+  const used = new Set<string>();
+  tokens.chart = tokens.chart.map((c) => {
+    const pick = used.has(c) ? pool.find((x) => !used.has(x) && !tokens.chart.includes(x)) ?? c : c;
+    used.add(pick);
+    return pick;
+  });
   return { tokens, adjustments };
 }
 

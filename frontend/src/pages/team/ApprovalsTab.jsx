@@ -3,7 +3,7 @@ import { Sheet, Unrecorded } from '../../ui';
 import { AgentIdentity } from './AgentMark.jsx';
 import * as agents from './agentsAdapter.js';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, BTN_TEXT_BODY, HeadRow, HonestBlock, MONO, MUTED, PendingOwner, TeamCard } from './teamUi.jsx';
-import { agentName, ago, dayTime, money } from './teamModel.js';
+import { agentName, ago, dayTime, money, agentLine } from './teamModel.js';
 
 /**
  * D1497 (#3727, TM7a, TM7b, TM7b2) — Approvals: the scope's queue of agent
@@ -62,7 +62,7 @@ export function ProposalSheet({ item, onClose, onDecided }) {
         </div>
       )}>
       <div className="flex flex-col gap-4 px-5 py-5">
-        <span className="flex flex-wrap items-center gap-2"><AgentIdentity name={agentName(a)} role={a.role_name} size={24} /><span className={MONO}>{item.module_label}</span></span>
+        <span className="flex flex-wrap items-center gap-2"><AgentIdentity name={agentName(a)} role={agentLine(a)} size={24} /><span className={MONO}>{item.module_label}</span></span>
         {decided ? (
           <p role="status" className="m-0 rounded-axal-md bg-emerald-50 px-3 py-2 text-[13px] text-axal-positive dark:bg-emerald-900/20 dark:text-emerald-300" data-testid="proposal-decided">
             ✓ {decided.text || decidedLine(decided)}
@@ -94,16 +94,17 @@ export function ApprovalsBoard({ value, onOpen, onAccept }) {
   const [mod, setMod] = useState('');
   const [status, setStatus] = useState('proposed');
   const [cost, setCost] = useState('');
-  const roles = [...new Set(items.map((i) => i.agent?.role_name).filter(Boolean))];
+  // D4119: filter by agent (its persona's name), never by a job title.
+  const roles = [...new Set(items.map((i) => (i.agent ? agentName(i.agent) : null)).filter(Boolean))];
   const mods = [...new Set(items.map((i) => i.module_label).filter(Boolean))];
   const statuses = [...new Set(items.map((i) => i.status || 'proposed'))];
-  const shown = items.filter((i) => (!role || i.agent?.role_name === role) && (!mod || i.module_label === mod)
+  const shown = items.filter((i) => (!role || (i.agent ? agentName(i.agent) : null) === role) && (!mod || i.module_label === mod)
     && (!status || (i.status || 'proposed') === status) && costMatch(cost, i.cost));
   const sel = 'h-9 rounded-[9px] border border-axal-hairline bg-white px-2.5 text-[12.5px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
   return (
     <div className="flex flex-col gap-4" data-testid="team-approvals">
       <div className="flex flex-wrap items-center gap-2">
-        <select aria-label="Role" className={sel} value={role} onChange={(e) => setRole(e.target.value)}><option value="">Role: All</option>{roles.map((r) => <option key={r}>{r}</option>)}</select>
+        <select aria-label="Agent" className={sel} value={role} onChange={(e) => setRole(e.target.value)}><option value="">Agent: All</option>{roles.map((r) => <option key={r}>{r}</option>)}</select>
         <select aria-label="Module" className={sel} value={mod} onChange={(e) => setMod(e.target.value)}><option value="">Module: All</option>{mods.map((m) => <option key={m}>{m}</option>)}</select>
         <select aria-label="Status" className={sel} value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="">Status: All</option>
@@ -118,7 +119,7 @@ export function ApprovalsBoard({ value, onOpen, onAccept }) {
             <HeadRow grid={GRID} cols={['Agent', 'Module', 'What it proposes', 'Cost', 'Proposed', 'Sponsor']} />
             {shown.map((i) => (
               <div key={i.uid} role="row" className={`grid grid-cols-1 ${GRID} items-center gap-3 border-b border-axal-hairline py-2.5 last:border-b-0 dark:border-gray-800`}>
-                <span role="cell"><AgentIdentity name={agentName(i.agent)} role={i.agent?.role_name} size={28} /></span>
+                <span role="cell"><AgentIdentity name={agentName(i.agent)} role={agentLine(i.agent)} size={28} /></span>
                 <span role="cell" className="text-[13px] text-axal-ink dark:text-gray-200">{i.module_label}</span>
                 <span role="cell" className="text-[13px] text-axal-ink dark:text-gray-200">{i.title}</span>
                 <span role="cell" className="font-mono text-[12.5px] text-axal-ink dark:text-gray-200">{i.cost?.available ? money(i.cost.value_microusd) : <Unrecorded />}</span>
@@ -140,7 +141,7 @@ export function ApprovalsBoard({ value, onOpen, onAccept }) {
           <ul className="m-0 flex list-none flex-col p-0">
             {decided.map((d) => (
               <li key={d.uid} className="grid grid-cols-1 items-center gap-2 border-b border-axal-hairline py-2 last:border-b-0 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1.6fr)_minmax(0,1.6fr)] dark:border-gray-800">
-                <AgentIdentity name={agentName(d.agent)} role={d.agent?.role_name} size={24} />
+                <AgentIdentity name={agentName(d.agent)} role={agentLine(d.agent)} size={24} />
                 <span className="text-[13px] text-axal-ink dark:text-gray-200">{d.title}</span>
                 <span className={MUTED}>{d.decision_line || <>{DECIDED_WORD[String(d.decision || '').toLowerCase()] || d.decision || <Unrecorded />}{dayTime(d.decided_at) ? ` ${dayTime(d.decided_at)}` : ''} by {d.by?.name || <Unrecorded />}</>}</span>
               </li>

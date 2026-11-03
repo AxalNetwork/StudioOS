@@ -463,6 +463,13 @@ export interface Env {
   // D1544 (#3784): Cloudflare Images, to resize a deck image to a model's
   // reference size before an edit. Optional: without it an edit refuses.
   IMAGES?: ImagesBinding;
+  // #4176 (D4176): Cloudflare Stream for Learning video. Optional: without it every Stream route answers
+  // 503 stream_unavailable and an item plays from R2 or its link as before.
+  STREAM?: import('./services/learningStream').StreamBinding;
+  // #4176: the tus route (files over 200 MB) calls Stream's REST API with this token and CLOUDFLARE_ACCOUNT_ID.
+  STREAM_API_TOKEN?: string;
+  // #4176: verifies Stream's Webhook-Signature (owner step B).
+  STREAM_WEBHOOK_SECRET?: string;
   // Feature flag — string "true" enables the native CF Queue path.
   USE_CF_QUEUE?: string;
   // Durable Objects for real-time WebSocket fan-out. Optional so unit-test
@@ -485,6 +492,10 @@ export interface Env {
   DECK_PRESENCE?: DurableObjectNamespace;
   // D1502 part 2 (#3753): one room per deck that drives its generation runs, and one governor per account that throttles their steps.
   DECK_GEN_ROOM?: DurableObjectNamespace;
+  /** D1536 (#3785, deck v2 B9): `do` (the default) or `queue`. While `queue`, every deck run goes to the Queue fallback; otherwise only a run of more than 18 variant steps does. */
+  DECK_GEN_RUNTIME?: string;
+  /** D1536: a read-only Cloudflare API token (Workers AI · Read) for the weekly catalogue drift job, with CLOUDFLARE_ACCOUNT_ID. Unset: the job skips with a logged reason and raises no alert. */
+  CF_AI_CATALOGUE_TOKEN?: string;
   AI_GOVERNOR?: DurableObjectNamespace;
   // D1581 (#3828): the phone remote for Present, paired by code. Optional: without it the remote routes answer 503 `remote_off`.
   DECK_REMOTE?: DurableObjectNamespace;
@@ -649,6 +660,10 @@ export interface Env {
   // D200 — `studioos-backups`, declared in both wrangler.toml tables; optional
   // at runtime, which is why services/backup.ts treats its absence as a state.
   BACKUPS?: R2Bucket;
+  // #4201 (#4152 G1) — `studioos-company-logos`, declared in both wrangler.toml
+  // tables. One PNG or SVG per company; served to members by
+  // `GET /api/company/:uid/logo`. Optional: the logo routes answer 503 without it.
+  COMPANY_LOGOS?: R2Bucket;
 
   // Wide allowlist for preview/dev CORS, see middleware/cors guard.
   EXTRA_DEV_ORIGINS?: string;

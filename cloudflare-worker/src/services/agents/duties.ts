@@ -38,6 +38,7 @@ import { agentFits, insertTask, type TaskRow } from './tasks';
 import { scopeOfAgent, type AgentRow } from './teams';
 import { TEMPLATES, type Duty } from './templates';
 import type { Refusal } from './goals';
+import { sessionSchedule, zonedNext, type SessionRow } from './sessions';
 
 export const CADENCES = ['daily', 'weekly', 'monthly'] as const;
 export type Cadence = (typeof CADENCES)[number];
@@ -61,8 +62,8 @@ export const dutyTemplateOf = (key: string): DutyTemplate | null => DUTY_TEMPLAT
 
 export type DutyRow = {
   id: number; uid: string; agent_id: number; template_key: string; title: string; module: string | null; option: string | null;
-  cadence: Cadence; weekday: number | null; day_of_month: number | null; hour_utc: number; next_due_at: string;
-  last_claimed_at: string | null; last_outcome: string | null; status: 'active' | 'paused' | 'removed';
+  cadence: Cadence | 'once'; weekday: number | null; day_of_month: number | null; hour_utc: number; next_due_at: string;
+  last_claimed_at: string | null; last_outcome: string | null; status: 'active' | 'paused' | 'done' | 'removed';
   created_by: number | null; created_at: string; updated_at: string;
 };
 
@@ -134,7 +135,7 @@ export async function addDuty(env: Env, a: AgentRow, b: DutyInput, by: number, n
     if (typeof b.title !== 'string' || !b.title.trim() || b.title.length > TITLE_MAX) return { ok: false, refusal: no(400, 'invalid_duty', `A duty's title is at most ${TITLE_MAX} characters.`) };
     title = b.title.trim();
   }
-  const live = await env.DB.prepare("SELECT COUNT(*) AS n FROM agent_duties WHERE agent_id = ? AND status <> 'removed'").bind(a.id).first<{ n: number }>();
+  const live = await env.DB.prepare("SELECT COUNT(*) AS n FROM agent_duties WHERE agent_id = ? AND kind = 'duty' AND status <> 'removed'").bind(a.id).first<{ n: number }>();
   if (Number(live?.n ?? 0) >= DUTIES_PER_AGENT_MAX) return { ok: false, refusal: no(409, 'too_many_duties', `An agent has at most ${DUTIES_PER_AGENT_MAX} duties.`) };
   const uid = newUid();
   try {
@@ -178,11 +179,11 @@ export async function removeDuty(env: Env, d: DutyRow): Promise<void> {
 
 export async function dutyByUid(env: Env, uid: string): Promise<DutyRow | null> {
   if (typeof uid !== 'string' || !/^[A-Za-z0-9_-]{6,64}$/.test(uid)) return null;
-  return env.DB.prepare('SELECT * FROM agent_duties WHERE uid = ?').bind(uid).first<DutyRow>();
+  return env.DB.prepare("SELECT * FROM agent_duties WHERE uid = ? AND kind = 'duty'").bind(uid).first<DutyRow>();
 }
 
 export async function dutiesOf(env: Env, agentId: number): Promise<DutyRow[]> {
-  return (await env.DB.prepare("SELECT * FROM agent_duties WHERE agent_id = ? AND status <> 'removed' ORDER BY id").bind(agentId).all<DutyRow>()).results ?? [];
+  return (await env.DB.prepare("SELECT * FROM agent_duties WHERE agent_id = ? AND kind = 'duty' AND status <> 'removed' ORDER BY id").bind(agentId).all<DutyRow>()).results ?? [];
 }
 
 /** How many runs a schedule makes in a month, for the estimate. */
@@ -199,17 +200,24 @@ export type DutyDeps = {
   tell: (env: Env, a: AgentRow, task: TaskRow) => Promise<void>;
 };
 
-export type ClaimOutcome = 'not_claimed' | 'task_created' | 'skipped:agent_paused' | 'skipped:no_tokens' | 'skipped:scope_gone';
+export type ClaimOutcome = 'not_claimed' | 'task_created' | 'skipped:agent_paused' | 'skipped:no_tokens' | 'skipped:scope_gone' | 'skipped:skill_retired';
 
 /**
  * Claim one due duty and act on it. Returns `not_claimed` when another
  * sweep moved it first: then nothing at all is written.
  */
 export async function claimDuty(env: Env, d: DutyRow, now: Date, deps: DutyDeps): Promise<{ outcome: ClaimOutcome; task?: TaskRow }> {
-  const next = sqlTime(nextDue(d, now));
-  const claimed = await env.DB.prepare(
-    'UPDATE agent_duties SET next_due_at = ?, last_claimed_at = ? WHERE id = ? AND next_due_at = ? AND status = \'active\'',
-  ).bind(next, sqlTime(now), d.id, d.next_due_at).run();
+  // #3957: a session's slot is in its member's zone, to the minute; a once session has no next slot and ends `done`.
+  const session = (d as SessionRow).kind === 'session' ? (d as SessionRow) : null;
+  const once = d.cadence === 'once';
+  const nextAt = session ? zonedNext(sessionSchedule(session), now) : once ? null : nextDue(d, now);
+  const claimed = once || !nextAt
+    ? await env.DB.prepare(
+      'UPDATE agent_duties SET status = \'done\', last_claimed_at = ? WHERE id = ? AND next_due_at = ? AND status = \'active\'',
+    ).bind(sqlTime(now), d.id, d.next_due_at).run()
+    : await env.DB.prepare(
+      'UPDATE agent_duties SET next_due_at = ?, last_claimed_at = ? WHERE id = ? AND next_due_at = ? AND status = \'active\'',
+    ).bind(sqlTime(nextAt), sqlTime(now), d.id, d.next_due_at).run();
   if (Number(claimed.meta?.changes ?? 0) !== 1) return { outcome: 'not_claimed' };
   const record = async (outcome: ClaimOutcome) => {
     await env.DB.prepare('UPDATE agent_duties SET last_outcome = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(outcome, d.id).run();
@@ -219,6 +227,13 @@ export async function claimDuty(env: Env, d: DutyRow, now: Date, deps: DutyDeps)
   if (!a || a.status !== 'active') return { outcome: await record('skipped:agent_paused') };
   const s = await scopeOfAgent(env, a);
   if (!s) return { outcome: await record('skipped:scope_gone') };
+  if (session) {
+    // The pinned skill must still be assigned and not retired, or the session is skipped and says why.
+    const sk = await env.DB.prepare(
+      'SELECT s.status FROM agent_skill_links l JOIN agent_skills s ON s.id = l.skill_id WHERE l.agent_id = ? AND l.skill_id = ?',
+    ).bind(a.id, session.skill_id).first<{ status: string }>().catch(() => null);
+    if (!sk || sk.status === 'retired') return { outcome: await record('skipped:skill_retired') };
+  }
   if (await deps.tokensLeft(env, a.sponsor_user_id) === false) return { outcome: await record('skipped:no_tokens') };
   const task = await insertTask(env, s, {
     title: d.title.slice(0, TITLE_MAX), module: d.module, option: d.option, kind: 'duty',
@@ -242,7 +257,7 @@ export async function dueDuties(env: Env, now: Date): Promise<DutyRow[]> {
 }
 
 export async function sweepDuties(env: Env, now: Date, deps: DutyDeps): Promise<Record<ClaimOutcome, number>> {
-  const out = { not_claimed: 0, task_created: 0, 'skipped:agent_paused': 0, 'skipped:no_tokens': 0, 'skipped:scope_gone': 0 } as Record<ClaimOutcome, number>;
+  const out = { not_claimed: 0, task_created: 0, 'skipped:agent_paused': 0, 'skipped:no_tokens': 0, 'skipped:scope_gone': 0, 'skipped:skill_retired': 0 } as Record<ClaimOutcome, number>;
   for (const d of await dueDuties(env, now)) {
     try { out[(await claimDuty(env, d, now, deps)).outcome] += 1; } catch { console.warn('[agents] duty_claim_failed'); }
   }

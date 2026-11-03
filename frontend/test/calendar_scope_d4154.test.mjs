@@ -11,7 +11,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { codeOnly } from './_codeOnly.mjs';
 import {
-  BUILD, NOT_RECORDED, apiScope, byDay, coverageLine, dayCounts, emptyLine, filterRows, scopeOf, scopedRow, scopesFor, viewingChip, withScope,
+  BUILD, NOT_RECORDED, NO_PAGE, optionsOf, apiScope, byDay, coverageLine, dayCounts, emptyLine, filterRows, scopeOf, scopedRow, scopesFor, viewingChip, withScope,
 } from '../src/pages/calendarScope/calendarScopeModel.js';
 import { ScopeSwitch } from '../src/pages/calendarScope/CalendarScopeView.jsx';
 
@@ -93,4 +93,24 @@ test('CA5: coverage and the empty scope say whether everyone answered', () => {
   assert.equal(coverageLine(null, 'studio', BRANCH_ADMIN), 'Coverage not reported.');
   assert.equal(emptyLine('studio', BRANCH_ADMIN, true), 'Nothing in Studio Lisbon in this range. Every company answered.');
   assert.match(VIEW, /That is not the same as nothing being booked\./);
+});
+
+test('C1 (#4196) is live: Company and Branch filter on the read, a row with no page says so, no option is "Not recorded"', () => {
+  // Mutations checked: live false → the switch assert and the enabled-select asserts fail; the company or studio
+  // clause dropped from filterRows → its filter assert fails; optionsOf keeping NOT_RECORDED → the options assert fails.
+  assert.equal(BUILD.C1.live, true);
+  const rows = [
+    scopedRow({ id: 'a', kind: 'ic_meeting', title: 'IC', company: { name: 'Northwind Labs' }, studio: { code: 'hq', name: 'HQ-held' }, open_href: '/deals/1' }),
+    scopedRow({ id: 'b', kind: 'compliance_due', title: 'Tax', company: { name: 'Atlas Co' }, studio: { code: 'hq', name: 'HQ-held' } }),
+    scopedRow({ id: 'c', kind: 'advisor_session', title: 'Booking', attendees: [] }),
+  ];
+  assert.deepEqual(filterRows(rows, { company: 'Atlas Co' }).map((r) => r.id), ['b']);
+  assert.deepEqual(filterRows(rows, { studio: 'HQ-held' }).map((r) => r.id), ['a', 'b']);
+  assert.deepEqual(optionsOf(rows, 'company'), ['Atlas Co', 'Northwind Labs']);
+  assert.deepEqual(optionsOf(rows, 'studio'), ['HQ-held']);
+  assert.match(NO_PAGE, /no page to open/);
+  const view = codeOnly(VIEW);
+  assert.match(view, /aria-label="Company"[^>]*>|onChange=\{\(e\) => setFilters\(\(f\) => \(\{ \.\.\.f, company:/);
+  assert.match(view, /setFilters\(\(f\) => \(\{ \.\.\.f, studio: e\.target\.value/);
+  assert.match(view, /BUILD\.C1\.live \? NO_PAGE : notYet\('C1'\)/);
 });

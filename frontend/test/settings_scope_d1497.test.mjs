@@ -1,7 +1,8 @@
-// D1497 (#3727, TM1e–TM1i) — who governs a Team page, and what the sidebar's
-// bottom block reads: "Company settings" (Team · Company settings · Projects)
-// in a company or a project inside one; "Project settings" (Team · Project
-// settings) in a standalone project, which has no Legal entry anywhere.
+// D1497 (#3727, TM1e–TM1i) — who governs a Team page and a scope's entries
+// ("Company settings": Team · Company settings · Projects; "Project settings"
+// for a standalone project, which has no Legal entry anywhere). Since D4152
+// (#4152, ST1) the sidebar draws them as ONE "Settings" entry with the scope
+// under it; the tabs live on the settings page.
 // Every name is the canvas's own sample, used here as a fixture only.
 //
 // Run with:
@@ -15,7 +16,7 @@ import { readFileSync } from 'node:fs';
 import SidebarNav, { SettingsScopeBlock } from '../src/ui/SidebarNav.jsx';
 import { ActiveCompanyContext } from '../src/contexts/ActiveCompanyContext.js';
 import {
-  BILLING_PATH, COMPANY_SETTINGS, PROJECT_SETTINGS, entryLabels, fromSettingsScope, projectCompany, projectsOfCompany, publishScope, readSettingsScope, scopeFor,
+  COMPANY_SETTINGS, PROJECT_SETTINGS, entryLabels, settingsActive, settingsEntry, withPortfolioRow, fromSettingsScope, projectCompany, projectsOfCompany, publishScope, readSettingsScope, scopeFor,
 } from '../src/lib/settingsScope.js';
 import { renderedText } from './_renderedText.mjs';
 
@@ -96,29 +97,42 @@ function sidebar(company) {
       h(SidebarNav, { groups: [], role: 'founder', user: { role: 'founder' } }))));
 }
 
-test('the sidebar draws the block by scope, keeps the Portfolio row (D1413), and Billing is a link under it', () => {
+test('D4152 ST1: the sidebar draws one "Settings" entry with the scope under it; no Billing, no Portfolio in it', () => {
   const co = sidebar(NORTHWIND);
-  const text = renderedText(co);
-  assert.match(co, /data-testid="settings-scope-block" data-scope="company"/);
-  assert.match(co, /data-testid="settings-scope-label">Company settings</);
-  assert.match(co, /href="\/account\/companies\/nw1\/settings\/team"/);
-  assert.match(co, /data-testid="scope-row-legal"[^>]*href="\/account\/portfolio\/nw1\/settings\/legal"/);
-  assert.match(text, /Portfolio/);
-  assert.match(co, /data-testid="settings-scope-billing"[^>]*>Billing · in Account/);
-  assert.match(co, new RegExp(`data-testid="settings-scope-billing"[^>]*href="${BILLING_PATH}"`));
-  assert.match(co, /data-testid="settings-scope-billing-pending">pending owner</, 'Billing\'s place is the owner\'s call');
-  assert.doesNotMatch(co, /scope-row-billing/, 'Billing is never one of the block\'s rows');
+  assert.equal((co.match(/data-testid="settings-entry"/g) || []).length, 1, 'exactly one Settings entry');
+  assert.match(co, /data-testid="settings-entry" data-scope="company"/);
+  assert.match(co, /data-testid="settings-entry-scope">\[Northwind Labs\]</);
+  assert.match(co, /href="\/account\/portfolio\/nw1\/settings"[^>]*data-testid="settings-entry"|data-testid="settings-entry"[^>]*href="\/account\/portfolio\/nw1\/settings"/);
+  assert.doesNotMatch(co, /settings-scope-billing|Billing · in Account|pending owner/, 'Billing is in the Account menu');
+  assert.doesNotMatch(co, /scope-row-|settings-scope-label/, 'the old block\'s rows are gone');
+  assert.match(readFileSync('frontend/src/App.jsx', 'utf8'), /<Link to="\/account\/billing" onClick=\{\(\) => setOpen\(false\)\}[\s\S]{0,200}Billing\s*<\/Link>/, 'Billing in the Account menu');
 
   publishScope(scopeFor({ project: { id: 9, name: '[Lantern]', company: null } }));
   try {
     const solo = sidebar(NORTHWIND);
     assert.match(solo, /data-scope="project"/);
-    assert.match(solo, /data-testid="settings-scope-label">Project settings</);
-    assert.doesNotMatch(renderedText(solo), /Legal/, 'no Legal entry in a standalone project');
-    assert.match(solo, /href="\/projects\/9\/settings\/team"/);
+    assert.match(solo, /data-testid="settings-entry-scope">\[Lantern\]</);
+    assert.match(solo, /href="\/projects\/9\/settings"/);
   } finally { publishScope(null); }
 
-  assert.doesNotMatch(sidebar(null), /settings-scope-block/, 'no company and no project: the block is not drawn');
+  assert.doesNotMatch(sidebar(null), /settings-entry/, 'no company and no project: no Settings entry');
+});
+
+test('D4152 §3: Portfolio is a main-navigation row after Studio; a shell with no Studio row keeps it at the foot', () => {
+  const ICON = () => null;
+  const founder = [{ key: 'home', items: [{ to: '/studio', label: 'Studio' }, { to: '/build', label: 'Build' }] }];
+  const out = withPortfolioRow(founder, ICON);
+  assert.equal(out.portfolioInNav, true);
+  assert.deepEqual(out.groups[0].items.map((i) => i.label), ['Studio', 'Portfolio', 'Build']);
+  assert.equal(out.groups[0].items[1].to, '/account/portfolio');
+  const investor = [{ key: 'home', items: [{ to: '/studio', label: 'Studio' }, { to: '/portfolio', label: 'Portfolio' }] }];
+  assert.deepEqual(withPortfolioRow(investor).groups[0].items.map((i) => i.label), ['Studio', 'Companies', 'Portfolio'], 'two rows never share a name');
+  const hq = [{ key: 'hq', items: [{ to: '/hq', label: 'Home' }] }];
+  assert.equal(withPortfolioRow(hq).portfolioInNav, false);
+  const html = renderToStaticMarkup(h(MemoryRouter, { initialEntries: ['/studio'] },
+    h(ActiveCompanyContext.Provider, { value: { company: null, setCompany() {}, companies: [], setCompanies() {} } },
+      h(SidebarNav, { groups: founder, role: 'founder', user: { role: 'founder' } }))));
+  assert.equal((renderedText(html).match(/Portfolio/g) || []).length, 1, 'Portfolio once, in the main navigation');
 });
 
 // ---------------------------------------------------------------- review fixes
@@ -151,38 +165,28 @@ test('projectCompany: the read\'s company, else the switcher\'s, else governed b
   assert.equal(projectCompany({ company_id: null }, { companies: [{ id: 9, uid: 'nw1' }] }), null);
 });
 
-const block = (props) => renderToStaticMarkup(h(MemoryRouter, { initialEntries: ['/account/portfolio/nw1/settings'] }, h(SettingsScopeBlock, props)));
+const entryAt = (scope, url) => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [url] }, h(SettingsScopeBlock, { scope })));
 
-test('one page lights one row: "Company settings" is the label of General, not a second link to it', () => {
-  const html = block({ scope: scopeFor({ company: { uid: 'nw1', name: 'x' } }), drawer: false, activeUid: 'nw1' });
-  assert.equal((html.match(/href="\/account\/portfolio\/nw1\/settings"/g) || []).length, 1, 'only General links to the settings page');
-  assert.match(html, /<span class="[^"]*" data-testid="scope-row-company">/);
-  assert.match(html, /max-h-\[38vh\] overflow-y-auto/, 'the block scrolls on its own on a desktop');
+test('D4152 ST1: the entry opens the scope\'s settings and is lit on any of its tabs', () => {
+  const co = scopeFor({ company: { uid: 'nw1', name: '[Northwind Labs]' } });
+  assert.deepEqual(settingsEntry(co).path, '/account/portfolio/nw1/settings');
+  for (const url of ['/account/portfolio/nw1/settings', '/account/portfolio/nw1/settings/legal', '/account/portfolio/nw1/settings/projects/8', '/account/companies/nw1/settings/team']) {
+    assert.equal(settingsActive(settingsEntry(co), url), true, url);
+    assert.match(entryAt(co, url), /aria-current="page"/, url);
+  }
+  assert.equal(settingsActive(settingsEntry(co), '/studio'), false);
+  const inCo = settingsEntry(scopeFor({ project: ATLAS }));
+  assert.deepEqual([inCo.where, inCo.path], ['[Northwind Labs] › [Atlas Pilot]', '/account/portfolio/nw1/settings/projects/7']);
+  const solo = settingsEntry(scopeFor({ project: { id: 9, name: '[Lantern]', company: null } }));
+  assert.deepEqual([solo.where, solo.path], ['[Lantern]', '/projects/9/settings']);
+  assert.equal(settingsActive(solo, '/projects/9/settings/team'), true);
 });
 
-test('the phone drawer: one row per entry, its sub-label right-aligned, no children (TM1i)', () => {
-  const projects = projectsOfCompany(ROWS, 'nw1');
-  const html = block({ scope: scopeFor({ company: { uid: 'nw1', name: 'x' }, projects }), drawer: true, activeUid: 'nw1' });
-  const text = renderedText(html);
-  assert.match(html, /data-form="drawer"/);
-  assert.match(text, /Company settingsGeneral · Legal/);
-  assert.match(text, /Projects\[2\]/);
-  assert.doesNotMatch(html, /scope-row-general|scope-row-legal|scope-row-project-7/, 'children are hidden in the drawer');
-});
-
-test('Company settings for a company not active here is off with its reason, never a dead end', () => {
-  const html = block({ scope: scopeFor({ company: { uid: 'nw1', name: 'x' } }), drawer: false, activeUid: 'other' });
-  assert.doesNotMatch(html, /href="\/account\/portfolio\/nw1\/settings"/);
-  assert.match(html, /data-testid="scope-row-general"[^>]*>|aria-disabled="true" title="Full company settings open for the company active on this device/);
-  assert.match(html, /title="Full company settings open for the company active on this device\. Make it active from its page\."/);
-  assert.match(html, /href="\/account\/companies\/nw1\/settings\/team"/, 'Team serves any company');
-});
-
-test('the collapsed block\'s links are named in full for a screen reader', () => {
-  const html = block({ scope: scopeFor({ company: { uid: 'nw1', name: 'x' } }), collapsed: true, activeUid: 'nw1' });
-  assert.match(html, /aria-label="Company settings · Team"/);
-  assert.match(html, /aria-label="Company settings"/);
-  assert.match(html, /<span class="[^"]*" aria-hidden="true">Set\.<\/span>/);
+test('the collapsed entry is the gear alone, named "Settings · <scope>" for a screen reader', () => {
+  const html = renderToStaticMarkup(h(MemoryRouter, null, h(SettingsScopeBlock, { scope: scopeFor({ company: { uid: 'nw1', name: '[Northwind Labs]' } }), collapsed: true })));
+  assert.match(html, /aria-label="Settings · \[Northwind Labs\]"/);
+  assert.match(html, /title="Settings · \[Northwind Labs\]"/);
+  assert.doesNotMatch(renderedText(html), /Settings/, 'no text beside the icon when collapsed');
 });
 
 test('the project page publishes its own scope, so a standalone project reads "Project settings" there too', () => {
@@ -190,6 +194,6 @@ test('the project page publishes its own scope, so a standalone project reads "P
   assert.match(src, /usePublishScope\(project && project\.id != null \? scopeFor\(\{ project: \{ id: project\.id, name: project\.name, company: projectCompany\(project, \{ companies \}\) \} \}\) : null\)/);
   publishScope(scopeFor({ project: { id: 9, name: '[Lantern]', company: projectCompany({ company_id: null }, {}) } }));
   try {
-    assert.match(sidebar(NORTHWIND), /data-testid="settings-scope-label">Project settings</, 'not the active company\'s block');
+    assert.match(sidebar(NORTHWIND), /data-testid="settings-entry" data-scope="project"/, 'not the active company\'s entry');
   } finally { publishScope(null); }
 });
