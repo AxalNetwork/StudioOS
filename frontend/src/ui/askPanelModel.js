@@ -213,16 +213,30 @@ export function askRoom(width) {
   return Number.isFinite(w) && w >= ASK_ROOM_MIN;
 }
 
+/** The docked panel's width, which the hosts' rail track also gains (`--fwr-ask`). */
+export const ASK_WIDTH = 420;
+
 /**
- * #4260: the docked panel's height, the part of the rail's column the reader
- * can see: from the scroll area's top (under the header) or the column's top,
- * whichever is lower, to the window's foot or the column's foot, whichever is
- * higher. Never negative; whole pixels.
+ * #4260: where the docked panel sits, in window pixels. It is drawn fixed at
+ * the document's level (`WorkerRail`), never inside the rail, so no host's
+ * rail stylesheet (`.inw-rail section`, `.fb-cadence-rail span` …) reaches it,
+ * and its height is the page's, not the rail column's:
+ *   - from the scroll area's top, under the header, to the footer's top or
+ *     the window's foot, whichever is higher, so neither the head nor the
+ *     composer is ever covered;
+ *   - inside the rail's column from its seam (`room`, the column took the
+ *     panel's width at 1440px and up), or against the column's outer edge,
+ *     over the content (the overlay, 1024 to 1439px or a host whose track
+ *     does not widen), never left of the scroll area.
+ * `box` is the rail's bounding box and `seam` its left border's width.
  */
-export function askFit({ top, bottom }, scrollTop, viewHeight) {
-  const from = Math.max(Number(scrollTop) || 0, Number(top) || 0);
-  const to = Math.min(Number(viewHeight) || 0, Number(bottom) || 0);
-  return Math.max(0, Math.round(to - from));
+export function askDock(box, seam, { scrollTop = 0, scrollLeft = 0, footTop = null, viewHeight = 0 } = {}, layout = 'dock') {
+  const room = layout === 'dock' && askRoom(box?.width);
+  const top = Math.round(Number(scrollTop) || 0);
+  const foot = Number.isFinite(Number(footTop)) && footTop !== null ? Math.min(Number(viewHeight) || 0, Number(footTop)) : Number(viewHeight) || 0;
+  const edge = Number(box?.left) || 0;
+  const left = room ? edge + (Number(seam) || 0) : Math.max(Number(scrollLeft) || 0, edge - ASK_WIDTH);
+  return { room, top, left: Math.round(left), height: Math.max(0, Math.round(foot - top)) };
 }
 
 export function askLayout(width) {

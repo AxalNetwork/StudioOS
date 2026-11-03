@@ -1,13 +1,11 @@
 /*
  * D1443 (#3706, canvas AK) — the Ask panel.
  *
- * DOCKED (1024px and up). `WorkerRail` draws `.fwr-ask-dock` inside its own
- * <aside>, which is the rail's column and runs from under the app header to
- * the footer (#4260: `RailFrame` hands the rail its inset, and an edge-to-edge
- * page grows its frame to the footer). The dock spans that column's height at
- * the rail's left edge (`right: 100%`); the panel is sticky inside it and as
- * tall as the part of the column in view (`--ask-fit`, measured by
- * `WorkerRail`), so it can pass neither the header nor the footer. It
+ * DOCKED (1024px and up). `WorkerRail` draws `.ead-ask-dock` fixed at the
+ * document's level and places it from its rail's box (#4260): from under the
+ * app header to the footer's top, at the rail column's seam (1440px and up,
+ * where the column widened for it) or against the column's outer edge, over
+ * the content. It can pass neither the header nor the footer. It
  * overlays the content column only: never the header, the sidebar, the rail or
  * the footer (AK12). This is the one sticky element in the rail's column
  * (workerRail.css keeps the rail itself without a scroll of its own).
@@ -131,23 +129,18 @@
 .ead-ask-grip { align-self: center; flex: none; width: 40px; height: 4px; margin-top: 8px; border-radius: 999px; background: var(--ask-line2); }
 
 /*
- * DOCKED: inside the rail's <aside>, at its left edge, header to footer.
- * #4260: the aside IS the column. `RailFrame` hands its inset to the rail and
- * the rail fills the column (workerRail.css), so the dock's top, bottom and
- * left edge are the column's, never 18px inside them. `WorkerRail` marks the
- * aside `data-ask-docked` while the dock is drawn, rather than a `:has()`.
+ * DOCKED (1024px and up). #4260: drawn fixed at the document's level, never
+ * inside the rail, and placed by `WorkerRail` from the rail's measured box
+ * (`askDock` in askPanelModel.js): from under the header to the footer's top,
+ * at the rail column's seam or against its outer edge. Inside the rail it took
+ * the rail's box (RailFrame's padding, a collapsed spine's height) and every
+ * host rule written for the rail's children. The figures below are where it
+ * sits before the first measurement; the inline placement replaces them.
  */
-/* `aside.fwr > .fwr-ask-dock`, one step above any single-class host rule:
-   a host frame that styles every child of its rail (`.a6-rail>div` pads and
-   rules each one) would otherwise move the dock 15px down its column. */
-aside.fwr > .fwr-ask-dock { display: none; }
+.ead-ask-dock { display: none; }
 @media (min-width: 1024px) {
-  aside.fwr[data-ask-docked="true"] { position: relative; }
-  aside.fwr > .fwr-ask-dock { display: block; position: absolute; top: 0; bottom: 0; right: 100%; width: 420px; z-index: 30; pointer-events: none; margin: 0; padding: 0; border: 0; }
-  /* The height is `--ask-fit`, the visible part of the column (WorkerRail
-     measures it as the page scrolls), so the head never slides under the
-     header and the composer never under the footer. */
-  .fwr-ask-dock > .ead-ask { pointer-events: auto; position: sticky; top: 0; height: min(var(--ask-fit, calc(100dvh - 56px)), 100%); }
+  .ead-ask-dock { display: block; position: fixed; top: 56px; right: 0; height: calc(100dvh - 56px); width: 420px; z-index: 40; }
+  .ead-ask-dock > .ead-ask { height: 100%; }
 }
 
 /*
@@ -160,20 +153,17 @@ aside.fwr > .fwr-ask-dock { display: none; }
  * is covered.
  *
  * The rail's own cards then move clear of the panel, but only where the track
- * really widened. #4260: `WorkerRail` measures its aside and sets
- * `data-ask-room` when it is ASK_ROOM_MIN (400px) wide or more: a rail column
- * is never that wide unless it took the panel's width (at most 288px open,
- * 44px on the spine; 464px and up once widened). This was a container query
- * on the aside, which the owner's collapsed rail showed unmet: the panel sat
- * over the content beside an empty 464px column. A host that does not read
- * the track keeps the overlay, rather than a rail squeezed to nothing.
+ * really widened: `WorkerRail` sets `data-ask-room` when its aside is 400px
+ * wide or more (a rail column is never that wide unless it took the panel's
+ * width: at most 288px open, 44px on the spine; 464px and up once widened),
+ * and places the panel at the column's seam. A host that does not read the
+ * track keeps the overlay, rather than a rail squeezed to nothing.
  * `frontend/test/header_ask_d1443p5.test.mjs` fails on any track read without
  * `--fwr-ask`.
  */
 @media (min-width: 1440px) {
   :root[data-eadwyn-ask-at="dock"] { --fwr-ask: 420px; }
-  aside.fwr[data-ask-room="true"] > .fwr-ask-dock { right: auto; left: 0; }
-  aside.fwr[data-ask-room="true"] > :not(.fwr-ask-dock) { margin-left: 420px; }
+  aside.fwr[data-ask-room="true"] > * { margin-left: 420px; }
 }
 
 /* OVER and SHEET: portalled below 1024px. */

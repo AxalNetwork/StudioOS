@@ -190,9 +190,10 @@ test('the seam: D1442 turned the quote and the waiting count on; nothing is off,
   assert.match(panel, /setTimeout\(\(\) => \{\s*askPanelAdapter\.quote\(convUid, text, page\)/);
 });
 
-test('WorkerRail mounts the panel inside its own aside at desktop, and portals it below 1024', () => {
+test('WorkerRail places the docked panel from its rail at desktop (#4260), and portals it below 1024', () => {
   const rail = codeOnly(read('frontend/src/ui/WorkerRail.jsx'));
-  assert.match(rail, /\{askPanel && askDocked && <div className="fwr-ask-dock" data-testid="ask-dock">\{askPanel\}<\/div>\}\s*<\/aside>/, 'docked inside the aside');
+  // #4260: never inside the aside, whose box and host rules it took; placed fixed from the rail's measured box.
+  assert.match(rail, /\{portalReady && askPanel && askDocked && createPortal\(\s*<div ref=\{setDock\} className="ead-ask-dock" data-testid="ask-dock" data-sheet-keep="">\{askPanel\}<\/div>,\s*document\.body,/, 'docked at the document level');
   assert.match(rail, /\{portalReady && askPanel && !askDocked && createPortal\(/, 'portalled below 1024');
   assert.match(rail, /if \(sheetOpen\) askPanelEvent\(\{ type: 'sheet' \}\);/, 'a detail sheet closes Ask');
   assert.match(rail, /if \(lastPath\.current !== pathname\) askPanelEvent\(\{ type: 'route' \}\);/, 'a route change closes Ask');
@@ -200,13 +201,11 @@ test('WorkerRail mounts the panel inside its own aside at desktop, and portals i
   assert.match(rail, /return \(\) => root\.removeAttribute\('data-eadwyn-ask'\);/);
 });
 
-test('the CSS: sticky in the rail\'s column at 1024px and up, never fixed there; dark pairs', () => {
+test('the CSS: placed in the rail\'s column at 1024px and up (#4260); dark pairs', () => {
   const css = read('frontend/src/ui/askPanel.css');
-  const desk = css.slice(css.indexOf('@media (min-width: 1024px) {\n  aside.fwr'));
-  const block = desk.slice(0, desk.indexOf('\n}\n'));
-  assert.match(block, /\.fwr-ask-dock \{[^}]*position: absolute;[^}]*right: 100%;/);
-  assert.match(block, /\.fwr-ask-dock > \.ead-ask \{[^}]*position: sticky;[^}]*height: min\(var\(--ask-fit, calc\(100dvh - 56px\)\), 100%\)/);
-  assert.doesNotMatch(block, /position: fixed/);
+  // #4260: fixed, because `WorkerRail` places it between the header and the footer from the rail's box (askDock); it can pass neither.
+  assert.match(css, /@media \(min-width: 1024px\) \{\n  \.ead-ask-dock \{ display: block; position: fixed;[^}]*width: 420px;[^}]*\}\n  \.ead-ask-dock > \.ead-ask \{ height: 100%; \}/);
+  assert.match(css, /^\.ead-ask-dock \{ display: none; \}/m, 'never below 1024px, where the layer draws it');
   assert.match(css, /\.dark \.ead-ask \{/);
   assert.match(css, /@media \(min-width: 1024px\) \{ \.ead-ask-layer, \.ead-ask-scrim \{ display: none; \} \}/);
 });

@@ -596,14 +596,17 @@ button.fwr-add-tokens:disabled { cursor: not-allowed; opacity: .55; }
     max-width: none; margin-left: 0; margin-right: 0;
     flex: 1 0 auto; display: flex; flex-direction: column;
   }
-  /* #4260: an edge-to-edge page (the cycle pages: Build, Raise …) has no
-     padding to take back, but its frame still has to reach the footer, or the
-     rail column, and the Ask panel docked in it, end where the page's content
-     does. */
-  [data-app-main].edge-to-edge-surface:has(> .fwr-frame[data-rail="true"]) {
+  /* #4260: an edge-to-edge page (the cycle pages, the founder desks, the
+     investor workspaces) has no padding to take back, but its rail still has
+     to reach the footer, or the rail column, and the Ask panel docked in it,
+     end where the page's content does. The container grows to the footer and
+     the child that holds the rail grows with it. Once flexed, that child's
+     height is definite, so a host shell's own `min-height: 100%` (`.fb-board`,
+     `.a6-network`, `.i4-shell` …) resolves at last instead of meaning nothing. */
+  [data-app-main].edge-to-edge-surface:has(aside.fwr) {
     flex: 1 0 auto; display: flex; flex-direction: column;
   }
-  [data-app-main].edge-to-edge-surface > .fwr-frame[data-rail="true"] { flex: 1 0 auto; }
+  [data-app-main].edge-to-edge-surface:has(aside.fwr) > :has(aside.fwr) { flex: 1 0 auto; }
 }
 
 /*
