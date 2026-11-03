@@ -42,7 +42,8 @@ export type PolicyRow = { model_id: string; enabled: number; plan_min: string | 
 /** Every policy row; an unreadable table is none. */
 export async function loadPolicy(env: Pick<Env, 'DB'>): Promise<PolicyRow[]> {
   try {
-    return (await env.DB.prepare('SELECT model_id, enabled, plan_min, note, updated_by, updated_at FROM ai_model_policy ORDER BY model_id').all<PolicyRow>()).results ?? [];
+    // `.bind()` with no values, as `loadFlagRows` does: a harness that pairs each query with its binds stays in step.
+    return (await env.DB.prepare('SELECT model_id, enabled, plan_min, note, updated_by, updated_at FROM ai_model_policy ORDER BY model_id').bind().all<PolicyRow>()).results ?? [];
   } catch { return []; }
 }
 
