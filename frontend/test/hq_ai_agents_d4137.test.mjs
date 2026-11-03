@@ -41,7 +41,8 @@ test('viewFor maps each address to its board, and an unknown sub-path to its tab
 
 test('each build task names its issue, and none is live before its routes land', () => {
   assert.deepEqual(Object.entries(BUILD).map(([k, b]) => [k, b.issue]), [['H1', 4158], ['H2', 4160], ['H3', 4161], ['H4', 4162], ['H5', 4163]]);
-  for (const b of Object.values(BUILD)) assert.equal(b.live, false);
+  // D4158: H1's roster routes are mounted (routes/admin_ai_agents_roster.ts), so it is live; the rest wait.
+  assert.deepEqual(Object.entries(BUILD).map(([k, b]) => [k, b.live]), [['H1', true], ['H2', false], ['H3', false], ['H4', false], ['H5', false]]);
   assert.equal(notYet('H4'), 'Not switched on yet. Platform AI policy and the kill switch arrives with #4162.');
 });
 
@@ -107,10 +108,13 @@ test('SA6 guardrails: the three platform rules, no advice wording in the panel',
   assert.doesNotMatch(prose, /\badvis(or|e)\b/i, 'the panel never offers advice outside the rule\'s own name');
 });
 
-test('the page reads only the one route that exists, and draws no write for H1–H5', () => {
+test('the page reads only routes that exist, and writes only through H1\'s roster', () => {
   const calls = [...PAGE.matchAll(/teamAgentsApi\.(\w+)/g)].map((m) => m[1]);
-  assert.deepEqual([...new Set(calls)], ['axalSkills']);
+  assert.deepEqual([...new Set(calls)], ['roles', 'axalSkills']);
   assert.match(read('lib/api/teamAgents.js'), /axalSkills: \(\) => request\('\/teams\/skills'\),/);
+  // D4158: the roster's four methods are the page's only admin calls, and its only writes.
+  const admin = [...PAGE.matchAll(/adminAiAgentsApi\.(\w+)/g)].map((m) => m[1]);
+  assert.deepEqual([...new Set(admin)].sort(), ['roster', 'rosterAgent', 'rosterDefaults', 'rosterUpdate']);
   assert.doesNotMatch(PAGE, /method: '(POST|PUT|PATCH|DELETE)'/);
   for (const label of ['Publish…', 'Re-run evals', 'Retire…']) {
     assert.match(PAGE, new RegExp(`<button type="button" disabled className=\\{BTN\\} title=\\{notYet\\('H2'\\)\\}>${label.replace('…', '…')}</button>`), label);

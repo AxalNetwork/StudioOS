@@ -32,6 +32,7 @@
  * id through `advisor_client_document_shares` and no namespace is widened;
  * D37 and `research_search_isolation.test.ts` are untouched.
  */
+import { MATCH_DEPS, MatchRefused, matchRows } from '../services/ai/matchRows';
 import { Hono } from 'hono';
 import { logAdminAction } from '../services/adminAudit';
 import researchCollections from './research_collections';
@@ -77,7 +78,7 @@ import { refuse } from '../util/refusal';
 // read their SQL from there.
 import { activeGrant, ndaActive, logAccess } from './data_room';
 import { tierAdmits, investorCommitted, admittedCounts, grantFolderScope, folderInScope } from '../services/dataRoomAccess';
-import { pageFromPath, railFor, refuseAssistOff } from '../util/railContext';
+import { pageFromPath, railFor, refuseAssistOff, refuseRun } from '../util/railContext';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 
 const research = new Hono<{ Bindings: Env }>();
@@ -3620,6 +3621,40 @@ export const SHARED_DRAFT_PAGES: Readonly<Record<string, string>> = {
  * reason `ValidateProposals` states in its own docblock: a component that
  * proposed on render would spend a reader's budget for visiting a page.
  */
+// #3938 part 2 (D1478 task 4, job GR4): the founder's press ranks one posting's
+// applicants: retrieve (bge-m3), rank (the reranker), then one line each, drawn only
+// from what the applicant wrote (`services/ai/matchRows.ts`). Nothing writes an
+// application's status; the founder acts in Talent. No applicant's email is read.
+research.post('/grow/talent/rank', async (c) => {
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+  const pid = await founderProject(c, user.id, String(body?.scope_key ?? ''));
+  if (pid == null) return c.json({ detail: 'no_project' }, 404);
+  const postingId = Number(body?.posting_id);
+  const post = Number.isSafeInteger(postingId) && postingId > 0
+    ? await c.env.DB.prepare("SELECT id, title, seniority FROM job_postings WHERE id = ? AND project_id = ? AND status <> 'draft'").bind(postingId, pid)
+      .first<{ id: number; title: string; seniority: string | null }>()
+    : null;
+  if (!post) return c.json({ detail: 'no_posting' }, 404);
+  const apps = (await c.env.DB.prepare(
+    `SELECT id, name, cover_note, linkedin_url, portfolio_url, resume_key FROM job_applications WHERE posting_id = ? ORDER BY created_at DESC LIMIT 40`,
+  ).bind(post.id).all<{ id: number; name: string | null; cover_note: string | null; linkedin_url: string | null; portfolio_url: string | null; resume_key: string | null }>()).results ?? [];
+  const query = `${post.title}${post.seniority ? `, ${post.seniority}` : ''}`;
+  const candidates = apps.map((a) => ({
+    key: String(a.id),
+    text: [a.name || 'Name not given', a.cover_note ? `Wrote: ${String(a.cover_note).slice(0, 600)}` : 'No cover note',
+      a.linkedin_url ? 'LinkedIn given' : null, a.portfolio_url ? 'Portfolio given' : null, a.resume_key ? 'Resume attached' : 'No resume'].filter(Boolean).join('. '),
+  }));
+  const rail = railFor(c, { page: FOUNDER_DRAFT_PAGES['grow/talent'] ?? 'grow', option: 'draft:grow/talent' });
+  const deps = MATCH_DEPS.make(c.env, { userId: user.id, surface: '/grow/talent', rail, guardText: query }, 'GR4');
+  let res;
+  try { res = await matchRows(query, candidates, deps, { top: 10 }); } catch (e) {
+    if (e instanceof MatchRefused) return refuseRun(c, e.result)!;
+    throw e;
+  }
+  return c.json({ job: 'GR4', posting_id: post.id, steps: res.steps, rows: res.rows.map((r) => ({ application_id: Number(r.key), position: r.position, line: r.line })) });
+});
+
 research.post('/drafts', async (c) => {
   const user = await requireAuth(c);
   const body = await c.req.json().catch(() => ({} as any));

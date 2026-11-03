@@ -215,7 +215,8 @@ jobs:
         run: |
           set -o pipefail
           tolerate() { "$@" 2>&1 | tee step.log || grep -qi 'already exists' step.log; }
-          for suffix in files publications backups; do
+          # #4201: company-logos is the COMPANY_LOGOS bucket (branchConfig.mjs derivedNames).
+          for suffix in files publications backups company-logos; do
             args=(r2 bucket create "studioos-${BRANCH}-${suffix}")
             [[ "$D1_JURISDICTION" != none ]] && args+=(--jurisdiction "$D1_JURISDICTION")
             tolerate npx --yes wrangler@4.131.0 "${args[@]}" \

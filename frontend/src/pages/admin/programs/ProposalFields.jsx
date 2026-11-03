@@ -5,6 +5,7 @@
 // proposalsModel's shape and `set(patch)` merges into it.
 import React from 'react';
 import { INPUT, SUB } from './parts';
+import { FillLabel } from '../../../ui/useScopedFill.jsx';
 import {
   CYCLE_LINE, JOIN_METHODS, PROPOSAL_GROUPS, WHO_WORDS, toggleWord,
 } from './proposalsModel';
@@ -20,6 +21,23 @@ export function Field({ label, children, testId }) {
       <span className={EYEBROW}>{label}</span>
       {children}
     </label>
+  );
+}
+
+/**
+ * #4046 (B4): a text field Fill with Eadwyn may fill. With no `fill` it is `Field`, unchanged (HQ's New program
+ * dialog); with one, the label names its input by id and sits in `FillLabel`'s row, outside any <label>, so the
+ * trigger button never becomes the label's control and the input keeps its name.
+ */
+function FillableField({ fill, name, label, value, id, children }) {
+  if (!fill) return <Field label={label}>{children}</Field>;
+  return (
+    <div className="flex flex-col gap-1">
+      <FillLabel fill={fill} name={name} label={label} value={value}>
+        <label htmlFor={id} className={EYEBROW}>{label}</label>
+      </FillLabel>
+      {children}
+    </div>
   );
 }
 
@@ -42,22 +60,24 @@ export function ChipGroup({ label, options, value, onChange, multi = false, togg
   );
 }
 
-export function BasicsFields({ form, set, prefix, disabled = false }) {
+/** `fill` (#4046 B4): Propose a program's `useScopedFill`, or null (HQ's New program dialog draws no Ask). */
+export function BasicsFields({ form, set, prefix, disabled = false, fill = null }) {
+  const id = (k) => (fill ? `${prefix}-${k}` : undefined);
   return (
     <div className="flex flex-col gap-3">
-      <Field label="Name">
-        <input value={form.name} onChange={(e) => set({ name: e.target.value })} maxLength={120} disabled={disabled} className={INPUT} data-testid={`${prefix}-name`} />
-      </Field>
-      <Field label="One-line purpose">
-        <input value={form.purpose} onChange={(e) => set({ purpose: e.target.value })} maxLength={300} disabled={disabled} className={INPUT} data-testid={`${prefix}-purpose`} />
-      </Field>
+      <FillableField fill={fill} name="name" label="Name" value={form.name} id={id('name')}>
+        <input id={id('name')} value={form.name} onChange={(e) => set({ name: e.target.value })} maxLength={120} disabled={disabled} className={INPUT} data-testid={`${prefix}-name`} />
+      </FillableField>
+      <FillableField fill={fill} name="purpose" label="One-line purpose" value={form.purpose} id={id('purpose')}>
+        <input id={id('purpose')} value={form.purpose} onChange={(e) => set({ purpose: e.target.value })} maxLength={300} disabled={disabled} className={INPUT} data-testid={`${prefix}-purpose`} />
+      </FillableField>
       <ChipGroup label="Who it is for" options={WHO_WORDS} value={form.who} multi disabled={disabled} onChange={(who) => set({ who })} testId={`${prefix}-who`} />
       <ChipGroup label="Group" options={PROPOSAL_GROUPS} value={form.group} disabled={disabled} onChange={(group) => set({ group })} testId={`${prefix}-group`} />
     </div>
   );
 }
 
-export function HowItRunsFields({ form, set, prefix, disabled = false }) {
+export function HowItRunsFields({ form, set, prefix, disabled = false, fill = null }) {
   return (
     <div className="flex flex-col gap-3">
       <ChipGroup label="Join method" options={JOIN_METHODS} value={form.join_method} disabled={disabled} onChange={(join_method) => set({ join_method })} testId={`${prefix}-join`} />
@@ -75,9 +95,9 @@ export function HowItRunsFields({ form, set, prefix, disabled = false }) {
       <Field label="Seats">
         <input type="number" min={1} inputMode="numeric" value={form.seats} disabled={disabled} onChange={(e) => set({ seats: e.target.value })} className={`${INPUT} w-28 font-mono`} data-testid={`${prefix}-seats`} />
       </Field>
-      <Field label="Eligibility">
-        <textarea rows={3} value={form.eligibility} disabled={disabled} maxLength={1000} onChange={(e) => set({ eligibility: e.target.value })} className={`${INPUT} py-2`} data-testid={`${prefix}-eligibility`} />
-      </Field>
+      <FillableField fill={fill} name="eligibility" label="Eligibility" value={form.eligibility} id={fill ? `${prefix}-eligibility` : undefined}>
+        <textarea id={fill ? `${prefix}-eligibility` : undefined} rows={3} value={form.eligibility} disabled={disabled} maxLength={1000} onChange={(e) => set({ eligibility: e.target.value })} className={`${INPUT} py-2`} data-testid={`${prefix}-eligibility`} />
+      </FillableField>
     </div>
   );
 }

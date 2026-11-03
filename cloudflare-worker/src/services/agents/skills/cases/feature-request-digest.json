@@ -1,0 +1,38 @@
+{
+  "skill": "feature-request-digest",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "build.records": {
+        "requests": [
+          {
+            "theme": "CSV export",
+            "customer": "Acme Dental"
+          },
+          {
+            "theme": "CSV export",
+            "customer": "Brightsmile"
+          }
+        ]
+      },
+      "grow.records": {
+        "accounts": [
+          "Acme Dental",
+          "Brightsmile"
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "CSV export",
+      "2"
+    ],
+    "must_say_not_recorded": [],
+    "must_not_include": [
+      "most requested ever"
+    ]
+  }
+}

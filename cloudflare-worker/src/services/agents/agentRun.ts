@@ -54,6 +54,14 @@
  *
  * The tool reads are named by the same run uid. Neither the prompt nor the
  * output is logged, thrown or written to an event.
+ *
+ * SKILLS (D1612 part D, #3954). A run may name one of the agent's skills
+ * (`skill`, its uid). After the reads are shaped and before the model sees
+ * anything, `skillForRun` (`skillEval.ts`) takes the version pinned on the
+ * agent, refuses a suspended one, re-checks its tools against the agent's
+ * grants (`tool_not_approved`) and refuses a read outside its allow-list
+ * (`tool_not_in_skill`). Its steps and allow-list join the system prompt; the
+ * usage row records `skill_id` and `skill_version`.
  */
 import type { Env, User } from '../../types';
 import { PLATFORM_PAUSED_MESSAGE, modelUnder, readPolicy } from './aiPolicy';
@@ -65,6 +73,7 @@ import { moduleOf, optionsIn, type ModuleDef, type Rules } from './catalogue';
 import { personaOf } from './personas';
 import { canManage, effectiveBook, logEvent, monthSpend, scopeOfAgent, type AgentRow, type Scope, type Spend } from './teams';
 import { cleanReads, grantsOf, readTools, type ToolDeps } from './agentTools';
+import { skillForRun, skillPrompt, tagUsage } from './skillEval';
 
 export const PROMPT_MAX = 8000;
 const CYCLE_PAGE = { validate: 'Founder · Validate', build: 'Founder · Build', raise: 'Founder · Raise', grow: 'Founder · Grow' } as const;
@@ -83,6 +92,8 @@ export type AgentRunInput = {
   taskId?: number | null;
   /** #3846: the run's uid, the same on every retry of one step. Absent, the run gets a fresh one. */
   runUid?: string | null;
+  /** D1612 part D (#3954): the uid of one of the agent's skills; its PINNED version guides the run. */
+  skill?: string | null;
 };
 
 export type AgentRefusal = { ok: false; status: number; code: string; message: string; extra?: Record<string, unknown> };
@@ -317,6 +328,10 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
   // Part 5: the named reads, through granted tools only, before the model sees anything.
   const shaped = cleanReads(input.toolReads, grantsOf(a.tool_grants_json));
   if (!shaped.ok) return refused(env, a, shaped, input.module, input.option);
+  // D1612 part D (#3954): a named skill runs at the agent's pinned version; its tools are checked again now.
+  const skill = input.skill != null ? await skillForRun(env, a, input.skill, shaped.reads.map((t) => t.tool)) : null;
+  if (skill && !skill.ok) return refused(env, a, skill, input.module, input.option);
+  if (skill) c.opts.systemPrompt = `${c.opts.systemPrompt}\n\n${skillPrompt(skill.version)}`;
   const read = await readTools(env, a, shaped.reads, runUid, input.toolDeps);
   if ('disconnected' in read) {
     await pause(env, a, 'tool_disconnected');
@@ -350,6 +365,7 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
     return refused(env, a, no(runRefusalStatus(r.refusal), r.refusal ?? 'run_failed', words, link ? { link } : undefined), input.module, input.option);
   }
   const usageLogId = r.usageLogId ?? null;
+  if (skill) await tagUsage(env, usageLogId, skill.skill.id, skill.version.version);
   let proposal: RailProposal;
   try {
     proposal = await proposeRail(env, {
@@ -362,6 +378,9 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
   }
   // The tools read are named, never their arguments or results.
   const tools = shaped.reads.map((t) => ({ integration_uid: t.integration_uid, tool: t.tool }));
-  await logEvent(env, a.id, a.sponsor_user_id, 'run', { module: input.module, option: input.option, ...(tools.length ? { tool_reads: tools } : {}) }, { usageLogId, proposalUid: proposal.uid });
+  await logEvent(env, a.id, a.sponsor_user_id, 'run', {
+    module: input.module, option: input.option, ...(tools.length ? { tool_reads: tools } : {}),
+    ...(skill ? { skill: { uid: skill.skill.uid, version: skill.version.version } } : {}),
+  }, { usageLogId, proposalUid: proposal.uid });
   return { ok: true, proposal, charged: await chargedFor(env, usageLogId), usageLogId, runKey, replayed: false };
 }

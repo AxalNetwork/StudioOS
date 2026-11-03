@@ -1,0 +1,30 @@
+{
+  "skill": "usability-findings-summary",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "validate.records": {
+        "sessions": 5,
+        "findings": [
+          {
+            "text": "Missed the reschedule button",
+            "hit": 4,
+            "quote": "I thought this was just a label"
+          }
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Missed the reschedule button",
+      "4"
+    ],
+    "must_say_not_recorded": [],
+    "must_not_include": [
+      "all users"
+    ]
+  }
+}

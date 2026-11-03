@@ -85,6 +85,8 @@ export function derivedNames(code) {
       FILES: `studioos-${code}-files`,
       PUBLICATIONS: `studioos-${code}-publications`,
       BACKUPS: `studioos-${code}-backups`,
+      // #4201: company logos (COMPANY_LOGOS).
+      COMPANY_LOGOS: `studioos-${code}-company-logos`,
     },
     // One branch index per Vectorize binding, as R2 is keyed by binding.
     // DECK_QUOTES (D1556, #3803) is the consented interview quotes index.
@@ -398,7 +400,7 @@ export function renderBranchConfig(tomlSrc, entry) {
         kv.set('crons', arr(BRANCH_CRONS));
         break;
       default:
-        break; // analytics_engine_datasets, ai, browser, images, assets, DOs, migrations, tail_consumers
+        break; // analytics_engine_datasets, ai, browser, images, stream, assets, DOs, migrations, tail_consumers
     }
     push(table, s.double, kv);
   }
@@ -471,6 +473,8 @@ export function checkRendered(tomlSrc, entry, rendered) {
     browser: 'binding',
     // D1544 (#3784): Cloudflare Images, account-wide like Browser Rendering: the same name on every branch.
     images: 'binding',
+    // #4176 (D4176): Cloudflare Stream, account-wide like Images: the same name on every branch.
+    stream: 'binding',
     ai: 'binding',
     'queues.producers': 'binding',
     'queues.consumers': 'queue',

@@ -91,6 +91,8 @@ const ok = (files: number, bytes: number) => ({ files, bytes, measured_bytes: by
 const OWNER_AREAS = {
   data_room: ok(3, 600), diligence_files: ok(1, 800), research_library: ok(1, 600),
   interview_recordings: ok(2, 900), data_room_versions: ok(1, 50), session_audio: ok(2, 220), deck_reviews: ok(2, 2100),
+  // D1580 part 2a: no kept rehearsal audio, so none is counted.
+  deck_rehearsals: ok(0, 0),
   validate_evidence: ok(1, 210), build_proofs: ok(2, 450), grow_minutes: ok(1, 240), brand_files: ok(2, 60), csv_imports: ok(1, 45),
   // D1411: no article of theirs, so no list is made and none is counted.
   articles: ok(0, 0),
@@ -105,7 +107,7 @@ test('D1169: every member store counts, company files count to the company owner
     const { kind: _k, key: _key, ...got } = area(body, key);
     assert.deepEqual(got, want, key);
   }
-  assert.equal(body.areas.length, 13, 'D1411 adds articles');
+  assert.equal(body.areas.length, 14, 'D1411 adds articles; D1580 part 2a adds kept rehearsal audio');
   assert.deepEqual(body.areas.slice(0, 4).map((a: any) => a.key), ['data_room', 'diligence_files', 'research_library', 'interview_recordings']);
   assert.equal(body.total_bytes, 6275); assert.equal(body.measured_bytes, 6275);
   assert.equal(body.files, 19); assert.equal(body.unknown_size_files, 0);
@@ -128,7 +130,7 @@ test('D1169: kinds group the areas in the canvas order and sum exactly', async (
   for (const [key, [files, bytes]] of Object.entries(want)) assert.deepEqual(kind(body, key), { key, ...ok(files, bytes) }, key);
   const kindOf: Record<string, string> = { data_room: 'data_room', data_room_versions: 'data_room', research_library: 'documents', validate_evidence: 'documents',
     build_proofs: 'documents', grow_minutes: 'documents', diligence_files: 'documents', interview_recordings: 'recordings', session_audio: 'recordings',
-    deck_reviews: 'decks_exports', brand_files: 'brand', csv_imports: 'other', articles: 'other' };
+    deck_reviews: 'decks_exports', deck_rehearsals: 'recordings', brand_files: 'brand', csv_imports: 'other', articles: 'other' };
   for (const a of body.areas) assert.equal(a.kind, kindOf[a.key], a.key);
 });
 
@@ -202,6 +204,7 @@ test('D1169: a missing size is unknown, never 0, in every new store; a missing o
 
 const STORES: Record<string, RegExp> = {
   data_room_versions: /data_room_file_versions/, session_audio: /interview_session_chunks/, deck_reviews: /FROM deck_reviews/,
+  deck_rehearsals: /JOIN deck_rehearsals r/,
   validate_evidence: /demand_signals/, build_proofs: /formation_steps/, grow_minutes: /obligation_occurrences/,
   brand_files: /FROM member_files/, csv_imports: /FROM data_imports/,
 };
@@ -283,6 +286,8 @@ test('D1169: the read touches only member stores; fund, legal, identity, 83(b) a
   const tables = new Set([...src.matchAll(/\b(?:FROM|JOIN)\s+([a-z_]+)/g)].map((m) => m[1]).filter((t) => t !== 'json_each'));
   assert.deepEqual([...tables].sort(), [
     'company_profiles', 'compliance_events', 'data_imports', 'data_room_file_versions', 'data_room_files', 'dd_attachments', 'deck_reviews',
+    // D1580 part 2a (#3827): kept rehearsal audio and its size.
+    'deck_rehearsals', 'deck_rehearsal_extras',
     'demand_signals', 'discovery_interviews', 'entity_obligations', 'formation_steps', 'interview_session_chunks', 'interview_sessions',
     'member_files', 'obligation_occurrences', 'projects', 'research_documents', 'user_company_links', 'users',
     // D1411 (#3894): a member's own articles, to list their objects in R2.
@@ -297,7 +302,7 @@ test('D1169: each owner column the read filters on has an index, except the two 
   const db = migratedTemplate();
   const src = readFileSync(new URL('../src/services/storageUsage.ts', import.meta.url), 'utf8');
   const queries = [...src.matchAll(/(?:groups:|largest:|const OWNED =) `([\s\S]*?)`/g)].map((m) => m[1]);
-  assert.equal(queries.length, 25);
+  assert.equal(queries.length, 27, 'D1580 part 2a adds two deck_rehearsals queries');
   const scans = new Set<string>();
   for (const q of queries) {
     for (const row of db.prepare('EXPLAIN QUERY PLAN ' + q).all(...Array(q.split('?').length - 1).fill('[]')) as any[]) {

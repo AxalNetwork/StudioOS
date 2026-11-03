@@ -22,6 +22,7 @@
 import type { Env, JobMessage } from './types';
 import { handleJob } from './services/queueWorker';
 import { FLOW_STEP_JOB, runFlowStep } from './services/flows';
+import { DECK_GEN_JOB, driveQueuedSlice } from './services/decks/queueRuntime';
 
 // Mirrors AI_JOB_TYPES in services/queueWorker.ts, which says why
 // `interview_process` is not in it: a deferral below spends one of the
@@ -152,6 +153,22 @@ export async function queueConsumer(
       continue;
     }
 
+    // D1536 (#3785): a deck run's slice. The run's own rows dedupe it (a step
+    // that is done never runs again, and `rebuild` repeats nothing), so it skips
+    // `job_idempotency`. A slice that throws is redelivered; the next slice is a
+    // new message, so a long run never spends this one's retries.
+    if (body.job_type === DECK_GEN_JOB) {
+      try {
+        await driveQueuedSlice(env, body.payload ?? {});
+        message.ack();
+        await meter(env, body.job_type, 'completed', Date.now() - t0);
+      } catch (e: any) {
+        console.error('[queue-consumer] deck run slice failed', { attempt: message.attempts }, e?.message || e);
+        await meter(env, body.job_type, 'failed', Date.now() - t0);
+        message.retry();
+      }
+      continue;
+    }
     // Defensive: a producer that bypassed `enqueueJob()` could ship a
     // message without an idempotency_key. Such a message can't be deduped
     // safely — ack it and surface the bug in error_logs rather than

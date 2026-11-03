@@ -436,7 +436,7 @@ export async function fetchMicrosoftUserinfo(accessToken: string): Promise<any> 
 // ===========================================================================
 export interface CalendarEvent {
   id: string;
-  kind: 'ic_meeting' | 'founder_checkin' | 'advisor_booking' | 'partner_office_hour' | 'calendly_event' | 'expert_booking' | 'event_ticket' | 'event_hosted' | 'investor_meeting' | 'compliance_due' | 'interview_call' | 'cohort_date' | 'deal_closing' | 'manual' | 'learning' | 'publish_send' | 'content_planned' | 'bot_call' | 'round_close' | 'nda_expiry' | 'workflow_task' | 'mvp_task' | 'contact_task' | 'engagement_milestone' | 'external_google' | 'external_microsoft' | 'work_item';
+  kind: 'ic_meeting' | 'founder_checkin' | 'advisor_booking' | 'partner_office_hour' | 'calendly_event' | 'expert_booking' | 'event_ticket' | 'event_hosted' | 'investor_meeting' | 'compliance_due' | 'interview_call' | 'cohort_date' | 'deal_closing' | 'manual' | 'learning' | 'publish_send' | 'content_planned' | 'bot_call' | 'round_close' | 'nda_expiry' | 'workflow_task' | 'mvp_task' | 'contact_task' | 'engagement_milestone' | 'external_google' | 'external_microsoft' | 'work_item' | 'agent_session';
   source_id: number;
   source_uid: string;
   title: string;
@@ -450,6 +450,8 @@ export interface CalendarEvent {
   notes: string | null;
   deal_id?: number | null;
   project_id?: number | null;
+  /** D1585 (#3832): an investor meeting's prospect, so the drawer's "Prep" reads its brief. */
+  prospect_id?: number | null;
   /**
    * D1033 — set only by the two My events kinds (`calendar/myEvents.ts`). The
    * venue words (`location_text`), the event row the copy came from, its page,
@@ -928,6 +930,8 @@ const READERS: Readonly<Record<CalendarEvent['kind'], CalendarReader>> = {
   // D1485 (#3979): the member's own Google and Outlook events, read live, page only, never pushable.
   external_google: async (env, userId, from, to) => (await import('./calendar/externalReaders')).googleEvents(env, userId, from, to),
   external_microsoft: async (env, userId, from, to) => (await import('./calendar/externalReaders')).microsoftEvents(env, userId, from, to),
+  // #3957: the AI agent sessions of the teams the member reads, page only: each live session's slots and the runs it made.
+  agent_session: async (env, userId, from, to) => (await (await import('./agents/sessions')).sessionEvents(env, userId, from, to)) as CalendarEvent[],
 };
 
 export const KNOWN_KINDS = Object.keys(READERS) as readonly CalendarEvent['kind'][];
@@ -1017,7 +1021,9 @@ export const PERSONAL_ONLY_KINDS = ['interview_call', 'cohort_date', 'deal_closi
   // D1485 (#3979): a member's own Google or Outlook events are theirs alone, never a staff scope's.
   'external_google', 'external_microsoft',
   // D1614 W4 (#3972): a project's work items, on the member's own page only.
-  'work_item'] as const;
+  'work_item',
+  // #3957: a team's AI agent sessions are read by that team's members, never by a staff scope.
+  'agent_session'] as const;
 export const SCOPED_SOURCE_LIMIT = 1000;
 export function validScopeWindow(from: string, to: string): boolean {
   const start = Date.parse(from), end = Date.parse(to);

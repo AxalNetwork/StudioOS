@@ -17,6 +17,12 @@
 //   PUT    /admin/ai-agents/policy/tools   { tools, reason }
 //   POST   /admin/ai-agents/policy/pause   { reason, confirm: 'PAUSE' }
 //   POST   /admin/ai-agents/policy/resume  { reason }
+// D4158 (#4158, H1): the roster, routes/admin_ai_agents_roster.ts. Every write
+// takes a reason of at least 10 characters; values are never sent.
+//   GET   /admin/ai-agents/roster
+//   GET   /admin/ai-agents/roster/:key
+//   PATCH /admin/ai-agents/roster/:key            { status? | name? tagline? story? goal? avatar?, trademark_checked?, reason }
+//   PUT   /admin/ai-agents/roster/:key/defaults   { model, start_cap_usd, max_cap_usd, reason }
 import { api, request } from '../api.js';
 
 const enc = encodeURIComponent;
@@ -37,4 +43,8 @@ export const adminAiAgentsApi = {
   setReadTools: (tools, reason) => request('/admin/ai-agents/policy/tools', { method: 'PUT', body: JSON.stringify({ tools, reason }) }),
   pauseAll: (reason, confirm) => request('/admin/ai-agents/policy/pause', { method: 'POST', body: JSON.stringify({ reason, confirm }) }),
   resumeAll: (reason) => request('/admin/ai-agents/policy/resume', { method: 'POST', body: JSON.stringify({ reason }) }),
+  roster: () => request('/admin/ai-agents/roster'),
+  rosterAgent: (key) => request(`/admin/ai-agents/roster/${enc(key)}`),
+  rosterUpdate: (key, b) => request(`/admin/ai-agents/roster/${enc(key)}`, { method: 'PATCH', body: JSON.stringify(b) }),
+  rosterDefaults: (key, b) => request(`/admin/ai-agents/roster/${enc(key)}/defaults`, { method: 'PUT', body: JSON.stringify(b) }),
 };
