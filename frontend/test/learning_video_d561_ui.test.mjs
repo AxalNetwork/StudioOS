@@ -461,7 +461,8 @@ test('playback: an uploaded file plays in the browser\'s own player from its str
   assert.match(video, /preload="metadata"/);
   assert.match(video, /aria-label="Cap tables in ten minutes, 10 min"/);
   assert.doesNotMatch(view, /<iframe|lesson-video-absent/);
-  assert.match(flat(view), /Transcript A cap table lists who owns what\./);
+  // D3726 LR4b: the stored transcript has no caption cues, and the card says so above it.
+  assert.match(flat(view), /Transcript No caption cues, so the plain transcript is shown\. A cap table lists who owns what\./);
   // A lesson whose item is the upload plays the same way.
   const course = {
     status: 'ready',

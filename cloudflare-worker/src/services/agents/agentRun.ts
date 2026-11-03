@@ -54,14 +54,26 @@
  *
  * The tool reads are named by the same run uid. Neither the prompt nor the
  * output is logged, thrown or written to an event.
+ *
+ * SKILLS (D1612 part D, #3954). A run may name one of the agent's skills
+ * (`skill`, its uid). After the reads are shaped and before the model sees
+ * anything, `skillForRun` (`skillEval.ts`) takes the version pinned on the
+ * agent, refuses a suspended one, re-checks its tools against the agent's
+ * grants (`tool_not_approved`) and refuses a read outside its allow-list
+ * (`tool_not_in_skill`). Its steps and allow-list join the system prompt; the
+ * usage row records `skill_id` and `skill_version`.
  */
 import type { Env, User } from '../../types';
+import { PLATFORM_PAUSED_MESSAGE, modelUnder, readPolicy } from './aiPolicy';
+import { agentAreas } from './adminReads';
 import { ROUTE, quoteRun, run, type RailContext, type RefusalReason, type RunOptions, type TaskClass } from '../aiRouter';
 import { railOptionsOn, type RailOptionRow } from '../ai/railMatrix';
 import { proposeRail, railByRunKey, type RailProposal } from '../railProposals';
-import { moduleOf, optionsIn, roleOf, type ModuleDef, type Rules } from './catalogue';
+import { moduleOf, optionsIn, type ModuleDef, type Rules } from './catalogue';
+import { personaOf } from './personas';
 import { canManage, effectiveBook, logEvent, monthSpend, scopeOfAgent, type AgentRow, type Scope, type Spend } from './teams';
 import { cleanReads, grantsOf, readTools, type ToolDeps } from './agentTools';
+import { skillForRun, skillPrompt, tagUsage } from './skillEval';
 
 export const PROMPT_MAX = 8000;
 const CYCLE_PAGE = { validate: 'Founder · Validate', build: 'Founder · Build', raise: 'Founder · Raise', grow: 'Founder · Grow' } as const;
@@ -80,6 +92,8 @@ export type AgentRunInput = {
   taskId?: number | null;
   /** #3846: the run's uid, the same on every retry of one step. Absent, the run gets a fresh one. */
   runUid?: string | null;
+  /** D1612 part D (#3954): the uid of one of the agent's skills; its PINNED version guides the run. */
+  skill?: string | null;
 };
 
 export type AgentRefusal = { ok: false; status: number; code: string; message: string; extra?: Record<string, unknown> };
@@ -162,10 +176,12 @@ async function refused(env: Env, a: AgentRow, r: AgentRefusal, module: string, o
 
 /** The system prompt: the role and its rule book, never the scope's records; part 5's tool reads go in the user message, as data. */
 function systemPrompt(a: AgentRow, rules: Rules, s: Scope, moduleLabel: string): string {
-  const role = roleOf(a.role_key);
-  const name = [a.first_name, a.last_name].filter(Boolean).join(' ');
+  // D4117: the agent is its persona; the role only selects the rule book.
+  const persona = personaOf(a.persona_key);
+  const name = persona?.name || [a.first_name, a.last_name].filter(Boolean).join(' ');
   return [
-    `You are ${name ? `${name}, ` : ''}the ${role?.name ?? a.role_key} agent of ${s.kind === 'company' ? 'the company' : 'the project'} "${s.name}", working in ${moduleLabel}.`,
+    `You are ${name || 'an agent'}, an AI agent of ${s.kind === 'company' ? 'the company' : 'the project'} "${s.name}", working in ${moduleLabel}.`,
+    persona ? `Who you are: ${persona.personality} Your goal: ${persona.goal}` : '',
     `Mission: ${rules.mission}`,
     `Tone: ${rules.tone}`,
     rules.escalates_when.length ? `Stop and say a person must decide when: ${rules.escalates_when.join('; ')}.` : '',
@@ -263,6 +279,35 @@ async function taskRefusal(env: Env, a: AgentRow, taskId: number | null | undefi
   return t ? null : no(422, 'task_not_assigned', 'That task is not this agent\'s.');
 }
 
+/**
+ * D4162: the platform's AI policy on one run. The kill switch refuses it (403
+ * `platform_paused`); a locked model is swapped for the agent's area default,
+ * or refused (403 `model_locked`) when that is locked too; a quote above the
+ * per-run ceiling is refused (402 `run_ceiling`) before any hold. A policy that
+ * cannot be read refuses the run: it may be paused.
+ */
+async function underPolicy(env: Env, a: AgentRow, c: { opts: Omit<RunOptions, 'rail' | 'surface'>; rail: RailContext; surface: string }): Promise<AgentRefusal | null> {
+  const policy = await readPolicy(env);
+  if (!policy) return no(503, 'policy_unreadable', 'The platform\'s AI policy could not be read, so the agent was not run. Try again shortly.');
+  if (policy.paused.on) return no(403, 'platform_paused', PLATFORM_PAUSED_MESSAGE);
+  if (c.opts.model) {
+    const area = (await agentAreas(env)).get(a.id) ?? null;
+    const m = modelUnder(policy, String(c.opts.model), area);
+    if (!m) return no(403, 'model_locked', 'This agent\'s model is switched off on the platform, and so is its area\'s default. Pick another model for it.');
+    c.opts.model = m.model;
+  }
+  const ceiling = policy.per_run_ceiling_microusd;
+  if (ceiling != null) {
+    let q: Awaited<ReturnType<typeof quoteRun>>;
+    try { q = await quoteRun(env, { ...c.opts, rail: c.rail, surface: c.surface }); } catch { q = { ok: false, refusal: 'misconfigured', error: 'unreadable' } as any; }
+    if (!q.ok) return no(503, 'run_quote_unreadable', 'This run could not be priced, so it was not checked against the platform\'s per-run ceiling. Nothing was charged.');
+    if (q.hold_microusd > ceiling) {
+      return no(402, 'run_ceiling', `This run would cost more than the platform's per-run ceiling of $${(ceiling / 1e6).toFixed(2)}. Nothing was charged.`);
+    }
+  }
+  return null;
+}
+
 export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRunResult> {
   const a = input.agent;
   if (input.runUid != null && !(typeof input.runUid === 'string' && RUN_UID_RE.test(input.runUid))) {
@@ -277,9 +322,16 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
   if (bad) return refused(env, a, bad, input.module, input.option);
   const c = await check(env, input);
   if (!c.ok) return a.status === 'removed' || c.code === 'not_found' ? c : refused(env, a, c, input.module, input.option);
+  // D4162 (#4162): HQ's AI policy, before anything is read, held or charged.
+  const held = await underPolicy(env, a, c);
+  if (held) return refused(env, a, held, input.module, input.option);
   // Part 5: the named reads, through granted tools only, before the model sees anything.
   const shaped = cleanReads(input.toolReads, grantsOf(a.tool_grants_json));
   if (!shaped.ok) return refused(env, a, shaped, input.module, input.option);
+  // D1612 part D (#3954): a named skill runs at the agent's pinned version; its tools are checked again now.
+  const skill = input.skill != null ? await skillForRun(env, a, input.skill, shaped.reads.map((t) => t.tool)) : null;
+  if (skill && !skill.ok) return refused(env, a, skill, input.module, input.option);
+  if (skill) c.opts.systemPrompt = `${c.opts.systemPrompt}\n\n${skillPrompt(skill.version)}`;
   const read = await readTools(env, a, shaped.reads, runUid, input.toolDeps);
   if ('disconnected' in read) {
     await pause(env, a, 'tool_disconnected');
@@ -313,6 +365,7 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
     return refused(env, a, no(runRefusalStatus(r.refusal), r.refusal ?? 'run_failed', words, link ? { link } : undefined), input.module, input.option);
   }
   const usageLogId = r.usageLogId ?? null;
+  if (skill) await tagUsage(env, usageLogId, skill.skill.id, skill.version.version);
   let proposal: RailProposal;
   try {
     proposal = await proposeRail(env, {
@@ -325,6 +378,9 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
   }
   // The tools read are named, never their arguments or results.
   const tools = shaped.reads.map((t) => ({ integration_uid: t.integration_uid, tool: t.tool }));
-  await logEvent(env, a.id, a.sponsor_user_id, 'run', { module: input.module, option: input.option, ...(tools.length ? { tool_reads: tools } : {}) }, { usageLogId, proposalUid: proposal.uid });
+  await logEvent(env, a.id, a.sponsor_user_id, 'run', {
+    module: input.module, option: input.option, ...(tools.length ? { tool_reads: tools } : {}),
+    ...(skill ? { skill: { uid: skill.skill.uid, version: skill.version.version } } : {}),
+  }, { usageLogId, proposalUid: proposal.uid });
   return { ok: true, proposal, charged: await chargedFor(env, usageLogId), usageLogId, runKey, replayed: false };
 }

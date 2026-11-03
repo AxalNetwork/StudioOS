@@ -44,6 +44,8 @@
   --k-round_close: #a16207; --k-nda_expiry: #6d28d9;
   --k-workflow_task: #3f6212; --k-mvp_task: #c2410c; --k-contact_task: #0c4a6e; --k-engagement_milestone: #9f1239;
   --k-external_google: #1e40af; --k-external_microsoft: #0369a1;
+  --k-work_item: #155e75;
+  --k-agent_session: #0f766e;
   background: var(--cal-shell);
   color: var(--cal-ink);
   min-height: 100%;
@@ -82,6 +84,8 @@
   --k-round_close: #fde047; --k-nda_expiry: #c4b5fd;
   --k-workflow_task: #d9f99d; --k-mvp_task: #fdba74; --k-contact_task: #bae6fd; --k-engagement_milestone: #fecdd3;
   --k-external_google: #bfdbfe; --k-external_microsoft: #7dd3fc;
+  --k-work_item: #a5f3fc;
+  --k-agent_session: #2dd4bf;
 }
 
 .cal-mono { font-family:var(--font-mono); font-variant-numeric: tabular-nums; }
@@ -156,6 +160,8 @@
 /* D1485 (#3979): a Google or Outlook event, read-only. */
 .cal-dot[data-kind='external_google'] { background: var(--k-external_google); border-radius: 50% 50% 0 0; }
 .cal-dot[data-kind='external_microsoft'] { background: var(--k-external_microsoft); border-radius: 0 0 50% 50%; }
+/* D1614 W4 (#3972): a project's work item, its own hue and a notched square. */
+.cal-dot[data-kind='work_item'] { background: var(--k-work_item); border-radius: 0 0 50% 0; }
 
 /* ── body: agenda beside the 328px rail ───────────────────────────────── */
 .cal-body { display: flex; align-items: stretch; }

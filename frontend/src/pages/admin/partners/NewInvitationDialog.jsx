@@ -13,6 +13,8 @@ import {
 import { PREVIEW_ASKS, PREVIEW_FAILED, PREVIEW_NOTE, lookupChecks, previewFor, previewReply } from './invitationsModel';
 import { useRead } from './usePartnerDesk';
 import { AMBER, CopyButton, EYE, INPUT, Refusal, SUB } from './parts';
+import { FillFormBar, FillLabel, useScopedFill } from '../../../ui/useScopedFill.jsx';
+import { SCOPED_FORMS } from '../../../lib/fillScoped.js';
 
 /**
  * D923 (#2370) — New invitation (PI4, and its result PI4d / PI4n), a
@@ -38,6 +40,12 @@ import { AMBER, CopyButton, EYE, INPUT, Refusal, SUB } from './parts';
  * Deal-sourcing revenue share or Custom can open it and set the invitation's
  * own terms; sending them is the approval. Every figure is required once it
  * is open. An Admin sees one sentence: the standard terms go.
+ *
+ * #4046 (B4): Ask Eadwyn on the message to the invitee, and on nothing else:
+ * the email, name, what to offer and the terms are the admin's own. The new
+ * invitation hangs under the caller, its inviter, so the read names no record
+ * and no parent. Send writes; then the placed message is recorded against the
+ * id the 201 names, before the result replaces the form.
  */
 
 export const CHECK_DELAY_MS = 400;
@@ -56,6 +64,12 @@ export default function NewInvitationDialog({ reads, onClose }) {
   const [created, setCreated] = useState(null);
   const [opening, setOpening] = useState(null);
   const [checkFor, setCheckFor] = useState('');
+  // #4046 (B4): off once the result replaces the form.
+  const fill = useScopedFill({
+    scope: SCOPED_FORMS.partnerInvitation, enabled: !created,
+    values: { personal_message: message },
+    onValues: (v) => { if (v.personal_message != null) setMessage(String(v.personal_message).slice(0, MESSAGE_MAX)); },
+  });
   // The result replaces the form, focused Send button and all, inside the same
   // Lightbox: focus moves to its Done, never to <body>.
   const doneButton = useRef(null);
@@ -94,6 +108,8 @@ export default function NewInvitationDialog({ reads, onClose }) {
         personal_message: message.trim() || undefined,
         ...(terms.state === 'own' ? { terms: terms.terms } : {}),
       });
+      // #4046 (B4): the record step, while the placed message is still held (the hook is off once created).
+      await fill.afterSave(reply?.id);
       setCreated({ reply, email: typed });
     } catch (e) {
       setRefusal(refusalText(e, 'create'));
@@ -252,11 +268,14 @@ export default function NewInvitationDialog({ reads, onClose }) {
             ) : null}
           </section>
         ) : null}
-        <label className="flex flex-col gap-1.5">
-          <span className={EYE}>Message to the invitee</span>
-          <textarea value={message} maxLength={MESSAGE_MAX} rows={3} onChange={(e) => setMessage(e.target.value.slice(0, MESSAGE_MAX))} className={`${INPUT} py-2 leading-normal`} data-testid="partners-new-message" />
+        <div className="flex flex-col gap-1.5">
+          <FillLabel fill={fill} name="personal_message" label="Message to the invitee" value={message}>
+            <label htmlFor="partners-new-message" className={EYE}>Message to the invitee</label>
+          </FillLabel>
+          <textarea id="partners-new-message" value={message} maxLength={MESSAGE_MAX} rows={3} onChange={(e) => setMessage(e.target.value.slice(0, MESSAGE_MAX))} className={`${INPUT} py-2 leading-normal`} data-testid="partners-new-message" />
           <span className={SUB} data-testid="partners-new-message-count">{`${counter(message.length, MESSAGE_MAX)} · ${MESSAGE_HINT}`}</span>
-        </label>
+        </div>
+        <FillFormBar fill={fill} />
         <p className={`m-0 ${SUB}`}>{LINK_FOOT}</p>
       </div>
     </Lightbox>

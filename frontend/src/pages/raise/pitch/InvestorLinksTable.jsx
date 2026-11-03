@@ -12,9 +12,9 @@ import { OFF_KEEPS, SWITCH_FAILED, TIME_PER_SLIDE, analyticsCellWords } from './
  * `GET /api/decks/:id/investor-links`).
  *
  * Columns: Investor · Version (frozen, or the variant) · NDA · Expiry · View cap
- * · Time per slide · Analytics. Walkthrough (#3837) is not read here, so it is
- * not drawn. Withdraw asks first ("Withdraw this link? Analytics so far are
- * kept."), and a withdrawn row keeps its views.
+ * · Time per slide · Analytics, with pd35's signal TAG ("Revisited after 48 h", D1568).
+ * Walkthrough (#3837) is not read here, so it is not drawn. Withdraw asks first
+ * ("Withdraw this link? Analytics so far are kept."), and a withdrawn row keeps its views.
  *
  * D1573 (#3820): the row's "Time per slide" switch (the link's consent,
  * `PUT …/investor-links/:shareId/time-per-slide`, written when it is pressed),
@@ -73,6 +73,8 @@ export function changesWords(answer) {
   return `${head}: ${parts.length ? parts.join(' · ') : 'no figure changed'}`;
 }
 export const CHANGES_UNREAD = (deck) => `Changes since v${deck?.version ?? '?'} could not be read.`;
+/** D1568 (#3815): pd35's signal TAG on the row: "Revisited after 48 h" once a revisit is recorded, never a number. */
+export const signalTag = (signals) => (Array.isArray(signals) && signals.some((x) => x?.kind === 'revisit') ? 'Revisited after 48 h' : null);
 export const viewsWords = (a) => `${a?.views ?? 0} ${a?.views === 1 ? 'view' : 'views'}${a?.last_viewed_at ? ` · last ${day(a.last_viewed_at)}` : ''}`;
 
 export default function InvestorLinksTable({ deck, refreshKey = 0 }) {
@@ -161,6 +163,7 @@ export default function InvestorLinksTable({ deck, refreshKey = 0 }) {
                   <td className="py-1.5 pr-2">
                     <button type="button" className="text-left text-axal-ink underline decoration-dotted underline-offset-2 hover:text-axal-violet dark:text-gray-100"
                       onClick={() => setSheet(r)} data-testid={`investor-link-analytics-${r.id}`}>{analyticsCellWords(r)}</button>
+                    {signalTag(r.signals) ? <span className="ml-1 rounded border border-axal-hairline px-1 text-[11px] text-axal-ink dark:border-gray-700 dark:text-gray-100" data-testid={`investor-link-signal-${r.id}`}>{signalTag(r.signals)}</span> : null}
                   </td>
                   <td className="py-1.5">
                     {r.status === 'live' ? <button type="button" className={GHOST} onClick={() => { setRefusal(''); setConfirm(r); }} data-testid={`investor-link-withdraw-${r.id}`}>Withdraw</button>

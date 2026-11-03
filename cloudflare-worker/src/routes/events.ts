@@ -11,6 +11,9 @@
  * `needs_payment: true`; the Stripe PaymentIntent + webhook confirmation is a
  * downstream task. No charge is created here.
  */
+import { railFor, refuseRun } from '../util/railContext';
+import { AI_SURFACE } from '../services/aiSurfaces';
+import { MATCH_DEPS, MatchRefused, matchRows } from '../services/ai/matchRows';
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import type { User } from '../types';
@@ -436,6 +439,48 @@ events.post('/', async (c) => {
 // registered for (and isn't hosting), lightly boosted by a track→type affinity
 // map; the caller's published archetype rides along for framing. Defensive
 // against a cold assessment schema (→ no personalization, chronological order).
+// #3938 part 2 (D1478 task 4, job LE10): the member's press orders the suggested events
+// by fit: retrieve (bge-m3), rank (the reranker), then one line each on why
+// (`services/ai/matchRows.ts`), charged to the member on My events. The plain read
+// below stays free and rule-based; nothing here runs without the press.
+events.post('/suggested/rank', async (c) => {
+  const u = await auth(c);
+  if (u instanceof Response) return u;
+  const b = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+  const extra = typeof b?.query === 'string' ? b.query.replace(/\s+/g, ' ').trim().slice(0, 300) : '';
+  let track: string | null = null;
+  try {
+    const r: any = await c.env.DB.prepare('SELECT track FROM assessment_results WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1').bind(u.id).first();
+    track = r?.track || null;
+  } catch { /* cold assessment schema: no track */ }
+  const rows = await c.env.DB.prepare(
+    `SELECT * FROM events e
+      WHERE e.visibility = 'public' AND e.status = 'published' AND e.admin_published = 1
+        AND datetime(e.starts_at) >= datetime('now')
+        AND e.host_user_id != ?
+        AND NOT EXISTS (
+          SELECT 1 FROM event_registrations r
+           WHERE r.event_id = e.id AND r.user_id = ?
+             AND r.status IN ('registered','confirmed','attended','waitlisted')
+        )
+      ORDER BY e.starts_at ASC
+      LIMIT 50`,
+  ).bind(u.id, u.id).all();
+  const query = [extra, track ? `Events for a member on the ${track} track` : 'Events for a member of a venture studio'].filter(Boolean).join('. ');
+  const candidates = (rows.results || []).map((e: any) => ({
+    key: String(e.id),
+    text: [e.title, e.type ? `A ${String(e.type).replace(/_/g, ' ')}` : null, typeof e.description === 'string' ? e.description.slice(0, 400) : null].filter(Boolean).join('. '),
+  }));
+  const rail = railFor(c, { page: 'Member · My events', option: null });
+  const deps = MATCH_DEPS.make(c.env, { userId: Number(u.id), surface: AI_SURFACE.eventSyndication, rail, guardText: query }, 'LE10');
+  let res;
+  try { res = await matchRows(query, candidates, deps, { top: 8 }); } catch (e) {
+    if (e instanceof MatchRefused) return refuseRun(c, e.result)!;
+    throw e;
+  }
+  return c.json({ job: 'LE10', steps: res.steps, rows: res.rows.map((r) => ({ event_id: Number(r.key), position: r.position, line: r.line })) });
+});
+
 events.get('/suggested', async (c) => {
   const u = await auth(c);
   if (u instanceof Response) return u;

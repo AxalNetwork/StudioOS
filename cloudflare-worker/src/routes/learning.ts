@@ -4,6 +4,10 @@
  *   GET  /catalog      one list over everything a member can learn from:
  *                      courses, videos and readings (this store), published
  *                      articles, published publications and upcoming events.
+ *                      `q` reaches a video's or reading's transcript too, and
+ *                      such a row carries `match: { in, snippet, at_seconds }`;
+ *                      `max_minutes` keeps what has a recorded length within it
+ *                      (#4180).
  *   GET  /courses/:slug   a course, its modules and lessons, and the caller's progress
  *   GET  /items/:uid      one video or reading
  *   POST /progress     the caller's own progress on an item, lesson or course
@@ -30,6 +34,7 @@ import {
   canSeeLearning, enrolledSql, LEARNING_LEVELS, PROGRESS_KINDS,
 } from '../services/learningAccess';
 import { streamUrl } from '../services/learningVideo';
+import { signedPlayback, streamOf, streamState, type VideoStream } from '../services/learningStream';
 import { COURSE_UID, courseCoverPrefix, readCover } from '../services/coverDraws';
 import { getCurrentUser } from '../auth';
 
@@ -49,14 +54,18 @@ const see = (kind: 'item' | 'course', uidExpr: string) =>
   + enrolledSql(kind, uidExpr) + ")))) AND status != 'archived'";
 const ITEM_ENROLLED = enrolledSql('item', 'learning_items.uid');
 const COURSE_ENROLLED = enrolledSql('course', 'learning_courses.uid');
-const MATCH = "(? IS NULL OR topic = ?) AND (? IS NULL OR level = ?) AND (? IS NULL OR title LIKE ? ESCAPE '\\' OR summary LIKE ? ESCAPE '\\')";
+// #4180 (lr7): `q` reaches the transcript too; `max_minutes` keeps what has a recorded length within it.
+const MATCH = "(? IS NULL OR topic = ?) AND (? IS NULL OR level = ?) AND (? IS NULL OR title LIKE ? ESCAPE '\\' OR summary LIKE ? ESCAPE '\\' OR transcript LIKE ? ESCAPE '\\')"
+  + ' AND (? IS NULL OR (duration_seconds IS NOT NULL AND duration_seconds <= ? * 60))';
 
 const ITEMS_SQL = 'SELECT uid, kind, title, summary, topic, level, duration_seconds, thumbnail_url, status, visibility, published_at, updated_at, '
+  + 'CASE WHEN ? IS NULL THEN NULL ELSE transcript END AS transcript, '
   + ITEM_ENROLLED + ' AS enrolled FROM learning_items WHERE kind = ? AND ' + see('item', 'learning_items.uid') + ' AND ' + MATCH
   + ' ORDER BY COALESCE(published_at, updated_at) DESC, id DESC LIMIT ? OFFSET ?';
 const ITEMS_COUNT = 'SELECT COUNT(*) AS n FROM learning_items WHERE kind = ? AND ' + see('item', 'learning_items.uid') + ' AND ' + MATCH;
 // Courses carry a level but no topic.
-const COURSE_MATCH = "(? IS NULL OR level = ?) AND (? IS NULL OR title LIKE ? ESCAPE '\\' OR summary LIKE ? ESCAPE '\\')";
+const COURSE_MATCH = "(? IS NULL OR level = ?) AND (? IS NULL OR title LIKE ? ESCAPE '\\' OR summary LIKE ? ESCAPE '\\')"
+  + ' AND (? IS NULL OR (estimated_minutes IS NOT NULL AND estimated_minutes <= ?))';
 const COURSES_SQL = 'SELECT uid, slug, title, summary, cover_url, level, estimated_minutes, status, visibility, published_at, updated_at, '
   + COURSE_ENROLLED + ' AS enrolled FROM learning_courses WHERE ' + see('course', 'learning_courses.uid') + ' AND ' + COURSE_MATCH
   + ' ORDER BY COALESCE(published_at, updated_at) DESC, id DESC LIMIT ? OFFSET ?';
@@ -89,6 +98,31 @@ export type CatalogRow = {
 };
 type SourceState = { status: 'ready'; total: number } | { status: 'unreadable'; reason: string } | { status: 'filtered_out'; reason: string };
 
+/**
+ * #4180 (lr7): where a search term sits in an item's transcript, when the
+ * title and summary do not hold it: up to 160 characters around it, and the
+ * time of the nearest timestamp before it ("04:12", "[04:12]", or a WebVTT
+ * cue's start) as seconds, or null when the transcript carries none. Null when
+ * the term is in the title or summary, or not in the transcript.
+ */
+const STAMP = /(?:^|\n|\[)\s*(?:(\d{1,2}):)?(\d{1,2}):(\d{2})(?:[.,]\d{1,3})?/g;
+export function transcriptMatch(row: { title?: string | null; summary?: string | null; transcript?: string | null }, q: string) {
+  const needle = q.toLowerCase();
+  if (String(row.title ?? '').toLowerCase().includes(needle) || String(row.summary ?? '').toLowerCase().includes(needle)) return null;
+  const text = String(row.transcript ?? '');
+  const at = text.toLowerCase().indexOf(needle);
+  if (at < 0) return null;
+  let seconds: number | null = null;
+  for (const m of text.slice(0, at + needle.length).matchAll(STAMP)) {
+    if ((m.index ?? 0) > at) break;
+    seconds = Number(m[1] ?? 0) * 3600 + Number(m[2]) * 60 + Number(m[3]);
+  }
+  const from = Math.max(0, at - 60);
+  const to = Math.min(text.length, at + needle.length + 100);
+  const snippet = `${from > 0 ? '…' : ''}${text.slice(from, to).replace(/\s+/g, ' ').trim()}${to < text.length ? '…' : ''}`;
+  return { in: 'transcript' as const, snippet, at_seconds: seconds };
+}
+
 /** Escape a LIKE term; null when there is no search. */
 function likeTerm(q: string | null): string | null {
   if (!q) return null;
@@ -105,7 +139,7 @@ const UNREADABLE: Record<Kind, string> = {
 };
 
 async function readKind(env: Env, user: unknown, kind: Kind, f: {
-  q: string | null; topic: string | null; level: string | null; limit: number; offset: number; now: string;
+  q: string | null; topic: string | null; level: string | null; limit: number; offset: number; now: string; maxMinutes?: number | null;
 }): Promise<{ rows: CatalogRow[]; state: SourceState }> {
   const like = likeTerm(f.q);
   const sa = user && isSuperAdmin(user as any) ? 1 : 0;
@@ -115,6 +149,11 @@ async function readKind(env: Env, user: unknown, kind: Kind, f: {
   // publications and events have no level.
   const hasTopic = kind === 'video' || kind === 'reading';
   const hasLevel = hasTopic || kind === 'course';
+  // #4180: only videos, readings and courses have a length, so a length filter leaves the others out.
+  const max = f.maxMinutes ?? null;
+  if (max != null && !hasLevel) {
+    return { rows: [], state: { status: 'filtered_out', reason: 'This source has no length, so a length filter leaves it out.' } };
+  }
   if ((f.topic && !hasTopic) || (f.level && !hasLevel)) {
     return { rows: [], state: { status: 'filtered_out', reason: f.topic && !hasTopic
       ? 'This source has no topic, so a topic filter leaves it out.'
@@ -122,20 +161,22 @@ async function readKind(env: Env, user: unknown, kind: Kind, f: {
   }
   try {
     if (kind === 'video' || kind === 'reading') {
-      const args = [kind, sa, me, f.topic, f.topic, f.level, f.level, like, like, like];
+      const args = [kind, sa, me, f.topic, f.topic, f.level, f.level, like, like, like, like, max, max];
       const [res, cnt] = await Promise.all([
-        env.DB.prepare(ITEMS_SQL).bind(me, ...args, f.limit, f.offset).all<any>(),
+        env.DB.prepare(ITEMS_SQL).bind(like, me, ...args, f.limit, f.offset).all<any>(),
         env.DB.prepare(ITEMS_COUNT).bind(...args).first<{ n: number }>(),
       ]);
       const rows = (res.results || []).filter((x) => canSeeLearning(user, x)).map((x): CatalogRow => ({
         kind, id: x.uid, title: x.title, summary: x.summary ?? null, href: `/learning/items/${x.uid}`,
         date: x.published_at ?? null, source: 'learning', topic: x.topic ?? null, level: x.level ?? null,
         duration_seconds: x.duration_seconds ?? null, thumbnail_url: x.thumbnail_url ?? null, status: x.status,
+        // #4180: found only in the transcript — the words around it, and their time when the transcript gives one.
+        match: f.q ? transcriptMatch(x, f.q) : null,
       }));
       return { rows, state: { status: 'ready', total: Number(cnt?.n ?? 0) } };
     }
     if (kind === 'course') {
-      const args = [sa, me, f.level, f.level, like, like, like];
+      const args = [sa, me, f.level, f.level, like, like, like, max, max];
       const [res, cnt] = await Promise.all([
         env.DB.prepare(COURSES_SQL).bind(me, ...args, f.limit, f.offset).all<any>(),
         env.DB.prepare(COURSES_COUNT).bind(...args).first<{ n: number }>(),
@@ -206,13 +247,18 @@ r.get('/catalog', async (c) => {
   }
   const topic = (c.req.query('topic') || '').trim().slice(0, 80) || null;
   const q = (c.req.query('q') || '').trim().slice(0, 120) || null;
+  const rawMax = c.req.query('max_minutes');
+  const maxMinutes = rawMax == null || rawMax === '' ? null : Number(rawMax);
+  if (maxMinutes != null && !(Number.isInteger(maxMinutes) && maxMinutes > 0 && maxMinutes <= 1440)) {
+    return refuse(c, 400, { code: 'bad_max_minutes', message: 'max_minutes is a whole number of minutes from 1 to 1440.' });
+  }
   const limit = clampLimit(c.req.query('limit'), 24, 100);
   // Without a kind the catalog is the newest `limit` rows across every
   // source; paging (`offset`) walks one kind at a time.
   const offset = kind ? parseOffset(c.req.query('offset')) : 0;
   const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
   const kinds = (kind ? [kind] : [...CATALOG_KINDS]) as Kind[];
-  const results = await Promise.all(kinds.map((k) => readKind(c.env, user, k, { q, topic, level, limit, offset, now })));
+  const results = await Promise.all(kinds.map((k) => readKind(c.env, user, k, { q, topic, level, limit, offset, now, maxMinutes })));
   const sources: Record<string, SourceState> = {};
   const rows: CatalogRow[] = [];
   kinds.forEach((k, i) => { sources[k] = results[i].state; rows.push(...results[i].rows); });
@@ -234,8 +280,10 @@ r.get('/courses/:slug', async (c) => {
   if (!course || !canSeeLearning(user, course)) return refuse(c, 404, { code: 'not_found', message: 'No such course.' });
   const [mods, lessons, progress] = await Promise.all([
     c.env.DB.prepare('SELECT id, uid, title, position FROM learning_course_modules WHERE course_id = ? ORDER BY position, id').bind(course.id).all<any>(),
-    c.env.DB.prepare(`SELECT l.uid, l.module_id, l.title, l.position, l.kind, l.ref_uid, l.required
+    // #4180 (lr3): a video or reading lesson's length is its item's; any other lesson, or an item with none, is null.
+    c.env.DB.prepare(`SELECT l.uid, l.module_id, l.title, l.position, l.kind, l.ref_uid, l.required, i.duration_seconds
                         FROM learning_lessons l JOIN learning_course_modules m ON m.id = l.module_id
+                        LEFT JOIN learning_items i ON l.kind IN ('video', 'reading') AND i.uid = l.ref_uid
                        WHERE m.course_id = ? ORDER BY l.position, l.id`).bind(course.id).all<any>(),
     c.env.DB.prepare(`SELECT subject_kind, subject_uid, status, percent, position_seconds, started_at, completed_at
                         FROM learning_progress WHERE user_id = ? AND (subject_kind = 'lesson' OR (subject_kind = 'course' AND subject_uid = ?))`)
@@ -256,6 +304,7 @@ r.get('/courses/:slug', async (c) => {
       uid: m.uid, title: m.title, position: m.position,
       lessons: allLessons.filter((l) => l.module_id === m.id).map((l) => ({
         uid: l.uid, title: l.title, position: l.position, kind: l.kind, ref_uid: l.ref_uid, required: Number(l.required) === 1,
+        duration_seconds: l.duration_seconds == null ? null : Number(l.duration_seconds),
         progress: mine.get(l.uid) ? { status: mine.get(l.uid).status, percent: mine.get(l.uid).percent, completed_at: mine.get(l.uid).completed_at } : null,
       })),
     })),
@@ -284,10 +333,20 @@ r.get('/items/:uid', async (c) => {
     const k = await c.env.DB.prepare('SELECT r2_key FROM learning_items WHERE uid = ?').bind(item.uid).first<{ r2_key: string | null }>();
     if (k?.r2_key) videoStreamUrl = await streamUrl(item.uid, k.r2_key);
   }
+  // #4176 (D4176): a ready Stream video plays first. Its URLs are signed here, only after the visibility check
+  // above, and never cached or logged. Without the binding the item plays as before.
+  const s = await streamState(c.env, item.uid);
+  const binding = streamOf(c.env);
+  let videoStream: VideoStream = null;
+  if (s.ready && binding) {
+    try { videoStream = await signedPlayback(c.env, binding, s.ready); } catch { videoStream = null; }
+  } else if (s.pending) videoStream = { state: s.pending };
   return c.json({
     item: {
       ...shown,
       transcript: item.transcript ?? null,
+      video_stream: videoStream,
+      chapters: s.chapters,
       // D561 — an uploaded video plays from the gated stream route; the
       // bucket key is never sent. Null when the item plays a link or nothing,
       // or has no object recorded (the stream route would answer 404). The

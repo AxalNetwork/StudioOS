@@ -29,6 +29,7 @@ import { SignJWT } from 'jose';
 
 import company from '../src/routes/company.ts';
 import { codeOnly } from './_codeOnly.mjs';
+import { addComplianceStore } from './_baseline.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-d431-0123456789-abcdef';
 const OWNER = 601;      // Owner, primary admin — an editor
@@ -70,6 +71,7 @@ function makeD1(db: InstanceType<typeof DatabaseSync>) {
 
 function freshDb() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
+  addComplianceStore(db); // D1614 (#3976): a seat's removal flags its compliance tasks in the same batch.
   db.exec(`
     CREATE TABLE users (id INTEGER PRIMARY KEY, role TEXT, is_active INTEGER DEFAULT 1,
       jwt_min_iat INTEGER, founder_id INTEGER, partner_id INTEGER, name TEXT, email TEXT);

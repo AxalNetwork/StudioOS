@@ -11,6 +11,7 @@ import {
   STYLE_OPTIONS, USE_LINES, USE_OPTIONS, askBody, contrastLine, costLine, defaultDescription, imageTag, keepLabel, overlayStyle, placeImage,
 } from './imageModel';
 import { COST, EYE, FIELD, GHOST, INK, LAV, MUTED, PRIMARY, RefusalLine } from './AssistParts';
+import { CROP_WORDS } from './imageLook';
 
 const SEG_ON = 'rounded-[7px] bg-white px-2.5 py-1 text-[12px] font-bold text-axal-ink shadow-sm dark:bg-gray-800 dark:text-gray-100';
 const SEG_OFF = 'rounded-[7px] px-2.5 py-1 text-[12px] font-semibold text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100';
@@ -49,7 +50,7 @@ function Segments({ label, options, value, onChange, testId }) {
  * an upload with their agreement recorded. Keep places the image (Save writes
  * the version); nothing else changes the deck.
  */
-export default function ImageLightbox({ deckId, cardIndex, card, theme, model, items = [], colours = {}, initialUse = 'content', onPlace, onClose }) {
+export default function ImageLightbox({ deckId, cardIndex, card, theme, model, items = [], colours = {}, initialUse = 'content', replacing = null, onPlace, onClose }) {
   const [on] = useAssistMode('raise');
   const [use, setUse] = useState(initialUse);
   const [description, setDescription] = useState(() => defaultDescription(card));
@@ -99,7 +100,7 @@ export default function ImageLightbox({ deckId, cardIndex, card, theme, model, i
     deckImagesApi.keep(image.uid, { use, overlay: use === 'content' ? undefined : overlay, ink, alt: image.alt || description.slice(0, 200) }).then(
       (r) => {
         setBusy(null);
-        const placed = placeImage({ card, theme, model }, r.image, use);
+        const placed = placeImage({ card, theme, model }, r.image, use, replacing);
         if (placed.error) { setRefusal({ message: placed.error }); return; }
         onPlace(placed);
       },
@@ -117,7 +118,7 @@ export default function ImageLightbox({ deckId, cardIndex, card, theme, model, i
       (r) => {
         setBusy(null);
         if (use === 'content') {
-          const placed = placeImage({ card, theme, model }, r.image, use);
+          const placed = placeImage({ card, theme, model }, r.image, use, replacing);
           if (placed.error) { setRefusal({ message: placed.error }); return; }
           onPlace(placed);
         } else setResults((rs) => [r.image, ...rs]);
@@ -204,12 +205,13 @@ export default function ImageLightbox({ deckId, cardIndex, card, theme, model, i
             </div>
           ) : null}
 
+          {replacing?.kind === 'image' ? <p className={`m-0 ${MUTED}`} data-testid="pitch-image-replace-keeps">{CROP_WORDS.replaceKeeps}</p> : null}
           <details className="rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700" data-testid="pitch-image-upload">
             <summary className={`cursor-pointer text-[12.5px] font-bold ${INK}`}>Upload an image instead</summary>
             <div className="mt-2 flex flex-col gap-2">
               <input type="file" accept="image/png,image/jpeg,image/webp" aria-label="Image file"
                 onChange={(e) => setUpload((u) => ({ ...u, file: e.target.files?.[0] || null }))} data-testid="pitch-image-file" />
-              <input className={FIELD} placeholder="Alt text: what the image shows" maxLength={200} value={upload.alt} onChange={(e) => setUpload((u) => ({ ...u, alt: e.target.value }))} aria-label="Alt text" />
+              <input className={FIELD} placeholder="Alt text: what the image shows" maxLength={200} value={upload.alt} onChange={(e) => setUpload((u) => ({ ...u, alt: e.target.value }))} aria-label="Alt text" data-testid="pitch-image-upload-alt" />
               <label className={`flex items-center gap-2 text-[12.5px] ${INK}`}>
                 <input type="checkbox" checked={upload.person} onChange={(e) => setUpload((u) => ({ ...u, person: e.target.checked, consent: e.target.checked && u.consent }))} data-testid="pitch-image-person" />
                 The photo shows a person
@@ -221,7 +223,9 @@ export default function ImageLightbox({ deckId, cardIndex, card, theme, model, i
                 </label>
               ) : null}
               <span className={MUTED}>{ALT_HELP}</span>
-              <button type="button" className={`${GHOST} self-start`} disabled={!upload.file || (upload.person && !upload.consent) || Boolean(busy)} onClick={sendUpload} data-testid="pitch-image-upload-run">
+              {/* D1534 (#3778): pd27, an upload is described before it is inserted. */}
+              {upload.file && !upload.alt.trim() ? <span className={MUTED} data-testid="pitch-image-alt-needed">{CROP_WORDS.altNeeded}</span> : null}
+              <button type="button" className={`${GHOST} self-start`} disabled={!upload.file || !upload.alt.trim() || (upload.person && !upload.consent) || Boolean(busy)} onClick={sendUpload} data-testid="pitch-image-upload-run">
                 {busy === 'upload' ? 'Uploading…' : 'Upload'}
               </button>
             </div>

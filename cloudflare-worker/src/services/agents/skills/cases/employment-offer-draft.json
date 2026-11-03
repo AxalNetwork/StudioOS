@@ -1,0 +1,36 @@
+{
+  "skill": "employment-offer-draft",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "team.roster": {
+        "open_roles": [
+          {
+            "title": "Customer success lead",
+            "salary_band_usd": "85000-95000",
+            "start": "2027-01-11",
+            "reports_to": "Maya Chen"
+          }
+        ]
+      },
+      "company.profile": {
+        "legal_name": "Brightsmile Health Inc.",
+        "jurisdiction": "Ontario"
+      }
+    }
+  },
+  "expect": {
+    "output": "draft",
+    "must_include": [
+      "Customer success lead",
+      "85000-95000"
+    ],
+    "must_say_not_recorded": [
+      "equity"
+    ],
+    "must_not_include": [
+      "signing bonus"
+    ]
+  }
+}

@@ -126,7 +126,7 @@ export function CompareNote({ ids, api: noteApi = dealFlowApi }) {
           <h3 className="m-0 text-[14px] font-bold text-axal-ink dark:text-gray-100">Draft a comparison note</h3>
           <p className={MUTED}>Eadwyn drafts from the scores on this page. Nothing is saved until you press Save to notes.</p>
         </div>
-        {!draft && <button type="button" className={BTN} onClick={run} disabled={busy} data-testid="dealflow-compare-note-draft">{busy ? 'Drafting…' : 'Draft with Eadwyn'}</button>}
+        {!draft && <button type="button" className={BTN} onClick={run} disabled={busy} data-testid="dealflow-compare-note-draft">{busy ? 'Drafting…' : 'Draft the note'}</button>}
       </div>
       {draft && (
         <div className="flex flex-col gap-2 rounded-lg border border-violet-200 bg-violet-50 p-3 dark:border-violet-800 dark:bg-violet-950" data-testid="dealflow-compare-note-text">

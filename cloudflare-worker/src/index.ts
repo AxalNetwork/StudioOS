@@ -274,6 +274,7 @@ import deckNew from './routes/deck_new';
 import deckAssist from './routes/deck_assist';
 import deckDerive from './routes/deck_derive';
 import deckCritic from './routes/deck_critic';
+import deckCritique from './routes/deck_critique';
 import deckQaRoutes from './routes/deck_qa';
 import deckTransform from './routes/deck_transform';
 import deckImages from './routes/deck_images';
@@ -1447,6 +1448,8 @@ app.route('/api/decks', deckAssist);
 app.route('/api/decks', deckDerive);
 // D1557 (#3804): the investor critic: rule findings, and one run on a model of another family than the writer's.
 app.route('/api/decks', deckCritic);
+// D1552 (#3799): ⋯ › Whole deck › Fix with critique (code checks, the vision pass, fixes as proposals).
+app.route('/api/decks', deckCritique);
 // D1559 (#3806): likely investor questions, real objections first, answers bound to records; before `decks`.
 app.route('/api/decks', deckQaRoutes);
 // D1560 (#3807): speaker notes, proofread, fix this slide and the translation pipeline, as proposals.
@@ -2305,6 +2308,15 @@ export default {
           } catch {
             console.error('[cron] agent duties unreadable');
           }
+          // #3851 (E7): the engine's alerts (caps, blocked tasks, waiting approvals, DLQ, gateway), each once per its window.
+          try {
+            const { sweepAgentAlerts } = await import('./services/agents/alerts');
+            const a = await sweepAgentAlerts(env, now);
+            const sent = Object.values(a).reduce((x, y) => x + y, 0);
+            if (sent) cronSummary.push(`agent alerts ${Object.entries(a).filter(([, n]) => n).map(([k, n]) => `${k}=${n}`).join(' ')}`);
+          } catch {
+            console.error('[cron] agent alerts unreadable');
+          }
         }
         // D1259: a published venture model rescores the next batch of ventures
         // each minute until every venture has its new rows. HQ only: only HQ
@@ -2542,6 +2554,17 @@ export default {
             console.info('[cron] fund reporting', r.quarter, 'due', r.due, 'built funds', JSON.stringify(built));
           } catch (e) {
             console.error('[cron] fund reporting failed', (e as Error)?.message);
+          }
+        }
+        // D1536 (#3785) — Monday 05:55 UTC, HQ only: the Workers AI catalogue
+        // against Cloudflare's live model list. Without CF_AI_CATALOGUE_TOKEN it
+        // logs why and skips; a failed read writes nothing and tells no one.
+        if (hqCadences && now.getUTCDay() === 1 && now.getUTCHours() === 5 && now.getUTCMinutes() === 55) {
+          try {
+            const { runCatalogueDrift } = await import('./services/ai/catalogueDrift');
+            await runCatalogueDrift(env);
+          } catch (e) {
+            console.error('[cron] ai catalogue drift failed', (e as Error)?.message);
           }
         }
         // Task #3 (Y-1) — nightly Trust Center housekeeping at 04:35 UTC:
@@ -3356,6 +3379,7 @@ export { HqEntrypoint, BranchEntrypoint } from './rpc';
 export { MeetingBotRun } from './durable-objects/meeting-bot-run';
 export { DeckGenRoom } from './durable-objects/deck-gen-room';
 export { AiGovernor } from './durable-objects/ai-governor';
+export { DeckRemote } from './durable-objects/deck-remote';
 
 // D1528 (#3847, #3742 E3): the agent engine's scope object and task Workflow,
 // named in wrangler.toml's [[durable_objects.bindings]] and [[workflows]].

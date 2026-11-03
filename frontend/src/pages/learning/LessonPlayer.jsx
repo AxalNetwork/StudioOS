@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import { Check, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
 import { Card, Pill, Unrecorded } from '../../ui';
 import { LearningEmpty, LearningUnreadable, SectionCard, stateBlock } from './LearningStates';
-import { NOT_LIVE, durationLabel, lessonKindLabel } from './learningModel';
+import { CHAPTERS_NOT_YET, NO_CHAPTERS, NOT_LIVE, PLAIN_TRANSCRIPT_LINE, clockLabel, durationLabel, lessonKindLabel, positionWriter } from './learningModel';
 
 /**
  * One lesson, or one standalone video or reading: the media, a transcript
@@ -32,6 +32,7 @@ import { NOT_LIVE, durationLabel, lessonKindLabel } from './learningModel';
 export default function LessonPlayer({
   status, lesson, item, video, transcript = null, moduleTitle, position, prev, next,
   completed = false, onMarkComplete, marking = false, markError = '', reason = NOT_LIVE.catalogue, onRetry,
+  resumeFrom = null, onPosition = null,
 }) {
   const block = stateBlock({
     status, reason, onRetry,
@@ -48,7 +49,7 @@ export default function LessonPlayer({
   return (
     <div className="space-y-4" data-testid="lesson-player">
       <Card padding="none" className="overflow-hidden">
-        {kind === 'video' ? <VideoArea video={video} item={item} length={length} /> : <ReadingArea body={item?.body} />}
+        {kind === 'video' ? <VideoArea video={video} item={item} length={length} resumeFrom={resumeFrom} onPosition={onPosition} /> : <ReadingArea body={item?.body} />}
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-axal-hairline px-4 py-3 dark:border-gray-800">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-1.5 text-[11.5px] text-axal-faint dark:text-gray-500">
@@ -56,6 +57,9 @@ export default function LessonPlayer({
               {moduleTitle && <span>{moduleTitle}</span>}
               {position && <span className="tabular-nums">· lesson {position}</span>}
               {length && <span className="tabular-nums">· {length}</span>}
+              {kind === 'video' && resumeFrom != null && (
+                <Pill tone="neutral" data-testid="lesson-resume">Resume from {clockLabel(resumeFrom)}</Pill>
+              )}
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -86,9 +90,27 @@ export default function LessonPlayer({
         )}
       </Card>
       {kind === 'video' && (
+        <SectionCard title="Chapters" testid="lesson-chapters">
+          {Array.isArray(item?.chapters) && item.chapters.length ? (
+            <ol className="space-y-1 text-[12.5px]" data-testid="lesson-chapters-list">
+              {item.chapters.map((c) => (
+                <li key={`${c.start_seconds}-${c.title}`} className="flex gap-2"><span className="tabular-nums text-axal-muted dark:text-gray-400">{clockLabel(c.start_seconds)}</span><span className="text-axal-ink dark:text-gray-100">{c.title}</span></li>
+              ))}
+            </ol>
+          ) : (
+            <p className="text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="lesson-chapters-none">
+              <Unrecorded reason={CHAPTERS_NOT_YET}>{NO_CHAPTERS}</Unrecorded> · {CHAPTERS_NOT_YET}
+            </p>
+          )}
+        </SectionCard>
+      )}
+      {kind === 'video' && (
         <SectionCard title="Transcript" testid="lesson-transcript">
           {text ? (
-            <p className="max-h-80 overflow-y-auto whitespace-pre-wrap text-[13px] leading-relaxed text-gray-700 dark:text-gray-300" data-testid="lesson-transcript-text">{text}</p>
+            <>
+              <p className="mb-1.5 text-[11.5px] text-axal-faint dark:text-gray-500" data-testid="lesson-transcript-plain">{PLAIN_TRANSCRIPT_LINE}</p>
+              <p className="max-h-80 overflow-y-auto whitespace-pre-wrap text-[13px] leading-relaxed text-gray-700 dark:text-gray-300" data-testid="lesson-transcript-text">{text}</p>
+            </>
           ) : (
             <p className="text-[12.5px] text-axal-muted dark:text-gray-400">
               <Unrecorded reason="No transcript is recorded for this video." /> · No transcript is recorded for this video.
@@ -100,7 +122,7 @@ export default function LessonPlayer({
   );
 }
 
-function VideoArea({ video, item, length }) {
+function VideoArea({ video, item, length, resumeFrom = null, onPosition = null }) {
   if (!video?.src) {
     const why = video?.reason || 'This video has no playable source yet.';
     return (
@@ -134,6 +156,8 @@ function VideoArea({ video, item, length }) {
       src={video.src}
       poster={item?.thumbnail_url || undefined}
       label={`${item?.title || 'Lesson video'}${length ? `, ${length}` : ''}`}
+      startAt={resumeFrom}
+      onPosition={onPosition}
     />
   );
 }
@@ -146,9 +170,18 @@ function VideoArea({ video, item, length }) {
  * the connection dropped) is "Unreadable", never a black box that never
  * starts, and Retry loads it again.
  */
-function StreamPlayer({ src, poster, label }) {
+function StreamPlayer({ src, poster, label, startAt = null, onPosition = null }) {
   const [attempt, setAttempt] = useState(0);
   const [failed, setFailed] = useState(false);
+  // D3726 (#3726) LR4: resume where the member left off, and write the position
+  // back at most every 15 s and on pause (`positionWriter`).
+  // The page passes a fresh callback each render; the writer reads the latest
+  // through a ref, so its 15 s throttle is not reset by a re-render.
+  const latest = useRef(onPosition);
+  latest.current = onPosition;
+  const hasWriter = Boolean(onPosition);
+  const writer = useMemo(() => (hasWriter ? positionWriter((s, p) => latest.current?.(s, p)) : null), [hasWriter, src]);
+  const seeked = useRef(false);
   if (failed) return <VideoUnreadable onRetry={() => { setFailed(false); setAttempt((n) => n + 1); }} />;
   return (
     <video
@@ -159,6 +192,14 @@ function StreamPlayer({ src, poster, label }) {
       src={src}
       poster={poster}
       onError={() => setFailed(true)}
+      onLoadedMetadata={(e) => {
+        if (seeked.current || startAt == null) return;
+        seeked.current = true;
+        try { e.currentTarget.currentTime = startAt; } catch { /* a player that cannot seek starts at 0 */ }
+      }}
+      onTimeUpdate={writer ? (e) => writer.tick(e.currentTarget.currentTime, e.currentTarget.duration) : undefined}
+      onPause={writer ? (e) => writer.flush(e.currentTarget.currentTime, e.currentTarget.duration) : undefined}
+      onEnded={writer ? (e) => writer.flush(e.currentTarget.currentTime, e.currentTarget.duration) : undefined}
       className="aspect-video w-full bg-black"
       aria-label={label}
       data-testid="lesson-video"

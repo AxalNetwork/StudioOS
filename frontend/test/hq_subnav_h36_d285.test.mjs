@@ -21,6 +21,7 @@ import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 import { ADMIN_PLACEMENT } from '../src/lib/adminPlacement.js';
 import { HQ_STRIPS, HQ_ROW_ROUTE, hqRowFor, stripFor, stripItemFor } from '../src/lib/hqStrips.js';
 import { codeOnly } from './_codeOnly.mjs';
+import { readRoutesSource } from './_routesSource.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
@@ -31,7 +32,8 @@ const SIDEBAR_NAV = codeOnly(read('frontend/src/ui/SidebarNav.jsx'));
 
 /** path → registered, read off every <Route> line. */
 const ROUTES = new Set();
-for (const seg of APP.split('<Route').slice(1)) {
+// App.jsx and the route modules as one source (D528, #4105): a strip page may live in either.
+for (const seg of readRoutesSource().split('<Route').slice(1)) {
   const p = /^\s*path="([^"]+)"/.exec(seg);
   if (p) ROUTES.add(p[1]);
 }
@@ -57,6 +59,8 @@ PLATFORM.splice(PLATFORM.findIndex(([l]) => l === 'Integration keys'), 2);
 PLATFORM.splice(PLATFORM.findIndex(([l]) => l === 'Bank accounts') + 1, 0, ['Product testing', '/admin?tab=product-testing']);
 // D1253 (#2428) — HQ › Scoring joins the Platform row after Product testing.
 PLATFORM.splice(PLATFORM.findIndex(([l]) => l === 'Product testing') + 1, 0, ['Scoring', '/admin/platform/scoring']);
+// D4155 (#4155) — HQ › Decks joins the Platform row after Promo codes.
+PLATFORM.splice(PLATFORM.findIndex(([l]) => l === 'Promo codes') + 1, 0, ['Decks', '/admin/platform/decks']);
 // D1172 (#3085, STG20) — HQ › Storage joins the Platform row after AI usage.
 PLATFORM.splice(PLATFORM.findIndex(([l]) => l === 'AI usage') + 1, 0, ['Storage', '/admin/platform/storage']);
 const CONTENT = [

@@ -203,8 +203,11 @@ test('each page mounts the one hook on its own form, and records after its own S
   }
   // AF19: a new report hangs under its engagement for this month only; a saved one is its own record.
   assert.match(read('pages/partner/delivery/StatusReportsZone.jsx'), /parent: reportId \? null : \(engagementId && draft\.period === thisMonth \? Number\(engagementId\) : null\)/);
-  // AF20: an event is edited, never added, here; its agenda's new item hangs under the event.
-  assert.match(read('pages/events/EventEditorPage.jsx'), /record: isEdit \? Number\(id\) : null, enabled: isEdit/);
+  // AF20: a saved event names its record; #4046 (B2): /events/new mounts it too (no `enabled: isEdit`), its new
+  // event under the caller, and records after the create. Its agenda's new item hangs under the event.
+  assert.match(read('pages/events/EventEditorPage.jsx'), /scope: SCOPED_FORMS\.event, record: isEdit \? Number\(id\) : null,\n/);
+  assert.doesNotMatch(read('pages/events/EventEditorPage.jsx'), /enabled: isEdit/);
+  assert.match(read('pages/events/EventEditorPage.jsx'), /await fill\.afterSave\(newId\);/);
   // AF21: H20's draft, placed from the sheet, is still kept by the publication's own Save.
   const pub = read('pages/admin/PublicationDetail.jsx');
   assert.match(pub, /\.\.\.\(fromProposal \? \{ summary_proposal_uid: fromProposal \} : \{\}\)/);

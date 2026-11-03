@@ -19,8 +19,8 @@ import { codeOnly } from './_codeOnly.mjs';
 const RUN = { usage_log_id: 41, rail_page: 'Founder · Grow · Distribution', rail_option: 'form:landing', charged_microusd: 1200, est_cost_usd: null };
 
 test('the run line says the control’s label, else its page, never the option key or a usage row', () => {
-  assert.equal(optionLabel('Founder · Grow · Distribution', 'form:landing'), 'Auto-fill with AI');
-  assert.equal(fillRunLine(RUN), 'Run: Auto-fill with AI · charged $0.0012');
+  assert.equal(optionLabel('Founder · Grow · Distribution', 'form:landing'), 'Ask', '#4046 B3: the brand page\'s one Ask');
+  assert.equal(fillRunLine(RUN), 'Run: Ask · charged $0.0012');
   assert.equal(fillRunLine({ ...RUN, rail_option: 'fill:unlisted' }), 'Run: Founder · Grow · Distribution · charged $0.0012');
   assert.equal(fillRunLine({ ...RUN, rail_option: null, rail_page: null }), 'Run: an Eadwyn run · charged $0.0012');
   // A key two pages share is read by its page.
@@ -55,10 +55,13 @@ test('the brand page sends only what Eadwyn proposed and the founder kept, with 
   assert.deepEqual(keptProposals({ content_json: 'x', logo_url: 'u', name: 'Harbour' }, { content_json: 'x', logo_url: 'u', name: 'Harbour' }), { name: 'Harbour' }, 'only the page’s own copy columns');
 
   const page = codeOnly(readFileSync('frontend/src/pages/BrandBuilderPage.jsx', 'utf8'));
-  assert.match(page, /setAiProposed\(proposalsFrom\(r\)\);/);
+  // #4046 B3: only Eadwyn's words for the fields Ask placed, filed under the model that wrote them.
+  assert.match(page, /const fresh = Object\.fromEntries\(Object\.entries\(proposalsFrom\(r\)\)\.filter\(\(\[f\]\) => f in placed\)\);/);
+  assert.match(page, /if \(model === aiModel\.current\) setAiProposed\(\(old\) => \(\{ \.\.\.old, \.\.\.fresh \}\)\);\n\s+else \{ setAiProposed\(fresh\); aiModel\.current = model; \}/);
   assert.match(page, /const kept = keptProposals\(draft, aiProposed\);/);
   assert.match(page, /api\.brandSaveLanding\(projectId, Object\.keys\(kept\)\.length \? \{ \.\.\.draft, ai_proposals: kept, ai_model: aiModel\.current \} : draft\)/);
   // Recorded once, and never filed against another venture's page.
   assert.ok([...page.matchAll(/setAiProposed\(\{\}\)/g)].length >= 2);
-  assert.match(page, /useEffect\(\(\) => \{ setAiProposed\(\{\}\); aiModel\.current = null; \}, \[projectId\]\);/);
+  // #4046 B3: a venture switch also clears what Ask placed and what the page may replace.
+  assert.match(page, /useEffect\(\(\) => \{ setAiProposed\(\{\}\); aiModel\.current = null; setAskPlaced\(\{\}\); askOpen\.current = \{\}; askContent\.current = \{\}; \}, \[projectId\]\);/);
 });

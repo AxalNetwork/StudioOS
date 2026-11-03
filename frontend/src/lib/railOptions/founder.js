@@ -131,7 +131,7 @@ export const FOUNDER_OPTIONS = [
   // ── Build.
   // D1071 (#2941): Plan the build's "Word with Eadwyn" — the rules' items worded, kept only by an item's Save.
   {
-    page: 'Founder · Build', key: 'draft:build/plan', route: '/build/plan', label: 'Word with Eadwyn', kind: 'write', handler: 'draft',
+    page: 'Founder · Build', key: 'draft:build/plan', route: '/build/plan', label: 'Word the plan', kind: 'write', handler: 'draft',
     at: [['frontend/src/pages/cycles/BuildPlan.jsx', 'buildPlanApi.word(']],
   },
   {
@@ -240,6 +240,11 @@ export const FOUNDER_OPTIONS = [
     page: 'Founder · Raise · Pitch deck', key: 'deck:critic', route: '/raise/pitch/edit', label: 'Read as an investor', kind: 'reason', handler: 'draft',
     at: [['frontend/src/pages/raise/pitch/CriticSection.jsx', 'deckCriticApi.run(']],
   },
+  // D1561 (#3808, pd25): Check wording in the Check claims sheet, charged only when pressed.
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'deck:wording', route: '/raise/pitch/edit', label: 'Check wording', kind: 'reason', handler: 'draft',
+    at: [['frontend/src/pages/raise/pitch/WordingSection.jsx', 'deckActionsApi.wording(']],
+  },
   // D1604 (#3716, plan §0): Change tone and Translate are typed in the instruction box ("warmer", "in French"),
   // which runs words that are only a tone or a language under these two options (`instructionModel.typedChange`).
   {
@@ -277,6 +282,11 @@ export const FOUNDER_OPTIONS = [
   {
     page: 'Founder · Raise · Pitch deck', key: 'transcribe:rehearsal', route: '/raise/pitch/present', label: 'Rehearse', kind: 'speech', handler: 'transcribe',
     at: [[REHEARSE, 'deckRehearsalsApi.run(']],
+  },
+  // D1580 part 2 (#3827): rehearse_coach, the coaching on a rehearsal's report; the member's pick here is its model.
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'rehearse:coach', route: '/raise/pitch/present', label: 'Coach me', kind: 'reason', handler: 'draft',
+    at: [[REHEARSE, 'deckRehearsalsApi.coach(']],
   },
   {
     page: 'Founder · Raise · Pitch deck', key: 'review:deck-file', route: '/raise/pitch/review', label: 'Drop your deck here or click to browse', kind: 'vision', handler: 'upload',
@@ -316,9 +326,9 @@ export const FOUNDER_OPTIONS = [
     page: 'Founder · Grow · Distribution', key: 'draft:grow/customers', route: '/grow/distribution', label: 'Draft a sequence', kind: 'write', handler: 'draft',
     at: [[CYCLE, "surface: 'grow/customers'"]],
   },
-  // The brand builder, Distribution's "Open landing-page builder" door.
+  // The brand builder, Distribution's "Open landing-page builder" door. #4046 B3: its one Ask (was "Auto-fill with AI").
   {
-    page: 'Founder · Grow · Distribution', key: 'form:landing', route: '/build/brand', label: 'Auto-fill with AI', kind: 'write', handler: 'form',
+    page: 'Founder · Grow · Distribution', key: 'form:landing', route: '/build/brand', label: 'Ask', kind: 'write', handler: 'form',
     at: [[BRAND, 'api.brandAutofillLanding(']],
   },
   {

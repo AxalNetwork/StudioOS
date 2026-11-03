@@ -32,6 +32,7 @@ function world() {
   db.exec(sql('migrations/762_scope_task_work_board.sql'));
   db.exec(sql('migrations/763_task_comments_labels_milestones.sql'));
   db.exec(sql('migrations/202611022015_scope_task_needs_reassignment.sql'));
+  db.exec(sql('migrations/202611022205_work_workload.sql')); // D1614 W4 (#4195): the board writes the time block
   db.exec(`CREATE TABLE project_members (id INTEGER PRIMARY KEY, project_id INTEGER, user_id INTEGER, role TEXT, status TEXT, removed_at TEXT, created_at TEXT, updated_at TEXT)`);
   const people: Array<[number, string, string, number | null]> = [
     [OWNER, 'Pat Owner', 'founder', 100], [COFOUNDER, 'Cleo Cofounder', 'founder', 101], [ADVISOR, 'Ada Advisor', 'advisor', null],

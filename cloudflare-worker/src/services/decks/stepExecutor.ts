@@ -8,11 +8,15 @@
  *   2. Run the step through `aiRouter.run` with `parentHold` (no hold of its
  *      own), `idempotencyKey` and `executionId`, and `rail.record =
  *      stepRecordRef(…)`, so its usage rows name the parent and the step.
- *   3. A busy model (429 or 3040) backs off with jitter and retries; then the
- *      step falls back within the same tier (the element's other suggestions,
- *      D1503's `chain`) and records `fallback_used`. Any other refusal (a guard
- *      block, an invalid input, a spent allowance) ends the step: it is not a
- *      model's to answer.
+ *   3. A busy model (429, 503 or 3040) backs off with jitter and retries; then
+ *      the step falls back within the same tier (the element's other
+ *      suggestions, D1503's `chain`) and records `fallback_used`. Any other
+ *      refusal (a guard block, an invalid input, a spent allowance) ends the
+ *      step: it is not a model's to answer. D1600 (#3879): at most
+ *      `MAX_AREA_RETRIES` (3) automatic retries in all, counted across the
+ *      fallback; then the step fails `model_busy`. Each try runs under its own
+ *      Idempotency-Key and the step's one record ref (4.), so a retry never
+ *      settles a hold of its own: the run charges the step once, when it lands.
  *   4. What the step charged is what its usage rows say (`charged_microusd`
  *      summed by `record_ref` under the parent); the run clamps it to the
  *      step's line of the quote.
@@ -22,15 +26,16 @@
 import type { Env } from '../../types';
 import { run as aiRun, type RunOptions, type RunResult } from '../aiRouter';
 import { ELEMENT_ROUTES, GRID_PAGE } from './elementModels';
-import { MAX_BUSY_RETRIES, backoffMs, governorFor, isBusy, waitForSlot, type GovernorClient } from './aiGovernor';
+import { MAX_AREA_RETRIES, MAX_BUSY_RETRIES, backoffMs, governorFor, isBusy, waitForSlot, type GovernorClient } from './aiGovernor';
 import { stepRecordRef, type StepExecutor, type StepRow } from './genRuntime';
+import { pipelineStep } from './imageDraw';
 
 export type ExecutorDeps = {
   run?: (env: Env, opts: RunOptions) => Promise<RunResult>;
   sleep?: (ms: number) => Promise<void>;
   random?: () => number;
   governor?: GovernorClient;
-  /** Told when a busy model is backed off ("Busy, retrying"), and when the step waits for a slot. */
+  /** Told before each automatic retry of a busy model ("Busy, retrying"): the step's retry number (1 to `MAX_AREA_RETRIES`) and the wait. */
   onBusy?: (step: StepRow, attempt: number, ms: number) => void | Promise<void>;
 };
 
@@ -82,6 +87,33 @@ export function stepExecutor(env: Env, deps: ExecutorDeps = {}): StepExecutor {
     const option = typeof input.option === 'string' ? input.option : (ELEMENT_ROUTES[step.element]?.option ?? null);
     let last: RunResult | null = null;
     let fellBack = false;
+    // D1505 (#3756): an image step is the image pipeline, not a bare draw:
+    // expand, draw at its size and seed, check, style, alt. A refused image
+    // settles at zero and is redrawn once; nothing unchecked leaves the step.
+    if (step.task === 'deck_image') {
+      try {
+        let n = 0;
+        const d = (passed.draw && typeof passed.draw === 'object' ? passed.draw : {}) as { width?: number; height?: number };
+        const r = await pipelineStep(env, {
+          userId: account, projectId: Number(ctx.batch.project_id), deckId: Number(ctx.batch.deck_id) || null, cardUid: step.card_uid, area: step.area_id,
+          base: String(passed.text ?? ''), draw: { ...passed, task: 'deck_image', userId: account, ...(step.model ? { model: step.model } : {}) } as RunOptions,
+          model: step.model, size: d.width && d.height ? { width: d.width, height: d.height } : null,
+          parentHold: ctx.parentHold ?? null, rail: { page: GRID_PAGE, option, record: ref },
+          run: (o) => run(env, { ...o, userId: account, parentHold: ctx.parentHold ?? undefined, idempotencyKey: `${ref}:p${n++}`, executionId: step.batch_uid, rail: { page: GRID_PAGE, option, record: ref } }),
+        });
+        const charged = await chargedFor(env, parentUid, ref);
+        if (!r.ok) return { ok: false, charged_microusd: charged, error_code: r.code };
+        return {
+          ok: true, charged_microusd: charged, model_used: r.model, usage_log_id: r.usage_log_id,
+          variant: { image: r.image, alt: r.alt, seed: r.seed, variant_index: r.variant_index, pipeline_uid: r.pipeline_uid, steps: r.steps, qa: r.qa, refused: r.refused },
+        };
+      } finally {
+        await gov.release(lease.id).catch(() => {});
+      }
+    }
+    // D1600: the step's automatic retries, counted across the fallback; at `MAX_AREA_RETRIES` it stops.
+    let retries = 0;
+    let exhausted = false;
     try {
       const candidates = candidatesFor(step);
       for (let i = 0; i < candidates.length; i++) {
@@ -108,12 +140,13 @@ export function stepExecutor(env: Env, deps: ExecutorDeps = {}): StepExecutor {
           last = r;
           busy = (r.attempts ?? []).some((a) => a.called && isBusy(a));
           if (!busy) break;
-          if (attempt < MAX_BUSY_RETRIES) {
-            const ms = backoffMs(attempt, random);
-            await deps.onBusy?.(step, attempt + 1, ms);
-            await sleep(ms);
-          }
+          if (attempt >= MAX_BUSY_RETRIES || retries >= MAX_AREA_RETRIES) break;
+          retries++;
+          const ms = backoffMs(attempt, random);
+          await deps.onBusy?.(step, retries, ms);
+          await sleep(ms);
         }
+        if (busy && retries >= MAX_AREA_RETRIES) { exhausted = true; break; }
         // A refusal that is not a model's (guard, input, allowance) ends the step; a busy or failed model falls back.
         if (!busy && last && last.refusal !== 'all_models_failed') break;
         fellBack = true;
@@ -121,6 +154,6 @@ export function stepExecutor(env: Env, deps: ExecutorDeps = {}): StepExecutor {
     } finally {
       await gov.release(lease.id).catch(() => {});
     }
-    return { ok: false, charged_microusd: await chargedFor(env, parentUid, ref), error_code: last?.refusal ?? 'step_failed', fallback_used: fellBack };
+    return { ok: false, charged_microusd: await chargedFor(env, parentUid, ref), error_code: exhausted ? 'model_busy' : (last?.refusal ?? 'step_failed'), fallback_used: fellBack };
   };
 }

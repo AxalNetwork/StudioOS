@@ -31,6 +31,8 @@ import {
 } from '../services/roundMath';
 import { bindingKey } from '../util/schemaBootstrap';
 import { logCycleWrite } from '../services/cycleActivity';
+import { exemptionInput, unpublishRoundLinks, unpublishes } from '../services/decks/roundExemption';
+import { roundExemptionOf } from '../services/decks/publish';
 import { CapitalAccessError, capitalInvestor, capitalMemberProjectIds, capitalOwner, capitalPage, capitalRequestPath, capitalStaff, capitalStudioSummary } from '../services/capRelAccess';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -279,7 +281,9 @@ async function ensureSchema(env: Env): Promise<void> {
   try {
     const info = await env.DB.prepare(`PRAGMA table_info(raise_rounds)`).all<{ name: string }>();
     const have = new Set((info.results || []).map((x) => x.name));
-    for (const [col, decl] of [['pro_rata_reserved', 'REAL'], ['pre_money', 'REAL'], ['target_cents', 'INTEGER'], ['currency', "TEXT NOT NULL DEFAULT 'USD'"]] as const) {
+    // D4086 (migration 202611022116): the round's exemption, NULL when not recorded, no default.
+    for (const [col, decl] of [['pro_rata_reserved', 'REAL'], ['pre_money', 'REAL'], ['target_cents', 'INTEGER'], ['currency', "TEXT NOT NULL DEFAULT 'USD'"],
+      ['exemption', "TEXT CHECK (exemption IS NULL OR exemption IN ('506b', '506c', 'reg_cf', 'reg_s', 'other'))"]] as const) {
       if (!have.has(col)) {
         try { await env.DB.prepare(`ALTER TABLE raise_rounds ADD COLUMN ${col} ${decl}`).run(); }
         catch (e) { console.warn('[contacts] ALTER raise_rounds column failed (likely already applied)', col, e); }
@@ -886,34 +890,45 @@ r.put('/raise-round', async (c) => {
     // D1193 (#3127, CRL10): one currency per venture, the round's (#2457 owner question 5).
     if (body.currency !== undefined && !/^[A-Z]{3}$/.test(String(body.currency ?? ''))) return c.json({ detail: 'currency is three capital letters, such as USD' }, 400);
     const currency = body.currency !== undefined ? String(body.currency) : undefined;
+    // D4086: the exemption is the founder's own statement; left out it is kept, null clears it, nothing is defaulted.
+    const ex = exemptionInput(body.exemption);
+    if ('error' in ex) return c.json({ detail: ex.error }, 400);
+    const exemption = ex.value;
     // D1193: the round's changes show in Capital relationships › Activity, by field name, never a figure.
     const changed = [name !== undefined && 'name', target !== undefined && 'target', currency !== undefined && 'currency',
-      close !== undefined && 'close date', notes !== undefined && 'notes'].filter(Boolean).join(', ');
+      close !== undefined && 'close date', notes !== undefined && 'notes', exemption !== undefined && 'exemption'].filter(Boolean).join(', ');
     const logRound = (summary: string) => logCycleWrite(c.env, { projectId: pid, userId: Number(user.id), cycle: 'raise', module: 'capital-relationships', entityId: null, action: 'round_updated', summary });
 
     const existing = await c.env.DB.prepare(
       `SELECT * FROM raise_rounds WHERE project_id = ? AND status = 'active'`,
     ).bind(pid).first<any>();
     if (existing) {
+      const prevExemption = roundExemptionOf(existing.exemption);
       await c.env.DB.prepare(
-        `UPDATE raise_rounds SET name=?, target_amount=?, close_date=?, notes=?, currency=?, updated_at=? WHERE id=?`,
+        `UPDATE raise_rounds SET name=?, target_amount=?, close_date=?, notes=?, currency=?, exemption=?, updated_at=? WHERE id=?`,
       ).bind(
         name !== undefined ? name : existing.name,
         target !== undefined ? target : existing.target_amount,
         close !== undefined ? close : existing.close_date,
         notes !== undefined ? notes : existing.notes,
         currency !== undefined ? currency : (existing.currency ?? 'USD'),
+        exemption !== undefined ? exemption : prevExemption,
         nowIso(), existing.id,
       ).run();
       if (changed) await logRound(`Round settings changed: ${changed}`);
+      // D4086: a round now recorded under anything but 506(c) takes its decks' published links down.
+      let unpublished = 0;
+      if (exemption !== undefined && unpublishes(prevExemption, exemption)) {
+        unpublished = await unpublishRoundLinks(c.env, { projectId: pid, roundUid: String(existing.uid), exemption: exemption!, byUserId: Number(user.id) });
+      }
       const fresh = await c.env.DB.prepare('SELECT * FROM raise_rounds WHERE id = ?').bind(existing.id).first<any>();
-      return c.json(fresh);
+      return c.json(unpublished ? { ...fresh, unpublished_links: unpublished } : fresh);
     }
     try {
       const res = await c.env.DB.prepare(
-        `INSERT INTO raise_rounds (uid, project_id, name, target_amount, close_date, status, notes, currency, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)`,
-      ).bind(newUid(), pid, name ?? null, target ?? null, close ?? null, notes ?? null, currency ?? 'USD', nowIso(), nowIso()).run();
+        `INSERT INTO raise_rounds (uid, project_id, name, target_amount, close_date, status, notes, currency, exemption, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)`,
+      ).bind(newUid(), pid, name ?? null, target ?? null, close ?? null, notes ?? null, currency ?? 'USD', exemption ?? null, nowIso(), nowIso()).run();
       await logRound('Round set up');
       const fresh = await c.env.DB.prepare('SELECT * FROM raise_rounds WHERE id = ?').bind(lastInsertId(res)).first<any>();
       return c.json(fresh, 201);

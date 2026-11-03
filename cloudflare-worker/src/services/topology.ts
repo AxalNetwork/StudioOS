@@ -79,8 +79,15 @@ export function branchResourceNames(code: string) {
       FILES: `studioos-${code}-files`,
       PUBLICATIONS: `studioos-${code}-publications`,
       BACKUPS: `studioos-${code}-backups`,
+      // #4201: company logos (COMPANY_LOGOS).
+      COMPANY_LOGOS: `studioos-${code}-company-logos`,
     },
-    vectorize: `axal-search-${code}`,
+    // One branch index per Vectorize binding, as scripts/lib/branchConfig.mjs names them.
+    vectorize: {
+      VECTORIZE: `axal-search-${code}`,
+      // D1556 (#3803): consented interview quotes for the deck.
+      DECK_QUOTES: `axal-deck-quotes-${code}`,
+    },
   };
 }
 
@@ -97,6 +104,8 @@ export const BINDINGS: readonly BindingSpec[] = [
   { name: 'FILES', kind: 'R2 bucket', hq: 'studioos-files', branch: (c) => branchResourceNames(c).r2.FILES, shared: false },
   { name: 'PUBLICATIONS', kind: 'R2 bucket', hq: 'studioos-publications', branch: (c) => branchResourceNames(c).r2.PUBLICATIONS, shared: false },
   { name: 'BACKUPS', kind: 'R2 bucket', hq: 'studioos-backups', branch: (c) => branchResourceNames(c).r2.BACKUPS, shared: false },
+  // #4201 (#4152 G1): the company logo store.
+  { name: 'COMPANY_LOGOS', kind: 'R2 bucket', hq: 'studioos-company-logos', branch: (c) => branchResourceNames(c).r2.COMPANY_LOGOS, shared: false },
   { name: 'JOB_QUEUE', kind: 'Queue', hq: 'studioos-job-queue', branch: (c) => branchResourceNames(c).queue, shared: false },
   { name: 'AGENT_QUEUE', kind: 'Queue', hq: 'studioos-agent-queue', branch: (c) => branchResourceNames(c).agentQueue, shared: false },
   { name: 'AGENT_SCOPE', kind: 'Durable Object namespace', hq: 'AgentScope', branch: () => 'AgentScope', shared: false },
@@ -113,12 +122,18 @@ export const BINDINGS: readonly BindingSpec[] = [
   // D1502 part 2 (#3753): a deck's generation runs, and the per-account step throttles.
   { name: 'DECK_GEN_ROOM', kind: 'Durable Object namespace', hq: 'DeckGenRoom', branch: () => 'DeckGenRoom', shared: false },
   { name: 'AI_GOVERNOR', kind: 'Durable Object namespace', hq: 'AiGovernor', branch: () => 'AiGovernor', shared: false },
-  { name: 'VECTORIZE', kind: 'Vectorize index', hq: 'axal-search', branch: (c) => branchResourceNames(c).vectorize, shared: false },
+  // D1581 (#3828): the phone remote for Present.
+  { name: 'DECK_REMOTE', kind: 'Durable Object namespace', hq: 'DeckRemote', branch: () => 'DeckRemote', shared: false },
+  { name: 'VECTORIZE', kind: 'Vectorize index', hq: 'axal-search', branch: (c) => branchResourceNames(c).vectorize.VECTORIZE, shared: false },
+  // D1556 (#3803): consented interview quotes for the deck (bge-m3, 1024 dimensions).
+  { name: 'DECK_QUOTES', kind: 'Vectorize index', hq: 'axal-deck-quotes', branch: (c) => branchResourceNames(c).vectorize.DECK_QUOTES, shared: false },
   { name: 'ANALYTICS', kind: 'Analytics Engine dataset', hq: 'studioos_metrics', branch: () => 'studioos_metrics', shared: true },
   { name: 'AI', kind: 'Workers AI', hq: null, branch: () => null, shared: true },
   { name: 'BROWSER', kind: 'Browser Rendering', hq: null, branch: () => null, shared: true },
   // D1544 (#3784): resizes a deck image to a model's reference size before an edit.
   { name: 'IMAGES', kind: 'Images', hq: null, branch: () => null, shared: true },
+  // D4176 (#4176): Learning video on Cloudflare Stream, account-wide like Images.
+  { name: 'STREAM', kind: 'Stream', hq: null, branch: () => null, shared: true },
   { name: 'ASSETS', kind: 'Static assets', hq: './docs', branch: () => './docs', shared: false },
 ];
 

@@ -33,7 +33,6 @@ import { buildCards, standardOutline } from '../src/services/decks/newDeck.ts';
 import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withGuard, GUARD_MODEL } from './_guard_stub.mjs';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { conflictingRecords, fullRecords, sparseRecords, wordsFor } from './fixtures/pitchStoryFixtures.ts';
 import { loadSchema } from './_schema_once.mjs';
@@ -81,9 +80,6 @@ test('a model switched off is not offered: `isOffered` reads MODELS_OFF, and a b
 
 // ─────────────────────────────────────────────────────────── the fixture
 
-const root = new URL('../sql/', import.meta.url);
-const migrations = readdirSync(new URL('migrations/', root)).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations)
-  .map((n) => readFileSync(new URL('migrations/' + n, root), 'utf8'));
 const scratch = mkdtempSync(join(tmpdir(), 'feature-flags-d1509-'));
 const seedPath = join(scratch, 'schema.sqlite');
 const schema = new DatabaseSync(seedPath, { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
@@ -200,7 +196,7 @@ test('a pick of a switched-off model is kept, never cleared, and reads "<C> is u
   try {
     assert.equal((await call(f, 2, 'PUT', URL7, { scope: 'deck', key: 'body', model: MISTRAL })).status, 200);
     assert.equal((await call(f, 2, 'PUT', '/api/ai/rail/pick', { page: PAGE, option: 'deck:rewrite', model: MISTRAL })).status, 200);
-    assert.equal((await call(f, 9, 'PUT', '/api/admin/feature-flags', { key: `model:${MISTRAL}`, scope: 'global', enabled: false })).status, 200);
+    assert.equal((await call(f, 9, 'PUT', '/api/admin/feature-flags', { key: `model:${MISTRAL}`, scope: 'global', enabled: false, reason: 'Synthetic test reason.' })).status, 200);
     const e = await call(f, 2, 'GET', URL7);
     const body = e.body.elements.find((x: any) => x.element === 'body');
     assert.notEqual(body.resolved.model, MISTRAL);
@@ -214,7 +210,7 @@ test('a pick of a switched-off model is kept, never cleared, and reads "<C> is u
     assert.equal((await call(f, 2, 'PUT', URL7, { scope: 'member', key: 'body', model: MISTRAL })).body.error, 'model_not_offered');
     assert.equal((await call(f, 2, 'PUT', '/api/ai/rail/pick', { page: PAGE, model: MISTRAL })).status, 400);
     // Back on: the pick runs again, nothing to redo.
-    assert.equal((await call(f, 9, 'PUT', '/api/admin/feature-flags', { key: `model:${MISTRAL}`, scope: 'global', enabled: null })).status, 200);
+    assert.equal((await call(f, 9, 'PUT', '/api/admin/feature-flags', { key: `model:${MISTRAL}`, scope: 'global', enabled: null, reason: 'Synthetic test reason.' })).status, 200);
     assert.equal((await call(f, 2, 'GET', URL7)).body.elements.find((x: any) => x.element === 'body').resolved.model, MISTRAL);
   } finally { f.close(); }
 });
@@ -225,7 +221,7 @@ test('an element switched off reads "Not switched on yet.", leaves its group, ca
   // Mutations checked: the element still resolved, the quote still holding for Body, the build still running the words — each red.
   const f = await fixture();
   try {
-    assert.equal((await call(f, 9, 'PUT', '/api/admin/feature-flags', { key: 'element:body', scope: 'global', enabled: false })).status, 200);
+    assert.equal((await call(f, 9, 'PUT', '/api/admin/feature-flags', { key: 'element:body', scope: 'global', enabled: false, reason: 'Synthetic test reason.' })).status, 200);
     const e = await call(f, 2, 'GET', URL7);
     const body = e.body.elements.find((x: any) => x.element === 'body');
     assert.deepEqual([body.switched_on, body.reason, body.resolved, body.suggested], [false, NOT_SWITCHED_ON, null, []]);
@@ -296,11 +292,12 @@ test('only an admin writes a flag; an unknown key, scope or value is refused wit
     }
     assert.equal((f.db.prepare('SELECT COUNT(*) AS n FROM feature_flags').get() as any).n, 0);
     await call(f, 2, 'GET', '/api/decks/new/context?project_id=1'); // primes the cache
-    const w = await call(f, 9, 'PUT', '/api/admin/feature-flags', { key: 'grid_generate', scope: 'user', scope_id: 2, enabled: false });
+    const w = await call(f, 9, 'PUT', '/api/admin/feature-flags', { key: 'grid_generate', scope: 'user', scope_id: 2, enabled: false, reason: 'Synthetic test reason.' });
     assert.deepEqual(w.body, { ok: true, key: 'grid_generate', scope: 'user', scope_id: '2', enabled: false });
     assert.equal((await call(f, 2, 'GET', '/api/decks/new/context?project_id=1')).body.grid_generate, false, 'the write dropped the cache');
     const list = await call(f, 9, 'GET', '/api/admin/feature-flags');
-    assert.equal(list.body.flags.length, 1); assert.equal(list.body.flags[0].updated_by, 9); assert.equal(list.body.cache_s, 60);
+    // #4189 (D4155 K2): the writer by name, never a bare id.
+    assert.equal(list.body.flags.length, 1); assert.deepEqual(list.body.flags[0].updated_by?.name, 'Synthetic member 9'); assert.equal(list.body.cache_s, 60);
   } finally { f.close(); }
 });
 

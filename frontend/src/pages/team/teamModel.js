@@ -36,6 +36,8 @@ export const TABS = [
   { key: 'skills', label: 'Skills' },
   { key: 'roles', label: 'Roles and rule books' },
   { key: 'approvals', label: 'Approvals' },
+  // D1614 W6 (#3974): WK6, a project's activity feed; a company's Team page has none (the owner, 2026-11-01).
+  { key: 'activity', label: 'Activity', projectOnly: true },
   { key: 'settings', label: 'Settings' },
 ];
 const TAB_KEYS = new Set(TABS.map((t) => t.key));
@@ -468,7 +470,10 @@ export function eventWords(e) {
   return `${what} by ${who}`;
 }
 
-export const agentName = (a) => [a?.first_name, a?.last_name].map((s) => String(s || '').trim()).filter(Boolean).join(' ') || a?.role_name || 'Unnamed agent';
+// D4117 (#4117): an agent is its persona (Vesta, Orrin, …); the Worker sends no job title.
+/** D4119: the line under an agent's name: its persona's tagline, or null. */
+export const agentLine = (a) => String(a?.persona?.tagline || '').trim() || null;
+export const agentName = (a) => String(a?.persona?.name || '').trim() || [a?.first_name, a?.last_name].map((s) => String(s || '').trim()).filter(Boolean).join(' ') || 'Unnamed agent';
 
 const PAUSE = {
   manual: (a) => ({ reason: a?.paused_by?.name ? `Paused by ${a.paused_by.name}` : 'Paused by a person', fix: 'Resume' }),
@@ -482,6 +487,8 @@ const PAUSE = {
     return { reason: server ? `A connected tool was disconnected: ${server} is disconnected` : 'A connected tool was disconnected', fix: 'Reconnect' };
   },
   ai_paused: () => ({ reason: 'Eadwyn is paused for this account', fix: null }),
+  // D4158 (#4158): HQ retired the persona. Nothing on the team resumes it; its open proposals stay decidable.
+  persona_retired: () => ({ reason: 'Axal VC HQ retired this agent. Its open proposals can still be decided.', fix: null }),
 };
 /** Why an agent is paused, and the one link that fixes it (TM9b). */
 export function pauseWords(a) {
@@ -497,8 +504,10 @@ export function agentRow(a, now = new Date()) {
     key: a.uid,
     uid: a.uid,
     name: agentName(a),
-    role: a.role_name || null,
-    roleOrUnrecorded: a.role_name || NOT_RECORDED,
+    // D4119: an agent's line is its persona's tagline, never a job title (D4117 §6).
+    role: agentLine(a),
+    roleOrUnrecorded: agentLine(a) || NOT_RECORDED,
+    persona: a.persona || null,
     // The model's own name; null is drawn as the muted "Not recorded".
     model: a.model_label || a.model_id || null,
     tools: tools.length ? `+ ${tools.length} read-only tool${tools.length === 1 ? '' : 's'}${servers.length ? ` from ${servers.join(', ')}` : ''}` : null,

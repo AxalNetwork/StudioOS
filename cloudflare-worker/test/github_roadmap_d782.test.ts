@@ -24,7 +24,6 @@ import { fedCounts } from '../src/integrations/fed.ts';
 import { encryptCredentials } from '../src/integrations/secrets.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { addMvpStores } from './_github_mvp_stores.mjs';
-import { migrationNumber } from '../../scripts/lib/migrationPlan.mjs';
 
 const JWT_SECRET = 'r'.repeat(64); // synthetic test fixture
 const mig = (n: string) => readFileSync(`cloudflare-worker/sql/migrations/${n}`, 'utf8');
@@ -143,7 +142,7 @@ const snapshot = (w: any) => JSON.stringify({
 test('the migration adds only what no earlier schema has, and nothing is backfilled', () => {
   // Mutation checked: add `ALTER TABLE roadmap_okrs ADD COLUMN target_date` to 499 → fails here.
   const earlier = [readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8'),
-    ...readdirSync('cloudflare-worker/sql/migrations').filter((f) => f.endsWith('.sql') && migrationNumber(f) < 499).map(mig)].join('\n');
+    ...readdirSync('cloudflare-worker/sql/migrations').filter((f) => f.endsWith('.sql') && Number.parseInt(f, 10) < 499).map(mig)].join('\n');
   for (const col of ['milestone_title', 'milestone_due', 'shipped_release_id']) {
     assert.ok(!new RegExp(`ALTER TABLE roadmap_okrs ADD COLUMN ${col}\\b`).test(earlier), `${col} already exists`);
     assert.match(M499, new RegExp(`ALTER TABLE roadmap_okrs ADD COLUMN ${col}\\b`));

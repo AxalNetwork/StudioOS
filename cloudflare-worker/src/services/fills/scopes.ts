@@ -9,7 +9,8 @@
  *   advisor_services          the advisor's own service    (routes/advisors.ts, `requireMyAdvisor`)
  *   engagement_status_reports the partner on the engagement, until it is sent
  *                             (routes/partner_delivery.ts, `requireOwnEngagement`; a sent report is frozen)
- *   events, event_agenda_items `canManage`: an admin, or the event's host (routes/events.ts)
+ *   events, event_agenda_items `canManage`: an admin, or the event's host (routes/events.ts);
+ *                             #4046 (B2): a new event (/events/new) hangs under the caller, its host
  *   admin_publications        an admin (routes/admin_publications.ts, `requireAdmin`)
  *   ic_decisions              its author, while it is not decided (routes/ic.ts `PUT /:uid`);
  *                             read as `icDecisionScope` reads it
@@ -22,8 +23,26 @@
  *   deal_notes                #4046: a firm's private note on a deal (routes/deal_context.ts,
  *                             `context`): an investor who may open the deal for that firm reads
  *                             the firm's notes; only the note's author fills it. No staff bypass.
+ *   testing_applications      #4046 (B2): a member's application to a product-testing programme,
+ *                             under the programme while `apply` would take it (services/testing.ts,
+ *                             `mayApplyTo`); a sent one is its member's alone. No staff bypass.
+ *   program_proposals         #4046 (B4): a studio's program proposal (routes/admin_program_proposals.ts,
+ *                             `requireAdmin` then services/programProposals.ts `ownRow`): its studio's
+ *                             admins, or its creator while HQ-held; written while a draft or sent back,
+ *                             never by a frozen admin. A new one hangs under the caller. A Super Admin
+ *                             reads one that is not a draft. No write bypass.
+ *   partner_invitations       #4046 (B4): an admin's invitation to a partner (routes/admin_partners.ts
+ *                             POST /invitations, `requireAdmin`): a new one hangs under the caller, its
+ *                             inviter; a sent one is read by any admin and filled by its inviter alone.
+ *   article_review_comments   #4046 (B4): a reviewer's comment on an article (routes/admin_articles.ts
+ *                             POST /:id/comments, `requireAdmin`): any admin adds one under an article
+ *                             that exists; any admin reads one, and only its author fills it. Not concealed:
+ *                             any admin reads every comment on the article, and no one else reaches the route.
+ *   segment_profiles          #4046 (B4): HQ's New segment (routes/persona_segments.ts POST /, `requireSuperAdmin`):
+ *                             an HQ Super Admin writes, on HQ alone; any admin reads (GET is `requireAdmin`). A new
+ *                             one hangs under the caller (`createProfile` stamps `updated_by`). Keyed by its rowid.
  *
- * The D1595 three and the deal note are CONCEALED: a caller who may not read the record is
+ * The D1595 three, the deal note, a testing application, a program proposal and a partner invitation are CONCEALED: a caller who may not read the record is
  * answered as if it did not exist, and each reads the request's verified
  * active company (`ScopeContext`), as its route does; without one it answers
  * nothing.
@@ -45,9 +64,13 @@
 import type { Env, User } from '../../types';
 import { inSupportBook, myPerk, offeringOwned, supportBookIds } from '../profileWriteGates';
 import { noteFirm, visibleDeal } from '../dealNotes';
+import { mayApplyTo } from '../testing';
+import { studioOf } from '../programProposals';
+import { adminWritesFrozen, isSuperAdmin } from '../../auth';
+import { branchOf } from '../../util/branch';
 
 export interface ScopeAccess { read: boolean; write: boolean }
-export type ParentKind = 'advisor' | 'engagement' | 'event' | 'project' | 'owner' | 'deal';
+export type ParentKind = 'advisor' | 'engagement' | 'event' | 'project' | 'owner' | 'deal' | 'programme' | 'article';
 
 /** What a scope may need from the request: the caller's verified active company (`activeCompanyFor`). */
 export interface ScopeContext {
@@ -93,6 +116,8 @@ async function myPartnerId(env: Env, user: User): Promise<number | null> {
 }
 
 /** `canManage` in routes/events.ts: an admin, or the event's host. */
+/** #4046 (B2): the profiles `/events/new` admits (App.jsx's guard); `POST /api/events` makes the caller its host. */
+const EVENT_HOSTS = new Set(['admin', 'founder', 'partner', 'investor', 'advisor']);
 const manages = (event: Record<string, unknown> | null, user: User) => !!event && (isAdminUser(user) || Number(event.host_user_id) === Number(user.id));
 
 export const RECORD_SCOPES: Readonly<Record<string, RecordScope>> = Object.freeze({
@@ -127,11 +152,14 @@ export const RECORD_SCOPES: Readonly<Record<string, RecordScope>> = Object.freez
       return NONE;
     },
   },
+  // #4046 (B2): /events/new. A new event hangs under its host, the caller (`POST /api/events` makes the caller
+  // its host); any profile the page admits may draft one. A saved event is its host's, or an admin's (`canManage`).
   events: {
     read: 'SELECT * FROM events WHERE id = ?',
-    parent: null,
-    async access(_env, user, row) {
-      return manages(row, user) ? { read: true, write: true } : NONE;
+    parent: { kind: 'owner', column: 'host_user_id', own: ownUserId },
+    async access(_env, user, row, parentId) {
+      if (row) return manages(row, user) ? BOTH : NONE;
+      return parentId != null && parentId === Number(user.id) && EVENT_HOSTS.has(role(user)) ? BOTH : NONE;
     },
   },
   event_agenda_items: {
@@ -206,6 +234,92 @@ export const RECORD_SCOPES: Readonly<Record<string, RecordScope>> = Object.freez
         if (await myPerk(env, String(row.uid ?? ''), Number(user.id), await ctx.activeCompany())) return BOTH;
       }
       return isAdminUser(user) && row ? READ_ONLY : NONE;
+    },
+  },
+  // #4046 (B2): a member's application to a product-testing programme, its answers only. A new one hangs under
+  // the programme, for a member `apply` would take now (`mayApplyTo`); a sent one is its member's alone, and
+  // only while it waits ('applied'), so the record step after Apply can keep what was placed. Concealed:
+  // another member's application, or a programme they may not apply to, reads as one that does not exist.
+  // The read lays the answers out as one column each, so a kept answer is compared field by field.
+  testing_applications: {
+    read: `SELECT a.*, json_extract(a.answers, '$[0]') AS answer_1, json_extract(a.answers, '$[1]') AS answer_2,
+      json_extract(a.answers, '$[2]') AS answer_3, json_extract(a.answers, '$[3]') AS answer_4, json_extract(a.answers, '$[4]') AS answer_5
+      FROM testing_applications a WHERE a.id = ?`,
+    parent: { kind: 'programme', column: 'programme_id' },
+    concealed: true,
+    async access(env, user, row, parentId) {
+      if (row) return Number(row.user_id) === Number(user.id) ? (row.status === 'applied' ? BOTH : READ_ONLY) : NONE;
+      return parentId != null && (await mayApplyTo(env, { id: Number(user.id), role: role(user) }, parentId)) ? BOTH : NONE;
+    },
+  },
+  // #4046 (B4): Admin · Programs' Propose a program. `ownRow`'s studio rule: a licence's admins share its proposals,
+  // an admin bound to no licence holds only their own. Written while 'draft' or 'sent_back' (`saveDraft`), and
+  // never while `requireAdmin` would refuse the admin's write (D135's freeze), so an Undo through /api/fills
+  // cannot write what Save could not. A new one hangs under the caller (`startDraft` makes them its creator).
+  // A Super Admin reads one that is not a draft (`proposalDetail`) and fills none of another studio's.
+  // Concealed: another studio's proposal answers 404 `unknown_proposal` on the route, so it does here too.
+  program_proposals: {
+    read: 'SELECT id, uid, created_by_user_id, licence_uid, status, name, purpose, eligibility, who_json, grp, join_method, cycle FROM program_proposals WHERE id = ?',
+    parent: { kind: 'owner', column: 'created_by_user_id', own: ownUserId },
+    concealed: true,
+    async access(env, user, row, parentId) {
+      if (!isAdminUser(user)) return NONE;
+      const uid = Number(user.id);
+      if (!row) return parentId != null && parentId === uid ? ((await adminWritesFrozen(env, user)) ? READ_ONLY : BOTH) : NONE;
+      const studio = await studioOf(env, uid);
+      const owns = studio != null ? row.licence_uid === studio : row.licence_uid == null && Number(row.created_by_user_id) === uid;
+      if (owns) return { read: true, write: (row.status === 'draft' || row.status === 'sent_back') && !(await adminWritesFrozen(env, user)) };
+      return isSuperAdmin(user as any) && row.status !== 'draft' ? READ_ONLY : NONE;
+    },
+  },
+  // #4046 (B4): New invitation on Admin · Community · Partner invitations. POST /api/admin/partners/invitations is
+  // `requireAdmin` (any admin, a Super Admin included) and binds the caller as `invited_by_user_id`, so a new one hangs
+  // under the caller. The admin reads (GET /invitations/:id) are any admin's; only the inviter's own Send records a
+  // fill, so a saved one is filled by its inviter alone. No partner or member reaches an invitation: concealed. The
+  // frozen-admin and suspended-branch refusals stay with the POST itself, which writes the row.
+  partner_invitations: {
+    read: 'SELECT id, invited_by_user_id, status, personal_message FROM partner_invitations WHERE id = ?',
+    parent: { kind: 'owner', column: 'invited_by_user_id', own: ownUserId },
+    concealed: true,
+    async access(env, user, row, parentId) {
+      if (!isAdminUser(user)) return NONE;
+      // The route is `requireAdmin`, so D135's freeze is part of its gate: a frozen admin reads and fills nothing.
+      const frozen = await adminWritesFrozen(env, user);
+      if (row) return { read: true, write: !frozen && Number(row.invited_by_user_id) === Number(user.id) };
+      return parentId != null && parentId === Number(user.id) ? (frozen ? READ_ONLY : BOTH) : NONE;
+    },
+  },
+  // #4046 (B4): the review drawer's new comment on Super Admin · Content · Content queue. POST
+  // /api/admin/articles/:id/comments is `requireAdmin` (any admin) and checks no article, so the scope adds that check:
+  // a new comment hangs under an article that exists. Any admin reads a comment (GET /api/admin/articles/:id lists them
+  // all); only its author fills one: the route lets a Super Admin rewrite another admin's words, but no trigger is
+  // given on another member's record (D1329). Not concealed: the route conceals nothing from an admin.
+  article_review_comments: {
+    read: 'SELECT * FROM article_review_comments WHERE id = ?',
+    parent: { kind: 'article', column: 'article_id' },
+    async access(env, user, row, parentId) {
+      if (!isAdminUser(user)) return NONE;
+      // `requireAdmin` carries D135's freeze: a frozen admin reads and fills nothing.
+      const frozen = await adminWritesFrozen(env, user);
+      if (row) return Number(row.author_id) === Number(user.id) && !frozen ? BOTH : READ_ONLY;
+      if (parentId == null) return NONE;
+      return (await env.DB.prepare('SELECT id FROM articles WHERE id = ?').bind(parentId).first()) ? (frozen ? READ_ONLY : BOTH) : NONE;
+    },
+  },
+  // #4046 (B4): HQ's New segment on Super Admin · Content · Personas. `requireSuperAdmin`'s rule exactly: an admin with the
+  // Super Admin elevation, on HQ (a branch is refused). A plain Admin, or any admin on a branch, reads (GET is `requireAdmin`)
+  // and fills nothing. `requireAdmin`'s D135 freeze never applies here: it exempts a Super Admin and a branch. A segment hangs
+  // under no record, so a new one hangs under the caller (`createProfile` stamps `updated_by` on its first version). The
+  // table's key is TEXT; the fill keys it by its rowid (a rowid table, and no route deletes a segment). Not concealed: the
+  // route conceals nothing from an admin and refuses everyone else.
+  segment_profiles: {
+    read: 'SELECT rowid AS id, key, name, profile, status, who, version, updated_by FROM segment_profiles WHERE rowid = ?',
+    parent: { kind: 'owner', column: 'updated_by', own: ownUserId },
+    async access(env, user, row, parentId) {
+      if (!isAdminUser(user)) return NONE;
+      const write = isSuperAdmin(user as any) && !branchOf(env);
+      if (row) return { read: true, write };
+      return parentId != null && parentId === Number(user.id) ? { read: true, write } : NONE;
     },
   },
   // #4046 (#3740 2b): Deal notes' New note. The firm and the deal by `context`'s own rule (routes/deal_context.ts);

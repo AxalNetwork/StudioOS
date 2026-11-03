@@ -44,6 +44,7 @@ import { readOne, READERS, type ReadContext } from '../services/agents/reads';
 import { depsOf, isReady, taskEvent, type TaskRow } from '../services/agents/tasks';
 import { canRead, effectiveBook, scopeOfAgent, type AgentRow } from '../services/agents/teams';
 import { handoffBlockFor, handsOffTo, parseHandoff, proposeHandoff } from '../services/agents/handoffs';
+import { sessionBlock } from '../services/agents/sessions';
 import {
   dailyLimitReached, markRun, moveTask, pauseAgent, runByUid, runsToday, scopeOfRow, scopeSettings, tellTeam,
   type PauseReason, type RunRow, type RunStep,
@@ -93,6 +94,8 @@ async function end(d: LoopDeps, l: Loaded, step: RunStep, status: string, refusa
 
 /** Read at every step: the engine off, or the halt key, ends the run here. */
 async function gate(d: LoopDeps, l: Loaded, step: RunStep): Promise<StepOut | null> {
+  // #3850 (E6): a run ended from outside (a project's move: `scope_moved`) stops at its next step, as it stands.
+  if (!['admitted', 'running', 'waiting_decision'].includes(l.run.status)) return stop(l.run.status, l.run.refusal);
   if (await haltedAll(d.env)) return end(d, l, step, 'halted', 'halted', 'The platform halted agents.');
   if (await engineMode(d.env) === 'off') return end(d, l, step, 'halted', 'engine_off', 'The agent engine is off.');
   return null;
@@ -151,6 +154,12 @@ export async function buildContext(d: LoopDeps, l: Loaded): Promise<Built> {
   if (!sponsor || !(await canRead(d.env, s, sponsor))) {
     return { ok: false, status: 'refused', refusal: 'sponsor_lost_access', summary: 'The sponsor can no longer see this team.', pause: 'sponsor_left' };
   }
+  if (s.kind === 'project') {
+    // #3850 (E6): checked again here, so a run admitted before a move ends at this step too.
+    const moved = await d.env.DB.prepare('SELECT 1 AS ok FROM projects WHERE id = ? AND NOT (company_id IS ?)')
+      .bind(s.id, l.run.admitted_company_id).first<{ ok: number }>();
+    if (moved) return { ok: false, status: 'scope_moved', refusal: 'scope_moved', summary: 'The project moved to another company.' };
+  }
   let projectId: number | null = s.kind === 'project' ? s.id : null;
   if (s.kind === 'company' && l.task.context_project_id) {
     // Checked every run: a project that left the company is no longer the company agent's to read.
@@ -180,6 +189,8 @@ export async function buildContext(d: LoopDeps, l: Loaded): Promise<Built> {
   // D1530 (#3849, E5): the roles this agent may hand off to, and how; a handoff task's why and note, as data.
   const handTo = await handsOffTo(d.env, l.agent);
   const handoff = await handoffBlockFor(d.env, l.task);
+  // #3957: a scheduled session's skill, record and instruction: the member's words are data, never the prompt's own lines.
+  const session = await sessionBlock(d.env, l.task);
   const head = [
     `Task: ${l.task.title}`,
     l.task.detail ? `Detail: ${l.task.detail}` : '',
@@ -190,12 +201,13 @@ export async function buildContext(d: LoopDeps, l: Loaded): Promise<Built> {
   const blocks = [
     `<agent_data source="memory" trust="data">${inert({ untrusted: true, data: notes })}</agent_data>`,
     ...(handoff ? [`<agent_data source="handoff" trust="data">${inert({ untrusted: true, data: handoff })}</agent_data>`] : []),
+    ...(session ? [`<agent_data source="session" trust="data">${inert({ untrusted: true, data: session })}</agent_data>`] : []),
     ...reads.map((r) => r.block),
   ];
   // Everything within the run's prompt limit, in order; what does not fit is named, not cut in half.
   let prompt = `${head}\n\n${UNTRUSTED_NOTICE}`;
   const omitted: string[] = [];
-  const names = ['memory', ...(handoff ? ['handoff'] : []), ...reads.map((r) => r.key)];
+  const names = ['memory', ...(handoff ? ['handoff'] : []), ...(session ? ['session'] : []), ...reads.map((r) => r.key)];
   blocks.forEach((b, i) => {
     if (prompt.length + 1 + b.length <= PROMPT_MAX - 200) prompt += `\n${b}`;
     else omitted.push(names[i]);

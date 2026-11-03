@@ -29,6 +29,7 @@ import { type RenderableDeck } from '../services/decks/render';
 import { renderDeckPPTX, renderDeckPPTXWithImages } from '../services/decks/pptx';
 import { NO_NOTES as NO_SPEAKER_NOTES, NO_SOURCES as NO_SOURCES_RECORDED, aiCards, sourceLines } from '../services/decks/offlineHtml';
 import { stripTrailingSlashes } from '../util/url';
+import { BRAND_FONTS, brandKitPick, deckBrandKitFor } from '../services/decks/brandKit';
 import { bindingKey } from '../util/schemaBootstrap';
 import { applyExportImageCopies, checkedExportImageCopies, copyExternalImages, copyRefusalMessage, type ExportImageCopies } from '../services/decks/imageCopy';
 import { refuse } from '../util/refusal';
@@ -44,7 +45,7 @@ import { sanitizeBinding } from '../services/decks/sources';
 import { saveGateRefusal } from '../services/decks/saveGates';
 import {
   AUDIENCES, BLOCK_KINDS, CHART_RANGES, LIBRARY_CHART_TYPES, TYPED_CHART_TYPES, GRID_COLS, GRID_ROWS, IMAGE_FITS, IMAGE_TAGS, LAYOUTS, MAX_BLOCKS, NOTES_MAX, OVERLAYS,
-  TEXT_STYLES, THEME_KINDS, VIDEO_RATIOS, contentHash, modelProblems, sanitizeModel, sanitizeTheme, assignCardUids, MODEL_VERSION,
+  TEXT_STYLES, THEME_KINDS, VIDEO_RATIOS, contentHash, modelProblems, sanitizeModel, sanitizeTheme, assignCardUids, MODEL_VERSION, visibleCards,
 } from '../services/decks/slideModel';
 import { checkVideoLink } from '../services/decks/videoLink';
 import { ensureDeckVersionColumns, ensureProposalOutlineColumns } from '../services/decks/deckVersionColumns';
@@ -526,7 +527,8 @@ export function rowToDeck(row: any, withSlides = true): any {
 export function publicDeckOf(row: any): any {
   const { audience, round, by, content_hash, ...deck } = rowToDeck(row);
   void audience; void round; void by; void content_hash;
-  deck.slides = (deck.slides || []).map((s: any) => {
+  // D1545 (#3788): a hidden card reaches no reader: not Present, the share page or the print page.
+  deck.slides = visibleCards(deck.slides || []).map((s: any) => {
     // D1579 (#3826): a card's status and assignee are the venture's working state, never an outside reader's.
     const { notes, status, assignee, ...card } = s || {};
     void notes; void status; void assignee;
@@ -825,13 +827,16 @@ export function printDeckOf(row: any, opts: PrintOptions): any {
   const deck = publicDeckOf(row);
   const full = rowToDeck(row);
   if (opts.notes) {
-    deck.slides = deck.slides.map((card: any, i: number) => {
-      const notes = String(full.slides?.[i]?.notes ?? '').trim();
+    // D1545: by uid, so a hidden card left out of the public deck never shifts a card's notes onto the next.
+    const byUid = new Map((full.slides || []).map((s: any) => [s?.uid, s]));
+    deck.slides = deck.slides.map((card: any) => {
+      const notes = String((byUid.get(card?.uid) as any)?.notes ?? '').trim();
       return { ...card, notes: notes || null };
     });
   }
   deck.export_options = { notes: opts.notes, sources: opts.sources };
-  if (opts.sources) deck.sources_appendix = { lines: sourceLines(full.slides || []), ai: aiCards(full.slides || []) };
+  const shown = visibleCards(full.slides || []);
+  if (opts.sources) deck.sources_appendix = { lines: sourceLines(shown), ai: aiCards(shown) };
   return deck;
 }
 
@@ -865,7 +870,10 @@ decks.get('/share/:token', async (c) => {
   // D1564 (#3811): a published link asks for the reader's email first, and
   // sends no card and uses no view until this browser has given one. While
   // public views are off (owner decision T) the gate is always on.
-  const published = publishOf(link?.include_json);
+  // D4086: a published link stands only while its round allows it; a round
+  // recorded under any exemption but 506(c) leaves it a private link.
+  const storedPublish = publishOf(link?.include_json);
+  const published = storedPublish && await (await import('./deck_publish')).linkStandsFor(c.env, parseInt(m[1])) ? storedPublish : null;
   if (link && published && gateFor(published) === 'email' && await shareLinkLive(c.env, await sha256Hex(token), bind.viewerHash)) {
     const { emailGatePassed, emailGateAnswer } = await import('./deck_publish');
     if (!(await emailGatePassed(c.env, c.req.header('cookie'), Number(link.id)))) {
@@ -952,7 +960,9 @@ decks.get('/share/:token', async (c) => {
   } catch {}
   if (bind.setCookie) c.header('Set-Cookie', bind.setCookie);
   // D902 — only what the link includes leaves the Worker (`shareInclude.ts`).
-  const included = parseShareInclude(link?.include_json);
+  // D1586 (#3833): proof sits behind the NDA, so a link without one carries no `proof_ref`.
+  const stored = parseShareInclude(link?.include_json);
+  const included = { ...stored, evidence: stored.evidence && ndaRequired };
   // D898's public fields (no audience, round, author or hash), with the cards
   // as the link includes them: speaker notes go only with notes on.
   // D1565 (#3812): a link made with a variant opens the master's own cards in the variant's order.
@@ -1012,7 +1022,7 @@ async function closedLink(c: any, error: string, deckId: number | null) {
  * `POST /share/:token/nda`). It names the venture and the version, and sends
  * no card: the text is read from `GET /share/:token/nda`.
  */
-async function ndaGate(c: any, linkId: number, deckId: number) {
+export async function ndaGate(c: any, linkId: number, deckId: number) {
   const env: Env = c.env;
   let userId: number | null = null;
   try { userId = Number((await requireAuth(c)).id) || null; } catch { /* not signed in: the gate asks them to */ }
@@ -1087,6 +1097,11 @@ decks.post('/share/:token/heartbeat', async (c) => {
     const row = await c.env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(parseInt(m[1])).first<any>();
     return row ? linkSentCards(c.env, row, link) : [];
   });
+  // D1568 (#3815): a read view of a prospect's link may signal a first view, a revisit or the ask reached.
+  try {
+    const { recordViewSignals } = await import('../services/raiseSignals');
+    await recordViewSignals(c.env, viewId, parseInt(m[1]), totals.map(([slide]) => slide));
+  } catch { /* a signal never fails a heartbeat */ }
   return c.json({ ok: true });
 });
 
@@ -1272,7 +1287,17 @@ decks.get('/brand-kit', async (c) => {
     console.warn('[decks] brand kit unreadable', (e as Error)?.message);
     return c.json({ error: 'Your brand kit could not be read.', code: 'unreadable' }, 503);
   }
-  if (!row) return c.json({ project_id: pid, kit: null });
+  // D1562 (#3809): the deck's own kit (fonts, palette roles, image style, references, logo), and the fonts it may name.
+  let deckKit: Awaited<ReturnType<typeof deckBrandKitFor>> = null;
+  try { deckKit = await deckBrandKitFor(c.env, pid); }
+  catch (e) {
+    console.warn('[decks] deck brand kit unreadable', (e as Error)?.message);
+    return c.json({ error: 'Your brand kit could not be read.', code: 'unreadable' }, 503);
+  }
+  if (!row && !deckKit) return c.json({ project_id: pid, kit: null, font_options: BRAND_FONTS });
+  // D1562: the theme a one-click run applies first when a kit exists (AUTO-2), worked out here so the page never re-derives it.
+  const pick = brandKitPick(row ? { palette_bg: row.palette_bg, palette_ink: row.palette_ink, palette_accent: row.palette_accent, theme_color: row.theme_color, palette_secondary: row.palette_secondary } : null, deckKit);
+  if (!row) return c.json({ project_id: pid, font_options: BRAND_FONTS, pick, kit: { name: null, palette: { bg: null, ink: null, accent: null, secondary: null }, fonts: null, voice: [], logo: { light: null, dark: null, inline: false }, updated_at: deckKit!.updated_at, deck: deckKit } });
   const hex = (v: unknown) => (typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v.trim()) ? v.trim().toLowerCase() : null);
   let voice: string[] = [];
   try {
@@ -1289,7 +1314,10 @@ decks.get('/brand-kit', async (c) => {
       voice,
       logo: { light: sanitizeImageUrl(row.logo_url), dark: sanitizeImageUrl(row.logo_dark_url), inline: Boolean(row.logo_svg || row.logo_dark_svg) },
       updated_at: row.updated_at ?? null,
+      deck: deckKit,
     },
+    font_options: BRAND_FONTS,
+    pick,
   });
 });
 
@@ -1776,7 +1804,7 @@ export async function shareLinkLive(env: Env, tokenHash: string, viewerHash: str
  * `UPDATE … WHERE bound_viewer_hash IS NULL`, so two first opens cannot both
  * win. Another browser is refused before any view is used.
  */
-async function bindShareViewer(c: any, tokenHash: string): Promise<{ refused: boolean; viewerHash: string | null; setCookie: string | null; allowDownload: boolean }> {
+export async function bindShareViewer(c: any, tokenHash: string): Promise<{ refused: boolean; viewerHash: string | null; setCookie: string | null; allowDownload: boolean }> {
   const env: Env = c.env;
   const tok = await env.DB.prepare(
     `SELECT id, allow_download, allow_forwarding, bound_viewer_hash,
@@ -1879,7 +1907,7 @@ export async function verifySignedToken(env: Env, token: string): Promise<any> {
   if (!payload?.k) throw new Error('Token missing key');
   return payload;
 }
-async function sha256Hex(s: string): Promise<string> {
+export async function sha256Hex(s: string): Promise<string> {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
   const bytes = new Uint8Array(buf);
   let out = '';
@@ -2216,7 +2244,8 @@ export function exportDeckOf(row: any, opts: PrintOptions): { slides: any[]; ren
   if (!Array.isArray(slides)) slides = [];
   // Re-sanitize persisted slides (defence-in-depth against legacy rows
   // pre-dating sanitizeImageUrl) before they reach Browser Rendering.
-  slides = founderPitchSlides(sanitizeSlides(slides));
+  // D1545 (#3788): a hidden card is in no export (PowerPoint, .odp, Google Slides).
+  slides = visibleCards(founderPitchSlides(sanitizeSlides(slides)));
   const notesOf = (s: any) => (opts.notes ? String(s?.notes ?? '').trim() || NO_SPEAKER_NOTES : undefined);
   const renderable: RenderableDeck = {
     title: row.title || 'Pitch deck',

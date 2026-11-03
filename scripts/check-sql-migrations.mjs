@@ -21,7 +21,7 @@
  */
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { migrationDuplicates, migrationNameProblem } from './lib/migrationPlan.mjs';
+import { migrationDuplicates, migrationNameProblem, compareMigrations } from './lib/migrationPlan.mjs';
 
 const DIR = 'cloudflare-worker/sql/migrations';
 
@@ -117,7 +117,7 @@ export function bannedIn(sql) {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const files = readdirSync(resolve(process.cwd(), DIR))
     .filter((f) => f.endsWith('.sql'))
-    .sort();
+    .sort(compareMigrations);
 
   const offenders = [];
   for (const file of files) {
