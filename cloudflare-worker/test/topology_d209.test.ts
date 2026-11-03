@@ -447,9 +447,15 @@ test('four functions read the shared dataset, each behind the credential check t
   assert.equal(NOT_FROM_ANALYTICS.length, 3);
 });
 
-test('two places write the dataset, and the branch code rides in the sixth blob', () => {
+test('three places write the dataset, and the branch code rides in the sixth blob', () => {
   const writers = [...new Set(CODE.filter(({ code }) => /\.writeDataPoint\(/.test(code)).map((f) => f.file))].sort();
-  assert.deepEqual(writers, ['middleware/observability.ts', 'services/auditMirror.ts']);
+  // D1510 (#3761) added the deck run and funnel points.
+  assert.deepEqual(writers, ['middleware/observability.ts', 'services/auditMirror.ts', 'services/decks/observability.ts']);
+  // The deck points keep the same layout: blob1 a kind that is never a path (so `blob1 LIKE '/%'` leaves them out), blob6 the branch.
+  const deck = CODE.find((f) => f.file === 'services/decks/observability.ts')!.code;
+  assert.match(bodyAfter(deck, '.writeDataPoint('), /blobs:\s*\[kind, \.\.\.slots, branchOf\(env\) \|\| 'hq', \.\.\.own\]/, 'four slots after the kind, then the branch: the sixth blob');
+  assert.match(deck, /slots: \[string, string, string, string\]/, 'exactly four slots between the kind and the branch');
+  assert.doesNotMatch(deck, /_KIND = '\//, 'a deck kind never starts with a slash');
   const obs = CODE.find((f) => f.file === 'middleware/observability.ts')!.code;
   const call = bodyAfter(obs, '.writeDataPoint(');
   assert.match(call, /indexes:\s*\[path\.slice\(0, 96\)\]/, 'one index, the path — the branch is not an index');

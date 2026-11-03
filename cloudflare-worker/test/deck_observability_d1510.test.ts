@@ -208,20 +208,27 @@ test('a finished run writes one point with its class, end, hold, charge and step
   assert.ok(a.ok);
   const st = await rt.startBatch((a as any).uid);
   assert.equal(st?.state, 'done');
-  const runs = ae.points.filter((p) => p.indexes[0] === 'deck_run');
+  const runs = ae.points.filter((p) => p.indexes[0] === 'deck:run');
   assert.equal(runs.length, 1);
   const [p] = runs;
-  assert.deepEqual(p.blobs.slice(0, 4), ['areas', 'done', 'do', (a as any).uid]);
-  assert.deepEqual(p.blobs.slice(4), [String(DECK), String(P)]);
+  // The dataset's layout (D161): blob1 the kind (never a path, so no traffic reader counts it), blob6 the branch.
+  assert.deepEqual(p.blobs.slice(0, 5), ['deck:run', 'areas', 'done', 'do', (a as any).uid]);
+  assert.deepEqual(p.blobs.slice(5), ['hq', String(DECK), String(P)]);
   assert.deepEqual(p.doubles.slice(0, 5), [14000, 6000, 2, 1, 1], 'hold, charge, steps, done, failed');
   assert.doesNotMatch(JSON.stringify(p), /Audits|Kestrel|llama/i, 'no words, no venture name');
   // Another driver reaching the end closes nothing, so writes nothing.
   await (rt as any).finish((a as any).uid);
-  assert.equal(ae.points.filter((x) => x.indexes[0] === 'deck_run').length, 1);
+  assert.equal(ae.points.filter((x) => x.indexes[0] === 'deck:run').length, 1);
   // 6000 of 10000 settled: the 50% alert went out from the run's end.
   assert.equal(count(db, `SELECT COUNT(*) AS n FROM notifications_inbox WHERE type = 'deck_ceiling_alert'`), 2);
   // Without the binding nothing is written and nothing fails.
   assert.equal(funnelPoint({ DB: d1Over(db) } as any, 'build', { projectId: P }), false);
+  // On a branch, blob6 is its code.
+  const br = analytics();
+  assert.equal(funnelPoint({ ANALYTICS: br, BRANCH_CODE: 'fr' } as any, 'build', { projectId: P, oneClick: true }), true);
+  assert.deepEqual(br.points[0].blobs, ['deck:funnel', 'build', '', String(P), '', 'fr', 'one_click']);
+  // A malformed branch code drops the metric, never the request.
+  assert.equal(funnelPoint({ ANALYTICS: br, BRANCH_CODE: 'Not A Code!' } as any, 'build', { projectId: P }), false);
 });
 
 // ---- the funnel ----------------------------------------------------------------
@@ -247,7 +254,7 @@ test('funnel: structure change and share; Build, Accept all, Accept all and pres
   const db = world();
   const ae = analytics();
   await createShareLink({ DB: d1Over(db), JWT_SECRET, ANALYTICS: ae } as any, { deckId: DECK, deckVersion: 1, userId: FOUNDER, actorEmail: null, ttlSeconds: 3600, projectId: P });
-  assert.deepEqual(ae.points.map((p) => [p.indexes[0], ...p.blobs]), [['deck_funnel', 'share', String(DECK), String(P), '', '']]);
+  assert.deepEqual(ae.points.map((p) => [p.indexes[0], ...p.blobs]), [['deck:funnel', 'deck:funnel', 'share', String(DECK), String(P), '', 'hq', '']]);
 
   // Accept all, and Accept all and present, on the one-click review.
   const slides = [{ ...CARD, uid: 'card-one' }, { ...CARD, uid: 'card-two' }];
@@ -260,13 +267,13 @@ test('funnel: structure change and share; Build, Accept all, Accept all and pres
   assert.deepEqual(ae.points, [], 'keeping some cards is not Accept all');
   const all = await keep(proposal(null), { indexes: [0, 1], save: true, present: false });
   assert.equal(all.status, 200);
-  assert.deepEqual(ae.points.map((p) => p.blobs[0]), ['accept_all']);
+  assert.deepEqual(ae.points.map((p) => p.blobs[1]), ['accept_all']);
   ae.points.length = 0;
   const present = await keep(proposal([1]), { indexes: [0], save: true, present: true });
   assert.equal(present.status, 200);
-  assert.deepEqual(ae.points.map((p) => p.blobs[0]), ['accept_all', 'accept_all_present']);
-  assert.deepEqual(ae.points[1].blobs.slice(1, 3), [String(present.body.deck.id), String(P)]);
-  for (const p of ae.points) assert.ok(p.blobs.every((x: string) => x === '' || /^[a-z_]+$|^\d+$/.test(x)), 'ids and codes only');
+  assert.deepEqual(ae.points.map((p) => p.blobs[1]), ['accept_all', 'accept_all_present']);
+  assert.deepEqual(ae.points[1].blobs.slice(2, 4), [String(present.body.deck.id), String(P)]);
+  for (const p of ae.points) assert.ok(p.blobs.every((x: string) => x === '' || /^[a-z_:]+$|^\d+$/.test(x)), 'ids and codes only');
 });
 
 // ---- the accept rate -------------------------------------------------------------

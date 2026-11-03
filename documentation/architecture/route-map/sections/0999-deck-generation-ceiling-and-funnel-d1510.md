@@ -8,9 +8,9 @@ The rules live in `services/decks/observability.ts`. The ceiling is D1540's owne
   - `POST /api/decks/:id/cards/:card/assist`.
   - Still, from D1540: `/outline`, `/generate` and `/proposals/:id/regenerate-card`.
 - **HQ alerts.** At 50% and 80% of the ceiling, each active HQ admin gets one in-app notice and one email (type `deck_ceiling_alert`), once per UTC day each. The check runs when a run is admitted and when one ends.
-- **Analytics Engine** (`ANALYTICS`, dataset `studioos_metrics`), ids and codes only:
-  - **`deck_run`**: one point per finished run, from the driver that closed it. Blobs: class, end state, runtime, run uid, deck id, venture id. Doubles: hold, charge, steps, done, failed, seconds.
-  - **`deck_funnel`**: one point per event. Blobs: event, deck id, venture id, proposal id, `one_click`. The events:
+- **Analytics Engine** (`ANALYTICS`, dataset `studioos_metrics`), ids and codes only, in the dataset's layout: blob1 is the kind (never a path, so the traffic readers skip it) and blob6 is the branch (`branchOf(env)` or `hq`).
+  - **`deck:run`**: one point per finished run, from the driver that closed it. Blobs: kind, class, end state, runtime, run uid, branch, deck id, venture id. Doubles: hold, charge, steps, done, failed, seconds.
+  - **`deck:funnel`**: one point per event. Blobs: kind, event, deck id, venture id, proposal id, branch, `one_click`. The events:
     - `structure_change`: `PUT /api/decks/:id` when a kept card's structure changed;
     - `share`: every link `createShareLink` makes;
     - `build`: `POST /api/decks/generate`;

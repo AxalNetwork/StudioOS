@@ -26,6 +26,7 @@
  * discarded, superseded or expired), with the seconds to the first result.
  */
 import type { Env } from '../../types';
+import { branchOf } from '../../util/branch';
 import { GRID_PAGE } from './elementModels';
 import { CEILING_REACHED, chargedToday, ceilingRefusal, dailyCeiling } from './runQuotes';
 
@@ -104,21 +105,31 @@ export async function noteCeilingAlerts(env: Env, now = new Date()): Promise<Ale
 export const FUNNEL_EVENTS = ['structure_change', 'share', 'build', 'accept_all', 'accept_all_present'] as const;
 export type FunnelEvent = typeof FUNNEL_EVENTS[number];
 
-const ids = (...xs: Array<number | string | null | undefined>) => xs.map((x) => (x == null ? '' : String(x).slice(0, 96)));
+/**
+ * The dataset's layout (D161, D209), shared with the request row
+ * (`middleware/observability.ts`) and the branch-action mirror
+ * (`services/auditMirror.ts`): blob1 is the row's kind, never a path, so the
+ * traffic readers (`blob1 LIKE '/%'`) never count these rows as requests; blob6
+ * is the branch, `branchOf(env)` or 'hq'. Slots 7 on are this row's own.
+ */
+export const RUN_KIND = 'deck:run';
+export const FUNNEL_KIND = 'deck:funnel';
 
-function write(env: Env, point: AnalyticsEngineDataPoint): boolean {
-  const ae = env.ANALYTICS;
-  if (!ae || typeof ae.writeDataPoint !== 'function') return false;
-  try { ae.writeDataPoint(point); return true; } catch { return false; }
+const id = (x: number | string | null | undefined) => (x == null ? '' : String(x).slice(0, 96));
+
+/** Writes one point; false when the binding is absent or the write fails. A metric never fails a request. */
+function write(env: Env, kind: string, slots: [string, string, string, string], own: string[], doubles: number[]): boolean {
+  try {
+    const ae = env.ANALYTICS;
+    if (!ae || typeof ae.writeDataPoint !== 'function') return false;
+    ae.writeDataPoint({ indexes: [kind], blobs: [kind, ...slots, branchOf(env) || 'hq', ...own], doubles });
+    return true;
+  } catch { return false; }
 }
 
-/** One funnel event: its name, the deck and the venture, by id. Nothing a founder wrote. */
+/** One funnel event: its name, the deck, the venture and the proposal, by id. Nothing a founder wrote. */
 export function funnelPoint(env: Env, event: FunnelEvent, at: { deckId?: number | null; projectId?: number | null; proposalId?: number | null; oneClick?: boolean }): boolean {
-  return write(env, {
-    indexes: ['deck_funnel'],
-    blobs: ids(event, at.deckId, at.projectId, at.proposalId, at.oneClick ? 'one_click' : ''),
-    doubles: [1],
-  });
+  return write(env, FUNNEL_KIND, [event, id(at.deckId), id(at.projectId), id(at.proposalId)], [at.oneClick ? 'one_click' : ''], [1]);
 }
 
 export type RunPointInput = {
@@ -128,11 +139,8 @@ export type RunPointInput = {
 
 /** One point per finished run: its class, how it ended, its hold and charge, its steps and how long it took. */
 export function runPoint(env: Env, r: RunPointInput): boolean {
-  return write(env, {
-    indexes: ['deck_run'],
-    blobs: ids(r.class, r.state, r.runtime ?? 'do', r.uid, r.deck_id, r.project_id),
-    doubles: [r.quote_microusd, r.charged_microusd, r.steps, r.done, r.failed, r.seconds ?? -1],
-  });
+  return write(env, RUN_KIND, [r.class, r.state, r.runtime ?? 'do', id(r.uid)], [id(r.deck_id), id(r.project_id)],
+    [r.quote_microusd, r.charged_microusd, r.steps, r.done, r.failed, r.seconds ?? -1]);
 }
 
 // ─────────────────────────────────────────────────────────── the accept rate
