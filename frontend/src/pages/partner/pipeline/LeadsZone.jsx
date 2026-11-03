@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
+import RankByFit from '../../../ui/RankByFit';
+import { applyRank } from '../../../lib/rankByFit';
 import {
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Pill,
   Field, SaveNote, NoPartnerProfile, isNoPartnerProfile,
@@ -205,6 +207,8 @@ export default function PartnerLeadsZone() {
   const [view, setView] = useState('open');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
+  // #3938 (IN10): Rank by fit orders the open leads against the firm's own audience fit, as a view.
+  const [rank, setRank] = useState(null);
 
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: '' }));
@@ -242,10 +246,11 @@ export default function PartnerLeadsZone() {
   // shows the other set, and the table below is where its reasons live. `Warm
   // intros` is prose — every lead here is a marketplace need, so it would
   // select the whole list and call that a filter.
+  const ranked = applyRank(items, (r) => r.need_id, rank);
   const visible = (() => {
-    if (view === 'strong') return items.filter((r) => r.score != null && r.score >= 80);
+    if (view === 'strong') return ranked.list.filter((r) => r.score != null && r.score >= 80);
     if (view === 'passed') return [];
-    return items;
+    return ranked.list;
   })();
 
   const rowActions = partnerZoneActions('pipeline/leads', { view: { header: ['Lead', 'Need', 'Score', 'Source', 'Budget max', 'Timeline'], rows: visible, cells: (r) => [r.who, r.title, r.score, r.source_label, r.budget_max, r.timeline] } });
@@ -336,6 +341,11 @@ export default function PartnerLeadsZone() {
 
           {d?.scoring === 'none' && (
             <p className="text-[12.5px] leading-relaxed text-axal-muted">{d.scoring_note}</p>
+          )}
+
+          {view !== 'passed' && items.length > 1 && (
+            <RankByFit run={(query) => api.rankPartnerLeads(query)} onRanked={setRank} ranked={rank ? ranked.ranked : null} total={items.length}
+              label="What work do you want next? (optional)" testid="partner-leads-rank" />
           )}
 
           {view !== 'passed' && (
