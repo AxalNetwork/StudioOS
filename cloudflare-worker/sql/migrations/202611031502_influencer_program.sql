@@ -256,7 +256,9 @@ CREATE TABLE IF NOT EXISTS influencer_events (
   influencer_id  INTEGER REFERENCES influencers(id),
   event          TEXT    NOT NULL CHECK (event IN (
                    'applied', 'withdrawn', 'admitted', 'declined', 'more_requested',
-                   'tier_changed', 'paused', 'resumed', 'ended')),
+                   'tier_changed', 'paused', 'resumed', 'ended',
+                   -- P2 (#4291) writes these two: a handle set or changed, and HQ taking one down.
+                   'handle_changed', 'handle_taken_down')),
   detail_json    TEXT    CHECK (detail_json IS NULL OR (json_valid(detail_json) AND length(detail_json) <= 4096)),
   actor_user_id  INTEGER REFERENCES users(id),
   created_at     TEXT    NOT NULL DEFAULT (datetime('now'))
