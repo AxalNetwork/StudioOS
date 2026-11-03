@@ -283,6 +283,11 @@ export const FOUNDER_OPTIONS = [
     page: 'Founder · Raise · Pitch deck', key: 'transcribe:rehearsal', route: '/raise/pitch/present', label: 'Rehearse', kind: 'speech', handler: 'transcribe',
     at: [[REHEARSE, 'deckRehearsalsApi.run(']],
   },
+  // D1580 part 2b (#3827): Rehearse's live transcript, for live words a minute and the notes checklist; the pick is the stream's model.
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'transcribe:rehearsal-live', route: '/raise/pitch/present', label: 'Count words live', kind: 'live', task: 'transcribe', handler: 'draft',
+    at: [[REHEARSE, 'deckRehearsalsApi.liveUrl(']],
+  },
   // D1580 part 2 (#3827): rehearse_coach, the coaching on a rehearsal's report; the member's pick here is its model.
   {
     page: 'Founder · Raise · Pitch deck', key: 'rehearse:coach', route: '/raise/pitch/present', label: 'Coach me', kind: 'reason', handler: 'draft',

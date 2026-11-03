@@ -23,6 +23,12 @@
  *        quoted and held; its points are checked in code
  *        (`services/decks/rehearseCoach.ts`). Written once (409
  *        already_coached). The audio's hour then counts from the coaching.
+ *   POST /api/decks/:id/rehearsals/live/quote → { model, hold_microusd, block_minutes, balance }   (part 2b)
+ *   GET  /api/decks/:id/rehearsals/live  (WebSocket) — the live transcript for pd38's
+ *        live words a minute and notes checklist, on the member's pick for
+ *        `transcribe:rehearsal-live`; one block held at a time
+ *        (`services/decks/rehearsalLive.ts`). 402 when the first block
+ *        cannot be held; 409 model_not_offered; 402 plan_locked.
  *
  * Who: the founder, on a deck version they may write; a rehearsal is its
  * maker's alone, so a co-founder never reads another's. A support session may
@@ -45,6 +51,10 @@ import { audioDeleteAfter, deleteRehearsalAudio } from '../services/rehearsalAud
 import { COACH_OPTION, COACH_SYSTEM, coachMessage, coachPoints, type Coaching } from '../services/decks/rehearseCoach';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 import { parseJsonLoose } from '../services/decks/autofill';
+import { LIVE_BLOCK_MINUTES, blockHoldMicro, holdBlock, liveChoice, relayLive } from '../services/liveTranscription';
+import { memberPlanTier } from '../services/ai/drawJobs';
+import { LIVE_OPTION, LIVE_REHEARSAL_SURFACE, liveModelFor, liveText, settleRehearsalLive } from '../services/decks/rehearsalLive';
+import { memberChargeMultiplier } from '../services/aiBudget';
 import { isSupportSession } from '../integrations/providers/mercury';
 import { railFor, refuseRun } from '../util/railContext';
 import { refuse } from '../util/refusal';
@@ -226,7 +236,7 @@ deckRehearsals.get('/:id{[0-9]+}/rehearsals', async (c) => {
   return c.json({ deck_id: deck.deckId, rehearsals: (rows.results || []).map(summary) });
 });
 
-deckRehearsals.get('/:id{[0-9]+}/rehearsals/:uid', async (c) => {
+deckRehearsals.get('/:id{[0-9]+}/rehearsals/:uid{[0-9a-f-]{36}}', async (c) => {
   const uid = c.req.param('uid');
   if (!UID.test(uid)) return c.json({ error: 'not found' }, 404);
   const user = await requireAuth(c);
@@ -342,4 +352,53 @@ deckRehearsals.post('/:id{[0-9]+}/rehearsals/:uid/coach', async (c) => {
   return c.json({ rehearsal: fresh ? whole(fresh) : null });
 });
 
+// ── part 2b: the live transcript ────────────────────────────────────────────
+
+/** The live model, checked by the live job's rules (offered, live, the plan's lock). */
+async function liveModelOk(c: any, user: User): Promise<{ ok: true; model: string } | Response> {
+  const model = await liveModelFor(c.env, Number(user.id), REHEARSE_PAGE);
+  let tier: Awaited<ReturnType<typeof memberPlanTier>>;
+  try { tier = await memberPlanTier(c.env, Number(user.id)); }
+  catch { return refuse(c, 503, { code: 'misconfigured', message: 'Your plan could not be read. Nothing was run.' }); }
+  const choice = liveChoice(model, c.env, tier);
+  if (!choice.ok) return refuse(c, choice.code === 'plan_locked' ? 402 : 409, { code: choice.code === 'plan_locked' ? 'plan_locked' : 'model_not_offered', message: choice.message });
+  return { ok: true, model };
+}
+
+deckRehearsals.post('/:id{[0-9]+}/rehearsals/live/quote', async (c) => {
+  const user = await requireAuth(c);
+  // #4189: the live words are part of rehearsing, so the same switch answers for them.
+  if (!(await flagsFor(c.env, user)).on('deck:rehearsal')) return refuse(c, 404, notSwitchedOn);
+  const deck = await deckOf(c, user);
+  if (deck instanceof Response) return deck;
+  const live = await liveModelOk(c, user);
+  if (live instanceof Response) return live;
+  const hold = blockHoldMicro(live.model, await memberChargeMultiplier(c.env, Number(user.id)), LIVE_REHEARSAL_SURFACE);
+  const short = await balanceRefusal(c.env, Number(user.id), hold);
+  return c.json({ model: live.model, hold_microusd: hold, block_minutes: LIVE_BLOCK_MINUTES, balance: short ? { ok: false, code: short.code, message: short.message } : { ok: true } });
+});
+
+deckRehearsals.get('/:id{[0-9]+}/rehearsals/live', async (c) => {
+  if (String(c.req.header('upgrade') || '').toLowerCase() !== 'websocket') return refuse(c, 426, { code: 'websocket_required', message: 'The live transcript is a WebSocket.' });
+  const user = await requireAuth(c);
+  // #4189: the live words are part of rehearsing, so the same switch answers for them.
+  if (!(await flagsFor(c.env, user)).on('deck:rehearsal')) return refuse(c, 404, notSwitchedOn);
+  const deck = await deckOf(c, user);
+  if (deck instanceof Response) return deck;
+  const live = await liveModelOk(c, user);
+  if (live instanceof Response) return live;
+  const userId = Number(user.id);
+  const first = await holdBlock(c.env, userId, live.model, LIVE_REHEARSAL_SURFACE);
+  if (!first.ok) return refuse(c, 402, { code: first.refusal, message: first.message });
+  let ctx: { waitUntil(p: Promise<unknown>): void } | undefined;
+  try { ctx = c.executionCtx; } catch { ctx = undefined; }
+  const said = liveText();
+  return relayLive(c.env, ctx, {
+    model: live.model, language: null, surface: LIVE_REHEARSAL_SURFACE, userId,
+    onSegment: (seg) => said.add(seg.text),
+    settle: (holds, elapsed) => settleRehearsalLive(c.env, { userId, model: live.model, railPage: REHEARSE_PAGE, deckId: deck.deckId }, holds, elapsed, said.text),
+  }, first.reservation);
+});
+
+export { LIVE_OPTION };
 export default deckRehearsals;
