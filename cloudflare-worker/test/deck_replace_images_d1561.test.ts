@@ -21,6 +21,9 @@ import { withGuard } from './_guard_stub.mjs';
 import { pipelineAI, type PipelineAnswers } from './_pipeline_ai.ts';
 import { loadSchema } from './_schema_once.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
+import { contractErrors } from '../src/contracts/validate.ts';
+import { readFileSync } from 'node:fs';
+const QUOTE = JSON.parse(readFileSync(new URL('../src/contracts/deckReplaceImages.schema.json', import.meta.url), 'utf8'));
 
 const JWT_SECRET = 'synthetic-d1561-images-only-not-a-real-credential'.repeat(2);
 const ORIGIN = 'https://axal.vc';
@@ -89,6 +92,8 @@ test('one quote for the whole deck: every image area priced, the hold covering o
     assert.equal(q.status, 200, JSON.stringify(q.body));
     assert.equal(q.body.ai, true);
     assert.equal(q.body.count, 3, 'every image area of the deck');
+    assert.deepEqual(contractErrors(QUOTE, q.body), [], 'the reply matches replaceImages\' contract');
+    assert.notDeepEqual(contractErrors(QUOTE, { ...q.body, areas: [{ ...q.body.areas[0], aspect: '2:1' }] }), [], 'and the contract refuses what it must');
     assert.deepEqual(q.body.areas.map((a: any) => [a.card, a.block]), [[0, 'i1'], [0, 'i2'], [1, 'i3']]);
     const sum = q.body.areas.reduce((n: number, a: any) => n + a.per_image_microusd, 0);
     assert.ok(sum > 0);
@@ -141,6 +146,7 @@ test('an area whose words are refused is left out and named; a deck with no imag
     const q = await post(f, '/api/decks/7/images/replace-all/quote');
     assert.equal(q.body.count, 2);
     assert.deepEqual(q.body.left_out.map((x: any) => [x.card, x.block, x.code]), [[1, 'i9', 'not_illustrative']]);
+    assert.deepEqual(contractErrors(QUOTE, q.body), [], 'a reply with an area left out matches too');
     assert.equal((await post(f, '/api/decks/7/images/replace-all/quote', 3)).status, 403, 'another venture\'s founder');
   } finally { f.close(); }
   const none = await fixture({ slides: [SLIDES[2]] });

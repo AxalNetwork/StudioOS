@@ -29,6 +29,9 @@ import { withGuard } from './_guard_stub.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { loadSchema } from './_schema_once.mjs';
+import { contractErrors } from '../src/contracts/validate.ts';
+import { readFileSync } from 'node:fs';
+const REORDER = JSON.parse(readFileSync(new URL('../src/contracts/deckReorderForStage.schema.json', import.meta.url), 'utf8'));
 
 const scratch = mkdtempSync(join(tmpdir(), 'deck-actions-d1561-'));
 const seedPath = join(scratch, 'schema.sqlite');
@@ -136,6 +139,8 @@ test('Reorder for stage is one undo step: one new version, the same cards in the
     const after = f.versions();
     assert.equal(after.length, before.length + 1, 'exactly one new version: one undo step');
     assert.deepEqual([r.body.one_undo_step, r.body.stage, r.body.stage_label, r.body.moved], [true, 'seed', 'Seed', 5]);
+    assert.deepEqual(contractErrors(REORDER, r.body), [], 'the reply matches deckActions\' contract');
+    assert.notDeepEqual(contractErrors(REORDER, { ...r.body, stage: 'series_z' }), [], 'and the contract refuses what it must');
     const v = after.at(-1);
     assert.equal(v.is_current, 1);
     assert.deepEqual(JSON.parse(v.slides).map((s: any) => s.uid), ['c-title', 'c-problem', 'c-solution', 'c-market', 'c-own', 'c-team']);
@@ -145,6 +150,7 @@ test('Reorder for stage is one undo step: one new version, the same cards in the
     // The same press on the new version: already in order, nothing written.
     const again = await call(f, 2, 'POST', `/api/decks/${v.id}/reorder-for-stage`, { stage: 'seed' });
     assert.deepEqual([again.status, again.body.unchanged, again.body.moved], [200, true, 0]);
+    assert.deepEqual(contractErrors(REORDER, again.body), [], 'the unchanged reply matches too');
     assert.equal(f.versions().length, after.length, 'nothing written when nothing moves');
     // The old version is no longer current: a reorder of it answers the conflict, never a reordered copy of old cards.
     const stale = await call(f, 2, 'POST', '/api/decks/7/reorder-for-stage', { stage: 'series_a' });
