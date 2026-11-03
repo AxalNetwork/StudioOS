@@ -987,6 +987,9 @@ auth.get('/me', async (c) => {
   }
   // D1548: set by `terms_acceptance_pending` below, read by the key after it.
   let termsReason: 'missing' | 'updated' | null = null;
+  // D4289 P1 (#4290): an active influencer membership; 0 when there is none or it cannot be read.
+  const { influencerActive } = await import('../services/influencers');
+  const influencer_active = await influencerActive(c.env, Number(user.id));
 
   return c.json({
     id: user.id, email: user.email, name: user.name, role: user.role,
@@ -1004,6 +1007,8 @@ auth.get('/me', async (c) => {
     // across auth refreshes.
     spinout_lab_active: Number((user as any).spinout_lab_active ?? 0),
     spinout_lab_week: Number((user as any).spinout_lab_week ?? 0),
+    // D4289 P1 (#4290): the Influencer sidebar row reads this, as the Lab's reads spinout_lab_active.
+    influencer_active,
     is_incorporated: Number((user as any).is_incorporated ?? 0),
     kyc_status: (user as any).kyc_status || 'not_started',
     // 'limited' lets the user past the KYC gate to browse the app, but
