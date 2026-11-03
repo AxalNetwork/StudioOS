@@ -52,13 +52,34 @@ routes live in the D528 module `frontend/src/routes/learning.jsx`, which
   `programReads.js`, `assessmentReads.js` and `webinarReads.js`. They call
   only methods the client already has (`frontend/src/lib/api/learning.js`,
   `frontend/src/lib/api/adminLearning.js`, and the older ones in
-  `frontend/src/lib/api.js`). No client method is added from here.
+  `frontend/src/lib/api.js`). A client method is added only with its mounted
+  route (#4178 added `learningApi.itemCaption` with `GET /api/learning/items/:uid/captions/:lang`).
 - **A refusal is shown in the route's own words.** The client's error carries
   the route's sentence; the page shows it as it came.
 - **Never a fake row, never a zero for a missing value.** A field the route
   does not send reads "Not recorded".
 - **The app's own styling.** The `ui/` kit and the Tailwind tokens; never the
   canvas's inline styles, and never a font.
+
+## The Stream lesson player (#4178, D4178)
+
+`LessonPlayer.jsx` plays a ready Stream video in Stream's own player
+(`@cloudflare/stream-react`, pinned exactly) on the signed source the item
+read sends (`streamSourceOf`), so it can be timed and seeked. It starts at the
+resume point and writes the position through `usePositionWriter`, the same
+throttle as the uploaded-file player: at most every 15 s, and on pause.
+
+- **Chapters** (`Chapters`) sit beside the player on a wide screen and below it
+  on a tablet or phone. The current one is marked; a click seeks.
+- **The transcript** (`Transcript`) reads a ready caption as timed cues
+  (`readItemCaption` → `parseVtt`, which skips malformed cues), marks the
+  current one, and seeks on a click. With no cues it shows the plain text and
+  says why; a caption that cannot be read is said so, never an empty list.
+- **A plain embed** (YouTube, Vimeo) cannot be seeked, so its chapters and
+  transcript are text, not buttons.
+- **The library's hover preview** (`HoverPreview` in `LearningHome.jsx`, lr7)
+  reads the item once on hover (`readItemPreview`) and shows its signed
+  `preview_url` when there is one; nothing otherwise.
 
 ## The coming-soon gate
 
