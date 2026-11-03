@@ -33,11 +33,17 @@ export async function ensureAttributionSchema(env: Env): Promise<void> {
       expires_at                  TIMESTAMP NOT NULL,
       converted_payment_intent_id TEXT,
       converted_at                TIMESTAMP,
-      created_at                  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      created_at                  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      -- D4289 P2 (#4291): migration 202611031659 adds these five; a new table carries them from the start.
+      source                      TEXT NOT NULL DEFAULT 'code' CHECK (source IN ('code', 'handle')),
+      handle                      TEXT,
+      channel                     TEXT,
+      status                      TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'flagged', 'refused')),
+      refused_reason              TEXT
     )`,
     `CREATE INDEX IF NOT EXISTS idx_referral_attributions_referrer
        ON referral_attributions(referrer_user_id)`,
-    // D4289 P2 (#4291): migration 202611031659 declares these; a dev D1 that predates it gains them here.
+    // D4289 P2 (#4291): a dev D1 whose table predates migration 202611031659 gains the five here.
     `ALTER TABLE referral_attributions ADD COLUMN source TEXT NOT NULL DEFAULT 'code'`,
     `ALTER TABLE referral_attributions ADD COLUMN handle TEXT`,
     `ALTER TABLE referral_attributions ADD COLUMN channel TEXT`,

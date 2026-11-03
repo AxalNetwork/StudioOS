@@ -16,9 +16,8 @@
 --                         optional UTM campaign; archived, never deleted.
 --   handle_visits         one row per visitor, handle, channel and day: a
 --                         day-salted hash of a client visitor id, never an IP.
---   referral_attributions declared here for the first time (it was created at
---                         run time by services/referralAttribution.ts, Task #8),
---                         and gains `source` (code | handle), `handle`,
+--   referral_attributions (declared by migration 287, D235) gains `source`
+--                         (code | handle), `handle`,
 --                         `channel` and `status` (active | flagged | refused)
 --                         with `refused_reason`.
 --   influencer_referral_flags
@@ -91,19 +90,6 @@ CREATE INDEX IF NOT EXISTS idx_handle_visits_day ON handle_visits(influencer_id,
 
 -- ─────────────────────────────────────────────── attribution
 
--- Task #8's shape, as services/referralAttribution.ts creates it at run time.
-CREATE TABLE IF NOT EXISTS referral_attributions (
-  id                          INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id                     INTEGER NOT NULL UNIQUE,
-  referral_code               TEXT NOT NULL,
-  referrer_user_id            INTEGER NOT NULL,
-  first_touch_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  expires_at                  TIMESTAMP NOT NULL,
-  converted_payment_intent_id TEXT,
-  converted_at                TIMESTAMP,
-  created_at                  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX IF NOT EXISTS idx_referral_attributions_referrer ON referral_attributions(referrer_user_id);
 ALTER TABLE referral_attributions ADD COLUMN source TEXT NOT NULL DEFAULT 'code' CHECK (source IN ('code', 'handle'));
 ALTER TABLE referral_attributions ADD COLUMN handle TEXT;
 ALTER TABLE referral_attributions ADD COLUMN channel TEXT;

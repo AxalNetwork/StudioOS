@@ -5,7 +5,7 @@ The rules live in `services/influencerHandles.ts` (handles, links, the public re
 - `influencers.handle_changed_at` and `page_line`;
 - `influencer_links`;
 - `handle_visits`;
-- `referral_attributions`, declared, with `source`, `handle`, `channel`, `status` and `refused_reason`;
+- `referral_attributions` (declared by 287) gains `source`, `handle`, `channel`, `status` and `refused_reason`;
 - `influencer_referral_flags`.
 
 | Route | Who | Answer |
