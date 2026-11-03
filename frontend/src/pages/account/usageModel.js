@@ -318,6 +318,7 @@ export const STORAGE_AREAS = [
   ['session_audio', 'Record a Session audio'],
   ['deck_reviews', 'Deck reviews'],
   ['deck_rehearsals', 'Kept rehearsal audio'],
+  ['deck_recordings', 'Walkthrough takes'],
   ['validate_evidence', 'Validate evidence'],
   ['build_proofs', 'Build proofs'],
   ['grow_minutes', 'Grow minutes'],

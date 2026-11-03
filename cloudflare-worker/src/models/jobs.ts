@@ -179,6 +179,13 @@ export const Jobs = {
     } catch {
       console.error('[cron] deck image sweep unreadable');
     }
+    // D1590 (#3837): a walkthrough take whose row left by a cascade (deck, venture or account) leaves R2.
+    try {
+      const { sweepOrphanRecordings } = await import('../services/decks/recordings');
+      await sweepOrphanRecordings(env);
+    } catch {
+      console.error('[cron] deck recording sweep unreadable');
+    }
     // D1512 (#3764): an area proposal nobody decided expires after 14 days, with the image proposals it holds.
     try {
       const { expireAreaProposals } = await import('../services/decks/areaExpiry');

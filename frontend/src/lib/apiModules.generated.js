@@ -110,6 +110,7 @@ export * from './api/deckModelPresets.js';
 export * from './api/deckPreflight.js';
 export * from './api/deckPublish.js';
 export * from './api/deckQa.js';
+export * from './api/deckRecordings.js';
 export * from './api/deckRehearsals.js';
 export * from './api/deckRemix.js';
 export * from './api/deckRemote.js';

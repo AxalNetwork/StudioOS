@@ -31,7 +31,7 @@ import { storagePlan, storagePlanKey } from './storagePlans';
 
 export type StorageAreaKey =
   | 'data_room' | 'diligence_files' | 'research_library' | 'interview_recordings'
-  | 'data_room_versions' | 'session_audio' | 'deck_reviews' | 'deck_rehearsals' | 'validate_evidence' | 'build_proofs'
+  | 'data_room_versions' | 'session_audio' | 'deck_reviews' | 'deck_rehearsals' | 'deck_recordings' | 'validate_evidence' | 'build_proofs'
   | 'grow_minutes' | 'brand_files' | 'csv_imports' | 'articles';
 export type StorageKindKey = 'data_room' | 'documents' | 'recordings' | 'decks_exports' | 'brand' | 'other';
 export type StorageState = 'ok' | 'near_80' | 'near_95' | 'full' | 'over' | 'no_allowance';
@@ -173,6 +173,16 @@ const AREAS: ReadonlyArray<Def> = [
       FROM ` + VENTURE_OWNERS + ` JOIN deck_rehearsal_extras x ON x.project_id = vo.project_id
       JOIN deck_rehearsals r ON r.id = x.rehearsal_id
       WHERE r.keep_audio = 1 AND r.audio_r2_key IS NOT NULL AND vo.user_id IS NOT NULL GROUP BY vo.user_id` },
+  // D1590 (#3837): a walkthrough take is kept until its maker deletes it, so every stored take counts.
+  { key: 'deck_recordings', kind: 'recordings', scope: 'company',
+    groups: `SELECT d.project_id AS project_id, COUNT(*) AS files, SUM(d.media_bytes) AS bytes, 0 AS unknown_size_files
+      FROM json_each(?) own JOIN deck_recordings d ON d.project_id = own.value GROUP BY d.project_id`,
+    largest: `SELECT 'Walkthrough card ' || d.card || ', take ' || d.take AS name, NULL AS version, d.media_bytes AS bytes, d.created_at AS added_at,
+      d.project_id AS project_id, d.uid AS ref
+      FROM json_each(?) own JOIN deck_recordings d ON d.project_id = own.value ORDER BY d.media_bytes DESC, d.id DESC LIMIT 10`,
+    owners: `SELECT vo.user_id AS user_id, COUNT(*) AS files, SUM(d.media_bytes) AS bytes, 0 AS unknown_size_files
+      FROM ` + VENTURE_OWNERS + ` JOIN deck_recordings d ON d.project_id = vo.project_id
+      WHERE vo.user_id IS NOT NULL GROUP BY vo.user_id` },
   // D1168's stores: a row marked missing holds no object and is not a file.
   { key: 'validate_evidence', kind: 'documents', scope: 'company',
     groups: `SELECT d.project_id AS project_id, COUNT(*) AS files, SUM(d.size_bytes) AS bytes,
