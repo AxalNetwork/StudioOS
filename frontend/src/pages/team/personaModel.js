@@ -17,7 +17,9 @@
  * Pure: no React, no request.
  */
 
-export const NOT_RECORDED = 'Not recorded';
+import { NOT_RECORDED } from '../../lib/absence.js';
+
+export { NOT_RECORDED };
 
 /** The six Axal values, in `FIT_V2_VALUES` order (D4117 §1). The persona read carries its own legend; this is the order. */
 export const VALUE_ORDER = ['integrity', 'stewardship', 'curiosity', 'resilience', 'collaboration', 'ambition'];
