@@ -1,0 +1,42 @@
+{
+  "skill": "month-end-close-checklist",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "mercury.balances": {
+        "accounts": [
+          {
+            "name": "Operating",
+            "reconciled": "2026-10-31"
+          },
+          {
+            "name": "Payroll"
+          }
+        ]
+      },
+      "stripe.revenue": {
+        "refunds": 2
+      },
+      "compliance.calendar": [
+        {
+          "name": "HST return",
+          "due": "2026-11-30"
+        }
+      ]
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "HST return",
+      "Operating"
+    ],
+    "must_say_not_recorded": [
+      "Payroll"
+    ],
+    "must_not_include": [
+      "books closed"
+    ]
+  }
+}

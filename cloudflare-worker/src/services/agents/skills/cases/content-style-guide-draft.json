@@ -1,0 +1,29 @@
+{
+  "skill": "content-style-guide-draft",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "company.profile": {
+        "positioning": "Calm, clear tools for busy clinics"
+      },
+      "build.records": {
+        "copy": [
+          "Booking confirmed",
+          "Appointment saved"
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "draft",
+    "must_include": [
+      "Booking confirmed",
+      "Appointment saved"
+    ],
+    "must_say_not_recorded": [],
+    "must_not_include": [
+      "synergy"
+    ]
+  }
+}

@@ -317,6 +317,7 @@ export const STORAGE_AREAS = [
   ['data_room_versions', 'Earlier data room versions'],
   ['session_audio', 'Record a Session audio'],
   ['deck_reviews', 'Deck reviews'],
+  ['deck_rehearsals', 'Kept rehearsal audio'],
   ['validate_evidence', 'Validate evidence'],
   ['build_proofs', 'Build proofs'],
   ['grow_minutes', 'Grow minutes'],

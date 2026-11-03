@@ -24,7 +24,7 @@ import { readFileSync } from 'node:fs';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
 import { withGuard } from './_guard_stub.mjs';
 import { ROUTE, __resetForTest, convertToMarkdown, quoteRun, run, IMAGE_CONVERSION_REFUSED } from '../src/services/aiRouter.ts';
-import { AWAITING_SPEND_APPROVAL, TASK_TEXT_JOBS, TEXT_KINDS, textChoice, textJob } from '../src/services/ai/textJobs.ts';
+import { AWAITING_SPEND_APPROVAL, TASK_MODEL_MOVES, TASK_TEXT_JOBS, TEXT_KINDS, textChoice, textJob } from '../src/services/ai/textJobs.ts';
 import { JOBS } from '../src/services/ai/modelUseCases.ts';
 import { modelById } from '../src/services/ai/catalogue.ts';
 import { FORM_TEXT_JOBS } from '../src/services/fills/fields.ts';
@@ -76,8 +76,14 @@ test('too long for every model: refused before any hold, naming the one that rea
   assert.match((q as any).error, /reads the most/);
 });
 
-test('mapped tasks keep their route\'s first model; no model a mapped job or form can reach is new to the router', () => {
-  for (const [task, job] of Object.entries(TASK_TEXT_JOBS)) assert.equal(textJob(job)!.default, (ROUTE as any)[task].model, `${task} → ${job}`);
+test('mapped tasks keep their route\'s first model unless TASK_MODEL_MOVES names the move; no model a mapped job or form can reach is new to the router', () => {
+  // #3937 part 3: a mapped task whose job's Default is another model is named in TASK_MODEL_MOVES, both ends stated.
+  for (const [task, job] of Object.entries(TASK_TEXT_JOBS)) {
+    const move = TASK_MODEL_MOVES[task];
+    if (move) assert.deepEqual([move.from, move.to], [(ROUTE as any)[task].model, textJob(job)!.default], `${task} → ${job}: the move as stated`);
+    else assert.equal(textJob(job)!.default, (ROUTE as any)[task].model, `${task} → ${job}`);
+  }
+  for (const task of Object.keys(TASK_MODEL_MOVES)) assert.ok(TASK_TEXT_JOBS[task], `${task}: a move names a mapped task`);
   const router = readFileSync(new URL('../src/services/aiRouter.ts', import.meta.url), 'utf8');
   const matrix = readFileSync(new URL('../src/services/ai/railMatrix.json', import.meta.url), 'utf8');
   const constants: Record<string, string> = { SMALL_LLAMA: '@cf/meta/llama-3.1-8b-instruct-fp8', MID_LLAMA: LLAMA70 };

@@ -21,6 +21,9 @@
  *   7. D1573 (#3820): `GET /api/decks/:id/investor-links/:shareId/analytics`
  *      matches deckSlideAnalytics, for a link nobody opened, a timed one and
  *      one with Time per slide off.
+ *   8. D1600 (#3879): `POST …/retry-failed`, `GET /api/decks/:id/batches?state=done&unseen=1`
+ *      and `POST …/seen` match deckRetryFailed, deckUnseenBatches and
+ *      deckMarkSeen, for a run with failed areas and a banner before and after.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/deck_contracts_d1511.test.ts
@@ -39,6 +42,9 @@ import { deckModelPresets } from '../src/routes/deck_model_presets.ts';
 import deckComments from '../src/routes/deck_comments.ts';
 import deckCardStatus from '../src/routes/deck_card_status.ts';
 import deckSlideAnalytics from '../src/routes/deck_slide_analytics.ts';
+import deckBatches from '../src/routes/deck_batches.ts';
+import { D1GenRuntime } from '../src/services/decks/genRuntime.ts';
+import { DeckGenRoom } from '../src/durable-objects/deck-gen-room.ts';
 import { ensureSchema } from '../src/routes/decks.ts';
 import { CONTRACTS as NAMED } from '../src/contracts/index.ts';
 import { contractErrors } from '../src/contracts/validate.ts';
@@ -374,4 +380,42 @@ test('7. the slide analytics reply matches deckSlideAnalytics, for a link nobody
   assert.deepEqual(contractErrors(CONTRACTS.slideAnalytics.schema, off), []);
   assert.deepEqual(contractErrors(CONTRACTS.slideAnalytics.schema, { ...timed, cards: [{ ...timed.cards[0], seconds: 0 }] }), ['$.cards[0].seconds: must be at least 1'], 'a counted card is never 0 seconds');
   assert.deepEqual(contractErrors(CONTRACTS.slideAnalytics.schema, { ...timed, timeline: [{ ...timed.timeline[0], kind: 'clicked' }] }), ['$.timeline[0].kind: must be one of ["opened","nda_accepted","reached_ask","revisited"]']);
+});
+
+// ── 8. The retry and the return banner (D1600, #3879) ────────────────────
+
+test('8. retry-failed, the unseen banner and seen match deckRetryFailed, deckUnseenBatches and deckMarkSeen', async () => {
+  const db = world();
+  db.exec('DELETE FROM member_subscription_amounts');
+  db.prepare('INSERT INTO ai_topup_accounts (user_id, balance_microusd) VALUES (10, 50000000)').run();
+  const env: any = { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) };
+  const room = new DeckGenRoom({ storage: { get: async () => undefined, put: async () => {}, setAlarm: async () => {} } } as any, env);
+  env.DECK_GEN_ROOM = { idFromName: (n: string) => n, get: () => ({ fetch: (url: string, init?: RequestInit) => room.fetch(new Request(url, init)) }) };
+  // A run of three areas on deck 1: two land, the third fails.
+  const rt = new D1GenRuntime(env, async (s) => (s.seq === 2 ? { ok: false, charged_microusd: 0, error_code: 'model_failed' } : { ok: true, charged_microusd: 0, variant: { text: 'synthetic' } }));
+  const lines = [0, 1, 2].map((i) => ({ card_uid: `c${i}`, area_id: `a${i}`, element: 'body', kind: 'text', task: 'rail_write', model: null, quote_microusd: 1000 }));
+  const a = await rt.admit({ deckId: 1, projectId: 1, userId: 10, cls: 'areas', idemKey: 'contract-run-0001', lines });
+  if (!a.ok) return assert.fail(JSON.stringify(a));
+  await rt.startBatch(a.uid);
+  const app = new Hono<any>().route('/api/decks', deckBatches);
+  const token = await new SignJWT({ user_id: 10, role: 'founder' }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const send = async (method: string, path: string, headers: Record<string, string> = {}) => {
+    const res = await withThrownResponses(() => app.request(path, { method, headers: { Authorization: `Bearer ${token}`, ...headers } }, env));
+    return { status: res.status, body: await res.json() as any };
+  };
+  const banner = await send('GET', '/api/decks/1/batches?state=done&unseen=1');
+  assert.equal(banner.status, 200);
+  assert.equal(banner.body.batches.length, 1);
+  assert.deepEqual(contractErrors(CONTRACTS.unseenBatches.schema, banner.body), []);
+  const retried = await send('POST', `/api/decks/areas/batches/${a.uid}/retry-failed`, { 'Idempotency-Key': 'contract-retry-0001' });
+  assert.equal(retried.status, 200, JSON.stringify(retried.body));
+  assert.deepEqual(retried.body.retried, ['a2']);
+  assert.deepEqual(contractErrors(CONTRACTS.retryFailed.schema, retried.body), []);
+  const seen = await send('POST', `/api/decks/areas/batches/${a.uid}/seen`);
+  assert.deepEqual(contractErrors(CONTRACTS.markSeen.schema, seen.body), []);
+  const empty = await send('GET', '/api/decks/1/batches?state=done&unseen=1');
+  assert.deepEqual(contractErrors(CONTRACTS.unseenBatches.schema, empty.body), []);
+  assert.deepEqual(empty.body.batches, []);
+  assert.deepEqual(contractErrors(CONTRACTS.unseenBatches.schema, { batches: [{ ...banner.body.batches[0], cards_waiting: -1 }] }), ['$.batches[0].cards_waiting: must be at least 0']);
+  assert.deepEqual(contractErrors(CONTRACTS.retryFailed.schema, { ...retried.body, retried: [] }), ['$.retried: needs at least 1 items']);
 });

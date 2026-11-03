@@ -41,7 +41,7 @@ import { AI_SURFACE } from './aiSurfaces';
 import { speechChoice, type SpeechChoice } from './ai/speechJobs';
 import type { CatalogueSwitches } from './ai/catalogue';
 import type { PlanTier } from './ai/drawJobs';
-import { liveInputFor, parseLiveEvent } from './sttFormats';
+import { liveInputFor, mipOptOut, mipPriceFactor, parseLiveEvent } from './sttFormats';
 import { websocketUnits, type Units } from './ai/shapes';
 import { labelSegments, recordReceipt, storeLiveSegment, type SessionRow } from './interviewSessions';
 
@@ -50,9 +50,17 @@ export const LIVE_BLOCK_MINUTES = 4;
 
 /** One block of streaming on this model, in micro-USD, at `multiplier` over cost (D762: 1 while billing is on cost). */
 export function blockQuoteMicro(model: string, multiplier = 1): number {
+  return aiBudget.billedUsdToMicro(livePerMinute(model) * LIVE_BLOCK_MINUTES, multiplier);
+}
+
+/** The live transcript is interview audio: its surface, and so its Deepgram opt-out (#3936 part 3). */
+export const LIVE_SURFACE = AI_SURFACE.validateInterviews;
+
+/** One streamed minute on this model, at Deepgram's opt-out rate where the model takes it. */
+export function livePerMinute(model: string): number {
   const perMinute = PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET[model];
   if (typeof perMinute !== 'number') throw new Error(`no websocket price for ${model}`);
-  return aiBudget.billedUsdToMicro(perMinute * LIVE_BLOCK_MINUTES, multiplier);
+  return perMinute * mipPriceFactor(model, LIVE_SURFACE);
 }
 
 /** The guard's share of one block: the output check on the most text a block of streaming can produce. */
@@ -119,7 +127,7 @@ export async function settleStream(
   env: Env, session: SessionRow, model: string, holds: aiBudget.AiReservation[], elapsedMs: number,
 ): Promise<{ minutes: number; cost_microusd: number; units: Units; guard: LiveGuard }> {
   const minutes = billedMinutes(elapsedMs);
-  const perMinute = PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET[model] ?? 0;
+  const perMinute = model in PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET ? livePerMinute(model) : 0;
   const userId = holds[0]?.userId ?? session.created_by_user_id;
   // D762: the stream is settled at the billed price its blocks were held at.
   const multiplier = holds.length ? await aiBudget.memberChargeMultiplier(env, holds[0].userId) : 1;
@@ -129,7 +137,7 @@ export async function settleStream(
   const rows = await env.DB.prepare("SELECT text FROM interview_transcript_segments WHERE session_id = ? AND source = 'live' ORDER BY start_ms, id")
     .bind(session.id).all<{ text: string | null }>().catch(() => ({ results: [] as Array<{ text: string | null }> }));
   const finalText = (rows.results ?? []).map((r) => String(r.text ?? '')).filter(Boolean).join('\n');
-  const surface = AI_SURFACE.validateInterviews;
+  const surface = LIVE_SURFACE;
   let checked: Awaited<ReturnType<typeof guardFinalText>> | null = null;
   try { checked = await guardFinalText(env, { userId, surface }, finalText, multiplier); }
   catch (e) { console.error('[live] guard failed:', (e as Error).message); }
@@ -182,7 +190,7 @@ export async function openLiveRelay(
 ): Promise<Response> {
   const model = session.live_model!;
   const ai = (env as unknown as { AI: { run(m: string, i: unknown, o: unknown): Promise<Response> } }).AI;
-  const upstreamResp = await ai.run(model, liveInputFor(model, session.language), { websocket: true });
+  const upstreamResp = await ai.run(model, liveInputFor(model, session.language, mipOptOut(model, LIVE_SURFACE)), { websocket: true });
   const upstream = (upstreamResp as unknown as { webSocket?: AnyWebSocket }).webSocket;
   if (!upstream) {
     await aiBudget.settleAiReservation(env, first, 0, true).catch(() => {});

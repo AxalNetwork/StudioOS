@@ -29,6 +29,7 @@ import { type RenderableDeck } from '../services/decks/render';
 import { renderDeckPPTX, renderDeckPPTXWithImages } from '../services/decks/pptx';
 import { NO_NOTES as NO_SPEAKER_NOTES, NO_SOURCES as NO_SOURCES_RECORDED, aiCards, sourceLines } from '../services/decks/offlineHtml';
 import { stripTrailingSlashes } from '../util/url';
+import { BRAND_FONTS, brandKitPick, deckBrandKitFor } from '../services/decks/brandKit';
 import { bindingKey } from '../util/schemaBootstrap';
 import { applyExportImageCopies, checkedExportImageCopies, copyExternalImages, copyRefusalMessage, type ExportImageCopies } from '../services/decks/imageCopy';
 import { refuse } from '../util/refusal';
@@ -44,7 +45,7 @@ import { sanitizeBinding } from '../services/decks/sources';
 import { saveGateRefusal } from '../services/decks/saveGates';
 import {
   AUDIENCES, BLOCK_KINDS, CHART_RANGES, LIBRARY_CHART_TYPES, TYPED_CHART_TYPES, GRID_COLS, GRID_ROWS, IMAGE_FITS, IMAGE_TAGS, LAYOUTS, MAX_BLOCKS, NOTES_MAX, OVERLAYS,
-  TEXT_STYLES, THEME_KINDS, VIDEO_RATIOS, contentHash, modelProblems, sanitizeModel, sanitizeTheme, assignCardUids, MODEL_VERSION,
+  TEXT_STYLES, THEME_KINDS, VIDEO_RATIOS, contentHash, modelProblems, sanitizeModel, sanitizeTheme, assignCardUids, MODEL_VERSION, visibleCards,
 } from '../services/decks/slideModel';
 import { checkVideoLink } from '../services/decks/videoLink';
 import { ensureDeckVersionColumns, ensureProposalOutlineColumns } from '../services/decks/deckVersionColumns';
@@ -526,7 +527,8 @@ export function rowToDeck(row: any, withSlides = true): any {
 export function publicDeckOf(row: any): any {
   const { audience, round, by, content_hash, ...deck } = rowToDeck(row);
   void audience; void round; void by; void content_hash;
-  deck.slides = (deck.slides || []).map((s: any) => {
+  // D1545 (#3788): a hidden card reaches no reader: not Present, the share page or the print page.
+  deck.slides = visibleCards(deck.slides || []).map((s: any) => {
     // D1579 (#3826): a card's status and assignee are the venture's working state, never an outside reader's.
     const { notes, status, assignee, ...card } = s || {};
     void notes; void status; void assignee;
@@ -825,13 +827,16 @@ export function printDeckOf(row: any, opts: PrintOptions): any {
   const deck = publicDeckOf(row);
   const full = rowToDeck(row);
   if (opts.notes) {
-    deck.slides = deck.slides.map((card: any, i: number) => {
-      const notes = String(full.slides?.[i]?.notes ?? '').trim();
+    // D1545: by uid, so a hidden card left out of the public deck never shifts a card's notes onto the next.
+    const byUid = new Map((full.slides || []).map((s: any) => [s?.uid, s]));
+    deck.slides = deck.slides.map((card: any) => {
+      const notes = String((byUid.get(card?.uid) as any)?.notes ?? '').trim();
       return { ...card, notes: notes || null };
     });
   }
   deck.export_options = { notes: opts.notes, sources: opts.sources };
-  if (opts.sources) deck.sources_appendix = { lines: sourceLines(full.slides || []), ai: aiCards(full.slides || []) };
+  const shown = visibleCards(full.slides || []);
+  if (opts.sources) deck.sources_appendix = { lines: sourceLines(shown), ai: aiCards(shown) };
   return deck;
 }
 
@@ -1282,7 +1287,17 @@ decks.get('/brand-kit', async (c) => {
     console.warn('[decks] brand kit unreadable', (e as Error)?.message);
     return c.json({ error: 'Your brand kit could not be read.', code: 'unreadable' }, 503);
   }
-  if (!row) return c.json({ project_id: pid, kit: null });
+  // D1562 (#3809): the deck's own kit (fonts, palette roles, image style, references, logo), and the fonts it may name.
+  let deckKit: Awaited<ReturnType<typeof deckBrandKitFor>> = null;
+  try { deckKit = await deckBrandKitFor(c.env, pid); }
+  catch (e) {
+    console.warn('[decks] deck brand kit unreadable', (e as Error)?.message);
+    return c.json({ error: 'Your brand kit could not be read.', code: 'unreadable' }, 503);
+  }
+  if (!row && !deckKit) return c.json({ project_id: pid, kit: null, font_options: BRAND_FONTS });
+  // D1562: the theme a one-click run applies first when a kit exists (AUTO-2), worked out here so the page never re-derives it.
+  const pick = brandKitPick(row ? { palette_bg: row.palette_bg, palette_ink: row.palette_ink, palette_accent: row.palette_accent, theme_color: row.theme_color, palette_secondary: row.palette_secondary } : null, deckKit);
+  if (!row) return c.json({ project_id: pid, font_options: BRAND_FONTS, pick, kit: { name: null, palette: { bg: null, ink: null, accent: null, secondary: null }, fonts: null, voice: [], logo: { light: null, dark: null, inline: false }, updated_at: deckKit!.updated_at, deck: deckKit } });
   const hex = (v: unknown) => (typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v.trim()) ? v.trim().toLowerCase() : null);
   let voice: string[] = [];
   try {
@@ -1299,7 +1314,10 @@ decks.get('/brand-kit', async (c) => {
       voice,
       logo: { light: sanitizeImageUrl(row.logo_url), dark: sanitizeImageUrl(row.logo_dark_url), inline: Boolean(row.logo_svg || row.logo_dark_svg) },
       updated_at: row.updated_at ?? null,
+      deck: deckKit,
     },
+    font_options: BRAND_FONTS,
+    pick,
   });
 });
 
@@ -2226,7 +2244,8 @@ export function exportDeckOf(row: any, opts: PrintOptions): { slides: any[]; ren
   if (!Array.isArray(slides)) slides = [];
   // Re-sanitize persisted slides (defence-in-depth against legacy rows
   // pre-dating sanitizeImageUrl) before they reach Browser Rendering.
-  slides = founderPitchSlides(sanitizeSlides(slides));
+  // D1545 (#3788): a hidden card is in no export (PowerPoint, .odp, Google Slides).
+  slides = visibleCards(founderPitchSlides(sanitizeSlides(slides)));
   const notesOf = (s: any) => (opts.notes ? String(s?.notes ?? '').trim() || NO_SPEAKER_NOTES : undefined);
   const renderable: RenderableDeck = {
     title: row.title || 'Pitch deck',

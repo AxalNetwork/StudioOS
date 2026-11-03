@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import {
-  AGENT_RUNS_LINE, NOT_RECORDED, SCOPES, TYPES, apiScope, byDay, coverageLine, dayCounts, emptyLine, filterRows, notYet, scopedRow, viewingChip, withScope,
+  AGENT_RUNS_LINE, NOT_RECORDED, SCOPES, TYPES, apiScope, byDay, coverageLine, dayCounts, emptyLine, filterRows, notYet, NO_PAGE, optionsOf, BUILD, scopedRow, viewingChip, withScope,
 } from './calendarScopeModel';
 
 /**
@@ -63,7 +63,7 @@ function ItemDetail({ row, onClose }) {
       <p className={`${MUTED} mt-3`}>Changes are made in the company it belongs to.</p>
       {row.openHref
         ? <Link to={row.openHref} className="cal-btn cal-btn-o cal-btn-sm mt-2" data-testid="cal-scope-open">Open in its company</Link>
-        : <button type="button" className="cal-btn cal-btn-o cal-btn-sm mt-2" disabled title={notYet('C1')} data-testid="cal-scope-open">Open in its company</button>}
+        : <button type="button" className="cal-btn cal-btn-o cal-btn-sm mt-2" disabled title={BUILD.C1.live ? NO_PAGE : notYet('C1')} data-testid="cal-scope-open">Open in its company</button>}
     </aside>
   );
 }
@@ -71,7 +71,7 @@ function ItemDetail({ row, onClose }) {
 /** CA2 / CA3 — the scoped read, its filters, the agenda or the month counts, and its states. */
 export default function CalendarScopeView({ scope, user, window: win, range, label, pathname, search, scopes, phone = false }) {
   const [state, setState] = useState({ status: 'loading' });
-  const [filters, setFilters] = useState({ type: '', project: '', person: '' });
+  const [filters, setFilters] = useState({ type: '', project: '', person: '', company: '', studio: '' });
   const [openId, setOpenId] = useState(null);
   const load = useCallback(async () => {
     setState({ status: 'loading' });
@@ -88,6 +88,8 @@ export default function CalendarScopeView({ scope, user, window: win, range, lab
   const rows = useMemo(() => (state.status === 'ready' ? state.items.map(scopedRow) : []), [state]);
   const shown = filterRows(rows, filters);
   const projects = [...new Set(rows.map((r) => r.project).filter(Boolean))].sort();
+  const companies = optionsOf(rows, 'company');
+  const studios = optionsOf(rows, 'studio');
   const complete = state.coverage?.complete === true;
   const month = range === 'month' && !phone;
   const open = rows.find((r) => r.id === openId) || null;
@@ -152,8 +154,16 @@ export default function CalendarScopeView({ scope, user, window: win, range, lab
           {state.status === 'ready' && <span className="cal-meta" data-testid="cal-scope-coverage">{coverageLine(state.coverage, scope, user)}</span>}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {scope === 'platform' && <select className={SELECT} disabled title={notYet('C1')} aria-label="Branch"><option>Branch: all</option></select>}
-          <select className={SELECT} disabled title={notYet('C1')} aria-label="Company"><option>Company: all</option></select>
+          {scope === 'platform' && (BUILD.C1.live
+            ? <select className={SELECT} value={filters.studio} onChange={(e) => setFilters((f) => ({ ...f, studio: e.target.value }))} aria-label="Branch">
+                <option value="">Branch: all</option>{studios.map((v) => <option key={v} value={v}>{v}</option>)}
+              </select>
+            : <select className={SELECT} disabled title={notYet('C1')} aria-label="Branch"><option>Branch: all</option></select>)}
+          {BUILD.C1.live
+            ? <select className={SELECT} value={filters.company} onChange={(e) => setFilters((f) => ({ ...f, company: e.target.value }))} aria-label="Company">
+                <option value="">Company: all</option>{companies.map((v) => <option key={v} value={v}>{v}</option>)}
+              </select>
+            : <select className={SELECT} disabled title={notYet('C1')} aria-label="Company"><option>Company: all</option></select>}
           <select className={SELECT} value={filters.project} onChange={(e) => setFilters((f) => ({ ...f, project: e.target.value }))} aria-label="Project">
             <option value="">Project: all</option>{projects.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>

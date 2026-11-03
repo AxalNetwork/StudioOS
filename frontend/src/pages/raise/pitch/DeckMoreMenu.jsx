@@ -7,7 +7,7 @@ import useMenuFocus from './useMenuFocus';
 
 /**
  * D1604 (#3716, pd13) — the editor header's ⋯ menu, "More deck actions", in
- * three sections: THIS DECK, THIS CARD and WHOLE DECK · USES AI (plan §2.2,
+ * four sections: THIS DECK, THIS CARD, BEFORE YOU SEND (D1370) and WHOLE DECK · USES AI (plan §2.2,
  * `MORE_MENU` in `deckV2Model.js`). On a phone a SHARE section comes first,
  * because the header there has no Share ▾.
  *

@@ -117,12 +117,14 @@ test('the agenda: Overdue pinned with its days, then months oldest first; a task
 
 // #3970 turned `burnup` on, #3969/#3973 the board methods, and #3976 the compliance methods
 // (company_compliance_d1614.test.mjs holds what each sends); every other method stays off until its route lands.
-const LIVE = new Set(['burnup', 'board', 'item', 'move', 'assign', 'create', 'complianceTasks', 'complianceTask', 'markDone', 'createWork', 'complianceCreate', 'complianceUpdate',
+// D1614 W6 (#3974): W3's run, retry and feed and W4's workload and schedule are on; #3957's agentSessions stays off.
+const LIVE = new Set(['burnup', 'board', 'item', 'move', 'assign', 'create', 'run', 'retry', 'feed', 'workload', 'schedule',
+  'complianceTasks', 'complianceTask', 'markDone', 'createWork', 'complianceCreate', 'complianceUpdate',
   'complianceAssignable', 'complianceAssign', 'complianceComment', 'complianceReady', 'complianceReopen']);
 test('the seam: every method not yet live is off, with the issue that turns it on, and makes no request', async () => {
   assert.deepEqual(Object.keys(WORK_SEAM).sort(), Object.keys(workAdapter).sort());
   for (const [m, issue] of Object.entries(WORK_SEAM)) {
-    assert.match(issue, /^#39(69|70|71|72|76)$/);
+    assert.match(issue, /^#39(57|69|70|71|72|76)$/);
     if (LIVE.has(m)) continue;
     const r = await workAdapter[m]('x');
     assert.equal(r.available, false, m);
