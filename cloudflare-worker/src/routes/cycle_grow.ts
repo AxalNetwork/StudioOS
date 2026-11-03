@@ -25,6 +25,8 @@
  *   POST  /kpis                    (Enter a KPI, decision 4)
  *   POST  /roles                   PATCH /roles/:id          PATCH /applications/:id/stage
  *   POST  /partners                PATCH /partners/:uid      PUT /partners/:uid/revenue/:month
+ *   POST  /partners/rank           { project, query }  #3938 GR17, the founder's press: rank the venture's
+ *                                  partners against a need (bge-m3, the reranker); no line is written
  *   POST  /markets                 PATCH /markets/:uid
  *   POST  /obligations             PATCH /obligations/:id    PUT /checklist/:key
  *
@@ -48,6 +50,9 @@ import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { canAccessProject } from '../services/projectAccess';
+import { AI_SURFACE } from '../services/aiSurfaces';
+import { MATCH_DEPS, MatchRefused, matchRows } from '../services/ai/matchRows';
+import { railFor, refuseRun } from '../util/railContext';
 import { pageOf, settleCard, type Card } from '../services/cycleCards';
 import {
   CARD_FNS, DURABILITY_ITEMS, GROW_MODULES, GROW_QUESTION,
@@ -453,6 +458,35 @@ r.patch('/roles/:id', write((c, u, pid, b) => updateRole(c.env, pid, u, intId(pa
 r.patch('/applications/:id/stage', write((c, u, pid, b) => setApplicationStage(c.env, pid, u, intId(param(c, 'id')), b)));
 r.post('/partners', write((c, u, pid, b) => addPartner(c.env, pid, u, b), true));
 r.patch('/partners/:uid', write((c, u, pid, b) => updatePartner(c.env, pid, u, param(c, 'uid'), b)));
+// #3938 part 3 (D1478 task 4, job GR17): the founder's press orders the venture's
+// partners by fit with a need they type: retrieve (bge-m3), then rank (the
+// reranker), on `services/ai/matchRows.ts`. GR17 is a two-step job, so no line is
+// written (`line` is null). A writer on the venture only; an ended partnership is
+// not ranked; nothing here changes a partner.
+r.post('/partners/rank', async (c) => {
+  try {
+    const user = await requireAuth(c); const b = await body(c);
+    const pid = await project(c, user, b.project, true);
+    const query = typeof b.query === 'string' ? b.query.replace(/\s+/g, ' ').trim().slice(0, 300) : '';
+    if (!query) throw new Refused(400, 'Say what you need a partner for', 'query');
+    const q = await c.env.DB.prepare(
+      `SELECT g.uid, g.name, g.type, g.stage, g.terms, g.terms_kind, g.terms_pct, g.terms_amount_cents, g.terms_currency
+         FROM growth_partners g WHERE g.project_id = ? AND g.stage <> 'ended' ORDER BY g.name COLLATE NOCASE LIMIT 60`,
+    ).bind(pid).all<Row>();
+    const candidates = (q.results || []).map((p) => ({
+      key: String(p.uid),
+      text: [String(p.name), `A ${String(p.type).replace(/_/g, ' ')} partner`, `Stage: ${String(p.stage)}`, termsLine(p) ? `Terms: ${termsLine(p)}` : null].filter(Boolean).join('. '),
+    }));
+    const rail = railFor(c, { page: 'Grow · Partner network', option: null });
+    const deps = MATCH_DEPS.make(c.env, { userId: Number(user.id), surface: AI_SURFACE.growPartnerNetwork, rail, guardText: query }, 'GR17');
+    let res;
+    try { res = await matchRows(query, candidates, deps, { top: 10, write: false }); } catch (e) {
+      if (e instanceof MatchRefused) return refuseRun(c, e.result)!;
+      throw e;
+    }
+    return c.json({ job: 'GR17', steps: res.steps, rows: res.rows.map((x) => ({ uid: x.key, position: x.position, line: x.line })) });
+  } catch (e) { return fail(c, e); }
+});
 r.put('/partners/:uid/revenue/:month', write((c, u, pid, b) => setPartnerRevenue(c.env, pid, u, param(c, 'uid'), param(c, 'month'), b)));
 r.post('/markets', write((c, u, pid, b) => addMarket(c.env, pid, u, b), true));
 r.patch('/markets/:uid', write((c, u, pid, b) => updateMarket(c.env, pid, u, param(c, 'uid'), b)));
