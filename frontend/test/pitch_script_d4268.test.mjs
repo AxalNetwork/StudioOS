@@ -147,6 +147,8 @@ test('the document before a run: the hold, the rule and the pace, each card\'s t
     assert.equal(m.text(m.by('pitch-script-empty-1')), EMPTY);
     assert.equal(m.by('pitch-script-empty-0'), undefined, 'a card with a script is not empty');
     assert.equal(m.pr(m.by('pitch-script-save')).disabled, true, 'nothing to save yet');
+    // D4254 P2b (#4269): Open teleprompter opens Present on this version, on the teleprompter.
+    assert.equal(m.pr(m.by('pitch-script-teleprompter')).href, '/raise/pitch/present?project_id=7&deck=31&view=teleprompter');
     assert.equal(m.by('pitch-script-unsaved'), undefined);
     assert.equal(m.text(m.by('pitch-script-download')), 'Download .txt');
   } finally { await m.close(); }
