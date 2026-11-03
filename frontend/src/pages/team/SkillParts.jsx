@@ -5,7 +5,7 @@ import SkillRadar from '../../components/play/SkillRadar.jsx';
 import SkillEnergy from '../../ui/SkillEnergy.jsx';
 import { areaVars } from '../../lib/skillAreas.js';
 import { BTN_SECONDARY, MONO, MUTED } from './teamUi.jsx';
-import { authorLine, energyOf, outputWords, radarLines, runCostWords, tagChip, usedBy } from './skillsModel.js';
+import { authorLine, costLine, energyOf, hintLine, outputWords, radarLines, runCostWords, skillTokensLine, tagChip, usedBy } from './skillsModel.js';
 
 /**
  * D1612 (#3952), v2 boards by #4224 (D4116) — the pieces every skill screen
@@ -131,6 +131,7 @@ export function SkillRow({ s, version, retired, why, toolState, check, children 
           {retired ? <span className={`${CHIP} border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200`}>Retired · still pinned</span> : null}
         </span>
         <ToolChips tools={s.tools} stateOf={toolState} />
+        {skillTokensLine(s.context_tokens) ? <span className={`${MONO} text-[11.5px] text-axal-muted dark:text-gray-400`} data-testid="skill-tokens">{skillTokensLine(s.context_tokens)}</span> : null}
         {why ? <span className="text-[12px] text-amber-800 dark:text-amber-200" data-testid="skill-why">{why}</span> : null}
       </span>
       {children}
@@ -159,6 +160,22 @@ export function AgentRadar({ vector, radar, height = 200, label = 'Computed from
         {vector ? lines.map((l) => <span key={l.label}><b>{l.label}</b> · {l.text}</span>)
           : <span className={MUTED}>This agent has no skills yet.</span>}
       </div>
+    </div>
+  );
+}
+
+/**
+ * D4121 (#4121): the run-cost line under the radar (AG3, SK4, SK5): a run
+ * carries one skill, so it is a range from the cheapest skill's run to the
+ * dearest. The specialist hint shows past 6 skills. `est` is `null` while it is read.
+ */
+export function RunCostLine({ est, lead = 'with' }) {
+  if (est === null) return <p className={`m-0 ${MUTED}`} data-testid="run-cost-line">Working out the cost per run…</p>;
+  const hint = hintLine(est);
+  return (
+    <div className="flex flex-col gap-1" data-testid="run-cost">
+      <p className={`m-0 ${MONO} text-[12.5px] text-axal-ink dark:text-gray-100`} data-testid="run-cost-line">{costLine(est, { lead })}</p>
+      {hint ? <p role="note" className="m-0 rounded-axal-md bg-axal-lavender px-3 py-2 text-[12.5px] text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-300" data-testid="run-cost-hint">{hint}</p> : null}
     </div>
   );
 }

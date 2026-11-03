@@ -11,7 +11,7 @@ import { createElement as h } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import {
-  CHAPTERS_NOT_YET, LEARNING_STREAM_TASKS, NO_CHAPTERS, PLAIN_TRANSCRIPT_LINE, RECOMMENDED_FUTURE,
+  LEARNING_STREAM_TASKS, NO_CHAPTERS, PLAIN_TRANSCRIPT_LINE, RECOMMENDED_FUTURE,
   clockLabel, newThisWeek, positionWriter, resumeAt, statsTiles,
 } from '../src/pages/learning/learningModel.js';
 import { continueTarget, enrolmentCopy, memberProgramHref } from '../src/pages/learning/programModel.js';
@@ -30,7 +30,6 @@ const settle = () => new Promise((r) => setTimeout(r, 0));
 
 test('every board this build cannot fill names its task', () => {
   assert.deepEqual(LEARNING_STREAM_TASKS, { stream: 4176, studio: 4177, player: 4178, copy: 4179, lists: 4180, analytics: 4181 });
-  assert.match(CHAPTERS_NOT_YET, /#4176/);
   assert.match(RECOMMENDED_FUTURE, /#3724/);
 });
 
@@ -111,12 +110,13 @@ test('LR4 position writes: at most one every 15 s while playing, one on pause, n
   release();
 });
 
-test('LR4 the player: resume pill, chapters not yet, the plain transcript line', () => {
+test('LR4 the player: resume pill, no chapters, the plain transcript line', () => {
   const item = { uid: 'i1', kind: 'video', title: 'The script', duration_seconds: 1800 };
   const m = html(h(LessonPlayer, { status: 'ready', lesson: null, item, video: { src: '/media/i1', embed: false }, transcript: 'Hello.', resumeFrom: 725, onPosition: () => {} }));
   assert.match(flat(m), /Resume from 12:05/);
   assert.match(m, /data-testid="lesson-chapters-none"/);
-  assert.ok(flat(m).includes(`${NO_CHAPTERS} · ${CHAPTERS_NOT_YET}`), 'no chapters, with the line saying why');
+  // #4178 (D4178): chapters arrived with #4176, so none recorded is simply "No chapters".
+  assert.ok(flat(m).includes(NO_CHAPTERS), 'no chapters says so');
   assert.ok(flat(m).includes(PLAIN_TRANSCRIPT_LINE), 'the plain transcript line');
   const none = html(h(LessonPlayer, { status: 'ready', lesson: null, item, video: { src: '/media/i1', embed: false } }));
   assert.doesNotMatch(none, /lesson-resume/, 'no position, no resume');

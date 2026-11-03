@@ -9,6 +9,7 @@ import { hqDeckStageNormsApi } from '../../../lib/api/hqDeckStageNorms';
 import { api } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
 import { isSuperAdminUser } from '../../../lib/shellRole';
+import AiModelsTab from './AiModelsTab';
 import { useAuth } from '../../../hooks/useAuthSync';
 import {
   BETA_ADD_LINE, BETA_COLUMNS, BETA_REMOVE_LINE, MODELS_LINK, addArmed, betaChoices, cohortRow, reasonOk, NORM_ADD_LINE, NORM_COLUMNS, NORM_RETIRE_LINE, NORM_RULE, NORM_SOURCE_HELP, NORM_STAGE_OF, NOT_RECORDED, PROJECT_NORMS_NOTE, NOTE_MAX, OUTCOMES, PROPOSAL_LINE, REASONS, STAGES, SUBTITLE,
@@ -27,6 +28,7 @@ import {
  *   Default templates  GET  /api/decks/admin/recommend-overrides  (any admin, D905)
  *   Stage norms        GET/POST /api/admin/deck-stage-norms, PUT /:uid, POST /:uid/retire,
  *                      GET /projects/:id (requireHqAdmin, K5 #4192)
+ *   AI models          GET/PUT /api/admin/ai/element-models (a Super Admin on HQ, D4251 #4251)
  * Every other control waits for its build task (K1–K5, #4188–#4192): it is
  * drawn disabled with the reason, so nothing claims an audited change the
  * Worker does not yet record. When a task lands its builder flips
@@ -627,6 +629,7 @@ export default function HqDecksPage() {
       <HeaderTab to="/admin/platform/decks/beta" end data-testid="hq-decks-tab-beta">Beta cohort</HeaderTab>
       <HeaderTab to="/admin/platform/decks/templates" end data-testid="hq-decks-tab-templates">Default templates</HeaderTab>
       <HeaderTab to="/admin/platform/decks/norms" end data-testid="hq-decks-tab-norms">Stage norms</HeaderTab>
+      <HeaderTab to="/admin/platform/decks/models" end data-testid="hq-decks-tab-ai-models">AI models</HeaderTab>
     </>
   );
   return (
@@ -637,6 +640,7 @@ export default function HqDecksPage() {
       {view === 'beta' ? <Beta /> : null}
       {view === 'templates' ? <Templates superAdmin={superAdmin} /> : null}
       {view === 'norms' ? <Norms /> : null}
+      {view === 'models' ? <AiModelsTab /> : null}
       <p className={MUTED}>The deck model defaults and locks stay on <Link to={MODELS_LINK.to} className="font-semibold text-axal-violet-deep underline dark:text-violet-300">AI usage</Link>.</p>
     </div>
   );

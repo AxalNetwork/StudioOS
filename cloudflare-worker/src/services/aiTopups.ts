@@ -71,13 +71,25 @@ export async function mirrorPriceOnce(env:Env, id:string, now:number=Date.now())
  * `AI_TOPUP_UNIT.minDollars` to `maxDollars`, so $N of tokens is N of it.
  */
 export const AI_TOPUP_UNIT = Object.freeze({ unitCents: 100, minDollars: 5, maxDollars: 500 });
+/**
+ * D1434 (#3703): the $1 unit price for the keys' mode. A price belongs to one
+ * Stripe mode, so live keys read STRIPE_PRICE_AI_TOPUP_UNIT_LIVE and test keys
+ * STRIPE_PRICE_AI_TOPUP_UNIT; moving production to live needs no deploy that
+ * swaps the id, and a live key never quotes the sandbox price. (The same rule
+ * as `stripeMode` in catalog.ts, written here because catalog.ts imports this file's readers.)
+ */
+export function aiTopupUnitRaw(env:Env):unknown {
+  const key=String((env as any).STRIPE_SECRET_KEY ?? '');
+  const live=key.startsWith('sk_live_') || key.startsWith('rk_live_');
+  return live ? (env as any).STRIPE_PRICE_AI_TOPUP_UNIT_LIVE : (env as any).STRIPE_PRICE_AI_TOPUP_UNIT;
+}
 export async function readAiTopupUnit(env:Env, now:number=Date.now()):Promise<AiTopupReading> {
-  const r=await readTopupPrice(env,(env as any).STRIPE_PRICE_AI_TOPUP_UNIT,now);
+  const r=await readTopupPrice(env,aiTopupUnitRaw(env),now);
   if (r.configured && r.state==='ready' && r.product.unit_amount !== AI_TOPUP_UNIT.unitCents) return {configured:true,state:'not_ready',reason:'bad_amount'};
   return r;
 }
 export function aiTopupUnitPriceId(env:Env):string|null {
-  const raw=(env as any).STRIPE_PRICE_AI_TOPUP_UNIT;
+  const raw=aiTopupUnitRaw(env);
   return typeof raw === 'string' && /^price_[A-Za-z0-9]+$/.test(raw) ? raw : null;
 }
 

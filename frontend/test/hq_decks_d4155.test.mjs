@@ -16,10 +16,12 @@ const read = (p) => readFileSync(new URL(`../src/${p}`, import.meta.url), 'utf8'
 const PAGE = read('pages/hq/decks/HqDecksPage.jsx');
 const ROUTES = read('routes/hqDecks.jsx');
 
-test('five tabs at their own addresses, each an HQ-only route', () => {
+test('six tabs at their own addresses, each an HQ-only route', () => {
   assert.deepEqual(TABS.map((t) => [t.label, t.to]), [
     ['Reports', '/admin/platform/decks'], ['Feature flags', '/admin/platform/decks/flags'], ['Beta cohort', '/admin/platform/decks/beta'],
     ['Default templates', '/admin/platform/decks/templates'], ['Stage norms', '/admin/platform/decks/norms'],
+    // D4251 (#4251): the elements × models grid and the kill switch.
+    ['AI models', '/admin/platform/decks/models'],
   ]);
   for (const { to } of TABS) assert.ok(ROUTES.includes(`<Route path="${to}" element={guard(['admin'], hqOnly(<HqDecksPage />))} />`), to);
   assert.equal(viewFor('/admin/platform/decks'), 'reports');
