@@ -173,3 +173,62 @@ export function figureCheckLine(text, q) {
 
 /** "Question 2 of 7". */
 export const drillLine = (at, total) => `Question ${at + 1} of ${total}`;
+
+// ─────────────────────────────────────────── D1580 part 2b (#3827): live words a minute and the live notes checklist
+// The live transcript is a help while rehearsing, never the record: it is counted here, in the browser, and
+// thrown away. The report is still counted by the Worker from the batch transcript. The word and stem rules
+// mirror `cloudflare-worker/src/services/decks/rehearsal.ts` (`wordsIn`, `itemCovered`, `wpmOf`).
+
+export const LIVE_WORDS = 'Count words live';
+export const LIVE_NOTE = 'Words a minute and your notes are checked as you speak. The live text is not kept; the report is counted from the transcript.';
+export const LIVE_WAITING = 'Words a minute show after a few seconds of speaking.';
+export const LIVE_OFF = 'Words a minute are counted from the transcript, in the report.';
+export const LIVE_STOPPED = 'Live words stopped. The report is still counted from the transcript.';
+export const LIVE_BUDGET = 'Live words stopped: your balance ran out for live words. The report is still counted from the transcript.';
+
+/** "Live words · Holds up to $0.0300 for each 4 minutes · you pay what it uses", or null before the quote is read. */
+export function liveHoldLine(quote) {
+  const hold = aiTokens(quote?.hold_microusd);
+  if (!hold) return null;
+  const mins = Number(quote?.block_minutes) || 0;
+  return `Live words · Holds up to ${hold}${mins ? ` for each ${mins} minutes` : ''} · you pay what it uses`;
+}
+
+const WORD = /[\p{L}\p{N}]+(?:['’.-][\p{L}\p{N}]+)*/gu;
+export const wordsIn = (text) => String(text || '').match(WORD) ?? [];
+const STOP = new Set(['about', 'after', 'again', 'also', 'because', 'been', 'being', 'from', 'have', 'here', 'into', 'just', 'more', 'most', 'only', 'other',
+  'over', 'same', 'some', 'such', 'than', 'that', 'their', 'them', 'then', 'there', 'these', 'they', 'this', 'those', 'very', 'what', 'when', 'where', 'which',
+  'while', 'will', 'with', 'would', 'your', 'ours', 'were', 'make', 'mention', 'talk', 'say', 'said']);
+const stem = (w) => w.toLowerCase().replace(/[’']s$/, '').slice(0, 6);
+const content = (text) => [...new Set(wordsIn(text).map((w) => w.toLowerCase()).filter((w) => w.length >= 4 && !STOP.has(w) && !/^\d/.test(w)).map(stem))];
+
+/** Whether a notes item was said: at least 60% of its content words (by stem) are in what was said. */
+export function itemCovered(item, said) {
+  const need = content(item);
+  if (!need.length) return false;
+  const have = new Set(wordsIn(said).map(stem));
+  return need.filter((w) => have.has(w)).length / need.length >= 0.6;
+}
+
+/** Words a minute over `ms`, or null under five seconds — never 0 for "not counted yet". */
+export function liveWpm(text, ms) {
+  const t = Number(ms) || 0;
+  return t >= 5000 ? Math.round(wordsIn(text).length / (t / 60000)) : null;
+}
+
+/** The live transcript, held per card: a final turn is kept on the card that was up; the newest interim text is shown, not kept. */
+export function liveSaid() {
+  const finals = [];
+  let interim = { card: 0, text: '' };
+  return {
+    take(read, card) {
+      if (!read?.text) return;
+      if (read.final) { finals[card] = `${finals[card] || ''} ${read.text}`.trim(); interim = { card, text: '' }; }
+      else interim = { card, text: read.text };
+    },
+    /** What was said with this card up, the interim text included. */
+    card(card) { return `${finals[card] || ''} ${interim.card === card ? interim.text : ''}`.trim(); },
+    /** Everything said, the interim text included. */
+    get all() { return `${finals.filter(Boolean).join(' ')} ${interim.text}`.trim(); },
+  };
+}

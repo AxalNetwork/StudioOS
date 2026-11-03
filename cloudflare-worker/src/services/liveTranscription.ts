@@ -48,19 +48,22 @@ import { labelSegments, recordReceipt, storeLiveSegment, type SessionRow } from 
 /** Under the reservation's five-minute expiry, so a held block never lapses mid-stream. */
 export const LIVE_BLOCK_MINUTES = 4;
 
-/** One block of streaming on this model, in micro-USD, at `multiplier` over cost (D762: 1 while billing is on cost). */
-export function blockQuoteMicro(model: string, multiplier = 1): number {
-  return aiBudget.billedUsdToMicro(livePerMinute(model) * LIVE_BLOCK_MINUTES, multiplier);
+/**
+ * One block of streaming on this model, in micro-USD, at `multiplier` over cost (D762: 1 while billing is on cost).
+ * `surface` sets the Deepgram opt-out rate (D1580 part 2b: a rehearsal streams on the pitch deck's page, which does not opt out).
+ */
+export function blockQuoteMicro(model: string, multiplier = 1, surface: string = LIVE_SURFACE): number {
+  return aiBudget.billedUsdToMicro(livePerMinute(model, surface) * LIVE_BLOCK_MINUTES, multiplier);
 }
 
 /** The live transcript is interview audio: its surface, and so its Deepgram opt-out (#3936 part 3). */
 export const LIVE_SURFACE = AI_SURFACE.validateInterviews;
 
-/** One streamed minute on this model, at Deepgram's opt-out rate where the model takes it. */
-export function livePerMinute(model: string): number {
+/** One streamed minute on this model, at Deepgram's opt-out rate where the model takes it on `surface`. */
+export function livePerMinute(model: string, surface: string = LIVE_SURFACE): number {
   const perMinute = PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET[model];
   if (typeof perMinute !== 'number') throw new Error(`no websocket price for ${model}`);
-  return perMinute * mipPriceFactor(model, LIVE_SURFACE);
+  return perMinute * mipPriceFactor(model, surface);
 }
 
 /** The guard's share of one block: the output check on the most text a block of streaming can produce. */
@@ -69,8 +72,8 @@ export function blockGuardMicro(multiplier = 1): number {
 }
 
 /** What one block holds: its minutes and the guard's share, at `multiplier`. */
-export function blockHoldMicro(model: string, multiplier = 1): number {
-  return blockQuoteMicro(model, multiplier) + blockGuardMicro(multiplier);
+export function blockHoldMicro(model: string, multiplier = 1, surface: string = LIVE_SURFACE): number {
+  return blockQuoteMicro(model, multiplier, surface) + blockGuardMicro(multiplier);
 }
 
 /** Record a Session's live transcript (plan job VA2). */
@@ -109,8 +112,8 @@ export function splitCost(totalMicro: number, blockMicro: number, blocks: number
 export type HoldResult = { ok: true; reservation: aiBudget.AiReservation } | { ok: false; refusal: string; message: string };
 
 /** Hold one block. A refusal carries the budget's own message. */
-export async function holdBlock(env: Env, userId: number, model: string): Promise<HoldResult> {
-  const held = await aiBudget.reserveAiBudget(env, userId, blockHoldMicro(model, await aiBudget.memberChargeMultiplier(env, userId)));
+export async function holdBlock(env: Env, userId: number, model: string, surface: string = LIVE_SURFACE): Promise<HoldResult> {
+  const held = await aiBudget.reserveAiBudget(env, userId, blockHoldMicro(model, await aiBudget.memberChargeMultiplier(env, userId), surface));
   if (!held.ok) return { ok: false, refusal: held.refusal, message: budgetRefusalMessage(held.refusal, held.refusal === 'spend_limit' ? held : null) };
   return { ok: true, reservation: held.reservation };
 }
@@ -181,16 +184,34 @@ export async function settleStream(
 type AnyWebSocket = WebSocket & { accept(): void };
 
 /**
- * Relay one live stream. `first` is the block already held before the upgrade
- * was answered. Returns the client half of the pair for the 101 response.
+ * D1580 part 2b (#3827): what a live stream belongs to. An interview session
+ * stores each finished passage and settles with its receipt (`openLiveRelay`);
+ * a rehearsal keeps its live text in the stream and settles on the pitch
+ * deck's page (`services/decks/rehearsalLive.ts`). The relay is the same.
  */
-export async function openLiveRelay(
-  env: Env, ctx: { waitUntil(p: Promise<unknown>): void } | undefined,
-  session: SessionRow, userId: number, intervieweeName: string | null, first: aiBudget.AiReservation,
+export type LiveOwner = {
+  model: string;
+  language: string | null;
+  /** The surface the model's privacy options are read for. */
+  surface: string;
+  userId: number;
+  /** A finished passage, as `parseLiveEvent` reads it. */
+  onSegment(seg: NonNullable<ReturnType<typeof parseLiveEvent>>): void;
+  /** Settle every block held, once the stream has ended. */
+  settle(holds: aiBudget.AiReservation[], elapsedMs: number): Promise<unknown>;
+};
+
+/**
+ * Relay one live stream for `owner`. `first` is the block already held before
+ * the upgrade was answered. Returns the client half of the pair for the 101
+ * response.
+ */
+export async function relayLive(
+  env: Env, ctx: { waitUntil(p: Promise<unknown>): void } | undefined, owner: LiveOwner, first: aiBudget.AiReservation,
 ): Promise<Response> {
-  const model = session.live_model!;
+  const { model, userId } = owner;
   const ai = (env as unknown as { AI: { run(m: string, i: unknown, o: unknown): Promise<Response> } }).AI;
-  const upstreamResp = await ai.run(model, liveInputFor(model, session.language, mipOptOut(model, LIVE_SURFACE)), { websocket: true });
+  const upstreamResp = await ai.run(model, liveInputFor(model, owner.language, mipOptOut(model, owner.surface)), { websocket: true });
   const upstream = (upstreamResp as unknown as { webSocket?: AnyWebSocket }).webSocket;
   if (!upstream) {
     await aiBudget.settleAiReservation(env, first, 0, true).catch(() => {});
@@ -214,7 +235,7 @@ export async function openLiveRelay(
     try { upstream.close(); } catch { /* already closed */ }
     try { server.close(reason?.code ?? 1000, reason?.text ?? 'done'); } catch { /* already closed */ }
     const elapsed = Date.now() - startedAt;
-    const done = Promise.resolve(pending).then(() => settleStream(env, session, model, holds, elapsed));
+    const done = Promise.resolve(pending).then(() => owner.settle(holds, elapsed));
     ctx?.waitUntil(done);
   };
 
@@ -222,7 +243,7 @@ export async function openLiveRelay(
     if (closed) return;
     // A new block before the stream crosses into it; refused ends the stream.
     if (!pending && blocksFor(Date.now() - startedAt + 30_000) > holds.length) {
-      pending = holdBlock(env, userId, model).then((h) => {
+      pending = holdBlock(env, userId, model, owner.surface).then((h) => {
         pending = null;
         if (h.ok) holds.push(h.reservation);
         else {
@@ -238,10 +259,7 @@ export async function openLiveRelay(
     if (closed) return;
     try { server.send(ev.data as string); } catch { /* client gone */ }
     const seg = parseLiveEvent(model, ev.data);
-    if (seg) {
-      const [stored] = labelSegments([seg], intervieweeName);
-      ctx?.waitUntil(storeLiveSegment(env, session, stored, model));
-    }
+    if (seg) owner.onSegment(seg);
   });
 
   server.addEventListener('close', () => finish());
@@ -250,4 +268,23 @@ export async function openLiveRelay(
   upstream.addEventListener('error', () => finish({ code: 1011, text: 'upstream' }));
 
   return new Response(null, { status: 101, webSocket: client } as ResponseInit);
+}
+
+/**
+ * Relay one interview session's live stream: each finished passage is stored
+ * as a `live` segment, and the stream settles with the session's receipt.
+ */
+export async function openLiveRelay(
+  env: Env, ctx: { waitUntil(p: Promise<unknown>): void } | undefined,
+  session: SessionRow, userId: number, intervieweeName: string | null, first: aiBudget.AiReservation,
+): Promise<Response> {
+  const model = session.live_model!;
+  return relayLive(env, ctx, {
+    model, language: session.language, surface: LIVE_SURFACE, userId,
+    onSegment: (seg) => {
+      const [stored] = labelSegments([seg], intervieweeName);
+      ctx?.waitUntil(storeLiveSegment(env, session, stored, model));
+    },
+    settle: (holds, elapsed) => settleStream(env, session, model, holds, elapsed),
+  }, first);
 }

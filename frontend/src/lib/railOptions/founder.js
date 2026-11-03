@@ -13,7 +13,7 @@
  *   `FILL_KINDS` entry.
  * - `label`: the words on the control the member presses.
  * - `kind`: one of the canvas's fourteen (`FOUNDER_KINDS`), or an option-only
- *   kind (`OPTION_KINDS`, D1478: `image`), which also names its `task`.
+ *   kind (`OPTION_KINDS`, D1478: `image`; D1580: `live`), which also names its `task`.
  * - `handler`: `form` (a fill band, or a form Eadwyn fills), `upload` (reads
  *   a file), `draft` (writes text: a draft, an answer, a summary, a review),
  *   `transcribe` (turns audio into text), or `none` (looks like one, runs no
@@ -40,8 +40,8 @@ export const FOUNDER_KINDS = [
 ];
 
 export const FOUNDER_HANDLERS = ['form', 'upload', 'draft', 'transcribe', 'none'];
-/** D1478 (#3721): kinds only an option takes, each run by the fixed job its `task` names. */
-export const OPTION_KINDS = ['image'];
+/** D1478 (#3721): kinds only an option takes, each run by the fixed job its `task` names. D1580 part 2b: `live`, a streamed transcript. */
+export const OPTION_KINDS = ['image', 'live'];
 
 const CYCLE = 'frontend/src/pages/cycles/CycleRoute.jsx';
 const PMF = 'frontend/src/workspaces/PmfExplain.jsx';
@@ -282,6 +282,11 @@ export const FOUNDER_OPTIONS = [
   {
     page: 'Founder · Raise · Pitch deck', key: 'transcribe:rehearsal', route: '/raise/pitch/present', label: 'Rehearse', kind: 'speech', handler: 'transcribe',
     at: [[REHEARSE, 'deckRehearsalsApi.run(']],
+  },
+  // D1580 part 2b (#3827): Rehearse's live transcript, for live words a minute and the notes checklist; the pick is the stream's model.
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'transcribe:rehearsal-live', route: '/raise/pitch/present', label: 'Count words live', kind: 'live', task: 'transcribe', handler: 'draft',
+    at: [[REHEARSE, 'deckRehearsalsApi.liveUrl(']],
   },
   // D1580 part 2 (#3827): rehearse_coach, the coaching on a rehearsal's report; the member's pick here is its model.
   {
