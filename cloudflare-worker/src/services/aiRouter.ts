@@ -45,7 +45,7 @@ import { MODEL_CONNECTIONS, MODULE_ROUTES, type ModuleTask } from './ai/moduleCo
 import { specialistRefusal, specialistRequest, specialistOutput, pcmBytes, pcmMinutes, type SpecialistInput } from './ai/moduleShapes';
 import { drawChoice, memberPlanTier, type DrawSkip, type DrawSource, type PlanTier } from './ai/drawJobs';
 import { speechChoice, type SpeechSkip, type SpeechSource } from './ai/speechJobs';
-import { TASK_TEXT_JOBS, textChoice, type TextSkip, type TextSource } from './ai/textJobs';
+import { TASK_TEXT_JOBS, railOptionTextJob, textChoice, type TextSkip, type TextSource } from './ai/textJobs';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -2018,7 +2018,11 @@ async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Prom
   // #3937 part 3: a task's own job (`TASK_TEXT_JOBS`) yields to a rail run's page row: a press on a page
   // the matrix lists runs that page's models (D764), as before. A job the caller names always applies.
   const pageRowed = !!opts.rail && !!(resolveRailOption(opts.rail.page, opts.rail.option ?? null) ?? resolveRail(opts.rail.page));
-  const textJobId = opts.textJob ?? (!opts.model && !pageRowed ? TASK_TEXT_JOBS[opts.task] : undefined);
+  // #4313 (D4313): a rail press whose option the table maps runs that option's job through
+  // `textChoice`, not its page's row. A press with no option, or whose option writes no text,
+  // keeps the path above until it moves.
+  const optionJob = opts.rail ? railOptionTextJob(opts.rail.page, opts.rail.option ?? null) : null;
+  const textJobId = opts.textJob ?? (!opts.model ? optionJob ?? (!pageRowed ? TASK_TEXT_JOBS[opts.task] : undefined) : undefined);
   if (textJobId && textShaped) {
     let pick: string | null = null;
     let tier: PlanTier;
