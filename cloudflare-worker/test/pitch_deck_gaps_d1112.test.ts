@@ -142,7 +142,7 @@ test('2. the options ride the signed token; the print payload carries notes and 
 });
 
 test('3. PDF and PowerPoint take the options: the token carries them, the appendix is one more page, the notes are the speaker notes', async () => {
-  // Mutation checked: the options dropped from the token → PDF's flags fail; no extra page → 4 screenshots fail;
+  // Mutation checked: the options dropped from the token → PDF's flags fail; no extra page → the slide4 check fails;
   // the notes slide always the card's text → the notes assertion fails.
   const f = fixture();
   let b = browser();
@@ -156,14 +156,15 @@ test('3. PDF and PowerPoint take the options: the token carries them, the append
   b = browser();
   r = await call(f, 'POST', '/10/export', { format: 'pptx', notes: true, sources: true }, { ...f.env, BROWSER: b.binding });
   assert.equal(r.status, 200);
-  assert.deepEqual(b.urls.map((u) => /slide=(\d+)/.exec(u)![1]), ['0', '1', '2', '3'], 'three cards and the Sources appendix');
-  assert.ok(r.text.includes('ppt/slides/slide4.xml'));
+  // D1574 (#3821): the editable PowerPoint pictures no slide; the appendix is still one more page.
+  assert.deepEqual(b.urls, [], 'no slide is photographed');
+  assert.ok(r.text.includes('ppt/slides/slide4.xml'), 'three cards and the Sources appendix');
   assert.ok(r.text.includes('Lead with the pilots.') && r.text.includes('Point at the tile.'), 'the speaker notes');
   assert.ok(r.text.includes('No notes on this card.'), 'a card with none says so');
 
   b = browser();
   r = await call(f, 'POST', '/10/export', { format: 'pptx' }, { ...f.env, BROWSER: b.binding });
-  assert.equal(b.urls.length, 3, 'no appendix unasked');
+  assert.ok(!r.text.includes('ppt/slides/slide4.xml'), 'no appendix unasked');
   assert.ok(!r.text.includes('Lead with the pilots.'), 'no speaker notes unasked');
   assert.ok(r.text.includes('Raising $2M'), 'the notes slide keeps the card\'s text, as before');
 });

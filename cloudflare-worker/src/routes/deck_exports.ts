@@ -11,12 +11,12 @@
  *   GET  /api/decks/:id/exports
  *        → {exports: [{id, deck_id, version, format, content_hash, by, created_at}]}
  *          for every version of the deck's venture, newest first (50).
- *   POST /api/decks/:id/export  (decks.ts, PDF and PowerPoint)
+ *   POST /api/decks/:id/export  (PDF in decks.ts; PowerPoint here, D1574)
  *        the middleware below hashes the file the route answers and writes
  *        its `deck_exports` row; its audit row is part 1's (#2674, fix 11).
- *        PDF/PowerPoint keep D895's route and audit; its access check is
- *        exported for reuse here. Consolidating export formats into one
- *        route remains a separate refactor.
+ *        D1574 (#3821): {format:'pptx'} is answered by the handler at the end
+ *        of this file with the editable PowerPoint (`pptxEditable.ts`); a
+ *        PDF passes on to decks.ts with D895's route and audit.
  *
  * WHO. The same D895 deck-specific check as PDF/PowerPoint: founders export,
  * admins read without exporting, and advisors cannot read deck data.
@@ -39,12 +39,14 @@ import { imageDataUri, imageUrlsOf, sniffImage, writeOfflineDeck, type ImageKind
 import { fetchExternalImage } from '../services/decks/imageSafety';
 import type { ExportImageCopies } from '../services/decks/imageCopy';
 import { dohResolver } from '../integrations/customMcp';
-import { copyStoredDeckImages, exportDeckOf, projectOwned, sanitizeImageUrl, signDeckPrintToken, themeOfRow } from './decks';
+import { auditDeckWrite, copyStoredDeckImages, deckOwnerBrand, ensureSchema, exportDeckOf, projectOwned, sanitizeImageUrl, signDeckPrintToken, themeOfRow } from './decks';
 import { deckCompliance } from '../services/decks/compliance';
 import { context as workspaceContext, member } from './google_workspace';
 import { WorkspaceError } from '../services/google/workspace';
 import { createPresentation, driveName } from '../services/google/driveCreate';
 import { writeEditableDeck, type ChartShot } from '../services/decks/pptxEditable';
+import type { ResolvedSeries } from '../services/decks/pptxChart';
+import { readSeries } from '../services/decks/chartSeries';
 import { dirOf } from '../services/decks/designSystem';
 import { ODP_MIMETYPE, writeOdp } from '../services/decks/odp';
 import { visibleCards } from '../services/decks/slideModel';
@@ -139,6 +141,32 @@ export async function fetchImages(urls: string[]): Promise<Map<string, { kind: I
 export async function inlineImages(urls: string[]): Promise<Map<string, string | null>> {
   const out = new Map<string, string | null>();
   for (const [u, g] of await fetchImages(urls)) out.set(u, g ? imageDataUri(g.kind, g.bytes) : null);
+  return out;
+}
+
+/** At most this many distinct bound series are read for one file. */
+export const BOUND_SERIES_MAX = 24;
+
+/**
+ * D1574 (#3821): each bound chart series' points, read from its store now
+ * (`chartSeries.readSeries`), by source key — what the editor and the print
+ * page draw. A series its store cannot read, or holds nothing for, is absent;
+ * the writer then draws the chart from what it has, never a made-up point.
+ */
+export async function boundSeries(env: Env, projectId: number, slides: any[]): Promise<ResolvedSeries> {
+  const keys = new Set<string>();
+  for (const s of slides) for (const b of Array.isArray(s?.blocks) ? s.blocks : []) {
+    if (b?.kind !== 'chart') continue;
+    for (const sr of Array.isArray(b.series) ? b.series : []) {
+      const k = sr?.binding?.source_key;
+      if (typeof k === 'string' && k) keys.add(k);
+    }
+  }
+  const out: ResolvedSeries = new Map();
+  for (const k of [...keys].slice(0, BOUND_SERIES_MAX)) {
+    const got = await readSeries(env, projectId, k).catch(() => null);
+    if (got && got.state === 'recorded' && got.points.length) out.set(k, got.points);
+  }
   return out;
 }
 
@@ -314,7 +342,9 @@ deckExports.post('/:id/export/google-slides', async (c) => {
 
   const chartShot = await chartShotFor(c, row, opts, copied.imageCopies);
   // D1571 (#3818): an Arabic or Hebrew deck's words read right to left in the editable file too.
-  const deck = await writeEditableDeck({ slides, renderable: renderable.slides, brand, notes: opts.notes, images, chartShot, compliance: deckCompliance(slides, themeOfRow(row)), dir: dirOf(themeOfRow(row)?.lang, themeOfRow(row)?.dir) });
+  // D1574 (#3821): the same writer as the PowerPoint download — native charts from the stores' points.
+  const series = await boundSeries(c.env, Number(row.project_id), slides);
+  const deck = await writeEditableDeck({ slides, renderable: renderable.slides, brand, notes: opts.notes, images, chartShot, compliance: deckCompliance(slides, themeOfRow(row)), dir: dirOf(themeOfRow(row)?.lang, themeOfRow(row)?.dir), series });
   const hash = await sha256Hex(deck.bytes);
 
   let created;
@@ -385,6 +415,54 @@ deckExports.use('/:id/export', async (c, next) => {
   headers.set('X-Content-SHA256', hash);
   c.res = undefined as any;
   c.res = new Response(bytes, { status: 200, headers });
+});
+
+/**
+ * D1574 (#3821, deck v2 E1) — pd8b's PowerPoint, "Keeps your layout": the
+ * version as the editable PowerPoint (`pptxEditable.ts`) — every area a
+ * native text box, shape, picture or chart at The Grid's placement, the
+ * one the editor draws and the .odp writer uses. It replaces the picture of
+ * each slide, so no headless browser is needed; one is used only to picture
+ * a chart whose type has no native counterpart (`chartShotFor`).
+ *
+ * Registered after the ledger middleware above, which records the file
+ * before it is handed out; a PDF passes on to `decks.ts`. The D895 check,
+ * the venture owner's brand and the `deck_exported` audit row are the PDF's.
+ */
+deckExports.post('/:id/export', async (c, next) => {
+  const body = await c.req.json().catch(() => ({} as any));
+  if (String(body?.format || 'pdf').toLowerCase() !== 'pptx') return next();
+  const user = await requireAuth(c);
+  await ensureSchema(c.env);
+  const found = await deckRow(c.env, Number(c.req.param('id')));
+  if (!found) return c.json({ error: 'not found' }, 404);
+  try { await projectOwned(c, user, Number(found.project_id), { write: true }); }
+  catch { return c.json({ error: 'forbidden' }, 403); }
+  // D1506: outside images are copied in before any export reads them.
+  const copied = await copyStoredDeckImages(c, user, found);
+  if ('refused' in copied) return copied.refused;
+  const row: DeckRow = copied.row;
+  // D1112 (#2992): PD17's two options apply to every format.
+  const opts = { notes: body?.notes === true, sources: body?.sources === true };
+  const { slides, renderable } = exportDeckOf(row, opts);
+  const projectId = Number(row.project_id);
+  const theme = themeOfRow(row);
+  const deck = await writeEditableDeck({
+    slides, renderable: renderable.slides, brand: await deckOwnerBrand(c.env, projectId), notes: opts.notes,
+    images: await fetchImages(imageUrlsOf(slides)), chartShot: await chartShotFor(c, row, opts, copied.imageCopies),
+    compliance: deckCompliance(slides, theme), dir: dirOf(theme?.lang, theme?.dir), series: await boundSeries(c.env, projectId, slides),
+  });
+  await auditDeckWrite(c, user, projectId, 'deck_exported', 'Deck exported');
+  const fname = (row.title || 'pitch-deck').replace(/[^A-Za-z0-9_-]+/g, '-').slice(0, 80);
+  return new Response(deck.bytes, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'Content-Disposition': `attachment; filename="${fname}.pptx"`,
+      'Cache-Control': 'no-store',
+      'X-Deck-Export-Mode': 'editable',
+    },
+  });
 });
 
 export default deckExports;
