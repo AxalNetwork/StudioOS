@@ -4,7 +4,7 @@
  */
 import assignments from './moduleModels';
 import { isOffered, modelById, type CatalogueSwitches } from './catalogue';
-import { RAIL_KIND_JOBS, jobStep, selectorFor } from './modelUseCases';
+import { RAIL_KIND_JOBS, USE_KINDS, jobStep, selectorFor } from './modelUseCases';
 
 export type ModuleOperation = 'chat' | 'vision' | 'decision' | 'image_labels' | 'embed' | 'rerank' | 'sentiment' | 'translate' | 'stream' | 'transcribe' | 'turn' | 'voice' | 'draw' | 'guard';
 export type ModelConnection = { operation: ModuleOperation; kinds: string[]; purpose: string };
@@ -42,6 +42,8 @@ export function fitsRailKind(kind: string, id: string): boolean {
   const op = MODEL_CONNECTIONS[id]?.operation;
   switch (kind) {
     case 'speech': return op === 'transcribe';
+    // D1580 part 2b (#3827): a live option lists what the live job's kind can stream (Flux, and Nova-3, whose operation is batch).
+    case 'live': return USE_KINDS.listen_live.models.includes(id);
     case 'vision': return chatCompatible(id, true);
     case 'draw': case 'edit_image': return op === 'draw';
     case 'decide': return op === 'decision';

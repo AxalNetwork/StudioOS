@@ -34,7 +34,7 @@ export function viewFor(pathname = '') {
 
 /** The build tasks behind the boards (#4155 K1–K5). `live: false` until each lands. */
 export const BUILD = {
-  K1: { issue: 4188, live: false, what: 'The founder, deck and card by name, and the area before and after' },
+  K1: { issue: 4188, live: true, what: 'The founder, deck and card by name, and the area before and after' },
   K2: { issue: 4189, live: false, what: 'A reason and an audit row on every flag change' },
   K3: { issue: 4190, live: false, what: 'The beta cohort' },
   K4: { issue: 4191, live: false, what: 'A reason and an audit row on every default template change' },
@@ -117,10 +117,14 @@ export function filterReports(rows, { model = '', reason = '', q = '' } = {}) {
 }
 
 /** What the proposal's status means for the deck, in the canvas's words. */
+// Keyed by `ai_rail_proposals.status` (migration 506: proposed, accepted, edited, discarded, withdrawn).
+// An edited proposal was accepted with the founder's changes, so it was written too; withdrawn has no canvas line.
+const ACCEPTED_LINE = 'The founder accepted the proposal. It was written to the deck.';
 export const PROPOSAL_LINE = {
   discarded: 'The founder discarded the proposal. Nothing was written to the deck.',
-  accepted: 'The founder accepted the proposal. It was written to the deck.',
-  pending: 'The proposal is still open on the founder’s deck.',
+  accepted: ACCEPTED_LINE,
+  edited: ACCEPTED_LINE,
+  proposed: 'The proposal is still open on the founder’s deck.',
 };
 
 // ── HD2 · Feature flags ─────────────────────────────────────────────────────

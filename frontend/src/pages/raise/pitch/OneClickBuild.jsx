@@ -15,7 +15,8 @@ import { ACCEPT_ALL, DISCARD, HOLD, NOT_ON } from './deckV2Model';
 import { THEME_LABELS, cardColours } from './editorModel';
 import { placeImage } from './imageModel';
 import {
-  DISCARD_SENTENCE, FAST_TITLE, NEW_PATH, NOT_ON_STUDIOOS, PROPOSAL_LINE, TITLES_ONLY_LINE, aiTokens, buildSentence, fastBrief, fastPathLine, refusalOf,
+  DISCARD_SENTENCE, FAST_TITLE, KEEP_ONE, KEPT_LINE, NEW_PATH, NOT_ON_STUDIOOS, PROPOSAL_LINE, RELOAD_LATEST, STALE_GONE, TITLES_ONLY_LINE, aiTokens,
+  buildSentence, canRegenerate, cardQuoteBody, fastBrief, fastPathLine, isStale, refusalOf, regenerateSentence, regeneratedLine, withBase,
 } from './newDeckModel';
 import {
   ACCEPT_ALL_PRESENT, ACCEPT_LINE, ACCEPT_THEME_LINE, ALREADY_KEPT, FAST_LINE, FAST_UNREAD, KIT_UNREAD, LEFT_OUT, NOTHING_TICKED, PROPOSED, REVIEW_TITLE, SAVED_LINE,
@@ -78,13 +79,14 @@ const SELECT = 'rounded-[8px] border border-axal-hairline bg-white px-2 py-1 tex
 export const reviewHref = (q, id) => `${NEW_PATH}${q}${q ? '&' : '?'}proposal=${encodeURIComponent(id)}`;
 
 /** A refusal in the Worker's words, with its plan link ("See plans") and its top-up, as `refusalOf` gives them. */
-export function RefusalLine({ refusal, testId }) {
+export function RefusalLine({ refusal, testId, onReload = null }) {
   if (!refusal) return null;
   return (
     <span role="alert" className="text-[12px] font-semibold text-axal-violet dark:text-violet-300" data-testid={testId}>
       {refusal.message}{' '}
       {refusal.link ? <Link to={refusal.link.href} className="underline">{refusal.link.text}</Link> : null}
       {refusal.topUp ? <a href={refusal.topUp.href} className="underline">{refusal.topUp.text}</a> : null}
+      {refusal.reload && onReload ? <button type="button" className="underline" onClick={onReload} data-testid={`${testId}-reload`}>{RELOAD_LATEST}</button> : null}
     </span>
   );
 }
@@ -236,18 +238,75 @@ export default function OneClickBuild({
  * versions read's list, for the base version's theme; `items` the sources
  * read's, for where each missing figure is recorded; `built` the build's
  * reply when the page just ran it.
+ *
+ * D897 §10 (#3659): card by card. Keep keeps one card now on the Worker;
+ * Regenerate rebuilds just that card, its quote first. Every write sends back
+ * the `proposal_hash` the page last read, and a 409 `proposal_changed`
+ * (another tab) offers Reload the latest.
  */
-export function ProposalReview({ projectId, q = '', proposal, items = [], versions = [], built = null, audience = null, onSaved = null }) {
+export function ProposalReview({ projectId, q = '', proposal: given, items = [], versions = [], built = null, audience = null, onSaved = null }) {
   const navigate = useNavigate();
   const [kit, setKit] = useState({ status: 'loading', data: null });
   const [picked, setPicked] = useState(null);
+  // D897 §9 (#3659): the proposal as this page last read or wrote it, and its hash, which every write sends back.
+  const [proposal, setProposal] = useState(given);
+  const [hash, setHash] = useState(built?.proposal_hash ?? given?.proposal_hash ?? null);
+  const [regen, setRegen] = useState(null);
+  const [lines, setLines] = useState({});
+  const [gone, setGone] = useState(false);
   const cards = useMemo(() => reviewCards(proposal, items), [proposal, items]);
   const locked = useMemo(() => keptAlready(proposal), [proposal]);
-  const [ticks, setTicks] = useState(() => defaultTicks(reviewCards(proposal, []), proposal));
+  const [ticks, setTicks] = useState(() => defaultTicks(reviewCards(given, []), given));
   const [busy, setBusy] = useState(null);
   const [refusal, setRefusal] = useState(null);
   const [discarding, setDiscarding] = useState(false);
   const [saved, setSaved] = useState(null);
+  useRailOption(busy === 'regenerate' ? 'deck:build' : null, 'Regenerate card');
+
+  /** A write's reply: the proposal and hash it wrote become the page's. */
+  const took = (r) => { if (r?.proposal) setProposal(r.proposal); if (r?.proposal_hash) setHash(r.proposal_hash); };
+  /** A refusal; another tab's move is said as such, with the way to read the latest. */
+  const refused = (e) => { setRefusal(refusalOf(e)); return !isStale(e); };
+
+  /** Read the proposal again after another tab moved it: the same one with its new hash, or gone. */
+  const reloadLatest = async () => {
+    setBusy('reload'); setRefusal(null);
+    try {
+      const read = await api.deckListVersions(projectId);
+      const p = read?.proposal;
+      if (p && String(p.id) === String(proposal.id)) { setProposal(p); setHash(p.proposal_hash ?? null); setTicks(defaultTicks(reviewCards(p, []), p)); setLines({}); }
+      else setGone(true);
+    } catch (e) { setRefusal(refusalOf(e)); reportError('pitch-review:reload', e); } finally { setBusy(null); }
+  };
+
+  /** Keep one card now, on the Worker: it is locked, survives a rebuild or a reload, and Accept saves it. */
+  const keepOne = async (index) => {
+    setBusy(`keep-${index}`); setRefusal(null);
+    try { took(await newDeckApi.keepSlides(proposal.id, withBase({ indexes: [index] }, hash))); setTicks((t) => new Set([...t, index])); }
+    catch (e) { if (refused(e)) reportError('pitch-review:keep-one', e); } finally { setBusy(null); }
+  };
+
+  /** Regenerate: its quote first, in the dialog; nothing runs until Confirm. */
+  const askRegenerate = async (c) => {
+    setRegen({ index: c.index, title: c.title, quote: null });
+    try {
+      const quote = await newDeckApi.quote(cardQuoteBody(projectId, proposal, c.index));
+      setRegen((r) => (r && r.index === c.index ? { ...r, quote } : r));
+    } catch (e) {
+      setRegen((r) => (r && r.index === c.index ? { ...r, quote: { ai: false, message: refusalOf(e)?.message } } : r));
+    }
+  };
+  const regenerate = async () => {
+    const index = regen?.index;
+    if (!Number.isInteger(index)) return;
+    setBusy('regenerate'); setRefusal(null);
+    try {
+      const r = await newDeckApi.regenerateCard(proposal.id, withBase({ index }, hash), railPressHeaders('deck:build'));
+      took(r);
+      setLines((l) => ({ ...l, [index]: regeneratedLine(r) }));
+      setRegen(null);
+    } catch (e) { if (refused(e)) reportError('pitch-review:regenerate', e); setRegen(null); } finally { setBusy(null); }
+  };
 
   useEffect(() => {
     let live = true;
@@ -279,7 +338,7 @@ export function ProposalReview({ projectId, q = '', proposal, items = [], versio
     const body = present ? { ...asked, present: true } : asked;
     setBusy(present ? 'present' : 'accept'); setRefusal(null);
     try {
-      const r = await newDeckApi.keepSlides(proposal.id, body);
+      const r = await newDeckApi.keepSlides(proposal.id, withBase(body, hash));
       let deck = r?.deck || null;
       if (!deck) throw new Error('The cards could not be saved. Nothing was changed.');
       const write = themeToWrite(theme, baseTheme);
@@ -296,7 +355,7 @@ export function ProposalReview({ projectId, q = '', proposal, items = [], versio
       onSaved?.(deck);
       if (present && !themeFailed) { navigate(presentHref(projectId, deck.id)); return; }
       setSaved({ deck, themeFailed, cardsVersion });
-    } catch (e) { setRefusal(refusalOf(e)); reportError('pitch-review:accept', e); } finally { setBusy(null); }
+    } catch (e) { if (refused(e)) reportError('pitch-review:accept', e); } finally { setBusy(null); }
   };
 
   const discard = async () => {
@@ -316,6 +375,15 @@ export function ProposalReview({ projectId, q = '', proposal, items = [], versio
           <Link to={`${EDIT_PATH}${q}`} className={GHOST} data-testid="pitch-review-edit">Open in the editor ›</Link>
         </span>
         <ImagesOffer deck={saved.deck} onDeck={(d) => setSaved((s) => ({ ...s, deck: d }))} />
+      </section>
+    );
+  }
+
+  if (gone) {
+    return (
+      <section className={`${CARD} flex flex-col items-start gap-3 p-4`} role="alert" data-testid="pitch-review-gone">
+        <span className={`text-[14px] font-bold ${INK}`}>{STALE_GONE}</span>
+        <Link to={`${STUDIO_PATH}${q}`} className={LINK}>Back to the studio ›</Link>
       </section>
     );
   }
@@ -358,7 +426,7 @@ export function ProposalReview({ projectId, q = '', proposal, items = [], versio
           <span className={`${SMALL} max-w-[360px] text-right`} data-testid="pitch-review-accept-line">{kept ? (willWrite ? ACCEPT_THEME_LINE : ACCEPT_LINE) : NOTHING_TICKED}</span>
         </div>
       </div>
-      <RefusalLine refusal={refusal} testId="pitch-review-refusal" />
+      <RefusalLine refusal={refusal} testId="pitch-review-refusal" onReload={reloadLatest} />
       {built?.cost?.charged_microusd != null ? (
         <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="pitch-review-charged">The build used {aiTokens(built.cost.charged_microusd)} in AI tokens. Nothing more is charged to accept it.</span>
       ) : null}
@@ -380,10 +448,25 @@ export function ProposalReview({ projectId, q = '', proposal, items = [], versio
                 <span className="flex min-w-0 flex-col">
                   <span className={`font-semibold ${INK}`}><span className="font-mono text-axal-muted dark:text-gray-400">{c.n}</span> {c.title}</span>
                   {fixed ? <span className={SMALL} data-testid={`pitch-review-kept-${c.index}`}>{ALREADY_KEPT}</span> : null}
+                  {fixed ? <span className={SMALL} data-testid={`pitch-review-kept-line-${c.index}`}>{KEPT_LINE}</span> : null}
+                  {lines[c.index] ? <span role="status" className={SMALL} data-testid={`pitch-review-regenerated-${c.index}`}>{lines[c.index]}</span> : null}
                   {c.emptyOnly ? <span className={SMALL}>Nothing on this card is recorded yet.</span> : null}
                   {c.partial ? <span className={SMALL} data-testid={`pitch-review-partial-${c.index}`}>A figure here is not recorded: it reads {NOT_ON_STUDIOOS}, never 0.</span> : null}
                 </span>
               </label>
+              {/* D897 §9 (#3659): one card at a time: keep it now, or rebuild just it (its price first). */}
+              {!fixed ? (
+                <span className="flex flex-wrap gap-1.5">
+                  <button type="button" className={GHOST} onClick={() => keepOne(c.index)} disabled={Boolean(busy)} aria-label={`${KEEP_ONE} card ${c.n} · ${c.title}`} data-testid={`pitch-review-keep-${c.index}`}>
+                    {busy === `keep-${c.index}` ? 'Keeping…' : KEEP_ONE}
+                  </button>
+                  {canRegenerate(proposal, c.index) ? (
+                    <button type="button" className={GHOST} onClick={() => askRegenerate(c)} disabled={Boolean(busy)} aria-label={`Regenerate card ${c.n} · ${c.title}`} data-testid={`pitch-review-regenerate-${c.index}`}>
+                      Regenerate
+                    </button>
+                  ) : null}
+                </span>
+              ) : null}
             </li>
           );
         })}
@@ -402,6 +485,22 @@ export function ProposalReview({ projectId, q = '', proposal, items = [], versio
             ))}
           </ul>
         </section>
+      ) : null}
+      {regen ? (
+        <Lightbox label="Regenerate this card" title="Regenerate this card" width={500} onClose={() => busy !== 'regenerate' && setRegen(null)} testId="pitch-review-regenerate-dialog"
+          footer={(
+            <div className="flex justify-end gap-2">
+              <button type="button" className={GHOST} onClick={() => setRegen(null)} disabled={busy === 'regenerate'}>Cancel</button>
+              <button type="button" className={PRIMARY} onClick={regenerate} disabled={busy === 'regenerate' || !regen.quote} data-testid="pitch-review-regenerate-confirm">
+                {busy === 'regenerate' ? 'Working…' : regen.quote?.ai ? `Regenerate · ${aiTokens(regen.quote.hold_microusd)}` : 'Regenerate'}
+              </button>
+            </div>
+          )}>
+          <div className="flex flex-col gap-2">
+            <p className={`m-0 ${MUTED}`} data-testid="pitch-review-regenerate-sentence">{regenerateSentence(regen.quote, regen.title)}</p>
+            {regen.quote?.ai ? <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="pitch-review-regenerate-hold">{HOLD(aiTokens(regen.quote.hold_microusd))}</span> : null}
+          </div>
+        </Lightbox>
       ) : null}
       {discarding ? (
         <Lightbox label="Discard this proposal" title="Discard this proposal" width={480} onClose={() => !busy && setDiscarding(false)} testId="pitch-review-discard-dialog"
