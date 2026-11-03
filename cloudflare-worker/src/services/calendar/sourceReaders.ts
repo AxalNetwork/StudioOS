@@ -66,6 +66,10 @@ export interface ComplianceFacts {
   owner: string | null;
   /** `auto` when the legal seeder wrote it, else `manual` or the feed that did. */
   source: string | null;
+  /** D1614 CO4 (#3976): the company the duty belongs to (its badge), or null for a standalone venture's. */
+  company: { uid: string; name: string } | null;
+  /** True for a company-level task (no venture): its changes go to /api/company/:uid/compliance. */
+  company_task: boolean;
 }
 export interface ComplianceReadOptions {
   /** The page read only: a done deadline stays on its day, so Mark done can be undone there. */
@@ -92,15 +96,28 @@ export async function complianceDueEvents(
 ): Promise<SourceEvent[]> {
   const rows = results(await env.DB.prepare(
     `SELECT e.id, e.uid, e.title, e.due_date, e.description, e.project_id, e.completion_status,
-            e.event_type, e.jurisdiction, e.recurrence, e.source, e.owner_name, p.company_id
+            e.event_type, e.jurisdiction, e.recurrence, e.source, e.owner_name, p.company_id,
+            c.uid AS company_uid, c.company_name, 0 AS company_task
        FROM compliance_events e JOIN projects p ON p.id = e.project_id AND p.deleted_at IS NULL
        JOIN users u ON u.id = ? AND u.founder_id = p.founder_id AND u.role = 'founder'
         AND u.is_active = 1 AND u.deletion_requested_at IS NULL
+       LEFT JOIN company_profiles c ON c.id = p.company_id
       WHERE (e.completion_status <> 'completed' OR ? = 1)
         AND julianday(date(e.due_date), '+1 day') > julianday(?)
         AND julianday(date(e.due_date)) < julianday(?)
-      ORDER BY date(e.due_date), e.id`,
-  ).bind(userId, opts.withDone ? 1 : 0, from, to).all<Row>());
+     UNION ALL
+     -- D1614 CO4 (#3976): a company-level task, for the people with a seat on its company.
+     SELECT e.id, e.uid, e.title, e.due_date, e.description, NULL, e.completion_status,
+            e.event_type, e.jurisdiction, e.recurrence, e.source, e.owner_name, e.company_id,
+            c.uid, c.company_name, 1
+       FROM compliance_events e JOIN company_profiles c ON c.id = e.company_id AND c.archived_at IS NULL
+       JOIN user_company_links l ON l.company_id = e.company_id AND l.user_id = ?
+      WHERE e.project_id IS NULL
+        AND (e.completion_status <> 'completed' OR ? = 1)
+        AND julianday(date(e.due_date), '+1 day') > julianday(?)
+        AND julianday(date(e.due_date)) < julianday(?)
+      ORDER BY 4, 1`,
+  ).bind(userId, opts.withDone ? 1 : 0, from, to, userId, opts.withDone ? 1 : 0, from, to).all<Row>());
   const today = opts.today || new Date().toISOString().slice(0, 10);
   return rows
     .filter((r) => opts.companyId === undefined || projectInActiveCompany(opts.companyId, { company_id: r.company_id ?? null }))
@@ -111,10 +128,12 @@ export async function complianceDueEvents(
         event_type: r.event_type ?? null, jurisdiction: r.jurisdiction ?? null, recurrence: r.recurrence ?? null,
         owner: typeof r.owner_name === 'string' && r.owner_name.trim() ? r.owner_name.trim() : null,
         source: r.source ?? null,
+        company: r.company_uid ? { uid: String(r.company_uid), name: String(r.company_name ?? '') } : null,
+        company_task: Number(r.company_task) === 1,
       };
       return {
         ...deadline({ ...base('compliance_due', Number(r.id), String(r.uid), String(r.title)),
-          project_id: Number(r.project_id), notes: r.description || null }, String(r.due_date)),
+          project_id: r.project_id == null ? null : Number(r.project_id), notes: r.description || null } as SourceEvent, String(r.due_date)),
         status: state === 'done' ? 'completed' : 'scheduled',
         compliance,
       };

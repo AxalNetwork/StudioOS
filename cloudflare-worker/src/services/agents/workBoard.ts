@@ -260,8 +260,9 @@ export async function updateWorkTask(env: Env, t: WorkTask, b: Record<string, an
   return (await taskByUid(env,t.uid)) as WorkTask;
 }
 
-/** D1614 W7 (#3993): a task created by accepting an agent's draft names that agent. */
-export type CreateOptions = { draftedByAgentId?: number | null };
+/** D1614 W7 (#3993): a task created by accepting an agent's draft names that agent.
+ * D1614 CO3 (#3976): `complianceRef` is the company obligation this item does the work for; the caller has checked it is this project's company's. */
+export type CreateOptions = { draftedByAgentId?: number | null; complianceRef?: number };
 export async function createWorkTask(env: Env, scope: Project, b: Record<string, any>, user: User, opts: CreateOptions = {}): Promise<WorkTask> {
   if (!(await canRead(env,scope,user)) || !(await canManage(env,scope,user))) throw new WorkRefusal(403,'not_manager','Only a project editor can create tasks.');
   const w = await boardWrite(env,scope,b,null), uid = newUid(), change = newUid();
@@ -277,7 +278,9 @@ export async function createWorkTask(env: Env, scope: Project, b: Record<string,
     opts.draftedByAgentId??null,w.scheduled_start??null,w.scheduled_end??null,scope.id),
   env.DB.prepare(`INSERT INTO scope_task_events (task_id,actor_user_id,kind,detail_json) SELECT id,?,'created',? FROM scope_tasks WHERE uid = ?`)
     .bind(user.id,JSON.stringify({ change,column:w.board_column,...(opts.draftedByAgentId?{draft:true}:{}) }),uid),
-  ...('labels' in b || 'labels_json' in b ? labelSyncStatements(env,uid,scope.id,JSON.parse(w.labels_json??'[]'),change) : [])]);
+  ...('labels' in b || 'labels_json' in b ? labelSyncStatements(env,uid,scope.id,JSON.parse(w.labels_json??'[]'),change) : []),
+  // D1614 CO3 (#3976): the compliance link is set in the same batch, and only when there is one.
+  ...(opts.complianceRef ? [env.DB.prepare('UPDATE scope_tasks SET compliance_ref = ? WHERE uid = ?').bind(opts.complianceRef,uid)] : [])]);
   return (await taskByUid(env,uid)) as WorkTask;
 }
 
