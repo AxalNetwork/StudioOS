@@ -133,38 +133,49 @@ test('the ledger reads every page whatever order the API lists in, and says when
   }
 });
 
-// #4281: with more than 3,000 artifacts in the repository, the cap alone cut
-// every listing off, and every review in every month was refused as "spend
-// unreadable". A newest-first listing now ends at the month's start.
-test('the ledger ends a newest-first listing at the month\'s start, however many artifacts the repository holds', async () => {
-  // Mutation checked: the early stop dropped → the 40-page listing reads 30 pages and is incomplete.
+// #4281: with more than 3,000 artifacts in the repository (3,272 on
+// 2026-11-03), the cap alone cut every listing off, and every review was
+// refused as "spend unreadable". The listing is in id order, newest first,
+// with created_at drifting up to ~47 minutes from it (measured); it now ends
+// a day past the month's start.
+test('the ledger ends an id-ordered listing a day past the month\'s start, whatever created_at drifts', async () => {
+  // Mutation checked: the early stop dropped → 60 pages read, cut off, incomplete;
+  // the stop at the month's start itself (no day of margin) → the record whose
+  // upload began before a later artifact's is missed.
   const since = '2026-11-01T00:00:00Z';
-  const record = (iso, n) => ({ name: `claude-review_v1_2026-11_pr${n}_${'b'.repeat(16)}_ok_250000`, created_at: iso, expired: false });
-  // 40 pages, newest first: page 1 holds this month's two records and 98 other artifacts; page 2 starts in October.
-  const pages = Array.from({ length: 40 }, (_, p) => Array.from({ length: 100 }, (_, i) => {
-    if (p === 0 && i === 0) return record('2026-11-03T11:00:00Z', 1);
-    if (p === 0 && i === 1) return record('2026-11-02T09:00:00Z', 2);
-    const minutes = p * 100 + i;
-    const iso = p === 0 ? `2026-11-01T${String(Math.floor(minutes / 60) % 24).padStart(2, '0')}:00:00Z` : new Date(Date.UTC(2026, 9, 31) - minutes * 60_000).toISOString().replace('.000', '');
-    return { name: 'test-results', created_at: iso };
+  const start = Date.parse('2026-11-03T12:00:00Z');
+  // 60 pages, ids descending, one artifact every 10 minutes, created_at jittered by up to 45 minutes.
+  const pages = Array.from({ length: 60 }, (_, p) => Array.from({ length: 100 }, (_, i) => {
+    const n = p * 100 + i;
+    const jitter = ((n * 37) % 91 - 45) * 60_000;
+    const iso = new Date(start - n * 10 * 60_000 + jitter).toISOString().replace('.000', '');
+    return { id: 1_000_000 - n, name: 'routing-docs', created_at: iso };
   }));
-  // Page 1 must itself be newest first: sort it.
-  pages[0].sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+  // Two records: one early in the listing, one just after the month's start, behind an October artifact in id order.
+  pages[0][3] = { id: pages[0][3].id, name: `claude-review_v1_2026-11_pr1_${'b'.repeat(16)}_ok_250000`, created_at: '2026-11-03T11:30:00Z' };
+  // The page after the first October artifact: a stop at the month's start itself would never read it.
+  const late = pages.findIndex((pg) => pg.some((a) => a.created_at < since)) + 1;
+  pages[late][0] = { id: pages[late][0].id, name: `claude-review_v1_2026-11_pr2_${'c'.repeat(16)}_ok_300000`, created_at: '2026-11-01T00:20:00Z' };
   const seen = [];
   const listing = await listMonthRecords(async (page) => { seen.push(page); return { artifacts: pages[page - 1] }; }, since);
   assert.equal(listing.complete, true, 'the month is read in full, so the budget can be applied');
-  assert.deepEqual(seen, [1, 2], 'it stops at the first page that reaches before the month');
-  assert.deepEqual(listing.artifacts.map((a) => a.created_at), ['2026-11-03T11:00:00Z', '2026-11-02T09:00:00Z']);
+  assert.ok(seen.length < pages.length, `it stops early (read ${seen.length} of ${pages.length} pages)`);
+  assert.deepEqual(listing.artifacts.map((a) => a.name.slice(25, 28)).sort(), ['pr1', 'pr2'], 'a record behind an older artifact in id order is still counted');
   assert.ok(pages.length > LEDGER_MAX_PAGES, 'more artifacts than the cap would ever read');
 });
 
-test('the ledger does not trust an order it has not seen: an out-of-order listing reads on to the cap', async () => {
-  // Mutation checked: the order check dropped → this listing stops at page 1 and calls itself complete.
+test('the ledger treats a reply with no artifact list as an error, never as the end of the month', async () => {
+  // Mutation checked: the throw dropped → an error reply reads as a complete month with no spend.
+  await assert.rejects(listMonthRecords(async () => ({ message: 'API rate limit exceeded' }), '2026-11-01T00:00:00Z'), /no artifact list/);
+});
+
+test('the ledger does not trust an order it has not seen: ids out of order read on to the cap', async () => {
+  // Mutation checked: the id order check dropped → this listing stops at page 1 and calls itself complete.
   const since = '2026-11-01T00:00:00Z';
-  const page1 = [{ name: 'x', created_at: '2026-10-01T00:00:00Z' }, ...Array.from({ length: 99 }, () => ({ name: 'y', created_at: '2026-11-02T00:00:00Z' }))];
+  const page1 = [{ id: 5, name: 'x', created_at: '2026-10-01T00:00:00Z' }, ...Array.from({ length: 99 }, (_, i) => ({ id: 10 + i, name: 'y', created_at: '2026-11-02T00:00:00Z' }))];
   const seen = [];
-  const full = Array.from({ length: 100 }, () => ({ name: 'z', created_at: '2026-11-02T00:00:00Z' }));
-  const listing = await listMonthRecords(async (page) => { seen.push(page); return { artifacts: page === 1 ? page1 : full }; }, since);
+  const full = (p) => Array.from({ length: 100 }, (_, i) => ({ id: 100_000 - p * 100 - i, name: 'z', created_at: '2026-11-02T00:00:00Z' }));
+  const listing = await listMonthRecords(async (page) => { seen.push(page); return { artifacts: page === 1 ? page1 : full(page) }; }, since);
   assert.equal(seen.length, LEDGER_MAX_PAGES, 'read on to the cap');
   assert.equal(listing.complete, false, 'and a listing the cap cut off is still incomplete, so the budget refuses');
 });
