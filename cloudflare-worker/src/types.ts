@@ -436,6 +436,9 @@ export interface Env {
   // Worker secret: never in D1, never a member's key, and not ANTHROPIC_API_KEY
   // above, which is dev-only (Task #31).
   AI_PROVIDER_ANTHROPIC?: string;
+  // #3778 phase 2 (D1534): the deck's Bria image tools (background removal) through AI Gateway,
+  // offered only when exactly 'on' (`imageToolsOn`). Off until the owner's steps on #1008.
+  AI_PROVIDER_BRIA?: string;
   AI_PROVIDER_ANTHROPIC_KEY?: string;
   // R2 bucket for KYC documents and other large/private blobs.
   // Optional so unit-test envs without R2 bindings still type-check.
