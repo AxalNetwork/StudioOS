@@ -1326,7 +1326,7 @@ async function ensureLogSchema(env: Env): Promise<void> {
   if (LOG_SCHEMA_READY.get(env.DB as unknown as object)) return;
   try {
     await env.DB.exec(
-      "CREATE TABLE IF NOT EXISTS ai_usage_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, task TEXT NOT NULL, model TEXT NOT NULL, latency_ms INTEGER NOT NULL DEFAULT 0, prompt_tokens INTEGER NOT NULL DEFAULT 0, completion_tokens INTEGER NOT NULL DEFAULT 0, est_cost_usd REAL NOT NULL DEFAULT 0, safety_score REAL, fallback_used INTEGER NOT NULL DEFAULT 0, cached INTEGER NOT NULL DEFAULT 0, refusal TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), surface TEXT, charged_microusd INTEGER CHECK (charged_microusd IS NULL OR charged_microusd >= 0), reservation_uid TEXT, rail_page TEXT, rail_option TEXT, record_ref TEXT, guard_for INTEGER, units_json TEXT, agent_id INTEGER)",
+      "CREATE TABLE IF NOT EXISTS ai_usage_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, task TEXT NOT NULL, model TEXT NOT NULL, latency_ms INTEGER NOT NULL DEFAULT 0, prompt_tokens INTEGER NOT NULL DEFAULT 0, completion_tokens INTEGER NOT NULL DEFAULT 0, est_cost_usd REAL NOT NULL DEFAULT 0, safety_score REAL, fallback_used INTEGER NOT NULL DEFAULT 0, cached INTEGER NOT NULL DEFAULT 0, refusal TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), surface TEXT, charged_microusd INTEGER CHECK (charged_microusd IS NULL OR charged_microusd >= 0), reservation_uid TEXT, rail_page TEXT, rail_option TEXT, record_ref TEXT, guard_for INTEGER, units_json TEXT, agent_id INTEGER, skill_id INTEGER, skill_version INTEGER)",
     );
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_ai_usage_user_created ON ai_usage_logs(user_id, created_at DESC)");
     await env.DB.exec("CREATE INDEX IF NOT EXISTS idx_ai_usage_task_created ON ai_usage_logs(task, created_at DESC)");
@@ -1351,6 +1351,9 @@ async function addLogColumns493(env: Env): Promise<void> {
   }
   // Migration 712's column (D1496 part 2): the agent a run was for.
   if (!have.has('agent_id')) await env.DB.exec('ALTER TABLE ai_usage_logs ADD COLUMN agent_id INTEGER');
+  // D1612 part D (#3954), migration 202611022313: the skill and pinned version an agent's run used (`skillEval.tagUsage`).
+  if (!have.has('skill_id')) await env.DB.exec('ALTER TABLE ai_usage_logs ADD COLUMN skill_id INTEGER');
+  if (!have.has('skill_version')) await env.DB.exec('ALTER TABLE ai_usage_logs ADD COLUMN skill_version INTEGER');
   await env.DB.exec(LOG_PAGE_INDEX_493);
 }
 
@@ -2004,12 +2007,15 @@ async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Prom
 
   // ---- #3937 (D1478 task 3, part 2): a text job's model ----------------------
   // A text run that names its job (or whose task `TASK_TEXT_JOBS` maps, when no
-  // model is named): the job's ladder, each model offered, unlocked and able to
+  // model is named and no page row decides): the job's ladder, each model offered, unlocked and able to
   // hold the input. A rail pick the job lists is honoured; a named model the job
   // does not list is refused. Too long for every model: refused, naming the
   // longest-window one, before anything is held.
   const textShaped = !route.isAudio && !route.isEmbed && !opts.rerank && !opts.translate && !opts.speak && !opts.draw && !opts.specialist && !(opts.images?.length);
-  const textJobId = opts.textJob ?? (!opts.model ? TASK_TEXT_JOBS[opts.task] : undefined);
+  // #3937 part 3: a task's own job (`TASK_TEXT_JOBS`) yields to a rail run's page row: a press on a page
+  // the matrix lists runs that page's models (D764), as before. A job the caller names always applies.
+  const pageRowed = !!opts.rail && !!(resolveRailOption(opts.rail.page, opts.rail.option ?? null) ?? resolveRail(opts.rail.page));
+  const textJobId = opts.textJob ?? (!opts.model && !pageRowed ? TASK_TEXT_JOBS[opts.task] : undefined);
   if (textJobId && textShaped) {
     let pick: string | null = null;
     let tier: PlanTier;

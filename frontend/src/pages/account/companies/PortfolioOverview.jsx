@@ -46,7 +46,7 @@ function CompanyCard({ c, onAddProject, onRetry, profile, counts }) {
   return (
     <article className={`${CARD} flex flex-col gap-3 !px-0 !pb-0 ${c.active ? 'ring-[3px] ring-axal-lavender dark:ring-violet-950/50' : ''}`} data-testid="company-card" data-uid={c.uid}>
       <div className="flex flex-wrap items-start gap-3 px-[18px]">
-        <CompanyMark name={c.name} size={40} />
+        <CompanyMark name={c.name} logoUrl={c.logoUrl} size={40} />
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           <span className="flex flex-wrap items-center gap-2">
             <Link to={companyPathFor(c.uid)} className={`text-[16px] font-extrabold tracking-[-.01em] ${INK} hover:underline`} data-testid={`company-name-${c.uid}`}>{c.name}</Link>

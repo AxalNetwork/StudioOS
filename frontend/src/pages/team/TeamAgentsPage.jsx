@@ -372,7 +372,7 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
           {kind === 'company' && ['founder', 'admin'].includes(me().role) ? <p className={`m-0 ${MUTED}`}>{ROSTER_LINE} <Link to="/build/team" className={BTN_TEXT}>Open Build › Team</Link></p> : null}
         </>
       ) : null}
-      {tab === 'skills' ? <SkillsTab scope={scope} rolesBlock={rolesBlock} agentsBlock={agentsBlock} onAddAgent={!planLocked && agentsBlock?.value?.can_manage ? () => setSheet({ kind: 'agent' }) : null} /> : null}
+      {tab === 'skills' ? <SkillsTab scope={scope} agentsBlock={agentsBlock} /> : null}
       {tab === 'roles' ? <RulebooksTab scope={scope} canManage={!!agentsBlock?.value?.can_manage} agentsBlock={agentsBlock} /> : null}
       {tab === 'approvals' ? <ApprovalsTab scope={scope} /> : null}
       {tab === 'settings' ? (

@@ -5806,6 +5806,32 @@
   },
   {
    "pageKey": "Founder · Raise · Pitch deck",
+   "optionKey": "rehearse:coach",
+   "optionLabel": "Coach me",
+   "kind": "reason",
+   "handler": "draft",
+   "routeTask": "rail_reason",
+   "models": [
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Default",
+     "line": "Tests a claim against its evidence"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Alternative",
+     "line": "Reviews the first answer"
+    },
+    {
+     "id": "@cf/qwen/qwq-32b",
+     "role": "Deeper",
+     "line": "Argues the other side"
+    }
+   ],
+   "more": []
+  },
+  {
+   "pageKey": "Founder · Raise · Pitch deck",
    "optionKey": "review:deck-file",
    "optionLabel": "Drop your deck here or click to browse",
    "kind": "vision",
@@ -6041,7 +6067,7 @@
   {
    "pageKey": "Founder · Grow · Distribution",
    "optionKey": "form:landing",
-   "optionLabel": "Auto-fill with AI",
+   "optionLabel": "Ask",
    "kind": "write",
    "handler": "form",
    "routeTask": "rail_write",

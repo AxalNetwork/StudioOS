@@ -43,6 +43,7 @@ import { deckCardStatusApi } from '../../../lib/api/deckCardStatus.js';
 import { deckCheckApi } from '../../../lib/api/deckCheck.js';
 import { deckCoeditApi } from '../../../lib/api/deckCoedit.js';
 import { deckCommentsApi } from '../../../lib/api/deckComments.js';
+import { deckCritiqueApi } from '../../../lib/api/deckCritique.js';
 import { deckDraftApi } from '../../../lib/api/deckDraft.js';
 import { deckElementModelsApi } from '../../../lib/api/deckElementModels.js';
 import { deckElementsApi } from '../../../lib/api/deckElements.js';
@@ -108,7 +109,7 @@ export const SURFACES = Object.freeze({
   consistency: { issue: 3802, what: 'Consistency and wording checks' },
   deckActions: { issue: 3808, what: 'Replace all images and Reorder for stage' },
   brandLocks: { issue: 3819, what: 'Brand kit locks' },
-  pptxImport: { issue: 3809, what: 'Start from a .pptx template' },
+  pptxImport: { issue: 3819, what: 'Start from a .pptx template' },
   investorLinks: { issue: 3812, what: 'One link per investor, consent and watermark preview' },
   withdrawInvestorLink: { issue: 3812, what: 'Withdraw one investor\'s link, keeping its analytics' },
   comments: { issue: 3817, what: 'Comments with mentions' },
@@ -241,7 +242,8 @@ export const buttonClicks = (deckId) => through(() => deckMediaApi.buttonClicks(
 export const presets = (deckId) => through(() => deckModelPresetsApi.read(deckId), SURFACES.presets.issue);
 /** D1549 (#3796, the row is #3786's): each element group HQ locked, with "Set by Axal VC HQ" — the same reply's `locks`. */
 export const orgLocks = (deckId) => through(() => deckModelPresetsApi.read(deckId).then((r) => r.locks), SURFACES.orgLocks.issue);
-export const critique = off('critique');
+// D1552 (#3799): Fix with critique: its quote (the ⋯ item's hold), or the run itself with `{ run: true }`.
+export const critique = (deckId, { run = false, vision = true } = {}) => through(() => (run ? deckCritiqueApi.run(deckId, { vision }) : deckCritiqueApi.quote(deckId)), SURFACES.critique.issue);
 /** D1553 (#3800): four layouts for one card, and the remove-a-block reflow; free, so it answers with AI paused. */
 export const remix = (deckId, card, opts) => through(() => deckRemixApi.remix(deckId, card, opts), SURFACES.remix.issue);
 /**

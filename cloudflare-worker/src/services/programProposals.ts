@@ -119,10 +119,13 @@ const toolsOf = (raw: unknown): Record<ToolKey, boolean> | null => {
   }
 };
 
-/** Every field, for the row's Open and PG15a. A field nobody set is null ("Not set"). */
+/**
+ * Every field, for the row's Open and PG15a. A field nobody set is null ("Not set").
+ * #4046 (B4): its integer `id` too, the record Fill with Eadwyn's record step names after a Save.
+ */
 export function proposalView(r: Row, studio: string | null = null) {
   return {
-    uid: r.uid, status: r.status, studio: studio ?? null, licence_uid: r.licence_uid ?? null,
+    id: Number(r.id), uid: r.uid, status: r.status, studio: studio ?? null, licence_uid: r.licence_uid ?? null,
     name: r.name, purpose: r.purpose, who: listOrNull(r.who_json), group: r.grp,
     join_method: r.join_method, cycle: r.cycle, cohort_weeks: r.cohort_weeks == null ? null : Number(r.cohort_weeks),
     seats: r.seats == null ? null : Number(r.seats), eligibility: r.eligibility,

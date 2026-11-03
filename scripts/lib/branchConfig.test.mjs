@@ -59,6 +59,8 @@ test('every name is derived from the code, and the shared dataset is not', () =>
     `bucket_name = "${n.r2.FILES}"`,
     `bucket_name = "${n.r2.PUBLICATIONS}"`,
     `bucket_name = "${n.r2.BACKUPS}"`,
+    // #4201: the company logo bucket is the branch's own too.
+    `bucket_name = "${n.r2.COMPANY_LOGOS}"`,
     'BRANCH_CODE = "fr"',
     'BRANCH_TERRITORY = "FR,BE,LU"',
     'CF_WORKER_SCRIPT_NAME = "studioos-fr"',

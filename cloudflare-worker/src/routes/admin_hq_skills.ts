@@ -11,6 +11,9 @@
  *   POST /:uid/review/request-changes { comment }       the named reviewer sends it back
  *   PUT  /:uid/cases                 { cases: [{ uid?, name, input, expect }], reason }   the skill's golden cases
  *   POST /:uid/evals                 { models? }        run every live case on each model, through `run()`, charged to HQ
+ *   POST /evals/published            { models?, uid? }  D1612 part D (#3954): every published Axal skill's golden cases (its
+ *                                    starter case and HQ's live ones) on its CURRENT version; a case that passed and now
+ *                                    fails is a regression, told to HQ once → { skills, results, regressions }
  *   POST /:uid/retire                { replacement_uid, reason }  → { pinned_agents }
  *   POST /bulk                       { action: publish | retire | evals, uids, reason, replacement_uid?, models? }
  *                                    each item done or refused on its own: { results: [{ uid, ok, code?, message? }] }
@@ -42,6 +45,7 @@ import {
   type CaseExpect, type CaseInput, type DraftParts, type ReviewRow,
 } from '../services/agents/skillLifecycle';
 import { RADAR_AXES } from '../services/skillsTaxonomySchema';
+import { evaluatePublished } from '../services/agents/skillEval';
 import type { OutputKind } from '../services/agents/skills';
 
 type C = Context<{ Bindings: Env }>;
@@ -297,6 +301,26 @@ adminHqSkills.post('/:uid/evals', async (c) => {
   if (!done.cases) return say(c, 409, 'no_cases', 'This skill has no golden cases yet. Add one, then run the evals.');
   await audit(c.env, admin, 'agent_skill_evals_run', s, null, null, { pass: done.summary.pass, total: done.summary.total }, { models: m.models });
   return c.json({ evals: { ...done.summary, pass_bar: PASS_BAR } });
+});
+
+// D1612 part D (#3954): the published versions' golden cases, for the evaluation board.
+adminHqSkills.post('/evals/published', async (c) => {
+  const admin = await requireSuperAdmin(c);
+  const b = await body(c);
+  const m = evalModels(c.env, admin, b.models);
+  if (!m.ok) return say(c, 400, 'models_invalid', m.message);
+  let only: number | null = null;
+  if (b.uid != null) {
+    const s = await hqSkill(c.env, b.uid);
+    if (!s) return noSkill(c);
+    if (s.status !== 'published') return say(c, 409, 'not_published', 'Only a published Axal skill has a version to evaluate.');
+    only = s.id;
+  }
+  const done = await evaluatePublished(c.env, admin.id, m.models, {}, only);
+  await logAdminAction(c.env, admin.id, admin.email, 'agent_skill_published_evals_run', {
+    skill_uid: only != null ? String(b.uid) : null, models: m.models, skills: done.skills, results: done.results, regressions: done.regressions.length,
+  });
+  return c.json(done);
 });
 
 // ── Retire ──────────────────────────────────────────────────────────────────

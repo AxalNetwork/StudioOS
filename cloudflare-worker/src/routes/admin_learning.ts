@@ -35,6 +35,7 @@ import { refuse } from '../util/refusal';
 import { logAdminAction } from '../services/adminAudit';
 import { COURSE_COVER, COURSE_UID, courseCoverPrefix, coverAsk, coverRunOptions, drawCover, quoteCover } from '../services/coverDraws';
 import { mapError, newUid } from './_t13t14t15_helpers';
+import { parseChapters } from '../services/learningStream';
 import {
   allowedVideoUrl, httpsUrl, parseResources, SLUG_RE,
   ITEM_KINDS, LESSON_KINDS, LEARNING_LEVELS, LEARNING_VISIBILITIES,
@@ -157,7 +158,7 @@ export async function guarded(c: Context<{ Bindings: Env }>, fn: () => Promise<R
 const now = () => new Date().toISOString();
 
 // Fixed column lists: an UPDATE names only columns from these, never a key from the body.
-const ITEM_COLUMNS = ['title', 'summary', 'body', 'video_url', 'duration_seconds', 'thumbnail_url', 'transcript', 'topic', 'level', 'visibility'] as const;
+const ITEM_COLUMNS = ['title', 'summary', 'body', 'video_url', 'duration_seconds', 'thumbnail_url', 'transcript', 'topic', 'level', 'visibility', 'chapters_json'] as const;
 const COURSE_COLUMNS = ['slug', 'title', 'summary', 'cover_url', 'level', 'estimated_minutes', 'resources_json', 'visibility'] as const;
 
 const ITEM_SELECT = 'SELECT uid, kind, title, summary, body, video_source, video_url, duration_seconds, thumbnail_url, transcript, topic, level, visibility, status, created_by, created_at, updated_at, published_at FROM learning_items';
@@ -216,16 +217,31 @@ r.patch('/items/:uid', async (c) => {
     const uid = c.req.param('uid');
     const before = await c.env.DB.prepare('SELECT kind FROM learning_items WHERE uid = ?').bind(uid).first<{ kind: string }>();
     if (!before) return refuse(c, 404, { code: 'not_found', message: 'No such item.' });
-    const f = itemFields(await c.req.json().catch(() => ({})), false);
-    const changed = await patchRow(c.env, 'learning_items', ITEM_COLUMNS, uid, f);
+    const raw = await c.req.json().catch(() => ({} as any));
+    const f = itemFields(raw, false);
+    // #4176 (D4176): chapters for a Stream video: at most 100, start times strictly increasing.
+    let chapters: string | undefined;
+    if (raw?.chapters !== undefined) {
+      const parsed = raw.chapters === null ? [] : parseChapters(raw.chapters);
+      if (!parsed) return refuse(c, 400, { code: 'bad_chapters', message: 'Chapters are at most 100, each a whole start second after the last and a title of up to 120 characters.' });
+      chapters = JSON.stringify(parsed);
+    }
+    const changed = await patchRow(c.env, 'learning_items', ITEM_COLUMNS, uid, { ...f, chapters_json: chapters });
     // A link replaces an uploaded video (the daily sweep removes the object);
     // clearing the link leaves an uploaded video where it is (D561).
     if (f.video_url) {
       await c.env.DB.prepare(`UPDATE learning_items SET video_source = 'url', r2_key = NULL WHERE uid = ?`).bind(uid).run();
+      // #4176 (D4176): a link replaces a Stream video too: the item stops playing it (its row stays, for the sweep).
+      // A store without the Stream columns has no Stream video to clear; any other failure is real.
+      try {
+        await c.env.DB.prepare(`UPDATE learning_items SET stream_uid = NULL WHERE uid = ? AND stream_uid IS NOT NULL`).bind(uid).run();
+      } catch (e) {
+        if (!/no such column|has no column/i.test(String((e as Error)?.message))) throw e;
+      }
     } else if (f.video_url === null) {
       await c.env.DB.prepare(`UPDATE learning_items SET video_source = NULL WHERE uid = ? AND video_source = 'url'`).bind(uid).run();
     }
-    await record(c, admin, 'learning.item.update', { uid, fields: ITEM_COLUMNS.filter((k) => (f as any)[k] !== undefined) });
+    await record(c, admin, 'learning.item.update', { uid, fields: [...ITEM_COLUMNS.filter((k) => (f as any)[k] !== undefined), ...(chapters !== undefined ? ['chapters'] : [])] });
     void changed;
     return c.json({ item: await c.env.DB.prepare(ITEM_SELECT + ' WHERE uid = ?').bind(uid).first() });
   });

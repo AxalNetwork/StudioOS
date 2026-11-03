@@ -162,12 +162,17 @@ export function readyLine(kept, left) {
 
 /**
  * The theme the proposal carries, decided before anything is saved:
+ *   - a saved deck brand kit's pick (D1562, the Worker's `pick`): its theme,
+ *     fonts, logo corner and art direction, applied without asking;
  *   - the base version's theme, kept as it is (nothing to write);
  *   - else the venture's brand kit, "Brand · from your brand kit" (written on Accept);
  *   - else Neutral light, which a card with no theme draws already.
  * `kit` is the brand-kit read: `{ status, data }`. While it reads, null.
  */
 export function themePick(baseTheme, kit) {
+  // D1562 (#3809, AUTO-2): a saved deck brand kit applies first, without asking: the Worker's pick, theme and reason.
+  const kitPick = kit?.status === 'ok' && kit.data?.kit?.deck ? kit.data.pick : null;
+  if (kitPick?.theme?.kind) return { theme: { background: null, ...kitPick.theme }, from: 'kit', line: `Theme: ${kitPick.reason || 'Brand · from your brand kit'}` };
   if (baseTheme?.kind) return { theme: baseTheme, from: 'version', line: `Theme: ${THEME_LABELS[baseTheme.kind] || baseTheme.kind} · as on your current version` };
   if (!kit || kit.status === 'loading' || kit.status === 'idle') return null;
   if (kit.status === 'ok' && kit.data?.kit) return { theme: { kind: 'brand', background: null }, from: 'kit', line: 'Theme: Brand · from your brand kit' };
