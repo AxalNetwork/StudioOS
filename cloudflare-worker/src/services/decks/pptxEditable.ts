@@ -374,6 +374,8 @@ export type EditableInput = {
   series?: ResolvedSeries | null;
   /** D1574: today's date (YYYY-MM-DD), which decides what is a projection; today when not given. */
   today?: string;
+  /** D1578 (#3825): the file's title and language (docProps/core.xml); none when not given. */
+  meta?: { title: string; lang: string } | null;
 };
 
 /**
@@ -424,6 +426,18 @@ function svgPicture(id: number, name: string, r: Rect, pngRid: string, svgRid: s
 }
 
 const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+/** Office's "Mark as decorative" extension (`adec:decorative`), which a screen reader skips. */
+export const DECORATIVE_EXT = '<a:extLst><a:ext uri="{C183D7F6-B498-43B3-948B-1728B52AA6E4}"><adec:decorative xmlns:adec="http://schemas.microsoft.com/office/drawing/2017/decorative" val="1"/></a:ext></a:extLst>';
+
+/**
+ * D1578 (#3825): a shape that only decorates — decor, an icon or texture, a
+ * filter's colour wash — is marked decorative on its first `p:cNvPr`, so a
+ * screen reader reads the slide's areas, in reading order, and nothing else.
+ */
+export function decorative(xml: string): string {
+  return xml.replace(/<p:cNvPr ([^>]*?)\/>/, (_m, attrs) => `<p:cNvPr ${attrs}>${DECORATIVE_EXT}</p:cNvPr>`);
+}
 
 /**
  * D1574: the blocks in reading order — top to bottom, then start to end —
@@ -521,7 +535,7 @@ async function blockSlideXml(slide: any, idx: number, total: number, input: Edit
     if (xml) {
       id += 1;
       counts.shapes += 1;
-      decor.push({ xml, rect: decorRect(d), group: d.group, pinned: d.pinned });
+      decor.push({ xml: decorative(xml), rect: decorRect(d), group: d.group, pinned: d.pinned });
       continue;
     }
     // D1574: an icon, texture or other drawn item as its SVG, the art the editor shows.
@@ -529,7 +543,7 @@ async function blockSlideXml(slide: any, idx: number, total: number, input: Edit
     if (!svg) continue;
     const r = decorRect(d);
     const png = embed('png', CLEAR_PNG);
-    decor.push({ xml: svgPicture(id++, `Decor ${d.id}`, r, png, embed('svg', new TextEncoder().encode(svg)), d.pinned), rect: r, group: d.group, pinned: d.pinned });
+    decor.push({ xml: decorative(svgPicture(id++, `Decor ${d.id}`, r, png, embed('svg', new TextEncoder().encode(svg)), d.pinned)), rect: r, group: d.group, pinned: d.pinned });
     counts.svg += 1;
   }
   const placed: Placed[] = [];
@@ -548,7 +562,7 @@ async function blockSlideXml(slide: any, idx: number, total: number, input: Edit
       if (img && MEDIA[img.kind]) {
         const look = imageLookParts(b, r, img);
         put(b, r, picture(id++, `Image ${b.id}`, r, embed(MEDIA[img.kind] as string, img.bytes), String(b.alt || ''), b.pinned === true, look));
-        if (look.wash) put(b, r, wash(id++, `Image ${b.id} filter`, r, look.wash.colour, look.wash.alpha));
+        if (look.wash) put(b, r, decorative(wash(id++, `Image ${b.id} filter`, r, look.wash.colour, look.wash.alpha)));
         counts.placed += 1;
       } else {
         put(b, r, textBox(id++, `Image ${b.id}`, r, [run(IMAGE_MISSING, { size: pt(22), italic: true, color: MUTED })], 'ctr', b.pinned === true));
@@ -673,7 +687,7 @@ export async function writeEditableDeck(input: EditableInput): Promise<EditableR
     '<Default Extension="svg" ContentType="image/svg+xml"/>',
     '<Default Extension="xlsx" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"/>',
     ...charts.map((_, i) => `<Override PartName="/ppt/charts/chart${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>`),
-  ]), ...parts];
+  ], input.meta ?? null), ...parts];
   return {
     bytes: buildZip(entries),
     charts: { native: counts.native, pictured: counts.pictured, as_text: counts.as_text },
