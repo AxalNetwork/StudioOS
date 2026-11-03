@@ -1,0 +1,35 @@
+{
+  "skill": "security-review-checklist",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "github.repos": {
+        "merged": [
+          {
+            "title": "Store patient phone numbers",
+            "paths": [
+              "api/patients"
+            ]
+          }
+        ],
+        "settings": {
+          "branch_protection": true
+        }
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Store patient phone numbers",
+      "branch protection"
+    ],
+    "must_say_not_recorded": [
+      "secret scanning"
+    ],
+    "must_not_include": [
+      "secure"
+    ]
+  }
+}

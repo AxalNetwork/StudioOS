@@ -1,0 +1,31 @@
+{
+  "skill": "churn-risk-review",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "accounts": [
+          {
+            "name": "Riverside Clinics",
+            "usage_change_60d": "-42%",
+            "open_tickets": 3
+          }
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Riverside Clinics",
+      "-42%"
+    ],
+    "must_say_not_recorded": [
+      "renewal"
+    ],
+    "must_not_include": [
+      "will churn"
+    ]
+  }
+}

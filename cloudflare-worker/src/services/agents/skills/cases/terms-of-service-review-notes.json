@@ -1,0 +1,35 @@
+{
+  "skill": "terms-of-service-review-notes",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "data_room.index": [
+        {
+          "name": "Privacy policy.pdf",
+          "effective": "2026-01-10"
+        }
+      ],
+      "build.records": {
+        "shipped": [
+          {
+            "name": "SMS reminders",
+            "date": "2026-09-02",
+            "data": "Patient phone number"
+          }
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "SMS reminders",
+      "2026-01-10"
+    ],
+    "must_say_not_recorded": [],
+    "must_not_include": [
+      "the policy is compliant"
+    ]
+  }
+}

@@ -4,6 +4,8 @@
  * `/api/admin/ai-agents/skills`. Super Admin only.
  *
  *   GET  /                           the library: [Row], with status, version, agents pinned, pass rate, last eval
+ *   GET  /library                    D4225: the "From Axal" library files, each with its area, level, check and whether it is in the store
+ *   POST /library/seed               D4225: { reason } — every library skill not in the store becomes a draft with its golden cases
  *   GET  /:uid                       one skill: its draft, status, review, golden cases and results, versions, retirement
  *   GET  /:uid/diff?from=vN&to=draft|vM   the frontmatter fields that changed and the steps, kept, added and removed
  *   POST /:uid/review                { reviewer_uid }   ask a named Super Admin to review the current draft
@@ -42,6 +44,7 @@ import {
   type CaseExpect, type CaseInput, type DraftParts, type ReviewRow,
 } from '../services/agents/skillLifecycle';
 import { RADAR_AXES } from '../services/skillsTaxonomySchema';
+import { areaOf, checkLibrary, nameOfSlug, readLibrarySkill, seedLibrary } from '../services/agents/skillLibrarySeed';
 import type { OutputKind } from '../services/agents/skills';
 
 type C = Context<{ Bindings: Env }>;
@@ -122,6 +125,33 @@ adminHqSkills.get('/', async (c) => {
     });
   }
   return c.json({ skills, pass_bar: PASS_BAR });
+});
+
+// D4225 (#4225): the "From Axal" library. Before `/:uid`, so `library` is never read as a skill uid.
+adminHqSkills.get('/library', async (c) => {
+  await requireSuperAdmin(c);
+  const tax = await taxonomyMaps(c.env);
+  const present = new Map(((await c.env.DB.prepare("SELECT slug, status FROM agent_skills WHERE scope = 'hq' AND company_id IS NULL").all<{ slug: string; status: string }>()).results ?? []).map((r) => [r.slug, r.status]));
+  const skills = checkLibrary(new Set(tax.category.keys())).map((x) => {
+    const raw = readLibrarySkill(x.entry.skill_md);
+    const tags = (raw?.tags as Array<{ slug: string; level: string }> | undefined) ?? [];
+    const { area, level } = areaOf(tags, (s) => tax.category.get(s) ?? null);
+    return {
+      slug: x.entry.slug, name: nameOfSlug(x.entry.slug), area, level, cases: x.entry.cases.length,
+      check: x.ok ? { ok: true } : { ok: false, code: x.code, message: x.message },
+      in_store: present.get(x.entry.slug) ?? null,
+    };
+  });
+  return c.json({ skills });
+});
+
+adminHqSkills.post('/library/seed', async (c) => {
+  const admin = await requireSuperAdmin(c);
+  const b = await body(c);
+  const reason = typeof b.reason === 'string' ? b.reason.trim() : '';
+  if (!reason) return say(c, 400, 'reason_required', 'Say why the library is being seeded.');
+  const lines = await seedLibrary(c.env, Number(admin.id), reason.slice(0, 500));
+  return c.json({ seeded: lines, created: lines.filter((l) => l.outcome === 'created').length, refused: lines.filter((l) => l.outcome === 'refused').length });
 });
 
 adminHqSkills.get('/:uid', async (c) => {
