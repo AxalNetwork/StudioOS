@@ -886,6 +886,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
       ) : null}
       {dialog?.kind === 'image' && card ? (
         <ImageLightbox deckId={base.deck.id} cardIndex={sel} card={dialog.replace ? removeBlock(card, dialog.replace) : card} theme={theme} model={model}
+          replacing={dialog.replace ? (card.blocks || []).find((b) => b.id === dialog.replace) || null : null}
           items={items} colours={{ ...colours, ink }} initialUse={dialog.use} onClose={() => setDialog(null)}
           onPlace={(placed) => {
             // One step: the card and, for a card background, the theme it needs.
