@@ -178,7 +178,7 @@ test('D900: an admin reads the reviews and is offered no run; a version never re
 
   const fresh = await mount({ deckReviews: async () => ({ viewer: 'founder', reviews: [], capped: false }) }, { id: 1, role: 'founder' });
   try {
-    assert.match(fresh.text(fresh.by('pitch-review-current')), /This version has not been reviewed yet\./);
+    assert.match(fresh.text(fresh.by('pitch-review-current')), /v\d+ has not been reviewed yet\./, 'D4271: the line names the version');
     assert.match(fresh.text(fresh.by('pitch-review-history-empty')), /No version of this deck has been reviewed yet\./);
     assert.equal(fresh.by('pitch-review-score'), undefined, 'no score is drawn without a review');
     assert.doesNotMatch(fresh.text(fresh.by('pitch-review-run')), /\$/, 'no estimate without a recorded charge');

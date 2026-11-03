@@ -72,6 +72,8 @@ export const AI_SURFACE = {
   cofounderMatch: '/spinout-lab/cofounder-match',
   /** Build · Team › Advisors — the founder's press ranks the matched advisors against a need (`POST /api/advisors/match/rank`), #3938 NE1. */
   advisorMatch: '/build/team',
+  /** Network · Introductions — the member's press ranks the people a who-knows read answers against a need (`POST /api/relationships/who-knows/rank`), #3938 NE1. */
+  networkIntroductions: '/network/introductions',
   /** Studio — Eadwyn's interview: answers, explain, tool routing, rerank, dictation, and their safety pass. */
   studio: '/studio',
   /** Onboarding · Chat — the profiling conversation and its extraction (`/api/profiling/*`). */
