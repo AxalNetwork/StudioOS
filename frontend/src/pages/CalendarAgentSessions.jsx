@@ -15,11 +15,16 @@
  * switched on" block, and the grids carry no session because the calendar read
  * has no `agent_session` kind yet. Nothing here runs, applies or charges
  * anything: a session's work is proposals that a named person accepts.
+ *
+ * D1614 W6 (#3974, CAL10): each of the last runs that has run opens W3's run
+ * sheet (`RunSheet`, `GET /api/teams/runs/:uid`): what it read and produced,
+ * its outcome, its cost, and Retry when it failed.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Lightbox, Sheet, Unreadable, actionDanger, actionGhost, actionPrimary } from '../ui';
 import * as sessions from './calendarAgentsAdapter';
+import { RunSheet } from './work/WorkPage.jsx';
 import {
   CADENCES, HOLD_LINE, INSTRUCTION_MAX, NOT_RECORDED, PROPOSALS_LINE, WEEKDAYS,
   agentGroups, agentMeta, capLine, estimateLine, offLine, readOnlyLine, repeatLine, runNowLine, runRow,
@@ -269,7 +274,7 @@ function Row({ label, children, testId }) {
 }
 
 /** CAL10 and CAL11, pure on one read, so the test draws every state. */
-export function AgentSessionView({ session, onAct, busy = '' }) {
+export function AgentSessionView({ session, onAct, busy = '', onOpenRun = null }) {
   const s = session || {};
   const skip = skipReason(s);
   const banner = waitingBanner(s);
@@ -317,6 +322,9 @@ export function AgentSessionView({ session, onAct, busy = '' }) {
                 <StateChip session={{ state: r.state, proposals_waiting: r.proposals }} testId="cal-agent-run-state" />
                 {row.note ? <span className={MUTED}>{row.note}</span> : null}
                 <span className={`ml-auto font-mono ${INK}`}>{row.cost}</span>
+                {onOpenRun && typeof r.uid === 'string' && r.uid ? (
+                  <button type="button" className={LINK} onClick={() => onOpenRun(r.uid)} aria-label={`Open the run of ${row.when}`} data-testid="cal-agent-run-open">Open run ›</button>
+                ) : null}
               </div>
             );
           })}
@@ -351,6 +359,8 @@ export default function AgentSessionSheet({ id, onClose, onChanged }) {
   const [read, setRead] = useState(null);
   const [busy, setBusy] = useState('');
   const [said, setSaid] = useState('');
+  // CAL10 (D1614 W6): the run whose sheet is open over this one, or null.
+  const [runUid, setRunUid] = useState(null);
   const load = () => { setRead(null); sessions.session(id).then(setRead); };
   useEffect(() => { let alive = true; sessions.session(id).then((b) => { if (alive) setRead(b); }); return () => { alive = false; }; }, [id]);
   const act = async (a) => {
@@ -391,8 +401,11 @@ export default function AgentSessionSheet({ id, onClose, onChanged }) {
     </div>
   );
   return (
-    <Sheet label={s.title || label} title={s.title || s.skill?.name || NOT_RECORDED} sub={head} onClose={onClose} width={560} footer={footer} testId="cal-agent-sheet">
-      <AgentSessionView session={s} onAct={act} busy={busy} />
-    </Sheet>
+    <>
+      <Sheet label={s.title || label} title={s.title || s.skill?.name || NOT_RECORDED} sub={head} onClose={onClose} width={560} footer={footer} testId="cal-agent-sheet">
+        <AgentSessionView session={s} onAct={act} busy={busy} onOpenRun={setRunUid} />
+      </Sheet>
+      {runUid ? <RunSheet uid={runUid} onClose={() => setRunUid(null)} onRetried={() => { onChanged?.(); load(); }} /> : null}
+    </>
   );
 }

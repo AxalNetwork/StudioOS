@@ -23,6 +23,7 @@
 
 import { NOT_RECORDED } from '../../../lib/absence.js';
 import { STUDIO_PATH, dayLabel, ventureQuery, versionLabel } from './pitchStudioModel.js';
+import { transitionOf } from './motionModel.js';
 
 export const PRESENT_PATH = '/raise/pitch/present';
 
@@ -153,6 +154,8 @@ export function cardOf(slide, i) {
     card.figures.push({ k: str(b.label) || 'Figure', v: str(b.value) || NOT_RECORDED, source: sourceOf(b.binding), key });
   }
   card.blocks = gridBlocks(s);
+  // D1576 (#3823): the card's transition, which Present plays as it comes up.
+  if (transitionOf(s.transition)) card.transition = s.transition;
   card.empty = !card.blocks.length && !card.sub && !card.lines.length && !card.bullets.length && !card.figures.length && !card.image;
   return card;
 }

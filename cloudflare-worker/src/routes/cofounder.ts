@@ -31,6 +31,11 @@ import { filterOptedInUserIds } from '../services/matchingConsent';
 import { logMatchListGeneration } from '../services/matchAudit';
 import { logActorAct } from '../services/actorLog';
 import { refuse } from '../util/refusal';
+import { railFor, refuseRun } from '../util/railContext';
+import { AI_SURFACE } from '../services/aiSurfaces';
+import { MATCH_DEPS, MatchRefused, matchRows } from '../services/ai/matchRows';
+/** The request's execution context, or none where the runtime gives none (a test's request). */
+const execCtx = (c: any) => { try { return c.executionCtx; } catch { return undefined; } };
 import {
   loadUserVectors,
   confidenceAdjustedAlignment,
@@ -937,6 +942,44 @@ cofounder.delete('/connections/:uid', async (c) => {
     await logActorAct(c.env, user, 'cofounder_connection_closed', { connection_uid: conn.uid });
   }
   return c.json(await serializeConnectionFor(c.env, conn, user));
+});
+
+// #3938 part 4 (D1478 task 4, job NE1, the co-founder surface): the founder's press
+// orders the cards `GET /browse` answers (same query string, so the same filters,
+// consent, directory and closed-connection rules) by fit with what they are
+// looking for: retrieve (bge-m3), rank (the reranker), one line each
+// (`services/ai/matchRows.ts`). Cards stay anonymous: the text is the card's own
+// fields, never a name or email. Nothing here sends interest.
+cofounder.post('/browse/rank', async (c) => {
+  const user = await requireAuth(c);
+  try { gate(user); } catch (e: any) { return c.json({ detail: e.message }, e.status || 403); }
+  const b = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+  const typed = typeof b?.query === 'string' ? b.query.replace(/\s+/g, ' ').trim().slice(0, 300) : '';
+  const own = typed ? null : await getProfile(c.env, user.id);
+  const query = typed || String(own?.looking_for ?? '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  if (!query) return refuse(c, 422, { code: 'query_missing', message: 'Say what you are looking for in a co-founder, or add it to your profile.' });
+  const browse = await cofounder.request(`/browse${new URL(c.req.url).search}`, { headers: c.req.raw.headers }, c.env, execCtx(c));
+  if (!browse.ok) return browse;
+  const cards = ((await browse.json()) as { items?: any[] }).items || [];
+  const candidates = cards.map((k) => ({
+    key: String(k.uid),
+    text: [
+      k.looking_for ? `Looking for: ${String(k.looking_for).slice(0, 300)}` : null,
+      Array.isArray(k.skills) && k.skills.length ? `Skills: ${k.skills.slice(0, 12).join(', ')}` : null,
+      Array.isArray(k.sectors) && k.sectors.length ? `Sectors: ${k.sectors.slice(0, 8).join(', ')}` : null,
+      k.commitment ? `Commitment: ${k.commitment}` : null,
+      k.remote_ok ? 'Open to remote' : null,
+      k.bio ? String(k.bio).slice(0, 400) : null,
+    ].filter(Boolean).join('. '),
+  }));
+  const rail = railFor(c, { page: 'Founder · Co-founder match', option: null });
+  const deps = MATCH_DEPS.make(c.env, { userId: Number(user.id), surface: AI_SURFACE.cofounderMatch, rail, guardText: query }, 'NE1');
+  let res;
+  try { res = await matchRows(query, candidates, deps, { top: 10 }); } catch (e) {
+    if (e instanceof MatchRefused) return refuseRun(c, e.result)!;
+    throw e;
+  }
+  return c.json({ job: 'NE1', steps: res.steps, rows: res.rows.map((r) => ({ uid: r.key, position: r.position, line: r.line })) });
 });
 
 // Task #1 (AG) — spec-contract aliases.

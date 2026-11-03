@@ -117,7 +117,8 @@ test('the agenda: Overdue pinned with its days, then months oldest first; a task
 
 // #3970 turned `burnup` on, #3969/#3973 the board methods, and #3976 the compliance methods
 // (company_compliance_d1614.test.mjs holds what each sends); every other method stays off until its route lands.
-// D1614 W6 (#3974): W3's run, retry and feed and W4's workload and schedule are on; #3957's agentSessions stays off.
+// D1614 W6 (#3974): W3's run, retry and feed and W4's workload and schedule are on; agentSessions stays off until
+// W4's Worker puts agents' sessions in the workload read (#3972). CAL10's run sheet opens from the session itself.
 const LIVE = new Set(['burnup', 'board', 'item', 'move', 'assign', 'create', 'run', 'retry', 'feed', 'workload', 'schedule',
   'complianceTasks', 'complianceTask', 'markDone', 'createWork', 'complianceCreate', 'complianceUpdate',
   'complianceAssignable', 'complianceAssign', 'complianceComment', 'complianceReady', 'complianceReopen']);

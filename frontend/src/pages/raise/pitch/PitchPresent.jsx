@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
@@ -11,11 +11,12 @@ import { asList, currentVersion, versionLabel } from './pitchStudioModel';
 import { langAttrs } from './deckLanguage';
 import {
   AUDIENCE, EMPTY_CARD, ESC_TO_EXIT, NO_CARDS, NO_VERSION, PRESENTER, READ_FAILED, SHOW_SOURCES, SOURCE_NOT_RECORDED,
-  cardsOf, clock, countLabel, dotsOf, exitHref, moveTo, notesOf, stepFor, swipeLine, swipeStep,
+  cardsOf, clock, countLabel, dotsOf, exitHref, notesOf, stepFor, swipeLine, swipeStep,
 } from './presentExportModel';
 import { REHEARSE } from './rehearseModel';
 import { DEFAULT_PITCH_SECONDS, PITCH_CHOICES, PITCH_LENGTH, presentBudget, remoteMove, remoteSocketPath } from './presentTimingModel';
 import { useWebSocket } from '../../../hooks/useWebSocket';
+import { MOTION_CSS, areaMotion, presentStep, transitionMotion } from './motionModel';
 
 // D1580 F1 (#3827): Present › Rehearse, loaded when it is opened.
 const RehearsePanel = lazy(() => import('./RehearsePanel'));
@@ -46,7 +47,28 @@ const RehearsePanel = lazy(() => import('./RehearsePanel'));
  * from its blocks, each at its range: text, metric tiles with their source
  * line under "Show sources", charts, images, and video, audio and link blocks
  * that open in a new tab.
+ *
+ * D1576 (#3823): a card's entrances play here, in the order the PowerPoint
+ * plays them (`motionModel.entranceSequence`): → reveals the next area, then
+ * moves on; ← hides the last, then goes back to the previous card with all of
+ * its areas shown. The card's transition plays as it comes up. Under
+ * `prefers-reduced-motion` the steps stay and nothing moves.
  */
+
+/** Whether the viewer asked for reduced motion. */
+function useReducedMotion() {
+  const query = '(prefers-reduced-motion: reduce)';
+  const read = () => (typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia(query).matches : false);
+  const [reduced, setReduced] = useState(read);
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
+    const m = window.matchMedia(query);
+    const on = () => setReduced(m.matches);
+    m.addEventListener?.('change', on);
+    return () => m.removeEventListener?.('change', on);
+  }, []);
+  return reduced;
+}
 
 /** Present's card colours: the face is always the light one. */
 const FACE_COLOURS = { bg: '#fbfaf7', ink: '#0f2a3d', accent: '#6d28d9', muted: '#64748b' };
@@ -92,7 +114,10 @@ export default function PitchPresent() {
   const { status, deck, projectId } = useVersion();
   const navigate = useNavigate();
   const phone = usePhoneWidth();
-  const [i, setI] = useState(0);
+  // D1576: the card, and how many of its entrances have played.
+  const [pos, setPos] = useState({ card: 0, shown: 0 });
+  const i = pos.card;
+  const reduced = useReducedMotion();
   const [view, setView] = useState('presenter');
   const [sources, setSources] = useState(false);
   const [seconds, setSeconds] = useState(0);
@@ -100,7 +125,7 @@ export default function PitchPresent() {
   const [pitchSeconds, setPitchSeconds] = useState(DEFAULT_PITCH_SECONDS);
   const [marks, setMarks] = useState([]);
   const touch = useRef(null);
-  const cards = status === 'ok' ? cardsOf(deck) : [];
+  const cards = useMemo(() => (status === 'ok' ? cardsOf(deck) : []), [status, deck]);
   // D1499: the deck's slide size, from its theme; 16:9 unless the theme says 4:3.
   const aspect = aspectOf(deck?.theme?.aspect);
   const n = cards.length;
@@ -108,8 +133,8 @@ export default function PitchPresent() {
 
   const step = useCallback((s) => {
     if (s === 'exit') { navigate(exit); return; }
-    setI((at) => moveTo(at, s, n));
-  }, [navigate, exit, n]);
+    setPos((at) => presentStep(at, s, cards));
+  }, [navigate, exit, cards]);
 
   useEffect(() => {
     const onKey = (e) => {
@@ -137,8 +162,8 @@ export default function PitchPresent() {
   // D1581: the phone remote. Its steps are Present's keys, or a card by number; Rehearse keeps its own keys.
   const onRemote = useCallback((frame) => {
     if (frame?.type !== 'step' || view === 'rehearse') return;
-    setI((at) => remoteMove(at, frame.step, n));
-  }, [view, n]);
+    setPos((at) => (frame.step && typeof frame.step === 'object' ? { card: remoteMove(at.card, frame.step, n), shown: 0 } : presentStep(at, frame.step, cards)));
+  }, [view, n, cards]);
   useWebSocket(status === 'ok' && deck?.id && !phone ? remoteSocketPath(deck.id) : null, { enabled: status === 'ok' && !!deck?.id && !phone, onMessage: onRemote });
 
   if (status !== 'ok' || !n) {
@@ -188,6 +213,7 @@ export default function PitchPresent() {
   const next = cards[i + 1] || null;
   return (
     <div className={SHELL} data-testid="pitch-present" data-view={view}>
+      <style>{MOTION_CSS}</style>
       <div className={BAR}>
         <div className="flex flex-wrap items-center gap-2" role="group" aria-label="View">
           <button type="button" className={view === 'presenter' ? ON : OFF} aria-pressed={view === 'presenter'} onClick={() => setView('presenter')}>{PRESENTER}</button>
@@ -210,7 +236,7 @@ export default function PitchPresent() {
         </Suspense>
       ) : view === 'presenter' ? (
         <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto px-4 pb-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          <Card card={card} sources={sources} aspect={aspect} chrome={chromeOf(deck, i)} theme={deck?.theme} />
+          <Card key={`${i}`} card={card} sources={sources} aspect={aspect} chrome={chromeOf(deck, i)} theme={deck?.theme} shown={pos.shown} reduced={reduced} />
           <div className="flex min-w-0 flex-col gap-3">
             <div className="flex flex-col gap-1.5">
               <span className="font-mono text-[11px] font-bold tracking-[.07em] text-gray-400">NEXT</span>
@@ -225,7 +251,7 @@ export default function PitchPresent() {
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-4 pb-4">
-          <div className="w-full" style={{ maxWidth: `min(100%, calc((100vh - 120px) * ${aspect === '4:3' ? '4 / 3' : '16 / 9'}))` }}><Card card={card} sources={sources} aspect={aspect} chrome={chromeOf(deck, i)} theme={deck?.theme} /></div>
+          <div className="w-full" style={{ maxWidth: `min(100%, calc((100vh - 120px) * ${aspect === '4:3' ? '4 / 3' : '16 / 9'}))` }}><Card key={`${i}`} card={card} sources={sources} aspect={aspect} chrome={chromeOf(deck, i)} theme={deck?.theme} shown={pos.shown} reduced={reduced} /></div>
           {dots}
         </div>
       )}
@@ -251,15 +277,19 @@ function Budget({ marks, seconds, n, i, pitchSeconds, setPitchSeconds }) {
   );
 }
 
-function Card({ card, sources, small = false, aspect = '16:9', chrome = null, theme = null }) {
+function Card({ card, sources, small = false, aspect = '16:9', chrome = null, theme = null, shown = null, reduced = false }) {
+  // D1576: with `shown`, the card plays: its transition as it comes up and its areas in their order.
+  const playing = shown != null;
+  const enter = playing ? transitionMotion(card, reduced) : null;
   // D1571 (#3818): the card reads in the deck's language and direction; its text aligns to the start.
   const words = langAttrs(theme);
   const head = small ? 'text-[15px]' : 'text-[clamp(20px,3vw,40px)]';
   const body = small ? 'text-[12px]' : 'text-[clamp(13px,1.4vw,19px)]';
   if (card.blocks?.length) {
     return (
-      <div className="relative w-full overflow-hidden rounded-[12px] bg-[#fbfaf7] text-[#0f2a3d]" style={{ fontFamily: 'Outfit, sans-serif', aspectRatio: ratioOf(aspect) }} {...words} data-testid="pitch-present-card" data-layout="grid">
-        <BlockGrid blocks={card.blocks} colours={FACE_COLOURS} live sources={sources} aspect={aspect} lang={words.lang} dir={words.dir} testId="pitch-present-blocks" />
+      <div className="relative w-full overflow-hidden rounded-[12px] bg-[#fbfaf7] text-[#0f2a3d]" style={{ fontFamily: 'Outfit, sans-serif', aspectRatio: ratioOf(aspect), ...(enter ? { animation: enter } : {}) }} {...words} data-testid="pitch-present-card" data-layout="grid" data-transition={enter ? card.transition : undefined}>
+        <BlockGrid blocks={card.blocks} colours={FACE_COLOURS} live sources={sources} aspect={aspect} lang={words.lang} dir={words.dir} testId="pitch-present-blocks"
+          motion={playing ? (b) => areaMotion(card, b.id, shown, reduced) : null} />
         {small ? null : <CardCompliance chrome={chrome} testId="pitch-present-compliance" />}
       </div>
     );

@@ -41,13 +41,14 @@ const STAGE_DEFAULTS: Record<Stage, DeckMethodId> = {
 };
 
 // Sector overrides — explicit picks beat the stage default.
+// D4155 K4 (#4191, owner decision): "deep tech" with a space or a hyphen is deep tech too, as HQ's grid writes it.
 const SECTOR_OVERRIDES: Array<{ sectorPattern: RegExp; stage: Stage; method: DeckMethodId }> = [
   { sectorPattern: /(consumer|d2c|brand|fashion)/i, stage: 'seed', method: 'narrative_brand' },
   { sectorPattern: /(consumer|d2c|brand|fashion)/i, stage: 'series_a', method: 'narrative_brand' },
   { sectorPattern: /(saas|enterprise|b2b)/i, stage: 'series_a', method: 'series_a_growth' },
-  { sectorPattern: /(deeptech|biotech|hardware|robotics)/i, stage: 'seed', method: 'sequoia_classic' },
-  { sectorPattern: /(deeptech|biotech|hardware|robotics)/i, stage: 'series_a', method: 'investor_appendix' },
-  { sectorPattern: /(deeptech|biotech|hardware|robotics)/i, stage: 'series_b', method: 'series_b_diligence' },
+  { sectorPattern: /(deep[\s-]?tech|biotech|hardware|robotics)/i, stage: 'seed', method: 'sequoia_classic' },
+  { sectorPattern: /(deep[\s-]?tech|biotech|hardware|robotics)/i, stage: 'series_a', method: 'investor_appendix' },
+  { sectorPattern: /(deep[\s-]?tech|biotech|hardware|robotics)/i, stage: 'series_b', method: 'series_b_diligence' },
 ];
 
 const OV_SCHEMA_READY = new WeakMap<object, boolean>();
@@ -96,22 +97,51 @@ export async function recommendMethod(
       }
     } catch { /* ignore */ }
 
-    for (const r of SECTOR_OVERRIDES) {
-      if (r.sectorPattern.test(sector) && r.stage === stage) {
-        return { method_id: r.method, sector, stage, source: 'sector' };
-      }
-    }
   }
-  return { method_id: STAGE_DEFAULTS[stage], sector, stage, source: 'stage_default' };
+  const d = engineDefault(sector, stage);
+  return { method_id: d.method_id, sector, stage, source: d.source };
 }
 
-export async function listOverrides(env: Env): Promise<Array<{ sector: string; stage: string; method_id: string; updated_at: string }>> {
+/**
+ * D4155 K4 (#4191): what the engine picks for a sector and stage with no
+ * override — the sector's explicit pick, else the stage's default. One
+ * function, so `recommendMethod` and HQ's grid cannot disagree.
+ */
+export function engineDefault(sector: string, stageInput: string): { method_id: DeckMethodId; source: 'sector' | 'stage_default' } {
+  const stage = normaliseStage(stageInput);
+  if (sector) {
+    for (const r of SECTOR_OVERRIDES) {
+      if (r.sectorPattern.test(sector) && r.stage === stage) return { method_id: r.method, source: 'sector' };
+    }
+  }
+  return { method_id: STAGE_DEFAULTS[stage], source: 'stage_default' };
+}
+
+/** The canvas's grid (HD4): six sectors by four stages, in the engine's stage ids. */
+export const GRID_SECTORS = ['B2B software', 'Fintech', 'Health', 'Climate', 'Consumer', 'Deep tech'] as const;
+export const GRID_STAGES = ['pre_seed', 'seed', 'series_a', 'series_b'] as const;
+export function engineDefaults() {
+  return GRID_SECTORS.flatMap((sector) => GRID_STAGES.map((stage) => ({ sector, stage, ...engineDefault(sector, stage) })));
+}
+
+export type OverrideRow = { sector: string; stage: string; method_id: string; updated_at: string; updated_by: { uid: string; name: string | null } | null };
+/** The overrides, each naming who set it by uid and name; never an email. */
+export async function listOverrides(env: Env): Promise<OverrideRow[]> {
   await ensureOverrideSchema(env);
   const rows = await env.DB.prepare(
-    `SELECT sector, stage, method_id, updated_at FROM deck_recommendation_overrides
-     ORDER BY sector ASC, stage ASC`,
-  ).all<{ sector: string; stage: string; method_id: string; updated_at: string }>();
-  return rows.results || [];
+    `SELECT o.sector, o.stage, o.method_id, o.updated_at, u.uid AS by_uid, u.name AS by_name
+       FROM deck_recommendation_overrides o LEFT JOIN users u ON u.id = o.updated_by
+      ORDER BY o.sector ASC, o.stage ASC`,
+  ).all<{ sector: string; stage: string; method_id: string; updated_at: string; by_uid: string | null; by_name: string | null }>();
+  return (rows.results || []).map((r) => ({ sector: r.sector, stage: r.stage, method_id: r.method_id, updated_at: r.updated_at,
+    updated_by: r.by_uid ? { uid: r.by_uid, name: r.by_name } : null }));
+}
+
+/** One override as stored, for an audit row's before; null when none. */
+export async function overrideOf(env: Env, sector: string, stage: string): Promise<{ method_id: string } | null> {
+  await ensureOverrideSchema(env);
+  return (await env.DB.prepare(`SELECT method_id FROM deck_recommendation_overrides WHERE LOWER(sector) = LOWER(?) AND stage = ? LIMIT 1`)
+    .bind(sector.trim(), normaliseStage(stage)).first<{ method_id: string }>()) ?? null;
 }
 
 export async function setOverride(

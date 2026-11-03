@@ -3,6 +3,7 @@
  *
  *   GET /api/decks/:id/investor-links/:shareId/analytics       one link's views, seconds per card, most-read card and visit timeline
  *   PUT /api/decks/:id/investor-links/:shareId/time-per-slide  { on: true | false } → { ok, link }: the link's "Time per slide" consent
+ *   GET /api/decks/:id/analytics/daily?from&to&version&nda     D4254 P4 (#4272): views per day NDA vs open, the two funnels, drop-off on two versions
  *
  * NO NEW STORE (migration: none). The seconds are D663's `deck_view_slides`,
  * keyed by card uid (D1500, migration 714); the consent is the link's own
@@ -34,6 +35,7 @@ import { deckFor, rowsOf } from './deck_investor_links';
 import type { RouteMount } from '../util/routeRegistry';
 import { askCardIndex } from '../services/decks/shareAnalytics';
 import { cardsWithSeconds, timePerSlideOn, visitTimeline, withTimePerSlide, type SecondsRow } from '../services/decks/slideAnalytics';
+import { readDailyQuery, shareDaily } from '../services/decks/shareDaily';
 
 const deckSlideAnalytics = new Hono<{ Bindings: Env }>();
 
@@ -100,6 +102,28 @@ deckSlideAnalytics.get('/:id{[0-9]+}/investor-links/:shareId{[0-9]+}/analytics',
   const row = (await rowsOf(c.env, Number(got.row.id))).find((r) => r.id === shareIdOf(c));
   if (!row) return c.json({ error: 'not found' }, 404);
   return c.json(await linkSlideAnalytics(c.env, got.row, row));
+});
+
+/**
+ * D4254 P4 (#4272): `GET /:id/analytics/daily?from&to&version&nda=all|yes|no`,
+ * Share & analytics (ps7) for the deck's venture across its versions: views per
+ * day NDA against open, the two funnels and drop-off on two versions
+ * (`services/decks/shareDaily.ts`). The venture's writers only (`write: true`),
+ * as the link consent above: a reader of the venture is not the founder. At
+ * most 90 days; a missing value is null, never 0.
+ */
+deckSlideAnalytics.get('/:id{[0-9]+}/analytics/daily', async (c) => {
+  const user = await requireAuth(c);
+  const got = await deckFor(c, user, true);
+  if ('refused' in got) return got.refused;
+  const q = readDailyQuery({ from: c.req.query('from'), to: c.req.query('to'), nda: c.req.query('nda'), version: c.req.query('version') }, new Date().toISOString().slice(0, 10));
+  if ('error' in q) return refuse(c, 422, { code: q.error, message: q.message });
+  try {
+    return c.json(await shareDaily(c.env, Number(got.row.project_id), q));
+  } catch (e) {
+    console.error('[deck_slide_analytics] daily read failed:', (e as Error)?.name || 'error');
+    return c.json({ state: 'unreadable', detail: "Views couldn't be read." }, 500);
+  }
 });
 
 deckSlideAnalytics.put('/:id{[0-9]+}/investor-links/:shareId{[0-9]+}/time-per-slide', async (c) => {

@@ -50,10 +50,11 @@ Object.assign(cyclesApi, { module: ok({ card: null, records: [] }) });
 localStorage.setItem('user', JSON.stringify(h.user));
 if (h.dark) document.documentElement.classList.add('dark');
 
-// `studio` mounts the studio home (StudioHome inside PitchStudio); otherwise the editor.
+// `studio` mounts the studio home (StudioHome inside PitchStudio's Decks tile); otherwise the editor.
+// D4254: /raise/pitch is the Overview now, so the home is the Decks tile at /raise/pitch/decks.
 const studio = h.page === 'studio';
 createRoot(document.getElementById('root')).render(
-  <MemoryRouter initialEntries={[studio ? `/raise/pitch?project_id=${h.deck.project_id}` : `/raise/pitch/edit?project_id=${h.deck.project_id}`]}>
-    <AuthProvider>{studio ? <PitchStudio /> : <PitchEditor />}</AuthProvider>
+  <MemoryRouter initialEntries={[studio ? `/raise/pitch/decks?project_id=${h.deck.project_id}` : `/raise/pitch/edit?project_id=${h.deck.project_id}`]}>
+    <AuthProvider>{studio ? <PitchStudio tab="decks" /> : <PitchEditor />}</AuthProvider>
   </MemoryRouter>,
 );

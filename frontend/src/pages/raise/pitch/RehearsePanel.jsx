@@ -2,12 +2,14 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { deckRehearsalsApi } from '../../../lib/api/deckRehearsals.js';
 import { reportError } from '../../../lib/log';
 import { useRailOption } from '../../../ui/railCrumbs';
+import { BUDGET_CLOSE, downsampleTo16k, openLiveSocket, readLiveEvent } from '../../../lib/interviewCapture.js';
 import { rehearse as rehearsals, shown } from './deckV2Adapter.js';
 import { refusalOf } from './newDeckModel';
 import LikelyQuestions from './LikelyQuestions.jsx';
 import {
   AUDIO_BITS_PER_SECOND, AUDIO_GONE, KEEP_AUDIO, KEEP_AUDIO_OFF, KEEP_AUDIO_ON, MAX_RECORDING_MS, NO_FIGURES, NO_MIC, PITCH_CHOICES,
-  RETENTION, TOO_SHORT, COACHING, COACH_ME, COACH_NOTE, COACH_EMPTY, coachHoldLine, budgetLine, cardBudgetsMs, clock, figureGrade, holdLine, noteItemsOf, rowOf, spentByCard, summaryLine,
+  RETENTION, TOO_SHORT, COACHING, COACH_ME, COACH_NOTE, COACH_EMPTY, coachHoldLine, LIVE_BUDGET, LIVE_NOTE, LIVE_OFF, LIVE_STOPPED, LIVE_WAITING, LIVE_WORDS,
+  itemCovered, liveHoldLine, liveSaid, liveWpm, budgetLine, cardBudgetsMs, clock, figureGrade, holdLine, noteItemsOf, rowOf, spentByCard, summaryLine,
 } from './rehearseModel';
 
 /**
@@ -27,8 +29,13 @@ import {
  *
  * The transcript is one run on the rail option `transcribe:rehearsal`: the
  * model is the member's pick in the AIRail, quoted and held before it runs.
- * Words a minute are counted from the transcript, so they are in the report,
- * not live.
+ *
+ * D1580 part 2b: with "Count words live" on, the microphone also feeds a
+ * streaming transcript (`transcribe:rehearsal-live`, held a block at a time)
+ * and the panel shows live words a minute and ticks the card's notes as they
+ * are said. That text stays in the browser and is never stored; the report is
+ * still counted from the batch transcript. If the live socket fails or the
+ * balance runs out, the rehearsal goes on and only the live line says so.
  */
 const PANEL = 'flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-6';
 const BOX = 'flex flex-col gap-2 rounded-[10px] bg-[#111827] p-3.5';
@@ -56,10 +63,24 @@ export default function RehearsePanel({ deck, cards, renderCard, onClose }) {
   const [now, setNow] = useState(0);
   const [level, setLevel] = useState(0);
   const rec = useRef(null);
+  const [liveOn, setLiveOn] = useState(true);
+  const [liveQuote, setLiveQuote] = useState(null);
+  const [liveState, setLiveState] = useState('off');
+  const [, setHeard] = useState(0);
   // The rail shows this option's models while Rehearse is open; the member's pick is the run's model.
   useRailOption('transcribe:rehearsal', 'Rehearse');
   // D1580 part 2: the coach's model is the member's pick for this option.
   useRailOption('rehearse:coach', COACH_ME);
+  // D1580 part 2b: the live words' model is the member's pick for this option.
+  useRailOption('transcribe:rehearsal-live', LIVE_WORDS);
+
+  useEffect(() => {
+    if (!deckId || stage !== 'setup') return undefined;
+    let live = true;
+    deckRehearsalsApi.liveQuote(deckId).then((q) => { if (live) setLiveQuote(q); }).catch((e) => { if (live) setLiveQuote({ refused: refusalOf(e) }); });
+    return () => { live = false; };
+  }, [deckId, stage]);
+  const liveReady = !!liveQuote && !liveQuote.refused && liveQuote.balance?.ok !== false;
 
   useEffect(() => {
     if (!deckId) return undefined;
@@ -83,6 +104,8 @@ export default function RehearsePanel({ deck, cards, renderCard, onClose }) {
     if (!r) return;
     cancelAnimationFrame(r.frame);
     clearInterval(r.tick);
+    if (r.processor) { r.processor.onaudioprocess = null; try { r.processor.disconnect(); } catch { /* gone */ } }
+    r.socket?.close();
     r.stream?.getTracks().forEach((t) => t.stop());
     r.ctx?.close().catch(() => undefined);
   }, []);
@@ -90,6 +113,7 @@ export default function RehearsePanel({ deck, cards, renderCard, onClose }) {
 
   const start = async () => {
     setProblem(null);
+    setLiveState('off');
     let stream;
     try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch { setProblem({ message: NO_MIC }); return; }
     const mime = pickMime();
@@ -97,13 +121,15 @@ export default function RehearsePanel({ deck, cards, renderCard, onClose }) {
     const recorder = new MediaRecorder(stream, { ...(mime ? { mimeType: mime } : {}), audioBitsPerSecond: AUDIO_BITS_PER_SECOND });
     const chunks = [];
     recorder.ondataavailable = (e) => { if (e.data?.size) chunks.push(e.data); };
-    const r = { stream, recorder, chunks, started: performance.now(), marks: [{ card: 1, at_ms: 0 }], frame: 0, tick: 0, ctx: null };
+    const r = { stream, recorder, chunks, started: performance.now(), marks: [{ card: 1, at_ms: 0 }], frame: 0, tick: 0, ctx: null, card: 0, said: liveSaid(), socket: null, processor: null };
     try {
       const Ctx = window.AudioContext || window.webkitAudioContext;
       r.ctx = new Ctx();
       const analyser = r.ctx.createAnalyser();
       analyser.fftSize = 512;
-      r.ctx.createMediaStreamSource(stream).connect(analyser);
+      const source = r.ctx.createMediaStreamSource(stream);
+      source.connect(analyser);
+      if (liveOn && liveReady) openLive(r, source);
       const data = new Uint8Array(analyser.fftSize);
       const draw = () => {
         analyser.getByteTimeDomainData(data);
@@ -126,12 +152,34 @@ export default function RehearsePanel({ deck, cards, renderCard, onClose }) {
     setStage('recording');
   };
 
+  // The live feed: 16 kHz PCM from the same microphone source, and the transcript events back.
+  function openLive(r, source) {
+    if (typeof r.ctx.createScriptProcessor !== 'function' || typeof WebSocket === 'undefined') { setLiveState('stopped'); return; }
+    r.socket = openLiveSocket({
+      url: deckRehearsalsApi.liveUrl(deckId),
+      WebSocketImpl: WebSocket,
+      onEvent: (ev) => {
+        const read = readLiveEvent(ev);
+        if (!read) return;
+        if (read.error) { setLiveState('stopped'); return; }
+        r.said.take(read, r.card);
+        setHeard((k) => k + 1);
+      },
+      onClose: (e) => { if (!r.stopping) setLiveState(e?.code === BUDGET_CLOSE ? 'budget' : 'stopped'); },
+    });
+    r.processor = r.ctx.createScriptProcessor(4096, 1, 1);
+    r.processor.onaudioprocess = (e) => { if (r.socket?.open) r.socket.send(downsampleTo16k(e.inputBuffer.getChannelData(0), r.ctx.sampleRate)); };
+    source.connect(r.processor);
+    r.processor.connect(r.ctx.destination);
+    setLiveState('on');
+  }
+
   const move = useCallback((step) => {
     const r = rec.current;
     if (!r || stage !== 'recording') return;
     setAt((i) => {
       const next = Math.max(0, Math.min(n - 1, i + step));
-      if (next !== i) r.marks.push({ card: next + 1, at_ms: Math.round(performance.now() - r.started) });
+      if (next !== i) { r.marks.push({ card: next + 1, at_ms: Math.round(performance.now() - r.started) }); r.card = next; }
       return next;
     });
   }, [n, stage]);
@@ -199,6 +247,10 @@ export default function RehearsePanel({ deck, cards, renderCard, onClose }) {
     const spent = spentByCard(rec.current?.marks || [], now, n);
     const over = spent[at] > budgets[at];
     const notes = noteItemsOf(cards[at]?.notes);
+    const said = rec.current?.said;
+    const live = liveState === 'on' && said;
+    const wpm = live ? liveWpm(said.all, now) : null;
+    const saidHere = live ? said.card(at) : '';
     return (
       <div className={PANEL} data-testid="rehearse-recording">
         <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
@@ -223,13 +275,16 @@ export default function RehearsePanel({ deck, cards, renderCard, onClose }) {
               <div className="h-2 w-full overflow-hidden rounded-full bg-gray-800" role="meter" aria-label="Microphone level" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(level * 100)}>
                 <div className="h-full bg-emerald-400 transition-[width]" style={{ width: `${Math.round(level * 100)}%` }} />
               </div>
-              <span className="text-[12px] text-gray-400">Words a minute are counted from the transcript, in the report.</span>
+              <LiveLine state={liveState} wpm={wpm} />
             </div>
             <div className={BOX} data-testid="rehearse-notes">
               <span className={LABEL}>NOTES</span>
               {notes.length ? (
                 <ul className="m-0 flex list-none flex-col gap-1 p-0">
-                  {notes.map((t, k) => <li key={k} className="text-[13.5px] leading-[1.45] text-gray-100">☐ {t}</li>)}
+                  {notes.map((t, k) => {
+                    const done = live && itemCovered(t, saidHere);
+                    return <li key={k} className={`text-[13.5px] leading-[1.45] ${done ? 'text-emerald-300' : 'text-gray-100'}`} data-said={done ? '1' : '0'}>{done ? '✓' : '○'} {t}</li>;
+                  })}
                 </ul>
               ) : <span className="text-[13px] text-gray-400">This card has no notes.</span>}
             </div>
@@ -274,6 +329,17 @@ export default function RehearsePanel({ deck, cards, renderCard, onClose }) {
         {quote?.balance && !quote.balance.ok ? <span className="text-[12.5px] text-amber-300">{quote.balance.message}</span> : null}
         <span className="text-[12.5px] text-gray-400" data-testid="rehearse-retention">{RETENTION}</span>
       </div>
+      <div className={BOX} data-testid="rehearse-live">
+        <label className="flex items-center gap-2 text-[13.5px] font-bold text-gray-100">
+          <input type="checkbox" role="switch" checked={liveOn && liveReady} disabled={!liveReady} onChange={(e) => setLiveOn(e.target.checked)} data-testid="rehearse-live-switch" />
+          {LIVE_WORDS}
+        </label>
+        <span className="font-mono text-[11.5px] text-gray-400" data-testid="rehearse-live-hold">
+          {liveHoldLine(liveQuote) || (liveQuote?.refused ? liveQuote.refused.message : liveQuote ? null : 'Reading the price…')}
+        </span>
+        {liveQuote?.balance?.ok === false ? <span className="text-[12.5px] text-amber-300">{liveQuote.balance.message}</span> : null}
+        <span className="text-[12.5px] text-gray-400">{LIVE_NOTE}</span>
+      </div>
       {problem ? <Problem problem={problem} /> : null}
       <div className="flex flex-wrap gap-2">
         <button type="button" className={PRIMARY} onClick={start} disabled={!deckId || !n || !!quote?.refused || (quote?.balance && !quote.balance.ok)} data-testid="rehearse-start">Start rehearsing</button>
@@ -298,6 +364,13 @@ export default function RehearsePanel({ deck, cards, renderCard, onClose }) {
       </div>
     </div>
   );
+}
+
+/** The line under the microphone meter: live words a minute, or why there are none. */
+function LiveLine({ state, wpm }) {
+  const text = state === 'on' ? (wpm == null ? LIVE_WAITING : null) : state === 'budget' ? LIVE_BUDGET : state === 'stopped' ? LIVE_STOPPED : LIVE_OFF;
+  if (text) return <span className={`text-[12px] ${state === 'budget' || state === 'stopped' ? 'text-amber-300' : 'text-gray-400'}`} data-testid="rehearse-live-line" data-state={state}>{text}</span>;
+  return <span className="font-mono text-[15px] font-bold text-gray-100" data-testid="rehearse-live-line" data-state={state}>{wpm} words a minute</span>;
 }
 
 function Problem({ problem }) {

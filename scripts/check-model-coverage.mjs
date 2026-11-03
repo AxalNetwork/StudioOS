@@ -37,7 +37,7 @@ const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 
 /** Rail kinds that draw, and that listen. A Draw selector lists drawers only; a Listen selector, speech recognisers. */
 export const DRAW_KINDS = Object.freeze(['draw', 'image', 'edit_image']);
-export const LISTEN_KINDS = Object.freeze(['listen', 'speech']);
+export const LISTEN_KINDS = Object.freeze(['listen', 'listen_file', 'listen_live', 'speech']);
 /** Catalogue kinds a Draw list may hold, and catalogue kinds a Listen list may never hold. */
 export const DRAWER_KINDS = Object.freeze(['Text-to-Image']);
 export const TEXT_KINDS = Object.freeze(['Text Generation', 'Summarization']);
@@ -166,10 +166,35 @@ function walk(dir, out) {
   return out;
 }
 
-/** The deck element groups, read from the module (it has no imports a script cannot load). */
-async function elementGroupsOf() {
+/** The deck element groups, read from the module (it has no imports a script cannot load), each with the job `DECK_ELEMENT_JOBS` gives it. */
+async function elementGroupsOf(deckJobs) {
   const mod = await import(pathToFileURL(join(ROOT, 'frontend/src/pages/raise/pitch/deckV2Model.js')).href);
-  return mod.ELEMENT_GROUPS.map((g) => ({ id: g.id, job: g.job }));
+  return mod.ELEMENT_GROUPS.map((g) => ({ id: g.id, job: deckJobs[g.id]?.job }));
+}
+
+/**
+ * `modelUseCases.ts`'s rows as `checkCoverage` reads them. JOBS has one row
+ * per step (a job's id repeats across its steps), so the rows are grouped by
+ * id into one job with its steps in order: a job declared twice is then a
+ * step number seen twice, not two rows of one id.
+ */
+export function jobsOf(rows) {
+  const byId = new Map();
+  for (const r of rows) {
+    if (!byId.has(r.id)) byId.set(r.id, { id: r.id, steps: [], seen: new Set() });
+    const job = byId.get(r.id);
+    if (job.seen.has(r.step)) { job.repeat = true; continue; }
+    job.seen.add(r.step);
+    job.steps.push({ step: r.step, kind: r.kind, default: r.default });
+  }
+  const out = [];
+  for (const job of byId.values()) {
+    const steps = job.steps.sort((a, b) => a.step - b.step).map(({ kind, default: d }) => ({ kind, default: d }));
+    out.push({ id: job.id, steps });
+    // A step declared twice is a job declared twice: two Defaults for it.
+    if (job.repeat) out.push({ id: job.id, steps });
+  }
+  return out;
 }
 
 /** Everything `checkCoverage` reads, from the repository. Needs the TypeScript loader (see the header). */
@@ -183,22 +208,24 @@ export async function load() {
     .map((p) => relative(ROOT, p).split(sep).join('/'))
     .filter((p) => p !== self && !p.startsWith('scripts/test/') && !/\.test\./.test(p))
     .map((path) => ({ path, text: readFileSync(join(ROOT, path), 'utf8') }));
-  const kindModels = useCases.KIND_MODELS;
+  // The model table: §1's set, every catalogue id offered or named as not offered, once each.
+  const models = [...useCases.COVERAGE.offered, ...Object.keys(useCases.COVERAGE.notOffered)].map((id) => ({ id }));
+  const kindModels = Object.fromEntries(Object.entries(useCases.USE_KINDS).map(([kind, row]) => [kind, [...row.models]]));
   const selectors = [
-    ...[...matrix.rows, ...matrix.options].map((s) => ({
+    ...[...matrix.rows, ...(matrix.options || [])].map((s) => ({
       where: `railMatrix ${s.pageKey}${s.optionKey ? ` / ${s.optionKey}` : ''}`,
       kind: s.kind,
       models: [...s.models, ...(s.more || [])].map((m) => m.id),
     })),
-    ...Object.entries(kindModels).map(([kind, models]) => ({ where: `modelUseCases ${kind}`, kind: kind.toLowerCase().replace(/\s+/g, '_'), models })),
+    ...Object.entries(kindModels).map(([kind, list]) => ({ where: `modelUseCases ${kind}`, kind, models: list })),
   ];
   return {
     catalogue: CATALOGUE.map((m) => ({ id: m.id, kind: m.kind, status: m.status })),
-    models: useCases.MODEL_USES.map((r) => ({ id: r.id })),
-    jobs: useCases.JOBS,
+    models,
+    jobs: jobsOf(useCases.JOBS),
     kindModels,
     selectors,
-    elementGroups: await elementGroupsOf(),
+    elementGroups: await elementGroupsOf(useCases.DECK_ELEMENT_JOBS),
     sources,
   };
 }

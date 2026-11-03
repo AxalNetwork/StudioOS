@@ -27,7 +27,8 @@ const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
 const KEY = /^[a-z0-9][a-z0-9-]*$/;
 const ADD_KEYS = {
   raise: {
-    'fundraising-readiness': ['rescore'], 'investor-narrative': ['narrative-version'], 'pitch-deck': ['deck-link'], 'data-room': ['upload'],
+    'fundraising-readiness': ['rescore'], 'investor-narrative': ['narrative-version'], 'data-room': ['upload'],
+    // D4254 P4 (#4272, D-d): no Pitch deck Add form; ShareDialog makes links.
     'cap-table': ['holder'], 'use-of-funds': ['split'], 'capital-relationships': ['investor'],
   },
   grow: {
@@ -65,7 +66,7 @@ const EDIT_KEYS = {
 };
 const CTA_APART = {
   'raise/fundraising-readiness': ['Re-score', 'Re-score now'], 'raise/investor-narrative': ['New version', 'Create version'],
-  'raise/pitch-deck': ['New link', 'Create link'], 'raise/use-of-funds': ['Edit split', 'Save split'],
+  'raise/use-of-funds': ['Edit split', 'Save split'],
   'grow/revenue-and-traction': ['Enter a KPI', 'Save KPI'], 'grow/team-expansion': ['Open a role', 'Open role'],
   'build/operating-systems': ['Connect a system', 'Continue to sign-in'],
   // CO:335's CTA is "Record", its button CO:342's "Record a decision".

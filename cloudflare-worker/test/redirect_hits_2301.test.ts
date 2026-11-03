@@ -46,7 +46,8 @@ test('the list is closed and well formed', () => {
   const keep = REDIRECT_ROUTES.filter((r) => r.keep).map((r) => r.path).sort();
   // D937: sent cohort notices keep the old Lab address working permanently.
   // D938: /admin forwards every old console tab, and #2375 keeps it for good.
-  assert.deepEqual(keep, ['/admin', '/admin/spinout-lab', '/help/:id', '/integrations', '/notifications', '/notifications/*', '/plans-and-pricing', '/product-testing', '/settings', '/settings/:section', '/support', '/tickets/:id']);
+  // D4254: the Raise module's links (services/raiseCycle.ts href) still name /raise/pitch-deck.
+  assert.deepEqual(keep, ['/admin', '/admin/spinout-lab', '/help/:id', '/integrations', '/notifications', '/notifications/*', '/plans-and-pricing', '/product-testing', '/raise/pitch-deck', '/settings', '/settings/:section', '/support', '/tickets/:id']);
 });
 
 

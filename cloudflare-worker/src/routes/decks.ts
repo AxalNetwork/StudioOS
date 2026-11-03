@@ -5,6 +5,7 @@
  * (markdown body) + image fields, version history, restore, and
  * ONE-TIME signed share URLs (HMAC + DB-tracked single-use).
  */
+import { checkDeckPdf, expectedLinks, hasWords, pdfRenderOptions, printPageOf } from '../services/decks/pdfExport';
 import { deckCompliance } from '../services/decks/compliance';
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -23,7 +24,8 @@ import { autofillDeck, toEditorSlides } from '../services/decks/autofill';
 import { fillAxalSpinoutDemoDay, buildAxalSpinoutDemoDaySlides, buildAxalSpinoutCoverage } from '../services/decks/axalSpinoutDemoDay';
 import { assembleSpinoutDeckData } from '../services/decks/spinoutDeckData';
 import { applySpinoutOverrides, loadSpinoutDeckOverrides } from '../services/decks/spinoutDeckOverrides';
-import { recommendMethod, listOverrides, setOverride, deleteOverride } from '../services/decks/recommend';
+import { recommendMethod, listOverrides, setOverride, deleteOverride, engineDefault, engineDefaults, overrideOf } from '../services/decks/recommend';
+import { logAdminAction } from '../services/adminAudit';
 import { getDeckBrand, setStudioWatermark, ensureMethodAllowed, fetchLandingPageForProject, applyBrandKitToSlides } from '../services/decks/branding';
 import { type RenderableDeck } from '../services/decks/render';
 import { NO_NOTES as NO_SPEAKER_NOTES, NO_SOURCES as NO_SOURCES_RECORDED, aiCards, sourceLines } from '../services/decks/offlineHtml';
@@ -489,6 +491,15 @@ export function rowToProposal(row: any): any {
   };
 }
 
+/**
+ * D897 §9 (#3659): what a proposal holds now, as one hash: its cards, what is
+ * kept and its outline. A write that sends it back as `base_hash` is refused
+ * 409 `proposal_changed` when another tab moved the proposal since.
+ */
+export async function proposalHash(row: any): Promise<string> {
+  return contentHash(String(row?.slides ?? '[]'), `${row?.kept_slides_json ?? ''}|${row?.outline_json ?? ''}`);
+}
+
 export function founderPitchSlides(slides: any[]): any[] {
   return slides.filter((slide) => slide && typeof slide === 'object').map((slide) => ({ ...slide, fields: Array.isArray(slide.fields) ? slide.fields.map((field: any) => {
     if (!String(field?.key || '').startsWith('vr_')) return field;
@@ -717,7 +728,8 @@ decks.get('/by-project/:pid', async (c) => {
       shared_links: links ? links.get(Number(r.id)) ?? 0 : null,
     })),
     shared_links_readable: links !== null,
-    proposal: proposal ? rowToProposal(proposal) : null,
+    // D897 §9 (#3659): a reopened proposal carries its hash, so its writes can say which one they read.
+    proposal: proposal ? { ...rowToProposal(proposal), proposal_hash: await proposalHash(proposal) } : null,
   });
 });
 
@@ -2276,11 +2288,20 @@ export function exportDeckOf(row: any, opts: PrintOptions): { slides: any[]; ren
   return { slides, renderable };
 }
 
-const SLIDE_VIEWPORT = { width: 1920, height: 1080, deviceScaleFactor: 1 };
-
 const RENDER_FAILED: Record<'pdf', { code: string; message: string }> = {
   pdf: { code: 'pdf_render_failed', message: 'The PDF could not be produced. Try again in a moment.' },
 };
+
+/**
+ * D1575 (#3822): a PDF the browser answered that does not match the screen —
+ * the wrong page size, a font not embedded, words flattened to a picture or a
+ * link that is not live. Refused with the check's codes, never handed out.
+ */
+function fidelityRefusal(c: any, codes: string[], pages: number) {
+  const diagnostic = { reason: 'pdf_fidelity', checks: codes, pages };
+  console.error('[decks/export] pdf check failed', JSON.stringify(diagnostic));
+  return refuse(c, 502, { code: 'pdf_fidelity_failed', message: 'The PDF did not come out as the deck shows. Try again in a moment.', extra: { diagnostic } });
+}
 
 /**
  * #3655: a failed render, with what failed as codes only — the renderer's
@@ -2299,9 +2320,11 @@ function renderRefusal(c: any, format: 'pdf', f: RenderFailure & { slide?: numbe
  * POST /api/decks/:id/export — { format: 'pdf' | 'pptx' } → file bytes.
  *
  *  - PDF: Browser Rendering navigates to the live React SPA print
- *    template at /deck/print-export/:hmacToken with print_mode=pdf so
- *    every slide renders at native 1920×1080. Matches the in-app
- *    preview investors see.
+ *    template at /deck/print-export/:hmacToken with print_mode=pdf.
+ *    D1575 (#3822): a studio deck prints at its aspect, 1920×1080 at 16:9
+ *    and 1440×1080 at 4:3 (a template deck stays 16:9), and the PDF is
+ *    checked before it is handed out: its page size, fonts embedded, words
+ *    as text and every link live (`services/decks/pdfExport.ts`).
  *  - PPTX: D1574 (#3821) — answered by `deck_exports.ts`, mounted before
  *    this router, as the editable PowerPoint (`pptxEditable.ts`): native
  *    text, shapes and charts on The Grid's placement. It no longer
@@ -2351,23 +2374,15 @@ decks.post('/:id/export', async (c) => {
       fallback: 'client_render',
     }, 503);
   }
+  // D1575 (#3822): the deck's own page, and what its PDF must carry.
+  const { slides: printed } = exportDeckOf(row, opts);
+  const page = printPageOf({ slides: printed, theme: themeOfRow(row), methodId: extractDeckMethodId(row) });
   const token = await signDeckPrintToken(c.env, id, 180, opts, copied.imageCopies);
-  const r = await renderUrl(c.env, 'pdf', {
-    url: `${publicBase}/deck/print-export/${token}?print_mode=pdf`,
-    viewport: SLIDE_VIEWPORT,
-    gotoOptions: { waitUntil: 'networkidle0', timeout: DECK_PAGE_LOAD_MS },
-    addStyleTag: [{
-      content: '@page { size: 1920px 1080px; margin: 0; } html, body { background: #ffffff !important; margin: 0 !important; padding: 0 !important; }',
-    }],
-    pdfOptions: {
-      printBackground: true,
-      preferCSSPageSize: true,
-      width: '1920px',
-      height: '1080px',
-      margin: { top: '0', right: '0', bottom: '0', left: '0' },
-    },
-  }, { kind: 'pdf', maxBytes: MAX_DECK_PDF_BYTES });
+  const r = await renderUrl(c.env, 'pdf', pdfRenderOptions(`${publicBase}/deck/print-export/${token}?print_mode=pdf`, page, DECK_PAGE_LOAD_MS),
+    { kind: 'pdf', maxBytes: MAX_DECK_PDF_BYTES });
   if (!r.ok) return renderRefusal(c, 'pdf', r);
+  const checked = await checkDeckPdf(r.bytes, page, { links: expectedLinks(printed), words: hasWords(printed) });
+  if (!checked.ok) return fidelityRefusal(c, checked.codes, checked.pages);
   await auditDeckWrite(c, user, Number(row.project_id), 'deck_exported', 'Deck exported');
   return new Response(r.bytes, {
     status: 200,
@@ -2418,8 +2433,14 @@ decks.get('/admin/recommend-overrides', async (c) => {
   const user = await requireAuth(c);
   if (String(user.role) !== 'admin') return c.json({ error: 'forbidden' }, 403);
   const overrides = await listOverrides(c.env);
-  return c.json({ overrides });
+  // D4155 K4 (#4191): the engine's own pick for each cell of HQ's grid, so a cell with no override names it.
+  return c.json({ overrides, defaults: engineDefaults() });
 });
+
+/** D4155 K4 (#4191): every default-template change carries a reason of at least ten characters. */
+const TEMPLATE_REASON_MIN = 10;
+const templateReason = (v: unknown): string | null => (typeof v === 'string' && v.trim().length >= TEMPLATE_REASON_MIN ? v.trim().slice(0, 1000) : null);
+const reasonRequired = (c: any) => c.json({ error: 'reason_required', message: `Say why, in at least ${TEMPLATE_REASON_MIN} characters.` }, 400);
 
 decks.put('/admin/recommend-overrides', async (c) => {
   const user = await requireAuth(c);
@@ -2432,9 +2453,15 @@ decks.put('/admin/recommend-overrides', async (c) => {
   const methodId = String(body?.method_id || '').trim();
   if (!sector || !stage || !methodId) return c.json({ error: 'sector, stage, method_id required' }, 400);
   if (!getMethod(methodId)) return c.json({ error: 'unknown method_id' }, 400);
+  const reason = templateReason(body?.reason);
+  if (!reason) return reasonRequired(c);
+  const before = (await overrideOf(c.env, sector, stage))?.method_id ?? null;
   await setOverride(c.env, sector, stage, methodId, Number(user.id) || null);
+  await logAdminAction(c.env, Number(user.id), String(user.email || ''), 'deck_default_template_set', {
+    sector, stage, before: { method_id: before, engine_default: engineDefault(sector, stage).method_id }, after: { method_id: methodId }, reason,
+  });
   const overrides = await listOverrides(c.env);
-  return c.json({ overrides });
+  return c.json({ overrides, defaults: engineDefaults() });
 });
 
 decks.delete('/admin/recommend-overrides', async (c) => {
@@ -2445,9 +2472,17 @@ decks.delete('/admin/recommend-overrides', async (c) => {
   const sector = c.req.query('sector') || '';
   const stage = c.req.query('stage') || '';
   if (!sector || !stage) return c.json({ error: 'sector + stage query required' }, 400);
+  // The reason rides in the body: a DELETE's query string lands in access logs, a reason should not.
+  const body = await c.req.json().catch(() => ({} as any));
+  const reason = templateReason(body?.reason);
+  if (!reason) return reasonRequired(c);
+  const before = (await overrideOf(c.env, sector, stage))?.method_id ?? null;
   await deleteOverride(c.env, sector, stage);
+  await logAdminAction(c.env, Number(user.id), String(user.email || ''), 'deck_default_template_reset', {
+    sector, stage, before: { method_id: before }, after: { method_id: null, engine_default: engineDefault(sector, stage).method_id }, reason,
+  });
   const overrides = await listOverrides(c.env);
-  return c.json({ overrides });
+  return c.json({ overrides, defaults: engineDefaults() });
 });
 
 export default decks;

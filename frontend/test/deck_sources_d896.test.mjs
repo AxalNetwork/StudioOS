@@ -283,7 +283,8 @@ test('PD2: the current-deck card mounts the coverage meter from the sources read
   assert.match(card, /<CoverageMeter coverage=\{sources\.data\?\.coverage\} status=\{sources\.status\} size="M" onRetry=\{sources\.retry\} \/>/);
   assert.match(studio, /<DataReady sources=\{sources\} \/>/);
   assert.match(studio, /import \{ CoverageMeter, useDeckSources \} from '\.\/SourcesBoards';/);
-  assert.match(read('frontend/src/pages/raise/pitch/pitchStudioModel.js'), /export const LINE = 'Build your deck from what StudioOS already knows\. Every figure shows its source\.';/);
+  // D4254: the page line is Pitch's now; the source chips stay on every figure.
+  assert.match(read('frontend/src/pages/raise/pitch/pitchStudioModel.js'), /export const LINE = 'Your deck, what to say, and who has seen it, in one place\.';/);
 });
 
 test('D1604 (#3716): the editor mounts the Sources panel from ⋯ › Sources and coverage, with the slide’s evidence', () => {

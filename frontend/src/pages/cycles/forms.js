@@ -507,14 +507,11 @@ const narrative = {
 };
 
 const TYPED = 'typed';
-const NEVER = 'never';
-const EXPIRES = [...opts([['7', '7 days'], ['14', '14 days'], ['30', '30 days']]), { value: NEVER, label: 'Never' }];
 const linkInvestor = [
   // A Capital relationships investor, or a name typed in (#1700 takes one, never both).
   { kind: 'CH', name: 'prospect_id', k: 'Investor', opts: [{ value: TYPED, label: 'Type a name' }], def: 0, required: true },
   { kind: 'T', name: 'investor_label', k: 'Fund or name', ph: 'Fund or name', max: 200, required: true, when: { name: 'prospect_id', value: TYPED } },
 ];
-const ALLOW = [{ value: 'download', label: 'Download as PDF' }, { value: 'forwarding', label: 'Forwarding', meta: 'views by others are tracked too' }];
 const investorBody = (v) => (v.prospect_id === TYPED ? { investor_label: str(v.investor_label) } : posId(v.prospect_id) ? { prospect_id: posId(v.prospect_id) } : {});
 /** Its prospects first, then "Type a name"; the first is chosen. */
 const prospectChips = (r) => [...chipsOf(r?.prospects), { value: TYPED, label: 'Type a name' }];
@@ -522,38 +519,6 @@ const prospectChips = (r) => [...chipsOf(r?.prospects), { value: TYPED, label: '
 export function shareLinkUrl(path, origin = globalThis.location?.origin ?? '') {
   return typeof path === 'string' && /^\/share\/deck\/[A-Za-z0-9._~-]+$/.test(path) ? `${origin}${path}` : null;
 }
-const BUILD_DECK = '/raise/pitch';
-const deckLink = {
-  key: 'deck-link', cta: 'Create link', button: 'New link',
-  title: 'New link',
-  sub: 'A link per investor, with an expiry. Views are tracked per slide.',
-  foot: 'Expired links stop opening; their views stay.',
-  fields: [
-    ...linkInvestor,
-    { kind: 'CH', name: 'deck_id', k: 'Deck version', opts: [], def: 0, required: true, empty: 'No deck yet.' },
-    { kind: 'CH', name: 'expires_days', k: 'Expires', opts: EXPIRES, def: 2 },
-    { kind: 'CK', name: 'allow', k: 'Allow', opts: ALLOW },
-  ],
-  loadOptions: (w, projectId) => raiseOptions(w, projectId, 'pitch-deck').then((r) => {
-    const decks = chipsOf(r?.decks);
-    return {
-      prospect_id: { opts: prospectChips(r), def: 0 },
-      deck_id: decks.length ? { opts: decks, def: 0 } : { opts: [], note: { text: '', href: BUILD_DECK, link: 'Build your deck' } },
-    };
-  }),
-  // A link needs a deck: with none the CTA cannot be pressed.
-  blocked: (fields) => !fields.find((f) => f.name === 'deck_id')?.options?.length,
-  toBody: (v) => ({
-    deck_id: posId(v.deck_id), ...investorBody(v),
-    expires_days: v.expires_days === NEVER ? null : Number(v.expires_days || 30),
-    allow_download: checkedOf(v.allow, 'download'), allow_forwarding: checkedOf(v.allow, 'forwarding'),
-  }),
-  submit: (w, projectId, v) => w.raise.deckLink(projectId, deckLink.toBody(v)),
-  done: (result) => {
-    const copy = shareLinkUrl(result?.share_path);
-    return copy ? { text: 'Copy the link now. It is shown only once.', copy } : null;
-  },
-};
 
 /** The size Upload's queue refuses before sending (`raise/dataroom/DataRoomUpload.jsx`), the Worker's own cap. */
 export const MAX_UPLOAD_MB = 20;
@@ -829,7 +794,7 @@ export const FORMS = {
   raise: {
     'fundraising-readiness': [rescore],
     'investor-narrative': [narrative],
-    'pitch-deck': [deckLink],
+    // D4254 P4 (#4272, D-d): no Add form on Pitch deck. ShareDialog is the only way to create a link.
     'data-room': [upload],
     'cap-table': [holder],
     'use-of-funds': [useOfFunds],
