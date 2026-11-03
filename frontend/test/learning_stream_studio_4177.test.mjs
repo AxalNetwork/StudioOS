@@ -37,6 +37,7 @@ import StreamStudio, {
 } from '../src/pages/learning/StudioStreamParts.jsx';
 import StudioItemEditor from '../src/pages/learning/StudioItemEditor.jsx';
 import StudioContentTable from '../src/pages/learning/StudioContentTable.jsx';
+import { escapeRe } from './_escapeRe.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (p) => readFileSync(resolve(ROOT, p), 'utf8');
@@ -427,7 +428,7 @@ test('the content table\'s Video column, and Copy to Stream drawn only when the 
   assert.equal(stillOnStorage(rows), 3);
   assert.equal(storageBanner(3), '3 uploaded videos still play from storage.');
   const later = html(h(StudioContentTable, { status: 'ready', rows, onCopyToStream: () => {} }));
-  assert.match(flat(later), new RegExp(`3 uploaded videos still play from storage\\. ${STORAGE_BANNER_LINE.replace(/[.;]/g, '\\$&')}`));
+  assert.match(flat(later), new RegExp(`3 uploaded videos still play from storage\\. ${escapeRe(STORAGE_BANNER_LINE)}`));
   assert.match(later, /data-testid="button-copy-stream-a"/);
   assert.match(flat(later), /Copying…/);
   assert.match(flat(later), /Verified/);
