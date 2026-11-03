@@ -9,6 +9,7 @@ import { Lightbox, WorkerRail } from '../../../ui';
 import PitchPage from './PitchPage';
 import PitchNotes from './PitchNotes';
 import PitchReview from './PitchReview';
+import ReviewTile from './ReviewTile';
 import {
   EDIT_PATH, EMPTY_DECK, LINE, NOT_RECORDED, NO_VENTURE, READ_ONLY, TABS, TITLE,
   asList, currentVersion, dayLabel, isReadOnly, linkPage, linkRows, ventureQuery,
@@ -190,7 +191,11 @@ export default function PitchStudio({ tab = 'overview' }) {
           // D900: the review of the current version (PD14), and below it the
           // reviewer for an upload or pasted text, which works with no venture
           // as it did before D894: the ventures read never stands in its way.
-          <PitchReview reads={reads} readOnly={readOnly} />
+          // D4271 (#4271): the comments across the deck, approvals and figures, above the AI review.
+          <>
+            <ReviewTile reads={reads} readOnly={readOnly} projectId={projectId} />
+            <PitchReview reads={reads} readOnly={readOnly} />
+          </>
         ) : reads.projects.status === 'error' ? (
           <ReadFailed text="Your ventures could not be read." onRetry={reads.reload} testId="pitch-studio-projects-error" />
         ) : reads.projects.status === 'ok' && !reads.project ? (
