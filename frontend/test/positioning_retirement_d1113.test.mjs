@@ -25,7 +25,7 @@ test('the retired page and client method are gone, and remaining pages import no
   for(const file of sourceFiles('frontend/src')) assert.doesNotMatch(readFileSync(file,'utf8'),/(?:from\s*|import\(\s*)['"][^'"]*PitchPositioningPage(?:\.jsx)?['"]/,file);
   // D898 group E retired the builder whose tab row this read; the studio's tabs carry no Positioning tab.
   assert.equal(existsSync('frontend/src/pages/PitchWorkspacePage.jsx'),false);
-  assert.deepEqual(TABS.map(t=>t.id),['decks','review','analytics','notes']);
+  assert.deepEqual(TABS.map(t=>t.id),['decks','script','review','analytics','notes']);
   assert.equal(typeof StudioDecks,'function');
 });
 

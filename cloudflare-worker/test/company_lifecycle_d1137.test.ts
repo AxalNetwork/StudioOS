@@ -311,8 +311,12 @@ test('a venture\'s seat changes write their events, and the event writer refuses
   const db = fixture(); const env = envOf(db); await seats(db, env);
   const add = await call(db, env, ADA, 'POST', `/api/projects/${VENTURE}/members`, { user_id: DEE, role: 'advisor' });
   assert.equal(add.status, 200, JSON.stringify(add.body));
+  // D1614 W8 (#3994): Dee's open task on the venture is flagged when the seat ends; nothing is reassigned.
+  db.prepare("INSERT INTO scope_tasks (uid, scope_kind, project_id, title, assignee_kind, assignee_user_id, status, board_column, task_number) VALUES ('t-dee', 'project', ?, 'Dee''s task', 'person', ?, 'open', 'ready', 1)").run(VENTURE, DEE);
   assert.equal((await call(db, env, ADA, 'DELETE', `/api/projects/${VENTURE}/members/${DEE}`)).status, 200);
+  assert.deepEqual({ ...(db.prepare("SELECT needs_reassignment, assignee_user_id FROM scope_tasks WHERE uid = 't-dee'").get() as any) }, { needs_reassignment: 1, assignee_user_id: DEE });
   assert.equal((await call(db, env, ADA, 'DELETE', `/api/projects/${VENTURE}/members/${DEE}`)).status, 200, 'removing again changes nothing');
+  assert.equal((db.prepare("SELECT COUNT(*) AS n FROM scope_task_events WHERE detail_json LIKE '%seat_ended%'").get() as any).n, 1, 'one event, not one per removal');
   assert.deepEqual(events(db).map((e) => [e.kind, e.project_id, e.target_user_id]), [['seat_add', VENTURE, DEE], ['seat_remove', VENTURE, DEE]]);
 
   assert.deepEqual([...MEMBERSHIP_EVENT_KINDS].sort(), ['archive', 'join', 'leave', 'project_move', 'project_transfer', 'remove', 'rename', 'restore', 'role_change', 'seat_add', 'seat_remove', 'transfer', 'currency_change'].sort());

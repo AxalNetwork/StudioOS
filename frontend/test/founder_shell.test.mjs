@@ -105,8 +105,8 @@ test('A4 owns the founder Raise landing while workspace mode retains its detaile
   assert.match(app, /guard\(labRoles\(\['admin', 'founder'\]\), <PitchEditor \/>\)/);
   assert.doesNotMatch(app, /PitchWorkspacePage/);
   // The desk is an overview OVER the sections, not instead of them. D894:
-  // the Pitch section page is the Pitch deck studio's home now.
-  assert.match(routeBlock(app, '/raise/pitch'), /<PitchStudio tab="decks" \/>/,
+  // the Pitch section page is the Pitch deck studio's home now. D4254: its Overview.
+  assert.match(routeBlock(app, '/raise/pitch'), /<PitchStudio tab="overview" \/>/,
     'the Pitch section page must survive the desk being mounted');
 });
 

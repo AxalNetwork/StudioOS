@@ -478,7 +478,7 @@ async function mountRaise(f, slug, { replies = REPLIES, answer, id = null, curre
   return { ...ui, calls, sends, w, inputs, radios, checks, pick, typeIn, tick: (name, value) => ui.choose(name, value) };
 }
 const raiseForm = (m, slug) => m.FORMS.raise[slug][0];
-const RAISE_NAMES = { 'fundraising-readiness': 'Fundraising readiness', 'investor-narrative': 'Investor narrative', 'pitch-deck': 'Pitch deck', 'data-room': 'Data room',
+const RAISE_NAMES = { 'fundraising-readiness': 'Fundraising readiness', 'investor-narrative': 'Investor narrative', 'pitch-deck': 'Pitch', 'data-room': 'Data room',
   'cap-table': 'Cap table', 'use-of-funds': 'Use of funds', 'capital-relationships': 'Capital relationships' };
 const file = (name, size = 4) => new File([new Uint8Array(size).fill(37)], name, { type: 'application/pdf' });
 

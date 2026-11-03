@@ -57,7 +57,7 @@ async function call(f: any, who: number | null, method: string, path: string, bo
 async function fixture() {
   __resetForTest();
   const f = aiBudgetFixture();
-  f.db.exec('PRAGMA foreign_keys=OFF; ALTER TABLE users ADD COLUMN founder_id INTEGER; ALTER TABLE activity_logs ADD COLUMN project_id INTEGER; ALTER TABLE activity_logs ADD COLUMN entity_type TEXT; ALTER TABLE activity_logs ADD COLUMN entity_id TEXT;');
+  f.db.exec('PRAGMA foreign_keys=OFF; ALTER TABLE users ADD COLUMN founder_id INTEGER; ALTER TABLE users ADD COLUMN uid TEXT; ALTER TABLE activity_logs ADD COLUMN project_id INTEGER; ALTER TABLE activity_logs ADD COLUMN entity_type TEXT; ALTER TABLE activity_logs ADD COLUMN entity_id TEXT;');
   for (const table of ['projects', 'pitch_decks']) f.db.exec(stripForeignKeys(tableFromBaseline(BASELINE, table)));
   f.db.exec(stripForeignKeys(MIGRATION));
   f.db.exec(CARD_UID);
@@ -193,14 +193,14 @@ test("a note never leaves through the deck's own read, a share or an export: onl
 
 test('only the Super Admin on HQ sets the default template by sector and stage; an Admin still reads it', async () => {
   const f = await fixture();
-  const body = { sector: 'Synthetic sector', stage: 'Seed', method_id: 'yc_seed' };
+  const body = { sector: 'Synthetic sector', stage: 'Seed', method_id: 'yc_seed', reason: 'Synthetic: K4 asks why (#4191).' };
   const plain = await call(f, ADMIN, 'PUT', '/api/decks/admin/recommend-overrides', body);
   assert.deepEqual([plain.status, plain.body.error], [403, 'super_admin_required']);
   const hq = await call(f, SUPER, 'PUT', '/api/decks/admin/recommend-overrides', body);
   assert.equal(hq.status, 200, JSON.stringify(hq.body));
   const branch = await call(f, SUPER, 'PUT', '/api/decks/admin/recommend-overrides', body, { ...f.env, BRANCH_CODE: 'lisbon' });
   assert.deepEqual([branch.status, branch.body.error], [403, 'super_admin_required'], 'no Super Admin on a branch');
-  const del = await call(f, ADMIN, 'DELETE', '/api/decks/admin/recommend-overrides?sector=Synthetic%20sector&stage=Seed');
+  const del = await call(f, ADMIN, 'DELETE', '/api/decks/admin/recommend-overrides?sector=Synthetic%20sector&stage=Seed', { reason: body.reason });
   assert.deepEqual([del.status, del.body.error], [403, 'super_admin_required']);
   const read = await call(f, ADMIN, 'GET', '/api/decks/admin/recommend-overrides');
   assert.equal(read.status, 200);

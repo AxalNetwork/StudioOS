@@ -622,6 +622,12 @@ export { ValidateZoneRedirect };
 // D755 §13 (#1915): /products keeps its query and its hash, so an old
 // /products#token-packs link still lands on the Token packs. D786 (#2211):
 // the catalogue is at /pricing/products now.
+// D4254 (#4254): an old Pitch address lands on its new one, venture and hash kept.
+function KeepQueryRedirect({ to }) {
+  const loc = useLocation();
+  return <Navigate to={{ pathname: to, search: loc.search, hash: loc.hash }} replace />;
+}
+
 function ProductsRedirect() {
   const loc = useLocation();
   return <Navigate to={{ pathname: '/pricing/products', search: loc.search, hash: loc.hash }} replace />;
@@ -3328,7 +3334,14 @@ function AppInner() {
            ? <PitchBoundary role={effectiveRole} />
            : new URLSearchParams(location.search).get('mode') === 'workspace'
            ? <PitchWorkspaceMoved />
-           : <PitchStudio tab="decks" />)} />
+           : <PitchStudio tab="overview" />)} />
+      {/* D4254 (#4254): the tile row. Decks is PD-1; Script & rehearsal and Share & analytics
+          are the new addresses; /raise/pitch/analytics and the old module page
+          /raise/pitch-deck land on them with the venture kept. */}
+      <Route path="/raise/pitch/decks" element={guard(labRoles(['admin', 'founder']), <PitchStudio tab="decks" />)} />
+      <Route path="/raise/pitch/script" element={guard(labRoles(['admin', 'founder']), <PitchStudio tab="script" />)} />
+      <Route path="/raise/pitch/share" element={guard(labRoles(['admin', 'founder']), <PitchStudio tab="analytics" />)} />
+      <Route path="/raise/pitch-deck" element={<KeepQueryRedirect to="/raise/pitch" />} />
        <Route path="/raise/status" element={guard(labRoles(['admin', 'founder']), <FounderRaiseStatus />)} />
       {/* D898 (#2676): the canvas's editor (PD1) at /raise/pitch/edit. The
           template builder retired with group E: its four actions are the
@@ -3342,7 +3355,7 @@ function AppInner() {
         (effectiveRole === 'advisor' || effectiveRole === 'partner' || effectiveRole === 'exploring') && user?.spinout_lab_active !== 1
           ? <PitchBoundary role={effectiveRole} />
           : <TemplatesGallery />)} />
-      <Route path="/raise/pitch/analytics" element={guard(labRoles(['admin', 'founder']), <PitchStudio tab="analytics" />)} />
+      <Route path="/raise/pitch/analytics" element={<KeepQueryRedirect to="/raise/pitch/share" />} />
       {/* D911 (#2695): Positioning moved into Investor narrative › Positioning (NAR18). */}
       <Route path="/raise/pitch/positioning" element={<PitchPositioningRedirect />} />
       <Route path="/raise/pitch/review" element={guard(labRoles(['admin', 'founder']), <PitchStudio tab="review" />)} />

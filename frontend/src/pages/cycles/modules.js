@@ -14,7 +14,7 @@ export const MODULES = {
   raise: [
     { slug: 'fundraising-readiness', name: 'Fundraising readiness' },
     { slug: 'investor-narrative', name: 'Investor narrative' },
-    { slug: 'pitch-deck', name: 'Pitch deck' },
+    { slug: 'pitch-deck', name: 'Pitch' },
     { slug: 'data-room', name: 'Data room' },
     { slug: 'cap-table', name: 'Cap table' },
     { slug: 'use-of-funds', name: 'Use of funds' },
