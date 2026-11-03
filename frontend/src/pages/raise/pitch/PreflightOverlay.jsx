@@ -112,7 +112,7 @@ export default function PreflightOverlay({ overlay, card, theme, kit }) {
                 <div key={l} className="flex flex-1 flex-col gap-1">
                   <span aria-hidden="true" className="h-10 rounded-[8px] border border-[#e2dfe8]" style={{ background: c }} />
                   <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{l}</span>
-                  <span className="font-mono text-[11px] text-axal-body dark:text-gray-300" data-testid={`pitch-preflight-pair-${l.toLowerCase()}`}>{c}</span>
+                  <span className="font-mono text-[11px] text-gray-700 dark:text-gray-300" data-testid={`pitch-preflight-pair-${l.toLowerCase()}`}>{c}</span>
                 </div>
               ))}
             </div>
@@ -128,7 +128,7 @@ export default function PreflightOverlay({ overlay, card, theme, kit }) {
           </div>
         ) : null}
       </div>
-      <p className="m-0 flex gap-2 text-[12.5px] leading-snug text-axal-body dark:text-gray-300" data-testid="pitch-preflight-overlay-legend">
+      <p className="m-0 flex gap-2 text-[12.5px] leading-snug text-gray-700 dark:text-gray-300" data-testid="pitch-preflight-overlay-legend">
         <span className="font-mono font-bold" aria-hidden="true">{overlay.n}</span>
         <span><b className="text-axal-ink dark:text-gray-100">{overlay.legend.title}</b>{overlay.legend.detail ? ` ${overlay.legend.detail}` : ''}</span>
       </p>
