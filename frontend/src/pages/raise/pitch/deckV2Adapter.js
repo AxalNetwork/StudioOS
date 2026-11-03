@@ -94,7 +94,7 @@ export const SURFACES = Object.freeze({
   deckUsage: { issue: 3776, what: 'Estimated and spent on this deck' },
   arrange: { issue: 3777, what: 'Align, distribute, group, lock and layers' },
   imageEdit: { issue: 3778, what: 'Crop, focus and filters' },
-  // D1534 (#3778 phase 2): upscale and background removal wait on owner decision M.
+  // D1534 (#3778 phase 2): background removal through AI Gateway (Bria, M = B), off until the owner's steps; upscale has no model yet.
   imageEditAi: { issue: 3778, what: 'Upscale and background removal' },
   imageVary: { issue: 3784, what: 'Erase, expand, vary and reference images' },
   elementsLibrary: { issue: 3779, what: 'Icons, shapes, dividers and textures' },
@@ -216,7 +216,12 @@ export const arrange = async (card, selection, op, opts) => ({ available: true, 
  * no route runs. The answer is what the toolbar offers.
  */
 export const imageEdit = async () => ({ available: true, value: { crop: 'rect', filters: [...FILTERS] } });
-export const imageEditAi = off('imageEditAi');
+/**
+ * D1534 (#3778 phase 2): the AI image tools (`GET /api/decks/images/tools`). Available only while a
+ * tool is on: with the switch off (until the owner's steps on #1008) `liveTools` answers 503
+ * `image_tool_off`, which reads "Coming later" with the Worker's own sentence.
+ */
+export const imageEditAi = () => through(() => deckImageEditsApi.liveTools(), SURFACES.imageEditAi.issue);
 /** D1544 (#3784): an edit's price (vary, edit, erase, expand) before it runs: one hold for the edit and its checks. */
 export const imageVary = (uid, ask) => through(() => deckImageEditsApi.quote(uid, ask), SURFACES.imageVary.issue);
 /**
