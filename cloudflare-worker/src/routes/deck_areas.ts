@@ -41,7 +41,7 @@ import { D1GenRuntime } from '../services/decks/genRuntime';
 import { admitDeckRun } from '../services/decks/genRooms';
 import {
   FAILED_LINE, expiresAtOf, parseRequest, planAreas, proposalView, quoteHolds, quoteView, recordsVariant, settleProposals,
-  type DeckAspect, type PlanCtx, type ProposalRow, type Variant,
+  type DeckAspect, type PlanCtx, type PlannedArea, type ProposalRow, type Variant,
 } from '../services/decks/areas';
 
 const deckAreas = new Hono<{ Bindings: Env }>();
@@ -97,6 +97,34 @@ deckAreas.post('/:id{[0-9]+}/areas/quote', async (c) => {
   return c.json(await quoteView(plan, Date.now()));
 });
 
+/**
+ * One proposal row per runnable area of an admitted run (`batchUid`), or a
+ * records element's ready row with no run. Shared with the narrative build
+ * (D1516), whose run is the same proposals under the `deck_build` class.
+ */
+export async function insertProposals(env: Env, deck: Pick<Deck, 'deckId' | 'projectId'>, runnable: PlannedArea[], batchUid: string | null, userId: number, now: number): Promise<ProposalRow[]> {
+  const expires = expiresAtOf(now);
+  const made: ProposalRow[] = [];
+  const stmts = runnable.map((a) => {
+    const uid = crypto.randomUUID();
+    const records = a.kind === 'records';
+    const variants: Variant[] | null = records ? [recordsVariant((a.payload as any).record)] : null;
+    const payload = records ? { kind: 'records', replaces_block: a.payload.replaces_block ?? null } : a.payload;
+    made.push({
+      uid, deck_id: deck.deckId, project_id: deck.projectId, card_uid: a.card_uid, area_id: a.area_id, batch_uid: records ? null : batchUid,
+      mode: records ? 'records' : 'variants', element: a.element, payload_json: JSON.stringify(payload), variants_json: variants ? JSON.stringify(variants) : null,
+      state: records ? 'ready' : 'running', outcome: null, accepted_variant: null, replaces_block: (a.payload.replaces_block as string | null) ?? null,
+      created_by: userId, created_at: new Date(now).toISOString().slice(0, 19).replace('T', ' '), decided_at: null, expires_at: expires,
+    });
+    const m = made[made.length - 1];
+    return env.DB.prepare(`INSERT INTO deck_area_proposals (uid, deck_id, project_id, card_uid, area_id, batch_uid, mode, element, payload_json, variants_json, state, replaces_block, created_by, created_at, expires_at)
+      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)`)
+      .bind(m.uid, m.deck_id, m.project_id, m.card_uid, m.area_id, m.batch_uid, m.mode, m.element, m.payload_json, m.variants_json, m.state, m.replaces_block, m.created_by, m.created_at, m.expires_at);
+  });
+  if (stmts.length) await env.DB.batch(stmts);
+  return made;
+}
+
 deckAreas.post('/:id{[0-9]+}/areas', async (c) => {
   const user = await requireAuth(c);
   const deck = await deckFor(c, user);
@@ -129,25 +157,7 @@ deckAreas.post('/:id{[0-9]+}/areas', async (c) => {
     const rows = ((await c.env.DB.prepare('SELECT * FROM deck_area_proposals WHERE batch_uid = ?1 ORDER BY created_at, uid').bind(batch.uid).all<ProposalRow>()).results ?? []) as ProposalRow[];
     return c.json({ batch_uid: batch.uid, class: plan.cls, hold_microusd: batch.quote_microusd, replayed: true, proposals: rows.map(proposalView), refused });
   }
-  const expires = expiresAtOf(now);
-  const made: ProposalRow[] = [];
-  const stmts = runnable.map((a) => {
-    const uid = crypto.randomUUID();
-    const records = a.kind === 'records';
-    const variants: Variant[] | null = records ? [recordsVariant((a.payload as any).record)] : null;
-    const payload = records ? { kind: 'records', replaces_block: a.payload.replaces_block ?? null } : a.payload;
-    made.push({
-      uid, deck_id: deck.deckId, project_id: deck.projectId, card_uid: a.card_uid, area_id: a.area_id, batch_uid: records ? null : batch?.uid ?? null,
-      mode: records ? 'records' : 'variants', element: a.element, payload_json: JSON.stringify(payload), variants_json: variants ? JSON.stringify(variants) : null,
-      state: records ? 'ready' : 'running', outcome: null, accepted_variant: null, replaces_block: (a.payload.replaces_block as string | null) ?? null,
-      created_by: userId, created_at: new Date(now).toISOString().slice(0, 19).replace('T', ' '), decided_at: null, expires_at: expires,
-    });
-    const m = made[made.length - 1];
-    return c.env.DB.prepare(`INSERT INTO deck_area_proposals (uid, deck_id, project_id, card_uid, area_id, batch_uid, mode, element, payload_json, variants_json, state, replaces_block, created_by, created_at, expires_at)
-      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)`)
-      .bind(m.uid, m.deck_id, m.project_id, m.card_uid, m.area_id, m.batch_uid, m.mode, m.element, m.payload_json, m.variants_json, m.state, m.replaces_block, m.created_by, m.created_at, m.expires_at);
-  });
-  await c.env.DB.batch(stmts);
+  const made = await insertProposals(c.env, deck, runnable, batch?.uid ?? null, userId, now);
   return c.json({ batch_uid: batch?.uid ?? null, class: plan.cls, hold_microusd: batch?.quote_microusd ?? 0, replayed: false, proposals: made.map(proposalView), refused });
 });
 

@@ -20,8 +20,20 @@
  *     annotation.
  * A PDF that fails any of these is refused with the codes, never handed out.
  * No text and no URL appears in a code.
+ *
+ * D1578 (#3825, deck v2 E5) — TAGGED, FOR PDF/UA. Chrome prints the page
+ * tagged (`tagged: true`): a structure tree in the DOM's order, which is the
+ * card's reading order, with each picture a Figure carrying its alt text (an
+ * image with empty alt text is an artifact, not a Figure). `finishTaggedPdf`
+ * then sets what the page cannot say: the deck's own title (shown as the
+ * window title), its language, the marked flag, and the document XMP with
+ * PDF/UA-1's identifier and the AI marking (`aiMarking.pdfXmp`). The check
+ * adds, under `ua`: `not_tagged`, `no_language`, `no_title`, `no_pdfua_id`,
+ * `figure_without_alt` and `ai_unmarked` (a deck with AI-drawn pictures whose
+ * PDF does not say so).
  */
-import { PDFArray, PDFDict, PDFDocument, PDFName, PDFRef, PDFString, PDFHexString, type PDFObject } from 'pdf-lib';
+import { PDFArray, PDFBool, PDFDict, PDFDocument, PDFName, PDFRawStream, PDFRef, PDFString, PDFHexString, type PDFObject } from 'pdf-lib';
+import { AI_COMPOSITE_TYPE, pdfXmp, type AiImage } from './aiMarking';
 
 export const SLIDE_SIZES = Object.freeze({
   '16:9': Object.freeze({ width: 1920, height: 1080 }),
@@ -122,6 +134,32 @@ export function expectedLinks(slides: any[]): string[] {
 
 export type PdfCheck = { ok: true; pages: number } | { ok: false; codes: string[]; pages: number };
 
+/** A deck's PDF language: its theme's tag (D1571), else English. */
+export const pdfLangOf = (theme: any): string => (typeof theme?.lang === 'string' && /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(theme.lang) ? theme.lang : 'en');
+
+/**
+ * D1578 — Chrome's tagged PDF, finished for PDF/UA: the title (and
+ * DisplayDocTitle), the language, MarkInfo /Marked true, and the document
+ * XMP (PDF/UA-1's identifier; the AI marking when `ai` is not empty). The
+ * structure tree and the pages are kept as Chrome wrote them. A file pdf-lib
+ * cannot read comes back unchanged, and the check refuses it.
+ */
+export async function finishTaggedPdf(bytes: Uint8Array, { title, lang, ai = [] as AiImage[] }: { title: string; lang: string; ai?: AiImage[] }): Promise<Uint8Array> {
+  let doc: PDFDocument;
+  try { doc = await PDFDocument.load(bytes, { updateMetadata: false }); } catch { return bytes; }
+  const name = (title || 'Pitch deck').slice(0, 200);
+  doc.setTitle(name, { showInWindowTitleBar: true });
+  doc.setLanguage(lang);
+  const ctx = doc.context;
+  const mark = ctx.lookup(doc.catalog.get(PDFName.of('MarkInfo')));
+  if (mark instanceof PDFDict) mark.set(PDFName.of('Marked'), PDFBool.True);
+  else doc.catalog.set(PDFName.of('MarkInfo'), ctx.obj({ Marked: true }));
+  // XMP is read as written: a plain stream, never compressed.
+  const xmp = ctx.stream(new TextEncoder().encode(pdfXmp({ title: name, lang, ai })), { Type: 'Metadata', Subtype: 'XML' });
+  doc.catalog.set(PDFName.of('Metadata'), ctx.register(xmp));
+  return doc.save({ useObjectStreams: false, updateFieldAppearances: false });
+}
+
 const str = (o: PDFObject | undefined): string | null => (o instanceof PDFString || o instanceof PDFHexString ? o.decodeText() : null);
 
 /**
@@ -129,7 +167,7 @@ const str = (o: PDFObject | undefined): string | null => (o instanceof PDFString
  * A failure lists its codes once each: `unreadable`, `no_pages`, `page_size`,
  * `font_not_embedded`, `text_flattened`, `links_missing`.
  */
-export async function checkDeckPdf(bytes: Uint8Array, page: PrintPage, { links = [] as string[], words = true } = {}): Promise<PdfCheck> {
+export async function checkDeckPdf(bytes: Uint8Array, page: PrintPage, { links = [] as string[], words = true, ua = null as null | { ai: number } } = {}): Promise<PdfCheck> {
   let doc: PDFDocument;
   let pages: ReturnType<PDFDocument['getPages']>;
   // A file pdf-lib cannot read, or one with no page tree, is unreadable.
@@ -184,6 +222,46 @@ export async function checkDeckPdf(bytes: Uint8Array, page: PrintPage, { links =
     }
   }
   if (words && fonts === 0) codes.add('text_flattened');
+  if (ua) for (const code of uaCodes(doc, look, ua.ai)) codes.add(code);
   if (links.some((l) => !uris.has(l))) codes.add('links_missing');
   return codes.size ? { ok: false, codes: [...codes], pages: pages.length } : { ok: true, pages: pages.length };
+}
+
+/**
+ * D1578 — PDF/UA's checks this export can answer for: tagged (a structure
+ * tree and MarkInfo /Marked true), a language, a title shown as the window
+ * title, the PDF/UA-1 identifier in the XMP, every Figure with alt text, and
+ * the AI marking when the deck holds AI-drawn pictures.
+ */
+function uaCodes(doc: PDFDocument, look: (o: PDFObject | undefined) => PDFObject | undefined, ai: number): string[] {
+  const out: string[] = [];
+  const cat = doc.catalog;
+  const tree = look(cat.get(PDFName.of('StructTreeRoot')));
+  const mark = look(cat.get(PDFName.of('MarkInfo')));
+  if (!(tree instanceof PDFDict) || !(mark instanceof PDFDict) || mark.get(PDFName.of('Marked')) !== PDFBool.True) out.push('not_tagged');
+  if (!str(look(cat.get(PDFName.of('Lang'))))?.trim()) out.push('no_language');
+  const prefs = look(cat.get(PDFName.of('ViewerPreferences')));
+  if (!doc.getTitle()?.trim() || !(prefs instanceof PDFDict) || prefs.get(PDFName.of('DisplayDocTitle')) !== PDFBool.True) out.push('no_title');
+  const meta = look(cat.get(PDFName.of('Metadata')));
+  const xmp = meta instanceof PDFRawStream ? new TextDecoder().decode(meta.contents) : '';
+  if (!/pdfuaid:part="1"|<pdfuaid:part>1<\/pdfuaid:part>/.test(xmp)) out.push('no_pdfua_id');
+  if (ai > 0 && !xmp.includes(AI_COMPOSITE_TYPE)) out.push('ai_unmarked');
+  // Every Figure in the structure tree has its alt text (or the text it stands for).
+  let bare = false;
+  const seen = new Set<PDFObject>();
+  const walk = (o: PDFObject | undefined, depth: number) => {
+    const v = look(o);
+    if (!v || depth > 64 || seen.has(v)) return;
+    seen.add(v);
+    if (v instanceof PDFArray) { for (const x of v.asArray()) walk(x, depth + 1); return; }
+    if (!(v instanceof PDFDict)) return;
+    if (v.get(PDFName.of('S'))?.toString() === '/Figure') {
+      const alt = str(look(v.get(PDFName.of('Alt')))) ?? str(look(v.get(PDFName.of('ActualText'))));
+      if (!alt?.trim()) bare = true;
+    }
+    walk(v.get(PDFName.of('K')), depth + 1);
+  };
+  if (tree instanceof PDFDict) walk(tree.get(PDFName.of('K')), 0);
+  if (bare) out.push('figure_without_alt');
+  return out;
 }

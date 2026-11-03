@@ -191,6 +191,111 @@ export const TASK_TEXT_JOBS: Readonly<Record<string, string>> = Object.freeze({
 });
 
 /**
+ * #4313 (D4313): the job each rail option runs, so a press resolves its model
+ * through `textChoice` (the job's ladder, the plan lock, the input's fit) and
+ * not through its page's row (D764). Every option `railMatrix.json` registers
+ * has a row; `rail_option_jobs_4313.test.ts` fails on one that has none.
+ *
+ * Most rows follow the plan's job for the press (§2). Where the plan names no
+ * job for a press (several partner and investor reads), the row is the job
+ * whose kind and Default match the press's own, and says "nearest". An option
+ * whose job has no text step (a recording, an image, an upload) keeps its own
+ * path: the router applies the table to text runs only.
+ *
+ * `RAIL_OPTION_PAGE_JOBS` holds the one option key that two pages use for
+ * different work (`draft:renewal-risk`: numbers on Retainers, a summary on Health).
+ */
+export const RAIL_OPTION_JOBS: Readonly<Record<string, string>> = Object.freeze({
+  // Studio and Eadwyn, onboarding
+  'ask:studio': 'ST1', 'explain:question': 'ST4', 'transcribe:voice-answer': 'ST6',
+  'answer:interview': 'ON1',
+  'studio:layout': 'CA1', // nearest: a plan run on glm (D1420's layout proposal)
+  'propose:goal-plan': 'BU2',
+  'sessions:block': 'CA1', // runs no model (D1596)
+  // Validate
+  'fill:pain_tag': 'VA11', 'transcribe:interview': 'VA1', 'transcribe:session': 'VA1', 'transcribe:recording': 'VA1',
+  'summarise:session': 'VA5', 'structure:transcript': 'VA5', 'ask:transcript': 'VA6', 'fill:hypothesis': 'VA15',
+  // Build
+  'draft:build/plan': 'BU1', 'draft:build/roadmap': 'BU2', 'draft:build/this-week': 'BU2', 'draft:build/retro': 'BU2', 'draft:build/kpi': 'BU3',
+  // Raise
+  'draft:raise/use-of-funds-check': 'RA8', 'draft:raise/use-of-funds-runway': 'RA8',
+  'form:uof-milestone-wording': 'BU1', // nearest: plan wording on the 70B
+  'draft:raise/pmf-explain': 'RA6', 'draft:raise/legal': 'RA6',
+  'draft:raise/pmf-questions': 'RA1', // nearest: Raise writing on the 70B
+  'draft:raise/data-room': 'RA2',
+  'draft:raise/narrative-fix': 'RA1', 'draft:narrative-positioning': 'RA1', 'draft:narrative-section': 'RA1', 'draft:narrative-objection': 'RA1',
+  'draft:raise/capital': 'RA8', 'draft:raise/liquidity': 'RA8', 'draft:update': 'RA12',
+  // The deck
+  'form:deck': 'DK1', 'form:deck-template': 'DK1', 'deck:outline': 'DK1', 'deck:build': 'DK1',
+  'deck:rewrite': 'DK2', 'deck:shorten': 'DK2', 'deck:expand': 'DK2', 'deck:tone': 'DK2', 'deck:translate': 'DK2',
+  'deck:notes': 'DK2', 'deck:chart': 'DK2', 'deck:table': 'DK2', 'deck:timeline': 'DK2',
+  'deck:critic': 'DK8', 'deck:wording': 'DK8', 'deck:image': 'DK4',
+  'transcribe:rehearsal': 'DK11', 'transcribe:rehearsal-live': 'DK11', 'rehearse:coach': 'DK12',
+  'review:deck-file': 'DK7', 'review:deck-text': 'DK8', 'review:deck-again': 'DK8', 'review:deck-version': 'DK8',
+  'derive:memo': 'IN1',
+  // Grow
+  'fill:feedback_theme': 'GR1', 'draft:grow/customers': 'GR2', 'form:landing': 'GR2', 'form:palette': 'GR2', 'draft:taglines': 'GR2',
+  'draft:logo': 'GR3', 'draft:grow/talent': 'GR4',
+  // Network
+  'draft:network/re-engagement': 'NE2', 'draft:network/intro-email': 'NE2',
+  'draft:network/relationships': 'NE1', 'draft:network/introductions': 'NE1',
+  'draft:orphan-reassignment': 'NE1', 'suggest:paths': 'NE1', 'draft:pass-reasons': 'NE1',
+  // Research
+  'ask:research': 'RE1', 'ask:library': 'RE1', 'ask:evidence': 'RE1', 'ask:question': 'RE1',
+  'draft:research/ask': 'RE3', 'draft:research/funds': 'RE3', 'draft:research/library': 'RE3', 'draft:index-gaps': 'RE3',
+  'analyse:competitors': 'RE3', 'analyse:again': 'RE3', 'analyse:sources': 'RE3', 'extract:candidate': 'RE3', 'extract:site': 'RE3',
+  'analyze:competitors': 'RE3', 'rerun:analysis': 'RE3', 'refresh:sources': 'RE3',
+  'upload:document': 'RE2', 'upload:reindex': 'RE2', 'reindex:document': 'RE2',
+  'draft:session-brief': 'CA2', 'draft:checkpoint-brief': 'CA2',
+  // Invest, the fund and the portfolio
+  'draft:ic-memo': 'IN1', 'draft:closing-cover-note': 'IN1', 'draft:thin-evidence': 'IN1',
+  'draft:multiple-narrative': 'IN5',
+  'draft:updates-read': 'IN13', // nearest: a summary on the 70B (IN9 reads sentiment and writes nothing)
+  'draft:support-summary': 'IN11', 'draft:lp-reminder': 'RA10',
+  // Advisor and Operating Partner practice
+  'draft:terms': 'IN11', 'draft:proposal': 'IN11', 'draft:chases': 'IN11', 'draft:weekly-reports': 'IN11',
+  'draft:catalog-read': 'IN11', 'draft:consent-requests': 'IN11',
+  'draft:period-narrative': 'GR16', 'draft:quarter-narrative': 'GR16', 'draft:attribution-read': 'GR16', 'draft:renewal-risk': 'GR16',
+  'draft:win-loss-read': 'IN13', 'draft:single-contact-exposure': 'IN13', // nearest: a summary on the 70B
+  'draft:counter': 'IN3',
+  'draft:operating-brief': 'CA1', 'draft:board-read': 'CA1', 'draft:capacity-findings': 'CA1',
+  'draft:expiry-consequences': 'CA4',
+  // HQ
+  'draft:publication-summary': 'AD1',
+});
+
+/**
+ * The options whose job's Default is not the model their kind's list ran
+ * first (`RAIL_KIND_JOBS`, D1478). Each follows the plan's job for the press,
+ * and each model already runs elsewhere, so none is newly wired.
+ * `rail_option_jobs_4313.test.ts` holds this list equal to the table.
+ */
+export const OPTION_MODEL_MOVES: Readonly<Record<string, { from: string; to: string }>> = Object.freeze({
+  'draft:build/retro': { from: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', to: '@cf/zai-org/glm-4.7-flash' }, // BU2: roadmap, this-week and retro
+  'draft:closing-cover-note': { from: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', to: '@cf/openai/gpt-oss-120b' }, // IN1: the closing note
+  'draft:index-gaps': { from: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', to: '@cf/openai/gpt-oss-120b' }, // RE3: research drafts
+});
+
+/** The option key two pages use for different work: the page's own job wins. */
+export const RAIL_OPTION_PAGE_JOBS: Readonly<Record<string, Readonly<Record<string, string>>>> = Object.freeze({
+  'draft:renewal-risk': Object.freeze({ 'operating partner · delivery · health': 'IN13' }),
+});
+
+/** The job a rail option runs on a page, or null when the table has no row for it. */
+export function railOptionJob(page: string | null | undefined, option: string | null | undefined): string | null {
+  if (typeof option !== 'string') return null;
+  const byPage = RAIL_OPTION_PAGE_JOBS[option];
+  const onPage = byPage && typeof page === 'string' ? byPage[page.trim().toLowerCase()] : undefined;
+  return onPage ?? RAIL_OPTION_JOBS[option] ?? null;
+}
+
+/** The text job a rail option runs, or null when its job writes no text (it keeps its own path). */
+export function railOptionTextJob(page: string | null | undefined, option: string | null | undefined): string | null {
+  const id = railOptionJob(page, option);
+  return id && textJob(id) ? id : null;
+}
+
+/**
  * The tasks whose job's Default is not the model the route ran first. Every
  * model here already runs elsewhere, so none is newly wired; each moves the
  * task's first model to the plan's Default. A test holds this list equal to

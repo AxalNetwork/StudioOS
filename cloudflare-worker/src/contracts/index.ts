@@ -47,6 +47,7 @@ export const CONTRACTS = Object.freeze({
   markSeen: { issue: 3879, route: 'POST /api/decks/areas/batches/:uid/seen', schema: 'deckMarkSeen.schema.json' },
   media: { issue: 3788, route: 'POST /api/decks/:id/videos/upload', schema: 'deckMediaVideo.schema.json' },
   myTemplates: { issue: 3782, route: 'GET /api/decks/templates/mine', schema: 'deckMyTemplates.schema.json' },
+  narrativeOutline: { issue: 3768, route: 'POST /api/decks/narrative/outline, or POST /api/decks/narrative/build (the adapter\'s `run`)', schema: 'deckNarrativeOutline.schema.json' },
   orgLocks: { issue: 3786, route: 'GET /api/decks/:id/model-presets (its locks key)', schema: 'deckOrgLocks.schema.json' },
   pasteCards: { issue: 3788, route: 'POST /api/decks/:id/paste', schema: 'deckPasteCards.schema.json' },
   pptxImport: { issue: 3819, route: 'POST /api/decks/templates/import?project_id=', schema: 'deckTemplateImport.schema.json' },

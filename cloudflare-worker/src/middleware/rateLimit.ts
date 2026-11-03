@@ -67,6 +67,8 @@ export const DECK_REMOTE_JOIN = /^\/api\/decks\/remote\/join\/?$/;
 export const DECK_GENERATE = /^\/api\/decks\/(?:\d+\/)?(?:areas(?:\/(?:generate|instruct|batches(?:\/[0-9a-f-]{36}\/retry-failed)?))?|build)\/?$/;
 // D1525 (#3783): ranking an area's variants runs one Clef decision; the quote runs nothing.
 export const DECK_JUDGE = /^\/api\/decks\/areas\/[0-9a-f-]{36}\/judge\/?$/;
+// D1516 (#3768): the narrative build admits one run for the whole deck; its outline runs nothing.
+export const DECK_NARRATIVE_BUILD = /^\/api\/decks\/narrative\/build\/?$/;
 
 // D810 — three of the four public newsletter routes, and nothing else under
 // the word. Unsubscribe is left out on purpose (S1's review): RFC 8058
@@ -436,7 +438,7 @@ const BUCKETS: Bucket[] = [
     name: 'deck_generate',
     limit: 6,
     windowSec: 60,
-    test: (p, m) => m === 'POST' && DECK_GENERATE.test(p),
+    test: (p, m) => m === 'POST' && (DECK_GENERATE.test(p) || DECK_NARRATIVE_BUILD.test(p)),
     scope: 'user',
     failClosed: true,
   },
@@ -444,7 +446,7 @@ const BUCKETS: Bucket[] = [
     name: 'deck_generate_hour',
     limit: 20,
     windowSec: 3600,
-    test: (p, m) => m === 'POST' && DECK_GENERATE.test(p),
+    test: (p, m) => m === 'POST' && (DECK_GENERATE.test(p) || DECK_NARRATIVE_BUILD.test(p)),
     scope: 'user',
     failClosed: true,
   },

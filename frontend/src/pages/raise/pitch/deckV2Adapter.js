@@ -61,6 +61,7 @@ import { deckJudgeApi } from '../../../lib/api/deckJudge.js';
 import { deckLayoutsApi } from '../../../lib/api/deckLayouts.js';
 import { deckMediaApi } from '../../../lib/api/deckMedia.js';
 import { deckModelPresetsApi } from '../../../lib/api/deckModelPresets.js';
+import { deckNarrativeApi } from '../../../lib/api/deckNarrative.js';
 import { deckRehearsalsApi } from '../../../lib/api/deckRehearsals.js';
 import { deckRemixApi } from '../../../lib/api/deckRemix.js';
 import { deckSlideAnalyticsApi } from '../../../lib/api/deckSlideAnalytics.js';
@@ -205,7 +206,15 @@ export const history = async () => Object.freeze({ available: true, value: gridO
 // D1525 (#3783): one area's variants, ranked blind by a judge of another family than the writers'. Without `run`,
 // its quote (runs nothing); with it, the ranking. It never accepts: Accept stays the founder's.
 export const judge = (proposalUid, { run = false } = {}) => through(() => (run ? deckJudgeApi.rank(proposalUid) : deckJudgeApi.quote(proposalUid)), SURFACES.judge.issue);
-export const narrativeOutline = off('narrativeOutline');
+/**
+ * D1516 (#3768): New deck from the narrative. Without `run`, the outline: the stage's cards with their grid plan, what
+ * was left out and why ("Problem not evidenced"), the theme and template picked, and the quote. With `run` (and the
+ * outline's `quoteUid`), the one build: a version that is not current, under one deck_build run and one hold.
+ */
+const narrativeBody = ({ projectId, audience, stage, sector, run, quoteUid } = {}) => ({
+  project_id: projectId, ...(audience ? { audience } : {}), ...(stage ? { stage } : {}), ...(sector ? { sector } : {}), ...(run && quoteUid ? { quote_uid: quoteUid } : {}),
+});
+export const narrativeOutline = (o = {}) => through(() => (o.run ? deckNarrativeApi.build(narrativeBody(o), o.idempotencyKey) : deckNarrativeApi.outline(narrativeBody(o))), SURFACES.narrativeOutline.issue);
 /**
  * D1521 (#3773): an instruction on the selected areas of one card. Without `run`, the quote (#3764's areas quote);
  * with `run` (and the quote's `quoteUid`), the one run under one hold, answered as one proposal per area. `areas`
