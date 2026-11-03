@@ -568,11 +568,19 @@ export async function requireAdmin(c: Context<{ Bindings: Env }>): Promise<User>
 async function refuseWhileFrozen(c: Context<{ Bindings: Env }>, user: User): Promise<void> {
   const method = String(c.req.method || '').toUpperCase();
   if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return;
-  if (branchOf(c.env)) return;
-  if (isSuperAdmin(user as any)) return;
-  let notice: { uid: string; subject: string; respond_by: string; status: string } | null = null;
+  const notice = await freezingNotice(c.env, user);
+  if (!notice) return;
+  const err: any = new Error(ADMIN_FROZEN);
+  err.notice = notice;
+  throw err;
+}
+
+/** The notice that freezes this admin's writes, or null: `refuseWhileFrozen`'s rule without the method. */
+async function freezingNotice(env: Env, user: User): Promise<{ uid: string; subject: string; respond_by: string; status: string } | null> {
+  if (branchOf(env)) return null;
+  if (isSuperAdmin(user as any)) return null;
   try {
-    notice = await c.env.DB.prepare(
+    return await env.DB.prepare(
       `SELECT uid, subject, respond_by, status
          FROM admin_notices
         WHERE user_id = ? AND status IN (?, ?)
@@ -581,12 +589,17 @@ async function refuseWhileFrozen(c: Context<{ Bindings: Env }>, user: User): Pro
     ).bind(user.id, ...FREEZING_STATUSES).first<{ uid: string; subject: string; respond_by: string; status: string }>();
   } catch (e) {
     console.warn('[compliance] admin_notices unreadable on a write gate', (e as Error).message);
-    return;
+    return null;
   }
-  if (!notice) return;
-  const err: any = new Error(ADMIN_FROZEN);
-  err.notice = notice;
-  throw err;
+}
+
+/**
+ * #4046 (B4): whether `requireAdmin` would refuse this admin's write (D135), for
+ * a gate that is not a route's own, such as Fill's record scope for a program
+ * proposal, whose undo goes through `/api/fills` and never meets `requireAdmin`.
+ */
+export async function adminWritesFrozen(env: Env, user: User): Promise<boolean> {
+  return !!(await freezingNotice(env, user));
 }
 
 /**

@@ -29,6 +29,7 @@ import { neverFillReason } from './neverFill';
 import type { Citation } from './types';
 import type { ScopeContext } from './scopes';
 import { noteFirm } from '../dealNotes';
+import { studioOf } from '../programProposals';
 
 /** The most rows one run may propose, and the most Accept all takes at once (#2431 question 3, A). */
 export const MAX_RUN_ROWS = 10;
@@ -186,6 +187,53 @@ export async function gatherScoped(env: Env, userId: number, table: string, row:
     if (firm === undefined) return out;
     out.existing = await list(`SELECT substr(body, 1, 300) AS value FROM deal_notes
       WHERE deal_id = ? AND company_id IS ? AND (company_id IS NOT NULL OR author_user_id = ?) ORDER BY id DESC LIMIT 10`, dealId ?? null, firm, userId);
+  } else if (table === 'program_proposals') {
+    // #4046 (B4): the studio's own other proposal names (`ownRow`'s rule) and the program names its admins can
+    // already see (the registry reader's licence filter, narrowed to leave out HQ's 'proposed' drafts), so a name is not a repeat; and
+    // the choices already on this proposal (who it is for, group, join method, cycle). Never HQ's note or
+    // decision, seats, weeks, rewards, templates, what HQ receives, tools, a sender or another studio's proposal.
+    const studio = await studioOf(env, userId);
+    out.existing = [
+      ...await list(`SELECT name AS value FROM program_proposals WHERE ((? IS NOT NULL AND licence_uid = ?) OR (licence_uid IS NULL AND created_by_user_id = ?))
+        AND id IS NOT ? AND name IS NOT NULL AND trim(name) <> '' ORDER BY id DESC LIMIT 20`, studio, studio, studio ? -1 : userId, row ? row.id ?? null : null),
+      ...await list("SELECT name AS value FROM programs WHERE (licence_uid IS NULL OR licence_uid = ?) AND status <> 'proposed' ORDER BY id DESC LIMIT 40", studio),
+    ];
+    if (row) {
+      let who: string[] = [];
+      try { const w = JSON.parse(String(row.who_json ?? '[]')); if (Array.isArray(w)) who = w.map((x) => String(x)); } catch { who = []; }
+      out.context = [
+        ...(row.name ? [`This proposal's name: ${String(row.name)}`] : []),
+        ...(who.length ? [`Who it is for: ${who.join(', ')}`] : []),
+        ...(row.grp ? [`Group: ${String(row.grp)}`] : []),
+        ...(row.join_method ? [`Join method: ${String(row.join_method)}`] : []),
+        ...(row.cycle ? [`Cycle: ${String(row.cycle)}`] : []),
+      ];
+    }
+  } else if (table === 'partner_invitations') {
+    // #4046 (B4): the inviting admin's own last few messages, so a new one is not a repeat. Never the invitee's email
+    // or name, the lookup, what to offer, the terms or another admin's invitation.
+    out.existing = await list(`SELECT substr(personal_message, 1, 300) AS value FROM partner_invitations
+      WHERE invited_by_user_id = ? AND personal_message IS NOT NULL AND trim(personal_message) <> '' ORDER BY id DESC LIMIT 5`, userId);
+  } else if (table === 'article_review_comments') {
+    // #4046 (B4): the article's own text, as the reviewer reads it (title, subtitle, sector and the first 4000
+    // characters), and its last first comments, so a note is not a repeat. Never the author's name or email, a
+    // reviewer, a revision's reason, the stage, views or any reason given in a stage change.
+    const articleId = row ? row.article_id : parentId;
+    const a = await env.DB.prepare('SELECT title, subtitle, sector, substr(body_markdown, 1, 4000) AS body FROM articles WHERE id = ?')
+      .bind(articleId ?? null).first<{ title: string | null; subtitle: string | null; sector: string | null; body: string | null }>();
+    out.context = a ? [
+      `Title: ${String(a.title ?? 'not recorded')}`,
+      ...(a.subtitle ? [`Subtitle: ${String(a.subtitle)}`] : []),
+      ...(a.sector ? [`Sector: ${String(a.sector)}`] : []),
+      `Article text (first 4000 characters): ${String(a.body ?? '')}`,
+    ] : [];
+    out.existing = await list(`SELECT substr(body, 1, 300) AS value FROM article_review_comments
+      WHERE article_id = ? AND parent_id IS NULL ORDER BY id DESC LIMIT 10`, articleId ?? null);
+    out.guide = 'Write a reviewer\'s note to the article\'s author about its text: what to clarify, cut or check. Never say whether it will be approved, rejected or published, never give a stage or a deadline, and never name the author.';
+  } else if (table === 'segment_profiles') {
+    // #4046 (B4): the segment names already on file, so a new one is not a repeat. Names alone: never a key (the
+    // segment's permanent identity), a profile, a status, a member count, a member, a suggestion or a history actor.
+    out.existing = await list('SELECT name AS value FROM segment_profiles ORDER BY rowid DESC LIMIT 40');
   } else if (table === 'admin_publications' && row) {
     out.context = [`Publication: ${String(row.title ?? 'title not recorded')}`, `Section: ${String(row.section ?? 'not recorded')}`];
   }
