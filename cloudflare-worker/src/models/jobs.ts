@@ -179,5 +179,12 @@ export const Jobs = {
     } catch {
       console.error('[cron] deck image sweep unreadable');
     }
+    // D1512 (#3764): an area proposal nobody decided expires after 14 days, with the image proposals it holds.
+    try {
+      const { expireAreaProposals } = await import('../services/decks/areaExpiry');
+      await expireAreaProposals(env);
+    } catch {
+      console.error('[cron] deck area proposal expiry unreadable');
+    }
   },
 };

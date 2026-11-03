@@ -54,7 +54,8 @@ async function exportsOf(deck: any) {
     slides, renderable: slides.map((s: any) => ({ title: s.title, fields: [] })) as any, brand: BRAND, notes: true, images: new Map(), chartShot: null,
   });
   const parts = unzip(pptx.bytes);
-  const slideXml = [...parts.entries()].filter(([n]) => /^ppt\/slides\/slide\d+\.xml$/.test(n)).map(([, b]) => new TextDecoder().decode(b)).join('\n');
+  // D1574: a native chart's words (its series names) live in its chart part.
+  const slideXml = [...parts.entries()].filter(([n]) => /^ppt\/(slides\/slide|charts\/chart)\d+\.xml$/.test(n)).map(([, b]) => new TextDecoder().decode(b)).join('\n');
   return { slides, html, pptx, slideXml, parts };
 }
 

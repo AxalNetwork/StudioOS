@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
+// D1574 (#3821): the PowerPoint is deck_exports.ts's, mounted before decks.ts as in index.ts.
+import deckExports from '../src/routes/deck_exports.ts';
 import decks from '../src/routes/decks.ts';
 import deckNew from '../src/routes/deck_new.ts';
 import brand from '../src/routes/brand.ts';
@@ -60,7 +62,7 @@ async function fixture() {
     prompts.push(content);
     return { response: '{}', usage: { prompt_tokens: 10, completion_tokens: 10 } };
   } }) };
-  const app = new Hono<any>().route('/api/decks', deckNew).route('/api/decks', decks).route('/api/brand', brand);
+  const app = new Hono<any>().route('/api/decks', deckNew).route('/api/decks', deckExports).route('/api/decks', decks).route('/api/brand', brand);
   const out = { ...f, app, env, prompts, shareId: 0, token: '', slug: '' };
   // Owner controls initialize the exact runtime schema before hostile calls.
   assert.equal((await request(out, 2, 'GET', '/api/decks/by-project/1')).status, 200);

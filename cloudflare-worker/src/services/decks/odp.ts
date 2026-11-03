@@ -38,6 +38,7 @@ import { IMAGE_MISSING, NOT_RECORDED, NO_NOTES, chartLabel, type ImageKind } fro
 import type { ChartShot, PlacedImage } from './pptxEditable';
 import { tableLines } from './slideModel';
 import { diagramLayout, diagramName, type DiagramLayout } from './diagramLayout';
+import { chartHeading } from './pptxChart';
 
 export const ODP_MIMETYPE = 'application/vnd.oasis.opendocument.presentation';
 /** The page, at 16:9. */
@@ -128,15 +129,15 @@ export function chartParas(b: any): Para[] {
   });
 }
 
-/** The line under a chart: its label, then where its series come from. */
-export function chartCaption(b: any): Para[] {
+/** The line under a chart: its label ("Projection · …" past today, pd8b), then where its series come from. */
+export function chartCaption(b: any, today: string = new Date().toISOString().slice(0, 10)): Para[] {
   const series = Array.isArray(b?.series) ? b.series : [];
   const sources = [...new Set(series.map((sr: any) => {
     const k = sr?.binding?.source_key;
     const at = sr?.binding?.as_of;
     return typeof k === 'string' && k ? `${k}${typeof at === 'string' && at ? `, as of ${at}` : ''}` : null;
   }).filter(Boolean))] as string[];
-  return [para('M', `${chartLabel(b?.chart_type)} chart`), para('S', sources.length ? `Source: ${sources.join(' · ')}` : `Source: ${NOT_RECORDED}`)];
+  return [para('M', chartHeading(`${chartLabel(b?.chart_type)} chart`, b, today)), para('S', sources.length ? `Source: ${sources.join(' · ')}` : `Source: ${NOT_RECORDED}`)];
 }
 
 /** One block's paragraphs, or null when it draws nothing (an empty text block). */
@@ -200,6 +201,8 @@ export type OdpInput = {
   chartShot?: ChartShot | null;
   /** D1546: Confidential and each card's footnotes (`compliance.ts`). */
   compliance?: DeckCompliance;
+  /** D1574: today's date (YYYY-MM-DD), which decides what is a projection; today when not given. */
+  today?: string;
 };
 export type OdpReport = { bytes: Uint8Array; charts: { pictured: number; as_text: number }; images: { placed: number; not_placed: number } };
 
@@ -253,7 +256,7 @@ export async function writeOdp(input: OdpInput): Promise<OdpReport> {
           if (input.chartShot && shotsLeft > 0) { shotsLeft -= 1; png = await input.chartShot(i, chartBox).catch(() => null); }
           if (png) { shapes.push(imageFrame(id('Chart'), chartBox, picture('png', png), `${chartLabel(b.chart_type)} chart`)); counts.pictured += 1; }
           else { shapes.push(textFrame(id('Chart'), chartBox, chartParas(b))); counts.as_text += 1; }
-          shapes.push(textFrame(id('Chart caption'), capBox, chartCaption(b)));
+          shapes.push(textFrame(id('Chart caption'), capBox, chartCaption(b, input.today)));
           continue;
         }
         if (b.kind === 'graphic') {
