@@ -24,7 +24,9 @@ import RulebooksTab from './RulebooksTab.jsx';
 import SkillsTab from './SkillsTab.jsx';
 import TeamCoverageCard from './TeamCoverageCard.jsx';
 import ApprovalsTab from './ApprovalsTab.jsx';
+import ActivityFeed from '../work/ActivityFeed.jsx';
 import TeamSettingsTab from './TeamSettingsTab.jsx';
+import PlatformPausedBanner from './PlatformPausedBanner.jsx';
 import * as agents from './agentsAdapter.js';
 import { BTN_PRIMARY, BTN_TEXT, EYEBROW, FIELD, MUTED, useMenu } from './teamUi.jsx';
 import {
@@ -103,12 +105,12 @@ function AddToTeam({ disabled, reading, canInvite, agentOff, onPerson, onAgent }
 }
 
 /** The four sections, as links (each is its own address): the one in view carries `aria-current="page"`. */
-function Tabs({ tab, badges }) {
+function Tabs({ tab, badges, project = false }) {
   const { pathname } = useLocation();
   return (
     <nav aria-label="Team" className="flex gap-5 overflow-x-auto border-b border-axal-hairline dark:border-gray-800">
       <span className="flex gap-5">
-        {TABS.map((t) => (
+        {TABS.filter((t) => project || !t.projectOnly).map((t) => (
           <Link key={t.key} to={`${pathname}?tab=${t.key}`} aria-current={tab === t.key ? 'page' : undefined}
             className={`-mb-px flex h-[42px] items-center gap-1.5 whitespace-nowrap border-b-2 text-[13.5px] ${tab === t.key ? 'border-axal-violet font-bold text-axal-ink dark:border-violet-400 dark:text-gray-100' : 'border-transparent text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`}
             data-testid={`team-tab-${t.key}`}>
@@ -332,6 +334,8 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
 
   return (
     <div className="flex flex-col gap-[18px] px-4 pb-8 pt-6 md:px-7" data-testid="team-page" data-scope={scope.kind}>
+      {/* D4162 (#4162): HQ's kill switch, as every team sees it. */}
+      <PlatformPausedBanner />
       <header className="flex flex-wrap items-start gap-3">
         <div className="min-w-0 flex-1">
           <p className={`m-0 ${EYEBROW}`} data-testid="team-eyebrow">{reading ? 'Reading…' : scope.eyebrow}</p>
@@ -349,7 +353,7 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
           ) : null}
         </div>
       </header>
-      <Tabs tab={tab} badges={badges} />
+      <Tabs tab={tab} badges={badges} project={kind === 'project'} />
       <Toast notice={notice} onClose={() => setNotice(null)} />
       {actionError ? <p role="alert" className="m-0 text-[12.5px] text-axal-destructive dark:text-red-300">{actionError}</p> : null}
 
@@ -372,9 +376,10 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
           {kind === 'company' && ['founder', 'admin'].includes(me().role) ? <p className={`m-0 ${MUTED}`}>{ROSTER_LINE} <Link to="/build/team" className={BTN_TEXT}>Open Build › Team</Link></p> : null}
         </>
       ) : null}
-      {tab === 'skills' ? <SkillsTab scope={scope} rolesBlock={rolesBlock} agentsBlock={agentsBlock} onAddAgent={!planLocked && agentsBlock?.value?.can_manage ? () => setSheet({ kind: 'agent' }) : null} /> : null}
+      {tab === 'skills' ? <SkillsTab scope={scope} agentsBlock={agentsBlock} /> : null}
       {tab === 'roles' ? <RulebooksTab scope={scope} canManage={!!agentsBlock?.value?.can_manage} agentsBlock={agentsBlock} /> : null}
       {tab === 'approvals' ? <ApprovalsTab scope={scope} /> : null}
+      {tab === 'activity' && kind === 'project' ? <ActivityFeed projectId={id} /> : null}
       {tab === 'settings' ? (
         <TeamSettingsTab scope={scope} agentsBlock={agentsBlock} canManage={canEdit}
           onEditCap={(a) => setSheet({ kind: 'profile', uid: a.uid, edit: 'cap' })}
@@ -383,7 +388,7 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
 
       {sheet?.kind === 'invite' ? <InviteSheet kind={kind} target={target} pending={invitations?.ok ? invitations.list : null} onClose={() => setSheet(null)} onDone={(out) => { if (out?.invitations?.[0]?.uid) setFresh(out.invitations[0].uid); invited(out); }} /> : null}
       {sheet?.kind === 'agent' && rolesBlock?.available ? (
-        <AddAgentSheet scope={scope} roles={rolesBlock.value?.roles} models={rolesBlock.value?.models} held={agentList.map((a) => a.role_key)}
+        <AddAgentSheet scope={scope} roles={rolesBlock.value?.roles} models={rolesBlock.value?.models} held={agentList.map((a) => a.role_key)} team={agentList}
           me={{ name: me().name }} onClose={() => setSheet(null)} onAdded={() => { setSheet(null); loadAgents(); }}
           onEditRulebook={(key) => { setSheet(null); navigate(`${pathname}?tab=roles&role=${encodeURIComponent(key)}`); }} />
       ) : null}

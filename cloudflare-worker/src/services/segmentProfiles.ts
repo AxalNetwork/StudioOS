@@ -22,6 +22,11 @@
  * offered before this store existed. A failed read is an error, never a
  * fallback: the caller answers 503.
  *
+ * ROWID (#4046 B4). Fill with Eadwyn names a segment by its implicit rowid
+ * (`services/fills/scopes.ts`, `fill_provenance.target_row_id`), since the key
+ * is TEXT. A rebuild of `segment_profiles` must keep each row's rowid (copy it
+ * explicitly), and no route deletes a segment, so a rowid is never reused.
+ *
  * COUNTS leave admin accounts out, and a count from 1 to 4 is suppressed
  * (`suppressGroup`, `SMALL_CELL_MIN`), with one more cell where a total would
  * give it away.
@@ -301,7 +306,9 @@ export async function createProfile(env: Env, body: Record<string, unknown>, act
     if (await getProfile(env, key).catch(() => null)) throw new SegmentInputError('segment_exists', 'A segment already has that key.', 409);
     throw error;
   }
-  return { ...v, in_code: false, code_profile: null, sign_up_questions: null, version: 1, updated_by: actor.id };
+  // #4046 (B4): the row's rowid, the integer a Fill with Eadwyn record step names it by (the key is TEXT).
+  const made = await env.DB.prepare('SELECT rowid AS id FROM segment_profiles WHERE key = ?').bind(key).first<{ id: number }>();
+  return { id: made ? Number(made.id) : null, ...v, in_code: false, code_profile: null, sign_up_questions: null, version: 1, updated_by: actor.id };
 }
 
 /**

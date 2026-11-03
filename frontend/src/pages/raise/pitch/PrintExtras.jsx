@@ -41,7 +41,7 @@ export const SOURCES_NOT_SENT = 'The Sources appendix did not come with this ver
 /** Does this slide belong to the studio (D897's fields, D898's blocks) rather than a template? */
 export const isStudioSlide = (s) => (Array.isArray(s?.blocks) && s.blocks.length > 0) || (Array.isArray(s?.fields) && s.fields.length > 0);
 
-export function StudioPrintCard({ slide, index, aspect = '16:9', chrome = null, theme = null }) {
+export function StudioPrintCard({ slide, index, aspect = '16:9', chrome = null, theme = null, onButton = null }) {
   const card = cardOf(slide, index);
   // D1571 (#3818): the printed page reads in the deck's language and direction.
   const words = langAttrs(theme);
@@ -50,7 +50,7 @@ export function StudioPrintCard({ slide, index, aspect = '16:9', chrome = null, 
     return (
       <div data-slide-frame="" style={{ ...PAGE, width: SLIDE_SIZES[aspectOf(aspect)].width }} {...words} data-testid={`print-card-${index}`} data-layout="grid">
         <PrintDecor slide={slide} aspect={aspect} index={index} />
-        <BlockGrid blocks={card.blocks} colours={COLOURS} live size="print" aspect={aspect} lang={words.lang} dir={words.dir} testId={`print-blocks-${index}`} />
+        <BlockGrid blocks={card.blocks} colours={COLOURS} live size="print" aspect={aspect} lang={words.lang} dir={words.dir} testId={`print-blocks-${index}`} onButton={onButton ? (b) => onButton(slide, b) : null} />
         <CardCompliance chrome={chrome} size="print" testId={`print-compliance-${index}`} />
       </div>
     );

@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
+import AxalValuesBars from './AxalValuesBars.jsx';
 import { Link } from 'react-router-dom';
 import { Loader2, AlertCircle, Lock, Sparkles, ChevronRight } from 'lucide-react';
 import { api, assessment } from '../../lib/api';
@@ -573,26 +574,9 @@ function FitBody({ state }) {
       )}
       
       {axalWithSignal.length > 0 && (
-        <div>
-          <div className="pf-lbl mb-[14px]">5 Axal behavioral values</div>
-          <div className="flex flex-col gap-[11px]">
-            {axal.map((v) => {
-              const score = Number(v.score) || 0;
-              const pct = Math.max(0, Math.min(100, score / 5 * 100));
-              return (
-                <div key={v.value_key}>
-                  <div className="flex justify-between mb-[5px]">
-                    <span className="text-[12px] font-semibold text-[#3f3f46] dark:text-gray-300 capitalize">{humanize(v.value_key)}</span>
-                    <span className="pf-mono text-[11px] font-bold text-[#7c3aed] dark:text-violet-400">{score.toFixed(1)}/5</span>
-                  </div>
-                  <div className="h-[6px] rounded-full bg-[#f1f1f5] dark:bg-gray-800 overflow-hidden">
-                    <div className="h-full rounded-full bg-[#7c3aed] dark:bg-violet-500 transition-all duration-700" style={{ width: `${pct}%` }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        // D4119: the same block an agent's profile draws (`AxalValuesBars`), here out of 5.
+        <AxalValuesBars testId="person-values" title={`${axal.length} Axal behavioral values`} scale="five"
+          bars={axal.map((v) => ({ key: v.value_key, label: v.label || humanize(v.value_key), description: v.description || '', score: (Number(v.score) || 0) / 5 }))} />
       )}
     </div>
   );

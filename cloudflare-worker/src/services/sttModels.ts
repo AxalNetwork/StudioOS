@@ -12,7 +12,8 @@
  * transcribed it.
  */
 import { PRICE_USD_PER_AUDIO_MINUTE, PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET, ROUTE } from './aiRouter';
-import { FLUX, NOVA_3, WHISPER, WHISPER_TINY_EN, WHISPER_TURBO } from './sttFormats';
+import { FLUX, NOVA_3, WHISPER, WHISPER_TINY_EN, WHISPER_TURBO, mipPriceFactor } from './sttFormats';
+import { AI_SURFACE } from './aiSurfaces';
 import { LANGUAGES } from './sessionSetup';
 
 export type SttKind = 'live' | 'final';
@@ -45,11 +46,15 @@ export const STT_MODELS: readonly SttModel[] = [
 export const DEFAULT_LIVE_MODEL = NOVA_3;
 export const DEFAULT_FINAL_MODEL = WHISPER_TURBO;
 
-/** USD per minute of audio, from the router's tables, or null when unpublished. */
+/**
+ * USD per minute of audio, from the router's tables, or null when unpublished.
+ * These are a session's models, so interview audio: a Deepgram model is listed
+ * at its opt-out rate, the one a run is held and charged at (#3936 part 3).
+ */
 export function pricePerMinute(model: string, kind: SttKind): number | null {
   const table = kind === 'live' ? PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET : PRICE_USD_PER_AUDIO_MINUTE;
   const p = table[model];
-  return typeof p === 'number' && Number.isFinite(p) ? p : null;
+  return typeof p === 'number' && Number.isFinite(p) ? p * mipPriceFactor(model, AI_SURFACE.validateInterviews) : null;
 }
 
 /**

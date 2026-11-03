@@ -501,7 +501,8 @@ const MOUNTS = {
   'Investor · Deals · Commit | ic-memo': { add: 'exempt: an IC decision is opened by the decision flow, and its memo is written on the decision page', edit: ['pages/ICDecisionPage.jsx', /scope: SCOPED_FORMS\.icMemo, record:/] },
   'Advisor · Expertise · Services | service': { add: ['pages/advisor/expertise/ServicesZone.jsx', /scope: SCOPED_FORMS\.service/], edit: 'exempt: Services has no Edit form today; the advisor sections are redrawn under #3700' },
   'Operating Partner · Delivery · Reporting | status-report': { add: ['pages/partner/delivery/StatusReportsZone.jsx', /parent: reportId \? null/], edit: ['pages/partner/delivery/StatusReportsZone.jsx', /record: reportId/] },
-  'Admin · Approvals · Events | event': { add: 'exempt: /events/new is an owner call, under #3724', edit: ['pages/events/EventEditorPage.jsx', /record: isEdit \? Number\(id\) : null/] },
+  // #4046 (B2): /events/new mounts the same form, its new event under the caller (the owner's call 5).
+  'Admin · Approvals · Events | event': { add: ['pages/events/EventEditorPage.jsx', /await fill\.afterSave\(newId\)/], edit: ['pages/events/EventEditorPage.jsx', /record: isEdit \? Number\(id\) : null/] },
   'Admin · Approvals · Events | agenda-item': { add: ['pages/events/EventManagePage.jsx', /parent: editing \? null : Number\(id\)/], edit: ['pages/events/EventManagePage.jsx', /record: editing \?\? null/] },
   'Super Admin · Content · Publications | publication': { add: 'exempt: a publication is created from its source, then its summary is written on its detail page', edit: ['pages/admin/PublicationDetail.jsx', /scope: SCOPED_FORMS\.publication, record: pubId/] },
   // D1424 (#3700) mounted D1595's three forms.
@@ -509,6 +510,16 @@ const MOUNTS = {
   'Operating Partner · Offers · Catalog | offering': { add: ['pages/ServiceCatalogPage.jsx', /parent: offering \? null : ownerId/], edit: ['pages/ServiceCatalogPage.jsx', /record: offering\?\.id \?\? null/] },
   'Operating Partner · Offers · Perk deals | perk': { add: ['pages/PerksPage.jsx', /scope: SCOPED_FORMS\.perk, parent: ownerId/], edit: 'exempt: a submitted perk is reviewed before it lists, and this console edits only its end date (Extend)' },
   // #4046 (#3740 2b): the deal page's New note.
+  // #4046 (B2): a member's answers on a programme (the owner's call 2). An application is sent with its answers and is never edited.
+  'Member · Studio · Product testing | testing-answers': { add: ['pages/testing/member/TesterSheets.jsx', /scope: SCOPED_FORMS\.testingAnswers, parent: /], edit: 'exempt: an application is sent with its answers, and no form re-opens them; Withdraw is its only change' },
+  // #4046 (B4): Propose a program. A new proposal hangs under the caller; a stored draft or sent-back one fills by its id.
+  'Admin · Programs | program-proposal': { add: ['pages/admin/programs/ProposePage.jsx', /scope: SCOPED_FORMS\.programProposal/], edit: ['pages/admin/programs/ProposePage.jsx', /record: proposal\?\.id \?\? null/] },
+  // #4046 (B4): New invitation's message. A new invitation hangs under the caller; it is emailed as it is made, and no route rewrites it.
+  'Admin · Community · Partner invitations | partner-invitation': { add: ['pages/admin/partners/NewInvitationDialog.jsx', /scope: SCOPED_FORMS\.partnerInvitation, enabled: !created/], edit: 'exempt: an invitation\'s message is emailed by the Send that makes it, and no form or route rewrites it' },
+  // #4046 (B4): the review drawer's new comment. It hangs under the article; it reaches the author's editor as it is sent.
+  'Super Admin · Content · Content queue | review-comment': { add: ['pages/admin/contentQueue/ReviewDrawer.jsx', /scope: SCOPED_FORMS\.reviewComment, parent: article\.id/], edit: 'exempt: a comment reaches the author\'s editor as it is sent, and no form re-opens its text; Resolve and Delete are its only changes' },
+  // #4046 (B4): HQ's New segment. A new segment hangs under the caller; its edit is the segment page's versioned PATCH.
+  'Super Admin · Content · Personas | segment-profile': { add: ['pages/admin/segments/NewSegment.jsx', /scope: SCOPED_FORMS\.segment, enabled: hq && !created/], edit: 'exempt: a segment\'s words are revised in SegmentWork\'s versioned edit, which records each change, its reason and its actor in the segment\'s history' },
   'Investor · Deals · Deal room | deal-note': { add: ['pages/deal/DealNotes.jsx', /scope: SCOPED_FORMS\.dealNote, parent: Number\(dealId\) > 0/], edit: ['pages/deal/DealNotes.jsx', /scope: SCOPED_FORMS\.dealNote, record: note\.id/] },
 };
 

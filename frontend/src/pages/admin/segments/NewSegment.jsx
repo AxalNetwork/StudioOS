@@ -4,13 +4,21 @@ import { useAuth } from '../../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../../lib/shellRole';
 import { personaSegmentsApi } from '../../../lib/api/personaSegments';
 import { AdminPageHeader, Lightbox } from '../../../ui';
+import { FillFormBar, FillLabel, useScopedFill } from '../../../ui/useScopedFill.jsx';
+import { SCOPED_FORMS } from '../../../lib/fillScoped.js';
 
 const INPUT = 'min-h-[44px] w-full rounded-lg border border-axal-hairline bg-white px-3 py-2 text-sm text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 const BTN = 'inline-flex min-h-[44px] items-center justify-center rounded-[9px] border border-axal-hairline px-4 text-sm font-bold dark:border-gray-700';
 const profiles = [['founder', 'Founders'], ['investor', 'Investors'], ['advisor', 'Advisors'], ['partner', 'Operating Partners'], ['exploring', 'Explorers'], ['any', 'Any profile']];
 
 /** D1128: creation reuses SEG6's name/profile/status/who fields; the existing
- * store owns needs/offers, and questions remain read-only, defined in code. */
+ * store owns needs/offers, and questions remain read-only, defined in code.
+ *
+ * #4046 (B4): Ask Eadwyn on the Name and Who they are, and on nothing else: the
+ * key, profile and status are HQ's call. A new segment hangs under the caller
+ * (the Worker names them), so the read names no record and no parent. Create
+ * writes; then the placed words are recorded against the id the 201 names,
+ * while the placed values are still held (the hook is off once created). */
 export default function NewSegment() {
   const hq = isSuperAdminUser(useAuth()?.user ?? null);
   const loc = useLocation();
@@ -21,11 +29,19 @@ export default function NewSegment() {
   const [error, setError] = useState('');
   const [created, setCreated] = useState(null);
   const change = key => event => setDraft(d => ({ ...d, [key]: event.target.value }));
+  // #4046 (B4): above the HQ-only early return, so the hooks always run in the same order.
+  const fill = useScopedFill({
+    scope: SCOPED_FORMS.segment, enabled: hq && !created,
+    values: { name: draft.name, who: draft.who },
+    onValues: (v) => setDraft((d) => ({ ...d, ...(v.name != null ? { name: String(v.name).slice(0, 80) } : {}), ...(v.who != null ? { who: String(v.who).slice(0, 280) } : {}) })),
+  });
   async function save() {
     setBusy(true); setError('');
     try {
       const result = await personaSegmentsApi.createSegment(draft);
       if (!result?.segment?.key) throw new Error('The creation result could not be read. Refresh before trying again.');
+      // #4046 (B4): the record step, while the placed words are still held (the hook is off once created).
+      await fill.afterSave(result.segment.id);
       setCreated(result.segment); setConfirm(false);
     } catch (e) { setError(e?.message || 'The segment could not be created. Try again.'); }
     finally { setBusy(false); }
@@ -35,11 +51,12 @@ export default function NewSegment() {
     <AdminPageHeader title="New segment" crumb={{ label: 'Persona segments', to: '/admin/persona-segments' }} line="Define who the studio serves. Changes apply to every studio." pills={[{ label: 'HQ only', tone: 'hq' }]} />
     {created ? <section role="status" className="rounded-xl border border-axal-hairline bg-white p-5 dark:border-gray-700 dark:bg-gray-900" data-testid="segment-created"><h2 className="text-lg font-bold">Created {created.name}</h2><p>{created.status === 'active' ? 'Members can choose this segment at sign-up.' : created.status === 'draft' ? 'Only admins can place members in this draft segment.' : 'Retired segments take no new members.'}</p><p>Questions: Not recorded. No questions are set in code for this segment.</p><Link className={BTN} to="/admin/persona-segments">Back to Persona segments</Link></section> : <form className="flex flex-col gap-4 rounded-xl border border-axal-hairline bg-white p-5 dark:border-gray-700 dark:bg-gray-900" onSubmit={e => { e.preventDefault(); setError(''); setConfirm(true); }}>
       <label>Segment key<input required maxLength={64} pattern="[a-z0-9_]+" className={INPUT} value={draft.key} onChange={change('key')} /><span className="text-sm text-axal-muted dark:text-gray-400">A permanent key: lower-case letters, numbers and underscores.</span></label>
-      <label>Name<input required maxLength={80} className={INPUT} value={draft.name} onChange={change('name')} /></label>
+      <FillFormBar fill={fill} />
+      <div className="flex flex-col"><FillLabel fill={fill} name="name" label="Name" value={draft.name}><label htmlFor="new-segment-name">Name</label></FillLabel><input id="new-segment-name" data-testid="new-segment-name" required maxLength={80} className={INPUT} value={draft.name} onChange={change('name')} /></div>
       <label>Profile<select className={INPUT} value={draft.profile} onChange={change('profile')}>{profiles.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
       <label>Status<select className={INPUT} value={draft.status} onChange={change('status')}><option value="draft">Draft</option><option value="active">Active</option><option value="retired">Retired</option></select></label>
       <p className="text-sm text-axal-muted dark:text-gray-400">Draft: only admins place members in it. Active: offered at sign-up. Retired: no new members.</p>
-      <label>Who they are<textarea maxLength={280} className={INPUT} value={draft.who} onChange={change('who')} /><span className="font-mono text-xs">{draft.who.length} / 280</span></label>
+      <div className="flex flex-col"><FillLabel fill={fill} name="who" label="Who they are" value={draft.who}><label htmlFor="new-segment-who">Who they are</label></FillLabel><textarea id="new-segment-who" data-testid="new-segment-who" maxLength={280} className={INPUT} value={draft.who} onChange={change('who')} /><span className="font-mono text-xs">{draft.who.length} / 280</span></div>
       <p className="text-sm text-axal-muted dark:text-gray-400">Questions and sidebar links are set in code. None are recorded for a new segment. Needs, typical members and offers start empty.</p>
       <div className="flex flex-wrap gap-3"><Link className={BTN} to="/admin/persona-segments">Cancel</Link><button className={`${BTN} bg-axal-violet text-white disabled:opacity-50`} type="submit" disabled={busy}>Create segment</button></div>
     </form>}

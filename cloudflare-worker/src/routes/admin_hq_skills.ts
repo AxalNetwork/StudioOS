@@ -4,6 +4,8 @@
  * `/api/admin/ai-agents/skills`. Super Admin only.
  *
  *   GET  /                           the library: [Row], with status, version, agents pinned, pass rate, last eval
+ *   GET  /library                    D4225: the "From Axal" library files, each with its area, level, check and whether it is in the store
+ *   POST /library/seed               D4225: { reason } — every library skill not in the store becomes a draft with its golden cases
  *   GET  /:uid                       one skill: its draft, status, review, golden cases and results, versions, retirement
  *   GET  /:uid/diff?from=vN&to=draft|vM   the frontmatter fields that changed and the steps, kept, added and removed
  *   POST /:uid/review                { reviewer_uid }   ask a named Super Admin to review the current draft
@@ -11,6 +13,9 @@
  *   POST /:uid/review/request-changes { comment }       the named reviewer sends it back
  *   PUT  /:uid/cases                 { cases: [{ uid?, name, input, expect }], reason }   the skill's golden cases
  *   POST /:uid/evals                 { models? }        run every live case on each model, through `run()`, charged to HQ
+ *   POST /evals/published            { models?, uid? }  D1612 part D (#3954): every published Axal skill's golden cases (its
+ *                                    starter case and HQ's live ones) on its CURRENT version; a case that passed and now
+ *                                    fails is a regression, told to HQ once → { skills, results, regressions }
  *   POST /:uid/retire                { replacement_uid, reason }  → { pinned_agents }
  *   POST /bulk                       { action: publish | retire | evals, uids, reason, replacement_uid?, models? }
  *                                    each item done or refused on its own: { results: [{ uid, ok, code?, message? }] }
@@ -42,6 +47,8 @@ import {
   type CaseExpect, type CaseInput, type DraftParts, type ReviewRow,
 } from '../services/agents/skillLifecycle';
 import { RADAR_AXES } from '../services/skillsTaxonomySchema';
+import { evaluatePublished } from '../services/agents/skillEval';
+import { areaOf, checkLibrary, nameOfSlug, readLibrarySkill, seedLibrary } from '../services/agents/skillLibrarySeed';
 import type { OutputKind } from '../services/agents/skills';
 
 type C = Context<{ Bindings: Env }>;
@@ -122,6 +129,33 @@ adminHqSkills.get('/', async (c) => {
     });
   }
   return c.json({ skills, pass_bar: PASS_BAR });
+});
+
+// D4225 (#4225): the "From Axal" library. Before `/:uid`, so `library` is never read as a skill uid.
+adminHqSkills.get('/library', async (c) => {
+  await requireSuperAdmin(c);
+  const tax = await taxonomyMaps(c.env);
+  const present = new Map(((await c.env.DB.prepare("SELECT slug, status FROM agent_skills WHERE scope = 'hq' AND company_id IS NULL").all<{ slug: string; status: string }>()).results ?? []).map((r) => [r.slug, r.status]));
+  const skills = checkLibrary(new Set(tax.category.keys())).map((x) => {
+    const raw = readLibrarySkill(x.entry.skill_md);
+    const tags = (raw?.tags as Array<{ slug: string; level: string }> | undefined) ?? [];
+    const { area, level } = areaOf(tags, (s) => tax.category.get(s) ?? null);
+    return {
+      slug: x.entry.slug, name: nameOfSlug(x.entry.slug), area, level, cases: x.entry.cases.length,
+      check: x.ok ? { ok: true } : { ok: false, code: x.code, message: x.message },
+      in_store: present.get(x.entry.slug) ?? null,
+    };
+  });
+  return c.json({ skills });
+});
+
+adminHqSkills.post('/library/seed', async (c) => {
+  const admin = await requireSuperAdmin(c);
+  const b = await body(c);
+  const reason = typeof b.reason === 'string' ? b.reason.trim() : '';
+  if (!reason) return say(c, 400, 'reason_required', 'Say why the library is being seeded.');
+  const lines = await seedLibrary(c.env, Number(admin.id), reason.slice(0, 500));
+  return c.json({ seeded: lines, created: lines.filter((l) => l.outcome === 'created').length, refused: lines.filter((l) => l.outcome === 'refused').length });
 });
 
 adminHqSkills.get('/:uid', async (c) => {
@@ -297,6 +331,26 @@ adminHqSkills.post('/:uid/evals', async (c) => {
   if (!done.cases) return say(c, 409, 'no_cases', 'This skill has no golden cases yet. Add one, then run the evals.');
   await audit(c.env, admin, 'agent_skill_evals_run', s, null, null, { pass: done.summary.pass, total: done.summary.total }, { models: m.models });
   return c.json({ evals: { ...done.summary, pass_bar: PASS_BAR } });
+});
+
+// D1612 part D (#3954): the published versions' golden cases, for the evaluation board.
+adminHqSkills.post('/evals/published', async (c) => {
+  const admin = await requireSuperAdmin(c);
+  const b = await body(c);
+  const m = evalModels(c.env, admin, b.models);
+  if (!m.ok) return say(c, 400, 'models_invalid', m.message);
+  let only: number | null = null;
+  if (b.uid != null) {
+    const s = await hqSkill(c.env, b.uid);
+    if (!s) return noSkill(c);
+    if (s.status !== 'published') return say(c, 409, 'not_published', 'Only a published Axal skill has a version to evaluate.');
+    only = s.id;
+  }
+  const done = await evaluatePublished(c.env, admin.id, m.models, {}, only);
+  await logAdminAction(c.env, admin.id, admin.email, 'agent_skill_published_evals_run', {
+    skill_uid: only != null ? String(b.uid) : null, models: m.models, skills: done.skills, results: done.results, regressions: done.regressions.length,
+  });
+  return c.json(done);
 });
 
 // ── Retire ──────────────────────────────────────────────────────────────────

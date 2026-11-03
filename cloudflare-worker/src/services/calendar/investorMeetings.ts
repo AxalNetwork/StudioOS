@@ -17,6 +17,9 @@
  *
  * Its id is the step's `calendar_item_uid`, kept from the moment it was logged,
  * so a provider copy stays the same item.
+ *
+ * D1585 (#3832): it carries `prospect_id`, so the drawer's "Prep" reads that
+ * prospect's brief (`GET /api/cycles/raise/prospects/:id/brief`).
  */
 import type { Env } from '../../types';
 import type { CalendarEvent } from '../calendar';
@@ -63,6 +66,7 @@ export async function investorMeetingEvents(env: Env, userId: number, fromIso: s
         attendees: [],
         notes,
         project_id: Number(r.project_id),
+        prospect_id: Number(r.prospect_id),
       } satisfies CalendarEvent;
     });
   } catch (e) {

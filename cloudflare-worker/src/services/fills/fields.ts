@@ -52,6 +52,16 @@ const CATALOG = 'Operating Partner · Offers · Catalog';
 const PERK_DEALS = 'Operating Partner · Offers · Perk deals';
 // #4046 (#3740 2b): the deal page's Notes tab.
 const DEAL_ROOM = 'Investor · Deals · Deal room';
+// #4046 (B2): a member's answers to a product-testing programme's questions, in Studio.
+const TESTING = 'Member · Studio · Product testing';
+// #4046 (B4): a studio's program proposal, on Admin · Programs' Propose a program.
+const PROGRAMS = 'Admin · Programs';
+// #4046 (B4): an admin's note to a partner they invite, in New invitation on Admin · Community · Partner invitations.
+const PARTNER_INVITATIONS = 'Admin · Community · Partner invitations';
+// #4046 (B4): an admin's comment to an article's author, in the review drawer on Super Admin · Content · Content queue.
+const CONTENT_QUEUE = 'Super Admin · Content · Content queue';
+// #4046 (B4): HQ's New segment on Super Admin · Content · Personas (/admin/persona-segments/new).
+const PERSONAS = 'Super Admin · Content · Personas';
 const SOLUTION_DESIGN = 'Founder · Build · Solution design';
 const REVENUE = 'Founder · Grow · Revenue and traction';
 const PROBLEM = 'Founder · Validate · Problem discovery';
@@ -130,7 +140,9 @@ export const FILL_FIELDS: readonly FillField[] = Object.freeze([
   // AF19: a status report's Done and Next, from the engagement record at no AI tokens.
   { page: REPORTING, form: 'status-report', field: 'shipped', label: 'Done this week', table: 'engagement_status_reports', column: 'shipped', class: 'restatement', sources: ['module:delivery/engagement'] },
   { page: REPORTING, form: 'status-report', field: 'next_up', label: 'Next week', table: 'engagement_status_reports', column: 'next_up', class: 'restatement', sources: ['module:delivery/engagement'] },
-  // AF20: an event's content, never its approval, times, capacity or price.
+  // AF20: an event's content, never its approval, times, capacity or price. #4046 (B2): its title too, on
+  // /events/new and on the edit page; the host names it, and Ask proposes words they keep or type over.
+  { page: EVENTS, form: 'event', field: 'title', label: 'Title', table: 'events', column: 'title', class: 'composition', sources: ['eadwyn'] },
   { page: EVENTS, form: 'event', field: 'description', label: 'Description', table: 'events', column: 'description', class: 'composition', sources: ['eadwyn'] },
   { page: EVENTS, form: 'agenda-item', field: 'title', label: 'Session', table: 'event_agenda_items', column: 'title', class: 'composition', sources: ['eadwyn'] },
   { page: EVENTS, form: 'agenda-item', field: 'description', label: 'What happens', table: 'event_agenda_items', column: 'description', class: 'composition', sources: ['eadwyn'] },
@@ -144,6 +156,26 @@ export const FILL_FIELDS: readonly FillField[] = Object.freeze([
   { page: PERK_DEALS, form: 'perk', field: 'blurb', label: 'One line founders see on the card', table: 'perks', column: 'blurb', class: 'composition', sources: ['eadwyn'] },
   // #4046: a firm's private note on a deal, its words only. Its tag is the investor's own call, so it has no entry.
   { page: DEAL_ROOM, form: 'deal-note', field: 'body', label: 'Note', table: 'deal_notes', column: 'body', class: 'composition', sources: ['eadwyn'] },
+  // #4046 (B2): a member's answers to a programme's questions (at most five, `testing.ts` MAX_QUESTIONS), each the
+  // member's own words about themselves; the run asks only the programme's own questions. Availability and the
+  // email consent are never listed. An answer is read from `answers` (a JSON list) by the scope's read.
+  ...[1, 2, 3, 4, 5].map((n) => ({ page: TESTING, form: 'testing-answers', field: `answer_${n}`, label: `Answer ${n}`, table: 'testing_applications', column: `answer_${n}`, class: 'composition' as const, sources: ['eadwyn'] })),
+  // #4046 (B4): a program proposal's words: its working name, its one-line purpose and who it suits, in the
+  // studio's prose. Who it is for, its group, join method, cycle, seats, rewards, templates, what HQ receives,
+  // its tools and HQ's note and decision are the studio's or HQ's call, so none is listed.
+  { page: PROGRAMS, form: 'program-proposal', field: 'name', label: 'Name', table: 'program_proposals', column: 'name', class: 'composition', sources: ['eadwyn'] },
+  { page: PROGRAMS, form: 'program-proposal', field: 'purpose', label: 'One-line purpose', table: 'program_proposals', column: 'purpose', class: 'composition', sources: ['eadwyn'] },
+  { page: PROGRAMS, form: 'program-proposal', field: 'eligibility', label: 'Eligibility', table: 'program_proposals', column: 'eligibility', class: 'composition', sources: ['eadwyn'] },
+  // #4046 (B4): the admin's own note to the partner they invite, shown in the email and at the start of the onboarding
+  // chat. The email and name are identity, what to offer is a decision and the terms are money and terms: none is listed.
+  { page: PARTNER_INVITATIONS, form: 'partner-invitation', field: 'personal_message', label: 'Message to the invitee', table: 'partner_invitations', column: 'personal_message', class: 'composition', sources: ['eadwyn'] },
+  // #4046 (B4): a reviewer's comment to an article's author about its text, the review drawer's new-comment box. The paragraph
+  // it points at is a choice, a reply is another form, and Resolve, every stage change and its reason are decisions: none is listed.
+  { page: CONTENT_QUEUE, form: 'review-comment', field: 'body', label: 'Comment', table: 'article_review_comments', column: 'body', class: 'composition', sources: ['eadwyn'] },
+  // #4046 (B4): HQ's words about a new segment: its display name and who they are. The key is its permanent identity,
+  // its profile and status are HQ's decisions (status gates sign-up), and typical, needs and offers are the edit's: none is listed.
+  { page: PERSONAS, form: 'segment-profile', field: 'name', label: 'Name', table: 'segment_profiles', column: 'name', class: 'composition', sources: ['eadwyn'] },
+  { page: PERSONAS, form: 'segment-profile', field: 'who', label: 'Who they are', table: 'segment_profiles', column: 'who', class: 'composition', sources: ['eadwyn'] },
 ].map((f) => Object.freeze({ ...f, sources: Object.freeze([...f.sources]) })) as FillField[]);
 
 /** The fields of one form, in the form's order. */

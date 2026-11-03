@@ -101,7 +101,7 @@ deckBatches.get(`/areas/batches/:uid${UID}`, async (c) => {
 deckBatches.get(`/areas/batches/:uid${UID}/events`, async (c) => {
   const r = await readable(c, c.req.param('uid'));
   if (r instanceof Response) return r;
-  const res = await eventsFromRoom(c.env, Number(r.st.deck_id), r.st.uid, Number(r.user.id)).catch(() => null);
+  const res = await eventsFromRoom(c.env, Number(r.st.deck_id), r.st.uid, Number(r.user.id), r.st.runtime).catch(() => null);
   if (!res) return refuse(c, 503, { code: 'runtime_unavailable', message: 'Live progress is not available here. Read the run instead.' });
   return res;
 });
@@ -110,10 +110,10 @@ deckBatches.post(`/areas/batches/:uid${UID}/cancel`, async (c) => {
   const r = await readable(c, c.req.param('uid'));
   if (r instanceof Response) return r;
   if (Number(r.st.created_by) !== Number(r.user.id)) return refuse(c, 403, { code: 'not_your_run', message: 'Only the member who started this run can stop it.' });
-  const res = await cancelInRoom(c.env, Number(r.st.deck_id), r.st.uid, Number(r.user.id)).catch(() => null);
+  const res = await cancelInRoom(c.env, Number(r.st.deck_id), r.st.uid, Number(r.user.id), r.st.runtime).catch(() => null);
   let st: BatchStatus | null;
   if (res && res.ok) st = (await res.json()) as BatchStatus;
-  else st = await reader(c.env).cancel(r.st.uid, Number(r.user.id)); // no room: stop it in D1 and settle what started
+  else st = await reader(c.env).cancel(r.st.uid, Number(r.user.id)); // no room (or a queue run): stop it in D1 and settle what started
   if (!st) return refuse(c, 404, { code: 'run_not_found', message: 'That generation run is not available.' });
   return c.json(runView(st));
 });
