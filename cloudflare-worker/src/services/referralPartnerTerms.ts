@@ -28,8 +28,16 @@ export type ReadState = typeof READ_STATES[number];
  * The standard rules an event pays today (OD4 is open). Only KYC approval
  * calls the engine (routes/kyc.ts); the other four seeded rules have no
  * caller, so terms may not name them and the rules read says `fires: false`.
+ * The influencer triggers (D4292) are paid by `invoice.paid` and the daily
+ * sweep, not by the engine; the bonus keys must match `BONUS_MILESTONES`.
  */
-export const FIRING_RULES: ReadonlySet<string> = new Set(['referral_kyc_approved']);
+export const FIRING_RULES: ReadonlySet<string> = new Set([
+  'referral_kyc_approved',
+  // D4292 (#4292): an influencer's share of each paid subscription invoice
+  // (services/influencerCommission.ts), and the flat milestone bonuses.
+  'subscription_invoice',
+  'influencer_bonus_10', 'influencer_bonus_25', 'influencer_bonus_50', 'influencer_bonus_100',
+]);
 
 /** The facts strip's words for Referral partners, in OD3's terms. Part 10 draws them. */
 export const FACTS = {

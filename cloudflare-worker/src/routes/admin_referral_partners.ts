@@ -123,7 +123,7 @@ export function readTermsInput(b: any, base?: TermsInput): TermsInput | Refusal 
   for (const t of rawTriggers) {
     const key = t?.rule_key;
     if (typeof key !== 'string' || !FIRING_RULES.has(key)) {
-      return { status: 400, code: 'trigger_unknown', message: 'Terms can pay only on a trigger an event fires today: a referred member’s identity check (referral_kyc_approved).' };
+      return { status: 400, code: 'trigger_unknown', message: 'Terms can pay only on a trigger an event fires today: a referred member’s identity check (referral_kyc_approved), a paid subscription invoice (subscription_invoice), or an influencer milestone bonus (influencer_bonus_10, _25, _50 or _100).' };
     }
     if (triggers.some((x) => x.rule_key === key)) return { status: 400, code: 'trigger_repeated', message: 'Name each trigger once.' };
     const amount = t.amount_cents ?? null;

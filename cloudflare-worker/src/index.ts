@@ -2481,6 +2481,18 @@ export default {
             console.error('[cron] leaderboard snapshots failed', e);
           }
         }
+        // D4292 (#4292) — the influencer commission hold: pending subscription
+        // commissions 30 days past their invoice become payable, then each
+        // referrer's milestone bonuses fire once. Daily at 05:30 UTC; idempotent.
+        if (now.getUTCHours() === 5 && now.getUTCMinutes() === 30) {
+          try {
+            const { sweepPendingCommissions } = await import('./services/influencerCommission');
+            const r = await sweepPendingCommissions(env, now.getTime());
+            if (r.payable || r.bonuses || r.custom) console.info(`[cron] influencer commissions payable=${r.payable} bonuses=${r.bonuses} custom=${r.custom}`);
+          } catch (e) {
+            console.error('[cron] influencer commission sweep failed', e instanceof Error ? e.message : 'error');
+          }
+        }
         // D484 — publish approved articles whose scheduled time has passed.
         // Every minute, on every tier: a branch's articles are its own, and an
         // article with no `publish_at` is never touched.
