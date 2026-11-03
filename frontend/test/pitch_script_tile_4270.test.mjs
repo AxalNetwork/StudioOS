@@ -169,9 +169,9 @@ test('Rehearsals: each run\'s figures, Not recorded where a run has none, and Op
   } finally { Object.assign(deckRehearsalsApi, saved); await m.unmount(); }
 });
 
-test('the tile: Script & rehearsal draws ScriptTile, and P1\'s Script block stays its Script view', () => {
+test('the tile: Script & rehearsal draws ScriptTile, and P2a\'s Script view is its Script view', () => {
   const src = readFileSync(new URL('../src/pages/raise/pitch/PitchStudio.jsx', import.meta.url), 'utf8');
-  assert.match(src, /tab === 'script' \? \([\s\S]{0,200}<ScriptTile deck=\{currentDeck\} readOnly=\{readOnly\} script=\{<ScriptComing /);
+  assert.match(src, /tab === 'script' \? \([\s\S]{0,280}<ScriptTile deck=\{currentDeck\} readOnly=\{readOnly\} script=\{<ScriptTab reads=\{reads\} readOnly=\{readOnly\} \/>/);
   const tile = readFileSync(new URL('../src/pages/raise/pitch/ScriptTile.jsx', import.meta.url), 'utf8');
   assert.match(tile, /role="tablist" aria-label="Script and rehearsal"/);
 });

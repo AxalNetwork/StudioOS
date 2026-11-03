@@ -7,9 +7,8 @@ import { SCRIPT_VIEWS, viewOf } from './scriptTileModel';
 /**
  * D4254 Script & rehearsal (/raise/pitch/script): its three views, as ps4,
  * ps4b and ps4c's tab list draws them, picked by `?view=` so each has an
- * address. D4270 (#4270, P2c) draws Likely questions and Rehearsals; the
- * Script view is P2a's (#4268), and until it lands it draws what `script`
- * passes (P1's truthful "coming" block).
+ * address. D4270 (#4270, P2c) draws Likely questions and Rehearsals. The
+ * Script view is P2a's (#4268): the caller passes it as `script`.
  */
 const TAB = 'rounded-[7px] px-3 py-1.5 text-[12.5px] font-bold';
 const ON = `${TAB} bg-white text-axal-ink shadow-sm dark:bg-gray-900 dark:text-gray-100`;
