@@ -62,6 +62,7 @@ const DOCUMENTED = new Map([
   ['cloudflare-worker/src/services/ai', 'shared model capabilities, shapes, prices and module connections'],
   ['cloudflare-worker/src/agents', 'the agent engine runtime (D1528): the seam, the AgentScope object, the task Workflow, the agent queue and the sweep'],
   ['cloudflare-worker/src/services/agents', 'team agents (D1496): the catalogue, rule books, goals, tasks, the queue and the run'],
+  ['cloudflare-worker/src/mcp/tools', 'the MCP server\'s tools (D666, D846), one file per group; D1588 adds the deck and raise tools'],
   ['cloudflare-worker/src/contracts', 'deck v2 adapter reply contracts (D1511): one JSON Schema per swapped method, and their validator'],
   ['cloudflare-worker/src/services/agents/skills', 'the Axal starter skill library (#3953, D1612): one SKILL.md per skill'],
   ['cloudflare-worker/src/services/agents/skills/cases', 'one golden evaluation case per starter skill, for part D (#3954)'],

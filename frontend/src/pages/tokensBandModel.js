@@ -95,9 +95,10 @@ export function autoReloadLine(read) {
  * reads ("Reading…") and when nothing is on sale (CRP10); a packs read that
  * failed leaves it on, because the packs below say so themselves.
  */
-export function addState({ meLoading, packCount }) {
+export function addState({ meLoading, packCount, custom = false }) {
   if (meLoading) return { enabled: false, line: W.reading };
-  // `packCount` is null while the packs are unread or failed.
-  if (packCount === 0) return { enabled: false, line: TOPUP_UNAVAILABLE };
+  // `packCount` is null while the packs are unread or failed. D1434: the custom
+  // amount ($5–$500) is a top-up on sale even when no pack is.
+  if (packCount === 0 && !custom) return { enabled: false, line: TOPUP_UNAVAILABLE };
   return { enabled: true, line: null };
 }

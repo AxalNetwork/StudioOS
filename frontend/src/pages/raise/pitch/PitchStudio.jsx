@@ -11,13 +11,15 @@ import PitchNotes from './PitchNotes';
 import PitchReview from './PitchReview';
 import ReviewTile from './ReviewTile';
 import {
-  EDIT_PATH, EMPTY_DECK, LINE, NOT_RECORDED, NO_VENTURE, READ_ONLY, TABS, TITLE,
+  EMPTY_DECK, LINE, NOT_RECORDED, NO_VENTURE, READ_ONLY, TABS, TITLE,
   asList, currentVersion, dayLabel, isReadOnly, linkPage, linkRows, ventureQuery,
 } from './pitchStudioModel';
 import ShareDialog from './ShareDialog';
 import ShareBoard from './ShareBoard';
 import StudioHome from './StudioHome';
+import ScriptTab from './ScriptTab';
 import PitchOverview from './PitchOverview';
+import ScriptTile from './ScriptTile';
 import { presentHref } from './presentExportModel';
 import { BUILD_YOUR_DECK, PRIMARY_OF } from './pitchOverviewModel';
 import { NEW_PATH } from './newDeckModel';
@@ -169,7 +171,8 @@ export default function PitchStudio({ tab = 'overview' }) {
   const q = ventureQuery(projectId || reads.requested);
 
   // D1604 (§5): the rail is the element groups' models and the deck's usage.
-  const currentId = currentVersion(asList(reads.versions.data, 'versions', 'decks'))?.id ?? null;
+  const currentDeck = currentVersion(asList(reads.versions.data, 'versions', 'decks'));
+  const currentId = currentDeck?.id ?? null;
   const railGroups = useMemo(() => deckRail(currentId), [currentId]);
   const rail = (
     <WorkerRail
@@ -210,7 +213,8 @@ export default function PitchStudio({ tab = 'overview' }) {
         ) : tab === 'overview' ? (
           <PitchOverview reads={reads} readOnly={readOnly} q={q} />
         ) : tab === 'script' ? (
-          <ScriptComing q={q} projectId={projectId} currentId={currentId} />
+          // D4268 is the Script view; D4270 keeps Likely questions and Rehearsals.
+          <ScriptTile deck={currentDeck} readOnly={readOnly} script={<ScriptTab reads={reads} readOnly={readOnly} />} />
         ) : (
           <StudioHome reads={reads} readOnly={readOnly} q={q} />
         )}
@@ -268,26 +272,6 @@ function StudioHeader({ tab, q, readOnly, projectId, currentId, noDeck }) {
         ))}
       </nav>
     </header>
-  );
-}
-
-/**
- * D4254 P2a/P2c (#4268, #4270): Script & rehearsal's own screens are slot
- * work. Until they land the tile says so, and opens what already works:
- * Present with Rehearse (D1580), whose report holds the likely questions.
- */
-function ScriptComing({ q, projectId, currentId }) {
-  return (
-    <div className={`${CARD} flex flex-col items-start gap-2.5 p-6`} data-testid="pitch-studio-script-coming">
-      <span className={`text-[15px] font-extrabold ${INK}`}>The script, card by card, is coming.</span>
-      <span className="text-[12.5px] leading-[1.45] text-axal-muted dark:text-gray-400">
-        Until then, write each card’s notes in the editor and rehearse from Present. The rehearsal report lists the questions investors are likely to ask.
-      </span>
-      <div className="flex flex-wrap gap-2">
-        {currentId != null && projectId != null ? <Link to={presentHref(projectId, currentId)} className={GHOST} data-testid="pitch-studio-script-present">Rehearse in Present</Link> : null}
-        <Link to={`${EDIT_PATH}${q}`} className={GHOST} data-testid="pitch-studio-script-edit">Open the editor</Link>
-      </div>
-    </div>
   );
 }
 
