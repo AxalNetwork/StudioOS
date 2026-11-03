@@ -1,6 +1,6 @@
 ### Admin › Programs › Influencers (D4298, #4298)
 
-The HQ desk for the influencer program (IN11), at `/admin/programs/influencer`, under `guard(['admin'], hqOnly(…))` (`frontend/src/routes/adminInfluencers.jsx`). The page is `pages/admin/programs/InfluencerPages.jsx`, mounted by `ProgramPage.jsx`, and its client is `lib/api/adminInfluencers.js`. Money is the Super Admin's: an admin reads "HQ reads", never a zero.
+The HQ desk for the influencer program (IN11), at `/admin/programs/influencer`, under `guard(['admin'])` (the Worker's `requireHqAdmin` refuses a branch admin) (`frontend/src/routes/adminInfluencers.jsx`). The page is `pages/admin/programs/InfluencerPages.jsx`, mounted by `ProgramPage.jsx`, and its client is `lib/api/adminInfluencers.js`. Money is the Super Admin's: an admin reads "HQ reads", never a zero.
 
 | Address | What it draws | Worker routes |
 | --- | --- | --- |
