@@ -59,13 +59,14 @@ test('⋯: four sections; adapter items are Coming later with the adapter\'s rea
   }
   assert.equal(MORE_MENU[0].items.findIndex((i) => i.id === 'reorder') >= 0, true, 'Reorder for stage sits under This deck');
   const on = moreState(MORE_MENU, { availability });
-  // D1561 (#3808): Stage, Reorder for stage and Replace all images are live; Fix with critique (#3799) is still off.
-  for (const [s, id] of [[0, 'stage'], [0, 'reorder'], [2, 'replace_images']]) {
-    const it = on.sections[s].items.find((i) => i.id === id);
+  // D1561 (#3808): Stage, Reorder for stage and Replace all images are live; D1552 (#3799) swapped Fix with critique.
+  // Sections are found by id: D1370 (#3661) put Before you send between This card and the AI items.
+  const sec = (st, id) => st.sections.find((x) => x.id === id);
+  for (const [s, id] of [['deck', 'stage'], ['deck', 'reorder'], ['ai', 'replace_images'], ['ai', 'critique']]) {
+    const it = sec(on, s).items.find((i) => i.id === id);
     assert.deepEqual([it.disabled, it.later ?? false], [false, false], `${id} is on`);
   }
-  const later = on.sections[2].items.find((i) => i.id === 'critique');
-  assert.deepEqual([later.disabled, later.later, later.why], [true, true, 'Not switched on yet.']);
+  assert.equal(on.sections.flatMap((x) => x.items).some((i) => i.later), false, 'no ⋯ item waits on the seam now');
   const readerReorder = moreState(MORE_MENU, { readOnly: true, availability }).sections[0].items.find((i) => i.id === 'reorder');
   assert.deepEqual([readerReorder.disabled, readerReorder.why], [true, 'Read only'], 'a reader cannot reorder the deck');
   assert.equal(on.off, 0, 'nothing wired runs a model today, so nothing is off');
@@ -107,7 +108,10 @@ test('while the editor is not on screen, the ⋯ items it carries out wait; Shar
   const st = moreState([{ id: 'share', label: 'Share', items: [{ id: 'share', label: 'Share link…' }, { id: 'export', label: 'Export…' }] }, ...MORE_MENU], { availability, waiting: EDITOR_WAITING });
   assert.deepEqual(st.sections[0].items.map((i) => i.disabled), [false, false]);
   assert.equal(st.sections[1].items.find((i) => i.id === 'versions').why, EDITOR_WAITING);
-  assert.equal(st.sections[3].items.find((i) => i.id === 'critique').why, 'Not switched on yet.', 'an adapter item keeps its own reason');
+  // Every adapter surface is on main now, so the waiting line covers them too; an adapter still off keeps its own reason.
+  assert.equal(st.sections.find((x) => x.id === 'ai').items.find((i) => i.id === 'critique').why, EDITOR_WAITING);
+  const off = moreState(MORE_MENU, { availability: () => ({ available: false, reason: 'Synthetic reason.' }), waiting: EDITOR_WAITING });
+  assert.equal(off.sections.find((x) => x.id === 'ai').items.find((i) => i.id === 'critique').why, 'Synthetic reason.', 'an adapter item keeps its own reason');
 });
 
 /* ------------------------------------------------------------------ *
@@ -139,22 +143,18 @@ test('the header holds the save state, ⋯, Present, Share and Ask, and nothing 
   } finally { await m.close(); }
 });
 
-test('⋯ draws its four sections; an adapter item is greyed, reachable, titled, and does nothing', async () => {
+test('⋯ draws its four sections; every adapter item is live now, and no issue number shows', async () => {
   const m = await mountEditor();
   try {
     await m.press(m.by('deck-more-open'));
     const menu = m.by('deck-more-menu');
     assert.equal(m.pr(menu).role, 'menu');
-    assert.deepEqual(['deck', 'card', 'ai'].map((s) => m.pr(m.by(`deck-more-section-${s}`))['aria-label']), ['This deck', 'This card', 'Whole deck · uses AI']);
-    // D1561 (#3808): Fix with critique (#3799) is an adapter item still off.
-    const later = m.by('deck-more-critique');
-    assert.equal(m.pr(later)['aria-disabled'], true);
-    assert.equal(m.pr(later).disabled, undefined, 'still focusable, so the reason is read out');
-    assert.equal(m.pr(later).title, 'Not switched on yet.');
-    assert.match(m.text(later), /Coming later/);
+    assert.deepEqual(['deck', 'card', 'before', 'ai'].map((s) => m.pr(m.by(`deck-more-section-${s}`))['aria-label']), ['This deck', 'This card', 'Before you send', 'Whole deck · uses AI']);
+    // D1552 (#3799): Fix with critique was the last adapter item off; the greyed state is covered by moreState above.
+    const critique = m.by('deck-more-critique');
+    assert.equal(m.pr(critique)['aria-disabled'], undefined);
+    assert.doesNotMatch(m.text(menu), /Coming later/);
     assert.doesNotMatch(m.text(menu), /#\d{4}/, 'no issue number in the UI');
-    await m.press(later);
-    assert.ok(m.by('deck-more-menu'), 'an adapter item does nothing');
     assert.match(m.text(m.by('deck-more-check')), /Check claims · Free checks/);
   } finally { await m.close(); }
 });
