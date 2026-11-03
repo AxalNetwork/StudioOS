@@ -113,6 +113,22 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-11-02 — AI agents and skills, v2 (#4116, #3945)
+
+The owner's four artifacts were decoded by `scripts/read-canvas.mjs`:
+- **`FvMdLdoYQbW4rRNQwwo29t`, the AI agents page.**
+  - `Agents Skills Page v2.dc.html` is the page. It has one frame per `v` value: `ag1` to `ag7f` and `sk0` to `sk6g`. A `-d` suffix is dark.
+  - `Agents Skills v2 · Boards.dc.html` is its board grid, "AI agents and skills". It holds Prompt A, AG1 to AG7: the agent card at three sizes, Add an AI agent (choose who, skills, model and cap), the agent profile, Team › AI agents and its states. It holds Prompt B, SK0 to SK6: the eight areas, the skill directory, the skill page, Assign to agents, New or edit skill, the cost explainer and the states. The grid imports the page by name.
+- **`Lrm34Kx7eZcCDL7KLcFoh3`, the Skills boards.** It decodes to the same page as the agents artifact, apart from markup formatting, so it is not kept twice.
+- **`7HhixL1bTg8Z16wyJZz5Fe`, the skill page.** It replaces `Agent Skills Page.dc.html` (D1612). The frame ids are unchanged, sk0 to sk9j, so `Agent Skills · Boards.dc.html` still imports it. The skills are no longer grouped by agent role: "Natural fit is a hint; any agent can take this skill", and every card carries its run cost.
+- **`JYqNSRQiSPQCs5fXab9VKk`, SkillEnergy.** `Skill Energy Page.dc.html` holds EN1 to EN6: three styles, the 8 × 5 grid, uniqueness, in context, motion and the spec sheet. Style B is built (D4120).
+
+**What wins over the canvases:**
+- **Values:** the canvases still draw the older eight values (Courage, Craft, Empathy, …). Build with the six Axal values instead: Integrity, Stewardship, Curiosity, Resilience, Collaboration and Ambition (D4117 §1).
+- **Removed from the persona:** no philosophy, no Schwartz bars and no trade-offs.
+
+Logo paths are `/axal-mark.png` and `/eadwyn-ai.png`. The decision is `documentation/architecture/decisions/D4116.md`.
+
 ## Landed 2026-11-02 — Settings, simplified (#4152)
 
 The owner's two artifacts for #4152 (boards ST1–ST6), decoded by
@@ -153,6 +169,24 @@ the list reads wait for L1–L6 (#4176–#4181) and say so.
 **Grade: EXTENDS the Calendar (D4154).** The Mine · Studio · Platform switcher
 and the read-only staff views over the scoped read D1206 already serves. Each
 item's owner, company, studio and link wait for C1 (#4196) and say so.
+## Landed 2026-11-02 — Check before you send (#3661)
+
+The owner's artifacts `UJXCEzoW75JuqpM2njFxQH` (the page) and `AByWUAWjZT6e6VbeDWp5HN`
+(the board grid) were decoded by `scripts/read-canvas.mjs`.
+- **The page replaces `Pitch Deck Studio v2 Page.dc.html`.** Every earlier frame (pd0 to pd40, aird1 to aird7) is
+  unchanged except pd13, whose ⋯ menu gains a fourth section, **Before you send › Check before you
+  send · Free**, between This card and Whole deck · uses AI. It adds frames pf1a to pf5g:
+  - **PF1:** the ⋯ item; the toolbar chip in its five states; the gate before Share and the gate before Export.
+  - **PF2:** the 400px results panel: To fix, Worth a look, Couldn't check and Passed. Show me, Dismiss
+    with Undo, and "Ask Eadwyn to suggest a fix" as a quoted proposal.
+  - **PF3:** the clipped title at export size, and the contrast pair.
+  - **PF4:** out of date after an edit, then re-checked.
+  - **PF5:** checking slide by slide, nothing to fix, couldn't check, a reader, out of tokens, and the phone.
+- **The grid is the new `Pitch Deck Studio v2 · Preflight Boards.dc.html`.** It imports the same page.
+  The existing `Pitch Deck Studio v2 · Boards.dc.html` is kept as it was.
+
+Logo paths are `/axal-mark.png` and `/eadwyn-ai.png`. The build is D1370 part 2
+(`documentation/architecture/decisions/D1370.md`).
 
 ## Landed 2026-11-01 — One interview, and its session (#3710)
 
@@ -328,6 +362,23 @@ route draws its unavailable state through
 `frontend/src/pages/incorporate/incorporateAdapter.js` (#3855, #3706). All four
 files stay here: some bodies are outstanding. No file moved, so no count
 changed.
+## Landed 2026-11-02 — HQ › Decks (#4155)
+
+The owner's two artifacts for #4155 (boards HD1–HD6), decoded by
+`scripts/read-canvas.mjs`:
+- `HQ Decks Page.dc.html` is the page, one frame per `v` value (`hd1` to
+  `hd6d`; a `-d` suffix is dark);
+- `HQ Decks · Boards.dc.html` is the board grid, HD1 to HD6. It imports the
+  page by name.
+
+**One edit, named.** The Axal VC mark (`uploads/axal-logo-200x200.png`) points
+at `/axal-mark.png`, as in the earlier intakes. No other value was edited.
+
+**Grade: NEW (D4155).** A Platform tab, Decks, after Promo codes at
+`/admin/platform/decks` with five tabs. The reports queue and Resolve, the
+flags read and the default templates read are live; the rest waits for K1–K5
+(#4188–#4192) and says so.
+
 ## Landed 2026-11-02 — HQ › AI agents (#4137)
 
 The owner's two artifacts for #4137 (boards SA0–SA9), decoded by

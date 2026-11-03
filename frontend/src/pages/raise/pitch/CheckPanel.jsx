@@ -5,6 +5,7 @@ import { deckCheckApi } from '../../../lib/api/deckCheck';
 import { raiseEvidenceApi } from '../../../lib/api/raiseEvidence';
 import { reportError } from '../../../lib/log';
 import CriticSection from './CriticSection';
+import WordingSection from './WordingSection';
 import { Lightbox, Pill } from '../../../ui';
 import {
   CHECK_INTRO, CONSISTENCY_EMPTY, CONSISTENCY_FAILED, CONSISTENCY_TITLE, DIRTY_FIRST, NEITHER_RIGHT, NOTE_MAX, STATE_LABELS, STATE_TONE,
@@ -170,6 +171,8 @@ export default function CheckPanel({ deck, projectId, readOnly, dirty, onReplace
         </section>
       ) : null}
       {/* D1557 (#3804): the investor critic's findings, pd25, in this sheet only. */}
+      {/* D1561 (#3808, pd25): the charged Wording pass, after the free checks. */}
+      <WordingSection deck={deck} readOnly={readOnly} onGoToCard={onGoToCard} />
       <CriticSection deck={deck} readOnly={readOnly} onGoToCard={onGoToCard} />
       {dialog?.kind === 'use' ? (
         <UseRecordDialog deck={deck} claim={dialog.claim} dirty={dirty} onClose={() => setDialog(null)}

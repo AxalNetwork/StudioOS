@@ -17,9 +17,11 @@ export { NOT_RECORDED };
 
 /** The build task behind what the items do not carry yet. */
 export const BUILD = {
-  C1: { issue: 4196, live: false, what: 'Each item’s owner, company, studio and its link into the company' },
+  C1: { issue: 4196, live: true, what: 'Each item’s owner, company, studio and its link into the company' },
 };
 export const notYet = (key) => `Not switched on yet. ${BUILD[key].what} arrives with #${BUILD[key].issue}.`;
+/** CA4: an item whose only page is a personal one (a booking, an investor meeting, a draft) has none to open. */
+export const NO_PAGE = 'This item has no page to open in its company.';
 
 /** The three scopes, in the canvas's order, with the value the route takes. */
 export const SCOPES = [
@@ -112,11 +114,16 @@ export function scopedRow(item) {
 }
 
 /** The filters over the read: type, project and a person by name. */
-export function filterRows(rows, { type = '', project = '', person = '' } = {}) {
+export function filterRows(rows, { type = '', project = '', person = '', company = '', studio = '' } = {}) {
   const who = String(person).trim().toLowerCase();
   return (rows || []).filter((r) => (!type || r.typeKey === type) && (!project || r.project === project)
+    // C1 (#4196): the Company and Branch filters, on the names the scoped read sends.
+    && (!company || r.company === company) && (!studio || r.studio === studio)
     && (!who || [r.owner, ...r.people].some((n) => typeof n === 'string' && n.toLowerCase().includes(who))));
 }
+
+/** C1: the values a Company or Branch filter offers — what the rows carry, never "Not recorded". */
+export const optionsOf = (rows, key) => [...new Set((rows || []).map((r) => r[key]).filter((v) => v && v !== NOT_RECORDED))].sort();
 
 const dayKey = (iso) => {
   const d = new Date(iso ?? '');

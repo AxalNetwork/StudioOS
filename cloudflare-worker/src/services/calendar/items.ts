@@ -53,6 +53,8 @@ export const FAMILY_OF: Readonly<Record<CalendarEvent['kind'], ItemFamily>> = {
   // D1485 (#3979): the member's own connected calendars.
   external_google: 'other',
   external_microsoft: 'other',
+  // #3957: AI agent sessions sit with the team's tasks.
+  agent_session: 'tasks',
 };
 
 /** The kinds `POST /calendar/push/:kind/:source_id` copies to Google or Outlook. */
@@ -76,6 +78,7 @@ export const ROLE_WORDS: Readonly<Record<string, string>> = {
   investor_in_room: 'In your deal room',
   yours: 'Your event',
   learning_plan: 'Your learning plan',
+  team_agent: 'Your team’s AI agent',
   venture_team: 'Your venture’s team',
   your_send: 'You confirmed this send',
   bot_sender: 'You sent the bot',
@@ -112,6 +115,7 @@ const ROLE_BY_KIND: Partial<Record<CalendarEvent['kind'], string>> = {
   contact_task: 'venture_follow_up',
   engagement_milestone: 'delivering',
   work_item: 'project_work',
+  agent_session: 'team_agent',
   external_google: 'from_google',
   external_microsoft: 'from_outlook',
 };
@@ -160,6 +164,7 @@ export function hrefOf(ev: CalendarEvent): string | null {
     case 'engagement_milestone': return '/delivery/health';
     // D1614 W4: the project's Work board.
     case 'work_item': return ev.project_id ? `/projects/${ev.project_id}/work` : null;
+    case 'agent_session': return typeof ev.url === 'string' && ev.url.startsWith('/calendar') ? ev.url : '/calendar';
     default: return null;
   }
 }

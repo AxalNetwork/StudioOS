@@ -8,6 +8,7 @@
  * over a white pixel, against the background's light text, must reach 4.5:1.
  */
 import { addBlock, firstFree } from './editorModel';
+import { keepLook } from './imageLook';
 import { aiTokens } from './newDeckModel';
 import { CONTRAST_MIN, DEFAULT_INK, OVERLAY_ALPHA, inkChannels, overlayContrast } from './imageContrast.js';
 
@@ -98,9 +99,16 @@ export function askBody({ use, description, style, palette, aspect, count, card,
  * where it fits, else 4 × 3), a card background on the card, the deck
  * background in the theme. Returns the new card and theme, or why not.
  */
-export function placeImage({ card, theme, model }, image, use) {
+export function placeImage({ card, theme, model }, image, use, replacing = null) {
   const url = image?.url;
   if (!url) return { error: 'The image has no address to place.' };
+  // D1534 (#3778): Replace keeps the crop — the new image takes the old block's place, crop, filter and fit.
+  if (use === 'content' && replacing?.kind === 'image') {
+    const block = keepLook(replacing, { kind: 'image', image_url: url, image_id: image.uid, alt: image.alt || '', tag: image.source === 'upload' ? 'photo' : 'illustration', fit: 'cover', crop: { x: 50, y: 50 } });
+    const blocks = (card.blocks || []).some((b) => b.id === replacing.id)
+      ? card.blocks.map((b) => (b.id === replacing.id ? block : b)) : [...(card.blocks || []), block];
+    return { card: { ...card, blocks }, theme, block };
+  }
   if (use === 'card') return { card: { ...card, background: { color: null, image_url: url, image_id: image.uid, overlay: image.overlay || 'light' } }, theme };
   if (use === 'deck') return { card, theme: { ...(theme || { kind: 'brand' }), background: { color: null, image_url: url, image_id: image.uid, overlay: image.overlay || 'light' } } };
   const big = firstFree(card, 6, 4, model);

@@ -19,6 +19,7 @@
  * that cannot be read is `{ available: false }`, never 0.
  */
 import type { Env } from '../types';
+import { PLATFORM_PAUSED_MESSAGE, platformPaused } from '../services/agents/aiPolicy';
 import { notify } from '../services/notify';
 import { chargedFor } from '../services/agents/agentRun';
 import { depsOf, isReady, taskEvent, type TaskRow } from '../services/agents/tasks';
@@ -105,6 +106,8 @@ const inScope = (a: AgentRow, s: ScopeRef) =>
 
 /** The engine and the halt, as admission reads them. */
 export async function engineRefusal(env: Env, by: number | null): Promise<Refusal | null> {
+  // D4162 (#4162): HQ's kill switch first, on every admission path of both runtimes; an unreadable policy counts as on.
+  if (await platformPaused(env)) return no(403, 'platform_paused', PLATFORM_PAUSED_MESSAGE);
   const mode = await engineMode(env);
   const paused = no(403, 'engine_paused', 'Agents are paused on the platform. You can still run them yourself.');
   if (mode === 'off' || mode === 'paused' || await haltedAll(env)) return paused;

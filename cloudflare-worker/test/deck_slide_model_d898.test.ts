@@ -187,7 +187,7 @@ test('3. a save the model cannot keep whole is refused with what is wrong, and w
     ['a row past six', { slides: [block({ grid: { c1: 1, c2: 2, r1: 6, r2: 7 } })] }, /12 × 6 grid/],
     ['an unknown kind', { slides: [block({ kind: 'carousel' })] }, /unknown kind/],
     ['two blocks on one cell', { slides: [{ ...MODEL_CARD, blocks: [MODEL_CARD.blocks[0], { ...MODEL_CARD.blocks[0], id: 'y' }] }] }, /overlaps/],
-    ['a video that is not YouTube or Vimeo', { slides: [block({ kind: 'video', url: 'https://example.com/v.mp4' })] }, /YouTube or Vimeo/],
+    ['a video that is not YouTube, Vimeo or Loom (D1545)', { slides: [block({ kind: 'video', url: 'https://example.com/v.mp4' })] }, /YouTube, Vimeo or Loom/],
     ['a plain-http link', { slides: [block({ kind: 'link', url: 'http://example.com' })] }, /https on a public host/],
     ['a link to a private host', { slides: [block({ kind: 'audio', url: 'https://10.0.0.5/clip.mp3' })] }, /https on a public host/],
     ['a binding that is not a source', { slides: [block({ kind: 'metric', binding: { source_key: 'MRR' } })] }, /binding is not a source/],

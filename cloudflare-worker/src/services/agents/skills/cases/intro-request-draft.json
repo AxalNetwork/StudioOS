@@ -1,0 +1,33 @@
+{
+  "skill": "intro-request-draft",
+  "version": 1,
+  "note": "A golden case for part D (#3954). Every record below is made up.",
+  "input": {
+    "records": {
+      "network.relationships": [
+        {
+          "name": "Priya Shah",
+          "knows": "Northpeak Ventures"
+        }
+      ],
+      "raise.records": {
+        "round": "Seed",
+        "target_usd": 2000000
+      },
+      "project.summary": {
+        "one_liner": "Bookings that never double up, for dental clinics"
+      }
+    }
+  },
+  "expect": {
+    "output": "draft",
+    "must_include": [
+      "Priya Shah",
+      "Northpeak Ventures"
+    ],
+    "must_say_not_recorded": [],
+    "must_not_include": [
+      "oversubscribed"
+    ]
+  }
+}

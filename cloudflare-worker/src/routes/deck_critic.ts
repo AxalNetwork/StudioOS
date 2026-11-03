@@ -35,7 +35,7 @@ import { ASSIST_PAGE } from '../services/decks/assist';
 import { parseJsonLoose } from '../services/decks/autofill';
 import { stagePlan } from '../services/decks/stagePlan';
 import { AUDIENCES } from '../services/decks/slideModel';
-import { citableNorms } from '../services/decks/stageNorms';
+import { citableStageNorms } from '../services/decks/stageNorms';
 import { cardOfSlide, stageFrom } from '../services/narrative/arcs';
 import { deckVersion } from '../services/raiseClaims';
 import { noteApplies, storedDeckClaims } from '../services/deckCheck';
@@ -113,7 +113,8 @@ export async function readAll(c: any, user: User, a: Ask) {
   const findings = ruleFindings({ cards, warnings: plan.warnings, order: plan.order, notBacked });
   let benchmark: { available: true; value: string[] } | { available: false; reason: string };
   try {
-    const norms = await citableNorms(c.env, a.projectId, plan.stage, plan.investor_type);
+    // D4155 K5 (#4192): the venture's own norms first, then HQ's active ones; a retired HQ norm is never cited.
+    const norms = await citableStageNorms(c.env, a.projectId, plan.stage, plan.investor_type);
     benchmark = norms.available ? { available: true, value: norms.value.map((n) => n.citation) } : norms;
   } catch { benchmark = { available: false, reason: 'The stage benchmarks could not be read.' }; }
   return { plan, cards, findings, benchmark, claims };

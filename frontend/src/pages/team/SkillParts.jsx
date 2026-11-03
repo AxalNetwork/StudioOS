@@ -5,12 +5,14 @@ import SkillRadar from '../../components/play/SkillRadar.jsx';
 import SkillEnergy from '../../ui/SkillEnergy.jsx';
 import { areaVars } from '../../lib/skillAreas.js';
 import { BTN_SECONDARY, MONO, MUTED } from './teamUi.jsx';
-import { authorLine, costLine, energyOf, hintLine, outputWords, radarLines, skillTokensLine, tagChip, usedBy } from './skillsModel.js';
+import { authorLine, costLine, energyOf, hintLine, outputWords, radarLines, runCostWords, skillTokensLine, tagChip, usedBy } from './skillsModel.js';
 
 /**
- * D1612 (#3952, SK1, SK4, SK5) — the pieces every skill screen shares: the
- * taxonomy and tool chips, the directory card, a skill row with its pinned
- * version, and the agent's radar with "Not recorded" when it has no skills.
+ * D1612 (#3952), v2 boards by #4224 (D4116) — the pieces every skill screen
+ * shares: the taxonomy and tool chips, the energy image, a skill's recorded
+ * run cost and D4121's estimate (a range, one skill per run), the directory
+ * card (SK1), a skill row with its pinned version, and the agent's radar
+ * with "Not recorded" when it has no skills.
  */
 
 const CHIP = 'inline-flex min-h-[22px] items-center gap-1 whitespace-nowrap rounded-axal-pill border px-2 text-[11.5px] font-semibold';
@@ -62,11 +64,43 @@ export function UsedBy({ n }) {
   return <span className={MUTED} data-testid="skill-used-by">Used by {words ? <b className="text-axal-ink dark:text-gray-100">{words}</b> : <Unrecorded />}</span>;
 }
 
-/** SK1: a directory card. */
+/**
+ * D4120: a skill's energy image, decorative (`aria-hidden`). A skill with no
+ * tag that has both an area and a level draws an empty frame of the same
+ * size, never a made-up area.
+ */
+export function SkillImage({ s, size = 96 }) {
+  const e = energyOf(s);
+  if (e) return <SkillEnergy {...e} size={size} />;
+  return <span aria-hidden="true" className="block shrink-0 rounded-axal-md border border-dashed border-axal-hairline bg-axal-ground/60 dark:border-gray-700 dark:bg-gray-950/60" style={{ width: size, height: size }} data-testid="skill-image-none" />;
+}
+
+/**
+ * A skill card's recorded run cost (`s`: "Run cost · $0.04 a run", or "Not recorded"),
+ * or D4121's estimate (`est`): a range, because a run carries one skill.
+ * `est` null is still being read. An unknown price is "Not recorded", never "$0.00".
+ */
+export function CostLine(props) {
+  if (props.s !== undefined && props.est === undefined) {
+    const words = runCostWords(props.s);
+    return <span className={MUTED} data-testid="skill-cost">Run cost · {words ? <b className="text-axal-ink dark:text-gray-100">{words}</b> : <Unrecorded />}</span>;
+  }
+  const { est, lead = 'with' } = props;
+  if (est === null) return <p className={`m-0 ${MUTED}`} data-testid="run-cost-line">Working out the cost per run…</p>;
+  const hint = hintLine(est);
+  return (
+    <div className="flex flex-col gap-1" data-testid="run-cost">
+      <p className={`m-0 ${MONO} text-[12.5px] text-axal-ink dark:text-gray-100`} data-testid="run-cost-line">{costLine(est, { lead })}</p>
+      {hint ? <p role="note" className="m-0 rounded-axal-md bg-axal-lavender px-3 py-2 text-[12.5px] text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-300" data-testid="run-cost-hint">{hint}</p> : null}
+    </div>
+  );
+}
+
+/** SK1: a directory card: its energy image, name, area chips, tools, run cost and "Used by". */
 export function SkillCard({ s, onOpen, onAssign, canAssign }) {
   return (
     <article className="flex min-w-0 flex-col gap-2 rounded-axal-lg border border-axal-hairline bg-white p-4 dark:border-gray-700 dark:bg-gray-900" data-testid={`skill-card-${s.uid}`}>
-      {energyOf(s) ? <SkillEnergy {...energyOf(s)} size={96} /> : null}
+      <SkillImage s={s} size={96} />
       <div className="flex items-start gap-2">
         <button type="button" onClick={() => onOpen(s)} className="min-w-0 flex-1 text-left text-[14.5px] font-extrabold text-axal-ink hover:underline dark:text-gray-100" data-testid={`skill-open-${s.uid}`}>{s.name}</button>
         {s.status === 'retired' ? <span className={`${CHIP} border-axal-hairline text-axal-muted dark:border-gray-700 dark:text-gray-400`}>Retired</span> : null}
@@ -74,10 +108,12 @@ export function SkillCard({ s, onOpen, onAssign, canAssign }) {
         {Number.isFinite(s.version) && s.version > 0 ? <span className={MONO}>v{s.version}</span> : null}
       </div>
       {s.description ? <p className="m-0 text-[12.5px] leading-[1.45] text-axal-ink/90 dark:text-gray-300">{s.description}</p> : null}
+      {s.status === 'retired' ? <span className="text-[12px] text-amber-800 dark:text-amber-200" data-testid="skill-retired-line">{s.scope === 'hq' ? 'Axal retired this skill.' : 'Retired.'} Agents still pinned to it keep working at their version.</span> : null}
       <span className={MUTED}>{authorLine(s)}</span>
       <TaxChips tags={s.taxonomy} />
       <ToolChips tools={s.tools} />
       {outputWords(s) ? <span className="text-[12.5px] text-axal-ink dark:text-gray-200"><b>Proposes:</b> {outputWords(s)}</span> : null}
+      <CostLine s={s} />
       <div className="mt-auto flex items-center gap-2 border-t border-axal-hairline pt-2.5 dark:border-gray-800">
         <span className="min-w-0 flex-1"><UsedBy n={s.used_by} /></span>
         {canAssign && s.status === 'published'
@@ -129,22 +165,6 @@ export function AgentRadar({ vector, radar, height = 200, label = 'Computed from
         {vector ? lines.map((l) => <span key={l.label}><b>{l.label}</b> · {l.text}</span>)
           : <span className={MUTED}>This agent has no skills yet.</span>}
       </div>
-    </div>
-  );
-}
-
-/**
- * D4121 (#4121): the run-cost line under the radar (AG3, SK4, SK5): a run
- * carries one skill, so it is a range from the cheapest skill's run to the
- * dearest. The specialist hint shows past 6 skills. `est` is `null` while it is read.
- */
-export function CostLine({ est, lead = 'with' }) {
-  if (est === null) return <p className={`m-0 ${MUTED}`} data-testid="run-cost-line">Working out the cost per run…</p>;
-  const hint = hintLine(est);
-  return (
-    <div className="flex flex-col gap-1" data-testid="run-cost">
-      <p className={`m-0 ${MONO} text-[12.5px] text-axal-ink dark:text-gray-100`} data-testid="run-cost-line">{costLine(est, { lead })}</p>
-      {hint ? <p role="note" className="m-0 rounded-axal-md bg-axal-lavender px-3 py-2 text-[12.5px] text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-300" data-testid="run-cost-hint">{hint}</p> : null}
     </div>
   );
 }
