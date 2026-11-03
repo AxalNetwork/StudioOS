@@ -86,13 +86,16 @@ export async function assignable(env: Env, p: Project): Promise<{ team: Array<Te
  * event goes first, so it is written only for rows the update then flags.
  */
 export function seatEndStatements(env: Env, projectId: number, userId: number, actorUserId: number) {
-  const where = `scope_kind = 'project' AND project_id = ? AND assignee_kind = 'person' AND assignee_user_id = ?
-    AND status NOT IN ('done','cancelled') AND needs_reassignment = 0`;
+  // Each statement spells out its WHERE: no query text is built from a fragment (check-sql-prepare).
   return [
     env.DB.prepare(`INSERT INTO scope_task_events (task_id, actor_user_id, kind, detail_json)
-      SELECT id, ?, 'updated', ? FROM scope_tasks WHERE ${where}`)
+      SELECT id, ?, 'updated', ? FROM scope_tasks
+       WHERE scope_kind = 'project' AND project_id = ? AND assignee_kind = 'person' AND assignee_user_id = ?
+         AND status NOT IN ('done','cancelled') AND needs_reassignment = 0`)
       .bind(actorUserId, JSON.stringify({ needs_reassignment: true, reason: 'seat_ended' }), projectId, userId),
-    env.DB.prepare(`UPDATE scope_tasks SET needs_reassignment = 1, updated_at = CURRENT_TIMESTAMP WHERE ${where}`).bind(projectId, userId),
+    env.DB.prepare(`UPDATE scope_tasks SET needs_reassignment = 1, updated_at = CURRENT_TIMESTAMP
+       WHERE scope_kind = 'project' AND project_id = ? AND assignee_kind = 'person' AND assignee_user_id = ?
+         AND status NOT IN ('done','cancelled') AND needs_reassignment = 0`).bind(projectId, userId),
   ];
 }
 
