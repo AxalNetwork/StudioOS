@@ -26,7 +26,7 @@ import { aiBudgetApi } from '../lib/api/aiBudget';
 import { usageApi } from '../lib/api/usage';
 import { isSuperAdminUser } from '../lib/shellRole';
 import { addState, autoReloadLine, planBlock, storageLine } from './tokensBandModel';
-import { ADD_TOKENS_HASH, ADD_TOKENS_PATH, TOPUP_UNAVAILABLE, usageMoney } from '../lib/aiTokens';
+import { ADD_TOKENS_HASH, ADD_TOKENS_PATH, CUSTOM_PACK, TOPUP_UNAVAILABLE, customRangeLine, sellableCustom, usageMoney } from '../lib/aiTokens';
 import CheckoutSheet from '../components/checkout/CheckoutSheet';
 import PackSheet from '../components/checkout/PackSheet';
 import { planKeyOf } from '../components/checkout/checkoutModel';
@@ -281,7 +281,8 @@ function TokensBand({ read, onRetry, onAdd, storage, autoReload, packs, user }) 
   const plan = me ? planBlock(me, { superAdmin: isSuperAdminUser(user) }) : null;
   const store = plan?.state === 'ok' ? storageLine(storage) : null;
   const auto = autoReloadLine(autoReload);
-  const add = addState({ meLoading: read.status === 'loading', packCount: packs.status === 'ready' ? packCards(packs.body).length : null });
+  const add = addState({ meLoading: read.status === 'loading', packCount: packs.status === 'ready' ? packCards(packs.body).length : null,
+    custom: packs.status === 'ready' && sellableCustom(packs.body?.custom) });
   return (
     <section className="axp-sec axp-tokband" id="add-tokens" aria-label="Your AI tokens" data-testid="pricing-tokens-band">
       {me?.ai_paused && <p className="axp-tokband-note" role="status">{TOKENS_BAND.paused}</p>}
@@ -358,6 +359,8 @@ function TokensBand({ read, onRetry, onAdd, storage, autoReload, packs, user }) 
 function Packs({ read, onRetry, signedIn, onBuy }) {
   const D = useContext(Face);
   const packs = read.status === 'ready' ? packCards(read.body) : [];
+  // D1434: the custom amount is its own card, after the packs, and the only one when no pack is on sale.
+  const anyAmount = read.status === 'ready' ? customRangeLine(read.body?.custom) : null;
   const back = `/login?next=${encodeURIComponent(ADD_TOKENS_PATH)}`;
   return (
     <section className="axp-sec" id="token-packs" aria-labelledby="axp-packs-h" data-testid="pricing-token-packs">
@@ -375,7 +378,7 @@ function Packs({ read, onRetry, signedIn, onBuy }) {
           <button type="button" className="axp-btn axp-btn-err" onClick={onRetry}>Try again</button>
         </div>
       )}
-      {read.status === 'ready' && (packs.length ? (
+      {read.status === 'ready' && (packs.length || anyAmount ? (
         <div className="axp-packs">
           {packs.map((p) => (
             <div key={p.uid} className="axp-pack" data-testid={`pricing-pack-${p.uid}`}>
@@ -387,6 +390,16 @@ function Packs({ read, onRetry, signedIn, onBuy }) {
                 : <Link to={back} className="axp-btn">Sign in to buy</Link>}
             </div>
           ))}
+          {anyAmount && (
+            <div className="axp-pack" data-testid="pricing-pack-custom">
+              <span className="axp-pack-t">AI tokens, any amount</span>
+              <span className={`axp-pack-n${D}`}>Any amount</span>
+              <span className="axp-pill">{anyAmount}</span>
+              {signedIn
+                ? <button type="button" className="axp-btn" onClick={() => onBuy(CUSTOM_PACK)} data-testid="pricing-pack-buy-custom">Choose an amount</button>
+                : <Link to={back} className="axp-btn">Sign in to buy</Link>}
+            </div>
+          )}
         </div>
       ) : (
         <p className="axp-p axp-muted">{TOPUP_UNAVAILABLE}</p>

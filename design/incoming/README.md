@@ -113,6 +113,14 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-11-03 — Who knows them, relationship intelligence (#3572, #3564)
+
+The owner's two relationship-intelligence artifacts were decoded by `scripts/read-canvas.mjs`:
+- **`Who knows them · Boards.dc.html`** (artifact `P5Ptt9j9Pf8b7iPSCnMmyz`) lays out the boards RI1 to RI8: the sharing setting, the strip on a record, asking for an introduction, the introducer's inbox, the introductions log, follow-ups, withdraw and phone. Each board imports the page.
+- **`Who Knows Them Page.dc.html`** (artifact `3ky9hz8rYRY1ApqcoRjSAQ`) draws 29 frames: ri1 to ri7 and their states (ri1n, ri1s, ri2s, ri3c, ri4e), phone (ri1p to ri7p) and dark (ri1-d to ri7-d, ri2p-d, ri3p-d, ri4p-d).
+
+The build is D1357 (`documentation/architecture/decisions/D1357.md`): the frontend is #3572, and the Worker parts are 8a and 8b.
+
 ## Landed 2026-11-03 — Influencer program (#4289)
 
 The owner's two artifacts were decoded by `scripts/read-canvas.mjs`:

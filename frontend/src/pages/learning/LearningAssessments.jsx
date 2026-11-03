@@ -5,6 +5,7 @@ import { titleCase } from '../../lib/absence';
 import ExercisePanel from './ExercisePanel';
 import ExamFlow from './ExamFlow';
 import { LearningEmpty, LearningHeader, LearningLoading, LearningUnreadable, SectionCard } from './LearningStates';
+import { AddToPlan } from './PlanSheet';
 import { STATUS_NOTICE } from './studioActions';
 import { readCourse } from './learningReads';
 import useLearningRead from './useLearningRead';
@@ -110,7 +111,7 @@ export function ExercisePage({ uid }) {
   return (
     <RailFrame rail={<AssessmentRail coverage={coverage} />} data-testid="learning-exercise">
       <div className="space-y-4">
-        <LearningHeader eyebrow="Learning · Exercise" title={exercise?.title || 'Exercise'} sub={context.sub} back={context.back} action={<NotPublished row={exercise} />} />
+        <LearningHeader eyebrow="Learning · Exercise" title={exercise?.title || 'Exercise'} sub={context.sub} back={context.back} action={<><NotPublished row={exercise} />{exercise?.uid ? <AddToPlan subject={{ kind: 'exercise', uid: exercise.uid, title: exercise.title }} /> : null}</>} />
         <ExerciseView state={state} onSubmit={onSubmit} busy={busy} error={error} onRetry={retry} />
       </div>
     </RailFrame>
@@ -203,7 +204,7 @@ export function ExamPage({ uid }) {
   return (
     <RailFrame rail={<AssessmentRail coverage={coverage} />} data-testid="learning-exam">
       <div className="space-y-4">
-        <LearningHeader eyebrow="Learning · Exam" title={exam?.title || 'Exam'} sub={context.sub} back={context.back} action={<NotPublished row={exam} />} />
+        <LearningHeader eyebrow="Learning · Exam" title={exam?.title || 'Exam'} sub={context.sub} back={context.back} action={<><NotPublished row={exam} />{exam?.uid ? <AddToPlan subject={{ kind: 'exam', uid: exam.uid, title: exam.title }} /> : null}</>} />
         <ExamView
           examState={examState} attemptsState={attemptsState} attempt={attempt} result={result}
           onStart={onStart} onSubmit={onSubmit} busy={busy} error={error} onRetryExam={retryExam} onRetryAttempts={retryAttempts}

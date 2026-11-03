@@ -38,14 +38,16 @@ const LICENCES = { items: [
 
 // ---------------------------------------------------------------- the model
 
-test('the programs are the canvas\'s nine, in its order and groups; six can be granted', () => {
+test('the programs are the canvas\'s nine and Influencers, in its order and groups; six can be granted', () => {
+  // D4289 P1 (#4290): Influencers joins its group, so the group's span stays one block.
   assert.deepEqual(PROGRAMS.map((p) => p.name), [
     'Spin-Out Lab', 'AI-native Venture', 'Mentor cohort access', 'Investor cohort access',
-    'Referral partners', 'Refer & Earn', 'Perks', 'Learning', 'Product testing',
+    'Referral partners', 'Refer & Earn', 'Influencers', 'Perks', 'Learning', 'Product testing',
   ]);
   assert.deepEqual(programGroups().map((g) => [g.group, g.span]), [
-    ['Ventures', 2], ['Access', 2], ['Network and referrals', 2], ['Rewards', 1], ['Learning', 1], ['Product', 1],
+    ['Ventures', 2], ['Access', 2], ['Network and referrals', 3], ['Rewards', 1], ['Learning', 1], ['Product', 1],
   ]);
+  assert.equal(PROGRAMS.find((p) => p.key === 'influencer').grant, 'hq', 'HQ runs it');
   assert.equal(PROGRAMS.filter((p) => p.grant === 'yes').length, 6);
 });
 

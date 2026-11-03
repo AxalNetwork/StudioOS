@@ -211,7 +211,7 @@ test('D1555 (#3802): consistency is swapped — the check read\'s `consistency`,
 test('the adapter keys each surface to the plan’s issue (§6.2)', () => {
   const want = {
     grid: 3749, saveCard: 3751, discardDraft: 3751, draft: 3751, batch: 3753, cancelBatch: 3753, elementModels: 3754,
-    areasQuote: 3764, areasGenerate: 3764, history: 3767, narrativeOutline: 3768, instruct: 3773,
+    areasQuote: 3764, areasGenerate: 3764, judge: 3783, history: 3767, narrativeOutline: 3768, instruct: 3773,
     stagePlan: 3774, figures: 3775, deckUsage: 3776, arrange: 3777, imageEdit: 3778, imageEditAi: 3778, imageVary: 3784, elementsLibrary: 3779,
     diagrams: 3780, ventureElements: 3781, templates: 3782, myTemplates: 3782, saveAsTemplate: 3782, typedTables: 3787,
     media: 3788, pasteCards: 3788, buttonClicks: 3788, presets: 3796, orgLocks: 3786, critique: 3799, remix: 3800, consistency: 3802, deckActions: 3808, replaceImages: 3808, outlineReorder: 3808,
@@ -330,7 +330,9 @@ test('the element picker: 8 groups, each item on main or on the seam, and the th
   assert.equal(PEND, '(pending owner)');
   const on = new Set(ELEMENTS.filter(elementOnMain).map((e) => e.id));
   for (const id of ['title', 'body', 'bullets', 'chart', 'table', 'timeline', 'metric', 'photo', 'upload', 'video', 'team_grid']) assert.ok(on.has(id), id);
-  for (const id of ['flow', 'funnel', 'icons']) assert.ok(!on.has(id), id);
+  // D1542 (#3780): Flow, Cycle and Matrix generate through the areas route; Funnel stays on the seam.
+  for (const id of ['flow', 'cycle', 'matrix']) assert.ok(on.has(id), id);
+  for (const id of ['funnel', 'hierarchy', 'hub', 'positioning', 'icons']) assert.ok(!on.has(id), id);
   // D1543 (#3781): the six venture-record items are keyed to their route and on main. Only the logo wall is
   // free: the others carry a model job in DECK_ELEMENT_JOBS (model_use_cases_3934 holds that a free item has none).
   const venture = ['team_bios', 'logo_wall', 'use_of_funds', 'round_terms', 'interview_quote', 'cap_table'];

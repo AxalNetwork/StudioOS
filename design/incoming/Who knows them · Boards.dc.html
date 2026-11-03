@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e9e7ee}
+a{color:#7c3aed;text-decoration:none}
+a:hover{color:#6d28d9;text-decoration:underline}
+</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:84px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1100px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">StudioOS · Network</span>
+<h1 style="margin:0;font-size:42px;font-weight:800;letter-spacing:-0.03em">Who knows them</h1>
+<p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">Members import their LinkedIn connections and may let a team see who they know. Only the relationship is shared, nothing is shared by default, and Axal never contacts anyone: an introduction is asked of the teammate, who decides. RI1 to RI8, each in light, dark and on the phone.</p>
+</header>
+<sc-for list="{{ groups }}" as="g" hint-placeholder-count="8">
+<section id="{{ g.id }}" style="display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">{{ g.id }}</span><h2 style="margin:0;font-size:22px;font-weight:800;letter-spacing:-0.02em">{{ g.t }}</h2></div>
+<sc-if value="{{ g.note }}" hint-placeholder-val="{{ false }}"><p style="margin:0;max-width:1100px;font-size:14px;line-height:1.55;color:#3f3a47;text-wrap:pretty">{{ g.note }}</p></sc-if>
+<div style="display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start">
+<sc-for list="{{ g.fr }}" as="f" hint-placeholder-count="2">
+<div style="display:flex;flex-direction:column;gap:8px">
+<sc-if value="{{ f.cap }}" hint-placeholder-val="{{ false }}"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">{{ f.cap }}</span></sc-if>
+<div style="{{ f.wst }}"><dc-import name="Who Knows Them Page" v="{{ f.v }}" hint-size="{{ f.hs }}"></dc-import></div>
+</div>
+</sc-for>
+</div>
+</section>
+</sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const F = (v, cap, w, h) => { const d = /-d$/.test(v); return { v, cap: cap || '', wst: `width:${w}px;border-radius:${w < 500 ? 28 : 14}px;overflow:hidden;border:1px solid ${d ? '#374151' : '#dedbe5'};box-shadow:0 20px 50px rgba(24,24,27,.10);background:${d ? '#0b1220' : '#f4f3f7'}`, hs: `${w}px,${h || 900}px` }; };
+    const G = (id, t, fr, note) => ({ id, t, fr, note: note || '' });
+    return { groups: [
+      G('RI1', 'Sharing setting', [F('ri1', 'On the LinkedIn connector page', 1440, 900), F('ri1n', 'In Network › Settings', 1440, 860), F('ri1s', 'Off (the default) · on · turned off just now', 1440, 640), F('ri1-d', 'Dark', 1440, 900), F('ri1p', 'Phone', 390, 844)], 'One switch per team the member belongs to. What is shared and what is never shared sit beside the switches.'),
+      G('RI2', '“Who knows them” on a record', [F('ri2', 'A Raise pipeline investor', 1440, 900), F('ri2s', 'A Deal flow company · a fund page · empty · unreadable', 1440, 497), F('ri2-d', 'Dark', 1440, 900), F('ri2p', 'Phone', 390, 844)], 'Up to three teammates who shared, each with how they know them. A member who has not shared never appears, and nothing hints at them: no count, no locked or blurred rows.'),
+      G('RI3', 'Ask for an introduction', [F('ri3', 'The shared right Sheet', 1440, 960), F('ri3c', 'Sent', 1440, 760), F('ri3-d', 'Dark', 1440, 960), F('ri3p', 'Phone', 390, 844)], 'The reason is required. Eadwyn can draft the optional context from the record; its hold shows before it runs.'),
+      G('RI4', 'The introducer’s inbox', [F('ri4', 'Requests: new, declining with a note, accepted', 1440, 980), F('ri4e', 'Write the intro · the Email composer from the introducer’s own mailbox', 1440, 900), F('ri4-d', 'Dark', 1440, 980), F('ri4p', 'Phone', 390, 844)]),
+      G('RI5', 'Network › Introductions log', [F('ri5', '', 1440, 760), F('ri5-d', 'Dark', 1440, 760), F('ri5p', 'Phone', 390, 844)]),
+      G('RI6', 'Follow-ups', [F('ri6', 'Due · done · snoozed', 1440, 359), F('ri6-d', 'Dark', 1440, 359), F('ri6p', 'Phone', 390, 844)]),
+      G('RI7', 'Withdraw', [F('ri7', 'Turning sharing off, then the teammate’s strip before and after', 1440, 845), F('ri7-d', 'Dark', 1440, 845), F('ri7p', 'Phone · after', 390, 844)], 'On the next read the name is simply gone; the strip shows no gap and no count.'),
+      G('RI8', 'Phone', [F('ri2p', 'RI2', 390, 844), F('ri3p', 'RI3', 390, 844), F('ri4p', 'RI4', 390, 844), F('ri2p-d', 'RI2 · dark', 390, 844), F('ri3p-d', 'RI3 · dark', 390, 844), F('ri4p-d', 'RI4 · dark', 390, 844)])
+    ] };
+  }
+}
+</script>
+</body></html>

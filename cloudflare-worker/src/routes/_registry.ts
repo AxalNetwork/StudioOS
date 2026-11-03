@@ -15,11 +15,14 @@ import { mount as admin_deck_betaMount } from './admin_deck_beta';
 import { mount as admin_deck_generationMount } from './admin_deck_generation';
 import { mount as admin_deck_stage_normsMount } from './admin_deck_stage_norms';
 import { mount as admin_hq_skillsMount } from './admin_hq_skills';
+import { mount as admin_influencersMount } from './admin_influencers';
 import { mount as company_complianceMount } from './company_compliance';
 import { mount as data_room_proposalsMount } from './data_room_proposals';
 import { mount as deck_actionsMount } from './deck_actions';
 import { mount as deck_brand_kitMount } from './deck_brand_kit';
 import { mount as deck_card_statusMount } from './deck_card_status';
+import { mount as deck_diagramsMount } from './deck_diagrams';
+import { mount as deck_judgeMount } from './deck_judge';
 import { mount as deck_layoutsMount } from './deck_layouts';
 import { mount as deck_mediaMount } from './deck_media';
 import { mount as deck_preflightMount } from './deck_preflight';
@@ -27,9 +30,13 @@ import { mount as deck_proofMount } from './deck_proof';
 import { mount as deck_quotesMount } from './deck_quotes';
 import { mount as deck_remoteMount } from './deck_remote';
 import { mount as deck_reportsMount } from './deck_reports';
+import { mount as deck_scriptMount } from './deck_script';
 import { mount as deck_slide_analyticsMount } from './deck_slide_analytics';
 import { mount as deck_stage_normsMount } from './deck_stage_norms';
 import { mount as deck_update_reuseMount } from './deck_update_reuse';
+import { mount as influencerMount } from './influencer';
+import { mount as influencer_analyticsMount } from './influencer_analytics';
+import { mount as influencer_payoutsMount } from './influencer_payouts';
 import { mount as learning_listsMount } from './learning_lists';
 import { mount as learning_streamMount } from './learning_stream';
 import { mount as team_platform_statusMount } from './team_platform_status';
@@ -46,11 +53,14 @@ export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'admin_deck_generation', mount: admin_deck_generationMount },
   { file: 'admin_deck_stage_norms', mount: admin_deck_stage_normsMount },
   { file: 'admin_hq_skills', mount: admin_hq_skillsMount },
+  { file: 'admin_influencers', mount: admin_influencersMount },
   { file: 'company_compliance', mount: company_complianceMount },
   { file: 'data_room_proposals', mount: data_room_proposalsMount },
   { file: 'deck_actions', mount: deck_actionsMount },
   { file: 'deck_brand_kit', mount: deck_brand_kitMount },
   { file: 'deck_card_status', mount: deck_card_statusMount },
+  { file: 'deck_diagrams', mount: deck_diagramsMount },
+  { file: 'deck_judge', mount: deck_judgeMount },
   { file: 'deck_layouts', mount: deck_layoutsMount },
   { file: 'deck_media', mount: deck_mediaMount },
   { file: 'deck_preflight', mount: deck_preflightMount },
@@ -58,9 +68,13 @@ export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'deck_quotes', mount: deck_quotesMount },
   { file: 'deck_remote', mount: deck_remoteMount },
   { file: 'deck_reports', mount: deck_reportsMount },
+  { file: 'deck_script', mount: deck_scriptMount },
   { file: 'deck_slide_analytics', mount: deck_slide_analyticsMount },
   { file: 'deck_stage_norms', mount: deck_stage_normsMount },
   { file: 'deck_update_reuse', mount: deck_update_reuseMount },
+  { file: 'influencer', mount: influencerMount },
+  { file: 'influencer_analytics', mount: influencer_analyticsMount },
+  { file: 'influencer_payouts', mount: influencer_payoutsMount },
   { file: 'learning_lists', mount: learning_listsMount },
   { file: 'learning_stream', mount: learning_streamMount },
   { file: 'team_platform_status', mount: team_platform_statusMount },

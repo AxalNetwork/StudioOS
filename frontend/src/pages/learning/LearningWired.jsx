@@ -10,6 +10,7 @@ import { AssessmentLesson } from './LearningAssessments';
 import { findLesson, lessonHref, resumeAt, videoPlayback } from './learningModel';
 import { markItemComplete, markLessonComplete, readCourse, readItem, readItemCaption, readMe, readMyAttempts, readMySubmissions, recordItemPosition } from './learningReads';
 import useLearningRead from './useLearningRead';
+import { AddToPlan } from './PlanSheet';
 
 /**
  * The learner pages that read the Learning store (D562 stage 2, D557's
@@ -76,7 +77,8 @@ export function CoursePage({ slug }) {
   return (
     <RailFrame rail={<LearnerRail coverage={courseCoverage(state)} />} data-testid="learning-course">
       <div className="space-y-4">
-        <LearningHeader title={course?.title || 'Course'} sub={course?.summary || undefined} back={LEARNING} />
+        <LearningHeader title={course?.title || 'Course'} sub={course?.summary || undefined} back={LEARNING}
+          action={course?.uid ? <AddToPlan subject={{ kind: 'course', uid: course.uid, title: course.title }} /> : null} />
         <CourseView state={state} onRetry={retry} />
       </div>
     </RailFrame>
@@ -193,6 +195,7 @@ export function LessonPage({ slug, lessonUid }) {
           title={found?.lesson.title || 'Lesson'}
           sub={course ? [course.title, found?.lesson.module?.title].filter(Boolean).join(' · ') : undefined}
           back={{ to: `/learning/courses/${encodeURIComponent(slug)}`, label: course?.title || 'Course' }}
+          action={found ? <AddToPlan subject={{ kind: 'lesson', uid: found.lesson.uid || lessonUid, title: found.lesson.title }} /> : null}
         />
         <LessonView
           courseState={courseState} itemState={itemState} lessonUid={lessonUid}
@@ -258,6 +261,7 @@ export function ItemPage({ uid }) {
           title={item?.title || 'Video'}
           sub={item?.summary || undefined}
           back={LEARNING}
+          action={item?.kind === 'video' ? <AddToPlan subject={{ kind: 'video', uid: item.uid || uid, title: item.title }} /> : null}
         />
         <ItemView state={state} onRetry={retry} onMark={onMark} marking={marking} markError={markError} />
       </div>
@@ -297,7 +301,8 @@ export function MePage({ sub }) {
   return (
     <RailFrame rail={<LearnerRail coverage={coverage} />} data-testid="learning-me">
       <div className="space-y-4">
-        <LearningHeader title="My learning" sub={sub} back={LEARNING} />
+        <LearningHeader title="My learning" sub={sub} back={LEARNING}
+          action={<Link to="/learning/plan" className="text-[12.5px] font-semibold text-axal-violet-deep underline dark:text-violet-300" data-testid="link-learning-plan">My learning plan</Link>} />
         <MeView state={state} onRetry={retry} submissions={{ ...submissions, onRetry: retrySubmissions }} attempts={{ ...attempts, onRetry: retryAttempts }} />
       </div>
     </RailFrame>
