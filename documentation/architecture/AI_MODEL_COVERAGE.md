@@ -44,7 +44,7 @@ Prices are Cloudflare's printed USD per unit (per 1M tokens, per 1k characters, 
 | `@cf/facebook/bart-large-cnn` | Summarization | deprecated | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/baai/bge-base-en-v1.5` | Text Embeddings | ga | tokens_in 0.067 | Not recorded | all | O | · | · | O | O | W | W | · | · | · | G | O | · | O |
 | `@cf/baai/bge-large-en-v1.5` | Text Embeddings | ga | tokens_in 0.204 | Not recorded | all | O | · | · | O | O | O | O | · | · | · | G | O | · | O |
-| `@cf/baai/bge-m3` | Text Embeddings | ga | tokens_in 0.012 | Not recorded | all | O | · | · | W | W | W | W | · | · | · | G | W | · | W |
+| `@cf/baai/bge-m3` | Text Embeddings | ga | tokens_in 0.012 | Not recorded | all | O | · | · | O | O | O | O | · | · | · | G | O | · | O |
 | `@cf/baai/bge-reranker-base` | Text Classification | ga | tokens_in 0.003 | Not recorded | all | O | · | · | O | O | O | O | · | · | · | W | O | · | O |
 | `@cf/baai/bge-small-en-v1.5` | Text Embeddings | ga | tokens_in 0.020 | Not recorded | all | O | · | · | O | O | O | O | · | · | · | G | O | · | O |
 | `@cf/cloudflare/clef` | Text Generation | ga | tokens_in 0.240 | 65536 | all | O | G | O | O | O | G | G | · | · | G | G | O | G | O |
@@ -54,13 +54,13 @@ Prices are Cloudflare's printed USD per unit (per 1M tokens, per 1k characters, 
 | `@cf/daily-co/phonellm-mini-alpha-2` | Text Generation | ga | tokens_in 0.060, tokens_out 0.240 | 262140 | all | G | G | G | G | G | G | G | · | G | G | G | G | · | G |
 | `@cf/deepseek-ai/deepseek-r1-distill-qwen-32b` | Text Generation | ga | tokens_in 0.497, tokens_out 4.881 | 80000 | all | O | G | G | O | G | G | G | · | G | G | G | O | · | O |
 | `@cf/deepseek-ai/deepseek-v4-flash-0731` | Text Generation | ga | tokens_in 0.440, tokens_cached 0.014, tokens_out 1.320 | 1048576 | paid | O | O | O | O | O | G | O | · | G | G | G | O | · | O |
-| `@cf/deepseek-ai/deepseek-v4-pro-0813` | Text Generation | ga | tokens_in 1.320, tokens_cached 0.044, tokens_out 3.960 | 1048576 | paid | W | G | W | W | W | G | W | · | G | G | G | W | · | W |
+| `@cf/deepseek-ai/deepseek-v4-pro-0813` | Text Generation | ga | tokens_in 1.320, tokens_cached 0.044, tokens_out 3.960 | 1048576 | paid | O | G | O | O | O | G | O | · | G | G | G | O | · | O |
 | `@cf/deepseek-ai/deepseek-v4.1-flash-1017` | Text Generation | ga | tokens_in 0.300, tokens_cached 0.006, tokens_out 1.200 | 1048576 | paid | O | G | O | O | O | G | O | · | G | G | G | O | · | O |
 | `@cf/facebook/detr-resnet-50` | Object Detection | beta | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/huggingface/distilbert-sst-2-int8` | Text Classification | ga | tokens_in 0.026 | Not recorded | all | O | G | · | · | O | · | · | · | · | G | · | O | · | O |
 | `@cf/lykon/dreamshaper-8-lcm` | Text-to-Image | ga | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/google/embeddinggemma-300m` | Text Embeddings | ga | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
-| `@cf/deepgram/flux` | Automatic Speech Recognition | partner | audio_minutes_websocket 0.0077 | Not recorded | all | O | O | · | O | · | · | · | · | · | · | G | · | · | O |
+| `@cf/deepgram/flux` | Automatic Speech Recognition | partner | audio_minutes_websocket 0.0077 | Not recorded | all | G | O | · | O | · | · | · | · | · | · | G | · | · | G |
 | `@cf/black-forest-labs/flux-1-schnell` | Text-to-Image | ga | tiles 0.0000528, steps 0.0001056 | Not recorded | all | · | · | O | W | W | · | · | · | W | · | · | O | · | G |
 | `@cf/black-forest-labs/flux-2-dev` | Text-to-Image | partner | input_tile_steps 0.00021, output_tile_steps 0.00041 | Not recorded | all, partner gate | · | · | O | O | O | · | · | · | G | · | · | O | · | G |
 | `@cf/black-forest-labs/flux-2-klein-4b` | Text-to-Image | partner | input_tiles 0.000059, output_tiles 0.000287 | Not recorded | all, partner gate | · | · | O | O | O | · | · | · | G | · | · | O | · | G |
@@ -74,15 +74,15 @@ Prices are Cloudflare's printed USD per unit (per 1M tokens, per 1k characters, 
 | `@cf/zai-org/glm-4.7-flash` | Text Generation | ga | tokens_in 0.060, tokens_out 0.400 | 131072 | all | O | G | W | O | W | O | O | · | G | G | W | W | · | W |
 | `@cf/zai-org/glm-5.2` | Text Generation | ga | tokens_in 1.400, tokens_cached 0.260, tokens_out 4.400 | 262144 | paid | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/zai-org/glm-5.3` | Text Generation | ga | tokens_in 1.400, tokens_cached 0.260, tokens_out 4.400 | Not recorded | paid | O | G | O | O | O | G | G | · | G | G | G | O | · | O |
-| `@cf/zai-org/glm-5.3-flash` | Text Generation | ga | tokens_in 0.150, tokens_cached 0.030, tokens_out 0.500 | 1048576 | paid | O | G | O | O | O | G | G | · | G | G | G | O | · | O |
-| `@cf/openai/gpt-oss-120b` | Text Generation | ga | tokens_in 0.350, tokens_out 0.750 | 128000 | all | W | G | O | W | O | O | O | · | G | G | O | W | · | W |
+| `@cf/zai-org/glm-5.3-flash` | Text Generation | ga | tokens_in 0.150, tokens_cached 0.030, tokens_out 0.500 | 1048576 | paid | O | G | O | O | O | G | O | · | G | G | G | O | · | O |
+| `@cf/openai/gpt-oss-120b` | Text Generation | ga | tokens_in 0.350, tokens_out 0.750 | 128000 | all | W | G | W | W | W | O | W | · | G | G | O | W | · | W |
 | `@cf/openai/gpt-oss-20b` | Text Generation | ga | tokens_in 0.200, tokens_out 0.300 | 128000 | all | O | G | O | O | O | G | G | · | G | G | O | O | · | O |
-| `@cf/ibm-granite/granite-4.0-h-micro` | Text Generation | ga | tokens_in 0.017, tokens_out 0.112 | 131000 | all | O | G | O | O | O | G | W | · | G | G | O | O | · | O |
+| `@cf/ibm-granite/granite-4.0-h-micro` | Text Generation | ga | tokens_in 0.017, tokens_out 0.112 | 131000 | all | O | G | O | O | O | O | W | · | G | G | O | O | · | O |
 | `@hf/nousresearch/hermes-2-pro-mistral-7b` | Text Generation | deprecated | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/ai4bharat/indictrans2-en-indic-1B` | Translation | ga | tokens_in 0.342, tokens_out 0.342 | Not recorded | all | O | O | · | · | O | · | O | · | G | G | G | · | · | O |
 | `@cf/moonshotai/kimi-k2.5` | Text Generation | deprecated | tokens_in 0.600, tokens_cached 0.100, tokens_out 3.000 | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
-| `@cf/moonshotai/kimi-k2.6` | Text Generation | ga | tokens_in 0.950, tokens_cached 0.160, tokens_out 4.000 | 262144 | paid | W | G | G | O | G | G | W | · | G | G | G | W | · | W |
-| `@cf/moonshotai/kimi-k2.7-code` | Text Generation | ga | tokens_in 0.950, tokens_cached 0.190, tokens_out 4.000 | 262144 | paid | G | G | W | G | G | G | G | · | G | G | G | W | · | G |
+| `@cf/moonshotai/kimi-k2.6` | Text Generation | ga | tokens_in 0.950, tokens_cached 0.160, tokens_out 4.000 | 262144 | paid | O | G | G | O | O | G | O | · | G | G | O | O | · | O |
+| `@cf/moonshotai/kimi-k2.7-code` | Text Generation | ga | tokens_in 0.950, tokens_cached 0.190, tokens_out 4.000 | 262144 | paid | G | G | O | G | G | G | G | · | G | G | G | O | · | G |
 | `@cf/meta/llama-2-7b-chat-fp16` | Text Generation | deprecated | tokens_in 0.556, tokens_out 6.667 | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/meta-llama/llama-2-7b-chat-hf-lora` | Text Generation | beta | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/meta/llama-2-7b-chat-int8` | Text Generation | deprecated | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
@@ -93,11 +93,11 @@ Prices are Cloudflare's printed USD per unit (per 1M tokens, per 1k characters, 
 | `@cf/meta/llama-3.1-8b-instruct` | Text Generation | deprecated | tokens_in 0.282, tokens_out 0.827 | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/meta/llama-3.1-8b-instruct-awq` | Text Generation | deprecated | tokens_in 0.123, tokens_out 0.266 | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/meta/llama-3.1-8b-instruct-fast` | Text Generation | ga | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
-| `@cf/meta/llama-3.1-8b-instruct-fp8` | Text Generation | ga | tokens_in 0.152, tokens_out 0.287 | 32000 | all | W | W | G | G | W | G | W | · | G | W | W | W | · | W |
+| `@cf/meta/llama-3.1-8b-instruct-fp8` | Text Generation | ga | tokens_in 0.152, tokens_out 0.287 | 32000 | all | W | W | G | O | W | O | W | · | G | W | W | W | · | W |
 | `@cf/meta/llama-3.1-8b-instruct-fp8-fast` | Text Generation | ga | tokens_in 0.045, tokens_out 0.384 | Not recorded | all | O | O | G | G | O | G | G | · | G | G | O | O | · | O |
 | `@cf/meta/llama-3.2-11b-vision-instruct` | Text Generation | ga | tokens_in 0.049, tokens_out 0.676 | 128000 | all | G | G | G | O | G | G | O | · | G | G | G | O | · | G |
-| `@cf/meta/llama-3.2-1b-instruct` | Text Generation | ga | tokens_in 0.027, tokens_out 0.201 | 60000 | all | O | G | G | G | O | G | G | · | G | G | O | O | · | O |
-| `@cf/meta/llama-3.2-3b-instruct` | Text Generation | ga | tokens_in 0.051, tokens_out 0.335 | 80000 | all | O | G | G | G | O | G | O | · | G | O | O | O | · | O |
+| `@cf/meta/llama-3.2-1b-instruct` | Text Generation | ga | tokens_in 0.027, tokens_out 0.201 | 60000 | all | O | G | G | O | O | O | O | · | G | G | O | O | · | O |
+| `@cf/meta/llama-3.2-3b-instruct` | Text Generation | ga | tokens_in 0.051, tokens_out 0.335 | 80000 | all | O | G | G | W | W | W | O | · | G | O | O | W | · | W |
 | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` | Text Generation | ga | tokens_in 0.293, tokens_out 2.253 | 24000 | all | W | W | O | W | W | O | W | · | G | W | W | W | · | W |
 | `@cf/meta/llama-4-scout-17b-16e-instruct` | Text Generation | ga | tokens_in 0.270, tokens_out 0.850 | 131000 | all | G | G | G | O | G | G | O | · | G | G | G | W | · | G |
 | `@cf/meta/llama-guard-3-8b` | Text Generation | ga | tokens_in 0.484, tokens_out 0.030 | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | W | · |
@@ -109,17 +109,17 @@ Prices are Cloudflare's printed USD per unit (per 1M tokens, per 1k characters, 
 | `@cf/mistral/mistral-7b-instruct-v0.1` | Text Generation | deprecated | tokens_in 0.110, tokens_out 0.190 | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@hf/mistral/mistral-7b-instruct-v0.2` | Text Generation | deprecated | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/mistral/mistral-7b-instruct-v0.2-lora` | Text Generation | beta | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
-| `@cf/mistralai/mistral-small-3.1-24b-instruct` | Text Generation | ga | tokens_in 0.351, tokens_out 0.555 | 128000 | all | O | G | O | O | O | O | O | · | G | G | G | O | · | O |
+| `@cf/mistralai/mistral-small-3.1-24b-instruct` | Text Generation | ga | tokens_in 0.351, tokens_out 0.555 | 128000 | all | O | G | O | O | W | O | W | · | G | G | O | O | · | O |
 | `@cf/moondream/moondream3.1-9B-A2B` | Image-to-Text | ga | tokens_in 0.300, tokens_out 1.000 | Not recorded | all | · | · | G | O | · | · | O | · | · | · | G | O | · | G |
 | `@cf/nvidia/nemotron-3-120b-a12b` | Text Generation | ga | tokens_in 0.500, tokens_out 1.500 | Not recorded | all | O | G | O | W | O | G | O | · | G | G | G | O | · | O |
 | `@cf/deepgram/nova-3` | Automatic Speech Recognition | partner | audio_minutes 0.0052, audio_minutes_websocket 0.0092 | Not recorded | all | O | W | · | O | · | · | · | · | · | · | O | · | · | O |
 | `@cf/microsoft/phi-2` | Text Generation | deprecated | Not recorded | Not recorded | all | · | · | · | · | · | · | · | · | · | · | · | · | · | · |
 | `@cf/leonardo/phoenix-1.0` | Text-to-Image | partner | tiles 0.005830, steps 0.000110 | Not recorded | all, partner gate | · | · | O | O | O | · | · | · | G | · | · | O | · | G |
 | `@cf/pfnet/plamo-embedding-1b` | Text Embeddings | ga | tokens_in 0.019 | Not recorded | all | O | · | · | O | O | O | O | · | · | · | G | O | · | O |
-| `@cf/qwen/qwen2.5-coder-32b-instruct` | Text Generation | ga | tokens_in 0.660, tokens_out 1.000 | Not recorded | all | G | G | O | G | G | G | G | · | G | G | G | O | · | G |
-| `@cf/qwen/qwen3-30b-a3b-fp8` | Text Generation | ga | tokens_in 0.051, tokens_out 0.335 | 32000 | all | O | G | O | O | O | G | G | · | G | G | O | O | · | O |
+| `@cf/qwen/qwen2.5-coder-32b-instruct` | Text Generation | ga | tokens_in 0.660, tokens_out 1.000 | Not recorded | all | G | G | W | G | G | G | G | · | G | G | G | W | · | G |
+| `@cf/qwen/qwen3-30b-a3b-fp8` | Text Generation | ga | tokens_in 0.051, tokens_out 0.335 | 32000 | all | O | G | O | O | O | G | O | · | G | G | O | O | · | O |
 | `@cf/qwen/qwen3-embedding-0.6b` | Text Embeddings | ga | tokens_in 0.012 | Not recorded | all | O | · | · | O | O | O | O | · | · | · | G | O | · | O |
-| `@cf/qwen/qwen3.8-27b` | Text Generation | ga | tokens_in 0.450, tokens_out 3.200 | 262144 | all | O | G | O | O | O | G | G | · | G | G | G | O | · | O |
+| `@cf/qwen/qwen3.8-27b` | Text Generation | ga | tokens_in 0.450, tokens_out 3.200 | 262144 | all | O | G | O | O | O | G | O | · | G | G | G | O | · | O |
 | `@cf/qwen/qwq-32b` | Text Generation | ga | tokens_in 0.660, tokens_out 1.000 | 24000 | all | O | G | O | O | O | G | O | · | G | G | G | O | · | O |
 | `@cf/microsoft/resnet-50` | Image Classification | ga | images 2.51 | Not recorded | all | · | · | · | O | · | · | O | · | · | · | · | O | G | · |
 | `@cf/pipecat-ai/smart-turn-v2` | Voice Activity Detection | ga | audio_minutes 0.00033795 | Not recorded | all | O | G | · | · | · | · | · | · | · | · | G | · | · | O |
@@ -175,14 +175,14 @@ voice: Read prepared session prompts and conversational replies aloud.
 
 embed: English retrieval and semantic similarity for research and relationship matching.
 
-- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Market intelligence"`; `railMatrix.json "Founder · Validate · Market intelligence"`; `railMatrix.json option ask:transcript`
+- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Market intelligence"`; `railMatrix.json option ask:transcript`
 - Raise: **offered**, `/api/ai/modules on "Founder · Raise · Capital relationships"`
 - Grow: **offered**, `/api/ai/modules on "Founder · Grow · Market expansion"`; `/api/ai/modules on "Founder · Grow · Partner network"`
 - Network: **wired**, `services/vectorize.ts (embed)`
-- Research: **wired**, `railMatrix.json "Advisor · Research · Library"`; `railMatrix.json "Founder · Research · Library"`; `railMatrix.json "Investor · Research · Library"`; `railMatrix.json "Operating Partner · Research · Library"`; and 1 more
+- Research: **wired**, `services/vectorize.ts (embed)`
 - Studio / Eadwyn: **gap**, `#3721`
-- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Exploring members"`; `/api/ai/modules on "Admin · Accounts · Users"`; `/api/ai/modules on "Admin · Accounts"`; `/api/ai/modules on "Admin · Approvals · Best fit"`; and 11 more
-- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Founders"`; `/api/ai/modules on "Advisor · Expertise · Visibility"`; `/api/ai/modules on "Advisor · Practice · Opportunities"`; `/api/ai/modules on "Investor · Axal VC Fund"`; and 8 more
+- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Exploring members"`; `/api/ai/modules on "Admin · Accounts · Users"`; `/api/ai/modules on "Admin · Accounts"`; `/api/ai/modules on "Admin · Approvals · Best fit"`; and 10 more
+- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Founders"`; `/api/ai/modules on "Advisor · Expertise · Visibility"`; `/api/ai/modules on "Advisor · Practice · Opportunities"`; `/api/ai/modules on "Investor · Axal VC Fund"`; and 7 more
 
 ### `@cf/baai/bge-large-en-v1.5`
 
@@ -202,26 +202,26 @@ embed: Detailed English semantic similarity for research and relationship matchi
 embed: Multilingual semantic similarity for research and relationship matching.
 
 - Validate: **offered**, `/api/ai/modules on "Founder · Validate · Market intelligence"`
-- Raise: **wired**, `railMatrix.json "Founder · Raise · Capital relationships"`
-- Grow: **wired**, `railMatrix.json "Founder · Grow · Market expansion"`; `railMatrix.json "Founder · Grow · Partner network"`
-- Network: **wired**, `railMatrix.json "Advisor · Network · Introductions"`; `railMatrix.json "Advisor · Network · Organizations"`; `railMatrix.json "Advisor · Network · Relationships"`; `railMatrix.json "Advisor · Network"`; and 12 more
-- Research: **wired**, `railMatrix.json "Founder · Research · Geographies"`
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Capital relationships"`
+- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Market expansion"`; `/api/ai/modules on "Founder · Grow · Partner network"`; `railMatrix.json option draft:grow/talent`
+- Network: **offered**, `/api/ai/modules on "Advisor · Network · Introductions"`; `/api/ai/modules on "Advisor · Network · Organizations"`; `/api/ai/modules on "Advisor · Network · Relationships"`; `/api/ai/modules on "Advisor · Network"`; and 16 more
+- Research: **offered**, `/api/ai/modules on "Advisor · Research · Ask"`; `/api/ai/modules on "Advisor · Research · Client prep"`; `/api/ai/modules on "Advisor · Research · Companies"`; `/api/ai/modules on "Advisor · Research · Library"`; and 18 more
 - Studio / Eadwyn: **gap**, `#3721`
-- Admin consoles: **wired**, `railMatrix.json "Admin · Accounts · Exploring members"`; `railMatrix.json "Admin · Accounts · Users"`; `railMatrix.json "Admin · Accounts"`; `railMatrix.json "Admin · Approvals · Best fit"`; and 9 more
-- Investor, Advisor and Partner workspaces: **wired**, `railMatrix.json "Advisor · Cohorts · Founders"`; `railMatrix.json "Advisor · Expertise · Visibility"`; `railMatrix.json "Advisor · Practice · Opportunities"`; `railMatrix.json "Investor · Deals · Pipeline"`; and 6 more
+- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Exploring members"`; `/api/ai/modules on "Admin · Accounts · Users"`; `/api/ai/modules on "Admin · Accounts"`; `/api/ai/modules on "Admin · Approvals · Best fit"`; and 10 more
+- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Founders"`; `/api/ai/modules on "Advisor · Expertise · Visibility"`; `/api/ai/modules on "Advisor · Practice · Opportunities"`; `/api/ai/modules on "Investor · Axal VC Fund"`; and 8 more
 
 ### `@cf/baai/bge-reranker-base`
 
 rerank: Rank supplied research passages and relationship matches by relevance.
 
-- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Market intelligence"`; `railMatrix.json "Founder · Validate · Market intelligence"`; `railMatrix.json option ask:transcript`
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Capital relationships"`; `railMatrix.json "Founder · Raise · Capital relationships"`
-- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Partner network"`; `railMatrix.json "Founder · Grow · Partner network"`; `railMatrix.json option draft:grow/talent`
-- Network: **offered**, `/api/ai/modules on "Advisor · Network · Introductions"`; `/api/ai/modules on "Advisor · Network · Organizations"`; `/api/ai/modules on "Advisor · Network · Relationships"`; `/api/ai/modules on "Advisor · Network"`; and 32 more
-- Research: **offered**, `/api/ai/modules on "Advisor · Research · Ask"`; `/api/ai/modules on "Advisor · Research · Client prep"`; `/api/ai/modules on "Advisor · Research · Companies"`; `/api/ai/modules on "Advisor · Research · Library"`; and 48 more
+- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Market intelligence"`; `railMatrix.json option ask:transcript`
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Capital relationships"`
+- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Partner network"`; `railMatrix.json option draft:grow/talent`
+- Network: **offered**, `/api/ai/modules on "Advisor · Network · Introductions"`; `/api/ai/modules on "Advisor · Network · Organizations"`; `/api/ai/modules on "Advisor · Network · Relationships"`; `/api/ai/modules on "Advisor · Network"`; and 16 more
+- Research: **offered**, `/api/ai/modules on "Advisor · Research · Ask"`; `/api/ai/modules on "Advisor · Research · Client prep"`; `/api/ai/modules on "Advisor · Research · Companies"`; `/api/ai/modules on "Advisor · Research · Library"`; and 31 more
 - Studio / Eadwyn: **wired**, `services/advisor/rerank.ts (rerank)`
-- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Exploring members"`; `/api/ai/modules on "Admin · Accounts · Users"`; `/api/ai/modules on "Admin · Accounts"`; `/api/ai/modules on "Admin · Approvals · Best fit"`; and 24 more
-- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Founders"`; `/api/ai/modules on "Advisor · Expertise · Visibility"`; `/api/ai/modules on "Advisor · Practice · Opportunities"`; `/api/ai/modules on "Investor · Axal VC Fund"`; and 19 more
+- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Exploring members"`; `/api/ai/modules on "Admin · Accounts · Users"`; `/api/ai/modules on "Admin · Accounts"`; `/api/ai/modules on "Admin · Approvals · Best fit"`; and 10 more
+- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Founders"`; `/api/ai/modules on "Advisor · Expertise · Visibility"`; `/api/ai/modules on "Advisor · Practice · Opportunities"`; `/api/ai/modules on "Investor · Axal VC Fund"`; and 8 more
 
 ### `@cf/baai/bge-small-en-v1.5`
 
@@ -325,35 +325,35 @@ chat: Compare evidence, work through scenarios and explain planning assumptions.
 
 chat: Compare evidence, work through scenarios and explain planning assumptions.
 
-- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Demand and urgency signals"`; `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Verdict"`
+- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Demand and urgency signals"`; `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Ideal customer profile"`; `/api/ai/modules on "Founder · Validate · Market intelligence"`; and 9 more
 - Record a Session: **offered**, `services/conversationItems.ts (extract_conversation_items)`; `services/interviewStructuring.ts (structure_interview)`; `services/interviewStructuring.ts (summarise_interview)`
-- Build: **offered**, `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; `/api/ai/modules on "Founder · Build · Solution design"`; and 1 more
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Cap table"`; `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise · Use of funds"`; `/api/ai/modules on "Founder · Raise"`
-- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Revenue and traction"`; `/api/ai/modules on "Founder · Grow · Team expansion"`; `/api/ai/modules on "Founder · Grow"`
+- Build: **offered**, `/api/ai/modules on "Founder · Build · Company creation"`; `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; and 3 more
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Cap table"`; `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise · Use of funds"`; `/api/ai/modules on "Founder · Raise"`; and 2 more
+- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Durable company-building"`; `/api/ai/modules on "Founder · Grow · Product improvement"`; `/api/ai/modules on "Founder · Grow · Revenue and traction"`; `/api/ai/modules on "Founder · Grow · Team expansion"`; and 3 more
 - Network: **gap**, `#3721`
-- Research: **offered**, `/api/ai/modules on "Investor · Research · Benchmarking"`
+- Research: **offered**, `/api/ai/modules on "Advisor · Research · Ask"`; `/api/ai/modules on "Advisor · Research · Client prep"`; `/api/ai/modules on "Advisor · Research · Companies"`; `/api/ai/modules on "Advisor · Research · Library"`; and 39 more
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **gap**, `#3721`
-- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 19 more
-- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Calendar"`; `/api/ai/modules on "Advisor · Cohorts · This week"`; `/api/ai/modules on "Advisor · Practice · Delivery"`; `/api/ai/modules on "Advisor · Practice · Earnings"`; and 17 more
+- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 61 more
+- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Calendar"`; `/api/ai/modules on "Advisor · Cohorts · Outcomes"`; `/api/ai/modules on "Advisor · Cohorts · This week"`; `/api/ai/modules on "Advisor · Cohorts"`; and 38 more
 
 ### `@cf/deepseek-ai/deepseek-v4-pro-0813`
 
 chat: Compare evidence, work through scenarios and explain planning assumptions.
 
-- Validate: **wired**, `railMatrix.json "Founder · Validate · Demand and urgency signals"`
+- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Demand and urgency signals"`; `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Verdict"`; `DK8 on "Founder · Validate · Experiments and evidence"`; and 3 more
 - Record a Session: **gap**, `#3721`
-- Build: **wired**, `railMatrix.json "Founder · Build · Company creation"`
-- Raise: **wired**, `railMatrix.json "Founder · Raise · Cap table"`; `railMatrix.json "Founder · Raise · Use of funds"`
-- Grow: **wired**, `railMatrix.json "Founder · Grow · Durable company-building"`; `railMatrix.json "Founder · Grow · Revenue and traction"`
+- Build: **offered**, `/api/ai/modules on "Founder · Build · Company creation"`; `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; and 4 more
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Cap table"`; `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise · Use of funds"`; `/api/ai/modules on "Founder · Raise"`; and 18 more
+- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Durable company-building"`; `/api/ai/modules on "Founder · Grow · Revenue and traction"`; `/api/ai/modules on "Founder · Grow · Team expansion"`; `/api/ai/modules on "Founder · Grow"`; and 2 more
 - Network: **gap**, `#3721`
-- Research: **wired**, `railMatrix.json "Investor · Research · Benchmarking"`
+- Research: **offered**, `/api/ai/modules on "Investor · Research · Benchmarking"`; `RA8 on "Investor · Research · Benchmarking"`; `railMatrix.json option draft:thin-evidence`
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **gap**, `#3721`
-- Admin consoles: **wired**, `railMatrix.json "Admin · Contracts · Agreements"`; `railMatrix.json "Admin · Contracts · Forms"`; `railMatrix.json "Admin · Contracts · NDAs"`; `railMatrix.json "Admin · Contracts · Partner deals"`; and 22 more
-- Investor, Advisor and Partner workspaces: **wired**, `railMatrix.json "Advisor · Practice · Earnings"`; `railMatrix.json "Investor · Deals · Closing"`; `railMatrix.json "Investor · Fund · Capital calls"`; `railMatrix.json "Investor · Fund · Distributions"`; and 8 more
+- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 65 more
+- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Calendar"`; `/api/ai/modules on "Advisor · Cohorts · This week"`; `/api/ai/modules on "Advisor · Practice · Delivery"`; `/api/ai/modules on "Advisor · Practice · Earnings"`; and 42 more
 
 ### `@cf/deepseek-ai/deepseek-v4.1-flash-1017`
 
@@ -387,11 +387,11 @@ sentiment: English positive and negative sentiment cues in customer and session 
 
 stream: Live conversational transcription in recorded sessions.
 
-- Validate: **offered**, `railMatrix.json "Founder · Validate · Customer research"`
+- Validate: **gap**, `#3721`
 - Record a Session: **offered**, `services/sttModels.ts (STT_MODELS), live`
 - Raise: **offered**, `railMatrix.json option transcribe:rehearsal-live`
 - Studio / Eadwyn: **gap**, `#3721`
-- Investor, Advisor and Partner workspaces: **offered**, `railMatrix.json "Advisor · Practice · Sessions"`
+- Investor, Advisor and Partner workspaces: **gap**, `#3721`
 
 ### `@cf/black-forest-labs/flux-1-schnell`
 
@@ -444,14 +444,14 @@ chat: Read pitch-deck images, explain screenshots and extract visual evidence.
 - Validate: **gap**, `#3721`
 - Record a Session: **gap**, `#3721`
 - Build: **gap**, `#3721`
-- Raise: **wired**, `railMatrix.json "Founder · Raise · Data room"`; `railMatrix.json "Founder · Raise · Pitch deck"`
+- Raise: **wired**, `BU6 on "Founder · Raise · Data room"`; `BU6 on "Founder · Raise · Pitch deck"`
 - Grow: **gap**, `#3721`
 - Network: **gap**, `#3721`
-- Research: **wired**, `railMatrix.json "Investor · Research · Diligence"`
+- Research: **wired**, `BU6 on "Investor · Research · Diligence"`
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **gap**, `#3721`
-- Admin consoles: **wired**, `railMatrix.json "Admin · Approvals · Due diligence"`; `railMatrix.json "Admin · Approvals · Entity profiles"`; `railMatrix.json "Admin · Approvals · Identity checks"`
+- Admin consoles: **wired**, `BU6 on "Admin · Approvals · Due diligence"`; `BU6 on "Admin · Approvals · Entity profiles"`; `BU6 on "Admin · Approvals · Identity checks"`
 - Investor, Advisor and Partner workspaces: **gap**, `#3721`
 
 ### `@cf/aisingapore/gemma-sea-lion-v4-27b-it`
@@ -462,13 +462,13 @@ chat: Southeast Asian language conversations and regional market copy.
 - Record a Session: **gap**, `#3721`
 - Build: **gap**, `#3721`
 - Raise: **offered**, `/api/ai/modules on "Founder · Raise · Investor narrative"`
-- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`; `/api/ai/modules on "Founder · Grow · Market expansion"`
+- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`; `/api/ai/modules on "Founder · Grow · Market expansion"`; `RE6 on "Founder · Grow · Market expansion"`
 - Network: **gap**, `#3721`
-- Research: **offered**, `/api/ai/modules on "Founder · Research · Geographies"`
+- Research: **offered**, `/api/ai/modules on "Founder · Research · Geographies"`; `RE6 on "Founder · Research · Geographies"`
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
-- Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`
-- Admin consoles: **offered**, `/api/ai/modules on "Admin · Approvals · Communities"`; `/api/ai/modules on "Admin · Approvals · Jobs"`; `/api/ai/modules on "Admin · Community · Communities"`; `/api/ai/modules on "Admin · Community · Jobs"`; and 11 more
+- Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`; and 4 more
+- Admin consoles: **offered**, `/api/ai/modules on "Admin · Approvals · Communities"`; `/api/ai/modules on "Admin · Approvals · Jobs"`; `/api/ai/modules on "Admin · Community · Communities"`; `/api/ai/modules on "Admin · Community · Jobs"`; and 12 more
 - Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Guidance"`; `/api/ai/modules on "Advisor · Expertise · Profile"`; `/api/ai/modules on "Advisor · Expertise · Services"`; `/api/ai/modules on "Advisor · Expertise · Thinking"`; and 8 more
 
 ### `@cf/zai-org/glm-4.7-flash`
@@ -477,16 +477,16 @@ chat: Interactive explanations, evidence summaries and planning drafts.
 
 - Validate: **offered**, `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Ideal customer profile"`; `/api/ai/modules on "Founder · Validate · Problem discovery"`; `/api/ai/modules on "Founder · Validate · Verdict"`; and 7 more
 - Record a Session: **gap**, `#3721`
-- Build: **wired**, `railMatrix.json "Founder · Build · Founding team"`; `railMatrix.json "Founder · Build · Operating systems"`; `railMatrix.json "Founder · Build · Product roadmap"`; `railMatrix.json "Founder · Build · Solution design"`; and 1 more
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise · Investor narrative"`; `/api/ai/modules on "Founder · Raise"`; `railMatrix.json "Founder · Raise · Investor narrative"`; and 19 more
-- Grow: **wired**, `railMatrix.json "Founder · Grow · Team expansion"`; `railMatrix.json "Founder · Grow"`
-- Network: **offered**, `railMatrix.json option draft:network/intro-email`; `railMatrix.json option draft:network/re-engagement`; `railMatrix.json option draft:single-contact-exposure`
-- Research: **offered**, `railMatrix.json option draft:checkpoint-brief`; `railMatrix.json option draft:index-gaps`; `railMatrix.json option draft:session-brief`
+- Build: **wired**, `BU2 on "Founder · Build · Founding team"`; `BU2 on "Founder · Build · Operating systems"`; `BU2 on "Founder · Build · Product roadmap"`; `BU2 on "Founder · Build · Solution design"`; and 1 more
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Capital relationships"`; `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise · Investor narrative"`; `/api/ai/modules on "Founder · Raise"`; and 21 more
+- Grow: **wired**, `BU2 on "Founder · Grow · Team expansion"`; `BU2 on "Founder · Grow"`
+- Network: **offered**, `/api/ai/modules on "Advisor · Network · Introductions"`; `/api/ai/modules on "Advisor · Network · Organizations"`; `/api/ai/modules on "Advisor · Network · Relationships"`; `/api/ai/modules on "Advisor · Network"`; and 31 more
+- Research: **offered**, `/api/ai/modules on "Founder · Research · Geographies"`; `RE6 on "Founder · Research · Geographies"`; `railMatrix.json option draft:checkpoint-brief`; `railMatrix.json option draft:index-gaps`; and 1 more
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
-- Studio / Eadwyn: **wired**, `railMatrix.json "Advisor · Home"`; `railMatrix.json "Founder · Studio"`; `railMatrix.json "Investor · Home"`; `railMatrix.json "Operating Partner · Home"`; and 1 more
-- Admin consoles: **wired**, `railMatrix.json "Admin · Accounts · Trash"`; `railMatrix.json "Admin · Approvals · Advisor cohort access"`; `railMatrix.json "Admin · Approvals · Events"`; `railMatrix.json "Admin · Community · Events"`; and 6 more
-- Investor, Advisor and Partner workspaces: **wired**, `railMatrix.json "Advisor · Cohorts · Calendar"`; `railMatrix.json "Advisor · Cohorts · This week"`; `railMatrix.json "Advisor · Practice · Delivery"`; `railMatrix.json "Advisor · Practice · Engagements"`; and 4 more
+- Studio / Eadwyn: **wired**, `ST1 on "Advisor · Home"`; `ST1 on "Founder · Studio"`; `ST1 on "Investor · Home"`; `ST1 on "Operating Partner · Home"`; and 1 more
+- Admin consoles: **wired**, `BU2 on "Admin · Accounts · Trash"`; `BU2 on "Admin · Approvals · Advisor cohort access"`; `BU2 on "Admin · Approvals · Events"`; `BU2 on "Admin · Community · Events"`; and 6 more
+- Investor, Advisor and Partner workspaces: **wired**, `BU2 on "Advisor · Cohorts · Calendar"`; `BU2 on "Advisor · Cohorts · This week"`; `BU2 on "Advisor · Practice · Delivery"`; `BU2 on "Advisor · Practice · Engagements"`; and 4 more
 
 ### `@cf/zai-org/glm-5.2`
 
@@ -499,7 +499,7 @@ chat: Prototype code, technical plans and multi-step problem solving.
 
 - Validate: **offered**, `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Verdict"`
 - Record a Session: **gap**, `#3721`
-- Build: **offered**, `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; `/api/ai/modules on "Founder · Build · Prototype / MVP"`; and 2 more
+- Build: **offered**, `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; `/api/ai/modules on "Founder · Build · Prototype / MVP"`; and 3 more
 - Raise: **offered**, `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise"`
 - Grow: **offered**, `/api/ai/modules on "Founder · Grow · Team expansion"`; `/api/ai/modules on "Founder · Grow"`
 - Network: **gap**, `#3721`
@@ -507,59 +507,59 @@ chat: Prototype code, technical plans and multi-step problem solving.
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **gap**, `#3721`
-- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 13 more
+- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 17 more
 - Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Calendar"`; `/api/ai/modules on "Advisor · Cohorts · This week"`; `/api/ai/modules on "Advisor · Practice · Delivery"`; `/api/ai/modules on "Advisor · Practice · Engagements"`; and 7 more
 
 ### `@cf/zai-org/glm-5.3-flash`
 
 chat: Prototype code, technical plans and multi-step problem solving.
 
-- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Verdict"`
+- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Verdict"`; `DK8 on "Founder · Validate · Experiments and evidence"`; `DK8 on "Founder · Validate · Verdict"`
 - Record a Session: **gap**, `#3721`
-- Build: **offered**, `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; `/api/ai/modules on "Founder · Build · Prototype / MVP"`; and 2 more
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise"`
+- Build: **offered**, `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; `/api/ai/modules on "Founder · Build · Prototype / MVP"`; and 3 more
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Data room"`; `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise · Pitch deck"`; `/api/ai/modules on "Founder · Raise"`; and 4 more
 - Grow: **offered**, `/api/ai/modules on "Founder · Grow · Team expansion"`; `/api/ai/modules on "Founder · Grow"`
 - Network: **gap**, `#3721`
-- Research: **gap**, `#3721`
+- Research: **offered**, `/api/ai/modules on "Investor · Research · Diligence"`; `BU6 on "Investor · Research · Diligence"`
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **gap**, `#3721`
-- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 13 more
-- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Calendar"`; `/api/ai/modules on "Advisor · Cohorts · This week"`; `/api/ai/modules on "Advisor · Practice · Delivery"`; `/api/ai/modules on "Advisor · Practice · Engagements"`; and 7 more
+- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Due diligence"`; `/api/ai/modules on "Admin · Approvals · Entity profiles"`; and 27 more
+- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Calendar"`; `/api/ai/modules on "Advisor · Cohorts · This week"`; `/api/ai/modules on "Advisor · Practice · Delivery"`; `/api/ai/modules on "Advisor · Practice · Engagements"`; and 10 more
 
 ### `@cf/openai/gpt-oss-120b`
 
 chat: Research synthesis, evidence comparison and detailed planning.
 
-- Validate: **wired**, `railMatrix.json "Founder · Validate · Experiments and evidence"`; `railMatrix.json "Founder · Validate · Verdict"`
+- Validate: **wired**, `DK8 on "Founder · Validate · Experiments and evidence"`; `DK8 on "Founder · Validate · Verdict"`; `RA8 on "Founder · Validate · Demand and urgency signals"`; `VA13 on "Founder · Validate · Market intelligence"`
 - Record a Session: **gap**, `#3721`
-- Build: **offered**, `/api/ai/modules on "Founder · Build · Company creation"`; `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; and 12 more
-- Raise: **wired**, `railMatrix.json "Founder · Raise · Fundraising readiness"`; `railMatrix.json "Founder · Raise"`; `routes/deck_derive.ts (memo_write)`
-- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Durable company-building"`; `/api/ai/modules on "Founder · Grow · Product improvement"`; `/api/ai/modules on "Founder · Grow · Revenue and traction"`; `/api/ai/modules on "Founder · Grow · Team expansion"`; and 7 more
+- Build: **wired**, `BU8 on "Founder · Build · Company creation"`
+- Raise: **wired**, `DK8 on "Founder · Raise · Fundraising readiness"`; `DK8 on "Founder · Raise"`; `RA8 on "Founder · Raise · Cap table"`; `RA8 on "Founder · Raise · Use of funds"`; and 1 more
+- Grow: **wired**, `BU8 on "Founder · Grow · Durable company-building"`; `RA8 on "Founder · Grow · Revenue and traction"`
 - Network: **offered**, `railMatrix.json option draft:single-contact-exposure`
-- Research: **offered**, `/api/ai/modules on "Advisor · Research · Ask"`; `/api/ai/modules on "Advisor · Research · Client prep"`; `/api/ai/modules on "Advisor · Research · Companies"`; `/api/ai/modules on "Advisor · Research · Markets"`; and 50 more
+- Research: **wired**, `RA8 on "Investor · Research · Benchmarking"`; `RE1 on "Advisor · Research · Library"`; `RE1 on "Founder · Research · Library"`; `RE1 on "Investor · Research · Library"`; and 18 more
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`; and 10 more
-- Admin consoles: **wired**, `railMatrix.json "Admin · Approvals · LP applications"`; `railMatrix.json "Admin · Approvals · Spin-Out applications"`; `railMatrix.json "Admin · Approvals · Spin-Out moderation"`; `railMatrix.json "Admin · Approvals"`
-- Investor, Advisor and Partner workspaces: **wired**, `railMatrix.json "Investor · Deals · Commit"`; `railMatrix.json "Investor · Deals · Screening"`; `railMatrix.json "Investor · Deals"`
+- Admin consoles: **wired**, `BU8 on "Admin · Contracts · Agreements"`; `BU8 on "Admin · Contracts · Forms"`; `BU8 on "Admin · Contracts · NDAs"`; `BU8 on "Admin · Contracts · Partner deals"`; and 27 more
+- Investor, Advisor and Partner workspaces: **wired**, `BU8 on "Investor · Deals · Closing"`; `BU8 on "Operating Partner · Pipeline · Negotiations"`; `DK8 on "Investor · Deals · Commit"`; `DK8 on "Investor · Deals · Screening"`; and 12 more
 
 ### `@cf/openai/gpt-oss-20b`
 
 chat: Interactive explanations, evidence summaries and planning drafts.
 
-- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Verdict"`
+- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Verdict"`; `DK8 on "Founder · Validate · Experiments and evidence"`; `DK8 on "Founder · Validate · Verdict"`
 - Record a Session: **gap**, `#3721`
-- Build: **offered**, `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; `/api/ai/modules on "Founder · Build · Solution design"`; and 8 more
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise"`
-- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Team expansion"`; `/api/ai/modules on "Founder · Grow"`; `railMatrix.json "Founder · Grow · Team expansion"`; `railMatrix.json "Founder · Grow"`
+- Build: **offered**, `/api/ai/modules on "Founder · Build · Company creation"`; `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; and 10 more
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise"`; `DK8 on "Founder · Raise · Fundraising readiness"`; `DK8 on "Founder · Raise"`
+- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Durable company-building"`; `/api/ai/modules on "Founder · Grow · Team expansion"`; `/api/ai/modules on "Founder · Grow"`; `BU2 on "Founder · Grow · Team expansion"`; and 2 more
 - Network: **gap**, `#3721`
 - Research: **gap**, `#3721`
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
-- Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`; and 3 more
-- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 19 more
-- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Calendar"`; `/api/ai/modules on "Advisor · Cohorts · This week"`; `/api/ai/modules on "Advisor · Practice · Delivery"`; `/api/ai/modules on "Advisor · Practice · Engagements"`; and 17 more
+- Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`; and 7 more
+- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 56 more
+- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Calendar"`; `/api/ai/modules on "Advisor · Cohorts · This week"`; `/api/ai/modules on "Advisor · Practice · Delivery"`; `/api/ai/modules on "Advisor · Practice · Engagements"`; and 24 more
 
 ### `@cf/ibm-granite/granite-4.0-h-micro`
 
@@ -568,15 +568,15 @@ chat: Short summaries, labels and lightweight record explanations.
 - Validate: **offered**, `/api/ai/modules on "Founder · Validate · Demand and urgency signals"`; `/api/ai/modules on "Founder · Validate · Ideal customer profile"`; `/api/ai/modules on "Founder · Validate · Problem discovery"`; `/api/ai/modules on "Founder · Validate"`; and 1 more
 - Record a Session: **gap**, `#3721`
 - Build: **offered**, `railMatrix.json option draft:build/kpi`
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Cap table"`; `/api/ai/modules on "Founder · Raise · Use of funds"`; `railMatrix.json "Founder · Raise · Cap table"`; `railMatrix.json "Founder · Raise · Use of funds"`; and 3 more
-- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Product improvement"`; `/api/ai/modules on "Founder · Grow · Revenue and traction"`; `railMatrix.json "Founder · Grow · Revenue and traction"`
-- Network: **gap**, `#3721`
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Cap table"`; `/api/ai/modules on "Founder · Raise · Capital relationships"`; `/api/ai/modules on "Founder · Raise · Investor narrative"`; `/api/ai/modules on "Founder · Raise · Use of funds"`; and 7 more
+- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`; `/api/ai/modules on "Founder · Grow · Market expansion"`; `/api/ai/modules on "Founder · Grow · Partner network"`; `/api/ai/modules on "Founder · Grow · Product improvement"`; and 5 more
+- Network: **offered**, `/api/ai/modules on "Advisor · Network · Introductions"`; `/api/ai/modules on "Advisor · Network · Organizations"`; `/api/ai/modules on "Advisor · Network · Relationships"`; `/api/ai/modules on "Advisor · Network"`; and 28 more
 - Research: **wired**, `services/market_intel/extractors/index.ts (paraphrase)`
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`
-- Admin consoles: **offered**, `/api/ai/modules on "Admin · Home"`; `/api/ai/modules on "Admin · Insights"`; `/api/ai/modules on "Admin · Programs · Assessment runs"`; `/api/ai/modules on "Admin · Programs · Profiling trends"`; and 19 more
-- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Outcomes"`; `/api/ai/modules on "Advisor · Cohorts"`; `/api/ai/modules on "Advisor · Expertise · Proof"`; `/api/ai/modules on "Advisor · Practice · Earnings"`; and 27 more
+- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Exploring members"`; `/api/ai/modules on "Admin · Accounts · Users"`; `/api/ai/modules on "Admin · Accounts"`; `/api/ai/modules on "Admin · Approvals · Best fit"`; and 73 more
+- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Founders"`; `/api/ai/modules on "Advisor · Cohorts · Guidance"`; `/api/ai/modules on "Advisor · Cohorts · Outcomes"`; `/api/ai/modules on "Advisor · Cohorts"`; and 71 more
 
 ### `@cf/ai4bharat/indictrans2-en-indic-1B`
 
@@ -595,18 +595,18 @@ translate: Translate session excerpts and market-expansion material from English
 
 chat: Long-document research and cross-source synthesis.
 
-- Validate: **wired**, `railMatrix.json "Founder · Validate · Market intelligence"`
+- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Ideal customer profile"`; `/api/ai/modules on "Founder · Validate · Market intelligence"`; `/api/ai/modules on "Founder · Validate · Problem discovery"`; and 9 more
 - Record a Session: **gap**, `#3721`
 - Build: **gap**, `#3721`
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise"`
-- Grow: **gap**, `#3721`
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Data room"`; `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise · Pitch deck"`; `/api/ai/modules on "Founder · Raise"`; and 4 more
+- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Product improvement"`; `ST2 on "Founder · Grow · Product improvement"`
 - Network: **gap**, `#3721`
-- Research: **wired**, `railMatrix.json "Advisor · Research · Ask"`; `railMatrix.json "Advisor · Research · Client prep"`; `railMatrix.json "Advisor · Research · Companies"`; `railMatrix.json "Advisor · Research · Markets"`; and 13 more
+- Research: **offered**, `/api/ai/modules on "Advisor · Research · Ask"`; `/api/ai/modules on "Advisor · Research · Client prep"`; `/api/ai/modules on "Advisor · Research · Companies"`; `/api/ai/modules on "Advisor · Research · Library"`; and 58 more
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
-- Studio / Eadwyn: **gap**, `#3721`
-- Admin consoles: **wired**, `railMatrix.json "Super Admin · Funds"`
-- Investor, Advisor and Partner workspaces: **wired**, `railMatrix.json "Investor · Axal VC Fund"`
+- Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`; and 4 more
+- Admin consoles: **offered**, `/api/ai/modules on "Admin · Approvals · Due diligence"`; `/api/ai/modules on "Admin · Approvals · Entity profiles"`; `/api/ai/modules on "Admin · Approvals · Identity checks"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 18 more
+- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Outcomes"`; `/api/ai/modules on "Advisor · Cohorts"`; `/api/ai/modules on "Advisor · Expertise · Proof"`; `/api/ai/modules on "Investor · Axal VC Fund"`; and 16 more
 
 ### `@cf/moonshotai/kimi-k2.7-code`
 
@@ -614,7 +614,7 @@ chat: Prototype code, implementation drafts and technical review.
 
 - Validate: **gap**, `#3721`
 - Record a Session: **gap**, `#3721`
-- Build: **wired**, `railMatrix.json "Founder · Build · Prototype / MVP"`
+- Build: **offered**, `/api/ai/modules on "Founder · Build · Prototype / MVP"`; `BU5 on "Founder · Build · Prototype / MVP"`
 - Raise: **gap**, `#3721`
 - Grow: **gap**, `#3721`
 - Network: **gap**, `#3721`
@@ -622,7 +622,7 @@ chat: Prototype code, implementation drafts and technical review.
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **gap**, `#3721`
-- Admin consoles: **wired**, `railMatrix.json "Super Admin · Platform · GitHub sync"`; `railMatrix.json "Super Admin · Platform · Integration keys"`; `railMatrix.json "Super Admin · Platform · Monitoring"`; `railMatrix.json "Super Admin · Platform"`
+- Admin consoles: **offered**, `/api/ai/modules on "Super Admin · Platform · GitHub sync"`; `/api/ai/modules on "Super Admin · Platform · Integration keys"`; `/api/ai/modules on "Super Admin · Platform · Monitoring"`; `/api/ai/modules on "Super Admin · Platform"`; and 4 more
 - Investor, Advisor and Partner workspaces: **gap**, `#3721`
 
 ### `@cf/meta/llama-3.1-70b-instruct-fp8-fast`
@@ -637,9 +637,9 @@ chat: Short summaries, labels and lightweight record explanations.
 - Validate: **wired**, `services/fills/citations.ts (research_ask)`; `services/fills/registry.ts (competitor_scan)`; `services/fills/registry.ts (market_sizing_inputs)`; `services/fills/registry.ts (validate_draft_hypotheses)`; and 1 more
 - Record a Session: **wired**, `services/conversationItems.ts (extract_conversation_items)`; `services/interviewStructuring.ts (structure_interview)`; `services/interviewStructuring.ts (summarise_interview)`
 - Build: **gap**, `#3721`
-- Raise: **gap**, `#3721`
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Capital relationships"`; `/api/ai/modules on "Founder · Raise · Investor narrative"`; `EM1 on "Founder · Raise · Investor narrative"`; `NE1 on "Founder · Raise · Capital relationships"`
 - Grow: **wired**, `routes/brand.ts (brand_autofill)`; `routes/brand.ts (brand_palette)`; `routes/brand.ts (brand_taglines)`; `services/fills/registry.ts (grow_theme_feedback)`
-- Network: **gap**, `#3721`
+- Network: **offered**, `/api/ai/modules on "Advisor · Network · Introductions"`; `/api/ai/modules on "Advisor · Network · Organizations"`; `/api/ai/modules on "Advisor · Network · Relationships"`; `/api/ai/modules on "Advisor · Network"`; and 28 more
 - Research: **wired**, `routes/research.ts (research_ask)`; `routes/research.ts (workspace_explain)`; `services/market_intel/extractors/index.ts (paraphrase)`
 - Articles: **gap**, `#3721`
 - Email: **wired**, `services/mail/drafts.ts (mail_draft)`
@@ -651,18 +651,18 @@ chat: Short summaries, labels and lightweight record explanations.
 
 chat: Short summaries, labels and lightweight record explanations.
 
-- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Ideal customer profile"`; `/api/ai/modules on "Founder · Validate · Problem discovery"`; `/api/ai/modules on "Founder · Validate"`
+- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Ideal customer profile"`; `/api/ai/modules on "Founder · Validate · Problem discovery"`; `/api/ai/modules on "Founder · Validate"`; `ST2 on "Founder · Validate · Ideal customer profile"`; and 2 more
 - Record a Session: **offered**, `services/conversationItems.ts (extract_conversation_items)`; `services/interviewStructuring.ts (structure_interview)`; `services/interviewStructuring.ts (summarise_interview)`
 - Build: **gap**, `#3721`
 - Raise: **gap**, `#3721`
-- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Product improvement"`
+- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Product improvement"`; `ST2 on "Founder · Grow · Product improvement"`
 - Network: **gap**, `#3721`
 - Research: **gap**, `#3721`
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`
-- Admin consoles: **offered**, `/api/ai/modules on "Admin · Home"`; `/api/ai/modules on "Admin · Programs · Assessment runs"`; `/api/ai/modules on "Super Admin · Content · Personas"`
-- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Outcomes"`; `/api/ai/modules on "Advisor · Cohorts"`; `/api/ai/modules on "Advisor · Expertise · Proof"`; `/api/ai/modules on "Investor · Portfolio · Updates"`; and 2 more
+- Admin consoles: **offered**, `/api/ai/modules on "Admin · Home"`; `/api/ai/modules on "Admin · Programs · Assessment runs"`; `/api/ai/modules on "Super Admin · Content · Personas"`; `ST2 on "Admin · Programs · Assessment runs"`; and 1 more
+- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Outcomes"`; `/api/ai/modules on "Advisor · Cohorts"`; `/api/ai/modules on "Advisor · Expertise · Proof"`; `/api/ai/modules on "Investor · Portfolio · Updates"`; and 8 more
 
 ### `@cf/meta/llama-3.2-11b-vision-instruct`
 
@@ -688,49 +688,49 @@ chat: Short summaries, labels and lightweight record explanations.
 - Validate: **offered**, `/api/ai/modules on "Founder · Validate · Ideal customer profile"`; `/api/ai/modules on "Founder · Validate · Problem discovery"`; `/api/ai/modules on "Founder · Validate"`
 - Record a Session: **gap**, `#3721`
 - Build: **gap**, `#3721`
-- Raise: **gap**, `#3721`
-- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Product improvement"`
-- Network: **gap**, `#3721`
-- Research: **gap**, `#3721`
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Capital relationships"`; `/api/ai/modules on "Founder · Raise · Investor narrative"`; `EM1 on "Founder · Raise · Investor narrative"`; `NE1 on "Founder · Raise · Capital relationships"`
+- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`; `/api/ai/modules on "Founder · Grow · Market expansion"`; `/api/ai/modules on "Founder · Grow · Partner network"`; `/api/ai/modules on "Founder · Grow · Product improvement"`; and 3 more
+- Network: **offered**, `/api/ai/modules on "Advisor · Network · Introductions"`; `/api/ai/modules on "Advisor · Network · Organizations"`; `/api/ai/modules on "Advisor · Network · Relationships"`; `/api/ai/modules on "Advisor · Network"`; and 28 more
+- Research: **offered**, `/api/ai/modules on "Founder · Research · Geographies"`; `RE6 on "Founder · Research · Geographies"`
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`
-- Admin consoles: **offered**, `/api/ai/modules on "Admin · Home"`; `/api/ai/modules on "Admin · Programs · Assessment runs"`; `/api/ai/modules on "Super Admin · Content · Personas"`
-- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Outcomes"`; `/api/ai/modules on "Advisor · Cohorts"`; `/api/ai/modules on "Advisor · Expertise · Proof"`; `/api/ai/modules on "Investor · Portfolio · Updates"`; and 2 more
+- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Exploring members"`; `/api/ai/modules on "Admin · Accounts · Users"`; `/api/ai/modules on "Admin · Accounts"`; `/api/ai/modules on "Admin · Approvals · Best fit"`; and 53 more
+- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Founders"`; `/api/ai/modules on "Advisor · Cohorts · Guidance"`; `/api/ai/modules on "Advisor · Cohorts · Outcomes"`; `/api/ai/modules on "Advisor · Cohorts"`; and 46 more
 
 ### `@cf/meta/llama-3.2-3b-instruct`
 
 chat: Short summaries, labels and lightweight record explanations.
 
-- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Ideal customer profile"`; `/api/ai/modules on "Founder · Validate · Problem discovery"`; `/api/ai/modules on "Founder · Validate"`; `services/fills/registry.ts (validate_tag_pains)`
+- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Ideal customer profile"`; `/api/ai/modules on "Founder · Validate · Problem discovery"`; `/api/ai/modules on "Founder · Validate"`; `ST2 on "Founder · Validate · Ideal customer profile"`; and 3 more
 - Record a Session: **gap**, `#3721`
 - Build: **gap**, `#3721`
-- Raise: **gap**, `#3721`
-- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Product improvement"`; `services/fills/registry.ts (grow_theme_feedback)`
-- Network: **gap**, `#3721`
-- Research: **offered**, `routes/research.ts (workspace_explain)`
+- Raise: **wired**, `NE1 on "Founder · Raise · Capital relationships"`
+- Grow: **wired**, `NE1 on "Founder · Grow · Partner network"`
+- Network: **wired**, `NE1 on "Advisor · Network · Introductions"`; `NE1 on "Advisor · Network · Organizations"`; `NE1 on "Advisor · Network · Relationships"`; `NE1 on "Advisor · Network"`; and 12 more
+- Research: **offered**, `/api/ai/modules on "Founder · Research · Geographies"`; `RE6 on "Founder · Research · Geographies"`; `routes/research.ts (workspace_explain)`
 - Articles: **gap**, `#3721`
 - Email: **offered**, `services/mail/drafts.ts (mail_draft)`
-- Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`; and 1 more
-- Admin consoles: **offered**, `/api/ai/modules on "Admin · Home"`; `/api/ai/modules on "Admin · Programs · Assessment runs"`; `/api/ai/modules on "Super Admin · Content · Personas"`
-- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Outcomes"`; `/api/ai/modules on "Advisor · Cohorts"`; `/api/ai/modules on "Advisor · Expertise · Proof"`; `/api/ai/modules on "Investor · Portfolio · Updates"`; and 3 more
+- Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`; and 5 more
+- Admin consoles: **wired**, `NE1 on "Admin · Accounts · Exploring members"`; `NE1 on "Admin · Accounts · Users"`; `NE1 on "Admin · Accounts"`; `NE1 on "Admin · Approvals · Best fit"`; and 9 more
+- Investor, Advisor and Partner workspaces: **wired**, `NE1 on "Advisor · Cohorts · Founders"`; `NE1 on "Advisor · Expertise · Visibility"`; `NE1 on "Advisor · Practice · Opportunities"`; `NE1 on "Investor · Deals · Pipeline"`; and 6 more
 
 ### `@cf/meta/llama-3.3-70b-instruct-fp8-fast`
 
 chat: Summarise research, explain records and draft member communications.
 
-- Validate: **wired**, `railMatrix.json "Founder · Validate · Ideal customer profile"`; `railMatrix.json "Founder · Validate · Problem discovery"`; `railMatrix.json "Founder · Validate"`; `services/fills/citations.ts (research_ask)`; and 4 more
+- Validate: **wired**, `ST2 on "Founder · Validate · Ideal customer profile"`; `ST2 on "Founder · Validate · Problem discovery"`; `ST2 on "Founder · Validate"`; `services/fills/citations.ts (research_ask)`; and 4 more
 - Record a Session: **wired**, `services/conversationItems.ts (extract_conversation_items)`; `services/interviewStructuring.ts (structure_interview)`; `services/interviewStructuring.ts (summarise_interview)`
-- Build: **offered**, `railMatrix.json option draft:build/plan`; `railMatrix.json option draft:build/retro`
-- Raise: **wired**, `railMatrix.json "Founder · Raise · Investor narrative"`
-- Grow: **wired**, `railMatrix.json "Founder · Grow · Distribution"`; `railMatrix.json "Founder · Grow · Product improvement"`; `routes/brand.ts (brand_autofill)`; `routes/brand.ts (brand_palette)`; and 2 more
+- Build: **offered**, `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; `/api/ai/modules on "Founder · Build · Solution design"`; and 8 more
+- Raise: **wired**, `EM1 on "Founder · Raise · Investor narrative"`
+- Grow: **wired**, `EM1 on "Founder · Grow · Distribution"`; `ST2 on "Founder · Grow · Product improvement"`; `routes/brand.ts (brand_autofill)`; `routes/brand.ts (brand_palette)`; and 2 more
 - Network: **offered**, `/api/ai/modules on "Advisor · Network · Introductions"`; `/api/ai/modules on "Advisor · Network · Organizations"`; `/api/ai/modules on "Advisor · Network · Relationships"`; `/api/ai/modules on "Advisor · Network"`; and 35 more
 - Research: **wired**, `routes/research.ts (research_ask)`; `routes/research.ts (workspace_explain)`
 - Articles: **gap**, `#3721`
 - Email: **wired**, `services/mail/drafts.ts (mail_draft)`
 - Studio / Eadwyn: **wired**, `routes/advisor.ts (advisor_explain)`; `routes/advisor.ts (tool_call)`; `routes/ai.ts (workspace_explain)`; `routes/profiling.ts (onboarding_chat)`
-- Admin consoles: **wired**, `railMatrix.json "Admin · Approvals · Communities"`; `railMatrix.json "Admin · Approvals · Jobs"`; `railMatrix.json "Admin · Community · Communities"`; `railMatrix.json "Admin · Community · Jobs"`; and 12 more
-- Investor, Advisor and Partner workspaces: **wired**, `railMatrix.json "Advisor · Cohorts · Guidance"`; `railMatrix.json "Advisor · Cohorts · Outcomes"`; `railMatrix.json "Advisor · Cohorts"`; `railMatrix.json "Advisor · Expertise · Profile"`; and 17 more
+- Admin consoles: **wired**, `EM1 on "Admin · Approvals · Communities"`; `EM1 on "Admin · Approvals · Jobs"`; `EM1 on "Admin · Community · Communities"`; `EM1 on "Admin · Community · Jobs"`; and 12 more
+- Investor, Advisor and Partner workspaces: **wired**, `EM1 on "Advisor · Cohorts · Guidance"`; `EM1 on "Advisor · Expertise · Profile"`; `EM1 on "Advisor · Expertise · Services"`; `EM1 on "Advisor · Expertise · Thinking"`; and 17 more
 
 ### `@cf/meta/llama-4-scout-17b-16e-instruct`
 
@@ -739,10 +739,10 @@ chat: Read pitch-deck images, explain screenshots and extract visual evidence.
 - Validate: **gap**, `#3721`
 - Record a Session: **gap**, `#3721`
 - Build: **gap**, `#3721`
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Data room"`; `/api/ai/modules on "Founder · Raise · Pitch deck"`; `railMatrix.json "Founder · Raise · Data room"`; `railMatrix.json "Founder · Raise · Pitch deck"`; and 1 more
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Data room"`; `/api/ai/modules on "Founder · Raise · Pitch deck"`; `BU6 on "Founder · Raise · Data room"`; `BU6 on "Founder · Raise · Pitch deck"`; and 1 more
 - Grow: **gap**, `#3721`
 - Network: **gap**, `#3721`
-- Research: **offered**, `/api/ai/modules on "Investor · Research · Diligence"`; `railMatrix.json "Investor · Research · Diligence"`
+- Research: **offered**, `/api/ai/modules on "Investor · Research · Diligence"`; `BU6 on "Investor · Research · Diligence"`
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **gap**, `#3721`
@@ -772,8 +772,8 @@ translate: Translate session excerpts and market-expansion material between supp
 
 - Validate: **offered**, `/api/ai/modules on "Founder · Validate · Customer research"`
 - Record a Session: **wired**, `services/sessionTranslation.ts (translate_segment)`
-- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Market expansion"`; `railMatrix.json "Founder · Grow · Market expansion"`
-- Research: **offered**, `/api/ai/modules on "Founder · Research · Geographies"`; `railMatrix.json "Founder · Research · Geographies"`
+- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Market expansion"`
+- Research: **offered**, `/api/ai/modules on "Founder · Research · Geographies"`
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **gap**, `#3721`
@@ -795,56 +795,56 @@ voice: Read prepared session prompts and conversational replies aloud.
 
 chat: Investor narratives, distribution copy and multilingual summaries.
 
-- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Ideal customer profile"`; `/api/ai/modules on "Founder · Validate · Problem discovery"`; `/api/ai/modules on "Founder · Validate"`
+- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Ideal customer profile"`; `/api/ai/modules on "Founder · Validate · Problem discovery"`; `/api/ai/modules on "Founder · Validate"`; `ST2 on "Founder · Validate · Ideal customer profile"`; and 2 more
 - Record a Session: **gap**, `#3721`
 - Build: **offered**, `railMatrix.json option draft:build/plan`
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Investor narrative"`; `railMatrix.json "Founder · Raise · Investor narrative"`; `railMatrix.json option deck:build`; `railMatrix.json option deck:chart`; and 17 more
-- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Distribution"`; `/api/ai/modules on "Founder · Grow · Market expansion"`; `/api/ai/modules on "Founder · Grow · Product improvement"`; `railMatrix.json "Founder · Grow · Distribution"`; and 6 more
-- Network: **offered**, `railMatrix.json option draft:network/intro-email`; `railMatrix.json option draft:network/re-engagement`
-- Research: **offered**, `/api/ai/modules on "Founder · Research · Geographies"`; `railMatrix.json "Founder · Research · Geographies"`
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Capital relationships"`; `/api/ai/modules on "Founder · Raise · Investor narrative"`; `EM1 on "Founder · Raise · Investor narrative"`; `NE1 on "Founder · Raise · Capital relationships"`; and 19 more
+- Grow: **wired**, `RE6 on "Founder · Grow · Market expansion"`
+- Network: **offered**, `/api/ai/modules on "Advisor · Network · Introductions"`; `/api/ai/modules on "Advisor · Network · Organizations"`; `/api/ai/modules on "Advisor · Network · Relationships"`; `/api/ai/modules on "Advisor · Network"`; and 30 more
+- Research: **wired**, `RE6 on "Founder · Research · Geographies"`
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
-- Studio / Eadwyn: **gap**, `#3721`
-- Admin consoles: **offered**, `/api/ai/modules on "Admin · Approvals · Communities"`; `/api/ai/modules on "Admin · Approvals · Jobs"`; `/api/ai/modules on "Admin · Community · Communities"`; `/api/ai/modules on "Admin · Community · Jobs"`; and 27 more
-- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Guidance"`; `/api/ai/modules on "Advisor · Cohorts · Outcomes"`; `/api/ai/modules on "Advisor · Cohorts"`; `/api/ai/modules on "Advisor · Expertise · Profile"`; and 35 more
+- Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`; and 4 more
+- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Exploring members"`; `/api/ai/modules on "Admin · Accounts · Users"`; `/api/ai/modules on "Admin · Accounts"`; `/api/ai/modules on "Admin · Approvals · Best fit"`; and 57 more
+- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Founders"`; `/api/ai/modules on "Advisor · Cohorts · Guidance"`; `/api/ai/modules on "Advisor · Cohorts · Outcomes"`; `/api/ai/modules on "Advisor · Cohorts"`; and 61 more
 
 ### `@cf/moondream/moondream3.1-9B-A2B`
 
 vision: Answer questions about document images and describe visual evidence.
 
 - Build: **gap**, `#3721`
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Data room"`; `/api/ai/modules on "Founder · Raise · Pitch deck"`; `railMatrix.json "Founder · Raise · Data room"`; `railMatrix.json "Founder · Raise · Pitch deck"`; and 1 more
-- Research: **offered**, `/api/ai/modules on "Investor · Research · Diligence"`; `railMatrix.json "Investor · Research · Diligence"`
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Data room"`; `/api/ai/modules on "Founder · Raise · Pitch deck"`; `railMatrix.json option review:deck-file`
+- Research: **offered**, `/api/ai/modules on "Investor · Research · Diligence"`
 - Studio / Eadwyn: **gap**, `#3721`
-- Admin consoles: **offered**, `/api/ai/modules on "Admin · Approvals · Due diligence"`; `/api/ai/modules on "Admin · Approvals · Entity profiles"`; `/api/ai/modules on "Admin · Approvals · Identity checks"`; `railMatrix.json "Admin · Approvals · Due diligence"`; and 2 more
+- Admin consoles: **offered**, `/api/ai/modules on "Admin · Approvals · Due diligence"`; `/api/ai/modules on "Admin · Approvals · Entity profiles"`; `/api/ai/modules on "Admin · Approvals · Identity checks"`
 - Investor, Advisor and Partner workspaces: **gap**, `#3721`
 
 ### `@cf/nvidia/nemotron-3-120b-a12b`
 
 chat: Compare evidence, work through scenarios and explain planning assumptions.
 
-- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Demand and urgency signals"`; `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Verdict"`
+- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Demand and urgency signals"`; `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Ideal customer profile"`; `/api/ai/modules on "Founder · Validate · Market intelligence"`; and 10 more
 - Record a Session: **gap**, `#3721`
-- Build: **offered**, `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; `/api/ai/modules on "Founder · Build · Solution design"`; and 1 more
+- Build: **offered**, `/api/ai/modules on "Founder · Build · Company creation"`; `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; and 3 more
 - Raise: **wired**, `routes/deck_derive.ts (memo_write)`
-- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Revenue and traction"`; `/api/ai/modules on "Founder · Grow · Team expansion"`; `/api/ai/modules on "Founder · Grow"`
+- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Durable company-building"`; `/api/ai/modules on "Founder · Grow · Product improvement"`; `/api/ai/modules on "Founder · Grow · Revenue and traction"`; `/api/ai/modules on "Founder · Grow · Team expansion"`; and 4 more
 - Network: **gap**, `#3721`
-- Research: **offered**, `/api/ai/modules on "Investor · Research · Benchmarking"`
+- Research: **offered**, `/api/ai/modules on "Advisor · Research · Ask"`; `/api/ai/modules on "Advisor · Research · Client prep"`; `/api/ai/modules on "Advisor · Research · Companies"`; `/api/ai/modules on "Advisor · Research · Library"`; and 40 more
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **gap**, `#3721`
-- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 19 more
-- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Calendar"`; `/api/ai/modules on "Advisor · Cohorts · This week"`; `/api/ai/modules on "Advisor · Practice · Delivery"`; `/api/ai/modules on "Advisor · Practice · Earnings"`; and 17 more
+- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 71 more
+- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Calendar"`; `/api/ai/modules on "Advisor · Cohorts · Outcomes"`; `/api/ai/modules on "Advisor · Cohorts · This week"`; `/api/ai/modules on "Advisor · Cohorts"`; and 48 more
 
 ### `@cf/deepgram/nova-3`
 
 transcribe: Transcribe member-supplied recordings and interview audio.
 
-- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Customer research"`; `railMatrix.json "Founder · Validate · Customer research"`; `railMatrix.json option transcribe:interview`; `railMatrix.json option transcribe:recording`; and 2 more
+- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Customer research"`; `VA1 on "Founder · Validate · Customer research"`; `railMatrix.json option transcribe:interview`; `railMatrix.json option transcribe:recording`; and 2 more
 - Record a Session: **wired**, `services/sttModels.ts (STT_MODELS), live`
 - Raise: **offered**, `railMatrix.json option transcribe:rehearsal`; `railMatrix.json option transcribe:rehearsal-live`
 - Studio / Eadwyn: **offered**, `railMatrix.json option transcribe:voice-answer`; `routes/advisor.ts (transcribe)`
-- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Practice · Sessions"`; `railMatrix.json "Advisor · Practice · Sessions"`
+- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Practice · Sessions"`; `VA1 on "Advisor · Practice · Sessions"`
 
 ### `@cf/leonardo/phoenix-1.0`
 
@@ -876,7 +876,7 @@ chat: Prototype code, implementation drafts and technical review.
 
 - Validate: **gap**, `#3721`
 - Record a Session: **gap**, `#3721`
-- Build: **offered**, `/api/ai/modules on "Founder · Build · Prototype / MVP"`; `railMatrix.json "Founder · Build · Prototype / MVP"`
+- Build: **wired**, `BU5 on "Founder · Build · Prototype / MVP"`
 - Raise: **gap**, `#3721`
 - Grow: **gap**, `#3721`
 - Network: **gap**, `#3721`
@@ -884,25 +884,25 @@ chat: Prototype code, implementation drafts and technical review.
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **gap**, `#3721`
-- Admin consoles: **offered**, `/api/ai/modules on "Super Admin · Platform · GitHub sync"`; `/api/ai/modules on "Super Admin · Platform · Integration keys"`; `/api/ai/modules on "Super Admin · Platform · Monitoring"`; `/api/ai/modules on "Super Admin · Platform"`; and 4 more
+- Admin consoles: **wired**, `BU5 on "Super Admin · Platform · GitHub sync"`; `BU5 on "Super Admin · Platform · Integration keys"`; `BU5 on "Super Admin · Platform · Monitoring"`; `BU5 on "Super Admin · Platform"`
 - Investor, Advisor and Partner workspaces: **gap**, `#3721`
 
 ### `@cf/qwen/qwen3-30b-a3b-fp8`
 
 chat: Interactive explanations, evidence summaries and planning drafts.
 
-- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Verdict"`
+- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Demand and urgency signals"`; `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Verdict"`; `DK8 on "Founder · Validate · Experiments and evidence"`; and 2 more
 - Record a Session: **gap**, `#3721`
-- Build: **offered**, `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; `/api/ai/modules on "Founder · Build · Solution design"`; and 1 more
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise"`
-- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Team expansion"`; `/api/ai/modules on "Founder · Grow"`
+- Build: **offered**, `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; `/api/ai/modules on "Founder · Build · Solution design"`; and 6 more
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Cap table"`; `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise · Use of funds"`; `/api/ai/modules on "Founder · Raise"`; and 4 more
+- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Revenue and traction"`; `/api/ai/modules on "Founder · Grow · Team expansion"`; `/api/ai/modules on "Founder · Grow"`; `BU2 on "Founder · Grow · Team expansion"`; and 2 more
 - Network: **gap**, `#3721`
-- Research: **gap**, `#3721`
+- Research: **offered**, `/api/ai/modules on "Investor · Research · Benchmarking"`; `RA8 on "Investor · Research · Benchmarking"`
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
-- Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`
-- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 10 more
-- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Calendar"`; `/api/ai/modules on "Advisor · Cohorts · This week"`; `/api/ai/modules on "Advisor · Practice · Delivery"`; `/api/ai/modules on "Advisor · Practice · Engagements"`; and 7 more
+- Studio / Eadwyn: **offered**, `/api/ai/modules on "Advisor · Home"`; `/api/ai/modules on "Founder · Studio"`; `/api/ai/modules on "Investor · Home"`; `/api/ai/modules on "Operating Partner · Home"`; and 4 more
+- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 44 more
+- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Calendar"`; `/api/ai/modules on "Advisor · Cohorts · This week"`; `/api/ai/modules on "Advisor · Practice · Delivery"`; `/api/ai/modules on "Advisor · Practice · Earnings"`; and 38 more
 
 ### `@cf/qwen/qwen3-embedding-0.6b`
 
@@ -923,33 +923,33 @@ chat: Prototype code, technical plans and multi-step problem solving.
 
 - Validate: **offered**, `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Verdict"`
 - Record a Session: **gap**, `#3721`
-- Build: **offered**, `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; `/api/ai/modules on "Founder · Build · Prototype / MVP"`; and 2 more
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise"`
+- Build: **offered**, `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; `/api/ai/modules on "Founder · Build · Prototype / MVP"`; and 3 more
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Data room"`; `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise · Pitch deck"`; `/api/ai/modules on "Founder · Raise"`; and 2 more
 - Grow: **offered**, `/api/ai/modules on "Founder · Grow · Team expansion"`; `/api/ai/modules on "Founder · Grow"`
 - Network: **gap**, `#3721`
-- Research: **gap**, `#3721`
+- Research: **offered**, `/api/ai/modules on "Investor · Research · Diligence"`; `BU6 on "Investor · Research · Diligence"`
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **gap**, `#3721`
-- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 13 more
+- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Due diligence"`; `/api/ai/modules on "Admin · Approvals · Entity profiles"`; and 23 more
 - Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Calendar"`; `/api/ai/modules on "Advisor · Cohorts · This week"`; `/api/ai/modules on "Advisor · Practice · Delivery"`; `/api/ai/modules on "Advisor · Practice · Engagements"`; and 7 more
 
 ### `@cf/qwen/qwq-32b`
 
 chat: Compare evidence, work through scenarios and explain planning assumptions.
 
-- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Demand and urgency signals"`; `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Verdict"`; `railMatrix.json "Founder · Validate · Experiments and evidence"`; and 2 more
+- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Demand and urgency signals"`; `/api/ai/modules on "Founder · Validate · Experiments and evidence"`; `/api/ai/modules on "Founder · Validate · Verdict"`; `DK8 on "Founder · Validate · Experiments and evidence"`; and 3 more
 - Record a Session: **gap**, `#3721`
 - Build: **offered**, `/api/ai/modules on "Founder · Build · Founding team"`; `/api/ai/modules on "Founder · Build · Operating systems"`; `/api/ai/modules on "Founder · Build · Product roadmap"`; `/api/ai/modules on "Founder · Build · Solution design"`; and 1 more
-- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Cap table"`; `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise · Use of funds"`; `/api/ai/modules on "Founder · Raise"`; and 11 more
-- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Revenue and traction"`; `/api/ai/modules on "Founder · Grow · Team expansion"`; `/api/ai/modules on "Founder · Grow"`
+- Raise: **offered**, `/api/ai/modules on "Founder · Raise · Cap table"`; `/api/ai/modules on "Founder · Raise · Fundraising readiness"`; `/api/ai/modules on "Founder · Raise · Use of funds"`; `/api/ai/modules on "Founder · Raise"`; and 13 more
+- Grow: **offered**, `/api/ai/modules on "Founder · Grow · Revenue and traction"`; `/api/ai/modules on "Founder · Grow · Team expansion"`; `/api/ai/modules on "Founder · Grow"`; `RA8 on "Founder · Grow · Revenue and traction"`
 - Network: **gap**, `#3721`
-- Research: **offered**, `/api/ai/modules on "Investor · Research · Benchmarking"`; `railMatrix.json option draft:thin-evidence`
+- Research: **offered**, `/api/ai/modules on "Investor · Research · Benchmarking"`; `RA8 on "Investor · Research · Benchmarking"`; `railMatrix.json option draft:thin-evidence`
 - Articles: **gap**, `#3721`
 - Email: **gap**, `#3721`
 - Studio / Eadwyn: **gap**, `#3721`
-- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 23 more
-- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Calendar"`; `/api/ai/modules on "Advisor · Cohorts · This week"`; `/api/ai/modules on "Advisor · Practice · Delivery"`; `/api/ai/modules on "Advisor · Practice · Earnings"`; and 22 more
+- Admin consoles: **offered**, `/api/ai/modules on "Admin · Accounts · Trash"`; `/api/ai/modules on "Admin · Approvals · Advisor cohort access"`; `/api/ai/modules on "Admin · Approvals · Events"`; `/api/ai/modules on "Admin · Approvals · LP applications"`; and 33 more
+- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Cohorts · Calendar"`; `/api/ai/modules on "Advisor · Cohorts · This week"`; `/api/ai/modules on "Advisor · Practice · Delivery"`; `/api/ai/modules on "Advisor · Practice · Earnings"`; and 32 more
 
 ### `@cf/microsoft/resnet-50`
 
@@ -973,21 +973,21 @@ turn: Detect whether a speaker has finished a turn in an audio excerpt.
 
 transcribe: Transcribe member-supplied recordings and interview audio.
 
-- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Customer research"`; `railMatrix.json option transcribe:interview`; `railMatrix.json option transcribe:recording`; `railMatrix.json option transcribe:session`; and 1 more
+- Validate: **offered**, `/api/ai/modules on "Founder · Validate · Customer research"`; `VA1 on "Founder · Validate · Customer research"`; `railMatrix.json option transcribe:interview`; `railMatrix.json option transcribe:recording`; and 2 more
 - Record a Session: **offered**, `routes/founder_validate.ts (transcribe)`; `services/sttModels.ts (STT_MODELS), final`
 - Raise: **offered**, `railMatrix.json option transcribe:rehearsal`
 - Studio / Eadwyn: **offered**, `railMatrix.json option transcribe:voice-answer`; `routes/advisor.ts (transcribe)`
-- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Practice · Sessions"`
+- Investor, Advisor and Partner workspaces: **offered**, `/api/ai/modules on "Advisor · Practice · Sessions"`; `VA1 on "Advisor · Practice · Sessions"`
 
 ### `@cf/openai/whisper-large-v3-turbo`
 
 transcribe: Transcribe member-supplied recordings and interview audio.
 
-- Validate: **wired**, `railMatrix.json "Founder · Validate · Customer research"`; `services/interviewProcessing.ts (transcribe)`
+- Validate: **wired**, `VA1 on "Founder · Validate · Customer research"`; `services/interviewProcessing.ts (transcribe)`
 - Record a Session: **wired**, `routes/founder_validate.ts (transcribe)`; `services/sttModels.ts (STT_MODELS), final`
 - Raise: **offered**, `railMatrix.json option transcribe:rehearsal`
 - Studio / Eadwyn: **wired**, `routes/advisor.ts (transcribe)`
-- Investor, Advisor and Partner workspaces: **wired**, `railMatrix.json "Advisor · Practice · Sessions"`
+- Investor, Advisor and Partner workspaces: **wired**, `VA1 on "Advisor · Practice · Sessions"`
 
 ## Picks the run never reads
 
