@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { SignJWT } from 'jose';
 import { Hono } from 'hono';
 import { removeMigratedDatabases } from './_storage_schema.ts';
-import { AGENT, COMPANY, PROJECT, SPONSOR, STRANGER, fakeAgentRun, loopDeps, world, type World } from './_agent_engine_fixture.ts';
+import { AGENT, COMPANY, SPONSOR, STRANGER, fakeAgentRun, loopDeps, world, type World } from './_agent_engine_fixture.ts';
 import { buildContext } from '../src/agents/loop.ts';
 import { claimDuty, sweepDuties, type DutyDeps, type DutyRow } from '../src/services/agents/duties.ts';
 import { sessionEvents, zonedInstant, zonedNext } from '../src/services/agents/sessions.ts';

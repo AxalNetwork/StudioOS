@@ -4,7 +4,7 @@
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/calendar_agents_d1613.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
