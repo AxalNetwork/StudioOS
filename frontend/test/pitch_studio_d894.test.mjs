@@ -39,7 +39,7 @@ import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import PitchStudio, { StudioAnalytics, StudioDecks } from '../src/pages/raise/pitch/PitchStudio.jsx';
 import { PitchMovedNotice } from '../src/pages/raise/pitch/PitchWorkspaceMoved.jsx';
 import {
-  ANALYTICS_PATH, BUILDER_MOVED_KEY, BUILDER_MOVED_NOTICE, BUILDER_PATH, EDIT_PATH, LINE, MOVED_KEY, MOVED_NOTICE, NOT_RECORDED, NO_VENTURE, NO_VIEWS, REVIEW_PATH, STUDIO_PATH, TABS, TITLE,
+  BUILDER_MOVED_KEY, BUILDER_MOVED_NOTICE, BUILDER_PATH, EDIT_PATH, LINE, MOVED_KEY, MOVED_NOTICE, NOT_RECORDED, NO_VENTURE, NO_VIEWS, REVIEW_PATH, STUDIO_PATH, TABS, TITLE,
   coverOf, currentVersion, dayLabel, funnelRows, isReadOnly, linkPage, linkRows, mmss, movedTarget, newLinkHref, noViewsYet,
   readerStats, slideCaption, slideSeconds, ventureQuery, versionRows, viewsState, weeklyViews, builderTarget,
 } from '../src/pages/raise/pitch/pitchStudioModel.js';
