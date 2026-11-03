@@ -52,7 +52,7 @@
  * (`services/decks/sources.ts`). A metric tile with no value is `value: null`,
  * which every reader shows as "Not recorded", never 0.
  */
-import { sanitizeBinding } from './sources';
+import { sanitizeBinding } from './binding';
 import { sanitizeArtDirection } from './artDirection';
 import { cellText, tableLines } from './tableCells';
 
