@@ -6,6 +6,8 @@
  *   PUT  /sharing                          { share } — the one opt-in, for every team I belong to
  *   PUT  /sharing/teams/:key               { share } — on or off for one of my teams
  *   GET  /who-knows?person=|company=|fund= the teammates who shared and know them, and how
+ *   POST /who-knows/rank?person=|company=|fund= { query } — #3938 NE1: ranks exactly the people that
+ *        read answers against what the member needs; each row is { ref, position, line }
  *   POST /intro-request                    { teammate, ref, note? } — asks the teammate; sends nothing to the contact
  *   GET  /intro-requests                   the requests I sent and received
  *   POST /intro-requests/:uid/decide       { decision: made | declined } — the teammate's answer
@@ -18,6 +20,9 @@ import type { Env, User } from '../types';
 import { requireAuth, selectJwt } from '../auth';
 import { decideIntro, introRequests, myTeams, RelationshipRefusal, requestIntro, setShare, whoKnows, whoKnowsQuery } from '../services/relationships';
 import { refuse } from '../util/refusal';
+import { railFor, refuseRun } from '../util/railContext';
+import { AI_SURFACE } from '../services/aiSurfaces';
+import { MATCH_DEPS, MatchRefused, matchRows } from '../services/ai/matchRows';
 
 const relationships = new Hono<{ Bindings: Env }>();
 
@@ -72,6 +77,40 @@ relationships.get('/who-knows', async (c) => {
   if (user instanceof Response) return user;
   try { return c.json(await whoKnows(c.env, user, whoKnowsQuery({ person: c.req.query('person'), company: c.req.query('company'), fund: c.req.query('fund') }))); }
   catch (e) { return failure(c, e); }
+});
+
+// #3938 NE1 (D1478 task 4, part 5): the member's press ranks the people the who-knows read
+// answers, against what they need from an introduction. It runs that same read, so the
+// access rule (my team, the teammate's share, a withdrawal) still decides who is a
+// candidate, and the read's audit rows are written as for any who-knows read. The text a
+// model sees is the person's title and company and how the teammate knows them: never a
+// name, an email or a profile URL.
+relationships.post('/who-knows/rank', async (c) => {
+  const user = await member(c);
+  if (user instanceof Response) return user;
+  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const query = typeof b?.query === 'string' ? b.query.replace(/\s+/g, ' ').trim().slice(0, 300) : '';
+  if (!query) return refuse(c, 422, { code: 'query_missing', message: 'Say what you need an introduction for.' });
+  let read;
+  try { read = await whoKnows(c.env, user, whoKnowsQuery({ person: c.req.query('person'), company: c.req.query('company'), fund: c.req.query('fund') })); }
+  catch (e) { return failure(c, e); }
+  const candidates = read.people.map((p) => ({
+    key: String(p.ref),
+    text: [
+      p.person.title ? `Title: ${String(p.person.title).slice(0, 200)}` : null,
+      p.person.company ? `Company: ${String(p.person.company).slice(0, 200)}` : null,
+      `Known through: ${p.how.source_label}`,
+      p.how.connected_since ? `Connected since: ${p.how.connected_since}` : null,
+    ].filter(Boolean).join('. '),
+  }));
+  const rail = railFor(c, { page: 'Founder · Network · Introductions', option: null });
+  const deps = MATCH_DEPS.make(c.env, { userId: Number(user.id), surface: AI_SURFACE.networkIntroductions, rail, guardText: query }, 'NE1');
+  let res;
+  try { res = await matchRows(query, candidates, deps, { top: 10 }); } catch (e) {
+    if (e instanceof MatchRefused) return refuseRun(c, e.result)!;
+    throw e;
+  }
+  return c.json({ job: 'NE1', steps: res.steps, rows: res.rows.map((r) => ({ ref: Number(r.key), position: r.position, line: r.line })) });
 });
 
 relationships.post('/intro-request', async (c) => {

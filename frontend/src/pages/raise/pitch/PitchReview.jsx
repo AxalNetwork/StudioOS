@@ -7,8 +7,8 @@ import { Lightbox, useRailOption } from '../../../ui';
 import DeckReviewerPage from '../../DeckReviewerPage';
 import { asList, currentVersion, versionLabel } from './pitchStudioModel';
 import {
-  NO_REVIEWS, NO_REVIEW_YET, REVIEW_COLUMNS, REVIEW_READ_ONLY, SCORE_NOT_RETURNED, UPLOAD_LINE, isReviewReadOnly, mayRunReview,
-  costLabel, estimateOf, historyRows, latestReview, pointerLabel, ranAt, reviewSentence,
+  NO_REVIEWS, REVIEW_COLUMNS, REVIEW_READ_ONLY, SCORE_NOT_RETURNED, UPLOAD_LINE, isReviewReadOnly, mayRunReview,
+  costLabel, estimateOf, historyRows, lastRunLine, latestReview, notReviewedLine, pointerLabel, ranAt, reviewSentence,
 } from './reviewModel';
 
 /**
@@ -112,7 +112,10 @@ export default function PitchReview({ reads, readOnly }) {
                   Proposed by Eadwyn · ran <span className={MONO}>{ranAt(latest.created_at)}</span> · cost <span className={MONO}>{costLabel(latest.cost)}</span>
                 </span>
               ) : (
-                <span className={MUTED}>{history.status === 'ok' ? NO_REVIEW_YET : ' '}</span>
+                <span className={MUTED} data-testid="pitch-review-not-reviewed">
+                  {history.status === 'ok' ? notReviewedLine(label) : ' '}
+                  {history.status === 'ok' && lastRunLine(reviews) ? <span className="block" data-testid="pitch-review-last-run">{lastRunLine(reviews)}</span> : null}
+                </span>
               )}
             </div>
             <div className="flex items-center gap-4">
