@@ -36,7 +36,7 @@ import {
 } from './programsModel';
 import {
   PERIODS, catalogueCards, catalogueTiles, creditsChart, figureOf, investorsFigure, joinsChart, labApplications, labCohortLine,
-  learningJoinOf, learningLine, mentorLine, needsOf, partnersFigure, referLine, scopeLinesOf, studioChip, testingLine, waitingChart,
+  influencerLine, learningJoinOf, learningLine, mentorLine, needsOf, partnersFigure, referLine, scopeLinesOf, studioChip, testingLine, waitingChart,
   weeksFrom, withWeeks,
 } from './catalogueModel';
 
@@ -293,6 +293,19 @@ function CatalogueBody() {
                 {superAdmin ? <Link to="/learning/studio/programs" className={`${LINK} self-center`}>Open the program studio</Link> : null}
               </>
             )} />
+        );
+      }
+      // D4298 (#4298): Influencers, with P1's figure and its applications waiting on HQ; the door opens Applications.
+      case 'influencer': {
+        const f = figureOf(p, 'influencers');
+        return (
+          <ProgramCard key={p.key} p={p} superAdmin={superAdmin} needs={needs}
+            figures={(
+              <CardFigure s={f} what="The influencers" onRetry={retry} testId="programs-card-influencer-figure">
+                {f.state === 'ready' ? <span className={FIGURE}>{influencerLine(f.data)}</span> : null}
+              </CardFigure>
+            )}
+            door={<Link to="/admin/programs/influencer" className={OPEN} aria-label="Open Influencers">Open</Link>} />
         );
       }
       case 'product-testing': {

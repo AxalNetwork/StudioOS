@@ -196,13 +196,13 @@ test('Credits in and out by month: granted above the axis by source, spent below
 
 test('the cards: the registry\'s order, status words and figures; the constant stands while it reads, so the doors are always drawn', () => {
   const { cards } = catalogueCards(ready(catalogueBody()));
-  assert.equal(cards.length, 9);
+  assert.equal(cards.length, 9, 'the read\'s nine rows');
   assert.equal(cards.find((c) => c.key === 'referral-partners').status, 'Partly built');
   assert.equal(cards.find((c) => c.key === 'investor-cohorts').status, 'Not built yet');
   assert.equal(cards.find((c) => c.key === 'ai-native-venture').status, 'Proposed');
   assert.equal(cards.find((c) => c.key === 'referral-partners').grant, 'HQ-held', 'the held-mode badges stay');
-  assert.equal(catalogueCards(loading()).cards.length, 9);
-  assert.equal(catalogueCards(failed()).cards.length, 9);
+  assert.equal(catalogueCards(loading()).cards.length, 10, 'the constant: nine, and Influencers (D4298)');
+  assert.equal(catalogueCards(failed()).cards.length, 10);
 });
 
 test('Lab applications: counts.pending, exact; a failed read fails that line only; under a studio, "Not read here yet"', () => {
@@ -361,7 +361,7 @@ test('loading (PG17) and failed (PG18a): each chart in its own skeleton, then Un
   const pending = await mounted('/admin/programs', worker({ catalogue: never }));
   try {
     for (const k of ['joins', 'waiting', 'credits']) assert.match(pending.textOf(`programs-chart-${k}-loading`), /^Reading…/, k);
-    assert.equal(pending.textOf('programs-catalogue-count'), '9 programs');
+    assert.equal(pending.textOf('programs-catalogue-count'), '10 programs');
     assert.ok(pending.hrefs().includes('/admin/programs/perks'));
   } finally { await pending.close(); }
   let fail = true;
