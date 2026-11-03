@@ -66,7 +66,7 @@ test('PD22: an Advisor, an Operating Partner and an Explorer read a boundary; th
   assert.equal(boundaryFor('exploring', true), null, 'an active Spin-Out Lab member uses the studio');
   const html = renderToStaticMarkup(React.createElement(PitchBoundary, { role: 'advisor' }));
   assert.match(html, /data-testid="pitch-studio-boundary"/);
-  assert.ok(html.includes('The Pitch deck studio is for the venture’s founders.'));
+  assert.ok(html.includes('Pitch is for the venture’s founders.'));
   assert.ok(html.includes('with the NDA if they ask for one'));
   assert.equal(renderToStaticMarkup(React.createElement(PitchBoundary, { role: 'partner' })).includes('NDA'), false);
 });
