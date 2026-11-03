@@ -42,6 +42,8 @@ export const HQ_STRIPS = {
     // D1253 (#2428): the venture scorecard's model, indices and fairness check.
     ['Scoring', '/admin/platform/scoring'],
     ['Promo codes', '/admin/platform/promo-codes'],
+    // D4155 (#4155): HQ › Decks, the deck studio's admin screens.
+    ['Decks', '/admin/platform/decks'],
     ['Monitoring', '/monitoring'],
     ['Telegram', '/admin/telegram'],
   ]),

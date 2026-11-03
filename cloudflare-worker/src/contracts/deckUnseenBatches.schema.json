@@ -1,0 +1,22 @@
+{
+  "$id": "deckUnseenBatches",
+  "title": "GET /api/decks/:id/batches?state=done&unseen=1 (D1600, #3879)",
+  "description": "The reply the deck v2 adapter's `unseenBatches` method passes through: the deck's finished runs nobody has opened from the return banner, newest first, at most five, each with the count of cards it left waiting. A count, never content (`routes/deck_batches.ts`).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["batches"],
+  "properties": {
+    "batches": {
+      "type": "array", "maxItems": 5,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["batch_uid", "finished_at", "cards_waiting"],
+        "properties": {
+          "batch_uid": { "type": "string" },
+          "finished_at": { "type": ["string", "null"], "description": "When the run ended; null only if it was not recorded." },
+          "cards_waiting": { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  }
+}

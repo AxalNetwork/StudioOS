@@ -304,9 +304,13 @@ export const cardStatus = (deckId, filter) => through(() => deckCardStatusApi.re
  */
 export const rehearse = (deckId) => through(() => deckRehearsalsApi.list(deckId), SURFACES.rehearse.issue);
 export const walkthrough = off('walkthrough');
-export const retryFailed = off('retryFailed');
-export const unseenBatches = off('unseenBatches');
-export const markSeen = off('markSeen');
+/**
+ * D1600 (#3879): retry only a run's failed areas, as a new run under what is left of its hold (pd2b); the deck's
+ * finished runs nobody has opened, for the return banner (pd2c); and clearing one when its Review is opened.
+ */
+export const retryFailed = (batchUid, { areas } = {}, idempotencyKey) => through(() => deckBatchesApi.retryFailed(batchUid, { areas }, idempotencyKey), SURFACES.retryFailed.issue);
+export const unseenBatches = (deckId) => through(() => deckBatchesApi.unseenBatches(deckId), SURFACES.unseenBatches.issue);
+export const markSeen = (batchUid) => through(() => deckBatchesApi.markSeen(batchUid), SURFACES.markSeen.issue);
 export const setDeckSource = (projectUid, fileUid, opts) => through(() => dataRoomApi.setDeckSource(projectUid, fileUid, opts), SURFACES.setDeckSource.issue);
 
 /**

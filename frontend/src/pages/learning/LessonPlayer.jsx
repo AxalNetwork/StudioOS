@@ -1,10 +1,14 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
+import { Stream } from '@cloudflare/stream-react';
 import { Check, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
 import { Card, Pill, Unrecorded } from '../../ui';
 import { LearningEmpty, LearningUnreadable, SectionCard, stateBlock } from './LearningStates';
-import { CHAPTERS_NOT_YET, NO_CHAPTERS, NOT_LIVE, PLAIN_TRANSCRIPT_LINE, clockLabel, durationLabel, lessonKindLabel, positionWriter } from './learningModel';
+import {
+  CUES_UNREADABLE, NO_CHAPTERS, NOT_LIVE, PLAIN_TRANSCRIPT_LINE, captionChoices, chapterAt, chaptersOf, clockLabel, cueAt, durationLabel,
+  lessonKindLabel, positionWriter,
+} from './learningModel';
 
 /**
  * One lesson, or one standalone video or reading: the media, a transcript
@@ -25,6 +29,15 @@ import { CHAPTERS_NOT_YET, NO_CHAPTERS, NOT_LIVE, PLAIN_TRANSCRIPT_LINE, clockLa
  *   moduleTitle, position ("5 of 12"), prev and next { title, href } or null
  *   completed   the member's own progress on it
  *   onMarkComplete, marking, markError
+ *   loadCaption #4178 (D4178): `(language) => Promise<cues>` for a Stream video's ready
+ *               captions (`readItemCaption`); without it the transcript is the plain text
+ *
+ * #4178 (D4178, LR4): a ready Stream video plays in Stream's own player
+ * (`@cloudflare/stream-react`, on the signed source), so it can be timed and
+ * seeked: the current chapter and the current cue are highlighted, and a click
+ * on either seeks. An uploaded file in the browser's player seeks the same way.
+ * A plain embed (YouTube, Vimeo) cannot be seeked from the page, so its
+ * chapters and transcript are text only.
  *
  * "Mark complete" is disabled until a page passes the handler: a button that
  * looked live and saved nothing would be the dead control D17 refuses.
@@ -32,8 +45,13 @@ import { CHAPTERS_NOT_YET, NO_CHAPTERS, NOT_LIVE, PLAIN_TRANSCRIPT_LINE, clockLa
 export default function LessonPlayer({
   status, lesson, item, video, transcript = null, moduleTitle, position, prev, next,
   completed = false, onMarkComplete, marking = false, markError = '', reason = NOT_LIVE.catalogue, onRetry,
-  resumeFrom = null, onPosition = null,
+  resumeFrom = null, onPosition = null, loadCaption = null,
 }) {
+  // The playing time, and how to seek, from whichever player is drawn (null when it cannot be seeked).
+  const [now, setNow] = useState(0);
+  const seeker = useRef(null);
+  const seek = useCallback((t) => { seeker.current?.(t); setNow(t); }, []);
+  const canSeek = Boolean(video?.player || (video?.src && !video?.embed));
   const block = stateBlock({
     status, reason, onRetry,
     what: 'the lesson',
@@ -46,10 +64,13 @@ export default function LessonPlayer({
   const kind = lesson?.kind || item?.kind;
   const length = durationLabel(item?.duration_seconds);
   const text = String(transcript ?? '').trim();
+  // LR4: on a wide screen the chapters sit beside the player; on a tablet or phone (lr20b, lr21) they stack below it.
+  // The transcript is always below.
   return (
     <div className="space-y-4" data-testid="lesson-player">
-      <Card padding="none" className="overflow-hidden">
-        {kind === 'video' ? <VideoArea video={video} item={item} length={length} resumeFrom={resumeFrom} onPosition={onPosition} /> : <ReadingArea body={item?.body} />}
+      <div className={kind === 'video' ? 'grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start' : ''} data-testid="lesson-player-layout">
+      <Card padding="none" className="min-w-0 overflow-hidden">
+        {kind === 'video' ? <VideoArea video={video} item={item} length={length} resumeFrom={resumeFrom} onPosition={onPosition} onTime={setNow} seeker={seeker} /> : <ReadingArea body={item?.body} />}
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-axal-hairline px-4 py-3 dark:border-gray-800">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-1.5 text-[11.5px] text-axal-faint dark:text-gray-500">
@@ -89,40 +110,16 @@ export default function LessonPlayer({
           </p>
         )}
       </Card>
+      {kind === 'video' && <Chapters item={item} now={now} onSeek={canSeek ? seek : null} />}
+      </div>
       {kind === 'video' && (
-        <SectionCard title="Chapters" testid="lesson-chapters">
-          {Array.isArray(item?.chapters) && item.chapters.length ? (
-            <ol className="space-y-1 text-[12.5px]" data-testid="lesson-chapters-list">
-              {item.chapters.map((c) => (
-                <li key={`${c.start_seconds}-${c.title}`} className="flex gap-2"><span className="tabular-nums text-axal-muted dark:text-gray-400">{clockLabel(c.start_seconds)}</span><span className="text-axal-ink dark:text-gray-100">{c.title}</span></li>
-              ))}
-            </ol>
-          ) : (
-            <p className="text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="lesson-chapters-none">
-              <Unrecorded reason={CHAPTERS_NOT_YET}>{NO_CHAPTERS}</Unrecorded> · {CHAPTERS_NOT_YET}
-            </p>
-          )}
-        </SectionCard>
-      )}
-      {kind === 'video' && (
-        <SectionCard title="Transcript" testid="lesson-transcript">
-          {text ? (
-            <>
-              <p className="mb-1.5 text-[11.5px] text-axal-faint dark:text-gray-500" data-testid="lesson-transcript-plain">{PLAIN_TRANSCRIPT_LINE}</p>
-              <p className="max-h-80 overflow-y-auto whitespace-pre-wrap text-[13px] leading-relaxed text-gray-700 dark:text-gray-300" data-testid="lesson-transcript-text">{text}</p>
-            </>
-          ) : (
-            <p className="text-[12.5px] text-axal-muted dark:text-gray-400">
-              <Unrecorded reason="No transcript is recorded for this video." /> · No transcript is recorded for this video.
-            </p>
-          )}
-        </SectionCard>
+        <Transcript text={text} video={video} loadCaption={loadCaption} now={now} onSeek={canSeek ? seek : null} />
       )}
     </div>
   );
 }
 
-function VideoArea({ video, item, length, resumeFrom = null, onPosition = null }) {
+function VideoArea({ video, item, length, resumeFrom = null, onPosition = null, onTime = null, seeker = null }) {
   if (!video?.src) {
     const why = video?.reason || 'This video has no playable source yet.';
     return (
@@ -136,7 +133,23 @@ function VideoArea({ video, item, length, resumeFrom = null, onPosition = null }
       </div>
     );
   }
+  if (video.embed && video.player) {
+    return (
+      <StreamVideo
+        key={video.player.src}
+        source={video.player}
+        poster={video.stream?.poster || item?.thumbnail_url || undefined}
+        title={item?.title || 'Lesson video'}
+        language={captionChoices(video)[0]?.language}
+        startAt={resumeFrom}
+        onPosition={onPosition}
+        onTime={onTime}
+        seeker={seeker}
+      />
+    );
+  }
   if (video.embed) {
+    if (seeker) seeker.current = null;
     return (
       <iframe
         src={video.src}
@@ -158,7 +171,171 @@ function VideoArea({ video, item, length, resumeFrom = null, onPosition = null }
       label={`${item?.title || 'Lesson video'}${length ? `, ${length}` : ''}`}
       startAt={resumeFrom}
       onPosition={onPosition}
+      onTime={onTime}
+      seeker={seeker}
     />
+  );
+}
+
+/**
+ * The writer of a player's position (LR4 resume): at most one write every 15 s
+ * while playing, and one on pause or end (`positionWriter`). The page passes a
+ * fresh callback each render; the writer reads the latest through a ref, so its
+ * throttle is not reset by a re-render.
+ */
+function usePositionWriter(onPosition, source) {
+  const latest = useRef(onPosition);
+  latest.current = onPosition;
+  const hasWriter = Boolean(onPosition);
+  return useMemo(() => (hasWriter ? positionWriter((s, p) => latest.current?.(s, p)) : null), [hasWriter, source]);
+}
+
+/**
+ * #4178 (D4178, LR4): a ready Stream video in Stream's own player, from the
+ * signed source the item read minted after its access check. Speed, quality,
+ * the captions menu and picture-in-picture are the player's own controls. It
+ * starts at the resume point, writes its position like the file player, and is
+ * seeked through `seeker`. A player that fails to load is "Unreadable", with
+ * Retry, never a black box.
+ */
+export function StreamVideo({ source, poster, title, language, startAt = null, onPosition = null, onTime = null, seeker = null }) {
+  const api = useRef(undefined);
+  const [attempt, setAttempt] = useState(0);
+  const [failed, setFailed] = useState(false);
+  const writer = usePositionWriter(onPosition, source.src);
+  useEffect(() => {
+    if (!seeker) return undefined;
+    seeker.current = (t) => { try { if (api.current) api.current.currentTime = t; } catch { /* a player that cannot seek stays put */ } };
+    return () => { seeker.current = null; };
+  }, [seeker]);
+  if (failed) return <VideoUnreadable onRetry={() => { setFailed(false); setAttempt((n) => n + 1); }} />;
+  const at = () => [api.current?.currentTime, api.current?.duration];
+  return (
+    <div className="aspect-video w-full bg-black" data-testid="lesson-video-stream">
+      <Stream
+        key={attempt}
+        src={source.src}
+        customerCode={source.customerCode || undefined}
+        controls
+        responsive
+        preload="metadata"
+        poster={poster}
+        title={title}
+        defaultTextTrack={language || undefined}
+        startTime={startAt ?? undefined}
+        streamRef={api}
+        onError={() => setFailed(true)}
+        onTimeUpdate={() => { const [t, d] = at(); onTime?.(Number(t) || 0); writer?.tick(t, d); }}
+        onPause={writer ? () => { const [t, d] = at(); writer.flush(t, d); } : undefined}
+        onEnded={writer ? () => { const [t, d] = at(); writer.flush(t, d); } : undefined}
+      />
+    </div>
+  );
+}
+
+/**
+ * LR4: chapters beside the player — the current one marked, and each a button
+ * that seeks when the player can be seeked. None recorded says so.
+ */
+export function Chapters({ item, now = 0, onSeek = null }) {
+  const chapters = chaptersOf(item);
+  const current = chapterAt(chapters, now);
+  return (
+    <SectionCard title="Chapters" testid="lesson-chapters">
+      {chapters.length ? (
+        <ol className="space-y-0.5 text-[12.5px]" data-testid="lesson-chapters-list">
+          {chapters.map((c, i) => {
+            const here = i === current;
+            const cls = `flex w-full gap-2 rounded-axal-sm px-1.5 py-1 text-left ${here ? 'bg-violet-50 font-semibold text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-200' : 'text-axal-ink dark:text-gray-100'}`;
+            const body = (<><span className="tabular-nums text-axal-muted dark:text-gray-400">{clockLabel(c.start)}</span><span>{c.title}</span></>);
+            return (
+              <li key={`${c.start}-${c.title}`}>
+                {onSeek ? (
+                  <button type="button" className={`${cls} hover:bg-axal-ground dark:hover:bg-gray-800`} aria-current={here ? 'true' : undefined} onClick={() => onSeek(c.start)} data-testid="button-chapter">{body}</button>
+                ) : (
+                  <span className={cls} aria-current={here ? 'true' : undefined} data-testid="text-chapter">{body}</span>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+      ) : (
+        <p className="text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="lesson-chapters-none">
+          <Unrecorded reason="No chapters are recorded for this video." /> · {NO_CHAPTERS}
+        </p>
+      )}
+    </SectionCard>
+  );
+}
+
+/**
+ * LR4 and LR4b: the transcript below the player. A Stream video's ready caption
+ * is read as timed cues — the current one marked, a click seeks — with a picker
+ * when there is more than one language. Without cues the plain transcript is
+ * shown and says why; without either, it says none is recorded.
+ */
+export function Transcript({ text, video, loadCaption = null, now = 0, onSeek = null }) {
+  const choices = captionChoices(video);
+  const [language, setLanguage] = useState(choices[0]?.language || null);
+  const [read, setRead] = useState({ status: language && loadCaption ? 'loading' : 'none', cues: [] });
+  // The page may pass a fresh loader each render; the read follows the language and the video, not the function.
+  const loader = useRef(loadCaption);
+  loader.current = loadCaption;
+  const hasLoader = Boolean(loadCaption);
+  const videoKey = video?.player?.src || video?.src || null;
+  useEffect(() => {
+    if (!language || !hasLoader) { setRead({ status: 'none', cues: [] }); return undefined; }
+    let live = true;
+    setRead({ status: 'loading', cues: [] });
+    Promise.resolve().then(() => loader.current(language))
+      .then((cues) => { if (live) setRead(Array.isArray(cues) && cues.length ? { status: 'ready', cues } : { status: 'none', cues: [] }); })
+      .catch(() => { if (live) setRead({ status: 'unreadable', cues: [] }); });
+    return () => { live = false; };
+  }, [language, hasLoader, videoKey]);
+  const current = read.status === 'ready' ? cueAt(read.cues, now) : -1;
+  const picker = choices.length > 1 && loadCaption ? (
+    <label className="mb-2 flex items-center gap-2 text-[12px] text-axal-muted dark:text-gray-400">
+      Transcript language
+      <select value={language || ''} onChange={(e) => setLanguage(e.target.value)} className="rounded-axal-sm border border-axal-hairline bg-white px-2 py-1 text-[12px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="select-transcript-language">
+        {choices.map((c) => <option key={c.language} value={c.language}>{c.label}</option>)}
+      </select>
+    </label>
+  ) : null;
+  const plain = (line) => (text ? (
+    <>
+      <p className="mb-1.5 text-[11.5px] text-axal-faint dark:text-gray-500" data-testid="lesson-transcript-plain">{line}</p>
+      <p className="max-h-80 overflow-y-auto whitespace-pre-wrap text-[13px] leading-relaxed text-gray-700 dark:text-gray-300" data-testid="lesson-transcript-text">{text}</p>
+    </>
+  ) : (
+    <p className="text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="lesson-transcript-none">
+      <Unrecorded reason="No transcript is recorded for this video." /> · No transcript is recorded for this video.
+    </p>
+  ));
+  let body;
+  if (read.status === 'loading') body = <p className="text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="lesson-transcript-loading">Reading the captions…</p>;
+  else if (read.status === 'ready') {
+    body = (
+      <ol className="max-h-80 space-y-0.5 overflow-y-auto text-[13px] leading-relaxed" data-testid="lesson-transcript-cues">
+        {read.cues.map((c, i) => {
+          const here = i === current;
+          const cls = `flex w-full gap-2 rounded-axal-sm px-1.5 py-0.5 text-left ${here ? 'bg-violet-50 text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-200' : 'text-gray-700 dark:text-gray-300'}`;
+          const inner = (<><span className="shrink-0 tabular-nums text-[11.5px] text-axal-faint dark:text-gray-500">{clockLabel(c.start)}</span><span>{c.text}</span></>);
+          return (
+            <li key={`${c.start}-${i}`}>
+              {onSeek ? (
+                <button type="button" className={`${cls} hover:bg-axal-ground dark:hover:bg-gray-800`} aria-current={here ? 'true' : undefined} onClick={() => onSeek(c.start)} data-testid="button-cue">{inner}</button>
+              ) : <span className={cls} aria-current={here ? 'true' : undefined} data-testid="text-cue">{inner}</span>}
+            </li>
+          );
+        })}
+      </ol>
+    );
+  } else body = plain(read.status === 'unreadable' ? CUES_UNREADABLE : PLAIN_TRANSCRIPT_LINE);
+  return (
+    <SectionCard title="Transcript" testid="lesson-transcript">
+      {picker}
+      {body}
+    </SectionCard>
   );
 }
 
@@ -170,22 +347,24 @@ function VideoArea({ video, item, length, resumeFrom = null, onPosition = null }
  * the connection dropped) is "Unreadable", never a black box that never
  * starts, and Retry loads it again.
  */
-function StreamPlayer({ src, poster, label, startAt = null, onPosition = null }) {
+function StreamPlayer({ src, poster, label, startAt = null, onPosition = null, onTime = null, seeker = null }) {
   const [attempt, setAttempt] = useState(0);
   const [failed, setFailed] = useState(false);
   // D3726 (#3726) LR4: resume where the member left off, and write the position
-  // back at most every 15 s and on pause (`positionWriter`).
-  // The page passes a fresh callback each render; the writer reads the latest
-  // through a ref, so its 15 s throttle is not reset by a re-render.
-  const latest = useRef(onPosition);
-  latest.current = onPosition;
-  const hasWriter = Boolean(onPosition);
-  const writer = useMemo(() => (hasWriter ? positionWriter((s, p) => latest.current?.(s, p)) : null), [hasWriter, src]);
+  // back at most every 15 s and on pause (`usePositionWriter`).
+  const writer = usePositionWriter(onPosition, src);
   const seeked = useRef(false);
+  const el = useRef(null);
+  useEffect(() => {
+    if (!seeker) return undefined;
+    seeker.current = (t) => { try { if (el.current) el.current.currentTime = t; } catch { /* a player that cannot seek stays put */ } };
+    return () => { seeker.current = null; };
+  }, [seeker]);
   if (failed) return <VideoUnreadable onRetry={() => { setFailed(false); setAttempt((n) => n + 1); }} />;
   return (
     <video
       key={attempt}
+      ref={el}
       controls
       playsInline
       preload="metadata"
@@ -197,7 +376,7 @@ function StreamPlayer({ src, poster, label, startAt = null, onPosition = null })
         seeked.current = true;
         try { e.currentTarget.currentTime = startAt; } catch { /* a player that cannot seek starts at 0 */ }
       }}
-      onTimeUpdate={writer ? (e) => writer.tick(e.currentTarget.currentTime, e.currentTarget.duration) : undefined}
+      onTimeUpdate={(e) => { onTime?.(e.currentTarget.currentTime || 0); writer?.tick(e.currentTarget.currentTime, e.currentTarget.duration); }}
       onPause={writer ? (e) => writer.flush(e.currentTarget.currentTime, e.currentTarget.duration) : undefined}
       onEnded={writer ? (e) => writer.flush(e.currentTarget.currentTime, e.currentTarget.duration) : undefined}
       className="aspect-video w-full bg-black"
