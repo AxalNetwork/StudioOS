@@ -13,6 +13,7 @@ import { NOTES_PLACEHOLDER, placementProblem } from './editorModel';
 import { elementsLibrary } from './deckV2Adapter';
 import { ARRANGE_OPS, DECOR_RULE, LAYERS_TITLE, arrange, arrangeState, decorLabel, decorPlan, decorSel, itemsOf } from './arrangeModel';
 import TextWords from './TextWords';
+import { ENTRANCES, ENTRANCE_LINE, ENTRANCE_TITLE, ENTRANCE_WORDS, NO_ENTRANCE, ORDER_MAX, entranceOf, withEntrance } from './motionModel';
 
 /**
  * D1604 (#3716, pd3) — the tools that show only while something on the Grid is
@@ -102,6 +103,39 @@ export function SpeakerNotes({ card, index, readOnly, notesMax, onNotes }) {
   );
 }
 
+/**
+ * D1576 (#3823, pd3): the area's entrance — None, Fade in, Rise, Zoom or Wipe —
+ * and, when it has one, where it comes in the order (blank: reading order).
+ * Shown only with the area's other tools, never as a toolbar.
+ */
+export function EntranceTools({ block, onPatch }) {
+  const e = entranceOf(block?.entrance);
+  return (
+    <div className="flex flex-wrap items-center gap-2" role="group" aria-label={ENTRANCE_TITLE} data-testid="pitch-tools-entrance">
+      <span className={EYE}>{ENTRANCE_TITLE}</span>
+      <span className="flex overflow-hidden rounded-[9px] border border-axal-hairline dark:border-gray-700">
+        {[null, ...ENTRANCES].map((effect) => {
+          const on = (e?.effect ?? null) === effect;
+          return (
+            <button key={effect || 'none'} type="button" aria-pressed={on}
+              className={`${SEG} ${on ? 'bg-axal-lavender text-axal-violet dark:bg-violet-950/40 dark:text-violet-300' : 'bg-white text-axal-ink dark:bg-gray-900 dark:text-gray-100'}`}
+              onClick={() => onPatch(withEntrance(block, effect, e?.order))} data-testid={`pitch-tools-entrance-${effect || 'none'}`}>
+              {effect ? ENTRANCE_WORDS[effect] : NO_ENTRANCE}
+            </button>
+          );
+        })}
+      </span>
+      {e ? (
+        <label className={`flex items-center gap-1.5 ${MUTED}`}>Order
+          <input type="number" min={1} max={ORDER_MAX} className={NUM} value={e.order ?? ''} placeholder="Auto" aria-label="Entrance order"
+            onChange={(ev) => onPatch(withEntrance(block, e.effect, ev.target.value))} data-testid="pitch-tools-entrance-order" />
+        </label>
+      ) : null}
+      <span className={`w-full ${MUTED}`}>{ENTRANCE_LINE}</span>
+    </div>
+  );
+}
+
 export default function BlockTools({
   card, cardIndex, area, model, charts, images = [], items = [], deckId, accent,
   onPatch, onRemove, onChartLibrary, onAddBlock, onImage, onDesign, onPlace, onAddCard,
@@ -134,6 +168,7 @@ export default function BlockTools({
         {block.kind === 'chart' ? (
           <ChartToolbar block={block} charts={charts} onPatch={onPatch} onLibrary={() => onChartLibrary(block.id)} onRemove={onRemove} />
         ) : null}
+        <EntranceTools block={block} onPatch={onPatch} />
         {block.kind === 'image' ? (
           <ImageToolbarLive block={block} image={images.find((x) => x.uid === block.image_id) || null} onPatch={onPatch}
             onReplace={() => onImage('content', block.id)} onUpload={() => onImage('content', block.id)} onRegenerate={() => onImage('content', block.id)} onRemove={onRemove} />
