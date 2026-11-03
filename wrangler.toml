@@ -582,6 +582,14 @@ binding = "BROWSER"
 [images]
 binding = "IMAGES"
 
+# ---------- Stream ----------
+# #4176 (D4176): Learning video on Cloudflare Stream — direct uploads, signed
+# playback tokens, captions and thumbnails (routes/learning_stream.ts). Until
+# the owner turns Stream on (owner step A, #1008) every Stream route answers
+# 503 stream_unavailable, so the code can ship ahead of it.
+[stream]
+binding = "STREAM"
+
 # ---------- Cron Triggers ----------
 # The cron handler in cloudflare-worker/src/index.ts uses a per-minute
 # RATE_LIMITS lease so concurrent firings (e.g. when the every-minute
@@ -952,6 +960,10 @@ binding = "BROWSER"
 # D1544 (#3784): mirror of the top-level [images] binding.
 [env.production.images]
 binding = "IMAGES"
+
+# #4176 (D4176): mirror of the top-level [stream] binding.
+[env.production.stream]
+binding = "STREAM"
 
 # Task #36 — Mirror of the top-level [assets] binding. Env tables
 # don't inherit, so the `--env production` deploy path needs its own.
