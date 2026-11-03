@@ -13,7 +13,7 @@
  *   node scripts/build-skill-library.mjs           write the module
  *   node scripts/build-skill-library.mjs --check   exit 1 when it is stale
  */
-import { readFileSync, readdirSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -21,13 +21,23 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const DIR = join(ROOT, 'cloudflare-worker/src/services/agents/skills');
 const OUT = join(ROOT, 'cloudflare-worker/src/services/agents/skillLibrary.generated.ts');
 
+/** A file's text, or null when it is not there: one read, never a check and then a read. */
+function readOrNull(path) {
+  try {
+    return readFileSync(path, 'utf8');
+  } catch (e) {
+    if (e && e.code === 'ENOENT') return null;
+    throw e;
+  }
+}
+
 /** The library as data: one entry per skill, slug order. */
 export function libraryEntries(dir = DIR) {
   const files = readdirSync(dir).filter((f) => f.endsWith('.md') && f !== 'README.md').sort();
   return files.map((f) => {
     const slug = f.slice(0, -3);
-    const casePath = join(dir, 'cases', `${slug}.json`);
-    const kase = existsSync(casePath) ? JSON.parse(readFileSync(casePath, 'utf8')) : null;
+    const caseText = readOrNull(join(dir, 'cases', `${slug}.json`));
+    const kase = caseText === null ? null : JSON.parse(caseText);
     return { slug, skill_md: readFileSync(join(dir, f), 'utf8'), cases: kase ? [kase] : [] };
   });
 }
@@ -49,7 +59,7 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = ${JSON.stringify(entries, 
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const next = render();
-  const now = existsSync(OUT) ? readFileSync(OUT, 'utf8') : '';
+  const now = readOrNull(OUT) ?? '';
   if (process.argv.includes('--check')) {
     if (now !== next) {
       console.error('✖ skillLibrary.generated.ts is stale: run node scripts/build-skill-library.mjs');
