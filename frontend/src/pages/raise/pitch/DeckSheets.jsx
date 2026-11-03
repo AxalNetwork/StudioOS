@@ -11,7 +11,7 @@ import { AUDIENCE_LABELS, KIT_FAILED, NOT_RECORDED, NO_KIT, THEME_LABELS } from 
 import { SLIDE_SIZES, STRUCTURES, aspectOf, placeOf, withAspect } from './gridModel';
 import { applyStructure, movedLine, recommendedLine } from './structureModel';
 import { LANGUAGES, langOf, languageLine, withLanguage } from './deckLanguage';
-import { deckActions as deckActionsAdapter, figures as figuresAdapter, remix as remixAdapter, replaceImages as replaceImagesAdapter, shown, stagePlan as stagePlanAdapter } from './deckV2Adapter';
+import { brandLocks as brandLocksAdapter, deckActions as deckActionsAdapter, figures as figuresAdapter, remix as remixAdapter, replaceImages as replaceImagesAdapter, shown, stagePlan as stagePlanAdapter } from './deckV2Adapter';
 import { deckImagesApi } from '../../../lib/api/deckImages';
 import { railPressHeaders } from '../../../lib/railPage';
 import { aiTokens, refusalOf } from './newDeckModel';
@@ -19,6 +19,8 @@ import { STAGES, replaceLabel, replaceNote, reorderLabel, reorderNote } from './
 import { GO_TO_CARD, checkCounts, toReview } from './figuresModel';
 import { movedNotice } from './deckReflow';
 import { deckBrandKitApi } from '../../../lib/api/deckBrandKit';
+import { deckBrandLocksApi } from '../../../lib/api/deckBrandLocks';
+import { ADMINS_ONLY, LOCKS_FAILED, LOCK_ROWS, lockFor } from './brandTemplateModel';
 
 /**
  * D1604 (#3716, pd13) — the sheets the editor's ⋯ opens, each one v1 surface
@@ -279,11 +281,60 @@ export function kitBodyOf(d) {
   };
 }
 
+/**
+ * D1572 (#3819, pd31): the kit's three lock switches. "Only the venture’s
+ * admins can lock": a member who cannot sees the switches, set as they are,
+ * and that line. A locked part shows "Locked by [name]".
+ */
+export function BrandLocks({ projectId, locks, onChanged }) {
+  const [busy, setBusy] = useState(null);
+  const [line, setLine] = useState('');
+  if (locks == null) return null;
+  if (locks.unreadable) return <span className={MUTED} role="status" data-testid="pitch-brand-locks-error">{LOCKS_FAILED}</span>;
+  if (locks.available !== true) return null;
+  const canLock = locks.value?.can_lock === true;
+  const toggle = async (part, locked) => {
+    setBusy(part); setLine('');
+    try { await deckBrandLocksApi.setLock(projectId, part, locked); onChanged?.(); }
+    catch (e) { setLine(e?.data?.message || e?.message || 'The lock could not be changed. Nothing changed.'); }
+    finally { setBusy(null); }
+  };
+  return (
+    <div className="flex flex-col gap-1.5" data-testid="pitch-brand-locks">
+      <span className={EYE}>Locks</span>
+      {LOCK_ROWS.map(({ part, label }) => {
+        const { locked, tag } = lockFor(locks, part);
+        return (
+          <div key={part} className="flex items-center justify-between gap-2">
+            <span className={`text-[12.5px] ${INK}`}>{label}{tag ? <span className={`ml-2 ${MUTED}`} data-testid={`pitch-brand-lock-tag-${part}`}>{tag}</span> : null}</span>
+            <button type="button" role="switch" aria-checked={locked} aria-label={`Lock ${label.toLowerCase()}`} disabled={!canLock || busy != null}
+              title={canLock ? undefined : ADMINS_ONLY} className={GHOST} data-testid={`pitch-brand-lock-${part}`} onClick={() => toggle(part, !locked)}>
+              {busy === part ? '…' : locked ? 'Locked' : 'Lock'}
+            </button>
+          </div>
+        );
+      })}
+      <span className={MUTED}>{ADMINS_ONLY}</span>
+      {line ? <span className={MUTED} role="status">{line}</span> : null}
+    </div>
+  );
+}
+
 function DeckKitFields({ projectId, deckId, kit, readOnly, dirty, onApplied }) {
   const fonts = kit.data?.font_options || [];
   const [draft, setDraft] = useState(() => kitDraftOf(kit.data?.kit?.deck));
   const [busy, setBusy] = useState(null);
   const [line, setLine] = useState('');
+  // D1572: the kit's locks; a locked part's fields cannot be edited here, and the Worker refuses a change anyway.
+  const [locks, setLocks] = useState(null);
+  const [lockTick, setLockTick] = useState(0);
+  useEffect(() => {
+    let live = true;
+    brandLocksAdapter(projectId).then((a) => { if (live) setLocks(a); });
+    return () => { live = false; };
+  }, [projectId, lockTick]);
+  const paletteLock = lockFor(locks, 'palette');
+  const fontsLock = lockFor(locks, 'fonts');
   const set = (patch) => setDraft((d) => ({ ...d, ...patch }));
   const save = async () => {
     setBusy('save'); setLine('');
@@ -303,21 +354,21 @@ function DeckKitFields({ projectId, deckId, kit, readOnly, dirty, onApplied }) {
   const swatch = (c) => (HEX_RE.test(c) ? { background: c } : undefined);
   return (
     <div className="flex flex-col gap-2" data-testid="pitch-sheet-brand-deck">
-      <span className={EYE}>Palette</span>
+      <span className={EYE}>Palette{paletteLock.tag ? ` · ${paletteLock.tag}` : ''}</span>
       <div className="grid grid-cols-5 gap-2">
         {KIT_ROLES.map(([role, label]) => (
           <label key={role} className={`flex flex-col gap-1 ${MUTED}`}>
             <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded-full border border-axal-hairline dark:border-gray-700" style={swatch(draft.palette[role])} aria-hidden="true" />{label}</span>
-            <input className={FIELD} value={draft.palette[role]} placeholder="#rrggbb" disabled={readOnly} aria-label={`${label} colour`} data-testid={`pitch-brand-palette-${role}`}
+            <input className={FIELD} value={draft.palette[role]} placeholder="#rrggbb" disabled={readOnly || paletteLock.locked} aria-label={`${label} colour`} data-testid={`pitch-brand-palette-${role}`}
               onChange={(e) => set({ palette: { ...draft.palette, [role]: e.target.value } })} />
           </label>
         ))}
       </div>
-      <span className={EYE}>Fonts</span>
+      <span className={EYE}>Fonts{fontsLock.tag ? ` · ${fontsLock.tag}` : ''}</span>
       <div className="grid grid-cols-2 gap-2">
         {[['display', 'Headings'], ['body', 'Text']].map(([key, label]) => (
           <label key={key} className={`flex flex-col gap-1 ${MUTED}`}>{label}
-            <select className={FIELD} value={draft[key]} disabled={readOnly} data-testid={`pitch-brand-font-${key}`} onChange={(e) => set({ [key]: e.target.value })}>
+            <select className={FIELD} value={draft[key]} disabled={readOnly || fontsLock.locked} data-testid={`pitch-brand-font-${key}`} onChange={(e) => set({ [key]: e.target.value })}>
               <option value="">Not set</option>
               {fonts.map((f) => <option key={f} value={f}>{f}</option>)}
             </select>
@@ -333,6 +384,7 @@ function DeckKitFields({ projectId, deckId, kit, readOnly, dirty, onApplied }) {
         ))}
       </div>
       <span className={MUTED}>{draft.references.length ? `${draft.references.length} reference ${draft.references.length === 1 ? 'image' : 'images'}` : 'No reference images yet. Keep images in the image library to use them here.'}</span>
+      <BrandLocks projectId={projectId} locks={locks} onChanged={() => setLockTick((t) => t + 1)} />
       {!readOnly ? (
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" className={GHOST} disabled={Boolean(busy)} onClick={save} data-testid="pitch-brand-save">{busy === 'save' ? 'Saving…' : 'Save brand kit'}</button>

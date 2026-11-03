@@ -19,9 +19,11 @@
  * Areas are the input. D1499 (#3749) changed only `areasOf`: a card with a
  * structure (`card.structure`, or its own `card.areas`) offers that
  * structure's areas as its free ranges; a card without one keeps the
- * row-by-row free ranges below. The divider drag is A4's (#3765). Locks
- * arrive with #3819; until then a block is locked only when it says so
- * (`locked: true`).
+ * row-by-row free ranges below. The divider drag is A4's (#3765). D1572
+ * (#3819): a brand lock locks a part of the kit (fonts, colour roles, logo),
+ * which the Worker enforces on save; an area is locked when its block says
+ * so (`locked: true`), and a locked area cannot be selected (`LOCKED_WHY`
+ * on hover).
  *
  * D1533 (#3777): multi-select reaches decor, `decor:<id>` beside the areas'
  * ids (`arrangeModel.decorSel`), and a group selects together: a click on a

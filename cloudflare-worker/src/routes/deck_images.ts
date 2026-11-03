@@ -79,6 +79,7 @@ import { artDirectionOfTheme, seedFor, type ArtDirection } from '../services/dec
 import { asReference } from '../services/decks/imageEdits';
 import { IMAGE_SPECS, type DrawReference } from '../services/ai/shapes';
 import { screenOf, screenUpload } from '../services/decks/uploadScreen';
+import { deckCeilingRefusal } from '../services/decks/observability';
 
 /** D1534 (#3778): pd27's words. */
 export const ALT_REQUIRED_MESSAGE = 'Alt text is needed before this image can be inserted.';
@@ -282,6 +283,9 @@ deckImages.post('/:id/images', async (c) => {
   const p = await priced(c, user, deck);
   if (p instanceof Response) return p;
   const userId = Number(user.id);
+  // D1510 (#3761): the owner's daily ceiling, before anything is held or drawn.
+  const ceiling = await deckCeilingRefusal(c.env, p.total);
+  if (ceiling) return refuse(c, 429, ceiling);
   // Before any hold: the balance for every image asked for, then room on the venture's storage plan.
   const short = await balanceRefusal(c.env, userId, p.total);
   if (short) return refuse(c, 402, { code: short.code, message: short.message });
@@ -393,6 +397,9 @@ deckImages.post('/:id/images/replace-all', async (c) => {
   }
   const userId = Number(user.id);
   const q = replaceQuote(plan.planned);
+  // D1510 (#3761): the owner's daily ceiling, before the one hold.
+  const ceiling = await deckCeilingRefusal(c.env, q.hold);
+  if (ceiling) return refuse(c, 429, ceiling);
   // The one hold refuses a balance that cannot cover it (402, the router's words) before anything is drawn.
   let ticket;
   try { ticket = await assertStorageRoom(c.env, { projectId: deck.projectId }, IMAGE_BYTES_ESTIMATE * plan.planned.length, user); }
