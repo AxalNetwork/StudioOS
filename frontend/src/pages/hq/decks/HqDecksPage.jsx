@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Card } from '../../../ui';
+import { Card, Lightbox } from '../../../ui';
 import AdminPageHeader, { HeaderTab } from '../../../ui/AdminPageHeader';
 import { deckReportsApi } from '../../../lib/api/deckReports';
 import { adminFeatureFlagsApi } from '../../../lib/api/adminFeatureFlags';
+import { adminDeckBetaApi } from '../../../lib/api/adminDeckBeta';
 import { hqDeckStageNormsApi } from '../../../lib/api/hqDeckStageNorms';
 import { api } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
@@ -11,9 +12,8 @@ import { isSuperAdminUser } from '../../../lib/shellRole';
 import AiModelsTab from './AiModelsTab';
 import { useAuth } from '../../../hooks/useAuthSync';
 import {
-  BUILD, BETA_COLUMNS, MODELS_LINK, NORM_ADD_LINE, NORM_COLUMNS, NORM_RETIRE_LINE, NORM_RULE, NORM_SOURCE_HELP, NORM_STAGE_OF, NOT_RECORDED, PROJECT_NORMS_NOTE, NOTE_MAX, OUTCOMES, PROPOSAL_LINE, REASONS, STAGES, SUBTITLE,
-  defaultOnKeys, filterReports, flagLabel, flagRows, normBody, normDraftArmed, normRetireArmed, normRow, notYet, offGridOverrides, reportRow, resolveArmed,
-  templateChangeArmed, templateGrid, templatePreview, templateResetArmed, viewFor,
+  BETA_ADD_LINE, BETA_COLUMNS, BETA_REMOVE_LINE, BUILD, MODELS_LINK, NORM_ADD_LINE, NORM_COLUMNS, NORM_RETIRE_LINE, NORM_RULE, NORM_SOURCE_HELP, NORM_STAGE_OF, NOTE_MAX, NOT_RECORDED, OUTCOMES, PROJECT_NORMS_NOTE, PROPOSAL_LINE, REASONS, STAGES, SUBTITLE,
+  addArmed, betaChoices, cohortRow, defaultOnKeys, filterReports, flagLabel, flagRows, normBody, normDraftArmed, normRetireArmed, normRow, notYet, offGridOverrides, reasonOk, reportRow, resolveArmed, templateChangeArmed, templateGrid, templatePreview, templateResetArmed, viewFor,
 } from './hqDecksModel';
 
 /**
@@ -24,6 +24,7 @@ import {
  *   Reports            GET  /api/admin/deck-reports?status=   (requireHqAdmin, D1540)
  *                      POST /api/admin/deck-reports/:uid/resolve  { outcome, note }
  *   Feature flags      GET  /api/admin/feature-flags          (requireAdmin, D1509)
+ *   Beta cohort        GET/POST /api/admin/deck-beta, GET /people, DELETE /:uid (requireHqAdmin, K3 #4190)
  *   Default templates  GET  /api/decks/admin/recommend-overrides  (any admin, D905)
  *                      PUT / DELETE the same, { reason }        (Super Admin, K4 #4191)
  *   Stage norms        GET/POST /api/admin/deck-stage-norms, PUT /:uid, POST /:uid/retire,
@@ -74,19 +75,6 @@ function ReadFailed({ what, claim, onRetry, testId }) {
       <span><strong>Could not be read.</strong> {what} did not load. {claim}</span>
       <button type="button" className={BTN} onClick={onRetry}>Try again</button>
     </div>
-  );
-}
-
-/** A board that waits on its build task, with its columns drawn and its controls off. */
-function Waiting({ task, columns, testId, children }) {
-  return (
-    <Card data-testid={testId}>
-      <p className={`${MUTED} mb-3`} data-testid={`${testId}-not-yet`}>{notYet(task)}</p>
-      {columns && (
-        <table className="w-full"><thead><tr>{columns.map((c) => <th key={c} className={TH}>{c}</th>)}</tr></thead></table>
-      )}
-      {children}
-    </Card>
   );
 }
 
@@ -258,14 +246,144 @@ function Flags() {
 
 // ── HD3 · Beta cohort ───────────────────────────────────────────────────────
 
-function Beta() {
+/** HD3: "Add people", found by name, the features to give them, and the reason. */
+function AddPeople({ keys, onDone, onClose }) {
+  const [query, setQuery] = useState('');
+  const [found, setFound] = useState([]);
+  const [picked, setPicked] = useState([]);
+  const [features, setFeatures] = useState([]);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  useEffect(() => {
+    let live = true;
+    if (query.trim().length < 2) { setFound([]); return undefined; }
+    adminDeckBetaApi.people(query.trim()).then((r) => { if (live) setFound(Array.isArray(r?.people) ? r.people : []); },
+      (e) => { reportError('hq-decks:beta-search', e); if (live) setFound([]); });
+    return () => { live = false; };
+  }, [query]);
+  const toggle = (list, set, v) => set(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
+  const armed = addArmed({ people: picked, features, reason });
+  const add = async () => {
+    if (!armed) return;
+    setBusy(true); setError(null);
+    try { await adminDeckBetaApi.add(picked.map((p) => p.uid), features, reason.trim()); onDone(); }
+    catch (e) { setError(e?.message || 'They could not be added. Nothing was changed.'); reportError('hq-decks:beta-add', e); }
+    finally { setBusy(false); }
+  };
   return (
-    <Waiting task="K3" columns={BETA_COLUMNS} testId="hq-decks-beta">
-      <div className="mt-3 flex gap-2">
-        <button type="button" className={PRIMARY} disabled title={notYet('K3')}>Add people</button>
+    <Lightbox label="Add people" title="Add people" width={560} onClose={() => !busy && onClose()} testId="deck-beta-add"
+      footer={(
+        <div className="flex justify-end gap-2">
+          <button type="button" className={BTN} onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="button" className={PRIMARY} onClick={add} disabled={busy || !armed} data-testid="deck-beta-add-confirm">{busy ? 'Adding…' : `Add ${picked.length || ''}`.trim()}</button>
+        </div>
+      )}>
+      <div className="flex flex-col gap-3">
+        <p className={MUTED}>{BETA_ADD_LINE}</p>
+        <input className={INPUT} placeholder="Find people by name" aria-label="Find people by name" value={query} onChange={(e) => setQuery(e.target.value)} data-testid="deck-beta-search" />
+        <ul className="m-0 flex list-none flex-col gap-1 p-0" data-testid="deck-beta-found">
+          {found.map((p) => (
+            <li key={p.uid}>
+              <label className="flex items-center gap-2 text-[13px]">
+                <input type="checkbox" checked={picked.some((x) => x.uid === p.uid)} onChange={() => setPicked((l) => (l.some((x) => x.uid === p.uid) ? l.filter((x) => x.uid !== p.uid) : [...l, p]))} data-testid={`deck-beta-pick-${p.uid}`} />
+                <span className="font-semibold">{p.name}</span>
+                <span className={MUTED}>{[p.company, p.role].filter(Boolean).join(' · ')}</span>
+              </label>
+            </li>
+          ))}
+        </ul>
+        <fieldset className="flex flex-col gap-1">
+          <legend className="text-[13px] font-semibold">Features</legend>
+          {betaChoices(keys).map((k) => (
+            <label key={k.key} className="flex items-center gap-2 text-[13px]">
+              <input type="checkbox" checked={features.includes(k.key)} onChange={() => toggle(features, setFeatures, k.key)} data-testid={`deck-beta-feature-${k.key}`} />
+              {k.label}
+            </label>
+          ))}
+        </fieldset>
+        <label className="flex flex-col gap-1 text-[13px]">
+          <span className="font-semibold">Reason <span className={MUTED}>(kept in the admin audit)</span></span>
+          <textarea className={INPUT} rows={2} value={reason} onChange={(e) => setReason(e.target.value)} data-testid="deck-beta-reason" />
+        </label>
+        {error ? <p role="alert" className="text-[12.5px] text-red-700 dark:text-red-300">{error}</p> : null}
       </div>
+    </Lightbox>
+  );
+}
+
+/** HD3b: "Remove…", with the reason; what they made stays. */
+function RemovePerson({ row, onDone, onClose }) {
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const remove = async () => {
+    if (!reasonOk(reason)) return;
+    setBusy(true); setError(null);
+    try { await adminDeckBetaApi.remove(row.uid, reason.trim()); onDone(); }
+    catch (e) { setError(e?.message || 'They could not be removed. Nothing was changed.'); reportError('hq-decks:beta-remove', e); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Lightbox label={`Remove ${row.name}`} title={`Remove ${row.name} from the beta`} width={480} onClose={() => !busy && onClose()} testId="deck-beta-remove"
+      footer={(
+        <div className="flex justify-end gap-2">
+          <button type="button" className={BTN} onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="button" className={PRIMARY} onClick={remove} disabled={busy || !reasonOk(reason)} data-testid="deck-beta-remove-confirm">{busy ? 'Removing…' : 'Remove'}</button>
+        </div>
+      )}>
+      <div className="flex flex-col gap-3">
+        <p className={MUTED}>{BETA_REMOVE_LINE}</p>
+        <label className="flex flex-col gap-1 text-[13px]">
+          <span className="font-semibold">Reason <span className={MUTED}>(kept in the admin audit)</span></span>
+          <textarea className={INPUT} rows={2} value={reason} onChange={(e) => setReason(e.target.value)} data-testid="deck-beta-remove-reason" />
+        </label>
+        {error ? <p role="alert" className="text-[12.5px] text-red-700 dark:text-red-300">{error}</p> : null}
+      </div>
+    </Lightbox>
+  );
+}
+
+function Beta() {
+  const [q, setQ] = useState('');
+  const [sheet, setSheet] = useState(null);
+  const [reply, retry] = useRead(() => adminDeckBetaApi.list({ q }), [q]);
+  const close = () => setSheet(null);
+  const done = () => { setSheet(null); retry(); };
+  const keys = reply?.keys || [];
+  return (
+    <Card data-testid="hq-decks-beta">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <input className={`${INPUT} max-w-[280px]`} placeholder="Name or company" aria-label="Filter by name or company" value={q} onChange={(e) => setQ(e.target.value)} data-testid="deck-beta-filter" />
+        <button type="button" className={PRIMARY} onClick={() => setSheet({ kind: 'add' })} disabled={reply === undefined || reply === null} data-testid="deck-beta-add-open">Add people</button>
+      </div>
+      {reply === undefined ? <Reading testId="deck-beta-reading" /> : null}
+      {reply === null ? <ReadFailed what="The beta cohort" claim="That is not the same as nobody being in it." onRetry={retry} testId="deck-beta-unreadable" /> : null}
+      {reply ? (
+        <div className="max-h-[32rem] overflow-auto">
+          <table className="w-full" data-testid="deck-beta-table">
+            <thead><tr>{[...BETA_COLUMNS, ''].map((c) => <th key={c || 'act'} className={TH}>{c || <span className="sr-only">Remove</span>}</th>)}</tr></thead>
+            <tbody>
+              {(reply.people || []).map((p) => {
+                const r = cohortRow(p, keys);
+                return (
+                  <tr key={r.uid} className="border-t border-axal-hairline dark:border-gray-800" data-testid={`deck-beta-row-${r.uid}`}>
+                    <td className={TD}><span className="font-semibold">{r.name}</span>{r.company && <><br /><span className={MUTED}>{r.company}</span></>}</td>
+                    <td className={TD}>{r.features.join(', ')}</td>
+                    <td className={TD}><Cell v={r.by} /> · {r.at ? day(r.at) : <Cell v={NOT_RECORDED} />}</td>
+                    <td className={TD}><button type="button" className={BTN} onClick={() => setSheet({ kind: 'remove', row: r })} data-testid={`deck-beta-remove-${r.uid}`}>Remove…</button></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {!(reply.people || []).length ? <p className={`${MUTED} mt-2`} data-testid="deck-beta-empty">{q ? 'Nobody in the cohort matches.' : 'Nobody is in the beta cohort yet.'}</p> : null}
+        </div>
+      ) : null}
       <p className={`${MUTED} mt-2`}>People are found by name. Emails are never shown.</p>
-    </Waiting>
+      {sheet?.kind === 'add' && <AddPeople keys={keys} onDone={done} onClose={close} />}
+      {sheet?.kind === 'remove' && <RemovePerson key={sheet.row.uid} row={sheet.row} onDone={done} onClose={close} />}
+    </Card>
   );
 }
 

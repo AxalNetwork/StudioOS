@@ -39,7 +39,7 @@ test('Decks joins the Platform strip after Promo codes, in the list and in the c
 
 test('each build task names its issue, and only a landed one is live', () => {
   assert.deepEqual(Object.entries(BUILD).map(([k, b]) => [k, b.issue]), [['K1', 4188], ['K2', 4189], ['K3', 4190], ['K4', 4191], ['K5', 4192]]);
-  assert.deepEqual(Object.entries(BUILD).filter(([, b]) => b.live).map(([k]) => k), ['K1', 'K4', 'K5'], 'K1 (#4188), K4 (#4191) and K5 (#4192) landed');
+  assert.deepEqual(Object.entries(BUILD).filter(([, b]) => b.live).map(([k]) => k), ['K1', 'K3', 'K4', 'K5'], 'K1 (#4188), K3 (#4190), K4 (#4191) and K5 (#4192) landed');
   assert.equal(notYet('K3'), 'Not switched on yet. The beta cohort arrives with #4190.');
 });
 
