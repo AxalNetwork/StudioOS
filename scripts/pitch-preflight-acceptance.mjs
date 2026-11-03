@@ -31,7 +31,7 @@
  * Exit 0: every check passed. Exit 1: a check failed. Exit 2: it could not run
  * (no build, no browser) and verified nothing.
  */
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
