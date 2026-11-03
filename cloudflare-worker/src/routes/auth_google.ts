@@ -632,6 +632,13 @@ async function resolveGoogleSignin(
   // (Belt-and-braces — the email UNIQUE constraint on users would also have
   // rejected one of the two INSERTs further upstream in most cases.)
   await sql`INSERT OR IGNORE INTO user_google_links (user_id, google_sub) VALUES (${user.id}, ${sub})`;
+  // D4289 P2 (#4291): a Google sign-up keeps the first-touch referral (`axal_ref`), a handle's or a code's,
+  // as /register does. Best-effort: attribution never breaks a sign-in.
+  try {
+    const { readRefCookie } = await import('../services/referralAttribution');
+    const { attachSignupReferral } = await import('../services/referrals/handleAttribution');
+    await attachSignupReferral(c.env, Number(user.id), readRefCookie(c.req.header('cookie')));
+  } catch (e) { console.error('[auth_google] referral not attached:', (e as Error).message); }
   // Task #66 — seed the onboarding-chatbot gate row. The frontend RequireAuth
   // guard pins this user to /onboarding/chat until the chatbot save flips
   // completed_at. INSERT OR IGNORE keeps a double-callback race a no-op.
