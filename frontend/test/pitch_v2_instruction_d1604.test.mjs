@@ -156,15 +156,20 @@ test('a figure in the instruction is refused before any quote; nothing was charg
 });
 
 test('several areas answer through the adapter; a chip comes out; a bound figure says why', async () => {
-  const m = await mountEditor({ answers: { 'assist.quote': QUOTE } });
+  const m = await mountEditor({ answers: { 'assist.quote': QUOTE, 'instruct.quote': async () => ({ class: 'areas', hold_microusd: 2400, runs: 2, refused: 0, areas: [] }) } });
   try {
     await m.press(m.by('pitch-editor-block-b1'));
     await m.press(m.by('pitch-editor-block-b2'), { shiftKey: true });
     assert.equal(m.pr(node(m, 'pitch-instruction-field')).placeholder, 'Tell Eadwyn what to change in these 2 areas');
     await m.type(node(m, 'pitch-instruction-field'), 'make both warmer');
     await m.press(node(m, 'pitch-instruction-send'));
-    assert.equal(m.text(node(m, 'pitch-instruction-later')), `Coming later: ${SURFACES.instruct.what}. Not switched on yet.`);
-    assert.equal(m.calls.filter((c) => c[0] === 'assist.quote').length, 0, 'nothing is quoted for a route not on main');
+    // D1521 (#3773): the adapter reaches the Worker's instruct quote with the selection; drawing its quote and run is B19's (#3795).
+    const asked = m.calls.filter((c) => c[0] === 'instruct.quote');
+    assert.equal(asked.length, 1);
+    assert.deepEqual(asked[0][2], { card: 0, selection: [{ area_id: 'b1' }, { area_id: 'b2' }], instruction: 'make both warmer' });
+    assert.equal(m.text(node(m, 'pitch-instruction-later')), `Coming later: ${SURFACES.instruct.what}.`);
+    assert.equal(m.calls.filter((c) => c[0] === 'assist.quote').length, 0, 'several areas never use the one-area quote');
+    assert.equal(m.calls.filter((c) => c[0] === 'instruct.run').length, 0, 'nothing runs without the founder pressing Run');
     await m.press(node(m, 'pitch-instruction-chip-b1-remove'));
     assert.ok(!m.by('pitch-instruction-chip-b1'), 'the chip came out');
     assert.equal(m.pr(node(m, 'pitch-editor-block-b1'))['aria-pressed'], false, 'and so did the area');

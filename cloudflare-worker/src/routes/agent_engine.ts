@@ -127,8 +127,8 @@ export const agentEngineEnabled = (env: Env) =>
   typeof env.AGENT_ENGINE === 'string' && env.AGENT_ENGINE !== '' && env.AGENT_ENGINE !== 'off' && env.TEAM_AGENTS_ENABLED === 'true';
 
 /** The runtime the routes reach; tests pass their own (the `railRunRoutes` pattern). */
-export type EngineRouteDeps = { runtime: (env: Env) => Promise<AgentRuntime> };
-const DEFAULT_DEPS: EngineRouteDeps = { runtime: agentRuntime };
+export type EngineRouteDeps = { runtime: (env: Env) => Promise<AgentRuntime>; now: () => Date };
+const DEFAULT_DEPS: EngineRouteDeps = { runtime: agentRuntime, now: () => new Date() };
 let deps: EngineRouteDeps = DEFAULT_DEPS;
 /** Tests only. */
 export function __setEngineRouteDeps(d: Partial<EngineRouteDeps> | null) { deps = d ? { ...DEFAULT_DEPS, ...d } : DEFAULT_DEPS; }
@@ -197,7 +197,7 @@ router.get('/project/:id/work/workload', async (c) => {
     const raw = c.req.query('weeks') ?? String(WEEKS_DEFAULT);
     const weeks = /^[0-9]{1,2}$/.test(raw) ? Number(raw) : NaN;
     if (!(weeks >= 1 && weeks <= WEEKS_MAX)) return refuse(c, 400, { code: 'invalid_weeks', message: `Show 1 to ${WEEKS_MAX} weeks.` });
-    return c.json(await projectWorkload(c.env, s.id, weeks, new Date()));
+    return c.json(await projectWorkload(c.env, s.id, weeks, deps.now(), user));
   } catch (e) { return mapError(c, e); }
 });
 

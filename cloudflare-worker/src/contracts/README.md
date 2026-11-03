@@ -22,6 +22,7 @@ reply against its schema, not only that the route exists.
 | `deckGrid.schema.json` | `GET /api/decks/:id/grid` (D1499, #3749): the geometry, the 17 structures and each card's areas with their boxes. |
 | `deckImageTools.schema.json` | `GET /api/decks/images/tools` (D1534, #3778 phase 2): the AI image tools (background removal through AI Gateway, Upscale with no model), each with whether it can run, its model, its per-image price and why not. |
 | `deckImageVary.schema.json` | `POST /api/decks/images/:uid/edit/quote` (D1544, #3784): an image edit's model, its one hold for the edit and its checks, the references it sends, or why it cannot run. |
+| `deckInstruct.schema.json` | `POST /api/decks/:id/areas/instruct/quote` and `POST /api/decks/:id/areas/instruct` (D1521, #3773): an instruction on at most six areas of one card, quoted as #3764's areas quote, or its one run: the batch, replay, the selection, what was asked and one proposal per area. |
 | `deckInvestorLinks.schema.json` | `GET /api/decks/:id/investor-links` (D1565, #3812): the deck, its version and its per-investor links. |
 | `deckJudge.schema.json` | `POST /api/decks/areas/:uid/judge/quote` and `POST /api/decks/areas/:uid/judge` (D1525, #3783): the judge's input-only hold and family, or its blind ranking of an area's variants (rank, probability, "Ranked n of m"), the score AUTO-5 reads and the panel's agreement. |
 | `deckMarkSeen.schema.json` | `POST /api/decks/areas/batches/:uid/seen` (D1600, #3879): `{ ok: true }` when the return banner's Review is opened. |

@@ -27,7 +27,7 @@ The retention periods for generated assets are owner decision W (#3716), pending
 | `deck_preflight_dismissals` | which preflight warnings an editor dismissed on a version: the finding's id, who and when, never its words (D4208) | deck cascade | none |
 | `deck_area_batches` | a deck generation run (D1502): its areas or whole-deck build, its quote and parent hold, and its state | deck cascade | none |
 | `deck_area_batch_steps` | a generation run's plan and progress, one row per quoted line (D1502) | cascade from its run | none (its images are `deck_images` rows) |
-| `deck_area_proposals` | what Generate into areas proposed, one row per area of a run (D1512): its variants' words, chart blocks or image references, and the decision (Accept, Discard, superseded) | deck cascade; its run is set null when the run goes. The daily cleanup (D1512) expires a proposal nobody decided 14 days after it was made; the row stays, with its outcome, for the accept rate | none (its images are `deck_images` rows) |
+| `deck_area_proposals` | what Generate into areas proposed, one row per area of a run (D1512): its variants' words, chart blocks or image references, and the decision (Accept, Discard, superseded). An instruction's rows (D1521) also keep the selection it was scoped to, what was asked and the SHA-256 of the founder's words, never the words | deck cascade; its run is set null when the run goes. The daily cleanup (D1512) expires a proposal nobody decided 14 days after it was made; the row stays, with its outcome, for the accept rate | none (its images are `deck_images` rows) |
 | `deck_logos` | the customer logos a venture may show, each with its own permission record (D1543) | venture cascade | none (each picture is a `deck_images` row) |
 | `deck_templates` | Gallery templates (D1535): HQ's, and each member's own Save as my template, text and figures already stripped | a member's own leave with their account (user cascade); HQ's are never deleted by the app | none |
 | `deck_approvers` | who must approve a deck before it is shared | venture cascade | none |
@@ -53,6 +53,8 @@ The retention periods for generated assets are owner decision W (#3716), pending
 | `deck_logos` | a venture's customer logos for the logo wall: the customer's name, the image, and the permission to show it (D1543) | venture cascade | none of its own (the image is a `deck_images` row) |
 | `deck_rehearsals` | a founder’s rehearsal transcript, card timings and counted report (D1580) | deck cascade | rehearsal audio: removed after an hour unless its maker keeps it; turning Keep the audio off removes it immediately |
 | `deck_rehearsal_extras` | a rehearsal’s audio size and its coaching points (D1580 part 2a) | rehearsal cascade (and so deck cascade) | none: the coaching restarts the audio’s hour, which `deck_rehearsals` removes |
+| `deck_recordings` | a founder’s walkthrough takes, one card each, with their captions (D1590) | deck, venture and account cascade; owner decision W = A: kept until its maker deletes it, no automatic expiry. A retake removes that card’s earlier takes | one per row, `deck-recordings/<project>/<uid>.<ext>`: the maker’s delete and a retake remove it with the row; after a cascade the daily cleanup removes an object whose row is gone, a day after upload |
+| `deck_recording_links` | which share links play the walkthrough (D1590) | deck and account cascade; removed when its maker detaches it | none |
 
 ## Not covered yet
 

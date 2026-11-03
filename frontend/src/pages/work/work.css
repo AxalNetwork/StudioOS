@@ -115,6 +115,8 @@
 .wk-wl-cell { display: flex; flex-direction: column; gap: 4px; min-height: 64px; }
 .wk-wl-cell[data-over='true'] { background: #fffbeb; box-shadow: inset 0 0 0 1px #f59e0b; }
 .wk-wl-bar { text-align: left; border-radius: 6px; padding: 4px 6px; background: #ede9fe; color: #3b2a7a; font-size: 12px; cursor: grab; }
+/* #3972: an agent's scheduled session, in the calendar's "AI agents" teal; not dragged, not opened as a task. */
+.wk-wl-session { background: #ccfbf1; color: #0f766e; cursor: default; }
 .wk-wl-unscheduled, .wk-wl-schedule, .wk-feed-lists { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; }
 .wk-feed-rows { list-style: none; padding: 0; margin: 12px 0; display: flex; flex-direction: column; }
 .wk-feed-rows > li { padding: 10px 0; border-top: 1px solid #e7e5f2; font-size: 13px; }
@@ -122,4 +124,5 @@
 .dark .wk-wl-head > span, .dark .wk-wl-who, .dark .wk-wl-cell { background: #111827; color: #e5e7eb; }
 .dark .wk-wl-cell[data-over='true'] { background: #451a03; box-shadow: inset 0 0 0 1px #d97706; }
 .dark .wk-wl-bar { background: #2e1065; color: #ddd6fe; }
+.dark .wk-wl-session { background: #042f2e; color: #2dd4bf; }
 .dark .wk-feed-rows > li { border-top-color: #374151; }

@@ -32,6 +32,8 @@ import LabPageHeader from '../components/spinout/LabPageHeader';
 import LabPageShell from '../components/spinout/LabPageShell';
 import IncomingLeadsStrip from '../components/IncomingLeadsStrip';
 import { Unrecorded, Unreadable } from '../ui';
+import RankByFit from '../ui/RankByFit';
+import { applyRank } from '../lib/rankByFit';
 import {
   buildMatchBrief, buildEvidenceModules, buildDecisionModel, serializeDecision,
   fitRows, DECISION_OUTCOMES, CAPABILITY_GAP_THRESHOLD,
@@ -60,6 +62,8 @@ export default function SpinoutLabCofounderMatchPage() {
   const [myProfile, setMyProfile] = useState(null); // cofounder profile | {unavailable}
   const [browse, setBrowse] = useState(null); // {items, viewer_has_profile} | {failed}
   const [browseSkill, setBrowseSkill] = useState('');
+  // #3938 (NE1): Rank by fit orders the browse cards by meaning against what the founder looks for, as a view.
+  const [browseRank, setBrowseRank] = useState(null);
   const [interestBusy, setInterestBusy] = useState(null);
   const [interestMsg, setInterestMsg] = useState(null);
 
@@ -137,7 +141,9 @@ export default function SpinoutLabCofounderMatchPage() {
   );
   const scoringDone = milestoneKeys.has('scoring_run_completed');
   const cards = useMemo(() => (Array.isArray(browse?.items) ? browse.items : []), [browse]);
-  const sortedCards = useMemo(() => sortCards(cards, sortKey), [cards, sortKey]);
+  useEffect(() => { setBrowseRank(null); }, [browse]);
+  const rankedCards = useMemo(() => applyRank(sortCards(cards, sortKey), (c) => c.uid, browseRank), [cards, sortKey, browseRank]);
+  const sortedCards = rankedCards.list;
   const cardByUid = useMemo(() => new Map(cards.map((c) => [c.uid, c])), [cards]);
   const outcomeDef = DECISION_OUTCOMES.find((o) => o.value === outcome) || null;
   const toggleFinalist = (uid) => setFinalists((f) => (
@@ -340,6 +346,10 @@ export default function SpinoutLabCofounderMatchPage() {
                 {interestMsg.text}
               </div>
             )}
+            {cards.length > 1 ? (
+              <RankByFit run={(query) => api.cofounderBrowseRank(query, browseSkill ? { skill: browseSkill } : {})} onRanked={setBrowseRank}
+                ranked={browseRank ? rankedCards.ranked : null} total={cards.length} label="Who are you looking for? (optional)" testid="cofounder-browse-rank" />
+            ) : null}
             {browse === null ? (
               <div className={`${CARD} py-8 flex justify-center`}><Loader2 className="w-5 h-5 animate-spin text-violet-500" /></div>
             ) : browse.failed ? (
@@ -367,6 +377,7 @@ export default function SpinoutLabCofounderMatchPage() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-[13.5px] font-bold text-gray-900 dark:text-gray-50">{card.handle}</span>
+                        {rankedCards.lineFor(card) ? <span className="basis-full text-[11.5px] text-violet-800 dark:text-violet-300" data-testid="cofounder-browse-rank-line">{rankedCards.lineFor(card)}</span> : null}
                         {card.match_score != null && (
                           <span className="text-[10.5px] font-bold rounded-full px-2 py-0.5 bg-violet-600 text-white" data-testid={`fit-${card.uid}`}>
                             Total fit {card.match_score}
