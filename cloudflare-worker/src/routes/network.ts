@@ -100,6 +100,8 @@ async function ensureSchema(env: Env) {
     `ALTER TABLE commissions ADD COLUMN terms_id INTEGER REFERENCES referral_partner_terms(id)`,
     `ALTER TABLE commissions ADD COLUMN reversed_amount_cents INTEGER NOT NULL DEFAULT 0`,
     `ALTER TABLE commissions ADD COLUMN reversed_at TIMESTAMP`,
+    // D4292 (migration 202611031345): when a held subscription commission becomes payable.
+    `ALTER TABLE commissions ADD COLUMN payable_at TEXT`,
   ];
   for (const s of stmts) { try { await db.prepare(s).run(); } catch {} }
 
@@ -559,6 +561,8 @@ function currencyTotals(rows: any[]) {
     currency: r.currency || 'USD',
     balance_cents: Number(r.balance_cents) || 0,
     claimed_cents: Number(r.claimed_cents) || 0,
+    // D4292: held 30 days before it is payable; never in the balance a payout claims.
+    held_cents: Number(r.held_cents) || 0,
     lifetime_cents: Number(r.lifetime_cents) || 0,
   }));
   const single = by_currency.length <= 1;
@@ -586,6 +590,7 @@ network.get('/commissions/me', async (c) => {
       SELECT currency,
              SUM(CASE WHEN status = 'accrued' THEN amount_cents ELSE 0 END) AS balance_cents,
              SUM(CASE WHEN status = 'paid' THEN amount_cents ELSE 0 END) AS claimed_cents,
+             SUM(CASE WHEN status = 'pending' THEN amount_cents ELSE 0 END) AS held_cents,
              SUM(amount_cents) AS lifetime_cents
       FROM commissions WHERE user_id = ${user.id} GROUP BY currency ORDER BY currency`;
     return c.json({ ...currencyTotals(totals as any[]), commissions: rows });
