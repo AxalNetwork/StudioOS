@@ -68,7 +68,8 @@ function CopyToStream({ row, onCopy }) {
  * `onAnalytics(row)` (D4181, lr17) puts "Analytics" on a video's row, which
  * opens its analytics Sheet. A reading has no positions, so it has none.
  */
-export default function StudioContentTable({ status, rows, reason = NOT_LIVE.studio, onRetry, onCopyToStream = null, onAnalytics = null }) {  const [filter, setFilter] = useState('all');
+export default function StudioContentTable({ status, rows, reason = NOT_LIVE.studio, onRetry, onCopyToStream = null, onAnalytics = null }) {
+  const [filter, setFilter] = useState('all');
   const all = rows || [];
   const active = STUDIO_FILTERS.find((f) => f.key === filter) || STUDIO_FILTERS[0];
   const visible = all.filter(active.test);
