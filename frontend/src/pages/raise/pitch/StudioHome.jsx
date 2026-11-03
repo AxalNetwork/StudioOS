@@ -13,6 +13,7 @@ import { useDeckChecks } from './DeckVersions';
 import { CoverageMeter, useDeckSources } from './SourcesBoards';
 import { SpinoutReadiness } from './StudioActions';
 import { availability, cardStatus } from './deckV2Adapter';
+import TemplateImport from './TemplateImport';
 import { notDonePill } from './cardStatusModel';
 import { LATER, aiOffState } from './deckV2Model';
 import { AiOffBanner } from './DeckAsk';
@@ -316,6 +317,7 @@ export function DeckNotDone({ deckId }) {
 
 /** pd1's Start from: four ways to begin, the one-click among them. */
 function StartFrom({ projectId, q }) {
+  const [importing, setImporting] = useState(false);
   return (
     <section className={`${CARD} flex flex-col gap-1 p-4`} aria-labelledby="pitch-studio-start-title" data-testid="pitch-studio-start">
       <h2 id="pitch-studio-start-title" className={`${EYE} m-0`}>{START_FROM}</h2>
@@ -323,6 +325,15 @@ function StartFrom({ projectId, q }) {
         {START_ITEMS.map((it) => {
           if (it.id === 'fast') return projectId != null ? <OneClickBuild key={it.id} projectId={projectId} q={q} /> : null;
           const off = it.adapter ? availability(it.adapter) : null;
+          // D1572 (#3819): pd30's import opens its sheet here, beside the other ways to begin.
+          if (it.id === 'pptx' && !off && projectId != null) {
+            return (
+              <li key={it.id} className="flex flex-col gap-0.5 border-t border-axal-hairline py-3 first:border-t-0 dark:border-gray-700" data-testid={`pitch-studio-start-${it.id}`}>
+                <button type="button" className={`text-left text-[13.5px] font-bold ${INK} hover:text-axal-violet dark:hover:text-violet-300`} onClick={() => setImporting(true)} data-testid={`pitch-studio-start-${it.id}-open`}>{it.label}</button>
+                <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{it.line}</span>
+              </li>
+            );
+          }
           if (off && off.available !== true) {
             return (
               <li key={it.id} className="flex flex-col gap-0.5 border-t border-axal-hairline py-3 first:border-t-0 dark:border-gray-700" title={off.reason} data-testid={`pitch-studio-start-${it.id}`}>
@@ -342,6 +353,7 @@ function StartFrom({ projectId, q }) {
           );
         })}
       </ul>
+      {importing ? <TemplateImport projectId={projectId} onClose={() => setImporting(false)} /> : null}
     </section>
   );
 }
