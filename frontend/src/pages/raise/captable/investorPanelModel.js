@@ -20,8 +20,9 @@ export const NO_ACCESS = 'The founder has not shared the cap table with you.';
 export const askLine = (venture) => `Ask ${venture || 'the founder'} for access. The founder answers on their Access tab.`;
 export const ASK_DIALOG = {
   title: 'Ask for access?',
-  sub: 'The founder is told that you asked. Nothing is shared until they choose a level on their Access tab. You can ask once a day.',
+  sub: 'The founder is told that you asked. Nothing is shared until they approve your ask at a level on their Access tab. If they decline, you can ask again after a day.',
 };
+export const ASK_NOT_YOURS = 'Only an investor introduced to this venture can ask its founder for access.';
 export const ROUNDS_NOT_RECORDED = 'Rounds and pricing are not recorded on the cap table yet.';
 export const PAYOUT_NOT_SHARED = 'Your payout at the founder’s exit values is not shown: exit values live in the founder’s saved scenarios, and a shared cap table leaves scenarios out.';
 export const READ_ONLY = 'Read only. The founder changes the cap table; you never open it in Raise.';
@@ -73,5 +74,7 @@ export function askOutcome(err) {
   if (!err) return { asked: true, line: 'Asked. The founder answers on their Access tab.' };
   if (code === 'already_asked') return { asked: true, line: 'You asked in the last day. The founder answers on their Access tab.' };
   if (code === 'already_shared') return { asked: false, line: 'The founder already shares it with you. Reload to see it.', reload: true };
+  // D1130 (CT22b): the ask is an investor's, for a venture they were introduced to. Anyone else is told why, once.
+  if (code === 'investors_only' || code === 'not_a_venture') return { asked: false, line: ASK_NOT_YOURS, final: true };
   return { asked: false, line: err?.message || 'Your ask could not be sent. Try again.' };
 }
