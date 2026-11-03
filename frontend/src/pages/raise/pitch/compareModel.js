@@ -35,6 +35,39 @@ export function compareCards(older, newer) {
 
 export const changedPill = (n) => (n === 0 ? 'No card changed' : `${n} changed`);
 
+/**
+ * D4254 P5 (#4273, ps3): what changed from `older` to `newer`, by card title.
+ * A card is matched by its uid; a card with no uid (a deck saved before uids)
+ * by its place. Added is in `newer` only, removed in `older` only, changed is
+ * in both with a different stored shape.
+ */
+export function compareSummary(older, newer) {
+  const a = slidesOf(older);
+  const b = slidesOf(newer);
+  const key = (c, i) => (typeof c?.uid === 'string' && c.uid ? `u:${c.uid}` : `p:${i}`);
+  const olds = new Map(a.map((c, i) => [key(c, i), { c, i }]));
+  const news = new Map(b.map((c, i) => [key(c, i), { c, i }]));
+  const added = []; const changed = []; const removed = [];
+  for (const [k, { c, i }] of news) {
+    const o = olds.get(k);
+    if (!o) added.push(cardTitle(c, i));
+    else if (!same(o.c, c)) changed.push(cardTitle(c, i));
+  }
+  for (const [k, { c, i }] of olds) if (!news.has(k)) removed.push(cardTitle(c, i));
+  return { added, removed, changed };
+}
+
+/** "v6 → v7 · Added: Use of funds · Changed: Traction, Team, The ask" (ps3). */
+export function compareLine(older, newer) {
+  const s = compareSummary(older, newer);
+  const parts = [`${vLabel(older)} → ${vLabel(newer)}`];
+  if (s.added.length) parts.push(`Added: ${s.added.join(', ')}`);
+  if (s.removed.length) parts.push(`Removed: ${s.removed.join(', ')}`);
+  if (s.changed.length) parts.push(`Changed: ${s.changed.join(', ')}`);
+  if (parts.length === 1) parts.push('No card changed');
+  return parts.join(' · ');
+}
+
 /** The Restore dialog's title and what it says changes and what stays. */
 export function restoreDialog(older, current, versions = []) {
   const top = Math.max(0, ...versions.map((v) => Number(v?.version) || 0), Number(current?.version) || 0);
