@@ -11,7 +11,7 @@ import { isSuperAdminUser } from '../../../lib/shellRole';
 import AiModelsTab from './AiModelsTab';
 import { useAuth } from '../../../hooks/useAuthSync';
 import {
-  BETA_COLUMNS, MODELS_LINK, NORM_ADD_LINE, NORM_COLUMNS, NORM_RETIRE_LINE, NORM_RULE, NORM_SOURCE_HELP, NORM_STAGE_OF, NOT_RECORDED, PROJECT_NORMS_NOTE, NOTE_MAX, OUTCOMES, PROPOSAL_LINE, REASONS, STAGES, SUBTITLE,
+  BUILD, BETA_COLUMNS, MODELS_LINK, NORM_ADD_LINE, NORM_COLUMNS, NORM_RETIRE_LINE, NORM_RULE, NORM_SOURCE_HELP, NORM_STAGE_OF, NOT_RECORDED, PROJECT_NORMS_NOTE, NOTE_MAX, OUTCOMES, PROPOSAL_LINE, REASONS, STAGES, SUBTITLE,
   defaultOnKeys, filterReports, flagLabel, flagRows, normBody, normDraftArmed, normRetireArmed, normRow, notYet, offGridOverrides, reportRow, resolveArmed, templateGrid, viewFor,
 } from './hqDecksModel';
 
@@ -142,7 +142,7 @@ function ReportSheet({ row, onResolved }) {
         <dt className="text-axal-muted dark:text-gray-400">Founder’s reason</dt><dd>{row.reason}{row.note ? ` · “${row.note}”` : ''}</dd>
       </dl>
       {PROPOSAL_LINE[row.proposal] && <p className={`${MUTED} mt-2`}>{PROPOSAL_LINE[row.proposal]}</p>}
-      {(isNR(row.founder) || isNR(row.before)) && <p className={`${MUTED} mt-2`} data-testid="deck-report-k1">{notYet('K1')}</p>}
+      {!BUILD.K1.live && (isNR(row.founder) || isNR(row.before)) && <p className={`${MUTED} mt-2`} data-testid="deck-report-k1">{notYet('K1')}</p>}
       <div className="mt-3 border-t border-axal-hairline pt-3 dark:border-gray-800">
         {row.open
           ? <ResolveForm row={row} onDone={onResolved} />
