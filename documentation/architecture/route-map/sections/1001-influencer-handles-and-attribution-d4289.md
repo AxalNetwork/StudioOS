@@ -1,6 +1,6 @@
 ### Influencer handles: `axal.vc/@handle`, channel links, visits and attribution (D4289 P2, #4291)
 
-The rules live in `services/influencerHandles.ts` (handles, links, the public read, visits) and `services/referrals/handleAttribution.ts` (the reference, sign-up and checkout attribution, the fraud checks). The stores come from migration `202611031619_influencer_handles.sql`:
+The rules live in `services/influencerHandles.ts` (handles, links, the public read, visits) and `services/referrals/handleAttribution.ts` (the reference, sign-up and checkout attribution, the fraud checks). The stores come from migration `202611031659_influencer_handles.sql`:
 - `slug_history` kind `handle`, with `expires_at` and `taken_down`;
 - `influencers.handle_changed_at` and `page_line`;
 - `influencer_links`;

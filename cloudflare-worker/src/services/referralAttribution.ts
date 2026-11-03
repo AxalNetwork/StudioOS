@@ -37,7 +37,7 @@ export async function ensureAttributionSchema(env: Env): Promise<void> {
     )`,
     `CREATE INDEX IF NOT EXISTS idx_referral_attributions_referrer
        ON referral_attributions(referrer_user_id)`,
-    // D4289 P2 (#4291): migration 202611031619 declares these; a dev D1 that predates it gains them here.
+    // D4289 P2 (#4291): migration 202611031659 declares these; a dev D1 that predates it gains them here.
     `ALTER TABLE referral_attributions ADD COLUMN source TEXT NOT NULL DEFAULT 'code'`,
     `ALTER TABLE referral_attributions ADD COLUMN handle TEXT`,
     `ALTER TABLE referral_attributions ADD COLUMN channel TEXT`,
