@@ -183,6 +183,37 @@ async function gh(apiUrl, token, path) {
   return res.json();
 }
 
+/** The listing's page cap: 3,000 artifacts, read only when the API's order cannot be trusted. */
+export const LEDGER_MAX_PAGES = 30;
+
+/**
+ * The review records created since `sinceIso`, from a newest-first listing
+ * read one page of 100 at a time (`fetchPage(page)` resolves to the API's
+ * reply). Complete when the listing ends, or when it passes `sinceIso` while
+ * every artifact so far came in newest-first order; incomplete when the page
+ * cap cuts it off.
+ */
+export async function listMonthRecords(fetchPage, sinceIso, maxPages = LEDGER_MAX_PAGES) {
+  const artifacts = [];
+  let previous = null;
+  let newestFirst = true;
+  for (let page = 1; page <= maxPages; page += 1) {
+    const data = await fetchPage(page);
+    const list = Array.isArray(data?.artifacts) ? data.artifacts : [];
+    let passedStart = false;
+    for (const a of list) {
+      const at = String(a.created_at || '');
+      if (previous !== null && at > previous) newestFirst = false;
+      previous = at;
+      if (at < sinceIso) { passedStart = true; continue; }
+      if (String(a.name || '').startsWith(RECORD_PREFIX)) artifacts.push({ name: a.name, created_at: a.created_at, expired: !!a.expired });
+    }
+    if (list.length < 100) return { artifacts, complete: true };
+    if (passedStart && newestFirst) return { artifacts, complete: true };
+  }
+  return { artifacts, complete: false };
+}
+
 /** The two GitHub REST reads: the merge base, and this repository's review records. */
 export function githubClient({ apiUrl, token, repository }) {
   return {
@@ -193,23 +224,18 @@ export function githubClient({ apiUrl, token, repository }) {
       if (!SHA.test(sha || '')) throw new Error('GitHub returned no merge base');
       return sha;
     },
-    // Every page, up to a cap, rather than stopping at the month's start:
-    // the ledger must not depend on the order the API lists artifacts in. A
-    // listing cut off by the cap is incomplete, and with a monthly budget set
-    // the runner then refuses rather than under-count the spend.
+    // #4281: the month's records, newest first. GitHub lists a repository's
+    // artifacts newest first, so once the listing passes the month's start
+    // every record of the month has been seen, and the listing is complete.
+    // That holds only while the order holds: each artifact must be no newer
+    // than the one before it. Should the API ever list out of order, the
+    // listing reads every page up to the cap instead, and one cut off by the
+    // cap is incomplete, so with a monthly budget set the runner refuses
+    // rather than under-count the spend. The cap alone was the whole rule
+    // before: once the repository held 3,000 artifacts, every review in every
+    // month was refused as "spend unreadable", and none ran.
     async listArtifacts(sinceIso) {
-      const artifacts = [];
-      for (let page = 1; page <= 30; page += 1) {
-        const data = await gh(apiUrl, token, `/repos/${repository}/actions/artifacts?per_page=100&page=${page}`);
-        const list = Array.isArray(data?.artifacts) ? data.artifacts : [];
-        for (const a of list) {
-          if (String(a.name || '').startsWith(RECORD_PREFIX) && String(a.created_at || '') >= sinceIso) {
-            artifacts.push({ name: a.name, created_at: a.created_at, expired: !!a.expired });
-          }
-        }
-        if (list.length < 100) return { artifacts, complete: true };
-      }
-      return { artifacts, complete: false };
+      return listMonthRecords((page) => gh(apiUrl, token, `/repos/${repository}/actions/artifacts?per_page=100&page=${page}`), sinceIso);
     },
   };
 }

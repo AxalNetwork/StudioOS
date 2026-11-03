@@ -25,7 +25,7 @@
 import type { Env } from '../types';
 
 /** What a change was to. The page's "What" filter is these keys. */
-export const CHANGE_KINDS = ['product', 'price', 'sync', 'token_pack', 'webhook', 'key'] as const;
+export const CHANGE_KINDS = ['product', 'price', 'sync', 'token_pack', 'webhook', 'key', 'mode'] as const;
 export type ChangeKind = (typeof CHANGE_KINDS)[number];
 
 /**
@@ -54,6 +54,7 @@ export const CHANGE_ACTIONS: Readonly<Record<string, ChangeKind>> = {
   stripe_webhook_register: 'webhook',
   stripe_webhook_update: 'webhook',
   stripe_pk_update: 'key',
+  stripe_mode_cutover: 'mode', // D1434
 };
 
 /** The action an export of this log is recorded under. Not a change, so not in the log. */

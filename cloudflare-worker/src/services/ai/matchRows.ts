@@ -8,8 +8,12 @@
  *
  * The jobs: NE1 (introductions, best fit, co-founder, advisors), GR4 (rank
  * applicants), RA11 (match investors to the venture) and LE10 (recommended for
- * you). Every step is the member's press, through `run()`: quoted, held,
- * guarded and charged on the caller's page and rail.
+ * you). Part 3 adds the plan's two-step jobs, which retrieve and rank and write
+ * nothing: IN10 (a partner's leads against the firm's audience fit) and GR17
+ * (the venture's partner network against what the founder needs). A job with
+ * no write step never runs a writer, whatever the caller asks. Every step is the
+ * member's press, through `run()`: quoted, held, guarded and charged on the
+ * caller's page and rail.
  *
  * DEGRADING, NEVER INVENTING. An embedding that cannot be read keeps the
  * candidates' own order (`retrieved: false`); a refused rank keeps the
@@ -25,7 +29,7 @@ import type { RankedContext } from './shapes';
 import { runRefusalView } from '../../util/railContext';
 import type { RunResult } from '../aiRouter';
 
-export type MatchJob = 'NE1' | 'GR4' | 'RA11' | 'LE10';
+export type MatchJob = 'NE1' | 'GR4' | 'RA11' | 'LE10' | 'IN10' | 'GR17';
 export type MatchCandidate = { key: string; text: string };
 export type MatchRow = { key: string; position: number; line: string | null };
 export type MatchResult = { rows: MatchRow[]; steps: { retrieved: boolean; ranked: boolean; written: boolean } };
@@ -41,13 +45,20 @@ export type MatchDeps = {
   write(prompt: string, rows: number): Promise<string | null>;
 };
 
-/** The job's retrieve and write models, from the plan's rows. */
-export function jobModels(job: MatchJob): { retrieve: string; write: string } {
-  const retrieve = jobStep(job, 0)?.default;
-  const write = jobStep(job, 2)?.default;
-  if (!retrieve || !write) throw new Error(`match job ${job} has no retrieve or write step`);
-  return { retrieve, write };
+/**
+ * The job's retrieve and write models, from the plan's rows. `write` is null for
+ * a two-step job (retrieve, rank): the plan gives it no writer, so none runs.
+ */
+export function jobModels(job: MatchJob): { retrieve: string; write: string | null } {
+  const retrieve = jobStep(job, 0)?.kind === 'retrieve' ? jobStep(job, 0)?.default : null;
+  const rankStep = jobStep(job, 1);
+  if (!retrieve || rankStep?.kind !== 'rank') throw new Error(`match job ${job} has no retrieve and rank steps`);
+  const w = jobStep(job, 2);
+  return { retrieve, write: w?.kind === 'write' ? w.default : null };
 }
+
+/** Whether the plan gives this job a write step (one line per row). */
+export const jobWrites = (job: MatchJob): boolean => jobModels(job).write != null;
 
 /**
  * A run the member must hear about (the page switched off, a budget stop, the
@@ -61,7 +72,7 @@ export class MatchRefused extends Error {
 const stopOn = (out: RunResult) => { if (!out.ok && runRefusalView(out)) throw new MatchRefused(out); };
 
 export function defaultMatchDeps(env: Env, charge: Charge, job: MatchJob): MatchDeps {
-  const { retrieve } = jobModels(job);
+  const { retrieve, write: writer } = jobModels(job);
   return {
     async embed(text) {
       const out = await aiRun(env, { ...charge, rail: charge.rail, surface: charge.surface, task: 'module_embed' as RunOptions['task'], model: retrieve, text });
@@ -74,6 +85,8 @@ export function defaultMatchDeps(env: Env, charge: Charge, job: MatchJob): Match
       return r.ok ? r.ranking : null;
     },
     async write(prompt, rows) {
+      // A two-step job has no writer: nothing runs and nothing is charged.
+      if (!writer) return null;
       // The job's write step (`textJob`), so the member's pick and the presets apply.
       const out = await aiRun(env, {
         ...charge, rail: charge.rail, surface: charge.surface, task: 'module_chat' as RunOptions['task'], textJob: job, maxTokens: Math.min(60 * rows, 900), temperature: 0.2,

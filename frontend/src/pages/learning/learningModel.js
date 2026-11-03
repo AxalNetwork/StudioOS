@@ -273,7 +273,7 @@ export function catalogRow(r) {
       return { ...base, href: id ? `/learning/courses/${enc(id)}` : null, level, minutes: r.estimated_minutes ?? null };
     case 'video':
     case 'reading':
-      return { ...base, href: itemHref({ kind: r.kind, uid: id }), level, topic: clean(r.topic) || null, seconds: r.duration_seconds ?? null, found: transcriptLine(r.match) };
+      return { ...base, uid: id || null, href: itemHref({ kind: r.kind, uid: id }), level, topic: clean(r.topic) || null, seconds: r.duration_seconds ?? null, found: transcriptLine(r.match) };
     case 'article': {
       const minutes = Number(r.read_minutes);
       return {
@@ -350,7 +350,12 @@ export function videoPlayback(item) {
     try { u = new URL(iframe); } catch { u = null; }
     // The player only embeds Stream's own hosts.
     if (u && u.protocol === 'https:' && (/^customer-[a-z0-9]+\.cloudflarestream\.com$/.test(u.hostname) || u.hostname === 'iframe.videodelivery.net')) {
-      return { src: iframe, embed: true, stream: { hls: vs.hls_url || null, poster: vs.poster_url || null, captions: Array.isArray(vs.captions) ? vs.captions : [], duration: vs.duration_seconds ?? null } };
+      return {
+        src: iframe, embed: true,
+        // #4178 (D4178): the Stream player's own source, so it can be seeked and timed; null keeps the plain iframe.
+        player: streamSourceOf(iframe),
+        stream: { hls: vs.hls_url || null, poster: vs.poster_url || null, preview: vs.preview_url || null, captions: Array.isArray(vs.captions) ? vs.captions : [], duration: vs.duration_seconds ?? null },
+      };
     }
     return { reason: 'The Stream address sent with this video is not Stream\'s own, so it is not played here.' };
   }
@@ -601,9 +606,8 @@ export function newThisWeek(rows, now = Date.now(), max = 4) {
 /** LR1 "Recommended for you": a marked future block, never rows. */
 export const RECOMMENDED_FUTURE = 'Waits on recommendations (#3724). Nothing is drawn here until then.';
 
-/** LR4 chapters: none is stored until #4176 adds them. */
+/** LR4 chapters: the item has none recorded. */
 export const NO_CHAPTERS = 'No chapters';
-export const CHAPTERS_NOT_YET = 'Chapters arrive with the Stream videos (#4176).';
 
 /** LR4b: a transcript with no caption cues is the plain text, and says so. */
 export const PLAIN_TRANSCRIPT_LINE = 'No caption cues, so the plain transcript is shown.';
@@ -644,6 +648,138 @@ export function positionWriter(write, { every = 15_000, now = () => Date.now() }
     flush: (seconds, duration) => send(seconds, duration),
   };
 }
+
+// ── #4178 (D4178): the Stream player — its source, chapters and timed cues ──
+
+/**
+ * The Stream player's own source, from the signed `iframe_url` the item read
+ * sends (D4176): `{ src, customerCode }` for `@cloudflare/stream-react`, where
+ * `src` is the signed token. `customer-<code>.cloudflarestream.com/<token>/iframe`
+ * and `iframe.videodelivery.net/<token>` are read; anything else is null, so the
+ * page falls back to the plain iframe it already validated.
+ */
+export function streamSourceOf(iframeUrl) {
+  let u;
+  try { u = new URL(clean(iframeUrl)); } catch { return null; }
+  if (u.protocol !== 'https:') return null;
+  const seg = u.pathname.split('/').filter(Boolean);
+  const token = /^[A-Za-z0-9._-]{16,4096}$/;
+  const m = /^customer-([a-z0-9]+)\.cloudflarestream\.com$/.exec(u.hostname);
+  if (m && seg.length === 2 && seg[1] === 'iframe' && token.test(seg[0])) return { src: seg[0], customerCode: m[1] };
+  if (u.hostname === 'iframe.videodelivery.net' && seg.length === 1 && token.test(seg[0])) return { src: seg[0], customerCode: null };
+  return null;
+}
+
+/** Chapters as the item read sends them, in time order, each with a title and a whole start second; anything else is dropped. */
+export function chaptersOf(item) {
+  const raw = Array.isArray(item?.chapters) ? item.chapters : [];
+  return raw
+    .map((c) => ({ start: Math.floor(Number(c?.start_seconds)), title: clean(c?.title) }))
+    .filter((c) => Number.isFinite(c.start) && c.start >= 0 && c.title)
+    .sort((a, b) => a.start - b.start);
+}
+
+/** The index of the chapter playing at `t` seconds: the last one that has started. -1 before the first. */
+export function chapterAt(chapters, t) {
+  const now = Number(t);
+  if (!Array.isArray(chapters) || !Number.isFinite(now)) return -1;
+  let at = -1;
+  for (let i = 0; i < chapters.length; i += 1) if (chapters[i].start <= now) at = i;
+  return at;
+}
+
+const VTT_TIME = /^(?:(\d{1,3}):)?(\d{1,2}):(\d{2})[.,](\d{1,3})$/;
+
+/** A WebVTT timestamp (`01:02:03.500` or `02:03.500`) as seconds, or null. */
+export function vttSeconds(stamp) {
+  const m = VTT_TIME.exec(String(stamp ?? '').trim());
+  if (!m) return null;
+  const [, h, min, sec, ms] = m;
+  if (Number(min) > 59 || Number(sec) > 59) return null;
+  return Number(h || 0) * 3600 + Number(min) * 60 + Number(sec) + Number(ms.padEnd(3, '0')) / 1000;
+}
+
+const ENTITIES = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&nbsp;': ' ', '&lrm;': '', '&rlm;': '' };
+
+/**
+ * A cue's words as plain text: entities decoded first, then every tag stripped
+ * until none is left, so an encoded `&lt;b&gt;` cannot come back as markup.
+ * (The page draws the text as text either way; this keeps it plain.)
+ */
+function cueText(raw) {
+  let text = String(raw).replace(/&(?:amp|lt|gt|quot|#39|nbsp|lrm|rlm);/g, (e) => ENTITIES[e]);
+  for (let before = ''; before !== text;) {
+    before = text;
+    text = text.replace(/<[^<>]*>/g, '');
+  }
+  return text.replace(/[<>]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * A caption file's cues, `[{ start, end, text }]` in time order, for the
+ * click-to-seek transcript. Tolerant by design: a block whose timing line is
+ * missing or unreadable, whose end is before its start, or whose text is empty
+ * is skipped, and the rest are kept. NOTE, STYLE and REGION blocks are not
+ * cues. Voice and styling tags are stripped. A file that does not start with
+ * WEBVTT has no cues.
+ */
+export function parseVtt(text) {
+  const src = String(text ?? '').replace(/^﻿/, '').replace(/\r\n?/g, '\n');
+  if (!/^WEBVTT(?:[ \t].*)?(?:\n|$)/.test(src)) return [];
+  const cues = [];
+  for (const block of src.split(/\n[ \t]*\n+/).slice(1)) {
+    const lines = block.split('\n').filter((l) => l.trim() !== '');
+    if (!lines.length || /^(NOTE|STYLE|REGION)\b/.test(lines[0])) continue;
+    const at = lines.findIndex((l) => l.includes('-->'));
+    if (at < 0 || at > 1) continue;
+    const [left, right = ''] = lines[at].split('-->');
+    const start = vttSeconds(left);
+    const end = vttSeconds(right.trim().split(/\s+/)[0]);
+    if (start == null || end == null || end < start) continue;
+    const words = cueText(lines.slice(at + 1).join(' '));
+    if (words) cues.push({ start, end, text: words });
+  }
+  return cues.sort((a, b) => a.start - b.start || a.end - b.end);
+}
+
+/** The index of the cue showing at `t` seconds, or -1 between cues. */
+export function cueAt(cues, t) {
+  const now = Number(t);
+  if (!Array.isArray(cues) || !Number.isFinite(now)) return -1;
+  let at = -1;
+  for (let i = 0; i < cues.length; i += 1) {
+    if (cues[i].start > now) break;
+    if (now < cues[i].end) at = i;
+  }
+  return at;
+}
+
+/** The ready captions the item read sends, as `{ language, label }` with a label to show. */
+export function captionChoices(video) {
+  const list = Array.isArray(video?.stream?.captions) ? video.stream.captions : [];
+  const seen = new Set();
+  return list
+    .map((c) => ({ language: clean(c?.language), label: clean(c?.label) }))
+    .filter((c) => c.language && !seen.has(c.language) && seen.add(c.language))
+    .map((c) => ({ ...c, label: c.label || c.language }));
+}
+
+/**
+ * lr7: a ready Stream video's hover preview (the signed `preview_url` the item
+ * read sends), or null — for anything not ready, or an address not on Stream's
+ * own hosts.
+ */
+export function previewOf(item) {
+  const vs = item?.video_stream;
+  if (!vs || vs.state !== 'ready') return null;
+  let u;
+  try { u = new URL(clean(vs.preview_url)); } catch { return null; }
+  if (u.protocol !== 'https:') return null;
+  return /^customer-[a-z0-9]+\.cloudflarestream\.com$/.test(u.hostname) || u.hostname === 'videodelivery.net' ? u.toString() : null;
+}
+
+/** LR4b: the transcript panel's words when the captions could not be timed. */
+export const CUES_UNREADABLE = 'The captions could not be read, so the plain transcript is shown.';
 
 // ── #4180 (D4180): the list reads ───────────────────────────────────────────
 
