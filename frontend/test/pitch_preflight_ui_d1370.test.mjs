@@ -4,9 +4,9 @@
 //     dismissed warnings leave the count, blocking findings never do; the chip's states; the gate;
 //   - the ⋯ menu carries Before you send › Check before you send · Free, between This card and AI;
 //   - mounted: the panel runs, lists what is to fix, Show me selects the card and leaves the strip,
-//     Dismiss and Undo, Ask greyed "Not switched on yet." with no issue number; a reader sees the
-//     findings with no Dismiss, Ask or Re-check; Export runs the check first and its gate opens the
-//     dialog only with nothing to fix.
+//     Dismiss and Undo (kept for the version since D4208, `pitch_preflight_wire_4208_4210`), with no
+//     issue number; a reader sees the findings with no Dismiss, Ask or Re-check; Export runs the
+//     check first and its gate opens the dialog only with nothing to fix.
 //
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/pitch_preflight_ui_d1370.test.mjs
 import test from 'node:test';
@@ -113,14 +113,20 @@ test('the gate: to fix first holds Send anyway back; warnings only offer it; not
 test('⋯: Before you send › Check before you send · Free, between This card and the AI items', () => {
   assert.deepEqual(MORE_MENU.map((s) => s.id), ['deck', 'card', 'before', 'ai']);
   assert.deepEqual(MORE_MENU.find((s) => s.id === 'before').items, [{ id: 'preflight', label: 'Check before you send', note: 'Free' }]);
-  assert.deepEqual([BUILD.P1.issue, BUILD.P2.issue, BUILD.P1.live, BUILD.P2.live], [4208, 4210, false, false]);
+  // D4208 and D4210 switched both on.
+  assert.deepEqual([BUILD.P1.issue, BUILD.P2.issue, BUILD.P1.live, BUILD.P2.live], [4208, 4210, true, true]);
   assert.equal(notYet(), 'Not switched on yet.');
 });
 
-test('the source: the panel reads and measures only, and never prints an issue number', () => {
+test('the source: the model calls nothing; the hook keeps dismissals and the panel asks for a fix, and nothing else', () => {
+  const read = (f) => codeOnly(readFileSync(new URL(`../src/pages/raise/pitch/${f}`, import.meta.url), 'utf8'));
+  const calls = (src) => [...new Set(src.match(/\b\w*[aA]pi\.\w+\(/g) || [])].sort();
+  assert.deepEqual(calls(read('preflightUiModel.js')), [], 'the model: no network');
+  assert.deepEqual(calls(read('usePreflight.js')), ['api.dismissals(', 'api.setDismissed('], 'the hook: the version\'s dismissals only (D4208)');
+  assert.deepEqual(calls(read('PreflightPanel.jsx')), ['deckAssistApi.quote(', 'deckAssistApi.run('], 'the panel: D899\'s quote and run only (D4210)');
   for (const f of ['PreflightPanel.jsx', 'usePreflight.js', 'preflightUiModel.js']) {
-    const src = codeOnly(readFileSync(new URL(`../src/pages/raise/pitch/${f}`, import.meta.url), 'utf8'));
-    assert.doesNotMatch(src, /fetch\(|request\(|\bapi\./, `${f}: no network`);
+    const src = read(f);
+    assert.doesNotMatch(src, /fetch\(|request\(/, `${f}: no request of its own`);
     assert.doesNotMatch(src, /\bscore\b|investor[- ]ready/i, `${f}: no score, no verdict`);
     assert.doesNotMatch(src, /\bFill\b/, `${f}: Ask, never Fill`);
   }
@@ -158,24 +164,21 @@ test('the panel: runs on open, lists what is to fix, Show me selects the card an
     assert.match(m.text(m.by('pitch-preflight-strip')), /Findings · 2 of/);
     await m.press(m.by('pitch-preflight-strip-back'));
     assert.ok(m.by('pitch-preflight'), 'back to the panel, the result kept');
-    assert.ok(!m.calls.some(([n]) => /update|save|assist|quote/i.test(n)), 'nothing written, nothing run');
+    assert.ok(!m.calls.some(([n]) => /update|save|assist\.run|setDismissed/i.test(n)), 'nothing written, nothing run');
   } finally { await m.close(); }
 });
 
-test('Dismiss and Undo on a warning; Ask is greyed, Not switched on yet, with no issue number', async () => {
+test('Dismiss and Undo on a warning, with no issue number', async () => {
   const m = await mountEditor({ answers: { deckGet: async () => WARNINGS } });
   try {
     await openPanel(m);
     const look = m.by('pitch-preflight-look');
     const before = (m.text(look).match(/Slide/g) || []).length;
-    const ask = m.walk(look).find((n) => String(m.pr(n)['data-testid'] || '').endsWith('-ask'));
-    assert.equal(m.pr(ask)['aria-disabled'], 'true');
-    assert.equal(m.pr(ask).title, 'Not switched on yet.');
     assert.doesNotMatch(m.text(m.by('pitch-preflight')), /#\d{4}/, 'no issue number in the UI');
     const dismiss = m.walk(look).find((n) => String(m.pr(n)['data-testid'] || '').endsWith('-dismiss'));
     await m.press(dismiss);
     assert.match(m.text(m.by('pitch-preflight-dismissed')), /^Dismissed · Slide 1 ·/);
-    assert.match(m.text(m.by('pitch-preflight-dismissed-count')), /1 dismissed · Dismissed here only/);
+    assert.equal(m.text(m.by('pitch-preflight-dismissed-count')), '1 dismissed', 'kept for the version (D4208): no "here only"');
     assert.equal((m.text(m.by('pitch-preflight-look') || { childNodes: [] }).match(/Slide/g) || []).length, before - 1);
     await m.press(m.by('pitch-preflight-undo'));
     assert.equal(m.by('pitch-preflight-dismissed-count'), undefined);
