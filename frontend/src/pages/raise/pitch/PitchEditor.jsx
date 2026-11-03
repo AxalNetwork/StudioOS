@@ -21,7 +21,7 @@ import PitchPage from './PitchPage';
 import DeckToolbar from './DeckToolbar';
 import useDeckPresence from './useDeckPresence';
 import CardsStrip from './CardsStrip';
-import { cardStatus, media as uploadVideoAdapter } from './deckV2Adapter';
+import { cardStatus, diagrams, media as uploadVideoAdapter } from './deckV2Adapter';
 import { withAssignee, withStatus } from './cardStatusModel';
 import GridStage from './GridStage';
 import BlockTools, { SpeakerNotes } from './BlockTools';
@@ -29,6 +29,7 @@ import { ArrangeSet, DecorLayers } from './BlockTools';
 import { isDecorOn } from './arrangeModel';
 import ShareDialog from './ShareDialog';
 import CommentsSheet from './CommentsSheet';
+import { editorCardOf } from './reviewTileModel';
 import ExportDialog from './ExportDialog';
 import TransitionSheet from './TransitionSheet';
 import { BackgroundSheet, BrandKitSheet, CheckSheet, RemixSheet, ReplaceImagesSheet, SizeSheet, SourcesSheet, StageSheet, StructureSheet, ThemeSheet, VersionsSheet } from './DeckSheets';
@@ -401,11 +402,13 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   }, meta);
   const setTheme = (t) => edit({ type: 'setTheme', theme: t }, { label: 'Theme' });
   const setAudience = (a) => edit({ type: 'setAudience', audience: a }, { label: 'Audience' });
-  const [sel, setSel] = useState(0);
+  // D4271 (#4271): `?card=<n>` (from 1) opens on that card, and `&comments=1` with its comments, as the Review tile links them.
+  const [deepLink] = useSearchParams();
+  const [sel, setSel] = useState(() => editorCardOf(deepLink.get('card'), cardsOf(deck).length));
   const [pickState, setPickState] = useState(NO_PICK);
   const [askLine, setAskLine] = useState(null);
   const [dialog, setDialog] = useState(null);
-  const [sheet, setSheet] = useState(null);
+  const [sheet, setSheet] = useState(() => (deepLink.get('comments') === '1' && deepLink.get('card') ? 'comments' : null));
   // D1513 (#3765): what the last structure moved to the speaker notes, until the card changes.
   const [structureNote, setStructureNote] = useState(null);
   const [compare, setCompare] = useState(null);
@@ -784,7 +787,9 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
                 // D1515: a drag is one step; a nudge burst on one block is one step (800 ms).
                 onMove={(id, grid) => { edit({ type: 'moveArea', index: sel, id, grid }, { label: 'Move block', coalesce: `move:${cardUid(card) ?? sel}:${id}` }); presence?.edit?.(); }}
                 // D1513: a divider move (both blocks) and its overflow are each one edit, so one undo step.
-                onCard={(next, why) => { setCard(sel, next, { label: why === 'overflow' ? 'Move overflow to notes' : 'Move divider' }); setStructureNote(null); }}
+                onCard={(next, why) => { setCard(sel, next, { label: why === 'overflow' ? 'Move overflow to notes' : why === 'diagram' ? 'Edit diagram' : 'Move divider' }); setStructureNote(null); }}
+                // D1542 (#3780): an edited diagram checked in code (fit, figures); free, nothing saved.
+                onDiagramCheck={base.deck?.id != null ? (diagram, grid) => diagrams(base.deck.id, { diagram, grid, card: sel }) : null}
                 onDecor={(item) => setCard(sel, { ...card, decor: [...(card.decor || []), item] })}
                 onAsk={ask} askOff={askOff} askLine={askLine}
                 items={items} onRefresh={() => { const r = refreshCard(card, items, charts); if (r.moved) setCard(sel, r.card, { label: 'Refresh figures' }); }}

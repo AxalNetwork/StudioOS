@@ -447,7 +447,9 @@ test('per link: its settings in one line, and its NDA signatures', () => {
   assert.equal(ndaCell({ nda_required: null }), NOT_RECORDED_CHIP);
 });
 
-test('Share & analytics draws the per-version block: the chart with its legend, the funnel, the median per viewer', () => {
+// D4254 P4 (#4272, ps7): the per-version block (tiles, seconds per card, one funnel) became the
+// Share & analytics board, drawn from the daily read (`share_board_4272`); the investors table stays.
+test('Share & analytics draws the board above the investors table, and each link\'s NDA and settings', () => {
   const engagement = {
     deck_id: 40, total_views: 5, total_read_seconds: 400, conversions: { nda_signed: 2 },
     shares: [{ id: 11, created_at: '2026-10-20 10:00:00', expires_at: '2026-11-04 00:00:00', view_limit: 3, view_count: 1, exhausted: false, revoked_at: null, investor: 'Fund A', allow_download: false, allow_forwarding: false, nda_required: true, nda_signed: 2 }],
@@ -463,17 +465,9 @@ test('Share & analytics draws the per-version block: the chart with its legend, 
   };
   const html = draw(h(StudioAnalytics, { reads, readOnly: false }));
   const t = renderedText(html);
-  assert.match(t, /Median time\s*1:15\s*per viewer, every view of this version/);
-  assert.match(html, /data-testid="pitch-studio-seconds-legend"/);
-  assert.match(t, /v4, with v3 dotted\./);
-  assert.match(html, /data-testid="pitch-studio-previous-1"/);
-  assert.match(html, /aria-label="Card 01: 30 seconds, 20 on v3, Card 02: 0 seconds, 10 on v3, Card 03: 90 seconds, 0 on v3"/);
-  assert.match(t, /Opened\s*4\s*Accepted the NDA\s*2\s*Reached the ask\s*1/);
+  assert.match(html, /data-testid="share-board"/, 'the ps7 board replaces the per-version block');
+  assert.doesNotMatch(html, /data-testid="pitch-studio-(tiles|seconds|funnel)"/, 'the old tiles, chart and funnel are gone');
   assert.match(html, /data-testid="pitch-studio-link-nda-11"/);
   assert.match(t, /2 signed/);
   assert.match(t, /3 views · Download off · Forwarding off/);
-
-  const unreadable = { ...engagement, analytics: { available: false, unreadable: true, reason: 'x' } };
-  const u = renderedText(draw(h(StudioAnalytics, { reads: { ...reads, engagement: ok(unreadable) }, readOnly: false })));
-  assert.match(u, /Seconds per card on this version could not be read\./, 'a block that could not be read is not drawn as nobody reading');
 });

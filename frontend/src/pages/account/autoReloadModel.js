@@ -30,6 +30,23 @@ const SKIPPED_WORDS = Object.freeze({
 const usd = (n) => (Number.isFinite(n) ? `$${n.toFixed(2)}` : null);
 
 /** "Visa ending 4242", or null with no card. */
+/**
+ * D1434: auto-reload is a money setting, so its read asks for an authenticator
+ * (`TOTP required`) and a recent confirmation (`step_up_required`), both 403.
+ * Those are a sign-in step, not a failed read: the card says what to do
+ * instead of "could not be read". Null for any other state.
+ */
+export const AUTO_RELOAD_GATE = Object.freeze({
+  confirm: 'Confirm with your authenticator to see auto-reload.',
+  totp: 'Auto-reload needs an authenticator app on your account. Add one in Security.',
+});
+export function gateLine(read) {
+  if (!read || read.status === 'ready' || read.status === 'loading' || read.httpStatus !== 403) return null;
+  if (read.code === 'step_up_required') return AUTO_RELOAD_GATE.confirm;
+  if (/TOTP required/i.test(String(read.message || ''))) return AUTO_RELOAD_GATE.totp;
+  return null;
+}
+
 export function cardText(card) {
   if (!card || typeof card !== 'object' || typeof card.last4 !== 'string' || !/^\d{4}$/.test(card.last4)) return null;
   const brand = typeof card.brand === 'string' && card.brand ? card.brand[0].toUpperCase() + card.brand.slice(1) : 'Card';

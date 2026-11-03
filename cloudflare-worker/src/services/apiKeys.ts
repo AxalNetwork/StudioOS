@@ -40,6 +40,7 @@ export const SCOPE_LABELS: Readonly<Record<string, { label: string; write: boole
   // D846 (#2467): the read scopes the tool registry added, in the consent page's words (routes/mcp_consent.ts).
   'build:read': { label: 'Read your Build progress, from the records your connected tools fed', write: false },
   'raise:read': { label: 'Read your Raise context', write: false },
+  'raise:write': { label: 'Propose deck changes and keep follow-up drafts for you to accept. Nothing is saved to your deck or sent without your press.', write: true },
   'connectors:read': { label: 'See which tools you have connected, their status and last sync. Never their tokens.', write: false },
   // D1343 (#3551): Email's MCP tools.
   'mail:read': { label: 'Read the records Eadwyn may quote in an email to someone, with their dates. Never sends.', write: false },

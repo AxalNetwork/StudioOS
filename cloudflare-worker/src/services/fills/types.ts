@@ -204,6 +204,13 @@ export interface FillKind {
 
   gather(ctx: FillContext): Promise<Gathered>;
   /**
+   * #3938 part 6 (D1478): what the job's retrieve step embeds before the writer
+   * runs, for a kind whose plan job has one (`services/ai/themeHints.ts`
+   * `THEME_JOBS`): the themes the founder named and the items to place. Each
+   * item's nearest themes go to the writer as a hint; the parser is unchanged.
+   */
+  hints?(gathered: Gathered): { themes: string[]; items: Array<{ key: string; text: string }> };
+  /**
    * The model's reply, turned into proposals — and this is where a proposal earns
    * the right to be offered at all.
    *

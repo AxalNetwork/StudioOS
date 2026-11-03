@@ -29,7 +29,7 @@ test('one General form: only what changed is saved, trimmed, an empty field as n
   assert.deepEqual(changes({ ...form, employee_count: '12' }, ROW), { employee_count: 12 });
   assert.equal(unsavedLine({ a: 1 }), '1 unsaved change');
   assert.equal(unsavedLine({}), null);
-  assert.ok(FIELDS.includes('description') && !FIELDS.includes('logo_url'), 'no logo field until the upload exists (#4201)');
+  assert.ok(FIELDS.includes('description') && !FIELDS.includes('logo_url'), 'the logo is a tile, never a URL field (#4201)');
 });
 
 test('the form refuses a blank name and a non-whole employee count; regions are chips over one column', () => {
