@@ -64,6 +64,10 @@ export const AI_SURFACE = {
   raiseCapitalRelationships: '/raise/capital-relationships',
   /** Raise · Data room — search inside the room on its own index (`POST /api/data-room/:uid/search`, `/search/index`, `/shared/:uid/search`), #3938. */
   raiseDataRoom: '/raise/data-room',
+  /** Grow · Partner network — the founder's press ranks the venture's partners against a need (`POST /api/cycles/grow/partners/rank`), #3938 GR17. */
+  growPartnerNetwork: '/grow/partner-network',
+  /** Partner · Pipeline · Leads — the firm's press ranks its open leads against its audience fit (`POST /api/partner/pipeline/leads/rank`), #3938 IN10. */
+  partnerLeads: '/pipeline/leads',
   /** Studio — Eadwyn's interview: answers, explain, tool routing, rerank, dictation, and their safety pass. */
   studio: '/studio',
   /** Onboarding · Chat — the profiling conversation and its extraction (`/api/profiling/*`). */

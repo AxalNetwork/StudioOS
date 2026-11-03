@@ -83,6 +83,9 @@ export function makeCycleWrites(request) {
       kpi: (projectId, body) => request('/cycles/grow/kpis', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       role: (projectId, body) => request('/cycles/grow/roles', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       partner: (projectId, body) => request('/cycles/grow/partners', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
+      // #3938 GR17, the founder's press: the venture's partners ranked against a need
+      // (bge-m3, then the reranker). Rows `{ uid, position, line: null }`.
+      partnerRank: (projectId, query) => request('/cycles/grow/partners/rank', { method: 'POST', body: JSON.stringify({ project: projectId, query }) }),
       partnerRevenue: (projectId, uid, month, body) => request(`/cycles/grow/partners/${seg(uid)}/revenue/${seg(month)}`, { method: 'PUT', body: JSON.stringify({ ...body, project: projectId }) }),
       market: (projectId, body) => request('/cycles/grow/markets', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       obligation: (projectId, body) => request('/cycles/grow/obligations', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),

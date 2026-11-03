@@ -64,6 +64,11 @@ export const adminLearningApi = {
   }),
   deleteCaptions: (uid, language) => request(`/admin/learning/items/${enc(uid)}/stream/captions/${enc(language)}`, { method: 'DELETE' }),
   setStreamThumbnail: (uid, pct) => request(`/admin/learning/items/${enc(uid)}/stream/thumbnail`, { method: 'PATCH', body: body({ thumbnail_pct: pct }) }),
+  // #4179 (D4179) — copy an item's uploaded file to Stream, one item a call. The content read (`listItems`) carries
+  // each uploaded item's `stream_copy`: { state: 'none' | 'copying' | 'verified' | 'failed', … } for Copy to Stream,
+  // Copying…, Verified and Copy failed (with the route's words). 409 not_r2 / already_copied; 502 stream_copy_failed.
+  //   migrateVideoToStream(uid) → 202 { copy: { stream_uid, state: 'copying' } }
+  migrateVideoToStream: (uid) => request('/admin/learning/stream/migrations', { method: 'POST', body: body({ item_uid: uid }) }),
 
   listCourses: () => request('/admin/learning/courses'),
   createCourse: (b) => request('/admin/learning/courses', { method: 'POST', body: body(b) }),

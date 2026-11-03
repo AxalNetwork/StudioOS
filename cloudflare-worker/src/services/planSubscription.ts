@@ -73,11 +73,22 @@ export function subscriptionPriceId(obj: Record<string, unknown>): string | null
  * the read's error is thrown, so a caller deciding whether to sell or change a
  * plan refuses instead of reading "no plan" (D892 §6).
  */
-async function catalogPlanOf(env: Env, obj: Record<string, unknown>, opts: { strict?: boolean } = {}): Promise<PlanMeta | null> {
-  const priceId = subscriptionPriceId(obj);
+/** The price a subscription's first item is on now, ignoring any stamped `price_id`. Pure. */
+export function subscriptionItemPriceId(obj: Record<string, unknown>): string | null {
+  const items = (obj.items as { data?: Array<{ price?: { id?: string } }> } | undefined)?.data;
+  const id = items?.[0]?.price?.id;
+  return typeof id === 'string' && id ? id : null;
+}
+
+async function catalogPlanOf(
+  env: Env,
+  obj: Record<string, unknown>,
+  opts: { strict?: boolean; priceId?: string | null; sync?: boolean } = {},
+): Promise<PlanMeta | null> {
+  const priceId = opts.priceId !== undefined ? opts.priceId : subscriptionPriceId(obj);
   if (!priceId) return null;
   try {
-    const found = await findCatalogProductByPriceId(env, priceId);
+    const found = await findCatalogProductByPriceId(env, priceId, opts.sync === false ? { sync: false } : undefined);
     return found ? planMetaForProduct(found.product, found.price) : null;
   } catch (e) {
     if (opts.strict) throw e;
@@ -99,7 +110,23 @@ export async function subscriptionPlanEvent(
   obj: Record<string, unknown>,
 ): Promise<{ meta: Record<string, string>; fromCatalog: boolean }> {
   const meta = { ...((obj.metadata as Record<string, string> | undefined) ?? {}) };
-  if (meta.kind || !eventType.startsWith('customer.subscription.')) return { meta, fromCatalog: false };
+  if (!eventType.startsWith('customer.subscription.')) return { meta, fromCatalog: false };
+  if (meta.kind) {
+    // D1434 (#3703, Q2 = B): a plan switched in the Stripe customer portal
+    // keeps the metadata stamped at checkout (`tier: growth`) while its item
+    // moves to the new price. The item's price wins when its product sells a
+    // plan of the same family; a price of another family, or a catalogue that
+    // cannot be read, leaves the metadata as it came.
+    const itemPrice = subscriptionItemPriceId(obj);
+    if (itemPrice && itemPrice !== meta.price_id) {
+      // The mirror only: a webhook never syncs the catalogue from Stripe for this check.
+      const current = await catalogPlanOf(env, obj, { priceId: itemPrice, sync: false });
+      if (current && current.kind === meta.kind) {
+        return { meta: { ...meta, ...planMetaFields(current), price_id: itemPrice }, fromCatalog: false };
+      }
+    }
+    return { meta, fromCatalog: false };
+  }
   const plan = await catalogPlanOf(env, obj);
   return plan ? { meta: { ...meta, ...planMetaFields(plan) }, fromCatalog: true } : { meta, fromCatalog: false };
 }

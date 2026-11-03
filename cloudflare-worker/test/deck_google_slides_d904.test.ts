@@ -38,7 +38,7 @@ import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts'
 import { ensureIntegrationsSchema } from '../src/integrations/registry.ts';
 import { DRIVE_FILE_SCOPE, ensureWorkspaceIntegration } from '../src/services/google/workspace.ts';
 import { DRIVE_UPLOAD_MAX_BYTES, GOOGLE_WORKSPACE_WRITES, SLIDES_MIME, PPTX_MIME, driveName, presentationUrl } from '../src/services/google/driveCreate.ts';
-import { CARD_H, CARD_W, CHART_SHOTS_MAX, blockRect, writeEditableDeck } from '../src/services/decks/pptxEditable.ts';
+import { CARD_H, CARD_W, CHART_SHOTS_MAX, blockRect, printRect, writeEditableDeck } from '../src/services/decks/pptxEditable.ts';
 import { IMAGE_MISSING, NOT_RECORDED, NO_NOTES } from '../src/services/decks/offlineHtml.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
@@ -57,7 +57,8 @@ const BLOCK_SLIDE = {
     { id: 'l', kind: 'text', style: 'list', text: 'First\nSecond', grid: { c1: 1, c2: 6, r1: 2, r2: 3 } },
     { id: 'm', kind: 'metric', label: 'Paying customers', value: null, grid: { c1: 7, c2: 9, r1: 2, r2: 2 } },
     { id: 'n', kind: 'metric', label: 'Pilots', value: '3', grid: { c1: 10, c2: 12, r1: 2, r2: 2 } },
-    { id: 'c', kind: 'chart', chart_type: 'columns', series: [{ label: 'Pilots', points: [{ x: 'Q1', y: 1 }, { x: 'Q2', y: 3 }] }], range: 'all', previous: false, labels: true, grid: { c1: 7, c2: 12, r1: 3, r2: 5 } },
+    // D1574: a type with no native chart, so the picture and the words are what this file covers.
+    { id: 'c', kind: 'chart', chart_type: 'cohort_heatmap', series: [{ label: 'Pilots', points: [{ x: 'Q1', y: 1 }, { x: 'Q2', y: 3 }] }], range: 'all', previous: false, labels: true, grid: { c1: 7, c2: 12, r1: 3, r2: 5 } },
     { id: 'i', kind: 'image', image_url: 'https://img.example.test/a.png', alt: 'Team', grid: { c1: 1, c2: 3, r1: 4, r2: 6 } },
     { id: 'w', kind: 'image', image_url: 'https://img.example.test/w.webp', alt: '', grid: { c1: 4, c2: 6, r1: 4, r2: 6 } },
   ],
@@ -86,14 +87,17 @@ function unzip(bytes: Uint8Array): Map<string, Uint8Array> {
 const text = (parts: Map<string, Uint8Array>, name: string) => new TextDecoder().decode(parts.get(name) ?? new Uint8Array());
 const EMU = 12192000 / CARD_W;
 
-test('1a. a block sits where the print card draws it: 3% padding, a 24 px gap, 12 columns by 6 rows', () => {
-  // Mutation checked: the gap left out → the single-cell width fails; padding of the height → the full-grid y fails.
+test('1a. D1574: a block sits where The Grid draws it (margins 112 / 96 / 88, a 24 px gutter); a chart picture is clipped from the print card', () => {
+  // Mutation checked: the print card's padding kept for blocks → the full-grid x fails; the gutter left out → the single-cell x fails.
   const full = blockRect({ c1: 1, c2: 12, r1: 1, r2: 6 });
-  assert.deepEqual([full.x, full.y, full.w, full.h].map((n) => Math.round(n * 10) / 10), [57.6, 57.6, 1804.8, 964.8]);
+  assert.deepEqual([full.x, full.y, full.w, full.h], [112, 96, 1696, 896]);
   const cell = blockRect({ c1: 2, c2: 2, r1: 2, r2: 2 });
-  assert.deepEqual([cell.x, cell.y, cell.w, cell.h].map((n) => Math.round(n * 10) / 10), [210, 222.4, 128.4, 140.8]);
-  assert.equal(Math.round(full.x + full.w + 57.6), CARD_W);
-  assert.equal(Math.round(full.y + full.h + 57.6), CARD_H);
+  assert.deepEqual([cell.x, cell.y, cell.w, cell.h], [255, 249, 119, 129]);
+  assert.equal(full.x + full.w + 112, CARD_W);
+  assert.equal(full.y + full.h + 88, CARD_H);
+  // The print page (D1112): 3% padding, a 24 px gap — only where a chart's picture is taken from.
+  const print = printRect({ c1: 1, c2: 12, r1: 1, r2: 6 });
+  assert.deepEqual([print.x, print.y, print.w, print.h].map((n) => Math.round(n * 10) / 10), [57.6, 57.6, 1804.8, 964.8]);
 });
 
 test('1b. the editable file: text boxes, a metric with no figure "Not recorded", pictures for images and charts, words for what cannot be pictured', async () => {
@@ -114,15 +118,15 @@ test('1b. the editable file: text boxes, a metric with no figure "Not recorded",
   assert.match(s1, /<a:t>3<\/a:t>/);
   assert.ok(s1.includes(IMAGE_MISSING), 'the WebP image says it could not be included');
   // The heading box sits at the grid's first row, full width.
-  assert.match(s1, new RegExp(`<a:off x="${Math.round(57.6 * EMU)}" y="${Math.round(57.6 * EMU)}"/><a:ext cx="${Math.round(1804.8 * EMU)}"`));
+  assert.match(s1, new RegExp(`<a:off x="${Math.round(112 * EMU)}" y="${Math.round(96 * EMU)}"/><a:ext cx="${Math.round(1696 * EMU)}"`));
   // Two pictures on the card: the PNG image and the chart; the chart's shot was its own block rectangle on slide 0.
   assert.equal((s1.match(/<p:pic>/g) || []).length, 2);
   assert.equal(shots.length, 1);
   assert.equal(shots[0][0], 0);
-  assert.deepEqual(shots[0][1], blockRect(BLOCK_SLIDE.blocks[4].grid as any));
+  assert.deepEqual(shots[0][1], printRect(BLOCK_SLIDE.blocks[4].grid as any));
   const media = [...parts.keys()].filter((k) => k.startsWith('ppt/media/'));
   assert.deepEqual(media.map((m) => m.split('.').pop()).sort(), ['png', 'png']);
-  assert.deepEqual(out.charts, { pictured: 1, as_text: 0 });
+  assert.deepEqual(out.charts, { native: 0, pictured: 1, as_text: 0 });
   assert.deepEqual(out.images, { placed: 1, not_placed: 1 });
   const rels = text(parts, 'ppt/slides/_rels/slide1.xml.rels');
   assert.equal((rels.match(/relationships\/image/g) || []).length, 2);
@@ -140,11 +144,11 @@ test('1c. no picture of a chart: its type and series in words; notes left empty 
   });
   const parts = unzip(out.bytes);
   const s1 = text(parts, 'ppt/slides/slide1.xml');
-  assert.match(s1, /Columns chart/);
+  assert.match(s1, /Cohort heatmap chart/);
   assert.match(s1, /Pilots: Q1 1 · Q2 3/);
   assert.equal((s1.match(/<p:pic>/g) || []).length, 0, 'two images that could not be fetched are not pictures');
   assert.equal((s1.split(IMAGE_MISSING).length - 1), 2);
-  assert.deepEqual(out.charts, { pictured: 0, as_text: 1 });
+  assert.deepEqual(out.charts, { native: 0, pictured: 0, as_text: 1 });
   assert.doesNotMatch(text(parts, 'ppt/notesSlides/notesSlide1.xml'), /Say the pilots first/);
 });
 
@@ -157,7 +161,7 @@ test('1d. at most CHART_SHOTS_MAX charts are pictured; the rest go in as words',
     chartShot: async () => { calls += 1; return PNG; },
   });
   assert.equal(calls, CHART_SHOTS_MAX);
-  assert.deepEqual(out.charts, { pictured: CHART_SHOTS_MAX, as_text: 2 });
+  assert.deepEqual(out.charts, { native: 0, pictured: CHART_SHOTS_MAX, as_text: 2 });
 });
 
 // ── the route ──
@@ -268,7 +272,7 @@ test('2. one file is created by one POST to Drive\'s upload endpoint, converted 
     assert.equal(a.length, 1);
     assert.equal(a[0].action, 'deck_exported');
     assert.doesNotMatch(String(a[0].details), /Pilots|drive_file_1|Seed deck/, 'the audit row names no figure, title or file');
-    assert.deepEqual(r.body.charts, { pictured: 0, as_text: 1 }, 'with no browser bound, the chart is words');
+    assert.deepEqual(r.body.charts, { native: 0, pictured: 0, as_text: 1 }, 'with no browser bound, the chart is words');
   } finally { g.restore(); }
 });
 
@@ -388,9 +392,9 @@ test('2b. with the headless browser bound, a chart is the print page\'s picture 
   try {
     const r = await exportGoogle(f);
     assert.equal(r.status, 200);
-    assert.deepEqual(r.body.charts, { pictured: 1, as_text: 0 });
+    assert.deepEqual(r.body.charts, { native: 0, pictured: 1, as_text: 0 });
     assert.equal(shots.length, 1);
-    const want = blockRect(BLOCK_SLIDE.blocks[4].grid as any);
+    const want = printRect(BLOCK_SLIDE.blocks[4].grid as any);
     assert.deepEqual(shots[0].screenshotOptions.clip, { x: Math.round(want.x), y: Math.round(want.y), width: Math.round(want.w), height: Math.round(want.h) });
     assert.match(shots[0].url, /^https:\/\/axal\.vc\/deck\/print-export\/[^?]+\?print_mode=single&slide=0$/);
   } finally { g.restore(); }
@@ -398,5 +402,5 @@ test('2b. with the headless browser bound, a chart is the print page\'s picture 
   const f2 = fixture(); await f2.ready();
   f2.env.BROWSER = { fetch: async () => new Response(PNG), quickAction: async () => new Response('<html>error</html>') };
   const g2 = google(() => Response.json({ id: 'drive_file_5', mimeType: SLIDES_MIME }));
-  try { assert.deepEqual((await exportGoogle(f2)).body.charts, { pictured: 0, as_text: 1 }); } finally { g2.restore(); }
+  try { assert.deepEqual((await exportGoogle(f2)).body.charts, { native: 0, pictured: 0, as_text: 1 }); } finally { g2.restore(); }
 });

@@ -35,7 +35,7 @@ import { refuse } from '../util/refusal';
 import { logAdminAction } from '../services/adminAudit';
 import { COURSE_COVER, COURSE_UID, courseCoverPrefix, coverAsk, coverRunOptions, drawCover, quoteCover } from '../services/coverDraws';
 import { mapError, newUid } from './_t13t14t15_helpers';
-import { parseChapters } from '../services/learningStream';
+import { copyStates, parseChapters } from '../services/learningStream';
 import { videoAnalytics, type Chapter } from '../services/learningAnalytics';
 import {
   allowedVideoUrl, httpsUrl, parseResources, SLUG_RE,
@@ -170,7 +170,13 @@ const COURSE_SELECT = 'SELECT id, uid, slug, title, summary, cover_url, level, e
 r.get('/items', async (c) => {
   const admin = await gate(c); if (admin instanceof Response) return admin;
   const res = await c.env.DB.prepare(ITEM_SELECT + ' ORDER BY updated_at DESC, id DESC LIMIT 500').all<any>();
-  return c.json({ items: res.results || [] });
+  const items = res.results || [];
+  // D4179 (#4179): each uploaded file's copy to Stream, as the content table draws it (Copy to Stream,
+  // Copying…, Verified, Copy failed). Read on its own; the bucket key itself is never sent.
+  const keys = new Map(((await c.env.DB.prepare(`SELECT uid, r2_key FROM learning_items WHERE video_source = 'r2' AND r2_key IS NOT NULL`)
+    .all<{ uid: string; r2_key: string }>()).results ?? []).map((r) => [r.uid, r.r2_key]));
+  const copies = await copyStates(c.env, items.map((i: any) => ({ uid: i.uid, video_source: i.video_source, r2_key: keys.get(i.uid) ?? null })));
+  return c.json({ items: items.map((i: any) => (i.video_source === 'r2' ? { ...i, stream_copy: copies.get(i.uid) ?? { state: 'none' } } : i)) });
 });
 
 r.post('/items', async (c) => {
@@ -286,7 +292,10 @@ async function setItemStatus(c: Context<{ Bindings: Env }>, action: 'publish' | 
   if (!item) return refuse(c, 404, { code: 'not_found', message: 'No such item.' });
   if (action === 'publish') {
     // D561 — a video has its link or an uploaded file.
-    const hasVideo = !!item.video_url || (item.video_source === 'r2' && !!item.r2_key);
+    // D4179: or a Stream video, which is all an item has left once its copied original is swept.
+    const streamUid = await c.env.DB.prepare('SELECT stream_uid FROM learning_items WHERE uid = ?').bind(uid).first<{ stream_uid: string | null }>()
+      .then((r) => r?.stream_uid ?? null, () => null);
+    const hasVideo = !!item.video_url || (item.video_source === 'r2' && !!item.r2_key) || !!streamUid;
     if (item.kind === 'video' && !hasVideo) return refuse(c, 409, { code: 'no_video', message: 'A video needs its link or an uploaded file before it is published.' });
     if (item.kind === 'reading' && !item.body) return refuse(c, 409, { code: 'no_body', message: 'A reading needs its text before it is published.' });
   }

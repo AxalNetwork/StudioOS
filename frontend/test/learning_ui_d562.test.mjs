@@ -763,9 +763,9 @@ test('StudioContentTable: its rows and filters', () => {
     { kind: 'exam', uid: 'x1', title: 'Seed basics check', status: 'archived', visibility: 'open', programs: null, updated_at: null },
   ];
   const studio = html(h(StudioContentTable, { status: 'ready', rows: ROWS }));
-  assert.match(flat(studio.slice(studio.indexOf('studio-row-v1'))), /^[^]*?Video Cap tables Published Open None 2 Oct 2026/);
-  assert.match(flat(studio.slice(studio.indexOf('studio-row-c1'))), /^[^]*?Course Seed basics Draft Program Nordics 3 Oct 2026/);
-  assert.match(flat(studio.slice(studio.indexOf('studio-row-x1'))), /^[^]*?Exam Seed basics check Archived Open Not recorded not recorded/);
+  assert.match(flat(studio.slice(studio.indexOf('studio-row-v1'))), /^[^]*?Video Cap tables Published Open None Not recorded 2 Oct 2026/);
+  assert.match(flat(studio.slice(studio.indexOf('studio-row-c1'))), /^[^]*?Course Seed basics Draft Program Nordics — 3 Oct 2026/);
+  assert.match(flat(studio.slice(studio.indexOf('studio-row-x1'))), /^[^]*?Exam Seed basics check Archived Open Not recorded — not recorded/);
   assert.equal((studio.match(/data-testid="filter-studio-/g) || []).length, 5);
   const keep = (key) => ROWS.filter(STUDIO_FILTERS.find((f) => f.key === key).test).map((r) => r.uid);
   assert.deepEqual([keep('all'), keep('published'), keep('draft'), keep('archived'), keep('program')], [['v1', 'c1', 'x1'], ['v1'], ['c1'], ['x1'], ['c1']]);

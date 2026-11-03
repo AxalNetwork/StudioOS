@@ -338,6 +338,78 @@ export function skillFileName(s) {
 /** "Update to v3" when the pinned version is behind the published one. */
 export const updateLabel = (s) => (Number.isFinite(s?.pinned_version) && Number.isFinite(s?.current_version) && s.current_version > s.pinned_version ? `Update to v${s.current_version}` : null);
 
+// ── Run cost (D4121, #4121) ───────────────────────────────────────────────────
+// A run carries one skill (#3954): a skill costs its tokens on each run that
+// uses it, and more skills never make one run dearer. So an agent's cost per
+// run is a range, from its cheapest skill's run to its dearest. An estimate the
+// Worker could not price is `{ available: false }` and reads "Not recorded";
+// no figure here is ever "$0.00" for a price nobody read.
+
+const NOT_RECORDED_COST = 'Not recorded';
+/** A persona area key (`personas.ts` AREAS) in words. */
+const AREA_WORDS = { product: 'Product', engineering: 'Engineering', design: 'Design', gtm: 'GTM', marketing: 'Marketing', finance: 'Finance', legal: 'Legal', capital: 'Capital' };
+export const areaWord = (k) => AREA_WORDS[k] || null;
+
+/** 1240 → "1.2k", 800 → "800". */
+export function tokensWord(n) {
+  if (!Number.isFinite(n) || n < 0) return null;
+  return n >= 1000 ? `${(Math.round(n / 100) / 10).toString()}k` : String(Math.round(n));
+}
+/** A skill card's line: "+≈1.2k tokens on each run that uses it", or null when it was never measured. */
+export const skillTokensLine = (t) => (Number.isFinite(t) ? `+≈${tokensWord(t)} tokens on each run that uses it` : null);
+
+/** A per-run figure: "$0.05", "< $0.01" for a real fraction of a cent, "Not recorded" when unknown. */
+export function perRunUsd(v) {
+  if (!Number.isFinite(v)) return NOT_RECORDED_COST;
+  if (v > 0 && v < 0.005) return '< $0.01';
+  return `$${v.toFixed(2)}`;
+}
+const capWord = (cap) => (Number.isFinite(cap) ? ` · cap $${Number.isInteger(cap) ? cap : cap.toFixed(2)}/month` : '');
+const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** "$0.03–$0.05", or one figure when the cheapest and dearest runs cost the same. */
+export function perRunRange(est) {
+  const lo = perRunUsd(est?.cheapest?.est_usd_per_run);
+  const hi = perRunUsd(est?.est_usd_per_run);
+  return lo === hi ? hi : `${lo}–${hi}`;
+}
+
+/**
+ * The cost line. AG3 and SK5 ("With 4 skills ≈ $0.03–$0.05 per run · cap
+ * $20/month") and the profile ("6 skills ≈ $0.03–$0.05 per run · cap $20/month").
+ */
+export function costLine(est, { lead = 'with' } = {}) {
+  if (!est?.available) return `Cost per run: ${NOT_RECORDED_COST}`;
+  const n = Number(est.skills) || 0;
+  const head = lead === 'with' ? (n ? `With ${plural(n, 'skill')}` : 'With no skills') : (n ? plural(n, 'skill') : 'No skills');
+  return `${head} ≈ ${perRunRange(est)} per run${capWord(est.cap_usd)}`;
+}
+
+/** SK3: "Ilyse: $0.02 → $0.04 per run with this skill": a run without a skill, then a run with it. */
+export function changeLine(name, est, skillUid) {
+  const run = (est?.runs || []).find((r) => r.skill_uid === skillUid);
+  if (!est?.available || !est.baseline || !run) return `${name}: ${NOT_RECORDED_COST}`;
+  return `${name}: ${perRunUsd(est.baseline.est_usd_per_run)} → ${perRunUsd(run.est_usd_per_run)} per run with this skill`;
+}
+
+const spread = (h) => (Number.isFinite(h?.areas) && h.areas > 1 ? ` across ${h.areas} areas` : '');
+
+/** AG3 and SK5: "9 skills across 3 areas. Consider adding Ilyse for GTM: a specialist keeps each agent focused." */
+export function hintLine(est) {
+  const h = est?.hint;
+  if (!h) return null;
+  const area = areaWord(h.area);
+  const head = `${plural(est.skills, 'skill')}${spread(h)}.`;
+  if (h.suggest?.name && area) return `${head} Consider adding ${h.suggest.name} for ${area}: a specialist keeps each agent focused.`;
+  return `${head} Consider a specialist${area ? ` for ${area}` : ''}: it keeps each agent focused.`;
+}
+
+/** SK3: "Kade would have 9 skills across 3 areas. Consider a specialist." */
+export function warningLine(name, est) {
+  if (!est?.hint) return null;
+  return `${name} would have ${plural(est.skills, 'skill')}${spread(est.hint)}. Consider a specialist.`;
+}
+
 // ---------------------------------------------------------------- A1's answers (#3951), as the screens draw them
 
 /** A tool key as the chip names it: `mercury.read` → "Mercury", `data_room.read` → "Data room". */

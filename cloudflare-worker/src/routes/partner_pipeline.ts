@@ -52,6 +52,9 @@ import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { LOSS_REASONS } from '../services/bdAnalytics';
+import { AI_SURFACE } from '../services/aiSurfaces';
+import { MATCH_DEPS, MatchRefused, matchRows } from '../services/ai/matchRows';
+import { railFor, refuseRun } from '../util/railContext';
 import {
   mapError, newUid, nowIso, requirePartnerProfile, trimOrNull,
 } from './_t13t14t15_helpers';
@@ -331,6 +334,84 @@ partnerPipeline.get('/leads', async (c) => {
         ? 'A score is a count of your own stated rules this lead meets, over the ones it was measured against. Every receipt on the row names the rule it came from. Nothing here is a model.'
         : 'This firm has stated no fit rule and listed no service, so there is nothing to score a lead against. Nothing is scored, and nothing is guessed.',
     });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * The firm's audience fit as words a model can match against: what it called
+ * best fit, what it sells, and what the caller typed. Empty when the firm has
+ * written none of these down.
+ */
+export function audienceFitQuery(rules: any[], offerings: any[], extra: string): string {
+  const fit = rules.filter((r) => r.kind === 'best_fit' && String(r.value ?? '').trim()).map((r) => String(r.value).trim());
+  const sells = offerings.map((o) => String(o.title ?? '').trim()).filter(Boolean);
+  return [
+    extra,
+    fit.length ? `Best fit: ${fit.slice(0, 12).join('; ')}` : '',
+    sells.length ? `Services: ${sells.slice(0, 12).join('; ')}` : '',
+  ].filter(Boolean).join('. ');
+}
+
+/**
+ * `POST /leads/rank { query? }` — #3938 part 3 (D1478 task 4, job IN10): the
+ * firm's press orders its open leads by fit with its own audience fit: retrieve
+ * (bge-m3), then rank (the reranker), on `services/ai/matchRows.ts`. IN10 is a
+ * two-step job: no line is written, so every row's `line` is null and the
+ * page keeps its receipts. The same three sets as `GET /leads`: a lead already
+ * bid, passed or excluded by the firm's own rules is never ranked. A firm that
+ * has written no fit, no service and typed nothing has nothing to rank against:
+ * 409, and no run. Nothing here changes a lead.
+ */
+partnerPipeline.post('/leads/rank', async (c) => {
+  try {
+    const { user, partnerId } = await actingPartner(c);
+    const b = await body<Record<string, unknown>>(c);
+    const extra = typeof b?.query === 'string' ? b.query.replace(/\s+/g, ' ').trim().slice(0, 300) : '';
+    const [needs, rules, offerings] = await Promise.all([
+      c.env.DB.prepare(
+        `SELECT n.id, n.title, n.description, n.category, n.budget_min, n.budget_max
+           FROM founder_needs n
+          WHERE n.status = 'open'
+            AND NOT EXISTS (SELECT 1 FROM quotes q WHERE q.need_id = n.id AND q.partner_id = ?)
+            AND NOT EXISTS (SELECT 1 FROM partner_lead_passes lp WHERE lp.need_id = n.id AND lp.partner_id = ?)
+          ORDER BY n.created_at DESC
+          LIMIT 60`,
+      ).bind(partnerId, partnerId).all<any>(),
+      c.env.DB.prepare(
+        `SELECT kind, value, floor_cents, statement, referred_to, signal
+           FROM partner_fit_rules WHERE partner_id = ? AND is_active = 1`,
+      ).bind(partnerId).all<any>(),
+      c.env.DB.prepare(
+        `SELECT title, category FROM service_offerings
+          WHERE owner_user_id IN (SELECT id FROM users WHERE partner_id = ?)
+            AND is_active = 1`,
+      ).bind(partnerId).all<any>(),
+    ]);
+    const ruleRows = rules.results || [];
+    const offeringRows = offerings.results || [];
+    const query = audienceFitQuery(ruleRows, offeringRows, extra);
+    if (!query) {
+      return c.json({ detail: 'There is nothing to rank your leads against yet. Add a best-fit profile or a service on Offers · Audience fit, or say what you are looking for.' }, 409);
+    }
+    const candidates = (needs.results || [])
+      .filter((n: any) => !scoreLead(n, ruleRows, offeringRows).excluded_by)
+      .map((n: any) => ({
+        key: String(n.id),
+        text: [
+          n.title,
+          n.category ? `Category: ${n.category}` : null,
+          typeof n.description === 'string' ? n.description.slice(0, 500) : null,
+          n.budget_max != null || n.budget_min != null ? `Budget up to $${Number(n.budget_max ?? n.budget_min)}` : 'Budget not stated',
+        ].filter(Boolean).join('. '),
+      }));
+    const rail = railFor(c, { page: 'Partner · Leads', option: null });
+    const deps = MATCH_DEPS.make(c.env, { userId: Number(user.id), surface: AI_SURFACE.partnerLeads, rail, guardText: query }, 'IN10');
+    let res;
+    try { res = await matchRows(query, candidates, deps, { top: 10, write: false }); } catch (e) {
+      if (e instanceof MatchRefused) return refuseRun(c, e.result)!;
+      throw e;
+    }
+    return c.json({ job: 'IN10', steps: res.steps, rows: res.rows.map((r) => ({ need_id: Number(r.key), position: r.position, line: r.line })) });
   } catch (e) { return mapError(c, e); }
 });
 
