@@ -8,6 +8,7 @@ import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, EYEBROW, FIELD, HonestBlock, MONO
 import { day } from '../account/companies/companiesModel.js';
 import { AreaDot, SkillCard, TaxChips, ToolChips, UsedBy } from './SkillParts.jsx';
 import { AssignSkillSheet, NewSkillSheet } from './SkillSheets.jsx';
+import { workLabel } from './personaModel.js';
 import {
   CATEGORIES, SORTS, assignGroups, authorLine, companySkillsTitle, directory, groups, outputWords, scopeLine, skillFileName,
 } from './skillsModel.js';
@@ -89,7 +90,7 @@ export function RoleTile({ role, counts, onOpen, onAddAgent }) {
   return (
     <article className="flex min-w-0 flex-col gap-2.5 rounded-axal-lg border border-axal-hairline bg-white p-4 dark:border-gray-700 dark:bg-gray-900" data-testid={`skills-role-${role.key}`}>
       <button type="button" onClick={() => onOpen(role.key)} disabled={!onOpen} className="flex flex-col gap-2.5 text-left disabled:cursor-default" data-testid={`skills-role-open-${role.key}`}>
-        <span className="flex items-center gap-2.5"><AgentTile size={34} /><b className="min-w-0 flex-1 text-[14.5px] leading-tight text-axal-ink dark:text-gray-100">{role.name}</b>{onOpen ? <span aria-hidden="true" className="text-axal-muted dark:text-gray-400">›</span> : null}</span>
+        <span className="flex items-center gap-2.5"><AgentTile size={34} /><b className="min-w-0 flex-1 text-[14.5px] leading-tight text-axal-ink dark:text-gray-100">{workLabel(role.key, role.name)}</b>{onOpen ? <span aria-hidden="true" className="text-axal-muted dark:text-gray-400">›</span> : null}</span>
         {role.mission ? <span className={MUTED}>{role.mission}</span> : null}
       </button>
       <span className="mt-auto flex flex-wrap items-center gap-1.5">
@@ -158,7 +159,7 @@ export function Directory({ role, value, companyName, canEdit, onBack, onOpen, o
       <div className="flex flex-wrap items-center gap-2.5">
         <button type="button" className={BTN_TEXT} onClick={onBack} data-testid="skills-back">‹ Roles</button>
         <span className={MUTED}>·</span>
-        <h2 className="m-0 text-[15px] font-extrabold text-axal-ink dark:text-gray-100">{role ? role.name : 'All roles'}</h2>
+        <h2 className="m-0 text-[15px] font-extrabold text-axal-ink dark:text-gray-100">{role ? workLabel(role.key, role.name) : 'All areas of work'}</h2>
         {counts && Number.isFinite(counts.skill_count) ? <span className="rounded-axal-pill border border-axal-hairline px-2 py-0.5 text-[11.5px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-200">{counts.skill_count} skills</span> : null}
         {counts && Number.isFinite(counts.agent_count) ? <span className="rounded-axal-pill border border-axal-hairline px-2 py-0.5 text-[11.5px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-200">{counts.agent_count} agents</span> : null}
         {canEdit ? <button type="button" className={`${BTN_PRIMARY} ml-auto h-9`} onClick={onNew} data-testid="skills-new">New skill</button> : null}
@@ -166,7 +167,7 @@ export function Directory({ role, value, companyName, canEdit, onBack, onOpen, o
       <Filters category={category} setCategory={setCategory} q={q} setQ={setQ} sort={sort} setSort={setSort} />
       {!list.length ? (
         <HonestBlock testId="skills-empty">
-          {filtered ? 'No skill matches this filter.' : `No skills for ${role ? role.name : 'any role'} yet. Axal adds skills as roles grow${canEdit ? '; editors can write one' : ''}.`}
+          {filtered ? 'No skill matches this filter.' : `No skills for ${role ? workLabel(role.key, role.name) : 'any area of work'} yet. Axal adds skills as roles grow${canEdit ? '; editors can write one' : ''}.`}
         </HonestBlock>
       ) : null}
       <Group title="From Axal" list={axal} onOpen={onOpen} onAssign={onAssign} canAssign={canEdit} testId="skills-group-axal" />
@@ -227,7 +228,7 @@ export function SkillPage({ block, agentsBlock, roleName, roleNames, onBack, onA
   const copy = async () => setCopied((await copyText(s.markdown || '')) ? 'Copied.' : 'It could not be copied. Select the text and copy it.');
   return (
     <div className="flex flex-col gap-3.5" data-testid="skill-page">
-      <button type="button" className={`w-fit ${BTN_TEXT}`} onClick={onBack}>‹ {roleName || 'Roles'}</button>
+      <button type="button" className={`w-fit ${BTN_TEXT}`} onClick={onBack}>‹ {roleName || 'Areas of work'}</button>
       <div className={`${SECTION} flex flex-wrap items-center gap-3`}>
         <AgentTile size={36} />
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -264,7 +265,7 @@ export function SkillPage({ block, agentsBlock, roleName, roleNames, onBack, onA
           <section className={`${SECTION} flex flex-col gap-2`}>
             <span className={EYEBROW}>Taxonomy</span><TaxChips tags={s.taxonomy} />
             <span className={EYEBROW}>Tools</span>{(s.tools || []).length ? <ToolChips tools={s.tools} /> : <span className={MUTED}>No tools</span>}
-            <span className={EYEBROW}>Roles</span><span className="text-[13px] text-axal-ink dark:text-gray-200">{roleNames(s.roles) || <Unrecorded />}</span>
+            <span className={EYEBROW}>Areas of work</span><span className="text-[13px] text-axal-ink dark:text-gray-200">{roleNames(s.roles) || <Unrecorded />}</span>
           </section>
           <section className={`${SECTION} flex flex-col`}>
             <span className={EYEBROW}>Version history</span>
@@ -312,7 +313,7 @@ export default function SkillsTab({ scope, rolesBlock, agentsBlock, onAddAgent }
   }, [skillUid]);
 
   const roles = rolesBlock?.available && Array.isArray(rolesBlock.value?.roles) ? rolesBlock.value.roles : [];
-  const roleNames = useMemo(() => (keys) => (Array.isArray(keys) ? keys.map((k) => roles.find((r) => r.key === k)?.name || k).join(', ') : ''), [roles]);
+  const roleNames = useMemo(() => (keys) => (Array.isArray(keys) ? keys.map((k) => workLabel(k, roles.find((r) => r.key === k)?.name)).join(', ') : ''), [roles]);
   const go = (next) => {
     const p = new URLSearchParams(search);
     p.set('tab', 'skills');
@@ -325,7 +326,7 @@ export default function SkillsTab({ scope, rolesBlock, agentsBlock, onAddAgent }
 
   let body;
   if (skillUid) {
-    body = <SkillPage block={page} agentsBlock={using} canEdit={canEdit} roleName={role?.name} roleNames={roleNames}
+    body = <SkillPage block={page} agentsBlock={using} canEdit={canEdit} roleName={role ? workLabel(role.key, role.name) : null} roleNames={roleNames}
       onBack={() => go({ skill: null })} onAssign={(s) => setSheet({ kind: 'assign', skill: s })}
       onRetry={() => { setPage(null); agents.skill(skillUid).then(setPage); }} />;
   } else if (!lib) {

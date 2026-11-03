@@ -22,6 +22,7 @@ board → file map and what waits for which issue are in
   the matching one-line body. No screen changes. Never add a client method
   for a route that does not exist.
 - **Skills (D1612) are behind the same seam.** Their methods in `agentsAdapter.js` (`skillLibrary` … `coverage`) answer unavailable until A1 (#3951) and A2 (#3956) land; the builder replaces each one-line body with `throughSkill(() => teamAgentsApi.<method>(…))`. A pasted SKILL.md is untrusted text: draw it as text, never as HTML, and let the Worker's import be the parse that saves.
+- **An agent is its persona (D4117, D4119).** Draw an agent with `AgentCard.jsx` (full, compact or chip) or `AgentIdentity`, and its line with the persona's tagline (`teamModel.agentLine`); never a job title. Where a role key must be shown, it is the area of work (`personaModel.workLabel`). An agent's values go through `../../components/profile/AxalValuesBars.jsx`, the same block a person's use.
 - **An agent is never drawn as a person.** People are circles
   (`PersonAvatar`); agents are rounded squares with the spark (`AgentTile`)
   and, wherever an agent is named, the "AI agent" pill (`AgentIdentity`). All

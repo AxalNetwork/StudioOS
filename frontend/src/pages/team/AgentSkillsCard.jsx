@@ -55,10 +55,9 @@ export function AgentSkillsView({ value, agent, canManage, onAdd, onUpdate, onRe
   const chip = scopeChip(agent?.scope);
   return (
     <div className="flex flex-col gap-3" data-testid="agent-skills">
-      {chip || agent?.role_name ? (
+      {chip ? (
         <span className="flex flex-wrap gap-1.5">
           {chip ? <span className="rounded-axal-pill border border-axal-hairline px-2 py-0.5 text-[11.5px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-200" data-testid="agent-scope-chip">{chip}</span> : null}
-          {agent?.role_name ? <span className="rounded-axal-pill border border-axal-hairline px-2 py-0.5 text-[11.5px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-200">{agent.role_name}</span> : null}
         </span>
       ) : null}
       <AgentRadar vector={vector} radar={value?.radar} />

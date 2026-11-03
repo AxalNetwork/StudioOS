@@ -469,6 +469,8 @@ export function eventWords(e) {
 }
 
 // D4117 (#4117): an agent is its persona (Vesta, Orrin, …); the Worker sends no job title.
+/** D4119: the line under an agent's name: its persona's tagline, or null. */
+export const agentLine = (a) => String(a?.persona?.tagline || '').trim() || null;
 export const agentName = (a) => String(a?.persona?.name || '').trim() || [a?.first_name, a?.last_name].map((s) => String(s || '').trim()).filter(Boolean).join(' ') || 'Unnamed agent';
 
 const PAUSE = {
@@ -498,8 +500,10 @@ export function agentRow(a, now = new Date()) {
     key: a.uid,
     uid: a.uid,
     name: agentName(a),
-    role: a.role_name || null,
-    roleOrUnrecorded: a.role_name || NOT_RECORDED,
+    // D4119: an agent's line is its persona's tagline, never a job title (D4117 §6).
+    role: agentLine(a),
+    roleOrUnrecorded: agentLine(a) || NOT_RECORDED,
+    persona: a.persona || null,
     // The model's own name; null is drawn as the muted "Not recorded".
     model: a.model_label || a.model_id || null,
     tools: tools.length ? `+ ${tools.length} read-only tool${tools.length === 1 ? '' : 's'}${servers.length ? ` from ${servers.join(', ')}` : ''}` : null,

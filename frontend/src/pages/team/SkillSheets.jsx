@@ -6,6 +6,7 @@ import { AgentTile } from './AgentMark.jsx';
 import * as agents from './agentsAdapter.js';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, EYEBROW, FIELD, HonestBlock, MONO, MUTED } from './teamUi.jsx';
 import { AgentRadar, SkillRow, TaxChips } from './SkillParts.jsx';
+import { workLabel } from './personaModel.js';
 import {
   LEVELS, OUTPUT_KINDS, assignGroups, blockedWords, directory, parseSkillMd, previewRadar, problemWords, radarVector, scopeLine,
 } from './skillsModel.js';
@@ -131,7 +132,7 @@ export function AddSkillsSheet({ agent, current, radar, onClose, onSaved }) {
   };
   const preview = previewRadar(radar, chosen);
   return (
-    <Sheet title="Add skills to this agent" sub={`${agent.role_name || 'Its role'}’s skills, most used first`} width={560} onClose={onClose} testId="add-skills-sheet"
+    <Sheet title="Add skills to this agent" sub="Skills for this agent, most used first" width={560} onClose={onClose} testId="add-skills-sheet"
       footer={(
         <div className="flex justify-end gap-2">
           <button type="button" className={BTN_SECONDARY} onClick={onClose}>Cancel</button>
@@ -367,7 +368,7 @@ export function NewSkillSheet({ scope, roles, role: initialRole, onClose, onSave
             <label className="flex flex-col gap-1"><span className="text-[12.5px] font-bold text-axal-ink dark:text-gray-100">Role · required</span>
               <select className={FIELD} value={role} onChange={(e) => setRole(e.target.value)} data-testid="new-skill-role">
                 <option value="">Pick a role</option>
-                {(roles || []).map((r) => <option key={r.key} value={r.key}>{r.name}</option>)}
+                {(roles || []).map((r) => <option key={r.key} value={r.key}>{workLabel(r.key, r.name)}</option>)}
               </select>
             </label>
             <label className="flex flex-col gap-1"><span className="text-[12.5px] font-bold text-axal-ink dark:text-gray-100">Name</span>
