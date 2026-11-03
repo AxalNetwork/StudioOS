@@ -17,6 +17,7 @@ import {
 import ShareDialog from './ShareDialog';
 import StudioHome from './StudioHome';
 import PitchOverview from './PitchOverview';
+import ScriptTile from './ScriptTile';
 import { presentHref } from './presentExportModel';
 import { BUILD_YOUR_DECK, PRIMARY_OF } from './pitchOverviewModel';
 import { NEW_PATH } from './newDeckModel';
@@ -168,7 +169,8 @@ export default function PitchStudio({ tab = 'overview' }) {
   const q = ventureQuery(projectId || reads.requested);
 
   // D1604 (§5): the rail is the element groups' models and the deck's usage.
-  const currentId = currentVersion(asList(reads.versions.data, 'versions', 'decks'))?.id ?? null;
+  const currentDeck = currentVersion(asList(reads.versions.data, 'versions', 'decks'));
+  const currentId = currentDeck?.id ?? null;
   const railGroups = useMemo(() => deckRail(currentId), [currentId]);
   const rail = (
     <WorkerRail
@@ -205,7 +207,8 @@ export default function PitchStudio({ tab = 'overview' }) {
         ) : tab === 'overview' ? (
           <PitchOverview reads={reads} readOnly={readOnly} q={q} />
         ) : tab === 'script' ? (
-          <ScriptComing q={q} projectId={projectId} currentId={currentId} />
+          // D4270: Likely questions and Rehearsals; the Script view stays P1's block until P2a (#4268).
+          <ScriptTile deck={currentDeck} readOnly={readOnly} script={<ScriptComing q={q} projectId={projectId} currentId={currentId} />} />
         ) : (
           <StudioHome reads={reads} readOnly={readOnly} q={q} />
         )}
@@ -267,16 +270,16 @@ function StudioHeader({ tab, q, readOnly, projectId, currentId, noDeck }) {
 }
 
 /**
- * D4254 P2a/P2c (#4268, #4270): Script & rehearsal's own screens are slot
- * work. Until they land the tile says so, and opens what already works:
- * Present with Rehearse (D1580), whose report holds the likely questions.
+ * D4254 P2a (#4268): the Script view is slot work. Until it lands the view
+ * says so, and opens what already works: the editor's notes and Present with
+ * Rehearse (D1580). Likely questions and Rehearsals are D4270's views.
  */
 function ScriptComing({ q, projectId, currentId }) {
   return (
     <div className={`${CARD} flex flex-col items-start gap-2.5 p-6`} data-testid="pitch-studio-script-coming">
       <span className={`text-[15px] font-extrabold ${INK}`}>The script, card by card, is coming.</span>
       <span className="text-[12.5px] leading-[1.45] text-axal-muted dark:text-gray-400">
-        Until then, write each card’s notes in the editor and rehearse from Present. The rehearsal report lists the questions investors are likely to ask.
+        Until then, write each card’s notes in the editor and rehearse from Present. Likely questions and your rehearsals are in the views above.
       </span>
       <div className="flex flex-wrap gap-2">
         {currentId != null && projectId != null ? <Link to={presentHref(projectId, currentId)} className={GHOST} data-testid="pitch-studio-script-present">Rehearse in Present</Link> : null}
