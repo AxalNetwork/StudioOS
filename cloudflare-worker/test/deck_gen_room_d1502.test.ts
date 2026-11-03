@@ -231,7 +231,7 @@ test('4. the routes: the deck reads a run, a stranger gets 404, only its starter
     const own = await call(db, FOUNDER, 'GET', `/api/decks/areas/batches/${a.uid}`);
     assert.equal(own.status, 200, JSON.stringify(own.body));
     assert.deepEqual([own.body.state, own.body.counts.waiting, own.body.held_microusd, own.body.charged_microusd], ['queued', 3, 0, 0]);
-    assert.deepEqual(own.body.steps[0], { seq: 0, card_uid: 'c1', area_id: 'a1', element: 'body', kind: 'text', model_label: 'llama-3.3-70b-instruct-fp8-fast', state: 'waiting', seconds: null, cost_microusd: 0, fallback_used: false, error_code: null, result: null });
+    assert.deepEqual(own.body.steps[0], { seq: 0, card_uid: 'c1', area_id: 'a1', element: 'body', kind: 'text', role: 'variant', model_label: 'llama-3.3-70b-instruct-fp8-fast', state: 'waiting', seconds: null, cost_microusd: 0, fallback_used: false, error_code: null, result: null });
     assert.equal(JSON.stringify(own.body).includes('private brief'), false, 'the step request stays in D1');
     assert.deepEqual(contractErrors(BATCH_SCHEMA, own.body), [], 'GET answers its D1511 contract');
     const stranger = await call(db, OTHER, 'GET', `/api/decks/areas/batches/${a.uid}`);
