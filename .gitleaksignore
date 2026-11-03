@@ -230,3 +230,8 @@ f9bac90fc12defb775b0759aaf8824dcdc470cac:cloudflare-worker/test/calendar_complia
 # it. Pin only the published findings, as D334's entry does.
 d6f46b997d07d2fbd18d64c190b29b2437dc3d71:cloudflare-worker/test/admin_deck_beta_4190.test.ts:generic-api-key:143
 d6f46b997d07d2fbd18d64c190b29b2437dc3d71:cloudflare-worker/test/admin_deck_beta_4190.test.ts:generic-api-key:155
+# #3938 part 7 (D1478): `segment_hints_3938.test.ts` first set its in-memory test
+# JWT key to a synthetic phrase repeated three times; it signs only the test's
+# own tokens and was never a credential. The next commit replaces it with 48
+# x's (no entropy), so no later commit carries it. Pin only the published finding.
+07050caffc38bcb858fa119db6faf9276d1e04fe:cloudflare-worker/test/segment_hints_3938.test.ts:generic-api-key:30

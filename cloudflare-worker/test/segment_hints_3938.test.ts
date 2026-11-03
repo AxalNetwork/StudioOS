@@ -27,7 +27,8 @@ import { HINT_DEPS, HintRefused, retrieveModel, type ThemeHintDeps } from '../sr
 import { NEAR_SEGMENT, SEGMENT_JOB, label, segmentHints, segmentSection, type Interviewee } from '../src/services/ai/segmentHints.ts';
 import { jobStep } from '../src/services/ai/modelUseCases.ts';
 
-const SECRET = 'synthetic-segment-hints-3938-'.repeat(3);
+// No entropy: gitleaks reads any random-looking literal beside SECRET as a key.
+const SECRET = 'x'.repeat(48);
 test.after(() => removeMigratedDatabases());
 const ICP = 'Founder · Validate · Ideal customer profile';
 const PROBLEM = 'Founder · Validate · Problem discovery';
