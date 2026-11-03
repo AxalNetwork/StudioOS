@@ -4116,6 +4116,15 @@ export const api = {
     const s = q.toString();
     return request(`/advisors/match${s ? `?${s}` : ''}`);
   },
+  // #3938 NE1, the founder's press: /advisors/match's list ranked against a typed need
+  // (bge-m3, the reranker, one line each). Rows `{ uid, position, line }`; 422 with no query.
+  advisorsMatchRank: (query, params) => {
+    const q = new URLSearchParams();
+    if (params?.gap) q.set('gap', params.gap);
+    if (params?.focus) q.set('focus', params.focus);
+    const s = q.toString();
+    return request(`/advisors/match/rank${s ? `?${s}` : ''}`, { method: 'POST', body: JSON.stringify({ query }) });
+  },
   getAdvisor: (uid) => request(`/advisors/${uid}`),
   openAdvisorBookingLink: (slug) =>
     request('/advisors/booking-links/open', { method: 'POST', body: JSON.stringify({ slug }) }),
@@ -4754,6 +4763,17 @@ export const api = {
     if (opts.limit) qs.set('limit', String(opts.limit));
     const s = qs.toString();
     return request(`/cofounder/browse${s ? `?${s}` : ''}`);
+  },
+  // #3938 NE1, the founder's press: the browse cards (same filters) ranked against what the
+  // founder looks for, or their profile's own words. Rows `{ uid, position, line }`; 422 with neither.
+  cofounderBrowseRank: (query = '', opts = {}) => {
+    const qs = new URLSearchParams();
+    for (const k of ['q', 'skill', 'sector', 'commitment']) {
+      if (opts[k]) qs.set(k, opts[k]);
+    }
+    if (opts.remote_only) qs.set('remote_only', 'true');
+    const s = qs.toString();
+    return request(`/cofounder/browse/rank${s ? `?${s}` : ''}`, { method: 'POST', body: JSON.stringify(query ? { query } : {}) });
   },
   cofounderExpressInterest: (data) =>
     request('/cofounder/interest', { method: 'POST', body: JSON.stringify(data) }),
