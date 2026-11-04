@@ -41,6 +41,8 @@ routes live in the D528 module `frontend/src/routes/learning.jsx`, which
 | `PlanSheet.jsx` | D3959: the "Add to my plan" sheet (from the Calendar's create dialog, CAL7), the button on each course, lesson, video, webinar, exercise and exam page, and the picker the Calendar's New › Plan learning opens. |
 | `PlanRowActions.jsx` | D3959: a plan item's Mark done, Reschedule, Open in Learning and Remove, with the Calendar's Reschedule and Cancel dialogs (CAL19). On `/learning/plan` and on a Learning entry in the Calendar. |
 | `LearningPlanPage.jsx` | D3959: `/learning/plan`, My learning plan: goals, Upcoming and the past 30 days, and Add a study block (from LR12 "My learning" and LR1's "Your progress"). |
+| `LessonFooter.jsx`, `lessonFooterModel.js`, `lessonFooter.css` | D4478: the accessible lesson position/completion footer and its phone bar. |
+| `lessonPositionWriter.js`, `useOnline.js` | D4478: the browser connection and latest-position offline queue around the existing progress throttle. |
 
 ## The rules for adding here
 
