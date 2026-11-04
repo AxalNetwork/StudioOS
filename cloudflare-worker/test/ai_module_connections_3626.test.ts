@@ -322,10 +322,13 @@ test('every newly connected text model actually dispatches through its persona m
       const r = page
         ? await run(f.env, { task: page.routeTask as any, userId: 2, model: id, text: 'Explain the supplied evidence.', rail: { page: page.pageKey }, ...(image ? { images: [png] } : {}) })
         : await run(f.env, { task: `rail_${MODEL_CONNECTIONS[id].kinds[0]}` as any, userId: 2, model: id, text: 'Explain the supplied evidence.' });
-      results.push([id, r.ok, r.usage.model, f.calls[0]?.id]);
+      results.push([id, r.ok, r.ok ? r.usage.model : r.refusal, f.calls[0]?.id]);
     } finally { f.db.close(); }
   }
-  assert.deepEqual(results, Object.entries(MODEL_CONNECTIONS).filter(([, c]) => c.operation === 'chat').map(([id]) => [id, true, id, id]));
+  // #4351 (D4351): a named model meets its job's plan lock. A model locked to the top plan
+  // is refused for every member (no tier reaches it yet) and never reaches the model.
+  assert.deepEqual(results, Object.entries(MODEL_CONNECTIONS).filter(([, c]) => c.operation === 'chat')
+    .map(([id]) => (MODEL_LOCKS[id] === 'top_paid' ? [id, false, 'plan_locked', undefined] : [id, true, id, id])));
 });
 
 test('Moondream uses image-query shape; no reasoning trace is returned as the answer', async () => {

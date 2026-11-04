@@ -86,3 +86,45 @@ export function latestHqNote(read) {
   const last = hq[hq.length - 1];
   return last ? { body: String(last.body || ''), name: last.author?.name || 'Axal HQ', at: last.created_at || null, card: last.card_index ?? null } : null;
 }
+
+/** How many investors "Recent investor activity" lists (ps1 draws five). */
+export const ACTIVITY_ROWS = 5;
+
+const stamp = (at) => {
+  const t = Date.parse(String(at || '').replace(' ', 'T') + (/[zZ]|[+-]\d\d:?\d\d$/.test(String(at || '')) ? '' : 'Z'));
+  return Number.isFinite(t) ? t : null;
+};
+
+const initialsOf = (name) => String(name || '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '·';
+
+/**
+ * #4274 (ps1, D1568): "Recent investor activity", from the current version's
+ * investor links (`GET /decks/:id/investor-links`). Each link's latest event is
+ * its newest recorded signal (D1568's words: "Opened", "Revisited after 48 h",
+ * "Reached the ask"), else an accepted NDA, else its last view. A link nobody
+ * has opened is not activity and is left out; a withdrawn link keeps what it
+ * recorded. Newest first, at most `ACTIVITY_ROWS`. `null` when the read gave
+ * no list, so the page says it could not read it rather than "no activity".
+ */
+export function investorActivity(read, limit = ACTIVITY_ROWS) {
+  const links = Array.isArray(read?.links) ? read.links : null;
+  if (!links) return null;
+  const rows = [];
+  for (const l of links) {
+    const signals = (Array.isArray(l?.signals) ? l.signals : []).filter((s) => s && stamp(s.at) != null);
+    const last = signals.reduce((a, s) => (a && stamp(a.at) >= stamp(s.at) ? a : s), null);
+    const nda = l?.nda?.state === 'accepted' && stamp(l.nda.accepted_at) != null ? l.nda.accepted_at : null;
+    const viewed = Number(l?.analytics?.views) > 0 && stamp(l.analytics.last_viewed_at) != null ? l.analytics.last_viewed_at : null;
+    const event = last ? { at: last.at, line: String(last.words || 'Opened') }
+      : nda ? { at: nda, line: 'Accepted the NDA' }
+        : viewed ? { at: viewed, line: 'Opened the deck' } : null;
+    if (!event) continue;
+    const name = l?.investor?.label || null;
+    rows.push({
+      id: Number(l.id), name, fund: l?.investor?.fund || null, initials: initialsOf(name || l?.investor?.fund),
+      prospectId: l?.investor?.prospect_id == null ? null : Number(l.investor.prospect_id),
+      line: event.line, at: event.at,
+    });
+  }
+  return rows.sort((a, b) => stamp(b.at) - stamp(a.at) || b.id - a.id).slice(0, limit);
+}

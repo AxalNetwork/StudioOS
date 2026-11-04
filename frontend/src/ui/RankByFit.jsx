@@ -3,7 +3,7 @@ import { rankRefusal, rankedLine } from '../lib/rankByFit';
 
 /**
  * #3938 (D1478 task 4, part 8): "Rank by fit", the page button for every
- * match-row press (RA11, LE10, IN10, GR17, NE1). `run(query)` is the page's
+ * match-row press (RA11, LE10, IN10, GR4, GR17, NE1). `run(query)` is the page's
  * client call; `onRanked(answer)` hands the Worker's `{ rows }` to the page,
  * which reorders its own list with `applyRank` (`lib/rankByFit.js`), and
  * `onRanked(null)` puts it back. Nothing is saved: a ranking is a view of the

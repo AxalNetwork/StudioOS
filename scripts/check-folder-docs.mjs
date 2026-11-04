@@ -138,6 +138,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/admin/profiles',       'Partner profiles under Approvals (D989)'],
   ['frontend/src/pages/admin/payments',       'Payments under Platform, HQ only (D1008)'],
   ['frontend/src/pages/admin/partners',       'the admin Partner invitations desk (D923): its tabs, the records, the dialogs and the model they read'],
+  ['frontend/src/pages/influencer/section', 'the member\'s Influencer section (D4289 P7, #4296): the page, its six tabs, the model and the one read seam'],
   ['frontend/src/pages/deal',                 'the deal page’s frame, working and reading tabs, staff views and who sees what (D1152–D1155)'],
   ['frontend/src/pages/investor/dealflow',     'Deal flow for an Investor and the Studio lens: the board, the table, their rules and controls (D1236, D1240, D1242)'],
   ['frontend/src/pages/duediligence',         'Due diligence (D1244): the list and case tabs as addresses, and the list tabs D1250 draws — Cases, Templates and their dialogs'],
@@ -190,6 +191,7 @@ const DOCUMENTED = new Map([
   ['cloudflare-worker/src/contracts',         'D1511: one JSON Schema per swapped deck v2 adapter method, checked against the real reply'],
   ['cloudflare-worker/test/fixtures',         'recorded and synthetic inputs the worker tests read, the fake AI binding\'s recordings among them'],
   ['frontend/tests/visual',                   'D1511: the Pitch deck editor\'s visual regression and axe suites, their server and baselines'],
+  ['frontend/src/routes',                     'one route module per area (D528): App.jsx collects them, and a new area is one file here'],
 ]);
 
 // Trees inside which a heavy folder is expected to document itself.

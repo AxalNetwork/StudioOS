@@ -3,6 +3,9 @@
  * /api/admin/influencers. An HQ admin (`requireHqAdmin`; a branch is refused).
  * The rules are `services/influencers.ts`.
  *
+ *   GET   /?status=active|paused|ended|all&limit=   D4298 (#4298): the Influencers table (services/influencers.ts
+ *         `listInfluencers`): each membership with its person, handle, sign-ups, and commission per
+ *         currency for the Super Admin only (an admin reads `hq_reads`) → { influencers, counts }
  *   GET   /applications?status=applied|more_requested|admitted|declined|withdrawn|open|all&limit=
  *         → { applications: [{ …, applicant: { user_id, name, role } }], counts: { applied, more_requested } }
  *   POST  /applications/:uid/decision  { admit: tier } | { decline: reason } | { more: question }
@@ -30,7 +33,7 @@ import { notify } from '../services/notify';
 import { decideFlag, listFlags } from '../services/referrals/handleAttribution';
 import {
   APPLICATION_FILTERS, REASON_MAX, REASON_MIN, INFLUENCER_ACTIONS, InfluencerRefusal, TIER_LABEL, changeInfluencer, decideApplication, isTier,
-  listApplications, readChange, readDecision, tierDefaults, writeTierDefault,
+  MEMBER_FILTERS, listApplications, listInfluencers, readChange, readDecision, tierDefaults, writeTierDefault,
 } from '../services/influencers';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -47,6 +50,16 @@ async function tell(env: Env, userId: number, type: string, title: string, body:
   try { await notify(env, { userId, type, title, body, link, channels: ['in_app', 'email'] }); }
   catch (e) { console.error('[admin_influencers] notice failed', (e as Error)?.message); }
 }
+
+r.get('/', async (c) => {
+  const admin = await requireHqAdmin(c);
+  const raw = c.req.query('status') || 'all';
+  if (!(MEMBER_FILTERS as readonly string[]).includes(raw)) {
+    return refuse(c, 400, { code: 'invalid_status', message: 'Filter by active, paused, ended or all.' });
+  }
+  const limit = Math.min(500, Math.max(1, Number(c.req.query('limit')) || 200));
+  try { return c.json(await listInfluencers(c.env, raw as typeof MEMBER_FILTERS[number], isSuperAdmin(admin), limit)); } catch (e) { return answer(c, e); }
+});
 
 r.get('/applications', async (c) => {
   await requireHqAdmin(c);

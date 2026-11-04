@@ -5,6 +5,9 @@
  * What D720 §5 asks the test to hold:
  *   · the committed `services/ai/railMatrix.json` is the script's output;
  *   · every canvas page has a row, and Admin has its Home;
+ *   · #4313 part 3: no page row stores a model list (its kind's job is its
+ *     list), so the rules below hold on each canvas kind's list, which the
+ *     generator checks and the options of that kind take;
  *   · every model is one Cloudflare prices (the pricing file, until D760's
  *     catalogue lands) and fits its kind's shape; axal-search takes bge-base;
  *   · one Default per row, at models[0];
@@ -50,7 +53,12 @@ const CANVAS = JSON.parse(read('design/incoming/airail-every-page-data/canvas.js
 const OVERRIDES = JSON.parse(read('scripts/lib/railMatrixOverrides.json'));
 const PRICING = readPricing(read('design/incoming/airail-every-page-data/cloudflare-pricing-2026-10-15.md'));
 const MATRIX = JSON.parse(read(OUT));
-const ROWS: { pageKey: string; kind: string; routeTask: string; models: { id: string; role: string; line: string }[] }[] = MATRIX.rows;
+const ROWS: { pageKey: string; kind: string; routeTask: string }[] = MATRIX.rows;
+type Listed = { pageKey: string; kind: string; routeTask: string; models: { id: string; role: string; line: string }[]; more: { id: string; line: string }[] };
+// #4313 part 3: each canvas kind's list as the generator checks it (`kinds`, never written), shaped as a row.
+const KINDS: Record<string, { models: Listed['models']; more: Listed['more'] }> = buildMatrix(CANVAS, OVERRIDES, PRICING).kinds;
+const KIND_ROWS: Listed[] = Object.entries(KINDS).map(([kind, l]) => ({ pageKey: `kind ${kind}`, kind, routeTask: `rail_${kind}`, ...l }));
+const canvasRow = (kind: string): Listed => KIND_ROWS.find((r) => r.kind === kind)!;
 const capsOf = (id: string): string[] =>
   (Object.values(OVERRIDES.models) as { id: string; caps: string[] }[]).find((m) => m.id === id)?.caps ?? [];
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
@@ -75,7 +83,7 @@ test('every canvas page has one row, keyed in the canvas\'s names, and Admin has
   assert.ok(keys.includes('Founder · Studio'), 'Founder\'s home is Studio');
   for (const p of ['Investor', 'Advisor', 'Operating Partner']) assert.ok(keys.includes(`${p} · Home`), `${p} · Home`);
   const home = ROWS.find((r) => r.pageKey === 'Investor · Home')!;
-  assert.deepEqual(ROWS.find((r) => r.pageKey === 'Admin · Home')!.models, home.models, 'Admin · Home takes a Home row\'s models');
+  assert.equal(ROWS.find((r) => r.pageKey === 'Admin · Home')!.kind, home.kind, 'Admin · Home takes a Home row\'s kind');
   for (const r of ROWS) {
     const name = r.pageKey.split(' · ').at(-1)!;
     // D796 (#2229): a renamed board may keep the kind it had, as its override says and why.
@@ -88,8 +96,23 @@ test('every canvas page has one row, keyed in the canvas\'s names, and Admin has
   }
 });
 
-test('every matrix model is one D760\'s catalogue knows and prices', () => {
-  for (const id of new Set(ROWS.flatMap((r) => r.models.map((m) => m.id)))) {
+test('#4313 part 3: a page row stores no model list, only its page, its kind and its router task', () => {
+  assert.equal(ROWS.length, 205);
+  for (const r of MATRIX.rows) assert.deepEqual(Object.keys(r), ['pageKey', 'kind', 'routeTask'], `${r.pageKey}: a page row carries a model list again`);
+  // What the page lists is its kind's job, as the rail draws it (D4313 part 2).
+  for (const r of ROWS) {
+    const ref = RAIL_KIND_JOBS[r.kind];
+    assert.ok(ref, `${r.pageKey}: kind ${r.kind} names no job`);
+    assert.equal(resolveRail(r.pageKey)!.models[0]?.id, jobStep(ref.id, ref.step)!.default, `${r.pageKey}: lists ${ref.id}'s Default first`);
+  }
+  // The generator never writes one, and a canvas kind still needs its list.
+  assert.ok(buildMatrix(CANVAS, OVERRIDES, PRICING).rows.every((r: any) => !('models' in r) && !('more' in r)));
+  const noCode = clone(CANVAS); delete noCode.suggested.code;
+  assert.match(buildMatrix(noCode, OVERRIDES, PRICING).problems.join('\n'), /: kind code has no models/);
+});
+
+test('every canvas kind\'s model is one D760\'s catalogue knows and prices', () => {
+  for (const id of new Set(KIND_ROWS.flatMap((r) => r.models.map((m) => m.id)))) {
     const m = modelById(id);
     assert.ok(m, `${id} is not in the catalogue`);
     assert.ok(Object.keys(m.neurons ?? {}).length > 0, `${id}: the catalogue has no neuron price`);
@@ -98,7 +121,7 @@ test('every matrix model is one D760\'s catalogue knows and prices', () => {
 });
 
 test('every model is priced, fits its kind, and a search-index kind reads axal-search with bge-base', () => {
-  for (const r of ROWS) {
+  for (const r of KIND_ROWS) {
     const shape = OVERRIDES.kinds[r.kind];
     assert.ok(r.models.length > 0, `${r.pageKey}: no models`);
     r.models.forEach((m, i) => {
@@ -109,7 +132,7 @@ test('every model is priced, fits its kind, and a search-index kind reads axal-s
       if (i === 0) assert.ok(caps.includes(shape.defaultNeeds), `${r.pageKey}: the default cannot do ${shape.defaultNeeds}`);
     });
   }
-  const kindRow = (k: string) => ROWS.find((r) => r.kind === k)!;
+  const kindRow = canvasRow;
   assert.ok(kindRow('vision').models.every((m) => capsOf(m.id).includes('vision')), 'every vision model reads images');
   assert.ok(capsOf(kindRow('speech').models[0].id).includes('speech'), 'a speech page transcribes first');
   // The search kind indexes the library and research searches it first: both read axal-search.
@@ -122,7 +145,7 @@ test('every model is priced, fits its kind, and a search-index kind reads axal-s
 });
 
 test('one Default per row, at models[0]', () => {
-  for (const r of ROWS) {
+  for (const r of KIND_ROWS) {
     assert.equal(r.models[0].role, 'Default', `${r.pageKey}: models[0] says Default`);
     assert.equal(r.models.filter((m) => m.role === 'Default').length, 1, `${r.pageKey}: only one Default`);
   }
@@ -130,7 +153,7 @@ test('one Default per row, at models[0]', () => {
 
 test('every paid-only default has a non-paid alternative of the same shape', () => {
   let paidDefaults = 0;
-  for (const r of ROWS) {
+  for (const r of KIND_ROWS) {
     const def = r.models[0];
     if (!PRICING.paidOnly.has(def.id)) continue;
     paidDefaults++;
@@ -142,7 +165,7 @@ test('every paid-only default has a non-paid alternative of the same shape', () 
 });
 
 test('the voice rule holds on every member-visible string', () => {
-  for (const r of ROWS) for (const m of r.models) {
+  for (const r of [...KIND_ROWS, ...MATRIX.options]) for (const m of r.models) {
     for (const s of [m.role, m.line]) assert.doesNotMatch(s, VOICE_BANNED, `${r.pageKey}: "${s}"`);
   }
   for (const word of ['advice', 'Recommended', 'fiduciary', 'Advisor chat']) assert.match(word, VOICE_BANNED);
@@ -163,6 +186,8 @@ test('the generator refuses a canvas or override that breaks a rule, and writes 
   assert.match(problemsWith((_c, o) => { o.searchIndexModel = '@cf/baai/bge-m3'; }), /axal-search is 768-dimensional/);
   assert.match(problemsWith((c) => { delete c.task_kind.Verdict; }), /Verdict has no kind/);
   assert.match(problemsWith((_c, o) => { o.pages['Founder · Studio'] = { kind: 'chat' }; }), /is on the canvas; drop its override/);
+  // #4313 part 3: a kind no option takes (code) is still held, once, as the kind's own list.
+  assert.match(problemsWith((c) => { c.suggested.code[1].t = 'Whisper'; }), /kind code: @cf\/openai\/whisper does not fit code/);
 });
 
 test('each rail_<kind> task is a ROUTE key that names only its kind\'s models, priced and named', () => {
@@ -182,7 +207,7 @@ test('each rail_<kind> task is a ROUTE key that names only its kind\'s models, p
   }
   for (const kind of CANVAS_RAIL_KINDS) {
     const entry = (ROUTE as Record<string, any>)[`rail_${kind}`];
-    const row = ROWS.find((r) => r.kind === kind)!;
+    const row = canvasRow(kind);
     const ids = row.models.map((m) => m.id);
     const offered = [entry.model, ...(entry.alternates ?? []), ...(entry.fallbackChain ?? [])];
     for (const id of offered) {
@@ -431,7 +456,7 @@ test('the generator refuses an option on a missing board, a key used twice, a ba
 // #3934: what a run reads is the resolved row (the table's job step), not the canvas file's.
 const RESEARCH = resolveRail(ROWS.find((r) => r.kind === 'research')!.pageKey)!;
 const CHAT = resolveRail(ROWS.find((r) => r.kind === 'chat')!.pageKey)!;
-const VISION = ROWS.find((r) => r.kind === 'vision')!;
+const VISION = canvasRow('vision');
 const OFF: Record<string, string> = {};
 const PAID_ON = { AI_PAID_MODELS: 'on' };
 
@@ -439,7 +464,7 @@ test('a rail run resolves the caller\'s model, then the pick, then the default a
   const text = { vision: false };
   // research: Kimi K2.6 (paid only) is the canvas default; a free plan starts on GPT-OSS 120B. The demotion is
   // resolveRailChain's own rule, so it is held on the canvas file's row; #3934's research job starts on GPT-OSS 120B.
-  const CANVAS_RESEARCH = ROWS.find((r) => r.kind === 'research')! as any;
+  const CANVAS_RESEARCH = canvasRow('research');
   assert.equal(CANVAS_RESEARCH.models[0].id, '@cf/moonshotai/kimi-k2.6');
   assert.deepEqual(compatibleModels(CANVAS_RESEARCH, text, OFF), ['@cf/moonshotai/kimi-k2.6', '@cf/openai/gpt-oss-120b'], 'the index and the reranker never answer a chat run');
   assert.deepEqual(resolveRailChain(CANVAS_RESEARCH, text, OFF, {}), { ok: true, primary: '@cf/openai/gpt-oss-120b', chain: [], source: 'default' });
@@ -457,7 +482,7 @@ test('a rail run resolves the caller\'s model, then the pick, then the default a
   assert.deepEqual(compatibleModels(VISION, { vision: true }, OFF), ['@cf/google/gemma-4-26b-a4b-it', '@cf/meta/llama-4-scout-17b-16e-instruct']);
   assert.equal((resolveRailChain(CHAT, { vision: true }, OFF, { caller: '@cf/zai-org/glm-4.7-flash' }) as any).refusal, 'model_not_offered');
   // A row with no model for the run leaves the task's route in charge.
-  const searchRow = ROWS.find((r) => r.kind === 'search')!;
+  const searchRow = canvasRow('search');
   assert.equal(resolveRailChain({ ...searchRow, models: searchRow.models.filter((m) => !m.id.includes('kimi')) }, text, OFF, {}), null);
 });
 
@@ -563,7 +588,7 @@ test('GET /api/ai/rail lists the page\'s options with their own rows and picks, 
 
 
 test('#3741: generated rows and options cap suggestions and keep demoted choices', () => {
-  for (const r of [...MATRIX.rows, ...MATRIX.options]) {
+  for (const r of [...KIND_ROWS, ...MATRIX.options] as any[]) {
     // D1596 (#3869): a no-model chip suggests nothing and demotes nothing.
     if (r.noModel) { assert.deepEqual([r.models, r.more, r.routeTask], [[], [], 'none'], r.optionKey); continue; }
     assert.ok(r.models.length > 0 && r.models.length <= 3, r.pageKey);
@@ -573,11 +598,11 @@ test('#3741: generated rows and options cap suggestions and keep demoted choices
   }
   // #3936: speech no longer carries four models: its Listen row lists no text model (plan §4.2 item 9),
   // so it has three suggestions and nothing demoted. Research keeps its demoted reranker.
-  const speech = MATRIX.rows.find((row: any) => row.kind === 'speech');
+  const speech = canvasRow('speech');
   assert.deepEqual(speech.more, []);
   assert.deepEqual(speech.models.map((m: any) => m.id), ['@cf/openai/whisper-large-v3-turbo', '@cf/deepgram/nova-3', '@cf/deepgram/flux']);
   for (const [kind, demoted] of [['research', '@cf/baai/bge-reranker-base']]) {
-    const r = MATRIX.rows.find((row: any) => row.kind === kind);
+    const r = canvasRow(kind);
     assert.deepEqual(r.more.map((m: any) => m.id), [demoted]);
     const broken = { ...r, models: [...r.models, { ...r.more[0], role: 'Alternative' }], more: [] };
     assert.match(rowProblems(broken, OVERRIDES, PRICING, capsOf).join('\n'), /more than 3 suggested models/);
@@ -703,7 +728,7 @@ test('an image option lists the draw models only, FLUX.1 Schnell first, and no p
   assert.ok(!ROWS.some((r) => r.kind === 'image'), 'image is an option kind only');
   assert.ok(!(RAIL_KINDS as readonly string[]).includes('image'), 'RAIL_KINDS stays the canvas kinds');
   // Vision rows still read images.
-  for (const r of ROWS.filter((x) => x.kind === 'vision')) assert.ok(r.models.every((m) => MODEL_CONNECTIONS[m.id]?.operation !== 'draw'), r.pageKey);
+  for (const r of ROWS.filter((x) => x.kind === 'vision')) assert.ok(resolveRail(r.pageKey)!.models.every((m) => MODEL_CONNECTIONS[m.id]?.operation !== 'draw'), r.pageKey);
 });
 
 test('a transcription option lists only what the transcribe task runs, and no chat model joins it', () => {

@@ -28,6 +28,7 @@ import { NEW_MODELS, modelName, railView } from '../src/ui/railModels.js';
 import {
   NOT_AVAILABLE, PRICE_NOTE, PRICE_UNREADABLE, guardSentence, modelPrice, priceGroups, priceText, railModelPrice, railRates, usd,
 } from '../src/ui/railPrices.js';
+import { railRows } from '../../cloudflare-worker/src/services/ai/railMatrix.ts';
 import { RailPageProvider } from '../src/ui/railCrumbs.js';
 import { __resetEadwynPanelForTest } from '../src/ui/eadwynPanel.js';
 import { __resetRailPrefsSyncForTest } from '../src/ui/railModelChoice.js';
@@ -82,11 +83,11 @@ function rates(billing = 'cost', extra = {}) {
 /**
  * D769 PR 2: `GET /api/ai/rail` for a matrix page, each model priced from the
  * same rows as the rate card (`price: { cost, billed }`, empty where the card
- * has none), in the billing the card reports.
+ * has none), in the billing the card reports. The page's row is the one the
+ * Worker builds from its kind's job (`railRows()`, #4313 part 3).
  */
-const MATRIX = JSON.parse(read('cloudflare-worker/src/services/ai/railMatrix.json'));
 function railAnswer(page, option, card = rates()) {
-  const r = MATRIX.rows.find((x) => x.pageKey === page);
+  const r = railRows().find((x) => x.pageKey === page);
   const priced = (id) => card.models.find((m) => m.id === id) || { cost: {}, billed: {} };
   return {
     ok: true, page, crumbs: page.split(' · '), kind: r.kind,
@@ -222,12 +223,13 @@ test('the price is the Worker\'s: cost while billing is cost, billed once it is 
 test('every suggested card and All models row prints its price in its unit', async () => {
   const m = await mount(onPage('/validate/customer-research', h(WorkerRail, { workspace: 'Validate' })));
   try {
-    // Customer research suggests Whisper Turbo, Nova-3 and Flux; the 70B stays in All models.
+    // Customer research suggests its job's (VA1) Whisper Turbo and Nova-3 (#4313 part 3: the page row stores no
+    // list of its own); the 70B stays in All models.
     assert.equal(m.text(m.by(`text-worker-rail-price-${tail(WHISPER)}`)), '$0.0005 / min');
     assert.equal(m.text(m.by(`text-worker-rail-price-${tail(NOVA)}`)), '$0.0052 / min · $0.0092 / min live');
     assert.equal(m.by(`text-worker-rail-price-${tail(L70)}`), undefined);
     const cards = m.all('card-worker-rail-model-');
-    assert.equal(cards.length, 3);
+    assert.equal(cards.length, 2);
     for (const c of cards) assert.ok(m.all(`text-worker-rail-price-${String(m.pr(c)['data-testid']).replace('card-worker-rail-model-', '')}`).length === 1);
     // All models: every row has its short price, under the canvas's note.
     await m.click('button-worker-rail-all-models');

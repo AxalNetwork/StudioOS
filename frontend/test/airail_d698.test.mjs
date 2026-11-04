@@ -29,6 +29,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { codeOnly } from './_codeOnly.mjs';
 import { renderedText } from './_renderedText.mjs';
 import { installDocument } from './_contracts_dom.mjs';
+import { railRows } from '../../cloudflare-worker/src/services/ai/railMatrix.ts';
 import WorkerRail, { MANUAL_LINE, SAFETY_LINE, RailUsage } from '../src/ui/WorkerRail.jsx';
 import { ALL_MODELS, modelName, railView } from '../src/ui/railModels.js';
 import { RailCrumbsProvider, RailPageProvider, useRailCrumbs, useRailOption, useSetRailCrumbs } from '../src/ui/railCrumbs.js';
@@ -90,12 +91,14 @@ const PRICING = routerPricing();
 /**
  * D769 PR 2 (#2088): `GET /api/ai/rail` as the Worker answers it, built from
  * the Worker's own matrix (`railMatrix.json`), so the rail is tested against
- * the rows a run resolves from. Each model is priced at a stub rate.
+ * the rows a run resolves from. A page's row is the one the Worker builds from
+ * its kind's job (`railRows()`; #4313 part 3, the page row stores no list).
+ * Each model is priced at a stub rate.
  */
 const MATRIX = JSON.parse(read('cloudflare-worker/src/services/ai/railMatrix.json'));
 const STUB_PRICE = { cost: { tokens_in: 0.293, tokens_out: 2.253 }, billed: { tokens_in: 0.36625, tokens_out: 2.81625 } };
 function railAnswer(page, option, { pick = null, mode = null, picks = {} } = {}) {
-  const row = MATRIX.rows.find((r) => r.pageKey.toLowerCase() === String(page).toLowerCase());
+  const row = railRows().find((r) => r.pageKey.toLowerCase() === String(page).toLowerCase());
   if (!row) return Object.assign(new Error('The rail has no models for that page.'), { status: 404, code: 'unknown_page' });
   const view = (r) => r.models.map((m) => ({ ...m, name: modelName(m.id), price: STUB_PRICE }));
   const opts = MATRIX.options.filter((o) => o.pageKey === row.pageKey);
@@ -411,13 +414,15 @@ test('All models is the new canvas\'s ten groups, and its ids are the router\'s'
   assert.ok(listed.every((id) => modelName(id)), 'a row has no name');
 });
 
-test('12 · Customer research draws three cards: Whisper, Nova-3 and Flux, in the matrix\'s order, with role and line', async () => {
+// #4313 part 3: the fake answers a page with the row the Worker builds from its kind's job (`railRows()`),
+// since no page row stores a list. Customer research is speech, VA1: Whisper Turbo, then Nova-3.
+test('12 · Customer research draws its job\'s two cards: Whisper, then Nova-3, in VA1\'s order, with role and line', async () => {
   const m = await mount(onPage('/validate/customer-research', h(WorkerRail, { workspace: 'Validate' })));
   try {
     assert.deepEqual(m.stub.page, [['Founder · Validate · Customer research', null]]);
-    assert.deepEqual(cardIds(m), [WHISPER, NOVA, '@cf/deepgram/flux'].map((id) => `card-worker-rail-model-${id.split('/').pop()}`));
+    assert.deepEqual(cardIds(m), [WHISPER, NOVA].map((id) => `card-worker-rail-model-${id.split('/').pop()}`));
     const whisper = m.by('card-worker-rail-model-whisper-large-v3-turbo');
-    assert.equal(m.text(whisper), 'Whisper Large v3 Turbo Default Turns each recording into a transcript $0.293 in · $2.253 out per 1M tokens');
+    assert.equal(m.text(whisper), 'Whisper Large v3 Turbo Default Cheap and multilingual $0.293 in · $2.253 out per 1M tokens');
     // #4313 part 2 (D4313): the page itself has no pick, so with no option open the cards are a list, not radios.
     assert.equal(m.pr(whisper).role, undefined);
     assert.equal(whisper.tagName, 'DIV');
@@ -454,10 +459,11 @@ test('12 · "Default" is the matrix\'s role word; the checked card is the member
   const ready = (over) => railView({ reading: { loading: false, data: { ...answer, ...over } }, page: answer.page });
   const v = ready({});
   assert.deepEqual(v.cards.map((c) => [c.name, c.role, c.checked]), [
-    ['Llama 3.3 70B Fast', 'Default', true], ['GLM-4.7 Flash', 'Alternative', false], ['GPT-OSS 120B', 'Deeper', false],
+    // #4313 part 3: Problem discovery is synth, so its cards are ST2's.
+    ['Llama 3.3 70B Fast', 'Default', true], ['GLM-4.7 Flash', 'Alternative', false], ['Mistral Small 3.1 24B', 'Deeper', false],
   ]);
-  assert.equal(v.cards[0].line, 'Groups notes and quotes into themes');
-  assert.deepEqual(ready({ pick: '@cf/openai/gpt-oss-120b' }).cards.map((c) => c.checked), [false, false, true]);
+  assert.equal(v.cards[0].line, 'The best English writer at the Balanced price');
+  assert.deepEqual(ready({ pick: '@cf/mistralai/mistral-small-3.1-24b-instruct' }).cards.map((c) => c.checked), [false, false, true]);
   // A pick the row does not offer is no pick; a pick made since the read wins.
   assert.equal(ready({ pick: 'm/gone' }).current, L70);
   assert.equal(railView({ reading: { loading: false, data: answer }, page: answer.page, pick: '@cf/zai-org/glm-4.7-flash' }).current, '@cf/zai-org/glm-4.7-flash');
@@ -469,7 +475,7 @@ test('12 · "Default" is the matrix\'s role word; the checked card is the member
 test('13 · with no option open the page offers no pick (#4313): its cards are not buttons and nothing is stored', async () => {
   const m = await mount(onPage('/validate/problem-discovery', h(WorkerRail, { workspace: 'Validate' })));
   try {
-    const card = m.by('card-worker-rail-model-gpt-oss-120b');
+    const card = m.by('card-worker-rail-model-mistral-small-3.1-24b-instruct');
     assert.equal(card.tagName, 'DIV', 'a page card is not a button');
     assert.equal(m.pr(card).role, undefined);
     assert.deepEqual(m.stub.setPagePick, [], 'no page pick is stored');
@@ -521,7 +527,10 @@ test('15 · all models: the canvas\'s groups in order, only the non-empty ones, 
   // #4313 part 2: with no option open nothing is pickable; with one open, a row is pickable only where its list offers it.
   assert.deepEqual(chips.filter((c) => c.pickable), []);
   const onOption = railView({ reading: { loading: false, data: answer }, page: answer.page, option: 'fill:pain_tag' }).groups.flatMap((g) => g.chips);
-  assert.deepEqual(onOption.filter((c) => c.pickable).map((c) => c.id), [L70, '@cf/openai/gpt-oss-120b', '@cf/zai-org/glm-4.7-flash'].sort((x, y) => onOption.findIndex((c) => c.id === x) - onOption.findIndex((c) => c.id === y)));
+  // #4313 part 3: the list is ST2's, the cards and the rest of what the job lists under All models.
+  const listed = [...answer.models, ...answer.more].map((m) => m.id);
+  assert.ok(listed.includes(L70) && listed.length > 3, 'the page lists its job\'s cards and more');
+  assert.deepEqual(onOption.filter((c) => c.pickable).map((c) => c.id), listed.sort((x, y) => onOption.findIndex((c) => c.id === x) - onOption.findIndex((c) => c.id === y)));
   assert.deepEqual(chips.filter((c) => c.selected).map((c) => c.id), [L70]);
   // The guard is never a pick, even on a row that lists it.
   const withGuard = railView({ reading: { loading: false, data: { ...answer, models: [...answer.models, { id: GUARD, role: null, line: null }] } }, page: answer.page, option: 'fill:pain_tag' });

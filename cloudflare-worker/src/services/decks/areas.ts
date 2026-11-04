@@ -47,6 +47,8 @@ import type { DeckArt } from './imageDraw';
 import type { SourceItem } from './sources';
 import { untrustedBlock, withUntrustedRule } from '../ai/untrusted';
 import { voicePreamble } from './prompts/voice';
+import { BEST_OF_N, afterOf, ensembleOf, filler, refineMessages, resolveAfter, wordsOf, type EnsembleMode } from './ensembles';
+import { JUDGE_INSTRUCTIONS, JUDGE_KEY, LABELS, judgeCandidates, judgeModelFor } from './judge';
 import { GRID_DIAGRAM_JOB, LATER_LINE, diagramMessage, diagramVariant, drawnTypeOf, isDiagramElement, stepsFor, type DiagramPayload } from './gridDiagram';
 
 /** A deck's own aspect (D1554): what a text area's capacity is measured at. */
@@ -87,7 +89,7 @@ export function kindOf(element: string): AreaKind | null {
 export const AREA_TEXT_ACTIONS = ['rewrite', 'shorten', 'expand'] as const;
 export type AreaTextAction = (typeof AREA_TEXT_ACTIONS)[number];
 export type AreaAsk = { id: string; grid: Grid; element: string; card: string | number | null; action: AreaTextAction };
-export type AreasRequest = { card: string | number | null; areas: AreaAsk[]; variants: number; cls: RunClass };
+export type AreasRequest = { card: string | number | null; areas: AreaAsk[]; variants: number; cls: RunClass; ensemble?: EnsembleMode };
 export type Refusal = { refusal: string; message: string };
 
 const AREA_ID = /^[A-Za-z0-9:_.#-]{1,64}$/;
@@ -127,7 +129,8 @@ export function parseRequest(body: any): AreasRequest | Refusal {
     areas.push({ id, grid, element, card: own, action });
   }
   if (cls === 'areas' && new Set(areas.map((a) => String(a.card))).size > 1) return { refusal: 'one_card', message: 'Generate into the areas of one card at a time, or run the whole-deck build.' };
-  return { card, areas, variants, cls };
+  // D1551 (#3798): how a text area is written; a whole-deck build drafts and refines by default.
+  return { card, areas, variants, cls, ensemble: ensembleOf(body?.ensemble, cls) };
 }
 
 // ---- the plan ---------------------------------------------------------------
@@ -178,7 +181,7 @@ function refused(base: Omit<PlannedArea, 'refusal' | 'lines' | 'quote_lines' | '
   return { ...base, refusal: { code, message }, lines: [], quote_lines: [], hold_microusd: 0, payload: {} };
 }
 
-async function planOne(ctx: PlanCtx, ask: AreaAsk, variants: number, uids: Array<Record<string, any>>): Promise<PlannedArea> {
+async function planOne(ctx: PlanCtx, ask: AreaAsk, variants: number, uids: Array<Record<string, any>>, ensemble: EnsembleMode = 'single'): Promise<PlannedArea> {
   const index = typeof ask.card === 'string' ? uids.findIndex((c) => c.uid === ask.card) : Number(ask.card);
   const card = index >= 0 ? uids[index] : undefined;
   const kind = kindOf(ask.element);
@@ -321,26 +324,62 @@ async function planOne(ctx: PlanCtx, ask: AreaAsk, variants: number, uids: Array
   const content = (k: number) => (k ? `${user}\n\n(Variant ${k + 1}: a different wording from the others.)` : user);
   const q = await ctx.quote({ task: 'rail_write', userId: ctx.userId, model: r.model, rail, systemPrompt: system, messages: [{ role: 'user', content: content(MAX_VARIANTS - 1) }], maxTokens, temperature: TEMPERATURES[0] } as RunOptions);
   if (!q.ok) return refused(base, q.refusal, q.error);
-  const lines: PlanLine[] = Array.from({ length: variants }, (_, k) => ({
+  const payload = { kind, role, limit, grid: ask.grid, action: before ? ask.action : 'rewrite', before: before || null, source: before || narrative, replaces_block: replaces, ensemble };
+  const option = before ? ASSIST_OPTIONS[ask.action] : `grid:${ask.element}`;
+  // D1551: best-of-n writes at least two drafts for the judge to compare.
+  const drafts = ensemble === 'best_of_n' ? Math.max(variants, Math.min(BEST_OF_N, MAX_VARIANTS)) : variants;
+  const draftLine = (k: number): PlanLine => ({
     card_uid: card.uid, area_id: ask.id, element: ask.element, kind: 'text', task: 'rail_write', model: r.model, quote_microusd: q.hold_microusd,
-    input: { systemPrompt: system, messages: [{ role: 'user', content: content(k) }], maxTokens, temperature: TEMPERATURES[k], option: before ? ASSIST_OPTIONS[ask.action] : `grid:${ask.element}`, variant: k, seed: textSeed(ctx.deckId, card.uid, ask.id, k) },
-  }));
-  return {
-    ...base, refusal: null, lines, hold_microusd: q.hold_microusd * variants,
-    quote_lines: [
-      { label: `${variants} variant${variants === 1 ? '' : 's'} · ${base.model_label}`, count: variants, per_microusd: q.hold_microusd, microusd: q.hold_microusd * variants },
-      { label: 'Safety check on every text run', count: variants, per_microusd: null, microusd: 0, included: true },
-    ],
-    payload: { kind, role, limit, grid: ask.grid, action: before ? ask.action : 'rewrite', before: before || null, source: before || narrative, replaces_block: replaces },
-  };
+    input: { systemPrompt: system, messages: [{ role: 'user', content: content(k) }], maxTokens, temperature: TEMPERATURES[k], option, variant: k, seed: textSeed(ctx.deckId, card.uid, ask.id, k), ensemble },
+  });
+  const quoteLines: QuoteLine[] = [
+    { label: `${drafts} ${ensemble === 'single' ? 'variant' : 'draft'}${drafts === 1 ? '' : 's'} · ${base.model_label}`, count: drafts, per_microusd: q.hold_microusd, microusd: q.hold_microusd * drafts },
+  ];
+  let lines: PlanLine[];
+  if (ensemble === 'draft_refine') {
+    // Each draft is refined by the model #3754 routed the element to, reading the draft (AUTO-1).
+    const refine = { label: TEXT_LABEL[ask.element], limit, voice: voicePreamble(ctx.voice), card: narrative || before };
+    const rm = refineMessages(refine, filler(limit));
+    const rq = await ctx.quote({ task: 'rail_write', userId: ctx.userId, model: r.model, rail, systemPrompt: rm.systemPrompt, messages: [{ role: 'user', content: rm.user }], maxTokens, temperature: TEMPERATURES[0] } as RunOptions);
+    if (!rq.ok) return refused(base, rq.refusal, rq.error);
+    lines = Array.from({ length: drafts }, (_, k) => [draftLine(k), {
+      card_uid: card.uid, area_id: ask.id, element: ask.element, kind: 'refine', task: 'rail_write', model: r.model, quote_microusd: rq.hold_microusd,
+      input: { refine, maxTokens, temperature: TEMPERATURES[0], option, variant: k, ensemble, after_back: [1] },
+    } as PlanLine]).flat();
+    quoteLines.push({ label: `${drafts} refine pass${drafts === 1 ? '' : 'es'} · ${base.model_label}`, count: drafts, per_microusd: rq.hold_microusd, microusd: rq.hold_microusd * drafts });
+  } else if (ensemble === 'best_of_n') {
+    lines = Array.from({ length: drafts }, (_, k) => draftLine(k));
+    // B7's judge (D1525): the first decide model outside the drafts' family; none, and every draft stays acceptable.
+    const pick = judgeModelFor(judgeCandidates(), [r.model]);
+    if ('model' in pick) {
+      const criteria = Object.fromEntries(LABELS.slice(0, drafts).map((l) => [l, `Variant ${l}`]));
+      const jq = await ctx.quote({
+        task: 'module_decision', userId: ctx.userId, model: pick.model, rail,
+        specialist: { operation: 'decision', questions: { [JUDGE_KEY]: { type: 'choice', instructions: JUDGE_INSTRUCTIONS, criteria } } },
+        text: filler(drafts * limit + 600),
+      } as RunOptions);
+      if (jq.ok) {
+        lines.push({
+          card_uid: card.uid, area_id: ask.id, element: ask.element, kind: 'judge', task: 'module_decision', model: pick.model, quote_microusd: jq.hold_microusd,
+          input: { judge: { element: ask.element, source: before || narrative }, ensemble, after_back: Array.from({ length: drafts }, (_, i) => drafts - i) },
+        });
+        quoteLines.push({ label: `Judge · ${modelLabel(pick.model)}`, count: 1, per_microusd: jq.hold_microusd, microusd: jq.hold_microusd });
+      }
+    }
+  } else {
+    lines = Array.from({ length: drafts }, (_, k) => draftLine(k));
+  }
+  quoteLines.push({ label: 'Safety check on every text run', count: drafts, per_microusd: null, microusd: 0, included: true });
+  return { ...base, variants: drafts, refusal: null, lines, hold_microusd: lines.reduce((n, l) => n + l.quote_microusd, 0), quote_lines: quoteLines, payload };
 }
 
 /** Every selected area as its steps, gates and price. An area that cannot run is refused on its own; the others still run. */
 export async function planAreas(ctx: PlanCtx, req: AreasRequest): Promise<AreasPlan> {
   const uids = assignCardUids(Array.isArray(ctx.cards) ? ctx.cards : []);
   const areas: PlannedArea[] = [];
-  for (const ask of req.areas) areas.push(await planOne(ctx, ask, req.variants, uids));
-  const lines = areas.flatMap((a) => a.lines);
+  for (const ask of req.areas) areas.push(await planOne(ctx, ask, req.variants, uids, req.ensemble ?? 'single'));
+  // D1551: an ensemble line's `after_back` becomes the run's sequence numbers (`admit` numbers lines by place).
+  const lines = resolveAfter(areas.flatMap((a) => a.lines));
   return { cls: req.cls, areas, lines, hold_microusd: areas.reduce((n, a) => n + a.hold_microusd, 0) };
 }
 
@@ -395,6 +434,10 @@ export type Variant = {
   state: 'ready' | 'failed' | 'stopped' | 'waiting' | 'running';
   error: { code: string; message: string } | null;
   payload: Record<string, unknown> | null; critique: Critique | null;
+  /** D1551: how the variant was written. `refined` is false when its refine did not land and the draft stands. */
+  ensemble?: { mode: EnsembleMode; refined?: boolean; draft_model_label?: string };
+  /** D1551: best-of-n's judge named this variant the best. */
+  best?: boolean;
 };
 
 const parse = (s: string | null | undefined): any => { if (!s) return null; try { return JSON.parse(s); } catch { return null; } };
@@ -411,9 +454,32 @@ export const STOPPED_LINE = 'Stopped before it ran. Nothing was charged for it.'
  * carries its own error; the others stay acceptable. `contrastAa` is the
  * deck's ink on its ground (4.5:1), checked once for the deck.
  */
-export function variantsOf(payload: any, steps: readonly StepRow[], opts: { aspect: DeckAspect; contrastAa: boolean | null }): Variant[] {
-  const mine = steps.slice().sort((a, b) => Number(parse(a.input)?.variant ?? 0) - Number(parse(b.input)?.variant ?? 0));
-  return mine.map((s, i) => {
+export function variantsOf(payload: any, all: readonly StepRow[], opts: { aspect: DeckAspect; contrastAa: boolean | null }): Variant[] {
+  // D1551: a refine is its draft's second pass, and a judge names the best; neither is a variant of its own.
+  const refineOf = new Map<number, StepRow>();
+  for (const s of all) if (s.kind === 'refine') for (const seq of afterOf(parse(s.input))) refineOf.set(seq, s);
+  const judge = all.find((s) => s.kind === 'judge' && s.state === 'done');
+  const best = judge ? Number(parse(judge.result)?.judge?.best) : NaN;
+  const steps = all.filter((s) => s.kind !== 'refine' && s.kind !== 'judge').map((draft) => {
+    const refine = refineOf.get(Number(draft.seq));
+    if (!refine) return { s: draft, refine: null as StepRow | null };
+    // The refined words when the refine landed; else the draft stands, and the variant says so.
+    const landed = refine.state === 'done' && wordsOf(refine.result) != null;
+    const s: StepRow = landed ? { ...refine, input: draft.input, started_at: draft.started_at } : draft;
+    return { s: { ...s, charged_microusd: Number(draft.charged_microusd || 0) + Number(refine.charged_microusd || 0) }, refine, landed, draft };
+  });
+  const mine = steps.slice().sort((a, b) => Number(parse(a.s.input)?.variant ?? 0) - Number(parse(b.s.input)?.variant ?? 0));
+  return mine.map(({ s, refine, ...rest }, i) => {
+    const v0 = oneVariant(payload, s, i, opts);
+    const mode = (parse(s.input)?.ensemble ?? 'single') as EnsembleMode;
+    if (mode !== 'single') v0.ensemble = { mode, ...(refine ? { refined: !!(rest as any).landed, draft_model_label: modelLabel((rest as any).draft?.model_used ?? (rest as any).draft?.model) } : {}) };
+    if (Number.isFinite(best) && best === i + 1) v0.best = true;
+    return v0;
+  });
+}
+
+function oneVariant(payload: any, s: StepRow, i: number, opts: { aspect: DeckAspect; contrastAa: boolean | null }): Variant {
+  {
     const input = parse(s.input) ?? {};
     const result = parse(s.result);
     const v: Variant = {
@@ -462,7 +528,7 @@ export function variantsOf(payload: any, steps: readonly StepRow[], opts: { aspe
       density_ok: words.length <= DENSITY_MAX[role],
     };
     return v;
-  });
+  }
 }
 
 /** A proposal as the lightbox and #3761 read it. */

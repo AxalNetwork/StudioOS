@@ -32,8 +32,19 @@
  */
 import { USE_KINDS, offerable } from '../ai/modelUseCases';
 import type { ChoiceAnswer, Decided } from '../ai/decide';
-import { familyOf } from './critic';
-import type { Variant } from './areas';
+import { familyOf } from './family';
+/**
+ * The variant fields the judge reads, declared here rather than imported from
+ * `areas.ts`: `areas.ts` reaches the deck's sources (and their Mercury feeds),
+ * and a step that runs the judge on the cron path must not reach them, even by
+ * a type (`mercury_member_privacy_d752`, D1551). `areas.Variant` has these fields.
+ */
+type Variant = {
+  n: number;
+  state: 'ready' | 'failed' | 'stopped' | 'waiting' | 'running';
+  payload: Record<string, unknown> | null;
+  critique: { fits: boolean | null; contrast_aa: boolean | null; density_ok: boolean | null } | null;
+};
 
 export const JUDGE_KEY = 'best';
 export const LABELS = ['A', 'B', 'C'] as const;

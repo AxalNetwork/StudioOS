@@ -11,6 +11,7 @@ import {
 } from './capRelModel';
 import CapRelProposals from './CapRelProposals';
 import Sheet from '../../../ui/Sheet.jsx';
+import WhoKnowsStrip from '../../relationships/WhoKnowsStrip.jsx';
 
 /**
  * D1192 (#3126) — Capital relationships' Pipeline (CRL2 the board, CRL3 the
@@ -331,6 +332,11 @@ export function InvestorLightbox({ projectId, prospect, search = '', onClose, on
             <button type="button" className={BTN_S} onClick={() => setDialog('eadwyn')} data-testid="caprel-investor-eadwyn">Propose next steps</button>
             <Link className={`${BTN_S} no-underline`} to={recordHref('raise', SLUG, prospect.id, tabSearch(search))} data-testid="caprel-investor-open">Open the full record</Link>
           </div>
+          {/* D1357 (#3572, RI2): teammates who shared knowing this investor: by their email when recorded, else their firm. */}
+          {prospect.email || prospect.firm ? (
+            <WhoKnowsStrip query={prospect.email ? { person: prospect.email } : { company: prospect.firm }}
+              subject={prospect.email ? nameOf(prospect) : `someone at ${prospect.firm}`} testId="caprel-who-knows" />
+          ) : null}
           {read.status === 'loading' ? <div className="h-32 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800" data-testid="caprel-investor-loading" /> : null}
           {read.status === 'unreadable' ? <Unreadable what="This investor's record" claim="The pipeline card above still holds what it shows." onRetry={() => setN((x) => x + 1)} /> : null}
           {rec ? (
