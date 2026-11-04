@@ -44,7 +44,7 @@ export function ProposalSheet({ item, onClose, onDecided }) {
   const [decided, setDecided] = useState(item.status && item.status !== 'proposed'
     ? { by: item.decided_by?.name, at: item.decided_at, decision: item.status } : null);
   const [refusal, setRefusal] = useState('');
-  const [editing, setEditing] = useState(item.editing === true && item.can_decide === true && Boolean(item.edit_key));
+  const [editing, setEditing] = useState(item.editing === true && item.status === 'proposed' && item.can_decide === true && Boolean(item.edit_key));
   const [draft, setDraft] = useState(item.draft || '');
   const [busy, setBusy] = useState(false);
   const pressing = useRef(false);

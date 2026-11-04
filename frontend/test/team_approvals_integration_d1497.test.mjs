@@ -189,3 +189,16 @@ test('an old team response or late detail cannot leak into a newly selected comp
     assert.match(v.text(), /Nothing is waiting for a decision/);
   } finally { await v.close(); }
 });
+
+
+test('a proposal decided between the list and Edit opens read-only from its fresh detail', async () => {
+  const v = await mount({ handle: (u) => u.pathname === '/api/teams/queue/proposal-one'
+    ? response({ item: { ...ITEM, status: 'accepted', decided_by: { name: 'Synthetic reviewer' }, decided_at: '2026-10-31 10:00:00' }, inputs: [] }) : null });
+  try {
+    await v.click(v.button('Edit'));
+    assert.match(v.text(), /Accepted 31 Oct 10:00 by Synthetic reviewer\./);
+    assert.equal(v.nodes().find((n) => v.pr(n)['aria-label'] === 'Edit proposal'), undefined);
+    assert.equal(v.button('Save edited proposal'), undefined);
+    assert.equal(v.seen.filter((s) => s.method === 'POST').length, 0);
+  } finally { await v.close(); }
+});
