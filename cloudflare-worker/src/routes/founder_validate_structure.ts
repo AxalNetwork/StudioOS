@@ -289,11 +289,16 @@ async function applyPlacement(
     case 'interview_summary': {
       const interviewId = await ownInterview();
       if (!sessionId) throw new WriterError(409, 'The summary needs its source session.');
-      const digest = JSON.stringify({ overview: [{ text: payload.text, cites: [{ from: row.cite_from, to: row.cite_to, quote: quoteOf(row) }] }],
-        key_quotes: [], decisions: [], next_steps: [], model: 'Accepted proposal' });
-      await env.DB.prepare(`UPDATE interview_sessions SET summary = ?, digest_json = ?, digest_kept_at = datetime('now'),
-        digest_kept_by = ? WHERE id = ? AND interview_id = ? AND project_id = ? AND consent_status = 'given'`)
-        .bind(String(payload.text), digest, user.id, sessionId, interviewId, row.project_id).run();
+      const sentence = JSON.stringify({ text: payload.text, cite: { from: row.cite_from, to: row.cite_to, quote: quoteOf(row) } });
+      // Append in SQL: concurrent Accept presses must not replace one another,
+      // or erase the digest's quotes, decisions, next steps and provenance.
+      await env.DB.prepare(`UPDATE interview_sessions
+        SET summary = trim(COALESCE(summary, '') || ' ' || ?),
+            digest_json = json_insert(json_patch(json(?), CASE WHEN json_valid(digest_json) THEN digest_json ELSE '{}' END), '$.overview[#]', json(?)),
+            digest_kept_at = datetime('now'), digest_kept_by = ?
+        WHERE id = ? AND interview_id = ? AND project_id = ? AND consent_status = 'given'`)
+        .bind(String(payload.text), JSON.stringify({ overview: [], key_quotes: [], decisions: [], next_steps: [], model: 'Accepted proposal' }),
+          sentence, user.id, sessionId, interviewId, row.project_id).run();
       await logCycleWrite(env, { projectId: row.project_id, userId: user.id, cycle: 'validate', module: 'customer-research',
         entityId: interviewId, action: 'interview_summary_accepted', summary: 'Interview summary accepted' });
       return;
