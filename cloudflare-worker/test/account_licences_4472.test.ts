@@ -31,6 +31,7 @@ import * as productTesting from '../src/services/testing.ts';
 import calendar from '../src/routes/calendar.ts';
 import compliance from '../src/routes/compliance.ts';
 import wellbeing from '../src/routes/wellbeing.ts';
+import comarketing from '../src/routes/comarketing.ts';
 import { userReadableDealIds } from '../src/routes/deals.ts';
 import { resolveAccess } from '../src/services/captableAccess.ts';
 import { mayReadTrustScores } from '../src/services/scoreAccess.ts';
@@ -43,7 +44,6 @@ import diligence from '../src/routes/dd.ts';
 import projects from '../src/routes/projects.ts';
 import advisors from '../src/routes/advisors.ts';
 import performance from '../src/routes/fund_performance.ts';
-import comarketing from '../src/routes/comarketing.ts';
 
 
 const SECRET = 'synthetic-4472-account-licence-secret';
@@ -704,12 +704,14 @@ test('new co-marketing audience gate admits held Founder or Partner, never Inves
     const path='/api/comarketing/published';
     assert.equal((await f.call(path,9005)).status,403);
     assert.equal((await f.call(path,9002)).status,403);
-    for (const [id,licence] of [[9005,'founder'],[9002,'partner']] as const) {
+    for (const [id,licence] of [[9005,'founder'],[9002,'partner'],[9005,'partner']] as const) {
       await grantLicence(f.DB,{userId:id,licence,actorId:9000,source:'admin'});
       const allowed=await f.call(path,id);assert.equal(allowed.status,200);assert.deepEqual(allowed.body.items,[]);
       assert.equal((await f.call('/api/comarketing/admin/queue',id)).status,403);
       await revokeLicence(f.DB,{userId:id,licence,actorId:9000,source:'admin'});
       assert.equal((await f.call(path,id)).status,403);
     }
+    assert.equal((await f.call('/api/comarketing/me/pitches',9001)).status,403);
+    assert.equal((await f.call('/api/comarketing/admin/queue',9000)).status,200);
   } finally { f.db.close(); }
 });
