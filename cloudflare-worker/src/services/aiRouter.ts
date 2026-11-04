@@ -45,7 +45,7 @@ import { MODEL_CONNECTIONS, MODULE_ROUTES, type ModuleTask } from './ai/moduleCo
 import { SPECIALIST_OUTPUT_MAX, specialistRefusal, specialistRequest, specialistOutput, pcmBytes, pcmMinutes, type SpecialistInput } from './ai/moduleShapes';
 import { drawChoice, memberPlanTier, type DrawSkip, type DrawSource, type PlanTier } from './ai/drawJobs';
 import { speechChoice, type SpeechSkip, type SpeechSource } from './ai/speechJobs';
-import { TASK_TEXT_JOBS, TEXT_KINDS as TEXT_JOB_KINDS, isTextJob, railOptionTextJob, textChoice, type TextSkip, type TextSource } from './ai/textJobs';
+import { TASK_TEXT_JOBS, TEXT_KINDS as TEXT_JOB_KINDS, isTextJob, namedModelCheck, railOptionTextJob, textChoice, type TextSkip, type TextSource } from './ai/textJobs';
 import { RAIL_KIND_JOBS, jobStep } from './ai/modelUseCases';
 
 // ---------------------------------------------------------------------------
@@ -2062,6 +2062,23 @@ async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Prom
       return { ok: false, refusal, error: c.message, record: c.code !== 'press_hidden' && c.code !== 'input_too_long' };
     }
     return { ok: true, primary: c.model, chain: c.chain, text: { job: c.job, source: c.source, skipped: c.skipped } };
+  }
+
+  // ---- #4351 (D4351): a model the caller names keeps its job's plan-lock and input-fit ----
+  // Since #4313 part 2 a named model on a page whose job writes text is checked only against
+  // the page's list below. It now meets the two checks `textChoice` applies to its own picks,
+  // before anything is held, and a refusal never falls back to another model.
+  if (opts.model && textShaped && !textJobId && railText?.job) {
+    let tier: PlanTier;
+    try { tier = await memberPlanTier(env, opts.userId); }
+    catch { return { ok: false, refusal: 'misconfigured', error: 'Unreadable: your plan could not be read. Nothing was run.', record: false }; }
+    const inputTokens = estTokens(chatMessagesFor(opts).map((m) => m.content).join('\n'));
+    const blocked = namedModelCheck(railText.job, opts.model, { switches, tier, caller: opts.model, inputTokens, outputTokens: opts.maxTokens ?? 512 });
+    if (blocked) {
+      return blocked.code === 'plan_locked'
+        ? { ok: false, refusal: 'plan_locked', error: blocked.message, record: true }
+        : { ok: false, refusal: 'invalid_input', error: blocked.message, record: false };
+    }
   }
 
   // ---- D764 PR 3: a rail run's models come from its page's row ------------
