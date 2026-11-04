@@ -9,7 +9,7 @@ import { useSyndicationRead } from './useSyndicationRead';
 import SyndicationState, { BUTTON, INPUT, Refusal, refusalText } from './SyndicationState';
 
 const channelsValid = (v) => Array.isArray(v?.channels) && CHANNELS.every((c) => v.channels.some((r) => r.channel === c.key && typeof r.adapter_ready === 'boolean'));
-const settingsValid = (v) => ['approved_events', 'admins_only'].includes(v?.settings?.hosts) && typeof v.settings.host_accounts === 'boolean' && v.settings.default_channels_by_type && typeof v.settings.default_channels_by_type === 'object' && Object.values(v.settings.default_channels_by_type).every((v) => Array.isArray(v));
+const settingsValid = (v) => ['approved_events', 'admins'].includes(v?.settings?.hosts) && typeof v.settings.host_accounts === 'boolean' && v.settings.default_channels_by_type && typeof v.settings.default_channels_by_type === 'object' && Object.values(v.settings.default_channels_by_type).every((v) => Array.isArray(v));
 const logValid = (v) => Array.isArray(v?.rows) && (v.next === null || Number.isSafeInteger(v.next)) && v.rows.every((r) => Number.isSafeInteger(r.id) && typeof r.channel === 'string');
 
 function ChannelCard({ channel, value, api, reload }) {
@@ -46,8 +46,11 @@ function ChannelCard({ channel, value, api, reload }) {
     </div>
     <Refusal text={error} />
     {dialog && <Lightbox label={`${dialog} ${channel.name}`} title={dialog === 'disconnect' ? `Disconnect ${channel.name}?` : `Connect ${channel.name}`} onClose={() => { if (!busy) { setDialog(null); setKey(''); } }} footer={<button type="button" className={BUTTON} disabled={busy || (dialog !== 'disconnect' && value.auth === 'api_key' && !key.trim())} data-testid={`syndication-account-confirm-${channel.key}`} onClick={() => run(async () => {
-      if (connected) await api.disconnect(account.uid);
-      if (dialog !== 'disconnect') await connect();
+      if (connected) {
+        await api.disconnect(account.uid);
+        try { if (dialog !== 'disconnect') await connect(); }
+        finally { reload(); }
+      } else if (dialog !== 'disconnect') await connect();
     })}>{busy ? 'Saving…' : dialog === 'disconnect' ? 'Disconnect' : dialog === 'reconnect' ? 'Disconnect and reconnect' : 'Continue to connect'}</button>}>
       <div className="space-y-3 p-5 text-sm text-axal-ink dark:text-gray-100">
         {connected && <p>Already posted listings stay up. Pending posts stop. Reconnecting replaces the current account connection.</p>}
@@ -114,7 +117,7 @@ function SettingsForm({ initial, api }) {
     } catch (e) { setError(refusalText(e)); } finally { setBusy(false); }
   };
   return <div className="space-y-3" data-testid="syndication-settings">
-    <Card className="space-y-3 p-4"><h2 className="font-semibold text-axal-ink dark:text-gray-100">Who may syndicate</h2><fieldset disabled={busy} className="space-y-2 text-sm text-axal-ink dark:text-gray-100">{[['approved_events', 'Any event an admin approves'], ['admins_only', 'Events by admins only']].map(([v, label]) => <label key={v} className="flex min-h-11 items-center gap-2"><input type="radio" name="hosts" value={v} checked={settings.hosts === v} onChange={() => { setSaved(false); setSettings({ ...settings, hosts: v }); }} />{label}</label>)}</fieldset></Card>
+    <Card className="space-y-3 p-4"><h2 className="font-semibold text-axal-ink dark:text-gray-100">Who may syndicate</h2><fieldset disabled={busy} className="space-y-2 text-sm text-axal-ink dark:text-gray-100">{[['approved_events', 'Any event an admin approves'], ['admins', 'Events by admins only']].map(([v, label]) => <label key={v} className="flex min-h-11 items-center gap-2"><input type="radio" name="hosts" value={v} checked={settings.hosts === v} onChange={() => { setSaved(false); setSettings({ ...settings, hosts: v }); }} />{label}</label>)}</fieldset></Card>
     <Card className="overflow-x-auto p-4"><h2 className="font-semibold text-axal-ink dark:text-gray-100">Default channels per event type</h2><table className="mt-3 min-w-[560px] text-sm text-axal-ink dark:text-gray-100"><thead><tr><th className="text-left">Type</th>{CHANNELS.map((c) => <th key={c.key}>{c.name}</th>)}</tr></thead><tbody>{SETTINGS_TYPES.map((t) => <tr key={t.id}><td>{t.label}</td>{CHANNELS.map((c) => <td key={c.key} className="p-3 text-center"><input type="checkbox" disabled={busy} checked={(settings.default_channels_by_type[t.id] || []).includes(c.key)} aria-label={`${t.label} on ${c.name}`} data-testid={`syndication-setting-${t.id}-${c.key}`} onChange={(e) => toggle(t.id, c.key, e.target.checked)} /></td>)}</tr>)}</tbody></table></Card>
     <p className="text-sm text-axal-muted dark:text-gray-400">HQ accounts only. Hosts cannot connect their own accounts. Attendee import is not enabled.</p>
     <button type="button" className={BUTTON} disabled={busy} onClick={save} data-testid="syndication-settings-save">{busy ? 'Saving…' : 'Save settings'}</button><Refusal text={error} />{saved && <p role="status" className="text-sm text-axal-ink dark:text-gray-100">Settings saved.</p>}
