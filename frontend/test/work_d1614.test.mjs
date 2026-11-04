@@ -276,3 +276,65 @@ test('#3973: mounted board: columns and counts from the read; Move to calls the 
     await act(async () => root.unmount());
   } finally { restore(); }
 });
+
+// W7 part 2 (#4419): mounted interactions use the same adapter seam as the sheets.
+import TaskTimeline from '../src/pages/work/TaskTimeline.jsx';
+import TaskReview from '../src/pages/work/TaskReview.jsx';
+import TaskDraft from '../src/pages/work/TaskDraft.jsx';
+import TaskClassification from '../src/pages/work/TaskClassification.jsx';
+import WorkSettings from '../src/pages/work/WorkSettings.jsx';
+import { mountContracts } from './_contracts_dom.mjs';
+const yes = (data) => Promise.resolve({available:true,data});
+
+test('W7 timeline names the actor, keeps missing cost honest, opens the run, and edits only your own comments', async () => {
+  const runs=[], writes=[];
+  const adapter={timeline:()=>yes({entries:[{type:'comment',at:'2026-11-04',comment:{uid:'c1',body:'Recorded words',author:{kind:'agent',name:'Analyst',uid:'a1'},run:'r1',cost:{available:false}}},
+    {type:'comment',at:'2026-11-05',comment:{uid:'c2',body:'My words',author:{kind:'person',name:'Member',uid:'u1'}}}]}),assignable:()=>yes({team:[{kind:'person',uid:'u1',name:'Member'}]}),editComment:(...a)=>{writes.push(a);return yes({});}};
+  const m=await mountContracts(h(TaskTimeline,{projectId:7,number:3,viewer:{user_uid:'u1'},adapter,onRun:(r)=>runs.push(r)}));
+  try {
+    assert.match(m.text(),/Cost: Not recorded/);assert.doesNotMatch(m.text(),/\$0/);
+    await m.click('View run ›');assert.deepEqual(runs,['r1']);
+    assert.equal(m.nodes().filter((n)=>m.props(n)?.children==='Edit comment').length,1);
+    await m.click('Edit comment');await m.fill('Edit your comment','Revised');
+    const form=m.nodes().find((n)=>n.tagName==='FORM');await act(async()=>m.props(form).onSubmit({preventDefault(){}}));
+    assert.deepEqual(writes,[[7,'c2',{body:'Revised'}]]);
+  }finally{await m.unmount();}
+});
+
+test('W7 review requires changes comment, calls review for both decisions and hides controls from readers', async()=>{
+  const calls=[],changed=[];const adapter={review:(...a)=>{calls.push(a);return yes({task:{uid:'t',column:'done'}});}};
+  const m=await mountContracts(h(TaskReview,{projectId:7,task:{task_number:3,column:'in_review'},canManage:true,adapter,onChanged:(r)=>changed.push(r)}));
+  try{await m.click('Request changes');assert.equal(calls.length,0);assert.match(m.text(),/Add a comment/);
+    await m.fill('Review comment','Please add evidence');await m.click('Request changes');await m.click('Approve and close');
+    assert.deepEqual(calls.map((c)=>c[2].decision),['request_changes','approve']);assert.equal(changed.length,2);
+  }finally{await m.unmount();}
+  assert.doesNotMatch(html(h(TaskReview,{task:{column:'in_review'},canManage:false})),/Approve and close/);
+});
+
+test('W7 draft accepts edits and requires a discard reason',async()=>{
+  const accepted=[],discarded=[];const adapter={acceptDraft:(...a)=>{accepted.push(a);return yes({task:{uid:'new'}});},discardDraft:(...a)=>{discarded.push(a);return yes({});}};
+  const m=await mountContracts(h(TaskDraft,{projectId:7,draft:{uid:'d',title:'Draft'},canManage:true,adapter}));
+  try{await m.click('Discard');assert.equal(discarded.length,0);await m.fill('Discard reason','Duplicate');await m.click('Discard');
+    assert.deepEqual(discarded,[[7,'d',{reason:'Duplicate'}]]);await m.click('Edit');await m.fill('Draft title','Reviewed title');await m.click('Accept edited draft');
+    assert.deepEqual(accepted,[[7,'d',{title:'Reviewed title',body:''}]]);
+  }finally{await m.unmount();}
+});
+
+test('W7 task label and milestone pickers call the project task routes',async()=>{
+  const calls=[];const adapter={labels:()=>yes({labels:[{uid:'l',name:'Bug'}]}),milestones:()=>yes({milestones:[{uid:'m',title:'Launch'}]}),
+    setLabels:(...a)=>{calls.push(['labels',...a]);return yes({task:{}});},setMilestone:(...a)=>{calls.push(['milestone',...a]);return yes({task:{}});}};
+  const m=await mountContracts(h(TaskClassification,{projectId:7,task:{task_number:3},canManage:true,adapter}));
+  try{const box=m.nodes().find((n)=>n.tagName==='INPUT');await act(async()=>m.props(box).onChange({target:{checked:true}}));await m.click('Save labels');
+    const select=m.nodes().find((n)=>n.tagName==='SELECT');await act(async()=>m.props(select).onChange({target:{value:'m'}}));await m.click('Save milestone');
+    assert.deepEqual(calls,[['labels',7,3,{labels:['l']}],['milestone',7,3,{milestone:'m'}]]);
+  }finally{await m.unmount();}
+});
+
+test('W7 settings create project labels with palette colors and milestones with dates',async()=>{
+ const calls=[];const adapter={labels:()=>yes({labels:[]}),milestones:()=>yes({milestones:[]}),createLabel:(...a)=>{calls.push(a);return yes({});},createMilestone:(...a)=>{calls.push(a);return yes({});}};
+ const m=await mountContracts(h(WorkSettings,{projectId:7,canManage:true,adapter}));
+ try{await m.fill('Label name','Bug');let forms=m.nodes().filter((n)=>n.tagName==='FORM');await act(async()=>m.props(forms[0]).onSubmit({preventDefault(){}}));
+  await m.fill('Milestone title','Launch');forms=m.nodes().filter((n)=>n.tagName==='FORM');await act(async()=>m.props(forms[1]).onSubmit({preventDefault(){}}));
+  assert.deepEqual(calls,[[7,{name:'Bug',color:'gray'}],[7,{title:'Launch',due_on:null,state:'open'}]]);
+ }finally{await m.unmount();}
+});
