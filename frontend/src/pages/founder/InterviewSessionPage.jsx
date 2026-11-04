@@ -203,7 +203,7 @@ export function makeReviewActions({ api, sessionId, set, onSpent, isLive = () =>
       set((st) => ({ ...st, running: true, runError: null }));
       // Only a model id is sent; anything else (a click event, say) is no model, so the Worker picks its default (#1589).
       // D778 part 8: the press names its own option, keeping the mounted rail's page.
-      try { await api.structure(sessionId, typeof model === 'string' && model ? model : undefined, railPressHeaders('structure:transcript')); await reload(); } catch (e) {
+      try { if (model?.output && typeof api.retryOutput === 'function') { await api.retryOutput(sessionId, model.output); } else await api.structure(sessionId, typeof model === 'string' && model ? model : undefined, railPressHeaders('structure:transcript')); await reload(); } catch (e) {
         put((st) => ({ ...st, runError: e }));
         // A timeout is not a refusal: the server may have saved placements.
         // Read them without repeating the paid write; retain the uncertain outcome.
@@ -264,6 +264,11 @@ export function ReviewStep({ api, sessionId, theme, receiptItems, onSpent, group
     actions.reload();
     return () => { actions.live.current = false; };
   }, [actions, sessionId]);
+  useEffect(() => {
+    if (!st.read?.outputs?.some((o) => ['queued', 'running'].includes(o.status))) return undefined;
+    const timer = setTimeout(() => actions.reload(), 3000);
+    return () => clearTimeout(timer);
+  }, [st.read, actions]);
   // D771 (#2097): a structuring run or a question at the transcript is the rail's option while it runs.
   useRailOption(st.running ? 'structure:transcript' : null, 'Structure the transcript');
   useRailOption(st.ask?.busy ? 'ask:transcript' : null, 'Ask');
@@ -274,7 +279,7 @@ export function ReviewStep({ api, sessionId, theme, receiptItems, onSpent, group
       theme={theme} read={st.read} running={st.running} runError={st.runError} errors={st.errors} busyId={st.busyId}
       onAccept={actions.accept} onDiscard={actions.discard} onStructure={actions.structure}
       ask={st.ask} onAsk={actions.ask} receiptItems={receiptItems}
-      grouped={grouped} onAcceptAll={actions.acceptAll} acceptAll={st.acceptAll}
+      grouped={grouped || !!st.read?.outputs} onAcceptAll={actions.acceptAll} acceptAll={st.acceptAll}
     />
   );
 }

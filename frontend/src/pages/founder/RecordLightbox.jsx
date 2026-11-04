@@ -235,6 +235,31 @@ export default function RecordLightbox({
   const [final, setFinal] = useState(initialModels?.defaults?.final ?? null);
   const [language, setLanguage] = useState('');
   const [minutes, setMinutes] = useState(30);
+  const supportsOutputs = typeof sessions.outputs === 'function';
+  const [outputs, setOutputs] = useState(['customer-research', 'pain-points', 'icp-fit']);
+  const [outputsLoaded, setOutputsLoaded] = useState(false);
+  const [outputQuote, setOutputQuote] = useState(undefined);
+  useEffect(() => {
+    if (!supportsOutputs || !projectId) return undefined;
+    let alive = true;
+    setOutputsLoaded(false); setOutputQuote(undefined);
+    sessions.outputs(projectId).then((r) => {
+      if (alive) {
+        if (!Array.isArray(r?.outputs) || !r.outputs.every((x) => typeof x === 'string')) { setOutputQuote(null); return; }
+        setOutputs(r.outputs); setOutputsLoaded(true);
+      }
+    }).catch(() => { if (alive) setOutputQuote(null); });
+    return () => { alive = false; };
+  }, [sessions, projectId, supportsOutputs]);
+  useEffect(() => {
+    if (!supportsOutputs || !outputsLoaded) return undefined;
+    let alive = true;
+    setOutputQuote(undefined);
+    const timer = setTimeout(() => sessions.outputs(projectId, minutes, outputs).then((r) => {
+      if (alive) setOutputQuote(r.quote?.ok ? r.quote.microusd : null);
+    }).catch(() => { if (alive) setOutputQuote(null); }), 200);
+    return () => { alive = false; clearTimeout(timer); };
+  }, [sessions, projectId, minutes, outputs, outputsLoaded, supportsOutputs]);
   const [board, setBoard] = useState(initialBoard);
   const [selected, setSelected] = useState(null); // null: the defaults (the first two), until the founder toggles one
   const [assistant, setAssistant] = useState(false);
@@ -324,7 +349,7 @@ export default function RecordLightbox({
   const botJoins = meeting ? !!plan?.bot : botReady;
   const captureKind = meeting ? (plan?.kind ?? 'none') : capture.kind;
   const captureReason = state.ok && !blockedReason && captureKind === 'none' ? (meeting ? plan?.reason ?? null : capture.reason) : null;
-  const ready = state.ok && !blockedReason && !linkProblem && captureKind !== 'none' && !busy
+  const ready = (!supportsOutputs || !m.audio || Number.isFinite(outputQuote)) && state.ok && !blockedReason && !linkProblem && captureKind !== 'none' && !busy
     && (!meeting || !!String(link).trim() || (fields.meeting_url && typeof channelsSource?.instantMeeting === 'function'));
   const label = howOf(mode) === 'call' ? 'Start Call' : m.start;
   const languages = languageOptions(models, live);
@@ -445,7 +470,7 @@ export default function RecordLightbox({
    * the app would stop the save.
    */
   const startCall = async () => {
-    if (!ready || sending.current) return;
+    if (!ready || sending.current || (supportsOutputs && m.audio && !Number.isFinite(outputQuote))) return;
     sending.current = true;
     setBusy(true); setRefusal(null); setAssigned(null);
     // D1377: on a phone the call opens in the Zoom or Meet app, so no browser tab is opened for it.
@@ -494,7 +519,7 @@ export default function RecordLightbox({
     const named = (who?.interviewee_name || name).trim();
     const into = (r) => ({ id: r?.id ?? who?.id, interviewee_name: r?.interviewee_name ?? who?.interviewee_name ?? named, interviewee_company: r?.interviewee_company ?? who?.interviewee_company ?? (company.trim() || null) });
     try {
-      const setup = { mode, consent, live: null, final: '@cf/deepgram/nova-3', language, conversation, provider, link: url, points: chosenPoints.map((p) => p.id), name, company };
+      const setup = { mode, consent, live: null, final: '@cf/deepgram/nova-3', language, conversation, ...(supportsOutputs ? { outputs } : {}), provider, link: url, points: chosenPoints.map((p) => p.id), name, company };
       const botFields = { ...fields, meeting_url: false };
       const r = interview
         ? await sessions.create(interview.id, { ...sessionBody(setup, botFields), client_key: `${startKey.current}-bot` })
@@ -520,7 +545,7 @@ export default function RecordLightbox({
 
   const submit = async () => {
     const useBot = botReady;
-    if (!ready || sending.current) return;
+    if (!ready || sending.current || (supportsOutputs && m.audio && !Number.isFinite(outputQuote))) return;
     if (meeting) { await startCall(); return; }
     // The browser recorder is for in person and a call on this phone's speaker
     // only. A meeting never reaches it (D1358).
@@ -553,7 +578,7 @@ export default function RecordLightbox({
         setBusy(false); sending.current = false;
         return;
       }
-      const setup = { mode, consent, live: useBot ? null : live, final: useBot ? '@cf/deepgram/nova-3' : final, language, conversation, provider, link, points: chosenPoints.map((p) => p.id), name, company };
+      const setup = { mode, consent, live: useBot ? null : live, final: useBot ? '@cf/deepgram/nova-3' : final, language, conversation, ...(supportsOutputs && m.audio ? { outputs } : {}), provider, link, points: chosenPoints.map((p) => p.id), name, company };
       // An interview it was opened on (a row's "Record a session") may already
       // be held, which the setup call refuses: it opens on that interview's own
       // route, with the same fields. A pick from the pipeline, or a new person,
@@ -809,6 +834,30 @@ export default function RecordLightbox({
                     </div>
                   </>
                 )}
+          </Section>
+        )}
+
+        {m.audio && supportsOutputs && (
+          <Section title="What do you want from this call?" testId="record-outputs">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {[
+                ['problem-discovery', 'Problem discovery'], ['customer-research', 'Customer research'],
+                ['ideal-customer-profile', 'Ideal customer profile'], ['market-intelligence', 'Market intelligence'],
+                ['demand-signals', 'Demand and urgency signals'], ['experiments', 'Experiments and evidence'],
+                ['verdict', 'Verdict'], ['pain-points', 'Pain points'], ['icp-fit', 'ICP fit'],
+                ['feature-requests-quotes', 'Feature requests & quotes'],
+              ].map(([id, label]) => <label key={id} className="flex items-center gap-2 text-[13px] text-axal-ink dark:text-gray-100">
+                <input type="checkbox" checked={outputs.includes(id)} disabled={!outputsLoaded || busy} onChange={(e) => {
+                  setOutputQuote(undefined);
+                  setOutputs((old) => e.target.checked ? [...old, id] : old.filter((x) => x !== id));
+                }} />{label}
+              </label>)}
+            </div>
+            <p role="status" className="m-0 text-[12px] text-axal-muted dark:text-gray-300" data-testid="record-outputs-cost">
+              {outputQuote === undefined ? 'Estimating AI tokens…' : outputQuote === null ? 'Unreadable: the extraction estimate could not be read. Reopen this form to try again.'
+                : `Estimated extraction: $${(outputQuote / 1000000).toFixed(6)} of AI tokens · based on ${minutes} minutes. Actual usage depends on the final transcript.`}
+            </p>
+            <p className="m-0 text-[11.5px] text-axal-faint">After the call only. Eadwyn proposes each selected output for you to Accept. Quotable lines need Quotes OK.</p>
           </Section>
         )}
 

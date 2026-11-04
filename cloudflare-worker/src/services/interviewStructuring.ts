@@ -49,6 +49,7 @@ export interface Segment {
 }
 
 export type PlacementKind =
+  | 'interview_summary'
   | 'pain_severity'
   | 'icp_fit'
   | 'segment'
@@ -125,6 +126,13 @@ function finding(kind: FindingKind, slug: ModuleSlug): KindSpec {
 }
 
 export const PLACEMENT_KINDS: Record<PlacementKind, KindSpec> = {
+  interview_summary: {
+    module: 'customer_research', slug: 'customer-research', writer: true,
+    parse: (p) => { const text = str(p.text, 400); return text ? { text } : null; },
+    key: (p) => `summary:${norm(p.text)}`,
+  },
+  quotable_line: finding('quotable_line', 'customer-research'),
+  verdict_contribution: { ...finding('verdict_contribution', 'verdict'), slugOf: () => 'verdict' },
   pain_severity: {
     slug: 'problem-discovery',
     module: 'problem_discovery',
@@ -410,7 +418,7 @@ export function mergePlacements(lists: readonly Placement[][]): Placement[] {
 }
 
 /** The rules every pass is held to, before its own kinds. */
-const STRUCTURE_RULES = [
+export const STRUCTURE_RULES = [
   'You read one customer-discovery interview and place what it says into the',
   "founder's Validate modules. You only PROPOSE; the founder accepts or discards",
   'each placement.',
@@ -423,7 +431,7 @@ const STRUCTURE_RULES = [
   'is not a placement: leave it out. Also include a verbatim quote of that passage.',
   'A quote may span at most three segments. Never invent or paraphrase it.',
 ];
-const STRUCTURE_TAIL = [
+export const STRUCTURE_TAIL = [
   'Use only hypothesis and pain-group ids from the lists you are given. Do not',
   'invent figures. Reply with ONE JSON object and nothing else:',
   '{"placements": [{"kind": "...", "payload": {...}, "cite": {"from": 0, "to": 0}, "quote": "<verbatim passage>"}]}',
@@ -431,7 +439,10 @@ const STRUCTURE_TAIL = [
 const AMOUNT = '"amount_cents": <optional whole cents>, "currency": "<optional, e.g. usd>", "period": "once" | "month" | "year" (optional)';
 
 /** Each kind's payload line, as the prompt teaches it. */
-const KIND_LINES: Record<PlacementKind, string> = {
+export const KIND_LINES: Record<PlacementKind, string> = {
+  interview_summary: '- interview_summary: {"text": "<a factual summary sentence from this passage>"}',
+  quotable_line: '- quotable_line: {"text": "<the verbatim quotable line, identical to quote>"}',
+  verdict_contribution: '- verdict_contribution: {"text": "<how this interview bears on proceeding, pivoting or stopping; evidence and uncertainty only, never a decision>"}',
   pain_severity: '- pain_severity: {"phrase": "<the pain in a few words>", "severity": "severe" | "real" | "mild", "pain_group_id": <optional: the id of the pain group it belongs to>}\n'
     + '    Give a pain_group_id only when the pain belongs to a pain group in the list. Never invent a group or name a new one: leave pain_group_id out instead.',
   icp_fit: '- icp_fit: {"fit": "strong" | "partial" | "none", "reason": "<one sentence>"}',

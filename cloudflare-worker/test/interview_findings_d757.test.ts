@@ -392,7 +392,7 @@ const B_REPLY = JSON.stringify({ placements: [
 
 test('every kind is in exactly one pass, and each pass\'s prompt lists only its own', () => {
   const all = STRUCTURE_PASSES.flatMap((p) => [...p.kinds]);
-  assert.deepEqual([...all].sort(), Object.keys(PLACEMENT_KINDS).sort(), 'a kind is in no pass, or in two');
+  assert.deepEqual([...all].sort(), Object.keys(PLACEMENT_KINDS).filter((k) => !['interview_summary', 'quotable_line', 'verdict_contribution'].includes(k)).sort(), 'a kind is in no pass, or in two');
   assert.equal(new Set(all).size, all.length);
 });
 

@@ -156,7 +156,7 @@ export function heardIn({ cite, spans, name, thread = false }) {
 export function groupBySlug(read) {
   const runs = Array.isArray(read?.runs) ? read.runs : [];
   const latestOf = (src) => [...runs].reverse().find((r) => (r.source === 'assistant' ? 'assistant' : 'studioos') === src);
-  const shown = [latestOf('assistant'), latestOf('studioos')].filter(Boolean).flatMap((r) => r.placements || []);
+  const shown = [...runs.filter((r) => String(r.run_id).startsWith('output:')), latestOf('assistant'), latestOf('studioos')].filter((r, i, all) => r && all.indexOf(r) === i).flatMap((r) => r.placements || []);
   const groups = VALIDATE_MODULES.map(([slug, name]) => ({ slug, name, placements: shown.filter((p) => p.slug === slug) }));
   const other = shown.filter((p) => !Object.hasOwn(MODULE_NAME, p.slug || ''));
   if (other.length) groups.push({ slug: 'other', name: 'Other', placements: other });
