@@ -15,6 +15,7 @@
  *   PUT    /:scope/:id/rulebooks/:role         a new version, within the floor (manage)
  *   GET    /agents/:uid/run/quote?module=&option=  what a run would hold (the sponsor)
  *   POST   /agents/:uid/run                    run it: a proposal, charged to the sponsor (part 2, #3842); `tool_reads` (part 5)
+ *   GET/PUT /:scope/:id/allowlists              D4422: inherited model/tool restrictions, saved by the effective scope’s editors
  *   GET    /tools                              the caller's own approved read tools, to grant an agent (part 5, #3844)
  *   GET    /:scope/:id/queue?role=&module=&option=&status=&cursor=&include=projects   the approvals queue (part 3, #3843)
  *   GET    /queue/:proposalUid                 one proposal and what the agent read for it
@@ -46,16 +47,14 @@
  * `services/agents/sponsor.ts`, and each agent's `resumes_at`: the UTC day a
  * cap-paused agent resumes, which the sweep does (null otherwise).
  */
+import { agentModels, planOk } from '../services/agents/modelOffers';
+import { effectiveAllowlistScope, readAllowlists, saveAllowlists, allowlistRefusal, allowlistTools, parseAllowlists } from '../services/agents/allowlists';
 import { maxTeamCap } from '../services/agents/aiPolicy';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
-import { userMeetsTier } from '../middleware/requireTier';
-import { modelRefusal } from '../services/aiRouter';
-import { CATALOGUE } from '../services/ai/catalogue';
-import { MODEL_CONNECTIONS } from '../services/ai/moduleConnections';
 import { agentQuote, agentRun, type AgentRefusal } from '../services/agents/agentRun';
 import { checkGrants, grantsView } from '../services/agents/agentTools';
 import { ATTACH_STATUS, checkSkillList, linkStatement } from '../services/agents/skillLinks';
@@ -75,6 +74,8 @@ import {
   agentByUid, bookRows, canManage, canRead, effectiveBook, loadScope, logEvent, monthSpend, scopeCols, scopeOfAgent,
   type AgentRow,
 } from '../services/agents/teams';
+
+export { agentModels, planOk } from '../services/agents/modelOffers';
 
 type C = Context<{ Bindings: Env }>;
 
@@ -104,12 +105,6 @@ const notFound = (c: C) => say(c, 404, 'not_found', 'There is no such team.');
 
 // ── Gates ───────────────────────────────────────────────────────────────────
 // Scope, read and manage live in `services/agents/teams.ts`, shared with the run.
-
-/** Owner Q6 = A: a founder on a paid plan (the D852 rule), or HQ's admin. */
-export function planOk(user: User): boolean {
-  if (isAdmin(user)) return true;
-  return String(user.role) === 'founder' && userMeetsTier(user, 'growth');
-}
 
 // ── Agents ──────────────────────────────────────────────────────────────────
 
@@ -165,20 +160,6 @@ export function namePart(v: unknown): { ok: true; value: string | null } | { ok:
   return { ok: true, value: t || null };
 }
 
-/**
- * #3842 add-on (S1, for TM3b): the models an agent may run on. Every text
- * model the module connections give chat work (`MODEL_CONNECTIONS`), from the
- * catalogue; `plan_locked` when the run would refuse it today
- * (`modelRefusal`: a beta, the partner gate shut, unpriced) or the caller's
- * plan cannot add agents, so the list and the add route's
- * `model_not_offered` agree. Deprecated models are not listed.
- */
-export function agentModels(env: Env, user: User) {
-  const plan = planOk(user);
-  return CATALOGUE
-    .filter((m) => MODEL_CONNECTIONS[m.id]?.operation === 'chat' && m.status !== 'deprecated' && m.status !== 'not_found')
-    .map((m) => ({ id: m.id, label: m.name, kind: m.kind, beta: m.status === 'beta', plan_locked: !plan || modelRefusal(env, m.id) !== null }));
-}
 
 const answer = (c: C, r: AgentRefusal) => say(c, r.status, r.code, r.message, r.extra);
 
@@ -316,7 +297,7 @@ router.get('/:scope/:id/queue', async (c) => {
       role: c.req.query('role') || null, module: c.req.query('module') || null, option: c.req.query('option') || null,
       status: status as RailProposalStatus, cursor: rawCursor ? Number(rawCursor) : null, includeProjects,
     };
-    const page = await queueList(c.env, s, filter);
+    const page = await queueList(c.env, s, filter, user);
     return c.json({ items: page.items, counts: { proposed: await queueCount(c.env, s, filter) }, next_cursor: page.next_cursor });
   } catch (e) { return mapError(c, e); }
 });
@@ -607,6 +588,44 @@ router.get('/:scope/:id/agents', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
+// D4422: company projects always read and write the parent company's policy.
+router.get('/:scope/:id/allowlists', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
+    if (!s) return notFound(c);
+    const parent = await effectiveAllowlistScope(c.env, s);
+    if (!parent) return say(c, 503, 'allowlists_unreadable', 'The company settings could not be read.');
+    if (!(await canRead(c.env, s, user)) && !(await canRead(c.env, parent, user))) return say(c, 403, 'not_member', 'Only the team can read its settings.');
+    const lists = await readAllowlists(c.env, parent);
+    if (!lists) return say(c, 503, 'allowlists_unreadable', 'The allowed models and tools could not be read.');
+    const manage = await canManage(c.env, parent, user);
+    return c.json({ ...lists, can_manage: manage, inherited: parent.kind !== s.kind,
+      scope: { kind: parent.kind, id: parent.kind === 'company' ? parent.uid : String(parent.id), name: parent.name },
+      models: agentModels(c.env, user), servers: manage ? await allowlistTools(c.env, parent) : [] });
+  } catch (e) { return mapError(c, e); }
+});
+
+router.put('/:scope/:id/allowlists', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
+    if (!s) return notFound(c);
+    const parent = await effectiveAllowlistScope(c.env, s);
+    if (!parent) return say(c, 503, 'allowlists_unreadable', 'The company settings could not be read.');
+    if (!(await canRead(c.env, s, user)) && !(await canRead(c.env, parent, user))) return say(c, 403, 'not_member', 'Only the team can read its settings.');
+    if (!(await canManage(c.env, parent, user))) return say(c, 403, 'not_manager', 'Only this company or project’s editors can change its allowed models and tools.');
+    const wanted = parseAllowlists(await readBody(c));
+    if (!wanted) return say(c, 400, 'invalid_allowlists', 'Send model_ids and tool_grants as lists, or null for the plan default.');
+    const offered = agentModels(c.env, user);
+    if (wanted.model_ids?.some((id) => !offered.some((m) => m.id === id && !m.plan_locked))) return say(c, 403, 'model_not_allowed', 'Choose only models currently offered on your plan.');
+    const servers = await allowlistTools(c.env, parent);
+    if (wanted.tool_grants?.some((g) => !planOk(user) || !servers.some((v) => v.integration_uid === g.integration_uid && v.tools.some((t) => t.name === g.tool)))) return say(c, 403, 'tool_not_allowed', 'Choose only approved read tools connected to this team.');
+    await saveAllowlists(c.env, parent, user.id, wanted);
+    return c.json({ ok: true });
+  } catch (e) { return mapError(c, e); }
+});
+
 router.post('/:scope/:id/agents', async (c) => {
   try {
     const user = await requireAuth(c);
@@ -633,12 +652,14 @@ router.post('/:scope/:id/agents', async (c) => {
     if (maxCap != null && b.monthly_cap_microusd > maxCap) return say(c, 422, 'cap_above_max', 'That cap is above the most a team may set for this agent.', { max_cap_microusd: maxCap });
     const first = namePart(b.first_name); const last = namePart(b.last_name);
     if (!first.ok || !last.ok) return say(c, 400, 'invalid_name', `A name is at most ${NAME_MAX} characters.`);
-    if (typeof b.model_id !== 'string' || !b.model_id || modelRefusal(c.env, b.model_id)) {
+    if (typeof b.model_id !== 'string' || !agentModels(c.env, user).some((m) => m.id === b.model_id && !m.plan_locked)) {
       return say(c, 422, 'model_not_offered', 'That model is not offered. Choose one from the list.');
     }
     // Part 5: each grant is the sponsor's (the caller's) own connected server, an approved, pinned read tool.
     const granted = await checkGrants(c.env, user.id, b.tool_grants);
     if (!granted.ok) return answer(c, granted);
+    const allowed = await allowlistRefusal(c.env, s, b.model_id, granted.grants);
+    if (allowed) return answer(c, allowed);
     // D1612 A2 (#3956): the Add-an-agent Skills step, through the same gates as PUT …/skills.
     if (b.skills !== undefined && (!Array.isArray(b.skills) || b.skills.length > 40)) return say(c, 400, 'invalid_skills', 'Send the agent\'s skills as a list of up to 40.');
     const [cId, pId] = scopeCols(s);

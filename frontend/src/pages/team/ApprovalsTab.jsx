@@ -179,7 +179,7 @@ export function ApprovalsBoard({ value, onOpen, onAccept, busy = false, onMore, 
   );
 }
 
-export default function ApprovalsTab({ scope, canManage = false, viewerUid = null, roles = [], onChanged }) {
+export default function ApprovalsTab({ scope, roles = [], onChanged }) {
   const [block, setBlock] = useState(null);
   const [open, setOpen] = useState(null);
   const [refusal, setRefusal] = useState('');
@@ -207,7 +207,7 @@ export default function ApprovalsTab({ scope, canManage = false, viewerUid = nul
     });
     return () => { alive = false; detailRequest.current += 1; epoch.current += 1; };
   }, [kind, id, revision]);
-  const mapped = (item) => queueProposal(item, { roles, canManage, viewerUid });
+  const mapped = (item) => queueProposal(item, { roles });
   const changed = () => { if (current.current !== key) return; close(); load(); onChanged?.(); };
   const openItem = async (item, intent) => {
     const request = ++detailRequest.current;

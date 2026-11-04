@@ -34,7 +34,8 @@
 //                                                           403 agent_paused | module_not_allowed | option_not_allowed | sponsor_lost_access | plan_required;
 //                                                           402 agent_cap_reached; 422 option_not_text; 503 agent_spend_unreadable;
 //                                                           and every AI run refusal in its own words (assist_off, guard_*, spend_limit, ai_paused, model_not_offered)
-// Part 3 (#3843), the approvals queue:
+// Part 3 (#3843), the approvals queue. #3727: each Item carries can_decide,
+// computed by the Worker for this caller and false after a decision:
 //   GET    /api/teams/:scope/:id/queue?role=&module=&option=&status=&cursor=&include=
 //                                                         → { items: [Item], counts: { proposed: { available, value } }, next_cursor };
 //                                                           403 not_member
@@ -80,7 +81,11 @@ import { request } from '../api.js';
 const enc = encodeURIComponent;
 const base = (scope, id) => `/teams/${enc(scope)}/${enc(id)}`;
 
+// D4422: GET/PUT /api/teams/:scope/:id/allowlists. Null lists retain defaults; [] denies all.
+// GET includes model/tool choices, effective scope, inheritance and can_manage. PUT is manage-only and audited.
 export const teamAgentsApi = {
+  readAllowlists: (scope, id) => request(`${base(scope, id)}/allowlists`),
+  saveAllowlists: (scope, id, lists) => request(`${base(scope, id)}/allowlists`, { method: 'PUT', body: JSON.stringify(lists) }),
   roles: () => request('/teams/roles'),
   personas: () => request('/teams/personas'),
   listAgents: (scope, id, { include, module } = {}) => {
