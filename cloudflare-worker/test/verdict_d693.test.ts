@@ -925,11 +925,12 @@ test('12: the card is empty with no decision, too little without a venture verdi
   const db = fixture();
   let c = await verdictCard(ctxOf(db));
   // D757 §2.6 (#1925): the eight keys and the interview line.
-  assert.deepEqual(Object.keys(c).sort(), ['caption', 'interview_evidence', 'name', 'next', 'range', 'reason', 'series', 'slug', 'state']);
+  assert.deepEqual(Object.keys(c).sort(), ['caption', 'contributions', 'interview_evidence', 'name', 'next', 'range', 'reason', 'series', 'slug', 'state']);
   assert.deepEqual(c, {
     slug: 'verdict', name: 'Verdict', range: 'All time', caption: 'Every decision, oldest to newest, never overwritten.',
     state: 'empty', series: null, reason: 'No decision yet. Decisions appear here once evidence is in.',
     next: { text: 'Record a decision', href: `/validate/verdict/new?project=${P}` },
+    contributions: [],
     interview_evidence: { count: 0, contradicting: 0, text: '0 pieces of interview evidence so far, 0 contradicting' },
   });
   // A withheld venture decision and a given decision on one hypothesis: no verdict for the venture.

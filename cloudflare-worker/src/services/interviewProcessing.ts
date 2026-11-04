@@ -616,6 +616,12 @@ export async function runInterviewProcessJob(env: Env, payload: unknown): Promis
       }
       session = (await loadSession(env, session.id))!;
       await assemble(env, session);
+      if (session.outputs != null) {
+        const { enqueueOutputs } = await import('./callOutputs');
+        await enqueueOutputs(env, session.id);
+        await setStage(env, session.id, 'done', doneNote(session));
+        return 'done';
+      }
       if (session.processing_auto === 0) {
         // Manual mode: stop after Transcribing; the review offers Summarise and Structure.
         await setStage(env, session.id, 'done', doneNote(session));

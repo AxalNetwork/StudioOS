@@ -80,8 +80,11 @@ test('the press draws Price it before a quote, never Draw, and says no people', 
 
 test('the event editor and the course builder mount the press with their own routes, and each path is the Worker\'s', () => {
   const editor = read('frontend/src/pages/events/EventEditorPage.jsx');
-  assert.match(editor, /import CoverDrawPress from '..\/..\/ui\/CoverDrawPress'/);
-  assert.match(editor, /\{id && <CoverDrawPress testid="event-cover-draw" quote=\{coverQuote\} draw=\{coverDraw\} onDrawn=\{onCoverDrawn\} \/>\}/, 'only a saved event');
+  // D3724 (NE2): the press moved into the editor's cover step, still mounted only for a saved event.
+  const step = read('frontend/src/pages/events/EventCoverStep.jsx');
+  assert.match(editor, /<EventCoverStep id=\{id\} form=\{form\} set=\{set\} coverQuote=\{coverQuote\} coverDraw=\{coverDraw\} onCoverDrawn=\{onCoverDrawn\} \/>/);
+  assert.match(step, /import CoverDrawPress from '..\/..\/ui\/CoverDrawPress'/);
+  assert.match(step, /\{id \? \([\s\S]*<CoverDrawPress key=\{seed\.n\} initialPrompt=\{seed\.prompt\} testid="event-cover-draw" quote=\{coverQuote\} draw=\{coverDraw\} onDrawn=\{onCoverDrawn\} \/>[\s\S]*\) : <p[^>]*data-testid="event-cover-save-first"/, 'only a saved event');
   assert.match(editor, /eventsApi\.coverQuote\(id, prompt\)/);
   assert.match(editor, /eventsApi\.coverDraw\(id, prompt\)/);
   assert.match(editor, /setForm\(\(f\) => \(\{ \.\.\.f, cover_url: url \}\)\)/, 'the drawn URL fills cover_url only');
