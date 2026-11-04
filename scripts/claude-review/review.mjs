@@ -12,9 +12,10 @@
  *                            exchanged for a short-lived Anthropic token; needs id-token: write
  *   ANTHROPIC_API_KEY        repository secret, the fallback; read by the SDK, never printed
  *   ANTHROPIC_MODEL, ANTHROPIC_MODEL_HIGH_RISK, CLAUDE_REVIEW_*  repository variables
- *   ANTHROPIC_API_KEY_2, ANTHROPIC_API_KEY_3, KIMI_API_KEY  repository secrets, optional: the
+ *   ANTHROPIC_API_KEY_2, ANTHROPIC_API_KEY_3, OPENAI_API_KEY, KIMI_API_KEY  repository secrets, optional: the
  *                            credit fallback chain, tried in that order, each only when the
  *                            account before it answers that its credit balance is exhausted
+ *   OPENAI_MODEL, OPENAI_BASE_URL  owner-selected model (no default), optional HTTPS endpoint
  *   KIMI_MODEL, KIMI_BASE_URL  repository variables, optional (defaults in claudeReview.mjs)
  *   GITHUB_TOKEN             the job's read-only token (contents, pull-requests, actions)
  *   GITHUB_EVENT_PATH, GITHUB_REPOSITORY, GITHUB_API_URL, GITHUB_STEP_SUMMARY, GITHUB_OUTPUT
@@ -31,9 +32,10 @@ import { appendFileSync, closeSync, fstatSync, mkdirSync, openSync, readFileSync
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { oidcFederationProvider } from '@anthropic-ai/sdk/lib/credentials/oidc-federation';
 import { WorkloadIdentityError } from '@anthropic-ai/sdk/lib/credentials/types';
-import { escapeCommandData, escapeCommandProperty, parseRates, readConfig } from '../lib/claudeReview.mjs';
+import { REVIEW_OUTPUT_SCHEMA, escapeCommandData, escapeCommandProperty, parseRates, readConfig } from '../lib/claudeReview.mjs';
 import { runReview } from '../lib/claudeReviewRun.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -115,6 +117,7 @@ export function classifyError(e, sdk = Anthropic) {
   else if (e instanceof sdk.APIConnectionError) kind = 'connection';
   else if (e instanceof sdk.InternalServerError) kind = status === 529 ? 'overloaded' : 'server';
   else if (e instanceof sdk.APIError) kind = status === 402 ? 'billing' : status === 529 ? 'overloaded' : 'unknown';
+  if (['insufficient_quota', 'billing_hard_limit_reached', 'billing_not_active'].includes(e?.code || e?.error?.code)) kind = 'billing';
   if (e?.name === 'APIUserAbortError' || e?.name === 'AbortError') kind = 'timeout';
   const out = new Error(`Anthropic API error: ${kind}`);
   Object.assign(out, { kind, status, requestId: requestId || fed?.requestId || undefined, detail: errorDetail(e, fed) });
@@ -176,6 +179,57 @@ export function kimiClient({ apiKey, baseURL, maxRetries, timeoutSeconds, sdk = 
   };
 }
 
+/** OpenAI's own request headers only; no Anthropic or ambient workspace headers. */
+export const OPENAI_HEADERS = /^(authorization|content-type|content-length|accept|accept-encoding|user-agent|idempotency-key|x-stainless-[a-z0-9-]+)$/i;
+export function openaiFetch(fetchImpl, apiKey) {
+  return (url, init = {}) => {
+    const headers = new Headers(init.headers);
+    for (const name of [...headers.keys()]) if (!OPENAI_HEADERS.test(name)) headers.delete(name);
+    headers.set('authorization', `Bearer ${apiKey}`);
+    return fetchImpl(url, { ...init, headers });
+  };
+}
+
+/** Streaming Responses API mapped into the runner's existing Message shape. */
+export function openaiClient({ apiKey, baseURL, timeoutSeconds, sdk = OpenAI, fetchImpl = globalThis.fetch }) {
+  let client;
+  const get = () => (client ||= new sdk({ apiKey, baseURL, organization: null, project: null, maxRetries: 0, timeout: timeoutSeconds * 1000, fetch: openaiFetch(fetchImpl, apiKey) }));
+  return {
+    create: async (p, options) => {
+      try {
+        const stream = await get().responses.create({
+          model: p.model, instructions: p.system, input: p.messages,
+          max_output_tokens: p.max_tokens, stream: true, store: false,
+          text: { format: { type: 'json_schema', name: 'review', strict: true, schema: REVIEW_OUTPUT_SCHEMA } },
+        }, options);
+        let response;
+        for await (const event of stream) {
+          if (event.type === 'response.completed' || event.type === 'response.incomplete') response = event.response;
+          if (event.type === 'response.failed' || event.type === 'error') {
+            const error = event.response?.error || event;
+            throw Object.assign(new Error(error.message || 'OpenAI stream failed'), { code: error.code });
+          }
+        }
+        if (!response) throw Object.assign(new Error('OpenAI stream ended before a final response'), { name: 'APIConnectionTimeoutError' });
+        const content = (response.output || []).filter(item => item.type === 'message').flatMap(item => item.content || []);
+        const refused = content.some(item => item.type === 'refusal');
+        const usage = response.usage;
+        const cached = usage?.input_tokens_details?.cached_tokens || 0;
+        return {
+          _request_id: response._request_id,
+          stop_reason: refused ? 'refusal' : response.status === 'incomplete' ? 'max_tokens' : 'end_turn',
+          content: content.filter(item => item.type === 'output_text').map(item => ({ type: 'text', text: item.text })),
+          usage: usage ? { input_tokens: typeof usage.input_tokens === 'number' ? Math.max(0, usage.input_tokens - cached) : undefined, output_tokens: usage.output_tokens, cache_read_input_tokens: cached, cache_creation_input_tokens: 0 } : undefined,
+        };
+      } catch (e) {
+        const classified = classifyError(e, sdk);
+        if (e?.name === 'APIConnectionTimeoutError') classified.kind = 'timeout';
+        throw classified;
+      }
+    },
+  };
+}
+
 /** The headers Kimi may receive: the request's own, never another credential. */
 export const KIMI_HEADERS = /^(content-type|content-length|accept|accept-encoding|x-api-key|anthropic-version|user-agent|idempotency-key|x-stainless-[a-z0-9-]+)$/i;
 
@@ -198,7 +252,9 @@ export function fallbacksFor(env, overrides = {}) {
   const out = {};
   for (const step of config.creditFallbacks) {
     const common = { maxRetries: config.maxRetries, timeoutSeconds: config.timeoutSeconds };
-    out[step.id] = step.provider === 'kimi'
+    out[step.id] = step.provider === 'openai'
+      ? openaiClient({ apiKey: env.OPENAI_API_KEY, baseURL: step.baseURL, ...common, ...(overrides.openai || {}) })
+      : step.provider === 'kimi'
       ? kimiClient({ apiKey: env.KIMI_API_KEY, baseURL: step.baseURL, ...common, ...(overrides.kimi || {}) })
       : anthropicClient({ apiKey: env[step.secret], federation: null, workspaceId: step.workspaceId, ...common, ...(overrides.anthropic || {}) });
   }

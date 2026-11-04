@@ -224,6 +224,11 @@ export function readConfig(env = {}) {
 
   // The credit fallback: Kimi, only when its key is set and it is not switched
   // off. The key is never copied into the config, only whether one is present.
+  const hasOpenaiKey = String(env.OPENAI_API_KEY ?? '').trim().length > 0;
+  const openaiModel = String(env.OPENAI_MODEL ?? '').trim();
+  const openaiBaseUrl = String(env.OPENAI_BASE_URL ?? '').trim() || 'https://api.openai.com/v1';
+  if (openaiModel && !MODEL_ID.test(openaiModel)) errors.push('OPENAI_MODEL is not a model ID');
+  if (hasOpenaiKey && !/^https:\/\/[a-z0-9.-]+(:\d+)?(\/[A-Za-z0-9._~\/-]*)?$/i.test(openaiBaseUrl)) errors.push('OPENAI_BASE_URL must be an https URL');
   const hasKimiKey = String(env.KIMI_API_KEY ?? '').trim().length > 0;
   const kimiModel = String(env.KIMI_MODEL ?? '').trim() || DEFAULTS.kimiModel;
   const kimiBaseUrl = String(env.KIMI_BASE_URL ?? '').trim() || DEFAULTS.kimiBaseUrl;
@@ -232,7 +237,7 @@ export function readConfig(env = {}) {
   if (hasKimiKey && !MODEL_ID.test(kimiModel)) errors.push('KIMI_MODEL is not a model ID');
   if (hasKimiKey && !/^https:\/\/[a-z0-9.-]+(:\d+)?(\/[A-Za-z0-9._~\/-]*)?$/i.test(kimiBaseUrl)) errors.push('KIMI_BASE_URL must be an https URL');
   // The chain, in the order it is tried: further Claude accounts (their own
-  // Console organizations, so their own credit), then Kimi. Each step is used
+  // Console organizations, so their own credit), then OpenAI and Kimi. Each step is used
   // only when the one before it answers that its credit is exhausted.
   const fallbackWorkspaces = {};
   for (const n of CLAUDE_FALLBACK_SLOTS) {
@@ -246,6 +251,7 @@ export function readConfig(env = {}) {
     for (const n of CLAUDE_FALLBACK_SLOTS) {
       if (String(env[`ANTHROPIC_API_KEY_${n}`] ?? '').trim()) creditFallbacks.push({ id: `claude${n}`, provider: 'anthropic', label: `Claude account ${n}`, secret: `ANTHROPIC_API_KEY_${n}`, workspaceId: fallbackWorkspaces[n] });
     }
+    if (hasOpenaiKey && openaiModel) creditFallbacks.push({ id: 'openai', provider: 'openai', label: 'OpenAI', secret: 'OPENAI_API_KEY', model: openaiModel, baseURL: openaiBaseUrl });
     if (hasKimiKey) creditFallbacks.push({ id: 'kimi', provider: 'kimi', label: 'Kimi', secret: 'KIMI_API_KEY', model: kimiModel, baseURL: kimiBaseUrl });
   }
 
