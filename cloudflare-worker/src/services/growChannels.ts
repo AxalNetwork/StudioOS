@@ -23,7 +23,7 @@ export async function channelReadings(env: Env, pid: number) {
   const members = await channelMembers(env, pid);
   const [contactRead, activityRead, campaignRead] = await Promise.allSettled([
     rows(env, "SELECT utm_json, created_at FROM contacts WHERE project_id = ? AND audience = 'customer' AND utm_json IS NOT NULL", pid),
-    rows(env, `SELECT channel_id, MAX(at) AS at FROM (
+    rows(env, `SELECT channel_id, strftime('%Y-%m-%dT%H:%M:%fZ', MAX(julianday(at))) AS at FROM (
       SELECT channel_id, updated_at AS at FROM content_calendar_items WHERE project_id = ?
       UNION ALL SELECT s.channel_id, s.created_at AS at FROM channel_spend s
         JOIN growth_channels g ON g.id = s.channel_id WHERE g.project_id = ?

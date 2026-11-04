@@ -25,7 +25,7 @@ export function activityLabel(value, now = Date.now()) {
   const hours = Math.floor((now - at) / 3_600_000);
   if (day === today && hours >= 0) return hours > 0 ? `${hours}h ago` : 'Today';
   if (day === new Date(now - 86_400_000).toISOString().slice(0, 10)) return 'Yesterday';
-  return new Intl.DateTimeFormat('en', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(at);
+  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(at);
 }
 export function connectionAction(connection) {
   const allowed = typeof connection?.href === 'string' && (connection.href === '/email' || connection.href === '/account/connectors' || /^\/account\/connectors\/(whatsapp|telegram|mercury)$/.test(connection.href));

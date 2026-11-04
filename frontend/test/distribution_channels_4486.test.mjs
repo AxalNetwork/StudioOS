@@ -52,7 +52,7 @@ test('recorded activity uses compact UTC labels while missing or invalid reading
   assert.equal(activityLabel('2026-11-04T12:30:00Z', now), '2h ago');
   assert.equal(activityLabel('2026-11-04 14:20:00', now), 'Today');
   assert.equal(activityLabel('2026-11-03T20:00:00Z', now), 'Yesterday');
-  assert.match(activityLabel('2026-10-28T10:00:00Z', now), /28/);
+  assert.equal(activityLabel('2026-10-28T10:00:00Z', now), '28 Oct');
   assert.equal(activityLabel('bad', now), 'Unreadable');
 });
 

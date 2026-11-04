@@ -153,10 +153,10 @@ test('activity is the latest observed content, attributed customer capture or sp
   f.db.prepare("INSERT INTO contacts(uid,project_id,audience,email,utm_json,created_at) VALUES ('hit',7,'customer','not-shown@example.test',?, '2026-10-03T10:00:00Z'),('other',8,'customer','private@example.test',?,'2026-10-30T10:00:00Z')")
     .run(JSON.stringify({ utm_source: 'search' }), JSON.stringify({ utm_source: 'search' }));
   const channelId = one(f, 'SELECT id FROM growth_channels WHERE uid = ?', uid).id;
-  f.db.prepare("INSERT INTO content_calendar_items(uid,project_id,channel_id,title,updated_at) VALUES ('piece',7,?,'A plan','2026-10-04T10:00:00Z')").run(channelId);
-  f.db.prepare("INSERT INTO channel_spend(channel_id,month,spend_cents,created_at) VALUES (?,'2026-10',100,'2026-10-05T10:00:00Z')").run(channelId);
+  f.db.prepare("INSERT INTO content_calendar_items(uid,project_id,channel_id,title,updated_at) VALUES ('piece',7,?,'A plan','2026-10-05T10:00:00Z')").run(channelId);
+  f.db.prepare("INSERT INTO channel_spend(channel_id,month,spend_cents,created_at) VALUES (?,'2026-10',100,'2026-10-05 12:00:00')").run(channelId);
   let ch = (await read(f)).body.channels[0]; assert.equal(ch.results, 1); assert.equal(ch.results_reason, null);
-  assert.equal(ch.last_activity, '2026-10-05T10:00:00Z'); assert.equal(ch.last_activity_reason, null);
+  assert.equal(ch.last_activity, '2026-10-05T12:00:00.000Z'); assert.equal(ch.last_activity_reason, null);
   f.db.exec('DROP TABLE contacts');
   ch = (await read(f)).body.channels[0]; assert.equal(ch.results, null); assert.match(ch.results_reason, /^Unreadable:/);
   assert.equal(ch.last_activity, null); assert.match(ch.last_activity_reason, /^Unreadable:/);
@@ -199,7 +199,7 @@ test('new categories, safe profile owner, Mercury activity and campaign links re
   assert.equal(next.status, 201);
   f.db.prepare("INSERT INTO mercury_grow_facts(integration_id,project_id,module,kind,period,subject,as_of,updated_at) VALUES (1,7,'distribution','channel_spend','2026-10',?,'2026-10-12','2026-10-12T10:00:00Z')").run(uid);
   const r = await read(f); const ch = r.body.channels.find((c: any) => c.uid === uid);
-  assert.equal(ch.kind, 'ads'); assert.equal(ch.last_activity, '2026-10-12T10:00:00Z');
+  assert.equal(ch.kind, 'ads'); assert.equal(ch.last_activity, '2026-10-12T10:00:00.000Z');
   assert.equal(ch.owner.name, null); assert.match(ch.owner.avatar, /^\/api\/settings\/headshot\//);
   assert.doesNotMatch(JSON.stringify(r.body), /hidden@example|private\/object/);
   assert.deepEqual(ch.campaigns, [{ uid: campaign.body.campaign.uid, name: 'Launch' }, { uid: next.body.campaign.uid, name: 'Next launch' }]);
