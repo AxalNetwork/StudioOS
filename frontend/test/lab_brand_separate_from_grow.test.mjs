@@ -53,8 +53,8 @@ test('Grow\'s own Brand page stays Grow\'s, and is its tab', () => {
   // what Grow's Brand page read; the old address forwards, query and hash kept.
   assert.match(routeBlock(APP, '/build/brand'), /guard\(labRoles\(\['admin', 'founder'\]\), founderWorkspace\('grow', <BrandBuilderPage \/>\)\)/);
   const forward = routeBlock(APP, '/grow/brand');
-  assert.match(forward, /<Navigate replace to=\{\{ pathname: '\/build\/brand', search: location\.search, hash: location\.hash \}\} \/>/);
-  assert.doesNotMatch(forward, /FounderGrowBrand/, '/grow/brand renders a page again');
+  assert.equal(forward, null, 'D2319 retires the alias');
+  assert.doesNotMatch(forward ?? '', /FounderGrowBrand/, '/grow/brand renders a page again');
   assert.match(read('frontend/src/pages/BrandBuilderPage.jsx'), /<BrandPagesSection projectId=\{projectId\} projectName=\{project\?\.name\} \/>/,
     "the builder dropped Grow's pages, leads and conversion");
   for (const zone of ['Focus', 'Talent', 'Customers', 'Partnerships', 'Launch']) {

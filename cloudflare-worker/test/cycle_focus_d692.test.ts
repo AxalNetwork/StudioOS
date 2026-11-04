@@ -359,11 +359,11 @@ test('7: Build\'s index is the canvas\'s seven rows with Tools first, from the s
   const r = await bRead(db);
   assert.deepEqual(r.body.index.map((x: any) => x.key),
     ['tools', 'solution-design', 'prototype-mvp', 'product-roadmap', 'founding-team', 'company-creation', 'operating-systems']);
-  assert.deepEqual(row(r.body, 'tools'), { key: 'tools', title: 'Tools', detail: '2 connected · 1 failing', value: '3', href: `/build/tools?project=${P}` });
+  assert.deepEqual(row(r.body, 'tools'), { key: 'tools', title: 'Tools', detail: '2 connected · 1 failing', value: '3', href: `/build/operating-systems?project=${P}#tools` });
   assert.deepEqual([row(r.body, 'solution-design').detail, row(r.body, 'solution-design').value], ['2 features linked to a pain', '']);
   assert.deepEqual([row(r.body, 'company-creation').detail, row(r.body, 'company-creation').value], [`Next filing ${dayMonth(day(20))}`, '']);
   assert.deepEqual([row(r.body, 'operating-systems').detail, row(r.body, 'operating-systems').value], ['Systems connected', '1 of 5']);
-  for (const x of r.body.index) assert.equal(x.href.split('?')[1], `project=${P}`, x.key);
+  for (const x of r.body.index) assert.equal(new URL(x.href, 'https://unit.test').searchParams.toString(), `project=${P}`, x.key);
 
   const noCompany = fixture(null);
   const n = await bRead(noCompany);
@@ -431,6 +431,7 @@ test('8: with the flag on and no open call, the call focus, the meter and the fo
     assert.equal(r.body.meter.detail,r.body.figures.find((f:any)=>f.key==='committed').reason);
     assert.match(r.body.meter.detail,/Received: \$0 \(bank-matched\).*Wired: \$300,000.*Signed: \$600,000/);
     assert.equal(r.body.index[0].key, 'calls');
+    assert.equal(row(r.body, 'calls').href, `/raise/capital-relationships/calls?project=${P}`, 'D2319: use the canonical history directly');
     assert.equal(row(r.body, 'calls').value, null, 'no call yet: Not recorded');
 
     db.exec("DELETE FROM raise_prospects WHERE stage <> 'committed'");
@@ -583,7 +584,7 @@ test('9: Updates counts sent and submitted updates only, and never another ventu
   ins.run('u3', P, FOUNDER, 'Draft', 'draft', null, null);
   ins.run('u4', P_OTHER, OTHER, 'Theirs', 'sent', `${day(-5)} 10:00:00`, null);
   const r = await gRead(db);
-  assert.deepEqual([row(r.body, 'updates').detail, row(r.body, 'updates').value, row(r.body, 'updates').href], ['Updates shared', '2', `/grow/updates?project=${P}`]);
+  assert.deepEqual([row(r.body, 'updates').detail, row(r.body, 'updates').value, row(r.body, 'updates').href], ['Updates shared', '2', `/grow/reporting?project=${P}`]);
 });
 
 // ---------------------------------------------------------------------------
@@ -601,20 +602,25 @@ const SLUGS: Record<string, string[]> = {
   grow: ['product-improvement', 'distribution', 'revenue-and-traction', 'team-expansion', 'partner-network', 'market-expansion', 'durable-company-building'],
 };
 function routed(href: string, routes: string[]): boolean {
-  const path = href.split('?')[0];
+  const got = href.split(/[?#]/)[0].split('/');
   return routes.some((r) => {
-    if (r === path) return true;
-    const m = /^\/(validate|raise|grow|build)\/:slug$/.exec(r);
-    if (!m) {
-      // Segment by segment, so a route's own text is never compiled as a pattern.
-      const want = r.split('/'), got = path.split('/');
-      return !r.includes(':slug') && want.length === got.length
-        && want.every((s, i) => (s.startsWith(':') ? got[i] !== '' : s === got[i]));
-    }
-    const [, cycle, slug] = /^\/([a-z]+)\/([^/]+)$/.exec(path) || [];
-    return cycle === m[1] && (SLUGS[cycle] || []).includes(slug);
+    const want = r.split('/');
+    return want.length === got.length && want.every((s, i) => {
+      if (s === ':slug') return (SLUGS[got[1]] || []).includes(got[i]);
+      return s.startsWith(':') ? got[i] !== '' : s === got[i];
+    });
   });
 }
+
+test('D2319: route checks accept a canonical tool tab only under a mounted module route and known slug', () => {
+  const tool = '/raise/capital-relationships/calls?project=1';
+  assert.equal(routed(tool, ['/raise/:slug/:id']), true);
+  assert.equal(routed(tool, ['/raise/:slug']), false);
+  assert.equal(routed('/raise/unknown/calls', ['/raise/:slug/:id']), false);
+  assert.equal(routed('/raise/capital-relationships/', ['/raise/:slug/:id']), false);
+  assert.equal(routed('/build/operating-systems?project=1#tools', ['/build/:slug']), true);
+});
+
 function strings(v: unknown, out: string[] = []): string[] {
   if (typeof v === 'string') out.push(v);
   else if (Array.isArray(v)) v.forEach((x) => strings(x, out));
@@ -750,4 +756,45 @@ test('#2447: unclassified commitments keep a visible meter explanation when the 
  const r=await rRead(db);assert.equal(r.status,200);assert.ok(r.body.meter);assert.ok(r.body.focus?.cta?.href);
  assert.equal(r.body.meter.display,null);assert.equal(r.body.meter.count,null);
  assert.match(r.body.meter.detail,/Status not recorded: \$400,000/);
+});
+
+test('D2319: canonical overview links survive every Tools state; restoring any old target fails and restoration passes', async () => {
+  const { stripTypeScriptTypes } = await import('node:module');
+  const source = readFileSync(resolve(ROOT, 'cloudflare-worker/src/services/cycleFocus.ts'), 'utf8');
+  const load = async (text: string) => {
+    const code = stripTypeScriptTypes(text + '\nexport { buildIndex, raiseIndex, growIndex };').replace(
+      /from ['"](\.\.?\/[^'"]+)['"]/g,
+      (_, spec) => `from '${new URL(/\.(ts|js|mjs)$/.test(spec) ? spec : spec + '.ts', new URL('../src/services/cycleFocus.ts', import.meta.url)).href}'`,
+    );
+    return import('data:text/javascript;base64,' + Buffer.from(code).toString('base64'));
+  };
+  const check = async (m: any) => {
+    for (const systems of [undefined, { card: { state: 'unreadable' } }, { card: { state: 'recorded' }, facts: { tools_total: 3, tools_connected: 2, tools_failing: 1 } }]) {
+      const rows = m.buildIndex({ id: P, company_id: COMPANY }, [null, null, null, null, null, systems], []);
+      assert.equal(rows.find((r: any) => r.key === 'tools').href, `/build/operating-systems?project=${P}#tools`);
+    }
+    const calls = m.raiseIndex({ projectId: P, env: { ROUND_CALLS_ENABLED: 'true' } }, [], [], { items: [] });
+    assert.equal(calls.find((r: any) => r.key === 'calls').href, `/raise/capital-relationships/calls?project=${P}`);
+    const ctx = { projectId: P, env: { DB: { prepare: () => ({ bind: () => ({ first: async () => ({ n: 0 }) }) }) } } };
+    const updates = await m.growIndex(ctx, [], []);
+    assert.equal(updates.find((r: any) => r.key === 'updates').href, `/grow/reporting?project=${P}`);
+  };
+  const actual = await load(source);
+  await check(actual);
+  for (const [canonical, old] of [
+    ['/build/operating-systems?project=${project.id}#tools', '/build/tools?project=${project.id}'],
+    ['/raise/capital-relationships/calls?project=${ctx.projectId}', '/raise/calls?project=${ctx.projectId}'],
+    ['/grow/reporting?project=${x.projectId}', '/grow/updates?project=${x.projectId}'],
+  ]) {
+    assert.ok(source.includes(canonical), canonical);
+    let offset = 0;
+    for (;;) {
+      const at = source.indexOf(canonical, offset);
+      if (at < 0) break;
+      const mutant = source.slice(0, at) + old + source.slice(at + canonical.length);
+      await assert.rejects(async () => check(await load(mutant)), assert.AssertionError, canonical);
+      await check(actual);
+      offset = at + canonical.length;
+    }
+  }
 });

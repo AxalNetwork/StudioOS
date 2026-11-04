@@ -314,7 +314,7 @@ test('D938: the page draws the shared AdminPageHeader with its title, line and m
 test('the routes, the row and the reads the page must never make', () => {
   const app = read('frontend/src/App.jsx');
   assert.match(app, /<Route path="\/admin\/community" element=\{guard\(\['admin'\], <AdminCommunity \/>\)\} \/>/);
-  assert.match(app, /<Route path="\/admin\/held\/community" element=\{<HeldCommunityRedirect \/>\} \/>/);
+  assert.doesNotMatch(app, /<Route path="\/admin\/held\/community" element=\{<HeldCommunityRedirect \/>\} \/>/);
   assert.match(read('frontend/src/sidebarConfig.js'), /\{ to: '\/admin\/community', icon: Network, label: 'Community'/);
   const page = read('frontend/src/pages/admin/community/AdminCommunity.jsx');
   // The aggregate decrypts members' answers to average them; the experts read caps at 50 and counts samples (D930 §2).

@@ -318,10 +318,10 @@ export default function IncorporateFlow({ embedded = false }) {
   if (orderId && /^\d{1,12}$/.test(orderId) && user?.role === 'admin') {
     return <IncorporateHqRead orderId={orderId} viewer={isSuperAdminUser(user) ? 'super_admin' : 'admin'} />;
   }
-  return <MemberIncorporateFlow embedded={embedded} />;
+  return <MemberIncorporateFlow embedded={embedded} user={user} />;
 }
 
-function MemberIncorporateFlow({ embedded = false }) {
+function MemberIncorporateFlow({ embedded = false, user }) {
   const [params] = useSearchParams();
   const phone = usePhoneWidth();
   const asked = params.get('project');
@@ -601,7 +601,7 @@ function MemberIncorporateFlow({ embedded = false }) {
         )
       ) : null}
 
-      {step === 5 ? <IncorporateDone order={status || order} projectId={projectId} companyName={form.company_name.trim()} /> : null}
+      {step === 5 ? <IncorporateDone user={user} order={status || order} projectId={projectId} companyName={form.company_name.trim()} /> : null}
 
       {step > 0 && step < 4 ? <button type="button" className={`w-fit ${BTN_TEXT}`} onClick={() => setStep(step - 1)} data-testid="incorporate-back">‹ Back</button> : null}
 

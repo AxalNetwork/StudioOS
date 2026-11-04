@@ -780,14 +780,14 @@ advisor.post('/start', async (c) => {
   let promoNotice: { state: 'offer' | 'issued'; message: string; code?: string; route?: string } | null = null;
   if (isExploringUser(user)) {
     try {
-      const { getExplorerPromo } = await import('../services/explorerPromo');
+      const { getExplorerPromo, explorerPromoLink } = await import('../services/explorerPromo');
       const issued = await getExplorerPromo(c.env, user.id);
       if (issued && !issued.redeemed_at) {
         promoNotice = {
           state: 'issued',
-          message: `Reminder — your one-time code ${issued.code} is ready: it redeems a free ${issued.license_label.toLowerCase()}. Claim it on the Products page before it expires.`,
+          message: `Reminder — your one-time code ${issued.code} is ready: it redeems a free ${issued.license_label.toLowerCase()}. Claim it on the Pricing products page before it expires.`,
           code: issued.code,
-          route: `/products?code=${encodeURIComponent(issued.code)}`,
+          route: explorerPromoLink(issued.code),
         };
       } else if (!issued) {
         promoNotice = {
@@ -1392,7 +1392,7 @@ advisor.post('/answer', async (c) => {
         `SELECT needs_assessment_completed FROM user_role_review WHERE user_id = ?`,
       ).bind(user.id).first<{ needs_assessment_completed: number | null }>();
       if (Number(review?.needs_assessment_completed || 0) === 1) {
-        const { getExplorerPromo, issueExplorerPromo, buildExplorerRecommendations } =
+        const { getExplorerPromo, issueExplorerPromo, buildExplorerRecommendations, explorerPromoLink } =
           await import('../services/explorerPromo');
         const already = await getExplorerPromo(c.env, user.id);
         if (!already) {
@@ -1407,8 +1407,8 @@ advisor.post('/answer', async (c) => {
               summary,
               cta: {
                 primary: {
-                  label: 'Redeem in Products',
-                  route: `/products?code=${encodeURIComponent(promo.code)}`,
+                  label: 'Redeem in Pricing products',
+                  route: explorerPromoLink(promo.code),
                 },
               },
             };
@@ -1421,7 +1421,7 @@ advisor.post('/answer', async (c) => {
               '',
               summary || '',
               '',
-              'Redeem it on the Products page — the confirmation will show a $0.00 total.',
+              'Redeem it on the Pricing products page — the confirmation will show a $0.00 total.',
             ].join('\n').replace(/\n{3,}/g, '\n\n');
             await recordMessage(c.env, conv.id, 'assistant', announcement, null);
           }

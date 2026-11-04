@@ -359,15 +359,6 @@ const ROUTES = [
     type: 'website',
     section: 'company',
   },
-  {
-    path: '/pricing/investor',
-    title: 'Investor plans',
-    description:
-      'Plans for investors and LPs, and what each tier includes. The investor-side counterpart to the main pricing page.',
-    key: 'pricing-investor',
-    type: 'website',
-    section: 'company',
-  },
 
   // ---- Trust center (#3705) ---------------------------------------------
   // The public trust center and its five tabs (`pages/site/trustCenterModel.js`

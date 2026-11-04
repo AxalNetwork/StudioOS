@@ -38,7 +38,8 @@ function decodePng(file) {
 
 test('every card key is a whole 1200×630 PNG, including the record families', () => {
   const keys = ogImageKeys();
-  for (const k of ['event', 'profile', 'private', 'trust', 'trust-security', 'terms', 'pricing-investor']) assert.ok(keys.includes(k), k);
+  for (const k of ['event', 'profile', 'private', 'trust', 'trust-security', 'terms']) assert.ok(keys.includes(k), k);
+  assert.equal(keys.includes('pricing-investor'), false, 'D2319: the obsolete pricing route has no separate card');
   assert.deepEqual(FAMILY_OG_KEYS, ['event', 'profile', 'private']);
   for (const k of keys) {
     const png = decodePng(`frontend/public/og/${k}.png`);

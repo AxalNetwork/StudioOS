@@ -54,3 +54,4 @@ and citations by number keep working.
 | `D4422.md` | #4422: inherited Team model and MCP read-tool allow-lists, enforced on the Worker and edited in TM8a. |
 | `D4459.md` | No-call run charges and live Work-item mutation responses. |
 | `D4488.md` | Distribution Ask drafts, scoped proposals and safe acceptance (#4488). |
+| `D4484.md` | Distribution static tabs, existing Overview content, module-specific campaign primary and shared Ask presentation. |

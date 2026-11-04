@@ -102,7 +102,7 @@ const READS = {
 const NAMES = { validate: 'Validate', build: 'Build', raise: 'Raise', grow: 'Grow' };
 // Validate's one "Also in" page, Advisory, was removed (#2341); Raise's Legal &
 // Capital left with #2354.
-const ALSO = { validate: [], build: [], raise: ['Incorporate', 'Co-Founder Agreement'], grow: ['Co-marketing', 'Perks'] }; // Network Effects left with #2324; Compliance Calendar moved into Calendar (D1384)
+const ALSO = { validate: [], build: [], raise: ['Incorporate', 'Co-Founder Agreement'], grow: ['Perks'] }; // D4439: co-marketing is inside Partner network; Network Effects left with #2324 and Compliance moved into Calendar (D1384)
 
 // ── The stub DOM, with a founder rail when asked ──────────────────────────
 
@@ -182,6 +182,7 @@ for (const cycle of Object.keys(READS)) {
     } else {
       assert.equal(also, '', `${cycle} has no "Also in" pages`);
     }
+    if (cycle === 'grow') assert.doesNotMatch(also, /href="\/comarketing"/, 'D4439: co-marketing belongs to Partner network, not the legacy Also in list');
     // Nothing of the desktop overview.
     assert.doesNotMatch(out, /data-testid="(cycle-overview|cycle-figures|cycle-cards)"|data-testid="also-in-/);
   });
