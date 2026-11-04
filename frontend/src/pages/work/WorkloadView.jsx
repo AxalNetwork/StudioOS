@@ -101,7 +101,7 @@ export default function WorkloadView({ projectId, onOpenItem, onNotice }) {
   );
 }
 
-function ScheduleBox({ s, onChange, onDone }) {
+export function ScheduleBox({ s, onChange, onDone }) {
   const [error, setError] = useState(null);
   const save = async () => {
     const b = scheduleBody(s.day, s.from, s.to);
