@@ -36,6 +36,8 @@ is automatic. The routes are `cloudflare-worker/src/routes/team_agents.ts`, moun
 | `allowlists.ts` | D4422 (#4422): company/project policy inheritance, validated lists, atomic audit and admission/use-time model/tool restrictions. |
 | `modelOffers.ts` | D4422: the shared existing plan and chat-model offer, re-exported by team_agents. |
 
+| `workRuns.ts` | D1614 (#3968): W1’s live E3 latest-run reader and guard-inclusive last/task charges; a usage failure leaves costs unavailable without hiding a recorded run. |
+
 **The rule for adding here.** `catalogue.ts` and `rulebook.ts` stay pure: no
 binding, no fetch. A read of the database goes in `teams.ts`, and a gate is
 written there once. A new module key must be a slug a cycle already has; a new
