@@ -25,7 +25,9 @@ import { AGENTS_FOOT, agentGroups, agentsFootLine, refusalWords } from './teamMo
  *
  * Every agent is drawn with its tile and the "AI agent" pill; spend and last
  * activity the Worker did not answer read "Not recorded", never "$0". A paused
- * pill is amber with brown text, never red, with its reason and its one fix.
+ * pill is amber with brown text, never red, with its reason and its one fix;
+ * D4387: the fix opens the profile on its dialog (`onOpen(row, action)`:
+ * Choose a new sponsor, or Edit cap).
  *
  * Below `md` a row keeps what the canvas's phone row keeps (TM9d1): the name
  * and pill, then one line with the role and this month's spend (or that it is
@@ -78,7 +80,7 @@ function AgentRow({ row, onOpen }) {
           <>
             <StatusPill row={row} />
             <span className={`block ${MUTED}`}>{row.pause.reason}</span>
-            {row.pause.fix ? <button type="button" className={BTN_TEXT} onClick={(e) => { e.stopPropagation(); onOpen?.(row); }}>{row.pause.fix}</button> : null}
+            {row.pause.fix ? <button type="button" className={BTN_TEXT} onClick={(e) => { e.stopPropagation(); onOpen?.(row, row.pause.action || null); }} data-testid={`agent-fix-${row.uid}`}>{row.pause.fix}</button> : null}
           </>
         ) : <Pill tone="ok">Active</Pill>}
       </span>

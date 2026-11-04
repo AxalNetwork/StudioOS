@@ -68,6 +68,7 @@ board → file map and what waits for which issue are in
 | `SkillParts.jsx` | The taxonomy and tool chips, the energy image, the card's run cost line and its explainer, D4121's per-run cost range (`RunCostLine`) and a skill row's tokens per run, the directory card, a skill row and the agent radar the skill screens share. |
 | `skillsModel.js` | The skill words and pure derivations: levels and the 8 areas, filter and sort, run cost, natural fit and the Assign order, the radar and coverage, assignment groups, refusals, A1's answers as the screens draw them, and the client-side SKILL.md preview. |
 | `WorkingHere.jsx` | Working here (TM6c) and Assign this task to… (TM6b). Built, not mounted: module headers mount them with the Ask panel (#3706) and the task store (#3845). |
+| `SponsorSheet.jsx` | D4387 (#4387): Choose a new sponsor, from TM9b's fix or the profile's Change sponsor. The team's members with whether each may sponsor the agent and why not, in the Worker's words; a reason of at least 10 characters; tools dropped only once ticked. |
 
 ## Skills v2: areas, not roles (#4224, D4116)
 
