@@ -9,7 +9,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { renderedText } from './_renderedText.mjs';
 import ChannelsTab, { ChannelPill, ConnectionCard } from '../src/pages/cycles/distribution/ChannelsTab.jsx';
-import { CHANNEL_COLUMNS, CHANNEL_DOORS, CHANNEL_PILLS, CONNECTION_PILLS, connectionAction, recorded, channelOptions } from '../src/pages/cycles/distribution/channelsModel.js';
+import { CHANNEL_COLUMNS, CHANNEL_DOORS, CHANNEL_PILLS, CONNECTION_PILLS, activityLabel, connectionAction, recorded, channelOptions } from '../src/pages/cycles/distribution/channelsModel.js';
 import { growChannelsApi } from '../src/lib/api/growChannels.js';
 import { formFor, editFor } from '../src/pages/cycles/forms.js';
 const h = React.createElement;
@@ -42,6 +42,15 @@ test('null is Not recorded, failed read is Unreadable, an observed zero remains 
   assert.equal(recorded(0), '0'); assert.equal(recorded(4), '4');
   assert.deepEqual(CHANNEL_DOORS.map((d) => d.href), ['/grow/launch', '/build/brand', '/comarketing']);
   assert.deepEqual(channelOptions([{ user_id: 2, name: 'Cal' }]).owner_user_id.opts, [{ value: '', label: 'Not assigned' }, { value: '2', label: 'Cal' }]);
+});
+
+test('recorded activity uses compact UTC labels while missing or invalid readings never invent activity', () => {
+  const now = Date.parse('2026-11-04T14:30:00Z');
+  assert.equal(activityLabel('2026-11-04T12:30:00Z', now), '2h ago');
+  assert.equal(activityLabel('2026-11-04 14:20:00', now), 'Today');
+  assert.equal(activityLabel('2026-11-03T20:00:00Z', now), 'Yesterday');
+  assert.match(activityLabel('2026-10-28T10:00:00Z', now), /28/);
+  assert.equal(activityLabel('bad', now), 'Unreadable');
 });
 
 test('existing channel forms carry purpose and member owner without changing the name Ask target', () => {

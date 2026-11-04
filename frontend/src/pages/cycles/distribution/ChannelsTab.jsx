@@ -6,7 +6,7 @@ import { cyclesWrite } from '../../../lib/api/cycles';
 import FormLightbox from '../FormLightbox';
 import Lightbox from '../../../ui/Lightbox';
 import { formFor, editFor } from '../forms';
-import { CHANNEL_COLUMNS, CHANNEL_DOORS, CHANNEL_PILLS, CONNECTION_PILLS, channelOptions, connectionAction, recorded } from './channelsModel';
+import { CHANNEL_COLUMNS, CHANNEL_DOORS, CHANNEL_PILLS, CONNECTION_PILLS, activityLabel, channelOptions, connectionAction, recorded } from './channelsModel';
 
 const BUTTON = 'rounded-lg border border-axal-hairline px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700';
 const CARD = 'rounded-xl border border-axal-hairline bg-white p-4 dark:border-gray-700 dark:bg-gray-900';
@@ -71,7 +71,8 @@ export default function ChannelsTab({ projectId, refresh, onChanged, fillFor = (
           <td className="p-3"><ChannelPill value={ch.status} /><span className="sr-only">Channel state; connection state appears in Connections below.</span></td>
           <td className="p-3">{ch.owner?.avatar && <img className="mr-1 inline h-6 w-6 rounded-full" src={ch.owner.avatar} alt="" />}<Reading value={ch.owner?.name} /></td>
           <td className="p-3"><Reading value={ch.purpose} /></td>
-          <td className="p-3"><Reading value={ch.last_activity} reason={ch.last_activity_reason} mono /></td>
+          <td className="p-3">{ch.last_activity ? <time dateTime={ch.last_activity} title={ch.last_activity} className="font-mono text-sm">{activityLabel(ch.last_activity)}</time>
+            : <Reading value={null} reason={ch.last_activity_reason} mono />}</td>
           <td className="p-3"><Reading value={ch.results} reason={ch.results_reason} mono />{ch.results != null && <span> {ch.results === 1 ? 'lead' : 'leads'}</span>}</td>
         </tr>)}</tbody>
       </table>

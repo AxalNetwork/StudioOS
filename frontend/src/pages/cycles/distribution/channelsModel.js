@@ -18,6 +18,15 @@ export const CHANNEL_DOORS = [
 export function recorded(value, reason) {
   return value == null ? (String(reason || '').startsWith('Unreadable') ? 'Unreadable' : 'Not recorded') : String(value);
 }
+export function activityLabel(value, now = Date.now()) {
+  const at = Date.parse(String(value).replace(' ', 'T') + (/Z$|[+-]\d\d:\d\d$/.test(String(value)) ? '' : 'Z'));
+  if (!Number.isFinite(at)) return 'Unreadable';
+  const today = new Date(now).toISOString().slice(0, 10); const day = new Date(at).toISOString().slice(0, 10);
+  const hours = Math.floor((now - at) / 3_600_000);
+  if (day === today && hours >= 0) return hours > 0 ? `${hours}h ago` : 'Today';
+  if (day === new Date(now - 86_400_000).toISOString().slice(0, 10)) return 'Yesterday';
+  return new Intl.DateTimeFormat('en', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(at);
+}
 export function connectionAction(connection) {
   const allowed = typeof connection?.href === 'string' && (connection.href === '/email' || connection.href === '/account/connectors' || /^\/account\/connectors\/(whatsapp|telegram|mercury)$/.test(connection.href));
   return { disabled: !allowed || connection.status === 'not_offered' || connection.status === 'needs_approval',
