@@ -138,6 +138,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/admin/profiles',       'Partner profiles under Approvals (D989)'],
   ['frontend/src/pages/admin/payments',       'Payments under Platform, HQ only (D1008)'],
   ['frontend/src/pages/admin/partners',       'the admin Partner invitations desk (D923): its tabs, the records, the dialogs and the model they read'],
+  ['frontend/src/pages/incorporate',       'Incorporate: the flow, its steps, the itemised quote, the timeline and the HQ read-only frame (D4357, D4360)'],
   ['frontend/src/pages/influencer/section', 'the member\'s Influencer section (D4289 P7, #4296): the page, its six tabs, the model and the one read seam'],
   ['frontend/src/pages/deal',                 'the deal page’s frame, working and reading tabs, staff views and who sees what (D1152–D1155)'],
   ['frontend/src/pages/investor/dealflow',     'Deal flow for an Investor and the Studio lens: the board, the table, their rules and controls (D1236, D1240, D1242)'],
