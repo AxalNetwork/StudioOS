@@ -136,3 +136,7 @@ Rows link only with `records.linkable` and a genuine Worker id. Build and Raise
 pass their ids through, and Grow and Validate set `recordId` to the Worker's id
 or null (D696 decision 7). In record mode the rail's crumbs carry the record's
 title (`RecordCrumb`, D696).
+
+`distribution/` holds Distribution's tab components; its README records each
+component and the shell/wizard handoff. D4492 supplies the prospect pipeline,
+individual contact sheets and recorded marketing-permission summary.

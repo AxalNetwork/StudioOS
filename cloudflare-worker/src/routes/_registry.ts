@@ -41,6 +41,7 @@ import { mount as deck_stage_normsMount } from './deck_stage_norms';
 import { mount as deck_update_reuseMount } from './deck_update_reuse';
 import { mount as deck_voiceMount } from './deck_voice';
 import { mount as event_recommendationsMount } from './event_recommendations';
+import { mount as grow_prospectsMount } from './grow_prospects';
 import { mount as influencerMount } from './influencer';
 import { mount as influencer_analyticsMount } from './influencer_analytics';
 import { mount as influencer_offersMount } from './influencer_offers';
@@ -89,6 +90,7 @@ export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'deck_update_reuse', mount: deck_update_reuseMount },
   { file: 'deck_voice', mount: deck_voiceMount },
   { file: 'event_recommendations', mount: event_recommendationsMount },
+  { file: 'grow_prospects', mount: grow_prospectsMount },
   { file: 'influencer', mount: influencerMount },
   { file: 'influencer_analytics', mount: influencer_analyticsMount },
   { file: 'influencer_offers', mount: influencer_offersMount },
