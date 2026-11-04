@@ -104,7 +104,7 @@ export default function HandlePage() {
             <p className="m-0 text-sm text-[#18181b]">Axal VC is a platform where founders build companies through four cycles. Investors, advisors and operating partners work beside them. Each plan is a monthly software membership.</p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2" data-testid="handle-plans">
               {HANDLE_PLANS.map((p) => (
-                <div key={p.key} className="rounded-xl border border-[#e4e0ec] bg-white p-4" data-testid={`handle-plan-${p.key}`}>
+                <div key={p.key} className="rounded-xl border border-[#e4e0ec] bg-white p-4 dark:bg-gray-900" data-testid={`handle-plan-${p.key}`}>
                   <p className="m-0 font-semibold text-[#18181b]">{p.name}</p>
                   <p className="m-0 mt-1 font-mono text-sm text-[#18181b]">{priceText(plans, p.key)}</p>
                   <p className="m-0 mt-1 text-xs text-[#6b6577]">{p.line}</p>
