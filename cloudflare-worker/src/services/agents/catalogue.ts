@@ -21,6 +21,7 @@
  *  - The read keys are owned here (#3742 correction 9). Most have no reader
  *    yet; part 2's run gives the model only the ones a rule book lists.
  */
+import { GENERAL_COUNSEL_DISCLAIMER_KEY } from './disclaimers';
 import { railOptionRows } from '../ai/railMatrix';
 
 export type ModuleDef = { key: string; label: string; cycle: 'validate' | 'build' | 'raise' | 'grow' | null; page: string };
@@ -216,7 +217,7 @@ export const ROLES: readonly Role[] = Object.freeze([
     kpis: ['Data room sections complete', 'Open legal questions listed'],
     tone: 'Formal and cautious',
     asks: ['share_outside'],
-  }, { disclaimer_key: 'agents.general_counsel.disclaimer' }),
+  }, { disclaimer_key: GENERAL_COUNSEL_DISCLAIMER_KEY }),
   role('people', 'Head of People', {
     mission: 'Shape the founding team, the roles to hire and the equity plan, as proposals.',
     works_in: ['founding-team', 'team-expansion'],
