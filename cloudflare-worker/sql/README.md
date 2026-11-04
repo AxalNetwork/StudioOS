@@ -59,3 +59,5 @@ five existing record tables, profile-file metadata in `member_files`, and the
 resumable discovery checkpoints in `member_file_size_backfill_state`. It leaves
 legacy sizes NULL and adds no users column. The operator backfill measures R2
 HEAD metadata after deployment; the migration never reads or deletes objects.
+
+| `migrations/202611041900_grow_campaign_details.sql` | D4483 (#4483): nullable audience/channel budget details and plain creative text; ALTERs apply once through the ledger. |
