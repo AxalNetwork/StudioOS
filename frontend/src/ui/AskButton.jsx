@@ -37,7 +37,7 @@ export function askButtonName(waiting) {
 const INK = 'text-axal-violet-deep dark:text-violet-300';
 const MUTED_INK = 'text-axal-muted dark:text-gray-400';
 
-export function AskButtonView({ onClick, disabled = false, expanded, waiting = null, state = 'rest', sub = null, testId = 'ask-eadwyn', buttonRef }) {
+export function AskButtonView({ onClick, disabled = false, expanded, waiting = null, state = 'rest', sub = null, testId = 'ask-eadwyn', buttonRef, title }) {
   const subId = useId();
   const running = state === 'running';
   const muted = state === 'off' || state === 'unreadable';
@@ -48,12 +48,13 @@ export function AskButtonView({ onClick, disabled = false, expanded, waiting = n
       ref={buttonRef}
       onClick={onClick}
       disabled={disabled}
+      title={title}
       aria-label={askButtonName(count)}
       aria-haspopup="dialog"
       aria-expanded={expanded}
       aria-describedby={sub ? subId : undefined}
       data-state={state}
-      className={`relative inline-flex h-10 items-center gap-2 rounded-[9px] border border-axal-lavender-edge bg-transparent px-3.5 text-[13.5px] font-semibold hover:bg-axal-lavender focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-axal-violet disabled:opacity-45 max-sm:min-h-[44px] dark:border-violet-700/60 dark:hover:bg-violet-900/30 ${muted ? MUTED_INK : INK}`}
+      className={`relative inline-flex h-10 items-center gap-2 rounded-[9px] border border-axal-lavender-edge ${expanded ? 'bg-axal-lavender dark:bg-violet-900/30' : 'bg-transparent'} px-3.5 text-[13.5px] font-semibold hover:bg-axal-lavender focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-axal-violet disabled:opacity-45 max-sm:min-h-[44px] dark:border-violet-700/60 dark:hover:bg-violet-900/30 ${muted ? MUTED_INK : INK}`}
       data-testid={testId}
     >
       {running
@@ -87,17 +88,20 @@ export function AskButtonView({ onClick, disabled = false, expanded, waiting = n
  * page (`askPanelAdapter.waiting`), read again each time the panel closes; a
  * count that could not be read draws nothing, never "0 waiting".
  */
-export function PageAsk({ label, testId = 'ask-eadwyn' }) {
+export function PageAsk({ label, testId = 'ask-eadwyn', page, state = 'rest', disabled = false, sub = null, title }) {
   const ask = useAskPanel();
   const [waiting, setWaiting] = useState(null);
+  const pageKey = page || ask.page;
   useEffect(() => {
-    if (!ask.available || !ask.page || ask.open) return undefined;
+    if (!ask.available || !pageKey) { setWaiting(null); return undefined; }
+    if (ask.open) return undefined;
+    setWaiting(null);
     let live = true;
-    askPanelAdapter.waiting(ask.page).then((w) => { if (live) setWaiting(w.available ? w.data?.count ?? null : null); });
+    askPanelAdapter.waiting(pageKey).then((w) => { if (live) setWaiting(w.available ? w.data?.count ?? null : null); });
     return () => { live = false; };
-  }, [ask.available, ask.page, ask.open]);
+  }, [ask.available, pageKey, ask.open]);
   if (!ask.available) return null;
-  return <AskButtonView onClick={() => openAskPanel(label)} expanded={ask.open} waiting={waiting} testId={testId} />;
+  return <AskButtonView onClick={() => openAskPanel(label)} expanded={ask.open} waiting={waiting} testId={testId} state={state} disabled={disabled} sub={sub} title={title} />;
 }
 
 export default AskButtonView;
