@@ -142,5 +142,6 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `work_controls_3968.test.mjs` | WK1–WK3 filter and burn-up interactions through real clients, attribution, failed reads and late responses (#3968). |
 | `general_counsel_4421.test.mjs` | #4421: rendered rule book, open/history queue, proposal and Ask notices; answered payment/plan pills removed. |
 | `syndication_review_4440.test.mjs` | D4440: all eight confirmed review findings, actual settings contract, dirty choices, accepted copy, private approval, event Save, reconnect and ticket-link validation. |
+| `grow_campaigns_d4447.test.mjs` | D4447 (#4447): eight Grow campaign requests, encoded identifiers and project-bound write bodies. |
 
 `team_allowlists_4422.test.mjs` checks D4422 actual Team checklist read/save requests, default resets, inherited edit gates, and honest read/save failures.
