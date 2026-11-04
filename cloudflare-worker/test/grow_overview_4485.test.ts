@@ -247,3 +247,23 @@ test('D4485: connection status belongs only to the signed-in user, never a chann
     assert.equal(data.kpis.leads.value, 2);
   } finally { f.db.close(); }
 });
+
+test('D4485: monthly CPL includes paused/ended campaign spend alongside its leads; active budget usage stays active-only', async () => {
+  const f = fixture();
+  try {
+    f.db.exec(`INSERT INTO grow_campaigns(uid,project_id,name,goal,status,utm_campaign,created_by,updated_by)
+      VALUES ('paused',1,'Paused plan','demos','paused','paused-tag',1,1);
+      INSERT INTO contacts(uid,project_id,audience,email,utm_json,created_at)
+      VALUES ('paused-lead',1,'customer','paused@example.invalid','{"utm_campaign":"paused-tag"}','2026-11-11');`);
+    const active = campaign([channel('manual', 1000)]);
+    const paused = { ...campaign([{ ...channel('mercury', 2000), uid: 'paused-channel' }], 'paused'), status: 'paused' };
+    for (const status of ['paused', 'ended']) {
+      f.db.prepare('UPDATE grow_campaigns SET status = ? WHERE uid = ?').run(status, 'paused');
+      const data = await distributionOverview(f.env, 1, { now, readCampaigns: async () => ({ campaigns: [active, { ...paused, status }] }) });
+      assert.equal(data.kpis.cost_per_lead.value, 1000, '3000 current-month cents / all three attributed leads');
+      assert.deepEqual(data.kpis.cost_per_lead.sources, ['manual', 'mercury', 'connector']);
+      assert.equal(data.kpis.spend_vs_budget.value, 1000, 'the budget KPI remains active-campaign spend');
+      assert.deepEqual(data.campaigns.items?.map((c) => c.uid), ['ours']);
+    }
+  } finally { f.db.close(); }
+});
