@@ -4,7 +4,7 @@ import { PersonAvatar } from './AgentMark.jsx';
 import AgentCard, { AgentAvatar, RiskScale } from './AgentCard.jsx';
 import AxalValuesBars from '../../components/profile/AxalValuesBars.jsx';
 import * as agents from './agentsAdapter.js';
-import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, FIELD, HonestBlock, MUTED, PendingOwner } from './teamUi.jsx';
+import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, FIELD, HonestBlock, MUTED } from './teamUi.jsx';
 import { HOLD_LINE, RULEBOOK_SECTIONS, WHO_PAYS, initials, money } from './teamModel.js';
 import { SkillsStep } from './SkillSheets.jsx';
 import { previewRadar } from './skillsModel.js';
@@ -337,7 +337,7 @@ export default function AddAgentSheet({ scope, roles, models, held = [], team = 
             <div className="flex flex-col gap-1">
               <span className="text-[13px] font-bold text-axal-ink dark:text-gray-100">Sponsor</span>
               <span className="flex items-center gap-2 text-[13px] text-axal-ink dark:text-gray-100"><PersonAvatar initials={initials(me?.name)} size={30} />You{me?.name ? ` (${me.name})` : ''}</span>
-              <span className={MUTED}>{`${name} runs as you and is paid from your AI tokens, up to the monthly cap.`} <PendingOwner /></span>
+              <span className={MUTED}>{`${name} runs as you and is paid from your AI tokens, up to the monthly cap.`}</span>
               <span className="sr-only">{WHO_PAYS}</span>
             </div>
             <label className="flex flex-col gap-1">

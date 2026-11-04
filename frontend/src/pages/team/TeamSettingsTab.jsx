@@ -2,7 +2,7 @@ import React from 'react';
 import { Lock } from 'lucide-react';
 import { Unrecorded } from '../../ui';
 import { AgentIdentity } from './AgentMark.jsx';
-import { BTN_TEXT, HeadRow, HonestBlock, MUTED, PendingOwner, TeamCard } from './teamUi.jsx';
+import { BTN_TEXT, HeadRow, HonestBlock, MUTED, TeamCard } from './teamUi.jsx';
 import { WHO_PAYS, agentName, money, whoMayAddAgents, agentLine } from './teamModel.js';
 // D1531 (#3742 E8, TM19a): the team's engine control.
 import EngineControl from './EngineControl.jsx';
@@ -10,8 +10,7 @@ import EngineControl from './EngineControl.jsx';
 /**
  * D1497 (#3727, TM8a, TM9a5) — the Team's Settings tab.
  *
- * Wired now, because they are rules and not data: who pays (owner Q2 = B,
- * still marked "pending owner" as the canvas marks it) and who may add agents
+ * Wired now, because they are rules and not data: who pays (owner Q2 = B, answered) and who may add agents
  * (the owner's authority rule for the scope, with the full list of company
  * editors, which the canvas shortens). Per-agent caps and what each role reads
  * come from the agents read through `agentsAdapter` and are unavailable here.
@@ -33,7 +32,6 @@ export default function TeamSettingsTab({ scope, agentsBlock, canManage, onEditC
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <TeamCard title="Who pays" testId="team-settings-pays">
           <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100">{WHO_PAYS}</p>
-          <div className="mt-2"><PendingOwner /></div>
         </TeamCard>
         <TeamCard title="Who may add agents" testId="team-settings-who">
           <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100" data-testid="team-settings-who-rule">{whoMayAddAgents(scope.kind, company)}</p>

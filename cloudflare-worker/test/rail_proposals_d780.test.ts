@@ -21,6 +21,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { SignJWT } from 'jose';
 import { Hono } from 'hono';
+import { stripForeignKeys, tableFromBaseline } from './_baseline.mjs';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
 import { withGuard } from './_guard_stub.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
@@ -137,7 +138,10 @@ test('D1496 part 3 (#3843): the member path is unchanged, and an agent\'s propos
   // Mutations checked: listRail/getRail unbound from user_id (an agent's proposal listed to anyone) → the OTHER asserts fail;
   // the member path writing decided_by_user_id → the NULL assert fails (its row's owner decided it).
   const w = world();
-  // Migration 712's two columns on this table (its other tables are not this test's).
+  // #4421: the agent's trusted role metadata comes from migration 712's registry.
+  w.f.db.exec(stripForeignKeys(tableFromBaseline(readFileSync(new URL('../sql/migrations/712_team_agents.sql', import.meta.url), 'utf8'), 'team_agents')));
+  w.f.db.exec("INSERT INTO team_agents (id,uid,scope_kind,project_id,role_key,model_id,sponsor_user_id,monthly_cap_microusd,created_by) VALUES (42,'synthetic-agent','project',7,'cfo','synthetic-model',2,1000,2)");
+  // Migration 712's two proposal columns.
   w.f.db.exec('ALTER TABLE ai_rail_proposals ADD COLUMN agent_id INTEGER; ALTER TABLE ai_rail_proposals ADD COLUMN decided_by_user_id INTEGER;');
   const agents = await proposeRail(w.env, { ...base, agentId: 42 });
   const mine = await proposeRail(w.env, base);
