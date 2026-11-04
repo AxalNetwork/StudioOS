@@ -27,10 +27,12 @@ export const recordedWorkRuns: WorkRunReader = async (env: Env, taskIds) => {
   try {
     // Match chargedFor: a usage charge includes its guard rows. First aggregate
     // each attempt, then all attempts, so guards do not multiply the task total.
+    // #4459: no usage reference means no model call/charge; a broken reference
+    // or an actual usage row without a valid charge remains unknown.
     const costs = (await env.DB.prepare(`WITH attempt_costs AS (
       SELECT r.task_id, r.uid, r.attempt, r.id,
-        SUM(u.charged_microusd) AS charged,
-        SUM(CASE WHEN u.charged_microusd IS NULL OR u.charged_microusd < 0 THEN 1 ELSE 0 END) AS missing
+        SUM(CASE WHEN r.usage_log_id IS NULL THEN 0 ELSE u.charged_microusd END) AS charged,
+        SUM(CASE WHEN r.usage_log_id IS NOT NULL AND (u.id IS NULL OR u.charged_microusd IS NULL OR u.charged_microusd < 0) THEN 1 ELSE 0 END) AS missing
       FROM agent_task_runs r LEFT JOIN ai_usage_logs u ON u.id = r.usage_log_id OR u.guard_for = r.usage_log_id
       WHERE r.task_id IN (SELECT value FROM json_each(?)) GROUP BY r.id
     ) SELECT task_id, uid, charged, missing, total_cost, missing_cost FROM (
