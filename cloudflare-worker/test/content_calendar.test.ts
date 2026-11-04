@@ -12,6 +12,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import { migratedDatabase, removeMigratedDatabases } from './_storage_schema.ts';
@@ -134,14 +135,16 @@ test('the calendar unreadable says so on its own and never blanks the channels',
 });
 
 test('Beehiiv, X, TikTok and Facebook never write the content calendar: only its writers and declared readers name the table', () => {
-  const root = new URL('../src/', import.meta.url).pathname;
+  const root = fileURLToPath(new URL('../src/', import.meta.url));
   const files: string[] = [];
   const walk = (d: string) => { for (const n of readdirSync(d)) { const p = join(d, n); if (statSync(p).isDirectory()) walk(p); else if (/\.ts$/.test(n)) files.push(p); } };
   walk(root);
   const naming = files.filter((f) => readFileSync(f, 'utf8').includes('content_calendar_items')).map((f) => f.slice(root.length)).sort();
   // D1486 §b (#3981): the calendar's page-only reader names the table too, and only reads it.
-  assert.deepEqual(naming, ['services/calendar/growReaders.ts', 'services/distribution/overview.ts', 'services/growCampaigns.ts', 'services/growWriters.ts', 'services/notion/grow.ts']);
+  assert.deepEqual(naming, ['services/calendar/growReaders.ts', 'services/distribution/overview.ts', 'services/growCampaigns.ts', 'services/growChannels.ts', 'services/growWriters.ts', 'services/notion/grow.ts']);
   // D4447: campaign plans link existing pieces; they never edit or publish them.
+  const channelReader = readFileSync(join(root, 'services/growChannels.ts'), 'utf8');
+  assert.doesNotMatch(channelReader, /\b(?:INSERT\s+(?:OR\s+\w+\s+)?INTO|UPDATE|DELETE\s+FROM|REPLACE\s+INTO)\s+content_calendar_items\b/i, 'channels never write the content calendar');
   const campaignReader = readFileSync(join(root, 'services/growCampaigns.ts'), 'utf8');
   assert.doesNotMatch(campaignReader, /\b(?:INSERT\s+(?:OR\s+\w+\s+)?INTO|UPDATE|DELETE\s+FROM|REPLACE\s+INTO)\s+content_calendar_items\b/i, 'campaign plans never write the content calendar');
   // D4485: Overview reads this week's plans but cannot edit or publish them.

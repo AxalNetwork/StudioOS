@@ -96,7 +96,7 @@ function fixture() {
     ('fba12', ${B}, 'Needs a dark mode', 'customer', NULL, NULL, NULL, NULL, 'open', 0, ${OTHER_FOUNDER}, '2026-09-01 09:00:00')`);
   db.exec(`INSERT INTO revenue_entries (uid, project_id, customer, amount_cents, revenue_type, received_on) VALUES ('rv1', ${A}, 'Harbour Mill', 90000, 'recurring', '${TODAY}')`);
   db.exec(`INSERT INTO growth_channels (id, uid, project_id, name, utm_source, kind, cac_bar_cents, bar_currency, created_by) VALUES
-    (1, 'cha1', ${A}, 'Newsletter', 'newsletter', 'content', 20000, 'usd', ${FOUNDER}), (2, 'cha12', ${B}, 'Podcast', 'podcast', NULL, NULL, NULL, ${OTHER_FOUNDER}),
+    (1, 'cha1', ${A}, 'Newsletter', 'newsletter', 'newsletter', 20000, 'usd', ${FOUNDER}), (2, 'cha12', ${B}, 'Podcast', 'podcast', NULL, NULL, NULL, ${OTHER_FOUNDER}),
     (3, 'chb1', ${A}, 'Search', 'search', NULL, NULL, NULL, ${FOUNDER})`);
   db.exec(`INSERT INTO channel_spend (channel_id, month, spend_cents) VALUES (1, '${MONTH}', 50000)`);
   db.exec(`INSERT INTO contacts (uid, project_id, audience, name, email, utm_json, created_at) VALUES
