@@ -626,6 +626,11 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
       await runAutoReload(env, Number(payload.user_id));
       return;
     }
+    case 'interview_output': {
+      const { runOutputJob } = await import('./callOutputs');
+      await runOutputJob(env, payload);
+      return;
+    }
     case 'session_structure': {
       // D684 — Structure without the button. A refusal (budget, no consent,
       // no transcript) is an outcome recorded on the session, not a retry.
@@ -673,7 +678,7 @@ async function handle(env: Env, job: QueueJob): Promise<void> {
 // `uploading` (the sweeper resumes it after 30 minutes) or `transcribing`
 // (only the member's Retry resumes it). Each AI call the job makes already
 // reserves and settles the member's own D640 budget.
-export const AI_JOB_TYPES = new Set(['ai_scoring', 'traction_review', 'liquidity_valuation', 'liquidity_matching', 'lpa_generation']);
+export const AI_JOB_TYPES = new Set(['interview_output', 'ai_scoring', 'traction_review', 'liquidity_valuation', 'liquidity_matching', 'lpa_generation']);
 const MAX_AI_PER_DRAIN = 5;
 
 export async function processQueueBatch(env: Env, batchSize = 10): Promise<{ processed: number; failed: number; deferred: number }> {

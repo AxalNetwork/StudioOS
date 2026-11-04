@@ -1,6 +1,7 @@
 // D1491 (#3725) — Event syndication's screens before the Worker core (D1490).
 // The model's words and rules, and that nothing on the page claims a post.
 import test from 'node:test';
+import { EVENT_TYPES } from '../src/lib/eventTypes.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
@@ -10,22 +11,18 @@ import {
 
 const read = (p) => readFileSync(new URL(`../src/${p}`, import.meta.url), 'utf8');
 
-test('SY1: the five channels in the canvas order, with what each can do', () => {
-  assert.deepEqual(CHANNELS.map((c) => c.key), ['luma', 'eventbrite', 'google_business', 'linkedin', 'facebook']);
-  assert.deepEqual(CHANNELS.filter((c) => c.capability === 'creates_events').map((c) => c.key), ['luma', 'eventbrite', 'google_business']);
-  assert.deepEqual(CHANNELS.filter((c) => c.pendingOwner).map((c) => c.key), ['linkedin', 'facebook'], 'the link-post fallback is owner question D');
+test('SY1: the approved channels, with Luma dropped, with what each can do', () => {
+  assert.deepEqual(CHANNELS.map((c) => c.key), ['eventbrite', 'google_business', 'linkedin', 'facebook']);
+  assert.deepEqual(CHANNELS.filter((c) => c.capability === 'creates_events').map((c) => c.key), ['eventbrite', 'google_business']);
+  assert.deepEqual(CHANNELS.filter((c) => c.pendingOwner).map((c) => c.key), [], 'the owner accepted link posts');
   assert.equal(CAPABILITY_LABEL.posts_link, 'Posts a link');
   for (const c of CHANNELS) assert.ok(c.needs.length > 20, c.key);
 });
 
-test('until the Worker core ships, every channel is "Not available yet" and the page says nothing posts', () => {
-  assert.equal(SYNDICATION_SERVICE_READY, false);
-  assert.deepEqual(channelStatus(null), { key: 'not_available', label: 'Not available yet', tone: 'muted', line: 'The syndication service is being built.' });
-  const page = read('pages/hq/eventSyndication/EventSyndicationPage.jsx');
-  assert.match(page, /Nothing is posted to other channels yet\./);
-  assert.match(page, /const status = channelStatus\(null\);/);
-  assert.doesNotMatch(page, /from '\.\.\/\.\.\/\.\.\/lib\/api/, 'no read before D1490 has routes');
-  assert.match(page, /<button type="button" disabled title=\{NOT_YET\}[^>]*>Connect<\/button>/);
+test('the core is ready while missing adapters remain unavailable', () => {
+  assert.equal(SYNDICATION_SERVICE_READY, true);
+  assert.equal(channelStatus(null).label, 'Not available yet');
+  assert.equal(channelStatus(null, { adapterReady: true }).label, 'Not connected');
 });
 
 test('SY1 status chips from an account (for D1490 wiring)', () => {
@@ -40,7 +37,7 @@ test('SY1 status chips from an account (for D1490 wiring)', () => {
 
 test('once D1490 serves reads: no account is "Not connected" only where the adapter exists', () => {
   assert.equal(channelStatus(null, { serviceReady: true, adapterReady: true }).label, 'Not connected');
-  assert.deepEqual(channelStatus(null, { serviceReady: true }), { key: 'not_available', label: 'Not available yet', tone: 'muted', line: 'Waiting for the platform’s approval.' });
+  assert.deepEqual(channelStatus(null, { serviceReady: true }), { key: 'not_available', label: 'Not available yet', tone: 'muted', line: 'Waiting for account approval and a posting connector.' });
   assert.equal(channelStatus({ status: 'disconnected' }, { serviceReady: true, adapterReady: true }).key, 'not_connected');
   assert.equal(syndicateNote('public', { serviceReady: true }), 'Posts when an admin approves this event.');
   assert.equal(syndicateNote('unlisted', { serviceReady: true }), 'Unlisted and private events are never posted to other channels.');
@@ -68,16 +65,16 @@ test('SY2b approve sentence and SY2a counters', () => {
   assert.equal(charCount('x'.repeat(101), 100).over, true);
 });
 
-test('SY2a/SY2u: only a public event can syndicate, and today nothing does', () => {
+test('SY2a/SY2u: only a public event can syndicate, and approval is the posting boundary', () => {
   assert.equal(syndicateNote('unlisted'), 'Unlisted and private events are never posted to other channels.');
   assert.equal(syndicateNote('private'), 'Unlisted and private events are never posted to other channels.');
-  assert.match(syndicateNote('public'), /^Other channels: none yet\./);
+  assert.equal(syndicateNote('public'), 'Posts when an admin approves this event.');
   const editor = read('pages/events/EventEditorPage.jsx');
   assert.match(editor, /\{syndicateNote\(form\.visibility\)\}/);
 });
 
 test('SY6: the twelve event types, and the tabs at their addresses', () => {
-  assert.equal(SETTINGS_TYPES.length, 12);
+  assert.deepEqual(SETTINGS_TYPES, EVENT_TYPES);
   assert.deepEqual(TABS.map((t) => t.to), ['/admin/platform/event-syndication', '/admin/platform/event-syndication/log', '/admin/platform/event-syndication/settings']);
   assert.equal(tabFor('/admin/platform/event-syndication'), 'channels');
   assert.equal(tabFor('/admin/platform/event-syndication/log'), 'log');

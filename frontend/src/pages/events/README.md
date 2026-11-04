@@ -48,3 +48,10 @@ D1131 cleanup uses the existing CF/D1 job queue: two immediate copies, bounded
 continuation, independent provider retries and a fresh cancellation check on
 delivery. Its queue contract is in `cloudflare-worker/src/services/queueWorker.ts`
 and `cloudflare-worker/src/models/jobs.ts`; no new schema or binding is needed.
+
+D3724 (#3724) adds "Recommended for you" and the editor's cover step. `RecommendedRow.jsx` draws the row on Upcoming and Discover, with Why this?, Not for me and Tune. Its rules and words live in the pure `recommendationsModel.js`. Every read and write it needs goes through `recommendationsAdapter.js`, which answers "not switched on yet" until D1487 and D1488 land. Until then the row draws today's Suggested card under one line saying so. `EventCoverStep.jsx` is NE2's Upload or Generate, with its checks and prompt in `eventCoverModel.js`. Generate hands the prompt to #3935's `CoverDrawPress`. Upload and four variants wait on Part E. D3724 lists every gap.
+D1491 (#3725) adds `EventSyndicationPanel.jsx`: saved public drafts choose channel
+accounts and preview copy without sending; a separate Save channels writes the
+choices. On an approved event its button explicitly posts additions. Manage and
+the admin desk read listing state, Retry, Withdraw, and Not recorded registration
+counts from the same Worker read.

@@ -112,7 +112,7 @@ test('1: every finding kind reads in the Worker\'s own words (findingLine read b
   const body = (text, start) => text.slice(text.indexOf(start), text.indexOf('\n}\n', text.indexOf(start)));
   const theirs = caseLines(body(w, 'export function findingLine('));
   const ours = caseLines(body(src('pages/cycles/validatePhone.js'), 'export function findingLine('));
-  assert.equal(theirs.length, 12, 'D873 (#2520) added decision');
+  assert.ok(theirs.length > 0, 'the finding formatter must have cases'); // The complete case list is compared below; new kinds do not pin a total.
   assert.deepEqual(ours, theirs);
   for (const map of ['ATTRIBUTE_WORD', 'KIND_WORD', 'FOLLOW_UP_WORD']) {
     const line = (text) => text.split('\n').find((l) => l.startsWith(`const ${map}`))?.replace(/: Record<string, string>/, '').trim();

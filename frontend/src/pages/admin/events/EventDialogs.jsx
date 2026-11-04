@@ -1,4 +1,8 @@
 import React, { useState } from 'react';
+import { eventSyndicationApi } from '../../../lib/api/eventSyndication';
+import { ChannelChoices, useEventChannels } from '../../events/EventSyndicationPanel';
+import SyndicationState from '../../hq/eventSyndication/SyndicationState';
+import { approveLabel, choicesOf } from '../../hq/eventSyndication/syndicationModel';
 import { Lightbox, actionDanger, actionGhost, actionPrimary } from '../../../ui';
 import {
   FEATURE_LINE, QUICK_REASONS, REASON_MAX, SEND_BACK_NOTE, approveLines, approveTitle, cancelCopy, capacityNow,
@@ -59,14 +63,20 @@ function Buttons({ back = 'Back', onClose, action, onAction, disabled, busy, ton
  * after the approve. `lines` are the page's (D921: line 3 counted from part
  * 3's free-seat preview), and `delivery` says where the invitations arrive.
  */
-export function ApproveDialog({ ev, lines = null, delivery = null, busy, refusal, onClose, onConfirm }) {
+export function ApproveDialog({ ev, lines = null, delivery = null, busy, refusal, onClose, onConfirm, syndicationApi = eventSyndicationApi }) {
+  const channelsRead = useEventChannels(ev.id, syndicationApi);
+  const [selection, setSelection] = useState(null);
+  const rows = selection?.source === channelsRead.data ? selection.rows : channelsRead.data?.rows || [];
   const [feature, setFeature] = useState(false);
   return (
     <Lightbox phone="sheet" label={approveTitle(ev)} title={approveTitle(ev)} onClose={onClose} testId="events-approve-dialog"
-      footer={<Buttons onClose={onClose} action="Approve and publish" busy={busy} onAction={() => onConfirm({ feature })} refusal={refusal} testId="events-approve-go" />}>
+      footer={<Buttons onClose={onClose} action={approveLabel(rows.filter((r) => r.on).length)} busy={busy} disabled={channelsRead.status !== 'ready'} onAction={() => onConfirm({ feature, channels: choicesOf(rows) })} refusal={refusal} testId="events-approve-go" />}>
       <div className={BODY}>
         <ul className={LINES} data-testid="events-approve-lines">{(lines || approveLines(ev)).map((l) => <li key={l}>{l}</li>)}</ul>
         {delivery ? <p className={`m-0 ${SUB}`} data-testid="events-approve-delivery">{delivery}</p> : null}
+        <div className="space-y-2"><h3 className="text-sm font-semibold text-axal-ink dark:text-gray-100">Will also post to</h3>
+          <SyndicationState read={channelsRead}><ChannelChoices rows={rows} disabled={busy} onChange={(next) => setSelection({ source: channelsRead.data, rows: next })} /></SyndicationState>
+        </div>
         <Switch checked={feature} onChange={setFeature} label="Also feature it" sub={FEATURE_LINE} testId="events-approve-feature" />
       </div>
     </Lightbox>

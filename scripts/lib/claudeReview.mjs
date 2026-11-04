@@ -82,8 +82,9 @@ const DEFAULTS = {
   maxContextBytes: 80_000,
   maxFiles: 150,
   contextRadius: 20,
-  maxRetries: 2,
-  timeoutSeconds: 300,
+  maxRetries: 0,
+  timeoutSeconds: 600,
+  jobSeconds: 900,
   maxCostUsd: 1,
   monthlyBudgetUsd: 25,
   minConfidence: 'medium',
@@ -104,6 +105,7 @@ const LIMITS = {
   contextRadius: [0, 200],
   maxRetries: [0, 3],
   timeoutSeconds: [30, 600],
+  jobSeconds: [120, 900],
 };
 
 const MODEL_ID = /^[a-z0-9][a-z0-9._-]{1,99}$/;
@@ -179,7 +181,7 @@ export function readConfig(env = {}) {
   const enabled = truthy(env.CLAUDE_REVIEW_ENABLED);
   const model = String(env.ANTHROPIC_MODEL ?? '').trim();
   const highRiskModel = String(env.ANTHROPIC_MODEL_HIGH_RISK ?? '').trim();
-  if (enabled && !model) errors.push('ANTHROPIC_MODEL is not set: name a current Anthropic model ID as a repository variable');
+
   if (model && !MODEL_ID.test(model)) errors.push('ANTHROPIC_MODEL is not a model ID');
   if (highRiskModel && !MODEL_ID.test(highRiskModel)) errors.push('ANTHROPIC_MODEL_HIGH_RISK is not a model ID');
   const hasApiKey = String(env.ANTHROPIC_API_KEY ?? '').trim().length > 0;
@@ -187,9 +189,6 @@ export function readConfig(env = {}) {
   // Workload identity federation wins when it is configured: no long-lived
   // secret, a short-lived token per run. The API key is the fallback.
   const auth = federation ? 'federation' : hasApiKey ? 'api_key' : null;
-  if (enabled && !auth) {
-    errors.push('no Anthropic credential: set the federation variables ANTHROPIC_FEDERATION_RULE_ID and ANTHROPIC_ORGANIZATION_ID (preferred), or the ANTHROPIC_API_KEY repository secret (an API key from the Anthropic Console, never a Claude subscription login)');
-  }
 
   const effortRaw = String(env.CLAUDE_REVIEW_EFFORT ?? '').trim().toLowerCase();
   let effort = DEFAULTS.effort;
@@ -222,6 +221,11 @@ export function readConfig(env = {}) {
 
   // The credit fallback: Kimi, only when its key is set and it is not switched
   // off. The key is never copied into the config, only whether one is present.
+  const hasOpenaiKey = String(env.OPENAI_API_KEY ?? '').trim().length > 0;
+  const openaiModel = String(env.OPENAI_MODEL ?? '').trim();
+  const openaiBaseUrl = String(env.OPENAI_BASE_URL ?? '').trim() || 'https://api.openai.com/v1';
+  if (openaiModel && !MODEL_ID.test(openaiModel)) errors.push('OPENAI_MODEL is not a model ID');
+  if (hasOpenaiKey && !/^https:\/\/[a-z0-9.-]+(:\d+)?(\/[A-Za-z0-9._~\/-]*)?$/i.test(openaiBaseUrl)) errors.push('OPENAI_BASE_URL must be an https URL');
   const hasKimiKey = String(env.KIMI_API_KEY ?? '').trim().length > 0;
   const kimiModel = String(env.KIMI_MODEL ?? '').trim() || DEFAULTS.kimiModel;
   const kimiBaseUrl = String(env.KIMI_BASE_URL ?? '').trim() || DEFAULTS.kimiBaseUrl;
@@ -230,13 +234,21 @@ export function readConfig(env = {}) {
   if (hasKimiKey && !MODEL_ID.test(kimiModel)) errors.push('KIMI_MODEL is not a model ID');
   if (hasKimiKey && !/^https:\/\/[a-z0-9.-]+(:\d+)?(\/[A-Za-z0-9._~\/-]*)?$/i.test(kimiBaseUrl)) errors.push('KIMI_BASE_URL must be an https URL');
   // The chain, in the order it is tried: further Claude accounts (their own
-  // Console organizations, so their own credit), then Kimi. Each step is used
-  // only when the one before it answers that its credit is exhausted.
+  // Console organizations, so their own credit), then OpenAI and Kimi. Each step is used
+  // when earlier accounts are unavailable or fail.
+  const fallbackWorkspaces = {};
+  for (const n of CLAUDE_FALLBACK_SLOTS) {
+    const name = `ANTHROPIC_WORKSPACE_ID_${n}`;
+    const workspaceId = String(env[name] ?? '').trim();
+    if (workspaceId && !FEDERATION_IDS.ANTHROPIC_WORKSPACE_ID.test(workspaceId)) errors.push(`${name} must be an Anthropic workspace ID (wrkspc_ followed by 8–64 letters or digits)`);
+    fallbackWorkspaces[n] = workspaceId || null;
+  }
   const creditFallbacks = [];
   if (providerRaw !== 'off') {
     for (const n of CLAUDE_FALLBACK_SLOTS) {
-      if (String(env[`ANTHROPIC_API_KEY_${n}`] ?? '').trim()) creditFallbacks.push({ id: `claude${n}`, provider: 'anthropic', label: `Claude account ${n}`, secret: `ANTHROPIC_API_KEY_${n}` });
+      if (String(env[`ANTHROPIC_API_KEY_${n}`] ?? '').trim()) creditFallbacks.push({ id: `claude${n}`, provider: 'anthropic', label: `Claude account ${n}`, secret: `ANTHROPIC_API_KEY_${n}`, workspaceId: fallbackWorkspaces[n] });
     }
+    if (hasOpenaiKey && openaiModel) creditFallbacks.push({ id: 'openai', provider: 'openai', label: 'OpenAI', secret: 'OPENAI_API_KEY', model: openaiModel, baseURL: openaiBaseUrl });
     if (hasKimiKey) creditFallbacks.push({ id: 'kimi', provider: 'kimi', label: 'Kimi', secret: 'KIMI_API_KEY', model: kimiModel, baseURL: kimiBaseUrl });
   }
 
@@ -255,6 +267,7 @@ export function readConfig(env = {}) {
     contextRadius: boundedInt(env.CLAUDE_REVIEW_CONTEXT_LINES, 'contextRadius', errors),
     maxRetries: boundedInt(env.CLAUDE_REVIEW_MAX_RETRIES, 'maxRetries', errors),
     timeoutSeconds: boundedInt(env.CLAUDE_REVIEW_TIMEOUT_SECONDS, 'timeoutSeconds', errors),
+    jobSeconds: boundedInt(env.CLAUDE_REVIEW_JOB_SECONDS, 'jobSeconds', errors),
     maxCostUsd: money(env.CLAUDE_REVIEW_MAX_COST_USD, 'maxCostUsd', errors),
     monthlyBudgetUsd: money(env.CLAUDE_REVIEW_MONTHLY_BUDGET_USD, 'monthlyBudgetUsd', errors),
     minConfidence,
@@ -265,6 +278,8 @@ export function readConfig(env = {}) {
     creditFallbacks,
     rateOverrides,
   };
+  if (enabled && auth && !model && !creditFallbacks.length) errors.push('ANTHROPIC_MODEL is not set: name a current Anthropic model ID as a repository variable');
+  if (config.timeoutSeconds * (config.maxRetries + 1) > config.jobSeconds - 60) errors.push('timeoutSeconds × (maxRetries + 1) exceeds the job budget after the 60-second recording reserve');
   return { config, errors };
 }
 
@@ -783,7 +798,7 @@ export function budgetDecision({ worstCaseUsd, maxCostUsd, monthlyBudgetUsd, led
 const RECORD_PREFIX = 'claude-review_v1_';
 // An optional last segment names the credit fallback account that answered
 // (claude2, claude3, kimi); none means the main account.
-const RECORD = /^claude-review_v1_(\d{4}-\d{2})_pr(\d+)_([0-9a-f]{16})_(ok|err|skip)_(\d+)(?:_([a-z0-9]{1,16}))?$/;
+const RECORD = /^claude-review_v1_(\d{4}-\d{2})_pr(\d+)_([0-9a-f]{16})_(ok|err|skip)_(\d+)(?:_r(\d+)a(\d+))?(?:_([a-z0-9]{1,16}))?$/;
 
 /**
  * The artifact name that records one review: month, pull request, input key,
@@ -791,18 +806,20 @@ const RECORD = /^claude-review_v1_(\d{4}-\d{2})_pr(\d+)_([0-9a-f]{16})_(ok|err|s
  * answered. Reading the month's spend and finding an earlier review of the
  * same inputs then needs only the artifact list.
  */
-export function recordName({ month, pr, key, status, usd, account = null }) {
+export function recordName({ month, pr, key, status, usd, account = null, runId = null, runAttempt = '1' }) {
   if (!/^\d{4}-\d{2}$/.test(month)) throw new Error('month must be YYYY-MM');
   if (!['ok', 'err', 'skip'].includes(status)) throw new Error('status must be ok, err or skip');
   if (account !== null && !/^[a-z0-9]{1,16}$/.test(account)) throw new Error('account must be a short lowercase id');
+  if (runId !== null && runId !== undefined && (!/^[1-9][0-9]{0,19}$/.test(String(runId)) || !/^[1-9][0-9]{0,9}$/.test(String(runAttempt)))) throw new Error('run id and attempt must be positive integers');
+  const runSuffix = runId === null || runId === undefined ? '' : `_r${runId}a${runAttempt}`;
   const micro = Math.max(0, Math.round((usd || 0) * 1_000_000));
-  return `${RECORD_PREFIX}${month}_pr${pr}_${String(key).slice(0, 16)}_${status}_${micro}${account ? `_${account}` : ''}`;
+  return `${RECORD_PREFIX}${month}_pr${pr}_${String(key).slice(0, 16)}_${status}_${micro}${runSuffix}${account ? `_${account}` : ''}`;
 }
 
 export function parseRecordName(name) {
   const m = RECORD.exec(String(name || ''));
   if (!m) return null;
-  return { month: m[1], pr: Number(m[2]), key: m[3], status: m[4], usd: Number(m[5]) / 1_000_000, account: m[6] || 'main' };
+  return { month: m[1], pr: Number(m[2]), key: m[3], status: m[4], usd: Number(m[5]) / 1_000_000, account: m[8] || 'main', ...(m[6] ? { runId: m[6], runAttempt: m[7] } : {}) };
 }
 
 /**

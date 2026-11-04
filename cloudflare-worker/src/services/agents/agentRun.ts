@@ -63,6 +63,8 @@
  * (`tool_not_in_skill`). Its steps and allow-list join the system prompt; the
  * usage row records `skill_id` and `skill_version`.
  */
+import { agentModels, planOk } from './modelOffers';
+import { allowlistRefusal } from './allowlists';
 import type { Env, User } from '../../types';
 import { PLATFORM_PAUSED_MESSAGE, modelUnder, readPolicy } from './aiPolicy';
 import { agentAreas } from './adminReads';
@@ -70,6 +72,7 @@ import { ROUTE, quoteRun, run, type RailContext, type RefusalReason, type RunOpt
 import { railOptionsOn, type RailOptionRow } from '../ai/railMatrix';
 import { proposeRail, railByRunKey, type RailProposal } from '../railProposals';
 import { moduleOf, optionsIn, type ModuleDef, type Rules } from './catalogue';
+import { agentDisclaimerText, disclaimerKeyForRole } from './disclaimers';
 import { personaOf } from './personas';
 import { canManage, effectiveBook, logEvent, monthSpend, scopeOfAgent, type AgentRow, type Scope, type Spend } from './teams';
 import { cleanReads, grantsOf, readTools, type ToolDeps } from './agentTools';
@@ -176,13 +179,15 @@ async function refused(env: Env, a: AgentRow, r: AgentRefusal, module: string, o
 
 /** The system prompt: the role and its rule book, never the scope's records; part 5's tool reads go in the user message, as data. */
 /** The system prompt a run sends; D4121's cost estimate counts the same text. */
-export function systemPrompt(a: Pick<AgentRow, 'persona_key' | 'first_name' | 'last_name'>, rules: Rules, s: Pick<Scope, 'kind' | 'name'>, moduleLabel: string): string {
+export function systemPrompt(a: Pick<AgentRow, 'persona_key' | 'first_name' | 'last_name' | 'role_key'>, rules: Rules, s: Pick<Scope, 'kind' | 'name'>, moduleLabel: string): string {
   // D4117: the agent is its persona; the role only selects the rule book.
+  const disclaimer = agentDisclaimerText(disclaimerKeyForRole(a.role_key));
   const persona = personaOf(a.persona_key);
   const name = persona?.name || [a.first_name, a.last_name].filter(Boolean).join(' ');
   return [
     `You are ${name || 'an agent'}, an AI agent of ${s.kind === 'company' ? 'the company' : 'the project'} "${s.name}", working in ${moduleLabel}.`,
     persona ? `Who you are: ${persona.personality} Your goal: ${persona.goal}` : '',
+    disclaimer ? `Include this exact limit in every output: ${disclaimer}` : '',
     `Mission: ${rules.mission}`,
     `Tone: ${rules.tone}`,
     rules.escalates_when.length ? `Stop and say a person must decide when: ${rules.escalates_when.join('; ')}.` : '',
@@ -206,6 +211,10 @@ async function check(env: Env, input: AgentRunInput): Promise<Checked> {
     await pause(env, a, 'sponsor_left');
     return no(403, 'sponsor_lost_access', 'The person who added this agent can no longer manage this team, so it is paused. An editor can choose a new sponsor.');
   }
+  const allowed = await allowlistRefusal(env, s, a.model_id, grantsOf(a.tool_grants_json));
+  if (allowed) return allowed;
+  if (!planOk(sponsor)) return no(403, 'plan_required', 'Agents come with a paid Founder plan.');
+  if (!agentModels(env, sponsor).some((m) => m.id === a.model_id && !m.plan_locked)) return no(403, 'model_not_offered', 'This agent’s model is no longer offered on its sponsor’s plan.');
   if (a.status === 'paused') return no(403, 'agent_paused', 'This agent is paused. Resume it to run it.', { paused_reason: a.paused_reason });
   const { rules } = await effectiveBook(env, s, a.role_key);
   const m = moduleOf(input.module);
@@ -295,6 +304,10 @@ async function underPolicy(env: Env, a: AgentRow, c: { opts: Omit<RunOptions, 'r
     const area = (await agentAreas(env)).get(a.id) ?? null;
     const m = modelUnder(policy, String(c.opts.model), area);
     if (!m) return no(403, 'model_locked', 'This agent\'s model is switched off on the platform, and so is its area\'s default. Pick another model for it.');
+    const scope = await scopeOfAgent(env, a);
+    if (!scope) return no(404, 'not_found', 'There is no such agent.');
+    const allowed = await allowlistRefusal(env, scope, m.model, []);
+    if (allowed) return allowed;
     c.opts.model = m.model;
   }
   const ceiling = policy.per_run_ceiling_microusd;
