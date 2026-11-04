@@ -210,3 +210,7 @@ D1169: `usage_storage_d1169.test.ts` holds the grown storage read: thirteen memb
 | `grow_campaigns_d4447.test.ts` | D4447 (#4447): real-SQLite campaign plans, gates, validation, scoped links, attribution and missing/unreadable figures. |
 
 D1456 (#4014): the existing record, recovery, bot-control and migration-runner suites cover channel/fact actions, recorded failed steps, creator-only safe bot details and migration 760 replay through the ledger. The engine fixture applies migration 760 from its SQL source.
+
+`team_allowlists_4422.test.ts` checks D4422 scope inheritance, manager/plan/approval bounds, atomic audit and use-time revocation, including agent MCP calls, over real SQLite.
+
+| `work_runs_3968.test.ts` | Real engine board/item latest-run wiring, guard-inclusive charges, unknown costs, scope gates and concurrent attempts (#3968). |

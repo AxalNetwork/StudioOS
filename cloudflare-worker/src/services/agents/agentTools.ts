@@ -23,6 +23,7 @@
  *
  * Never logged: a tool's arguments or its result.
  */
+import { agentMcpRefusal } from './allowlists';
 import type { Env } from '../../types';
 import type { IntegrationRow } from '../../integrations/registry';
 import { CustomMcpError, callCustomTool, customMcpEnabled, customRowFor, grantableTools, isConnectionUid, type CustomDeps } from '../../integrations/customMcp';
@@ -134,6 +135,10 @@ export async function readTools(env: Env, a: Pick<AgentRow, 'uid' | 'sponsor_use
   Promise<{ ok: true; block: string | null; calls: number } | Disconnected | No> {
   if (!reads.length) return { ok: true, block: null, calls: 0 };
   if (!customMcpEnabled(env)) return no(409, 'custom_mcp_off', 'Connected tools are switched off, so this run cannot read them.');
+  for (const r of reads) {
+    const denied = await agentMcpRefusal(env, a.sponsor_user_id, { agent_uid: a.uid, integration_uid: r.integration_uid }, r.tool);
+    if (denied) return denied;
+  }
   const rows = new Map<string, IntegrationRow>();
   for (const r of reads) {
     const row = rows.get(r.integration_uid) ?? await customRowFor(env, a.sponsor_user_id, r.integration_uid);
@@ -146,12 +151,14 @@ export async function readTools(env: Env, a: Pick<AgentRow, 'uid' | 'sponsor_use
   const results: EadwynToolResult[] = [];
   let n = 0;
   for (const r of reads) {
+    const denied = await agentMcpRefusal(env, a.sponsor_user_id, { agent_uid: a.uid, integration_uid: r.integration_uid }, r.tool);
+    if (denied) return denied;
     const row = rows.get(r.integration_uid)!;
     n += 1;
     try {
       const { value } = await metered(env, {
         userId: a.sponsor_user_id, executionId, operation: AGENT_TOOL_OPERATION, component: `read${n}`, quoteMicrousd: 0, surface: 'mcp',
-      }, async () => call(env, row, r.tool, r.arguments, deps.custom ?? {}));
+      }, async () => call(env, row, r.tool, r.arguments, { ...deps.custom, agentContext: { agent_uid: a.uid, integration_uid: r.integration_uid } }));
       results.push({ name: r.tool, outcome: 'data', data: capResult(value.data) });
     } catch (e) {
       // A schema changed at the server since it was pinned, or the sign-in was refused: the server is disconnected for this agent.

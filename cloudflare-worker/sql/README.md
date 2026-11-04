@@ -17,6 +17,7 @@ and is not kept in sync.
 | `migrations/737_deck_brand_kits.sql` | D1562 (#3809, deck v2 D1): `deck_brand_kits`, one row per venture (display and body fonts, palette roles, image style, reference image uids, a logo uid). Additive; number given on the issue. |
 | `migrations/760_interview_processing_failed_stage.sql` | D1456 (#4014): nullable, constrained failed processing step; existing migration ledger prevents replay. |
 | `migrations/202611041613_grow_campaigns.sql` | D4447 (#4447): campaign plans, channel budgets and same-venture item links; Part A of #3722. |
+| `migrations/202611041438_team_allowlists.sql` | D4422 (#4422): per-company and standalone-project model/tool lists, with actor/time; company projects inherit their parent policy. |
 
 ## Adding a change
 
