@@ -52,7 +52,6 @@ import {
   perkQueueFrom, referralOverview, refusalText, rejectBody, routeFor, scopeChip, waitingForYou, weekLines, withoutMoved,
 } from '../src/pages/admin/programs/programsModel.js';
 import { readRouteMap } from '../../scripts/lib/routeMap.mjs';
-import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
@@ -596,7 +595,7 @@ test('the routes: each address under today\'s guard, never hqOnly, and the three
       '/admin/programs/investor-cohorts', '/admin/programs/investor-cohorts/activity', '/admin/programs/ai-native-venture'],
   };
   for (const [component, paths] of Object.entries(pages)) {
-    for (const p of paths) assert.equal(APP.includes(`\n      <Route path="${p}" element={guard(['admin'], <${component} />)} />`), !isRetiredRedirect(`${p}`), p);
+    for (const p of paths) assert.ok(APP.includes(`\n      <Route path="${p}" element={guard(['admin'], <${component} />)} />`), p);
     assert.equal((APP.match(new RegExp(`<${component} />`, 'g')) || []).length, paths.length, component);
   }
   assert.doesNotMatch(codeOnly(APP).split('\n').filter((l) => l.includes('/admin/programs')).join('\n'), /hqOnly\(/, 'no hqOnly');
@@ -605,7 +604,7 @@ test('the routes: each address under today\'s guard, never hqOnly, and the three
     ['/admin/advisor-cohorts', 'AdvisorCohortsRedirect', 'AdvisorCohortsRedirect'],
     ['/admin/refer-earn', 'ReferEarnRedirect', 'ReferEarnRedirect'],
   ]) {
-    assert.equal(APP.includes(`\n      <Route path="${path}" element={<${component} />} />`), !isRetiredRedirect(`${path}`), `${path} is not its redirect's whole element`);
+    assert.equal(APP.includes(`\n      <Route path="${path}" element={<${component} />} />`), false, `${path} is retired`);
     assert.equal(APP.includes(`const ${component} = lazy(() => import('./pages/admin/programs/${file}'));`), false, `${component} has no App binding after retirement`);
   }
   // Each redirect takes its path and moved key from the one model, each path a literal.

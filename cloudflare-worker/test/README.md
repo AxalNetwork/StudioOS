@@ -217,3 +217,6 @@ D1456 (#4014): the existing record, recovery, bot-control and migration-runner s
 | `comarketing_split_4439.test.ts` | D4439: investor refuses every member read/write; partners/founders keep their existing access; HQ reads historical investor pitches. |
 | `syndication_review_4440.test.ts` | D4440: client dirty choices against mounted Worker routes, terminal history, disconnected accounts and retained accepted copy. |
 | `work_runs_4459.test.ts` | #4459: no-call attempts preserve paid totals; real engine labels/milestone/review responses retain the live item run and cost. |
+
+`redirect_links_d2319.test.ts` exercises canonical checklist, calendar, promo,
+advisor CTA and stored search-result URLs after redirect retirement (#4415).

@@ -399,6 +399,6 @@ test('the docs say what the code does: useEscapeClose names the mount-order haza
   assert.match(hook, /the first Escape\s+\* closes the lightbox, nested dialog and all/);
   const row = readRouteMap().split('\n').find((l) => l.startsWith('| Grow · Share an update |'));
   assert.match(row, /\| `\/grow\/update` \(D686 S02-A, #1596\): the Grow page with the sheet open over it/);
-  assert.match(row, /`\/grow\/updates` redirects to `\/grow\/reporting` \(D1056\)/);
+  assert.match(row, /`\/grow\/updates` \(retired D2319\) previously redirected to `\/grow\/reporting` \(D1056\)/);
   assert.doesNotMatch(row, /`\/grow` \(the cycle overview's primary action\) → the sheet/);
 });
