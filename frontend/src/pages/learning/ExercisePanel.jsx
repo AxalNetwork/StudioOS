@@ -4,9 +4,9 @@ import { Check, Circle } from 'lucide-react';
 import { Pill, Unrecorded } from '../../ui';
 import { SectionCard, stateBlock } from './LearningStates';
 import { NOT_LIVE, SUBMISSION_STATUS, formatDay } from './learningModel';
-import { checkedOf, exerciseAnswer } from './assessmentModel';
+import { answerCounter, checkedOf, exerciseAnswer } from './assessmentModel';
 
-const words = (value) => String(value ?? '').trim().split(/\s+/).filter(Boolean).length;
+const ACCEPTED_LINE = 'Accepted. There is nothing to resubmit.';
 
 /**
  * One exercise: its instructions, the member's answer (a text, or a
@@ -27,17 +27,17 @@ const words = (value) => String(value ?? '').trim().split(/\s+/).filter(Boolean)
  *   busy, error (the route's refusal, as it came)
  *
  * AN ACCEPTED ANSWER IS FINISHED: there is nothing to resubmit, so the form is
- * not drawn. Submitted waits on a reviewer; Needs work takes a new answer.
+ * not drawn. Other states retain the current answer for the next submission.
  * Resubmitting adds a row, so the earlier answers stay (D559) and are listed.
  */
 export default function ExercisePanel({
   status, exercise, submission, history = [], onSubmit, busy = false, error = '',
-  reason = NOT_LIVE.exercises, onRetry,
+  reason = NOT_LIVE.exercises, onRetry, formId,
 }) {
   const isChecklist = exercise?.submission_kind === 'checklist';
   const items = Array.isArray(exercise?.checklist) ? exercise.checklist : [];
   const redo = submission?.status === 'needs_work';
-  const [draft, setDraft] = useState(redo && !isChecklist ? submission.body || '' : '');
+  const [draft, setDraft] = useState(!isChecklist ? submission?.body || '' : '');
   const [checked, setChecked] = useState(() => (redo && isChecklist ? checkedOf(submission.body, items.length) || [] : []));
   const block = stateBlock({
     status, reason, onRetry,
@@ -51,7 +51,15 @@ export default function ExercisePanel({
   const current = submission?.status ? SUBMISSION_STATUS[submission.status] : null;
   const accepted = submission?.status === 'accepted';
   const instructions = String(exercise?.instructions ?? '').trim();
-  const answerable = isChecklist || Boolean(draft.trim());
+  const max = exercise?.answer_max_chars ?? undefined;
+  const answerable = isChecklist || (Boolean(draft.trim()) && (!Number.isFinite(max) || [...draft].length <= max));
+  const reviewedDay = formatDay(submission?.reviewed_at) || 'Not recorded';
+  const reviewer = submission?.reviewer_name || 'Reviewer not recorded';
+  const statusLine = !submission ? 'Submit when you are ready. You can resubmit after a review.'
+    : submission.status === 'submitted' ? `Submitted ${formatDay(submission.submitted_at) || 'Not recorded'}. ${reviewer} reads it next.`
+    : submission.status === 'accepted' ? `Accepted ${reviewedDay}.`
+    : submission.status === 'needs_work' ? `Sent back ${reviewedDay}. Edit your answer and resubmit.` : null;
+  const hasReview = Boolean(submission?.feedback || submission?.reviewed_at || accepted || redo);
   const toggle = (i) => setChecked((list) => (list.includes(i) ? list.filter((x) => x !== i) : [...list, i]));
   const submit = (event) => {
     event.preventDefault();
@@ -59,7 +67,7 @@ export default function ExercisePanel({
   };
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]" data-testid="exercise-panel">
+    <div className="grid min-w-0 gap-4 [overflow-wrap:anywhere] lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]" data-testid="exercise-panel">
       <div className="min-w-0 space-y-4">
         <SectionCard title="Instructions">
           {instructions
@@ -69,16 +77,19 @@ export default function ExercisePanel({
         <SectionCard title="Your answer" meta={submission?.submitted_at ? `submitted ${formatDay(submission.submitted_at)}` : null} testid="exercise-answer">
           {submission && (isChecklist
             ? <ChecklistAnswer items={items} checked={checkedOf(submission.body, items.length)} />
-            : submission.body && (
+            : accepted && submission.body && (
               <p className="mb-3 whitespace-pre-wrap rounded-axal-md bg-axal-ground p-3 text-[13px] leading-relaxed text-gray-700 dark:bg-gray-950 dark:text-gray-300" data-testid="exercise-submitted-body">
                 {submission.body}
               </p>
             ))}
           {!submission && <p className="mb-3 text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="exercise-not-submitted">You have not submitted an answer yet.</p>}
           {accepted ? (
-            <p className="text-[12.5px] text-emerald-700 dark:text-emerald-300" data-testid="exercise-accepted">Accepted. There is nothing to resubmit.</p>
+            <>
+              <p className="text-[12.5px] text-emerald-700 dark:text-emerald-300" data-testid="exercise-accepted">{ACCEPTED_LINE}</p>
+              {!isChecklist && typeof submission.body === 'string' && <span className="text-xs tabular-nums text-axal-muted dark:text-gray-400" data-testid="text-exercise-count">{answerCounter(submission.body, max)}</span>}
+            </>
           ) : (
-            <form onSubmit={submit} className="space-y-2" data-testid="form-exercise-answer">
+            <form id={formId} onSubmit={submit} className="space-y-2" data-testid="form-exercise-answer">
               {isChecklist ? (
                 <fieldset className="space-y-1.5" data-testid="exercise-checklist">
                   <legend className="sr-only">Your checklist</legend>
@@ -86,7 +97,7 @@ export default function ExercisePanel({
                   {items.map((item, i) => (
                     <label
                       key={i}
-                      className={`flex cursor-pointer items-start gap-2.5 rounded-axal-md border px-3 py-2 text-[13px] text-axal-ink dark:text-gray-100 ${checked.includes(i) ? 'border-axal-lavender-edge bg-axal-lavender dark:border-violet-800 dark:bg-violet-900/30' : 'border-axal-hairline dark:border-gray-700'}`}
+                      className={`flex min-h-11 cursor-pointer items-start gap-2.5 rounded-axal-md border px-3 py-2 text-[13px] text-axal-ink dark:text-gray-100 ${checked.includes(i) ? 'border-axal-lavender-edge bg-axal-lavender dark:border-violet-800 dark:bg-violet-900/30' : 'border-axal-hairline dark:border-gray-700'}`}
                     >
                       <input type="checkbox" checked={checked.includes(i)} onChange={() => toggle(i)} className="mt-0.5 accent-violet-600" data-testid={`input-exercise-check-${i}`} />
                       <span>{item}</span>
@@ -95,52 +106,39 @@ export default function ExercisePanel({
                 </fieldset>
               ) : (
                 <>
-                  <label htmlFor="exercise-answer" className="sr-only">Your answer</label>
+                  <label htmlFor="exercise-answer" className="mb-1 block text-xs font-medium text-axal-ink dark:text-gray-200">Write your answer</label>
                   <textarea
                     id="exercise-answer"
-                    rows={6}
+                    rows={4}
+                    maxLength={max}
+                    required
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
-                    className="w-full rounded-axal-md border border-axal-hairline bg-white p-3 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100"
-                    placeholder={submission ? 'Write your revised answer' : 'Write your answer'}
+                    className="h-[110px] w-full max-w-full rounded-axal-md border border-axal-hairline bg-white p-3 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100"
+                    placeholder="Write your answer"
                     data-testid="input-exercise-answer"
                   />
                 </>
               )}
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-[11.5px] tabular-nums text-axal-faint dark:text-gray-500" data-testid="text-exercise-count">
-                  {isChecklist ? `${checked.length} of ${items.length} done` : `${words(draft)} words`}
+                  {isChecklist ? `${checked.length} of ${items.length} done` : answerCounter(draft, max)}
                 </span>
-                <button
-                  type="submit"
-                  disabled={!onSubmit || busy || !answerable}
-                  title={onSubmit ? undefined : 'Answers cannot be submitted from here.'}
-                  className="rounded-axal-sm bg-axal-violet px-3 py-1.5 text-[12.5px] font-semibold text-white hover:bg-axal-violet-deep disabled:cursor-not-allowed disabled:opacity-50"
-                  data-testid="button-exercise-submit"
-                >
-                  {busy ? 'Submitting…' : submission ? 'Resubmit' : 'Submit'}
-                </button>
+                {!formId && <ExerciseSubmit submission={submission} busy={busy} disabled={!onSubmit || !answerable} unavailable={!onSubmit} />}
               </div>
               {error && <p className="text-[12px] text-red-700 dark:text-red-300" role="alert" data-testid="exercise-error">{error}</p>}
             </form>
           )}
         </SectionCard>
       </div>
-      <div className="min-w-0 space-y-4">
+      <div className="order-first min-w-0 space-y-4 lg:order-last">
         <SectionCard title="Status" testid="exercise-status">
-          {current ? (
+          {current || !submission ? (
             <div className="space-y-2">
-              <Pill tone={current.tone} dot>{current.label}</Pill>
-              <p className="text-[12px] tabular-nums text-axal-muted dark:text-gray-400">
-                Submitted {formatDay(submission.submitted_at) || <Unrecorded>date not recorded</Unrecorded>}
-                {submission.reviewed_at && <> · reviewed {formatDay(submission.reviewed_at)}</>}
-              </p>
+              <Pill tone={current?.tone || 'neutral'} dot>{current?.label || 'Not submitted yet'}</Pill>
+              <p className="text-[12px] tabular-nums text-axal-muted dark:text-gray-400">{statusLine}</p>
             </div>
-          ) : submission ? (
-            <p className="text-[12.5px] text-axal-muted dark:text-gray-400"><Unrecorded>Status not recorded</Unrecorded></p>
-          ) : (
-            <p className="text-[12.5px] text-axal-muted dark:text-gray-400">Not submitted yet.</p>
-          )}
+          ) : <p className="text-[12.5px] text-axal-muted dark:text-gray-400"><Unrecorded>Status not recorded</Unrecorded></p>}
           {history.length > 0 && (
             <ul className="mt-3 space-y-1 border-t border-axal-hairline pt-3 text-[12px] dark:border-gray-800" data-testid="exercise-history">
               {history.map((h, i) => (
@@ -157,16 +155,28 @@ export default function ExercisePanel({
         </SectionCard>
         <SectionCard
           title="Reviewer’s feedback"
-          meta={submission?.reviewed_at ? `${submission.reviewer_name || 'Reviewer not recorded'} · ${formatDay(submission.reviewed_at)}` : null}
           testid="exercise-feedback"
         >
+          {hasReview && <div className="mb-3 flex min-w-0 items-center gap-2 text-xs text-axal-muted dark:text-gray-400" data-testid="exercise-reviewer">
+            <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-axal-ground dark:bg-gray-900">{[...(submission?.reviewer_name || '').trim()][0]?.toUpperCase() || '—'}</span>
+            <span className="min-w-0 break-words">{reviewer} · {reviewedDay}</span>
+          </div>}
           {submission?.feedback
             ? <p className="whitespace-pre-wrap border-l-2 border-axal-lavender-edge pl-2.5 text-[13px] leading-relaxed text-gray-700 dark:border-violet-800 dark:text-gray-300">{submission.feedback}</p>
-            : <p className="text-[12.5px] text-axal-muted dark:text-gray-400">{submission?.reviewed_at ? 'The reviewer left no written feedback.' : 'No review yet.'}</p>}
+            : <p className="text-[12.5px] text-axal-muted dark:text-gray-400">No review yet.</p>}
         </SectionCard>
       </div>
     </div>
   );
+}
+
+/** LR10's header action; the same control serves an embedded lesson form. */
+export function ExerciseSubmit({ submission, formId, busy = false, disabled = false, unavailable = false }) {
+  const accepted = submission?.status === 'accepted';
+  return <button type="submit" form={formId} disabled={accepted || busy || disabled}
+    title={accepted ? ACCEPTED_LINE : unavailable ? 'Answers cannot be submitted from here.' : undefined}
+    className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-axal-sm bg-axal-violet px-4 py-2 text-[12.5px] font-semibold text-white hover:bg-axal-violet-deep disabled:cursor-not-allowed disabled:opacity-50"
+    data-testid="button-exercise-submit">{accepted ? 'Resubmit' : busy ? 'Submitting…' : submission?.status === 'needs_work' ? 'Resubmit' : 'Submit'}</button>;
 }
 
 /**
