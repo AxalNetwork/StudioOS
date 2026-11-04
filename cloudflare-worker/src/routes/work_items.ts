@@ -107,7 +107,7 @@ export function workItemRoutes(enabled: (env: Env) => boolean, publish: Publish 
   }));
   router.post('/project/:id/work/drafts/:uid/accept', handle(async (c) => {
     const { s, user } = await project(c);
-    return c.json({ task: await card(c, await acceptDraft(c.env, s, c.req.param('uid') ?? '', user, await body(c))) }, 201);
+    return c.json({ task: await card(c, await acceptDraft(c.env, s, c.req.param('uid') ?? '', user, await c.req.json().catch(() => ({})))) }, 201);
   }));
   router.post('/project/:id/work/drafts/:uid/discard', handle(async (c) => {
     const { s, user } = await project(c);

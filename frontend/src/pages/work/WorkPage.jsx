@@ -14,6 +14,10 @@ import {
 import WorkloadView, { ScheduleBox } from './WorkloadView.jsx';
 import MyTasks from './MyTasks.jsx';
 import AssignPicker from './AssignPicker.jsx';
+import TaskTimeline from './TaskTimeline.jsx';
+import TaskReview from './TaskReview.jsx';
+import TaskClassification from './TaskClassification.jsx';
+import TaskDrafts from './TaskDrafts.jsx';
 // D1531 (#3742 E8): Goals (TM10), the engine's banner (TM19b) and Start this task (TM19f).
 import GoalsView from '../team/GoalsView.jsx';
 import { EngineBanner, StartTask } from '../team/EngineControl.jsx';
@@ -194,7 +198,7 @@ export default function WorkPage() {
       {adding ? <NewItem onCreate={create} onCancel={() => setAdding(false)} /> : null}
       {missingItem ? <p role="status" data-testid="work-item-missing">That task wasn't found.</p> : null}
       {notice ? <p className="wk-notice" role="status" data-testid="work-notice">{notice}</p> : null}
-      {board.status === 'ready' && tab === 'board' ? <Board items={board.items} viewer={board.viewer} onOpen={openItem} onMove={move} onRun={setRunUid} /> : null}
+      {board.status === 'ready' && tab === 'board' ? <Board projectId={id} onDraftChanged={(task) => { load(); if (task?.uid) setItemUid(task.uid); }} items={board.items} viewer={board.viewer} onOpen={openItem} onMove={move} onRun={setRunUid} /> : null}
       {board.status === 'ready' && tab === 'backlog' ? <Backlog items={board.items} onOpen={openItem} projectId={id} /> : null}
       {tab === 'burnup' ? <Burnup series={burn.series} status={burn.status} reason={burn.reason} message={burn.message}
         range={burnQuery.from ? 'custom' : burnQuery.range} appliedFrom={burnQuery.from} appliedTo={burnQuery.to} onRange={setBurnQuery} split={split} onSplit={setSplit}
@@ -227,7 +231,7 @@ function NewItem({ onCreate, onCancel }) {
  * this reader may move is draggable to a column; any other card is not, and
  * has no Move menu. Without `viewer` (a board read before #3973) nothing moves.
  */
-export function Board({ items, onOpen, onMove, onRun, viewer = null }) {
+export function Board({ projectId, onDraftChanged, items, onOpen, onMove, onRun, viewer = null }) {
   const [reviewOnly, setReviewOnly] = useState(false);
   const cols = boardColumns(reviewOnly ? items.filter(it => it.run?.status === 'waiting') : items);
   const failed = items.map(it => it.run).filter(r => r?.status === 'failed' && r.uid).sort((a, b) => (Date.parse(b.ended_at || b.started_at) || 0) - (Date.parse(a.ended_at || a.started_at) || 0))[0];
@@ -258,6 +262,7 @@ export function Board({ items, onOpen, onMove, onRun, viewer = null }) {
             </header>
             <p className="wk-col-est">Estimate: {c.estimate}</p>
             <p className="wk-col-line">{c.line}</p>
+            {c.key === 'triage' && projectId != null ? <TaskDrafts key={projectId} projectId={projectId} canManage={!!viewer?.can_manage} onChanged={onDraftChanged} /> : null}
             {c.cards.map((card) => <Card key={card.uid} card={card} onOpen={onOpen} onMove={onMove} readOnly={!canMove(card, viewer)} />)}
           </section>
         ))}
@@ -403,6 +408,11 @@ export function ItemSheet({ uid, projectId = null, viewer = null, onClose, onRun
       {schedule && canMove(it, viewer) ? <ScheduleBox s={schedule} onChange={setSchedule} onDone={message => { setSchedule(null); setNotice(message); onAssigned?.(); }} /> : null}
       {state.status === 'off' ? <HonestBlock>{state.reason}</HonestBlock> : null}
       {state.status === 'error' ? <HonestBlock role="alert">This item could not be read.</HonestBlock> : null}
+      {it && projectId != null && it.task_number != null && <>
+        <TaskReview key={`review-${uid}`} task={it} projectId={projectId} canManage={!!viewer?.can_manage} onChanged={assigned} />
+        <TaskClassification key={`classification-${uid}`} task={it} projectId={projectId} canManage={!!viewer?.can_manage} onChanged={assigned} />
+        <TaskTimeline key={`timeline-${uid}-${it.column}`} projectId={projectId} number={it.task_number} viewer={viewer} onRun={onRun} />
+      </>}
       {it ? (
         <dl className="wk-fields">
           <dt>Assignee</dt><dd>{assigneeLine(it).text}</dd>

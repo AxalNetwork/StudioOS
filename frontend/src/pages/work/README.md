@@ -17,5 +17,12 @@ and `Work Compliance · Boards.dc.html`.
 | `WorkSummaryCard.jsx` | #4420: project Portfolio ENTRY card, board counts and the two-week burn-up, with independent failed reads. |
 | `work.css` | Styles scoped to `.wk-page`, each colour with its `.dark` pair. |
 
+| `TaskTimeline.jsx` | W7 (#4419): Activity, Team mentions, own comment edits and deletes, run links and honest cost. |
+| `TaskReview.jsx` | W7 (#4419): manager review with a required changes comment. |
+| `TaskDraft.jsx` | W7 (#4419): accept, edit before accept and discard with reason. |
+| `TaskDrafts.jsx` | W7 (#4419): Triage's draft proposals and their 560px sheet. |
+| `TaskClassification.jsx` | WK9 (#4419): item labels and milestone pickers. |
+| `WorkSettings.jsx` | WK9 (#4419): label and milestone management in Project settings. |
+
 **Adding to it:** a new read or write goes through `workAdapter.js`, with its
 client in `frontend/src/lib/api/` (D527) once its route is on `main`.
