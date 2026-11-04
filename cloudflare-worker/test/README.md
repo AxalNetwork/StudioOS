@@ -226,4 +226,3 @@ D1456 (#4014): the existing record, recovery, bot-control and migration-runner s
 
 `redirect_links_d2319.test.ts` exercises canonical checklist, calendar, promo,
 advisor CTA and stored search-result URLs after redirect retirement (#4415).
-| `campaign_options_4487.test.ts` | Venture-isolated segment/work selectors and existing writer gates for Distribution campaign form options (D4487). |
