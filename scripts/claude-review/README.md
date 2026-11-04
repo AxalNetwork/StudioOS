@@ -13,7 +13,7 @@ runbook, covering settings, enabling, rollback and cost, is
 | `review.test.mjs` | The CLI's own tests, against the real SDK error classes and with no network. Run by the workflow's `selftest` job, after `npm ci` here. |
 | `record.json`, `review.json` | Not files here: what `review.mjs` writes for upload. `record.json` holds the tokens, cost and outcome; `review.json`, after a successful review only, holds the validated findings for whoever fixes them. |
 | `rates.json` | Dollars per million tokens per model, dated, used to estimate a review's cost and to bound it before the call. The `CLAUDE_REVIEW_RATES` repository variable overrides it per model. |
-| `package.json`, `package-lock.json` | The one dependency, `@anthropic-ai/sdk`, pinned exactly. This is its own package so the review job installs one SDK rather than the root workspace, with `--ignore-scripts`. |
+| `package.json`, `package-lock.json` | The official `@anthropic-ai/sdk` and `openai` SDKs, pinned exactly. OpenAI 7.41.0 was released 2026-10-21, at least two weeks before this change. This package installs only review SDKs with `--ignore-scripts`. |
 
 ## The rule for adding to it
 

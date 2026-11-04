@@ -239,25 +239,28 @@ export default function RecordLightbox({
   const [outputs, setOutputs] = useState(['customer-research', 'pain-points', 'icp-fit']);
   const [outputsLoaded, setOutputsLoaded] = useState(false);
   const [outputQuote, setOutputQuote] = useState(undefined);
+  const [outputIssue, setOutputIssue] = useState('');
+  const unavailableOutputs = (message) => { setOutputs([]); setOutputQuote(null); setOutputIssue(message || 'The extraction estimate is unavailable.'); };
   useEffect(() => {
     if (!supportsOutputs || !projectId) return undefined;
     let alive = true;
-    setOutputsLoaded(false); setOutputQuote(undefined);
+    setOutputsLoaded(false); setOutputQuote(undefined); setOutputIssue('');
     sessions.outputs(projectId).then((r) => {
       if (alive) {
-        if (!Array.isArray(r?.outputs) || !r.outputs.every((x) => typeof x === 'string')) { setOutputQuote(null); return; }
+        if (!Array.isArray(r?.outputs) || !r.outputs.every((x) => typeof x === 'string')) { unavailableOutputs('The output choices could not be read.'); return; }
         setOutputs(r.outputs); setOutputsLoaded(true);
       }
-    }).catch(() => { if (alive) setOutputQuote(null); });
+    }).catch(() => { if (alive) unavailableOutputs('The output choices could not be read.'); });
     return () => { alive = false; };
   }, [sessions, projectId, supportsOutputs]);
   useEffect(() => {
     if (!supportsOutputs || !outputsLoaded) return undefined;
+    if (!outputs.length) { setOutputQuote(0); return undefined; }
     let alive = true;
     setOutputQuote(undefined);
     const timer = setTimeout(() => sessions.outputs(projectId, minutes, outputs).then((r) => {
-      if (alive) setOutputQuote(r.quote?.ok ? r.quote.microusd : null);
-    }).catch(() => { if (alive) setOutputQuote(null); }), 200);
+      if (alive) { if (r.quote?.ok && Number.isFinite(r.quote.microusd)) { setOutputQuote(r.quote.microusd); setOutputIssue(''); } else unavailableOutputs(r.quote?.message); }
+    }).catch(() => { if (alive) unavailableOutputs('The extraction estimate could not be read.'); }), 200);
     return () => { alive = false; clearTimeout(timer); };
   }, [sessions, projectId, minutes, outputs, outputsLoaded, supportsOutputs]);
   const [board, setBoard] = useState(initialBoard);
@@ -349,7 +352,7 @@ export default function RecordLightbox({
   const botJoins = meeting ? !!plan?.bot : botReady;
   const captureKind = meeting ? (plan?.kind ?? 'none') : capture.kind;
   const captureReason = state.ok && !blockedReason && captureKind === 'none' ? (meeting ? plan?.reason ?? null : capture.reason) : null;
-  const ready = (!supportsOutputs || !m.audio || Number.isFinite(outputQuote)) && state.ok && !blockedReason && !linkProblem && captureKind !== 'none' && !busy
+  const ready = state.ok && !blockedReason && !linkProblem && captureKind !== 'none' && !busy
     && (!meeting || !!String(link).trim() || (fields.meeting_url && typeof channelsSource?.instantMeeting === 'function'));
   const label = howOf(mode) === 'call' ? 'Start Call' : m.start;
   const languages = languageOptions(models, live);
@@ -470,7 +473,7 @@ export default function RecordLightbox({
    * the app would stop the save.
    */
   const startCall = async () => {
-    if (!ready || sending.current || (supportsOutputs && m.audio && !Number.isFinite(outputQuote))) return;
+    if (!ready || sending.current) return;
     sending.current = true;
     setBusy(true); setRefusal(null); setAssigned(null);
     // D1377: on a phone the call opens in the Zoom or Meet app, so no browser tab is opened for it.
@@ -519,7 +522,7 @@ export default function RecordLightbox({
     const named = (who?.interviewee_name || name).trim();
     const into = (r) => ({ id: r?.id ?? who?.id, interviewee_name: r?.interviewee_name ?? who?.interviewee_name ?? named, interviewee_company: r?.interviewee_company ?? who?.interviewee_company ?? (company.trim() || null) });
     try {
-      const setup = { mode, consent, live: null, final: '@cf/deepgram/nova-3', language, conversation, ...(supportsOutputs ? { outputs } : {}), provider, link: url, points: chosenPoints.map((p) => p.id), name, company };
+      const setup = { mode, consent, live: null, final: '@cf/deepgram/nova-3', language, conversation, ...(supportsOutputs ? { outputs: Number.isFinite(outputQuote) ? outputs : [] } : {}), provider, link: url, points: chosenPoints.map((p) => p.id), name, company };
       const botFields = { ...fields, meeting_url: false };
       const r = interview
         ? await sessions.create(interview.id, { ...sessionBody(setup, botFields), client_key: `${startKey.current}-bot` })
@@ -545,7 +548,7 @@ export default function RecordLightbox({
 
   const submit = async () => {
     const useBot = botReady;
-    if (!ready || sending.current || (supportsOutputs && m.audio && !Number.isFinite(outputQuote))) return;
+    if (!ready || sending.current) return;
     if (meeting) { await startCall(); return; }
     // The browser recorder is for in person and a call on this phone's speaker
     // only. A meeting never reaches it (D1358).
@@ -578,7 +581,7 @@ export default function RecordLightbox({
         setBusy(false); sending.current = false;
         return;
       }
-      const setup = { mode, consent, live: useBot ? null : live, final: useBot ? '@cf/deepgram/nova-3' : final, language, conversation, ...(supportsOutputs && m.audio ? { outputs } : {}), provider, link, points: chosenPoints.map((p) => p.id), name, company };
+      const setup = { mode, consent, live: useBot ? null : live, final: useBot ? '@cf/deepgram/nova-3' : final, language, conversation, ...(supportsOutputs && m.audio ? { outputs: Number.isFinite(outputQuote) ? outputs : [] } : {}), provider, link, points: chosenPoints.map((p) => p.id), name, company };
       // An interview it was opened on (a row's "Record a session") may already
       // be held, which the setup call refuses: it opens on that interview's own
       // route, with the same fields. A pick from the pipeline, or a new person,
@@ -848,13 +851,13 @@ export default function RecordLightbox({
                 ['feature-requests-quotes', 'Feature requests & quotes'],
               ].map(([id, label]) => <label key={id} className="flex items-center gap-2 text-[13px] text-axal-ink dark:text-gray-100">
                 <input type="checkbox" checked={outputs.includes(id)} disabled={!outputsLoaded || busy} onChange={(e) => {
-                  setOutputQuote(undefined);
+                  setOutputQuote(undefined); setOutputIssue('');
                   setOutputs((old) => e.target.checked ? [...old, id] : old.filter((x) => x !== id));
                 }} />{label}
               </label>)}
             </div>
             <p role="status" className="m-0 text-[12px] text-axal-muted dark:text-gray-300" data-testid="record-outputs-cost">
-              {outputQuote === undefined ? 'Estimating AI tokens…' : outputQuote === null ? 'Unreadable: the extraction estimate could not be read. Reopen this form to try again.'
+              {outputIssue ? `${outputIssue} No outputs selected. You can still start recording.` : outputQuote === undefined ? 'Estimating AI tokens… Recording can start without outputs.' : outputQuote === null ? 'The extraction estimate is unavailable. Recording can start without outputs.'
                 : `Estimated extraction: $${(outputQuote / 1000000).toFixed(6)} of AI tokens · based on ${minutes} minutes. Actual usage depends on the final transcript.`}
             </p>
             <p className="m-0 text-[11.5px] text-axal-faint">After the call only. Eadwyn proposes each selected output for you to Accept. Quotable lines need Quotes OK.</p>
