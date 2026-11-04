@@ -113,6 +113,7 @@ export type TaskClass =
   | 'course_cover'
   // D1341 (#3549): Eadwyn's email draft from the member's ticked records.
   | 'mail_draft'
+  | 'distribution_draft'
   // D1420 (#3864): Eadwyn's layout proposals for /studio (`studio:layout`).
   | 'studio_layout'
   // D1583 (#3830): a memo written from a deck's own words, around its figures' placeholders.
@@ -816,6 +817,13 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
   // page explanation. A mid model with the same priced alternates; no cache: a
   // draft quotes figures read at the press.
   mail_draft: {
+    provider: 'workers-ai',
+    model: MID_LLAMA,
+    fallbackChain: [SMALL_LLAMA],
+    alternates: [MID_LLAMA, SMALL_LLAMA, '@cf/meta/llama-3.2-3b-instruct'],
+  },
+  // D4488: Distribution text proposals, metered separately, never cached.
+  distribution_draft: {
     provider: 'workers-ai',
     model: MID_LLAMA,
     fallbackChain: [SMALL_LLAMA],

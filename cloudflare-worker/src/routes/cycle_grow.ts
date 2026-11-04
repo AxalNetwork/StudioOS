@@ -66,7 +66,7 @@ import {
   logGrowWrite, setApplicationStage, setChannelSpend, setChecklistItem, setPartnerRevenue, updateChannel, updateFeedback, updateMarket, updateObligation,
   updatePartner, updateRole,
 } from '../services/growWriters';
-import { campaigns, createCampaign, updateCampaign, campaignChannel, campaignItem, archiveCampaign } from '../services/growCampaigns';
+import { campaign, campaignCreatives, putCampaignCreative, campaigns, createCampaign, updateCampaign, campaignChannel, campaignItem, archiveCampaign } from '../services/growCampaigns';
 import { canAskAgain } from '../services/updateShare';
 import { isAdmin } from './_t13t14t15_helpers';
 import { growPhone } from '../services/cycleFocus';
@@ -444,9 +444,25 @@ r.get('/campaigns', async (c) => {
   try {
     const user = await requireAuth(c);
     const pid = await project(c, user, c.req.query('project'), false);
-    return c.json(await campaigns(c.env, pid));
+    return c.json(await campaigns(c.env, pid, { status: c.req.query('status'), q: c.req.query('q') }));
   } catch (e) { return fail(c, e); }
 });
+// D4483: detail and creative reads use the same venture reader gate.
+r.get('/campaigns/:uid', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const pid = await project(c, user, c.req.query('project'), false);
+    return c.json(await campaign(c.env, pid, param(c, 'uid')));
+  } catch (e) { return fail(c, e); }
+});
+r.get('/campaigns/:uid/creatives', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const pid = await project(c, user, c.req.query('project'), false);
+    return c.json(await campaignCreatives(c.env, pid, param(c, 'uid')));
+  } catch (e) { return fail(c, e); }
+});
+r.put('/campaigns/:uid/creatives/:placement/:field', write((c, u, pid, b) => putCampaignCreative(c.env, pid, u, param(c, 'uid'), param(c, 'placement'), param(c, 'field'), b)));
 r.post('/campaigns', write((c, u, pid, b) => createCampaign(c.env, pid, u, b), true));
 r.patch('/campaigns/:uid', write((c, u, pid, b) => updateCampaign(c.env, pid, u, param(c, 'uid'), b)));
 r.put('/campaigns/:uid/channels/:channelUid', write((c, u, pid, b) => campaignChannel(c.env, pid, u, param(c, 'uid'), param(c, 'channelUid'), b)));

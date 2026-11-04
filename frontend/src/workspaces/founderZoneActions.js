@@ -156,7 +156,8 @@ export const FOUNDER_ZONE_ACTIONS = {
     { label: 'Export', kind: 'export' },
   ],
   'grow/partnerships': [
-    { label: 'New proposal', to: '/comarketing' },
+    // D4439: the frozen canvas says New proposal; founders read published pieces, never submit partner pitches.
+    { canvas: 'New proposal', label: 'Open co-marketing', to: '/grow/partner-network/co-marketing' },
     { label: 'Export terms', kind: 'export' },
   ],
   // D1194 (#3128): `raise/capital-match` is retired into Capital relationships › Match.

@@ -543,13 +543,16 @@ const PHONE_VIEWS = {
 // Decision 10's departures in a section list, named rather than matched loosely.
 const DEPARTED_SECTIONS = {
   help: (c) => ['Popular this week', ...c.slice(1)],
+  // D4481 / LR20a supersedes A8m's Learning layout.
+  learning: () => ['Continue learning', 'New this week', 'Your programs', 'Upcoming webinars', 'Browse'],
 };
 
-test('5. A4m–A10m: each phone view draws ‹ Back, the canvas\'s title and sub, then its sections in order', () => {
+test('5. phone views keep their headings and ordered sections, including D4481 Learning', () => {
   for (const [key, view] of Object.entries(PHONE_VIEWS)) {
     const c = CANVAS_PAGES[key];
     const markup = html(view());
-    assert.equal(barOf(markup).trim().startsWith(`‹ Back ${c.title} ${c.sub}`), true, `${key}: ${barOf(markup)}`);
+    const heading = key === 'learning' ? '‹ Back Learning' : `‹ Back ${c.title} ${c.sub}`;
+    assert.equal(barOf(markup).trim().startsWith(heading), true, `${key}: ${barOf(markup)}`);
     const want = key === 'trust' ? ['Requirements', 'Your requirements'] : DEPARTED_SECTIONS[key] ? DEPARTED_SECTIONS[key](c.sections) : c.sections;
     assert.deepEqual(sectionTitles(markup), want, key);
     assert.match(markup, /class="-m-4 md:-m-6 lg:m-0 |class="min-h-screen bg-white dark:bg-gray-950"/, `${key}: no phone gutter`);
@@ -742,7 +745,11 @@ test('8. a gated Learning draws the coming-soon line and Browse, Articles open, 
   const home = read('frontend/src/pages/learning/LearningHome.jsx');
   assert.match(home, /useLearningRead\(readMe, \[\], \{ enabled: !gated, scope: 'me' \}\)/);
   assert.match(home, /useMyPrograms\(!gated\)/);
-  assert.match(home, /\{!gated && <OpenPrograms \{\.\.\.programs\} \/>\}/);
+  assert.match(home, /gated \? \([\s\S]*?<ComingSoonCard[\s\S]*?\) : \([\s\S]*?<MyProgramsSection \{\.\.\.programs\} \/>/);
+  assert.match(home, /if \(gated\) return \[browseGroup\(\{ gated \}\)\];/);
+  const populated = html(h(LearningPhoneView, { ...LEARN, gated: true }));
+  assert.deepEqual(sectionTitles(populated), ['Browse']);
+  assert.doesNotMatch(populated, /learning-phone-primary|learning-phone-programs|learning-phone-webinars/);
 });
 
 /** The page itself below 1024px: `usePhoneWidth` reads `window.matchMedia` on its first render. */
@@ -774,13 +781,16 @@ const PR2_FILES = [
   'frontend/src/pages/docs/DocsLayout.jsx', 'frontend/src/pages/account/PricingPhone.jsx', 'frontend/src/pages/ProductsPage.jsx',
 ];
 
-test('10. A4m–A10m share one bar, which names itself to Eadwyn by its title; no page draws a button of its own', () => {
+test('10. account bars share Eadwyn wiring while D4481 Learning keeps no Ask button', () => {
   const frame = read('frontend/src/pages/account/AccountPhonePage.jsx');
   assert.match(frame, /<PhoneBar back=\{\{ label: 'Back' \}\} title=\{page\.title\} sub=\{page\.sub\} eadwynLabel=\{page\.title\} \/>/);
   for (const f of PR2_FILES) {
     const src = read(f);
     assert.doesNotMatch(src, /Open Eadwyn for this page/, `${f} draws an Eadwyn button of its own`);
-    for (const bar of src.matchAll(/<PhoneBar [^>]*\/>/g)) assert.match(bar[0], /eadwynLabel=\{page\.title\}/, `${f}: ${bar[0]}`);
+    for (const bar of src.matchAll(/<PhoneBar [^>]*\/>/g)) {
+      if (f.endsWith('/learning/LearningHome.jsx')) assert.doesNotMatch(bar[0], /eadwynLabel/, 'D4481 keeps Learning free of Ask');
+      else assert.match(bar[0], /eadwynLabel=\{page\.title\}/, `${f}: ${bar[0]}`);
+    }
   }
   // The owner requested no rail on Perks or Learning home.
   const perks = read('frontend/src/pages/PerksPage.jsx');
@@ -812,7 +822,7 @@ async function phoneButtons(element, { served, url }) {
   }
 }
 
-test('10. with the panel serving the viewer, the bar on /account, a section, /perks and /learning holds the button; otherwise none does', async () => {
+test('10. served account bars open Eadwyn, unserved viewers and Learning do not', async () => {
   const cases = [
     ['/account', 'Account', h(AccountPhoneFrame, { view: 'index', sections: SECTIONS, renderPane: noop, index: h('div') })],
     ['/account/billing', 'Billing and orders', h(AccountPhoneFrame, { view: 'billing', sections: SECTIONS, renderPane: () => h('div') })],
@@ -821,8 +831,8 @@ test('10. with the panel serving the viewer, the bar on /account, a section, /pe
   ];
   for (const [url, label, element] of cases) {
     const on = await phoneButtons(element, { served: true, url });
-    assert.equal(on.count, 1, `${url}: no Eadwyn button for a served founder`);
-    assert.equal(on.label, label, `${url}: the panel opened without the bar's title`);
+    assert.equal(on.count, url === '/learning' ? 0 : 1, `${url}: incorrect Eadwyn availability`);
+    if (url !== '/learning') assert.equal(on.label, label, `${url}: the panel opened without the bar's title`);
     const off = await phoneButtons(element, { served: false, url });
     assert.equal(off.count, 0, `${url}: a viewer the panel does not serve got a button`);
   }

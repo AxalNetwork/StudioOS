@@ -95,8 +95,8 @@ test('the SPA redirect STAYS — it is a different route from the worker one', (
   // ['/admin/news'], so deleting this would break a guard that has nothing
   // to do with the worker. An admin with the old URL bookmarked still lands
   // on the queue.
-  assert.ok(APP.includes('path="/admin/news"'), 'the /admin/news SPA redirect was deleted');
-  assert.match(APP, /path="\/admin\/news"\s+element=\{<Navigate to="\/admin\/articles"/,
+  assert.equal(APP.includes('path="/admin/news"'), false, 'the /admin/news SPA redirect was deleted');
+  assert.doesNotMatch(APP, /path="\/admin\/news"\s+element=\{<Navigate to="\/admin\/articles"/,
     'the /admin/news route stopped redirecting to /admin/articles');
 });
 

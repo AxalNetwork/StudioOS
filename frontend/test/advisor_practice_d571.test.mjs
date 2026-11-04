@@ -36,6 +36,7 @@ import {
   AccessLogTable, AdvisorAccessLogView, ClientCompanyAccessLogView,
 } from '../src/pages/advisor/practice/ClientAccessLog.jsx';
 import { AdvisorProfileView } from '../src/pages/advisor/AdvisorProfilePage.jsx';
+import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (p) => readFileSync(resolve(ROOT, p), 'utf8');
@@ -538,7 +539,7 @@ test('the canvas addresses land on the zone sections, behind the zones\' own gua
     ['/practice/booking-links', '/practice/sessions#booking-links'],
     ['/practice/access-log', '/practice/engagements#access-log'],
   ]) {
-    assert.ok(APP.includes(`<Route path="${path}" element={guard(['admin', 'advisor'], <Navigate to="${to}" replace />)} />`), path);
+    assert.equal(APP.includes(`<Route path="${path}" element={guard(['admin', 'advisor'], <Navigate to="${to}" replace />)} />`), !isRetiredRedirect(`${path}`), path);
   }
   assert.ok(APP.includes('<Route path="/advisors/:uid" element={<AdvisorProfilePage />} />'), 'the approved profile is publicly readable');
   assert.match(APP, /const AdvisorProfilePage = lazy\(\(\) => import\('\.\/pages\/advisor\/AdvisorProfilePage'\)\);/);

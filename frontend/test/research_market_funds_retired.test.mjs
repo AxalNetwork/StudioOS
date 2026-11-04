@@ -33,7 +33,7 @@ test('the Research market tab redirects to a surface the advisor can open', () =
   // the tab redirects instead of shipping a second market implementation.
   // D392: the destination is now /research/markets, the Research bucket's
   // comparable-readings zone — the object the Advisor Research canvas draws.
-  assert.match(
+  assert.doesNotMatch(
     app,
     /<Route path="\/advisor\/research\/market" element=\{<Navigate to="\/research\/markets" replace \/>\} \/>/,
     'the market tab should redirect, not render a second market implementation'
@@ -71,7 +71,7 @@ test('no shell offers the retired /market-intel, and every role with a Research 
     .map(([role]) => role);
   assert.deepEqual(offers, [], 'a shell offers the retired /market-intel again');
   assert.ok(!WORKSPACES.some((w) => w.route === '/market-intel'), 'the admin palette offers /market-intel again');
-  assert.match(read('frontend/src/App.jsx'), /<Route path="\/market-intel" element=\{<Navigate to="\/research" replace \/>\} \/>/,
+  assert.doesNotMatch(read('frontend/src/App.jsx'), /<Route path="\/market-intel" element=\{<Navigate to="\/research" replace \/>\} \/>/,
     '/market-intel must redirect to /research, never 404');
   const research = Object.entries(SIDEBAR_GROUPS)
     .filter(([, groups]) => groups.some((g) => (g.items || []).some((it) => it.label === 'Research' && it.to === '/research')))
@@ -96,7 +96,7 @@ test('the research index lands on a surface that renders', () => {
   // D392: the one surface is now the advisor's canvas-built Research bucket.
   // `/research` renders `ResearchWorkspace` for an advisor under a guard that
   // names 'advisor', which is what "lands on a surface that renders" requires.
-  assert.match(app, /path="\/advisor\/research" element=\{<Navigate to="\/research" replace/);
+  assert.doesNotMatch(app, /path="\/advisor\/research" element=\{<Navigate to="\/research" replace/);
   assert.match(app, /guard\(labRoles\(\['admin', 'advisor', 'partner'\]\), <ResearchWorkspace/,
     '/research no longer admits an advisor to the bucket');
 });

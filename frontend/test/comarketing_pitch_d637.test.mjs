@@ -85,7 +85,7 @@ test('the View link records a visit, and a failed record never throws', async ()
   assert.equal(recordFeedVisit({}, { trackCoMarketing: () => { throw new Error('never'); } }), null, 'no code, no call');
 
   const page = codeOnly(readFileSync(new URL('../src/pages/CoMarketingPage.jsx', import.meta.url), 'utf8'));
-  assert.match(page, /onClick=\{\(\) => \{ recordFeedVisit\(p\); \}\} data-testid=\{`feed-view-\$\{p\.uid\}`\}/);
+  assert.match(page, /onClick=\{\(\) => \{ recordFeedVisit\(p, api, landingPath\); \}\} data-testid=\{`feed-view-\$\{p\.uid\}`\}/);
   assert.match(page, /to=\{`\/comarketing\/\$\{encodeURIComponent\(p\.uid\)\}`\}/);
   const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
   assert.match(app, /path="\/comarketing\/:pitch" element=\{guard\(\['admin', 'partner'\]/);

@@ -1,3 +1,4 @@
+import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
 /**
  * The shell config advertises doors. This asserts every one of them opens.
  *
@@ -104,7 +105,8 @@ const ownedBy = (role) => zoneRoutes.filter(
 
 test('every zone route of a migrated shell is registered in App.jsx', () => {
   for (const role of MIGRATED) {
-    const missing = ownedBy(role).filter((r) => !registered.has(r));
+    for (const r of ownedBy(role).filter(isRetiredRedirect)) assert.equal(registered.has(r), false, `${r} retired by D2319`);
+    const missing = ownedBy(role).filter((r) => !isRetiredRedirect(r) && !registered.has(r));
     assert.deepEqual(missing, [],
       `${role}: these zones are advertised by a sidebar row but have no route:\n  ${missing.join('\n  ')}`);
   }
