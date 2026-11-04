@@ -46,17 +46,22 @@ test('every card key is a whole 1200×630 PNG, including the record families', (
   }
 });
 
-test('the cards are painted to the bottom edge: the band and the footer survive (the 87px viewport bug)', () => {
-  // A plain card's art band is lavender #f4f0fe from top to bottom; a doc card's ground is lavender everywhere.
+test('the cards are painted to the bottom edge: the corner arc and the footer survive (the 87px viewport bug)', () => {
+  // Revision of 2026-11-04: a plain card's bottom-left corner is the lavender #f4f0fe arc; a doc card's ground is lavender everywhere.
   for (const k of ['home', 'pricing', 'articles', 'event', 'trust', 'terms']) {
     const png = decodePng(`frontend/public/og/${k}.png`);
     assert.deepEqual(png.px(10, 625), [0xf4, 0xf0, 0xfe], `${k}: bottom-left is the band, not unpainted`);
   }
-  // The violet rule before "axal.vc" sits in the last 72px.
+  // The violet rule before "axal.vc" sits in the last 72px, left of the centre: the footer is centred.
   const home = decodePng('frontend/public/og/home.png');
   const violet = [];
-  for (let y = 540; y < 572; y++) for (let x = 300; x < 330; x++) { const [r, g, b] = home.px(x, y); if (b > 200 && r > 100 && r < 140 && g < 80) violet.push(y); }
+  for (let y = 540; y < 572; y++) for (let x = 500; x < 600; x++) { const [r, g, b] = home.px(x, y); if (b > 200 && r > 100 && r < 140 && g < 80) violet.push(x); }
   assert.ok(violet.length > 20, 'the footer rule is drawn');
+  assert.ok(Math.min(...violet) > 480 && Math.max(...violet) < 600, 'the rule sits in the centred footer, not at the old x 300');
+  // The revision: the text block spans the safe area, centred, and the drawn description is cut at 118.
+  assert.match(generator, /left: 72px; right: 72px; top: 62px; bottom: 62px;/);
+  assert.match(generator, /align-items: center; text-align: center;/);
+  assert.match(generator, /function cardDescription\(text, limit = 118\)/);
   assert.match(generator, /height:100vh;background:#000/, 'the probe measures the viewport, not the screenshot');
 });
 
@@ -91,7 +96,7 @@ test('cards never carry an amount, an email or a seat count', () => {
   assert.doesNotMatch(fam, /\$|@|seat|capacity/i);
 });
 
-test('the canvases are on disk, unedited intake', () => {
+test('the canvases are on disk, unedited intake (the revision of 2026-11-04)', () => {
   for (const f of ['Share Cards Page.dc.html', 'Share Cards · Boards.dc.html']) assert.ok(read(`design/incoming/${f}`).length > 5000, f);
   assert.match(read('design/incoming/Share Cards · Boards.dc.html'), /dc-import name="Share Cards Page"/);
 });
