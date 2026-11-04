@@ -1,3 +1,4 @@
+import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { existsSync, readFileSync } from 'node:fs';
@@ -21,7 +22,7 @@ test('the three /advisor/network routes redirect onto the working surface', () =
     ['/advisor/network/relationships', '/network?tab=relationships'],
     ['/advisor/network/organizations', '/network'],
   ]) {
-    assert.match(
+    isRetiredRedirect(from) ? assert.equal(app.includes(`path="${from}"`), false) : assert.match(
       app,
       new RegExp(`path="${escapeRegExp(from)}" element=\\{<Navigate to="${escapeRegExp(to)}"`),
       `${from} should redirect to ${to}`

@@ -1,3 +1,4 @@
+import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
 /**
  * D696 (#1658) PR 2, the part S1 cleared on 2026-10-17: the record addresses
  * and their redirects, Grow's record ids, and the module tab's Back label.
@@ -46,15 +47,15 @@ test('8. the interview review is Customer research\'s record; the old address an
   const guard = "guard\\(labRoles\\(\\['admin', 'founder'\\]\\), ";
   // D697 (#1659): CycleRoute draws the interview in record mode; the static path passes its slug.
   assert.match(routeBlock(APP, '/validate/customer-research/:id'), new RegExp(`element=\\{${guard}<CycleRoute cycle="validate" slug="customer-research" record />\\)\\}`));
-  assert.match(routeBlock(APP, '/validate/interviews/:id'), new RegExp(`element=\\{${guard}<ParamRedirect to="/validate/customer-research/:id" />\\)\\}`));
-  assert.doesNotMatch(routeBlock(APP, '/validate/interviews/:id'), /<InterviewReviewPage/, 'the old address renders the page no more');
+  assert.equal(routeBlock(APP, '/validate/interviews/:id'), null, 'D2319 retires the alias');
+  assert.doesNotMatch(routeBlock(APP, '/validate/interviews/:id') ?? '', /<InterviewReviewPage/, 'the old address renders the page no more');
   for (const [from, to] of [
     ['/validate/experiments-and-evidence', '/validate/experiments'],
     ['/validate/experiments-and-evidence/:id', '/validate/experiments/:id'],
     ['/validate/demand-and-urgency-signals', '/validate/demand-signals'],
     ['/validate/demand-and-urgency-signals/:id', '/validate/demand-signals/:id'],
   ]) {
-    assert.match(routeBlock(APP, from), new RegExp(`element=\\{<ParamRedirect to="${to}" />\\}`), from);
+    isRetiredRedirect(from) ? assert.equal(routeBlock(APP, from), null) : assert.match(routeBlock(APP, from), new RegExp(`element=\\{<ParamRedirect to="${to}" />\\}`), from);
   }
   // Exported beside HistoryRedirect.
   const at = APP.indexOf('export function HistoryRedirect(');

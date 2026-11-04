@@ -24,6 +24,7 @@ import { MANAGE_LABEL as SWITCHER_MANAGE, setReadState } from '../src/ui/Company
 import { ActiveCompanyContext } from '../src/contexts/ActiveCompanyContext.js';
 import { REDIRECT_ROUTES } from '../../cloudflare-worker/src/services/redirectRoutes.ts';
 import { redirectPatternFor } from '../src/lib/redirectBeacon.js';
+import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -82,11 +83,11 @@ test('mounted, /company-settings forwards with the query, to the active company,
   } finally { restore(); }
 });
 
-test('/company-settings is a counted forward (#2319): a path-only entry and a route that only forwards', () => {
-  assert.ok(REDIRECT_ROUTES.some((r) => r.path === '/company-settings'), 'the beacon does not count /company-settings');
+test('D2319 removes /company-settings from routes and beacon keys', () => {
+  assert.equal(REDIRECT_ROUTES.some((r) => r.path === '/company-settings'), false, 'retired by D2319');
   const app = read('frontend/src/App.jsx');
   const line = app.split('\n').find((l) => l.includes('path="/company-settings"'));
-  assert.match(line, /<CompanySettingsRedirect \/>/);
+  assert.equal(line, undefined);
   for (const p of ['/account/portfolio/settings', '/account/portfolio/:uid/settings']) {
     const at = app.indexOf(`path="${p}"`);
     assert.ok(at > 0 && at < app.indexOf('path="/account/portfolio/:tab"'), `${p} must precede /account/portfolio/:tab`);
@@ -240,8 +241,8 @@ test('D1415 part 4: App.jsx routes the new addresses (settings before :tab) and 
   const app = read('frontend/src/App.jsx');
   for (const p of ['/account/companies', '/account/companies/settings', '/account/companies/:uid/settings', '/account/companies/:tab']) {
     const line = app.split('\n').find((l) => l.includes(`path="${p}"`));
-    assert.ok(line, `${p} is not routed`);
-    assert.match(line, /element=\{<CompaniesMovedRedirect \/>\}/, `${p} must only forward`);
+    assert.equal(Boolean(line), !isRetiredRedirect(p), p);
+    isRetiredRedirect(`${p}`) ? assert.equal(line, undefined) : assert.match(line, /element=\{<CompaniesMovedRedirect \/>\}/, `${p} must only forward`);
   }
   const at = (p) => app.indexOf(`path="${p}"`);
   assert.ok(at('/account/portfolio/settings') > 0 && at('/account/portfolio/settings') < at('/account/portfolio/:tab'));
@@ -249,7 +250,7 @@ test('D1415 part 4: App.jsx routes the new addresses (settings before :tab) and 
   // /partner/operations[/overview] go straight to the new settings address.
   for (const p of ['/partner/operations', '/partner/operations/overview']) {
     const line = app.split('\n').find((l) => l.includes(`path="${p}"`));
-    assert.match(line, /<Navigate to="\/account\/portfolio\/settings" replace \/>/, p);
+    isRetiredRedirect(`${p}`) ? assert.equal(line, undefined) : assert.match(line, /<Navigate to="\/account\/portfolio\/settings" replace \/>/, p);
   }
 });
 
@@ -260,14 +261,14 @@ test('D1415 part 4: /company-settings lands under /account/portfolio in one hop,
   }
 });
 
-test('D1415 part 4: the beacon counts each old address under its own pattern, exact before :tab', () => {
+test('D2319: old company aliases no longer count; portfolio destinations remain canonical', () => {
   const paths = REDIRECT_ROUTES.map((r) => r.path);
   const tab = paths.indexOf('/account/companies/:tab');
   for (const p of ['/account/companies', '/account/companies/settings', '/account/companies/:uid/settings']) {
-    assert.ok(paths.includes(p), `${p} is not counted`);
-    assert.ok(paths.indexOf(p) < tab, `${p} must precede /account/companies/:tab`);
+    assert.equal(paths.includes(p), false, `${p} retired by D2319`);
+    assert.equal(tab, -1, 'the retired parameter alias is absent too');
   }
-  for (const [from, , pattern] of OLD) assert.equal(redirectPatternFor(split(from)[0]), pattern, from);
+  for (const [from, , pattern] of OLD) assert.equal(redirectPatternFor(split(from)[0]), isRetiredRedirect(split(from)[0]) ? null : pattern, from);
   for (const now of ['/account/portfolio', '/account/portfolio/acme', '/account/portfolio/settings']) assert.equal(redirectPatternFor(now), null, now);
 });
 

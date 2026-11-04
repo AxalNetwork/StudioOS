@@ -27,6 +27,7 @@ import FormLightbox from '../src/pages/cycles/FormLightbox.jsx';
 import { EDITS, FORMS, editFor, formFor } from '../src/pages/cycles/forms.js';
 import { MODULES, OVERVIEWS, card, figure, records, slugOf } from './_cycle_fixtures.mjs';
 import { MODULES as LIVE_MODULES } from '../src/pages/cycles/modules.js';
+import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
 
 const read = (f) => readFileSync(resolve(process.cwd(), f), 'utf8');
 const html = (el, entry = '/validate') => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [entry] }, el));
@@ -483,21 +484,21 @@ test('A CYCLE IS MOUNTED ONLY ONCE ITS READ IS WIRED: all four are, each with it
   assert.match(app, /<Route path="\/build\/:slug" element=\{guard\(labRoles\(\[[^\]]*\]\), <CycleRoute cycle="build" \/>\)\} \/>/, 'Build has its module pages');
   // Every Build page keeps its static route, and no module slug is one of them.
   const buildPages = [...app.matchAll(/<Route path="\/build\/([a-z-]+)"/g)].map((m) => m[1]);
-  for (const page of ['roadmap', 'cadence', 'kpi', 'this-week', 'board', 'team', 'competitors', 'captable']) assert.ok(buildPages.includes(page), `/build/${page} lost its route`);
+  for (const page of ['roadmap', 'cadence', 'kpi', 'this-week', 'board', 'team', 'competitors', 'captable']) assert.equal(buildPages.includes(page), !isRetiredRedirect(`/build/${page}`), `/build/${page}`);
   for (const m of LIVE_MODULES.build) assert.ok(!buildPages.includes(m.slug), `${m.slug} would be shadowed by a Build page`);
   assert.match(app, /<Route path="\/grow" element=\{founderGrowLanding\s*\? guard\(\[[^\]]*\], <CycleRoute cycle="grow" \/>\)/, "a founder's /grow is the Grow overview");
   assert.match(app, /<Route path="\/grow\/:slug" element=\{guard\(\[[^\]]*\], <CycleRoute cycle="grow" \/>\)\} \/>/, 'Grow has its module pages');
   // The seven Grow pages keep their static routes, and no module slug is one of them.
   const growPages = ['focus', 'talent', 'customers', 'partnerships', 'capital-match', 'brand', 'launch'];
-  for (const page of growPages) assert.ok(app.includes(`<Route path="/grow/${page}"`), `/grow/${page} lost its route`);
+  for (const page of growPages) assert.equal(app.includes(`<Route path="/grow/${page}"`), !isRetiredRedirect(`/grow/${page}`), `/grow/${page} lost its route`);
   for (const m of LIVE_MODULES.grow) assert.ok(!growPages.includes(m.slug), `${m.slug} would be shadowed by a Grow page`);
   // Raise's tools keep their static routes, which win over /raise/:slug.
   for (const tool of ['/raise/pitch', '/raise/data-room', '/raise/capital/model', '/raise/capital/pipeline']) {
-    assert.ok(app.includes(`<Route path="${tool}"`), `${tool} lost its route`);
+    assert.equal(app.includes(`<Route path="${tool}"`), !isRetiredRedirect(`${tool}`), `${tool} lost its route`);
   }
   // D704 (#1666): the three old zone pages redirect to their modules.
   for (const zone of ['interviews', 'pain-map', 'hypotheses']) {
-    assert.ok(app.includes(`<Route path="/validate/${zone}" element={guard(labRoles(['admin', 'founder']), <ValidateZoneRedirect zone="${zone}" />)} />`), `/validate/${zone} redirects to its module`);
+    assert.equal(app.includes(`<Route path="/validate/${zone}" element={guard(labRoles(['admin', 'founder']), <ValidateZoneRedirect zone="${zone}" />)} />`), !isRetiredRedirect(`/validate/${zone}`), `/validate/${zone} redirects to its module`);
   }
   assert.doesNotMatch(app, /FounderValidateWorkspace/, 'the old workspace is gone');
   // D693 decision 12 (#1704): /validate/verdict stays a static line, with the

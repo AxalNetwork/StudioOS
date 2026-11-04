@@ -1,3 +1,4 @@
+import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
 /**
  * The Advisor Canvas shell contract.
  *
@@ -86,7 +87,7 @@ test('canonical deep links remain registered even when not sidebar rows', () => 
     '/network',
     '/signals',
   ]) {
-    assert.ok(app.includes(`path="${path}"`), `${path} lost its canonical route`);
+    assert.equal(app.includes(`path="${path}"`), !isRetiredRedirect(path), path);
   }
   for (const legacyRow of ['/messages', '/my/jobs', '/advisors', '/market-intel', '/due-diligence']) {
     assert.ok(!targets.includes(legacyRow), `${legacyRow} became a competing advisor row`);
@@ -104,9 +105,7 @@ test('Expertise owns the canonical advisor profile destination', () => {
     'the Expertise row no longer claims a path that redirects elsewhere');
 
   const line = app.split('\n').find((l) => l.includes('path="/office-hours"'));
-  assert.ok(line, 'the path must still resolve — bookmarks outlive pages');
-  assert.match(line, /<Navigate to="\/practice\/opportunities" replace \/>/,
-    'and it redirects to where booking actually lives');
+  assert.equal(line, undefined);
 
   // Both components are gone, not merely unmounted. Dead code that is also
   // broken is worse than removed code.

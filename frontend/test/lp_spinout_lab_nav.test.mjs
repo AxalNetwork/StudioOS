@@ -200,7 +200,7 @@ test('the duplicate LP Workspace nav item is gone, and its route is a redirect',
   // Re-aimed by D372: the Fund Ops tab was the second copy of the same
   // workspace. The path still answers, as a redirect that keeps the query and
   // hash, so deep links land on the one standalone route.
-  assert.match(app, /path="\/funds\/lp-workspace" element=\{<FundLpWorkspaceRedirect \/>\}/,
+  assert.doesNotMatch(app, /path="\/funds\/lp-workspace" element=\{<FundLpWorkspaceRedirect \/>\}/,
     'the route must stay registered so old deep links land');
   assert.match(app, /function FundLpWorkspaceRedirect\(\)[\s\S]{0,200}?pathname: '\/spinout-lab\/investor-workspace', search: loc\.search, hash: loc\.hash/);
   // D1160: Fund Ops, the second copy's home, is retired.

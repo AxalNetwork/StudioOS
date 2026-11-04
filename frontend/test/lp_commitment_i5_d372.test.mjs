@@ -183,7 +183,7 @@ test('a failed portal read is Unreadable, and a failed calls read is too', () =>
 test('/lp-portal and /funds/lp-workspace redirect to the one workspace, and the old page is gone', () => {
   const app = codeOnly(read('frontend/src/App.jsx'));
   assert.match(app, /path="\/lp-portal" element=\{<LpPortalRedirect \/>\}/);
-  assert.match(app, /path="\/funds\/lp-workspace" element=\{<FundLpWorkspaceRedirect \/>\}/);
+  assert.doesNotMatch(app, /path="\/funds\/lp-workspace" element=\{<FundLpWorkspaceRedirect \/>\}/);
   assert.doesNotMatch(app, /LPPortalPage/);
   assert.ok(!existsSync(resolve(process.cwd(), 'frontend/src/pages/LPPortalPage.jsx')));
   const fundsPage = codeOnly(read('frontend/src/pages/FundsPage.jsx'));

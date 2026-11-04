@@ -24,29 +24,21 @@ const MERGES = [
 
 const routeLine = (path) => APP.split('\n').find((l) => l.includes(`<Route path="${path}" element=`)) || '';
 
-test('each retired address forwards to its survivor, query and hash kept', () => {
+test('D2319 retires each unused Build alias while its survivor remains', () => {
   for (const [from, to, survivorRoute] of MERGES) {
-    if (from === '/build/captable') {
-      assert.equal(routeLine(from).trim(), '<Route path="/build/captable" element={<CapTableMovedRedirect to="/raise/cap-table" />} />');
+    assert.equal(routeLine(from), '', `${from} retired by D2319`);
+    if (!survivorRoute) {
+      assert.match(routeLine(to === '/raise/cap-table' ? '/raise/:slug' : to), /element=\{guard\(/, `${to}'s route is gone`);
       continue;
     }
-    if (from === '/build/financials') {
-      // Its query and hash are kept by the component; use_of_funds_d1178 lands each one.
-      assert.equal(routeLine(from).trim(), '<Route path="/build/financials" element={<UseOfFundsMovedRedirect />} />');
-      assert.match(routeLine(to), /element=\{guard\(/, `${to}'s route is gone`);
-      continue;
-    }
-    assert.equal(routeLine(from).trim(),
-      `<Route path="${from}" element={<Navigate replace to={{ pathname: '${to}', search: location.search, hash: location.hash }} />} />`,
-      `${from} no longer forwards to ${to} with its query and hash`);
     assert.match(routeLine(survivorRoute), /element=\{guard\(/, `${to}'s route is gone`);
   }
 });
 
-test('each retired address is in the redirect inventory, and its page file is gone', () => {
+test('D2319 removes Build aliases from the redirect inventory; old page files remain gone', () => {
   const listed = new Set(REDIRECT_ROUTES.map((r) => r.path));
   for (const [from, , , page] of MERGES) {
-    assert.ok(listed.has(from), `${from} left the redirect inventory`);
+    assert.equal(listed.has(from), false, `${from} retired by D2319`);
     if (page) assert.ok(!existsSync(resolve(root, `frontend/src/pages/${page}.jsx`)), `${page} is back`);
   }
 });

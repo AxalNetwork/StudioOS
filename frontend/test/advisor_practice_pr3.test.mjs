@@ -389,7 +389,7 @@ test('the zone mounts its own page, and the legacy workspace serves it no longer
   assert.ok(blurb.includes(`delivery: '${sub[1]}'`), `the blurb must be the artboard's: ${sub[1]}`);
 
   // And the old URL redirects rather than answering the same question twice.
-  assert.match(APP, /path="\/advisor\/advisory\/delivery" element=\{<Navigate to="\/practice\/delivery" replace \/>\}/);
+  assert.doesNotMatch(APP, /path="\/advisor\/advisory\/delivery" element=\{<Navigate to="\/practice\/delivery" replace \/>\}/);
 });
 
 test('the zone states its limits, including the one the store cannot remove', () => {

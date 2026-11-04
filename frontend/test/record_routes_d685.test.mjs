@@ -163,7 +163,7 @@ test('both entry points name /validate/record; the old ?new=record is gone from 
   // redirects to `/validate/record` and `?new=notes|upload` to `?log=`
   // (validate_pages_removed_d704 test 1); a row's Record a session is the
   // interview record's (interview_record_d697 test 7).
-  assert.match(read('frontend/src/App.jsx'), /<Route path="\/validate\/interviews" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <ValidateZoneRedirect zone="interviews" \/>\)\} \/>/);
+  assert.doesNotMatch(read('frontend/src/App.jsx'), /<Route path="\/validate\/interviews" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <ValidateZoneRedirect zone="interviews" \/>\)\} \/>/);
   assert.match(DOORS.founders.live.map((i) => i.route).join(' '), /\/validate\/record\b/, 'the door points at the lightbox');
   assert.equal(DOORS.founders.live.some((i) => i.route === '/validate/session/:id'), false);
 });
