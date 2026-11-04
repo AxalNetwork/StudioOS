@@ -40,6 +40,7 @@ reply against its schema, not only that the route exists.
 | `deckStagePlan.schema.json` | `GET /api/decks/:id/stage-plan` (D1522, #3774): the keys the route adds to `stagePlan()`'s plan. |
 | `deckUnseenBatches.schema.json` | `GET /api/decks/:id/batches?state=done&unseen=1` (D1600, #3879): the finished runs nobody opened, newest first, at most five, each with its count of cards waiting. |
 | `deckUsage.schema.json` | `GET /api/decks/:id/usage` (D1524, #3776): the deck's estimate, its spend from the ledger and the per-run unit prices; unread is `{ available: false }`, never 0. |
+| `deckDocumentImport.schema.json` | `POST /api/decks/imports` (D1563, #3810): what Start from › Import a document made — an outline from a paste, DOCX or PDF, or a .pptx deck's cards — with the venture's proposal it stored and the import's counts. |
 | `deckTemplateImport.schema.json` | `POST /api/decks/templates/import` (D1572, #3819): pd30's mapping report for a .pptx template: colours, fonts with their OFL stand-in, each layout on whole cells or with its reason, and the counts. |
 | `deckTemplates.schema.json` | `GET /api/decks/templates` (D1535, #3782): HQ's Gallery templates, filtered, with New deck's seven audiences. |
 | `deckVentureElements.schema.json` | `GET /api/decks/:id/venture-elements` and `/venture-elements/:element` (D1543, #3781): every venture-record element placed or refused by its gate, or one placed element, with its blocks and bindings. |

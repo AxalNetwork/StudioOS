@@ -387,7 +387,7 @@ deckNew.post('/new/quote', async (c) => {
 });
 
 /** Replaces the venture's unkept proposal with this one (D767: one per venture); returns its id. */
-async function writeProposal(env: Env, projectId: number, baseDeckId: number, title: string, slides: any[], outline: any, userId: number): Promise<number> {
+export async function writeProposal(env: Env, projectId: number, baseDeckId: number, title: string, slides: any[], outline: any, userId: number): Promise<number> {
   const res = await env.DB.batch([
     env.DB.prepare('DELETE FROM pitch_deck_proposals WHERE project_id = ?').bind(projectId),
     env.DB.prepare(
@@ -398,7 +398,7 @@ async function writeProposal(env: Env, projectId: number, baseDeckId: number, ti
   return Number((res[1] as any)?.meta?.last_row_id || 0);
 }
 
-async function proposalRow(env: Env, id: number) {
+export async function proposalRow(env: Env, id: number) {
   return env.DB.prepare('SELECT * FROM pitch_deck_proposals WHERE id = ?').bind(id).first<any>();
 }
 
