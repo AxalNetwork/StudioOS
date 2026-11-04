@@ -4,7 +4,8 @@
 //   * PR1: Present's Phone remote makes a code, shows it with its QR and its
 //     countdown, and a paired phone turns it into "Phone remote · on" + Unpair;
 //   * PR2 to PR4: /remote joins with the six digits, sends the card it lands on,
-//     says when Present isn't open, and goes back to the code when disconnected.
+//     says when Present isn't open, and goes back to the code when disconnected;
+//   * a QR scan pre-fills and connects at once; a paste replaces the whole code.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -26,6 +27,7 @@ const h = React.createElement;
 const err = (status, code) => Object.assign(new Error(code || 'synthetic'), { status, code });
 
 test('the pure rules: grouped code, digits, countdown, one answer for a bad code, a step not delivered', () => {
+  // Mutations checked: the code left ungrouped; the countdown announced every second; a step past the last card; "not delivered" read as delivered; a 409 read as a failure, not a disconnect.
   assert.equal(groupCode('482913'), '482 913');
   assert.equal(spokenCode('482913'), '4 8 2 9 1 3', 'read digit by digit');
   assert.equal(digitsOf(' 48-29 13x9'), '482913');
@@ -103,6 +105,7 @@ test('PR1: Phone remote makes a code and shows it grouped, with its QR and count
 });
 
 test('PR1d and PR1e: a Worker without the remote says it is off; a failed press says so with Try again', async () => {
+  // Mutation checked: remote_off read as any other failure → "A code couldn't be made" instead of "off right now".
   Object.assign(deckRemoteApi, { pair: async () => { throw err(503, 'remote_off'); } });
   const m = await mount(h(RemotePair, { deckId: 31 }));
   try {
@@ -123,6 +126,7 @@ const DECK = { id: 31, title: 'Synthetic deck', slides: [{ title: 'Problem', not
 const USER = { id: 2, role: 'founder', name: 'Synthetic Founder' };
 
 test('PR2 to PR3: the code joins, the remote shows the card, and each press sends the card it lands on', async () => {
+  // Mutation checked: a bare step sent instead of the card it lands on.
   const calls = [];
   Object.assign(deckRemoteApi, {
     join: async (code) => { calls.push(['join', code]); return { deck_id: 31, remote_id: 'r1', expires_at: null }; },
@@ -148,6 +152,7 @@ test('PR2 to PR3: the code joins, the remote shows the card, and each press send
 });
 
 test('PR2b, PR2c, PR4b: one answer for a bad code, too many tries, and a disconnected phone goes back to the code', async () => {
+  // Mutations checked: 429 read as a bad code; remote_not_paired read as a failed step.
   let joins = 0;
   Object.assign(deckRemoteApi, {
     join: async () => { joins += 1; if (joins === 1) throw err(404, 'code_not_found'); if (joins === 2) throw err(429); return { deck_id: 31, remote_id: 'r1' }; },
@@ -170,6 +175,7 @@ test('PR2b, PR2c, PR4b: one answer for a bad code, too many tries, and a disconn
 });
 
 test('PR2d: signed out, it says to sign in and comes back with the code kept', async () => {
+  // Mutations checked: a 401 read as a bad code; the sign-in link without the code.
   const m = await mount(h(RemotePage), '/remote?code=482913');
   try {
     assert.match(m.text(m.by('remote-signed-out')), new RegExp(SIGNED_OUT));
@@ -184,4 +190,30 @@ test('Present draws the pairing, and its socket turns the chip on and off', () =
   assert.match(p, /if \(frame\?\.type === 'unpaired'\) \{ setRemotePaired\(false\); return; \}/);
   const r = readFileSync(new URL('../src/routes/remote.jsx', import.meta.url), 'utf8');
   assert.match(r, /<Route path="\/remote" element=\{<RemotePage \/>\} \/>/);
+});
+
+test('PR2: opened from the QR code, the page fills the six digits and connects at once', async () => {
+  // Mutation checked: the QR auto-connect removed → nothing joins until Connect is pressed.
+  const calls = [];
+  Object.assign(deckRemoteApi, { join: async (code) => { calls.push(['join', code]); return { deck_id: 31, remote_id: 'r1' }; } });
+  api.deckGet = async () => DECK;
+  const m = await mount(h(RemotePage), '/remote?code=482913', { user: USER });
+  try {
+    assert.deepEqual(calls, [['join', '482913']], 'joined without a press');
+    assert.match(m.text(m.by('remote-connected')), /Connected to Synthetic deck/);
+  } finally { localStorage.removeItem('user'); await m.close(); }
+});
+
+test('PR2: a paste into any box replaces the whole code, digits only', async () => {
+  // Mutation checked: a paste treated as one box's digit → the two digits typed first stay and the code reads 124829.
+  Object.assign(deckRemoteApi, { join: async () => ({ deck_id: 31, remote_id: 'r1' }) });
+  const m = await mount(h(RemotePage), '/remote', { user: USER });
+  try {
+    await m.type(m.by('remote-box-0'), '1');
+    await m.type(m.by('remote-box-1'), '2');
+    await act(async () => { m.pr(m.by('remote-box-2')).onPaste({ preventDefault() {}, clipboardData: { getData: () => '482 913' } }); });
+    await m.settle();
+    assert.deepEqual(['0', '1', '2', '3', '4', '5'].map((k) => m.pr(m.by(`remote-box-${k}`)).value), ['4', '8', '2', '9', '1', '3']);
+    assert.equal(m.pr(m.by('remote-connect')).disabled, false);
+  } finally { localStorage.removeItem('user'); await m.close(); }
 });
