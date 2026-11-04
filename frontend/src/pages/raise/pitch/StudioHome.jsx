@@ -7,6 +7,7 @@ import { deckSourcesApi } from '../../../lib/api/deckSources';
 import { Pill, usePhoneWidth } from '../../../ui';
 import ExportDialog from './ExportDialog';
 import DataReady from './DataReady';
+import DecksTile from './DecksTile';
 import OneClickBuild from './OneClickBuild';
 import { BrandKitSheet, VersionsSheet } from './DeckSheets';
 import { useDeckChecks } from './DeckVersions';
@@ -55,6 +56,10 @@ import {
  *   Investor links  shared links, unique viewers, median time, views by
  *                   week, most read slide and NDA signed (D894), with
  *                   "Open Share & analytics ›"
+ *
+ * Below the row, the Decks tile's cards and Versions timeline (`DecksTile.jsx`,
+ * D4273): Main and each variant with its links, each version with who saved
+ * it, Compare (with Restore) and Share this version.
  *
  * Plus Spin-Out readiness for a Spin-Out deck (D898 group E). Fill from
  * project is not mounted: the deck's Ask proposes, and nothing is filled
@@ -159,6 +164,11 @@ export default function StudioHome({ reads, readOnly, q }) {
         <DataReady sources={sources} />
         <InvestorLinks reads={reads} hasDeck={Boolean(current)} q={q} />
       </div>
+      {/* D4254 P5 (#4273, ps3): the deck and its variants as cards, and the Versions timeline. */}
+      {current ? (
+        <DecksTile projectId={projectId} versions={versions} current={current} readOnly={readOnly} onChanged={reads.reload}
+          cardCount={reads.deck.status === 'ok' && Array.isArray(reads.deck.data?.slides) ? reads.deck.data.slides.length : null} />
+      ) : null}
       {/* D898 group E: the builder's Spin-Out readiness, now the studio's. */}
       {reads.deck.status === 'ok' ? <SpinoutReadiness projectId={projectId} deck={reads.deck.data} /> : null}
 

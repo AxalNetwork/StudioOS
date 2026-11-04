@@ -18,5 +18,11 @@ Worker routes in `routes/relationships.ts`, mounted at `/api/relationships`, bac
 | `POST /api/relationships/intro-requests/:uid/follow-up/snooze` | either side, for themselves | Takes `{ until: YYYY-MM-DD }`, after today (400 `until_not_future`). |
 | `POST /api/mail/send` with `intro_uid` | the teammate asked | D4329: the intro, sent from the introducer's own mailbox through the Email composer. Checked before anything goes out: 404 for anyone else's request, 409 `intro_not_accepted` or `intro_already_made`. After the send, the request is `made` (`mail_sent_uid` names the send, shown to the introducer only) and the requester is told. |
 
+| `POST /api/relationships/drafts/ask-reason` | signed in | D4330, RI3 "Draft from this record". Takes `{ teammate, ref, record?, estimate? }`: a relationship I can see now (else 404), and optionally the record I am on (`prospect:21`, …), read through its module's own gate (else 404). Answers `{ estimate: { hold_microusd, model } }` (nothing run) or `{ draft: { kind: 'ask_reason', proposal: true, text, model } }`. |
+| `POST /api/relationships/intro-requests/:uid/drafts/intro` | the teammate asked, once accepted | D4330, RI4 "Draft with Eadwyn". Takes `{ estimate? }`; answers `{ estimate }` or `{ draft: { kind: 'intro', proposal: true, subject, body, model } }`, to open in the Email composer. 409 `intro_not_accepted` before Accept. |
+| `POST /api/relationships/intro-requests/:uid/drafts/follow-up` | either side, once made | D4330, RI6 "Draft a follow-up". Takes `{ estimate? }`; answers `{ estimate }` or `{ draft: { kind: 'follow_up', proposal: true, subject, body, model } }`. 409 `intro_not_made` before it is made. |
+
+The three drafts are the router's `mail_draft` task, held, guarded and charged in AI tokens and logged against `/network/introductions` (402 on a short balance, in the top-up sentence). Nothing is stored and nothing is sent. A prompt carries only what the caller can already see, with anything that looks like an email, phone or link withheld.
+
 Every route above refuses a caller who is not on the request with 404 "Not found.", in the words of a request that does not exist, and no route contacts the person.
 

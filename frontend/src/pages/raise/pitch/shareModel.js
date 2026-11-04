@@ -54,7 +54,34 @@ export const DEFAULT_SHARE = Object.freeze({
   allowDownload: false, allowForwarding: false, ndaRequired: true, include: DEFAULT_INCLUDE,
   // D1573 (#3820): "Time per slide", on as pd35's row editor draws it; off keeps visit counts only.
   timePerSlide: true,
+  // #4272 (ps7n): what the link shows: this version, or one of its tailored variants (`variant:<uid>`).
+  target: 'version',
 });
+
+// ── #4272 ps7n: version or variant, and the watermark ─────────────────────────
+
+/** The choice that sends the version itself; a variant is `variant:<uid>`. */
+export const THIS_VERSION = 'version';
+/** The watermark is not optional (D1565): every link names its investor. The toggle is drawn on and fixed. */
+export const WATERMARK_LINE = 'Always on: every link carries a watermark naming its investor.';
+export const VARIANTS_UNREAD = 'Variants could not be read. The link can still show this version.';
+
+/** The "Version or variant" choices: this version first, then this version's tailored variants. */
+export function linkTargets(deck, variants) {
+  const out = [{ value: THIS_VERSION, label: deck?.version != null ? `v${deck.version} · this version` : 'This version' }];
+  for (const v of Array.isArray(variants) ? variants : []) {
+    const uid = typeof v?.uid === 'string' ? v.uid.trim() : '';
+    if (!uid) continue;
+    out.push({ value: `variant:${uid}`, label: `Variant · ${String(v.name || '').trim() || 'Unnamed'}` });
+  }
+  return out;
+}
+
+/** The variant a choice names, or null for this version (or a choice that is not one). */
+export function variantOf(target) {
+  const m = /^variant:(.+)$/.exec(String(target ?? ''));
+  return m ? m[1] : null;
+}
 
 /** "Frozen at v4 as of 21 Oct": a link never follows a later save. */
 export function frozenLine(version) {
@@ -99,14 +126,15 @@ export function shareBody(state, deck) {
 }
 
 /** The sentence under the form: what Create link writes, before it writes. */
-export function whatShareDoes(state, deck, investorName) {
+export function whatShareDoes(state, deck, investorName, variantName = null) {
   if (!deck?.id) return NO_DECK;
   const who = investorName || 'this investor';
+  const what = variantOf(state?.target) ? `the ${variantName ? `“${variantName}”` : 'tailored'} variant of v${deck.version}` : `v${deck.version}`;
   const until = state.expires == null ? 'never expires' : `expires in ${state.expires} days`;
   const limit = viewLimitOf(state.viewLimit);
   const views = limit ? `opens ${limit === 1 ? 'once' : `${limit} times`}` : 'has no view limit';
   const nda = state.ndaRequired ? ' It asks for the NDA before any card shows.' : '';
-  return `Creates one link to v${deck.version} for ${who}. It ${until} and ${views}.${nda} Every link is logged on the deck.`;
+  return `Creates one link to ${what} for ${who}. It ${until} and ${views}.${nda} Every link is logged on the deck.`;
 }
 
 /** The link to copy, only for the path the writer returns. */

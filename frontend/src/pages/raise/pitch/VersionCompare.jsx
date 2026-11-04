@@ -3,7 +3,7 @@ import { api } from '../../../lib/api';
 import { deckCoeditApi } from '../../../lib/api/deckCoedit.js';
 import { reportError } from '../../../lib/log';
 import { Lightbox } from '../../../ui';
-import { changedPill, compareCards, restoreCardDialog, restoreDialog, vLabel } from './compareModel';
+import { changedPill, compareCards, compareLine, restoreCardDialog, restoreDialog, vLabel } from './compareModel';
 import { dayLabel } from './pitchStudioModel';
 
 /**
@@ -93,6 +93,8 @@ export default function VersionCompare({ older, newer, versions, readOnly, onClo
     <section className="flex flex-col gap-3" data-testid="pitch-compare" aria-label={`Compare ${vLabel(older)} with ${vLabel(newer)}`}>
       <div className="flex flex-wrap items-center justify-between gap-2.5">
         <span className={MUTED}>Changed cards are outlined. {cmp ? <span className={AMBER} data-testid="pitch-compare-count">{changedPill(cmp.changed)}</span> : null}</span>
+        {/* D4254 P5 (#4273, ps3): what changed, by card title. */}
+        {both ? <span className={`text-[12.5px] font-semibold ${INK}`} data-testid="pitch-compare-line">{compareLine(left.data, right.data)}</span> : null}
         <span className="flex gap-2">
           {!readOnly ? <button type="button" className={GHOST} disabled={!both} onClick={() => { setRefusal(null); setDialog(true); }} data-testid="pitch-compare-restore">Restore {vLabel(older)}</button> : null}
           <button type="button" className={GHOST} onClick={onClose} data-testid="pitch-compare-close">Close</button>
