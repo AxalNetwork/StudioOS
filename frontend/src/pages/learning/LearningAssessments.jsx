@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { Pill, RailFrame, Unrecorded, WorkerRail } from '../../ui';
+import { Pill, Unrecorded, WorkerRail } from '../../ui';
 import { titleCase } from '../../lib/absence';
 import ExercisePanel, { ExerciseSubmit } from './ExercisePanel';
 import { readRefusal } from '../../lib/api.js';
