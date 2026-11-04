@@ -8,6 +8,7 @@ import { projectSettingsPath, projectTeamPath, companyProjectTeamPath, scopeFor,
 import { MoveUnderSheet } from '../../team/ProjectSettingsPage.jsx';
 import { managedNote } from '../../team/teamModel.js';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT } from '../../team/teamUi.jsx';
+import SkillsLink from '../../team/SkillsLink.jsx';
 import { through } from './portfolioAdapter.js';
 import {
   BASE_PATH, companyPathFor, companyProjectsPath, day, incorporatePath, jurisdictionName, legalFormWord, seatWord, stageWord, valueFact,
@@ -142,7 +143,13 @@ export default function ProjectPage({ id, projects = null, summary = null, paths
             ]} />
           )}
         </PCard>
-        <PCard title="Team" count={team ? team.length : null} testId="project-team" aside={<Link to={teamTo} className={LINK}>Open Team</Link>}>
+        <PCard title="Team" count={team ? team.length : null} testId="project-team" aside={(
+          <>
+            <Link to={teamTo} className={LINK}>Open Team</Link>
+            {/* #4363: the project's Skills tab, in the form its Team uses, once the read names that form. */}
+            <SkillsLink scope={ready ? scope : null} className={LINK} testId="project-skills-link" />
+          </>
+        )}>
           {members.status === 'loading' && !members.value ? <Reading lines={2} />
             : !team ? <Failed what="The team" onRetry={reread} testId="project-team-unread" />
               : (
