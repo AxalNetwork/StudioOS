@@ -113,6 +113,27 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-11-04 — Pitch › Present: pair a phone as a remote (#3828)
+
+The owner's artifact `KBaBZ9jqPoEFTSqqS1WzQD`, republished, was decoded by `scripts/read-canvas.mjs`. Its page is the bundle's second file, taken out as it was: it already pointed at the shared runtime and Google Fonts. The logo paths were rewritten.
+- **`Pitch · Boards.dc.html`** keeps every PS board and adds PR1 to PR6.
+- **The page replaces `Pitch Deck Studio v2 Page.dc.html`.** All 124 earlier frames are kept. It adds 20:
+  - pr1 to pr1e: Present's code panel and its states;
+  - pr2 to pr2d: the phone's code entry and its states;
+  - pr3 and pr3m: connected, and ⋯ Disconnect;
+  - pr4a to pr4c: the connection states;
+  - pr5a and pr5b: tablet;
+  - pr6a and pr6b: light.
+
+The build is D1581 §PR (`documentation/architecture/decisions/D1581.md`).
+## Landed 2026-11-04 — HQ › AI agents: the agents' values, revised (#4137)
+
+The owner's two HQ › AI agents artifacts were decoded by `scripts/read-canvas.mjs`:
+- **The boards** (artifact `9ecDUL1qvu1FZLfWfMaUbV`) are unchanged.
+- **The page** (artifact `LxnWj8iKZPZyfvLYJoeFT9`) replaces `HQ AI Agents Page.dc.html`. Its only change is the 16 agents' top values: every one is now an Axal value, and Empathy, Courage and Craft are gone.
+
+The owner chose to store the canvas's values and its two areas per agent. That Worker change is #4388 (S16).
+
 ## Landed 2026-11-04 — Work: assignees from the team only, and My tasks (#3968, #3994)
 
 The owner's two artifacts were decoded by `scripts/read-canvas.mjs`:

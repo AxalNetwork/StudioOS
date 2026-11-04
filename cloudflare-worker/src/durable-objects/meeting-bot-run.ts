@@ -29,7 +29,7 @@ export async function validBotCallback(env: Env, req: Request, raw: string, now 
   if ((env.MEETING_BOT_SECRET?.length ?? 0) < 32 || !/^\d{13}$/.test(ts) || Math.abs(now - Number(ts)) > BOT_CALLBACK_WINDOW_MS || !/^[a-f0-9]{64}$/.test(signature)) return false;
   const text = `v1:${ts}:${req.method}:${new URL(req.url).pathname}:${raw}`;
   if (constantTimeEqual(signature, await botHmac(env.MEETING_BOT_SECRET!, text))) return true;
-  const uid = /^\/api\/meeting-bots\/([^/]+)\/(?:events|zoom-credentials)$/.exec(new URL(req.url).pathname)?.[1];
+  const uid = /^\/api\/meeting-bots\/([^/]+)\/(?:events|zoom-credentials|meet-credentials)$/.exec(new URL(req.url).pathname)?.[1];
   return runtimeUid(uid) && constantTimeEqual(signature,await botHmac(await runtimeKey(env.MEETING_BOT_SECRET!,uid),text));
 }
 export async function validBotUploadToken(env: Env, uid: string, seq: string, token: string, now=Date.now()) {
@@ -57,6 +57,8 @@ const int = (v: unknown, max: number) => typeof v === 'number' && Number.isSafeI
 const FAILED_CODES = new Set(['admission_refused','meeting_ended','runtime_failed','notice_failed','unsupported_platform','processing_failed','no_audio']);
 /** D1368: the bot's `<code>` or `<code>@<step>[:<state>]`, the same shape meeting-bot/src/callback.ts sends. */
 export const BOT_FAILURE_DETAIL = /^[a-z_]{1,40}(@[a-z_]{1,40}(:[a-z_]{1,20})?)?$/;
+/** D3678: the most two-step codes one Meet run may ask for. */
+export const MEET_CODES_MAX = 4;
 interface BillingBlock { uid: string; index: number; start: number; end: number; settled: boolean; minutes: number }
 interface UploadTicket { token: string; seq: number; size: number; start: number; expires: number; used: boolean }
 
@@ -94,6 +96,22 @@ export class MeetingBotRun implements DurableObject {
           const waiting='waitingForHost' in credentials && credentials.waitingForHost===true;
           if ((await this.state.storage.get<boolean>('waiting_for_host')??false)!==waiting) await this.state.storage.put('waiting_for_host',waiting);
           return json(credentials);
+        }
+        else if (action === '/meet-credentials') {
+          // D3678 (#3678): Eadwyn's Google account for a signed-in Meet join, only while this Meet run is joining.
+          const { credentialStep, meetCredentials }=await import('../services/meetBotGoogle');
+          const step=credentialStep(await req.text());
+          if (!step) throw new BotError(400,'invalid_bot_event','The runtime request is not valid.');
+          if (run.platform!=='google_meet' || run.status!=='joining' || !await this.allowed(run) || (await this.lease()??0)<=Date.now())
+            throw new BotError(403,'meet_run_inactive','The Meet runtime is not available.');
+          const last=await this.state.storage.get<number>('meet_credentials_at')??0;
+          if (Date.now()-last<2500) throw new BotError(429,'bot_meet_rate','The runtime must wait before retrying.');
+          // A sign-in asks for at most a few codes; more is a loop, not a sign-in.
+          const codes=await this.state.storage.get<number>('meet_codes')??0;
+          if (step==='code' && codes>=MEET_CODES_MAX) throw new BotError(429,'bot_meet_codes_spent','The runtime asked for too many codes.');
+          await this.state.storage.put('meet_credentials_at',Date.now());
+          if (step==='code') await this.state.storage.put('meet_codes',codes+1);
+          return await meetCredentials(this.env,step);
         }
         else if (action === '/status') await this.tick(run);
         else throw new BotError(404,'bot_not_found','The bot run is not available.');

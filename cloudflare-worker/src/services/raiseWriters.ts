@@ -28,6 +28,7 @@ import { ownedRow } from './records/owned';
 import { addHolder, updateHolder, HolderError, type AddHolderArgs } from './capTableWrites';
 import { SERVED_FUNDS } from './researchFundDirectory';
 import { ensureTier } from '../middleware/requireTier';
+import { DECK_STUDIO_TIER } from './decks/studioAccess';
 import { watermarkFor } from './decks/variants';
 import { createShareLink, revokeShareLink, SHARE_NEVER_EXPIRES } from '../routes/decks';
 import { shareIncludeFromBody } from './decks/shareInclude';
@@ -394,7 +395,7 @@ async function linkInvestor(env: Env, projectId: number, b: Record<string, unkno
  * (`services/decks/shareInclude.ts`; left out, answer A).
  */
 export async function createDeckLink(env: Env, a: { projectId: number; user: User; body: Record<string, unknown> }) {
-  ensureTier(a.user, 'studio');
+  ensureTier(a.user, DECK_STUDIO_TIER);
   const b = a.body;
   const deckId = posInt(b.deck_id);
   const deck = deckId == null ? null : await env.DB.prepare('SELECT id, version FROM pitch_decks WHERE id = ? AND project_id = ?')
@@ -449,7 +450,7 @@ const sqlTime = (ms: number) => new Date(ms).toISOString().replace('T', ' ').sli
  * only on a link that never expires already.
  */
 export async function updateDeckLink(env: Env, a: { projectId: number; user: User; linkId: unknown; body: Record<string, unknown> }) {
-  ensureTier(a.user, 'studio');
+  ensureTier(a.user, DECK_STUDIO_TIER);
   const id = posInt(typeof a.linkId === 'string' && /^[1-9][0-9]{0,9}$/.test(a.linkId) ? Number(a.linkId) : a.linkId);
   const row = id == null ? null : await env.DB.prepare(
     `SELECT t.id, t.expires_at FROM pitch_deck_share_tokens t JOIN pitch_decks d ON d.id = t.deck_id

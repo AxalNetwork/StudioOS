@@ -14,7 +14,7 @@ import DeckGridTab from './DeckGridTab';
 import { useAuth } from '../../../hooks/useAuthSync';
 import {
   BETA_ADD_LINE, BETA_COLUMNS, BETA_REMOVE_LINE, BUILD, FLAG_CHANGE_LINE, MODELS_LINK, NORM_ADD_LINE, NORM_COLUMNS, NORM_RETIRE_LINE, NORM_RULE, NORM_SOURCE_HELP, NORM_STAGE_OF, NOTE_MAX, NOT_RECORDED, OUTCOMES, PROJECT_NORMS_NOTE, PROPOSAL_LINE, REASONS, STAGES, SUBTITLE,
-  addArmed, betaChoices, cohortRow, defaultOnKeys, defaultRow, filterReports, flagChange, flagChangeArmed, flagChangeTitle, flagRows, normBody, normDraftArmed, normRetireArmed, normRow, notYet, offGridOverrides, reasonOk, reportRow, resolveArmed, templateChangeArmed, templateGrid, templatePreview, templateResetArmed, viewFor,
+  addArmed, betaChoices, cohortRow, defaultOnKeys, defaultRow, filterReports, flagChange, flagChangeArmed, flagChangeTitle, flagRows, normBody, normDraftArmed, normRetireArmed, normRow, notYet, offGridOverrides, reasonOk, reportRow, resolveArmed, takedownArmed, TAKEDOWN_REASON_MAX, templateChangeArmed, templateGrid, templatePreview, templateResetArmed, viewFor,
 } from './hqDecksModel';
 
 /**
@@ -24,6 +24,7 @@ import {
  * THE LIVE READS AND WRITES, each on a mounted route:
  *   Reports            GET  /api/admin/deck-reports?status=   (requireHqAdmin, D1540)
  *                      POST /api/admin/deck-reports/:uid/resolve  { outcome, note }
+ *                      POST /api/admin/deck-images/:uid/takedown  { reason }  (#4375)
  *   Feature flags      GET  /api/admin/feature-flags          (requireAdmin, D1509)
  *                      PUT  the same, { key, scope, scope_id, enabled, reason }  (K2 #4189)
  *   Beta cohort        GET/POST /api/admin/deck-beta, GET /people, DELETE /:uid (requireHqAdmin, K3 #4190)
@@ -120,6 +121,48 @@ function ResolveForm({ row, onDone }) {
   );
 }
 
+/** #4375: take down one image the report names, with a reason the founder reads. */
+function TakedownForm({ image, onDone }) {
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [done, setDone] = useState(image.takenDown);
+  const armed = takedownArmed(reason);
+  const submit = async () => {
+    setBusy(true); setError('');
+    try {
+      await deckReportsApi.takedownImage(image.uid, reason.trim());
+      setDone(true);
+      onDone?.();
+    } catch (e) {
+      setError(e?.message || 'The image could not be taken down.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <li className="flex flex-wrap items-start gap-3" data-testid={`deck-report-image-${image.uid}`}>
+      <img src={image.url} alt="" className="h-16 w-28 shrink-0 rounded border border-axal-hairline object-cover dark:border-gray-700" />
+      {done
+        ? <p className={MUTED} data-testid="deck-report-image-taken-down">Taken down. Every card that used it shows “Image removed by Axal HQ”.</p>
+        : (
+          <div className="min-w-[14rem] flex-1 space-y-2">
+            <label className="block text-[12px] font-semibold text-axal-ink dark:text-gray-200">
+              Why take it down · required
+              <textarea className={`${INPUT} mt-1`} rows={2} maxLength={TAKEDOWN_REASON_MAX} value={reason} onChange={(e) => setReason(e.target.value)}
+                placeholder="What is wrong with it: reported as unlawful, a person without consent…" data-testid="deck-report-takedown-reason" />
+            </label>
+            <p className={MUTED}>The file is deleted and the founder is told, with this reason. It cannot be undone.</p>
+            {error && <p role="alert" className="text-[12.5px] text-red-700 dark:text-red-300">{error}</p>}
+            <button type="button" className={PRIMARY} disabled={!armed || busy} onClick={submit} data-testid="deck-report-takedown-button">
+              {busy ? 'Taking down…' : 'Take down image'}
+            </button>
+          </div>
+        )}
+    </li>
+  );
+}
+
 function ReportSheet({ row, onResolved }) {
   return (
     <Card data-testid="deck-report-sheet">
@@ -135,6 +178,12 @@ function ReportSheet({ row, onResolved }) {
       </dl>
       {PROPOSAL_LINE[row.proposal] && <p className={`${MUTED} mt-2`}>{PROPOSAL_LINE[row.proposal]}</p>}
       {!BUILD.K1.live && (isNR(row.founder) || isNR(row.before)) && <p className={`${MUTED} mt-2`} data-testid="deck-report-k1">{notYet('K1')}</p>}
+      {row.images.length > 0 && (
+        <div className="mt-3 border-t border-axal-hairline pt-3 dark:border-gray-800" data-testid="deck-report-images">
+          <p className="text-[12px] font-semibold text-axal-ink dark:text-gray-200">Images on this result</p>
+          <ul className="mt-2 space-y-3">{row.images.map((im) => <TakedownForm key={im.uid} image={im} />)}</ul>
+        </div>
+      )}
       <div className="mt-3 border-t border-axal-hairline pt-3 dark:border-gray-800">
         {row.open
           ? <ResolveForm row={row} onDone={onResolved} />

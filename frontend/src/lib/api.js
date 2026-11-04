@@ -130,6 +130,8 @@ export function isPublicPath(pathname) {
     || currentPath.startsWith('/authors/')
     || /^\/advisors\/[^/]+$/.test(currentPath)
     || currentPath === '/spinout-lab'
+    // D1581 (#3828, PR2d): a signed-out phone on the remote page is told to sign in, its code kept.
+    || currentPath === '/remote'
     // D1072 (#2425): the public trust center and its tabs; /trust/me is the member's own and stays auth-only.
     || ['/trust', '/trust/security', '/trust/data', '/trust/subprocessors', '/trust/documents', '/trust/disclosure'].includes(currentPath)
     // Printable Program Brief — public brochure page; /spinout-lab/apply

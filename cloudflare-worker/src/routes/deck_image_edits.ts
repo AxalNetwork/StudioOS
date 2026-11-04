@@ -59,7 +59,7 @@ import { gatewayImageModelFor } from '../services/ai/catalogue';
 import { railFor, refuseRun } from '../util/railContext';
 import { refuse } from '../util/refusal';
 import { auditDeckWrite, getDeckRow, projectOwned, themeOfRow } from './decks';
-import { imageUrl } from './deck_images';
+import { imageUrl, TAKEN_DOWN_SENTENCE } from './deck_images';
 
 const deckImageEdits = new Hono<{ Bindings: Env }>();
 
@@ -77,6 +77,8 @@ async function imageOf(c: any, user: User): Promise<any | Response> {
   const row = await c.env.DB.prepare('SELECT * FROM deck_images WHERE uid = ?').bind(uid).first();
   if (!row) return c.json({ error: 'not found' }, 404);
   try { await projectOwned(c, user, Number(row.project_id), { write: true }); } catch { return c.json({ error: 'not found' }, 404); }
+  // #4375: an image HQ took down is not edited, cut out or upscaled: its bytes are gone.
+  if (row.taken_down_at) return refuse(c, 410, { code: 'image_taken_down', message: TAKEN_DOWN_SENTENCE });
   return row;
 }
 
