@@ -302,6 +302,12 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
   const [agentsBlock, setAgentsBlock] = useState(null);
   const [rolesBlock, setRolesBlock] = useState(null);
   const [queueBlock, setQueueBlock] = useState(null);
+  const queueRead = useRef(0);
+  const refreshQueue = useCallback(() => {
+    const request = ++queueRead.current;
+    setQueueBlock(null);
+    return agents.queue(kind, id, {}).then((out) => { if (request === queueRead.current) setQueueBlock(out); });
+  }, [kind, id]);
   const [sheet, setSheet] = useState(null);
   const [dialog, setDialog] = useState(null);
   const [notice, setNotice] = useState(null);
@@ -315,7 +321,7 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
   }, [kind, id, canEdit]);
   // The agents are their own read: a failed people read still draws the agents card's own state (TM9c1).
   useEffect(() => { if (state.status !== 'loading') loadAgents(); }, [state.status, loadAgents]);
-  useEffect(() => { agents.roles().then(setRolesBlock); agents.queue(kind, id, {}).then(setQueueBlock); }, [kind, id]);
+  useEffect(() => { agents.roles().then(setRolesBlock); refreshQueue(); return () => { queueRead.current += 1; }; }, [refreshQueue]);
 
   // The sidebar's bottom block draws the scope this page is about (TM1e–TM1g), once it is read.
   usePublishScope(state.status === 'ready' ? scope : null);
@@ -412,7 +418,7 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
       ) : null}
       {tab === 'skills' ? <SkillsTab scope={scope} agentsBlock={agentsBlock} /> : null}
       {tab === 'roles' ? <RulebooksTab scope={scope} canManage={!!agentsBlock?.value?.can_manage} agentsBlock={agentsBlock} /> : null}
-      {tab === 'approvals' ? <ApprovalsTab scope={scope} /> : null}
+      {tab === 'approvals' ? <ApprovalsTab scope={scope} canManage={!!agentsBlock?.value?.can_manage} viewerUid={me().uid} roles={rolesBlock?.value?.roles} onChanged={refreshQueue} /> : null}
       {tab === 'activity' && kind === 'project' ? <ActivityTab projectId={id} team={agentList} /> : null}
       {tab === 'settings' ? (
         <TeamSettingsTab scope={scope} agentsBlock={agentsBlock} canManage={canEdit}

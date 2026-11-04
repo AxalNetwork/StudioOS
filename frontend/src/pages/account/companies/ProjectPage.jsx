@@ -8,6 +8,7 @@ import { projectSettingsPath, projectTeamPath, companyProjectTeamPath, scopeFor,
 import { MoveUnderSheet } from '../../team/ProjectSettingsPage.jsx';
 import { managedNote } from '../../team/teamModel.js';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT } from '../../team/teamUi.jsx';
+import WorkSummaryCard from '../../work/WorkSummaryCard.jsx';
 import SkillsLink from '../../team/SkillsLink.jsx';
 import { AccessPill } from '../../../ui/ReasonGate';
 import { through } from './portfolioAdapter.js';
@@ -172,6 +173,8 @@ export default function ProjectPage({ id, projects = null, summary = null, paths
               )}
         </PCard>
       </div>
+
+      {ready ? <WorkSummaryCard key={id} projectId={id} /> : null}
 
       {moving ? (
         <MoveUnderSheet project={{ id, name }} companies={companies} onClose={() => setMoving(false)}

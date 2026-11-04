@@ -48,3 +48,9 @@ D1131 cleanup uses the existing CF/D1 job queue: two immediate copies, bounded
 continuation, independent provider retries and a fresh cancellation check on
 delivery. Its queue contract is in `cloudflare-worker/src/services/queueWorker.ts`
 and `cloudflare-worker/src/models/jobs.ts`; no new schema or binding is needed.
+
+D1491 (#3725) adds `EventSyndicationPanel.jsx`: saved public drafts choose channel
+accounts and preview copy without sending; a separate Save channels writes the
+choices. On an approved event its button explicitly posts additions. Manage and
+the admin desk read listing state, Retry, Withdraw, and Not recorded registration
+counts from the same Worker read.

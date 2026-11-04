@@ -364,3 +364,34 @@ test('#4394 (TM19c): a decision_expired item names its open proposal, so "Decide
     assert.equal((await call(w,STRANGER,'GET','/project/7/work/board')).status,403,'the read gate holds');
   } finally { w.db.close(); }
 });
+
+test('#4420: summary shares board gates and counts every project column including legacy tasks', async()=>{
+  const w=world();try{
+    const path='/project/7/work/summary';
+    assert.equal((await call(w,null,'GET',path)).status,401);
+    assert.equal((await call(w,STRANGER,'GET',path)).status,403);
+    assert.equal((await call(w,OWNER,'GET','/company/co-one/work/summary')).status,404);
+    assert.equal((await call(w,OWNER,'GET','/company/7/work/summary')).status,404);
+    assert.equal((await call(w,OWNER,'GET','/project/999/work/summary')).status,404);
+    assert.deepEqual((await call(w,MEMBER,'GET',path)).body,{open:0,closed:0,columns:{triage:0,backlog:0,ready:0,in_progress:0,in_review:0,done:0}});
+    for(const column of ['triage','backlog','ready','in_progress','in_review']) {
+      const task=await create(w,{column});
+      if(['backlog','in_progress'].includes(column)) w.db.prepare('UPDATE scope_tasks SET board_column=NULL WHERE uid=?').run(task.uid);
+    }
+    const finished=await create(w); await close(w,finished.uid);
+    const cancelled=await create(w); await close(w,cancelled.uid,'not_planned');
+    w.db.prepare('UPDATE scope_tasks SET board_column=NULL,close_reason=NULL WHERE uid IN (?,?)').run(finished.uid,cancelled.uid);
+    const legacy=await create(w); w.db.prepare("UPDATE scope_tasks SET board_column=NULL,status='waiting_decision' WHERE uid=?").run(legacy.uid);
+    await create(w,{},8);
+    const board=await call(w,MEMBER,'GET','/project/7/work/board');
+    const summary=await call(w,MEMBER,'GET',path);
+    assert.equal(summary.status,200);
+    assert.deepEqual(summary.body,{open:6,closed:2,columns:Object.fromEntries(board.body.columns.map((c:any)=>[c.key,c.count]))});
+    assert.equal(summary.body.columns.in_review,2);
+    assert.equal(summary.body.columns.done,2);
+    for(const change of [{AGENT_ENGINE:'off'},{TEAM_AGENTS_ENABLED:'false'}]){
+      const prior={...w.env};Object.assign(w.env,change);
+      const off=await call(w,OWNER,'GET',path);assert.deepEqual([off.status,off.body.error],[404,'agent_engine_off']);Object.assign(w.env,prior);
+    }
+  }finally{w.db.close();}
+});
