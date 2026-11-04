@@ -239,3 +239,32 @@ test('channel link, planned budget and actor activity roll back together on a fa
   assert.deepEqual((await read(f)).body.campaigns[0].channels, []);
   assert.equal(one(f, 'SELECT COUNT(*) n FROM activity_logs WHERE entity_id = ?', uid).n, 1);
 });
+test('a campaign list reads and groups venture contact attribution once, preserving tagless and unreadable states', async () => {
+  const f = fixture();
+  const first = (await create(f, { utm_campaign: 'first' })).body.campaign.uid;
+  const second = (await create(f, { utm_campaign: 'second' })).body.campaign.uid;
+  const tagless = (await create(f)).body.campaign.uid;
+  f.db.exec(`INSERT INTO contacts(uid,project_id,audience,email,utm_json) VALUES
+    ('first-contact',7,'customer','first@example.test','{"utm_campaign":" FIRST "}'),
+    ('second-contact',7,'customer','second@example.test','{"utm_campaign":"second"}'),
+    ('second-contact-again',7,'customer','second2@example.test','{"utm_campaign":"second"}'),
+    ('foreign-contact',8,'customer','foreign@example.test','{"utm_campaign":"first"}');`);
+  const prepare = f.env.DB.prepare.bind(f.env.DB);
+  let contactReads = 0;
+  f.env.DB.prepare = (sql: string) => { if (/\bFROM contacts\b/i.test(sql)) contactReads++; return prepare(sql); };
+  let rows = (await read(f)).body.campaigns;
+  assert.equal(contactReads, 1, 'contact scan count does not grow with campaign count');
+  assert.equal(rows.find((c: any) => c.uid === first).leads, 1);
+  assert.equal(rows.find((c: any) => c.uid === second).leads, 2);
+  assert.equal(rows.find((c: any) => c.uid === tagless).leads, null);
+  assert.match(rows.find((c: any) => c.uid === tagless).leads_reason, /^Not recorded:/);
+  f.db.exec('ALTER TABLE contacts RENAME COLUMN utm_json TO unreadable_utm');
+  contactReads = 0;
+  rows = (await read(f)).body.campaigns;
+  assert.equal(contactReads, 1, 'one failed source read, not one failure per campaign');
+  for (const uid of [first, second]) {
+    assert.equal(rows.find((c: any) => c.uid === uid).leads, null);
+    assert.match(rows.find((c: any) => c.uid === uid).leads_reason, /^Unreadable:/);
+  }
+  assert.match(rows.find((c: any) => c.uid === tagless).leads_reason, /^Not recorded:/);
+});

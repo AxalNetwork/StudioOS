@@ -83,8 +83,26 @@ async function uniqueWrite(env: Env, statements: Statement[]) {
     throw e;
   }
 }
+/** One attribution scan per venture/list request, using utmSource's permissive JSON parsing. */
+async function campaignLeads(env: Env, pid: number): Promise<{ counts: Map<string, number> | null; reason: string | null }> {
+  try {
+    const contacts = await env.DB.prepare('SELECT utm_json FROM contacts WHERE project_id = ? AND utm_json IS NOT NULL').bind(pid).all<{ utm_json: string }>();
+    const counts = new Map<string, number>();
+    for (const row of contacts.results ?? []) {
+      try {
+        const v = JSON.parse(row.utm_json)?.utm_campaign;
+        if (typeof v === 'string' && v.trim()) {
+          const tag = v.trim().toLowerCase();
+          counts.set(tag, (counts.get(tag) ?? 0) + 1);
+        }
+      } catch { /* Same parser as utmSource: malformed attribution is not a match. */ }
+    }
+    return { counts, reason: null };
+  } catch { return { counts: null, reason: 'Unreadable: campaign leads could not be read' }; }
+}
+
 /** The optional figures fail independently; missing values remain null, including explicitly recorded zero spend. */
-async function readCampaign(env: Env, c: Campaign) {
+async function readCampaign(env: Env, c: Campaign, attribution?: Awaited<ReturnType<typeof campaignLeads>>) {
   const segment = c.segment_id == null ? null : await env.DB.prepare('SELECT id, name FROM customer_segments WHERE id = ? AND project_id = ?').bind(c.segment_id, c.project_id).first();
   const links = await env.DB.prepare('SELECT g.id, g.uid, g.name, l.planned_budget_cents FROM grow_campaign_channels l JOIN growth_channels g ON g.id = l.channel_id WHERE l.campaign_id = ? AND g.project_id = ? ORDER BY g.name, g.uid').bind(c.id, c.project_id).all<{ id: number; uid: string; name: string; planned_budget_cents: number | null }>();
   const channels = await Promise.all((links.results ?? []).map(async (g) => {
@@ -102,14 +120,9 @@ async function readCampaign(env: Env, c: Campaign) {
   let leads: number | null = null;
   let leads_reason: string | null = 'Not recorded: this campaign has no UTM campaign tag';
   if (c.utm_campaign) {
-    try {
-      const contacts = await env.DB.prepare('SELECT utm_json FROM contacts WHERE project_id = ? AND utm_json IS NOT NULL').bind(c.project_id).all<{ utm_json: string }>();
-      leads = 0;
-      for (const row of contacts.results ?? []) {
-        try { const v = JSON.parse(row.utm_json)?.utm_campaign; if (typeof v === 'string' && v.trim().toLowerCase() === c.utm_campaign) leads++; } catch { /* Same parser as utmSource: malformed attribution is not a match. */ }
-      }
-      leads_reason = null;
-    } catch { leads = null; leads_reason = 'Unreadable: campaign leads could not be read'; }
+    const result = attribution ?? await campaignLeads(env, c.project_id);
+    leads = result.counts ? result.counts.get(c.utm_campaign) ?? 0 : null;
+    leads_reason = result.reason;
   }
   const counts = await env.DB.prepare(`SELECT
     (SELECT COUNT(*) FROM grow_campaign_items i JOIN content_calendar_items t ON t.id = i.ref_id WHERE i.campaign_id = ? AND i.kind = 'content_item' AND t.project_id = ?) AS content,
@@ -119,7 +132,9 @@ async function readCampaign(env: Env, c: Campaign) {
 }
 export async function campaigns(env: Env, pid: number) {
   const rows = await env.DB.prepare('SELECT * FROM grow_campaigns WHERE project_id = ? AND archived_at IS NULL ORDER BY created_at DESC, id DESC').bind(pid).all<Campaign>();
-  return { campaigns: await Promise.all((rows.results ?? []).map((c) => readCampaign(env, c))) };
+  const records = rows.results ?? [];
+  const attribution = records.some((c) => c.utm_campaign) ? await campaignLeads(env, pid) : undefined;
+  return { campaigns: await Promise.all(records.map((c) => readCampaign(env, c, attribution))) };
 }
 const response = async (env: Env, pid: number, uid: string) => ({ campaign: await readCampaign(env, await owned(env, pid, uid)) });
 export async function createCampaign(env: Env, pid: number, user: User, b: Body) {
