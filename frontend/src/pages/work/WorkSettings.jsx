@@ -9,9 +9,10 @@ function Catalogue({ projectId, kind, canManage, adapter }) {
   const [rows,setRows] = useState(null), [edit,setEdit] = useState(null), [title,setTitle] = useState('');
   const [color,setColor] = useState('gray'), [due,setDue] = useState(''), [state,setState] = useState('open');
   const [error,setError] = useState(''), [busy,setBusy] = useState(false);
+  const reset = () => {setEdit(null);setTitle('');setColor('gray');setDue('');setState('open');};
   const load = async () => { const r=await adapter[kind](projectId); if (!r.available) {setError(r.reason);return;} setRows(r.data?.[kind] || []); };
   useEffect(() => { let live=true;setRows(null);adapter[kind](projectId).then((r)=>{if(live){if(r.available)setRows(r.data?.[kind] || []);else setError(r.reason);}},()=>{if(live)setError(`${kind} could not be read.`);});return()=>{live=false;};},[adapter,kind,projectId]);
-  const change = async (fn) => {if(busy)return;setBusy(true);setError('');try{const r=await fn();if(!r.available){setError(r.reason);return;}await load();setEdit(null);setTitle('');}catch(e){setError(reviewError(e));}finally{setBusy(false);}};
+  const change = async (fn) => {if(busy)return;setBusy(true);setError('');try{const r=await fn();if(!r.available){setError(r.reason);return;}await load();reset();}catch(e){setError(reviewError(e));}finally{setBusy(false);}};
   const choose = (r) => {setEdit(r.uid);setTitle(label?r.name:r.title);setColor(r.color || 'gray');setDue(r.due_on || '');setState(r.state || 'open');};
   return <section className="mt-3 space-y-2" aria-label={label?'Labels':'Milestones'}>
     <h3 className="font-semibold">{label?'Labels':'Milestones'}</h3>
@@ -29,7 +30,7 @@ function Catalogue({ projectId, kind, canManage, adapter }) {
         :<><label>Due date <input aria-label="Milestone due date" type="date" value={due} onChange={(e)=>setDue(e.target.value)} className="dark:bg-gray-900" /></label>
           <label>State <select aria-label="Milestone state" value={state} onChange={(e)=>setState(e.target.value)} className="dark:bg-gray-900"><option value="open">Open</option><option value="closed">Closed</option></select></label></>}
       <button type="submit" disabled={busy || !title.trim()} className={BTN_PRIMARY}>{edit?`Save ${singular}`:`Create ${singular}`}</button>
-      {edit && <button type="button" className={BTN_SECONDARY} onClick={()=>{setEdit(null);setTitle('');}}>Cancel edit</button>}
+      {edit && <button type="button" className={BTN_SECONDARY} onClick={reset}>Cancel edit</button>}
     </form>}
     {error && <p role="alert">{error}</p>}
   </section>;

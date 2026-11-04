@@ -338,3 +338,43 @@ test('W7 settings create project labels with palette colors and milestones with 
   assert.deepEqual(calls,[[7,{name:'Bug',color:'gray'}],[7,{title:'Launch',due_on:null,state:'open'}]]);
  }finally{await m.unmount();}
 });
+
+// S1's review of #4441: accessibility and state refresh regressions.
+import TaskDrafts from '../src/pages/work/TaskDrafts.jsx';
+import { ItemSheet } from '../src/pages/work/WorkPage.jsx';
+
+test('editing a comment focuses and names its field and announces edit mode',async()=>{
+ const adapter={timeline:()=>yes({entries:[{type:'comment',comment:{uid:'c',body:'Words',author:{kind:'person',uid:'u'}}}]}),assignable:()=>yes({team:[]})};
+ const m=await mountContracts(h(TaskTimeline,{projectId:7,number:1,viewer:{user_uid:'u'},adapter}));
+ try{const field=m.nodes().find((n)=>n.tagName==='TEXTAREA');let focused=0;field.focus=()=>{focused++;};await m.click('Edit comment');
+  assert.equal(focused,1);assert.equal(m.props(field)['aria-label'],'Edit your comment');
+  assert.equal(m.nodes().some((n)=>m.props(n)?.role==='status'&&m.props(n)?.children==='Editing your comment.'),true);
+ }finally{await m.unmount();}
+});
+
+test('catalogue save and Cancel edit reset milestone date/state and label color',async()=>{
+ const api={labels:()=>yes({labels:[{uid:'l',name:'Bug',color:'red'}]}),milestones:()=>yes({milestones:[{uid:'m',title:'Old milestone',due_on:'2026-12-01',state:'closed'}]}),updateMilestone:()=>yes({}),updateLabel:()=>yes({})};
+ const m=await mountContracts(h(WorkSettings,{projectId:7,canManage:true,adapter:api}));
+ const byLabel=(name)=>m.nodes().find((n)=>m.props(n)?.['aria-label']===name);
+ const clickLabel=async(name)=>{await act(async()=>m.props(byLabel(name)).onClick());};
+ try{
+  await clickLabel('Edit Old milestone');await m.click('Cancel edit');
+  assert.equal(m.props(byLabel('Milestone due date')).value,'');assert.equal(m.props(byLabel('Milestone state')).value,'open');
+  await clickLabel('Edit Old milestone');const forms=m.nodes().filter((n)=>n.tagName==='FORM');await act(async()=>m.props(forms[1]).onSubmit({preventDefault(){}}));
+  assert.equal(m.props(byLabel('Milestone due date')).value,'');assert.equal(m.props(byLabel('Milestone state')).value,'open');
+  await clickLabel('Edit Bug');await m.click('Cancel edit');assert.equal(m.props(byLabel('Label color')).value,'gray');
+  await clickLabel('Edit Bug');await act(async()=>m.props(m.nodes().filter((n)=>n.tagName==='FORM')[0]).onSubmit({preventDefault(){}}));assert.equal(m.props(byLabel('Label color')).value,'gray');
+ }finally{await m.unmount();}
+});
+
+test('the item sheet reloads Activity after label and milestone saves',async()=>{
+ const saved={...workAdapter};let reads=0;const task={uid:'task-refresh',task_number:1,title:'Task',column:'backlog'};
+ Object.assign(workAdapter,{item:()=>yes(task),timeline:()=>{reads++;return yes({entries:[]});},assignable:()=>yes({team:[]}),labels:()=>yes({labels:[]}),milestones:()=>yes({milestones:[]}),setLabels:()=>yes({task}),setMilestone:()=>yes({task})});
+ const m=await mountContracts(h(ItemSheet,{uid:task.uid,projectId:7,viewer:{can_manage:true,user_uid:'u'},onClose(){}}));
+ try{assert.equal(reads,1);await m.click('Save labels');assert.equal(reads,2);await m.click('Save milestone');assert.equal(reads,3);}finally{await m.unmount();Object.assign(workAdapter,saved);}
+});
+
+test('the draft list has a named region and README component rows stay inside the table',()=>{
+ const out=html(h(TaskDrafts,{projectId:7,canManage:false}));assert.match(out,/<section aria-label="Agent task drafts"/);
+ const doc=read('frontend/src/pages/work/README.md');assert.doesNotMatch(doc,/\|\n\s*\n\| `TaskTimeline/);
+});

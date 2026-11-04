@@ -9,7 +9,7 @@ export default function TaskDrafts({ projectId, canManage, onChanged, adapter=wo
   useEffect(()=>{let live=true;setSelected(null);setRead({status:'loading'});
     adapter.drafts(projectId).then((r)=>{if(live)setRead(r.available?{status:'ready',rows:r.data?.drafts || []}:{status:'off',reason:r.reason});},()=>{if(live)setRead({status:'error'});});return()=>{live=false;};},[adapter,projectId]);
   const changed=(task)=>{setRead((old)=>({...old,rows:old.rows.filter((r)=>r.uid!==selected.uid)}));setSelected(null);onChanged?.(task);};
-  return <div aria-label="Agent task drafts">
+  return <section aria-label="Agent task drafts">
     {read.status==='loading'&&<p>Reading drafts…</p>}
     {read.status==='off'&&<p>{read.reason}</p>}
     {read.status==='error'&&<p role="alert">Agent drafts could not be read.</p>}
@@ -17,5 +17,5 @@ export default function TaskDrafts({ projectId, canManage, onChanged, adapter=wo
     {selected&&<Sheet title="Agent draft" width={560} onClose={()=>setSelected(null)} testId="work-draft-sheet">
       <TaskDraft key={selected.uid} draft={selected} projectId={projectId} canManage={canManage} onChanged={changed} adapter={adapter}/>
     </Sheet>}
-  </div>;
+  </section>;
 }

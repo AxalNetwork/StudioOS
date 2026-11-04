@@ -1,5 +1,5 @@
 // D1614 W7 part 2 (#4419): the item's activity and Team-only comment mentions.
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { workAdapter } from './workAdapter.js';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, MUTED, HonestBlock } from '../team/teamUi.jsx';
 
@@ -18,6 +18,8 @@ export default function TaskTimeline({ projectId, number, viewer, onRun, adapter
   const [body, setBody] = useState('');
   const [mentions, setMentions] = useState([]);
   const [editing, setEditing] = useState(null);
+  const commentRef = useRef(null);
+  useEffect(() => { if (editing) commentRef.current?.focus?.(); }, [editing]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const load = useCallback(async () => {
@@ -60,7 +62,8 @@ export default function TaskTimeline({ projectId, number, viewer, onRun, adapter
     <form onSubmit={(e) => { e.preventDefault(); if (!body.trim()) return; write(() => editing
       ? adapter.editComment(projectId, editing, { body:body.trim() })
       : adapter.comment(projectId,number,{ body:body.trim(), mentions })); }}>
-      <label className="block">{editing ? 'Edit your comment' : 'Comment'}<textarea aria-label="Comment" value={body} maxLength={20000} rows={3} className="block w-full rounded border p-2 dark:bg-gray-900 dark:border-gray-700" onChange={(e) => setBody(e.target.value)} /></label>
+      <p role="status">{editing ? 'Editing your comment.' : ''}</p>
+      <label className="block">{editing ? 'Edit your comment' : 'Comment'}<textarea ref={commentRef} aria-label={editing ? 'Edit your comment' : 'Comment'} value={body} maxLength={20000} rows={3} className="block w-full rounded border p-2 dark:bg-gray-900 dark:border-gray-700" onChange={(e) => setBody(e.target.value)} /></label>
       {!editing && <fieldset className="my-2"><legend>@ Mention someone on this Team</legend>
         {team === null ? <p className={MUTED}>Unreadable: Team mentions are unavailable.</p> : team.map((person) => <label key={`${person.kind}:${person.uid}`} className="mr-3 inline-flex gap-1">
           <input type="checkbox" checked={mentions.some((m) => m.uid === person.uid && m.kind === person.kind)} onChange={(e) => setMentions((old) => e.target.checked ? [...old,{kind:person.kind,uid:person.uid}] : old.filter((m) => m.uid !== person.uid || m.kind !== person.kind))} />{person.name || 'Name not recorded'}

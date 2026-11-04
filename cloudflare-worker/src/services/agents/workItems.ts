@@ -390,16 +390,17 @@ export async function acceptDraft(env: Env, scope: Project, uid: string, user: U
   const task = draftDto(row);
   if (!task.readable) throw new WorkRefusal(409, 'draft_invalid', 'This draft cannot be accepted. Discard it.');
   const fields = edit && Object.keys(edit).length ? draftFields({ title: task.title, body: task.body, type: task.type, module: task.module, ...edit }) : null;
+  const edited = fields && (['title','body','type','module'] as const).some((key) => fields[key] !== task[key]);
   const claim = await env.DB.prepare(
-    `UPDATE ai_rail_proposals SET status = 'accepted', decided_by_user_id = ?, decided_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP, decided_payload_json = ?
+    `UPDATE ai_rail_proposals SET status = ?, decided_by_user_id = ?, decided_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP, decided_payload_json = ?
      WHERE uid = ? AND rail_option = ? AND record_ref = ? AND status = 'proposed'`,
-  ).bind(Number(user.id), fields ? JSON.stringify({ create_task: fields }) : null, uid, DRAFT_OPTION, draftRecord(scope.id)).run();
+  ).bind(edited ? 'edited' : 'accepted', Number(user.id), fields ? JSON.stringify({ create_task: fields }) : null, uid, DRAFT_OPTION, draftRecord(scope.id)).run();
   if (!claim.meta?.changes) throw new WorkRefusal(409, 'draft_decided', 'This draft was already accepted or discarded.');
   try {
     return await createWorkTask(env, scope, { title: fields?.title ?? task.title, body: fields ? fields.body : task.body, type: fields?.type ?? task.type, ...((fields?.module ?? task.module) ? { module: fields?.module ?? task.module } : {}), column: 'backlog', source_ref: uid },
       user, { draftedByAgentId: row.agent_id });
   } catch (e) {
-    await env.DB.prepare("UPDATE ai_rail_proposals SET status = 'proposed', decided_by_user_id = NULL, decided_at = NULL, decided_payload_json = NULL WHERE uid = ? AND status = 'accepted'").bind(uid).run();
+    await env.DB.prepare("UPDATE ai_rail_proposals SET status = 'proposed', decided_by_user_id = NULL, decided_at = NULL, decided_payload_json = NULL WHERE uid = ? AND status IN ('accepted', 'edited')").bind(uid).run();
     throw e;
   }
 }

@@ -379,6 +379,7 @@ const Tile = ({ k, v }) => <div className="wk-tile"><span>{k}</span><b>{v}</b></
 export function ItemSheet({ uid, projectId = null, viewer = null, onClose, onRun, onAssigned }) {
   const [state, setState] = useState({ status: 'loading' });
   const [picking, setPicking] = useState(false);
+  const [timelineVersion, setTimelineVersion] = useState(0);
   const [moving, setMoving] = useState(false);
   const [schedule, setSchedule] = useState(null);
   const [notice, setNotice] = useState(null);
@@ -398,7 +399,7 @@ export function ItemSheet({ uid, projectId = null, viewer = null, onClose, onRun
   }, [uid]);
   const it = state.item;
   // D1614 W8 (#3994): Assign opens the Team picker, this Team's people then its agents.
-  const assigned = (task) => { if (task) setState({ status: 'ready', item: task }); setPicking(false); onAssigned?.(task); };
+  const assigned = (task) => { if (task) setState({ status: 'ready', item: task }); setPicking(false); setTimelineVersion((v) => v + 1); onAssigned?.(task); };
   return (
     <Sheet title={it?.title || 'Item'} onClose={onClose} width={560} testId="work-item-sheet"
       footer={it ? <><button type="button" className={BTN_PRIMARY} onClick={() => setPicking((v) => !v)} disabled={projectId == null} data-testid="work-item-assign">Assign</button><>{canMove(it, viewer) ? <><button type="button" className={BTN_SECONDARY} onClick={() => setMoving(v => !v)} data-testid="work-item-move">Move ▾</button><button type="button" className={BTN_SECONDARY} onClick={() => setSchedule({ item: it, day: '', from: '09:00', to: '11:00' })} data-testid="work-item-schedule">Schedule</button></> : null}</></> : null}>
@@ -411,7 +412,7 @@ export function ItemSheet({ uid, projectId = null, viewer = null, onClose, onRun
       {it && projectId != null && it.task_number != null && <>
         <TaskReview key={`review-${uid}`} task={it} projectId={projectId} canManage={!!viewer?.can_manage} onChanged={assigned} />
         <TaskClassification key={`classification-${uid}`} task={it} projectId={projectId} canManage={!!viewer?.can_manage} onChanged={assigned} />
-        <TaskTimeline key={`timeline-${uid}-${it.column}`} projectId={projectId} number={it.task_number} viewer={viewer} onRun={onRun} />
+        <TaskTimeline key={`timeline-${uid}-${it.column}-${timelineVersion}`} projectId={projectId} number={it.task_number} viewer={viewer} onRun={onRun} />
       </>}
       {it ? (
         <dl className="wk-fields">

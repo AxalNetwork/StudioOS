@@ -362,7 +362,8 @@ test('#4419: Accept edited draft keeps original proposal and records the accepte
     const res=await call(w,OWNER,'POST',`/project/7/work/drafts/${uid}/accept`,{title:'Reviewed title',body:'Reviewed body'});
     assert.equal(res.status,201,res.text);
     assert.deepEqual([res.body.task.title,res.body.task.body],['Reviewed title','Reviewed body']);
-    const proposal=w.db.prepare('SELECT payload_json,decided_payload_json FROM ai_rail_proposals WHERE uid=?').get(uid) as any;
+    const proposal=w.db.prepare('SELECT status,payload_json,decided_payload_json FROM ai_rail_proposals WHERE uid=?').get(uid) as any;
+    assert.equal(proposal.status,'edited');
     assert.equal(JSON.parse(proposal.payload_json).create_task.title,'Original title');
     assert.equal(JSON.parse(proposal.decided_payload_json).create_task.title,'Reviewed title');
   }finally{w.db.close();}

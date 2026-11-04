@@ -16,7 +16,6 @@ and `Work Compliance · Boards.dc.html`.
 | `workAdapter.js` | The one seam. Every method is off until its Worker part lands; `WORK_SEAM` names each method's issue. |
 | `WorkSummaryCard.jsx` | #4420: project Portfolio ENTRY card, board counts and the two-week burn-up, with independent failed reads. |
 | `work.css` | Styles scoped to `.wk-page`, each colour with its `.dark` pair. |
-
 | `TaskTimeline.jsx` | W7 (#4419): Activity, Team mentions, own comment edits and deletes, run links and honest cost. |
 | `TaskReview.jsx` | W7 (#4419): manager review with a required changes comment. |
 | `TaskDraft.jsx` | W7 (#4419): accept, edit before accept and discard with reason. |
