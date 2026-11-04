@@ -11,6 +11,7 @@ import VideosLibrary from '../src/pages/learning/VideosLibrary.jsx';
 import LearningHome, { HoverPreview } from '../src/pages/learning/LearningHome.jsx';
 import { ItemPage, ItemView } from '../src/pages/learning/LearningWired.jsx';
 import { learningApi } from '../src/lib/api/learning.js';
+import { articles } from '../src/lib/api.js';
 import { mountContracts } from './_contracts_dom.mjs';
 
 const row = { kind: 'video', key: 'video:v1', uid: 'v1', href: '/learning/videos/v1', title: 'Finding customers', seconds: 1120, topic: 'Validate', level: 'Intro', query: 'warm introductions',
@@ -188,4 +189,24 @@ test('the library preview waits 400ms, ignores touch, names playback and stays h
     await act(async () => handlers.pointerleave());
     assert.doesNotMatch(ui.text(), /Preview playing/);
   } finally { await ui.unmount(); }
+});
+
+test('switching from a later Articles page through Videos filters and back restarts Articles at page one', async () => {
+  const stub = stubLearning();
+  const previous = articles.list;
+  const articleCalls = [];
+  articles.list = async params => { articleCalls.push(params); return { items: [{ id: 1, slug: 'synthetic', title: 'Synthetic article' }], total: 90 }; };
+  const oldMedia = globalThis.matchMedia;
+  globalThis.matchMedia = q => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {} });
+  let ui;
+  try {
+    ui = await mountContracts(React.createElement(LearningHome, { gated: false }), '/learning?tab=articles', { id: 1, role: 'founder' });
+    await ui.flush();
+    await ui.click('Older'); await ui.flush();
+    assert.ok(articleCalls.at(-1).offset > 0);
+    await ui.click('Videos'); await ui.flush();
+    await ui.fill('Topic', 'Validate'); await ui.flush();
+    await ui.click('Articles'); await ui.flush();
+    assert.equal(articleCalls.at(-1).offset, 0);
+  } finally { await ui?.unmount(); stub.restore(); articles.list = previous; globalThis.matchMedia = oldMedia; }
 });
