@@ -698,15 +698,18 @@ test('integration and legacy Carta membership use held licences while preserving
 });
 
 
-test('co-marketing admits held Founder and Partner licences, revokes access, and keeps HQ primary-only', async () => {
-  const f=fixture(); try {
-    assert.equal((await f.call('/api/comarketing/published',9005)).status,403);
-    for (const licence of ['founder','partner']) {
-      await grantLicence(f.DB,change(licence,9005));
-      assert.equal((await f.call('/api/comarketing/published',9005)).status,200);
-      assert.equal((await f.call('/api/comarketing/admin/queue',9005)).status,403);
-      await revokeLicence(f.DB,change(licence,9005));
-      assert.equal((await f.call('/api/comarketing/published',9005)).status,403);
+test('new co-marketing audience gate admits held Founder or Partner, never Investor alone or HQ powers', async () => {
+  const f=fixture();
+  try {
+    const path='/api/comarketing/published';
+    assert.equal((await f.call(path,9005)).status,403);
+    assert.equal((await f.call(path,9002)).status,403);
+    for (const [id,licence] of [[9005,'founder'],[9002,'partner'],[9005,'partner']] as const) {
+      await grantLicence(f.DB,{userId:id,licence,actorId:9000,source:'admin'});
+      const allowed=await f.call(path,id);assert.equal(allowed.status,200);assert.deepEqual(allowed.body.items,[]);
+      assert.equal((await f.call('/api/comarketing/admin/queue',id)).status,403);
+      await revokeLicence(f.DB,{userId:id,licence,actorId:9000,source:'admin'});
+      assert.equal((await f.call(path,id)).status,403);
     }
     assert.equal((await f.call('/api/comarketing/me/pitches',9001)).status,403);
     assert.equal((await f.call('/api/comarketing/admin/queue',9000)).status,200);
