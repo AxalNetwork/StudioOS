@@ -150,6 +150,7 @@ export * from './api/fundStructure.js';
 export * from './api/googleSignIn.js';
 export * from './api/googleWorkspace.js';
 export * from './api/googleWorkspaceBuild.js';
+export * from './api/growCalendar.js';
 export * from './api/growTalent.js';
 export * from './api/helpCenter.js';
 export * from './api/hqDeckStageNorms.js';
