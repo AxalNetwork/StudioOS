@@ -75,7 +75,7 @@ export default function EventEditorPage() {
   const [publishError, setPublishError] = useState('');
   // What the header shows: the event as last read or saved, and Registrations' count.
   const [saved, setSaved] = useState(null);
-  const [channelRefresh, setChannelRefresh] = useState(0);
+  const [channelCopy, setChannelCopy] = useState(null);
   const [pending, setPending] = useState(undefined);
   // D1329 (#3490, AF20): Fill with Eadwyn on a saved event's Title and
   // Description, for an admin or its host (`canManage`). #4046 (B2): on
@@ -349,7 +349,7 @@ export default function EventEditorPage() {
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{syndicateNote(form.visibility)}</p>
             {/* D1493 (#3906, SY8): Ask proposes each kept listing's title and description. */}
             {isEdit && form.visibility === 'public' && saved?.visibility === 'public'
-              ? <><EventSyndicationPanel key={id} eventId={id} editable refresh={channelRefresh} /><SyndicationAsk eventId={id} onSaved={() => setChannelRefresh((v) => v + 1)} /></>
+              ? <><EventSyndicationPanel key={id} eventId={id} editable acceptedCopy={channelCopy} /><SyndicationAsk eventId={id} onSaved={(_data, copy) => setChannelCopy(copy)} /></>
               : form.visibility === 'public' && <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Save a public draft before choosing channels.</p>}
           </div>
         </section>

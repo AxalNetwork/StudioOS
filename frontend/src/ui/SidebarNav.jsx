@@ -1,13 +1,13 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
-import { Building2, ChevronDown, ChevronLeft, ChevronRight, Lock as LockIcon, Search, Settings as SettingsIcon, X } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Lock as LockIcon, Search, Settings as SettingsIcon, X } from 'lucide-react';
 import { openPaywall } from '../components/PaywallModal';
 import { defaultOpenGroups, hasTier, hasInvestorTier } from '../sidebarConfig';
 import { safeReadJSON } from '../lib/storage';
 import { hqRowFor } from '../lib/hqStrips.js';
 import CompanySwitcher from './CompanySwitcher';
 import { useActiveCompany } from '../contexts/ActiveCompanyContext';
-import { settingsActive, settingsEntry, useScopeInView, withPortfolioRow } from '../lib/settingsScope.js';
+import { settingsActive, settingsEntry, useScopeInView } from '../lib/settingsScope.js';
 import { useActiveProject } from '../lib/activeProject.js';
 import useLicenceNeeds from '../hooks/useLicenceNeeds';
 import { needsCount } from '../lib/licencePage';
@@ -27,16 +27,14 @@ import { needsCount } from '../lib/licencePage';
  * from getSidebarGroups() in sidebarConfig.js, keyed by the active role.
  *
  * Note the render order, which is the app's universal chrome and is deliberate:
- * CompanySwitcher → search filter → role groups → Settings (D4152; Portfolio is a
- * main-navigation row after Studio since D4152, at the foot only in a shell with no Studio row). The search
+ * CompanySwitcher → search filter → role groups → Settings (D4152).
+ * Account Portfolio lives in the Account menu (D4416). The search
  * here is a client-side filter over already-rendered nav labels; it is NOT the
  * global Vectorize-backed /search.
  */
 
-export default function SidebarNav({ groups: roleGroups, role, onNavigate, user, collapsed, onCollapse, onClose }) {
+export default function SidebarNav({ groups, role, onNavigate, user, collapsed, onCollapse, onClose }) {
   const navLocation = useLocation();
-  // D4152 (#4152 §3): Portfolio is a place, not a setting — a row after Studio.
-  const { groups, portfolioInNav } = useMemo(() => withPortfolioRow(roleGroups, Building2), [roleGroups]);
   // D1497 (#3727, TM1e–TM1i): the bottom block follows the scope in view.
   // D1413 (#3696, PF5/PF6): with no page publishing one, a project picked in the switcher decides it.
   const { company: activeCompany } = useActiveCompany();
@@ -314,24 +312,6 @@ export default function SidebarNav({ groups: roleGroups, role, onNavigate, user,
     </nav>
     <div className="flex-none border-t border-gray-200 dark:border-gray-700">
       {settingsScope ? <SettingsScopeBlock scope={settingsScope} collapsed={collapsed} onNavigate={onNavigate} activeUid={activeCompany?.uid || null} /> : null}
-      {/* D1140 (#3020, CMP19a), D1413 (#3696 Q1): Portfolio. D4152: at the foot only in a shell with no Studio row. */}
-      {!portfolioInNav && <NavLink
-        to="/account/portfolio"
-        onClick={onNavigate}
-        className={({ isActive }) =>
-          collapsed
-            ? `flex flex-col items-center gap-0.5 px-1 py-2.5 text-[10px] w-full transition-colors ${isActive ? partnerAccent ? 'text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40' : 'text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30' : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800'}`
-            : `flex items-center gap-3 px-5 py-2.5 text-sm w-full transition-colors ${isActive ? partnerAccent ? 'text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40' : 'text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30' : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800'}`
-        }
-        title={collapsed ? 'Portfolio' : undefined}
-      >
-        <Building2 size={collapsed ? 18 : 16} />
-        {collapsed ? (
-          <span className="truncate w-full text-center">Port.</span>
-        ) : (
-          <span className="truncate">Portfolio</span>
-        )}
-      </NavLink>}
     </div>
     </div>
   );
