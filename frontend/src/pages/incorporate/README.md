@@ -11,6 +11,7 @@ their import.
 |---|---|
 | `IncorporateFlow.jsx` | The six steps (goals, compare, company details, review, pay & file, done), `?project=<id>` prefill, Start fresh, the device draft, the order and Stripe. |
 | `IncorporationTimeline.jsx` | After payment: Submitted, Packet ready and Filed from the order's own row (D601), the EIN row (D579), and the company line only when the order carries `company_uid`. |
+| `IncorporateHqRead.jsx` | D4360 (#4360, INC5g): HQ reading one order read only, at `/incorporate?order=<id>` for an admin (opened from Lab › Formation): D1463's access pill, the timeline with `readOnly` (no Add EIN, no bank step), and no Pay and submit. The read is `GET /api/admin/incorporations`. |
 | `IncorporateDone.jsx` | "[Company] is on its way", Back to the project, Open company (only with `company_uid`), and the next steps: the 83(b) deadline and the cap table. |
 | `incorporateModel.js` | Pure: the steps and their words, the recommendation, the jurisdiction card, your own projects, the prefill, the co-founder agreement's status, the timeline and the 83(b) line, the device draft. |
 | `incorporateAdapter.js` | The seam to what is not on main: `orderCompany` (#3855, the order's `company_uid`) and `askPanel` (#3706). |
