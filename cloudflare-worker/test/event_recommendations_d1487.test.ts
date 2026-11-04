@@ -10,10 +10,11 @@ import events from '../src/routes/events.ts';
 import eventsPublic from '../src/routes/events_public.ts';
 import { RECOMMENDATION_DEPS, cosine } from '../src/services/eventRecommendations.ts';
 import { d1Over } from './_d1_sqlite.mjs';
+import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { tableFromBaseline } from './_baseline.mjs';
 const SECRET = 'synthetic-3724-event-recommendation-secret';
 function table(name: string) {
-  const files = ['schema_baseline.sql', ...readdirSync(new URL('../sql/migrations/',import.meta.url)).filter(f=>f.endsWith('.sql')).sort().map(f=>'migrations/'+f)];
+  const files = ['schema_baseline.sql', ...readdirSync(new URL('../sql/migrations/',import.meta.url)).filter(f=>f.endsWith('.sql')).sort(compareMigrations).map(f=>'migrations/'+f)];
   for (const file of files) { try { return tableFromBaseline(readFileSync(new URL('../sql/'+file,import.meta.url),'utf8'),name); } catch {} }
   throw new Error('table absent: '+name);
 }
