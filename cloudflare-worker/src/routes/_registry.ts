@@ -41,6 +41,7 @@ import { mount as deck_stage_normsMount } from './deck_stage_norms';
 import { mount as deck_update_reuseMount } from './deck_update_reuse';
 import { mount as deck_voiceMount } from './deck_voice';
 import { mount as event_recommendationsMount } from './event_recommendations';
+import { mount as grow_adsMount } from './grow_ads';
 import { mount as grow_channelsMount } from './grow_channels';
 import { mount as grow_distribution_askMount } from './grow_distribution_ask';
 import { mount as grow_inboxMount } from './grow_inbox';
@@ -92,6 +93,7 @@ export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'deck_update_reuse', mount: deck_update_reuseMount },
   { file: 'deck_voice', mount: deck_voiceMount },
   { file: 'event_recommendations', mount: event_recommendationsMount },
+  { file: 'grow_ads', mount: grow_adsMount },
   { file: 'grow_channels', mount: grow_channelsMount },
   { file: 'grow_distribution_ask', mount: grow_distribution_askMount },
   { file: 'grow_inbox', mount: grow_inboxMount },

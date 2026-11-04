@@ -220,6 +220,8 @@ D1456 (#4014): the existing record, recovery, bot-control and migration-runner s
 | `comarketing_split_4439.test.ts` | D4439: investor refuses every member read/write; partners/founders keep their existing access; HQ reads historical investor pitches. |
 | `syndication_review_4440.test.ts` | D4440: client dirty choices against mounted Worker routes, terminal history, disconnected accounts and retained accepted copy. |
 | `work_runs_4459.test.ts` | #4459: no-call attempts preserve paid totals; real engine labels/milestone/review responses retain the live item run and cost. |
+
+`grow_ads_4490.test.ts` checks migrated Ads reads, missing months, Mercury precedence, team visibility, authentication and venture isolation.
 | `distribution_ask_4488.test.ts` | D4488 metered proposals, venture/allowance gates and safe acceptance without sends. |
 | `grow_inbox_4494.test.ts` | D4494: real SQLite mounted Inbox reads, per-member scope/read receipts, null on failures, no sends, and Outlook lookup/paging safety. |
 
