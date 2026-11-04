@@ -71,7 +71,7 @@ test('D690 decision 10: no column draws a channel, though the row keeps its chan
 
 test('#4411: recording pills show the method in words and never borrow the quote status', () => {
   const cell = (recording_consent, consent = 'agreed') => RECORDS['customer-research'].row({ ...ROW, recording_consent, consent }).cells;
-  for (const [method, words] of [['verbal', 'Said yes out loud'], ['written', 'In writing'], ['in_app', 'In the app'], ['pre_agreed', 'Agreed beforehand']]) {
+  for (const [method, words] of [['verbal', 'Said yes out loud'], ['written', 'In writing'], ['in_app', 'In the app'], ['pre_agreed', 'Agreed beforehand'], ['chat_reply', 'Agreed in the chat']]) {
     assert.deepEqual(cell({ status: 'given', method }, null).recording_consent, { text: `Given · ${words}`, tone: 'ok' });
     assert.deepEqual(cell({ status: 'given', method }, null).consent, { text: 'Not asked', tone: 'grey' });
   }
