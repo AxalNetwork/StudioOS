@@ -4,7 +4,8 @@
  * Once a day (the 03:00 cleanup, `models/jobs.ts` `Jobs.cleanup`), `sweepDeckImages` removes:
  *   · a discarded image 24 hours after Discard (`discarded_at`);
  *   · a proposal nobody kept, 14 days after it was made (`created_at`).
- * A kept image is never removed here.
+ * A kept image is never removed here, and neither is one HQ took down (#4375):
+ * its row is the record, and the file route answers the placeholder from it.
  *
  * NOTHING THAT IS NAMED GOES. Before an object is deleted, the view
  * `deck_images_named` (migration 722, the one copy of the rule) looks for
@@ -56,8 +57,11 @@ async function candidates(env: Pick<Env, 'DB'>, now: Date): Promise<Candidate[]>
   const at = sqlTime(now);
   const rows = await env.DB.prepare(
     `SELECT id, uid, project_id, r2_key, size_bytes, state FROM deck_images
-      WHERE (state = 'discarded' AND discarded_at IS NOT NULL AND discarded_at <= datetime(?, ?))
-         OR (state = 'proposed' AND created_at <= datetime(?, ?))
+      WHERE ((state = 'discarded' AND discarded_at IS NOT NULL AND discarded_at <= datetime(?, ?))
+         OR (state = 'proposed' AND created_at <= datetime(?, ?)))
+        -- #4375: a row HQ took down stays: it is the record of the takedown, and the file route
+        -- answers the placeholder from it for every card that still names the image.
+        AND taken_down_at IS NULL
       ORDER BY COALESCE(discarded_at, created_at), id LIMIT ?`,
   ).bind(at, `-${DISCARDED_AFTER_HOURS} hours`, at, `-${PROPOSAL_AFTER_DAYS} days`, MAX_SCANNED).all<Candidate>();
   return (rows.results || []) as Candidate[];
