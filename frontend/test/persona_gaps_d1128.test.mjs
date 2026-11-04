@@ -5,6 +5,7 @@ import { Routes, Route, useLocation } from 'react-router-dom';
 import { installDocument, mountContracts } from './_contracts_dom.mjs';
 import { api, events } from '../src/lib/api.js';
 import { personaSegmentsApi } from '../src/lib/api/personaSegments.js';
+import { personaSegmentScopesApi } from '../src/lib/api/personaSegmentScopes.js';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import NewSegment from '../src/pages/admin/segments/NewSegment.jsx';
 import PersonaSegments from '../src/pages/admin/segments/PersonaSegments.jsx';
@@ -16,9 +17,10 @@ import { sourceModule } from './_form_d695.mjs';
 const h = React.createElement;
 const HQ = { id: 1, role: 'admin', is_super_admin: 1 };
 const originalApi = { ...api }, originalSegments = { ...personaSegmentsApi }, originalEvents = { ...events };
+const originalScopes = { ...personaSegmentScopesApi };
 const id = (v, value) => v.nodes().find(n => v.props(n)?.['data-testid'] === value);
 async function change(v, node, value) { await act(async () => v.props(node).onChange({ target: { value } })); }
-function restore() { Object.assign(api, originalApi); Object.assign(personaSegmentsApi, originalSegments); Object.assign(events, originalEvents); }
+function restore() { Object.assign(api, originalApi); Object.assign(personaSegmentsApi, originalSegments); Object.assign(events, originalEvents); Object.assign(personaSegmentScopesApi, originalScopes); }
 function Probe() { const location = useLocation(); return h('p', { 'data-testid': 'location' }, location.pathname + location.search + ':' + Boolean(location.state?.skipPersonaFollowUp)); }
 
 test('HQ gets both New segment doors on an empty Overview; a plain Admin gets no authoring door', async () => {
@@ -27,6 +29,10 @@ test('HQ gets both New segment doors on an empty Overview; a plain Admin gets no
   personaSegmentsApi.read = async () => ({});
   personaSegmentsApi.segmentProfiles = async () => ({ items: [] });
   personaSegmentsApi.segmentCoverage = async () => ({ items: [] });
+  const scopesRead = [];
+  personaSegmentScopesApi.scopes = async () => ({ scopes: [{ code: 'hq', label: 'HQ-held accounts' }], registry: { readable: true } });
+  personaSegmentScopesApi.overview = async (scope) => { scopesRead.push(scope); return { summary: { members: { available: true, total: 0, in_segment: 0, no_segment: 0 } }, profiles: { segments: [] }, coverage: { segments: [] } }; };
+  personaSegmentScopesApi.suggestions = async () => ({ suggestions: [] });
   for (const hq of [false, true]) {
     const v = await mountContracts(h(AuthProvider, null, h(PersonaSegments)), '/admin/persona-segments', { ...HQ, is_super_admin: hq ? 1 : 0 });
     try {
@@ -36,6 +42,7 @@ test('HQ gets both New segment doors on an empty Overview; a plain Admin gets no
       else assert.match(v.text(), /HQ writes the segment profiles/);
     } finally { await v.unmount(); }
   }
+  assert.deepEqual(scopesRead, ['hq'], 'only HQ reads the new scoped Overview');
   restore();
 });
 
