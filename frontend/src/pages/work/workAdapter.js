@@ -63,7 +63,7 @@ export const workAdapter = {
   setLabels: (projectId, number, body) => through(() => workApi.setLabels(projectId, number, body), WORK_OFF),
   setMilestone: (projectId, number, body) => through(() => workApi.setMilestone(projectId, number, body), WORK_OFF),
   drafts: (projectId) => through(() => workApi.drafts(projectId), WORK_OFF),
-  acceptDraft: (projectId, uid) => through(() => workApi.acceptDraft(projectId, uid), WORK_OFF),
+  acceptDraft: (projectId, uid, edit) => through(() => workApi.acceptDraft(projectId, uid, edit), WORK_OFF),
   discardDraft: (projectId, uid, body) => through(() => workApi.discardDraft(projectId, uid, body), WORK_OFF),
   labels: (projectId) => through(() => workApi.labels(projectId), WORK_OFF),
   createLabel: (projectId, body) => through(() => workApi.createLabel(projectId, body), WORK_OFF),

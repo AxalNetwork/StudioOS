@@ -222,9 +222,11 @@ export function openaiClient({ apiKey, baseURL, timeoutSeconds, sdk = OpenAI, fe
           max_output_tokens: p.max_tokens, stream: true, store: false,
           text: { format: { type: 'json_schema', name: 'review', strict: true, schema: REVIEW_OUTPUT_SCHEMA } },
         }, options);
+        // HTTP success starts the uncertain-cost window. The SDK can throw on
+        // the first SSE error before yielding any event to this iterator.
+        streamStarted = true;
         let response;
         for await (const event of stream) {
-          streamStarted = true;
           if (event.type === 'response.completed' || event.type === 'response.incomplete') response = event.response;
           if (event.type === 'response.failed' || event.type === 'error') {
             const error = event.response?.error || event;

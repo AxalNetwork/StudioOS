@@ -18,6 +18,7 @@ import { mount as admin_deck_imagesMount } from './admin_deck_images';
 import { mount as admin_deck_stage_normsMount } from './admin_deck_stage_norms';
 import { mount as admin_hq_skillsMount } from './admin_hq_skills';
 import { mount as admin_influencersMount } from './admin_influencers';
+import { mount as admin_persona_segment_scopesMount } from './admin_persona_segment_scopes';
 import { mount as company_complianceMount } from './company_compliance';
 import { mount as data_room_proposalsMount } from './data_room_proposals';
 import { mount as deck_accessMount } from './deck_access';
@@ -38,6 +39,7 @@ import { mount as deck_scriptMount } from './deck_script';
 import { mount as deck_slide_analyticsMount } from './deck_slide_analytics';
 import { mount as deck_stage_normsMount } from './deck_stage_norms';
 import { mount as deck_update_reuseMount } from './deck_update_reuse';
+import { mount as deck_voiceMount } from './deck_voice';
 import { mount as event_recommendationsMount } from './event_recommendations';
 import { mount as influencerMount } from './influencer';
 import { mount as influencer_analyticsMount } from './influencer_analytics';
@@ -64,6 +66,7 @@ export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'admin_deck_stage_norms', mount: admin_deck_stage_normsMount },
   { file: 'admin_hq_skills', mount: admin_hq_skillsMount },
   { file: 'admin_influencers', mount: admin_influencersMount },
+  { file: 'admin_persona_segment_scopes', mount: admin_persona_segment_scopesMount },
   { file: 'company_compliance', mount: company_complianceMount },
   { file: 'data_room_proposals', mount: data_room_proposalsMount },
   { file: 'deck_access', mount: deck_accessMount },
@@ -84,6 +87,7 @@ export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'deck_slide_analytics', mount: deck_slide_analyticsMount },
   { file: 'deck_stage_norms', mount: deck_stage_normsMount },
   { file: 'deck_update_reuse', mount: deck_update_reuseMount },
+  { file: 'deck_voice', mount: deck_voiceMount },
   { file: 'event_recommendations', mount: event_recommendationsMount },
   { file: 'influencer', mount: influencerMount },
   { file: 'influencer_analytics', mount: influencer_analyticsMount },

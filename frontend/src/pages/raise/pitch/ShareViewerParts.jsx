@@ -5,6 +5,7 @@ import { reportError } from '../../../lib/log';
 import {
   ACCEPT_AND_OPEN, NDA_GATE_TITLE, NDA_UNREADABLE, SIGN_IN_TO_ACCEPT, closedCard, figureChips, frozenLine,
 } from './shareModel';
+import { VOICE_LABEL, sharedVoice } from './voiceModel';
 
 /**
  * D902 (#2681) — the parts of the investor's viewer (PD20, PD22) that a link's
@@ -152,6 +153,29 @@ export function FigureSources({ slides }) {
           </div>
         ))}
       </div>
+    </section>
+  );
+}
+
+/**
+ * D1569 (#3816): each card's AI voice-over, always labelled "AI voice". The
+ * share read sends a card's voice only as a signed link, after every gate of
+ * the link passed (`withVoiceLinks`); a card without one draws nothing.
+ */
+export function CardVoices({ slides }) {
+  const rows = (slides || []).map((s, i) => ({ i, v: sharedVoice(s), title: typeof s?.title === 'string' ? s.title : '' })).filter((r) => r.v);
+  if (!rows.length) return null;
+  return (
+    <section className="deck-print-cta mx-auto my-6 flex max-w-4xl flex-col gap-2 px-4" data-testid="share-card-voices" aria-label={`${VOICE_LABEL} on these cards`}>
+      <span className="font-mono text-[10.5px] uppercase tracking-[.07em] text-gray-500 dark:text-slate-400">{VOICE_LABEL}</span>
+      {rows.map((r) => (
+        <div key={r.i} className="flex flex-col gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900" data-testid={`share-card-voice-${r.i + 1}`}>
+          <span className="text-[12.5px] font-semibold text-gray-900 dark:text-slate-100">
+            Card {r.i + 1}{r.title ? ` · ${r.title}` : ''} <span className="ml-1 rounded-full bg-violet-100 px-2 py-0.5 text-[10.5px] font-bold text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">{r.v.label}</span>
+          </span>
+          <audio controls preload="none" src={r.v.url} className="w-full" aria-label={`${r.v.label}: card ${r.i + 1}`} />
+        </div>
+      ))}
     </section>
   );
 }
