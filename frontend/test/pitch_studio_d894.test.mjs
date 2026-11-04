@@ -656,10 +656,10 @@ test('the routes: the studio\'s three tabs, the editor at its new address, and t
   const route = (path) => `<Route path="${path}" element={guard(labRoles(['admin', 'founder'])`;
   for (const p of ['/raise/pitch/edit', '/raise/pitch/decks', '/raise/pitch/script', '/raise/pitch/share', '/raise/pitch/review', '/raise/pitch/notes']) assert.ok(app.includes(route(p)), p);
   // D4254: the old Share & analytics address redirects, venture kept.
-  assert.ok(app.includes('<Route path="/raise/pitch/analytics" element={<KeepQueryRedirect to="/raise/pitch/share" />} />'));
+  assert.equal(app.includes('<Route path="/raise/pitch/analytics" element={<KeepQueryRedirect to="/raise/pitch/share" />} />'), false);
   // D905 (#2684), PD22: the studio's home also admits the roles it is not for, to tell them so.
   // D911 (#2695): positioning moved into Investor narrative › Positioning; its old address redirects.
-  assert.ok(app.includes('<Route path="/raise/pitch/positioning" element={<PitchPositioningRedirect />} />'));
+  assert.equal(app.includes('<Route path="/raise/pitch/positioning" element={<PitchPositioningRedirect />} />'), false);
   assert.ok(app.includes(`<Route path="/raise/pitch" element={guard(labRoles(['admin', 'founder', 'advisor', 'partner', 'exploring'])`), '/raise/pitch');
   assert.match(app, /get\('mode'\) === 'workspace'\s*\?\s*studioGate\(<PitchWorkspaceMoved \/>\)\s*:\s*studioGate\(<PitchStudio tab="overview" \/>\)/);
   // D898 (#2676): the canvas's editor at /raise/pitch/edit; the template builder retired (group E) and its address opens the studio.

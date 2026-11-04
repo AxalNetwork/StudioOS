@@ -72,7 +72,7 @@ test('the GP control opens the selected fund in the Email composer and gives hel
 test('the shipped shell and both starters retire the old page and client', () => {
   for (const p of ['src/pages/MessagesPage.jsx', 'src/lib/messagesView.js', '../cloudflare-worker/src/routes/messages.ts']) assert.equal(existsSync(new URL('../' + p, import.meta.url)), false, p);
   assert.doesNotMatch(raw('src/lib/api.js'), /message(?:Threads|Thread|StartThread|Send|MarkRead|Archive|Attach|AttachmentLink)\s*:/);
-  assert.match(raw('src/App.jsx'), /path="\/messages"[^\n]*<MessagesRedirect/);
+  assert.doesNotMatch(raw('src/App.jsx'), /path="\/messages"[^\n]*<MessagesRedirect/);
   const delivery = raw('src/pages/advisor/practice/DeliveryZone.jsx');
   assert.match(delivery, /<EmailAction person=\{`work_product:\$\{i.id\}`\}/);
   const walk = (url) => readdirSync(url, { withFileTypes: true }).flatMap((d) => d.isDirectory() ? walk(new URL(d.name + '/', url)) : /\.[jt]sx?$/.test(d.name) ? [new URL(d.name, url)] : []);

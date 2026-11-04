@@ -213,3 +213,12 @@ test('D4487: the mounted list/detail uses the server permission and keeps failed
     try{await m.flush();const activate=m.nodes().find(n=>n.tagName==='BUTTON'&&n.textContent==='Activate');assert.ok(activate);assert.equal(m.props(activate).disabled,true);assert.match(m.text(),failed?/Unreadable: permission to change campaigns could not be read/:/You can read this venture’s campaigns but not change them/);assert.doesNotMatch(m.text(),/Private permission detail/);assert.deepEqual(writes,[]);}finally{await m.unmount();}
   }
 });
+
+test('UTM validation accepts the existing alphabet and rejects long or invalid tags promptly', () => {
+  for (const tag of ['spring', '0', 'spring__--demo-', 'a'.repeat(80)]) {
+    assert.equal(model.stepReason(2, { utm_campaign: tag }), null);
+  }
+  for (const tag of ['', '-spring', 'Spring', 'spring demo', 'a'.repeat(81), '0'.repeat(100000) + '!']) {
+    assert.equal(model.stepReason(2, { utm_campaign: tag }), 'Choose another UTM tag');
+  }
+});

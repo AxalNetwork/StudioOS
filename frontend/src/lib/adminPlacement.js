@@ -204,10 +204,8 @@ export const PAGE_HOMES = {
   '/my/jobs': [['partner', 'Network', 'also'], ['advisor', 'Network', 'also']],
   '/partner/insights': [['partner', 'Pipeline', 'also']],
   '/partner/office-hours': [['partner', 'Offers', 'also']],
-  '/comarketing': [['partner', 'Offers', 'also'], ['founder', 'Grow', 'also', {
-    label: 'Co-marketing',
-    description: 'Pitch a webinar, post or podcast with a partner, and see what it brought in.',
-  }]],
+  // D4439: founders enter the canonical Grow Partner network module; this legacy page is partner Offers only.
+  '/comarketing': [['partner', 'Offers', 'also']],
   '/incorporate/cofounder-agreement': [['founder', 'Raise', 'also']],
   '/spinout-lab/83b': [['founder', 'Spin-Out Lab', 'lab']],
   '/perks': [['founder', 'Grow', 'also']],

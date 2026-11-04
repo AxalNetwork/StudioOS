@@ -279,15 +279,15 @@ test('each cycle has a `/:slug/new` route beside its module page, with the same 
     assert.ok(app.indexOf(page) < app.indexOf(adding) && between.split('<Route ').length <= 3, `${cycle}'s /new sits beside its module page`);
   }
   const redirect = `<Route path="/validate/customer-research/new" element={guard(${GUARDS.validate}, <HistoryRedirect to="/validate/record" />)} />`;
-  assert.equal(app.split(redirect).length, 2, "Customer research's Add is Record a session");
-  assert.ok(app.indexOf(redirect) < app.indexOf('<Route path="/validate/:slug/new"'));
+  assert.equal(app.includes(redirect), false, "D2319: the unused add alias was retired");
+  assert.ok(app.includes('<Route path="/validate/record"'));
 });
 
 test('every module\'s `/new` resolves to its cycle\'s adding route, and Customer research\'s to Record a session', () => {
   for (const [cycle, modules] of Object.entries(MODULES)) {
     for (const { slug } of modules) {
       const url = `/${cycle}/${slug}/new`;
-      const want = url === '/validate/customer-research/new' ? url : `/${cycle}/:slug/new`;
+      const want = `/${cycle}/:slug/new`;
       assert.equal(bestMatch(url), want, url);
       assert.equal(isCyclePath(url), true, `${url} has the cycle gutter`);
     }

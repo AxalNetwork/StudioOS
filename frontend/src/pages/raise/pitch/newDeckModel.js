@@ -12,7 +12,7 @@ import { NOT_ON_STUDIOOS } from './sourcesModel';
 
 export const NEW_PATH = '/raise/pitch/new';
 export const NO_ROUND = 'No active round yet.';
-export const ROUND_LINK = { text: 'Plan it in Raise › Round planner ›', path: '/raise/calls' };
+export const ROUND_LINK = { text: 'Plan it in Raise › Round planner ›', path: '/raise/capital-relationships/calls' };
 export const PROPOSED_BY_EADWYN = 'Proposed by Eadwyn';
 export const PROPOSAL_LINE = 'Figures come from your records. Eadwyn wrote the wording.';
 export const TITLES_ONLY_LINE = 'Figures come from your records. The cards carry their titles.';

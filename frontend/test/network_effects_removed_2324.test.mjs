@@ -32,8 +32,8 @@ test('the page and its only panel are gone, and the old address lands on Network
   assert.equal(existsSync(resolve(ROOT, 'frontend/src/components/CompanyProfilePanel.jsx')), false);
   const app = read('frontend/src/App.jsx');
   assert.doesNotMatch(app, /NetworkEffectsPage/);
-  assert.match(app, /<Route path="\/network-effects" element=\{<Navigate to="\/network" replace \/>\} \/>/);
-  assert.ok(REDIRECT_ROUTES.some((r) => r.path === '/network-effects' && !r.keep), 'counted with #2301 and retired with the rest');
+  assert.doesNotMatch(app, /<Route path="\/network-effects" element=\{<Navigate to="\/network" replace \/>\} \/>/);
+  assert.equal(REDIRECT_ROUTES.some((r) => r.path === '/network-effects'), false, 'retired by D2319');
 });
 
 test('nothing in the app opens /network-effects', () => {
