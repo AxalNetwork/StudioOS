@@ -314,3 +314,40 @@ test('GET /:scope/:id/moves: newest first, in or out, the blocked count, behind 
     assert.equal((await call(w, SPONSOR, '/company/co-nope/moves')).status, 404);
   } finally { __setEngineRouteDeps(null); w.close(); }
 });
+
+test('#4394 (TM18b): an out move names the runs it stopped, each scope only its own agents\', by persona and task; an in move names none', async () => {
+  // Mutation checked: the scope filter dropped → the company reads the project agent's run too.
+  const w = moving();
+  try {
+    w.db.prepare("UPDATE team_agents SET persona_key = 'solen' WHERE id = ?").run(AGENT);
+    w.db.prepare("UPDATE team_agents SET persona_key = NULL WHERE id = ?").run(CO_AGENT);
+    w.task(300, AGENT);
+    w.task(310, CO_AGENT, { scope: 'company', contextProject: PROJECT });
+    const a = await w.runtime.admit(P, { agentId: AGENT, taskId: 300, by: SPONSOR, source: 'person' });
+    const ca = await w.runtime.admit(C, { agentId: CO_AGENT, taskId: 310, by: SPONSOR, source: 'person' });
+    assert.ok(a.ok && ca.ok);
+    const d = loopDeps(w, fakeAgentRun(w).fn);
+    assert.ok((await load(d, a.run.uid)).go);
+    assert.ok((await load(d, ca.run.uid)).go);
+    await move(w, null); // out of every company: an out move for both the company and the project
+    assert.equal((await onProjectMoved(w.env, { projectId: PROJECT, from: COMPANY, to: null, actorUserId: SPONSOR }, fakeDeps().deps)).ended, 2);
+    const t = (id: number) => w.db.prepare('SELECT uid, title FROM scope_tasks WHERE id = ?').get(id) as any;
+    const agentUid = (id: number) => (w.db.prepare('SELECT uid FROM team_agents WHERE id = ?').get(id) as any).uid;
+
+    const co = await call(w, SPONSOR, '/company/co-1/moves');
+    assert.equal(co.status, 200, JSON.stringify(co.body));
+    assert.equal(co.body.moves[0].direction, 'out');
+    assert.deepEqual(co.body.moves[0].stopped_runs, [{ agent: { uid: agentUid(CO_AGENT), persona: null }, task: { uid: t(310).uid, title: t(310).title } }]);
+    const pr = await call(w, SPONSOR, `/project/${PROJECT}/moves`);
+    assert.equal(pr.body.moves[0].direction, 'out');
+    assert.deepEqual(pr.body.moves[0].stopped_runs, [{ agent: { uid: agentUid(AGENT), persona: { key: 'solen', name: 'Solen' } }, task: { uid: t(300).uid, title: t(300).title } }]);
+    assert.doesNotMatch(JSON.stringify([co.body, pr.body]), /"role_key"|@example\.test|"user_id"/, 'no job title, no email, no numeric id');
+
+    // Moving back in names no stopped runs, and the earlier out move keeps only its own.
+    await w.DB.batch(projectMoveStatements(w.env, { projectId: PROJECT, from: null, to: COMPANY, actorUserId: SPONSOR }));
+    const back = await call(w, SPONSOR, `/project/${PROJECT}/moves`);
+    assert.equal(back.body.moves[0].direction, 'in');
+    assert.equal('stopped_runs' in back.body.moves[0], false, 'an in move carries no stopped_runs');
+    assert.deepEqual(back.body.moves[1].stopped_runs.map((r: any) => r.task.uid), [t(300).uid], 'the earlier out move keeps its own');
+  } finally { __setEngineRouteDeps(null); w.close(); }
+});
