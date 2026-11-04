@@ -202,7 +202,8 @@ export function acceptAllBatches(rows) {
 export function verdictInterviewLine(data) {
   if (data?.parts?.can_write !== true) return null;
   const line = data?.card?.interview_evidence;
-  return line && typeof line.text === 'string' && line.text ? line.text : null;
+  const contributions = Array.isArray(data?.card?.contributions) ? data.card.contributions.map((x) => x.text).filter(Boolean) : [];
+  return [line && typeof line.text === 'string' ? line.text : null, ...contributions.map((x) => `Interview contribution: ${x}`)].filter(Boolean).join(' · ') || null;
 }
 
 // A finding kind's words, as the Worker's `findingLine`
@@ -226,6 +227,8 @@ export function amountWord(p) {
 /** `{ what, detail }` for a finding kind, or null for any other kind. */
 export function findingLine(kind, p = {}) {
   switch (kind) {
+    case 'quotable_line': return { what: 'Quotable line', detail: 'Accepted quotation' };
+    case 'verdict_contribution': return { what: 'Contribution to Verdict', detail: String(p.text ?? '') };
     case 'firmographic': return { what: ATTRIBUTE_WORD[String(p.attribute)] ?? 'Firmographic', detail: String(p.value ?? '') };
     case 'job_to_be_done': return { what: 'Job to be done', detail: String(p.job ?? '') };
     case 'market_fact': return { what: `Market fact · ${capital(String(p.topic ?? 'other'))}`, detail: String(p.fact ?? '') };

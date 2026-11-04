@@ -63,6 +63,7 @@ export const STRUCTURING_STEPS = new Set(Object.keys(STEP_LABELS));
 export function placementText(p) {
   const v = p?.edited_payload || p?.payload || {};
   switch (p?.kind) {
+    case 'interview_summary': case 'quotable_line': case 'verdict_contribution': return v.text;
     case 'pain_severity': return `“${v.phrase}” · ${SEVERITY[v.severity] || 'Severity not recorded'}`;
     case 'icp_fit': return `${FIT[v.fit] || 'Fit not recorded'} · ${v.reason || ''}`.replace(/ · $/, '');
     case 'segment': return `Segment: ${v.name}`;
@@ -107,7 +108,7 @@ export function spanLabel(from, to) {
 export function groupByModule(read) {
   const runs = read?.runs || [];
   const latestOf = (src) => [...runs].reverse().find((r) => (r.source === 'assistant' ? 'assistant' : 'studioos') === src);
-  const shown = [latestOf('assistant'), latestOf('studioos')].filter(Boolean);
+  const shown = [...runs.filter((r) => String(r.run_id).startsWith('output:')), latestOf('assistant'), latestOf('studioos')].filter((r, i, all) => r && all.indexOf(r) === i);
   const groups = new Map();
   for (const pl of shown.flatMap((r) => r.placements || [])) {
     const m = MODULE_LABELS[pl.module] ? pl.module : 'other';
@@ -221,6 +222,11 @@ export function ModuleSuggestions({
   const any = groups.some((g) => g.placements.length);
   return (
     <section data-testid="module-suggestions" className="space-y-4">
+      {read?.outputs && <ul className="space-y-1 text-[13px] text-axal-muted dark:text-gray-300" aria-label="Call outputs">
+        {read.outputs.map((o) => <li key={o.output}>{o.label}: {o.status === 'empty' ? 'Nothing found in this call'
+          : o.status === 'failed' ? <>Could not be extracted · <button type="button" className="underline" onClick={() => onStructure?.({ output: o.output })}>Try again</button></>
+            : o.status === 'done' ? 'Proposals ready for review' : o.status === 'running' ? 'Extracting…' : 'Waiting for the final transcript'}</li>)}
+      </ul>}
       {runError && (refusalKind(runError) === 'budget' ? <BudgetRefusal err={runError} /> : <p role="alert" className="text-[13px] font-semibold text-red-700 dark:text-red-400">{runError.message}</p>)}
       {!any && (
         <div data-testid="suggestions-none" className="text-[13px] text-axal-faint">
@@ -248,7 +254,7 @@ export function ModuleSuggestions({
               </div>
             )}
             {outcome?.error && <p role="alert" className="mb-2 text-[12.5px] font-semibold text-red-700 dark:text-red-400" data-testid={`accept-all-error-${g.slug}`}>{outcome.error.data?.detail || outcome.error.message}</p>}
-            {g.slug === 'verdict'
+            {g.slug === 'verdict' && g.placements.length === 0
               ? <p className="m-0 text-[12.5px] text-axal-faint" data-testid="suggestions-verdict-note">{VERDICT_NOTE}</p>
               : g.placements.length === 0
                 ? <p className="m-0 text-[12.5px] text-axal-faint">Nothing suggested here.</p>
