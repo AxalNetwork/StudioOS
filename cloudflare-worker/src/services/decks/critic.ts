@@ -59,16 +59,9 @@ export type Finding = {
 
 // ─────────────────────────────────────────────────────────── the family rule
 
-/** A model id's family: `@cf/<org>/…` → org, `anthropic/…` or `claude…` → anthropic; null when unreadable. */
-export function familyOf(model: string | null | undefined): string | null {
-  const id = String(model ?? '').trim().toLowerCase();
-  if (!id) return null;
-  const cf = /^@cf\/([^/]+)\//.exec(id);
-  if (cf) return cf[1];
-  if (/^(anthropic\/|claude)/.test(id)) return 'anthropic';
-  const org = /^([a-z0-9._-]+)\//.exec(id);
-  return org ? org[1] : null;
-}
+// D1551: it lives in `family.ts`, which imports nothing, so the judge reaches it without this module.
+import { familyOf } from './family';
+export { familyOf };
 
 /** The first candidate whose family differs from the writer's; null when none, or the writer is unknown. */
 export function criticModelFor(candidates: readonly string[], writer: string | null | undefined): string | null {

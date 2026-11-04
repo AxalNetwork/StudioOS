@@ -1,259 +1,253 @@
 /**
- * D1551 (#3798, deck v2 C3) — text ensembles: draft-refine and best-of-n with
- * the judge, priced inside the one quote, run under the one hold, with the
- * first draft announced before the refine or the judge. Synthetic data, stub
- * model calls.
+ * D1551 (#3798, deck v2 C3) — text ensembles on the generation runtime.
+ *
+ *   1. The modes: a whole-deck build drafts and refines by default; an areas
+ *      run writes once; best-of-n writes three drafts and a judge line.
+ *   2. One quote, one hold: every refine and judge is a line of the plan,
+ *      quoted at its run's maximum, and the lines sum to the area's hold.
+ *   3. Order: a refine or judge line is claimed only once its drafts have
+ *      ended, even with six drivers racing.
+ *   4. The refine reads its draft's words; the variant is the refined text,
+ *      or the draft when the refine did not land (and says so).
+ *   5. The judge ranks the drafts blind, outside their family, inside the
+ *      run's one hold, and names the best variant; the judge is no variant.
+ *   6. Progress rows name each step's role (draft, refine, judge).
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/deck_ensembles_d1551.test.ts
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
-import {
-  BEST_OF_STEP, REFINE_INSTRUCTION, bestOfOptions, ensembleCalls, ensembleN, quoteEnsemble, refineOptions, runEnsemble,
-  type RunOptions, type RunResult,
-} from '../src/services/aiRouter.ts';
-import { BEST_OF_ELEMENTS, ensembleFor, ensembleLabel, judgeFor, quoteAreaEnsemble } from '../src/services/decks/ensembles.ts';
-import { blindOrder, judgeCandidates } from '../src/services/decks/judge.ts';
-import { planAreas } from '../src/services/decks/areas.ts';
-import { familyOf } from '../src/services/decks/critic.ts';
+import { readFileSync } from 'node:fs';
+import { aiBudgetFixture, setFixtureAllowance } from './_ai_budget_fixture.mjs';
+import { parseRequest, planAreas, variantsOf, type PlanCtx } from '../src/services/decks/areas.ts';
+import { D1GenRuntime, READY_STEP, stepRecordRef, type PlanLine, type StepExecutor, type StepRow } from '../src/services/decks/genRuntime.ts';
 import { stepExecutor } from '../src/services/decks/stepExecutor.ts';
-import { modelLabel, stepRecordRef, type StepRow } from '../src/services/decks/genRuntime.ts';
-import { Governor } from '../src/services/decks/aiGovernor.ts';
-import { DeckGenRoom } from '../src/durable-objects/deck-gen-room.ts';
-import { d1Over } from './_d1_sqlite.mjs';
-import { loadSchema } from './_schema_once.mjs';
+import { BEST_OF_N, ensembleOf, refineMessages, resolveAfter, roleOf } from '../src/services/decks/ensembles.ts';
+import { familyOf } from '../src/services/decks/critic.ts';
+import { runView } from '../src/routes/deck_batches.ts';
 
-const WRITER = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
-const ASK: RunOptions = { task: 'rail_write', userId: 10, model: '@cf/synthetic/writer', systemPrompt: 'sys', messages: [{ role: 'user', content: 'Write the title.' }], maxTokens: 60, temperature: 0.4 } as RunOptions;
-const ok = (output: string, model = '@cf/synthetic/writer', id = 1): RunResult => ({ ok: true, output, usage: { model } as any, usageLogId: id });
-const no = (refusal = 'all_models_failed'): RunResult => ({ ok: false, refusal: refusal as any, usage: {} as any });
+const MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+const CARD = {
+  uid: 'card-one', title: 'Kestrel cuts audit time', notes: '',
+  blocks: [{ id: 'b2', kind: 'text', grid: { c1: 1, c2: 7, r1: 2, r2: 6 }, style: 'paragraph', text: 'Audits take weeks. Kestrel reads the ledger and flags what matters.' }],
+};
+const EMPTY = { c1: 8, c2: 12, r1: 2, r2: 4 };
 
-// ─────────────────────────────────────────────────────────── the modes
-
-test('draft-refine: one draft, the draft heard first, then one refine of it that adds nothing; a failed refine keeps the draft', async () => {
-  const seen: Array<{ messages: any[]; temperature: number | undefined; model: string | undefined }> = [];
-  const heard: string[] = [];
-  const out = await runEnsemble(null as any, ASK, { mode: 'draft-refine' }, {
-    run: async (_e, o) => { seen.push({ messages: o.messages!, temperature: o.temperature, model: o.model }); heard.push(`call ${seen.length}`); return seen.length === 1 ? ok('First draft words.') : ok('Tighter words.', '@cf/synthetic/writer', 2); },
-    onDraft: (t) => { heard.push(`draft: ${t}`); },
-  });
-  assert.equal(seen.length, 2, 'two calls');
-  assert.deepEqual(heard, ['call 1', 'draft: First draft words.', 'call 2'], 'the draft is heard before the refine runs');
-  assert.deepEqual(seen[1].messages.slice(-2), [{ role: 'assistant', content: 'First draft words.' }, { role: 'user', content: REFINE_INSTRUCTION }]);
-  assert.match(REFINE_INSTRUCTION, /Do not add a number, a name or a claim/);
-  assert.equal(seen[1].temperature, 0.3, 'the refine runs cooler');
-  assert.equal(seen[1].model, '@cf/synthetic/writer', 'the routed model refines its own draft');
-  assert.deepEqual([out.ok, out.output, out.refined, out.usageLogId], [true, 'Tighter words.', true, 2]);
-  assert.deepEqual(out.calls.map((c) => [c.role, c.ok]), [['draft', true], ['refine', true]]);
-
-  let n = 0;
-  const kept = await runEnsemble(null as any, ASK, { mode: 'draft-refine' }, { run: async () => (++n === 1 ? ok('Only the draft.') : no()) });
-  assert.deepEqual([kept.ok, kept.output, kept.refined], [true, 'Only the draft.', false], 'an ensemble never loses an answer it had');
-  const blank = await runEnsemble(null as any, ASK, { mode: 'draft-refine' }, { run: async () => ok('   ') });
-  assert.equal(blank.ok, false, 'an empty draft is no draft');
-  const failed = await runEnsemble(null as any, ASK, { mode: 'draft-refine' }, { run: async () => no('guard_blocked') });
-  assert.deepEqual([failed.ok, failed.failed?.refusal, failed.calls.length], [false, 'guard_blocked', 1], 'no refine after no draft');
-});
-
-test('best-of-n: n drafts at rising temperatures, the judge picks one; no judge, a refusing judge or one answer keeps the first answered', async () => {
-  assert.deepEqual(bestOfOptions(ASK, 3).map((o) => o.temperature), [0.4, 0.6, 0.8]);
-  assert.equal(BEST_OF_STEP, 0.2);
-  assert.deepEqual([ensembleN({ mode: 'best-of-n' }), ensembleN({ mode: 'best-of-n', n: 9 }), ensembleN({ mode: 'best-of-n', n: 1 })], [3, 3, 2]);
-  assert.deepEqual([ensembleCalls({ mode: 'single' }), ensembleCalls({ mode: 'draft-refine' }), ensembleCalls({ mode: 'best-of-n', n: 2 })], [1, 2, 2]);
-  const texts = ['Alpha line', 'Beta line', 'Gamma line'];
-  let k = 0;
-  const run = async (_e: any, o: RunOptions) => ok(texts[Math.round(((o.temperature ?? 0.4) - 0.4) / 0.2)], '@cf/synthetic/writer', 100 + k++);
-  const asked: any[] = [];
-  const judged = await runEnsemble(null as any, ASK, { mode: 'best-of-n', n: 3 }, {
-    run, judge: async (answers) => { asked.push(answers); return { index: 2, probability: 0.7, model: '@cf/synthetic/judge' }; },
-  });
-  assert.deepEqual(asked[0].map((a: any) => a.text), texts, 'the judge reads every answered draft');
-  assert.deepEqual([judged.output, judged.pick, judged.judged, judged.probability, judged.judge_model], ['Gamma line', 2, true, 0.7, '@cf/synthetic/judge']);
-  assert.deepEqual(judged.calls.map((c) => c.role), ['candidate', 'candidate', 'candidate']);
-  const unjudged = await runEnsemble(null as any, ASK, { mode: 'best-of-n', n: 3 }, { run });
-  assert.deepEqual([unjudged.output, unjudged.judged], ['Alpha line', false]);
-  const refusing = await runEnsemble(null as any, ASK, { mode: 'best-of-n', n: 3 }, { run, judge: async () => null });
-  assert.deepEqual([refusing.output, refusing.judged], ['Alpha line', false]);
-  const outOfRange = await runEnsemble(null as any, ASK, { mode: 'best-of-n', n: 3 }, { run, judge: async () => ({ index: 7, probability: 0.9, model: 'x' }) });
-  assert.deepEqual([outOfRange.output, outOfRange.judged], ['Alpha line', false], 'a pick that names no answer is no pick');
-  let c = 0;
-  let asked1 = 0;
-  const one = await runEnsemble(null as any, ASK, { mode: 'best-of-n', n: 3 }, {
-    run: async () => (c++ === 1 ? ok('Only Beta') : no()), judge: async () => { asked1++; return { index: 1, probability: 0.9, model: 'j' }; },
-  });
-  assert.deepEqual([one.ok, one.output, one.pick, one.judged], [true, 'Only Beta', 1, false]);
-  assert.equal(asked1, 0, 'a judge of one answer is never asked');
-  // The first draft is told once, however many drafts answer.
-  const toldB: string[] = [];
-  await runEnsemble(null as any, ASK, { mode: 'best-of-n', n: 3 }, { run, onDraft: (t) => { toldB.push(t); } });
-  assert.equal(toldB.length, 1, 'the first answered draft, once');
-  const none = await runEnsemble(null as any, ASK, { mode: 'best-of-n', n: 2 }, { run: async () => no() });
-  assert.equal(none.ok, false);
-});
-
-test('the quote is every call: draft-refine counts the refine with the longest draft in its input; best-of-n counts each draft', async () => {
-  const inputs: number[] = [];
-  const quote = async (_e: any, o: RunOptions) => { const chars = (o.messages ?? []).reduce((s, m) => s + m.content.length, 0); inputs.push(chars); return { ok: true as const, hold_microusd: 100 + Math.ceil(chars / 100), model: o.model ?? 'm' }; };
-  const dr = await quoteEnsemble(null as any, { ...ASK, maxTokens: 400 } as RunOptions, { mode: 'draft-refine' }, quote);
-  assert.equal(dr.ok && dr.calls, 2);
-  assert.ok(inputs[1] >= 400 * 4, 'the refine is priced with the draft\'s longest answer in its input');
-  assert.equal(dr.ok && dr.hold_microusd, (100 + Math.ceil(inputs[0] / 100)) + (100 + Math.ceil(inputs[1] / 100)));
-  const bo = await quoteEnsemble(null as any, ASK, { mode: 'best-of-n', n: 3 }, async () => ({ ok: true as const, hold_microusd: 100, model: 'm' }));
-  assert.deepEqual(bo.ok && [bo.hold_microusd, bo.calls], [300, 3]);
-  const refused = await quoteEnsemble(null as any, ASK, { mode: 'draft-refine' }, async () => ({ ok: false as const, refusal: 'assist_off' as any, error: 'off' }));
-  assert.equal(refused.ok, false);
-  assert.deepEqual(refineOptions(ASK, 'd', null).messages!.length, 3);
-});
-
-// ─────────────────────────────────────────────────────────── which element, and its line
-
-test('a whole-deck run writes a title, a kicker and a callout best of three, judged; other words draft-and-refine; a lightbox run stays single', async () => {
-  assert.deepEqual([...BEST_OF_ELEMENTS].sort(), ['callout', 'kicker', 'title']);
-  assert.deepEqual(ensembleFor('title', 'deck_build', 1), { mode: 'best-of-n', n: 3 });
-  assert.deepEqual(ensembleFor('body', 'deck_build', 1), { mode: 'draft-refine' });
-  assert.deepEqual(ensembleFor('title', 'areas', 1), { mode: 'single' }, 'the lightbox asked for variants to choose from');
-  assert.deepEqual(ensembleFor('title', 'deck_build', 3), { mode: 'single' });
-  // The judge keeps the family rule: never the writer's own family.
-  const [lead] = judgeCandidates();
-  const judge = judgeFor('@cf/meta/llama-3.3-70b-instruct-fp8-fast');
-  assert.ok(judge && familyOf(judge) !== familyOf('@cf/meta/llama-3.3-70b-instruct-fp8-fast'));
-  assert.equal(judgeFor(lead), judgeCandidates().find((m) => familyOf(m) !== familyOf(lead)) ?? null);
-  assert.equal(judgeFor(null), null, 'a writer that cannot be read is never judged');
-
-  const priced: RunOptions[] = [];
-  const quote = async (o: RunOptions) => { priced.push(o); return { ok: true as const, hold_microusd: o.task === 'module_decision' ? 40 : 100, model: o.model ?? '@cf/meta/llama-3.3-70b-instruct-fp8-fast' }; };
-  const writer = { ...ASK, model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' } as RunOptions;
-  const bo = await quoteAreaEnsemble(quote, writer, { mode: 'best-of-n', n: 3 }, 'title', 80);
-  assert.ok(bo.ok);
-  assert.deepEqual(bo.ok && [bo.hold_microusd, bo.calls, bo.judge_microusd], [340, 3, 40], 'three drafts and the judge, in one line');
-  assert.equal(priced.filter((o) => o.task === 'module_decision').length, 1);
-  assert.equal(bo.ok && bo.judge_model, judgeFor(writer.model));
-  const dr = await quoteAreaEnsemble(quote, writer, { mode: 'draft-refine' }, 'body', 400);
-  assert.deepEqual(dr.ok && [dr.hold_microusd, dr.calls, dr.judge_model], [200, 2, null]);
-  assert.equal(ensembleLabel({ mode: 'draft-refine' }, 2, 'Llama', null), 'Draft and refine · Llama');
-  assert.match(ensembleLabel({ mode: 'best-of-n', n: 3 }, 3, 'Llama', null), /^Best of 3, the first answer kept \(no judge of another model family\)/);
-});
-
-// ─────────────────────────────────────────────────────────── the step
-
-const BUILT = (() => { const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true }); loadSchema(db); return (db.prepare(`SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END`).all() as any[]).map((r) => r.sql as string); })();
-function db0() {
-  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  for (const s of BUILT) { try { db.exec(s); } catch { /* replayed */ } }
-  return db;
+function ctx(): PlanCtx & { quotes: any[] } {
+  const quotes: any[] = [];
+  return {
+    quotes, userId: 7, projectId: 5, deckId: 50, cards: [CARD], aspect: '16:9', voice: null,
+    quote: async (o: any) => { quotes.push(o); return { ok: true, hold_microusd: o.task === 'module_decision' ? 700 : 1200, model: o.model ?? MODEL }; },
+    modelFor: async (element: string) => ({ element, model: MODEL, source: 'default', locked: false, set_by: null, stale: [], plan_blocked: [], notice: null, switched_off: [] }) as any,
+    venture: async () => ({ available: false, code: 'x', line: 'x' }) as any,
+    sources: async () => [], art: async () => ({ seed_base: 'a'.repeat(32), art: {} as any }),
+  } as any;
 }
-const UID = '00000000-0000-4000-8000-0000000000aa';
-const stepOf = (over: Partial<StepRow>): StepRow => ({
-  batch_uid: UID, seq: 3, card_uid: 'c1', area_id: 'a1', element: 'body', kind: 'text', task: 'rail_write', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
-  state: 'running', quote_microusd: 500, charged_microusd: 0, model_used: null, fallback_used: 0, usage_log_id: null, error_code: null, started_at: null, ended_at: null,
-  input: JSON.stringify({ messages: [{ role: 'user', content: 'Write the body.' }], maxTokens: 120, temperature: 0.4, ensemble: { mode: 'draft-refine' } }), result: null, ...over,
+const area = { id: 'free:8-2', grid: EMPTY, element: 'callout' };
+const req = (extra: Record<string, unknown>) => { const r = parseRequest({ card: 'card-one', areas: [area], ...extra }); if ('refusal' in r) throw new Error(r.message); return r; };
+
+// ---- 1. the modes ----------------------------------------------------------------
+
+test('1. a whole-deck build drafts and refines by default; an areas run writes once; a mode can be asked for', () => {
+  assert.equal(ensembleOf(undefined, 'deck_build'), 'draft_refine');
+  assert.equal(ensembleOf(undefined, 'areas'), 'single');
+  assert.equal(ensembleOf('best_of_n', 'areas'), 'best_of_n');
+  assert.equal(ensembleOf('everything', 'deck_build'), 'draft_refine', 'an unknown mode is the class default');
+  assert.equal(req({ class: 'deck_build' }).ensemble, 'draft_refine');
+  assert.equal(req({}).ensemble, 'single');
 });
 
-test('an ensemble step: every call under the run\'s one hold and the step\'s record, its charge their sum, the first draft told first', async () => {
-  const db = db0();
+// ---- 2. one quote, one hold ------------------------------------------------------------
+
+test('2. draft-refine: each draft has its refine line, after it, and the lines sum to the hold', async () => {
+  // Mutation checked: the refine line left out of the hold → the lines no longer sum to it.
+  const c = ctx();
+  const plan = await planAreas(c, req({ class: 'deck_build' }));
+  const [a] = plan.areas;
+  assert.deepEqual(plan.lines.map((l) => l.kind), ['text', 'refine']);
+  assert.deepEqual((plan.lines[1].input as any).after, [0], 'the refine is after its draft');
+  assert.equal(plan.lines[1].model, MODEL, 'refined by the model #3754 routed the element to');
+  assert.equal(a.lines.reduce((n, l) => n + l.quote_microusd, 0), a.hold_microusd);
+  assert.equal(a.quote_lines.reduce((n, l) => n + l.microusd, 0), a.hold_microusd);
+  assert.equal(plan.hold_microusd, 2400, 'one quote: the draft and its refine');
+  // The refine is quoted at its most: a draft as long as the area's limit.
+  const refineQuote = c.quotes.find((q) => /improve one draft/.test(String(q.systemPrompt)));
+  assert.ok(refineQuote, 'the refine was quoted');
+  assert.ok(String(refineQuote.messages[0].content).length > Number((plan.areas[0].payload as any).limit));
+});
+
+test('2. best-of-n: three drafts and one judge after all three, outside the drafts\' family, inside the quote', async () => {
+  const c = ctx();
+  const plan = await planAreas(c, req({ ensemble: 'best_of_n' }));
+  assert.equal(BEST_OF_N, 3);
+  assert.deepEqual(plan.lines.map((l) => l.kind), ['text', 'text', 'text', 'judge']);
+  const judge = plan.lines[3];
+  assert.deepEqual((judge.input as any).after, [0, 1, 2]);
+  assert.notEqual(familyOf(judge.model), familyOf(MODEL), 'the family rule');
+  assert.equal(judge.task, 'module_decision');
+  assert.equal(plan.hold_microusd, 3 * 1200 + 700);
+  assert.equal(plan.areas[0].quote_lines.reduce((n, l) => n + l.microusd, 0), plan.hold_microusd);
+});
+
+test('2. resolveAfter turns each line\'s offsets into the run\'s sequence numbers', () => {
+  const lines = resolveAfter([{ input: { a: 1 } }, { input: { after_back: [1] } }, { input: null }, { input: { after_back: [3, 1] } }] as any);
+  assert.deepEqual(lines.map((l: any) => l.input?.after ?? null), [null, [0], null, [0, 2]]);
+});
+
+// ---- the runtime, end to end on D1 -----------------------------------------------------
+
+const M716 = readFileSync('cloudflare-worker/sql/migrations/716_deck_area_batches.sql', 'utf8');
+const M752 = readFileSync('cloudflare-worker/sql/migrations/752_deck_area_batches_seen.sql', 'utf8');
+const RUNTIME_COLUMN = readFileSync('cloudflare-worker/sql/migrations/202611022120_deck_batch_runtime.sql', 'utf8');
+const HOLD_COLUMNS = ['525_ai_reservation_idempotency.sql', '632_ai_hold_context.sql'].map((n) => readFileSync(`cloudflare-worker/sql/migrations/${n}`, 'utf8')).join('\n');
+const USER = 7, DECK = 50, P = 5;
+
+function world() {
+  const f = aiBudgetFixture();
+  f.db.exec(HOLD_COLUMNS);
+  f.db.exec('CREATE TABLE IF NOT EXISTS pitch_decks (id INTEGER PRIMARY KEY, project_id INTEGER, version INTEGER, slides TEXT, title TEXT, is_current INTEGER)');
+  f.db.exec(`INSERT INTO pitch_decks (id, project_id, version, slides, title, is_current) VALUES (${DECK}, ${P}, 1, '[]', 'Synthetic', 1)`);
+  f.db.exec(M716); f.db.exec(M752); f.db.exec(RUNTIME_COLUMN);
+  setFixtureAllowance(f.db, 0);
+  f.db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(?,?)').run(USER, 50_000_000);
+  return f;
+}
+const steps = (f: any, uid: string) => f.db.prepare('SELECT * FROM deck_area_batch_steps WHERE batch_uid = ? ORDER BY seq').all(uid) as StepRow[];
+const free = { acquire: async () => ({ ok: true, lease: { id: 'l' } }), release: async () => {} } as any;
+
+test('3. a refine or judge is claimed only after its drafts end, even with six drivers racing', async () => {
+  // Mutation checked: READY_STEP without the `after` clause → a refine starts while its draft runs.
+  const f = world();
   try {
-    const env: any = { DB: d1Over(db) };
-    const g = new Governor();
-    const governor = { acquire: async (i: any) => g.acquire(i), release: async (id: string) => { g.release(id); } };
-    const ref = stepRecordRef(UID, 3);
-    const calls: RunOptions[] = [];
-    const run = async (_e: any, o: RunOptions) => {
-      calls.push(o);
-      db.prepare("INSERT INTO ai_usage_logs (user_id, task, model, charged_microusd, reservation_uid, record_ref) VALUES (?, 'rail_write', ?, ?, ?, ?)").run(10, o.model ?? 'm', 120, o.parentHold?.uid ?? null, o.rail?.record ?? null);
-      return ok(calls.length === 1 ? 'The body, drafted.' : 'The body, refined.', o.model, calls.length);
+    const order: string[] = [];
+    const execute: StepExecutor = async (step) => {
+      order.push(`start ${step.seq}`);
+      await new Promise((r) => setTimeout(r, step.kind === 'text' ? 30 : 1));
+      order.push(`end ${step.seq}`);
+      return { ok: true, charged_microusd: 0, variant: { text: `words ${step.seq}` } };
     };
-    const drafts: string[] = [];
-    const x = stepExecutor(env, { run: run as any, governor, sleep: async () => {}, onDraft: (_s, t) => { drafts.push(t); } });
-    const ctx: any = { batch: { created_by: 10, uid: UID, project_id: 1, deck_id: 1 }, parentHold: { uid: 'hold-1', userId: 10 } };
-    const r = await x(stepOf({}), ctx);
-    assert.equal(r.ok, true);
-    assert.equal(calls.length, 2);
-    assert.ok(calls.every((o) => o.parentHold?.uid === 'hold-1' && o.rail?.record === ref), 'one hold, one record');
-    assert.equal(new Set(calls.map((o) => o.idempotencyKey)).size, 2, 'each call its own key, so a retry never runs the other twice');
-    assert.equal(r.charged_microusd, 240, 'the step charges the sum of its calls');
-    assert.deepEqual(drafts, ['The body, drafted.']);
-    assert.deepEqual((r.variant as any).text, 'The body, refined.');
-    assert.deepEqual((r.variant as any).ensemble.calls.map((c: any) => c.role), ['draft', 'refine']);
-    assert.equal((r.variant as any).ensemble.refined, true);
-    assert.deepEqual(g.held(10), { runs: 0, image: 0, text: 0, vision: 0 }, 'the lease is released');
-
-    // Best of three, with the judge under the same hold and record (the judge's decide is a run too).
-    calls.length = 0;
-    // The line's own judge (not the first candidate), and a label that maps to a draft other than the first.
-    const judgeModel = '@cf/cloudflare/clef';
-    assert.notEqual(judgeFor(WRITER), judgeModel);
-    const order = blindOrder(3, ref);
-    const at = order.findIndex((v) => v !== 0);
-    const letter = 'ABC'[at];
-    const runB = async (_e: any, o: any) => {
-      calls.push(o);
-      if (o.task === 'module_decision') return { ok: true, output: JSON.stringify({ best: { choice: letter, confidence: 0.8, probabilities: { [letter]: 0.8 } } }), usage: { model: o.model }, usageLogId: 99 };
-      return ok(`Title ${calls.length}`, o.model, calls.length);
-    };
-    const xb = stepExecutor(env, { run: runB as any, governor, sleep: async () => {} });
-    const rb = await xb(stepOf({ element: 'title', input: JSON.stringify({ messages: [{ role: 'user', content: 'Write the title.' }], maxTokens: 40, temperature: 0.4, ensemble: { mode: 'best-of-n', n: 3, judge_model: judgeModel, judge_microusd: 50 } }) }), ctx);
-    assert.equal(rb.ok, true);
-    const writes = calls.filter((o) => o.task === 'rail_write');
-    assert.equal(writes.length, 3, 'three drafts');
-    assert.ok(calls.every((o) => o.rail?.record === ref), 'the judge runs under the step\'s record too');
-    const e = (rb.variant as any).ensemble;
-    assert.equal(e.mode, 'best-of-n');
-    assert.equal(e.judged, true, 'the judge of another family ranked the three');
-    assert.equal(e.probability, 0.8);
-    assert.equal(e.pick, order[at], 'the judge\'s label maps back through the blind order');
-    assert.notEqual(e.pick, 0);
-    assert.deepEqual(calls.filter((o) => o.task === 'module_decision').map((o) => o.model), [judgeModel], 'the line\'s own judge is asked, once');
-    assert.equal((rb.variant as any).text, `Title ${e.pick + 1}`, 'the step\'s words are the judged pick');
-    assert.equal(e.judge_model_label, modelLabel(judgeModel));
-    assert.equal(e.calls.length, 3);
-    // A line with no judge (none of another family offered): the drafts run, no judge runs, the first draft stands.
-    calls.length = 0;
-    const rn = await xb(stepOf({ element: 'title', input: JSON.stringify({ messages: [{ role: 'user', content: 'Write the title.' }], maxTokens: 40, temperature: 0.4, ensemble: { mode: 'best-of-n', n: 3, judge_model: null, judge_microusd: 0 } }) }), ctx);
-    assert.equal(calls.filter((o) => o.task === 'module_decision').length, 0);
-    assert.deepEqual([(rn.variant as any).ensemble.judged, (rn.variant as any).ensemble.pick], [false, 0]);
-  } finally { db.close(); }
+    const rt = new D1GenRuntime({ DB: f.DB } as any, execute);
+    const lines: PlanLine[] = resolveAfter([
+      { card_uid: 'c1', area_id: 'a1', element: 'callout', kind: 'text', task: 'rail_write', model: MODEL, quote_microusd: 100, input: { variant: 0, ensemble: 'draft_refine' } },
+      { card_uid: 'c1', area_id: 'a1', element: 'callout', kind: 'refine', task: 'rail_write', model: MODEL, quote_microusd: 100, input: { variant: 0, ensemble: 'draft_refine', after_back: [1] } },
+      { card_uid: 'c2', area_id: 'a2', element: 'callout', kind: 'text', task: 'rail_write', model: MODEL, quote_microusd: 100, input: { variant: 0, ensemble: 'draft_refine' } },
+      { card_uid: 'c2', area_id: 'a2', element: 'callout', kind: 'refine', task: 'rail_write', model: MODEL, quote_microusd: 100, input: { variant: 0, ensemble: 'draft_refine', after_back: [1] } },
+    ]);
+    const a = await rt.admit({ deckId: DECK, projectId: P, userId: USER, cls: 'deck_build', idemKey: 'ensemble-order-1', lines });
+    assert.equal(a.ok, true, JSON.stringify(a));
+    if (!a.ok) return;
+    await Promise.all(Array.from({ length: 6 }, () => rt.startBatch(a.uid)));
+    for (const [draft, refine] of [[0, 1], [2, 3]]) {
+      assert.ok(order.indexOf(`end ${draft}`) < order.indexOf(`start ${refine}`), `refine ${refine} started after draft ${draft} ended: ${order.join(', ')}`);
+    }
+    assert.ok(order.indexOf('start 2') < order.indexOf('end 0'), 'the two drafts ran side by side (the fan-out)');
+    assert.ok(steps(f, a.uid).every((s) => s.state === 'done'));
+    assert.match(READY_STEP, /json_extract\(s\.input, '\$\.after'\)/);
+  } finally { f.db.close(); }
 });
 
-test('the room tells a first draft as variant_ready with the step still running, its money filled from the run', async () => {
-  const db = db0();
+test('3. every ready draft is claimed before any ready second pass, so the deck\'s first draft lands first', async () => {
+  // Mutation checked: READY_STEP ordered by seq alone → the refine of the first area runs before the second area\'s draft.
+  const f = world();
   try {
-    const store = new Map<string, unknown>();
-    const state: any = { storage: { get: async (k: string) => store.get(k), put: async (k: string, v: unknown) => { store.set(k, v); }, setAlarm: async () => {} } };
-    const room = new DeckGenRoom(state, { DB: d1Over(db) } as any);
-    const seen: any[] = [];
-    room.onEvent((e) => seen.push(e));
-    await room.drafted({ batch_uid: UID, seq: 2, card_uid: 'c1', area_id: 'a1', element: 'body' }, 'Early words.', '@cf/meta/llama-3.3-70b-instruct-fp8-fast');
-    assert.equal(seen.length, 1);
-    assert.deepEqual([seen[0].type, seen[0].state, seen[0].variant], ['variant_ready', 'running', { text: 'Early words.', draft: true }]);
-    assert.ok(seen[0].charged_microusd >= 0 && seen[0].held_microusd >= 0, 'never the -1 placeholders');
-    assert.equal(typeof seen[0].model_label, 'string');
-  } finally { db.close(); }
+    const order: number[] = [];
+    const rt = new D1GenRuntime({ DB: f.DB } as any, async (step) => { order.push(step.seq); return { ok: true, charged_microusd: 0, variant: { text: 'w' } }; });
+    const line = (card: string, kind: string, back?: number[]): PlanLine => ({ card_uid: card, area_id: 'a', element: 'callout', kind, task: 'rail_write', model: MODEL, quote_microusd: 10, input: { ensemble: 'draft_refine', ...(back ? { after_back: back } : {}) } });
+    const a = await rt.admit({ deckId: DECK, projectId: P, userId: USER, cls: 'deck_build', idemKey: 'ensemble-draft-first', lines: resolveAfter([line('c1', 'text'), line('c1', 'refine', [1]), line('c2', 'text'), line('c2', 'refine', [1])]) });
+    if (!a.ok) throw new Error(JSON.stringify(a));
+    await rt.startBatch(a.uid);
+    assert.deepEqual(order, [0, 2, 1, 3]);
+  } finally { f.db.close(); }
 });
 
-test('the plan: a whole-deck run prices each text area as its ensemble in one line, the judge in it; a lightbox run keeps a line per variant', async () => {
-  const cards = [{ uid: 'c1', title: 'Kestrel closes the month in a day', blocks: [] }];
-  const priced: RunOptions[] = [];
-  const ctx: any = {
-    userId: 10, projectId: 1, deckId: 1, cards, aspect: '16:9', voice: null,
-    quote: async (o: RunOptions) => { priced.push(o); return { ok: true, hold_microusd: o.task === 'module_decision' ? 40 : 100, model: o.model ?? WRITER }; },
-    modelFor: async () => ({ model: WRITER, source: 'default' }),
-    venture: async () => ({ available: false }), sources: async () => [], art: async () => ({ art: null }),
+function fakeRun(f: any, opts: { refine?: 'ok' | 'fail'; judge?: string } = {}) {
+  const seen: any[] = [];
+  const run = async (_env: any, o: any) => {
+    seen.push(o);
+    const row = f.db.prepare('INSERT INTO ai_usage_logs (user_id, task, model, charged_microusd, reservation_uid, record_ref) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(USER, o.task, o.model ?? MODEL, 50, o.parentHold?.uid ?? null, o.rail?.record ?? null);
+    const base = { usage: { model: o.model ?? MODEL }, usageLogId: Number(row.lastInsertRowid), attempts: [] };
+    if (o.task === 'module_decision') return { ok: true, output: JSON.stringify({ best: { choice: opts.judge ?? 'A', confidence: 0.8 } }), ...base };
+    const refining = /improve one draft/.test(String(o.systemPrompt ?? ''));
+    if (refining && opts.refine === 'fail') return { ok: false, refusal: 'all_models_failed', error: 'down', ...base, attempts: [] };
+    return { ok: true, output: refining ? 'Kestrel reads the ledger and flags what matters, in hours.' : 'Kestrel reads the ledger.', ...base };
   };
-  const areas = [
-    { id: 'a-title', grid: { c1: 1, c2: 12, r1: 1, r2: 1 }, element: 'title', card: 'c1', action: 'rewrite' },
-    { id: 'a-body', grid: { c1: 1, c2: 12, r1: 2, r2: 5 }, element: 'body', card: 'c1', action: 'rewrite' },
-  ] as any;
-  const build = await planAreas(ctx, { card: null, areas, variants: 1, cls: 'deck_build' });
-  const [title, body] = build.areas;
-  assert.equal(title.refusal, null, JSON.stringify(title.refusal));
-  assert.deepEqual([title.lines.length, (title.lines[0].input as any).ensemble.mode, title.hold_microusd], [1, 'best-of-n', 340], 'three drafts and the judge in one line');
-  assert.equal((title.lines[0].input as any).ensemble.judge_model, judgeFor(WRITER));
-  assert.equal(title.lines[0].quote_microusd, 340);
-  assert.match(title.quote_lines[0].label, /^Best of 3, judged by /);
-  assert.deepEqual([body.lines.length, (body.lines[0].input as any).ensemble.mode, body.hold_microusd], [1, 'draft-refine', 200]);
-  assert.equal(build.hold_microusd, 540, 'the run\'s one quote is every ensemble\'s calls');
-  const lightbox = await planAreas(ctx, { card: null, areas: [areas[0]], variants: 3, cls: 'areas' });
-  assert.deepEqual([lightbox.areas[0].lines.length, (lightbox.areas[0].lines[0].input as any).ensemble], [3, undefined], 'one call per variant, no ensemble');
+  return { run, seen };
+}
+
+async function runPlan(f: any, plan: { lines: PlanLine[] }, run: any) {
+  const rt = new D1GenRuntime({ DB: f.DB } as any, stepExecutor({ DB: f.DB } as any, { run, governor: free, sleep: async () => {} }));
+  const a = await rt.admit({ deckId: DECK, projectId: P, userId: USER, cls: 'deck_build', idemKey: `ensemble-${Math.random().toString(36).slice(2, 10)}`, lines: plan.lines });
+  assert.equal(a.ok, true, JSON.stringify(a));
+  if (!a.ok) throw new Error('not admitted');
+  await rt.startBatch(a.uid);
+  return a.uid;
+}
+
+test('4. the refine reads its draft\'s words; the variant is the refined text, charged for both, under the one hold', async () => {
+  // Mutation checked: the executor not reading the draft → the refine's message has no draft in it.
+  const f = world();
+  try {
+    const plan = await planAreas(ctx(), req({ class: 'deck_build' }));
+    const fr = fakeRun(f);
+    const uid = await runPlan(f, plan, fr.run);
+    const refineCall = fr.seen.find((o) => /improve one draft/.test(String(o.systemPrompt)));
+    assert.match(String(refineCall.messages[0].content), /Kestrel reads the ledger\./, 'the draft is in the refine, as data');
+    assert.ok(fr.seen.every((o) => o.parentHold?.uid), 'every call ran under the one parent hold');
+    const holds = f.db.prepare("SELECT COUNT(*) AS n FROM ai_budget_reservations").get() as any;
+    assert.equal(holds.n, 1, 'one hold for the draft and the refine');
+    const [v] = variantsOf(plan.areas[0].payload, steps(f, uid), { aspect: '16:9', contrastAa: true });
+    assert.equal((v.payload as any).block.text, 'Kestrel reads the ledger and flags what matters, in hours.');
+    assert.deepEqual(v.ensemble, { mode: 'draft_refine', refined: true, draft_model_label: v.ensemble?.draft_model_label });
+    assert.equal(v.cost_microusd, 100, 'the draft and its refine');
+    assert.equal(variantsOf(plan.areas[0].payload, steps(f, uid), { aspect: '16:9', contrastAa: true }).length, 1, 'the refine is no variant of its own');
+  } finally { f.db.close(); }
+});
+
+test('4. a refine that does not land leaves the draft standing, and the variant says so', async () => {
+  const f = world();
+  try {
+    const plan = await planAreas(ctx(), req({ class: 'deck_build' }));
+    const uid = await runPlan(f, plan, fakeRun(f, { refine: 'fail' }).run);
+    const [v] = variantsOf(plan.areas[0].payload, steps(f, uid), { aspect: '16:9', contrastAa: true });
+    assert.equal(v.state, 'ready');
+    assert.equal((v.payload as any).block.text, 'Kestrel reads the ledger.');
+    assert.equal(v.ensemble?.refined, false);
+  } finally { f.db.close(); }
+});
+
+test('5. best-of-n: the judge ranks the drafts inside the run\'s hold and names the best; it is no variant', async () => {
+  // Mutation checked: variantsOf ignoring the judge's result → no variant is marked best.
+  const f = world();
+  try {
+    const plan = await planAreas(ctx(), req({ ensemble: 'best_of_n' }));
+    const fr = fakeRun(f, { judge: 'B' });
+    const uid = await runPlan(f, plan, fr.run);
+    const judgeCall = fr.seen.find((o) => o.task === 'module_decision');
+    assert.ok(judgeCall, 'the judge ran');
+    assert.notEqual(familyOf(judgeCall.model), familyOf(MODEL));
+    assert.ok(judgeCall.parentHold?.uid, 'inside the run\'s one hold');
+    assert.doesNotMatch(String(judgeCall.text), /llama|meta/i, 'blind: no model name');
+    const vs = variantsOf(plan.areas[0].payload, steps(f, uid), { aspect: '16:9', contrastAa: true });
+    assert.equal(vs.length, 3, 'three drafts; the judge is none of them');
+    assert.equal(vs.filter((v) => v.best).length, 1);
+    const charged = (f.db.prepare('SELECT charged_microusd AS n FROM deck_area_batches WHERE uid = ?').get(uid) as any).n;
+    assert.ok(charged <= plan.hold_microusd, 'settled within the one quote');
+  } finally { f.db.close(); }
+});
+
+test('6. progress rows name each step\'s role, model, state, seconds and cost', async () => {
+  const f = world();
+  try {
+    const plan = await planAreas(ctx(), req({ class: 'deck_build' }));
+    const uid = await runPlan(f, plan, fakeRun(f).run);
+    const rt = new D1GenRuntime({ DB: f.DB } as any, async () => ({ ok: true, charged_microusd: 0 }));
+    const view = runView((await rt.status(uid))!);
+    assert.deepEqual(view.steps.map((s: any) => s.role), ['draft', 'refine']);
+    for (const s of view.steps as any[]) for (const k of ['element', 'model_label', 'state', 'seconds', 'cost_microusd']) assert.ok(k in s, k);
+    assert.equal(roleOf('text', { ensemble: 'single' }), 'variant');
+    assert.equal(stepRecordRef(uid, 1), `deckstep:${uid}:1`);
+    assert.match(refineMessages({ label: 'callout', limit: 90, voice: '', card: 'Card words' }, 'Draft words').user, /Draft:[\s\S]*Draft words/);
+  } finally { f.db.close(); }
 });

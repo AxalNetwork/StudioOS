@@ -32,11 +32,12 @@
  */
 import { USE_KINDS, offerable } from '../ai/modelUseCases';
 import type { ChoiceAnswer, Decided } from '../ai/decide';
-import { familyOf } from './critic';
+import { familyOf } from './family';
 /**
- * The parts of an area's variant (`areas.ts` `Variant`) the judge reads. Kept here, not imported, so the
- * judge's module graph does not reach the area planner and its record sources: the generation runtime
- * (D1551, `ensembles.ts`) runs the judge, and the cron drives that runtime (D752's privacy guard).
+ * The variant fields the judge reads, declared here rather than imported from
+ * `areas.ts`: `areas.ts` reaches the deck's sources (and their Mercury feeds),
+ * and a step that runs the judge on the cron path must not reach them, even by
+ * a type (`mercury_member_privacy_d752`, D1551). `areas.Variant` has these fields.
  */
 type Variant = {
   n: number;

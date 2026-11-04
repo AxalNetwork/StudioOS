@@ -455,6 +455,16 @@ export function PayoutQueue({ state, rows, view = 'open', pending, busy, result,
   );
 }
 
+/** The source filter an address names (`?source=subscription_invoice`), else every source. */
+export function sourceFromAddress(search = typeof window === 'undefined' ? '' : window.location.search) {
+  try {
+    const v = new URLSearchParams(search).get('source');
+    return v && /^[a-z_]{1,64}$/.test(v) ? v : 'all';
+  } catch {
+    return 'all';
+  }
+}
+
 /** Every commission, newest first, with its filters above it. */
 export function AllCommissionsTable({ state, rows, total, onRetry, filters }) {
   let body;
@@ -532,7 +542,8 @@ export default function AdminCommissions({ user }) {
   const [queue, setQueue] = useState({ status: 'loading', data: null });
   const [take, setTake] = useState({ status: 'loading', data: null });
   const [status, setStatus] = useState('all');
-  const [source, setSource] = useState('all');
+  // D4298 (#4298): Admin › Programs › Influencers › Payouts opens this page with `?source=`.
+  const [source, setSource] = useState(() => sourceFromAddress());
   const [period, setPeriod] = useState('all');
   const [query, setQuery] = useState('');
   const [view, setView] = useState('open');

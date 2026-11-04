@@ -181,7 +181,7 @@ function RowAction({ action }) {
 
 export default function CycleModulePage({
   cycle, slug, moduleName, cards, data, status = data ? 'ready' : 'loading', message = '', onRetry,
-  records, recordsStatus, recordsMessage, query, onQuery, onRetryRecords, action, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null,
+  records, recordsStatus, recordsMessage, query, onQuery, onRetryRecords, action, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null, aboveRecords = null,
 }) {
   const meta = cycleOf(cycle);
   if (!meta) return null;
@@ -223,6 +223,8 @@ export default function CycleModulePage({
               {item.label || `Open ${name}`}
             </Link>
           ))}
+          {/* #3938 (D1478 part 9): a control that acts on the records themselves (Partner network's Rank by fit). */}
+          {aboveRecords}
           <RecordsTable
             key={`${meta.key}/${slug}`}
             title={data?.module?.records_title || name}

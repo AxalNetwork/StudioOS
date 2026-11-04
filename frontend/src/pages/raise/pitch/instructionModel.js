@@ -3,10 +3,16 @@
  * the selection, pure. No React, no network.
  *
  *   instructionPlan   the selection → one filled text area (runs on main,
- *                     `deck_assist` action `ask`), several areas (the
- *                     adapter's `instruct`, #3773 / #3795), off (AI paused),
- *                     or refused with why (a figure bound to a record, an
- *                     area with no words)
+ *                     `deck_assist` action `ask`), several areas (D1527,
+ *                     #3795: `deckInstructApi`'s quote and run, D1521), off
+ *                     (AI paused), or refused with why (a figure bound to a
+ *                     record, an area with no words)
+ *   severalBody       the several-area request: the card, the selection, the
+ *                     words and 1–3 variants
+ *   severalHold       the quote's line: "Holds up to $x · you pay what it
+ *                     uses", with how many areas run and how many cannot
+ *   labelResults      each area's results named by its chip ("c1–6 × r2–4 ·
+ *                     Body"), so a proposal says which area it is for
  *   instructionField  the typed words: whether they name a figure, which is
  *                     refused before any quote (the Worker's own word list)
  *   typedChange       v1's Change tone and Translate, now typed (plan §0):
@@ -22,6 +28,7 @@
 
 import { LANGUAGES, TONES, blockRefusal } from './deckAssistModel.js';
 import { numberIn } from './newDeckModel.js';
+import { areaLabel } from './deckV2Model.js';
 
 /** An instruction is a rewrite with the founder's words (D899): one rail option. */
 export const ASK_OPTION = 'deck:rewrite';
@@ -85,3 +92,56 @@ export function instructionField(text) {
   const words = String(text ?? '').trim();
   return { words, figure: numberIn(words) };
 }
+
+// ─────────────────────────────────────────────── D1527 (#3795): several areas
+
+/** How many variants an instruction on several areas may ask for (D1521: 1 to 3, each priced). */
+export const VARIANT_CHOICES = Object.freeze([1, 2, 3]);
+export const SEVERAL_RUNNING = 'Eadwyn is changing the selected areas…';
+export const SEVERAL_STILL = 'Still running. The proposals stay in this deck’s proposals; nothing more is charged.';
+export const RETRY = 'Retry';
+/** pd19: Accept all is one step on the undo history (D1515), whatever it places. */
+export const ONE_UNDO = 'Accept all is one undo step.';
+
+/** The body both instruct routes take: the card's place, the selected areas, the words, the variants. */
+export function severalBody({ cardIndex, areas = [], instruction, variants = 1 }) {
+  const n = VARIANT_CHOICES.includes(Number(variants)) ? Number(variants) : 1;
+  return { card: cardIndex, selection: areas.map((a) => ({ area_id: String(a.id ?? a) })), instruction: String(instruction ?? '').trim(), variants: n };
+}
+
+/**
+ * The quote, as one line: what it holds, how many areas it runs, and how many
+ * cannot (each says why below). `aiTokens` formats the hold.
+ */
+export function severalHold(quote, aiTokens) {
+  if (!quote) return 'Reading the cost…';
+  const refused = Array.isArray(quote.areas) ? quote.areas.filter((a) => a?.refusal).length : Number(quote.refused) || 0;
+  const runs = Array.isArray(quote.areas) ? quote.areas.length - refused : Number(quote.runs) || 0;
+  if (runs <= 0) return 'None of the selected areas can run. Nothing is held.';
+  const hold = Number.isFinite(quote.hold_microusd) ? `Holds up to ${aiTokens(quote.hold_microusd)} · you pay what it uses` : 'Paid in AI tokens, charged to you when it runs.';
+  return [hold, `${runs} ${runs === 1 ? 'area' : 'areas'}`, refused ? `${refused} cannot run` : null].filter(Boolean).join(' · ');
+}
+
+/** The quote's per-area refusals, by the area's chip label. */
+export function severalRefusals(quote, areas = []) {
+  const byId = new Map(areas.map((a) => [String(a.id), a]));
+  return (Array.isArray(quote?.areas) ? quote.areas : []).filter((x) => x?.refusal).map((x) => {
+    const a = byId.get(String(x.area_id ?? x.key));
+    return { key: String(x.area_id ?? x.key), label: a ? areaLabel(a.grid) : String(x.area_id ?? x.key), message: x.refusal?.message || 'This area cannot run.' };
+  });
+}
+
+/** Results (`areaRunResults`) named by their area's chip and carrying the area, in the selection's order. */
+export function labelResults(results, areas = [], kindOf = () => null) {
+  const order = new Map(areas.map((a, i) => [String(a.id), i]));
+  const name = (key) => {
+    const a = areas.find((x) => String(x.id) === String(key));
+    return a ? [areaLabel(a.grid), kindOf(a)].filter(Boolean).join(' · ') : String(key);
+  };
+  // `area` is what `placeResult` places into: the selected area as the editor drew it.
+  return (results || []).map((r) => ({ ...r, label: name(r.areaKey), area: areas.find((a) => String(a.id) === String(r.areaKey)) ?? null }))
+    .sort((x, y) => (order.get(String(x.areaKey)) ?? 99) - (order.get(String(y.areaKey)) ?? 99));
+}
+
+/** Whether a run still has an area generating, so the box reads the batch again. */
+export const stillRunning = (proposals) => (proposals || []).some((p) => p?.state === 'running' || !(Array.isArray(p?.variants) && p.variants.length));

@@ -3,17 +3,19 @@ import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { deckRehearsalsApi } from '../../../lib/api/deckRehearsals';
 import { deckCommentsApi } from '../../../lib/api/deckComments';
+import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks';
 import { reportError } from '../../../lib/log';
 import { usePhoneWidth } from '../../../ui';
 import { DeckCard } from './StudioHome';
 import { useDeckChecks } from './DeckVersions';
 import { useDeckSources } from './SourcesBoards';
+import { DraftDialog } from '../caprel/CapRelOutreach';
 import { NEW_PATH } from './newDeckModel';
 import { TEMPLATES_PATH } from './templatesModel';
 import { NOT_RECORDED, NOTES_PATH, REVIEW_PATH, asList, currentVersion, dayLabel, readerStats } from './pitchStudioModel';
 import {
   NO_DECK_ITEMS, NO_DECK_TITLE, SCRIPT_PATH, SHARE_PATH, WHAT_PITCH_DOES,
-  latestHqNote, lastRehearsal, openComments, scriptCoverage,
+  investorActivity, latestHqNote, lastRehearsal, openComments, scriptCoverage,
 } from './pitchOverviewModel';
 
 /**
@@ -26,11 +28,15 @@ import {
  * fails says so on its own card; a value it cannot read is "Not recorded".
  * Nothing here writes.
  *
+ * Recent investor activity (#4274, ps1) is the current version's investor
+ * links and their D1568 signals (`investorActivity`), newest first. "Draft
+ * follow-up" is Capital relationships' own metered draft (`DraftDialog`,
+ * CRL8): nothing is sent. A link with no prospect behind it has no draft.
+ *
  * Not drawn yet, and why: the estimated length against a target and the
- * likely questions answered wait for P2a and P2c (#4268, #4270); Recent
- * investor activity and Upcoming pitch meetings wait for P4 (#4272) and a
- * recorded meetings source (D-h). A block with no source is left out, never
- * filled.
+ * likely questions answered wait for P2a and P2c (#4268, #4270); Upcoming
+ * pitch meetings waits for a recorded meetings source (D-h). A block with no
+ * source is left out, never filled.
  */
 const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-1.5 rounded-[8px] px-3 text-[12.5px] font-bold';
 const GHOST = `${BTN} border border-axal-hairline bg-white text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800`;
@@ -59,6 +65,8 @@ function useVersionRead(deckId, fetcher, label) {
 const listRehearsals = (id) => deckRehearsalsApi.list(id);
 const listComments = (id) => deckCommentsApi.list(id);
 const listNotes = (id) => api.deckNotes(id);
+const listLinks = (id) => deckInvestorLinksApi.investorLinks(id);
+export const CAPREL_PATH = '/raise/capital-relationships/pipeline';
 
 export default function PitchOverview({ reads, readOnly, q }) {
   const phone = usePhoneWidth();
@@ -71,6 +79,7 @@ export default function PitchOverview({ reads, readOnly, q }) {
   const rehearsals = useVersionRead(deckId, listRehearsals, 'rehearsals');
   const comments = useVersionRead(deckId, listComments, 'comments');
   const notes = useVersionRead(deckId, listNotes, 'notes');
+  const links = useVersionRead(deckId, listLinks, 'investor links');
 
   const busy = reads.projects.status === 'loading' || reads.versions.status === 'loading' || reads.versions.status === 'idle';
   if (busy) return <div className={MUTED} aria-busy="true" data-testid="pitch-overview-loading">Reading…</div>;
@@ -94,6 +103,7 @@ export default function PitchOverview({ reads, readOnly, q }) {
         <ReviewCard read={comments} q={q} />
         <SharingCard engagement={reads.engagement} q={q} />
       </div>
+      <InvestorActivity read={links} q={q} projectId={projectId} readOnly={readOnly} />
       <HqNote read={notes} q={q} />
     </div>
   );
@@ -170,6 +180,40 @@ function SharingCard({ engagement, q }) {
             </>
           )}
     </Status>
+  );
+}
+
+/** ps1: Recent investor activity. Each row opens Capital relationships; a founder can draft a follow-up. */
+function InvestorActivity({ read, q, projectId, readOnly }) {
+  const [drafting, setDrafting] = useState(null);
+  const rows = read.status === 'ok' ? investorActivity(read.data) : null;
+  return (
+    <section className={`${CARD} flex flex-col gap-1 p-4`} data-testid="pitch-overview-activity">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className={`m-0 text-[14px] font-extrabold ${INK}`}>Recent investor activity</h2>
+        <Link to={`${SHARE_PATH}${q}`} className="text-[12.5px] font-bold text-axal-violet hover:underline dark:text-violet-300" data-testid="pitch-overview-activity-all">Share & analytics ›</Link>
+      </div>
+      {read.status === 'error' ? <span className={MUTED} data-testid="pitch-overview-activity-error">Investor activity could not be read. Try again from Share & analytics.</span>
+        : read.status !== 'ok' ? <span className={MUTED}>Reading…</span>
+          : rows == null ? <span className={MUTED} data-testid="pitch-overview-activity-error">{NOT_RECORDED}</span>
+            : !rows.length ? <span className={MUTED} data-testid="pitch-overview-activity-none">No investor has opened a link to this version yet.</span>
+              : rows.map((r, i) => (
+                <div key={r.id} className={`flex flex-wrap items-center gap-x-3 gap-y-2 py-2.5 ${i ? 'border-t border-axal-hairline dark:border-gray-700' : ''}`} data-testid={`pitch-overview-activity-${r.id}`}>
+                  <span aria-hidden="true" className="inline-flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-axal-lavender text-[11px] font-bold text-violet-800 dark:bg-violet-950/50 dark:text-violet-200">{r.initials}</span>
+                  <div className="flex min-w-[200px] flex-1 flex-col gap-0.5">
+                    <span className={`text-[13px] font-bold ${INK}`}>{r.fund || r.name || 'An investor'}{r.fund && r.name ? <span className="font-medium text-axal-muted dark:text-gray-400"> · {r.name}</span> : null}</span>
+                    <span className="text-[12.5px] text-axal-ink/80 dark:text-gray-300">{r.line}{r.at ? ` · ${dayLabel(r.at)}` : ''}</span>
+                  </div>
+                  {!readOnly && r.prospectId != null && projectId != null ? (
+                    <button type="button" className={GHOST} onClick={() => setDrafting(r)} data-testid={`pitch-overview-activity-draft-${r.id}`}>Draft follow-up</button>
+                  ) : null}
+                  <Link to={`${CAPREL_PATH}${q}`} className={GHOST} data-testid={`pitch-overview-activity-open-${r.id}`}>Open in Capital relationships</Link>
+                </div>
+              ))}
+      {drafting ? (
+        <DraftDialog projectId={projectId} prospect={{ id: drafting.prospectId, name: drafting.name || drafting.fund }} purpose="follow_up" onClose={() => setDrafting(null)} />
+      ) : null}
+    </section>
   );
 }
 

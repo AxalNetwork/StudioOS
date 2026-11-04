@@ -29,9 +29,10 @@ import { ELEMENT_ROUTES, GRID_PAGE } from './elementModels';
 import { MAX_AREA_RETRIES, MAX_BUSY_RETRIES, backoffMs, governorFor, isBusy, waitForSlot, type GovernorClient } from './aiGovernor';
 import { stepRecordRef, type StepExecutor, type StepRow } from './genRuntime';
 import { pipelineStep } from './imageDraw';
-import { runEnsemble } from '../aiRouter';
-import { stepJudge } from './ensembles';
-import { modelLabel } from './genRuntime';
+import { afterOf, refineMessages, wordsOf } from './ensembles';
+import { judgeArea } from './judge';
+import { readChoice } from '../ai/decide';
+import { AI_SURFACE } from '../aiSurfaces';
 
 export type ExecutorDeps = {
   run?: (env: Env, opts: RunOptions) => Promise<RunResult>;
@@ -40,8 +41,6 @@ export type ExecutorDeps = {
   governor?: GovernorClient;
   /** Told before each automatic retry of a busy model ("Busy, retrying"): the step's retry number (1 to `MAX_AREA_RETRIES`) and the wait. */
   onBusy?: (step: StepRow, attempt: number, ms: number) => void | Promise<void>;
-  /** D1551 (#3798): told when an ensemble step's first draft lands, before its refine or its judge has run. */
-  onDraft?: (step: StepRow, text: string, model: string | null) => void | Promise<void>;
 };
 
 const STEP_INPUT_KEYS = ['text', 'messages', 'systemPrompt', 'maxTokens', 'temperature', 'draw', 'drawJob', 'images', 'guardText'] as const;
@@ -97,6 +96,58 @@ export function stepExecutor(env: Env, deps: ExecutorDeps = {}): StepExecutor {
     const passed: Partial<RunOptions> = {};
     for (const k of STEP_INPUT_KEYS) if (input[k] !== undefined) (passed as any)[k] = input[k];
     const option = typeof input.option === 'string' ? input.option : (ELEMENT_ROUTES[step.element]?.option ?? null);
+    // D1551 (#3798): the ensembles' second calls read what their drafts wrote.
+    const afterRows = async () => {
+      const seqs = afterOf(input);
+      if (!seqs.length) return [] as StepRow[];
+      const rows = await env.DB.prepare('SELECT * FROM deck_area_batch_steps WHERE batch_uid = ?1 AND seq IN (SELECT value FROM json_each(?2)) ORDER BY seq')
+        .bind(step.batch_uid, JSON.stringify(seqs)).all<StepRow>();
+      return (rows.results || []) as StepRow[];
+    };
+    if (step.kind === 'refine') {
+      // A refine whose draft wrote nothing runs nothing and is free; the draft's own failure stands.
+      const [draft] = await afterRows();
+      const words = draft && draft.state === 'done' ? wordsOf(draft.result) : null;
+      const refine = input.refine as { label: string; limit: number; voice: string; card: string } | undefined;
+      if (!words || !refine) { await gov.release(lease.id).catch(() => {}); return { ok: false, charged_microusd: 0, error_code: 'draft_missing' }; }
+      const m = refineMessages(refine, words);
+      passed.systemPrompt = m.systemPrompt;
+      passed.messages = [{ role: 'user', content: m.user }];
+    }
+    if (step.kind === 'judge') {
+      try {
+        const drafts = (await afterRows()).sort((a, b) => Number(inputOf(a).variant ?? 0) - Number(inputOf(b).variant ?? 0));
+        const judge = (input.judge ?? {}) as { element?: string; source?: string | null };
+        const variants = drafts.map((d, i) => ({ n: i + 1, state: d.state === 'done' ? 'ready' as const : 'failed' as const, payload: { kind: 'text', after: wordsOf(d.result) ?? '' } }));
+        let usageLogId: number | null = null;
+        const out = await judgeArea({
+          // Inside the run's one hold (AUTO-5): the judge's line of the quote is its whole budget.
+          perJudgeMicrousd: Number(step.quote_microusd), budgetMicrousd: Number(step.quote_microusd),
+          decide: async (q) => {
+            // The same `run` as every other step, so the judge is metered, idempotent and under the parent hold.
+            const r = await run(env, {
+              task: 'module_decision' as RunOptions['task'], userId: account, model: q.model, surface: AI_SURFACE.raisePitch,
+              rail: { page: GRID_PAGE, option, record: ref }, parentHold: ctx.parentHold ?? undefined,
+              idempotencyKey: `${ref}:judge`, executionId: step.batch_uid,
+              specialist: { operation: 'decision', questions: { [q.key]: { type: 'choice', instructions: q.instructions, criteria: q.options } } },
+              text: q.text,
+            } as RunOptions);
+            const charged_microusd = await chargedFor(env, parentUid, ref);
+            if (!r.ok) return { ok: false as const, result: r, charged_microusd };
+            usageLogId = r.usageLogId ?? null;
+            return { ok: true as const, answer: readChoice(r.output, q.key, Object.keys(q.options)), model: r.usage?.model ?? q.model, usageLogId, charged_microusd };
+          },
+        }, { element: String(judge.element ?? step.element), source: judge.source ?? null, variants: variants as any, seed: `${step.batch_uid}:${step.seq}`, generators: drafts.map((d) => d.model_used ?? d.model) });
+        const charged = await chargedFor(env, parentUid, ref);
+        if (out.state !== 'ranked') return { ok: false, charged_microusd: charged, error_code: out.refusal.code, model_used: out.model ?? step.model };
+        return {
+          ok: true, charged_microusd: charged, model_used: out.model, usage_log_id: usageLogId,
+          variant: { judge: { best: out.judgement.best, of: out.judgement.of, score: out.judgement.score, clears: out.judgement.clears, ranking: out.judgement.ranking } },
+        };
+      } finally {
+        await gov.release(lease.id).catch(() => {});
+      }
+    }
     let last: RunResult | null = null;
     let fellBack = false;
     // D1505 (#3756): an image step is the image pipeline, not a bare draw:
@@ -130,63 +181,6 @@ export function stepExecutor(env: Env, deps: ExecutorDeps = {}): StepExecutor {
     // D1600: the step's automatic retries, counted across the fallback; at `MAX_AREA_RETRIES` it stops.
     let retries = 0;
     let exhausted = false;
-    // D1551 (#3798): an ensemble step. Each of its calls runs as a single step's call does (same-tier fallback, busy
-    // retries counted across the step), under the run's parent hold and the step's one record ref; the judge too.
-    const ens = input.ensemble && typeof input.ensemble === 'object' ? input.ensemble as Record<string, unknown> : null;
-    if (ens && (ens.mode === 'draft-refine' || ens.mode === 'best-of-n')) {
-      let tag = 0;
-      let fell = false;
-      const tiered = async (_e: Env, o: RunOptions): Promise<RunResult> => {
-        const t = tag++;
-        const tier = [o.model ?? step.model, ...candidatesFor(step).filter((m) => m !== (o.model ?? step.model))].filter((m, i, a) => a.indexOf(m) === i);
-        let r: RunResult | null = null;
-        for (let i = 0; i < tier.length; i++) {
-          let busy = false;
-          for (let attempt = 0; attempt <= MAX_BUSY_RETRIES; attempt++) {
-            r = await run(env, { ...o, ...(tier[i] ? { model: tier[i] as string } : {}), idempotencyKey: `${ref}:e${t}:${i}:${attempt}` });
-            if (r.ok) { if (i > 0) fell = true; return r; }
-            busy = (r.attempts ?? []).some((a) => a.called && isBusy(a));
-            if (!busy || attempt >= MAX_BUSY_RETRIES || retries >= MAX_AREA_RETRIES) break;
-            retries++;
-            const ms = backoffMs(attempt, random);
-            await deps.onBusy?.(step, retries, ms);
-            await sleep(ms);
-          }
-          if (busy && retries >= MAX_AREA_RETRIES) { exhausted = true; break; }
-          if (!busy && r && r.refusal !== 'all_models_failed') break;
-        }
-        return r!;
-      };
-      const base = {
-        ...passed, task: step.task as RunOptions['task'], userId: account, ...(step.model ? { model: step.model } : {}),
-        parentHold: ctx.parentHold ?? undefined, executionId: step.batch_uid, rail: { page: GRID_PAGE, option, record: ref },
-      } as RunOptions;
-      try {
-        const out = await runEnsemble(env, base, { mode: ens.mode, n: Number(ens.n) || undefined }, {
-          run: tiered,
-          judge: ens.mode === 'best-of-n' ? stepJudge(env, {
-            charge: { userId: account, rail: { page: GRID_PAGE, option, record: ref }, parentHold: ctx.parentHold ?? undefined, executionId: step.batch_uid },
-            element: step.element, seed: ref, judgeModel: typeof ens.judge_model === 'string' ? ens.judge_model : null, judgeMicrousd: Number(ens.judge_microusd) || 0, run,
-          }) : undefined,
-          onDraft: deps.onDraft ? (text, model) => deps.onDraft!(step, text, model) : undefined,
-        });
-        const charged = await chargedFor(env, parentUid, ref);
-        if (!out.ok) return { ok: false, charged_microusd: charged, error_code: exhausted ? 'model_busy' : (out.failed?.refusal ?? 'step_failed'), fallback_used: fell };
-        return {
-          ok: true, charged_microusd: charged, model_used: out.model, fallback_used: fell, usage_log_id: out.usageLogId,
-          variant: {
-            text: out.output,
-            ensemble: {
-              mode: out.mode, refined: out.refined, pick: out.pick, judged: out.judged, probability: out.probability,
-              judge_model_label: out.judge_model ? modelLabel(out.judge_model) : null,
-              calls: out.calls.map((c) => ({ role: c.role, index: c.index, ok: c.ok, model_label: modelLabel(c.model) })),
-            },
-          },
-        };
-      } finally {
-        await gov.release(lease.id).catch(() => {});
-      }
-    }
     try {
       const candidates = candidatesFor(step);
       for (let i = 0; i < candidates.length; i++) {

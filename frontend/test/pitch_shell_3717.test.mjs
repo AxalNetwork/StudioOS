@@ -95,7 +95,7 @@ test('the common frame is outermost, with the cycle gutter and responsive back p
   assert.doesNotMatch(out,/pitch-header-ask/,'no ask prop, no Ask');
 });
 
-test('studio, New deck and editor render one crumb, no nested founder frame, and one rail',async()=>{
+test('studio and New deck render one crumb, the editor its deck bar; no nested founder frame, and one rail',async()=>{
   for(const [Component,url,id,current,links]of [
     // D4254: the Decks tile is PD-1 (the home this checks); the Overview is /raise/pitch.
     [function DecksTile(){return h(PitchStudio,{tab:'decks'});},'/raise/pitch/decks?project_id=7','pitch-studio','Pitch',['/raise?project_id=7']],
@@ -105,9 +105,21 @@ test('studio, New deck and editor render one crumb, no nested founder frame, and
     const m=await mount(Component,url);
     try {
       const nodes=m.walk(m.container),crumbs=nodes.filter(n=>m.pr(n)['aria-label']==='Breadcrumb');
-      assert.equal(crumbs.length,1,id);
-      assert.equal(m.text(m.walk(crumbs[0]).find(n=>m.pr(n)['aria-current']==='page')),current,id);
-      assert.deepEqual(m.walk(crumbs[0]).filter(n=>n.tagName==='A').map(n=>m.pr(n).href),links,id);
+      if(id==='pitch-editor') {
+        // D4254 P1 slice 2 (#4274, psE): a deck open, the header collapses into the deck bar; no crumb.
+        assert.equal(crumbs.length,0,id);
+        const bar=m.by('pitch-deck-bar');
+        assert.equal(m.pr(bar).role,'toolbar');
+        assert.equal(m.pr(bar)['aria-label'],'Deck');
+        const own=m.walk(bar).filter(n=>n.tagName==='A'&&!m.walk(m.by('deck-toolbar')).includes(n));
+        assert.deepEqual(own.map(n=>m.pr(n).href),['/raise/pitch?project_id=7'],'‹ Pitch goes to the Overview, the venture kept');
+        assert.equal(m.text(m.by('pitch-back')),'‹ Pitch');
+        assert.equal(m.pr(m.by('pitch-deck-bar-section'))['aria-label'],'Pitch section: Decks');
+      } else {
+        assert.equal(crumbs.length,1,id);
+        assert.equal(m.text(m.walk(crumbs[0]).find(n=>m.pr(n)['aria-current']==='page')),current,id);
+        assert.deepEqual(m.walk(crumbs[0]).filter(n=>n.tagName==='A').map(n=>m.pr(n).href),links,id);
+      }
       assert.equal(m.container.childNodes.find(n=>n.nodeType===1)===m.by(id),true,id);
       assert.match(m.pr(m.by(id)).className,/^fwr-frame/);
       assert.equal(m.pr(m.by(id))['data-rail'],'true');
@@ -121,12 +133,13 @@ test('studio, New deck and editor render one crumb, no nested founder frame, and
       assert.equal(nodes.some(n=>['founder-module-back','founder-workspace-raise','heading-founder-raise'].includes(m.pr(n)['data-testid'])),false);
       if(id==='pitch-editor') {
         assert.ok(m.by('pitch-editor-rail'));
-        // D1604: the header holds the h1, DeckToolbar and DeckAsk; the old editor bar and right panel are gone.
+        // D1604, D4254 P1 slice 2: the deck bar holds the h1, DeckToolbar and DeckAsk; the old editor bar and right panel are gone.
         assert.equal(m.text(m.by('pitch-heading')),current);
         assert.equal(m.by('pitch-heading').tagName,'H1');
-        const tools=m.by('pitch-header-tools');
-        assert.ok(m.walk(tools).includes(m.by('deck-toolbar')));
-        assert.ok(m.walk(tools).includes(m.by('pitch-header-ask')));
+        const bar=m.by('pitch-deck-bar');
+        assert.ok(m.walk(bar).includes(m.by('pitch-heading')));
+        assert.ok(m.walk(bar).includes(m.by('deck-toolbar')));
+        assert.ok(m.walk(bar).includes(m.by('pitch-header-ask')));
         assert.ok(!m.by('pitch-editor-bar')&&!m.by('pitch-editor-panel'));
         const body=m.by('pitch-editor-body');
         assert.match(m.pr(body).className,/lg:grid-cols-\[150px_minmax\(0,1fr\)\]/);
@@ -168,6 +181,6 @@ test('editor keeps the same frame, dock and moved notice when its deck finishes 
     assert.equal(m.by('pitch-editor')===frame,true);
     assert.equal(m.by('worker-rail-frame')===dock,true);
     assert.equal(m.by('pitch-moved')===notice,true);
-    assert.match(m.text(m.by('pitch-crumb')),/Synthetic venture · v3/);
+    assert.match(m.text(m.by('pitch-deck-bar')),/Synthetic venture · v3/);
   } finally {await m.close();}
 });

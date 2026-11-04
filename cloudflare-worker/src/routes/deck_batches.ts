@@ -39,6 +39,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { projectOwned } from '../middleware/projectContentAccess';
+import { roleOf } from '../services/decks/ensembles';
 import { refuse } from '../util/refusal';
 import { D1GenRuntime, modelLabel, type BatchStatus, type StepRow } from '../services/decks/genRuntime';
 import { admitDeckRun, admitStatus, cancelInRoom, eventsFromRoom } from '../services/decks/genRooms';
@@ -75,6 +76,8 @@ export function runView(st: BatchStatus) {
     },
     steps: st.steps.map((s) => ({
       seq: Number(s.seq), card_uid: s.card_uid, area_id: s.area_id, element: s.element, kind: s.kind,
+      // D1551 (#3798): draft, refine, judge or a plain variant, so pd2b's row says which pass it is.
+      role: roleOf(s.kind, parsed(s.input) as Record<string, unknown> | null),
       model_label: modelLabel(s.model_used ?? s.model), state: s.state, seconds: secondsOf(s),
       cost_microusd: Number(s.charged_microusd || 0), fallback_used: !!Number(s.fallback_used), error_code: s.error_code,
       result: parsed(s.result),

@@ -31,13 +31,14 @@
       "type": "array",
       "items": {
         "type": "object", "additionalProperties": false,
-        "required": ["seq", "card_uid", "area_id", "element", "kind", "model_label", "state", "seconds", "cost_microusd", "fallback_used", "error_code", "result"],
+        "required": ["seq", "card_uid", "area_id", "element", "kind", "role", "model_label", "state", "seconds", "cost_microusd", "fallback_used", "error_code", "result"],
         "properties": {
           "seq": { "type": "integer", "minimum": 0 },
           "card_uid": { "description": "The card, or null for a deck-wide step." },
           "area_id": { "description": "The area, or null." },
           "element": { "type": "string" },
           "kind": { "type": "string" },
+          "role": { "enum": ["draft", "refine", "judge", "variant"], "description": "D1551 (#3798): which pass of a text ensemble the step is; a plain variant otherwise." },
           "model_label": { "type": "string", "description": "The model's name, or \"No model · free\"." },
           "state": { "enum": ["waiting", "running", "done", "failed", "stopped"] },
           "seconds": { "description": "Null until the step ends: never 0 for a step that has not run." },

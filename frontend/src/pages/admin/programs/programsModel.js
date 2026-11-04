@@ -37,6 +37,7 @@ import { NOT_RECORDED } from '../../../lib/absence.js';
 import { parseStamp } from '../../../ui/parseStamp.js';
 import { SCOPE_LABEL, SCOPE_TITLE } from '../insights/insightsModel.js';
 import { LEARNING_COMING_SOON } from '../../learning/learningAccess.js';
+import { TABS as INFLUENCER_TABS } from './influencersModel.js';
 
 export { NOT_RECORDED, SCOPE_LABEL, SCOPE_TITLE, parseStamp };
 
@@ -158,6 +159,9 @@ export const LEARNING_WHO = LEARNING_COMING_SOON ? 'Not open to members yet' : '
 export const PARTNERS_WHO = 'Members HQ adds as referral partners, in one of three segments: Event organisers, Venture scouts and Deal makers.';
 export const PARTNERS_JOIN = 'By invitation. HQ adds the partner; their own referral code earns.';
 export const PARTNERS_TERMS = 'Standard commission rules, or custom terms the Super Admin approves and the partner signs.';
+/** D4298 (#4298): Influencers' words, D4289's (D-a, D-j). */
+export const INFLUENCER_PURPOSE = 'Admit, pay and watch the people who bring members to Axal VC.';
+export const INFLUENCER_WHO = 'Any member HQ admits, in any role';
 export const AI_NATIVE_PURPOSE = 'Founders build an AI-native company with Eadwyn and the studio’s tools.';
 
 /**
@@ -196,6 +200,12 @@ export const PROGRAMS = Object.freeze([
     key: 'refer-and-earn', group: 'Network and referrals', name: 'Refer & Earn',
     purpose: 'Members refer founders and platform users, and earn perk credits when a referral is accepted, forms or is onboarded. A sign-up through a member’s link earns them an introduction credit.',
     status: 'Live', grant: 'HQ-held', hqGrant: 'HQ-held', who: 'Founders, investors, advisors and partners', join: 'Open',
+  },
+  {
+    // D4298 (#4298): D4289's program, by application, run at HQ.
+    key: 'influencer', group: 'Network and referrals', name: 'Influencers',
+    purpose: INFLUENCER_PURPOSE,
+    status: 'Partly built', grant: 'Runs at HQ', hqGrant: 'HQ only', who: INFLUENCER_WHO, join: 'By application',
   },
   {
     key: 'perks', group: 'Rewards', name: 'Perks',
@@ -345,6 +355,13 @@ export const PAGES = Object.freeze({
       { key: 'overview', label: 'Overview', path: INVESTOR_PATH },
       { key: 'activity', label: 'Activity', path: INVESTOR_ACTIVITY_PATH },
     ],
+  },
+  // D4298 (#4298, IN11): seven tabs; the program's own address opens Applications.
+  influencer: {
+    title: 'Influencers', workspace: 'Programs',
+    line: INFLUENCER_PURPOSE,
+    facts: [`Who: ${INFLUENCER_WHO}`, 'Join: By application', 'Terms: tier defaults HQ sets, signed per influencer'],
+    tabs: INFLUENCER_TABS,
   },
   'ai-native-venture': {
     title: 'AI-native Venture', workspace: 'Programs',

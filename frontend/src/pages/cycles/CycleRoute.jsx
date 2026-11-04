@@ -91,6 +91,8 @@ import { forecastHref, isUseOfFundsTab, SLUG as USE_OF_FUNDS } from '../raise/us
 import { CapRelHomeNav, CapRelTabPage } from '../raise/caprel/CapRelTool';
 import EvidencePart from './evidence/EvidencePart';
 import { PublishTo, PublishedFromHere } from './publish/PublishEntry.jsx';
+import RankByFit from '../../ui/RankByFit';
+import { applyRank } from '../../lib/rankByFit';
 import { isCapRelTab, SLUG as CAP_REL } from '../raise/caprel/capRelModel';
 
 
@@ -847,6 +849,9 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   // D1466 (#3714, RO15): a 403 or 404 on the overview is a refusal, drawn as the Worker's sentence.
   const [overviewMessage, setOverviewMessage] = useState('');
   const [module, setModule] = useState(null);
+  // #3938 GR17 (D1478 part 9): the Partner network's "Rank by fit" answer, a view of the rows read; any new read puts the list back.
+  const [partnerRank, setPartnerRank] = useState(null);
+  useEffect(() => { setPartnerRank(null); }, [module, slug]);
   const [moduleStatus, setModuleStatus] = useState('loading');
   // D693 decision 7: a read refused on purpose keeps the Worker's sentence.
   const [moduleMessage, setModuleMessage] = useState('');
@@ -1228,7 +1233,10 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
       </>
     );
   } else {
-    const recs = module?.records;
+    const read = module?.records;
+    const rankable = cycle === 'grow' && slug === 'partner-network' && projectId && !narrativeAdmin && Array.isArray(read?.rows) && read.rows.length > 0;
+    const ranked = rankable && partnerRank ? applyRank(read.rows, (row) => row.id, partnerRank) : null;
+    const recs = ranked ? { ...read, rows: ranked.list } : read;
     // D703 step 6: below 1024px the module is a pushed page with the same props.
     const ModulePage = phone ? PhoneModulePage : CycleModulePage;
     body = (
@@ -1264,6 +1272,9 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
           : cycle === 'raise' && slug === DATA_ROOM ? <DataRoomHomeNav search={q} />
           : cycle === 'raise' && slug === USE_OF_FUNDS ? <UseOfFundsHomeNav search={q} projectId={projectId} />
           : cycle === 'raise' && slug === CAP_REL ? <CapRelHomeNav search={q} projectId={projectId} /> : undefined}
+        // #3938 GR17: the venture's partners ranked against a need the founder types (the route refuses without one), above the table it reorders.
+        aboveRecords={rankable ? <RankByFit run={(need) => cyclesWrite.grow.partnerRank(projectId, need)} onRanked={setPartnerRank}
+          ranked={ranked ? ranked.ranked : null} total={read.rows.length} label="What do you need a partner for?" needsQuery testid="grow-partners-rank" /> : null}
         // D1321 (#3482): each Grow module's Publish to… in its header, on part 2's gate (D1333's `parts.publish`).
         more={cycle === 'grow' && projectId ? <PublishTo part={module?.parts?.publish} projectId={projectId} module={slug} />
           // D1328 (#3489, AF1): the module's "Fill with Eadwyn", with its waiting row proposals (AF16).

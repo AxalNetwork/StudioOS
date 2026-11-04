@@ -139,6 +139,10 @@ test('the addresses: the catalogue, each program\'s tabs as static sub-paths, an
   assert.deepEqual(routeFor('/admin/programs/investor-cohorts/activity'), { program: 'investor-cohorts', tab: 'activity' });
   assert.deepEqual(routeFor('/admin/programs/referral-partners/queue'), { program: 'referral-partners', tab: 'queue' });
   assert.deepEqual(routeFor('/admin/programs/ai-native-venture'), { program: 'ai-native-venture', tab: 'page' });
+  // D4298 (#4298): Influencers' seven tabs; the bare address is its overview, which opens Applications.
+  assert.deepEqual(routeFor('/admin/programs/influencer'), { program: 'influencer', tab: 'overview' });
+  assert.deepEqual(routeFor('/admin/programs/influencer/applications'), { program: 'influencer', tab: 'applications' });
+  assert.deepEqual(routeFor('/admin/programs/influencer/how-it-runs'), { program: 'influencer', tab: 'how' });
   // A program has only the tabs it has today; one tab is no strip.
   assert.deepEqual(Object.fromEntries(Object.entries(PAGES).map(([k, p]) => [k, p.tabs.map((t) => t.label)])), {
     // D962 (#2795) adds Activity to these four; no page has a Terms tab.
@@ -148,6 +152,8 @@ test('the addresses: the catalogue, each program\'s tabs as static sub-paths, an
     learning: ['Overview', 'How it runs', 'People', 'Activity'],
     // D963 (#2796): Referral partners' Queue and Activity, Investor cohort access's Overview and Activity.
     'referral-partners': ['Overview', 'How it runs', 'Queue', 'Activity'],
+    // D4298 (#4298): Influencers (IN11).
+    influencer: ['How it runs', 'Applications', 'Influencers', 'Offers', 'Payouts', 'Activity', 'Settings'],
     'investor-cohorts': ['Overview', 'Activity'],
     'ai-native-venture': [],
   });
@@ -158,7 +164,7 @@ test('the addresses: the catalogue, each program\'s tabs as static sub-paths, an
   assert.equal(movedNotice('/admin/programs', '?moved=partners'), null);
   assert.equal(withoutMoved('?moved=held&x=1'), '?x=1');
   assert.equal(withoutMoved('?moved=held'), '');
-  assert.equal(PROGRAMS.length, 9, 'S-RUN: nine programs');
+  assert.equal(PROGRAMS.length, 10, 'S-RUN: nine programs, and Influencers (D4298)');
   assert.deepEqual(PAGES['mentor-cohorts'].workspace, 'Advisor cohort access');
   assert.deepEqual(PAGES['refer-and-earn'].workspace, 'Referrals');
 });
@@ -483,7 +489,8 @@ async function mounted(url, page, handle, { user = null } = {}) {
 }
 
 const PROGRAM_DOORS = ['/admin/programs/spinout-lab', '/admin/programs/ai-native-venture', '/admin/programs/mentor-cohorts', '/admin/programs/investor-cohorts',
-  '/admin/programs/referral-partners', '/admin/programs/refer-and-earn', '/admin/programs/perks', '/admin/programs/learning'];
+  '/admin/programs/referral-partners', '/admin/programs/refer-and-earn', '/admin/programs/perks', '/admin/programs/learning',
+  '/admin/programs/influencer'];
 
 // D961 (#2794): the catalogue draws from part 1's catalogue read now, so its
 // mounted tests (an Admin's catalogue, a read that fails, first use and a
@@ -719,8 +726,8 @@ test('the pages read D953 §2\'s reads, D961\'s catalogue read and D962\'s throu
   const clients = [...src.matchAll(/import \{([^}]+)\} from '[./]+lib\/api(?:\/(\w+))?'/g)]
     .flatMap((imp) => imp[1].split(',').map((s) => `${imp[2] || 'api'}:${s.trim()}`).filter((s) => !s.endsWith(':')));
   // D964 (#2797) adds part 2's proposal client, the contracts library's templates (Terms) and HQ's grants read (the Studio filter); D961 part 1's catalogue client; D962 part 1's programsApi.
-  // D963 (#2796) adds parts 5 and 6's clients.
-  assert.deepEqual([...new Set(clients)].sort(), ['adminPrograms:adminProgramsApi', 'api:api', 'contracts:contractsApi', 'insights:insightsApi', 'investorCohorts:investorCohortsApi',
+  // D963 (#2796) adds parts 5 and 6's clients; D4298 (#4298) the Influencers client.
+  assert.deepEqual([...new Set(clients)].sort(), ['adminInfluencers:adminInfluencersApi', 'adminPrograms:adminProgramsApi', 'api:api', 'contracts:contractsApi', 'insights:insightsApi', 'investorCohorts:investorCohortsApi',
     'learning:learningApi', 'programGrants:programGrantsApi', 'programProposals:programProposalsApi', 'programs:programsApi', 'referralPartners:referralPartnersApi'],
     'the existing clients, each from its own module (lib/api re-exports them, but a named import of lib/api must name what api.js itself declares)');
   // D960 lifted Guard H for applications (a failure is a 503 now); participants still answer [] on any error.

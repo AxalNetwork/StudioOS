@@ -28,7 +28,7 @@
  */
 import type { Env } from '../types';
 import {
-  D1GenRuntime, modelLabel, type AdmitInput, type Admitted, type BatchStatus, type DeckGenRuntime, type GenEvent, type StepExecutor,
+  D1GenRuntime, type AdmitInput, type Admitted, type BatchStatus, type DeckGenRuntime, type GenEvent, type StepExecutor,
 } from '../services/decks/genRuntime';
 import { stepExecutor } from '../services/decks/stepExecutor';
 import { admitStatus } from '../services/decks/genRooms';
@@ -57,7 +57,7 @@ export class DeckGenRoom implements DurableObject, DeckGenRuntime {
   constructor(state: DurableObjectState, env: Env) {
     this.state = state;
     this.env = env;
-    this.execute = stepExecutor(env, { onBusy: (step, attempt, ms) => this.retrying(step, attempt, ms), onDraft: (step, text, model) => this.drafted(step, text, model) });
+    this.execute = stepExecutor(env, { onBusy: (step, attempt, ms) => this.retrying(step, attempt, ms) });
     this.runtime = new D1GenRuntime(env, (s, c) => this.execute(s, c), (e) => this.broadcast(e));
   }
 
@@ -75,17 +75,6 @@ export class DeckGenRoom implements DurableObject, DeckGenRuntime {
     await this.broadcast({ type: 'area_retrying', ...base, next_at: new Date(Date.now() + ms).toISOString() });
   }
 
-  /**
-   * D1551 (#3798): an ensemble step's first draft, before its refine or its judge: pd2b's row shows words at once.
-   * `variant_ready` with the step still `running` and `variant.draft: true`; the step's own `variant_ready` follows when it lands.
-   */
-  async drafted(step: { batch_uid: string; seq: number; card_uid: string | null; area_id: string | null; element: string }, text: string, model: string | null) {
-    await this.broadcast({
-      type: 'variant_ready', batch_uid: step.batch_uid, seq: step.seq, card_uid: step.card_uid, area_id: step.area_id, element: step.element,
-      model_label: modelLabel(model), state: 'running', variant: { text, draft: true }, charged_microusd: -1, held_microusd: -1,
-    });
-  }
-
   // ---- DeckGenRuntime ------------------------------------------------------
   admit(input: AdmitInput): Promise<Admitted> { return this.runtime.admit(input); }
   startBatch(uid: string, opts?: { until?: number }): Promise<BatchStatus | null> { return this.runtime.startBatch(uid, opts); }
@@ -96,7 +85,7 @@ export class DeckGenRoom implements DurableObject, DeckGenRuntime {
   // ---- events --------------------------------------------------------------
   private async broadcast(e: GenEvent) {
     // `area_busy` and `area_retrying` carry no money: fill the running figures from the run.
-    if (e.type === 'area_busy' || e.type === 'area_retrying' || (e.type === 'variant_ready' && e.state === 'running')) {
+    if (e.type === 'area_busy' || e.type === 'area_retrying') {
       const st = await this.runtime.status(e.batch_uid).catch(() => null);
       e = { ...e, charged_microusd: st ? st.steps.reduce((n, s) => n + Number(s.charged_microusd || 0), 0) : 0, held_microusd: Number(st?.quote_microusd ?? 0) };
     }
