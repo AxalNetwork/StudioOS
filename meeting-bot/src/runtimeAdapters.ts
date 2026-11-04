@@ -11,6 +11,7 @@ import { diagnoseCallbacks, runDiagnosis } from './diagnose.ts';
 import { realClock } from './lifecycle.ts';
 import { consoleSink } from './log.ts';
 import type { MeetPage } from './adapters/meet.ts';
+import { meetCredentials } from './adapters/meet/signin.ts';
 import { AdapterFailure } from './types.ts';
 import type { MeetingAdapter, Platform } from './types.ts';
 
@@ -39,7 +40,9 @@ export async function runtimeAdapter(platform:Platform,context:RuntimeAdapterCon
   const browser=await (factories.launch??(()=>chromium.launch({headless:true,chromiumSandbox:true})))();
   try{
     const page=await browser.newPage({locale:'en-US'});
-    const adapter=platform==='teams'?new TeamsAdapter(page as unknown as TeamsPage):new MeetAdapter(page as unknown as MeetPage);
+    // D3678: a Meet run signs in to Eadwyn's Google account first, its credentials over the run's signed callback.
+    const signIn=meetCredentials({origin:context.callbackOrigin,path:`/api/meeting-bots/${context.uid}/meet-credentials`,key:context.secret,...(factories.fetch?{fetch:factories.fetch}:{})});
+    const adapter=platform==='teams'?new TeamsAdapter(page as unknown as TeamsPage):new MeetAdapter(page as unknown as MeetPage,{signIn});
     const leave=adapter.leave.bind(adapter);let leaving:Promise<void>|null=null;
     adapter.leave=()=>leaving??(leaving=(async()=>{await Promise.allSettled([Promise.resolve().then(leave),Promise.resolve().then(()=>browser.close())]);})());
     return adapter;
@@ -55,7 +58,8 @@ export async function runtimeDiagnose(platform:Platform,meetingUrl:string,contex
       try{
         const page=await browser.newPage({locale:'en-US',viewport:{width:1280,height:720}});
         return {page:{screenshot:()=>page.screenshot({type:'png'}),url:()=>page.url()},
-          meet:new MeetAdapter(page as unknown as MeetPage,{log:consoleSink}),close:()=>browser.close()};
+          meet:new MeetAdapter(page as unknown as MeetPage,{log:consoleSink,
+            signIn:meetCredentials({origin:context.callbackOrigin,path:`/api/meeting-bots/diagnostics/${context.uid}/meet-credentials`,key:context.secret,...(factories.fetch?{fetch:factories.fetch}:{})})}),close:()=>browser.close()};
       }catch(e){await browser.close();throw e;}
     }});
 }

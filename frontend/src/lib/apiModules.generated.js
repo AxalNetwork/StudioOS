@@ -82,6 +82,7 @@ export * from './api/dealInsights.js';
 export * from './api/dealStaff.js';
 export * from './api/dealViews.js';
 export * from './api/dealWorkroom.js';
+export * from './api/deckAccess.js';
 export * from './api/deckActions.js';
 export * from './api/deckAreas.js';
 export * from './api/deckAssist.js';

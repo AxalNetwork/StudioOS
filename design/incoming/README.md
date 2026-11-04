@@ -113,6 +113,47 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-11-04 — Pitch › Present: pair a phone as a remote (#3828)
+
+The owner's artifact `KBaBZ9jqPoEFTSqqS1WzQD`, republished, was decoded by `scripts/read-canvas.mjs`. Its page is the bundle's second file, taken out as it was: it already pointed at the shared runtime and Google Fonts. The logo paths were rewritten.
+- **`Pitch · Boards.dc.html`** keeps every PS board and adds PR1 to PR6.
+- **The page replaces `Pitch Deck Studio v2 Page.dc.html`.** All 124 earlier frames are kept. It adds 20:
+  - pr1 to pr1e: Present's code panel and its states;
+  - pr2 to pr2d: the phone's code entry and its states;
+  - pr3 and pr3m: connected, and ⋯ Disconnect;
+  - pr4a to pr4c: the connection states;
+  - pr5a and pr5b: tablet;
+  - pr6a and pr6b: light.
+
+The build is D1581 §PR (`documentation/architecture/decisions/D1581.md`).
+## Landed 2026-11-04 — HQ › AI agents: the agents' values, revised (#4137)
+
+The owner's two HQ › AI agents artifacts were decoded by `scripts/read-canvas.mjs`:
+- **The boards** (artifact `9ecDUL1qvu1FZLfWfMaUbV`) are unchanged.
+- **The page** (artifact `LxnWj8iKZPZyfvLYJoeFT9`) replaces `HQ AI Agents Page.dc.html`. Its only change is the 16 agents' top values: every one is now an Axal value, and Empathy, Courage and Craft are gone.
+
+The owner chose to store the canvas's values and its two areas per agent. That Worker change is #4388 (S16).
+
+## Landed 2026-11-04 — Work: assignees from the team only, and My tasks (#3968, #3994)
+
+The owner's two artifacts were decoded by `scripts/read-canvas.mjs`:
+- **The boards replace `Work Compliance · Boards.dc.html`** (artifact `XJd9TTJgzjdasWvuJv6ArV`). Every earlier board is kept, and WK7's note now says its rows are the Team's people and agents only. Two boards are new:
+  - **WK9, Assignees · the team only:** w9 (a project task), w9m (@-mentions), w9c (a company compliance task) and w9s (states: a seat ended, no match, an admin on HQ read-only access);
+  - **WK13, My tasks:** w13 (Founder › Studio, grouped by team), w13b (where each licence finds it) and w13p (phone).
+- **The page replaces `Work Compliance Page.dc.html`** (artifact `6snU4LwGECSELCgYtneiB3`). Every earlier frame is kept, and it adds w9, w9m, w9c, w9s, w13, w13b and w13p.
+
+The frontend is #3994's (PR #4381). Every Worker read those screens need is on main.
+
+## Landed 2026-11-04 — Pitch deck templates and the Gallery's covers (#3876)
+
+The owner's four artifacts were decoded by `scripts/read-canvas.mjs`:
+- **`Pitch Deck Templates · Boards.dc.html`** (artifact `RBKVDL4jz2C2DjFLQamWtk`) is new: one board per template, TPL-01 to TPL-24, six per stage. Each imports the page below.
+- **`Pitch Deck Templates Page.dc.html`** (artifact `M4e1veoddTFbYEzTEt7JHt`) is new. It draws each template's title card large, then its swatch, type, decor, chrome, art and tone, then every card in order on the 12 × 6 grid. Its themes match `templateLibrary.ts` exactly. It rewrites TPL-01 to TPL-12's placeholders for AI-native companies (`HD1`, `SUP1`, `TL1`), which is #3876's content work.
+- **The page replaces `Pitch Deck Studio v2 Page.dc.html`** (artifact `UJXCEzoW75JuqpM2njFxQH`). Every earlier frame is kept (119 of 119). It adds pd29c (24 covers, one row per stage), pd29s (selected, Use this template), pd29y (Yours, Save as my template), pd29strip (TPL-07's preview strip) and the tx01 to tx24 cover exports.
+- **The boards replace `Pitch Deck Studio v2 · Boards.dc.html`** (artifact `AByWUAWjZT6e6VbeDWp5HN`). They add PF1 to PF5 and PD-29b to PD-29d. Every earlier board is kept.
+
+The Gallery's integration is D3876 (`documentation/architecture/decisions/D3876.md`).
+
 ## Landed 2026-11-03 — Who knows them, relationship intelligence (#3572, #3564)
 
 The owner's two relationship-intelligence artifacts were decoded by `scripts/read-canvas.mjs`:

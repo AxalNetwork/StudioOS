@@ -52,7 +52,6 @@ const REVIEWER = 'frontend/src/pages/DeckReviewerPage.jsx';
 const NEW_DECK = 'frontend/src/pages/raise/pitch/NewDeck.jsx';
 // D1604 (#3716, pd1): the one-click moved from PitchStudio.jsx to the studio's home.
 const ONE_CLICK = 'frontend/src/pages/raise/pitch/OneClickBuild.jsx';
-const TEMPLATES = 'frontend/src/pages/raise/pitch/TemplatesGallery.jsx';
 const STUDIO_ACTIONS = 'frontend/src/pages/raise/pitch/StudioActions.jsx';
 const REHEARSE = 'frontend/src/pages/raise/pitch/RehearsePanel.jsx';
 const PITCH_REVIEW = 'frontend/src/pages/raise/pitch/PitchReview.jsx';
@@ -214,7 +213,7 @@ export const FOUNDER_OPTIONS = [
   },
   {
     page: 'Founder · Raise · Pitch deck', key: 'form:deck-template', route: '/raise/pitch/new', label: 'Use this template', kind: 'write', handler: 'form',
-    at: [[NEW_DECK, 'api.deckApplyMethod('], [TEMPLATES, 'api.deckApplyMethod(']],
+    at: [[NEW_DECK, 'api.deckApplyMethod(']],
   },
   // D897 (#2677): New deck (PD5, PD6) and the studio's fast path (PD2), which D1604 (#3716) made
   // `OneClickBuild.jsx`: on the studio's home and on top of New deck. The gallery (pd29) uses a template.

@@ -482,3 +482,120 @@ export function nextTasks(tasks, n = 5) {
     .sort((a, b) => String(a.due).localeCompare(String(b.due)) || String(a.uid).localeCompare(String(b.uid))).slice(0, n);
 }
 export const NO_TASKS_RECORDED = 'Not recorded: no compliance task is recorded for this company yet.';
+
+// ---------------------------------------------------------------------------
+// D1614 W8 (#3994, frontend half): the Team picker, My tasks, workload by role.
+// The owner (2026-11-04): built from the house shell, no WK13 board.
+// ---------------------------------------------------------------------------
+
+/** A Team member's role, in words: the project role the Team records, never a guess. */
+export const TEAM_ROLE_WORDS = Object.freeze({
+  owner: 'Founder', cofounder: 'Co-founder', advisor: 'Advisor', investor: 'Investor', partner: 'Operating partner', admin: 'Admin', member: 'Member',
+});
+export function teamRoleWords(role) {
+  const r = String(role || '').toLowerCase();
+  if (!r) return NOT_RECORDED;
+  return TEAM_ROLE_WORDS[r] || r.charAt(0).toUpperCase() + r.slice(1).replace(/_/g, ' ');
+}
+
+/**
+ * A licence's badge, in that licence's accent (`workspaces/shellConfig.js` ACCENT):
+ * founder violet, investor indigo, advisor emerald, operating partner amber, admin steel.
+ * Written out whole, because Tailwind reads class names at build time.
+ */
+export const LICENCE_BADGE = Object.freeze({
+  founder: 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950 dark:text-violet-300',
+  investor: 'border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950 dark:text-indigo-300',
+  advisor: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
+  partner: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300',
+  admin: 'border-slate-300 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
+});
+const AGENT_BADGE = 'border-cyan-200 bg-cyan-50 text-cyan-800 dark:border-cyan-800 dark:bg-cyan-950 dark:text-cyan-300';
+export const licenceBadge = (licence) => LICENCE_BADGE[String(licence || '').toLowerCase()] || LICENCE_BADGE.admin;
+
+/** One person's or agent's line in the picker, from the assignable read's `team` list. */
+export function assigneeOption(m) {
+  if (!m || !m.uid) return null;
+  const open = Number(m.open_tasks) || 0;
+  const openWords = `${open} open ${open === 1 ? 'task' : 'tasks'}`;
+  if (m.kind === 'agent') {
+    return {
+      kind: 'agent', uid: m.uid, name: m.name || 'AI agent', badge: { text: m.role || 'AI agent', className: AGENT_BADGE },
+      line: [m.status === 'paused' ? 'Paused' : 'Active', openWords].join(' · '), paused: m.status === 'paused',
+    };
+  }
+  const cap = m.capacity == null ? 'capacity Not recorded' : `${m.capacity} pts a week`;
+  return {
+    kind: 'person', uid: m.uid, name: m.name || NOT_RECORDED,
+    badge: { text: teamRoleWords(m.team_role), className: licenceBadge(m.licence) },
+    line: [openWords, cap].join(' · '), paused: false,
+  };
+}
+
+/** The picker's two groups (S1, 2026-11-02): this Team's people, then its AI agents. Only this Team. */
+export function assigneeGroups(data) {
+  const team = Array.isArray(data?.team) ? data.team : [];
+  const opts = team.map(assigneeOption).filter(Boolean);
+  return [
+    { key: 'people', label: 'Team', options: opts.filter((o) => o.kind === 'person') },
+    { key: 'agents', label: 'AI agents', options: opts.filter((o) => o.kind === 'agent') },
+  ];
+}
+
+/** A refusal in the Worker's own words (422 assignee_not_member, read_only_admin, 409 agent_not_live). */
+export function refusalWords(e, fallback = 'That could not be saved. Try again.') {
+  const d = e?.data && typeof e.data === 'object' ? e.data : {};
+  const said = [d.detail, d.message, e?.message].find((x) => typeof x === 'string' && x.trim() && !/^(HTTP \d+|Request failed)$/.test(x));
+  return said || fallback;
+}
+
+/** My tasks' filters, the Worker's own values (MY_TASK_STATES, MY_TASK_DUES). */
+export const MY_TASK_STATES = Object.freeze([
+  { key: 'open', label: 'Open' }, { key: 'closed', label: 'Done' }, { key: 'all', label: 'All' },
+]);
+export const MY_TASK_DUES = Object.freeze([
+  { key: '', label: 'Any date' }, { key: 'overdue', label: 'Overdue' }, { key: 'today', label: 'Due today' }, { key: 'week', label: 'This week' }, { key: 'none', label: 'No date' },
+]);
+
+/** One task row: the column, the due line, blocked, and "needs reassignment" after a seat ended. */
+export function myTaskRow(t, now = new Date()) {
+  const due = dueLine(t?.due_at, now);
+  const chips = [];
+  if (t?.blocked) chips.push('Blocked');
+  if (t?.needs_reassignment) chips.push('Needs reassignment');
+  return {
+    uid: t?.uid, title: t?.title || NOT_RECORDED, link: t?.link || null,
+    where: t?.column ? columnLabel(t.column) || NOT_RECORDED : (t?.state === 'closed' ? 'Done' : 'Open'),
+    due: due ? `${due.overdue ? 'Overdue · ' : 'Due '}${due.text}` : 'No due date', overdue: !!due?.overdue && t?.state !== 'closed', chips,
+  };
+}
+
+/** The My tasks read as sections: projects first (by project), then compliance (by company). */
+export function myTaskSections(data, now = new Date()) {
+  const projects = (Array.isArray(data?.projects) ? data.projects : []).map((g) => ({
+    key: `project:${g?.project?.id}`, kind: 'project', title: g?.project?.name || NOT_RECORDED,
+    rows: (g?.tasks || []).map((t) => myTaskRow(t, now)),
+  }));
+  const compliance = (Array.isArray(data?.compliance) ? data.compliance : []).map((g) => ({
+    key: `company:${g?.company?.uid}`, kind: 'compliance', title: `${g?.company?.name || NOT_RECORDED} · compliance`,
+    rows: (g?.tasks || []).map((t) => myTaskRow(t, now)),
+  }));
+  const sections = [...projects, ...compliance].filter((s) => s.rows.length);
+  return { sections, count: sections.reduce((a, s) => a + s.rows.length, 0), more: !!data?.has_more };
+}
+
+/** Workload rows by role: the Team's people by licence, in the shell's order, then its AI agents. */
+export const WORKLOAD_ROLE_GROUPS = Object.freeze([
+  { key: 'founder', label: 'Founders' }, { key: 'investor', label: 'Investors' }, { key: 'advisor', label: 'Advisors' },
+  { key: 'partner', label: 'Operating partners' }, { key: 'admin', label: 'Admins' }, { key: 'other', label: 'Team' }, { key: 'agent', label: 'AI agents' },
+]);
+export function workloadByRole(rows, team) {
+  const licenceOf = new Map((Array.isArray(team) ? team : []).filter((m) => m?.kind === 'person').map((m) => [m.uid, String(m.licence || '').toLowerCase()]));
+  const known = new Set(WORKLOAD_ROLE_GROUPS.map((g) => g.key));
+  const keyOf = (r) => {
+    if (r.kind === 'agent') return 'agent';
+    const l = licenceOf.get(r.who?.uid);
+    return l && known.has(l) && l !== 'agent' ? l : 'other';
+  };
+  return WORKLOAD_ROLE_GROUPS.map((g) => ({ ...g, rows: (rows || []).filter((r) => keyOf(r) === g.key) })).filter((g) => g.rows.length);
+}

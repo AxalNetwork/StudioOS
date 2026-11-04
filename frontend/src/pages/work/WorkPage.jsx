@@ -12,6 +12,8 @@ import {
   assigneeLine, backlogRows, boardColumns, burnup, canMove, columnLabel, dueLine, moveTargets, needsYou, runChip, runCost, runOutcome, runSheet,
 } from './workModel.js';
 import WorkloadView from './WorkloadView.jsx';
+import MyTasks from './MyTasks.jsx';
+import AssignPicker from './AssignPicker.jsx';
 import './work.css';
 
 /**
@@ -131,10 +133,11 @@ export default function WorkPage() {
       {board.status === 'ready' && tab === 'board' ? <Board items={board.items} viewer={board.viewer} onOpen={setItemUid} onMove={move} /> : null}
       {board.status === 'ready' && tab === 'backlog' ? <Backlog items={board.items} onOpen={setItemUid} /> : null}
       {tab === 'burnup' && burn.status === 'ready' ? <Burnup series={burn.series} /> : null}
-      {tab === 'mine' && board.status === 'ready' ? <p className={MUTED} data-testid="work-mine-later">My items arrive with #3994 (W8).</p> : null}
+      {/* D1614 W8 (#3994): My items is My tasks narrowed to this project. */}
+      {tab === 'mine' ? <MyTasks licence="founder" project={id} title="My items" testId="work-mine" /> : null}
       {tab === 'workload' ? <WorkloadView projectId={id} onOpenItem={setItemUid} onNotice={setNotice} /> : null}
 
-      {itemUid ? <ItemSheet uid={itemUid} onClose={() => setItemUid(null)} onRun={setRunUid} /> : null}
+      {itemUid ? <ItemSheet uid={itemUid} projectId={id} onClose={() => setItemUid(null)} onRun={setRunUid} onAssigned={load} /> : null}
       {runUid ? <RunSheet uid={runUid} onClose={() => setRunUid(null)} /> : null}
     </div>
   );
@@ -284,17 +287,21 @@ export function Burnup({ series }) {
 const Tile = ({ k, v }) => <div className="wk-tile"><span>{k}</span><b>{v}</b></div>;
 
 /** WK4: the item sheet. Its read is #3969's; until then it says so. */
-export function ItemSheet({ uid, onClose, onRun }) {
+export function ItemSheet({ uid, projectId = null, onClose, onRun, onAssigned }) {
   const [state, setState] = useState({ status: 'loading' });
+  const [picking, setPicking] = useState(false);
   useEffect(() => {
     let live = true;
     workAdapter.item(uid).then((r) => { if (live) setState(r.available ? { status: 'ready', item: r.data } : { status: 'off', reason: r.reason }); }, () => { if (live) setState({ status: 'error' }); });
     return () => { live = false; };
   }, [uid]);
   const it = state.item;
+  // D1614 W8 (#3994): Assign opens the Team picker, this Team's people then its agents.
+  const assigned = (task) => { if (task) setState({ status: 'ready', item: task }); setPicking(false); onAssigned?.(task); };
   return (
     <Sheet title={it?.title || 'Item'} onClose={onClose} width={560} testId="work-item-sheet"
-      footer={it ? <><button type="button" className={BTN_PRIMARY}>Assign</button><button type="button" className={BTN_SECONDARY}>Move ▾</button><button type="button" className={BTN_SECONDARY}>Schedule</button></> : null}>
+      footer={it ? <><button type="button" className={BTN_PRIMARY} onClick={() => setPicking((v) => !v)} disabled={projectId == null} data-testid="work-item-assign">Assign</button><button type="button" className={BTN_SECONDARY}>Move ▾</button><button type="button" className={BTN_SECONDARY}>Schedule</button></> : null}>
+      {it && picking && projectId != null ? <AssignPicker projectId={projectId} taskUid={uid} current={it.assignee} onAssigned={assigned} onCancel={() => setPicking(false)} /> : null}
       {state.status === 'off' ? <HonestBlock>{state.reason}</HonestBlock> : null}
       {state.status === 'error' ? <HonestBlock role="alert">This item could not be read.</HonestBlock> : null}
       {it ? (

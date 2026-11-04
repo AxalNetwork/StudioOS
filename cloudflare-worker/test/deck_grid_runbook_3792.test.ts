@@ -35,6 +35,10 @@ const CLAIMS: Array<[string, string, string | RegExp]> = [
   // 2. Refund a batch
   ['`POST /api/ai-budget/reviews/:uid/refund`', 'routes/ai_budget.ts', "for (const action of ['charge','refund'] as const) r.post(`/reviews/:uid/${action}`"],
   ['`POST /api/ai-budget/members/:userId/adjustments`', 'routes/ai_budget.ts', "r.post('/members/:userId/adjustments'"],
+  // D4373 (#4373): the batch refund, its ledger key and its audit action.
+  ['`POST /api/ai-budget/deck-batches/:uid/refund`', 'routes/ai_budget.ts', "r.post('/deck-batches/:uid/refund'"],
+  ["`source_ref = 'adj:deck-refund:<batch uid>:<seq>'`", 'services/decks/batchRefund.ts', "REFUND_REF_PREFIX = 'adj:deck-refund:'"],
+  ['`deck_batch_refund`', 'services/decks/batchRefund.ts', "'deck_batch_refund'"],
   ["`operation = 'deck.generate'`", 'services/decks/genRuntime.ts', "'deck.generate'"],
   ['`deck-batch:<key>`', 'services/decks/genRuntime.ts', 'deck-batch:'],
   ['`releaseExpired`', 'services/aiBudget.ts', 'releaseExpired'],

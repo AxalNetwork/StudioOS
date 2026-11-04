@@ -73,6 +73,10 @@ export const FIXTURES = [
   // The Studio dashboard (`pages/Dashboard.jsx`) draws a spinner, then an
   // error card, until `/dashboard` returns its `user`.
   [/\/api\/dashboard(\?|$)/, (m) => ({ user: m, role_view: m.role })],
+  // D4359 (#4359): the Pitch deck studio draws only behind its plan gate, so
+  // its pages are drawn as a Raise + Grow member reads them (the Worker's
+  // `deckStudioAccess` answer when the plan covers the studio).
+  [/\/api\/decks\/access(\?|$)/, () => ({ open: true, required: 'studio', plan: { tier: 'studio', name: 'Raise + Grow', plan_key: 'founder:studio' }, message: null })],
 ];
 
 /** `<Profile> <route>`: how a route is named in `RENDER_NOT_YET`. */

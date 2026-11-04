@@ -98,6 +98,7 @@ import { lockedOut } from '../services/decks/elementModels';
 import { NOT_SWITCHED_ON, flagsFor, notSwitchedOn } from '../services/featureFlags';
 import type { Resolved } from '../services/decks/elementModels';
 import { promptFor } from '../services/decks/prompts';
+import { DECK_STUDIO_TIER } from '../services/decks/studioAccess';
 
 const deckNew = new Hono<{ Bindings: Env }>();
 
@@ -116,7 +117,7 @@ async function venture(c: any, user: User, projectId: number, write: boolean) {
 
 /** The plan gate New deck shares with the old /generate; its 402 is the plan's own body. */
 function planRefusal(user: User): Response | null {
-  try { ensureTier(user, 'studio'); return null; } catch (e) { if (e instanceof Response) return e; throw e; }
+  try { ensureTier(user, DECK_STUDIO_TIER); return null; } catch (e) { if (e instanceof Response) return e; throw e; }
 }
 
 /** A figure stated where only records may state one: 422, with the module that records it. */

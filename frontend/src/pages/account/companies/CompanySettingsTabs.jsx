@@ -7,6 +7,7 @@ import { companyProjectTeamPath, companyTeamPath, scopeFor, usePublishScope } fr
 import { ActionDialog } from './LifecycleDialogs.jsx';
 import { moveOutCopy } from '../../team/teamModel.js';
 import { BTN_DANGER, BTN_SECONDARY, BTN_TEXT } from '../../team/teamUi.jsx';
+import SkillsLink from '../../team/SkillsLink.jsx';
 import * as portfolio from './portfolioAdapter.js';
 import {
   BASE_PATH, companyLegalPath, companyProjectsPath, companySettingsPathFor, legalFacts, stageWord, valueFact,
@@ -143,7 +144,7 @@ function ProjectSettingsCard({ uid, companyName, child, onMoved }) {
               : team == null ? <span key="t" className={MUTED} data-testid="company-project-team-unread">The team could not be read · <button type="button" className={LINK} onClick={reread}>Try again</button></span>
                 : <span key="t">{team} {team === 1 ? 'person' : 'people'} · <Link to={teamTo} className={LINK}>Open Team</Link></span>],
             ['Agents', agents.status === 'loading' ? <span key="a" className={MUTED}>Reading…</span>
-              : agents.status === 'ready' ? <span key="a" data-testid="company-project-agents">{agents.value} · <Link to={teamTo} className={LINK}>Open Team</Link></span>
+              : agents.status === 'ready' ? <span key="a" data-testid="company-project-agents">{agents.value} · <Link to={teamTo} className={LINK}>Open Team</Link> · <SkillsLink scope={{ kind: 'company_project', company: { uid }, project: { id } }} className={LINK} testId="company-project-skills-link" /></span>
                 : agents.out?.unreadable ? <span key="a" className={MUTED} data-testid="company-project-agents-unread">Agents could not be read · <button type="button" className={LINK} onClick={reread}>Try again</button></span>
                   : <span key="a" className={MUTED} data-testid="company-project-agents-off">{agents.out?.reason || 'AI agents aren’t switched on yet.'}</span>],
           ]} />

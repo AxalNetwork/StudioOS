@@ -481,6 +481,8 @@ const PitchBuilderMoved = lazy(() => import('./pages/raise/pitch/PitchWorkspaceM
 const PitchPresent = lazy(() => import('./pages/raise/pitch/PitchPresent'));
 const PitchEditor = lazy(() => import('./pages/raise/pitch/PitchEditor'));
 const PitchBoundary = lazy(() => import('./pages/raise/pitch/PitchBoundary'));
+// D4359 (#4359): the studio's plan gate, read from the Worker's own answer.
+const StudioGate = lazy(() => import('./pages/raise/pitch/StudioGate'));
 const NewDeck = lazy(() => import('./pages/raise/pitch/NewDeck'));
 const TemplatesGallery = lazy(() => import('./pages/raise/pitch/TemplatesGallery'));
 const NarrativeBoundary = lazy(() => import('./pages/raise/narrative/NarrativeAdmin').then((m) => ({ default: m.NarrativeBoundary })));
@@ -2439,6 +2441,8 @@ function AppInner() {
     fundUnlocked: hasInvestorTier(user, 'institutional'),
   });
   const founderEditor = (component) => <><FounderModuleBackLink user={user} />{component}</>;
+  // D4359 (#4359, #2434 Q8 = A): a studio page is drawn only when the Worker says this member's plan covers it.
+  const studioGate = (component) => <StudioGate>{component}</StudioGate>;
   const founderWorkspace = (page, component, options = {}) => (
     effectiveRole === 'founder'
       ? <FounderWorkspacePage page={page} {...options}>{component}</FounderWorkspacePage>
@@ -3334,35 +3338,35 @@ function AppInner() {
          (effectiveRole === 'advisor' || effectiveRole === 'partner' || effectiveRole === 'exploring') && user?.spinout_lab_active !== 1
            ? <PitchBoundary role={effectiveRole} />
            : new URLSearchParams(location.search).get('mode') === 'workspace'
-           ? <PitchWorkspaceMoved />
-           : <PitchStudio tab="overview" />)} />
+           ? studioGate(<PitchWorkspaceMoved />)
+           : studioGate(<PitchStudio tab="overview" />))} />
       {/* D4254 (#4254): the tile row. Decks is PD-1; Script & rehearsal and Share & analytics
           are the new addresses; /raise/pitch/analytics and the old module page
           /raise/pitch-deck land on them with the venture kept. */}
-      <Route path="/raise/pitch/decks" element={guard(labRoles(['admin', 'founder']), <PitchStudio tab="decks" />)} />
-      <Route path="/raise/pitch/script" element={guard(labRoles(['admin', 'founder']), <PitchStudio tab="script" />)} />
-      <Route path="/raise/pitch/share" element={guard(labRoles(['admin', 'founder']), <PitchStudio tab="analytics" />)} />
+      <Route path="/raise/pitch/decks" element={guard(labRoles(['admin', 'founder']), studioGate(<PitchStudio tab="decks" />))} />
+      <Route path="/raise/pitch/script" element={guard(labRoles(['admin', 'founder']), studioGate(<PitchStudio tab="script" />))} />
+      <Route path="/raise/pitch/share" element={guard(labRoles(['admin', 'founder']), studioGate(<PitchStudio tab="analytics" />))} />
       <Route path="/raise/pitch-deck" element={<KeepQueryRedirect to="/raise/pitch" />} />
        <Route path="/raise/status" element={guard(labRoles(['admin', 'founder']), <FounderRaiseStatus />)} />
       {/* D898 (#2676): the canvas's editor (PD1) at /raise/pitch/edit. The
           template builder retired with group E: its four actions are the
           studio's, and /raise/pitch/builder opens the studio with a moved notice. */}
-      <Route path="/raise/pitch/edit" element={guard(labRoles(['admin', 'founder']), <PitchEditor />)} />
+      <Route path="/raise/pitch/edit" element={guard(labRoles(['admin', 'founder']), studioGate(<PitchEditor />))} />
       <Route path="/raise/pitch/builder" element={<PitchBuilderMoved />} />
       {/* D897 (#2677), PD3–PD6: New deck. A static path, so `/raise/:slug/new` never takes it. */}
-      <Route path="/raise/pitch/new" element={guard(labRoles(['admin', 'founder']), <NewDeck />)} />
+      <Route path="/raise/pitch/new" element={guard(labRoles(['admin', 'founder']), studioGate(<NewDeck />))} />
       {/* D1604 (#3716, pd29): the templates gallery, behind the studio's own boundary (D905). */}
       <Route path="/raise/pitch/templates" element={guard(labRoles(['admin', 'founder', 'advisor', 'partner', 'exploring']),
         (effectiveRole === 'advisor' || effectiveRole === 'partner' || effectiveRole === 'exploring') && user?.spinout_lab_active !== 1
           ? <PitchBoundary role={effectiveRole} />
-          : <TemplatesGallery />)} />
+          : studioGate(<TemplatesGallery />))} />
       <Route path="/raise/pitch/analytics" element={<KeepQueryRedirect to="/raise/pitch/share" />} />
       {/* D911 (#2695): Positioning moved into Investor narrative › Positioning (NAR18). */}
       <Route path="/raise/pitch/positioning" element={<PitchPositioningRedirect />} />
-      <Route path="/raise/pitch/review" element={guard(labRoles(['admin', 'founder']), <PitchStudio tab="review" />)} />
+      <Route path="/raise/pitch/review" element={guard(labRoles(['admin', 'founder']), studioGate(<PitchStudio tab="review" />))} />
       {/* D901 (#2680) — present mode (PD16): full screen, reads one version, writes nothing. */}
-      <Route path="/raise/pitch/present" element={guard(labRoles(['admin', 'founder']), founderEditor(<PitchPresent />))} />
-      <Route path="/raise/pitch/notes" element={guard(labRoles(['admin', 'founder']), <PitchStudio tab="notes" />)} />
+      <Route path="/raise/pitch/present" element={guard(labRoles(['admin', 'founder']), studioGate(founderEditor(<PitchPresent />)))} />
+      <Route path="/raise/pitch/notes" element={guard(labRoles(['admin', 'founder']), studioGate(<PitchStudio tab="notes" />))} />
       {/* D1180 (#3107): the workspace's default tab was the financial model, now retired, so
           ?mode=workspace lands on Use of funds › Runway › Forecast as /raise/capital/model does,
           counting itself (the address is also the Capital page). */}
