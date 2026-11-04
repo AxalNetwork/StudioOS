@@ -1,5 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Loader2, Sparkles, X } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
+import AskIntent from '../../ui/AskIntent.jsx';
+import { AskButtonView } from '../../ui/AskButton.jsx';
+import { useHeaderAskClaim } from '../../ui/HeaderAsk.jsx';
+import { useAskPanel } from '../../ui/eadwynPanel.js';
 import { articleAuthoringApi } from '../../lib/api/articleAuthoring.js';
 import { railProposalsApi } from '../../lib/api/railProposals.js';
 import { railPressHeaders } from '../../lib/railPage';
@@ -9,18 +13,37 @@ import {
 } from './articleCanvas';
 
 /**
- * D1408 (#3694) — AR3, Eadwyn's writing panel on an article.
+ * D1408 (#3694) — AR3, Eadwyn's writing actions on an article. D4353 (#4353):
+ * a PAGE INTENT in the docked Ask panel (D1443 part 4, `AskIntent`), the way
+ * `pages/email/EmailDraftIntent.jsx` carries an email draft. It replaced the
+ * side panel the article page drew beside the editor, so the page has one Ask
+ * (its header's, `ArticleAsk`) and one Eadwyn surface: the panel, which docks
+ * at the rail's left edge from 1024px and is a bottom sheet on a phone. The
+ * panel is not modal, so the member keeps selecting text while it is open.
  *
- * The canvas draws it as Eadwyn's panel (ARTICLES · WRITING). The shared Ask
- * panel that slides out of the AIRail (#3706) is not built, so the article
- * page draws this one beside the article, non-modal: the member keeps
- * selecting text while it is open. When #3706 lands, this body moves into it.
- *
- * Every press runs one D1409 option: quote, then run. A run leaves a proposal;
- * nothing goes into the article until the member presses Insert or Replace,
- * and the page's own save writes it. Discard decides the proposal and places
- * nothing.
+ * Every press runs one D1409 option: quote, then run. Each action's hold is
+ * quoted as before ("Holds up to $X · you pay what it uses"), and each run's
+ * card says what it charged. A run leaves a proposal; nothing goes into the
+ * article until the member presses Insert or Replace, and the page's own save
+ * writes it. Discard decides the proposal and places nothing. The text and
+ * image models are the AIRail's; nothing here picks one.
  */
+
+/**
+ * The article editor's one Ask (D4353). It is the page's own Ask, so it claims
+ * the header place (`useHeaderAskClaim`, as the Pitch deck's `DeckAsk` does)
+ * and the rail's fallback draws no second one beside it. It draws only while
+ * the Ask panel serves this viewer (`useAskPanel`): a support session, an
+ * Explorer or a page another licence owns gets no Ask (AK13). Its "N waiting"
+ * is the proposals the intent has read on this article; before that read, or
+ * when it fails, it is null and nothing is drawn, never "0 waiting".
+ */
+export function ArticleAsk({ open, waiting = null, onAsk }) {
+  useHeaderAskClaim();
+  const ask = useAskPanel();
+  if (!ask.available) return null;
+  return <AskButtonView onClick={onAsk} expanded={open} waiting={waiting} testId="article-ask" />;
+}
 
 const record = (id) => `articles:${id}`;
 const OPTIONS = ARTICLE_ACTIONS.map((a) => a.option);
@@ -85,7 +108,7 @@ function ProposalCard({ item, onPlace, onDiscard, onApplySeo, onApplyHeadline, e
   );
 }
 
-export default function ArticleWritingPanel({
+export default function ArticleWritingIntent({
   articleId, editable, getContext, onPlace, onApplySeo, onApplyHeadline, onClose, onWaiting, autoRun = null,
 }) {
   const [brief, setBrief] = useState('');
@@ -98,9 +121,7 @@ export default function ArticleWritingPanel({
   const [error, setError] = useState(null);
   const [focus, setFocus] = useState(() => getContext?.() || {});
 
-  useEffect(() => { onWaiting?.(items.length); }, [items.length, onWaiting]);
-
-  // What the member is working on, refreshed while the panel is open.
+  // What the member is working on, refreshed while the intent is open.
   useEffect(() => {
     const t = setInterval(() => setFocus(getContext?.() || {}), 700);
     return () => clearInterval(t);
@@ -110,6 +131,8 @@ export default function ArticleWritingPanel({
   // that fails is said (AR6e), never shown as "nothing waiting".
   const [waitingUnread, setWaitingUnread] = useState(false);
   const [readTick, setReadTick] = useState(0);
+  // A read that failed with nothing else on screen is not known, so the Ask draws no count.
+  useEffect(() => { onWaiting?.(waitingUnread && items.length === 0 ? null : items.length); }, [items.length, waitingUnread, onWaiting]);
   useEffect(() => {
     if (!articleId) return undefined;
     let live = true;
@@ -159,14 +182,14 @@ export default function ArticleWritingPanel({
       const range = option === 'rewrite:article' ? { start: ctx.start, end: ctx.end } : null;
       setItems((prev) => [{ proposal: r.proposal, cost: r.cost, hold: q?.hold_microusd, range, at: ctx.end }, ...prev]);
     } catch (e) {
-      reportError('ArticleWritingPanel:run', e);
+      reportError('ArticleWritingIntent:run', e);
       setError(refusalMessage(e));
     } finally {
       setRunning(null);
     }
   }, [articleId, brief, heading, tone, getContext]);
 
-  // A field's Ask (the publish sheet's blank search title or description) opens the panel on its option.
+  // A field's Ask (the publish sheet's blank search title or description) opens the intent on its option.
   useEffect(() => {
     if (autoRun && editable) run(autoRun);
   }, []);  // eslint-disable-line react-hooks/exhaustive-deps
@@ -177,7 +200,7 @@ export default function ArticleWritingPanel({
       await railProposalsApi.decide(item.proposal.uid, decision);
     } catch (e) {
       // A proposal decided elsewhere is gone either way.
-      if (e?.status !== 409) { reportError('ArticleWritingPanel:decide', e); setError(refusalMessage(e)); setBusy(false); return false; }
+      if (e?.status !== 409) { reportError('ArticleWritingIntent:decide', e); setError(refusalMessage(e)); setBusy(false); return false; }
     }
     setItems((prev) => prev.filter((x) => x.proposal.uid !== item.proposal.uid));
     setBusy(false);
@@ -190,16 +213,15 @@ export default function ArticleWritingPanel({
 
   const where = focus.selection ? 'Selected text' : focus.section ? `Section · ${focus.section}` : 'Whole article';
 
+  const footer = (
+    <span className="text-[11px] text-slate-500" data-testid="article-intent-footer">
+      Nothing goes into your article until you press Insert or Replace. The text and image models are chosen in the AIRail.
+    </span>
+  );
+
   return (
-    <aside className="fixed inset-x-0 bottom-0 z-40 max-h-[75vh] rounded-t-2xl shadow-2xl lg:static lg:z-auto lg:max-h-none lg:rounded-none lg:shadow-none w-full lg:w-[360px] shrink-0 border-t lg:border-t-0 lg:border-l border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex flex-col" aria-label="Eadwyn writing panel" data-testid="article-writing-panel">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800">
-        <div>
-          <div className="text-[11px] uppercase tracking-wide text-slate-500">Eadwyn · Articles · Writing</div>
-          <div className="text-sm font-semibold flex items-center gap-1.5"><Sparkles className="w-4 h-4 text-violet-600" /> Ask</div>
-        </div>
-        <button type="button" onClick={onClose} aria-label="Close the writing panel" className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800"><X className="w-4 h-4" /></button>
-      </div>
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+    <AskIntent label="Write this article" eyebrow="Eadwyn · Articles · Writing" title="Writing" footer={footer} onClose={onClose} testId="article-writing-intent">
+      <div className="space-y-4">
         <section>
           <div className="text-[11px] uppercase tracking-wide text-slate-500 mb-1">Working on</div>
           <span className="inline-block text-xs px-2 py-0.5 rounded-full bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200" data-testid="article-working-on">{where}</span>
@@ -273,9 +295,6 @@ export default function ArticleWritingPanel({
           <p className="text-xs text-slate-500">This article is with the review team or published, so Eadwyn proposes nothing for it now.</p>
         )}
       </div>
-      <div className="px-4 py-3 border-t border-slate-200 dark:border-slate-800 text-[11px] text-slate-500">
-        Nothing goes into your article until you press Insert or Replace. The text and image models are chosen in the AIRail.
-      </div>
-    </aside>
+    </AskIntent>
   );
 }
