@@ -150,7 +150,7 @@ test('scope Settings stays in the footer; account Portfolio lives in the Account
   const nav = readFileSync(resolve(process.cwd(), 'frontend/src/ui/SidebarNav.jsx'), 'utf8');
   // D4416 amends D4152: companies and projects moved from the rail to Account.
   assert.doesNotMatch(nav, /to="\/account\/portfolio"/, 'no account Portfolio footer');
-  const app = readFileSync(resolve(process.cwd(), 'frontend/src/App.jsx'), 'utf8');
+  const app = readRoutesSource();
   const account = app.slice(app.indexOf('function UserDropdown('), app.indexOf('function PortalSwitcher'));
   assert.match(account, /<Link to="\/account\/portfolio"[\s\S]*?>\s*Portfolio\s*<\/Link>/, 'Portfolio remains reachable from Account');
   assert.ok(!/to="\/company-settings"/.test(nav), 'the footer points at the retired address');

@@ -161,7 +161,7 @@ test('Trust and account Portfolio stay in the user menu, outside the sidebar', (
   assert.ok(!targets.includes('/company-settings'));
   const sidebar = read('frontend/src/ui/SidebarNav.jsx');
   assert.doesNotMatch(sidebar, /to="\/account\/portfolio"/); // D4416 amends D4152.
-  const app = read('frontend/src/App.jsx');
+  const app = readRoutesSource();
   const account = app.slice(app.indexOf('function UserDropdown('), app.indexOf('function PortalSwitcher'));
   assert.match(account, /<Link to="\/account\/portfolio"[\s\S]*?>\s*Portfolio\s*<\/Link>/);
   assert.ok(!/to="\/settings"/.test(sidebar));
