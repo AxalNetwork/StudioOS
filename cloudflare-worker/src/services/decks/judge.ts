@@ -33,7 +33,17 @@
 import { USE_KINDS, offerable } from '../ai/modelUseCases';
 import type { ChoiceAnswer, Decided } from '../ai/decide';
 import { familyOf } from './critic';
-import type { Variant } from './areas';
+/**
+ * The parts of an area's variant (`areas.ts` `Variant`) the judge reads. Kept here, not imported, so the
+ * judge's module graph does not reach the area planner and its record sources: the generation runtime
+ * (D1551, `ensembles.ts`) runs the judge, and the cron drives that runtime (D752's privacy guard).
+ */
+type Variant = {
+  n: number;
+  state: 'ready' | 'failed' | 'stopped' | 'waiting' | 'running';
+  payload: Record<string, unknown> | null;
+  critique: { fits: boolean | null; contrast_aa: boolean | null; density_ok: boolean | null } | null;
+};
 
 export const JUDGE_KEY = 'best';
 export const LABELS = ['A', 'B', 'C'] as const;
