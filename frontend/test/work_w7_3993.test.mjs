@@ -176,3 +176,21 @@ test('S1 finding 4: a successful Move clears an earlier refusal notice', async (
   assert.doesNotMatch(m.text(), /Move refused by Worker/);
  } finally { if (m) await m.close(); Object.assign(workAdapter, old); }
 });
+
+
+test('S1 missing-link follow-up: the missing-task message stays during a board reload', async () => {
+ let reads = 0, finishReload;
+ const ready = { available: true, data: { items: [], viewer } };
+ await withProject({
+  board: async () => ++reads === 1 ? ready : new Promise(resolve => { finishReload = resolve; }),
+  burnup: async () => ({ available: true, data: { series: [] } }),
+  item: async () => { throw Object.assign(new Error('Missing'), { status: 404 }); },
+ }, async m => {
+  assert.match(m.text(), /That task wasn't found\./);
+  await m.change('work-filter', 'changed filter');
+  await act(async () => m.props(m.by('work-filter').parentNode).onSubmit({ preventDefault() {} }));
+  assert.match(m.text(), /That task wasn't found\./, 'the missing-task message must stay while the board reloads');
+  await act(async () => finishReload(ready));
+  assert.match(m.text(), /That task wasn't found\./);
+ });
+});
