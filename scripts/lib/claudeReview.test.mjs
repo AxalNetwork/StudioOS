@@ -989,11 +989,11 @@ test('review #4452 R1: actual head commit author or committer markers identify C
 });
 
 
-test('owner policy: the full order is Claude main, Claude 2, Claude 3, OpenAI, Kimi, skipping each missing key', async () => {
-  const order = ['main', 'claude2', 'claude3', 'openai', 'kimi'];
-  const secrets = ['ANTHROPIC_API_KEY', 'ANTHROPIC_API_KEY_2', 'ANTHROPIC_API_KEY_3', 'OPENAI_API_KEY', 'KIMI_API_KEY'];
-  const env = { ...OPENAI_ENV, KIMI_MODEL: 'kimi-k3', CLAUDE_REVIEW_RATES: JSON.stringify({ models: { ...JSON.parse(OPENAI_ENV.CLAUDE_REVIEW_RATES).models, 'kimi-k3': { input: 1, output: 1, cache_read: 0.1, cache_write: 1 } } }) };
-  for (const absent of [-1, 0, 1, 2, 3, 4]) {
+test('owner policy: the full order is Claude main, Claude 2, Claude 3, OpenAI, Gemini, Kimi, skipping each missing key', async () => {
+  const order = ['main', 'claude2', 'claude3', 'openai', 'gemini', 'kimi'];
+  const secrets = ['ANTHROPIC_API_KEY', 'ANTHROPIC_API_KEY_2', 'ANTHROPIC_API_KEY_3', 'OPENAI_API_KEY', 'GEMINI_API_KEY', 'KIMI_API_KEY'];
+  const env = { ...OPENAI_ENV, GEMINI_API_KEY: 'test-google', GEMINI_MODEL: 'owner-gemini', KIMI_MODEL: 'kimi-k3', CLAUDE_REVIEW_RATES: JSON.stringify({ models: { ...JSON.parse(OPENAI_ENV.CLAUDE_REVIEW_RATES).models, 'owner-gemini': { input: 0, output: 0 }, 'kimi-k3': { input: 1, output: 1, cache_read: 0.1, cache_write: 1 } } }) };
+  for (const absent of [-1, 0, 1, 2, 3, 4, 5]) {
     const expected = order.filter((_, i) => i !== absent);
     const last = expected.at(-1);
     const settings = { ...env, ...(absent < 0 ? {} : { [secrets[absent]]: '' }) };
@@ -1004,6 +1004,82 @@ test('owner policy: the full order is Claude main, Claude 2, Claude 3, OpenAI, K
     assert.deepEqual([...(calls.create.length ? ['main'] : []), ...calls.fallback.map(c => c.id)], expected);
     if (absent >= 0) assert.ok(plain(r.summary).includes(secrets[absent]), `names missing ${secrets[absent]}`);
     if (last === 'kimi') assert.equal(calls.fallback.at(-1).model, 'kimi-k3');
-    else assert.equal(calls.fallback.at(-1).model, 'gpt-5.3-codex');
+    else assert.equal(calls.fallback.at(-1).model, 'owner-gemini');
   }
+});
+
+
+test('D4467: unreadable listing refuses every account and names the cause instead of credit exhaustion', async () => {
+  const h = harness({ env: { ANTHROPIC_API_KEY_2: 'key2' }, fallbacks: { claude2: () => { throw new Error('must not call'); } }, listArtifacts: async () => {
+    throw Object.assign(new Error('secret payload'), { ledgerReadFailure: 'artifact listing page 2: HTTP 503' });
+  } });
+  const r = await runReview(h.deps);
+  assert.equal(r.outcome, 'budget_refused');
+  assert.deepEqual([h.calls.create.length, h.calls.fallback.length], [0, 0]);
+  assert.match(plain(r.summary), /Claude was not called: .*could not be read/);
+  assert.match(r.reason, /artifact listing page 2: HTTP 503/);
+  assert.doesNotMatch(plain(r.summary), /out of credit|monthly review budget is used|secret payload/);
+});
+const GEMINI_ENV = { GEMINI_API_KEY: 'test-google', GEMINI_MODEL: 'owner-gemini',
+  CLAUDE_REVIEW_RATES: JSON.stringify({ models: { 'owner-gemini': { input: 0, output: 0 } } }) };
+
+test('#4466: Gemini requires its own key/model, validates HTTPS, and preserves zero rates', () => {
+  const { config, errors } = readConfig({ ...ENV, ...GEMINI_ENV });
+  assert.deepEqual(errors, []);
+  assert.equal(config.creditFallbacks.find(s => s.id === 'gemini').baseURL, 'https://generativelanguage.googleapis.com');
+  for (const field of ['GEMINI_API_KEY', 'GEMINI_MODEL']) {
+    assert.ok(!readConfig({ ...ENV, ...GEMINI_ENV, [field]: '' }).config.creditFallbacks.some(s => s.id === 'gemini'));
+  }
+  assert.ok(!readConfig({ ...ENV, ...GEMINI_ENV, CLAUDE_REVIEW_CREDIT_FALLBACK: 'off' }).config.creditFallbacks.length);
+  assert.match(readConfig({ ...ENV, ...GEMINI_ENV, GEMINI_MODEL: '../bad' }).errors.join(';'), /GEMINI_MODEL/);
+  for (const url of ['http://example.test', 'https://example.test?key=secret', 'https://user:secret@example.test']) {
+    assert.match(readConfig({ ...ENV, ...GEMINI_ENV, GEMINI_BASE_URL: url }).errors.join(';'), /GEMINI_BASE_URL/);
+  }
+  assert.equal(preflightCost({ inputTokens: 1000, maxOutputTokens: 1000, model: 'owner-gemini', rates: config.rateOverrides }), 0);
+});
+
+test('#4466: free Gemini succeeds at known zero and is cross-vendor even on a Codex PR', async () => {
+  const { deps, calls } = harness({ env: { ...GEMINI_ENV, ANTHROPIC_API_KEY: '', KIMI_API_KEY: 'kimi' },
+    event: prEvent({ body: '## Agent\nS19 · Codex', head: { sha: H, ref: 'codex/test', repo: { full_name: REPO } } }),
+    fallbacks: { gemini: () => kimiMessage(), kimi: () => kimiMessage() } });
+  const result = await runReview(deps);
+  assert.equal(result.outcome, 'reviewed');
+  assert.deepEqual(calls.fallback.map(c => c.id), ['gemini']);
+  assert.equal(JSON.parse(result.record.body).cost_known, true);
+  assert.equal(JSON.parse(result.record.body).usd, 0);
+  assert.equal(parseRecordName(result.record.name).account, 'gemini');
+  assert.doesNotMatch(result.summary, /same vendor/);
+  assert.doesNotMatch(result.findingsFile, /same vendor/);
+});
+
+test('#4466: Gemini quota skips retries, names the free-tier limit and reaches Kimi', async () => {
+  const { deps, calls } = harness({ env: { ...GEMINI_ENV, ANTHROPIC_API_KEY: '', KIMI_API_KEY: 'kimi', CLAUDE_REVIEW_MAX_RETRIES: '2', CLAUDE_REVIEW_TIMEOUT_SECONDS: '120' },
+    fallbacks: { gemini: () => apiError('rate_limit', 429), kimi: () => kimiMessage() } });
+  const result = await runReview(deps);
+  assert.equal(result.outcome, 'reviewed');
+  assert.deepEqual(calls.fallback.map(c => c.id), ['gemini', 'kimi']);
+  assert.match(plain(result.summary), /Gemini free-tier limit reached/);
+});
+
+test('#4466: Gemini has its own budget, ledger and durable uncertain abort cost', async () => {
+  const env = { ...GEMINI_ENV, ANTHROPIC_API_KEY: '', KIMI_API_KEY: 'kimi',
+    CLAUDE_REVIEW_RATES: JSON.stringify({ models: { 'owner-gemini': { input: 1, output: 1 } } }) };
+  const artifacts = [{ name: recordName({ month: '2026-10', pr: 9, key: 'b'.repeat(64), status: 'ok', usd: 25, account: 'gemini' }), created_at: '2026-10-15T00:00:00Z' }];
+  const full = harness({ env, artifacts, fallbacks: { gemini: () => kimiMessage(), kimi: () => kimiMessage() } });
+  assert.equal((await runReview(full.deps)).outcome, 'reviewed');
+  assert.deepEqual(full.calls.fallback.map(c => c.id), ['kimi']);
+  const records = [];
+  const abort = harness({ env, fallbacks: { gemini: () => Object.assign(apiError('timeout'), { streamStarted: true }), kimi: () => kimiMessage() } });
+  abort.deps.persistRecord = record => records.push({ ...JSON.parse(record.body), name: record.name });
+  assert.equal((await runReview(abort.deps)).outcome, 'reviewed');
+  const own = records.filter(r => r.account_id === 'gemini');
+  assert.ok(own[0].usd > 0);
+  assert.equal(own.at(-1).usd, own[0].usd);
+  assert.equal(own.at(-1).cost_known, false);
+  assert.match(own.at(-1).name, /_gemini$/);
+  const wf = readFileSync(new URL('../../.github/workflows/claude-review.yml', import.meta.url), 'utf8');
+  for (const name of ['GEMINI_API_KEY', 'GEMINI_MODEL', 'GEMINI_BASE_URL']) assert.match(wf, new RegExp(name + ':'));
+  assert.match(wf, /if: always\(\) && steps\.usage\.outputs\.gemini != ''/);
+  assert.match(wf, /path: \$\{\{ runner\.temp \}\}\/claude-review\/gemini\//);
+  assert.match(wf, /\['main', 'claude2', 'claude3', 'openai', 'gemini', 'kimi'\]/);
 });

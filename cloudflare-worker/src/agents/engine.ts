@@ -18,6 +18,7 @@
  * Bound SQL only. Codes in logs, never a prompt, an output or a name. A cost
  * that cannot be read is `{ available: false }`, never 0.
  */
+import { inCohort } from '../services/agents/cohort';
 import type { Env } from '../types';
 import { PLATFORM_PAUSED_MESSAGE, platformPaused } from '../services/agents/aiPolicy';
 import { notify } from '../services/notify';
@@ -105,16 +106,20 @@ const inScope = (a: AgentRow, s: ScopeRef) =>
   a.scope_kind === s.kind && (s.kind === 'company' ? a.company_id === s.id : a.project_id === s.id);
 
 /** The engine and the halt, as admission reads them. */
-export async function engineRefusal(env: Env, by: number | null): Promise<Refusal | null> {
+export async function engineRefusal(env: Env, by: number | null, scope?: ScopeRef): Promise<Refusal | null> {
   // D4162 (#4162): HQ's kill switch first, on every admission path of both runtimes; an unreadable policy counts as on.
   if (await platformPaused(env)) return no(403, 'platform_paused', PLATFORM_PAUSED_MESSAGE);
   const mode = await engineMode(env);
   const paused = no(403, 'engine_paused', 'Agents are paused on the platform. You can still run them yourself.');
   if (mode === 'off' || mode === 'paused' || await haltedAll(env)) return paused;
-  if (mode === 'canary') {
+  if (mode === 'canary' || mode === 'cohort') {
     // Canary: only a platform admin's own start is admitted; the sweep and `after` admit nothing.
     const admin = by ? await env.DB.prepare("SELECT 1 AS ok FROM users WHERE id = ? AND role = 'admin' AND is_active = 1").bind(by).first<{ ok: number }>() : null;
-    if (!admin) return paused;
+    if (!admin) {
+      if (mode !== 'cohort') return paused;
+      try { if (!await inCohort(env, by, scope)) return paused; }
+      catch { return paused; } // Missing/unreadable cohort data never grants admission.
+    }
   }
   return null;
 }
@@ -125,7 +130,7 @@ export async function engineRefusal(env: Env, by: number | null): Promise<Refusa
  * within a scope; the single-flight index covers anything else.
  */
 export async function admitInScope(env: Env, s: ScopeRef, t: Trigger): Promise<Admission> {
-  const engine = await engineRefusal(env, t.by);
+  const engine = await engineRefusal(env, t.by, s);
   if (engine) return engine;
   const settings = await scopeSettings(env, s);
   if (settings.engine_paused) return no(403, 'scope_paused', 'Agents are paused on this team. An editor can resume them.');

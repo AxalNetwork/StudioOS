@@ -237,6 +237,7 @@ export const teamLine = (t) => [t?.company || NOT_RECORDED, t?.project].filter(B
 
 /** SA2's history: what changed, in words, and before → after. */
 const ACTION_WORDS = {
+  'cohort.add': 'Added to cohort', 'cohort.remove': 'Removed from cohort',
   'persona.offer': 'Offered in the gallery', 'persona.hide': 'Hidden from the gallery', 'persona.retire': 'Retired',
   'persona.rename': 'Name changed', 'persona.identity': 'Identity changed', 'persona.defaults': 'Defaults for teams changed',
 };

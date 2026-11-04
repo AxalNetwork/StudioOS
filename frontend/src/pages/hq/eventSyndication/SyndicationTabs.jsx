@@ -9,7 +9,7 @@ import { useSyndicationRead } from './useSyndicationRead';
 import SyndicationState, { BUTTON, INPUT, Refusal, refusalText } from './SyndicationState';
 
 const channelsValid = (v) => Array.isArray(v?.channels) && CHANNELS.every((c) => v.channels.some((r) => r.channel === c.key && typeof r.adapter_ready === 'boolean'));
-const settingsValid = (v) => ['approved_events', 'admins_only'].includes(v?.settings?.hosts) && typeof v.settings.host_accounts === 'boolean' && v.settings.default_channels_by_type && typeof v.settings.default_channels_by_type === 'object' && Object.values(v.settings.default_channels_by_type).every((v) => Array.isArray(v));
+const settingsValid = (v) => ['approved_events', 'admins'].includes(v?.settings?.hosts) && typeof v.settings.host_accounts === 'boolean' && v.settings.default_channels_by_type && typeof v.settings.default_channels_by_type === 'object' && Object.values(v.settings.default_channels_by_type).every((v) => Array.isArray(v));
 const logValid = (v) => Array.isArray(v?.rows) && (v.next === null || Number.isSafeInteger(v.next)) && v.rows.every((r) => Number.isSafeInteger(r.id) && typeof r.channel === 'string');
 
 function ChannelCard({ channel, value, api, reload }) {
@@ -17,7 +17,8 @@ function ChannelCard({ channel, value, api, reload }) {
   const [error, setError] = useState(null);
   const [dialog, setDialog] = useState(null);
   const [key, setKey] = useState('');
-  const account = value.account;
+  const [disconnected, setDisconnected] = useState(false);
+  const account = disconnected ? { ...value.account, status: 'disconnected' } : value.account;
   const status = channelStatus(account, { adapterReady: value.adapter_ready });
   const connected = account && account.status !== 'disconnected';
   const run = async (write) => {
@@ -45,12 +46,18 @@ function ChannelCard({ channel, value, api, reload }) {
       {connected && <button type="button" className={BUTTON} disabled={busy} onClick={() => { setError(null); setDialog('disconnect'); }} data-testid={`syndication-disconnect-${channel.key}`}>Disconnect…</button>}
     </div>
     <Refusal text={error} />
+    {disconnected && <p role="status" className="text-sm text-axal-muted dark:text-gray-400">This account is now disconnected. Connect again to resume posting.</p>}
     {dialog && <Lightbox label={`${dialog} ${channel.name}`} title={dialog === 'disconnect' ? `Disconnect ${channel.name}?` : `Connect ${channel.name}`} onClose={() => { if (!busy) { setDialog(null); setKey(''); } }} footer={<button type="button" className={BUTTON} disabled={busy || (dialog !== 'disconnect' && value.auth === 'api_key' && !key.trim())} data-testid={`syndication-account-confirm-${channel.key}`} onClick={() => run(async () => {
-      if (connected) await api.disconnect(account.uid);
+      if (connected) {
+        await api.disconnect(account.uid);
+        setDisconnected(true);
+        if (dialog === 'reconnect') setDialog('connect');
+      }
       if (dialog !== 'disconnect') await connect();
     })}>{busy ? 'Saving…' : dialog === 'disconnect' ? 'Disconnect' : dialog === 'reconnect' ? 'Disconnect and reconnect' : 'Continue to connect'}</button>}>
       <div className="space-y-3 p-5 text-sm text-axal-ink dark:text-gray-100">
         {connected && <p>Already posted listings stay up. Pending posts stop. Reconnecting replaces the current account connection.</p>}
+        {disconnected && <p>This account is now disconnected. Connect again to resume posting.</p>}
         {dialog !== 'disconnect' && <><p>Connect Axal’s HQ account. Tickets and registrations stay on Axal.</p>{value.auth === 'api_key' ? <label className="flex flex-col gap-1">API key<input type="password" autoComplete="off" className={INPUT} value={key} onChange={(e) => setKey(e.target.value)} /></label> : <p>You will continue to the channel’s authorisation page.</p>}</>}
         <Refusal text={error} />
       </div>
@@ -114,7 +121,7 @@ function SettingsForm({ initial, api }) {
     } catch (e) { setError(refusalText(e)); } finally { setBusy(false); }
   };
   return <div className="space-y-3" data-testid="syndication-settings">
-    <Card className="space-y-3 p-4"><h2 className="font-semibold text-axal-ink dark:text-gray-100">Who may syndicate</h2><fieldset disabled={busy} className="space-y-2 text-sm text-axal-ink dark:text-gray-100">{[['approved_events', 'Any event an admin approves'], ['admins_only', 'Events by admins only']].map(([v, label]) => <label key={v} className="flex min-h-11 items-center gap-2"><input type="radio" name="hosts" value={v} checked={settings.hosts === v} onChange={() => { setSaved(false); setSettings({ ...settings, hosts: v }); }} />{label}</label>)}</fieldset></Card>
+    <Card className="space-y-3 p-4"><h2 className="font-semibold text-axal-ink dark:text-gray-100">Who may syndicate</h2><fieldset disabled={busy} className="space-y-2 text-sm text-axal-ink dark:text-gray-100">{[['approved_events', 'Any event an admin approves'], ['admins', 'Events by admins only']].map(([v, label]) => <label key={v} className="flex min-h-11 items-center gap-2"><input type="radio" name="hosts" value={v} checked={settings.hosts === v} onChange={() => { setSaved(false); setSettings({ ...settings, hosts: v }); }} />{label}</label>)}</fieldset></Card>
     <Card className="overflow-x-auto p-4"><h2 className="font-semibold text-axal-ink dark:text-gray-100">Default channels per event type</h2><table className="mt-3 min-w-[560px] text-sm text-axal-ink dark:text-gray-100"><thead><tr><th className="text-left">Type</th>{CHANNELS.map((c) => <th key={c.key}>{c.name}</th>)}</tr></thead><tbody>{SETTINGS_TYPES.map((t) => <tr key={t.id}><td>{t.label}</td>{CHANNELS.map((c) => <td key={c.key} className="p-3 text-center"><input type="checkbox" disabled={busy} checked={(settings.default_channels_by_type[t.id] || []).includes(c.key)} aria-label={`${t.label} on ${c.name}`} data-testid={`syndication-setting-${t.id}-${c.key}`} onChange={(e) => toggle(t.id, c.key, e.target.checked)} /></td>)}</tr>)}</tbody></table></Card>
     <p className="text-sm text-axal-muted dark:text-gray-400">HQ accounts only. Hosts cannot connect their own accounts. Attendee import is not enabled.</p>
     <button type="button" className={BUTTON} disabled={busy} onClick={save} data-testid="syndication-settings-save">{busy ? 'Saving…' : 'Save settings'}</button><Refusal text={error} />{saved && <p role="status" className="text-sm text-axal-ink dark:text-gray-100">Settings saved.</p>}

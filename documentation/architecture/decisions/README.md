@@ -48,5 +48,8 @@ and citations by number keep working.
 | --- | --- |
 | `D1151.md` | Deal Team, Market and Traction read contracts and verification. |
 | `D1364.md` | Time-based deployed asset retention, capacity limits and verification. |
+| `D4447.md` | #4447, Part A of #3722: Grow campaign plans and their routes; carries the spec's D1481. |
+| `D4450.md` | #4450: event Explain reuses the deck quote expiry/binding and ledger retry key, while preserving successful text on receipt-read failure. |
 | `D4421.md` | Answered Team questions and the shared General counsel disclaimer. |
 | `D4422.md` | #4422: inherited Team model and MCP read-tool allow-lists, enforced on the Worker and edited in TM8a. |
+| `D4459.md` | No-call run charges and live Work-item mutation responses. |

@@ -44,6 +44,8 @@
 import { aiBudgetApi } from '../../../lib/api/aiBudget.js';
 import { deckElementModelsApi } from '../../../lib/api/deckElementModels.js';
 import { deckModelPresetsApi } from '../../../lib/api/deckModelPresets.js';
+import { deckVoiceApi } from '../../../lib/api/deckVoice.js';
+import { VOICE_LABEL } from './voiceModel.js';
 import { SURFACES, deckUsage, elementModels, orgLocks, presets as presetsRead, unavailable } from './deckV2Adapter.js';
 import { ELEMENT_GROUPS, LATER } from './deckV2Model.js';
 
@@ -81,8 +83,24 @@ export const DECK_RAIL_GROUPS = Object.freeze([
   G('venture', 'Venture records', [], ['venture'], { elements: true }),
   // D1525 (#3783): the judge that ranks an area's variants is this group's; the results view has no model control.
   G('vision', 'Vision and checks', ['review:deck-file'], [], { usedBy: 'Deck review, Rank the variants' }),
+  // D1569 (#3816): the voice the AI voice-over speaks in. Chosen only here, never beside the action (⋯ › This card).
+  G('voice', 'Voice', [], [], { voice: true, usedBy: 'AI voice-over' }),
   G('safety', 'Safety', [], [], { safety: true, usedBy: null }),
 ]);
+
+/** D1569: why the Voice group offers one voice. Owner answer (2026-11-04): MeloTTS only; others after decision P, in their own change. */
+export const ONE_VOICE = 'One voice for now. Other voices come later.';
+
+/**
+ * D1569: the Voice group's block on a deck, from the Worker's voice read
+ * (`GET /api/decks/:id/voice`): the one model it speaks with, labelled "AI
+ * voice". The rail names no model of its own; a pick is refused with why.
+ */
+export function voiceAnswer(read) {
+  const id = read?.model?.id;
+  if (typeof id !== 'string' || !id) throw Object.assign(new Error('The voice could not be read.'), { status: 500 });
+  return { ok: true, models: [{ id, role: 'Default', line: VOICE_LABEL, ...(read.model.name ? { name: read.model.name } : {}) }], more: [], pick: id };
+}
 
 /**
  * One group's block as `RailGroups` reads it, from the per-element reply: its
@@ -104,9 +122,13 @@ export function groupAnswer(answer, groupId) {
 /** The groups for a page: on a deck, each element group reads and picks through the per-element routes. */
 export function railItems(deckId) {
   if (deckId == null) {
-    return DECK_RAIL_GROUPS.map((g) => (g.elements && !g.options.length ? Object.freeze({ ...g, unavailable: NO_DECK }) : g));
+    return DECK_RAIL_GROUPS.map((g) => ((g.elements || g.voice) && !g.options.length ? Object.freeze({ ...g, unavailable: NO_DECK }) : g));
   }
-  return DECK_RAIL_GROUPS.map((g) => (!g.elements ? g : Object.freeze({
+  return DECK_RAIL_GROUPS.map((g) => (g.voice ? Object.freeze({
+    ...g,
+    read: () => deckVoiceApi.read(deckId).then(voiceAnswer),
+    pick: () => Promise.reject(new Error(ONE_VOICE)),
+  }) : !g.elements ? g : Object.freeze({
     ...g,
     read: () => elementModels(deckId).then((a) => groupAnswer(a, g.id)),
     pick: (model) => deckElementModelsApi.pick(deckId, { scope: 'deck', key: `group:${g.id}`, model }),

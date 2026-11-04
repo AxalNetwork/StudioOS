@@ -9,6 +9,7 @@ used to be one file, `../ROUTE_MAP.md`; that file is now only a pointer here.
 | --- | --- |
 | `sections/` | The map's prose and tables, one file per section, read in file-name order. The first file (number 0000) is the top of the map. |
 | `canvases/` | One folder per canvas table: `part-1/`, `part-2/`, `part-3/`, `part-4/` and `part-5/`. Each holds one file per canvas, and each file is exactly one table row. |
+| `sections/0999-grow-campaign-store-d4447.md` | #4447 / #3722 Part A: Grow campaign store routes; no UI. |
 
 A section that holds a canvas table keeps the table's header and separator, then
 one marker line, `<!-- route-map rows: canvases/part-N -->`. The rows of that

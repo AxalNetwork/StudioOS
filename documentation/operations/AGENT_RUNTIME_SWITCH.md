@@ -11,7 +11,7 @@ the engine is down. The decision is
 
 | Switch | Where | Effect |
 | --- | --- | --- |
-| `AGENT_ENGINE` | `[vars]` and `[env.production.vars]` (and `[env.preview.vars]`) | `off`: every engine route answers 404 `agent_engine_off`; a run in flight ends at its next step (`engine_off`). `paused`: admissions stop (403 `engine_paused`); runs already admitted carry on and decisions still land. `canary`: only a platform admin's own start is admitted. `on`: everything. Needs `TEAM_AGENTS_ENABLED = "true"` too. |
+| `AGENT_ENGINE` | `[vars]` and `[env.production.vars]` (and `[env.preview.vars]`) | `off`: every engine route answers 404 `agent_engine_off`; a run in flight ends at its next step (`engine_off`). `paused`: admissions stop (403 `engine_paused`); runs already admitted carry on and decisions still land. `canary`: only a platform admin's own start is admitted. `cohort`: platform admins plus HQ-listed users or scopes (D4423). `on`: everything. Needs `TEAM_AGENTS_ENABLED = "true"` too. |
 | `agents:halt` | KV `RATE_LIMITS` | Set: every run ends at its next step (`halted`) and nothing is admitted. The fastest stop; no deploy. |
 | `agents:paused` | KV `RATE_LIMITS` | The platform circuit breaker. A gateway limit sets it (`gateway_limit`); while it is set the engine reads `paused`. A person clears it. |
 | A scope's pause | `PUT /api/teams/:scope/:id/engine` `{ paused: true }` | That scope admits nothing more; a resume rebuilds its object from D1. |
@@ -95,19 +95,20 @@ platform. You can still run them yourself."
 
 ## Before the engine goes live
 
-The owner's account steps, none of which this repository can do:
-- confirm Workers Paid and accept Workflow step billing;
-- create the queues `studioos-agent-queue` and `studioos-agent-queue-dlq`, and
-  their preview twins `studioos-agent-queue-preview` and
-  `studioos-agent-queue-preview-dlq` (a branch's are
-  `studioos-<code>-agent-queue` and `studioos-<code>-agent-queue-dlq`);
-- create the `agents` AI Gateway with its spend limits, then set
-  `AGENT_AI_GATEWAY` to its id. No secret is added.
-- optionally set `AGENT_GATEWAY_MONTHLY_LIMIT_MICROUSD` to the gateway's
-  monthly limit in micro-USD (the Worker cannot read the dashboard's), so HQ
-  ops hear once a month when agent runs reach 70% of it (#3851). Unset, that
-  alert is off; the gateway still stops runs at its limit.
+Production's `studioos-agent-queue`, `studioos-agent-queue-dlq` and
+`studioos-agent-task` Workflow are already deployed. Queue and Workflow
+creation is not an outstanding production prerequisite. New preview or branch
+provisioning still needs its own configured resources.
 
-Until then `AGENT_ENGINE` stays `off`. A deploy that declares a queue the
-account does not have fails at deploy time, so the queues must exist before
-the first deploy that carries these bindings.
+The outstanding owner steps are the `agents` gateway (payload logging and
+caching off, $100 monthly limit), Workers Paid confirmation, HQ policy caps,
+and counsel's privacy and ToS review. See [AGENT_ENGINE_GO_LIVE.md](AGENT_ENGINE_GO_LIVE.md)
+for the staged rollout. `AGENT_AI_GATEWAY` remains unset; the monthly alert
+threshold is now explicitly `100000000` micro-USD in all three var tables.
+That var does not configure the gateway's hard limit: the owner sets $100 in
+the dashboard too.
+
+`TEAM_AGENTS_ENABLED`, `AGENT_ENGINE`, `AGENT_AUTONOMY` and `AGENT_RUNTIME`
+retain their current values. Each later switch requires its own owner-approved
+PR. The deployed `do → sdk → do` rehearsal is deferred until a switch to `sdk`
+is proposed; CI's runtime contract suite covers both implementations meanwhile.
