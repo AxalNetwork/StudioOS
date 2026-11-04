@@ -247,3 +247,9 @@ d6f46b997d07d2fbd18d64c190b29b2437dc3d71:cloudflare-worker/test/admin_deck_beta_
 2691f4fecc089d1e6766ab49b0a7eeea8364af46:frontend/src/pages/admin/programs/referralPartnersModel.js:generic-api-key:301
 2691f4fecc089d1e6766ab49b0a7eeea8364af46:frontend/src/pages/admin/programs/referralPartnersModel.js:generic-api-key:302
 b3d19c7c669f45d69fe79a4f690b1e4c5bded6a8:.gitleaksignore:generic-api-key:234
+# D4269 (#4269): line 41 of the teleprompter model named the browser localStorage
+# entry for the teleprompter's size and speed (pitch.teleprompter.v1), not a
+# credential; generic-api-key matched it on the `_KEY` name. The next commit
+# renames it `PREFS_STORE_NAME`, so no later commit carries the match. Scoped to
+# the one finding, as D334's entry is.
+a519fc5743a2b719b6f8f8f0ff709bbf25670bec:frontend/src/pages/raise/pitch/teleprompterModel.js:generic-api-key:41

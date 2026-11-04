@@ -17,6 +17,10 @@ import { REHEARSE } from './rehearseModel';
 import { DEFAULT_PITCH_SECONDS, PITCH_CHOICES, PITCH_LENGTH, presentBudget, remoteMove, remoteSocketPath } from './presentTimingModel';
 import { useWebSocket } from '../../../hooks/useWebSocket';
 import { MOTION_CSS, areaMotion, presentStep, transitionMotion } from './motionModel';
+import {
+  BACK, END, LAST_CARD, MIRROR, NEXT_CARD, ON_SCREEN, PHONE_REMOTE, SIZE, SPEED, TELEPROMPTER, TELEPROMPTER_TITLE, THIS_CARD,
+  SIZE_MAX, SIZE_MIN, cardLabel, isRemote, mirrorStyle, nextLine, nextSize, nextSpeed, readPrefs, scriptOf, speedOf, startView, writePrefs,
+} from './teleprompterModel';
 
 // D1580 F1 (#3827): Present › Rehearse, loaded when it is opened.
 const RehearsePanel = lazy(() => import('./RehearsePanel'));
@@ -38,6 +42,15 @@ const RehearsePanel = lazy(() => import('./RehearsePanel'));
  * the pitch length (2, 3 or 5 minutes, Rehearse's own split, `cardBudgetsMs`),
  * amber when over. A phone paired by code (`DeckRemote`) moves the cards
  * through Present's socket, as the keys do; pairing is not drawn yet.
+ *
+ * D4254 P2b (#4269): Teleprompter (ps5), beside the views, reads each card's
+ * script (its speaker notes) in large type that scrolls at the viewer's
+ * speed, with what is on screen, the next card and its first line, the timer
+ * and the card's budget; Size, Speed and Mirror are the viewer's own (kept in
+ * this browser). `?view=teleprompter` opens on it (P2a's Open teleprompter).
+ * On a phone, `?remote=1` is the phone remote (ps5b): the card and its script,
+ * the next line, and ‹ Back / Next card ›, which move this phone's view. It
+ * writes nothing to the Worker.
  *
  * D1580 F1 (#3827): Rehearse, beside the two views, times the founder card by
  * card against the pitch length and writes a rehearsal and its report
@@ -110,15 +123,25 @@ function useVersion() {
   return { ...state, projectId: projectId || state.deck?.project_id || null };
 }
 
+/** This browser's store, or null where it is blocked (a private window, a sandbox). */
+function viewerStore() {
+  try { return typeof window !== 'undefined' ? window.localStorage : null; } catch { return null; }
+}
+
 export default function PitchPresent() {
   const { status, deck, projectId } = useVersion();
   const navigate = useNavigate();
   const phone = usePhoneWidth();
+  const [params] = useSearchParams();
+  // D4254 P2b: the teleprompter's size and speed, the viewer's own; Mirror is this screen's only.
+  const [prompt, setPrompt] = useState(() => readPrefs(viewerStore()));
+  const [mirror, setMirror] = useState(false);
+  const setPrefs = useCallback((patch) => setPrompt((was) => { const next = { ...was, ...patch }; writePrefs(viewerStore(), next); return next; }), []);
   // D1576: the card, and how many of its entrances have played.
   const [pos, setPos] = useState({ card: 0, shown: 0 });
   const i = pos.card;
   const reduced = useReducedMotion();
-  const [view, setView] = useState('presenter');
+  const [view, setView] = useState(() => startView(params));
   const [sources, setSources] = useState(false);
   const [seconds, setSeconds] = useState(0);
   // D1581: the pitch length, and when each card came up (Rehearse's marks).
@@ -187,6 +210,12 @@ export default function PitchPresent() {
     </div>
   );
 
+  // D4254 P2b (ps5b): the phone remote — the card, its script, the next line, and Back / Next card.
+  if (phone && isRemote(params)) {
+    // A remote moves a whole card, as D1581's remote steps do (`remoteMove`), never one entrance at a time.
+    return <PhoneRemote card={card} next={cards[i + 1] || null} i={i} n={n} seconds={seconds} exit={exit} onStep={(s) => setPos((at) => ({ card: remoteMove(at.card, s, n), shown: 0 }))} />;
+  }
+
   if (phone) {
     return (
       <div
@@ -219,10 +248,11 @@ export default function PitchPresent() {
           <button type="button" className={view === 'presenter' ? ON : OFF} aria-pressed={view === 'presenter'} onClick={() => setView('presenter')}>{PRESENTER}</button>
           <button type="button" className={view === 'audience' ? ON : OFF} aria-pressed={view === 'audience'} onClick={() => setView('audience')}>{AUDIENCE}</button>
           <button type="button" className={sources ? ON : OFF} aria-pressed={sources} onClick={() => setSources((v) => !v)} data-testid="pitch-present-sources">{SHOW_SOURCES}</button>
+          <button type="button" className={view === 'teleprompter' ? ON : OFF} aria-pressed={view === 'teleprompter'} onClick={() => setView('teleprompter')} data-testid="pitch-present-teleprompter">{TELEPROMPTER}</button>
           <button type="button" className={view === 'rehearse' ? ON : OFF} aria-pressed={view === 'rehearse'} onClick={() => setView('rehearse')} data-testid="pitch-present-rehearse">{REHEARSE}</button>
         </div>
         <span data-testid="pitch-present-status">
-          {view === 'presenter' ? `${clock(seconds)} · ` : ''}{countLabel(i, n)} · <Link to={exit} className="text-gray-300 hover:underline">{ESC_TO_EXIT}</Link>
+          {view === 'presenter' || view === 'teleprompter' ? `${clock(seconds)} · ` : ''}{countLabel(i, n)} · <Link to={exit} className="text-gray-300 hover:underline">{ESC_TO_EXIT}</Link>
         </span>
       </div>
       {view === 'rehearse' ? (
@@ -234,6 +264,10 @@ export default function PitchPresent() {
             onClose={() => setView('presenter')}
           />
         </Suspense>
+      ) : view === 'teleprompter' ? (
+        <Teleprompter card={card} next={next} i={i} n={n} seconds={seconds} exit={exit} aspect={aspect} theme={deck?.theme}
+          prefs={prompt} setPrefs={setPrefs} mirror={mirror} setMirror={setMirror}
+          budget={<Budget marks={marks} seconds={seconds} n={n} i={i} pitchSeconds={pitchSeconds} setPitchSeconds={setPitchSeconds} />} />
       ) : view === 'presenter' ? (
         <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto px-4 pb-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
           <Card key={`${i}`} card={card} sources={sources} aspect={aspect} chrome={chromeOf(deck, i)} theme={deck?.theme} shown={pos.shown} reduced={reduced} />
@@ -255,6 +289,90 @@ export default function PitchPresent() {
           {dots}
         </div>
       )}
+    </div>
+  );
+}
+
+/** D4254 P2b: the script moves up at the viewer's speed, and starts again at the top on each card. */
+function useAutoScroll(ref, pxPerSec, key) {
+  useEffect(() => { if (ref.current) ref.current.scrollTop = 0; }, [ref, key]);
+  useEffect(() => {
+    if (!pxPerSec) return undefined;
+    const t = setInterval(() => { if (ref.current) ref.current.scrollTop += pxPerSec / 20; }, 50);
+    return () => clearInterval(t);
+  }, [ref, pxPerSec, key]);
+}
+
+const BIG = 'inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-[10px] border border-gray-700 px-3 text-[13px] font-bold text-gray-200 hover:bg-gray-800 disabled:opacity-40';
+
+/** D4254 P2b (ps5): Present · Teleprompter. */
+function Teleprompter({ card, next, i, n, seconds, exit, aspect, theme, prefs, setPrefs, mirror, setMirror, budget }) {
+  const box = useRef(null);
+  const speed = speedOf(prefs.speed);
+  useAutoScroll(box, speed.pxPerSec, i);
+  const script = scriptOf(card);
+  const after = nextLine(next);
+  return (
+    <div className="grid min-h-0 flex-1 gap-4 overflow-hidden px-4 pb-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2.2fr)]" data-testid="teleprompter-view">
+      <div className="flex min-w-0 flex-col gap-3 overflow-y-auto">
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-mono text-[12px] font-bold text-gray-300">{TELEPROMPTER_TITLE}</span>
+          <span className="flex items-center gap-2">
+            <span className="font-mono text-[15px] font-bold text-gray-100" data-testid="teleprompter-timer">{clock(seconds)}</span>
+            <Link to={exit} className={BIG} data-testid="teleprompter-end">{END}</Link>
+          </span>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <span className="font-mono text-[11px] font-bold tracking-[.07em] text-gray-400">{ON_SCREEN.toUpperCase()}</span>
+          <Card card={card} sources={false} small aspect={aspect} theme={theme} />
+        </div>
+        {budget}
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Teleprompter controls" data-testid="teleprompter-controls">
+          <span className="font-mono text-[11px] font-bold tracking-[.07em] text-gray-400">{SIZE.toUpperCase()}</span>
+          <button type="button" className={BIG} aria-label="Smaller text" disabled={prefs.size <= SIZE_MIN} onClick={() => setPrefs({ size: nextSize(prefs.size, -1) })} data-testid="teleprompter-smaller">A−</button>
+          <button type="button" className={BIG} aria-label="Larger text" disabled={prefs.size >= SIZE_MAX} onClick={() => setPrefs({ size: nextSize(prefs.size, 1) })} data-testid="teleprompter-larger">A+</button>
+          <span className="ms-2 font-mono text-[11px] font-bold tracking-[.07em] text-gray-400">{SPEED.toUpperCase()}</span>
+          <button type="button" className={BIG} onClick={() => setPrefs({ speed: nextSpeed(prefs.speed) })} aria-label={`Scroll speed: ${speed.label}`} data-testid="teleprompter-speed">{speed.label}</button>
+          <button type="button" className={mirror ? ON : OFF} aria-pressed={mirror} onClick={() => setMirror((v) => !v)} data-testid="teleprompter-mirror">{MIRROR}</button>
+        </div>
+      </div>
+      <div className="flex min-h-0 min-w-0 flex-col gap-3">
+        <span className="font-mono text-[11px] font-bold tracking-[.07em] text-gray-400">{THIS_CARD.toUpperCase()} · {cardLabel(card)}</span>
+        <div ref={box} className="min-h-0 flex-1 overflow-y-auto rounded-[12px] bg-black px-6 py-5" data-testid="teleprompter-script" data-speed={speed.id}>
+          <div style={{ fontSize: `${prefs.size}px`, ...mirrorStyle(mirror) }} className={`flex flex-col gap-[0.6em] font-semibold leading-[1.35] ${script.empty ? 'text-gray-500' : 'text-white'}`} data-testid="teleprompter-text" data-size={prefs.size} data-mirror={mirror ? 'true' : 'false'}>
+            {script.paragraphs.map((p, k) => <p key={k} className="m-0 whitespace-pre-line">{p}</p>)}
+          </div>
+        </div>
+        <div className="flex flex-col gap-0.5 rounded-[10px] bg-[#111827] p-3.5" data-testid="teleprompter-next">
+          {after ? (<>
+            <span className="font-mono text-[11px] font-bold tracking-[.07em] text-gray-400">{after.label.toUpperCase()} · <span className="normal-case tracking-normal text-gray-200">{after.title}</span></span>
+            {after.first ? <span className="text-[14px] leading-[1.5] text-gray-300">{after.first}</span> : null}
+          </>) : <span className="text-[13px] text-gray-400">{LAST_CARD}</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** D4254 P2b (ps5b): the phone remote — the timer, this card and its script, the next line, Back and Next card. */
+function PhoneRemote({ card, next, i, n, seconds, exit, onStep }) {
+  const script = scriptOf(card);
+  const after = nextLine(next);
+  return (
+    <div className={SHELL} data-testid="pitch-present" data-view="remote">
+      <div className={BAR}>
+        <span className="font-bold text-gray-200">{PHONE_REMOTE}</span>
+        <span className="flex items-center gap-3"><span className="text-[15px] font-bold text-gray-100" data-testid="remote-timer">{clock(seconds)}</span><Link to={exit} className="font-bold text-violet-300">Exit</Link></span>
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-3" data-testid="remote-script">
+        <span className="text-[13px] font-bold text-violet-300" data-testid="remote-card">{cardLabel(card)}</span>
+        {script.paragraphs.map((p, k) => <p key={k} className={`m-0 whitespace-pre-line text-[19px] leading-[1.45] ${script.empty ? 'text-gray-500' : 'text-white'}`}>{p}</p>)}
+        {after ? <p className="m-0 text-[13px] text-gray-400" data-testid="remote-next">{after.label} · {after.title}{after.first ? ` — ${after.first}` : ''}</p> : <p className="m-0 text-[13px] text-gray-400" data-testid="remote-next">{LAST_CARD}</p>}
+      </div>
+      <div className="grid grid-cols-2 gap-2 border-t border-gray-800 px-4 py-3">
+        <button type="button" className={BIG} disabled={i === 0} onClick={() => onStep('prev')} data-testid="remote-back">{BACK}</button>
+        <button type="button" className={`${BIG} border-violet-500 bg-violet-600 text-white hover:bg-violet-500`} disabled={i >= n - 1} onClick={() => onStep('next')} data-testid="remote-next-card">{NEXT_CARD}</button>
+      </div>
     </div>
   );
 }
