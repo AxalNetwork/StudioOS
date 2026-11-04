@@ -19,6 +19,8 @@
  *   readLines(path)                  the head version's lines, or null
  *   anthropic.countTokens(params)    { input_tokens }
  *   anthropic.create(params)         the Message; errors carry `kind` (see review.mjs)
+ *   fallback.create(params)          the credit fallback (Kimi), or null; used only when Anthropic
+ *                                    answers that the credit balance is exhausted
  *
  * Returns { outcome, exitCode, summary, annotations, record, findingsFile }.
  * `record` is the artifact to upload (name and JSON body) when tokens were
@@ -27,7 +29,7 @@
  */
 import {
   REVIEW_OUTPUT_SCHEMA, SYSTEM_PROMPT, annotations, budgetDecision, buildExcerpts, buildUserMessage,
-  estimateCost, estimateTokens, eventGate, mergeRates, parseUnifiedDiff, pickModel, preflightCost,
+  creditExhausted, estimateCost, fallbackRequest, unfence, estimateTokens, eventGate, mergeRates, parseUnifiedDiff, pickModel, preflightCost,
   readConfig, readLedger, recordName, renderSummary, reportable, reviewKey, selectDiff, validateReview,
 } from './claudeReview.mjs';
 
@@ -46,6 +48,13 @@ const API_ERROR_TEXT = {
   timeout: 'the request timed out.',
   connection: 'the API could not be reached.',
   unknown: 'the API call failed.',
+};
+
+const KIMI_ERROR_TEXT = {
+  authentication: 'the Kimi key was rejected (401). Check the KIMI_API_KEY repository secret.',
+  not_found: 'the Kimi model was not found (404). Check that KIMI_MODEL names a model your Kimi account offers.',
+  billing: 'the Kimi account could not be billed (402): its balance may be used up too.',
+  bad_request: 'the Kimi request was rejected (400).',
 };
 
 const short = (sha) => String(sha || '').slice(0, 12);
@@ -155,9 +164,14 @@ export async function runReview(deps) {
   };
   if (config.refusalFallback === 'default') Object.assign(params, { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' });
 
+  // Which provider answered: Anthropic, or the credit fallback when the
+  // Anthropic account has no credit left. Every run tries Anthropic first, so
+  // the review returns to Claude as soon as its credit does.
+  let provider = 'anthropic';
+  let usedModel = model;
   const record = (status, usd, extra) => {
     const name = recordName({ month, pr: pr.number, key, status, usd });
-    return { name, body: JSON.stringify({ name, month, pr: pr.number, head_sha: pr.head.sha, merge_base: mergeBase, key, status, model, tier, usd, ...extra }, null, 2) };
+    return { name, body: JSON.stringify({ name, month, pr: pr.number, head_sha: pr.head.sha, merge_base: mergeBase, key, status, model: usedModel, provider, tier, usd, ...extra }, null, 2) };
   };
 
   let message;
@@ -165,9 +179,17 @@ export async function runReview(deps) {
     try {
       message = await deps.anthropic.create(params);
     } catch (e) {
-      // A model or platform that does not accept server-side fallbacks rejects
-      // the request outright (400, unbilled). Retry once without them.
-      if (e?.kind === 'bad_request' && params.fallbacks) {
+      if (creditExhausted(e) && config.creditFallback && deps.fallback) {
+        // Anthropic refused before doing any work (unbilled): its credit is
+        // used up. Send the same review to the fallback provider.
+        provider = config.creditFallback.provider;
+        usedModel = config.creditFallback.model;
+        Object.assign(state.facts, { model: usedModel, provider: `Kimi (fallback: the Anthropic credit balance is exhausted)`, effort: 'n/a' });
+        state.limitations.push(`Reviewed by Kimi (${usedModel}) because the Anthropic credit balance is exhausted. The next review tries Claude first again.`);
+        message = await deps.fallback.create(fallbackRequest(params, usedModel));
+      } else if (e?.kind === 'bad_request' && params.fallbacks) {
+        // A model or platform that does not accept server-side fallbacks rejects
+        // the request outright (400, unbilled). Retry once without them.
         delete params.fallbacks;
         delete params.betas;
         state.limitations.push('The request was rejected with refusal fallbacks enabled and was retried without them; set CLAUDE_REVIEW_REFUSAL_FALLBACK=off if this model does not support them.');
@@ -184,7 +206,9 @@ export async function runReview(deps) {
     // What the API or the token exchange said, already stripped of anything
     // credential-shaped by the client: the cause, where the kind alone is a guess.
     const detail = typeof e?.detail === 'string' && e.detail ? e.detail : null;
-    return finish(state, 'api_error', `${API_ERROR_TEXT[kind] || API_ERROR_TEXT.unknown}${e?.status ? ` (HTTP ${e.status})` : ''}${detail ? ` The API said: ${detail}` : ''}`, {
+    const who = provider === 'anthropic' ? '' : 'The Anthropic credit balance is exhausted, and the Kimi fallback failed too: ';
+    const text = provider === 'anthropic' ? (API_ERROR_TEXT[kind] || API_ERROR_TEXT.unknown) : (KIMI_ERROR_TEXT[kind] || API_ERROR_TEXT[kind] || API_ERROR_TEXT.unknown);
+    return finish(state, 'api_error', `${who}${text}${e?.status ? ` (HTTP ${e.status})` : ''}${detail ? ` The API said: ${detail}` : ''}`, {
       record: record('err', 0, { outcome: 'api_error', error_kind: kind, http_status: e?.status ?? null, error_detail: detail, duration_seconds: Number(seconds) }),
     });
   }
@@ -193,7 +217,7 @@ export async function runReview(deps) {
   state.facts.duration = `${seconds} s`;
   if (message?._request_id) state.facts['request id'] = message._request_id;
   state.facts['stop reason'] = String(message?.stop_reason || 'unknown');
-  const usage = estimateCost(message?.usage, model, state.rates);
+  const usage = estimateCost(message?.usage, usedModel, state.rates);
   const usageFacts = { duration_seconds: Number(seconds), stop_reason: message?.stop_reason, usage: usage.perModel, cost_known: usage.known, fallback_ran: usage.fallbackRan };
 
   if (message?.stop_reason === 'refusal') {
@@ -203,7 +227,9 @@ export async function runReview(deps) {
     });
   }
 
-  const text = (message?.content || []).filter((b) => b?.type === 'text').map((b) => b.text).join('');
+  const joined = (message?.content || []).filter((b) => b?.type === 'text').map((b) => b.text).join('');
+  // Kimi has no structured output, so its answer may arrive in a code fence.
+  const text = provider === 'anthropic' ? joined : unfence(joined);
   const checked = validateReview(text, selection.included);
   if (!checked.ok) {
     const truncated = message?.stop_reason === 'max_tokens';
@@ -220,7 +246,7 @@ export async function runReview(deps) {
   // API). Untrusted model text, already checked against the diff.
   const findingsFile = JSON.stringify({
     schema_version: checked.review.schema_version,
-    pr: pr.number, head_sha: pr.head.sha, merge_base: mergeBase, model,
+    pr: pr.number, head_sha: pr.head.sha, merge_base: mergeBase, model: usedModel, provider,
     status: checked.review.status, summary: checked.review.summary,
     min_confidence: config.minConfidence, findings: shown, limitations: checked.review.limitations,
   }, null, 2);

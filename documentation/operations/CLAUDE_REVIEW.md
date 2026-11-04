@@ -93,6 +93,10 @@ Set these under *Settings → Secrets and variables → Actions*.
 | `CLAUDE_REVIEW_REFUSAL_FALLBACK` | variable | `default` | Server-side refusal fallback (`fallbacks: "default"`). If the model rejects it, the call is retried once without it. `off` disables it. |
 | `CLAUDE_REVIEW_RATES` | variable | unset | JSON with the same shape as `rates.json`, merged per model. Needed for a model not listed there. |
 | `CLAUDE_REVIEW_FAIL_ON_ERROR` | variable | off | `true` fails the step on a configuration or API error. Findings never fail it. |
+| `KIMI_API_KEY` | secret | unset | **The credit fallback** (§6a). A Kimi (Moonshot) API key. Used only when Anthropic answers that its credit balance is exhausted. |
+| `KIMI_MODEL` | variable | `kimi-k2-turbo-preview` | The Kimi model for the fallback. Check the name against the models your Kimi console lists. |
+| `KIMI_BASE_URL` | variable | `https://api.moonshot.ai/anthropic` | Kimi's Anthropic-compatible endpoint. Change it only if your Kimi console gives a different API base. |
+| `CLAUDE_REVIEW_CREDIT_FALLBACK` | variable | `kimi` when `KIMI_API_KEY` is set | `off` turns the fallback off without removing the secret. |
 
 ## 4. Enable, disable, roll back
 
@@ -152,7 +156,7 @@ It is **not** a required check. Making it one is a separate, explicit decision, 
 - **Routine, Sonnet 5.5:** a typical PR (20K input tokens, 4K output including thinking) is about $0.08. A large one at the default limits (70K input, 8K output) is about $0.22.
 - **High-risk, Opus 5.5:** about double those figures.
 
-Volume drives the total. Every push to an open PR starts a review of the new head; identical inputs are not reviewed twice. **No saving is claimed until the shadow period has measured both sides.** The default $25 monthly budget is a pilot cap, not an estimate: if it is reached, reviews are refused, with the reason in the summary, until the next month or until an administrator raises it. Nothing switches keys, buys credit or turns on auto-reload.
+Volume drives the total. Every push to an open PR starts a review of the new head; identical inputs are not reviewed twice. **No saving is claimed until the shadow period has measured both sides.** The default $25 monthly budget is a pilot cap, not an estimate: if it is reached, reviews are refused, with the reason in the summary, until the next month or until an administrator raises it. Nothing buys credit or turns on auto-reload. The one automatic switch is the credit fallback of §6a, and only when Anthropic's credit is exhausted.
 
 ## 6. Anthropic credits and spend
 
@@ -167,7 +171,19 @@ Volume drives the total. Every push to an open PR starts a review of the new hea
 - set `ANTHROPIC_MODEL=claude-opus-5-5` and `CLAUDE_REVIEW_EFFORT=high`;
 - set `CLAUDE_REVIEW_MAX_OUTPUT_TOKENS=32000` and `CLAUDE_REVIEW_MAX_COST_USD=2.00`. At the default bounds, the worst case at these settings is about $0.95 (`rates.json`), so the $1.00 default cap would refuse the largest reviews.
 
-When the credit runs out, requests stop until the next one arrives, and nothing is charged unless the organization also holds purchased credit or has auto-reload on.
+When the credit runs out, requests stop until the next one arrives, and nothing is charged unless the organization also holds purchased credit or has auto-reload on. With `KIMI_API_KEY` set, reviews go to Kimi in the meantime (§6a).
+
+### 6a. The credit fallback: Kimi (owner, 2026-11-04)
+
+When the Anthropic credit runs out, the review is sent to Kimi instead of stopping.
+
+- **Claude first, every run.** Each review calls Anthropic first. Only when Anthropic refuses for credit does the same review go to Kimi: a 402, or the 400 "Your credit balance is too low". That refusal is unbilled. When the credit returns (a Max plan's monthly credit, or a top-up), the next review is Claude's again. Nothing is switched by hand, and no variable changes.
+- **Nothing else falls back.** An authentication error, a rate limit, a server error or a refusal is reported as before.
+- **How Kimi is called.** Through Moonshot's Anthropic-compatible endpoint, with the same SDK, retries and timeout. Kimi has no structured output, so the JSON schema goes in the system prompt, a fenced answer is unwrapped, and the answer is validated as strictly as Claude's. An answer that does not validate is `malformed_response`, never published.
+- **What it costs.** The record names `provider: "kimi"` and the Kimi model, priced from the `kimi-*` rows in `rates.json`. Those rates are as last known and unverified, so check them in the Kimi console and override them with `CLAUDE_REVIEW_RATES`. Kimi spend counts toward the same monthly budget. The Kimi balance is managed in the Kimi console, and nothing here tops it up.
+- **What it sends.** The same diff and excerpts as a Claude review, to Moonshot. This repository is public, so the diff is already public.
+- **Setup.** Add the `KIMI_API_KEY` repository secret (*Settings → Secrets and variables → Actions → Secrets*). Optionally set `KIMI_MODEL` and `KIMI_BASE_URL` (§3). `CLAUDE_REVIEW_CREDIT_FALLBACK=off` turns it off.
+- **If Kimi fails too,** the summary says "the Kimi fallback failed too" and gives Kimi's reason: wrong key, unknown model or an empty balance. A zero-cost record is written.
 
 ## 7. Limitations
 

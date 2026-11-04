@@ -12,6 +12,9 @@
  *                            exchanged for a short-lived Anthropic token; needs id-token: write
  *   ANTHROPIC_API_KEY        repository secret, the fallback; read by the SDK, never printed
  *   ANTHROPIC_MODEL, ANTHROPIC_MODEL_HIGH_RISK, CLAUDE_REVIEW_*  repository variables
+ *   KIMI_API_KEY             repository secret, optional: the credit fallback. Used only when
+ *                            Anthropic answers that the credit balance is exhausted
+ *   KIMI_MODEL, KIMI_BASE_URL  repository variables, optional (defaults in claudeReview.mjs)
  *   GITHUB_TOKEN             the job's read-only token (contents, pull-requests, actions)
  *   GITHUB_EVENT_PATH, GITHUB_REPOSITORY, GITHUB_API_URL, GITHUB_STEP_SUMMARY, GITHUB_OUTPUT
  *   CLAUDE_REVIEW_PR_DIR     the checkout of the pull request's head (data only; nothing in it runs)
@@ -84,6 +87,7 @@ export function errorDetail(e, fed) {
   else text = String(e?.name || 'Error');
   return String(text)
     .replace(/sk-ant-[A-Za-z0-9_-]+/g, '[redacted]')
+    .replace(/\bsk-[A-Za-z0-9_-]{16,}/g, '[redacted]')
     .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*/g, '[redacted]')
     .replace(/\b(Bearer|bearer)\s+\S+/g, '$1 [redacted]')
     .replace(/[\u0000-\u001f\u007f]+/g, ' ')
@@ -146,6 +150,34 @@ export function anthropicClient({ apiKey, federation = null, identityToken = nul
     countTokens: (p) => wrap((c) => c.messages.countTokens({ model: p.model, system: p.system, messages: p.messages })),
     create: (p) => wrap((c) => (p.betas ? c.beta.messages.create(p) : c.messages.create(p))),
   };
+}
+
+/**
+ * The credit fallback: Kimi through Moonshot's Anthropic-compatible endpoint,
+ * with the same SDK, the same retries and the same error kinds. Built on first
+ * use, so a run that never needs it never touches the key.
+ */
+export function kimiClient({ apiKey, baseURL, maxRetries, timeoutSeconds, sdk = Anthropic }) {
+  let client = null;
+  const get = () => (client ||= new sdk({ apiKey, baseURL, maxRetries, timeout: timeoutSeconds * 1000 }));
+  return {
+    create: async (p) => {
+      try { return await get().messages.create(p); } catch (e) { throw classifyError(e, sdk); }
+    },
+  };
+}
+
+/** The fallback client the run uses, or null when no fallback is configured. */
+export function fallbackFor(env, overrides = {}) {
+  const { config } = readConfig(env);
+  if (!config.creditFallback) return null;
+  return kimiClient({
+    apiKey: env.KIMI_API_KEY,
+    baseURL: config.creditFallback.baseURL,
+    maxRetries: config.maxRetries,
+    timeoutSeconds: config.timeoutSeconds,
+    ...overrides,
+  });
 }
 
 /** The client the run uses: federation when the variables configure it, else the API key. */
@@ -309,8 +341,10 @@ export async function main(env = process.env) {
       }
     },
     anthropic: null,
+    fallback: null,
   };
   deps.anthropic = clientFor(env);
+  deps.fallback = fallbackFor(env);
 
   let result;
   try {

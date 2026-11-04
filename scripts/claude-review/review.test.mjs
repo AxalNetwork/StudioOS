@@ -18,7 +18,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
 import { WorkloadIdentityError } from '@anthropic-ai/sdk/lib/credentials/types';
-import { GithubIdentityError, LEDGER_MAX_PAGES, OIDC_AUDIENCE, anthropicClient, classifyError, clientFor, errorDetail, githubClient, githubIdentityToken, listMonthRecords, main, safePath } from './review.mjs';
+import { GithubIdentityError, LEDGER_MAX_PAGES, OIDC_AUDIENCE, anthropicClient, classifyError, clientFor, errorDetail, fallbackFor, githubClient, githubIdentityToken, kimiClient, listMonthRecords, main, safePath } from './review.mjs';
 
 const headers = new Headers({ 'request-id': 'req_test' });
 const gen = (status) => Anthropic.APIError.generate(status, { type: 'error', error: { type: 'x', message: 'm' } }, 'm', headers);
@@ -371,4 +371,34 @@ test('main: an outcome whose reason can quote the pull request or the model keep
   }
   assert.equal(out.join(''), 'claude-review: diff_error\n');
   assert.match(s.read().summary, /diff could not be computed/);
+});
+
+test('the Kimi fallback: built only with its key, on its own base URL, once, and its errors keep their kinds', async () => {
+  const built = [];
+  class KimiSdk {
+    constructor(opts) {
+      built.push(opts);
+      this.messages = { create: async (p) => { if (p.model === 'gone') throw new Anthropic.NotFoundError(404, { error: { message: 'model gone' } }, 'model gone', new Headers()); return { ok: true }; } };
+    }
+  }
+  for (const k of ['APIError', 'AuthenticationError', 'PermissionDeniedError', 'NotFoundError', 'RateLimitError', 'BadRequestError', 'APIConnectionTimeoutError', 'APIConnectionError', 'InternalServerError']) KimiSdk[k] = Anthropic[k];
+  const env = { CLAUDE_REVIEW_ENABLED: 'true', ANTHROPIC_MODEL: 'claude-sonnet-5-5', ANTHROPIC_API_KEY: 'a' };
+  assert.equal(fallbackFor(env), null, 'no KIMI_API_KEY, no fallback');
+  assert.equal(fallbackFor({ ...env, KIMI_API_KEY: 'k', CLAUDE_REVIEW_CREDIT_FALLBACK: 'off' }), null);
+  const client = fallbackFor({ ...env, KIMI_API_KEY: 'sk-kimi-key', CLAUDE_REVIEW_MAX_RETRIES: '1' }, { sdk: KimiSdk });
+  assert.equal(built.length, 0, 'not built until a review needs it');
+  assert.deepEqual(await client.create({ model: 'kimi-k2-turbo-preview' }), { ok: true });
+  await client.create({ model: 'kimi-k2-turbo-preview' });
+  assert.equal(built.length, 1);
+  assert.equal(built[0].baseURL, 'https://api.moonshot.ai/anthropic');
+  assert.equal(built[0].apiKey, 'sk-kimi-key');
+  assert.equal(built[0].maxRetries, 1);
+  await assert.rejects(client.create({ model: 'gone' }), (e) => e.kind === 'not_found' && e.status === 404);
+  const direct = kimiClient({ apiKey: 'k', baseURL: 'https://example.test/anthropic', maxRetries: 0, timeoutSeconds: 30, sdk: KimiSdk });
+  await direct.create({ model: 'm' });
+  assert.equal(built.at(-1).baseURL, 'https://example.test/anthropic');
+});
+
+test('an error detail never carries a Kimi-style key', () => {
+  assert.equal(errorDetail(new Error('bad key sk-AbCdEfGhIjKlMnOpQrStUv rejected'), null), 'bad key [redacted] rejected');
 });
