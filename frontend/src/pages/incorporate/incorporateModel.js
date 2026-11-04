@@ -10,8 +10,15 @@
  * answer Q5): no itemised breakdown, and "The state fee is confirmed at
  * filing." The status timeline is the order's own fields (D601): Submitted
  * is `paid_at`, Packet ready is `packet_document_id`, Filed is `filed_on`.
- * EIN is its own row (D579), never a status. There is no bank row (Q7) and no
- * plan gate (Q6).
+ * EIN is its own row (D579), never a status. There is no plan gate (Q6).
+ *
+ * THE BANK STEP (#4356, D4356). The owner chose Mercury, which settled Q7.
+ * "Open a bank account" names Mercury and links to its account opening:
+ * the owner's referral link when one is configured (`VITE_MERCURY_REFERRAL_URL`,
+ * never in the code), else Mercury's public site. The step is done only when
+ * the founder's own Mercury is connected and active (`GET
+ * /api/mercury/personal/status`), never from a guess. On the status timeline
+ * it comes after Filed, so it shows once the company is formed.
  */
 import { PAID_STATUSES } from '../../lib/incorporationPricing.js';
 
@@ -144,4 +151,47 @@ export function saveDraft(draft, store = globalThis.localStorage) {
 }
 export function clearDraft(store = globalThis.localStorage) {
   try { store?.removeItem(DRAFT_KEY); } catch { /* nothing kept */ }
+}
+
+// ---------------------------------------------------------------- the bank step (#4356, D4356)
+
+/** Mercury's public site, where "Open account" starts its sign-up; used until the owner configures a referral link. */
+export const MERCURY_PUBLIC_URL = 'https://mercury.com/';
+export const BANK_TITLE = 'Open a bank account';
+export const BANK_LINES = Object.freeze({
+  todo: 'Open your company’s business account with Mercury, Axal’s bank partner. Then connect it here so Axal can read it.',
+  connect: 'Already have a Mercury account? Connect it, and this step is done.',
+  done: 'Your Mercury account is connected.',
+  attention: 'Your Mercury connection needs attention. Reconnect it to finish this step.',
+  unread: 'Whether your Mercury is connected could not be read.',
+  reading: 'Reading…',
+});
+
+/**
+ * The link to open a Mercury account: the configured referral link when it is
+ * an https address on mercury.com (or a subdomain), else the public site. A
+ * malformed or off-site value is never linked to.
+ */
+export function mercuryOpenUrl(configured) {
+  const raw = typeof configured === 'string' ? configured.trim() : '';
+  if (!raw) return MERCURY_PUBLIC_URL;
+  try {
+    const u = new URL(raw);
+    const host = u.hostname.toLowerCase();
+    if (u.protocol === 'https:' && (host === 'mercury.com' || host.endsWith('.mercury.com')) && !u.username && !u.password) return u.toString();
+  } catch { /* not an address */ }
+  return MERCURY_PUBLIC_URL;
+}
+
+/**
+ * The step's state from `GET /api/mercury/personal/status` (`undefined` while
+ * reading, `'unread'` when it failed): done only when connected and active.
+ *   { kind: 'reading' | 'unread' | 'todo' | 'attention' | 'done', done, line }
+ */
+export function bankStepOf(status) {
+  if (status === undefined) return { kind: 'reading', done: false, line: BANK_LINES.reading };
+  if (status === 'unread' || !status || typeof status !== 'object') return { kind: 'unread', done: false, line: BANK_LINES.unread };
+  if (status.connected === true && status.connection?.status === 'active') return { kind: 'done', done: true, line: BANK_LINES.done };
+  if (status.connected === true) return { kind: 'attention', done: false, line: BANK_LINES.attention };
+  return { kind: 'todo', done: false, line: BANK_LINES.todo };
 }

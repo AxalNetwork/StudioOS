@@ -7,6 +7,7 @@ import { companyPathFor } from '../account/companies/companiesModel.js';
 import { BTN_TEXT, FIELD } from '../team/teamUi.jsx';
 import { orderCompany } from './incorporateAdapter.js';
 import { timeline } from './incorporateModel.js';
+import BankStep from './BankStep.jsx';
 
 /**
  * D1414 (#3696, INC3b, INC5c, INC5h3) — the order's status, then two rows
@@ -22,7 +23,9 @@ import { timeline } from './incorporateModel.js';
  *                                      `company_uid` (#3855, through
  *                                      `incorporateAdapter.orderCompany`)
  *
- * There is no bank row (owner answer Q7).
+ *   Open a bank account                #4356 (D4356): after Filed, once the
+ *                                      company is formed; done only when the
+ *                                      founder's Mercury is connected (`BankStep`)
  */
 
 function EinRow({ projectId }) {
@@ -87,6 +90,8 @@ export default function IncorporationTimeline({ order, projectId, projectName = 
       {order && PACKET_NOT_BUILT_STATUSES.includes(order.status) ? <p className="m-0 mt-3 text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="timeline-packet-not-built">{`${PACKET_NOT_BUILT} Your receipt is in Billing.`}</p> : null}
       <div className="mt-3 flex flex-col gap-3">
         <EinRow projectId={projectId} />
+        {/* #4356: the bank comes after the company is formed (INC3b's last stop). */}
+        {steps.find((st) => st.key === 'filed')?.done ? <div className="border-t border-axal-hairline pt-3 dark:border-gray-800"><BankStep variant="row" /></div> : null}
       </div>
       {company.available ? (
         <p className="m-0 mt-3 flex flex-wrap items-center justify-between gap-2 rounded-axal-md border border-violet-200 bg-axal-lavender px-3 py-2.5 text-[13px] text-axal-ink dark:border-violet-800 dark:bg-violet-900/20 dark:text-gray-100" data-testid="timeline-company">
