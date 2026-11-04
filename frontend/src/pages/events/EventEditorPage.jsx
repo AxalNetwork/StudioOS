@@ -19,7 +19,7 @@ import { EVENT_TYPE_IDS } from '../../lib/eventTypes';
 import { syndicateNote } from '../hq/eventSyndication/syndicationModel';
 import SyndicationAsk from './SyndicationAsk.jsx';
 import Lightbox from '../../ui/Lightbox';
-import CoverDrawPress from '../../ui/CoverDrawPress';
+import EventCoverStep from './EventCoverStep';
 import { publishAction } from './eventOrganiserModel';
 import HostHeader, { NewEventHeader } from './HostHeader';
 import { pendingCount } from './hostHeaderModel';
@@ -248,10 +248,8 @@ export default function EventEditorPage() {
               </select>
             </div>
             <div>
-              <label className={labelCls}>Cover image URL</label>
-              <input className={inputCls} value={form.cover_url} onChange={(e) => set('cover_url', e.target.value)} placeholder="https://…" />
-              {/* #3935 (EV2): a saved event can have its cover drawn; the URL fills this field, and Save writes it. */}
-              {id && <CoverDrawPress testid="event-cover-draw" quote={coverQuote} draw={coverDraw} onDrawn={onCoverDrawn} />}
+              {/* D3724 (NE2): upload or generate; #3935's press draws, and Save writes the link. */}
+              <EventCoverStep id={id} form={form} set={set} coverQuote={coverQuote} coverDraw={coverDraw} onCoverDrawn={onCoverDrawn} />
             </div>
           </div>
           <div>
