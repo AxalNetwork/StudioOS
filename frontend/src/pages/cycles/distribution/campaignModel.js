@@ -59,7 +59,7 @@ function datesValid(row) {
 export function stepReason(step,draft) {
   if(step===0) return !String(draft.name||'').trim()?'Name your campaign':draft.name.length>120?'Keep the name to 120 characters':!GOALS.some(g=>g.key===draft.goal)?'Pick a goal':null;
   if(step===1) return !['icp','segment','import','none'].includes(draft.audience_kind)||(['icp','segment'].includes(draft.audience_kind)&&!draft.segment_id)?'Pick an audience, or No segment':null;
-  if(step===2) return draft.utm_conflict||!/^([a-z0-9]+[-_]*)+$/.test(draft.utm_campaign||'')||draft.utm_campaign.length>80?'Choose another UTM tag':null;
+  if(step===2) return draft.utm_conflict||draft.utm_campaign.length>80||!/^[a-z0-9][a-z0-9_-]*$/.test(draft.utm_campaign||'')?'Choose another UTM tag':null;
   if(step===3) {
     if(!datesValid(draft)||(draft.channels||[]).some(c=>!datesValid(c))) return 'Fix the dates first';
     if(Number.isNaN(centsInput(draft.budget))||(draft.channels||[]).some(c=>Number.isNaN(centsInput(c.amount)))) return 'Use a valid budget amount';
