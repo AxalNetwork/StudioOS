@@ -7,7 +7,7 @@ The canvases are `design/canvases/integrated/Cycle Overview.dc.html` and its two
 
 | File | What it holds |
 | --- | --- |
-| `distribution/` | D4484 (#4484): Distribution’s static tabs, module header/New campaign, shared Ask and DS presentation; Overview retains the existing module content. |
+| `distribution/` | D4484 (#4484): Distribution’s static tabs, module header/New campaign, shared Ask and DS presentation; Overview retains the existing module content. D4486: channel readings and read-only connection cards on that shell. |
 | `lovable/` | D1082 (#2947): Build in Lovable's dialog, button and model, mounted on an experiment row and beside Add must-have. See its README. |
 | `FromGoogle.jsx` | D1091 (#2956, D1314 §3: GW3's frame, GW7's states): the one From Google section a module mounts for its chosen Google file. It reads the file itself; the feed hands it the rows, columns, `deleted`, `partly`, `onSync` and `onDeleteRow`. Loading, Empty (Choose from Google Drive), Unreadable (rows kept, Choose again), Partly synced (Sync again), and Delete's in-page dialog. Parts 3–6 (#2957–#2960) mount it |
 | `ValidateFromGoogle.jsx` | D1092 (#2957): From Google on Validate's three modules, from `parts.from_google`: the shared section's rows on Customer research (interview notes) and Demand and urgency signals (signals To confirm), Choose the interview for an unmapped Doc, GW5's Map a question with a preview that stores nothing, and Experiments' confirmed signals offered as evidence with the hypothesis picker and Dismiss; `team_only`, `not_connected` and `unreadable` for this part only |
@@ -80,7 +80,6 @@ The canvases are `design/canvases/integrated/Cycle Overview.dc.html` and its two
 | `evidence/` | D1261 (#2430): Raise's Evidence view at `/raise/evidence`, its item and claim drawers as addresses, and the investor's evidence block (D1268: the deal page, an investor's round call and the diligence room, on D1265's read); `evidenceModel.js` holds the five Source labels, strengths, claim states and sharing. `cycleModel.js`'s `lead` draws Evidence after Overview on Raise. A bank-derived figure reaches an investor only one by one, after the NDA, as "From the company's bank, as of [date]" (D1269, amending D840 §2) |
 | `reporting/` | D1060 (#2930): the Reporting desk's blocks and dialogs and the report builder and sent report, with their rules (`deskModel.js`, `builderModel.js`) |
 | `publish/` | D1321 (#3482, part 3 of #2400): Publish to… (the sheet, its confirm and result) and "Published outside", the second list on the Reporting desk's History, over part 1's `publishApi` (D1319); `publishModel.js` holds the rules and words. Only the confirm the founder presses sends |
-| `distribution/` | Distribution tabs: channel readings and read-only connection cards (D4486); shared shell follows #4484. |
 
 ## Rules
 
