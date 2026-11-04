@@ -77,11 +77,8 @@ async function call(f: { env: any }, who: number, method: string, path: string, 
 }
 const grow = (f: any, who: number, method: string, path: string, body: Record<string, unknown> = {}) =>
   call(f, who, method, `/api/cycles/grow${path}`, { project: PA, ...body });
-const list = (f: any, slug: string, qs = '', who = FOUNDER) => call(f, who, 'GET', `/api/cycles/grow/modules/${slug}?project=${PA}${qs}`);
 const plain = (r: any) => (r == null ? r : { ...r });
 const one = (f: any, sql: string, ...args: any[]) => plain(f.db.prepare(sql).get(...args)) as any;
-const all = (f: any, sql: string, ...args: any[]) => (f.db.prepare(sql).all(...args) as any[]).map(plain);
-const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
 
 const create = (f: any, b = {}, who = FOUNDER) => grow(f, who, 'POST', '/campaigns', { name: 'Spring launch', goal: 'signups', ...b });
 const read = (f: any, who = FOUNDER, pid = PA) => call(f, who, 'GET', `/api/cycles/grow/campaigns?project=${pid}`);
@@ -144,6 +141,13 @@ test('field validation, combined dates on patches, and the campaign status state
   assert.equal((await grow(f, FOUNDER, 'PATCH', `/campaigns/${uid}`, { status: 'bogus' })).status, 400);
   for (const status of ['active','paused','active','ended']) {
     const r = await grow(f, FOUNDER, 'PATCH', `/campaigns/${uid}`, { status }); assert.equal(r.status, 200); assert.equal(r.body.campaign.status, status);
+    if (status !== 'ended') {
+      const edit = await grow(f, FOUNDER, 'PATCH', `/campaigns/${uid}`, { name: `Edited while ${status}` });
+      assert.equal(edit.status, 200);
+      assert.equal(edit.body.campaign.status, status, 'a name-only PATCH preserves the current status');
+      assert.equal(edit.body.campaign.starts_on, '2026-03-01');
+      assert.equal(edit.body.campaign.ends_on, '2026-03-31');
+    }
     if (status === 'paused') assert.equal((await grow(f, FOUNDER, 'PATCH', `/campaigns/${uid}`, { status: 'ended' })).status, 409);
   }
   assert.equal((await grow(f, FOUNDER, 'PATCH', `/campaigns/${uid}`, { status: 'active' })).status, 409);
