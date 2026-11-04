@@ -5,7 +5,7 @@ import { personaSegmentScopesApi } from '../../../lib/api/personaSegmentScopes';
 import { BLOCK_FAILED, SCOPE_LINE } from './segModel';
 const CARD = 'rounded-xl border border-axal-hairline bg-white p-4 dark:border-gray-700 dark:bg-gray-900';
 const SUB = 'text-xs text-axal-muted dark:text-gray-400';
-const BUTTON = 'min-h-11 rounded-lg border border-axal-hairline px-3 py-2 text-sm font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-100';
+const BUTTON = 'min-h-[44px] rounded-lg border border-axal-hairline px-3 py-2 text-sm font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-100';
 const ready = (data) => ({ status: 'ready', data });
 const error = () => ({ status: 'error', data: null });
 const loading = () => ({ status: 'loading', data: null });
@@ -47,7 +47,7 @@ export function ScopeControls({ scope, onChange, tick, api = personaSegmentScope
   }, [api, tick, own]);
   return <section className={`${CARD} space-y-2`} data-testid="seg-scope-controls">
     <label className="flex flex-wrap items-center gap-2 text-sm font-semibold text-axal-ink dark:text-gray-100">Scope
-      <select className="min-h-11 max-w-full rounded-full border border-axal-hairline bg-white px-3 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" value={scope} disabled={read.status !== 'ready'} onChange={(e) => onChange(e.target.value)} data-testid="seg-scope-select">
+      <select className="min-h-[44px] max-w-full rounded-full border border-axal-hairline bg-white px-3 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" value={scope} disabled={read.status !== 'ready'} onChange={(e) => onChange(e.target.value)} data-testid="seg-scope-select">
         {read.status === 'ready' ? read.data.scopes.map((s) => <option key={s.code} value={s.code}>{s.label}</option>) : <option value={scope}>{scope === 'hq' ? 'HQ-held accounts' : scope}</option>}
       </select>
     </label>
