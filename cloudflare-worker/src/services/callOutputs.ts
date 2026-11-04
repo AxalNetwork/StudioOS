@@ -1,6 +1,7 @@
 /** Selected post-call extraction jobs and pending Validate proposals (D4412, #4412). */
 import type { Env } from '../types';
 import { run, quoteRun, type RunOptions } from './aiRouter';
+import { DIGEST_PAGE, DIGEST_OPTIONS } from './interviewProcessing';
 import { AI_SURFACE } from './aiSurfaces';
 import { writableSession } from './interviewIntake';
 import { loadSession, type SessionRow } from './interviewSessions';
@@ -51,7 +52,8 @@ export const MAX_OUTPUT_TOKENS = 2500;
 export function extractionOptions(userId: number, output: CallOutput, text: string, ctx: StructureContext): RunOptions {
   return {
     task: 'structure_interview', userId, surface: AI_SURFACE.validateInterviews,
-    // No page matrix overrides: TASK_TEXT_JOBS selects VA5 through textChoice.
+    rail: { page: DIGEST_PAGE, option: DIGEST_OPTIONS.structure },
+    // The structure option and TASK_TEXT_JOBS both select VA5 through textChoice.
     systemPrompt: [...STRUCTURE_RULES, `Extract only ${CALL_OUTPUTS[output].label}.`,
       ...CALL_OUTPUTS[output].kinds.map((k) => KIND_LINES[k]), ...STRUCTURE_TAIL, contextLines(ctx)].join('\n'),
     messages: [{ role: 'user', content: text }], maxTokens: MAX_OUTPUT_TOKENS, temperature: 0.2,
@@ -116,11 +118,12 @@ export async function runOutputJob(env: Env, payload: unknown) {
     // fails visibly rather than silently truncating it or multiplying spend.
     if (new TextEncoder().encode(transcriptData(segments)).length > 100 * 1024) throw new Error('input_too_long');
     const options = extractionOptions(userId, output, transcriptData(segments), await loadStructureContext(env, session.project_id));
+    options.rail = { page: DIGEST_PAGE, option: DIGEST_OPTIONS.structure, record: `session:${id}` };
     const quote = await quoteRun(env, options);
     if (!quote.ok) throw new Error('quote_unavailable');
     await env.DB.prepare('UPDATE interview_output_jobs SET quote_microusd = ? WHERE session_id = ? AND output = ?')
       .bind(quote.hold_microusd, id, output).run();
-    const result = await run(env, { ...options, pinMicrousd: quote.hold_microusd });
+    const result = await run(env, { ...options, surface: AI_SURFACE.validateInterviews, rail: options.rail, pinMicrousd: quote.hold_microusd });
     await recordStructureReceipt(env, id, job!.run_id, { step: 'structured', model: result.usage.model,
       requested_model: quote.model, fallback_used: !!result.usage.fallback_used, prompt_tokens: result.usage.prompt_tokens,
       completion_tokens: result.usage.completion_tokens, est_cost_usd: result.usage.est_cost_usd }, result.ok ? 'ok' : 'refused', result.refusal ?? null);

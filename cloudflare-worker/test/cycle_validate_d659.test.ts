@@ -129,7 +129,7 @@ test('D659: the overview is #1469\'s shape — four figures, seven cards, every 
   }
   for (const c of r.body.cards) {
     // D757 §2.6 (#1925): the Verdict card adds one key, its interview line.
-    const extra = c.slug === 'verdict' ? ['interview_evidence'] : [];
+    const extra = c.slug === 'verdict' ? ['contributions', 'interview_evidence'] : [];
     assert.deepEqual(Object.keys(c).sort(), ['caption', 'name', 'next', 'range', 'reason', 'series', 'slug', 'state', ...extra].sort());
     assert.ok((CARD_STATES as readonly string[]).includes(c.state), c.slug);
   }

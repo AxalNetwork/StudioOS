@@ -902,3 +902,15 @@ test('D4412: default call outputs, estimated tokens and selection sent on Start'
   assert.deepEqual(s.calls.open[0].outputs, ['customer-research','pain-points','icp-fit']);
  } finally { await m.unmount(); }
 });
+
+
+test('D4412: malformed output preferences keep the form readable and refuse Start without a quote', async () => {
+  const s = spies(); s.props.sessions.outputs = async () => ({});
+  const m = await mount(s.props);
+  try {
+    await m.type('record-name', 'Synthetic interview'); await m.click('record-consents-verbal');
+    assert.match(m.text(), /Unreadable: the extraction estimate/);
+    assert.equal(m.pr(m.by('record-start'))['aria-disabled'], true);
+    await m.click('record-start'); assert.equal(s.calls.open.length, 0);
+  } finally { await m.unmount(); }
+});

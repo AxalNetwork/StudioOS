@@ -244,7 +244,10 @@ export default function RecordLightbox({
     let alive = true;
     setOutputsLoaded(false); setOutputQuote(undefined);
     sessions.outputs(projectId).then((r) => {
-      if (alive) { setOutputs(r.outputs); setOutputsLoaded(true); }
+      if (alive) {
+        if (!Array.isArray(r?.outputs) || !r.outputs.every((x) => typeof x === 'string')) { setOutputQuote(null); return; }
+        setOutputs(r.outputs); setOutputsLoaded(true);
+      }
     }).catch(() => { if (alive) setOutputQuote(null); });
     return () => { alive = false; };
   }, [sessions, projectId, supportsOutputs]);
