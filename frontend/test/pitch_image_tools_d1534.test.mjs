@@ -6,7 +6,9 @@
  *   - On: Remove background is a live button; its press is quoted first and runs
  *     only from the quote; a short balance never runs; the result is kept and
  *     placed in the block's own place, so the crop, filter and fit stay.
- *   - Upscale has no model: always greyed.
+ *   - Upscale (D4316, Pruna) is live only while the Worker says it is on: its own
+ *     switch. Its quote prints Pruna's line; an image already large enough says so
+ *     and never runs; the upscaled child is placed with the block's own look.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/pitch_image_tools_d1534.test.mjs
  */
@@ -89,14 +91,14 @@ test('off: every tool is greyed under Coming later', async () => {
   } finally { await m.unmount(); }
 });
 
-test('on: the press is quoted first, runs only from the quote, and a short balance never runs; Upscale stays greyed', async () => {
+test('on: the press is quoted first, runs only from the quote, and a short balance never runs; Upscale stays greyed while off', async () => {
   // Mutation checked: Run enabled before a quote (a press runs unpriced).
   const seen = [];
   const tools = { quote: async (t) => { seen.push(['quote', t]); return QUOTE; }, run: async (t) => { seen.push(['run', t]); } };
   const m = await mount(h(ImageToolbar, { block: BLOCK, image: null, onPatch() {}, onReplace() {}, onUpload() {}, onRegenerate() {}, onRemove() {}, live: new Set(['remove_background']), tools }));
   try {
     await m.press(m.by('pitch-image-filters'));
-    assert.equal(m.by('pitch-image-tool-upscale'), undefined, 'Upscale has no model');
+    assert.equal(m.by('pitch-image-tool-upscale'), undefined, 'Upscale is greyed while its own switch is off');
     await m.press(m.by('pitch-image-tool-remove_background'));
     assert.deepEqual(seen, [['quote', 'remove_background']], 'the quote, and nothing run');
     assert.match(m.text(m.by('pitch-image-tool-cost')), /^Bria RMBG 2\.0 · 1 image · /);
@@ -132,5 +134,54 @@ test('the live toolbar keeps the cutout and places it in the block\'s own place:
     await m.press(m.by('pitch-image-tool-run'));
     assert.deepEqual(calls, [['quote', 'a', 'remove_background'], ['run', 'a', 'remove_background', 'string'], ['keep', 'b', { use: 'content', alt: 'The team' }]]);
     assert.deepEqual(patches, [{ image_url: '/api/decks/images/b/file', image_id: 'b' }], 'only the image changes: the crop, filter and fit stay');
+  } finally { await m.unmount(); }
+});
+
+// D4316 (#4316): Upscale through Pruna, behind its own switch.
+const UP_QUOTE = { ai: true, tool: 'upscale', label: 'Upscale', model: 'pruna/p-image-upscale', model_label: 'Pruna P-Image-Upscale', hold_microusd: 5_000, balance: { ok: true } };
+
+test('upscale on: a live button, Pruna\'s quote line first, then the run; already large enough never runs', async () => {
+  // Mutation checked: TOOL_OF_LABEL without Upscale → the button never goes live.
+  const seen = [];
+  const tools = { quote: async (t) => { seen.push(['quote', t]); return UP_QUOTE; }, run: async (t) => { seen.push(['run', t]); } };
+  const m = await mount(h(ImageToolbar, { block: BLOCK, image: null, onPatch() {}, onReplace() {}, onUpload() {}, onRegenerate() {}, onRemove() {}, live: new Set(['upscale']), tools }));
+  try {
+    await m.press(m.by('pitch-image-filters'));
+    assert.equal(m.by('pitch-image-tool-remove_background'), undefined, 'background removal stays greyed: its switch is off');
+    await m.press(m.by('pitch-image-tool-upscale'));
+    assert.deepEqual(seen, [['quote', 'upscale']]);
+    assert.match(m.text(m.by('pitch-image-tool-cost')), /^Pruna P-Image-Upscale · 1 image · /);
+    await m.press(m.by('pitch-image-tool-run'));
+    assert.deepEqual(seen, [['quote', 'upscale'], ['run', 'upscale']]);
+  } finally { await m.unmount(); }
+  const LARGE = 'This image is already large enough to upscale. Nothing was run and nothing was charged.';
+  const big = await mount(h(ImageToolbar, { block: BLOCK, image: null, onPatch() {}, onReplace() {}, onUpload() {}, onRegenerate() {}, onRemove() {}, live: new Set(['upscale']),
+    tools: { quote: async () => ({ ai: false, reason: 'image_large_enough', message: LARGE }), run: async () => { throw new Error('must not run'); } } }));
+  try {
+    await big.press(big.by('pitch-image-filters'));
+    await big.press(big.by('pitch-image-tool-upscale'));
+    assert.equal(big.text(big.by('pitch-image-tool-cost')), LARGE);
+    assert.equal(big.pr(big.by('pitch-image-tool-run')).disabled, true);
+  } finally { await big.unmount(); }
+});
+
+test('the live toolbar places the upscaled child in the block\'s own place: crop, filter and fit stay, so every renderer draws it the same', async () => {
+  const calls = [];
+  const patches = [];
+  const fake = {
+    edits: {
+      toolQuote: async (uid, tool) => { calls.push(['quote', uid, tool]); return UP_QUOTE; },
+      runTool: async (uid, tool) => { calls.push(['run', uid, tool]); return { image: { uid: 'u', url: '/api/decks/images/u/file', alt: 'The team', state: 'proposed', width: 2048, height: 1536 } }; },
+    },
+    images: { keep: async (uid, body) => { calls.push(['keep', uid, body]); return { image: { uid, url: `/api/decks/images/${uid}/file`, state: 'kept' } }; } },
+  };
+  const live = async () => ({ available: true, value: { tools: [{ tool: 'remove_background', on: false }, { tool: 'upscale', on: true }] } });
+  const m = await mount(h(ImageToolbarLive, { block: BLOCK, image: null, onPatch: (p) => patches.push(p), onReplace() {}, onUpload() {}, onRegenerate() {}, onRemove() {}, api: fake, adapter: live }));
+  try {
+    await m.press(m.by('pitch-image-filters'));
+    await m.press(m.by('pitch-image-tool-upscale'));
+    await m.press(m.by('pitch-image-tool-run'));
+    assert.deepEqual(calls.map((c) => c.slice(0, 3)), [['quote', 'a', 'upscale'], ['run', 'a', 'upscale'], ['keep', 'u', { use: 'content', alt: 'The team' }]]);
+    assert.deepEqual(patches, [{ image_url: '/api/decks/images/u/file', image_id: 'u' }], 'the block keeps its crop, filter and fit');
   } finally { await m.unmount(); }
 });
