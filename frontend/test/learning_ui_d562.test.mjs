@@ -522,9 +522,11 @@ test('an admin and the Super Admin see the full page: no card, All first, the st
   assert.match(flat(program), /Read-only Assigned to you by a Super Admin\. Content and enrolment are managed at HQ\./);
 });
 
-test('Learning home has no AI rail; subpage rails keep their accent and voice', () => {
+test('Learning home and the member program have no AI rail; other existing subpage rails keep their accent and voice', () => {
   const home = flat(page('/learning', '/learning', { view: 'home', user: FOUNDER, activeRole: 'founder' }));
   assert.doesNotMatch(home, /Eadwyn AI/);
+  const member = flat(page('/learning/my-programs/p1', '/learning/my-programs/:program', { view: 'myProgram', user: FOUNDER, activeRole: 'founder' }));
+  assert.doesNotMatch(member, /Eadwyn AI/);
   assert.match(flat(page('/learning/studio', '/learning/studio', { view: 'studio', user: SUPER, activeRole: 'admin' })), /Eadwyn AI .{0,24}?Learning studio/);
   assert.match(flat(page('/learning/programs/p1', '/learning/programs/:program', { view: 'program', user: ADMIN, activeRole: 'admin' })), /Eadwyn AI .{0,24}?Learning programs/);
   const dir = resolve(ROOT, 'frontend/src/pages/learning');
@@ -532,9 +534,11 @@ test('Learning home has no AI rail; subpage rails keep their accent and voice', 
   const mounts = [...codeOnly(rails).matchAll(/<WorkerRail[\s\S]*?\/>/g)].map((m) => m[0]);
   // The three tiers of a page that waits on its store, the learner pages that read, the studio,
   // and, in stage 3, the assigned admin's program pages and the studio's program pages (D558),
-  // the exercise and exam pages (D559), the webinar page (D560), a member's own program page (D3726 LR13),
+  // the exercise and exam pages (D559), the webinar page (D560),
   // and the learning plan (D3959).
-  assert.equal(mounts.length, 11);
+  // D4476/D4479 removed both assessment rails; their dead shared component is gone too.
+  // D4480 also removes the member program's AI panel.
+  assert.equal(mounts.length, 9);
   for (const tier of ['founder', 'admin', 'super_admin']) assert.ok(mounts.some((m) => m.includes(`role="${tier}"`)), `no ${tier} rail`);
   for (const mount of mounts) {
     assert.match(mount, /workspace="Learning[^"]*"/);
@@ -672,7 +676,7 @@ test('ExercisePanel: not submitted, needs work, accepted, with the reviewer’s 
   };
   const work = html(h(ExercisePanel, { status: 'ready', exercise: EXERCISE, submission: needsWork, onSubmit: () => {} }));
   const out = flat(work);
-  assert.match(out, /Needs work Submitted 1 Oct 2026 · reviewed 2 Oct 2026/);
+  assert.match(out, /Needs work Sent back 2 Oct 2026\. Edit your answer and resubmit\./);
   assert.match(out, /Rae Reviewer · 2 Oct 2026 Name the buyer\./);
   assert.match(work, />We help founders raise\.<\/textarea>/, 'a resubmission starts from the answer that needs work');
   assert.equal(linkOf(work, 'button-exercise-submit').label, 'Resubmit');
@@ -711,18 +715,18 @@ test('ExamFlow: intro, one question at a time against the clock, the result, ans
   assert.match(tagOf(spent, 'button-exam-start'), /disabled=""/);
   const taking = html(h(ExamFlow, { status: 'ready', exam: EXAM, attempt: ATTEMPT, now: Date.parse('2026-10-06T10:06:12Z') }));
   assert.match(taking, /data-step="taking"/);
-  assert.match(flat(taking), /Question 1 of 2 · 0 answered 23:48 What is a pre-money valuation\?/);
+  assert.match(flat(taking), /Question 1 of 2 · 0 answered 23:48 left What is a pre-money valuation\?/);
   assert.match(taking, /type="radio"/);
   assert.doesNotMatch(taking, /type="checkbox"|Which of these dilute/, 'more than one question on the screen');
   assert.match(html(h(ExamFlow, { status: 'ready', exam: EXAM, attempt: ATTEMPT, now: Date.parse('2026-10-06T10:31:00Z') })), /Time is up\./);
   const hidden = html(h(ExamFlow, { status: 'ready', exam: EXAM, result: REVEALED, attempts: [] }));
   assert.match(hidden, /data-step="result"/);
-  assert.match(flat(hidden), /82% Pass Pass mark 70% · 16 of 20 correct · submitted 5 Oct 2026/);
+  assert.match(flat(hidden), /82% Passed Pass mark 70% · 16 of 20 correct · submitted 5 Oct 2026/);
   assert.match(hidden, /data-testid="exam-answers-hidden"/);
   assert.doesNotMatch(hidden, /The value before the round/, 'a correct answer is drawn on an exam that does not reveal them');
   const shown = html(h(ExamFlow, { status: 'ready', exam: { ...EXAM, reveal: 'score_and_answers' }, result: REVEALED, attempts: [] }));
   assert.match(flat(shown), /Your answer: The value after it Correct: The value before the round/);
-  assert.match(text(h(ExamFlow, { status: 'ready', exam: EXAM, result: { ...RESULT, score_percent: 64, passed: 0 }, attempts: [] })), /64% Fail/);
+  assert.match(text(h(ExamFlow, { status: 'ready', exam: EXAM, result: { ...RESULT, score_percent: 64, passed: 0 }, attempts: [] })), /64% Not passed/);
 });
 
 test('MyLearning: three stores, three states, and one failure blanks nothing else', () => {
@@ -814,7 +818,10 @@ test('the pages use the app’s own styling: no font, no canvas colour, no new c
   assert.ok(files.length >= 15, `only ${files.length} files read`);
   for (const f of files) {
     const src = codeOnly(readFileSync(resolve(dir, f), 'utf8'));
-    assert.doesNotMatch(src, /fontFamily|font-family|Space Grotesk|Roboto Mono|font-mono/, `${f} sets a font`);
+    // D4480: the member's semantic date uses the existing app mono token,
+    // exactly here; arbitrary fonts elsewhere remain forbidden.
+    const styled = f === 'MemberProgram.jsx' ? src.replace('<time dateTime={copy.dateTime} className="font-mono tabular-nums">', '<time>') : src;
+    assert.doesNotMatch(styled, /fontFamily|font-family|Space Grotesk|Roboto Mono|font-mono/, `${f} sets a font`);
     assert.doesNotMatch(src, /#[0-9a-fA-F]{6}\b/, `${f} carries a canvas colour`);
     for (const m of src.matchAll(/style=\{\{([^}]*)\}\}/g)) assert.match(m[1], /^\s*width:/, `${f} styles something inline other than a bar's width`);
     // Five files call the client: the member reads, the studio's reads and writes, and, in stage 3,

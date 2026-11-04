@@ -43,7 +43,17 @@ const byUid = (env: Env, uid: string) =>
 
 const enrolmentOf = (env: Env, programId: number, userId: number) =>
   env.DB.prepare('SELECT status, enrolled_at FROM learning_enrollments WHERE program_id = ? AND user_id = ?')
-    .bind(programId, userId).first<{ status: string; enrolled_at: string }>();
+    .bind(programId, userId).first<{ status: string; enrolled_at: string | null }>();
+
+/** D4480: recorded UTC/ISO instants only; a missing stamp is never today's date. */
+function enrolmentIso(value: string | null): string | null {
+  if (!value?.trim()) return null;
+  let stamp = value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?$/.test(stamp)) return null;
+  if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(\.\d+)?$/.test(stamp)) stamp = `${stamp.replace(' ', 'T')}Z`;
+  const time = Date.parse(stamp);
+  return Number.isFinite(time) ? new Date(time).toISOString() : null;
+}
 
 r.get('/programs', async (c) => {
   const user = await auth(c); if (user instanceof Response) return user;
@@ -199,10 +209,9 @@ r.post('/programs/:uid/enrol', async (c) => {
 
 /** What the caller is to this program: the Super Admin, an assigned admin, an enrolled member, or none. */
 async function standing(c: C, user: any, p: ProgramRow) {
-  if (isSuperAdmin(user)) return { reader: true, enrolled: false };
-  const reader = await isAssignedAdmin(c.env, user, p.id);
+  const reader = isSuperAdmin(user) || await isAssignedAdmin(c.env, user, p.id);
   const e = await enrolmentOf(c.env, p.id, user.id);
-  return { reader, enrolled: e?.status === 'active' };
+  return { reader, enrolled: e?.status === 'active', enrolled_at: e?.status === 'active' ? enrolmentIso(e.enrolled_at) : null };
 }
 
 r.get('/programs/:uid', async (c) => {
@@ -216,10 +225,11 @@ r.get('/programs/:uid', async (c) => {
   const described = await describeContents(c.env, contents);
   let mine = null;
   if (s.enrolled) {
-    const self = { user_id: user.id, uid: String(user.uid ?? ''), name: null, enrolled_at: '' };
+    const self = { user_id: user.id, uid: String(user.uid ?? ''), name: null, enrolled_at: s.enrolled_at || '' };
     mine = (await completionFor(c.env, contents, [self]))[0].completion;
   }
-  return c.json({ program: programView(p), contents: described, enrolled: s.enrolled, my_completion: mine });
+  return c.json({ program: programView(p), contents: described, enrolled: s.enrolled,
+    ...(s.enrolled ? { enrolled_at: s.enrolled_at } : {}), my_completion: mine });
 });
 
 async function readerOf(c: C, user: any): Promise<ProgramRow | Response> {

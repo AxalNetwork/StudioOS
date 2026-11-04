@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { RailFrame, Unrecorded, WorkerRail } from '../../ui';
+import { RailFrame, Unrecorded } from '../../ui';
 import { byPosition } from './learningModel';
 import { LearningEmpty, LearningHeader, LearningLoading, LearningUnreadable, SectionCard } from './LearningStates';
 import { ErrorLine, PRIMARY } from './studioParts';
@@ -28,18 +28,6 @@ import useLearningRead from './useLearningRead';
 
 const LEARNING = { to: '/learning', label: 'Learning' };
 
-function Rail({ coverage }) {
-  return (
-    <WorkerRail
-      workspace="Learning"
-      role="founder"
-      stance="Read-only learning view"
-      note="Eadwyn reads back what this page has loaded, on a click. It does not mark progress, register you, submit an answer or sit an exam."
-      coverage={coverage}
-    />
-  );
-}
-
 function CurriculumRow({ content, completion, enrolled }) {
   const unavailable = content.status !== 'published' ? (UNAVAILABLE_LINE[content.status] || 'Not available') : null;
   const cell = enrolled ? completionCell(entryFor(completion, content)) : null;
@@ -66,7 +54,7 @@ export function MemberProgramView({ state, onRetry, onJoin, joining = false, joi
   if (state.status === 'missing') {
     return (
       <SectionCard title="Not available" testid="member-program">
-        <LearningEmpty title="No such program" body="It does not exist, it is not published, or it is not open to you." cta={{ label: 'Back to Learning', to: '/learning' }} />
+        <LearningEmpty title="No such program." body="It does not exist, it is not published, or it is not open to you." cta={{ label: 'Back to Learning', to: '/learning' }} />
       </SectionCard>
     );
   }
@@ -76,7 +64,7 @@ export function MemberProgramView({ state, onRetry, onJoin, joining = false, joi
   const contents = byPosition(state.contents);
   const progress = enrolled ? programProgress(contents, completion) : null;
   const next = enrolled ? continueTarget(contents, completion) : null;
-  const copy = enrolmentCopy(program, enrolled);
+  const copy = enrolmentCopy(program, { enrolled, enrolled_at: state.enrolled_at });
   const joinable = !enrolled && program.enrolment === 'open';
   const width = progress?.total ? Math.round((100 * progress.done) / progress.total) : 0;
   return (
@@ -117,7 +105,7 @@ export function MemberProgramView({ state, onRetry, onJoin, joining = false, joi
           </SectionCard>
           <SectionCard title="Enrolment" testid="member-program-enrolment">
             <p className="text-[13px] font-semibold text-axal-ink dark:text-gray-100">{copy.title}</p>
-            <p className="mt-1 text-[12.5px] text-axal-muted dark:text-gray-400">{copy.line}</p>
+            <p className="mt-1 text-[12.5px] text-axal-muted dark:text-gray-400">{copy.date ? <>{copy.beforeDate}<time dateTime={copy.dateTime} className="font-mono tabular-nums">{copy.date}</time>.</> : copy.line}</p>
             <p className="mt-1 text-[11.5px] text-axal-faint dark:text-gray-500">{copy.none}</p>
           </SectionCard>
         </div>
@@ -144,7 +132,7 @@ export default function MemberProgramPage({ uid }) {
   };
   const program = state.status === 'ready' ? state.program : null;
   return (
-    <RailFrame rail={<Rail coverage={program ? [`One program: “${program.name || 'Untitled program'}”`] : []} />} data-testid="learning-my-program">
+    <RailFrame data-testid="learning-my-program">
       <div className="space-y-4">
         <LearningHeader eyebrow="Learning · Program" title={program?.name || 'Program'} back={LEARNING} />
         <MemberProgramView state={state} onRetry={retry} onJoin={onJoin} joining={joining} joinError={joinError} />

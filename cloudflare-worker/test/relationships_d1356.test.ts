@@ -252,3 +252,47 @@ test('every share, withdrawal, who-knows read and introduction request is audite
     assert.ok(!JSON.stringify(f.audits()).includes('@'), 'no email in the audit');
   } finally { f.close(); }
 });
+
+test('D4464: summary follows current team sharing and caller-only introduction counts', async () => {
+  const f = fixture();
+  try {
+    await share(f, 2, true); await share(f, 3, true); await share(f, 4, true);
+    const intro = f.db.prepare("INSERT INTO relationship_interactions(uid,kind,requester_user_id,teammate_user_id,team_key,person_name,status,made_at) VALUES (?,'intro_requested',?,?,'project:1','Synthetic person',?,?)");
+    intro.run('sent',4,2,'pending',null); intro.run('received',2,4,'pending',null);
+    intro.run('foreign',3,2,'pending',null);
+    intro.run('recent',4,2,'made',new Date().toISOString());
+    intro.run('old',4,2,'made','2020-01-01');
+    const r = await call(f, 4, 'GET', '/api/relationships/summary');
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.body.sharing, { opted_in: true, teams_shared: 1, teams_total: 1 });
+    assert.equal(r.body.teammates_sharing, 1, 'only a current teammate sharing eligible contacts');
+    assert.deepEqual(r.body.requests, { sent_pending: 1, received_pending: 1, made_90d: 1 });
+    assert.deepEqual(r.body.recording['requests.made_90d'], { recorded: true });
+    await call(f, 2, 'PUT', '/api/relationships/sharing/teams/project%3A1', { share: false });
+    assert.equal((await call(f, 4, 'GET', '/api/relationships/summary')).body.teammates_sharing, 0);
+    const other = await call(f, 5, 'GET', '/api/relationships/summary');
+    assert.deepEqual(other.body.requests, { sent_pending: 0, received_pending: 0, made_90d: 0 });
+    assert.equal(other.body.teammates_sharing, 0);
+    const support = await call(f, 4, 'GET', '/api/relationships/summary', undefined, { impersonated_by: 1 });
+    assert.equal(support.status, 403);
+    assert.equal(support.body.error, 'support_session_refused');
+  } finally { f.close(); }
+});
+
+test('D4464: a failed summary statement is null with a reason and HTTP 503, never a false zero', async () => {
+  const f = fixture();
+  try {
+    f.db.exec('DROP TABLE relationship_interactions');
+    const r = await call(f, 4, 'GET', '/api/relationships/summary');
+    assert.equal(r.status, 503);
+    assert.equal(r.body.error, 'relationships_unreadable');
+    assert.deepEqual(r.body.requests, { sent_pending: null, received_pending: null, made_90d: null });
+    for (const key of ['sent_pending', 'received_pending', 'made_90d']) {
+      assert.equal(r.body.recording[`requests.${key}`].recorded, false);
+      assert.ok(r.body.recording[`requests.${key}`].reason.length > 0);
+    }
+    assert.equal(r.body.teammates_sharing, 0, 'the readable count remains recorded');
+    assert.equal(r.body.recording.teammates_sharing.recorded, true);
+
+  } finally { f.close(); }
+});

@@ -20,7 +20,7 @@
  * started", an exam never sat has no score, and no cell is ever drawn as 0%.
  */
 import { titleCase } from '../../lib/absence';
-import { byPosition, moveInOrder } from './learningModel';
+import { byPosition, formatDay, moveInOrder, parseInstant } from './learningModel';
 
 /**
  * What each kind of program content is called. A program's `item` is a video
@@ -255,13 +255,18 @@ export const ENROLLED_BY = { self: 'joined by themselves', super_admin: 'enrolle
 export const memberProgramHref = (uid) => `/learning/my-programs/${encodeURIComponent(uid)}`;
 
 /** LR13's enrolment card: how a member comes to be in it, in the canvas's words. */
-export function enrolmentCopy(program, enrolled) {
+export function enrolmentCopy(program, { enrolled = false, enrolled_at = null, timeZone } = {}) {
   const open = program?.enrolment === 'open';
+  const instant = enrolled && typeof enrolled_at === 'string' ? parseInstant(enrolled_at) : null;
+  const dateTime = instant?.toISOString() || null;
+  const date = dateTime ? formatDay(dateTime, timeZone) : null;
+  const beforeDate = `${open ? 'You joined' : 'A Super Admin enrolled you'} on `;
   return {
     title: open ? 'Open to join' : 'By invitation',
     line: enrolled
-      ? (open ? 'You joined this program.' : 'A Super Admin enrolled you.')
+      ? (date ? `${beforeDate}${date}.` : `${open ? 'You joined this program.' : 'A Super Admin enrolled you.'} The date is not recorded.`)
       : (open ? 'Anyone with a profile can join.' : 'A Super Admin enrols members of this program.'),
+    date, dateTime, beforeDate,
     none: 'No cohort dates, mentors or application: none is stored.',
   };
 }

@@ -11,8 +11,8 @@ const enc = encodeURIComponent;
 const fileBody = (file) => { const fd = new FormData(); fd.append('file', file); return fd; };
 
 export const contactsBookApi = {
-  // D1352 (#3567): the member's own book, each row with its sources, notes and open follow-ups.
-  book: (q = '', page = 1) => request(`/contacts/book?${new URLSearchParams({ ...(q ? { q } : {}), ...(page > 1 ? { page: String(page) } : {}) })}`),
+  // D1352/D4464: own book; optional third argument { source: linkedin_csv|csv|typed, follow_up: open }.
+  book: (q = '', page = 1, filters = {}) => request(`/contacts/book?${new URLSearchParams({ ...(filters.source !== undefined ? { source: filters.source } : {}), ...(filters.follow_up !== undefined ? { follow_up: filters.follow_up } : {}), ...(q ? { q } : {}), ...(page > 1 ? { page: String(page) } : {}) })}`),
   previewLinkedinCsv: (file) => request('/contacts/import/linkedin-csv?preview=1', { method: 'POST', body: fileBody(file) }),
   importLinkedinCsv: (file) => request('/contacts/import/linkedin-csv', { method: 'POST', body: fileBody(file) }),
   reviews: () => request('/contacts/import/reviews'),

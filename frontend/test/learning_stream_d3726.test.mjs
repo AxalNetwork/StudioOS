@@ -20,6 +20,7 @@ import { learningApi } from '../src/lib/api/learning.js';
 import { NewThisWeek, ProgressStrip, RecommendedFuture } from '../src/pages/learning/LearningHome.jsx';
 import LessonPlayer from '../src/pages/learning/LessonPlayer.jsx';
 import { MemberProgramView } from '../src/pages/learning/MemberProgram.jsx';
+import { readMemberProgram } from '../src/pages/learning/programReads.js';
 
 const read = (p) => readFileSync(new URL(`../src/${p}`, import.meta.url), 'utf8');
 const html = (el) => renderToStaticMarkup(h(MemoryRouter, { initialEntries: ['/learning'] }, el));
@@ -136,9 +137,9 @@ test('LR13 the member program page: route, enrolment words, Continue', () => {
   assert.match(read('routes/learning.jsx'), /path="\/learning\/my-programs\/:program" element=\{guard\(\['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'\], <LearningPage view="myProgram"/);
   assert.equal(memberProgramHref('p 1'), '/learning/my-programs/p%201');
   assert.match(read('pages/learning/MyPrograms.jsx'), /to=\{memberProgramHref\(program\.uid\)\}/);
-  assert.deepEqual(enrolmentCopy({ enrolment: 'invite' }, true).title, 'By invitation');
-  assert.equal(enrolmentCopy({ enrolment: 'invite' }, true).line, 'A Super Admin enrolled you.');
-  assert.equal(enrolmentCopy({ enrolment: 'open' }, false).line, 'Anyone with a profile can join.');
+  assert.deepEqual(enrolmentCopy({ enrolment: 'invite' }, { enrolled: true }).title, 'By invitation');
+  assert.equal(enrolmentCopy({ enrolment: 'invite' }, { enrolled: true }).line, 'A Super Admin enrolled you. The date is not recorded.');
+  assert.equal(enrolmentCopy({ enrolment: 'open' }, { enrolled: false }).line, 'Anyone with a profile can join.');
   const contents = [
     { subject_kind: 'course', subject_uid: 'c1', status: 'published', href: '/learning/courses/c1' },
     { subject_kind: 'item', subject_uid: 'v1', status: 'draft', href: '/learning/videos/v1' },
@@ -162,7 +163,7 @@ test('LR13 enrolled: progress per item and overall; LR13b open: Join to start an
   const mine = html(h(MemberProgramView, { state: { status: 'ready', program, contents, enrolled: true, completion } }));
   assert.match(mine, /data-testid="member-program-continue"/);
   assert.match(flat(mine), /1 of 2 complete/);
-  assert.match(flat(mine), /By invitation A Super Admin enrolled you\. No cohort dates, mentors or application: none is stored\./);
+  assert.match(flat(mine), /By invitation A Super Admin enrolled you\. The date is not recorded\. No cohort dates, mentors or application: none is stored\./);
   assert.doesNotMatch(mine, /member-program-join/);
   const open = html(h(MemberProgramView, { state: { status: 'ready', program: { ...program, enrolment: 'open' }, contents, enrolled: false, completion: null }, onJoin: () => {} }));
   assert.equal((flat(open).match(/Join to start/g) || []).length, 2);
@@ -171,6 +172,56 @@ test('LR13 enrolled: progress per item and overall; LR13b open: Join to start an
   assert.doesNotMatch(open, /member-program-continue/);
   assert.match(flat(html(h(MemberProgramView, { state: { status: 'missing' } }))), /No such program/);
   assert.match(flat(html(h(MemberProgramView, { state: { status: 'unreadable' }, onRetry: () => {} }))), /not a claim that it holds nothing/);
+});
+
+test('#4480: enrolment copy names recorded dates, keeps unknown dates honest, and ignores dates before joining', () => {
+  const date = '2026-10-01T12:00:00.000Z';
+  const options = { enrolled: true, enrolled_at: date, timeZone: 'UTC' };
+  const invite = enrolmentCopy({ enrolment: 'invite' }, options);
+  assert.equal(invite.line, 'A Super Admin enrolled you on 1 Oct 2026.');
+  assert.equal(invite.dateTime, date);
+  assert.equal(invite.date, '1 Oct 2026');
+  assert.equal(enrolmentCopy({ enrolment: 'invite' }, { ...options, enrolled_at: null }).line, 'A Super Admin enrolled you. The date is not recorded.');
+  assert.equal(enrolmentCopy({ enrolment: 'open' }, options).line, 'You joined on 1 Oct 2026.');
+  const notJoined = enrolmentCopy({ enrolment: 'open' }, { ...options, enrolled: false });
+  assert.equal(notJoined.line, 'Anyone with a profile can join.');
+  assert.equal(notJoined.date, null);
+  for (const unknown of [null, '', 'not-a-date', 0]) {
+    const copy = enrolmentCopy({ enrolment: 'open' }, { ...options, enrolled_at: unknown });
+    assert.equal(copy.date, null);
+    assert.equal(copy.line, 'You joined this program. The date is not recorded.');
+  }
+});
+
+test('#4480: the enrolment date is en-GB in the member’s zone, including the default viewer zone', () => {
+  const state = { enrolled: true, enrolled_at: '2026-10-01T23:30:00.000Z' };
+  assert.equal(enrolmentCopy({ enrolment: 'open' }, { ...state, timeZone: 'UTC' }).date, '1 Oct 2026');
+  assert.equal(enrolmentCopy({ enrolment: 'open' }, { ...state, timeZone: 'Europe/Helsinki' }).date, '2 Oct 2026');
+  const previous = process.env.TZ;
+  try {
+    process.env.TZ = 'Europe/Helsinki';
+    assert.equal(enrolmentCopy({ enrolment: 'open' }, state).date, '2 Oct 2026');
+  } finally { if (previous === undefined) delete process.env.TZ; else process.env.TZ = previous; }
+});
+
+test('#4480: member program read carries the own date into a semantic mono date, never a non-member’s date', async () => {
+  const before = learningApi.program;
+  const date = '2026-10-01T12:00:00.000Z';
+  const program = { uid: 'p1', name: 'Date fixtures', enrolment: 'invite' };
+  try {
+    learningApi.program = async () => ({ program, contents: [], enrolled: true, enrolled_at: date, my_completion: [] });
+    const state = await readMemberProgram('p1');
+    assert.equal(state.enrolled_at, date);
+    const view = html(h(MemberProgramView, { state: { status: 'ready', ...state } }));
+    assert.match(view, /<time dateTime="2026-10-01T12:00:00.000Z" class="font-mono tabular-nums">/i);
+    assert.match(flat(view), /A Super Admin enrolled you on/);
+    learningApi.program = async () => ({ program: { ...program, enrolment: 'open' }, contents: [], enrolled: false, enrolled_at: date });
+    const outsider = await readMemberProgram('p1');
+    assert.equal(Object.hasOwn(outsider, 'enrolled_at'), false);
+    const open = html(h(MemberProgramView, { state: { status: 'ready', ...outsider } }));
+    assert.match(flat(open), /Anyone with a profile can join/);
+    assert.doesNotMatch(open, /<time/);
+  } finally { learningApi.program = before; }
 });
 
 test('LR1 readMyStats reads #4180\'s stats route once and turns it into the four tiles', async () => {
