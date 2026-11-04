@@ -18,7 +18,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
 import { WorkloadIdentityError } from '@anthropic-ai/sdk/lib/credentials/types';
-import { GithubIdentityError, LEDGER_MAX_PAGES, OIDC_AUDIENCE, anthropicClient, classifyError, clientFor, errorDetail, fallbacksFor, githubClient, kimiFetch, githubIdentityToken, listMonthRecords, main, safePath } from './review.mjs';
+import { GithubIdentityError, LEDGER_MAX_PAGES, OIDC_AUDIENCE, anthropicClient, classifyError, clientFor, errorDetail, fallbacksFor, githubClient, kimiClient, kimiFetch, githubIdentityToken, listMonthRecords, main, safePath } from './review.mjs';
 
 const headers = new Headers({ 'request-id': 'req_test' });
 const gen = (status) => Anthropic.APIError.generate(status, { type: 'error', error: { type: 'x', message: 'm' } }, 'm', headers);
@@ -41,8 +41,8 @@ test('the client is built on first use, so a run that never calls the API never 
   class CountingSdk {
     constructor() {
       built += 1;
-      this.messages = { create: async () => ({}), countTokens: async () => ({ input_tokens: 1 }) };
-      this.beta = { messages: { create: async () => ({}) } };
+      this.messages = { stream: (...args) => ({ finalMessage: () => this.messages.create(...args) }), create: async () => ({}), countTokens: async () => ({ input_tokens: 1 }) };
+      this.beta = { messages: { stream: (...args) => ({ finalMessage: () => this.beta.messages.create(...args) }), create: async () => ({}) } };
     }
   }
   Object.assign(CountingSdk, Anthropic);
@@ -57,8 +57,8 @@ test('a request carrying betas goes to the beta endpoint, any other to the stand
   const seen = [];
   class FakeSdk {
     constructor() {
-      this.messages = { create: async () => { seen.push('messages'); return {}; }, countTokens: async (p) => { seen.push(Object.keys(p).sort().join(',')); return { input_tokens: 1 }; } };
-      this.beta = { messages: { create: async () => { seen.push('beta'); return {}; } } };
+      this.messages = { stream: (...args) => ({ finalMessage: () => this.messages.create(...args) }), create: async () => { seen.push('messages'); return {}; }, countTokens: async (p) => { seen.push(Object.keys(p).sort().join(',')); return { input_tokens: 1 }; } };
+      this.beta = { messages: { stream: (...args) => ({ finalMessage: () => this.beta.messages.create(...args) }), create: async () => { seen.push('beta'); return {}; } } };
     }
   }
   Object.assign(FakeSdk, Anthropic);
@@ -211,8 +211,8 @@ test('under federation the client gets the exchange as its credentials and no AP
   class RecordingSdk {
     constructor(opts) {
       made.push(opts);
-      this.messages = { create: async () => ({}), countTokens: async () => ({ input_tokens: 1 }) };
-      this.beta = { messages: { create: async () => ({}) } };
+      this.messages = { stream: (...args) => ({ finalMessage: () => this.messages.create(...args) }), create: async () => ({}), countTokens: async () => ({ input_tokens: 1 }) };
+      this.beta = { messages: { stream: (...args) => ({ finalMessage: () => this.beta.messages.create(...args) }), create: async () => ({}) } };
     }
   }
   Object.assign(RecordingSdk, Anthropic);
@@ -265,7 +265,7 @@ test('the real SDK exchange sends the request the Console documents, with the Gi
 test('the run\'s client follows the repository variables: federation when its rule is set, else the key', async () => {
   const made = [];
   class RecordingSdk {
-    constructor(opts) { made.push(opts); this.messages = { create: async () => ({}) }; this.beta = { messages: { create: async () => ({}) } }; }
+    constructor(opts) { made.push(opts); this.messages = { stream: (...args) => ({ finalMessage: () => this.messages.create(...args) }), create: async () => ({}) }; this.beta = { messages: { stream: (...args) => ({ finalMessage: () => this.beta.messages.create(...args) }), create: async () => ({}) } }; }
   }
   Object.assign(RecordingSdk, Anthropic);
   const makeProvider = (cfg) => Object.assign(async () => ({ token: 't' }), { cfg });
@@ -273,7 +273,7 @@ test('the run\'s client follows the repository variables: federation when its ru
   await clientFor(fed, { sdk: RecordingSdk, makeProvider }).create({ model: 'm' });
   assert.equal(made[0].apiKey, null);
   assert.equal(made[0].credentials.cfg.federationRuleId, 'fdrl_01BkFJFKoPa1oFPY5ioQaCYp');
-  assert.equal(made[0].maxRetries, 1);
+  assert.equal(made[0].maxRetries, 0);
   await clientFor({ ANTHROPIC_API_KEY: 'k' }, { sdk: RecordingSdk, makeProvider }).create({ model: 'm' });
   assert.equal(made[1].apiKey, 'k');
   assert.equal(made[1].credentials, undefined);
@@ -378,7 +378,7 @@ test('the fallback chain: one client per configured step, built only when used, 
   class FakeSdk {
     constructor(opts) {
       built.push(opts);
-      this.messages = { create: async (p) => { if (p.model === 'gone') throw new Anthropic.NotFoundError(404, { error: { message: 'model gone' } }, 'model gone', new Headers()); return { ok: true }; } };
+      this.messages = { stream: (...args) => ({ finalMessage: () => this.messages.create(...args) }), create: async (p) => { if (p.model === 'gone') throw new Anthropic.NotFoundError(404, { error: { message: 'model gone' } }, 'model gone', new Headers()); return { ok: true }; } };
     }
   }
   for (const k of ['APIError', 'AuthenticationError', 'PermissionDeniedError', 'NotFoundError', 'RateLimitError', 'BadRequestError', 'APIConnectionTimeoutError', 'APIConnectionError', 'InternalServerError']) FakeSdk[k] = Anthropic[k];
@@ -394,7 +394,7 @@ test('the fallback chain: one client per configured step, built only when used, 
   await chain.kimi.create({ model: 'kimi-k2-turbo-preview' });
   await chain.kimi.create({ model: 'kimi-k2-turbo-preview' });
   assert.equal(built.length, 2, 'each client built once');
-  assert.deepEqual([built[1].apiKey, built[1].baseURL, built[1].maxRetries], ['sk-kimi-key', 'https://api.moonshot.ai/anthropic', 1]);
+  assert.deepEqual([built[1].apiKey, built[1].baseURL, built[1].maxRetries], ['sk-kimi-key', 'https://api.moonshot.ai/anthropic', 0]);
   await assert.rejects(chain.kimi.create({ model: 'gone' }), (e) => e.kind === 'not_found' && e.status === 404);
   assert.equal(built[1].authToken, null, 'no ANTHROPIC_AUTH_TOKEN reaches Moonshot');
   assert.equal(typeof built[1].fetch, 'function');
@@ -409,4 +409,27 @@ test('the Kimi fetch forwards only the request\'s own headers', async () => {
 
 test('an error detail never carries a Kimi-style key', () => {
   assert.equal(errorDetail(new Error('bad key sk-AbCdEfGhIjKlMnOpQrStUv rejected'), null), 'bad key [redacted] rejected');
+});
+
+
+test('D4433: streaming returns final usage, forwards attempt options and classifies a mid-stream failure', async () => {
+  const seen = [];
+  const message = { content: [{ type: 'text', text: '{}' }], usage: { input_tokens: 12, output_tokens: 8 } };
+  class StreamSdk {
+    constructor(options) {
+      assert.equal(options.maxRetries, 0, 'runner owns retries');
+      this.messages = { stream: (p, opts) => {
+        seen.push({ p, opts });
+        return { finalMessage: async () => { if (p.model === 'timeout') throw new Anthropic.APIConnectionTimeoutError(); return message; } };
+      } };
+      this.beta = { messages: this.messages };
+    }
+  }
+  Object.setPrototypeOf(StreamSdk, Anthropic);
+  const options = { timeout: 1234, signal: AbortSignal.timeout(2000), maxRetries: 0 };
+  for (const client of [kimiClient({ apiKey: 'test', baseURL: 'https://example.test', maxRetries: 2, timeoutSeconds: 30, sdk: StreamSdk }), anthropicClient({ apiKey: 'test', maxRetries: 2, timeoutSeconds: 30, sdk: StreamSdk })]) {
+    assert.equal(await client.create({ model: 'ok' }, options), message);
+    assert.equal(seen.at(-1).opts, options);
+    await assert.rejects(client.create({ model: 'timeout' }, options), e => e.kind === 'timeout');
+  }
 });

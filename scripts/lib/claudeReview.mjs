@@ -82,8 +82,9 @@ const DEFAULTS = {
   maxContextBytes: 80_000,
   maxFiles: 150,
   contextRadius: 20,
-  maxRetries: 2,
-  timeoutSeconds: 300,
+  maxRetries: 0,
+  timeoutSeconds: 600,
+  jobSeconds: 900,
   maxCostUsd: 1,
   monthlyBudgetUsd: 25,
   minConfidence: 'medium',
@@ -104,6 +105,7 @@ const LIMITS = {
   contextRadius: [0, 200],
   maxRetries: [0, 3],
   timeoutSeconds: [30, 600],
+  jobSeconds: [120, 900],
 };
 
 const MODEL_ID = /^[a-z0-9][a-z0-9._-]{1,99}$/;
@@ -255,6 +257,7 @@ export function readConfig(env = {}) {
     contextRadius: boundedInt(env.CLAUDE_REVIEW_CONTEXT_LINES, 'contextRadius', errors),
     maxRetries: boundedInt(env.CLAUDE_REVIEW_MAX_RETRIES, 'maxRetries', errors),
     timeoutSeconds: boundedInt(env.CLAUDE_REVIEW_TIMEOUT_SECONDS, 'timeoutSeconds', errors),
+    jobSeconds: boundedInt(env.CLAUDE_REVIEW_JOB_SECONDS, 'jobSeconds', errors),
     maxCostUsd: money(env.CLAUDE_REVIEW_MAX_COST_USD, 'maxCostUsd', errors),
     monthlyBudgetUsd: money(env.CLAUDE_REVIEW_MONTHLY_BUDGET_USD, 'monthlyBudgetUsd', errors),
     minConfidence,
@@ -265,6 +268,7 @@ export function readConfig(env = {}) {
     creditFallbacks,
     rateOverrides,
   };
+  if (config.timeoutSeconds * (config.maxRetries + 1) > config.jobSeconds - 60) errors.push('timeoutSeconds × (maxRetries + 1) exceeds the job budget after the 60-second recording reserve');
   return { config, errors };
 }
 

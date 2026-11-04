@@ -115,6 +115,7 @@ export function classifyError(e, sdk = Anthropic) {
   else if (e instanceof sdk.APIConnectionError) kind = 'connection';
   else if (e instanceof sdk.InternalServerError) kind = status === 529 ? 'overloaded' : 'server';
   else if (e instanceof sdk.APIError) kind = status === 402 ? 'billing' : status === 529 ? 'overloaded' : 'unknown';
+  if (e?.name === 'APIUserAbortError' || e?.name === 'AbortError') kind = 'timeout';
   const out = new Error(`Anthropic API error: ${kind}`);
   Object.assign(out, { kind, status, requestId: requestId || fed?.requestId || undefined, detail: errorDetail(e, fed) });
   return out;
@@ -131,7 +132,7 @@ export function anthropicClient({ apiKey, federation = null, identityToken = nul
   // and a credential problem is the runner's error to report, not a crash.
   let client = null;
   const build = () => {
-    const base = { maxRetries, timeout: timeoutSeconds * 1000 };
+    const base = { maxRetries: 0, timeout: timeoutSeconds * 1000 };
     if (!federation) return new sdk({ ...base, apiKey });
     const credentials = makeProvider({
       identityTokenProvider: identityToken,
@@ -150,7 +151,7 @@ export function anthropicClient({ apiKey, federation = null, identityToken = nul
   };
   return {
     countTokens: (p) => wrap((c) => c.messages.countTokens({ model: p.model, system: p.system, messages: p.messages })),
-    create: (p) => wrap((c) => (p.betas ? c.beta.messages.create(p) : c.messages.create(p))),
+    create: (p, options) => wrap((c) => (p.betas ? c.beta.messages : c.messages).stream(p, options).finalMessage()),
   };
 }
 
@@ -164,10 +165,10 @@ export function kimiClient({ apiKey, baseURL, maxRetries, timeoutSeconds, sdk = 
   // Only the Kimi key goes to Moonshot: authToken is pinned to null (the SDK
   // would read ANTHROPIC_AUTH_TOKEN), and every header outside the allowlist
   // (ANTHROPIC_CUSTOM_HEADERS, an Authorization bearer) is dropped on the way out.
-  const get = () => (client ||= new sdk({ apiKey, authToken: null, baseURL, maxRetries, timeout: timeoutSeconds * 1000, fetch: kimiFetch(fetchImpl) }));
+  const get = () => (client ||= new sdk({ apiKey, authToken: null, baseURL, maxRetries: 0, timeout: timeoutSeconds * 1000, fetch: kimiFetch(fetchImpl) }));
   return {
-    create: async (p) => {
-      try { return await get().messages.create(p); } catch (e) { throw classifyError(e, sdk); }
+    create: async (p, options) => {
+      try { return await get().messages.stream(p, options).finalMessage(); } catch (e) { throw classifyError(e, sdk); }
     },
   };
 }
@@ -361,6 +362,15 @@ export async function main(env = process.env) {
         return null;
       }
     },
+    persistRecord(record) {
+      const account = JSON.parse(record.body).account_id || 'main';
+      const dir = join(outDir, account);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'record.json'), `${record.body}\n`);
+      writeFileSync(join(dir, 'name.txt'), record.name);
+      // Keep a root copy for diagnostics and older consumers.
+      writeFileSync(join(outDir, 'record.json'), `${record.body}\n`);
+    },
     anthropic: null,
     fallbacks: {},
   };
@@ -386,7 +396,11 @@ export async function main(env = process.env) {
   if (result.record) {
     mkdirSync(outDir, { recursive: true });
     writeFileSync(join(outDir, 'record.json'), `${result.record.body}\n`);
-    if (result.findingsFile) writeFileSync(join(outDir, 'review.json'), `${result.findingsFile}\n`);
+    if (result.findingsFile) {
+      writeFileSync(join(outDir, 'review.json'), `${result.findingsFile}\n`);
+      const account = JSON.parse(result.record.body).account_id || 'main';
+      writeFileSync(join(outDir, account, 'review.json'), `${result.findingsFile}\n`);
+    }
   }
   if (env.GITHUB_OUTPUT) {
     appendFileSync(env.GITHUB_OUTPUT, `outcome=${result.outcome}\nrecord_name=${result.record ? result.record.name : ''}\n`);

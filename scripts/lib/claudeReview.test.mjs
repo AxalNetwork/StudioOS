@@ -55,7 +55,7 @@ test('every limit is bounded, and a bad value is an error rather than a silent d
   assert.equal(readConfig({ ...base, CLAUDE_REVIEW_EFFORT: 'none' }).config.effort, null);
   assert.equal(readConfig({ ...base, CLAUDE_REVIEW_REFUSAL_FALLBACK: 'off' }).config.refusalFallback, 'off');
   const c = readConfig(base).config;
-  assert.equal(c.maxRetries, 2);
+  assert.equal(c.maxRetries, 0);
   assert.equal(c.annotations, false, 'annotations are opt-in');
   assert.equal(c.failOnError, false, 'advisory by default');
   assert.equal(c.reviewDrafts, true, 'agents open drafts, so drafts are reviewed unless turned off');
@@ -753,4 +753,91 @@ test('credit: each account is bounded by its own month, and the main account\'s 
   const alone = harness({ artifacts: spentMain });
   assert.equal((await runReview(alone.deps)).outcome, 'budget_refused');
   assert.equal(alone.calls.create.length, 0);
+});
+
+
+test('D4433: configuration bounds retry time by the job minus its recording reserve', () => {
+  assert.match(readConfig({ ...ENV, CLAUDE_REVIEW_TIMEOUT_SECONDS: '300', CLAUDE_REVIEW_MAX_RETRIES: '2', CLAUDE_REVIEW_JOB_SECONDS: '900' }).errors.join(';'), /exceeds the job budget/);
+  assert.deepEqual(readConfig({ ...ENV, CLAUDE_REVIEW_TIMEOUT_SECONDS: '300', CLAUDE_REVIEW_MAX_RETRIES: '1', CLAUDE_REVIEW_JOB_SECONDS: '900' }).errors, []);
+});
+
+test('D4433: reserve precedes spending, the shared deadline caps the attempt and stops retry/fallback', async () => {
+  const { deps } = harness({ env: { CLAUDE_REVIEW_TIMEOUT_SECONDS: '600', CLAUDE_REVIEW_MAX_RETRIES: '0', KIMI_API_KEY: 'k' }, fallbacks: { kimi: () => { throw new Error('must not start fallback'); } } });
+  let time = Date.parse('2026-10-16T10:00:00Z');
+  const start = time;
+  deps.now = () => new Date(time);
+  const records = [];
+  deps.persistRecord = r => records.push(JSON.parse(r.body));
+  deps.github.listArtifacts = async () => { time += 300_000; return { artifacts: [], complete: true }; };
+  let calls = 0;
+  deps.anthropic.create = async (p, opts) => {
+    calls += 1;
+    assert.equal(records.at(-1).reason, 'deadline');
+    assert.ok(records.at(-1).usd > 0, 'reservation is already durable');
+    assert.equal(opts.timeout, 540_000, '840 seconds minus elapsed 300');
+    assert.equal(opts.maxRetries, 0);
+    time = start + 790_000;
+    throw apiError('timeout');
+  };
+  const r = await runReview(deps);
+  assert.equal(calls, 1);
+  assert.match(plain(r.summary), /Stopped at the time limit; the cost of the cut-off attempt is counted at its worst case/);
+  assert.ok(JSON.parse(r.record.body).usd > 0);
+});
+
+test('D4433: no paid call starts with under 60 seconds left', async () => {
+  const { deps, calls } = harness();
+  let t = Date.parse('2026-10-16T10:00:00Z');
+  deps.now = () => new Date(t);
+  deps.github.listArtifacts = async () => { t += 781_000; return { artifacts: [], complete: true }; };
+  const r = await runReview(deps);
+  assert.equal(calls.create.length, 0);
+  assert.equal(r.record, null);
+  assert.match(plain(r.summary), /Stopped at the time limit/);
+});
+
+test('D4433: a timed-out account stays charged after a later fallback succeeds', async () => {
+  const { deps } = harness({ env: { ANTHROPIC_API_KEY_2: 'second', KIMI_API_KEY: 'k' }, create: () => apiError('billing', 402), fallbacks: { claude2: () => apiError('timeout'), kimi: () => ({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(answer()) }], usage: { input_tokens: 3000, output_tokens: 100 } }) } });
+  const records = new Map();
+  deps.persistRecord = r => records.set(JSON.parse(r.body).account_id || 'main', r);
+  const r = await runReview(deps);
+  assert.equal(r.outcome, 'reviewed');
+  assert.equal(JSON.parse(records.get('main').body).usd, 0);
+  const timed = JSON.parse(records.get('claude2').body);
+  assert.equal(timed.error_kind, 'timeout');
+  assert.ok(timed.usd > 0);
+  assert.equal(JSON.parse(records.get('kimi').body).outcome, 'reviewed');
+  const ledger = readLedger([...records.values()].map(r => ({ name: r.name })), { month: '2026-10', key: '', listingComplete: true, account: 'claude2' });
+  assert.ok(ledger.spentUsd > 0);
+});
+
+test('D4433: retries are recorded separately in the account total and obey the budget', async () => {
+  const { deps, calls } = harness({ env: { CLAUDE_REVIEW_TIMEOUT_SECONDS: '300', CLAUDE_REVIEW_MAX_RETRIES: '1', CLAUDE_REVIEW_MAX_COST_USD: '2' }, create: n => n === 1 ? apiError('timeout') : undefined });
+  const saved = [];
+  deps.persistRecord = r => saved.push(JSON.parse(r.body));
+  const r = await runReview(deps);
+  assert.equal(r.outcome, 'reviewed');
+  assert.equal(calls.create.length, 2);
+  assert.ok(JSON.parse(r.record.body).usd > saved[0].usd, 'timeout reservation plus successful usage');
+});
+
+test('D4433: recording runs even after a cancelled review and uploads each account', () => {
+  const wf = readFileSync(new URL('../../.github/workflows/claude-review.yml', import.meta.url), 'utf8');
+  assert.match(wf, /CLAUDE_REVIEW_JOB_SECONDS: 900/);
+  assert.match(wf, /name: Prepare usage records\n        if: always\(\)/);
+  for (const account of ['main', 'claude2', 'claude3', 'kimi']) {
+    assert.ok(wf.includes(`if: always() && steps.usage.outputs.${account} != ''`));
+    assert.ok(wf.includes(`claude-review/${account}/`));
+  }
+});
+
+
+test('D4433: an exhausted deadline stops a configured retry', async () => {
+  const { deps, calls } = harness({ env: { CLAUDE_REVIEW_TIMEOUT_SECONDS: '300', CLAUDE_REVIEW_MAX_RETRIES: '1' }, create: () => { time += 790_000; return apiError('timeout'); } });
+  let time = Date.parse('2026-10-16T10:00:00Z');
+  deps.now = () => new Date(time);
+  const r = await runReview(deps);
+  assert.equal(calls.create.length, 1);
+  assert.match(plain(r.summary), /Stopped at the time limit/);
+  assert.ok(JSON.parse(r.record.body).usd > 0);
 });

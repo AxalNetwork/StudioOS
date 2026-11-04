@@ -101,8 +101,12 @@ function finish(state, outcome, reason, extra = {}) {
 export async function runReview(deps) {
   const started = deps.now();
   const state = { limitations: [], facts: {}, config: null, rates: null };
+  const jobStart = Date.parse(deps.env.CLAUDE_REVIEW_JOB_STARTED_AT || '') || +started;
   const { config, errors } = readConfig(deps.env);
   state.config = config;
+  const deadline = jobStart + (config.jobSeconds - 60) * 1000;
+  const left = () => deadline - +deps.now();
+  const deadlineError = () => Object.assign(new Error('review deadline'), { kind: 'deadline' });
   state.rates = mergeRates(deps.rates, config.rateOverrides);
 
   if (!config.enabled) return finish(state, 'disabled', 'CLAUDE_REVIEW_ENABLED is not "true", so no review ran and nothing was spent');
@@ -196,24 +200,54 @@ export async function runReview(deps) {
   // reviews the same inputs again.
   let recordKey = key;
   let accountId = null;
+  const costs = new Map();
+  let lastRecord = null;
   const record = (status, usd, extra) => {
+    usd += costs.get(accountId) || 0;
     const name = recordName({ month, pr: pr.number, key: recordKey, status, usd, account: accountId });
-    return { name, body: JSON.stringify({ name, month, pr: pr.number, head_sha: pr.head.sha, merge_base: mergeBase, key: recordKey, status, model: usedModel, provider, account, tier, usd, ...extra }, null, 2) };
+    const saved = { name, body: JSON.stringify({ name, month, pr: pr.number, head_sha: pr.head.sha, merge_base: mergeBase, key: recordKey, status, model: usedModel, provider, account, account_id: accountId, tier, usd, ...extra }, null, 2) };
+    lastRecord = saved;
+    deps.persistRecord?.(saved);
+    return saved;
   };
   const chain = (config.creditFallbacks || []).filter((step) => deps.fallbacks?.[step.id]);
+
+  // SDK retries are disabled: every paid attempt is reserved on disk before
+  // spending and bounded by the one deadline, including retries and fallbacks.
+  const paidCall = async (client, request) => {
+    const worst = preflightCost({ inputTokens, maxOutputTokens: config.maxOutputTokens, model: usedModel, rates: state.rates });
+    for (let retry = 0; ; retry += 1) {
+      const remaining = left();
+      if (remaining < 60_000) throw deadlineError();
+      const prior = costs.get(accountId) || 0;
+      const ownLedger = listing ? readLedger(listing.artifacts, { month, key, listingComplete: listing.complete, account: accountId || 'main' }) : ledger;
+      const allowed = config.maxCostUsd > 0 && prior + worst > config.maxCostUsd ? { allow: false, reason: 'retry would exceed the per-review cap' } : budgetDecision({ worstCaseUsd: worst, maxCostUsd: config.maxCostUsd, monthlyBudgetUsd: config.monthlyBudgetUsd, ledger: { ...ownLedger, spentUsd: ownLedger.spentUsd + prior } });
+      if (!allowed.allow) throw Object.assign(new Error('attempt budget'), { kind: 'billing', detail: allowed.reason });
+      record('err', worst, { outcome: 'api_error', error_kind: 'deadline', reason: 'deadline', cost_known: false });
+      try {
+        return await client.create(request, { timeout: Math.min(config.timeoutSeconds * 1000, remaining), maxRetries: 0, signal: AbortSignal.timeout(Math.max(1, Math.floor(Math.min(config.timeoutSeconds * 1000, remaining)))) });
+      } catch (e) {
+        const uncertain = ['timeout', 'connection', 'server', 'overloaded', 'deadline'].includes(e?.kind);
+        record('err', uncertain ? worst : 0, { outcome: 'api_error', error_kind: e?.kind || 'unknown', cost_known: !uncertain });
+        costs.set(accountId, prior + (uncertain ? worst : 0));
+        if (left() < 60_000) throw deadlineError();
+        if (retry >= config.maxRetries || !['rate_limit', 'timeout', 'connection', 'server', 'overloaded'].includes(e?.kind)) throw e;
+      }
+    }
+  };
 
   // The main account's call, with the one retry without refusal fallbacks
   // when the platform rejects them (a plain 400, unbilled). A credit refusal
   // on either attempt reaches the chain below.
   const mainCall = async () => {
     try {
-      return await deps.anthropic.create(params);
+      return await paidCall(deps.anthropic, params);
     } catch (e) {
       if (creditExhausted(e) || !(e?.kind === 'bad_request' && params.fallbacks)) throw e;
       delete params.fallbacks;
       delete params.betas;
       state.limitations.push('The request was rejected with refusal fallbacks enabled and was retried without them; set CLAUDE_REVIEW_REFUSAL_FALLBACK=off if this model does not support them.');
-      return await deps.anthropic.create(params);
+      return await paidCall(deps.anthropic, params);
     }
   };
 
@@ -261,10 +295,11 @@ export async function runReview(deps) {
           ? (({ betas, fallbacks, ...rest }) => rest)(params)
           : fallbackRequest(params, usedModel);
         try {
-          message = await deps.fallbacks[step.id].create(request);
+          message = await paidCall(deps.fallbacks[step.id], request);
           failed = null;
           break;
         } catch (e2) {
+          if (e2?.kind === 'deadline') throw e2;
           failed = e2;
           if (creditExhausted(e2)) { empty.push(step.label); continue; }
           onlyBudget = false;
@@ -282,6 +317,7 @@ export async function runReview(deps) {
     }
   } catch (e) {
     const kind = e?.kind || 'unknown';
+    if (kind === 'deadline') return finish(state, 'api_error', 'Stopped at the time limit; the cost of the cut-off attempt is counted at its worst case.', { record: lastRecord });
     const seconds = ((deps.now() - started) / 1000).toFixed(1);
     state.facts.duration = `${seconds} s`;
     if (e?.requestId) state.facts['request id'] = e.requestId;
