@@ -341,6 +341,54 @@ test('a program the caller is not in is not found; an enrolled member sees their
 
 // ---- #1251: My programs in one read --------------------------------------------------
 
+test('#4480: program detail returns only the caller’s active enrolment date, normalised to ISO', async () => {
+  const db = seeded();
+  try {
+    db.prepare("INSERT INTO learning_programs (uid, name, enrolment, status, created_by) VALUES (?, ?, 'open', 'published', ?)")
+      .run('dates-program', 'Date fixtures', SUPER);
+    const id = (db.prepare('SELECT id FROM learning_programs WHERE uid = ?').get('dates-program') as any).id;
+    const add = db.prepare("INSERT INTO learning_enrollments (program_id, user_id, enrolled_by, enrolled_at, status) VALUES (?, ?, ?, ?, 'active')");
+    add.run(id, MEMBER, SUPER, '2026-10-01 23:30:00');
+    add.run(id, PEER, SUPER, '2026-09-12T10:00:00.000Z');
+    add.run(id, SUPER, SUPER, '2026-10-05T12:00:00+02:00');
+    const mine = await prog(db, MEMBER, '/programs/dates-program');
+    assert.equal(mine.status, 200);
+    assert.equal(mine.body.enrolled_at, '2026-10-01T23:30:00.000Z');
+    assert.equal(mine.body.enrolled, true);
+    assert.equal((await prog(db, PEER, '/programs/dates-program')).body.enrolled_at, '2026-09-12T10:00:00.000Z');
+    const staffMember = (await prog(db, SUPER, '/programs/dates-program')).body;
+    assert.equal(staffMember.enrolled, true);
+    assert.equal(staffMember.enrolled_at, '2026-10-05T10:00:00.000Z');
+    for (const unknown of ['', 'not-a-date', '0', '2026-13-01T10:00:00Z']) {
+      db.prepare('UPDATE learning_enrollments SET enrolled_at = ? WHERE program_id = ? AND user_id = ?').run(unknown, id, MEMBER);
+      const reply = await prog(db, MEMBER, '/programs/dates-program');
+      assert.equal(reply.body.enrolled_at, null, 'an unknown stamp is not today or an invalid ISO string');
+      assert.equal(reply.body.enrolled, true);
+    }
+  } finally { db.close(); }
+});
+
+test('#4480: open-program outsiders, removed members and non-enrolled staff readers get no date key', async () => {
+  const db = seeded();
+  try {
+    db.prepare("INSERT INTO learning_programs (uid, name, enrolment, status, created_by) VALUES (?, ?, 'open', 'published', ?)")
+      .run('private-dates', 'Private date fixtures', SUPER);
+    const id = (db.prepare('SELECT id FROM learning_programs WHERE uid = ?').get('private-dates') as any).id;
+    db.prepare("INSERT INTO learning_enrollments (program_id, user_id, enrolled_by, enrolled_at, status) VALUES (?, ?, ?, ?, 'active')")
+      .run(id, PEER, SUPER, '2026-09-12T10:00:00.000Z');
+    db.prepare("INSERT INTO learning_enrollments (program_id, user_id, enrolled_by, enrolled_at, status) VALUES (?, ?, ?, ?, 'removed')")
+      .run(id, MEMBER, SUPER, '2026-09-11T11:00:00.000Z');
+    db.prepare('INSERT INTO learning_program_admins (program_id, user_id, assigned_by) VALUES (?, ?, ?)').run(id, ASSIGNED, SUPER);
+    for (const who of [OUTSIDER, MEMBER, SUPER, ASSIGNED]) {
+      const reply = await prog(db, who, '/programs/private-dates');
+      assert.equal(reply.status, 200);
+      assert.equal(reply.body.enrolled, false);
+      assert.equal(Object.hasOwn(reply.body, 'enrolled_at'), false, `non-enrolled reader ${who} has no enrolment date key`);
+      assert.doesNotMatch(JSON.stringify(reply.body), /2026-09-12T10:00:00|2026-09-11T11:00:00/);
+    }
+  } finally { db.close(); }
+});
+
 /** `prog`, over a D1 binding the caller supplies (to count or fail its queries). */
 async function progOver(DB: any, who: number, path: string) {
   const res: Response = await programs.request(path, { headers: { Authorization: `Bearer ${await tokenFor(who)}` } },

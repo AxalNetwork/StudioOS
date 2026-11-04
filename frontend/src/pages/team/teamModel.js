@@ -460,6 +460,7 @@ export function budgetLine(usedMicro, capMicro, tail = ' this month') {
 
 /** This month's spend: "$3.84 of $25 cap", or "Not recorded" when the read did not answer. Never "$0". */
 export function spendLine(a) {
+  if (a?.source === 'mcp_client') return 'Runs on your own assistant';
   const s = a?.month_spend;
   const cap = money(a?.monthly_cap_microusd, { whole: true });
   if (!s || !s.available || s.value_microusd == null) return null;
@@ -514,7 +515,7 @@ export function eventWords(e) {
 
 // D4117 (#4117): an agent is its persona (Vesta, Orrin, …); the Worker sends no job title.
 /** D4119: the line under an agent's name: its persona's tagline, or null. */
-export const agentLine = (a) => String(a?.persona?.tagline || '').trim() || null;
+export const agentLine = (a) => a?.source === 'mcp_client' ? 'Connected app' : String(a?.persona?.tagline || '').trim() || null;
 export const agentName = (a) => String(a?.persona?.name || '').trim() || [a?.first_name, a?.last_name].map((s) => String(s || '').trim()).filter(Boolean).join(' ') || 'Unnamed agent';
 
 /** The Worker's daily run limit (`agents/runtime.ts` DAILY_LIMIT). */
@@ -555,6 +556,7 @@ export function agentRow(a, now = new Date()) {
     key: a.uid,
     uid: a.uid,
     name: agentName(a),
+    outside: a.source === 'mcp_client',
     // D4119: an agent's line is its persona's tagline, never a job title (D4117 §6).
     role: agentLine(a),
     roleOrUnrecorded: agentLine(a) || NOT_RECORDED,

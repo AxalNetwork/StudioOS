@@ -2,6 +2,7 @@
  * D1356 (#3571, part 7 of #3564) — the team relationship layer, mounted at
  * `/api/relationships`.
  *
+ *   GET  /summary                          caller-scoped sharing and request counts (D4464)
  *   GET  /sharing                          my teams, and whether my relationships are shared with each
  *   PUT  /sharing                          { share } — the one opt-in, for every team I belong to
  *   PUT  /sharing/teams/:key               { share } — on or off for one of my teams
@@ -33,7 +34,7 @@ import type { Env, User } from '../types';
 import { requireAuth, selectJwt } from '../auth';
 import {
   decideIntro, followUpDone, introRequests, myTeams, recordOutcome, RelationshipRefusal, requestIntro, setFollowUp, setShare, snoozeFollowUp,
-  whoKnows, whoKnowsQuery, withdrawIntro,
+  relationshipSummary, whoKnows, whoKnowsQuery, withdrawIntro,
 } from '../services/relationships';
 import { refuse } from '../util/refusal';
 import { railFor, refuseRun } from '../util/railContext';
@@ -66,6 +67,18 @@ const share = (b: Record<string, unknown>) => {
   if (typeof b.share !== 'boolean') throw new RelationshipRefusal(400, 'share_required', 'Say whether to share: true or false.');
   return b.share;
 };
+
+// D4464: partial reads retain nulls and reasons, with the same unreadable status as other reads.
+relationships.get('/summary', async (c) => {
+  const user = await member(c);
+  if (user instanceof Response) return user;
+  try {
+    const summary = await relationshipSummary(c.env, user);
+    const unreadable = Object.values(summary.recording).some((r) => !r.recorded);
+    if (unreadable) return refuse(c, 503, { code: 'relationships_unreadable', message: 'Relationships could not be read. Try again.', extra: summary });
+    return c.json(summary);
+  } catch (e) { return failure(c, e); }
+});
 
 relationships.get('/sharing', async (c) => {
   const user = await member(c);

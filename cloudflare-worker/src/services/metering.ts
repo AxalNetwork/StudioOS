@@ -90,6 +90,7 @@ export const METERING_POLICY: MeteringPolicy = Object.freeze({
     [toolOperation('raise.prospect_brief')]: { price_microusd: 0, unit: 'call' },
     [toolOperation('raise.qa_prep')]: { price_microusd: 0, unit: 'call' },
     [toolOperation('raise.draft_follow_up')]: { price_microusd: 0, unit: 'call' },
+    [toolOperation('team.propose')]: { price_microusd: 0, unit: 'call' },
   }) as Record<string, MeteredOperation>,
 });
 
@@ -126,6 +127,7 @@ export const OPERATION_INFO: Readonly<Record<string, { label: string; source: Pr
   [toolOperation('raise.prospect_brief')]: { label: 'Read an investor meeting brief', source: 'axal', ai: false },
   [toolOperation('raise.qa_prep')]: { label: 'Prepare for investor questions', source: 'axal', ai: false },
   [toolOperation('raise.draft_follow_up')]: { label: 'Draft a follow-up to an investor', source: 'axal', ai: false },
+  [toolOperation('team.propose')]: { label: 'Propose text for your team', source: 'axal', ai: false },
 });
 
 /**
