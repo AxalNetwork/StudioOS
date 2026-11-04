@@ -352,6 +352,8 @@ export function configOf(row: Pick<IntegrationRow, 'config_json'>): CustomConfig
 // ─────────────────────────────────────────────────────────── sign-in
 
 export interface CustomDeps {
+  /** D4422: engine-supplied restrictive context, never taken from tool arguments. */
+  agentContext?: { agent_uid: string; integration_uid: string };
   resolve?: Resolver;
   fetcher?: McpFetch;
   /** The host this request came to; never a custom server's. */
@@ -479,7 +481,14 @@ async function openCustom(env: Env, row: IntegrationRow, deps: CustomDeps, captu
   const attempt = async (token: string) => {
     const listed: Array<Record<string, unknown>> = [];
     const fetcher = guardedFetcher(cfg.hosts, resolve, deps.fetcher ?? fetch, captureList ? listed : undefined, deps.ownHost ?? null);
-    const session = await openMcpSession(provider, { accessToken: token, fetcher, era: cfg.era, log: deps.log });
+    const session = await openMcpSession(provider, { accessToken: token, fetcher: async (url, init) => {
+      const headers = new Headers(init.headers);
+      if (deps.agentContext) {
+        headers.set('X-Axal-Agent', deps.agentContext.agent_uid);
+        headers.set('X-Axal-Integration', deps.agentContext.integration_uid);
+      }
+      return fetcher(url, { ...init, headers });
+    }, era: cfg.era, log: deps.log });
     return { session, listed };
   };
   try {
