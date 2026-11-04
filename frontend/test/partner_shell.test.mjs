@@ -156,11 +156,14 @@ test('the shared Network page only mounts Partner chrome for Partner users', () 
   // retired it, and Research is the role-branched ResearchWorkspace.
 });
 
-test('Trust stays in the user menu and Company Settings stays in the pinned footer', () => {
+test('Trust and account Portfolio stay in the user menu, outside the sidebar', () => {
   assert.ok(!targets.includes('/trust'));
   assert.ok(!targets.includes('/company-settings'));
   const sidebar = read('frontend/src/ui/SidebarNav.jsx');
-  assert.match(sidebar, /to="\/account\/portfolio"/); // D1140 (#3020)
+  assert.doesNotMatch(sidebar, /to="\/account\/portfolio"/); // D4416 amends D4152.
+  const app = read('frontend/src/App.jsx');
+  const account = app.slice(app.indexOf('function UserDropdown('), app.indexOf('function PortalSwitcher'));
+  assert.match(account, /<Link to="\/account\/portfolio"[\s\S]*?>\s*Portfolio\s*<\/Link>/);
   assert.ok(!/to="\/settings"/.test(sidebar));
 });
 

@@ -182,7 +182,10 @@ test('Portfolio is the section\'s name (owner Q1), and an investor\'s two Portfo
   assert.match(LINE, /A company is a legal entity\. A project can stand alone, or sit inside a company\./);
   assert.deepEqual(INVESTOR_LINK, { label: 'Also in your investor Portfolio ›', to: '/portfolio' });
   assert.match(read('frontend/src/pages/investor/InvestorPortfolioCanvas.jsx'), /ACCOUNT_LINK\.label/);
-  assert.match(read('frontend/src/ui/SidebarNav.jsx'), /<span className="truncate">Portfolio<\/span>/);
+  // D4416 changes the door's placement, not its name or investor cross-link.
+  const app = read('frontend/src/App.jsx');
+  const account = app.slice(app.indexOf('function UserDropdown('), app.indexOf('function PortalSwitcher'));
+  assert.match(account, /<Link to="\/account\/portfolio"[\s\S]*?>\s*Portfolio\s*<\/Link>/);
 });
 
 test('the cards: D1412\'s legal line, location and status; a missing fact is "none", a failed one "unread", never 0', () => {
