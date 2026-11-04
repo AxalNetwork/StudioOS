@@ -6,6 +6,9 @@ import { CATALOG } from '../src/services/onboardingChecklist.ts';
 import { hrefOf } from '../src/services/calendar/items.ts';
 import { explorerPromoLink } from '../src/services/explorerPromo.ts';
 import { executeTool } from '../src/services/advisor/tools.ts';
+import { personRecord } from '../src/services/mail/contextPack.ts';
+import { makeD1 } from './_d1_sqlite.mjs';
+import { tableFromBaseline } from './_baseline.mjs';
 import { searchSemantic } from '../src/services/vectorize.ts';
 
 function env(url = '/partners?user=7#profile') {
@@ -71,4 +74,22 @@ test('D2319: already indexed directory URLs normalize on reads without losing qu
   assert.equal((await searchSemantic(env(), 'Example', { type: 'partner' }))[0]?.url, '/directory?user=7#profile');
   assert.equal((await searchSemantic(env('/partners/onboard'), 'Example', { type: 'partner' }))[0]?.url, '/partners/onboard');
   assert.equal((await searchSemantic(env('/directory?user=7'), 'Example', { type: 'partner' }))[0]?.url, '/directory?user=7');
+});
+
+
+test('D2319: owned engagement mail links retain founder versus changed-role routing', async () => {
+  const schema = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
+  const { DB, db } = makeD1(['partners', 'engagements', 'partner_bookings', 'partner_office_hour_slots'].map((t) => tableFromBaseline(schema, t)).join('\n'));
+  try {
+    db.exec("INSERT INTO partners(id,name,email) VALUES(7,'Example partner','partner@example.test'); INSERT INTO engagements(id,uid,need_id,quote_id,partner_id,founder_id,project_id,price) VALUES(1,'engagement',1,1,7,10,20,100)");
+    const user = { id: 1, role: 'founder', founder_id: 10 } as any;
+    const record = await personRecord({ DB } as any, user, 'partner:1');
+    assert.equal(record.item.link, '/build/marketplace?tab=needs');
+    for (const role of ['partner', 'investor', 'advisor', 'exploring']) {
+      const changed = await personRecord({ DB } as any, { ...user, role }, 'partner:1');
+      assert.equal(changed.item.link, '/pipeline/leads', role);
+    }
+    await assert.rejects(() => personRecord({ DB } as any, { ...user, founder_id: 99 }, 'partner:1'), /Record not found/);
+    await assert.rejects(() => personRecord({ DB } as any, { ...user, founder_id: null }, 'partner:1'), /Record not found/);
+  } finally { db.close(); }
 });
