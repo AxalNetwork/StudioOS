@@ -197,10 +197,13 @@ export async function putCampaignCreative(env: Env, pid: number, user: User, uid
   if (!['headline', 'body', 'script'].includes(field)) throw new Refused(400, 'Invalid creative field', 'field');
   if (typeof b.text !== 'string' || [...b.text].length > 2000) throw new Refused(400, 'Creative text must have at most 2000 characters', 'text');
   const result = await env.DB.batch([
-    env.DB.prepare("INSERT INTO grow_campaign_creatives (uid, campaign_id, placement, field, text, updated_by) SELECT ?, id, ?, ?, ?, ? FROM grow_campaigns WHERE id = ? AND project_id = ? AND archived_at IS NULL AND status != 'ended' ON CONFLICT (campaign_id, placement, field) DO UPDATE SET text = excluded.text, updated_by = excluded.updated_by, updated_at = datetime('now')").bind(crypto.randomUUID().replace(/-/g, ''), placement, field, b.text, user.id, c.id, pid),
+    // Explicit insert/update targets keep the schema checker out of the parent SELECT.
+    // Both statements and the audit remain one atomic, final-state-guarded save.
+    env.DB.prepare("INSERT OR IGNORE INTO grow_campaign_creatives (uid, campaign_id, placement, field, text, updated_by) SELECT ?, id, ?, ?, ?, ? FROM grow_campaigns WHERE id = ? AND project_id = ? AND archived_at IS NULL AND status != 'ended'").bind(crypto.randomUUID().replace(/-/g, ''), placement, field, b.text, user.id, c.id, pid),
+    env.DB.prepare("UPDATE grow_campaign_creatives SET text = ?, updated_by = ?, updated_at = datetime('now') WHERE campaign_id = ? AND placement = ? AND field = ? AND EXISTS (SELECT 1 FROM grow_campaigns WHERE id = ? AND project_id = ? AND archived_at IS NULL AND status != 'ended')").bind(b.text, user.id, c.id, placement, field, c.id, pid),
     audit(env, pid, user, uid, 'grow_campaign_creative_changed'),
   ]);
-  if (!result[0].meta.changes) throw new Refused(409, 'Campaign changed; read it again before editing');
+  if (!result[1].meta.changes) throw new Refused(409, 'Campaign changed; read it again before editing');
   return campaignCreatives(env, pid, uid);
 }
 const response = async (env: Env, pid: number, uid: string) => ({ campaign: await readCampaign(env, await owned(env, pid, uid)) });
