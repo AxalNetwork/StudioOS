@@ -6,7 +6,7 @@ import type { ThreadMessage } from './mail/adapters/types';
 import { logCycleWriteStatement } from './cycleActivity';
 
 type Contact = { id: number; uid: string; project_id: number; name: string | null; organization: string | null; email: string; utm_json: string | null; status: string };
-type Reply = { id: number; contact_id: number; direction: string; body: string | null; channel: string | null; created_at: string | null };
+type Reply = { id: number; contact_id: number; direction: string; body: string | null; channel?: string | null; created_at: string | null };
 type Sent = { uid: string; contact_id: number; account_id: number; subject: string; sent_at: string; provider_message_id: string | null };
 export type InboxMessage = { key: string; direction: 'inbound' | 'outbound'; source: 'contact_replies' | 'mail_sent' | 'mailbox'; channel: string | null; at: string | null; body: string | null; subject: string | null; preview: boolean };
 export const INBOX_READ_LIMIT = 5000;
@@ -63,7 +63,7 @@ export async function loadInbox(env: Env, user: User, project: number, onlyConta
   if (contacts.length > CONTACT_LIMIT) failed.add('limit');
   const selected = contacts.slice(0, CONTACT_LIMIT), ids = new Set(selected.map((c) => c.id));
   const [replies, sent, accounts, receipts, campaigns] = await Promise.all([
-    source<Reply>('contact_replies', env.DB.prepare("SELECT r.id, r.contact_id, r.direction, r.body, r.channel, r.created_at FROM contact_replies r JOIN contacts c ON c.id = r.contact_id WHERE c.project_id = ? AND c.audience = 'customer' AND (? IS NULL OR c.uid = ?) ORDER BY r.id DESC LIMIT 5001").bind(project, onlyContact ?? null, onlyContact ?? null)),
+    source<Reply>('contact_replies', env.DB.prepare("SELECT r.* FROM contact_replies r JOIN contacts c ON c.id = r.contact_id WHERE c.project_id = ? AND c.audience = 'customer' AND (? IS NULL OR c.uid = ?) ORDER BY r.id DESC LIMIT 5001").bind(project, onlyContact ?? null, onlyContact ?? null)),
     source<Sent>('mail_sent', env.DB.prepare("SELECT s.uid, c.id AS contact_id, s.account_id, s.subject, s.sent_at, s.provider_message_id FROM mail_sent s JOIN mail_accounts a ON a.id = s.account_id AND a.user_id = s.user_id JOIN contacts c ON lower(trim(c.email)) = lower(trim(s.recipient)) WHERE c.project_id = ? AND c.audience = 'customer' AND s.user_id = ? AND s.sent_at IS NOT NULL AND (? IS NULL OR c.uid = ?) ORDER BY s.id DESC LIMIT 1001").bind(project, user.id, onlyContact ?? null, onlyContact ?? null)),
     source<AccountRow>('mail_accounts', env.DB.prepare("SELECT * FROM mail_accounts WHERE user_id = ? AND status <> 'revoked' ORDER BY id").bind(user.id)),
     source<{ contact_id: number; message_key: string }>('read_receipts', env.DB.prepare('SELECT r.contact_id, r.message_key FROM grow_inbox_reads r JOIN contacts c ON c.id = r.contact_id WHERE r.user_id = ? AND c.project_id = ? AND (? IS NULL OR c.uid = ?) ORDER BY r.read_at DESC LIMIT 50001').bind(user.id, project, onlyContact ?? null, onlyContact ?? null)),
@@ -74,7 +74,7 @@ export async function loadInbox(env: Env, user: User, project: number, onlyConta
   for (const r of replies.slice(0, MESSAGE_LIMIT)) {
     if (!ids.has(r.contact_id)) continue;
     if (r.direction !== 'inbound' && r.direction !== 'outbound') { failed.add('contact_replies'); continue; }
-    byContact.get(r.contact_id)!.push({ key: 'contact:' + r.id, source: 'contact_replies', direction: r.direction, channel: CHANNELS.has(r.channel || '') ? r.channel : null, at: r.created_at, body: r.body, subject: null, preview: false });
+    byContact.get(r.contact_id)!.push({ key: 'contact:' + r.id, source: 'contact_replies', direction: r.direction, channel: CHANNELS.has(r.channel || '') ? r.channel ?? null : null, at: r.created_at, body: r.body, subject: null, preview: false });
   }
   const ownAccounts = new Map(accounts.filter((a) => a.user_id === user.id).map((a) => [a.id, a]));
   const fetched = new Map<string, Promise<ThreadMessage[]>>();

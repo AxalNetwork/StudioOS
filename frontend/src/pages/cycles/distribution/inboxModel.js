@@ -29,5 +29,7 @@ export async function sendConfirmedReply(api, { accountUid, recipient, subject, 
   if (!accountUid || !recipient || !subject?.trim() || !body?.trim()) throw new Error('Complete the reply before sending.');
   const confirmation = await api.confirmSend(accountUid);
   if (!confirmation?.nonce) throw new Error('The send could not be confirmed. Try again.');
-  return api.send({ account_uid: accountUid, to: recipient, subject: subject.trim(), body, nonce: confirmation.nonce });
+  const result = await api.send({ account_uid: accountUid, to: recipient, subject: subject.trim(), body, nonce: confirmation.nonce });
+  if (typeof result?.sent?.uid !== 'string' || !result.sent.uid) throw new Error('The send result could not be verified. Check your mailbox.');
+  return result;
 }

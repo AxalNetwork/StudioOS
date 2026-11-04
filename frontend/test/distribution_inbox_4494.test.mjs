@@ -7,7 +7,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { mountContracts, installDocument } from './_contracts_dom.mjs';
 import InboxTab, { InboxNeedsYou, MessageBubble, ReplyComposer, useInboxUnread } from '../src/pages/cycles/distribution/InboxTab.jsx';
 import DistributionTabs from '../src/pages/cycles/distribution/DistributionTabs.jsx';
-import { acceptedReply, bookingHref, bubbleDirection, INBOX_EMPTY, INBOX_EMPTY_NOTE, unreadCount } from '../src/pages/cycles/distribution/inboxModel.js';
+import { acceptedReply, bookingHref, bubbleDirection, INBOX_EMPTY, INBOX_EMPTY_NOTE, sendConfirmedReply, unreadCount } from '../src/pages/cycles/distribution/inboxModel.js';
 import { growInboxApi } from '../src/lib/api/growInbox.js';
 
 const h = React.createElement;
@@ -131,4 +131,8 @@ test('switching ventures clears the selected recipient and ignores a late thread
     assert.doesNotMatch(m.text(), /Can we speak on Thursday|From your own mailbox|Synthetic Ari/);
     assert.match(m.text(), /No replies yet/);
   } finally { await m.unmount(); }
+});
+
+test('a missing send receipt cannot be treated as a confirmed send', async () => {
+  await assert.rejects(() => sendConfirmedReply({ confirmSend: async () => ({ nonce: 'synthetic' }), send: async () => ({}) }, { accountUid: 'mailbox-a', recipient: 'synthetic@example.test', subject: 'Reply', body: 'Synthetic body' }), /send result could not be verified/);
 });
