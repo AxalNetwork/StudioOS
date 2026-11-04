@@ -275,7 +275,7 @@ test('a review record carries its month, PR, key, outcome and cost in its name, 
   const key = 'd'.repeat(64);
   const name = recordName({ month: '2026-10', pr: 42, key, status: 'ok', usd: 0.123456 });
   assert.equal(name, 'claude-review_v1_2026-10_pr42_dddddddddddddddd_ok_123456');
-  assert.deepEqual(parseRecordName(name), { month: '2026-10', pr: 42, key: 'dddddddddddddddd', status: 'ok', usd: 0.123456 });
+  assert.deepEqual(parseRecordName(name), { month: '2026-10', pr: 42, key: 'dddddddddddddddd', status: 'ok', usd: 0.123456, account: 'main' });
   assert.equal(parseRecordName('claude-review_v1_2026-10_pr42_x_ok_1'), null);
   const artifacts = [
     { name, created_at: '2026-10-10T00:00:00Z' },
@@ -290,6 +290,14 @@ test('a review record carries its month, PR, key, outcome and cost in its name, 
   assert.equal(readLedger([{ name, created_at: 'x', expired: true }], { month: '2026-10', key, listingComplete: true }).duplicate, null);
   const errOnly = [{ name: recordName({ month: '2026-10', pr: 42, key, status: 'err', usd: 0 }), created_at: 'x' }];
   assert.equal(readLedger(errOnly, { month: '2026-10', key, listingComplete: true }).duplicate, null, 'a failed review is retried on the next push');
+  // Each account counts only its own spend; a duplicate is any account's.
+  const kimiName = recordName({ month: '2026-10', pr: 42, key, status: 'ok', usd: 0.25, account: 'kimi' });
+  assert.equal(kimiName, 'claude-review_v1_2026-10_pr42_dddddddddddddddd_ok_250000_kimi');
+  assert.equal(parseRecordName(kimiName).account, 'kimi');
+  const mixed = [...artifacts, { name: kimiName, created_at: '2026-10-11T00:00:00Z' }];
+  assert.equal(readLedger(mixed, { month: '2026-10', key, listingComplete: true }).spentUsd.toFixed(6), '0.623456', 'the main account does not count Kimi');
+  assert.equal(readLedger(mixed, { month: '2026-10', key, listingComplete: true, account: 'kimi' }).spentUsd.toFixed(6), '0.250000');
+  assert.throws(() => recordName({ month: '2026-10', pr: 1, key, status: 'ok', usd: 0, account: 'Kimi_1' }));
 });
 
 test('the review key changes with every input that changes the review', () => {
@@ -718,4 +726,26 @@ test('credit: an answer without token counts records its worst case, never $0', 
   assert.ok(body.usd > 0);
   assert.equal(body.cost_known, false);
   assert.match(plain(r.summary), /no token counts, so its worst case was recorded/);
+});
+
+test('credit: each account is bounded by its own month, and the main account\'s budget reached goes down the chain', async () => {
+  // The main account has spent its budget; Kimi has spent nothing.
+  const spentMain = [{ name: recordName({ month: '2026-10', pr: 9, key: 'a'.repeat(64), status: 'ok', usd: 24.99 }), created_at: '2026-10-15T00:00:00Z', expired: false }];
+  const { deps, calls } = harness({ env: KIMI, artifacts: spentMain, fallbacks: { kimi: () => kimiMessage() } });
+  const r = await runReview(deps);
+  assert.equal(r.outcome, 'reviewed');
+  assert.equal(calls.create.length, 0, 'Claude is not called over its budget');
+  assert.equal(calls.fallback.length, 1);
+  assert.match(r.record.name, /_kimi$/);
+  assert.match(plain(r.summary), /Claude was not called: .*monthly/);
+  // Kimi has spent its own budget too: refused before calling it, with the reason.
+  const spentBoth = [...spentMain, { name: recordName({ month: '2026-10', pr: 9, key: 'b'.repeat(64), status: 'ok', usd: 24.99, account: 'kimi' }), created_at: '2026-10-15T00:00:00Z', expired: false }];
+  const both = harness({ env: KIMI, artifacts: spentBoth, fallbacks: { kimi: () => kimiMessage() } });
+  const r2 = await runReview(both.deps);
+  assert.equal(r2.outcome, 'budget_refused');
+  assert.equal(both.calls.fallback.length, 0);
+  // Without a chain, the main account's budget refusal stands as before.
+  const alone = harness({ artifacts: spentMain });
+  assert.equal((await runReview(alone.deps)).outcome, 'budget_refused');
+  assert.equal(alone.calls.create.length, 0);
 });

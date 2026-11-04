@@ -40,7 +40,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const SHA = /^[0-9a-f]{40}$/;
 const RECORD_PREFIX = 'claude-review_v1_';
 const MAX_FILE_BYTES = 2_000_000;
-const LOGGED_REASONS = new Set(['api_error', 'configuration_error']);
+// budget_refused's reason is the runner's own arithmetic, never model or PR text.
+const LOGGED_REASONS = new Set(['api_error', 'configuration_error', 'budget_refused']);
 
 /** The audience Anthropic's token exchange expects on GitHub's identity token. */
 export const OIDC_AUDIENCE = 'https://api.anthropic.com';

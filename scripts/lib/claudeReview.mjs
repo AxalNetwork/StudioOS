@@ -781,38 +781,45 @@ export function budgetDecision({ worstCaseUsd, maxCostUsd, monthlyBudgetUsd, led
 // ---------------------------------------------------------------------------
 
 const RECORD_PREFIX = 'claude-review_v1_';
-const RECORD = /^claude-review_v1_(\d{4}-\d{2})_pr(\d+)_([0-9a-f]{16})_(ok|err|skip)_(\d+)$/;
+// An optional last segment names the credit fallback account that answered
+// (claude2, claude3, kimi); none means the main account.
+const RECORD = /^claude-review_v1_(\d{4}-\d{2})_pr(\d+)_([0-9a-f]{16})_(ok|err|skip)_(\d+)(?:_([a-z0-9]{1,16}))?$/;
 
 /**
  * The artifact name that records one review: month, pull request, input key,
- * outcome and cost in micro-dollars. Reading the month's spend and finding an
- * earlier review of the same inputs then needs only the artifact list.
+ * outcome, cost in micro-dollars and, for a credit fallback, the account that
+ * answered. Reading the month's spend and finding an earlier review of the
+ * same inputs then needs only the artifact list.
  */
-export function recordName({ month, pr, key, status, usd }) {
+export function recordName({ month, pr, key, status, usd, account = null }) {
   if (!/^\d{4}-\d{2}$/.test(month)) throw new Error('month must be YYYY-MM');
   if (!['ok', 'err', 'skip'].includes(status)) throw new Error('status must be ok, err or skip');
+  if (account !== null && !/^[a-z0-9]{1,16}$/.test(account)) throw new Error('account must be a short lowercase id');
   const micro = Math.max(0, Math.round((usd || 0) * 1_000_000));
-  return `${RECORD_PREFIX}${month}_pr${pr}_${String(key).slice(0, 16)}_${status}_${micro}`;
+  return `${RECORD_PREFIX}${month}_pr${pr}_${String(key).slice(0, 16)}_${status}_${micro}${account ? `_${account}` : ''}`;
 }
 
 export function parseRecordName(name) {
   const m = RECORD.exec(String(name || ''));
   if (!m) return null;
-  return { month: m[1], pr: Number(m[2]), key: m[3], status: m[4], usd: Number(m[5]) / 1_000_000 };
+  return { month: m[1], pr: Number(m[2]), key: m[3], status: m[4], usd: Number(m[5]) / 1_000_000, account: m[6] || 'main' };
 }
 
 /**
- * This month's spend and any earlier successful review of the same inputs,
- * from a list of artifacts (`{ name, created_at, expired }`). `complete` is
- * false when the listing stopped before reaching the start of the month.
+ * This month's spend by one account and any earlier successful review of the
+ * same inputs (by any account), from a list of artifacts (`{ name,
+ * created_at, expired }`). Each account in the credit fallback chain has its
+ * own balance, so the monthly budget is counted per account: `account` is
+ * 'main' or a fallback step id. `complete` is false when the listing stopped
+ * before reaching the start of the month.
  */
-export function readLedger(artifacts, { month, key, listingComplete }) {
+export function readLedger(artifacts, { month, key, listingComplete, account = 'main' }) {
   let spentUsd = 0;
   let duplicate = null;
   for (const a of artifacts) {
     const r = parseRecordName(a.name);
     if (!r || r.month !== month) continue;
-    spentUsd += r.usd;
+    if (r.account === account) spentUsd += r.usd;
     if (!duplicate && r.status === 'ok' && r.key === String(key).slice(0, 16) && !a.expired) duplicate = a;
   }
   return { spentUsd, duplicate, complete: !!listingComplete };

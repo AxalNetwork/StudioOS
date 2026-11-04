@@ -160,7 +160,11 @@ export async function runReview(deps) {
   const worstCaseUsd = preflightCost({ inputTokens, maxOutputTokens: config.maxOutputTokens, model, rates: state.rates });
   state.facts['month spend recorded'] = ledger.complete ? `$${ledger.spentUsd.toFixed(2)}` : 'unreadable';
   const budget = budgetDecision({ worstCaseUsd, maxCostUsd: config.maxCostUsd, monthlyBudgetUsd: config.monthlyBudgetUsd, ledger });
-  if (!budget.allow) return finish(state, 'budget_refused', `${budget.reason}. No API call was made.`);
+  // The main account's own cap reached is, for the chain, the same as its
+  // credit running out: skip the call and let the next account review.
+  const hasChain = (config.creditFallbacks || []).some((step) => deps.fallbacks?.[step.id]);
+  if (!budget.allow && !hasChain) return finish(state, 'budget_refused', `${budget.reason}. No API call was made.`);
+  const mainSkipped = budget.allow ? null : budget.reason;
 
   const params = {
     model,
@@ -181,8 +185,9 @@ export async function runReview(deps) {
   // counts as a duplicate of a Claude review: once Claude's credit is back, it
   // reviews the same inputs again.
   let recordKey = key;
+  let accountId = null;
   const record = (status, usd, extra) => {
-    const name = recordName({ month, pr: pr.number, key: recordKey, status, usd });
+    const name = recordName({ month, pr: pr.number, key: recordKey, status, usd, account: accountId });
     return { name, body: JSON.stringify({ name, month, pr: pr.number, head_sha: pr.head.sha, merge_base: mergeBase, key: recordKey, status, model: usedModel, provider, account, tier, usd, ...extra }, null, 2) };
   };
   const chain = (config.creditFallbacks || []).filter((step) => deps.fallbacks?.[step.id]);
@@ -205,6 +210,7 @@ export async function runReview(deps) {
   let message;
   try {
     try {
+      if (mainSkipped) throw Object.assign(new Error('main account over its budget'), { kind: 'billing', mainSkipped });
       message = await mainCall();
     } catch (e) {
       if (!(creditExhausted(e) && chain.length)) throw e;
@@ -212,18 +218,22 @@ export async function runReview(deps) {
       // is used up. Walk the chain; a step that is out of credit too passes
       // the review on, any other failure stops here.
       let failed = e;
-      const empty = ['Claude'];
+      const empty = [e?.mainSkipped ? 'Claude (its monthly review budget is used)' : 'Claude'];
+      if (e?.mainSkipped) state.limitations.push(`Claude was not called: ${e.mainSkipped}.`);
       for (const step of chain) {
         provider = step.provider;
         account = step.label;
         usedModel = step.provider === 'anthropic' ? model : step.model;
+        accountId = step.id;
+        // Each account has its own balance, so its own month: bound this
+        // step by the per-review cap and by what this account has spent.
+        const worst = preflightCost({ inputTokens, maxOutputTokens: config.maxOutputTokens, model: usedModel, rates: state.rates });
+        const stepLedger = listing ? readLedger(listing.artifacts, { month, key, listingComplete: listing.complete, account: step.id }) : { spentUsd: 0, duplicate: null, complete: false };
+        const allowed = budgetDecision({ worstCaseUsd: worst, maxCostUsd: config.maxCostUsd, monthlyBudgetUsd: config.monthlyBudgetUsd, ledger: stepLedger });
+        if (!allowed.allow) {
+          return finish(state, 'budget_refused', `${empty.join(', ')} ${empty.length === 1 ? 'is' : 'are'} out of credit, and ${account} was not called: ${allowed.reason}. No API call was made to ${account}.`);
+        }
         if (usedModel !== model) {
-          // Another model: bound its cost as the main model's was, before the call.
-          const worst = preflightCost({ inputTokens, maxOutputTokens: config.maxOutputTokens, model: usedModel, rates: state.rates });
-          const allowed = budgetDecision({ worstCaseUsd: worst, maxCostUsd: config.maxCostUsd, monthlyBudgetUsd: config.monthlyBudgetUsd, ledger });
-          if (!allowed.allow) {
-            return finish(state, 'budget_refused', `${empty.join(', ')} ${empty.length === 1 ? 'is' : 'are'} out of credit, and ${account} was not called: ${allowed.reason}. No API call was made to ${account}.`);
-          }
           recordKey = reviewKey({ mergeBase, headSha: pr.head.sha, model: usedModel, config });
           const earlier = listing ? readLedger(listing.artifacts, { month, key: recordKey, listingComplete: listing.complete }).duplicate : null;
           if (earlier) {
