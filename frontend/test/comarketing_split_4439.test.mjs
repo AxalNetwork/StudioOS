@@ -16,6 +16,7 @@ import { PARTNER_TAB_SETS } from '../src/pages/partner/PartnerWorkspaceTabs.jsx'
 import { moduleToolLinks, editorModuleLink } from '../src/pages/cycles/founderToolNavigation.js';
 import { FOUNDER_ZONE_ACTIONS } from '../src/workspaces/founderZoneActions.js';
 import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
+import { PAGE_HOMES, alsoInFor } from '../src/lib/adminPlacement.js';
 import { HELP_SURFACES, canOpenSurface } from '../src/pages/docs/guidePlacement.js';
 import { recordFeedVisit } from '../src/pages/CoMarketingPage.jsx';
 import { ROLE_REDIRECTS, isRedirectKey } from '../../cloudflare-worker/src/services/redirectRoutes.ts';
@@ -63,10 +64,13 @@ test('founder opens co-marketing from Partner network and returns with the ventu
   assert.deepEqual(moduleToolLinks('grow', 'partner-network', founder, '?project_id=41&tab=old'), [{ label: 'Open co-marketing', href: target + '?project_id=41' }]);
   assert.ok(!moduleToolLinks('grow', 'distribution', founder).some((link) => link.href.includes('co-marketing')));
   assert.deepEqual(editorModuleLink(target, '?project_id=41&tab=old', founder), { href: '/grow/partner-network?project_id=41', label: '← Grow › Partner network' });
-  assert.deepEqual(FOUNDER_ZONE_ACTIONS['grow/partnerships'][0], { label: 'Open co-marketing', to: target });
+  assert.deepEqual(FOUNDER_ZONE_ACTIONS['grow/partnerships'][0], { canvas: 'New proposal', label: 'Open co-marketing', to: target });
   assert.equal((read('../src/pages/founder/FounderGrowPartnerships.jsx').match(/\/grow\/partner-network\/co-marketing\?project_id=/g) || []).length, 2);
   const visibility = PARTNER_TAB_SETS.offers.find((tab) => tab.to === '/comarketing');
   assert.deepEqual(visibility.roles, ['admin', 'partner']);
+  assert.deepEqual(PAGE_HOMES['/comarketing'], [['partner', 'Offers', 'also']]);
+  assert.ok(alsoInFor('partner', 'Offers').some(row => row.route === '/comarketing'));
+  assert.ok(!alsoInFor('founder', 'Grow').some(row => row.route === '/comarketing'));
   const partnerOffers = SIDEBAR_GROUPS.partner.flatMap((group) => group.items).find((row) => row.label === 'Offers');
   assert.ok(partnerOffers.match.includes('/comarketing'));
   const investorTargets = SIDEBAR_GROUPS.investor.flatMap((group) => group.items).flatMap((row) => [row.to, ...(row.match || [])]);

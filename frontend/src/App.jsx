@@ -343,6 +343,7 @@ const PublicAdvisorBookingPage = lazy(() => import('./pages/advisor/PublicAdviso
 const AttestConsentPage = lazy(() => import('./pages/AttestConsentPage'));
 const PartnerAttestConsentPage = lazy(() => import('./pages/PartnerAttestConsentPage'));
 const PartnerOfficeHoursPage = lazy(() => import('./pages/PartnerOfficeHoursPage'));
+const CoMarketingFounderRedirect = lazy(() => import('./pages/founder/CoMarketingFounderRedirect'));
 const CoMarketingPage = lazy(() => import('./pages/CoMarketingPage'));
 const CoMarketingPitchPage = lazy(() => import('./pages/CoMarketingPitchPage'));
 const CalendarPage = lazy(() => import('./pages/CalendarPage'));
@@ -3551,7 +3552,7 @@ function AppInner() {
           contract breaks. This redirect keeps every bookmark alive; it points
           at Opportunities because availability is what "office hours" meant. */}
       <Route path="/partner/office-hours" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerWorkspaceTabs set="offers" user={user}><PartnerOfficeHoursPage /></PartnerWorkspaceTabs>))} />
-      <Route path="/comarketing" element={guard(['admin', 'partner', 'founder', 'investor'], partnerPrivateWorkspace(effectiveRole === 'founder' ? founderWorkspace('grow', founderEditor(<CoMarketingPage user={user} />)) : <PartnerWorkspaceTabs set="offers" user={user}><CoMarketingPage user={user} /></PartnerWorkspaceTabs>))} />
+      <Route path="/comarketing" element={guard(['admin', 'partner', 'founder'], partnerPrivateWorkspace(effectiveRole === 'founder' ? <CoMarketingFounderRedirect /> : <PartnerWorkspaceTabs set="offers" user={user}><CoMarketingPage user={user} /></PartnerWorkspaceTabs>))} />
       {/* D637 — one pitch, edited while Proposed. Only a partner owns pitches (or an admin reads one). */}
       <Route path="/comarketing/:pitch" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerWorkspaceTabs set="offers" user={user}><CoMarketingPitchPage /></PartnerWorkspaceTabs>))} />
       {/* D1210 (#3176, CAL14): an Explorer reaches the calendar: Events and From other calendars, and no New. */}

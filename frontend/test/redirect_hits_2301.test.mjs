@@ -134,7 +134,7 @@ test('the mounted default beacon sends canonical tab keys through fetch and tole
 });
 
 test('D1160: a role\'s forward is counted by the forward itself, never by the address bar, since the address is another role\'s page', async () => {
-  assert.deepEqual(ROLE_REDIRECTS.map((r) => r.path), ['/funds', '/funds/performance', '/pipeline']);
+  assert.deepEqual(ROLE_REDIRECTS.map((r) => r.path), ['/funds', '/funds/performance', '/pipeline', '/comarketing']);
   for (const { path } of ROLE_REDIRECTS) {
     assert.ok(isRedirectKey(`redirect:${path}`), `${path} is countable`);
     assert.equal(redirectPatternFor(path), null, `an investor at ${path} is not counted`);
