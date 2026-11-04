@@ -115,3 +115,9 @@ test('repeated checked events keep source selection unique without requoting the
     assert.deepEqual(f.calls[0][1].sources,['validate','research','distribution']);
   }finally{await ui.close();}
 });
+
+test('canonical structured targets are preserved in both the quote and run requests',async()=>{
+  const f=apiFor();const kinds=[{kind:'ad_creative',placement:'google_search_text',field:'headline',channel_uid:'channel-one'}];
+  const ui=await mount(h(DistributionAskIntent,{projectId:1,api:f.api,kinds}));
+  try{assert.deepEqual(f.calls[0][1].kinds,kinds);await ui.click('Ask Eadwyn to draft for each channel');assert.deepEqual(f.calls.find(c=>c[0]==='run')[1].kinds,kinds);}finally{await ui.close();}
+});

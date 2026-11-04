@@ -160,3 +160,17 @@ test('an archived campaign keeps its unaccepted text discardable without changin
   assert.equal((await f.call('POST',`/${p.uid}/decide`,{project:1,decision:'discard'})).status,200);
   assert.equal(f.count('grow_campaign_creatives'),0);
 });
+
+test('structured creative targets quote and run intact; unknown target fields refuse before AI',async()=>{
+  const f=fixture();
+  const kind={kind:'ad_creative',placement:'google_search_text',field:'headline',channel_uid:'channel-one'};
+  const request={...REQUEST,target:'form',kinds:[kind]};
+  const q=await f.call('POST','/quote',request);
+  assert.equal(q.status,200);
+  const r=await f.call('POST','/run',{...request,quote:q.body.estimate});
+  assert.equal(r.status,200,JSON.stringify(r.body));
+  assert.deepEqual(Object.fromEntries(['kind','placement','creative_field','channel_uid','target'].map(k=>[k,r.body.proposals[0].payload[k]])),{kind:'ad_creative',placement:'google_search_text',creative_field:'headline',channel_uid:'channel-one',target:'form'});
+  assert.equal(f.count('grow_campaign_creatives'),0);
+  assert.equal((await f.call('POST','/quote',{...request,kinds:[{...kind,budget:100}]})).status,400);
+  assert.equal(f.prompts.length,1);
+});
