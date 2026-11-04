@@ -33,6 +33,7 @@ import CommentsSheet from './CommentsSheet';
 import { areaFromLink, cardFromLink } from './deckLinkModel';
 import ExportDialog from './ExportDialog';
 import TransitionSheet from './TransitionSheet';
+import VoiceSheet from './VoiceSheet';
 import { BackgroundSheet, BrandKitSheet, CheckSheet, RemixSheet, ReplaceImagesSheet, SizeSheet, SourcesSheet, StageSheet, StructureSheet, ThemeSheet, VersionsSheet } from './DeckSheets';
 // D1583 (#3830): ⋯ › This deck › Teaser, one-pager or memo.
 import DeriveSheet from './DeriveSheet.jsx';
@@ -708,7 +709,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     if (id === 'replace_images') { if (!readOnly) setSheet('replace_images'); return; }
     // D4254 P1 slice 2 (#4274): the deck bar's Edit closes the comments it opened.
     if (id === 'close_comments') { setSheet((s) => (s === 'comments' ? null : s)); return; }
-    if (['theme', 'size', 'brand', 'sources', 'versions', 'check', 'structure', 'background', 'transition', 'remix', 'derive', 'comments', 'find'].includes(id)) setSheet(id);
+    if (['theme', 'size', 'brand', 'sources', 'versions', 'check', 'structure', 'background', 'transition', 'remix', 'derive', 'comments', 'find', 'voice'].includes(id)) setSheet(id);
   };
   if (actionRef) actionRef.current = act;
   const cardAction = (id, i, value) => {
@@ -875,6 +876,11 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
       ) : null}
       {sheet === 'transition' && card ? (
         <TransitionSheet card={card} index={sel} readOnly={readOnly} onTransition={(t) => edit({ type: 'setFlag', index: sel, key: 'transition', value: t ?? undefined }, { label: 'Transition' })} onClose={() => setSheet(null)} />
+      ) : null}
+      {/* D1569 (#3816): ⋯ › This card › AI voice-over. Accept writes a new version, read back as Restore's is. */}
+      {sheet === 'voice' && card && base.deck?.id ? (
+        <VoiceSheet deckId={base.deck.id} card={card} index={sel} readOnly={readOnly} dirty={dirty}
+          onAccepted={() => onSaved?.()} onClose={() => setSheet(null)} />
       ) : null}
       {sheet === 'derive' && base.deck?.id ? (
         <DeriveSheet deckId={base.deck.id} version={base.deck.version ?? null} dirty={dirty} readOnly={readOnly} aiOn={aiOn} outOfTokens={outOfTokens}

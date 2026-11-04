@@ -186,6 +186,15 @@ export const Jobs = {
     } catch {
       console.error('[cron] deck recording sweep unreadable');
     }
+    // D1569 (#3816): an AI voice-over nobody accepted or discarded leaves R2 after seven days.
+    try {
+      const { sweepOrphanAudio, sweepPendingVoice } = await import('../services/decks/cardAudio');
+      await sweepPendingVoice(env);
+      // A clip no version or proposal names any more (its deck, venture or account went) leaves R2 too.
+      await sweepOrphanAudio(env);
+    } catch {
+      console.error('[cron] deck voice sweep unreadable');
+    }
     // D4374 (#4374): a deck generation run whose driver died is stopped (timed out) and its hold settled at what it placed.
     try {
       const { sweepStuckBatches } = await import('../services/decks/batchSweep');

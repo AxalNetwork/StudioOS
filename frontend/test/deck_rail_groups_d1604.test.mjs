@@ -37,7 +37,8 @@ import { api } from '../src/lib/api.js';
 import { aiBudgetApi } from '../src/lib/api/aiBudget.js';
 import { railPrefsApi } from '../src/lib/api/railPrefs.js';
 import { FOUNDER_OPTIONS } from '../src/lib/railOptions/founder.js';
-import { DECK_RAIL_GROUPS, DECK_RAIL_PAGE, PRESETS, deckRail, groupAnswer, heldNow, railItems, usedBy } from '../src/pages/raise/pitch/deckRailGroups.js';
+import { DECK_RAIL_GROUPS, DECK_RAIL_PAGE, ONE_VOICE, PRESETS, deckRail, groupAnswer, heldNow, railItems, usedBy, voiceAnswer } from '../src/pages/raise/pitch/deckRailGroups.js';
+import { deckVoiceApi } from '../src/lib/api/deckVoice.js';
 import { deckElementModelsApi } from '../src/lib/api/deckElementModels.js';
 import { deckModelPresetsApi } from '../src/lib/api/deckModelPresets.js';
 import { deckUsageApi } from '../src/lib/api/deckUsage.js';
@@ -64,7 +65,9 @@ test('every option a group names is a Pitch deck option on main; on a deck every
   const none = Object.fromEntries(railItems(null).map((g) => [g.id, g]));
   for (const id of ['graphics', 'diagrams', 'venture']) assert.match(none[id].unavailable.reason, /picked per deck/);
   assert.equal(none.text.read, undefined); assert.equal(none.text.unavailable, undefined);
-  assert.deepEqual(DECK_RAIL_GROUPS.map((g) => g.label), ['Text', 'Images', 'Graphics', 'Data', 'Diagrams', 'Venture records', 'Vision and checks', 'Safety']);
+  // D1569 (#3816): Voice, the AI voice-over's model, before Safety.
+  assert.deepEqual(DECK_RAIL_GROUPS.map((g) => g.label), ['Text', 'Images', 'Graphics', 'Data', 'Diagrams', 'Venture records', 'Vision and checks', 'Voice', 'Safety']);
+  assert.match(none.voice.unavailable.reason, /picked per deck/, 'with no deck, the voice is per deck too');
   assert.deepEqual(DECK_RAIL_GROUPS.find((g) => g.id === 'images').options, ['deck:image']);
   assert.deepEqual(DECK_RAIL_GROUPS.find((g) => g.id === 'data').options, ['deck:chart', 'deck:table', 'deck:timeline']);
   assert.ok(DECK_RAIL_GROUPS.find((g) => g.id === 'safety').safety);
@@ -144,6 +147,9 @@ async function mount(el, { holds = { holds: [{ included_microusd: 60000, topup_m
   const realPrefs = { ...railPrefsApi };
   const realElements = { ...deckElementModelsApi };
   const realPresets = { ...deckModelPresetsApi };
+  const realVoice = { ...deckVoiceApi };
+  // D1569 (#3816): the voice the Voice group reads.
+  deckVoiceApi.read = async () => ({ model: { id: '@cf/synthetic/voice', name: 'synthetic-voice', label: 'AI voice' }, cards: [] });
   // D1549 (#3796): the deck's presets, Balanced in force, nothing locked.
   deckModelPresetsApi.read = async () => ({ deck_id: 31, project_id: 1, preset: 'balanced', stored: null, options: [], groups: [], locks: [] });
   const calls = { page: [], pick: [], elements: [], elementPick: [] };
@@ -174,7 +180,7 @@ async function mount(el, { holds = { holds: [{ included_microusd: 60000, topup_m
     async click(id) { const n = by(id); if (!n) throw new Error(`Missing ${id}`); await act(async () => { await pr(n).onClick?.({ preventDefault() {} }); }); await settle(); },
     async unmount() {
       await act(async () => root.unmount()); restore();
-      Object.assign(api, real); Object.assign(aiBudgetApi, realBudget); Object.assign(railPrefsApi, realPrefs); Object.assign(deckElementModelsApi, realElements); Object.assign(deckModelPresetsApi, realPresets);
+      Object.assign(api, real); Object.assign(aiBudgetApi, realBudget); Object.assign(railPrefsApi, realPrefs); Object.assign(deckElementModelsApi, realElements); Object.assign(deckModelPresetsApi, realPresets); Object.assign(deckVoiceApi, realVoice);
       __resetEadwynPanelForTest(); __resetAssistModeForTest(); __resetRailPrefsSyncForTest();
     },
   };
@@ -277,4 +283,20 @@ test('the three pitch pages pass the deck\'s groups, and the shared rail runs no
   const rail = read('frontend/src/ui/RailGroups.jsx');
   assert.doesNotMatch(rail, /\b(deckAssistApi|deckImagesApi|newDeckApi|railPressHeaders|request\()/, 'the rail runs nothing');
   assert.doesNotMatch(read('frontend/src/ui/RailGroups.jsx'), /from '\.\.\/pages\//, 'the shared rail reads no page module');
+});
+
+test('D1569: the Voice group shows the one voice the Worker names, labelled AI voice, and a pick is refused with why', async () => {
+  assert.deepEqual(voiceAnswer({ model: { id: '@cf/synthetic/voice', name: 'synthetic-voice' } }),
+    { ok: true, models: [{ id: '@cf/synthetic/voice', role: 'Default', line: 'AI voice', name: 'synthetic-voice' }], more: [], pick: '@cf/synthetic/voice' });
+  assert.throws(() => voiceAnswer({}), /could not be read/, 'an unreadable voice is said, never empty');
+  const voice = railItems(31).find((g) => g.id === 'voice');
+  await assert.rejects(voice.pick('@cf/other/voice'), new RegExp(ONE_VOICE.replace(/[.]/g, '\\.')));
+  const m = await mount(h(WorkerRail, { workspace: 'Raise', groups: deckRail(31) }));
+  try {
+    await m.click('button-worker-rail-group-voice');
+    assert.match(m.text(m.by('worker-rail-group-voice')), /Voice.*synthetic-voice/);
+    assert.ok(m.by('card-worker-rail-group-voice-voice'), 'the one voice, as a card');
+  } finally { await m.unmount(); }
+  const src = read('frontend/src/pages/raise/pitch/deckRailGroups.js');
+  assert.doesNotMatch(src, /@cf\//, 'the rail names no model of its own');
 });
