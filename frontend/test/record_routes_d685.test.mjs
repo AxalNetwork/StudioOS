@@ -174,7 +174,7 @@ const labelsOf = (cols) => cols.map((c) => c.label);
 test('the Interviews list: titled Interviews, with a Channel filter, and the channel in words', () => {
   // D697: the three bottom sections' tables carry the canvas's titles (CO:611, :612, :616).
   assert.deepEqual(TITLES, { 'customer-research': 'Interviews', 'problem-discovery': 'Pain themes', experiments: 'Hypotheses' });
-  const mod = adaptModule('validate', 'customer-research', { module: { name: 'Customer research' }, records: { cols: ['Interviewee', 'Company', 'Date', 'ICP fit', 'Consent', 'State'], rows: [], total: 0, page: 1, page_size: 25 } });
+  const mod = adaptModule('validate', 'customer-research', { module: { name: 'Customer research' }, records: { cols: ['Interviewee', 'Company', 'Date', 'ICP fit', 'Recording consent', 'Quotes OK', 'State'], rows: [], total: 0, page: 1, page_size: 25 } });
   assert.equal(mod.module.records_title, 'Interviews');
   assert.equal(mod.module.name, 'Customer research', 'the module keeps its name');
   assert.equal(adaptModule('validate', 'customer-research', { records: { cols: [], rows: [] } }).module.records_title, 'Interviews', 'even when the read carried no module');
@@ -183,13 +183,13 @@ test('the Interviews list: titled Interviews, with a Channel filter, and the cha
   assert.equal(adaptModule('validate', 'experiments', { module: { name: 'Experiments and evidence' } }).module.records_title, 'Hypotheses');
   assert.equal('records_title' in adaptModule('validate', 'ideal-customer-profile', { module: { name: 'Ideal customer profile' } }).module, false, 'only the three bottom sections are retitled');
   assert.equal('records_title' in adaptModule('grow', 'customer-research', { module: {} }).module, false);
-  const recs = adaptRecords('validate', 'customer-research', { cols: ['Interviewee', 'Company', 'Date', 'ICP fit', 'Consent', 'State'], rows: [{ ...ROW, channel: 'phone' }], total: 1, page: 1, page_size: 25 });
+  const recs = adaptRecords('validate', 'customer-research', { cols: ['Interviewee', 'Company', 'Date', 'ICP fit', 'Recording consent', 'Quotes OK', 'State'], rows: [{ ...ROW, channel: 'phone' }], total: 1, page: 1, page_size: 25 });
   const f = recs.filters.find((x) => x.key === 'channel');
   assert.equal(f.label, 'Channel');
   // Video and audio calls are one Call (the owner, 2026-10-21); `call` filters both.
   assert.deepEqual(f.options, [{ value: 'in_person', label: 'In person' }, { value: 'call', label: 'Call' }, { value: 'text', label: 'Text chat' }]);
-  assert.deepEqual(recs.filters.map((x) => x.key), ['icp', 'consent', 'channel'], 'D697 decision 4: State replaced Stage; the Worker keeps stage:pipeline for the picker');
-  assert.deepEqual(labelsOf(recs.cols).slice(5), ['State'], 'D690: State ends the list; Channel is a filter');
+  assert.deepEqual(recs.filters.map((x) => x.key), ['icp', 'recording_consent', 'consent', 'channel'], 'D697 decision 4: State replaced Stage; the Worker keeps stage:pipeline for the picker');
+  assert.deepEqual(labelsOf(recs.cols).slice(-1), ['State'], 'D690: State ends the list; Channel is a filter');
   assert.equal(cellView(recs.rows[0].cells.channel).text, 'Call');
 });
 
@@ -209,7 +209,8 @@ test('channels are words: all four, the old manual rows, an unknown one as writt
 test('the Worker already filters the interview log on channel (bound), so the filter needs no new route', () => {
   const svc = read('cloudflare-worker/src/services/cycleValidate.ts');
   // `call` is the merged filter: both stored call channels (the owner, 2026-10-21).
-  assert.match(svc, /AND \(\? = '' OR channel = \? OR \(\? = 'call' AND channel IN \('video', 'phone'\)\)\)/);
+  // Count and page now join the latest recording session; both qualify the interview channel.
+  assert.equal((svc.match(/AND \(\? = '' OR i\.channel = \? OR \(\? = 'call' AND i\.channel IN \('video', 'phone'\)\)\)/g) || []).length, 2);
   assert.match(svc, /AND \(\? = '' OR i\.channel = \? OR \(\? = 'call' AND i\.channel IN \('video', 'phone'\)\)\)/);
   assert.match(svc, /const channel = \['in_person', 'call', 'video', 'phone', 'text', 'manual'\]\.includes\(f\.channel\) \? f\.channel : '';/);
   assert.ok(renderedText(html(h(RecordsTable, { title: 'Interviews', records: { cols: [{ key: 'a', label: 'A' }], rows: [], total: 0, page: 1, page_size: 25, filters: [{ key: 'channel', label: 'Channel', options: [{ value: 'call', label: 'Call' }] }] } }))).includes('Channel: all'));
