@@ -177,7 +177,7 @@ test('A CHOSEN VENTURE RIDES ON EVERY LINK: tabs, card titles and the module pag
   assert.match(route, /searchParams\.get\('project_id'\) \|\| searchParams\.get\('project'\)/, "the read's own `?project=` links pick the venture too");
   // Assert each surface directly: adding a new venture-aware surface must not
   // invalidate an unrelated total-count pin (D4487).
-  for (const component of ['CycleHeader', 'PhoneCycleRoot', 'CycleOverview', 'RaiseLead', 'PmfChip', 'BuildPlanDoor', 'ModulePage', 'CapTableHomeNav', 'DataRoomHomeNav', 'UseOfFundsHomeNav', 'CapRelHomeNav', 'DistributionTabs', 'NewCampaignPage', 'CampaignsTab']) {
+  for (const component of ['CycleHeader', 'PhoneCycleRoot', 'CycleOverview', 'RaiseLead', 'PmfChip', 'BuildPlanDoor', 'ModulePage', 'CapTableHomeNav', 'DataRoomHomeNav', 'UseOfFundsHomeNav', 'CapRelHomeNav', 'DistributionTabs', 'NewCampaignPage', 'CampaignsTab', 'InboxNeedsYou']) {
     const start = route.search(new RegExp(`<${component}\\b`));
     assert.ok(start >= 0, `${component} is mounted`);
     assert.match(route.slice(start, route.indexOf('/>', start)), /search=\{q\}/, `${component} keeps the venture`);
