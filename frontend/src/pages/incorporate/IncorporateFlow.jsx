@@ -13,6 +13,9 @@ import AskButton from '../team/AskButton.jsx';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, FIELD } from '../team/teamUi.jsx';
 import IncorporationTimeline from './IncorporationTimeline.jsx';
 import IncorporateDone from './IncorporateDone.jsx';
+import IncorporateHqRead from './IncorporateHqRead.jsx';
+import { useAuth } from '../../hooks/useAuthSync';
+import { isSuperAdminUser } from '../../lib/shellRole';
 import {
   DECLINED, LINE, NOT_YOURS, OFFICERS_LATER, OWN_ONLY, RANGES, SAVED_HERE, STATE_FEE, STEPS, TITLE,
   clearDraft, cofounderStatus, jurisdictionCard, loadDraft, ownProjects, prefill, recommend, saveDraft, shortDay, stepLine,
@@ -303,7 +306,22 @@ function orderRefusal(e, label) {
   return 'The payment could not be started. Try again in a moment.';
 }
 
+/**
+ * D4360 (#4360, INC5g): an admin who opens `/incorporate?order=<id>` (from Lab ›
+ * Formation) reads that order read only; everyone else, and an admin without
+ * `?order`, gets the member's flow, unchanged.
+ */
 export default function IncorporateFlow({ embedded = false }) {
+  const [params] = useSearchParams();
+  const user = useAuth()?.user ?? null;
+  const orderId = params.get('order');
+  if (orderId && /^\d{1,12}$/.test(orderId) && user?.role === 'admin') {
+    return <IncorporateHqRead orderId={orderId} viewer={isSuperAdminUser(user) ? 'super_admin' : 'admin'} />;
+  }
+  return <MemberIncorporateFlow embedded={embedded} />;
+}
+
+function MemberIncorporateFlow({ embedded = false }) {
   const [params] = useSearchParams();
   const phone = usePhoneWidth();
   const asked = params.get('project');
