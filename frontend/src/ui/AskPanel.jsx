@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import AgentDisclaimer from '../pages/team/AgentDisclaimer.jsx';
 import { X } from 'lucide-react';
 import { useEscapeClose } from '../components/useEscapeClose';
 import { askPanelAdapter } from './askPanelAdapter.js';
@@ -213,6 +214,7 @@ export default function AskPanel({ page, label, crumb, options = [], aiOn = true
                     {c.source && <span className="ead-ask-source">{c.source}</span>}
                   </span>
                   <span className="ead-ask-card-text">{c.text}</span>
+                  <AgentDisclaimer disclaimerKey={c.disclaimer_key} />
                   {c.status === 'proposed' ? (
                     <span className="ead-ask-card-acts">
                       <button type="button" className="ead-ask-btn is-primary" onClick={() => decide(c, 'accept')}>Accept</button>

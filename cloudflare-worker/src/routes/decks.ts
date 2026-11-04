@@ -61,6 +61,7 @@ import { approvalRefusal, pendingApprovers } from '../services/decks/deckApprova
 import { newAssignments, notifyAssignments } from '../services/decks/cardStatus';
 import { peopleOf } from '../services/decks/deckPeople';
 import { funnelPoint, structuresChanged } from '../services/decks/observability';
+import { keyOfProject } from '../services/decks/cardAudio';
 
 /** D895 applies only to deck operations, not other project-content routes. */
 export async function projectOwned(c: any, user: any, projectId: number, opts: { write?: boolean; audit?: boolean; contactData?: boolean } = {}) {
@@ -543,8 +544,10 @@ export function publicDeckOf(row: any): any {
   // D1545 (#3788): a hidden card reaches no reader: not Present, the share page or the print page.
   deck.slides = visibleCards(deck.slides || []).map((s: any) => {
     // D1579 (#3826): a card's status and assignee are the venture's working state, never an outside reader's.
-    const { notes, status, assignee, ...card } = s || {};
+    const { notes, status, assignee, voice, ...card } = s || {};
     void notes; void status; void assignee;
+    // D1569 (#3816): an accepted AI voice-over reaches a reader as its label and model only; the clip plays through a signed link.
+    if (voice?.key) card.voice = { label: voice.label, model: voice.model };
     return card;
   });
   // D1546: every reader of a deck (share, present, the print page the PDF and PowerPoint photograph)
@@ -991,7 +994,8 @@ decks.get('/share/:token', async (c) => {
   return c.json({
     ...publicDeckOf(row),
     // D1507: quotes and logos go out only with the consent or permission the venture's records hold.
-    slides: shareSlides(cards, included, await shareGatesFor(c.env, Number(row.project_id))),
+    // D1569 (#3816): a card's AI voice-over goes out as a signed link only, after every gate above passed.
+    slides: await withVoiceLinks(c.env, shareSlides(cards, included, await shareGatesFor(c.env, Number(row.project_id))), Number(row.project_id)),
     // D1565: who the link was made for, drawn over every card ("Prepared for …").
     watermark: link?.watermark_text ?? null,
     view_id: viewId,
@@ -1884,7 +1888,26 @@ async function signingKey(env: Env): Promise<CryptoKey> {
     { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify'],
   );
 }
-async function mintSignedToken(env: Env, fileKey: string, ttlSeconds: number, actor: string | null): Promise<string> {
+/** D1569 (#3816): a voice link lives an hour: long enough to present, short enough that a copied link dies. */
+export const VOICE_LINK_TTL_S = 3600;
+/** D1569: a link that plays one clip of this venture for an hour; null for any other key. */
+export async function voiceLink(env: Env, key: unknown, projectId: number): Promise<string | null> {
+  if (!keyOfProject(key, projectId)) return null;
+  return `/api/decks/voice/${await mintSignedToken(env, key, VOICE_LINK_TTL_S, null)}`;
+}
+/** D1569: each card's voice as a reader gets it: its label, its model and a link to play it, never its key. */
+export async function withVoiceLinks(env: Env, slides: any[], projectId: number): Promise<any[]> {
+  const out: any[] = [];
+  for (const s of slides || []) {
+    const key = (s as any)?.voice?.key;
+    const url = key ? await voiceLink(env, key, projectId) : null;
+    if (!s || typeof s !== 'object' || !('voice' in s)) { out.push(s); continue; }
+    const { voice, ...card } = s as any;
+    out.push(url ? { ...card, voice: { label: voice.label, model: voice.model, url } } : card);
+  }
+  return out;
+}
+export async function mintSignedToken(env: Env, fileKey: string, ttlSeconds: number, actor: string | null): Promise<string> {
   const payload: any = { k: fileKey, exp: Math.floor(Date.now() / 1000) + Math.max(1, ttlSeconds) };
   if (actor) payload.a = actor;
   // D902 — a nonce, so two links made for one version in the same second are two

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import CohortCard from './CohortCard.jsx';
 import { RefreshCw } from 'lucide-react';
 import { Card } from '../../../ui';
 import AdminPageHeader, { HeaderTab } from '../../../ui/AdminPageHeader';
@@ -77,6 +78,7 @@ function Overview({ skills }) {
   const tiles = overviewTiles({ hqSkills: skills.status === 'ready' ? skills.hq : null });
   return (
     <div className="space-y-4" data-testid="ai-agents-overview">
+      <CohortCard />
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {tiles.map((t) => (
           <Card key={t.key} className="px-4 py-3.5" data-testid={`ai-agents-kpi-${t.key}`}>

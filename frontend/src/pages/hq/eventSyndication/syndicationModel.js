@@ -136,9 +136,15 @@ export function safeExternal(value) {
 }
 export const eventReadValid = (v) => !!v && typeof v.eligible === 'boolean' && typeof v.approved === 'boolean' && Array.isArray(v.rows) && v.rows.every((r) => typeof r.account_uid === 'string' && typeof r.on === 'boolean' && typeof r.adapter_ready === 'boolean' && r.overrides && typeof r.overrides === 'object');
 /** Each changed choice keeps all saved copy; posted rows are managed by Withdraw. */
-export const copyOf = (overrides) => Object.fromEntries(Object.entries(overrides).filter(([, v]) => typeof v === 'string' && v.trim()));
-export const choicesOf = (rows) => rows.filter((r) => r.status !== 'posted' && r.adapter_ready && CHANNELS.some((c) => c.key === r.channel)).map((r) => ({ account_uid: r.account_uid, on: r.on, overrides: copyOf(r.overrides) }));
-export const copyInvalid = (row) => charCount(row.overrides.title, row.title_limit).over || charCount(row.overrides.description, row.text_limit).over || (!!row.overrides.ticket_url && (!safeExternal(row.overrides.ticket_url) || row.overrides.ticket_url.length > 2000));
+export const copyOf = (overrides) => Object.fromEntries(Object.entries(overrides).filter(([, v]) => typeof v === 'string' && v.trim()).map(([k, v]) => [k, v.trim()]));
+export const choiceEditable = (row) => !['withdrawn', 'cancelled', 'skipped', 'posted'].includes(row.status) && row.adapter_ready && CHANNELS.some((c) => c.key === row.channel);
+/** D4440: only deliberate edits leave the page; a choice-only write preserves current saved copy. */
+export const choicesOf = (rows, dirty = new Set(), copyEdited = new Set()) => rows.filter((r) => dirty.has(r.account_uid) && choiceEditable(r)).map((r) => ({ account_uid: r.account_uid, on: r.on, ...(copyEdited.has(r.account_uid) ? { overrides: copyOf(r.overrides) } : {}) }));
+export function ticketLinkError(value) {
+  const link = String(value || '').trim();
+  return link && (link.length > 2000 || !/^https:\/\/[^\s]+$/i.test(link)) ? 'Use an https ticket link without spaces (at most 2000 characters).' : null;
+}
+export const copyInvalid = (row) => charCount(row.overrides.title, row.title_limit).over || charCount(row.overrides.description, row.text_limit).over || !!ticketLinkError(row.overrides.ticket_url);
 /** A separate first write: a failed choice must never be followed by Approve. */
 export async function approveWithChannels(api, admin, id, channels) {
   if (channels.length) await api.choose(id, channels);
