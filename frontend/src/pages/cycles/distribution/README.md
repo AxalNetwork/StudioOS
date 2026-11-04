@@ -13,18 +13,14 @@ starting ads.
 | `distributionModel.js` | Tab order, project-scoped paths and the budget-derived Ask state. Unknown budget data never means out of tokens. |
 | `DistributionParts.jsx` | Cards, KPI, source chips, dot pills, Not recorded, a wrapper over AskProposal, notes, tables, progress, hold lines and loading/coming-soon states. These components make no reads or writes. |
 | `distribution.css` | Scoped DS light/dark tokens, spacing and phone tab overflow. |
-| `CampaignsTab.jsx` | Campaign filters, attention rows and route-driven detail, over the existing campaign API (D4487). |
-| `CampaignCard.jsx` | Recorded funnel, budget and linked-item counts, sorted by state (D4487). |
-| `CampaignSheet.jsx` | The 480px detail with explicit Activate/Pause/Resume/End and Archive confirmations (D4487). |
-| `NewCampaignPage.jsx` | Six full-page steps; Schedule saves a plan, never activates or publishes (D4487). |
-| `CampaignSteps.jsx` | Goal, audience, channels, dates/budgets, manual assets and review; slots for #4488 and Prospects (D4487). |
-| `campaignModel.js` | Pure labels, ordering, missing-value rules, amounts, validation and review rows (D4487). |
-| `campaignPlan.js` | Manual campaign/linked-draft save with retained identifiers for partial retries (D4487). |
-| `campaigns.css` | Responsive light/dark campaign layouts and 44px controls (D4487). |
-
-CycleRoute still owns the module page. Overview retains its channels table,
-outreach draft, content calendar, update-ask replies, Mercury, Notion and tool
-doors. Other tabs show Coming in this module soon until their tasks land.
+| `CampaignsTab.jsx` | D4487: campaign filters, attention rows and route-driven detail, over the existing campaign API. |
+| `CampaignCard.jsx` | D4487: recorded funnel, budget and linked-item counts, sorted by state. |
+| `CampaignSheet.jsx` | D4487: the 480px detail with explicit Activate/Pause/Resume/End and Archive confirmations. |
+| `NewCampaignPage.jsx` | D4487: six full-page steps; Schedule saves a plan, never activates or publishes. |
+| `CampaignSteps.jsx` | D4487: goal, audience, channels, dates/budgets, manual assets and review; slots for #4488 and Prospects. |
+| `campaignModel.js` | D4487: pure labels, ordering, missing-value rules, amounts, validation and review rows. |
+| `campaignPlan.js` | D4487: manual campaign/linked-draft save with retained identifiers for partial retries. |
+| `campaigns.css` | D4487: responsive light/dark campaign layouts and 44px controls. |
 | `DistributionAskIntent.jsx` | D4488: sources, quote before run, proposal preview and local form acceptance. |
 | `WaitingForYou.jsx` | D4488: venture-scoped header count, loading/empty/error states and individual or safe bulk decisions. |
 | `distributionAskModel.js` | D4488: labels, actual listed counts, exact safe kinds and recorded hold/charge copy. |
@@ -33,11 +29,15 @@ doors. Other tabs show Coming in this module soon until their tasks land.
 | `inbox.css` | D4494: DS8 thread columns, phone stacking and directional message bubbles using shared tokens. |
 | `ChannelsTab.jsx` | D4486: venture channel readings, existing Add/Edit forms and Ask, read-only connection cards, settings confirmation and existing tool doors. |
 | `channelsModel.js` | D4486: columns, category choices, independent state pills, UTC activity labels, safe settings actions and missing readings. |
+| `AdsTab.jsx` | D4490: budget planner, spend gaps, platform availability and creative drafts; shell integration requested from #4484. |
+| `adsModel.js` | D4490: slider amounts, totals and monthly chart gaps. |
+| `ads.css` | D4490: responsive Ads columns using the Distribution tokens. |
 
 CycleRoute still owns the module page. Overview retains its channels table,
 outreach draft, content calendar, update-ask replies, Mercury, Notion and tool
-doors. Inbox is the D4494 tab. Channels is the D4486 tab on this shell. Other
-tabs show Coming in this module soon until their tasks land.
+doors. Campaigns is the D4487 tab. Inbox is the D4494 tab. Channels is the
+D4486 tab on this shell. Other tabs show Coming in this module soon until their
+tasks land.
 A pending read uses LoadingSkeleton. No sample count or campaign is fabricated.
 
 Routes are explicit in routes/growDistribution.jsx, including Campaigns/new

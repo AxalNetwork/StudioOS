@@ -260,7 +260,7 @@ test('record mode and write completion are mutation checked against the mounted 
   await mutationCheck(read('frontend/src/pages/cycles/CycleRoute.jsx'), 'pages/cycles/CycleRoute.jsx', assertRecordRead, [
     // D906: a narrative tab word (`/story`) is never read as a record; D1015 adds Cap table's (`/instruments`).
     ['record && known && validRecord && !narrativeTab && !capTableTab && !dataRoomTab && !dataRoomOldFile && !uofTab && !capRelTab && !!projectId && !!def', 'false'],
-    ["if (record || !slug || !known || !projectId || !def)", "if (!slug || !known || !projectId || !def)"],
+    ["if (record || !slug || !known || !projectId || !def || (distribution && distributionTab !== 'overview'))", "if (!slug || !known || !projectId || !def || (distribution && distributionTab !== 'overview'))"],
     ['reread: () => load(true)', 'reread: async () => {}'],
   ], true);
 });
