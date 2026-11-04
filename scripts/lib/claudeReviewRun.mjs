@@ -20,8 +20,7 @@
  *   anthropic.countTokens(params)    { input_tokens }
  *   anthropic.create(params)         the Message; errors carry `kind` (see review.mjs)
  *   fallbacks[id].create(params)     the credit fallback chain's clients, by step id (claude2,
- *                                    claude3, kimi); used only when the account before answers
- *                                    that its credit balance is exhausted
+ *                                    claude3, kimi); used when earlier accounts are unavailable or fail
  *
  * Returns { outcome, exitCode, summary, annotations, record, findingsFile }.
  * `record` is the artifact to upload (name and JSON body) when tokens were
@@ -117,14 +116,23 @@ export async function runReview(deps) {
   const gate = eventGate(deps.event, { repository: deps.repository, reviewDrafts: config.reviewDrafts });
   if (!gate.run) return finish(state, 'skipped', gate.reason);
   const pr = deps.event.pull_request;
-  const codexAuthored = /^codex\//i.test(pr.head?.ref || deps.env.CLAUDE_REVIEW_PR_HEAD || '') || /(?:\bS\d+\s*[·:|—-]\s*Codex\b|(?:^|\n)\s*(?:agent\s*:\s*|##?\s+Agent\s*\n+\s*)Codex\b|\bgenerated\s+(?:by|with)\s+(?:OpenAI\s+)?Codex\b)/im.test(pr.body || deps.env.CLAUDE_REVIEW_PR_BODY || '') || /codex/i.test(pr.user?.login || deps.env.CLAUDE_REVIEW_PR_AUTHOR || '');
-  const eligibleFallbacks = (config.creditFallbacks || []).filter(step => {
-    if (step.provider === 'openai' && codexAuthored) {
-      state.limitations.push("OpenAI skipped: same vendor as the PR's author");
-      return false;
-    }
-    return true;
-  });
+  const body = String(pr.body || deps.env.CLAUDE_REVIEW_PR_BODY || '');
+  // Inspect only the PR's own Agent section, never dependency or regression prose.
+  const agentSection = /^##[ \t]+Agent[ \t]*\r?\n([\s\S]*?)(?=^#{1,6}[ \t]|$(?![\s\S]))/im.exec(body)?.[1] || '';
+  const agentLine = agentSection.replace(/<!--[\s\S]*?-->/g, '').split(/\r?\n/).find(line => line.trim())?.trim() || '';
+  let commitMarkers = [];
+  try { commitMarkers = await deps.git.authorMarkers?.(pr.head.sha) || []; } catch { /* branch and Agent section remain available */ }
+  const codexAuthored = /^codex\//i.test(pr.head?.ref || deps.env.CLAUDE_REVIEW_PR_HEAD || '') || /^(?:S\d+\s*[·:|—-]\s*)?Codex\b/i.test(agentLine) || /codex/i.test(pr.user?.login || deps.env.CLAUDE_REVIEW_PR_AUTHOR || '') || commitMarkers.some(marker => /\bcodex\b/i.test(String(marker)));
+  const eligibleFallbacks = config.creditFallbacks || [];
+  const mainUnavailable = !config.auth ? 'ANTHROPIC_API_KEY is not set and federation is not configured' : !config.model ? 'ANTHROPIC_MODEL is not set' : null;
+  const fallbackOff = String(deps.env.CLAUDE_REVIEW_CREDIT_FALLBACK || '').trim().toLowerCase() === 'off';
+  if (mainUnavailable) state.limitations.push(`Claude skipped: ${mainUnavailable}.`);
+  if (fallbackOff) state.limitations.push('The fallback chain is off (CLAUDE_REVIEW_CREDIT_FALLBACK=off).');
+  else for (const [label, key, modelKey] of [['Claude account 2', 'ANTHROPIC_API_KEY_2'], ['Claude account 3', 'ANTHROPIC_API_KEY_3'], ['OpenAI', 'OPENAI_API_KEY', 'OPENAI_MODEL'], ['Kimi', 'KIMI_API_KEY']]) {
+    if (!String(deps.env[key] || '').trim()) state.limitations.push(`${label} skipped: ${key} is not set.`);
+    else if (modelKey && !String(deps.env[modelKey] || '').trim()) state.limitations.push(`${label} skipped: ${modelKey} is not set.`);
+  }
+  if (mainUnavailable && !eligibleFallbacks.some(step => deps.fallbacks?.[step.id])) return finish(state, 'skipped', 'No configured review account is available. Nothing was spent.');
   const prInfo = { number: pr.number, title: pr.title, body: pr.body, baseRef: pr.base?.ref || 'main' };
 
   let mergeBase;
@@ -173,6 +181,7 @@ export async function runReview(deps) {
   const messages = [{ role: 'user', content: userMessage }];
   let inputTokens;
   try {
+    if (mainUnavailable) throw new Error('main account unavailable for token counting');
     const counted = await deps.anthropic.countTokens({ model, system: SYSTEM_PROMPT, messages });
     inputTokens = Math.ceil((counted.input_tokens + 400) * 1.05);
     state.facts['input tokens (counted)'] = String(counted.input_tokens);
@@ -187,8 +196,8 @@ export async function runReview(deps) {
   // The main account's own cap reached is, for the chain, the same as its
   // credit running out: skip the call and let the next account review.
   const hasChain = eligibleFallbacks.some((step) => deps.fallbacks?.[step.id]);
-  if (!budget.allow && !hasChain) return finish(state, 'budget_refused', `${budget.reason}. No API call was made.`);
-  const mainSkipped = budget.allow ? null : budget.reason;
+  if (!mainUnavailable && !budget.allow && !hasChain) return finish(state, 'budget_refused', `${budget.reason}. No API call was made.`);
+  const mainSkipped = mainUnavailable || (budget.allow ? null : budget.reason);
 
   const params = {
     model,
@@ -214,8 +223,8 @@ export async function runReview(deps) {
   let lastRecord = null;
   const record = (status, usd, extra) => {
     usd += costs.get(accountId) || 0;
-    const name = recordName({ month, pr: pr.number, key: recordKey, status, usd, account: accountId });
-    const saved = { name, body: JSON.stringify({ name, month, pr: pr.number, head_sha: pr.head.sha, merge_base: mergeBase, key: recordKey, status, model: usedModel, provider, account, account_id: accountId, tier, usd, ...extra }, null, 2) };
+    const name = recordName({ month, pr: pr.number, key: recordKey, status, usd, account: accountId, runId: deps.env.CLAUDE_REVIEW_RUN_ID || deps.env.GITHUB_RUN_ID, runAttempt: deps.env.CLAUDE_REVIEW_RUN_ATTEMPT || deps.env.GITHUB_RUN_ATTEMPT || '1' });
+    const saved = { name, body: JSON.stringify({ name, month, pr: pr.number, head_sha: pr.head.sha, merge_base: mergeBase, key: recordKey, status, model: usedModel, provider, account, account_id: accountId, tier, usd, ...extra, cost_known: (extra?.cost_known ?? true) && !(costs.get(accountId) > 0) }, null, 2) };
     lastRecord = saved;
     deps.persistRecord?.(saved);
     return saved;
@@ -237,7 +246,7 @@ export async function runReview(deps) {
       try {
         return await client.create(request, { timeout: Math.min(config.timeoutSeconds * 1000, remaining), maxRetries: 0, signal: AbortSignal.timeout(Math.max(1, Math.floor(Math.min(config.timeoutSeconds * 1000, remaining)))) });
       } catch (e) {
-        const uncertain = ['timeout', 'connection', 'server', 'overloaded', 'deadline'].includes(e?.kind);
+        const uncertain = e?.streamStarted === true || !['authentication', 'federation', 'permission', 'not_found', 'bad_request', 'rate_limit', 'billing'].includes(e?.kind);
         record('err', uncertain ? worst : 0, { outcome: 'api_error', error_kind: e?.kind || 'unknown', cost_known: !uncertain });
         costs.set(accountId, prior + (uncertain ? worst : 0));
         if (left() < 60_000) throw deadlineError();
@@ -267,17 +276,17 @@ export async function runReview(deps) {
       if (mainSkipped) throw Object.assign(new Error('main account over its budget'), { kind: 'billing', mainSkipped });
       message = await mainCall();
     } catch (e) {
-      if (!(creditExhausted(e) && chain.length)) throw e;
+      if (e?.kind === 'deadline' || !chain.length) throw e;
       // The main account refused before doing any work (unbilled): its credit
       // is used up. Walk the chain; a step that is out of credit too passes
       // the review on, any other failure stops here.
       let failed = e;
-      const empty = [e?.mainSkipped ? 'Claude (its monthly review budget is used)' : 'Claude'];
+      const empty = e?.mainSkipped ? (mainUnavailable ? [] : ['Claude (its monthly review budget is used)']) : creditExhausted(e) ? ['Claude'] : [];
       if (e?.mainSkipped) state.limitations.push(`Claude was not called: ${e.mainSkipped}.`);
       // A fallback account that cannot be used (a bad key, a key with no
       // workspace, no rate, its own budget spent) is skipped with its reason,
       // never the end of the chain: the accounts after it still get their turn.
-      const skipped = [];
+      const skipped = mainUnavailable ? [`Claude skipped: ${mainUnavailable}`] : !e?.mainSkipped && !creditExhausted(e) ? [`Claude failed: ${stepFailure(e, { provider: 'anthropic', secret: 'ANTHROPIC_API_KEY' })}`] : [];
       let onlyBudget = true;
       for (const step of chain) {
         provider = step.provider;
@@ -290,6 +299,7 @@ export async function runReview(deps) {
         const worst = preflightCost({ inputTokens, maxOutputTokens: config.maxOutputTokens, model: usedModel, rates: state.rates });
         const stepLedger = listing ? readLedger(listing.artifacts, { month, key, listingComplete: listing.complete, account: step.id }) : { spentUsd: 0, duplicate: null, complete: false };
         const allowed = budgetDecision({ worstCaseUsd: worst, maxCostUsd: config.maxCostUsd, monthlyBudgetUsd: config.monthlyBudgetUsd, ledger: stepLedger });
+        if (step.provider === 'anthropic' && !model) { skipped.push(`${account} was not called: ANTHROPIC_MODEL is not set`); continue; }
         if (!allowed.allow) {
           skipped.push(`${account} was not called: ${allowed.reason}`);
           continue;
@@ -317,12 +327,12 @@ export async function runReview(deps) {
         }
       }
       if (failed) {
-        const out = `${empty.join(', ')} ${empty.length === 1 ? 'is' : 'are'} out of credit${skipped.length ? `; ${skipped.join('; ')}` : ''}.`;
+        const out = `${empty.length ? `${empty.join(', ')} ${empty.length === 1 ? 'is' : 'are'} out of credit` : 'The earlier accounts were unavailable'}${skipped.length ? `; ${skipped.join('; ')}` : ''}.`;
         if (skipped.length && onlyBudget) return finish(state, 'budget_refused', `${out} No API call was made to them.`);
         throw Object.assign(failed, { chainSummary: out });
       }
       Object.assign(state.facts, { model: usedModel, account: `${account} (credit fallback)`, ...(provider === 'anthropic' ? {} : { effort: 'n/a' }) });
-      state.limitations.push(`Reviewed by ${account} (${usedModel}) because ${empty.join(', ')} ${empty.length === 1 ? 'is' : 'are'} out of credit. The next review tries the main Claude account first again.`);
+      state.limitations.push(`Reviewed by ${account} (${usedModel}) because ${empty.length ? `${empty.join(', ')} ${empty.length === 1 ? 'is' : 'are'} out of credit` : 'earlier accounts were unavailable'}. The next review tries the main Claude account first again.`);
       if (skipped.length) state.limitations.push(`Skipped on the way: ${skipped.join('; ')}.`);
     }
   } catch (e) {
@@ -346,6 +356,8 @@ export async function runReview(deps) {
     });
   }
 
+  const reviewNotice = provider === 'openai' && codexAuthored ? "Reviewed by OpenAI, the same vendor as the PR's author. This is not a cross-vendor review under AGENTS.md." : null;
+  if (reviewNotice) state.limitations.push(reviewNotice);
   const seconds = ((deps.now() - started) / 1000).toFixed(1);
   state.facts.duration = `${seconds} s`;
   if (message?._request_id) state.facts['request id'] = message._request_id;
@@ -388,7 +400,7 @@ export async function runReview(deps) {
   const findingsFile = JSON.stringify({
     schema_version: checked.review.schema_version,
     pr: pr.number, head_sha: pr.head.sha, merge_base: mergeBase, model: usedModel, provider, account,
-    status: checked.review.status, summary: checked.review.summary,
+    status: checked.review.status, summary: reviewNotice ? `${reviewNotice}\n\n${checked.review.summary}` : checked.review.summary, same_vendor: !!reviewNotice, review_notice: reviewNotice,
     min_confidence: config.minConfidence, findings: shown, limitations: checked.review.limitations,
   }, null, 2);
   return finish(state, 'reviewed', '', {

@@ -108,7 +108,8 @@ export function classifyError(e, sdk = Anthropic) {
   if (fed) {
     kind = 'federation';
     if (typeof fed.statusCode === 'number') status = fed.statusCode;
-  } else if (e instanceof sdk.AuthenticationError) kind = 'authentication';
+  } else if (typeof sdk.APIUserAbortError === 'function' && e instanceof sdk.APIUserAbortError) kind = 'timeout';
+  else if (e instanceof sdk.AuthenticationError) kind = 'authentication';
   else if (e instanceof sdk.PermissionDeniedError) kind = 'permission';
   else if (e instanceof sdk.NotFoundError) kind = 'not_found';
   else if (e instanceof sdk.RateLimitError) kind = 'rate_limit';
@@ -122,6 +123,21 @@ export function classifyError(e, sdk = Anthropic) {
   const out = new Error(`Anthropic API error: ${kind}`);
   Object.assign(out, { kind, status, requestId: requestId || fed?.requestId || undefined, detail: errorDetail(e, fed) });
   return out;
+}
+
+/** A connected stream may have billed tokens even if its final message fails. */
+async function streamMessage(messages, p, options, sdk) {
+  let streamStarted = false;
+  try {
+    const stream = messages().stream(p, options);
+    stream.on?.('connect', () => { streamStarted = true; });
+    return await stream.finalMessage();
+  } catch (e) {
+    const out = classifyError(e, sdk);
+    out.streamStarted = streamStarted;
+    if (options?.signal?.aborted) out.kind = 'timeout';
+    throw out;
+  }
 }
 
 /**
@@ -157,7 +173,7 @@ export function anthropicClient({ apiKey, federation = null, identityToken = nul
   };
   return {
     countTokens: (p) => wrap((c) => c.messages.countTokens({ model: p.model, system: p.system, messages: p.messages })),
-    create: (p, options) => wrap((c) => (p.betas ? c.beta.messages : c.messages).stream(p, options).finalMessage()),
+    create: (p, options) => streamMessage(() => p.betas ? get().beta.messages : get().messages, p, options, sdk),
   };
 }
 
@@ -173,9 +189,7 @@ export function kimiClient({ apiKey, baseURL, maxRetries, timeoutSeconds, sdk = 
   // (ANTHROPIC_CUSTOM_HEADERS, an Authorization bearer) is dropped on the way out.
   const get = () => (client ||= new sdk({ apiKey, authToken: null, baseURL, maxRetries: 0, timeout: timeoutSeconds * 1000, fetch: kimiFetch(fetchImpl) }));
   return {
-    create: async (p, options) => {
-      try { return await get().messages.stream(p, options).finalMessage(); } catch (e) { throw classifyError(e, sdk); }
-    },
+    create: (p, options) => streamMessage(() => get().messages, p, options, sdk),
   };
 }
 
@@ -196,6 +210,7 @@ export function openaiClient({ apiKey, baseURL, timeoutSeconds, sdk = OpenAI, fe
   const get = () => (client ||= new sdk({ apiKey, baseURL, organization: null, project: null, maxRetries: 0, timeout: timeoutSeconds * 1000, fetch: openaiFetch(fetchImpl, apiKey) }));
   return {
     create: async (p, options) => {
+      let streamStarted = false;
       try {
         const stream = await get().responses.create({
           model: p.model, instructions: p.system, input: p.messages,
@@ -204,6 +219,7 @@ export function openaiClient({ apiKey, baseURL, timeoutSeconds, sdk = OpenAI, fe
         }, options);
         let response;
         for await (const event of stream) {
+          streamStarted = true;
           if (event.type === 'response.completed' || event.type === 'response.incomplete') response = event.response;
           if (event.type === 'response.failed' || event.type === 'error') {
             const error = event.response?.error || event;
@@ -223,6 +239,8 @@ export function openaiClient({ apiKey, baseURL, timeoutSeconds, sdk = OpenAI, fe
         };
       } catch (e) {
         const classified = classifyError(e, sdk);
+        classified.streamStarted = streamStarted;
+        if (options?.signal?.aborted) classified.kind = 'timeout';
         if (e?.name === 'APIConnectionTimeoutError') classified.kind = 'timeout';
         throw classified;
       }
@@ -390,6 +408,10 @@ export async function main(env = process.env) {
     nonce: () => randomBytes(8).toString('hex'),
     github: githubClient({ apiUrl, token, repository }),
     git: {
+      async authorMarkers(sha) {
+        if (!SHA.test(sha)) throw new Error('not a commit id');
+        return git(prDir, ['show', '-s', '--format=%an%n%cn', sha]).split('\n').map(s => s.slice(0, 500));
+      },
       async fetch(sha) {
         if (!SHA.test(sha)) throw new Error('not a commit id');
         try { git(prDir, ['cat-file', '-e', `${sha}^{commit}`]); return; } catch { /* not present yet */ }

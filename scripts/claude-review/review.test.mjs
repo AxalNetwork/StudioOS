@@ -98,10 +98,10 @@ test('main: a disabled review writes its summary and outputs and exits 0', async
   assert.match(output, /^outcome=disabled\nrecord_name=\n$/);
 });
 
-test('main: an enabled review with no key is a configuration error, never a crash, and never prints a key', async () => {
+test('main: absent keys skip cleanly, malformed enabled configuration refuses, and keys stay private', async () => {
   const s = sandbox({ CLAUDE_REVIEW_ENABLED: 'true', ANTHROPIC_MODEL: 'claude-sonnet-5-5', ANTHROPIC_API_KEY: '' });
   assert.equal(await main(s.env), 0);
-  assert.match(s.read().summary, /configuration\\_error/);
+  assert.match(s.read().summary, /No configured review account/);
   const k = sandbox({ CLAUDE_REVIEW_ENABLED: 'true', ANTHROPIC_API_KEY: 'sk-ant-should-not-appear', CLAUDE_REVIEW_FAIL_ON_ERROR: 'true' });
   assert.equal(await main(k.env), 1, 'with fail-on-error a configuration error fails the step');
   assert.doesNotMatch(k.read().summary, /sk-ant-should-not-appear/);
@@ -547,4 +547,34 @@ test('D4443: the OpenAI fallback uses a lazy separate official client', async ()
   assert.equal(built.length, 1);
   assert.equal(built[0].baseURL, 'https://api.openai.com/v1');
   assert.equal(built[0].apiKey, 'unit');
+});
+
+
+test('review #4448 R1: real SDK user-abort errors have no distinctive name but must classify as timeout', () => {
+  assert.equal(new Anthropic.APIUserAbortError().name, 'Error');
+  assert.equal(classifyError(new Anthropic.APIUserAbortError()).kind, 'timeout');
+  assert.equal(classifyError(new OpenAI.APIUserAbortError(), OpenAI).kind, 'timeout');
+});
+
+test('review #4448 R1/R2: abort and plain SDK errors after a stream connects retain uncertainty', async () => {
+  for (const thrown of [new Anthropic.APIUserAbortError(), new Anthropic.AnthropicError('socket closed')]) {
+    class BrokenSdk {
+      constructor() { this.messages = { stream: () => ({ on(event, listener) { if (event === 'connect') listener(); return this; }, finalMessage: async () => { throw thrown; } }) }; this.beta = { messages: this.messages }; }
+    }
+    Object.setPrototypeOf(BrokenSdk, Anthropic);
+    const client = anthropicClient({ apiKey: 'test', maxRetries: 0, timeoutSeconds: 30, sdk: BrokenSdk });
+    await assert.rejects(client.create({ model: 'test' }), e => e.streamStarted === true && (thrown instanceof Anthropic.APIUserAbortError ? e.kind === 'timeout' : e.kind === 'unknown'));
+  }
+});
+
+test('review #4452 R2: OpenAI terminal stream errors are marked as possibly billed', async () => {
+  class BrokenOpenAI {
+    constructor() { this.responses = { create: async function* () {
+      yield { type: 'response.created', response: { status: 'in_progress' } };
+      yield { type: 'response.failed', response: { error: { code: 'server_error', message: 'reasoning interrupted' } } };
+    } }; }
+  }
+  Object.setPrototypeOf(BrokenOpenAI, OpenAI);
+  const client = openaiClient({ apiKey: 'test', baseURL: 'https://api.example', timeoutSeconds: 30, sdk: BrokenOpenAI });
+  await assert.rejects(client.create({ model: 'gpt-5.3-codex' }), e => e.streamStarted === true);
 });

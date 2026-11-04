@@ -32,12 +32,11 @@ const diffFor = (path, added, { start = 10, context = ['ctx before'] } = {}) => 
 
 // --- configuration ----------------------------------------------------------
 
-test('the review is off until CLAUDE_REVIEW_ENABLED is true, and an enabled review needs a model and a key', () => {
+test('the review is off until enabled and every account may be absent', () => {
   assert.equal(readConfig({}).config.enabled, false);
   assert.deepEqual(readConfig({}).errors, []);
   const { errors } = readConfig({ CLAUDE_REVIEW_ENABLED: 'true' });
-  assert.ok(errors.some((e) => /ANTHROPIC_MODEL is not set/.test(e)));
-  assert.ok(errors.some((e) => /no Anthropic credential: set the federation variables .* or the ANTHROPIC_API_KEY repository secret/.test(e)));
+  assert.deepEqual(errors, [], 'all accounts are optional');
   const ok = readConfig({ CLAUDE_REVIEW_ENABLED: 'true', ANTHROPIC_MODEL: 'claude-sonnet-5-5', ANTHROPIC_API_KEY: 'k' });
   assert.deepEqual(ok.errors, []);
   assert.equal(ok.config.hasApiKey, true);
@@ -406,16 +405,16 @@ test('run: disabled means no git, no GitHub call, no API call and nothing spent'
   assert.deepEqual([calls.create.length, calls.count, calls.list, calls.fetch.length], [0, 0, 0, 0]);
 });
 
-test('run: a missing secret is a clear configuration error, non-blocking unless fail-on-error is set', async () => {
+test('run: absent credentials skip cleanly without spending', async () => {
   const { deps, calls } = harness({ env: { ANTHROPIC_API_KEY: '' } });
   const r = await runReview(deps);
-  assert.equal(r.outcome, 'configuration_error');
+  assert.equal(r.outcome, 'skipped');
   assert.equal(r.exitCode, 0);
-  assert.match(plain(r.summary), /no Anthropic credential/);
+  assert.match(plain(r.summary), /ANTHROPIC_API_KEY is not set/);
   assert.doesNotMatch(plain(r.summary), /test-key/);
   assert.equal(calls.create.length, 0);
   const strict = harness({ env: { ANTHROPIC_API_KEY: '', CLAUDE_REVIEW_FAIL_ON_ERROR: 'true' } });
-  assert.equal((await runReview(strict.deps)).exitCode, 1);
+  assert.equal((await runReview(strict.deps)).exitCode, 0);
 });
 
 test('run: a fork\'s pull request is skipped before anything is read', async () => {
@@ -642,8 +641,8 @@ test('credit: with credit, the main account answers and no fallback is called', 
 test('credit: the main account\'s other failures never fall back; a broken fallback account is skipped with its reason', async () => {
   for (const e of [apiError('authentication', 401), apiError('rate_limit', 429), apiError('server', 500)]) {
     const { deps, calls } = harness({ env: CHAIN, create: () => e, fallbacks: { claude2: () => claudeMessage(), kimi: () => kimiMessage() } });
-    assert.equal((await runReview(deps)).outcome, 'api_error');
-    assert.equal(calls.fallback.length, 0);
+    assert.equal((await runReview(deps)).outcome, 'reviewed');
+    assert.equal(calls.fallback.length, 1);
   }
   // The owner's account 3 was a key with no workspace (a 400): the chain
   // went no further. Now it is skipped, named, and the next account reviews.
@@ -884,13 +883,17 @@ test('D4443: a non-Codex PR uses OpenAI after Claude credit refusals and records
   assert.ok(saved.some(r => /_err_\d+_openai$/.test(r.name)), 'OpenAI also reserves before spending');
 });
 
-test('D4443: Codex branch, body and author markers all skip OpenAI with the required summary', async () => {
-  for (const override of [{ head: { sha: H, ref: 'codex/s19-feature', repo: { full_name: REPO } } }, { body: '## Agent\n\nS28 · Codex' }, { body: 'Agent: Codex' }, { body: '## Agent\n\nCodex' }, { user: { login: 'codex[bot]' } }]) {
+test('D4443 owner update: Codex PRs use OpenAI and label the summary and review artifact', async () => {
+  for (const override of [{ head: { sha: H, ref: 'codex/s19-feature', repo: { full_name: REPO } } }, { body: '## Agent\n\nS28 · Codex' }, { body: '## Agent\n\nCodex' }, { user: { login: 'codex[bot]' } }]) {
     const { deps, calls } = openaiHarness({ event: prEvent(override) });
     const r = await runReview(deps);
     assert.equal(r.outcome, 'reviewed');
-    assert.deepEqual(calls.fallback.map(c => c.id), ['claude2', 'claude3', 'kimi']);
-    assert.match(plain(r.summary), /OpenAI skipped: same vendor as the PR's author/);
+    assert.deepEqual(calls.fallback.map(c => c.id), ['claude2', 'claude3', 'openai']);
+    const notice = "Reviewed by OpenAI, the same vendor as the PR's author. This is not a cross-vendor review under AGENTS.md.";
+    assert.ok(plain(r.summary).includes(notice));
+    const review = JSON.parse(r.findingsFile);
+    assert.equal(review.same_vendor, true);
+    assert.ok(review.summary.includes(notice));
   }
 });
 
@@ -919,4 +922,88 @@ test('D4443: OpenAI has its own monthly budget and cancellation artifact', async
   const wf = readFileSync(new URL('../../.github/workflows/claude-review.yml', import.meta.url), 'utf8');
   assert.match(wf, /if: always\(\) && steps.usage.outputs.openai != ''/);
   for (const key of ['OPENAI_API_KEY', 'OPENAI_MODEL', 'OPENAI_BASE_URL', 'CLAUDE_REVIEW_PR_HEAD', 'CLAUDE_REVIEW_PR_BODY', 'CLAUDE_REVIEW_PR_AUTHOR']) assert.ok(wf.includes(`${key}:`));
+});
+
+
+test('review #4448 R2: unknown mid-stream errors retain the preflight reservation', async () => {
+  const { deps } = harness({ create: () => apiError('unknown') });
+  const saved = [];
+  deps.persistRecord = r => saved.push(JSON.parse(r.body));
+  const r = await runReview(deps);
+  const result = JSON.parse(r.record.body);
+  assert.ok(result.usd > 0);
+  assert.equal(result.usd, saved[0].usd);
+  assert.equal(result.cost_known, false);
+});
+
+test('review #4452 R2: OpenAI unknown or post-connect billing failures retain cost when Kimi succeeds', async () => {
+  for (const kind of ['unknown', 'billing']) {
+    const error = Object.assign(apiError(kind), { streamStarted: true });
+    const { deps } = openaiHarness({ fallbacks: { openai: () => error, kimi: () => kimiMessage() } });
+    const records = new Map();
+    deps.persistRecord = r => records.set(JSON.parse(r.body).account_id, JSON.parse(r.body));
+    assert.equal((await runReview(deps)).outcome, 'reviewed');
+    assert.ok(records.get('openai').usd > 0);
+    assert.equal(records.get('openai').cost_known, false);
+  }
+});
+
+test('review #4448 R4: rerun artifacts are unique and every attempt counts in its account ledger', async () => {
+  const records = [];
+  for (const [run, attempt] of [['1234', '1'], ['1234', '2'], ['5678', '1']]) {
+    const { deps } = openaiHarness({ env: { ...OPENAI_ENV, CLAUDE_REVIEW_RUN_ID: run, CLAUDE_REVIEW_RUN_ATTEMPT: attempt }, fallbacks: { openai: () => apiError('timeout') } });
+    const r = await runReview(deps);
+    records.push(r.record);
+  }
+  assert.equal(new Set(records.map(r => r.name)).size, 3);
+  assert.match(records[1].name, /_r1234a2_openai$/);
+  const parsed = parseRecordName(records[1].name);
+  assert.equal(parsed.account, 'openai');
+  assert.equal(parsed.runAttempt, '2');
+  const ledger = readLedger(records.map(r => ({ name: r.name })), { month: '2026-10', key: '', listingComplete: true, account: 'openai' });
+  const usd = JSON.parse(records[0].body).usd;
+  assert.ok(Math.abs(ledger.spentUsd - 3 * usd) < 0.000003);
+  const wf = readFileSync(new URL('../../.github/workflows/claude-review.yml', import.meta.url), 'utf8');
+  assert.ok(wf.includes('CLAUDE_REVIEW_RUN_ATTEMPT: $' + '{{ github.run_attempt }}'));
+});
+
+test('review #4452 R1: only the own Agent section identifies Codex, never dependency or regression prose', async () => {
+  for (const text of ['Stacked on #4448 (S19 · Codex)', 'Fixes a regression generated by Codex in #4400', 'Agent: Codex']) {
+    const { deps, calls } = openaiHarness({ event: prEvent({ body: `${text}\n\n## Agent\n\nS28 · Claude\n\n## Review requested\nS19 · Codex can inspect it` }) });
+    const r = await runReview(deps);
+    assert.equal(r.outcome, 'reviewed');
+    assert.ok(calls.fallback.some(c => c.id === 'openai'), text);
+    assert.doesNotMatch(plain(r.summary), /the same vendor as the PR's author/);
+  }
+});
+
+test('review #4452 R1: actual head commit author or committer markers identify Codex', async () => {
+  for (const markers of [['Codex', 'Owner'], ['Owner', 'OpenAI Codex']]) {
+    const { deps, calls } = openaiHarness({ event: prEvent({ body: '## Agent\n\nS28 · Claude' }) });
+    deps.git.authorMarkers = async () => markers;
+    const r = await runReview(deps);
+    assert.equal(r.outcome, 'reviewed');
+    assert.ok(calls.fallback.some(c => c.id === 'openai'));
+    assert.match(plain(r.summary), /Reviewed by OpenAI, the same vendor/);
+  }
+});
+
+
+test('owner policy: the full order is Claude main, Claude 2, Claude 3, OpenAI, Kimi, skipping each missing key', async () => {
+  const order = ['main', 'claude2', 'claude3', 'openai', 'kimi'];
+  const secrets = ['ANTHROPIC_API_KEY', 'ANTHROPIC_API_KEY_2', 'ANTHROPIC_API_KEY_3', 'OPENAI_API_KEY', 'KIMI_API_KEY'];
+  const env = { ...OPENAI_ENV, KIMI_MODEL: 'kimi-k3', CLAUDE_REVIEW_RATES: JSON.stringify({ models: { ...JSON.parse(OPENAI_ENV.CLAUDE_REVIEW_RATES).models, 'kimi-k3': { input: 1, output: 1, cache_read: 0.1, cache_write: 1 } } }) };
+  for (const absent of [-1, 0, 1, 2, 3, 4]) {
+    const expected = order.filter((_, i) => i !== absent);
+    const last = expected.at(-1);
+    const settings = { ...env, ...(absent < 0 ? {} : { [secrets[absent]]: '' }) };
+    const fallbacks = Object.fromEntries(order.slice(1).map(id => [id, () => id === last ? kimiMessage() : apiError('authentication', 401)]));
+    const { deps, calls } = harness({ env: settings, create: () => apiError('authentication', 401), fallbacks });
+    const r = await runReview(deps);
+    assert.equal(r.outcome, 'reviewed', `missing ${absent}`);
+    assert.deepEqual([...(calls.create.length ? ['main'] : []), ...calls.fallback.map(c => c.id)], expected);
+    if (absent >= 0) assert.ok(plain(r.summary).includes(secrets[absent]), `names missing ${secrets[absent]}`);
+    if (last === 'kimi') assert.equal(calls.fallback.at(-1).model, 'kimi-k3');
+    else assert.equal(calls.fallback.at(-1).model, 'gpt-5.3-codex');
+  }
 });
