@@ -132,12 +132,11 @@ export async function loadInbox(env: Env, user: User, project: number, onlyConta
 export async function markInboxRead(env: Env, user: User, project: number, contact: Contact, keys: string[], messages: InboxMessage[]) {
   const allowed = new Set(messages.filter((m) => m.direction === 'inbound').map((m) => m.key));
   if (keys.length > MESSAGE_LIMIT || keys.some((k) => !allowed.has(k))) return false;
-  const statements = [...new Set(keys)].map((key) => env.DB.prepare('INSERT INTO grow_inbox_reads (user_id, contact_id, message_key) VALUES (?, ?, ?) ON CONFLICT(user_id, contact_id, message_key) DO NOTHING').bind(user.id, contact.id, key));
-  if (statements.length) {
-    statements.push(logCycleWriteStatement(env, { projectId: project, userId: user.id, cycle: 'grow', module: 'distribution', entityId: contact.uid, action: 'distribution_inbox_read', summary: 'Read Distribution replies' }));
-    // D1 batch is atomic. Stay within its statement limit without claiming a
-    // partially marked thread was fully read.
-    for (let i = 0; i < statements.length; i += 90) await env.DB.batch(statements.slice(i, i + 90));
+  if (keys.length) {
+    // One bound JSON input, one INSERT and its audit in an atomic D1 batch:
+    // a long thread cannot exhaust the request's per-query allowance halfway.
+    const insert = env.DB.prepare('INSERT OR IGNORE INTO grow_inbox_reads (user_id, contact_id, message_key) SELECT ?, ?, value FROM json_each(?)').bind(user.id, contact.id, JSON.stringify([...new Set(keys)]));
+    await env.DB.batch([insert, logCycleWriteStatement(env, { projectId: project, userId: user.id, cycle: 'grow', module: 'distribution', entityId: contact.uid, action: 'distribution_inbox_read', summary: 'Read Distribution replies' })]);
   }
   return true;
 }

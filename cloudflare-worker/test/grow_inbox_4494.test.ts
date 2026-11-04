@@ -7,7 +7,9 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import inbox from '../src/routes/grow_inbox.ts';
 import { inboxMailboxReader } from '../src/services/growInbox.ts';
-import { outlookAdapter } from '../src/services/mail/adapters/oauth.ts';
+import { outlookAdapter, gmailAdapter } from '../src/services/mail/adapters/oauth.ts';
+import { encryptColumn } from '../src/services/columnCipher.ts';
+import { openCreds } from '../src/services/mail/accounts.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 
 const SECRET = 'synthetic-inbox-test-jwt-secret-only-'.repeat(2);
@@ -167,4 +169,49 @@ test('Outlook refuses malformed pages and off-host pagination instead of reporti
       assert.equal(hosts.includes('outside.example.test'), false);
     }
   } finally { globalThis.fetch = saved; }
+});
+
+test('the default mailbox reader opens only the caller credentials, seals rotation and sends nothing', async () => {
+  const f = fixture(), savedFetch = globalThis.fetch, adapters = [outlookAdapter, gmailAdapter], sends = adapters.map((a) => a.send);
+  f.env.MAIL_MICROSOFT_CLIENT_ID = 'synthetic-client'; f.env.MAIL_MICROSOFT_CLIENT_SECRET = 'synthetic-secret';
+  const sealed = await encryptColumn(f.env, 'mail_accounts', 'credentials', 'own-readable', JSON.stringify({ kind: 'oauth', refresh_token: 'synthetic-refresh-original' }));
+  f.db.prepare('UPDATE mail_accounts SET credentials = ? WHERE id = 31').run(sealed);
+  let sent = 0;
+  for (const adapter of adapters) adapter.send = async () => { sent++; throw new Error('Inbox cannot send'); };
+  globalThis.fetch = async (url: any) => {
+    const at = new URL(String(url));
+    if (at.hostname === 'login.microsoftonline.com') return Response.json({ access_token: 'synthetic-access', refresh_token: 'synthetic-refresh-rotated' });
+    if (at.hostname !== 'graph.microsoft.com') throw new Error('Unexpected provider');
+    if (at.pathname.endsWith('/sent-a')) return Response.json({ conversationId: 'conversation-a' });
+    return Response.json({ value: [{ id: 'readable-message', internetMessageId: '<stable@example.test>', from: { emailAddress: { address: 'ari@example.test' } }, receivedDateTime: '2026-11-03T10:00:00Z', subject: 'A demo', bodyPreview: 'A provider reply' }] });
+  };
+  try {
+    const detail = await call(f, 'GET', '/prospect-a?project=7');
+    assert.equal(detail.status, 200);
+    assert.equal(detail.body.thread.messages.filter((m: any) => m.source === 'mailbox').length, 1);
+    const keys = detail.body.thread.messages.filter((m: any) => m.direction === 'inbound').map((m: any) => m.key);
+    await call(f, 'POST', '/prospect-a/read', { project: 7, message_keys: keys });
+    assert.equal((await call(f, 'GET', '/unread-count?project=7')).body.count, 0);
+    const row = f.db.prepare('SELECT * FROM mail_accounts WHERE id=31').get() as any;
+    const creds = await openCreds(f.env, row);
+    assert.equal(creds?.kind === 'oauth' && creds.refresh_token, 'synthetic-refresh-rotated');
+    assert.doesNotMatch(JSON.stringify(detail.body), /synthetic-refresh|credentials|synthetic-access/);
+    assert.equal(sent, 0);
+  } finally { globalThis.fetch = savedFetch; adapters.forEach((a, i) => { a.send = sends[i]; }); }
+});
+
+test('a long read snapshot and its audit roll back together on a failed write', async () => {
+  const f = fixture();
+  const insert = f.db.prepare("INSERT INTO contact_replies(contact_id,direction,body) VALUES(11,'inbound',?)");
+  for (let i = 0; i < 150; i++) insert.run('Synthetic reply ' + i);
+  // In-memory fault injection only: force the second statement in the D1 batch to fail.
+  f.db.exec("CREATE TRIGGER synthetic_inbox_audit_failure BEFORE INSERT ON activity_logs WHEN NEW.action='distribution_inbox_read' BEGIN SELECT RAISE(ABORT,'Synthetic audit failure'); END");
+  await withReader(async () => {
+    const detail = await call(f, 'GET', '/prospect-a?project=7');
+    const keys = detail.body.thread.messages.filter((m: any) => m.direction === 'inbound').map((m: any) => m.key);
+    const result = await call(f, 'POST', '/prospect-a/read', { project: 7, message_keys: keys });
+    assert.equal(result.status, 503);
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM grow_inbox_reads').get()!.n, 0);
+    assert.doesNotMatch(JSON.stringify(result.body), /Synthetic audit failure/);
+  });
 });
