@@ -157,6 +157,8 @@ jobs:
           # run starts with the main account above.
           ANTHROPIC_API_KEY_2: ${{ secrets.ANTHROPIC_API_KEY_2 }}
           ANTHROPIC_API_KEY_3: ${{ secrets.ANTHROPIC_API_KEY_3 }}
+          ANTHROPIC_WORKSPACE_ID_2: ${{ vars.ANTHROPIC_WORKSPACE_ID_2 }}
+          ANTHROPIC_WORKSPACE_ID_3: ${{ vars.ANTHROPIC_WORKSPACE_ID_3 }}
           KIMI_API_KEY: ${{ secrets.KIMI_API_KEY }}
           KIMI_MODEL: ${{ vars.KIMI_MODEL }}
           KIMI_BASE_URL: ${{ vars.KIMI_BASE_URL }}

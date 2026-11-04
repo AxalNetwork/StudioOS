@@ -127,13 +127,16 @@ export function classifyError(e, sdk = Anthropic) {
  * federation `apiKey` and `authToken` are passed as null, because an API key
  * (even one read from the environment) outranks `credentials`.
  */
-export function anthropicClient({ apiKey, federation = null, identityToken = null, maxRetries, timeoutSeconds, sdk = Anthropic, makeProvider = oidcFederationProvider }) {
+export function anthropicClient({ apiKey, federation = null, identityToken = null, workspaceId, maxRetries, timeoutSeconds, sdk = Anthropic, makeProvider = oidcFederationProvider }) {
   // Built on first use: a run that never calls the API never builds a client,
   // and a credential problem is the runner's error to report, not a crash.
   let client = null;
   const build = () => {
     const base = { maxRetries: 0, timeout: timeoutSeconds * 1000 };
-    if (!federation) return new sdk({ ...base, apiKey });
+    // Fallbacks pass null when unset to suppress another account's ambient header.
+    // The main API-key client does not set this option.
+    const workspaceHeaders = workspaceId === undefined ? {} : { defaultHeaders: { 'anthropic-workspace-id': workspaceId || null } };
+    if (!federation) return new sdk({ ...base, apiKey, ...workspaceHeaders });
     const credentials = makeProvider({
       identityTokenProvider: identityToken,
       federationRuleId: federation.ruleId,
@@ -197,7 +200,7 @@ export function fallbacksFor(env, overrides = {}) {
     const common = { maxRetries: config.maxRetries, timeoutSeconds: config.timeoutSeconds };
     out[step.id] = step.provider === 'kimi'
       ? kimiClient({ apiKey: env.KIMI_API_KEY, baseURL: step.baseURL, ...common, ...(overrides.kimi || {}) })
-      : anthropicClient({ apiKey: env[step.secret], federation: null, ...common, ...(overrides.anthropic || {}) });
+      : anthropicClient({ apiKey: env[step.secret], federation: null, workspaceId: step.workspaceId, ...common, ...(overrides.anthropic || {}) });
   }
   return out;
 }

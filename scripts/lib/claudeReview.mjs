@@ -234,10 +234,17 @@ export function readConfig(env = {}) {
   // The chain, in the order it is tried: further Claude accounts (their own
   // Console organizations, so their own credit), then Kimi. Each step is used
   // only when the one before it answers that its credit is exhausted.
+  const fallbackWorkspaces = {};
+  for (const n of CLAUDE_FALLBACK_SLOTS) {
+    const name = `ANTHROPIC_WORKSPACE_ID_${n}`;
+    const workspaceId = String(env[name] ?? '').trim();
+    if (workspaceId && !FEDERATION_IDS.ANTHROPIC_WORKSPACE_ID.test(workspaceId)) errors.push(`${name} must be an Anthropic workspace ID (wrkspc_ followed by 8–64 letters or digits)`);
+    fallbackWorkspaces[n] = workspaceId || null;
+  }
   const creditFallbacks = [];
   if (providerRaw !== 'off') {
     for (const n of CLAUDE_FALLBACK_SLOTS) {
-      if (String(env[`ANTHROPIC_API_KEY_${n}`] ?? '').trim()) creditFallbacks.push({ id: `claude${n}`, provider: 'anthropic', label: `Claude account ${n}`, secret: `ANTHROPIC_API_KEY_${n}` });
+      if (String(env[`ANTHROPIC_API_KEY_${n}`] ?? '').trim()) creditFallbacks.push({ id: `claude${n}`, provider: 'anthropic', label: `Claude account ${n}`, secret: `ANTHROPIC_API_KEY_${n}`, workspaceId: fallbackWorkspaces[n] });
     }
     if (hasKimiKey) creditFallbacks.push({ id: 'kimi', provider: 'kimi', label: 'Kimi', secret: 'KIMI_API_KEY', model: kimiModel, baseURL: kimiBaseUrl });
   }

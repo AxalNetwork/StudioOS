@@ -433,3 +433,45 @@ test('D4433: streaming returns final usage, forwards attempt options and classif
     await assert.rejects(client.create({ model: 'timeout' }, options), e => e.kind === 'timeout');
   }
 });
+
+
+test('D4433 item 8: each fallback client receives only its own optional workspace header', async () => {
+  const built = [];
+  class WorkspaceSdk {
+    constructor(opts) { built.push(opts); this.messages = { stream: () => ({ finalMessage: async () => ({}) }) }; }
+  }
+  const env = { ANTHROPIC_API_KEY_2: 'second', ANTHROPIC_API_KEY_3: 'third', ANTHROPIC_WORKSPACE_ID: 'wrkspc_MAIN0000', ANTHROPIC_WORKSPACE_ID_2: 'wrkspc_22222222', ANTHROPIC_WORKSPACE_ID_3: 'wrkspc_33333333', KIMI_API_KEY: 'kimi' };
+  const clients = fallbacksFor(env, { anthropic: { sdk: WorkspaceSdk }, kimi: { sdk: WorkspaceSdk } });
+  for (const id of ['claude2', 'claude3', 'kimi']) await clients[id].create({ model: 'test' });
+  assert.equal(built[0].defaultHeaders['anthropic-workspace-id'], 'wrkspc_22222222');
+  assert.equal(built[1].defaultHeaders['anthropic-workspace-id'], 'wrkspc_33333333');
+  assert.equal(built[2].defaultHeaders, undefined, 'Kimi receives no Claude workspace header');
+  assert.ok(!JSON.stringify(built).includes('MAIN0000'), 'main federation workspace is never reused');
+  const unset = fallbacksFor({ ...env, ANTHROPIC_WORKSPACE_ID_2: '' }, { anthropic: { sdk: WorkspaceSdk } });
+  await unset.claude2.create({ model: 'test' });
+  assert.equal(built.at(-1).defaultHeaders['anthropic-workspace-id'], null, 'unset suppresses ambient workspace headers');
+});
+
+test('D4433 item 8: real SDK requests cannot inherit an ambient workspace from another account', async () => {
+  const savedFetch = globalThis.fetch;
+  const savedHeaders = process.env.ANTHROPIC_CUSTOM_HEADERS;
+  const seen = [];
+  process.env.ANTHROPIC_CUSTOM_HEADERS = 'Anthropic-Workspace-Id: wrkspc_AMBIENT0';
+  globalThis.fetch = async (url, init) => {
+    seen.push(new Headers(init.headers).get('anthropic-workspace-id'));
+    return new Response(JSON.stringify({ input_tokens: 1 }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    const clients = fallbacksFor({ ANTHROPIC_API_KEY_2: 'test-second', ANTHROPIC_API_KEY_3: 'test-third', ANTHROPIC_WORKSPACE_ID_2: 'wrkspc_22222222', ANTHROPIC_WORKSPACE_ID_3: 'wrkspc_33333333' });
+    const p = { model: 'test-model', system: 's', messages: [] };
+    await clients.claude2.countTokens(p);
+    await clients.claude3.countTokens(p);
+    const unset = fallbacksFor({ ANTHROPIC_API_KEY_2: 'test-second' });
+    await unset.claude2.countTokens(p);
+    assert.deepEqual(seen, ['wrkspc_22222222', 'wrkspc_33333333', null]);
+  } finally {
+    globalThis.fetch = savedFetch;
+    if (savedHeaders === undefined) delete process.env.ANTHROPIC_CUSTOM_HEADERS;
+    else process.env.ANTHROPIC_CUSTOM_HEADERS = savedHeaders;
+  }
+});

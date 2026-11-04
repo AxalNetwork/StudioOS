@@ -95,6 +95,7 @@ Set these under *Settings → Secrets and variables → Actions*.
 | `CLAUDE_REVIEW_RATES` | variable | unset | JSON with the same shape as `rates.json`, merged per model. Needed for a model not listed there. |
 | `CLAUDE_REVIEW_FAIL_ON_ERROR` | variable | off | `true` fails the step on a configuration or API error. Findings never fail it. |
 | `ANTHROPIC_API_KEY_2`, `ANTHROPIC_API_KEY_3` | secrets | unset | **The credit fallback chain** (§6a): API keys from further Claude Console organizations, for example the one fed by the second Max plan's monthly credit. Tried in order, each only when the account before is out of credit. |
+| `ANTHROPIC_WORKSPACE_ID_2`, `ANTHROPIC_WORKSPACE_ID_3` | variables | unset | Optional workspace IDs (`wrkspc_` plus 8–64 letters or digits) for the corresponding fallback Claude key. Each goes only to its own client as `anthropic-workspace-id`. Malformed values refuse configuration. The main federation workspace is never reused for fallback keys. Leave unset for a workspace-scoped key. |
 | `KIMI_API_KEY` | secret | unset | The last step of the chain (§6a). A Kimi (Moonshot) API key. |
 | `KIMI_MODEL` | variable | `kimi-k2-turbo-preview` | The Kimi model for the fallback. Check the name against the models your Kimi console lists. |
 | `KIMI_BASE_URL` | variable | `https://api.moonshot.ai/anthropic` | Kimi's Anthropic-compatible endpoint. Change it only if your Kimi console gives a different API base. |

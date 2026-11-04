@@ -841,3 +841,15 @@ test('D4433: an exhausted deadline stops a configured retry', async () => {
   assert.match(plain(r.summary), /Stopped at the time limit/);
   assert.ok(JSON.parse(r.record.body).usd > 0);
 });
+
+
+test('D4433 item 8: fallback workspace IDs are optional, validated and kept per account', () => {
+  const env = { ...ENV, ANTHROPIC_API_KEY_2: 'second', ANTHROPIC_API_KEY_3: 'third', ANTHROPIC_WORKSPACE_ID_2: 'wrkspc_22222222', ANTHROPIC_WORKSPACE_ID_3: 'wrkspc_33333333' };
+  const c = readConfig(env);
+  assert.deepEqual(c.errors, []);
+  assert.deepEqual(c.config.creditFallbacks.map(s => s.workspaceId), ['wrkspc_22222222', 'wrkspc_33333333']);
+  assert.equal(readConfig({ ...env, ANTHROPIC_WORKSPACE_ID_2: '' }).config.creditFallbacks[0].workspaceId, null);
+  for (const slot of [2, 3]) assert.match(readConfig({ ...env, [`ANTHROPIC_WORKSPACE_ID_${slot}`]: 'not-a-workspace' }).errors.join(';'), new RegExp(`ANTHROPIC_WORKSPACE_ID_${slot} must be an Anthropic workspace ID`));
+  const wf = readFileSync(new URL('../../.github/workflows/claude-review.yml', import.meta.url), 'utf8');
+  for (const slot of [2, 3]) assert.ok(wf.includes(`ANTHROPIC_WORKSPACE_ID_${slot}: \${{ vars.ANTHROPIC_WORKSPACE_ID_${slot} }}`));
+});
