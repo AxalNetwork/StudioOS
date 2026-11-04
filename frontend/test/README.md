@@ -147,6 +147,8 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `grow_campaigns_d4447.test.mjs` | D4447 (#4447): eight Grow campaign requests, encoded identifiers and project-bound write bodies. |
 | `distribution_shell_4484.test.mjs` | D4484: static Distribution routes, retained records/Overview, module primary, tabs, honest Ask states and proposal callbacks. |
 | `_redirectLinks_2319.mjs` | D2319 (#4415): syntax-aware navigation-target audit across frontend and Worker source, without treating API paths or comparisons as links. |
+| `distribution_campaigns_4487.test.mjs` | Campaign cards, full-page plan steps, status actions, honest figures, confirmations and partial-save retries (D4487). |
+| `distribution_shell_4484.test.mjs` | D4484: static Distribution routes, retained records/Overview, module primary, tabs, honest Ask states and proposal callbacks. |
 
 `team_allowlists_4422.test.mjs` checks D4422 actual Team checklist read/save requests, default resets, inherited edit gates, and honest read/save failures.
 | `distribution_ask_4488.test.mjs` | D4488 quotes, unsaved acceptance, listed/safe counts and exclusive Ask intent. |
