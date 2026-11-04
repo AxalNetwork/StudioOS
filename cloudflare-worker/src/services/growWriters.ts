@@ -270,7 +270,7 @@ export async function updateChannel(env: Env, pid: number, user: User, uid: stri
   await env.DB.batch([
     env.DB.prepare('UPDATE growth_channels SET name = ?, state = ?, kind = ?, cac_bar_cents = ?, bar_currency = ?, updated_at = ?, purpose = ?, owner_user_id = ?, legacy_kind = ? WHERE id = ?')
       .bind(has(b, 'name') ? (str(b.name, 120) ?? row.name) : row.name, has(b, 'state') ? oneOf(b.state, CHANNEL_STATES, 'state', true) : row.state,
-        kind.kind, bar, barCurrency, nowIso(), purpose, owner, kind.legacy, row.id),
+        kind.kind, bar, barCurrency, nowIso(), purpose, owner, kind.legacy ?? row.legacy_kind, row.id),
     ...(spend == null ? [] : [spendStatement(env, uid, thisMonth(), spend, user.id)]),
     logCycleWriteStatement(env, entry(pid, user.id, { module: 'distribution', entityId: uid, action: 'grow_channel_updated', summary: 'Channel updated' })),
   ]);

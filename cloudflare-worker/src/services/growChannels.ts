@@ -44,18 +44,25 @@ export async function channelReadings(env: Env, pid: number) {
     const was = hits.get(source);
     hits.set(source, { count: (was?.count || 0) + 1, at: latest(was?.at || null, r.created_at) });
   }
+  const memberById = new Map(members.map((m) => [m.user_id, m]));
+  const activityByChannel = new Map((activityRead.status === 'fulfilled' ? activityRead.value : []).map((a) => [a.channel_id, a.at]));
+  const campaignsByChannel = new Map<number, { uid: string; name: string }[]>();
+  if (campaignRead.status === 'fulfilled') for (const c of campaignRead.value) {
+    const group = campaignsByChannel.get(c.channel_id) || [];
+    group.push({ uid: c.uid, name: c.name }); campaignsByChannel.set(c.channel_id, group);
+  }
   return { members, channels: channels.map((r) => {
     const hit = hits.get(r.utm_source);
     const at = activityRead.status === 'fulfilled' && contactRead.status === 'fulfilled'
-      ? latest(activityRead.value.find((a) => a.channel_id === r.id)?.at || null, hit?.at || null) : null;
+      ? latest(activityByChannel.get(r.id) || null, hit?.at || null) : null;
     return {
       uid: r.uid, name: r.name, status: r.state, kind: r.kind, purpose: r.purpose, utm_source: r.utm_source,
-      owner: members.find((m) => m.user_id === r.owner_user_id) || null,
+      owner: memberById.get(r.owner_user_id) || null,
       last_activity: at, last_activity_reason: at ? null : activityRead.status === 'rejected' || contactRead.status === 'rejected'
         ? 'Unreadable: channel activity could not be read.' : 'Not recorded: no content, attributed contact or spend activity.',
       results: hit?.count ?? null, results_reason: hit ? null : contactRead.status === 'rejected'
         ? 'Unreadable: attributed contacts could not be read.' : 'Not recorded: no customer contact has this UTM source.',
-      campaigns: campaignRead.status === 'fulfilled' ? campaignRead.value.filter((c) => c.channel_id === r.id).map((c) => ({ uid: c.uid, name: c.name })) : null,
+      campaigns: campaignRead.status === 'fulfilled' ? campaignsByChannel.get(r.id) || [] : null,
       campaigns_reason: campaignRead.status === 'rejected' ? 'Unreadable: campaign links could not be read.' : null,
     };
   }) };

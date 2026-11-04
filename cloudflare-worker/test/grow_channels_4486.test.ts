@@ -182,6 +182,10 @@ test('connection reads use only own grant and address, author safe error sentenc
 
 test('new categories, safe profile owner, Mercury activity and campaign links reuse existing stores', async () => {
   const f = fixture();
+  const legacy = await create(f, { name: 'Legacy search', kind: 'paid_search' });
+  assert.equal(legacy.status, 201);
+  assert.equal((await grow(f, FOUNDER, 'PATCH', `/channels/${legacy.body.uid}`, { kind: 'ads', purpose: 'Updated purpose' })).status, 200);
+  assert.deepEqual(one(f, 'SELECT kind, legacy_kind FROM growth_channels WHERE uid = ?', legacy.body.uid), { kind: 'ads', legacy_kind: 'paid_search' });
   for (const kind of ['organic', 'ads', 'newsletter', 'outreach', 'signups', 'partner']) {
     const made = await create(f, { name: kind, kind }); assert.equal(made.status, 201);
   }
@@ -191,12 +195,15 @@ test('new categories, safe profile owner, Mercury activity and campaign links re
   assert.equal((await grow(f, FOUNDER, 'PATCH', `/channels/${uid}`, { owner_user_id: COFOUNDER })).status, 200);
   const campaign = await grow(f, FOUNDER, 'POST', '/campaigns', { name: 'Launch', goal: 'sales', channel_uids: [uid] });
   assert.equal(campaign.status, 201);
+  const next = await grow(f, FOUNDER, 'POST', '/campaigns', { name: 'Next launch', goal: 'signups', channel_uids: [uid] });
+  assert.equal(next.status, 201);
   f.db.prepare("INSERT INTO mercury_grow_facts(integration_id,project_id,module,kind,period,subject,as_of,updated_at) VALUES (1,7,'distribution','channel_spend','2026-10',?,'2026-10-12','2026-10-12T10:00:00Z')").run(uid);
   const r = await read(f); const ch = r.body.channels.find((c: any) => c.uid === uid);
   assert.equal(ch.kind, 'ads'); assert.equal(ch.last_activity, '2026-10-12T10:00:00Z');
   assert.equal(ch.owner.name, null); assert.match(ch.owner.avatar, /^\/api\/settings\/headshot\//);
   assert.doesNotMatch(JSON.stringify(r.body), /hidden@example|private\/object/);
-  assert.deepEqual(ch.campaigns, [{ uid: campaign.body.campaign.uid, name: 'Launch' }]);
+  assert.deepEqual(ch.campaigns, [{ uid: campaign.body.campaign.uid, name: 'Launch' }, { uid: next.body.campaign.uid, name: 'Next launch' }]);
+  for (const other of r.body.channels.filter((c: any) => c.uid !== uid)) assert.deepEqual(other.campaigns, []);
 });
 
 test('support sessions receive no private grant data and unreadable core storage gives a safe refusal', async () => {
