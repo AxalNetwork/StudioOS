@@ -97,6 +97,18 @@ test('4: accepting Ask copy rereads the panel; another row Save cannot overwrite
   } finally { await page.close(); }
 });
 
+test('review: a fast retry reread replaces stale copy and clears the previous draft', async () => {
+  let value = read([row('eb', { status: 'failed' })]);
+  const api = { forEvent: async () => value, retry: async () => { value = read([row('eb', { status: 'pending', overrides: { title: 'Fresh after retry' } })]); } };
+  const page = await mounted(h(EventSyndicationPanel, { eventId: 42, editable: true, api }));
+  try {
+    await page.change('syndication-copy-eb-title', 'Unsaved old copy');
+    await page.click('syndication-retry-s-eb');
+    assert.equal(page.props('syndication-copy-eb-title').value, 'Fresh after retry');
+    assert.equal(page.props('syndication-save').disabled, true);
+  } finally { await page.close(); }
+});
+
 test('5: private/unlisted approval needs no channel read and offers no posting choices', async () => {
   for (const visibility of ['private', 'unlisted']) {
     const writes = [], reads = [];
