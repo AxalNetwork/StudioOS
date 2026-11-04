@@ -31,6 +31,7 @@ import * as productTesting from '../src/services/testing.ts';
 import calendar from '../src/routes/calendar.ts';
 import compliance from '../src/routes/compliance.ts';
 import wellbeing from '../src/routes/wellbeing.ts';
+import comarketing from '../src/routes/comarketing.ts';
 import { userReadableDealIds } from '../src/routes/deals.ts';
 import { resolveAccess } from '../src/services/captableAccess.ts';
 import { mayReadTrustScores } from '../src/services/scoreAccess.ts';
@@ -70,7 +71,7 @@ function fixture() {
   let grantReads = 0;
   env.DB = { ...DB, prepare(sql: string) { if (sql.startsWith('SELECT licence FROM account_licences')) grantReads++; return DB.prepare(sql); } };
   const app = new Hono<any>();
-  app.route('/api/projects',projects).route('/api/calendar',calendar).route('/api/compliance',compliance).route('/api/wellbeing',wellbeing).route('/api/legal/esign',esign).route('/api/search',search).route('/api/telegram',telegram).route('/api/integrations',integrations);
+  app.route('/api/comarketing',comarketing).route('/api/projects',projects).route('/api/calendar',calendar).route('/api/compliance',compliance).route('/api/wellbeing',wellbeing).route('/api/legal/esign',esign).route('/api/search',search).route('/api/telegram',telegram).route('/api/integrations',integrations);
   app.get('/synthetic/bank-purpose/:use',async c=>{const u=await getCurrentUser(c);const refusal=await personalPolicy(c,u!,c.req.param('use') as any);return refusal||c.json({ok:true});});
   app.route('/api/dd',diligence).route('/api/advisors',advisors).route('/api/fund-performance',performance);
   app.route('/api', routes).route('/api/auth', authRoutes).route('/api/admin/licences', appointments).route('/api/admin', adminRoutes);
@@ -694,4 +695,20 @@ test('integration and legacy Carta membership use held licences while preserving
     await grantLicence(f.DB,change('founder',9003));assert.equal((await f.call(path,9003,'POST',{})).status,404);
     await revokeLicence(f.DB,change('founder',9002));assert.equal((await f.call(path,9002,'POST',{})).body.error,'purpose_not_allowed');
   }finally {f.db.close();}
+});
+
+
+test('co-marketing admits held Founder and Partner licences, revokes access, and keeps HQ primary-only', async () => {
+  const f=fixture(); try {
+    assert.equal((await f.call('/api/comarketing/published',9005)).status,403);
+    for (const licence of ['founder','partner']) {
+      await grantLicence(f.DB,change(licence,9005));
+      assert.equal((await f.call('/api/comarketing/published',9005)).status,200);
+      assert.equal((await f.call('/api/comarketing/admin/queue',9005)).status,403);
+      await revokeLicence(f.DB,change(licence,9005));
+      assert.equal((await f.call('/api/comarketing/published',9005)).status,403);
+    }
+    assert.equal((await f.call('/api/comarketing/me/pitches',9001)).status,403);
+    assert.equal((await f.call('/api/comarketing/admin/queue',9000)).status,200);
+  } finally { f.db.close(); }
 });
