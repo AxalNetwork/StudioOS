@@ -382,6 +382,8 @@ export const learningJoinOf = (d) => {
   const words = (Array.isArray(d.join_methods) ? d.join_methods : []).map((m) => JOIN_WORD[m]).filter(Boolean);
   return words.length === 2 ? 'Open or by invitation' : words[0] || NOT_RECORDED;
 };
+/** D4298 (#4298): the Influencers card's figure, P1's active members. */
+export const influencerLine = (d) => `${plural(Number(d.count) || 0, 'active influencer', 'active influencers')}`;
 export const testingLine = (d) => `${nf(d.open)} open · ${nf(d.applications)} applied, not withdrawn`;
 
 /**

@@ -33,7 +33,10 @@ page in a child component inside it:
   Investor cohort access (`/admin/programs/investor-cohorts`, `/activity`) and
   the one-page `/admin/programs/ai-native-venture`. D963 (#2796) completes the
   last three on parts 1, 5 and 6's reads; each header's status pill is part
-  1's registry's.
+  1's registry's. D4298 (#4298) adds Influencers (IN11):
+  `/admin/programs/influencer`, which opens `/applications`, and
+  `/how-it-runs`, `/influencers`, `/offers`, `/payouts`, `/activity` and
+  `/settings`, routed by `frontend/src/routes/adminInfluencers.jsx`.
 
 - `ProposePage.jsx` — D964 (#2797), workspace "Programs":
   `/admin/programs/propose`, Propose a program (PG14) on part 2's proposal
@@ -67,6 +70,14 @@ The pieces they draw with:
   the NDA template's state, four tiles, How it runs and the Investors table;
   Give an investor access (PG11d) and End access, on part 6's reads
   (`../../../lib/api/investorCohorts.js`).
+- `InfluencerPages.jsx` — D4298 (#4298): Influencers' Applications (the
+  queue and the answers drawer: admit at a tier, decline, ask for more), the
+  Influencers table with its row actions and the flags card, Offers, Payouts
+  (doors to Commissions) and Settings (the tier defaults, the Super Admin's to
+  edit), on `../../../lib/api/adminInfluencers.js`. Money is the Super
+  Admin's: an admin reads "HQ reads".
+- `influencersModel.js` — D4298: Influencers' tabs, words and arithmetic
+  (money per currency, the reason floor, each action's body). Pure.
 - `ReferRewards.jsx` — D965 (#2798): Refer & Earn Overview's Rewards issued
   tile and Rewards card, each on its own read (part 4's paged total and
   `GET /api/refer-earn/admin/rewards`), with the words from
