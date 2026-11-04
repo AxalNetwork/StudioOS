@@ -61,7 +61,7 @@ test('item sheet Move and Schedule perform writes, and read-only viewers get no 
  }finally{if(m)await m.close();Object.assign(workAdapter,old);}
 });
 test('Needs-you opens the latest failed run and review filters the board',async()=>{
- const runs=[];const items=[task,{uid:'review',title:'Waiting review',column:'in_review'},
+ const runs=[];const items=[task,{uid:'review',title:'Waiting review',column:'in_review',run:{status:'waiting'}},
  {uid:'older',title:'Old failure',column:'ready',run:{uid:'run-old',status:'failed',ended_at:'2026-11-01T10:00:00Z'}},
  {uid:'newer',title:'New failure',column:'ready',run:{uid:'run-new',status:'failed',ended_at:'2026-11-02T10:00:00Z'}}];
  const m=await mount(h(MemoryRouter,null,h(Board,{items,viewer,onRun:u=>runs.push(u)})));
@@ -99,4 +99,80 @@ test('a late response from the previous project cannot open its item on the new 
   assert.ok(m.by('work-card-project-eight'));
   assert.match(m.text(),/That task wasn't found\./);
  } finally {if(m)await m.close();Object.assign(workAdapter,old);api.getProject=getProject;globalThis.fetch=fetch;}
+});
+
+
+// S1's four confirmed findings: exercise the controls through the mounted UI.
+async function withProject(stubs, run) {
+ const old = Object.fromEntries(Object.keys(stubs).map(k => [k, workAdapter[k]]));
+ const getProject = api.getProject, fetch = globalThis.fetch;
+ api.getProject = async () => ({ id: 7, name: 'Example' });
+ globalThis.fetch = async () => new Response(JSON.stringify({ error: 'agent_engine_off' }), { status: 404, headers: { 'content-type': 'application/json' } });
+ Object.assign(workAdapter, stubs);
+ let m;
+ try {
+  m = await mount(h(MemoryRouter, { initialEntries: ['/projects/7/work?item=item-a'] }, h(Routes, null, h(Route, { path: '/projects/:id/work', element: h(WorkPage) }))));
+  await run(m);
+ } finally { if (m) await m.close(); Object.assign(workAdapter, old); api.getProject = getProject; globalThis.fetch = fetch; }
+}
+test('S1 finding 1: a hidden linked item stays open with its schedule notice across board reload', async () => {
+ let reads = 0;
+ await withProject({
+  board: async () => ({ available: true, data: { items: [], viewer } }),
+  burnup: async () => ({ available: true, data: { series: [] } }),
+  item: async () => { if (++reads > 2) throw new Error('Recheck unavailable'); return { available: true, data: task }; },
+  schedule: async () => ({ available: true, data: task }),
+ }, async m => {
+  const sheet = m.by('work-item-sheet');
+  await m.press('work-item-schedule');
+  await m.change('work-schedule-day', '2026-11-10');
+  await m.press('work-schedule-save');
+  assert.ok(m.by('work-item-sheet') === sheet, 'the confirmed sheet must not remount');
+  assert.match(m.text(), /is scheduled\./);
+  assert.equal(reads, 2, 'reload must not recheck an already confirmed linked item');
+ });
+});
+test('S1 finding 2: review proposals includes waiting runs in Backlog and excludes completed runs', async () => {
+ const items = [
+  { ...task, uid: 'waiting-backlog', column: 'backlog', run: { status: 'waiting', proposals: 3 } },
+  { ...task, uid: 'completed-review', column: 'in_review', run: { status: 'completed', proposals: 8 } },
+ ];
+ const m = await mount(h(MemoryRouter, null, h(Board, { items, viewer })));
+ try {
+  assert.match(m.text(), /Review 3 proposals/);
+  await m.press('work-needs-review');
+  assert.ok(m.by('work-card-waiting-backlog'));
+  assert.equal(m.by('work-card-completed-review'), undefined);
+ } finally { await m.close(); }
+});
+test('S1 finding 3: sheet Move and Schedule each refresh the burn-up', async () => {
+ let burnReads = 0;
+ await withProject({
+  board: async () => ({ available: true, data: { items: [task], viewer } }),
+  burnup: async () => { burnReads++; return { available: true, data: { series: [] } }; },
+  item: async () => ({ available: true, data: task }),
+  move: async () => ({ available: true, data: { ...task, column: 'done' } }),
+  schedule: async () => ({ available: true, data: task }),
+ }, async m => {
+  await m.press('work-item-schedule');
+  await m.change('work-schedule-day', '2026-11-10');
+  await m.press('work-schedule-save');
+  assert.equal(burnReads, 2, 'Schedule must refresh the chart');
+  await m.press('work-item-move');
+  await m.press('work-item-move-done');
+  assert.equal(burnReads, 3, 'Move must refresh the chart');
+ });
+});
+test('S1 finding 4: a successful Move clears an earlier refusal notice', async () => {
+ const old = { item: workAdapter.item, move: workAdapter.move }; let moves = 0, m;
+ workAdapter.item = async () => ({ available: true, data: task });
+ workAdapter.move = async () => ++moves === 1 ? { available: false, reason: 'Move refused by Worker.' } : { available: true, data: { ...task, column: 'done' } };
+ try {
+  m = await mount(h(MemoryRouter, null, h(ItemSheet, { uid: task.uid, projectId: 7, viewer, onClose() {} })));
+  await m.press('work-item-move');
+  await m.press('work-item-move-done');
+  assert.match(m.text(), /Move refused by Worker/);
+  await m.press('work-item-move-done');
+  assert.doesNotMatch(m.text(), /Move refused by Worker/);
+ } finally { if (m) await m.close(); Object.assign(workAdapter, old); }
 });

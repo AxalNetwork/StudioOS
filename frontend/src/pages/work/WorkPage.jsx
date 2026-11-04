@@ -46,18 +46,22 @@ export default function WorkPage() {
   const tab = missingItem ? 'board' : selectedTab;
   const openItem = uid => { setItemUid(uid); setQ(previous => { const next = new URLSearchParams(previous); next.set('item', uid); return next; }); };
   useEffect(() => { setItemUid(null); setRunUid(null); }, [id]);
+  const boardReady = board.status === 'ready' && board.projectId === id;
+  const itemOnBoard = boardReady && board.items.some(it => it.uid === requestedItem);
+  useEffect(() => { setMissingItem(false); }, [requestedItem, id]);
   useEffect(() => {
     let live = true;
-    setMissingItem(false);
     if (!requestedItem) setItemUid(null);
-    else if (board.status === 'ready' && board.projectId === id) {
-      if (board.items.some(it => it.uid === requestedItem)) setItemUid(requestedItem);
+    // A confirmed sheet owns its state, even when a reload/filter hides its card.
+    else if (requestedItem !== itemUid) {
+      setItemUid(null);
+      if (!boardReady) return;
+      if (itemOnBoard) { setMissingItem(false); setItemUid(requestedItem); }
       else {
-        setItemUid(null);
         // A board filter can hide a real item. Verify its project before opening it.
         workAdapter.item(requestedItem).then(r => {
           if (!live) return;
-          if (r.available && r.data?.uid === requestedItem && String(r.data?.project?.id) === String(id)) setItemUid(requestedItem);
+          if (r.available && r.data?.uid === requestedItem && String(r.data?.project?.id) === String(id)) { setMissingItem(false); setItemUid(requestedItem); }
           else if (r.available) setMissingItem(true);
           else setNotice(r.reason);
         }, e => {
@@ -68,7 +72,7 @@ export default function WorkPage() {
       }
     }
     return () => { live = false; };
-  }, [requestedItem, board, id]);
+  }, [requestedItem, itemUid, boardReady, itemOnBoard, id]);
   const closeItem = () => { setItemUid(null); setQ(previous => { const next = new URLSearchParams(previous); next.delete('item'); return next; }); };
   const [filterDraft, setFilterDraft] = useState('');
   const [filter, setFilter] = useState('');
@@ -131,6 +135,11 @@ export default function WorkPage() {
     load();
     setBurnReload((v) => v + 1);
   }, [id, load]);
+
+  const refreshAfterSheet = useCallback(() => {
+    load();
+    setBurnReload((v) => v + 1);
+  }, [load]);
 
   const name = project?.name || 'this project';
   const company = project?.company_name || project?.company?.name || null;
@@ -195,7 +204,7 @@ export default function WorkPage() {
       {tab === 'workload' ? <WorkloadView projectId={id} onOpenItem={openItem} onNotice={setNotice} /> : null}
       {tab === 'goals' ? <GoalsView scope="project" id={id} canManage={!!board.viewer?.can_manage} /> : null}
 
-      {itemUid ? <ItemSheet key={itemUid} uid={itemUid} projectId={id} viewer={board.viewer} onClose={closeItem} onRun={setRunUid} onAssigned={load} /> : null}
+      {itemUid ? <ItemSheet key={itemUid} uid={itemUid} projectId={id} viewer={board.viewer} onClose={closeItem} onRun={setRunUid} onAssigned={refreshAfterSheet} /> : null}
       {runUid ? <RunSheet uid={runUid} onClose={() => setRunUid(null)} /> : null}
     </div>
   );
@@ -220,10 +229,10 @@ function NewItem({ onCreate, onCancel }) {
  */
 export function Board({ items, onOpen, onMove, onRun, viewer = null }) {
   const [reviewOnly, setReviewOnly] = useState(false);
-  const cols = boardColumns(reviewOnly ? items.filter(it => it.column === 'in_review') : items);
+  const cols = boardColumns(reviewOnly ? items.filter(it => it.run?.status === 'waiting') : items);
   const failed = items.map(it => it.run).filter(r => r?.status === 'failed' && r.uid).sort((a, b) => (Date.parse(b.ended_at || b.started_at) || 0) - (Date.parse(a.ended_at || a.started_at) || 0))[0];
   const needs = needsYou(items);
-  const reviewCount = items.filter(it => it.column === 'in_review').length;
+  const reviewCount = items.filter(it => it.run?.status === 'waiting').length;
   return (
     <>
       {needs || reviewCount ? (
@@ -369,6 +378,7 @@ export function ItemSheet({ uid, projectId = null, viewer = null, onClose, onRun
   const [schedule, setSchedule] = useState(null);
   const [notice, setNotice] = useState(null);
   const doMove = async column => {
+    setNotice(null);
     try {
       const r = await workAdapter.move(uid, column);
       if (!r.available) { setNotice(r.reason); return; }
