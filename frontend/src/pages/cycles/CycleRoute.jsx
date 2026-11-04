@@ -31,6 +31,7 @@ import RecordView, { RecordPhoneProvider } from './RecordView';
 import { HEADER_BUTTON, RecordHeaderProvider } from './RecordHeader.jsx';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
 import DistributionTabs from './distribution/DistributionTabs.jsx';
+import ChannelsTab from './distribution/ChannelsTab.jsx';
 import { ComingSoon } from './distribution/DistributionParts.jsx';
 import { distributionPrimary } from './distribution/distributionModel.js';
 import InboxTab, { InboxNeedsYou, useInboxUnread } from './distribution/InboxTab.jsx';
@@ -1266,6 +1267,7 @@ export default function CycleRoute({ cycle, tab = null, lightbox = false, adding
         message={moduleStatus === 'refused' ? moduleMessage : undefined}
         onRetry={() => setReload((n) => n + 1)}
         records={recs}
+        showRecords={!distribution}
         recordsStatus={moduleStatus === 'ready' ? (recs?.state === 'unreadable' ? 'unreadable' : 'ready') : undefined}
         recordsMessage={recs?.state === 'unreadable' ? recs.reason : undefined}
         query={query}
@@ -1325,10 +1327,11 @@ export default function CycleRoute({ cycle, tab = null, lightbox = false, adding
   // D4484: Overview keeps the existing module body; unlanded tabs read no campaign data.
   if (distribution) {
     if (distributionTab === 'overview' && projectStatus === 'ready') body = <><InboxNeedsYou reading={inboxUnread} search={q} />{body}</>;
+    if (distributionTab === 'channels' && projectStatus === 'ready') body = <ChannelsTab projectId={projectId} refresh={reload} onChanged={() => setReload((n) => n + 1)} fillFor={fillFor} />;
     if (distributionTab === 'inbox' && projectStatus === 'ready') body = <InboxTab projectId={projectId} onUnreadChange={inboxUnread.acceptRead} />;
     body = <DistributionTabs tab={distributionTab} search={q} action={action} aiOff={!fillsOn} inboxCount={inboxUnread.count}
       loading={projectStatus === 'loading' || (distributionTab === 'overview' && projectStatus === 'ready' && moduleStatus === 'loading')}>
-      {distributionTab === 'inbox' && projectStatus === 'ready' ? body : distributionTab === 'overview' || projectStatus !== 'ready' ? body : <ComingSoon />}
+      {['channels', 'inbox'].includes(distributionTab) && projectStatus === 'ready' ? body : distributionTab === 'overview' || projectStatus !== 'ready' ? body : <ComingSoon />}
     </DistributionTabs>;
   }
 

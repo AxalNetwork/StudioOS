@@ -25,9 +25,9 @@ starting ads.
 | `adsModel.js` | D4490: slider amounts, totals and monthly chart gaps. |
 | `ads.css` | D4490: responsive Ads columns using the Distribution tokens. |
 
-CycleRoute still owns the module page. Overview retains its channels table,
+CycleRoute still owns the module page. Overview retains its charts,
 outreach draft, content calendar, update-ask replies, Mercury, Notion and tool
-doors. Inbox is the D4494 tab. Channels is the D4486 tab on this shell. Other
+doors. Inbox is the D4494 tab. Channels is the mounted D4486 tab; its table replaces Overview’s legacy channel records. Other
 tabs show Coming in this module soon until their tasks land.
 A pending read uses LoadingSkeleton. No sample count or campaign is fabricated.
 

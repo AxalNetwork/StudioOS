@@ -1,6 +1,6 @@
 ### Distribution Channels (D4486, #4486; part of #3722)
 
-`/grow/distribution/channels` uses #4484's Distribution shell. The venture
+`/grow/distribution/channels` uses #4484's Distribution shell and mounts the channel reader with the existing name Ask. Overview's duplicate channel table is removed on desktop and phone. The venture
 read is `GET /api/grow/channels?project=`, mounted by `grow_channels.ts`.
 Add and Edit retain `POST /api/cycles/grow/channels` and
 `PATCH /api/cycles/grow/channels/:uid`; channel name Ask remains #4046.
