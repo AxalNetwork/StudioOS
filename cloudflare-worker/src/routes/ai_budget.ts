@@ -357,6 +357,25 @@ r.get('/members/:userId/runs',async c=>{
     return c.json(out);
   } catch(error) { return refuse(c,503,{code:'ai_member_runs_unreadable',message:'Unreadable: where this member\'s AI spend went could not be read.',raw:error}); }
 });
+// ---------------------------------------------------------------------------
+// D4373 (#4373): refund one deck generation run. HQ's Admin and Super Admin.
+// Every settled charge of the batch goes back to the founder's AI tokens, one
+// ledger and audit row each; a second press refunds nothing again.
+// ---------------------------------------------------------------------------
+r.post('/deck-batches/:uid/refund',async c=>{
+  const actor=await requireHqAdmin(c);
+  const body=await c.req.json().catch(()=>null) as any;
+  const uid=c.req.param('uid');
+  if (!/^[A-Za-z0-9-]{8,64}$/.test(uid)) return c.json({error:'batch_not_found',message:'No deck batch has that ID.'},404);
+  try {
+    const { refundBatch, REASON_MIN, REASON_MAX } = await import('../services/decks/batchRefund');
+    const out=await refundBatch(c.env,{batchUid:uid,actorId:actor.id,reason:body?.reason});
+    if (!out.ok) return out.error==='batch_not_found'
+      ? c.json({error:'batch_not_found',message:'No deck batch has that ID.'},404)
+      : c.json({error:'reason_required',message:`Give a reason of ${REASON_MIN} to ${REASON_MAX} characters.`},400);
+    return c.json(out);
+  } catch(error) { return refuse(c,503,{code:'deck_batch_refund_not_recorded',message:'The refund was not recorded. Charges already refunded stay refunded; press again to finish.',raw:error}); }
+});
 r.get('/reconcile',async c=>{
   await requireSuperAdmin(c);
   try { return c.json(await reconcile(c.env)); }

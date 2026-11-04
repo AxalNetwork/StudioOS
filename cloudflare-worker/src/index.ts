@@ -919,6 +919,9 @@ const COOL_OFF_ROUTES = [
   // added or taken on someone else's behalf. The member-account read beside it
   // stays open.
   '/api/ai-budget/members/:userId/adjustments',
+  // D4373 — HQ's refund of a deck generation run: money given back on a
+  // member's behalf, the same class as an adjustment.
+  '/api/ai-budget/deck-batches/:uid/refund',
   // D966 — the SAFE basis repair writes founders' cap tables: the money-adjacent
   // class D892's reconciliation is paused under (`/api/admin/billing`). The exact
   // route, so D710's entity reads under `/api/admin/mercury` stay open.

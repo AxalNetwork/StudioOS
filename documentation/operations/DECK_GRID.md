@@ -81,7 +81,9 @@ the before and after, in `admin_audit_log` and `activity_logs`.
   charges. A run that charged nothing releases the hold in full. The ledger is
   `ai_credit_ledger` (append only: `hold`, `release`, `spend`, `adjustment`);
   each step's charge is in `ai_usage_logs` with the hold's `reservation_uid`.
-- **There is no "refund a deck batch" route.**
+- **HQ refunds a whole run in one press** (D4373):
+  `POST /api/ai-budget/deck-batches/:uid/refund` with
+  `{ "reason": "<10 to 400 characters>" }`. HQ Admin or Super Admin.
 
 **Find the run and what it charged.**
 ```sql
@@ -97,15 +99,24 @@ SELECT id, model, charged_microusd, created_at FROM ai_usage_logs WHERE reservat
 - **`review`** (the run went over its hold): HQ's review queue decides it.
   `GET /api/ai-budget/reviews`, then `POST /api/ai-budget/reviews/:uid/refund`
   with `{ "reason": "<at least 10 characters>" }`. Super Admin.
-- **`settled`** (the run charged, and the member is owed some or all of it):
-  give it back as an adjustment.
+- **`settled`** (the run charged, and the member is owed it): refund the batch.
+  `POST /api/ai-budget/deck-batches/<batch uid>/refund` with
+  `{ "reason": "<why, 10 to 400 characters>" }`. Every step that charged goes
+  back to the founder's AI tokens as its own `adjustment` row
+  (`source_ref = 'adj:deck-refund:<batch uid>:<seq>'`), each with one
+  `admin_audit_log` row (`deck_batch_refund`), never more in all than the hold
+  settled. The answer lists each charge (`refunded`, `already_refunded`).
+  A second press refunds nothing again. It sits behind the recovery cool-off,
+  like every adjustment, and the member gets one notice with the amount.
+  To give back only part of a run, use an adjustment instead:
   `POST /api/ai-budget/members/:userId/adjustments` with
   `{ "amount_usd": <positive, at most 100>, "reason": "Deck batch <uid>: <why>", "idempotency_key": "deck-batch-<uid>" }`.
-  Using the batch uid as the key means a second press is a no-op. It sits behind
-  the recovery cool-off, like every adjustment.
-- **`pending`** past its `expires_at`: nothing to do. The member's next budget
-  read refunds it (`releaseExpired`).
-- **`refunded`**: nothing is owed. Check the ledger's `release` row.
+- **Not settled** (`pending`, `review`, `refunded`, or no hold): the refund
+  route refunds 0 and says why (`nothing_settled: true`). Then:
+  - **`pending`** past its `expires_at`: nothing to do. The member's next
+    budget read refunds it (`releaseExpired`).
+  - **`review`**: decide it in the review queue, as above.
+  - **`refunded`**: nothing is owed. Check the ledger's `release` row.
 
 **Check.** The member's `GET /api/ai-budget/me` balance moved by the amount,
 and `ai_credit_ledger` has the `adjustment` row with your reason.
@@ -234,7 +245,7 @@ which `scripts/check-deck-retention.mjs` checks.
 
 ## What is not built (for whoever builds it next)
 
-- A Super Admin "refund this batch" action that settles or adjusts by batch uid.
+- A button in HQ for the batch refund (the route is built, D4373).
 - A sweeper or HQ list for stuck runs, and a lease on a queue slice (D1536).
 - An admin image takedown that does steps 2 to 6 above in one audited press.
 - A live staging Worker, so each procedure can be run end to end before a
