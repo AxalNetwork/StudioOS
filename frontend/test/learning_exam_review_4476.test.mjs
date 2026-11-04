@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { renderedText } from './_renderedText.mjs';
 import { installDocument } from './_contracts_dom.mjs';
 import { reviewRows, reviewLine, perQuestionResults } from '../src/pages/learning/assessmentModel.js';
 import ExamFlow from '../src/pages/learning/ExamFlow.jsx';
@@ -110,4 +111,10 @@ test('timeout refusal uses the route message and unreadable errors hide network 
   const unreadable = render({ error: 'private transport exception', errorUnreadable: true });
   assert.match(unreadable, /learning-unreadable/);
   assert.doesNotMatch(unreadable, /private transport exception/);
+});
+
+
+test('the active attempt shows time left without treating seconds as remaining attempts', () => {
+  const taking = renderToStaticMarkup(React.createElement(ExamFlow, base));
+  assert.doesNotMatch(renderedText(taking), /[0-9]+ attempts? left/);
 });

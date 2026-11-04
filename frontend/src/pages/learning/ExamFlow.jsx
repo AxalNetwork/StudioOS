@@ -225,7 +225,6 @@ function ExamTaking({ exam, attempt, clock, onSubmit, busy }) {
             </li>
           ))}
         </ol>
-        {typeof left === 'number' && left > 0 && <p className="mt-4 text-[13px] text-axal-muted dark:text-gray-400">{left} {left === 1 ? 'attempt' : 'attempts'} left</p>}
       {left === 0 && <p role="status" className="text-[13px] text-axal-amber-deep dark:text-amber-300">Time is up. Your answers are being submitted as they stand.</p>}
       </div>
       <div className={navigation}>
@@ -263,7 +262,6 @@ function ExamTaking({ exam, attempt, clock, onSubmit, busy }) {
             {o.label}
           </label>
         ))}
-        {typeof left === 'number' && left > 0 && <p className="mt-4 text-[13px] text-axal-muted dark:text-gray-400">{left} {left === 1 ? 'attempt' : 'attempts'} left</p>}
       {left === 0 && <p className="text-[12px] text-red-700 dark:text-red-300" role="alert">Time is up. Your answers are being submitted as they stand.</p>}
       </fieldset>
       <div className={navigation}>

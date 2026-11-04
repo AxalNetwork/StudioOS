@@ -711,18 +711,18 @@ test('ExamFlow: intro, one question at a time against the clock, the result, ans
   assert.match(tagOf(spent, 'button-exam-start'), /disabled=""/);
   const taking = html(h(ExamFlow, { status: 'ready', exam: EXAM, attempt: ATTEMPT, now: Date.parse('2026-10-06T10:06:12Z') }));
   assert.match(taking, /data-step="taking"/);
-  assert.match(flat(taking), /Question 1 of 2 · 0 answered 23:48 What is a pre-money valuation\?/);
+  assert.match(flat(taking), /Question 1 of 2 · 0 answered 23:48 left What is a pre-money valuation\?/);
   assert.match(taking, /type="radio"/);
   assert.doesNotMatch(taking, /type="checkbox"|Which of these dilute/, 'more than one question on the screen');
   assert.match(html(h(ExamFlow, { status: 'ready', exam: EXAM, attempt: ATTEMPT, now: Date.parse('2026-10-06T10:31:00Z') })), /Time is up\./);
   const hidden = html(h(ExamFlow, { status: 'ready', exam: EXAM, result: REVEALED, attempts: [] }));
   assert.match(hidden, /data-step="result"/);
-  assert.match(flat(hidden), /82% Pass Pass mark 70% · 16 of 20 correct · submitted 5 Oct 2026/);
+  assert.match(flat(hidden), /82% Passed Pass mark 70% · 16 of 20 correct · submitted 5 Oct 2026/);
   assert.match(hidden, /data-testid="exam-answers-hidden"/);
   assert.doesNotMatch(hidden, /The value before the round/, 'a correct answer is drawn on an exam that does not reveal them');
   const shown = html(h(ExamFlow, { status: 'ready', exam: { ...EXAM, reveal: 'score_and_answers' }, result: REVEALED, attempts: [] }));
   assert.match(flat(shown), /Your answer: The value after it Correct: The value before the round/);
-  assert.match(text(h(ExamFlow, { status: 'ready', exam: EXAM, result: { ...RESULT, score_percent: 64, passed: 0 }, attempts: [] })), /64% Fail/);
+  assert.match(text(h(ExamFlow, { status: 'ready', exam: EXAM, result: { ...RESULT, score_percent: 64, passed: 0 }, attempts: [] })), /64% Not passed/);
 });
 
 test('MyLearning: three stores, three states, and one failure blanks nothing else', () => {
