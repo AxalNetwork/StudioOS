@@ -330,6 +330,7 @@ test('4: Record a decision preselects exactly that evidence; a partner gets neit
 test('4: no kind proposes a verdict, and no suggestion path writes a decision', async () => {
   const { env, db } = world();
   for (const kind of Object.keys(PLACEMENT_KINDS) as (keyof typeof PLACEMENT_KINDS)[]) {
+    if (kind === 'verdict_contribution') continue; // D4412: context only, never a decision
     assert.notEqual(PLACEMENT_KINDS[kind].slug, 'verdict', kind);
     for (const p of [{}, { attribute: 'role' }, { attribute: 'tools' }]) assert.notEqual(placementSlug(kind, p), 'verdict', kind);
   }

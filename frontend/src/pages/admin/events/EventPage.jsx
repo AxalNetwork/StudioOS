@@ -1,3 +1,4 @@
+import EventSyndicationPanel from '../../events/EventSyndicationPanel';
 import React, { useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { adminEvents, events as eventsApi } from '../../../lib/api';
@@ -157,6 +158,7 @@ export default function EventPage({ id, reads, now }) {
   const title = titleOf(ev);
   return (
     <div className="flex flex-col gap-3.5" data-testid="events-event">
+      <EventSyndicationPanel key={id} eventId={id} refresh={ev} />
       <header className="flex flex-col gap-2">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 flex-col gap-1.5">
