@@ -190,39 +190,43 @@ test('every Learning route resolves, behind the narrowest guard it needs', () =>
 
 // ── The coming-soon gate ──────────────────────────────────────────────────
 
-test('the gate: every non-admin profile sees coming soon, admin and Super Admin do not', () => {
-  assert.equal(LEARNING_COMING_SOON, true, 'the gate is on until the content exists');
-  for (const role of ['founder', 'investor', 'partner', 'advisor', 'exploring', 'a_role_added_later']) {
-    assert.equal(learningComingSoon({ role }), true, `${role} should see coming soon`);
+test('the gate is lifted (owner, 2026-11-04): every profile sees the whole Learning center; switched on, it holds every non-admin', () => {
+  assert.equal(LEARNING_COMING_SOON, false, 'the owner lifted the gate on 2026-11-04 (#3726)');
+  for (const user of [{ role: 'founder' }, { role: 'investor' }, { role: 'partner' }, { role: 'advisor' }, { role: 'exploring' }, {}, null, ADMIN, SUPER]) {
+    assert.equal(learningComingSoon(user), false, `${JSON.stringify(user)} sees the whole Learning center`);
   }
-  assert.equal(learningComingSoon({}), true, 'a profile with no role is gated');
-  assert.equal(learningComingSoon(null), true, 'no profile at all is gated');
-  assert.equal(learningComingSoon(ADMIN), false, 'an admin sees the whole Learning center');
-  assert.equal(learningComingSoon(SUPER), false, 'the Super Admin sees the whole Learning center');
-  assert.equal(learningComingSoon({ role: 'admin' }), false);
+  // The dormant gate, switched on, still holds exactly whom it held.
+  for (const role of ['founder', 'investor', 'partner', 'advisor', 'exploring', 'a_role_added_later']) {
+    assert.equal(learningComingSoon({ role }, role, true), true, `${role} would see coming soon`);
+  }
+  assert.equal(learningComingSoon({}, undefined, true), true, 'a profile with no role would be gated');
+  assert.equal(learningComingSoon(null, undefined, true), true, 'no profile at all would be gated');
+  assert.equal(learningComingSoon(ADMIN, 'admin', true), false, 'an admin sees the whole Learning center');
+  assert.equal(learningComingSoon(SUPER, 'admin', true), false, 'the Super Admin sees the whole Learning center');
 });
 
 test('the gate follows the browsed role, and lifting the switch opens Learning to everyone', () => {
-  // "View as": the admin checks what a founder sees, coming-soon card and all.
-  assert.equal(learningComingSoon(ADMIN, 'founder'), true);
-  assert.equal(learningComingSoon(SUPER, 'investor'), true);
-  assert.equal(learningComingSoon(SUPER, 'admin'), false);
+  // "View as" (the switch on): the admin checks what a founder sees, coming-soon card and all.
+  assert.equal(learningComingSoon(ADMIN, 'founder', true), true);
+  assert.equal(learningComingSoon(SUPER, 'investor', true), true);
+  assert.equal(learningComingSoon(SUPER, 'admin', true), false);
   // Impersonation: `user` IS the impersonated account.
-  assert.equal(learningComingSoon({ role: 'partner' }, 'partner'), true);
+  assert.equal(learningComingSoon({ role: 'partner' }, 'partner', true), true);
   // The lift: one switch, and every profile gets the Learning center.
   for (const user of [FOUNDER, { role: 'advisor' }, ADMIN, SUPER]) assert.equal(learningComingSoon(user, user.role, false), false);
   const src = read('frontend/src/pages/learning/learningAccess.js');
   assert.match(src, /TEMPORARY, BY THE OWNER'S REQUEST ON 2026-10-06/);
   assert.match(src, /TO LIFT IT, set `LEARNING_COMING_SOON` to `false`/);
-  assert.match(src, /export const LEARNING_COMING_SOON = true;/);
+  assert.match(src, /LIFTED BY THE OWNER ON 2026-11-04/);
+  assert.match(src, /export const LEARNING_COMING_SOON = false;/);
   // One gate: every Learning page asks this function and nothing else decides it.
   const pageSrc = codeOnly(read('frontend/src/pages/learning/LearningPage.jsx'));
   assert.match(pageSrc, /const gated = learningComingSoon\(user, activeRole \?\? user\?\.role\);/);
 });
 
-test('the routed page applies the gate to the role being browsed', () => {
-  assert.match(page('/learning', '/learning', { view: 'home', user: ADMIN, activeRole: 'founder' }), /data-testid="learning-coming-soon-sections"/,
-    'an admin viewing as a founder sees the founder page');
+test('the routed page, gate lifted: an admin viewing as a founder sees the founder page, the whole center', () => {
+  assert.doesNotMatch(page('/learning', '/learning', { view: 'home', user: ADMIN, activeRole: 'founder' }), /learning-coming-soon/,
+    'an admin viewing as a founder sees what a founder sees: the whole center');
   assert.doesNotMatch(page('/learning', '/learning', { view: 'home', user: ADMIN, activeRole: 'admin' }), /learning-coming-soon/);
 });
 
@@ -461,16 +465,16 @@ test('a gated profile: Articles open by default, every other tab and section one
     assert.doesNotMatch(panel, /data-testid="list-|data-testid="row-|catalog-row-|learning-not-live/, `${t.key} leaks its list to a gated profile`);
     assert.doesNotMatch(markup, /input-learning-search/, 'a closed tab offers a search');
   }
-  // The container: a gated profile lands on Articles, and a deep link to a closed tab shows the card.
+  // The container, gate lifted (owner, 2026-11-04): a founder lands on All, and every tab is live.
   const landing = page('/learning', '/learning', { view: 'home', user: FOUNDER, activeRole: 'founder' });
-  assert.match(tagOf(landing, 'tab-articles'), /aria-selected="true"/);
-  assert.match(tagOf(landing, 'tab-all'), /aria-selected="false"/);
-  assert.match(tagOf(landing, 'panel-articles'), /data-mode="live"/);
+  assert.match(tagOf(landing, 'tab-all'), /aria-selected="true"/);
+  assert.match(tagOf(landing, 'panel-all'), /data-mode="live"/);
+  assert.doesNotMatch(landing, /learning-coming-soon/);
   const deep = page('/learning?tab=courses', '/learning', { view: 'home', user: FOUNDER, activeRole: 'founder' });
-  assert.match(tagOf(deep, 'panel-courses'), /data-mode="coming_soon"/);
+  assert.match(tagOf(deep, 'panel-courses'), /data-mode="live"/);
 });
 
-test('a gated profile on a deep Learning route sees the coming-soon card in place', () => {
+test('gate lifted: every profile on a deep Learning route sees the surface itself, reading its store', () => {
   // Every view reads its store (D557 in stage 2; D559's exercises and exams and D560's
   // webinars in stage 3): before the read an admin sees it loading, never "not live".
   for (const [url, pattern, view, body] of [
@@ -485,10 +489,9 @@ test('a gated profile on a deep Learning route sees the coming-soon card in plac
   ]) {
     for (const role of ['founder', 'investor', 'partner', 'advisor']) {
       const markup = page(url, pattern, { view, user: { role }, activeRole: role });
-      assert.match(markup, /data-testid="learning-coming-soon"/, `${role} at ${url} does not see the card`);
-      assert.ok(!markup.includes(`data-testid="${body}"`), `${role} at ${url} sees the ${view} body`);
-      assert.doesNotMatch(markup, /learning-loading/, `${role} at ${url} starts a Learning read`);
-      assert.match(tagOf(markup, 'link-coming-soon-articles'), /href="\/learning\?tab=articles"/, 'the card points at the open tab');
+      assert.doesNotMatch(markup, /learning-coming-soon/, `${role} at ${url} still sees the card`);
+      assert.ok(markup.includes(`data-testid="${body}"`), `${role} at ${url} does not see the ${view} body`);
+      assert.match(markup, /data-testid="learning-loading"/, `${role} at ${url} does not read its store`);
     }
     // The admin sees the surface itself.
     const admin = page(url, pattern, { view, user: ADMIN, activeRole: 'admin' });

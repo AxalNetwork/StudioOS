@@ -204,12 +204,12 @@ test('4: the threshold — more than 6 skills suggests a specialist for the area
   const six = await est(w, CFO, `?add=${uids.slice(0, 6).join(',')}`);
   assert.equal(six.body.hint, null, 'six skills: no hint');
   const seven = await est(w, CFO, `?add=${uids.join(',')}`);
-  assert.deepEqual(seven.body.hint, { reason: 'skills', area: 'finance', areas: 2, suggest: { key: 'orrin', name: 'Orrin' } },
-    'Vesta, the first finance persona, is already on this team: the next offered one is named');
+  assert.deepEqual(seven.body.hint, { reason: 'skills', area: 'finance', areas: 2, suggest: { key: 'ryssa', name: 'Ryssa' } },
+    'Vesta and Tessaly, the first finance personas (D4388\'s areas), are already on this team: the next offered one is named');
   assert.deepEqual(seven.body.thresholds, { max_skills: 6 });
   // Hidden or retired personas (D4158) are never suggested.
-  w.db.exec("INSERT INTO ai_persona_settings (persona_key, status) VALUES ('orrin', 'hidden')");
-  assert.notEqual((await est(w, CFO, `?add=${uids.join(',')}`)).body.hint.suggest?.key, 'orrin');
+  w.db.exec("INSERT INTO ai_persona_settings (persona_key, status) VALUES ('ryssa', 'hidden')");
+  assert.notEqual((await est(w, CFO, `?add=${uids.join(',')}`)).body.hint.suggest?.key, 'ryssa');
 });
 
 test('5: gates — a team member reads, a stranger does not; AG3 estimates an agent not yet added', async () => {

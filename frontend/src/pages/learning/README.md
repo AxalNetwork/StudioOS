@@ -87,11 +87,13 @@ throttle as the uploaded-file player: at most every 15 s, and on pause.
   reads the item once on hover (`readItemPreview`) and shows its signed
   `preview_url` when there is one; nothing otherwise.
 
-## The coming-soon gate
+## The coming-soon gate (lifted 2026-11-04)
 
-`learningAccess.js` holds it, temporary, by the owner's request of
-2026-10-06: every profile but the admin and the Super Admin sees "Coming soon"
-everywhere in Learning except Articles. The gate is applied before a wired
+The owner lifted it on 2026-11-04 (#3726, D3726): `LEARNING_COMING_SOON` is
+`false`, and every profile gets the whole Learning center. What follows
+describes the dormant gate. `learningAccess.js` holds it, temporary, by the
+owner's request of 2026-10-06: every profile but the admin and the Super Admin
+saw "Coming soon" everywhere in Learning except Articles. The gate is applied before a wired
 view is mounted, so a gated profile never reads the Learning store. To lift
 it, set `LEARNING_COMING_SOON` to `false`, then remove the gate and its
 callers' coming-soon branches.

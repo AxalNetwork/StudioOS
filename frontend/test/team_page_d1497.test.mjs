@@ -377,7 +377,7 @@ const COMPANY_ROUTE = '/account/companies/:uid/settings/team';
 test('company Team: people and invitations on the routes that exist; agents unavailable; Resend and Revoke wired', async () => {
   const v = await mount('/account/companies/nw1/settings/team', COMPANY_ROUTE, h(TeamAgentsPage, { form: 'company' }));
   try {
-    assert.deepEqual(v.keys().filter((k) => k.startsWith('GET ')).sort(), ['GET /api/account/projects', 'GET /api/company/nw1', 'GET /api/company/nw1/invitations', 'GET /api/company/team-vocabulary', 'GET /api/teams/company/nw1/agents', 'GET /api/teams/company/nw1/coverage', 'GET /api/teams/platform-status', 'GET /api/teams/roles'], 'D1612 A2 (#3956): the coverage card reads its route; D4162: and the platform status');
+    assert.deepEqual(v.keys().filter((k) => k.startsWith('GET ')).sort(), ['GET /api/account/projects', 'GET /api/company/nw1', 'GET /api/company/nw1/invitations', 'GET /api/company/team-vocabulary', 'GET /api/teams/company/nw1/agents', 'GET /api/teams/company/nw1/coverage', 'GET /api/teams/company/nw1/moves', 'GET /api/teams/platform-status', 'GET /api/teams/roles'], 'D1612 A2 (#3956): the coverage card reads its route; D4162: and the platform status; D1531 (TM18): and the moves');
     assert.equal(v.has('platform-paused-banner'), false, 'nothing paused: no banner');
     const text = v.text();
     assert.match(text, /Company settings/);

@@ -727,7 +727,7 @@ test('a screen never draws another read\'s reply, and the studio\'s words stay w
 
 // ── The gate ───────────────────────────────────────────────────────────────
 
-test('the gate still holds: a gated profile reads nothing from Learning and keeps Articles', () => {
+test('the gate is lifted (owner, 2026-11-04): every profile reads Learning, and the dormant gate is still the one test before a view mounts', () => {
   for (const role of ['founder', 'investor', 'partner', 'advisor']) {
     for (const [url, pattern, view] of [
       ['/learning/videos/v-yt', '/learning/videos/:uid', 'item'],
@@ -736,17 +736,15 @@ test('the gate still holds: a gated profile reads nothing from Learning and keep
       ['/learning/me', '/learning/me', 'me'],
     ]) {
       const markup = page(url, pattern, { view, user: { role }, activeRole: role });
-      assert.match(markup, /data-testid="learning-coming-soon"/, `${role} at ${url}`);
-      assert.doesNotMatch(markup, /learning-loading|lesson-player|course-outline/, `${role} at ${url} starts a Learning read`);
+      assert.doesNotMatch(markup, /learning-coming-soon/, `${role} at ${url}`);
+      assert.match(markup, /learning-loading/, `${role} at ${url} does not start its Learning read`);
     }
-    // The home: Articles open; All, Courses and Videos closed, and Continue learning not asked for.
+    // The home: All, Courses and Videos are live.
     for (const tab of ['all', 'courses', 'videos']) {
       const home = page(`/learning?tab=${tab}`, '/learning', { view: 'home', user: { role }, activeRole: role });
-      assert.match(tagOf(home, `panel-${tab}`), /data-mode="coming_soon"/);
-      assert.doesNotMatch(home, /learning-loading|section-continue|list-catalog/);
+      assert.match(tagOf(home, `panel-${tab}`), /data-mode="live"/);
+      assert.doesNotMatch(home, /learning-coming-soon/);
     }
-    const articles = page('/learning', '/learning', { view: 'home', user: { role }, activeRole: role });
-    assert.match(tagOf(articles, 'panel-articles'), /data-mode="live"/);
   }
   // The reads themselves are asked for only when the gate lets the profile see them
   // (a server render makes none, so the switches are read from the source).

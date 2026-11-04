@@ -152,6 +152,7 @@ export * from './api/googleWorkspaceBuild.js';
 export * from './api/growTalent.js';
 export * from './api/helpCenter.js';
 export * from './api/hqDeckStageNorms.js';
+export * from './api/incorporationQuote.js';
 export * from './api/influencer.js';
 export * from './api/influencerProgram.js';
 export * from './api/insights.js';

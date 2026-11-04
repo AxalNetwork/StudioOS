@@ -15,6 +15,8 @@
  *   DELETE /drafts/:uid                            archive
  *   POST   /drafts/from-proposal/:proposalUid      Use this draft: Eadwyn's `draft:publish` proposal becomes a draft (D1322)
  *   POST   /drafts/:uid/preview                    { destination_uids } previews, check and envelope_hash per place
+ *   POST   /ask                                    { project_id, module, destination_uids, estimate? } #4046: Eadwyn's post
+ *                                                   text for the ticked places, quoted or run; it writes nothing
  *   POST   /drafts/:uid/confirm                    { destination_uid, envelope_hash, idempotency_key }
  *   GET    /sends?project=&module=&provider=&status=, GET /sends/:uid   the history; text for the team only
  *   POST   /sends/:uid/retry | /check | /mark-not-sent | /retract | /mark-removed
@@ -34,7 +36,13 @@ import { isSupportSession } from '../integrations/providers/mercury';
 import { getProviderImpl, type IntegrationRow } from '../integrations/registry';
 import { publishTarget, PUBLISH_DAILY_CAP } from '../integrations/publishTargets';
 import { PUBLISH_MODULES, type PublishModule } from '../integrations/publishSources';
-import { createDraft } from '../services/publishSources';
+import { createDraft, prefillDraft } from '../services/publishSources';
+import { quoteRun, run as aiRouterRun, type RunOptions } from '../services/aiRouter';
+import { AI_SURFACE } from '../services/aiSurfaces';
+import { railFor, refuseRun } from '../util/railContext';
+import {
+  ASK_MAX_PLACES, ASK_MAX_TOKENS, ASK_SYSTEM, PUBLISH_ASK_OPTION, PUBLISH_ASK_PAGE, askLimit, askPrompt, screenPost, type AskPlace,
+} from '../services/publishAsk';
 import { isTeamViewer } from '../services/mercury/growFeeds';
 import { decideRail, getRail } from '../services/railProposals';
 import {
@@ -262,6 +270,55 @@ publish.post('/drafts/:uid/preview', handle(async (c, ctx) => {
     previews.push({ ...p, envelope: undefined });
   }
   return c.json({ previews });
+}));
+
+/**
+ * #4046 (S1, 2026-11-04) — Ask on the post text (`services/publishAsk.ts`).
+ * The founder who may publish, for places that pass preview's own rule; the
+ * module's never-list builder is all Eadwyn reads, team-only figures never.
+ * `estimate: true` quotes the run and runs nothing; otherwise one metered
+ * `rail_write` answers `{ text }`. No draft, proposal or send is written.
+ */
+publish.post('/ask', handle(async (c, ctx) => {
+  const b = await body(c);
+  const projectId = idOf(b.project_id);
+  await canPublish(c.env, { user: ctx.user, support: ctx.support, projectId });
+  if (!(PUBLISH_MODULES as readonly string[]).includes(String(b.module))) throw refused('invalid');
+  const module = b.module as PublishModule;
+  const uids = Array.isArray(b.destination_uids) ? [...new Set(b.destination_uids.map(String))] : [];
+  if (!uids.length || uids.length > ASK_MAX_PLACES) throw refused('invalid');
+  const places: AskPlace[] = [];
+  for (const uid of uids) {
+    const dest = await destinationOf(c.env, uid);
+    const integration = await loadIntegration(c.env, dest.integration_id);
+    await canPublish(c.env, { user: ctx.user, support: ctx.support, projectId, integration, destination: dest });
+    const target = publishTarget(dest.provider_key);
+    places.push({ provider_key: dest.provider_key, account: dest.display_name, audience: dest.audience_label ?? target?.audience ?? null, text_limit: target?.text_limit ?? null });
+  }
+  // The never-list builder, with team-only figures left out whatever the draft holds (D1322).
+  const built = await prefillDraft(c.env, projectId, module, { teamOnly: false });
+  const lines = built.source_refs.map((r) => ({ line: r.text, source: r.source, as_of: r.as_of }));
+  if (!lines.length) throw refused('nothing_to_draft');
+  const opts: RunOptions = {
+    task: 'rail_write', userId: Number(ctx.user.id), surface: AI_SURFACE.growPublish,
+    rail: railFor(c, { page: PUBLISH_ASK_PAGE, option: PUBLISH_ASK_OPTION }, `publish:${module}`),
+    systemPrompt: ASK_SYSTEM, messages: [{ role: 'user', content: askPrompt(module, lines, places) }],
+    temperature: 0.5, maxTokens: ASK_MAX_TOKENS,
+  };
+  const sources = [...new Set(lines.map((l) => l.source))].map((label) => ({ label }));
+  if (b.estimate === true) {
+    const q = await quoteRun(c.env, opts);
+    if (!q.ok) return refuseRun(c, { refusal: q.refusal, error: q.error }) ?? refuse(c, 503, { code: 'estimate_unreadable', message: 'The cost of this draft could not be worked out. Try again.', audience: 'member' });
+    return c.json({ estimate: { hold_microusd: q.hold_microusd, model: q.model }, sources, limit: askLimit(places) });
+  }
+  const result = await aiRouterRun(c.env, { ...opts, surface: AI_SURFACE.growPublish, rail: opts.rail });
+  if (!result.ok || !result.output) {
+    return refuseRun(c, result) ?? refuse(c, 503, { code: 'ai_unavailable', message: 'Eadwyn could not draft this post just now. Nothing was charged. Try again.', audience: 'member' });
+  }
+  const text = screenPost(result.output, askLimit(places));
+  if (!text) return refuse(c, 503, { code: 'ai_unavailable', message: 'Eadwyn’s draft came back empty. Try again.', audience: 'member' });
+  console.log('[publish] ask drafted', { module, places: places.length, lines: lines.length });
+  return c.json({ text, sources, model: result.usage?.model ?? null, limit: askLimit(places) });
 }));
 
 publish.post('/drafts/:uid/confirm', handle(async (c, ctx) => {

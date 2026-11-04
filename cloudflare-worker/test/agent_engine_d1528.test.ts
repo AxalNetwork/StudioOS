@@ -520,15 +520,17 @@ test('the sweep resends admitted runs whose message was lost, admits nothing mor
     w.db.prepare("UPDATE agent_task_runs SET created_at = datetime('now', '-10 minutes') WHERE uid = ?").run(a.run.uid);
     const sent: string[] = [];
     const r = await sweepAgents(w.env, new Date(), { enqueue: async (_e, uid) => { sent.push(uid); }, runtime: async () => w.runtime });
-    assert.deepEqual([r, sent], [{ resent: 1, admitted: 0 }, [a.run.uid]]);
+    assert.deepEqual([r, sent], [{ resent: 1, admitted: 0, cap_resumed: 0 }, [a.run.uid]]);
     w.env.AGENT_AUTONOMY = 'self_start';
     const r2 = await sweepAgents(w.env, new Date(), { enqueue: async () => {}, runtime: async () => w.runtime });
-    assert.deepEqual(r2, { resent: 1, admitted: 1 }, 'self_start offers agent 51 its ready task');
+    assert.deepEqual(r2, { resent: 1, admitted: 1, cap_resumed: 0 }, 'self_start offers agent 51 its ready task');
     await w.kv.put('agents:halt', 'drill');
-    assert.deepEqual(await sweepAgents(w.env, new Date(), { enqueue: async () => {}, runtime: async () => w.runtime }), { resent: 0, admitted: 0 });
+    assert.deepEqual(await sweepAgents(w.env, new Date(), { enqueue: async () => {}, runtime: async () => w.runtime }), { resent: 0, admitted: 0, cap_resumed: 0 });
   } finally { close(w); }
   const index = readFileSync(new URL('../src/index.ts', import.meta.url), 'utf8');
-  assert.match(index, /if \(now\.getUTCMinutes\(\) % 5 === 1 && env\.AGENT_ENGINE && env\.AGENT_ENGINE !== 'off' && env\.TEAM_AGENTS_ENABLED === 'true'\) \{\n\s+try \{\n\s+const \{ sweepAgents \}/);
+  // D4387: the sweep runs whenever team agents are on (its cap resume); duties and alerts stay behind the engine.
+  assert.match(index, /if \(now\.getUTCMinutes\(\) % 5 === 1 && env\.TEAM_AGENTS_ENABLED === 'true'\) \{\n\s+try \{\n\s+const \{ sweepAgents \}/);
+  assert.match(index, /if \(env\.AGENT_ENGINE && env\.AGENT_ENGINE !== 'off'\) \{\n\s+\/\/ D1530[^\n]*\n\s+try \{\n\s+const \{ sweepAgentDuties \}/);
   assert.equal(index.match(/getUTCMinutes\(\) % 5 === 1\b/g)?.length, 1, 'the agent sweep has the minute to itself');
 });
 

@@ -21,6 +21,8 @@ export const WORK_TABS = Object.freeze([
   { key: 'mine', label: 'My items' },
   // D1614 W6 (#3974): WK7, the project's Workload (the owner: the Workload view is per project).
   { key: 'workload', label: 'Workload' },
+  // D1531 (#3742 E8, TM10): the project's goals and an agent's plan for one.
+  { key: 'goals', label: 'Goals' },
 ]);
 
 /** WK1: the six columns, in order, with the line under each title. */
