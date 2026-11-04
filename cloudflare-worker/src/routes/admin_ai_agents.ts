@@ -12,7 +12,11 @@
  *                                    SA8: every admin action on the panel, newest first
  *   GET /audit.csv                   SA8: the same, as CSV (at most 5,000 rows)
  *
- * Read-only. The audit is written by H1–H4 through `recordAiAdminAction`
+ *   GET /cohort                     D4423: the prepared go-live membership list
+ *   POST /cohort                    D4423: add an active founder or explicit scope
+ *   DELETE /cohort/:uid              D4423: remove a member; never changes engine flags
+ *
+ * Reporting is read-only. The audit is written by H1–H4 and cohort actions
  * (`services/agents/adminAudit.ts`); there is no route that updates or
  * deletes it. A figure with no data is `null` ("Not recorded"), never 0, and no
  * answer or CSV carries an email.
@@ -25,7 +29,25 @@ import { refuse } from '../util/refusal';
 import { overview, runDetail, runFiltersOf, runLog, spend, SPEND_BY, type SpendBy } from '../services/agents/adminReads';
 import { AUDIT_CSV_MAX, auditCsv, auditFiltersOf, readAudit } from '../services/agents/adminAudit';
 
+import { addToCohort, removeFromCohort, cohortList, CohortError } from '../services/agents/cohort';
+
 const r = new Hono<{ Bindings: Env }>();
+
+// D4423: no engine flag here; HQ prepares the list before rollout.
+r.get('/cohort', async (c) => {
+  await requireSuperAdmin(c);
+  return c.json(await cohortList(c.env));
+});
+r.post('/cohort', async (c) => {
+  const user = await requireSuperAdmin(c);
+  try { return c.json(await addToCohort(c.env, user.id, await c.req.json().catch(() => null)), 201); }
+  catch (e) { if(e instanceof CohortError) return refuse(c,e.status,{code:'invalid_cohort',message:e.message}); throw e; }
+});
+r.delete('/cohort/:uid', async (c) => {
+  const user = await requireSuperAdmin(c);
+  try { return c.json(await removeFromCohort(c.env,user.id,c.req.param('uid'))); }
+  catch(e) { if(e instanceof CohortError) return refuse(c,e.status,{code:'cohort_not_found',message:e.message}); throw e; }
+});
 
 r.get('/overview', async (c) => {
   await requireSuperAdmin(c);
