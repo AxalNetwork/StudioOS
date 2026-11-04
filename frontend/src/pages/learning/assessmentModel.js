@@ -60,6 +60,12 @@ export function courseContext(state, kind, uid, slug) {
 
 // ── Exercises ─────────────────────────────────────────────────────────────
 
+/** D4479: a sent limit and Unicode code points, never an invented cap. */
+export function answerCounter(text, max) {
+  if (!Number.isSafeInteger(max) || max <= 0) return null;
+  return `${[...String(text ?? '')].length.toLocaleString('en-GB')} / ${max.toLocaleString('en-GB')}`;
+}
+
 /**
  * The items a checklist submission checked. The route stores a checklist's
  * `body` as the JSON list of indexes (`"[0,2]"`). Null when the body is not
