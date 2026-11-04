@@ -132,7 +132,7 @@ export async function accessToken(env: Env, userId: number): Promise<string> {
 export interface MeetingInput { topic: string; startsAt: string; durationMin: number }
 export interface CreatedMeeting { externalRef: string; joinUrl: string; startsAt: string; endsAt: string; meetingCode: string }
 
-const MEET_CODE = /meet\.google\.com\/([a-z]{3,4}-[a-z]{4}-[a-z]{3,4})\b/i;
+const MEET_CODE = /meet\.google\.com\/(?:meet\/)?([a-z]{3,4}-[a-z]{4}-[a-z]{3,4})\b/i;
 /** The Meet code a join link carries: `https://meet.google.com/abc-mnop-xyz` → `abc-mnop-xyz`. */
 export function meetingCodeOf(joinUrl: string | null | undefined): string | null {
   return MEET_CODE.exec(String(joinUrl ?? ''))?.[1]?.toLowerCase() ?? null;
