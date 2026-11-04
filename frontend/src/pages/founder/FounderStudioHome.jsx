@@ -88,7 +88,8 @@ export default function FounderStudioHome({ user }) {
   const [reads, setReads] = useState({});
   const [advisorAvailable, setAdvisorAvailable] = useState(null);
   const [retry, setRetry] = useState(0);
-  const studio = useStudioLayout({ profile: 'founder', viewer: user, readOnly: user?.role === 'admin' });
+  // D4362 (#4362): an admin arranges their own Founder Studio (the hook sends `profile`).
+  const studio = useStudioLayout({ profile: 'founder', viewer: user });
   const cycles = useCycleReads(reads.project, cyclesPlaced(studio.shown));
 
   useEffect(() => {
