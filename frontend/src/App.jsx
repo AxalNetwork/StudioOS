@@ -875,7 +875,11 @@ function UserDropdown({ user, onLogout }) {
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
             Trust Center
           </Link>
-          {/* D4152 (#4152 §2): Billing leaves the sidebar's settings block for the Account menu. */}
+          {/* D4416: companies and projects Portfolio lives above Billing in Account. */}
+          <Link to="/account/portfolio" onClick={() => setOpen(false)}
+            className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
+            Portfolio
+          </Link>
           <Link to="/account/billing" onClick={() => setOpen(false)}
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
             Billing

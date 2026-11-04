@@ -16,7 +16,7 @@ import { readFileSync } from 'node:fs';
 import SidebarNav, { SettingsScopeBlock } from '../src/ui/SidebarNav.jsx';
 import { ActiveCompanyContext } from '../src/contexts/ActiveCompanyContext.js';
 import {
-  COMPANY_SETTINGS, PROJECT_SETTINGS, entryLabels, settingsActive, settingsEntry, withPortfolioRow, fromSettingsScope, projectCompany, projectsOfCompany, publishScope, readSettingsScope, scopeFor,
+  COMPANY_SETTINGS, PROJECT_SETTINGS, entryLabels, settingsActive, settingsEntry, fromSettingsScope, projectCompany, projectsOfCompany, publishScope, readSettingsScope, scopeFor,
 } from '../src/lib/settingsScope.js';
 import { renderedText } from './_renderedText.mjs';
 
@@ -118,21 +118,26 @@ test('D4152 ST1: the sidebar draws one "Settings" entry with the scope under it;
   assert.doesNotMatch(sidebar(null), /settings-entry/, 'no company and no project: no Settings entry');
 });
 
-test('D4152 §3: Portfolio is a main-navigation row after Studio; a shell with no Studio row keeps it at the foot', () => {
-  const ICON = () => null;
-  const founder = [{ key: 'home', items: [{ to: '/studio', label: 'Studio' }, { to: '/build', label: 'Build' }] }];
-  const out = withPortfolioRow(founder, ICON);
-  assert.equal(out.portfolioInNav, true);
-  assert.deepEqual(out.groups[0].items.map((i) => i.label), ['Studio', 'Portfolio', 'Build']);
-  assert.equal(out.groups[0].items[1].to, '/account/portfolio');
-  const investor = [{ key: 'home', items: [{ to: '/studio', label: 'Studio' }, { to: '/portfolio', label: 'Portfolio' }] }];
-  assert.deepEqual(withPortfolioRow(investor).groups[0].items.map((i) => i.label), ['Studio', 'Companies', 'Portfolio'], 'two rows never share a name');
-  const hq = [{ key: 'hq', items: [{ to: '/hq', label: 'Home' }] }];
-  assert.equal(withPortfolioRow(hq).portfolioInNav, false);
-  const html = renderToStaticMarkup(h(MemoryRouter, { initialEntries: ['/studio'] },
-    h(ActiveCompanyContext.Provider, { value: { company: null, setCompany() {}, companies: [], setCompanies() {} } },
-      h(SidebarNav, { groups: founder, role: 'founder', user: { role: 'founder' } }))));
-  assert.equal((renderedText(html).match(/Portfolio/g) || []).length, 1, 'Portfolio once, in the main navigation');
+test('D4416: account Portfolio is absent from every sidebar shell; investor holdings remain', () => {
+  const shells = [
+    ['founder', [{ to: '/studio', label: 'Studio' }, { to: '/build', label: 'Build' }]],
+    ['investor', [{ to: '/studio', label: 'Studio' }, { to: '/portfolio', label: 'Portfolio' }]],
+    ['admin', [{ to: '/hq', label: 'Home' }]],
+  ];
+  for (const [role, items] of shells) for (const collapsed of [false, true]) {
+    const html = renderToStaticMarkup(h(MemoryRouter, { initialEntries: ['/studio'] },
+      h(ActiveCompanyContext.Provider, { value: { company: null, setCompany() {}, companies: [], setCompanies() {} } },
+        h(SidebarNav, { groups: [{ key: 'home', items }], role, collapsed, user: { role } }))));
+    assert.doesNotMatch(html, /href="\/account\/portfolio"/);
+    assert.equal(html.includes('href="/portfolio"'), role === 'investor');
+  }
+});
+
+test('D4416: desktop and phone Account menus place Portfolio immediately above Billing', () => {
+  const desktop = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+  const phone = readFileSync(new URL('../src/ui/phone/AccountSheet.jsx', import.meta.url), 'utf8');
+  assert.match(desktop, /<Link to="\/account\/portfolio" onClick=\{\(\) => setOpen\(false\)\}[\s\S]*?>\s*Portfolio\s*<\/Link>\s*<Link to="\/account\/billing"/);
+  assert.match(phone, /\['Portfolio', '\/account\/portfolio'\], \['Billing', '\/account\/billing'\]/);
 });
 
 // ---------------------------------------------------------------- review fixes

@@ -78,15 +78,15 @@ test('2–3: an unrelated panel Save neither sends historical rows nor a disconn
   } finally { await page.close(); }
 });
 
-test('4: accepting Ask copy rereads the panel; another row Save cannot overwrite the accepted title', async () => {
+test('4: accepting Ask copy merges into the panel; another row Save cannot overwrite the accepted title', async () => {
   let rows = [row('eb'), row('other')]; const writes = [];
   const syn = { forEvent: async () => read(rows),
     assistQuote: async () => ({ ai: true, hold_microusd: 100, model: 'synthetic' }),
     assist: async () => ({ proposals: [{ uid: 'p1', status: 'proposed', payload: { account_uid: 'eb', channel: 'eventbrite', field: 'title', value: 'Accepted title' } }] }),
     choose: async (_id, choices) => { writes.push(choices); rows = rows.map((r) => { const changed = choices.find((v) => v.account_uid === r.account_uid); return changed ? { ...r, ...changed } : r; }); return read(rows); } };
-  function Editor() { const [refresh, setRefresh] = useState(0); return h(React.Fragment, null,
-    h(EventSyndicationPanel, { eventId: 42, editable: true, api: syn, refresh }),
-    h(SyndicationAsk, { eventId: 42, api: { syndication: syn, proposals: { decide: async () => ({}) } }, onSaved: () => setRefresh((v) => v + 1) })); }
+  function Editor() { const [acceptedCopy, setAcceptedCopy] = useState(null); return h(React.Fragment, null,
+    h(EventSyndicationPanel, { eventId: 42, editable: true, api: syn, acceptedCopy }),
+    h(SyndicationAsk, { eventId: 42, api: { syndication: syn, proposals: { decide: async () => ({}) } }, onSaved: (_data, copy) => setAcceptedCopy(copy) })); }
   const page = await mounted(h(Editor));
   try {
     await page.click('syndication-ask-open-eb'); await page.click('syndication-ask-run'); await page.click('syndication-card-accept-p1');
@@ -97,16 +97,65 @@ test('4: accepting Ask copy rereads the panel; another row Save cannot overwrite
   } finally { await page.close(); }
 });
 
+test('review: accepting Ask in the real editor keeps another channel’s unsaved choice and copy', async () => {
+  const original = globalThis.fetch; let reads = 0;
+  let rows = [row('eb'), row('draft', { uid: null, status: null, on: false })];
+  const writes = [], ev = { id: 42, title: 'Synthetic', slug: 'synthetic', starts_at: '2099-03-01T18:00:00Z', timezone: 'UTC', visibility: 'public', status: 'draft' };
+  globalThis.fetch = async (url, init = {}) => {
+    const path = new URL(String(url), 'https://synthetic.test').pathname;
+    let body = {};
+    if (path === '/api/events/42/syndication') {
+      if (init.method === 'PUT') {
+        const choices = JSON.parse(init.body).channels; writes.push(choices);
+        rows = rows.map((r) => { const saved = choices.find((v) => v.account_uid === r.account_uid); return saved ? { ...r, ...saved } : r; });
+      } else reads++;
+      body = read(rows);
+    } else if (path === '/api/events/42') body = { event: ev, agenda: [] };
+    else if (path.endsWith('/assist/quote')) body = { ai: true, hold_microusd: 100, model: 'synthetic' };
+    else if (path.endsWith('/syndication/assist')) body = { proposals: [{ uid: 'p1', status: 'proposed', payload: { account_uid: 'eb', channel: 'eventbrite', field: 'title', value: 'Accepted title' } }] };
+    return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
+  };
+  let page;
+  try {
+    page = await mounted(h(Routes, null, h(Route, { path: '/events/:id/edit', element: h(EventEditorPage) })), '/events/42/edit');
+    await page.change('syndication-choice-draft', true);
+    await page.change('syndication-copy-draft-title', 'Unsaved channel title');
+    await page.change('syndication-copy-eb-description', 'Unsaved same-channel description');
+    const before = reads;
+    await page.click('syndication-ask-open-eb'); await page.click('syndication-ask-run'); await page.click('syndication-card-accept-p1');
+    assert.equal(page.props('syndication-choice-draft').checked, true);
+    assert.equal(page.props('syndication-copy-draft-title').value, 'Unsaved channel title');
+    assert.equal(page.props('syndication-copy-eb-title').value, 'Accepted title');
+    assert.equal(page.props('syndication-copy-eb-description').value, 'Unsaved same-channel description');
+    assert.equal(page.props('syndication-save').disabled, false);
+    assert.equal(reads, before, 'Ask delivers its saved row without rereading the panel');
+    await page.click('syndication-save');
+    assert.deepEqual(writes.at(-1).map((r) => r.account_uid), ['eb', 'draft']);
+    assert.equal(rows[0].overrides.title, 'Accepted title');
+    assert.equal(rows[1].overrides.title, 'Unsaved channel title');
+    assert.equal(rows[0].overrides.description, 'Unsaved same-channel description');
+  } finally { if (page) await page.close(); globalThis.fetch = original; }
+});
+
 test('review: a fast retry reread replaces stale copy and clears the previous draft', async () => {
   let value = read([row('eb', { status: 'failed' })]);
   const api = { forEvent: async () => value, retry: async () => { value = read([row('eb', { status: 'pending', overrides: { title: 'Fresh after retry' } })]); } };
-  const page = await mounted(h(EventSyndicationPanel, { eventId: 42, editable: true, api }));
+  const page = await mounted(h(EventSyndicationPanel, { eventId: 42, editable: true, api,
+    acceptedCopy: { eventId: 42, row: row('eb', { status: 'failed', overrides: { title: 'Previously accepted copy' } }), fields: ['title'] } }));
   try {
+    assert.equal(page.props('syndication-copy-eb-title').value, 'Previously accepted copy');
     await page.change('syndication-copy-eb-title', 'Unsaved old copy');
     await page.click('syndication-retry-s-eb');
     assert.equal(page.props('syndication-copy-eb-title').value, 'Fresh after retry');
     assert.equal(page.props('syndication-save').disabled, true);
   } finally { await page.close(); }
+});
+
+test('review: a saved Ask result from another event cannot change the open event', async () => {
+  const page = await mounted(h(EventSyndicationPanel, { eventId: 42, editable: true, api: { forEvent: async () => read() },
+    acceptedCopy: { eventId: 43, row: row('eb', { overrides: { title: 'Another event copy' } }), fields: ['title'] } }));
+  try { assert.equal(page.props('syndication-copy-eb-title').value, 'Old title'); }
+  finally { await page.close(); }
 });
 
 test('5: private/unlisted approval needs no channel read and offers no posting choices', async () => {
@@ -149,17 +198,39 @@ test('6: the real event editor main Save keeps an unsaved channel choice', async
   } finally { if (page) await page.close(); globalThis.fetch = original; }
 });
 
-test('7: a failed reconnect reloads after disconnect, so retry is a fresh Connect', async () => {
+test('7: a failed reconnect keeps the refusal and disconnected state, so retry is a fresh Connect', async () => {
   let account = { uid: 'acc', display_name: 'Synthetic', status: 'active' }, disconnects = 0, connects = 0;
   const api = { channels: async () => ({ channels: ['eventbrite', 'google_business', 'linkedin', 'facebook'].map((channel) => ({ channel, adapter_ready: channel === 'eventbrite', auth: 'oauth', account: channel === 'eventbrite' ? account : null })) }),
     disconnect: async () => { disconnects++; account = { ...account, status: 'disconnected' }; }, connect: async () => { connects++; throw Error('Connect failed'); } };
   const page = await mounted(h(Channels, { api }));
   try {
     await page.click('syndication-connect-eventbrite'); await page.click('syndication-account-confirm-eventbrite');
+    const dialog = page.nodes().find((n) => props(n).role === 'dialog');
+    assert.match(text(dialog), /Connect failed/);
+    assert.match(text(dialog), /now disconnected/i);
     assert.equal(page.nodes().filter((n) => n.tagName === 'BUTTON' && text(n) === 'Reconnect…').length, 0);
     await page.click('syndication-connect-eventbrite'); await page.click('syndication-account-confirm-eventbrite');
     assert.deepEqual([disconnects, connects], [1, 2]);
   } finally { await page.close(); }
+});
+
+test('review: successful reconnect replaces the card while its refresh waits or fails', async () => {
+  for (const fails of [false, true]) {
+    let calls = 0, resolveRefresh, rejectRefresh;
+    const accounts = (name) => ({ channels: ['eventbrite', 'google_business', 'linkedin', 'facebook'].map((channel) => ({ channel, adapter_ready: channel === 'eventbrite', auth: 'oauth', account: channel === 'eventbrite' ? { uid: 'acc', display_name: name, status: 'active' } : null })) });
+    const api = { channels: () => ++calls === 1 ? Promise.resolve(accounts('Initial account')) : new Promise((resolve, reject) => { resolveRefresh = resolve; rejectRefresh = reject; }),
+      disconnect: async () => ({}), connect: async () => ({ account: { uid: 'new-account' } }) };
+    const page = await mounted(h(Channels, { api }));
+    try {
+      await page.click('syndication-connect-eventbrite'); await page.click('syndication-account-confirm-eventbrite');
+      assert.match(page.text(), /Reading channels/);
+      assert.equal(page.find('syndication-connect-eventbrite'), undefined);
+      await act(async () => { if (fails) rejectRefresh(Error('Refresh failed')); else resolveRefresh(accounts('Reconnected account')); await new Promise((resolve) => setTimeout(resolve, 0)); });
+      if (fails) assert.match(page.text(), /Unreadable/);
+      else assert.match(page.text(), /Reconnected account/);
+      assert.doesNotMatch(page.text(), /now disconnected/i);
+    } finally { await page.close(); }
+  }
 });
 
 test('8: ticket links trim before the Worker regex and invalid internal whitespace has an inline error', async () => {
