@@ -189,3 +189,19 @@ test('D4478: the uploaded-file fallback identifies its source and records no inv
   assert.match(markup, /data-testid="lesson-uploaded-file">Uploaded file/);
   assert.match(markup, /data-testid="lesson-chapters-none"/);
 });
+
+test('D4478: withdrawing a position handler cancels pending work without inventing a save refusal', async () => {
+  const writes = [];
+  const onPosition = (s, p) => writes.push([s, p]);
+  const view = await mount(h(LessonPlayer, { status: 'ready', item: ITEM, video: VIDEO, onPosition }), { online: false });
+  try {
+    await view.time(26);
+    await view.render(h(LessonPlayer, { status: 'ready', item: ITEM, video: VIDEO, onPosition: null }));
+    await view.online(true); await view.flush();
+    assert.deepEqual(writes, [], 'an unavailable writer does not pretend to save its cancelled queue');
+    assert.equal(view.byId('text-mark-error'), undefined, 'intentional cancellation is not a refused request');
+    await view.render(h(LessonPlayer, { status: 'ready', item: ITEM, video: VIDEO, onPosition }));
+    await view.time(30); await view.flush();
+    assert.deepEqual(writes, [[30, 30]], 'a restored handler records only a new position');
+  } finally { await view.unmount(); }
+});
