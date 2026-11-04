@@ -22,7 +22,8 @@ declare module '*.png' {
 declare module '*/railMatrix.json' {
   const matrix: {
     _generated: string;
-    rows: { pageKey: string; kind: string; routeTask: string; models: { id: string; role: string; line: string }[] }[];
+    // #4313 part 3: a page row names its kind; its models come from that kind's job.
+    rows: { pageKey: string; kind: string; routeTask: string }[];
     options: {
       pageKey: string; optionKey: string; optionLabel: string; kind: string; handler: string; routeTask: string;
       models: { id: string; role: string; line: string }[];
