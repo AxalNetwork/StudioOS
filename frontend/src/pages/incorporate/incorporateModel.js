@@ -14,8 +14,9 @@
  *
  * THE BANK STEP (#4356, D4356). The owner chose Mercury, which settled Q7.
  * "Open a bank account" names Mercury and links to its account opening:
- * the owner's referral link when one is configured (`VITE_MERCURY_REFERRAL_URL`,
- * never in the code), else Mercury's public site. The step is done only when
+ * the status read's `open_account_url`, which the Worker builds (the owner's
+ * referral link, `MERCURY_REFERRAL_URL`, never in the code, else Mercury's
+ * public site). The frontend names no Mercury host (D715). The step is done only when
  * the founder's own Mercury is connected and active (`GET
  * /api/mercury/personal/status`), never from a guess. On the status timeline
  * it comes after Filed, so it shows once the company is formed.
@@ -155,8 +156,6 @@ export function clearDraft(store = globalThis.localStorage) {
 
 // ---------------------------------------------------------------- the bank step (#4356, D4356)
 
-/** Mercury's public site, where "Open account" starts its sign-up; used until the owner configures a referral link. */
-export const MERCURY_PUBLIC_URL = 'https://mercury.com/';
 export const BANK_TITLE = 'Open a bank account';
 export const BANK_LINES = Object.freeze({
   todo: 'Open your company’s business account with Mercury, Axal’s bank partner. Then connect it here so Axal can read it.',
@@ -168,19 +167,18 @@ export const BANK_LINES = Object.freeze({
 });
 
 /**
- * The link to open a Mercury account: the configured referral link when it is
- * an https address on mercury.com (or a subdomain), else the public site. A
- * malformed or off-site value is never linked to.
+ * Where "Open a Mercury account" goes: the status read's `open_account_url`,
+ * which the Worker builds (the owner's referral link, else Mercury's public
+ * site). The frontend names no Mercury host (D715), so an absent or non-https
+ * value draws no link rather than a guessed one.
  */
-export function mercuryOpenUrl(configured) {
-  const raw = typeof configured === 'string' ? configured.trim() : '';
-  if (!raw) return MERCURY_PUBLIC_URL;
+export function mercuryOpenUrl(status) {
+  const raw = status && typeof status === 'object' ? status.open_account_url : null;
+  if (typeof raw !== 'string') return null;
   try {
     const u = new URL(raw);
-    const host = u.hostname.toLowerCase();
-    if (u.protocol === 'https:' && (host === 'mercury.com' || host.endsWith('.mercury.com')) && !u.username && !u.password) return u.toString();
-  } catch { /* not an address */ }
-  return MERCURY_PUBLIC_URL;
+    return u.protocol === 'https:' && !u.username && !u.password ? u.toString() : null;
+  } catch { return null; }
 }
 
 /**

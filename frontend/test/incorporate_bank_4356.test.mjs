@@ -5,8 +5,9 @@
  *   · the step's state from `GET /api/mercury/personal/status`: done only when
  *     connected and active; a lapsed connection asks to reconnect; a failed read
  *     says so and is never done;
- *   · the Open link: the owner's referral link (config) when it is an https
- *     mercury.com address, else Mercury's public site; never an off-site link;
+ *   · the Open link is the status read's `open_account_url` (the Worker builds it:
+ *     the owner's referral link, else Mercury's public site); an absent or
+ *     non-https value draws no link, and no frontend file names a Mercury host (D715);
  *   · the timeline's bank row appears only once Filed; the Done page's card;
  *   · mounted: the step reads the founder's own Mercury status.
  *
@@ -25,13 +26,14 @@ import { renderedText } from './_renderedText.mjs';
 import BankStep from '../src/pages/incorporate/BankStep.jsx';
 import IncorporationTimeline from '../src/pages/incorporate/IncorporationTimeline.jsx';
 import IncorporateDone from '../src/pages/incorporate/IncorporateDone.jsx';
-import { BANK_LINES, BANK_TITLE, MERCURY_PUBLIC_URL, bankStepOf, mercuryOpenUrl } from '../src/pages/incorporate/incorporateModel.js';
+import { BANK_LINES, BANK_TITLE, bankStepOf, mercuryOpenUrl } from '../src/pages/incorporate/incorporateModel.js';
 
 const h = React.createElement;
 const wrap = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
-const ACTIVE = { connected: true, connection: { uid: 'mc-1', status: 'active', account_name: '[Orbit Notes Inc.]' }, uses: [] };
-const LAPSED = { connected: true, connection: { uid: 'mc-1', status: 'error', account_name: '[Orbit Notes Inc.]' }, uses: [] };
-const NONE = { connected: false, connection: null, uses: [] };
+const OPEN = 'https://bank.example/open?ref=axal';
+const ACTIVE = { connected: true, connection: { uid: 'mc-1', status: 'active', account_name: '[Orbit Notes Inc.]' }, uses: [], open_account_url: OPEN };
+const LAPSED = { connected: true, connection: { uid: 'mc-1', status: 'error', account_name: '[Orbit Notes Inc.]' }, uses: [], open_account_url: OPEN };
+const NONE = { connected: false, connection: null, uses: [], open_account_url: OPEN };
 
 test('the step is done only when the founder\'s Mercury is connected and active', () => {
   assert.deepEqual(bankStepOf(ACTIVE), { kind: 'done', done: true, line: BANK_LINES.done });
@@ -45,23 +47,23 @@ test('the step is done only when the founder\'s Mercury is connected and active'
   assert.match(BANK_LINES.todo, /Mercury/);
 });
 
-test('the Open link: a configured https mercury.com referral, else the public site; never off-site', () => {
-  assert.equal(MERCURY_PUBLIC_URL, 'https://mercury.com/');
-  assert.equal(mercuryOpenUrl(''), MERCURY_PUBLIC_URL, 'unconfigured');
-  assert.equal(mercuryOpenUrl(undefined), MERCURY_PUBLIC_URL);
-  assert.equal(mercuryOpenUrl(' https://mercury.com/r/axal-example '), 'https://mercury.com/r/axal-example');
-  assert.equal(mercuryOpenUrl('https://app.mercury.com/signup?ref=x'), 'https://app.mercury.com/signup?ref=x');
-  for (const bad of ['http://mercury.com/r/x', 'https://mercury.com.evil.example/r', 'https://evilmercury.com/', 'javascript:alert(1)', 'https://u:p@mercury.com/', 'not a url']) {
-    assert.equal(mercuryOpenUrl(bad), MERCURY_PUBLIC_URL, `${bad} is never linked to`);
+test('the Open link is the address the status read names; an absent or non-https one draws no link', () => {
+  assert.equal(mercuryOpenUrl(NONE), OPEN);
+  assert.equal(mercuryOpenUrl({ ...NONE, open_account_url: undefined }), null, 'never a guessed address');
+  for (const bad of ['http://bank.example/', 'javascript:alert(1)', 'https://u:p@bank.example/', 'not a url', 42]) {
+    assert.equal(mercuryOpenUrl({ ...NONE, open_account_url: bad }), null, `${bad} is never linked to`);
   }
-  assert.match(readFileSync(new URL('../.env.example', import.meta.url), 'utf8'), /^VITE_MERCURY_REFERRAL_URL=$/m, 'the key is documented and blank');
+  assert.equal(mercuryOpenUrl('unread'), null);
+  assert.equal(mercuryOpenUrl(undefined), null);
+  const src = ['incorporateModel.js', 'BankStep.jsx'].map((f) => readFileSync(new URL(`../src/pages/incorporate/${f}`, import.meta.url), 'utf8')).join('\n');
+  assert.doesNotMatch(src, /VITE_MERCURY|mercury\.com/i, 'the address is the Worker\'s, not the build\'s');
 });
 
 test('the card: not done offers Open and Connect; done shows the tick and no actions; a failed read is never done', () => {
-  const todo = wrap(h(BankStep, { status: NONE, configured: 'https://mercury.com/r/axal-example' }));
+  const todo = wrap(h(BankStep, { status: NONE }));
   assert.match(todo, /data-testid="done-bank" data-done="false" data-kind="todo"/);
   assert.match(renderedText(todo), new RegExp(`${BANK_TITLE}.*Mercury, Axal’s bank partner.*Already have a Mercury account`));
-  assert.match(todo, /href="https:\/\/mercury\.com\/r\/axal-example" target="_blank" rel="noopener noreferrer"[^>]*data-testid="bank-open-mercury"/);
+  assert.match(todo, /href="https:\/\/bank\.example\/open\?ref=axal" target="_blank" rel="noopener noreferrer"[^>]*data-testid="bank-open-mercury"/);
   assert.match(todo, /data-testid="bank-connect-mercury" href="\/account\/connectors\/mercury"[^>]*>Connect Mercury</);
   const done = wrap(h(BankStep, { status: ACTIVE }));
   assert.match(done, /data-done="true" data-kind="done"/);
@@ -71,7 +73,9 @@ test('the card: not done offers Open and Connect; done shows the tick and no act
   const unread = wrap(h(BankStep, { status: 'unread' }));
   assert.match(unread, /data-done="false" data-kind="unread"/);
   assert.match(renderedText(unread), /could not be read/);
-  assert.match(wrap(h(BankStep, { status: NONE, configured: '' })), /href="https:\/\/mercury\.com\/"/, 'the public site when unconfigured');
+  assert.doesNotMatch(unread, /bank-open-mercury/, 'no address was read, so no Open link');
+  assert.match(unread, /bank-connect-mercury/, 'Connect still offered');
+  assert.doesNotMatch(wrap(h(BankStep, { status: { ...NONE, open_account_url: null } })), /bank-open-mercury/, 'no link without an address');
 });
 
 test('the timeline\'s bank row appears only once Filed; the Done page carries the card', () => {

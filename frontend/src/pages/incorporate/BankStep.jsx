@@ -8,15 +8,14 @@ import { BANK_LINES, BANK_TITLE, bankStepOf, mercuryOpenUrl } from './incorporat
  *
  * Drawn from INC3b's status timeline (its last stop, "bank") as a row after
  * Filed, and from INC4's Done next steps (bank, cap table, 83(b)) as a card.
- * It names Mercury and links out to its account opening: the owner's referral
- * link when configured (`VITE_MERCURY_REFERRAL_URL`), else Mercury's public
- * site. It is done only when the founder's own Mercury is connected and active
+ * It names Mercury and links out to its account opening at the address the
+ * status read names (`open_account_url`: the owner's referral link, set on the
+ * Worker as `MERCURY_REFERRAL_URL`, else Mercury's public site). It is done only when the founder's own Mercury is connected and active
  * (`GET /api/mercury/personal/status`); until then it offers Connect Mercury,
  * the existing connector page. A failed read says so and is never done.
  *
- * `status` and `configured` are for tests: a fixed status read, and the config value.
+ * `status` is for tests: a fixed status read.
  */
-const CONFIGURED = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_MERCURY_REFERRAL_URL) || '';
 const LINK = 'text-[12.5px] font-semibold text-axal-violet-deep hover:underline dark:text-violet-300';
 
 export function useMercuryStatus(fixed) {
@@ -34,16 +33,16 @@ function Actions({ step, openUrl }) {
   if (step.done) return null;
   return (
     <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-      <a href={openUrl} target="_blank" rel="noopener noreferrer" className={LINK} data-testid="bank-open-mercury">Open a Mercury account ↗</a>
+      {openUrl ? <a href={openUrl} target="_blank" rel="noopener noreferrer" className={LINK} data-testid="bank-open-mercury">Open a Mercury account ↗</a> : null}
       <Link to="/account/connectors/mercury" className={LINK} data-testid="bank-connect-mercury">{step.kind === 'attention' ? 'Reconnect Mercury' : 'Connect Mercury'}</Link>
     </span>
   );
 }
 
-export default function BankStep({ variant = 'card', status: fixed, configured = CONFIGURED }) {
+export default function BankStep({ variant = 'card', status: fixed }) {
   const status = useMercuryStatus(fixed);
   const step = bankStepOf(status);
-  const openUrl = mercuryOpenUrl(configured);
+  const openUrl = mercuryOpenUrl(status);
   if (variant === 'row') {
     return (
       <div className="flex items-start gap-3" data-testid="timeline-bank" data-done={step.done ? 'true' : 'false'} data-kind={step.kind}>
