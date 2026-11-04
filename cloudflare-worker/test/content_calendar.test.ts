@@ -12,6 +12,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import { migratedDatabase, removeMigratedDatabases } from './_storage_schema.ts';
@@ -134,7 +135,7 @@ test('the calendar unreadable says so on its own and never blanks the channels',
 });
 
 test('Beehiiv, X, TikTok and Facebook never write the content calendar: only its writers and declared readers name the table', () => {
-  const root = new URL('../src/', import.meta.url).pathname;
+  const root = fileURLToPath(new URL('../src/', import.meta.url));
   const files: string[] = [];
   const walk = (d: string) => { for (const n of readdirSync(d)) { const p = join(d, n); if (statSync(p).isDirectory()) walk(p); else if (/\.ts$/.test(n)) files.push(p); } };
   walk(root);
