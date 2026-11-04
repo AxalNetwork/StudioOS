@@ -58,7 +58,7 @@ import RaisePosthog from './RaisePosthog';
 import { ImprovementPosthog, RevenuePosthog } from './GrowPosthog';
 import NotionInterviewImport from './NotionInterviewImport';
 import NotionSnapshotImport from './NotionSnapshotImport';
-import ContentCalendar from './ContentCalendar';
+import CalendarTab, { CalendarWeek } from './distribution/CalendarTab.jsx';
 import { buildPartsMap } from './buildParts';
 import UpdatesHistory from './UpdatesHistory';
 import ReportingDesk from './ReportingDesk';
@@ -392,7 +392,7 @@ const CYCLE_DEFS = {
       distribution: (data, ctx) => (<>
         <UpdateAskReplies replies={data?.parts?.from_update_asks} pill="Lead" />
         {/* D1090 (#2955): planned pieces, typed here or from Notion; a plan, never what was sent. */}
-        <ContentCalendar part={data?.parts?.content_calendar} channels={data?.records?.rows} projectId={ctx.projectId} reload={ctx.reload} />
+        <CalendarWeek projectId={ctx.projectId} />
         {fromMercury('distribution', data, ctx)}
         <FromNotion section="grow" projectId={ctx.projectId} module="distribution" />
       </>),
@@ -1325,10 +1325,11 @@ export default function CycleRoute({ cycle, tab = null, lightbox = false, adding
   // D4484: Overview keeps the existing module body; unlanded tabs read no campaign data.
   if (distribution) {
     if (distributionTab === 'overview' && projectStatus === 'ready') body = <><InboxNeedsYou reading={inboxUnread} search={q} />{body}</>;
+    if (distributionTab === 'calendar' && projectStatus === 'ready') body = <CalendarTab projectId={projectId} />;
     if (distributionTab === 'inbox' && projectStatus === 'ready') body = <InboxTab projectId={projectId} onUnreadChange={inboxUnread.acceptRead} />;
     body = <DistributionTabs tab={distributionTab} search={q} action={action} aiOff={!fillsOn} inboxCount={inboxUnread.count}
       loading={projectStatus === 'loading' || (distributionTab === 'overview' && projectStatus === 'ready' && moduleStatus === 'loading')}>
-      {distributionTab === 'inbox' && projectStatus === 'ready' ? body : distributionTab === 'overview' || projectStatus !== 'ready' ? body : <ComingSoon />}
+      {['inbox', 'calendar'].includes(distributionTab) && projectStatus === 'ready' ? body : distributionTab === 'overview' || projectStatus !== 'ready' ? body : <ComingSoon />}
     </DistributionTabs>;
   }
 

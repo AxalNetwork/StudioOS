@@ -86,7 +86,7 @@ const path = '/api/grow/calendar?project=7&from=2026-11-01&to=2026-11-30';
 test('inclusive range excludes other ventures and dates outside the range', async () => {
   const f = fixture(); pieces(f);
   const r = await call(f, FOUNDER, 'GET', path);
-  assert.equal(r.status, 200); assert.deepEqual(r.body.pieces.map((p: any) => p.uid), ['first', 'last']);
+  assert.equal(r.status, 200); assert.equal(r.body.can_edit, true); assert.deepEqual(r.body.pieces.map((p: any) => p.uid), ['first', 'last']);
   assert.equal((await call(f, OTHER, 'GET', path)).status, 403);
 });
 test('campaign filter uses existing links and includes the campaign metadata', async () => {

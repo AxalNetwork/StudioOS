@@ -30,8 +30,8 @@ starting ads.
 | `calendarModel.js` | D4489: Monday-first dates, overflow, status and platform widths. |
 
 CycleRoute still owns the module page. Overview retains its channels table,
-outreach draft, content calendar, update-ask replies, Mercury, Notion and tool
-doors. Inbox is the D4494 tab. Channels is the D4486 tab on this shell. Calendar is the D4489 tab. Other
+outreach draft, This week calendar summary, update-ask replies, Mercury, Notion and tool
+doors. Calendar is the D4489 tab, using the same scoped read as This week. Inbox is the D4494 tab. Channels is the D4486 tab on this shell. Calendar is the D4489 tab. Other
 tabs show Coming in this module soon until their tasks land.
 A pending read uses LoadingSkeleton. No sample count or campaign is fabricated.
 

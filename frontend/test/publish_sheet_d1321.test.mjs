@@ -484,3 +484,14 @@ test('phone, dark and the house rules: 44px targets, a dark pair on every surfac
   assert.match(read('frontend/src/pages/cycles/ReportingDesk.jsx'), /<PublishedOutside projectId=\{projectId\} \/>/);
   assert.doesNotMatch(read('frontend/src/lib/api/publish.js'), /D1321/, 'part 1’s client is used as it is');
 });
+
+test('D4489: calendar copy enters the draft without selecting or sending to any destination', async () => {
+  const { api, calls } = stubApi();
+  const v = await mount(sheet(api, { initialText: 'Customer story from the calendar.' }));
+  try {
+    assert.equal(v.props('publish-text').value, 'Customer story from the calendar.');
+    assert.ok(calls.some(c => c[0] === 'createDraft' && c[1].text === 'Customer story from the calendar.'));
+    assert.equal(calls.some(c => c[0] === 'confirm'), false);
+    assert.equal(v.props('publish-review').disabled, true);
+  } finally { await v.close(); }
+});

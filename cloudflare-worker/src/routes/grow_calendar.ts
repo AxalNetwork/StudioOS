@@ -16,7 +16,7 @@ async function access(c: C, write = false) {
   const p = await c.env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ? AND deleted_at IS NULL').bind(id).first<{ id: number; founder_id: number | null }>();
   if (!p) throw new Refused(404, 'Project not found');
   if (!await canAccessProject(c.env, user, p, { write })) throw new Refused(403, 'Forbidden');
-  return { id, user };
+  return { id, user, project: p };
 }
 function fail(c: C, e: unknown) {
   if (e instanceof Refused) return c.json({ detail: e.sentence }, e.status as 400);
@@ -29,7 +29,7 @@ export function plannedTime(v: unknown): string | null {
 }
 router.get('/', async (c) => {
   try {
-    const { id } = await access(c);
+    const { id, user, project } = await access(c);
     const from = calendarDay(c.req.query('from')); const to = calendarDay(c.req.query('to'));
     if (!from || !to || from > to) throw new Refused(400, 'A valid inclusive from and to date range is required');
     const channel = c.req.query('channel') || null; const campaign = c.req.query('campaign') || null;
@@ -42,7 +42,7 @@ router.get('/', async (c) => {
       ORDER BY i.planned_on, i.planned_at_time, i.uid`).bind(id, from, to, channel, channel, campaign, campaign).all<Record<string, unknown>>();
     const links = await c.env.DB.prepare(`SELECT l.ref_id, c.uid, c.name, c.utm_campaign FROM grow_campaign_items l
       JOIN grow_campaigns c ON c.id = l.campaign_id WHERE c.project_id = ? AND l.kind = 'content_item' ORDER BY c.name, c.uid`).bind(id).all<{ ref_id: number; uid: string; name: string; utm_campaign: string | null }>();
-    return c.json({ pieces: (rows.results || []).map((i) => ({ ...i, status: i.source === 'notion' ? 'planned' : i.status,
+    return c.json({ can_edit: await canAccessProject(c.env, user, project, { write: true }), pieces: (rows.results || []).map((i) => ({ ...i, status: i.source === 'notion' ? 'planned' : i.status,
       campaigns: (links.results || []).filter((l) => l.ref_id === i.id).map(({ ref_id: _ref, ...v }) => v) })) });
   } catch (e) { return fail(c, e); }
 });

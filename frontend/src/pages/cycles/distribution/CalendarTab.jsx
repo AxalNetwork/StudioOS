@@ -1,5 +1,7 @@
 /** D4489 — plans by month/week; no automatic publishing or invented analytics. */
 import { useEffect, useState } from 'react';
+import { growChannelsApi } from '../../../lib/api/growChannels';
+import { usePhoneWidth } from '../../../ui/phone/usePhoneWidth';
 import { growCalendar } from '../../../lib/api/growCalendar';
 import { cyclesWrite } from '../../../lib/api/cycles';
 import { destinationRows } from '../publish/publishModel';
@@ -9,8 +11,14 @@ import { dayKey, monthGrid, weekGrid, dayPieces, pieceStatus } from './calendarM
 import PieceSheet from './PieceSheet';
 import PostPreview from './PostPreview';
 
-export default function CalendarTab({ projectId, channels = [], campaigns = [], api = growCalendar }) {
-  const [date, setDate] = useState(() => new Date()); const [mode, setMode] = useState('month');
+export default function CalendarTab({ projectId, api = growCalendar }) {
+  const compact = usePhoneWidth('(max-width: 1023px)');
+  const [options, setOptions] = useState({ state: 'loading', channels: [], campaigns: [] });
+  const { channels, campaigns } = options;
+  useEffect(() => { let live = true; setOptions({ state: 'loading', channels: [], campaigns: [] });
+    Promise.all([growChannelsApi.channels(projectId), cyclesWrite.grow.campaigns(projectId)]).then(([a, b]) => { if (live) setOptions({ state: 'ready', channels: (a.channels || []).map(c => ({ ...c, id: c.uid })), campaigns: b.campaigns || [] }); }).catch(() => { if (live) setOptions({ state: 'error', channels: [], campaigns: [] }); });
+    return () => { live = false; }; }, [projectId]);
+  const [date, setDate] = useState(() => new Date()); const [mode, setMode] = useState(() => compact ? 'week' : 'month');
   const [channel, setChannel] = useState(''); const [campaign, setCampaign] = useState('');
   const [read, setRead] = useState({ state: 'loading', pieces: [] }); const [revision, setRevision] = useState(0);
   const [selected, setSelected] = useState(null); const [dialog, setDialog] = useState(null); const [expanded, setExpanded] = useState({});
@@ -19,7 +27,7 @@ export default function CalendarTab({ projectId, channels = [], campaigns = [], 
   const reload = () => setRevision((n) => n + 1);
   useEffect(() => {
     let live = true; setRead({ state: 'loading', pieces: [] }); setSelected(null);
-    if (projectId) api.pieces(projectId, { from, to, channel, campaign }).then((r) => { if (live) setRead({ state: 'ready', pieces: r.pieces || [] }); }).catch(() => { if (live) setRead({ state: 'error', pieces: [] }); });
+    if (projectId) api.pieces(projectId, { from, to, channel, campaign }).then((r) => { if (live) setRead({ state: 'ready', pieces: r.pieces || [], canEdit: r.can_edit === true }); }).catch(() => { if (live) setRead({ state: 'error', pieces: [] }); });
     else setRead({ state: 'error', pieces: [] });
     return () => { live = false; };
   }, [api, projectId, from, to, channel, campaign, revision]);
@@ -31,27 +39,42 @@ export default function CalendarTab({ projectId, channels = [], campaigns = [], 
   const move = (n) => { const next = new Date(date); if (mode === 'month') { next.setUTCDate(1); next.setUTCMonth(next.getUTCMonth() + n); } else next.setUTCDate(next.getUTCDate() + n * 7); setDate(next); setExpanded({}); };
   const done = () => { setDialog(null); setSelected(null); reload(); };
   const all = read.pieces;
-  return <section className="space-y-4 text-gray-900 dark:text-gray-100" aria-label="Content calendar">
+  return <section className="space-y-4 text-gray-900 dark:text-gray-100 [&_button]:min-h-[44px] [&_select]:min-h-[44px] [&_select]:bg-white dark:[&_select]:bg-gray-900" aria-label="Content calendar">
     <div className="flex flex-wrap items-center gap-3"><button aria-label="Previous period" onClick={() => move(-1)}>‹</button><strong>{date.toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' })}</strong><button aria-label="Next period" onClick={() => move(1)}>›</button><button onClick={() => setDate(new Date())}>Today</button>
       {['month', 'week'].map((v) => <button key={v} aria-pressed={mode === v} onClick={() => { setMode(v); setExpanded({}); }} className={mode === v ? 'rounded-full bg-violet-100 px-3 text-violet-900 dark:bg-violet-950 dark:text-violet-200' : ''}>{v === 'month' ? 'Month' : 'Week'}</button>)}
-      <select aria-label="Channel filter" value={channel} onChange={(e) => setChannel(e.target.value)}><option value="">All channels</option>{channels.map((c) => <option key={c.uid || c.id} value={c.uid || c.id}>{c.name}</option>)}</select>
-      <select aria-label="Campaign filter" value={campaign} onChange={(e) => setCampaign(e.target.value)}><option value="">All campaigns</option>{campaigns.map((c) => <option key={c.uid} value={c.uid}>{c.name}</option>)}</select>
-      <button onClick={() => setDialog({ kind: 'add' })}>+ Plan a piece</button>
+      <select disabled={options.state !== 'ready'} aria-label="Channel filter" value={channel} onChange={(e) => setChannel(e.target.value)}><option value="">All channels</option>{channels.map((c) => <option key={c.uid || c.id} value={c.uid || c.id}>{c.name}</option>)}</select>
+      <select disabled={options.state !== 'ready'} aria-label="Campaign filter" value={campaign} onChange={(e) => setCampaign(e.target.value)}><option value="">All campaigns</option>{campaigns.map((c) => <option key={c.uid} value={c.uid}>{c.name}</option>)}</select>
+      <button disabled={!read.canEdit} onClick={() => setDialog({ kind: 'add' })}>+ Plan a piece</button>
     </div>
+    {options.state === 'error' && <p role="alert">Unreadable: filter choices could not be read.</p>}
     <p>Pieces you plan to publish. A plan, never a record of what was sent.</p><p>You press Send for each post.</p>
     {read.state === 'loading' ? <div role="status" aria-label="Loading calendar" className="h-96 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800" /> : read.state === 'error' ? <p role="alert">Unreadable: the calendar could not be read. <button onClick={reload}>Try again</button></p> : <>
-      {!all.length && <p>Nothing planned this month. <button onClick={() => setDialog({ kind: 'add' })}>+ Plan a piece</button></p>}
+      {!all.some(p => p.planned_on?.slice(0, 7) === dayKey(date).slice(0, 7)) && <p>Nothing planned this month. <button disabled={!read.canEdit} onClick={() => setDialog({ kind: 'add' })}>+ Plan a piece</button></p>}
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]"><div className="min-w-0 overflow-x-auto rounded-xl border bg-white dark:border-gray-700 dark:bg-gray-900"><div className="grid min-w-[630px] grid-cols-7">
         {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => <div className="p-2 font-bold" key={d}>{d}</div>)}
         {days.map((d) => { const key = dayKey(d); const { visible, overflow } = dayPieces(all, key, expanded[key]); return <div key={key} className={`min-h-[88px] border-t p-2 dark:border-gray-700 ${key === dayKey(new Date()) ? 'bg-violet-50 dark:bg-violet-950' : ''}`} style={{ opacity: mode === 'month' && d.getUTCMonth() !== date.getUTCMonth() ? 0.45 : 1 }}><time dateTime={key}>{d.getUTCDate()}</time>
           {visible.map((p) => { const status = pieceStatus(p); return <button className={`mb-1 block w-full rounded border p-1 text-left text-xs ${status.dropped ? 'line-through' : ''}`} key={p.uid} onClick={() => setSelected(p)}><span className="block text-gray-500 dark:text-gray-400">{p.channel_name || 'No channel'}</span><span className="block truncate">{p.title}</span><span className={status.className}>{status.label}</span>{(p.campaigns || []).map((c) => <span className="block truncate" key={c.uid}>{c.name}</span>)}</button>; })}
           {overflow > 0 && <button onClick={() => setExpanded((v) => ({ ...v, [key]: true }))}>+{overflow} more</button>}
         </div>; })}
-      </div></div><aside className="min-w-0 rounded-xl border bg-white p-4 dark:border-gray-700 dark:bg-gray-900">{selected ? <><h3>{selected.title} · {selected.channel_name || 'No channel'}</h3><PostPreview platform={selected.channel_kind} /></> : <p>Select a piece to preview it.</p>}<p>Notion-planned pieces show as Planned, never as Sent.</p></aside></div>
+      </div></div><aside className="min-w-0 rounded-xl border bg-white p-4 dark:border-gray-700 dark:bg-gray-900">{selected ? <><h3>{selected.title} · {selected.channel_name || 'No channel'}</h3><PostPreview platform={selected.channel_name || selected.channel_kind} /></> : <p>Select a piece to preview it.</p>}<p>Notion-planned pieces show as Planned, never as Sent.</p></aside></div>
     </>}
-    {selected && !dialog && <PieceSheet piece={selected} projectId={projectId} onClose={() => setSelected(null)} onEdit={() => setDialog({ kind: 'edit', item: selected })} onTime={(time) => api.time(projectId, selected.uid, time).then(done)} canPublish={places.canPublish} destinations={places.rows} destinationsState={places.state} />}
+    {selected && !dialog && <PieceSheet piece={selected} projectId={projectId} onClose={() => setSelected(null)} onEdit={() => setDialog({ kind: 'edit', item: selected })} onTime={(time) => api.time(projectId, selected.uid, time).then(done)} canEdit={read.canEdit} canPublish={places.canPublish} destinations={places.rows} destinationsState={places.state} />}
     {(dialog?.kind === 'add' || dialog?.kind === 'edit') && <PieceDialog item={dialog.item} channels={channels} onClose={() => setDialog(null)} onSave={(b) => (dialog.item ? cyclesWrite.grow.contentUpdate(projectId, dialog.item.uid, b) : cyclesWrite.grow.content(projectId, b)).then(done)} />}
-    {selected && <button onClick={() => setDialog({ kind: 'delete', item: selected })}>Delete piece</button>}
+    {selected && read.canEdit && <button onClick={() => setDialog({ kind: 'delete', item: selected })}>Delete piece</button>}
     {dialog?.kind === 'delete' && <DeleteDialog item={dialog.item} onClose={() => setDialog(null)} onConfirm={() => cyclesWrite.grow.contentDelete(projectId, dialog.item.uid).then(done)} />}
+  </section>;
+}
+
+/** D4489 — Overview reads the same calendar API, bounded to this week. */
+export function CalendarWeek({ projectId, api = growCalendar }) {
+  const [read, setRead] = useState({ state: 'loading', pieces: [] });
+  const [revision, setRevision] = useState(0);
+  useEffect(() => { let live = true; const days = weekGrid(new Date());
+    setRead({ state: 'loading', pieces: [] });
+    api.pieces(projectId, { from: dayKey(days[0]), to: dayKey(days[6]) }).then(r => { if (live) setRead({ state: 'ready', pieces: r.pieces || [] }); }).catch(() => { if (live) setRead({ state: 'error', pieces: [] }); });
+    return () => { live = false; }; }, [api, projectId, revision]);
+  return <section className="rounded-xl border bg-white p-4 dark:border-gray-700 dark:bg-gray-900" aria-label="This week"><h2>This week</h2>
+    {read.state === 'loading' ? <p role="status">Loading planned pieces…</p> : read.state === 'error' ? <p>Unreadable: this week could not be read. <button onClick={() => setRevision(n => n + 1)}>Try again</button></p> : !read.pieces.length ? <p>Nothing planned this week.</p> : <ul>{read.pieces.map(p => <li key={p.uid}>{p.planned_on} · {p.title} · {pieceStatus(p).label}</li>)}</ul>}
+    <a className="inline-flex min-h-[44px] items-center" href={`/grow/distribution/calendar?project_id=${encodeURIComponent(projectId)}`}>Open Calendar</a>
   </section>;
 }
