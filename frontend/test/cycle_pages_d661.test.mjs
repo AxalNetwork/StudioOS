@@ -175,16 +175,13 @@ test('A CHOSEN VENTURE RIDES ON EVERY LINK: tabs, card titles and the module pag
   for (const m of navOf(mod).matchAll(/href="([^"]+)"/g)) assert.match(m[1], /\?project_id=7$/, m[1]);
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.match(route, /searchParams\.get\('project_id'\) \|\| searchParams\.get\('project'\)/, "the read's own `?project=` links pick the venture too");
-  // 4 → 5 (D906): the Investor narrative tool's tab bar on its module page keeps it too.
-  // 5 → 4 (2026-10-24, D906 review): that tab bar now takes `tabSearch(q, …)`, the venture and the version.
-  // 4 → 5 (D1015, #2432): the Cap table tool's tab bar on its module page keeps it too.
-  // 5 → 6 (D1063, #2426): the Build overview's door to the plan keeps it too.
-  // 6 → 7 (D1101, #2456): the Data room tool's tab bar on its module page keeps it too.
-  // 8 → 9 (D1173, #2455): the Use of funds tool's tab bar on its module page keeps it too.
-  // 9 → 10 (D1188, #2457): the Capital relationships tool's tab bar on its module page keeps it too.
-  // 10 → 11 (D1466, #3714): Raise's lead row (Next steps' links) keeps it too.
-  // 11 → 12 (D4484): Distribution’s tab shell keeps the venture too.
-  assert.equal((route.match(/search=\{q\}/g) || []).length, 12, 'Distribution and the overview, module, record header, Validate\'s phone focus, the Cap table, Data room, Use of funds and Capital relationships tabs, the plan door, the readiness door and Raise\'s lead row keep the venture');
+  // D4485: check each consumer rather than a total changed by every new component.
+  for (const component of ['CycleHeader', 'PhoneCycleRoot', 'CycleOverview', 'RaiseLead', 'PmfChip', 'BuildPlanDoor', 'ModulePage', 'CapTableHomeNav', 'DataRoomHomeNav', 'UseOfFundsHomeNav', 'CapRelHomeNav', 'OverviewTab', 'DistributionTabs']) {
+    const start = route.search(new RegExp(`<${component}\\b`));
+    const end = route.indexOf('search={q}', start);
+    const attributes = route.slice(start, end);
+    assert.ok(start >= 0 && end > start && !attributes.includes('search={') && !attributes.includes('/>'), `${component} receives the venture query`);
+  }
   assert.match(route, /search=\{tabSearch\(q, searchParams\.get\('version'\)\)\}/, 'the narrative tabs keep the venture, and the version');
 });
 
