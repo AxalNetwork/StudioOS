@@ -113,6 +113,14 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-11-04 — HQ › AI agents: the agents' values, revised (#4137)
+
+The owner's two artifacts were decoded by `scripts/read-canvas.mjs`:
+- **The boards** (artifact `9ecDUL1qvu1FZLfWfMaUbV`) are unchanged.
+- **The page** (artifact `LxnWj8iKZPZyfvLYJoeFT9`) replaces `HQ AI Agents Page.dc.html`. Its only change is the 16 agents' top values: every one is now an Axal value, and Empathy, Courage and Craft are gone.
+
+The owner chose to store the canvas's values and its two areas per agent. That Worker change is #4388 (S16).
+
 ## Landed 2026-11-04 — Pitch deck templates and the Gallery's covers (#3876)
 
 The owner's four artifacts were decoded by `scripts/read-canvas.mjs`:
