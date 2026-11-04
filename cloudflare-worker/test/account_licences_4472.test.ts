@@ -396,3 +396,53 @@ test('shared archetype entitlement accepts either held licence’s existing paid
     assert.equal((await archetypeAccess(f.env,{...base,investor_subscription_status:'trialing',investor_trial_ends_at:'2000-01-01'})).locked,true);
   } finally { f.db.close(); }
 });
+
+for (const licence of ['founder','investor','advisor','partner'] as const) {
+  test(`held ${licence} profile heals after a grant-time outage on a fresh /me request`, async () => {
+    const f=fixture(); try {
+      const table=licence+'s', id=9003, identity=licence==='founder'||licence==='partner'?'email':'user_id', value=identity==='email'?'explorer@example.test':id;
+      f.db.exec(`CREATE TRIGGER synthetic_profile_outage BEFORE INSERT ON ${table} BEGIN SELECT RAISE(ABORT,'synthetic profile outage'); END;`);
+      await grantLicence(f.DB,change(licence,id));
+      assert.equal(f.db.prepare(`SELECT ${licence}_id AS id FROM users WHERE id=?`).get(id)!.id,null);
+      assert.equal(count(f.db,'account_licence_events'),1);
+      f.db.exec('DROP TRIGGER synthetic_profile_outage');
+      const me=await f.call('/api/auth/me',id); assert.equal(me.status,200); assert.equal(me.body.role,'exploring');
+      assert.ok(me.body.licences.includes(licence));
+      assert.ok(f.db.prepare(`SELECT ${licence}_id AS id FROM users WHERE id=?`).get(id)!.id);
+      assert.equal(f.db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE ${identity}=?`).get(value)!.n,1);
+      assert.equal((await f.call('/api/auth/me',id)).status,200);
+      assert.equal(f.db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE ${identity}=?`).get(value)!.n,1);
+      assert.equal(count(f.db,'account_licence_events'),1);
+    } finally { f.db.close(); }
+  });
+  test(`appointed Admin's retained ${licence} profile heals after the appointment side-effect outage`, async () => {
+    const f=fixture(); try {
+      const id={founder:9001,investor:9005,advisor:9002,partner:9004}[licence], email={founder:'founder@example.test',investor:'investor@example.test',advisor:'other@example.test',partner:'partner@example.test'}[licence], table=licence+'s',identity=licence==='founder'||licence==='partner'?'email':'user_id',value=identity==='email'?email:id;
+      f.db.exec(`CREATE TRIGGER synthetic_profile_outage BEFORE INSERT ON ${table} BEGIN SELECT RAISE(ABORT,'synthetic profile outage'); END;`);
+      const appointed=await f.call('/api/admin/licences/synthetic-territory/admins',9000,'POST',{email,reason:'Synthetic profile recovery appointment'});
+      assert.equal(appointed.status,200); assert.equal(count(f.db,'account_licence_events'),1);
+      assert.equal(f.db.prepare(`SELECT ${licence}_id AS id FROM users WHERE id=?`).get(id)!.id,null);
+      f.db.exec('DROP TRIGGER synthetic_profile_outage');
+      const me=await f.call('/api/auth/me',id); assert.equal(me.status,200); assert.equal(me.body.role,'admin'); assert.deepEqual(me.body.licences,[licence]);
+      assert.ok(f.db.prepare(`SELECT ${licence}_id AS id FROM users WHERE id=?`).get(id)!.id);
+      assert.equal(f.db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE ${identity}=?`).get(value)!.n,1);
+      assert.equal(count(f.db,'account_licence_events'),1);
+    } finally { f.db.close(); }
+  });
+}
+
+
+test('one fresh request heals all four held profiles after simultaneous grant-side outages', async () => {
+  const f=fixture(); try {
+    for (const licence of ['founder','investor','advisor','partner']) {
+      f.db.exec(`CREATE TRIGGER synthetic_${licence}_outage BEFORE INSERT ON ${licence}s BEGIN SELECT RAISE(ABORT,'synthetic profile outage'); END;`);
+      await grantLicence(f.DB,change(licence,9003));
+    }
+    for (const licence of ['founder','investor','advisor','partner']) f.db.exec(`DROP TRIGGER synthetic_${licence}_outage`);
+    const me=await f.call('/api/auth/me',9003); assert.equal(me.status,200); assert.equal(me.body.role,'exploring');
+    assert.deepEqual(me.body.licences,['founder','investor','advisor','partner']);
+    const row=f.db.prepare('SELECT founder_id,investor_id,advisor_id,partner_id FROM users WHERE id=9003').get()!;
+    for (const licence of me.body.licences) assert.ok(row[licence+'_id'],licence);
+    assert.equal(count(f.db,'account_licence_events'),4);
+  } finally { f.db.close(); }
+});

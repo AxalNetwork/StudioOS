@@ -21,7 +21,8 @@
  *   - role='partner' & partner_id IS NULL  →  same for partners,
  *     with a generated AXAL-XXXXXX(XX) referral_code (matches the
  *     pattern in routes/partners.ts).
- *   - Any other role: no-op.
+ *   - Every held licence is ensured, including after a grant-time outage.
+ *     Investor and Advisor rows are keyed by user_id; Admin itself creates none.
  *
  * Idempotent: an email-collision on the UNIQUE index falls through
  * to a SELECT that picks up the existing row, so re-running on the
@@ -47,17 +48,22 @@ export async function ensureRoleProfile(env: Env, user: User): Promise<RoleProfi
 
   if (!user.email) return current;
 
-  if (user.role === 'founder' && !current.founder_id) {
+  // Auth supplies the held union; explicit grant-time calls supply the granted
+  // role. Retrying /me repairs every held profile without creating a grant.
+  const licences = new Set([String(user.role).toLowerCase(), ...(user.licences || [])]);
+  if (licences.has('founder') && !current.founder_id) {
     const fid = await ensureFounder(env, user);
     if (fid) current.founder_id = fid;
-  } else if (user.role === 'partner' && !current.partner_id) {
+  }
+  if (licences.has('partner') && !current.partner_id) {
     const pid = await ensurePartner(env, user);
     if (pid) current.partner_id = pid;
   }
 
-  if (user.role === 'investor') {
+  if (licences.has('investor')) {
     current.investor_id = await ensureInvestor(env, user);
-  } else if (user.role === 'advisor') {
+  }
+  if (licences.has('advisor')) {
     current.advisor_id = await ensureAdvisor(env, user);
   }
   return current;
