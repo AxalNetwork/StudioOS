@@ -604,8 +604,8 @@ test('the routes: each address under today\'s guard, never hqOnly, and the three
     ['/admin/advisor-cohorts', 'AdvisorCohortsRedirect', 'AdvisorCohortsRedirect'],
     ['/admin/refer-earn', 'ReferEarnRedirect', 'ReferEarnRedirect'],
   ]) {
-    assert.ok(APP.includes(`\n      <Route path="${path}" element={<${component} />} />`), `${path} is not its redirect's whole element`);
-    assert.ok(APP.includes(`const ${component} = lazy(() => import('./pages/admin/programs/${file}'));`), `${component} is not lazy-imported`);
+    assert.equal(APP.includes(`\n      <Route path="${path}" element={<${component} />} />`), false, `${path} is retired`);
+    assert.equal(APP.includes(`const ${component} = lazy(() => import('./pages/admin/programs/${file}'));`), false, `${component} has no App binding after retirement`);
   }
   // Each redirect takes its path and moved key from the one model, each path a literal.
   const model = read('frontend/src/pages/admin/programs/programsModel.js');
@@ -617,7 +617,7 @@ test('the routes: each address under today\'s guard, never hqOnly, and the three
   assert.doesNotMatch(APP, /<HeldPrograms \/>|<AdminReferralReview \/>|<AdvisorCohortAssignments \/>/, 'the old pages are not routed');
   assert.ok(!existsSync(resolve(root, 'frontend/src/pages/admin/HeldPrograms.jsx')), 'HeldPrograms.jsx goes');
   const counted = REDIRECT_ROUTES.map((r) => r.path);
-  for (const p of ['/admin/held/programs', '/admin/advisor-cohorts', '/admin/refer-earn']) assert.ok(counted.includes(p), `${p} is not counted for #2319`);
+  for (const p of ['/admin/held/programs', '/admin/advisor-cohorts', '/admin/refer-earn']) assert.equal(counted.includes(p), false, `${p} retired by D2319`);
 });
 
 test('each frame is one literal AdminBoardFrame, named for its board, as the whole body of a no-argument default export', () => {

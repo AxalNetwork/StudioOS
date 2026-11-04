@@ -170,7 +170,8 @@ test('4: Add channel derives the UTM source from the name, a clash gets -2, kind
   const c = await grow(f, FOUNDER, 'POST', '/channels', { name: 'paid-search-eu' });
   assert.equal(c.body.utm_source, 'paid-search-eu-3');
   const row = one(f, 'SELECT id, kind, cac_bar_cents, bar_currency FROM growth_channels WHERE uid = ?', a.body.uid);
-  assert.deepEqual([row.kind, row.cac_bar_cents, row.bar_currency], ['paid_search', 20000, 'eur']);
+  assert.deepEqual([row.kind, row.cac_bar_cents, row.bar_currency], ['ads', 20000, 'eur']);
+  assert.equal(one(f, 'SELECT legacy_kind FROM growth_channels WHERE uid = ?', a.body.uid).legacy_kind, 'paid_search');
   const spend = one(f, 'SELECT month, spend_cents, source FROM channel_spend WHERE channel_id = ?', row.id);
   assert.deepEqual([spend.month, spend.spend_cents, spend.source], [new Date().toISOString().slice(0, 7), 150000, 'manual']);
   assert.equal(one(f, 'SELECT bar_currency FROM growth_channels WHERE uid = ?', b.body.uid).bar_currency, null, 'no currency without an amount');
@@ -181,7 +182,8 @@ test('4: Add channel derives the UTM source from the name, a clash gets -2, kind
   const edit = await grow(f, FOUNDER, 'PATCH', `/channels/${b.body.uid}`, { kind: 'content', cac_bar_cents: 9000, spend_cents: 2500 });
   assert.equal(edit.status, 200);
   const edited = one(f, 'SELECT id, kind, cac_bar_cents, bar_currency FROM growth_channels WHERE uid = ?', b.body.uid);
-  assert.deepEqual([edited.kind, edited.cac_bar_cents, edited.bar_currency], ['content', 9000, 'usd']);
+  assert.deepEqual([edited.kind, edited.cac_bar_cents, edited.bar_currency], ['organic', 9000, 'usd']);
+  assert.equal(one(f, 'SELECT legacy_kind FROM growth_channels WHERE uid = ?', b.body.uid).legacy_kind, 'content');
   assert.equal(one(f, 'SELECT spend_cents FROM channel_spend WHERE channel_id = ?', edited.id).spend_cents, 2500);
   assert.equal((await grow(f, FOUNDER, 'POST', '/channels', { name: 'Bad', kind: 'billboards' })).status, 400);
 });

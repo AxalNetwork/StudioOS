@@ -105,7 +105,7 @@ export default function AcceptInvitePage() {
                 : `You've joined the startup as ${result?.role === 'advisor' ? 'an advisor' : 'a co-founder'}.`}
             </p>
             <button
-              onClick={() => navigate(result?.project_id ? `/projects/${result.project_id}` : '/projects')}
+              onClick={() => navigate(result?.project_id ? `/projects/${result.project_id}` : '/build')}
               className="mt-5 inline-flex items-center justify-center px-4 py-2 bg-violet-600 hover:bg-violet-700 rounded-lg text-sm text-white font-medium"
             >
               Open project
