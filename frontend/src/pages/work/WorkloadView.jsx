@@ -8,7 +8,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { BTN_PRIMARY, BTN_SECONDARY, MUTED, HonestBlock } from '../team/teamUi.jsx';
 import { workAdapter } from './workAdapter.js';
-import { isSession, scheduleBody, weekLabel, workloadRows } from './workModel.js';
+import { isSession, scheduleBody, weekLabel, workloadByRole, workloadRows } from './workModel.js';
 
 export const WORKLOAD_LINE = 'Bars sit in the week they are scheduled or due; their label is the estimate. Drag a bar to another row to reassign it.';
 
@@ -20,7 +20,10 @@ export default function WorkloadView({ projectId, onOpenItem, onNotice }) {
     setState({ status: 'loading' });
     try {
       const r = await workAdapter.workload(projectId, { weeks: 4 });
-      setState(r.available ? { status: 'ready', data: r.data } : { status: 'off', reason: r.reason });
+      // D1614 W8 (#3994): rows grouped by role, from the Team's own read. Without it the rows stay ungrouped.
+      let team = null;
+      if (r.available) { try { const t = await workAdapter.assignable(projectId); team = t.available ? t.data?.team || [] : null; } catch { team = null; } }
+      setState(r.available ? { status: 'ready', data: r.data, team } : { status: 'off', reason: r.reason });
     } catch { setState({ status: 'error' }); }
   }, [projectId]);
   useEffect(() => { load(); }, [load]);
@@ -40,6 +43,7 @@ export default function WorkloadView({ projectId, onOpenItem, onNotice }) {
   if (state.status === 'error') return <HonestBlock>Workload could not be read. That is not the same as nobody having work. <button type="button" className={BTN_SECONDARY} onClick={load}>Try again</button></HonestBlock>;
   const weeks = state.data?.weeks || [];
   const rows = workloadRows(state.data);
+  const groups = state.team ? workloadByRole(rows, state.team) : [{ key: 'all', label: null, rows }];
   return (
     <section className="wk-workload" data-testid="work-workload">
       <p className={MUTED}>{WORKLOAD_LINE}</p>
@@ -48,7 +52,9 @@ export default function WorkloadView({ projectId, onOpenItem, onNotice }) {
           <span role="columnheader">Person or agent</span>
           {weeks.map((w) => <span key={w} role="columnheader" data-testid="work-workload-week">{weekLabel(w)}</span>)}
         </div>
-        {rows.map((r) => (
+        {groups.map((g) => (<React.Fragment key={g.key}>
+        {g.label ? <div role="row" className="wk-wl-group" data-testid="work-workload-group"><span role="rowheader" style={{ gridColumn: '1 / -1' }}><b>{g.label}</b></span></div> : null}
+        {g.rows.map((r) => (
           <div role="row" key={r.key} className="wk-wl-row" data-testid="work-workload-row">
             <span role="rowheader" className="wk-wl-who">
               <b>{r.who?.name || 'Not recorded'}</b>
@@ -72,6 +78,7 @@ export default function WorkloadView({ projectId, onOpenItem, onNotice }) {
             ))}
           </div>
         ))}
+        </React.Fragment>))}
       </div>
       {rows.some((r) => r.unscheduled.length) ? (
         <div className="wk-wl-unscheduled" data-testid="work-workload-unscheduled">

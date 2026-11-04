@@ -40,7 +40,7 @@ export const PLAN_NAME: Record<Exclude<Tier, 'free'>, string> = {
   studio: planByKey('founder:studio')!.name,
 };
 
-const TIER_COPY: Record<Exclude<Tier, 'free'>, string> = {
+export const TIER_COPY: Record<Exclude<Tier, 'free'>, string> = {
   growth: 'This is on the Validate + Build plan. Upgrade to validate and build without limits.',
   studio: 'This is on the Raise + Grow plan. Upgrade for the pitch deck, cap table, capital, legal, and partner tooling.',
 };

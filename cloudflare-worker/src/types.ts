@@ -105,6 +105,9 @@ export interface Env {
   // New code should prefer these; APP_URL stays as the legacy name.
   PUBLIC_BASE_URL?: string;
   PUBLIC_MARKETING_URL?: string;
+  // D4356 (#4356): the owner's Mercury referral link for Incorporate's bank step. Used only when it is https on
+  // mercury.com (`services/mercury/oauth.ts` `isMercuryHttps`); else `/api/mercury/personal/status` names Mercury's public site.
+  MERCURY_REFERRAL_URL?: string;
   // Phase 2 canonical-host flip: post-callback redirects go to axal.vc
   // (via APP_URL / PUBLIC_BASE_URL), but the Google OAuth redirect_uri
   // must stay on the host registered in Google Cloud Console
