@@ -9,7 +9,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
 import cycleGrow from '../src/routes/cycle_grow.ts';
-import { updateCampaign } from '../src/services/growCampaigns.ts';
+import { campaignChannel, updateCampaign } from '../src/services/growCampaigns.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 
@@ -228,5 +228,14 @@ test('a failed atomic replacement rolls back campaign fields, links and audit; a
   f.env.DB.batch = original;
   c = (await read(f)).body.campaigns[0];
   assert.equal(c.name, 'Concurrent edit'); assert.equal(c.channels[0].uid, 'our-channel');
+  assert.equal(one(f, 'SELECT COUNT(*) n FROM activity_logs WHERE entity_id = ?', uid).n, 1);
+});
+test('channel link, planned budget and actor activity roll back together on a failed save', async () => {
+  const f = fixture(); links(f); const uid = (await create(f)).body.campaign.uid;
+  const batch = f.env.DB.batch.bind(f.env.DB);
+  f.env.DB.batch = (statements: any[]) => batch([...statements, f.env.DB.prepare('INSERT INTO campaign_channel_failure_missing(id) VALUES (1)')]);
+  await assert.rejects(campaignChannel(f.env, PA, { id: FOUNDER } as any, uid, 'our-channel', { planned_budget_cents: 500 }));
+  f.env.DB.batch = batch;
+  assert.deepEqual((await read(f)).body.campaigns[0].channels, []);
   assert.equal(one(f, 'SELECT COUNT(*) n FROM activity_logs WHERE entity_id = ?', uid).n, 1);
 });

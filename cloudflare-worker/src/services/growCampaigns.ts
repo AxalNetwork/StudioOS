@@ -157,11 +157,16 @@ export async function updateCampaign(env: Env, pid: number, user: User, uid: str
 export async function campaignChannel(env: Env, pid: number, user: User, uid: string, channelUid: string, b: Body, remove = false) {
   const c = await owned(env, pid, uid); editable(c);
   const id = await channel(env, pid, channelUid);
-  const stmt = remove
-    ? env.DB.prepare('DELETE FROM grow_campaign_channels WHERE campaign_id = ? AND channel_id = ? AND EXISTS (SELECT 1 FROM grow_campaigns WHERE id = ? AND archived_at IS NULL)').bind(c.id, id, c.id)
-    : env.DB.prepare('INSERT INTO grow_campaign_channels (campaign_id, channel_id, planned_budget_cents) SELECT id, ?, ? FROM grow_campaigns WHERE id = ? AND archived_at IS NULL ON CONFLICT(campaign_id, channel_id) DO UPDATE SET planned_budget_cents = excluded.planned_budget_cents').bind(id, money(b.planned_budget_cents, 'planned_budget_cents'), c.id);
-  const result = await env.DB.batch([stmt, audit(env, pid, user, uid, 'grow_campaign_channel_changed')]);
-  if (!result[0].meta.changes) { editable(await owned(env, pid, uid)); return missing(); }
+  // Insert/link and budget update share one batch. Explicit statement targets
+  // also let the column checker distinguish the link table from its parent.
+  const statements = remove
+    ? [env.DB.prepare('DELETE FROM grow_campaign_channels WHERE campaign_id = ? AND channel_id = ? AND EXISTS (SELECT 1 FROM grow_campaigns WHERE id = ? AND archived_at IS NULL)').bind(c.id, id, c.id)]
+    : [
+      env.DB.prepare('INSERT OR IGNORE INTO grow_campaign_channels (campaign_id, channel_id) SELECT id, ? FROM grow_campaigns WHERE id = ? AND archived_at IS NULL').bind(id, c.id),
+      env.DB.prepare('UPDATE grow_campaign_channels SET planned_budget_cents = ? WHERE campaign_id = ? AND channel_id = ? AND EXISTS (SELECT 1 FROM grow_campaigns WHERE id = ? AND archived_at IS NULL)').bind(money(b.planned_budget_cents, 'planned_budget_cents'), c.id, id, c.id),
+    ];
+  const result = await env.DB.batch([...statements, audit(env, pid, user, uid, 'grow_campaign_channel_changed')]);
+  if (!result[statements.length - 1].meta.changes) { editable(await owned(env, pid, uid)); return missing(); }
   return response(env, pid, uid);
 }
 export async function campaignItem(env: Env, pid: number, user: User, uid: string, kind: unknown, itemUid: unknown, remove = false) {
