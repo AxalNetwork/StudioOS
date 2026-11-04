@@ -183,7 +183,7 @@ test('A CHOSEN VENTURE RIDES ON EVERY LINK: tabs, card titles and the module pag
   // 9 → 10 (D1188, #2457): the Capital relationships tool's tab bar on its module page keeps it too.
   // 10 → 11 (D1466, #3714): Raise's lead row (Next steps' links) keeps it too.
   // 11 → 12 (D4484): Distribution’s tab shell keeps the venture too.
-  assert.equal((route.match(/search=\{q\}/g) || []).length, 12, 'Distribution and the overview, module, record header, Validate\'s phone focus, the Cap table, Data room, Use of funds and Capital relationships tabs, the plan door, the readiness door and Raise\'s lead row keep the venture');
+  assert.equal((route.match(/search=\{q\}/g) || []).length, 13, 'The Inbox link, Distribution and the overview, module, record header, Validate\'s phone focus, the Cap table, Data room, Use of funds and Capital relationships tabs, the plan door, the readiness door and Raise\'s lead row keep the venture');
   assert.match(route, /search=\{tabSearch\(q, searchParams\.get\('version'\)\)\}/, 'the narrative tabs keep the venture, and the version');
 });
 

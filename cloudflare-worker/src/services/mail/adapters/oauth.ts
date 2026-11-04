@@ -19,7 +19,7 @@
  */
 import type { Env } from '../../../types';
 import { buildMime, b64url } from './mime';
-import { AdapterError, type Creds, type MailAdapter, type OAuthCreds, type Outgoing } from './types';
+import { AdapterError, type Creds, type MailAdapter, type OAuthCreds, type Outgoing, type ThreadMessage } from './types';
 
 export type OAuthProvider = 'outlook' | 'gmail';
 
@@ -104,10 +104,10 @@ export async function exchangeCode(env: Env, p: OAuthProvider, code: string, red
   return { creds: { kind: 'oauth', refresh_token: t.refresh_token } as OAuthCreds, address: String(address).toLowerCase(), name, scopes: t.scope ?? '' };
 }
 
-async function refreshed(env: Env, p: OAuthProvider, creds: Creds): Promise<{ access: string; creds: OAuthCreds }> {
+async function refreshed(env: Env, p: OAuthProvider, creds: Creds, read = false): Promise<{ access: string; creds: OAuthCreds }> {
   if (creds.kind !== 'oauth') throw new AdapterError('refused', 'These are not OAuth credentials.');
   const body: Record<string, string> = { grant_type: 'refresh_token', refresh_token: creds.refresh_token };
-  if (p === 'outlook') body.scope = OUTLOOK_SCOPES.join(' ');
+  if (p === 'outlook') body.scope = [...OUTLOOK_SCOPES, ...(read ? [OUTLOOK_READ_SCOPE] : [])].join(' ');
   const t = await token(env, p, body);
   return { access: t.access_token, creds: { kind: 'oauth', refresh_token: t.refresh_token || creds.refresh_token } };
 }
@@ -135,11 +135,40 @@ export const outlookAdapter: MailAdapter = {
     return { creds: t.creds };
   },
   async revoke() { /* Microsoft has no per-app refresh-token revoke: the credentials are forgotten here. */ },
-  async listThread(env, creds, threadId) {
-    const t = await refreshed(env, 'outlook', creds);
-    const filter = encodeURIComponent(`conversationId eq '${threadId.replace(/'/g, "''")}'`);
-    const out = await graph(t.access, `/me/messages?$filter=${filter}&$select=from,subject,receivedDateTime,bodyPreview&$top=25`);
-    return (out?.value || []).map((m: any) => ({ from: m.from?.emailAddress?.address ?? null, subject: m.subject ?? null, received_at: m.receivedDateTime ?? null, preview: m.bodyPreview ?? null }));
+  async listThread(env, creds, sentMessageId) {
+    const t = await refreshed(env, 'outlook', creds, true);
+    // D4494: mail_sent stores internetMessageId (or the Graph message id),
+    // never conversationId. Resolve only that sent message in /me first.
+    if (!sentMessageId || sentMessageId.length > 2048 || /[\r\n]/.test(sentMessageId)) throw unreachable('outlook');
+    const lookup = sentMessageId.includes('@')
+      ? '/me/messages?$filter=' + encodeURIComponent("internetMessageId eq '" + sentMessageId.replace(/'/g, "''") + "'") + '&$select=id,conversationId&$top=2'
+      : '/me/messages/' + encodeURIComponent(sentMessageId) + '?$select=id,conversationId';
+    const found = await graph(t.access, lookup, { signal: AbortSignal.timeout(8000) });
+    const message = sentMessageId.includes('@') ? (Array.isArray(found?.value) && found.value.length === 1 ? found.value[0] : null) : found;
+    if (typeof message?.conversationId !== 'string' || !message.conversationId) throw unreachable('outlook');
+    const predicate = "conversationId eq '" + message.conversationId.replace(/'/g, "''") + "'";
+    const fields = 'id,internetMessageId,from,subject,receivedDateTime,bodyPreview';
+    const base = '/me/messages?$filter=' + encodeURIComponent(predicate) + '&$select=' + fields + '&$top=100';
+    const messages: ThreadMessage[] = [];
+    let path: string | null = base;
+    for (let page = 0; path && page < 10; page++) {
+      const out = await graph(t.access, path, { signal: AbortSignal.timeout(8000) });
+      if (!Array.isArray(out?.value)) throw unreachable('outlook');
+      for (const m of out.value) {
+        if (typeof m?.id !== 'string' || !m.id || typeof m.from?.emailAddress?.address !== 'string' || typeof m.receivedDateTime !== 'string' || !Number.isFinite(Date.parse(m.receivedDateTime)) || (m.subject != null && typeof m.subject !== 'string') || (m.bodyPreview != null && typeof m.bodyPreview !== 'string')) throw unreachable('outlook');
+        messages.push({ id: typeof m.internetMessageId === 'string' && m.internetMessageId ? m.internetMessageId : m.id, from: m.from?.emailAddress?.address ?? null, subject: m.subject ?? null, received_at: m.receivedDateTime ?? null, preview: m.bodyPreview ?? null });
+      }
+      path = null;
+      if (out['@odata.nextLink']) {
+        // Keep Graph's complete paging URL (including its opaque skip value),
+        // but refuse a changed host, mailbox path or conversation predicate.
+        const next = new URL(out['@odata.nextLink']);
+        if (next.origin !== 'https://graph.microsoft.com' || next.pathname !== '/v1.0/me/messages' || next.username || next.password || next.hash || next.searchParams.get('$filter') !== predicate || next.searchParams.get('$select') !== fields || next.searchParams.get('$top') !== '100') throw unreachable('outlook');
+        path = next.pathname.slice('/v1.0'.length) + next.search;
+      }
+    }
+    if (path) throw unreachable('outlook');
+    return { messages, creds: t.creds };
   },
 };
 
