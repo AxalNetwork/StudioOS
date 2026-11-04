@@ -229,10 +229,22 @@ export const followUpState = (f: FollowUp | null, on = today()) => {
   return { due_on: f.due_on, snoozed_until: until, done_at: f.done_at, state };
 };
 
-function interactionView(r: Interaction, caller: number, outcome: Outcome | null, followUp: FollowUp | null) {
+/** D1357 (#3572): the two people on a request, by name, for the page's "Omar Reyes → Lena Hart". Never an email. */
+type Names = ReadonlyMap<number, string | null>;
+async function namesOf(env: Env, ids: number[]): Promise<Map<number, string | null>> {
+  const unique = [...new Set(ids.filter((n) => Number.isSafeInteger(n) && n > 0))];
+  if (!unique.length) return new Map();
+  const rows = (await env.DB.prepare('SELECT id, name FROM users WHERE id IN (SELECT value FROM json_each(?))').bind(JSON.stringify(unique)).all<{ id: number; name: string | null }>()).results || [];
+  return new Map(rows.map((r) => [Number(r.id), r.name ?? null]));
+}
+
+function interactionView(r: Interaction, caller: number, outcome: Outcome | null, followUp: FollowUp | null, names: Names = new Map()) {
   const asker = r.requester_user_id === caller;
   return {
     uid: r.uid, kind: r.kind, requester_user_id: r.requester_user_id, teammate_user_id: r.teammate_user_id, team_key: r.team_key,
+    // D1357 (#3572): the asker and the teammate by name (only the two of them read a request).
+    requester: { id: r.requester_user_id, name: names.get(r.requester_user_id) ?? null },
+    teammate: { id: r.teammate_user_id, name: names.get(r.teammate_user_id) ?? null },
     person: { name: r.person_name, company: r.person_company }, note: r.note,
     // The context for the person is the asker's note to the teammate, to forward if they choose: only the two of them read it.
     context_note: r.context_note, decision_note: r.decision_note,
@@ -267,7 +279,7 @@ async function viewOf(env: Env, user: User, requestUid: string) {
   ).bind(requestUid).first<Outcome>();
   const fu = await env.DB.prepare('SELECT request_uid, due_on, done_at, snoozed_until FROM relationship_follow_ups WHERE request_uid = ? AND user_id = ?')
     .bind(requestUid, user.id).first<FollowUp>();
-  return interactionView(row, user.id, outcome ?? null, fu ?? null);
+  return interactionView(row, user.id, outcome ?? null, fu ?? null, await namesOf(env, [row.requester_user_id, row.teammate_user_id]));
 }
 
 /** The event row a step writes under its request (653's intro_made/intro_declined shape). */
@@ -344,7 +356,8 @@ export async function introRequests(env: Env, user: User, filter: LogFilter = {}
       'SELECT request_uid, due_on, done_at, snoozed_until FROM relationship_follow_ups WHERE user_id = ? AND request_uid IN (SELECT value FROM json_each(?))',
     ).bind(user.id, list).all<FollowUp>()).results || []) followUps.set(f.request_uid, f);
   }
-  const view = (r: Interaction) => interactionView(r, user.id, outcomes.get(r.uid) ?? null, followUps.get(r.uid) ?? null);
+  const names = await namesOf(env, rows.flatMap((r) => [r.requester_user_id, r.teammate_user_id]));
+  const view = (r: Interaction) => interactionView(r, user.id, outcomes.get(r.uid) ?? null, followUps.get(r.uid) ?? null, names);
   return {
     sent: rows.filter((r) => r.requester_user_id === user.id).map(view),
     received: rows.filter((r) => r.teammate_user_id === user.id).map(view),

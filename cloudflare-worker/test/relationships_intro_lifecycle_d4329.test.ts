@@ -326,3 +326,23 @@ test('the migration keeps the requests 653 already holds, with their ids, and wi
     assert.throws(() => db.exec("INSERT INTO relationship_follow_ups(uid,request_uid,user_id,due_on) VALUES ('d','a',4,'soon')"), /CHECK/);
   } finally { db.close(); }
 });
+
+test('D1357 (#3572): a request names the asker and the teammate, by name, to the two of them; never an email', async () => {
+  // Mutation checked: the names left out of the view → the two names fail; the log built without them → the received row fails.
+  const f = fixture();
+  try {
+    await shareAll(f, 2);
+    const r = await call(f, 4, 'POST', `${R}/intro-request`, { teammate: 2, ref: 21, note: 'Met at the demo day.' });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    const made = r.body.request;
+    assert.deepEqual([made.requester, made.teammate], [{ id: 4, name: 'Synthetic member 4' }, { id: 2, name: 'Synthetic member 2' }]);
+    for (const who of [4, 2]) {
+      const log = await call(f, who, 'GET', `${R}/intro-requests`);
+      assert.equal(log.status, 200);
+      const row = [...log.body.sent, ...log.body.received][0];
+      assert.deepEqual([row.requester.name, row.teammate.name], ['Synthetic member 4', 'Synthetic member 2']);
+      assert.equal(/synthetic-\d@example\.invalid/.test(log.text), false, 'no member email');
+      for (const p of PRIVATE) assert.equal(log.text.includes(p), false, `${p} is never in the log`);
+    }
+  } finally { f.close(); }
+});
