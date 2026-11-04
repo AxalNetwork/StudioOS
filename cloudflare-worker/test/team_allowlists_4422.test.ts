@@ -168,6 +168,8 @@ test('only connected team read tools can be selected; sponsor grants still gate 
   server(w, EDITOR, SRV); server(w, STRANGER, THEIRS);
   const get = await call(w, EDITOR, 'GET', `${CO}/allowlists`);
   assert.deepEqual(get.body.servers.map((s: any) => [s.integration_uid, s.tools.map((t: any) => t.name)]), [[SRV, ['read_ledger']]]);
+  const reader = await call(w, MEMBER, 'GET', `${CO}/allowlists`);
+  assert.deepEqual(reader.body.servers, [], 'readers do not receive other members’ private connection catalogues');
   for (const g of [{ ...G, integration_uid: THEIRS }, { ...G, tool: 'send_mail' }, { ...G, tool: 'old_report' }]) {
     assert.equal((await PUT(w, { ...DEFAULT, tool_grants: [g] })).status, 403);
   }

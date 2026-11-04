@@ -599,9 +599,10 @@ router.get('/:scope/:id/allowlists', async (c) => {
     if (!(await canRead(c.env, s, user)) && !(await canRead(c.env, parent, user))) return say(c, 403, 'not_member', 'Only the team can read its settings.');
     const lists = await readAllowlists(c.env, parent);
     if (!lists) return say(c, 503, 'allowlists_unreadable', 'The allowed models and tools could not be read.');
-    return c.json({ ...lists, can_manage: await canManage(c.env, parent, user), inherited: parent.kind !== s.kind,
+    const manage = await canManage(c.env, parent, user);
+    return c.json({ ...lists, can_manage: manage, inherited: parent.kind !== s.kind,
       scope: { kind: parent.kind, id: parent.kind === 'company' ? parent.uid : String(parent.id), name: parent.name },
-      models: agentModels(c.env, user), servers: await allowlistTools(c.env, parent) });
+      models: agentModels(c.env, user), servers: manage ? await allowlistTools(c.env, parent) : [] });
   } catch (e) { return mapError(c, e); }
 });
 

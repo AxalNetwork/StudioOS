@@ -57,13 +57,14 @@ test('reads inherited company defaults, models before tools, narrows both lists 
 });
 
 test('read-only inherited policy has disabled fields and no Save even for a project manager', async () => {
-  const v = await mount({ can_manage: false, model_ids: [MODEL], tool_grants: [G] });
+  const v = await mount({ can_manage: false, model_ids: [MODEL], tool_grants: [G], servers: [] });
   try {
     assert.match(v.text(), /Only Acme’s editors can change this/);
     assert.equal(Boolean(v.by('allowlists-save')), false);
     assert.ok(v.nodes().filter((n) => n.tagName === 'FIELDSET').every((n) => v.props(n).disabled));
     assert.equal(v.props(v.by('allowlists-model-default')).checked, false);
     assert.equal(v.props(v.by(`allowlists-tool-${G.integration_uid}-${G.tool}`)).checked, true);
+    assert.doesNotMatch(v.text(), /no longer available/);
     assert.equal(v.calls.some((c) => c.method === 'PUT'), false);
   } finally { await v.close(); }
 });
