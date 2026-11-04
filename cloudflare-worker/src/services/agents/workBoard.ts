@@ -387,6 +387,14 @@ export async function workCards(env: Env, tasks: WorkTask[], readRuns: WorkRunRe
     WHERE d.task_id IN (SELECT value FROM json_each(?)) ORDER BY b.id`).bind(ids)
     .all<Blocker & {task_id:number;status:string;close_reason:string|null}>();
   const runByTask = await readRuns(env,tasks.map(t=>t.id));
+  // #4394 (TM19c): a task blocked `decision_expired` names the open proposal its run is waiting on, so "Decide now" opens it.
+  const expired = tasks.filter(t=>t.status==='blocked'&&t.blocked_reason==='decision_expired').map(t=>t.id);
+  const openProposal = new Map<number,string>();
+  if (expired.length) {
+    const rows = await env.DB.prepare(`SELECT task_id, uid FROM ai_rail_proposals
+      WHERE task_id IN (SELECT value FROM json_each(?)) AND status = 'proposed' ORDER BY id DESC`).bind(JSON.stringify(expired)).all<{task_id:number;uid:string}>();
+    for (const r of rows.results??[]) if (!openProposal.has(r.task_id)) openProposal.set(r.task_id,r.uid);
+  }
   for (const t of tasks) {
     const r = refsById.get(t.id);
     if (!r) throw new Error('Missing recorded work task');
@@ -417,7 +425,7 @@ export async function workCards(env: Env, tasks: WorkTask[], readRuns: WorkRunRe
         :{kind:'none' as const},
       priority:t.priority,due:t.due_at,due_at:t.due_at,
       scheduled:t.scheduled_start&&t.scheduled_end?{start:t.scheduled_start,end:t.scheduled_end}:null,module:t.module,option:t.option,kind:t.kind,
-      source:t.source_kind,goal:r.goal_title,goal_uid:r.goal_uid,depends_on:ownDeps.map(({uid,task_number,title})=>({uid,task_number,title})),blocked:blockers.length>0||t.status==='blocked',blocked_reason:t.blocked_reason,blockers,
+      source:t.source_kind,goal:r.goal_title,goal_uid:r.goal_uid,depends_on:ownDeps.map(({uid,task_number,title})=>({uid,task_number,title})),blocked:blockers.length>0||t.status==='blocked',blocked_reason:t.blocked_reason,proposal_uid:t.blocked_reason==='decision_expired'?openProposal.get(t.id)??null:null,blockers,
       ready:t.status==='open'&&columnOf(t)==='ready'&&!blockers.length,
       run:run?{uid:run.uid,status:({done:'completed',waiting_decision:'waiting',admitted:'running'} as Record<string,string>)[run.status]??run.status,
         recorded_status:run.status,charged_microusd:cost.available?cost.value_microusd:null,cost,started_at:run.started_at,ended_at:run.ended_at}:null,

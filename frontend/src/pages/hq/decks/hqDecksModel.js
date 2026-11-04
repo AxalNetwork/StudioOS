@@ -109,8 +109,20 @@ export function reportRow(r) {
     before: textOf(r?.before) ?? NOT_RECORDED,
     after: textOf(r?.after) ?? textOf(payload?.text) ?? textOf(payload?.after) ?? NOT_RECORDED,
     proposal: r?.proposal?.status ?? null,
+    // #4375: the images the result and its card name, each one HQ can take down.
+    images: (Array.isArray(r?.images) ? r.images : [])
+      .filter((im) => typeof im?.uid === 'string' && im.uid)
+      .map((im) => ({ uid: im.uid, url: typeof im.url === 'string' ? im.url : `/api/decks/images/${im.uid}/file`, takenDown: im.taken_down === true })),
   };
 }
+
+/** #4375: a takedown's reason, as the Worker takes it (10 to 1,000 characters, trimmed). */
+export const TAKEDOWN_REASON_MIN = 10;
+export const TAKEDOWN_REASON_MAX = 1000;
+export const takedownArmed = (reason) => {
+  const t = String(reason ?? '').trim();
+  return t.length >= TAKEDOWN_REASON_MIN && t.length <= TAKEDOWN_REASON_MAX;
+};
 
 /** The filters over the rows the route sent: model and reason, by exact value. */
 export function filterReports(rows, { model = '', reason = '', q = '' } = {}) {

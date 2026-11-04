@@ -3,10 +3,31 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { BotError, botControl } from '../services/meetingBots';
 import { boundedBotBody, validBotCallback, validBotUploadToken } from '../durable-objects/meeting-bot-run';
-import { diagnosisCallback, validDiagnosisCallback, SCREENSHOT_MAX } from '../services/meetingBotDiagnose';
+import { diagnosisActive, diagnosisCallback, validDiagnosisCallback, SCREENSHOT_MAX } from '../services/meetingBotDiagnose';
 
 const callbacks = new Hono<{ Bindings: Env }>();
 // #3708: the owner diagnostic's reports, screenshot and probe chunk; signed with the diagnostic's own key.
+// D3678 (#3678): the owner diagnostic signs in as Eadwyn's Google account too, so it checks the real join.
+callbacks.post('/diagnostics/:id/meet-credentials',async c=>{
+  try {
+    const raw=new TextDecoder().decode(await boundedBotBody(c.req.raw,64));
+    if (!await validDiagnosisCallback(c.env,c.req.raw,raw,c.req.param('id'))) return c.json({code:'invalid_bot_signature',message:'The runtime signature is invalid.'},401);
+    const { credentialStep, meetCredentials }=await import('../services/meetBotGoogle');
+    const step=credentialStep(raw);
+    if (!step) return c.json({code:'invalid_bot_event',message:'The runtime request is not valid.'},400);
+    if (!await diagnosisActive(c.env,c.req.param('id'),'google_meet')) return c.json({code:'meet_run_inactive',message:'The Meet runtime is not available.'},403);
+    return await meetCredentials(c.env,step);
+  } catch { return c.json({code:'bot_meet_unavailable',message:'The Meet runtime is not available.'},503); }
+});
+callbacks.post('/:uid/meet-credentials',async c=>{
+  try {
+    const raw=new TextDecoder().decode(await boundedBotBody(c.req.raw,64));
+    if (!await validBotCallback(c.env,c.req.raw,raw)) return c.json({code:'invalid_bot_signature',message:'The runtime signature is invalid.'},401);
+    const response=await botControl(c.env,c.req.param('uid'),'meet-credentials',{body:raw,headers:{'content-type':'application/json'}});
+    const headers=new Headers(response.headers);headers.set('cache-control','no-store');
+    return new Response(response.body,{status:response.status,headers});
+  } catch { return c.json({code:'bot_meet_unavailable',message:'The Meet runtime is not available.'},503); }
+});
 callbacks.post('/diagnostics/:id/:kind',async c=>{
   try {
     const raw=new TextDecoder().decode(await boundedBotBody(c.req.raw,Math.ceil(SCREENSHOT_MAX/3)*4+64));

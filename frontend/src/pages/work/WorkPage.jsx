@@ -14,6 +14,10 @@ import {
 import WorkloadView from './WorkloadView.jsx';
 import MyTasks from './MyTasks.jsx';
 import AssignPicker from './AssignPicker.jsx';
+// D1531 (#3742 E8): Goals (TM10), the engine's banner (TM19b) and Start this task (TM19f).
+import GoalsView from '../team/GoalsView.jsx';
+import { EngineBanner, StartTask } from '../team/EngineControl.jsx';
+import { EXPIRED_LINE, isExpiredBlock } from '../team/engineModel.js';
 import './work.css';
 
 /**
@@ -104,6 +108,8 @@ export default function WorkPage() {
         </div>
       </header>
 
+      {!off ? <EngineBanner scope="project" id={id} /> : null}
+
       <div className="wk-bar">
         <nav className="wk-tabs" aria-label="Work views">
           {WORK_TABS.map((t) => (
@@ -131,11 +137,12 @@ export default function WorkPage() {
       {adding ? <NewItem onCreate={create} onCancel={() => setAdding(false)} /> : null}
       {notice ? <p className="wk-notice" role="status" data-testid="work-notice">{notice}</p> : null}
       {board.status === 'ready' && tab === 'board' ? <Board items={board.items} viewer={board.viewer} onOpen={setItemUid} onMove={move} /> : null}
-      {board.status === 'ready' && tab === 'backlog' ? <Backlog items={board.items} onOpen={setItemUid} /> : null}
+      {board.status === 'ready' && tab === 'backlog' ? <Backlog items={board.items} onOpen={setItemUid} projectId={id} /> : null}
       {tab === 'burnup' && burn.status === 'ready' ? <Burnup series={burn.series} /> : null}
       {/* D1614 W8 (#3994): My items is My tasks narrowed to this project. */}
       {tab === 'mine' ? <MyTasks licence="founder" project={id} title="My items" testId="work-mine" /> : null}
       {tab === 'workload' ? <WorkloadView projectId={id} onOpenItem={setItemUid} onNotice={setNotice} /> : null}
+      {tab === 'goals' ? <GoalsView scope="project" id={id} canManage={!!board.viewer?.can_manage} /> : null}
 
       {itemUid ? <ItemSheet uid={itemUid} projectId={id} onClose={() => setItemUid(null)} onRun={setRunUid} onAssigned={load} /> : null}
       {runUid ? <RunSheet uid={runUid} onClose={() => setRunUid(null)} /> : null}
@@ -233,7 +240,7 @@ function Card({ card, onOpen, onMove, readOnly }) {
 }
 
 /** WK2: the backlog as a table, with "Done hidden". */
-export function Backlog({ items, onOpen }) {
+export function Backlog({ items, onOpen, projectId = null }) {
   const rows = backlogRows(items);
   return (
     <div className="wk-table-wrap" data-testid="work-backlog">
@@ -242,7 +249,7 @@ export function Backlog({ items, onOpen }) {
         <tbody>
           {rows.map((r) => (
             <tr key={r.uid} onClick={() => onOpen?.(r.uid)}>
-              <td>{r.title}</td>
+              <td>{r.title}{isExpiredBlock(r) ? <span className={`block ${MUTED}`} data-testid="work-expired">{EXPIRED_LINE} <Link to={`/projects/${encodeURIComponent(projectId ?? '')}/settings/team?tab=approvals`} className={BTN_TEXT} onClick={(e) => e.stopPropagation()}>Decide now ›</Link></span> : null}</td>
               <td>{assigneeLine(r).text}</td>
               <td><span className="wk-chip">{columnLabel(r.column)}</span></td>
               <td>{r.priority || NOT_RECORDED_WORD}</td>
@@ -311,6 +318,9 @@ export function ItemSheet({ uid, projectId = null, onClose, onRun, onAssigned })
           <dt>Due</dt><dd>{dueLine(it.due)?.text || NOT_RECORDED_WORD}</dd>
           <dt>Goal</dt><dd>{it.goal || NOT_RECORDED_WORD}</dd>
           {it.compliance ? <><dt>Compliance</dt><dd>{it.compliance.title} · the obligation stays with {it.compliance.company}; this work happens in the project</dd></> : null}
+          {assigneeLine(it).agent && !['done', 'cancelled'].includes(String(it.column || it.status || '')) ? (
+            <><dt>Start</dt><dd><StartTask task={it} agentName={assigneeLine(it).text} onStarted={(run) => { if (run?.uid) onRun(run.uid); }} /></dd></>
+          ) : null}
           <dt>Agent runs</dt>
           <dd>{(it.runs || []).length ? it.runs.map((r) => <button key={r.uid} type="button" className={BTN_TEXT} onClick={() => onRun(r.uid)}>{runOutcome(r).title} · {runCost(r)}</button>) : 'None'}</dd>
         </dl>

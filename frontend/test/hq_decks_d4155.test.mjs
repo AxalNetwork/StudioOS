@@ -159,10 +159,10 @@ test('the reset client sends its reason in the body, never the URL', async () =>
   assert.doesNotMatch(url, /reason/, 'the URL carries sector and stage only');
 });
 
-test('the page writes only Resolve, the feature flags, the default templates and the stage norms, reads only mounted routes, and never shows an email', () => {
+test('the page writes only Resolve, an image takedown (#4375), the feature flags, the default templates and the stage norms, reads only mounted routes, and never shows an email', () => {
   const calls = [...PAGE.matchAll(/\b(deckReportsApi|adminFeatureFlagsApi|hqDeckStageNormsApi|api)\.(\w+)\(/g)].map((m) => `${m[1]}.${m[2]}`);
   assert.deepEqual([...new Set(calls)].sort(), ['adminFeatureFlagsApi.list', 'adminFeatureFlagsApi.set', 'api.deckMethods', 'api.deckRecommendOverrides', 'api.deckResetRecommendOverride', 'api.deckSetRecommendOverride',
-    'deckReportsApi.queue', 'deckReportsApi.resolve',
+    'deckReportsApi.queue', 'deckReportsApi.resolve', 'deckReportsApi.takedownImage',
     'hqDeckStageNormsApi.add', 'hqDeckStageNormsApi.edit', 'hqDeckStageNormsApi.list', 'hqDeckStageNormsApi.projectNorms', 'hqDeckStageNormsApi.retire']);
   assert.doesNotMatch(PAGE, /\.email\b/);
   assert.doesNotMatch(PAGE.replace(/NORM_RULE/g, ''), /\badvis(or|e)\b/i);

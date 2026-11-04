@@ -50,6 +50,15 @@
      with non-breaking spaces as Meet may render them. -->
 <template id="blocked_live"><h1>You can&#8217;t&nbsp;join&nbsp;this video&nbsp;call</h1><button>Return to home screen</button><p>Your meeting is safe</p><p>No one can join a meeting unless invited or admitted by the host</p></template>
 <template id="unsupported"><p>This browser is not supported</p></template>
+<!-- D3678 (#3678): the pre-join screen a signed-in user sees. Constructed (UNVERIFIED): no guest name field,
+     the account's chip in the corner, and Ask to join. The account's name is drawn as a placeholder only. -->
+<template id="prejoin_signed_in">
+  <h1>Ready to join?</h1>
+  <div role="button" aria-label="Google Account: Eadwyn AI (Axal VC)">E</div>
+  <div role="button" aria-label="Turn off microphone (ctrl + d)" data-toggle="mic">mic</div>
+  <div role="button" aria-label="Turn off camera (ctrl + e)" data-toggle="camera">cam</div>
+  <button id="ask">Ask to join</button>
+</template>
 <template id="nameonly"><h1>Ready to join?</h1><input aria-label="Your name" value=""></template>
 
 <template id="lobby">
@@ -99,7 +108,7 @@
   function render(state) {
     app.replaceChildren(document.getElementById(state).content.cloneNode(true));
     app.dataset.state = state;
-    if (state === 'prejoin' || state === 'prejoin_open' || state === 'media_prompt') wirePrejoin();
+    if (state === 'prejoin' || state === 'prejoin_open' || state === 'media_prompt' || state === 'prejoin_signed_in') wirePrejoin();
     if (state === 'in_call') { wireCall(); draw(); }
   }
 
@@ -116,8 +125,8 @@
         el.setAttribute('aria-label', what === 'mic' ? 'Turn on microphone (ctrl + d)' : 'Turn on camera (ctrl + e)');
       });
     }
-    const name = app.querySelector('input');
-    const go = (asked) => () => { log.name = name.value; log.asked = asked; render(asked === 'join' ? 'in_call' : 'lobby'); };
+    const name = app.querySelector('input[aria-label="Your name"]');
+    const go = (asked) => () => { log.name = name ? name.value : null; log.asked = asked; render(asked === 'join' ? 'in_call' : 'lobby'); };
     app.querySelector('#ask')?.addEventListener('click', go('ask'));
     app.querySelector('#join')?.addEventListener('click', go('join'));
   }

@@ -15,6 +15,10 @@
  *   GET    /goals/:uid/plan/quote              manage: what a plan would hold (the CEO agent's sponsor, else the caller)
  *   POST   /goals/:uid/plan                    manage: a plan, one proposal (`services/agents/planner.ts`)
  *   POST   /goals/:uid/plan/accept             manage: { proposal, remove?, titles? } → every task in one batch
+ *   POST   /goals/:uid/plan/discard            manage: { proposal } → { ok }; 409 plan_decided (#4394)
+ * #4394: the quote and the draft name the planner `agent: { uid, persona: { key, name } } | null` (D4117: never a
+ * job title); the draft carries `cost: { held, charged }`. `/moves` adds `stopped_runs` on an `out` move, `/handoffs`
+ * each chain's `started_at`, and the Work board a `decision_expired` item's `proposal_uid`.
  *   GET    /:scope/:id/suggested-team?goal=    manage: the wizard (rule-based, no model, nothing written)
  *   GET    /templates                          signed in: the role templates
  *   GET    /capabilities                       signed in: modules, reads, options, floor
@@ -94,7 +98,7 @@ import { mapError } from './_t13t14t15_helpers';
 import { quoteRun, type TaskClass } from '../services/aiRouter';
 import { ALWAYS_ASKS_FLOOR, MODULES, READ_KEYS, optionsIn } from '../services/agents/catalogue';
 import { moduleSurface } from '../services/agents/agentRun';
-import { acceptPlan, draftPlan, planQuote } from '../services/agents/planner';
+import { acceptPlan, discardPlan, draftPlan, planQuote } from '../services/agents/planner';
 import { TEMPLATES, monthEstimate, suggestRoles, templateOf, type DutyQuote } from '../services/agents/templates';
 import { canManage, canRead, loadScope, scopeOfAgent, type Scope } from '../services/agents/teams';
 import { goalByUid, goalDto, goalWrite, goalsOf, insertGoal, updateGoal, type Refusal } from '../services/agents/goals';
@@ -679,7 +683,7 @@ router.get('/goals/:uid/plan/quote', async (c) => {
     if ('refusal' in m) return m.refusal;
     const q = await planQuote(c.env, m.s!, m.g!, user);
     if (!q.ok) return refuse(c, q.status as any, { code: q.code, message: q.message, ...(q.extra ? { extra: q.extra } : {}) });
-    return c.json({ quote: q.quote, by: q.by });
+    return c.json({ quote: q.quote, by: q.by, agent: q.agent });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -692,6 +696,21 @@ router.post('/goals/:uid/plan', async (c) => {
     const r = await draftPlan(c.env, m.s!, m.g!, user);
     if (!r.ok) return refuse(c, r.status as any, { code: r.code, message: r.message, ...(r.extra ? { extra: r.extra } : {}) });
     return c.json({ proposal: r.proposal }, 201);
+  } catch (e) { return mapError(c, e); }
+});
+
+// #4394 (TM10d): discard a drafted plan; 409 plan_decided once it was accepted or discarded.
+router.post('/goals/:uid/plan/discard', async (c) => {
+  try {
+    if (!agentEngineEnabled(c.env)) return off(c);
+    const user = await requireAuth(c);
+    const m = await managedGoal(c, user);
+    if ('refusal' in m) return m.refusal;
+    const b = await readBody(c);
+    if (!b) return say(c, { status: 400, code: 'invalid_plan', message: 'Name the plan to discard.' });
+    const r = await discardPlan(c.env, m.g!, b.proposal);
+    if (!r.ok) return refuse(c, r.status as any, { code: r.code, message: r.message });
+    return c.json({ ok: true });
   } catch (e) { return mapError(c, e); }
 });
 

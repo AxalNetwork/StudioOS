@@ -80,6 +80,10 @@ import { asReference } from '../services/decks/imageEdits';
 import { IMAGE_SPECS, type DrawReference } from '../services/ai/shapes';
 import { screenOf, screenUpload } from '../services/decks/uploadScreen';
 import { deckCeilingRefusal } from '../services/decks/observability';
+import { takedownPng } from '../services/decks/takedownPlaceholder';
+
+/** #4375: an image HQ took down is no longer the founder's to keep, edit, discard or upload again. */
+export const TAKEN_DOWN_SENTENCE = 'Axal HQ removed this image. Every card that used it shows a placeholder; choose another image.';
 
 /** D1534 (#3778): pd27's words. */
 export const ALT_REQUIRED_MESSAGE = 'Alt text is needed before this image can be inserted.';
@@ -94,7 +98,7 @@ const deckImages = new Hono<{ Bindings: Env }>();
  */
 async function artReference(env: Env, deck: Deck, model: string): Promise<DrawReference | null> {
   if (!deck.art.reference_uid || !((IMAGE_SPECS[model]?.maxReferences ?? 0) > 0) || !env.FILES) return null;
-  const row = await env.DB.prepare("SELECT r2_key, mime, shows_person FROM deck_images WHERE uid = ? AND project_id = ? AND state = 'kept'")
+  const row = await env.DB.prepare("SELECT r2_key, mime, shows_person FROM deck_images WHERE uid = ? AND project_id = ? AND state = 'kept' AND taken_down_at IS NULL")
     .bind(deck.art.reference_uid, deck.projectId).first<any>().catch(() => null);
   if (!row || Number(row.shows_person) === 1) return null;
   try {
@@ -144,6 +148,7 @@ async function imageOf(c: any, user: User): Promise<any | Response> {
   const row = await c.env.DB.prepare('SELECT * FROM deck_images WHERE uid = ?').bind(uid).first();
   if (!row) return c.json({ error: 'not found' }, 404);
   try { await projectOwned(c, user, Number(row.project_id), { write: true }); } catch { return c.json({ error: 'not found' }, 404); }
+  if (row.taken_down_at) return refuse(c, 410, { code: 'image_taken_down', message: TAKEN_DOWN_SENTENCE });
   return row;
 }
 
@@ -461,6 +466,8 @@ async function landImage(c: any, user: User, deck: Deck, raw: Uint8Array, l: Lan
   const bytes = stripMetadata(raw, mime);
   const sha = await sha256Hex(bytes);
   const same = await c.env.DB.prepare('SELECT * FROM deck_images WHERE project_id = ? AND sha256 = ?').bind(deck.projectId, sha).first() as any;
+  // #4375: the same bytes as an image HQ took down are refused, not handed back as a duplicate.
+  if (same?.taken_down_at) return refuse(c, 409, { code: 'image_taken_down', message: TAKEN_DOWN_SENTENCE });
   if (same && same.state !== 'discarded') return c.json({ image: view(c, same), duplicate: true });
   if (same) await c.env.DB.prepare('UPDATE deck_images SET sha256 = NULL WHERE id = ? AND project_id = ?').bind(same.id, deck.projectId).run();
   let ticket;
@@ -548,7 +555,7 @@ deckImages.get('/:id/images', async (c) => {
   const user = await requireAuth(c);
   const deck = await deckOf(c, user, false);
   if (deck instanceof Response) return deck;
-  const rows = await c.env.DB.prepare("SELECT * FROM deck_images WHERE project_id = ? AND state = 'kept' ORDER BY created_at DESC, id DESC LIMIT 100")
+  const rows = await c.env.DB.prepare("SELECT * FROM deck_images WHERE project_id = ? AND state = 'kept' AND taken_down_at IS NULL ORDER BY created_at DESC, id DESC LIMIT 100")
     .bind(deck.projectId).all();
   return c.json({ images: (rows.results ?? []).map((r: any) => view(c, r)) });
 });
@@ -601,8 +608,16 @@ deckImages.post('/images/:uid/discard', async (c) => {
 deckImages.get('/images/:uid/file', async (c) => {
   const uid = String(c.req.param('uid') || '');
   if (!UID.test(uid) || !c.env.FILES) return c.json({ error: 'not found' }, 404);
-  const row = await c.env.DB.prepare('SELECT uid, project_id, r2_key, mime, state FROM deck_images WHERE uid = ?').bind(uid).first<any>();
+  const row = await c.env.DB.prepare('SELECT uid, project_id, r2_key, mime, state, taken_down_at FROM deck_images WHERE uid = ?').bind(uid).first<any>();
   if (!row || row.state === 'discarded') return c.json({ error: 'not found' }, 404);
+  // #4375: a taken-down image answers the neutral placeholder, read before R2, so every card, version,
+  // draft and export that names it draws "Image removed by Axal HQ" and never the removed bytes.
+  if (row.taken_down_at) {
+    return new Response(takedownPng(), { headers: {
+      'content-type': 'image/png', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'",
+      'cache-control': 'no-store', 'x-axal-image-state': 'taken-down',
+    } });
+  }
   if (row.state !== 'kept') {
     // A proposal is the venture's own until it is kept.
     try { const user = await requireAuth(c); await projectOwned(c, user, Number(row.project_id), { write: true }); }

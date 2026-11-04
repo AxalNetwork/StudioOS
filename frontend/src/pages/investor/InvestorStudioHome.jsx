@@ -64,7 +64,8 @@ export default function InvestorStudioHome({
     return () => { alive = false; };
   }, [previewing, retry]);
 
-  const studio = useStudioLayout({ profile: 'investor', viewer: user, readOnly: previewing });
+  // D4362 (#4362): an admin previewing arranges their own Investor Studio; its tiles stay withheld (`withheld`).
+  const studio = useStudioLayout({ profile: 'investor', viewer: user });
   const opportunities = useMemo(() => list(dashboard?.ai_scored_opportunities, ['items', 'opportunities']).filter(Boolean).slice(0, 4), [dashboard]);
   const dealCount = list(dashboard?.proprietary_deal_flow, ['items', 'deals']).length;
   const stages = list(lifecycle?.stages, ['items']);
