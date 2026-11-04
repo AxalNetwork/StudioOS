@@ -45,15 +45,15 @@ test('proposal reads and queue items carry trusted role metadata, including old 
     assert.equal(rows.find(r=>r.uid===own.uid)?.disclaimer_key,KEY);
     assert.equal(rows.find(r=>r.uid===spoof.uid)?.disclaimer_key,undefined);
     const scope=(await loadScope(w.env,'project','7'))!;
-    const queue=await queueList(w.env,scope,{});
+    const user=w.db.prepare('SELECT * FROM users WHERE id=?').get(SPONSOR) as any;
+    const queue=await queueList(w.env,scope,{},user);
     assert.equal(queue.items.find(r=>r.uid===own.uid)?.disclaimer_key,KEY);
     assert.equal(queue.items.find(r=>r.uid===spoof.uid)?.disclaimer_key,undefined);
-    const user=w.db.prepare('SELECT * FROM users WHERE id=?').get(SPONSOR) as any;
     const item=await queueItem(w.env,user,own.uid); assert.equal(item.ok,true);
     if(!item.ok)throw new Error('missing synthetic queue item');
     assert.equal(item.item.disclaimer_key,KEY);
     w.db.prepare("UPDATE ai_rail_proposals SET status='accepted' WHERE uid=?").run(own.uid);
-    const history=await queueList(w.env,scope,{status:'accepted'});
+    const history=await queueList(w.env,scope,{status:'accepted'},user);
     assert.equal(history.items[0].disclaimer_key,KEY);
     assert.doesNotMatch(JSON.stringify(own),/sponsor@example|agent_id|user_id/);
   }finally{w.close();}

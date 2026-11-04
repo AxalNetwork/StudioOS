@@ -1,5 +1,5 @@
 import React from 'react';
-import { Lock } from 'lucide-react';
+import TeamAllowlists from './TeamAllowlists.jsx';
 import { Unrecorded } from '../../ui';
 import { AgentIdentity } from './AgentMark.jsx';
 import { BTN_TEXT, HeadRow, HonestBlock, MUTED, TeamCard } from './teamUi.jsx';
@@ -14,9 +14,7 @@ import EngineControl from './EngineControl.jsx';
  * (the owner's authority rule for the scope, with the full list of company
  * editors, which the canvas shortens). Per-agent caps and what each role reads
  * come from the agents read through `agentsAdapter` and are unavailable here.
- * Models and tools allowed per company have no store and no filed route
- * (#3727 part 6 note): the card says so and draws no switch. No company AI
- * budget is drawn.
+ * D4422 wires TM8a to the inherited model/tool lists through agentsAdapter.
  *
  * "Edit cap" opens the agent's profile with its cap editor open (#3840's
  * `PATCH /api/teams/agents/:uid`); "Open rule book" opens the Roles tab on
@@ -25,7 +23,6 @@ import EngineControl from './EngineControl.jsx';
 export default function TeamSettingsTab({ scope, agentsBlock, canManage, onEditCap, onOpenRulebook }) {
   const company = scope.company?.name;
   const list = agentsBlock?.available ? (agentsBlock.value?.agents || []) : null;
-  const locked = scope.kind === 'company_project' && !canManage;
   return (
     <div className="flex flex-col gap-4" data-testid="team-settings">
       <EngineControl scope={scope.kind === 'company' ? 'company' : 'project'} id={scope.kind === 'company' ? scope.company.uid : scope.project.id} canManage={canManage} />
@@ -57,12 +54,7 @@ export default function TeamSettingsTab({ scope, agentsBlock, canManage, onEditC
             </div>
           )}
       </TeamCard>
-      <TeamCard title="Models and tools allowed" testId="team-settings-models">
-        <p className={`m-0 ${MUTED}`}>Agents use the models offered on your plan, and read-only tools their sponsor approved. A list kept per {scope.kind === 'project' ? 'project' : 'company'} is not stored yet, so nothing is switched here.</p>
-        {locked ? (
-          <p className={`m-0 mt-2 flex items-center gap-1.5 ${MUTED}`} data-testid="team-settings-locked"><Lock size={12} aria-hidden="true" />Only {company}’s editors can change this.</p>
-        ) : null}
-      </TeamCard>
+      <TeamAllowlists key={`${scope.kind}:${scope.kind === 'company' ? scope.company.uid : scope.project.id}`} scope={scope.kind === 'company' ? 'company' : 'project'} id={scope.kind === 'company' ? scope.company.uid : scope.project.id} />
       <TeamCard title="Data sharing per role" testId="team-settings-sharing">
         {list === null ? <HonestBlock>{agentsBlock?.reason || 'The agents could not be read.'} What each role reads arrives with them.</HonestBlock>
           : !list.length ? <p className={`m-0 ${MUTED}`}>No agent works here yet.</p> : (

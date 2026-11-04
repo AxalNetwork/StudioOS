@@ -63,6 +63,8 @@
  * (`tool_not_in_skill`). Its steps and allow-list join the system prompt; the
  * usage row records `skill_id` and `skill_version`.
  */
+import { agentModels, planOk } from './modelOffers';
+import { allowlistRefusal } from './allowlists';
 import type { Env, User } from '../../types';
 import { PLATFORM_PAUSED_MESSAGE, modelUnder, readPolicy } from './aiPolicy';
 import { agentAreas } from './adminReads';
@@ -209,6 +211,10 @@ async function check(env: Env, input: AgentRunInput): Promise<Checked> {
     await pause(env, a, 'sponsor_left');
     return no(403, 'sponsor_lost_access', 'The person who added this agent can no longer manage this team, so it is paused. An editor can choose a new sponsor.');
   }
+  const allowed = await allowlistRefusal(env, s, a.model_id, grantsOf(a.tool_grants_json));
+  if (allowed) return allowed;
+  if (!planOk(sponsor)) return no(403, 'plan_required', 'Agents come with a paid Founder plan.');
+  if (!agentModels(env, sponsor).some((m) => m.id === a.model_id && !m.plan_locked)) return no(403, 'model_not_offered', 'This agent’s model is no longer offered on its sponsor’s plan.');
   if (a.status === 'paused') return no(403, 'agent_paused', 'This agent is paused. Resume it to run it.', { paused_reason: a.paused_reason });
   const { rules } = await effectiveBook(env, s, a.role_key);
   const m = moduleOf(input.module);
@@ -298,6 +304,10 @@ async function underPolicy(env: Env, a: AgentRow, c: { opts: Omit<RunOptions, 'r
     const area = (await agentAreas(env)).get(a.id) ?? null;
     const m = modelUnder(policy, String(c.opts.model), area);
     if (!m) return no(403, 'model_locked', 'This agent\'s model is switched off on the platform, and so is its area\'s default. Pick another model for it.');
+    const scope = await scopeOfAgent(env, a);
+    if (!scope) return no(404, 'not_found', 'There is no such agent.');
+    const allowed = await allowlistRefusal(env, scope, m.model, []);
+    if (allowed) return allowed;
     c.opts.model = m.model;
   }
   const ceiling = policy.per_run_ceiling_microusd;
