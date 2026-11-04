@@ -195,6 +195,11 @@ export const FOUNDER_OPTIONS = [
     page: 'Founder · Raise · Investor narrative', key: 'draft:narrative-section', route: '/raise/investor-narrative/story', label: 'Draft this section', kind: 'write', handler: 'draft',
     at: [['frontend/src/pages/raise/narrative/StoryTab.jsx', 'narrativeApi.draftSection(']],
   },
+  // D1558 (#3805, deck v2 C10): Story's coach — this version read against the current deck, findings with proposals, no chat.
+  {
+    page: 'Founder · Raise · Investor narrative', key: 'review:narrative-coach', route: '/raise/investor-narrative/story', label: 'Coach against the deck', kind: 'reason', handler: 'draft',
+    at: [['frontend/src/pages/raise/narrative/NarrativeCoach.jsx', 'narrativeCoachApi.coach(']],
+  },
   // D913 (#2697, NAR10): Story's Objections panel — "Answer it" drafts the open section to answer one objection.
   {
     page: 'Founder · Raise · Investor narrative', key: 'draft:narrative-objection', route: '/raise/investor-narrative/story', label: 'Answer an objection', kind: 'write', handler: 'draft',

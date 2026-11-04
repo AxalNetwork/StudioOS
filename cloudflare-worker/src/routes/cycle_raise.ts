@@ -30,6 +30,12 @@
  *   PUT   /narrative/:version/sections/:section   { body?, audience_note?, position?, source?, bindings? }
  *   D1114 (#2994): POST /narrative/:version/sections/:section/draft  { mode: draft | shorten | plain, words? }
  *         one metered run under `draft:narrative-section` → { version, section, mode, text, removed }; writes nothing
+ *   D1558 (#3805): the narrative coach and the "deck ready to send" item (`services/narrative/coach.ts`).
+ *   GET   /deck-ready                → { state: ready | not_ready | no_deck, deck_id, version, label, rows: [{ key, kind, label,
+ *                                       card_uid, card_index, card_title, area, href }] }   computed, free
+ *   POST  /narrative/:version/coach  one metered run under `review:narrative-coach` → { version, deck_id, deck_version,
+ *                                       findings: [{ key, section, kind, message, proposal, card_uid, card_index, area, href }],
+ *                                       dropped, ready }; writes nothing
  *   D913 (#2697): the objections investors raised (`services/narrative/objections.ts`, `objectionDraft.ts`).
  *   GET   /narrative/objections      → { objections: [{ key, text, count, prospects, last_heard, answer, answered }], capped, answers }
  *   PUT   /narrative/objections/:objection/answer  { version, section, how: eadwyn | picked } → { objection, answered }
@@ -157,6 +163,8 @@ import { readObjections, type Objection } from '../services/narrative/objections
 import { OBJECTION_OPTION, OBJECTION_SYSTEM, objectionPrompt } from '../services/narrative/objectionDraft';
 import { decideRail, getRail, listRail, proposeRail, withdrawRail, type RailProposal } from '../services/railProposals';
 import { run as aiRouterRun } from '../services/aiRouter';
+import { COACH_OPTION, COACH_PAGE, COACH_SYSTEM, coachCards, coachFindings, coachPrompt, deckReady } from '../services/narrative/coach';
+import { hydrateSlides } from '../services/decks/cardBlobs';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { parseJsonLoose } from '../services/decks/autofill';
 import { railFor, refuseRun } from '../util/railContext';
@@ -1225,6 +1233,68 @@ cycleRaise.post('/narrative/:version/sections/:section/draft', async (c) => {
   const { text, removed } = screenSection(parseJsonLoose<unknown>(result.output), m.max);
   if (!text) return c.json({ code: 'nothing_kept', detail: 'Eadwyn’s words all held a number, so none was kept. Write this section yourself, and insert figures from your records.', removed }, 422);
   return c.json({ version: got.version, section: sectionKey, mode, text, removed });
+});
+
+/**
+ * D1558 (#3805): the venture's current deck version with its cards, or null
+ * when it has none. A deck whose cards cannot be read throws, and the caller
+ * answers 503: an unreadable deck is never "ready".
+ */
+async function currentDeck(env: any, projectId: number): Promise<{ id: number; version: number; slides: unknown[] } | null> {
+  const row = await env.DB.prepare('SELECT * FROM pitch_decks WHERE project_id = ? AND is_current = 1 ORDER BY version DESC LIMIT 1').bind(projectId).first();
+  if (!row) return null;
+  const full: any = await hydrateSlides(env, row);
+  const slides = JSON.parse(full.slides || '[]');
+  if (!Array.isArray(slides)) throw new Error('deck cards unreadable');
+  return { id: Number(full.id), version: Number(full.version), slides };
+}
+
+// D1558 (#3805): "Deck ready to send", computed from the current deck, free.
+cycleRaise.get('/deck-ready', async (c) => {
+  const s = await narrativeScope(c, 'read');
+  if (s instanceof Response) return s;
+  let deck;
+  try { deck = await currentDeck(c.env, s.projectId); }
+  catch { return c.json({ code: 'unreadable', detail: 'The deck could not be read, so it is not known whether it is ready. Try again.' }, 503); }
+  return c.json(deckReady(deck, s.projectId));
+});
+
+// D1558 (#3805): the narrative coach. One `rail_write` run under
+// `review:narrative-coach`: the version's sections against the current deck,
+// every figure masked. It answers findings with proposals, never a
+// conversation, and writes nothing.
+cycleRaise.post('/narrative/:version/coach', async (c) => {
+  const s = await narrativeScope(c, 'write');
+  if (s instanceof Response) return s;
+  const raw = c.req.param('version');
+  if (!/^(0|[1-9][0-9]{0,8})$/.test(raw)) return c.json({ detail: 'Version not found' }, 404);
+  let read: Awaited<ReturnType<typeof readNarrative>>;
+  try { read = await readNarrative(c.env, s.projectId, raw); } catch (e) { return writeFailed(c, e); }
+  if (read.version === 0) return c.json({ detail: 'Version 0 is the live deck’s wording. Coach a saved version.' }, 409);
+  if (read.sections.state !== 'ok') return c.json({ code: 'unreadable', detail: 'This version’s sections could not be read, so there is nothing to coach. Try again.' }, 503);
+  let deck;
+  try { deck = await currentDeck(c.env, s.projectId); }
+  catch { return c.json({ code: 'unreadable', detail: 'The deck could not be read. Nothing was run.' }, 503); }
+  if (!deck) return c.json({ code: 'no_deck', detail: 'There is no deck to coach against yet. Build one first. Nothing was run.' }, 409);
+  const sections = (read.sections.items as Array<{ key: string; label?: string; body: string | null }>)
+    .map((x) => ({ key: x.key, label: NARRATIVE_SECTIONS.find((n) => n.key === x.key)?.label ?? x.key, body: x.body }));
+  if (!sections.some((x) => (x.body ?? '').trim())) return c.json({ code: 'nothing_to_read', detail: 'This version has no words yet, so there is nothing to coach. Write a section first. Nothing was run.' }, 422);
+  const cards = coachCards(deck.slides);
+  const result = await aiRouterRun(c.env, {
+    task: 'rail_write',
+    userId: Number(s.user.id),
+    surface: AI_SURFACE.raiseNarrative,
+    rail: railFor(c, { page: COACH_PAGE, option: COACH_OPTION }, `narrative:${s.projectId}:${read.version}:coach`),
+    systemPrompt: COACH_SYSTEM,
+    messages: [{ role: 'user', content: coachPrompt(sections, cards) }],
+    temperature: 0.3,
+    maxTokens: 1800,
+  });
+  if (!result.ok || !result.output) {
+    return refuseRun(c, result) || c.json({ code: 'ai_unavailable', detail: 'Eadwyn could not coach this just now. Nothing was charged. Try again.' }, 503);
+  }
+  const got = coachFindings(parseJsonLoose<unknown>(result.output), cards, s.projectId);
+  return c.json({ version: read.version, deck_id: deck.id, deck_version: deck.version, findings: got.findings, dropped: got.dropped, ready: deckReady(deck, s.projectId) });
 });
 
 // D913 (#2697, NAR10): "Answer it". One `rail_write` run under

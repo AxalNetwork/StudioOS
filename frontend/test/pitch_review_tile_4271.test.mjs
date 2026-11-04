@@ -51,7 +51,9 @@ test('a thread opens its card with its comments; the editor reads the card it is
   assert.equal(threadHref(null, null), '/raise/pitch/edit?');
   assert.deepEqual([editorCardOf('3', 5), editorCardOf('9', 5), editorCardOf('0', 5), editorCardOf('x', 5), editorCardOf(null, 5)], [2, 0, 0, 0, 0]);
   const editor = readFileSync(new URL('../src/pages/raise/pitch/PitchEditor.jsx', import.meta.url), 'utf8');
-  assert.match(editor, /useState\(\(\) => editorCardOf\(deepLink\.get\('card'\), cardsOf\(deck\)\.length\)\)/);
+  // D1558 (#3805): the card is read through `cardFromLink`, which takes a uid first and then this place (`editorCardOf`).
+  assert.match(editor, /useState\(\(\) => cardFromLink\(deepLink\.get\('card'\), cardsOf\(deck\)\)\)/);
+  assert.match(readFileSync(new URL('../src/pages/raise/pitch/deckLinkModel.js', import.meta.url), 'utf8'), /return byUid >= 0 \? byUid : editorCardOf\(raw, list\.length\);/);
   assert.match(editor, /deepLink\.get\('comments'\) === '1' && deepLink\.get\('card'\) \? 'comments' : null/);
 });
 
