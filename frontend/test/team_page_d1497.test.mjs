@@ -179,7 +179,7 @@ test('through() maps the Worker\'s answers to what the page draws, in words', as
     assert.ok(!refusalWords(code).includes(code), `${code} reaches the page as words`);
   }
   const plan = renderedText(render(h(AgentsCard, { block: await fail(403, 'plan_required'), kind: 'company', companyName: 'x' })));
-  assert.match(plan, /AI agents come with a paid Founder plan\.pending ownerSee plans/);
+  assert.match(plan, /AI agents come with a paid Founder plan\.See plans/);
   const unread = renderedText(render(h(AgentsCard, { block: await fail(500), kind: 'company', companyName: 'x', onRetry() {} })));
   assert.match(unread, /AI agents could not be read\. That is not the same as having none\.Try again/);
 });
@@ -301,7 +301,7 @@ test('a rule book keeps the seven-item floor locked and nothing automatic', () =
   const book = { role_key: 'cfo', version: 3, effective: { mission: 'Drafts the runway note.', may_propose: ['Use of funds rows'], kpis: [], tone: null }, diff: [], versions: [] };
   const text = renderedText(render(h(RulebookView, { book, role: { name: 'CFO' }, onBack() {}, onEdit() {}, onRestore() {}, canManage: true })));
   for (const item of ['Payments', 'Signing', 'Filing', 'Cap table writes', 'Sending an email', 'Publishing a post', 'Inviting a person']) assert.ok(text.includes(item), item);
-  assert.match(text, /Nothing is automatic in v1\.pending owner/);
+  assert.match(text, /Nothing is automatic in v1\./);
   assert.match(text, /KPIsNot recorded/);
   assert.match(text, /ToneNot recorded/);
 });
@@ -573,7 +573,7 @@ test('TM7a, TM7b2, TM9b1: four filters, Accept decides from the row, and the dec
 test('TM4b2 and TM4c: the counsel banner, the Edit sheet\'s own floor line, and dates as days', () => {
   const book = { role_key: 'general_counsel', version: 3, effective: {}, diff: [], versions: [{ version: 3, by: { name: '[Avery Stone]' }, at: '2026-10-30T10:00:00Z' }] };
   const text = renderedText(render(h(RulebookView, { book, role: { key: 'general_counsel', name: 'General counsel (assistant)' }, onBack() {}, onEdit() {}, onRestore() {}, canManage: false })));
-  assert.match(text, /Not legal advice\. Always escalates\.pending owner: wording from counsel/);
+  assert.match(text, /Not legal advice\. Always escalates\.counsel wording pending/);
   assert.match(text, /v3 by \[Avery Stone\] · 30 Oct/);
   assert.match(read(`${TEAM}/RulebooksTab.jsx`), /note=\{FLOOR_EDIT_NOTE\}/);
   const profile = renderedText(render(h(AgentProfile, { data: { agent: AGENTS[0], matrix: [], month_spend: { available: true, value_microusd: 3_840_000 }, resets_at: '2026-11-01', events: [{ text: 'Ran', at: '2026-10-31T09:12:00Z' }] } })));
