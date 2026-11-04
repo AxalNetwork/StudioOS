@@ -6,6 +6,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { retiredNavigationLinks, retiredRouteMapLinks } from './_redirectLinks_2319.mjs';
+import FounderMarketplacePage from '../src/pages/FounderMarketplacePage.jsx';
 import IncorporateDone from '../src/pages/incorporate/IncorporateDone.jsx';
 import { advisorTabs } from '../src/pages/advisor/AdvisorWorkspaceShell.jsx';
 import { COMMUNITY_CONSOLES } from '../src/pages/branch/BranchCommunity.jsx';
@@ -158,4 +159,11 @@ test('D2319: repaired public navigation uses the canonical screens and 83(b) ret
     assert.ok(markup.includes(`href="${target}"`), `${user.role}: ${target}`);
     assert.equal(markup.includes('href="/incorporate/83b"'), false);
   }
+});
+test('D2319: the founder engagement mail destination opens the mounted Needs tab', () => {
+  const user = { id: 1, role: 'founder', founder_id: 10 };
+  const target = '/build/marketplace?tab=needs';
+  assert.ok(routes.includes(`<Route path="/build/marketplace" element={guard(['admin', 'founder'], founderWorkspace('validate', founderEditor(<FounderMarketplacePage user={user} />)))} />`));
+  const markup = renderToStaticMarkup(React.createElement(MemoryRouter, { initialEntries: [target] }, React.createElement(FounderMarketplacePage, { user })));
+  assert.ok(markup.includes('Search title / description'), 'the actual NeedsBrowseTab renders from the mail destination query');
 });
