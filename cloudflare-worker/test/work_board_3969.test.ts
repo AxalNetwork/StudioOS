@@ -340,3 +340,27 @@ test('the engine mounts the board itself, and E1 offers an agent only Ready-colu
     assert.equal(coList.tasks.find((t:any)=>t.uid===co.task.uid).ready,true);
   }finally{w.db.close();}
 });
+
+test('#4394 (TM19c): a decision_expired item names its open proposal, so "Decide now" opens it; any other block names none',async()=>{
+  // Mutation checked: the open-proposal read dropped → proposal_uid is null on the expired item.
+  const w=world();
+  try {
+    const expired=await create(w,{title:'Waiting on a decision'});
+    const manual=await create(w,{title:'Waiting for a signature',status:'blocked',blocked_reason:'Waiting for a signature'});
+    const decided=await create(w,{title:'Decided already'});
+    const id=(uid:string)=>(w.db.prepare('SELECT id FROM scope_tasks WHERE uid = ?').get(uid) as any).id;
+    w.db.prepare("UPDATE scope_tasks SET status = 'blocked', blocked_reason = 'decision_expired' WHERE uid IN (?, ?)").run(expired.uid,decided.uid);
+    const proposal=w.db.prepare(`INSERT INTO ai_rail_proposals (uid,user_id,rail_page,rail_option,record_ref,kind,status,payload_json,task_id)
+      VALUES (?,?,'Founder · Studio','draft:studio',NULL,'draft',?,'{}',?)`);
+    proposal.run('prop-old',OWNER,'discarded',id(expired.uid));
+    proposal.run('prop-open',OWNER,'proposed',id(expired.uid));
+    proposal.run('prop-done',OWNER,'accepted',id(decided.uid));
+    const r=await call(w,OWNER,'GET','/project/7/work/board');
+    assert.equal(r.status,200,JSON.stringify(r.body));
+    const item=(uid:string)=>r.body.items.find((x:any)=>x.uid===uid);
+    assert.deepEqual([item(expired.uid).blocked_reason,item(expired.uid).proposal_uid],['decision_expired','prop-open']);
+    assert.deepEqual([item(decided.uid).blocked_reason,item(decided.uid).proposal_uid],['decision_expired',null],'no open proposal: none named, never a decided one');
+    assert.deepEqual([item(manual.uid).blocked_reason,item(manual.uid).proposal_uid],['Waiting for a signature',null]);
+    assert.equal((await call(w,STRANGER,'GET','/project/7/work/board')).status,403,'the read gate holds');
+  } finally { w.db.close(); }
+});
