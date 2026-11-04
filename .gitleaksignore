@@ -253,3 +253,7 @@ b3d19c7c669f45d69fe79a4f690b1e4c5bded6a8:.gitleaksignore:generic-api-key:234
 # renames it `PREFS_STORE_NAME`, so no later commit carries the match. Scoped to
 # the one finding, as D334's entry is.
 a519fc5743a2b719b6f8f8f0ff709bbf25670bec:frontend/src/pages/raise/pitch/teleprompterModel.js:generic-api-key:41
+# #4046: the synthetic JWT signing seed in publish_ask_4046's first commit. It signs
+# test tokens for an in-memory database only, never a credential. The next commit uses the
+# shared 'test'.repeat(16) literal. Scoped to the one finding.
+a2a4570bbd160b4c77668945f50122dda4e8c9bc:cloudflare-worker/test/publish_ask_4046.test.ts:generic-api-key:35

@@ -32,7 +32,7 @@ import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 
 test.after(() => removeMigratedDatabases());
 
-const SECRET = 'publish-ask-4046-synthetic-secret-0123456789'; // in-memory test signing seed only
+const SECRET = 'test'.repeat(16); // in-memory test signing seed only, the shared unit-test literal
 const FOUNDER = 1, COFOUNDER = 2;
 const P = 701;
 const fake = publishFake({ key: 'fakepub4046', textLimit: 120 });

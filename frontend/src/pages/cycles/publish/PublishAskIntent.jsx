@@ -18,6 +18,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import AskIntent from '../../../ui/AskIntent.jsx';
+import { useRailOption } from '../../../ui/railCrumbs';
 import { ADD_TOKENS_PATH } from '../../../lib/aiTokens';
 import { publishApi } from '../../../lib/api/publish.js';
 import { ASK_ACCEPT_LINE, ASK_HOLD_READING, ASK_REPLACES, askHoldLine, askPlaces, canAskDraft } from './publishAskModel.js';
@@ -45,6 +46,8 @@ export default function PublishAskIntent({ projectId, module, ticked = [], place
     return () => { live = false; };
   }, [ask, api]);
 
+  // #4046: the rail names the press while it runs, as every founder draft does (D771).
+  useRailOption(busy ? 'draft:publish' : null, 'Draft the post');
   const draft = versions[at] ?? null;
   const hold = askHoldLine(estimate);
   const pressable = canAskDraft({ estimate, busy });

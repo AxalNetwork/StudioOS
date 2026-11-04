@@ -311,7 +311,7 @@ publish.post('/ask', handle(async (c, ctx) => {
     if (!q.ok) return refuseRun(c, { refusal: q.refusal, error: q.error }) ?? refuse(c, 503, { code: 'estimate_unreadable', message: 'The cost of this draft could not be worked out. Try again.', audience: 'member' });
     return c.json({ estimate: { hold_microusd: q.hold_microusd, model: q.model }, sources, limit: askLimit(places) });
   }
-  const result = await aiRouterRun(c.env, opts);
+  const result = await aiRouterRun(c.env, { ...opts, surface: AI_SURFACE.growPublish, rail: opts.rail });
   if (!result.ok || !result.output) {
     return refuseRun(c, result) ?? refuse(c, 503, { code: 'ai_unavailable', message: 'Eadwyn could not draft this post just now. Nothing was charged. Try again.', audience: 'member' });
   }
