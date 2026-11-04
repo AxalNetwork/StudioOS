@@ -102,7 +102,11 @@ test('canOpenTeam is the Team routes\' guard: five profiles for a company, the f
     return JSON.parse(/guard\((?:labRoles\()?(\[[^\]]*\])/.exec(line)[1].replace(/'/g, '"'));
   };
   const model = read(`${SRC}/pages/team/teamModel.js`);
-  const listOf = (name) => JSON.parse(new RegExp(`const ${name} = (\\[[^\\]]*\\]);`).exec(model)[1].replace(/'/g, '"'));
+  const LIST_PATTERNS = {
+    COMPANY_TEAM_ROLES: /const COMPANY_TEAM_ROLES = (\[[^\]]*\]);/,
+    PROJECT_TEAM_ROLES: /const PROJECT_TEAM_ROLES = (\[[^\]]*\]);/,
+  };
+  const listOf = (name) => JSON.parse(LIST_PATTERNS[name].exec(model)[1].replace(/'/g, '"'));
   assert.deepEqual(listOf('COMPANY_TEAM_ROLES'), guardOf('/account/companies/:uid/settings/team'));
   assert.deepEqual(listOf('COMPANY_TEAM_ROLES'), guardOf('/account/companies/:uid/settings/projects/:id/team'));
   assert.deepEqual(listOf('PROJECT_TEAM_ROLES'), guardOf('/projects/:id/settings/team'));
