@@ -44,6 +44,9 @@ const nowIso = () => new Date().toISOString();
 
 // ---- exercises -----------------------------------------------------------------------
 
+/** D4479: the LR10 answer limit, measured in Unicode code points. */
+export const EXERCISE_ANSWER_MAX_CHARS = 2000;
+
 // `enrolled` (D558) binds the caller's id first, then the uid.
 const EXERCISE_SQL = 'SELECT id, uid, title, instructions, submission_kind, checklist_json, visibility, status, published_at, '
   + enrolledSql('exercise', 'learning_exercises.uid') + ' AS enrolled FROM learning_exercises WHERE uid = ?';
@@ -51,7 +54,7 @@ const EXERCISE_SQL = 'SELECT id, uid, title, instructions, submission_kind, chec
 function exerciseView(x: any) {
   let checklist: string[] | null = null;
   if (x.submission_kind === 'checklist') { try { checklist = JSON.parse(x.checklist_json || '[]'); } catch { checklist = []; } }
-  return { uid: x.uid, title: x.title, instructions: x.instructions, submission_kind: x.submission_kind, checklist, status: x.status, published_at: x.published_at };
+  return { uid: x.uid, title: x.title, instructions: x.instructions, submission_kind: x.submission_kind, checklist, ...(x.submission_kind === 'text' ? { answer_max_chars: EXERCISE_ANSWER_MAX_CHARS } : {}), status: x.status, published_at: x.published_at };
 }
 
 const SUBMISSION_COLS = 'uid, body, status, feedback, submitted_at, reviewed_at';
@@ -83,7 +86,7 @@ r.post('/exercises/:uid/submissions', async (c) => {
   } else {
     const text = typeof b?.body === 'string' ? b.body.trim() : '';
     if (!text) return refuse(c, 400, { code: 'bad_answer', message: 'An answer needs some text.' });
-    if (text.length > 50_000) return refuse(c, 400, { code: 'bad_answer', message: 'An answer is at most 50,000 characters.' });
+    if ([...text].length > EXERCISE_ANSWER_MAX_CHARS) return refuse(c, 400, { code: 'bad_answer', message: 'An answer is at most 2,000 characters.' });
     body = text;
   }
   const latest = await c.env.DB.prepare(

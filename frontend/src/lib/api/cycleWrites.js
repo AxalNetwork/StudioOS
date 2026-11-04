@@ -76,6 +76,15 @@ export function makeCycleWrites(request) {
       deleteGoogleCopy: (projectId, id) => request(`/cycles/raise/google/facts/${seg(id)}?${q(projectId)}`, { method: 'DELETE' }),
     },
     grow: {
+      // D4447 (#4447): campaign plans; these routes never send, post or spend.
+      campaign: (projectId, body) => request('/cycles/grow/campaigns', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
+      campaignArchive: (projectId, uid) => request(`/cycles/grow/campaigns/${seg(uid)}`, { method: 'DELETE', body: JSON.stringify({ project: projectId }) }),
+      campaignChannel: (projectId, uid, channelUid, body) => request(`/cycles/grow/campaigns/${seg(uid)}/channels/${seg(channelUid)}`, { method: 'PUT', body: JSON.stringify({ ...body, project: projectId }) }),
+      campaignChannelRemove: (projectId, uid, channelUid) => request(`/cycles/grow/campaigns/${seg(uid)}/channels/${seg(channelUid)}`, { method: 'DELETE', body: JSON.stringify({ project: projectId }) }),
+      campaignItem: (projectId, uid, body) => request(`/cycles/grow/campaigns/${seg(uid)}/items`, { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
+      campaignItemRemove: (projectId, uid, kind, itemUid) => request(`/cycles/grow/campaigns/${seg(uid)}/items/${seg(kind)}/${seg(itemUid)}`, { method: 'DELETE', body: JSON.stringify({ project: projectId }) }),
+      campaigns: (projectId) => request(`/cycles/grow/campaigns?${q(projectId)}`),
+      campaignUpdate: (projectId, uid, body) => request(`/cycles/grow/campaigns/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
       feedback: (projectId, body) => request('/cycles/grow/feedback', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       channel: (projectId, body) => request('/cycles/grow/channels', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       channelSpend: (projectId, uid, month, body) => request(`/cycles/grow/channels/${seg(uid)}/spend/${seg(month)}`, { method: 'PUT', body: JSON.stringify({ ...body, project: projectId }) }),

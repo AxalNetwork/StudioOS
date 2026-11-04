@@ -51,7 +51,7 @@ export default function SyndicationAsk({ eventId, api = null, onSaved = null }) 
       </ul>
       {open ? (
         <AskCopy key={open.account_uid} eventId={eventId} row={open} syn={syn} proposals={props}
-          onSaved={(data) => { setRead({ status: 'ready', data }); setOpen((askableRows(data).find((x) => x.account_uid === open.account_uid)) || open); onSaved?.(data); }}
+          onSaved={(data, values) => { setRead({ status: 'ready', data }); setOpen((askableRows(data).find((x) => x.account_uid === open.account_uid)) || open); onSaved?.(data, { eventId, row: data?.rows?.find((x) => x.account_uid === open.account_uid), fields: Object.keys(values) }); }}
           onClose={() => setOpen(null)} />
       ) : null}
     </div>
@@ -102,7 +102,7 @@ function AskCopy({ eventId, row, syn, proposals, onSaved, onClose }) {
     setCards((prev) => prev.map((c) => (decided.has(c.uid) ? { ...c, status: decided.get(c.uid), value: values[c.field] ?? c.value, text: values[c.field] ?? c.text } : c)));
     if (Object.keys(values).length) {
       try {
-        onSaved(await syn.choose(eventId, savedChannels(row, values)));
+        onSaved(await syn.choose(eventId, savedChannels(row, values)), values);
       } catch {
         setNote({ tone: 'bad', title: SAVE_FAILED, line: null });
       }
