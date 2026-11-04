@@ -92,7 +92,8 @@ test('the seam: an item is Coming later only while its adapter surface answers u
   assert.deepEqual([crit.disabled, Boolean(crit.later)], [false, false]);
   const paused = moreState(MORE_MENU, { availability: on, aiOn: false });
   assert.equal(paused.sections.find((s) => s.id === 'ai').items.find((i) => i.id === 'critique').why, 'AI is paused for your studio.', 'once wired, AI paused greys it like any AI item');
-  assert.equal(paused.off, 2, 'and it counts into the name');
+  // D1569 (#3816): This card › AI voice-over is an AI item too.
+  assert.equal(paused.off, 3, 'and it counts into the name');
   assert.equal(moreState(MORE_MENU, { availability: () => ({ available: false, reason: 'Synthetic reason.' }) }).sections[0].items[0].why, 'Synthetic reason.');
   // The card ⋯ read the same seam until #3788 (D1545) swapped `media`: Hide and Move to section are wired either way.
   for (const avail of [availability, on]) {

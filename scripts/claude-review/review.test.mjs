@@ -18,6 +18,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
+import { runReview } from '../lib/claudeReviewRun.mjs';
+import { parseRates } from '../lib/claudeReview.mjs';
 import { WorkloadIdentityError } from '@anthropic-ai/sdk/lib/credentials/types';
 import { GithubIdentityError, LEDGER_MAX_PAGES, OIDC_AUDIENCE, openaiClient, openaiFetch, anthropicClient, classifyError, clientFor, errorDetail, fallbacksFor, githubClient, kimiClient, kimiFetch, githubIdentityToken, listMonthRecords, main, safePath } from './review.mjs';
 
@@ -618,4 +620,132 @@ test('D4467: artifact HTTP and transport failures have bounded retries and safe 
       assert.deepEqual([calls, delays], [attempts, attempts === 4 ? [1000, 2000, 4000] : []]);
     }
   } finally { globalThis.fetch = saved; }
+});
+
+// Exercise real SDK stream parsing and the durable ledger together, without a network.
+async function failedStreamRun(provider, makeClient, expectedStreamStarted = true) {
+  const records = [];
+  const requests = [];
+  const client = makeClient(() => requests.push(structuredClone(records)));
+  let error;
+  const observed = { create: async (...args) => {
+    try { return await client.create(...args); }
+    catch (failure) { error = failure; throw failure; }
+  } };
+  const openai = provider === 'openai';
+  const repo = 'AxalNetwork/StudioOS';
+  const model = openai ? 'gpt-5.3-codex' : 'claude-sonnet-5-5';
+  const result = await runReview({
+    env: { CLAUDE_REVIEW_ENABLED: 'true', CLAUDE_REVIEW_MAX_RETRIES: '0',
+      ...(openai ? { OPENAI_API_KEY: 'test-openai', OPENAI_MODEL: model } : { ANTHROPIC_API_KEY: 'test-claude', ANTHROPIC_MODEL: model }),
+    },
+    repository: repo,
+    event: { pull_request: { number: 42, state: 'open', title: 'Test', body: '', user: { login: 'test' },
+      base: { sha: 'b'.repeat(40), ref: 'main' }, head: { sha: 'a'.repeat(40), repo: { full_name: repo } } } },
+    rates: parseRates({ date: '2026-11-04', models: { [model]: { input: 1, output: 1, cache_read: 1, cache_write: 1 } } }),
+    now: () => new Date('2026-11-04T10:00:00Z'), nonce: () => 'test',
+    github: { mergeBase: async () => 'b'.repeat(40), listArtifacts: async () => ({ artifacts: [], complete: true }) },
+    git: { fetch: async () => {}, diff: async () => 'diff --git a/a.js b/a.js\n--- a/a.js\n+++ b/a.js\n@@ -1 +1 @@\n-old\n+new\n' },
+    readLines: () => ['new'],
+    anthropic: openai ? {} : { countTokens: async () => ({ input_tokens: 100 }), create: observed.create },
+    fallbacks: openai ? { openai: observed } : {},
+    persistRecord: record => records.push(JSON.parse(record.body)),
+  });
+  assert.ok(requests.length > 0, 'the real SDK sent a request');
+  for (const reserved of requests) {
+    assert.ok(reserved.length > 0, 'reserve the attempt before sending the request');
+    assert.ok(reserved.at(-1).usd > 0);
+    assert.equal(reserved.at(-1).cost_known, false);
+  }
+  assert.equal(error.streamStarted, expectedStreamStarted);
+  assert.notEqual(result.outcome, 'reviewed');
+  assert.ok(records.length >= 2, 'persist reservation and failure settlement');
+  return records;
+}
+
+for (const code of ['insufficient_quota', 'billing_hard_limit_reached', 'billing_not_active']) {
+  test(`#4463: real OpenAI first-event SSE ${code} keeps its worst-case reservation`, async () => {
+    const records = await failedStreamRun('openai', beforeRequest => openaiClient({
+      apiKey: 'test-key', baseURL: 'https://openai.example/v1', timeoutSeconds: 30,
+      fetchImpl: async () => {
+        beforeRequest();
+        return new Response(`event: error\ndata: ${JSON.stringify({ type: 'error', code, message: 'Stream refused' })}\n\n`,
+          { status: 200, headers: { 'content-type': 'text/event-stream' } });
+      },
+    }));
+    const final = records.at(-1);
+    assert.equal(final.error_kind, 'billing');
+    assert.equal(final.account_id, 'openai');
+    assert.equal(final.usd, records[0].usd);
+    assert.equal(final.cost_known, false);
+  });
+}
+
+test('#4463: real OpenAI HTTP quota refusal before a stream still costs zero', async () => {
+  const records = await failedStreamRun('openai', beforeRequest => openaiClient({
+    apiKey: 'test-key', baseURL: 'https://openai.example/v1', timeoutSeconds: 30,
+    fetchImpl: async () => {
+      beforeRequest();
+      return new Response(JSON.stringify({ error: { code: 'insufficient_quota', message: 'Quota refused' } }),
+        { status: 429, headers: { 'content-type': 'application/json' } });
+    },
+  }), false);
+  assert.equal(records.at(-1).error_kind, 'billing');
+  assert.equal(records.at(-1).usd, 0);
+  assert.equal(records.at(-1).cost_known, true);
+});
+
+test('#4463: real OpenAI abort before headers keeps its worst-case reservation', async () => {
+  const records = await failedStreamRun('openai', beforeRequest => {
+    const client = openaiClient({ apiKey: 'test-key', baseURL: 'https://openai.example/v1', timeoutSeconds: 30,
+      fetchImpl: async () => {
+        beforeRequest();
+        controller.abort();
+        throw new DOMException('Aborted before headers', 'AbortError');
+      },
+    });
+    const controller = new AbortController();
+    return { create: (params, options) => client.create(params, { ...options, signal: controller.signal }) };
+  }, false);
+  assert.equal(records.at(-1).error_kind, 'timeout');
+  assert.equal(records.at(-1).usd, records[0].usd);
+  assert.equal(records.at(-1).cost_known, false);
+});
+
+test('#4463: real Anthropic first-event SSE APIError keeps its worst-case reservation', async () => {
+  const records = await failedStreamRun('anthropic', beforeRequest => {
+    class InterceptedAnthropic extends Anthropic {
+      constructor(options) { super({ ...options, fetch: async () => {
+        beforeRequest();
+        return new Response('event: error\ndata: {"type":"error","error":{"type":"overloaded_error","message":"Stream failed"}}\n\n',
+          { status: 200, headers: { 'content-type': 'text/event-stream' } });
+      } }); }
+    }
+    return anthropicClient({ apiKey: 'test-key', timeoutSeconds: 30, sdk: InterceptedAnthropic });
+  });
+  assert.equal(records.at(-1).error_kind, 'unknown');
+  assert.equal(records.at(-1).usd, records[0].usd);
+  assert.equal(records.at(-1).cost_known, false);
+});
+
+test('#4463: main key and federation clients never receive fallback workspace headers', async () => {
+  const built = [];
+  class RecordingSdk {
+    constructor(options) { built.push(options); this.messages = { countTokens: async () => ({ input_tokens: 1 }) }; }
+  }
+  const env = { ANTHROPIC_API_KEY: 'main', ANTHROPIC_API_KEY_2: 'second', ANTHROPIC_API_KEY_3: 'third',
+    ANTHROPIC_WORKSPACE_ID_2: 'wrkspc_22222222', ANTHROPIC_WORKSPACE_ID_3: 'wrkspc_33333333' };
+  const p = { model: 'test', system: 's', messages: [] };
+  await clientFor(env, { sdk: RecordingSdk }).countTokens(p);
+  await clientFor({ ...env, ANTHROPIC_FEDERATION_RULE_ID: 'fdrl_01BkFJFKoPa1oFPY5ioQaCYp',
+    ANTHROPIC_ORGANIZATION_ID: 'a984f1f6-6fd8-48ed-80d0-5d6d62f99ae4', ANTHROPIC_WORKSPACE_ID: 'wrkspc_MAIN0000',
+  }, { sdk: RecordingSdk, makeProvider: cfg => ({ cfg }) }).countTokens(p);
+  assert.equal(built.length, 2);
+  assert.equal(built[0].apiKey, 'main');
+  assert.equal(built[1].apiKey, null);
+  assert.equal(built[1].credentials.cfg.workspaceId, 'wrkspc_MAIN0000');
+  for (const options of built) {
+    assert.equal(new Headers(options.defaultHeaders).get('anthropic-workspace-id'), null);
+    assert.doesNotMatch(JSON.stringify(options), /wrkspc_22222222|wrkspc_33333333/);
+  }
 });

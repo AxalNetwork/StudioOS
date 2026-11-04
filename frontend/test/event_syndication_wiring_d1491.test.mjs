@@ -131,14 +131,14 @@ test('old event response cannot replace the next event', async () => {
 
 test('approve dialog reads choices and count; unreadable choices prevent approval', async () => {
   const { api, calls } = fake(); const confirmed = [];
-  const props = { ev: { id: 42, title: 'Synthetic event' }, syndicationApi: api, onClose() {}, onConfirm: (v) => confirmed.push(v) };
+  const props = { ev: { id: 42, title: 'Synthetic event', visibility: 'public' }, syndicationApi: api, onClose() {}, onConfirm: (v) => confirmed.push(v) };
   const page = await mounted(h(ApproveDialog, props));
   try {
     assert.match(page.text(), /Approve, publish and post to 1 channel/);
     await page.change('syndication-choice-eb', false);
     assert.equal(calls.some(([n]) => n === 'choose'), false);
     await page.click('events-approve-go');
-    assert.deepEqual(confirmed, [{ feature: false, channels: [{ account_uid: 'eb', on: false, overrides: ROW.overrides }] }]);
+    assert.deepEqual(confirmed, [{ feature: false, channels: [{ account_uid: 'eb', on: false }] }]);
     const bad = fake({ forEvent: async () => { throw new Error('unreadable'); } }).api;
     await page.render(h(ApproveDialog, { ...props, syndicationApi: bad }));
     assert.match(page.text(), /Unreadable/); assert.equal(page.props('events-approve-go').disabled, true);
@@ -232,6 +232,6 @@ test('posted copy is read-only; failed choice save stays refused without a succe
   finally { await posted.close(); }
   const bad = fake({ choose: async () => { throw new Error('Choice refused'); } });
   const failed = await mounted(h(EventSyndicationPanel, { eventId: '42', editable: true, api: bad.api }));
-  try { await failed.click('syndication-save'); assert.match(failed.text(), /Choice refused/); assert.doesNotMatch(failed.text(), /Channels saved/); }
+  try { await failed.change('syndication-copy-eb-title', 'Edited title'); await failed.click('syndication-save'); assert.match(failed.text(), /Choice refused/); assert.doesNotMatch(failed.text(), /Channels saved/); }
   finally { await failed.close(); }
 });

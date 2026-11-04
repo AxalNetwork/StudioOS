@@ -69,6 +69,11 @@ function stub(routes = {}) {
     '/api/personas/admin/segments': () => json(SEG),
     '/api/personas/segments': () => json(PROFILES),
     '/api/personas/segments/coverage': () => json(COVERAGE),
+    // D4438: Super Admin now reads the scoped bundle, registry and inset.
+    // Keep this phone test on its populated Overview, not the failed-read UI.
+    '/api/admin/persona-segment-scopes': () => json({ scopes: [{ code: 'hq', label: 'HQ-held accounts' }, { code: '*', label: 'All studios' }], registry: { readable: true } }),
+    '/api/admin/persona-segment-scopes/overview': () => json({ summary: SEG, profiles: PROFILES, coverage: COVERAGE }),
+    '/api/admin/persona-segment-scopes/suggestions': () => json({ suggestions: [] }),
   };
   globalThis.fetch = async (url, init = {}) => {
     const u = new URL(String(url), 'http://x');
@@ -190,6 +195,8 @@ test('mounted on a phone: every button, link, select and field on Overview is at
   const s = stub();
   const v = await render(h(PersonaSegmentsPage, { superAdmin: true }), { phone: true });
   try {
+    assert.match(v.of('seg-scope-select'), /HQ-held accountsAll studios/);
+    assert.match(v.of('seg-suggestions-inset'), /No suggestions waiting for HQ in this scope.*Review suggestions/s);
     const own = v.controls().filter((n) => !v.textOf(n).includes('Eadwyn'));
     assert.ok(own.length > 20, `${own.length} controls`);
     const short = own.filter((n) => !TALL.test(v.classOf(n)) && !/(?:^|\s)h-11(?:\s|$)/.test(v.classOf(n)));

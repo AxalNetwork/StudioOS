@@ -17,7 +17,7 @@
  *
  * Also here: the engine's state as every caller reads it, so the kill switch
  * is written once.
- *   AGENT_ENGINE   off | paused | canary | on (var; anything else is `off`).
+ *   AGENT_ENGINE   off | paused | canary | cohort | on (var; anything else is `off`).
  *                  `paused` stops admissions only; a run already admitted
  *                  carries on to its proposal.
  *   agents:halt    KV (`RATE_LIMITS`): set, every run ends at its next step
@@ -33,8 +33,8 @@ export type ScopeKind = 'company' | 'project';
 export type ScopeRef = { kind: ScopeKind; id: number };
 export const scopeName = (s: ScopeRef) => `${s.kind}:${s.id}`;
 
-export type EngineMode = 'off' | 'paused' | 'canary' | 'on';
-export const ENGINE_MODES: readonly EngineMode[] = ['off', 'paused', 'canary', 'on'];
+export type EngineMode = 'off' | 'paused' | 'canary' | 'cohort' | 'on';
+export const ENGINE_MODES: readonly EngineMode[] = ['off', 'paused', 'canary', 'cohort', 'on'];
 export type Autonomy = 'manual' | 'self_start';
 export type RuntimeName = 'do' | 'sdk';
 
