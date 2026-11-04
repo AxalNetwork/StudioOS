@@ -56,6 +56,16 @@ const CLAUDE_FALLBACK_ERROR_TEXT = {
   permission: 'its key may not use this model or workspace (403).',
 };
 
+/** One fallback account's failure, in a sentence with its HTTP status and what the API said. */
+function stepFailure(e, step) {
+  const kind = e?.kind || 'unknown';
+  const base = step.provider === 'kimi'
+    ? (KIMI_ERROR_TEXT[kind] || API_ERROR_TEXT[kind] || API_ERROR_TEXT.unknown)
+    : (CLAUDE_FALLBACK_ERROR_TEXT[kind] || API_ERROR_TEXT[kind] || API_ERROR_TEXT.unknown).replace('<secret>', step.secret);
+  const detail = typeof e?.detail === 'string' && e.detail ? ` The API said: ${e.detail}` : '';
+  return `${base}${e?.status ? ` (HTTP ${e.status})` : ''}${detail}`;
+}
+
 const KIMI_ERROR_TEXT = {
   authentication: 'the Kimi key was rejected (401). Check the KIMI_API_KEY repository secret.',
   not_found: 'the Kimi model was not found (404). Check that KIMI_MODEL names a model your Kimi account offers.',
@@ -220,18 +230,25 @@ export async function runReview(deps) {
       let failed = e;
       const empty = [e?.mainSkipped ? 'Claude (its monthly review budget is used)' : 'Claude'];
       if (e?.mainSkipped) state.limitations.push(`Claude was not called: ${e.mainSkipped}.`);
+      // A fallback account that cannot be used (a bad key, a key with no
+      // workspace, no rate, its own budget spent) is skipped with its reason,
+      // never the end of the chain: the accounts after it still get their turn.
+      const skipped = [];
+      let onlyBudget = true;
       for (const step of chain) {
         provider = step.provider;
         account = step.label;
         usedModel = step.provider === 'anthropic' ? model : step.model;
         accountId = step.id;
+        recordKey = key;
         // Each account has its own balance, so its own month: bound this
         // step by the per-review cap and by what this account has spent.
         const worst = preflightCost({ inputTokens, maxOutputTokens: config.maxOutputTokens, model: usedModel, rates: state.rates });
         const stepLedger = listing ? readLedger(listing.artifacts, { month, key, listingComplete: listing.complete, account: step.id }) : { spentUsd: 0, duplicate: null, complete: false };
         const allowed = budgetDecision({ worstCaseUsd: worst, maxCostUsd: config.maxCostUsd, monthlyBudgetUsd: config.monthlyBudgetUsd, ledger: stepLedger });
         if (!allowed.allow) {
-          return finish(state, 'budget_refused', `${empty.join(', ')} ${empty.length === 1 ? 'is' : 'are'} out of credit, and ${account} was not called: ${allowed.reason}. No API call was made to ${account}.`);
+          skipped.push(`${account} was not called: ${allowed.reason}`);
+          continue;
         }
         if (usedModel !== model) {
           recordKey = reviewKey({ mergeBase, headSha: pr.head.sha, model: usedModel, config });
@@ -249,16 +266,19 @@ export async function runReview(deps) {
           break;
         } catch (e2) {
           failed = e2;
-          if (!creditExhausted(e2)) break;
-          empty.push(step.label);
+          if (creditExhausted(e2)) { empty.push(step.label); continue; }
+          onlyBudget = false;
+          skipped.push(`${account} failed: ${stepFailure(e2, step)}`);
         }
       }
       if (failed) {
-        failed.emptyAccounts = empty;
-        throw failed;
+        const out = `${empty.join(', ')} ${empty.length === 1 ? 'is' : 'are'} out of credit${skipped.length ? `; ${skipped.join('; ')}` : ''}.`;
+        if (skipped.length && onlyBudget) return finish(state, 'budget_refused', `${out} No API call was made to them.`);
+        throw Object.assign(failed, { chainSummary: out });
       }
       Object.assign(state.facts, { model: usedModel, account: `${account} (credit fallback)`, ...(provider === 'anthropic' ? {} : { effort: 'n/a' }) });
       state.limitations.push(`Reviewed by ${account} (${usedModel}) because ${empty.join(', ')} ${empty.length === 1 ? 'is' : 'are'} out of credit. The next review tries the main Claude account first again.`);
+      if (skipped.length) state.limitations.push(`Skipped on the way: ${skipped.join('; ')}.`);
     }
   } catch (e) {
     const kind = e?.kind || 'unknown';
@@ -268,15 +288,14 @@ export async function runReview(deps) {
     // What the API or the token exchange said, already stripped of anything
     // credential-shaped by the client: the cause, where the kind alone is a guess.
     const detail = typeof e?.detail === 'string' && e.detail ? e.detail : null;
-    const empty = Array.isArray(e?.emptyAccounts) ? e.emptyAccounts : null;
-    const who = !empty ? '' : creditExhausted(e)
-      ? `Every account in the credit fallback chain is out of credit (${empty.join(', ')}). `
-      : `${empty.join(', ')} ${empty.length === 1 ? 'is' : 'are'} out of credit, and the fallback ${account} failed: `;
-    const text = !empty ? (API_ERROR_TEXT[kind] || API_ERROR_TEXT.unknown)
-      : creditExhausted(e) ? 'No review was made; credit has to be added to one of them.'
-      : provider === 'kimi' ? (KIMI_ERROR_TEXT[kind] || API_ERROR_TEXT[kind] || API_ERROR_TEXT.unknown)
-      : (CLAUDE_FALLBACK_ERROR_TEXT[kind] || API_ERROR_TEXT[kind] || API_ERROR_TEXT.unknown).replace('<secret>', `ANTHROPIC_API_KEY_${account.split(' ').pop()}`);
-    return finish(state, 'api_error', `${who}${text}${e?.status ? ` (HTTP ${e.status})` : ''}${detail ? ` The API said: ${detail}` : ''}`, {
+    if (typeof e?.chainSummary === 'string') {
+      // The chain ran out: every account is out of credit, skipped or failed,
+      // each named with its reason above.
+      return finish(state, 'api_error', `No account in the credit fallback chain could review: ${e.chainSummary} Credit has to be added to one of them, or the failing account fixed.`, {
+        record: record('err', 0, { outcome: 'api_error', error_kind: kind, http_status: e?.status ?? null, error_detail: detail, duration_seconds: Number(seconds) }),
+      });
+    }
+    return finish(state, 'api_error', `${API_ERROR_TEXT[kind] || API_ERROR_TEXT.unknown}${e?.status ? ` (HTTP ${e.status})` : ''}${detail ? ` The API said: ${detail}` : ''}`, {
       record: record('err', 0, { outcome: 'api_error', error_kind: kind, http_status: e?.status ?? null, error_detail: detail, duration_seconds: Number(seconds) }),
     });
   }
