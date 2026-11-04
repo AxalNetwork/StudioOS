@@ -12,6 +12,9 @@ import ChannelsTab, { ChannelPill, ConnectionCard } from '../src/pages/cycles/di
 import { CHANNEL_COLUMNS, CHANNEL_DOORS, CHANNEL_PILLS, CONNECTION_PILLS, activityLabel, connectionAction, recorded, channelOptions } from '../src/pages/cycles/distribution/channelsModel.js';
 import { growChannelsApi } from '../src/lib/api/growChannels.js';
 import { formFor, editFor } from '../src/pages/cycles/forms.js';
+import { cyclesWrite } from '../src/lib/api/cycles.js';
+import { formFields, formValues } from '../src/pages/cycles/FormLightbox.jsx';
+import { mountForm, mutationCheck } from './_form_d695.mjs';
 const h = React.createElement;
 const html = (element) => renderToStaticMarkup(h(MemoryRouter, null, element));
 
@@ -81,4 +84,42 @@ test('the tab renders real column order, missing values, venture doors and no in
     for (const d of CHANNEL_DOORS) assert.ok(nodes.some((n) => n.tagName === 'A' && props(n).href === `${d.href}?project_id=7`));
     assert.doesNotMatch(text(container), /Add channel/);
   } finally { await act(async () => root.unmount()); growChannelsApi.channels = previous; restore(); }
+});
+
+const ownerRead = { can_write: true, members: [{ user_id: 2, name: 'Cal' }], connections: [],
+  channels: [{ uid: 'a', name: 'Search', kind: 'ads', status: 'active', owner: { user_id: 2, name: 'Cal', avatar: null }, purpose: 'Reach teams', last_activity: null, results: null, campaigns: [] }] };
+async function verifyOwner({ default: Tab }) {
+  const beforeRead = growChannelsApi.channels; const beforeWrite = cyclesWrite.grow.channelUpdate; const calls = [];
+  growChannelsApi.channels = async () => ownerRead;
+  cyclesWrite.grow.channelUpdate = async (...args) => { calls.push(args); return { uid: 'a' }; };
+  let ui;
+  try {
+    ui = await mountForm(h(Tab, { projectId: 7 }), { phone: true });
+    const edit = ui.nodes().find((n) => ui.props(n)['aria-label'] === 'Edit channel Search'); assert.ok(edit);
+    await act(async () => ui.props(edit).onClick()); await ui.flush();
+    const owner = ui.nodes().find((n) => n.tagName === 'INPUT' && ui.props(n).name === 'owner_user_id' && ui.props(n).value === '2');
+    assert.ok(owner); assert.equal(ui.props(owner).checked, true, 'owner object pre-fills the existing member');
+    assert.equal(ui.props(ui.by('cycle-form-purpose')).value, 'Reach teams');
+    await ui.submit(); assert.equal(calls.length, 1); assert.equal(calls[0][0], 7); assert.equal(calls[0][1], 'a');
+    assert.equal(calls[0][2].owner_user_id, 2); assert.equal(calls[0][2].purpose, 'Reach teams');
+  } finally { if (ui) await ui.unmount(); growChannelsApi.channels = beforeRead; cyclesWrite.grow.channelUpdate = beforeWrite; }
+}
+test('editing from the tab prefills and saves its owner object and purpose; dropping either prefill fails', async () => {
+  const path = 'pages/cycles/distribution/ChannelsTab.jsx'; const source = readFileSync(new URL('../src/' + path, import.meta.url), 'utf8');
+  await mutationCheck(source, path, verifyOwner, [
+    ["owner_user_id: editing.owner?.user_id == null ? '' : String(editing.owner.user_id)", "owner_user_id: ''"],
+    ["purpose: editing.purpose || ''", "purpose: ''"],
+  ]);
+});
+
+test('legacy row editing loads owner defaults from the channel read without requiring an owner field on old rows', async () => {
+  const before = growChannelsApi.channels; growChannelsApi.channels = async () => ownerRead;
+  try {
+    const edit = editFor('grow', 'distribution'); const current = edit.valuesOf({ edit: { uid: 'a', name: 'Search', state: 'active' } });
+    assert.equal(Object.hasOwn(current, 'owner_user_id'), false);
+    const loaded = await edit.loadOptions({}, 7, 'a');
+    const values = formValues(formFields(edit, loaded, current), current);
+    assert.equal(values.owner_user_id, '2'); assert.equal(values.purpose, 'Reach teams');
+    assert.equal(edit.toBody(values).owner_user_id, 2);
+  } finally { growChannelsApi.channels = before; }
 });
