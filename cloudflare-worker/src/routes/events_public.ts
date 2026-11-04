@@ -11,6 +11,7 @@
  * 'published' AND admin_published=1. Unlisted events are reachable by direct
  * slug/invite token only (never listed). Private events are invite-only.
  */
+import { validEventTopics } from '../services/eventTopics';
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { verifyTurnstile } from '../services/turnstile';
@@ -79,6 +80,11 @@ eventsPublic.get('/events', async (c) => {
   if (format) {
     if (!FORMATS.has(format)) return refuse(c, 400, { code: 'invalid_format', message: 'Choose virtual, in person or hybrid.' });
     where.push('location_kind = ?'); binds.push(format);
+  }
+  const topic = c.req.query('topic');
+  if (topic) {
+    if (!validEventTopics([topic])) return c.json({ error: 'bad_topic' }, 400);
+    where.push('EXISTS (SELECT 1 FROM json_each(events.topics_json) WHERE value = ?)'); binds.push(topic);
   }
   const price = c.req.query('price');
   if (price) {
