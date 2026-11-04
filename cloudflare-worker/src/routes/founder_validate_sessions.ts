@@ -90,7 +90,7 @@ import { callList } from '../services/channels/callList';
 import { MEETING_ERRORS, MeetingProviderError } from '../services/channels/meetings';
 import { assertStorageRoom } from '../services/storageRoom';
 
-import { parseOutputs, outputPreferences, preferenceStatement, quoteOutputs, outputStates, enqueueOutputs, isCallOutput } from '../services/callOutputs';
+import { parseOutputs, outputPreferences, preferenceStatement, quoteOutputs, outputStates, retryOutput, isCallOutput } from '../services/callOutputs';
 
 const sessions = new Hono<{ Bindings: Env }>();
 
@@ -168,9 +168,7 @@ sessions.post('/sessions/:id/outputs/:output/retry', async (c) => {
   const output = c.req.param('output');
   if (s.session.created_by_user_id !== s.user.id || s.session.consent_status !== 'given') return notFound('Session');
   if (!isCallOutput(output)) return json({ detail: 'invalid_output' }, 400);
-  await c.env.DB.prepare("UPDATE interview_output_jobs SET status = 'queued' WHERE session_id = ? AND output = ? AND status = 'failed'")
-    .bind(s.session.id, output).run();
-  await enqueueOutputs(c.env, s.session.id);
+  await retryOutput(c.env, s.session.id, output);
   return json({ outputs: await outputStates(c.env, s.session) });
 });
 

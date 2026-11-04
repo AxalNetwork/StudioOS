@@ -1,10 +1,13 @@
 {
   "name": "studioos-claude-review",
   "private": true,
-  "description": "Advisory pull-request review through the Anthropic Messages API. Its own package so the review job installs one dependency, not the root workspace.",
+  "description": "Advisory pull-request review through the Anthropic and OpenAI APIs. Its own package so the review job installs only the pinned review dependencies, not the root workspace.",
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.135.0"
+    "@anthropic-ai/sdk": "0.135.0",
+    "openai": "7.41.0"
   }
 }

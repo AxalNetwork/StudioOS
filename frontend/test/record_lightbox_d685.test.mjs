@@ -904,13 +904,27 @@ test('D4412: default call outputs, estimated tokens and selection sent on Start'
 });
 
 
-test('D4412: malformed output preferences keep the form readable and refuse Start without a quote', async () => {
+test('#4449: unreadable output preferences still allow recording with no AI outputs', async () => {
   const s = spies(); s.props.sessions.outputs = async () => ({});
   const m = await mount(s.props);
   try {
     await m.type('record-name', 'Synthetic interview'); await m.click('record-consents-verbal');
-    assert.match(m.text(), /Unreadable: the extraction estimate/);
-    assert.equal(m.pr(m.by('record-start'))['aria-disabled'], true);
-    await m.click('record-start'); assert.equal(s.calls.open.length, 0);
+    assert.match(m.text(), /output choices could not be read.*No outputs selected.*still start recording/);
+    assert.notEqual(m.pr(m.by('record-start'))['aria-disabled'], true);
+    await m.click('record-start'); assert.deepEqual(s.calls.open[0].outputs, []);
   } finally { await m.unmount(); }
+});
+
+
+test('#4449: a refused AI estimate clears selections, explains why and leaves Start available',async()=>{
+ for(const failure of ['AI assistance is off','Model unavailable']){
+  const s=spies();s.props.sessions.outputs=async(_p,_m,picked)=>({outputs:picked??['pain-points'],quote:{ok:false,message:failure}});
+  const m=await mount(s.props);
+  try{await act(async()=>{await new Promise(r=>setTimeout(r,250));});
+   await m.type('record-name','Synthetic interview');await m.click('record-consents-verbal');
+   assert.ok(m.text().includes(failure));assert.match(m.text(),/No outputs selected/);
+   assert.notEqual(m.pr(m.by('record-start'))['aria-disabled'],true);
+   await m.click('record-start');assert.deepEqual(s.calls.open[0].outputs,[]);
+  }finally{await m.unmount();}
+ }
 });

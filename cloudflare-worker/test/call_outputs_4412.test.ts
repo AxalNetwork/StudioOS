@@ -85,6 +85,7 @@ async function call(env: any, app: any, method: string, path: string, body?: unk
 function setup(reply?: (model: string, input: any) => any) {
  const w = world(reply);
  w.db.exec(mig('202611041353_call_outputs.sql'));
+ w.db.exec(mig('202611041637_call_output_recovery.sql'));
  w.db.exec(mig('489_interview_findings.sql'));
  w.db.exec(`CREATE TABLE interview_session_points (id INTEGER PRIMARY KEY, session_id INTEGER, hypothesis_id INTEGER, text TEXT, sort_order INTEGER, covered_at TEXT, covered_offset_ms INTEGER);`);
  for (const column of ['quote_consent INTEGER','transcript TEXT','transcribed_at TEXT','transcribed_by_model TEXT']) {
@@ -148,7 +149,7 @@ test('live or unconsented sessions run nothing; withdrawal while model runs cann
  assert.equal(rows(w.db, 'interview_output_jobs').length, 0);
  w.db.exec("UPDATE interview_sessions SET consent_status='given' WHERE id=5"); await enqueueOutputs(w.env, 5); await runOutputJob(w.env, job('pain-points'));
  assert.equal(rows(w.db, 'validate_proposals').length, 0);
- assert.equal(rows(w.db, 'interview_output_jobs')[0].status, 'failed');
+ assert.equal(rows(w.db, 'interview_output_jobs')[0].status, 'cancelled');
 });
 
 test('empty is distinct from malformed/failed extraction; retry only runs the failed output', async () => {
@@ -195,4 +196,66 @@ test('setup persists selected outputs and quotes a member-scoped estimate', asyn
  assert.equal(opened.status, 201);
  assert.deepEqual(JSON.parse(opened.json.session.outputs), ['pain-points','market-intelligence']);
  assert.deepEqual(await outputPreferences(w.env, 2, 7), ['pain-points','market-intelligence']);
+});
+
+// S1 post-merge regressions (#4449).
+test('#4449: manual Summarise and Structure run with selected outputs or explicit none', async () => {
+ for (const outputs of [['pain-points'], []]) {
+  const w=setup((_m,input)=>({response: JSON.stringify(input).includes('Summarise one customer')
+   ? JSON.stringify({sentences:[{text:'Manual work hurts.',cites:[{from:0,to:4000}]}]})
+   : JSON.stringify({placements:[candidate('pain_severity',{phrase:'Manual work',severity:'severe'})]})}));
+  w.db.prepare('UPDATE interview_sessions SET outputs=? WHERE id=5').run(JSON.stringify(outputs));
+  const summary=await call(w.env,sessionsApp,'POST','/sessions/5/summarise',{});
+  assert.equal(summary.status,201);
+  assert.match(w.db.prepare('SELECT summary FROM interview_sessions WHERE id=5').get().summary || '',/Manual work hurts/);
+  const structured=await call(w.env,structure,'POST','/sessions/5/structure',{});
+  assert.equal(structured.status,201);
+  assert.equal(rows(w.db,'validate_proposals').length,1);
+  assert.ok(w.calls.length>=2);
+ }
+});
+
+test('#4449: accepting summaries appends both sentences and preserves the stored digest',async()=>{
+ const w=setup(()=>({response:JSON.stringify({placements:[candidate('interview_summary',{text:'First finding.'}),candidate('interview_summary',{text:'Second finding.'})]})}));
+ const before={overview:[{text:'Existing finding.',cite:{from:0,to:4000}}],key_quotes:[{quote:'Manual work hurts.'}],decisions:[{text:'Keep testing.'}],next_steps:[{text:'Ask again.'}],hash:'source-hash',model:'original-model'};
+ w.db.prepare('UPDATE interview_sessions SET outputs=?,summary=?,digest_json=? WHERE id=5').run('["customer-research"]','Existing finding.',JSON.stringify(before));
+ await enqueueOutputs(w.env,5);await runOutputJob(w.env,job('customer-research'));
+ for(const p of rows(w.db,'validate_proposals'))assert.equal((await call(w.env,structure,'POST',`/placements/${p.id}/accept`)).status,200);
+ const saved=w.db.prepare('SELECT summary,digest_json FROM interview_sessions WHERE id=5').get();const digest=JSON.parse(saved.digest_json);
+ assert.deepEqual(digest.overview.map((x:any)=>x.text),['Existing finding.','First finding.','Second finding.']);
+ for(const k of ['key_quotes','decisions','next_steps','hash','model'])assert.deepEqual(digest[k],(before as any)[k]);
+ assert.equal(saved.summary,'Existing finding. First finding. Second finding.');
+});
+
+test('#4449: terminal preflight reasons and stale queued/running retries recover abandoned jobs',async()=>{
+ for(const [change,status,reason] of [
+  ["UPDATE interview_sessions SET consent_status='declined' WHERE id=5",'cancelled','consent_withdrawn'],
+  ["UPDATE projects SET founder_id=999 WHERE id=7",'failed','write_access_lost'],
+  ["UPDATE interview_sessions SET status='recording' WHERE id=5",'failed','session_not_ready'],
+  ["DELETE FROM interview_transcript_segments WHERE session_id=5",'failed','no_transcript'],
+ ] as const){const w=setup();await enqueueOutputs(w.env,5);w.db.exec(change);await runOutputJob(w.env,job('pain-points'));
+  const state=rows(w.db,'interview_output_jobs')[0];assert.equal(state.status,status);assert.equal(state.failure_reason,reason);assert.equal(w.calls.length,0);
+ }
+ for(const status of ['queued','running']){const w=setup();await enqueueOutputs(w.env,5);w.db.prepare("UPDATE interview_output_jobs SET status=?,updated_at=datetime('now','-16 minutes') WHERE output='pain-points'").run(status);
+  const read=await call(w.env,structure,'GET','/sessions/5/placements');assert.equal(read.json.outputs[0].retryable,true);
+  await call(w.env,sessionsApp,'POST','/sessions/5/outputs/pain-points/retry');
+  assert.equal(rows(w.db,'interview_output_jobs')[0].status,'queued');await runOutputJob(w.env,job('pain-points'));assert.equal(rows(w.db,'interview_output_jobs')[0].status,'empty');
+ }
+});
+
+test('#4449: overlapping outputs quote and extract each kind only once',async()=>{
+ const w=setup();
+ const selected=['problem-discovery','pain-points','customer-research','ideal-customer-profile','icp-fit'];
+ const quote=async(outputs:string[])=>call(w.env,sessionsApp,'GET','/sessions/outputs?project_id=7&minutes=30&outputs='+encodeURIComponent(JSON.stringify(outputs)));
+ assert.equal((await quote(['problem-discovery','pain-points'])).json.quote.microusd,(await quote(['pain-points'])).json.quote.microusd);
+ w.db.prepare('UPDATE interview_sessions SET outputs=? WHERE id=5').run(JSON.stringify(selected));
+ await enqueueOutputs(w.env,5);for(const output of selected)await runOutputJob(w.env,job(output));
+ assert.equal(w.calls.length,3);assert.equal(rows(w.db,'interview_output_jobs').every((r:any)=>r.status==='empty'),true);
+});
+
+test('#4449: a deduplicated extraction with nothing stored reports no new proposals',async()=>{
+ const w=setup(()=>({response:JSON.stringify({placements:[candidate('pain_severity',{phrase:'Manual work',severity:'severe'})]})}));
+ await enqueueOutputs(w.env,5);await runOutputJob(w.env,job('pain-points'));
+ w.db.exec("UPDATE interview_output_jobs SET status='queued' WHERE output='pain-points'");await runOutputJob(w.env,job('pain-points'));
+ assert.equal(rows(w.db,'validate_proposals').length,1);assert.equal(rows(w.db,'interview_output_jobs')[0].status,'empty');
 });

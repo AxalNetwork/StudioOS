@@ -11,7 +11,7 @@ import {
   BACKLOG_COLUMNS, BURN_RANGES, BURN_SPLITS, WORK_PURPOSE, WORK_TABS,
   assigneeLine, backlogRows, boardColumns, burnup, canMove, columnLabel, dueLine, moveTargets, needsYou, runChip, runCost, runOutcome, runSheet,
 } from './workModel.js';
-import WorkloadView from './WorkloadView.jsx';
+import WorkloadView, { ScheduleBox } from './WorkloadView.jsx';
 import MyTasks from './MyTasks.jsx';
 import AssignPicker from './AssignPicker.jsx';
 // D1531 (#3742 E8): Goals (TM10), the engine's banner (TM19b) and Start this task (TM19f).
@@ -34,13 +34,46 @@ import './work.css';
 export default function WorkPage() {
   const { id } = useParams();
   const [q, setQ] = useSearchParams();
-  const tab = WORK_TABS.some((t) => t.key === q.get('view')) ? q.get('view') : 'board';
+  const selectedTab = WORK_TABS.some((t) => t.key === q.get('view')) ? q.get('view') : 'board';
   const [project, setProject] = useState(null);
   const [board, setBoard] = useState({ status: 'loading' });
   const boardRead = useRef(0);
   const [burn, setBurn] = useState({ status: 'loading' });
   const [itemUid, setItemUid] = useState(null);
   const [runUid, setRunUid] = useState(null);
+  const requestedItem = q.get('item');
+  const [missingItem, setMissingItem] = useState(false);
+  const tab = missingItem ? 'board' : selectedTab;
+  const openItem = uid => { setItemUid(uid); setQ(previous => { const next = new URLSearchParams(previous); next.set('item', uid); return next; }); };
+  useEffect(() => { setItemUid(null); setRunUid(null); }, [id]);
+  const boardReady = board.status === 'ready' && board.projectId === id;
+  const itemOnBoard = boardReady && board.items.some(it => it.uid === requestedItem);
+  useEffect(() => { setMissingItem(false); }, [requestedItem, id]);
+  useEffect(() => {
+    let live = true;
+    if (!requestedItem) setItemUid(null);
+    // A confirmed sheet owns its state, even when a reload/filter hides its card.
+    else if (requestedItem !== itemUid) {
+      setItemUid(null);
+      if (!boardReady) return;
+      if (itemOnBoard) { setMissingItem(false); setItemUid(requestedItem); }
+      else {
+        // A board filter can hide a real item. Verify its project before opening it.
+        workAdapter.item(requestedItem).then(r => {
+          if (!live) return;
+          if (r.available && r.data?.uid === requestedItem && String(r.data?.project?.id) === String(id)) { setMissingItem(false); setItemUid(requestedItem); }
+          else if (r.available) setMissingItem(true);
+          else setNotice(r.reason);
+        }, e => {
+          if (!live) return;
+          if (e?.status === 404) setMissingItem(true);
+          else setNotice('That task could not be read. Try again.');
+        });
+      }
+    }
+    return () => { live = false; };
+  }, [requestedItem, itemUid, boardReady, itemOnBoard, id]);
+  const closeItem = () => { setItemUid(null); setQ(previous => { const next = new URLSearchParams(previous); next.delete('item'); return next; }); };
   const [filterDraft, setFilterDraft] = useState('');
   const [filter, setFilter] = useState('');
   const [burnQuery, setBurnQuery] = useState({ range: '2w' });
@@ -58,7 +91,7 @@ export default function WorkPage() {
     setBoard({ status: 'loading' });
     try {
       const r = await workAdapter.board(id, { filter });
-      if (read === boardRead.current) setBoard(r.available ? { status: 'ready', items: r.data?.items || [], viewer: r.data?.viewer || null } : { status: 'off', reason: r.reason });
+      if (read === boardRead.current) setBoard(r.available ? { status: 'ready', projectId: id, items: r.data?.items || [], viewer: r.data?.viewer || null } : { status: 'off', reason: r.reason });
     } catch {
       if (read === boardRead.current) setBoard({ status: 'error' });
     }
@@ -102,6 +135,11 @@ export default function WorkPage() {
     load();
     setBurnReload((v) => v + 1);
   }, [id, load]);
+
+  const refreshAfterSheet = useCallback(() => {
+    load();
+    setBurnReload((v) => v + 1);
+  }, [load]);
 
   const name = project?.name || 'this project';
   const company = project?.company_name || project?.company?.name || null;
@@ -154,18 +192,19 @@ export default function WorkPage() {
       ) : null}
 
       {adding ? <NewItem onCreate={create} onCancel={() => setAdding(false)} /> : null}
+      {missingItem ? <p role="status" data-testid="work-item-missing">That task wasn't found.</p> : null}
       {notice ? <p className="wk-notice" role="status" data-testid="work-notice">{notice}</p> : null}
-      {board.status === 'ready' && tab === 'board' ? <Board items={board.items} viewer={board.viewer} onOpen={setItemUid} onMove={move} /> : null}
-      {board.status === 'ready' && tab === 'backlog' ? <Backlog items={board.items} onOpen={setItemUid} projectId={id} /> : null}
+      {board.status === 'ready' && tab === 'board' ? <Board items={board.items} viewer={board.viewer} onOpen={openItem} onMove={move} onRun={setRunUid} /> : null}
+      {board.status === 'ready' && tab === 'backlog' ? <Backlog items={board.items} onOpen={openItem} projectId={id} /> : null}
       {tab === 'burnup' ? <Burnup series={burn.series} status={burn.status} reason={burn.reason} message={burn.message}
         range={burnQuery.from ? 'custom' : burnQuery.range} appliedFrom={burnQuery.from} appliedTo={burnQuery.to} onRange={setBurnQuery} split={split} onSplit={setSplit}
         onRetry={() => setBurnReload((v) => v + 1)} /> : null}
       {/* D1614 W8 (#3994): My items is My tasks narrowed to this project. */}
       {tab === 'mine' ? <MyTasks licence="founder" project={id} title="My items" testId="work-mine" /> : null}
-      {tab === 'workload' ? <WorkloadView projectId={id} onOpenItem={setItemUid} onNotice={setNotice} /> : null}
+      {tab === 'workload' ? <WorkloadView projectId={id} onOpenItem={openItem} onNotice={setNotice} /> : null}
       {tab === 'goals' ? <GoalsView scope="project" id={id} canManage={!!board.viewer?.can_manage} /> : null}
 
-      {itemUid ? <ItemSheet uid={itemUid} projectId={id} onClose={() => setItemUid(null)} onRun={setRunUid} onAssigned={load} /> : null}
+      {itemUid ? <ItemSheet key={itemUid} uid={itemUid} projectId={id} viewer={board.viewer} onClose={closeItem} onRun={setRunUid} onAssigned={refreshAfterSheet} /> : null}
       {runUid ? <RunSheet uid={runUid} onClose={() => setRunUid(null)} /> : null}
     </div>
   );
@@ -188,18 +227,22 @@ function NewItem({ onCreate, onCancel }) {
  * this reader may move is draggable to a column; any other card is not, and
  * has no Move menu. Without `viewer` (a board read before #3973) nothing moves.
  */
-export function Board({ items, onOpen, onMove, viewer = null }) {
-  const cols = boardColumns(items);
+export function Board({ items, onOpen, onMove, onRun, viewer = null }) {
+  const [reviewOnly, setReviewOnly] = useState(false);
+  const cols = boardColumns(reviewOnly ? items.filter(it => it.run?.status === 'waiting') : items);
+  const failed = items.map(it => it.run).filter(r => r?.status === 'failed' && r.uid).sort((a, b) => (Date.parse(b.ended_at || b.started_at) || 0) - (Date.parse(a.ended_at || a.started_at) || 0))[0];
   const needs = needsYou(items);
+  const reviewCount = items.filter(it => it.run?.status === 'waiting').length;
   return (
     <>
-      {needs ? (
+      {needs || reviewCount ? (
         <div className="wk-needs" role="status" data-testid="work-needs-you">
-          <b>Needs you</b><span>{needs.line}</span>
-          {needs.review ? <button type="button" className={BTN_SECONDARY}>{needs.review}</button> : null}
-          {needs.failed ? <button type="button" className={BTN_TEXT}>See the failed run</button> : null}
+          <b>Needs you</b><span>{needs?.line || 'Items waiting for review.'}</span>
+          {needs?.review || reviewCount ? <button type="button" className={BTN_SECONDARY} onClick={() => setReviewOnly(true)} data-testid="work-needs-review">{needs?.review || `Review ${reviewCount} ${reviewCount === 1 ? 'item' : 'items'}`}</button> : null}
+          {needs?.failed ? <button type="button" className={BTN_TEXT} disabled={!failed} onClick={() => { if (failed) onRun?.(failed.uid); }} data-testid="work-needs-failed">See the failed run</button> : null}
         </div>
       ) : null}
+      {reviewOnly ? <button type="button" className={BTN_TEXT} onClick={() => setReviewOnly(false)} data-testid="work-review-clear">Show all items</button> : null}
       <div className="wk-board" data-testid="work-board">
         {cols.map((c) => (
           <section key={c.key} className="wk-col" data-tone={c.tone} aria-label={`${c.label}, ${c.count}`} data-testid={`work-col-${c.key}`}
@@ -328,9 +371,21 @@ export function Burnup({ series, status = 'ready', reason, message, range = '2w'
 const Tile = ({ k, v }) => <div className="wk-tile"><span>{k}</span><b>{v}</b></div>;
 
 /** WK4: the item sheet. Its read is #3969's; until then it says so. */
-export function ItemSheet({ uid, projectId = null, onClose, onRun, onAssigned }) {
+export function ItemSheet({ uid, projectId = null, viewer = null, onClose, onRun, onAssigned }) {
   const [state, setState] = useState({ status: 'loading' });
   const [picking, setPicking] = useState(false);
+  const [moving, setMoving] = useState(false);
+  const [schedule, setSchedule] = useState(null);
+  const [notice, setNotice] = useState(null);
+  const doMove = async column => {
+    setNotice(null);
+    try {
+      const r = await workAdapter.move(uid, column);
+      if (!r.available) { setNotice(r.reason); return; }
+      if (r.data) setState({ status: 'ready', item: r.data });
+      setMoving(false); onAssigned?.(r.data);
+    } catch (e) { setNotice(e?.message || 'That move did not go through. Nothing changed.'); }
+  };
   useEffect(() => {
     let live = true;
     workAdapter.item(uid).then((r) => { if (live) setState(r.available ? { status: 'ready', item: r.data } : { status: 'off', reason: r.reason }); }, () => { if (live) setState({ status: 'error' }); });
@@ -341,8 +396,11 @@ export function ItemSheet({ uid, projectId = null, onClose, onRun, onAssigned })
   const assigned = (task) => { if (task) setState({ status: 'ready', item: task }); setPicking(false); onAssigned?.(task); };
   return (
     <Sheet title={it?.title || 'Item'} onClose={onClose} width={560} testId="work-item-sheet"
-      footer={it ? <><button type="button" className={BTN_PRIMARY} onClick={() => setPicking((v) => !v)} disabled={projectId == null} data-testid="work-item-assign">Assign</button><button type="button" className={BTN_SECONDARY}>Move ▾</button><button type="button" className={BTN_SECONDARY}>Schedule</button></> : null}>
+      footer={it ? <><button type="button" className={BTN_PRIMARY} onClick={() => setPicking((v) => !v)} disabled={projectId == null} data-testid="work-item-assign">Assign</button><>{canMove(it, viewer) ? <><button type="button" className={BTN_SECONDARY} onClick={() => setMoving(v => !v)} data-testid="work-item-move">Move ▾</button><button type="button" className={BTN_SECONDARY} onClick={() => setSchedule({ item: it, day: '', from: '09:00', to: '11:00' })} data-testid="work-item-schedule">Schedule</button></> : null}</></> : null}>
       {it && picking && projectId != null ? <AssignPicker projectId={projectId} taskUid={uid} current={it.assignee} onAssigned={assigned} onCancel={() => setPicking(false)} /> : null}
+      {notice ? <p role="status">{notice}</p> : null}
+      {it && moving && canMove(it, viewer) ? <div aria-label="Move item">{moveTargets(it).map(t => <button key={t.key} type="button" className={BTN_TEXT} data-testid={`work-item-move-${t.key}`} onClick={() => doMove(t.key)}>{t.label}</button>)}</div> : null}
+      {schedule && canMove(it, viewer) ? <ScheduleBox s={schedule} onChange={setSchedule} onDone={message => { setSchedule(null); setNotice(message); onAssigned?.(); }} /> : null}
       {state.status === 'off' ? <HonestBlock>{state.reason}</HonestBlock> : null}
       {state.status === 'error' ? <HonestBlock role="alert">This item could not be read.</HonestBlock> : null}
       {it ? (
