@@ -81,7 +81,11 @@ import { request } from '../api.js';
 const enc = encodeURIComponent;
 const base = (scope, id) => `/teams/${enc(scope)}/${enc(id)}`;
 
+// D4422: GET/PUT /api/teams/:scope/:id/allowlists. Null lists retain defaults; [] denies all.
+// GET includes model/tool choices, effective scope, inheritance and can_manage. PUT is manage-only and audited.
 export const teamAgentsApi = {
+  readAllowlists: (scope, id) => request(`${base(scope, id)}/allowlists`),
+  saveAllowlists: (scope, id, lists) => request(`${base(scope, id)}/allowlists`, { method: 'PUT', body: JSON.stringify(lists) }),
   roles: () => request('/teams/roles'),
   personas: () => request('/teams/personas'),
   listAgents: (scope, id, { include, module } = {}) => {

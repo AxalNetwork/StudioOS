@@ -37,6 +37,7 @@
  * asks all of it again on every call. A tool's name is stable; a breaking
  * change registers `<name>_v2` beside it.
  */
+import { agentMcpRefusal, type AgentMcpContext } from '../services/agents/allowlists';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/cfworker';
@@ -258,7 +259,7 @@ export async function listedTools(env: Env, props: GrantProps, scope: readonly s
  * no member's call changes; `policy` is the server's own, and only tests pass
  * another.
  */
-export async function callTool(env: Env, props: GrantProps, grantId: string | null, tool: McpTool, args: Record<string, unknown>, scope: readonly string[] = [], policy: MeteringPolicy = METERING_POLICY) {
+export async function callTool(env: Env, props: GrantProps, grantId: string | null, tool: McpTool, args: Record<string, unknown>, scope: readonly string[] = [], policy: MeteringPolicy = METERING_POLICY, agentContext?: AgentMcpContext) {
   const executionId = newExecutionId();
   // D1315: the ledger, the call log and the price keep the tool's stored name.
   const recorded = tool.storedAs ?? tool.name;
@@ -284,6 +285,11 @@ export async function callTool(env: Env, props: GrantProps, grantId: string | nu
   };
   try {
     user = await grantUser(env, props);
+    if (agentContext) {
+      if (tool.readOnly === false) throw new ToolRefused('Agents can only use read-only MCP tools.', 'tool_not_allowed');
+      const denied = await agentMcpRefusal(env, user.id, agentContext, tool.name);
+      if (denied) throw new ToolRefused(denied.message, denied.code);
+    }
     stage = 'scope';
     if (!scope.includes(tool.requiredScope)) {
       throw new ToolRefused(props.keyUid
@@ -393,7 +399,7 @@ export function toolAliases(tools: readonly McpTool[]): Map<string, string> {
   return out;
 }
 
-export async function createServer(env: Env, props: GrantProps, grantId: string | null, scope: readonly string[] = []): Promise<McpServer> {
+export async function createServer(env: Env, props: GrantProps, grantId: string | null, scope: readonly string[] = [], agentContext?: AgentMcpContext): Promise<McpServer> {
   const server = new McpServer({ name: 'StudioOS', version: '1.0.0' }, { jsonSchemaValidator: new CfWorkerJsonSchemaValidator() });
   const { tools, refusal } = await listedTools(env, props, scope);
   for (const tool of tools) {
@@ -403,7 +409,7 @@ export async function createServer(env: Env, props: GrantProps, grantId: string 
       inputSchema: tool.inputSchema,
       annotations: { readOnlyHint: tool.readOnly !== false, destructiveHint: false, openWorldHint: false },
       _meta: toolMeta(tool),
-    }, (async (args: Record<string, unknown>) => callTool(env, props, grantId, tool, args ?? {}, scope)) as any);
+    }, (async (args: Record<string, unknown>) => callTool(env, props, grantId, tool, args ?? {}, scope, METERING_POLICY, agentContext)) as any);
   }
   // With nothing listed the SDK never installs its tool handlers; install them so tools/list answers [].
   if (!tools.length) (server as unknown as { setToolRequestHandlers(): void }).setToolRequestHandlers();
@@ -413,7 +419,12 @@ export async function createServer(env: Env, props: GrantProps, grantId: string 
 
 /** A fresh stateless server for one authenticated request, OAuth grant or member API key alike (D842). */
 export async function serveMcp(request: Request, env: Env, props: GrantProps, grantId: string | null, scope: readonly string[]): Promise<Response> {
-  const server = await createServer(env, props, grantId, scope);
+  const agent = request.headers.get('X-Axal-Agent');
+  const integration = request.headers.get('X-Axal-Integration');
+  if ((agent !== null || integration !== null) && (!agent || !/^[A-Za-z0-9_-]{1,128}$/.test(agent) || !integration || !/^[A-Za-z0-9_-]{1,128}$/.test(integration))) {
+    return Response.json({ error: 'agent_context_invalid', message: 'Supply both the agent and its MCP connection.' }, { status: 400 });
+  }
+  const server = await createServer(env, props, grantId, scope, agent && integration ? { agent_uid: agent, integration_uid: integration } : undefined);
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
   await server.connect(transport);
   return transport.handleRequest(request);
