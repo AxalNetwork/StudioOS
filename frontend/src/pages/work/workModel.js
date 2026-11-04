@@ -64,7 +64,7 @@ export function assigneeLine(item) {
 /** The last run's chip (WK1): its words, and the cost so far or charged. */
 export function runChip(run) {
   if (!run || !run.status) return null;
-  const words = { completed: 'Completed', failed: 'Failed', waiting: 'Waiting for you', running: 'Running', skipped: 'Skipped', cancelled: 'Cancelled' }[run.status];
+  const words = { completed: 'Completed', failed: 'Failed', waiting: 'Waiting for you', running: 'Running' }[run.status];
   if (!words) return null;
   const c = num(run.charged_microusd);
   const cost = c == null ? null : `${money(c)}${run.status === 'running' ? ' so far' : ''}`;

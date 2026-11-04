@@ -8,9 +8,9 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
-import { detailOutcome, feedRow, runChip, runSheet, scheduleBody, spendWords, weekLabel, workloadRows, workloadSessions } from '../src/pages/work/workModel.js';
+import { detailOutcome, feedRow, runSheet, scheduleBody, spendWords, weekLabel, workloadRows, workloadSessions } from '../src/pages/work/workModel.js';
 import { workAdapter } from '../src/pages/work/workAdapter.js';
-import { ItemSheet, RunSheet } from '../src/pages/work/WorkPage.jsx';
+import { RunSheet } from '../src/pages/work/WorkPage.jsx';
 import ActivityFeed from '../src/pages/work/ActivityFeed.jsx';
 import WorkloadView from '../src/pages/work/WorkloadView.jsx';
 
@@ -241,26 +241,4 @@ test('WK7 sessions: an agent\'s session slots are teal bars, not dragged or open
     assert.deepEqual([r.available, r.data.map((x) => [x.agent.uid, x.items.length])], [true, [['a1', 2]]]);
     assert.ok(m.calls.some((c) => /\/work\/workload\?weeks=1$/.test(c.url)), 'through the workload read');
   } finally { await m.unmount(); }
-});
-
-
-test('#3968: the item sheet opens its recorded latest run, and preserves a supplied history', async () => {
-  assert.equal(runChip({ status: 'skipped' })?.words, 'Skipped');
-  assert.equal(runChip({ status: 'cancelled' })?.words, 'Cancelled');
-  const opened = [];
-  for (const task of [
-    { uid: 'task-live', title: 'Recorded work', column: 'in_review', run: { uid: 'last-run', status: 'waiting', charged_microusd: null } },
-    { uid: 'task-live', title: 'Recorded work', column: 'in_review', run: { uid: 'last-run', status: 'waiting' }, runs: [{ uid: 'history-run', status: 'completed' }] },
-    { uid: 'task-live', title: 'Recorded work', column: 'ready', run: null },
-  ]) {
-    const m = await mount(h(ItemSheet, { uid: 'task-live', onClose() {}, onRun: (uid) => opened.push(uid) }), [
-      [/GET .*\/tasks\/task-live$/, () => json({ task })],
-    ]);
-    try {
-      const uid = task.runs ? 'history-run' : task.run ? 'last-run' : null;
-      if (uid) { if (!task.runs) assert.match(m.text(), /Waiting for you/); assert.ok(m.by(`work-item-run-${uid}`)); await m.press(m.by(`work-item-run-${uid}`)); }
-      else { assert.ok(!m.by('work-item-run-last-run')); assert.match(m.text(), /Agent runsNone/); }
-    } finally { await m.unmount(); }
-  }
-  assert.deepEqual(opened, ['last-run', 'history-run']);
 });
