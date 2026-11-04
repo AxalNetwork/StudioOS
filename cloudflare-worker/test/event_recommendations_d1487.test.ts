@@ -11,6 +11,9 @@ import eventsPublic from '../src/routes/events_public.ts';
 import { RECOMMENDATION_DEPS, cosine } from '../src/services/eventRecommendations.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { AI_BUDGET_MIGRATION, AI_LOG_SCHEMA, setFixtureAllowance } from './_ai_budget_fixture.mjs';
+import { withGuard } from './_guard_stub.mjs';
+import { __resetForTest, run as runAI } from '../src/services/aiRouter.ts';
 import { tableFromBaseline } from './_baseline.mjs';
 const SECRET = 'synthetic-3724-event-recommendation-secret';
 function table(name: string) {
@@ -119,10 +122,10 @@ test('Explain quote runs no model; paid run uses caller reasons and a fixed even
     f.db.exec("INSERT INTO ai_usage_logs(id,user_id,task,model,charged_microusd) VALUES (1,2,'rail_match','synthetic',75)");
     EVENT_REC_AI.run=async(_env:any,o:any)=>{runs++;opts.push(o);return {ok:true,output:'Your recorded round matches the fundraising topic.',usage:{} as any,usageLogId:1} as any;};
     const quote=await f.call('/api/events/1/recommendation/explain/quote',2,'POST');assert.equal(quote.status,200);assert.equal(quote.body.hold_microusd,120);assert.equal(runs,0);assert.equal(quotes,1);
-    const run=await f.call('/api/events/1/recommendation/explain',2,'POST',{user_id:7,reasons:['Secret Series Z']});assert.equal(run.status,200);assert.equal(run.body.charged_microusd,75);assert.equal(run.body.usage_log_id,1);assert.equal(runs,1);assert.equal(opts[1].userId,2);assert.equal(opts[1].rail.page,EVENT_REC_PAGE);assert.equal(opts[1].rail.record,'event:1');assert.ok(!JSON.stringify(opts).includes('Secret Series Z'));
+    const run=await f.call('/api/events/1/recommendation/explain',2,'POST',{quote_uid:quote.body.quote_uid,user_id:7,reasons:['Secret Series Z']});assert.equal(run.status,200);assert.equal(run.body.charged_microusd,75);assert.equal(run.body.usage_log_id,1);assert.equal(runs,1);assert.equal(opts[1].userId,2);assert.equal(opts[1].rail.page,EVENT_REC_PAGE);assert.equal(opts[1].rail.record,'event:1');assert.ok(!JSON.stringify(opts).includes('Secret Series Z'));
     assert.equal((await f.call('/api/events/1/recommendation/explain',2,'POST',{},true)).status,403);assert.equal(runs,1);
     f.db.prepare("INSERT INTO ai_rail_preferences(uid,user_id,section,task,mode) VALUES ('synthetic-off',?,?,'','manual')").run(2,EVENT_REC_PAGE.toLowerCase());assert.equal((await f.call('/api/events/1/recommendation/explain/quote',2,'POST')).status,403);assert.equal(runs,1);assert.equal((await f.call('/api/events/recommended')).status,200);
-    f.db.exec('DELETE FROM ai_rail_preferences');EVENT_REC_AI.quote=async()=>({ok:false,refusal:'budget_user_day',error:'synthetic'} as any);assert.equal((await f.call('/api/events/1/recommendation/explain/quote',2,'POST')).status,402);for(const [refusal,status] of [['budget_user_day',402],['ai_paused',403],['guard_blocked',422],['guard_unavailable',503]] as const){ EVENT_REC_AI.run=async()=>({ok:false,refusal,error:'synthetic'} as any);assert.equal((await f.call('/api/events/1/recommendation/explain',2,'POST')).status,status); }
+    f.db.exec('DELETE FROM ai_rail_preferences');EVENT_REC_AI.quote=async()=>({ok:false,refusal:'budget_user_day',error:'synthetic'} as any);assert.equal((await f.call('/api/events/1/recommendation/explain/quote',2,'POST')).status,402);EVENT_REC_AI.quote=async()=>({ok:true,hold_microusd:120,model:'synthetic'});for(const [refusal,status] of [['budget_user_day',402],['ai_paused',403],['guard_blocked',422],['guard_unavailable',503]] as const){ EVENT_REC_AI.run=async()=>({ok:false,refusal,error:'synthetic'} as any);assert.equal((await f.call('/api/events/1/recommendation/explain',2,'POST',{quote_uid:quote.body.quote_uid})).status,status); }
   }finally{Object.assign(EVENT_REC_AI,original);f.db.close();}
 });
 
@@ -136,4 +139,99 @@ test('migration 709 cascades member-private preferences/feedback/vectors and del
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM event_rec_vectors').get()!.n,1);
   db.exec('DELETE FROM events WHERE id=1');assert.equal(db.prepare('SELECT COUNT(*) AS n FROM event_rec_vectors').get()!.n,0);
  }finally{db.close();}
+});
+
+// D4450: a paid explanation survives an unavailable receipt; null is not a zero charge.
+test('Explain retains generated text when the post-charge receipt read fails', async () => {
+  const f = fixture(); const original = { ...EVENT_REC_AI };
+  try {
+    EVENT_REC_AI.quote = async () => ({ ok: true, hold_microusd: 120, model: 'synthetic' } as any);
+    EVENT_REC_AI.run = async () => ({ ok: true, output: 'Your recorded round matches this event.', usage: {}, usageLogId: 1 } as any);
+    f.db.exec("INSERT INTO ai_usage_logs(id,user_id,task,model,charged_microusd) VALUES (1,2,'rail_match','synthetic',75)");
+    const quote = await f.call('/api/events/1/recommendation/explain/quote', 2, 'POST');
+    const body = { quote_uid: quote.body.quote_uid };
+    const charged = await f.call('/api/events/1/recommendation/explain', 2, 'POST', body);
+    assert.equal(charged.status, 200);
+    assert.equal(charged.body.charged_microusd, 75);
+    const freshQuote = await f.call('/api/events/1/recommendation/explain/quote', 2, 'POST');
+    const DB = f.env.DB;
+    f.env.DB = { ...DB, prepare(sql: string) {
+      const stmt = DB.prepare(sql);
+      if (sql.startsWith('SELECT charged_microusd FROM ai_usage_logs')) {
+        return { bind(...args: any[]) { stmt.bind(...args); return { async first() { throw new Error('synthetic receipt outage'); } }; } };
+      }
+      return stmt;
+    } };
+    const unreadable = await f.call('/api/events/1/recommendation/explain', 2, 'POST', { quote_uid: freshQuote.body.quote_uid });
+    assert.equal(unreadable.status, 200, JSON.stringify(unreadable.body));
+    assert.deepEqual(unreadable.body, { text: 'Your recorded round matches this event.', usage_log_id: 1, charged_microusd: null });
+  } finally { Object.assign(EVENT_REC_AI, original); f.db.close(); }
+});
+
+// The real router/ledger proves that carrying the quote identity prevents a second hold and charge.
+test('Explain retries reuse one paid run; quote expiry and changed member/event/input/price refuse before a charge', async () => {
+  const f = fixture(); const original = { ...EVENT_REC_AI }; const embed = RECOMMENDATION_DEPS.embed;
+  __resetForTest();
+  try {
+    const sql = (name: string) => readFileSync(new URL('../sql/migrations/'+name,import.meta.url),'utf8');
+    f.db.exec('DROP TABLE ai_usage_logs'); f.db.exec(AI_LOG_SCHEMA);
+    f.db.exec(AI_BUDGET_MIGRATION + ['510_member_ai_pauses.sql','525_ai_reservation_idempotency.sql','632_ai_hold_context.sql'].map(sql).join('\n'));
+    setFixtureAllowance(f.db, 0);
+    f.db.exec("UPDATE users SET subscription_tier='growth',subscription_status='active' WHERE id IN (2,7); INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES (2,5000000),(7,5000000)");
+    f.db.exec('UPDATE users SET founder_id=20 WHERE id=7; DELETE FROM assessment_results WHERE user_id IN (2,7)');
+    let calls = 0;
+    f.env.AI = withGuard({ run: async () => { calls++; return { response: 'Your recorded round matches this event.', usage: { prompt_tokens: 40, completion_tokens: 10 } }; } });
+    RECOMMENDATION_DEPS.embed = async () => new Array(768).fill(1);
+    EVENT_REC_AI.run = runAI;
+    const beforeQuote = Date.now();
+    const quote = await f.call('/api/events/1/recommendation/explain/quote',2,'POST');
+    const afterQuote = Date.now();
+    assert.equal(quote.status,200,JSON.stringify(quote.body));
+    assert.equal(Date.parse(quote.body.expires_at),parseInt(quote.body.quote_uid.split('.')[0],36));
+    assert.ok(Date.parse(quote.body.expires_at)>=beforeQuote+10*60_000 && Date.parse(quote.body.expires_at)<=afterQuote+10*60_000,'the existing deck quote lifetime is ten minutes');
+    const body = {quote_uid:quote.body.quote_uid};
+    const balance = () => Number(f.db.prepare('SELECT balance_microusd FROM ai_topup_accounts WHERE user_id=2').get()!.balance_microusd);
+    const holds = () => f.db.prepare('SELECT COUNT(*) AS n FROM ai_budget_reservations').get()!.n;
+    const rejected = async (payload: unknown, event = 1, user = 2) => {
+      const r = await f.call(`/api/events/${event}/recommendation/explain`,user,'POST',payload);
+      assert.equal(r.status,409,JSON.stringify(r.body));
+      assert.equal(r.body.message,'This price has expired. Get a new quote.');
+      assert.deepEqual([calls,holds(),balance()],[0,0,5000000]);
+    };
+    await rejected({});
+    const [,signature] = body.quote_uid.split('.');
+    await rejected({quote_uid:(Date.now()-1).toString(36)+'.'+signature});
+    await rejected({quote_uid:body.quote_uid.replace(/.$/, (v: string) => v === '0' ? '1' : '0')});
+    await rejected(body,2);
+    await rejected(body,1,7);
+    f.db.exec("UPDATE events SET summary='Synthetic venture worksh0p' WHERE id=1");
+    await rejected(body);
+    f.db.exec("UPDATE events SET summary='Synthetic venture workshop' WHERE id=1");
+    const quoteFn = EVENT_REC_AI.quote;
+    EVENT_REC_AI.quote = async (env,opts) => { const q = await quoteFn(env,opts); return q.ok ? {...q,hold_microusd:q.hold_microusd+1} : q; };
+    await rejected(body);
+    EVENT_REC_AI.quote = quoteFn;
+    const first = await f.call('/api/events/1/recommendation/explain',2,'POST',body);
+    assert.equal(first.status,200,JSON.stringify(first.body));
+    assert.equal(first.body.text,'Your recorded round matches this event.');
+    assert.equal(calls,1);
+    assert.ok(balance()<5000000,'the first run charged actual top-up tokens');
+    assert.equal(first.body.charged_microusd,5000000-balance());
+    assert.ok(Number.isSafeInteger(first.body.usage_log_id) && first.body.usage_log_id>0);
+    const usageRows = () => f.db.prepare("SELECT COUNT(*) AS n FROM ai_usage_logs WHERE task='rail_match'").get()!.n;
+    assert.equal(usageRows(),1);
+    const chargedBalance = balance(); const held = holds();
+    const again = await f.call('/api/events/1/recommendation/explain',2,'POST',body);
+    assert.deepEqual([again.status,again.body.error],[409,'step_replayed']);
+    assert.equal(usageRows(),1,'a replay writes no second charged usage row');
+    assert.deepEqual([calls,holds(),balance()],[1,held,chargedBalance],'a retry takes no second hold or charge');
+    const key = f.db.prepare("SELECT idempotency_key FROM ai_budget_reservations WHERE operation='ai.rail_match'").get()!.idempotency_key;
+    assert.equal(key,`event-explain:2:1:${body.quote_uid}`);
+    const fresh = await f.call('/api/events/1/recommendation/explain/quote',2,'POST');
+    assert.notEqual(fresh.body.quote_uid,body.quote_uid);
+    const next = await f.call('/api/events/1/recommendation/explain',2,'POST',{quote_uid:fresh.body.quote_uid});
+    assert.equal(next.status,200,JSON.stringify(next.body));
+    assert.equal(calls,2,'a fresh displayed quote can start a new paid run');
+    assert.ok(balance()<chargedBalance);
+  } finally { Object.assign(EVENT_REC_AI,original);RECOMMENDATION_DEPS.embed=embed;__resetForTest();f.db.close(); }
 });
