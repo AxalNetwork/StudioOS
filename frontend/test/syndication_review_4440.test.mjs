@@ -214,6 +214,25 @@ test('7: a failed reconnect keeps the refusal and disconnected state, so retry i
   } finally { await page.close(); }
 });
 
+test('review: successful reconnect replaces the card while its refresh waits or fails', async () => {
+  for (const fails of [false, true]) {
+    let calls = 0, resolveRefresh, rejectRefresh;
+    const accounts = (name) => ({ channels: ['eventbrite', 'google_business', 'linkedin', 'facebook'].map((channel) => ({ channel, adapter_ready: channel === 'eventbrite', auth: 'oauth', account: channel === 'eventbrite' ? { uid: 'acc', display_name: name, status: 'active' } : null })) });
+    const api = { channels: () => ++calls === 1 ? Promise.resolve(accounts('Initial account')) : new Promise((resolve, reject) => { resolveRefresh = resolve; rejectRefresh = reject; }),
+      disconnect: async () => ({}), connect: async () => ({ account: { uid: 'new-account' } }) };
+    const page = await mounted(h(Channels, { api }));
+    try {
+      await page.click('syndication-connect-eventbrite'); await page.click('syndication-account-confirm-eventbrite');
+      assert.match(page.text(), /Reading channels/);
+      assert.equal(page.find('syndication-connect-eventbrite'), undefined);
+      await act(async () => { if (fails) rejectRefresh(Error('Refresh failed')); else resolveRefresh(accounts('Reconnected account')); await new Promise((resolve) => setTimeout(resolve, 0)); });
+      if (fails) assert.match(page.text(), /Unreadable/);
+      else assert.match(page.text(), /Reconnected account/);
+      assert.doesNotMatch(page.text(), /now disconnected/i);
+    } finally { await page.close(); }
+  }
+});
+
 test('8: ticket links trim before the Worker regex and invalid internal whitespace has an inline error', async () => {
   const valid = row('eb', { overrides: { ticket_url: ' https://tickets.synthetic.test/path ' } });
   assert.equal(copyInvalid(valid), false);
