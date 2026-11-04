@@ -17,6 +17,8 @@ import { useToast } from '../../components/useToast';
 import PageExplainer from '../../components/PageExplainer';
 import EventQRCode from '../../components/events/EventQRCode';
 import { CheckInSheet, PhoneUpcoming } from './MyEventsPhone';
+import RecommendedRow from './RecommendedRow';
+import * as recommendations from './recommendationsAdapter';
 import { PHONE_ROOT } from './myEventsPhoneModel';
 import { Unreadable } from '../../ui';
 import RankByFit from '../../ui/RankByFit';
@@ -62,6 +64,29 @@ function useSuggestedEvents() {
   return { ...state, reload: () => setRevision(n => n + 1) };
 }
 
+/** D3724 (ME1, ME10): the recommendation read, through the adapter; its own block, retried on its own. */
+function useRecommended() {
+  const [state, setState] = useState({ status: 'loading', data: null });
+  const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    setState({ status: 'loading', data: null });
+    Promise.resolve().then(() => recommendations.recommended({ limit: 8 }))
+      .then(data => { if (alive) setState({ status: 'ready', data }); })
+      .catch(() => { if (alive) setState({ status: 'error', data: null }); });
+    return () => { alive = false; };
+  }, [revision]);
+  return { ...state, reload: () => setRevision(n => n + 1) };
+}
+
+/** D3724: the row's writes, each through the adapter (D1487, D1488). */
+const RECOMMEND_ACT = {
+  feedback: (id, body) => recommendations.feedback(id, body),
+  explainQuote: (id) => recommendations.explainQuote(id),
+  explain: (id) => recommendations.explain(id),
+  savePrefs: (p) => recommendations.savePrefs(p),
+};
+
 export default function MyEventsPage() {
   const [hosting, setHosting] = useState([]);
   const [attending, setAttending] = useState([]);
@@ -102,6 +127,7 @@ export default function MyEventsPage() {
 
   useEffect(() => { load(); }, [load]);
   const suggested = useSuggestedEvents();
+  const recommended = useRecommended();
   // #3938 (LE10): Rank by fit orders the suggestions by meaning, with one line each, as a view.
   const [eventsRank, setEventsRank] = useState(null);
   useEffect(() => { setEventsRank(null); }, [suggested.data]);
@@ -190,6 +216,7 @@ export default function MyEventsPage() {
   );
   const body = tab === 'discover' ? (
       <DiscoverTabFull api={api} held={held} invitations={invites} suggested={tips} suggestionsRead={suggested} now={now}
+        recommended={(fallback) => <RecommendedRow read={recommended} act={RECOMMEND_ACT} explorer={explorer} layout="grid" fallback={fallback} />}
         onRegistered={changed} onAccept={(inv) => setAnswer({ invitation: inv, action: 'accept' })} />
     ) : loading ? (
       <Reading />
@@ -208,7 +235,7 @@ export default function MyEventsPage() {
         onPick={(t, it) => (it.key === 'ticket' || it.key === 'cancel' ? navigate(ticketPath(t.id)) : null)} />
     ) : (
       <UpcomingTab attending={attending} hosting={explorer ? [] : hosting} invitations={invites} invitationsRead={invitations} feed={feed}
-        suggested={tips} suggestionsRead={suggested} suggestRank={suggestRank} explorer={explorer} now={now} api={api}
+        suggested={tips} suggestionsRead={suggested} suggestRank={suggestRank} recommended={recommended} explorer={explorer} now={now} api={api}
         onAnswer={(inv, action) => setAnswer({ invitation: inv, action })} onSubscribe={() => setSubscribing(true)}
         onPick={(t, it) => (it.key === 'ticket' || it.key === 'cancel' ? navigate(ticketPath(t.id)) : null)} />
   );
@@ -328,7 +355,7 @@ function Reading() {
   );
 }
 
-function UpcomingTab({ attending, hosting, invitations, invitationsRead, feed, suggested, suggestionsRead, suggestRank = null, explorer, now, api, onAnswer, onSubscribe, onPick }) {
+function UpcomingTab({ attending, hosting, invitations, invitationsRead, feed, suggested, suggestionsRead, suggestRank = null, recommended = null, explorer, now, api, onAnswer, onSubscribe, onPick }) {
   const zone = viewerZone();
   const { upcoming } = splitTickets(attending, now);
   const next = nextEvent(upcoming);
@@ -418,7 +445,9 @@ function UpcomingTab({ attending, hosting, invitations, invitationsRead, feed, s
         <div className="flex flex-col gap-3.5">
           <MiniCalendar month={month} setMonth={setMonthPick} items={items} chosen={chosen} onChoose={setChosen} explorer={explorer} now={now} zone={zone} />
           <SubscribeCard read={feed} onOpen={onSubscribe} />
-          <SuggestedCard events={suggested.slice(0, 3)} total={suggested.length} read={suggestionsRead} explorer={explorer} rank={suggestRank} />
+          {/* D3724 (ME1): Recommended for you; until its read is switched on, today's Suggested card under one line saying so. */}
+          <RecommendedRow read={recommended} act={RECOMMEND_ACT} explorer={explorer}
+            fallback={<SuggestedCard events={suggested.slice(0, 3)} total={suggested.length} read={suggestionsRead} explorer={explorer} rank={suggestRank} />} />
         </div>
       </div>
       {adding ? (

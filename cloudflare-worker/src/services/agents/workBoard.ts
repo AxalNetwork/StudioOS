@@ -453,6 +453,23 @@ function sortCards<T extends SortableCard>(cards: T[], sort: string): T[] {
   });
 }
 
+/** #4420: one aggregate read, with the same legacy-column derivation as the board. */
+export async function projectWorkSummary(env: Env, scope: Project) {
+  const rows = await env.DB.prepare(`SELECT COALESCE(board_column, CASE status
+    WHEN 'in_progress' THEN 'in_progress' WHEN 'waiting_decision' THEN 'in_review'
+    WHEN 'done' THEN 'done' WHEN 'cancelled' THEN 'done' ELSE 'backlog' END) AS board_column,
+    COUNT(*) AS count, SUM(CASE WHEN status IN ('done','cancelled') THEN 1 ELSE 0 END) AS closed
+    FROM scope_tasks WHERE scope_kind = 'project' AND project_id = ? GROUP BY 1`)
+    .bind(scope.id).all<{ board_column: Column; count: number; closed: number }>();
+  const columns = Object.fromEntries(BOARD_COLUMNS.map((key) => [key, 0])) as Record<Column, number>;
+  let open = 0, closed = 0;
+  for (const row of rows.results ?? []) {
+    columns[row.board_column] = Number(row.count);
+    closed += Number(row.closed); open += Number(row.count) - Number(row.closed);
+  }
+  return { open, closed, columns };
+}
+
 export async function projectBoard(env: Env, scope: Project, filter = '', readRuns: WorkRunReader = NO_WORK_RUNS_RECORDED, sort = '') {
   const f = boardFilter(filter);
   const r = await env.DB.prepare(`SELECT * FROM scope_tasks WHERE scope_kind = 'project' AND project_id = ? ORDER BY position,id LIMIT 5001`)
