@@ -71,7 +71,7 @@ function AgentRow({ row, onOpen }) {
         </span>
       </span>
       <span role="cell" className="hidden min-w-0 md:block">
-        <span className="block truncate text-[13px] text-axal-ink dark:text-gray-200">Platform model · {row.model || <Unrecorded />}</span>
+        <span className="block truncate text-[13px] text-axal-ink dark:text-gray-200">{row.outside ? 'Connected app' : <>Platform model · {row.model || <Unrecorded />}</>}</span>
         {row.tools ? <span className={`block truncate ${MUTED}`}>{row.tools}</span> : null}
       </span>
       <span role="cell" className="hidden truncate text-[13px] text-axal-ink md:block dark:text-gray-200">{row.sponsor || <Unrecorded />}</span>

@@ -18,7 +18,7 @@ import { SignJWT } from 'jose';
 
 import { developerKeys } from '../src/routes/developer_keys.ts';
 import {
-  MAX_LIVE_KEYS, constantTimeEqual, createKey, revokeKey, sha256Hex, verifyKey, touchLastUsed,
+  MAX_LIVE_KEYS, rowScopes, constantTimeEqual, createKey, revokeKey, sha256Hex, verifyKey, touchLastUsed,
 } from '../src/services/apiKeys.ts';
 import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
@@ -239,4 +239,19 @@ test('constantTimeEqual compares whole strings', () => {
   assert.equal(constantTimeEqual('abc', 'abc'), true);
   assert.equal(constantTimeEqual('abc', 'abd'), false);
   assert.equal(constantTimeEqual('abc', 'abcd'), false);
+});
+
+
+test('D4424: member keys never advertise, mint or recover Team-only OAuth scopes', async () => {
+  const { env, db } = fixture();
+  env.TEAM_AGENTS_ENABLED = 'true';
+  const list = await call(env, 'GET', '/api/developer/keys');
+  assert.equal(list.body.scopes_available.some((s: any) => s.name.startsWith('team:')), false);
+  for (const scope of ['team:read', 'team:propose']) {
+    const response = await create(env, { scopes: ['validate:read', scope] });
+    assert.equal(response.status, 400);
+    assert.equal(response.body.code, 'invalid_scopes');
+  }
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM member_api_keys').get().n, 0);
+  assert.deepEqual(rowScopes({ scopes_json: JSON.stringify(['validate:read', 'team:read', 'team:propose']) }), ['validate:read']);
 });

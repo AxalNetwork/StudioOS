@@ -1,3 +1,4 @@
+import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
 /**
  * D505 — the partner sidebar stops naming the retired `/partner/operations/*`
  * routes (D395 redirects): each `match` points at the successor, the
@@ -69,8 +70,7 @@ test('each successor sits in the row D395 assigned, and each retired address red
       assert.ok(row, `no partner row labelled ${label}`);
       assert.ok((row.match || []).includes(successor), `${label} does not match ${successor} (for ${retired})`);
     }
-    assert.match(APP, new RegExp(`<Route path="${escapeRe(retired)}" element=\\{<Navigate to="${escapeRe(successor)}" replace \\/>\\} \\/>`),
-      `${retired} is not a redirect to ${successor}`);
+    assert.equal(APP.includes(`path="${retired}"`), false);
     assert.match(APP, new RegExp(`<Route path="${escapeRe(successor)}"`), `${successor} is not a mounted route`);
   }
   // Nothing invented: every partner `match` entry is a mounted route or a
@@ -78,7 +78,7 @@ test('each successor sits in the row D395 assigned, and each retired address red
   const mounted = [...APP.matchAll(/<Route path="([^"]+)"/g)].map((m) => m[1]);
   for (const row of partnerRows()) {
     for (const p of row.match || []) {
-      assert.ok(mounted.some((m) => m === p || m.startsWith(`${p}/`)), `${row.label} matches ${p}, which no route mounts`);
+      assert.equal(mounted.some((m) => m === p || m.startsWith(`${p}/`)), !isRetiredRedirect(p), `${row.label}: ${p}`);
     }
   }
 });

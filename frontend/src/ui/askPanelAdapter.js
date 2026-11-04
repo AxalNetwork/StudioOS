@@ -46,7 +46,8 @@ export const askPanelAdapter = {
   waiting: guarded(async (page) => {
     if (!page) return { available: false, reason: 'No rail page.' };
     const r = await railProposalsApi.list({ page, status: 'proposed' });
-    return { available: true, data: { count: Array.isArray(r?.proposals) ? r.proposals.length : 0 } };
+    return Array.isArray(r?.proposals) ? { available: true, data: { count: r.proposals.length } }
+      : { available: false, reason: 'The proposals could not be read.' };
   }),
 };
 

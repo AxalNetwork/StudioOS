@@ -40,8 +40,8 @@ Introduction packs retire with CR5 (#1915): `POST /api/payments/intro-credits/in
 - a visitor sees the plan cards, built from the public read because `/api/catalog/products` needs a session, and the Token packs with Sign in to buy (`/login?next=%2Fplans-and-pricing%23token-packs`);
 - Subscribe and Preview go to `/login?next=%2Fplans-and-pricing`;
 - the promo box, the cart, the add-ons, active licences, the product modal, the admin tools and the phone's account bar are not drawn for a visitor, and their reads are not made;
-- `/plans-and-pricing/:productId`, `/checkout` and `/checkout/confirmation` still need sign-in;
-- `/products` redirects with its query and hash, so `/products#token-packs` lands on the packs.
+- `/plans-and-pricing/:productId` (retired D2319), `/checkout` and `/checkout/confirmation` still need sign-in;
+- `/products` (retired D2319) redirects with its query and hash, so `/products#token-packs` (retired D2319) lands on the packs.
 
 The `/pricing` page (D786 part 2) takes every card's price from the same read; a plan the read does not sell says "Not offered yet". A visitor reads it in the public site's frame, a member inside the app's top bar and left sidebar. The door pages' tokens block links to `/pricing/products#token-packs`.
 

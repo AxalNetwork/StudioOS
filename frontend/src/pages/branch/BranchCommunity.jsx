@@ -97,7 +97,7 @@ export const COMMUNITY_CONSOLES = [
   {
     key: 'network-profiles',
     label: 'Network profiles',
-    to: '/admin/network-profiles',
+    to: '/admin/advisors-partners/deck',
     worker: 'admin_network_profiles.ts',
     scope: 'Yours to author',
     what: 'Create, edit, reorder and set a photo. It is not a member directory — nothing '

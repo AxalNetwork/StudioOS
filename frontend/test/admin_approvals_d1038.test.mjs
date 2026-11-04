@@ -1056,7 +1056,7 @@ test('the routes under one guard, the redirect, the row lit on every sub-path, a
     '/admin/approvals/wellbeing-experts/declined', '/admin/approvals/product-testers/:item', '/admin/approvals/co-marketing/:item', '/admin/approvals/wellbeing-experts/:item']) {
     assert.ok(app.includes(`<Route path="${p}" element={guard(['admin'], <ApprovalsLaneBoards />)} />`), p);
   }
-  assert.ok(app.includes('<Route path="/admin/held/approvals" element={<HeldApprovalsRedirect />} />'));
+  assert.equal(app.includes('<Route path="/admin/held/approvals" element={<HeldApprovalsRedirect />} />'), false);
   const row = SIDEBAR_GROUPS.admin.flatMap((g) => g.items).find((r) => r.label === 'Approvals');
   assert.equal(row.to, '/admin/approvals');
   assert.ok(row.match.includes('/admin/approvals'), 'the lane boards light the row');

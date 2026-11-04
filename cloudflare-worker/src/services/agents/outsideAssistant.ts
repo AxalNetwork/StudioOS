@@ -1,7 +1,6 @@
 /** D4424 (#4424): isolated outside-assistant identity and revocation primitives; no route enables them yet. */
 import type { Env, User } from '../../types';
-import { userMeetsTier } from '../../middleware/requireTier';
-import { isAdmin } from '../../routes/_t13t14t15_helpers';
+import { planOk } from './modelOffers';
 import { roleOf } from './catalogue';
 import { canManage, loadScope, scopeOfAgent, type AgentRow } from './teams';
 
@@ -13,18 +12,41 @@ type Binding = { uid: string; agent_id: number; sponsor_user_id: number; client_
 
 export class OutsideAssistantRefused extends Error {
   code: string;
-  constructor(code: string, message: string) { super(message); this.code = code; }
+  readonly sentence: string;
+  constructor(code: string, message: string) { super(message); this.code = code; this.sentence = message; }
+}
+/** Only thrown after D1 invalidation committed; callers may safely explain that access has ended. */
+export class OutsideProviderCleanupPending extends Error {
+  constructor() { super('The app is disconnected in Axal VC. We could not finish disconnecting it from your assistant. Try again.'); }
 }
 const refuse = (code: string, message: string): never => { throw new OutsideAssistantRefused(code, message); };
 const enabled = (env: Env) => { if (env.TEAM_AGENTS_ENABLED !== 'true') refuse('team_agents_off', 'AI agents are not switched on for this team.'); };
 const plan = (user: User) => {
-  if (!isAdmin(user) && !(user.role === 'founder' && userMeetsTier(user, 'growth'))) {
+  if (!planOk(user)) {
     refuse('plan_required', 'Agents come with a paid Founder plan.');
   }
 };
 const bindingByUid = (env: Env, uid: string) => UID.test(uid)
   ? env.DB.prepare('SELECT * FROM team_agent_mcp_bindings WHERE uid = ?').bind(uid).first<Binding>()
   : Promise.resolve(null);
+
+/** Internal removal lookups; never a bearer or secret. */
+export const outsideBindingForAgent = (env: Env, agentId: number) => env.DB.prepare(
+  'SELECT * FROM team_agent_mcp_bindings WHERE agent_id = ?',
+).bind(agentId).first<Binding>();
+
+/** Existing retention and runtime cleanup also runs after failed provider revocation. */
+export async function cleanupOutsideAgent(env: Env, agentId: number): Promise<void> {
+  const a = await env.DB.prepare('SELECT * FROM team_agents WHERE id = ?').bind(agentId).first<OutsideRow>();
+  if (!a || a.source !== 'mcp_client' || a.status !== 'removed') return;
+  try {
+    const { onAgentRemoved } = await import('./memory');
+    await onAgentRemoved(env, a.id);
+    await env.DB.prepare("UPDATE agent_duties SET status = 'removed', updated_at = CURRENT_TIMESTAMP WHERE agent_id = ? AND status <> 'removed'").bind(a.id).run();
+  } catch { console.warn('[agents] outside_removal_retention_failed'); }
+  const { eraseAgentRuntime } = await import('../../agents/erasure');
+  await eraseAgentRuntime(env, a);
+}
 
 /** Trusted consent handler only. Reserve the role before authorization; pending records cannot call tools. */
 export async function reserveOutsideAssistant(env: Env, user: User, input: {
@@ -72,13 +94,14 @@ export async function completeOutsideBinding(env: Env, user: User, input: { bind
   const s = a && await scopeOfAgent(env, a);
   if (!a || a.source !== 'mcp_client' || a.status !== 'paused' || a.paused_reason !== 'awaiting_connection'
       || !s || !(await canManage(env, s, user))) refuse('not_manager', 'This company connection is no longer available.');
-  await env.DB.batch([
+  const [claimed] = await env.DB.batch([
     env.DB.prepare(`UPDATE team_agent_mcp_bindings SET grant_id = ?, state = 'active', updated_at = CURRENT_TIMESTAMP
       WHERE uid = ? AND state = 'pending'`).bind(input.grantId, b!.uid),
     env.DB.prepare(`UPDATE team_agents SET status = 'active', paused_reason = NULL, updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND status = 'paused' AND paused_reason = 'awaiting_connection'
         AND EXISTS (SELECT 1 FROM team_agent_mcp_bindings WHERE uid = ? AND state = 'active')`).bind(a!.id, b!.uid),
   ]);
+  if (Number(claimed.meta?.changes) !== 1) refuse('connection_not_pending', 'This connection is no longer waiting for approval.');
 }
 
 /** Before each call, after grantUser. The principal comes from verified encrypted props, not tool arguments. */
@@ -117,5 +140,11 @@ export async function revokeOutsideBinding(env: Env, user: User, bindingUid: str
     env.DB.prepare(`UPDATE team_agents SET status = 'removed', paused_reason = NULL,
       removed_at = COALESCE(removed_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(b!.agent_id),
   ]);
-  if (b!.grant_id) await revokeGrant(b!.grant_id, String(b!.sponsor_user_id));
+  try {
+    if (b!.grant_id) await revokeGrant(b!.grant_id, String(b!.sponsor_user_id));
+  } catch {
+    throw new OutsideProviderCleanupPending();
+  } finally {
+    await cleanupOutsideAgent(env, b!.agent_id);
+  }
 }

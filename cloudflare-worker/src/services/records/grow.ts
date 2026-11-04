@@ -120,6 +120,7 @@ const growCtx = (rc: RecordContext): GrowCtx => ({ env: rc.env, projectId: rc.pr
 const LABEL: Record<string, string> = {
   customer: 'Customer', investor: 'Investor', team: 'Team', open: 'Open', planned: 'Planned', shipped: 'Shipped',
   active: 'Active', testing: 'Testing', paused: 'Paused',
+  organic: 'Organic', ads: 'Ads', newsletter: 'Newsletter', outreach: 'Outreach', signups: 'Sign-ups',
   content: 'Content', paid_search: 'Paid search', paid_social: 'Paid social', outbound: 'Outbound', partner: 'Partner', events: 'Events',
   draft: 'Draft', pending_review: 'Pending review', published: 'Live', rejected: 'Rejected', closed: 'Closed',
   full_time: 'Full-time', part_time: 'Part-time', contract: 'Contract', fractional: 'Fractional',

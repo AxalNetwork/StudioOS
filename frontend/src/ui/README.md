@@ -44,6 +44,7 @@ write a bordered white box with a title, it already exists here.
 | `index.js` | The public entry point — import from here. |
 | `linkedinBrand.js` | D1355: official LinkedIn asset provenance, hashes, approved theme variants and minimum dimensions. |
 | `LinkedInSignInButton.jsx` | D1355: unmodified official sign-in artwork at actual LinkedIn OAuth entry points. |
+| `AskProposal.jsx` | D4484: shared Ask proposal presentation; its host owns Accept, Edit and Discard. |
 
 ## Rules
 

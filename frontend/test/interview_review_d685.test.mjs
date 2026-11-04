@@ -314,7 +314,7 @@ test('the route, and the rows that link to it: Customer research and the intervi
   // D696 (#1658): the review is Customer research's record; the old address redirects to it.
   // D697 (#1659): CycleRoute draws it in record mode, so it sits inside Validate.
   assert.match(app, /<Route path="\/validate\/customer-research\/:id" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <CycleRoute cycle="validate" slug="customer-research" record \/>\)\} \/>/);
-  assert.match(app, /<Route path="\/validate\/interviews\/:id" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <ParamRedirect to="\/validate\/customer-research\/:id" \/>\)\} \/>/);
+  assert.doesNotMatch(app, /<Route path="\/validate\/interviews\/:id" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <ParamRedirect to="\/validate\/customer-research\/:id" \/>\)\} \/>/);
   assert.match(app, /<Route path="\/validate\/session\/:id" /, 'the per-session deep link stays');
   const page = readFileSync('frontend/src/pages/founder/InterviewReviewPage.jsx', 'utf8');
   assert.doesNotMatch(page, /<Link[^>]*\/placements\//, 'no placement action is a link');

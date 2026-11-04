@@ -30,7 +30,7 @@ const safeCardText = (v: unknown, max = 200): string | null => typeof v === 'str
 const stamp = () => new Date().toISOString();
 const audit = (env: Env, pid: number, user: User, action: string, details: object) => env.DB.prepare(
   'INSERT INTO activity_logs(user_id, project_id, action, details) VALUES(?, ?, ?, ?)').bind(user.id,pid,action,JSON.stringify(details));
-const sourceSql = `CASE WHEN source IN ('landing','website','brand') THEN 'website' WHEN source IN ('lovable','lovable_signup') THEN 'lovable' WHEN source IN ('linkedin','linkedin_csv') THEN 'linkedin_csv' WHEN source IN ('import','csv','import_csv') THEN 'import' WHEN source IN ('manual','added_by_hand') THEN 'manual' WHEN source IN ('update_ask','update_call') THEN 'update_ask' ELSE 'crm' END`;
+
 const sourceOf = (raw: string | null) => ({landing:'website',brand:'website',lovable_signup:'lovable',linkedin:'linkedin_csv',csv:'import',import_csv:'import',added_by_hand:'manual',update_call:'update_ask'} as Record<string,string>)[raw||''] || (raw && PROSPECT_SOURCES.includes(raw as any) ? raw : 'crm');
 function utmOf(raw: string | null): Record<string,string> | null {
   try { const o = JSON.parse(raw || 'null'); if (!o || typeof o !== 'object') return null;
@@ -58,16 +58,16 @@ export async function prospectPipeline(env: Env, pid: number, filter: {source?: 
   if (!Number.isInteger(per) || per < 1 || per > 100) return bad('Read from 1 to 100 prospects per status.', 'per_status');
   const selected = await campaign(env,pid,filter.campaign);
   if (selected && !selected.utm_campaign) return { available:false,reason:'Not recorded: this campaign has no UTM tag.',total:null,columns:[] };
-  // json_valid guards malformed old attribution before json_extract. All request values are bound.
-  const where = `project_id=? AND audience='customer' AND (?='' OR ${sourceSql}=?) AND (? IS NULL OR CASE WHEN json_valid(utm_json) THEN json_extract(utm_json,'$.utm_campaign') END=?)`;
+  // Keep both query texts literal so schema and interpolation guards inspect them.
+  // json_valid guards malformed old attribution; all request values are bound.
   const args = [pid,source,source,selected?.utm_campaign ?? null,selected?.utm_campaign ?? null];
-  const totals = await env.DB.prepare(`SELECT status,COUNT(*) AS n FROM contacts WHERE ${where} GROUP BY status`).bind(...args).all<{status:string;n:number}>();
+  const totals = await env.DB.prepare(`SELECT status,COUNT(*) AS n FROM contacts WHERE project_id=? AND audience='customer' AND (?='' OR CASE WHEN source IN ('landing','website','brand') THEN 'website' WHEN source IN ('lovable','lovable_signup') THEN 'lovable' WHEN source IN ('linkedin','linkedin_csv') THEN 'linkedin_csv' WHEN source IN ('import','csv','import_csv') THEN 'import' WHEN source IN ('manual','added_by_hand') THEN 'manual' WHEN source IN ('update_ask','update_call') THEN 'update_ask' ELSE 'crm' END=?) AND (? IS NULL OR CASE WHEN json_valid(utm_json) THEN json_extract(utm_json,'$.utm_campaign') END=?) GROUP BY status`).bind(...args).all<{status:string;n:number}>();
   if ((totals.results||[]).some(row=>!PROSPECT_STATUSES.includes(row.status))) return {available:false,reason:'Not recorded: some prospects have an unsupported status.',total:null,columns:[]};
   const rows = await env.DB.prepare(`SELECT uid,name,organization,status,source,utm_json,created_at,updated_at,
     (SELECT MIN(due_date) FROM contact_tasks t WHERE t.contact_id=ranked.id AND t.done=0) AS due_date,
     (SELECT MAX(created_at) FROM contact_replies r WHERE r.contact_id=ranked.id AND r.direction='inbound') AS replied_at
     FROM (SELECT id,uid,name,organization,status,source,utm_json,created_at,updated_at,
-      ROW_NUMBER() OVER (PARTITION BY status ORDER BY updated_at DESC,id DESC) AS position FROM contacts WHERE ${where}) ranked WHERE position<=?`).bind(...args,per).all<any>();
+      ROW_NUMBER() OVER (PARTITION BY status ORDER BY updated_at DESC,id DESC) AS position FROM contacts WHERE project_id=? AND audience='customer' AND (?='' OR CASE WHEN source IN ('landing','website','brand') THEN 'website' WHEN source IN ('lovable','lovable_signup') THEN 'lovable' WHEN source IN ('linkedin','linkedin_csv') THEN 'linkedin_csv' WHEN source IN ('import','csv','import_csv') THEN 'import' WHEN source IN ('manual','added_by_hand') THEN 'manual' WHEN source IN ('update_ask','update_call') THEN 'update_ask' ELSE 'crm' END=?) AND (? IS NULL OR CASE WHEN json_valid(utm_json) THEN json_extract(utm_json,'$.utm_campaign') END=?)) ranked WHERE position<=?`).bind(...args,per).all<any>();
   const columns = PROSPECT_STATUSES.map(status => {
     const cards = (rows.results || []).filter(r=>r.status===status).map(r=>({uid:r.uid,name:safeCardText(r.name,120),company:safeCardText(r.organization),title:null,
       source:sourceOf(r.source),status:r.status,utm:utmOf(r.utm_json),due_date:typeof r.due_date==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(r.due_date)?r.due_date:null,replied_at:r.replied_at,created_at:r.created_at,updated_at:r.updated_at}));
@@ -84,10 +84,12 @@ export function consentValue(channel: unknown, input: Body) {
   return {channel:String(channel),basis,proof};
 }
 function consentStatement(env: Env, pid:number, uid: string, user: User, value: ReturnType<typeof consentValue>) {
+  // VALUES keeps the upsert target unambiguous to schema analysis. A missing
+  // scoped contact fails the NOT NULL constraint and rolls back the batch.
   return env.DB.prepare(`INSERT INTO contact_marketing_consents(contact_id,channel,basis,proof,recorded_at,recorded_by)
-    SELECT id,?,?,?,?,? FROM contacts WHERE uid=? AND project_id=? AND audience='customer'
+    VALUES ((SELECT id FROM contacts WHERE uid=? AND project_id=? AND audience='customer'),?,?,?,?,?)
     ON CONFLICT(contact_id,channel) DO UPDATE SET basis=excluded.basis,proof=excluded.proof,recorded_at=excluded.recorded_at,recorded_by=excluded.recorded_by`)
-    .bind(value.channel,value.basis,value.proof,stamp(),user.id,uid,pid);
+    .bind(uid,pid,value.channel,value.basis,value.proof,stamp(),user.id);
 }
 export async function saveProspectConsent(env: Env,pid:number,user:User,uid:string,channel:string,b:Body) {
   await prospect(env,pid,uid); const value=consentValue(channel,b);

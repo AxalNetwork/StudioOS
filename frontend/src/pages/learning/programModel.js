@@ -20,12 +20,13 @@
  * started", an exam never sat has no score, and no cell is ever drawn as 0%.
  */
 import { titleCase } from '../../lib/absence';
-import { byPosition, moveInOrder } from './learningModel';
+import { byPosition, formatDay, moveInOrder, parseInstant } from './learningModel';
 
 /**
  * What each kind of program content is called. A program's `item` is a video
- * or a reading, and the route does not say which (`describeContents` selects
- * the item's kind and does not send it), so it is named as either.
+ * or a reading. The route carries `kind` (D954); completionCell uses that
+ * recorded kind for Watched wording, retaining generic progress for readings
+ * or items whose kind is not recorded.
  */
 export const SUBJECT_KIND_LABEL = {
   course: 'Course', item: 'Video or reading', exam: 'Exam', exercise: 'Exercise', webinar: 'Webinar',
@@ -60,7 +61,7 @@ const startedMark = (p) => (p ? `${p}%` : 'Started');
  * short `mark` for a matrix cell, the `label` in words (the cell's title and
  * its screen-reader text, and the member's own list), and a `tone`.
  */
-export function completionCell(entry) {
+export function completionCell(entry, kind = null) {
   if (!entry) return NOT_RECORDED;
   const s = entry.status;
   switch (entry.subject_kind) {
@@ -75,6 +76,7 @@ export function completionCell(entry) {
       return { mark: startedMark(p), tone: 'neutral', label: `In progress${lessons}` };
     }
     case 'item': {
+      if (kind === 'video') return { mark: s === 'completed' ? 'Watched' : 'Not watched', tone: s === 'completed' ? 'ok' : s === 'in_progress' ? 'neutral' : 'none', label: s === 'completed' ? 'Watched' : 'Not watched' };
       if (s === 'completed') return { mark: '✓', tone: 'ok', label: 'Completed' };
       if (s !== 'in_progress') return dash('Not started');
       const p = wholeOf(entry.percent);
@@ -86,7 +88,7 @@ export function completionCell(entry) {
       if (s === 'submitted') return { mark: 'Submitted', tone: 'info', label: 'Submitted, not reviewed yet' };
       return dash('Not submitted');
     case 'exam': {
-      if (s !== 'passed' && s !== 'not_passed') return dash('Not attempted');
+      if (s !== 'passed' && s !== 'not_passed') return { mark: 'Not sat', tone: 'none', label: 'Not sat' };
       const best = wholeOf(entry.best_score_percent);
       const n = Number(entry.attempts);
       const tries = Number.isFinite(n) && n > 0 ? ` · ${n} attempt${n === 1 ? '' : 's'}` : '';
@@ -102,7 +104,7 @@ export function completionCell(entry) {
       if (s === 'attended') return { mark: '✓', tone: 'ok', label: 'Attended' };
       if (s === 'not_attended') return { mark: 'Missed', tone: 'warn', label: 'Did not attend' };
       if (s === 'registered') return { mark: 'Registered', tone: 'info', label: 'Registered, not attended yet' };
-      return dash('Not registered');
+      return { mark: 'Not registered', tone: 'none', label: 'Not registered' };
     default:
       // A kind the route cannot measure yet (`not_built`): said, never guessed.
       return NOT_RECORDED;
@@ -255,13 +257,18 @@ export const ENROLLED_BY = { self: 'joined by themselves', super_admin: 'enrolle
 export const memberProgramHref = (uid) => `/learning/my-programs/${encodeURIComponent(uid)}`;
 
 /** LR13's enrolment card: how a member comes to be in it, in the canvas's words. */
-export function enrolmentCopy(program, enrolled) {
+export function enrolmentCopy(program, { enrolled = false, enrolled_at = null, timeZone } = {}) {
   const open = program?.enrolment === 'open';
+  const instant = enrolled && typeof enrolled_at === 'string' ? parseInstant(enrolled_at) : null;
+  const dateTime = instant?.toISOString() || null;
+  const date = dateTime ? formatDay(dateTime, timeZone) : null;
+  const beforeDate = `${open ? 'You joined' : 'A Super Admin enrolled you'} on `;
   return {
     title: open ? 'Open to join' : 'By invitation',
     line: enrolled
-      ? (open ? 'You joined this program.' : 'A Super Admin enrolled you.')
+      ? (date ? `${beforeDate}${date}.` : `${open ? 'You joined this program.' : 'A Super Admin enrolled you.'} The date is not recorded.`)
       : (open ? 'Anyone with a profile can join.' : 'A Super Admin enrols members of this program.'),
+    date, dateTime, beforeDate,
     none: 'No cohort dates, mentors or application: none is stored.',
   };
 }
