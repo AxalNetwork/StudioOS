@@ -45,7 +45,7 @@ test('listed count is actual open rows; bulk is exactly post, subject and newsle
 
 test('drafting quotes first, displays its hold, and acceptance returns a proposal to the unsaved form',async()=>{
   const {api,calls}=apiFor();const accepted=[];
-  const ui=await mount(h(DistributionAskIntent,{projectId:1,api,onAccept:rows=>accepted.push(...rows)}));
+  const ui=await mount(h(DistributionAskIntent,{projectId:1,campaignUid:'campaign-one',api,onAccept:rows=>accepted.push(...rows)}));
   try {
     assert.match(ui.text(),/Holds up to \$0.04 · you pay what it uses/);
     assert.deepEqual(calls.map(c=>c[0]),['quote']);
@@ -120,4 +120,18 @@ test('canonical structured targets are preserved in both the quote and run reque
   const f=apiFor();const kinds=[{kind:'ad_creative',placement:'google_search_text',field:'headline',channel_uid:'channel-one'}];
   const ui=await mount(h(DistributionAskIntent,{projectId:1,api:f.api,kinds}));
   try{assert.deepEqual(f.calls[0][1].kinds,kinds);await ui.click('Ask Eadwyn to draft for each channel');assert.deepEqual(f.calls.find(c=>c[0]==='run')[1].kinds,kinds);}finally{await ui.close();}
+});
+
+
+test('an explicit campaign target is quoted and run as campaign text with an honest acceptance boundary',async()=>{
+  const f=apiFor([p('ad','ad_creative',{campaign_uid:'campaign-one',target:'campaign',placement:'google_search_text',creative_field:'headline'})]);
+  const ui=await mount(h(DistributionAskIntent,{projectId:1,campaignUid:'campaign-one',target:'campaign',kinds:[{kind:'ad_creative',placement:'google_search_text',field:'headline'}],api:f.api}));
+  try{
+    assert.equal(f.calls[0][1].target,'campaign');
+    await ui.click('Ask Eadwyn to draft for each channel');
+    assert.equal(f.calls.find(c=>c[0]==='run')[1].target,'campaign');
+    assert.match(ui.text(),/Accept keeps the text in this campaign/);
+    await ui.click('Accept');
+    assert.doesNotMatch(ui.text(),/Not saved|Nothing is saved until you create/);
+  }finally{await ui.close();}
 });

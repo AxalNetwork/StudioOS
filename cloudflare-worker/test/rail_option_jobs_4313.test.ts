@@ -10,7 +10,7 @@
  *     each move lands on a model a route already runs;
  *   · through run(): a press runs its option's job, not its page's row; the member's
  *     pick for the option is honoured when the job lists it; a named job still wins;
- *   · the scope count on textChoice, which the PR posts.
+ *   · every routed text job belongs to the recorded model plan.
  *
  * Synthetic records only; Workers AI is a stub.
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
@@ -35,11 +35,6 @@ const LLAMA70 = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 /** The kinds whose presses write text; transcription, image, upload and no-model options keep their own path. */
 const writesText = (o: { kind: string; handler: string }) => !['speech', 'image', 'live', 'vision'].includes(o.kind) && !['upload', 'none', 'transcribe'].includes(o.handler)
   && !(o.kind === 'search' && o.handler !== 'draft'); // a re-index runs the index, not a writer
-/** Plan §6 PR 3's scope list, as text_jobs_part3_d1478 pins it. */
-const SCOPE = ('ST1 ST2 ST3 ST4 ON1 ON2 VA5 VA6 VA11 VA12 VA13 VA15 VA16 BU1 BU2 BU3 BU4 BU5 BU6 BU8 DK1 DK2 DK3 DK7 DK8 DK9 DK12 DK13 '
-  + 'RA1 RA2 RA6 RA7 RA8 RA10 RA12 IN1 IN3 IN5 IN6 IN7 IN8 IN11 IN13 GR1 GR2 GR5 GR10 GR12 GR13 GR16 NE2 RE3 RE5 RE6 '
-  + 'CA1 CA2 CA4 EV1 EV5 EV8 AR1 AR2 AR3 LE5 LE6 LE7 EM1 EM3 EM4 AG1 AG4 AG5 AG7 AG8 AD1 AD2 AD4 MI1').split(' ');
-
 test('every registered rail option has a job the plan has; a text press has a text job', () => {
   const rows = railOptionRows();
   assert.ok(rows.length > 100, 'the matrix\'s options');
@@ -164,11 +159,10 @@ test('through run(): the member\'s pick for the option is honoured when the job 
   } finally { named.f.db.close(); }
 });
 
-test('the scope on textChoice: the count the PR posts', () => {
+test('every routed text job belongs to the recorded model plan', () => {
   const optionJobs = new Set<string>();
   for (const o of railOptionRows()) { const id = railOptionTextJob(o.pageKey, o.optionKey); if (id) optionJobs.add(id); }
   const routed = new Set([...Object.values(TASK_TEXT_JOBS), ...Object.values(FORM_TEXT_JOBS), ...optionJobs]);
-  const on = SCOPE.filter((j) => routed.has(j));
-  assert.equal(on.length, 43, `scope jobs on textChoice: ${on.join(' ')}`);
-  assert.ok(JOBS.length > 0);
+  const planned = new Set(JOBS.map((job) => job.id));
+  assert.deepEqual([...routed].filter((job) => !planned.has(job)), [], 'routed jobs need a recorded plan entry');
 });

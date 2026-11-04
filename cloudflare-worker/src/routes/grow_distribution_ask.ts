@@ -51,7 +51,7 @@ router.post('/run',handle(async(c,user)=>{
   if (!estimate.ok) return aiRefusal(c,estimate);
   if (!b.quote || b.quote.hold_microusd !== estimate.hold_microusd || b.quote.model !== estimate.model) return refuse(c,409,{code:'quote_changed',message:'Read the current hold before drafting. Refresh the quote and try again.',audience:'member'});
   // Only the freshly server-derived hold can cap the router; a request cannot set a charge cap.
-  const result = await run(c.env,{...options,surface:AI_SURFACE.growDistribution,pinMicrousd:estimate.hold_microusd});
+  const result = await run(c.env,{...options,task:'distribution_draft',rail:options.rail,surface:AI_SURFACE.growDistribution,pinMicrousd:estimate.hold_microusd});
   if (!result.ok) return aiRefusal(c,result);
   const drafts = distributionOutput(String(result.output ?? ''),input,context.segmentIds);
   const proposals = await storeDistributionDrafts(c.env,user,input,drafts,result.usage.model,result.usageLogId ?? null,context.sources);

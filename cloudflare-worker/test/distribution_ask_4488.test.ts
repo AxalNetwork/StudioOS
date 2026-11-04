@@ -8,6 +8,7 @@ import { migratedDatabase, removeMigratedDatabases } from './_storage_schema.ts'
 import { d1Over } from './_d1_sqlite.mjs';
 import { withGuard } from './_guard_stub.mjs';
 import { __resetForTest } from '../src/services/aiRouter.ts';
+import { TASK_TEXT_JOBS, RAIL_OPTION_JOBS } from '../src/services/ai/textJobs.ts';
 import { proposeRail, decideRail } from '../src/services/railProposals.ts';
 import { DISTRIBUTION_PAGE, DISTRIBUTION_OPTION } from '../src/services/distributionDrafts.ts';
 
@@ -173,4 +174,9 @@ test('structured creative targets quote and run intact; unknown target fields re
   assert.equal(f.count('grow_campaign_creatives'),0);
   assert.equal((await f.call('POST','/quote',{...request,kinds:[{...kind,budget:100}]})).status,400);
   assert.equal(f.prompts.length,1);
+});
+
+
+test('Distribution task and option use the marketing and outreach job',()=>{
+  assert.deepEqual([TASK_TEXT_JOBS.distribution_draft,RAIL_OPTION_JOBS[DISTRIBUTION_OPTION]],['GR5','GR5']);
 });
