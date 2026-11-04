@@ -37,6 +37,7 @@ export type QueueItem = {
   headline: string;
   payload: Record<string, unknown>;
   status: RailProposalStatus;
+  can_decide: boolean;
   // D4117: who the agent is (its persona); no job title reaches the client.
   agent: { uid: string; role_key: string; persona: ReturnType<typeof personaDto> | null; first_name: string | null; last_name: string | null };
   sponsor: Person | null;
@@ -71,7 +72,7 @@ export function headlineOf(payload: Record<string, unknown>): string {
   return line.length > HEADLINE_MAX ? `${line.slice(0, HEADLINE_MAX - 1)}…` : line;
 }
 
-async function toItem(env: Env, r: QueueRow): Promise<QueueItem> {
+async function toItem(env: Env, r: QueueRow, mayDecide = false): Promise<QueueItem> {
   const payload = (r.status === 'edited' ? parse(r.decided_payload_json) : null) ?? parse(r.payload_json) ?? {};
   return {
     uid: r.uid,
@@ -81,6 +82,7 @@ async function toItem(env: Env, r: QueueRow): Promise<QueueItem> {
     headline: headlineOf(parse(r.payload_json) ?? {}),
     payload,
     status: r.status,
+    can_decide: r.status === 'proposed' && mayDecide,
     agent: { uid: r.agent_uid, role_key: r.role_key, persona: (() => { const p = personaOf(r.persona_key); return p ? personaDto(p) : null; })(), first_name: r.first_name, last_name: r.last_name },
     sponsor: r.sponsor_uid ? { uid: r.sponsor_uid, name: r.sponsor_name ?? '' } : null,
     cost: await chargedFor(env, r.run_usage_log_id ?? r.usage_log_id ?? null),
@@ -105,7 +107,7 @@ function scopeBinds(s: Scope, includeProjects: boolean): (string | number)[] {
   return [s.kind, companyId ?? 0, projectId ?? 0, includeProjects && s.kind === 'company' ? 1 : 0, s.kind === 'company' ? s.id : 0];
 }
 
-export async function queueList(env: Env, s: Scope, f: QueueFilter): Promise<{ items: QueueItem[]; next_cursor: string | null }> {
+export async function queueList(env: Env, s: Scope, f: QueueFilter, user: User): Promise<{ items: QueueItem[]; next_cursor: string | null }> {
   const role = f.role || null; const option = f.option || null; const status = f.status || null; const module = f.module || null;
   const cursor = f.cursor ?? null;
   const r = await env.DB.prepare(
@@ -134,7 +136,21 @@ export async function queueList(env: Env, s: Scope, f: QueueFilter): Promise<{ i
   const rows = r.results ?? [];
   const page = rows.slice(0, QUEUE_PAGE);
   const items: QueueItem[] = [];
-  for (const row of page) items.push(await toItem(env, row));
+  // Permissions come from the same live gates as queueDecide, never a UID
+  // inferred from the browser's sign-in cache. Cache by scope for this page.
+  const grants = new Map<string, { read: boolean; manage: boolean }>();
+  for (const row of page) {
+    const key = `${row.scope_kind}:${row.company_id ?? ''}:${row.project_id ?? ''}`;
+    let grant = grants.get(key);
+    if (!grant) {
+      const same = row.scope_kind === s.kind && (s.kind === 'company' ? row.company_id === s.id : row.project_id === s.id);
+      const scope = same ? s : await scopeOfAgent(env, agentPart(row));
+      const read = Boolean(scope && (same || await canRead(env, scope, user)));
+      grant = { read, manage: Boolean(read && scope && await canManage(env, scope, user)) };
+      grants.set(key, grant);
+    }
+    items.push(await toItem(env, row, grant.read && (grant.manage || row.sponsor_user_id === user.id)));
+  }
   return { items, next_cursor: rows.length > QUEUE_PAGE ? String(page[page.length - 1].id) : null };
 }
 
@@ -197,7 +213,7 @@ export async function queueItem(env: Env, user: User, uid: string): Promise<{ ok
   const s = r && await scopeOfAgent(env, agentPart(r));
   if (!r || !s) return missing();
   if (!(await canRead(env, s, user))) return no(403, 'not_member', 'Only the team can see its approvals.');
-  return { ok: true, item: await toItem(env, r), inputs: inputsOf(r) };
+  return { ok: true, item: await toItem(env, r, r.sponsor_user_id === user.id || await canManage(env, s, user)), inputs: inputsOf(r) };
 }
 
 /**

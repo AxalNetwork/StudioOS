@@ -654,7 +654,7 @@ const proposalValue = (value) => {
   return String(value);
 };
 export const QUEUE_HISTORY_STATUSES = ['accepted', 'edited', 'discarded', 'withdrawn'];
-export function queueProposal(item, { roles = [], canManage = false, viewerUid = null } = {}) {
+export function queueProposal(item, { roles = [] } = {}) {
   const modules = (Array.isArray(roles) ? roles : []).flatMap((r) => Array.isArray(r.works_in) ? r.works_in : []);
   const label = modules.find((m) => m.key === item.module)?.label;
   const payload = item.payload && typeof item.payload === 'object' ? item.payload : {};
@@ -664,6 +664,6 @@ export function queueProposal(item, { roles = [], canManage = false, viewerUid =
     module_label: label || (item.module ? String(item.module).replace(/-/g, ' ') : null),
     draft: textKey ? payload[textKey] : proposalValue(payload) || null, edit_key: textKey,
     decision: item.status === 'proposed' ? null : item.status, by: item.decided_by,
-    can_decide: canManage || Boolean(viewerUid && item.sponsor?.uid === viewerUid),
+    can_decide: item.status === 'proposed' && item.can_decide === true,
   };
 }

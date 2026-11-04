@@ -6,7 +6,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { installDocument } from './_contracts_dom.mjs';
 import * as adapter from '../src/pages/team/agentsAdapter.js';
-import ApprovalsTab from '../src/pages/team/ApprovalsTab.jsx';
+import ApprovalsTab, { ProposalSheet } from '../src/pages/team/ApprovalsTab.jsx';
 import { queueProposal } from '../src/pages/team/teamModel.js';
 
 const h = React.createElement;
@@ -14,7 +14,7 @@ const SCOPE = { kind: 'company', company: { uid: 'company-one', name: 'Synthetic
 const ROLES = [{ key: 'cfo', works_in: [{ key: 'use-of-funds', label: 'Use of funds' }] }];
 const ITEM = {
   uid: 'proposal-one', headline: 'Synthetic runway draft', payload: { text: 'First draft\nSecond line', source_key: 'synthetic' },
-  status: 'proposed', module: 'use-of-funds', option: 'draft:runway', created_at: '2026-10-31 09:00:00',
+  status: 'proposed', can_decide: true, module: 'use-of-funds', option: 'draft:runway', created_at: '2026-10-31 09:00:00',
   agent: { uid: 'agent-one', first_name: 'Synthetic', last_name: 'Agent', role_key: 'cfo' },
   sponsor: { uid: 'sponsor-one', name: 'Synthetic sponsor' }, cost: { available: true, value_microusd: 40_000 },
   decided_at: null, decided_by: null,
@@ -23,11 +23,11 @@ const response = (body, status = 200) => ({ ok: status < 400, status, headers: {
 const deferred = () => { let resolve; const promise = new Promise((r) => { resolve = r; }); return { promise, resolve }; };
 const page = (items = [], next = null) => ({ items, counts: { proposed: { available: true, value: items.length } }, next_cursor: next });
 
-async function mount({ canManage = true, viewerUid = 'reader-one', handle, ...extra } = {}) {
+async function mount({ canManage = true, viewerUid = 'reader-one', handle, component = ApprovalsTab, ...extra } = {}) {
   const restore = installDocument();
   const fetch = globalThis.fetch;
   const seen = [];
-  let saved = { ...ITEM, payload: { ...ITEM.payload } };
+  let saved = { ...ITEM, can_decide: canManage || viewerUid === ITEM.sponsor.uid, payload: { ...ITEM.payload } };
   globalThis.fetch = async (url, init = {}) => {
     const u = new URL(String(url), 'http://test');
     const method = init.method || 'GET';
@@ -47,7 +47,7 @@ async function mount({ canManage = true, viewerUid = 'reader-one', handle, ...ex
   const root = createRoot(box);
   let props = { scope: SCOPE, roles: ROLES, canManage, viewerUid, ...extra };
   const settle = async () => { for (let i = 0; i < 8; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
-  const draw = async (patch = {}) => { props = { ...props, ...patch }; await act(async () => root.render(h(ApprovalsTab, props))); await settle(); };
+  const draw = async (patch = {}) => { props = { ...props, ...patch }; await act(async () => root.render(h(component, props))); await settle(); };
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
   const pr = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
   const text = (n) => n.nodeType === 3 ? n.textContent || '' : n.childNodes?.length ? n.childNodes.map(text).join('') : n.textContent || '';
@@ -94,12 +94,14 @@ test('run refusals and a second decision keep their words, status and decider; m
 });
 
 test('a real queue DTO supplies the title, date and module; absent spend/model stay unrecorded and permissions stay narrow', () => {
-  const view = queueProposal(ITEM, { roles: ROLES });
+  const view = queueProposal({ ...ITEM, can_decide: false }, { roles: ROLES });
   assert.equal(view.title, ITEM.headline); assert.equal(view.proposed_at, ITEM.created_at); assert.equal(view.module_label, 'Use of funds');
   assert.equal(view.draft, ITEM.payload.text); assert.equal(view.can_decide, false); assert.equal(view.model_label, undefined);
-  assert.equal(queueProposal(ITEM, { viewerUid: 'sponsor-one' }).can_decide, true);
-  assert.equal(queueProposal(ITEM, { viewerUid: 'someone-else' }).can_decide, false);
-  assert.equal(queueProposal(ITEM, { canManage: true }).can_decide, true);
+  assert.equal(queueProposal(ITEM).can_decide, true);
+  assert.equal(queueProposal({ ...ITEM, can_decide: false }, { viewerUid: 'sponsor-one' }).can_decide, false);
+  assert.equal(queueProposal({ ...ITEM, can_decide: false }, { canManage: true }).can_decide, false);
+  assert.equal(queueProposal({ ...ITEM, can_decide: undefined }).can_decide, false);
+  assert.equal(queueProposal({ ...ITEM, status: 'accepted' }).can_decide, false);
   assert.equal(queueProposal({ ...ITEM, cost: { available: false } }).cost.available, false);
   assert.equal(queueProposal({ ...ITEM, payload: { total: 0, enabled: false } }).draft, 'total: 0\nenabled: false');
 });
@@ -120,7 +122,7 @@ test('TM7 loads open and decided proposals; Edit reads fresh detail, then sends 
     await act(async () => { v.pr(save).onClick(); v.pr(save).onClick(); });
     assert.deepEqual(v.seen.filter((s) => s.method === 'POST').map((s) => s.body), [{ decision: 'edit', payload: { text: 'Human approved wording', source_key: 'synthetic' } }]);
     hold.resolve(response({ item: { ...ITEM, status: 'edited' } })); await v.settle();
-    assert.equal(changed, 1); assert.equal(v.byId('proposal-sheet'), undefined);
+    assert.equal(changed, 1); assert.equal(Boolean(v.byId('proposal-sheet')), false);
     assert.equal(v.seen.filter((s) => s.status === 'proposed').length, 2, 're-read after the human decides');
   } finally { hold.resolve(response({ item: ITEM })); await v.close(); }
 });
@@ -128,9 +130,9 @@ test('TM7 loads open and decided proposals; Edit reads fresh detail, then sends 
 test('a reader only views; the sponsor can decide; an already decided proposal has no write controls', async () => {
   const v = await mount({ canManage: false });
   try {
-    assert.equal(v.button('Accept'), undefined); assert.equal(v.button('Edit'), undefined);
+    assert.equal(Boolean(v.button('Accept')), false); assert.equal(Boolean(v.button('Edit')), false);
     await v.click(v.button('View'));
-    assert.equal(v.button('Accept'), undefined); assert.equal(v.button('Discard'), undefined);
+    assert.equal(Boolean(v.button('Accept')), false); assert.equal(Boolean(v.button('Discard')), false);
     assert.equal(v.seen.filter((s) => s.method === 'POST').length, 0);
   } finally { await v.close(); }
   const sponsor = await mount({ canManage: false, viewerUid: 'sponsor-one' });
@@ -166,7 +168,7 @@ test('pagination uses the server cursor and status, appends the page and never i
     await v.click(v.button('More open proposals'));
     assert.match(v.text(), /Second page proposal/); assert.match(v.text(), /2 shown/); assert.doesNotMatch(v.text(), /of 2/);
     assert.equal(v.seen.filter((s) => s.cursor === '25' && s.status === 'proposed').length, 1);
-    assert.equal(v.button('More open proposals'), undefined);
+    assert.equal(Boolean(v.button('More open proposals')), false);
   } finally { await v.close(); }
 });
 
@@ -185,7 +187,7 @@ test('an old team response or late detail cannot leak into a newly selected comp
     detail.resolve(response({ item: { ...ITEM, headline: 'Old detail must stay hidden' }, inputs: [] }));
     pending.resolve(response(page([{ ...ITEM, headline: 'Old team must stay hidden' }]))); await v.settle();
     assert.doesNotMatch(v.text(), /Old detail must stay hidden|Old team must stay hidden/);
-    assert.equal(v.byId('proposal-sheet'), undefined);
+    assert.equal(Boolean(v.byId('proposal-sheet')), false);
     assert.match(v.text(), /Nothing is waiting for a decision/);
   } finally { await v.close(); }
 });
@@ -197,8 +199,19 @@ test('a proposal decided between the list and Edit opens read-only from its fres
   try {
     await v.click(v.button('Edit'));
     assert.match(v.text(), /Accepted 31 Oct 10:00 by Synthetic reviewer\./);
-    assert.equal(v.nodes().find((n) => v.pr(n)['aria-label'] === 'Edit proposal'), undefined);
-    assert.equal(v.button('Save edited proposal'), undefined);
+    assert.equal(Boolean(v.nodes().find((n) => v.pr(n)['aria-label'] === 'Edit proposal')), false);
+    assert.equal(Boolean(v.button('Save edited proposal')), false);
     assert.equal(v.seen.filter((s) => s.method === 'POST').length, 0);
+  } finally { await v.close(); }
+});
+
+
+test('the proposal sheet itself refuses editing a decided item even with a stale permission flag', async () => {
+  const v = await mount({ component: ProposalSheet, item: { ...ITEM, title: ITEM.headline, draft: ITEM.payload.text, edit_key: 'text', editing: true, status: 'accepted' }, onClose() {} });
+  try {
+    assert.equal(Boolean(v.nodes().find((n) => v.pr(n)['aria-label'] === 'Edit proposal')), false);
+    assert.equal(Boolean(v.button('Save edited proposal')), false);
+    assert.ok(v.button('Close'));
+    assert.equal(v.seen.length, 0);
   } finally { await v.close(); }
 });

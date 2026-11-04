@@ -418,7 +418,7 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
       ) : null}
       {tab === 'skills' ? <SkillsTab scope={scope} agentsBlock={agentsBlock} /> : null}
       {tab === 'roles' ? <RulebooksTab scope={scope} canManage={!!agentsBlock?.value?.can_manage} agentsBlock={agentsBlock} /> : null}
-      {tab === 'approvals' ? <ApprovalsTab scope={scope} canManage={!!agentsBlock?.value?.can_manage} viewerUid={me().uid} roles={rolesBlock?.value?.roles} onChanged={refreshQueue} /> : null}
+      {tab === 'approvals' ? <ApprovalsTab scope={scope} roles={rolesBlock?.value?.roles} onChanged={refreshQueue} /> : null}
       {tab === 'activity' && kind === 'project' ? <ActivityTab projectId={id} team={agentList} /> : null}
       {tab === 'settings' ? (
         <TeamSettingsTab scope={scope} agentsBlock={agentsBlock} canManage={canEdit}
