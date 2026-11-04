@@ -143,7 +143,7 @@ export async function updateCampaign(env: Env, pid: number, user: User, uid: str
   // Every statement uses the same snapshot in one atomic batch. Concurrent edits
   // cannot overwrite dates/status or leave a partial replacement of the links.
   const keys = fields.filter((k) => present(v, k));
-  const guard = `id = ? AND project_id = ? AND archived_at IS NULL AND ${fields.map((k) => `${k} IS ?`).join(' AND ')}`;
+  const guard = 'id = ? AND project_id = ? AND archived_at IS NULL AND name IS ? AND goal IS ? AND status IS ? AND starts_on IS ? AND ends_on IS ? AND budget_cents IS ? AND utm_campaign IS ? AND segment_id IS ?';
   const args = [old.id, pid, ...fields.map((k) => old[k])];
   const statements: Statement[] = [];
   if (ids !== null) {
