@@ -8,7 +8,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { renderedText } from './_renderedText.mjs';
-import ChannelsTab, { ChannelPill, ConnectionCard } from '../src/pages/cycles/distribution/ChannelsTab.jsx';
+import ChannelsTab, { ChannelPill, ChannelConnectionCard } from '../src/pages/cycles/distribution/ChannelsTab.jsx';
 import { CHANNEL_COLUMNS, CHANNEL_DOORS, CHANNEL_PILLS, CONNECTION_PILLS, activityLabel, connectionAction, recorded, channelOptions } from '../src/pages/cycles/distribution/channelsModel.js';
 import { growChannelsApi } from '../src/lib/api/growChannels.js';
 import { formFor, editFor } from '../src/pages/cycles/forms.js';
@@ -30,7 +30,7 @@ test('columns and rendered channel/connection pills keep channel state distinct 
 
 test('LinkedIn action is disabled, its approval reason visible, and every unsupported provider stays unavailable', () => {
   const connection = { key: 'linkedin', name: 'LinkedIn', status: 'not_offered', reason: 'Needs LinkedIn’s approval', href: null };
-  const out = html(h(ConnectionCard, { connection, onAction() { throw new Error('disabled'); } }));
+  const out = html(h(ChannelConnectionCard, { connection, onAction() { throw new Error('disabled'); } }));
   assert.match(out, /<button[^>]*disabled/); assert.match(renderedText(out), /Needs LinkedIn’s approval/);
   assert.equal(connectionAction(connection).disabled, true);
   assert.equal(connectionAction({ ...connection, href: '/account/connectors' }).disabled, true);

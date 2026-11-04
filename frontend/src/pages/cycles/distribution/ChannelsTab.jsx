@@ -23,7 +23,7 @@ export function ChannelPill({ value, connection = false }) {
 }
 const Reading = ({ value, reason, mono = false }) => <span title={reason || undefined} className={value == null ? 'text-sm italic text-gray-500 dark:text-gray-400' : mono ? 'font-mono text-sm' : 'text-sm'}>{recorded(value, reason)}</span>;
 
-export function ConnectionCard({ connection, onAction }) {
+export function ChannelConnectionCard({ connection, onAction }) {
   const action = connectionAction(connection);
   return <article className={`${CARD} flex flex-col gap-3`}>
     <h3 className="font-bold">{connection.name}</h3>
@@ -79,7 +79,7 @@ export default function ChannelsTab({ projectId, refresh, onChanged, fillFor = (
       {!data.channels.length && <p className="p-3 text-sm text-gray-500">No channels recorded yet.</p>}
     </div>
     <div><h2 className="mb-2 text-xs font-bold uppercase tracking-wide">Connections</h2><p className="mb-4 text-sm">Each card says what Axal VC may do with that account. Connecting and disconnecting ask first, in a dialog.</p>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">{data.connections.map((c) => <ConnectionCard key={c.key} connection={c} onAction={(connection, action) => setConfirm({ connection, action })} />)}</div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">{data.connections.map((c) => <ChannelConnectionCard key={c.key} connection={c} onAction={(connection, action) => setConfirm({ connection, action })} />)}</div>
     </div>
     <nav className="flex flex-wrap gap-3" aria-label="Related tools">{CHANNEL_DOORS.map((d) => <Link key={d.href} className={BUTTON} to={`${d.href}?project_id=${encodeURIComponent(projectId)}`}>{d.label} ›</Link>)}</nav>
     {editing && <FormLightbox key={editing.uid || 'new'} form={edit} current={current} cycle="grow" slug="distribution" moduleName="Distribution"
