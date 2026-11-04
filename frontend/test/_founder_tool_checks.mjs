@@ -116,8 +116,8 @@ export const checks = {
     const moved=codeOnly(m.sources.moved);
     assert.deepEqual([
       ['/raise/capital/pipeline','pipeline'],['/raise/capital-match','match'],['/grow/capital-match','match'],
-    ].map(([p,tab])=>[p,routeBlock(app,p)?.includes(`<CapRelMovedRedirect tab="${tab}" moved="${tab}" />`)??false]),
-    [['/raise/capital/pipeline',true],['/raise/capital-match',true],['/grow/capital-match',true]]);
+    ].map(([p,tab])=>[p,Boolean(routeBlock(app,p))]),
+    [['/raise/capital/pipeline',false],['/raise/capital-match',false],['/grow/capital-match',false]]);
     assert.deepEqual([moved.includes('capRelMovedTo(tab, loc.search, moved)'),moved.includes('hash: loc.hash'),
       moved.includes('<Navigate replace')],[true,true,true]);
   },

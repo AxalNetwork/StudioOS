@@ -1,3 +1,4 @@
+import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
 /**
  * D286 — the Admin shell on accounts HQ holds directly (canvas S20), its wall
  * rules, and every leftover console placed (S22). Tasks 415, 416, 418, 419;
@@ -93,7 +94,7 @@ test('the nine rows are S20\'s eight, in S20\'s order, with D714\'s Fund admin a
     assert.ok(!r.to.startsWith('/branch'), `${r.label} points under /branch/, which refuses on HQ`);
     assert.ok(routeLine(pathOf(r.to)), `${r.label} → ${r.to} is not a registered route`);
     for (const m of r.match || []) {
-      assert.ok(routeLine(m), `${r.label} matches ${m}, which is not a registered route`);
+      assert.equal(Boolean(routeLine(m)), !isRetiredRedirect(m), `${r.label}: ${m}`);
       assert.ok(!m.startsWith('/branch'), `${r.label} matches a /branch/ path`);
     }
   }
@@ -112,7 +113,7 @@ test('Accounts, Approvals, Programs, Community and Insights are guard([\'admin\'
     assert.ok(line, `${path} is not registered`);
     assert.match(line, new RegExp(`guard\\(\\['admin'\\], <${page} \\/>\\)`), `${path} is not guard(['admin'])`);
     assert.doesNotMatch(line, /hqOnly\(/, `${path} is wrapped in hqOnly — this is the plain admin's own shell`);
-    assert.match(routeLine(old), new RegExp(`<${redirect} \\/>`), `the old address ${old} no longer redirects`);
+    isRetiredRedirect(old) ? assert.equal(routeLine(old), undefined) : assert.match(routeLine(old), new RegExp(`<${redirect} \\/>`), `the old address ${old} no longer redirects`);
   }
   // D941 (#2746, #2375 question 1, answer A): Accounts took /admin/accounts;
   // its old held address forwards, and HQ's Team moved to /admin/hq-team.
@@ -128,7 +129,7 @@ test('Accounts, Approvals, Programs, Community and Insights are guard([\'admin\'
     assert.match(read('frontend/src/pages/admin/AccountsAddress.jsx'), new RegExp(`import HeldAccounts from '\\./${file.split('/').pop().replace('.jsx', '')}'`), `${file} is not what /admin/accounts draws`);
     assert.match(SRC[file], /<HeldZone\b/, `${file} does not render inside HeldZone`);
   }
-  assert.match(routeLine('/admin/held/accounts'), /<HeldAccountsRedirect \/>/, 'the old address /admin/held/accounts no longer redirects');
+  assert.equal(routeLine('/admin/held/accounts'), undefined, 'D2319 retires the old address');
   assert.match(routeLine('/admin/hq-team'), /hqOnly\(<HqAccountsPage/, 'HQ › Team is not at /admin/hq-team, HQ only');
   // The four landings with consoles keep their row lit inside them.
   for (const label of ['Accounts', 'Approvals', 'Programs', 'Community']) {

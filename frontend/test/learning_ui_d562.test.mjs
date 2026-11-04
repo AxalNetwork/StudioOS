@@ -141,7 +141,7 @@ test('the article routes still resolve to the article pages, and Learning takes 
     assert.ok(routeBlock(src, pattern).includes(`<${component} />`), `${pattern} no longer renders ${component}`);
   }
   // The legacy redirects still land on the editor.
-  assert.match(routeBlock(src, '/articles/mine'), /<Navigate to="\/articles\/draft" replace \/>/);
+  assert.equal(routeBlock(src, '/articles/mine'), null, 'D2319 retires the alias');
 });
 
 const MEMBERS = "guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <LearningPage";

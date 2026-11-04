@@ -40,7 +40,7 @@ test('every counted route is one the app opens', () => {
   for (const c of cycleRoutes) assert.ok(routed(c), `${c} serves its cycle's modules`);
   for (const r of ROUTES) {
     const cycle = `/${r.split('/')[1]}/:slug`;
-    const ok = routed(r) || (cycleRoutes.has(cycle) && Object.values(CYCLE_MODULES).flat().some((m) => r.endsWith(`/${m.slug}`)));
+    const ok = routed(r) || (r === '/raise/capital-relationships/match' && routed('/raise/:slug/:id')) || (cycleRoutes.has(cycle) && Object.values(CYCLE_MODULES).flat().some((m) => r.endsWith(`/${m.slug}`)));
     assert.ok(ok, `${r} is a route App.jsx opens`);
   }
   for (const layer of PLATFORM_LAYERS) for (const m of layer.mods) assert.ok(ROUTES.includes(m.to), `${m.t} counts`);
@@ -67,4 +67,35 @@ test('the page types no module number', () => {
   const src = read('frontend/src/pages/LandingPage.jsx').replace(/\/\*[\s\S]*?\*\//g, '');
   assert.match(src, /PLATFORM_MODULE_COUNT/);
   assert.doesNotMatch(src, new RegExp(`\\b${PLATFORM_MODULE_COUNT}\\b`), 'the count is derived, never written down');
+});
+
+test('D2319: the module count uses live tools instead of retired shell aliases', () => {
+  for (const [old, canonical] of [['/raise/capital-match', '/raise/capital-relationships/match'], ['/grow/brand', '/build/brand']]) {
+    assert.equal(ROUTES.includes(old), false, old);
+    assert.equal(ROUTES.includes(canonical), true, canonical);
+    assert.equal(routed(old), false, old);
+  }
+});
+
+test('D2319: restoring either old counter alias or losing its canonical destination fails, then restoration passes', async () => {
+  const source = read('frontend/src/lib/siteModules.js');
+  const check = (routes) => {
+    for (const [old, canonical] of [['/raise/capital-match', '/raise/capital-relationships/match'], ['/grow/brand', '/build/brand']]) {
+      assert.equal(routes.includes(old), false, old);
+      assert.equal(routes.includes(canonical), true, canonical);
+    }
+  };
+  check(ROUTES);
+  for (const [from, to] of [['/raise/capital-match', '/raise/capital-relationships/match'], ['/grow/brand', '/build/brand']]) {
+    for (const wrong of [from, '/missing-canonical-tool']) {
+      const original = `'${from}': '${to}'`;
+      const mutant = source.replace(original, `'${from}': '${wrong}'`);
+      assert.notEqual(mutant, source);
+      const resolved = mutant.replace(/from '(\.\.?\/[^']+)'/g,
+        (_, spec) => `from '${new URL(spec, new URL('../src/lib/siteModules.js', import.meta.url)).href}'`);
+      const changed = await import('data:text/javascript;base64,' + Buffer.from(resolved).toString('base64'));
+      assert.throws(() => check(changed.platformModuleRoutes()), assert.AssertionError);
+      check(ROUTES);
+    }
+  }
 });

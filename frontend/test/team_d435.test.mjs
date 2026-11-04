@@ -34,6 +34,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const PAGE = read('frontend/src/pages/founder/FounderTeamPage.jsx');
@@ -71,13 +72,13 @@ test('the Team page is mounted in workspace mode, the old page is gone, and the 
   assert.ok(!existsSync(resolve(process.cwd(), 'frontend/src/pages/TeamBuildingPage.jsx')), 'the retired page is deleted (D304)');
   for (const [path, tab] of [['/advisors', 'advisor'], ['/my/jobs', 'jobs']]) {
     const line = APP.split('\n').find((l) => l.includes(`path="${path}"`));
-    assert.match(line, new RegExp(`user\\?\\.role === 'founder' \\? <Navigate to="/build/team\\?mode=workspace&tab=${tab}" replace />`), path);
+    isRetiredRedirect(`${path}`) ? assert.equal(line, undefined) : assert.match(line, new RegExp(`user\\?\\.role === 'founder' \\? <Navigate to="/build/team\\?mode=workspace&tab=${tab}" replace />`), path);
   }
   assert.doesNotMatch(APP, /to="\/build\/team\?tab=/, 'a redirect dropped mode=workspace, which old links still carry');
   // #2355 removed the /cofounder page: its address forwards every role to
   // Co-founder Match, the one matcher (#2297 §3), not to the Team page.
   const cofounder = APP.split('\n').find((l) => l.includes('path="/cofounder"'));
-  assert.match(cofounder, /element=\{<Navigate to="\/spinout-lab\/cofounder-match" replace \/>\}/);
+  assert.equal(cofounder, undefined);
   // The founder home's bookings card that linked here was retired with the
   // 69dc42f3 body (D564); no founder Studio link sends a bare ?tab= either.
   assert.doesNotMatch(codeOnly(read('frontend/src/pages/founder/FounderStudioBody.jsx')), /\/build\/team\?tab=/);

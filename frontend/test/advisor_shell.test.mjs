@@ -104,9 +104,7 @@ test('Expertise owns the canonical advisor profile destination', () => {
     'the Expertise row no longer claims a path that redirects elsewhere');
 
   const line = app.split('\n').find((l) => l.includes('path="/office-hours"'));
-  assert.ok(line, 'the path must still resolve — bookmarks outlive pages');
-  assert.match(line, /<Navigate to="\/practice\/opportunities" replace \/>/,
-    'and it redirects to where booking actually lives');
+  assert.equal(line, undefined);
 
   // Both components are gone, not merely unmounted. Dead code that is also
   // broken is worse than removed code.

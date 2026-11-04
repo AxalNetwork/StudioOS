@@ -117,7 +117,7 @@ test('A7 owns the founder Research landing, and /signals only redirects to it', 
   // D422: the landing is `/research`'s; bare `/signals` redirects there. D670
   // retired the Signals feed, so the redirect is everyone's and no route
   // mounts a Research tab bar any more.
-  assert.match(line, /<Navigate to=\{`\/research\$\{location\.search\}`\} replace \/>/);
+  assert.equal(line, undefined);
   assert.match(app, /founderResearchLanding\s*\?\s*guard\([^)]*\), <FounderResearchDesk \/>\)/);
   assert.doesNotMatch(app, /<SignalsPage\b|FounderWorkspaceTabs set="research"/);
 });

@@ -95,9 +95,7 @@ test('the profile step is answered here, not at a route that redirects away', ()
   const APP = read('frontend/src/App.jsx');
   for (const dead of ['/skills', '/values']) {
     const i = APP.indexOf(`path="${dead}"`);
-    assert.ok(i > 0, `${dead} left App.jsx — re-check where the assessment lives`);
-    assert.match(APP.slice(i, i + 140), /Navigate to="\/studio" replace/,
-      `${dead} is a real page again, so the assessment may now have a home of its own`);
+    assert.equal(i, -1, `${dead} retired by D2319`);
   }
   const first = orientationSteps({ role: 'founder', progress: fresh })[0];
   assert.equal(first.route, undefined, 'the profile step points at a route; it is answered in the panel');

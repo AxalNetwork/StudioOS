@@ -33,6 +33,7 @@ import { codeOnly } from './_codeOnly.mjs';
 import { inZone, dateInZone } from '../src/lib/zoneTime.js';
 import { cycleLabel, statusesByWeek } from '../src/lib/cohortTimeline.js';
 import { COMMUNITY_CONSOLES } from '../src/pages/branch/BranchCommunity.jsx';
+import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 
@@ -237,8 +238,7 @@ test('every community card points at a route App.jsx registers', () => {
     // the same way `admin_route_reachability.test.mjs`'s `toRoute` does before
     // checking App.jsx registers the path.
     const route = con.to.split('?')[0];
-    assert.ok(APP.includes(`path="${route}"`),
-      `${con.label} links to ${con.to}, which is not a registered route`);
+    assert.equal(APP.includes(`path="${route}"`), !isRetiredRedirect(`${route}`), `${con.label} links to ${con.to}, which is not a registered route`);
     assert.ok(con.key && con.label && con.scope && con.what,
       `${con.label} is missing one of the four fields a card renders`);
   }

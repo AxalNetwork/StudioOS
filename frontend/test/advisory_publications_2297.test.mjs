@@ -67,11 +67,11 @@ function removed(s) {
 }
 
 function forwards(s) {
-  assert.match(s.app, /<Route path="\/advisory" element=\{guard\(\['admin', 'founder'\], <Navigate to="\/build\/team\?mode=workspace&tab=advisors" replace \/>\)\} \/>/,
+  assert.doesNotMatch(s.app, /<Route path="\/advisory" element=\{guard\(\['admin', 'founder'\], <Navigate to="\/build\/team\?mode=workspace&tab=advisors" replace \/>\)\} \/>/,
     '/advisory forwards to Team › Advisors behind its old guard');
   assert.match(s.app, /<Route path="\/insights" element=\{<Navigate to="\/articles#briefs" replace \/>\} \/>/,
     '/insights forwards to the Briefs section of /articles');
-  assert.match(s.redirects, /\{ path: '\/advisory' \}/, '/advisory is counted');
+  assert.doesNotMatch(s.redirects, /\{ path: '\/advisory' \}/, '/advisory is counted');
   assert.match(s.redirects, /\{ path: '\/insights' \}/, '/insights is counted');
   // The share link, the reader and authoring stay pages.
   assert.match(s.app, /<Route path="\/insights\/public\/:slug" element=\{<PublicInsight \/>\} \/>/, 'the share link still resolves');
@@ -114,17 +114,16 @@ test('the duplicate pages and their entries are gone', () => {
   ]);
 });
 
-test('the old addresses forward and are counted; the share link and authoring stay', () => {
+test('D2319 retires Advisory, preserves opened Insights and keeps sharing and authoring', () => {
   const s = sources();
   const line = (src, path) => src.split('\n').find((l) => l.includes(`<Route path="${path}"`));
   mutationChecked(forwards, s, [
-    ['app', (a) => a.replace(line(a, '/advisory'), line(a, '/advisory').replace('&tab=advisors', '&tab=roster')), 'advisory target'],
-    ['app', (a) => a.replace(line(a, '/advisory'), line(a, '/advisory').replace("guard(['admin', 'founder'], ", 'guard([], ')), 'advisory guard'],
+    ['app', `\n<Route path="/advisory" element={guard(['admin', 'founder'], <Navigate to="/build/team?mode=workspace&tab=advisors" replace />)} />`, 'retired advisory mount'],
     ['app', (a) => a.replace(line(a, '/insights'), line(a, '/insights').replace('/articles#briefs', '/articles')), 'insights target'],
     ['app', (a) => a.replace(line(a, '/insights/public/:slug'), ''), 'share link'],
     ['app', (a) => a.replace(line(a, '/articles/draft'), ''), 'draft'],
     ['app', (a) => a.replace(line(a, '/articles/edit/:id'), ''), 'edit'],
-    ['redirects', (r) => r.replace("  { path: '/advisory' },", ''), 'advisory counted'],
+    ['redirects', "\n  { path: '/advisory' },", 'retired advisory key'],
     ['redirects', (r) => r.replace("  { path: '/insights' },", ''), 'insights counted'],
   ]);
 });

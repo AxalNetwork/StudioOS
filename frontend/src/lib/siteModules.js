@@ -27,13 +27,20 @@ function storeless(role, bucket, zone) {
   return false;
 }
 
+// D2319: these two historical shell zones now name unmounted aliases. Count
+// their live tools, deduplicated with any other references to those tools.
+const CANONICAL_TOOLS = {
+  '/raise/capital-match': '/raise/capital-relationships/match',
+  '/grow/brand': '/build/brand',
+};
+
 /** Every module's route, each once, in a stable order. */
 export function platformModuleRoutes() {
   const routes = new Set();
   for (const role of ROLES_WITH_SHELL) {
     for (const bucket of bucketsFor(role)) {
       for (const zone of bucket.zones) {
-        if (!storeless(role, bucket, zone)) routes.add(zonePath(bucket, zone));
+        if (!storeless(role, bucket, zone)) routes.add(CANONICAL_TOOLS[zonePath(bucket, zone)] || zonePath(bucket, zone));
       }
     }
   }

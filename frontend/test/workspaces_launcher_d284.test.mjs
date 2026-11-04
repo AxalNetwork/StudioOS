@@ -27,6 +27,7 @@ import { WORKSPACES, WORKSPACE_GROUP_ORDER, ADMIN_PLACEMENT } from '../src/lib/a
 import {
   pageItemsFor, sidebarPageItems, groupByKind, KIND_ORDER, ADMIN_SHELLS, EMAIL_ROLES,
 } from '../src/lib/paletteIndex.js';
+import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
@@ -105,8 +106,8 @@ test('no page is labelled as an AI advisor, and the three founder redirects stil
   // founder still lands on the founder marketplace's tab.
   for (const [path, tab] of [['/services', 'services'], ['/needs', 'needs']]) {
     const line = APP.split('\n').find((l) => l.includes(`path="${path}"`));
-    assert.ok(line, `${path} is not routed`);
-    assert.match(line, new RegExp(`<MarketplaceRedirect role=\\{user\\?\\.role\\} founderTab="${tab}"`), `${path} no longer sends a founder to their tab`);
+    assert.equal(Boolean(line), !isRetiredRedirect(path), path);
+    isRetiredRedirect(`${path}`) ? assert.equal(line, undefined) : assert.match(line, new RegExp(`<MarketplaceRedirect role=\\{user\\?\\.role\\} founderTab="${tab}"`), `${path} no longer sends a founder to their tab`);
   }
   assert.match(APP, /function MarketplaceRedirect\(\{ role, founderTab, to \}\) \{[\s\S]{0,80}?if \(role === 'founder'\) return <Navigate to=\{`\/build\/marketplace\?tab=\$\{founderTab\}`\} replace \/>;/,
     'the founder branch of the marketplace redirect is gone');
