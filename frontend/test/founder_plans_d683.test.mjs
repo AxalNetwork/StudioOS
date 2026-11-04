@@ -54,7 +54,9 @@ test('Raise and Grow work asks for Raise + Grow; Validate and Build work for Val
   const decks = W('routes/decks.ts');
   // D897 (#2677): /generate moved to deck_new.ts with /outline; both pass the same Raise + Grow gate first.
   const fresh = W('routes/deck_new.ts');
-  assert.match(fresh, /function planRefusal\(user: User\): Response \| null \{\n  try \{ ensureTier\(user, 'studio'\); return null; \}/, 'New deck is Raise + Grow');
+  // D4359: the studio's gates name the one constant, which is Raise + Grow.
+  assert.match(W('services/decks/studioAccess.ts'), /export const DECK_STUDIO_TIER = 'studio' as const;/, 'the studio is Raise + Grow');
+  assert.match(fresh, /function planRefusal\(user: User\): Response \| null \{\n  try \{ ensureTier\(user, DECK_STUDIO_TIER\); return null; \}/, 'New deck is Raise + Grow');
   for (const route of ["/generate'", "/outline'"]) {
     const at = fresh.indexOf(`deckNew.post('${route}`);
     assert.ok(at > 0, `deck_new ${route} exists`);
@@ -65,7 +67,7 @@ test('Raise and Grow work asks for Raise + Grow; Validate and Build work for Val
   for (const route of ["/:id/share'"]) {
     const at = decks.indexOf(`decks.post('${route}`);
     assert.ok(at > 0, `decks ${route} exists`);
-    assert.match(decks.slice(at, at + 400), /ensureTier\(await requireAuth\(c\), 'studio'\)/, `deck ${route} is Raise + Grow`);
+    assert.match(decks.slice(at, at + 400), /ensureTier\(await requireAuth\(c\), DECK_STUDIO_TIER\)/, `deck ${route} is Raise + Grow`);
   }
   assert.doesNotMatch(decks, /required_tier: 'growth'|tierCovers\(tier, 'growth'\)/, 'no deck path asks for growth');
   assert.doesNotMatch(W('services/decks/branding.ts'), /'growth'/, 'deck branding and premium methods are Raise + Grow');

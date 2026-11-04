@@ -14,6 +14,7 @@ import { hydrateSuperAdmin, isSuperAdmin, requireAuth } from '../auth';
 import { projectOwned as sharedProjectOwned } from '../middleware/projectContentAccess';
 import { getProjectMembershipRole } from '../services/projectAccess';
 import { ensureTier, tierCovers } from '../middleware/requireTier';
+import { DECK_STUDIO_TIER } from '../services/decks/studioAccess';
 import {
   DECK_METHODS, PREMIUM_METHOD_IDS, getMethod,
 } from '../services/decks/methods';
@@ -1585,7 +1586,7 @@ decks.get('/:id/cards/:hash/rendition/:size', async (c) => {
 });
 
 decks.post('/:id/share', async (c) => {
-  ensureTier(await requireAuth(c), 'studio'); // D683: Raise + Grow
+  ensureTier(await requireAuth(c), DECK_STUDIO_TIER); // D683, D4359: Raise + Grow
   const user = await requireAuth(c);
   const id = parseInt(c.req.param('id'));
   await ensureSchema(c.env);
