@@ -1,5 +1,7 @@
 # cloudflare-worker/test — what the worker guarantees
 
+`aggregator_false_zeros_d301.test.ts` checks real SQLite aggregator counts, unreadable tables and draft suppression. Its first-day booking regression pins the clock so the seeded timestamp and preview share the exact window boundary.
+
 `admin_promos_d1271.test.ts` checks all four HQ Super Admin promo gates,
 branch refusal even with an elevation row, stale/non-TOTP sessions, the
 production cool-off prefix, and successful billing-audited writes over
