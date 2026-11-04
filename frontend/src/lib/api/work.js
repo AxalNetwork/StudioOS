@@ -59,6 +59,8 @@ const enc = encodeURIComponent;
 const SCOPE = 'project';
 
 export const workApi = {
+  // #4420: project-only counts, behind the board's flags and read gate.
+  summary: (projectId) => request(`/teams/${SCOPE}/${enc(projectId)}/work/summary`),
   timeline: (projectId, number) => request(`/teams/project/${enc(projectId)}/tasks/${enc(number)}/timeline`),
   comment: (projectId, number, body) => request(`/teams/project/${enc(projectId)}/tasks/${enc(number)}/comments`, { method: 'POST', body: JSON.stringify(body || {}) }),
   editComment: (projectId, uid, body) => request(`/teams/project/${enc(projectId)}/comments/${enc(uid)}`, { method: 'PATCH', body: JSON.stringify(body || {}) }),

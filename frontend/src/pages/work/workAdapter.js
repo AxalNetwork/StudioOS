@@ -54,6 +54,7 @@ export async function through(call, reason) {
 }
 
 export const workAdapter = {
+  summary: (projectId) => through(() => workApi.summary(projectId), WORK_OFF),
   timeline: (projectId, number) => through(() => workApi.timeline(projectId, number), WORK_OFF),
   comment: (projectId, number, body) => through(() => workApi.comment(projectId, number, body), WORK_OFF),
   editComment: (projectId, uid, body) => through(() => workApi.editComment(projectId, uid, body), WORK_OFF),
@@ -105,6 +106,7 @@ export const workAdapter = {
 
 /** Every method, with the issue that turns it on, for the decision file and its test. */
 export const WORK_SEAM = Object.freeze({
+  summary: '#4420',
   timeline: '#3993',
   comment: '#3993',
   editComment: '#3993',
