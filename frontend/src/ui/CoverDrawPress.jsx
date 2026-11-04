@@ -4,10 +4,11 @@ import { COVER_INITIAL, coverQuoteLine, makeCoverActions } from './coverDraw';
 /**
  * #3935: "Draw a cover", beside a cover-image field. `quote(prompt)` and
  * `draw(prompt)` are the page's client calls; `onDrawn(url, alt)` fills its
- * field. See `coverDraw.js` for the two steps.
+ * field; `initialPrompt` starts the field (D3724). See `coverDraw.js` for the two steps.
  */
-export default function CoverDrawPress({ quote, draw, onDrawn, testid = 'cover-draw' }) {
-  const [state, setState] = useState(COVER_INITIAL);
+export default function CoverDrawPress({ quote, draw, onDrawn, testid = 'cover-draw', initialPrompt = '' }) {
+  // D3724 (NE2): the event's cover step can start the press from a prompt it wrote; the member still edits it.
+  const [state, setState] = useState(() => (initialPrompt ? { ...COVER_INITIAL, prompt: initialPrompt } : COVER_INITIAL));
   const actions = useMemo(() => makeCoverActions({ quote, draw, set: setState, onDrawn }), [quote, draw, onDrawn]);
   const busy = state.quoting || state.drawing;
   const line = coverQuoteLine(state.quote);

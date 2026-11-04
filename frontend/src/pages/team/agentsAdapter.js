@@ -72,6 +72,7 @@ export async function through(call, sent = null) {
     const status = e?.status ?? e?.response?.status ?? null;
     const code = e?.code || e?.data?.code || e?.data?.error || null;
     if (status === 404 && (code === 'team_agents_off' || code === 'custom_mcp_off')) return unavailable(code === 'custom_mcp_off' ? 'Connected read-only tools aren’t switched on yet.' : AGENTS_OFF_REASON);
+    if (['model_not_allowed', 'tool_not_allowed', 'invalid_allowlists', 'allowlists_unreadable'].includes(code) && e?.message) return { available: false, refused: true, code, reason: e.message };
     if (status === 403 && code === 'plan_required') return { available: false, locked: 'plan', reason: refusalWords('plan_required') };
     if (status === 403) return { available: false, refused: true, code, reason: refusalWords(code) === refusalWords('') ? (e?.message || refusalWords(code)) : refusalWords(code) };
     if (status === 422 && code === 'rule_floor') {
@@ -213,3 +214,7 @@ export const coverage = (scope, id) => throughSkill(() => teamAgentsApi.coverage
 export const costEstimate = (uid, change = {}) => throughSkill(() => teamAgentsApi.costEstimate(uid, change));
 /** D4121: the same for an agent not yet added (AG3, the Add-an-agent Skills step). */
 export const draftCostEstimate = (scope, id, draft) => throughSkill(() => teamAgentsApi.draftCostEstimate(scope, id, draft));
+
+// D4422: inherited Team settings, through the same refusal boundary as agents.
+export const readAllowlists = (scope, id) => through(() => teamAgentsApi.readAllowlists(scope, id));
+export const saveAllowlists = (scope, id, lists) => through(() => teamAgentsApi.saveAllowlists(scope, id, lists));

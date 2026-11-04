@@ -351,9 +351,9 @@ export function boardFilter(raw: string): Filter {
 }
 
 /** Board DTOs have named assignees and uid references, never numeric user ids or emails. */
-export type WorkRun = {task_id:number;uid:string;status:string;started_at:string|null;ended_at:string|null;charged_microusd:number|null;total_cost:number|null;missing_cost:number};
-/** E3 supplies this reader with its run-table migration. Until then no run
- * exists in the canonical schema, so status and charge are not recorded. */
+export type WorkRun = {task_id:number;uid:string;status:string;display_status?:string;started_at:string|null;ended_at:string|null;charged_microusd:number|null;total_cost:number|null;missing_cost:number};
+/** Reader seam: routes use recordedWorkRuns over E3. Internal board-only
+ * reads may omit runs, and tests may inject their own recorded run reader. */
 export type WorkRunReader = (env: Env, taskIds: number[]) => Promise<Map<number,WorkRun>>;
 export const NO_WORK_RUNS_RECORDED: WorkRunReader = async () => new Map();
 export async function workCards(env: Env, tasks: WorkTask[], readRuns: WorkRunReader = NO_WORK_RUNS_RECORDED) {
@@ -427,7 +427,7 @@ export async function workCards(env: Env, tasks: WorkTask[], readRuns: WorkRunRe
       scheduled:t.scheduled_start&&t.scheduled_end?{start:t.scheduled_start,end:t.scheduled_end}:null,module:t.module,option:t.option,kind:t.kind,
       source:t.source_kind,goal:r.goal_title,goal_uid:r.goal_uid,depends_on:ownDeps.map(({uid,task_number,title})=>({uid,task_number,title})),blocked:blockers.length>0||t.status==='blocked',blocked_reason:t.blocked_reason,proposal_uid:t.blocked_reason==='decision_expired'?openProposal.get(t.id)??null:null,blockers,
       ready:t.status==='open'&&columnOf(t)==='ready'&&!blockers.length,
-      run:run?{uid:run.uid,status:({done:'completed',waiting_decision:'waiting',admitted:'running'} as Record<string,string>)[run.status]??run.status,
+      run:run?{uid:run.uid,status:run.display_status??({done:'completed',waiting_decision:'waiting',admitted:'running'} as Record<string,string>)[run.status]??run.status,
         recorded_status:run.status,charged_microusd:cost.available?cost.value_microusd:null,cost,started_at:run.started_at,ended_at:run.ended_at}:null,
       cost:run&&!run.missing_cost&&run.total_cost!=null?{available:true,value_microusd:run.total_cost}:{available:false},created_at:t.created_at,updated_at:t.updated_at,version:t.work_version,
       needs_reassignment:Number(t.needs_reassignment??0)===1,
