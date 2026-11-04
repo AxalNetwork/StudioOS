@@ -60,6 +60,12 @@ export function courseContext(state, kind, uid, slug) {
 
 // ── Exercises ─────────────────────────────────────────────────────────────
 
+/** D4479: a sent limit and Unicode code points, never an invented cap. */
+export function answerCounter(text, max) {
+  if (!Number.isSafeInteger(max) || max <= 0) return null;
+  return `${[...String(text ?? '')].length.toLocaleString('en-GB')} / ${max.toLocaleString('en-GB')}`;
+}
+
 /**
  * The items a checklist submission checked. The route stores a checklist's
  * `body` as the JSON list of indexes (`"[0,2]"`). Null when the body is not
@@ -168,6 +174,23 @@ export function revealedAnswers(exam, result) {
     const chosen = Array.isArray(answers[q.uid]) ? answers[q.uid] : [];
     const right = Array.isArray(correct[q.uid]) ? correct[q.uid] : [];
     return { uid: q.uid, n: i + 1, prompt: q.prompt, chosen: label(chosen), correct: label(right), right: right.length > 0 && sameSet(chosen, right) };
+  });
+}
+
+/** #4476: review uses the attempt's question order and the choices held in memory. */
+export function reviewRows(questions, answers) {
+  return (questions || []).map((q, i) => ({ n: i + 1, uid: q.uid, text: q.prompt, answered: (answers?.[q.uid] || []).length > 0 }));
+}
+
+export const reviewLine = (answered, total) => `${answered} of ${total} answered. Unanswered questions count as wrong.`;
+
+/** #4476: only the route's explicit reveal permits grading individual questions. */
+export function perQuestionResults(result) {
+  if (result?.answers_revealed !== true || !result.correct) return null;
+  return (result.questions || Object.keys(result.correct).map(uid => ({ uid }))).map((q, i) => {
+    const correct = result.correct[q.uid];
+    const chosen = result.answers?.[q.uid] || [];
+    return { n: i + 1, right: Array.isArray(correct) && correct.length > 0 && sameSet(chosen, correct) };
   });
 }
 

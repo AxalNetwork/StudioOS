@@ -32,3 +32,4 @@ missing, every path answers 404.
 - **Consent identifies callbacks** through `assistantIdentity.ts`; a self-declared name never establishes a vendor identity. Full redirect URI and requested scopes are shown.
 - **Limits**: register 10/IP/minute, authorize 30/IP/minute; dynamic registrations 7 days; interview submissions 20/client/user/day, atomic in D1; pending session placements 100 and assistant placements 500/user/day.
 - **Revocation propagates across edges in about a minute**, because grants use KV.
+- **Outside Team connections (D4424)** carry an encrypted binding UID, rechecked in D1 on every list/call. They use only role/company-approved read tools and `team.propose`; ordinary direct-write tools are unavailable. `outsidePolicy.ts` keeps inbound Axal tool names distinct from outbound custom-server grants. Removal invalidates D1 before provider cleanup; ordinary member MCP grants keep D665's existing gates.

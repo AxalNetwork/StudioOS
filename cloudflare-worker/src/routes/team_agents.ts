@@ -16,6 +16,7 @@
  *   GET    /agents/:uid/run/quote?module=&option=  what a run would hold (the sponsor)
  *   POST   /agents/:uid/run                    run it: a proposal, charged to the sponsor (part 2, #3842); `tool_reads` (part 5)
  *   GET/PUT /:scope/:id/allowlists              D4422: inherited model/tool restrictions, saved by the effective scope’s editors
+ *   GET/PUT /:scope/:id/outside-assistant-tools D4424: inherited inbound Axal tool names, separate from outbound custom-server grants
  *   GET    /tools                              the caller's own approved read tools, to grant an agent (part 5, #3844)
  *   GET    /:scope/:id/queue?role=&module=&option=&status=&cursor=&include=projects   the approvals queue (part 3, #3843)
  *   GET    /queue/:proposalUid                 one proposal and what the agent read for it
@@ -70,6 +71,9 @@ import { PLATFORM_CAP_MAX_MICROUSD, RETIRED_PAUSE, galleryPersonas, loadPersonaS
 import { checkRules, diffRules } from '../services/agents/rulebook';
 import { SPONSOR_WORDS, capResumesAt, sponsorRefusal, teamMembers } from '../services/agents/sponsor';
 import { notify } from '../services/notify';
+import { outsideBindingForAgent, revokeOutsideBinding, OutsideProviderCleanupPending } from '../services/agents/outsideAssistant';
+import { oauthHelpers } from '../mcp/oauth';
+import { OUTSIDE_TOOLS, outsideToolPolicy, saveOutsideToolPolicy } from '../services/agents/outsidePolicy';
 import {
   agentByUid, bookRows, canManage, canRead, effectiveBook, loadScope, logEvent, monthSpend, scopeCols, scopeOfAgent,
   type AgentRow,
@@ -132,6 +136,8 @@ async function agentDto(env: Env, a: AgentRow) {
     uid: a.uid,
     // D4117: the role keys the rule book only; no job title reaches the client.
     role_key: a.role_key,
+    source: a.source ?? 'platform',
+    billing: a.source === 'mcp_client' ? 'own_assistant' : 'platform',
     persona: persona ? personaView(persona, settings!.get(persona.key)) : null,
     first_name: a.first_name,
     last_name: a.last_name,
@@ -143,8 +149,8 @@ async function agentDto(env: Env, a: AgentRow) {
     paused_reason: a.paused_reason,
     // D4387: the UTC day (YYYY-MM-DD) a cap-paused agent resumes; null for every other agent. The page never works it out.
     resumes_at: await capResumesAt(env, a),
-    monthly_cap_microusd: a.monthly_cap_microusd,
-    month_spend: await monthSpend(env, a.id),
+    monthly_cap_microusd: a.source === 'mcp_client' ? null : a.monthly_cap_microusd,
+    month_spend: a.source === 'mcp_client' ? { available: false } : await monthSpend(env, a.id),
     last_activity_at: await lastActivity(env, a.id),
     scope_kind: a.scope_kind,
     project: project ? { id: project.id, name: project.name } : null,
@@ -359,7 +365,7 @@ router.get('/agents/:uid', async (c) => {
       can_manage: await canManage(c.env, s, user),
       rulebook: { effective: book.rules, version: book.version },
       matrix,
-      cap_microusd: a.monthly_cap_microusd,
+      cap_microusd: a.source === 'mcp_client' ? null : a.monthly_cap_microusd,
       month_spend: agent.month_spend,
       proposals,
       events: (ev.results ?? []).map((e) => ({
@@ -385,6 +391,12 @@ router.patch('/agents/:uid', async (c) => {
     if (a.status === 'removed') return say(c, 409, 'removed', 'This agent was removed.');
     const b = await readBody(c);
     if (!b) return say(c, 400, 'invalid_body', 'Send what to change.');
+    if (a.source === 'mcp_client' && ['monthly_cap_microusd', 'first_name', 'last_name'].some((k) => k in b)) {
+      return say(c, 409, 'outside_assistant', 'This connected app keeps its own name and pays for its own model.');
+    }
+    if (a.source === 'mcp_client' && b.status === 'active' && a.paused_reason === 'awaiting_connection') {
+      return say(c, 409, 'connection_pending', 'Finish connecting this outside assistant before resuming it.');
+    }
     const next = { status: a.status, paused_reason: a.paused_reason, cap: a.monthly_cap_microusd, first_name: a.first_name, last_name: a.last_name };
     const events: [string, unknown?][] = [];
     if ('status' in b) {
@@ -475,6 +487,7 @@ router.put('/agents/:uid/sponsor', async (c) => {
     const got = await managed(c, user);
     if (!got.agent) return got.refusal;
     const a = got.agent;
+    if (a.source === 'mcp_client') return say(c, 409, 'outside_assistant', 'Connect the outside assistant again as its new sponsor. Its current connection cannot be transferred.');
     const b = await readBody(c);
     if (!b) return say(c, 400, 'invalid_body', 'Send the new sponsor and why.');
     const reason = typeof b.reason === 'string' ? b.reason.trim() : '';
@@ -531,6 +544,17 @@ router.delete('/agents/:uid', async (c) => {
     if (!a || !s) return say(c, 404, 'not_found', 'There is no such agent.');
     if (!(await canRead(c.env, s, user))) return say(c, 403, 'not_member', 'Only the team can see its agents.');
     if (!(await canManage(c.env, s, user))) return say(c, 403, 'not_manager', 'Only the team’s editors can remove its agents.');
+    if (a.source === 'mcp_client') {
+      const binding = await outsideBindingForAgent(c.env, a.id);
+      if (!binding) return say(c, 503, 'connection_unreadable', 'This agent’s connection could not be read. Try again shortly.');
+      // Also retry provider cleanup for an already-removed agent.
+      try { await revokeOutsideBinding(c.env, user, binding.uid, (id, sponsor) => oauthHelpers(c.env).revokeGrant(id, sponsor)); }
+      catch (e) {
+        if (e instanceof OutsideProviderCleanupPending) return say(c, 503, 'connection_cleanup_pending', e.message);
+        throw e;
+      }
+      return c.json({ ok: true });
+    }
     if (a.status === 'removed') return c.json({ ok: true });
     const withdrawn = await c.env.DB.prepare(
       "UPDATE ai_rail_proposals SET status = 'withdrawn', updated_at = CURRENT_TIMESTAMP WHERE agent_id = ? AND status = 'proposed'",
@@ -589,6 +613,35 @@ router.get('/:scope/:id/agents', async (c) => {
 });
 
 // D4422: company projects always read and write the parent company's policy.
+/** Inbound Axal tools have their own namespace, never a fabricated custom-server connection id. */
+router.get('/:scope/:id/outside-assistant-tools', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
+    if (!s) return notFound(c);
+    if (!(await canRead(c.env, s, user))) return say(c, 403, 'not_member', 'Only the team can see its tools.');
+    const tools = await outsideToolPolicy(c.env, s);
+    if (tools === undefined) return say(c, 503, 'allowlists_unreadable', 'The team’s allowed tools could not be read.');
+    const parent = await effectiveAllowlistScope(c.env, s);
+    return c.json({ tools, offered: OUTSIDE_TOOLS, can_manage: !!parent && await canManage(c.env, parent, user) });
+  } catch (e) { return mapError(c, e); }
+});
+router.put('/:scope/:id/outside-assistant-tools', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
+    const parent = s && await effectiveAllowlistScope(c.env, s);
+    if (!s || !parent) return notFound(c);
+    if (!(await canManage(c.env, parent, user))) return say(c, 403, 'not_manager', 'Only this team’s editors can choose its tools.');
+    const b = await readBody(c); const tools: unknown = b?.tools;
+    if (tools !== null && (!Array.isArray(tools) || tools.length > OUTSIDE_TOOLS.length || tools.some(t => typeof t !== 'string' || !OUTSIDE_TOOLS.includes(t)))) {
+      return say(c, 400, 'invalid_tools', 'Choose offered Axal VC tools, or the role default.');
+    }
+    await saveOutsideToolPolicy(c.env, parent, user.id, tools as string[] | null);
+    return c.json({ tools: await outsideToolPolicy(c.env, parent) });
+  } catch (e) { return mapError(c, e); }
+});
+
 router.get('/:scope/:id/allowlists', async (c) => {
   try {
     const user = await requireAuth(c);

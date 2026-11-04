@@ -343,6 +343,7 @@ const PublicAdvisorBookingPage = lazy(() => import('./pages/advisor/PublicAdviso
 const AttestConsentPage = lazy(() => import('./pages/AttestConsentPage'));
 const PartnerAttestConsentPage = lazy(() => import('./pages/PartnerAttestConsentPage'));
 const PartnerOfficeHoursPage = lazy(() => import('./pages/PartnerOfficeHoursPage'));
+const CoMarketingFounderRedirect = lazy(() => import('./pages/founder/CoMarketingFounderRedirect'));
 const CoMarketingPage = lazy(() => import('./pages/CoMarketingPage'));
 const CoMarketingPitchPage = lazy(() => import('./pages/CoMarketingPitchPage'));
 const CalendarPage = lazy(() => import('./pages/CalendarPage'));
@@ -874,7 +875,11 @@ function UserDropdown({ user, onLogout }) {
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
             Trust Center
           </Link>
-          {/* D4152 (#4152 §2): Billing leaves the sidebar's settings block for the Account menu. */}
+          {/* D4416: companies and projects Portfolio lives above Billing in Account. */}
+          <Link to="/account/portfolio" onClick={() => setOpen(false)}
+            className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
+            Portfolio
+          </Link>
           <Link to="/account/billing" onClick={() => setOpen(false)}
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
             Billing
@@ -3551,7 +3556,7 @@ function AppInner() {
           contract breaks. This redirect keeps every bookmark alive; it points
           at Opportunities because availability is what "office hours" meant. */}
       <Route path="/partner/office-hours" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerWorkspaceTabs set="offers" user={user}><PartnerOfficeHoursPage /></PartnerWorkspaceTabs>))} />
-      <Route path="/comarketing" element={guard(['admin', 'partner', 'founder', 'investor'], partnerPrivateWorkspace(effectiveRole === 'founder' ? founderWorkspace('grow', founderEditor(<CoMarketingPage user={user} />)) : <PartnerWorkspaceTabs set="offers" user={user}><CoMarketingPage user={user} /></PartnerWorkspaceTabs>))} />
+      <Route path="/comarketing" element={guard(['admin', 'partner', 'founder'], partnerPrivateWorkspace(effectiveRole === 'founder' ? <CoMarketingFounderRedirect /> : <PartnerWorkspaceTabs set="offers" user={user}><CoMarketingPage user={user} /></PartnerWorkspaceTabs>))} />
       {/* D637 — one pitch, edited while Proposed. Only a partner owns pitches (or an admin reads one). */}
       <Route path="/comarketing/:pitch" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerWorkspaceTabs set="offers" user={user}><CoMarketingPitchPage /></PartnerWorkspaceTabs>))} />
       {/* D1210 (#3176, CAL14): an Explorer reaches the calendar: Events and From other calendars, and no New. */}

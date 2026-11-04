@@ -171,6 +171,58 @@ export async function whoKnows(env: Env, user: User, q: WhoKnowsQuery) {
   return { query: { kind: q.kind }, people: rows.map(knownView) };
 }
 
+/** D4464 (#4464): the caller's Network counters; failed reads never become zero.
+ * `recording` is keyed by the numeric field's dotted path. A partial failure
+ * preserves readable fields but the route answers 503, with no database details.
+ */
+export async function relationshipSummary(env: Env, user: User) {
+  const recording: Record<string, { recorded: boolean; reason?: string }> = {};
+  async function read<T>(keys: string[], fn: () => Promise<T>): Promise<T | null> {
+    try {
+      const value = await fn();
+      for (const key of keys) recording[key] = { recorded: true };
+      return value;
+    } catch {
+      for (const key of keys) recording[key] = { recorded: false, reason: 'Relationships could not be read. Try again.' };
+      return null;
+    }
+  }
+  const sharing = await read(['sharing.opted_in', 'sharing.teams_shared', 'sharing.teams_total'], async () => {
+    const mine = await myTeams(env, user);
+    return { opted_in: mine.opted_in, teams_shared: mine.teams.filter((t) => t.shared).length, teams_total: mine.teams.length };
+  });
+  const teammates = await read(['teammates_sharing'], async () => {
+    const row = await env.DB.prepare(`SELECT COUNT(DISTINCT theirs.user_id) AS n
+      FROM team_memberships mine
+      JOIN team_memberships theirs ON theirs.team_key = mine.team_key AND theirs.user_id <> mine.user_id
+      JOIN shared_relationships sr ON sr.owner_user_id = theirs.user_id
+      JOIN users u ON u.id = theirs.user_id
+      WHERE mine.user_id = ?
+   AND (EXISTS (SELECT 1 FROM relationship_shares rs WHERE rs.user_id = theirs.user_id AND rs.team_key = mine.team_key AND rs.granted_at IS NOT NULL AND rs.withdrawn_at IS NULL)
+        OR (EXISTS (SELECT 1 FROM relationship_shares rs WHERE rs.user_id = theirs.user_id AND rs.team_key = '*' AND rs.granted_at IS NOT NULL AND rs.withdrawn_at IS NULL)
+            AND NOT EXISTS (SELECT 1 FROM relationship_shares rs WHERE rs.user_id = theirs.user_id AND rs.team_key = mine.team_key AND rs.withdrawn_at IS NOT NULL)))`).bind(user.id).first<{ n: number }>();
+    if (!row || !Number.isSafeInteger(row.n)) throw new Error('Unreadable count');
+    return row.n;
+  });
+  const requests = await read(['requests.sent_pending', 'requests.received_pending', 'requests.made_90d'], async () => {
+    const row = await env.DB.prepare(`SELECT
+      COUNT(CASE WHEN requester_user_id = ? AND status = 'pending' THEN 1 END) AS sent_pending,
+      COUNT(CASE WHEN teammate_user_id = ? AND status = 'pending' THEN 1 END) AS received_pending,
+      COUNT(CASE WHEN status = 'made' AND datetime(made_at) >= datetime('now', '-90 days') THEN 1 END) AS made_90d
+      FROM relationship_interactions
+      WHERE kind = 'intro_requested' AND (requester_user_id = ? OR teammate_user_id = ?)`)
+      .bind(user.id, user.id, user.id, user.id).first<{ sent_pending: number; received_pending: number; made_90d: number }>();
+    if (!row || Object.values(row).some((n) => !Number.isSafeInteger(n))) throw new Error('Unreadable count');
+    return row;
+  });
+  return {
+    sharing: sharing ?? { opted_in: null, teams_shared: null, teams_total: null },
+    teammates_sharing: teammates,
+    requests: requests ?? { sent_pending: null, received_pending: null, made_90d: null },
+    recording,
+  };
+}
+
 // ---------------------------------------------------------------- introductions
 //
 // D4329 (#4329, D1357 part 8a): the request lifecycle.

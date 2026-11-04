@@ -388,6 +388,7 @@ async function growFixture() {
   db.exec(migDdl('125')); db.exec(migFile('437'));
   db.exec(migFile('443'));
   db.exec(migFile('462'));
+  db.exec(sqlOf('202611041912_growth_channel_details.sql'));
   db.exec(migFile('507'));
   db.prepare('INSERT INTO users (id, role, founder_id, name, email) VALUES (?, ?, ?, ?, ?)').run(FOUNDER, 'founder', 1001, 'Fay', 'fay@example.test');
   db.prepare(`INSERT INTO projects (id, uid, name, founder_id, company_id) VALUES (?, 'p7', 'Venture', 1001, 70)`).run(GP);
@@ -771,7 +772,7 @@ function routeRequest(grow: any, buildDb: any) {
 const SAMPLES: Record<string, Record<string, Record<string, unknown>>> = {
   grow: {
     'product-improvement': { body: 'Needs single sign-on', source: 'customer', from_name: 'Ana', from_company: 'Acme Test', theme_choice: 'new', theme: 'Security', from_email: 'ana@x.example' },
-    distribution: { kind: 'paid_social', name: 'Podcasts', state: 'testing', spend: '1,250.50', bar: '200' },
+    distribution: { kind: 'ads', name: 'Podcasts', state: 'testing', spend: '1,250.50', bar: '200' },
     'revenue-and-traction': { kpi: 'mrr', value: '38,400', as_of: dayFrom(0), note: 'Typed from the bank statement' },
     'team-expansion': { title: 'Founding engineer', team: 'Engineering', type: 'fractional', target_start: dayFrom(60), band: '90,000–120,000', equity: '0.5', post_to: [] },
     'partner-network': { name: 'Initech', type: 'agency', stage: 'terms', terms_kind: 'rev_share', amount: '20%' },
@@ -806,7 +807,7 @@ test('D661: every Add form sends a body its Worker route accepts, and the row re
     { from_company: 'Acme Test', from_email: 'ana@x.example', notify_on_ship: 1 }, 'Tell them when it ships is checked, so their email is kept');
   const podcasts = await growRow('distribution', (r) => r.name === 'Podcasts');
   assert.deepEqual([podcasts.utm_source, podcasts.state, podcasts.spend_cents, podcasts.spend_source], ['podcasts', 'testing', 125050, 'manual'], 'the UTM source from the name, and dollars to cents this month, in the one POST');
-  assert.deepEqual({ ...grow.db.prepare("SELECT kind, cac_bar_cents, bar_currency FROM growth_channels WHERE name = 'Podcasts'").get() as any }, { kind: 'paid_social', cac_bar_cents: 20000, bar_currency: 'usd' });
+  assert.deepEqual({ ...grow.db.prepare("SELECT kind, legacy_kind, cac_bar_cents, bar_currency FROM growth_channels WHERE name = 'Podcasts'").get() as any }, { kind: 'ads', legacy_kind: null, cac_bar_cents: 20000, bar_currency: 'usd' });
   assert.deepEqual({ ...grow.db.prepare('SELECT mrr, source, notes FROM project_metrics WHERE project_id = ? AND snapshot_date = ?').get(GP, dayFrom(0)) as any },
     { mrr: 38400, source: 'manual', notes: 'Typed from the bank statement' }, 'MRR in US dollars, as a hand entry');
   assert.deepEqual({ ...grow.db.prepare("SELECT team, employment_type, comp_min_cents, comp_max_cents, comp_currency, equity_pct, status FROM job_postings WHERE title = 'Founding engineer'").get() as any },
@@ -852,7 +853,11 @@ test('D661: every choice a form offers is one its Worker route accepts', async (
     }
   }
   // Grow's choices; Build's moved to cycle_forms_d695.test.ts with its canvas forms (#1656 PR 3b).
-  assert.ok(n >= 57, `${n} choices checked`);
+  const offered = Object.keys(FORMS.grow).flatMap((slug) => formFor('grow', slug)!.fields)
+    .filter((f: any) => f.type === 'select' || f.kind === 'CH')
+    .reduce((total: number, f: any) => total + (f.options ?? f.opts).filter((o: any) => !o.disabled).length, 0);
+  assert.ok(offered > 0, 'the forms offer choices');
+  assert.equal(n, offered, 'every currently offered choice was checked; no pinned historical total');
 });
 
 test('D661: the forms refuse what the Worker would, and show the Worker\'s own sentence on its field', async () => {
@@ -921,7 +926,7 @@ test('D661: every Grow Edit form starts from its row, and the change reads back 
     'an emptied field is cleared, and what the form does not hold is left as logged');
   const ch = await raw('distribution');
   assert.deepEqual([ch.name, ch.state, ch.utm_source, ch.spend_cents], ['Podcasts (paused)', 'paused', 'podcasts', 125050], 'a spend not typed is not rewritten');
-  assert.deepEqual({ ...grow.db.prepare("SELECT kind, cac_bar_cents FROM growth_channels WHERE utm_source = 'podcasts'").get() as any }, { kind: 'paid_social', cac_bar_cents: 20000 }, 'a field the row does not carry is left as it was');
+  assert.deepEqual({ ...grow.db.prepare("SELECT kind, legacy_kind, cac_bar_cents FROM growth_channels WHERE utm_source = 'podcasts'").get() as any }, { kind: 'ads', legacy_kind: null, cac_bar_cents: 20000 }, 'a field the row does not carry is left as it was');
   assert.equal((grow.db.prepare('SELECT mrr FROM project_metrics WHERE project_id = ? AND snapshot_date = ? AND source = ?').get(GP, dayFrom(0), 'manual') as any).mrr, 40000);
   assert.deepEqual({ ...grow.db.prepare("SELECT title, team, employment_type, comp_min_cents FROM job_postings WHERE title = 'Founding engineer'").get() as any },
     { title: 'Founding engineer', team: 'Product', employment_type: 'fractional', comp_min_cents: 9000000 }, 'only the team is sent');

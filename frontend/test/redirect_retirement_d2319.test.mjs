@@ -160,8 +160,6 @@ test('D2319: repaired public navigation uses the canonical screens and 83(b) ret
     assert.equal(markup.includes('href="/incorporate/83b"'), false);
   }
 });
-
-
 test('D2319: the founder engagement mail destination opens the mounted Needs tab', () => {
   const user = { id: 1, role: 'founder', founder_id: 10 };
   const target = '/build/marketplace?tab=needs';

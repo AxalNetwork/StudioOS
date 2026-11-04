@@ -144,6 +144,7 @@ async function fixture() {
   db.exec(ddl('125')); db.exec(file('437'));
   db.exec(file('443'));
   db.exec(file('462'));
+  db.exec(file('202611041912'));
   db.exec(file('507'));
   const u = db.prepare('INSERT INTO users (id, role, founder_id, name, email) VALUES (?, ?, ?, ?, ?)');
   u.run(FOUNDER, 'founder', 10, 'Fay', 'fay@co.example');

@@ -207,6 +207,7 @@ D1169: `usage_storage_d1169.test.ts` holds the grown storage read: thirteen memb
 | `work_items_3993.test.ts` | D1614 W7 (#3993): per-project numbering and the company 404, cleaned comment Markdown, mentions and their notices, an agent's comment and cost, an agent that cannot close, review (approve, request changes with a comment), drafts that need Accept (and a racing accept), labels and milestones with filters and sort, and migration 763 over legacy rows, over real SQLite. |
 | `deck_grid_diagram_d1542.test.ts` | D1542 (#3780): the `grid_diagram` job: every number stripped ("$3M ARR" → "ARR"), the family of types (Flow, Cycle and Matrix generate; the rest are later), overflow refused by `fitProblems` and each node's box, the plan on the Diagrams group's model, a proposal nothing saves before Accept, and `POST /api/decks/:id/diagrams/check` against its contract. |
 | `deck_record_diagrams_pin_d1542.test.ts` | D1542 (#3780): the one-click path's `recordDiagrams` pinned, its whole output for one venture, the composer's blocks drawn from it, and no reach into the `grid_diagram` job. |
+| `grow_campaigns_d4447.test.ts` | D4447 (#4447): real-SQLite campaign plans, gates, validation, scoped links, attribution and missing/unreadable figures. |
 | `general_counsel_4421.test.ts` | #4421: canonical role metadata on proposal/queue reads, owner isolation, spoof prevention and the shared run instruction. |
 
 D1456 (#4014): the existing record, recovery, bot-control and migration-runner suites cover channel/fact actions, recorded failed steps, creator-only safe bot details and migration 760 replay through the ledger. The engine fixture applies migration 760 from its SQL source.
@@ -214,8 +215,10 @@ D1456 (#4014): the existing record, recovery, bot-control and migration-runner s
 `team_allowlists_4422.test.ts` checks D4422 scope inheritance, manager/plan/approval bounds, atomic audit and use-time revocation, including agent MCP calls, over real SQLite.
 
 | `work_runs_3968.test.ts` | Real engine board/item latest-run wiring, guard-inclusive charges, unknown costs, scope gates and concurrent attempts (#3968). |
+| `comarketing_split_4439.test.ts` | D4439: investor refuses every member read/write; partners/founders keep their existing access; HQ reads historical investor pitches. |
 | `syndication_review_4440.test.ts` | D4440: client dirty choices against mounted Worker routes, terminal history, disconnected accounts and retained accepted copy. |
 | `work_runs_4459.test.ts` | #4459: no-call attempts preserve paid totals; real engine labels/milestone/review responses retain the live item run and cost. |
+| `grow_inbox_4494.test.ts` | D4494: real SQLite mounted Inbox reads, per-member scope/read receipts, null on failures, no sends, and Outlook lookup/paging safety. |
 
 `redirect_links_d2319.test.ts` exercises canonical checklist, calendar, promo,
 advisor CTA and stored search-result URLs after redirect retirement (#4415).

@@ -162,14 +162,21 @@ export async function runReview(deps) {
   const month = monthOf(started);
   const monthStart = `${month}-01T00:00:00Z`;
   let ledger;
+  let ledgerFailure = null;
   let listing = null;
   try {
     listing = await deps.github.listArtifacts(monthStart);
     ledger = readLedger(listing.artifacts, { month, key, listingComplete: listing.complete });
-  } catch {
+  } catch (e) {
+    if (/^artifact listing page [1-9][0-9]*: (HTTP [1-5][0-9]{2}|timeout|network error|read error|no artifact list)$/.test(e?.ledgerReadFailure || '')) ledgerFailure = e.ledgerReadFailure;
     ledger = { spentUsd: 0, duplicate: null, complete: false };
     state.limitations.push('This month\'s review records could not be read, so a repeat of an earlier review could not be detected.');
   }
+  const decideBudget = input => {
+    const result = budgetDecision(input);
+    if (!result.allow && ledgerFailure && result.reason.includes('could not be read')) return { ...result, reason: `${result.reason} (${ledgerFailure})` };
+    return result;
+  };
   if (ledger.duplicate) {
     return finish(state, 'duplicate', `these exact inputs were already reviewed (${ledger.duplicate.name}, ${ledger.duplicate.created_at}); see that run's summary. Nothing was spent.`);
   }
@@ -194,7 +201,7 @@ export async function runReview(deps) {
 
   const worstCaseUsd = preflightCost({ inputTokens, maxOutputTokens: config.maxOutputTokens, model, rates: state.rates });
   state.facts['month spend recorded'] = ledger.complete ? `$${ledger.spentUsd.toFixed(2)}` : 'unreadable';
-  const budget = budgetDecision({ worstCaseUsd, maxCostUsd: config.maxCostUsd, monthlyBudgetUsd: config.monthlyBudgetUsd, ledger });
+  const budget = decideBudget({ worstCaseUsd, maxCostUsd: config.maxCostUsd, monthlyBudgetUsd: config.monthlyBudgetUsd, ledger });
   // The main account's own cap reached is, for the chain, the same as its
   // credit running out: skip the call and let the next account review.
   const hasChain = eligibleFallbacks.some((step) => deps.fallbacks?.[step.id]);
@@ -242,7 +249,7 @@ export async function runReview(deps) {
       if (remaining < 60_000) throw deadlineError();
       const prior = costs.get(accountId) || 0;
       const ownLedger = listing ? readLedger(listing.artifacts, { month, key, listingComplete: listing.complete, account: accountId || 'main' }) : ledger;
-      const allowed = config.maxCostUsd > 0 && prior + worst > config.maxCostUsd ? { allow: false, reason: 'retry would exceed the per-review cap' } : budgetDecision({ worstCaseUsd: worst, maxCostUsd: config.maxCostUsd, monthlyBudgetUsd: config.monthlyBudgetUsd, ledger: { ...ownLedger, spentUsd: ownLedger.spentUsd + prior } });
+      const allowed = config.maxCostUsd > 0 && prior + worst > config.maxCostUsd ? { allow: false, reason: 'retry would exceed the per-review cap' } : decideBudget({ worstCaseUsd: worst, maxCostUsd: config.maxCostUsd, monthlyBudgetUsd: config.monthlyBudgetUsd, ledger: { ...ownLedger, spentUsd: ownLedger.spentUsd + prior } });
       if (!allowed.allow) throw Object.assign(new Error('attempt budget'), { kind: 'billing', detail: allowed.reason });
       record('err', worst, { outcome: 'api_error', error_kind: 'deadline', reason: 'deadline', cost_known: false });
       try {
@@ -283,12 +290,12 @@ export async function runReview(deps) {
       // is used up. Walk the chain; a step that is out of credit too passes
       // the review on, any other failure stops here.
       let failed = e;
-      const empty = e?.mainSkipped ? (mainUnavailable ? [] : ['Claude (its monthly review budget is used)']) : creditExhausted(e) ? ['Claude'] : [];
+      const empty = e?.mainSkipped ? [] : creditExhausted(e) ? ['Claude'] : [];
       if (e?.mainSkipped) state.limitations.push(`Claude was not called: ${e.mainSkipped}.`);
       // A fallback account that cannot be used (a bad key, a key with no
       // workspace, no rate, its own budget spent) is skipped with its reason,
       // never the end of the chain: the accounts after it still get their turn.
-      const skipped = mainUnavailable ? [`Claude skipped: ${mainUnavailable}`] : !e?.mainSkipped && !creditExhausted(e) ? [`Claude failed: ${stepFailure(e, { provider: 'anthropic', secret: 'ANTHROPIC_API_KEY' })}`] : [];
+      const skipped = e?.mainSkipped ? [`Claude was not called: ${e.mainSkipped}`] : !e?.mainSkipped && !creditExhausted(e) ? [`Claude failed: ${stepFailure(e, { provider: 'anthropic', secret: 'ANTHROPIC_API_KEY' })}`] : [];
       let onlyBudget = true;
       for (const step of chain) {
         provider = step.provider;
@@ -300,7 +307,7 @@ export async function runReview(deps) {
         // step by the per-review cap and by what this account has spent.
         const worst = preflightCost({ inputTokens, maxOutputTokens: config.maxOutputTokens, model: usedModel, rates: state.rates });
         const stepLedger = listing ? readLedger(listing.artifacts, { month, key, listingComplete: listing.complete, account: step.id }) : { spentUsd: 0, duplicate: null, complete: false };
-        const allowed = budgetDecision({ worstCaseUsd: worst, maxCostUsd: config.maxCostUsd, monthlyBudgetUsd: config.monthlyBudgetUsd, ledger: stepLedger });
+        const allowed = decideBudget({ worstCaseUsd: worst, maxCostUsd: config.maxCostUsd, monthlyBudgetUsd: config.monthlyBudgetUsd, ledger: stepLedger });
         if (step.provider === 'anthropic' && !model) { skipped.push(`${account} was not called: ANTHROPIC_MODEL is not set`); continue; }
         if (!allowed.allow) {
           skipped.push(`${account} was not called: ${allowed.reason}`);

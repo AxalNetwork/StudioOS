@@ -123,11 +123,14 @@ test('A7 owns the founder Research landing, and /signals only redirects to it', 
 });
 
 test('a founder never gets two tab bars on one page', () => {
-  // /comarketing already carried the Partner Offers bar. The fix is a branch,
-  // not a second bar stacked on the first.
+  // D4439: the founder's old address forwards; the canonical page owns one Grow frame.
+  // Partners retain their Offers bar at the original address.
   const comarketing = app.split('\n').find((l) => l.includes('path="/comarketing"'));
-  assert.match(comarketing, /effectiveRole === 'founder'\s*\?\s*founderWorkspace\('grow', founderEditor\(/,
-    '/comarketing must serve founders the Grow bar INSTEAD of the Partner bar');
+  assert.match(comarketing, /effectiveRole === 'founder'\s*\?\s*<CoMarketingFounderRedirect \/>/,
+    '/comarketing must forward founders to Partner network');
+  const founderPage = readFileSync('frontend/src/pages/founder/FounderCoMarketingPage.jsx', 'utf8');
+  assert.match(founderPage, /<FounderWorkspacePage page="grow" hideHeader>/);
+  assert.doesNotMatch(founderPage, /PartnerWorkspaceTabs|FounderWorkspaceTabs/, 'the founder feed must not stack tab bars');
   assert.ok(comarketing.includes('<PartnerWorkspaceTabs set="offers"'),
     '/comarketing must still serve everyone else the Partner bar');
 
@@ -184,19 +187,14 @@ test('Trust stays out of the sidebar', () => {
   assert.ok(!targets.includes('/trust'), 'Trust Center belongs to the user dropdown');
 });
 
-test('Company Settings is the pinned footer only, never a nav row', () => {
-  // It used to be both: a row at the end of the group AND the pinned footer,
-  // so every role rendered it twice. The footer is the single entry point now.
-  assert.ok(
-    !targets.includes('/company-settings'),
-    'a /company-settings row is back in the nav config; it duplicates the pinned footer',
-  );
-
-  // The guard that moved here with it. SidebarNav's footer is unconditional —
-  // no role gate — so removing the row cannot strand a role without a door.
+test('scope Settings stays in the footer; account Portfolio lives in the Account menu', () => {
+  assert.ok(!targets.includes('/company-settings'), 'no retired Company Settings nav row');
   const nav = readFileSync(resolve(process.cwd(), 'frontend/src/ui/SidebarNav.jsx'), 'utf8');
-  // D1140 (#3020): the footer is Companies and projects now.
-  assert.ok(/to="\/account\/portfolio"/.test(nav), 'the pinned footer lost its link');
+  // D4416 amends D4152: companies and projects moved from the rail to Account.
+  assert.doesNotMatch(nav, /to="\/account\/portfolio"/, 'no account Portfolio footer');
+  const app = readRoutesSource();
+  const account = app.slice(app.indexOf('function UserDropdown('), app.indexOf('function PortalSwitcher'));
+  assert.match(account, /<Link to="\/account\/portfolio"[\s\S]*?>\s*Portfolio\s*<\/Link>/, 'Portfolio remains reachable from Account');
   assert.ok(!/to="\/company-settings"/.test(nav), 'the footer points at the retired address');
   assert.ok(!/to="\/settings"/.test(nav), 'the footer must not point at the personal Account page');
 });

@@ -75,7 +75,7 @@ const checks:any = {
       ['assign_chat_to_interview','validate:write'],['decks.propose_area','raise:write'],['decks.propose_variant','raise:write'],['decks.read_outline','raise:read'],['extract_action_items','validate:write'],['get_build_progress','build:read'],['get_interview_guide','validate:read'],['get_meeting_transcript','validate:read'],
       ['get_session_insights','validate:read'],['get_validate_context','validate:read'],['list_channel_chats','validate:read'],['list_companies','validate:read'],
       ['list_connections','connectors:read'],['list_meetings','validate:read'],['mail_context','mail:read'],['mail_draft','mail:write'],['propose_placements','validate:write'],['raise.draft_follow_up','raise:write'],['raise.prospect_brief','raise:read'],['raise.qa_prep','raise:read'],['structure_with_axalvc','validate:write'],
-      ['submit_interview','validate:write'],['summarize_meeting','validate:write']]);
+      ['submit_interview','validate:write'],['summarize_meeting','validate:write'],['team.propose','team:propose']]);
   },
   async scope(m:any) {
     const {env}=fixture();let ran=0;const tool={name:'test',requiredScope:'validate:write',company:false,run:async()=>++ran};
@@ -328,7 +328,7 @@ const probes=[
  ['identity','identity',"Gemini: ['https://vertexaisearch.cloud.google.com/oauth-redirect']",'Gemini: []'],
  ['identity','identity',"Grok: ['https://grok.com/connectors-oauth-exchange-code/', 'https://grok.com/connectors-oauth-exchange-code']",'Grok: []'],
  ['destination','consent','redirect_uri: p.authRequest.redirectUri','redirect_uri: hostOf(p.authRequest.redirectUri)'],
- ['client','consent','clientId: p.authRequest.clientId','clientId: \'wrong\''],
+ ['client','consent','userId: Number(user.id), clientId: p.authRequest.clientId','userId: Number(user.id), clientId: \'wrong\''],
  ['keepGrant','consent','revokeExistingGrants: false','revokeExistingGrants: true'],
  ['publicLimit','oauth','register: 10','register: 11'],
  ['publicLimit','oauth','authorize: 30','authorize: 31'],

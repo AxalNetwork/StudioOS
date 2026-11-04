@@ -75,8 +75,6 @@ test('D2319: already indexed directory URLs normalize on reads without losing qu
   assert.equal((await searchSemantic(env('/partners/onboard'), 'Example', { type: 'partner' }))[0]?.url, '/partners/onboard');
   assert.equal((await searchSemantic(env('/directory?user=7'), 'Example', { type: 'partner' }))[0]?.url, '/directory?user=7');
 });
-
-
 test('D2319: owned engagement mail links retain founder versus changed-role routing', async () => {
   const schema = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
   const { DB, db } = makeD1(['partners', 'engagements', 'partner_bookings', 'partner_office_hour_slots'].map((t) => tableFromBaseline(schema, t)).join('\n'));

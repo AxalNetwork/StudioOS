@@ -73,7 +73,7 @@ function Cta({ add }) {
 
 export default function PhoneModulePage({
   cycle, slug, moduleName, data, status = data ? 'ready' : 'loading', message = '', onRetry,
-  records, recordsStatus, recordsMessage, query = {}, onQuery, onRetryRecords, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null, aboveRecords = null,
+  records, recordsStatus, recordsMessage, query = {}, onQuery, onRetryRecords, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null, aboveRecords = null, header = undefined,
 }) {
   const [text, setText] = useState(query.q || '');
   const meta = cycleOf(cycle);
@@ -85,10 +85,10 @@ export default function PhoneModulePage({
   // A refused or unreadable read sends no card, so the cycle's own list names it (never its slug).
   const name = card?.name || data?.module?.name || moduleName || slug;
   const recs = records ?? data?.records;
-  const bar = (
+  const bar = header === undefined ? (
     <CycleBar back={{ label: cycleName, to: `/${meta.key}${search}` }} title={name} sub={card?.caption || undefined}
       eadwynLabel={`${cycleName} · ${name}`} />
-  );
+  ) : header;
   // A module that is also a tool draws its own tabs here (D906: Investor
   // narrative), in every state: each tab has its own read.
   const tabs = (subnav || more) ? <div className="mb-[14px] flex min-w-0 flex-col gap-2">{more && <div className="flex justify-end">{more}</div>}{subnav}</div> : null;

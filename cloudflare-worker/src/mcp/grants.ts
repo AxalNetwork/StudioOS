@@ -27,6 +27,8 @@ export interface GrantProps {
   grantedAt: number;
   /** D842 (#2470): set when the principal is a member API key (`clientId` is `apikey:<uid>`), never for an OAuth grant. */
   keyUid?: string;
+  /** D4424: encrypted connection identity; never taken from tool arguments or request headers. */
+  outsideBindingUid?: string;
 }
 
 /**

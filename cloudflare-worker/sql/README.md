@@ -16,7 +16,9 @@ and is not kept in sync.
 | `migrations/730_pitch_card_blobs.sql` | D1539 (#3789, deck v2 B13): `pitch_card_blobs(hash, json, created_at)`, each card's JSON once under the SHA-256 of its canonical JSON, and `pitch_decks.card_hashes`, a version's cards as an ordered hash list. Additive; nothing backfilled; `slides` is still written during the transition. |
 | `migrations/737_deck_brand_kits.sql` | D1562 (#3809, deck v2 D1): `deck_brand_kits`, one row per venture (display and body fonts, palette roles, image style, reference image uids, a logo uid). Additive; number given on the issue. |
 | `migrations/760_interview_processing_failed_stage.sql` | D1456 (#4014): nullable, constrained failed processing step; existing migration ledger prevents replay. |
+| `migrations/202611041613_grow_campaigns.sql` | D4447 (#4447): campaign plans, channel budgets and same-venture item links; Part A of #3722. |
 | `migrations/202611041438_team_allowlists.sql` | D4422 (#4422): per-company and standalone-project model/tool lists, with actor/time; company projects inherit their parent policy. |
+| `migrations/202611042009_distribution_inbox_reads.sql` | D4494: per-member, per-message Inbox receipts. |
 
 ## Adding a change
 
@@ -57,3 +59,5 @@ five existing record tables, profile-file metadata in `member_files`, and the
 resumable discovery checkpoints in `member_file_size_backfill_state`. It leaves
 legacy sizes NULL and adds no users column. The operator backfill measures R2
 HEAD metadata after deployment; the migration never reads or deletes objects.
+
+| `migrations/202611041900_grow_campaign_details.sql` | D4483 (#4483): nullable audience/channel budget details and plain creative text; ALTERs apply once through the ledger. |

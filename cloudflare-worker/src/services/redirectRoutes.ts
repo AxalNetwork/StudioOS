@@ -61,10 +61,12 @@ export const ADMIN_TAB_REDIRECTS: readonly RedirectRoute[] = Object.freeze([
  * stays the partner's bucket and the founder's and an admin's board; its
  * forward (`DealsPipelineRedirect`) sends the key.
  */
-export const ROLE_REDIRECTS: readonly (RedirectRoute & { role: 'admin' | 'investor' })[] = Object.freeze([
+export const ROLE_REDIRECTS: readonly (RedirectRoute & { role: 'admin' | 'investor' | 'founder' })[] = Object.freeze([
   { path: '/funds', role: 'admin' },
   { path: '/funds/performance', role: 'admin' },
   { path: '/pipeline', role: 'investor' },
+  // D4439: only founders forward; partner visits stay pageviews.
+  { path: '/comarketing', role: 'founder' },
 ]);
 
 /**

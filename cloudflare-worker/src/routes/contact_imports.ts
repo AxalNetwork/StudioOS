@@ -8,7 +8,7 @@
  *   POST  /import/linkedin-csv[?preview=1]     multipart `file`; preview writes nothing
  *   GET   /import/reviews                       the member's pending suggestions
  *   POST  /import/reviews/:uid/:decision        merge | keep | dismiss
- *   GET   /book[?q=&page=]                         the member's own book, with each row's sources (D1352)
+ *   GET   /book[?q=&page=&source=&follow_up=]                         the member's own book, with each row's sources (D1352)
  *   GET   /book/:id/notes, POST /book/:id/notes        { body }
  *   GET   /book/:id/tasks, POST /book/:id/tasks        { title, due_on? }
  *   PATCH /book/:id/tasks/:uid                         { done }
@@ -87,7 +87,7 @@ const body = async (c: any): Promise<Record<string, any>> => { const b = await c
 // D1352 (#3567): the book itself, for Network › Relationships.
 r.get('/book', handle(async (c, ctx) => {
   const page = idOf(c.req.query('page')) ?? 1;
-  return c.json(await bookOf(c.env, Number(ctx.user.id), String(c.req.query('q') ?? ''), page));
+  return c.json(await bookOf(c.env, Number(ctx.user.id), String(c.req.query('q') ?? ''), page, { source: c.req.query('source'), follow_up: c.req.query('follow_up') }));
 }));
 r.get('/book/:id/notes', handle(async (c, ctx) => {
   const k = await contactOr404(c, ctx); if (!k) return missing(c);

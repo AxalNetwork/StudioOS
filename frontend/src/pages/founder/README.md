@@ -110,3 +110,5 @@ the shared parts and `RecordChatTool.jsx`'s tab bar (`SubTabs`), and reads
 `GET /meetings`. One venture's calls are also `GET /meetings/calls`, and
 `PATCH /sessions/:id/speakers` renames one speaker in every passage. With all
 three channels built, D1309's "Today" panel is gone.
+
+- `FounderCoMarketingPage.jsx` reuses the published feed in Grow › Partner network; `CoMarketingFounderRedirect.jsx` counts only the founder’s legacy forward, retaining query and hash (D4439, #4439).

@@ -39,7 +39,7 @@ export const RETURNS = [
   ['/build/marketplace','/validate/customer-research','← Validate › Customer research'],
   ['/execution','/build/product-roadmap','← Build › Product roadmap'],
   ['/build/team','/grow/team-expansion','← Grow › Team expansion'],
-  ['/comarketing','/grow/distribution','← Grow › Distribution'],
+  ['/comarketing','/grow/partner-network','← Grow › Partner network'],
   // D1180 (#3107) and D1194 (#3128): /raise/capital, /raise/capital/model and
   // /raise/capital/pipeline only forward, so none has a module return.
   ['/raise/legal-engine','/build/company-creation','← Build › Company creation'],
@@ -54,7 +54,7 @@ export const RETURNS = [
 ];
 export const checks = {
   doors(m=actual) {
-    const groups = [['grow','distribution'],['raise','cap-table'],['build','company-creation'],['raise','capital-relationships'],['raise','data-room']];
+    const groups = [['grow','distribution'],['raise','cap-table'],['build','company-creation'],['raise','capital-relationships'],['raise','data-room'],['grow','partner-network']];
     const out = groups.map(([cycle,slug])=>{
       const tools=m.navigation.moduleToolLinks(cycle,slug,founder,'?project_id=41');
       return links(render(m.CycleModulePage,{cycle,slug,tools,data:{module:{name:slug},records:{cols:[],rows:[],total:0}}}), 'cycle-module-tool');
@@ -68,6 +68,7 @@ export const checks = {
       [{href:'/raise/capital-relationships/match?project_id=41',label:'Open investor match',quiet:true}],
       // D1109: the files tool's door (D696) left with the tool; the module page is the Data room tool.
       [],
+      [{href:'/grow/partner-network/co-marketing?project_id=41',label:'Open co-marketing',quiet:true}],
     ]);
   },
   gates(m=actual) {
@@ -100,10 +101,11 @@ export const checks = {
     assert.deepEqual([m.oldTabsExist, /<FounderWorkspaceTabs\b|import\([^)]*FounderWorkspaceTabs/.test(codeOnly(m.sources.app))],[false,false]);
   },
   bindings(m=actual) {
-    const app=codeOnly(m.sources.app);
+    const app=codeOnly(m.sources.app + '\n' + readFileSync('frontend/src/routes/comarketing.jsx','utf8'));
     // D1178: /raise/capital/model is a redirect to Use of funds › Forecast now, so no editor mounts there.
     // D1194: the capital-match addresses forward to the tool, so they mount no editor either.
-    const routes=RETURNS.map(r=>r[0]).filter(p=>!['/raise/capital-match','/grow/capital-match','/build/brand','/grow/launch','/legal','/legal/send','/raise/capital/model'].includes(p));
+    // D4439: the old /comarketing address now forwards; its canonical founder page owns the tested module return.
+    const routes=RETURNS.map(r=>r[0]).filter(p=>!['/raise/capital-match','/grow/capital-match','/build/brand','/grow/launch','/legal','/legal/send','/raise/capital/model','/comarketing'].includes(p));
     assert.deepEqual([routes.map(p=>[p,routeBlock(app,p)?.includes('founderEditor(')??false]),
       /const founderEditor = \(component\) => <><FounderModuleBackLink user=\{user\} \/>\{component\}<\/>/.test(app),
       /tools=\{moduleToolLinks\(cycle, slug, user, q\)\}/.test(m.sources.route)],
@@ -134,6 +136,6 @@ export const checks = {
       const block=route(t.path)||'';
       const roles=block.match(/guard\((?:labRoles\()?\[([^\]]*)\]/)?.[1]||'';
       return [t.path,t.roles.every(r=>roles.includes("'"+r+"'"))];
-    }),[['/build/brand',true],['/grow/launch',true],['/legal',true],['/legal/send',true],['/raise/capital-relationships/match',true]]);
+    }),[['/build/brand',true],['/grow/launch',true],['/legal',true],['/legal/send',true],['/raise/capital-relationships/match',true],['/grow/partner-network/co-marketing',true]]);
   },
 };
