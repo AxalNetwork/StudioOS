@@ -253,3 +253,12 @@ b3d19c7c669f45d69fe79a4f690b1e4c5bded6a8:.gitleaksignore:generic-api-key:234
 # renames it `PREFS_STORE_NAME`, so no later commit carries the match. Scoped to
 # the one finding, as D334's entry is.
 a519fc5743a2b719b6f8f8f0ff709bbf25670bec:frontend/src/pages/raise/pitch/teleprompterModel.js:generic-api-key:41
+
+# D3678 (#3678) — one finding, not one commit. gitleaks' generic-api-key rule
+# flagged `RFC_KEY_B32` in cloudflare-worker/test/meet_bot_signin_3678.test.ts,
+# introduced in commit de797bc2c5. It is RFC 6238 Appendix B's own published
+# test seed ("12345678901234567890") written in base32: public, in the RFC,
+# and no account's key. Nothing to rotate. The test now writes the base32 at
+# run time, so no later commit carries the literal; this entry is scoped to
+# that exact fingerprint.
+de797bc2c5a7121c7ed9ea713a7adeaf32ad46be:cloudflare-worker/test/meet_bot_signin_3678.test.ts:generic-api-key:28

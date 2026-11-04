@@ -1,8 +1,12 @@
 /**
  * D886 B3 (#2581): the Google Meet adapter, B2's `MeetingAdapter` for Meet.
  *
- * - **Join:** the bot opens the link as a guest named `botName` ("Eadwyn AI"),
- *   with the microphone and camera off, and asks to join. It resolves in the
+ * - **Sign-in (D3678, #3678):** with a `signIn` source, the bot first signs in
+ *   to its own Google account (`meet/signin.ts`), so Meet sees a signed-in
+ *   user, named as that account is ("Eadwyn AI (Axal VC)"). With no account set
+ *   up it joins as before.
+ * - **Join:** the bot opens the link (as a guest named `botName`, "Eadwyn AI",
+ *   when not signed in), with the microphone and camera off, and asks to join. It resolves in the
  *   waiting room, or in the call when the meeting lets anyone in.
  * - **Admitted:** it resolves once a host admits the bot.
  * - **In the call,** it reads every `pollMs`:
@@ -34,6 +38,7 @@ import { consoleSink, logLine } from '../log.ts';
 import { realClock } from '../lifecycle.ts';
 import { CAPTURE_BINDING, CAPTURE_SCRIPT, decodeBlock } from './meet/capture.ts';
 import type { MeetPage } from './meet/page.ts';
+import { signIn, type SignInSource } from './meet/signin.ts';
 import { sel, type HookName } from './meet/selectors.ts';
 import { REFUSAL, RosterTracker, STATE_HOOKS, SpeakerTracker, classify, isMeetLink, isOut, unknownPage, type MeetState, type RosterRow } from './meet/signals.ts';
 
@@ -57,6 +62,8 @@ export interface MeetOptions {
   readonly pollMs?: number;
   /** How long one join step (the pre-join screen, then the answer to Ask to join) may take. */
   readonly stepTimeoutMs?: number;
+  /** D3678: where the bot's Google account comes from; absent, it joins as a guest. */
+  readonly signIn?: SignInSource;
 }
 
 export class MeetAdapter implements MeetingAdapter {
@@ -78,6 +85,9 @@ export class MeetAdapter implements MeetingAdapter {
   private watching: Promise<void> | null = null;
   private prepared = false;
   private lastStep: string | null = null;
+  private readonly signInSource?: SignInSource;
+  /** Whether the bot is signed in to its own Google account (D3678). */
+  signedIn = false;
 
   constructor(page: MeetPage, opts: MeetOptions = {}) {
     this.page = page;
@@ -94,6 +104,7 @@ export class MeetAdapter implements MeetingAdapter {
     this.clock = opts.clock ?? realClock;
     this.pollMs = opts.pollMs ?? 500;
     this.stepTimeoutMs = opts.stepTimeoutMs ?? 30_000;
+    this.signInSource = opts.signIn;
   }
 
   // ── reading the page ──
@@ -162,6 +173,9 @@ export class MeetAdapter implements MeetingAdapter {
       await this.page.addInitScript({ content: CAPTURE_SCRIPT });
       this.prepared = true;
     }
+    if (this.signInSource && !this.signedIn) {
+      this.signedIn = await signIn(this.page, this.signInSource, { log: this.log, clock: this.clock, pollMs: this.pollMs, stepTimeoutMs: this.stepTimeoutMs, signal: req.signal });
+    }
     logLine(this.log, 'meet_navigation_started');
     await this.page.goto(req.url, { waitUntil: 'domcontentloaded' });
     logLine(this.log, 'meet_navigation_ready');
@@ -170,7 +184,11 @@ export class MeetAdapter implements MeetingAdapter {
     if (first === 'unknown') logLine(this.log, `meet_page_${await this.unknownPage()}`);
     this.refuseOn(first);
     if (first !== 'prejoin') throw new AdapterFailure('platform_blocked');
-    if (await this.visible('name_input')) await this.page.locator(sel('name_input')).first().fill(req.botName);
+    if (await this.visible('name_input')) {
+      // Signed in, Meet never asks for a name: the guest field means Google dropped the session.
+      if (this.signedIn) { logLine(this.log, 'meet_signin_not_kept'); throw new AdapterFailure('platform_blocked', 'signin_not_kept'); }
+      await this.page.locator(sel('name_input')).first().fill(req.botName);
+    }
     // Each toggle is pressed only while it says it is on, so it is never turned back on.
     for (const hook of ['mic_on', 'camera_on'] as const) {
       if (await this.visible(hook)) await this.page.locator(sel(hook)).first().click();

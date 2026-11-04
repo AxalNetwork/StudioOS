@@ -487,6 +487,11 @@ export interface Env {
   MEETING_BOT_SECRET?: string;
   // #3708: the bot host's deployed commit, set by meeting-bot-deploy.yml; read only by the owner's diagnostic.
   MEETING_BOT_VERSION?: string;
+  // D3678 (#3678): Eadwyn AI's own Google Workspace account, for a signed-in Meet join.
+  // The TOTP key never leaves the site Worker (services/meetBotGoogle.ts).
+  MEET_BOT_GOOGLE_EMAIL?: string;
+  MEET_BOT_GOOGLE_PASSWORD?: string;
+  MEET_BOT_GOOGLE_TOTP?: string;
   MEETING_BOT_ZOOM_CLIENT_ID?: string;
   MEETING_BOT_ZOOM_CLIENT_SECRET?: string;
   MEETING_BOT_COST_MICROUSD_PER_MINUTE?: string;
