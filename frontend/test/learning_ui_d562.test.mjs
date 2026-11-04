@@ -536,8 +536,9 @@ test('Learning home and the member program have no AI rail; other existing subpa
   // and, in stage 3, the assigned admin's program pages and the studio's program pages (D558),
   // the exercise and exam pages (D559), the webinar page (D560),
   // and the learning plan (D3959).
-  // D4480: the member program follows the owner's no-AI-panel rule.
-  assert.equal(mounts.length, 10);
+  // D4476/D4479 removed both assessment rails; their dead shared component is gone too.
+  // D4480 also removes the member program's AI panel.
+  assert.equal(mounts.length, 9);
   for (const tier of ['founder', 'admin', 'super_admin']) assert.ok(mounts.some((m) => m.includes(`role="${tier}"`)), `no ${tier} rail`);
   for (const mount of mounts) {
     assert.match(mount, /workspace="Learning[^"]*"/);
