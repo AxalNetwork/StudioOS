@@ -5,6 +5,7 @@ import { teamsApi } from '../../../lib/api/teams';
 import { reportError } from '../../../lib/log';
 import { companyTeamPath } from '../../../lib/settingsScope.js';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT } from '../../team/teamUi.jsx';
+import SkillsLink from '../../team/SkillsLink.jsx';
 import * as portfolio from './portfolioAdapter.js';
 import {
   ACTIVE_HERE, BASE_PATH, companyLegalPath, companyPowers, companySettingsPathFor, documentRows, legalFacts, locationRows,
@@ -210,7 +211,13 @@ export default function CompanyPage({
         </div>
         <div className="flex min-w-0 flex-col gap-4">
           <PCard title="Team" count={detail.status === 'ready' ? members.length : null} testId="company-team"
-            aside={<Link to={companyTeamPath(uid)} className={LINK} data-testid="company-team-link">Team</Link>}>
+            aside={(
+              <>
+                <Link to={companyTeamPath(uid)} className={LINK} data-testid="company-team-link">Team</Link>
+                {/* #4363: the company's Skills tab, one click from its team. */}
+                <SkillsLink scope={{ kind: 'company', company: { uid } }} className={LINK} testId="company-skills-link" />
+              </>
+            )}>
             {detail.status === 'loading' && !detail.value ? <Reading lines={2} />
               : detail.status !== 'ready' ? <Failed what="The team" onRetry={reread} testId="company-team-unread" />
                 : (

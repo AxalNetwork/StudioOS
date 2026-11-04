@@ -24,6 +24,13 @@
 //   PUT /api/teams/project/:id/work/capacity/:personUid   { weekly_capacity_points: number | null } → { person, capacity }  (W4)
 //       one's own, or a project editor's; 400 invalid_capacity; 403 not_manager; 404 not on the project.
 //   A task's time block is the board's PATCH /api/teams/tasks/:uid { scheduled_start, scheduled_end } (W4).
+//   GET /api/teams/project/:id/assignable                    (W8, #3994; routes/agent_engine.ts)
+//       → { team: [{ kind: 'person', uid, name, team_role, licence, open_tasks, capacity } | { kind: 'agent', uid, name, role, status, open_tasks }] }
+//       this project's Team only; never an email. 403 not_member; 404 not_found.
+//   GET /api/teams/me/tasks?state=open|closed|all&project=&due=overdue|today|week|none   (W8, #3994)
+//       → { projects: [{ project: { id, name }, tasks: [{ uid, task_number, title, type, column, state, due_at, blocked, needs_reassignment, link }] }],
+//           compliance: [{ company: { uid, name }, tasks: [{ uid, title, type, state, due_at, needs_reassignment, project_id, link }] }], has_more }
+//       only tasks the caller can read; 400 invalid_filter.
 // Projects only: a company has no Kanban. Days are the member's time zone; a
 // day before the first item is `{ day, available: false }`, never zeros.
 import { request } from '../api.js';
@@ -56,6 +63,16 @@ export const workApi = {
     return request(`/teams/project/${enc(projectId)}/work/burnup${qs ? `?${qs}` : ''}`);
   },
   workload: (projectId, { weeks } = {}) => request(`/teams/project/${enc(projectId)}/work/workload${weeks ? `?weeks=${enc(weeks)}` : ''}`),
+  // D1614 W8 (#3994): who may be given a task here (this Team's people and agents), and every task given to me.
+  assignable: (projectId) => request(`/teams/project/${enc(projectId)}/assignable`),
+  myTasks: ({ state, project, due } = {}) => {
+    const q = new URLSearchParams();
+    if (state) q.set('state', state);
+    if (project != null && project !== '') q.set('project', String(project));
+    if (due) q.set('due', due);
+    const qs = q.toString();
+    return request(`/teams/me/tasks${qs ? `?${qs}` : ''}`);
+  },
   setCapacity: (projectId, personUid, points) => request(`/teams/project/${enc(projectId)}/work/capacity/${enc(personUid)}`, {
     method: 'PUT', body: JSON.stringify({ weekly_capacity_points: points }),
   }),

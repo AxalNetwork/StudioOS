@@ -17,6 +17,7 @@ import AdminStudioHome from './admin/AdminStudioHome';
 import ProductTour from '../components/ProductTour';
 // D1337 (#3542): Product testing's card and lists, under each member's Studio home. An Admin sees none.
 import ProductTestingStudio from './testing/member/ProductTestingStudio';
+import MyTasks from './work/MyTasks.jsx';
 
 export default function Dashboard({ activeRole, authUser }) {
   const location = useLocation();
@@ -215,6 +216,8 @@ export default function Dashboard({ activeRole, authUser }) {
         )}
         <ProductTour enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
         <FounderStudioHome user={user} />
+        {/* D1614 W8 (#3994): every task given to me, across my Teams. */}
+        <MyTasks licence="founder" testId="studio-my-tasks" />
         <ProductTestingStudio user={authUser || user} />
       </div>
     );

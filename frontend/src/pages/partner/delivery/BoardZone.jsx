@@ -10,6 +10,7 @@ import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { Eyebrow, Instrument, Legend, NotRecorded } from '../../../workspaces/canvasKit';
 import EngagementLifecycle from './EngagementLifecycle';
+import MyTasks from '../../work/MyTasks.jsx';
 
 /**
  * Delivery · Board — `/delivery/board`.
@@ -117,6 +118,8 @@ export default function PartnerDeliveryBoardZone() {
 
   return (
     <>
+      {/* D1614 W8 (#3994): every task given to me, across my Teams. */}
+      <div className="mb-4"><MyTasks licence="partner" testId="delivery-my-tasks" /></div>
       {/* ACTIONS YES, FILTERS NO, when the account cannot read the store.
           An action states what the zone DOES and an export over nothing
           loaded renders disabled and says so; a filter chip is a claim about

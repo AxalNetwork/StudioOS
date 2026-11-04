@@ -23,7 +23,7 @@ their import.
 - **The price is the catalog quote's one amount** (owner Q5), with the
   registered-agent offer beside it and "The state fee is confirmed at
   filing." No itemised breakdown is invented.
-- **No gate and no bank link** (owner Q6, Q7).
+- **No gate** (owner Q6). **The bank step** (#4356, D4356): the owner chose Mercury, which settles Q7. `BankStep.jsx` is "Open a bank account", a row after Filed on the timeline and a card in Done's next steps; done only when the founder's Mercury is connected and active. Open goes to `open_account_url` from `GET /api/mercury/personal/status`: the Worker builds it from the owner's referral link (`MERCURY_REFERRAL_URL`), else Mercury's public site. No file here names a Mercury host (D715).
 - **A company appears when the order says so** (owner Q9): Open company and
   "now appears in Portfolio" are drawn only from `company_uid`, through
   `incorporateAdapter.orderCompany`.

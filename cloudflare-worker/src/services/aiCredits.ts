@@ -586,7 +586,9 @@ export type AdjustmentOutcome =
  * the audit row. At most $100 either way, at most $250 added per member in 30
  * days, never below zero. The bounds are checked inside the INSERT, so two
  * concurrent adjustments cannot pass one check together. The member's notice
- * gives the amount and never the reason.
+ * gives the amount and never the reason. A deck batch refund (D4373,
+ * `adj:deck-refund:`) gives back a charge, not goodwill, so the 30-day window
+ * leaves it out.
  */
 export async function recordAdjustment(env: Env, input: { userId: number; actorId: number; deltaMicrousd: number; reason: string; key: string }): Promise<AdjustmentOutcome> {
   const { userId, actorId, deltaMicrousd: delta, reason, key } = input;
@@ -605,7 +607,8 @@ export async function recordAdjustment(env: Env, input: { userId: number; actorI
       SELECT ?, a.user_id, 'adjustment', ?, ?, ?, ? FROM ai_topup_accounts a
       WHERE a.user_id = ? AND a.balance_microusd + ? >= 0
         AND (? < 0 OR (SELECT COALESCE(SUM(delta_microusd), 0) FROM ai_credit_ledger
-          WHERE user_id = a.user_id AND kind = 'adjustment' AND delta_microusd > 0 AND created_at > datetime('now', ?)) + ? <= ?)`)
+          WHERE user_id = a.user_id AND kind = 'adjustment' AND delta_microusd > 0 AND source_ref NOT LIKE 'adj:deck-refund:%'
+            AND created_at > datetime('now', ?)) + ? <= ?)`)
       .bind(uid, delta, sourceRef, String(actorId), reason, userId, delta, delta, window, delta, TOKEN_PACK_LIMITS.maxAdjustmentAddedMicrousd),
     env.DB.prepare(`UPDATE ai_topup_accounts SET balance_microusd = balance_microusd + ?, updated_at = datetime('now')
       WHERE user_id = ? AND EXISTS(SELECT 1 FROM ai_credit_ledger WHERE uid = ?)`).bind(delta, userId, uid),

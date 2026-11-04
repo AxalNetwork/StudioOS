@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Pill, Skeleton, Unrecorded } from '../../ui';
 import { AgentIdentity, AgentTile } from './AgentMark.jsx';
+import SkillsLink from './SkillsLink.jsx';
 import { BTN_PRIMARY, BTN_TEXT, HeadRow, HonestBlock, MONO, MUTED, PendingOwner, TeamCard } from './teamUi.jsx';
 import { AGENTS_FOOT, agentGroups, agentsFootLine, refusalWords } from './teamModel.js';
 
@@ -29,6 +30,9 @@ import { AGENTS_FOOT, agentGroups, agentsFootLine, refusalWords } from './teamMo
  * Below `md` a row keeps what the canvas's phone row keeps (TM9d1): the name
  * and pill, then one line with the role and this month's spend (or that it is
  * not recorded) and the status pill.
+ *
+ * #4363: the header carries a Skills link to this scope's Skills tab
+ * (`SkillsLink`), in every state, since the library is its own read.
  */
 
 /** TM9c4: the plan lock, from a 403 `plan_required` or the list's `plan_ok: false` (#3840). */
@@ -97,12 +101,13 @@ function AgentTable({ rows, onOpen, label }) {
   );
 }
 
-export default function AgentsCard({ block, loading, kind, companyName, canAdd, planLocked = false, onAdd, onOpen, onRetry, now = new Date() }) {
+export default function AgentsCard({ block, loading, kind, scope = null, companyName, canAdd, planLocked = false, onAdd, onOpen, onRetry, now = new Date() }) {
   // The grouped footer's company reach is said only once it is live (#3697 part 2), as the page's managed note is.
   const [hidden, setHidden] = useState(() => new Set());
+  const aside = <SkillsLink scope={scope} testId="team-agents-skills" />;
   if (loading) {
     return (
-      <TeamCard title="AI agents" testId="team-agents">
+      <TeamCard title="AI agents" aside={aside} testId="team-agents">
         <div aria-busy="true" className="flex flex-col gap-2">
           <span className={`self-end ${MUTED}`}>Reading…</span>
           {[0, 1, 2].map((i) => <Skeleton key={i} h={44} />)}
@@ -112,7 +117,7 @@ export default function AgentsCard({ block, loading, kind, companyName, canAdd, 
   }
   if (!block || block.available !== true) {
     return (
-      <TeamCard title="AI agents" testId="team-agents">
+      <TeamCard title="AI agents" aside={aside} testId="team-agents">
         {block?.locked === 'plan' ? <PlanLine reason={block.reason} /> : block?.unreadable ? (
           <HonestBlock role="alert" testId="team-agents-unreadable" action={onRetry ? <button type="button" className={`w-fit ${BTN_TEXT}`} onClick={onRetry}>Try again</button> : null}>
             AI agents could not be read. That is not the same as having none.
@@ -128,7 +133,7 @@ export default function AgentsCard({ block, loading, kind, companyName, canAdd, 
   const agents = Array.isArray(block.value?.agents) ? block.value.agents : [];
   if (!agents.length) {
     return (
-      <TeamCard title="AI agents" testId="team-agents">
+      <TeamCard title="AI agents" aside={aside} testId="team-agents">
         <div className="flex flex-col items-center gap-3 rounded-axal-md border border-dashed border-axal-hairline px-6 py-8 text-center dark:border-gray-700" data-testid="team-agents-empty">
           <AgentTile size={40} />
           <p className={`m-0 max-w-md ${MUTED}`}>No agent works here yet. Add one in a role, like a CFO who drafts your runway note. It will only propose; you decide.</p>
@@ -142,7 +147,7 @@ export default function AgentsCard({ block, loading, kind, companyName, canAdd, 
   const grouped = kind === 'company' && groups.length > 1;
   const toggle = (k) => setHidden((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; });
   return (
-    <TeamCard title="AI agents" count={agents.length} testId="team-agents">
+    <TeamCard title="AI agents" count={agents.length} aside={aside} testId="team-agents">
       {grouped ? (
         <>
           <div role="group" aria-label="Scope" className="mb-3 flex flex-wrap gap-1.5" data-testid="team-agents-scope">
