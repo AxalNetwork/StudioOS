@@ -9,6 +9,7 @@ import { useViewAsBranch } from '../../contexts/ViewAsBranchContext';
 import HqBranchOverlay from './HqBranchOverlay';
 import { revenueAbsenceForLicence } from '../../lib/hqRevenuePerSub';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
+import MyTasks from '../work/MyTasks.jsx';
 
 /**
  * HQ · Home — the whole business on one screen (Admin · Super canvas, H1).
@@ -350,6 +351,8 @@ export default function HqHomePage() {
             ))}
           </div>
         </div>
+        {/* D1614 W8 (#3994): every task given to me, across my Teams. Not under View as: that is a branch's page. */}
+        <div className="mt-3"><MyTasks licence="admin" testId="hq-my-tasks" /></div>
         {selected && (
           <p className="mt-2 text-[11.5px] text-axal-faint">
             Narrowed to {selected.brand_name} on this page only. Elsewhere, use View as on a deployed branch
