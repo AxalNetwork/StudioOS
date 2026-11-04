@@ -841,3 +841,71 @@ test('D4433: an exhausted deadline stops a configured retry', async () => {
   assert.match(plain(r.summary), /Stopped at the time limit/);
   assert.ok(JSON.parse(r.record.body).usd > 0);
 });
+
+
+const OPENAI_ENV = { ...CHAIN, OPENAI_API_KEY: 'test-openai', OPENAI_MODEL: 'gpt-5.3-codex', CLAUDE_REVIEW_RATES: JSON.stringify({ models: { 'gpt-5.3-codex': { input: 1.75, output: 14, cache_read: 0.175, cache_write: 1.75 } } }) };
+
+test('D4443: OpenAI is configured between Claude and Kimi only with key and explicit valid model', () => {
+  const c = readConfig({ ...ENV, ...OPENAI_ENV });
+  assert.deepEqual(c.errors, []);
+  assert.deepEqual(c.config.creditFallbacks.map(s => s.id), ['claude2', 'claude3', 'openai', 'kimi']);
+  assert.equal(c.config.creditFallbacks[2].baseURL, 'https://api.openai.com/v1');
+  for (const env of [{ OPENAI_API_KEY: '' }, { OPENAI_MODEL: '' }, { CLAUDE_REVIEW_CREDIT_FALLBACK: 'off' }]) {
+    assert.equal(readConfig({ ...ENV, ...OPENAI_ENV, ...env }).config.creditFallbacks.some(s => s.id === 'openai'), false);
+  }
+  assert.match(readConfig({ ...ENV, ...OPENAI_ENV, OPENAI_MODEL: 'bad model!' }).errors.join(';'), /OPENAI_MODEL is not a model ID/);
+  assert.match(readConfig({ ...ENV, ...OPENAI_ENV, OPENAI_BASE_URL: 'http://bad.test' }).errors.join(';'), /OPENAI_BASE_URL must be an https URL/);
+  assert.ok(!JSON.stringify(c.config).includes('test-openai'));
+});
+
+const openaiHarness = (over = {}) => harness({ env: OPENAI_ENV, create: () => creditError(), fallbacks: { claude2: () => creditError(), claude3: () => creditError(), openai: () => kimiMessage(), kimi: () => kimiMessage() }, ...over });
+
+test('D4443: a non-Codex PR uses OpenAI after Claude credit refusals and records _openai', async () => {
+  const { deps, calls } = openaiHarness({ event: prEvent({ body: 'This changes the Codex vendor check.\n\n## Agent\n\nS28 · Claude' }) });
+  const saved = [];
+  deps.persistRecord = r => saved.push(r);
+  const r = await runReview(deps);
+  assert.equal(r.outcome, 'reviewed');
+  assert.deepEqual(calls.fallback.map(c => c.id), ['claude2', 'claude3', 'openai']);
+  const record = JSON.parse(r.record.body);
+  assert.deepEqual([record.provider, record.account, record.model], ['openai', 'OpenAI', 'gpt-5.3-codex']);
+  assert.match(r.record.name, /_openai$/);
+  assert.ok(saved.some(r => /_err_\d+_openai$/.test(r.name)), 'OpenAI also reserves before spending');
+});
+
+test('D4443: Codex branch, body and author markers all skip OpenAI with the required summary', async () => {
+  for (const override of [{ head: { sha: H, ref: 'codex/s19-feature', repo: { full_name: REPO } } }, { body: '## Agent\n\nS28 · Codex' }, { body: 'Agent: Codex' }, { body: '## Agent\n\nCodex' }, { user: { login: 'codex[bot]' } }]) {
+    const { deps, calls } = openaiHarness({ event: prEvent(override) });
+    const r = await runReview(deps);
+    assert.equal(r.outcome, 'reviewed');
+    assert.deepEqual(calls.fallback.map(c => c.id), ['claude2', 'claude3', 'kimi']);
+    assert.match(plain(r.summary), /OpenAI skipped: same vendor as the PR's author/);
+  }
+});
+
+test('D4443: quota or broken OpenAI credentials skip to Kimi; missing rates refuse before calling', async () => {
+  for (const error of [apiError('billing', 429), apiError('authentication', 401)]) {
+    const { deps, calls } = openaiHarness({ fallbacks: { openai: () => error, kimi: () => kimiMessage() } });
+    const r = await runReview(deps);
+    assert.equal(r.outcome, 'reviewed');
+    assert.deepEqual(calls.fallback.map(c => c.id), ['openai', 'kimi']);
+    assert.match(plain(r.summary), error.kind === 'authentication' ? /OpenAI key was rejected/ : /OpenAI.*out of credit/);
+  }
+  const { deps, calls } = openaiHarness({ env: { ...OPENAI_ENV, CLAUDE_REVIEW_RATES: '' } });
+  const r = await runReview(deps);
+  assert.equal(r.outcome, 'reviewed');
+  assert.ok(!calls.fallback.some(c => c.id === 'openai'));
+  assert.match(plain(r.summary), /OpenAI was not called: the model has no rate in the rate table/);
+});
+
+test('D4443: OpenAI has its own monthly budget and cancellation artifact', async () => {
+  const spent = [{ name: recordName({ month: '2026-10', pr: 9, key: 'b'.repeat(64), status: 'ok', usd: 25, account: 'openai' }), created_at: '2026-10-15T00:00:00Z' }];
+  const { deps, calls } = openaiHarness({ artifacts: spent });
+  const r = await runReview(deps);
+  assert.equal(r.outcome, 'reviewed');
+  assert.ok(!calls.fallback.some(c => c.id === 'openai'));
+  assert.match(plain(r.summary), /OpenAI was not called:.*monthly budget/);
+  const wf = readFileSync(new URL('../../.github/workflows/claude-review.yml', import.meta.url), 'utf8');
+  assert.match(wf, /if: always\(\) && steps.usage.outputs.openai != ''/);
+  for (const key of ['OPENAI_API_KEY', 'OPENAI_MODEL', 'OPENAI_BASE_URL', 'CLAUDE_REVIEW_PR_HEAD', 'CLAUDE_REVIEW_PR_BODY', 'CLAUDE_REVIEW_PR_AUTHOR']) assert.ok(wf.includes(`${key}:`));
+});

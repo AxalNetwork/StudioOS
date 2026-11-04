@@ -17,8 +17,9 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { WorkloadIdentityError } from '@anthropic-ai/sdk/lib/credentials/types';
-import { GithubIdentityError, LEDGER_MAX_PAGES, OIDC_AUDIENCE, anthropicClient, classifyError, clientFor, errorDetail, fallbacksFor, githubClient, kimiClient, kimiFetch, githubIdentityToken, listMonthRecords, main, safePath } from './review.mjs';
+import { GithubIdentityError, LEDGER_MAX_PAGES, OIDC_AUDIENCE, openaiClient, openaiFetch, anthropicClient, classifyError, clientFor, errorDetail, fallbacksFor, githubClient, kimiClient, kimiFetch, githubIdentityToken, listMonthRecords, main, safePath } from './review.mjs';
 
 const headers = new Headers({ 'request-id': 'req_test' });
 const gen = (status) => Anthropic.APIError.generate(status, { type: 'error', error: { type: 'x', message: 'm' } }, 'm', headers);
@@ -432,4 +433,77 @@ test('D4433: streaming returns final usage, forwards attempt options and classif
     assert.equal(seen.at(-1).opts, options);
     await assert.rejects(client.create({ model: 'timeout' }, options), e => e.kind === 'timeout');
   }
+});
+
+
+test('D4443: fake SDK streams strict Responses output and maps cached usage once', async () => {
+  const built = [], sent = [];
+  class FakeOpenAI {
+    constructor(options) {
+      built.push(options);
+      this.responses = { create: async function* (p, opts) {
+        sent.push({ p, opts });
+        yield { type: 'response.output_text.delta', delta: 'partial' };
+        if (p.model === 'quota') throw new OpenAI.RateLimitError(429, { code: 'insufficient_quota', message: 'quota' }, 'quota', new Headers());
+        if (p.model === 'timeout') throw new OpenAI.APIConnectionTimeoutError();
+        if (p.model === 'failed') { yield { type: 'response.failed', response: { error: { code: 'insufficient_quota', message: 'no quota' } } }; return; }
+        if (p.model === 'disconnected') return;
+        yield { type: p.model === 'cut' ? 'response.incomplete' : 'response.completed', response: {
+          status: p.model === 'cut' ? 'incomplete' : 'completed',
+          output: [{ type: 'reasoning', summary: [] }, { type: 'message', content: p.model === 'refuse' ? [{ type: 'refusal', refusal: 'no' }] : [{ type: 'output_text', text: '{"ok":true}' }] }],
+          usage: { input_tokens: 100, output_tokens: 40, input_tokens_details: { cached_tokens: 60 } },
+        } };
+      } };
+    }
+  }
+  Object.setPrototypeOf(FakeOpenAI, OpenAI);
+  const client = openaiClient({ apiKey: 'unit-key', baseURL: 'https://api.example/v1', timeoutSeconds: 30, sdk: FakeOpenAI });
+  assert.equal(built.length, 0);
+  const opts = { timeout: 2000, maxRetries: 0 };
+  const message = await client.create({ model: 'gpt-5.3-codex', system: 'system', messages: [{ role: 'user', content: 'diff' }], max_tokens: 1024 }, opts);
+  assert.deepEqual(message.usage, { input_tokens: 40, output_tokens: 40, cache_read_input_tokens: 60, cache_creation_input_tokens: 0 });
+  assert.deepEqual(message.content, [{ type: 'text', text: '{"ok":true}' }]);
+  assert.equal(sent[0].p.stream, true);
+  assert.equal(sent[0].p.store, false);
+  assert.equal(sent[0].p.text.format.strict, true);
+  assert.equal(sent[0].p.max_output_tokens, 1024);
+  assert.equal(sent[0].p.instructions, 'system');
+  assert.equal(sent[0].opts, opts);
+  assert.equal(built[0].maxRetries, 0);
+  assert.equal(built[0].organization, null);
+  assert.equal(built[0].project, null);
+  for (const [model, kind] of [['quota', 'billing'], ['failed', 'billing'], ['timeout', 'timeout'], ['disconnected', 'timeout']]) await assert.rejects(client.create({ model }), e => e.kind === kind);
+  assert.equal((await client.create({ model: 'refuse' })).stop_reason, 'refusal');
+  assert.equal((await client.create({ model: 'cut' })).stop_reason, 'max_tokens');
+});
+
+test('D4443: OpenAI fetch sends only allowlisted headers and its own key', async () => {
+  let seen;
+  const f = openaiFetch(async (url, init) => { seen = init.headers; return new Response('{}'); }, 'own-key');
+  await f('https://api.example/v1/responses', { headers: { authorization: 'Bearer another-provider', 'x-api-key': 'another-key', 'openai-organization': 'ambient-org', 'anthropic-version': '2023-06-01', 'content-type': 'application/json', 'x-custom': 'hidden', 'x-stainless-retry-count': '0' } });
+  assert.deepEqual([...seen.keys()].sort(), ['authorization', 'content-type', 'x-stainless-retry-count']);
+  assert.equal(seen.get('authorization'), 'Bearer own-key');
+});
+
+test('D4443: OpenAI keys are redacted from classified errors', () => {
+  const key = 'sk-' + 'proj-abcdefghijklmnopqrstuvwx';
+  const error = new OpenAI.AuthenticationError(401, { message: `Incorrect API key ${key}` }, `Incorrect API key ${key}`, new Headers());
+  const result = classifyError(error, OpenAI);
+  assert.equal(result.kind, 'authentication');
+  assert.match(result.detail, /redacted/);
+  assert.ok(!result.detail.includes(key));
+});
+
+test('D4443: the OpenAI fallback uses a lazy separate official client', async () => {
+  const built = [];
+  class FakeOpenAI {
+    constructor(opts) { built.push(opts); this.responses = { create: async function* () { yield { type: 'response.completed', response: { status: 'completed', output: [], usage: { input_tokens: 1, output_tokens: 1 } } }; } }; }
+  }
+  const chain = fallbacksFor({ OPENAI_API_KEY: 'unit', OPENAI_MODEL: 'gpt-5.3-codex' }, { openai: { sdk: FakeOpenAI } });
+  assert.deepEqual(Object.keys(chain), ['openai']);
+  assert.equal(built.length, 0);
+  await chain.openai.create({ model: 'gpt-5.3-codex' });
+  assert.equal(built.length, 1);
+  assert.equal(built[0].baseURL, 'https://api.openai.com/v1');
+  assert.equal(built[0].apiKey, 'unit');
 });
