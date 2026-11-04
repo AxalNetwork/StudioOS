@@ -23,7 +23,7 @@ async function mount(element) {
   const box=document.createElement('div');document.body.appendChild(box);const root=createRoot(box);
   const settle=async()=>{for(let n=0;n<5;n++)await act(async()=>{await new Promise(r=>setTimeout(r,0));});};
   await act(async()=>root.render(element));await settle();
-  return {box,settle,all:()=>walk(box),text:()=>txt(box),async click(label){const node=walk(box).find(n=>n.tagName==='BUTTON'&&txt(n)===label);if(!node)throw Error(`Missing button ${label}: ${txt(box)}`);await act(async()=>props(node).onClick?.({preventDefault(){}}));await settle();},async close(){await act(async()=>root.unmount());window.addEventListener=oldAdd;window.removeEventListener=oldRemove;window.dispatchEvent=oldDispatch;restore();__resetEadwynPanelForTest();}};
+  return {box,settle,async render(el){await act(async()=>root.render(el));await settle();},all:()=>walk(box),text:()=>txt(box),async click(label){const node=walk(box).find(n=>n.tagName==='BUTTON'&&txt(n)===label);if(!node)throw Error(`Missing button ${label}: ${txt(box)}`);await act(async()=>props(node).onClick?.({preventDefault(){}}));await settle();},async close(){await act(async()=>root.unmount());window.addEventListener=oldAdd;window.removeEventListener=oldRemove;window.dispatchEvent=oldDispatch;restore();__resetEadwynPanelForTest();}};
 }
 function apiFor(rows=[p('one')],over={}) { const calls=[];return {calls,api:{quote:async b=>{calls.push(['quote',b]);return {estimate:{hold_microusd:40000,model:'synthetic'},sources:[{key:'validate',label:'Validate · ICP',count:2}]};},run:async b=>{calls.push(['run',b]);return {proposals:rows,receipt:{held_microusd:40000,charged_microusd:8000}};},proposals:async()=>({proposals:rows}),decide:async(uid,b)=>{calls.push(['decide',uid,b]);return {proposal:{...rows.find(p=>p.uid===uid),status:b.decision==='discard'?'discarded':'accepted',decided_payload:b.edited??null}};},acceptSafe:async b=>{calls.push(['safe',b]);return {results:[]};},...over}};}
 
@@ -133,5 +133,49 @@ test('an explicit campaign target is quoted and run as campaign text with an hon
     assert.match(ui.text(),/Accept keeps the text in this campaign/);
     await ui.click('Accept');
     assert.doesNotMatch(ui.text(),/Not saved|Nothing is saved until you create/);
+  }finally{await ui.close();}
+});
+
+
+test('a late draft from the previous campaign never enters the current campaign preview',async()=>{
+  let finish;const f=apiFor([],{run:()=>new Promise(resolve=>{finish=resolve;})});
+  const ui=await mount(h(DistributionAskIntent,{projectId:1,campaignUid:'first-campaign',api:f.api}));
+  try{
+    const button=ui.all().find(n=>n.tagName==='BUTTON'&&txt(n)==='Ask Eadwyn to draft for each channel');let pending;
+    await act(async()=>{pending=props(button).onClick();});
+    await ui.render(h(DistributionAskIntent,{projectId:1,campaignUid:'second-campaign',api:f.api}));
+    await act(async()=>{finish({proposals:[p('old','post',{campaign_uid:'first-campaign',text:'Old campaign private draft'})],receipt:{held_microusd:40000,charged_microusd:8000}});await pending;});await ui.settle();
+    assert.doesNotMatch(ui.text(),/Old campaign private draft/);
+    assert.doesNotMatch(ui.text(),/Charged \$0.008/);
+    assert.equal(f.calls.filter(c=>c[0]==='quote').at(-1)[1].campaign_uid,'second-campaign');
+  }finally{await ui.close();}
+});
+
+test('late form acceptance cannot update the next campaign',async()=>{
+  let finish;const accepted=[];const rows=[p('old','post',{campaign_uid:'first-campaign'})];
+  const f=apiFor(rows,{decide:()=>new Promise(resolve=>{finish=resolve;})});
+  const view=campaignUid=>h(DistributionAskIntent,{projectId:1,campaignUid,api:f.api,onAccept:rows=>accepted.push(...rows)});
+  const ui=await mount(view('first-campaign'));
+  try{
+    await ui.click('Ask Eadwyn to draft for each channel');
+    const button=ui.all().find(n=>n.tagName==='BUTTON'&&txt(n)==='Accept');let pending;
+    await act(async()=>{pending=props(button).onClick();});await ui.render(view('second-campaign'));
+    await act(async()=>{finish({proposal:{...rows[0],status:'accepted'}});await pending;});await ui.settle();
+    assert.equal(accepted.length,0);
+    assert.doesNotMatch(ui.text(),/Not saved/);
+  }finally{await ui.close();}
+});
+
+test('late Waiting acceptance cannot notify or alter the next venture view',async()=>{
+  let finish;const accepted=[];const old=p('old');
+  const f=apiFor([],{proposals:async project=>({proposals:project===1?[old]:[]}),decide:()=>new Promise(resolve=>{finish=resolve;})});
+  const view=projectId=>h(WaitingForYou,{projectId,api:f.api,onAccept:rows=>accepted.push(...rows)});
+  const ui=await mount(view(1));
+  try{
+    const button=ui.all().find(n=>n.tagName==='BUTTON'&&txt(n)==='Accept');let pending;
+    await act(async()=>{pending=props(button).onClick();});await ui.render(view(2));
+    await act(async()=>{finish({proposal:{...old,status:'accepted'}});await pending;});await ui.settle();
+    assert.equal(accepted.length,0);
+    assert.match(ui.text(),/Nothing waits for you\./);
   }finally{await ui.close();}
 });
