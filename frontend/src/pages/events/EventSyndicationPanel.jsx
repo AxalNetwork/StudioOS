@@ -1,5 +1,5 @@
 /** D1491 (#3725) — SY2/SY3/SY4: explicit choices, pure preview, listing state and honest registration reads. */
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { eventSyndicationApi } from '../../lib/api/eventSyndication';
 import Lightbox from '../../ui/Lightbox.jsx';
 import Sheet from '../../ui/Sheet.jsx';
@@ -25,7 +25,7 @@ export function ChannelChoices({ rows, onChange, disabled = false }) {
   </div>;
 }
 
-function PanelBody({ eventId, read, api, editable }) {
+function PanelBody({ eventId, read, api, editable, acceptedCopy, appliedCopy }) {
   const [rows, setRows] = useState(read.data.rows);
   const [dirty, setDirty] = useState(new Set());
   const [copyEdited, setCopyEdited] = useState(new Set());
@@ -34,6 +34,16 @@ function PanelBody({ eventId, read, api, editable }) {
   const [notice, setNotice] = useState(null);
   const [preview, setPreview] = useState(null);
   const [withdraw, setWithdraw] = useState(null);
+  // Apply each saved Ask result once, without rereading or resetting local edits.
+  // The ref lives above the loading boundary, so a later Retry cannot replay old copy.
+  useEffect(() => {
+    if (!acceptedCopy?.row || String(acceptedCopy.eventId) !== String(eventId) || appliedCopy.current === acceptedCopy) return;
+    appliedCopy.current = acceptedCopy;
+    const saved = acceptedCopy.row;
+    const overrides = Object.fromEntries(acceptedCopy.fields.map((field) => [field, saved.overrides[field]]));
+    setRows((prev) => prev.map((r) => r.account_uid === saved.account_uid
+      ? { ...r, ...saved, on: r.on, overrides: { ...r.overrides, ...overrides } } : r));
+  }, [acceptedCopy, appliedCopy, eventId]);
   const pending = choicesOf(rows, dirty, copyEdited);
   const invalid = rows.some((r) => copyEdited.has(r.account_uid) && choiceEditable(r) && copyInvalid(r));
   const save = async () => {
@@ -109,10 +119,11 @@ function PanelBody({ eventId, read, api, editable }) {
   </div>;
 }
 
-export default function EventSyndicationPanel({ eventId, editable = false, api = eventSyndicationApi, refresh = null }) {
+export default function EventSyndicationPanel({ eventId, editable = false, api = eventSyndicationApi, refresh = null, acceptedCopy = null }) {
+  const appliedCopy = useRef(null);
   const read = useEventChannels(eventId, api, refresh);
   return <section className="my-3 space-y-3 rounded-xl border border-axal-hairline bg-white p-4 dark:border-gray-700 dark:bg-gray-900" data-testid="event-syndication-panel">
     <div className="flex items-center justify-between gap-2"><h3 className="text-sm font-semibold text-axal-ink dark:text-gray-100">Channels</h3>{!editable && <button type="button" className={BUTTON} onClick={read.reload}>Refresh status</button>}</div>
-    <SyndicationState read={read}>{read.data && <PanelBody key={eventId} eventId={eventId} read={read} api={api} editable={editable} />}</SyndicationState>
+    <SyndicationState read={read}>{read.data && <PanelBody key={eventId} eventId={eventId} read={read} api={api} editable={editable} acceptedCopy={acceptedCopy} appliedCopy={appliedCopy} />}</SyndicationState>
   </section>;
 }
