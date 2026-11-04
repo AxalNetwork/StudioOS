@@ -6,6 +6,8 @@ import {
   CHECK_PASSED, CHECK_WAITS, NO_OVERRIDE, PREVIEW_WAITS, accountOn, confirmRows, counterOf, dayAndTime, destinationRows, droppedLines, findingRows, footState,
   highlightRuns, historyHref, idempotencyKey, mediaLine, moduleLabel, resultSummary, tickedLine, viewLink,
 } from './publishModel.js';
+import PublishAskIntent from './PublishAskIntent.jsx';
+import { ASK_LABEL, ASK_MARK, askMarkShown, askOff } from './publishAskModel.js';
 import {
   BTN_PRIMARY, BTN_SECONDARY, ConfirmSend, EYEBROW, LAV_BOX, LINK, MUTED, SendActions, StatusPill, Tile,
 } from './SendParts.jsx';
@@ -53,6 +55,9 @@ export default function PublishSheet({ projectId, module, onClose, api = publish
   const [retrying, setRetrying] = useState(null);
   const [saved, setSaved] = useState('');
   const [prefill, setPrefill] = useState(start ? { status: 'loading' } : null);
+  // #4046: Ask on the post text. `accepted` is what Eadwyn's Accept placed; typing over it makes it the founder's own.
+  const [askingEadwyn, setAskingEadwyn] = useState(false);
+  const [accepted, setAccepted] = useState(null);
   const draft = useRef(null);
   const kept = useRef(false);
   const chain = useRef(Promise.resolve());
@@ -131,6 +136,7 @@ export default function PublishSheet({ projectId, module, onClose, api = publish
 
   const toggle = (uid) => setTicked((t) => (t.includes(uid) ? t.filter((x) => x !== uid) : [...t, uid]));
   const foot = footState({ text, ticked, previews, checking });
+  const askWhy = askOff({ canPublish: read.canPublish, ticked });
   const mine = ticked.map((uid) => previews.find((p) => p.destination_uid === uid)).filter(Boolean);
   const findings = findingRows(mine);
   const open = mine.find((p) => p.destination_uid === tab) || mine[0] || null;
@@ -199,7 +205,13 @@ export default function PublishSheet({ projectId, module, onClose, api = publish
       <div className="flex flex-col gap-[18px] px-5 py-[18px]">
         <Destinations read={read} ticked={ticked} onToggle={toggle} onRetry={load} />
         <section className="flex flex-col gap-2" aria-labelledby="publish-draft-h" data-testid="publish-draft">
-          <span id="publish-draft-h" className={EYEBROW}>Draft</span>
+          <span className="flex items-center justify-between gap-2">
+            <span id="publish-draft-h" className={EYEBROW}>Draft</span>
+            <span className="flex items-center gap-2">
+              {askWhy && <span className={`text-[12px] ${MUTED}`} data-testid="publish-ask-why">{askWhy}</span>}
+              <button type="button" className={BTN_SECONDARY} disabled={!!askWhy || askingEadwyn} onClick={() => setAskingEadwyn(true)} aria-label="Ask Eadwyn to draft the post" data-testid="publish-ask-open">{ASK_LABEL}</button>
+            </span>
+          </span>
           <textarea value={text} onChange={(e) => { setText(e.target.value); setSaved(''); }} rows={6} aria-label="Your post" placeholder="Write your post."
             className="w-full resize-y rounded-[7px] border border-[#dcd8e4] bg-white px-3 py-2.5 text-[13.5px] leading-[1.55] text-axal-ink placeholder:text-[#a1a1aa] focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/30 dark:border-gray-600 dark:bg-gray-950 dark:text-gray-100"
             data-testid="publish-text" />
@@ -211,6 +223,7 @@ export default function PublishSheet({ projectId, module, onClose, api = publish
                 : <React.Fragment key={i}>{r.text}</React.Fragment>))}
             </p>
           )}
+          {askMarkShown(accepted, text) && <p className={`m-0 text-[12px] ${MUTED}`} data-testid="publish-ask-mark">{ASK_MARK}</p>}
           <PrefillNote prefill={prefill} />
           {saved && <p role="status" className={`m-0 text-[12px] ${MUTED}`} data-testid="publish-saved">{saved}</p>}
         </section>
@@ -219,6 +232,10 @@ export default function PublishSheet({ projectId, module, onClose, api = publish
           onConsent={(id, on) => setConsent((c) => (on ? [...new Set([...c, id])] : c.filter((x) => x !== id)))} onTeamOnly={setTeamOnly} />
       </div>
       {asking && <ConfirmSend rows={confirmRows(mine, read.rows)} onCancel={() => setAsking(false)} onSend={send} />}
+      {askingEadwyn && (
+        <PublishAskIntent projectId={projectId} module={module} ticked={ticked} places={read.rows} hasText={!!text.trim()} api={api}
+          onAccept={(t) => { setText(t); setAccepted(t); setSaved(''); setAskingEadwyn(false); }} onClose={() => setAskingEadwyn(false)} />
+      )}
     </Sheet>
   );
 }

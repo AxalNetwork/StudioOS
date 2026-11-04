@@ -10,14 +10,15 @@
  *   POST /api/decks/:id/save-as-template   { name }        → 201 { template: Meta }
  *
  * `Meta` is `{ uid, name, description, stage, audience_tags, deck_audience,
- * style, swatch, card_count }`. The Audience filter is New deck's seven
+ * style, swatch, card_count, cover }`; `cover` is `{ accent, accent_ink,
+ * display_font }` from the template's theme, or null (#3876). The Audience filter is New deck's seven
  * audiences. Q5 (#3876): apply has its own route and writes the proposal with
  * `method_id` `tpl:<uid>`, so v1's `apply-method` ids and its "Use this
  * template" label stay as they are.
  *
  * HQ's templates come from `services/decks/templateSeeds.ts` (#3876's
- * content), written into the table on the first read (`INSERT OR IGNORE` by
- * uid). A seed that fails `templateProblems` is never written. Who: reading
+ * content), written into the table on the first read, and written again when
+ * a seed's content changed (#3876; an HQ row only, never a user's). A seed that fails `templateProblems` is never written. Who: reading
  * is for anyone signed in; apply and save are the deck routes' `projectOwned`,
  * write. Nothing here runs a model.
  *
@@ -32,7 +33,7 @@ import { newUid } from './_t13t14t15_helpers';
 import { getDeckRow, proposeFill, rowToDeck, sanitizeSlides, themeOfRow } from './decks';
 import { AUDIENCES } from '../services/decks/slideModel';
 import {
-  ATTESTATION, AUDIENCE_LABEL, CONTRACT, STAGES, STAGE_LABEL, STYLES, TEMPLATE_METHOD, metaOf, pickTemplate, stripDeck, templateProblems, toSlides,
+  ATTESTATION, AUDIENCE_LABEL, CONTRACT, STAGES, STAGE_LABEL, STYLES, TEMPLATE_METHOD, coverOf, metaOf, pickTemplate, stripDeck, templateProblems, toSlides,
   type TemplateMeta,
 } from '../services/decks/templates';
 import { HQ_TEMPLATES } from '../services/decks/templateSeeds';
@@ -44,9 +45,18 @@ type Row = { uid: string; scope: 'hq' | 'user'; owner_id: number | null; name: s
 const metaRow = (r: Row): TemplateMeta => ({
   uid: r.uid, name: r.name, description: r.description, stage: (r.stage as any) ?? null, audience_tags: (() => { try { return JSON.parse(r.audience_tags); } catch { return []; } })(),
   deck_audience: r.deck_audience, style: r.style, swatch: r.swatch, card_count: Number(r.card_count),
+  // #3876: the cover's accent, ink and display face, from the stored theme; null when it names none.
+  cover: coverOf((() => { try { return r.theme_json ? JSON.parse(r.theme_json) : null; } catch { return null; } })()),
 });
 
-/** HQ's seeds into the table, once each; a seed that fails its contract is skipped and logged. */
+/**
+ * HQ's seeds into the table; a seed that fails its contract is skipped and logged.
+ * #3876: a seed whose content changed since it was written is written again
+ * (its stored `structure_json` differs from the seed's), so a revised
+ * template reaches a database that already holds it. Only `scope = 'hq'`
+ * rows are ever updated: a user's own template is never touched, even one
+ * whose uid a seed shares.
+ */
 let seeded = false;
 async function seedHq(env: Env): Promise<void> {
   if (seeded) return;
@@ -55,8 +65,13 @@ async function seedHq(env: Env): Promise<void> {
     if (p.length) { console.warn('[deck_templates] seed refused', { uid: t?.uid, first: p[0] }); continue; }
     const m = metaOf(t);
     await env.DB.prepare(
-      `INSERT OR IGNORE INTO deck_templates (uid, scope, owner_id, name, description, stage, audience_tags, deck_audience, style, swatch, card_count, structure_json, theme_json, provenance_json)
-       VALUES (?, 'hq', NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO deck_templates (uid, scope, owner_id, name, description, stage, audience_tags, deck_audience, style, swatch, card_count, structure_json, theme_json, provenance_json)
+       VALUES (?, 'hq', NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(uid) DO UPDATE SET
+         name = excluded.name, description = excluded.description, stage = excluded.stage, audience_tags = excluded.audience_tags,
+         deck_audience = excluded.deck_audience, style = excluded.style, swatch = excluded.swatch, card_count = excluded.card_count,
+         structure_json = excluded.structure_json, theme_json = excluded.theme_json, provenance_json = excluded.provenance_json
+       WHERE deck_templates.scope = 'hq' AND deck_templates.structure_json IS NOT excluded.structure_json`,
     ).bind(m.uid, m.name, m.description, m.stage, JSON.stringify(m.audience_tags), m.deck_audience, m.style, m.swatch, m.card_count,
       JSON.stringify(t), t.theme ? JSON.stringify(t.theme) : null, JSON.stringify(t.provenance)).run();
   }

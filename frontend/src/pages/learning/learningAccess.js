@@ -33,8 +33,12 @@
  * special case: `user` is then the impersonated account.
  */
 
-/** The switch. Temporary (owner, 2026-10-06): set to false when the content exists. */
-export const LEARNING_COMING_SOON = true;
+/**
+ * The switch. Temporary (owner, 2026-10-06); LIFTED BY THE OWNER ON 2026-11-04
+ * (#3726, D3726): every profile gets the whole Learning center. The gate's code
+ * stays dormant until its callers' coming-soon branches are removed.
+ */
+export const LEARNING_COMING_SOON = false;
 
 /** The one sentence a gated profile reads, wherever a Learning screen is closed to them. */
 export const COMING_SOON_LINE = 'Courses, videos, webinars and more are coming soon. Articles are open now.';

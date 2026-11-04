@@ -327,6 +327,11 @@ export const FOUNDER_OPTIONS = [
     page: 'Founder · Grow', key: 'draft:update', route: '/grow/update', label: 'Share an update', kind: 'write', handler: 'draft',
     at: [['frontend/src/pages/founder/ShareUpdateSheet.jsx', 'shareUpdateApi.draftLines(']],
   },
+  // #4046: Publish to…'s post text, drafted for the ticked places in the Ask panel; it writes nothing.
+  {
+    page: 'Founder · Grow', key: 'draft:publish', route: '/grow', label: 'Draft the post', kind: 'write', handler: 'draft',
+    at: [['frontend/src/pages/cycles/publish/PublishAskIntent.jsx', 'api.ask(']],
+  },
   {
     page: 'Founder · Grow · Product improvement', key: 'fill:feedback_theme', route: '/grow/product-improvement', label: 'Propose themes', kind: 'synth', handler: 'form',
     at: [[CYCLE, "'feedback_theme'"]],

@@ -3,7 +3,8 @@
 D1414 (#3696, INC1–INC7): the flow at `/incorporate` that turns one of your
 own projects, or a new one, into a company filed by Axal VC, built to the
 owner's canvases `design/incoming/Incorporate Flow Page.dc.html` and
-`design/incoming/Incorporate · Boards.dc.html`. `pages/IncorporatePage.jsx`
+`design/incoming/Incorporate · Boards.dc.html`. `frontend/src/pages/IncorporatePage.jsx`
+`design/incoming/Incorporate · Boards.dc.html`. `../IncorporatePage.jsx`
 re-exports `IncorporateFlow.jsx`, so `App.jsx` and `LegalEnginePage.jsx` keep
 their import.
 
