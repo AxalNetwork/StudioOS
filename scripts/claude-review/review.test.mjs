@@ -18,7 +18,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
 import { WorkloadIdentityError } from '@anthropic-ai/sdk/lib/credentials/types';
-import { GithubIdentityError, LEDGER_MAX_PAGES, OIDC_AUDIENCE, anthropicClient, classifyError, clientFor, errorDetail, githubClient, githubIdentityToken, listMonthRecords, main, safePath } from './review.mjs';
+import { GithubIdentityError, LEDGER_MAX_PAGES, OIDC_AUDIENCE, anthropicClient, classifyError, clientFor, errorDetail, fallbacksFor, githubClient, kimiFetch, githubIdentityToken, listMonthRecords, main, safePath } from './review.mjs';
 
 const headers = new Headers({ 'request-id': 'req_test' });
 const gen = (status) => Anthropic.APIError.generate(status, { type: 'error', error: { type: 'x', message: 'm' } }, 'm', headers);
@@ -371,4 +371,42 @@ test('main: an outcome whose reason can quote the pull request or the model keep
   }
   assert.equal(out.join(''), 'claude-review: diff_error\n');
   assert.match(s.read().summary, /diff could not be computed/);
+});
+
+test('the fallback chain: one client per configured step, built only when used, on its own key and endpoint', async () => {
+  const built = [];
+  class FakeSdk {
+    constructor(opts) {
+      built.push(opts);
+      this.messages = { create: async (p) => { if (p.model === 'gone') throw new Anthropic.NotFoundError(404, { error: { message: 'model gone' } }, 'model gone', new Headers()); return { ok: true }; } };
+    }
+  }
+  for (const k of ['APIError', 'AuthenticationError', 'PermissionDeniedError', 'NotFoundError', 'RateLimitError', 'BadRequestError', 'APIConnectionTimeoutError', 'APIConnectionError', 'InternalServerError']) FakeSdk[k] = Anthropic[k];
+  const env = { CLAUDE_REVIEW_ENABLED: 'true', ANTHROPIC_MODEL: 'claude-sonnet-5-5', ANTHROPIC_API_KEY: 'a', CLAUDE_REVIEW_MAX_RETRIES: '1' };
+  assert.deepEqual(fallbacksFor(env), {}, 'no fallback key, no chain');
+  assert.deepEqual(fallbacksFor({ ...env, KIMI_API_KEY: 'k', ANTHROPIC_API_KEY_2: 'b', CLAUDE_REVIEW_CREDIT_FALLBACK: 'off' }), {});
+  const chain = fallbacksFor({ ...env, ANTHROPIC_API_KEY_2: 'sk-ant-second', KIMI_API_KEY: 'sk-kimi-key' }, { anthropic: { sdk: FakeSdk }, kimi: { sdk: FakeSdk } });
+  assert.deepEqual(Object.keys(chain), ['claude2', 'kimi']);
+  assert.equal(built.length, 0, 'nothing built until a review needs it');
+  await chain.claude2.create({ model: 'claude-sonnet-5-5' });
+  assert.equal(built[0].apiKey, 'sk-ant-second');
+  assert.equal(built[0].baseURL, undefined, 'a Claude account goes to Anthropic');
+  await chain.kimi.create({ model: 'kimi-k2-turbo-preview' });
+  await chain.kimi.create({ model: 'kimi-k2-turbo-preview' });
+  assert.equal(built.length, 2, 'each client built once');
+  assert.deepEqual([built[1].apiKey, built[1].baseURL, built[1].maxRetries], ['sk-kimi-key', 'https://api.moonshot.ai/anthropic', 1]);
+  await assert.rejects(chain.kimi.create({ model: 'gone' }), (e) => e.kind === 'not_found' && e.status === 404);
+  assert.equal(built[1].authToken, null, 'no ANTHROPIC_AUTH_TOKEN reaches Moonshot');
+  assert.equal(typeof built[1].fetch, 'function');
+});
+
+test('the Kimi fetch forwards only the request\'s own headers', async () => {
+  let seen;
+  const f = kimiFetch(async (url, init) => { seen = init.headers; return new Response('{}'); });
+  await f('https://api.moonshot.ai/anthropic/v1/messages', { method: 'POST', headers: { 'x-api-key': 'k', 'content-type': 'application/json', 'anthropic-version': '2023-06-01', authorization: 'Bearer anthropic-token', 'x-custom': 'secret', 'x-stainless-retry-count': '0' } });
+  assert.deepEqual([...seen.keys()].sort(), ['anthropic-version', 'content-type', 'x-api-key', 'x-stainless-retry-count']);
+});
+
+test('an error detail never carries a Kimi-style key', () => {
+  assert.equal(errorDetail(new Error('bad key sk-AbCdEfGhIjKlMnOpQrStUv rejected'), null), 'bad key [redacted] rejected');
 });

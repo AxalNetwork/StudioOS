@@ -12,6 +12,10 @@
  *                            exchanged for a short-lived Anthropic token; needs id-token: write
  *   ANTHROPIC_API_KEY        repository secret, the fallback; read by the SDK, never printed
  *   ANTHROPIC_MODEL, ANTHROPIC_MODEL_HIGH_RISK, CLAUDE_REVIEW_*  repository variables
+ *   ANTHROPIC_API_KEY_2, ANTHROPIC_API_KEY_3, KIMI_API_KEY  repository secrets, optional: the
+ *                            credit fallback chain, tried in that order, each only when the
+ *                            account before it answers that its credit balance is exhausted
+ *   KIMI_MODEL, KIMI_BASE_URL  repository variables, optional (defaults in claudeReview.mjs)
  *   GITHUB_TOKEN             the job's read-only token (contents, pull-requests, actions)
  *   GITHUB_EVENT_PATH, GITHUB_REPOSITORY, GITHUB_API_URL, GITHUB_STEP_SUMMARY, GITHUB_OUTPUT
  *   CLAUDE_REVIEW_PR_DIR     the checkout of the pull request's head (data only; nothing in it runs)
@@ -84,6 +88,7 @@ export function errorDetail(e, fed) {
   else text = String(e?.name || 'Error');
   return String(text)
     .replace(/sk-ant-[A-Za-z0-9_-]+/g, '[redacted]')
+    .replace(/\bsk-[A-Za-z0-9_-]{16,}/g, '[redacted]')
     .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*/g, '[redacted]')
     .replace(/\b(Bearer|bearer)\s+\S+/g, '$1 [redacted]')
     .replace(/[\u0000-\u001f\u007f]+/g, ' ')
@@ -146,6 +151,53 @@ export function anthropicClient({ apiKey, federation = null, identityToken = nul
     countTokens: (p) => wrap((c) => c.messages.countTokens({ model: p.model, system: p.system, messages: p.messages })),
     create: (p) => wrap((c) => (p.betas ? c.beta.messages.create(p) : c.messages.create(p))),
   };
+}
+
+/**
+ * The credit fallback: Kimi through Moonshot's Anthropic-compatible endpoint,
+ * with the same SDK, the same retries and the same error kinds. Built on first
+ * use, so a run that never needs it never touches the key.
+ */
+export function kimiClient({ apiKey, baseURL, maxRetries, timeoutSeconds, sdk = Anthropic, fetchImpl = globalThis.fetch }) {
+  let client = null;
+  // Only the Kimi key goes to Moonshot: authToken is pinned to null (the SDK
+  // would read ANTHROPIC_AUTH_TOKEN), and every header outside the allowlist
+  // (ANTHROPIC_CUSTOM_HEADERS, an Authorization bearer) is dropped on the way out.
+  const get = () => (client ||= new sdk({ apiKey, authToken: null, baseURL, maxRetries, timeout: timeoutSeconds * 1000, fetch: kimiFetch(fetchImpl) }));
+  return {
+    create: async (p) => {
+      try { return await get().messages.create(p); } catch (e) { throw classifyError(e, sdk); }
+    },
+  };
+}
+
+/** The headers Kimi may receive: the request's own, never another credential. */
+export const KIMI_HEADERS = /^(content-type|content-length|accept|accept-encoding|x-api-key|anthropic-version|user-agent|idempotency-key|x-stainless-[a-z0-9-]+)$/i;
+
+/** A fetch that forwards only the allowlisted headers. */
+export function kimiFetch(fetchImpl) {
+  return (url, init = {}) => {
+    const headers = new Headers(init.headers);
+    for (const name of [...headers.keys()]) if (!KIMI_HEADERS.test(name)) headers.delete(name);
+    return fetchImpl(url, { ...init, headers });
+  };
+}
+
+/**
+ * The credit fallback chain's clients, by step id: a further Claude account
+ * (its own API key, its own Console organization) through the same Anthropic
+ * client, or Kimi. Each is built only if a review reaches it.
+ */
+export function fallbacksFor(env, overrides = {}) {
+  const { config } = readConfig(env);
+  const out = {};
+  for (const step of config.creditFallbacks) {
+    const common = { maxRetries: config.maxRetries, timeoutSeconds: config.timeoutSeconds };
+    out[step.id] = step.provider === 'kimi'
+      ? kimiClient({ apiKey: env.KIMI_API_KEY, baseURL: step.baseURL, ...common, ...(overrides.kimi || {}) })
+      : anthropicClient({ apiKey: env[step.secret], federation: null, ...common, ...(overrides.anthropic || {}) });
+  }
+  return out;
 }
 
 /** The client the run uses: federation when the variables configure it, else the API key. */
@@ -309,8 +361,10 @@ export async function main(env = process.env) {
       }
     },
     anthropic: null,
+    fallbacks: {},
   };
   deps.anthropic = clientFor(env);
+  deps.fallbacks = fallbacksFor(env);
 
   let result;
   try {

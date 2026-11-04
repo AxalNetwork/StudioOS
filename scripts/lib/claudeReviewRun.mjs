@@ -19,6 +19,9 @@
  *   readLines(path)                  the head version's lines, or null
  *   anthropic.countTokens(params)    { input_tokens }
  *   anthropic.create(params)         the Message; errors carry `kind` (see review.mjs)
+ *   fallbacks[id].create(params)     the credit fallback chain's clients, by step id (claude2,
+ *                                    claude3, kimi); used only when the account before answers
+ *                                    that its credit balance is exhausted
  *
  * Returns { outcome, exitCode, summary, annotations, record, findingsFile }.
  * `record` is the artifact to upload (name and JSON body) when tokens were
@@ -27,7 +30,7 @@
  */
 import {
   REVIEW_OUTPUT_SCHEMA, SYSTEM_PROMPT, annotations, budgetDecision, buildExcerpts, buildUserMessage,
-  estimateCost, estimateTokens, eventGate, mergeRates, parseUnifiedDiff, pickModel, preflightCost,
+  creditExhausted, estimateCost, fallbackRequest, unfence, estimateTokens, eventGate, mergeRates, parseUnifiedDiff, pickModel, preflightCost,
   readConfig, readLedger, recordName, renderSummary, reportable, reviewKey, selectDiff, validateReview,
 } from './claudeReview.mjs';
 
@@ -46,6 +49,18 @@ const API_ERROR_TEXT = {
   timeout: 'the request timed out.',
   connection: 'the API could not be reached.',
   unknown: 'the API call failed.',
+};
+
+const CLAUDE_FALLBACK_ERROR_TEXT = {
+  authentication: 'its key was rejected (401). Check the <secret> repository secret.',
+  permission: 'its key may not use this model or workspace (403).',
+};
+
+const KIMI_ERROR_TEXT = {
+  authentication: 'the Kimi key was rejected (401). Check the KIMI_API_KEY repository secret.',
+  not_found: 'the Kimi model was not found (404). Check that KIMI_MODEL names a model your Kimi account offers.',
+  billing: 'the Kimi account could not be billed (402): its balance may be used up too.',
+  bad_request: 'the Kimi request was rejected (400).',
 };
 
 const short = (sha) => String(sha || '').slice(0, 12);
@@ -113,8 +128,9 @@ export async function runReview(deps) {
   const month = monthOf(started);
   const monthStart = `${month}-01T00:00:00Z`;
   let ledger;
+  let listing = null;
   try {
-    const listing = await deps.github.listArtifacts(monthStart);
+    listing = await deps.github.listArtifacts(monthStart);
     ledger = readLedger(listing.artifacts, { month, key, listingComplete: listing.complete });
   } catch {
     ledger = { spentUsd: 0, duplicate: null, complete: false };
@@ -155,26 +171,84 @@ export async function runReview(deps) {
   };
   if (config.refusalFallback === 'default') Object.assign(params, { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' });
 
+  // Who answered: the main Claude account, or the first step of the credit
+  // fallback chain whose account still has credit. Every run starts with the
+  // main account, so reviews return to it as soon as its credit does.
+  let provider = 'anthropic';
+  let account = 'Claude';
+  let usedModel = model;
+  // A review by another model is recorded under that model's key, so it never
+  // counts as a duplicate of a Claude review: once Claude's credit is back, it
+  // reviews the same inputs again.
+  let recordKey = key;
   const record = (status, usd, extra) => {
-    const name = recordName({ month, pr: pr.number, key, status, usd });
-    return { name, body: JSON.stringify({ name, month, pr: pr.number, head_sha: pr.head.sha, merge_base: mergeBase, key, status, model, tier, usd, ...extra }, null, 2) };
+    const name = recordName({ month, pr: pr.number, key: recordKey, status, usd });
+    return { name, body: JSON.stringify({ name, month, pr: pr.number, head_sha: pr.head.sha, merge_base: mergeBase, key: recordKey, status, model: usedModel, provider, account, tier, usd, ...extra }, null, 2) };
+  };
+  const chain = (config.creditFallbacks || []).filter((step) => deps.fallbacks?.[step.id]);
+
+  // The main account's call, with the one retry without refusal fallbacks
+  // when the platform rejects them (a plain 400, unbilled). A credit refusal
+  // on either attempt reaches the chain below.
+  const mainCall = async () => {
+    try {
+      return await deps.anthropic.create(params);
+    } catch (e) {
+      if (creditExhausted(e) || !(e?.kind === 'bad_request' && params.fallbacks)) throw e;
+      delete params.fallbacks;
+      delete params.betas;
+      state.limitations.push('The request was rejected with refusal fallbacks enabled and was retried without them; set CLAUDE_REVIEW_REFUSAL_FALLBACK=off if this model does not support them.');
+      return await deps.anthropic.create(params);
+    }
   };
 
   let message;
   try {
     try {
-      message = await deps.anthropic.create(params);
+      message = await mainCall();
     } catch (e) {
-      // A model or platform that does not accept server-side fallbacks rejects
-      // the request outright (400, unbilled). Retry once without them.
-      if (e?.kind === 'bad_request' && params.fallbacks) {
-        delete params.fallbacks;
-        delete params.betas;
-        state.limitations.push('The request was rejected with refusal fallbacks enabled and was retried without them; set CLAUDE_REVIEW_REFUSAL_FALLBACK=off if this model does not support them.');
-        message = await deps.anthropic.create(params);
-      } else {
-        throw e;
+      if (!(creditExhausted(e) && chain.length)) throw e;
+      // The main account refused before doing any work (unbilled): its credit
+      // is used up. Walk the chain; a step that is out of credit too passes
+      // the review on, any other failure stops here.
+      let failed = e;
+      const empty = ['Claude'];
+      for (const step of chain) {
+        provider = step.provider;
+        account = step.label;
+        usedModel = step.provider === 'anthropic' ? model : step.model;
+        if (usedModel !== model) {
+          // Another model: bound its cost as the main model's was, before the call.
+          const worst = preflightCost({ inputTokens, maxOutputTokens: config.maxOutputTokens, model: usedModel, rates: state.rates });
+          const allowed = budgetDecision({ worstCaseUsd: worst, maxCostUsd: config.maxCostUsd, monthlyBudgetUsd: config.monthlyBudgetUsd, ledger });
+          if (!allowed.allow) {
+            return finish(state, 'budget_refused', `${empty.join(', ')} ${empty.length === 1 ? 'is' : 'are'} out of credit, and ${account} was not called: ${allowed.reason}. No API call was made to ${account}.`);
+          }
+          recordKey = reviewKey({ mergeBase, headSha: pr.head.sha, model: usedModel, config });
+          const earlier = listing ? readLedger(listing.artifacts, { month, key: recordKey, listingComplete: listing.complete }).duplicate : null;
+          if (earlier) {
+            return finish(state, 'duplicate', `${empty.join(', ')} ${empty.length === 1 ? 'is' : 'are'} out of credit, and ${account} already reviewed these exact inputs (${earlier.name}, ${earlier.created_at}); see that run's summary. Nothing was spent.`);
+          }
+        }
+        const request = step.provider === 'anthropic'
+          ? (({ betas, fallbacks, ...rest }) => rest)(params)
+          : fallbackRequest(params, usedModel);
+        try {
+          message = await deps.fallbacks[step.id].create(request);
+          failed = null;
+          break;
+        } catch (e2) {
+          failed = e2;
+          if (!creditExhausted(e2)) break;
+          empty.push(step.label);
+        }
       }
+      if (failed) {
+        failed.emptyAccounts = empty;
+        throw failed;
+      }
+      Object.assign(state.facts, { model: usedModel, account: `${account} (credit fallback)`, ...(provider === 'anthropic' ? {} : { effort: 'n/a' }) });
+      state.limitations.push(`Reviewed by ${account} (${usedModel}) because ${empty.join(', ')} ${empty.length === 1 ? 'is' : 'are'} out of credit. The next review tries the main Claude account first again.`);
     }
   } catch (e) {
     const kind = e?.kind || 'unknown';
@@ -184,7 +258,15 @@ export async function runReview(deps) {
     // What the API or the token exchange said, already stripped of anything
     // credential-shaped by the client: the cause, where the kind alone is a guess.
     const detail = typeof e?.detail === 'string' && e.detail ? e.detail : null;
-    return finish(state, 'api_error', `${API_ERROR_TEXT[kind] || API_ERROR_TEXT.unknown}${e?.status ? ` (HTTP ${e.status})` : ''}${detail ? ` The API said: ${detail}` : ''}`, {
+    const empty = Array.isArray(e?.emptyAccounts) ? e.emptyAccounts : null;
+    const who = !empty ? '' : creditExhausted(e)
+      ? `Every account in the credit fallback chain is out of credit (${empty.join(', ')}). `
+      : `${empty.join(', ')} ${empty.length === 1 ? 'is' : 'are'} out of credit, and the fallback ${account} failed: `;
+    const text = !empty ? (API_ERROR_TEXT[kind] || API_ERROR_TEXT.unknown)
+      : creditExhausted(e) ? 'No review was made; credit has to be added to one of them.'
+      : provider === 'kimi' ? (KIMI_ERROR_TEXT[kind] || API_ERROR_TEXT[kind] || API_ERROR_TEXT.unknown)
+      : (CLAUDE_FALLBACK_ERROR_TEXT[kind] || API_ERROR_TEXT[kind] || API_ERROR_TEXT.unknown).replace('<secret>', `ANTHROPIC_API_KEY_${account.split(' ').pop()}`);
+    return finish(state, 'api_error', `${who}${text}${e?.status ? ` (HTTP ${e.status})` : ''}${detail ? ` The API said: ${detail}` : ''}`, {
       record: record('err', 0, { outcome: 'api_error', error_kind: kind, http_status: e?.status ?? null, error_detail: detail, duration_seconds: Number(seconds) }),
     });
   }
@@ -193,7 +275,15 @@ export async function runReview(deps) {
   state.facts.duration = `${seconds} s`;
   if (message?._request_id) state.facts['request id'] = message._request_id;
   state.facts['stop reason'] = String(message?.stop_reason || 'unknown');
-  const usage = estimateCost(message?.usage, model, state.rates);
+  let usage = estimateCost(message?.usage, usedModel, state.rates);
+  if (!Number.isFinite(message?.usage?.input_tokens) || !Number.isFinite(message?.usage?.output_tokens)) {
+    // No token counts (more likely from a compatible endpoint than from
+    // Anthropic): record the worst case, never $0, so the month's budget
+    // keeps counting.
+    const worst = preflightCost({ inputTokens, maxOutputTokens: config.maxOutputTokens, model: usedModel, rates: state.rates });
+    usage = { ...usage, usd: worst ?? usage.usd, known: false };
+    state.limitations.push('The answer carried no token counts, so its worst case was recorded as its cost.');
+  }
   const usageFacts = { duration_seconds: Number(seconds), stop_reason: message?.stop_reason, usage: usage.perModel, cost_known: usage.known, fallback_ran: usage.fallbackRan };
 
   if (message?.stop_reason === 'refusal') {
@@ -203,7 +293,9 @@ export async function runReview(deps) {
     });
   }
 
-  const text = (message?.content || []).filter((b) => b?.type === 'text').map((b) => b.text).join('');
+  const joined = (message?.content || []).filter((b) => b?.type === 'text').map((b) => b.text).join('');
+  // Kimi has no structured output, so its answer may arrive in a code fence.
+  const text = provider === 'kimi' ? unfence(joined) : joined;
   const checked = validateReview(text, selection.included);
   if (!checked.ok) {
     const truncated = message?.stop_reason === 'max_tokens';
@@ -220,7 +312,7 @@ export async function runReview(deps) {
   // API). Untrusted model text, already checked against the diff.
   const findingsFile = JSON.stringify({
     schema_version: checked.review.schema_version,
-    pr: pr.number, head_sha: pr.head.sha, merge_base: mergeBase, model,
+    pr: pr.number, head_sha: pr.head.sha, merge_base: mergeBase, model: usedModel, provider, account,
     status: checked.review.status, summary: checked.review.summary,
     min_confidence: config.minConfidence, findings: shown, limitations: checked.review.limitations,
   }, null, 2);

@@ -90,6 +90,10 @@ const DEFAULTS = {
   annotations: false,
   failOnError: false,
   refusalFallback: 'default',
+  // The provider tried when Anthropic answers that the credit balance is
+  // exhausted (KIMI_API_KEY set). Moonshot's Anthropic-compatible endpoint.
+  kimiModel: 'kimi-k2-turbo-preview',
+  kimiBaseUrl: 'https://api.moonshot.ai/anthropic',
 };
 
 const LIMITS = {
@@ -103,6 +107,8 @@ const LIMITS = {
 };
 
 const MODEL_ID = /^[a-z0-9][a-z0-9._-]{1,99}$/;
+/** The further Claude accounts the credit fallback may use, as ANTHROPIC_API_KEY_<n> secrets. */
+export const CLAUDE_FALLBACK_SLOTS = [2, 3];
 
 const truthy = (v) => /^(1|true|yes|on)$/i.test(String(v ?? '').trim());
 
@@ -214,6 +220,26 @@ export function readConfig(env = {}) {
     }
   }
 
+  // The credit fallback: Kimi, only when its key is set and it is not switched
+  // off. The key is never copied into the config, only whether one is present.
+  const hasKimiKey = String(env.KIMI_API_KEY ?? '').trim().length > 0;
+  const kimiModel = String(env.KIMI_MODEL ?? '').trim() || DEFAULTS.kimiModel;
+  const kimiBaseUrl = String(env.KIMI_BASE_URL ?? '').trim() || DEFAULTS.kimiBaseUrl;
+  const providerRaw = String(env.CLAUDE_REVIEW_CREDIT_FALLBACK ?? '').trim().toLowerCase();
+  if (providerRaw && !['on', 'off'].includes(providerRaw)) errors.push(`CLAUDE_REVIEW_CREDIT_FALLBACK must be "on" or "off"; got "${providerRaw}"`);
+  if (hasKimiKey && !MODEL_ID.test(kimiModel)) errors.push('KIMI_MODEL is not a model ID');
+  if (hasKimiKey && !/^https:\/\/[a-z0-9.-]+(:\d+)?(\/[A-Za-z0-9._~\/-]*)?$/i.test(kimiBaseUrl)) errors.push('KIMI_BASE_URL must be an https URL');
+  // The chain, in the order it is tried: further Claude accounts (their own
+  // Console organizations, so their own credit), then Kimi. Each step is used
+  // only when the one before it answers that its credit is exhausted.
+  const creditFallbacks = [];
+  if (providerRaw !== 'off') {
+    for (const n of CLAUDE_FALLBACK_SLOTS) {
+      if (String(env[`ANTHROPIC_API_KEY_${n}`] ?? '').trim()) creditFallbacks.push({ id: `claude${n}`, provider: 'anthropic', label: `Claude account ${n}`, secret: `ANTHROPIC_API_KEY_${n}` });
+    }
+    if (hasKimiKey) creditFallbacks.push({ id: 'kimi', provider: 'kimi', label: 'Kimi', secret: 'KIMI_API_KEY', model: kimiModel, baseURL: kimiBaseUrl });
+  }
+
   const config = {
     enabled,
     model: model || null,
@@ -236,9 +262,42 @@ export function readConfig(env = {}) {
     failOnError: truthy(env.CLAUDE_REVIEW_FAIL_ON_ERROR),
     reviewDrafts: env.CLAUDE_REVIEW_DRAFTS === undefined || String(env.CLAUDE_REVIEW_DRAFTS).trim() === '' ? true : truthy(env.CLAUDE_REVIEW_DRAFTS),
     refusalFallback,
+    creditFallbacks,
     rateOverrides,
   };
   return { config, errors };
+}
+
+/**
+ * Whether an API error means the Anthropic account has no credit left: a 402,
+ * or the 400 Anthropic answers with "Your credit balance is too low". Only
+ * this sends the review to the credit fallback; every other failure is
+ * reported as it is.
+ */
+export function creditExhausted(e) {
+  if (e?.kind === 'billing') return true;
+  return e?.kind === 'bad_request' && /credit balance/i.test(String(e?.detail || ''));
+}
+
+/**
+ * The request for the credit fallback. Kimi's Anthropic-compatible endpoint
+ * takes the same messages, but not Anthropic's structured output, effort or
+ * betas, so the schema is stated in the system prompt and the answer is still
+ * checked by `validateReview`.
+ */
+export function fallbackRequest(params, model) {
+  return {
+    model,
+    max_tokens: params.max_tokens,
+    system: `${params.system}\n\nAnswer with one JSON object and nothing else: no prose and no code fence. It must match this JSON Schema:\n${JSON.stringify(REVIEW_OUTPUT_SCHEMA)}`,
+    messages: params.messages,
+  };
+}
+
+/** A JSON answer wrapped in a Markdown code fence, unwrapped; anything else unchanged. */
+export function unfence(text) {
+  const m = /^\s*```(?:json)?\s*\n([\s\S]*?)\n?```\s*$/.exec(String(text));
+  return m ? m[1] : text;
 }
 
 // ---------------------------------------------------------------------------

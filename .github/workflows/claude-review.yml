@@ -149,6 +149,15 @@ jobs:
           ANTHROPIC_WORKSPACE_ID: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
           # Fallback when no federation rule is set.
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # The credit fallback chain, tried in this order and only when the
+          # account before answers that its credit balance is exhausted; every
+          # run starts with the main account above.
+          ANTHROPIC_API_KEY_2: ${{ secrets.ANTHROPIC_API_KEY_2 }}
+          ANTHROPIC_API_KEY_3: ${{ secrets.ANTHROPIC_API_KEY_3 }}
+          KIMI_API_KEY: ${{ secrets.KIMI_API_KEY }}
+          KIMI_MODEL: ${{ vars.KIMI_MODEL }}
+          KIMI_BASE_URL: ${{ vars.KIMI_BASE_URL }}
+          CLAUDE_REVIEW_CREDIT_FALLBACK: ${{ vars.CLAUDE_REVIEW_CREDIT_FALLBACK }}
           ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL }}
           ANTHROPIC_MODEL_HIGH_RISK: ${{ vars.ANTHROPIC_MODEL_HIGH_RISK }}
           CLAUDE_REVIEW_ENABLED: ${{ vars.CLAUDE_REVIEW_ENABLED }}
