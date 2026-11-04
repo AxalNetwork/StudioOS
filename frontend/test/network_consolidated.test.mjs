@@ -1,4 +1,3 @@
-import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { existsSync, readFileSync } from 'node:fs';
@@ -9,12 +8,11 @@ import { WORKSPACES } from '../src/lib/adminPlacement.js';
 
 const root = resolve(process.cwd());
 const read = (p) => readFileSync(resolve(root, p), 'utf8');
-const escapeRegExp = (s) => s.replace(/[\\^$.*+?()[\]{}|/]/g, '\\$&');
 
 // documentation/architecture/DECISIONS.md D10. Companion to research_market_funds_retired and the repo's
 // other deletion guards.
 
-test('the three /advisor/network routes redirect onto the working surface', () => {
+test('D2319 retires the /advisor/network aliases and preserves the working surface', () => {
   const app = read('frontend/src/App.jsx');
   for (const [from, to] of [
     ['/advisor/network', '/network'],
@@ -22,11 +20,7 @@ test('the three /advisor/network routes redirect onto the working surface', () =
     ['/advisor/network/relationships', '/network?tab=relationships'],
     ['/advisor/network/organizations', '/network'],
   ]) {
-    isRetiredRedirect(from) ? assert.equal(app.includes(`path="${from}"`), false) : assert.match(
-      app,
-      new RegExp(`path="${escapeRegExp(from)}" element=\\{<Navigate to="${escapeRegExp(to)}"`),
-      `${from} should redirect to ${to}`
-    );
+    assert.equal(app.includes(`path="${from}"`), false, `${from} retired by D2319`);
   }
   assert.doesNotMatch(app, /AdvisorNetworkWorkspace/);
 });

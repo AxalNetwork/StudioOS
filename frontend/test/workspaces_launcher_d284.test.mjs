@@ -107,7 +107,7 @@ test('no page is labelled as an AI advisor, and the three founder redirects stil
   for (const [path, tab] of [['/services', 'services'], ['/needs', 'needs']]) {
     const line = APP.split('\n').find((l) => l.includes(`path="${path}"`));
     assert.equal(Boolean(line), !isRetiredRedirect(path), path);
-    isRetiredRedirect(`${path}`) ? assert.equal(line, undefined) : assert.match(line, new RegExp(`<MarketplaceRedirect role=\\{user\\?\\.role\\} founderTab="${tab}"`), `${path} no longer sends a founder to their tab`);
+    assert.equal(line, undefined);
   }
   assert.match(APP, /function MarketplaceRedirect\(\{ role, founderTab, to \}\) \{[\s\S]{0,80}?if \(role === 'founder'\) return <Navigate to=\{`\/build\/marketplace\?tab=\$\{founderTab\}`\} replace \/>;/,
     'the founder branch of the marketplace redirect is gone');

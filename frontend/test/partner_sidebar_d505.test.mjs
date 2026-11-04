@@ -70,8 +70,7 @@ test('each successor sits in the row D395 assigned, and each retired address red
       assert.ok(row, `no partner row labelled ${label}`);
       assert.ok((row.match || []).includes(successor), `${label} does not match ${successor} (for ${retired})`);
     }
-    isRetiredRedirect(retired) ? assert.equal(APP.includes(`path="${retired}"`), false) : assert.match(APP, new RegExp(`<Route path="${escapeRe(retired)}" element=\\{<Navigate to="${escapeRe(successor)}" replace \\/>\\} \\/>`),
-      `${retired} is not a redirect to ${successor}`);
+    assert.equal(APP.includes(`path="${retired}"`), false);
     assert.match(APP, new RegExp(`<Route path="${escapeRe(successor)}"`), `${successor} is not a mounted route`);
   }
   // Nothing invented: every partner `match` entry is a mounted route or a

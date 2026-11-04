@@ -113,7 +113,7 @@ test('Accounts, Approvals, Programs, Community and Insights are guard([\'admin\'
     assert.ok(line, `${path} is not registered`);
     assert.match(line, new RegExp(`guard\\(\\['admin'\\], <${page} \\/>\\)`), `${path} is not guard(['admin'])`);
     assert.doesNotMatch(line, /hqOnly\(/, `${path} is wrapped in hqOnly — this is the plain admin's own shell`);
-    isRetiredRedirect(old) ? assert.equal(routeLine(old), undefined) : assert.match(routeLine(old), new RegExp(`<${redirect} \\/>`), `the old address ${old} no longer redirects`);
+    assert.equal(routeLine(old), undefined);
   }
   // D941 (#2746, #2375 question 1, answer A): Accounts took /admin/accounts;
   // its old held address forwards, and HQ's Team moved to /admin/hq-team.

@@ -1,4 +1,3 @@
-import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
 import { actual, checks } from './_founder_tool_checks.mjs';
 /**
  * The Workspaces launcher is retired; its 28 pages live in the profile
@@ -223,8 +222,7 @@ test('the pages removed on 2026-10-21 only forward, and no row or Also in names 
   };
   for (const [route, forward] of Object.entries(FORWARDS)) {
     const block = routeBlock(APP, route);
-    assert.equal(Boolean(block), !isRetiredRedirect(route), route);
-    if (!isRetiredRedirect(route)) assert.match(block, forward, `${route} renders something other than its forward`);
+    assert.equal(block, null, `${route} retired by D2319`);
     assert.ok(!(route in PAGE_HOMES), `${route} still has a home`);
     for (const role of ['founder', 'investor', 'partner']) {
       for (const r of rowsOf(role)) assert.ok(!(r.match || []).includes(route), `${role} ${r.label} still matches ${route}`);

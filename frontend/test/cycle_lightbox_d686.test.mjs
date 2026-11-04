@@ -1,4 +1,3 @@
-import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
 /**
  * D686 §5.1 (#1596) — the cycle lightbox plumbing: the shell's residuals
  * (`size`, `onEscape`, the Tab filter, the scroll lock on the app scroller),
@@ -237,7 +236,7 @@ test('the three action routes are literal routes with their guard and `lightbox`
     assert.ok(at < app.indexOf(`<Route path="${slug}"`), `${path} is declared before ${slug}`);
   }
   for (const [path, to, hash] of [['/build/tools', '/build/operating-systems', '#tools'], ['/raise/calls', '/raise/capital-relationships/calls', ''], ['/grow/updates', '/grow/reporting', '']]) {
-    isRetiredRedirect(path) ? assert.equal(app.includes(`<Route path="${path}"`), false) : assert.match(app, new RegExp(`<Route path="${path}" element=\\{guard\\([^\\n]*<HistoryRedirect to="${to}" hash="${hash}" />\\)\\} />`), path);
+    assert.equal(app.includes(`<Route path="${path}"`), false);
   }
   assert.match(app, /export function HistoryRedirect\(\{ to, hash \}\) \{\s*const location = useLocation\(\);\s*return <Navigate replace to=\{\{ pathname: to, search: location\.search, hash \}\} \/>;/);
 });
