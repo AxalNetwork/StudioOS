@@ -304,6 +304,12 @@ export const incompleteTables = new Set();
  */
 const ARCHIVE_DIR = path.join(SQL_DIR, 'historical');
 
+/** D4486: literal column renames create a real column too; keep the guard's union semantics. */
+export function renamedColumns(text) {
+  return [...stripComments(text).matchAll(/\bALTER\s+TABLE\s+([`"[]?\w+[`"\]]?)\s+RENAME\s+COLUMN\s+([`"[]?\w+[`"\]]?)\s+TO\s+([`"[]?\w+[`"\]]?)/gi)]
+    .map((m) => ({ table: norm(m[1]), from: norm(m[2]), to: norm(m[3]) }));
+}
+
 export function knownColumns() {
   const schema = new Map();
   const sources = [
@@ -336,6 +342,10 @@ export function knownColumns() {
       if (!/^[a-z_]\w*$/.test(t)) continue;
       if (!schema.get(t)) schema.set(t, new Set());
       schema.get(t).add(c);
+    }
+    for (const rename of renamedColumns(text)) {
+      if (!schema.get(rename.table)) schema.set(rename.table, new Set());
+      schema.get(rename.table).add(rename.to);
     }
     // `ALTER TABLE x RENAME TO y`: a rebuild (create `x_new` with the wider
     // shape, copy, drop the old table, rename) leaves its columns under the
