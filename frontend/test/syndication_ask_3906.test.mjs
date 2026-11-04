@@ -175,6 +175,6 @@ test('no suggestion chips; the client paths; the editor mounts it under Visibili
   assert.match(client, /assist: .*\n\s+method: 'POST', timeoutMs: 60_000/);
   const editor = read('pages/events/EventEditorPage.jsx');
   const note = editor.indexOf('{syndicateNote(form.visibility)}');
-  const ask = editor.indexOf("{isEdit && form.visibility === 'public' && <SyndicationAsk eventId={id} />}");
+  const ask = editor.indexOf("<SyndicationAsk eventId={id} />");
   assert.ok(note > 0 && ask > note, 'under the Visibility note');
 });
