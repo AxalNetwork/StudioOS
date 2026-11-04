@@ -420,6 +420,8 @@ export const RULEBOOK_SECTIONS = [
   ['may_do_automatically', 'May do automatically'], ['always_asks_human', 'Always asks a human'],
   ['escalates_when', 'Escalates when'], ['kpis', 'KPIs'], ['tone', 'Tone'],
 ];
+/** D4387: a sponsor change keeps its reason, at least this long (the Worker's `SPONSOR_REASON_MIN`). */
+export const SPONSOR_REASON_MIN = 10;
 export const WHO_PAYS = 'Agents run as their sponsor and are paid from the sponsor’s AI tokens, capped per agent.';
 export const HOLD_LINE = (amount) => `Holds up to ${amount} · you pay what it uses`;
 
@@ -477,7 +479,9 @@ export function ago(iso, now = new Date()) {
 const EVENTS = {
   added: () => 'Added',
   paused: () => 'Paused',
-  resumed: () => 'Resumed',
+  // D4387: the sweep resumes a cap pause at the month's start; a new sponsor resumes a `sponsor_left` pause.
+  resumed: (d) => (d?.reason === 'cap_reset' ? 'Resumed at the start of the month'
+    : d?.reason === 'sponsor_changed' ? 'Resumed with its new sponsor' : 'Resumed'),
   removed: (d) => (Number(d?.proposals_withdrawn) > 0 ? `Removed; ${countWord(Number(d.proposals_withdrawn), 'open proposal')} withdrawn` : 'Removed'),
   cap_changed: (d) => {
     const from = money(d?.from_microusd, { whole: true });
@@ -487,6 +491,10 @@ const EVENTS = {
   rulebook_changed: (d) => (Number.isFinite(Number(d?.version)) && d?.version != null ? `Rule book saved as v${d.version}` : 'Rule book saved'),
   run: () => 'Ran',
   refused: () => 'A run was refused',
+  sponsor_changed: (d) => {
+    const to = String(d?.to?.name || '').trim();
+    return to ? `Sponsor changed to ${to}` : 'Sponsor changed';
+  },
 };
 /**
  * One profile event (#3840's `{ kind, actor: { uid, name } | null, at, detail }`)
@@ -511,12 +519,14 @@ export const DAILY_RUNS = 20;
 
 const PAUSE = {
   manual: (a) => ({ reason: a?.paused_by?.name ? `Paused by ${a.paused_by.name}` : 'Paused by a person', fix: 'Resume' }),
+  // D4387: `resumes_at` is the Worker's (the day its sweep resumes the agent); the page never works it out.
   cap: (a) => {
     const on = day(a?.resumes_at, { year: false });
-    return { reason: `Reached its monthly cap${on ? `. Resumes ${on}.` : ''}`, fix: 'Raise the cap' };
+    return { reason: `Reached its monthly cap${on ? `. Resumes ${on}.` : ''}`, fix: 'Raise the cap', action: 'cap' };
   },
   // D1531 (#3742 E8, TM19d/TM19e): the pause reasons TM9b lacked, in the canvas's words; `hint` is the line under it.
-  sponsor_left: () => ({ reason: 'Paused because the person who added it can no longer manage this team.', fix: 'Choose a new sponsor' }),
+  // D4387: `action: 'sponsor'` opens the sponsor sheet from "Choose a new sponsor".
+  sponsor_left: () => ({ reason: 'Paused because the person who added it can no longer manage this team.', fix: 'Choose a new sponsor', action: 'sponsor' }),
   tool_disconnected: (a) => {
     const server = a?.paused_server?.name || a?.paused_tool?.server_name || a?.paused_tool?.name || null;
     return { reason: server ? `A connected tool was disconnected: ${server} is disconnected` : 'A connected tool was disconnected', fix: 'Reconnect' };
@@ -528,7 +538,7 @@ const PAUSE = {
   // D4158 (#4158): HQ retired the persona. Nothing on the team resumes it; its open proposals stay decidable.
   persona_retired: () => ({ reason: 'Axal VC HQ retired this agent. It cannot be resumed.', hint: 'No Resume. Add another agent in its place.', fix: null }),
 };
-/** Why an agent is paused, and the one link that fixes it (TM9b). */
+/** Why an agent is paused, and the one link that fixes it (TM9b); `action` names the dialog the link opens (D4387). */
 export function pauseWords(a) {
   if (a?.status !== 'paused') return null;
   return (PAUSE[a.paused_reason] || (() => ({ reason: 'Paused', fix: null })))(a);

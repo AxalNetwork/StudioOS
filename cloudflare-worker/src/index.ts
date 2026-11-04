@@ -2300,34 +2300,40 @@ export default {
           }
         }
         // D1528 (#3847): the agent sweep. Its own minute (% 5 === 1), under
-        // this lease, only while the engine is enabled. NOT GATED ON
+        // this lease. NOT GATED ON
         // `hqCadences`: each deployment's agents and runs are its own rows.
-        if (now.getUTCMinutes() % 5 === 1 && env.AGENT_ENGINE && env.AGENT_ENGINE !== 'off' && env.TEAM_AGENTS_ENABLED === 'true') {
+        // D4387 (#4387): the sweep runs whenever team agents are on, so an
+        // agent paused at its cap resumes when the month turns even with the
+        // engine off; `sweepAgents` itself still admits nothing while the
+        // engine is off or halted. Duties and alerts stay the engine's.
+        if (now.getUTCMinutes() % 5 === 1 && env.TEAM_AGENTS_ENABLED === 'true') {
           try {
             const { sweepAgents } = await import('./agents/sweep');
             const r = await sweepAgents(env, now);
-            if (r.resent || r.admitted) cronSummary.push(`agents resent=${r.resent} admitted=${r.admitted}`);
+            if (r.resent || r.admitted || r.cap_resumed) cronSummary.push(`agents resent=${r.resent} admitted=${r.admitted} cap_resumed=${r.cap_resumed}`);
           } catch {
             console.error('[cron] agent sweep unreadable');
           }
-          // D1530 (#3849, E5): the due duties, claim before act.
-          try {
-            const { sweepAgentDuties } = await import('./agents/sweep');
-            const d = await sweepAgentDuties(env, now);
-            if (d && (d.task_created || d['skipped:agent_paused'] || d['skipped:no_tokens'])) {
-              cronSummary.push(`agent duties tasks=${d.task_created} skipped=${d['skipped:agent_paused'] + d['skipped:no_tokens'] + d['skipped:scope_gone']}`);
+          if (env.AGENT_ENGINE && env.AGENT_ENGINE !== 'off') {
+            // D1530 (#3849, E5): the due duties, claim before act.
+            try {
+              const { sweepAgentDuties } = await import('./agents/sweep');
+              const d = await sweepAgentDuties(env, now);
+              if (d && (d.task_created || d['skipped:agent_paused'] || d['skipped:no_tokens'])) {
+                cronSummary.push(`agent duties tasks=${d.task_created} skipped=${d['skipped:agent_paused'] + d['skipped:no_tokens'] + d['skipped:scope_gone']}`);
+              }
+            } catch {
+              console.error('[cron] agent duties unreadable');
             }
-          } catch {
-            console.error('[cron] agent duties unreadable');
-          }
-          // #3851 (E7): the engine's alerts (caps, blocked tasks, waiting approvals, DLQ, gateway), each once per its window.
-          try {
-            const { sweepAgentAlerts } = await import('./services/agents/alerts');
-            const a = await sweepAgentAlerts(env, now);
-            const sent = Object.values(a).reduce((x, y) => x + y, 0);
-            if (sent) cronSummary.push(`agent alerts ${Object.entries(a).filter(([, n]) => n).map(([k, n]) => `${k}=${n}`).join(' ')}`);
-          } catch {
-            console.error('[cron] agent alerts unreadable');
+            // #3851 (E7): the engine's alerts (caps, blocked tasks, waiting approvals, DLQ, gateway), each once per its window.
+            try {
+              const { sweepAgentAlerts } = await import('./services/agents/alerts');
+              const a = await sweepAgentAlerts(env, now);
+              const sent = Object.values(a).reduce((x, y) => x + y, 0);
+              if (sent) cronSummary.push(`agent alerts ${Object.entries(a).filter(([, n]) => n).map(([k, n]) => `${k}=${n}`).join(' ')}`);
+            } catch {
+              console.error('[cron] agent alerts unreadable');
+            }
           }
         }
         // D1259: a published venture model rescores the next batch of ventures

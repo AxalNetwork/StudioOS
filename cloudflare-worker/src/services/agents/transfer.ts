@@ -32,6 +32,7 @@
  */
 import type { Env } from '../../types';
 import type { ScopeRef } from '../../agents/runtime';
+import { personaOf } from './personas';
 
 export type Move = { projectId: number; from: number | null; to: number | null; actorUserId: number };
 
@@ -154,7 +155,10 @@ export type MoveRow = {
   by: { uid: string; name: string } | null;
   at: string;
   blocked_tasks: number;
+  /** #4394 (TM18b): on an `out` move only, this scope's own agents' runs the move stopped (`scope_moved`). */
+  stopped_runs?: StoppedRun[];
 };
+export type StoppedRun = { agent: { uid: string; persona: { key: string; name: string } | null }; task: { uid: string; title: string } };
 
 /**
  * The moves a scope saw, newest first (TM18's banner): a company's projects
@@ -183,16 +187,46 @@ export async function movesOf(env: Pick<Env, 'DB'>, scope: ScopeRef, limit: numb
           OR (? IS NOT NULL AND (json_extract(e.before_json, '$.company_id') = ? OR json_extract(e.after_json, '$.company_id') = ?)))
       ORDER BY e.created_at DESC, e.id DESC LIMIT ?`,
   ).bind(projectId, projectId, companyId, companyId, companyId, limit).all<any>()).results ?? [];
-  return rows.map((r) => ({
+  const out: MoveRow[] = [];
+  for (const r of rows) {
     // A company: did the project come in or go out? A project: did it move into a company, or out of every company?
-    direction: scope.kind === 'company' ? (Number(r.from_id) === scope.id ? 'out' : 'in') : (r.to_id != null ? 'in' : 'out'),
+    const direction: 'in' | 'out' = scope.kind === 'company' ? (Number(r.from_id) === scope.id ? 'out' : 'in') : (r.to_id != null ? 'in' : 'out');
+    out.push({
+    direction,
     project: { id: Number(r.project_id), name: String(r.project_name ?? '') },
     from: r.from_uid ? { uid: String(r.from_uid), name: String(r.from_name ?? '') } : null,
     to: r.to_uid ? { uid: String(r.to_uid), name: String(r.to_name ?? '') } : null,
     by: r.by_uid ? { uid: String(r.by_uid), name: String(r.by_name ?? '') } : null,
     at: String(r.created_at),
     blocked_tasks: Number(r.blocked_tasks ?? 0),
-  }));
+    ...(direction === 'out' ? { stopped_runs: await stoppedRuns(env, scope, Number(r.project_id), String(r.created_at)) } : {}),
+    });
+  }
+  return out;
+}
+
+/**
+ * #4394 (TM18b): the runs a move stopped, as this scope sees them: only its
+ * OWN agents' runs (a project reads its agents; the company it left reads its
+ * agents whose tasks the move blocked), never the other side's. A run counts
+ * when it ended `scope_moved` after this move and before the project's next
+ * move. A person is never named here; an agent by its persona (D4117).
+ */
+async function stoppedRuns(env: Pick<Env, 'DB'>, scope: ScopeRef, projectId: number, at: string): Promise<StoppedRun[]> {
+  const rows = (await env.DB.prepare(
+    `SELECT a.uid AS agent_uid, a.persona_key, t.uid AS task_uid, t.title AS task_title
+       FROM agent_task_runs r JOIN team_agents a ON a.id = r.agent_id JOIN scope_tasks t ON t.id = r.task_id
+      WHERE r.status = 'scope_moved' AND r.ended_at >= ?
+        AND r.ended_at < COALESCE((SELECT MIN(n.created_at) FROM company_membership_events n
+                                    WHERE n.kind = 'project_move' AND n.project_id = ? AND n.created_at > ?), '9999-12-31')
+        AND ((? = 'project' AND a.scope_kind = 'project' AND a.project_id = ?)
+          OR (? = 'company' AND a.scope_kind = 'company' AND a.company_id = ? AND t.blocked_reason = 'project_left'))
+      ORDER BY r.ended_at, r.id LIMIT 50`,
+  ).bind(at, projectId, at, scope.kind, projectId, scope.kind, scope.id).all<{ agent_uid: string; persona_key: string | null; task_uid: string; task_title: string }>()).results ?? [];
+  return rows.map((r) => {
+    const p = personaOf(r.persona_key);
+    return { agent: { uid: r.agent_uid, persona: p ? { key: p.key, name: p.name } : null }, task: { uid: r.task_uid, title: r.task_title } };
+  });
 }
 
 /** The deps a real move uses: the scope objects (`doRuntime.tellMoved`) and the agents' teams (`engine.tellTeam`). */

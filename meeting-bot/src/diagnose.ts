@@ -6,7 +6,8 @@
  * - `container`: this process received the signed command;
  * - `browser`: Chromium launches;
  * - `egress`: the container reaches Google's hosts (or Zoom's);
- * - `join`: where the Meet page stops (sign-in wall, refusal, lobby, in the call);
+ * - `join`: where the Meet page stops (Eadwyn's own sign-in, D3678; a sign-in
+ *   wall, refusal, lobby, in the call);
  * - `admission`: waiting for the host, then admitted or not;
  * - `audio`: frames arrive, and one silent probe chunk of the same length uploads.
  *
@@ -64,6 +65,8 @@ const STAGES: readonly DiagnoseStage[] = ['container', 'browser', 'egress', 'joi
 
 /** Where the Meet page stopped: D1368's step, D1373's page kind, or the adapter's refusal. */
 export function joinStop(error: unknown, step: string | null): string {
+  // D3678: the signed-in join's own codes (`meet/signin.ts`).
+  if (error instanceof AdapterFailure && error.detail?.startsWith('signin_')) return error.detail;
   if (step === 'meet_page_signin') return 'signin_wall';
   if (step?.startsWith('meet_page_')) return `page_${step.slice('meet_page_'.length)}`;
   // D1374: Meet's own "You can't join this video call".

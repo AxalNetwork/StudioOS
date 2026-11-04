@@ -8,6 +8,8 @@
  *   POST   /:scope/:id/agents                  add one (manage + paid plan)
  *   GET    /agents/:uid                        its profile: rule book, matrix, spend, proposals, events
  *   PATCH  /agents/:uid                        pause, resume, cap, name (manage)
+ *   GET    /agents/:uid/sponsors               D4387: the team's members and whether each may sponsor it (manage)
+ *   PUT    /agents/:uid/sponsor                D4387: a new sponsor, with a reason; resumes a `sponsor_left` pause (manage)
  *   DELETE /agents/:uid                        remove: rows kept, open proposals withdrawn (manage)
  *   GET    /:scope/:id/rulebooks/:role         default, effective, versions, diff, floor
  *   PUT    /:scope/:id/rulebooks/:role         a new version, within the floor (manage)
@@ -40,6 +42,9 @@
  * `decided_by_user_id` and a `proposal_decided` event.
  * Part 5 (#3844, owner Q3 = A) adds the sponsor's approved read tools
  * (D852), through `services/agents/agentTools.ts`.
+ * D4387 (#4387, #3742 E8) adds the sponsor change, checked by
+ * `services/agents/sponsor.ts`, and each agent's `resumes_at`: the UTC day a
+ * cap-paused agent resumes, which the sweep does (null otherwise).
  */
 import { maxTeamCap } from '../services/agents/aiPolicy';
 import { Hono } from 'hono';
@@ -64,6 +69,8 @@ import { ALWAYS_ASKS_FLOOR, MODULES, ROLES, moduleOf, optionsIn, roleOf } from '
 import { AREAS, ROLE_PERSONA, VALUE_LEGEND, personaOf } from '../services/agents/personas';
 import { PLATFORM_CAP_MAX_MICROUSD, RETIRED_PAUSE, galleryPersonas, loadPersonaSettings, maxCapOf, personaView, statusOf, unavailable } from '../services/agents/rosterAdmin';
 import { checkRules, diffRules } from '../services/agents/rulebook';
+import { SPONSOR_WORDS, capResumesAt, sponsorRefusal, teamMembers } from '../services/agents/sponsor';
+import { notify } from '../services/notify';
 import {
   agentByUid, bookRows, canManage, canRead, effectiveBook, loadScope, logEvent, monthSpend, scopeCols, scopeOfAgent,
   type AgentRow,
@@ -139,6 +146,8 @@ async function agentDto(env: Env, a: AgentRow) {
     sponsor: await personOf(env, a.sponsor_user_id),
     status: a.status,
     paused_reason: a.paused_reason,
+    // D4387: the UTC day (YYYY-MM-DD) a cap-paused agent resumes; null for every other agent. The page never works it out.
+    resumes_at: await capResumesAt(env, a),
     monthly_cap_microusd: a.monthly_cap_microusd,
     month_spend: await monthSpend(env, a.id),
     last_activity_at: await lastActivity(env, a.id),
@@ -435,6 +444,101 @@ router.patch('/agents/:uid', async (c) => {
     for (const [kind, detail] of events) await logEvent(c.env, a.id, user.id, kind, detail);
     const fresh = await c.env.DB.prepare('SELECT * FROM team_agents WHERE id = ?').bind(a.id).first<AgentRow>();
     return c.json({ agent: await agentDto(c.env, fresh!) });
+  } catch (e) { return mapError(c, e); }
+});
+
+// ── The sponsor (D4387) ─────────────────────────────────────────────────────
+
+export const SPONSOR_REASON_MIN = 10;
+export const SPONSOR_REASON_MAX = 500;
+const USER_UID = /^[A-Za-z0-9_-]{1,64}$/;
+
+/** The agent and its scope, for one of its managers; or the refusal, in PATCH's gate order. */
+async function managed(c: C, user: User) {
+  const a = await agentByUid(c.env, c.req.param('uid') ?? '');
+  const s = a && await scopeOfAgent(c.env, a);
+  if (!a || !s) return { refusal: say(c, 404, 'not_found', 'There is no such agent.') };
+  if (!(await canRead(c.env, s, user))) return { refusal: say(c, 403, 'not_member', 'Only the team can see its agents.') };
+  if (!(await canManage(c.env, s, user))) return { refusal: say(c, 403, 'not_manager', 'Only the team’s editors can change who sponsors an agent.') };
+  if (a.status === 'removed') return { refusal: say(c, 409, 'removed', 'This agent was removed.') };
+  return { agent: a, scope: s };
+}
+
+/** The team's members, each with whether they may sponsor this agent and, when not, why in words. Never an email or a numeric id. */
+router.get('/agents/:uid/sponsors', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const got = await managed(c, user);
+    if (!got.agent) return got.refusal;
+    const candidates = [];
+    for (const m of await teamMembers(c.env, got.scope)) {
+      const current = m.id === got.agent.sponsor_user_id;
+      const r = current ? null : await sponsorRefusal(c.env, got.scope, m);
+      candidates.push({ uid: m.uid, name: m.name, current, can_sponsor: !current && !r, code: r?.code ?? null, reason: r?.message ?? null });
+    }
+    return c.json({ sponsor: await personOf(c.env, got.agent.sponsor_user_id), candidates });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * A new sponsor, `{ sponsor_uid, reason, drop_tools? }`. The new sponsor
+ * passes `sponsorRefusal`; the reason (10 to 500 characters) is kept in the
+ * `sponsor_changed` event with the caller as its actor. An agent paused
+ * `sponsor_left` resumes. Its read tools are the old sponsor's own servers,
+ * which no one else can read through, so an agent with tools changes sponsor
+ * only with `drop_tools: true`, and they are dropped.
+ */
+router.put('/agents/:uid/sponsor', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const got = await managed(c, user);
+    if (!got.agent) return got.refusal;
+    const a = got.agent;
+    const b = await readBody(c);
+    if (!b) return say(c, 400, 'invalid_body', 'Send the new sponsor and why.');
+    const reason = typeof b.reason === 'string' ? b.reason.trim() : '';
+    if (reason.length < SPONSOR_REASON_MIN || reason.length > SPONSOR_REASON_MAX) {
+      return say(c, 400, 'reason_required', `Say why the sponsor changes, in ${SPONSOR_REASON_MIN} to ${SPONSOR_REASON_MAX} characters. It is kept in the agent’s activity.`);
+    }
+    const target = typeof b.sponsor_uid === 'string' && USER_UID.test(b.sponsor_uid)
+      ? await c.env.DB.prepare('SELECT * FROM users WHERE uid = ? AND is_active = 1').bind(b.sponsor_uid).first<User>()
+      : null;
+    if (!target) return say(c, 422, 'sponsor_not_found', SPONSOR_WORDS.sponsor_not_found);
+    if (target.id === a.sponsor_user_id) return say(c, 409, 'same_sponsor', 'That person already sponsors this agent.');
+    const refusal = await sponsorRefusal(c.env, got.scope, target);
+    if (refusal) return say(c, refusal.status, refusal.code, refusal.message);
+    let grants: unknown[] = [];
+    try { const g = JSON.parse(a.tool_grants_json || '[]'); grants = Array.isArray(g) ? g : []; } catch { grants = []; }
+    if (grants.length && b.drop_tools !== true) {
+      return say(c, 422, 'sponsor_tools', `This agent reads through ${grants.length === 1 ? 'a tool' : `${grants.length} tools`} on its current sponsor’s own connected servers, which a new sponsor cannot use. Choose to drop ${grants.length === 1 ? 'it' : 'them'} to change the sponsor.`, { tools: grants.length });
+    }
+    const resume = a.status === 'paused' && a.paused_reason === 'sponsor_left';
+    // Only from the sponsor this read saw: a change made meanwhile is not overwritten.
+    const u = await c.env.DB.prepare(
+      `UPDATE team_agents SET sponsor_user_id = ?, tool_grants_json = ?,
+         status = CASE WHEN status = 'paused' AND paused_reason = 'sponsor_left' THEN 'active' ELSE status END,
+         paused_reason = CASE WHEN status = 'paused' AND paused_reason = 'sponsor_left' THEN NULL ELSE paused_reason END,
+         updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND sponsor_user_id = ? AND status <> 'removed'`,
+    ).bind(target.id, grants.length ? '[]' : a.tool_grants_json, a.id, a.sponsor_user_id).run();
+    if (!u.meta?.changes) return say(c, 409, 'sponsor_changed_meanwhile', 'Someone changed this agent a moment ago. Reload it and try again.');
+    await logEvent(c.env, a.id, user.id, 'sponsor_changed', {
+      from: await personOf(c.env, a.sponsor_user_id), to: { uid: target.uid, name: target.name }, reason,
+      ...(grants.length ? { tools_dropped: grants.length } : {}),
+    });
+    if (resume) await logEvent(c.env, a.id, user.id, 'resumed', { reason: 'sponsor_changed' });
+    const fresh = await c.env.DB.prepare('SELECT * FROM team_agents WHERE id = ?').bind(a.id).first<AgentRow>();
+    const agent = await agentDto(c.env, fresh!);
+    // The new sponsor is told: their tokens pay this agent's runs from now on. Best effort.
+    try {
+      const name = agent.persona?.name || [agent.first_name, agent.last_name].filter(Boolean).join(' ') || 'An agent';
+      await notify(c.env, {
+        userId: target.id, type: 'agent_sponsor', channels: ['in_app'], category: 'proactive_nudges', link: null,
+        title: `You now sponsor ${name}`,
+        body: `${user.name || 'An editor'} made you the sponsor of ${name} on ${got.scope.name}. Its runs are paid from your AI tokens, capped per month. Their reason: "${reason.slice(0, 200)}"`,
+      });
+    } catch { console.warn('[agents] sponsor_notice_failed'); }
+    return c.json({ agent });
   } catch (e) { return mapError(c, e); }
 });
 

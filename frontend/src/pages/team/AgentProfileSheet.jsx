@@ -8,6 +8,7 @@ import * as agents from './agentsAdapter.js';
 import AgentSkillsCard from './AgentSkillsCard.jsx';
 // D1531 (#3742 E8, TM5m): its memory and scheduled duties.
 import { AgentDuties, AgentMemory } from './AgentMemory.jsx';
+import SponsorSheet from './SponsorSheet.jsx';
 import { BTN_DANGER, BTN_PRIMARY, BTN_SECONDARY, FIELD, HonestBlock, MONO, MUTED } from './teamUi.jsx';
 import { day } from '../account/companies/companiesModel.js';
 import { agentName, agentSkillsScope, budgetLine, dayTime, eventWords, pauseWords } from './teamModel.js';
@@ -38,6 +39,10 @@ import { agentName, agentSkillsScope, budgetLine, dayTime, eventWords, pauseWord
  * highlighted and captioned "Fixed · part of who [Name] is", with the risk
  * scale. The persona is the agent's name, so the first-name and surname
  * fields are gone; no job title is drawn (the Worker sends none).
+ *
+ * D4387 (#4387): a manager's "Change sponsor" opens `SponsorSheet`, as TM9b's
+ * "Choose a new sponsor" does (`editSponsor`), and TM9b's "Raise the cap"
+ * opens Edit cap (`editCap`).
  */
 
 const PROPOSAL_KEYS = [['proposed', 'Proposed'], ['accepted', 'Accepted'], ['edited', 'Edited'], ['discarded', 'Discarded'], ['withdrawn', 'Withdrawn']];
@@ -170,9 +175,9 @@ function CapEditor({ name, current, refusal, onCancel, onSave }) {
   );
 }
 
-export default function AgentProfileSheet({ uid, scope = null, canManage, editCap = false, onClose, onChanged }) {
+export default function AgentProfileSheet({ uid, scope = null, canManage, editCap = false, editSponsor = false, onClose, onChanged }) {
   const [block, setBlock] = useState(null);
-  const [confirm, setConfirm] = useState(editCap ? 'cap' : null);
+  const [confirm, setConfirm] = useState(editCap ? 'cap' : editSponsor ? 'sponsor' : null);
   const [refusal, setRefusal] = useState('');
   const [legend, setLegend] = useState([]);
   useEffect(() => { let alive = true; agents.agent(uid).then((b) => { if (alive) setBlock(b); }); return () => { alive = false; }; }, [uid]);
@@ -200,6 +205,7 @@ export default function AgentProfileSheet({ uid, scope = null, canManage, editCa
           <div className="flex justify-end gap-2">
             <button type="button" className={BTN_SECONDARY} onClick={() => setConfirm('pause')} data-testid="agent-pause">{a.status === 'paused' ? 'Resume' : 'Pause'}</button>
             <button type="button" className={BTN_DANGER} onClick={() => setConfirm('remove')} data-testid="agent-remove">Remove</button>
+            <button type="button" className={BTN_SECONDARY} onClick={() => setConfirm('sponsor')} data-testid="agent-change-sponsor">Change sponsor</button>
             <button type="button" className={BTN_PRIMARY} onClick={() => { setRefusal(''); setConfirm('cap'); }} data-testid="agent-edit-cap">Edit cap</button>
           </div>
         ) : null}>
@@ -224,6 +230,10 @@ export default function AgentProfileSheet({ uid, scope = null, canManage, editCa
       {confirm === 'cap' && a && manage ? (
         <CapEditor name={name} current={a.monthly_cap_microusd} refusal={refusal}
           onCancel={() => setConfirm(null)} onSave={(micro) => act('cap', { monthly_cap_microusd: micro })} />
+      ) : null}
+      {confirm === 'sponsor' && a && manage ? (
+        <SponsorSheet uid={a.uid || uid} name={name} toolCount={Array.isArray(a.tools) ? a.tools.length : 0}
+          onCancel={() => setConfirm(null)} onSaved={() => { setConfirm(null); onChanged?.(); }} />
       ) : null}
       {confirm === 'remove' ? (
         <Confirm testId="agent-remove-confirm" danger title={`Remove ${name}?`} body="Its open proposals are withdrawn. Its history is kept."
