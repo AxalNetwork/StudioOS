@@ -211,6 +211,7 @@ export const TASK_TEXT_JOBS: Readonly<Record<string, string>> = Object.freeze({
   brand_taglines: 'GR2',
   grow_theme_feedback: 'GR1', // feedback themes
   mail_draft: 'EM1', // a draft from ticked records
+  distribution_draft: 'GR5', // D4488: Distribution posts, creatives and outreach
 });
 
 /**
@@ -259,6 +260,7 @@ export const RAIL_OPTION_JOBS: Readonly<Record<string, string>> = Object.freeze(
   // Grow
   'fill:feedback_theme': 'GR1', 'draft:grow/customers': 'GR2', 'form:landing': 'GR2', 'form:palette': 'GR2', 'draft:taglines': 'GR2',
   'draft:logo': 'GR3', 'draft:grow/talent': 'GR4',
+  'draft:distribution': 'GR5', // D4488: campaign assets and outreach text
   'draft:publish': 'GR2', // #4046: Publish to…'s post text, as Grow's other marketing writing
   // Network
   'draft:network/re-engagement': 'NE2', 'draft:network/intro-email': 'NE2',

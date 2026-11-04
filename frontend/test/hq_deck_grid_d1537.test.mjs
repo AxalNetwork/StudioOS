@@ -117,6 +117,6 @@ test('3. Funnel: the tiles, bands and accept rates; the tabs, routes and the pla
   const read = (f) => readFileSync(new URL(`../src/${f}`, import.meta.url), 'utf8');
   const routes = read('routes/hqDecks.jsx');
   for (const p of ['grid', 'funnel']) assert.ok(routes.includes(`<Route path="/admin/platform/decks/${p}" element={guard(['admin'], hqOnly(<HqDecksPage />))} />`), p);
-  assert.match(routes, /<Route path="\/admin\/ai\/deck-grid" element={<Navigate to="\/admin\/platform\/decks\/grid" replace \/>} \/>/);
+  assert.doesNotMatch(routes, /<Route path="\/admin\/ai\/deck-grid" element={<Navigate to="\/admin\/platform\/decks\/grid" replace \/>} \/>/);
   assert.match(read('pages/hq/decks/HqDecksPage.jsx'), /view === 'grid' \|\| view === 'funnel' \? <DeckGridTab view={view} \/>/);
 });

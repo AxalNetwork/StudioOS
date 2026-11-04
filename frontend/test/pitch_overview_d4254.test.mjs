@@ -82,7 +82,7 @@ test('the routes: Overview at /raise/pitch, the new tiles, and the old addresses
   assert.match(app, /path="\/raise\/pitch\/script" element=\{guard\([^)]*\), studioGate\(<PitchStudio tab="script" \/>\)\)\}/);
   assert.match(app, /path="\/raise\/pitch\/share" element=\{guard\([^)]*\), studioGate\(<PitchStudio tab="analytics" \/>\)\)\}/);
   assert.match(app, /path="\/raise\/pitch-deck" element=\{<KeepQueryRedirect to="\/raise\/pitch" \/>\}/);
-  assert.match(app, /path="\/raise\/pitch\/analytics" element=\{<KeepQueryRedirect to="\/raise\/pitch\/share" \/>\}/);
+  assert.doesNotMatch(app, /path="\/raise\/pitch\/analytics" element=\{<KeepQueryRedirect to="\/raise\/pitch\/share" \/>\}/);
   assert.match(app, /function KeepQueryRedirect\(\{ to \}\)[\s\S]{0,200}search: loc\.search, hash: loc\.hash/);
   assert.ok(app.indexOf('path="/raise/pitch-deck"') < app.indexOf('path="/raise/:slug"'), 'the static route ranks above /raise/:slug');
 });

@@ -38,6 +38,7 @@ const CHIP_ROUTES = Object.fromEntries([...FOUNDER_ASK_CHIPS, ...ADVISOR_ASK_CHI
 
 export default function AskPanel({ page, label, crumb, options = [], aiOn = true, layout = 'dock', onClose }) {
   const intent = useAskPanel().intent;
+  const exclusive = !!intent?.exclusive;
   const [convUid, setConvUid] = useState(null);
   const [messages, setMessages] = useState([]);
   const [cards, setCards] = useState([]);
@@ -60,7 +61,7 @@ export default function AskPanel({ page, label, crumb, options = [], aiOn = true
   useEffect(() => {
     let live = true;
     setConvUid(null); setMessages([]); setCards([]); setRun(null);
-    if (!page) return undefined;
+    if (!page || exclusive) return undefined;
     (async () => {
       try {
         const list = await askPanelAdapter.conversations(page);
@@ -79,7 +80,7 @@ export default function AskPanel({ page, label, crumb, options = [], aiOn = true
     })();
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
+  }, [page, exclusive]);
 
   // D1442's quote, once typing pauses (it reads the switched-on connectors, as
   // the run will). Off, refused or unreadable, the line says the hold is not
@@ -87,11 +88,12 @@ export default function AskPanel({ page, label, crumb, options = [], aiOn = true
   useEffect(() => {
     let live = true;
     setHold(null);
+    if (exclusive) return undefined;
     const t = setTimeout(() => {
       askPanelAdapter.quote(convUid, text, page).then((q) => { if (live) setHold(q.available ? q.data?.hold_microusd ?? null : null); });
     }, QUOTE_PAUSE_MS);
     return () => { live = false; clearTimeout(t); };
-  }, [convUid, text, page]);
+  }, [convUid, text, page, exclusive]);
 
   const send = useCallback(async (question) => {
     const q = String(question ?? text).trim();
@@ -174,7 +176,7 @@ export default function AskPanel({ page, label, crumb, options = [], aiOn = true
       <div className="ead-ask-body">
         {/* D1443 part 4 (#3992): a page's own task (a form's Sources and Preview, a module's row proposals) is drawn here, by its host's AskIntent. */}
         {intent ? <div ref={setAskSlot} className="ead-ask-intent" data-testid="ask-panel-intent" /> : null}
-        {chips.length > 0 && (
+        {!exclusive && chips.length > 0 && (
           <div className="ead-ask-chips" data-testid="ask-panel-chips">
             <span className="ead-ask-eyebrow">{ASK_SUGGESTED}</span>
             <div className="ead-ask-chip-row">
@@ -195,7 +197,7 @@ export default function AskPanel({ page, label, crumb, options = [], aiOn = true
           </div>
         )}
 
-        <div className="ead-ask-log" role="log" aria-label="Conversation" data-testid="ask-panel-log">
+        {!exclusive && <div className="ead-ask-log" role="log" aria-label="Conversation" data-testid="ask-panel-log">
           {messages.map((m) => (m.role === 'user'
             ? <p key={m.id} className="ead-ask-you">{m.content}</p>
             : (
@@ -234,10 +236,10 @@ export default function AskPanel({ page, label, crumb, options = [], aiOn = true
               {block.action?.retry && <button type="button" className="ead-ask-btn" onClick={() => setState('ok')}>{block.action.label}</button>}
             </div>
           )}
-        </div>
+        </div>}
       </div>
 
-      <form className="ead-ask-composer" onSubmit={(e) => { e.preventDefault(); send(); }}>
+      {!exclusive && <form className="ead-ask-composer" onSubmit={(e) => { e.preventDefault(); send(); }}>
         <textarea
           ref={inputRef}
           className="ead-ask-input"
@@ -255,7 +257,7 @@ export default function AskPanel({ page, label, crumb, options = [], aiOn = true
           <button type="submit" className="ead-ask-btn is-primary" disabled={!sendOk} data-testid="ask-panel-send">Send</button>
         </span>
         <span className="ead-ask-foot">{ASK_FOOT}</span>
-      </form>
+      </form>}
     </section>
   );
 }

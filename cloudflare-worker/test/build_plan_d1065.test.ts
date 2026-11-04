@@ -111,6 +111,8 @@ test('rule 10 and no-evidence: connectors are doors backed by a real test, never
 test('the evidence projection uses accepted rows and counts, never interviews, quotes, contacts, amounts or dates', async () => {
   const {db,env}=fixture();
   try {
+    // A valid descending access path must not change reference order or the evidence hash.
+    db.exec('CREATE INDEX build_plan_test_objection_order ON interview_findings(project_id, kind, id DESC)');
     const e=await readEvidence(env,1);
     assert.equal(e.themes[0].mentions,3); assert.equal(e.themes[0].severity,'severe');
     assert.equal(e.hypotheses[0].supporting,3); assert.deepEqual(e.signals.map(s=>s.id),[1,2]);

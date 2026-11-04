@@ -132,11 +132,11 @@ test('the FOUNDER_FULL_BLEED comment describes the legacy routes as the redirect
   // (`/signals` was the third; D670 made it a redirect for everyone and it
   // left the list.)
   assert.match(CODE, /path="\/execution" element=\{guard\(\['admin', 'founder'\], effectiveRole === 'founder' && !founderExecutionEditor\s*\? <Navigate to=\{`\/build\$\{location\.search\}`\} replace \/>/);
-  assert.match(CODE, /path="\/signals" element=\{<Navigate to=\{`\/research\$\{location\.search\}`\} replace \/>\}/);
+  assert.doesNotMatch(CODE, /path="\/signals" element=\{<Navigate to=\{`\/research\$\{location\.search\}`\} replace \/>\}/);
   // `/build/discovery` left the list with its editor (#2335): it forwards to
   // Customer research for everyone, so no page there needs the desk's width.
   const discovery = CODE.slice(CODE.indexOf('path="/build/discovery"'), CODE.indexOf('path="/build/discovery"') + 600);
-  assert.match(discovery, /<Navigate replace to=\{\{ pathname: '\/validate\/customer-research', search: location\.search, hash: location\.hash \}\} \/>/);
+  assert.equal(CODE.includes('path="/build/discovery"'), false, 'D2319 retires the alias');
   const list = SIDEBAR.slice(SIDEBAR.indexOf('export const FOUNDER_FULL_BLEED'), SIDEBAR.indexOf('];', SIDEBAR.indexOf('export const FOUNDER_FULL_BLEED')));
   assert.ok(!list.includes("'/build/discovery'"), '/build/discovery is listed as a full-bleed page again');
 });

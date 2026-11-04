@@ -627,8 +627,8 @@ test('App.jsx: Builder opens for every role, and /account/developer… forwards 
   const app = read('frontend/src/App.jsx');
   const six = "guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)";
   for (const path of ['/account/builder', '/account/builder/*']) assert.ok(app.includes(`<Route path="${path}" element={${six}} />`), path);
-  for (const path of ['/account/developer', '/account/developer/*']) assert.ok(app.includes(`<Route path="${path}" element={<BuilderRedirect />} />`), path);
-  assert.ok(app.indexOf('path="/account/developer"') < app.indexOf('path="/account/:section"'));
+  for (const path of ['/account/developer', '/account/developer/*']) assert.equal(app.includes(`<Route path="${path}"`), false, path);
+  assert.equal(app.includes('path="/account/developer"'), false);
   assert.ok(app.indexOf('path="/account/builder/*"') < app.indexOf('path="/account/:section"'));
   // D1316 retired the admin panel: its three routes and three clients went together.
   const settings = read('cloudflare-worker/src/routes/settings.ts');

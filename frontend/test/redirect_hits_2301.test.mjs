@@ -50,7 +50,7 @@ test('the list is App.jsx\'s redirect-only routes, no more and no fewer', () => 
   // so they are counted until #2319 retires them. `/needs` stood in the list
   // above while it still rendered the board for a partner.
   for (const gone of ['/portfolio/coverage', '/needs', '/services', '/founder/post-need', '/partner/needs', '/partners/portal', '/partner-portal']) {
-    assert.ok(routes.includes(gone), `${gone} renders a page again`);
+    assert.equal(routes.includes(gone), false, `${gone} was retired by D2319`);
   }
 });
 
@@ -60,7 +60,7 @@ test('an address resolves to its pattern, exact before splat, never its ids', ()
   assert.equal(redirectPatternFor('/notifications'), '/notifications');
   assert.equal(redirectPatternFor('/notifications/abc/def'), '/notifications/*');
   assert.equal(redirectPatternFor('/settings/email'), '/settings/:section');
-  assert.equal(redirectPatternFor('/partner/operations/portfolio'), '/partner/operations/portfolio');
+  assert.equal(redirectPatternFor('/partner/operations/portfolio'), null);
   for (const page of ['/studio', '/research', '/help/tickets/7', '/dashboard/x', '', null]) assert.equal(redirectPatternFor(page), null, String(page));
 });
 
@@ -134,7 +134,7 @@ test('the mounted default beacon sends canonical tab keys through fetch and tole
 });
 
 test('D1160: a role\'s forward is counted by the forward itself, never by the address bar, since the address is another role\'s page', async () => {
-  assert.deepEqual(ROLE_REDIRECTS.map((r) => r.path), ['/funds', '/funds/performance', '/pipeline']);
+  assert.deepEqual(ROLE_REDIRECTS.map((r) => r.path), ['/funds', '/funds/performance', '/pipeline', '/comarketing']);
   for (const { path } of ROLE_REDIRECTS) {
     assert.ok(isRedirectKey(`redirect:${path}`), `${path} is countable`);
     assert.equal(redirectPatternFor(path), null, `an investor at ${path} is not counted`);
@@ -159,12 +159,13 @@ test('D1160: a role\'s forward is counted by the forward itself, never by the ad
 
 test('D1243: /deals/pipeline and an investor\'s /pipeline land on Deal flow\'s table, the query and hash kept; each is counted once', async () => {
   // /deals/pipeline is a redirect for everyone: the address bar counts it.
-  assert.equal(redirectPatternFor('/deals/pipeline'), '/deals/pipeline');
+  assert.equal(redirectPatternFor('/deals/pipeline'), null);
   // /pipeline is still the partner's, the founder's and an admin's page: only the investor's forward counts it.
   assert.equal(redirectPatternFor('/pipeline'), null);
-  assert.ok(isRedirectKey('redirect:/pipeline') && isRedirectKey('redirect:/deals/pipeline'));
+  assert.ok(isRedirectKey('redirect:/pipeline'));
+  assert.equal(isRedirectKey('redirect:/deals/pipeline'), false);
   const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
-  assert.ok(app.includes('<Route path="/deals/pipeline" element={<DealsPipelineRedirect />} />'));
+  assert.equal(app.includes('<Route path="/deals/pipeline"'), false);
   const line = app.split('\n').find((l) => l.includes('<Route path="/pipeline" element='));
   assert.match(line, /effectiveRole === 'partner' \? <PartnerBucketRoutes \/> : effectiveRole === 'investor' \? <DealsPipelineRedirect countAs="\/pipeline" \/> : investorWorkspace\('deals', <PipelineWorkspace \/>\)/,
     'the partner keeps the bucket, the founder and an admin the board, and only an investor forwards');

@@ -113,7 +113,7 @@ draft's page ("Continue draft") and a closed call's ("Open a new call"); it
 resumes the venture's newest draft rather than starting a second one, with its
 counsel approval and recorded audience, and shows the open call instead when
 there is one. A founder's sent call lives in
-the Raise shell at `/raise/capital-relationships/calls/:uid` (`RaiseCallPage`, D1221; `/raise/calls/:uid` forwards there, D1227: responses with search,
+the Raise shell at `/raise/capital-relationships/calls/:uid` (`RaiseCallPage`, D1221; `/raise/calls/:uid` (retired D2319) forwards there, D1227: responses with search,
 filters and paging, the closed and paused banners, Extend the date and Close
 the call); a founder opening `/round-calls/:uid` is sent there, while
 investors and counsel keep `/round-calls/:uid`. A founder's draft opens there

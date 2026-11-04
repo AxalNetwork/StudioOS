@@ -42,7 +42,7 @@ function fixture(run: Run = answer({ fields: [] })) {
     INSERT INTO founders(id,name,email) VALUES (101,'One','one@example.test'),(202,'Two','two@example.test');
     INSERT INTO users(id,name,email,role,founder_id,is_active) VALUES (11,'Owner','owner@example.test','founder',101,1),(22,'Other','other@example.test','founder',202,1);
     INSERT INTO projects(id,uid,name,founder_id) VALUES (701,'v-acme','Acme Field',101),(702,'v-theirs','Theirs',202);
-    INSERT INTO growth_channels(id,uid,project_id,name,utm_source,state,kind,cac_bar_cents) VALUES
+    INSERT INTO growth_channels(id,uid,project_id,name,utm_source,state,legacy_kind,cac_bar_cents) VALUES
       (31,'${CH}',701,'Founder-led LinkedIn','founder-led-linkedin','active','content',43210),
       (32,'${THEIRS}',702,'Their webinar','their-webinar','active','events',NULL),
       (33,'c0ffee00c0ffee00c0ffee00c0ffee00',701,'Partner referrals','partner-referrals','testing','referral',NULL);
