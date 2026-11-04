@@ -259,7 +259,6 @@ export const RAIL_OPTION_JOBS: Readonly<Record<string, string>> = Object.freeze(
   // Grow
   'fill:feedback_theme': 'GR1', 'draft:grow/customers': 'GR2', 'form:landing': 'GR2', 'form:palette': 'GR2', 'draft:taglines': 'GR2',
   'draft:logo': 'GR3', 'draft:grow/talent': 'GR4',
-  'draft:publish': 'GR2', // #4046: Publish to…'s post text, as Grow's other marketing writing
   // Network
   'draft:network/re-engagement': 'NE2', 'draft:network/intro-email': 'NE2',
   'draft:network/relationships': 'NE1', 'draft:network/introductions': 'NE1',
