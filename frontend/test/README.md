@@ -68,6 +68,7 @@ mounts, and a keydown recorder on the window.
 D696's record contracts live in `record_page_d696.test.mjs` (real rendering,
 parent callbacks, safe links and declared actions) and `persona_pdf_d696.test.mjs`
 (allowlisted content, dated download and one-page measured bounds).
+`record_mode_d696.test.mjs` checks mounted record reads and writes; its mutation targets the record-mode guard separately from Distribution tab guards.
 `_record_d696.mjs` supplies synthetic records and isolated mutation imports.
 Each behavioral assertion group runs against the original source, against
 changes it must reject, and again against the restored source; no checkout
