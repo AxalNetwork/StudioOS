@@ -38,8 +38,9 @@
  * change registers `<name>_v2` beside it.
  */
 import { agentMcpRefusal, type AgentMcpContext } from '../services/agents/allowlists';
-import { outsidePrincipal, outsideProposalChoices, outsideToolAllowed, OUTSIDE_PROPOSE, type OutsidePrincipal } from '../services/agents/outsidePolicy';
+import { outsideEffectiveScopes, outsidePrincipal, outsideProposalChoices, outsideToolAllowed, OUTSIDE_PROPOSE, type OutsidePrincipal } from '../services/agents/outsidePolicy';
 import { logEvent } from '../services/agents/teams';
+import { agentDisclaimerText, disclaimerKeyForRole } from '../services/agents/disclaimers';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
@@ -250,7 +251,7 @@ export async function listedTools(env: Env, props: GrantProps, scope: readonly s
   try {
     principal = await grantUser(env, props);
     outside = await outsidePrincipal(env, props, grantId);
-    if (outside) props = outside.props;
+    if (outside) { props = outside.props; scope = outsideEffectiveScopes(scope); }
   } catch (e) {
     if (e instanceof ToolRefused) return { tools: [], refusal: e.sentence };
     throw e;
@@ -264,6 +265,7 @@ export async function listedTools(env: Env, props: GrantProps, scope: readonly s
   const choices = outside ? outsideProposalChoices(outside) : [];
   return { tools: REGISTRY.filter((_, i) => ok[i]).map(t => outside && t.name === OUTSIDE_PROPOSE ? {
     ...t,
+    description: [t.description, agentDisclaimerText(disclaimerKeyForRole(outside.agent.role_key))].filter(Boolean).join(' '),
     inputSchema: { ...t.inputSchema,
       module: z.enum(choices.map(c => c.module) as [string, ...string[]]),
       option: z.enum([...new Set(choices.flatMap(c => c.options))] as [string, ...string[]]),
@@ -314,7 +316,7 @@ export async function callTool(env: Env, props: GrantProps, grantId: string | nu
   try {
     user = await grantUser(env, props);
     outside = await outsidePrincipal(env, props, grantId);
-    if (outside) props = outside.props;
+    if (outside) { props = outside.props; scope = outsideEffectiveScopes(scope); }
     if ((!outside && tool.outsideOnly)
         || (outside && !(await outsideToolAllowed(env, outside, tool.name, tool.requiredScope, tool.readOnly)))) {
       throw new ToolRefused('That tool is not allowed for this outside assistant’s role and company.', 'tool_not_allowed');
@@ -326,7 +328,9 @@ export async function callTool(env: Env, props: GrantProps, grantId: string | nu
     }
     stage = 'scope';
     if (!scope.includes(tool.requiredScope)) {
-      throw new ToolRefused(props.keyUid
+      throw new ToolRefused(outside && tool.name !== OUTSIDE_PROPOSE
+        ? 'This connection needs permission to read for its team role. Reconnect your assistant with Team read permission.'
+        : props.keyUid
         ? `This key needs ${tool.requiredScope} for ${tool.name}. Create a key with that permission.`
         : `This token needs ${tool.requiredScope} for ${tool.name}. Reconnect with that permission.`, 'insufficient_scope', 'scope');
     }

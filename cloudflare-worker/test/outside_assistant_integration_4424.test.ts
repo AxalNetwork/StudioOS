@@ -9,7 +9,7 @@ import { stripForeignKeys, tableFromBaseline, addColumnsFrom } from './_baseline
 import { AI_LOG_SCHEMA } from './_ai_budget_fixture.mjs';
 import { memKV } from './_mem_kv.mjs';
 import { withGuard } from './_guard_stub.mjs';
-import { routeMcp, oauthHelpers } from '../src/mcp/oauth.ts';
+import { routeMcp, oauthHelpers, providerOptions } from '../src/mcp/oauth.ts';
 import { callTool, registeredTools, listedTools, type McpTool } from '../src/mcp/server.ts';
 import { assistantGrants, mcpConsent } from '../src/routes/mcp_consent.ts';
 import teamAgents from '../src/routes/team_agents.ts';
@@ -53,7 +53,7 @@ const REDIRECT='https://assistant.example/callback', VERIFIER='v'.repeat(64);
 async function hit(w: W,path:string,init:RequestInit={}) {
   return routeMcp(new Request(`https://axal.vc${path}`,init),w.env,{waitUntil(){},passThroughOnException(){}} as any);
 }
-async function parked(w: W,scopes='validate:read validate:write team:propose') {
+async function parked(w: W,scopes='validate:read validate:write team:read team:propose') {
   const reg=await hit(w,'/api/oauth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
     redirect_uris:[REDIRECT],client_name:'Outside app',token_endpoint_auth_method:'none',grant_types:['authorization_code','refresh_token']})});
   assert.equal(reg.status,201,await reg.clone().text()); const clientId=(await reg.json() as any).client_id;
@@ -62,9 +62,9 @@ async function parked(w: W,scopes='validate:read validate:write team:propose') {
   const auth=await hit(w,`/api/oauth/authorize?${params}`);
   assert.equal(auth.status,302); return {clientId,id:new URL(auth.headers.get('location')!).searchParams.get('request')!};
 }
-async function connect(w: W, roleKey = 'cpo') {
+async function connect(w: W, roleKey = 'cpo', projects = [101]) {
   const p=await parked(w);
-  const approved=await asUser(w,'POST',`/api/mcp/consent/${p.id}/approve`,{companies:[101],team_agent:{company_uid:'company-a',role_key:roleKey}});
+  const approved=await asUser(w,'POST',`/api/mcp/consent/${p.id}/approve`,{companies:projects,team_agent:{company_uid:'company-a',role_key:roleKey}});
   assert.equal(approved.status,200,JSON.stringify(approved.body));
   const code=new URL(approved.body.redirectTo).searchParams.get('code')!;
   const exchanged=await hit(w,'/api/oauth/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'authorization_code',code,redirect_uri:REDIRECT,client_id:p.clientId,code_verifier:VERIFIER,resource:'https://axal.vc/mcp'})});
@@ -72,12 +72,12 @@ async function connect(w: W, roleKey = 'cpo') {
   const tokens=await exchanged.json() as any; const token=tokens.access_token;
   const binding:any=w.db.prepare('SELECT * FROM team_agent_mcp_bindings').get();
   const agent:any=w.db.prepare('SELECT * FROM team_agents').get();
-  const props:any={userId:1,clientId:p.clientId,companies:[101],clientName:'Outside app',redirectHost:'assistant.example',redirectUri:REDIRECT,grantedAt:Math.floor(Date.now()/1000),outsideBindingUid:binding.uid};
+  const props:any={userId:1,clientId:p.clientId,companies:projects,clientName:'Outside app',redirectHost:'assistant.example',redirectUri:REDIRECT,grantedAt:Math.floor(Date.now()/1000),outsideBindingUid:binding.uid};
   return {token,refreshToken:tokens.refresh_token,binding,agent,props};
 }
 const decoded=(r:any)=>JSON.parse(r.content[0].text);
 const proposalTool=()=>registeredTools().find(t=>t.name==='team.propose')!;
-const args=()=>({company:101,module:'experiments',option:'fill:hypothesis',text:'Interview teams about their current workflow.',request_id:crypto.randomUUID()});
+const args=()=>({project:101,module:'experiments',option:'fill:hypothesis',text:'Interview teams about their current workflow.',request_id:crypto.randomUUID()});
 function retention(w: W, agentId: number) {
   w.db.prepare("INSERT INTO agent_memory_notes(uid,agent_id,scope_kind,company_id,kind,body) VALUES('note',?,'company',11,'fact','Kept team fact')").run(agentId);
   w.db.prepare("INSERT INTO agent_duties(uid,agent_id,template_key,title,cadence,hour_utc,next_due_at) VALUES('duty',?,'cpo.test','Test duty','daily',0,'2099-01-01')").run(agentId);
@@ -101,7 +101,8 @@ test('completed OAuth binds one actual provider grant and lists only the current
   const grants=await oauthHelpers(w.env).listUserGrants('1');
   assert.equal(grants.items[0].id,c.binding.grant_id);
   assert.equal((grants.items[0].metadata as any).outsideBindingUid,c.binding.uid);
-  const available=await listedTools(w.env,c.props,['validate:read','validate:write','team:propose'],c.binding.grant_id);
+  assert.deepEqual([...grants.items[0].scope].sort(),['team:propose','team:read']);
+  const available=await listedTools(w.env,c.props,['team:read','team:propose'],c.binding.grant_id);
   const names=available.tools.map(t=>t.name);
   assert.ok(names.includes('list_companies')); assert.ok(names.includes('team.propose'));
   assert.ok(names.includes('get_validate_context'));
@@ -116,7 +117,7 @@ test('outside direct writes refuse before execution; ordinary member MCP writes 
   const outside=await callTool(w.env,c.props,c.binding.grant_id,tool,{company:101},['validate:write']);
   assert.equal(decoded(outside).code,'tool_not_allowed'); assert.equal(ran,0);
   for (const patch of [{name:'list_companies',requiredScope:'validate:read' as const},{name:'list_companies',readOnly:true}]) {
-    const disguised=await callTool(w.env,c.props,c.binding.grant_id,{...tool,...patch},{company:101},['validate:read','validate:write']);
+    const disguised=await callTool(w.env,c.props,c.binding.grant_id,{...tool,...patch},{company:101},['team:read','validate:write']);
     assert.equal(decoded(disguised).code,'tool_not_allowed'); assert.equal(ran,0);
   }
   const member=await callTool(w.env,{...c.props,outsideBindingUid:undefined},c.binding.grant_id,tool,{company:101},['validate:write']);
@@ -129,7 +130,7 @@ test('read/proposal policy is company inherited, manager-only and rechecked; [] 
   assert.equal((await asUser(w,'PUT','/api/teams/company/company-a/outside-assistant-tools',{tools:['unknown']})).status,400);
   assert.equal((await asUser(w,'PUT','/api/teams/company/company-a/outside-assistant-tools',{tools:[]})).status,200);
   assert.deepEqual((await asUser(w,'GET','/api/teams/project/101/outside-assistant-tools')).body.tools,[]);
-  assert.equal((await listedTools(w.env,c.props,['validate:read','team:propose'],c.binding.grant_id)).tools.length,0);
+  assert.equal((await listedTools(w.env,c.props,['team:read','team:propose'],c.binding.grant_id)).tools.length,0);
   const refused=await callTool(w.env,c.props,c.binding.grant_id,proposalTool(),args(),['team:propose']);
   assert.equal(decoded(refused).code,'tool_not_allowed');
   assert.equal((await asUser(w,'PUT','/api/teams/company/company-a/outside-assistant-tools',{tools:null})).status,200);
@@ -215,7 +216,7 @@ test('the actual MCP transport derives the bound identity from the OAuth token a
 });
 
 test('empty forged binding, feature off and lost sponsor access fail closed on every call',async()=>{
-  const w=world(); const c=await connect(w); const scopes=['validate:read','team:propose'];
+  const w=world(); const c=await connect(w); const scopes=['team:read','team:propose'];
   assert.equal(decoded(await callTool(w.env,{...c.props,outsideBindingUid:''},c.binding.grant_id,proposalTool(),args(),scopes)).code,'connection_revoked');
   w.env.TEAM_AGENTS_ENABLED='false';
   assert.equal(decoded(await callTool(w.env,c.props,c.binding.grant_id,proposalTool(),args(),scopes)).code,'team_agents_off');
@@ -229,9 +230,9 @@ test('changed role reads apply immediately; a corrupt rule book never falls back
   const w=world(); const c=await connect(w); const rules={...roleOf('cpo')!.default_rules,reads:[]};
   w.db.prepare("INSERT INTO team_rulebooks(uid,scope_kind,company_id,role_key,version,rules_json,created_by) VALUES('book','company',11,'cpo',1,?,1)").run(JSON.stringify(rules));
   const read=registeredTools().find(t=>t.name==='list_companies')!;
-  assert.equal(decoded(await callTool(w.env,c.props,c.binding.grant_id,read,{},['validate:read'])).code,'tool_not_allowed');
+  assert.equal(decoded(await callTool(w.env,c.props,c.binding.grant_id,read,{},['team:read'])).code,'tool_not_allowed');
   w.db.exec("UPDATE team_rulebooks SET rules_json='{'");
-  const listing=await listedTools(w.env,c.props,['validate:read','team:propose'],c.binding.grant_id);
+  const listing=await listedTools(w.env,c.props,['team:read','team:propose'],c.binding.grant_id);
   assert.deepEqual(listing.tools,[]); assert.match(listing.refusal!,/rule book could not be read/);
   assert.equal(decoded(await callTool(w.env,c.props,c.binding.grant_id,proposalTool(),args(),['team:propose'])).code,'unavailable');
   assert.equal(w.db.prepare('SELECT COUNT(*) AS n FROM ai_rail_proposals').get().n,0); w.db.close();
@@ -295,11 +296,11 @@ test('a tool policy changed during the safety check is applied before the propos
 test('unreadable policy and invalid rule-book shape refuse instead of returning defaults or an empty successful read',async()=>{
   const w=world(); const c=await connect(w);
   w.db.exec("INSERT INTO team_allowlists(scope_kind,scope_id,axal_tools_json,updated_by) VALUES('company',11,'[\"unknown\"]',1)");
-  const listing=await listedTools(w.env,c.props,['validate:read','team:propose'],c.binding.grant_id);
+  const listing=await listedTools(w.env,c.props,['team:read','team:propose'],c.binding.grant_id);
   assert.deepEqual(listing.tools,[]); assert.match(listing.refusal!,/allowed tools could not be read/);
   w.db.exec('UPDATE team_allowlists SET axal_tools_json=NULL');
   w.db.exec("INSERT INTO team_rulebooks(uid,scope_kind,company_id,role_key,version,rules_json,created_by) VALUES('bad','company',11,'cpo',1,'{}',1)");
-  const rules=await listedTools(w.env,c.props,['validate:read','team:propose'],c.binding.grant_id);
+  const rules=await listedTools(w.env,c.props,['team:read','team:propose'],c.binding.grant_id);
   assert.deepEqual(rules.tools,[]); assert.match(rules.refusal!,/rule book could not be verified/); w.db.close();
 });
 
@@ -336,4 +337,44 @@ test('a shared Build option does not let a CTO propose in a module outside its r
   const inside=await callTool(w.env,c.props,c.binding.grant_id,proposalTool(),{...outside,module:'solution-design',request_id:crypto.randomUUID()},['team:propose']);
   assert.equal(inside.isError,undefined,JSON.stringify(decoded(inside)));
   assert.equal(w.db.prepare('SELECT COUNT(*) AS n FROM ai_rail_proposals').get().n,1); w.db.close();
+});
+
+test('outside counsel proposals and tool discovery retain the canonical disclaimer from main',async()=>{
+  const w=world(); const c=await connect(w,'general_counsel');
+  const listing=await listedTools(w.env,c.props,['team:propose'],c.binding.grant_id);
+  assert.match(listing.tools[0].description,/Not legal advice\. Always escalates\./);
+  const r=await callTool(w.env,c.props,c.binding.grant_id,proposalTool(),{...args(),module:'fundraising-readiness',option:'draft:raise/legal',
+    role_key:'cpo',disclaimer_key:null},['team:propose']);
+  assert.equal(r.isError,undefined,JSON.stringify(decoded(r)));
+  assert.equal(decoded(r).notice,'Not legal advice. Always escalates.');
+  assert.equal(decoded(r).proposal.disclaimer_key,'agents.general_counsel.disclaimer'); w.db.close();
+});
+
+test('Team-only token scopes fail closed without the binding context, and are not advertised while Teams is off',async()=>{
+  const w=world(); const c=await connect(w);
+  const scope=(await oauthHelpers(w.env).listUserGrants('1')).items[0].scope;
+  const ordinary={...c.props,outsideBindingUid:undefined};
+  assert.equal((await listedTools(w.env,ordinary,scope,c.binding.grant_id)).tools.length,0);
+  let ran=0;
+  const tool:McpTool={name:'submit_interview',requiredScope:'validate:write',source:'axal',version:'1',company:true,readOnly:false,
+    title:'write',description:'write',inputSchema:{},run:async()=>{ran++;return {ok:true};}};
+  assert.equal(decoded(await callTool(w.env,ordinary,c.binding.grant_id,tool,{company:101},scope)).code,'insufficient_scope');
+  assert.equal(ran,0);
+  const oldPermission=await callTool(w.env,c.props,c.binding.grant_id,registeredTools().find(t=>t.name==='list_companies')!,{},['validate:read']);
+  assert.equal(decoded(oldPermission).code,'insufficient_scope');
+  const off=providerOptions({...w.env,TEAM_AGENTS_ENABLED:'false'});
+  assert.equal(off.scopesSupported!.some(s=>s.startsWith('team:')),false);
+  assert.equal(off.resourceMetadata!.scopes_supported!.some(s=>s.startsWith('team:')),false); w.db.close();
+});
+
+test('a company agent can propose company work without approving or naming any project',async()=>{
+  const w=world(); const c=await connect(w,'ceo',[]);
+  const listing=await listedTools(w.env,c.props,['team:propose'],c.binding.grant_id);
+  assert.equal(listing.tools[0].name,'team.propose');
+  assert.equal(listing.tools[0].inputSchema.project.isOptional(),true);
+  const r=await callTool(w.env,c.props,c.binding.grant_id,proposalTool(),{module:'operating-systems',option:'draft:build/this-week',
+    text:'Review the company’s operating priorities.',request_id:crypto.randomUUID()},['team:propose']);
+  assert.equal(r.isError,undefined,JSON.stringify(decoded(r)));
+  assert.equal(decoded(r).proposal.record_ref,'company:company-a');
+  assert.equal(decoded(r).proposal.payload.project_id,null); assert.equal(w.generated(),0); w.db.close();
 });

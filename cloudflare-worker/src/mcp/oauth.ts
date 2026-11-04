@@ -42,11 +42,12 @@ export const OAUTH_PATHS = { authorize: '/api/oauth/authorize', token: '/api/oau
  */
 // D1343 (#3551): `mail:read` reads an email's context; `mail:write` drafts one. No scope sends.
 // D1588 (#3835): `raise:write` proposes deck changes and keeps follow-up drafts; it never saves a deck or sends.
-export const SCOPES = ['validate:read', 'validate:write', 'build:read', 'raise:read', 'raise:write', 'connectors:read', 'mail:read', 'mail:write', 'team:propose'] as const;
+export const SCOPES = ['validate:read', 'validate:write', 'build:read', 'raise:read', 'raise:write', 'connectors:read', 'mail:read', 'mail:write', 'team:read', 'team:propose'] as const;
 export const CONSENT_TTL_SECONDS = 600;
 export const CLIENT_REGISTRATION_TTL_SECONDS = 7 * 86_400;
 export const PUBLIC_OAUTH_LIMITS = { register: 10, authorize: 30 } as const;
 export const requestedScopes = (scope: readonly string[] | undefined) => [...new Set(scope ?? [])].filter((s) => (SCOPES as readonly string[]).includes(s));
+const offeredScopes = (env: Env) => SCOPES.filter(s => env.TEAM_AGENTS_ENABLED === 'true' || !s.startsWith('team:'));
 const HOUR = 3600;
 const DAY = 86_400;
 
@@ -89,8 +90,9 @@ async function authorize(request: Request, env: Env, helpers: ReturnType<typeof 
   if (!authRequest.codeChallenge || authRequest.codeChallengeMethod !== 'S256') {
     return Response.json({ error: 'invalid_request', detail: 'PKCE with S256 is required' }, { status: 400 });
   }
-  const scopes = requestedScopes(authRequest.scope);
-  if (!scopes.length) return Response.json({ error: 'invalid_scope', detail: `Request at least one of ${SCOPES.join(', ')}.` }, { status: 400 });
+  const offered = offeredScopes(env);
+  const scopes = requestedScopes(authRequest.scope).filter(s => (offered as readonly string[]).includes(s));
+  if (!scopes.length) return Response.json({ error: 'invalid_scope', detail: `Request at least one of ${offered.join(', ')}.` }, { status: 400 });
   authRequest.scope = scopes;
   const client = await helpers.lookupClient(authRequest.clientId);
   if (!client) return Response.json({ error: 'invalid_client', detail: 'Unknown client' }, { status: 400 });
@@ -113,11 +115,11 @@ export function providerOptions(env: Env): OAuthProviderOptions<Env> {
     accessTokenTTL: HOUR,
     refreshTokenTTL: 30 * DAY,
     refreshTokenIdleTTL: 30 * DAY,
-    scopesSupported: [...SCOPES],
+    scopesSupported: offeredScopes(env),
     resourceMetadata: {
       resource: `${origin}${MCP_PATH}`,
       authorization_servers: [origin],
-      scopes_supported: [...SCOPES],
+      scopes_supported: offeredScopes(env),
       bearer_methods_supported: ['header'],
       resource_name: 'StudioOS',
     },

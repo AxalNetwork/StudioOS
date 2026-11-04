@@ -24,7 +24,15 @@ export const OUTSIDE_READS: Readonly<Record<string, string>> = Object.freeze({
 });
 export const OUTSIDE_PROPOSE = 'team.propose';
 export const OUTSIDE_TOOLS = Object.freeze([...Object.keys(OUTSIDE_READS), OUTSIDE_PROPOSE]);
-export type OutsidePrincipal = { agent: AgentRow; scope: Scope; user: User; props: GrantProps; rules: Rules; allowedTools: string[] | null };
+export type OutsidePrincipal = { agent: AgentRow; scope: Extract<Scope, { kind: 'company' }>; user: User; props: GrantProps; rules: Rules; allowedTools: string[] | null };
+
+/** Only a verified Team binding translates Team read permission into the mapped ordinary read tools. */
+export function outsideEffectiveScopes(scope: readonly string[]): string[] {
+  return [
+    ...(scope.includes('team:read') ? ['validate:read', 'build:read', 'raise:read', 'connectors:read', 'mail:read'] : []),
+    ...(scope.includes('team:propose') ? ['team:propose'] : []),
+  ];
+}
 
 /** Only verified encrypted props select an outside identity. Headers/arguments never do. */
 export async function outsidePrincipal(env: Env, props: GrantProps, grantId: string | null): Promise<OutsidePrincipal | null> {

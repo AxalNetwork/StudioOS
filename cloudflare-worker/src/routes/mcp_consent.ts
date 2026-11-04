@@ -55,6 +55,7 @@ export const SCOPE_COPY: Record<(typeof SCOPES)[number], string> = {
   'connectors:read': 'See which tools you have connected, their status and last sync. Never their tokens.',
   'mail:read': 'Read the records Eadwyn may quote in an email to someone, with their dates. Never sends.',
   'mail:write': 'Draft emails with Eadwyn, charged to your AI tokens. Drafts are kept in Axal VC; nothing is sent.',
+  'team:read': 'Read only what your chosen team role allows, in the company and projects you select.',
   'team:propose': 'Propose changes as the team role you choose. A person decides; nothing is changed or sent automatically.',
 };
 
@@ -142,8 +143,9 @@ mcpConsent.post('/:id/approve', async (c) => {
   const helpers = oauthHelpers(c.env);
   const client = await helpers.lookupClient(p.authRequest.clientId);
   if (!client) return c.json({ detail: 'This assistant is no longer registered. Start again from your assistant.' }, 410);
-  const scope = requestedScopes(p.authRequest.scope).filter(s => s !== 'team:propose' || !!team);
-  if (!scope.length) return c.json({ detail: `Request at least one of ${SCOPES.join(', ')}.` }, 400);
+  // Exclusive Team scopes fail closed if an older server sees this grant or its Team context is lost.
+  const scope = requestedScopes(p.authRequest.scope).filter(s => team ? s.startsWith('team:') : !s.startsWith('team:'));
+  if (!scope.length) return c.json({ detail: team ? 'Your assistant needs Team permissions. Start the connection again from your assistant.' : `Request at least one of ${SCOPES.join(', ')}.` }, 400);
   let reserved: { bindingUid: string; agentUid: string } | null = null;
   if (team) {
     try { reserved = await reserveOutsideAssistant(c.env, user, { companyUid: String(team.company_uid), roleKey: String(team.role_key),
