@@ -3,6 +3,7 @@
  *
  *   GET    /api/mcp/consent/:id            the parked request: client, full redirect URI, scopes, grantable companies
  *   POST   /api/mcp/consent/:id/approve    { companies: [id…] } → { redirectTo }
+ *                                         D4424: optional team_agent { company_uid, role_key }, bound to this client and actual provider grant
  *   POST   /api/mcp/consent/:id/deny       → { redirectTo } carrying access_denied
  *   GET    /api/connectors/assistants      the caller's grants (never a token); D1316 adds scopes, the recognised
  *                                       assistant, each company's still_owned, the last call and 30-day counts
@@ -28,6 +29,10 @@ import { CONSENT_TTL_SECONDS, SCOPES, requestedScopes, consentKey, mcpEnabled, o
 import { assistantIdentity } from '../mcp/assistantIdentity';
 import { grantableCompanies, lastUsedKey, type GrantProps } from '../mcp/grants';
 import { ownsVenture } from './_founder_validate_helpers';
+import { reserveOutsideAssistant, completeOutsideBinding, revokeOutsideBinding, OutsideAssistantRefused, OutsideProviderCleanupPending } from '../services/agents/outsideAssistant';
+import { canManage, loadScope } from '../services/agents/teams';
+import { ROLES } from '../services/agents/catalogue';
+import { isAdmin } from './_t13t14t15_helpers';
 
 type C = Context<{ Bindings: Env }>;
 const usedKey = (id: string) => `mcp_consent_used:${id}`;
@@ -50,6 +55,7 @@ export const SCOPE_COPY: Record<(typeof SCOPES)[number], string> = {
   'connectors:read': 'See which tools you have connected, their status and last sync. Never their tokens.',
   'mail:read': 'Read the records Eadwyn may quote in an email to someone, with their dates. Never sends.',
   'mail:write': 'Draft emails with Eadwyn, charged to your AI tokens. Drafts are kept in Axal VC; nothing is sent.',
+  'team:propose': 'Propose changes as the team role you choose. A person decides; nothing is changed or sent automatically.',
 };
 
 async function signedIn(c: C): Promise<User | Response> {
@@ -58,6 +64,22 @@ async function signedIn(c: C): Promise<User | Response> {
 }
 
 const hostOf = (uri: string) => { try { return new URL(uri).host; } catch { return null; } };
+
+/** Real company ids/UIDs, kept distinct from MCP's original project-id allow-list. */
+async function outsideChoices(env: Env, user: User) {
+  if (env.TEAM_AGENTS_ENABLED !== 'true') return null;
+  const rows = await env.DB.prepare(`SELECT DISTINCT c.uid, c.company_name FROM company_profiles c
+    LEFT JOIN user_company_links l ON l.company_id=c.id
+    WHERE c.archived_at IS NULL AND (l.user_id=? OR ?=1) ORDER BY c.company_name, c.id LIMIT 201`)
+    .bind(user.id, isAdmin(user) ? 1 : 0).all<{ uid: string; company_name: string }>();
+  const companies = [];
+  for (const row of (rows.results ?? []).slice(0, 200)) {
+    const s = await loadScope(env, 'company', row.uid);
+    if (s && await canManage(env, s, user)) companies.push({ uid: row.uid, name: row.company_name });
+  }
+  return { companies, truncated: (rows.results ?? []).length > 200,
+    roles: ROLES.map(r => ({ key: r.key, name: r.name, rules: r.default_rules })), address: 'https://axal.vc/mcp' };
+}
 
 /** The parked request, or the Response that says why not. */
 async function parked(c: C, id: string): Promise<ParkedRequest | Response> {
@@ -90,6 +112,7 @@ mcpConsent.get('/:id', async (c) => {
     scopes: requestedScopes(p.authRequest.scope),
     scope_labels: requestedScopes(p.authRequest.scope).map((scope) => ({ scope, label: SCOPE_COPY[scope as keyof typeof SCOPE_COPY] })),
     companies: await grantableCompanies(c.env, user),
+    outside_assistant: await outsideChoices(c.env, user),
     expires_at: new Date(p.createdAt + CONSENT_TTL_SECONDS * 1000).toISOString(),
   });
 });
@@ -99,30 +122,75 @@ mcpConsent.post('/:id/approve', async (c) => {
   if ((await selectJwt(c))?.payload.impersonated_by) return c.json({ detail: 'A support session cannot answer assistant consent.' }, 403);
   const id = c.req.param('id');
   const p = await parked(c, id); if (p instanceof Response) return p;
-  const body = (await c.req.json().catch(() => ({}))) as { companies?: unknown };
+  const body = (await c.req.json().catch(() => ({}))) as { companies?: unknown; team_agent?: { company_uid?: unknown; role_key?: unknown } };
+  const team = body.team_agent;
+  if (team && (typeof team.company_uid !== 'string' || typeof team.role_key !== 'string')) return c.json({ detail: 'Choose the company and team role.' }, 400);
+  if (team && c.env.TEAM_AGENTS_ENABLED !== 'true') return c.json({ detail: 'AI agents are not switched on for this team.' }, 404);
   const asked = Array.isArray(body.companies) ? body.companies.map(Number) : [];
-  if (!asked.length || asked.some((n) => !Number.isInteger(n) || n <= 0)) return c.json({ detail: 'Tick at least one company' }, 400);
+  if ((!team && !asked.length) || asked.some((n) => !Number.isInteger(n) || n <= 0)) return c.json({ detail: 'Tick at least one company' }, 400);
   // Checked again here: the page's list is not trusted.
   const allowed = new Set((await grantableCompanies(c.env, user)).map((x) => x.id));
   if (asked.some((n) => !allowed.has(n))) return c.json({ detail: 'You can only connect companies you own' }, 403);
+  if (team) {
+    const s = await loadScope(c.env, 'company', String(team.company_uid));
+    if (!s || !(await canManage(c.env, s, user))) return c.json({ detail: 'Only the company’s editors can connect an outside assistant.' }, 403);
+    const projects = await c.env.DB.prepare('SELECT id FROM projects WHERE company_id=? AND deleted_at IS NULL AND id IN (SELECT value FROM json_each(?))')
+      .bind(s.id, JSON.stringify(asked)).all<{ id: number }>();
+    const inside = new Set((projects.results ?? []).map(r => r.id));
+    if (asked.some(id => !inside.has(id))) return c.json({ detail: 'Choose projects under the selected company.' }, 403);
+  }
   const helpers = oauthHelpers(c.env);
   const client = await helpers.lookupClient(p.authRequest.clientId);
   if (!client) return c.json({ detail: 'This assistant is no longer registered. Start again from your assistant.' }, 410);
-  const scope = requestedScopes(p.authRequest.scope);
+  const scope = requestedScopes(p.authRequest.scope).filter(s => s !== 'team:propose' || !!team);
   if (!scope.length) return c.json({ detail: `Request at least one of ${SCOPES.join(', ')}.` }, 400);
-  await spend(c, id);
-  const companies = [...new Set(asked)];
-  const props: GrantProps = {
-    userId: Number(user.id), clientId: p.authRequest.clientId, companies, clientName: client.clientName?.trim() || null,
-    redirectHost: hostOf(p.authRequest.redirectUri), redirectUri: p.authRequest.redirectUri, grantedAt: Math.floor(Date.now() / 1000),
-  };
-  const { redirectTo } = await helpers.completeAuthorization({
-    request: p.authRequest, userId: String(user.id),
-    metadata: { clientId: props.clientId, clientName: props.clientName, redirectHost: props.redirectHost, companies, grantedAt: props.grantedAt },
-    scope, props, revokeExistingGrants: false,
-  });
-  await logActorAct(c.env, user, 'mcp_grant_approved', { client: props.clientName, redirect_host: props.redirectHost, companies });
-  return c.json({ redirectTo });
+  let reserved: { bindingUid: string; agentUid: string } | null = null;
+  if (team) {
+    try { reserved = await reserveOutsideAssistant(c.env, user, { companyUid: String(team.company_uid), roleKey: String(team.role_key),
+      clientId: p.authRequest.clientId, clientName: client.clientName?.trim() || 'Outside assistant' }); }
+    catch (e) {
+      if (e instanceof OutsideAssistantRefused) return c.json({ detail: e.message, error: e.code }, e.code === 'role_taken' ? 409 : 403);
+      throw e;
+    }
+  }
+  let createdGrantId: string | null = null;
+  try {
+    await spend(c, id);
+    const companies = [...new Set(asked)];
+    const props: GrantProps = {
+      userId: Number(user.id), clientId: p.authRequest.clientId, companies, clientName: client.clientName?.trim() || null,
+      redirectHost: hostOf(p.authRequest.redirectUri), redirectUri: p.authRequest.redirectUri, grantedAt: Math.floor(Date.now() / 1000),
+      ...(reserved ? { outsideBindingUid: reserved.bindingUid } : {}),
+    };
+    const { redirectTo } = await helpers.completeAuthorization({
+      request: p.authRequest, userId: String(user.id),
+      metadata: { clientId: props.clientId, clientName: props.clientName, redirectHost: props.redirectHost, companies, grantedAt: props.grantedAt,
+        ...(reserved ? { outsideBindingUid: reserved.bindingUid } : {}) },
+      scope, props, revokeExistingGrants: false,
+    });
+    if (reserved) {
+      let cursor: string | undefined; let grantId: string | null = null;
+      do {
+        const page = await helpers.listUserGrants(String(user.id), cursor ? { cursor } : undefined);
+        const match = page.items.find(g => (g.metadata as { outsideBindingUid?: unknown })?.outsideBindingUid === reserved!.bindingUid);
+        if (match) grantId = match.id;
+        cursor = page.cursor;
+      } while (cursor && !grantId);
+      if (!grantId) throw new Error('Outside assistant authorization could not be resolved');
+      createdGrantId = grantId;
+      await completeOutsideBinding(c.env, user, { bindingUid: reserved.bindingUid, clientId: props.clientId, grantId });
+    }
+    await logActorAct(c.env, user, 'mcp_grant_approved', { client: props.clientName, redirect_host: props.redirectHost, companies });
+    return c.json({ redirectTo });
+  } catch (e) {
+    if (reserved) {
+      await revokeOutsideBinding(c.env, user, reserved.bindingUid, (grant, sponsor) => helpers.revokeGrant(grant, sponsor))
+        .catch(() => { console.warn('[mcp] outside_connection_cleanup_failed'); });
+      if (createdGrantId) await helpers.revokeGrant(createdGrantId, String(user.id))
+        .catch(() => { console.warn('[mcp] outside_provider_cleanup_failed'); });
+    }
+    throw e;
+  }
 });
 
 mcpConsent.post('/:id/deny', async (c) => {
@@ -228,14 +296,35 @@ assistantGrants.delete('/:grantId', async (c) => {
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(grantId)) return c.json({ detail: 'Not found' }, 404);
   const helpers = oauthHelpers(c.env);
   // Only the caller's own grant: the provider keys grants by user.
-  let found = false; let cursor: string | undefined;
+  let found = false; let bindingUid: string | null = null; let cursor: string | undefined;
   do {
     const page = await helpers.listUserGrants(String(user.id), cursor ? { cursor } : undefined);
-    if (page.items.some((g) => g.id === grantId)) found = true;
+    const grant = page.items.find((g) => g.id === grantId);
+    if (grant) {
+      found = true;
+      const metadata = grant.metadata as { outsideBindingUid?: unknown } | undefined;
+      if (typeof metadata?.outsideBindingUid === 'string') bindingUid = metadata.outsideBindingUid;
+    }
     cursor = page.cursor;
   } while (cursor && !found);
   if (!found) return c.json({ detail: 'Not found' }, 404);
-  await helpers.revokeGrant(grantId, String(user.id));
+  if (bindingUid) {
+    // Metadata is provider-owned. Verify it names this exact user's grant before changing a Team.
+    const binding = await c.env.DB.prepare('SELECT sponsor_user_id, grant_id FROM team_agent_mcp_bindings WHERE uid = ?')
+      .bind(bindingUid).first<{ sponsor_user_id: number; grant_id: string | null }>();
+    if (!binding || binding.sponsor_user_id !== user.id || (binding.grant_id !== null && binding.grant_id !== grantId)) {
+      return c.json({ detail: 'This connected app’s team record could not be verified. Try again shortly.' }, 503);
+    }
+    try { await revokeOutsideBinding(c.env, user, bindingUid, (id, sponsor) => helpers.revokeGrant(id, sponsor)); }
+    catch (e) {
+      if (e instanceof OutsideProviderCleanupPending) return c.json({ detail: e.message, message: e.message, error: 'connection_cleanup_pending' }, 503);
+      throw e;
+    }
+    // An interrupted approval may never have completed its D1 grant-id pin.
+    if (binding.grant_id === null) await helpers.revokeGrant(grantId, String(user.id));
+  } else {
+    await helpers.revokeGrant(grantId, String(user.id));
+  }
   await c.env.OAUTH_KV!.delete(lastUsedKey(grantId)).catch(() => {});
   await logActorAct(c.env, user, 'mcp_grant_revoked', { grant: grantId });
   return c.json({ revoked: true });

@@ -45,12 +45,12 @@ export default function TeamSettingsTab({ scope, agentsBlock, canManage, onEditC
               {list.map((a) => (
                 <div key={a.uid} role="row" className="grid grid-cols-1 items-center gap-3 border-b border-axal-hairline py-2.5 last:border-b-0 md:grid-cols-[minmax(0,1.6fr)_110px_minmax(0,1.4fr)_minmax(0,1fr)_80px] dark:border-gray-800">
                   <span role="cell"><AgentIdentity name={agentName(a)} role={agentLine(a)} size={28} /></span>
-                  <span role="cell" className="font-mono text-[12.5px] text-axal-ink dark:text-gray-200">{money(a.monthly_cap_microusd, { whole: true }) || <Unrecorded />}</span>
+                  <span role="cell" className="font-mono text-[12.5px] text-axal-ink dark:text-gray-200">{a.source === 'mcp_client' ? 'Not applicable' : money(a.monthly_cap_microusd, { whole: true }) || <Unrecorded />}</span>
                   <span role="cell" className="font-mono text-[12.5px] text-axal-ink dark:text-gray-200">
-                    {a.month_spend?.available ? `${money(a.month_spend.value_microusd)}${a.status === 'paused' && a.paused_reason === 'cap' ? ' · paused at its cap' : ''}` : <Unrecorded />}
+                    {a.source === 'mcp_client' ? 'Runs on your own assistant' : a.month_spend?.available ? `${money(a.month_spend.value_microusd)}${a.status === 'paused' && a.paused_reason === 'cap' ? ' · paused at its cap' : ''}` : <Unrecorded />}
                   </span>
                   <span role="cell" className="text-[13px] text-axal-ink dark:text-gray-200">{a.sponsor?.name || <Unrecorded />}</span>
-                  <span role="cell">{canManage ? <button type="button" className={BTN_TEXT} onClick={() => onEditCap?.(a)} data-testid={`team-settings-edit-cap-${a.uid}`}>Edit cap</button> : null}</span>
+                  <span role="cell">{canManage && a.source !== 'mcp_client' ? <button type="button" className={BTN_TEXT} onClick={() => onEditCap?.(a)} data-testid={`team-settings-edit-cap-${a.uid}`}>Edit cap</button> : null}</span>
                 </div>
               ))}
             </div>
