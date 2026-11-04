@@ -198,7 +198,7 @@ export default function WorkPage() {
       {adding ? <NewItem onCreate={create} onCancel={() => setAdding(false)} /> : null}
       {missingItem ? <p role="status" data-testid="work-item-missing">That task wasn't found.</p> : null}
       {notice ? <p className="wk-notice" role="status" data-testid="work-notice">{notice}</p> : null}
-      {board.status === 'ready' && tab === 'board' ? <Board projectId={id} onDraftChanged={(task) => { load(); if (task?.uid) setItemUid(task.uid); }} items={board.items} viewer={board.viewer} onOpen={openItem} onMove={move} onRun={setRunUid} /> : null}
+      {board.status === 'ready' && tab === 'board' ? <Board projectId={id} onDraftChanged={(task) => { load(); if (task?.uid) openItem(task.uid); }} items={board.items} viewer={board.viewer} onOpen={openItem} onMove={move} onRun={setRunUid} /> : null}
       {board.status === 'ready' && tab === 'backlog' ? <Backlog items={board.items} onOpen={openItem} projectId={id} /> : null}
       {tab === 'burnup' ? <Burnup series={burn.series} status={burn.status} reason={burn.reason} message={burn.message}
         range={burnQuery.from ? 'custom' : burnQuery.range} appliedFrom={burnQuery.from} appliedTo={burnQuery.to} onRange={setBurnQuery} split={split} onSplit={setSplit}

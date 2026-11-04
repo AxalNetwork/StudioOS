@@ -69,6 +69,7 @@ export const workApi = {
   setLabels: (projectId, number, body) => request(`/teams/project/${enc(projectId)}/tasks/${enc(number)}/labels`, { method: 'PUT', body: JSON.stringify(body || {}) }),
   setMilestone: (projectId, number, body) => request(`/teams/project/${enc(projectId)}/tasks/${enc(number)}/milestone`, { method: 'PUT', body: JSON.stringify(body || {}) }),
   drafts: (projectId) => request(`/teams/project/${enc(projectId)}/work/drafts`),
+  // #4419: optional reviewed title/body/type/module; original proposal is retained.
   acceptDraft: (projectId, uid, edit) => request(`/teams/project/${enc(projectId)}/work/drafts/${enc(uid)}/accept`, { method: 'POST', ...(edit ? { body: JSON.stringify(edit) } : {}) }),
   discardDraft: (projectId, uid, body) => request(`/teams/project/${enc(projectId)}/work/drafts/${enc(uid)}/discard`, { method: 'POST', body: JSON.stringify(body || {}) }),
   labels: (projectId) => request(`/teams/project/${enc(projectId)}/work/labels`),
