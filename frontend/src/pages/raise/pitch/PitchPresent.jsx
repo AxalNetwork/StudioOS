@@ -16,6 +16,8 @@ import {
 import { REHEARSE } from './rehearseModel';
 import { DEFAULT_PITCH_SECONDS, PITCH_CHOICES, PITCH_LENGTH, presentBudget, remoteMove, remoteSocketPath } from './presentTimingModel';
 import { useWebSocket } from '../../../hooks/useWebSocket';
+import { deckRemoteApi } from '../../../lib/api/deckRemote';
+import RemotePair from './RemotePair';
 import { MOTION_CSS, areaMotion, presentStep, transitionMotion } from './motionModel';
 import {
   BACK, END, LAST_CARD, MIRROR, NEXT_CARD, ON_SCREEN, PHONE_REMOTE, SIZE, SPEED, TELEPROMPTER, TELEPROMPTER_TITLE, THIS_CARD,
@@ -41,7 +43,9 @@ const RehearsePanel = lazy(() => import('./RehearsePanel'));
  * D1581 F2 (#3828): the presenter view times each card against its share of
  * the pitch length (2, 3 or 5 minutes, Rehearse's own split, `cardBudgetsMs`),
  * amber when over. A phone paired by code (`DeckRemote`) moves the cards
- * through Present's socket, as the keys do; pairing is not drawn yet.
+ * through Present's socket, as the keys do. Pairing is PR1 (`RemotePair.jsx`):
+ * the bar's Phone remote makes a code; the socket's `paired` and `unpaired`
+ * frames turn its chip on and off. The phone's side is `/remote` (PR2 to PR4).
  *
  * D4254 P2b (#4269): Teleprompter (ps5), beside the views, reads each card's
  * script (its speaker notes) in large type that scrolls at the viewer's
@@ -183,7 +187,16 @@ export default function PitchPresent() {
   }, [i, n]);
 
   // D1581: the phone remote. Its steps are Present's keys, or a card by number; Rehearse keeps its own keys.
+  const [remotePaired, setRemotePaired] = useState(false);
+  useEffect(() => {
+    if (status !== 'ok' || !deck?.id || phone) return undefined;
+    let live = true;
+    deckRemoteApi.state(deck.id).then((r) => { if (live) setRemotePaired(Boolean(r?.paired)); }, () => {});
+    return () => { live = false; };
+  }, [status, deck?.id, phone]);
   const onRemote = useCallback((frame) => {
+    if (frame?.type === 'paired') { setRemotePaired(true); return; }
+    if (frame?.type === 'unpaired') { setRemotePaired(false); return; }
     if (frame?.type !== 'step' || view === 'rehearse') return;
     setPos((at) => (frame.step && typeof frame.step === 'object' ? { card: remoteMove(at.card, frame.step, n), shown: 0 } : presentStep(at, frame.step, cards)));
   }, [view, n, cards]);
@@ -251,8 +264,11 @@ export default function PitchPresent() {
           <button type="button" className={view === 'teleprompter' ? ON : OFF} aria-pressed={view === 'teleprompter'} onClick={() => setView('teleprompter')} data-testid="pitch-present-teleprompter">{TELEPROMPTER}</button>
           <button type="button" className={view === 'rehearse' ? ON : OFF} aria-pressed={view === 'rehearse'} onClick={() => setView('rehearse')} data-testid="pitch-present-rehearse">{REHEARSE}</button>
         </div>
-        <span data-testid="pitch-present-status">
-          {view === 'presenter' || view === 'teleprompter' ? `${clock(seconds)} · ` : ''}{countLabel(i, n)} · <Link to={exit} className="text-gray-300 hover:underline">{ESC_TO_EXIT}</Link>
+        <span className="flex flex-wrap items-center gap-2">
+          {deck?.id ? <RemotePair deckId={deck.id} paired={remotePaired} onUnpaired={() => setRemotePaired(false)} /> : null}
+          <span data-testid="pitch-present-status">
+            {view === 'presenter' || view === 'teleprompter' ? `${clock(seconds)} · ` : ''}{countLabel(i, n)} · <Link to={exit} className="text-gray-300 hover:underline">{ESC_TO_EXIT}</Link>
+          </span>
         </span>
       </div>
       {view === 'rehearse' ? (
@@ -355,15 +371,22 @@ function Teleprompter({ card, next, i, n, seconds, exit, aspect, theme, prefs, s
 }
 
 /** D4254 P2b (ps5b): the phone remote — the timer, this card and its script, the next line, Back and Next card. */
-function PhoneRemote({ card, next, i, n, seconds, exit, onStep }) {
+/**
+ * D4254 P2b (ps5b) and D1581 PR3 (#3828): the phone remote. `top` is the
+ * paired page's connection strip ("Connected to [Deck title]" and ⋯), and
+ * `notice` a line under it (PR4a, PR4c); Present's own `?remote=1` passes neither.
+ */
+export function PhoneRemote({ card, next, i, n, seconds, exit, onStep, top = null, notice = null }) {
   const script = scriptOf(card);
   const after = nextLine(next);
   return (
     <div className={SHELL} data-testid="pitch-present" data-view="remote">
       <div className={BAR}>
         <span className="font-bold text-gray-200">{PHONE_REMOTE}</span>
-        <span className="flex items-center gap-3"><span className="text-[15px] font-bold text-gray-100" data-testid="remote-timer">{clock(seconds)}</span><Link to={exit} className="font-bold text-violet-300">Exit</Link></span>
+        <span className="flex items-center gap-3">{seconds != null ? <span className="text-[15px] font-bold text-gray-100" data-testid="remote-timer">{clock(seconds)}</span> : null}{exit ? <Link to={exit} className="font-bold text-violet-300">Exit</Link> : null}</span>
       </div>
+      {top}
+      {notice ? <div role="status" className="mx-4 mb-2 rounded-[8px] bg-[#1f2937] px-3 py-2 text-[12.5px] font-semibold text-amber-200" data-testid="remote-notice">{notice}</div> : null}
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-3" data-testid="remote-script">
         <span className="text-[13px] font-bold text-violet-300" data-testid="remote-card">{cardLabel(card)}</span>
         {script.paragraphs.map((p, k) => <p key={k} className={`m-0 whitespace-pre-line text-[19px] leading-[1.45] ${script.empty ? 'text-gray-500' : 'text-white'}`}>{p}</p>)}
