@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import React, { act } from 'react';
+import { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { h, mountForm } from './_form_d695.mjs';
@@ -199,7 +199,7 @@ test('cover step: Upload and Generate as tabs; the link stays; a new event is to
   const ui = await mountForm(h(EventCoverStep, { id: null, form: { cover_url: '' }, set }));
   try {
     await ui.click('Generate with Eadwyn');
-    assert.match(ui.text(), new RegExp(COVER_RULE.replace(/\./g, '\\.')));
+    assert.ok(ui.text().includes(COVER_RULE), 'the rule is shown');
     assert.ok(ui.by('event-cover-save-first'));
     assert.equal(ui.by('event-cover-draw'), undefined, 'no press for an unsaved event');
   } finally { await ui.unmount(); }
