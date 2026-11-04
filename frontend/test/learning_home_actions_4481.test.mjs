@@ -28,7 +28,7 @@ async function mounted(element, phone = false) {
 function server({ full = false, holdRegistration = false, holdJoin = false, me = [], unknownSeats = false } = {}) {
   let registered = false, joined = false;
   const releases = [], calls = [];
-  const webinar = { uid: 'w1', title: 'Synthetic webinar', starts_at: '2099-11-06T14:00:00Z', ends_at: '2099-11-06T15:00:00Z', status: 'published', ...(unknownSeats ? {} : { capacity: 3, registered_count: registered ? 2 : 1, seats_left: registered ? 1 : 2 }) };
+  const webinar = { uid: 'w1', title: 'Synthetic webinar', starts_at: '2099-11-06T14:00:00Z', ends_at: '2099-11-06T15:00:00Z', status: 'published', ...(unknownSeats ? {} : { capacity: 3, registered_count: 1, seats_left: 2 }) };
   const program = { uid: 'p1', name: 'Synthetic program', region: 'Lisbon', status: 'published', enrolment: 'open' };
   const contents = [{ subject_kind: 'course', subject_uid: 'c1', title: 'Course', status: 'published' }, { subject_kind: 'item', subject_uid: 'v1', title: 'Video', status: 'published' }];
   const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
