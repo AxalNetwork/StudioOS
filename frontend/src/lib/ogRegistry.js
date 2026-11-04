@@ -162,6 +162,15 @@ const ROUTES = [
     section: 'company',
   },
   {
+    // D4297 (#4297): the Influencer program; the company section's card, so no new image.
+    path: '/influencers',
+    title: 'Influencers',
+    description:
+      'Earn recurring revenue by bringing people to Axal VC. Share your own handle; when someone subscribes through it, you earn part of every invoice.',
+    type: 'website',
+    section: 'company',
+  },
+  {
     path: '/demo',
     title: 'Book a demo',
     description:

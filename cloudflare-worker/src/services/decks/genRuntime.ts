@@ -97,6 +97,8 @@ export type BatchRow = {
   seen_at?: string | null; notified_at?: string | null; parent_batch_uid?: string | null;
   /** D1536 (#3785): which runtime drives the run (migration 202611022120); absent before it ran. */
   runtime?: 'do' | 'queue';
+  /** D4374 (migration 202611040743): why a run stopped when its owner did not stop it (`timed_out`); null otherwise. */
+  stop_reason?: string | null;
 };
 export type StepResult = {
   ok: boolean; charged_microusd: number; model_used?: string | null; fallback_used?: boolean;

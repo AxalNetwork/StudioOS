@@ -186,6 +186,13 @@ export const Jobs = {
     } catch {
       console.error('[cron] deck recording sweep unreadable');
     }
+    // D4374 (#4374): a deck generation run whose driver died is stopped (timed out) and its hold settled at what it placed.
+    try {
+      const { sweepStuckBatches } = await import('../services/decks/batchSweep');
+      await sweepStuckBatches(env);
+    } catch {
+      console.error('[cron] deck batch sweep unreadable');
+    }
     // D1512 (#3764): an area proposal nobody decided expires after 14 days, with the image proposals it holds.
     try {
       const { expireAreaProposals } = await import('../services/decks/areaExpiry');

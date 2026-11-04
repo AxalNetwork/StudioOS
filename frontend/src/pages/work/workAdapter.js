@@ -28,6 +28,7 @@
  *   complianceAssignable, complianceAssign,
  *   complianceComment, complianceReady,
  *   complianceReopen                   #3976        its task sheet's other changes
+ *   assignable, myTasks                W8   #3994   the Team picker (this Team's people and agents) and My tasks
  */
 import { workApi } from '../../lib/api/work.js';
 import { workloadSessions } from './workModel.js';
@@ -75,6 +76,9 @@ export const workAdapter = {
   complianceComment: (uid, taskUid, body) => through(() => cc.comment(uid, taskUid, body), COMPLIANCE_OFF),
   complianceReady: (uid, taskUid) => through(() => cc.ready(uid, taskUid), COMPLIANCE_OFF),
   complianceReopen: (uid, taskUid) => through(() => cc.reopen(uid, taskUid), COMPLIANCE_OFF),
+  // D1614 W8 (#3994): the Team picker and My tasks (#4286).
+  assignable: (projectId) => through(() => workApi.assignable(projectId), WORK_OFF),
+  myTasks: (filter) => through(() => workApi.myTasks(filter), WORK_OFF),
 };
 
 /** Every method, with the issue that turns it on, for the decision file and its test. */
@@ -84,4 +88,5 @@ export const WORK_SEAM = Object.freeze({
   complianceTasks: '#3976', complianceTask: '#3976', markDone: '#3976', createWork: '#3976',
   complianceCreate: '#3976', complianceUpdate: '#3976', complianceAssignable: '#3976', complianceAssign: '#3976',
   complianceComment: '#3976', complianceReady: '#3976', complianceReopen: '#3976',
+  assignable: '#3994', myTasks: '#3994',
 });
