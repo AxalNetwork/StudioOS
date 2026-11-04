@@ -968,7 +968,8 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   }, [record, cycle, slug, reporting, buildPlan, projectId, reload, def]);
 
   useEffect(() => {
-    if (record || !slug || !known || !projectId || !def || (distribution && distributionTab !== 'overview')) return undefined;
+    if (record || !slug || !known || !projectId || !def) return undefined;
+    if (distribution && distributionTab !== 'overview') return undefined;
     let alive = true;
     setModuleStatus('loading');
     cyclesApi.module(cycle, projectId, slug, { q: query.q, filter: filterString(query.filter), sort: query.sort, page: query.page })
