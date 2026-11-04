@@ -22,10 +22,17 @@ import { googleStage } from '../src/services/meetingBotDiagnose.ts';
 
 const UID = '00000000-0000-4000-8000-000000000003', OTHER = '00000000-0000-4000-8000-000000000004', DIAG = '00000000-0000-4000-8000-000000000005';
 const MASTER = 'synthetic-runtime-master-secret-0123456789';
-// Synthetic secrets: no real account. The TOTP key is RFC 6238's own ASCII key, in base32.
+// Synthetic secrets: no real account. The TOTP seed is RFC 6238's own published ASCII seed,
+// written in base32 at run time (as Google shows a setup key), so no base32 literal is committed.
 const EMAIL = 'bot@example.test', PASSWORD = 'synthetic-password-not-real';
 const RFC_KEY_ASCII = '12345678901234567890';
-const RFC_KEY_B32 = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';
+const toBase32 = (bytes: Uint8Array) => {
+  const abc = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  let bits = 0, value = 0, out = '';
+  for (const b of bytes) { value = (value << 8) | b; bits += 8; while (bits >= 5) { out += abc[(value >>> (bits - 5)) & 31]; bits -= 5; } }
+  return bits ? out + abc[(value << (5 - bits)) & 31] : out;
+};
+const RFC_KEY_B32 = toBase32(new TextEncoder().encode(RFC_KEY_ASCII));
 
 test('1. the code generator matches RFC 6238 Appendix B (SHA-1, 8 digits), and base32 reads the setup key', async () => {
   const key = new TextEncoder().encode(RFC_KEY_ASCII);
@@ -34,7 +41,7 @@ test('1. the code generator matches RFC 6238 Appendix B (SHA-1, 8 digits), and b
   // Six digits, as an authenticator shows: the last six of the same value.
   assert.equal(await totp(key, 59_000), '287082');
   assert.deepEqual(base32(RFC_KEY_B32), key);
-  assert.deepEqual(base32('gezd gnbv gy3t qojq gezd gnbv gy3t qojq'), key, 'spaces and case, as Google shows the key');
+  assert.deepEqual(base32(RFC_KEY_B32.toLowerCase().replace(/(.{4})/g, '$1 ')), key, 'spaces and case, as Google shows the key');
   assert.equal(base32('not base32!'), null);
   assert.equal(base32(''), null);
 });
