@@ -166,16 +166,18 @@ test('late form acceptance cannot update the next campaign',async()=>{
   }finally{await ui.close();}
 });
 
-test('late Waiting acceptance cannot notify or alter the next venture view',async()=>{
-  let finish;const accepted=[];const old=p('old');
+test('late Waiting acceptance cannot notify or alter the next venture or form scope',async()=>{
+ for(const next of [{projectId:2,campaignUid:undefined},{projectId:1,campaignUid:null}]){
+  let finish;const accepted=[];const old=p('old','post',{campaign_uid:'saved-campaign'});
   const f=apiFor([],{proposals:async project=>({proposals:project===1?[old]:[]}),decide:()=>new Promise(resolve=>{finish=resolve;})});
-  const view=projectId=>h(WaitingForYou,{projectId,api:f.api,onAccept:rows=>accepted.push(...rows)});
-  const ui=await mount(view(1));
+  const view=scope=>h(WaitingForYou,{...scope,api:f.api,onAccept:rows=>accepted.push(...rows)});
+  const ui=await mount(view({projectId:1,campaignUid:undefined}));
   try{
     const button=ui.all().find(n=>n.tagName==='BUTTON'&&txt(n)==='Accept');let pending;
-    await act(async()=>{pending=props(button).onClick();});await ui.render(view(2));
+    await act(async()=>{pending=props(button).onClick();});await ui.render(view(next));
     await act(async()=>{finish({proposal:{...old,status:'accepted'}});await pending;});await ui.settle();
     assert.equal(accepted.length,0);
     assert.match(ui.text(),/Nothing waits for you\./);
   }finally{await ui.close();}
+ }
 });
