@@ -52,7 +52,7 @@ function server({ full = false, holdRegistration = false, holdJoin = false, me =
     }
     throw Error(`Unexpected synthetic request ${method} ${path}`);
   };
-  return { fetch, calls, release: () => releases.splice(0).forEach((resolve) => resolve()) };
+  return { fetch, calls, allowRegistration: () => { full = false; }, release: () => releases.splice(0).forEach((resolve) => resolve()) };
 }
 async function withHome(options, run, element = h(LearningHome, { gated: false })) {
   const fixture = server(options), original = globalThis.fetch; globalThis.fetch = fixture.fetch;
@@ -150,5 +150,23 @@ test('a recorded course with no usable link is not called an empty course record
     assert.equal(text(page.find('learning-phone-primary')), 'Course link not recorded');
     assert.equal(page.props('learning-phone-primary').disabled, true);
     assert.doesNotMatch(text(page.find('learning-phone-continue')), /No course in progress/);
+  });
+});
+
+
+test('retry clears a prior route refusal while pending and stays clear after success', async () => {
+  for (const phone of [false, true]) await withHome({ full: true, holdRegistration: true, phone }, async (page, fixture) => {
+    await page.click('home-webinar-register-w1');
+    assert.match(text(page.find('home-webinar-error-w1')), /This session has no seats left/);
+    fixture.allowRegistration();
+    let write;
+    try {
+      await act(async () => { write = page.props('home-webinar-register-w1').onClick(); await settle(); });
+      assert.equal(Boolean(page.find('home-webinar-error-w1')), false);
+      await act(async () => { fixture.release(); await write; await settle(); });
+      assert.match(text(page.find('home-webinar-w1')), /Registered.*1 seat left|1 seat left.*Registered/);
+      assert.doesNotMatch(text(page.find('home-webinar-w1')), /This session has no seats left/);
+      assert.equal(fixture.calls.filter(([method, path]) => method === 'POST' && path.endsWith('/registration')).length, 2);
+    } finally { fixture.release(); await Promise.allSettled([write]); }
   });
 });
