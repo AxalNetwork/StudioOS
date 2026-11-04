@@ -78,6 +78,7 @@ function AgentRow({ row, onOpen }) {
           <>
             <StatusPill row={row} />
             <span className={`block ${MUTED}`}>{row.pause.reason}</span>
+            {row.pause.hint ? <span className={`block ${MUTED}`}>{row.pause.hint}</span> : null}
             {row.pause.fix ? <button type="button" className={BTN_TEXT} onClick={(e) => { e.stopPropagation(); onOpen?.(row); }}>{row.pause.fix}</button> : null}
           </>
         ) : <Pill tone="ok">Active</Pill>}

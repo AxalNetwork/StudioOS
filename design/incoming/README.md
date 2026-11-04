@@ -113,6 +113,14 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-11-04 — The agent engine's screens, TM10–TM19 and TM5m (#3742 E8)
+
+The owner's two artifacts were decoded by `scripts/read-canvas.mjs`:
+- **`Agent Engine Page.dc.html`** (artifact `NvMDWjvwjLSwe9ZXeU6TjX`) is new. It draws goals and the planner (TM10), the handoff trail (TM13), evaluation (TM14), the agent-for-a-goal sheet (TM15), move notices (TM18), the engine's states (TM19) and an agent's memory and duties (TM5m). The logo is `/axal-mark.png` and the portraits `/agents/<key>.png`.
+- **`Agent Engine · Boards.dc.html`** (artifact `DE8S63W88XcmjVo84CXMdF`) is new: one board per screen and state, each importing the page by name.
+
+The integration is D1531 (`documentation/architecture/decisions/D1531.md`).
+
 ## Landed 2026-11-04 — Pitch deck templates and the Gallery's covers (#3876)
 
 The owner's four artifacts were decoded by `scripts/read-canvas.mjs`:

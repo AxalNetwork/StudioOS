@@ -506,20 +506,27 @@ export function eventWords(e) {
 export const agentLine = (a) => String(a?.persona?.tagline || '').trim() || null;
 export const agentName = (a) => String(a?.persona?.name || '').trim() || [a?.first_name, a?.last_name].map((s) => String(s || '').trim()).filter(Boolean).join(' ') || 'Unnamed agent';
 
+/** The Worker's daily run limit (`agents/runtime.ts` DAILY_LIMIT). */
+export const DAILY_RUNS = 20;
+
 const PAUSE = {
   manual: (a) => ({ reason: a?.paused_by?.name ? `Paused by ${a.paused_by.name}` : 'Paused by a person', fix: 'Resume' }),
   cap: (a) => {
     const on = day(a?.resumes_at, { year: false });
     return { reason: `Reached its monthly cap${on ? `. Resumes ${on}.` : ''}`, fix: 'Raise the cap' };
   },
-  sponsor_left: () => ({ reason: 'Its sponsor no longer manages this company', fix: 'Choose a new sponsor' }),
+  // D1531 (#3742 E8, TM19d/TM19e): the pause reasons TM9b lacked, in the canvas's words; `hint` is the line under it.
+  sponsor_left: () => ({ reason: 'Paused because the person who added it can no longer manage this team.', fix: 'Choose a new sponsor' }),
   tool_disconnected: (a) => {
     const server = a?.paused_server?.name || a?.paused_tool?.server_name || a?.paused_tool?.name || null;
     return { reason: server ? `A connected tool was disconnected: ${server} is disconnected` : 'A connected tool was disconnected', fix: 'Reconnect' };
   },
-  ai_paused: () => ({ reason: 'Eadwyn is paused for this account', fix: null }),
+  ai_paused: () => ({ reason: 'Paused because AI is paused for its sponsor.', hint: 'Resume is off until AI is on for the sponsor again.', fix: null }),
+  spend_limit: () => ({ reason: 'Paused because its sponsor reached their AI spend limit.', hint: 'Resumes when the sponsor’s limit resets or is raised.', fix: 'Resume' }),
+  daily_limit: () => ({ reason: `Paused because it ran ${DAILY_RUNS} times today.`, hint: 'It can run again after midnight UTC. There is no automatic resume.', fix: 'Resume' }),
+  scope_archived: () => ({ reason: 'Paused because its team was archived.', hint: 'Restore the team to resume its agents.', fix: null }),
   // D4158 (#4158): HQ retired the persona. Nothing on the team resumes it; its open proposals stay decidable.
-  persona_retired: () => ({ reason: 'Axal VC HQ retired this agent. Its open proposals can still be decided.', fix: null }),
+  persona_retired: () => ({ reason: 'Axal VC HQ retired this agent. It cannot be resumed.', hint: 'No Resume. Add another agent in its place.', fix: null }),
 };
 /** Why an agent is paused, and the one link that fixes it (TM9b). */
 export function pauseWords(a) {
