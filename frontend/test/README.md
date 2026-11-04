@@ -147,3 +147,4 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `redirect_retirement_d2319.test.mjs` | D2319 (#2319), #4415: retired aliases, protected outside links and retained beacon groups. |
 | `_retiredRedirects_2319.mjs` | D2319: recorded policy for route-pin tests, including concrete addresses matching retired dynamic patterns. |
 | `work_controls_3968.test.mjs` | WK1–WK3 filter and burn-up interactions through real clients, attribution, failed reads and late responses (#3968). |
+| `_redirectLinks_2319.mjs` | D2319 (#4415): syntax-aware navigation-target audit across frontend and Worker source, without treating API paths or comparisons as links. |
