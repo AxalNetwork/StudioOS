@@ -223,13 +223,14 @@ export function Board({ items, onOpen, onMove, onRun, viewer = null }) {
   const cols = boardColumns(reviewOnly ? items.filter(it => it.column === 'in_review') : items);
   const failed = items.map(it => it.run).filter(r => r?.status === 'failed' && r.uid).sort((a, b) => (Date.parse(b.ended_at || b.started_at) || 0) - (Date.parse(a.ended_at || a.started_at) || 0))[0];
   const needs = needsYou(items);
+  const reviewCount = items.filter(it => it.column === 'in_review').length;
   return (
     <>
-      {needs ? (
+      {needs || reviewCount ? (
         <div className="wk-needs" role="status" data-testid="work-needs-you">
-          <b>Needs you</b><span>{needs.line}</span>
-          {needs.review ? <button type="button" className={BTN_SECONDARY} onClick={() => setReviewOnly(true)} data-testid="work-needs-review">{needs.review}</button> : null}
-          {needs.failed ? <button type="button" className={BTN_TEXT} disabled={!failed} onClick={() => { if (failed) onRun?.(failed.uid); }} data-testid="work-needs-failed">See the failed run</button> : null}
+          <b>Needs you</b><span>{needs?.line || 'Items waiting for review.'}</span>
+          {needs?.review || reviewCount ? <button type="button" className={BTN_SECONDARY} onClick={() => setReviewOnly(true)} data-testid="work-needs-review">{needs?.review || `Review ${reviewCount} ${reviewCount === 1 ? 'item' : 'items'}`}</button> : null}
+          {needs?.failed ? <button type="button" className={BTN_TEXT} disabled={!failed} onClick={() => { if (failed) onRun?.(failed.uid); }} data-testid="work-needs-failed">See the failed run</button> : null}
         </div>
       ) : null}
       {reviewOnly ? <button type="button" className={BTN_TEXT} onClick={() => setReviewOnly(false)} data-testid="work-review-clear">Show all items</button> : null}

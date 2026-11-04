@@ -61,11 +61,11 @@ test('item sheet Move and Schedule perform writes, and read-only viewers get no 
  }finally{if(m)await m.close();Object.assign(workAdapter,old);}
 });
 test('Needs-you opens the latest failed run and review filters the board',async()=>{
- const runs=[];const items=[task,{uid:'review',title:'Waiting review',column:'in_review',run:{uid:'waiting',status:'waiting',proposals:1}},
+ const runs=[];const items=[task,{uid:'review',title:'Waiting review',column:'in_review'},
  {uid:'older',title:'Old failure',column:'ready',run:{uid:'run-old',status:'failed',ended_at:'2026-11-01T10:00:00Z'}},
  {uid:'newer',title:'New failure',column:'ready',run:{uid:'run-new',status:'failed',ended_at:'2026-11-02T10:00:00Z'}}];
  const m=await mount(h(MemoryRouter,null,h(Board,{items,viewer,onRun:u=>runs.push(u)})));
- try{await m.press('work-needs-failed');assert.deepEqual(runs,['run-new']);await m.press('work-needs-review');assert.ok(m.by('work-card-review'));assert.equal(m.by('work-card-item-a'),undefined);await m.press('work-review-clear');assert.ok(m.by('work-card-item-a'));}finally{await m.close();}
+ try{assert.match(m.text(),/Review 1 item/);await m.press('work-needs-failed');assert.deepEqual(runs,['run-new']);await m.press('work-needs-review');assert.ok(m.by('work-card-review'));assert.equal(m.by('work-card-item-a'),undefined);await m.press('work-review-clear');assert.ok(m.by('work-card-item-a'));}finally{await m.close();}
 });
 test('?item= opens only this board’s item; a missing uid shows the board and a message',async()=>{
  const old={board:workAdapter.board,burnup:workAdapter.burnup,item:workAdapter.item,run:workAdapter.run};const getProject=api.getProject;const fetch=globalThis.fetch;const reads=[], runs=[];
