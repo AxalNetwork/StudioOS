@@ -1,7 +1,8 @@
 /**
  * D1528 (#3847, E3 of #3742) — the agent sweep, from the every-minute
  * dispatcher in `index.ts`: on `now.getUTCMinutes() % 5 === 1`, under the
- * existing `cron:queue:lease`, only while the engine is enabled, and NOT gated
+ * existing `cron:queue:lease`, whenever team agents are on (D4387: the cap
+ * resume below; before it, only while the engine was enabled), and NOT gated
  * on `hqCadences` (each deployment sweeps its own rows). No new cron line.
  *
  * It admits at most `SWEEP_MAX` (60) runs a minute, in this order:
@@ -11,6 +12,16 @@
  *      agent with no live run is offered its next ready task through its
  *      scope's object. With `manual` (the default) this step admits nothing.
  * Halted, it does neither.
+ *
+ * D4387 (#4387, E8): before either, and before the halt and engine checks,
+ * it resumes the agents paused at their monthly cap in an earlier UTC month
+ * (`resumeCapPauses`, at most 60 a sweep). That is a status change and admits
+ * no run, so it is safe while halted or off; holding it back would leave a
+ * cap-paused agent stuck for a month after the engine came back, and the
+ * sponsor's own run (`agentRun`) does not need the engine at all. `index.ts`
+ * therefore calls this sweep whenever team agents are on, and the engine's
+ * own steps still stop at the checks below. A failed resume read is logged
+ * and the sweep goes on. It never resumes any other pause reason.
  *
  * D1530 (#3849, E5): `sweepAgentDuties`, called from the same block, claims
  * the duties that are due (claim before act, `services/agents/duties.ts`).
@@ -28,14 +39,16 @@ import { enqueueAgentRun } from './agentQueue';
 import { defaultTokensLeft, sweepDuties, type DutyDeps } from '../services/agents/duties';
 import { notify } from '../services/notify';
 import { purgeExpired } from '../services/agents/memory';
+import { resumeCapPauses } from '../services/agents/sponsor';
 
 export const SWEEP_MAX = 60;
 export const RESEND_AFTER_MIN = 5;
 
 export type SweepDeps = { enqueue: (env: Env, runUid: string) => Promise<void>; runtime: () => Promise<AgentRuntime> };
 
-export async function sweepAgents(env: Env, now: Date, deps?: Partial<SweepDeps>): Promise<{ resent: number; admitted: number }> {
-  const out = { resent: 0, admitted: 0 };
+export async function sweepAgents(env: Env, now: Date, deps?: Partial<SweepDeps>): Promise<{ resent: number; admitted: number; cap_resumed: number }> {
+  const out = { resent: 0, admitted: 0, cap_resumed: 0 };
+  try { out.cap_resumed = await resumeCapPauses(env, now); } catch { console.warn('[agents] cap_resume_failed'); }
   if (await haltedAll(env)) return out;
   const mode = await engineMode(env);
   if (mode === 'off') return out;

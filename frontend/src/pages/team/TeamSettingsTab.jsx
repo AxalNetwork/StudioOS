@@ -4,6 +4,8 @@ import { Unrecorded } from '../../ui';
 import { AgentIdentity } from './AgentMark.jsx';
 import { BTN_TEXT, HeadRow, HonestBlock, MUTED, PendingOwner, TeamCard } from './teamUi.jsx';
 import { WHO_PAYS, agentName, money, whoMayAddAgents, agentLine } from './teamModel.js';
+// D1531 (#3742 E8, TM19a): the team's engine control.
+import EngineControl from './EngineControl.jsx';
 
 /**
  * D1497 (#3727, TM8a, TM9a5) — the Team's Settings tab.
@@ -27,6 +29,7 @@ export default function TeamSettingsTab({ scope, agentsBlock, canManage, onEditC
   const locked = scope.kind === 'company_project' && !canManage;
   return (
     <div className="flex flex-col gap-4" data-testid="team-settings">
+      <EngineControl scope={scope.kind === 'company' ? 'company' : 'project'} id={scope.kind === 'company' ? scope.company.uid : scope.project.id} canManage={canManage} />
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <TeamCard title="Who pays" testId="team-settings-pays">
           <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100">{WHO_PAYS}</p>

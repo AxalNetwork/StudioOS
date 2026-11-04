@@ -11,8 +11,12 @@
  *   Saving… then Saved. A failed save stays in edit mode with the draft kept
  *   (409 → SM8c with Reload layout; 402 → the locked notice; else Try again).
  * - Reset asks first (SM5r), then `resetLayout` at once and leaves edit mode.
- * - An administrator previews: `profile` is always sent and Customise is
- *   never offered (SM11), so an admin never writes a row.
+ * - An administrator names the profile: `profile` is always sent, on every
+ *   read, save and reset. D4362 (#4362) supersedes SM11: an admin customises
+ *   the Founder, Investor, Advisor or Partner Studio they switch to, and the
+ *   layout is the admin's own, keyed by (admin, profile), never a member's.
+ *   Arranging modules unlocks nothing: a tile the admin's preview withholds
+ *   stays withheld (the home's `withheld`, not `readOnly`).
  *
  * `deriveStudio` is the pure half, so a home renders in a Node test from
  * fixture reads (`studioFromReads`) without this hook.
@@ -40,11 +44,11 @@ export function deriveStudio({ profile, viewer, readOnly = false, modules, layou
   let placed = [];
   if (layoutRead === 'failed' && !noProfile) placed = fallbackLayout(profile);
   else if (layoutRead === 'ready') placed = toSave(layout.layout);
-  const canCustomise = !readOnly && !admin && layoutRead === 'ready' && !!catalogue;
+  const canCustomise = !readOnly && layoutRead === 'ready' && !!catalogue;
   return {
     profile,
     admin,
-    readOnly: readOnly || admin,
+    readOnly,
     modules,
     catalogue,
     groups: catalogue && Array.isArray(modules.groups) ? modules.groups : [],

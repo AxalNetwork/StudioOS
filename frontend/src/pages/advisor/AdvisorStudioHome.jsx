@@ -176,7 +176,8 @@ export default function AdvisorStudioHome({
     }).sort((a, b) => new Date(slotView(a).startsAt) - new Date(slotView(b).startsAt));
   }, [slots]);
 
-  const studio = useStudioLayout({ profile: 'advisor', viewer: user, readOnly: previewing });
+  // D4362 (#4362): an admin previewing arranges their own Advisor Studio; its tiles stay withheld (`withheld`).
+  const studio = useStudioLayout({ profile: 'advisor', viewer: user });
   const withheld = { state: TILE.WITHHELD };
   const tiles = previewing ? Object.fromEntries(['today', 'storefront', 'engagements', 'consented_proof', 'earnings'].map((k) => [k, withheld])) : {
     today: calendar.state === 'loading' || bookings.state === 'loading' ? { state: TILE.LOADING }

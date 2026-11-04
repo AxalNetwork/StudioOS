@@ -143,7 +143,7 @@ test('the article pages carry the rail under <Profile> · Articles, the key the 
 });
 
 test('each part calls only the routes it should, and nothing writes the article but the page’s save', () => {
-  const panel = read('pages/articles/ArticleWritingPanel.jsx');
+  const panel = read('pages/articles/ArticleWritingIntent.jsx');
   assert.match(panel, /articleAuthoringApi\.quote\(articleId, option, built\.input\)/);
   assert.match(panel, /articleAuthoringApi\.assist\(articleId, option, built\.input, railPressHeaders\(option\)\)/);
   assert.match(panel, /railProposalsApi\.decide\(item\.proposal\.uid, decision\)/);
@@ -171,7 +171,7 @@ test('AR6e: a failed read is said, never drawn as empty', () => {
   const lib = read('pages/articles/ArticleLibrary.jsx');
   assert.match(lib, /\{loadError && items\.length === 0 \? \(/);
   assert.match(lib, /Your articles could not be read\./);
-  const panel = read('pages/articles/ArticleWritingPanel.jsx');
+  const panel = read('pages/articles/ArticleWritingIntent.jsx');
   assert.match(panel, /Promise\.allSettled\(OPTIONS\.map/);
   assert.match(panel, /setWaitingUnread\(results\.some\(\(r\) => r\.status === 'rejected'\)\)/);
 });
@@ -185,8 +185,11 @@ test('AR5: an admin publishes now or schedules only another member\'s approved a
   assert.match(page, /await adminApi\.schedule\(article\.id, iso\);/);
 });
 
-test('AR6g: on a phone the writing panel is a bottom sheet', () => {
-  assert.match(read('pages/articles/ArticleWritingPanel.jsx'), /<aside className="fixed inset-x-0 bottom-0 [^"]*lg:static/);
+test('AR6g: on a phone the writing actions are the Ask panel\'s bottom sheet (D4353: an intent, not a panel of their own)', () => {
+  // The Ask panel is the bottom sheet below 640px (D1443 §3); the writing actions are its intent, so they draw no sheet of their own.
+  const intent = read('pages/articles/ArticleWritingIntent.jsx');
+  assert.match(intent, /<AskIntent label="Write this article"/);
+  assert.doesNotMatch(intent, /<aside\b|fixed inset-x-0 bottom-0/);
 });
 
 test('the canvases are kept where the integration reads them', () => {

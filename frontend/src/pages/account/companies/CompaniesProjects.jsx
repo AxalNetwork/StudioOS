@@ -372,7 +372,7 @@ export default function CompaniesProjects({ role, entityRecords = null }) {
     return (
       <div className="flex min-w-0 flex-col gap-4" data-testid="companies-projects">
         <ProjectPage id={openProject} projects={projects.status === 'ready' ? projects.data : null}
-          summary={companies.status === 'ready' ? companies.data : null} paths={paths} />
+          summary={companies.status === 'ready' ? companies.data : null} paths={paths} profile={profile} />
         {sheets}
       </div>
     );

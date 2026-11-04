@@ -9,7 +9,8 @@
  * is a fact only the Worker states.
  *
  * WIRED (#3840, D1496, part 1): `roles`, `listAgents`, `addAgent`, `agent`,
- * `updateAgent`, `removeAgent`, `rulebook` and `saveRulebook` call
+ * `updateAgent`, `removeAgent`, `rulebook` and `saveRulebook` (and D4387's
+ * `sponsorCandidates` and `changeSponsor`, through `throughSponsor`) call
  * `teamAgentsApi` (`frontend/src/lib/api/teamAgents.js`, added by #3840 with
  * its routes in `cloudflare-worker/src/routes/team_agents.ts`). Every one of
  * those routes answers 404 `team_agents_off` while `TEAM_AGENTS_ENABLED` is
@@ -116,6 +117,29 @@ export const agent = (uid) => through(() => teamAgentsApi.agent(uid));
 export const updateAgent = (uid, patch) => through(() => teamAgentsApi.updateAgent(uid, patch));
 /** `DELETE /api/teams/agents/:uid` → `{ ok: true }`: open proposals withdrawn, history kept. */
 export const removeAgent = (uid) => through(() => teamAgentsApi.removeAgent(uid));
+/**
+ * D4387 (#4387): the sponsor change. A refusal is drawn in the Worker's own
+ * words, each code its own sentence (`sponsor_not_member`, `sponsor_plan_required`,
+ * `sponsor_no_tokens`, `sponsor_tools` with its `tools` count, …); an answer
+ * with no code is unreadable, never a success.
+ */
+export async function throughSponsor(call) {
+  try {
+    return { available: true, value: await call() };
+  } catch (e) {
+    const status = e?.status ?? e?.response?.status ?? null;
+    const code = e?.code || e?.data?.code || e?.data?.error || null;
+    if (status === 404 && code === 'team_agents_off') return unavailable();
+    if (code && [400, 403, 404, 409, 422, 503].includes(status) && e?.message) {
+      return { available: false, refused: true, code, reason: e.message, tools: Number(e?.data?.tools) || null };
+    }
+    return { available: false, unreadable: true, reason: 'could not be read' };
+  }
+}
+/** `GET /api/teams/agents/:uid/sponsors` → `{ sponsor, candidates: [{ uid, name, current, can_sponsor, code, reason }] }`. */
+export const sponsorCandidates = (uid) => throughSponsor(() => teamAgentsApi.sponsorCandidates(uid));
+/** `PUT /api/teams/agents/:uid/sponsor` `{ sponsor_uid, reason, drop_tools? }` → `{ agent }`. */
+export const changeSponsor = (uid, body) => throughSponsor(() => teamAgentsApi.changeSponsor(uid, body));
 /** `GET /api/teams/:scope/:id/rulebooks/:role` → `{ role_key, default, effective, version, versions, diff, floor }`. */
 export const rulebook = (scope, id, role) => through(() => teamAgentsApi.rulebook(scope, id, role));
 /** `PUT /api/teams/:scope/:id/rulebooks/:role` `{ rules }` → `{ effective, version }`. */

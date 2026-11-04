@@ -32,6 +32,7 @@ is automatic. The routes are `cloudflare-worker/src/routes/team_agents.ts`, moun
 | `workBoard.ts` | D1614 W1 (#3969): project board fields and cards over `scope_tasks` (migration 762), transactional moves with actor events, close reasons, per-project numbering, scoped dependency checks (E1's cycle walk; 409 `task_blocked`) and the `unblocked` notice. E3's run store is read through the `WorkRunReader` seam, "no recorded runs" until #3847 supplies one. |
 | `workItems.ts` | D1614 W7 (#3993): a project task's comments (cleaned Markdown, mentions through `notify()`), its timeline and derived participants, a person's review, agents' task drafts (proposals until Accept), labels and milestones. Migration 763. `work_items_3993.test.ts` covers it. |
 | `workLabels.ts` | D1614 W7: the statements that keep `task_label_links` and W1's `labels_json` mirror in step inside W1's own batch. |
+| `sponsor.ts` | D4387 (#4387, #3742 E8): who may sponsor an agent (`sponsorRefusal`: on the team, an editor, a paid Founder plan, AI tokens left; a balance it cannot read refuses), the team's members (`teamMembers`), and the cap's monthly reset: `resumeCapPauses` (from the agent sweep; only `paused_reason = 'cap'`, paused in an earlier UTC month) and `capResumesAt` (the day it resumes, for the agent's `resumes_at`). `team_agent_sponsor_4387.test.ts` covers it. |
 
 **The rule for adding here.** `catalogue.ts` and `rulebook.ts` stay pure: no
 binding, no fetch. A read of the database goes in `teams.ts`, and a gate is
