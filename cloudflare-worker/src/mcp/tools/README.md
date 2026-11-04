@@ -10,6 +10,7 @@
 | `meetings.ts` | D874's call tools over D684's Zoom and Meet refs: `list_meetings` and `get_meeting_transcript` (`validate:read`; a consented, imported call's stored lines, paged, links and meeting ids removed), `summarize_meeting` (`validate:write`; the engine's summary, run once through `aiRouter`'s AI tokens), `extract_action_items` (`validate:write`; D859's extraction over the call, stored as pending proposals with their passages, nothing accepted). Never a join URL, meeting id or passcode |
 | `mail.ts` | D1343's Email tools: `mail_context` (`mail:read`, the records Eadwyn may quote to one person, with their dates) and `mail_draft` (`mail:write`, one draft run once through `aiRouter`, kept in Email; nothing is sent) |
 | `decks.ts` | D1588's deck and raise tools, all taking the company and refused for anyone but the venture's founders: `decks.read_outline`, `raise.prospect_brief` and `raise.qa_prep` (`raise:read`), and `decks.propose_area`, `decks.propose_variant` and `raise.draft_follow_up` (`raise:write`, `proposes`), which leave a card edit on the deck's Ask, the deck proposal, or an Email draft. None saves a change or sends; no chat or thread tool. Logic in `../../services/decks/eadwynDeckTools.ts` |
+| `team.ts` | D4424: `team.propose` (`team:propose`), available only to a verified outside Team connection. Guarded text waits in the Team approvals queue with its agent identity; the current role and company allow-list are enforced. No direct write, send or generation model. |
 
 ## Rules
 
