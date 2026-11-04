@@ -492,7 +492,9 @@ const FOUNDER = { theme: ['validate', 'problem-discovery'], segment: ['validate'
   // #3740 part 2a.
   item: ['build', 'product-roadmap'], investor: ['raise', 'capital-relationships'], role: ['grow', 'team-expansion'],
   // #4046 (Group A1).
-  competitor: ['validate', 'market-intelligence'], feedback: ['grow', 'product-improvement'], obligation: ['grow', 'durable-company-building'] };
+  competitor: ['validate', 'market-intelligence'], feedback: ['grow', 'product-improvement'], obligation: ['grow', 'durable-company-building'],
+  // #4046 (S1, 2026-11-04): Distribution's channel.
+  channel: ['grow', 'distribution'] };
 /** A founder form whose Edit cannot take Ask, with its reason (#4046). */
 const FOUNDER_EDIT_EXEMPT = {
   feedback: 'exempt: Edit feedback picks its theme from the venture\'s chips; only Log feedback names a new theme',
@@ -614,7 +616,7 @@ test('#4046 Group A1: a competitor\'s why, feedback\'s new theme and an obligati
   assert.equal(ob.valuesOf({ edit: { id: 61, title: 'Board meeting' } }).title, 'Board meeting');
   assert.equal(ob.toBody({ title: 'Quarterly board meeting', status: 'upcoming' }).title, 'Quarterly board meeting');
   // A keyed table sends its text key; any other table sends ids only.
-  assert.deepEqual([...KEYED_FILL_TABLES], ['competitor_tracking', 'product_feedback']);
+  assert.deepEqual([...KEYED_FILL_TABLES], ['competitor_tracking', 'product_feedback', 'growth_channels']);
   assert.equal(fillTable(FILL_PAGES['validate/market-intelligence'], 'competitor'), 'competitor_tracking');
   assert.equal(fillRecordId('cand-1', 'competitor_tracking'), 'cand-1');
   assert.equal(fillRecordId('cand-1', 'compliance_events'), null, 'a table not keyed takes ids only');

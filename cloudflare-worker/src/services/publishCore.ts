@@ -63,6 +63,8 @@ export const REFUSALS = Object.freeze({
   wrong_state: [409, 'That is not something this post can do now.'],
   reconnect_to_retract: [409, 'Reconnect the service to delete this post from it.'],
   check_not_supported: [409, 'This service cannot be checked from Axal VC. Look for the post there.'],
+  // #4046: Ask on the post text found no record of this module to draft from.
+  nothing_to_draft: [422, 'Nothing recorded here yet to draft from. Write your own.'],
 } as const satisfies Record<string, readonly [number, string]>);
 export type RefusalCode = keyof typeof REFUSALS;
 export const refused = (code: RefusalCode) => new PublishRefusal(REFUSALS[code][0], code, REFUSALS[code][1]);
