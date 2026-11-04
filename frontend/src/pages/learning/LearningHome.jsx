@@ -790,7 +790,17 @@ export default function LearningHome({ gated, links = [] }) {
   const filters = readVideoFilters(params);
   const { topic, level, max } = tab === 'videos' ? filters : { topic: '', level: '', max: '' };
   const [page, setPage] = useState(0);
-  const [catalogOffset, setCatalogOffset] = useState(0);
+  // A restored URL must never read a new filter with an old page offset.
+  const catalogKey = JSON.stringify([kind, q, topic, level, max]);
+  const [catalogPage, setCatalogPage] = useState({ key: catalogKey, offset: 0 });
+  const catalogOffset = catalogPage.key === catalogKey ? catalogPage.offset : 0;
+  const setCatalogOffset = useCallback(value => setCatalogPage(previous => ({
+    key: catalogKey,
+    offset: typeof value === 'function' ? value(previous.key === catalogKey ? previous.offset : 0) : value,
+  })), [catalogKey]);
+  useEffect(() => {
+    setCatalogPage(previous => previous.key === catalogKey ? previous : { key: catalogKey, offset: 0 });
+  }, [catalogKey]);
 
   useEffect(() => { setQuery(q); }, [q]);
   useEffect(() => {
@@ -800,7 +810,7 @@ export default function LearningHome({ gated, links = [] }) {
       setPage(0); setCatalogOffset(0);
     }, 300);
     return () => clearTimeout(t);
-  }, [query, q, setParams]);
+  }, [query, q, setParams, setCatalogOffset]);
 
   const [catalogRead, retryCatalog] = useLearningRead(() => readCatalog({ kind, q, offset: catalogOffset, topic, level, max_minutes: max }), [kind, q, catalogOffset, topic, level, max],
     { enabled: live && (tab === 'all' || Boolean(kind)), scope: 'catalog' });
@@ -847,7 +857,7 @@ export default function LearningHome({ gated, links = [] }) {
     setCatalogOffset(0);
     setAssessmentOffset(0);
     setParams((old) => { const next = new URLSearchParams(old); next.set('tab', key); return next; });
-  }, [setParams]);
+  }, [setParams, setCatalogOffset]);
   const onCatalogPage = (step) => setCatalogOffset((o) => Math.max(0, o + step * ALL_LIMIT));
   const onArticlesPage = (step) => setPage((p) => Math.max(0, p + step));
   const onRetry = {

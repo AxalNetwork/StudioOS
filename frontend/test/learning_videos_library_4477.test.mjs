@@ -238,3 +238,20 @@ test('mounted phone Videos uses one tab bar and omits the home action sections',
     assert.equal(ui.nodes().filter(n=>['learning-phone-primary','learning-phone-programs','learning-phone-webinars'].includes(ui.props(n)?.['data-testid'])).length,0);
   }finally{await ui?.unmount();stub.restore();globalThis.matchMedia=oldMedia;}
 });
+
+test('Back and Forward to video filters restart at the first page without a stale-offset request',async()=>{
+  const stub=stubLearning(),oldMedia=globalThis.matchMedia;let ui;
+  learningApi.catalog=async params=>{stub.calls.push(params);return {items:[{id:'v1',kind:'video',title:row.title}],sources:{video:{status:'ready',total:41}}};};
+  globalThis.matchMedia=q=>({matches:false,media:q,addEventListener(){},removeEventListener(){}});
+  function History(){const navigate=useNavigate();return React.createElement(React.Fragment,null,React.createElement('button',{onClick:()=>navigate(-1)},'Back'),React.createElement('button',{onClick:()=>navigate(1)},'Forward'));}
+  const readsSince=n=>stub.calls.slice(n).filter(p=>p.kind==='video'&&p.offset!==undefined);
+  try{
+    ui=await mountContracts(React.createElement(React.Fragment,null,React.createElement(History),React.createElement(LearningHome,{gated:false})),'/learning?tab=videos',{id:1,role:'founder'});
+    await ui.flush();await ui.fill('Topic','Validate');await ui.flush();await ui.click('Next');await ui.flush();
+    assert.equal(readsSince(0).at(-1).offset,ALL_LIMIT);
+    let start=stub.calls.length;await ui.click('Back');await ui.flush();
+    assert.ok(readsSince(start).length>0);assert.ok(readsSince(start).every(p=>p.offset===0&&!p.topic),'Back must not read the old page of the restored filter');
+    start=stub.calls.length;await ui.click('Forward');await ui.flush();
+    assert.ok(readsSince(start).length>0);assert.ok(readsSince(start).every(p=>p.offset===0&&p.topic==='Validate'),'Forward must not revive the old page');
+  }finally{await ui?.unmount();stub.restore();globalThis.matchMedia=oldMedia;}
+});
