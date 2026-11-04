@@ -48,3 +48,4 @@ and citations by number keep working.
 | --- | --- |
 | `D1151.md` | Deal Team, Market and Traction read contracts and verification. |
 | `D1364.md` | Time-based deployed asset retention, capacity limits and verification. |
+| `D4422.md` | #4422: inherited Team model and MCP read-tool allow-lists, enforced on the Worker and edited in TM8a. |

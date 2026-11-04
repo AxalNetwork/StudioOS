@@ -510,7 +510,7 @@ export function HostingList({ hosting, now, f, setF, onPublish, onCopy, onCancel
  * each row's price line and action from eligibility; "1–25 of [N]". One
  * failed read is said where it is, and never blanks the tab.
  */
-export function DiscoverTabFull({ api, held, invitations, suggested, suggestionsRead, onRegistered, onAccept, now = Date.now() }) {
+export function DiscoverTabFull({ api, held, invitations, suggested, suggestionsRead, onRegistered, onAccept, now = Date.now(), recommended = null }) {
   const zone = viewerZone();
   const months = discoverMonths(now, zone);
   const [monthKey, setMonthKey] = useState(months[0].key);
@@ -575,21 +575,24 @@ export function DiscoverTabFull({ api, held, invitations, suggested, suggestions
   const reset = () => setPage(1);
   return (
     <div className="flex flex-col gap-3.5" data-testid="my-events-discover">
-      {suggestionsRead?.status === 'error' ? <Unreadable what="Suggested events" claim="This is not a claim that none are available." onRetry={suggestionsRead.reload} /> : null}
-      {suggested.length ? (
-        <section className="flex flex-col gap-2">
-          <h2 className={`m-0 text-[15px] font-extrabold ${INK}`}>Suggested for you</h2>
-          <div className="grid gap-2.5 md:grid-cols-2 lg:grid-cols-4">
-            {suggested.slice(0, 4).map((ev) => (
-              <Link key={ev.id} to={`/events/${ev.slug || ev.id}`} className={`${CARD} flex flex-col gap-1 p-3 hover:border-axal-violet`} data-testid="my-events-discover-suggested">
-                <span className={`text-[13px] font-bold ${INK}`}>{ev.title}</span>
-                <span className={`text-[11.5px] ${MUTED}`}>{timeLine(ev, zone)}</span>
-                {ev.suggestion_reason ? <Pill tone="info">{ev.suggestion_reason}</Pill> : null}
-              </Link>
-            ))}
-          </div>
-        </section>
-      ) : null}
+      {/* D3724 (ME5): the page's Recommended row wraps today's Suggested block, which it draws until recommendations are switched on. */}
+      {(recommended || ((x) => x))(<>
+        {suggestionsRead?.status === 'error' ? <Unreadable what="Suggested events" claim="This is not a claim that none are available." onRetry={suggestionsRead.reload} /> : null}
+        {suggested.length ? (
+          <section className="flex flex-col gap-2">
+            <h2 className={`m-0 text-[15px] font-extrabold ${INK}`}>Suggested for you</h2>
+            <div className="grid gap-2.5 md:grid-cols-2 lg:grid-cols-4">
+              {suggested.slice(0, 4).map((ev) => (
+                <Link key={ev.id} to={`/events/${ev.slug || ev.id}`} className={`${CARD} flex flex-col gap-1 p-3 hover:border-axal-violet`} data-testid="my-events-discover-suggested">
+                  <span className={`text-[13px] font-bold ${INK}`}>{ev.title}</span>
+                  <span className={`text-[11.5px] ${MUTED}`}>{timeLine(ev, zone)}</span>
+                  {ev.suggestion_reason ? <Pill tone="info">{ev.suggestion_reason}</Pill> : null}
+                </Link>
+              ))}
+            </div>
+          </section>
+        ) : null}
+      </>)}
       <div className="flex flex-wrap items-center gap-2" data-testid="my-events-discover-months">
         <input type="search" value={q} onChange={(e) => { setQ(e.target.value); reset(); }} placeholder="Search events" aria-label="Search events" className={`${INPUT} w-full max-w-xs`} />
         {months.map((m) => (

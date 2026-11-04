@@ -1,6 +1,7 @@
 /**
  * Task #39 — Event engine: shared serialization + slug + ICS helpers.
  */
+import { eventTopics } from './eventTopics';
 import type { Env } from '../types';
 import { parseAudienceRules } from './eventAudience';
 
@@ -70,6 +71,7 @@ export function shapeEvent(row: any, opts: { includePrivate?: boolean; includeJo
     summary: row.summary ?? null,
     description: row.description ?? null,
     cover_url: row.cover_url ?? null,
+    topics: eventTopics(row.topics_json),
     starts_at: row.starts_at,
     ends_at: row.ends_at ?? null,
     timezone: row.timezone ?? 'UTC',

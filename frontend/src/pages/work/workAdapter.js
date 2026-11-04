@@ -51,6 +51,7 @@ export async function through(call, reason) {
 }
 
 export const workAdapter = {
+  summary: (projectId) => through(() => workApi.summary(projectId), WORK_OFF),
   board: (projectId, opts) => through(() => workApi.board(projectId, opts), WORK_OFF),
   item: (uid) => through(async () => (await workApi.item(uid))?.task ?? null, WORK_OFF),
   move: (uid, column, position) => through(async () => (await workApi.move(uid, { column, position }))?.task ?? null, WORK_OFF),
@@ -83,7 +84,7 @@ export const workAdapter = {
 
 /** Every method, with the issue that turns it on, for the decision file and its test. */
 export const WORK_SEAM = Object.freeze({
-  board: '#3969', item: '#3969', move: '#3969', assign: '#3969', create: '#3969',
+  summary: '#4420', board: '#3969', item: '#3969', move: '#3969', assign: '#3969', create: '#3969',
   burnup: '#3970', run: '#3971', retry: '#3971', feed: '#3971', workload: '#3972', schedule: '#3972', agentSessions: '#3972',
   complianceTasks: '#3976', complianceTask: '#3976', markDone: '#3976', createWork: '#3976',
   complianceCreate: '#3976', complianceUpdate: '#3976', complianceAssignable: '#3976', complianceAssign: '#3976',
