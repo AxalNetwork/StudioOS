@@ -25,6 +25,7 @@ import { fileURLToPath } from 'node:url';
 
 import { bucketsFor, bucketForPath, zoneForPath } from '../src/workspaces/shellConfig.js';
 import { readRoutesSource } from './_routesSource.mjs';
+import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 // D528 — App.jsx plus every module under frontend/src/routes/, so a zone route
@@ -92,7 +93,8 @@ test('the parser finds every declared zone route in App.jsx', () => {
   // If this drifts, the assertions below stop covering part of the route table
   // WITHOUT failing — a guard that got quieter, which is worse than no guard.
   const found = new Set(zoneRouteRows.map((r) => r.path));
-  const missing = [...zoneRoutes].filter((z) => !found.has(z));
+  for (const z of [...zoneRoutes].filter(isRetiredRedirect)) assert.equal(found.has(z), false, `${z} retired by D2319`);
+  const missing = [...zoneRoutes].filter((z) => !isRetiredRedirect(z) && !found.has(z));
   assert.deepEqual(missing, [],
     `these zone routes were not parsed, so nothing below checks them:\n  ${missing.join('\n  ')}`);
   assert.ok(zoneRoutes.size >= 70,

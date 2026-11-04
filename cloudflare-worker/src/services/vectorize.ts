@@ -247,7 +247,8 @@ export async function searchSemantic(env: Env, query: string, opts: SearchOpts =
         type: (m.metadata?.type || m.id.split(':')[0]) as EntityType,
         entity_id: Number(m.metadata?.entity_id ?? m.id.split(':')[1] ?? 0),
         title: String(m.metadata?.title || ''),
-        url: String(m.metadata?.url || ''),
+        // Existing vectors keep their metadata until re-indexed; normalize the retired directory alias on reads too.
+        url: String(m.metadata?.url || '').replace(/^\/partners(?=[?#]|$)/, '/directory'),
         snippet: String(m.metadata?.snippet || ''),
         score: Number(m.score ?? 0),
         owner_user_id: m.metadata?.owner_user_id == null ? null : Number(m.metadata.owner_user_id),
@@ -326,7 +327,7 @@ export async function embedAndUpsertById(env: Env, type: EntityType, id: number)
       // Task #5 (AV) — partner CTAs are surfaced to founders/investors,
       // so the route must point at the user-facing partner directory
       // instead of the admin user editor (which non-admins cannot open).
-      url: `/partners?user=${id}`,
+      url: `/directory?user=${id}`,
       snippet: `${row.role} • ${domain}`,
     });
   }

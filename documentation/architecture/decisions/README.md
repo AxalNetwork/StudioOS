@@ -55,3 +55,4 @@ and citations by number keep working.
 | `D4459.md` | No-call run charges and live Work-item mutation responses. |
 | `D4484.md` | Distribution static tabs, existing Overview content, module-specific campaign primary and shared Ask presentation. |
 | `D4494.md` | Distribution Inbox source scope, personal unread receipts, honest missing bodies/counts and the explicit Send boundary. |
+| `D4486.md` | #4486: Distribution Channels, compatible kinds and read-only connection cards. |

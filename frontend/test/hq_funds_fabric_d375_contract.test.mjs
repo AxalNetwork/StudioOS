@@ -224,7 +224,7 @@ test('D375: one WorkerRail, and no /admin/fabric alias — the redirect set stay
   const pinned = read('frontend/test/admin_route_reachability.test.mjs').match(/assert\.deepEqual\(REDIRECTS, \[([^\]]*)\],/);
   assert.ok(pinned, 'the reachability test pins REDIRECTS');
   assert.ok(!pinned[1].includes('/admin/fabric'), 'an /admin/fabric redirect joined the set');
-  assert.match(pinned[1], /'\/admin\/held\/insights'/);
-  assert.match(pinned[1], /'\/admin\/news'/);
+  assert.doesNotMatch(pinned[1], /'\/admin\/held\/insights'/);
+  assert.doesNotMatch(pinned[1], /'\/admin\/news'/);
 
 });

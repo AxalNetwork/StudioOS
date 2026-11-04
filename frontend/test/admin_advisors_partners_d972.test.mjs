@@ -315,12 +315,12 @@ test('the routes, the redirects, the row, the strip and the reads the page must 
   for (const sub of ['', '/firms', '/deck']) {
     assert.ok(app.includes(`<Route path="/admin/advisors-partners${sub}" element={guard(['admin'], <AdvisorsPartners />)} />`), sub || 'overview');
   }
-  assert.ok(app.includes('<Route path="/admin/network-profiles" element={<ApRedirect />} />'));
+  assert.equal(app.includes('<Route path="/admin/network-profiles" element={<ApRedirect />} />'), false);
   assert.ok(app.includes('<StripLink to="/admin/advisors-partners">Advisors &amp; Partners</StripLink>'));
-  assert.match(read('cloudflare-worker/src/services/redirectRoutes.ts'), /\{ path: '\/admin\/network-profiles' \}/);
+  assert.doesNotMatch(read('cloudflare-worker/src/services/redirectRoutes.ts'), /\{ path: '\/admin\/network-profiles' \}/);
   // D952: Partner invitations' Firm links forwards to the Firms tab, and the redirect is counted.
-  assert.ok(app.includes('<Route path="/admin/partner-invitations/firm-links" element={<FirmLinksRedirect />} />'));
-  assert.match(read('cloudflare-worker/src/services/redirectRoutes.ts'), /\{ path: '\/admin\/partner-invitations\/firm-links' \}, \/\/ D952/);
+  assert.equal(app.includes('<Route path="/admin/partner-invitations/firm-links" element={<FirmLinksRedirect />} />'), false);
+  assert.doesNotMatch(read('cloudflare-worker/src/services/redirectRoutes.ts'), /\{ path: '\/admin\/partner-invitations\/firm-links' \}, \/\/ D952/);
   // The partner-facing sentences name the new place.
   for (const f of ['frontend/src/pages/partner/kit.jsx', 'frontend/src/pages/partner/PartnerFirmProfileCard.jsx']) {
     const src = read(f);

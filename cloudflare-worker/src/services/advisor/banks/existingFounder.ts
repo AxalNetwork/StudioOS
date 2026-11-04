@@ -47,7 +47,7 @@ const block = (section: string, page: string, anchor: string,
 
 export const EXISTING_FOUNDER_BANK: Question[] = [
   // ---- BUILD (project + product) -------------------------------------
-  ...block('BUILD', '/projects', 'build/projects', [
+  ...block('BUILD', '/build', 'build/projects', [
     { id: 'founder.project.name', prompt: 'Confirm your company / project name.', kind: 'short', imp: 'critical' },
     { id: 'founder.project.pitch', prompt: 'One-paragraph pitch — refresh how you position yourselves today.', imp: 'high' },
     { id: 'founder.project.sector', prompt: 'Sector?', kind: 'select', opts: SECTORS, imp: 'high', mi: 'sector_heat' },
@@ -90,7 +90,7 @@ export const EXISTING_FOUNDER_BANK: Question[] = [
   ]),
 
   // ---- METRICS / FINANCIALS ------------------------------------------
-  ...block('METRICS', '/raise/capital/model', 'capital/metrics', [
+  ...block('METRICS', '/raise/use-of-funds/runway/forecast', 'capital/metrics', [
     { id: 'founder.financials.runway_months', prompt: 'How many months of runway do you have? (whole number)', kind: 'number', imp: 'critical', ev: true, followups: ['founder.financials.monthly_burn_usd'] },
     { id: 'founder.financials.monthly_burn_usd', prompt: 'Monthly burn (USD).', kind: 'number', imp: 'critical', ev: true, mi: 'capital_velocity', followups: ['founder.financials.mrr_usd'] },
     { id: 'founder.financials.mrr_usd', prompt: 'Monthly recurring revenue (USD). Enter 0 if none.', kind: 'number', imp: 'high', ev: true, mi: 'demand_supply', followups: ['founder.financials.gross_margin_pct'] },

@@ -345,7 +345,7 @@ test('off a branch the cards render the absence and no sample figures', () => {
   assert.match(html, /href="\/admin\/events"/);
   assert.match(html, /href="\/admin\/jobs"/);
   assert.match(html, /href="\/admin\/circles"/);
-  assert.match(html, /href="\/admin\/network-profiles"/);
+  assert.match(html, /href="\/admin\/advisors-partners\/deck"/);
   assert.doesNotMatch(html, /184|€|\$|Good morning/);
   assert.doesNotMatch(html, /0 of 0/);
 });
