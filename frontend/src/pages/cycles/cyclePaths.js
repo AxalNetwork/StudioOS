@@ -17,6 +17,8 @@ export function isCyclePath(pathname) {
   const [cycle, child, record, extra, more] = parts.slice(1);
   // D1024 (#2861): a Cap table scenario, and the compare page, sit two segments under the module.
   if (cycle === 'raise' && child === 'cap-table' && record === 'scenarios' && extra !== undefined) return more === undefined && RECORD_ID.test(extra.toLowerCase());
+  // D4484: campaign creation/details are static children of Distribution's Campaigns tab.
+  if (cycle === 'grow' && child === 'distribution' && record === 'campaigns' && extra !== undefined) return more === undefined && RECORD_ID.test(extra.toLowerCase());
   if (extra !== undefined) return false;
   if (child === undefined) return true;
   if (child === ACTION_PATHS[cycle]) return record === undefined || (cycle === 'validate' && record === 'live');

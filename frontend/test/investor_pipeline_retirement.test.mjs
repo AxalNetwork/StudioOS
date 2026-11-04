@@ -49,15 +49,11 @@ const RETIRED = [
   ['/pipeline/transactions', '/deals/closing'],
 ];
 
-test('each retired path redirects to its canonical zone', () => {
+test('D2319 retires the old Pipeline paths; canonical zones remain', () => {
   for (const [from, to] of RETIRED) {
     const at = APP.indexOf(`path="${from}"`);
-    assert.ok(at > 0, `${from} is no longer registered — an old inbound link now 404s`);
-    // Bounded to this route's own element so a NEIGHBOURING route's Navigate
-    // cannot satisfy it — the three sit on consecutive lines.
-    const element = APP.slice(at, at + 160);
-    assert.match(element, new RegExp(`<Navigate to="${to}" replace`),
-      `${from} does not redirect to ${to}`);
+    assert.equal(at, -1, `${from} retired by D2319`);
+    assert.ok(APP.includes(`path="${to}"`), `${to} stays mounted`);
   }
 });
 

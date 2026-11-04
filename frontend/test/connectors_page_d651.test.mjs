@@ -241,7 +241,7 @@ test('THE REDIRECT KEEPS OAUTH RETURNS WORKING: /integrations?… lands on its c
   const app = read('frontend/src/App.jsx');
   assert.match(app, /<Navigate to=\{connectorsRedirect\(loc\)\} state=\{\{ connectorsMoved: true \}\} replace \/>/);
   assert.match(app, /<Route path="\/integrations" element=\{authOnly\(<IntegrationsRedirect \/>\)\} \/>/);
-  assert.match(app, /<Route path="\/account\/integrations" element=\{authOnly\(<IntegrationsRedirect \/>\)\} \/>/);
+  assert.doesNotMatch(app, /<Route path="\/account\/integrations" element=\{authOnly\(<IntegrationsRedirect \/>\)\} \/>/);
   // The section reads the return from the address it lands on, and strips it.
   const section = read('frontend/src/pages/account/AccountConnectors.jsx');
   assert.match(section, /const \[ret\] = useState\(\(\) => oauthReturn\(location\.search\)\);/);

@@ -62,9 +62,9 @@ test('App mounts the catalogue at /pricing/products and the old addresses as red
   assert.match(app, /* D1288: wrapped in the old token addresses' redirect. */ /<Route path="\/pricing\/products" element=\{<TokensRedirect>\{user \? guard\(\[[^\]]+\], <ProductsPage \/>\) : <ProductsPage \/>\}<\/TokensRedirect>\} \/>/);
   assert.match(app, /<Route path="\/pricing\/products\/:productId" element=\{guard\(\[[^\]]+\], <ProductsPage \/>\)\} \/>/);
   assert.match(app, /<Route path="\/plans-and-pricing" element=\{<PlansAndPricingRedirect \/>\} \/>/);
-  assert.match(app, /<Route path="\/plans-and-pricing\/:productId" element=\{<ParamRedirect to="\/pricing\/products\/:productId" \/>\} \/>/);
-  assert.match(app, /<Route path="\/pricing\/investor" element=\{<InvestorPricingRedirect \/>\} \/>/);
-  assert.match(app, /<Route path="\/products\/:productId" element=\{<ParamRedirect to="\/pricing\/products\/:productId" \/>\} \/>/);
+  assert.doesNotMatch(app, /<Route path="\/plans-and-pricing\/:productId" element=\{<ParamRedirect to="\/pricing\/products\/:productId" \/>\} \/>/);
+  assert.doesNotMatch(app, /<Route path="\/pricing\/investor" element=\{<InvestorPricingRedirect \/>\} \/>/);
+  assert.doesNotMatch(app, /<Route path="\/products\/:productId" element=\{<ParamRedirect to="\/pricing\/products\/:productId" \/>\} \/>/);
   assert.match(app, /pathname: '\/pricing\/products', search: loc\.search, hash: loc\.hash/, '/products keeps its query and hash');
   assert.doesNotMatch(app, /InvestorPricingPage/);
 });

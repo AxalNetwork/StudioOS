@@ -227,8 +227,8 @@ test('NAR18: the old address redirects with its query and hash, and the notice s
 
 test('the move: the route, the redirect inventory, the rail option, and every link to the old page', () => {
   const app = read('frontend/src/App.jsx');
-  assert.ok(app.includes('<Route path="/raise/pitch/positioning" element={<PitchPositioningRedirect />} />'));
-  assert.match(read('cloudflare-worker/src/services/redirectRoutes.ts'), /\{ path: '\/raise\/pitch\/positioning' \}/);
+  assert.equal(app.includes('<Route path="/raise/pitch/positioning" element={<PitchPositioningRedirect />} />'), false);
+  assert.doesNotMatch(read('cloudflare-worker/src/services/redirectRoutes.ts'), /\{ path: '\/raise\/pitch\/positioning' \}/);
   const rail = read('frontend/src/lib/railOptions/founder.js');
   assert.match(rail, /page: 'Founder · Raise · Investor narrative', key: 'draft:narrative-positioning'/);
   assert.doesNotMatch(rail, /key: 'draft:positioning'/);

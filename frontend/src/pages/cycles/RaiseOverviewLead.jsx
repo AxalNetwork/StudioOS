@@ -115,7 +115,7 @@ export function RaiseFromTools({ part, readOnly = false, onRetry }) {
                 {r.state === 'unreadable'
                   ? <PartUnreadable text={`${r.label || r.key} could not be read.`} onRetry={onRetry} />
                   : r.state === 'not_connected'
-                    ? <span className={SUB}>Not connected{readOnly ? '' : <> · <Link to="/account/integrations" className={LINK}>Connect</Link></>}</span>
+                    ? <span className={SUB}>Not connected{readOnly ? '' : <> · <Link to="/account/connectors" className={LINK}>Connect</Link></>}</span>
                     : <>
                       <span className="text-[13px] text-axal-ink dark:text-gray-100">{r.fact || 'Not recorded'}</span>
                       <span className="text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="tool-last-read">{lastRead(r.as_of)}</span>

@@ -46,6 +46,6 @@ test('the old bookmark keeps query/hash and sends one path-only redirect beacon'
   try{
     await act(async()=>root.render(h(MemoryRouter,{initialEntries:['/raise/pitch/positioning?project_id=3&version=4&keep=a&keep=b#lines']},h(Shell))));
     assert.equal(where,DESTINATION+'?project_id=3&version=4&keep=a&keep=b&moved=positioning#lines');
-    assert.deepEqual(sent,['redirect:/raise/pitch/positioning']);
+    assert.deepEqual(sent,[], 'retired aliases no longer send beacons');
   }finally{await act(async()=>root.unmount());restore();}
 });

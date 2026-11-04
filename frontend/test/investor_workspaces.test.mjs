@@ -32,7 +32,7 @@ test('investor workspace routes branch on the active role', () => {
   assert.match(app, /path="\/network"[\s\S]{0,180}effectiveRole === 'investor'[\s\S]{0,100}<InvestorNetworkWorkspace \/>/);
   // /market-intel rendered the investor Research workspace too; D670 retired
   // it, and /research is that workspace's one address.
-  assert.match(app, /<Route path="\/market-intel" element=\{<Navigate to="\/research" replace \/>\} \/>/);
+  assert.doesNotMatch(app, /<Route path="\/market-intel" element=\{<Navigate to="\/research" replace \/>\} \/>/);
   assert.match(routeBlock(app, '/research'), /researchRole === 'investor'[\s\S]{0,120}<InvestorResearchWorkspace \/>/);
 });
 

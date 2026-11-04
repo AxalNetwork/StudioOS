@@ -36,3 +36,9 @@ folder are placed there, in file-name order.
 Code reads the map only through `scripts/lib/routeMap.mjs`. Its `readRouteMap()`
 returns the whole map as one text, exactly as the single file read before the
 split.
+
+D2319: an address followed by `(retired D2319)` is historical only. Any old
+forwarding or counted-redirect description for that marked address predates its
+retirement; it no longer mounts or forwards. The frontend guard scans every
+fragment for unmarked retired SPA addresses. Worker endpoint columns have their
+own `/api` mount and are checked separately from SPA navigation.

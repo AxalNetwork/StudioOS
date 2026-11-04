@@ -102,6 +102,6 @@ much harder to notice.
 Those bodies take the row as a RENDER PROP called with the rows they loaded
 (`AskZone`, `LibraryZone`, `SignalsPage`, `CompetitorAnalysis`,
 `RelationshipsPanel`, `IntroductionsPanel`), so each page renders what it is
-handed and learns nothing about licences. `/signals`, `/build/competitors`,
-`/relationships` and `/network` for an operator pass nothing and get nothing.
+handed and learns nothing about licences. `/signals` (retired D2319), `/build/competitors`,
+`/relationships` (retired D2319) and `/network` for an operator pass nothing and get nothing.
 
