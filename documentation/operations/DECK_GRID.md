@@ -134,23 +134,48 @@ index, so **a stuck run also blocks its deck** from a new one. There is no lease
 or heartbeat on a run (D1536 lists one as not built); the hold's five-minute TTL
 (`HOLD_TTL_MS`, renewed at each step) is the nearest thing.
 
-**Find stuck runs.** The 30 minutes is a judgement, not a constant in the code.
+**The sweep (D4374).** The daily cleanup (`runCleanupJobs` in
+`models/jobs.ts`) runs `sweepStuckBatches` (`services/decks/batchSweep.ts`).
+A run is stuck when it is still active and no step has started or ended for
+`STUCK_AFTER_MS` (30 minutes, a constant whose comment gives the reason). For
+each one it:
+- ends its steps by rebuild's rule: a `running` step whose usage row exists
+  under the hold is `done` at what that row charged (clamped to its quote);
+  any other `running` or `waiting` step is `stopped` with `error_code =
+  'timed_out'`;
+- closes the run `cancelled` with `stop_reason = 'timed_out'`, in one
+  compare-and-set on its state, so of two sweeps (or a sweep and a late driver)
+  only one closes it;
+- settles the hold once, through `settleAiReservation`, at what the steps
+  charged, releasing the rest. A hold no longer pending is counted as
+  `already_released` and not touched.
+
+It writes one `activity_logs` row per sweep (`action = 'deck.batch_sweep'`,
+actor `system`) with its counts. The batch read shows the run as
+"Stopped · timed out" (`state_line`), and the deck is free for a new run.
+
+**Find stuck runs** between sweeps. This lists the runs with no step started
+in the window; the sweep (`stuckRuns`) also leaves a run whose last step ended
+inside it, so treat a row here as a candidate, not a verdict:
 ```sql
 SELECT b.uid, b.deck_id, b.state, b.runtime, b.created_at, b.started_at, r.status AS hold_status, r.expires_at
   FROM deck_area_batches b
   LEFT JOIN ai_budget_reservations r ON r.uid = b.reservation_uid
  WHERE b.state IN ('queued', 'running', 'cancelling')
-   AND b.created_at < datetime('now', '-30 minutes');
+   AND datetime(COALESCE(b.started_at, b.created_at)) < datetime('now', '-30 minutes')
+   AND NOT EXISTS (SELECT 1 FROM deck_area_batch_steps s WHERE s.batch_uid = b.uid
+         AND datetime(s.started_at) >= datetime('now', '-30 minutes'));
 ```
 
 **Steps.**
 1. **The owner can Stop it**: `POST /api/decks/areas/batches/:uid/cancel`. Only
    the run's owner may (another account is 403 `not_your_run`). Ask them first:
-   it is the one path that settles the hold correctly.
+   it settles the hold at once; otherwise the daily sweep does.
 2. **A queue run in the DLQ**: `GET /api/infra/dlq` lists it, and
    `POST /api/infra/dlq/:id/retry?source=cf|d1` sends it again (admin). Retry
    once; a second failure is a bug to file, not to retry.
-3. **Neither works**: there is no repair route. Do **not** settle the hold by
+3. **Neither works**: wait for the next daily sweep, which does this right.
+   There is no repair route to run it by hand. Do **not** settle the hold by
    hand in SQL: settling is a compare-and-set over two tables plus the ledger
    trigger, and only `settleAiReservation` does it right.
    - If the hold is already `refunded` (it expired), marking the run `failed`
@@ -165,7 +190,7 @@ SELECT b.uid, b.deck_id, b.state, b.runtime, b.created_at, b.started_at, r.statu
    - If the hold is still `pending` and not expired, wait out its TTL, then do
      the above.
 4. File an issue with the batch uid, its runtime and which of the three causes
-   it was. A sweeper is not built.
+   it was, and whether the sweep closed it (its `deck.batch_sweep` row).
 
 **Check.** The query above no longer returns the run, and the deck starts a
 new one.
@@ -235,7 +260,8 @@ which `scripts/check-deck-retention.mjs` checks.
 ## What is not built (for whoever builds it next)
 
 - A Super Admin "refund this batch" action that settles or adjusts by batch uid.
-- A sweeper or HQ list for stuck runs, and a lease on a queue slice (D1536).
+- An HQ list of stuck runs, and a lease on a queue slice (D1536). The sweep is
+  built (D4374).
 - An admin image takedown that does steps 2 to 6 above in one audited press.
 - A live staging Worker, so each procedure can be run end to end before a
   release.
