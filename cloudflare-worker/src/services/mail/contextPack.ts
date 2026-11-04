@@ -182,7 +182,7 @@ async function partnerEngagement(env: Env, user: User, id: string): Promise<Read
   const ref = `partner:${id}`;
   return {
     person: { ref, kind: 'partner', relationship: 'advisor', name, project_id: Number(e.project_id) },
-    item: { ref, kind: 'partner', label: `Operating partner engagement · ${name}`, as_of: day(last?.starts_at ?? e.updated_at), link: '/needs', selected: true, text },
+    item: { ref, kind: 'partner', label: `Operating partner engagement · ${name}`, as_of: day(last?.starts_at ?? e.updated_at), link: user.role === 'founder' ? '/build/marketplace?tab=needs' : '/pipeline/leads', selected: true, text },
   };
 }
 

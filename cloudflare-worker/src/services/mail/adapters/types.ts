@@ -21,7 +21,9 @@ export type Creds = OAuthCreds | ImapCreds | McpCreds;
 
 export type Outgoing = { from: string; fromName: string | null; to: string; subject: string; body: string };
 export type SendResult = { messageId: string | null; creds?: Creds };
-export type ThreadMessage = { from: string | null; subject: string | null; received_at: string | null; preview: string | null };
+export type ThreadMessage = { id?: string; from: string | null; subject: string | null; received_at: string | null; preview: string | null };
+/** D4494: a thread read can rotate the mailbox's access just as a send can. */
+export type ThreadRead = { messages: ThreadMessage[]; creds?: Creds };
 
 export type AdapterCode = 'expired' | 'auth_failed' | 'refused' | 'unreachable' | 'unconfigured';
 
@@ -38,5 +40,5 @@ export interface MailAdapter {
   /** Revokes at the provider where it can; a provider that cannot is a no-op. */
   revoke(env: Env, creds: Creds): Promise<void>;
   /** Only where the account `can_read`: the messages of a thread Axal sent. */
-  listThread?(env: Env, creds: Creds, threadId: string): Promise<ThreadMessage[]>;
+  listThread?(env: Env, creds: Creds, sentMessageId: string): Promise<ThreadRead>;
 }

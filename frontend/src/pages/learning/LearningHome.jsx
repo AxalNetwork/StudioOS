@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { CalendarPlus, ChevronLeft, ChevronRight, Search, SquarePen } from 'lucide-react';
-import { Card, Pill, RailFrame, Unrecorded, usePhoneWidth } from '../../ui';
-import { AccountPhonePage, phonePending } from '../account/AccountPhonePage';
+import { Card, PhoneBar, PhoneRows, Pill, RailFrame, Unrecorded, usePhoneWidth } from '../../ui';
+import { phonePending } from '../account/AccountPhonePage';
 import { ACCOUNT_PHONE_PAGES } from '../account/accountPhone';
 import { COMING_SOON_LINE } from './learningAccess';
 import {
@@ -17,19 +17,20 @@ import {
   RouteUnreadable, SectionCard, stateBlock,
 } from './LearningStates';
 import { MyProgramsSection, OpenPrograms, useMyPrograms } from './MyPrograms';
-import { UpcomingWebinarsList, WebinarsTabPanel, useNow } from './LearningWebinars';
+import { WebinarsTabPanel, useNow } from './LearningWebinars';
 import { formatWebinarDayTime, seatsOf } from './webinarModel';
-import { programProgress, progressLine } from './programModel';
+import { memberProgramHref, programProgress, progressLine } from './programModel';
 import useLearningRead from './useLearningRead';
 import VideosLibrary from './VideosLibrary';
 import { videoFilters as readVideoFilters, withVideoFilter } from './videoLibraryModel';
+import { HOME_SECONDARY, HomePhonePrimary, HomeWebinarAction, HomeWebinarsList, homeSeatsLine, inProgressCourses, useHomeWebinarRegistration } from './LearningHomeActions';
 
 /** The canvas's one header action, kept for every profile: Articles stay open. */
-export function WriteArticleLink() {
+export function WriteArticleLink({ secondary = false }) {
   return (
     <Link
       to="/articles/draft"
-      className="inline-flex items-center gap-1.5 rounded-axal-sm bg-axal-violet px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-axal-violet-deep"
+      className={secondary ? HOME_SECONDARY : "inline-flex items-center gap-1.5 rounded-axal-sm bg-axal-violet px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-axal-violet-deep"}
       data-testid="link-write-article"
     >
       <SquarePen size={14} aria-hidden="true" /> Write an article
@@ -344,12 +345,12 @@ export function ProgressStrip({ state = IDLE, onRetry }) {
  * seven days, newest first, from the catalog the All tab reads. A failed read
  * is Unreadable, never an empty week.
  */
-export function NewThisWeek({ state, now = Date.now(), onRetry }) {
+export function NewThisWeek({ state, now = Date.now(), onRetry, limit = 4 }) {
   let body;
   if (isLoading(state)) body = <LearningLoading rows={2} what="what is new" />;
   else if (state.status !== 'ready') body = <LearningUnreadable what="What is new this week" claim="This is not a claim that nothing is new." onRetry={onRetry} />;
   else {
-    const rows = newThisWeek(state.rows, now);
+    const rows = newThisWeek(state.rows, now).slice(0, limit);
     body = rows.length === 0 ? (
       <LearningEmpty title="Nothing new this week" body="Courses, videos and readings HQ publishes appear here in their first week." />
     ) : (
@@ -380,13 +381,13 @@ export function RecommendedFuture() {
 }
 
 /** Continue learning: what the member has started, from `GET /api/learning/me`. */
-export function ContinueLearning({ state, onRetry }) {
+export function ContinueLearning({ state, onRetry, onBrowse }) {
   if (isLoading(state)) return <LearningLoading rows={2} what="your progress" />;
   if (state.status !== 'ready') {
     return <LearningUnreadable what="Your progress" claim="This is not a claim that you have started nothing." onRetry={onRetry} />;
   }
-  const rows = (state.in_progress || []).filter((r) => r.href).slice(0, 3);
-  if (!rows.length) return <LearningEmpty title="Nothing in progress" body="A course you start appears here, with where you left off." />;
+  const rows = inProgressCourses(state).slice(0, 3);
+  if (!rows.length) return <div className="space-y-2"><p className="text-[12.5px] text-axal-muted dark:text-gray-400">No course in progress.</p><button type="button" className={HOME_SECONDARY} onClick={onBrowse} disabled={!onBrowse} data-testid="learning-browse-courses">Browse courses</button></div>;
   return (
     <ul className="space-y-3" data-testid="list-continue">
       {rows.map((r) => {
@@ -395,9 +396,10 @@ export function ContinueLearning({ state, onRetry }) {
         return (
           <li key={`${r.subject_kind}:${r.subject_uid}`} className="space-y-1" data-testid="row-continue">
             <div className="flex items-baseline justify-between gap-2 text-[13px]">
-              <Link to={r.href} className="min-w-0 truncate font-semibold text-axal-ink hover:text-axal-violet-deep dark:text-gray-100 dark:hover:text-violet-300">{r.title || 'Untitled'}</Link>
+              <span className="min-w-0 flex-1 break-words"><RowTitle href={r.href}>{r.title || 'Untitled'}</RowTitle></span>
               <span className="flex-none text-[12px] tabular-nums text-axal-muted dark:text-gray-400">{has ? `${Math.round(p)}%` : 'Started'}</span>
             </div>
+            {r.href ? <Link to={r.href} className="inline-flex min-h-[44px] items-center rounded-axal-sm bg-axal-violet px-3 py-1.5 text-[12.5px] font-semibold text-white dark:bg-violet-400 dark:text-gray-950 sm:min-h-[32px]">Continue</Link> : <Unrecorded>Course link not recorded</Unrecorded>}
             {has && (
               <div className="h-1.5 overflow-hidden rounded-full bg-axal-ground dark:bg-gray-800" aria-hidden="true">
                 <div className="h-full rounded-full bg-axal-violet" style={{ width: `${Math.max(0, Math.min(100, Math.round(p)))}%` }} />
@@ -525,7 +527,7 @@ export function AssessmentList({ state = IDLE, kind, onPage, onRetry }) {
 function LearningSearch({ query, onQuery, gated }) {
   return <>
           <label htmlFor="learning-search" className="sr-only">Search</label>
-          <div className="relative">
+          <div role="search" className="relative">
             <Search size={14} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-axal-faint dark:text-gray-500" />
             <input
               id="learning-search"
@@ -543,12 +545,12 @@ function LearningSearch({ query, onQuery, gated }) {
 function LearningCatalogue({
   gated, tab, onTab, query, onQuery, q, catalog, articles, publications, events, upcoming, past, now,
   onCatalogPage, onArticlesPage, onRetry, exercises = IDLE, exams = IDLE, onAssessmentPage = () => {},
-  videoFilters = {}, onVideoFilter, videoOptions = [], videoTotal = null,
+  videoFilters = {}, onVideoFilter, videoOptions = [], videoTotal = null, showTabs = true,
 }) {
   const mode = tabMode(tab, gated);
   return (
     <Card padding="none" data-testid="learning-catalogue">
-      <TabBar tab={tab} gated={gated} onTab={onTab} />
+      {showTabs && <TabBar tab={tab} gated={gated} onTab={onTab} />}
       {mode === 'live' && tab !== 'videos' && <div className="px-4 pt-3"><LearningSearch query={query} onQuery={onQuery} gated={gated} /></div>}
       <div id="learning-panel" role="tabpanel" aria-labelledby={`learning-tab-${tab}`} className="p-4" data-testid={`panel-${tab}`} data-mode={mode}>
         {mode === 'coming_soon' && <ComingSoonCard />}
@@ -587,7 +589,7 @@ function LearningCatalogue({
  *   links     extra links for an admin: [{ to, label }]
  */
 /** The home shares Help's decorative artwork; no Learning reads or gates change. */
-export function LearningHero({ phoneBar = null }) {
+export function LearningHero({ phoneBar = null, primary = null, showArticle = true }) {
   return (
     <header className="relative isolate overflow-hidden border-b border-violet-200 bg-violet-50 px-4 pb-8 pt-10 text-center md:px-8 dark:border-violet-900/60 dark:bg-violet-950" data-testid="learning-hero">
       <img src="/site/home-hero.webp" alt="" className="absolute inset-0 -z-20 h-full w-full object-cover object-[center_45%]" />
@@ -596,7 +598,8 @@ export function LearningHero({ phoneBar = null }) {
       <h1 className="text-[28px] font-extrabold leading-tight tracking-tight text-balance text-gray-900 dark:text-gray-100">Learning</h1>
       <p className="mx-auto mt-2 max-w-2xl text-[13.5px] leading-relaxed text-gray-600 dark:text-gray-300">Courses, videos, webinars, articles, publications, events, exercises and exams, in one place.</p>
       </>}
-      <div className="mt-5 flex justify-center"><WriteArticleLink /></div>
+      {primary && <div className="mt-4">{primary}</div>}
+      {showArticle && <div className="mt-5 flex justify-center"><WriteArticleLink /></div>}
     </header>
   );
 }
@@ -604,7 +607,7 @@ export function LearningHero({ phoneBar = null }) {
 export function LearningHomeView({
   gated, tab, onTab = () => {}, query = '', onQuery = () => {}, q = '',
   catalog = IDLE, articles = IDLE, publications = IDLE, events = IDLE, me = IDLE,
-  upcoming = IDLE, past = IDLE, programs = PROGRAMS_IDLE, now = Date.now(), fresh = IDLE, stats = IDLE,
+  upcoming = IDLE, past = IDLE, programs = PROGRAMS_IDLE, now = Date.now(), fresh = IDLE, stats = IDLE, webinarActions = {},
   onCatalogPage = () => {}, onArticlesPage = () => {}, onRetry = {}, links = [],
   exercises = IDLE, exams = IDLE, onAssessmentPage = () => {},
   videoFilters = {}, onVideoFilter, videoOptions = [], videoTotal = null,
@@ -618,13 +621,18 @@ export function LearningHomeView({
           <ComingSoonCard articlesLink={false} testid="learning-coming-soon-sections" />
         ) : tab !== 'videos' ? (
           <>
-            <ProgressStrip state={stats} onRetry={onRetry.stats} />
-            <div className="grid gap-4 lg:grid-cols-2">
-              <SectionCard title="Continue learning" testid="section-continue"><ContinueLearning state={me} onRetry={onRetry.me} /></SectionCard>
-              <MyProgramsSection {...programs} />
+            <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+              <div className="min-w-0 space-y-4">
+                <ProgressStrip state={stats} onRetry={onRetry.stats} />
+                <SectionCard title="Continue learning" meta="Pick up where you left off." testid="section-continue"><ContinueLearning state={me} onRetry={onRetry.me} onBrowse={() => onTab('courses')} /></SectionCard>
+                <NewThisWeek state={fresh} now={now} onRetry={onRetry.fresh} />
+              </div>
+              <div className="min-w-0 space-y-4">
+                <MyProgramsSection {...programs} />
+                <SectionCard title="Upcoming webinars" testid="section-webinars"><HomeWebinarsList state={upcoming} now={now} onRetry={onRetry.upcoming} actions={webinarActions} /></SectionCard>
+                <RecommendedFuture />
+              </div>
             </div>
-            <NewThisWeek state={fresh} now={now} onRetry={onRetry.fresh} />
-            <RecommendedFuture />
           </>
         ) : null}
         <LearningCatalogue
@@ -634,11 +642,7 @@ export function LearningHomeView({
           exercises={exercises} exams={exams} onAssessmentPage={onAssessmentPage}
           videoFilters={videoFilters} onVideoFilter={onVideoFilter} videoOptions={videoOptions} videoTotal={videoTotal}
         />
-        {!gated && tab !== 'videos' && (
-          <SectionCard title="Upcoming webinars" testid="section-webinars">
-            <UpcomingWebinarsList state={upcoming} now={now} onRetry={onRetry.upcoming} />
-          </SectionCard>
-        )}
+
       </div>
     </>
   );
@@ -679,29 +683,29 @@ export function browseGroup({ gated }) {
  * Everyone else gets Continue learning, My programs and Upcoming webinars
  * first, from the same reads as the desktop's cards.
  */
-export function learningPhoneGroups({ gated, me = IDLE, programs = PROGRAMS_IDLE, upcoming = IDLE, now = Date.now(), onRetry = {} }) {
+export function learningPhoneGroups({ gated, me = IDLE, programs = PROGRAMS_IDLE, upcoming = IDLE, fresh = IDLE, now = Date.now(), onRetry = {}, onBrowse, webinarActions = {} }) {
   if (gated) return [browseGroup({ gated })];
-  const [continueTitle, programsTitle, webinarsTitle] = ACCOUNT_PHONE_PAGES.learning.sections;
+  const [continueTitle, , webinarsTitle] = ACCOUNT_PHONE_PAGES.learning.sections;
   const status = (st) => (isLoading(st) ? 'loading' : st.status);
 
   const cont = { label: continueTitle, rows: [], testid: 'learning-phone-continue' };
   if (status(me) !== 'ready') cont.note = phonePending(status(me), 'Your progress', 'This is not a claim that you have started nothing.', onRetry.me);
   else {
-    cont.rows = (me.in_progress || []).filter((r) => r.href).slice(0, 3).map((r) => {
+    cont.rows = inProgressCourses(me).slice(0, 1).map((r) => {
       const p = Number(r.percent);
       const has = r.percent !== null && r.percent !== undefined && Number.isFinite(p);
       return { key: `${r.subject_kind}:${r.subject_uid}`, title: r.title || 'Untitled', description: kindLabel(r.subject_kind === 'item' ? r.item_kind : r.subject_kind), value: has ? `${Math.round(p)}%` : 'Started', bar: has ? Math.round(p) : null, to: r.href, testid: 'learning-phone-continue-row' };
     });
-    if (!cont.rows.length) cont.note = 'Nothing in progress. A course you start appears here, with where you left off.';
+    if (!cont.rows.length) cont.note = <span className="block space-y-2"><span className="block">No course in progress.</span><button type="button" className={HOME_SECONDARY} onClick={onBrowse} disabled={!onBrowse} data-testid="learning-browse-courses">Browse courses</button></span>;
   }
 
-  const mine = { label: programsTitle, rows: [], testid: 'learning-phone-programs' };
+  const mine = { label: 'Your programs', rows: [], testid: 'learning-phone-programs' };
   const enrolled = programs.enrolled || IDLE;
   if (status(enrolled) !== 'ready') mine.note = phonePending(status(enrolled), 'Your programs', 'This is not a claim that you are in none.', programs.onRetry?.enrolled);
   else {
     mine.rows = (enrolled.rows || []).map(({ program, detail }) => {
       const progress = detail.status === 'ready' ? programProgress(detail.contents, detail.completion) : null;
-      const row = { key: program.uid, title: program.name || 'Untitled program', testid: 'learning-phone-program' };
+      const row = { key: program.uid, title: program.name || 'Untitled program', to: memberProgramHref(program.uid), testid: 'learning-phone-program' };
       if (!progress) {
         const reason = detail.status === 'ready' ? 'The program route sent no completion for you.' : 'Your progress in this program could not be read.';
         return { ...row, description: program.region || '', notRecorded: true, notRecordedReason: reason };
@@ -709,32 +713,45 @@ export function learningPhoneGroups({ gated, me = IDLE, programs = PROGRAMS_IDLE
       const pct = progress.total ? Math.round((100 * progress.done) / progress.total) : null;
       return { ...row, description: progressLine(progress), value: pct == null ? '' : `${pct}%`, bar: pct };
     });
-    if (!mine.rows.length) mine.note = 'You are in no program yet. Most programs are by invitation: a Super Admin enrols their members.';
+    if (!mine.rows.length) mine.note = 'You are not in a program yet. Most programs are by invitation: a Super Admin enrols their members.';
   }
+
+  const programNote = mine.note;
+  mine.note = <>{programNote && <span className="block">{programNote}</span>}<OpenPrograms {...programs} /></>;
 
   const web = { label: webinarsTitle, rows: [], testid: 'learning-phone-webinars' };
   if (status(upcoming) !== 'ready') web.note = phonePending(status(upcoming), 'The upcoming webinars', 'This is not a claim that none is scheduled.', onRetry.upcoming);
   else {
     web.rows = (upcoming.rows || []).slice(0, 3).map((w) => {
       const phase = webinarPhase(w, now);
-      const pill = phase === 'cancelled' ? { label: 'Cancelled', tone: 'danger' }
-        : w.registered ? { label: 'Registered', tone: 'info' }
-          : seatsOf(w).full ? { label: 'Full', tone: 'neutral' }
-            : w.href ? { label: 'Register', tone: 'info' } : null;
-      return { key: w.uid, title: w.title || 'Untitled webinar', description: formatWebinarDayTime(w.starts_at) || 'Start not recorded', pill, to: w.href || undefined, testid: 'learning-phone-webinar' };
+      const active = !w.registered && !['cancelled', 'past'].includes(phase) && !seatsOf(w).full;
+      const error = webinarActions.errors?.[w.uid];
+      return { key: w.uid, title: w.title || 'Untitled webinar',
+        description: <span><span className="font-mono">{formatWebinarDayTime(w.starts_at) || 'Start not recorded'} · {homeSeatsLine(w)}</span>{error && <span role="alert" className="block text-red-700 dark:text-red-300" data-testid={`home-webinar-error-${w.uid}`}>{error}</span>}</span>,
+        value: <HomeWebinarAction row={w} phase={phase} actions={webinarActions} />, to: active ? undefined : w.href || undefined, testid: `home-webinar-${w.uid}` };
+
     });
     if (!web.rows.length) web.note = 'No webinar scheduled. Webinars HQ schedules appear here, with a way to register.';
   }
-  return [cont, mine, web, browseGroup({ gated })];
+  const latest = { label: 'New this week', rows: [], testid: 'learning-phone-new' };
+  if (status(fresh) !== 'ready') latest.note = phonePending(status(fresh), 'What is new this week', 'This is not a claim that nothing is new.', onRetry.fresh);
+  else {
+    latest.rows = newThisWeek(fresh.rows, now).slice(0, 3).map((row) => ({ key: row.key, title: row.title, to: row.href, description: kindLabel(row.kind), value: catalogMeta(row) || 'Length not recorded', testid: 'learning-phone-new-row' }));
+    if (!latest.rows.length) latest.note = 'Nothing new this week.';
+  }
+  return [cont, latest, mine, web, browseGroup({ gated })];
 }
 
 /** A8m — the bar and the sections, then `children`: the tab lists Browse opens. */
-export function LearningPhoneView({ gated, me, programs, upcoming, now, onRetry, children = null, videoLibrary = false }) {
-  return (
-    <AccountPhonePage pageKey="learning" testid="learning-phone" bleed header={bar => <LearningHero phoneBar={bar} />} groups={videoLibrary ? [] : learningPhoneGroups({ gated, me, programs, upcoming, now, onRetry })}>
-      <div className={videoLibrary ? '-mx-[6px] min-w-0' : 'contents'}>{children}</div>
-    </AccountPhonePage>
-  );
+export function LearningPhoneView({ gated, me, programs, upcoming, fresh, now, onRetry, onTab = () => {}, tab = 'all', webinarActions = {}, children = null, videoLibrary = tab === 'videos' }) {
+  const onBrowse = () => onTab('courses');
+  const groups = videoLibrary ? [] : learningPhoneGroups({ gated, me, programs, upcoming, fresh, now, onRetry, onBrowse, webinarActions });
+  return <div className="min-h-screen bg-white dark:bg-gray-950" data-testid="learning-phone" data-phone="true">
+    <LearningHero phoneBar={<PhoneBar back={{ label: 'Back' }} title="Learning" />} showArticle={gated} primary={!gated && !videoLibrary && <HomePhonePrimary state={me} onBrowse={onBrowse} />} />
+    <div className="px-4"><TabBar tab={tab} gated={gated} onTab={onTab} /></div>
+    <div className="px-4 pt-4 [&>div]:px-0"><PhoneRows groups={groups} /></div>
+    {children && <div className="space-y-4 px-4 pb-4">{children}</div>}
+  </div>;
 }
 
 /** What the rail says it is looking at: one line per read this page actually made. */
@@ -806,7 +823,7 @@ export default function LearningHome({ gated, links = [] }) {
   const [me, retryMe] = useLearningRead(readMe, [], { enabled: !gated, scope: 'me' });
   // Upcoming webinars feed both the home's section and the Webinars tab, so they
   // are read once; the past ones only while that tab is open.
-  const [upcoming, retryUpcoming] = useLearningRead(() => readWebinars('upcoming'), [], { enabled: !gated, scope: 'webinars-upcoming' });
+  const [upcoming, retryUpcoming, setUpcoming] = useLearningRead(() => readWebinars('upcoming'), [], { enabled: !gated, scope: 'webinars-upcoming' });
   const [past, retryPast] = useLearningRead(() => readWebinars('past'), [],
     { enabled: live && tab === 'webinars', scope: 'webinars-past' });
   // #4180: the Exercises and Exams tabs read their own lists, a page at a time.
@@ -817,6 +834,7 @@ export default function LearningHome({ gated, links = [] }) {
     { enabled: live && tab === 'exams', scope: 'exams' });
   const onAssessmentPage = (step) => setAssessmentOffset((o) => Math.max(0, o + step * ALL_LIMIT));
   const programs = useMyPrograms(!gated);
+  const webinarActions = useHomeWebinarRegistration(setUpcoming);
   const now = useNow(60 * 1000);
   // D3726 LR1: New this week reads the catalog's newest rows across every kind.
   const [fresh, retryFresh] = useLearningRead(() => readCatalog({}), [], { enabled: !gated, scope: 'catalog-new' });
@@ -842,11 +860,11 @@ export default function LearningHome({ gated, links = [] }) {
   return (
     <RailFrame data-testid="learning-home">
       {phone ? (
-        <LearningPhoneView gated={gated} me={me} programs={programs} upcoming={upcoming} now={now} onRetry={onRetry} videoLibrary={tab === 'videos'}>
+        <LearningPhoneView gated={gated} me={me} programs={programs} upcoming={upcoming} fresh={fresh} now={now} onRetry={onRetry} onTab={onTab} tab={tab} webinarActions={webinarActions}>
           <AdminLinks links={links} />
-          {!gated && tab !== 'videos' && <OpenPrograms {...programs} />}
+          {!gated && tab !== 'videos' && <WriteArticleLink secondary />}
           <LearningCatalogue
-            gated={gated} tab={tab} onTab={onTab} query={query} onQuery={setQuery} q={q}
+            showTabs={false} gated={gated} tab={tab} onTab={onTab} query={query} onQuery={setQuery} q={q}
             catalog={catalog} articles={articles} publications={publications} events={events}
             upcoming={upcoming} past={past} now={now} onCatalogPage={onCatalogPage} onArticlesPage={onArticlesPage} onRetry={onRetry}
             exercises={exercises} exams={exams} onAssessmentPage={onAssessmentPage}
@@ -868,6 +886,7 @@ export default function LearningHome({ gated, links = [] }) {
             events={events}
             me={me}
             upcoming={upcoming}
+            webinarActions={webinarActions}
             past={past}
             programs={programs}
             now={now}

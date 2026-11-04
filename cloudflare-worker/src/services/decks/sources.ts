@@ -289,7 +289,7 @@ const github: Adapter = {
 // ─────────────────────────────────────────────────────────────── Raise
 
 const round: Adapter = {
-  id: 'round', area: 'raise', module: 'Raise › Round planner', href: q('/raise/calls'),
+  id: 'round', area: 'raise', module: 'Raise › Round planner', href: q('/raise/capital-relationships/calls'),
   slots: [
     { key: 'raise.round_target', label: 'Round', unit: 'usd' },
     { key: 'raise.round_close', label: 'Close', unit: 'date' },
@@ -410,7 +410,7 @@ const mercury: Adapter = {
 };
 
 const updates: Adapter = {
-  id: 'updates', area: 'grow', module: 'Grow › Investor updates', href: q('/grow/updates'),
+  id: 'updates', area: 'grow', module: 'Grow › Investor updates', href: q('/grow/reporting'),
   slots: [{ key: 'grow.investor_updates', label: 'Investor updates sent', unit: 'count' }],
   async read({ env, projectId }) {
     const r = await first<{ n: number; at: string | null }>(env,

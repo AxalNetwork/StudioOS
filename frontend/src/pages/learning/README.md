@@ -42,6 +42,7 @@ routes live in the D528 module `frontend/src/routes/learning.jsx`, which
 | `PlanRowActions.jsx` | D3959: a plan item's Mark done, Reschedule, Open in Learning and Remove, with the Calendar's Reschedule and Cancel dialogs (CAL19). On `/learning/plan` and on a Learning entry in the Calendar. |
 | `LearningPlanPage.jsx` | D3959: `/learning/plan`, My learning plan: goals, Upcoming and the past 30 days, and Add a study block (from LR12 "My learning" and LR1's "Your progress"). |
 | `VideosLibrary.jsx`, `videoLibraryModel.js` | D4477 LR7: recorded video filters, transcript-hit banner, poster cards and bounded open-at-time links. |
+| `LearningHomeActions.jsx` | D4481 (#4481): the home’s shared registration action and current seat refresh, structured refusals, phone course primary and webinar rows. |
 
 ## The rules for adding here
 

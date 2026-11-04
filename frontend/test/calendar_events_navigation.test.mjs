@@ -39,7 +39,7 @@ test('Calendar, Events, and Learning appear in the user dropdown before the Help
   assert.equal(menu.indexOf('to="/articles/draft"'), -1, 'the menu no longer links the article editor as "Articles"');
 });
 
-test('the Help Center is reachable before KYC, and the old path still resolves', () => {
+test('the Help Center is reachable before KYC; ticket-id links stay and the unused index retires', () => {
   // Two ways this rename could strand someone, both of them silent.
   //
   // RequireAuth holds an un-KYC'd user on a small allowlist of paths. Support
@@ -65,7 +65,7 @@ test('the Help Center is reachable before KYC, and the old path still resolves',
   // And the worker emits /tickets links into notification rows that are
   // already in people's feeds, so both old paths must still land — now on
   // the ticket flow's new address rather than on the Help Center home.
-  assert.match(app, /path="\/tickets"\s+element=\{<Navigate to="\/help\/tickets" replace \/>\}/);
+  assert.equal(app.includes('path="/tickets"'), false, 'D2319 retires only the unused index');
   assert.match(app, /path="\/tickets\/:id"/,
     'tickets.ts emits /tickets/<id> for its "Open ticket" CTA');
 });
