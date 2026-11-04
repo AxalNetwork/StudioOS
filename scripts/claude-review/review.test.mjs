@@ -18,10 +18,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
+import { GoogleGenAI, ApiError } from '@google/genai';
 import { runReview } from '../lib/claudeReviewRun.mjs';
 import { parseRates } from '../lib/claudeReview.mjs';
 import { WorkloadIdentityError } from '@anthropic-ai/sdk/lib/credentials/types';
-import { GithubIdentityError, LEDGER_MAX_PAGES, OIDC_AUDIENCE, openaiClient, openaiFetch, anthropicClient, classifyError, clientFor, errorDetail, fallbacksFor, githubClient, kimiClient, kimiFetch, githubIdentityToken, listMonthRecords, main, safePath } from './review.mjs';
+import { GithubIdentityError, LEDGER_MAX_PAGES, OIDC_AUDIENCE, geminiClient, geminiFetch, openaiClient, openaiFetch, anthropicClient, classifyError, clientFor, errorDetail, fallbacksFor, githubClient, kimiClient, kimiFetch, githubIdentityToken, listMonthRecords, main, safePath } from './review.mjs';
 
 const headers = new Headers({ 'request-id': 'req_test' });
 const gen = (status) => Anthropic.APIError.generate(status, { type: 'error', error: { type: 'x', message: 'm' } }, 'm', headers);
@@ -620,6 +621,151 @@ test('D4467: artifact HTTP and transport failures have bounded retries and safe 
       assert.deepEqual([calls, delays], [attempts, attempts === 4 ? [1000, 2000, 4000] : []]);
     }
   } finally { globalThis.fetch = saved; }
+});
+
+test('#4466: Gemini streams structured JSON, excludes thought text and accounts for cached/thought tokens', async () => {
+  const built = [], sent = [];
+  class FakeGemini {
+    constructor(options) {
+      built.push(options);
+      this.models = { generateContentStream: async function* (params) {
+        sent.push(params);
+        yield { candidates: [{ content: { parts: [{ text: 'private thought', thought: true }, { text: '{"status":' }] } }] };
+        yield { candidates: [{ content: { parts: [{ text: '"no_issues"}' }] }, finishReason: 'STOP' }], responseId: 'gemini-request',
+          usageMetadata: { promptTokenCount: 100, cachedContentTokenCount: 60, candidatesTokenCount: 40, thoughtsTokenCount: 20 } };
+      } };
+    }
+  }
+  const client = geminiClient({ apiKey: 'test-google', baseURL: 'https://gemini.example', timeoutSeconds: 600, sdk: FakeGemini });
+  assert.equal(built.length, 0);
+  const signal = new AbortController().signal;
+  const message = await client.create({ model: 'owner-model', system: 'system', messages: [{ role: 'user', content: 'diff' }], max_tokens: 1024 }, { timeout: 2345, signal });
+  assert.equal(built[0].vertexai, false);
+  assert.equal(built[0].httpOptions.retryOptions.attempts, 1);
+  assert.equal(built[0].httpOptions.timeout, 2345);
+  assert.equal(sent[0].model, 'owner-model');
+  assert.equal(sent[0].config.abortSignal, signal);
+  assert.equal(sent[0].config.systemInstruction, 'system');
+  assert.equal(sent[0].config.maxOutputTokens, 1024);
+  assert.equal(sent[0].config.responseMimeType, 'application/json');
+  assert.deepEqual(sent[0].config.responseSchema.required, ['schema_version', 'status', 'summary', 'findings', 'limitations']);
+  assert.deepEqual(sent[0].contents, [{ role: 'user', parts: [{ text: 'diff' }] }]);
+  assert.deepEqual(message.content, [{ type: 'text', text: '{"status":"no_issues"}' }]);
+  assert.deepEqual(message.usage, { input_tokens: 40, cache_read_input_tokens: 60, cache_creation_input_tokens: 0, output_tokens: 60 });
+  assert.equal(message.stop_reason, 'end_turn');
+  assert.equal(message._request_id, 'gemini-request');
+});
+
+test('#4466: Gemini fetch strips credential URLs and foreign headers and forbids redirects', async () => {
+  let seen;
+  const fetch = geminiFetch(async (url, options) => { seen = { url, options }; return new Response('{}'); }, 'own-google-key');
+  await fetch('https://gemini.example/stream?key=secret&alt=sse&api_key=other', { headers: {
+    authorization: 'Bearer foreign', 'x-api-key': 'foreign', 'x-goog-api-key': 'foreign', 'anthropic-workspace-id': 'foreign',
+    'content-type': 'application/json', 'x-goog-api-client': 'sdk',
+  } });
+  assert.equal(seen.url, 'https://gemini.example/stream?alt=sse');
+  assert.deepEqual([...seen.options.headers.keys()].sort(), ['content-type', 'x-goog-api-client', 'x-goog-api-key']);
+  assert.equal(seen.options.headers.get('x-goog-api-key'), 'own-google-key');
+  assert.equal(seen.options.redirect, 'error');
+});
+
+const geminiParams = { model: 'owner-model', system: 'system', messages: [{ role: 'user', content: 'diff' }], max_tokens: 1024 };
+const sse = value => `data: ${JSON.stringify(value)}\n\n`;
+
+test('#4466: real Google SDK uses header auth, structured streaming and no SDK quota retry', async () => {
+  const calls = [];
+  let status = 200;
+  const key = 'AIza' + 'test_google_key_never_real_01234567890';
+  const client = geminiClient({ apiKey: key, baseURL: 'https://gemini.example', timeoutSeconds: 30,
+    fetchImpl: async (url, init) => {
+      calls.push({ url, init, body: JSON.parse(init.body) });
+      return status === 200 ? new Response(sse({ candidates: [{ content: { parts: [{ text: '{}' }] }, finishReason: 'STOP' }],
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 4 } }), { headers: { 'content-type': 'text/event-stream' } })
+        : new Response(JSON.stringify({ error: { code: status, status: 'RESOURCE_EXHAUSTED', message: `quota ${key}` } }), { status });
+    },
+  });
+  const result = await client.create(geminiParams);
+  assert.equal(result.stop_reason, 'end_turn');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'https://gemini.example/v1beta/models/owner-model:streamGenerateContent?alt=sse');
+  assert.equal(new Headers(calls[0].init.headers).get('x-goog-api-key'), key);
+  assert.ok(!calls[0].url.includes(key));
+  assert.ok(!calls[0].init.body.includes(key));
+  assert.equal(calls[0].body.generationConfig.responseMimeType, 'application/json');
+  assert.ok(calls[0].body.generationConfig.responseSchema.properties.findings);
+  status = 429;
+  let error;
+  try { await client.create(geminiParams); } catch (e) { error = e; }
+  assert.equal(calls.length, 2, 'SDK does not retry the quota error');
+  assert.equal(error.kind, 'rate_limit');
+  assert.equal(error.streamStarted, false);
+  assert.match(error.detail, /redacted/);
+  assert.ok(!error.detail.includes(key));
+});
+
+test('#4466: Google SDK first-event errors and mid-stream aborts preserve uncertainty', async () => {
+  for (const mode of ['first-error', 'abort', 'sse-quota', 'unfinished']) {
+    const controller = new AbortController();
+    const client = geminiClient({ apiKey: 'test-google', baseURL: 'https://gemini.example', timeoutSeconds: 30,
+      fetchImpl: async () => new Response(new ReadableStream({
+        start(stream) {
+          if (mode === 'first-error') { stream.enqueue(new TextEncoder().encode('{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","message":"limit"}}')); stream.close(); }
+          else if (mode === 'sse-quota') { stream.enqueue(new TextEncoder().encode(sse({ error: { code: 429, message: 'limit' } }))); stream.close(); }
+          else { stream.enqueue(new TextEncoder().encode(sse({ candidates: [{ content: { parts: [{ text: 'partial' }] } }] }))); if (mode === 'unfinished') stream.close(); }
+        },
+        pull(stream) { controller.abort(); stream.error(new DOMException('aborted', 'AbortError')); },
+      }), { headers: { 'content-type': 'text/event-stream' } }),
+    });
+    let error;
+    try { await client.create(geminiParams, { signal: controller.signal }); } catch (e) { error = e; }
+    assert.equal(error.streamStarted, true, mode);
+    assert.equal(error.kind, ['first-error', 'sse-quota'].includes(mode) ? 'rate_limit' : mode === 'abort' ? 'timeout' : 'unknown');
+  }
+});
+
+test('#4466: Gemini refusals and incomplete streams never masquerade as completed reviews', async () => {
+  for (const [chunk, stop] of [
+    [{ promptFeedback: { blockReason: 'SAFETY' } }, 'refusal'],
+    [{ candidates: [{ finishReason: 'SAFETY' }] }, 'refusal'],
+    [{ candidates: [{ finishReason: 'MAX_TOKENS' }] }, 'max_tokens'],
+  ]) {
+    class FakeGemini { constructor() { this.models = { generateContentStream: async function* () { yield chunk; } }; } }
+    const message = await geminiClient({ apiKey: 'test', timeoutSeconds: 30, sdk: FakeGemini }).create(geminiParams);
+    assert.equal(message.stop_reason, stop);
+    assert.equal(message.usage, undefined, 'missing counts must retain worst-case cost in the runner');
+  }
+  for (const [status, kind] of [[400, 'bad_request'], [401, 'authentication'], [402, 'billing'], [403, 'permission'], [404, 'not_found'], [429, 'rate_limit'], [500, 'server']]) {
+    assert.equal(classifyError(new ApiError({ status, message: 'test' }), GoogleGenAI).kind, kind);
+  }
+});
+
+test('#4466: the Gemini fallback builds the configured official client lazily', async () => {
+  const built = [];
+  class FakeGemini { constructor(options) { built.push(options); this.models = { generateContentStream: async function* () { yield { candidates: [{ finishReason: 'STOP' }] }; } }; } }
+  const clients = fallbacksFor({ GEMINI_API_KEY: 'google-own', GEMINI_MODEL: 'owner-model', GEMINI_BASE_URL: 'https://gemini.example' }, { gemini: { sdk: FakeGemini } });
+  assert.deepEqual(Object.keys(clients), ['gemini']);
+  assert.equal(built.length, 0);
+  await clients.gemini.create(geminiParams);
+  assert.equal(built[0].apiKey, 'google-own');
+  assert.equal(built[0].httpOptions.baseUrl, 'https://gemini.example');
+});
+
+
+test('#4466: fragmented multi-line SSE errors preserve their code before SDK normalization', async () => {
+  const key = 'AIza' + 'synthetic_error_key_012345678901234567';
+  const client = geminiClient({ apiKey: key, baseURL: 'https://gemini.example', timeoutSeconds: 30,
+    fetchImpl: async () => new Response(new ReadableStream({ start(stream) {
+      const frame = 'event: error\r\ndata: {"error":\r\ndata: {"code":403,"message":"refused ' + key + '"}}\r\n\r\n';
+      const bytes = new TextEncoder().encode(frame);
+      for (let i = 0; i < bytes.length; i += 7) stream.enqueue(bytes.slice(i, i + 7));
+      stream.close();
+    } }), { headers: { 'content-type': 'text/event-stream' } }),
+  });
+  let error;
+  try { await client.create(geminiParams); } catch (e) { error = e; }
+  assert.equal(error.kind, 'permission');
+  assert.equal(error.streamStarted, true);
+  assert.ok(!error.detail.includes(key));
 });
 
 // Exercise real SDK stream parsing and the durable ledger together, without a network.

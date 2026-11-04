@@ -9,11 +9,11 @@ runbook, covering settings, enabling, rollback and cost, is
 
 | File | What it holds |
 | --- | --- |
-| `review.mjs` | git (a depth-1 fetch of the merge base and the diff), the GitHub REST API (the merge base, this month's review records) and the official Anthropic SDK, authenticated by workload identity federation (GitHub's OIDC token, fetched fresh for each exchange) or by the API key. It maps each SDK error class to a kind the summary can explain. Nothing the model writes reaches stdout except through escaped annotations. |
+| `review.mjs` | git (a depth-1 fetch of the merge base and the diff), the GitHub REST API (the merge base, this month's review records) and the official review SDKs; Anthropic authenticates by workload identity federation (GitHub's OIDC token, fetched fresh for each exchange) or by the API key. It maps each SDK error class to a kind the summary can explain. Nothing the model writes reaches stdout except through escaped annotations. |
 | `review.test.mjs` | The CLI's own tests, against the real SDK error classes and with no network. Run by the workflow's `selftest` job, after `npm ci` here. |
 | `record.json`, `review.json` | Not files here: what `review.mjs` writes for upload. `record.json` holds the tokens, cost and outcome; `review.json`, after a successful review only, holds the validated findings for whoever fixes them. |
 | `rates.json` | Dollars per million tokens per model, dated, used to estimate a review's cost and to bound it before the call. The `CLAUDE_REVIEW_RATES` repository variable overrides it per model. |
-| `package.json`, `package-lock.json` | The official `@anthropic-ai/sdk` and `openai` SDKs, pinned exactly. OpenAI 7.41.0 was released 2026-10-21, at least two weeks before this change. This package installs only review SDKs with `--ignore-scripts`. |
+| `package.json`, `package-lock.json` | The official `@anthropic-ai/sdk`, `openai` and `@google/genai` SDKs, pinned exactly. OpenAI 7.41.0 was released 2026-10-21, at least two weeks before this change. `@google/genai` 2.30.0 was released 2026-10-15, more than two weeks before D4466. This package installs only review SDKs with `--ignore-scripts`. |
 
 ## The rule for adding to it
 

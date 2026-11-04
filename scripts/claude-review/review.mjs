@@ -12,10 +12,11 @@
  *                            exchanged for a short-lived Anthropic token; needs id-token: write
  *   ANTHROPIC_API_KEY        repository secret, the fallback; read by the SDK, never printed
  *   ANTHROPIC_MODEL, ANTHROPIC_MODEL_HIGH_RISK, CLAUDE_REVIEW_*  repository variables
- *   ANTHROPIC_API_KEY_2, ANTHROPIC_API_KEY_3, OPENAI_API_KEY, KIMI_API_KEY  repository secrets, optional: the
+ *   ANTHROPIC_API_KEY_2, ANTHROPIC_API_KEY_3, OPENAI_API_KEY, GEMINI_API_KEY, KIMI_API_KEY  repository secrets, optional: the
  *                            credit fallback chain, tried in that order, each only when the
  *                            account before it answers that its credit balance is exhausted
  *   OPENAI_MODEL, OPENAI_BASE_URL  owner-selected model (no default), optional HTTPS endpoint
+ *   GEMINI_MODEL, GEMINI_BASE_URL  owner-selected model (no default), optional HTTPS endpoint
  *   KIMI_MODEL, KIMI_BASE_URL  repository variables, optional (defaults in claudeReview.mjs)
  *   GITHUB_TOKEN             the job's read-only token (contents, pull-requests, actions)
  *   GITHUB_EVENT_PATH, GITHUB_REPOSITORY, GITHUB_API_URL, GITHUB_STEP_SUMMARY, GITHUB_OUTPUT
@@ -33,6 +34,7 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
+import { GoogleGenAI, ApiError as GeminiApiError } from '@google/genai';
 import { oidcFederationProvider } from '@anthropic-ai/sdk/lib/credentials/oidc-federation';
 import { WorkloadIdentityError } from '@anthropic-ai/sdk/lib/credentials/types';
 import { REVIEW_OUTPUT_SCHEMA, escapeCommandData, escapeCommandProperty, parseRates, readConfig } from '../lib/claudeReview.mjs';
@@ -90,6 +92,7 @@ export function errorDetail(e, fed) {
   else if (typeof e?.message === 'string') text = e.message;
   else text = String(e?.name || 'Error');
   return String(text)
+    .replace(/AIza[A-Za-z0-9_-]+/g, '[redacted]')
     .replace(/sk-ant-[A-Za-z0-9_-]+/g, '[redacted]')
     .replace(/\bsk-[A-Za-z0-9_-]{16,}/g, '[redacted]')
     .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*/g, '[redacted]')
@@ -108,6 +111,8 @@ export function classifyError(e, sdk = Anthropic) {
   if (fed) {
     kind = 'federation';
     if (typeof fed.statusCode === 'number') status = fed.statusCode;
+  } else if (sdk === GoogleGenAI) {
+    kind = ({ 400: 'bad_request', 401: 'authentication', 402: 'billing', 403: 'permission', 404: 'not_found', 408: 'timeout', 429: 'rate_limit' })[status] || (status >= 500 ? 'server' : 'unknown');
   } else if (typeof sdk.APIUserAbortError === 'function' && e instanceof sdk.APIUserAbortError) kind = 'timeout';
   else if (e instanceof sdk.AuthenticationError) kind = 'authentication';
   else if (e instanceof sdk.PermissionDeniedError) kind = 'permission';
@@ -120,7 +125,7 @@ export function classifyError(e, sdk = Anthropic) {
   else if (e instanceof sdk.APIError) kind = status === 402 ? 'billing' : status === 529 ? 'overloaded' : 'unknown';
   if (['insufficient_quota', 'billing_hard_limit_reached', 'billing_not_active'].includes(e?.code || e?.error?.code)) kind = 'billing';
   if (e?.name === 'APIUserAbortError' || e?.name === 'AbortError') kind = 'timeout';
-  const out = new Error(`Anthropic API error: ${kind}`);
+  const out = new Error(`${sdk === GoogleGenAI ? 'Gemini' : 'Anthropic'} API error: ${kind}`);
   Object.assign(out, { kind, status, requestId: requestId || fed?.requestId || undefined, detail: errorDetail(e, fed) });
   return out;
 }
@@ -250,6 +255,97 @@ export function openaiClient({ apiKey, baseURL, timeoutSeconds, sdk = OpenAI, fe
   };
 }
 
+/** Gemini receives its own key only, in a header, and never a credential URL. */
+export const GEMINI_HEADERS = /^(content-type|content-length|accept|accept-encoding|user-agent|x-goog-api-client|x-server-timeout)$/i;
+export function geminiFetch(fetchImpl, apiKey, connected = () => {}) {
+  return async (url, init = {}) => {
+    const target = new URL(url);
+    // generateContentStream needs only alt=sse; discard any credential query.
+    for (const name of [...target.searchParams.keys()]) if (name !== 'alt') target.searchParams.delete(name);
+    const headers = new Headers(init.headers);
+    for (const name of [...headers.keys()]) if (!GEMINI_HEADERS.test(name)) headers.delete(name);
+    headers.set('x-goog-api-key', apiKey);
+    const response = await fetchImpl(target.toString(), { ...init, headers, redirect: 'error' });
+    if (response.ok) connected();
+    if (response.ok && response.body && /text\/event-stream/i.test(response.headers.get('content-type') || '')) {
+      // The SDK drops error fields when normalizing SSE data into candidates.
+      // Detect only error frames before that normalization; forward all bytes.
+      const decoder = new TextDecoder();
+      let pending = '';
+      const body = response.body.pipeThrough(new TransformStream({
+        transform(bytes, controller) {
+          pending += decoder.decode(bytes, { stream: true });
+          const frames = pending.split(/\r\n\r\n|\n\n|\r\r/);
+          pending = frames.pop();
+          for (const frame of frames) {
+            const data = frame.split(/\r\n|\n|\r/).filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n');
+            let event;
+            try { event = JSON.parse(data); } catch { continue; }
+            if (event?.error) throw new GeminiApiError({
+              status: typeof event.error.code === 'number' ? event.error.code : 500,
+              message: String(event.error.message || 'Gemini stream failed'),
+            });
+          }
+          controller.enqueue(bytes);
+        },
+      }));
+      return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+    }
+    return response;
+  };
+}
+
+/** Official Gemini stream adapted to the common, separately validated review. */
+export function geminiClient({ apiKey, baseURL, timeoutSeconds, sdk = GoogleGenAI, fetchImpl = globalThis.fetch }) {
+  return {
+    create: async (p, options = {}) => {
+      let streamStarted = false;
+      try {
+        // Per-attempt client keeps the connection marker local to this reservation.
+        const client = new sdk({ apiKey, vertexai: false, httpOptions: {
+          baseUrl: baseURL, timeout: options.timeout ?? timeoutSeconds * 1000,
+          retryOptions: { attempts: 1 }, fetch: geminiFetch(fetchImpl, apiKey, () => { streamStarted = true; }),
+        } });
+        const stream = await client.models.generateContentStream({
+          model: p.model,
+          contents: p.messages.map(message => ({ role: message.role === 'assistant' ? 'model' : 'user', parts: [{ text: message.content }] })),
+          config: { systemInstruction: p.system, maxOutputTokens: p.max_tokens, candidateCount: 1,
+            responseMimeType: 'application/json', responseSchema: REVIEW_OUTPUT_SCHEMA, abortSignal: options.signal },
+        });
+        streamStarted = true;
+        let text = '', usage, finishReason, refused = false, requestId;
+        for await (const chunk of stream) {
+          if (chunk.error) throw Object.assign(new Error(chunk.error.message || 'Gemini stream failed'), { status: chunk.error.code });
+          const candidate = chunk.candidates?.[0];
+          for (const part of candidate?.content?.parts || []) if (!part.thought && typeof part.text === 'string') text += part.text;
+          if (candidate?.finishReason) finishReason = candidate.finishReason;
+          if (chunk.promptFeedback?.blockReason) refused = true;
+          if (chunk.usageMetadata) usage = chunk.usageMetadata;
+          if (chunk.responseId) requestId = chunk.responseId;
+        }
+        if (!finishReason && !refused) throw new Error('Gemini stream ended without a final response');
+        refused ||= !!finishReason && !['STOP', 'MAX_TOKENS'].includes(finishReason);
+        const cached = usage?.cachedContentTokenCount ?? 0;
+        return {
+          _request_id: requestId,
+          stop_reason: refused ? 'refusal' : finishReason === 'MAX_TOKENS' ? 'max_tokens' : 'end_turn',
+          content: [{ type: 'text', text }],
+          usage: usage ? {
+            input_tokens: Number.isFinite(usage.promptTokenCount) ? Math.max(0, usage.promptTokenCount - cached) : undefined,
+            cache_read_input_tokens: cached, cache_creation_input_tokens: 0,
+            output_tokens: Number.isFinite(usage.candidatesTokenCount) ? usage.candidatesTokenCount + (usage.thoughtsTokenCount ?? 0) : undefined,
+          } : undefined,
+        };
+      } catch (error) {
+        const classified = classifyError(error, GoogleGenAI);
+        classified.streamStarted = streamStarted;
+        if (options.signal?.aborted) classified.kind = 'timeout';
+        throw classified;
+      }
+    },
+  };
+}
+
 /** The headers Kimi may receive: the request's own, never another credential. */
 export const KIMI_HEADERS = /^(content-type|content-length|accept|accept-encoding|x-api-key|anthropic-version|user-agent|idempotency-key|x-stainless-[a-z0-9-]+)$/i;
 
@@ -265,7 +361,7 @@ export function kimiFetch(fetchImpl) {
 /**
  * The credit fallback chain's clients, by step id: a further Claude account
  * (its own API key, its own Console organization) through the same Anthropic
- * client, or Kimi. Each is built only if a review reaches it.
+ * client, OpenAI, Gemini or Kimi. Each is built only if a review reaches it.
  */
 export function fallbacksFor(env, overrides = {}) {
   const { config } = readConfig(env);
@@ -274,6 +370,8 @@ export function fallbacksFor(env, overrides = {}) {
     const common = { maxRetries: config.maxRetries, timeoutSeconds: config.timeoutSeconds };
     out[step.id] = step.provider === 'openai'
       ? openaiClient({ apiKey: env.OPENAI_API_KEY, baseURL: step.baseURL, ...common, ...(overrides.openai || {}) })
+      : step.provider === 'gemini'
+      ? geminiClient({ apiKey: env.GEMINI_API_KEY, baseURL: step.baseURL, ...common, ...(overrides.gemini || {}) })
       : step.provider === 'kimi'
       ? kimiClient({ apiKey: env.KIMI_API_KEY, baseURL: step.baseURL, ...common, ...(overrides.kimi || {}) })
       : anthropicClient({ apiKey: env[step.secret], federation: null, workspaceId: step.workspaceId, ...common, ...(overrides.anthropic || {}) });
