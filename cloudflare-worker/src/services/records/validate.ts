@@ -18,7 +18,7 @@ import { sessionAudioParts, sessionDigest, sessionReceiptLines } from '../../rou
 import { sessionPlacementRows } from '../../routes/founder_validate_structure';
 import { loadSession, type SessionRow } from '../interviewSessions';
 import {
-  MODULES, QUOTE_WITHHELD, claimsOf, heldDate, interviewState, isHeld, loadInterviews,
+  MODULES, QUOTE_WITHHELD, claimsOf, heldDate, interviewState, isHeld, loadInterviews, recordingConsentText,
   loadSegments, loadSeverities, segmentsOf, supportsByGroup, themesOf,
   type ClaimStatus, type HypRow, type InterviewRow, type LinkRow,
 } from '../cycleValidate';
@@ -402,9 +402,6 @@ const STATE_WORD: Record<string, [string, string]> = {
   ready: ['Ready to review', 'amb'], reviewed: ['Reviewed', 'ok'], lead: ['Lead', 'grey'], invited: ['Invited', 'grey'],
   booked: ['Booked', 'vio'], logged: ['Logged', 'grey'],
 };
-const CONSENT_WORD: Record<string, string> = {
-  verbal: 'Said yes out loud', written: 'In writing', in_app: 'In the app', pre_agreed: 'Agreed beforehand', chat_reply: 'Agreed in the chat',
-};
 const IMPORTED: Record<string, string> = { whatsapp: 'WhatsApp', telegram: 'Telegram', zoom: 'Zoom', google_meet: 'Google Meet', meeting_bot: 'Eadwyn AI', upload: 'an uploaded recording' };
 
 type InterviewData = {
@@ -526,7 +523,6 @@ const customerResearch: ModuleSpec = {
       : Number(iv.recording_duration_sec) > 0 ? Math.max(1, Math.round(Number(iv.recording_duration_sec) / 60)) : null;
     const state = interviewState(d.session ? { status: d.session.status, submitted_via: d.session.submitted_via, processing_stage: d.session.processing_stage, consent_status: d.session.consent_status } : null, iv.stage ?? null);
     const fit = iv.icp_fit ? FIT[String(iv.icp_fit)] : null;
-    const method = d.session?.consent_method ? CONSENT_WORD[String(d.session.consent_method)] : null;
     const channel = await interviewChannel(ctx, d.session);
     const need = await needToHave(ctx, Number(iv.id));
     const writer = isWriter(ctx);
@@ -540,7 +536,8 @@ const customerResearch: ModuleSpec = {
       ],
       facts: [
         { label: 'Captured', value: capturedWord(d) },
-        fact('Consent', method, d.session ? 'No consent method recorded' : 'No session recorded'),
+        { label: 'Recording consent', value: recordingConsentText(d.session) },
+        { label: 'Quotes OK', value: iv.quote_consent === 1 ? 'Agreed · deck-eligible' : iv.quote_consent === 0 ? 'Declined' : 'Not asked' },
         { ...fact('ICP fit', fit ? joined(fit[0], d.segment) : null, 'No fit recorded'), ...(writer && !fit ? { action: 'judge-fit' } : {}) },
         { ...fact('Need-to-have', need, 'No pain judged yet'), ...(writer && need == null ? { action: 'judge-need' } : {}) },
       ],

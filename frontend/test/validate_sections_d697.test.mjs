@@ -44,7 +44,7 @@ const HYP_PARTS = {
   fit_gap: [{ id: 3, code: 'H3', supporting: 2, bar: 5, fit_unrecorded: 1 }],
 };
 const COLS = {
-  'customer-research': ['Interviewee', 'Company', 'Date', 'ICP fit', 'Consent', 'State'],
+  'customer-research': ['Interviewee', 'Company', 'Date', 'ICP fit', 'Recording consent', 'Quotes OK', 'State'],
   'problem-discovery': ['Theme', 'Mentions', 'Severity', 'Trend', 'Supports'],
   experiments: ['Hypothesis', 'Status', 'Evidence', 'Sprint', 'Owner', 'Source'],
 };

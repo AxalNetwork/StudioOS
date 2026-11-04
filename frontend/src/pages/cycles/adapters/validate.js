@@ -280,7 +280,15 @@ export function figure(f) {
 const CLAIM_TONE = { supported: 'ok', refuted: 'bad', testing: 'v2', untested: 'grey', inconclusive: 'muted', not_recorded: 'warn' };
 const CLAIM_WORD = { supported: 'Supported', refuted: 'Refuted', testing: 'Testing', untested: 'Untested', inconclusive: 'Inconclusive', not_recorded: 'Fit not recorded' };
 const FIT = { strong: ['Strong', 'ok'], partial: ['Partial', 'v2'], none: ['None', 'grey'] };
-const CONSENT = { agreed: ['Agreed', 'ok'], declined: ['Declined', 'bad'] };
+const CONSENT = { agreed: ['Agreed · deck-eligible', 'ok'], declined: ['Declined', 'bad'] };
+/** #4411: a recording pill never borrows the quote permission. */
+const RECORDING_METHOD = { verbal: 'Said yes out loud', written: 'In writing', in_app: 'In the app', pre_agreed: 'Agreed beforehand', chat_reply: 'Agreed in the chat' };
+function recordingConsentPill(value) {
+  if (value?.status === 'declined') return { text: 'Declined', tone: 'bad' };
+  if (value?.status !== 'given') return { text: 'Not asked', tone: 'grey' };
+  const method = Object.hasOwn(RECORDING_METHOD, value.method) ? RECORDING_METHOD[value.method] : null;
+  return { text: method ? `Given · ${method}` : 'Given', tone: 'ok' };
+}
 /** D690 decision 9: an interview's state, by the key the Worker sends. */
 export const STATE = {
   failed: 'Failed',
@@ -368,9 +376,9 @@ export const RECORDS = {
     sorts: [{ key: 'mentions', label: 'Mentions' }, { key: 'trend', label: 'Trend' }, { key: 'theme', label: 'Theme' }, { key: 'recent', label: 'Most recent' }],
   },
   'customer-research': {
-    // D690 decision 10: the canvas's five columns plus State. Channel stays a
+    // #4411 splits recording and quote permissions. Channel stays a
     // filter and a cell (its words are pinned), but no column names it.
-    keys: ['interviewee', 'company', 'date', 'icp_fit', 'consent', 'state'],
+    keys: ['interviewee', 'company', 'date', 'icp_fit', 'recording_consent', 'consent', 'state'],
     row: (r) => ({ id: r.id, recordId: workerId(r.id), cells: {
       // D685 §5.11: the interviewee opens the interview's review, Customer
       // research's record (D696 decision 6). A linked row draws it as text.
@@ -380,6 +388,7 @@ export const RECORDS = {
       company: r.company ?? null,
       date: r.date ?? null,
       icp_fit: pill(FIT, r.icp_fit),
+      recording_consent: recordingConsentPill(r.recording_consent),
       consent: r.consent ? pill(CONSENT, r.consent) : { text: 'Not asked', tone: 'grey' },
       channel: word(CHANNEL, r.channel),
       state: word(STATE, r.state),
@@ -388,7 +397,8 @@ export const RECORDS = {
       { key: 'icp', label: 'ICP fit', options: [{ value: 'strong', label: 'Strong' }, { value: 'partial', label: 'Partial' }, { value: 'none', label: 'None' }, { value: 'not_recorded', label: 'Not recorded' }] },
       // D697 decision 4: FVW's Deck-eligible view is the Agreed rows, and Stage
       // gave way to State (the Worker keeps `stage:pipeline` for the recruiting picker).
-      { key: 'consent', label: 'Consent', options: [{ value: 'agreed', label: 'Agreed · deck-eligible' }, { value: 'declined', label: 'Declined' }, { value: 'not_asked', label: 'Not asked' }] },
+      { key: 'recording_consent', label: 'Recording consent', options: [{ value: 'given', label: 'Given' }, { value: 'declined', label: 'Declined' }, { value: 'not_asked', label: 'Not asked' }] },
+      { key: 'consent', label: 'Quotes OK', options: [{ value: 'agreed', label: 'Agreed · deck-eligible' }, { value: 'declined', label: 'Declined' }, { value: 'not_asked', label: 'Not asked' }] },
       { key: 'channel', label: 'Channel', options: ['in_person', 'call', 'text'].map((value) => ({ value, label: CHANNEL[value] })) },
     ],
     sorts: [{ key: 'newest', label: 'Newest' }, { key: 'oldest', label: 'Oldest' }, { key: 'name', label: 'Name' }],
