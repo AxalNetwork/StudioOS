@@ -337,6 +337,7 @@ export function ItemSheet({ uid, projectId = null, onClose, onRun, onAssigned })
     return () => { live = false; };
   }, [uid]);
   const it = state.item;
+  const runs = it?.runs ?? (it?.run ? [it.run] : []);
   // D1614 W8 (#3994): Assign opens the Team picker, this Team's people then its agents.
   const assigned = (task) => { if (task) setState({ status: 'ready', item: task }); setPicking(false); onAssigned?.(task); };
   return (
@@ -356,7 +357,7 @@ export function ItemSheet({ uid, projectId = null, onClose, onRun, onAssigned })
             <><dt>Start</dt><dd><StartTask task={it} agentName={assigneeLine(it).text} onStarted={(run) => { if (run?.uid) onRun(run.uid); }} /></dd></>
           ) : null}
           <dt>Agent runs</dt>
-          <dd>{(it.runs || []).length ? it.runs.map((r) => <button key={r.uid} type="button" className={BTN_TEXT} onClick={() => onRun(r.uid)}>{runOutcome(r).title} · {runCost(r)}</button>) : 'None'}</dd>
+          <dd>{runs.length ? runs.map((r) => <button key={r.uid} type="button" className={BTN_TEXT} data-testid={`work-item-run-${r.uid}`} onClick={() => onRun(r.uid)}>{runChip(r)?.words ?? runOutcome(r).title} · {runCost(r)}</button>) : 'None'}</dd>
         </dl>
       ) : null}
     </Sheet>

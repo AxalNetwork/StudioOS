@@ -9,7 +9,9 @@ import { refuse } from '../util/refusal';
 import { mapError } from './_t13t14t15_helpers';
 import { canManage, canRead, loadScope, scopeOfAgent } from '../services/agents/teams';
 import { taskByUid } from '../services/agents/tasks';
-import { createWorkTask, projectBoard, setWorkDeps, updateWorkTask, workCards, WorkRefusal, NO_WORK_RUNS_RECORDED, type WorkRunReader, type WorkTask } from '../services/agents/workBoard';
+import { createWorkTask, projectBoard, setWorkDeps, updateWorkTask, workCards, WorkRefusal, type WorkRunReader, type WorkTask } from '../services/agents/workBoard';
+
+import { recordedWorkRuns } from '../services/agents/workRuns';
 
 type C = Context<{ Bindings: Env }>;
 async function body(c: C) {
@@ -30,7 +32,7 @@ async function visible(c: C, user: User) {
   return {t,s};
 }
 
-export function workBoardRoutes(enabled: (env: Env) => boolean, readRuns: WorkRunReader = NO_WORK_RUNS_RECORDED) {
+export function workBoardRoutes(enabled: (env: Env) => boolean, readRuns: WorkRunReader = recordedWorkRuns) {
   const router = new Hono<{Bindings:Env}>();
   const off = (c: C) => c.json({error:'agent_engine_off'},404);
   router.get('/:scope/:id/work/board',async(c)=>{
