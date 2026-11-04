@@ -15,6 +15,7 @@
  * never stops the engine or deletes anything, so an upgrade shows it at once.
  * The person's own answers, skills and values are never locked.
  */
+import { holdsLicence } from './accountLicences';
 import type { Env, User } from '../types';
 import { userMeetsTier, tierUpsell } from '../middleware/requireTier';
 import { effectiveInvestorTier, investorTierCovers, investorUpsell, type InvestorUser } from '../middleware/requireInvestorTier';
@@ -49,7 +50,11 @@ export async function archetypeAccess(env: Env, user: User | null | undefined, n
   const role = String(user.role ?? '').toLowerCase();
   if (ALWAYS_UNLOCKED.has(role) || (user.licences || []).some(licence => ALWAYS_UNLOCKED.has(licence))) return { locked: false };
   if (Number((user as any).spinout_lab_active ?? 0) === 1) return { locked: false };
-  if (role === 'investor') {
+  // A shared entitlement accepts either held licence's existing paid plan.
+  // Evaluate Founder as Founder: requireTier's primary Investor bypass must
+  // not manufacture a paid Founder entitlement for a mixed account.
+  if (holdsLicence(user, 'founder') && userMeetsTier({ ...user, role: 'founder' }, 'growth')) return { locked: false };
+  if (holdsLicence(user, 'investor')) {
     let row = user as InvestorUser;
     const primaryId = Number((user as InvestorUser).investor_seat_primary_user_id ?? 0);
     if (primaryId) {
@@ -59,11 +64,9 @@ export async function archetypeAccess(env: Env, user: User | null | undefined, n
            FROM users WHERE id = ?`,
       ).bind(primaryId).first<InvestorUser>()) as InvestorUser;
     }
-    return investorTierCovers(investorTierNow(row, now), 'professional')
-      ? { locked: false }
-      : { locked: true, required_plan: INVESTOR_PLAN };
+    if (investorTierCovers(investorTierNow(row, now), 'professional')) return { locked: false };
   }
-  return userMeetsTier(user, 'growth') ? { locked: false } : { locked: true, required_plan: FOUNDER_PLAN };
+  return { locked: true, required_plan: role === 'investor' ? INVESTOR_PLAN : FOUNDER_PLAN };
 }
 
 /**

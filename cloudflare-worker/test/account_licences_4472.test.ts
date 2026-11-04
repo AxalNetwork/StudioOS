@@ -22,6 +22,7 @@ import { verifiedInvestor } from '../src/services/roundCallPolicy.ts';
 import { canMoveRound } from '../src/services/dealStudioLens.ts';
 import { canReadOperatorReview } from '../src/services/section83bOperatorReview.ts';
 import { modulePageAllowed } from '../src/routes/ai_modules.ts';
+import { archetypeAccess } from '../src/services/archetypeEntitlement.ts';
 import { PipelineRoom } from '../src/durable-objects/pipeline-room.ts';
 import diligence from '../src/routes/dd.ts';
 import projects from '../src/routes/projects.ts';
@@ -372,5 +373,26 @@ test('appointment reuses an active grant matching the corrected primary without 
     assert.equal(f.db.prepare('SELECT source FROM account_licence_events').get()!.source,'admin');
     assert.equal(count(f.db,'licence_admins'),1); assert.equal(count(f.db,'licence_events'),1); assert.equal(count(f.db,'activity_logs'),2);
     assert.deepEqual(await heldLicences(f.DB,{id:9001,role:'admin'}),['founder']);
+  } finally { f.db.close(); }
+});
+
+
+test('shared archetype entitlement accepts either held licence’s existing paid plan, never an unpaid or unheld plan', async () => {
+  const f=fixture(); try {
+    const base:any={...f.db.prepare('SELECT * FROM users WHERE id=9001').get(),licences:['founder','investor'],subscription_tier:'free',subscription_status:'active',investor_tier:'professional',investor_subscription_status:'active'};
+    assert.equal((await archetypeAccess(f.env,base)).locked,false,'paid Investor grant unlocks a Founder account');
+    assert.equal((await archetypeAccess(f.env,{...base,subscription_tier:'growth',investor_tier:'free'})).locked,false,'paid Founder remains unlocked after adding Investor');
+    assert.equal((await archetypeAccess(f.env,{...base,role:'investor',subscription_tier:'growth',investor_tier:'free'})).locked,false,'paid Founder grant unlocks an Investor account');
+    assert.equal((await archetypeAccess(f.env,{...base,licences:['founder']})).locked,true,'unheld Investor plan grants nothing');
+    assert.equal((await archetypeAccess(f.env,{...base,investor_tier:'free'})).locked,true,'two free licences grant no paid feature');
+    assert.equal((await archetypeAccess(f.env,{...base,role:'investor',investor_tier:'free'})).locked,true,'primary Investor bypass cannot invent a paid Founder plan');
+    assert.equal((await archetypeAccess(f.env,{...base,role:'investor',licences:['investor'],subscription_tier:'growth',investor_tier:'free'})).locked,true,'unheld Founder plan grants nothing');
+    f.db.exec("UPDATE users SET investor_tier='institutional',investor_subscription_status='active' WHERE id=9005");
+    const seat={...base,investor_tier:'free',investor_seat_primary_user_id:9005};
+    assert.equal((await archetypeAccess(f.env,seat)).locked,false,'additional Investor seat reads its primary’s plan');
+    f.db.exec("UPDATE users SET investor_tier='free' WHERE id=9005");
+    assert.equal((await archetypeAccess(f.env,{...seat,investor_tier:'professional'})).locked,true,'seat cannot use a stale local tier');
+    assert.equal((await archetypeAccess(f.env,{...base,investor_subscription_status:'cancelled'})).locked,true);
+    assert.equal((await archetypeAccess(f.env,{...base,investor_subscription_status:'trialing',investor_trial_ends_at:'2000-01-01'})).locked,true);
   } finally { f.db.close(); }
 });
