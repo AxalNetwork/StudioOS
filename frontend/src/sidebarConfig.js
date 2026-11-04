@@ -309,8 +309,7 @@ export const SIDEBAR_GROUPS = {
   //     Trust Center "Identity" tab (Task #25). The /kyc route stays registered
   //     and reachable (the onboarding KYC gate still redirects there).
   //
-  // Newly surfaced (routes already existed and are founder-accessible, they just
-  // weren't in the founder nav): Co-Marketing (/comarketing, Launch).
+  // D4439: co-marketing is opened from Grow › Partner network; the old root only forwards founders.
   // Founder shell — the canvas declares nine rows (Home · Validate · Build ·
   // Raise · Grow · Network · Research · Trust · Company Settings). Eight land
   // here; Trust is deliberately absent, pinned out of every sidebar by
@@ -371,7 +370,7 @@ export const SIDEBAR_GROUPS = {
       // D1384: /compliance is retired into Calendar, so it lights nothing here.
       { to: '/raise', icon: Sparkles, label: 'Raise', match: ['/raise', '/incorporate'] },
       { to: '/grow', icon: TrendingUp, label: 'Grow',
-        match: ['/grow', '/build/team', '/advisors', '/my/jobs', '/jobs', '/my/applications', '/build/brand', '/comarketing', '/perks'] },
+        match: ['/grow', '/build/team', '/advisors', '/my/jobs', '/jobs', '/my/applications', '/build/brand', '/perks'] },
       // Points at /network, not at the first zone: /network is the one route
       // that role-branches its element, so it is the landing every license can
       // open, and it forwards to the zone. The three /network/* zone routes are

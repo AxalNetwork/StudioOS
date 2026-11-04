@@ -104,7 +104,7 @@ function pageLabelFromSource() {
 test('pageLabel keeps its route map and its empty string', () => {
   const pageLabel = pageLabelFromSource();
   assert.equal(pageLabel(''), '');
-  assert.equal(pageLabel('/build/deck'), 'Pitch Deck');
+  assert.equal(pageLabel('/raise/pitch'), 'Pitch Deck');
   assert.equal(pageLabel('/some/new-page_x'), 'New Page X');
 });
 

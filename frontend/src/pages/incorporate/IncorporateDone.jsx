@@ -16,7 +16,7 @@ import BankStep from './BankStep.jsx';
  * date guessed) and the cap table. #4356 (D4356): and Open a bank account, with
  * Mercury (`BankStep`), done only when the founder's Mercury is connected.
  */
-export default function IncorporateDone({ order, projectId, companyName }) {
+export default function IncorporateDone({ order, projectId, companyName, user }) {
   const [tracker, setTracker] = useState({ kind: 'loading' });
   useEffect(() => {
     let alive = true;
@@ -48,7 +48,7 @@ export default function IncorporateDone({ order, projectId, companyName }) {
             {tracker.kind === 'loading' ? 'Reading…' : tracker.kind === 'due' ? <span className="font-semibold text-amber-800 dark:text-amber-300">{tracker.line}</span>
               : tracker.kind === 'unread' ? 'The 83(b) deadline could not be read' : <>Deadline <Unrecorded /></>}
           </span>
-          <Link to="/incorporate/83b" className="text-[12.5px] font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">Open the tracker</Link>
+          <Link to={user?.spinout_lab_active === 1 || user?.role === 'admin' ? '/spinout-lab/83b' : '/raise/legal-engine/equity'} className="text-[12.5px] font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">Open the tracker</Link>
         </section>
         <section className="flex flex-col gap-1.5 rounded-axal-lg border border-axal-hairline bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-900" data-testid="done-cap-table">
           <b className="text-[14px] text-axal-ink dark:text-gray-100">Set up your cap table</b>

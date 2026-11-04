@@ -1,6 +1,8 @@
 /**
  * T15 — Co-marketing pitches + admin approval + attribution tracking.
- * Mounted at /api/comarketing.
+ * Mounted at /api/comarketing. D4439 (#4439) splits the member audience:
+ * partners and founders retain their existing permissions; investors cannot
+ * read or write this area. HQ's inner requireAdmin gates remain authoritative.
  */
 import { Hono } from 'hono';
 import type { Context } from 'hono';
@@ -16,6 +18,16 @@ import { notify } from '../services/notify';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 
 const r = new Hono<{ Bindings: Env }>();
+
+r.use('*', async (c, next) => {
+  try {
+    const user = await requireAuth(c);
+    if (!['admin', 'partner', 'founder'].includes(user.role)) {
+      return refuse(c, 403, { code: 'comarketing_role_required', message: 'Co-marketing is available to partners and founders. HQ reviews it under Approvals.' });
+    }
+  } catch (e) { return mapError(c, e); }
+  return next();
+});
 
 const ASSET_TYPES = new Set(['webinar', 'blog', 'podcast', 'event', 'newsletter', 'other']);
 // Migration 183. An angle is a sentence, not an essay — the whole point of the
