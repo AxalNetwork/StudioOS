@@ -248,9 +248,12 @@ export function makeReviewActions({ api, sessionId, set, onSpent, isLive = () =>
 
 export const REVIEW_INITIAL = { read: undefined, running: false, runError: null, errors: {}, busyId: null, ask: {}, acceptAll: {} };
 
+export const OUTPUT_POLL_LIMIT_MS = 15 * 60 * 1000;
 /** The review step, mounted: reads the placements and wires each action. */
 export function ReviewStep({ api, sessionId, theme, receiptItems, onSpent, grouped = null }) {
   const [st, setSt] = useState(REVIEW_INITIAL);
+  const pollStarted = React.useRef(Date.now());
+  const [pollExpired, setPollExpired] = useState(false);
   // D778 part 8: each session's actions carry their own liveness, ended when another session opens.
   const actions = React.useMemo(() => {
     const live = { current: true };
@@ -261,14 +264,19 @@ export function ReviewStep({ api, sessionId, theme, receiptItems, onSpent, group
     actions.live.current = true;
     // Another session: its state starts clean rather than inheriting a running press.
     if (opened.current !== sessionId) { opened.current = sessionId; setSt(REVIEW_INITIAL); }
+    pollStarted.current = Date.now(); setPollExpired(false);
     actions.reload();
     return () => { actions.live.current = false; };
   }, [actions, sessionId]);
   useEffect(() => {
-    if (!st.read?.outputs?.some((o) => ['queued', 'running'].includes(o.status))) return undefined;
-    const timer = setTimeout(() => actions.reload(), 3000);
+    if (pollExpired || !st.read?.outputs?.some((o) => ['queued', 'running'].includes(o.status) && !o.retryable)) return undefined;
+    const remaining = OUTPUT_POLL_LIMIT_MS - (Date.now() - pollStarted.current);
+    const timer = setTimeout(() => {
+      if (remaining <= 3000) setPollExpired(true);
+      else actions.reload();
+    }, Math.max(0, Math.min(3000, remaining)));
     return () => clearTimeout(timer);
-  }, [st.read, actions]);
+  }, [st.read, actions, pollExpired]);
   // D771 (#2097): a structuring run or a question at the transcript is the rail's option while it runs.
   useRailOption(st.running ? 'structure:transcript' : null, 'Structure the transcript');
   useRailOption(st.ask?.busy ? 'ask:transcript' : null, 'Ask');
@@ -276,8 +284,8 @@ export function ReviewStep({ api, sessionId, theme, receiptItems, onSpent, group
   if (st.read === null) return <p role="alert" className="text-[13px] text-red-700 dark:text-red-400">Unreadable: the placements could not be read.</p>;
   return (
     <InterviewReview
-      theme={theme} read={st.read} running={st.running} runError={st.runError} errors={st.errors} busyId={st.busyId}
-      onAccept={actions.accept} onDiscard={actions.discard} onStructure={actions.structure}
+      theme={theme} read={pollExpired ? { ...st.read, outputs: st.read.outputs?.map((o) => ({ ...o, retryable: o.retryable || ['queued','running'].includes(o.status) })) } : st.read} running={st.running} runError={st.runError} errors={st.errors} busyId={st.busyId}
+      onAccept={actions.accept} onDiscard={actions.discard} onStructure={(model) => { pollStarted.current = Date.now(); setPollExpired(false); return actions.structure(model); }}
       ask={st.ask} onAsk={actions.ask} receiptItems={receiptItems}
       grouped={grouped || !!st.read?.outputs} onAcceptAll={actions.acceptAll} acceptAll={st.acceptAll}
     />
