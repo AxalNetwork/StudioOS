@@ -136,3 +136,5 @@ Rows link only with `records.linkable` and a genuine Worker id. Build and Raise
 pass their ids through, and Grow and Validate set `recordId` to the Worker's id
 or null (D696 decision 7). In record mode the rail's crumbs carry the record's
 title (`RecordCrumb`, D696).
+
+| `distribution/` | D4488 (#4488): campaign drafting and Waiting for you, inside the shared Ask panel. |

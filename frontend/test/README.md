@@ -144,3 +144,4 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `grow_campaigns_d4447.test.mjs` | D4447 (#4447): eight Grow campaign requests, encoded identifiers and project-bound write bodies. |
 
 `team_allowlists_4422.test.mjs` checks D4422 actual Team checklist read/save requests, default resets, inherited edit gates, and honest read/save failures.
+| `distribution_ask_4488.test.mjs` | D4488 quotes, unsaved acceptance, listed/safe counts and exclusive Ask intent. |
