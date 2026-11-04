@@ -1009,6 +1009,17 @@ test('owner policy: the full order is Claude main, Claude 2, Claude 3, OpenAI, G
 });
 
 
+test('D4467: unreadable listing refuses every account and names the cause instead of credit exhaustion', async () => {
+  const h = harness({ env: { ANTHROPIC_API_KEY_2: 'key2' }, fallbacks: { claude2: () => { throw new Error('must not call'); } }, listArtifacts: async () => {
+    throw Object.assign(new Error('secret payload'), { ledgerReadFailure: 'artifact listing page 2: HTTP 503' });
+  } });
+  const r = await runReview(h.deps);
+  assert.equal(r.outcome, 'budget_refused');
+  assert.deepEqual([h.calls.create.length, h.calls.fallback.length], [0, 0]);
+  assert.match(plain(r.summary), /Claude was not called: .*could not be read/);
+  assert.match(r.reason, /artifact listing page 2: HTTP 503/);
+  assert.doesNotMatch(plain(r.summary), /out of credit|monthly review budget is used|secret payload/);
+});
 const GEMINI_ENV = { GEMINI_API_KEY: 'test-google', GEMINI_MODEL: 'owner-gemini',
   CLAUDE_REVIEW_RATES: JSON.stringify({ models: { 'owner-gemini': { input: 0, output: 0 } } }) };
 
