@@ -6,6 +6,8 @@ import AxalValuesBars from '../../components/profile/AxalValuesBars.jsx';
 import { agentValueBars, fixedCaption } from './personaModel.js';
 import * as agents from './agentsAdapter.js';
 import AgentSkillsCard from './AgentSkillsCard.jsx';
+// D1531 (#3742 E8, TM5m): its memory and scheduled duties.
+import { AgentDuties, AgentMemory } from './AgentMemory.jsx';
 import SponsorSheet from './SponsorSheet.jsx';
 import { BTN_DANGER, BTN_PRIMARY, BTN_SECONDARY, FIELD, HonestBlock, MONO, MUTED } from './teamUi.jsx';
 import { day } from '../account/companies/companiesModel.js';
@@ -213,6 +215,10 @@ export default function AgentProfileSheet({ uid, scope = null, canManage, editCa
               <>
                 <AgentProfile data={block.value} canManage={manage} legend={legend} />
                 <div className="px-5 pb-5"><AgentSkillsCard agent={{ uid: a?.uid || uid, role_key: a?.role_key, scope: a?.scope || null }} canManage={manage} skillsScope={agentSkillsScope(scope, a)} /></div>
+                <div className="flex flex-col gap-5 border-t border-axal-hairline px-5 py-5 dark:border-gray-800">
+                  <AgentMemory uid={a?.uid || uid} canManage={manage} />
+                  <AgentDuties uid={a?.uid || uid} />
+                </div>
               </>
             )}
       </Sheet>
