@@ -140,3 +140,5 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 
 `team_allowlists_4422.test.mjs` checks D4422 actual Team checklist read/save requests, default resets, inherited edit gates, and honest read/save failures.
 | `work_controls_3968.test.mjs` | WK1–WK3 filter and burn-up interactions through real clients, attribution, failed reads and late responses (#3968). |
+
+| `syndication_review_4440.test.mjs` | D4440: all eight confirmed review findings, actual settings contract, dirty choices, accepted copy, private approval, event Save, reconnect and ticket-link validation. |

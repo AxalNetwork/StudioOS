@@ -213,3 +213,5 @@ D1456 (#4014): the existing record, recovery, bot-control and migration-runner s
 `team_allowlists_4422.test.ts` checks D4422 scope inheritance, manager/plan/approval bounds, atomic audit and use-time revocation, including agent MCP calls, over real SQLite.
 
 | `work_runs_3968.test.ts` | Real engine board/item latest-run wiring, guard-inclusive charges, unknown costs, scope gates and concurrent attempts (#3968). |
+
+| `syndication_review_4440.test.ts` | D4440: client dirty choices against mounted Worker routes, terminal history, disconnected accounts and retained accepted copy. |
