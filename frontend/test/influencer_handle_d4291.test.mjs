@@ -50,6 +50,7 @@ test('the app, the register page and the stub use the one reader', () => {
   const page = read('pages/influencer/HandlePage.jsx');
   assert.match(page, /if \(!isHandle\) return <NotFoundPage \/>;/, 'a segment without @ is the 404');
   assert.match(page, /if \(d\?\.state === 'live' && d\.ref\) keepFirstTouch\(d\.ref\);/, 'only a live handle sets the cookie');
-  assert.match(page, /data-testid="handle-disclosure">\{d\.disclosure\}/);
+  // D4297 (#4297): IN7 draws the Worker's sentence through `disclosureOf`, which falls back to the same sentence.
+  assert.match(page, /data-testid="handle-disclosure">\{disclosureOf\(d\)\}/);
   assert.match(read('lib/api/publicHandles.js'), /'X-Axal-Visitor': visitor/);
 });

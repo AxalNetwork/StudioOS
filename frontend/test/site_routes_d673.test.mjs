@@ -53,7 +53,8 @@ test('the shell links every page the canvas nav and footer link', async () => {
   const paths = (list) => list.map((l) => l.to);
   assert.deepEqual(paths(DOOR_LINKS), ['/for-founders', '/for-investors', '/for-service-partners', '/for-advisors']);
   assert.deepEqual(paths(NETWORK_LINKS), ['/resources', '/articles', '/directory', '/events', '/circles', '/jobs']);
-  assert.deepEqual(paths(BUILD_LINKS), ['/about', '/spinout-lab', '/intelligence', '/methodology', '/administrators']);
+  // D4297 (#4297): the Influencer program's page joins Build With Us (D4289 P8 asks for it in siteLinks).
+  assert.deepEqual(paths(BUILD_LINKS), ['/about', '/spinout-lab', '/intelligence', '/methodology', '/administrators', '/influencers']);
 });
 
 test('each new public path is reachable logged-out, previewable and in the sitemap', () => {

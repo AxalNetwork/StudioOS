@@ -191,6 +191,7 @@ const DOCUMENTED = new Map([
   ['cloudflare-worker/src/contracts',         'D1511: one JSON Schema per swapped deck v2 adapter method, checked against the real reply'],
   ['cloudflare-worker/test/fixtures',         'recorded and synthetic inputs the worker tests read, the fake AI binding\'s recordings among them'],
   ['frontend/tests/visual',                   'D1511: the Pitch deck editor\'s visual regression and axe suites, their server and baselines'],
+  ['frontend/src/routes',                     'one route module per area (D528): App.jsx collects them, and a new area is one file here'],
 ]);
 
 // Trees inside which a heavy folder is expected to document itself.

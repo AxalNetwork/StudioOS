@@ -26,6 +26,7 @@ import Sheet from '../ui/Sheet.jsx';
 import BrandIcon from '../ui/BrandIcon.jsx';
 import './referrals/referrals.css';
 import { appOrigin } from '../lib/branchHost';
+import InfluencerCard from './influencer/InfluencerCard';
 import { memberRewardMatrix } from '../lib/referralRewards';
 
 const STATUS_TONE = {
@@ -764,6 +765,9 @@ export default function ReferralsPage({ embedded = false }) {
                 </div>
               ))}
             </div>
+
+            {/* D4297 (#4297, IN10): the Influencer program's card: Apply, the application's state, or the section. */}
+            {!embedded ? <div className="mt-8"><InfluencerCard /></div> : null}
 
             <div className="mt-8">
               <div className="mb-3.5 flex flex-wrap items-baseline justify-between gap-2">

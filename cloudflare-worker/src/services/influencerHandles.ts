@@ -331,13 +331,19 @@ export async function publicHandle(env: Env, rawHandle: string, rawChannel: stri
   const photo = m.headshot_r2_key && effectiveFlags(prefs, String(m.role || ''))?.headshot ? `/api/settings/headshot/${m.user_uid}` : null;
   const { TIER_LABEL } = await import('./influencers');
   const name = String(m.name || '').trim() || 'This influencer';
+  // D4297 (#4297): the featured active offer (P4 #4293), or none. An offer store
+  // that cannot be read shows no offer and never fails the page.
+  let offer: Awaited<ReturnType<typeof import('./influencerOffers').featuredOffer>> = null;
+  try {
+    const { featuredOffer } = await import('./influencerOffers');
+    offer = await featuredOffer(env, Number(m.user_id), now);
+  } catch (e) { console.warn('[handles] offer not read', (e as Error)?.message); }
   return {
     status: 200 as const,
     body: {
       state: 'live' as const, handle, channel, name, photo, line: m.page_line ?? null,
       tier: m.tier, tier_label: (TIER_LABEL as any)[m.tier] ?? null,
-      // P4 (#4293) adds the influencer's offer; until then there is none to show.
-      offer: null,
+      offer,
       disclosure: DISCLOSURE(name),
       // The first-touch cookie the page sets: `h:<handle>[:<channel>]`.
       ref: `h:${handle}${channel ? `:${channel}` : ''}`,

@@ -165,6 +165,8 @@ export function isPublicPath(pathname) {
     || currentPath === '/methodology'
     || currentPath === '/intelligence'
     || currentPath === '/resources'
+    // D4297 (#4297) — the Influencer program's public page.
+    || currentPath === '/influencers'
     || currentPath === '/contact'
     // D813 (#2259) — the newsletter's signup, and the confirm and preferences
     // pages a link in an email opens; none of them takes a sign-in.
