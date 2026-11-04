@@ -18,6 +18,7 @@
  */
 import type { Env, User } from '../../types';
 import { chargedFor } from './agentRun';
+import { disclaimerKeyForRole } from './disclaimers';
 import { moduleOf } from './catalogue';
 import { personaDto, personaOf } from './personas';
 import { NeverFillRefusal, decideRailAs, type RailDecision, type RailProposal, type RailProposalStatus } from '../railProposals';
@@ -31,6 +32,7 @@ type Person = { uid: string; name: string };
 
 export type QueueItem = {
   uid: string;
+  disclaimer_key?: string;
   kind: string;
   option: string;
   module: string | null;
@@ -76,6 +78,7 @@ async function toItem(env: Env, r: QueueRow, mayDecide = false): Promise<QueueIt
   const payload = (r.status === 'edited' ? parse(r.decided_payload_json) : null) ?? parse(r.payload_json) ?? {};
   return {
     uid: r.uid,
+    ...(disclaimerKeyForRole(r.role_key) ? { disclaimer_key: disclaimerKeyForRole(r.role_key) } : {}),
     kind: r.kind,
     option: r.rail_option,
     module: r.module ?? null,

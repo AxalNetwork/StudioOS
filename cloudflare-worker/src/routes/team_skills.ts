@@ -605,7 +605,7 @@ router.get('/:scope/:id/cost-estimate', async (c) => {
   if (!pins) return say(c, 404, 'skill_not_found', 'One of those skills is not one this agent can be given.');
   const { rules } = await effectiveBook(c.env, scope, role.key);
   const label = moduleOf(rules.works_in[0] ?? '')?.label ?? 'its modules';
-  const draft = { persona_key: personaKey, first_name: null, last_name: null } as Pick<AgentRow, 'persona_key' | 'first_name' | 'last_name'>;
+  const draft = { role_key: role.key, persona_key: personaKey, first_name: null, last_name: null } as Pick<AgentRow, 'role_key' | 'persona_key' | 'first_name' | 'last_name'>;
   return costAnswer(c, {
     model, sponsorId: user.id, prompt: systemPrompt(draft, rules, scope, label), capMicro: cap,
     before: [], after: pins.map((p) => ({ skill_id: p.skill_id, version: p.version })), scope,
