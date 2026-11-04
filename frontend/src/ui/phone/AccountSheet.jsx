@@ -13,7 +13,7 @@ const ACCOUNT_ROWS = [
   ['Email', '/email'], ['Your profile', '/profile'], ['Account', '/account'], ['Usage', '/account/usage'],
   ['Connectors', '/account/connectors'], ['Trust Center', '/trust/me'],
   // D4152 (#4152 §2): Billing lives in the Account menu, on a phone too.
-  ['Billing', '/account/billing'], ['Perks', '/perks'],
+  ['Portfolio', '/account/portfolio'], ['Billing', '/account/billing'], ['Perks', '/perks'],
   ['Calendar', '/calendar'], ['Events', '/my/events'], ['Learning', '/learning'],
   ['Help Center', '/help'], ['Pricing', '/pricing'],
 ];

@@ -1,5 +1,5 @@
 // D1140 (#3020, CMP19) — one place for companies: the switcher's Manage link,
-// the sidebar row, "Your companies" off Profile and identity, the forward from
+// the Account menu, "Your companies" off Profile and identity, the forward from
 // /company-settings and the settings at their new address.
 // D1415 part 4 (#3856): the section's address is /account/portfolio; every old
 // /account/companies… address forwards there in one hop (tests at the end).
@@ -103,13 +103,16 @@ test('the settings segment is never read as a company or a tab', () => {
   assert.equal(companySettingsPathFor('beta-co'), '/account/portfolio/beta-co/settings');
 });
 
-test('Manage opens the right company: the switcher, the sidebar row, and Your companies', () => {
+test('Manage opens the right company: the switcher, Account menu, and Your companies', () => {
   assert.equal(SWITCHER_MANAGE, MANAGE_LABEL);
   const switcher = read('frontend/src/ui/CompanySwitcher.jsx');
   assert.match(switcher, /<Link\s+to="\/account\/portfolio"[^>]*\n?[^>]*onClick=\{\(\) => setOpen\(false\)\}[\s\S]{0,200}data-testid="switcher-manage"/);
   const sidebar = read('frontend/src/ui/SidebarNav.jsx');
-  assert.match(sidebar, /to="\/account\/portfolio"/);
-  assert.ok(sidebar.includes(SIDEBAR_LABEL), 'the sidebar row carries the section\'s name (D1413: Portfolio)');
+  assert.doesNotMatch(sidebar, /to="\/account\/portfolio"/);
+  const app = read('frontend/src/App.jsx');
+  const account = app.slice(app.indexOf('function UserDropdown('), app.indexOf('function PortalSwitcher'));
+  assert.match(account, /<Link to="\/account\/portfolio"[\s\S]*?>\s*Portfolio\s*<\/Link>/);
+  assert.equal(SIDEBAR_LABEL, 'Portfolio', 'D1413 name retained in Account (D4416)');
   assert.doesNotMatch(sidebar, />\s*Company Settings\s*</);
   const settings = read('frontend/src/pages/SettingsPage.jsx');
   const card = settings.slice(settings.indexOf('function YourCompaniesSection'));
