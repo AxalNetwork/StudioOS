@@ -803,7 +803,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
             ) : null}
             {card ? <DecorLayers card={card} selection={selection} readOnly={readOnly} onSelection={setPickState} /> : null}
             {card && !readOnly && chosen.length ? (
-              <InstructionBox deckId={base.deck.id} cardIndex={sel} card={card} areas={chosen} items={items} aiOn={aiOn} onTokens={onTokens}
+              <InstructionBox deckId={base.deck.id} cardIndex={sel} card={card} cards={cards} model={model} areas={chosen} items={items} aiOn={aiOn} onTokens={onTokens}
                 onRemove={(id) => setPickState((p) => ({ selection: p.selection.filter((x) => x !== id), focus: p.focus }))}
                 onPlace={placeCard} onProposals={onProposals} />
             ) : null}
