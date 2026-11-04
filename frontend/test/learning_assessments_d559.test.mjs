@@ -492,7 +492,7 @@ test('sitting an exam: the attempt\'s own order, the server\'s deadline, one que
   const attempt = { ...START_REPLY.attempt, questions: START_REPLY.questions };
   const markup = html(h(ExamView, { examState, attemptsState: attemptsState(), attempt, now: Date.parse('2026-10-06T10:06:12Z'), onSubmit: () => {} }));
   assert.match(markup, /data-step="taking"/);
-  assert.match(flat(markup), /Question 1 of 2 · 0 answered 23:48 Which of these dilute the founders\? Choose every answer that applies\./);
+  assert.match(flat(markup), /Question 1 of 2 · 0 answered 23:48 left Which of these dilute the founders\? Choose every answer that applies\./);
   assert.match(markup, /type="checkbox"/);
   assert.doesNotMatch(markup, /What is a pre-money valuation|type="radio"/, 'more than one question on the screen');
   assert.doesNotMatch(flat(markup), /Correct/, 'a correct answer while the attempt runs');
@@ -505,13 +505,12 @@ test('sitting an exam: the attempt\'s own order, the server\'s deadline, one que
   assert.equal(attemptSecondsLeft({ started_at: '2026-10-06T10:00:00Z', deadline: '2026-10-06T10:30:00Z' }, EXAM, Date.parse('2026-10-06T10:31:00Z')), 0);
   // One question left to answer on the last screen: the submit, and what an unanswered one counts as.
   const last = html(h(ExamView, { examState, attemptsState: attemptsState(), attempt: { ...attempt, questions: [START_REPLY.questions[1]] }, now: at, onSubmit: () => {} }));
-  assert.match(last, /data-testid="button-exam-submit"/);
+  assert.match(last, /data-testid="button-exam-review"/);
   assert.match(flat(zone(last, 'text-exam-unanswered', '</span>')), /1 unanswered: an unanswered question counts as wrong\./);
   // What goes to the route: each answered question's options as their indexes; an unanswered one left out.
   assert.deepEqual(answerIndexes(START_REPLY.questions, { q2: ['2', '0'], q1: [] }), { q2: [0, 2] });
   assert.deepEqual(answerIndexes([{ uid: 'q', options: [{ key: 'a', label: 'A' }, { key: 'b', label: 'B' }] }], { q: ['b'] }), { q: [1] });
   const flow = codeOnly(read('frontend/src/pages/learning/ExamFlow.jsx'));
-  assert.match(flow, /const send = \(\) => \{ if \(onSubmit\) onSubmit\(answerIndexes\(questions, answers\)\); \};/);
   // When the server's clock runs out, what is chosen is sent, once, inside the route's grace.
   assert.match(flow, /if \(left === 0 && onSubmit && !busy && !autoSent\.current\) \{\s*autoSent\.current = true;\s*send\(\);/);
   // A new attempt starts with nothing chosen: the screen is keyed by the attempt.
@@ -524,11 +523,11 @@ test('the result: the route\'s score and outcome, and the correct answers only w
   const markup = html(h(ExamView, { examState, attemptsState: attemptsState(), result: hidden, onStart: () => {} }));
   const out = flat(markup);
   assert.match(markup, /data-step="result"/);
-  assert.match(out, /50% Fail Pass mark 70% · 1 of 2 correct · submitted 6 Oct 2026/);
+  assert.match(out, /50% Not passed Pass mark 70% · 1 of 2 correct · submitted 6 Oct 2026/);
   assert.match(flat(zone(markup, 'exam-answers-hidden', '</p>')), /Correct answers: hidden\. This exam does not reveal them\./);
   assert.doesNotMatch(out, /Options for staff|The value before the round/, 'an option was drawn on a result that reveals nothing');
   // Earlier attempts, this one left out; another try while the route counts one left.
-  assert.match(flat(zone(markup, 'exam-attempts', '</ul>')), /50% Fail 4 Oct 2026 0% Timed out 3 Oct 2026/);
+  assert.match(flat(zone(markup, 'exam-attempts', '</ul>')), /50% Not passed 4 Oct 2026 0% Not passed 3 Oct 2026/);
   assert.ok(tagOf(markup, 'button-exam-retry'));
   assert.doesNotMatch(html(h(ExamView, { examState, attemptsState: attemptsState({ attemptsLeft: 0 }), result: hidden, onStart: () => {} })), /button-exam-retry/);
   assert.doesNotMatch(html(h(ExamView, { examState, attemptsState: { status: 'loading' }, result: hidden, onStart: () => {} })), /button-exam-retry/);
@@ -546,14 +545,14 @@ test('the result: the route\'s score and outcome, and the correct answers only w
   assert.match(unsent, /Correct answers: not sent for this attempt\./);
   assert.doesNotMatch(unsent, /Options for staff/);
   // A timed-out attempt says so; a score the route did not send is said to be missing, never 0%.
-  assert.match(text(h(ExamView, { examState, attemptsState: attemptsState(), result: { ...hidden, score_percent: 0, timed_out: true } })), /0% Timed out/);
+  assert.match(text(h(ExamView, { examState, attemptsState: attemptsState(), result: { ...hidden, score_percent: 0, timed_out: true } })), /0% Not passed/);
   const unscored = html(h(ExamView, { examState, attemptsState: attemptsState(), result: { ...hidden, score_percent: null, passed: null } }));
   assert.match(flat(unscored), /Score not recorded Pass mark 70%/);
   // The score and its pill, up to the line under them: no number and no outcome invented.
   assert.doesNotMatch(flat(zone(unscored, 'text-exam-score', '</div>')), /%|NaN|Fail|Pass/);
-  // The attempt just submitted is the result, not one of the earlier attempts.
+  // Your attempts includes the submitted attempt once the refreshed list sends it.
   const listed = html(h(ExamView, { examState, attemptsState: attemptsState({ attempts: [{ ...GRADED, answers_revealed: false }, ...ATTEMPTS_REPLY.attempts] }), result: hidden }));
-  assert.doesNotMatch(flat(zone(listed, 'exam-attempts', '</ul>')), /6 Oct 2026/);
+  assert.match(flat(zone(listed, 'exam-attempts', '</ul>')), /6 Oct 2026/);
   // The page keeps the questions it showed, for the reveal.
   assert.match(codeOnly(read('frontend/src/pages/learning/LearningAssessments.jsx')), /setResult\(\{ \.\.\.graded, questions: sitting\.questions \}\);/);
 });

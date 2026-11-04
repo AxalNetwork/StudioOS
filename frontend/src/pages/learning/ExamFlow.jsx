@@ -4,7 +4,7 @@ import { Card, Pill, Stat, StatGrid, Unrecorded } from '../../ui';
 import { LearningLoading, LearningUnreadable, SectionCard, stateBlock } from './LearningStates';
 import { NOT_LIVE, attemptsLeft as attemptsLeftOf, byPosition, formatClock, formatDay, minutesLabel } from './learningModel';
 import {
-  answerIndexes, attemptOutcome, attemptSecondsLeft, openAttemptOf, optionRows, revealedAnswers, scoreOf,
+  answerIndexes, attemptOutcome, attemptSecondsLeft, openAttemptOf, optionRows, perQuestionResults, revealedAnswers, reviewLine, reviewRows, scoreOf,
 } from './assessmentModel';
 
 /** The clock: a prop when a test pins it, otherwise a tick a second while an attempt runs. */
@@ -18,7 +18,7 @@ function useClock(fixed, running) {
   return fixed !== undefined ? fixed : tick;
 }
 
-const BUTTON = 'rounded-axal-sm px-3 py-1.5 text-[12.5px] font-semibold disabled:cursor-not-allowed disabled:opacity-50';
+const BUTTON = 'min-h-11 rounded-axal-sm px-3 py-1.5 text-[12.5px] font-semibold disabled:cursor-not-allowed disabled:opacity-50';
 const PRIMARY = `${BUTTON} bg-axal-violet text-white hover:bg-axal-violet-deep`;
 const SECONDARY = `${BUTTON} border border-axal-hairline text-axal-ink hover:border-axal-violet/40 dark:border-gray-700 dark:text-gray-200`;
 
@@ -52,7 +52,7 @@ const SECONDARY = `${BUTTON} border border-axal-hairline text-axal-ink hover:bor
  */
 export default function ExamFlow({
   status, exam, attempts = [], attemptsLeft, attemptsStatus = 'ready', onRetryAttempts,
-  attempt, result, now, onStart, onSubmit, busy = false, error = '',
+  attempt, result, now, onStart, onSubmit, busy = false, error = '', errorCode = '', errorUnreadable = false,
   reason = NOT_LIVE.exams, onRetry,
 }) {
   const clock = useClock(now, Boolean(attempt));
@@ -79,7 +79,8 @@ export default function ExamFlow({
       {step === 'result' && (
         <ExamResult exam={exam} attempts={attempts} left={left} attemptsStatus={attemptsStatus} onRetryAttempts={onRetryAttempts} result={result} onStart={onStart} busy={busy} />
       )}
-      {error && <p className="mt-2 text-[12px] text-red-700 dark:text-red-300" role="alert" data-testid="exam-error">{error}</p>}
+      {errorUnreadable && <LearningUnreadable what="Your attempt" claim="Your answers could not be confirmed. Try again." />}
+      {!errorUnreadable && error && <p className="mt-2 rounded-axal-md border border-axal-hairline p-3 text-[13px] text-axal-ink dark:border-gray-700 dark:text-gray-100" role={errorCode === 'time_limit_passed' ? 'status' : 'alert'} data-testid="exam-error">{error}</p>}
     </div>
   );
 }
@@ -143,16 +144,17 @@ function ExamIntro({ exam, attempts, left, attemptsStatus, onRetryAttempts, onSt
 }
 
 /** The member's own attempts: score, outcome and date, or "Open" for one still running. */
-function AttemptList({ attempts, status, onRetry, title, except }) {
+function AttemptList({ attempts, status, onRetry, title, except, resultLabels = false }) {
   if (status === 'loading') return <div className="mt-4"><LearningLoading rows={2} what="your attempts" /></div>;
   if (status === 'unreadable') {
     return <div className="mt-4"><LearningUnreadable what="Your attempts" claim="This is not a claim that you have none." onRetry={onRetry} /></div>;
   }
   const rows = (attempts || []).filter((a) => !except || a.uid !== except);
-  if (rows.length === 0) return null;
+  if (rows.length === 0 && !resultLabels) return null;
   return (
     <div className="mt-4">
       <h3 className="text-[12px] font-bold text-axal-ink dark:text-gray-100">{title}</h3>
+      {rows.length === 0 && <p className="mt-2 text-[13px] text-axal-muted dark:text-gray-400">No attempts recorded.</p>}
       <ul className="mt-1 space-y-1" data-testid="exam-attempts">
         {rows.map((a, i) => {
           const score = scoreOf(a);
@@ -160,7 +162,7 @@ function AttemptList({ attempts, status, onRetry, title, except }) {
           return (
             <li key={a.uid || i} className="flex flex-wrap items-center justify-between gap-2 rounded-axal-md border border-axal-hairline px-2.5 py-1.5 text-[12px] tabular-nums text-axal-muted dark:border-gray-800 dark:text-gray-400">
               <span>{a.submitted_at ? (score !== null ? `${score}%` : 'Score not recorded') : 'Not submitted'}</span>
-              <Pill tone={outcome.tone}>{outcome.label}</Pill>
+              <Pill tone={outcome.tone}>{resultLabels && (a.passed === true || a.passed === 1) ? 'Passed' : resultLabels && (a.passed === false || a.passed === 0) ? 'Not passed' : outcome.label}</Pill>
               <span>{formatDay(a.submitted_at || a.started_at) || 'date not recorded'}</span>
             </li>
           );
@@ -173,13 +175,16 @@ function AttemptList({ attempts, status, onRetry, title, except }) {
 function ExamTaking({ exam, attempt, clock, onSubmit, busy }) {
   const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState({});
+  const [review, setReview] = useState(false);
+  const sending = useRef(false);
+  useEffect(() => { if (!busy) sending.current = false; }, [busy]);
   const questions = byPosition(attempt?.questions);
   const total = questions.length;
   const at = Math.min(index, Math.max(0, total - 1));
   const question = questions[at];
   const left = attemptSecondsLeft(attempt, exam, clock);
   const answered = questions.filter((q) => (answers[q.uid] || []).length > 0).length;
-  const send = () => { if (onSubmit) onSubmit(answerIndexes(questions, answers)); };
+  const send = () => { if (onSubmit && !busy && !sending.current) { sending.current = true; onSubmit(answerIndexes(questions, answers)); } };
   // When the server's clock runs out, what is chosen is sent, once: the
   // route's grace is there for this request to arrive.
   const autoSent = useRef(false);
@@ -200,24 +205,53 @@ function ExamTaking({ exam, attempt, clock, onSubmit, busy }) {
     return { ...prev, [question.uid]: nextKeys };
   });
   const unanswered = total - answered;
+  const navigation = 'sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-2 border-t border-axal-hairline bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900 sm:static';
+  const clockLabel = left === null ? 'No time limit' : `${formatClock(left)} left`;
+  if (review) return (
+    <Card padding="none" className="min-w-0 max-w-[760px]" data-testid="exam-review">
+      <div className="space-y-3 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-extrabold text-axal-ink dark:text-gray-100">Review before you submit</h2>
+          <span className="text-[13px] tabular-nums text-axal-muted dark:text-gray-400" data-testid="text-exam-clock">{clockLabel}</span>
+        </div>
+        <p className="text-[13px] text-axal-muted dark:text-gray-400">{reviewLine(answered, total)}</p>
+        <ol className="divide-y divide-axal-hairline dark:divide-gray-800">
+          {reviewRows(questions, answers).map(row => (
+            <li key={row.uid} className="flex min-w-0 items-center gap-2 py-2 text-[13px]">
+              <span className="tabular-nums text-axal-muted dark:text-gray-400">{row.n}</span>
+              <span className="min-w-0 flex-1 truncate text-axal-ink dark:text-gray-100" title={row.text}>{row.text}</span>
+              <Pill tone={row.answered ? 'ok' : 'warn'}>{row.answered ? 'Answered' : 'Unanswered'}</Pill>
+              <button type="button" className={`${SECONDARY} shrink-0`} aria-label={`Edit question ${row.n}`} data-testid={`button-exam-edit-${row.uid}`} onClick={() => { setIndex(row.n - 1); setReview(false); }}>Edit</button>
+            </li>
+          ))}
+        </ol>
+        {typeof left === 'number' && left > 0 && <p className="mt-4 text-[13px] text-axal-muted dark:text-gray-400">{left} {left === 1 ? 'attempt' : 'attempts'} left</p>}
+      {left === 0 && <p role="status" className="text-[13px] text-axal-amber-deep dark:text-amber-300">Time is up. Your answers are being submitted as they stand.</p>}
+      </div>
+      <div className={navigation}>
+        <button type="button" className={SECONDARY} onClick={() => setReview(false)} data-testid="button-exam-questions">Back to questions</button>
+        <button type="button" className={PRIMARY} onClick={send} disabled={!onSubmit || busy} data-testid="button-exam-submit">{busy ? 'Submitting…' : 'Submit answers'}</button>
+      </div>
+    </Card>
+  );
   return (
-    <Card padding="none" className="overflow-hidden" data-testid="exam-taking">
+    <Card padding="none" className="min-w-0 max-w-[760px]" data-testid="exam-taking">
       <div className="flex items-center justify-between gap-3 border-b border-axal-hairline px-4 py-2.5 dark:border-gray-800">
         <span className="text-[12px] tabular-nums text-axal-muted dark:text-gray-400">Question {at + 1} of {total} · {answered} answered</span>
         <span className={`inline-flex items-center gap-1 text-[13px] font-semibold tabular-nums ${left === 0 ? 'text-red-700 dark:text-red-300' : 'text-axal-ink dark:text-gray-100'}`} data-testid="text-exam-clock">
-          <Timer size={14} aria-hidden="true" /> {left === null ? 'No time limit' : formatClock(left)}
+          <Timer size={14} aria-hidden="true" /> {clockLabel}
         </span>
       </div>
       <div className="h-1 bg-axal-ground dark:bg-gray-800" aria-hidden="true">
         <div className="h-full bg-axal-violet" style={{ width: `${total ? Math.round(((at + 1) / total) * 100) : 0}%` }} />
       </div>
-      <fieldset className="space-y-2 p-4">
-        <legend className="mb-2 text-[14px] font-semibold text-axal-ink dark:text-gray-100">{question.prompt}</legend>
+      <fieldset role={multiple ? 'group' : 'radiogroup'} className="min-w-0 space-y-2 p-4">
+        <legend className="w-full"><h2 className="mb-2 break-words text-lg font-semibold text-axal-ink dark:text-gray-100" data-testid="exam-question">{question.prompt}</h2></legend>
         {multiple && <p className="text-[11.5px] text-axal-faint dark:text-gray-500">Choose every answer that applies.</p>}
         {optionRows(question.options).map((o) => (
           <label
             key={o.key}
-            className={`flex cursor-pointer items-center gap-2.5 rounded-axal-md border px-3 py-2 text-[13px] ${chosen.includes(o.key) ? 'border-axal-lavender-edge bg-axal-lavender dark:border-violet-800 dark:bg-violet-900/30' : 'border-axal-hairline dark:border-gray-700'} text-axal-ink dark:text-gray-100`}
+            className={`flex min-h-11 min-w-0 break-words cursor-pointer items-center gap-2.5 rounded-axal-md border px-3 py-2 text-[13px] ${chosen.includes(o.key) ? 'border-axal-lavender-edge bg-axal-lavender dark:border-violet-800 dark:bg-violet-900/30' : 'border-axal-hairline dark:border-gray-700'} text-axal-ink dark:text-gray-100`}
           >
             <input
               type={multiple ? 'checkbox' : 'radio'}
@@ -229,12 +263,13 @@ function ExamTaking({ exam, attempt, clock, onSubmit, busy }) {
             {o.label}
           </label>
         ))}
-        {left === 0 && <p className="text-[12px] text-red-700 dark:text-red-300" role="alert">Time is up. Your answers are being submitted as they stand.</p>}
+        {typeof left === 'number' && left > 0 && <p className="mt-4 text-[13px] text-axal-muted dark:text-gray-400">{left} {left === 1 ? 'attempt' : 'attempts'} left</p>}
+      {left === 0 && <p className="text-[12px] text-red-700 dark:text-red-300" role="alert">Time is up. Your answers are being submitted as they stand.</p>}
       </fieldset>
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-axal-hairline px-4 py-3 dark:border-gray-800">
-        <button type="button" className={SECONDARY} onClick={() => setIndex(at - 1)} disabled={at === 0} data-testid="button-exam-back">Back</button>
+      <div className={navigation}>
+        <button type="button" className={SECONDARY} onClick={() => setIndex(at - 1)} disabled={at === 0} data-testid="button-exam-back">‹ Back</button>
         {at < total - 1 ? (
-          <button type="button" className={PRIMARY} onClick={() => setIndex(at + 1)} data-testid="button-exam-next">Next</button>
+          <button type="button" className={PRIMARY} onClick={() => setIndex(at + 1)} data-testid="button-exam-next">Next ›</button>
         ) : (
           <span className="flex flex-wrap items-center gap-2">
             {unanswered > 0 && (
@@ -242,8 +277,8 @@ function ExamTaking({ exam, attempt, clock, onSubmit, busy }) {
                 {unanswered} unanswered: an unanswered question counts as wrong.
               </span>
             )}
-            <button type="button" className={PRIMARY} onClick={send} disabled={!onSubmit || busy} data-testid="button-exam-submit">
-              {busy ? 'Submitting…' : 'Submit answers'}
+            <button type="button" className={PRIMARY} onClick={() => setReview(true)} data-testid="button-exam-review">
+              Review answers
             </button>
           </span>
         )}
@@ -257,20 +292,33 @@ function ExamResult({ exam, attempts, left, attemptsStatus, onRetryAttempts, res
   const outcome = attemptOutcome(result);
   const pass = Number(exam?.pass_mark_percent);
   const revealed = revealedAnswers(exam, result);
+  const perQuestion = exam?.reveal === 'score_and_answers' ? perQuestionResults(result) : null;
   return (
     <Card padding="lg" data-testid="exam-result">
+      {result?.timed_out === true && <p role="status" className="mb-4 rounded-axal-md bg-axal-lavender p-3 text-[13px] text-axal-ink dark:bg-violet-900/30 dark:text-gray-100">Time is up. Your answers are being submitted as they stand.</p>}
+      <p className="text-[12px] font-semibold text-axal-muted dark:text-gray-400">Your score</p>
       <div className="flex flex-wrap items-baseline gap-3">
         <span className="text-3xl font-extrabold tabular-nums text-axal-ink dark:text-gray-100" data-testid="text-exam-score">
           {score !== null ? `${score}%` : <Unrecorded>Score not recorded</Unrecorded>}
         </span>
-        {(score !== null || outcome.label === 'Timed out') && <Pill tone={outcome.tone}>{outcome.label}</Pill>}
+        {(score !== null || outcome.label === 'Timed out') && <Pill tone={outcome.tone}>{result?.passed === true || result?.passed === 1 ? 'Passed' : result?.passed === false || result?.passed === 0 ? 'Not passed' : outcome.label}</Pill>}
       </div>
       <p className="mt-1 text-[12.5px] tabular-nums text-axal-muted dark:text-gray-400">
         Pass mark {Number.isFinite(pass) && exam?.pass_mark_percent != null ? `${pass}%` : 'not recorded'}
         {result?.correct_count != null && result?.question_count != null && <> · {result.correct_count} of {result.question_count} correct</>}
         {result?.submitted_at && <> · submitted {formatDay(result.submitted_at)}</>}
       </p>
-      <AttemptList attempts={attempts} status={attemptsStatus} onRetry={onRetryAttempts} title="Earlier attempts" except={result?.uid} />
+      <div className="mt-4 grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)]">
+        {perQuestion !== null && <Card data-testid="exam-per-question">
+          <h3 className="font-bold text-axal-ink dark:text-gray-100">Right and wrong, per question</h3>
+          <ol className="mt-2 divide-y divide-axal-hairline dark:divide-gray-800">
+            {perQuestion.map(row => <li key={row.n} className="flex items-center justify-between gap-2 py-2 text-[13px] text-axal-ink dark:text-gray-100"><span>Question {row.n}</span><Pill tone={row.right ? 'ok' : 'danger'}>{row.right ? 'Right' : 'Wrong'}</Pill></li>)}
+          </ol>
+        </Card>}
+        <Card><AttemptList attempts={attempts} status={attemptsStatus} onRetry={onRetryAttempts} title="Your attempts" resultLabels />
+          <p className="mt-3 text-[12px] text-axal-muted dark:text-gray-400">No explanations or certificate</p>
+        </Card>
+      </div>
       {revealed ? (
         <ol className="mt-4 space-y-2" data-testid="exam-answers">
           {revealed.map((a) => (
@@ -293,7 +341,9 @@ function ExamResult({ exam, attempts, left, attemptsStatus, onRetryAttempts, res
             : 'Correct answers: hidden. This exam does not reveal them.'}
         </p>
       )}
-      {onStart && attemptsStatus !== 'loading' && left !== 0 && (
+      {typeof left === 'number' && left > 0 && <p className="mt-4 text-[13px] text-axal-muted dark:text-gray-400">{left} {left === 1 ? 'attempt' : 'attempts'} left</p>}
+      {left === 0 && <p className="mt-4 text-[13px] text-axal-muted dark:text-gray-400">No attempts left</p>}
+      {onStart && attemptsStatus === 'ready' && (left === null || Number.isInteger(left) && left > 0) && (
         <button type="button" className={`${SECONDARY} mt-4`} onClick={onStart} disabled={busy} data-testid="button-exam-retry">Try again</button>
       )}
     </Card>
