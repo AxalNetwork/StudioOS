@@ -9,7 +9,9 @@
  * A missing figure reads "Not recorded", never 0. Attendance never appears in
  * a reason (owner question 3 is open; the board draws none).
  */
+import { NOT_RECORDED } from '../../lib/absence.js';
 
+export { NOT_RECORDED };
 export const ROW_TITLE = 'Recommended for you';
 export const RANK_LINE = 'Ranked from your own profile. Ranking runs nothing and charges nothing.';
 export const NOT_ON = 'Recommendations aren’t switched on yet. Until they are, the suggestions below come from your track and event types.';
@@ -21,7 +23,6 @@ export const NOT_FOR_ME_DONE = 'Hidden. Fewer like this.';
 export const HOST_NEVER = 'The host never sees this.';
 export const NO_ATTENDEES = 'No attendee names or counts are used.';
 export const EXPLORER_REASON = 'Popular with new members';
-export const NOT_RECORDED = 'Not recorded';
 export const GOALS_MAX = 500;
 export const GOALS_TOO_LONG = `Goals can be at most ${GOALS_MAX} characters.`;
 
