@@ -144,25 +144,14 @@ test('"Not recorded" is muted and never a zero: spend, last activity, title, cou
 
 // ---------------------------------------------------------------- unavailable is not none
 
-/** #3842 (runQuote, runAgent), #3843 (queue, queueItem, decide) and #3844 (toolChoices): no route yet. */
-const UNBUILT = ['runQuote', 'runAgent', 'queue', 'queueItem', 'decide', 'toolChoices'];
+/** #3727 integration: the merged run, queue and tool routes are wired. */
+const INTEGRATED = ['runQuote', 'runAgent', 'queue', 'queueItem', 'decide', 'toolChoices'];
 /** #3840's eight, wired to `teamAgentsApi`. */
 const WIRED = ['roles', 'listAgents', 'addAgent', 'agent', 'updateAgent', 'removeAgent', 'rulebook', 'saveRulebook'];
 
-test('the seam: #3842–#3844 still answer unavailable without a request, and the card says it is not "none"', async () => {
-  const restore = installDocument();
-  const previous = globalThis.fetch;
-  const seen = [];
-  globalThis.fetch = async (u) => { seen.push(String(u)); return response({ ok: true }); };
-  try {
-    for (const name of UNBUILT) {
-      const out = await adapter[name]('company', 'nw1', {});
-      assert.deepEqual(out, { available: false, reason: 'AI agents aren’t switched on yet.' }, `${name} claims something with no route`);
-    }
-    assert.deepEqual(seen, [], 'an unbuilt function reaches no route');
-  } finally { globalThis.fetch = previous; restore(); }
+test('the seam: merged parts answer through their routes; unavailable is never the same as none', async () => {
   const exported = Object.entries(adapter).filter(([, fn]) => typeof fn === 'function').map(([n]) => n);
-  for (const name of [...UNBUILT, ...WIRED]) assert.ok(exported.includes(name), name);
+  for (const name of [...INTEGRATED, ...WIRED]) assert.ok(exported.includes(name), name);
   const off = renderedText(render(h(AgentsCard, { block: adapter.unavailable(), kind: 'company', companyName: 'x' })));
   assert.match(off, /AI agents aren’t switched on yet\. That is not the same as having none\./);
   assert.doesNotMatch(off, /No agent works here yet/);
@@ -275,8 +264,8 @@ test('no client method exists for a route that does not exist', () => {
     assert.match(seam, new RegExp(`export const ${m} = [^\\n]*through\\(\\(\\) => teamAgentsApi\\.${m}\\(`), `${m} is wired to teamAgentsApi.${m}`);
   }
   // S1 wires the existing run, queue and tool client methods into the adapter.
-  for (const m of ['queue', 'queueItem', 'decide', 'toolChoices']) {
-    assert.doesNotMatch(seam, new RegExp(`export const ${m} = [^\\n]*teamAgentsApi`), `${m} adapter wiring remains with S1`);
+  for (const m of INTEGRATED) {
+    assert.match(seam, new RegExp(`export const ${m} = [^\\n]*through\\(\\(\\) => teamAgentsApi\\.${m}\\(`), `${m} reaches its merged client`);
   }
   for (const f of readdirSync(TEAM).filter((x) => /\.jsx?$/.test(x))) {
     assert.doesNotMatch(read(`${TEAM}/${f}`), /request\(|fetch\(/, `${f} reaches the network itself`);
@@ -377,7 +366,7 @@ const COMPANY_ROUTE = '/account/companies/:uid/settings/team';
 test('company Team: people and invitations on the routes that exist; agents unavailable; Resend and Revoke wired', async () => {
   const v = await mount('/account/companies/nw1/settings/team', COMPANY_ROUTE, h(TeamAgentsPage, { form: 'company' }));
   try {
-    assert.deepEqual(v.keys().filter((k) => k.startsWith('GET ')).sort(), ['GET /api/account/projects', 'GET /api/company/nw1', 'GET /api/company/nw1/invitations', 'GET /api/company/team-vocabulary', 'GET /api/teams/company/nw1/agents', 'GET /api/teams/company/nw1/coverage', 'GET /api/teams/company/nw1/moves', 'GET /api/teams/platform-status', 'GET /api/teams/roles'], 'D1612 A2 (#3956): the coverage card reads its route; D4162: and the platform status; D1531 (TM18): and the moves');
+    assert.deepEqual(v.keys().filter((k) => k.startsWith('GET ')).sort(), ['GET /api/account/projects', 'GET /api/company/nw1', 'GET /api/company/nw1/invitations', 'GET /api/company/team-vocabulary', 'GET /api/teams/company/nw1/agents', 'GET /api/teams/company/nw1/coverage', 'GET /api/teams/company/nw1/moves', 'GET /api/teams/company/nw1/queue', 'GET /api/teams/platform-status', 'GET /api/teams/roles'], 'D1612 A2 (#3956): the coverage card reads its route; D4162: and the platform status; D1531 (TM18): and the moves');
     assert.equal(v.has('platform-paused-banner'), false, 'nothing paused: no banner');
     const text = v.text();
     assert.match(text, /Company settings/);
@@ -572,7 +561,7 @@ test('TM3a–TM3c (D4119 AG4): tools are granted from #3844\'s servers, the rule
 });
 
 test('TM7a, TM7b2, TM9b1: four filters, Accept decides from the row, and the decision and pause words in full', () => {
-  const value = { items: [{ uid: 'p1', title: 'Weekly runway note draft', module_label: 'Raise › Runway', status: 'proposed', agent: AGENTS[0], cost: { available: true, value_microusd: 40_000 }, sponsor: { name: '[Avery Stone]' } }], decided: [] };
+  const value = { items: [{ uid: 'p1', can_decide: true, title: 'Weekly runway note draft', module_label: 'Raise › Runway', status: 'proposed', agent: AGENTS[0], cost: { available: true, value_microusd: 40_000 }, sponsor: { name: '[Avery Stone]' } }], decided: [] };
   const html = render(h(ApprovalsBoard, { value, onOpen() {}, onAccept() {} }));
   for (const l of ['Agent', 'Module', 'Status', 'Cost']) assert.match(html, new RegExp(`aria-label="${l}"`), l);
   assert.match(html, /data-testid="approval-accept-p1"/);

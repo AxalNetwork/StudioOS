@@ -16,15 +16,10 @@
  * those routes answers 404 `team_agents_off` while `TEAM_AGENTS_ENABLED` is
  * off, which `through` draws as "AI agents aren’t switched on yet."
  *
- * STILL UNAVAILABLE, one-line bodies until their routes land. Each builder
- * adds the method to `teamAgents.js` in the same PR as the route and replaces
- * only the matching body with `through(() => teamAgentsApi.<method>(…))`:
- *
- *   #3842 (part 2)  runQuote · runAgent
- *   #3843 (part 3)  queue · queueItem · decide (the route and `teamAgentsApi` landed;
- *                   S1 swaps these bodies and maps `Item` onto the board)
- *   #3844 (part 5)  toolChoices (the route and `teamAgentsApi.toolChoices` landed;
- *                   S1 swaps this body)
+ * WIRED (#3727 integration): #3842's runQuote/runAgent, #3843's queue,
+ * queueItem/decide and #3844's toolChoices use their merged clients too.
+ * The adapter preserves their DTOs; Approvals maps the Worker's queue fields
+ * onto TM7. Feature switches and permission refusals remain server-owned.
  *
  * HOW #3840'S REFUSALS ARE DRAWN (`through`):
  *   404 `team_agents_off`        unavailable: the switched-off state
@@ -76,9 +71,9 @@ export async function through(call, sent = null) {
   } catch (e) {
     const status = e?.status ?? e?.response?.status ?? null;
     const code = e?.code || e?.data?.code || e?.data?.error || null;
-    if (status === 404 && code === 'team_agents_off') return unavailable();
+    if (status === 404 && (code === 'team_agents_off' || code === 'custom_mcp_off')) return unavailable(code === 'custom_mcp_off' ? 'Connected read-only tools aren’t switched on yet.' : AGENTS_OFF_REASON);
     if (status === 403 && code === 'plan_required') return { available: false, locked: 'plan', reason: refusalWords('plan_required') };
-    if (status === 403) return { available: false, refused: true, code, reason: refusalWords(code) };
+    if (status === 403) return { available: false, refused: true, code, reason: refusalWords(code) === refusalWords('') ? (e?.message || refusalWords(code)) : refusalWords(code) };
     if (status === 422 && code === 'rule_floor') {
       // #3840 names the section; the floor item outlined is the first one the rules sent dropped (TM4c).
       if (e?.data?.section === 'may_do_automatically') return { available: false, refused: true, code, highlight: null, reason: refusalWords('auto_floor') };
@@ -93,10 +88,10 @@ export async function through(call, sent = null) {
     if (status === 409 && code === 'not_open') {
       // Who decided it, and when and how when the Worker says (TM7b2: "Accepted 31 Oct 09:40 by …").
       const d = e?.data || {};
-      const decided = d.decided_by ? { by: d.decided_by, at: d.decided_at || d.decided_by.at || null, decision: d.decision || d.decided_by.decision || null } : null;
+      const decided = d.decided_by || d.status ? { by: d.decided_by, at: d.decided_at || d.decided_by?.at || null, decision: d.decision || d.status || d.decided_by?.decision || null } : null;
       return { available: false, refused: true, code, decided, reason: refusalWords(code, d.decided_by?.name) };
     }
-    if ((status === 400 || status === 409 || status === 422) && code) return { available: false, refused: true, code, reason: refusalWords(code, e?.data?.decided_by?.name) };
+    if ((status === 400 || status === 402 || status === 409 || status === 422 || status === 503) && code) return { available: false, refused: true, code, reason: refusalWords(code) === refusalWords('') ? (e?.message || refusalWords(code)) : refusalWords(code, e?.data?.decided_by?.name) };
     return { available: false, unreadable: true, reason: 'could not be read' };
   }
 }
@@ -148,23 +143,23 @@ export const saveRulebook = (scope, id, role, rules) => through(() => teamAgents
 // ---------------------------------------------------------------- #3842 part 2
 
 /** `GET /api/teams/agents/:uid/run/quote` → the hold shown before a run. */
-export const runQuote = (/* uid, { module, option } */) => off();
+export const runQuote = (uid, opts = {}) => through(() => teamAgentsApi.runQuote(uid, opts));
 /** `POST /api/teams/agents/:uid/run`. */
-export const runAgent = (/* uid, body */) => off();
+export const runAgent = (uid, body) => through(() => teamAgentsApi.runAgent(uid, body));
 
 // ---------------------------------------------------------------- #3843 part 3
 
-/** `GET /api/teams/:scope/:id/queue` → `{ items, decided, counts }`; `counts` is a block, never 0 for unread. */
-export const queue = (/* scope, id, filters */) => off();
+/** `GET /api/teams/:scope/:id/queue` → `{ items, counts, next_cursor }`; `counts` is a block, never 0 for unread. */
+export const queue = (scope, id, filters = {}) => through(() => teamAgentsApi.queue(scope, id, filters));
 /** `GET /api/teams/queue/:proposalUid`. */
-export const queueItem = (/* proposalUid */) => off();
+export const queueItem = (proposalUid) => through(() => teamAgentsApi.queueItem(proposalUid));
 /** `POST /api/teams/queue/:proposalUid/decide` → 409 `not_open` carries `decided_by`. */
-export const decide = (/* proposalUid, { decision, payload } */) => off();
+export const decide = (proposalUid, body) => through(() => teamAgentsApi.decide(proposalUid, body));
 
 // ---------------------------------------------------------------- #3844 part 5
 
 /** `GET /api/teams/tools` → the sponsor's approved read tools. */
-export const toolChoices = off;
+export const toolChoices = () => through(() => teamAgentsApi.toolChoices());
 
 // ---------------------------------------------------------------- D1612 skills: A1 (#3951) and A2 (#3956)
 //
