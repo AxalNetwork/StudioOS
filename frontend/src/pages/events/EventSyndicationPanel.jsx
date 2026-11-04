@@ -77,7 +77,7 @@ function PanelBody({ eventId, read, api, editable }) {
         {['title', 'description', 'ticket_url'].map((key) => {
           const limit = key === 'title' ? r.title_limit : key === 'description' ? r.text_limit : 2000;
           const Field = key === 'description' ? 'textarea' : 'input';
-          const count = charCount(r.overrides[key], limit);
+          const count = charCount(key === 'ticket_url' ? String(r.overrides[key] || '').trim() : r.overrides[key], limit);
           const linkError = key === 'ticket_url' ? ticketLinkError(r.overrides[key]) : null;
           return <label key={key} className="flex flex-col gap-1 text-sm text-axal-ink dark:text-gray-100">{key === 'ticket_url' ? 'Ticket link (https)' : key === 'title' ? 'Title' : 'Description'}
             <Field className={`${INPUT} min-w-0 w-full`} value={r.overrides[key] || ''} onChange={(e) => change(r, key, e.target.value)} aria-invalid={!!linkError || count.over || undefined} data-testid={`syndication-copy-${r.account_uid}-${key}`} />

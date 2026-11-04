@@ -160,5 +160,8 @@ test('8: ticket links trim before the Worker regex and invalid internal whitespa
     assert.equal(page.props('syndication-copy-eb-ticket_url')['aria-invalid'], true);
     assert.match(page.text(), /https ticket link.*spaces/);
     assert.equal(page.props('syndication-save').disabled, true);
+    await page.change('syndication-copy-eb-ticket_url', ' '.repeat(2001) + 'https://tickets.synthetic.test/path ');
+    assert.equal(page.props('syndication-copy-eb-ticket_url')['aria-invalid'], undefined);
+    assert.equal(page.props('syndication-save').disabled, false);
   } finally { await page.close(); }
 });
