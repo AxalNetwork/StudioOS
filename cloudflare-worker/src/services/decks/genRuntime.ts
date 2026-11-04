@@ -132,6 +132,18 @@ export interface DeckGenRuntime {
 export const stepRecordRef = (batchUid: string, seq: number) => `deckstep:${batchUid}:${seq}`;
 export const modelLabel = (model: string | null | undefined) => (model ? (modelById(model)?.name ?? model) : FREE_LABEL);
 const ACTIVE: readonly BatchState[] = ['queued', 'running', 'cancelling'];
+/**
+ * D1551: the next waiting step whose `after` steps have all ended (done, failed or stopped).
+ * Every ready draft goes before any ready second pass (a refine, a judge), so the deck's first
+ * draft lands as early as the drivers allow (pd2b's p50).
+ * A step that names no `after`, or one that is not in the run, is ready at once.
+ */
+export const READY_STEP = `SELECT s.* FROM deck_area_batch_steps s WHERE s.batch_uid = ?1 AND s.state = 'waiting'
+  AND NOT EXISTS (
+    SELECT 1 FROM json_each(CASE WHEN json_valid(s.input) THEN COALESCE(json_extract(s.input, '$.after'), '[]') ELSE '[]' END) a
+    JOIN deck_area_batch_steps d ON d.batch_uid = s.batch_uid AND d.seq = a.value
+    WHERE d.state IN ('waiting', 'running'))
+  ORDER BY CASE WHEN s.kind IN ('refine', 'judge') THEN 1 ELSE 0 END, s.seq LIMIT 1`;
 const nowSql = () => new Date().toISOString().slice(0, 19).replace('T', ' ');
 const KEY = /^[A-Za-z0-9._:-]{8,120}$/;
 
@@ -240,7 +252,9 @@ export class D1GenRuntime implements DeckGenRuntime {
       const b = (await this.batchRow(uid))!;
       if (b.state !== 'running') break;
       if (opts.until !== undefined && Date.now() >= opts.until) return this.status(uid);
-      const step = await this.env.DB.prepare(`SELECT * FROM deck_area_batch_steps WHERE batch_uid = ?1 AND state = 'waiting' ORDER BY seq LIMIT 1`).bind(uid).first<StepRow>();
+      // D1551 (#3798): a line runs only once every line it is after (an ensemble's draft, or its drafts) has ended.
+      // A line blocked on a step another driver is running is left to that driver, which claims it next.
+      const step = await this.env.DB.prepare(READY_STEP).bind(uid).first<StepRow>();
       if (!step) break;
       // Claim the step; a driver that raced here claims nothing and looks for the next one.
       const claim = await this.env.DB.prepare(`UPDATE deck_area_batch_steps SET state = 'running', started_at = ?3 WHERE batch_uid = ?1 AND seq = ?2 AND state = 'waiting'`).bind(uid, step.seq, nowSql()).run();

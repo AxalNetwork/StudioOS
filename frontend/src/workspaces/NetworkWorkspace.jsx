@@ -16,6 +16,9 @@ import { relationshipLogPath } from '../lib/partnerEarnings';
 const FounderNetworkRelationships = lazy(() => import('../pages/founder/FounderNetworkRelationships'));
 const NetworkContacts = lazy(() => import('../pages/NetworkContacts'));
 const FounderNetworkIntroductions = lazy(() => import('../pages/founder/FounderNetworkIntroductions'));
+// D1357 (#3572): relationship intelligence — the team introductions desk (RI4–RI6) and the sharing setting (RI1).
+const IntroductionsDesk = lazy(() => import('../pages/relationships/IntroductionsDesk'));
+const SharingCard = lazy(() => import('../pages/relationships/SharingCard'));
 const FounderNetworkOrganizations = lazy(() => import('../pages/founder/FounderNetworkOrganizations'));
 const InvestorNetworkWorkspace = lazy(() => import('../pages/investor/InvestorNetworkWorkspace'));
 const AdvisorNetworkRelationships = lazy(() => import('../pages/advisor/network/RelationshipsZone'));
@@ -336,6 +339,10 @@ export default function NetworkWorkspace({ role = 'founder' }) {
       {slug === 'relationships' && <RelationshipRequests logPath={role === 'partner' ? relationshipLogPath : undefined} />}
       {/* D1352 (#3567): the member's own contacts, with their source chips, notes and follow-ups. */}
       {slug === 'relationships' && <Suspense fallback={null}><NetworkContacts /></Suspense>}
+      {/* D1357 (#3572, RI1): "Let my team see who I know", Network's own setting for it. */}
+      {slug === 'relationships' && <Suspense fallback={null}><SharingCard testId="network-sharing" /></Suspense>}
+      {/* D1357 (#3572, RI4–RI6): what teammates asked of you, follow-ups, and every introduction asked or made. */}
+      {slug === 'introductions' && <Suspense fallback={null}><IntroductionsDesk /></Suspense>}
       {body}
     </WorkspaceShell>
   );

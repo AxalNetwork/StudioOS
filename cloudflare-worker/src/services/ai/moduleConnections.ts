@@ -59,13 +59,15 @@ export function fitsRailKind(kind: string, id: string): boolean {
  * its job step in `modelUseCases.ts` (RAIL_KIND_JOBS): at most three
  * suggested (Default, Alternative, Deeper) and the rest of the step and its
  * kind under All models, each a model the row's run can do and a rail may
- * list. #3741's `{ models, more }` shape is unchanged.
+ * list. #3741's `{ models, more }` shape is unchanged. #4313 part 3: a page
+ * row stores no models (`railMatrix.json`), so its list is always its job's.
  */
 /** #3935: the draw job each image option runs; an image option not named here reads the deck's DK4. */
 export const IMAGE_OPTION_JOBS: Readonly<Record<string, string>> = Object.freeze({ 'deck:image': 'DK4', 'draft:logo': 'GR3' });
 
-export function withModuleModels<T extends Page>(row: T): T & { more: Array<{ id: string; line: string }> } {
-  const models = row.models.filter(m => MODEL_CONNECTIONS[m.id]?.operation !== 'vision').map(m => ({ ...m }));
+type Listed = Omit<Page, 'models'> & { models?: Page['models'] };
+export function withModuleModels<T extends Listed>(row: T): T & Pick<Page, 'models'> & { more: Array<{ id: string; line: string }> } {
+  const models = (row.models ?? []).filter(m => MODEL_CONNECTIONS[m.id]?.operation !== 'vision').map(m => ({ ...m }));
   const more = (row.more ?? []).map(({ id, line }) => ({ id, line }));
   // D1478 (#3721): a transcription option lists what transcribes; no chat model joins it.
   if ((row as { handler?: string }).handler === 'transcribe') return { ...row, models, more };

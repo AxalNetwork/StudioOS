@@ -17,6 +17,11 @@ import { request } from '../api.js';
 //   introFollowUpDone(uid)         POST /relationships/intro-requests/:uid/follow-up/done → { request }
 //   snoozeIntroFollowUp(uid, until) POST /relationships/intro-requests/:uid/follow-up/snooze { until } → { request }
 // Made is not a press: the intro is sent from the Email composer with `intro_uid` (mailAccountsApi's send), which records it.
+// D4330 (#4330): Eadwyn's three drafts, each a quoted proposal ({ estimate: true } quotes and runs nothing;
+// a run is metered like every Eadwyn run). Nothing is stored or sent: the words go into the request or the composer.
+//   draftAskReason({ teammate, ref, record?, estimate? }) POST /relationships/drafts/ask-reason → { estimate } | { draft: { kind, proposal, text } }
+//   draftIntro(uid, { estimate? })      POST /relationships/intro-requests/:uid/drafts/intro → { estimate } | { draft: { kind, proposal, subject, body } }
+//   draftFollowUp(uid, { estimate? })   POST /relationships/intro-requests/:uid/drafts/follow-up → { estimate } | { draft: { kind, proposal, subject, body } }
 // Private by default. A shared reply has a name, company and title, never an email, phone, notes or URL.
 const id = (v) => encodeURIComponent(String(v));
 /** `?person=…` (or company, fund): the one thing a who-knows read asks about. */
@@ -43,4 +48,8 @@ export const relationshipsApi = {
   setIntroFollowUp: (uid, dueOn) => send('PUT', `/relationships/intro-requests/${id(uid)}/follow-up`, { due_on: dueOn }),
   introFollowUpDone: (uid) => send('POST', `/relationships/intro-requests/${id(uid)}/follow-up/done`),
   snoozeIntroFollowUp: (uid, until) => send('POST', `/relationships/intro-requests/${id(uid)}/follow-up/snooze`, { until }),
+  // Model runs: the 30s default would abort one, as for whoKnowsRank.
+  draftAskReason: (body) => request('/relationships/drafts/ask-reason', { method: 'POST', timeoutMs: 60_000, body: JSON.stringify(body ?? {}) }),
+  draftIntro: (uid, { estimate } = {}) => request(`/relationships/intro-requests/${id(uid)}/drafts/intro`, { method: 'POST', timeoutMs: 60_000, body: JSON.stringify(estimate ? { estimate: true } : {}) }),
+  draftFollowUp: (uid, { estimate } = {}) => request(`/relationships/intro-requests/${id(uid)}/drafts/follow-up`, { method: 'POST', timeoutMs: 60_000, body: JSON.stringify(estimate ? { estimate: true } : {}) }),
 };

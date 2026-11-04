@@ -80,6 +80,8 @@ const SHARED = (P) => [
   off('/my/events', key(P, 'Events')),
   off('/learning', key(P, 'Learning')),
   off('/referrals', key(P, 'Referrals')),
+  // D4289 P7 (#4296): the Influencer section, for an admitted influencer in any profile; its tabs by prefix.
+  off('/influencer', key(P, 'Influencer')),
   off('/company-settings', key(P, 'Company settings')),
   off('/updates', key(P, 'Updates')),
   off('/legal/send', key(P, 'Send for signature')),

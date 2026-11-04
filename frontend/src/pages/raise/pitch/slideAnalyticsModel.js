@@ -9,6 +9,8 @@
  * slide off says "visit counts only". A view count is a count, so "Views 0"
  * is a real zero.
  */
+import { recordHref } from '../../cycles/recordModel.js';
+import { SLUG as CAPREL_SLUG } from '../caprel/capRelModel.js';
 
 export const VIEWS_UNREAD = 'Views could not be read.';
 export const CONSENT_OFF = 'Visit counts only. Time per slide is off for this link.';
@@ -116,3 +118,22 @@ export function barsOf(answer) {
 /** The visit timeline as rows: "12 Oct · 09:14" and "Opened". */
 export const timelineRows = (answer) => (Array.isArray(answer?.timeline) ? answer.timeline : [])
   .map((e, i) => ({ key: `${e.kind}-${e.view_id ?? 'x'}-${i}`, at: stampWords(e.at), words: TIMELINE_WORDS[e.kind] || e.kind }));
+
+// ── #4272 ps7s: the per-investor sheet's next steps ───────────────────────────
+
+/** Why the two actions are off for a link whose investor was typed in, not picked from Capital relationships. */
+export const NOT_IN_CAPREL = 'This link names an investor typed in by hand, so it has no Capital relationships record to draft from or open.';
+
+/**
+ * What "Draft follow-up" and "Open in Capital relationships" act on: the link's
+ * prospect in Capital relationships, its name, and the record's address. A link
+ * whose investor was typed (no `prospect_id`) gets `{ ok: false, reason }`, so
+ * both are drawn off with that reason, never pointed at nobody.
+ */
+export function nextStepsOf(row) {
+  const id = Number(row?.investor?.prospect_id);
+  if (!Number.isSafeInteger(id) || id < 1) return { ok: false, reason: NOT_IN_CAPREL };
+  const name = [row?.investor?.label, row?.investor?.fund].filter(Boolean).join(' · ') || 'investor';
+  // The same address the pipeline's "Open the full record" uses (CapRelPipeline, `recordHref`).
+  return { ok: true, prospectId: id, name, href: recordHref('raise', CAPREL_SLUG, id) };
+}

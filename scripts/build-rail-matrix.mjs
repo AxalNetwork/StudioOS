@@ -11,14 +11,16 @@
  * shape, and the page rows the canvas has no board for), and writes
  * `cloudflare-worker/src/services/ai/railMatrix.json`.
  *
- * One row per page: `{ pageKey, kind, routeTask, models: [{ id, role, line }], more: [{ id, line }] }`.
- * #3741 keeps the first three choices as Default/Alternative/Deeper cards;
- * remaining canvas choices are kept under All models, without changing ids.
+ * One row per page: `{ pageKey, kind, routeTask }`. #4313 (part 3) stopped
+ * writing a page's models: every page lists and runs its kind's job
+ * (`RAIL_KIND_JOBS`, `withModuleModels`), so a stored list was read by nothing.
+ * A page's kind must still be one the canvas suggests models for.
  *
  * PR 3: one row per registered option too, from each profile's list in
  * `frontend/src/lib/railOptions/` (D771–D775): `{ pageKey, optionKey,
- * optionLabel, kind, handler, routeTask, models }`. An option takes its own
- * kind's models; `handler: "none"` runs no model and gets no row, unless it
+ * optionLabel, kind, handler, routeTask, models, more }`. An option takes its
+ * own kind's models (#3741: the first three as Default/Alternative/Deeper
+ * cards, the rest under All models, ids unchanged); `handler: "none"` runs no model and gets no row, unless it
  * is `noModel` (D1596, #3869): an Ask chip that runs arithmetic, listed with
  * `models: []`, `more: []` and `routeTask: "none"` so the rail offers it. D1478
  * (#3721): an option may take a kind no page row has (`optionKinds`, today
@@ -28,12 +30,13 @@
  * and partner lists name a board by its bare canvas name, which is resolved to
  * its page key inside that profile.
  * The page key is `<Profile> · <Section>` or `<Profile> · <Section> · <Module>`
- * in the canvas's names. `models[0]` is the default and the only card that says
- * Default. A kind on the axal-search index takes the index's own model, because
+ * in the canvas's names. An option's `models[0]` is the default and the only
+ * card that says Default. A kind on the axal-search index takes the index's own model, because
  * the index is 768-dimensional and only bge-base writes it.
  *
- * The rules D720 §5 sets are checked here as well as in the test, so a bad
- * canvas or override never writes a file: every id is one the pricing file
+ * The rules D720 §5 sets are checked on each canvas kind's list and every
+ * option row here as well as in the test, so a bad canvas or override never
+ * writes a file: every id is one the pricing file
  * prices, every model fits its kind's shape, every paid-only default has a
  * non-paid alternative of the same shape, and member-visible strings follow
  * the voice rule.
@@ -157,9 +160,9 @@ export function buildMatrix(canvas, overrides, pricing, registered = []) {
   const rows = [];
   const add = (pageKey, kind) => {
     if (kind in optionKinds) { problems.push(`${pageKey}: ${kind} is an option kind, never a page's`); return; }
-    const models = kindModels[kind];
-    if (!models) { problems.push(`${pageKey}: kind ${kind} has no models`); return; }
-    rows.push({ pageKey, kind, routeTask: `rail_${kind}`, ...curated(models) });
+    if (!kindModels[kind]) { problems.push(`${pageKey}: kind ${kind} has no models`); return; }
+    // #4313 part 3: no model list. The page's kind's job supplies it (RAIL_KIND_JOBS).
+    rows.push({ pageKey, kind, routeTask: `rail_${kind}` });
   };
   for (const [profile, sections] of Object.entries(canvas.profiles)) {
     for (const [section, modules] of Object.entries(sections)) {
@@ -177,15 +180,21 @@ export function buildMatrix(canvas, overrides, pricing, registered = []) {
     const onCanvas = rows.find((r) => r.pageKey === pageKey);
     // D796 (#2229): a board renamed on the canvas can keep the kind it had (`keepKind`, with its `why`).
     if (onCanvas && o.keepKind) {
-      const models = kindModels[o.kind];
-      if (!models) problems.push(`${pageKey}: kind ${o.kind} has no models`);
-      else Object.assign(onCanvas, { kind: o.kind, routeTask: `rail_${o.kind}`, ...curated(models) });
+      if (!kindModels[o.kind]) problems.push(`${pageKey}: kind ${o.kind} has no models`);
+      else Object.assign(onCanvas, { kind: o.kind, routeTask: `rail_${o.kind}` });
     } else if (onCanvas) problems.push(`${pageKey} is on the canvas; drop its override`);
     else add(pageKey, o.kind);
   }
 
-  for (const r of rows) problems.push(...rowProblems(r, overrides, pricing, capsOf));
   if (new Set(rows.map((r) => r.pageKey)).size !== rows.length) problems.push('a page key is used twice');
+  // Each canvas kind's list, held to D720 §5 once. No page row stores it (#4313 part 3); the
+  // options of that kind take it, and `kinds` hands it to the test. It is not written.
+  const kinds = {};
+  for (const kind of Object.keys(canvas.suggested)) {
+    if (!kindModels[kind]) continue;
+    kinds[kind] = curated(kindModels[kind]);
+    problems.push(...rowProblems({ pageKey: `kind ${kind}`, kind, ...kinds[kind] }, overrides, pricing, capsOf));
+  }
 
   // PR 3: the registered options, each with its own kind's models.
   const options = [];
@@ -221,10 +230,10 @@ export function buildMatrix(canvas, overrides, pricing, registered = []) {
     problems.push(...rowProblems({ ...row, pageKey: `${page.key} [${o.key}]` }, overrides, pricing, capsOf));
     options.push(row);
   }
-  return { rows, options, problems };
+  return { rows, options, kinds, problems };
 }
 
-/** D720 §5's rules for one page row; an empty list when it holds. */
+/** D720 §5's rules for one option row's models; an empty list when it holds. */
 export function rowProblems(row, overrides, pricing, capsOf) {
   const out = [];
   const shape = overrides.kinds[row.kind] ?? overrides.optionKinds?.[row.kind];

@@ -2,7 +2,7 @@
  * D4295 (#4295, D4289 P6) — the influencer analytics read.
  *
  *   GET /api/influencer/me/analytics?from&to&channel&grain=week
- *       → every figure IN1, IN2, IN4 and IN5 draw (services/influencer/analytics.ts),
+ *       → every figure IN1, IN2, IN4 and IN5 draw (services/influencer/analytics.ts; D4295 §2),
  *         plus `line`, IN1's Eadwyn line restating them with their date
  *   GET /api/admin/influencers/:uid/analytics?from&to&channel&grain=week
  *       → the same figures for HQ. Money is the Super Admin's: any other admin
