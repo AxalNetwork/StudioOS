@@ -45,7 +45,7 @@ export const HELP_SURFACES = {
   "/kyc": {"label": "Identity verification", "roles": ["admin", "founder", "partner", "investor"], "lab": false},
   "/legal": {"label": "Legal templates", "roles": ["admin", "founder"], "lab": false},
   "/deals": {"label": "Deals", "roles": ["admin", "partner", "investor"], "lab": false},
-  "/comarketing": {"label": "Co-marketing", "roles": ["admin", "partner", "founder", "investor"], "lab": false},
+  "/comarketing": {"label": "Co-marketing", "roles": ["admin", "partner", "founder"], "lab": false},
   "/build/marketplace": {"label": "Marketplace", "roles": ["admin", "founder"], "lab": false},
   "/directory": {"label": "Public Directory", "roles": null, "lab": false},
   "/articles/draft": {"label": "Write an article", "roles": null, "lab": false, "authenticated": true},

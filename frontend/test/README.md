@@ -142,3 +142,5 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `redirect_retirement_d2319.test.mjs` | D2319 (#2319), #4415: retired aliases, protected outside links and retained beacon groups. |
 | `_retiredRedirects_2319.mjs` | D2319: recorded policy for route-pin tests, including concrete addresses matching retired dynamic patterns. |
 | `work_controls_3968.test.mjs` | WK1–WK3 filter and burn-up interactions through real clients, attribution, failed reads and late responses (#3968). |
+
+| `comarketing_split_4439.test.mjs` | D4439: founder Partner network door and counted forward, partner Offers, investor guard and navigation, and visit attribution path. |
