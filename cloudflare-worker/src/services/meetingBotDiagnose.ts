@@ -22,6 +22,7 @@ import { constantTimeEqual } from '../rpc/secret';
 import { googleConnection, accessToken, MEET_SPACE_SCOPE, MEET_TRANSCRIPT_SCOPE } from './channels/googleMeet';
 import { zoomConnection, mintObfToken } from './channels/zoom';
 import { MeetingProviderError } from './channels/meetings';
+import { meetSignInConfigured } from './meetBotGoogle';
 
 export const DIAGNOSE_STAGES = ['site', 'config', 'container', 'browser', 'egress', 'join', 'admission', 'audio', 'last_run'] as const;
 export type DiagnoseStage = typeof DIAGNOSE_STAGES[number];
@@ -63,7 +64,7 @@ export const DIAGNOSE_FIXES: Record<string, string> = {
   runtime_busy: 'A diagnostic is already running on this instance. Wait for it, then start again.',
   launch_failed: 'Chromium did not launch in the image. Rebuild it (meeting-bot-image.yml) and read the container smoke step.',
   host_unreachable: 'The container cannot reach the meeting hosts. Check the host’s egress (enableInternet) and any account egress policy.',
-  signin_wall: 'Google sent the bot to sign in. Allow guests in the call (Workspace admin: Meet › Access › let external participants join without sign-in), or use a signed-in bot account (#3678).',
+  signin_wall: 'Google sent the bot to sign in. Allow guests in the call (Workspace admin: Meet › Access › let external participants join without sign-in), or set the bot’s own Google account (MEET_BOT_GOOGLE_EMAIL, _PASSWORD and _TOTP on the studioos Worker, D3678) so it signs in.',
   cannot_join: 'Meet answered “You can’t join this video call”: the meeting admits only its organisation or signed-in users. Change the meeting’s host access, or the Workspace’s external-participant policy.',
   page_unsupported: 'Google declined this browser. The routes left are a signed-in account (#3678) or Google’s own interfaces (D1373).',
   page_unread: 'Meet showed a page none of the bot’s hooks match. Open the screenshot and correct meet/selectors.ts against it.',
@@ -90,6 +91,14 @@ export const DIAGNOSE_FIXES: Record<string, string> = {
   zoom_waiting_for_host: 'Zoom mints the bot’s pass only while you are in the meeting. Join it as the connected Zoom account, then run the check again.',
   zoom_obf_scope_missing: 'The Zoom grant lacks user:read:token. Add the scope to the Zoom app and reconnect Zoom.',
   zoom_reconnect: 'Your Zoom grant was revoked or expired. Reconnect Zoom.',
+  // D3678 (#3678): the signed-in join's own failures.
+  signin_rejected: 'Google refused Eadwyn’s email or password. Check MEET_BOT_GOOGLE_EMAIL and MEET_BOT_GOOGLE_PASSWORD on the studioos Worker against the account.',
+  signin_challenged: 'Google asked the bot to verify itself (a captcha, “Verify it’s you” or “This browser may not be secure”). Sign in to the account once by hand from a normal browser, approve the device, then run the check again.',
+  signin_code_refused: 'Google refused the two-step code. MEET_BOT_GOOGLE_TOTP must be the authenticator’s setup key (not a backup code), and the account’s authenticator must still be the one it was set up with.',
+  signin_no_code_method: 'Google offered no authenticator-app code. Set up 2-Step Verification on the account with an authenticator app.',
+  signin_unknown_page: 'Google showed a sign-in page the bot does not recognise. Open the screenshot and correct meet/signin.ts against it.',
+  signin_unavailable: 'The bot could not fetch its Google account from the Worker. Read the Worker log around this time.',
+  signin_not_kept: 'The bot signed in, but Meet showed the guest name field: Google did not keep the session. Open the screenshot.',
   never_reported: 'The container went quiet at this stage. Read the meeting-bot host’s log for diagnose_failed or runtime_failed around this time.',
   last_run_failed: 'Your last real run failed with the code shown. Its detail says where it stopped (D1368).',
 };
@@ -116,6 +125,11 @@ async function load(env: Env, id: string): Promise<DiagnoseRecord | null> {
   if (!runtimeUid(id)) return null;
   const obj = await store(env).get(KEY(id));
   return obj ? JSON.parse(await obj.text()) as DiagnoseRecord : null;
+}
+/** D3678: whether a diagnostic `id` exists, is still inside its window, and is for `platform`. */
+export async function diagnosisActive(env: Env, id: string, platform: BotPlatform, now = Date.now()): Promise<boolean> {
+  const rec = await load(env, id);
+  return !!rec && rec.platform === platform && now - rec.created_at <= DIAGNOSE_WINDOW_MS;
 }
 /** Read, change, write only if no one wrote between: the container's reports and the start can race. */
 async function update(env: Env, id: string, change: (rec: DiagnoseRecord) => boolean | void, create?: DiagnoseRecord): Promise<DiagnoseRecord | null> {
@@ -190,6 +204,8 @@ export async function googleStage(env: Env, userId: number, now: number, doFetch
     meet_api: 'not_checked',
     // Neither is readable through an API: the join stage answers the second.
     consent_screen: 'owner_check_in_cloud_console', guest_policy: 'read_by_join_stage',
+    // D3678: whether the bot signs in as its own Google account, or joins as a guest. Set or missing, never a value.
+    bot_account: meetSignInConfigured(env) ? 'set' : 'missing',
   };
   let failure: string | null = !client ? 'oauth_client_missing' : !conn ? 'not_connected' : null;
   if (client && conn) {
