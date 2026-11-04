@@ -105,3 +105,13 @@ test('a paused AI account is explained without offering tokens as a fix',async()
   const ui=await mount(h(DistributionAskIntent,{projectId:1,api:f.api}));
   try{assert.match(ui.text(),/AI is paused on this account. Contact support/);assert.doesNotMatch(ui.text(),/Add tokens|PRIVATE provider/);}finally{await ui.close();}
 });
+
+test('repeated checked events keep source selection unique without requoting the same selection',async()=>{
+  const f=apiFor();const ui=await mount(h(DistributionAskIntent,{projectId:1,api:f.api}));
+  try{
+    const checkbox=ui.all().find(n=>n.tagName==='INPUT'&&props(n).type==='checkbox');
+    await act(async()=>{props(checkbox).onChange({target:{checked:true}});props(checkbox).onChange({target:{checked:true}});});await ui.settle();
+    assert.equal(f.calls.filter(c=>c[0]==='quote').length,1);
+    assert.deepEqual(f.calls[0][1].sources,['validate','research','distribution']);
+  }finally{await ui.close();}
+});
