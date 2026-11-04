@@ -113,6 +113,16 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-11-04 — Pitch deck templates and the Gallery's covers (#3876)
+
+The owner's four artifacts were decoded by `scripts/read-canvas.mjs`:
+- **`Pitch Deck Templates · Boards.dc.html`** (artifact `RBKVDL4jz2C2DjFLQamWtk`) is new: one board per template, TPL-01 to TPL-24, six per stage. Each imports the page below.
+- **`Pitch Deck Templates Page.dc.html`** (artifact `M4e1veoddTFbYEzTEt7JHt`) is new. It draws each template's title card large, then its swatch, type, decor, chrome, art and tone, then every card in order on the 12 × 6 grid. Its themes match `templateLibrary.ts` exactly. It rewrites TPL-01 to TPL-12's placeholders for AI-native companies (`HD1`, `SUP1`, `TL1`), which is #3876's content work.
+- **The page replaces `Pitch Deck Studio v2 Page.dc.html`** (artifact `UJXCEzoW75JuqpM2njFxQH`). Every earlier frame is kept (119 of 119). It adds pd29c (24 covers, one row per stage), pd29s (selected, Use this template), pd29y (Yours, Save as my template), pd29strip (TPL-07's preview strip) and the tx01 to tx24 cover exports.
+- **The boards replace `Pitch Deck Studio v2 · Boards.dc.html`** (artifact `AByWUAWjZT6e6VbeDWp5HN`). They add PF1 to PF5 and PD-29b to PD-29d. Every earlier board is kept.
+
+The Gallery's integration is D3876 (`documentation/architecture/decisions/D3876.md`).
+
 ## Landed 2026-11-03 — Who knows them, relationship intelligence (#3572, #3564)
 
 The owner's two relationship-intelligence artifacts were decoded by `scripts/read-canvas.mjs`:
