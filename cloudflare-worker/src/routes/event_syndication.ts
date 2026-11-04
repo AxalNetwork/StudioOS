@@ -76,7 +76,7 @@ async function readRows(env: Env, event: Record<string, any>) {
   // A listing whose account was disconnected since stays visible: it is still out there.
   for (const r of existing) if (!accounts.some((a) => a.id === Number(r.account_id))) rows.push(shape(r.channel, r.account_uid, r.display_name, r, false));
   const own = eventEligibility(event as any, role, settings);
-  return { eligible: own.ok, reason: own.ok ? null : own.reason, rows };
+  return { eligible: own.ok, approved: event.status === 'published' && Number(event.admin_published) === 1, reason: own.ok ? null : own.reason, rows };
 }
 
 function overridesRead(json: unknown): Record<string, string> {
@@ -94,6 +94,9 @@ function shape(channel: string, accountUid: string, displayName: string, row: an
     account_uid: accountUid,
     display_name: displayName,
     capability: adapter?.capability ?? null,
+    adapter_ready: !!adapter,
+    title_limit: adapter?.title_limit ?? DEFAULT_TITLE_LIMIT,
+    text_limit: adapter?.text_limit ?? DEFAULT_TEXT_LIMIT,
     on: row ? ON_STATES.includes(row.status) : suggested,
     status: row?.status ?? null,
     sync_state: row?.sync_state ?? null,
