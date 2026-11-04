@@ -126,7 +126,7 @@ export function ExercisePage({ uid }) {
  * submitted, both held by the page.
  */
 export function ExamView({
-  examState, attemptsState, attempt = null, result = null, onStart, onSubmit, busy = false, error = '', onRetryExam, onRetryAttempts, now,
+  examState, attemptsState, attempt = null, result = null, onStart, onSubmit, busy = false, error = '', errorCode = '', errorUnreadable = false, onRetryExam, onRetryAttempts, now,
 }) {
   const ready = examState.status === 'ready';
   const attemptsReady = attemptsState.status === 'ready';
@@ -145,6 +145,8 @@ export function ExamView({
       onSubmit={onSubmit}
       busy={busy}
       error={error}
+      errorCode={errorCode}
+      errorUnreadable={errorUnreadable}
       onRetry={onRetryExam}
     />
   );
@@ -158,16 +160,21 @@ export function ExamPage({ uid }) {
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [errorCode, setErrorCode] = useState('');
+  const [errorUnreadable, setErrorUnreadable] = useState(false);
   const onStart = async () => {
     if (busy) return;
     setBusy(true);
     setError('');
+    setErrorCode('');
+    setErrorUnreadable(false);
     try {
       const started = await startExamAttempt(uid);
       setResult(null);
       setAttempt(started);
     } catch (err) {
-      setError(err?.message || 'The exam could not be started.');
+      if (err?.status && err?.code) { setError(err.message); setErrorCode(err.code); }
+      else setErrorUnreadable(true);
     } finally {
       setBusy(false);
       // A start counts against the limit, and a refusal may follow one made elsewhere.
@@ -179,12 +186,15 @@ export function ExamPage({ uid }) {
     const sitting = attempt;
     setBusy(true);
     setError('');
+    setErrorCode('');
+    setErrorUnreadable(false);
     try {
       const graded = await submitExamAttempt(uid, sitting.uid, answers);
       setResult({ ...graded, questions: sitting.questions });
       setAttempt(null);
     } catch (err) {
-      setError(err?.message || 'Your answers could not be submitted.');
+      if (err?.status && err?.code) { setError(err.message); setErrorCode(err.code); }
+      else setErrorUnreadable(true);
       // The clock ran out, or it was submitted already: the attempt is closed,
       // and the list read again says how it ended.
       if (err?.status === 409 || err?.status === 404) setAttempt(null);
@@ -194,23 +204,16 @@ export function ExamPage({ uid }) {
     }
   };
   const exam = examState.status === 'ready' ? examState.exam : null;
-  const counted = exam && exam.question_count !== null && exam.question_count !== undefined && Number.isFinite(Number(exam.question_count));
-  const coverage = exam ? [
-    `One exam: “${exam.title}”${counted ? `, ${plural(Number(exam.question_count), 'question')}` : ''}`,
-    attemptsState.status === 'ready'
-      ? `${plural(attemptsState.attempts.length, 'attempt')} of yours${attemptsState.attemptsLeft === null ? '' : `, ${attemptsState.attemptsLeft} left`}`
-      : null,
-  ].filter(Boolean) : [];
   return (
-    <RailFrame rail={<AssessmentRail coverage={coverage} />} data-testid="learning-exam">
+    <div className="min-w-0 px-4 sm:px-0" data-testid="learning-exam">
       <div className="space-y-4">
         <LearningHeader eyebrow="Learning · Exam" title={exam?.title || 'Exam'} sub={context.sub} back={context.back} action={<><NotPublished row={exam} />{exam?.uid ? <AddToPlan subject={{ kind: 'exam', uid: exam.uid, title: exam.title }} /> : null}</>} />
         <ExamView
           examState={examState} attemptsState={attemptsState} attempt={attempt} result={result}
-          onStart={onStart} onSubmit={onSubmit} busy={busy} error={error} onRetryExam={retryExam} onRetryAttempts={retryAttempts}
+          onStart={onStart} onSubmit={onSubmit} busy={busy} error={error} errorCode={errorCode} errorUnreadable={errorUnreadable} onRetryExam={retryExam} onRetryAttempts={retryAttempts}
         />
       </div>
-    </RailFrame>
+    </div>
   );
 }
 
