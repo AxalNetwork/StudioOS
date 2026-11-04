@@ -10,7 +10,7 @@ import { installDocument } from './_contracts_dom.mjs';
 import { api } from '../src/lib/api.js';
 import PitchPresent from '../src/pages/raise/pitch/PitchPresent.jsx';
 import {
-  PREFS_KEY, SIZE_DEFAULT, SIZE_MAX, SIZE_MIN, SIZE_STEP, clampSize, isRemote, mirrorStyle, nextLine, nextSize, nextSpeed,
+  PREFS_STORE_NAME, SIZE_DEFAULT, SIZE_MAX, SIZE_MIN, SIZE_STEP, clampSize, isRemote, mirrorStyle, nextLine, nextSize, nextSpeed,
   readPrefs, scriptOf, startView, teleprompterHref, writePrefs,
 } from '../src/pages/raise/pitch/teleprompterModel.js';
 
@@ -31,13 +31,13 @@ test('the model: size bounds and steps, the speed cycle, the kept prefs, the scr
   const store = { getItem: (k) => kept.get(k) ?? null, setItem: (k, v) => kept.set(k, v) };
   assert.deepEqual(readPrefs(store), { size: SIZE_DEFAULT, speed: 'off' });
   writePrefs(store, { size: 999, speed: 'fast' });
-  assert.deepEqual(JSON.parse(kept.get(PREFS_KEY)), { size: SIZE_MAX, speed: 'fast' }, 'what is kept is in bounds');
+  assert.deepEqual(JSON.parse(kept.get(PREFS_STORE_NAME)), { size: SIZE_MAX, speed: 'fast' }, 'what is kept is in bounds');
   assert.deepEqual(readPrefs(store), { size: SIZE_MAX, speed: 'fast' });
   const blocked = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } };
   assert.deepEqual(readPrefs(blocked), { size: SIZE_DEFAULT, speed: 'off' });
   assert.doesNotThrow(() => writePrefs(blocked, { size: 40 }));
   assert.deepEqual(readPrefs(null), { size: SIZE_DEFAULT, speed: 'off' });
-  kept.set(PREFS_KEY, '{not json');
+  kept.set(PREFS_STORE_NAME, '{not json');
   assert.deepEqual(readPrefs(store), { size: SIZE_DEFAULT, speed: 'off' });
 
   assert.deepEqual(scriptOf({ notes: 'Teams close in hours.\n\nMRR is from 42 teams.\nNext: how we charge.' }).paragraphs, ['Teams close in hours.', 'MRR is from 42 teams.', 'Next: how we charge.']);
@@ -112,19 +112,19 @@ test('ps5: Teleprompter shows the card\'s script, what is on screen and the next
     await m.press(m.by('teleprompter-larger'));
     assert.equal(m.pr(m.by('teleprompter-text'))['data-size'], SIZE_DEFAULT + SIZE_STEP);
     assert.equal(m.pr(m.by('teleprompter-text')).style.fontSize, `${SIZE_DEFAULT + SIZE_STEP}px`);
-    assert.deepEqual(JSON.parse(m.kept.get(PREFS_KEY)), { size: SIZE_DEFAULT + SIZE_STEP, speed: 'off' });
+    assert.deepEqual(JSON.parse(m.kept.get(PREFS_STORE_NAME)), { size: SIZE_DEFAULT + SIZE_STEP, speed: 'off' });
     for (let k = 0; k < 20; k += 1) if (!m.pr(m.by('teleprompter-larger')).disabled) await m.press(m.by('teleprompter-larger'));
     assert.equal(m.pr(m.by('teleprompter-text'))['data-size'], SIZE_MAX, 'A+ stops at the largest');
     assert.equal(m.pr(m.by('teleprompter-larger')).disabled, true);
     // Speed cycles and is kept.
     await m.press(m.by('teleprompter-speed'));
     assert.equal(m.pr(m.by('teleprompter-script'))['data-speed'], 'slow');
-    assert.equal(JSON.parse(m.kept.get(PREFS_KEY)).speed, 'slow');
+    assert.equal(JSON.parse(m.kept.get(PREFS_STORE_NAME)).speed, 'slow');
     // Mirror flips the words, for this screen only.
     await m.press(m.by('teleprompter-mirror'));
     assert.equal(m.pr(m.by('teleprompter-text'))['data-mirror'], 'true');
     assert.equal(m.pr(m.by('teleprompter-text')).style.transform, 'scaleX(-1)');
-    assert.equal(JSON.parse(m.kept.get(PREFS_KEY)).mirror, undefined, 'Mirror is not kept');
+    assert.equal(JSON.parse(m.kept.get(PREFS_STORE_NAME)).mirror, undefined, 'Mirror is not kept');
     // Nothing is written to the Worker.
     assert.deepEqual([...new Set(m.calls.map(([c]) => c))], ['deckGet']);
   } finally { await m.close(); }

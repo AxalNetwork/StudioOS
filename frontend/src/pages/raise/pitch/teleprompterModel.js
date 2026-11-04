@@ -38,7 +38,7 @@ export const SPEEDS = Object.freeze([
 ]);
 export const SPEED_DEFAULT = 'off';
 
-export const PREFS_KEY = 'pitch.teleprompter.v1';
+export const PREFS_STORE_NAME = 'pitch.teleprompter.v1';
 
 /** A size kept inside the bounds and on the step; anything unreadable is the default. */
 export function clampSize(v) {
@@ -62,7 +62,7 @@ export function nextSpeed(id) {
 /** The viewer's kept size and speed; a missing, broken or blocked store is the defaults. */
 export function readPrefs(storage) {
   try {
-    const raw = storage?.getItem?.(PREFS_KEY);
+    const raw = storage?.getItem?.(PREFS_STORE_NAME);
     const v = raw ? JSON.parse(raw) : null;
     return { size: clampSize(v?.size ?? SIZE_DEFAULT), speed: speedOf(v?.speed).id };
   } catch {
@@ -72,7 +72,7 @@ export function readPrefs(storage) {
 
 /** Keeps the size and speed for this viewer; a store that refuses is ignored. */
 export function writePrefs(storage, prefs) {
-  try { storage?.setItem?.(PREFS_KEY, JSON.stringify({ size: clampSize(prefs?.size), speed: speedOf(prefs?.speed).id })); } catch { /* the page still works */ }
+  try { storage?.setItem?.(PREFS_STORE_NAME, JSON.stringify({ size: clampSize(prefs?.size), speed: speedOf(prefs?.speed).id })); } catch { /* the page still works */ }
 }
 
 /** The card's script as paragraphs, or the one "no notes" line. */
