@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Pill, RailFrame, Unrecorded, WorkerRail } from '../../ui';
 import { titleCase } from '../../lib/absence';
-import ExercisePanel from './ExercisePanel';
+import ExercisePanel, { ExerciseSubmit } from './ExercisePanel';
+import { readRefusal } from '../../lib/api.js';
 import ExamFlow from './ExamFlow';
 import { LearningEmpty, LearningHeader, LearningLoading, LearningUnreadable, SectionCard } from './LearningStates';
 import { AddToPlan } from './PlanSheet';
@@ -69,12 +70,13 @@ function useCourseContext(kind, uid) {
 // ── /learning/exercises/:slug ─────────────────────────────────────────────
 
 /** The exercise and the member's own submissions, newest first: the latest is the one the status speaks of. */
-export function ExerciseView({ state, onSubmit, busy = false, error = '', onRetry }) {
+export function ExerciseView({ state, onSubmit, busy = false, error = '', onRetry, formId }) {
   const ready = state.status === 'ready';
   const submissions = ready ? state.submissions : [];
   return (
     <ExercisePanel
-      // A new submission starts a fresh form under the answer it stored.
+      formId={formId}
+      // A new submission resets the form to its stored answer and current status.
       key={submissions[0]?.uid || 'none'}
       status={statusOf(state)}
       exercise={ready ? state.exercise : null}
@@ -101,20 +103,21 @@ export function ExercisePage({ uid }) {
       const stored = await submitExerciseAnswer(uid, answer);
       setState((s) => (s.status === 'ready' ? { ...s, submissions: [stored, ...s.submissions] } : s));
     } catch (err) {
-      setError(err?.message || 'Your answer could not be submitted.');
+      setError(readRefusal(err?.data).message || 'Your answer could not be submitted.');
     } finally {
       setBusy(false);
     }
   };
   const exercise = state.status === 'ready' ? state.exercise : null;
-  const coverage = exercise ? [`One exercise: “${exercise.title}”`, `${plural(state.submissions.length, 'submission')} of yours`] : [];
+  const formId = `learning-exercise-${uid}`;
+  const submission = state.status === 'ready' ? state.submissions[0] : null;
   return (
-    <RailFrame rail={<AssessmentRail coverage={coverage} />} data-testid="learning-exercise">
+    <div className="min-w-0 px-4 py-6 sm:px-8 [&_[data-testid=link-learning-back]]:min-h-11 [&_button]:min-h-11 [&_h1]:break-words" data-testid="learning-exercise">
       <div className="space-y-4">
-        <LearningHeader eyebrow="Learning · Exercise" title={exercise?.title || 'Exercise'} sub={context.sub} back={context.back} action={<><NotPublished row={exercise} />{exercise?.uid ? <AddToPlan subject={{ kind: 'exercise', uid: exercise.uid, title: exercise.title }} /> : null}</>} />
-        <ExerciseView state={state} onSubmit={onSubmit} busy={busy} error={error} onRetry={retry} />
+        <LearningHeader eyebrow="Learning · Exercise" title={exercise?.title || 'Exercise'} sub={context.sub?.replace(/^Part of /, '')} back={context.back} action={<div className="flex flex-wrap items-center gap-2"><NotPublished row={exercise} />{exercise?.uid ? <AddToPlan subject={{ kind: 'exercise', uid: exercise.uid, title: exercise.title }} /> : null}<ExerciseSubmit submission={submission} formId={formId} busy={busy} disabled={!exercise} /></div>} />
+        <ExerciseView formId={formId} state={state} onSubmit={onSubmit} busy={busy} error={error} onRetry={retry} />
       </div>
-    </RailFrame>
+    </div>
   );
 }
 
@@ -126,7 +129,7 @@ export function ExercisePage({ uid }) {
  * submitted, both held by the page.
  */
 export function ExamView({
-  examState, attemptsState, attempt = null, result = null, onStart, onSubmit, busy = false, error = '', onRetryExam, onRetryAttempts, now,
+  examState, attemptsState, attempt = null, result = null, onStart, onSubmit, busy = false, error = '', errorCode = '', errorUnreadable = false, onRetryExam, onRetryAttempts, now,
 }) {
   const ready = examState.status === 'ready';
   const attemptsReady = attemptsState.status === 'ready';
@@ -145,6 +148,8 @@ export function ExamView({
       onSubmit={onSubmit}
       busy={busy}
       error={error}
+      errorCode={errorCode}
+      errorUnreadable={errorUnreadable}
       onRetry={onRetryExam}
     />
   );
@@ -158,16 +163,21 @@ export function ExamPage({ uid }) {
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [errorCode, setErrorCode] = useState('');
+  const [errorUnreadable, setErrorUnreadable] = useState(false);
   const onStart = async () => {
     if (busy) return;
     setBusy(true);
     setError('');
+    setErrorCode('');
+    setErrorUnreadable(false);
     try {
       const started = await startExamAttempt(uid);
       setResult(null);
       setAttempt(started);
     } catch (err) {
-      setError(err?.message || 'The exam could not be started.');
+      if (err?.status && err?.code) { setError(err.message); setErrorCode(err.code); }
+      else setErrorUnreadable(true);
     } finally {
       setBusy(false);
       // A start counts against the limit, and a refusal may follow one made elsewhere.
@@ -179,12 +189,15 @@ export function ExamPage({ uid }) {
     const sitting = attempt;
     setBusy(true);
     setError('');
+    setErrorCode('');
+    setErrorUnreadable(false);
     try {
       const graded = await submitExamAttempt(uid, sitting.uid, answers);
       setResult({ ...graded, questions: sitting.questions });
       setAttempt(null);
     } catch (err) {
-      setError(err?.message || 'Your answers could not be submitted.');
+      if (err?.status && err?.code) { setError(err.message); setErrorCode(err.code); }
+      else setErrorUnreadable(true);
       // The clock ran out, or it was submitted already: the attempt is closed,
       // and the list read again says how it ended.
       if (err?.status === 409 || err?.status === 404) setAttempt(null);
@@ -194,23 +207,16 @@ export function ExamPage({ uid }) {
     }
   };
   const exam = examState.status === 'ready' ? examState.exam : null;
-  const counted = exam && exam.question_count !== null && exam.question_count !== undefined && Number.isFinite(Number(exam.question_count));
-  const coverage = exam ? [
-    `One exam: “${exam.title}”${counted ? `, ${plural(Number(exam.question_count), 'question')}` : ''}`,
-    attemptsState.status === 'ready'
-      ? `${plural(attemptsState.attempts.length, 'attempt')} of yours${attemptsState.attemptsLeft === null ? '' : `, ${attemptsState.attemptsLeft} left`}`
-      : null,
-  ].filter(Boolean) : [];
   return (
-    <RailFrame rail={<AssessmentRail coverage={coverage} />} data-testid="learning-exam">
+    <div className="min-w-0 px-4 sm:px-0" data-testid="learning-exam">
       <div className="space-y-4">
         <LearningHeader eyebrow="Learning · Exam" title={exam?.title || 'Exam'} sub={context.sub} back={context.back} action={<><NotPublished row={exam} />{exam?.uid ? <AddToPlan subject={{ kind: 'exam', uid: exam.uid, title: exam.title }} /> : null}</>} />
         <ExamView
           examState={examState} attemptsState={attemptsState} attempt={attempt} result={result}
-          onStart={onStart} onSubmit={onSubmit} busy={busy} error={error} onRetryExam={retryExam} onRetryAttempts={retryAttempts}
+          onStart={onStart} onSubmit={onSubmit} busy={busy} error={error} errorCode={errorCode} errorUnreadable={errorUnreadable} onRetryExam={retryExam} onRetryAttempts={retryAttempts}
         />
       </div>
-    </RailFrame>
+    </div>
   );
 }
 

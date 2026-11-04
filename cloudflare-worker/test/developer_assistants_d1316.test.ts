@@ -139,7 +139,7 @@ test('overview: 404 with the flag off, 401 signed out; the server, scopes, tools
   assert.deepEqual(r.body.scopes.map((s: any) => s.scope), ['validate:read', 'validate:write', 'build:read', 'raise:read', 'raise:write', 'connectors:read', 'mail:read', 'mail:write']);
   assert.ok(r.body.scopes.every((s: any) => typeof s.label === 'string' && s.label.length > 0));
   const names = r.body.tools.map((t: any) => t.name);
-  assert.deepEqual(names, registeredTools().map((t) => t.name));
+  assert.deepEqual(names, registeredTools().filter((t) => !t.requiredScope.startsWith('team:')).map((t) => t.name));
   assert.ok(names.includes('structure_with_axalvc'));
   assert.ok(!names.includes('structure_with_studioos'), 'an alias is never listed');
   const write = r.body.tools.find((t: any) => t.name === 'structure_with_axalvc');
@@ -250,4 +250,16 @@ test('the admin panel\'s three routes and their three clients are gone together'
   assert.throws(() => read('frontend/src/pages/account/AccountDeveloper.jsx'));
   assert.match(read('cloudflare-worker/src/index.ts'), /app\.route\('\/api\/developer\/assistants', developerAssistants\);/);
   assert.match(read('frontend/src/lib/api/assistants.js'), /overview: \(\) => request\('\/developer\/assistants\/overview'\)/);
+});
+
+
+test('D4424: developer overview advertises Team scopes/tools only with the Team flag on', async () => {
+  const { env } = fixture();
+  const off = await asUser(env, FOUNDER, 'GET', '/api/developer/assistants/overview');
+  assert.equal(off.body.scopes.some((s: any) => s.scope.startsWith('team:')), false);
+  assert.equal(off.body.tools.some((t: any) => t.required_scope.startsWith('team:')), false);
+  env.TEAM_AGENTS_ENABLED = 'true';
+  const on = await asUser(env, FOUNDER, 'GET', '/api/developer/assistants/overview');
+  assert.deepEqual(on.body.scopes.filter((s: any) => s.scope.startsWith('team:')).map((s: any) => s.scope), ['team:read', 'team:propose']);
+  assert.equal(on.body.tools.some((t: any) => t.name === 'team.propose'), true);
 });

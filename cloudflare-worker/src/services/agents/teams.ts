@@ -21,6 +21,8 @@ import { roleOf, type Rules } from './catalogue';
 
 export type Scope = { kind: 'company'; id: number; uid: string; name: string } | { kind: 'project'; id: number; name: string; founder_id: number | null; company_id: number | null };
 export type AgentRow = {
+  /** D4424: absent on old fixtures; existing agents default to platform in D1. */
+  source?: 'platform' | 'mcp_client';
   id: number; uid: string; scope_kind: 'company' | 'project'; company_id: number | null; project_id: number | null;
   role_key: string; first_name: string | null; last_name: string | null; model_id: string; tool_grants_json: string;
   /** D4117: one of the 16 personas (`personas.ts`); null only for a role the backfill had no persona for. */
