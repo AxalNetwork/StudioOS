@@ -189,6 +189,8 @@ const FORWARDED: Record<string, string[]> = {
 
 /** Every call site's fixed name, by file — the table D552.md lists. */
 const EXPECTED: Record<string, string[]> = {
+  'services/callOutputs.ts': ['AI_SURFACE.validateInterviews'], // D4412: selected post-call extractions
+
   'routes/publish.ts': ['AI_SURFACE.growPublish'], // #4046: Publish to…'s post text (POST /api/publish/ask), which writes nothing
   'services/decks/dataroomExtract.ts': ['AI_SURFACE.raiseDataRoom'], // D1602: owner-approved document extraction
   'routes/data_room_proposals.ts': ['AI_SURFACE.raiseDataRoom'], // D4170 (#4170): Eadwyn's data room proposals, a quoted run over file names

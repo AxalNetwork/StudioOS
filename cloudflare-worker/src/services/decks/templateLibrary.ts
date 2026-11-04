@@ -195,6 +195,84 @@ function overlay(card: string, layout: string, deckAudience: string, stage: Stag
   return o;
 }
 
+// ── TPL-01 to TPL-12: written for AI-native companies ──────────────────────
+//
+// S1 (2026-11-04, #3876), from the owner's template canvas: the Pre-seed and
+// Seed templates take the canvas's AI-native headings (HD1), support lines
+// (SUP1), metric tiles (TL1) and competition rows; TPL-13 to TPL-24 keep the
+// general words. The canvas's strings are held to the house rules: every
+// placeholder passes `numberIn` and holds at most 40 characters inside its
+// brackets (H5), so the longer ones are shortened here, keeping what they ask
+// for (D3876 records each against the canvas's wording).
+
+/** TPL-nn up to this number is AI-native. */
+export const AI_NATIVE_LAST = 12;
+export const isAiNative = (n: string): boolean => Number(n) >= 1 && Number(n) <= AI_NATIVE_LAST;
+
+/** HD1: each card's heading (its H area, or a statement's S). */
+export const AI_HEADINGS: Readonly<Record<string, string>> = Object.freeze({
+  problem: '[The work people still do by hand]',
+  team: '[Why this team can build it]',
+  solution: '[What the model does; what a person keeps]',
+  why_now: '[What changed in the models, and why now]',
+  validation: '[What customers let the model do]',
+  product: '[What it does, and how a run works]',
+  market: '[Who buys, and how many there are]',
+  competition: '[Us, incumbents and general models]',
+  roadmap: '[The next stretch, on today’s models]',
+  round: '[The round]',
+  use_of_funds: '[Where it goes: people, compute, data]',
+  traction: '[Growth, and what it costs to serve]',
+  unit_economics: '[What a customer is worth after compute]',
+  every_figure: '[Every figure, with its source]',
+  cap_table: '[Ownership after the round]',
+});
+
+/** SUP1: each card's support line, in its paragraph area (P, else a text R or L); a card with none keeps its heading only. */
+export const AI_SUPPORT: Readonly<Record<string, string>> = Object.freeze({
+  problem: '[Who does it, and what a mistake costs]',
+  why_now: '[The model change that crossed a line]',
+  market: '[Who buys, and what they replace]',
+  use_of_funds: '[What this round pays for, compute too]',
+  solution: '[Where a person stays in the loop]',
+  cap_table: '[Holders after this round, pool included]',
+});
+
+/** TL1: the metric tiles, in order from M1, each bound to its slot (`sources.ts`); a figure is never written. */
+export const AI_TILES: Readonly<Record<string, ReadonlyArray<readonly [label: string, key: string]>>> = Object.freeze({
+  validation: [['[Interviews]', 'validate.interviews'], ['[Pilots]', 'validate.pilots'], ['[Tasks completed without a correction]', 'validate.tasks_without_correction']],
+  traction: [['[MRR]', 'grow.mrr'], ['[Paying customers]', 'grow.paying_customers'], ['[Gross margin after compute]', 'grow.gross_margin_after_compute']],
+  product: [['[Active accounts]', 'grow.active_accounts'], ['[Runs a week]', 'grow.runs_per_week'], ['[Accepted without edits]', 'grow.accepted_without_edits']],
+  unit_economics: [['[CAC]', 'grow.cac'], ['[LTV]', 'grow.ltv'], ['[Compute per customer]', 'grow.compute_per_customer'], ['[Gross margin]', 'grow.gross_margin']],
+});
+
+/** The competition table's rows: what the founder compares on, each row backed by the competitors they track. */
+export const AI_COMPETITION_ROWS: readonly string[] = Object.freeze([
+  '[Works inside the customer’s workflow]', '[Learns from corrections]', '[Shows its sources]', '[Priced per outcome]',
+]);
+
+/** The AI-native words for one card, over what it already has (`base`): only the areas the canvas changes. */
+function aiNative(card: string, layout: string, base: Areas): Areas {
+  const o: Areas = {};
+  const heading = AI_HEADINGS[card];
+  const keyOf = (a: AreaSpec | undefined) => (a && a.t === 'text' ? a.key : undefined);
+  if (heading && LAYOUT_AREAS[layout].some((d) => d.id === 'H')) o.H = T(heading);
+  else if (heading && layout === 'statement') o.S = T(heading, keyOf(base.S));
+  const support = AI_SUPPORT[card];
+  if (support) {
+    const at = ['P', 'R', 'L'].find((id) => base[id]?.t === 'text' && LAYOUT_AREAS[layout].some((d) => d.id === id && d.style === 'paragraph'));
+    if (at) o[at] = T(support, keyOf(base[at]));
+  }
+  const tiles = AI_TILES[card];
+  if (tiles && layout === 'metric_tiles') {
+    tiles.forEach(([label, key], i) => { const id = `M${i + 1}`; if (base[id]?.t === 'metric') o[id] = M(label, key); });
+  }
+  if (card === 'competition' && layout === 'comparison_table') {
+    o.C = CH('comparison_table', ...AI_COMPETITION_ROWS.map((row): [string, string] => [row, 'validate.competitors']));
+  }
+  return o;
+}
+
 // ── H13: speaker notes, and each card's message ─────────────────────────────
 
 const NOTES: Record<string, string> = {
@@ -646,7 +724,9 @@ function decorFor(s: Spec, card: string, layout: string): Array<Record<string, u
 function cardOf(s: Spec, card: string, layout: string, over: Areas | undefined) {
   const preset = LAYOUT_AREAS[layout];
   if (!preset) throw new Error(`TPL-${s.n}: no layout ${layout}`);
-  const merged: Areas = { ...defaults(card, layout), ...overlay(card, layout, s.deck_audience, s.stage), ...(over ?? {}) };
+  const base: Areas = { ...defaults(card, layout), ...overlay(card, layout, s.deck_audience, s.stage) };
+  // #3876 (S1, 2026-11-04): TPL-01 to 12 take the canvas's AI-native words; a template's own overrides still win.
+  const merged: Areas = { ...base, ...(isAiNative(s.n) ? aiNative(card, layout, base) : {}), ...(over ?? {}) };
   // The image area of an image_text solution card is the template's art when it has one, else the founder's screenshot.
   if (layout === 'image_text' && !over?.I) merged.I = s.image?.card === card ? ART : SHOT;
   const blocks: unknown[] = []; const areas: unknown[] = [];

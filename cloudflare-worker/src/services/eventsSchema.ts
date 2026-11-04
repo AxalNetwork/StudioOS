@@ -24,6 +24,7 @@ const STATEMENTS: string[] = [
      summary            TEXT,
      description        TEXT,
      cover_url          TEXT,
+     topics_json        TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(topics_json) AND json_type(topics_json) = 'array'),
      starts_at          TEXT NOT NULL,
      ends_at            TEXT,
      timezone           TEXT NOT NULL DEFAULT 'UTC',
@@ -169,6 +170,10 @@ export async function ensureEventsSchema(env: Env): Promise<boolean> {
         // the rest of the bootstrap.
         console.warn('[eventsSchema] statement failed (continuing)', (e as Error).message);
       }
+    }
+    const columns = await env.DB.prepare('PRAGMA table_info(events)').all<{ name: string }>();
+    if (!(columns.results || []).some(col => col.name === 'topics_json')) {
+      await env.DB.prepare("ALTER TABLE events ADD COLUMN topics_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(topics_json) AND json_type(topics_json) = 'array')").run();
     }
     READY.set(bindingKey(env), true);
     return true;

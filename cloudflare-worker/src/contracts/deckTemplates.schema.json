@@ -60,7 +60,8 @@
         "deck_audience",
         "style",
         "swatch",
-        "card_count"
+        "card_count",
+        "cover"
       ],
       "properties": {
         "uid": {
@@ -101,6 +102,39 @@
         "card_count": {
           "type": "integer",
           "minimum": 1
+        },
+        "cover": {
+          "description": "#3876: the cover's accent and its ink (each a #RRGGBB hex, checked by the Worker's coverOf) and the display face, from the template's theme; null when it names none",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "required": [
+            "accent",
+            "accent_ink",
+            "display_font"
+          ],
+          "properties": {
+            "accent": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "accent_ink": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "display_font": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
         }
       }
     },

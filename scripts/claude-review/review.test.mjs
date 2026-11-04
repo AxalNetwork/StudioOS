@@ -17,8 +17,9 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { WorkloadIdentityError } from '@anthropic-ai/sdk/lib/credentials/types';
-import { GithubIdentityError, LEDGER_MAX_PAGES, OIDC_AUDIENCE, anthropicClient, classifyError, clientFor, errorDetail, githubClient, githubIdentityToken, listMonthRecords, main, safePath } from './review.mjs';
+import { GithubIdentityError, LEDGER_MAX_PAGES, OIDC_AUDIENCE, openaiClient, openaiFetch, anthropicClient, classifyError, clientFor, errorDetail, fallbacksFor, githubClient, kimiClient, kimiFetch, githubIdentityToken, listMonthRecords, main, safePath } from './review.mjs';
 
 const headers = new Headers({ 'request-id': 'req_test' });
 const gen = (status) => Anthropic.APIError.generate(status, { type: 'error', error: { type: 'x', message: 'm' } }, 'm', headers);
@@ -41,8 +42,8 @@ test('the client is built on first use, so a run that never calls the API never 
   class CountingSdk {
     constructor() {
       built += 1;
-      this.messages = { create: async () => ({}), countTokens: async () => ({ input_tokens: 1 }) };
-      this.beta = { messages: { create: async () => ({}) } };
+      this.messages = { stream: (...args) => ({ finalMessage: () => this.messages.create(...args) }), create: async () => ({}), countTokens: async () => ({ input_tokens: 1 }) };
+      this.beta = { messages: { stream: (...args) => ({ finalMessage: () => this.beta.messages.create(...args) }), create: async () => ({}) } };
     }
   }
   Object.assign(CountingSdk, Anthropic);
@@ -57,8 +58,8 @@ test('a request carrying betas goes to the beta endpoint, any other to the stand
   const seen = [];
   class FakeSdk {
     constructor() {
-      this.messages = { create: async () => { seen.push('messages'); return {}; }, countTokens: async (p) => { seen.push(Object.keys(p).sort().join(',')); return { input_tokens: 1 }; } };
-      this.beta = { messages: { create: async () => { seen.push('beta'); return {}; } } };
+      this.messages = { stream: (...args) => ({ finalMessage: () => this.messages.create(...args) }), create: async () => { seen.push('messages'); return {}; }, countTokens: async (p) => { seen.push(Object.keys(p).sort().join(',')); return { input_tokens: 1 }; } };
+      this.beta = { messages: { stream: (...args) => ({ finalMessage: () => this.beta.messages.create(...args) }), create: async () => { seen.push('beta'); return {}; } } };
     }
   }
   Object.assign(FakeSdk, Anthropic);
@@ -97,10 +98,10 @@ test('main: a disabled review writes its summary and outputs and exits 0', async
   assert.match(output, /^outcome=disabled\nrecord_name=\n$/);
 });
 
-test('main: an enabled review with no key is a configuration error, never a crash, and never prints a key', async () => {
+test('main: absent keys skip cleanly, malformed enabled configuration refuses, and keys stay private', async () => {
   const s = sandbox({ CLAUDE_REVIEW_ENABLED: 'true', ANTHROPIC_MODEL: 'claude-sonnet-5-5', ANTHROPIC_API_KEY: '' });
   assert.equal(await main(s.env), 0);
-  assert.match(s.read().summary, /configuration\\_error/);
+  assert.match(s.read().summary, /No configured review account/);
   const k = sandbox({ CLAUDE_REVIEW_ENABLED: 'true', ANTHROPIC_API_KEY: 'sk-ant-should-not-appear', CLAUDE_REVIEW_FAIL_ON_ERROR: 'true' });
   assert.equal(await main(k.env), 1, 'with fail-on-error a configuration error fails the step');
   assert.doesNotMatch(k.read().summary, /sk-ant-should-not-appear/);
@@ -211,8 +212,8 @@ test('under federation the client gets the exchange as its credentials and no AP
   class RecordingSdk {
     constructor(opts) {
       made.push(opts);
-      this.messages = { create: async () => ({}), countTokens: async () => ({ input_tokens: 1 }) };
-      this.beta = { messages: { create: async () => ({}) } };
+      this.messages = { stream: (...args) => ({ finalMessage: () => this.messages.create(...args) }), create: async () => ({}), countTokens: async () => ({ input_tokens: 1 }) };
+      this.beta = { messages: { stream: (...args) => ({ finalMessage: () => this.beta.messages.create(...args) }), create: async () => ({}) } };
     }
   }
   Object.assign(RecordingSdk, Anthropic);
@@ -265,7 +266,7 @@ test('the real SDK exchange sends the request the Console documents, with the Gi
 test('the run\'s client follows the repository variables: federation when its rule is set, else the key', async () => {
   const made = [];
   class RecordingSdk {
-    constructor(opts) { made.push(opts); this.messages = { create: async () => ({}) }; this.beta = { messages: { create: async () => ({}) } }; }
+    constructor(opts) { made.push(opts); this.messages = { stream: (...args) => ({ finalMessage: () => this.messages.create(...args) }), create: async () => ({}) }; this.beta = { messages: { stream: (...args) => ({ finalMessage: () => this.beta.messages.create(...args) }), create: async () => ({}) } }; }
   }
   Object.assign(RecordingSdk, Anthropic);
   const makeProvider = (cfg) => Object.assign(async () => ({ token: 't' }), { cfg });
@@ -273,7 +274,7 @@ test('the run\'s client follows the repository variables: federation when its ru
   await clientFor(fed, { sdk: RecordingSdk, makeProvider }).create({ model: 'm' });
   assert.equal(made[0].apiKey, null);
   assert.equal(made[0].credentials.cfg.federationRuleId, 'fdrl_01BkFJFKoPa1oFPY5ioQaCYp');
-  assert.equal(made[0].maxRetries, 1);
+  assert.equal(made[0].maxRetries, 0);
   await clientFor({ ANTHROPIC_API_KEY: 'k' }, { sdk: RecordingSdk, makeProvider }).create({ model: 'm' });
   assert.equal(made[1].apiKey, 'k');
   assert.equal(made[1].credentials, undefined);
@@ -371,4 +372,209 @@ test('main: an outcome whose reason can quote the pull request or the model keep
   }
   assert.equal(out.join(''), 'claude-review: diff_error\n');
   assert.match(s.read().summary, /diff could not be computed/);
+});
+
+test('the fallback chain: one client per configured step, built only when used, on its own key and endpoint', async () => {
+  const built = [];
+  class FakeSdk {
+    constructor(opts) {
+      built.push(opts);
+      this.messages = { stream: (...args) => ({ finalMessage: () => this.messages.create(...args) }), create: async (p) => { if (p.model === 'gone') throw new Anthropic.NotFoundError(404, { error: { message: 'model gone' } }, 'model gone', new Headers()); return { ok: true }; } };
+    }
+  }
+  for (const k of ['APIError', 'AuthenticationError', 'PermissionDeniedError', 'NotFoundError', 'RateLimitError', 'BadRequestError', 'APIConnectionTimeoutError', 'APIConnectionError', 'InternalServerError']) FakeSdk[k] = Anthropic[k];
+  const env = { CLAUDE_REVIEW_ENABLED: 'true', ANTHROPIC_MODEL: 'claude-sonnet-5-5', ANTHROPIC_API_KEY: 'a', CLAUDE_REVIEW_MAX_RETRIES: '1' };
+  assert.deepEqual(fallbacksFor(env), {}, 'no fallback key, no chain');
+  assert.deepEqual(fallbacksFor({ ...env, KIMI_API_KEY: 'k', ANTHROPIC_API_KEY_2: 'b', CLAUDE_REVIEW_CREDIT_FALLBACK: 'off' }), {});
+  const chain = fallbacksFor({ ...env, ANTHROPIC_API_KEY_2: 'sk-ant-second', KIMI_API_KEY: 'sk-kimi-key' }, { anthropic: { sdk: FakeSdk }, kimi: { sdk: FakeSdk } });
+  assert.deepEqual(Object.keys(chain), ['claude2', 'kimi']);
+  assert.equal(built.length, 0, 'nothing built until a review needs it');
+  await chain.claude2.create({ model: 'claude-sonnet-5-5' });
+  assert.equal(built[0].apiKey, 'sk-ant-second');
+  assert.equal(built[0].baseURL, undefined, 'a Claude account goes to Anthropic');
+  await chain.kimi.create({ model: 'kimi-k2-turbo-preview' });
+  await chain.kimi.create({ model: 'kimi-k2-turbo-preview' });
+  assert.equal(built.length, 2, 'each client built once');
+  assert.deepEqual([built[1].apiKey, built[1].baseURL, built[1].maxRetries], ['sk-kimi-key', 'https://api.moonshot.ai/anthropic', 0]);
+  await assert.rejects(chain.kimi.create({ model: 'gone' }), (e) => e.kind === 'not_found' && e.status === 404);
+  assert.equal(built[1].authToken, null, 'no ANTHROPIC_AUTH_TOKEN reaches Moonshot');
+  assert.equal(typeof built[1].fetch, 'function');
+});
+
+test('the Kimi fetch forwards only the request\'s own headers', async () => {
+  let seen;
+  const f = kimiFetch(async (url, init) => { seen = init.headers; return new Response('{}'); });
+  await f('https://api.moonshot.ai/anthropic/v1/messages', { method: 'POST', headers: { 'x-api-key': 'k', 'content-type': 'application/json', 'anthropic-version': '2023-06-01', authorization: 'Bearer anthropic-token', 'x-custom': 'secret', 'x-stainless-retry-count': '0' } });
+  assert.deepEqual([...seen.keys()].sort(), ['anthropic-version', 'content-type', 'x-api-key', 'x-stainless-retry-count']);
+});
+
+test('an error detail never carries a Kimi-style key', () => {
+  assert.equal(errorDetail(new Error('bad key sk-AbCdEfGhIjKlMnOpQrStUv rejected'), null), 'bad key [redacted] rejected');
+});
+
+
+test('D4433: streaming returns final usage, forwards attempt options and classifies a mid-stream failure', async () => {
+  const seen = [];
+  const message = { content: [{ type: 'text', text: '{}' }], usage: { input_tokens: 12, output_tokens: 8 } };
+  class StreamSdk {
+    constructor(options) {
+      assert.equal(options.maxRetries, 0, 'runner owns retries');
+      this.messages = { stream: (p, opts) => {
+        seen.push({ p, opts });
+        return { finalMessage: async () => { if (p.model === 'timeout') throw new Anthropic.APIConnectionTimeoutError(); return message; } };
+      } };
+      this.beta = { messages: this.messages };
+    }
+  }
+  Object.setPrototypeOf(StreamSdk, Anthropic);
+  const options = { timeout: 1234, signal: AbortSignal.timeout(2000), maxRetries: 0 };
+  for (const client of [kimiClient({ apiKey: 'test', baseURL: 'https://example.test', maxRetries: 2, timeoutSeconds: 30, sdk: StreamSdk }), anthropicClient({ apiKey: 'test', maxRetries: 2, timeoutSeconds: 30, sdk: StreamSdk })]) {
+    assert.equal(await client.create({ model: 'ok' }, options), message);
+    assert.equal(seen.at(-1).opts, options);
+    await assert.rejects(client.create({ model: 'timeout' }, options), e => e.kind === 'timeout');
+  }
+});
+
+
+test('D4433 item 8: each fallback client receives only its own optional workspace header', async () => {
+  const built = [];
+  class WorkspaceSdk {
+    constructor(opts) { built.push(opts); this.messages = { stream: () => ({ finalMessage: async () => ({}) }) }; }
+  }
+  const env = { ANTHROPIC_API_KEY_2: 'second', ANTHROPIC_API_KEY_3: 'third', ANTHROPIC_WORKSPACE_ID: 'wrkspc_MAIN0000', ANTHROPIC_WORKSPACE_ID_2: 'wrkspc_22222222', ANTHROPIC_WORKSPACE_ID_3: 'wrkspc_33333333', KIMI_API_KEY: 'kimi' };
+  const clients = fallbacksFor(env, { anthropic: { sdk: WorkspaceSdk }, kimi: { sdk: WorkspaceSdk } });
+  for (const id of ['claude2', 'claude3', 'kimi']) await clients[id].create({ model: 'test' });
+  assert.equal(built[0].defaultHeaders['anthropic-workspace-id'], 'wrkspc_22222222');
+  assert.equal(built[1].defaultHeaders['anthropic-workspace-id'], 'wrkspc_33333333');
+  assert.equal(built[2].defaultHeaders, undefined, 'Kimi receives no Claude workspace header');
+  assert.ok(!JSON.stringify(built).includes('MAIN0000'), 'main federation workspace is never reused');
+  const unset = fallbacksFor({ ...env, ANTHROPIC_WORKSPACE_ID_2: '' }, { anthropic: { sdk: WorkspaceSdk } });
+  await unset.claude2.create({ model: 'test' });
+  assert.equal(built.at(-1).defaultHeaders['anthropic-workspace-id'], null, 'unset suppresses ambient workspace headers');
+});
+
+test('D4433 item 8: real SDK requests cannot inherit an ambient workspace from another account', async () => {
+  const savedFetch = globalThis.fetch;
+  const savedHeaders = process.env.ANTHROPIC_CUSTOM_HEADERS;
+  const seen = [];
+  process.env.ANTHROPIC_CUSTOM_HEADERS = 'Anthropic-Workspace-Id: wrkspc_AMBIENT0';
+  globalThis.fetch = async (url, init) => {
+    seen.push(new Headers(init.headers).get('anthropic-workspace-id'));
+    return new Response(JSON.stringify({ input_tokens: 1 }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    const clients = fallbacksFor({ ANTHROPIC_API_KEY_2: 'test-second', ANTHROPIC_API_KEY_3: 'test-third', ANTHROPIC_WORKSPACE_ID_2: 'wrkspc_22222222', ANTHROPIC_WORKSPACE_ID_3: 'wrkspc_33333333' });
+    const p = { model: 'test-model', system: 's', messages: [] };
+    await clients.claude2.countTokens(p);
+    await clients.claude3.countTokens(p);
+    const unset = fallbacksFor({ ANTHROPIC_API_KEY_2: 'test-second' });
+    await unset.claude2.countTokens(p);
+    assert.deepEqual(seen, ['wrkspc_22222222', 'wrkspc_33333333', null]);
+  } finally {
+    globalThis.fetch = savedFetch;
+    if (savedHeaders === undefined) delete process.env.ANTHROPIC_CUSTOM_HEADERS;
+    else process.env.ANTHROPIC_CUSTOM_HEADERS = savedHeaders;
+  }
+});
+
+test('D4443: fake SDK streams strict Responses output and maps cached usage once', async () => {
+  const built = [], sent = [];
+  class FakeOpenAI {
+    constructor(options) {
+      built.push(options);
+      this.responses = { create: async function* (p, opts) {
+        sent.push({ p, opts });
+        yield { type: 'response.output_text.delta', delta: 'partial' };
+        if (p.model === 'quota') throw new OpenAI.RateLimitError(429, { code: 'insufficient_quota', message: 'quota' }, 'quota', new Headers());
+        if (p.model === 'timeout') throw new OpenAI.APIConnectionTimeoutError();
+        if (p.model === 'failed') { yield { type: 'response.failed', response: { error: { code: 'insufficient_quota', message: 'no quota' } } }; return; }
+        if (p.model === 'disconnected') return;
+        yield { type: p.model === 'cut' ? 'response.incomplete' : 'response.completed', response: {
+          status: p.model === 'cut' ? 'incomplete' : 'completed',
+          output: [{ type: 'reasoning', summary: [] }, { type: 'message', content: p.model === 'refuse' ? [{ type: 'refusal', refusal: 'no' }] : [{ type: 'output_text', text: '{"ok":true}' }] }],
+          usage: { input_tokens: 100, output_tokens: 40, input_tokens_details: { cached_tokens: 60 } },
+        } };
+      } };
+    }
+  }
+  Object.setPrototypeOf(FakeOpenAI, OpenAI);
+  const client = openaiClient({ apiKey: 'unit-key', baseURL: 'https://api.example/v1', timeoutSeconds: 30, sdk: FakeOpenAI });
+  assert.equal(built.length, 0);
+  const opts = { timeout: 2000, maxRetries: 0 };
+  const message = await client.create({ model: 'gpt-5.3-codex', system: 'system', messages: [{ role: 'user', content: 'diff' }], max_tokens: 1024 }, opts);
+  assert.deepEqual(message.usage, { input_tokens: 40, output_tokens: 40, cache_read_input_tokens: 60, cache_creation_input_tokens: 0 });
+  assert.deepEqual(message.content, [{ type: 'text', text: '{"ok":true}' }]);
+  assert.equal(sent[0].p.stream, true);
+  assert.equal(sent[0].p.store, false);
+  assert.equal(sent[0].p.text.format.strict, true);
+  assert.equal(sent[0].p.max_output_tokens, 1024);
+  assert.equal(sent[0].p.instructions, 'system');
+  assert.equal(sent[0].opts, opts);
+  assert.equal(built[0].maxRetries, 0);
+  assert.equal(built[0].organization, null);
+  assert.equal(built[0].project, null);
+  for (const [model, kind] of [['quota', 'billing'], ['failed', 'billing'], ['timeout', 'timeout'], ['disconnected', 'timeout']]) await assert.rejects(client.create({ model }), e => e.kind === kind);
+  assert.equal((await client.create({ model: 'refuse' })).stop_reason, 'refusal');
+  assert.equal((await client.create({ model: 'cut' })).stop_reason, 'max_tokens');
+});
+
+test('D4443: OpenAI fetch sends only allowlisted headers and its own key', async () => {
+  let seen;
+  const f = openaiFetch(async (url, init) => { seen = init.headers; return new Response('{}'); }, 'own-key');
+  await f('https://api.example/v1/responses', { headers: { authorization: 'Bearer another-provider', 'x-api-key': 'another-key', 'openai-organization': 'ambient-org', 'anthropic-version': '2023-06-01', 'content-type': 'application/json', 'x-custom': 'hidden', 'x-stainless-retry-count': '0' } });
+  assert.deepEqual([...seen.keys()].sort(), ['authorization', 'content-type', 'x-stainless-retry-count']);
+  assert.equal(seen.get('authorization'), 'Bearer own-key');
+});
+
+test('D4443: OpenAI keys are redacted from classified errors', () => {
+  const key = 'sk-' + 'proj-abcdefghijklmnopqrstuvwx';
+  const error = new OpenAI.AuthenticationError(401, { message: `Incorrect API key ${key}` }, `Incorrect API key ${key}`, new Headers());
+  const result = classifyError(error, OpenAI);
+  assert.equal(result.kind, 'authentication');
+  assert.match(result.detail, /redacted/);
+  assert.ok(!result.detail.includes(key));
+});
+
+test('D4443: the OpenAI fallback uses a lazy separate official client', async () => {
+  const built = [];
+  class FakeOpenAI {
+    constructor(opts) { built.push(opts); this.responses = { create: async function* () { yield { type: 'response.completed', response: { status: 'completed', output: [], usage: { input_tokens: 1, output_tokens: 1 } } }; } }; }
+  }
+  const chain = fallbacksFor({ OPENAI_API_KEY: 'unit', OPENAI_MODEL: 'gpt-5.3-codex' }, { openai: { sdk: FakeOpenAI } });
+  assert.deepEqual(Object.keys(chain), ['openai']);
+  assert.equal(built.length, 0);
+  await chain.openai.create({ model: 'gpt-5.3-codex' });
+  assert.equal(built.length, 1);
+  assert.equal(built[0].baseURL, 'https://api.openai.com/v1');
+  assert.equal(built[0].apiKey, 'unit');
+});
+
+
+test('review #4448 R1: real SDK user-abort errors have no distinctive name but must classify as timeout', () => {
+  assert.equal(new Anthropic.APIUserAbortError().name, 'Error');
+  assert.equal(classifyError(new Anthropic.APIUserAbortError()).kind, 'timeout');
+  assert.equal(classifyError(new OpenAI.APIUserAbortError(), OpenAI).kind, 'timeout');
+});
+
+test('review #4448 R1/R2: abort and plain SDK errors after a stream connects retain uncertainty', async () => {
+  for (const thrown of [new Anthropic.APIUserAbortError(), new Anthropic.AnthropicError('socket closed')]) {
+    class BrokenSdk {
+      constructor() { this.messages = { stream: () => ({ on(event, listener) { if (event === 'connect') listener(); return this; }, finalMessage: async () => { throw thrown; } }) }; this.beta = { messages: this.messages }; }
+    }
+    Object.setPrototypeOf(BrokenSdk, Anthropic);
+    const client = anthropicClient({ apiKey: 'test', maxRetries: 0, timeoutSeconds: 30, sdk: BrokenSdk });
+    await assert.rejects(client.create({ model: 'test' }), e => e.streamStarted === true && (thrown instanceof Anthropic.APIUserAbortError ? e.kind === 'timeout' : e.kind === 'unknown'));
+  }
+});
+
+test('review #4452 R2: OpenAI terminal stream errors are marked as possibly billed', async () => {
+  class BrokenOpenAI {
+    constructor() { this.responses = { create: async function* () {
+      yield { type: 'response.created', response: { status: 'in_progress' } };
+      yield { type: 'response.failed', response: { error: { code: 'server_error', message: 'reasoning interrupted' } } };
+    } }; }
+  }
+  Object.setPrototypeOf(BrokenOpenAI, OpenAI);
+  const client = openaiClient({ apiKey: 'test', baseURL: 'https://api.example', timeoutSeconds: 30, sdk: BrokenOpenAI });
+  await assert.rejects(client.create({ model: 'gpt-5.3-codex' }), e => e.streamStarted === true);
 });

@@ -113,6 +113,22 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-11-04 — My events with recommendations, and the New event cover step (#3724)
+
+The owner's two artifacts were decoded by `scripts/read-canvas.mjs` and replace the 10-25 versions:
+- **`My Events Page.dc.html`** (artifact `BpnR4TosBL3NQumJUTtKRs`): My events with "Recommended for you", Why this, Not for me, Tune recommendations and People to invite, plus the New event editor with its cover step. The logo path was rewritten to `/axal-mark.png`.
+- **`My Events · Boards.dc.html`** (artifact `7vEqinMZBc4u53iyCVzskH`): boards ME1 to ME13 and NE1 to NE5. Its bundle imported the page as "My Events v2 Page"; the import was renamed to "My Events Page" so it resolves to the file here.
+
+The integration is D3724 (`documentation/architecture/decisions/D3724.md`), which lists the parts still waiting on Worker routes.
+
+## Landed 2026-11-04 — Share cards, the centred revision (#3705)
+
+Both artifacts were re-read with `scripts/read-canvas.mjs` and replace their files:
+- **`Share Cards Page.dc.html`** (`NuqvJUKoNJbwYfqwZG44WY`): the card is now centred. The mark and "AXAL VC" sit at the top, then the eyebrow chip, the title and the description in the middle, and "axal.vc" at the foot. Violet arcs fill the top-right and bottom-left corners. Trust and legal cards keep the lavender ground and hairline frame, with a document glyph above the eyebrow; the private card has a round violet lock. The left band is gone.
+- **`Share Cards · Boards.dc.html`** (`XJKVGprpDKwwSVNiNbZehv`): the boards SC0 to SC12 against the revised page.
+
+`scripts/generate-og-images.mjs` draws the revision, and the 28 cards in `frontend/public/og/` are re-rendered. The record text the Worker injector (D1439) writes already matched the boards, so no Worker change was needed.
+
 ## Landed 2026-11-04 — Learning on Stream, the studio's ready row (#3726)
 
 Both artifacts were decoded by `scripts/read-canvas.mjs`:

@@ -28,6 +28,9 @@
  *   complianceAssignable, complianceAssign,
  *   complianceComment, complianceReady,
  *   complianceReopen                   #3976        its task sheet's other changes
+ *   timeline, comment, editComment, deleteComment, review, setLabels, setMilestone, drafts, acceptDraft, discardDraft,
+ *   labels, createLabel, updateLabel, deleteLabel, milestones, createMilestone, updateMilestone, deleteMilestone
+ *                                      W7  #3993  item timeline, reviews, labels, milestones and drafts (#4418)
  *   assignable, myTasks                W8   #3994   the Team picker (this Team's people and agents) and My tasks
  */
 import { workApi } from '../../lib/api/work.js';
@@ -51,6 +54,26 @@ export async function through(call, reason) {
 }
 
 export const workAdapter = {
+  summary: (projectId) => through(() => workApi.summary(projectId), WORK_OFF),
+  timeline: (projectId, number) => through(() => workApi.timeline(projectId, number), WORK_OFF),
+  comment: (projectId, number, body) => through(() => workApi.comment(projectId, number, body), WORK_OFF),
+  editComment: (projectId, uid, body) => through(() => workApi.editComment(projectId, uid, body), WORK_OFF),
+  deleteComment: (projectId, uid) => through(() => workApi.deleteComment(projectId, uid), WORK_OFF),
+  review: (projectId, number, body) => through(() => workApi.review(projectId, number, body), WORK_OFF),
+  setLabels: (projectId, number, body) => through(() => workApi.setLabels(projectId, number, body), WORK_OFF),
+  setMilestone: (projectId, number, body) => through(() => workApi.setMilestone(projectId, number, body), WORK_OFF),
+  drafts: (projectId) => through(() => workApi.drafts(projectId), WORK_OFF),
+  acceptDraft: (projectId, uid) => through(() => workApi.acceptDraft(projectId, uid), WORK_OFF),
+  discardDraft: (projectId, uid, body) => through(() => workApi.discardDraft(projectId, uid, body), WORK_OFF),
+  labels: (projectId) => through(() => workApi.labels(projectId), WORK_OFF),
+  createLabel: (projectId, body) => through(() => workApi.createLabel(projectId, body), WORK_OFF),
+  updateLabel: (projectId, uid, body) => through(() => workApi.updateLabel(projectId, uid, body), WORK_OFF),
+  deleteLabel: (projectId, uid) => through(() => workApi.deleteLabel(projectId, uid), WORK_OFF),
+  milestones: (projectId) => through(() => workApi.milestones(projectId), WORK_OFF),
+  createMilestone: (projectId, body) => through(() => workApi.createMilestone(projectId, body), WORK_OFF),
+  updateMilestone: (projectId, uid, body) => through(() => workApi.updateMilestone(projectId, uid, body), WORK_OFF),
+  deleteMilestone: (projectId, uid) => through(() => workApi.deleteMilestone(projectId, uid), WORK_OFF),
+
   board: (projectId, opts) => through(() => workApi.board(projectId, opts), WORK_OFF),
   item: (uid) => through(async () => (await workApi.item(uid))?.task ?? null, WORK_OFF),
   move: (uid, column, position) => through(async () => (await workApi.move(uid, { column, position }))?.task ?? null, WORK_OFF),
@@ -83,6 +106,26 @@ export const workAdapter = {
 
 /** Every method, with the issue that turns it on, for the decision file and its test. */
 export const WORK_SEAM = Object.freeze({
+  summary: '#4420',
+  timeline: '#3993',
+  comment: '#3993',
+  editComment: '#3993',
+  deleteComment: '#3993',
+  review: '#3993',
+  setLabels: '#3993',
+  setMilestone: '#3993',
+  drafts: '#3993',
+  acceptDraft: '#3993',
+  discardDraft: '#3993',
+  labels: '#3993',
+  createLabel: '#3993',
+  updateLabel: '#3993',
+  deleteLabel: '#3993',
+  milestones: '#3993',
+  createMilestone: '#3993',
+  updateMilestone: '#3993',
+  deleteMilestone: '#3993',
+
   board: '#3969', item: '#3969', move: '#3969', assign: '#3969', create: '#3969',
   burnup: '#3970', run: '#3971', retry: '#3971', feed: '#3971', workload: '#3972', schedule: '#3972', agentSessions: '#3972',
   complianceTasks: '#3976', complianceTask: '#3976', markDone: '#3976', createWork: '#3976',

@@ -692,10 +692,12 @@ const isOldRoute = (d: Pick<DecisionRow, 'state' | 'evidence_count'>) => d.state
  *   when no deadline is ahead.
  */
 /** D757 §2.6 (#1925): the card's one read-only interview line; null when it cannot be read. */
-export type VerdictCard = Card & { interview_evidence?: { count: number; contradicting: number; text: string } | null };
+export type VerdictCard = Card & { contributions?: { text: string; href: string }[]; interview_evidence?: { count: number; contradicting: number; text: string } | null };
 
 export async function verdictCard(ctx: Ctx): Promise<VerdictCard> {
   return safeCard({ slug: 'verdict', name: 'Verdict', range: 'All time', caption: 'Every decision, oldest to newest, never overwritten.', source: 'Decisions' }, async (): Promise<Omit<VerdictCard, 'slug' | 'name' | 'range' | 'caption'>> => {
+    const hasFindings = ctx.canWrite && (await (await import('./interviewFindings')).presentTables(ctx.env, ['interview_findings'])).has('interview_findings');
+    const contributions = hasFindings ? (await ctx.env.DB.prepare("SELECT interview_id, payload_json FROM interview_findings WHERE project_id = ? AND kind = 'verdict_contribution' ORDER BY id DESC LIMIT 50").bind(ctx.projectId).all<{ interview_id: number; payload_json: string }>()).results?.map((r) => ({ text: String(JSON.parse(r.payload_json).text), href: `/validate/customer-research/${r.interview_id}?project=${ctx.projectId}` })) ?? [] : [];
     const add = { text: 'Record a decision', href: `/validate/verdict/new?project=${ctx.projectId}` };
     const [any, current, interview_evidence] = await Promise.all([
       decisionsFor(ctx.env, ctx.projectId, { pageSize: 1 }),
@@ -703,11 +705,11 @@ export async function verdictCard(ctx: Ctx): Promise<VerdictCard> {
       interviewLine(ctx),
     ]);
     if (any.total === 0) {
-      return { state: 'empty', series: null, next: add, reason: 'No decision yet. Decisions appear here once evidence is in.', interview_evidence };
+      return { state: 'empty', series: null, next: add, contributions, reason: 'No decision yet. Decisions appear here once evidence is in.', interview_evidence };
     }
     if (!current) {
       return {
-        state: 'too_little', series: null, next: add, interview_evidence,
+        state: 'too_little', series: null, next: add, interview_evidence, contributions,
         reason: 'No verdict for the venture yet. Withheld decisions and decisions on one hypothesis are in the table.',
       };
     }
@@ -732,7 +734,7 @@ export async function verdictCard(ctx: Ctx): Promise<VerdictCard> {
         }
         : null,
       reason: null,
-      interview_evidence,
+      interview_evidence, contributions,
     };
   });
 }

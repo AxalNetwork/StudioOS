@@ -296,34 +296,57 @@ export type ProviderSwitches = Partial<Record<'AI_PROVIDER_ANTHROPIC', string>>;
  * `AI_PROVIDER_BRIA` is exactly 'on'. The owner turns it on after buying
  * AI Gateway credits and sending Bria's sub-processor notice (#1008).
  *
- * Bria only (M = B). Cloudflare lists no Bria upscale model, so Upscale has no
- * row: it stays "Coming later" until a model is chosen.
+ * ONE SWITCH PER PROVIDER. Each provider is its own sub-processor, so each row
+ * names its own switch: Bria's background removal runs while `AI_PROVIDER_BRIA`
+ * is 'on' (M = B), and Pruna's upscale (D4316, the owner's answer A on #4316)
+ * while `AI_PROVIDER_PRUNA` is 'on'. Turning one on never turns on the other.
  */
 export type ImageToolId = 'remove_background' | 'upscale';
+export const IMAGE_TOOL_SWITCH = 'AI_PROVIDER_BRIA' as const;
+/** D4316: Pruna's own switch, off by default; on only after its 10-day sub-processor notice (#1008). */
+export const UPSCALE_TOOL_SWITCH = 'AI_PROVIDER_PRUNA' as const;
+export type ImageToolSwitch = typeof IMAGE_TOOL_SWITCH | typeof UPSCALE_TOOL_SWITCH;
 export interface GatewayImageModel {
   id: string;
-  provider: 'bria';
+  provider: 'bria' | 'pruna';
   name: string;
   tool: ImageToolId;
+  /** The wrangler var that turns this provider on, exactly 'on'. */
+  switch: ImageToolSwitch;
   /** USD per image, exactly as printed. */
   usdPerImage: string;
   source: string;
   read: string;
 }
-export const IMAGE_TOOL_SWITCH = 'AI_PROVIDER_BRIA' as const;
 export const GATEWAY_IMAGE_MODELS: readonly GatewayImageModel[] = Object.freeze([
   {
     id: 'bria/remove-background',
     provider: 'bria',
     name: 'Bria RMBG 2.0',
     tool: 'remove_background',
+    switch: IMAGE_TOOL_SWITCH,
     usdPerImage: '0.018',
     source: 'https://developers.cloudflare.com/ai/models/bria/remove-background/',
     read: '2026-11-03',
   },
+  // D4316 (#4316): Pruna P-Image-Upscale, the owner's answer A (2026-11-04). About $0.005 an image, as
+  // #4316 and Pruna's own page quote it. Cloudflare's page points to the dashboard for the price, and was
+  // not reachable from the session that wrote this row: the owner confirms the figure there before the switch.
+  {
+    id: 'pruna/p-image-upscale',
+    provider: 'pruna',
+    name: 'Pruna P-Image-Upscale',
+    tool: 'upscale',
+    switch: UPSCALE_TOOL_SWITCH,
+    usdPerImage: '0.005',
+    source: 'https://developers.cloudflare.com/ai/models/pruna/p-image-upscale/',
+    read: '2026-11-04',
+  },
 ]);
 export const gatewayImageModelFor = (tool: ImageToolId): GatewayImageModel | null => GATEWAY_IMAGE_MODELS.find((m) => m.tool === tool) ?? null;
 export const imageToolsOn = (env: Partial<Record<typeof IMAGE_TOOL_SWITCH, string>>): boolean => env[IMAGE_TOOL_SWITCH] === 'on';
+/** D4316: whether this row's own provider is switched on (exactly 'on'). */
+export const imageToolOn = (env: Partial<Record<ImageToolSwitch, string>>, m: GatewayImageModel): boolean => env[m.switch] === 'on';
 
 
 export const providerModelById = (id: string): ProviderModel | null => PROVIDER_MODELS.find((m) => m.id === id) ?? null;

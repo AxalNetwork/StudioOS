@@ -155,6 +155,7 @@ export async function storePlacements(
     task?: 'structure_interview' | 'extract_conversation_items';
     /** D873 (#2520): how the cited words were made; a call's are 'Recorded'. Absent, nothing is said. */
     sourceLabel?: 'Recorded';
+    requireGivenConsent?: boolean;
     /** D866: reject an AI result whose source was changed while it ran. */
     sourceSnapshot?: readonly { id: number; text: string }[];
   },
@@ -187,6 +188,7 @@ export async function storePlacements(
         json_extract(p.value, '$.from'), json_extract(p.value, '$.to'), ?
        FROM json_each(?) p
       WHERE NOT EXISTS (SELECT 1 FROM interview_sessions s WHERE s.id = ? AND s.consent_status = 'declined')
+        AND (? = 0 OR EXISTS (SELECT 1 FROM interview_sessions s WHERE s.id = ? AND s.consent_status = 'given'))
         AND NOT EXISTS (SELECT 1 FROM json_each(?) expected
           LEFT JOIN interview_transcript_segments current ON current.id = json_extract(expected.value, '$.id') AND current.session_id = ?
           WHERE current.id IS NULL OR current.text IS NOT json_extract(expected.value, '$.text'))`,
@@ -200,7 +202,7 @@ export async function storePlacements(
         ...(p.quoteOriginal ? { quote_original: p.quoteOriginal } : {}), ...(p.sourceLang ? { source_lang: p.sourceLang } : {}),
         ...(opts.sourceLabel ? { source_label: opts.sourceLabel } : {}),
       }),
-    }))), opts.sessionId, JSON.stringify(opts.sourceSnapshot ?? []), opts.sessionId,
+    }))), opts.sessionId, opts.requireGivenConsent ? 1 : 0, opts.sessionId, JSON.stringify(opts.sourceSnapshot ?? []), opts.sessionId,
   )]);
   return { stored: written.reduce((n, r) => n + Number(r.meta?.changes ?? 0), 0), deduped };
 }
@@ -284,6 +286,27 @@ async function applyPlacement(
   };
   const sessionId = row.session_id ?? null;
   switch (kind) {
+    case 'interview_summary': {
+      const interviewId = await ownInterview();
+      if (!sessionId) throw new WriterError(409, 'The summary needs its source session.');
+      const digest = JSON.stringify({ overview: [{ text: payload.text, cites: [{ from: row.cite_from, to: row.cite_to, quote: quoteOf(row) }] }],
+        key_quotes: [], decisions: [], next_steps: [], model: 'Accepted proposal' });
+      await env.DB.prepare(`UPDATE interview_sessions SET summary = ?, digest_json = ?, digest_kept_at = datetime('now'),
+        digest_kept_by = ? WHERE id = ? AND interview_id = ? AND project_id = ? AND consent_status = 'given'`)
+        .bind(String(payload.text), digest, user.id, sessionId, interviewId, row.project_id).run();
+      await logCycleWrite(env, { projectId: row.project_id, userId: user.id, cycle: 'validate', module: 'customer-research',
+        entityId: interviewId, action: 'interview_summary_accepted', summary: 'Interview summary accepted' });
+      return;
+    }
+    case 'quotable_line': {
+      const iv = await env.DB.prepare('SELECT quote_consent FROM discovery_interviews WHERE id = ? AND project_id = ?')
+        .bind(await ownInterview(), row.project_id).first<{ quote_consent: number | null }>();
+      if (iv?.quote_consent !== 1) throw new WriterError(409, 'Quotes OK must be agreed before accepting a quotable line.');
+      if (String(payload.text) !== quoteOf(row)) throw new WriterError(422, 'A quotable line must keep the cited words unchanged.');
+      await writeInterviewFinding(env, { projectId: row.project_id, userId: user.id, interviewId: await ownInterview(), kind, payload,
+        sessionId, proposalId: row.id, quote: quoteOf(row), citeFrom: row.cite_from ?? null, citeTo: row.cite_to ?? null });
+      return;
+    }
     case 'pain_severity':
       // The three-level word itself (D659 widened the column's values), with
       // the mention and the theme in the same batch (D757).
@@ -727,6 +750,7 @@ structure.get('/sessions/:id/placements', async (c) => {
   const lastTwo = runs.slice(-2);
   return json({
     runs,
+    outputs: (s.session as any).outputs == null ? null : await (await import('../services/callOutputs')).outputStates(c.env, s.session),
     submitted_via_name: submittedVia,
     compare: lastTwo.length === 2
       ? { first: lastTwo[0].run_id, second: lastTwo[1].run_id, modules: alignRuns(lastTwo[0].placements, lastTwo[1].placements) }

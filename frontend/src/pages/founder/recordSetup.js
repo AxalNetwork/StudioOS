@@ -486,6 +486,7 @@ export function sessionBody(s, fields = SETUP_FIELDS) {
   const m = modeOf(s.mode);
   const body = { channel: s.mode };
   if (m.audio) {
+    if (Array.isArray(s.outputs)) body.outputs = s.outputs;
     body.consent = { status: 'given', method: s.consent };
     body.live_model = s.live ?? null;
     body.final_model = s.final ?? null;

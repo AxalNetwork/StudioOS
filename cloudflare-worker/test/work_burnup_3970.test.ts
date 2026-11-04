@@ -35,6 +35,8 @@ function world() {
   db.exec(sql('migrations/762_scope_task_work_board.sql'));
   // D1614 W7 (#3993): the board, which `filter=` reuses, reads 763's milestone, author and draft columns.
   db.exec(sql('migrations/763_task_comments_labels_milestones.sql'));
+  // #3968: the production board now reads E3's canonical run store.
+  db.exec(stripForeignKeys(tableFromBaseline(sql('migrations/728_agent_engine.sql'), 'agent_task_runs')));
   // D1614 W8 (#3994): W1's write clears needs_reassignment.
   db.exec(sql('migrations/202611022015_scope_task_needs_reassignment.sql'));
   db.exec(sql('migrations/202611022205_work_workload.sql')); // D1614 W4: the board reads the time block
