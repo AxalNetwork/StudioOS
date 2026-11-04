@@ -46,7 +46,8 @@ const TIER_COPY: Record<Exclude<InvestorTier, 'free'>, string> = {
   professional:
     'This is an Investor Professional feature. Upgrade for full deal flow, intros, and exports.',
   institutional:
-    'This is an Investor Institutional feature. Upgrade for unlimited dealrooms, co-invest, and LP reporting.',
+    // #4376 (owner, 2026-11-04): Institutional is custom-priced; it is never bought, so the gate names sales, not an upgrade.
+    'This is an Investor Institutional feature: unlimited dealrooms, co-invest, and LP reporting. Institutional is priced by Axal VC for each firm: Contact Axal VC.',
 };
 
 /**
