@@ -1,4 +1,3 @@
-import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
 /**
  * D696 (#1658) PR 2, the part S1 cleared on 2026-10-17: the record addresses
  * and their redirects, Grow's record ids, and the module tab's Back label.
@@ -55,7 +54,7 @@ test('8. the interview review is Customer research\'s record; the old address an
     ['/validate/demand-and-urgency-signals', '/validate/demand-signals'],
     ['/validate/demand-and-urgency-signals/:id', '/validate/demand-signals/:id'],
   ]) {
-    isRetiredRedirect(from) ? assert.equal(routeBlock(APP, from), null) : assert.match(routeBlock(APP, from), new RegExp(`element=\\{<ParamRedirect to="${to}" />\\}`), from);
+    assert.equal(routeBlock(APP, from), null);
   }
   // Exported beside HistoryRedirect.
   const at = APP.indexOf('export function HistoryRedirect(');

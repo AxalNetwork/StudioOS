@@ -242,7 +242,7 @@ test('D1415 part 4: App.jsx routes the new addresses (settings before :tab) and 
   for (const p of ['/account/companies', '/account/companies/settings', '/account/companies/:uid/settings', '/account/companies/:tab']) {
     const line = app.split('\n').find((l) => l.includes(`path="${p}"`));
     assert.equal(Boolean(line), !isRetiredRedirect(p), p);
-    isRetiredRedirect(`${p}`) ? assert.equal(line, undefined) : assert.match(line, /element=\{<CompaniesMovedRedirect \/>\}/, `${p} must only forward`);
+    assert.equal(line, undefined);
   }
   const at = (p) => app.indexOf(`path="${p}"`);
   assert.ok(at('/account/portfolio/settings') > 0 && at('/account/portfolio/settings') < at('/account/portfolio/:tab'));
@@ -250,7 +250,7 @@ test('D1415 part 4: App.jsx routes the new addresses (settings before :tab) and 
   // /partner/operations[/overview] go straight to the new settings address.
   for (const p of ['/partner/operations', '/partner/operations/overview']) {
     const line = app.split('\n').find((l) => l.includes(`path="${p}"`));
-    isRetiredRedirect(`${p}`) ? assert.equal(line, undefined) : assert.match(line, /<Navigate to="\/account\/portfolio\/settings" replace \/>/, p);
+    assert.equal(line, undefined);
   }
 });
 
