@@ -43,6 +43,7 @@ import diligence from '../src/routes/dd.ts';
 import projects from '../src/routes/projects.ts';
 import advisors from '../src/routes/advisors.ts';
 import performance from '../src/routes/fund_performance.ts';
+import comarketing from '../src/routes/comarketing.ts';
 
 
 const SECRET = 'synthetic-4472-account-licence-secret';
@@ -70,7 +71,7 @@ function fixture() {
   let grantReads = 0;
   env.DB = { ...DB, prepare(sql: string) { if (sql.startsWith('SELECT licence FROM account_licences')) grantReads++; return DB.prepare(sql); } };
   const app = new Hono<any>();
-  app.route('/api/projects',projects).route('/api/calendar',calendar).route('/api/compliance',compliance).route('/api/wellbeing',wellbeing).route('/api/legal/esign',esign).route('/api/search',search).route('/api/telegram',telegram).route('/api/integrations',integrations);
+  app.route('/api/comarketing',comarketing).route('/api/projects',projects).route('/api/calendar',calendar).route('/api/compliance',compliance).route('/api/wellbeing',wellbeing).route('/api/legal/esign',esign).route('/api/search',search).route('/api/telegram',telegram).route('/api/integrations',integrations);
   app.get('/synthetic/bank-purpose/:use',async c=>{const u=await getCurrentUser(c);const refusal=await personalPolicy(c,u!,c.req.param('use') as any);return refusal||c.json({ok:true});});
   app.route('/api/dd',diligence).route('/api/advisors',advisors).route('/api/fund-performance',performance);
   app.route('/api', routes).route('/api/auth', authRoutes).route('/api/admin/licences', appointments).route('/api/admin', adminRoutes);
@@ -694,4 +695,21 @@ test('integration and legacy Carta membership use held licences while preserving
     await grantLicence(f.DB,change('founder',9003));assert.equal((await f.call(path,9003,'POST',{})).status,404);
     await revokeLicence(f.DB,change('founder',9002));assert.equal((await f.call(path,9002,'POST',{})).body.error,'purpose_not_allowed');
   }finally {f.db.close();}
+});
+
+
+test('new co-marketing audience gate admits held Founder or Partner, never Investor alone or HQ powers', async () => {
+  const f=fixture();
+  try {
+    const path='/api/comarketing/published';
+    assert.equal((await f.call(path,9005)).status,403);
+    assert.equal((await f.call(path,9002)).status,403);
+    for (const [id,licence] of [[9005,'founder'],[9002,'partner']] as const) {
+      await grantLicence(f.DB,{userId:id,licence,actorId:9000,source:'admin'});
+      const allowed=await f.call(path,id);assert.equal(allowed.status,200);assert.deepEqual(allowed.body.items,[]);
+      assert.equal((await f.call('/api/comarketing/admin/queue',id)).status,403);
+      await revokeLicence(f.DB,{userId:id,licence,actorId:9000,source:'admin'});
+      assert.equal((await f.call(path,id)).status,403);
+    }
+  } finally { f.db.close(); }
 });

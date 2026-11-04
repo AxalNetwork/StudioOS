@@ -23,7 +23,7 @@ const r = new Hono<{ Bindings: Env }>();
 r.use('*', async (c, next) => {
   try {
     const user = await requireAuth(c);
-    if (!['admin', 'partner', 'founder'].includes(user.role)) {
+    if (user.role !== 'admin' && !holdsLicence(user, 'partner') && !holdsLicence(user, 'founder')) {
       return refuse(c, 403, { code: 'comarketing_role_required', message: 'Co-marketing is available to partners and founders. HQ reviews it under Approvals.' });
     }
   } catch (e) { return mapError(c, e); }
