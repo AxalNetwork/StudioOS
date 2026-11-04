@@ -1,6 +1,10 @@
 /** D4485 (#4485): Distribution overview on migrated SQLite; no connector or production reads. */
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
+import { Hono } from 'hono';
+import { SignJWT } from 'jose';
+import cycleGrow from '../src/routes/cycle_grow.ts';
+import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { distributionOverview, overviewSpend, overviewWeek } from '../src/services/distribution/overview.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { migratedDatabase, removeMigratedDatabases } from './_storage_schema.ts';
@@ -8,7 +12,8 @@ after(removeMigratedDatabases);
 const now = new Date('2026-11-11T12:00:00Z');
 function fixture() {
   const db = migratedDatabase();
-  db.exec(`INSERT INTO users(id,role,name,email) VALUES (1,'founder','Synthetic owner','synthetic-owner@example.invalid');
+  db.exec(`INSERT INTO founders(id,name,email) VALUES (1,'Synthetic owner','synthetic-owner@example.invalid'),(2,'Other founder','other@example.invalid');
+    INSERT INTO users(id,role,name,email,founder_id,is_active) VALUES (1,'founder','Synthetic owner','synthetic-owner@example.invalid',1,1),(2,'founder','Other founder','other@example.invalid',2,1);
     INSERT INTO projects(id,name,founder_id) VALUES (1,'Synthetic venture',1),(2,'Other venture',2);
     INSERT INTO grow_campaigns(id,uid,project_id,name,goal,status,utm_campaign,created_by,updated_by) VALUES
       (1,'ours',1,'Our campaign','demos','active','launch',1,1),
@@ -29,7 +34,7 @@ function fixture() {
       ('mon',1,'Monday','2026-11-09','planned',1),('sun',1,'Sunday','2026-11-15','scheduled',1),
       ('before',1,'Before','2026-11-08','planned',1),('after',1,'After','2026-11-16','planned',1),
       ('foreign',2,'Other venture','2026-11-11','planned',2),('dropped',1,'Dropped','2026-11-11','dropped',1);`);
-  return { db, env: { DB: d1Over(db) } as any };
+  return { db, env: { DB: d1Over(db), JWT_SECRET: 'test-only'.repeat(8), ENVIRONMENT: 'development' } as any };
 }
 const readEmpty = async () => ({ campaigns: [] });
 const channel = (source: 'manual' | 'mercury', cents: number, month = '2026-11') => ({ uid: 'social', spend_cents: cents, spend_reason: null, spend_months: [{ month, source, spend_cents: cents }] });
@@ -126,5 +131,63 @@ test('D4485: owner decision — cost uses current-month spend and its sources, w
     const absent = await distributionOverview(f.env, 1, { now, readCampaigns: async () => ({ campaigns: [campaign([channel('manual', 100, '2026-10')])] }) });
     assert.equal(absent.kpis.cost_per_lead.value, null);
     assert.match(absent.kpis.cost_per_lead.reason!, /current-month spend/);
+  } finally { f.db.close(); }
+});
+
+
+test('D4485: mounted overview uses the Grow project gate and rejects invalid weeks and anonymous reads', async () => {
+  const f = fixture();
+  const app = new Hono<any>().route('/api/cycles/grow', cycleGrow);
+  app.onError((e, c) => c.json({ detail: 'Request refused' }, (AUTH_ERROR_STATUSES[e.message] || 500) as any));
+  const call = async (user: number | null, project: number, week = '2026-W46') => {
+    const token = user === null ? null : await new SignJWT({ user_id: user }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(f.env.JWT_SECRET));
+    const res = await app.request(`/api/cycles/grow/distribution/overview?project=${project}&week=${encodeURIComponent(week)}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} }, f.env);
+    return { status: res.status, body: await res.json() as any };
+  };
+  try {
+    const own = await call(1, 1);
+    assert.equal(own.status, 200, JSON.stringify(own.body));
+    assert.deepEqual(own.body.campaigns.items.map((c: any) => c.uid), ['ours']);
+    assert.deepEqual(own.body.week.items.map((i: any) => i.uid), ['mon', 'sun']);
+    assert.equal((await call(2, 1)).status, 403);
+    assert.equal((await call(1, 2)).status, 403);
+    assert.equal((await call(null, 1)).status, 401);
+    const invalid = await call(1, 1, '2026-W99');
+    assert.equal(invalid.status, 400);
+    assert.equal(invalid.body.field, 'week');
+  } finally { f.db.close(); }
+});
+
+test('D4485: real campaign reader keeps Mercury precedence, foreign facts out, and CPL within the current month', async () => {
+  const f = fixture();
+  try {
+    f.db.exec(`UPDATE grow_campaigns SET starts_on='2026-10-01',ends_on='2026-11-30',budget_cents=10000 WHERE id=1;
+      INSERT INTO grow_campaign_channels(campaign_id,channel_id,planned_budget_cents) VALUES (1,1,10000);
+      INSERT INTO channel_spend(channel_id,month,spend_cents) VALUES (1,'2026-10',100),(1,'2026-11',1000);
+      INSERT INTO mercury_grow_facts(integration_id,project_id,module,kind,period,subject,amount_cents,as_of) VALUES
+        (1,1,'distribution','channel_spend','2026-11','social',2000,'2026-11-11'),
+        (1,2,'distribution','channel_spend','2026-11','social',9999,'2026-11-11');`);
+    const result = await distributionOverview(f.env, 1, { now });
+    assert.equal(result.kpis.spend_vs_budget.value, 2100);
+    assert.equal(result.kpis.cost_per_lead.value, 1000);
+    assert.deepEqual(result.kpis.cost_per_lead.sources, ['mercury','connector']);
+    assert.equal(result.kpis.leads.value, 2);
+  } finally { f.db.close(); }
+});
+
+
+test('D4485: no active campaigns is distinct from no campaigns, and an unreadable list has no fabricated total', async () => {
+  const f = fixture();
+  try {
+    f.db.exec("UPDATE grow_campaigns SET status='draft' WHERE project_id=1");
+    const draft = await distributionOverview(f.env, 1, { now });
+    assert.deepEqual(draft.campaigns.items, []);
+    assert.equal(draft.campaigns.total, 1);
+    f.db.exec('DELETE FROM grow_campaigns WHERE project_id=1');
+    const empty = await distributionOverview(f.env, 1, { now });
+    assert.equal(empty.campaigns.total, 0);
+    const failed = await distributionOverview(f.env, 1, { now, readCampaigns: async () => { throw new Error('unavailable'); } });
+    assert.equal(failed.campaigns.total, null);
+    assert.equal(failed.campaigns.items, null);
   } finally { f.db.close(); }
 });

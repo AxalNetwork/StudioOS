@@ -79,6 +79,7 @@ The canvases are `design/canvases/integrated/Cycle Overview.dc.html` and its two
 | `evidence/` | D1261 (#2430): Raise's Evidence view at `/raise/evidence`, its item and claim drawers as addresses, and the investor's evidence block (D1268: the deal page, an investor's round call and the diligence room, on D1265's read); `evidenceModel.js` holds the five Source labels, strengths, claim states and sharing. `cycleModel.js`'s `lead` draws Evidence after Overview on Raise. A bank-derived figure reaches an investor only one by one, after the NDA, as "From the company's bank, as of [date]" (D1269, amending D840 §2) |
 | `reporting/` | D1060 (#2930): the Reporting desk's blocks and dialogs and the report builder and sent report, with their rules (`deskModel.js`, `builderModel.js`) |
 | `publish/` | D1321 (#3482, part 3 of #2400): Publish to… (the sheet, its confirm and result) and "Published outside", the second list on the Reporting desk's History, over part 1's `publishApi` (D1319); `publishModel.js` holds the rules and words. Only the confirm the founder presses sends |
+| `distribution/` | Distribution overview data labels and week columns (D4485); shared shell supplied by #4484. |
 
 ## Rules
 

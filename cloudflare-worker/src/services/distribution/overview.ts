@@ -84,8 +84,13 @@ export async function distributionOverview(env: Env, projectId: number, options:
   const replies = await count('contact replies', `SELECT COUNT(*) AS n FROM contact_replies r JOIN contacts c ON c.id = r.contact_id
     WHERE c.project_id = ? AND r.direction = 'inbound' AND datetime(r.created_at) >= datetime(?) AND datetime(r.created_at) < datetime(?)`, [projectId, month, until]);
   let active: CampaignView[] | null = null;
+  let total: number | null = null;
   let campaignReason: string | null = null;
-  try { active = (await (options.readCampaigns ?? campaigns)(env, projectId)).campaigns.filter((c) => c.status === 'active'); }
+  try {
+    const records = (await (options.readCampaigns ?? campaigns)(env, projectId)).campaigns;
+    total = records.length;
+    active = records.filter((c) => c.status === 'active');
+  }
   catch { campaignReason = unreadable('campaigns'); }
   const spend = active === null ? { ...unavailable(campaignReason!), budget_cents: null } : overviewSpend(active);
   const costSpend = active === null ? spend : overviewSpend(active, month.slice(0, 7));
@@ -101,5 +106,5 @@ export async function distributionOverview(env: Env, projectId: number, options:
     week = { ...range, items: rows.results ?? [], reason: null };
   } catch { week = { ...range, items: null, reason: unreadable('this week’s calendar') }; }
   return { month: month.slice(0, 7), kpis: { reach: unavailable(noReach), clicks: unavailable(noReach), leads, replies, cost_per_lead: cost, spend_vs_budget: spend },
-    campaigns: { items: active, reason: campaignReason }, week };
+    campaigns: { items: active, total, reason: campaignReason }, week };
 }

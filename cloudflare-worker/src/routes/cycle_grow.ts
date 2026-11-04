@@ -66,6 +66,7 @@ import {
   logGrowWrite, setApplicationStage, setChannelSpend, setChecklistItem, setPartnerRevenue, updateChannel, updateFeedback, updateMarket, updateObligation,
   updatePartner, updateRole,
 } from '../services/growWriters';
+import { distributionOverview } from '../services/distribution/overview';
 import { campaign, campaignCreatives, putCampaignCreative, campaigns, createCampaign, updateCampaign, campaignChannel, campaignItem, archiveCampaign } from '../services/growCampaigns';
 import { canAskAgain } from '../services/updateShare';
 import { isAdmin } from './_t13t14t15_helpers';
@@ -440,6 +441,14 @@ const param = (c: C, k: string): string => c.req.param(k) ?? '';
 const intId = (v: string) => Number(v);
 
 // D4447 / #3722 Part A: plans only, through the same venture read/write gates.
+// D4485: static overview read, before parameter routes, through the existing venture gate.
+r.get('/distribution/overview', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const pid = await project(c, user, c.req.query('project'), false);
+    return c.json(await distributionOverview(c.env, pid, { week: c.req.query('week') }));
+  } catch (e) { return fail(c, e); }
+});
 r.get('/campaigns', async (c) => {
   try {
     const user = await requireAuth(c);
