@@ -12,9 +12,10 @@
  *                            exchanged for a short-lived Anthropic token; needs id-token: write
  *   ANTHROPIC_API_KEY        repository secret, the fallback; read by the SDK, never printed
  *   ANTHROPIC_MODEL, ANTHROPIC_MODEL_HIGH_RISK, CLAUDE_REVIEW_*  repository variables
- *   ANTHROPIC_API_KEY_2, ANTHROPIC_API_KEY_3, KIMI_API_KEY  repository secrets, optional: the
+ *   ANTHROPIC_API_KEY_2, ANTHROPIC_API_KEY_3, OPENAI_API_KEY, KIMI_API_KEY  repository secrets, optional: the
  *                            credit fallback chain, tried in that order, each only when the
  *                            account before it answers that its credit balance is exhausted
+ *   OPENAI_MODEL, OPENAI_BASE_URL  owner-selected model (no default), optional HTTPS endpoint
  *   KIMI_MODEL, KIMI_BASE_URL  repository variables, optional (defaults in claudeReview.mjs)
  *   GITHUB_TOKEN             the job's read-only token (contents, pull-requests, actions)
  *   GITHUB_EVENT_PATH, GITHUB_REPOSITORY, GITHUB_API_URL, GITHUB_STEP_SUMMARY, GITHUB_OUTPUT
@@ -31,9 +32,10 @@ import { appendFileSync, closeSync, fstatSync, mkdirSync, openSync, readFileSync
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { oidcFederationProvider } from '@anthropic-ai/sdk/lib/credentials/oidc-federation';
 import { WorkloadIdentityError } from '@anthropic-ai/sdk/lib/credentials/types';
-import { escapeCommandData, escapeCommandProperty, parseRates, readConfig } from '../lib/claudeReview.mjs';
+import { REVIEW_OUTPUT_SCHEMA, escapeCommandData, escapeCommandProperty, parseRates, readConfig } from '../lib/claudeReview.mjs';
 import { runReview } from '../lib/claudeReviewRun.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -106,7 +108,8 @@ export function classifyError(e, sdk = Anthropic) {
   if (fed) {
     kind = 'federation';
     if (typeof fed.statusCode === 'number') status = fed.statusCode;
-  } else if (e instanceof sdk.AuthenticationError) kind = 'authentication';
+  } else if (typeof sdk.APIUserAbortError === 'function' && e instanceof sdk.APIUserAbortError) kind = 'timeout';
+  else if (e instanceof sdk.AuthenticationError) kind = 'authentication';
   else if (e instanceof sdk.PermissionDeniedError) kind = 'permission';
   else if (e instanceof sdk.NotFoundError) kind = 'not_found';
   else if (e instanceof sdk.RateLimitError) kind = 'rate_limit';
@@ -115,9 +118,26 @@ export function classifyError(e, sdk = Anthropic) {
   else if (e instanceof sdk.APIConnectionError) kind = 'connection';
   else if (e instanceof sdk.InternalServerError) kind = status === 529 ? 'overloaded' : 'server';
   else if (e instanceof sdk.APIError) kind = status === 402 ? 'billing' : status === 529 ? 'overloaded' : 'unknown';
+  if (['insufficient_quota', 'billing_hard_limit_reached', 'billing_not_active'].includes(e?.code || e?.error?.code)) kind = 'billing';
+  if (e?.name === 'APIUserAbortError' || e?.name === 'AbortError') kind = 'timeout';
   const out = new Error(`Anthropic API error: ${kind}`);
   Object.assign(out, { kind, status, requestId: requestId || fed?.requestId || undefined, detail: errorDetail(e, fed) });
   return out;
+}
+
+/** A connected stream may have billed tokens even if its final message fails. */
+async function streamMessage(messages, p, options, sdk) {
+  let streamStarted = false;
+  try {
+    const stream = messages().stream(p, options);
+    stream.on?.('connect', () => { streamStarted = true; });
+    return await stream.finalMessage();
+  } catch (e) {
+    const out = classifyError(e, sdk);
+    out.streamStarted = streamStarted;
+    if (options?.signal?.aborted) out.kind = 'timeout';
+    throw out;
+  }
 }
 
 /**
@@ -126,13 +146,16 @@ export function classifyError(e, sdk = Anthropic) {
  * federation `apiKey` and `authToken` are passed as null, because an API key
  * (even one read from the environment) outranks `credentials`.
  */
-export function anthropicClient({ apiKey, federation = null, identityToken = null, maxRetries, timeoutSeconds, sdk = Anthropic, makeProvider = oidcFederationProvider }) {
+export function anthropicClient({ apiKey, federation = null, identityToken = null, workspaceId, maxRetries, timeoutSeconds, sdk = Anthropic, makeProvider = oidcFederationProvider }) {
   // Built on first use: a run that never calls the API never builds a client,
   // and a credential problem is the runner's error to report, not a crash.
   let client = null;
   const build = () => {
-    const base = { maxRetries, timeout: timeoutSeconds * 1000 };
-    if (!federation) return new sdk({ ...base, apiKey });
+    const base = { maxRetries: 0, timeout: timeoutSeconds * 1000 };
+    // Fallbacks pass null when unset to suppress another account's ambient header.
+    // The main API-key client does not set this option.
+    const workspaceHeaders = workspaceId === undefined ? {} : { defaultHeaders: { 'anthropic-workspace-id': workspaceId || null } };
+    if (!federation) return new sdk({ ...base, apiKey, ...workspaceHeaders });
     const credentials = makeProvider({
       identityTokenProvider: identityToken,
       federationRuleId: federation.ruleId,
@@ -150,7 +173,7 @@ export function anthropicClient({ apiKey, federation = null, identityToken = nul
   };
   return {
     countTokens: (p) => wrap((c) => c.messages.countTokens({ model: p.model, system: p.system, messages: p.messages })),
-    create: (p) => wrap((c) => (p.betas ? c.beta.messages.create(p) : c.messages.create(p))),
+    create: (p, options) => streamMessage(() => p.betas ? get().beta.messages : get().messages, p, options, sdk),
   };
 }
 
@@ -164,10 +187,63 @@ export function kimiClient({ apiKey, baseURL, maxRetries, timeoutSeconds, sdk = 
   // Only the Kimi key goes to Moonshot: authToken is pinned to null (the SDK
   // would read ANTHROPIC_AUTH_TOKEN), and every header outside the allowlist
   // (ANTHROPIC_CUSTOM_HEADERS, an Authorization bearer) is dropped on the way out.
-  const get = () => (client ||= new sdk({ apiKey, authToken: null, baseURL, maxRetries, timeout: timeoutSeconds * 1000, fetch: kimiFetch(fetchImpl) }));
+  const get = () => (client ||= new sdk({ apiKey, authToken: null, baseURL, maxRetries: 0, timeout: timeoutSeconds * 1000, fetch: kimiFetch(fetchImpl) }));
   return {
-    create: async (p) => {
-      try { return await get().messages.create(p); } catch (e) { throw classifyError(e, sdk); }
+    create: (p, options) => streamMessage(() => get().messages, p, options, sdk),
+  };
+}
+
+/** OpenAI's own request headers only; no Anthropic or ambient workspace headers. */
+export const OPENAI_HEADERS = /^(authorization|content-type|content-length|accept|accept-encoding|user-agent|idempotency-key|x-stainless-[a-z0-9-]+)$/i;
+export function openaiFetch(fetchImpl, apiKey) {
+  return (url, init = {}) => {
+    const headers = new Headers(init.headers);
+    for (const name of [...headers.keys()]) if (!OPENAI_HEADERS.test(name)) headers.delete(name);
+    headers.set('authorization', `Bearer ${apiKey}`);
+    return fetchImpl(url, { ...init, headers });
+  };
+}
+
+/** Streaming Responses API mapped into the runner's existing Message shape. */
+export function openaiClient({ apiKey, baseURL, timeoutSeconds, sdk = OpenAI, fetchImpl = globalThis.fetch }) {
+  let client;
+  const get = () => (client ||= new sdk({ apiKey, baseURL, organization: null, project: null, maxRetries: 0, timeout: timeoutSeconds * 1000, fetch: openaiFetch(fetchImpl, apiKey) }));
+  return {
+    create: async (p, options) => {
+      let streamStarted = false;
+      try {
+        const stream = await get().responses.create({
+          model: p.model, instructions: p.system, input: p.messages,
+          max_output_tokens: p.max_tokens, stream: true, store: false,
+          text: { format: { type: 'json_schema', name: 'review', strict: true, schema: REVIEW_OUTPUT_SCHEMA } },
+        }, options);
+        let response;
+        for await (const event of stream) {
+          streamStarted = true;
+          if (event.type === 'response.completed' || event.type === 'response.incomplete') response = event.response;
+          if (event.type === 'response.failed' || event.type === 'error') {
+            const error = event.response?.error || event;
+            throw Object.assign(new Error(error.message || 'OpenAI stream failed'), { code: error.code });
+          }
+        }
+        if (!response) throw Object.assign(new Error('OpenAI stream ended before a final response'), { name: 'APIConnectionTimeoutError' });
+        const content = (response.output || []).filter(item => item.type === 'message').flatMap(item => item.content || []);
+        const refused = content.some(item => item.type === 'refusal');
+        const usage = response.usage;
+        const cached = usage?.input_tokens_details?.cached_tokens || 0;
+        return {
+          _request_id: response._request_id,
+          stop_reason: refused ? 'refusal' : response.status === 'incomplete' ? 'max_tokens' : 'end_turn',
+          content: content.filter(item => item.type === 'output_text').map(item => ({ type: 'text', text: item.text })),
+          usage: usage ? { input_tokens: typeof usage.input_tokens === 'number' ? Math.max(0, usage.input_tokens - cached) : undefined, output_tokens: usage.output_tokens, cache_read_input_tokens: cached, cache_creation_input_tokens: 0 } : undefined,
+        };
+      } catch (e) {
+        const classified = classifyError(e, sdk);
+        classified.streamStarted = streamStarted;
+        if (options?.signal?.aborted) classified.kind = 'timeout';
+        if (e?.name === 'APIConnectionTimeoutError') classified.kind = 'timeout';
+        throw classified;
+      }
     },
   };
 }
@@ -194,9 +270,11 @@ export function fallbacksFor(env, overrides = {}) {
   const out = {};
   for (const step of config.creditFallbacks) {
     const common = { maxRetries: config.maxRetries, timeoutSeconds: config.timeoutSeconds };
-    out[step.id] = step.provider === 'kimi'
+    out[step.id] = step.provider === 'openai'
+      ? openaiClient({ apiKey: env.OPENAI_API_KEY, baseURL: step.baseURL, ...common, ...(overrides.openai || {}) })
+      : step.provider === 'kimi'
       ? kimiClient({ apiKey: env.KIMI_API_KEY, baseURL: step.baseURL, ...common, ...(overrides.kimi || {}) })
-      : anthropicClient({ apiKey: env[step.secret], federation: null, ...common, ...(overrides.anthropic || {}) });
+      : anthropicClient({ apiKey: env[step.secret], federation: null, workspaceId: step.workspaceId, ...common, ...(overrides.anthropic || {}) });
   }
   return out;
 }
@@ -330,6 +408,10 @@ export async function main(env = process.env) {
     nonce: () => randomBytes(8).toString('hex'),
     github: githubClient({ apiUrl, token, repository }),
     git: {
+      async authorMarkers(sha) {
+        if (!SHA.test(sha)) throw new Error('not a commit id');
+        return git(prDir, ['show', '-s', '--format=%an%n%cn', sha]).split('\n').map(s => s.slice(0, 500));
+      },
       async fetch(sha) {
         if (!SHA.test(sha)) throw new Error('not a commit id');
         try { git(prDir, ['cat-file', '-e', `${sha}^{commit}`]); return; } catch { /* not present yet */ }
@@ -361,6 +443,15 @@ export async function main(env = process.env) {
         return null;
       }
     },
+    persistRecord(record) {
+      const account = JSON.parse(record.body).account_id || 'main';
+      const dir = join(outDir, account);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'record.json'), `${record.body}\n`);
+      writeFileSync(join(dir, 'name.txt'), record.name);
+      // Keep a root copy for diagnostics and older consumers.
+      writeFileSync(join(outDir, 'record.json'), `${record.body}\n`);
+    },
     anthropic: null,
     fallbacks: {},
   };
@@ -386,7 +477,11 @@ export async function main(env = process.env) {
   if (result.record) {
     mkdirSync(outDir, { recursive: true });
     writeFileSync(join(outDir, 'record.json'), `${result.record.body}\n`);
-    if (result.findingsFile) writeFileSync(join(outDir, 'review.json'), `${result.findingsFile}\n`);
+    if (result.findingsFile) {
+      writeFileSync(join(outDir, 'review.json'), `${result.findingsFile}\n`);
+      const account = JSON.parse(result.record.body).account_id || 'main';
+      writeFileSync(join(outDir, account, 'review.json'), `${result.findingsFile}\n`);
+    }
   }
   if (env.GITHUB_OUTPUT) {
     appendFileSync(env.GITHUB_OUTPUT, `outcome=${result.outcome}\nrecord_name=${result.record ? result.record.name : ''}\n`);

@@ -223,9 +223,9 @@ export function ModuleSuggestions({
   return (
     <section data-testid="module-suggestions" className="space-y-4">
       {read?.outputs && <ul className="space-y-1 text-[13px] text-axal-muted dark:text-gray-300" aria-label="Call outputs">
-        {read.outputs.map((o) => <li key={o.output}>{o.label}: {o.status === 'empty' ? 'Nothing found in this call'
-          : o.status === 'failed' ? <>Could not be extracted · <button type="button" className="underline" onClick={() => onStructure?.({ output: o.output })}>Try again</button></>
-            : o.status === 'done' ? 'Proposals ready for review' : o.status === 'running' ? 'Extracting…' : 'Waiting for the final transcript'}</li>)}
+        {read.outputs.map((o) => <li key={o.output}>{o.label}: {o.status === 'empty' ? 'No new proposals'
+          : (o.status === 'failed' || o.retryable) ? <>Could not be extracted · <button type="button" className="underline" onClick={() => onStructure?.({ output: o.output })}>Try again</button></>
+            : o.status === 'cancelled' ? 'Cancelled: consent withdrawn' : o.status === 'done' ? 'Proposals ready for review' : o.status === 'running' ? 'Extracting…' : 'Waiting for the final transcript'}</li>)}
       </ul>}
       {runError && (refusalKind(runError) === 'budget' ? <BudgetRefusal err={runError} /> : <p role="alert" className="text-[13px] font-semibold text-red-700 dark:text-red-400">{runError.message}</p>)}
       {!any && (

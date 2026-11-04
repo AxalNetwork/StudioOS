@@ -33,7 +33,7 @@ name: Claude review
 #   - Read-only token: contents, pull-requests and actions (the last to list
 #     this month's review records), plus id-token for federation. No job can
 #     write to the repository, the pull request or a check.
-#   - Third-party code is the pinned Anthropic SDK, installed with
+#   - Third-party code is the pinned official Anthropic/OpenAI SDKs, installed with
 #     --ignore-scripts from a committed lockfile.
 
 on:
@@ -93,6 +93,9 @@ jobs:
       # when only the API key is configured.
       id-token: write
     steps:
+      - name: Start review clock
+        run: echo "CLAUDE_REVIEW_JOB_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+
       - name: Check out the reviewer (base commit)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -154,6 +157,14 @@ jobs:
           # run starts with the main account above.
           ANTHROPIC_API_KEY_2: ${{ secrets.ANTHROPIC_API_KEY_2 }}
           ANTHROPIC_API_KEY_3: ${{ secrets.ANTHROPIC_API_KEY_3 }}
+          ANTHROPIC_WORKSPACE_ID_2: ${{ vars.ANTHROPIC_WORKSPACE_ID_2 }}
+          ANTHROPIC_WORKSPACE_ID_3: ${{ vars.ANTHROPIC_WORKSPACE_ID_3 }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
+          CLAUDE_REVIEW_PR_HEAD: ${{ github.event.pull_request.head.ref }}
+          CLAUDE_REVIEW_PR_BODY: ${{ github.event.pull_request.body }}
+          CLAUDE_REVIEW_PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           KIMI_API_KEY: ${{ secrets.KIMI_API_KEY }}
           KIMI_MODEL: ${{ vars.KIMI_MODEL }}
           KIMI_BASE_URL: ${{ vars.KIMI_BASE_URL }}
@@ -168,6 +179,9 @@ jobs:
           CLAUDE_REVIEW_MAX_FILES: ${{ vars.CLAUDE_REVIEW_MAX_FILES }}
           CLAUDE_REVIEW_CONTEXT_LINES: ${{ vars.CLAUDE_REVIEW_CONTEXT_LINES }}
           CLAUDE_REVIEW_MAX_RETRIES: ${{ vars.CLAUDE_REVIEW_MAX_RETRIES }}
+          CLAUDE_REVIEW_RUN_ID: ${{ github.run_id }}
+          CLAUDE_REVIEW_RUN_ATTEMPT: ${{ github.run_attempt }}
+          CLAUDE_REVIEW_JOB_SECONDS: 900
           CLAUDE_REVIEW_TIMEOUT_SECONDS: ${{ vars.CLAUDE_REVIEW_TIMEOUT_SECONDS }}
           CLAUDE_REVIEW_MAX_COST_USD: ${{ vars.CLAUDE_REVIEW_MAX_COST_USD }}
           CLAUDE_REVIEW_MONTHLY_BUDGET_USD: ${{ vars.CLAUDE_REVIEW_MONTHLY_BUDGET_USD }}
@@ -182,20 +196,59 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: node reviewer/scripts/claude-review/review.mjs
 
-      # One artifact per review that spent tokens or succeeded. Its NAME holds
-      # the month, the pull request, the input key, the outcome and the cost,
-      # so the next review reads this month's spend and spots a repeat from
-      # the artifact list alone. Kept 90 days, longer than any month.
+      # Read durable names even if Review was cancelled before setting outputs.
+      - name: Prepare usage records
+        if: always()
+        id: usage
+        env:
+          RECORD_DIR: ${{ runner.temp }}/claude-review
+        run: |
+          node --input-type=module <<'JS'
+          import { readFileSync, appendFileSync } from 'node:fs';
+          for (const account of ['main', 'claude2', 'claude3', 'openai', 'kimi']) {
+            try {
+              const name = readFileSync(`${process.env.RECORD_DIR}/${account}/name.txt`, 'utf8');
+              if (/^claude-review_v1_[a-z0-9_-]+$/.test(name)) appendFileSync(process.env.GITHUB_OUTPUT, `${account}=${name}\n`);
+            } catch { /* no paid attempt on this account */ }
+          }
+          JS
       - name: Record usage
-        if: always() && steps.review.outputs.record_name != ''
+        if: always() && steps.usage.outputs.main != ''
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ${{ steps.review.outputs.record_name }}
-          # record.json: tokens, cost, outcome. review.json (after a successful
-          # review only): the validated findings, for a person or an agent
-          # fixing them, since a job summary cannot be read through the API.
-          path: |
-            ${{ runner.temp }}/claude-review/record.json
-            ${{ runner.temp }}/claude-review/review.json
+          name: ${{ steps.usage.outputs.main }}
+          path: ${{ runner.temp }}/claude-review/main/
+          retention-days: 90
+          if-no-files-found: ignore
+      - name: Record usage (claude2)
+        if: always() && steps.usage.outputs.claude2 != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.usage.outputs.claude2 }}
+          path: ${{ runner.temp }}/claude-review/claude2/
+          retention-days: 90
+          if-no-files-found: ignore
+      - name: Record usage (claude3)
+        if: always() && steps.usage.outputs.claude3 != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.usage.outputs.claude3 }}
+          path: ${{ runner.temp }}/claude-review/claude3/
+          retention-days: 90
+          if-no-files-found: ignore
+      - name: Record usage (kimi)
+        if: always() && steps.usage.outputs.kimi != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.usage.outputs.kimi }}
+          path: ${{ runner.temp }}/claude-review/kimi/
+          retention-days: 90
+          if-no-files-found: ignore
+      - name: Record usage (openai)
+        if: always() && steps.usage.outputs.openai != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.usage.outputs.openai }}
+          path: ${{ runner.temp }}/claude-review/openai/
           retention-days: 90
           if-no-files-found: ignore
