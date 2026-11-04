@@ -127,8 +127,8 @@ const LIVE = new Set(['burnup', 'board', 'item', 'move', 'assign', 'create', 'ru
 test('the seam: every method not yet live is off, with the issue that turns it on, and makes no request', async () => {
   assert.deepEqual(Object.keys(WORK_SEAM).sort(), Object.keys(workAdapter).sort());
   for (const [m, issue] of Object.entries(WORK_SEAM)) {
-    assert.match(issue, /^#39(57|69|70|71|72|76|94)$/);
-    if (LIVE.has(m)) continue;
+    assert.match(issue, /^#39(57|69|70|71|72|76|93|94)$/);
+    if (LIVE.has(m) || issue === '#3993') continue; // W7 routes are on main and covered by work_w7_3993.
     const r = await workAdapter[m]('x');
     assert.equal(r.available, false, m);
   }

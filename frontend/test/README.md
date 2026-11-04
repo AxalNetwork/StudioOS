@@ -136,3 +136,4 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 
 | `pitch_shell_3717.test.mjs` | #3717: pitch route/frame/crumb integration, shared gutter and responsive grids, with restored-old-behavior mutations. |
 | `pitch_diagrams_d1542.test.mjs` | D1542 (#3780): `deckV2Adapter.diagrams` swapped to `deckDiagramsApi.check`, Flow, Cycle and Matrix on the areas route (the rest later), a diagram row's size check, a proposal that changes nothing before Accept, nodes edited on the canvas, and the check line. |
+| `work_w7_3993.test.mjs` | #4418: W7 client/adapter routes and off blocks, project item deep links, sheet writes, review filtering and latest failed-run opening. |
