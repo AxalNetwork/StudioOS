@@ -1007,3 +1007,16 @@ test('owner policy: the full order is Claude main, Claude 2, Claude 3, OpenAI, K
     else assert.equal(calls.fallback.at(-1).model, 'gpt-5.3-codex');
   }
 });
+
+
+test('D4467: unreadable listing refuses every account and names the cause instead of credit exhaustion', async () => {
+  const h = harness({ env: { ANTHROPIC_API_KEY_2: 'key2' }, fallbacks: { claude2: () => { throw new Error('must not call'); } }, listArtifacts: async () => {
+    throw Object.assign(new Error('secret payload'), { ledgerReadFailure: 'artifact listing page 2: HTTP 503' });
+  } });
+  const r = await runReview(h.deps);
+  assert.equal(r.outcome, 'budget_refused');
+  assert.deepEqual([h.calls.create.length, h.calls.fallback.length], [0, 0]);
+  assert.match(plain(r.summary), /Claude was not called: .*could not be read/);
+  assert.match(r.reason, /artifact listing page 2: HTTP 503/);
+  assert.doesNotMatch(plain(r.summary), /out of credit|monthly review budget is used|secret payload/);
+});

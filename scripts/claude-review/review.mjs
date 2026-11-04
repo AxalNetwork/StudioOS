@@ -310,7 +310,12 @@ async function gh(apiUrl, token, path) {
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
     signal: AbortSignal.timeout(30_000),
   });
-  if (!res.ok) throw new Error(`GitHub API ${res.status} for ${path.split('?')[0]}`);
+  if (!res.ok) {
+    // Only artifact page reads use this retry metadata; other GitHub reads do not retry.
+    const body = res.status === 403 ? await res.json().catch(() => null) : null;
+    const rateLimited = res.status === 403 && (res.headers.get('x-ratelimit-remaining') === '0' || res.headers.has('retry-after') || /rate limit/i.test(body?.message || ''));
+    throw Object.assign(new Error(`GitHub API ${res.status} for ${path.split('?')[0]}`), { status: res.status, rateLimited });
+  }
   return res.json();
 }
 
@@ -338,15 +343,28 @@ export const LEDGER_SKEW_MS = 24 * 60 * 60 * 1000;
  * artifact created a day before `sinceIso`; incomplete when the page cap cuts
  * it off, or when the ids come out of order (then it reads on to the cap).
  */
-export async function listMonthRecords(fetchPage, sinceIso, maxPages = LEDGER_MAX_PAGES) {
+export async function listMonthRecords(fetchPage, sinceIso, maxPages = LEDGER_MAX_PAGES, sleep = ms => new Promise(resolve => setTimeout(resolve, ms))) {
   const artifacts = [];
   const stopBefore = new Date(Date.parse(sinceIso) - LEDGER_SKEW_MS).toISOString().replace('.000', '');
   let previousId = null;
   let newestFirst = true;
   for (let page = 1; page <= maxPages; page += 1) {
-    const data = await fetchPage(page);
+    let data;
+    for (let attempt = 0; ; attempt += 1) {
+      try { data = await fetchPage(page); break; } catch (e) {
+        const timeout = e?.name === 'TimeoutError' || e?.name === 'AbortError';
+        const network = e instanceof TypeError;
+        const status = Number(e?.status);
+        const retryable = status >= 500 && status <= 599 || status === 429 || status === 403 && e.rateLimited || timeout || network;
+        if (retryable && attempt < 3) { await sleep(1000 * 2 ** attempt); continue; }
+        // Fixed vocabulary only: never expose response bodies, URLs, credentials or raw errors.
+        const cause = Number.isInteger(status) && status >= 100 && status <= 599 ? `HTTP ${status}` : timeout ? 'timeout' : network ? 'network error' : 'read error';
+        const reason = `artifact listing page ${page}: ${cause}`;
+        throw Object.assign(new Error(reason), { ledgerReadFailure: reason });
+      }
+    }
     // A reply with no list is not the end of the listing: an error must not read as a month with no spend.
-    if (!Array.isArray(data?.artifacts)) throw new Error('GitHub returned no artifact list');
+    if (!Array.isArray(data?.artifacts)) throw Object.assign(new Error(`GitHub returned no artifact list on page ${page}`), { ledgerReadFailure: `artifact listing page ${page}: no artifact list` });
     const list = data.artifacts;
     let pastStop = false;
     for (const a of list) {
@@ -364,7 +382,7 @@ export async function listMonthRecords(fetchPage, sinceIso, maxPages = LEDGER_MA
 }
 
 /** The two GitHub REST reads: the merge base, and this repository's review records. */
-export function githubClient({ apiUrl, token, repository }) {
+export function githubClient({ apiUrl, token, repository, sleep }) {
   return {
     async mergeBase(base, head) {
       if (!SHA.test(base) || !SHA.test(head)) throw new Error('base or head is not a commit id');
@@ -384,7 +402,7 @@ export function githubClient({ apiUrl, token, repository }) {
     // before: once the repository held 3,000 artifacts, every review in every
     // month was refused as "spend unreadable", and none ran.
     async listArtifacts(sinceIso) {
-      return listMonthRecords((page) => gh(apiUrl, token, `/repos/${repository}/actions/artifacts?per_page=100&page=${page}`), sinceIso);
+      return listMonthRecords((page) => gh(apiUrl, token, `/repos/${repository}/actions/artifacts?per_page=100&page=${page}`), sinceIso, LEDGER_MAX_PAGES, sleep);
     },
   };
 }

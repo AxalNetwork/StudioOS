@@ -578,3 +578,44 @@ test('review #4452 R2: OpenAI terminal stream errors are marked as possibly bill
   const client = openaiClient({ apiKey: 'test', baseURL: 'https://api.example', timeoutSeconds: 30, sdk: BrokenOpenAI });
   await assert.rejects(client.create({ model: 'gpt-5.3-codex' }), e => e.streamStarted === true);
 });
+
+// #4467: retry only the failed page; do not discard earlier records or hide a refusal.
+test('D4467: transient artifact page errors recover with a complete ledger', async () => {
+  const seen = [], delays = [];
+  const record = { id: 1000, name: `claude-review_v1_2026-11_pr1_${'a'.repeat(16)}_ok_1000`, created_at: '2026-11-02T00:00:00Z' };
+  const listing = await listMonthRecords(async page => {
+    seen.push(page);
+    if (page === 1) return { artifacts: Array.from({ length: 100 }, (_, i) => ({ ...record, id: 1000 - i })) };
+    if (seen.length < 4) throw Object.assign(new Error('unavailable'), { status: 503 });
+    return { artifacts: [] };
+  }, '2026-11-01T00:00:00Z', 50, async ms => { delays.push(ms); });
+  assert.deepEqual([seen, delays, listing.complete, listing.artifacts.length], [[1, 2, 2, 2], [1000, 2000], true, 100]);
+});
+
+test('D4467: artifact HTTP and transport failures have bounded retries and safe page causes', async () => {
+  const saved = globalThis.fetch;
+  try {
+    for (const [status, headers, body, attempts, cause] of [
+      [503, {}, '', 4, 'HTTP 503'], [429, {}, '', 4, 'HTTP 429'],
+      [403, { 'x-ratelimit-remaining': '0' }, '', 4, 'HTTP 403'],
+      [403, {}, 'secondary rate limit', 4, 'HTTP 403'],
+      [403, {}, 'forbidden', 1, 'HTTP 403'], [401, {}, '', 1, 'HTTP 401'], [404, {}, '', 1, 'HTTP 404'],
+      [0, {}, 'network', 4, 'network error'], [0, {}, 'timeout', 4, 'timeout'],
+    ]) {
+      let calls = 0;
+      const delays = [];
+      globalThis.fetch = async () => {
+        calls++;
+        if (!status) throw body === 'timeout' ? new DOMException('secret', 'TimeoutError') : new TypeError('secret');
+        return new Response(JSON.stringify({ message: body + ' secret' }), { status, headers });
+      };
+      const gh = githubClient({ apiUrl: 'https://api.example', token: 'secret', repository: 'o/r', sleep: async ms => { delays.push(ms); } });
+      await assert.rejects(gh.listArtifacts('2026-11-01T00:00:00Z'), e => {
+        assert.equal(e.ledgerReadFailure, `artifact listing page 1: ${cause}`);
+        assert.doesNotMatch(e.message, /secret/);
+        return true;
+      });
+      assert.deepEqual([calls, delays], [attempts, attempts === 4 ? [1000, 2000, 4000] : []]);
+    }
+  } finally { globalThis.fetch = saved; }
+});
