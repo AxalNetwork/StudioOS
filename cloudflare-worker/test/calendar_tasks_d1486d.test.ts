@@ -138,7 +138,7 @@ test('all day on the due day, grouped under Deadlines, with task source labels a
     assert.deepEqual(by('Due · Draft the data room').source, { family: 'tasks', module: 'Workflows › Tasks', label: 'Workflow task', account: null });
     assert.deepEqual(by('Due · Ship the login').source, { family: 'tasks', module: 'Build › Board', label: 'Build task', account: null });
     assert.deepEqual(by('Follow up · Call back').source, { family: 'tasks', module: 'Contacts › Follow-ups', label: 'Contact follow-up', account: null });
-    assert.deepEqual([by('Due · Draft the data room').href, by('Due · Ship the login').href, by('Follow up · Call back').href], [null, '/build/board', '/contacts']);
+    assert.deepEqual([by('Due · Draft the data room').href, by('Due · Ship the login').href, by('Follow up · Call back').href], [null, '/build/board', '/network?tab=contacts']);
     assert.ok(items.every((i) => i.family === 'deadlines'));
     const firm = await describeItems(env, { id: PARTNER, role: 'partner' },
       (await fetchUserEventsWithSources(env, PARTNER, 'partner', FROM, TO, ['engagement_milestone'], { withCancelled: true })).events);

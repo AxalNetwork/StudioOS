@@ -107,7 +107,7 @@ function guardRoles(src, path) {
   return null;
 }
 
-const FAMILY = ['/referrals', '/refer', '/payouts'];
+const FAMILY = ['/referrals', '/refer'];
 
 test('the /referrals family is one route with two aliases, on one role list', () => {
   const rows = FAMILY.map((p) => [p, guardRoles(app, p)]);
@@ -119,13 +119,12 @@ test('the /referrals family is one route with two aliases, on one role list', ()
   // The aliases must still BE aliases. Without this, the equality below would
   // pin a coincidence: two unrelated routes that happen to share a role list.
   const refer = rows[1][1];
-  const payouts = rows[2][1];
+  assert.equal(guardRoles(app, '/payouts'), null, 'D2319 retires /payouts');
   assert.match(refer.body, /<ReferRedirect \/>/,
     '/refer no longer renders ReferRedirect, so it may not lead to /referrals');
   assert.match(app, /function ReferRedirect\(\)[\s\S]{0,240}?pathname: '\/referrals'/,
     'ReferRedirect no longer navigates to /referrals');
-  assert.match(payouts.body, /<Navigate to="\/referrals" replace \/>/,
-    '/payouts no longer redirects to /referrals');
+
 
   const [canonical, ...aliases] = rows;
   for (const [p, row] of aliases) {

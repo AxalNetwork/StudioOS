@@ -1098,13 +1098,13 @@ export async function routeAnswer(
         if (cur?.id) {
           // D898: the slides change in place, so the version's content hash no longer holds.
           await env.DB.prepare(`UPDATE pitch_decks SET slides = ?, content_hash = NULL WHERE id = ?`).bind(slidesJson, cur.id).run();
-          return { status: 'saved', saved_to: { table: 'pitch_decks', column: 'slides', id: cur.id, page_url: '/build/deck' } };
+          return { status: 'saved', saved_to: { table: 'pitch_decks', column: 'slides', id: cur.id, page_url: '/raise/pitch' } };
         }
         const ins = await env.DB.prepare(
           `INSERT INTO pitch_decks (project_id, version, slides, title, is_current, created_by) VALUES (?, 1, ?, ?, 1, ?)`,
         ).bind(ctx.project_id, slidesJson, 'Draft', user.id).run();
         const newId = Number((ins as { meta?: { last_row_id?: number } }).meta?.last_row_id || 0);
-        return { status: 'saved', saved_to: { table: 'pitch_decks', column: 'slides', id: newId || undefined, page_url: '/build/deck' } };
+        return { status: 'saved', saved_to: { table: 'pitch_decks', column: 'slides', id: newId || undefined, page_url: '/raise/pitch' } };
       } catch (e) {
         return { status: 'failed', error: (e as Error).message };
       }

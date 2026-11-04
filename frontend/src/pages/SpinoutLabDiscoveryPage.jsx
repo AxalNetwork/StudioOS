@@ -1118,7 +1118,7 @@ export default function SpinoutLabDiscoveryPage() {
                 )}
                 {deckUnlocked ? (
                   <Link
-                    to="/build/deck"
+                    to="/raise/pitch"
                     data-testid="link-open-deck"
                     className="mt-3.5 h-9 w-full rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold inline-flex items-center justify-center gap-1.5"
                   >

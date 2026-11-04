@@ -2974,7 +2974,7 @@ function buildLifecycleChecklist(
   switch (stage) {
     case 'idea':
       return [
-        { key: 'concept_summary', label: 'Write a one-line concept summary', done: m('concept_summary'), href: '/build/command-center?tab=founder-portal', manual: true },
+        { key: 'concept_summary', label: 'Write a one-line concept summary', done: m('concept_summary'), href: '/studio', manual: true },
         { key: 'talk_cofounders', label: 'Talk to 3 potential co-founders', done: m('talk_cofounders'), href: '/build/team?tab=cofounder', manual: true },
         { key: 'first_hypothesis', label: 'Note your riskiest assumption', done: m('first_hypothesis'), href: '/validate/customer-research', manual: true },
       ];
