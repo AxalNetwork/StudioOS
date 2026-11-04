@@ -47,6 +47,37 @@ export function tabFrom(search = '') {
   return TAB_KEYS.has(t) ? t : 'people';
 }
 
+/**
+ * #4363: who may open a scope's Team page, as `routes/team.jsx` guards it, so
+ * a Skills link is drawn only for someone whose click lands on the tab. The
+ * two company forms admit the five profiles of a company's settings; a
+ * standalone project's Team admits what `/projects/:id` admits (`labRoles`:
+ * the four, or anyone in the Spin-Out Lab), so an advisor or an Explorer
+ * outside the Lab is not shown it.
+ */
+const COMPANY_TEAM_ROLES = ['admin', 'founder', 'partner', 'investor', 'advisor'];
+const PROJECT_TEAM_ROLES = ['admin', 'founder', 'partner', 'investor'];
+export function canOpenTeam(user, kind) {
+  const role = String(user?.role || '').toLowerCase();
+  if (kind === 'company' || kind === 'company_project') return COMPANY_TEAM_ROLES.includes(role);
+  if (kind === 'project') return PROJECT_TEAM_ROLES.includes(role) || Number(user?.spinout_lab_active) === 1;
+  return false;
+}
+
+/**
+ * #4363: the scope whose Skills tab an agent's profile links to. A company
+ * editor's list includes its projects' agents (`include=projects`), so a
+ * project's agent opens that project's Skills, under the page's company; any
+ * other agent opens the page's own scope.
+ */
+export function agentSkillsScope(pageScope, agent) {
+  if (!pageScope) return null;
+  if (pageScope.kind === 'company' && agent?.scope_kind === 'project' && agent.project?.id != null) {
+    return { kind: 'company_project', company: pageScope.company, project: { id: agent.project.id } };
+  }
+  return pageScope;
+}
+
 export const TITLE = 'Team';
 export const purposeLine = (name) => `The people and AI agents working on ${name}. Agents propose; people decide.`;
 export const AGENTS_FOOT = 'Agents propose; a named person accepts. Nothing is written without Accept.';

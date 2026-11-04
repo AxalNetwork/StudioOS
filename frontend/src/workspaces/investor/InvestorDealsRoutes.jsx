@@ -4,6 +4,7 @@ import { Skeleton, WorkerRail } from '../../ui';
 import WorkspaceShell from '../WorkspaceShell';
 import BucketBoard from '../BucketBoard';
 import BucketOverview from '../BucketOverview';
+import MyTasks from '../../pages/work/MyTasks.jsx';
 import { boardFor } from '../boards';
 import { bucketForPath, zoneForPath } from '../shellConfig';
 import { api } from '../../lib/api';
@@ -189,6 +190,8 @@ function DealsRoot({ bucket, search }) {
         ? <BucketBoard bucket={bucket} role="investor" board={board} />
         : <BucketOverview bucket={bucket} role="investor" descriptions={ZONE_LINES} />}
       <DealRoomsPanel />
+      {/* D1614 W8 (#3994): every task given to me, across my Teams. */}
+      <MyTasks licence="investor" testId="deals-my-tasks" />
     </>
   );
   return <DealFlow view={view} scope={scope} board={today} />;

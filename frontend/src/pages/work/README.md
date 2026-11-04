@@ -10,7 +10,9 @@ and `Work Compliance · Boards.dc.html`.
 | `CompliancePage.jsx` | `/account/companies/:uid/settings/compliance`: the agenda (Overdue, then months, CO2), the task sheet with "Create work in a project…" (CO3), the read-only member (CO3r). |
 | `workModel.js` | The words and rules as plain functions: columns, cards, the burn-up's geometry, the agenda, who may change compliance tasks. |
 | `ActivityFeed.jsx` | WK6 (#3974): a project's activity feed on its Team page (Team › Activity): People · AI agents · Both, one person or agent with their lists, Show older, a run's sheet. |
-| `WorkloadView.jsx` | WK7 (#3974): the project's Workload (Work › Workload): rows per person and agent, weeks as columns, amber over a recorded capacity, drag to reassign, Schedule work. |
+| `WorkloadView.jsx` | WK7 (#3974): the project's Workload (Work › Workload): rows per person and agent, grouped by role (W8, #3994), weeks as columns, amber over a recorded capacity, drag to reassign, Schedule work. |
+| `AssignPicker.jsx` | W8 (#3994): the Assignees picker on a task's sheet — this Team's people (role badge in their licence's accent, open tasks, capacity), then its AI agents (role, status); a refusal in the Worker's words. |
+| `MyTasks.jsx` | W8 (#3994): every task given to the reader, by project then by company's compliance, with State and Due filters; placed in each licence's workspace (D1614 §14) and as Work › My items. |
 | `workAdapter.js` | The one seam. Every method is off until its Worker part lands; `WORK_SEAM` names each method's issue. |
 | `work.css` | Styles scoped to `.wk-page`, each colour with its `.dark` pair. |
 
