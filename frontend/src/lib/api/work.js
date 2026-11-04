@@ -40,6 +40,8 @@ const enc = encodeURIComponent;
 const SCOPE = 'project';
 
 export const workApi = {
+  // #4420: project-only counts, behind the board's flags and read gate.
+  summary: (projectId) => request(`/teams/${SCOPE}/${enc(projectId)}/work/summary`),
   board: (projectId, { filter, sort } = {}) => {
     const q = new URLSearchParams();
     if (filter) q.set('filter', filter);

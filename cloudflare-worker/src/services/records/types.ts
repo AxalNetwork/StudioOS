@@ -71,7 +71,8 @@ export type RecordContent = {
   title: string;
   sub: string;
   pills: Array<string | { text: string; tone?: string }>;
-  facts: [RecordFact, RecordFact, RecordFact, RecordFact];
+  /** #4411: interviews add a fifth fact to distinguish recording from quote permission. */
+  facts: [RecordFact, RecordFact, RecordFact, RecordFact] | [RecordFact, RecordFact, RecordFact, RecordFact, RecordFact];
   /** A store's own uid beside the record id, where its other routes address it by uid (D691: a data-room file). */
   uid?: string;
   createdBy?: number | null;

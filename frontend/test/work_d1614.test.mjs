@@ -119,7 +119,7 @@ test('the agenda: Overdue pinned with its days, then months oldest first; a task
 // (company_compliance_d1614.test.mjs holds what each sends); every other method stays off until its route lands.
 // D1614 W6 (#3974): W3's run, retry and feed and W4's workload and schedule are on; #3972 turned agentSessions on, once
 // W4's Worker put agents' sessions in the workload read. CAL10's run sheet opens from the session itself.
-const LIVE = new Set(['burnup', 'board', 'item', 'move', 'assign', 'create', 'run', 'retry', 'feed', 'workload', 'schedule', 'agentSessions',
+const LIVE = new Set(['summary', 'burnup', 'board', 'item', 'move', 'assign', 'create', 'run', 'retry', 'feed', 'workload', 'schedule', 'agentSessions',
   'complianceTasks', 'complianceTask', 'markDone', 'createWork', 'complianceCreate', 'complianceUpdate',
   'complianceAssignable', 'complianceAssign', 'complianceComment', 'complianceReady', 'complianceReopen',
   // D1614 W8 (#3994): the Team picker and My tasks, on #4286's routes.
@@ -127,7 +127,7 @@ const LIVE = new Set(['burnup', 'board', 'item', 'move', 'assign', 'create', 'ru
 test('the seam: every method not yet live is off, with the issue that turns it on, and makes no request', async () => {
   assert.deepEqual(Object.keys(WORK_SEAM).sort(), Object.keys(workAdapter).sort());
   for (const [m, issue] of Object.entries(WORK_SEAM)) {
-    assert.match(issue, /^#39(57|69|70|71|72|76|94)$/);
+    assert.match(issue, /^#(?:39(57|69|70|71|72|76|94)|4420)$/);
     if (LIVE.has(m)) continue;
     const r = await workAdapter[m]('x');
     assert.equal(r.available, false, m);

@@ -1,3 +1,4 @@
+import EventSyndicationPanel from './EventSyndicationPanel';
 // Task #40 (E2) — EventEditorPage: create (/events/new) + edit (/events/:id/edit).
 // Title, type, schedule + timezone, location, cover, capacity, waitlist,
 // approval, visibility, and the audience-rules builder (design §7.1). A draft
@@ -346,7 +347,9 @@ export default function EventEditorPage() {
             <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Syndicate to</h3>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{syndicateNote(form.visibility)}</p>
             {/* D1493 (#3906, SY8): Ask proposes each kept listing's title and description. */}
-            {isEdit && form.visibility === 'public' && <SyndicationAsk eventId={id} />}
+            {isEdit && form.visibility === 'public' && saved?.visibility === 'public'
+              ? <><EventSyndicationPanel key={id} eventId={id} editable refresh={saved} /><SyndicationAsk eventId={id} /></>
+              : form.visibility === 'public' && <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Save a public draft before choosing channels.</p>}
           </div>
         </section>
 

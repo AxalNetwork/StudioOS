@@ -385,6 +385,9 @@ export function refusalWords(code, detail) {
     case 'invalid_role': return 'Choose one of the roles.';
     case 'removed': return 'This agent was removed.';
     case 'agent_cap_reached': return 'Reached its monthly cap';
+    case 'not_sponsor': return 'Only this agent’s sponsor can run it.';
+    case 'payload_required': return 'Edit the proposal before saving your version.';
+    case 'never_fill': return 'This proposal includes a value that always needs a person. Open it in its module.';
     case 'agent_paused': return 'This agent is paused.';
     case 'not_open': return `Already decided${detail ? ` by ${detail}` : ''}.`;
     case 'already_pending': return 'An invitation to that address is already waiting. Nothing was sent.';
@@ -638,5 +641,29 @@ export function moveOutCopy(project, company, live = COMPANY_AUTHORITY_LIVE) {
       ? ['It becomes a standalone project managed by its Owner.', `${company}'s editors lose access now.`, 'Agents added by the company stop; their open proposals stay decidable.', 'Project agents keep working.']
       : ['It becomes a standalone project managed by its Owner.', `It no longer shows under ${company}.`],
     button: 'Move out', cancel: 'Cancel', danger: true,
+  };
+}
+
+
+// #3727 integration: TM7 reads the actual queue DTO, without inventing a
+// title, source, model or spend. Approval still happens only in the Worker.
+const proposalValue = (value) => {
+  if (value == null) return NOT_RECORDED;
+  if (Array.isArray(value)) return value.map(proposalValue).join('; ');
+  if (typeof value === 'object') return Object.entries(value).map(([key, v]) => `${key.replace(/[_-]/g, ' ')}: ${proposalValue(v)}`).join('\n');
+  return String(value);
+};
+export const QUEUE_HISTORY_STATUSES = ['accepted', 'edited', 'discarded', 'withdrawn'];
+export function queueProposal(item, { roles = [], canManage = false, viewerUid = null } = {}) {
+  const modules = (Array.isArray(roles) ? roles : []).flatMap((r) => Array.isArray(r.works_in) ? r.works_in : []);
+  const label = modules.find((m) => m.key === item.module)?.label;
+  const payload = item.payload && typeof item.payload === 'object' ? item.payload : {};
+  const textKey = typeof payload.text === 'string' ? 'text' : typeof payload.value === 'string' ? 'value' : null;
+  return {
+    ...item, title: item.headline || null, proposed_at: item.created_at,
+    module_label: label || (item.module ? String(item.module).replace(/-/g, ' ') : null),
+    draft: textKey ? payload[textKey] : proposalValue(payload) || null, edit_key: textKey,
+    decision: item.status === 'proposed' ? null : item.status, by: item.decided_by,
+    can_decide: canManage || Boolean(viewerUid && item.sponsor?.uid === viewerUid),
   };
 }

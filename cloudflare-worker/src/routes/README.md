@@ -634,3 +634,5 @@ D1594 (#3863): `studio_layout.ts`'s layout reads carry `revision` (migration 750
 | `deck_model_presets.ts` | D1549 (#3796): a deck's preset per element group and the groups HQ locked (`/api/decks/:id/model-presets`), and HQ's org default and lock (`/api/admin/ai/deck-models`). |
 | `work_items.ts` | D1614 W7 (#3993): a project task's timeline, comments, review, agent drafts, labels and milestones, mounted by `agent_engine.ts` beside W1's board under the same gates. Project scope only: every company path is 404. Migration 763. |
 D1456 (#4014): the existing creator-only session bot read adds pattern-filtered failure detail codes from its selected run; its access and refusal behavior is unchanged.
+
+#4420: `work_board.ts` also reads `GET /api/teams/project/:id/work/summary`, the project-only open/closed and column counts under the board’s flags and read gate.
