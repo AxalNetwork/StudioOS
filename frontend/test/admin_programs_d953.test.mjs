@@ -606,7 +606,7 @@ test('the routes: each address under today\'s guard, never hqOnly, and the three
     ['/admin/refer-earn', 'ReferEarnRedirect', 'ReferEarnRedirect'],
   ]) {
     assert.equal(APP.includes(`\n      <Route path="${path}" element={<${component} />} />`), !isRetiredRedirect(`${path}`), `${path} is not its redirect's whole element`);
-    assert.ok(APP.includes(`const ${component} = lazy(() => import('./pages/admin/programs/${file}'));`), `${component} is not lazy-imported`);
+    assert.equal(APP.includes(`const ${component} = lazy(() => import('./pages/admin/programs/${file}'));`), false, `${component} has no App binding after retirement`);
   }
   // Each redirect takes its path and moved key from the one model, each path a literal.
   const model = read('frontend/src/pages/admin/programs/programsModel.js');

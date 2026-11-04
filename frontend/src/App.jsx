@@ -149,26 +149,18 @@ const AdminExploring = lazy(() => import('./pages/admin/AdminExploring'));
 // (canvas S20). D941 (#2746): Accounts takes /admin/accounts, and HQ's Team
 // moved to /admin/hq-team; the other four stay under /admin/held/.
 const AccountsAddress = lazy(() => import('./pages/admin/AccountsAddress'));
-const HeldAccountsRedirect = lazy(() => import('./pages/admin/HeldAccountsRedirect'));
 const AdminApprovals = lazy(() => import('./pages/admin/approvals/AdminApprovals'));
 const ApprovalsLaneBoards = lazy(() => import('./pages/admin/approvals/LaneBoards'));
-const HeldApprovalsRedirect = lazy(() => import('./pages/admin/approvals/HeldApprovalsRedirect'));
 // D953 (#2371) — Admin › Programs: the catalogue, one page per program with its
 // tabs as sub-paths, and the three old addresses' redirects.
 const AdminProgramsCatalogue = lazy(() => import('./pages/admin/programs/ProgramsCatalogue'));
 const AdminMentorCohortAccess = lazy(() => import('./pages/admin/programs/MentorCohortAccess'));
 const AdminReferAndEarn = lazy(() => import('./pages/admin/programs/ReferAndEarn'));
 const AdminProgramPage = lazy(() => import('./pages/admin/programs/ProgramPage'));
-const HeldProgramsRedirect = lazy(() => import('./pages/admin/programs/HeldProgramsRedirect'));
-const AdvisorCohortsRedirect = lazy(() => import('./pages/admin/programs/AdvisorCohortsRedirect'));
-const ReferEarnRedirect = lazy(() => import('./pages/admin/programs/ReferEarnRedirect'));
 const AdminProposePage = lazy(() => import('./pages/admin/programs/ProposePage'));
 const AdminProposalsPage = lazy(() => import('./pages/admin/programs/ProposalsPage'));
 const AdminCommunity = lazy(() => import('./pages/admin/community/AdminCommunity'));
-const HeldCommunityRedirect = lazy(() => import('./pages/admin/community/HeldCommunityRedirect'));
-const PitchPositioningRedirect = lazy(() => import('./pages/raise/narrative/PitchPositioningRedirect'));
 const AdminInsights = lazy(() => import('./pages/admin/insights/AdminInsights'));
-const HeldInsightsRedirect = lazy(() => import('./pages/admin/insights/HeldInsightsRedirect'));
 const AdminLpApplications = lazy(() => import('./pages/admin/AdminLpApplications'));
 const AdminLicences = lazy(() => import('./pages/admin/AdminLicences'));
 const ProgramGrants = lazy(() => import('./pages/admin/grants/ProgramGrants'));
@@ -183,12 +175,9 @@ const NewPersonaSegment = lazy(() => import('./pages/admin/segments/NewSegment')
 const PersonaSegmentPage = lazy(() => import('./pages/admin/segments/SegmentPage'));
 // D1008 (#2386): Payments, out of the Admin Console, under Platform, HQ only.
 const Payments = lazy(() => import('./pages/admin/payments/Payments'));
-const ApRedirect = lazy(() => import('./pages/admin/advisors/ApRedirect'));
-const FirmLinksRedirect = lazy(() => import('./pages/admin/advisors/FirmLinksRedirect'));
 // Task #102 — Spin-Out Lab admin dashboard (applications + participants).
 const AdminLab = lazy(() => import('./pages/admin/lab/AdminLab'));
 const LabRedirect = lazy(() => import('./pages/admin/lab/LabRedirect'));
-const LabPreviewRedirect = lazy(() => import('./pages/admin/lab/LabPreviewRedirect'));
 const SpinoutModerationPage = lazy(() => import('./pages/admin/SpinoutModerationPage'));
 const AdminSpinoutJourneyPreview = lazy(() => import('./pages/admin/AdminSpinoutJourneyPreview'));
 const AdminTelegram = lazy(() => import('./pages/admin/AdminTelegram'));
@@ -449,7 +438,6 @@ const OnboardingPartnerPage = lazy(() => import('./pages/OnboardingPartnerPage')
 const OnboardingChatPage = lazy(() => import('./pages/OnboardingChatPage'));
 const BrandBuilderPage = lazy(() => import('./pages/BrandBuilderPage'));
 const CompetitorAnalysisPage = lazy(() => import('./pages/CompetitorAnalysisPage'));
-const MessagesRedirect = lazy(() => import('./pages/email/MessagesRedirect'));
 const EmailPage = lazy(() => import('./pages/email/EmailPage'));
 // D702 (#1664) — the founder's profile pages (Studio · Mobile S6m, S7m, S9m, S10m).
 const YouPage = lazy(() => import('./pages/profile/YouPage'));
@@ -626,7 +614,9 @@ function KeepQueryRedirect({ to }) {
   return <Navigate to={{ pathname: to, search: loc.search, hash: loc.hash }} replace />;
 }
 
-function ProductsRedirect() {
+// D2319: legacy helper contracts remain exported for isolated tests; their
+// former addresses have no App mounts. Like HistoryRedirect, these are components.
+export function ProductsRedirect() {
   const loc = useLocation();
   return <Navigate to={{ pathname: '/pricing/products', search: loc.search, hash: loc.hash }} replace />;
 }
@@ -643,7 +633,7 @@ function DashboardRedirect() {
 // alias. The owner removed the page and its features (#2297 §7); both
 // addresses land on Refer & earn. Old bookmarks keep their query string and
 // hash.
-function PartnerPortalRedirect() {
+export function PartnerPortalRedirect() {
   const loc = useLocation();
   return <Navigate to={{ pathname: '/referrals', search: loc.search, hash: loc.hash }} replace />;
 }
@@ -653,7 +643,7 @@ function PartnerPortalRedirect() {
 // older /marketplace) are removed (#2297 §7). A founder keeps the redirect to
 // the matching tab of the founder marketplace; everyone else lands on the
 // partner's zone that took the job, Pipeline · Leads or Offers · Catalog.
-function MarketplaceRedirect({ role, founderTab, to }) {
+export function MarketplaceRedirect({ role, founderTab, to }) {
   const loc = useLocation();
   if (role === 'founder') return <Navigate to={`/build/marketplace?tab=${founderTab}`} replace />;
   return <Navigate to={{ pathname: to, search: loc.search, hash: loc.hash }} replace />;
@@ -665,7 +655,7 @@ function MarketplaceRedirect({ role, founderTab, to }) {
 // writes: numbered calls, each LP's line, receipts and the wire trail, for
 // any fund the caller operates. The tab accepted no query string of its own;
 // whatever a bookmark carries travels anyway.
-function FundCapitalCallsRedirect() {
+export function FundCapitalCallsRedirect() {
   const loc = useLocation();
   return <Navigate to={{ pathname: '/funds/calls', search: loc.search, hash: loc.hash }} replace />;
 }
@@ -682,7 +672,7 @@ function LpPortalRedirect() {
 
 // D372 — /funds/lp-workspace rendered the same LP workspace as a Fund Ops tab,
 // embedded. It is one route now.
-function FundLpWorkspaceRedirect() {
+export function FundLpWorkspaceRedirect() {
   const loc = useLocation();
   return <Navigate to={{ pathname: '/spinout-lab/investor-workspace', search: loc.search, hash: loc.hash }} replace />;
 }
@@ -748,7 +738,7 @@ function HelpTicketIdRedirect() {
 // seven surfaces deep-link `#<section>/<subsection>` (CommandPalette,
 // PageExplainer, EmptyState, ProjectsPage, PersonalAdvisor,
 // AdvisorProgressWidget) and the anchor IS the address of the article.
-function DocsRedirect() {
+export function DocsRedirect() {
   const loc = useLocation();
   return <Navigate to={{ pathname: '/help', search: loc.search, hash: loc.hash }} replace />;
 }
