@@ -142,15 +142,14 @@ export async function updateCampaign(env: Env, pid: number, user: User, uid: str
   const ids = await channelIds(env, pid, b);
   // Every statement uses the same snapshot in one atomic batch. Concurrent edits
   // cannot overwrite dates/status or leave a partial replacement of the links.
-  const keys = fields.filter((k) => present(v, k));
-  const guard = 'id = ? AND project_id = ? AND archived_at IS NULL AND name IS ? AND goal IS ? AND status IS ? AND starts_on IS ? AND ends_on IS ? AND budget_cents IS ? AND utm_campaign IS ? AND segment_id IS ?';
+  const next = { ...old, ...v };
   const args = [old.id, pid, ...fields.map((k) => old[k])];
   const statements: Statement[] = [];
   if (ids !== null) {
-    statements.push(env.DB.prepare(`DELETE FROM grow_campaign_channels WHERE campaign_id IN (SELECT id FROM grow_campaigns WHERE ${guard}) AND channel_id NOT IN (SELECT value FROM json_each(?))`).bind(...args, JSON.stringify(ids)));
-    for (const id of ids) statements.push(env.DB.prepare(`INSERT OR IGNORE INTO grow_campaign_channels (campaign_id, channel_id) SELECT id, ? FROM grow_campaigns WHERE ${guard}`).bind(id, ...args));
+    statements.push(env.DB.prepare('DELETE FROM grow_campaign_channels WHERE campaign_id IN (SELECT id FROM grow_campaigns WHERE id = ? AND project_id = ? AND archived_at IS NULL AND name IS ? AND goal IS ? AND status IS ? AND starts_on IS ? AND ends_on IS ? AND budget_cents IS ? AND utm_campaign IS ? AND segment_id IS ?) AND channel_id NOT IN (SELECT value FROM json_each(?))').bind(...args, JSON.stringify(ids)));
+    for (const id of ids) statements.push(env.DB.prepare('INSERT OR IGNORE INTO grow_campaign_channels (campaign_id, channel_id) SELECT id, ? FROM grow_campaigns WHERE id = ? AND project_id = ? AND archived_at IS NULL AND name IS ? AND goal IS ? AND status IS ? AND starts_on IS ? AND ends_on IS ? AND budget_cents IS ? AND utm_campaign IS ? AND segment_id IS ?').bind(id, ...args));
   }
-  statements.push(env.DB.prepare(`UPDATE grow_campaigns SET ${keys.map((k) => `${k} = ?, `).join('')}updated_by = ?, updated_at = datetime('now') WHERE ${guard}`).bind(...keys.map((k) => v[k]), user.id, ...args));
+  statements.push(env.DB.prepare("UPDATE grow_campaigns SET name = ?, goal = ?, status = ?, starts_on = ?, ends_on = ?, budget_cents = ?, utm_campaign = ?, segment_id = ?, updated_by = ?, updated_at = datetime('now') WHERE id = ? AND project_id = ? AND archived_at IS NULL AND name IS ? AND goal IS ? AND status IS ? AND starts_on IS ? AND ends_on IS ? AND budget_cents IS ? AND utm_campaign IS ? AND segment_id IS ?").bind(...fields.map((k) => next[k]), user.id, ...args));
   const result = await uniqueWrite(env, [...statements, audit(env, pid, user, uid, 'grow_campaign_updated')]);
   if (!result[statements.length - 1].meta.changes) throw new Refused(409, 'Campaign changed; read it again before editing');
   return response(env, pid, uid);
