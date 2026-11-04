@@ -41,12 +41,12 @@ r.get('/cohort', async (c) => {
 r.post('/cohort', async (c) => {
   const user = await requireSuperAdmin(c);
   try { return c.json(await addToCohort(c.env, user.id, await c.req.json().catch(() => null)), 201); }
-  catch (e) { if(e instanceof CohortError) return refuse(c,e.status,{code:'invalid_cohort',message:e.message}); throw e; }
+  catch (e) { if(e instanceof CohortError) return refuse(c,e.status,{code:'invalid_cohort',message:e.status === 404 ? 'No active founder or available scope matches that entry.' : 'Enter one valid founder email or scope.'}); throw e; }
 });
 r.delete('/cohort/:uid', async (c) => {
   const user = await requireSuperAdmin(c);
   try { return c.json(await removeFromCohort(c.env,user.id,c.req.param('uid'))); }
-  catch(e) { if(e instanceof CohortError) return refuse(c,e.status,{code:'cohort_not_found',message:e.message}); throw e; }
+  catch(e) { if(e instanceof CohortError) return refuse(c,e.status,{code:'cohort_not_found',message:'That cohort entry is no longer listed.'}); throw e; }
 });
 
 r.get('/overview', async (c) => {
