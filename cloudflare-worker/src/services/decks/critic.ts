@@ -24,7 +24,12 @@
  * stage benchmark recorded" and the run is told to cite none. A citation
  * quotes the norm, its range and its source; it never rates the company.
  */
-import type { Warning } from '../narrative/arcs';
+/**
+ * A stage plan's warning (`narrative/arcs.ts` `Warning`), as the critic reads it. Kept here, not imported, so
+ * `familyOf`'s module graph does not reach the record sources: the generation runtime's judge (D1551) uses it,
+ * and the cron drives that runtime (D752's privacy guard).
+ */
+type Warning = { card: string; code: 'missing_card' | 'missing_proof' | 'unchecked_proof'; message: string; action: string };
 import { untrustedBlock, withUntrustedRule } from '../ai/untrusted';
 
 export const SEVERITIES = ['deal_breaker', 'will_be_asked', 'polish'] as const;
