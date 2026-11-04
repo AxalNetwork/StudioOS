@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { Pill, Unrecorded, WorkerRail } from '../../ui';
+import { Pill, Unrecorded } from '../../ui';
 import { titleCase } from '../../lib/absence';
 import ExercisePanel, { ExerciseSubmit } from './ExercisePanel';
 import { readRefusal } from '../../lib/api.js';
@@ -39,19 +39,6 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 /** A read's state as the status a component draws: a 404 is "ready, with nothing to show". */
 const statusOf = (state) => (state.status === 'missing' ? 'ready' : state.status === 'idle' ? 'loading' : state.status);
-
-function AssessmentRail({ coverage }) {
-  return (
-    <WorkerRail
-      workspace="Learning"
-      // Violet, the founder accent, as on every learner page.
-      role="founder"
-      stance="Read-only learning view"
-      note="Eadwyn reads back what this page has loaded, on a click. It does not write or submit an answer, start an exam or choose an option."
-      coverage={coverage}
-    />
-  );
-}
 
 /** A Super Admin can open a draft or an archived one; members cannot, and the header says so. */
 export function NotPublished({ row }) {

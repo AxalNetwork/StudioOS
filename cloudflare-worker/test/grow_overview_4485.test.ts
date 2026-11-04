@@ -112,3 +112,19 @@ test('D4485: failed blocks stay unreadable while independent blocks remain avail
     assert.match(week.week.reason!, /^Unreadable:/);
   } finally { f.db.close(); }
 });
+
+
+test('D4485: owner decision — cost uses current-month spend and its sources, while budget uses campaign-window spend', async () => {
+  const f = fixture();
+  try {
+    const both = { ...channel('mercury', 200), spend_cents: 300, spend_months: [channel('manual', 100, '2026-10').spend_months[0], channel('mercury', 200).spend_months[0]] };
+    const result = await distributionOverview(f.env, 1, { now, readCampaigns: async () => ({ campaigns: [campaign([both])] }) });
+    assert.equal(result.kpis.spend_vs_budget.value, 300);
+    assert.deepEqual(result.kpis.spend_vs_budget.sources, ['manual', 'mercury']);
+    assert.equal(result.kpis.cost_per_lead.value, 100);
+    assert.deepEqual(result.kpis.cost_per_lead.sources, ['mercury', 'connector']);
+    const absent = await distributionOverview(f.env, 1, { now, readCampaigns: async () => ({ campaigns: [campaign([channel('manual', 100, '2026-10')])] }) });
+    assert.equal(absent.kpis.cost_per_lead.value, null);
+    assert.match(absent.kpis.cost_per_lead.reason!, /current-month spend/);
+  } finally { f.db.close(); }
+});

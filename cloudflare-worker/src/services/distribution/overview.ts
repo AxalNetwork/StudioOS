@@ -39,16 +39,17 @@ export function overviewWeek(value?: string, now = new Date()) {
 }
 
 /** #4483's per-channel/month read is authoritative; a shared channel is never counted twice. */
-export function overviewSpend(active: CampaignView[]) {
+export function overviewSpend(active: CampaignView[], month?: string) {
   if (!active.length) return { ...unavailable('Not recorded: no active campaigns'), budget_cents: null };
   const months = new Map<string, SpendMonth>();
   for (const campaign of active) {
     if (!campaign.channels.length) return { ...unavailable('Not recorded: an active campaign has no recorded channel spend'), budget_cents: budget(active) };
     for (const channel of campaign.channels) {
-      if (channel.spend_cents === null || !channel.spend_months?.length) {
-        return { ...unavailable(channel.spend_reason ?? 'Not recorded: campaign spend provenance is not available'), budget_cents: budget(active) };
+      const records = channel.spend_months?.filter((m) => month === undefined || m.month === month);
+      if (channel.spend_cents === null || !records?.length) {
+        return { ...unavailable(channel.spend_reason ?? (month ? 'Not recorded: current-month spend is not recorded for every active channel' : 'Not recorded: campaign spend provenance is not available')), budget_cents: budget(active) };
       }
-      for (const month of channel.spend_months) {
+      for (const month of records) {
         const key = `${channel.uid}:${month.month}`;
         const old = months.get(key);
         if (!old || month.source === 'mercury') months.set(key, month);
@@ -87,9 +88,10 @@ export async function distributionOverview(env: Env, projectId: number, options:
   try { active = (await (options.readCampaigns ?? campaigns)(env, projectId)).campaigns.filter((c) => c.status === 'active'); }
   catch { campaignReason = unreadable('campaigns'); }
   const spend = active === null ? { ...unavailable(campaignReason!), budget_cents: null } : overviewSpend(active);
-  const cost: Metric = spend.value === null || leads.value === null || leads.value === 0
-    ? unavailable(spend.reason ?? leads.reason ?? 'Not recorded: no attributed leads to divide spend by')
-    : { value: spend.value / leads.value, reason: null, sources: [...new Set([...spend.sources, ...leads.sources])] };
+  const costSpend = active === null ? spend : overviewSpend(active, month.slice(0, 7));
+  const cost: Metric = costSpend.value === null || leads.value === null || leads.value === 0
+    ? unavailable(costSpend.reason ?? leads.reason ?? 'Not recorded: no attributed leads to divide spend by')
+    : { value: costSpend.value / leads.value, reason: null, sources: [...new Set([...costSpend.sources, ...leads.sources])] };
   let week: { key: string; from: string; until: string; items: unknown[] | null; reason: string | null };
   try {
     const rows = await env.DB.prepare(`SELECT i.uid, i.title, i.planned_on, i.status, g.uid AS channel_uid, g.name AS channel
