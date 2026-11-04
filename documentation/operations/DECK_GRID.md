@@ -226,42 +226,53 @@ new one.
 - Logos: `DELETE /api/decks/:id/logos/:key`, or `PATCH` with
   `{ "permitted": false }`, removes or withdraws the `deck_logos` row only; the
   image object stays.
-- **No admin purge, delete or takedown route exists.** The DMCA policy
-  (`cloudflare-worker/src/templates/legal/dmca_policy_v1.md`) is a draft that
-  nothing serves, and no designated agent is registered (D706). Until counsel
-  finishes it, a takedown notice goes to the owner first; this page does not
-  decide whether a notice is valid.
+- **HQ takedown (#4375, D4375).** `POST /api/admin/deck-images/:uid/takedown`
+  `{ reason }`, HQ admins only, does in one audited press what used to be
+  steps 2 to 5:
+  - deletes the R2 object;
+  - marks the row `taken_down_at` with the admin and the reason;
+  - from then on, the file URL answers a neutral placeholder ("Image removed
+    by Axal HQ") instead of the bytes, so every version, draft, proposal and
+    export that names the image shows the placeholder (nothing is rewritten);
+  - tells the venture's founders, with the reason;
+  - writes the admin audit row.
+
+  HQ › Decks › Reports offers it on each image a report names. The daily
+  sweep never removes a taken-down row, because the row is the record.
+- The DMCA policy (`cloudflare-worker/src/templates/legal/dmca_policy_v1.md`)
+  is a draft that nothing serves, and no designated agent is registered
+  (D706). Until counsel finishes it, a takedown notice goes to the owner first;
+  this page does not decide whether a notice is valid.
 
 **Steps (owner-approved takedown, or an image that must go).**
-1. Record the notice or the reason on a private issue (never a public comment:
-   it names a person and a work). Note the image uid, the deck, the venture,
-   and who approved the takedown.
-2. Find where the image is used: `deck_images_named` (migration 722's view)
-   lists the places a kept image is named. Its uid can be in `pitch_decks.slides`
-   and `theme_json`, `pitch_deck_cards.json`, `pitch_deck_proposals.slides`,
-   `deck_derivatives` and brand kits.
-3. Remove it from each of those places, so no deck still points at it. Tell the
-   deck's owner which slides changed.
-4. Mark it gone, so the file route answers 404 at once:
-   ```sql
-   UPDATE deck_images SET state = 'discarded' WHERE uid = '<image uid>';
-   ```
-5. Delete the object now rather than waiting for the sweep:
+1. Record the notice on a private issue, never in a public comment: it names
+   a person and a work. Note the image uid, the deck, the venture and who
+   approved the takedown.
+2. Take it down: from the report in HQ › Decks › Reports (Take down image),
+   or by calling the route with the reason the founder will read. The reason
+   is 10 to 1,000 characters. A second takedown is 409 `already_taken_down`.
+   If the answer says `r2_deleted: false`, delete the object by hand:
    `npx wrangler r2 object delete <FILES bucket>/deck-images/<project>/<uid>.<ext> --remote`,
-   then record it as the sweep would:
+   then record the key, as the sweep would:
    ```sql
    INSERT INTO deck_r2_tombstones (key, project_id, bytes, reason)
    VALUES ('deck-images/<project>/<uid>.<ext>', <project>, NULL, 'discarded');
    ```
-   The table only takes `discarded` or `unkept_proposal` as a reason, so the
-   takedown's own reason lives on the private issue from step 1.
-6. Purge the edge cache for `https://axal.vc/api/decks/images/<uid>/file` and
+   The table only takes `discarded` or `unkept_proposal` as a reason; the
+   takedown's own reason is on the row (`taken_down_reason`) and the private
+   issue. The file route never serves the bytes either way, because it reads
+   the mark before R2.
+3. Purge the edge cache for `https://axal.vc/api/decks/images/<uid>/file` and
    the same path on `app.axal.vc` (Cloudflare dashboard › Caching › Purge by
-   URL). A browser that already cached it keeps it until its own cache clears;
-   that cannot be reached from here.
+   URL). A kept image was served `public, max-age=31536000, immutable`, so a
+   copy cached before the takedown can outlive it until it is purged. A
+   browser that already cached it keeps it until its own cache clears, and
+   that cannot be reached from here. Files a founder exported before the
+   takedown are their own and are not reached either.
 
-**Check.** The file URL answers 404 on both hosts, `deck_images_named` no longer
-names the uid, and the tombstone row exists.
+**Check.** The file URL answers the placeholder (`x-axal-image-state:
+taken-down`) on both hosts, the row has `taken_down_at`, and the admin audit
+log has a `deck_image_taken_down` row.
 
 **Retention.** The rules for these stores are in `DATA_RETENTION.md` (D1508),
 which `scripts/check-deck-retention.mjs` checks.
@@ -273,6 +284,7 @@ which `scripts/check-deck-retention.mjs` checks.
 - A button in HQ for the batch refund (the route is built, D4373).
 - An HQ list of stuck runs, and a lease on a queue slice (D1536). The sweep is
   built (D4374).
-- An admin image takedown that does steps 2 to 6 above in one audited press.
+- Purging the edge cache from the image takedown itself (D4375): it needs a
+  Cloudflare API token with cache purge, which the Worker does not hold.
 - A live staging Worker, so each procedure can be run end to end before a
   release.

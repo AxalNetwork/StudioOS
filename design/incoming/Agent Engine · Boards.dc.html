@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e9e7ee}
+a{color:#7c3aed;text-decoration:none}
+a:hover{color:#6d28d9;text-decoration:underline}
+</style>
+</helmet>
+<div style="box-sizing:border-box;width:max-content;min-width:100%;padding:64px;display:flex;flex-direction:column;gap:72px;background:#e9e7ee;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+<header style="display:flex;flex-direction:column;gap:10px;max-width:1100px">
+<span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Axal VC · Agent engine · TM10–TM19, TM5m (E8 of #3742)</span>
+<h1 style="margin:0;font-size:42px;font-weight:800;letter-spacing:-0.03em">Agent engine</h1>
+<p style="margin:0;font-size:15px;line-height:1.55;color:#4a4553;text-wrap:pretty">Goals and plans, the handoff trail, evaluation, an agent for a goal, move notices, engine states, and an agent’s memory and duties. Only what the mounted routes return is drawn. Agents are personas with the spark marker; people are circles. Light and dark for every board.</p>
+</header>
+<sc-for list="{{ groups }}" as="g" hint-placeholder-count="7">
+<section style="display:flex;flex-direction:column;gap:22px">
+<div style="display:flex;flex-direction:column;gap:6px;max-width:1100px"><h2 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-0.02em">{{ g.t }}</h2><sc-if value="{{ g.n }}" hint-placeholder-val="{{ false }}"><p style="margin:0;font-size:14px;line-height:1.55;color:#3f3a47;text-wrap:pretty">{{ g.n }}</p></sc-if></div>
+<sc-for list="{{ g.boards }}" as="b" hint-placeholder-count="3">
+<div id="{{ b.id }}" style="display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="font-family:'Roboto Mono',monospace;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#18181b;color:#fff">{{ b.id }}</span><span style="font-size:21px;font-weight:800;letter-spacing:-0.02em">{{ b.t }}</span></div>
+<sc-if value="{{ b.n }}" hint-placeholder-val="{{ false }}"><p style="margin:0;max-width:960px;font-size:13px;line-height:1.55;color:#3f3a47;text-wrap:pretty">{{ b.n }}</p></sc-if>
+<div style="display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start">
+<sc-for list="{{ b.fr }}" as="f" hint-placeholder-count="2">
+<div style="display:flex;flex-direction:column;gap:8px">
+<sc-if value="{{ f.cap }}" hint-placeholder-val="{{ false }}"><span style="font-family:'Roboto Mono',monospace;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">{{ f.cap }}</span></sc-if>
+<div style="{{ f.wst }}"><dc-import name="Agent Engine Page" v="{{ f.v }}" hint-size="{{ f.hs }}"></dc-import></div>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-for>
+</section>
+</sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const F = (v, cap, w, h) => { const d = /-d$/.test(v); return { v, cap: cap || '', wst: `width:${w}px;${h ? 'height:' + h + 'px;' : ''}border-radius:${w < 500 ? 28 : 14}px;overflow:hidden;border:1px solid ${d ? '#374151' : '#dedbe5'};box-shadow:0 20px 50px rgba(24,24,27,.10);background:${d ? '#0b1220' : '#f4f3f7'}`, hs: `${w}px,${h || 800}px` }; };
+    const LD = (v, cap, w, h) => [F(v, cap ? cap + ' · light' : 'Light', w, h), F(v + '-d', cap ? cap + ' · dark' : 'Dark', w, h)];
+    const B = (id, t, fr, n) => ({ id, t, fr, n: n || '' });
+    return { groups: [
+      { t: 'TM10 · Goals and plan', n: 'Home: a Goals view beside Work’s tabs for a project, and a Goals section of the company’s Team page. Agents plan project goals only (owner, 2026-11-04).', boards: [
+        B('TM10a', 'Goal list', [...LD('tm10a', 'Manager', 1440, 1000), F('tm10a_ro', 'Reader · no actions', 1440, 1000)], 'Title, status, parent goal, target date, progress and cost to date. The project’s burn-up sits once above the list, labelled as the project’s. A missing cost reads “Not recorded”.'),
+        B('TM10a2', 'New or edit goal · Sheet 520', [...LD('tm10a2', 'Edit', 1440, 1000), F('tm10a2e', 'Refused · invalid_goal and parent_not_in_company as sentences', 1440, 1000)], 'Focus order: Title, Why, Metric, Target date, Stage, Parent goal, Linked OKR, Priority, Status, then Cancel and Save.'),
+        B('TM10b', 'One goal’s plan', LD('tm10b', '', 1440, 1000), 'WK2’s rows filtered to the goal and regrouped by module. Dependency lines carry the text equivalent “Waits on: [task]”.'),
+        B('TM10c', 'Ask panel · the quote first', [...LD('tm10c', 'by [Vesta], the planner agent', 1440, 1000), F('tm10c2', 'by Eadwyn', 1440, 1000)], 'Opens out of the AIRail, not a separate sheet. “$[0.12] · by [Vesta]” or “$[0.12] · by Eadwyn”.'),
+        B('TM10d', 'Ask panel · the proposal card', [...LD('tm10d', '[Vesta] proposes a plan', 1440, 1000), F('tm10d2', 'Eadwyn proposes a plan · accepted by [Avery Stone]', 1440, 1000)], 'Edit is removing and retitling items before Accept. Dropped sentences show as a muted note. Discard goes through the proposal’s own decide.'),
+        B('TM10e', 'A company goal', LD('tm10e', '', 1440, 820), 'The chip is greyed: “Agents plan goals inside a project. Open a project to plan this goal.”'),
+        B('TM10f', 'Import from Goals', LD('tm10f', '', 1440, 420), 'WK8’s empty-state button opens the Goals view. No import route exists, so no picker is drawn.'),
+        B('TM10 · states', 'Loading · empty · could not be read · the rest', [F('tm10l', 'Loading', 1440, 760), F('tm10em', 'No goals yet', 1440, 760), F('tm10er', 'Could not be read', 1440, 760), ...LD('tm10s', 'Quote unavailable, not switched on, plan_invalid, plan_decided, cost, each refusal', 1440, 641)]),
+        B('TM10 · phone', '390', [F('tm10p1', 'Goal list', 390, 844), F('tm10p2', 'The proposal card as a bottom sheet', 390, 844), F('tm10p1-d', 'Dark', 390, 844)])
+      ] },
+      { t: 'TM13 · Handoff trail', n: 'Home: a “Handoffs” view in Team › Activity for projects, and a section of the Team page for companies. A step carries no run or task uid, so no “Open run” link.', boards: [
+        B('TM13a', 'Chains and refused loops', LD('tm13a', '', 1440, 980), 'Each step: [portrait] → [portrait]: title · accepted by [person] · task created. Nested depth is an indent, at most 3. A missing role holder reads “No agent on this team for this step”; a missing decider “Not recorded”.'),
+        B('TM13 · states', 'Loading · empty · could not be read', [F('tm13l', 'Loading', 1440, 700), F('tm13em', 'No handoffs yet', 1440, 700), F('tm13er', 'Could not be read', 1440, 700)]),
+        B('TM13 · phone', '390', [F('tm13p', '', 390, 844), F('tm13p-d', 'Dark', 390, 844)])
+      ] },
+      { t: 'TM14 · Evaluation (per team)', n: 'Home: Team › AI agents › “How agents are doing”. The 30 / 90 days toggle uses ?days=.', boards: [
+        B('TM14a', 'How agents are doing', LD('tm14a', '', 1440, 1000), 'One row per role_key, drawn as the persona that holds it. Under 10 decisions: “Too few decisions to rate ([n])”. A key with no live agent: “An agent no longer on this team”. Refusals are sentences with counts.'),
+        B('TM14b', 'The skills strip', [F('tm14a', 'Skills with cases, not run and regressions', 1440, 1000), F('tm14c', '[] · “No Axal skills to check”', 1440, 1000), F('tm14b', 'null · “Skill checks could not be read”', 1440, 1000)]),
+        B('TM14 · states', 'Loading · empty · could not be read', [F('tm14l', 'Loading', 1440, 760), F('tm14em', 'No decisions yet', 1440, 760), F('tm14er', 'Could not be read', 1440, 760)]),
+        B('TM14 · phone', '390 · stacked cards', [F('tm14p', '', 390, 844), F('tm14p-d', 'Dark', 390, 844)])
+      ] },
+      { t: 'TM15 · An agent for this goal', n: 'Sheet 640, opened from a goal. Needs manage. Suggestions carry no template name; adding sends one POST per agent and reports each result.', boards: [
+        B('TM15', 'Suggestions with model and cap per row', [...LD('tm15', '', 1440, 1000), F('tm15r', 'After Add: one added, one refused, one cap refused', 1440, 1000)], 'The person sets each cap. “Already on the team” rows are disabled and show that persona. No template key and no job title appear.'),
+        B('TM15 · states', 'Loading · nothing to suggest · read-only · every refusal', [F('tm15s', 'Loading · nothing to suggest · you can’t manage this team', 1440, 622), ...LD('tm15x', 'role_taken, persona_on_team, persona_unavailable, cap_above_max, plan_required, not_manager', 1440, 284)])
+      ] },
+      { t: 'TM18 · Transfer and incorporation notices', n: 'From GET /moves. Dismiss is local to this browser. The move itself stays in the TM1g2 / TM1h confirms.', boards: [
+        B('TM18a', 'The project’s Team page after a move', [...LD('tm18a', 'Between companies', 1440, 760), F('tm18a2', 'Incorporation (from null)', 1440, 760), F('tm18a3', 'To standalone (to null) · mover not recorded', 1440, 760)]),
+        B('TM18b', 'The old company’s side', LD('tm18b', '', 1440, 700), '“[blocked_tasks] tasks were blocked”; stopped runs read “Stopped: the project moved to another company.” No task list.'),
+        B('TM18c', 'The new company · “Suggest a company team”', LD('tm18c', '', 1440, 640), 'Opens TM15.'),
+        B('TM18 · states', 'Loading · no moves · could not be read', LD('tm18s', '', 1440, 195))
+      ] },
+      { t: 'TM19 · Engine states (narrowed)', n: 'Kill switch, engine pause / HQ halt / canary, and gateway limit keep the code’s split. No separate canary line (S1).', boards: [
+        B('TM19a', 'Team engine control · Team › Settings', [...LD('tm19a', 'Editor', 1440, 760), F('tm19a2', 'Pause confirm · Sheet 520', 1440, 760), F('tm19a3', 'Team paused · self_start', 1440, 760), F('tm19a4', 'Reader · read-only', 1440, 760), F('tm19a5', 'invalid_engine as its sentence', 1440, 760)]),
+        B('TM19b', 'Platform pause, HQ halt and canary on Work, Calendar and Ask', LD('tm19b', '', 1440, 481), 'The Team page already has the banner; these are the places that lacked it.'),
+        B('TM19c', 'Decision expired', LD('tm19c', '', 1440, 346), 'A Work card in Backlog, blocked: “No decision in 7 days; the proposal is still open.” with “Decide now”.'),
+        B('TM19d', 'Daily limit', LD('tm19d', '', 1440, 203), '“Paused because it ran 20 times today.” Editors resume; no automatic resume.'),
+        B('TM19e', 'The pause reasons TM9b lacks', LD('tm19e', '', 1440, 481), 'Sponsor spend limit, AI paused for the sponsor, team archived, retired by Axal VC HQ (no Resume), and “Choose a new sponsor” (#4387).'),
+        B('TM19f', 'Start a task · Work item sheet (WK4 extension)', LD('tm19f', '', 1440, 1328), '“Start · ~$[0.04]” with the quote first; running; every start and quote refusal as its exact sentence; quote unavailable; the self_start variant.'),
+        B('TM19 · phone', '390', [F('tm19pb', 'TM19b', 390, 844), F('tm19pc', 'TM19c', 390, 844), F('tm19pf', 'TM19f', 390, 844), F('tm19pf-d', 'TM19f · dark', 390, 844)])
+      ] },
+      { t: 'TM5m · Agent memory and schedule (AG5 extension)', n: 'Extra sections of the AG5 agent profile, over Team › AI agents.', boards: [
+        B('TM5m-a', 'Memory · Sheet 640', [...LD('tm5ma', 'Manager', 1440, 1000), F('tm5ma2', 'Note too long · Forget everything confirm', 1440, 1000), F('tm5ma3', 'Read-only', 1440, 1000)], 'The retention line shows retention.text exactly as returned.'),
+        B('TM5m-b', 'Scheduled duties · Sheet 640', LD('tm5mb', '', 1440, 1000), 'Template duties only. Last outcome as a sentence. The last 5 runs open the RunSheet. The only link out is “See and schedule on the Calendar”.'),
+        B('TM5m · states', 'No notes · no duties · could not be read · cost · read-only · loading', LD('tm5ms', '', 1440, 377)),
+        B('TM5m · phone', '390', [F('tm5mpa', 'Memory', 390, 844), F('tm5mpb', 'Scheduled duties', 390, 844), F('tm5mpa-d', 'Memory · dark', 390, 844)])
+      ] }
+    ] };
+  }
+}
+</script>
+</body></html>

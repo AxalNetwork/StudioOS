@@ -4,6 +4,7 @@ import Pill from '../../ui/Pill.jsx';
 import { Unrecorded } from '../../ui/Honesty.jsx';
 import { api } from '../../lib/api';
 import { accountCompaniesApi } from '../../lib/api/accountCompanies.js';
+import { incorporationQuoteApi } from '../../lib/api/incorporationQuote.js';
 import { fmtCents } from '../../lib/incorporationPricing.js';
 import { reportError } from '../../lib/log';
 import { usePhoneWidth } from '../../ui/phone/usePhoneWidth';
@@ -12,10 +13,14 @@ import AskButton from '../team/AskButton.jsx';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, FIELD } from '../team/teamUi.jsx';
 import IncorporationTimeline from './IncorporationTimeline.jsx';
 import IncorporateDone from './IncorporateDone.jsx';
+import IncorporateHqRead from './IncorporateHqRead.jsx';
+import { useAuth } from '../../hooks/useAuthSync';
+import { isSuperAdminUser } from '../../lib/shellRole';
 import {
   DECLINED, LINE, NOT_YOURS, OFFICERS_LATER, OWN_ONLY, RANGES, SAVED_HERE, STATE_FEE, STEPS, TITLE,
   clearDraft, cofounderStatus, jurisdictionCard, loadDraft, ownProjects, prefill, recommend, saveDraft, shortDay, stepLine,
 } from './incorporateModel.js';
+import { ITEMISED_TITLE, OPTIONAL, TOTAL, quoteRows, totalText } from './itemisedQuoteModel.js';
 
 /**
  * D1414 (#3696, INC1–INC7) — Incorporate, redesigned: turn one of your own
@@ -30,7 +35,10 @@ import {
  *   3 Company details        the legal name and its register check, the
  *                            registered agent and address, the co-founder
  *                            agreement's status (`GET /api/legal/documents`)
- *   4 Review                 every answer with Edit, and the order summary
+ *   4 Review                 every answer with Edit, the order summary, and
+ *                            the itemised quote (D4357): each fee with its
+ *                            source and the day it was checked, Not recorded
+ *                            when unknown, and a total of the known lines
  *   5 Pay & file             the catalog quote's one price and the
  *                            registered-agent offer (owner answer Q5: "The
  *                            state fee is confirmed at filing."), the order
@@ -231,6 +239,45 @@ function OrderCard({ jurisdiction, quote, onRetry }) {
   );
 }
 
+function QuoteRow({ r }) {
+  return (
+    <li className="flex flex-col gap-0.5 border-t border-axal-hairline py-2 first:border-t-0 dark:border-gray-800" data-testid={`incorporate-line-${r.key}`} data-known={r.known ? '1' : '0'}>
+      <div className="flex items-baseline justify-between gap-3">
+        <span className={`text-[13px] ${INK}`}>{r.label}</span>
+        <span className={`font-mono text-[13px] ${r.known ? INK : 'text-axal-muted dark:text-gray-400'}`} data-testid={`incorporate-line-${r.key}-amount`}>{r.amount}</span>
+      </div>
+      <span className="text-[11.5px] text-axal-muted dark:text-gray-400" data-testid={`incorporate-line-${r.key}-source`}>
+        {r.paid ? `${r.paid} · ` : ''}{r.sourceUrl ? <a href={r.sourceUrl} target="_blank" rel="noopener noreferrer" className="underline decoration-dotted hover:text-axal-ink dark:hover:text-gray-200">{r.source}</a> : r.source}
+      </span>
+    </li>
+  );
+}
+
+/** D4357 (#4357): the quote line by line, before the founder confirms. */
+function ItemisedQuote({ read, onRetry }) {
+  if (read.status === 'idle') return null;
+  if (read.status === 'loading') return <Card title={ITEMISED_TITLE} testId="incorporate-itemised"><p className={MUTED}>Reading…</p></Card>;
+  if (read.status !== 'ready') return <Card title={ITEMISED_TITLE} testId="incorporate-itemised"><Failed what="The itemised quote" onRetry={onRetry} testId="incorporate-itemised-unread" /></Card>;
+  const rows = quoteRows(read.value);
+  const total = totalText(read.value?.total);
+  return (
+    <Card title={ITEMISED_TITLE} testId="incorporate-itemised">
+      <ul className="m-0 list-none p-0">{rows.main.map((r) => <QuoteRow key={r.key} r={r} />)}</ul>
+      <div className="mt-2 flex items-baseline justify-between gap-3 border-t border-axal-hairline pt-2 dark:border-gray-700">
+        <span className={LABEL}>{TOTAL}</span>
+        <b className={`font-mono text-[15px] ${INK}`} data-testid="incorporate-itemised-total" data-complete={total.complete ? '1' : '0'}>{total.amount}</b>
+      </div>
+      {total.note ? <p className={`m-0 mt-1.5 ${MUTED}`} data-testid="incorporate-itemised-incomplete">{total.note}</p> : null}
+      {rows.optional.length ? (
+        <>
+          <p className={`m-0 mt-3 ${EYEBROW}`}>{OPTIONAL}</p>
+          <ul className="m-0 list-none p-0">{rows.optional.map((r) => <QuoteRow key={r.key} r={r} />)}</ul>
+        </>
+      ) : null}
+    </Card>
+  );
+}
+
 /** After payment: the annual registered-agent offer, through the same embedded terminal (unchanged from Task #6). */
 function RegisteredAgentOptIn({ offer }) {
   const [opted, setOpted] = useState(false);
@@ -259,7 +306,22 @@ function orderRefusal(e, label) {
   return 'The payment could not be started. Try again in a moment.';
 }
 
+/**
+ * D4360 (#4360, INC5g): an admin who opens `/incorporate?order=<id>` (from Lab ›
+ * Formation) reads that order read only; everyone else, and an admin without
+ * `?order`, gets the member's flow, unchanged.
+ */
 export default function IncorporateFlow({ embedded = false }) {
+  const [params] = useSearchParams();
+  const user = useAuth()?.user ?? null;
+  const orderId = params.get('order');
+  if (orderId && /^\d{1,12}$/.test(orderId) && user?.role === 'admin') {
+    return <IncorporateHqRead orderId={orderId} viewer={isSuperAdminUser(user) ? 'super_admin' : 'admin'} />;
+  }
+  return <MemberIncorporateFlow embedded={embedded} />;
+}
+
+function MemberIncorporateFlow({ embedded = false }) {
   const [params] = useSearchParams();
   const phone = usePhoneWidth();
   const asked = params.get('project');
@@ -278,6 +340,7 @@ export default function IncorporateFlow({ embedded = false }) {
   const [checking, setChecking] = useState(false);
   const [skip, setSkip] = useState(false);
   const [quote, setQuote] = useState({ status: 'idle' });
+  const [itemised, setItemised] = useState({ status: 'idle' });
   const [cofounder, setCofounder] = useState({ kind: 'loading' });
   const [order, setOrder] = useState(null);
   const [projectId, setProjectId] = useState(null);
@@ -347,6 +410,14 @@ export default function IncorporateFlow({ embedded = false }) {
     api.legalIncorporationQuote(selectedId).then((v) => setQuote({ status: 'ready', value: v })).catch(() => setQuote({ status: 'error' }));
   }, [selectedId]);
   useEffect(() => { if (step >= 3 && !order) readQuote(); }, [step, readQuote]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // D4357: the itemised quote, read on the review step before the founder confirms.
+  const readItemised = useCallback(() => {
+    if (!selectedId) return;
+    setItemised({ status: 'loading' });
+    incorporationQuoteApi.itemised(selectedId).then((v) => setItemised({ status: 'ready', value: v })).catch(() => setItemised({ status: 'error' }));
+  }, [selectedId]);
+  useEffect(() => { if (step === 3 && !order) readItemised(); }, [step, readItemised]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The answers stay on this device until the order is paid (INC5a).
   useEffect(() => {
@@ -496,7 +567,10 @@ export default function IncorporateFlow({ embedded = false }) {
               ))}
             </dl>
           </Card>
-          <OrderCard jurisdiction={selected} quote={quote} onRetry={readQuote} />
+          <div className="flex flex-col gap-4">
+            <OrderCard jurisdiction={selected} quote={quote} onRetry={readQuote} />
+            <ItemisedQuote read={itemised} onRetry={readItemised} />
+          </div>
         </div>
       ) : null}
 

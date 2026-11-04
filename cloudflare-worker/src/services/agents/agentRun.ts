@@ -204,7 +204,7 @@ async function check(env: Env, input: AgentRunInput): Promise<Checked> {
   const sponsor = await sponsorOf(env, a);
   if (!sponsor || !(await canManage(env, s, sponsor))) {
     await pause(env, a, 'sponsor_left');
-    return no(403, 'sponsor_lost_access', 'The person who added this agent can no longer manage this team, so it is paused. An editor can add it again.');
+    return no(403, 'sponsor_lost_access', 'The person who added this agent can no longer manage this team, so it is paused. An editor can choose a new sponsor.');
   }
   if (a.status === 'paused') return no(403, 'agent_paused', 'This agent is paused. Resume it to run it.', { paused_reason: a.paused_reason });
   const { rules } = await effectiveBook(env, s, a.role_key);

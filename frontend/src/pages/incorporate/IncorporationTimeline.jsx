@@ -28,7 +28,7 @@ import BankStep from './BankStep.jsx';
  *                                      founder's Mercury is connected (`BankStep`)
  */
 
-function EinRow({ projectId }) {
+function EinRow({ projectId, readOnly = false }) {
   const [read, setRead] = useState({ status: 'loading' });
   const [adding, setAdding] = useState(false);
   const [value, setValue] = useState('');
@@ -53,7 +53,7 @@ function EinRow({ projectId }) {
             : (
               <span className="flex flex-wrap items-center gap-2">
                 <Unrecorded />
-                {read.value?.can_edit && !adding ? <button type="button" className={BTN_TEXT} onClick={() => setAdding(true)} data-testid="timeline-ein-add">Add EIN</button> : null}
+                {read.value?.can_edit && !readOnly && !adding ? <button type="button" className={BTN_TEXT} onClick={() => setAdding(true)} data-testid="timeline-ein-add">Add EIN</button> : null}
                 {adding ? (
                   <>
                     <input aria-label="EIN" className={`${FIELD} !w-[150px]`} value={value} onChange={(e) => setValue(e.target.value)} placeholder="NN-NNNNNNN" autoComplete="off" />
@@ -67,7 +67,7 @@ function EinRow({ projectId }) {
   );
 }
 
-export default function IncorporationTimeline({ order, projectId, projectName = null }) {
+export default function IncorporationTimeline({ order, projectId, projectName = null, readOnly = false }) {
   const steps = timeline(order);
   const company = orderCompany(order);
   return (
@@ -89,9 +89,9 @@ export default function IncorporationTimeline({ order, projectId, projectName = 
       </ol>
       {order && PACKET_NOT_BUILT_STATUSES.includes(order.status) ? <p className="m-0 mt-3 text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="timeline-packet-not-built">{`${PACKET_NOT_BUILT} Your receipt is in Billing.`}</p> : null}
       <div className="mt-3 flex flex-col gap-3">
-        <EinRow projectId={projectId} />
+        <EinRow projectId={projectId} readOnly={readOnly} />
         {/* #4356: the bank comes after the company is formed (INC3b's last stop). */}
-        {steps.find((st) => st.key === 'filed')?.done ? <div className="border-t border-axal-hairline pt-3 dark:border-gray-800"><BankStep variant="row" /></div> : null}
+        {!readOnly && steps.find((st) => st.key === 'filed')?.done ? <div className="border-t border-axal-hairline pt-3 dark:border-gray-800"><BankStep variant="row" /></div> : null}
       </div>
       {company.available ? (
         <p className="m-0 mt-3 flex flex-wrap items-center justify-between gap-2 rounded-axal-md border border-violet-200 bg-axal-lavender px-3 py-2.5 text-[13px] text-axal-ink dark:border-violet-800 dark:bg-violet-900/20 dark:text-gray-100" data-testid="timeline-company">

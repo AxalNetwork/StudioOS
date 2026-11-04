@@ -414,6 +414,17 @@ const EDITOR_ROLES = ['owner', 'admin', 'founder'];
  * Who the caller is in a company, from `GET /api/company/:uid`'s members:
  * what they may do there, and the people a transfer can go to.
  */
+/**
+ * D4360 (#4360, PF7's admin frame): an admin or HQ reading a company or
+ * project they hold no seat in reads it read only. The page draws D1463's
+ * access pill ("Read only · HQ access" or "· Studio admin access") and no write.
+ * Portfolio is not one of D1463's gated records, so there is no reason gate here.
+ */
+export const hqReadOnly = (profile, member) => (profile === 'admin' || profile === 'hq') && !member;
+/** `AccessPill`'s viewer for a Portfolio profile (`ui/reasonGate.js` accessWord). */
+export const accessViewer = (profile) => (profile === 'hq' ? 'super_admin' : profile === 'admin' ? 'admin' : null);
+export const READ_ONLY_LINE = 'Read only. Its members make the changes here.';
+
 export function companyPowers(detail, meId) {
   const members = Array.isArray(detail?.members) ? detail.members : [];
   const me = members.find((m) => Number(m.user_id) === Number(meId)) || null;

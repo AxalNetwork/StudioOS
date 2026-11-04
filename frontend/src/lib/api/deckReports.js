@@ -11,6 +11,9 @@
 //   POST /api/admin/deck-reports/:uid/resolve     { outcome: addressed|no_fault, note }   (HQ admin)
 //        → { report }; 400 note_required (under 10 characters); 409 already_resolved
 // A report refunds nothing and changes no proposal.
+//   POST /api/admin/deck-images/:uid/takedown   { reason }   (HQ admin, #4375; routes/admin_deck_images.ts)
+//        → { image: { uid, project_id, taken_down_at, reason, r2_deleted } }; 400 reason_required; 409 already_taken_down
+//        Every card that used the image then shows "Image removed by Axal HQ"; the founder is told.
 import { request } from '../api.js';
 
 const enc = encodeURIComponent;
@@ -33,5 +36,8 @@ export const deckReportsApi = {
   queue: (status = 'open') => request(`/admin/deck-reports?status=${enc(status)}`),
   resolve: (reportUid, { outcome, note } = {}) => request(`/admin/deck-reports/${enc(reportUid)}/resolve`, {
     method: 'POST', body: JSON.stringify(note ? { outcome, note } : { outcome }),
+  }),
+  takedownImage: (imageUid, reason) => request(`/admin/deck-images/${enc(imageUid)}/takedown`, {
+    method: 'POST', body: JSON.stringify({ reason }),
   }),
 };
