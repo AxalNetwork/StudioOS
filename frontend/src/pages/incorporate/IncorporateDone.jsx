@@ -6,13 +6,15 @@ import { companyPathFor, projectPagePath } from '../account/companies/companiesM
 import { BTN_PRIMARY, BTN_SECONDARY } from '../team/teamUi.jsx';
 import { orderCompany } from './incorporateAdapter.js';
 import { deadline83b } from './incorporateModel.js';
+import BankStep from './BankStep.jsx';
 
 /**
  * D1414 (#3696, INC4) — "[Company] is on its way", with Back to the project
  * always and Open company only when the order carries its company (#3855).
  * Next steps: the 83(b) deadline from the founder's own trackers (`GET
  * /api/legal/83b/trackers?project_id=`; "Not recorded" when none, never a
- * date guessed) and the cap table. No bank link (owner answer Q7).
+ * date guessed) and the cap table. #4356 (D4356): and Open a bank account, with
+ * Mercury (`BankStep`), done only when the founder's Mercury is connected.
  */
 export default function IncorporateDone({ order, projectId, companyName }) {
   const [tracker, setTracker] = useState({ kind: 'loading' });
@@ -38,7 +40,8 @@ export default function IncorporateDone({ order, projectId, companyName }) {
         </span>
       </section>
       <span className="font-mono text-[11px] font-medium uppercase tracking-[.11em] text-axal-muted dark:text-gray-400">Next steps</span>
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-3 md:grid-cols-3">
+        <BankStep variant="card" />
         <section className={`flex flex-col gap-1.5 rounded-axal-lg border bg-white px-4 py-3 dark:bg-gray-900 ${tracker.kind === 'due' ? 'border-amber-300 dark:border-amber-700' : 'border-axal-hairline dark:border-gray-700'}`} data-testid="done-83b">
           <b className="text-[14px] text-axal-ink dark:text-gray-100">File your 83(b)</b>
           <span className="text-[12.5px] text-axal-muted dark:text-gray-400">
