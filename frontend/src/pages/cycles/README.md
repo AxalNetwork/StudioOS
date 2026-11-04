@@ -7,7 +7,7 @@ The canvases are `design/canvases/integrated/Cycle Overview.dc.html` and its two
 
 | File | What it holds |
 | --- | --- |
-| `distribution/` | D4484 (#4484): Distribution’s static tabs, module header/New campaign, shared Ask and DS presentation; Overview retains the existing module content. D4486: channel readings and read-only connection cards on that shell. |
+| `distribution/` | D4484 (#4484): Distribution’s static tabs, module header/New campaign, shared Ask and DS presentation; Overview retains the existing module content. D4486: channel readings and read-only connection cards on that shell. D4494: Inbox reads and confirmed manual replies. |
 | `lovable/` | D1082 (#2947): Build in Lovable's dialog, button and model, mounted on an experiment row and beside Add must-have. See its README. |
 | `FromGoogle.jsx` | D1091 (#2956, D1314 §3: GW3's frame, GW7's states): the one From Google section a module mounts for its chosen Google file. It reads the file itself; the feed hands it the rows, columns, `deleted`, `partly`, `onSync` and `onDeleteRow`. Loading, Empty (Choose from Google Drive), Unreadable (rows kept, Choose again), Partly synced (Sync again), and Delete's in-page dialog. Parts 3–6 (#2957–#2960) mount it |
 | `ValidateFromGoogle.jsx` | D1092 (#2957): From Google on Validate's three modules, from `parts.from_google`: the shared section's rows on Customer research (interview notes) and Demand and urgency signals (signals To confirm), Choose the interview for an unmapped Doc, GW5's Map a question with a preview that stores nothing, and Experiments' confirmed signals offered as evidence with the hypothesis picker and Dismiss; `team_only`, `not_connected` and `unreadable` for this part only |
