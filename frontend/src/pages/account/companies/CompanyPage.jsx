@@ -5,6 +5,7 @@ import { teamsApi } from '../../../lib/api/teams';
 import { reportError } from '../../../lib/log';
 import { companyTeamPath } from '../../../lib/settingsScope.js';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT } from '../../team/teamUi.jsx';
+import ComplianceCard from '../../work/ComplianceCard.jsx';
 import SkillsLink from '../../team/SkillsLink.jsx';
 import { AccessPill } from '../../../ui/ReasonGate';
 import * as portfolio from './portfolioAdapter.js';
@@ -212,6 +213,7 @@ export default function CompanyPage({
                   </ul>
                 ) : <p className={`m-0 ${MUTED}`} data-testid="company-locations-none">No location recorded.</p>}
           </PCard>
+          {detail.status === 'ready' ? <ComplianceCard key={uid} uid={uid} /> : null}
           <DocumentsCard uid={uid} read={docs} onRetry={reread} onChanged={reread} readOnly={locked} />
         </div>
         <div className="flex min-w-0 flex-col gap-4">
