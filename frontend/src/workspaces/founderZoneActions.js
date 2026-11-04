@@ -156,7 +156,7 @@ export const FOUNDER_ZONE_ACTIONS = {
     { label: 'Export', kind: 'export' },
   ],
   'grow/partnerships': [
-    { label: 'New proposal', to: '/comarketing' },
+    { label: 'Open co-marketing', to: '/grow/partner-network/co-marketing' },
     { label: 'Export terms', kind: 'export' },
   ],
   // D1194 (#3128): `raise/capital-match` is retired into Capital relationships › Match.
