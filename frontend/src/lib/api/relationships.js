@@ -31,6 +31,8 @@ const askOf = (q) => {
 };
 const send = (method, path, body) => request(path, { method, body: JSON.stringify(body ?? {}) });
 export const relationshipsApi = {
+  // D4464: caller-scoped counts; failed reads are null with recorded metadata (HTTP 503).
+  summary: () => request('/relationships/summary'),
   sharing: () => request('/relationships/sharing'),
   setSharing: (share) => send('PUT', '/relationships/sharing', { share }),
   setTeamSharing: (key, share) => send('PUT', `/relationships/sharing/teams/${id(key)}`, { share }),

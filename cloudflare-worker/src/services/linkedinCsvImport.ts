@@ -327,10 +327,10 @@ async function candidateOf(env: Env, owner: number, table: CandidateTable, id: n
 }
 
 export class ReviewRefusal extends Error {
-  readonly status: 404 | 409;
-  readonly code: 'not_found' | 'decided' | 'cannot_merge';
+  readonly status: 400 | 404 | 409;
+  readonly code: 'not_found' | 'decided' | 'cannot_merge' | 'invalid_filter';
   readonly sentence: string;
-  constructor(status: 404 | 409, code: 'not_found' | 'decided' | 'cannot_merge', sentence: string) {
+  constructor(status: 400 | 404 | 409, code: 'not_found' | 'decided' | 'cannot_merge' | 'invalid_filter', sentence: string) {
     super(code);
     this.name = 'ReviewRefusal';
     this.status = status; this.code = code; this.sentence = sentence;
@@ -393,7 +393,12 @@ export async function ownContact(env: Env, owner: number, id: number) {
  * and its open follow-ups. Every statement binds the owner.
  */
 export const BOOK_PAGE = 50;
-export async function bookOf(env: Env, owner: number, q: string, page: number) {
+export async function bookOf(env: Env, owner: number, q: string, page: number, filters: { source?: string; follow_up?: string } = {}) {
+  if ((filters.source !== undefined && !['linkedin_csv', 'csv', 'typed'].includes(filters.source)) ||
+      (filters.follow_up !== undefined && filters.follow_up !== 'open')) {
+    throw new ReviewRefusal(400, 'invalid_filter', 'Choose a recorded source or open follow-ups.');
+  }
+  const filterArgs = [filters.source ?? null, owner, filters.source ?? null, filters.follow_up ?? null, owner, filters.follow_up ?? null];
   const term = q.trim().toLowerCase().slice(0, 100);
   const like = `%${term.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
   const offset = Math.max(0, page - 1) * BOOK_PAGE;
@@ -404,12 +409,15 @@ export async function bookOf(env: Env, owner: number, q: string, page: number) {
             (SELECT COUNT(*) FROM network_contact_tasks t WHERE t.owner_user_id = ? AND t.contact_id = n.id AND t.done_at IS NULL) AS open_tasks
        FROM network_connections n
       WHERE n.user_id = ? AND (? = '' OR lower(n.name) LIKE ? ESCAPE '\\' OR lower(COALESCE(n.company, '')) LIKE ? ESCAPE '\\')
+      AND (? IS NULL OR EXISTS (SELECT 1 FROM contact_sources s WHERE s.owner_user_id = ? AND s.contact_table = 'network_connections' AND s.contact_id = n.id AND s.source = ?))
+      AND (? IS NULL OR EXISTS (SELECT 1 FROM network_contact_tasks t WHERE t.owner_user_id = ? AND t.contact_id = n.id AND t.done_at IS NULL AND ? = 'open'))
       ORDER BY n.name COLLATE NOCASE, n.id LIMIT ? OFFSET ?`,
-  ).bind(owner, owner, owner, owner, term, like, like, BOOK_PAGE, offset).all<any>()).results || [];
+  ).bind(owner, owner, owner, owner, term, like, like, ...filterArgs, BOOK_PAGE, offset).all<any>()).results || [];
   const total = await env.DB.prepare(
     `SELECT COUNT(*) AS n FROM network_connections n
-      WHERE n.user_id = ? AND (? = '' OR lower(n.name) LIKE ? ESCAPE '\\' OR lower(COALESCE(n.company, '')) LIKE ? ESCAPE '\\')`,
-  ).bind(owner, term, like, like).first<{ n: number }>();
+      WHERE n.user_id = ? AND (? = '' OR lower(n.name) LIKE ? ESCAPE '\\' OR lower(COALESCE(n.company, '')) LIKE ? ESCAPE '\\') AND (? IS NULL OR EXISTS (SELECT 1 FROM contact_sources s WHERE s.owner_user_id = ? AND s.contact_table = 'network_connections' AND s.contact_id = n.id AND s.source = ?))
+      AND (? IS NULL OR EXISTS (SELECT 1 FROM network_contact_tasks t WHERE t.owner_user_id = ? AND t.contact_id = n.id AND t.done_at IS NULL AND ? = 'open'))`,
+  ).bind(owner, term, like, like, ...filterArgs).first<{ n: number }>();
   return {
     total: Number(total?.n ?? 0), page: Math.max(1, page), page_size: BOOK_PAGE,
     contacts: rows.map((r) => ({

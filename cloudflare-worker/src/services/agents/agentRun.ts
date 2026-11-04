@@ -204,6 +204,7 @@ export const moduleSurface = (m: ModuleDef): string => (m.cycle ? `/${m.cycle}/$
 async function check(env: Env, input: AgentRunInput): Promise<Checked> {
   const a = input.agent;
   if (a.status === 'removed') return no(409, 'removed', 'This agent was removed.');
+  if (a.source === 'mcp_client') return no(403, 'outside_assistant', 'This agent runs on its own assistant. Ask it there; its proposals wait for a person here.');
   const s = await scopeOfAgent(env, a);
   if (!s) return no(404, 'not_found', 'There is no such agent.');
   const sponsor = await sponsorOf(env, a);
