@@ -209,3 +209,5 @@ D1169: `usage_storage_d1169.test.ts` holds the grown storage read: thirteen memb
 | `deck_record_diagrams_pin_d1542.test.ts` | D1542 (#3780): the one-click path's `recordDiagrams` pinned, its whole output for one venture, the composer's blocks drawn from it, and no reach into the `grid_diagram` job. |
 
 D1456 (#4014): the existing record, recovery, bot-control and migration-runner suites cover channel/fact actions, recorded failed steps, creator-only safe bot details and migration 760 replay through the ledger. The engine fixture applies migration 760 from its SQL source.
+
+| `work_runs_3968.test.ts` | Real engine board/item latest-run wiring, guard-inclusive charges, unknown costs, scope gates and concurrent attempts (#3968). |
