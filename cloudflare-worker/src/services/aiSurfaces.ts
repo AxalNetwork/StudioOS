@@ -58,6 +58,8 @@ export const AI_SURFACE = {
   dealsCompare: '/deals/compare',
   /** Grow · Publish to… — Eadwyn's post text for the ticked places (`POST /api/publish/ask`), #4046. It writes nothing. */
   growPublish: '/grow',
+  /** D4488: Distribution draft proposals. */
+  growDistribution: '/grow/distribution',
   /** Build · Plan the build — Eadwyn's wording of the plan (`POST /api/cycles/build/plan/word`), D1071. */
   buildPlan: '/build/plan',
   /** Raise · Cap table — Eadwyn's read of a signed document (`POST /api/captable/record/:projectId/document-read`), D1021. */

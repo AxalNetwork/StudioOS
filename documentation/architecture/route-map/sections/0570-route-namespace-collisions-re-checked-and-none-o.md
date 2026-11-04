@@ -29,7 +29,7 @@ The two systems are not the same and the earlier note conflated them.
 | `/deals/{pipeline,screening,commit,closing}` | swallowed by `/deals/:dealId` | **Not a collision.** The literals outrank the param. Mount them in any order. |
 | `/pipeline/{leads,proposals,…}` (partner) | collides with investor `/pipeline/*` | **Not a collision.** The BD Console canvas's pipeline tabs are `all` / `mine` / `floor` / `retainer` — client-side filters inside one page, not sibling routes, and none share a name with `screening`/`commit`/`transactions`. |
 | `/grow/*` | collides with `/founder/growth/*` | **Moot.** #326 withdrew the Growth section; zero `/founder/growth` routes remain. |
-| `/research/*` | collides with `/advisor/research/*` | **Not a collision — a duplicate surface.** Distinct paths that render the same material. D8 already settled the market tab (`/advisor/research/market` → `/market-intel`); the rest is the same call, not a routing one. |
+| `/research/*` | collides with `/advisor/research/*` | **Not a collision — a duplicate surface.** Distinct paths that render the same material. D8 already settled the market tab (`/advisor/research/market` (retired D2319) → `/market-intel` (retired D2319)); the rest is the same call, not a routing one. |
 | `/fund/*` | collides with `/funds/*` | **Not a collision.** Singular and plural are distinct namespaces. It is a *legibility* hazard — two prefixes one letter apart — and the fix is to not introduce `/fund/*`, not to re-route `/funds/*`. |
 | `/practice/*` | collides with `/advisor/advisory/*` | **Not a collision — a duplicate surface.** Same class as `/research/*`. |
 

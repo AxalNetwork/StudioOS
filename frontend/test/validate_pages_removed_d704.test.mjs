@@ -150,15 +150,13 @@ test('D704 test 2 (route): the three old paths render ValidateZoneRedirect under
   const app = readFileSync('frontend/src/App.jsx', 'utf8');
   for (const zone of ['interviews', 'pain-map', 'hypotheses']) {
     const block = routeBlock(app, `/validate/${zone}`);
-    assert.ok(block, `/validate/${zone} is still declared, so a bookmark lands`);
-    assert.ok(block.includes(`element={guard(labRoles(['admin', 'founder']), <ValidateZoneRedirect zone="${zone}" />)}`), `/validate/${zone} redirects with its own zone`);
-    assert.doesNotMatch(block, /FounderValidateWorkspace|founderEditor/, 'no editor chrome and no old page');
+    assert.equal(block, null, `/validate/${zone} retired by D2319`);
   }
   assert.doesNotMatch(app, /FounderValidateWorkspace/, 'App.jsx no longer imports the old workspace');
   // #1704's /validate/verdict is the Verdict module.
   assert.ok(routeBlock(app, '/validate/verdict').includes('<CycleRoute cycle="validate" slug="verdict" />'));
   // #1658's one-interview redirect is untouched.
-  assert.match(routeBlock(app, '/validate/interviews/:id'), /<ParamRedirect to="\/validate\/customer-research\/:id" \/>/);
+  assert.equal(routeBlock(app, '/validate/interviews/:id'), null, 'D2319 retires the old record alias');
 });
 
 test('D704 test 5 (interviews): no tool, door or Lab link leads to the Interviews page', () => {

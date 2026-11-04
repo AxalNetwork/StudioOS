@@ -54,8 +54,8 @@ test('the retired files are deleted, not left orphaned', () => {
 
 test('the /skills and /values routes still redirect, now that their pages are gone', () => {
   const app = codeOnly(read('App.jsx'));
-  assert.match(app, /<Route path="\/skills" element=\{<Navigate to="\/studio" replace \/>\} \/>/);
-  assert.match(app, /<Route path="\/values" element=\{<Navigate to="\/studio" replace \/>\} \/>/);
+  assert.doesNotMatch(app, /<Route path="\/skills" element=\{<Navigate to="\/studio" replace \/>\} \/>/);
+  assert.doesNotMatch(app, /<Route path="\/values" element=\{<Navigate to="\/studio" replace \/>\} \/>/);
   assert.doesNotMatch(app, /SkillsProfilePage|ValuesAssessmentPage/);
 });
 

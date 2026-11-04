@@ -138,7 +138,7 @@ test('App.jsx serves /validate/record behind the founder guard, as the page and 
   assert.doesNotMatch(line, /<Navigate/);
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   // D695 (#1656): `adding` is the module's `/new` address; `lightbox` is unchanged.
-  assert.match(route, /export default function CycleRoute\(\{ cycle, lightbox = false, adding = false, record = false, slug: suppliedSlug, reporting = null, buildPlan = null, dataRoomFile = false, capTableProposal = false, capTableScenario = false, uofSub = null \}\)/);
+  assert.match(route, /export default function CycleRoute\(\{ cycle, tab = null, lightbox = false, adding = false, record = false, slug: suppliedSlug, reporting = null, buildPlan = null, dataRoomFile = false, capTableProposal = false, capTableScenario = false, uofSub = null \}\)/);
 });
 
 test('closing goes back to the page underneath, makes no server call, and a plain click records where it came from', () => {
@@ -163,7 +163,7 @@ test('both entry points name /validate/record; the old ?new=record is gone from 
   // redirects to `/validate/record` and `?new=notes|upload` to `?log=`
   // (validate_pages_removed_d704 test 1); a row's Record a session is the
   // interview record's (interview_record_d697 test 7).
-  assert.match(read('frontend/src/App.jsx'), /<Route path="\/validate\/interviews" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <ValidateZoneRedirect zone="interviews" \/>\)\} \/>/);
+  assert.doesNotMatch(read('frontend/src/App.jsx'), /<Route path="\/validate\/interviews" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <ValidateZoneRedirect zone="interviews" \/>\)\} \/>/);
   assert.match(DOORS.founders.live.map((i) => i.route).join(' '), /\/validate\/record\b/, 'the door points at the lightbox');
   assert.equal(DOORS.founders.live.some((i) => i.route === '/validate/session/:id'), false);
 });

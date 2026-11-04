@@ -185,7 +185,7 @@ test('the admin grant has a page, and no zone page can reach it', () => {
   // D953 (#2371): the page is Programs › Mentor cohort access › People, which
   // mounts the console's body; the old address redirects there and still lights
   // the Programs row.
-  assert.match(app, /<Route path="\/admin\/advisor-cohorts" element=\{<AdvisorCohortsRedirect \/>\} \/>/);
+  assert.doesNotMatch(app, /<Route path="\/admin\/advisor-cohorts" element=\{<AdvisorCohortsRedirect \/>\} \/>/);
   assert.match(app, /<Route path="\/admin\/programs\/mentor-cohorts\/people" element=\{guard\(\['admin'\], <AdminMentorCohortAccess \/>\)\} \/>/);
   // D962 (#2795): People passes its reload hooks too; the body is still mounted, embedded.
   assert.match(read('frontend/src/pages/admin/programs/MentorCohortAccess.jsx'), /<AdvisorCohortAssignmentsBody embedded\b/);

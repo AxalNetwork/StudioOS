@@ -340,6 +340,11 @@ export const FOUNDER_OPTIONS = [
     page: 'Founder · Grow · Distribution', key: 'draft:grow/customers', route: '/grow/distribution', label: 'Draft a sequence', kind: 'write', handler: 'draft',
     at: [[CYCLE, "surface: 'grow/customers'"]],
   },
+  // D4488: campaign drafts run in the Ask intent; models and usage remain in AIRail.
+  {
+    page: 'Founder · Grow · Distribution', key: 'draft:distribution', route: '/grow/distribution', label: 'Draft Distribution text', kind: 'write', handler: 'draft',
+    at: [['frontend/src/pages/cycles/distribution/DistributionAskIntent.jsx', 'api.run(']],
+  },
   // The brand builder, Distribution's "Open landing-page builder" door. #4046 B3: its one Ask (was "Auto-fill with AI").
   {
     page: 'Founder · Grow · Distribution', key: 'form:landing', route: '/build/brand', label: 'Ask', kind: 'write', handler: 'form',

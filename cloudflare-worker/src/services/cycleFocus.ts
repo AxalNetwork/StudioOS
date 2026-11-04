@@ -212,10 +212,10 @@ function buildIndex(project: BuildProject, reads: BuildRead[], figures: Figure[]
   const facts = systems?.facts ?? {};
   const tools = Number(facts.tools_total);
   const toolsRow: IndexRow = systems?.card.state === 'unreadable'
-    ? { key: 'tools', title: 'Tools', detail: 'Connected tools', value: UNREADABLE, href: `/build/tools?project=${project.id}` }
+    ? { key: 'tools', title: 'Tools', detail: 'Connected tools', value: UNREADABLE, href: `/build/operating-systems?project=${project.id}#tools` }
     : project.company_id == null || !num(tools) || tools === 0
-      ? { key: 'tools', title: 'Tools', detail: 'Connected tools', value: null, href: `/build/tools?project=${project.id}` }
-      : { key: 'tools', title: 'Tools', detail: `${Number(facts.tools_connected)} connected · ${Number(facts.tools_failing)} failing`, value: String(tools), href: `/build/tools?project=${project.id}` };
+      ? { key: 'tools', title: 'Tools', detail: 'Connected tools', value: null, href: `/build/operating-systems?project=${project.id}#tools` }
+      : { key: 'tools', title: 'Tools', detail: `${Number(facts.tools_connected)} connected · ${Number(facts.tools_failing)} failing`, value: String(tools), href: `/build/operating-systems?project=${project.id}#tools` };
   // #1693's keys, never the cells: a stored pain theme, and an open filing's date.
   const linked = (solution?.rows ?? []).filter((r) => r.keys?.linked === 'yes').length;
   const solutionRow: IndexRow = solution?.card.state === 'unreadable'
@@ -339,7 +339,7 @@ function raiseIndex(ctx: RaiseCtx, figures: Figure[], cards: Card[], calls: Call
     rows.push({
       key: 'calls', title: 'Calls', detail: 'Calls for Capital',
       value: 'state' in calls ? UNREADABLE : items && items.length ? `${items.filter((i) => i.effective_state === 'open').length} open` : null,
-      href: `/raise/calls?project=${ctx.projectId}`,
+      href: `/raise/capital-relationships/calls?project=${ctx.projectId}`,
     });
   }
   rows.push({
@@ -493,7 +493,7 @@ async function growIndex(x: GrowCtx, figures: Figure[], cards: Card[]): Promise<
   }
   const card = (slug: string, title: string, detail: string): IndexRow => ({ key: slug, title, detail, value: cardValue(cardOf(cards, slug)), href: href(slug) });
   return [
-    { key: 'updates', title: 'Updates', detail: 'Updates shared', value: updates, href: `/grow/updates?project=${x.projectId}` },
+    { key: 'updates', title: 'Updates', detail: 'Updates shared', value: updates, href: `/grow/reporting?project=${x.projectId}` },
     card('product-improvement', 'Product improvement', 'Feedback themes by status'),
     card('distribution', 'Distribution', 'Cost per customer by channel'),
     {
