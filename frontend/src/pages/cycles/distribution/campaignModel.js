@@ -74,7 +74,7 @@ export function campaignBody(draft) {
     utm_campaign:draft.utm_campaign||null,audience_kind:draft.audience_kind||null,segment_id:['icp','segment'].includes(draft.audience_kind)?Number(draft.segment_id):null,channel_uids:(draft.channels||[]).map(c=>c.uid)};
 }
 export const campaignPath = (uid='',search='') => `/grow/distribution/campaigns${uid?`/${encodeURIComponent(uid)}`:''}${search?(String(search).startsWith('?')?'':'?')+search:''}`;
-export function emptyDraft() { return {name:'',goal:'',audience_kind:'',segment_id:'',utm_campaign:'',utm_typed:false,budget:'',starts_on:'',ends_on:'',channels:[],assets:{},links:[]}; }
+export function emptyDraft() { return {name:'',goal:'',audience_kind:'',segment_id:'',utm_campaign:'',utm_typed:false,budget:'',starts_on:'',ends_on:'',channels:[],assets:{},creatives:{},links:[]}; }
 export function fromCampaign(row) {
   return {...emptyDraft(),...row,budget:row.budget_cents==null?'':String(row.budget_cents/100),segment_id:row.segment?.id??'',utm_campaign:row.utm_campaign||'',utm_typed:true,
     channels:(row.channels||[]).map(c=>({...c,amount:c.planned_budget_cents==null?'':String(c.planned_budget_cents/100)})),links:row.linked_items||[]};
@@ -84,5 +84,5 @@ export function reviewRows(draft,options={}) {
   const audience={icp:'ICP from Validate',segment:'A saved segment',import:'An imported list',none:'No segment'}[draft.audience_kind]||'Not recorded';
   return [['Goal',goalLabel(draft.goal)],['Audience',`${audience}${segment?` · ${segment.name}`:''}${draft.audience_kind!=='none'?` · ${number(options.reachable)} reachable`:''}`],
     ['Channels',draft.channels.map(c=>c.name||'Not recorded').join(', ')||'Not recorded'],['Budget',draft.budget===''||draft.budget==null?'Not set':`${money(centsInput(draft.budget))} across ${draft.channels.length} channels · charged by each platform`],
-    ['UTM tag',draft.utm_campaign||'Not recorded'],['Assets',`${(draft.links||[]).length+Object.values(draft.assets||{}).filter(t=>String(t).trim()).length} accepted · ${number(options.waiting)} waiting`],['Dates',dateRange(draft)]];
+    ['UTM tag',draft.utm_campaign||'Not recorded'],['Assets',`${Object.values(draft.creatives||{}).filter(c=>draft.channels.some(ch=>ch.uid===c.channel_uid)).length+(draft.links||[]).length+Object.values(draft.assets||{}).filter(t=>String(t).trim()).length} accepted · ${number(options.waiting)} waiting`],['Dates',dateRange(draft)]];
 }

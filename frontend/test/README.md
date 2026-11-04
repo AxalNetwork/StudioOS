@@ -154,3 +154,5 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `distribution_ask_4488.test.mjs` | D4488 quotes, unsaved acceptance, listed/safe counts and exclusive Ask intent. |
 
 - `network_reads_d4464.test.mjs` — Network book filter query arguments and the relationship summary client (#4464).
+
+| `distribution_integration_4488.test.mjs` | Mounted campaign Ask acceptance, manual Save and canonical creative retries (D4488). |

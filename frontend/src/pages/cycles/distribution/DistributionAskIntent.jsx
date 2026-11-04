@@ -7,7 +7,7 @@ import { growDistributionAsk } from '../../../lib/api/growDistributionAsk.js';
 import { SOURCE_CHOICES, holdLine, receiptLine, notifyDistribution, ACCEPT_LINE, OUT_OF_TOKENS } from './distributionAskModel.js';
 import { BUTTON, ProposalCard } from './WaitingForYou.jsx';
 const DEFAULT_KINDS = ['post','newsletter','outreach_email'];
-export default function DistributionAskIntent({projectId,campaignUid,target='form',kinds=DEFAULT_KINDS,now={},onAccept,onClose,api=growDistributionAsk}) {
+export default function DistributionAskIntent({projectId,campaignUid,target='form',kinds=DEFAULT_KINDS,channelNames={},now={},onAccept,onClose,api=growDistributionAsk}) {
   const [sources,setSources]=useState(['validate','research','distribution']);
   const [estimate,setEstimate]=useState(null),[refs,setRefs]=useState([]),[rows,setRows]=useState([]),[receipt,setReceipt]=useState(null);
   const [hasAccepted,setHasAccepted]=useState(false);
@@ -25,7 +25,7 @@ export default function DistributionAskIntent({projectId,campaignUid,target='for
     <p className="text-sm">Ask Eadwyn to draft for each channel. Nothing is saved until you accept.</p>
     <fieldset disabled={busy} className="space-y-1"><legend className="mb-2 text-xs font-semibold uppercase tracking-wide">Sources</legend>{SOURCE_CHOICES.map(s=><label key={s.key} className="flex min-h-[44px] items-center gap-2 text-sm"><input type="checkbox" className="h-5 w-5" checked={sources.includes(s.key)} onChange={e=>setSources(v=>e.target.checked?(v.includes(s.key)?v:[...v,s.key]):v.filter(k=>k!==s.key))}/>{s.label}{refs.find(r=>r.key===s.key)?` · ${refs.find(r=>r.key===s.key).count} recorded`:''}</label>)}</fieldset>
     <p className="text-xs text-axal-muted dark:text-gray-400">Only selected venture records are read. Team-only figures are never read. Dates and budgets stay manual.</p>
-    {rows.length?<div className="grid grid-cols-1 gap-3" aria-label="Preview">{rows.map(p=><ProposalCard key={p.uid} proposal={p} busy={busy} onDecide={decide} now={now}/>)}</div>:null}
+    {rows.length?<div className="distribution-asset-preview grid grid-cols-1 gap-3" aria-label="Preview">{rows.map(p=><ProposalCard key={p.uid} proposal={p} busy={busy} onDecide={decide} now={now} channelName={channelNames[p.payload?.channel_uid]}/>)}</div>:null}
     {target === 'form' && (rows.length || hasAccepted)?<span className="self-start rounded-full bg-amber-100 px-2 py-1 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">Not saved</span>:null}
     {error?<div role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200">{error==='tokens'?OUT_OF_TOKENS:error==='paused'?'AI is paused on this account. Contact support.':error==='off'?'AI assistance is off for this page. You can still write it yourself.':error==='changed'?'The hold changed. Read the new hold before asking again.':error==='decision'?'That proposal could not be decided. Reload to check its state.':'Eadwyn could not prepare these drafts. Try again.'} {error==='tokens'?<a className="underline" href={ADD_TOKENS_PATH}>Add tokens</a>:null}<p className="mt-2">You can still write the post and the email yourself.</p></div>:null}
   </AskIntent>;

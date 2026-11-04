@@ -52,7 +52,7 @@ export default function AskIntent({ label, eyebrow = 'Ask Eadwyn', title, footer
           <span className="ead-ask-eyebrow">{eyebrow}</span>
           <b id={titleId} className="text-[14px] text-axal-ink dark:text-gray-100">{title}</b>
         </span>
-        <button type="button" className="ead-ask-btn is-ghost min-h-[44px] min-w-[44px]" aria-label={`Close ${title}`} onClick={() => { const live = id.current; id.current = null; if (live != null) endAskIntent(live); closer.current?.(); }} data-testid={`${testId}-close`}>Close</button>
+        <button type="button" className="ead-ask-btn is-ghost min-h-[44px] min-w-[44px]" style={{minHeight:44,minWidth:44}} aria-label={`Close ${title}`} onClick={() => { const live = id.current; id.current = null; if (live != null) endAskIntent(live); closer.current?.(); }} data-testid={`${testId}-close`}>Close</button>
       </span>
       {children}
       {footer ? <span className="ead-ask-intent-foot flex flex-col gap-2">{footer}</span> : null}

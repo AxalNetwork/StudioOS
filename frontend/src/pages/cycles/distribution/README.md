@@ -1,14 +1,3 @@
-# Distribution Ask (#4488)
-
-Campaign drafting uses the shared Ask panel and D780 proposals. The campaign wizard
-owns its manual fields and Save action; these components return accepted proposals
-without saving campaign fields, sending messages or starting ads.
-
-| File | Purpose |
-| --- | --- |
-| `DistributionAskIntent.jsx` | Sources, quote before run, proposal preview and local form acceptance. |
-| `WaitingForYou.jsx` | Venture-scoped header count, loading/empty/error states and individual or safe bulk decisions. |
-| `distributionAskModel.js` | Labels, actual listed counts, exact safe kinds and recorded hold/charge copy. |
 # Distribution — the existing Grow module, with its own tabs (D4484)
 
 The DS1–DS12 series is primary; MK fills its gaps. The licence-union sidebar,
@@ -16,7 +5,7 @@ app header, AIRail and footer stay with the app. No company switcher lives here.
 
 | File | Purpose |
 | --- | --- |
-| `DistributionTabs.jsx` | Module header, New campaign, shared HeaderAsk and the nine accessible, horizontally scrolling tabs. The Inbox owner supplies a successfully read count; null means no badge. |
+| `DistributionTabs.jsx` | Module header, New campaign, project-scoped Waiting Ask and the nine accessible, horizontally scrolling tabs. The Inbox owner supplies a successfully read count; null means no badge. |
 | `distributionModel.js` | Tab order, project-scoped paths and the budget-derived Ask state. Unknown budget data never means out of tokens. |
 | `DistributionParts.jsx` | Cards, KPI, source chips, dot pills, Not recorded, a wrapper over AskProposal, notes, tables, progress, hold lines and loading/coming-soon states. These components make no reads or writes. |
 | `distribution.css` | Scoped DS light/dark tokens, spacing and phone tab overflow. |
@@ -39,3 +28,11 @@ and Campaigns/:uid. No Distribution wildcard may shadow the existing Grow
 record route. Campaign screens must use #4447/#4483's existing store, router
 and grow client, with reads owned by their task; the shell reads no campaigns.
 Proposals retain their host's decisions; nothing posts or sends on mount.
+
+| File | Purpose |
+| --- | --- |
+| `DistributionAskIntent.jsx` | Selected sources, quoted drafting and unsaved proposal preview (D4488). |
+| `WaitingForYou.jsx` | Venture-scoped Waiting count, safe bulk and individual decisions (D4488). |
+| `distributionAskModel.js` | Recorded hold/charge, labels and exact safe kinds (D4488). |
+| `CampaignDraftAsk.jsx` | Assets Ask with explicit formats and ad placements (D4488). |
+| `campaignAskModel.js` | Functional acceptance into local fields without changing manual money or dates (D4488). |

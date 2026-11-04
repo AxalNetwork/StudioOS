@@ -1324,7 +1324,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   }
   // D4487: new campaigns are full pages; a campaign uid is a sheet over its list.
   if (distribution) {
-    body = campaignNew ? (projectStatus === 'ready' ? <NewCampaignPage key={`${projectId}:${location.search}`} projectId={projectId} role={user?.role} search={q} aiOff={!fillsOn} /> : body) : <DistributionTabs tab={distributionTab} search={q} action={action} aiOff={!fillsOn}
+    body = campaignNew ? (projectStatus === 'ready' ? <NewCampaignPage key={`${projectId}:${location.search}`} projectId={projectId} role={user?.role} search={q} aiOff={!fillsOn} /> : body) : <DistributionTabs projectId={projectStatus==='ready'?projectId:null} tab={distributionTab} search={q} action={action} aiOff={!fillsOn}
       loading={projectStatus === 'loading' || (distributionTab === 'overview' && projectStatus === 'ready' && moduleStatus === 'loading')}>
       {distributionTab === 'overview' || projectStatus !== 'ready' ? body : distributionTab === 'campaigns' ? <CampaignsTab key={projectId} projectId={projectId} role={user?.role} search={q} campaignUid={campaignUid}/> : <ComingSoon />}
     </DistributionTabs>;

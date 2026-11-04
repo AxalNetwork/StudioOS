@@ -78,13 +78,13 @@ test('Ask counts come from the explicit Distribution page; null, zero and failed
  }finally{askPanelAdapter.waiting=saved;__resetEadwynPanelForTest();}
 });
 
-test('Ask off/out are disabled with the specified tooltip and Add tokens; unknown budget is not out',async()=>{
+test('Ask off/out retain access to existing proposals with the specified tooltip and Add tokens; unknown budget is not out',async()=>{
  assert.deepEqual([distributionAskState(false,{budget:null}),distributionAskState(false,{budget:{...BUDGET,monthly_microusd:0}}),distributionAskState(true,{budget:BUDGET}),distributionAskState(false,{budget:{...BUDGET,monthly_microusd:0,unlimited:true}})],['rest','out','off','rest']);
  const saved={mine:aiBudgetApi.mine,topUp:aiBudgetApi.topUp,waiting:askPanelAdapter.waiting};
  aiBudgetApi.mine=async()=>({...BUDGET,monthly_microusd:0});aiBudgetApi.topUp=async()=>({});askPanelAdapter.waiting=async()=>({available:false});
  try{for(const aiOff of [true,false]){
   __resetEadwynPanelForTest();const m=await mountContracts(h(React.Fragment,null,h(Rail),h(DistributionAsk,{aiOff})));
-  try{const button=m.nodes().find(n=>m.props(n)?.['data-testid']==='distribution-ask');assert.equal(m.props(button).disabled,true);assert.equal(m.props(button).title,aiOff?'AI is switched off. Everything manual still works.':'Not enough AI tokens');assert.equal(m.text().includes('Add tokens'),!aiOff);}finally{await m.unmount();}
+  try{const button=m.nodes().find(n=>m.props(n)?.['data-testid']==='distribution-ask');assert.equal(m.props(button).disabled,false);assert.equal(m.props(button).title,aiOff?'AI is switched off. Everything manual still works.':'Not enough AI tokens');assert.equal(m.text().includes('Add tokens'),!aiOff);}finally{await m.unmount();}
  }}finally{Object.assign(aiBudgetApi,{mine:saved.mine,topUp:saved.topUp});askPanelAdapter.waiting=saved.waiting;__resetEadwynPanelForTest();}
 });
 

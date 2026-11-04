@@ -10,15 +10,15 @@ import { waitingModel, proposalLabel, notifyDistribution, WAITING_OUT } from './
 export const BUTTON = 'min-h-[44px] rounded-lg border border-axal-lavender-edge px-3 py-2 text-sm font-semibold disabled:opacity-45 dark:border-violet-700';
 const PRIMARY = `${BUTTON} bg-axal-violet text-white`;
 
-export function ProposalCard({ proposal, busy, onDecide, now = {} }) {
+export function ProposalCard({ proposal, busy, onDecide, channelName, now = {} }) {
   const v = proposal.payload, fields = v.kind === 'campaign_fields';
   const [editing, setEditing] = useState(false), [value, setValue] = useState(v.text ?? '');
   const [values, setValues] = useState(v.values ?? {});
   const [selected, setSelected] = useState(() => Object.keys(v.values ?? {}).filter(k => now[k] == null || now[k] === ''));
   const chosen = Object.fromEntries(Object.entries(values).filter(([key]) => selected.includes(key)));
   return <article className="rounded-xl border border-axal-lavender-edge bg-white p-3 dark:border-violet-900 dark:bg-gray-950" data-testid={`distribution-proposal-${proposal.uid}`}>
-    <h3 className="mb-2 text-sm font-semibold">{proposalLabel(proposal)} · draft</h3>
-    {fields ? <div className="overflow-x-auto"><table className="w-full text-left text-xs"><thead><tr>{['Field','Now','Will place','Source','Select'].map(s=><th key={s} className="p-1">{s}</th>)}</tr></thead><tbody>{Object.entries(values).map(([key,val])=><tr key={key}><th className="p-1">{{name:'Name',goal:'Goal',segment_id:'Audience'}[key]}</th><td className="p-1">{now[key] ?? 'Blank'}</td><td className="p-1">{editing && key !== 'segment_id' ? <input aria-label={`Edit ${key}`} className="w-full min-w-16 border p-1 dark:bg-gray-900" value={val ?? ''} onChange={e=>setValues({...values,[key]:e.target.value})}/> : val ?? 'Not recorded'}</td><td className="p-1">Eadwyn</td><td className="p-1"><input type="checkbox" className="h-5 w-5" aria-label={`Select ${key}`} checked={selected.includes(key)} onChange={e=>setSelected(s=>e.target.checked?[...s,key]:s.filter(k=>k!==key))}/></td></tr>)}</tbody></table><p className="my-2 text-xs">Dates: Not placed here: you type them.</p></div>
+    <h3 className="mb-2 text-sm font-semibold">{proposalLabel(proposal)}{channelName?` · ${channelName}`:''} · draft</h3>
+    {fields ? <div className="overflow-x-auto"><table className="w-full text-left text-xs"><thead><tr>{['Field','Now','Will place','Source','Select'].map(s=><th key={s} className="p-1">{s}</th>)}</tr></thead><tbody>{Object.entries(values).map(([key,val])=><tr key={key}><th className="p-1">{{name:'Name',goal:'Goal',segment_id:'Audience'}[key]}</th><td className="p-1">{now[key] ?? 'Blank'}</td><td className="p-1">{editing && key !== 'segment_id' ? <input aria-label={`Edit ${key}`} className="w-full min-w-16 border p-1 dark:bg-gray-900" value={val ?? ''} onChange={e=>setValues({...values,[key]:e.target.value})}/> : val ?? 'Not recorded'}</td><td className="p-1">Eadwyn</td><td className="p-1"><label className="flex min-h-[44px] min-w-[44px] items-center justify-center"><input type="checkbox" className="h-5 w-5" aria-label={`Select ${key}`} checked={selected.includes(key)} onChange={e=>setSelected(s=>e.target.checked?[...s,key]:s.filter(k=>k!==key))}/></label></td></tr>)}</tbody></table><p className="my-2 text-xs">Dates: Not placed here: you type them.</p></div>
       : editing ? <textarea className="min-h-28 w-full rounded-lg border p-2 text-sm dark:bg-gray-900" aria-label={`Edit ${proposalLabel(proposal)}`} value={value} maxLength={2000} onChange={e=>setValue(e.target.value)}/> : <p className="whitespace-pre-wrap break-words text-sm">{v.text}</p>}
     <div className="mt-3 flex flex-wrap gap-2">
       <button type="button" className={PRIMARY} disabled={busy || fields && !selected.length || !fields && !value.trim()} onClick={()=>onDecide(proposal,fields || editing?'edit':'accept',fields?{values:chosen}:editing?{text:value}:undefined)}>{fields ? `Accept selected (${selected.length})` : editing ? 'Accept edit' : 'Accept'}</button>
@@ -28,15 +28,16 @@ export function ProposalCard({ proposal, busy, onDecide, now = {} }) {
   </article>;
 }
 function useWaiting(projectId,campaignUid,api) {
-  const key = `${projectId}/${campaignUid ?? ''}`;
+  const key = JSON.stringify([projectId,campaignUid===undefined?'all':campaignUid]);
   const [state,setState] = useState({key,rows:null,error:false});
   const seq = useRef(0);
   const reload = useCallback(async()=>{
     const request = ++seq.current;
+    if(!Number.isSafeInteger(Number(projectId))||Number(projectId)<1){setState({key,rows:null,error:true});return;}
     try {
       const r = await api.proposals(projectId,campaignUid);
       if (!Array.isArray(r?.proposals)) throw new Error('Unreadable proposals');
-      if (request === seq.current) setState({key,rows:r.proposals,error:false});
+      if (request === seq.current) setState({key,rows:campaignUid===null?r.proposals.filter(p=>p.payload?.campaign_uid==null):r.proposals,error:false});
     } catch { if (request === seq.current) setState({key,rows:null,error:true}); }
   },[projectId,campaignUid,api,key]);
   useEffect(()=>{
@@ -65,10 +66,10 @@ export default function WaitingForYou({ projectId,campaignUid,onAccept,onClose,o
   </AskIntent>;
 }
 /** Header owns its venture-scoped count; unreadable reads never become a badge. */
-export function DistributionAskHeader({projectId,campaignUid,onAccept,api=growDistributionAsk}) {
+export function DistributionAskHeader({projectId,campaignUid,onAccept,state='rest',title,sub,api=growDistributionAsk}) {
   const ask=useAskPanel(), available=ask.available;
   useHeaderAskClaim(available);
   const {rows} = useWaiting(projectId,campaignUid,api);
   const [open,setOpen] = useState(false);
-  return available ? <><AskButtonView waiting={rows === null?null:waitingModel(rows).count} expanded={open && ask.open} onClick={()=>{if(open && ask.open)closeAskPanel();else setOpen(true);}} testId="distribution-header-ask"/>{open?<WaitingForYou projectId={projectId} campaignUid={campaignUid} onAccept={onAccept} api={api} onClose={()=>setOpen(false)}/>:null}</> : null;
+  return available ? <><AskButtonView waiting={rows === null?null:waitingModel(rows).count} expanded={open && ask.open} onClick={()=>{if(open && ask.open)closeAskPanel();else setOpen(true);}} testId="distribution-ask" state={state} title={title} sub={sub}/>{open?<WaitingForYou projectId={projectId} campaignUid={campaignUid} onAccept={onAccept} outOfTokens={state==='out'} api={api} onClose={()=>setOpen(false)}/>:null}</> : null;
 }

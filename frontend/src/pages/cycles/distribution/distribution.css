@@ -9,3 +9,6 @@
 
 
 .distribution-frame,[data-app-main]:has(.distribution-shell){background:#f4f3f7}.dark .distribution-frame,.dark [data-app-main]:has(.distribution-shell){background:#0b1220}
+
+/* D4488: DS3 asset proposals use two columns on desktop; DS10 Waiting stays one column. */
+@media (min-width: 768px) { .distribution-asset-preview { grid-template-columns: repeat(2,minmax(0,1fr)); } }

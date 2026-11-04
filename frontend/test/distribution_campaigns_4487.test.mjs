@@ -98,8 +98,8 @@ test('D4487: the disabled Continue explains each reason visibly, not only in a t
     assert.ok(out.includes(`role="status">${reason}</p>`),reason);
   }
   const fresh=html(h(CampaignStep,{step:0,draft:model.emptyDraft(),options:{},onChange(){}}));
-  assert.match(fresh,/aria-label="Ask Eadwyn to fill Name"/);
-  assert.match(fresh,/aria-label="Ask Eadwyn to fill Goal"/);
+  assert.match(fresh,/aria-label="Ask Eadwyn about Name"/);
+  assert.match(fresh,/aria-label="Ask Eadwyn about Goal"/);
   const typed=html(h(CampaignStep,{step:0,draft:valid,options:{},onChange(){}}));
   assert.doesNotMatch(typed,/fill-trigger-/);
 });
