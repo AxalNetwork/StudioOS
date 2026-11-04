@@ -48,3 +48,4 @@ and citations by number keep working.
 | --- | --- |
 | `D1151.md` | Deal Team, Market and Traction read contracts and verification. |
 | `D1364.md` | Time-based deployed asset retention, capacity limits and verification. |
+| `D4447.md` | #4447, Part A of #3722: Grow campaign plans and their routes; carries the spec's D1481. |
