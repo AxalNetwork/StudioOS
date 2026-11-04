@@ -745,6 +745,7 @@ test('8. a gated Learning draws the coming-soon line and Browse, Articles open, 
   const home = read('frontend/src/pages/learning/LearningHome.jsx');
   assert.match(home, /useLearningRead\(readMe, \[\], \{ enabled: !gated, scope: 'me' \}\)/);
   assert.match(home, /useMyPrograms\(!gated\)/);
+  assert.match(home, /gated \? \([\s\S]*?<ComingSoonCard[\s\S]*?\) : \([\s\S]*?<MyProgramsSection \{\.\.\.programs\} \/>/);
   assert.match(home, /if \(gated\) return \[browseGroup\(\{ gated \}\)\];/);
   const populated = html(h(LearningPhoneView, { ...LEARN, gated: true }));
   assert.deepEqual(sectionTitles(populated), ['Browse']);
