@@ -543,13 +543,14 @@ const PHONE_VIEWS = {
 // Decision 10's departures in a section list, named rather than matched loosely.
 const DEPARTED_SECTIONS = {
   help: (c) => ['Popular this week', ...c.slice(1)],
+  learning: () => ['Continue learning', 'New this week', 'Your programs', 'Upcoming webinars', 'Browse'],
 };
 
 test('5. A4m–A10m: each phone view draws ‹ Back, the canvas\'s title and sub, then its sections in order', () => {
   for (const [key, view] of Object.entries(PHONE_VIEWS)) {
     const c = CANVAS_PAGES[key];
     const markup = html(view());
-    assert.equal(barOf(markup).trim().startsWith(`‹ Back ${c.title} ${c.sub}`), true, `${key}: ${barOf(markup)}`);
+    assert.equal(barOf(markup).trim().startsWith(key === 'learning' ? `‹ Back ${c.title}` : `‹ Back ${c.title} ${c.sub}`), true, `${key}: ${barOf(markup)}`);
     const want = key === 'trust' ? ['Requirements', 'Your requirements'] : DEPARTED_SECTIONS[key] ? DEPARTED_SECTIONS[key](c.sections) : c.sections;
     assert.deepEqual(sectionTitles(markup), want, key);
     assert.match(markup, /class="-m-4 md:-m-6 lg:m-0 |class="min-h-screen bg-white dark:bg-gray-950"/, `${key}: no phone gutter`);
@@ -742,7 +743,8 @@ test('8. a gated Learning draws the coming-soon line and Browse, Articles open, 
   const home = read('frontend/src/pages/learning/LearningHome.jsx');
   assert.match(home, /useLearningRead\(readMe, \[\], \{ enabled: !gated, scope: 'me' \}\)/);
   assert.match(home, /useMyPrograms\(!gated\)/);
-  assert.match(home, /\{!gated && <OpenPrograms \{\.\.\.programs\} \/>\}/);
+  assert.match(home, /gated \? \([\s\S]*?<ComingSoonCard[\s\S]*?\) : \([\s\S]*?<MyProgramsSection \{\.\.\.programs\} \/>/);
+  assert.match(home, /if \(gated\) return \[browseGroup\(\{ gated \}\)\];/);
 });
 
 /** The page itself below 1024px: `usePhoneWidth` reads `window.matchMedia` on its first render. */

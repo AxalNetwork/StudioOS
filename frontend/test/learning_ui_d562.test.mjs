@@ -537,6 +537,7 @@ test('Learning home and the member program have no AI rail; other existing subpa
   // the exercise and exam pages (D559), the webinar page (D560),
   // and the learning plan (D3959).
   assert.doesNotMatch(codeOnly(read('frontend/src/pages/learning/LearningPrograms.jsx')), /<WorkerRail/, 'assigned program pages keep the owner’s no-rail rule');
+
   for (const tier of ['founder', 'admin', 'super_admin']) assert.ok(mounts.some((m) => m.includes(`role="${tier}"`)), `no ${tier} rail`);
   for (const mount of mounts) {
     assert.match(mount, /workspace="Learning[^"]*"/);

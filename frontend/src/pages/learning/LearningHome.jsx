@@ -733,10 +733,11 @@ export function learningPhoneGroups({ gated, me = IDLE, programs = PROGRAMS_IDLE
 
 /** A8m — the bar and the sections, then `children`: the tab lists Browse opens. */
 export function LearningPhoneView({ gated, me, programs, upcoming, fresh, now, onRetry, onTab = () => {}, tab = 'all', webinarActions = {}, children = null }) {
+  const page = ACCOUNT_PHONE_PAGES.learning;
   const onBrowse = () => onTab('courses');
   const groups = learningPhoneGroups({ gated, me, programs, upcoming, fresh, now, onRetry, onBrowse, webinarActions });
   return <div className="min-h-screen bg-white dark:bg-gray-950" data-testid="learning-phone" data-phone="true">
-    <LearningHero phoneBar={<PhoneBar back={{ label: 'Back' }} title="Learning" />} showArticle={gated} primary={!gated && <HomePhonePrimary state={me} onBrowse={onBrowse} />} />
+    <LearningHero phoneBar={<PhoneBar back={{ label: 'Back' }} title="Learning" eadwynLabel={page.title} />} showArticle={gated} primary={!gated && <HomePhonePrimary state={me} onBrowse={onBrowse} />} />
     <div className="px-4"><TabBar tab={tab} gated={gated} onTab={onTab} /></div>
     <div className="px-4 pt-4 [&>div]:px-0"><PhoneRows groups={groups} /></div>
     {children && <div className="space-y-4 px-4 pb-4">{children}</div>}
