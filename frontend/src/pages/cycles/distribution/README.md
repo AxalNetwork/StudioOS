@@ -8,6 +8,8 @@ app header, AIRail and footer stay with the app. No company switcher lives here.
 | `DistributionTabs.jsx` | Module header, New campaign, shared HeaderAsk and the nine accessible, horizontally scrolling tabs. The Inbox owner supplies a successfully read count; null means no badge. |
 | `distributionModel.js` | Tab order, project-scoped paths and the budget-derived Ask state. Unknown budget data never means out of tokens. |
 | `DistributionParts.jsx` | Cards, KPI, source chips, dot pills, Not recorded, a wrapper over AskProposal, notes, tables, progress, hold lines and loading/coming-soon states. These components make no reads or writes. |
+| `ResultsTab.jsx` | D4491 read-only attribution, spend, campaign funnels, missing/read-error states and the Revenue boundary. |
+| `resultsModel.js` | D4491 missing-value, money and funnel presentation. |
 | `distribution.css` | Scoped DS light/dark tokens, spacing and phone tab overflow. |
 
 CycleRoute still owns the module page. Overview retains its channels table,
