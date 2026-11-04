@@ -35,6 +35,9 @@ const URL1 = '/api/decks/voice/eyJrIjoiZGVjay1hdWRpby83In0.sig';
 const QUOTE = { ai: true, model: '@cf/myshell-ai/melotts', job: 'DK10', hold_microusd: 400, chars: 40, label: VOICE_LABEL, balance: { ok: true } };
 const CARD = { uid: 'c-cover', title: 'Kestrel', notes: 'We make freight reconciliation automatic.' };
 
+/** Every regular-expression metacharacter escaped, so a URL matches only itself. */
+const escapeRegExp = (v) => String(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 test('1. the model: the quote line and hold; no script; only the Worker\'s signed links play', () => {
   assert.equal(VOICE_LABEL, 'AI voice');
   assert.equal(holdText(400), '$0.0004');
@@ -143,7 +146,7 @@ test('4. Present and the share viewer play it, labelled AI voice', () => {
   const html = renderToStaticMarkup(h(CardVoices, { slides: [{ title: 'Kestrel', voice: { url: URL1, label: 'AI voice', model: 'm' } }, { title: 'Problem' }] }));
   assert.match(html, /data-testid="share-card-voices"/);
   assert.match(html, /Card 1 · Kestrel.*AI voice/);
-  assert.match(html, new RegExp(`<audio[^>]*src="${URL1.replace(/[.]/g, '\\.')}"`));
+  assert.match(html, new RegExp(`<audio[^>]*src="${escapeRegExp(URL1)}"`));
   assert.doesNotMatch(html, /Card 2/, 'a card without a voice-over draws nothing');
   assert.equal(renderToStaticMarkup(h(CardVoices, { slides: [{ title: 'X' }] })), '', 'nothing when no card has one');
   const page = read('frontend/src/pages/PitchDeckPrintPage.jsx');

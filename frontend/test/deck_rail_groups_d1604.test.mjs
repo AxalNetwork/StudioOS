@@ -290,7 +290,7 @@ test('D1569: the Voice group shows the one voice the Worker names, labelled AI v
     { ok: true, models: [{ id: '@cf/synthetic/voice', role: 'Default', line: 'AI voice', name: 'synthetic-voice' }], more: [], pick: '@cf/synthetic/voice' });
   assert.throws(() => voiceAnswer({}), /could not be read/, 'an unreadable voice is said, never empty');
   const voice = railItems(31).find((g) => g.id === 'voice');
-  await assert.rejects(voice.pick('@cf/other/voice'), new RegExp(ONE_VOICE.replace(/[.]/g, '\\.')));
+  await assert.rejects(voice.pick('@cf/other/voice'), (e) => String(e?.message).includes(ONE_VOICE));
   const m = await mount(h(WorkerRail, { workspace: 'Raise', groups: deckRail(31) }));
   try {
     await m.click('button-worker-rail-group-voice');
