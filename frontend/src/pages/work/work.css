@@ -126,3 +126,7 @@
 .dark .wk-wl-bar { background: #2e1065; color: #ddd6fe; }
 .dark .wk-wl-session { background: #042f2e; color: #2dd4bf; }
 .dark .wk-feed-rows > li { border-top-color: #374151; }
+/* D1614 W8 (#3994): a role's heading above its Workload rows, across every column. */
+.wk-wl-group { display: contents; }
+.wk-wl-group > span { background: #f8f7fc; padding: 6px 10px; font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; }
+.dark .wk-wl-group > span { background: #0b1220; color: #9ca3af; }

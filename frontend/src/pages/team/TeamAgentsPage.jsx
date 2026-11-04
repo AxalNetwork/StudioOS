@@ -369,7 +369,7 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
                 onRevoke={(i) => act(kind === 'company' ? i.uid : i.key, () => onRevoke(i))} />
             ) : null}
           </PeopleCard>
-          <AgentsCard block={agentsBlock} loading={!agentsBlock} kind={kind} companyName={name}
+          <AgentsCard block={agentsBlock} loading={!agentsBlock} kind={kind} scope={scope} companyName={name}
             canAdd={!!agentsBlock?.value?.can_manage && !planLocked} planLocked={planLocked} onAdd={() => setSheet({ kind: 'agent' })}
             onOpen={(row) => setSheet({ kind: 'profile', uid: row.uid })} onRetry={loadAgents} />
           <TeamCoverageCard kind={kind} id={id} />
@@ -392,7 +392,7 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
           me={{ name: me().name }} onClose={() => setSheet(null)} onAdded={() => { setSheet(null); loadAgents(); }}
           onEditRulebook={(key) => { setSheet(null); navigate(`${pathname}?tab=roles&role=${encodeURIComponent(key)}`); }} />
       ) : null}
-      {sheet?.kind === 'profile' ? <AgentProfileSheet uid={sheet.uid} editCap={sheet.edit === 'cap'} canManage={!!agentsBlock?.value?.can_manage} onClose={() => setSheet(null)} onChanged={() => { setSheet(null); loadAgents(); }} /> : null}
+      {sheet?.kind === 'profile' ? <AgentProfileSheet uid={sheet.uid} scope={scope} editCap={sheet.edit === 'cap'} canManage={!!agentsBlock?.value?.can_manage} onClose={() => setSheet(null)} onChanged={() => { setSheet(null); loadAgents(); }} /> : null}
       {dialog && dialogs[dialog.kind] ? dialogs[dialog.kind](dialog.p, () => setDialog(null), () => { setDialog(null); reload(); }) : null}
     </div>
   );

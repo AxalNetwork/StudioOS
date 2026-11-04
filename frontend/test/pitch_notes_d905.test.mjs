@@ -77,7 +77,7 @@ test('the wiring: the Notes tab and its route, the boundary inside the shell, an
   // The route names each boundary role literally (route_role_zone_contract asks for an explicit branch).
   assert.match(app, /\(effectiveRole === 'advisor' \|\| effectiveRole === 'partner' \|\| effectiveRole === 'exploring'\) && user\?\.spinout_lab_active !== 1\s*\?\s*<PitchBoundary role=\{effectiveRole\} \/>/);
   for (const role of BOUNDARY_ROLES) assert.ok(app.includes(`effectiveRole === '${role}'`), `${role} matches BOUNDARY_ROLES`);
-  assert.ok(app.includes(`<Route path="/raise/pitch/notes" element={guard(labRoles(['admin', 'founder']), <PitchStudio tab="notes" />)} />`));
+  assert.ok(app.includes(`<Route path="/raise/pitch/notes" element={guard(labRoles(['admin', 'founder']), studioGate(<PitchStudio tab="notes" />))} />`), 'D4359: inside the plan gate');
   // D4254: /raise/pitch/analytics redirects to /raise/pitch/share, which carries the guard.
   for (const p of ['/raise/pitch/edit', '/raise/pitch/share', '/raise/pitch/review']) {
     assert.ok(app.includes(`<Route path="${p}" element={guard(labRoles(['admin', 'founder'])`), `${p} keeps its guard: the boundary is the studio's home only`);

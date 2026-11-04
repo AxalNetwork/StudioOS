@@ -661,14 +661,14 @@ test('the routes: the studio\'s three tabs, the editor at its new address, and t
   // D911 (#2695): positioning moved into Investor narrative › Positioning; its old address redirects.
   assert.ok(app.includes('<Route path="/raise/pitch/positioning" element={<PitchPositioningRedirect />} />'));
   assert.ok(app.includes(`<Route path="/raise/pitch" element={guard(labRoles(['admin', 'founder', 'advisor', 'partner', 'exploring'])`), '/raise/pitch');
-  assert.match(app, /get\('mode'\) === 'workspace'\s*\?\s*<PitchWorkspaceMoved \/>\s*:\s*<PitchStudio tab="overview" \/>/);
+  assert.match(app, /get\('mode'\) === 'workspace'\s*\?\s*studioGate\(<PitchWorkspaceMoved \/>\)\s*:\s*studioGate\(<PitchStudio tab="overview" \/>\)/);
   // D898 (#2676): the canvas's editor at /raise/pitch/edit; the template builder retired (group E) and its address opens the studio.
-  assert.match(app, /<Route path="\/raise\/pitch\/edit" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <PitchEditor \/>\)\} \/>/);
+  assert.match(app, /<Route path="\/raise\/pitch\/edit" element=\{guard\(labRoles\(\['admin', 'founder'\]\), studioGate\(<PitchEditor \/>\)\)\} \/>/);
   assert.ok(app.includes('<Route path="/raise/pitch/builder" element={<PitchBuilderMoved />} />'), 'the builder\'s address opens the studio');
   assert.doesNotMatch(app, /PitchWorkspacePage|[^b]PitchDeckPage\b/);
   for (const f of ['frontend/src/pages/PitchWorkspacePage.jsx', 'frontend/src/pages/PitchDeckPage.jsx']) assert.ok(!existsSync(resolve(root, f)), `${f} is back`);
-  assert.match(app, /<Route path="\/raise\/pitch\/share" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <PitchStudio tab="analytics" \/>\)\} \/>/);
-  assert.match(app, /<Route path="\/raise\/pitch\/review" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <PitchStudio tab="review" \/>\)\} \/>/);
+  assert.match(app, /<Route path="\/raise\/pitch\/share" element=\{guard\(labRoles\(\['admin', 'founder'\]\), studioGate\(<PitchStudio tab="analytics" \/>\)\)\} \/>/);
+  assert.match(app, /<Route path="\/raise\/pitch\/review" element=\{guard\(labRoles\(\['admin', 'founder'\]\), studioGate\(<PitchStudio tab="review" \/>\)\)\} \/>/);
   assert.ok(!existsSync(resolve(root, 'frontend/src/pages/founder/FounderRaisePitch.jsx')), 'the read-only Pitch page is still on disk');
   assert.doesNotMatch(app, /FounderRaisePitch/);
   const moved = read('frontend/src/pages/raise/pitch/PitchWorkspaceMoved.jsx');

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { deckScriptApi } from '../../../lib/api/deckScript';
-import { presentHref } from './presentExportModel';
+import { teleprompterHref } from './teleprompterModel';
 import { NEW_PATH } from './newDeckModel';
 import {
   AUDIENCES, CONFLICT, DEFAULT_LENGTH, DEFAULT_WPM, DOWNLOAD_NOTE, EMPTY, FAILED, LENGTHS, NOTES_MAX, NO_DECK, NO_UID, RULE, STALE, TONES,
@@ -286,7 +286,7 @@ export default function ScriptTab({ reads, readOnly }) {
               )}
               <button type="button" className={QUIET} onClick={copy} data-testid="pitch-script-copy">Copy</button>
               <button type="button" className={QUIET} onClick={download} title={DOWNLOAD_NOTE} data-testid="pitch-script-download">Download .txt</button>
-              {projectId != null ? <Link to={presentHref(projectId, deck.id)} className={GHOST} data-testid="pitch-script-teleprompter">Open teleprompter</Link> : null}
+              {projectId != null ? <Link to={teleprompterHref(projectId, deck.id)} className={GHOST} data-testid="pitch-script-teleprompter">Open teleprompter</Link> : null}
             </div>
             {readOnly ? null : (
               <div className="flex flex-wrap gap-4">
