@@ -147,4 +147,4 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 
 - `network_reads_d4464.test.mjs` — Network book filter query arguments and the relationship summary client (#4464).
 
-- `distribution_overview_4485.test.mjs` — Distribution overview read/client arguments; DS1 UI coverage waits on the approved canvas (D4485).
+- `distribution_overview_4485.test.mjs` — Distribution overview read/client contract, null-safe display model and real-date week columns; screen integration waits on #4484 (D4485).
