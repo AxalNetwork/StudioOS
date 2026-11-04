@@ -87,7 +87,7 @@ test('the common frame is outermost, with the cycle gutter and responsive back p
   assert.match(read('pages/raise/pitch/PitchPage.css'),/\[data-app-main\]:has\(> \.pitch-page-frame\)/);
   assert.match(read('pages/raise/pitch/PitchPage.css'),/flex: 1 0 auto/);
   assert.ok(out.includes(CYCLE_GUTTER));
-  assert.match(read('pages/cycles/CycleRoute.jsx'),/className=\{CYCLE_GUTTER\}/);
+  assert.match(read('pages/cycles/CycleRoute.jsx'),/className=\{distribution \? 'min-w-0' : CYCLE_GUTTER\}/);
   assert.match(read('pages/raise/pitch/PitchPage.jsx'),/\$\{CYCLE_GUTTER\}/);
   // D1604: the header's right side is the deck's Ask on every width; the phone-only EadwynButton is gone.
   assert.match(read('pages/raise/pitch/PitchPage.jsx'),/<div className="shrink-0" data-testid="pitch-header-ask"><DeckAsk \{\.\.\.ask\} \/><\/div>/);
