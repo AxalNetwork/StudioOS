@@ -512,3 +512,5 @@ D1051 adds `billingCheckout.js`: `checkoutApi.quote`, `.start(…, nonce)` and `
 | `deckVentureElements.js` | D1543: the venture-record elements (team grid and bios, use of funds, round terms, cap-table totals, logo wall, interview quote) under `/api/decks/:id/venture-elements[/:element]`, each from records with its gate refusal, and the logos store with its permission flag under `/api/decks/:id/logos`. |
 | `deckModelPresets.js` | D1549: a deck's preset (Fast, Balanced, Best or Custom) per element group, and the groups HQ locked, under `/api/decks/:id/model-presets`. |
 | `adminDeckModels.js` | D1549: HQ's org default and lock per deck element group, under `/api/admin/ai/deck-models` (Super Admin, step-up). |
+
+`growAds.js` (D4490) reads the mounted Ads endpoint; campaign budget and creative writes remain in `cycleWrites.js`.

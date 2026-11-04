@@ -21,6 +21,9 @@ starting ads.
 | `inbox.css` | D4494: DS8 thread columns, phone stacking and directional message bubbles using shared tokens. |
 | `ChannelsTab.jsx` | D4486: venture channel readings, existing Add/Edit forms and Ask, read-only connection cards, settings confirmation and existing tool doors. |
 | `channelsModel.js` | D4486: columns, category choices, independent state pills, UTC activity labels, safe settings actions and missing readings. |
+| `AdsTab.jsx` | D4490: budget planner, spend gaps, platform availability and creative drafts; shell integration requested from #4484. |
+| `adsModel.js` | D4490: slider amounts, totals and monthly chart gaps. |
+| `ads.css` | D4490: responsive Ads columns using the Distribution tokens. |
 
 CycleRoute still owns the module page. Overview retains its channels table,
 outreach draft, content calendar, update-ask replies, Mercury, Notion and tool
