@@ -145,8 +145,12 @@ test('D4485: mounted overview uses the Grow project gate and rejects invalid wee
     return { status: res.status, body: await res.json() as any };
   };
   try {
+    f.db.exec("INSERT INTO integrations(uid,user_id,provider_key,status,auth_type) VALUES ('route-link',1,'whatsapp_link','active','api_key')");
     const own = await call(1, 1);
     assert.equal(own.status, 200, JSON.stringify(own.body));
+    assert.deepEqual(own.body.update_asks.items, []);
+    assert.equal(own.body.update_asks.can_add, true);
+    assert.equal(own.body.channels.items.at(-1).status, 'Connected');
     assert.deepEqual(own.body.campaigns.items.map((c: any) => c.uid), ['ours']);
     assert.deepEqual(own.body.week.items.map((i: any) => i.uid), ['mon', 'sun']);
     assert.equal((await call(2, 1)).status, 403);
@@ -189,5 +193,57 @@ test('D4485: no active campaigns is distinct from no campaigns, and an unreadabl
     const failed = await distributionOverview(f.env, 1, { now, readCampaigns: async () => { throw new Error('unavailable'); } });
     assert.equal(failed.campaigns.total, null);
     assert.equal(failed.campaigns.items, null);
+  } finally { f.db.close(); }
+});
+
+
+test('D4485: last-update customer identities are writer-only, project scoped, and independently unreadable', async () => {
+  const f = fixture();
+  try {
+    f.db.exec(`INSERT INTO portfolio_updates(id,uid,project_id,author_user_id,title,status,created_at) VALUES
+      (1,'old',1,1,'Old','submitted','2026-11-01'),(2,'last',1,1,'Last','submitted','2026-11-02'),
+      (3,'foreign-update',2,2,'Foreign','submitted','2026-11-03'),(4,'draft',1,1,'Draft','draft','2026-11-04');
+      INSERT INTO update_asks(id,uid,update_id,kind,text) VALUES (1,'old-ask',1,'customer','Old ask'),(2,'last-ask',2,'customer','Recorded ask'),(3,'foreign-ask',3,'customer','Other'),(4,'draft-ask',4,'customer','Draft'),(5,'partner-ask',2,'partner','Partner');
+      INSERT INTO update_ask_replies(uid,ask_id,name,email,message) VALUES
+      ('old-reply',1,'Old','old@example.invalid','Old'),('last-reply',2,'Synthetic reply','reply@example.invalid','Recorded reply'),
+      ('foreign-reply',3,'Other','other@example.invalid','Other'),('draft-reply',4,'Draft','draft@example.invalid','Draft'),('partner-reply',5,'Partner','partner@example.invalid','Partner');`);
+    const options = { now, readCampaigns: readEmpty, canWrite: true, canAddProspects: true };
+    const writer = await distributionOverview(f.env, 1, options);
+    assert.deepEqual(JSON.parse(JSON.stringify(writer.update_asks)), { items: [{ uid: 'last-reply', name: 'Synthetic reply', email: 'reply@example.invalid', message: 'Recorded reply', ask_text: 'Recorded ask' }], reason: null, can_add: true });
+    const reader = await distributionOverview(f.env, 1, { ...options, canWrite: false });
+    assert.equal(reader.update_asks.items, null);
+    assert.equal(reader.update_asks.can_add, false);
+    assert.doesNotMatch(JSON.stringify(reader), /reply@example/);
+    assert.equal((await distributionOverview(f.env, 2, options)).update_asks.items?.length, 1);
+    f.db.exec('DROP TABLE update_ask_replies');
+    const failed = await distributionOverview(f.env, 1, options);
+    assert.equal(failed.update_asks.items, null);
+    assert.match(failed.update_asks.reason!, /^Unreadable:/);
+    assert.equal(failed.kpis.leads.value, 2);
+  } finally { f.db.close(); }
+});
+
+test('D4485: connection status belongs only to the signed-in user, never a channel plan or profile sign-in', async () => {
+  const f = fixture();
+  try {
+    f.db.exec(`INSERT INTO integrations(uid,user_id,provider_key,status,auth_type) VALUES ('their-link',2,'whatsapp_link','active','api_key'),('profile',1,'linkedin','active','oauth2');`);
+    const options = { now, readCampaigns: readEmpty, userId: 1 };
+    let data = await distributionOverview(f.env, 1, options);
+    assert.deepEqual(data.channels.items?.map((c) => c.status), ['Not offered yet','Not offered yet','Not offered yet','Not offered yet','Not offered yet','Not connected']);
+    f.db.exec(`INSERT INTO integrations(uid,user_id,provider_key,status,auth_type) VALUES ('my-link',1,'whatsapp_link','active','api_key');`);
+    assert.equal((await distributionOverview(f.env, 1, options)).channels.items?.at(-1)?.status, 'Connected');
+    for (const [status, expected] of [['error','Reconnect'],['paused','Paused'],['disconnected','Not connected']]) {
+      f.db.prepare('UPDATE integrations SET status = ? WHERE user_id = 1').run(status);
+      assert.equal((await distributionOverview(f.env, 1, options)).channels.items?.at(-1)?.status, expected);
+    }
+    f.db.exec("UPDATE integrations SET status = 'active', last_error = 'synthetic private error' WHERE user_id = 1");
+    data = await distributionOverview(f.env, 1, options);
+    assert.equal(data.channels.items?.at(-1)?.status, 'Reconnect');
+    assert.doesNotMatch(JSON.stringify(data), /synthetic private error/);
+    f.db.exec('DROP TABLE integrations');
+    data = await distributionOverview(f.env, 1, options);
+    assert.equal(data.channels.items, null);
+    assert.match(data.channels.reason!, /^Unreadable:/);
+    assert.equal(data.kpis.leads.value, 2);
   } finally { f.db.close(); }
 });

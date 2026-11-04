@@ -446,7 +446,7 @@ r.get('/distribution/overview', async (c) => {
   try {
     const user = await requireAuth(c);
     const pid = await project(c, user, c.req.query('project'), false);
-    return c.json(await distributionOverview(c.env, pid, { week: c.req.query('week') }));
+    return c.json(await distributionOverview(c.env, pid, { week: c.req.query('week'), userId: user.id, canWrite: await writes(c, user, pid), canAddProspects: user.role === 'founder' }));
   } catch (e) { return fail(c, e); }
 });
 r.get('/campaigns', async (c) => {

@@ -219,6 +219,6 @@ D1456 (#4014): the existing record, recovery, bot-control and migration-runner s
 | `syndication_review_4440.test.ts` | D4440: client dirty choices against mounted Worker routes, terminal history, disconnected accounts and retained accepted copy. |
 | `work_runs_4459.test.ts` | #4459: no-call attempts preserve paid totals; real engine labels/milestone/review responses retain the live item run and cost. |
 
-- `grow_overview_4485.test.ts` — Distribution's scoped monthly figures, spend provenance, ISO week and independent failures (D4485).
+- `grow_overview_4485.test.ts` — Distribution's scoped monthly figures, spend provenance, ISO week, writer-only replies, personal connection isolation and independent failures (D4485).
 `redirect_links_d2319.test.ts` exercises canonical checklist, calendar, promo,
 advisor CTA and stored search-result URLs after redirect retirement (#4415).

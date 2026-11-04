@@ -62,7 +62,7 @@ export function overviewSpend(active: CampaignView[], month?: string) {
 function budget(active: CampaignView[]) { return active.some((c) => c.budget_cents === null) ? null : active.reduce((sum, c) => sum + c.budget_cents!, 0); }
 
 /** Called only after the existing Grow project read gate; no request-controlled id is interpolated. */
-export async function distributionOverview(env: Env, projectId: number, options: { week?: string; now?: Date; readCampaigns?: CampaignReader } = {}) {
+export async function distributionOverview(env: Env, projectId: number, options: { week?: string; now?: Date; readCampaigns?: CampaignReader; userId?: number; canWrite?: boolean; canAddProspects?: boolean } = {}) {
   const now = options.now ?? new Date();
   const range = overviewWeek(options.week, now);
   const month = `${day(now).slice(0, 7)}-01`;
@@ -105,6 +105,32 @@ export async function distributionOverview(env: Env, projectId: number, options:
       ORDER BY i.planned_on, i.id`).bind(projectId, range.from, range.until).all();
     week = { ...range, items: rows.results ?? [], reason: null };
   } catch { week = { ...range, items: null, reason: unreadable('this week’s calendar') }; }
-  return { month: month.slice(0, 7), kpis: { reach: unavailable(noReach), clicks: unavailable(noReach), leads, replies, cost_per_lead: cost, spend_vs_budget: spend },
+  let updateAsks: { items: unknown[] | null; reason: string | null; can_add: boolean } = {
+    items: null, reason: 'Not recorded: update-ask identities are available only to venture writers', can_add: false,
+  };
+  if (options.canWrite) {
+    try {
+      const rows = await env.DB.prepare(`SELECT r.uid, r.name, r.email, r.message, a.text AS ask_text
+        FROM update_ask_replies r JOIN update_asks a ON a.id = r.ask_id JOIN portfolio_updates u ON u.id = a.update_id
+        WHERE u.project_id = ? AND a.kind = 'customer'
+          AND u.id = (SELECT id FROM portfolio_updates WHERE project_id = ? AND (sent_at IS NOT NULL OR status = 'submitted') ORDER BY created_at DESC, id DESC LIMIT 1)
+        ORDER BY r.id DESC LIMIT 50`).bind(projectId, projectId).all();
+      updateAsks = { items: rows.results ?? [], reason: null, can_add: options.canAddProspects === true };
+    } catch { updateAsks = { items: null, reason: unreadable('update-ask replies'), can_add: false }; }
+  }
+  const channels: { items: { name: string; status: string }[] | null; reason: string | null } = {
+    items: null, reason: 'Not recorded: no signed-in connection owner is available',
+  };
+  if (options.userId) {
+    try {
+      // Marketing apps are not offered yet. A LinkedIn profile sign-in is not an ad grant.
+      const link = await env.DB.prepare(`SELECT status, last_error FROM integrations
+        WHERE user_id = ? AND provider_key = 'whatsapp_link' ORDER BY id DESC LIMIT 1`).bind(options.userId).first<{ status: string; last_error: string | null }>();
+      channels.items = ['LinkedIn ads', 'X', 'Meta ads', 'Google Ads', 'Newsletter · Resend'].map((name) => ({ name, status: 'Not offered yet' }));
+      channels.items.push({ name: 'WhatsApp capture', status: !link ? 'Not connected' : link.last_error || link.status === 'error' ? 'Reconnect' : link.status === 'active' ? 'Connected' : link.status === 'paused' ? 'Paused' : 'Not connected' });
+      channels.reason = null;
+    } catch { channels.reason = unreadable('connected channels'); }
+  }
+  return { month: month.slice(0, 7), update_asks: updateAsks, channels, kpis: { reach: unavailable(noReach), clicks: unavailable(noReach), leads, replies, cost_per_lead: cost, spend_vs_budget: spend },
     campaigns: { items: active, total, reason: campaignReason }, week };
 }

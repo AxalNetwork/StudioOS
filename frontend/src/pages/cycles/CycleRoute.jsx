@@ -31,6 +31,7 @@ import RecordView, { RecordPhoneProvider } from './RecordView';
 import { HEADER_BUTTON, RecordHeaderProvider } from './RecordHeader.jsx';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
 import DistributionTabs from './distribution/DistributionTabs.jsx';
+import OverviewTab from './distribution/OverviewTab.jsx';
 import { ComingSoon } from './distribution/DistributionParts.jsx';
 import { distributionPrimary } from './distribution/distributionModel.js';
 import { EmailAction } from '../email/emailParts.jsx';
@@ -389,7 +390,6 @@ const CYCLE_DEFS = {
       </>),
       // The replies customer and partner asks brought in, beside the rows.
       distribution: (data, ctx) => (<>
-        <UpdateAskReplies replies={data?.parts?.from_update_asks} pill="Lead" />
         {/* D1090 (#2955): planned pieces, typed here or from Notion; a plan, never what was sent. */}
         <ContentCalendar part={data?.parts?.content_calendar} channels={data?.records?.rows} projectId={ctx.projectId} reload={ctx.reload} />
         {fromMercury('distribution', data, ctx)}
@@ -1319,6 +1319,10 @@ export default function CycleRoute({ cycle, tab = null, lightbox = false, adding
         {moduleStatus === 'ready' && cycle === 'raise' && slug === USE_OF_FUNDS && user?.role === 'founder' && projectId && <UseOfFundsEadwyn key={projectId} projectId={projectId} ai={ai} />}
       </ModulePage>
     );
+  }
+  // D4485: DS1 cards sit above the existing channels, draft and connector tools.
+  if (distribution && distributionTab === 'overview' && projectStatus === 'ready') {
+    body = <OverviewTab key={projectId} projectId={projectId} search={q} refresh={reload}>{body}</OverviewTab>;
   }
   // D4484: Overview keeps the existing module body; unlanded tabs read no campaign data.
   if (distribution) {

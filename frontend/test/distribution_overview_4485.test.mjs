@@ -1,4 +1,4 @@
-/** D4485 (#4485): Distribution overview client uses the mounted project-scoped read. UI cases await DS1. */
+/** D4485 (#4485): Distribution overview client uses the mounted project-scoped read. DS1 rendering and scoped write states. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { budgetView, KPI_LABELS, metricView, resultsLine, sourceChips, todayKey, weekColumns } from '../src/pages/cycles/distribution/overviewModel.js';
@@ -79,4 +79,82 @@ test('today follows the live local clock across days, rather than the design sam
   assert.equal(todayKey(), '2026-11-12');
   assert.equal(weekColumns(week).days[2].today, false);
   assert.equal(weekColumns(week).days[3].today, true);
+});
+
+
+import React from 'react';
+import { MemoryRouter } from 'react-router-dom';
+import { renderToStaticMarkup } from 'react-dom/server';
+import OverviewTab, { OverviewView } from '../src/pages/cycles/distribution/OverviewTab.jsx';
+import { mountContracts } from './_contracts_dom.mjs';
+const h = React.createElement;
+const fixture = () => ({
+  kpis: Object.fromEntries(Object.keys(KPI_LABELS).map((key) => [key, { value: null, sources: [], reason: 'Not recorded: no source' }])),
+  campaigns: { items: [], total: 0 }, week: { from: '2026-11-09', items: [] },
+  channels: { items: [{ name: 'X', status: 'Not offered yet' }] },
+  update_asks: { items: [], can_add: true },
+});
+const render = (data, props = {}) => renderToStaticMarkup(h(MemoryRouter, null, h(OverviewView, { data, today: '2026-11-11', search: '?project_id=7', ...props })));
+const text = (html) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+
+test('DS1 renders missing KPIs without zero, real source chips, seven days and independent failed blocks', () => {
+  const data = fixture();
+  let out = render(data);
+  assert.match(out.split('data-testid="overview-kpi-reach"')[1].split('</section>')[0], /class="ds-not-recorded">Not recorded/);
+  assert.doesNotMatch(out, /ds-overview-value[^>]*>0/);
+  assert.match(out, /Nothing scheduled/);
+  assert.match(out, /ds-overview-day is-today[^]*?Wed · today/);
+  assert.match(out, /No campaigns yet\. A campaign groups/);
+  assert.match(out, /campaigns\/new\?project_id=7/);
+  data.kpis.cost_per_lead = { value: 1200, sources: ['mercury', 'connector'] };
+  data.kpis.replies = { value: null, sources: [], reason: 'Unreadable: replies' };
+  data.week.items = [{ uid: 'post', planned_on: '2026-11-09', title: 'Real post', channel: 'Email' }];
+  out = render(data);
+  assert.match(text(out), /Cost per lead \$12\.00 This month’s spend ÷ leads Mercury Connector/);
+  assert.match(text(out), /Unreadable Couldn’t be read\. This is not a claim that there are none\. Try again/);
+  assert.match(text(out), /POST Real post Email/);
+  assert.match(out, /Not offered yet/);
+});
+
+test('campaign cards, replies and loading distinguish real zero budget, draft-only and unknown reads', () => {
+  const data = fixture();
+  data.campaigns = { total: 1, items: [{ uid: 'campaign', name: 'Recorded campaign', goal: 'demos', budget_cents: 0, leads: 2, demos: 1, channels: [{ uid: 'email', name: 'Email', spend_months: [{ source: 'mercury' }] }] }] };
+  data.update_asks.items = [{ uid: 'reply', name: 'Synthetic reply', ask_text: 'A recorded ask', email: 'reply@example.invalid' }];
+  let out = render(data, { onAdd() {} });
+  assert.match(text(out), /Recorded campaign Active Goal · Demos Email Budget — No paid budget · outreach only 2 leads · 1 demos/);
+  assert.match(text(out), /2 leads · 1 demos Connector Manual Mercury/);
+  assert.match(text(out), /Synthetic reply A recorded ask Add to Prospects Lead/);
+  data.update_asks.can_add = false;
+  assert.doesNotMatch(render(data, { onAdd() {} }), /Add to Prospects/);
+  data.campaigns.items = [];
+  assert.match(render(data), /No active campaigns/);
+  data.week.items = null; data.channels.items = null; data.update_asks.items = null;
+  out = render(data);
+  assert.equal((out.match(/This is not a claim/g) || []).length, 3);
+  assert.doesNotMatch(text(out), /Nothing scheduled|No replies from/);
+  const loading = render(data, { loading: true });
+  assert.match(loading, /Loading Distribution overview/);
+  assert.doesNotMatch(loading, /No active campaigns/);
+});
+
+test('Overview read failure retries, preserves legacy tools, and a real Add to Prospects writes the existing contact contract', async () => {
+  const data = fixture();
+  data.update_asks.items = [{ uid: 'reply', name: 'Synthetic reply', email: 'reply@example.invalid', ask_text: 'A recorded ask' }];
+  const calls = []; let reads = 0; let failWrite = true;
+  const app = await mountContracts(h(OverviewTab, { projectId: 7, read: async (id) => { assert.equal(id, 7); if (++reads === 1) throw Error('private read failure'); return data; }, create: async (body) => { calls.push(body); if (failWrite) throw Error('private write failure'); } }, h('p', null, 'Legacy channel tools')));
+  try {
+    assert.match(app.text(), /Unreadable/);
+    const nodeText = (node) => node?.childNodes?.length ? node.childNodes.map(nodeText).join('') : node?.textContent || '';
+    assert.ok(Object.keys(KPI_LABELS).every((key) => nodeText(app.nodes().find((node) => app.props(node)?.['data-testid'] === `overview-kpi-${key}`)).includes('Unreadable')), 'every KPI is unreadable when the request fails');
+    assert.match(app.text(), /Legacy channel tools/);
+    assert.doesNotMatch(app.text(), /private read failure/);
+    await app.click('Try again');
+    assert.match(app.text(), /Synthetic reply/);
+    await app.click('Add to Prospects');
+    assert.match(app.text(), /Couldn’t add this prospect\. Try again/);
+    failWrite = false;
+    await app.click('Add to Prospects');
+    assert.deepEqual(calls, Array(2).fill({ project_id: 7, name: 'Synthetic reply', email: 'reply@example.invalid', audience: 'customer', source: 'update ask' }));
+    assert.match(app.text(), /Added to Prospects/);
+  } finally { await app.unmount(); }
 });
