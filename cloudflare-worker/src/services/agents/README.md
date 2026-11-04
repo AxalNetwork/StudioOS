@@ -34,6 +34,8 @@ is automatic. The routes are `cloudflare-worker/src/routes/team_agents.ts`, moun
 | `workItems.ts` | D1614 W7 (#3993): a project task's comments (cleaned Markdown, mentions through `notify()`), its timeline and derived participants, a person's review, agents' task drafts (proposals until Accept), labels and milestones. Migration 763. `work_items_3993.test.ts` covers it. |
 | `workLabels.ts` | D1614 W7: the statements that keep `task_label_links` and W1's `labels_json` mirror in step inside W1's own batch. |
 | `sponsor.ts` | D4387 (#4387, #3742 E8): who may sponsor an agent (`sponsorRefusal`: on the team, an editor, a paid Founder plan, AI tokens left; a balance it cannot read refuses), the team's members (`teamMembers`), and the cap's monthly reset: `resumeCapPauses` (from the agent sweep; only `paused_reason = 'cap'`, paused in an earlier UTC month) and `capResumesAt` (the day it resumes, for the agent's `resumes_at`). `team_agent_sponsor_4387.test.ts` covers it. |
+| `allowlists.ts` | D4422 (#4422): company/project policy inheritance, validated lists, atomic audit and admission/use-time model/tool restrictions. |
+| `modelOffers.ts` | D4422: the shared existing plan and chat-model offer, re-exported by team_agents. |
 
 | `workRuns.ts` | D1614 (#3968): W1’s live E3 latest-run reader and guard-inclusive last/task charges; a usage failure leaves costs unavailable without hiding a recorded run. |
 

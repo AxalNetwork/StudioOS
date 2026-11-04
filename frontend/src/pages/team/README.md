@@ -79,6 +79,7 @@ board → file map and what waits for which issue are in
 | `AgentMemory.jsx` | The agent profile's Memory and Scheduled duties (TM5m). |
 | `WorkingHere.jsx` | Working here (TM6c) and Assign this task to… (TM6b). Built, not mounted: module headers mount them with the Ask panel (#3706) and the task store (#3845). |
 | `SponsorSheet.jsx` | D4387 (#4387): Choose a new sponsor, from TM9b's fix or the profile's Change sponsor. The team's members with whether each may sponsor the agent and why not, in the Worker's words; a reason of at least 10 characters; tools dropped only once ticked. |
+| `TeamAllowlists.jsx` | D4422 (#4422): the inherited model/tool lists in TM8a; independent plan defaults, checked saves and honest refusals through agentsAdapter. |
 
 ## Skills v2: areas, not roles (#4224, D4116)
 
