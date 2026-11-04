@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { makeD1 } from './_d1_sqlite.mjs';
 import { stripForeignKeys, tableFromBaseline, addColumnsFrom } from './_baseline.mjs';
-import { reserveOutsideAssistant, completeOutsideBinding, outsideAgentForGrant, revokeOutsideBinding } from '../src/services/agents/outsideAssistant.ts';
+import { reserveOutsideAssistant, completeOutsideBinding, outsideAgentForGrant, revokeOutsideBinding, OutsideProviderCleanupPending } from '../src/services/agents/outsideAssistant.ts';
 
 const sql = (f: string) => readFileSync(new URL(`../sql/${f}`, import.meta.url), 'utf8');
 const baseline = sql('schema_baseline.sql');
@@ -117,7 +117,7 @@ test('revocation closes D1 first, withdraws only pending proposals and retries p
     assert.equal(w.db.prepare('SELECT status FROM team_agents').get().status, 'removed');
     assert.equal(w.db.prepare('SELECT state FROM team_agent_mcp_bindings').get().state, 'revoked');
     throw new Error('provider unavailable');
-  }), /provider unavailable/);
+  }), OutsideProviderCleanupPending);
   await assert.rejects(outsideAgentForGrant(w.env, w.user, p), rejected('connection_revoked'));
   await assert.rejects(completeOutsideBinding(w.env, w.user, p), rejected('connection_not_pending'));
   await revokeOutsideBinding(w.env, w.user, p.bindingUid, async (g,u) => { calls.push([g,u]); });
@@ -160,4 +160,16 @@ test('a binding failure rolls back its agent and audit rather than reserving a s
   await assert.rejects(reserveOutsideAssistant(w.env, w.user, input), /binding unavailable/);
   for (const t of ['team_agents', 'team_agent_mcp_bindings', 'team_agent_events']) assert.equal(w.db.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get().n, 0);
   w.db.close();
+});
+
+test('revocation between completion’s read and batch cannot reactivate a pending agent', async () => {
+  const w = world(); const ids = await reserveOutsideAssistant(w.env, w.user, input);
+  const batch = w.env.DB.batch.bind(w.env.DB);
+  w.env.DB.batch = async (statements: unknown[]) => {
+    w.db.exec("UPDATE team_agent_mcp_bindings SET state='revoked'; UPDATE team_agents SET status='removed'");
+    return batch(statements);
+  };
+  await assert.rejects(completeOutsideBinding(w.env, w.user, { ...ids, clientId: input.clientId, grantId: 'provider-grant' }), rejected('connection_not_pending'));
+  assert.equal(w.db.prepare('SELECT state FROM team_agent_mcp_bindings').get().state, 'revoked');
+  assert.equal(w.db.prepare('SELECT status FROM team_agents').get().status, 'removed'); w.db.close();
 });
