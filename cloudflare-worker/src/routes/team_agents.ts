@@ -316,7 +316,7 @@ router.get('/:scope/:id/queue', async (c) => {
       role: c.req.query('role') || null, module: c.req.query('module') || null, option: c.req.query('option') || null,
       status: status as RailProposalStatus, cursor: rawCursor ? Number(rawCursor) : null, includeProjects,
     };
-    const page = await queueList(c.env, s, filter);
+    const page = await queueList(c.env, s, filter, user);
     return c.json({ items: page.items, counts: { proposed: await queueCount(c.env, s, filter) }, next_cursor: page.next_cursor });
   } catch (e) { return mapError(c, e); }
 });
