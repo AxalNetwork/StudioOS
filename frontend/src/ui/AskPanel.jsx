@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import AgentDisclaimer from '../pages/team/AgentDisclaimer.jsx';
+import AskProposal from './AskProposal.jsx';
 import { X } from 'lucide-react';
 import { useEscapeClose } from '../components/useEscapeClose';
 import { askPanelAdapter } from './askPanelAdapter.js';
@@ -208,23 +208,8 @@ export default function AskPanel({ page, label, crumb, options = [], aiOn = true
           {open.length > 0 && (
             <div className="ead-ask-cards" data-testid="ask-panel-cards">
               {cards.map((c) => (
-                <div key={c.uid} className="ead-ask-card" data-status={c.status} data-testid={`ask-card-${c.uid}`}>
-                  <span className="ead-ask-card-head">
-                    <span className="ead-ask-eyebrow is-violet">{c.eyebrow}</span>
-                    {c.source && <span className="ead-ask-source">{c.source}</span>}
-                  </span>
-                  <span className="ead-ask-card-text">{c.text}</span>
-                  <AgentDisclaimer disclaimerKey={c.disclaimer_key} />
-                  {c.status === 'proposed' ? (
-                    <span className="ead-ask-card-acts">
-                      <button type="button" className="ead-ask-btn is-primary" onClick={() => decide(c, 'accept')}>Accept</button>
-                      {CHIP_ROUTES[c.option] ? <a className="ead-ask-btn" href={CHIP_ROUTES[c.option]}>Edit</a> : null}
-                      <button type="button" className="ead-ask-btn is-ghost" onClick={() => decide(c, 'discard')}>Discard</button>
-                    </span>
-                  ) : (
-                    <span className="ead-ask-decided">{c.status === 'accepted' ? 'Accepted' : 'Discarded'}</span>
-                  )}
-                </div>
+                <AskProposal key={c.uid} proposal={c} onAccept={() => decide(c, 'accept')}
+                  onDiscard={() => decide(c, 'discard')} editHref={CHIP_ROUTES[c.option]} />
               ))}
               <span className="ead-ask-all">
                 {all && (

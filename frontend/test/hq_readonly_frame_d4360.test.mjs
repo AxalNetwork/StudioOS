@@ -158,7 +158,7 @@ test('INC5g: HQ reads one order read only — the pill, the timeline, the line, 
 test('the wiring: an admin with ?order reads HQ\'s view; a member never does; Lab › Formation opens it', () => {
   const flow = read('pages/incorporate/IncorporateFlow.jsx');
   assert.match(flow, /if \(orderId && \/\^\\d\{1,12\}\$\/\.test\(orderId\) && user\?\.role === 'admin'\) \{\n\s+return <IncorporateHqRead orderId=\{orderId\} viewer=\{isSuperAdminUser\(user\) \? 'super_admin' : 'admin'\} \/>;/);
-  assert.match(flow, /return <MemberIncorporateFlow embedded=\{embedded\} \/>;/);
+  assert.match(flow, /return <MemberIncorporateFlow embedded=\{embedded\} user=\{user\} \/>;/);
   assert.match(read('pages/admin/lab/LabFormation.jsx'), /to=\{`\/incorporate\?order=\$\{encodeURIComponent\(r\.id\)\}`\}/);
   assert.match(read('pages/account/companies/CompaniesProjects.jsx'), /paths=\{paths\} profile=\{profile\} \/>/, 'the project page is told who is looking');
   for (const f of ['pages/account/companies/CompanyPage.jsx', 'pages/account/companies/ProjectPage.jsx', 'pages/incorporate/IncorporateHqRead.jsx']) {

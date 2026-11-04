@@ -215,7 +215,10 @@ D1456 (#4014): the existing record, recovery, bot-control and migration-runner s
 `team_allowlists_4422.test.ts` checks D4422 scope inheritance, manager/plan/approval bounds, atomic audit and use-time revocation, including agent MCP calls, over real SQLite.
 
 | `work_runs_3968.test.ts` | Real engine board/item latest-run wiring, guard-inclusive charges, unknown costs, scope gates and concurrent attempts (#3968). |
+| `comarketing_split_4439.test.ts` | D4439: investor refuses every member read/write; partners/founders keep their existing access; HQ reads historical investor pitches. |
 | `syndication_review_4440.test.ts` | D4440: client dirty choices against mounted Worker routes, terminal history, disconnected accounts and retained accepted copy. |
 | `work_runs_4459.test.ts` | #4459: no-call attempts preserve paid totals; real engine labels/milestone/review responses retain the live item run and cost. |
 
 - `grow_overview_4485.test.ts` — Distribution's scoped monthly figures, spend provenance, ISO week and independent failures (D4485).
+`redirect_links_d2319.test.ts` exercises canonical checklist, calendar, promo,
+advisor CTA and stored search-result URLs after redirect retirement (#4415).

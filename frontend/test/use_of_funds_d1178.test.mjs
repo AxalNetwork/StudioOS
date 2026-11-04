@@ -237,7 +237,7 @@ test('every old address lands on Forecast with the venture, and Forecast reads t
     } finally { await v.close(); }
   }
   const listed = new Set(REDIRECT_ROUTES.map((r) => r.path));
-  for (const p of ['/raise/capital/model', '/build/financials']) assert.ok(listed.has(p), `${p} joins the redirect inventory`);
+  for (const p of ['/raise/capital/model', '/build/financials']) assert.equal(listed.has(p), false, `${p} retired by D2319`);
 });
 
 /* ------------------------------------------------------------------ *
@@ -396,8 +396,8 @@ test('on a phone, a page under a tab goes back to its tab', async () => {
 
 test('the wiring: the two routes, the two redirects, the links repointed, no browser pop-up, dark pairs', () => {
   const app = read('frontend/src/App.jsx');
-  assert.ok(app.includes('<Route path="/raise/capital/model" element={<UseOfFundsMovedRedirect />} />'));
-  assert.ok(app.includes('<Route path="/build/financials" element={<UseOfFundsMovedRedirect />} />'));
+  assert.equal(app.includes('<Route path="/raise/capital/model" element={<UseOfFundsMovedRedirect />} />'), false);
+  assert.equal(app.includes('<Route path="/build/financials" element={<UseOfFundsMovedRedirect />} />'), false);
   assert.ok(app.includes('<CycleRoute cycle="raise" slug="use-of-funds" uofSub="forecast" />'));
   assert.ok(app.includes('<CycleRoute cycle="raise" slug="use-of-funds" uofSub="compare" />'));
   assert.ok(read('cloudflare-worker/src/services/raiseCycle.ts').includes("model: '/raise/use-of-funds/runway/forecast'"));

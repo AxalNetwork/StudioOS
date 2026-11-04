@@ -40,8 +40,8 @@ test('sidebar exposes a single Network entry and no standalone Contacts/Relation
 });
 
 test('legacy /contacts and /relationships routes redirect into the Network tabs', () => {
-  assert.match(app, /path="\/contacts"\s+element=\{<Navigate to="\/network\?tab=contacts" replace \/>\}/);
-  assert.match(app, /path="\/relationships"\s+element=\{<Navigate to="\/network\?tab=relationships" replace \/>\}/);
+  assert.doesNotMatch(app, /path="\/contacts"\s+element=\{<Navigate to="\/network\?tab=contacts" replace \/>\}/);
+  assert.doesNotMatch(app, /path="\/relationships"\s+element=\{<Navigate to="\/network\?tab=relationships" replace \/>\}/);
 });
 
 test('/network route mounts NetworkPage and dead page imports are removed', () => {

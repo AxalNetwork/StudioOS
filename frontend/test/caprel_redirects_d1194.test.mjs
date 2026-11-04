@@ -29,6 +29,7 @@ import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
 import { moduleToolLinks } from '../src/pages/cycles/founderToolNavigation.js';
 import { REDIRECT_ROUTES } from '../../cloudflare-worker/src/services/redirectRoutes.ts';
 import { redirectPatternFor } from '../src/lib/redirectBeacon.js';
+import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
 
 const h = React.createElement;
 const root = resolve(process.cwd());
@@ -132,10 +133,10 @@ test('the notices are the canvas\'s two sentences (CRL13)', () => {
   });
 });
 
-test('App.jsx mounts exactly these three, unguarded (the tool\'s own route guards), and the old pages are gone', () => {
+test('D2319 removes old Capital relationships aliases and keeps the guarded tool', () => {
   for (const [path, { tab, moved }] of OLD) {
     const line = APP.split('\n').find((l) => l.includes(`<Route path="${path}" element=`)) || '';
-    assert.equal(line.trim(), `<Route path="${path}" element={<CapRelMovedRedirect tab="${tab}" moved="${moved}" />} />`, path);
+    assert.equal(line.trim(), isRetiredRedirect(path) ? '' : `<Route path="${path}" element={<CapRelMovedRedirect tab="${tab}" moved="${moved}" />} />`, path);
   }
   assert.match(APP, /<Route path="\/raise\/:slug\/:id" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <CycleRoute cycle="raise" record \/>\)\} \/>/, 'the tool\'s tabs keep their guard');
   assert.doesNotMatch(codeOnly(APP), /RaisePipelinePage|FounderGrowCapitalMatch/);
@@ -145,12 +146,12 @@ test('App.jsx mounts exactly these three, unguarded (the tool\'s own route guard
   assert.match(APP, /: <Navigate to="\/raise\/capital-relationships\/pipeline" replace \/>\} \/>/);
 });
 
-test('each old address is counted for #2319, and none is kept past the 90 days', () => {
+test('D2319 removes old Capital relationships beacon keys', () => {
   for (const [path] of OLD) {
     const row = REDIRECT_ROUTES.find((r) => r.path === path);
-    assert.ok(row, `${path} is not on REDIRECT_ROUTES`);
-    assert.equal(row.keep, undefined, `${path} is kept`);
-    assert.equal(redirectPatternFor(path), path);
+    assert.equal(Boolean(row), !isRetiredRedirect(path), path);
+    assert.equal(row?.keep, undefined, `${path} is kept`);
+    assert.equal(redirectPatternFor(path), isRetiredRedirect(path) ? null : path);
   }
   assert.equal(redirectPatternFor('/raise/capital-relationships/match'), null, 'the tool itself is no redirect');
 });
