@@ -93,7 +93,9 @@ test('create, read, update and archive preserve null budget, actor and links; ar
   const r = await create(f, { channel_uids: ['our-channel'], segment_id: 1 });
   assert.equal(r.status, 201); const uid = r.body.campaign.uid;
   assert.match(uid, /^[a-f0-9]{32}$/);
-  assert.deepEqual({ ...r.body.campaign, uid }, { uid, name: 'Spring launch', goal: 'signups', status: 'draft', starts_on: null, ends_on: null, budget_cents: null, budget_reason: 'Not recorded: no campaign budget entered', utm_campaign: null, segment: { id: 1, name: 'Teams' }, channels: [{ uid: 'our-channel', name: 'Search', planned_budget_cents: null, planned_budget_reason: 'Not recorded: no channel budget entered', spend_cents: null, spend_reason: 'Not recorded: this campaign has no complete date window' }], items: { content: 0, drafts: 0 }, leads: null, leads_reason: 'Not recorded: this campaign has no UTM campaign tag' });
+  const { audience_kind, budget_used_pct, demos, demos_reason, customers, customers_reason, ...legacy } = r.body.campaign;
+  legacy.channels = legacy.channels.map(({ budget_type, starts_on, ends_on, spend_source, spend_months, budget_used_pct, ...g }: any) => g);
+  assert.deepEqual({ ...legacy, uid }, { uid, name: 'Spring launch', goal: 'signups', status: 'draft', starts_on: null, ends_on: null, budget_cents: null, budget_reason: 'Not recorded: no campaign budget entered', utm_campaign: null, segment: { id: 1, name: 'Teams' }, channels: [{ uid: 'our-channel', name: 'Search', planned_budget_cents: null, planned_budget_reason: 'Not recorded: no channel budget entered', spend_cents: null, spend_reason: 'Not recorded: this campaign has no complete date window' }], items: { content: 0, drafts: 0 }, leads: null, leads_reason: 'Not recorded: this campaign has no UTM campaign tag' });
   assert.equal((await read(f)).body.campaigns[0].uid, uid);
   const updated = await grow(f, COFOUNDER, 'PATCH', `/campaigns/${uid}`, { name: 'Revised', budget_cents: 0 });
   assert.equal(updated.status, 200);
@@ -103,7 +105,7 @@ test('create, read, update and archive preserve null budget, actor and links; ar
   for (const [kind, item] of [['content_item', 'our-content'], ['publish_draft', 'our-draft']]) assert.equal((await grow(f, FOUNDER, 'POST', `/campaigns/${uid}/items`, { kind, uid: item })).status, 200);
   const archive = await grow(f, FOUNDER, 'DELETE', `/campaigns/${uid}`);
   assert.deepEqual(archive, { status: 200, body: { ok: true } });
-  assert.deepEqual((await read(f)).body, { campaigns: [] });
+  assert.deepEqual((await read(f)).body.campaigns, []);
   assert.equal(one(f, 'SELECT COUNT(*) n FROM grow_campaign_items').n, 2);
   assert.equal(one(f, 'SELECT COUNT(*) n FROM grow_campaign_channels').n, 1);
   for (const [method, path, b] of [
@@ -148,7 +150,7 @@ test('field validation, combined dates on patches, and the campaign status state
       assert.equal(edit.body.campaign.starts_on, '2026-03-01');
       assert.equal(edit.body.campaign.ends_on, '2026-03-31');
     }
-    if (status === 'paused') assert.equal((await grow(f, FOUNDER, 'PATCH', `/campaigns/${uid}`, { status: 'ended' })).status, 409);
+    // D4483 tests paused → ended separately; retain this resume path.
   }
   assert.equal((await grow(f, FOUNDER, 'PATCH', `/campaigns/${uid}`, { status: 'active' })).status, 409);
 });
