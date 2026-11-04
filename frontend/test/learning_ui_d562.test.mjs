@@ -672,7 +672,7 @@ test('ExercisePanel: not submitted, needs work, accepted, with the reviewer’s 
   };
   const work = html(h(ExercisePanel, { status: 'ready', exercise: EXERCISE, submission: needsWork, onSubmit: () => {} }));
   const out = flat(work);
-  assert.match(out, /Needs work Submitted 1 Oct 2026 · reviewed 2 Oct 2026/);
+  assert.match(out, /Needs work Sent back 2 Oct 2026\. Edit your answer and resubmit\./);
   assert.match(out, /Rae Reviewer · 2 Oct 2026 Name the buyer\./);
   assert.match(work, />We help founders raise\.<\/textarea>/, 'a resubmission starts from the answer that needs work');
   assert.equal(linkOf(work, 'button-exercise-submit').label, 'Resubmit');

@@ -20,7 +20,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createElement as h } from 'react';
+import { createElement as h, act } from 'react';
+import { createRoot } from 'react-dom/client';
+import { installDocument } from './_contracts_dom.mjs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { codeOnly } from './_codeOnly.mjs';
@@ -84,7 +86,7 @@ const routed = (url, pattern, element) => renderToStaticMarkup(
 /** `GET /api/learning/exercises/:uid`: `exerciseView` and `SUBMISSION_COLS`, newest first. */
 const EXERCISE_TEXT = {
   uid: 'e1', title: 'Write your one-liner', instructions: 'Say what you do in **one** sentence.', submission_kind: 'text',
-  checklist: null, status: 'published', published_at: '2026-10-02T10:00:00.000Z',
+  checklist: null, answer_max_chars: 2000, status: 'published', published_at: '2026-10-02T10:00:00.000Z',
 };
 const NEEDS_WORK = { uid: 's2', body: 'We help founders raise.', status: 'needs_work', feedback: 'Name the buyer.', submitted_at: '2026-10-03T10:00:00.000Z', reviewed_at: '2026-10-04T10:00:00.000Z' };
 const FIRST_TRY = { uid: 's1', body: 'We do fintech.', status: 'needs_work', feedback: 'Too vague.', submitted_at: '2026-10-01T10:00:00.000Z', reviewed_at: '2026-10-02T10:00:00.000Z' };
@@ -389,7 +391,7 @@ test('an exercise: its instructions, the latest answer and its status, earlier a
   const markup = html(h(ExerciseView, { state: { status: 'ready', ...EXERCISE_REPLY }, onSubmit: () => {} }));
   const out = flat(markup);
   assert.match(markup, /<strong>one<\/strong>/);
-  assert.match(out, /Needs work Submitted 3 Oct 2026 · reviewed 4 Oct 2026/);
+  assert.match(out, /Needs work Sent back 4 Oct 2026\. Edit your answer and resubmit\./);
   // Resubmitting adds a row: the earlier answer is listed, not lost, and the latest is not listed twice.
   const history = zone(markup, 'exercise-history', '</ul>');
   assert.match(flat(history), /Needs work 1 Oct 2026/);
@@ -564,10 +566,10 @@ test('the exam page\'s states: loading, unreadable, no such exam', () => {
   assert.match(text(h(ExamView, { examState: { status: 'missing', message: 'No such exam.' }, attemptsState: { status: 'missing' } })), /No such exam/);
 });
 
-test('the pages: a header from the read, the rail, and the course they were opened from', () => {
+test('the pages: a header from the read, no Learning rail, and the course they were opened from', () => {
   const plain = routed('/learning/exercises/e1', '/learning/exercises/:slug', h(ExercisePage, { uid: 'e1' }));
   assert.match(plain, /data-testid="learning-exercise"/);
-  assert.match(flat(plain), /Eadwyn AI .{0,24}?Learning/);
+  assert.doesNotMatch(flat(plain), /Eadwyn AI|Ask Eadwyn/);
   assert.match(tagOf(plain, 'link-learning-back'), /href="\/learning"/);
   assert.match(plain, /learning-loading/);
   const fromCourse = routed('/learning/exams/x1?course=seed-basics', '/learning/exams/:slug', h(ExamPage, { uid: 'x1' }));
@@ -819,4 +821,83 @@ test('the app\'s own styling, one file calling the client, and no client method 
   assert.doesNotMatch(member, /adminLearningApi\./);
   assert.equal(reads.split('adminLearningApi.getExam(').length - 1, 1);
   assert.match(reads, /export async function readStudioExam\(uid\) \{\s*return \{ exam: rowOf\(await adminLearningApi\.getExam\(uid\)/);
+});
+
+
+test('D4479: the text counter counts code points, groups en-GB, and invents no limit', async () => {
+  const { answerCounter } = await import('../src/pages/learning/assessmentModel.js');
+  assert.equal(typeof answerCounter, 'function');
+  assert.equal(answerCounter('🙂', 2000), '1 / 2,000');
+  assert.equal(answerCounter('', 2000), '0 / 2,000');
+  assert.equal(answerCounter('a'.repeat(1234), 2000), '1,234 / 2,000');
+  assert.equal(answerCounter('answer', null), null);
+  assert.equal(answerCounter('answer', undefined), null);
+});
+
+test('D4479: text uses the sent max, an empty character counter and no invented cap', () => {
+  const out = html(h(ExercisePanel, { status: 'ready', exercise: EXERCISE_TEXT, onSubmit() {} }));
+  assert.match(tagOf(out, 'input-exercise-answer'), /maxLength="2000"/i);
+  assert.match(tagOf(out, 'input-exercise-answer'), /placeholder="Write your answer"/);
+  assert.match(flat(zone(out, 'text-exercise-count', '</span>')), /0 \/ 2,000/);
+  const unknown = html(h(ExercisePanel, { status: 'ready', exercise: { ...EXERCISE_TEXT, answer_max_chars: undefined }, onSubmit() {} }));
+  assert.doesNotMatch(tagOf(unknown, 'input-exercise-answer'), /maxlength/i);
+  assert.doesNotMatch(unknown, /2,000|0 words/);
+});
+
+test('D4479: status sentences and submission actions follow the four states with honest dates', async () => {
+  const { ExerciseSubmit } = await import('../src/pages/learning/ExercisePanel.jsx');
+  assert.equal(typeof ExerciseSubmit, 'function');
+  const cases = [
+    [null, 'Submit', /Not submitted yet.*Submit when you are ready\. You can resubmit after a review\./],
+    [{ ...NEEDS_WORK, status: 'submitted' }, 'Submit', /Submitted 3 Oct 2026\. Reviewer not recorded reads it next\./],
+    [NEEDS_WORK, 'Resubmit', /Sent back 4 Oct 2026\. Edit your answer and resubmit\./],
+    [{ ...NEEDS_WORK, status: 'accepted' }, 'Resubmit', /Accepted 4 Oct 2026\./],
+  ];
+  for (const [submission, label, sentence] of cases) {
+    const panel = html(h(ExercisePanel, { status: 'ready', exercise: EXERCISE_TEXT, submission, onSubmit() {} }));
+    assert.match(flat(panel), sentence);
+    const button = html(h(ExerciseSubmit, { submission, formId: 'exercise-form' }));
+    assert.equal(labelOf(button, 'button-exercise-submit'), label);
+    assert.equal(tagOf(button, 'button-exercise-submit').includes('disabled=""'), submission?.status === 'accepted');
+    assert.match(tagOf(button, 'button-exercise-submit'), /form="exercise-form"/);
+    if (submission?.status === 'accepted') assert.match(button, /title="Accepted\. There is nothing to resubmit\."/);
+  }
+  const missingDate = html(h(ExercisePanel, { status: 'ready', exercise: EXERCISE_TEXT, submission: { ...NEEDS_WORK, reviewed_at: null } }));
+  assert.match(flat(missingDate), /Sent back Not recorded\. Edit your answer and resubmit\./);
+  assert.match(flat(missingDate), /Reviewer not recorded.*Not recorded.*Name the buyer/);
+});
+
+
+test('D4479: the page header submits its form and shows only the route refusal, never a raw error', async () => {
+  const restore = installDocument(), previousFetch = globalThis.fetch;
+  const container = document.createElement('div'); document.body.appendChild(container);
+  const root = createRoot(container);
+  const posted = []; let rawFailure = false;
+  globalThis.fetch = async (url, init = {}) => {
+    if (init.method === 'POST') {
+      posted.push(JSON.parse(init.body));
+      if (rawFailure) throw new Error('Synthetic private network detail');
+      return new Response(JSON.stringify(REFUSAL('bad_answer', 'An answer is at most 2,000 characters.')), { status: 400, headers: { 'content-type': 'application/json' } });
+    }
+    return new Response(JSON.stringify(String(url).includes('/courses/') ? COURSE_REPLY : { exercise: EXERCISE_TEXT, submissions: [] }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  const props = n => Object.entries(n || {}).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
+  const walk = n => [n, ...(n.childNodes || []).flatMap(walk)];
+  const by = id => walk(document.body).find(n => props(n)['data-testid'] === id);
+  const text = n => n?.nodeType === 3 ? n.textContent : (n?.childNodes || []).map(text).join('') || n?.textContent || '';
+  try {
+    await act(async () => root.render(h(MemoryRouter, { initialEntries: ['/learning/exercises/e1?course=seed-basics'] }, h(ExercisePage, { uid: 'e1' }))));
+    assert.equal(props(by('button-exercise-submit')).form, props(by('form-exercise-answer')).id);
+    assert.match(text(document.body), /Seed basics · Practice/);
+    assert.doesNotMatch(text(document.body), /Eadwyn|Ask/);
+    await act(async () => props(by('input-exercise-answer')).onChange({ target: { value: '🙂' } }));
+    assert.equal(text(by('text-exercise-count')), '1 / 2,000');
+    await act(async () => props(by('form-exercise-answer')).onSubmit({ preventDefault() {} }));
+    assert.deepEqual(posted, [{ body: '🙂' }]);
+    assert.equal(text(by('exercise-error')), 'An answer is at most 2,000 characters.');
+    rawFailure = true;
+    await act(async () => props(by('form-exercise-answer')).onSubmit({ preventDefault() {} }));
+    assert.equal(text(by('exercise-error')), 'Your answer could not be submitted.');
+    assert.doesNotMatch(text(document.body), /Synthetic private network detail/);
+  } finally { await act(async () => root.unmount()); globalThis.fetch = previousFetch; restore(); }
 });
