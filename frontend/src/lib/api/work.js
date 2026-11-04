@@ -33,6 +33,25 @@
 //       only tasks the caller can read; 400 invalid_filter.
 // Projects only: a company has no Kanban. Days are the member's time zone; a
 // day before the first item is `{ day, available: false }`, never zeros.
+// W7 (#3993, #4418), routes/work_items.ts, under /api/teams:
+//   GET /teams/project/:id/tasks/:number/timeline — timeline
+//   POST /teams/project/:id/tasks/:number/comments — comment
+//   PATCH /teams/project/:id/comments/:uid — editComment
+//   DELETE /teams/project/:id/comments/:uid — deleteComment
+//   POST /teams/project/:id/tasks/:number/review — review
+//   PUT /teams/project/:id/tasks/:number/labels — setLabels
+//   PUT /teams/project/:id/tasks/:number/milestone — setMilestone
+//   GET /teams/project/:id/work/drafts — drafts
+//   POST /teams/project/:id/work/drafts/:uid/accept — acceptDraft
+//   POST /teams/project/:id/work/drafts/:uid/discard — discardDraft
+//   GET /teams/project/:id/work/labels — labels
+//   POST /teams/project/:id/work/labels — createLabel
+//   PATCH /teams/project/:id/work/labels/:uid — updateLabel
+//   DELETE /teams/project/:id/work/labels/:uid — deleteLabel
+//   GET /teams/project/:id/work/milestones — milestones
+//   POST /teams/project/:id/work/milestones — createMilestone
+//   PATCH /teams/project/:id/work/milestones/:uid — updateMilestone
+//   DELETE /teams/project/:id/work/milestones/:uid — deleteMilestone
 import { request } from '../api.js';
 
 const enc = encodeURIComponent;
@@ -42,6 +61,25 @@ const SCOPE = 'project';
 export const workApi = {
   // #4420: project-only counts, behind the board's flags and read gate.
   summary: (projectId) => request(`/teams/${SCOPE}/${enc(projectId)}/work/summary`),
+  timeline: (projectId, number) => request(`/teams/project/${enc(projectId)}/tasks/${enc(number)}/timeline`),
+  comment: (projectId, number, body) => request(`/teams/project/${enc(projectId)}/tasks/${enc(number)}/comments`, { method: 'POST', body: JSON.stringify(body || {}) }),
+  editComment: (projectId, uid, body) => request(`/teams/project/${enc(projectId)}/comments/${enc(uid)}`, { method: 'PATCH', body: JSON.stringify(body || {}) }),
+  deleteComment: (projectId, uid) => request(`/teams/project/${enc(projectId)}/comments/${enc(uid)}`, { method: 'DELETE' }),
+  review: (projectId, number, body) => request(`/teams/project/${enc(projectId)}/tasks/${enc(number)}/review`, { method: 'POST', body: JSON.stringify(body || {}) }),
+  setLabels: (projectId, number, body) => request(`/teams/project/${enc(projectId)}/tasks/${enc(number)}/labels`, { method: 'PUT', body: JSON.stringify(body || {}) }),
+  setMilestone: (projectId, number, body) => request(`/teams/project/${enc(projectId)}/tasks/${enc(number)}/milestone`, { method: 'PUT', body: JSON.stringify(body || {}) }),
+  drafts: (projectId) => request(`/teams/project/${enc(projectId)}/work/drafts`),
+  acceptDraft: (projectId, uid) => request(`/teams/project/${enc(projectId)}/work/drafts/${enc(uid)}/accept`, { method: 'POST' }),
+  discardDraft: (projectId, uid, body) => request(`/teams/project/${enc(projectId)}/work/drafts/${enc(uid)}/discard`, { method: 'POST', body: JSON.stringify(body || {}) }),
+  labels: (projectId) => request(`/teams/project/${enc(projectId)}/work/labels`),
+  createLabel: (projectId, body) => request(`/teams/project/${enc(projectId)}/work/labels`, { method: 'POST', body: JSON.stringify(body || {}) }),
+  updateLabel: (projectId, uid, body) => request(`/teams/project/${enc(projectId)}/work/labels/${enc(uid)}`, { method: 'PATCH', body: JSON.stringify(body || {}) }),
+  deleteLabel: (projectId, uid) => request(`/teams/project/${enc(projectId)}/work/labels/${enc(uid)}`, { method: 'DELETE' }),
+  milestones: (projectId) => request(`/teams/project/${enc(projectId)}/work/milestones`),
+  createMilestone: (projectId, body) => request(`/teams/project/${enc(projectId)}/work/milestones`, { method: 'POST', body: JSON.stringify(body || {}) }),
+  updateMilestone: (projectId, uid, body) => request(`/teams/project/${enc(projectId)}/work/milestones/${enc(uid)}`, { method: 'PATCH', body: JSON.stringify(body || {}) }),
+  deleteMilestone: (projectId, uid) => request(`/teams/project/${enc(projectId)}/work/milestones/${enc(uid)}`, { method: 'DELETE' }),
+
   board: (projectId, { filter, sort } = {}) => {
     const q = new URLSearchParams();
     if (filter) q.set('filter', filter);

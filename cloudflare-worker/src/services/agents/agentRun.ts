@@ -72,6 +72,7 @@ import { ROUTE, quoteRun, run, type RailContext, type RefusalReason, type RunOpt
 import { railOptionsOn, type RailOptionRow } from '../ai/railMatrix';
 import { proposeRail, railByRunKey, type RailProposal } from '../railProposals';
 import { moduleOf, optionsIn, type ModuleDef, type Rules } from './catalogue';
+import { agentDisclaimerText, disclaimerKeyForRole } from './disclaimers';
 import { personaOf } from './personas';
 import { canManage, effectiveBook, logEvent, monthSpend, scopeOfAgent, type AgentRow, type Scope, type Spend } from './teams';
 import { cleanReads, grantsOf, readTools, type ToolDeps } from './agentTools';
@@ -178,13 +179,15 @@ async function refused(env: Env, a: AgentRow, r: AgentRefusal, module: string, o
 
 /** The system prompt: the role and its rule book, never the scope's records; part 5's tool reads go in the user message, as data. */
 /** The system prompt a run sends; D4121's cost estimate counts the same text. */
-export function systemPrompt(a: Pick<AgentRow, 'persona_key' | 'first_name' | 'last_name'>, rules: Rules, s: Pick<Scope, 'kind' | 'name'>, moduleLabel: string): string {
+export function systemPrompt(a: Pick<AgentRow, 'persona_key' | 'first_name' | 'last_name' | 'role_key'>, rules: Rules, s: Pick<Scope, 'kind' | 'name'>, moduleLabel: string): string {
   // D4117: the agent is its persona; the role only selects the rule book.
+  const disclaimer = agentDisclaimerText(disclaimerKeyForRole(a.role_key));
   const persona = personaOf(a.persona_key);
   const name = persona?.name || [a.first_name, a.last_name].filter(Boolean).join(' ');
   return [
     `You are ${name || 'an agent'}, an AI agent of ${s.kind === 'company' ? 'the company' : 'the project'} "${s.name}", working in ${moduleLabel}.`,
     persona ? `Who you are: ${persona.personality} Your goal: ${persona.goal}` : '',
+    disclaimer ? `Include this exact limit in every output: ${disclaimer}` : '',
     `Mission: ${rules.mission}`,
     `Tone: ${rules.tone}`,
     rules.escalates_when.length ? `Stop and say a person must decide when: ${rules.escalates_when.join('; ')}.` : '',

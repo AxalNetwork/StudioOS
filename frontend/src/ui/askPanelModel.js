@@ -165,7 +165,7 @@ export function proposalCard(row) {
   const eyebrow = str(p.kind_label) || str(p.field_label) || str(p.title) || words(p.kind) || 'Proposal';
   const text = str(p.summary) || str(p.value) || str(p.text) || str(p.label) || dateRange(p) || 'Not recorded';
   const source = str(p.source) || str(p.why) || null;
-  return { uid: String(row?.uid ?? ''), eyebrow, text, source, status: str(row?.status) || 'proposed' };
+  return { uid: String(row?.uid ?? ''), eyebrow, text, source, status: str(row?.status) || 'proposed', ...(typeof row?.disclaimer_key === 'string' ? { disclaimer_key: row.disclaimer_key } : {}) };
 }
 
 /** `free_afternoon` → "Free afternoon"; anything that is not a key gives nothing. */

@@ -163,7 +163,7 @@ export async function digestSession(env: Env, opts: {
     throw err;
   }
 
-  if (session.outputs != null) {
+  if (session.outputs != null && !force && opts.trigger !== 'manual') {
     const { enqueueOutputs } = await import('./callOutputs');
     await enqueueOutputs(env, session.id);
     return { ok: true, status: 'unchanged' };
