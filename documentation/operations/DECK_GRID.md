@@ -216,9 +216,16 @@ new one.
    or by calling the route with the reason the founder will read. The reason
    is 10 to 1,000 characters. A second takedown is 409 `already_taken_down`.
    If the answer says `r2_deleted: false`, delete the object by hand:
-   `npx wrangler r2 object delete <FILES bucket>/deck-images/<project>/<uid>.<ext> --remote`.
-   The file route never serves it either way, because it reads the mark
-   before R2.
+   `npx wrangler r2 object delete <FILES bucket>/deck-images/<project>/<uid>.<ext> --remote`,
+   then record the key, as the sweep would:
+   ```sql
+   INSERT INTO deck_r2_tombstones (key, project_id, bytes, reason)
+   VALUES ('deck-images/<project>/<uid>.<ext>', <project>, NULL, 'discarded');
+   ```
+   The table only takes `discarded` or `unkept_proposal` as a reason; the
+   takedown's own reason is on the row (`taken_down_reason`) and the private
+   issue. The file route never serves the bytes either way, because it reads
+   the mark before R2.
 3. Purge the edge cache for `https://axal.vc/api/decks/images/<uid>/file` and
    the same path on `app.axal.vc` (Cloudflare dashboard › Caching › Purge by
    URL). A kept image was served `public, max-age=31536000, immutable`, so a
