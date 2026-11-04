@@ -10,7 +10,7 @@ import { api } from '../src/lib/api.js';
 import { workAdapter, WORK_OFF } from '../src/pages/work/workAdapter.js';
 import WorkPage, { Board, ItemSheet } from '../src/pages/work/WorkPage.jsx';
 const h = React.createElement;
-const task = { uid: 'item-a', title: 'Example task', column: 'ready', assignee: null };
+const task = { project: { id: 7 }, uid: 'item-a', title: 'Example task', column: 'ready', assignee: null };
 const viewer = { can_manage: true, user_uid: 'person-a' };
 async function mount(element) {
  const restore = installDocument(); const container = document.createElement('div'); document.body.appendChild(container);
@@ -70,11 +70,12 @@ test('Needs-you opens the latest failed run and review filters the board',async(
 test('?item= opens only this board’s item; a missing uid shows the board and a message',async()=>{
  const old={board:workAdapter.board,burnup:workAdapter.burnup,item:workAdapter.item,run:workAdapter.run};const getProject=api.getProject;const fetch=globalThis.fetch;const reads=[], runs=[];
  api.getProject=async()=>({id:7,name:'Example'});globalThis.fetch=async()=>new Response(JSON.stringify({error:'agent_engine_off'}),{status:404,headers:{'content-type':'application/json'}});
- workAdapter.board=async()=>({available:true,data:{items:[task,{uid:'failure',title:'Failed task',column:'ready',run:{uid:'failed-run',status:'failed',ended_at:'2026-11-01T10:00:00Z'}}],viewer}});workAdapter.burnup=async()=>({available:true,data:{series:[]}});workAdapter.item=async uid=>{reads.push(uid);return {available:true,data:task};};
+ workAdapter.board=async()=>({available:true,data:{items:[task,{uid:'failure',title:'Failed task',column:'ready',run:{uid:'failed-run',status:'failed',ended_at:'2026-11-01T10:00:00Z'}}],viewer}});workAdapter.burnup=async()=>({available:true,data:{series:[]}});workAdapter.item=async uid=>{reads.push(uid);if(uid==='not-here')throw Object.assign(new Error('Missing'),{status:404});return {available:true,data:task};};
  workAdapter.run=async uid=>{runs.push(uid);return {available:true,data:{detail:{}}};};
  let m;const page=uid=>h(MemoryRouter,{initialEntries:['/projects/7/work?item='+uid]},h(Routes,null,h(Route,{path:'/projects/:id/work',element:h(WorkPage)})));
  try{m=await mount(page('item-a'));assert.ok(m.by('work-item-sheet'));assert.deepEqual(reads,['item-a']);await m.press('work-needs-failed');assert.ok(m.by('work-run-sheet'));assert.deepEqual(runs,['failed-run']);await m.close();m=null;
- m=await mount(page('not-here'));assert.equal(m.by('work-item-sheet'),undefined);assert.ok(m.by('work-board'));assert.match(m.text(),/That task wasn't found\./);assert.deepEqual(reads,['item-a']);
+ m=await mount(page('not-here'));assert.equal(m.by('work-item-sheet'),undefined);assert.ok(m.by('work-board'));assert.match(m.text(),/That task wasn't found\./);assert.deepEqual(reads,['item-a','not-here']);await m.close();m=null;
+ workAdapter.board=async()=>({available:true,data:{items:[],viewer}});m=await mount(page('item-a'));assert.ok(m.by('work-item-sheet'));assert.equal(m.by('work-item-missing'),undefined);
  }finally{if(m)await m.close();Object.assign(workAdapter,old);api.getProject=getProject;globalThis.fetch=fetch;}
 });
 
@@ -86,14 +87,14 @@ test('a late response from the previous project cannot open its item on the new 
  globalThis.fetch=async()=>new Response(JSON.stringify({error:'agent_engine_off'}),{status:404,headers:{'content-type':'application/json'}});
  workAdapter.board=id=>String(id)==='7'?new Promise(resolve=>{resolveFirst=resolve;}):Promise.resolve({available:true,data:{items:[{...task,uid:'project-eight'}],viewer}});
  workAdapter.burnup=async()=>({available:true,data:{series:[]}});
- workAdapter.item=async uid=>{reads.push(uid);return {available:true,data:task};};
+ workAdapter.item=async uid=>{reads.push(uid);return {available:true,data:{...task,uid}};};
  function Page(){navigate=useNavigate();return h(WorkPage);}
  let m;
  try {
   m=await mount(h(MemoryRouter,{initialEntries:['/projects/7/work?item=foreign']},h(Routes,null,h(Route,{path:'/projects/:id/work',element:h(Page)}))));
   await act(async()=>navigate('/projects/8/work?item=foreign'));
   await act(async()=>resolveFirst({available:true,data:{items:[{...task,uid:'foreign'}],viewer}}));
-  assert.deepEqual(reads,[]);
+  assert.deepEqual(reads,['foreign']);
   assert.equal(m.by('work-item-sheet'),undefined);
   assert.ok(m.by('work-card-project-eight'));
   assert.match(m.text(),/That task wasn't found\./);

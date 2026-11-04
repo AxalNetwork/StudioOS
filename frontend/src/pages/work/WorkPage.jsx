@@ -36,21 +36,45 @@ export default function WorkPage() {
   const [q, setQ] = useSearchParams();
   const selectedTab = WORK_TABS.some((t) => t.key === q.get('view')) ? q.get('view') : 'board';
   const [project, setProject] = useState(null);
-  const loadSequence = useRef(0);
   const [board, setBoard] = useState({ status: 'loading' });
+  const boardRead = useRef(0);
   const [burn, setBurn] = useState({ status: 'loading' });
   const [itemUid, setItemUid] = useState(null);
   const [runUid, setRunUid] = useState(null);
   const requestedItem = q.get('item');
-  const missingItem = board.status === 'ready' && board.projectId === id && requestedItem && !board.items.some(it => it.uid === requestedItem);
+  const [missingItem, setMissingItem] = useState(false);
   const tab = missingItem ? 'board' : selectedTab;
   const openItem = uid => { setItemUid(uid); setQ(previous => { const next = new URLSearchParams(previous); next.set('item', uid); return next; }); };
   useEffect(() => { setItemUid(null); setRunUid(null); }, [id]);
   useEffect(() => {
+    let live = true;
+    setMissingItem(false);
     if (!requestedItem) setItemUid(null);
-    else if (board.status === 'ready' && board.projectId === id) setItemUid(board.items.some(it => it.uid === requestedItem) ? requestedItem : null);
+    else if (board.status === 'ready' && board.projectId === id) {
+      if (board.items.some(it => it.uid === requestedItem)) setItemUid(requestedItem);
+      else {
+        setItemUid(null);
+        // A board filter can hide a real item. Verify its project before opening it.
+        workAdapter.item(requestedItem).then(r => {
+          if (!live) return;
+          if (r.available && r.data?.uid === requestedItem && String(r.data?.project?.id) === String(id)) setItemUid(requestedItem);
+          else if (r.available) setMissingItem(true);
+          else setNotice(r.reason);
+        }, e => {
+          if (!live) return;
+          if (e?.status === 404) setMissingItem(true);
+          else setNotice('That task could not be read. Try again.');
+        });
+      }
+    }
+    return () => { live = false; };
   }, [requestedItem, board, id]);
   const closeItem = () => { setItemUid(null); setQ(previous => { const next = new URLSearchParams(previous); next.delete('item'); return next; }); };
+  const [filterDraft, setFilterDraft] = useState('');
+  const [filter, setFilter] = useState('');
+  const [burnQuery, setBurnQuery] = useState({ range: '2w' });
+  const [split, setSplit] = useState('Both');
+  const [burnReload, setBurnReload] = useState(0);
 
   useEffect(() => {
     let live = true;
@@ -59,23 +83,28 @@ export default function WorkPage() {
   }, [id]);
 
   const load = useCallback(async () => {
-    const sequence = ++loadSequence.current;
-    const current = () => sequence === loadSequence.current;
+    const read = ++boardRead.current;
     setBoard({ status: 'loading' });
     try {
-      const r = await workAdapter.board(id);
-      if (current()) setBoard(r.available ? { status: 'ready', projectId: id, items: r.data?.items || [], viewer: r.data?.viewer || null } : { status: 'off', reason: r.reason });
+      const r = await workAdapter.board(id, { filter });
+      if (read === boardRead.current) setBoard(r.available ? { status: 'ready', projectId: id, items: r.data?.items || [], viewer: r.data?.viewer || null } : { status: 'off', reason: r.reason });
     } catch {
-      if (current()) setBoard({ status: 'error' });
+      if (read === boardRead.current) setBoard({ status: 'error' });
     }
-    try {
-      const b = await workAdapter.burnup(id);
-      if (current()) setBurn(b.available ? { status: 'ready', series: b.data?.series || [] } : { status: 'off', reason: b.reason });
-    } catch {
-      if (current()) setBurn({ status: 'error' });
-    }
-  }, [id]);
-  useEffect(() => { load(); return () => { loadSequence.current += 1; }; }, [load]);
+  }, [id, filter]);
+  useEffect(() => { load(); return () => { boardRead.current += 1; }; }, [load]);
+
+  // Each selection owns its read: a late response cannot replace a newer chart.
+  useEffect(() => {
+    let live = true;
+    setBurn({ status: 'loading' });
+    workAdapter.burnup(id, { ...burnQuery, filter }).then((r) => {
+      if (live) setBurn(r.available ? { status: 'ready', series: r.data?.series || [] } : { status: 'off', reason: r.reason });
+    }, (e) => {
+      if (live) setBurn({ status: 'error', message: e?.message || 'Try again.' });
+    });
+    return () => { live = false; };
+  }, [id, filter, burnQuery, burnReload]);
 
   const [notice, setNotice] = useState(null);
   const [adding, setAdding] = useState(false);
@@ -88,6 +117,7 @@ export default function WorkPage() {
       setNotice(e?.message || 'That move did not go through. Nothing changed.');
     }
     load();
+    setBurnReload((v) => v + 1);
   }, [load]);
   const create = useCallback(async (title) => {
     setNotice(null);
@@ -99,6 +129,7 @@ export default function WorkPage() {
       setNotice(e?.message || 'The item was not created.');
     }
     load();
+    setBurnReload((v) => v + 1);
   }, [id, load]);
 
   const name = project?.name || 'this project';
@@ -132,7 +163,11 @@ export default function WorkPage() {
             </button>
           ))}
         </nav>
-        <input type="search" className="wk-filter" placeholder="Filter by keyword or field" aria-label="Filter work" disabled={off} />
+        <form className="wk-bar" onSubmit={(e) => { e.preventDefault(); setFilter(filterDraft.trim()); }}>
+          <input type="search" className="wk-filter" placeholder="Filter by keyword or field" aria-label="Filter work" disabled={off}
+            maxLength={500} value={filterDraft} onChange={(e) => setFilterDraft(e.target.value)} data-testid="work-filter" />
+          <button type="submit" className={BTN_SECONDARY} disabled={off}>Apply filter</button>
+        </form>
       </div>
 
       {board.status === 'loading' ? <p className={MUTED} role="status">Reading…</p> : null}
@@ -152,7 +187,9 @@ export default function WorkPage() {
       {notice ? <p className="wk-notice" role="status" data-testid="work-notice">{notice}</p> : null}
       {board.status === 'ready' && tab === 'board' ? <Board items={board.items} viewer={board.viewer} onOpen={openItem} onMove={move} onRun={setRunUid} /> : null}
       {board.status === 'ready' && tab === 'backlog' ? <Backlog items={board.items} onOpen={openItem} projectId={id} /> : null}
-      {tab === 'burnup' && burn.status === 'ready' ? <Burnup series={burn.series} /> : null}
+      {tab === 'burnup' ? <Burnup series={burn.series} status={burn.status} reason={burn.reason} message={burn.message}
+        range={burnQuery.from ? 'custom' : burnQuery.range} appliedFrom={burnQuery.from} appliedTo={burnQuery.to} onRange={setBurnQuery} split={split} onSplit={setSplit}
+        onRetry={() => setBurnReload((v) => v + 1)} /> : null}
       {/* D1614 W8 (#3994): My items is My tasks narrowed to this project. */}
       {tab === 'mine' ? <MyTasks licence="founder" project={id} title="My items" testId="work-mine" /> : null}
       {tab === 'workload' ? <WorkloadView projectId={id} onOpenItem={openItem} onNotice={setNotice} /> : null}
@@ -285,13 +322,26 @@ export function Backlog({ items, onOpen, projectId = null }) {
 }
 
 /** WK3: scope as a solid line, completed dashed, the gap shaded as open. */
-export function Burnup({ series }) {
-  const g = burnup(series);
+export function Burnup({ series, status = 'ready', reason, message, range = '2w', appliedFrom = '', appliedTo = '', onRange, split = 'Both', onSplit, onRetry }) {
+  const [custom, setCustom] = useState(range === 'custom');
+  const [from, setFrom] = useState(appliedFrom);
+  const [to, setTo] = useState(appliedTo);
+  const g = burnup(series, { split });
+  const ranges = ['2w', '1m', '3m', 'max', 'custom'];
   return (
     <section className="wk-burn" data-testid="work-burnup">
-      <div className="wk-seg" role="group" aria-label="Range">{BURN_RANGES.map((r, i) => <button key={r} type="button" aria-pressed={i === 0}>{r}</button>)}</div>
-      <div className="wk-seg" role="group" aria-label="Who">{BURN_SPLITS.map((r) => <button key={r} type="button" aria-pressed={r === 'Both'}>{r}</button>)}</div>
-      {g.empty ? <p className="wk-nr" data-testid="work-burnup-empty">{g.line}</p> : (
+      <div className="wk-seg" role="group" aria-label="Range">{BURN_RANGES.map((r, i) => <button key={r} type="button" aria-pressed={(custom ? 'custom' : range) === ranges[i]}
+        onClick={() => { setCustom(ranges[i] === 'custom'); if (ranges[i] !== 'custom') onRange?.({ range: ranges[i] }); }} data-testid={`burn-range-${ranges[i]}`}>{r}</button>)}</div>
+      {custom ? <form className="wk-bar" onSubmit={(e) => { e.preventDefault(); if (from && to && from <= to) onRange?.({ from, to }); }} data-testid="burn-custom">
+        <label>From <input type="date" className="wk-filter" required value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} data-testid="burn-from" /></label>
+        <label>To <input type="date" className="wk-filter" required value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} data-testid="burn-to" /></label>
+        <button type="submit" className={BTN_SECONDARY} disabled={!from || !to || from > to}>Apply dates</button>
+      </form> : null}
+      <div className="wk-seg" role="group" aria-label="Who">{BURN_SPLITS.map((r) => <button key={r} type="button" aria-pressed={r === split} onClick={() => onSplit?.(r)} data-testid={`burn-split-${r}`}>{r}</button>)}</div>
+      {status === 'loading' ? <p role="status">Reading burn-up…</p> : null}
+      {status === 'error' ? <HonestBlock role="alert" testId="burn-unreadable"><b>Burn-up could not be read.</b> {message}<button type="button" className={BTN_SECONDARY} onClick={onRetry}>Try again</button></HonestBlock> : null}
+      {status === 'off' ? <HonestBlock>{reason}</HonestBlock> : null}
+      {status !== 'ready' ? null : g.empty ? <p className="wk-nr" data-testid="work-burnup-empty">{g.line}</p> : (
         <>
           <div className="wk-tiles">
             <Tile k="Scope" v={`${g.tiles.scope} items`} /><Tile k="Completed" v={g.tiles.completed} /><Tile k="Open" v={g.tiles.open} />
