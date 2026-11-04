@@ -1,4 +1,3 @@
-import { holdsLicence } from '../services/accountLicences';
 /**
  * Spin-Out Lab — 4-week guided sprint, gated on evidence.
  *
@@ -35,6 +34,7 @@ import { holdsLicence } from '../services/accountLicences';
  * `exitLab`) are exported so the smoke test can drive the full flow
  * against a mocked sql() helper without standing up Hono + JWT.
  */
+import { holdsLicence } from '../services/accountLicences';
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { getSQL } from '../db';

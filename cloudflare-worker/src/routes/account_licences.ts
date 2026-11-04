@@ -1,7 +1,7 @@
 /** D4472 (#4472): own held licences and admin-only additional grant/revoke routes. */
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import type { Env } from '../types';
-import { requireAuth, requireAdmin } from '../auth';
+import { requireAuth, requireAdmin, requireSuperAdmin } from '../auth';
 import { LICENCE_ORDER, isLicence, grantLicence, revokeLicence, LicenceRefusal } from '../services/accountLicences';
 import { PROFILE_WORDS } from './admin_accounts';
 import { refuse } from '../util/refusal';
@@ -24,6 +24,15 @@ function accountId(raw: string): number {
   if (!/^[1-9][0-9]*$/.test(raw) || !Number.isSafeInteger(Number(raw))) throw new LicenceRefusal('not_found', 404);
   return Number(raw);
 }
+/** Keep the existing boundary around another administrator's account data. */
+async function administeredAccount(c: Context<{ Bindings: Env }>) {
+  const admin = await requireAdmin(c);
+  const userId = accountId(c.req.param('id') || '');
+  const target = await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ?').bind(userId).first<{ id: number; role: string }>();
+  if (!target) throw new LicenceRefusal('not_found', 404);
+  if (target.role === 'admin' && target.id !== admin.id) await requireSuperAdmin(c);
+  return { admin, userId };
+}
 async function view(db: D1Database, userId: number) {
   const user = await db.prepare('SELECT id, role FROM users WHERE id = ?').bind(userId).first<{ id: number; role: string }>();
   if (!user) throw new LicenceRefusal('not_found', 404);
@@ -45,19 +54,19 @@ r.get('/account/licences', async c => {
   return c.json(await view(c.env.DB, user.id));
 });
 r.get('/admin/accounts/:id/licences', async c => {
-  await requireAdmin(c);
-  return c.json(await view(c.env.DB, accountId(c.req.param('id'))));
+  const { userId } = await administeredAccount(c);
+  return c.json(await view(c.env.DB, userId));
 });
 r.post('/admin/accounts/:id/licences', async c => {
-  const admin = await requireAdmin(c);
+  const { admin, userId } = await administeredAccount(c);
   const body = await c.req.json().catch(() => null);
   if (!isLicence(body?.licence)) throw new LicenceRefusal('invalid_licence', 400);
-  const code = await grantLicence(c.env.DB, { userId: accountId(c.req.param('id')), licence: body.licence, actorId: admin.id, source: 'admin' });
+  const code = await grantLicence(c.env.DB, { userId, licence: body.licence, actorId: admin.id, source: 'admin' });
   return c.json({ ok: true, code });
 });
 r.delete('/admin/accounts/:id/licences/:licence', async c => {
-  const admin = await requireAdmin(c);
-  const code = await revokeLicence(c.env.DB, { userId: accountId(c.req.param('id')), licence: c.req.param('licence'), actorId: admin.id, source: 'admin' });
+  const { admin, userId } = await administeredAccount(c);
+  const code = await revokeLicence(c.env.DB, { userId, licence: c.req.param('licence'), actorId: admin.id, source: 'admin' });
   return c.json({ ok: true, code });
 });
 export const mount = { path: '/api', router: r };

@@ -24,6 +24,7 @@ import { canReadOperatorReview } from '../src/services/section83bOperatorReview.
 import { modulePageAllowed } from '../src/routes/ai_modules.ts';
 import { PipelineRoom } from '../src/durable-objects/pipeline-room.ts';
 import diligence from '../src/routes/dd.ts';
+import projects from '../src/routes/projects.ts';
 import advisors from '../src/routes/advisors.ts';
 import performance from '../src/routes/fund_performance.ts';
 
@@ -46,13 +47,14 @@ function fixture() {
       VALUES ('synthetic-territory','TEST-4472','Synthetic entity','Synthetic brand','active');`);
   // Apply to existing primary-role accounts: any forbidden backfill is observable.
   db.exec(ddl);
-  for (const id of [9000,9001,9002,9003]) db.prepare(`INSERT INTO user_sessions(user_id,jti,factor,assurance_level,last_step_up_at)
+  for (const id of [9000,9001,9002,9003,9004,9005]) db.prepare(`INSERT INTO user_sessions(user_id,jti,factor,assurance_level,last_step_up_at)
     VALUES (?,?,'totp','totp',datetime('now'))`).run(id,'synthetic-'+id);
   const DB = d1Over(db);
   const env: any = { DB, JWT_SECRET: SECRET, ENVIRONMENT: 'development' };
   let grantReads = 0;
   env.DB = { ...DB, prepare(sql: string) { if (sql.startsWith('SELECT licence FROM account_licences')) grantReads++; return DB.prepare(sql); } };
   const app = new Hono<any>();
+  app.route('/api/projects',projects);
   app.route('/api/dd',diligence).route('/api/advisors',advisors).route('/api/fund-performance',performance);
   app.route('/api', routes).route('/api/auth', authRoutes).route('/api/admin/licences', appointments).route('/api/admin', adminRoutes);
   app.get('/role/:licence', async c => c.json({ id: (await requireRole(c,c.req.param('licence') as any)).id }));
@@ -284,5 +286,91 @@ test('retained Investor licences never take away scalar Admin permissions', asyn
     assert.equal(holdsOnlyLicence(admin,'investor'),false);
     assert.equal(await canReadOperatorReview(f.env,admin,{id:1,name:'Synthetic project',founder_id:41}),true);
     assert.equal(canViewLpData(admin),true); assert.equal(canViewPartnerDemand(admin),true);
+  } finally { f.db.close(); }
+});
+
+test('adding Investor preserves accepted co-founder edits, roster reads and Spin-Out override access', async () => {
+  const f=fixture(); try {
+    f.db.exec("INSERT INTO founders(id,name,email) VALUES (447901,'Synthetic owner','owner@example.test'); INSERT INTO users(id,email,name,role,founder_id) VALUES (9010,'owner@example.test','Synthetic owner','founder',447901); INSERT INTO projects(id,name,founder_id) VALUES (447301,'Synthetic shared venture',447901); INSERT INTO project_members(project_id,user_id,role,status) VALUES (447301,9001,'cofounder','accepted'),(447301,9005,'cofounder','accepted'); UPDATE users SET subscription_tier='studio',subscription_status='active',kyc_status='approved' WHERE id=9001;");
+    const paths=['/api/projects/447301/members','/api/projects/447301/spinout-deck/overrides','/api/projects/447301/market-assumptions'];
+    assert.equal((await f.call('/api/projects/447301',9001,'PUT',{description:'Before investor licence'})).status,200);
+    for (const path of paths) assert.equal((await f.call(path)).status,200,path);
+    await grantLicence(f.DB,change('investor'));
+    assert.equal((await f.call('/api/projects/447301',9001,'PUT',{description:'After investor licence'})).status,200);
+    for (const path of paths) assert.equal((await f.call(path)).status,200,path);
+    assert.equal(f.db.prepare('SELECT description FROM projects WHERE id=447301').get()!.description,'After investor licence');
+    assert.equal((await f.call('/api/projects/447301',9005,'PUT',{description:'Not allowed'})).status,403);
+    assert.equal((await f.call(paths[0],9005)).status,403);
+    assert.equal((await f.call('/api/projects/447301',9002,'PUT',{description:'No membership'})).status,403);
+  } finally { f.db.close(); }
+});
+
+test('a residual founder ID after primary correction grants no ownership without an explicit Founder licence', async () => {
+  const f=fixture(); try {
+    await ensureRoleProfile(f.env,f.db.prepare('SELECT * FROM users WHERE id=9001').get() as any);
+    f.db.exec("UPDATE users SET subscription_tier='studio',subscription_status='active' WHERE id=9001");
+    const founderId=f.db.prepare('SELECT founder_id FROM users WHERE id=9001').get()!.founder_id;
+    f.db.prepare('INSERT INTO projects(id,name,founder_id) VALUES (447302,?,?)').run('Synthetic own venture',founderId);
+    assert.equal((await f.call('/api/projects/447302',9001,'PUT',{description:'Primary Founder'})).status,200);
+    assert.equal((await f.call('/api/projects/447302/market-assumptions')).status,200);
+    assert.equal((await f.call('/api/projects/447302/spinout-deck/overrides')).status,200);
+    assert.equal((await f.call('/api/admin/users/9001/role',9000,'PATCH',{role:'partner'})).status,200);
+    assert.equal((await f.call('/api/projects/447302',9001,'PUT',{description:'Old ID alone'})).status,403);
+    assert.equal((await f.call('/api/projects/447302/market-assumptions')).status,403);
+    assert.equal((await f.call('/api/projects/447302/spinout-deck/overrides')).status,403);
+    await grantLicence(f.DB,change('founder'));
+    assert.equal((await f.call('/api/projects/447302',9001,'PUT',{description:'Explicit Founder grant'})).status,200);
+    assert.equal((await f.call('/api/projects/447302/market-assumptions')).status,200);
+    assert.equal((await f.call('/api/projects/447302/spinout-deck/overrides')).status,200);
+  } finally { f.db.close(); }
+});
+
+test('ordinary Admins manage members and their own licence reads; another Admin remains Super Admin only', async () => {
+  const f=fixture(); try {
+    f.db.exec("INSERT INTO users(id,email,name,role) VALUES (9006,'other-admin@example.test','Synthetic administrator','admin'); INSERT INTO user_sessions(user_id,jti,factor,assurance_level,last_step_up_at) VALUES (9006,'synthetic-9006','totp','totp',datetime('now'));");
+    const other='/api/admin/accounts/9000/licences';
+    for (const [method,path,body] of [['GET',other,undefined],['POST',other,{licence:'advisor'}],['DELETE',other+'/founder',undefined]] as const) {
+      const r=await f.call(path,9006,method,body); assert.equal(r.status,403); assert.equal(r.body.error,'forbidden');
+    }
+    assert.equal(count(f.db,'account_licence_events'),0);
+    assert.equal((await f.call('/api/admin/accounts/9006/licences',9006)).status,200);
+    assert.equal((await f.call('/api/admin/accounts/9001/licences',9006,'POST',{licence:'investor'})).status,200);
+    assert.equal(f.db.prepare('SELECT actor_id FROM account_licence_events').get()!.actor_id,9006);
+    assert.equal((await f.call('/api/admin/accounts/9006/licences',9000,'POST',{licence:'founder'})).status,200);
+    assert.equal((await f.call('/api/admin/accounts/9006/licences',9000)).status,200);
+    const own=await f.call('/api/admin/accounts/9006/licences',9006); assert.deepEqual(own.body.held.map((row:any)=>row.licence),['founder']);
+    assert.equal((await f.call('/api/admin/accounts/9006/licences/founder',9000,'DELETE')).status,200);
+  } finally { f.db.close(); }
+});
+
+test('a primary correction racing an appointment cannot commit a territory binding or partial audit', async () => {
+  const f=fixture(); try {
+    const prepare=f.DB.prepare.bind(f.DB), batch=f.DB.batch.bind(f.DB); let corrected=false;
+    f.DB.prepare=(sql:string)=>Object.assign(prepare(sql),{syntheticSql:sql});
+    f.DB.batch=async (statements:any[])=>{
+      if (!corrected && statements.some(statement=>/INSERT\s+INTO\s+account_licences\b/i.test(statement.syntheticSql || ''))) {
+        corrected=true; f.db.exec("UPDATE users SET role='investor' WHERE id=9001");
+      }
+      return batch(statements);
+    };
+    const r=await f.call('/api/admin/licences/synthetic-territory/admins',9000,'POST',{email:'founder@example.test',reason:'Synthetic concurrent appointment'});
+    assert.equal(corrected,true); assert.notEqual(r.status,200);
+    assert.equal(f.db.prepare('SELECT role FROM users WHERE id=9001').get()!.role,'investor');
+    for (const table of ['account_licences','account_licence_events','licence_admins','licence_events','activity_logs']) assert.equal(count(f.db,table),0,table);
+  } finally { f.db.close(); }
+});
+
+test('appointment reuses an active grant matching the corrected primary without duplicating its event', async () => {
+  const f=fixture(); try {
+    f.db.exec("UPDATE users SET role='partner' WHERE id=9001");
+    await grantLicence(f.DB,change('founder'));
+    f.db.exec("UPDATE users SET role='founder' WHERE id=9001");
+    const r=await f.call('/api/admin/licences/synthetic-territory/admins',9000,'POST',{email:'founder@example.test',reason:'Synthetic existing grant appointment'});
+    assert.equal(r.status,200,JSON.stringify(r.body));
+    assert.equal(f.db.prepare('SELECT role FROM users WHERE id=9001').get()!.role,'admin');
+    assert.equal(count(f.db,'account_licences'),1); assert.equal(count(f.db,'account_licence_events'),1);
+    assert.equal(f.db.prepare('SELECT source FROM account_licence_events').get()!.source,'admin');
+    assert.equal(count(f.db,'licence_admins'),1); assert.equal(count(f.db,'licence_events'),1); assert.equal(count(f.db,'activity_logs'),2);
+    assert.deepEqual(await heldLicences(f.DB,{id:9001,role:'admin'}),['founder']);
   } finally { f.db.close(); }
 });

@@ -797,19 +797,20 @@ projects.put('/:id', async (c) => {
 
   // RBAC: admins can edit any project; founders can only edit their own; a
   // partner edits only as an accepted owner or co-founder member (D889).
-  // Investors are NOT editors (audit M2) — their project access is the read-only,
+  // Investor-only accounts are NOT editors (audit M2) — their project access is the read-only,
   // NDA-masked view in GET '/:id'. Letting an investor through here is a
   // write-IDOR (they could mutate any founder's project, incl. the
   // admin/partner-only stage/status/playbook_week fields below).
   const project = rows[0];
   const isPrivileged = user.role === 'admin';
-  const isOwner = !!user.founder_id && project.founder_id === user.founder_id;
+  const isOwner = (holdsLicence(user, 'founder') || Number(user.spinout_lab_active ?? 0) === 1)
+    && !!user.founder_id && project.founder_id === user.founder_id;
   // Task #1 — accepted co-founders may also edit project DATA. Advisors are
   // read-only (membership role 'advisor' is NOT granted write), and investors
   // are never editors. privilegedFields (stage/status/playbook_week) stay
   // admin-only via the `isPrivileged` gate further below (D889: not a partner's).
   let isCofounderEditor = false;
-  if (!isPrivileged && !isOwner && !holdsLicence(user, 'investor')) {
+  if (!isPrivileged && !isOwner && !holdsOnlyLicence(user, 'investor')) {
     const memberRole = await getProjectMembershipRole(c.env, id, user.id);
     isCofounderEditor = memberRole === 'cofounder' || memberRole === 'owner';
   }
@@ -1155,12 +1156,13 @@ async function resolveSpinoutDeckAccess(
   }
   // D889 (#2438): a partner generates a deck only as an accepted owner or co-founder member.
   const isStaff = user.role === 'admin';
-  const isOwner = !!user.founder_id && project.founder_id === user.founder_id;
+  const isOwner = (holdsLicence(user, 'founder') || Number(user.spinout_lab_active ?? 0) === 1)
+    && !!user.founder_id && project.founder_id === user.founder_id;
   // Task #1 — accepted co-founders may also generate the deck (advisors are
   // read-only on data; investors/advisors stay excluded). The deck is ALWAYS
   // sourced from the OWNER's Lab data, never the co-founder's.
   let isCofounderMember = false;
-  if (!isStaff && !isOwner && !holdsLicence(user, 'investor')) {
+  if (!isStaff && !isOwner && !holdsOnlyLicence(user, 'investor')) {
     const memberRole = await getProjectMembershipRole(c.env, projectId, user.id);
     isCofounderMember = memberRole === 'cofounder' || memberRole === 'owner';
   }
@@ -1302,7 +1304,8 @@ async function canEditProjectData(
   // D889 (#2438): only an admin bypasses membership; a partner edits as an accepted owner or co-founder.
   if (user.role === 'admin') return true;
   if (holdsOnlyLicence(user, 'investor')) return false;
-  if (user.founder_id && project.founder_id === user.founder_id) return true;
+  if ((holdsLicence(user, 'founder') || Number(user.spinout_lab_active ?? 0) === 1)
+    && user.founder_id && project.founder_id === user.founder_id) return true;
   const memberRole = await getProjectMembershipRole(env, project.id, user.id);
   return memberRole === 'cofounder' || memberRole === 'owner';
 }
@@ -1459,7 +1462,7 @@ projects.get('/:id/members', async (c) => {
 
   const manager = isProjectManager(user, project);
   let canView = manager;
-  if (!canView && !holdsLicence(user, 'investor')) {
+  if (!canView && !holdsOnlyLicence(user, 'investor')) {
     canView = await canAccessProject(c.env, user, project, { write: false });
   }
   if (!canView) return c.json({ detail: 'Forbidden: you do not have access to this project' }, 403);

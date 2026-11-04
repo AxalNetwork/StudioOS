@@ -63,14 +63,19 @@ export async function grantLicence(db: D1Database, change: Change): Promise<'gra
   // Both the active-row guard and the event are decided inside one transaction.
   // changes() refers to the immediately preceding insert/upsert, so retries
   // (including concurrent ones) never append a second grant event.
+  // A stale retained primary violates the existing NOT NULL constraint inside
+  // this transaction, rolling back the appointment's binding and audit too.
   const statements = [
     db.prepare(`INSERT INTO account_licences (user_id, licence, source, granted_by)
-      SELECT ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM users WHERE id = ?
-        AND ((? = 1 AND lower(role) = ?) OR (? = 0 AND lower(role) <> ?)))
+      SELECT ?, CASE WHEN ? = 1 AND NOT EXISTS
+        (SELECT 1 FROM users WHERE id = ? AND lower(role) = ?)
+        THEN NULL ELSE ? END, ?, ?
+      WHERE ? = 1 OR EXISTS (SELECT 1 FROM users WHERE id = ? AND lower(role) <> ?)
       ON CONFLICT(user_id, licence) DO UPDATE SET source = excluded.source,
         granted_by = excluded.granted_by, granted_at = datetime('now'), revoked_at = NULL, revoked_by = NULL
       WHERE account_licences.revoked_at IS NOT NULL`)
-      .bind(userId, licence, source, actorId, userId, change.retainPrimary ? 1 : 0, licence, change.retainPrimary ? 1 : 0, licence),
+      .bind(userId, change.retainPrimary ? 1 : 0, userId, licence, licence, source, actorId,
+        change.retainPrimary ? 1 : 0, userId, licence),
     db.prepare(`INSERT INTO account_licence_events (user_id, licence, action, actor_id, source)
       SELECT ?, ?, 'grant', ?, ? WHERE changes() = 1`).bind(userId, licence, actorId, source),
   ];
