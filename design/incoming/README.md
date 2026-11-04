@@ -113,6 +113,14 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-11-04 — Learning on Stream, the studio's ready row (#3726)
+
+Both artifacts were decoded by `scripts/read-canvas.mjs`:
+- **The page** (artifact `H2JdjkLfSYqaY6QMDh6uFo`) replaces `Learning Stream Page.dc.html`. Its one change is the studio's upload field: a ready video's file name truncates and its "Ready" pill sits under it.
+- **The boards** (artifact `EaVXvZy3xJ5v5wqdGf6bpw`) are unchanged.
+
+The same day the owner lifted Learning's coming-soon gate for every profile (D3726, update of 2026-11-04).
+
 ## Landed 2026-11-04 — The agent engine's screens, TM10–TM19 and TM5m (#3742 E8)
 
 The owner's two artifacts were decoded by `scripts/read-canvas.mjs`:
