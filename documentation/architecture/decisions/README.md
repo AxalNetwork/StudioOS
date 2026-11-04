@@ -51,3 +51,4 @@ and citations by number keep working.
 | `D4447.md` | #4447, Part A of #3722: Grow campaign plans and their routes; carries the spec's D1481. |
 | `D4421.md` | Answered Team questions and the shared General counsel disclaimer. |
 | `D4422.md` | #4422: inherited Team model and MCP read-tool allow-lists, enforced on the Worker and edited in TM8a. |
+| `D4459.md` | No-call run charges and live Work-item mutation responses. |

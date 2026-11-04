@@ -5,10 +5,10 @@ import Lightbox from '../../ui/Lightbox.jsx';
 import Sheet from '../../ui/Sheet.jsx';
 import { useSyndicationRead } from '../hq/eventSyndication/useSyndicationRead';
 import SyndicationState, { BUTTON, INPUT, Refusal, refusalText } from '../hq/eventSyndication/SyndicationState';
-import { CHANNELS, ROW_STATUS, channelOf, charCount, choicesOf, copyOf, copyInvalid, eventReadValid, registrationsText, safeExternal, syncLine } from '../hq/eventSyndication/syndicationModel';
+import { CHANNELS, ROW_STATUS, channelOf, charCount, choiceEditable, choicesOf, copyOf, copyInvalid, eventReadValid, registrationsText, safeExternal, syncLine, ticketLinkError } from '../hq/eventSyndication/syndicationModel';
 
-export function useEventChannels(eventId, api = eventSyndicationApi, refresh = null) {
-  const load = useCallback(() => api.forEvent(eventId), [api, eventId, refresh]);
+export function useEventChannels(eventId, api = eventSyndicationApi, refresh = null, enabled = true) {
+  const load = useCallback(() => enabled ? api.forEvent(eventId) : Promise.resolve({ eligible: false, approved: false, rows: [] }), [api, eventId, refresh, enabled]);
   return useSyndicationRead(load, eventReadValid);
 }
 
@@ -17,7 +17,7 @@ export function ChannelChoices({ rows, onChange, disabled = false }) {
   return <div className="space-y-2" data-testid="syndication-choices">
     {!rows.length && <p className="text-sm text-axal-muted dark:text-gray-400">No channel accounts are connected. HQ must connect an account before a channel can be selected.</p>}
     {rows.map((r) => <label key={r.account_uid} className="flex min-h-11 items-center gap-2 text-sm text-axal-ink dark:text-gray-100">
-      <input type="checkbox" checked={r.on} disabled={disabled || !r.adapter_ready || r.status === 'posted'} data-testid={`syndication-choice-${r.account_uid}`}
+      <input type="checkbox" checked={r.on} disabled={disabled || !choiceEditable(r)} data-testid={`syndication-choice-${r.account_uid}`}
         onChange={(e) => onChange(rows.map((v) => v.account_uid === r.account_uid ? { ...v, on: e.target.checked } : v))} />
       {channelOf(r.channel)?.name || r.channel} · {r.display_name}
       {!r.adapter_ready && <span className="text-axal-muted dark:text-gray-400">Not available yet</span>}
@@ -27,18 +27,22 @@ export function ChannelChoices({ rows, onChange, disabled = false }) {
 
 function PanelBody({ eventId, read, api, editable }) {
   const [rows, setRows] = useState(read.data.rows);
+  const [dirty, setDirty] = useState(new Set());
+  const [copyEdited, setCopyEdited] = useState(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [preview, setPreview] = useState(null);
   const [withdraw, setWithdraw] = useState(null);
-  const invalid = rows.some(copyInvalid);
+  const pending = choicesOf(rows, dirty, copyEdited);
+  const invalid = rows.some((r) => copyEdited.has(r.account_uid) && choiceEditable(r) && copyInvalid(r));
   const save = async () => {
     setBusy(true); setError(null); setNotice(null);
     try {
-      const reply = await api.choose(eventId, choicesOf(rows));
+      const reply = await api.choose(eventId, pending);
       if (!eventReadValid(reply)) throw new Error('Saved, but the channel response is unreadable. Refresh before making more changes.');
       setRows(reply.rows);
+      setDirty(new Set()); setCopyEdited(new Set());
       setNotice(reply.approved ? 'Channels saved. Selected additions are queued to post.' : 'Channels saved. They post when an admin approves this event.');
     } catch (e) { setError(refusalText(e)); } finally { setBusy(false); }
   };
@@ -55,19 +59,29 @@ function PanelBody({ eventId, read, api, editable }) {
       setPreview(v);
     } catch (e) { setError(refusalText(e)); } finally { setBusy(false); }
   };
-  const change = (r, key, value) => setRows(rows.map((v) => v.account_uid === r.account_uid ? { ...v, overrides: { ...v.overrides, [key]: value } } : v));
+  const change = (r, key, value) => {
+    setDirty((prev) => new Set([...prev, r.account_uid]));
+    setCopyEdited((prev) => new Set([...prev, r.account_uid]));
+    setRows(rows.map((v) => v.account_uid === r.account_uid ? { ...v, overrides: { ...v.overrides, [key]: value } } : v));
+  };
+  const choose = (updated) => {
+    setDirty((prev) => new Set([...prev, ...updated.filter((r) => rows.find((v) => v.account_uid === r.account_uid)?.on !== r.on).map((r) => r.account_uid)]));
+    setRows(rows.map((r) => updated.find((v) => v.account_uid === r.account_uid) || r));
+  };
   return <div className="space-y-3">
     {read.data.reason && <p className="text-sm text-axal-muted dark:text-gray-400">{read.data.reason}</p>}
     {editable && <>
-      <ChannelChoices rows={rows.filter((r) => CHANNELS.some((c) => c.key === r.channel))} disabled={busy} onChange={(updated) => setRows(rows.map((r) => updated.find((v) => v.account_uid === r.account_uid) || r))} />
-      {rows.filter((r) => r.on && r.adapter_ready && r.status !== 'posted' && CHANNELS.some((c) => c.key === r.channel)).map((r) => <fieldset key={r.account_uid} disabled={busy} className="space-y-2 rounded-lg border border-axal-hairline p-3 dark:border-gray-700">
+      <ChannelChoices rows={rows.filter((r) => CHANNELS.some((c) => c.key === r.channel))} disabled={busy} onChange={choose} />
+      {rows.filter((r) => r.on && choiceEditable(r)).map((r) => <fieldset key={r.account_uid} disabled={busy} className="space-y-2 rounded-lg border border-axal-hairline p-3 dark:border-gray-700">
         <legend className="text-sm font-semibold text-axal-ink dark:text-gray-100">{channelOf(r.channel)?.name} copy</legend>
         {['title', 'description', 'ticket_url'].map((key) => {
           const limit = key === 'title' ? r.title_limit : key === 'description' ? r.text_limit : 2000;
           const Field = key === 'description' ? 'textarea' : 'input';
-          const count = charCount(r.overrides[key], limit);
+          const count = charCount(key === 'ticket_url' ? String(r.overrides[key] || '').trim() : r.overrides[key], limit);
+          const linkError = key === 'ticket_url' ? ticketLinkError(r.overrides[key]) : null;
           return <label key={key} className="flex flex-col gap-1 text-sm text-axal-ink dark:text-gray-100">{key === 'ticket_url' ? 'Ticket link (https)' : key === 'title' ? 'Title' : 'Description'}
-            <Field className={`${INPUT} min-w-0 w-full`} value={r.overrides[key] || ''} onChange={(e) => change(r, key, e.target.value)} aria-invalid={count.over || undefined} data-testid={`syndication-copy-${r.account_uid}-${key}`} />
+            <Field className={`${INPUT} min-w-0 w-full`} value={r.overrides[key] || ''} onChange={(e) => change(r, key, e.target.value)} aria-invalid={!!linkError || count.over || undefined} data-testid={`syndication-copy-${r.account_uid}-${key}`} />
+            {linkError && <span role="alert" className="text-xs text-red-700 dark:text-red-300">{linkError}</span>}
             <span className="text-xs text-axal-muted dark:text-gray-400">{count.text} · Blank uses the event’s copy.</span>
           </label>;
         })}
@@ -75,7 +89,7 @@ function PanelBody({ eventId, read, api, editable }) {
       </fieldset>)}
       {read.data.approved && <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">This event is already approved. Saving a newly selected channel queues a post immediately.</p>}
       {invalid && <p role="alert" className="text-sm text-red-700 dark:text-red-300">Check the channel limits and use an https ticket link.</p>}
-      {choicesOf(rows).length > 0 && <button type="button" className={BUTTON} disabled={busy || invalid} onClick={save} data-testid="syndication-save">{busy ? 'Saving…' : read.data.approved ? 'Save channels and post additions' : 'Save channels'}</button>}
+      {rows.some(choiceEditable) && <button type="button" className={BUTTON} disabled={busy || invalid || !pending.length} onClick={save} data-testid="syndication-save">{busy ? 'Saving…' : read.data.approved ? 'Save channels and post additions' : 'Save channels'}</button>}
     </>}
     {!editable && !rows.some((r) => r.uid) && <p className="text-sm text-axal-muted dark:text-gray-400">No channel listings recorded.</p>}
     {rows.filter((r) => r.uid).map((r) => <article key={r.uid} className="space-y-1 border-t border-axal-hairline pt-3 text-sm text-axal-ink dark:border-gray-700 dark:text-gray-100">

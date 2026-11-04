@@ -23,6 +23,7 @@
  * against `licence_deployments`. See the header of `hqOps.ts` for what that
  * does and does not establish.
  */
+import { branchSegmentOverview } from '../services/personaSegmentScopes';
 import { recordProgramUsage, type ProgramFigure } from '../services/programUsage';
 import { WorkerEntrypoint } from 'cloudflare:workers';
 import type { Env } from '../types';
@@ -71,6 +72,9 @@ export class HqEntrypoint extends WorkerEntrypoint<Env> {
   // Super Admin scope: #2660's read over this branch's database. Counts
   // only, so no secret, on the rule above.
   insights(params?: Record<string, string>) { return branchInsights(this.env, params, loadInsightsForBranch); }
+  // D4438 — same local segment queries, aggregate-only HQ scope read.
+  personaSegmentOverview(now?: number) { return branchSegmentOverview(this.env, now); }
+
 
   // D954 — Admin › Programs' catalogue over this branch's own database, for
   // HQ's Super Admin scope. Counts only, so no secret, on the rule above.

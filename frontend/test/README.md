@@ -28,6 +28,7 @@ also exercises a `project_id` deep link.
 
 | File | Guarantee |
 | --- | --- |
+| `persona_segment_scopes_4438.test.mjs` | D4438: scope changes update SEG7, waiting suggestions, stale reply guards, failures and missing figures. |
 | `event_syndication_wiring_d1491.test.mjs` | D1491: explicit choice save, pure preview, approval order, stored HQ settings/accounts/log, listing actions and failed/stale reads. |
 | `capital_access_client_d1191.test.mjs` | D1191: capital summary/support transport preserves project, page, reason, investor target and POST verb. |
 | `dataroom_deck_source_d1602.test.mjs` | D1602: owner controls, capability hiding, quote confirmation, failed saves, withdrawal and the deck-source client seam. |
@@ -140,6 +141,7 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `work_w7_3993.test.mjs` | #4418: W7 client/adapter routes and off blocks, project item deep links, sheet writes, review filtering and latest failed-run opening; four failing-first regressions from S1’s review (reload stability, waiting-run filtering, burn-up refresh and refusal reset), plus missing-task text during a board reload. |
 | `work_controls_3968.test.mjs` | WK1–WK3 filter and burn-up interactions through real clients, attribution, failed reads and late responses (#3968). |
 | `general_counsel_4421.test.mjs` | #4421: rendered rule book, open/history queue, proposal and Ask notices; answered payment/plan pills removed. |
+| `syndication_review_4440.test.mjs` | D4440: all eight confirmed review findings, actual settings contract, dirty choices, accepted copy, private approval, event Save, reconnect and ticket-link validation. |
 
 `team_allowlists_4422.test.mjs` checks D4422 actual Team checklist read/save requests, default resets, inherited edit gates, and honest read/save failures.
 | `work_controls_3968.test.mjs` | WK1–WK3 filter and burn-up interactions through real clients, attribution, failed reads and late responses (#3968). |

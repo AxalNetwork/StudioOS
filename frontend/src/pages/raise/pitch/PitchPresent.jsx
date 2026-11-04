@@ -18,6 +18,8 @@ import { DEFAULT_PITCH_SECONDS, PITCH_CHOICES, PITCH_LENGTH, presentBudget, remo
 import { useWebSocket } from '../../../hooks/useWebSocket';
 import { deckRemoteApi } from '../../../lib/api/deckRemote';
 import RemotePair from './RemotePair';
+import { deckVoiceApi } from '../../../lib/api/deckVoice';
+import { VOICE_LABEL, voiceUrlFor } from './voiceModel';
 import { MOTION_CSS, areaMotion, presentStep, transitionMotion } from './motionModel';
 import {
   BACK, END, LAST_CARD, MIRROR, NEXT_CARD, ON_SCREEN, PHONE_REMOTE, SIZE, SPEED, TELEPROMPTER, TELEPROMPTER_TITLE, THIS_CARD,
@@ -153,6 +155,15 @@ export default function PitchPresent() {
   const [marks, setMarks] = useState([]);
   const touch = useRef(null);
   const cards = useMemo(() => (status === 'ok' ? cardsOf(deck) : []), [status, deck]);
+  // D1569 (#3816): each shown card's uid, in `cardsOf`'s order, and the links that play the accepted AI voice-overs.
+  const uids = useMemo(() => (status === 'ok' && Array.isArray(deck?.slides) ? deck.slides.filter((s) => !(s && typeof s === 'object' && s.hidden === true)).map((s) => (typeof s?.uid === 'string' ? s.uid : null)) : []), [status, deck]);
+  const [voices, setVoices] = useState(null);
+  useEffect(() => {
+    if (status !== 'ok' || !deck?.id || !(deck.slides || []).some((s) => s?.voice)) { setVoices(null); return undefined; }
+    let live = true;
+    deckVoiceApi.read(deck.id).then((r) => { if (live) setVoices(r); }, () => { if (live) setVoices(null); });
+    return () => { live = false; };
+  }, [status, deck]);
   // D1499: the deck's slide size, from its theme; 16:9 unless the theme says 4:3.
   const aspect = aspectOf(deck?.theme?.aspect);
   const n = cards.length;
@@ -296,6 +307,7 @@ export default function PitchPresent() {
               <span className="font-mono text-[11px] font-bold tracking-[.07em] text-gray-400">NOTES</span>
               <span className={`whitespace-pre-line text-[14px] leading-[1.55] ${card.notes ? 'text-gray-100' : 'text-gray-400'}`}>{notesOf(card)}</span>
             </div>
+            <VoicePlayer url={voiceUrlFor(voices, uids[i])} index={i} />
             <Budget marks={marks} seconds={seconds} n={n} i={i} pitchSeconds={pitchSeconds} setPitchSeconds={setPitchSeconds} />
           </div>
         </div>
@@ -401,6 +413,17 @@ export function PhoneRemote({ card, next, i, n, seconds, exit, onStep, top = nul
 }
 
 /** D1581: the pitch length and this card's time against its share; `seconds` ticks it. */
+/** D1569 (#3816): the card's accepted voice-over, always labelled "AI voice"; nothing when the card has none. */
+function VoicePlayer({ url, index }) {
+  if (!url) return null;
+  return (
+    <div className="flex flex-col gap-1.5 rounded-[10px] bg-[#111827] p-3.5" data-testid="pitch-present-voice">
+      <span className="font-mono text-[11px] font-bold tracking-[.07em] text-gray-400">{VOICE_LABEL.toUpperCase()}</span>
+      <audio key={url} controls preload="none" src={url} className="w-full" aria-label={`${VOICE_LABEL}: card ${index + 1}`} data-testid="pitch-present-voice-audio" />
+    </div>
+  );
+}
+
 function Budget({ marks, seconds, n, i, pitchSeconds, setPitchSeconds }) {
   const b = presentBudget(marks, Date.now(), n, i, pitchSeconds);
   return (
