@@ -429,8 +429,7 @@ export async function submitCanonicalCheckin(
 
 wellbeing.post('/checkins', async (c) => {
   const user = await requireAuth(c);
-  const r = role(user);
-  if (r === 'investor') return c.json({ detail: 'Not available for investors' }, 403);
+  if (holdsOnlyLicence(user, 'investor')) return c.json({ detail: 'Not available for investors' }, 403);
   await ensureWellbeingSchema(c.env);
   const body = await c.req.json().catch(() => ({}));
   const result = await submitCanonicalCheckin(c.env, user.id, body);

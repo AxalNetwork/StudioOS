@@ -23,6 +23,7 @@
  * rule, and `mail_link_testing_d812.test.ts` holds the three to the same
  * people. Nothing here emails anyone.
  */
+import { heldLicences } from './accountLicences';
 import type { Env } from '../types';
 import { notify } from './notify';
 import { newUid, nowIso } from '../routes/_t13t14t15_helpers';
@@ -32,6 +33,12 @@ import { requireActiveTester, testerStatusOf } from './testerPool';
 export type Owner = { kind: 'hq' } | { kind: 'partner'; partnerId: number };
 
 export const ROLES = ['founder', 'partner', 'investor', 'exploring', 'advisor'] as const;
+/** Primary Admin remains excluded from the tester pool; other members use their held union. */
+async function eligibleRoles(env: Env, user: { id: number; role: string; licences?: readonly string[] }): Promise<string[]> {
+  if (user.role === 'admin') return ['admin'];
+  return [...new Set([String(user.role), ...(user.licences || await heldLicences(env.DB, user))])];
+}
+
 export const MAX_QUESTIONS = 5;
 export const PROGRAMME_STATUSES = ['draft', 'submitted', 'approved', 'open', 'testing', 'closed', 'rejected'] as const;
 
@@ -227,10 +234,10 @@ export async function memberProgrammes(env: Env, user: { id: number; role: strin
             (SELECT a.status FROM testing_applications a WHERE a.programme_id = p.id AND a.user_id = ?) AS my_status
        FROM testing_programmes p LEFT JOIN partners pt ON pt.id = p.owner_partner_id
       WHERE p.status = 'open' AND (p.closes_at IS NULL OR p.closes_at > ?) AND (p.opens_at IS NULL OR p.opens_at <= ?)
-        AND EXISTS (SELECT 1 FROM json_each(p.eligible_roles) r WHERE r.value = ?)
+        AND EXISTS (SELECT 1 FROM json_each(p.eligible_roles) r WHERE r.value IN (SELECT value FROM json_each(?)))
         AND (SELECT COUNT(*) FROM testing_applications a WHERE a.programme_id = p.id AND a.status = 'picked') < p.places
       ORDER BY p.closes_at IS NULL, p.closes_at, p.id`,
-  ).bind(user.id, now, now, String(user.role)).all();
+  ).bind(user.id, now, now, JSON.stringify(await eligibleRoles(env, user))).all();
   return (results || []).map((r: any) => ({ ...programmeDto(r), my_status: r.my_status ?? null }));
 }
 
@@ -340,9 +347,9 @@ export async function summary(env: Env, user: { id: number; role: string }) {
   const open = !active ? { n: 0 } : await env.DB.prepare(
     `SELECT COUNT(*) AS n FROM testing_programmes p
       WHERE p.status = 'open' AND (p.closes_at IS NULL OR p.closes_at > ?) AND (p.opens_at IS NULL OR p.opens_at <= ?)
-        AND EXISTS (SELECT 1 FROM json_each(p.eligible_roles) r WHERE r.value = ?)
+        AND EXISTS (SELECT 1 FROM json_each(p.eligible_roles) r WHERE r.value IN (SELECT value FROM json_each(?)))
         AND (SELECT COUNT(*) FROM testing_applications a WHERE a.programme_id = p.id AND a.status = 'picked') < p.places`,
-  ).bind(now, now, String(user.role)).first<{ n: number }>();
+  ).bind(now, now, JSON.stringify(await eligibleRoles(env, user))).first<{ n: number }>();
   const { results } = await env.DB.prepare(
     `${SELECT_APPLICATION} WHERE a.user_id = ? AND a.status = 'picked' ORDER BY p.testing_starts IS NULL, p.testing_starts, a.id`,
   ).bind(user.id).all();
@@ -862,10 +869,10 @@ export async function mayApplyTo(env: Env, user: { id: number; role: string }, p
   const r = await env.DB.prepare(
     `SELECT 1 AS ok FROM testing_programmes p
       WHERE p.id = ? AND p.status = 'open' AND (p.closes_at IS NULL OR p.closes_at > ?) AND (p.opens_at IS NULL OR p.opens_at <= ?)
-        AND EXISTS (SELECT 1 FROM json_each(p.eligible_roles) r WHERE r.value = ?)
+        AND EXISTS (SELECT 1 FROM json_each(p.eligible_roles) r WHERE r.value IN (SELECT value FROM json_each(?)))
         AND (SELECT COUNT(*) FROM testing_applications a WHERE a.programme_id = p.id AND a.status = 'picked') < p.places
         AND NOT EXISTS (SELECT 1 FROM testing_applications a WHERE a.programme_id = p.id AND a.user_id = ?)`,
-  ).bind(programmeId, now, now, String(user.role), user.id).first();
+  ).bind(programmeId, now, now, JSON.stringify(await eligibleRoles(env, user)), user.id).first();
   return !!r;
 }
 
@@ -876,7 +883,7 @@ export async function apply(env: Env, user: { id: number; role: string }, uid: s
   const now = nowIso();
   const accepting = p.status === 'open' && (!p.closes_at || p.closes_at > now) && (!p.opens_at || p.opens_at <= now);
   if (!accepting) throw refuse(409, 'not_open', 'This programme is not taking applications.');
-  if (!parse<string[]>(p.eligible_roles, []).includes(String(user.role))) {
+  if (!(await eligibleRoles(env, user)).some(role => parse<string[]>(p.eligible_roles, []).includes(role))) {
     throw refuse(403, 'not_eligible', 'This programme is not open to your role.');
   }
   if (Number(p.picked_count) >= Number(p.places)) throw refuse(409, 'programme_full', 'Every place on this programme is taken.');

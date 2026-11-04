@@ -10,7 +10,7 @@ import { MODEL_CONNECTIONS } from '../ai/moduleConnections';
 /** Owner Q6 = A: a founder on a paid plan (the D852 rule), or HQ's admin. */
 export function planOk(user: User): boolean {
   if (isAdmin(user)) return true;
-  return holdsLicence(user, 'founder') && userMeetsTier(user, 'growth');
+  return holdsLicence(user, 'founder') && userMeetsTier({ ...user, role: 'founder' }, 'growth');
 }
 
 /**

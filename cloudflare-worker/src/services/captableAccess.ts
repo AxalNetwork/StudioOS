@@ -102,7 +102,7 @@ export async function resolveAccess(
   if (member === 'owner' || member === 'cofounder') {
     return { ok: true, level: 'full', via: 'member', read_only: true, holder_ref: null, owner: false, cofounder: true };
   }
-  if (holdsLicence(user, 'investor')) {
+  if (holdsOnlyLicence(user, 'investor')) {
     const related = await investorProjectIds(env, user as any, null);
     if (!related || !related.includes(project.id)) return refused;
     const g = await liveGrantFor(env, project.id, user.id);

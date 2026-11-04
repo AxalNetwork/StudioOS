@@ -664,7 +664,8 @@ export const rateLimitMiddleware = (): MiddlewareHandler<{ Bindings: Env }> => {
     // into 6s, on the exact route where the budget is 30s and already shared
     // with two more limiters and a schema bootstrap.
     const matching = BUCKETS.filter(
-      (b) => b.test(path, method, role) && !(b.scope === 'user' && !userId),
+      (b) => (b.test(path, method, role) || (user?.licences || []).some((licence: string) => b.test(path, method, licence)))
+        && !(b.scope === 'user' && !userId),
     );
 
     for (let i = 0; i < matching.length; i++) {

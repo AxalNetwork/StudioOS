@@ -1,4 +1,4 @@
-import { holdsLicence } from '../services/accountLicences';
+import { holdsLicence, heldLicences } from '../services/accountLicences';
 /**
  * T13 — Advisors + office-hour slots + bookings + reviews.
  * Mounted at /api/advisors. Port of backend/app/api/routes/advisors.py.
@@ -3014,7 +3014,8 @@ advisors.get('/admin/cohort-assignments/assignable', async (c) => {
       `SELECT u.id AS id, u.name AS name, u.email AS email, a.id AS advisor_profile_id
          FROM users u
          LEFT JOIN advisors a ON a.user_id = u.id
-        WHERE LOWER(u.role) = 'advisor' AND u.is_active = 1
+        WHERE u.is_active = 1 AND (LOWER(u.role) = 'advisor' OR EXISTS (
+          SELECT 1 FROM account_licences l WHERE l.user_id = u.id AND l.licence = 'advisor' AND l.revoked_at IS NULL))
         ORDER BY u.name ASC
         LIMIT 500`
     ).all<{ id: number; name: string | null; email: string | null; advisor_profile_id: number | null }>();
@@ -3209,6 +3210,7 @@ advisors.post('/admin/cohort-assignments', async (c) => {
     const target = await c.env.DB.prepare('SELECT id, role, is_active FROM users WHERE id = ?')
       .bind(advisorUserId).first<{ id: number; role: string; is_active: number }>();
     if (!target) return c.json({ detail: 'No such user' }, 404);
+    Object.assign(target, { licences: await heldLicences(c.env.DB, target) });
     // `role` was SELECTed here from the day this shipped and never read, so the
     // only check was that the id existed. The parameter is named
     // `advisor_user_id`; accepting any user made that name a lie, and removed

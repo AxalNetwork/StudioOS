@@ -71,7 +71,7 @@ ventureRisk.get('/by-project/:projectId', async (c) => {
     if (!canRead(user)) return c.json({ detail: 'Forbidden' }, 403);
     const projectId = parseProjectId(c.req.param('projectId'));
     if (projectId == null) return c.json({ detail: 'Invalid project_id' }, 400);
-    if (holdsLicence(user, 'investor') && !await mayReadProjectDeal(c.env, user, projectId)) {
+    if (user.role !== 'admin' && !holdsLicence(user, 'partner') && holdsLicence(user, 'investor') && !await mayReadProjectDeal(c.env, user, projectId)) {
       return c.json({ detail: 'Forbidden' }, 403);
     }
     const assessment = await buildAssessment(c.env, projectId, { role: user.role, userId: user.id });

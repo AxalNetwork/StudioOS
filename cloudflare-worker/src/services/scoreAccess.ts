@@ -1,4 +1,4 @@
-import { holdsLicence } from './accountLicences';
+import { holdsOnlyLicence } from './accountLicences';
 import type { Env, User } from '../types';
 import { userMayReadDeal } from '../routes/deals';
 
@@ -42,7 +42,7 @@ export async function mayReadTrustScores(env: Env, user: User, ids: number[]): P
     return Number(row?.n ?? 0) === others.length;
   }
   // D1254: investors need a shared open deal; an intro alone grants no score read.
-  const allowed = await counterpartiesOf(env, user.id, others, !holdsLicence(user, 'investor'));
+  const allowed = await counterpartiesOf(env, user.id, others, !holdsOnlyLicence(user, 'investor'));
   return others.every(id => allowed.has(id));
 }
 

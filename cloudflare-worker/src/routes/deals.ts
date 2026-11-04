@@ -1017,7 +1017,8 @@ export async function userReadableDealIds(env: Env, user: User, dealIds: number[
            OR EXISTS (SELECT 1 FROM commitments k WHERE k.deal_id = d.id AND k.investor_user_id = ?)
          )
        ))
-  `).bind(JSON.stringify(ids), user.role, user.role, user.id, user.id).all<{ id: number }>();
+  `).bind(JSON.stringify(ids), user.role === 'admin' ? 'admin' : holdsLicence(user, 'partner') ? 'partner' : 'investor',
+    user.role === 'admin' ? 'admin' : holdsLicence(user, 'partner') ? 'partner' : 'investor', user.id, user.id).all<{ id: number }>();
   return new Set((rows.results || []).map(row => Number(row.id)));
 }
 

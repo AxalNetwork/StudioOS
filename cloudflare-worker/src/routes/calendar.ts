@@ -1,4 +1,4 @@
-import { holdsLicence, heldLicences } from '../services/accountLicences';
+import { holdsLicence, holdsOnlyLicence, heldLicences } from '../services/accountLicences';
 /**
  * Calendar routes — port of backend/app/api/routes/calendar.py.
  *
@@ -432,9 +432,8 @@ calendar.get('/feed/calendar.ics', safe('cal_feed_ics', 'Could not export calend
 // ===========================================================================
 // IC meetings
 // ===========================================================================
-function canScheduleIc(role: string): boolean {
-  const r = role.toLowerCase();
-  return r === 'admin' || r === 'investor';
+function canScheduleIc(user: User): boolean {
+  return user.role === 'admin' || holdsLicence(user, 'investor');
 }
 
 async function serializeIc(env: Env, m: any): Promise<any> {
@@ -459,6 +458,7 @@ async function serializeIc(env: Env, m: any): Promise<any> {
 // permission. Investor access follows the deal invitation/commitment stores;
 // advisor access follows the founder's live, unexpired session grant.
 async function isProjectParty(env: Env, user: User, project: { id: number; founder_id: number | null }, allowVentureLead = true): Promise<boolean> {
+  if (!user.licences) user.licences = await heldLicences(env.DB, user);
   if (holdsLicence(user, 'founder') && user.founder_id && user.founder_id === project.founder_id) return true;
   const member = await getProjectMembershipRole(env, project.id, user.id);
   if (member && await canAccessProject(env, user, project)) return true;
@@ -473,7 +473,7 @@ async function isProjectParty(env: Env, user: User, project: { id: number; found
     if (invited.length) return true;
     const committed = await sql`SELECT 1 FROM commitments c JOIN deals d ON d.id = c.deal_id
       WHERE d.project_id = ${project.id} AND c.investor_user_id = ${user.id} AND c.status IN ('pending','confirmed') LIMIT 1`;
-    return committed.length > 0;
+    if (committed.length > 0) return true;
   }
   if (holdsLicence(user, 'advisor')) {
     const grants = await sql`SELECT 1 FROM advisor_client_grants
@@ -488,6 +488,7 @@ async function isProjectParty(env: Env, user: User, project: { id: number; found
 // to the same venture. Reading a deal as staff alone does not make an invitee
 // a party to it; the authenticated organiser is explicitly opting in themselves.
 async function isDealParty(env: Env, user: User, dealId: number): Promise<boolean> {
+  if (!user.licences) user.licences = await heldLicences(env.DB, user);
   const sql = getSQL(env);
   const deal = (await sql`SELECT p.id, p.founder_id, d.lead_partner_id FROM deals d JOIN projects p ON p.id = d.project_id
     WHERE d.id = ${dealId} AND p.deleted_at IS NULL` as any[])[0];
@@ -497,9 +498,13 @@ async function isDealParty(env: Env, user: User, dealId: number): Promise<boolea
     const invited = await sql`SELECT 1 FROM deal_invitations WHERE deal_id = ${dealId} AND investor_user_id = ${user.id} AND status IN ('invited','interested') LIMIT 1`;
     if (invited.length) return true;
     const committed = await sql`SELECT 1 FROM commitments WHERE deal_id = ${dealId} AND investor_user_id = ${user.id} AND status IN ('pending','confirmed') LIMIT 1`;
-    return committed.length > 0;
+    if (committed.length > 0) return true;
+    if (holdsOnlyLicence(user, 'investor')) return false;
   }
-  return isProjectParty(env, user, deal, false);
+  // Other held licences keep their own project ties. A project's OTHER deal
+  // invitation must never stand in for an exact IC-deal Investor relationship.
+  const otherLicences = { ...user, licences: (user.licences || []).filter(licence => licence !== 'investor') };
+  return isProjectParty(env, otherLicences, deal, false);
 }
 
 /** A person's id from the uid the people picker gave, or null. */
@@ -565,7 +570,7 @@ async function keepMeetCopy(env: Env, userId: number, kind: 'ic_meeting' | 'foun
 calendar.post('/ic-meetings', safe('ic_create', 'Could not create IC meeting', async (c) => {
   const user = await requireAuth(c);
   if (!userMeetsInvestorTier(user, 'professional')) return c.json(investorUpsell('professional'), 402);
-  if (!canScheduleIc(lc(user.role))) return c.json({ detail: 'Investor or admin role required' }, 403);
+  if (!canScheduleIc(user)) return c.json({ detail: 'Investor or admin role required' }, 403);
   const body = await c.req.json().catch(() => ({}));
   const title = String(body?.title || '').trim().slice(0, 240);
   if (title.length < 2) return c.json({ detail: 'title required (min 2 chars)' }, 400);
@@ -579,7 +584,7 @@ calendar.post('/ic-meetings', safe('ic_create', 'Could not create IC meeting', a
   const dealId = Number(body.deal_id);
   if (!Number.isSafeInteger(dealId) || dealId <= 0) return c.json({ detail: 'deal_id required' }, 400);
   if (!(await userMayReadDeal(c.env, user, dealId))) return c.json({ detail: 'Not allowed to schedule for this deal' }, 403);
-  if (holdsLicence(user, 'investor') && !(await isDealParty(c.env, user, dealId))) return c.json({ detail: 'Current deal relationship required' }, 403);
+  if (holdsOnlyLicence(user, 'investor') && !(await isDealParty(c.env, user, dealId))) return c.json({ detail: 'Current deal relationship required' }, 403);
   if (body.attendee_user_ids != null && !Array.isArray(body.attendee_user_ids)) return c.json({ detail: 'Invalid attendees' }, 400);
   if (body.attendee_uids != null && !Array.isArray(body.attendee_uids)) return c.json({ detail: 'Invalid attendees' }, 400);
   const attendeeIds = new Set<number>((body.attendee_user_ids || []).map(Number));
@@ -992,7 +997,7 @@ async function ventureCandidates(env: Env, v: Venture, into: Map<number, Picked>
     for (const r of await sql`SELECT investor_user_id AS id FROM commitments WHERE deal_id = ${d.id} AND status IN ('pending','confirmed')` as any[]) note(into, r.id, `Committed to ${v.name}`, v);
   }
   if (v.founder_id) {
-    for (const r of await sql`SELECT id FROM users WHERE founder_id = ${v.founder_id} AND role = 'founder'` as any[]) note(into, r.id, `Founder of ${v.name}`, v);
+    for (const r of await sql`SELECT id FROM users WHERE founder_id = ${v.founder_id}` as any[]) note(into, r.id, `Founder of ${v.name}`, v);
   }
   // A removed or pending member is dropped by the create's rule in `presentPicked`.
   for (const r of await sql`SELECT user_id AS id FROM project_members WHERE project_id = ${v.id}` as any[]) note(into, r.id, `On the ${v.name} team`, v);
@@ -1023,7 +1028,9 @@ async function presentPicked(env: Env, picked: Map<number, Picked>, keep: (u: Us
   const items: any[] = [];
   for (const [id, p] of picked) {
     const u = await env.DB.prepare('SELECT * FROM users WHERE id = ? AND is_active = 1').bind(id).first<User & { uid: string; display_name?: string | null; headline?: string | null }>();
-    if (!u || !(await keep(u))) continue;
+    if (!u) continue;
+    u.licences = await heldLicences(env.DB, u);
+    if (!(await keep(u))) continue;
     const name = String(u.display_name || u.name || '').trim();
     if (!name || (q && !name.toLowerCase().includes(q))) continue;
     items.push({
@@ -1043,13 +1050,13 @@ calendar.get('/people', safe('people_pick', 'Could not search people', async (c)
   const sql = getSQL(c.env);
   const picked = new Map<number, Picked>();
   if (purpose === 'ic') {
-    if (!canScheduleIc(lc(user.role))) return c.json({ detail: 'Investor or admin role required' }, 403);
+    if (!canScheduleIc(user)) return c.json({ detail: 'Investor or admin role required' }, 403);
     const dealId = Number(url.searchParams.get('deal_id'));
     if (!Number.isSafeInteger(dealId) || dealId <= 0) {
       return c.json({ error: 'deal_required', detail: 'Choose the deal first: the people come from it.' }, 400);
     }
     if (!(await userMayReadDeal(c.env, user, dealId))) return c.json({ detail: 'Not allowed to schedule for this deal' }, 403);
-    if (holdsLicence(user, 'investor') && !(await isDealParty(c.env, user, dealId))) return c.json({ detail: 'Current deal relationship required' }, 403);
+    if (holdsOnlyLicence(user, 'investor') && !(await isDealParty(c.env, user, dealId))) return c.json({ detail: 'Current deal relationship required' }, 403);
     const v = (await sql`SELECT p.id, p.name, p.founder_id FROM deals d JOIN projects p ON p.id = d.project_id
       WHERE d.id = ${dealId} AND p.deleted_at IS NULL` as Venture[])[0];
     if (v) await ventureCandidates(c.env, v, picked, dealId);
@@ -1095,7 +1102,7 @@ calendar.get('/deals', safe('deal_pick', 'Could not search deals', async (c) => 
     if (items.length >= PICK_MAX) break;
     if (!(await userMayReadDeal(c.env, user, d.id))) continue;
     // An investor schedules only on a deal they are still on (the create's rule).
-    if (holdsLicence(user, 'investor') && !(await isDealParty(c.env, user, d.id))) continue;
+    if (holdsOnlyLicence(user, 'investor') && !(await isDealParty(c.env, user, d.id))) continue;
     items.push({ id: d.id, name: d.name, status: d.status });
   }
   return c.json({ items });

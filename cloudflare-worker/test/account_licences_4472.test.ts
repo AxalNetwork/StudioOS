@@ -22,6 +22,21 @@ import { verifiedInvestor } from '../src/services/roundCallPolicy.ts';
 import { canMoveRound } from '../src/services/dealStudioLens.ts';
 import { canReadOperatorReview } from '../src/services/section83bOperatorReview.ts';
 import { modulePageAllowed } from '../src/routes/ai_modules.ts';
+import search from '../src/routes/search.ts';
+import telegram from '../src/routes/telegram_join.ts';
+import integrations, { ensureRole as ensureIntegrationRole } from '../src/routes/integrations.ts';
+import { personalPolicy } from '../src/services/mercuryPersonal.ts';
+import esign from '../src/routes/esign.ts';
+import * as productTesting from '../src/services/testing.ts';
+import calendar from '../src/routes/calendar.ts';
+import compliance from '../src/routes/compliance.ts';
+import wellbeing from '../src/routes/wellbeing.ts';
+import { userReadableDealIds } from '../src/routes/deals.ts';
+import { resolveAccess } from '../src/services/captableAccess.ts';
+import { mayReadTrustScores } from '../src/services/scoreAccess.ts';
+import { rateLimitMiddleware } from '../src/middleware/rateLimit.ts';
+import { registrationEligibility } from '../src/services/eventOrganiser.ts';
+import { planOk } from '../src/services/agents/modelOffers.ts';
 import { archetypeAccess } from '../src/services/archetypeEntitlement.ts';
 import { PipelineRoom } from '../src/durable-objects/pipeline-room.ts';
 import diligence from '../src/routes/dd.ts';
@@ -55,7 +70,8 @@ function fixture() {
   let grantReads = 0;
   env.DB = { ...DB, prepare(sql: string) { if (sql.startsWith('SELECT licence FROM account_licences')) grantReads++; return DB.prepare(sql); } };
   const app = new Hono<any>();
-  app.route('/api/projects',projects);
+  app.route('/api/projects',projects).route('/api/calendar',calendar).route('/api/compliance',compliance).route('/api/wellbeing',wellbeing).route('/api/legal/esign',esign).route('/api/search',search).route('/api/telegram',telegram).route('/api/integrations',integrations);
+  app.get('/synthetic/bank-purpose/:use',async c=>{const u=await getCurrentUser(c);const refusal=await personalPolicy(c,u!,c.req.param('use') as any);return refusal||c.json({ok:true});});
   app.route('/api/dd',diligence).route('/api/advisors',advisors).route('/api/fund-performance',performance);
   app.route('/api', routes).route('/api/auth', authRoutes).route('/api/admin/licences', appointments).route('/api/admin', adminRoutes);
   app.get('/role/:licence', async c => c.json({ id: (await requireRole(c,c.req.param('licence') as any)).id }));
@@ -67,7 +83,9 @@ function fixture() {
     const headers: Record<string,string> = { 'Content-Type':'application/json' };
     if (user !== null) headers.Authorization = 'Bearer ' + await new SignJWT({ user_id:user,jti:'synthetic-'+user,...(support?{impersonated_by:9000}:{}) })
       .setProtectedHeader({alg:'HS256'}).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(SECRET));
-    const response = await app.request(path,{method,headers,body:body === undefined?undefined:JSON.stringify(body)},env);
+    const pending: Promise<unknown>[]=[];
+    const response = await app.request(path,{method,headers,body:body === undefined?undefined:JSON.stringify(body)},env,{waitUntil(p:Promise<unknown>){pending.push(p);},passThroughOnException(){}});
+    await Promise.allSettled(pending);
     return { status:response.status, body:await response.json() as any };
   } };
 }
@@ -445,4 +463,235 @@ test('one fresh request heals all four held profiles after simultaneous grant-si
     for (const licence of me.body.licences) assert.ok(row[licence+'_id'],licence);
     assert.equal(count(f.db,'account_licence_events'),4);
   } finally { f.db.close(); }
+});
+
+
+test('event audience role rules hydrate additional licences and honor revocation without bypassing invitations', async () => {
+  const f=fixture(); try {
+    const selected={id:447201,audience_rules_json:JSON.stringify({mode:'selected',roles:['investor']})};
+    const eligible=async(event=selected,id:number|null=9001)=>registrationEligibility(f.env,event,id,'founder@example.test');
+    assert.equal((await eligible()).eligible,false);
+    await grantLicence(f.DB,change('investor'));
+    assert.equal((await eligible()).eligible,true);
+    assert.equal((await eligible(selected,9002)).eligible,false);
+    assert.equal((await eligible({...selected,audience_rules_json:JSON.stringify({mode:'selected',roles:['admin']})})).eligible,false);
+    assert.equal((await eligible({...selected,audience_rules_json:JSON.stringify({mode:'invite_only'})})).eligible,false);
+    await revokeLicence(f.DB,change('investor')); assert.equal((await eligible()).eligible,false);
+    assert.equal((await eligible({...selected,audience_rules_json:JSON.stringify({mode:'selected',roles:['founder']})})).eligible,true);
+    assert.equal((await eligible(selected,null)).eligible,false);
+  } finally { f.db.close(); }
+});
+
+test('a held Founder licence still needs its existing paid Founder plan to sponsor agents', () => {
+  const base:any={id:9001,role:'investor',licences:['founder','investor'],subscription_tier:'free',subscription_status:'active'};
+  assert.equal(planOk(base),false,'primary Investor tier bypass is not a paid Founder plan');
+  assert.equal(planOk({...base,role:'partner'}),false,'primary Partner tier bypass is not a paid Founder plan');
+  assert.equal(planOk({...base,subscription_tier:'growth'}),true);
+  assert.equal(planOk({...base,subscription_tier:'growth',subscription_status:'cancelled'}),false);
+  assert.equal(planOk({...base,licences:['investor'],subscription_tier:'growth'}),false);
+  assert.equal(planOk({...base,role:'admin',licences:[]}),true);
+});
+
+
+test('calendar admission and fetched invitees use held licences, preserving exact deal ties and mixed Advisor access', async () => {
+  const f=fixture(); try {
+    await ensureRoleProfile(f.env,f.db.prepare('SELECT * FROM users WHERE id=9001').get() as any);
+    const fid=f.db.prepare('SELECT founder_id FROM users WHERE id=9001').get()!.founder_id;
+    f.db.prepare('INSERT INTO projects(id,name,founder_id) VALUES (447401,?,?)').run('Synthetic calendar venture',fid);
+    f.db.exec("INSERT INTO deals(id,project_id) VALUES (447401,447401),(447402,447401); UPDATE users SET uid='synthetic-calendar-'||id; UPDATE users SET investor_tier='professional',investor_subscription_status='active' WHERE id IN(9001,9003,9005); INSERT INTO deal_invitations(deal_id,investor_user_id) VALUES (447401,9003),(447402,9005); INSERT INTO project_members(project_id,user_id,role,status) VALUES(447401,9005,'advisor','accepted');");
+    await grantLicence(f.DB,change('investor',9003));
+    const start_at=new Date(Date.now()+86400000).toISOString();
+    const meeting={title:'Synthetic IC',start_at,deal_id:447401,attendee_user_ids:[9003]};
+    let r=await f.call('/api/calendar/ic-meetings',9000,'POST',meeting); assert.equal(r.status,200,JSON.stringify(r.body));
+    const picker=await f.call('/api/calendar/people?for=ic&deal_id=447401',9000); assert.equal(picker.status,200); assert.ok(picker.body.items.some((item:any)=>item.uid==='synthetic-calendar-9003'));
+    assert.equal((await f.call('/api/calendar/ic-meetings',9003,'POST',{...meeting,attendee_user_ids:[]})).status,200);
+    assert.equal((await f.call('/api/calendar/ic-meetings',9000,'POST',{...meeting,attendee_user_ids:[9005]})).status,403,'an invitation to another deal is insufficient');
+    f.db.exec('DELETE FROM project_members WHERE user_id=9005');
+    await grantLicence(f.DB,change('advisor',9005));
+    assert.equal((await f.call('/api/calendar/ic-meetings',9000,'POST',{...meeting,attendee_user_ids:[9005]})).status,403,'a second licence cannot turn another deal’s invitation into this deal’s tie');
+    await grantLicence(f.DB,change('investor',9000));
+    assert.equal((await f.call('/api/calendar/ic-meetings',9000,'POST',meeting)).status,200,'an Investor grant cannot remove Admin scheduling');
+    await grantLicence(f.DB,change('investor',9002)); await grantLicence(f.DB,change('advisor',9004));
+    for (const id of [9002,9004]) f.db.prepare("INSERT INTO advisor_client_grants(uid,project_id,advisor_user_id,granted_by_user_id,scope_sessions) VALUES (?,447401,?,9001,1)").run('synthetic-calendar-grant-'+id,id);
+    const checkin={title:'Synthetic check-in',start_at,founder_user_id:9001,project_id:447401};
+    assert.equal((await f.call('/api/calendar/founder-checkins',9002,'POST',checkin)).status,200,'Investor addition preserves the Advisor client tie');
+    assert.equal((await f.call('/api/calendar/founder-checkins',9001,'POST',{...checkin,counterpart_user_id:9004})).status,200,'fetched counterpart has an additional Advisor licence');
+    await revokeLicence(f.DB,change('investor',9003));
+    assert.equal((await f.call('/api/calendar/ic-meetings',9003,'POST',{...meeting,attendee_user_ids:[]})).status,403);
+    const gone=await f.call('/api/calendar/people?for=ic&deal_id=447401',9000); assert.ok(!gone.body.items.some((item:any)=>item.uid==='synthetic-calendar-9003'));
+    f.db.exec("UPDATE users SET role='partner' WHERE id=9001"); await grantLicence(f.DB,change('founder'));
+    const founders=await f.call('/api/calendar/people?for=checkin',9004); assert.equal(founders.status,200); assert.ok(founders.body.items.some((item:any)=>item.uid==='synthetic-calendar-9001'));
+    const owners=await f.call('/api/calendar/people?for=ic&deal_id=447401',9000); assert.ok(owners.body.items.some((item:any)=>item.uid==='synthetic-calendar-9001'));
+  } finally { f.db.close(); }
+});
+
+test('cohort assignment and its picker hydrate the target’s additional Advisor licence and drop revoked grants', async () => {
+  const f=fixture(); try {
+    f.db.exec("INSERT INTO cohort_cycles(id,year,month,start_at,end_at) VALUES(447401,2099,1,'2099-01-01','2099-02-01')");
+    await grantLicence(f.DB,change('advisor'));
+    const listed=await f.call('/api/advisors/admin/cohort-assignments/assignable',9000); assert.equal(listed.status,200); assert.ok(listed.body.items.some((item:any)=>item.id===9001));
+    const assigned=await f.call('/api/advisors/admin/cohort-assignments',9000,'POST',{advisor_user_id:9001,cohort_cycle_id:447401}); assert.equal(assigned.status,200,JSON.stringify(assigned.body));
+    assert.equal((await f.call('/api/advisors/admin/cohort-assignments',9000,'POST',{advisor_user_id:9003,cohort_cycle_id:447401})).status,400);
+    await revokeLicence(f.DB,change('advisor'));
+    const gone=await f.call('/api/advisors/admin/cohort-assignments/assignable',9000); assert.ok(!gone.body.items.some((item:any)=>item.id===9001));
+    assert.equal((await f.call('/api/advisors/admin/cohort-assignments',9000,'POST',{advisor_user_id:9001,cohort_cycle_id:447401})).status,400);
+  } finally { f.db.close(); }
+});
+
+test('Compliance reader/writer privileges follow held Partner and keep Admin privileges after an Investor addition', async () => {
+  const f=fixture(); try {
+    f.db.exec(readFileSync(new URL('../sql/migrations/467_founder_profile_pages.sql',import.meta.url),'utf8'));
+    f.db.exec("INSERT INTO projects(id,name,founder_id,investor_findable) VALUES (447402,'Synthetic compliance venture',447402,0)");
+    assert.equal((await f.call('/api/compliance/events?project_id=447402',9002)).status,403);
+    await grantLicence(f.DB,change('partner',9002));
+    assert.equal((await f.call('/api/compliance/events?project_id=447402',9002)).status,200);
+    const saved=await f.call('/api/compliance/events',9002,'POST',{project_id:447402,due_date:'2099-01-01',title:'Synthetic filing'}); assert.equal(saved.status,200,JSON.stringify(saved.body));
+    await grantLicence(f.DB,change('investor',9002));
+    assert.equal((await f.call('/api/compliance/events?project_id=447402',9002)).status,200,'Investor addition cannot remove Partner access to an unlisted venture');
+    await grantLicence(f.DB,change('investor',9000));
+    assert.equal((await f.call('/api/compliance/events?project_id=447402',9000)).status,200);
+    await revokeLicence(f.DB,change('partner',9002));
+    assert.equal((await f.call('/api/compliance/events?project_id=447402',9002)).status,404);
+    f.db.exec('UPDATE users SET founder_id=447402 WHERE id=9001');
+    assert.equal((await f.call('/api/admin/users/9001/role',9000,'PATCH',{role:'advisor'})).status,200);
+    assert.equal((await f.call('/api/compliance/events?project_id=447402',9001)).status,403,'residual Founder ID is not a licence');
+    assert.equal((await f.call('/api/compliance/events',9001,'POST',{project_id:447402,due_date:'2099-01-02',title:'Synthetic filing'})).status,403);
+  } finally { f.db.close(); }
+});
+
+test('a held Founder licence admits the canonical wellbeing pulse for an Investor primary; Investor-only stays refused', async () => {
+  const f=fixture(); try {
+    assert.equal((await f.call('/api/wellbeing/checkins',9005,'POST',{stress:2})).status,403);
+    await grantLicence(f.DB,change('founder',9005));
+    const saved=await f.call('/api/wellbeing/checkins',9005,'POST',{stress:2}); assert.equal(saved.status,201,JSON.stringify(saved.body));
+    await revokeLicence(f.DB,change('founder',9005));
+    assert.equal((await f.call('/api/wellbeing/checkins',9005,'POST',{stress:3})).status,403);
+  } finally { f.db.close(); }
+});
+
+test('bulk deal authorization binds the held licence while keeping unrelated Investor deals out', async () => {
+  const f=fixture(); try {
+    f.db.exec("INSERT INTO projects(id,name,founder_id) VALUES(447403,'Synthetic bulk venture',447403); INSERT INTO deals(id,project_id) VALUES(447403,447403),(447404,447403); INSERT INTO deal_invitations(deal_id,investor_user_id) VALUES(447403,9001)");
+    const actor=()=>({...f.db.prepare('SELECT * FROM users WHERE id=9001').get(),licences:[]}) as any;
+    assert.equal((await userReadableDealIds(f.env,actor(),[447403,447404])).size,0);
+    await grantLicence(f.DB,change('investor')); let u=actor();u.licences=await heldLicences(f.DB,u);
+    assert.deepEqual([...await userReadableDealIds(f.env,u,[447403,447404])],[447403]);
+    await grantLicence(f.DB,change('partner'));u=actor();u.licences=await heldLicences(f.DB,u);
+    assert.deepEqual([...await userReadableDealIds(f.env,u,[447403,447404])],[447403,447404]);
+  } finally { f.db.close(); }
+});
+
+test('adding Investor preserves an Advisor member’s cap table summary and intro trust-score access', async () => {
+  const f=fixture(); try {
+    f.db.exec(readFileSync(new URL('../sql/migrations/575_cap_table_access.sql',import.meta.url),'utf8'));
+    f.db.exec("INSERT INTO projects(id,name,founder_id) VALUES(447405,'Synthetic cap table venture',447405); INSERT INTO project_members(project_id,user_id,role,status) VALUES(447405,9002,'advisor','accepted'),(447405,9005,'advisor','accepted'); INSERT INTO pairwise_ndas(party_a_user_id,party_b_user_id,status) VALUES(9001,9002,'active'),(9001,9005,'active')");
+    const actor=async(id:number)=>{const u:any=f.db.prepare('SELECT * FROM users WHERE id=?').get(id);u.licences=await heldLicences(f.DB,u);return u;};
+    assert.equal((await resolveAccess(f.env,await actor(9002),{id:447405,founder_id:447405})).ok,true);
+    await grantLicence(f.DB,change('investor',9002));
+    const mixed=await actor(9002);assert.equal((await resolveAccess(f.env,mixed,{id:447405,founder_id:447405})).ok,true);
+    assert.equal(await mayReadTrustScores(f.env,mixed,[9001]),true);
+    assert.equal((await resolveAccess(f.env,await actor(9005),{id:447405,founder_id:447405})).ok,false);
+    assert.equal(await mayReadTrustScores(f.env,await actor(9005),[9001]),false);
+  } finally { f.db.close(); }
+});
+
+test('a role-specific rate bucket applies to each held licence once, keeping the original five-execution limit', async () => {
+  const values=new Map<string,string>(), app=new Hono<any>();
+  app.use('*',async(c,next)=>{c.set('currentUser',{id:9001,role:'founder',licences:['founder','partner','investor']});await next();});
+  app.use('*',rateLimitMiddleware()); app.post('/api/spinout/synthetic',c=>c.json({ok:true}));
+  const env:any={RATE_LIMITS:{async get(key:string){return values.get(key)||null;},async put(key:string,value:string){values.set(key,value);}}};
+  for(let i=0;i<6;i++) {const r=await app.request('/api/spinout/synthetic',{method:'POST'},env,{waitUntil(){},passThroughOnException(){}});assert.equal(r.status,i<5?200:429);}
+  assert.equal([...values.keys()].filter(key=>key.includes('spinout')).length,1);
+});
+
+
+test('signature template discovery, preview and send admission use the de-duplicated held-licence catalogue', async () => {
+  const f=fixture(); try {
+    const path='/api/legal/esign';
+    assert.equal((await f.call(path+'/templates/mentor_nda_axal')).status,404);
+    assert.equal((await f.call(path+'/send',9001,'POST',{document_type:'mentor_nda_axal'})).status,403);
+    await grantLicence(f.DB,change('advisor'));await grantLicence(f.DB,change('partner'));
+    const list=await f.call(path+'/templates');assert.equal(list.status,200);assert.equal(list.body.role,'founder');
+    const keys=list.body.items.map((row:any)=>row.doc_type);assert.equal(new Set(keys).size,keys.length);assert.ok(keys.includes('mentor_nda_axal'));assert.ok(keys.includes('partner_services'));assert.ok(keys.includes('founder_nda_v1'));
+    assert.equal((await f.call(path+'/templates/mentor_nda_axal')).status,200);
+    const invalidRecipient=await f.call(path+'/send',9001,'POST',{document_type:'mentor_nda_axal'});assert.equal(invalidRecipient.status,400);assert.equal(invalidRecipient.body.error,'valid recipient_email is required');
+    assert.equal(count(f.db,'esign_envelopes'),0);
+    await revokeLicence(f.DB,change('advisor'));
+    assert.equal((await f.call(path+'/templates/mentor_nda_axal')).status,404);
+    assert.equal((await f.call(path+'/send',9001,'POST',{document_type:'mentor_nda_axal'})).status,403);
+    assert.equal((await f.call(path+'/templates/not_a_template')).status,404);
+  } finally { f.db.close(); }
+});
+
+test('testing programme eligibility, counts and application admit the held union while keeping pool status and revocation gates', async () => {
+  const f=fixture(); try {
+    for(const name of ['516_product_testing.sql','576_product_testers.sql'])f.db.exec(readFileSync(new URL('../sql/migrations/'+name,import.meta.url),'utf8'));
+    f.db.exec("INSERT INTO product_testers(user_id,status,decided_at) VALUES(9001,'active',datetime('now')); INSERT INTO testing_programmes(id,uid,owner_kind,created_by,product_name,places,eligible_roles,status) VALUES(447410,'synthetic-testing-1','hq',9000,'Synthetic programme one',3,'[\"investor\"]','open'),(447411,'synthetic-testing-2','hq',9000,'Synthetic programme two',3,'[\"investor\"]','open'),(447412,'synthetic-testing-3','hq',9000,'Synthetic programme three',3,'[\"founder\"]','open');");
+    const member=()=>f.db.prepare('SELECT * FROM users WHERE id=9001').get() as any;
+    assert.equal(await productTesting.mayApplyTo(f.env,member(),447410),false);
+    assert.equal((await productTesting.summary(f.env,member())).open_count,1);
+    await assert.rejects(()=>productTesting.apply(f.env,member(),'synthetic-testing-1',{}),(e:any)=>e.code==='not_eligible');
+    await grantLicence(f.DB,change('investor'));
+    assert.equal((await productTesting.memberProgrammes(f.env,member())).length,3);
+    assert.equal((await productTesting.summary(f.env,member())).open_count,3);
+    assert.equal(await productTesting.mayApplyTo(f.env,member(),447410),true);
+    const applied=await productTesting.apply(f.env,member(),'synthetic-testing-1',{});assert.equal(applied!.status,'applied');assert.equal(count(f.db,'testing_events'),1);
+    await revokeLicence(f.DB,change('investor'));
+    assert.equal((await productTesting.memberProgrammes(f.env,member())).length,1);
+    assert.equal((await productTesting.summary(f.env,member())).open_count,1);
+    assert.equal(await productTesting.mayApplyTo(f.env,member(),447411),false);
+    await assert.rejects(()=>productTesting.apply(f.env,member(),'synthetic-testing-2',{}),(e:any)=>e.code==='not_eligible');
+    assert.equal(count(f.db,'testing_events'),1);
+    f.db.exec("UPDATE product_testers SET status='paused' WHERE user_id=9001");
+    assert.equal(await productTesting.mayApplyTo(f.env,member(),447412),false);
+    await assert.rejects(()=>productTesting.memberProgrammes(f.env,member()),(e:any)=>e.code==='not_active_tester');
+  } finally { f.db.close(); }
+});
+
+
+test('semantic search admits the union of held result types and removes revoked types without changing primary', async () => {
+  const f=fixture(); try {
+    f.env.VECTORIZE={async query(){return {matches:[]};}};f.env.AI={async run(){return {data:[[0,1]]};}};
+    const path='/api/search?q=synthetic&type=deal';
+    assert.equal((await f.call(path)).body.warning,'type not available for your role');
+    await grantLicence(f.DB,change('investor'));
+    const found=await f.call(path);assert.equal(found.status,200);assert.ok(found.body.allowed_types.includes('deal'));assert.equal(found.body.warning,undefined);
+    assert.equal(f.db.prepare('SELECT role FROM users WHERE id=9001').get()!.role,'founder');
+    await revokeLicence(f.DB,change('investor'));assert.equal((await f.call(path)).body.warning,'type not available for your role');
+  } finally {f.db.close();}
+});
+
+test('Telegram lists held audiences with the same primary default and gates requests without sending a message', async () => {
+  const f=fixture();try {
+    const request=()=>f.call('/api/telegram/join-request',9001,'POST',{channel_slug:'axal-investors'});
+    assert.equal((await request()).status,403);
+    await grantLicence(f.DB,change('investor'));
+    const channels=await f.call('/api/telegram/channels');assert.equal(channels.status,200);assert.equal(channels.body.default_slug,'axal-founders');assert.ok(channels.body.channels.some((row:any)=>row.slug==='axal-investors'));
+    const unconfigured=await request();assert.equal(unconfigured.status,503);assert.equal(unconfigured.body.error,'slack_webhook_unconfigured');assert.equal(count(f.db,'telegram_join_requests'),0);
+    await revokeLicence(f.DB,change('investor'));assert.equal((await request()).status,403);
+  }finally {f.db.close();}
+});
+
+test('personal Mercury purpose admission uses held licences while support, HQ-only and primary Admin preview boundaries remain', async () => {
+  const f=fixture();try {
+    const path='/synthetic/bank-purpose/capital_attestation';
+    assert.equal((await f.call(path)).status,403);
+    await grantLicence(f.DB,change('investor'));assert.equal((await f.call(path)).status,200);
+    assert.equal((await f.call(path,9001,'GET',undefined,true)).status,403);
+    f.env.BRANCH_CODE='synthetic';const branch=await f.call(path);assert.equal(branch.status,403);assert.equal(branch.body.error,'hq_only');delete f.env.BRANCH_CODE;
+    await grantLicence(f.DB,change('founder',9000));assert.equal((await f.call('/synthetic/bank-purpose/venture_revenue',9000)).status,403,'Admin retains its existing read-only preview policy');
+    await revokeLicence(f.DB,change('investor'));assert.equal((await f.call(path)).status,403);
+  }finally {f.db.close();}
+});
+
+test('integration and legacy Carta membership use held licences while preserving ownership and capability refusals', async () => {
+  const f=fixture();try {
+    const bare:any={id:9003,role:'exploring',licences:[]};assert.throws(()=>ensureIntegrationRole({} as any,bare));assert.doesNotThrow(()=>ensureIntegrationRole({} as any,{...bare,licences:['founder']}));
+    f.db.exec("INSERT INTO integrations(uid,user_id,provider_key,auth_type,config_json) VALUES ('synthetic-carta',9002,'carta','oauth2','{\"audience\":\"founder\"}')");
+    const path='/api/integrations/synthetic-carta/sync';const before=await f.call(path,9002,'POST',{});assert.equal(before.status,403);assert.equal(before.body.error,'purpose_not_allowed');
+    await grantLicence(f.DB,change('founder',9002));
+    const binding=await f.call(path,9002,'POST',{});assert.equal(binding.status,422,JSON.stringify(binding.body));assert.equal(binding.body.error,'sync_not_supported');
+    await grantLicence(f.DB,change('founder',9003));assert.equal((await f.call(path,9003,'POST',{})).status,404);
+    await revokeLicence(f.DB,change('founder',9002));assert.equal((await f.call(path,9002,'POST',{})).body.error,'purpose_not_allowed');
+  }finally {f.db.close();}
 });
