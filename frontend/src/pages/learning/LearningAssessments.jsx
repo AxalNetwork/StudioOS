@@ -35,8 +35,6 @@ import { AttemptsReview, StudioExamBuilder, StudioExerciseEditor, SubmissionsRev
  * (`LearningPage.jsx`), so a gated profile never reads at all.
  */
 
-const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
-
 /** A read's state as the status a component draws: a 404 is "ready, with nothing to show". */
 const statusOf = (state) => (state.status === 'missing' ? 'ready' : state.status === 'idle' ? 'loading' : state.status);
 
