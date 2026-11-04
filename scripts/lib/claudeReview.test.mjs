@@ -861,7 +861,7 @@ test('D4443: OpenAI is configured between Claude and Kimi only with key and expl
 const openaiHarness = (over = {}) => harness({ env: OPENAI_ENV, create: () => creditError(), fallbacks: { claude2: () => creditError(), claude3: () => creditError(), openai: () => kimiMessage(), kimi: () => kimiMessage() }, ...over });
 
 test('D4443: a non-Codex PR uses OpenAI after Claude credit refusals and records _openai', async () => {
-  const { deps, calls } = openaiHarness();
+  const { deps, calls } = openaiHarness({ event: prEvent({ body: 'This changes the Codex vendor check.\n\n## Agent\n\nS28 · Claude' }) });
   const saved = [];
   deps.persistRecord = r => saved.push(r);
   const r = await runReview(deps);
@@ -874,7 +874,7 @@ test('D4443: a non-Codex PR uses OpenAI after Claude credit refusals and records
 });
 
 test('D4443: Codex branch, body and author markers all skip OpenAI with the required summary', async () => {
-  for (const override of [{ head: { sha: H, ref: 'codex/s19-feature', repo: { full_name: REPO } } }, { body: '## Agent\n\nS28 · Codex' }, { user: { login: 'codex[bot]' } }]) {
+  for (const override of [{ head: { sha: H, ref: 'codex/s19-feature', repo: { full_name: REPO } } }, { body: '## Agent\n\nS28 · Codex' }, { body: 'Agent: Codex' }, { body: '## Agent\n\nCodex' }, { user: { login: 'codex[bot]' } }]) {
     const { deps, calls } = openaiHarness({ event: prEvent(override) });
     const r = await runReview(deps);
     assert.equal(r.outcome, 'reviewed');

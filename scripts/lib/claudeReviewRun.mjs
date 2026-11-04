@@ -117,7 +117,7 @@ export async function runReview(deps) {
   const gate = eventGate(deps.event, { repository: deps.repository, reviewDrafts: config.reviewDrafts });
   if (!gate.run) return finish(state, 'skipped', gate.reason);
   const pr = deps.event.pull_request;
-  const codexAuthored = /^codex\//i.test(pr.head?.ref || deps.env.CLAUDE_REVIEW_PR_HEAD || '') || /\bCodex\b/i.test(pr.body || deps.env.CLAUDE_REVIEW_PR_BODY || '') || /codex/i.test(pr.user?.login || deps.env.CLAUDE_REVIEW_PR_AUTHOR || '');
+  const codexAuthored = /^codex\//i.test(pr.head?.ref || deps.env.CLAUDE_REVIEW_PR_HEAD || '') || /(?:\bS\d+\s*[·:|—-]\s*Codex\b|(?:^|\n)\s*(?:agent\s*:\s*|##?\s+Agent\s*\n+\s*)Codex\b|\bgenerated\s+(?:by|with)\s+(?:OpenAI\s+)?Codex\b)/im.test(pr.body || deps.env.CLAUDE_REVIEW_PR_BODY || '') || /codex/i.test(pr.user?.login || deps.env.CLAUDE_REVIEW_PR_AUTHOR || '');
   const eligibleFallbacks = (config.creditFallbacks || []).filter(step => {
     if (step.provider === 'openai' && codexAuthored) {
       state.limitations.push("OpenAI skipped: same vendor as the PR's author");
