@@ -107,6 +107,8 @@ const LIMITS = {
 };
 
 const MODEL_ID = /^[a-z0-9][a-z0-9._-]{1,99}$/;
+/** The further Claude accounts the credit fallback may use, as ANTHROPIC_API_KEY_<n> secrets. */
+export const CLAUDE_FALLBACK_SLOTS = [2, 3];
 
 const truthy = (v) => /^(1|true|yes|on)$/i.test(String(v ?? '').trim());
 
@@ -224,10 +226,19 @@ export function readConfig(env = {}) {
   const kimiModel = String(env.KIMI_MODEL ?? '').trim() || DEFAULTS.kimiModel;
   const kimiBaseUrl = String(env.KIMI_BASE_URL ?? '').trim() || DEFAULTS.kimiBaseUrl;
   const providerRaw = String(env.CLAUDE_REVIEW_CREDIT_FALLBACK ?? '').trim().toLowerCase();
-  if (providerRaw && !['kimi', 'off'].includes(providerRaw)) errors.push(`CLAUDE_REVIEW_CREDIT_FALLBACK must be "kimi" or "off"; got "${providerRaw}"`);
+  if (providerRaw && !['on', 'off'].includes(providerRaw)) errors.push(`CLAUDE_REVIEW_CREDIT_FALLBACK must be "on" or "off"; got "${providerRaw}"`);
   if (hasKimiKey && !MODEL_ID.test(kimiModel)) errors.push('KIMI_MODEL is not a model ID');
   if (hasKimiKey && !/^https:\/\/[a-z0-9.-]+(:\d+)?(\/[A-Za-z0-9._~\/-]*)?$/i.test(kimiBaseUrl)) errors.push('KIMI_BASE_URL must be an https URL');
-  const creditFallback = hasKimiKey && providerRaw !== 'off' ? { provider: 'kimi', model: kimiModel, baseURL: kimiBaseUrl } : null;
+  // The chain, in the order it is tried: further Claude accounts (their own
+  // Console organizations, so their own credit), then Kimi. Each step is used
+  // only when the one before it answers that its credit is exhausted.
+  const creditFallbacks = [];
+  if (providerRaw !== 'off') {
+    for (const n of CLAUDE_FALLBACK_SLOTS) {
+      if (String(env[`ANTHROPIC_API_KEY_${n}`] ?? '').trim()) creditFallbacks.push({ id: `claude${n}`, provider: 'anthropic', label: `Claude account ${n}`, secret: `ANTHROPIC_API_KEY_${n}` });
+    }
+    if (hasKimiKey) creditFallbacks.push({ id: 'kimi', provider: 'kimi', label: 'Kimi', secret: 'KIMI_API_KEY', model: kimiModel, baseURL: kimiBaseUrl });
+  }
 
   const config = {
     enabled,
@@ -251,7 +262,7 @@ export function readConfig(env = {}) {
     failOnError: truthy(env.CLAUDE_REVIEW_FAIL_ON_ERROR),
     reviewDrafts: env.CLAUDE_REVIEW_DRAFTS === undefined || String(env.CLAUDE_REVIEW_DRAFTS).trim() === '' ? true : truthy(env.CLAUDE_REVIEW_DRAFTS),
     refusalFallback,
-    creditFallback,
+    creditFallbacks,
     rateOverrides,
   };
   return { config, errors };

@@ -374,14 +374,14 @@ function harness(over = {}) {
         return next;
       },
     },
-    fallback: over.fallback === undefined ? null : {
+    fallbacks: Object.fromEntries(Object.entries(over.fallbacks || {}).map(([id, answer]) => [id, {
       create: async (p) => {
-        calls.fallback.push(JSON.parse(JSON.stringify(p)));
-        const next = over.fallback(calls.fallback.length, p);
+        calls.fallback.push({ id, ...JSON.parse(JSON.stringify(p)) });
+        const next = answer(calls.fallback.length, p);
         if (next instanceof Error) throw next;
         return next;
       },
-    },
+    }])),
   };
   return { deps, calls };
 }
@@ -562,11 +562,13 @@ test('run: a sensitive path uses the high-risk model when one is set, and token 
   assert.match(plain(r.summary), /input tokens \(estimated\)/);
 });
 
-// --- the credit fallback (Kimi) ---------------------------------------------
+// --- the credit fallback chain (more Claude accounts, then Kimi) -------------
 
 const KIMI = { KIMI_API_KEY: 'kimi-test-key' };
+const CHAIN = { ANTHROPIC_API_KEY_2: 'second-key', ANTHROPIC_API_KEY_3: 'third-key', ...KIMI };
 const creditError = () => Object.assign(apiError('bad_request', 400), { detail: 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.' });
 const kimiMessage = (text = JSON.stringify(answer())) => ({ stop_reason: 'end_turn', content: [{ type: 'text', text }], usage: { input_tokens: 4000, output_tokens: 600 } });
+const claudeMessage = () => ({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(answer()) }], usage: { input_tokens: 4000, output_tokens: 600 } });
 
 test('credit: only a 402 or the "credit balance" 400 counts as credit exhausted', () => {
   assert.equal(creditExhausted(apiError('billing', 402)), true);
@@ -576,70 +578,98 @@ test('credit: only a 402 or the "credit balance" 400 counts as credit exhausted'
   assert.equal(creditExhausted(null), false);
 });
 
-test('credit: config turns the fallback on with KIMI_API_KEY, off with CLAUDE_REVIEW_CREDIT_FALLBACK=off, and checks its settings', () => {
-  assert.equal(readConfig({ ...ENV }).config.creditFallback, null);
-  assert.deepEqual(readConfig({ ...ENV, ...KIMI }).config.creditFallback, { provider: 'kimi', model: 'kimi-k2-turbo-preview', baseURL: 'https://api.moonshot.ai/anthropic' });
-  assert.equal(readConfig({ ...ENV, ...KIMI, CLAUDE_REVIEW_CREDIT_FALLBACK: 'off' }).config.creditFallback, null);
-  assert.equal(readConfig({ ...ENV, ...KIMI, KIMI_MODEL: 'kimi-k2-0905-preview' }).config.creditFallback.model, 'kimi-k2-0905-preview');
+test('credit: the chain is the further Claude accounts in order, then Kimi; off empties it; no key is copied', () => {
+  assert.deepEqual(readConfig({ ...ENV }).config.creditFallbacks, []);
+  assert.deepEqual(readConfig({ ...ENV, ...CHAIN }).config.creditFallbacks.map((s) => s.id), ['claude2', 'claude3', 'kimi']);
+  assert.deepEqual(readConfig({ ...ENV, ANTHROPIC_API_KEY_3: 'x', ...KIMI }).config.creditFallbacks.map((s) => s.id), ['claude3', 'kimi']);
+  const kimi = readConfig({ ...ENV, ...KIMI }).config.creditFallbacks[0];
+  assert.deepEqual([kimi.model, kimi.baseURL], ['kimi-k2-turbo-preview', 'https://api.moonshot.ai/anthropic']);
+  assert.deepEqual(readConfig({ ...ENV, ...CHAIN, CLAUDE_REVIEW_CREDIT_FALLBACK: 'off' }).config.creditFallbacks, []);
+  assert.equal(readConfig({ ...ENV, ...KIMI, KIMI_MODEL: 'kimi-k2-0905-preview' }).config.creditFallbacks[0].model, 'kimi-k2-0905-preview');
   assert.match(readConfig({ ...ENV, ...KIMI, KIMI_BASE_URL: 'http://api.moonshot.ai' }).errors.join(), /KIMI_BASE_URL must be an https URL/);
   assert.match(readConfig({ ...ENV, ...KIMI, CLAUDE_REVIEW_CREDIT_FALLBACK: 'openai' }).errors.join(), /CLAUDE_REVIEW_CREDIT_FALLBACK/);
-  assert.doesNotMatch(JSON.stringify(readConfig({ ...ENV, ...KIMI }).config), /kimi-test-key/);
+  assert.doesNotMatch(JSON.stringify(readConfig({ ...ENV, ...CHAIN }).config), /kimi-test-key|second-key|third-key/);
 });
 
-test('credit: Claude out of credit sends the same review to Kimi, once, and records it as Kimi', async () => {
-  const { deps, calls } = harness({ env: KIMI, create: () => creditError(), fallback: () => kimiMessage('```json\n' + JSON.stringify(answer()) + '\n```') });
+test('credit: main account out of credit, the second Claude account reviews with the same model and structured output', async () => {
+  const { deps, calls } = harness({ env: CHAIN, create: () => creditError(), fallbacks: { claude2: () => claudeMessage(), kimi: () => kimiMessage() } });
   const r = await runReview(deps);
   assert.equal(r.outcome, 'reviewed');
   assert.equal(calls.create.length, 1, 'no refusal-fallback retry against an empty account');
-  assert.equal(calls.fallback.length, 1);
+  assert.deepEqual(calls.fallback.map((c) => c.id), ['claude2']);
   const sent = calls.fallback[0];
+  assert.equal(sent.model, 'claude-sonnet-5-5');
+  assert.ok(sent.output_config, 'a Claude account keeps structured output');
+  assert.equal(sent.betas, undefined);
+  const body = JSON.parse(r.record.body);
+  assert.deepEqual([body.provider, body.account, body.model], ['anthropic', 'Claude account 2', 'claude-sonnet-5-5']);
+  assert.match(plain(r.summary), /Reviewed by Claude account 2 \(claude-sonnet-5-5\) because Claude is out of credit/);
+});
+
+test('credit: every Claude account out of credit sends the review to Kimi, recorded as Kimi', async () => {
+  const { deps, calls } = harness({ env: CHAIN, create: () => creditError(), fallbacks: { claude2: () => apiError('billing', 402), claude3: () => creditError(), kimi: () => kimiMessage('```json\n' + JSON.stringify(answer()) + '\n```') } });
+  const r = await runReview(deps);
+  assert.equal(r.outcome, 'reviewed');
+  assert.deepEqual(calls.fallback.map((c) => c.id), ['claude2', 'claude3', 'kimi']);
+  const sent = calls.fallback[2];
   assert.equal(sent.model, 'kimi-k2-turbo-preview');
   assert.deepEqual(sent.messages, calls.create[0].messages);
   assert.equal(sent.output_config, undefined);
-  assert.equal(sent.betas, undefined);
   assert.match(sent.system, /JSON Schema/);
   const body = JSON.parse(r.record.body);
-  assert.equal(body.provider, 'kimi');
-  assert.equal(body.model, 'kimi-k2-turbo-preview');
+  assert.deepEqual([body.provider, body.account, body.model], ['kimi', 'Kimi', 'kimi-k2-turbo-preview']);
   assert.ok(body.usd > 0, 'Kimi spend is priced from the rate table');
-  assert.match(plain(r.summary), /Reviewed by Kimi \(kimi-k2-turbo-preview\) because the Anthropic credit balance is exhausted/);
-  assert.doesNotMatch(plain(r.summary), /kimi-test-key|test-key/);
+  assert.match(plain(r.summary), /Reviewed by Kimi \(kimi-k2-turbo-preview\) because Claude, Claude account 2, Claude account 3 are out of credit/);
+  assert.doesNotMatch(plain(r.summary), /kimi-test-key|second-key|test-key/);
 });
 
-test('credit: with credit, Claude answers and Kimi is never called', async () => {
-  const { deps, calls } = harness({ env: KIMI, fallback: () => kimiMessage() });
+test('credit: with credit, the main account answers and no fallback is called', async () => {
+  const { deps, calls } = harness({ env: CHAIN, fallbacks: { claude2: () => claudeMessage(), kimi: () => kimiMessage() } });
   const r = await runReview(deps);
   assert.equal(r.outcome, 'reviewed');
   assert.equal(calls.fallback.length, 0);
-  assert.equal(JSON.parse(r.record.body).provider, 'anthropic');
+  assert.deepEqual([JSON.parse(r.record.body).provider, JSON.parse(r.record.body).account], ['anthropic', 'Claude']);
 });
 
-test('credit: other Anthropic failures never go to Kimi', async () => {
+test('credit: other failures never fall back, and a non-credit failure inside the chain stops it', async () => {
   for (const e of [apiError('authentication', 401), apiError('rate_limit', 429), apiError('server', 500)]) {
-    const { deps, calls } = harness({ env: KIMI, create: () => e, fallback: () => kimiMessage() });
+    const { deps, calls } = harness({ env: CHAIN, create: () => e, fallbacks: { claude2: () => claudeMessage(), kimi: () => kimiMessage() } });
     assert.equal((await runReview(deps)).outcome, 'api_error');
     assert.equal(calls.fallback.length, 0);
   }
+  const { deps, calls } = harness({ env: CHAIN, create: () => creditError(), fallbacks: { claude2: () => apiError('authentication', 401), claude3: () => claudeMessage(), kimi: () => kimiMessage() } });
+  const r = await runReview(deps);
+  assert.equal(r.outcome, 'api_error');
+  assert.deepEqual(calls.fallback.map((c) => c.id), ['claude2']);
+  assert.match(plain(r.summary), /Claude is out of credit, and the fallback Claude account 2 failed: its key was rejected \(401\)\. Check the ANTHROPIC_API_KEY_2 repository secret/);
 });
 
-test('credit: without a Kimi key, a credit error is reported as before', async () => {
+test('credit: without any fallback key, a credit error is reported as before', async () => {
   const { deps } = harness({ create: () => apiError('billing', 402) });
   const r = await runReview(deps);
   assert.equal(r.outcome, 'api_error');
   assert.match(plain(r.summary), /credit balance may be exhausted/);
 });
 
-test('credit: a failing Kimi is reported as the fallback failing, with a zero-cost Kimi record', async () => {
-  const { deps } = harness({ env: KIMI, create: () => apiError('billing', 402), fallback: () => apiError('not_found', 404) });
+test('credit: every account empty is said plainly, with a zero-cost record', async () => {
+  const { deps } = harness({ env: { ANTHROPIC_API_KEY_2: 'second-key', ...KIMI }, create: () => creditError(), fallbacks: { claude2: () => creditError(), kimi: () => apiError('billing', 402) } });
   const r = await runReview(deps);
   assert.equal(r.outcome, 'api_error');
-  assert.match(plain(r.summary), /Kimi fallback failed too: the Kimi model was not found \(404\)\. Check that KIMI_MODEL/);
+  assert.match(plain(r.summary), /Every account in the credit fallback chain is out of credit \(Claude, Claude account 2, Kimi\)/);
   const body = JSON.parse(r.record.body);
-  assert.deepEqual([body.provider, body.usd, body.status], ['kimi', 0, 'err']);
+  assert.deepEqual([body.usd, body.status], [0, 'err']);
+});
+
+test('credit: a failing Kimi is reported as the fallback failing', async () => {
+  const { deps } = harness({ env: KIMI, create: () => apiError('billing', 402), fallbacks: { kimi: () => apiError('not_found', 404) } });
+  const r = await runReview(deps);
+  assert.equal(r.outcome, 'api_error');
+  assert.match(plain(r.summary), /Claude is out of credit, and the fallback Kimi failed: the Kimi model was not found \(404\)\. Check that KIMI_MODEL/);
+  assert.equal(JSON.parse(r.record.body).provider, 'kimi');
 });
 
 test('credit: a Kimi answer that is not the schema is malformed, not published', async () => {
-  const { deps } = harness({ env: KIMI, create: () => creditError(), fallback: () => kimiMessage('Here is my review: looks fine.') });
+  const { deps } = harness({ env: KIMI, create: () => creditError(), fallbacks: { kimi: () => kimiMessage('Here is my review: looks fine.') } });
   assert.equal((await runReview(deps)).outcome, 'malformed_response');
 });
 
@@ -648,4 +678,44 @@ test('credit: unfence only unwraps a whole fenced block', () => {
   assert.equal(unfence('```\n{"a":1}```'), '{"a":1}');
   assert.equal(unfence('{"a":1}'), '{"a":1}');
   assert.equal(unfence('text ```json\n{}\n```'), 'text ```json\n{}\n```');
+});
+
+test('credit: a fallback model is bounded by the same caps before it is called', async () => {
+  const { deps, calls } = harness({ env: { ...KIMI, KIMI_MODEL: 'kimi-unpriced', CLAUDE_REVIEW_MAX_COST_USD: '0.5' }, create: () => creditError(), fallbacks: { kimi: () => kimiMessage() } });
+  const r = await runReview(deps);
+  assert.equal(r.outcome, 'budget_refused');
+  assert.match(plain(r.summary), /Claude is out of credit, and Kimi was not called: the model has no rate/);
+  assert.equal(calls.fallback.length, 0);
+});
+
+test('credit: a Kimi review never blocks Claude from reviewing the same inputs later, and is not repeated by Kimi', async () => {
+  const first = harness({ env: KIMI, create: () => creditError(), fallbacks: { kimi: () => kimiMessage() } });
+  const kimiRecord = (await runReview(first.deps)).record;
+  const artifacts = [{ name: kimiRecord.name, created_at: '2026-10-16T09:00:00Z', expired: false }];
+  const back = harness({ env: KIMI, artifacts, fallbacks: { kimi: () => kimiMessage() } });
+  const r = await runReview(back.deps);
+  assert.equal(r.outcome, 'reviewed', 'Claude, with credit again, reviews what Kimi reviewed');
+  assert.equal(JSON.parse(r.record.body).provider, 'anthropic');
+  const still = harness({ env: KIMI, artifacts, create: () => creditError(), fallbacks: { kimi: () => kimiMessage() } });
+  const again = await runReview(still.deps);
+  assert.equal(again.outcome, 'duplicate');
+  assert.equal(still.calls.fallback.length, 0, 'Kimi is not paid twice for the same inputs');
+});
+
+test('credit: a credit refusal on the retry without refusal fallbacks still reaches the chain', async () => {
+  const { deps, calls } = harness({ env: KIMI, create: (n) => (n === 1 ? apiError('bad_request', 400) : creditError()), fallbacks: { kimi: () => kimiMessage() } });
+  const r = await runReview(deps);
+  assert.equal(r.outcome, 'reviewed');
+  assert.equal(calls.create.length, 2);
+  assert.equal(calls.fallback.length, 1);
+});
+
+test('credit: an answer without token counts records its worst case, never $0', async () => {
+  const { deps } = harness({ env: KIMI, create: () => creditError(), fallbacks: { kimi: () => ({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(answer()) }] }) } });
+  const r = await runReview(deps);
+  assert.equal(r.outcome, 'reviewed');
+  const body = JSON.parse(r.record.body);
+  assert.ok(body.usd > 0);
+  assert.equal(body.cost_known, false);
+  assert.match(plain(r.summary), /no token counts, so its worst case was recorded/);
 });
