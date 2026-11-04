@@ -61,7 +61,8 @@ export default function PartnerStudioHome({
   const partner = profile.state === 'ready' ? profile.data : null;
   const first = String(partner?.name || user?.name || '').trim().split(/\s+/)[0] || 'there';
 
-  const studio = useStudioLayout({ profile: 'partner', viewer: user, readOnly: previewing });
+  // D4362 (#4362): an admin previewing arranges their own Partner Studio; its tiles stay withheld (`withheld`).
+  const studio = useStudioLayout({ profile: 'partner', viewer: user });
   const home = usePartnerHome(previewing);
   const tiles = partnerTiles(home.state, home.load);
   const dim = studio.editing ? 'sm-dim' : '';
