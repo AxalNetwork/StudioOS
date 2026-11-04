@@ -73,7 +73,7 @@ function Cta({ add }) {
 
 export default function PhoneModulePage({
   cycle, slug, moduleName, data, status = data ? 'ready' : 'loading', message = '', onRetry,
-  records, recordsStatus, recordsMessage, query = {}, onQuery, onRetryRecords, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null,
+  records, recordsStatus, recordsMessage, query = {}, onQuery, onRetryRecords, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null, aboveRecords = null,
 }) {
   const [text, setText] = useState(query.q || '');
   const meta = cycleOf(cycle);
@@ -155,6 +155,8 @@ export default function PhoneModulePage({
         {interviewLine && <p className="m-0 mt-2.5 text-[13px] font-semibold text-gray-900 dark:text-gray-100" data-testid="verdict-interview-line">{interviewLine}</p>}
       </section>
 
+      {/* #3938 (D1478 part 9): a control that acts on the records themselves, as on the desktop page. */}
+      {aboveRecords && <div className="mt-[22px]">{aboveRecords}</div>}
       <div className="mt-[22px] flex flex-col gap-2" data-testid="phone-module-controls">
         <form role="search" onSubmit={(e) => { e.preventDefault(); set({ q: text.trim() }); }}>
           <input type="search" value={text} onChange={(e) => setText(e.target.value)} aria-label={`Search ${title}`} placeholder={`Search ${String(title || '').toLowerCase()}…`}
