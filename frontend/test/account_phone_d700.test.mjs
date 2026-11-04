@@ -742,7 +742,7 @@ test('8. a gated Learning draws the coming-soon line and Browse, Articles open, 
   const home = read('frontend/src/pages/learning/LearningHome.jsx');
   assert.match(home, /useLearningRead\(readMe, \[\], \{ enabled: !gated, scope: 'me' \}\)/);
   assert.match(home, /useMyPrograms\(!gated\)/);
-  assert.match(home, /\{!gated && <OpenPrograms \{\.\.\.programs\} \/>\}/);
+  assert.match(home, /\{!gated && tab !== 'videos' && <OpenPrograms \{\.\.\.programs\} \/>\}/);
 });
 
 /** The page itself below 1024px: `usePhoneWidth` reads `window.matchMedia` on its first render. */
