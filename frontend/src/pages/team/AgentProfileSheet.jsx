@@ -8,7 +8,7 @@ import * as agents from './agentsAdapter.js';
 import AgentSkillsCard from './AgentSkillsCard.jsx';
 import { BTN_DANGER, BTN_PRIMARY, BTN_SECONDARY, FIELD, HonestBlock, MONO, MUTED } from './teamUi.jsx';
 import { day } from '../account/companies/companiesModel.js';
-import { agentName, budgetLine, dayTime, eventWords, pauseWords } from './teamModel.js';
+import { agentName, agentSkillsScope, budgetLine, dayTime, eventWords, pauseWords } from './teamModel.js';
 
 /**
  * D1497 (#3727, TM5a, TM5b) — an agent's profile, a Sheet at 640, from
@@ -27,7 +27,8 @@ import { agentName, budgetLine, dayTime, eventWords, pauseWords } from './teamMo
  * the agent; for a manager they save through "Save name", never silently.
  *
  * D1612 (#3952, SK4): below the profile, its Skills and Values
- * (`AgentSkillsCard`, A2 #3956 through the adapter).
+ * (`AgentSkillsCard`, A2 #3956 through the adapter). #4363: its Skills link
+ * opens the Skills tab of the scope the agent works in (`agentSkillsScope`).
  *
  * D4119 (#4119, AG5): the profile opens on the persona (D4117): its full
  * card with the status line, its Story and goal, and its Values, the same
@@ -167,7 +168,7 @@ function CapEditor({ name, current, refusal, onCancel, onSave }) {
   );
 }
 
-export default function AgentProfileSheet({ uid, canManage, editCap = false, onClose, onChanged }) {
+export default function AgentProfileSheet({ uid, scope = null, canManage, editCap = false, onClose, onChanged }) {
   const [block, setBlock] = useState(null);
   const [confirm, setConfirm] = useState(editCap ? 'cap' : null);
   const [refusal, setRefusal] = useState('');
@@ -205,7 +206,7 @@ export default function AgentProfileSheet({ uid, canManage, editCap = false, onC
             : (
               <>
                 <AgentProfile data={block.value} canManage={manage} legend={legend} />
-                <div className="px-5 pb-5"><AgentSkillsCard agent={{ uid: a?.uid || uid, role_key: a?.role_key, scope: a?.scope || null }} canManage={manage} /></div>
+                <div className="px-5 pb-5"><AgentSkillsCard agent={{ uid: a?.uid || uid, role_key: a?.role_key, scope: a?.scope || null }} canManage={manage} skillsScope={agentSkillsScope(scope, a)} /></div>
               </>
             )}
       </Sheet>
