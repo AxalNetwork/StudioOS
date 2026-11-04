@@ -1031,11 +1031,12 @@ export const LISTS: Record<ModuleSlug, { cols: string[]; filters: FilterSpec[]; 
     sorts: [{ key: 'mentions', label: 'Mentions' }, { key: 'trend', label: 'Trend' }, { key: 'theme', label: 'Theme' }, { key: 'recent', label: 'Most recent' }],
   },
   'customer-research': {
-    cols: ['Interviewee', 'Company', 'Date', 'ICP fit', 'Consent', 'State'],
+    cols: ['Interviewee', 'Company', 'Date', 'ICP fit', 'Recording consent', 'Quotes OK', 'State'],
     filters: [
       { key: 'icp', label: 'ICP fit', options: [opt('strong', 'Strong'), opt('partial', 'Partial'), opt('none', 'None'), NOT_RECORDED] },
       // Deck-eligible is FVW's `quote_consent === true`: the same rows as Agreed.
-      { key: 'consent', label: 'Consent', options: [opt('agreed', 'Agreed · deck-eligible'), opt('declined', 'Declined'), opt('not_asked', 'Not asked')] },
+      { key: 'recording_consent', label: 'Recording consent', options: [opt('given', 'Given'), opt('declined', 'Declined'), opt('not_asked', 'Not asked')] },
+      { key: 'consent', label: 'Quotes OK', options: [opt('agreed', 'Agreed · deck-eligible'), opt('declined', 'Declined'), opt('not_asked', 'Not asked')] },
       // Video and audio calls are one "Call" (the owner, 2026-10-21): `call` matches both stored channels.
       { key: 'channel', label: 'Channel', options: [opt('in_person', 'In person'), opt('call', 'Call'), opt('text', 'Text chat')] },
     ],
@@ -1224,10 +1225,29 @@ function durationMin(activeMs: number | null, recordingSec: number | null): numb
   return ms > 0 ? Math.max(1, Math.round(ms / 60_000)) : null;
 }
 
+/** #4411: permission to record is independent of permission to quote. */
+export const RECORDING_CONSENT_METHODS: Record<string, string> = {
+  verbal: 'Said yes out loud', written: 'In writing', in_app: 'In the app',
+  pre_agreed: 'Agreed beforehand', chat_reply: 'Agreed in the chat',
+};
+export function recordingConsent(session?: { consent_status?: unknown; consent_method?: unknown } | null) {
+  const status = session?.consent_status === 'given' ? 'given'
+    : session?.consent_status === 'declined' ? 'declined' : 'not_asked';
+  const method = status === 'given' && typeof session?.consent_method === 'string'
+    && Object.hasOwn(RECORDING_CONSENT_METHODS, session.consent_method) ? session.consent_method : null;
+  return { status, method };
+}
+export function recordingConsentText(session?: { consent_status?: unknown; consent_method?: unknown } | null): string {
+  const { status, method } = recordingConsent(session);
+  return status === 'given' ? method ? `Given · ${RECORDING_CONSENT_METHODS[method]}` : 'Given'
+    : status === 'declined' ? 'Declined' : 'Not asked';
+}
+
 /** Customer research is the one table paged in SQL: it is the one that grows. */
 async function researchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   const f = rq.filter;
   const icp = ['strong', 'partial', 'none'].includes(f.icp) ? f.icp : f.icp === 'not_recorded' ? 'not_recorded' : '';
+  const recording = ['given', 'declined', 'not_asked'].includes(f.recording_consent) ? f.recording_consent : '';
   const consent = ['agreed', 'declined', 'not_asked'].includes(f.consent) ? f.consent : '';
   // D685: `pipeline` is the recruiting picker's filter, the three stages still to come.
   const stage = ['lead', 'invited', 'booked', 'done', 'pipeline'].includes(f.stage) ? f.stage : '';
@@ -1235,16 +1255,20 @@ async function researchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   const like = rq.q ? `%${rq.q.replace(/[\\%_]/g, (m) => `\\${m}`)}%` : '';
   // Every condition is a bound parameter; an empty one switches itself off.
   // The statement is literal twice over (count and page) rather than spliced.
-  const binds = [ctx.projectId, like, like, like, icp, icp, icp, consent, consent, consent, consent, stage, stage, stage, channel, channel, channel];
+  const binds = [ctx.projectId, like, like, like, icp, icp, icp, consent, consent, consent, consent, recording, recording, recording, recording, stage, stage, stage, channel, channel, channel];
   const sort = rq.sort === 'oldest' || rq.sort === 'name' || rq.sort === 'booked' ? rq.sort : 'newest';
   const total = await ctx.env.DB.prepare(
-    `SELECT COUNT(*) AS n FROM discovery_interviews
-      WHERE project_id = ?
-        AND (? = '' OR lower(interviewee_name) LIKE ? ESCAPE '\\' OR lower(COALESCE(interviewee_company, '')) LIKE ? ESCAPE '\\')
-        AND (? = '' OR (? = 'not_recorded' AND icp_fit IS NULL) OR icp_fit = ?)
-        AND (? = '' OR (? = 'agreed' AND quote_consent = 1) OR (? = 'declined' AND quote_consent = 0) OR (? = 'not_asked' AND quote_consent IS NULL))
-        AND (? = '' OR COALESCE(stage, 'done') = ? OR (? = 'pipeline' AND stage IN ('lead', 'invited', 'booked')))
-        AND (? = '' OR channel = ? OR (? = 'call' AND channel IN ('video', 'phone')))`,
+    `SELECT COUNT(*) AS n
+       FROM discovery_interviews i
+       LEFT JOIN interview_sessions s
+         ON s.id = (SELECT MAX(x.id) FROM interview_sessions x WHERE x.interview_id = i.id AND x.project_id = i.project_id)
+      WHERE i.project_id = ?
+        AND (? = '' OR lower(i.interviewee_name) LIKE ? ESCAPE '\\' OR lower(COALESCE(i.interviewee_company, '')) LIKE ? ESCAPE '\\')
+        AND (? = '' OR (? = 'not_recorded' AND i.icp_fit IS NULL) OR i.icp_fit = ?)
+        AND (? = '' OR (? = 'agreed' AND i.quote_consent = 1) OR (? = 'declined' AND i.quote_consent = 0) OR (? = 'not_asked' AND i.quote_consent IS NULL))
+        AND (? = '' OR (? = 'given' AND s.consent_status = 'given') OR (? = 'declined' AND s.consent_status = 'declined') OR (? = 'not_asked' AND COALESCE(s.consent_status, 'not_recorded') NOT IN ('given', 'declined')))
+        AND (? = '' OR COALESCE(i.stage, 'done') = ? OR (? = 'pipeline' AND i.stage IN ('lead', 'invited', 'booked')))
+        AND (? = '' OR i.channel = ? OR (? = 'call' AND i.channel IN ('video', 'phone')))`,
   ).bind(...binds).first<{ n: number }>();
   // The page, each interview beside its latest session (by id). A pains blob
   // that is not JSON counts as no pain, never as a failed read.
@@ -1253,7 +1277,7 @@ async function researchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
             i.recording_duration_sec,
             json_array_length(CASE WHEN json_valid(i.pains_json) THEN i.pains_json ELSE '[]' END) AS pains,
             COALESCE(substr(i.done_at, 1, 10), NULLIF(trim(i.interview_date), ''), substr(i.created_at, 1, 10)) AS d,
-            s.id AS session_id, s.status AS session_status, s.submitted_via, s.processing_stage, s.active_ms, s.consent_status
+            s.id AS session_id, s.status AS session_status, s.submitted_via, s.processing_stage, s.active_ms, s.consent_status, s.consent_method
        FROM discovery_interviews i
        LEFT JOIN interview_sessions s
          ON s.id = (SELECT MAX(x.id) FROM interview_sessions x WHERE x.interview_id = i.id AND x.project_id = i.project_id)
@@ -1261,6 +1285,7 @@ async function researchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
         AND (? = '' OR lower(i.interviewee_name) LIKE ? ESCAPE '\\' OR lower(COALESCE(i.interviewee_company, '')) LIKE ? ESCAPE '\\')
         AND (? = '' OR (? = 'not_recorded' AND i.icp_fit IS NULL) OR i.icp_fit = ?)
         AND (? = '' OR (? = 'agreed' AND i.quote_consent = 1) OR (? = 'declined' AND i.quote_consent = 0) OR (? = 'not_asked' AND i.quote_consent IS NULL))
+        AND (? = '' OR (? = 'given' AND s.consent_status = 'given') OR (? = 'declined' AND s.consent_status = 'declined') OR (? = 'not_asked' AND COALESCE(s.consent_status, 'not_recorded') NOT IN ('given', 'declined')))
         AND (? = '' OR COALESCE(i.stage, 'done') = ? OR (? = 'pipeline' AND i.stage IN ('lead', 'invited', 'booked')))
         AND (? = '' OR i.channel = ? OR (? = 'call' AND i.channel IN ('video', 'phone')))
       ORDER BY CASE WHEN ? = 'booked' THEN CASE i.stage WHEN 'booked' THEN 0 WHEN 'invited' THEN 1 WHEN 'lead' THEN 2 ELSE 3 END END ASC,
@@ -1286,6 +1311,7 @@ async function researchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
       id: r.id, interviewee: r.interviewee_name, company: r.interviewee_company ?? null,
       role: r.interviewee_role ?? null,
       date: r.d ?? null, icp_fit: r.icp_fit ?? null,
+      recording_consent: recordingConsent(r),
       consent: r.quote_consent === 1 ? 'agreed' : r.quote_consent === 0 ? 'declined' : null,
       channel: r.channel ?? null, stage: r.stage ?? 'done',
       pains: Number(r.pains ?? 0),
