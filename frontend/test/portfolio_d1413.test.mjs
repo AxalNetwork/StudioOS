@@ -369,6 +369,8 @@ test('PF5: signing out forgets the picked project; a company made or switched to
 test('PF2: the company page draws each block alone; Legal failing leaves Team and Documents; people by name, never by email', async () => {
   let v = await mount('founder', { url: '/account/portfolio/nl' });
   try {
+    assert.ok(v.has('company-compliance-card'));
+    assert.ok(!v.has('project-work-card'), 'a company has no Work card');
     assert.match(v.of('company-legal-facts'), /Delaware, United States.*7712345.*•••• 4821.*251 Little Falls Drive.*12 Mar 2026.*\[Avery Stone\] · CEO · Director/s);
     assert.match(v.of('company-locations'), /Registered office.*Wilmington.*Headquarters.*Lisbon, Portugal/s);
     assert.match(v.of('company-document-registered_agent_agreement'), /Registered agent agreementNot recorded.*Upload/s);
@@ -395,6 +397,8 @@ test('PF3: a standalone project offers Make it a company (Incorporate, prefilled
     assert.match(v.of('project-not-a-company'), /Not a company yet.*\[Lantern\] is a standalone project\. It is not a legal entity\./s);
     assert.equal(v.prop('project-make-company', 'href'), '/incorporate?project=2');
     assert.ok(v.has('project-move-under'));
+    assert.ok(v.has('project-work-card'));
+    assert.ok(!v.has('company-compliance-card'), 'a standalone project has no Compliance card');
     assert.match(v.of('project-facts'), /\/p\/lantern.*Validation.*Climate.*12 Sep 2026.*LocationNot recorded/s);
     assert.doesNotMatch(v.text(), /Legal/, 'a standalone project has no Legal anywhere');
   } finally { await v.close(); }
