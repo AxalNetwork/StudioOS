@@ -20,3 +20,7 @@ and Campaigns/:uid. No Distribution wildcard may shadow the existing Grow
 record route. Campaign screens must use #4447/#4483's existing store, router
 and grow client, with reads owned by their task; the shell reads no campaigns.
 Proposals retain their host's decisions; nothing posts or sends on mount.
+
+| `AdsTab.jsx` | D4490 budget planner, spend gaps, platform availability and creative drafts; shell integration requested from #4484. |
+| `adsModel.js` | D4490 slider amounts, totals and monthly chart gaps. |
+| `ads.css` | D4490 responsive Ads columns using the Distribution tokens. |
