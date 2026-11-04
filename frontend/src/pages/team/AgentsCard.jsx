@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Pill, Skeleton, Unrecorded } from '../../ui';
 import { AgentIdentity, AgentTile } from './AgentMark.jsx';
 import SkillsLink from './SkillsLink.jsx';
-import { BTN_PRIMARY, BTN_TEXT, HeadRow, HonestBlock, MONO, MUTED, PendingOwner, TeamCard } from './teamUi.jsx';
+import { BTN_PRIMARY, BTN_TEXT, HeadRow, HonestBlock, MONO, MUTED, TeamCard } from './teamUi.jsx';
 import { AGENTS_FOOT, agentGroups, agentsFootLine, refusalWords } from './teamModel.js';
 
 /**
@@ -43,7 +43,7 @@ function PlanLine({ reason = refusalWords('plan_required') }) {
     <div className="flex flex-wrap items-center gap-3 rounded-axal-md border border-axal-hairline px-4 py-3 text-left dark:border-gray-700" data-testid="team-agents-plan">
       <AgentTile size={28} />
       <span className="text-[13px] text-axal-ink dark:text-gray-100">{reason}</span>
-      <PendingOwner />
+
       <Link to="/pricing" className={`ml-auto ${BTN_TEXT}`}>See plans</Link>
     </div>
   );
