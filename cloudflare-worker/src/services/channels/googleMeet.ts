@@ -132,7 +132,7 @@ export async function accessToken(env: Env, userId: number): Promise<string> {
 export interface MeetingInput { topic: string; startsAt: string; durationMin: number }
 export interface CreatedMeeting { externalRef: string; joinUrl: string; startsAt: string; endsAt: string; meetingCode: string }
 
-const MEET_CODE = /meet\.google\.com\/([a-z]{3,4}-[a-z]{4}-[a-z]{3,4})\b/i;
+const MEET_CODE = /meet\.google\.com\/(?:meet\/)?([a-z]{3,4}-[a-z]{4}-[a-z]{3,4})\b/i;
 /** The Meet code a join link carries: `https://meet.google.com/abc-mnop-xyz` → `abc-mnop-xyz`. */
 export function meetingCodeOf(joinUrl: string | null | undefined): string | null {
   return MEET_CODE.exec(String(joinUrl ?? ''))?.[1]?.toLowerCase() ?? null;
@@ -260,12 +260,15 @@ export async function createOpenSpace(env: Env, conn: GoogleConnection): Promise
   if (!res.ok) throw new MeetingProviderError('meet_create_failed', false);
   const body = await res.json().catch(() => null) as { name?: string; meetingUri?: string } | null;
   const spaceName = String(body?.name ?? '');
-  const joinUrl = String(body?.meetingUri ?? '');
-  const meetingCode = meetingCodeOf(joinUrl);
-  if (!SPACE_NAME.test(spaceName) || !/^https:\/\/meet\.google\.com\//.test(joinUrl) || !meetingCode) {
+  const given = String(body?.meetingUri ?? '');
+  const meetingCode = meetingCodeOf(given);
+  if (!SPACE_NAME.test(spaceName) || !/^https:\/\/meet\.google\.com\//.test(given) || !meetingCode) {
     throw new MeetingProviderError('meet_link_unavailable', false);
   }
-  return { spaceName, joinUrl, meetingCode, autoTranscribe };
+  // The call's own address, rebuilt from its code: a meetingUri that came back
+  // as /meet/<code> was stored and shown as given, and the bot's link check
+  // then refused it, so Eadwyn AI was never sent.
+  return { spaceName, joinUrl: `https://meet.google.com/${meetingCode}`, meetingCode, autoTranscribe };
 }
 
 /** Remember a space Axal created, so attaching its link finds it without a Calendar event. */
