@@ -88,8 +88,8 @@ test('D2319: restoring either old counter alias or losing its canonical destinat
   check(ROUTES);
   for (const [from, to] of [['/raise/capital-match', '/raise/capital-relationships/match'], ['/grow/brand', '/build/brand']]) {
     for (const wrong of [from, '/missing-canonical-tool']) {
-      const original = `'${from}': '${to}'`;
-      const mutant = source.replace(original, `'${from}': '${wrong}'`);
+      const original = `return '${to}';`;
+      const mutant = source.replace(original, `return '${wrong}';`);
       assert.notEqual(mutant, source);
       const resolved = mutant.replace(/from '(\.\.?\/[^']+)'/g,
         (_, spec) => `from '${new URL(spec, new URL('../src/lib/siteModules.js', import.meta.url)).href}'`);

@@ -1,3 +1,4 @@
+import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
 /**
  * The Advisor Canvas shell contract.
  *
@@ -86,7 +87,7 @@ test('canonical deep links remain registered even when not sidebar rows', () => 
     '/network',
     '/signals',
   ]) {
-    assert.ok(app.includes(`path="${path}"`), `${path} lost its canonical route`);
+    assert.equal(app.includes(`path="${path}"`), !isRetiredRedirect(path), path);
   }
   for (const legacyRow of ['/messages', '/my/jobs', '/advisors', '/market-intel', '/due-diligence']) {
     assert.ok(!targets.includes(legacyRow), `${legacyRow} became a competing advisor row`);
