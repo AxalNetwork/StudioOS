@@ -113,6 +113,16 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-11-04 — Work: assignees from the team only, and My tasks (#3968, #3994)
+
+The owner's two artifacts were decoded by `scripts/read-canvas.mjs`:
+- **The boards replace `Work Compliance · Boards.dc.html`** (artifact `XJd9TTJgzjdasWvuJv6ArV`). Every earlier board is kept, and WK7's note now says its rows are the Team's people and agents only. Two boards are new:
+  - **WK9, Assignees · the team only:** w9 (a project task), w9m (@-mentions), w9c (a company compliance task) and w9s (states: a seat ended, no match, an admin on HQ read-only access);
+  - **WK13, My tasks:** w13 (Founder › Studio, grouped by team), w13b (where each licence finds it) and w13p (phone).
+- **The page replaces `Work Compliance Page.dc.html`** (artifact `6snU4LwGECSELCgYtneiB3`). Every earlier frame is kept, and it adds w9, w9m, w9c, w9s, w13, w13b and w13p.
+
+The frontend is #3994's (PR #4381). Every Worker read those screens need is on main.
+
 ## Landed 2026-11-04 — Pitch deck templates and the Gallery's covers (#3876)
 
 The owner's four artifacts were decoded by `scripts/read-canvas.mjs`:
