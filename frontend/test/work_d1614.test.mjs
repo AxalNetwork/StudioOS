@@ -119,7 +119,7 @@ test('the agenda: Overdue pinned with its days, then months oldest first; a task
 // (company_compliance_d1614.test.mjs holds what each sends); every other method stays off until its route lands.
 // D1614 W6 (#3974): W3's run, retry and feed and W4's workload and schedule are on; #3972 turned agentSessions on, once
 // W4's Worker put agents' sessions in the workload read. CAL10's run sheet opens from the session itself.
-const LIVE = new Set(['burnup', 'board', 'item', 'move', 'assign', 'create', 'run', 'retry', 'feed', 'workload', 'schedule', 'agentSessions',
+const LIVE = new Set(['summary', 'burnup', 'board', 'item', 'move', 'assign', 'create', 'run', 'retry', 'feed', 'workload', 'schedule', 'agentSessions',
   'complianceTasks', 'complianceTask', 'markDone', 'createWork', 'complianceCreate', 'complianceUpdate',
   'complianceAssignable', 'complianceAssign', 'complianceComment', 'complianceReady', 'complianceReopen',
   // D1614 W8 (#3994): the Team picker and My tasks, on #4286's routes.
@@ -127,8 +127,8 @@ const LIVE = new Set(['burnup', 'board', 'item', 'move', 'assign', 'create', 'ru
 test('the seam: every method not yet live is off, with the issue that turns it on, and makes no request', async () => {
   assert.deepEqual(Object.keys(WORK_SEAM).sort(), Object.keys(workAdapter).sort());
   for (const [m, issue] of Object.entries(WORK_SEAM)) {
-    assert.match(issue, /^#39(57|69|70|71|72|76|94)$/);
-    if (LIVE.has(m)) continue;
+    assert.match(issue, /^#(?:39(57|69|70|71|72|76|93|94)|4420)$/);
+    if (LIVE.has(m) || issue === '#3993') continue; // W7 routes are on main and covered by work_w7_3993.
     const r = await workAdapter[m]('x');
     assert.equal(r.available, false, m);
   }
@@ -275,4 +275,106 @@ test('#3973: mounted board: columns and counts from the read; Move to calls the 
     assert.deepEqual(moves, [['x1', 'in_progress'], ['x1', 'done']]);
     await act(async () => root.unmount());
   } finally { restore(); }
+});
+
+// W7 part 2 (#4419): mounted interactions use the same adapter seam as the sheets.
+import TaskTimeline from '../src/pages/work/TaskTimeline.jsx';
+import TaskReview from '../src/pages/work/TaskReview.jsx';
+import TaskDraft from '../src/pages/work/TaskDraft.jsx';
+import TaskClassification from '../src/pages/work/TaskClassification.jsx';
+import WorkSettings from '../src/pages/work/WorkSettings.jsx';
+import { mountContracts } from './_contracts_dom.mjs';
+const yes = (data) => Promise.resolve({available:true,data});
+
+test('W7 timeline names the actor, keeps missing cost honest, opens the run, and edits only your own comments', async () => {
+  const runs=[], writes=[];
+  const adapter={timeline:()=>yes({entries:[{type:'comment',at:'2026-11-04',comment:{uid:'c1',body:'Recorded words',author:{kind:'agent',name:'Analyst',uid:'a1'},run:'r1',cost:{available:false}}},
+    {type:'comment',at:'2026-11-05',comment:{uid:'c2',body:'My words',author:{kind:'person',name:'Member',uid:'u1'}}}]}),assignable:()=>yes({team:[{kind:'person',uid:'u1',name:'Member'}]}),editComment:(...a)=>{writes.push(a);return yes({});}};
+  const m=await mountContracts(h(TaskTimeline,{projectId:7,number:3,viewer:{user_uid:'u1'},adapter,onRun:(r)=>runs.push(r)}));
+  try {
+    assert.match(m.text(),/Cost: Not recorded/);assert.doesNotMatch(m.text(),/\$0/);
+    await m.click('View run ›');assert.deepEqual(runs,['r1']);
+    assert.equal(m.nodes().filter((n)=>m.props(n)?.children==='Edit comment').length,1);
+    await m.click('Edit comment');await m.fill('Edit your comment','Revised');
+    const form=m.nodes().find((n)=>n.tagName==='FORM');await act(async()=>m.props(form).onSubmit({preventDefault(){}}));
+    assert.deepEqual(writes,[[7,'c2',{body:'Revised'}]]);
+  }finally{await m.unmount();}
+});
+
+test('W7 review requires changes comment, calls review for both decisions and hides controls from readers', async()=>{
+  const calls=[],changed=[];const adapter={review:(...a)=>{calls.push(a);return yes({task:{uid:'t',column:'done'}});}};
+  const m=await mountContracts(h(TaskReview,{projectId:7,task:{task_number:3,column:'in_review'},canManage:true,adapter,onChanged:(r)=>changed.push(r)}));
+  try{await m.click('Request changes');assert.equal(calls.length,0);assert.match(m.text(),/Add a comment/);
+    await m.fill('Review comment','Please add evidence');await m.click('Request changes');await m.click('Approve and close');
+    assert.deepEqual(calls.map((c)=>c[2].decision),['request_changes','approve']);assert.equal(changed.length,2);
+  }finally{await m.unmount();}
+  assert.doesNotMatch(html(h(TaskReview,{task:{column:'in_review'},canManage:false})),/Approve and close/);
+});
+
+test('W7 draft accepts edits and requires a discard reason',async()=>{
+  const accepted=[],discarded=[];const adapter={acceptDraft:(...a)=>{accepted.push(a);return yes({task:{uid:'new'}});},discardDraft:(...a)=>{discarded.push(a);return yes({});}};
+  const m=await mountContracts(h(TaskDraft,{projectId:7,draft:{uid:'d',title:'Draft'},canManage:true,adapter}));
+  try{await m.click('Discard');assert.equal(discarded.length,0);await m.fill('Discard reason','Duplicate');await m.click('Discard');
+    assert.deepEqual(discarded,[[7,'d',{reason:'Duplicate'}]]);await m.click('Edit');await m.fill('Draft title','Reviewed title');await m.click('Accept edited draft');
+    assert.deepEqual(accepted,[[7,'d',{title:'Reviewed title',body:''}]]);
+  }finally{await m.unmount();}
+});
+
+test('W7 task label and milestone pickers call the project task routes',async()=>{
+  const calls=[];const adapter={labels:()=>yes({labels:[{uid:'l',name:'Bug'}]}),milestones:()=>yes({milestones:[{uid:'m',title:'Launch'}]}),
+    setLabels:(...a)=>{calls.push(['labels',...a]);return yes({task:{}});},setMilestone:(...a)=>{calls.push(['milestone',...a]);return yes({task:{}});}};
+  const m=await mountContracts(h(TaskClassification,{projectId:7,task:{task_number:3},canManage:true,adapter}));
+  try{const box=m.nodes().find((n)=>n.tagName==='INPUT');await act(async()=>m.props(box).onChange({target:{checked:true}}));await m.click('Save labels');
+    const select=m.nodes().find((n)=>n.tagName==='SELECT');await act(async()=>m.props(select).onChange({target:{value:'m'}}));await m.click('Save milestone');
+    assert.deepEqual(calls,[['labels',7,3,{labels:['l']}],['milestone',7,3,{milestone:'m'}]]);
+  }finally{await m.unmount();}
+});
+
+test('W7 settings create project labels with palette colors and milestones with dates',async()=>{
+ const calls=[];const adapter={labels:()=>yes({labels:[]}),milestones:()=>yes({milestones:[]}),createLabel:(...a)=>{calls.push(a);return yes({});},createMilestone:(...a)=>{calls.push(a);return yes({});}};
+ const m=await mountContracts(h(WorkSettings,{projectId:7,canManage:true,adapter}));
+ try{await m.fill('Label name','Bug');let forms=m.nodes().filter((n)=>n.tagName==='FORM');await act(async()=>m.props(forms[0]).onSubmit({preventDefault(){}}));
+  await m.fill('Milestone title','Launch');forms=m.nodes().filter((n)=>n.tagName==='FORM');await act(async()=>m.props(forms[1]).onSubmit({preventDefault(){}}));
+  assert.deepEqual(calls,[[7,{name:'Bug',color:'gray'}],[7,{title:'Launch',due_on:null,state:'open'}]]);
+ }finally{await m.unmount();}
+});
+
+// S1's review of #4441: accessibility and state refresh regressions.
+import TaskDrafts from '../src/pages/work/TaskDrafts.jsx';
+import { ItemSheet } from '../src/pages/work/WorkPage.jsx';
+
+test('editing a comment focuses and names its field and announces edit mode',async()=>{
+ const adapter={timeline:()=>yes({entries:[{type:'comment',comment:{uid:'c',body:'Words',author:{kind:'person',uid:'u'}}}]}),assignable:()=>yes({team:[]})};
+ const m=await mountContracts(h(TaskTimeline,{projectId:7,number:1,viewer:{user_uid:'u'},adapter}));
+ try{const field=m.nodes().find((n)=>n.tagName==='TEXTAREA');let focused=0;field.focus=()=>{focused++;};await m.click('Edit comment');
+  assert.equal(focused,1);assert.equal(m.props(field)['aria-label'],'Edit your comment');
+  assert.equal(m.nodes().some((n)=>m.props(n)?.role==='status'&&m.props(n)?.children==='Editing your comment.'),true);
+ }finally{await m.unmount();}
+});
+
+test('catalogue save and Cancel edit reset milestone date/state and label color',async()=>{
+ const api={labels:()=>yes({labels:[{uid:'l',name:'Bug',color:'red'}]}),milestones:()=>yes({milestones:[{uid:'m',title:'Old milestone',due_on:'2026-12-01',state:'closed'}]}),updateMilestone:()=>yes({}),updateLabel:()=>yes({})};
+ const m=await mountContracts(h(WorkSettings,{projectId:7,canManage:true,adapter:api}));
+ const byLabel=(name)=>m.nodes().find((n)=>m.props(n)?.['aria-label']===name);
+ const clickLabel=async(name)=>{await act(async()=>m.props(byLabel(name)).onClick());};
+ try{
+  await clickLabel('Edit Old milestone');await m.click('Cancel edit');
+  assert.equal(m.props(byLabel('Milestone due date')).value,'');assert.equal(m.props(byLabel('Milestone state')).value,'open');
+  await clickLabel('Edit Old milestone');const forms=m.nodes().filter((n)=>n.tagName==='FORM');await act(async()=>m.props(forms[1]).onSubmit({preventDefault(){}}));
+  assert.equal(m.props(byLabel('Milestone due date')).value,'');assert.equal(m.props(byLabel('Milestone state')).value,'open');
+  await clickLabel('Edit Bug');await m.click('Cancel edit');assert.equal(m.props(byLabel('Label color')).value,'gray');
+  await clickLabel('Edit Bug');await act(async()=>m.props(m.nodes().filter((n)=>n.tagName==='FORM')[0]).onSubmit({preventDefault(){}}));assert.equal(m.props(byLabel('Label color')).value,'gray');
+ }finally{await m.unmount();}
+});
+
+test('the item sheet reloads Activity after label and milestone saves',async()=>{
+ const saved={...workAdapter};let reads=0;const task={uid:'task-refresh',task_number:1,title:'Task',column:'backlog'};
+ Object.assign(workAdapter,{item:()=>yes(task),timeline:()=>{reads++;return yes({entries:[]});},assignable:()=>yes({team:[]}),labels:()=>yes({labels:[]}),milestones:()=>yes({milestones:[]}),setLabels:()=>yes({task}),setMilestone:()=>yes({task})});
+ const m=await mountContracts(h(ItemSheet,{uid:task.uid,projectId:7,viewer:{can_manage:true,user_uid:'u'},onClose(){}}));
+ try{assert.equal(reads,1);await m.click('Save labels');assert.equal(reads,2);await m.click('Save milestone');assert.equal(reads,3);}finally{await m.unmount();Object.assign(workAdapter,saved);}
+});
+
+test('the draft list has a named region and README component rows stay inside the table',()=>{
+ const out=html(h(TaskDrafts,{projectId:7,canManage:false}));assert.match(out,/<section aria-label="Agent task drafts"/);
+ const doc=read('frontend/src/pages/work/README.md');assert.doesNotMatch(doc,/\|\n\s*\n\| `TaskTimeline/);
 });

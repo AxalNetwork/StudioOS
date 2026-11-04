@@ -64,7 +64,7 @@ export function assigneeLine(item) {
 /** The last run's chip (WK1): its words, and the cost so far or charged. */
 export function runChip(run) {
   if (!run || !run.status) return null;
-  const words = { completed: 'Completed', failed: 'Failed', waiting: 'Waiting for you', running: 'Running' }[run.status];
+  const words = { completed: 'Completed', failed: 'Failed', waiting: 'Waiting for you', running: 'Running', skipped: 'Skipped', cancelled: 'Cancelled' }[run.status];
   if (!words) return null;
   const c = num(run.charged_microusd);
   const cost = c == null ? null : `${money(c)}${run.status === 'running' ? ' so far' : ''}`;
@@ -134,8 +134,12 @@ export function assignGroups({ people = [], agents = [], agentsOn = true } = {})
  */
 export const BURN_RANGES = Object.freeze(['2 weeks', '1 month', '3 months', 'Max', 'Custom range']);
 export const BURN_SPLITS = Object.freeze(['People', 'Agents', 'Both']);
-export function burnup(series, { width = 1000, height = 260 } = {}) {
-  const pts = (Array.isArray(series) ? series : []).filter((p) => p && num(p.scope) != null && num(p.completed) != null);
+export function burnup(series, { width = 1000, height = 260, split = 'Both' } = {}) {
+  const kind = split === 'People' ? 'person' : split === 'Agents' ? 'agent' : null;
+  const pts = (Array.isArray(series) ? series : [])
+    .filter((p) => p && p.available !== false && num(p.scope) != null && num(p.completed) != null)
+    .map((p) => ({ ...p, total_completed: num(p.completed), open: num(p.open) ?? num(p.scope) - num(p.completed), completed: kind ? num(p.completed_by?.[kind]) : num(p.completed) }))
+    .filter((p) => p.completed != null);
   if (!pts.length) return { empty: true, line: NOT_RECORDED };
   const top = Math.max(...pts.map((p) => num(p.scope)), 1);
   const x = (i) => (pts.length === 1 ? 0 : (i / (pts.length - 1)) * width);
@@ -143,14 +147,14 @@ export function burnup(series, { width = 1000, height = 260 } = {}) {
   const path = (k) => pts.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(num(p[k])).toFixed(1)}`).join(' ');
   const first = pts[0];
   const last = pts[pts.length - 1];
-  const open = num(last.scope) - num(last.completed);
+  const open = last.open;
   return {
     empty: false,
     scope: path('scope'),
     completed: path('completed'),
-    area: `${path('scope')} L${x(pts.length - 1).toFixed(1)},${y(num(last.completed)).toFixed(1)} ${[...pts].reverse().map((p, i) => `L${x(pts.length - 1 - i).toFixed(1)},${y(num(p.completed)).toFixed(1)}`).join(' ')} Z`,
+    area: `${path('scope')} L${x(pts.length - 1).toFixed(1)},${y(last.total_completed).toFixed(1)} ${[...pts].reverse().map((p, i) => `L${x(pts.length - 1 - i).toFixed(1)},${y(p.total_completed).toFixed(1)}`).join(' ')} Z`,
     tiles: { scope: num(last.scope), completed: num(last.completed), open },
-    line: `Scope grew from ${num(first.scope)} to ${num(last.scope)} items; ${num(last.completed)} are completed and ${open} are open.`,
+    line: `Scope grew from ${num(first.scope)} to ${num(last.scope)} items; ${num(last.completed)} are completed${kind ? ` by ${split.toLowerCase()}` : ''} and ${open} are open.`,
   };
 }
 

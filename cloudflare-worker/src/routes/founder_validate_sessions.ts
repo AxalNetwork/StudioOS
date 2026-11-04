@@ -90,6 +90,8 @@ import { callList } from '../services/channels/callList';
 import { MEETING_ERRORS, MeetingProviderError } from '../services/channels/meetings';
 import { assertStorageRoom } from '../services/storageRoom';
 
+import { parseOutputs, outputPreferences, preferenceStatement, quoteOutputs, outputStates, retryOutput, isCallOutput } from '../services/callOutputs';
+
 const sessions = new Hono<{ Bindings: Env }>();
 
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), {
@@ -146,6 +148,30 @@ sessions.get('/sessions/models', async (c) => {
 // D685 §5.6 — the caller's own recordings in flight, for the pill and the
 // recovery on app load. Declared above `/sessions/:id` so "active" is never
 // read as an id. Filtered on the caller, not on a project scope.
+// D4412: per-member/project choices and a read-only price, before :id routes.
+sessions.get('/sessions/outputs', async (c) => {
+  const user = (await requireAuth(c)) as User;
+  const projectId = Number(c.req.query('project_id'));
+  if (!Number.isSafeInteger(projectId) || projectId <= 0) return json({ detail: 'project_id_required' }, 400);
+  const project = await c.env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ?').bind(projectId).first<ProjectRef>();
+  if (!project || !canWrite(project, user)) return notFound('Project');
+  let selected;
+  try { selected = c.req.query('outputs') == null ? await outputPreferences(c.env, user.id, projectId) : parseOutputs(JSON.parse(c.req.query('outputs')!)); }
+  catch { return json({ detail: 'invalid_outputs' }, 400); }
+  if (!selected) return json({ detail: 'invalid_outputs' }, 400);
+  const minutes = Number(c.req.query('minutes') || 30);
+  if (!Number.isFinite(minutes) || minutes < 1 || minutes > 180) return json({ detail: 'invalid_duration' }, 400);
+  return json({ outputs: selected, quote: await quoteOutputs(c.env, user.id, selected, minutes) });
+});
+sessions.post('/sessions/:id/outputs/:output/retry', async (c) => {
+  const s = await scopeSession(c); if (s instanceof Response) return s;
+  const output = c.req.param('output');
+  if (s.session.created_by_user_id !== s.user.id || s.session.consent_status !== 'given') return notFound('Session');
+  if (!isCallOutput(output)) return json({ detail: 'invalid_output' }, 400);
+  await retryOutput(c.env, s.session.id, output);
+  return json({ outputs: await outputStates(c.env, s.session) });
+});
+
 sessions.get('/sessions/active', async (c) => {
   const user = (await requireAuth(c)) as User;
   return json({ items: await activeSessionsOf(c.env, user.id) });
@@ -314,6 +340,7 @@ function planSession(body: any, legacy: boolean): OpenPlan | Response {
   const offered: readonly string[] = legacy ? CHANNELS : SETUP_CHANNELS;
   if (!offered.includes(channel)) return json({ detail: 'invalid_channel', accepted: offered }, 400);
   const audio = AUDIO_CHANNELS.has(channel);
+  if (body?.outputs !== undefined && (!audio || parseOutputs(body.outputs) === null)) return json({ detail: 'invalid_outputs' }, 400);
 
   if (body?.source != null && body.source !== UPLOAD_SOURCE) return json({ detail: 'invalid_source', accepted: [UPLOAD_SOURCE] }, 400);
   if (body?.source === UPLOAD_SOURCE) {
@@ -403,11 +430,15 @@ async function openOn(env: Env, user: User, interview: { id: number | null; proj
   ).bind(uid, interview.id, interview.project_id, user.id, plan.channel, up ? 'stopped' : 'draft', plan.consent, plan.method || null, plan.consent,
     plan.liveModel, plan.finalModel, plan.language, plan.callProvider, plan.meetingUrl, plan.clientKey,
     up ? UPLOAD_SOURCE : null, up ? up.durationMs : 0, up ? 1 : 0, up ? 1 : 0);
-  const ins = create ? (await env.DB.batch([create, insert]))[1] : await insert.run();
+  const selection = body?.outputs === undefined ? [] : [env.DB.prepare('UPDATE interview_sessions SET outputs = ? WHERE uid = ?')
+    .bind(JSON.stringify(parseOutputs(body.outputs)), uid)];
+  const ins = selection.length ? (await env.DB.batch([...(create ? [create] : []), insert, ...selection]))[create ? 1 : 0]
+    : create ? (await env.DB.batch([create, insert]))[1] : await insert.run();
   const session = (await loadSession(env, Number(ins.meta?.last_row_id)))!;
   interview = { id: session.interview_id, project_id: interview.project_id };
 
   const stmts = [
+    ...(body?.outputs === undefined ? [] : [preferenceStatement(env, user.id, interview.project_id, parseOutputs(body.outputs)!)]),
     ...(await pointStatements(env, session.id, interview.project_id, body?.points)),
     // The interview takes its channel from its first session (D685 §5.4).
     env.DB.prepare('UPDATE discovery_interviews SET channel = COALESCE(channel, ?) WHERE id = ?').bind(plan.channel, interview.id),

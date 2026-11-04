@@ -82,7 +82,7 @@ adminEventSyndication.get('/channels', async (c) => {
   return c.json({
     channels: CHANNEL_KEYS.map((channel) => {
       const adapter = syndicationChannel(channel);
-      return { channel, capability: adapter?.capability ?? null, adapter_ready: !!adapter, account: accountOut(live.find((a: any) => a.channel === channel)) };
+      return { channel, capability: adapter?.capability ?? null, adapter_ready: !!adapter, auth: adapter?.auth ?? null, account: accountOut(live.find((a: any) => a.channel === channel)) };
     }),
   });
 });

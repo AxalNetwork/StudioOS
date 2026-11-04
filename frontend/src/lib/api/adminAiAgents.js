@@ -29,6 +29,10 @@ const enc = encodeURIComponent;
 const q = (params = {}) => new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
 
 export const adminAiAgentsApi = {
+  // D4423: HQ-only cohort preparation; email is input only, scope entries use the same POST.
+  cohort: () => request('/admin/ai-agents/cohort'),
+  addCohort: (email) => request('/admin/ai-agents/cohort', { method: 'POST', body: JSON.stringify({ email }) }),
+  removeCohort: (uid) => request(`/admin/ai-agents/cohort/${enc(uid)}`, { method: 'DELETE' }),
   overview: () => request('/admin/ai-agents/overview'),
   runs: (filters = {}) => request(`/admin/ai-agents/runs?${q(filters)}`),
   run: (uid) => request(`/admin/ai-agents/runs/${enc(uid)}`),

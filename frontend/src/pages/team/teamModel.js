@@ -385,6 +385,9 @@ export function refusalWords(code, detail) {
     case 'invalid_role': return 'Choose one of the roles.';
     case 'removed': return 'This agent was removed.';
     case 'agent_cap_reached': return 'Reached its monthly cap';
+    case 'not_sponsor': return 'Only this agent’s sponsor can run it.';
+    case 'payload_required': return 'Edit the proposal before saving your version.';
+    case 'never_fill': return 'This proposal includes a value that always needs a person. Open it in its module.';
     case 'agent_paused': return 'This agent is paused.';
     case 'not_open': return `Already decided${detail ? ` by ${detail}` : ''}.`;
     case 'already_pending': return 'An invitation to that address is already waiting. Nothing was sent.';
@@ -457,6 +460,7 @@ export function budgetLine(usedMicro, capMicro, tail = ' this month') {
 
 /** This month's spend: "$3.84 of $25 cap", or "Not recorded" when the read did not answer. Never "$0". */
 export function spendLine(a) {
+  if (a?.source === 'mcp_client') return 'Runs on your own assistant';
   const s = a?.month_spend;
   const cap = money(a?.monthly_cap_microusd, { whole: true });
   if (!s || !s.available || s.value_microusd == null) return null;
@@ -511,7 +515,7 @@ export function eventWords(e) {
 
 // D4117 (#4117): an agent is its persona (Vesta, Orrin, …); the Worker sends no job title.
 /** D4119: the line under an agent's name: its persona's tagline, or null. */
-export const agentLine = (a) => String(a?.persona?.tagline || '').trim() || null;
+export const agentLine = (a) => a?.source === 'mcp_client' ? 'Connected app' : String(a?.persona?.tagline || '').trim() || null;
 export const agentName = (a) => String(a?.persona?.name || '').trim() || [a?.first_name, a?.last_name].map((s) => String(s || '').trim()).filter(Boolean).join(' ') || 'Unnamed agent';
 
 /** The Worker's daily run limit (`agents/runtime.ts` DAILY_LIMIT). */
@@ -552,6 +556,7 @@ export function agentRow(a, now = new Date()) {
     key: a.uid,
     uid: a.uid,
     name: agentName(a),
+    outside: a.source === 'mcp_client',
     // D4119: an agent's line is its persona's tagline, never a job title (D4117 §6).
     role: agentLine(a),
     roleOrUnrecorded: agentLine(a) || NOT_RECORDED,
@@ -638,5 +643,29 @@ export function moveOutCopy(project, company, live = COMPANY_AUTHORITY_LIVE) {
       ? ['It becomes a standalone project managed by its Owner.', `${company}'s editors lose access now.`, 'Agents added by the company stop; their open proposals stay decidable.', 'Project agents keep working.']
       : ['It becomes a standalone project managed by its Owner.', `It no longer shows under ${company}.`],
     button: 'Move out', cancel: 'Cancel', danger: true,
+  };
+}
+
+
+// #3727 integration: TM7 reads the actual queue DTO, without inventing a
+// title, source, model or spend. Approval still happens only in the Worker.
+const proposalValue = (value) => {
+  if (value == null) return NOT_RECORDED;
+  if (Array.isArray(value)) return value.map(proposalValue).join('; ');
+  if (typeof value === 'object') return Object.entries(value).map(([key, v]) => `${key.replace(/[_-]/g, ' ')}: ${proposalValue(v)}`).join('\n');
+  return String(value);
+};
+export const QUEUE_HISTORY_STATUSES = ['accepted', 'edited', 'discarded', 'withdrawn'];
+export function queueProposal(item, { roles = [] } = {}) {
+  const modules = (Array.isArray(roles) ? roles : []).flatMap((r) => Array.isArray(r.works_in) ? r.works_in : []);
+  const label = modules.find((m) => m.key === item.module)?.label;
+  const payload = item.payload && typeof item.payload === 'object' ? item.payload : {};
+  const textKey = typeof payload.text === 'string' ? 'text' : typeof payload.value === 'string' ? 'value' : null;
+  return {
+    ...item, title: item.headline || null, proposed_at: item.created_at,
+    module_label: label || (item.module ? String(item.module).replace(/-/g, ' ') : null),
+    draft: textKey ? payload[textKey] : proposalValue(payload) || null, edit_key: textKey,
+    decision: item.status === 'proposed' ? null : item.status, by: item.decided_by,
+    can_decide: item.status === 'proposed' && item.can_decide === true,
   };
 }

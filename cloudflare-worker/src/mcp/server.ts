@@ -37,7 +37,12 @@
  * asks all of it again on every call. A tool's name is stable; a breaking
  * change registers `<name>_v2` beside it.
  */
+import { agentMcpRefusal, type AgentMcpContext } from '../services/agents/allowlists';
+import { outsideEffectiveScopes, outsidePrincipal, outsideProposalChoices, outsideToolAllowed, OUTSIDE_PROPOSE, type OutsidePrincipal } from '../services/agents/outsidePolicy';
+import { logEvent } from '../services/agents/teams';
+import { agentDisclaimerText, disclaimerKeyForRole } from '../services/agents/disclaimers';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { z } from 'zod';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/cfworker';
 import type { Env, User } from '../types';
@@ -64,6 +69,9 @@ export interface ToolRun {
   connected: number[];
   /** D842 (#2470): this call's id, in its result's `_meta` and its activity line; #2465 records it, #2466 keys its hold on it. */
   executionId: string;
+  /** D4424: verified connection context; never tool arguments or headers. */
+  outside?: OutsidePrincipal | null;
+  grantId?: string | null;
   /** D842: aborted when the call times out; a tool that holds AI tokens releases them on it (#2466). */
   signal: AbortSignal;
 }
@@ -103,13 +111,15 @@ export interface McpTool {
    * member already decides it (the deck's Ask, Email's drafts).
    */
   proposes?: boolean;
+  /** D4424: requires a verified outside Team binding, never an ordinary member grant. */
+  outsideOnly?: boolean;
   /** D842: how long a call may run before it answers `timeout`; `TOOL_TIMEOUT_MS` when unset. */
   timeoutMs?: number;
   run: (r: ToolRun) => Promise<unknown>;
 }
 
 /** The scopes whose tools need the company writable, not only readable (D1588 adds raise:write). */
-export const WRITE_SCOPES: ReadonlySet<string> = new Set(['validate:write', 'raise:write']);
+export const WRITE_SCOPES: ReadonlySet<string> = new Set(['validate:write', 'raise:write', 'team:propose']);
 
 /** D842 (#2470): a tool call's default time limit. */
 export const TOOL_TIMEOUT_MS = 20_000;
@@ -235,15 +245,32 @@ export async function liveCompanies(env: Env, props: GrantProps, user: Awaited<R
 }
 
 /** The tools this principal is listed, or, when the grant no longer stands, none and the sentence why. */
-export async function listedTools(env: Env, props: GrantProps, scope: readonly string[]): Promise<{ tools: McpTool[]; refusal: string | null }> {
+export async function listedTools(env: Env, props: GrantProps, scope: readonly string[], grantId: string | null = null): Promise<{ tools: McpTool[]; refusal: string | null }> {
   let principal: Awaited<ReturnType<typeof grantUser>>;
-  try { principal = await grantUser(env, props); } catch (e) {
+  let outside: OutsidePrincipal | null = null;
+  try {
+    principal = await grantUser(env, props);
+    outside = await outsidePrincipal(env, props, grantId);
+    if (outside) { props = outside.props; scope = outsideEffectiveScopes(scope); }
+  } catch (e) {
     if (e instanceof ToolRefused) return { tools: [], refusal: e.sentence };
     throw e;
   }
   const ids = (await liveCompanies(env, props, principal)).map((c) => c.id);
-  const ok = await Promise.all(REGISTRY.map((t) => toolAvailable(env, principal, scope, ids, t)));
-  return { tools: REGISTRY.filter((_, i) => ok[i]), refusal: null };
+  const ok = await Promise.all(REGISTRY.map(async (t) => {
+    if (!outside && t.outsideOnly) return false;
+    if (outside && !(await outsideToolAllowed(env, outside, t.name, t.requiredScope, t.readOnly))) return false;
+    return toolAvailable(env, principal, scope, ids, t);
+  }));
+  const choices = outside ? outsideProposalChoices(outside) : [];
+  return { tools: REGISTRY.filter((_, i) => ok[i]).map(t => outside && t.name === OUTSIDE_PROPOSE ? {
+    ...t,
+    description: [t.description, agentDisclaimerText(disclaimerKeyForRole(outside.agent.role_key))].filter(Boolean).join(' '),
+    inputSchema: { ...t.inputSchema,
+      module: z.enum(choices.map(c => c.module) as [string, ...string[]]),
+      option: z.enum([...new Set(choices.flatMap(c => c.options))] as [string, ...string[]]),
+    },
+  } : t), refusal: null };
 }
 
 /**
@@ -258,12 +285,13 @@ export async function listedTools(env: Env, props: GrantProps, scope: readonly s
  * no member's call changes; `policy` is the server's own, and only tests pass
  * another.
  */
-export async function callTool(env: Env, props: GrantProps, grantId: string | null, tool: McpTool, args: Record<string, unknown>, scope: readonly string[] = [], policy: MeteringPolicy = METERING_POLICY) {
+export async function callTool(env: Env, props: GrantProps, grantId: string | null, tool: McpTool, args: Record<string, unknown>, scope: readonly string[] = [], policy: MeteringPolicy = METERING_POLICY, agentContext?: AgentMcpContext) {
   const executionId = newExecutionId();
   // D1315: the ledger, the call log and the price keep the tool's stored name.
   const recorded = tool.storedAs ?? tool.name;
   const started = Date.now();
   let user: Awaited<ReturnType<typeof grantUser>> | null = null;
+  let outside: OutsidePrincipal | null = null;
   let companyId: number | null = null;
   let stage: CallStage = 'auth';
   // D842 keys use keyUid; retain D843's earlier principal field for callers.
@@ -276,6 +304,9 @@ export async function callTool(env: Env, props: GrantProps, grantId: string | nu
       errorCategory, durationMs: Date.now() - started, apiKeyUid, grantId, client: props.clientName ?? null, companyId,
     });
     if (user) await logToolCall(env, user, { tool: recorded, company: companyId, client: props.clientName, outcome, keyUid: apiKeyUid, grant: grantId, reason });
+    if (outside && !(recorded === OUTSIDE_PROPOSE && outcome === 'ok')) {
+      await logEvent(env, outside.agent.id, user!.id, outcome === 'ok' ? 'run' : 'refused', { source: 'mcp_client', tool: recorded, outcome });
+    }
     // D849: a failing key may be failing for many calls; the member hears once an hour.
     if (apiKeyUid && user && (outcome === 'error' || outcome === 'timeout')) {
       try { await noteKeyFailures(env, user.id, apiKeyUid); }
@@ -284,9 +315,22 @@ export async function callTool(env: Env, props: GrantProps, grantId: string | nu
   };
   try {
     user = await grantUser(env, props);
+    outside = await outsidePrincipal(env, props, grantId);
+    if (outside) { props = outside.props; scope = outsideEffectiveScopes(scope); }
+    if ((!outside && tool.outsideOnly)
+        || (outside && !(await outsideToolAllowed(env, outside, tool.name, tool.requiredScope, tool.readOnly)))) {
+      throw new ToolRefused('That tool is not allowed for this outside assistant’s role and company.', 'tool_not_allowed');
+    }
+    if (agentContext) {
+      if (tool.readOnly === false) throw new ToolRefused('Agents can only use read-only MCP tools.', 'tool_not_allowed');
+      const denied = await agentMcpRefusal(env, user.id, agentContext, tool.name);
+      if (denied) throw new ToolRefused(denied.message, denied.code);
+    }
     stage = 'scope';
     if (!scope.includes(tool.requiredScope)) {
-      throw new ToolRefused(props.keyUid
+      throw new ToolRefused(outside && tool.name !== OUTSIDE_PROPOSE
+        ? 'This connection needs permission to read for its team role. Reconnect your assistant with Team read permission.'
+        : props.keyUid
         ? `This key needs ${tool.requiredScope} for ${tool.name}. Create a key with that permission.`
         : `This token needs ${tool.requiredScope} for ${tool.name}. Reconnect with that permission.`, 'insufficient_scope', 'scope');
     }
@@ -321,13 +365,13 @@ export async function callTool(env: Env, props: GrantProps, grantId: string | nu
     const operation = toolOperation(recorded);
     const priced = listed(operation, policy);
     if (!priced) console.warn('[mcp] tool has no metering price:', tool.name);
-    const quote = priced ? quoteFor(operation, 1, policy) : 0;
+    const quote = !outside && priced ? quoteFor(operation, 1, policy) : 0;
     const runUser = user;
     // One id and abort signal connect D842's timeout to D843 usage and D844's hold.
     const result = await withTimeout(tool.timeoutMs ?? TOOL_TIMEOUT_MS, async (signal) => {
       const runTool = async () => {
         signal.throwIfAborted();
-        return tool.run({ env, props, user: runUser, companies, company, args, connected, executionId, signal });
+        return tool.run({ env, props, user: runUser, companies, company, args, connected, executionId, signal, outside, grantId });
       };
       return quote > 0
         ? (await meteredCall(env, { userId: runUser.id, executionId, operation, quoteMicrousd: quote,
@@ -393,9 +437,9 @@ export function toolAliases(tools: readonly McpTool[]): Map<string, string> {
   return out;
 }
 
-export async function createServer(env: Env, props: GrantProps, grantId: string | null, scope: readonly string[] = []): Promise<McpServer> {
+export async function createServer(env: Env, props: GrantProps, grantId: string | null, scope: readonly string[] = [], agentContext?: AgentMcpContext): Promise<McpServer> {
   const server = new McpServer({ name: 'StudioOS', version: '1.0.0' }, { jsonSchemaValidator: new CfWorkerJsonSchemaValidator() });
-  const { tools, refusal } = await listedTools(env, props, scope);
+  const { tools, refusal } = await listedTools(env, props, scope, grantId);
   for (const tool of tools) {
     server.registerTool(tool.name, {
       title: tool.title,
@@ -403,7 +447,7 @@ export async function createServer(env: Env, props: GrantProps, grantId: string 
       inputSchema: tool.inputSchema,
       annotations: { readOnlyHint: tool.readOnly !== false, destructiveHint: false, openWorldHint: false },
       _meta: toolMeta(tool),
-    }, (async (args: Record<string, unknown>) => callTool(env, props, grantId, tool, args ?? {}, scope)) as any);
+    }, (async (args: Record<string, unknown>) => callTool(env, props, grantId, tool, args ?? {}, scope, METERING_POLICY, agentContext)) as any);
   }
   // With nothing listed the SDK never installs its tool handlers; install them so tools/list answers [].
   if (!tools.length) (server as unknown as { setToolRequestHandlers(): void }).setToolRequestHandlers();
@@ -413,7 +457,12 @@ export async function createServer(env: Env, props: GrantProps, grantId: string 
 
 /** A fresh stateless server for one authenticated request, OAuth grant or member API key alike (D842). */
 export async function serveMcp(request: Request, env: Env, props: GrantProps, grantId: string | null, scope: readonly string[]): Promise<Response> {
-  const server = await createServer(env, props, grantId, scope);
+  const agent = request.headers.get('X-Axal-Agent');
+  const integration = request.headers.get('X-Axal-Integration');
+  if ((agent !== null || integration !== null) && (!agent || !/^[A-Za-z0-9_-]{1,128}$/.test(agent) || !integration || !/^[A-Za-z0-9_-]{1,128}$/.test(integration))) {
+    return Response.json({ error: 'agent_context_invalid', message: 'Supply both the agent and its MCP connection.' }, { status: 400 });
+  }
+  const server = await createServer(env, props, grantId, scope, agent && integration ? { agent_uid: agent, integration_uid: integration } : undefined);
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
   await server.connect(transport);
   return transport.handleRequest(request);
@@ -458,3 +507,5 @@ registerMcpTools(MAIL_TOOLS);
 // D1588: the deck and raise tools. The write ones only propose; nothing is saved without the founder's press.
 import { DECK_TOOLS } from './tools/decks';
 registerMcpTools(DECK_TOOLS);
+import { TEAM_TOOLS } from './tools/team';
+registerMcpTools(TEAM_TOOLS);

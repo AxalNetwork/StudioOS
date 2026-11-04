@@ -13,8 +13,16 @@
  *      settles the hold at the quote with one usage row.
  *   3. A refusal holds nothing: a member without tokens is 402 before any call.
  *   4. A failed call releases the hold and stores nothing.
- *   5. Upscale has no Bria model on Cloudflare: off even with the switch on.
+ *   5. Upscale has its own switch (D4316): off while only Bria's is on.
  *   6. Reverting a tool's child restores the parent; another venture's image is 404.
+ *
+ * D4316 (#4316): Upscale through Pruna P-Image-Upscale, behind `AI_PROVIDER_PRUNA`.
+ *   7. The catalogue row and its own switch; Bria's switch never turns it on.
+ *   8. Upscale is quoted and charged: Pruna runs once with 4× the area (capped
+ *      at 8 MP), in the original's format, without enhancement; the child records
+ *      its own, larger pixel size and keeps the parent's alt text.
+ *   9. An image already at 8 MP is refused before any hold, quote included.
+ *  10. A JPEG stays a JPEG; a failed upscale releases the hold.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -26,8 +34,8 @@ import deckImageEdits, { __setToolDepsForTest } from '../src/routes/deck_image_e
 import deckImages from '../src/routes/deck_images.ts';
 import decks from '../src/routes/decks.ts';
 import { __resetForTest } from '../src/services/aiRouter.ts';
-import { GATEWAY_IMAGE_MODELS, IMAGE_TOOL_SWITCH, gatewayImageModelFor } from '../src/services/ai/catalogue.ts';
-import { NO_MODEL_MESSAGE, OFF_MESSAGE, resultUrl, toolQuoteMicro } from '../src/services/decks/imageTools.ts';
+import { GATEWAY_IMAGE_MODELS, IMAGE_TOOL_SWITCH, UPSCALE_TOOL_SWITCH, gatewayImageModelFor } from '../src/services/ai/catalogue.ts';
+import { OFF_MESSAGE, OFF_MESSAGES, UPSCALE_TOO_LARGE_MESSAGE, resultUrl, toolInput, toolQuoteMicro, upscaleTarget } from '../src/services/decks/imageTools.ts';
 import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withGuard } from './_guard_stub.mjs';
@@ -35,6 +43,8 @@ import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scrip
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { CONTRACTS } from '../src/contracts/index.ts';
 import { contractErrors } from '../src/contracts/validate.ts';
+import { imageLookParts } from '../src/services/decks/pptxEditable.ts';
+import * as browserLook from '../../frontend/src/pages/raise/pitch/imageLook.js';
 
 const TOOLS_SCHEMA = JSON.parse(readFileSync(new URL('../src/contracts/' + CONTRACTS.imageEditAi.schema, import.meta.url), 'utf8'));
 
@@ -49,6 +59,15 @@ const FOUNDER = 2, OTHER = 3;
 const P_PHOTO = '00000000-0000-4000-8000-000000000011';
 const P_OTHER = '00000000-0000-4000-8000-000000000014';
 const CUT_URL = 'https://bria-results.example/cutout.png';
+const PRUNA = 'pruna/p-image-upscale';
+const UP_URL = 'https://pruna-results.example/upscaled.png';
+const UP_JPG_URL = 'https://pruna-results.example/upscaled.jpg';
+
+/** A JPEG that reads as `w` × `h` (SOI, then an SOF0 segment). */
+function jpegOf(w: number, h: number): Uint8Array {
+  const b = new Uint8Array([0xff, 0xd8, 0xff, 0xc0, 0x00, 0x11, 0x08, h >> 8, h & 255, w >> 8, w & 255, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1, 0xff, 0xd9]);
+  return b;
+}
 
 /** A PNG header that reads as `w` × `h`. */
 function pngOf(w: number, h: number): Uint8Array {
@@ -59,7 +78,8 @@ function pngOf(w: number, h: number): Uint8Array {
   return b;
 }
 
-async function fixture({ on = false, balance = 5_000_000, bria = 'ok' as 'ok' | 'throws' | 'no_url' } = {}) {
+async function fixture({ on = false, balance = 5_000_000, bria = 'ok' as 'ok' | 'throws' | 'no_url', pruna = false, prunaAnswer = 'ok' as 'ok' | 'throws',
+  size = [1024, 768] as [number, number], parentMime = 'image/png' as 'image/png' | 'image/jpeg' } = {}) {
   __resetForTest();
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   db.exec(baseline); for (const sql of migrations) db.exec(sql);
@@ -72,33 +92,42 @@ async function fixture({ on = false, balance = 5_000_000, bria = 'ok' as 'ok' | 
   for (const key of ['founder:free', 'founder:studio']) db.prepare('INSERT OR IGNORE INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES(?,0,0,2)').run(key);
   const r2 = new Map<string, Uint8Array>();
   const img = db.prepare(`INSERT INTO deck_images (id, uid, project_id, deck_id, card, r2_key, mime, width, height, source, style, aspect, use, state, alt)
-    VALUES (?, ?, ?, 7, 0, ?, 'image/png', 1024, 768, 'upload', 'flat', '4:3', 'content', 'kept', 'The founding team at the bench')`);
+    VALUES (?, ?, ?, 7, 0, ?, ?, ?, ?, 'upload', 'flat', '4:3', 'content', 'kept', 'The founding team at the bench')`);
   for (const [id, uid, project] of [[1, P_PHOTO, 1], [4, P_OTHER, 3]] as const) {
-    const key = `deck-images/${project}/${uid}.png`;
-    img.run(id, uid, project, key);
-    r2.set(key, pngOf(1024, 768));
+    const key = `deck-images/${project}/${uid}.${parentMime === 'image/jpeg' ? 'jpg' : 'png'}`;
+    img.run(id, uid, project, key, parentMime, size[0], size[1]);
+    r2.set(key, parentMime === 'image/jpeg' ? jpegOf(size[0], size[1]) : pngOf(size[0], size[1]));
   }
   const calls: Array<{ model: string; input: any; opts: any }> = [];
   const AI = withGuard({
     run: async (model: string, input: any, opts: any) => {
       calls.push({ model, input, opts });
+      if (model === PRUNA) {
+        if (prunaAnswer === 'throws') throw new Error('pruna 500');
+        return { image: input.output_format === 'jpg' ? UP_JPG_URL : UP_URL };
+      }
       if (model !== BRIA) throw new Error(`unexpected model ${model}`);
       if (bria === 'throws') throw new Error('bria 500');
       return bria === 'no_url' ? { state: 'Failed' } : { image: CUT_URL };
     },
   });
   const fetched: string[] = [];
-  __setToolDepsForTest({ fetch: (async (url: string) => { fetched.push(url); return new Response(pngOf(1024, 768)); }) as any });
+  __setToolDepsForTest({ fetch: (async (url: string) => {
+    fetched.push(url);
+    if (url === UP_URL) return new Response(pngOf(size[0] * 2, size[1] * 2));
+    if (url === UP_JPG_URL) return new Response(jpegOf(size[0] * 2, size[1] * 2));
+    return new Response(pngOf(1024, 768));
+  }) as any });
   const FILES = {
     put: async (key: string, bytes: Uint8Array) => { r2.set(key, new Uint8Array(bytes)); },
     get: async (key: string) => (r2.has(key) ? { body: new Blob([r2.get(key)!]).stream() } : null),
   };
-  const env: any = { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development', AI, FILES, ...(on ? { [IMAGE_TOOL_SWITCH]: 'on' } : {}) };
+  const env: any = { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development', AI, FILES, ...(on ? { [IMAGE_TOOL_SWITCH]: 'on' } : {}), ...(pruna ? { [UPSCALE_TOOL_SWITCH]: 'on' } : {}) };
   await ensureProjectMembershipSchema(env);
   const app = new Hono<any>().route('/api/decks', deckImageEdits).route('/api/decks', deckImages).route('/api/decks', decks);
   app.onError((err, c) => c.json({ detail: err.message }, (AUTH_ERROR_STATUSES[err.message] || 500) as any));
   const close = () => { __setToolDepsForTest(undefined); db.close(); };
-  const runs = () => db.prepare("SELECT model, task, est_cost_usd, charged_microusd, refusal, surface FROM ai_usage_logs WHERE model = ? ORDER BY id").all(BRIA) as any[];
+  const runs = (model = BRIA) => db.prepare("SELECT model, task, est_cost_usd, charged_microusd, refusal, surface, units_json AS units FROM ai_usage_logs WHERE model = ? ORDER BY id").all(model) as any[];
   const holds = () => db.prepare('SELECT status, COALESCE(actual_included_microusd, 0) + COALESCE(actual_topup_microusd, 0) AS charged FROM ai_budget_reservations').all() as any[];
   const children = () => db.prepare('SELECT * FROM deck_images WHERE parent_uid IS NOT NULL ORDER BY id').all() as any[];
   const row = (uid: string) => db.prepare('SELECT * FROM deck_images WHERE uid = ?').get(uid) as any;
@@ -115,9 +144,10 @@ async function call(f: F, who: number, path: string, json?: unknown) {
 }
 const briaCalls = (f: F) => f.calls.filter((c) => c.model === BRIA);
 
-test('the catalogue row: Bria RMBG 2.0 at the printed $0.018 an image; no Bria upscale row', () => {
-  assert.deepEqual(GATEWAY_IMAGE_MODELS.map((m) => [m.id, m.tool, m.usdPerImage]), [[BRIA, 'remove_background', '0.018']]);
-  assert.equal(gatewayImageModelFor('upscale'), null);
+test('the catalogue rows: Bria RMBG 2.0 at $0.018 behind AI_PROVIDER_BRIA; Pruna upscale at $0.005 behind its own AI_PROVIDER_PRUNA', () => {
+  assert.deepEqual(GATEWAY_IMAGE_MODELS.map((m) => [m.id, m.provider, m.tool, m.switch, m.usdPerImage]),
+    [[BRIA, 'bria', 'remove_background', 'AI_PROVIDER_BRIA', '0.018'], [PRUNA, 'pruna', 'upscale', 'AI_PROVIDER_PRUNA', '0.005']]);
+  assert.equal(gatewayImageModelFor('upscale')!.id, PRUNA);
   assert.equal(resultUrl({ image: CUT_URL }), CUT_URL);
   assert.equal(resultUrl({ state: 'Completed', result: { image: CUT_URL } }), CUT_URL);
   assert.equal(resultUrl({ image: 'http://insecure.example/x.png' }), null, 'only an https result is fetched');
@@ -130,7 +160,7 @@ test('the switch off means no call: "Coming later", the quote is not ai, a press
     const tools = await call(f, FOUNDER, '/api/decks/images/tools');
     assert.deepEqual(contractErrors(TOOLS_SCHEMA, tools.body), [], 'the adapter\'s imageEditAi contract (D1511)');
     assert.deepEqual(tools.body.tools.map((t: any) => [t.tool, t.on, t.message]),
-      [['remove_background', false, OFF_MESSAGE], ['upscale', false, NO_MODEL_MESSAGE]]);
+      [['remove_background', false, OFF_MESSAGE], ['upscale', false, OFF_MESSAGES.upscale]]);
     const q = await call(f, FOUNDER, `/api/decks/images/${P_PHOTO}/tools/remove_background/quote`, {});
     assert.deepEqual([q.status, q.body.ai, q.body.reason], [200, false, 'image_tool_off']);
     const run = await call(f, FOUNDER, `/api/decks/images/${P_PHOTO}/tools/remove_background`, {});
@@ -195,14 +225,18 @@ test('a failed call releases the hold and stores nothing', async () => {
   }
 });
 
-test('upscale has no Bria model on Cloudflare: off even with the switch on', async () => {
+test('upscale has its own switch: off while only Bria\'s is on (D4316)', async () => {
+  // Mutation checked: Upscale read from Bria's switch → Pruna is offered and called with only AI_PROVIDER_BRIA set.
   const f = await fixture({ on: true });
   try {
+    const tools = await call(f, FOUNDER, '/api/decks/images/tools');
+    assert.deepEqual(tools.body.tools.map((t: any) => [t.tool, t.on]), [['remove_background', true], ['upscale', false]]);
     const q = await call(f, FOUNDER, `/api/decks/images/${P_PHOTO}/tools/upscale/quote`, {});
-    assert.deepEqual([q.body.ai, q.body.message], [false, NO_MODEL_MESSAGE]);
+    assert.deepEqual([q.body.ai, q.body.message], [false, OFF_MESSAGES.upscale]);
     assert.equal((await call(f, FOUNDER, `/api/decks/images/${P_PHOTO}/tools/upscale`, {})).status, 503);
     assert.equal((await call(f, FOUNDER, `/api/decks/images/${P_PHOTO}/tools/crop`, {})).status, 404, 'an unknown tool');
     assert.equal(briaCalls(f).length, 0);
+    assert.equal(f.calls.filter((c) => c.model === PRUNA).length, 0);
   } finally { f.close(); }
 });
 
@@ -217,4 +251,109 @@ test('reverting a tool\'s child restores the parent; another venture\'s image is
     assert.equal(theirs.status, 404);
     assert.equal(briaCalls(f).length, 1, 'only the founder\'s own image ran');
   } finally { f.close(); }
+});
+
+// ── D4316 (#4316): Upscale through Pruna ───────────────────────────────────
+const prunaCalls = (f: F) => f.calls.filter((c) => c.model === PRUNA);
+
+test('7. the upscale target: 4× the area, capped at 8 MP; at the cap, none', () => {
+  assert.equal(upscaleTarget({ width: 1024, height: 768 }), 4);
+  assert.equal(upscaleTarget({ width: 640, height: 480 }), 2);
+  assert.equal(upscaleTarget({ width: 2000, height: 1500 }), 8, 'capped');
+  assert.equal(upscaleTarget({ width: 4000, height: 2000 }), null, 'already 8 MP');
+  assert.equal(upscaleTarget(null), null);
+  assert.deepEqual(toolInput('upscale', 'data:x', 'image/png', 4),
+    { image: 'data:x', upscale_mode: 'target', target: 4, enhance_details: false, enhance_realism: false, output_format: 'png' });
+  assert.equal(toolInput('upscale', 'data:x', 'image/jpeg', 4).output_format, 'jpg');
+  assert.deepEqual(toolInput('remove_background', 'data:x', 'image/png', null), { image: 'data:x', preserve_alpha: true });
+  assert.equal(resultUrl(UP_URL), UP_URL, 'an upscaler may answer with the URL alone');
+});
+
+test('8. upscale is quoted and charged: Pruna once at 4× the area, a child with its own size, the hold settled at the quote', async () => {
+  // Mutations checked: the child stored with the parent's size (the PowerPoint would crop the wrong pixels); the usage row's provider left as bria.
+  const f = await fixture({ pruna: true });
+  try {
+    const quoteMicro = await toolQuoteMicro(f.env, FOUNDER, gatewayImageModelFor('upscale')!);
+    assert.ok(quoteMicro >= 5_000, 'at least the printed $0.005');
+    const q = await call(f, FOUNDER, `/api/decks/images/${P_PHOTO}/tools/upscale/quote`, {});
+    assert.deepEqual([q.status, q.body.ai, q.body.model, q.body.model_label, q.body.label, q.body.hold_microusd], [200, true, PRUNA, 'Pruna P-Image-Upscale', 'Upscale', quoteMicro]);
+    assert.equal(prunaCalls(f).length, 0, 'a quote calls nothing');
+    const before = { ...f.row(P_PHOTO) };
+    const r = await call(f, FOUNDER, `/api/decks/images/${P_PHOTO}/tools/upscale`, {});
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.equal(prunaCalls(f).length, 1);
+    assert.equal(briaCalls(f).length, 0, 'Bria is not called for an upscale');
+    const [one] = prunaCalls(f);
+    assert.match(one.input.image, /^data:image\/png;base64,/);
+    assert.deepEqual([one.input.upscale_mode, one.input.target, one.input.output_format, one.input.enhance_details, one.input.enhance_realism], ['target', 4, 'png', false, false]);
+    assert.deepEqual(f.fetched, [UP_URL], 'the result is fetched once');
+    const [child] = f.children();
+    assert.deepEqual([child.parent_uid, child.image_tool, child.edit_op, child.state, child.mime, child.model, child.alt, child.width, child.height],
+      [P_PHOTO, 'upscale', null, 'proposed', 'image/png', PRUNA, 'The founding team at the bench', 2048, 1536]);
+    assert.ok(f.r2.has(child.r2_key));
+    assert.deepEqual({ ...f.row(P_PHOTO) }, before, 'the parent is unchanged');
+    assert.deepEqual(f.holds().map((h) => [h.status, h.charged]), [['settled', quoteMicro]]);
+    const [usage] = f.runs(PRUNA);
+    assert.deepEqual([usage.est_cost_usd, usage.charged_microusd, usage.refusal, usage.task], [0.005, quoteMicro, null, 'rail_edit_image']);
+    assert.equal(JSON.parse(usage.units).provider, 'pruna');
+    // Revert discards the child, as for a cutout.
+    const back = await call(f, FOUNDER, `/api/decks/images/${child.uid}/revert`, {});
+    assert.deepEqual([back.status, back.body.parent.uid], [200, P_PHOTO]);
+  } finally { f.close(); }
+});
+
+test('9. an image already at 8 MP is refused before any hold: the quote says so, a press is 422 and calls nothing', async () => {
+  // Mutation checked: the cap dropped → Pruna is called (and charged) for an image it cannot enlarge.
+  const f = await fixture({ pruna: true, size: [4000, 2000] });
+  try {
+    const q = await call(f, FOUNDER, `/api/decks/images/${P_PHOTO}/tools/upscale/quote`, {});
+    assert.deepEqual([q.body.ai, q.body.reason, q.body.message], [false, 'image_large_enough', UPSCALE_TOO_LARGE_MESSAGE]);
+    const r = await call(f, FOUNDER, `/api/decks/images/${P_PHOTO}/tools/upscale`, {});
+    assert.deepEqual([r.status, r.body.error], [422, 'image_large_enough']);
+    assert.deepEqual([prunaCalls(f).length, f.holds().length, f.children().length], [0, 0, 0]);
+  } finally { f.close(); }
+});
+
+test('10. a JPEG stays a JPEG; a failed upscale releases the hold and stores nothing', async () => {
+  // Mutation checked: the result format fixed to PNG → a JPEG's upscale is refused as unreadable and never stored.
+  const f = await fixture({ pruna: true, parentMime: 'image/jpeg', size: [800, 600] });
+  try {
+    const r = await call(f, FOUNDER, `/api/decks/images/${P_PHOTO}/tools/upscale`, {});
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.equal(prunaCalls(f)[0].input.output_format, 'jpg');
+    const [child] = f.children();
+    assert.deepEqual([child.mime, child.width, child.height], ['image/jpeg', 1600, 1200]);
+    assert.match(child.r2_key, /\.jpg$/);
+  } finally { f.close(); }
+  const g = await fixture({ pruna: true, prunaAnswer: 'throws' });
+  try {
+    const r = await call(g, FOUNDER, `/api/decks/images/${P_PHOTO}/tools/upscale`, {});
+    assert.deepEqual([r.status, r.body.error, r.body.message], [503, 'image_tool_failed', 'The image could not be upscaled this time. Nothing was charged.']);
+    assert.equal(g.children().length, 0);
+    assert.ok(g.holds().every((h) => h.charged === 0 && h.status !== 'pending'), 'released');
+  } finally { g.close(); }
+});
+
+test('11. Bria\'s switch and Pruna\'s are independent: Pruna on alone leaves background removal off', async () => {
+  const f = await fixture({ pruna: true });
+  try {
+    const tools = await call(f, FOUNDER, '/api/decks/images/tools');
+    assert.deepEqual(tools.body.tools.map((t: any) => [t.tool, t.on]), [['remove_background', false], ['upscale', true]]);
+    assert.equal((await call(f, FOUNDER, `/api/decks/images/${P_PHOTO}/tools/remove_background`, {})).status, 503);
+    assert.equal(briaCalls(f).length, 0);
+  } finally { f.close(); }
+});
+
+test('12. the upscaled child draws the same as its parent: the editable PowerPoint crops the same window, and the browser\'s look is the block\'s own', () => {
+  // The block keeps its crop, filter and fit (placedResult); only its image changes. The PDF and the
+  // PowerPoint download are taken from the print page, which draws with the browser's look below.
+  const block = { id: 'i1', kind: 'image', grid: { c1: 1, r1: 1, c2: 6, r2: 4 }, image_url: 'x', alt: 'A desk', fit: 'cover', crop: { x: 40, y: 50, rect: { x: 10, y: 0, w: 80, h: 80 } }, filter: 'warm' };
+  const frame = { x: 0, y: 0, w: 800, h: 450 };
+  const parent = imageLookParts(block, frame, { kind: 'png', bytes: pngOf(1024, 768) });
+  const child = imageLookParts(block, frame, { kind: 'png', bytes: pngOf(2048, 1536) });
+  assert.ok(parent.src, 'a window shows');
+  assert.deepEqual(child, parent, 'the same srcRect, effects and wash');
+  const jpeg = imageLookParts(block, frame, { kind: 'jpeg', bytes: jpegOf(2048, 1536) });
+  assert.equal(jpeg.src, parent.src, 'an upscaled JPEG too');
+  assert.deepEqual(browserLook.imageLookStyle({ ...block, image_url: 'child' }), browserLook.imageLookStyle(block), 'the browser draws the block\'s look, whatever the image');
 });

@@ -57,6 +57,7 @@ for (const [label, prefix, sfx] of TABLES) {
     assert.ok(vars);
     assert.deepEqual(['AGENT_ENGINE', 'AGENT_AUTONOMY', 'AGENT_RUNTIME'].map((k) => unq(vars.kv.get(k))), ['off', 'manual', 'do']);
     assert.equal(vars.kv.has('AGENT_AI_GATEWAY'), false, 'the owner creates the gateway first');
+    assert.equal(unq(vars.kv.get('AGENT_GATEWAY_MONTHLY_LIMIT_MICROUSD')), '100000000', 'D4423: $100 monthly gateway limit');
   });
 }
 

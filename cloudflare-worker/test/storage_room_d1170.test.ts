@@ -216,6 +216,8 @@ const SITES: Array<[string, string, string]> = [
   // D1590 (#3837): a walkthrough take is kept until its maker deletes it, so the upload is guarded.
   ['routes/deck_recordings.ts', "deckRecordings.post('/:id{[0-9]+}/recordings', async", 'await c.env.FILES.put(key, mediaBytes'],
   ['routes/founder_validate.ts', "founderValidate.post('/interviews/:id/recording'", 'await c.env.FILES.put(key, await file.arrayBuffer()'],
+  // D1569 (#3816): every per-card clip (an AI voice-over today) lands through the one writer, weighed first.
+  ['services/decks/cardAudio.ts', 'export async function putCardAudio', 'await env.FILES.put(key, a.bytes'],
   ['routes/deck_reviewer.ts', "deckReviewer.post('/upload'", 'await c.env.FILES.put(r2Key, bytes'],
   ['routes/imports.ts', 'async function maybeStoreRaw', "await env.FILES.put(key, csv"],
   ['routes/brand.ts', "brand.post('/logo/upload'", 'await files.put(key, logoBytes'],

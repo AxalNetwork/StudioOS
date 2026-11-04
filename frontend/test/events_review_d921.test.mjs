@@ -264,6 +264,7 @@ const response = (body, status = 200) => ({ ok: status < 400, status, headers: {
 function worker({ queue = [], list = null, history = {}, comp = {}, writes = {} } = {}) {
   return (url, options = {}) => {
     const method = String(options.method || 'GET').toUpperCase();
+    if (/\/api\/events\/\d+\/syndication$/.test(url)) return response({ eligible: false, approved: false, reason: 'Not approved for the public calendar', rows: [] });
     const post = url.match(/\/api\/admin\/events\/(\d+)\/([\w-]+)$/);
     if (method === 'POST' && post) return writes[post[2]] ? writes[post[2]](options) : response({ event: { id: Number(post[1]) } });
     if (post && post[2] === 'history') return history[post[1]] ? response(history[post[1]]) : response({ event_id: Number(post[1]), history: { available: true, items: [] } });

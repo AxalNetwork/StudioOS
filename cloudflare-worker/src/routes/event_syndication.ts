@@ -72,11 +72,11 @@ async function readRows(env: Env, event: Record<string, any>) {
   ).bind(event.id).all<any>()).results || [];
   const byAccount = new Map(existing.map((r: any) => [Number(r.account_id), r]));
   const typeDefaults = new Set(settings.default_channels_by_type[String(event.type)] ?? []);
-  const rows = accounts.map((a) => shape(a.channel, a.uid, a.display_name, byAccount.get(a.id) ?? null, !!a.default_on || typeDefaults.has(a.channel as any)));
+  const rows = accounts.map((a) => shape(a.channel, a.uid, a.display_name, byAccount.get(a.id) ?? null, !!a.default_on || typeDefaults.has(a.channel as any), a.status === 'active'));
   // A listing whose account was disconnected since stays visible: it is still out there.
-  for (const r of existing) if (!accounts.some((a) => a.id === Number(r.account_id))) rows.push(shape(r.channel, r.account_uid, r.display_name, r, false));
+  for (const r of existing) if (!accounts.some((a) => a.id === Number(r.account_id))) rows.push(shape(r.channel, r.account_uid, r.display_name, r, false, false));
   const own = eventEligibility(event as any, role, settings);
-  return { eligible: own.ok, reason: own.ok ? null : own.reason, rows };
+  return { eligible: own.ok, approved: event.status === 'published' && Number(event.admin_published) === 1, reason: own.ok ? null : own.reason, rows };
 }
 
 function overridesRead(json: unknown): Record<string, string> {
@@ -86,7 +86,7 @@ function overridesRead(json: unknown): Record<string, string> {
   } catch { return {}; }
 }
 
-function shape(channel: string, accountUid: string, displayName: string, row: any | null, suggested: boolean) {
+function shape(channel: string, accountUid: string, displayName: string, row: any | null, suggested: boolean, available: boolean) {
   const adapter = syndicationChannel(channel);
   return {
     uid: row?.uid ?? null,
@@ -94,6 +94,9 @@ function shape(channel: string, accountUid: string, displayName: string, row: an
     account_uid: accountUid,
     display_name: displayName,
     capability: adapter?.capability ?? null,
+    adapter_ready: !!adapter && available,
+    title_limit: adapter?.title_limit ?? DEFAULT_TITLE_LIMIT,
+    text_limit: adapter?.text_limit ?? DEFAULT_TEXT_LIMIT,
     on: row ? ON_STATES.includes(row.status) : suggested,
     status: row?.status ?? null,
     sync_state: row?.sync_state ?? null,
@@ -141,13 +144,13 @@ eventSyndication.put('/:id/syndication', async (c) => {
   const settings = await readSettings(c.env);
   const accounts = await accountsFor(c.env, m.event, settings);
   // Validate every entry before writing any.
-  const plan: Array<{ account: Account; on: boolean; overrides: Record<string, string> }> = [];
+  const plan: Array<{ account: Account; on: boolean; overrides: Record<string, string>; overridesSupplied: boolean }> = [];
   for (const entry of body.channels) {
     const account = accounts.find((a) => a.uid === String(entry?.account_uid ?? ''));
     if (!account) return refuse(c, 404, { code: 'account_not_found', message: 'That channel account is not one this event can use.' });
     const overrides = cleanOverrides(account.channel, entry?.overrides);
     if (!overrides) return refuse(c, 400, { code: 'invalid_overrides', message: 'A title or description is over the channel’s limit, or the ticket link is not an https address.' });
-    plan.push({ account, on: !!entry?.on, overrides });
+    plan.push({ account, on: !!entry?.on, overrides, overridesSupplied: entry.overrides !== undefined });
   }
   const current = (await c.env.DB.prepare('SELECT account_id, status FROM event_syndications WHERE event_id = ?').bind(m.event.id).all<any>()).results || [];
   for (const p of plan) {
@@ -163,13 +166,13 @@ eventSyndication.put('/:id/syndication', async (c) => {
       const row = await c.env.DB.prepare(
         `INSERT INTO event_syndications (uid, event_id, account_id, channel, status, overrides_json, content_hash, selected_by)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT (event_id, account_id) DO UPDATE SET overrides_json = excluded.overrides_json,
+         ON CONFLICT (event_id, account_id) DO UPDATE SET overrides_json = CASE WHEN ? = 1 THEN excluded.overrides_json ELSE event_syndications.overrides_json END,
            status = CASE WHEN event_syndications.status IN ('withdrawn', 'cancelled', 'skipped') THEN excluded.status ELSE event_syndications.status END,
            skip_reason = CASE WHEN event_syndications.status IN ('withdrawn', 'cancelled', 'skipped') THEN NULL ELSE event_syndications.skip_reason END,
            attempts = CASE WHEN event_syndications.status IN ('withdrawn', 'cancelled', 'skipped') THEN 0 ELSE event_syndications.attempts END,
            updated_at = datetime('now')
          RETURNING uid, status`,
-      ).bind(crypto.randomUUID(), m.event.id, p.account.id, p.account.channel, start, JSON.stringify(p.overrides), hash, m.user.id).first<{ uid: string; status: string }>();
+      ).bind(crypto.randomUUID(), m.event.id, p.account.id, p.account.channel, start, JSON.stringify(p.overrides), hash, m.user.id, p.overridesSupplied ? 1 : 0).first<{ uid: string; status: string }>();
       const was = current.find((r: any) => Number(r.account_id) === p.account.id);
       if (!was || !ON_STATES.includes(was.status)) {
         await logSyndication(c.env, { account_id: p.account.id, event_id: m.event.id, channel: p.account.channel, action: 'select', outcome: 'ok', actor_user_id: m.user.id });

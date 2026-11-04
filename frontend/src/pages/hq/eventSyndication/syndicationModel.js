@@ -1,37 +1,23 @@
-/**
- * D1491 (#3725) — Event syndication's words and rules, pure.
- *
- * The canvas is `design/incoming/Event Syndication Page.dc.html` (boards SY0–SY8).
- * Part A's Worker core (D1490) holds the accounts, the per-event rows and the
- * log; until it ships, every screen reads `SYNDICATION_SERVICE_READY = false`
- * and says nothing posts. The status words, the skip sentences and the
- * button lines are fixed here, so wiring Part A's reads changes no copy.
- */
+/** D1491 (#3725) — event syndication words and rules for the mounted D1490 core. */
 import { EVENT_TYPES } from '../../../lib/eventTypes.js';
 
-/** Part A (D1490) is not on main: no account, row or log exists to read. */
-export const SYNDICATION_SERVICE_READY = false;
+/** Core reads are live; adapter availability comes from the Worker. */
+export const SYNDICATION_SERVICE_READY = true;
 
 export const CAPABILITY_LABEL = Object.freeze({
   creates_events: 'Creates events',
   posts_link: 'Posts a link',
 });
 
-/**
- * The five channels, in the canvas's order. `pendingOwner` marks the link-post
- * fallback (owner question D on #3725). `needs` is what must exist before the
- * channel can connect (owner step E, names only).
- */
+/** Owner choices on #3725: HQ accounts, no Luma, link posts for LinkedIn/Facebook. */
 export const CHANNELS = Object.freeze([
-  { key: 'luma', name: 'Luma', capability: 'creates_events', pendingOwner: false,
-    needs: 'Luma’s API needs a paid Luma plan and a calendar API key.' },
   { key: 'eventbrite', name: 'Eventbrite', capability: 'creates_events', pendingOwner: false,
     needs: 'Needs Axal’s Eventbrite organisation and app. Listings send people to Axal to register.' },
   { key: 'google_business', name: 'Google Business Profile', capability: 'creates_events', pendingOwner: false,
     needs: 'Needs a verified Business Profile location and Google’s API access approval.' },
-  { key: 'linkedin', name: 'LinkedIn', capability: 'posts_link', pendingOwner: true,
+  { key: 'linkedin', name: 'LinkedIn', capability: 'posts_link', pendingOwner: false,
     needs: 'Needs LinkedIn’s Community Management API approval for Axal’s Page.' },
-  { key: 'facebook', name: 'Facebook', capability: 'posts_link', pendingOwner: true,
+  { key: 'facebook', name: 'Facebook', capability: 'posts_link', pendingOwner: false,
     needs: 'Needs Meta’s App Review for posting to Axal’s Page.' },
 ]);
 
@@ -44,12 +30,12 @@ export const channelOf = (key) => CHANNELS.find((c) => c.key === key) || null;
  */
 export function channelStatus(account, { serviceReady = SYNDICATION_SERVICE_READY, adapterReady = false, now = Date.now() } = {}) {
   if (!serviceReady && !account) {
-    return { key: 'not_available', label: 'Not available yet', tone: 'muted', line: 'The syndication service is being built.' };
+    return { key: 'not_available', label: 'Not available yet', tone: 'muted', line: 'The syndication service is unavailable.' };
   }
   if (!account || account.status === 'disconnected') {
     return adapterReady
       ? { key: 'not_connected', label: 'Not connected', tone: 'muted', line: null }
-      : { key: 'not_available', label: 'Not available yet', tone: 'muted', line: 'Waiting for the platform’s approval.' };
+      : { key: 'not_available', label: 'Not available yet', tone: 'muted', line: 'Waiting for account approval and a posting connector.' };
   }
   if (account.status === 'expired') return { key: 'expired', label: 'Expired', tone: 'red', line: 'Reconnect to keep posting.' };
   if (account.status === 'error') return { key: 'error', label: 'Error', tone: 'red', line: account.last_error || null };
@@ -104,7 +90,7 @@ export const LOG_OUTCOME = Object.freeze({ ok: 'OK', failed: 'Failed', skipped: 
 
 /** SY4: a channel's registrations. A count the service did not import is "Not recorded", never 0. */
 export function registrationsText(count) {
-  return Number.isFinite(Number(count)) && count !== null ? String(Number(count)) : 'Not recorded';
+  return typeof count === 'number' && Number.isFinite(count) && count >= 0 ? String(count) : 'Not recorded';
 }
 
 /** SY2b: the approve button's sentence. */
@@ -121,25 +107,19 @@ export function approveLabel(channelsOn = 0) {
 export function syndicateNote(visibility, { serviceReady = SYNDICATION_SERVICE_READY } = {}) {
   if (visibility !== 'public') return 'Unlisted and private events are never posted to other channels.';
   if (!serviceReady) {
-    return 'Other channels: none yet. A public event is listed on axal.vc when an admin approves it. Listing it on Luma, Eventbrite, Google, LinkedIn and Facebook as well is being built.';
+    return 'Channel choices are unavailable. Nothing is sent from this screen.';
   }
   return 'Posts when an admin approves this event.';
 }
 
 /** SY2a: a per-channel edit's counter, "64 / 100", and whether it is over. */
 export function charCount(text, limit) {
-  const n = [...String(text || '')].length;
+  const n = String(text || '').length; // Same UTF-16 bounds as the Worker writer.
   return { text: `${n} / ${limit}`, over: Number.isFinite(limit) && n > limit };
 }
 
 /** SY6: the twelve event types, by the shared list. */
 export const SETTINGS_TYPES = EVENT_TYPES;
-
-/** SY6: the settings S1's spec proposes, pending the owner's answers A and C. */
-export const PROPOSED_SETTINGS = Object.freeze({
-  hosts: { value: 'approved_events', label: 'Any event an admin approves', alt: 'Events by admins only', pendingOwner: 'A' },
-  hostAccounts: { value: false, label: 'Hosts may connect their own accounts', pendingOwner: 'C' },
-});
 
 /** The module's tabs, by address. */
 export const TABS = Object.freeze([
@@ -149,3 +129,24 @@ export const TABS = Object.freeze([
 ]);
 
 export const tabFor = (pathname = '') => (/\/log\/?$/.test(pathname) ? 'log' : /\/settings\/?$/.test(pathname) ? 'settings' : 'channels');
+
+/** Only https external destinations can be opened from provider responses. */
+export function safeExternal(value) {
+  try { const u = new URL(value); return u.protocol === 'https:' && !u.username && !u.password ? u.href : null; } catch { return null; }
+}
+export const eventReadValid = (v) => !!v && typeof v.eligible === 'boolean' && typeof v.approved === 'boolean' && Array.isArray(v.rows) && v.rows.every((r) => typeof r.account_uid === 'string' && typeof r.on === 'boolean' && typeof r.adapter_ready === 'boolean' && r.overrides && typeof r.overrides === 'object');
+/** Each changed choice keeps all saved copy; posted rows are managed by Withdraw. */
+export const copyOf = (overrides) => Object.fromEntries(Object.entries(overrides).filter(([, v]) => typeof v === 'string' && v.trim()).map(([k, v]) => [k, v.trim()]));
+export const choiceEditable = (row) => !['withdrawn', 'cancelled', 'skipped', 'posted'].includes(row.status) && row.adapter_ready && CHANNELS.some((c) => c.key === row.channel);
+/** D4440: only deliberate edits leave the page; a choice-only write preserves current saved copy. */
+export const choicesOf = (rows, dirty = new Set(), copyEdited = new Set()) => rows.filter((r) => dirty.has(r.account_uid) && choiceEditable(r)).map((r) => ({ account_uid: r.account_uid, on: r.on, ...(copyEdited.has(r.account_uid) ? { overrides: copyOf(r.overrides) } : {}) }));
+export function ticketLinkError(value) {
+  const link = String(value || '').trim();
+  return link && (link.length > 2000 || !/^https:\/\/[^\s]+$/i.test(link)) ? 'Use an https ticket link without spaces (at most 2000 characters).' : null;
+}
+export const copyInvalid = (row) => charCount(row.overrides.title, row.title_limit).over || charCount(row.overrides.description, row.text_limit).over || !!ticketLinkError(row.overrides.ticket_url);
+/** A separate first write: a failed choice must never be followed by Approve. */
+export async function approveWithChannels(api, admin, id, channels) {
+  if (channels.length) await api.choose(id, channels);
+  return admin.approve(id);
+}

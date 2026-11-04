@@ -15,7 +15,7 @@ import { d1Over } from './_d1_sqlite.mjs';
 const SECRET = 'test'.repeat(16);
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
-  for (const name of ['109_events_core.sql', '392_event_organiser.sql']) db.exec(readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8'));
+  for (const name of ['109_events_core.sql', '392_event_organiser.sql', '709_event_recommendations.sql']) db.exec(readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8'));
   db.exec(`CREATE TABLE users(id INTEGER PRIMARY KEY, uid TEXT, name TEXT, email TEXT, role TEXT, is_active INTEGER DEFAULT 1);
     INSERT INTO users VALUES(1,'host','Synthetic host','host@example.test','founder',1),(2,'admin','Synthetic admin','admin@example.test','admin',1),(3,'member','Synthetic member','member@example.test','investor',1);`);
   const base = d1Over(db);

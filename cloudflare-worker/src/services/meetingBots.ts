@@ -44,6 +44,8 @@ export function botRate(cost: number, multiplier = BOT_COMMISSION_MULTIPLIER): n
   return Math.ceil(cost * multiplier);
 }
 export function botLimit(user: User): number { return userMeetsTier(user, 'growth') ? 120 : 30; }
+/** A Meet call's path: `/abc-defg-hij`, also accepted as `/meet/abc-defg-hij`. */
+export const MEET_PATH = /^\/(?:meet\/)?([a-z]{3,4}-[a-z]{4}-[a-z]{3,4})\/?$/i;
 export function botPlatform(value: unknown): { platform: BotPlatform; url: string } {
   try {
     if (typeof value !== 'string' || value.length > 2048) throw 0;
@@ -52,12 +54,16 @@ export function botPlatform(value: unknown): { platform: BotPlatform; url: strin
     const h = u.hostname.toLowerCase();
     let platform: BotPlatform;
     if ((h === 'zoom.us' || h.endsWith('.zoom.us')) && /^\/(?:j\/|wc\/join\/)\d{6,20}\/?$/.test(u.pathname)) platform = 'zoom';
-    else if (h === 'meet.google.com' && /^\/[a-z]{3,4}-[a-z]{4}-[a-z]{3,4}\/?$/i.test(u.pathname)) platform = 'google_meet';
+    else if (h === 'meet.google.com' && MEET_PATH.test(u.pathname)) {
+      // A Meet link copied with an extra "/meet/" segment opens nothing in a
+      // browser either; the bot joins the call's own address.
+      return { platform: 'google_meet', url: `https://meet.google.com/${MEET_PATH.exec(u.pathname)![1].toLowerCase()}` };
+    }
     else if ((h === 'teams.microsoft.com' || h === 'teams.cloud.microsoft') && /^\/(?:l\/meetup-join\/|meet\/)[^\s]+$/.test(u.pathname)) platform = 'teams';
     else if (h === 'teams.live.com' && /^\/meet\/[^\s]+$/.test(u.pathname)) platform = 'teams';
     else throw 0;
     return { platform, url: u.href };
-  } catch { throw new BotError(400, 'unsupported_link', 'Use a Zoom, Google Meet or Microsoft Teams meeting link.'); }
+  } catch { throw new BotError(400, 'unsupported_link', 'Use a Zoom, Google Meet or Microsoft Teams meeting link. A Google Meet link looks like https://meet.google.com/abc-defg-hij.'); }
 }
 export async function botRow(env: Env, uid: string): Promise<BotRun | null> {
   return env.DB.prepare('SELECT * FROM meeting_bots WHERE uid = ?').bind(uid).first<BotRun>();

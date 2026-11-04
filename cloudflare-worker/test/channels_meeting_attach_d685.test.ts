@@ -237,6 +237,28 @@ test('attached Meet verifies own Calendar event; import creates provider session
     'Recorder words');
 });
 
+test('a Meet link copied as /meet/<code> attaches to the call\'s own address', async (t) => {
+  const f = world();
+  const sessionId = recording(f);
+  await meetConnected(f);
+  mockFetch(t, {
+    'POST https://oauth2.googleapis.com/token': () => json({ access_token: 'fixture-access' }),
+    'GET https://www.googleapis.com/calendar/v3/calendars/primary/events': () => json({ items: [
+      { organizer: { self: true }, hangoutLink: `https://meet.google.com/${MEET_CODE}` },
+    ] }),
+  });
+  const made = await request(f, 'POST', `/interviews/${INTERVIEW}/meetings`, {
+    attach: { join_url: `https://meet.google.com/meet/${MEET_CODE}` }, session_id: sessionId,
+  });
+  assert.equal(made.status, 201);
+  assert.equal((await loadRef(f.env, made.body.meeting.uid))?.external_ref, MEET_CODE);
+  const bad = await request(f, 'POST', `/interviews/${INTERVIEW}/meetings`, {
+    attach: { join_url: 'https://meet.google.com/meet/not-a-code' }, session_id: sessionId,
+  });
+  assert.equal(bad.status, 400);
+  assert.match(bad.body.message, /looks like https:\/\/meet\.google\.com\/abc-defg-hij/);
+});
+
 test('attached Meet refuses a call organised by another account', async (t) => {
   const f = world();
   const sessionId = recording(f);

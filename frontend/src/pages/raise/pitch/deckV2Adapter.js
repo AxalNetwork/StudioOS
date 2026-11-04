@@ -104,7 +104,8 @@ export const SURFACES = Object.freeze({
   deckUsage: { issue: 3776, what: 'Estimated and spent on this deck' },
   arrange: { issue: 3777, what: 'Align, distribute, group, lock and layers' },
   imageEdit: { issue: 3778, what: 'Crop, focus and filters' },
-  // D1534 (#3778 phase 2): background removal through AI Gateway (Bria, M = B), off until the owner's steps; upscale has no model yet.
+  // D1534 (#3778 phase 2): background removal through AI Gateway (Bria, M = B); D4316 (#4316): upscale (Pruna).
+  // Each behind its own provider switch, off until the owner's steps on #1008.
   imageEditAi: { issue: 3778, what: 'Upscale and background removal' },
   imageVary: { issue: 3784, what: 'Erase, expand, vary and reference images' },
   elementsLibrary: { issue: 3779, what: 'Icons, shapes, dividers and textures' },

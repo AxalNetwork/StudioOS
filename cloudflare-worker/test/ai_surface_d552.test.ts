@@ -189,6 +189,8 @@ const FORWARDED: Record<string, string[]> = {
 
 /** Every call site's fixed name, by file — the table D552.md lists. */
 const EXPECTED: Record<string, string[]> = {
+  'services/callOutputs.ts': ['AI_SURFACE.validateInterviews'], // D4412: selected post-call extractions
+
   'routes/publish.ts': ['AI_SURFACE.growPublish'], // #4046: Publish to…'s post text (POST /api/publish/ask), which writes nothing
   'services/decks/dataroomExtract.ts': ['AI_SURFACE.raiseDataRoom'], // D1602: owner-approved document extraction
   'routes/data_room_proposals.ts': ['AI_SURFACE.raiseDataRoom'], // D4170 (#4170): Eadwyn's data room proposals, a quoted run over file names
@@ -216,6 +218,7 @@ const EXPECTED: Record<string, string[]> = {
   'routes/deck_transform.ts': ['AI_SURFACE.raisePitch'], // D1560: notes, proofread, fix this slide, translate
   'routes/deck_rehearsals.ts': ['AI_SURFACE.raisePitch', 'AI_SURFACE.raisePitch'], // D1580 F1 (#3827): a rehearsal's transcript; part 2a: its coaching
   'routes/deck_recordings.ts': ['AI_SURFACE.raisePitch'], // D1590 (#3837): a walkthrough take's captions, on the pitch deck's page
+  'routes/deck_voice.ts': ['AI_SURFACE.raisePitch'], // D1569 (#3816): a card's AI voice-over, on the pitch deck's page
   'routes/article_assist.ts': ['AI_SURFACE.articles', 'AI_SURFACE.articles'], // D1409: Eadwyn's writing options on an article, and its images
   'routes/event_syndication_assist.ts': ['AI_SURFACE.eventSyndication'], // D1493: Eadwyn's proposed copy for a syndication channel
   'services/mail/drafts.ts': ['AI_SURFACE.mailDraft'], // D1341: Eadwyn's email drafts and revisions; D1343 moved the call into `runDraft`, shared by the route and the MCP tool

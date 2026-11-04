@@ -31,6 +31,8 @@ function world() {
   db.exec(stripForeignKeys(sql('migrations/727_scope_goals_and_tasks.sql')));
   db.exec(sql('migrations/762_scope_task_work_board.sql'));
   db.exec(sql('migrations/763_task_comments_labels_milestones.sql'));
+  // #3968: the production board now reads E3's canonical run store.
+  db.exec(stripForeignKeys(tableFromBaseline(sql('migrations/728_agent_engine.sql'), 'agent_task_runs')));
   db.exec(sql('migrations/202611022015_scope_task_needs_reassignment.sql'));
   db.exec(sql('migrations/202611022205_work_workload.sql')); // D1614 W4 (#4195): the board writes the time block
   addComplianceStore(db); // #3976: My tasks' compliance group
