@@ -183,7 +183,16 @@ export async function setFeedbackTheme(env: Env, projectId: number, uid: string,
 // ── Distribution ────────────────────────────────────────────────────────────
 
 export const CHANNEL_STATES = ['active', 'testing', 'paused'] as const;
-export const CHANNEL_KINDS = ['content', 'paid_search', 'paid_social', 'outbound', 'referral', 'partner', 'events', 'other'] as const;
+export const CHANNEL_KINDS = ['organic', 'ads', 'newsletter', 'outreach', 'signups', 'partner'] as const;
+const LEGACY_CHANNEL_KINDS = ['content', 'paid_search', 'paid_social', 'outbound', 'referral', 'partner', 'events', 'other'] as const;
+/** D4486: old open tabs may still submit the former vocabulary; keep it and map clear equivalents. */
+function channelKind(value: unknown): { kind: string | null; legacy: string | null } {
+  if (value == null || value === '') return { kind: null, legacy: null };
+  if (CHANNEL_KINDS.includes(value as any)) return { kind: String(value), legacy: null };
+  const legacy = oneOf(value, LEGACY_CHANNEL_KINDS, 'kind', true)!;
+  const mapped: Record<string, string> = { content: 'organic', paid_search: 'ads', paid_social: 'ads', outbound: 'outreach' };
+  return { kind: mapped[legacy] ?? null, legacy };
+}
 
 /** A UTM source from a channel's name: lowercase, non-alphanumerics to `-`, `-2`, `-3` on a clash. */
 export async function deriveUtmSource(env: Env, pid: number, name: string): Promise<string> {
@@ -203,6 +212,25 @@ const spendStatement = (env: Env, uid: string, month: string, spend: number, use
 
 const isUnique = (e: unknown) => String((e as Error).message).toLowerCase().includes('unique');
 
+/** D4486: a channel's owner is the founder or an active accepted venture member. */
+async function channelOwner(env: Env, pid: number, value: unknown): Promise<number | null> {
+  if (value == null || value === '') return null;
+  const id = typeof value === 'number' || typeof value === 'string' ? Number(value) : NaN;
+  if (!Number.isSafeInteger(id) || id <= 0) throw new Refused(400, 'Choose a member of this venture', 'owner_user_id');
+  const member = await env.DB.prepare(`SELECT u.id FROM users u WHERE u.id = ? AND u.is_active = 1
+    AND (u.founder_id = (SELECT founder_id FROM projects WHERE id = ?)
+      OR EXISTS (SELECT 1 FROM project_members m WHERE m.project_id = ? AND m.user_id = u.id AND m.status = 'accepted'))`)
+    .bind(id, pid, pid).first();
+  if (!member) throw new Refused(400, 'Choose a member of this venture', 'owner_user_id');
+  return id;
+}
+
+function channelPurpose(value: unknown): string | null {
+  if (value == null || value === '') return null;
+  if (typeof value !== 'string' || value.trim().length > 140) throw new Refused(400, 'Purpose is at most 140 characters', 'purpose');
+  return value.trim() || null;
+}
+
 export async function addChannel(env: Env, pid: number, user: User, b: Body): Promise<{ uid: string; utm_source: string }> {
   const name = str(b.name, 120);
   if (!name) throw new Refused(400, 'A channel has a name', 'name');
@@ -210,12 +238,15 @@ export async function addChannel(env: Env, pid: number, user: User, b: Body): Pr
   const utm = given ?? await deriveUtmSource(env, pid, name);
   const bar = centsOrNull(b.cac_bar_cents, 'cac_bar_cents');
   const spend = centsOrNull(b.spend_cents, 'spend_cents');
+  const owner = await channelOwner(env, pid, b.owner_user_id);
+  const purpose = channelPurpose(b.purpose);
+  const kind = channelKind(b.kind);
   const id = newUid();
   const statements = [
-    env.DB.prepare(`INSERT INTO growth_channels (uid, project_id, name, utm_source, state, kind, cac_bar_cents, bar_currency, created_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .bind(id, pid, name, utm, oneOf(b.state, CHANNEL_STATES, 'state') ?? 'active', oneOf(b.kind, CHANNEL_KINDS, 'kind'),
-        bar, currencyFor(bar, b.bar_currency, 'bar_currency'), user.id),
+    env.DB.prepare(`INSERT INTO growth_channels (uid, project_id, name, utm_source, state, kind, cac_bar_cents, bar_currency, created_by, purpose, owner_user_id, legacy_kind)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(id, pid, name, utm, oneOf(b.state, CHANNEL_STATES, 'state') ?? 'active', kind.kind,
+        bar, currencyFor(bar, b.bar_currency, 'bar_currency'), user.id, purpose, owner, kind.legacy),
     ...(spend == null ? [] : [spendStatement(env, id, thisMonth(), spend, user.id)]),
     logCycleWriteStatement(env, entry(pid, user.id, { module: 'distribution', entityId: id, action: 'grow_channel_added', summary: 'Channel added' })),
   ];
@@ -228,15 +259,18 @@ export async function addChannel(env: Env, pid: number, user: User, b: Body): Pr
 
 export async function updateChannel(env: Env, pid: number, user: User, uid: string, b: Body): Promise<{ uid: string }> {
   const row = await owned<Row & { id: number }>(env,
-    'SELECT id, name, state, kind, cac_bar_cents, bar_currency FROM growth_channels WHERE uid = ? AND project_id = ?', uid, pid);
+    'SELECT id, name, state, kind, legacy_kind, cac_bar_cents, bar_currency, purpose, owner_user_id FROM growth_channels WHERE uid = ? AND project_id = ?', uid, pid);
   const bar = has(b, 'cac_bar_cents') ? centsOrNull(b.cac_bar_cents, 'cac_bar_cents') : row.cac_bar_cents as number | null;
   const barCurrency = has(b, 'cac_bar_cents') || has(b, 'bar_currency')
     ? currencyFor(bar, has(b, 'bar_currency') ? b.bar_currency : row.bar_currency, 'bar_currency') : row.bar_currency;
   const spend = has(b, 'spend_cents') ? centsOrNull(b.spend_cents, 'spend_cents') : null;
+  const owner = has(b, 'owner_user_id') ? await channelOwner(env, pid, b.owner_user_id) : row.owner_user_id;
+  const purpose = has(b, 'purpose') ? channelPurpose(b.purpose) : row.purpose;
+  const kind = has(b, 'kind') ? channelKind(b.kind) : { kind: row.kind, legacy: row.legacy_kind };
   await env.DB.batch([
-    env.DB.prepare('UPDATE growth_channels SET name = ?, state = ?, kind = ?, cac_bar_cents = ?, bar_currency = ?, updated_at = ? WHERE id = ?')
+    env.DB.prepare('UPDATE growth_channels SET name = ?, state = ?, kind = ?, cac_bar_cents = ?, bar_currency = ?, updated_at = ?, purpose = ?, owner_user_id = ?, legacy_kind = ? WHERE id = ?')
       .bind(has(b, 'name') ? (str(b.name, 120) ?? row.name) : row.name, has(b, 'state') ? oneOf(b.state, CHANNEL_STATES, 'state', true) : row.state,
-        has(b, 'kind') ? oneOf(b.kind, CHANNEL_KINDS, 'kind') : row.kind, bar, barCurrency, nowIso(), row.id),
+        kind.kind, bar, barCurrency, nowIso(), purpose, owner, kind.legacy, row.id),
     ...(spend == null ? [] : [spendStatement(env, uid, thisMonth(), spend, user.id)]),
     logCycleWriteStatement(env, entry(pid, user.id, { module: 'distribution', entityId: uid, action: 'grow_channel_updated', summary: 'Channel updated' })),
   ]);
