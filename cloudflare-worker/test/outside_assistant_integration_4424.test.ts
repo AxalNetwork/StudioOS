@@ -378,3 +378,26 @@ test('a company agent can propose company work without approving or naming any p
   assert.equal(decoded(r).proposal.record_ref,'company:company-a');
   assert.equal(decoded(r).proposal.payload.project_id,null); assert.equal(w.generated(),0); w.db.close();
 });
+
+
+test('CI4471: consent role conflicts use canonical authored refusals', async () => {
+  const w = world(); await connect(w); const p = await parked(w);
+  const r = await asUser(w, 'POST', `/api/mcp/consent/${p.id}/approve`, { companies: [101], team_agent: { company_uid: 'company-a', role_key: 'cpo' } });
+  assert.equal(r.status, 409);
+  assert.deepEqual([r.body.error, r.body.message, r.body.detail], ['role_taken', 'This team already has an agent in that role.', 'This team already has an agent in that role.']);
+  assert.equal(r.body.upstream, undefined);
+  w.db.close();
+});
+
+test('CI4471: Connected apps cleanup failure preserves the retryable authored response', async () => {
+  const w = world(); const c = await connect(w);
+  w.env.OAUTH_KV.delete = async () => { throw new Error('private provider outage'); };
+  const r = await asUser(w, 'DELETE', `/api/connectors/assistants/${c.binding.grant_id}`);
+  assert.equal(r.status, 503);
+  assert.equal(r.body.error, 'connection_cleanup_pending');
+  assert.equal(r.body.message, 'The app is disconnected in Axal VC. We could not finish disconnecting it from your assistant. Try again.');
+  assert.equal(r.body.detail, r.body.message);
+  assert.doesNotMatch(JSON.stringify(r.body), /private provider outage/);
+  assert.equal(w.db.prepare('SELECT state FROM team_agent_mcp_bindings').get().state, 'revoked');
+  w.db.close();
+});

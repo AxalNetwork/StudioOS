@@ -32,6 +32,7 @@ import { ownsVenture } from './_founder_validate_helpers';
 import { reserveOutsideAssistant, completeOutsideBinding, revokeOutsideBinding, OutsideAssistantRefused, OutsideProviderCleanupPending } from '../services/agents/outsideAssistant';
 import { canManage, loadScope } from '../services/agents/teams';
 import { ROLES } from '../services/agents/catalogue';
+import { refuse } from '../util/refusal';
 import { isAdmin } from './_t13t14t15_helpers';
 
 type C = Context<{ Bindings: Env }>;
@@ -151,7 +152,9 @@ mcpConsent.post('/:id/approve', async (c) => {
     try { reserved = await reserveOutsideAssistant(c.env, user, { companyUid: String(team.company_uid), roleKey: String(team.role_key),
       clientId: p.authRequest.clientId, clientName: client.clientName?.trim() || 'Outside assistant' }); }
     catch (e) {
-      if (e instanceof OutsideAssistantRefused) return c.json({ detail: e.message, error: e.code }, e.code === 'role_taken' ? 409 : 403);
+      if (e instanceof OutsideAssistantRefused) return refuse(c, e.code === 'role_taken' ? 409 : 403, {
+        code: e.code, raw: e, message: e.sentence,
+      });
       throw e;
     }
   }
@@ -319,7 +322,10 @@ assistantGrants.delete('/:grantId', async (c) => {
     }
     try { await revokeOutsideBinding(c.env, user, bindingUid, (id, sponsor) => helpers.revokeGrant(id, sponsor)); }
     catch (e) {
-      if (e instanceof OutsideProviderCleanupPending) return c.json({ detail: e.message, message: e.message, error: 'connection_cleanup_pending' }, 503);
+      if (e instanceof OutsideProviderCleanupPending) return refuse(c, 503, {
+        code: 'connection_cleanup_pending', raw: e,
+        message: 'The app is disconnected in Axal VC. We could not finish disconnecting it from your assistant. Try again.',
+      });
       throw e;
     }
     // An interrupted approval may never have completed its D1 grant-id pin.

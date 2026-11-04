@@ -12,7 +12,8 @@ type Binding = { uid: string; agent_id: number; sponsor_user_id: number; client_
 
 export class OutsideAssistantRefused extends Error {
   code: string;
-  constructor(code: string, message: string) { super(message); this.code = code; }
+  readonly sentence: string;
+  constructor(code: string, message: string) { super(message); this.code = code; this.sentence = message; }
 }
 /** Only thrown after D1 invalidation committed; callers may safely explain that access has ended. */
 export class OutsideProviderCleanupPending extends Error {

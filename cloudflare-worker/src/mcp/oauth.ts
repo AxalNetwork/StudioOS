@@ -47,7 +47,7 @@ export const CONSENT_TTL_SECONDS = 600;
 export const CLIENT_REGISTRATION_TTL_SECONDS = 7 * 86_400;
 export const PUBLIC_OAUTH_LIMITS = { register: 10, authorize: 30 } as const;
 export const requestedScopes = (scope: readonly string[] | undefined) => [...new Set(scope ?? [])].filter((s) => (SCOPES as readonly string[]).includes(s));
-const offeredScopes = (env: Env) => SCOPES.filter(s => env.TEAM_AGENTS_ENABLED === 'true' || !s.startsWith('team:'));
+export const offeredScopes = (env: Env) => SCOPES.filter(s => env.TEAM_AGENTS_ENABLED === 'true' || !s.startsWith('team:'));
 const HOUR = 3600;
 const DAY = 86_400;
 
