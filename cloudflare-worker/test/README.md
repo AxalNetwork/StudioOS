@@ -216,3 +216,4 @@ D1456 (#4014): the existing record, recovery, bot-control and migration-runner s
 | `work_runs_3968.test.ts` | Real engine board/item latest-run wiring, guard-inclusive charges, unknown costs, scope gates and concurrent attempts (#3968). |
 | `syndication_review_4440.test.ts` | D4440: client dirty choices against mounted Worker routes, terminal history, disconnected accounts and retained accepted copy. |
 | `work_runs_4459.test.ts` | #4459: no-call attempts preserve paid totals; real engine labels/milestone/review responses retain the live item run and cost. |
+| `account_licences_4472.test.ts` | D4472: additional licence union, grants, auth and atomic appointment rollback. |

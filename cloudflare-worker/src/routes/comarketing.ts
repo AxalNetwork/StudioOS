@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /**
  * T15 — Co-marketing pitches + admin approval + attribution tracking.
  * Mounted at /api/comarketing.
@@ -612,7 +613,7 @@ r.get('/founder/by-project/:pid', async (c) => {
       .bind(pid).first<{ id: number; founder_id: number | null; company_id: number | null }>();
     if (!project) return notFound();
     if (!isAdmin(user)) {
-      const own = user.role === 'founder' && user.founder_id != null && project.founder_id === user.founder_id;
+      const own = holdsLicence(user, 'founder') && user.founder_id != null && project.founder_id === user.founder_id;
       if (!own || !projectInActiveCompany(await activeCompanyFor(c, user), project)) return notFound();
     }
 

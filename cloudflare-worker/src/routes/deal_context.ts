@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /** D1150: investor's own deal progress and firm's private notes. No staff bypass. */
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -24,7 +25,7 @@ r.use('/:id/notes/:uid', guard);
 
 export async function context(c: any) {
   const user = await requireAuth(c);
-  if (user.role !== 'investor') return { error: c.json({ error: 'investor_only' }, 403) };
+  if (!holdsLicence(user, 'investor')) return { error: c.json({ error: 'investor_only' }, 403) };
   const raw = c.req.param('id');
   if (!/^[1-9][0-9]{0,14}$/.test(raw)) return { error: c.json({ error: 'invalid_deal' }, 400) };
   const company = await noteFirm(c.env.DB, user.id, await activeCompanyFor(c, user), !!c.req.header('X-Company-Id'));

@@ -1,3 +1,4 @@
+import { holdsLicence, isLicence } from '../services/accountLicences';
 /** #3626: self-scoped module operations over the member's supplied material.
  * No project/user ids, business-record reads/writes or automatic actions.
  * Auth, preferences and billing metadata use the existing services. The common
@@ -23,7 +24,7 @@ export function modulePageAllowed(user: { role: string; is_super_admin?: number 
   if (profile === 'Super Admin') return user.role === 'admin' && user.is_super_admin === 1;
   const profiles: Record<string, string> = { founder: 'Founder', investor: 'Investor', advisor: 'Advisor', partner: 'Operating Partner', admin: 'Admin' };
   // Match requireRole: admins may use View as; the charged id stays their own.
-  return user.role === 'admin' ? Object.values(profiles).includes(profile) : profiles[user.role] === profile;
+  return user.role === 'admin' ? Object.values(profiles).includes(profile) : Object.entries(profiles).some(([licence, label]) => isLicence(licence) && holdsLicence(user, licence) && label === profile);
 }
 function bytes64(bytes: Uint8Array): string {
   let s = ''; for (const b of bytes) s += String.fromCharCode(b); return btoa(s);

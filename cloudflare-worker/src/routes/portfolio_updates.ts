@@ -1,3 +1,4 @@
+import { holdsOnlyLicence } from '../services/accountLicences';
 /**
  * Portfolio-company update inbox (Support stage).
  *
@@ -108,7 +109,7 @@ async function projectFounderId(env: Env, projectId: number): Promise<number | n
 }
 
 async function canShareUpdate(env: Env, user: User, projectId: number, founderId: number | null): Promise<boolean> {
-  return isAdmin(user) || (user.role !== 'partner' && await canAccessProject(env, user, { id: projectId, founder_id: founderId }, { write: true }));
+  return isAdmin(user) || (!holdsOnlyLicence(user, 'partner') && await canAccessProject(env, user, { id: projectId, founder_id: founderId }, { write: true }));
 }
 
 const shareDenied = { detail: 'You can read this venture but not share its updates.', code: 'share_not_allowed' };

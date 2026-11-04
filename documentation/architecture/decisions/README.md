@@ -51,3 +51,4 @@ and citations by number keep working.
 | `D4421.md` | Answered Team questions and the shared General counsel disclaimer. |
 | `D4422.md` | #4422: inherited Team model and MCP read-tool allow-lists, enforced on the Worker and edited in TM8a. |
 | `D4459.md` | No-call run charges and live Work-item mutation responses. |
+| `D4472.md` | One account, several licences: ordered access union, additional grants and atomic appointment retention. |

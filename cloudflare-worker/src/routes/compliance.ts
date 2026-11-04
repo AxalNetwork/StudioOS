@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /**
  * T12 — Compliance calendar (port of backend/app/api/routes/compliance.py).
  *
@@ -241,7 +242,7 @@ async function loadProject(
   if (!row) return null;
   // D702 — a venture its founder keeps to introductions is missing to an
   // investor without one, as the other venture reads answer.
-  if (role(user) === 'investor' && !(await findableBy(c.env, user as any, row.id))) return null;
+  if (holdsLicence(user, 'investor') && !(await findableBy(c.env, user as any, row.id))) return null;
   if (isPrivilegedReader(role(user))) return row;
   return projectInActiveCompany(await activeCompanyFor(c, user), row) ? row : null;
 }

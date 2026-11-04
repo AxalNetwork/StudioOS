@@ -1,3 +1,4 @@
+import { holdsLicence } from '../accountLicences';
 /**
  * Task #10 (AC-1) — Personal-advisor write-router.
  *
@@ -68,7 +69,7 @@ async function loadSubscriptionFields(env: Env, userId: number): Promise<UserSub
  * resolveFounderId() pattern in routes/projects.ts.
  */
 async function ensureFounderProject(env: Env, user: User): Promise<{ project_id: number; founder_id: number } | null> {
-  if (user.role !== 'founder' && user.role !== 'admin') return null;
+  if (!holdsLicence(user, 'founder') && user.role !== 'admin') return null;
   let founderId = user.founder_id || null;
   if (!founderId) {
     try {
@@ -898,7 +899,7 @@ export async function routeAnswer(
 
   // ---- Founder bank ---------------------------------------------------
   if (q.persona === 'founder') {
-    if (user.role !== 'founder' && user.role !== 'admin') {
+    if (!holdsLicence(user, 'founder') && user.role !== 'admin') {
       return { status: 'failed', error: 'founder questions require founder role' };
     }
     const ctx = await ensureFounderProject(env, user);
@@ -1245,7 +1246,7 @@ export async function routeAnswer(
 
   // ---- Investor bank --------------------------------------------------
   if (q.persona === 'investor') {
-    if (user.role !== 'investor' && user.role !== 'admin') {
+    if (!holdsLicence(user, 'investor') && user.role !== 'admin') {
       return { status: 'failed', error: 'investor questions require investor role' };
     }
     if (questionId === 'investor.profile.thesis') {
@@ -1308,7 +1309,7 @@ export async function routeAnswer(
     // detector. Compare via string cast so TS doesn't complain about
     // the unreachable-looking branch.
     const role = String(user.role || '');
-    if (role !== 'advisor' && role !== 'admin') {
+    if (!holdsLicence(user, 'advisor') && role !== 'admin') {
       return { status: 'failed', error: 'advisor questions require advisor role' };
     }
     const advisor = await ensureAdvisorRow(env, user);

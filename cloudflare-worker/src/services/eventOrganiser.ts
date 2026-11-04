@@ -1,3 +1,4 @@
+import { holdsLicence, isLicence } from './accountLicences';
 /** D567: registration audience rules are independent of complimentary pricing. */
 import type { Env } from '../types';
 import { PERSONAS, isAllowedPersonaOverlap, type PersonaId } from '../personas';
@@ -50,7 +51,7 @@ export async function registrationEligibility(env: Env, event: any, userId: numb
   }
   if (userId === null) return { eligible: false, reason: 'Sign in with an eligible member account.' };
   const user: any = await env.DB.prepare(`SELECT role FROM users WHERE id = ?`).bind(userId).first();
-  if ((rules.roles as string[] | undefined)?.includes(user?.role)) return { eligible: true, reason: 'Your role is eligible.' };
+  if ((rules.roles as string[] | undefined)?.some(role => !!user && (role === user.role || (isLicence(role) && holdsLicence(user, role))))) return { eligible: true, reason: 'Your role is eligible.' };
   if ((rules.personas as string[] | undefined)?.length) {
     const rows = await env.DB.prepare(`SELECT persona_id, is_primary FROM user_personas WHERE user_id = ?`).bind(userId).all<{ persona_id: string; is_primary: number }>();
     const held = rows.results || [];

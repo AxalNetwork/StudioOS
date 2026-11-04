@@ -47,7 +47,7 @@ function investorTierNow(row: InvestorUser | null | undefined, now: number) {
 export async function archetypeAccess(env: Env, user: User | null | undefined, now = Date.now()): Promise<ArchetypeAccess> {
   if (!user) return { locked: true, required_plan: FOUNDER_PLAN };
   const role = String(user.role ?? '').toLowerCase();
-  if (ALWAYS_UNLOCKED.has(role)) return { locked: false };
+  if (ALWAYS_UNLOCKED.has(role) || (user.licences || []).some(licence => ALWAYS_UNLOCKED.has(licence))) return { locked: false };
   if (Number((user as any).spinout_lab_active ?? 0) === 1) return { locked: false };
   if (role === 'investor') {
     let row = user as InvestorUser;

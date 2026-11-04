@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /**
  * Task #8 — Customer Discovery + Roadmap (worker port of
  * backend/app/api/routes/progress.py, discovery & roadmap surfaces only).
@@ -121,17 +122,17 @@ async function loadProject(
     'SELECT id, name, founder_id, company_id FROM projects WHERE id = ?',
   ).bind(projectId).first<Project>();
   if (!row) return null;
-  if (isPrivileged(user.role)) return row;
+  if (isPrivileged(user)) return row;
   return projectInActiveCompany(await activeCompanyFor(c, user), row) ? row : null;
 }
 
-function isPrivileged(role: User['role']): boolean {
+function isPrivileged(user: User): boolean {
   // Task #3 (DF) — investor removed from read-allowlist per IDOR contract.
-  return role === 'admin' || role === 'partner';
+  return user.role === 'admin' || holdsLicence(user, 'partner');
 }
 
 function ensureCanView(project: Project, user: User): void {
-  if (isPrivileged(user.role)) return;
+  if (isPrivileged(user)) return;
   if (!canAccessFounderResource(user, project.founder_id)) {
     throw new Error('Forbidden');
   }
@@ -139,7 +140,7 @@ function ensureCanView(project: Project, user: User): void {
 
 function ensureCanEdit(project: Project, user: User): void {
   if (user.role === 'admin') return;
-  if (user.role === 'founder') {
+  if (holdsLicence(user, 'founder')) {
     if (!canAccessFounderResource(user, project.founder_id)) {
       throw new Error('Forbidden');
     }

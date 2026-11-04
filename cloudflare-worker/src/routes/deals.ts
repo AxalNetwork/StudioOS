@@ -1,3 +1,4 @@
+import { holdsLicence, heldLicences } from '../services/accountLicences';
 import { investorHasDealRelationship } from '../services/dealAccess';
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
@@ -55,8 +56,8 @@ function enrichDeal(row: any): any {
   return { ...row, currency: row.currency ?? 'USD', progress_pct: progress, days_in_stage: daysInStage(row) };
 }
 
-const isPrivilegedRole = (role: string) =>
-  role === 'admin' || role === 'partner' || role === 'investor';
+const isPrivilegedRole = (user: User) =>
+  user.role === 'admin' || holdsLicence(user, 'partner') || holdsLicence(user, 'investor');
 
 /** Internal deal-team fields never leave staff responses. */
 export function serializeDeal(row: any, role: string): any {
@@ -151,7 +152,7 @@ deals.get('/', async (c) => {
 // ---------------------------------------------------------------------------
 deals.get('/funnel', async (c) => {
   const user = await requireAuth(c);
-  if (!isPrivilegedRole(user.role as string)) return c.json({ stages: [], total: 0 });
+  if (!isPrivilegedRole(user)) return c.json({ stages: [], total: 0 });
   const sql = getSQL(c.env);
   const rows = await sql`
     SELECT d.status AS stage,
@@ -201,7 +202,7 @@ deals.get('/studio', async (c) => {
  */
 deals.get('/pass-analytics', async (c) => {
   const user = await requireAuth(c);
-  if (!isPrivilegedRole(user.role as string)) return c.json({ detail: 'Forbidden' }, 403);
+  if (!isPrivilegedRole(user)) return c.json({ detail: 'Forbidden' }, 403);
   await ensureDealPassSchema(c.env);
   const sql = getSQL(c.env);
 
@@ -288,7 +289,7 @@ deals.get('/pass-analytics', async (c) => {
  */
 deals.get('/stage-analytics', async (c) => {
   const user = await requireAuth(c);
-  if (!isPrivilegedRole(user.role as string)) return c.json({ detail: 'Forbidden' }, 403);
+  if (!isPrivilegedRole(user)) return c.json({ detail: 'Forbidden' }, 403);
   await ensureDealPassSchema(c.env);
   const sql = getSQL(c.env);
 
@@ -341,7 +342,7 @@ deals.get('/stage-analytics', async (c) => {
  */
 deals.get('/screening', async (c) => {
   const user = await requireAuth(c);
-  if (user.role !== 'admin' && user.role !== 'partner' && user.role !== 'investor') return c.json({ detail: 'Forbidden' }, 403);
+  if (user.role !== 'admin' && !holdsLicence(user, 'partner') && !holdsLicence(user, 'investor')) return c.json({ detail: 'Forbidden' }, 403);
   const sql = getSQL(c.env);
   let desk: unknown;
   try {
@@ -517,7 +518,7 @@ deals.get('/invitations/mine', async (c) => {
 // recorded. Registered before `/:id` so the literal is not read as an id.
 deals.get('/transfers', async (c) => {
   const user = await requireAuth(c);
-  if (!isPrivilegedRole(user.role as string)) return c.json({ detail: 'Forbidden' }, 403);
+  if (!isPrivilegedRole(user)) return c.json({ detail: 'Forbidden' }, 403);
   const sql = getSQL(c.env);
   // The column list is written out in both branches rather than interpolated:
   // this file's `sql` tag binds every ${} as a VALUE, so a column list must
@@ -559,7 +560,7 @@ deals.get('/transfers', async (c) => {
 // this firm is in the room.
 deals.get('/dealroom/quota', async (c) => {
   const user = (await requireAuth(c)) as InvestorUser;
-  if (user.role !== 'investor' && !DEALROOM_BYPASS_ROLES.has(String(user.role))) {
+  if (!holdsLicence(user, 'investor') && !DEALROOM_BYPASS_ROLES.has(String(user.role))) {
     return c.json({ error: 'investor_only' }, 403);
   }
   await ensureInvestorPaywallSchema(c.env);
@@ -974,10 +975,9 @@ type ReadCtx =
 async function canReadDeal(env: Env, user: User, dealId: number, projectFounderId: any): Promise<boolean> {
   // #2460 narrows the generic founder guard; deal-room policy is separate
   // and deliberately retains the existing partner reader pending #2450.
-  if (user.role === 'partner') return true;
+  if (holdsLicence(user, 'partner')) return true;
   if (canAccessFounderResource(user as any, projectFounderId)) return true;
-  const role = String((user as any).role || '').toLowerCase();
-  if (role === 'investor') return investorHasDealRelationship(env, (user as any).id, dealId);
+  if (holdsLicence(user, 'investor')) return investorHasDealRelationship(env, (user as any).id, dealId);
   return false;
 }
 
@@ -1007,7 +1007,7 @@ export async function userMayReadDeal(env: Env, user: User, dealId: number): Pro
 export async function userReadableDealIds(env: Env, user: User, dealIds: number[]): Promise<Set<number>> {
   const ids = [...new Set(dealIds.filter(id => Number.isInteger(id) && id > 0))];
   if (!ids.length) return new Set();
-  if (user.role !== 'admin' && user.role !== 'partner' && user.role !== 'investor') return new Set();
+  if (user.role !== 'admin' && !holdsLicence(user, 'partner') && !holdsLicence(user, 'investor')) return new Set();
   const rows = await env.DB.prepare(`
     SELECT d.id FROM deals d
      WHERE d.id IN (SELECT CAST(value AS INTEGER) FROM json_each(?))
@@ -1053,7 +1053,7 @@ deals.get('/:id/evidence', async (c) => {
   if (ctx.error) return ctx.error;
   const { sql, deal, user } = ctx;
   await sql.end();
-  if (String((user as any).role) !== 'investor') {
+  if (!holdsLicence(user, 'investor')) {
     return c.json({ code: 'investor_only', detail: 'This is the investor’s read of the evidence. The founder reads it in Raise › Evidence.' }, 403);
   }
   if (!deal.project_id) return c.json({ detail: 'Deal not found' }, 404);
@@ -1574,7 +1574,7 @@ deals.post('/:id/invitations', async (c) => {
   let created = 0;
   for (const iid of ids) {
     const u = await sql`SELECT id, role FROM users WHERE id = ${iid}`;
-    if (u.length === 0 || String((u[0] as any).role) !== 'investor') continue;
+    if (u.length === 0 || !(await heldLicences(c.env.DB, u[0] as any)).includes('investor')) continue;
     let inserted: any[] = [];
     try {
       inserted = await sql`INSERT INTO deal_invitations (deal_id, investor_user_id, invited_by_user_id, message, email_opt_in, status) VALUES (${id}, ${iid}, ${admin.id}, ${data.message || null}, ${sendEmail ? 1 : 0}, 'invited') ON CONFLICT (deal_id, investor_user_id) DO NOTHING RETURNING id`;
@@ -1697,7 +1697,7 @@ deals.post('/:id/dealroom/join', async (c) => {
   const user = (await requireAuth(c)) as InvestorUser;
   await ensureInvestorPaywallSchema(c.env);
   const isBypass = DEALROOM_BYPASS_ROLES.has(String(user.role));
-  if (user.role !== 'investor' && !isBypass) {
+  if (!holdsLicence(user, 'investor') && !isBypass) {
     return c.json({ error: 'investor_only' }, 403);
   }
   const dealId = Number(c.req.param('id'));
@@ -1759,7 +1759,7 @@ deals.delete('/:id/dealroom/leave', async (c) => {
   const user = await requireAuth(c);
   // Mirror the bypass list from the join endpoint — admin/partner/advisor
   // who joined a dealroom must also be able to leave it.
-  if (user.role !== 'investor' && !DEALROOM_BYPASS_ROLES.has(String(user.role))) {
+  if (!holdsLicence(user, 'investor') && !DEALROOM_BYPASS_ROLES.has(String(user.role))) {
     return c.json({ error: 'investor_only' }, 403);
   }
   const dealId = Number(c.req.param('id'));

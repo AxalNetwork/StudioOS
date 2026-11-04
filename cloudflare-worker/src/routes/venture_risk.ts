@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 import { mayReadProjectDeal } from '../services/scoreAccess';
 /**
  * Task #9 — Venture Risk surface.
@@ -34,13 +35,13 @@ import {
 const ventureRisk = new Hono<{ Bindings: Env }>();
 
 /** Single-project roles; investors additionally require a readable deal. */
-function canRead(role: User['role']): boolean {
-  return role === 'admin' || role === 'partner' || role === 'investor';
+function canRead(user: User): boolean {
+  return user.role === 'admin' || holdsLicence(user, 'partner') || holdsLicence(user, 'investor');
 }
 
 /** Analyst WRITE set — admin / partner. */
-function canWrite(role: User['role']): boolean {
-  return role === 'admin' || role === 'partner';
+function canWrite(user: User): boolean {
+  return user.role === 'admin' || holdsLicence(user, 'partner');
 }
 
 function parseProjectId(raw: string): number | null {
@@ -51,7 +52,7 @@ function parseProjectId(raw: string): number | null {
 ventureRisk.get('/matrix', async (c) => {
   try {
     const user = await requireAuth(c);
-    if (!canWrite(user.role)) return c.json({ detail: 'Forbidden' }, 403);
+    if (!canWrite(user)) return c.json({ detail: 'Forbidden' }, 403);
     const companies = await buildMatrix(c.env, 200, { role: user.role, userId: user.id });
     return c.json({
       layer_meta: LAYERS,
@@ -67,10 +68,10 @@ ventureRisk.get('/matrix', async (c) => {
 ventureRisk.get('/by-project/:projectId', async (c) => {
   try {
     const user = await requireAuth(c);
-    if (!canRead(user.role)) return c.json({ detail: 'Forbidden' }, 403);
+    if (!canRead(user)) return c.json({ detail: 'Forbidden' }, 403);
     const projectId = parseProjectId(c.req.param('projectId'));
     if (projectId == null) return c.json({ detail: 'Invalid project_id' }, 400);
-    if (user.role === 'investor' && !await mayReadProjectDeal(c.env, user, projectId)) {
+    if (holdsLicence(user, 'investor') && !await mayReadProjectDeal(c.env, user, projectId)) {
       return c.json({ detail: 'Forbidden' }, 403);
     }
     const assessment = await buildAssessment(c.env, projectId, { role: user.role, userId: user.id });
@@ -84,7 +85,7 @@ ventureRisk.get('/by-project/:projectId', async (c) => {
 ventureRisk.post('/:projectId/recompute', async (c) => {
   try {
     const user = await requireAuth(c);
-    if (!canWrite(user.role)) return c.json({ detail: 'Forbidden' }, 403);
+    if (!canWrite(user)) return c.json({ detail: 'Forbidden' }, 403);
     const projectId = parseProjectId(c.req.param('projectId'));
     if (projectId == null) return c.json({ detail: 'Invalid project_id' }, 400);
     // Auto scores are always computed live, so a recompute is a fresh build.
@@ -99,7 +100,7 @@ ventureRisk.post('/:projectId/recompute', async (c) => {
 ventureRisk.put('/:projectId/layers/:layerKey', async (c) => {
   try {
     const user = await requireAuth(c);
-    if (!canWrite(user.role)) return c.json({ detail: 'Forbidden' }, 403);
+    if (!canWrite(user)) return c.json({ detail: 'Forbidden' }, 403);
     const projectId = parseProjectId(c.req.param('projectId'));
     if (projectId == null) return c.json({ detail: 'Invalid project_id' }, 400);
     const layerKey = c.req.param('layerKey');
@@ -153,7 +154,7 @@ ventureRisk.put('/:projectId/layers/:layerKey', async (c) => {
 ventureRisk.delete('/:projectId/layers/:layerKey', async (c) => {
   try {
     const user = await requireAuth(c);
-    if (!canWrite(user.role)) return c.json({ detail: 'Forbidden' }, 403);
+    if (!canWrite(user)) return c.json({ detail: 'Forbidden' }, 403);
     const projectId = parseProjectId(c.req.param('projectId'));
     if (projectId == null) return c.json({ detail: 'Invalid project_id' }, 400);
     const layerKey = c.req.param('layerKey');

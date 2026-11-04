@@ -1,6 +1,6 @@
 /**
  * ensureRoleProfile — backfill founder_id / partner_id on the users
- * row whenever a user with role=founder|partner is missing the FK
+ * row for each licence (D4472 adds investor/advisor profile creation).
  * to their persona-specific profile table.
  *
  * Why this exists:
@@ -35,6 +35,8 @@ import type { Env, User } from '../types';
 export interface RoleProfileIds {
   founder_id: number | null;
   partner_id: number | null;
+  investor_id?: number | null;
+  advisor_id?: number | null;
 }
 
 export async function ensureRoleProfile(env: Env, user: User): Promise<RoleProfileIds> {
@@ -53,6 +55,11 @@ export async function ensureRoleProfile(env: Env, user: User): Promise<RoleProfi
     if (pid) current.partner_id = pid;
   }
 
+  if (user.role === 'investor') {
+    current.investor_id = await ensureInvestor(env, user);
+  } else if (user.role === 'advisor') {
+    current.advisor_id = await ensureAdvisor(env, user);
+  }
   return current;
 }
 
@@ -137,4 +144,32 @@ async function ensurePartner(env: Env, user: User): Promise<number | null> {
     console.error('[ensureRoleProfile] partner lookup failed:', (e as Error).message);
   }
   return null;
+}
+
+/** D4472: create both investor stores, linked by user_id, without resetting a saved profile. */
+async function ensureInvestor(env: Env, user: User): Promise<number | null> {
+  try {
+    await env.DB.batch([
+      env.DB.prepare(`INSERT INTO investors (uid, user_id)
+        SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM investors WHERE user_id = ?)`)
+        .bind(crypto.randomUUID(), user.id, user.id),
+      env.DB.prepare('INSERT OR IGNORE INTO investor_profiles (user_id) VALUES (?)').bind(user.id),
+    ]);
+    const row = await env.DB.prepare('SELECT id FROM investors WHERE user_id = ? ORDER BY id LIMIT 1')
+      .bind(user.id).first<{ id: number }>();
+    if (row) await env.DB.prepare('UPDATE users SET investor_id = ? WHERE id = ?').bind(row.id, user.id).run();
+    return row?.id ?? null;
+  } catch (error) { console.error('[ensureRoleProfile] investor profile failed', error); return user.investor_id ?? null; }
+}
+
+/** D4472: Advisors are keyed by user_id; a retry preserves their recorded profile. */
+async function ensureAdvisor(env: Env, user: User): Promise<number | null> {
+  try {
+    await env.DB.prepare(`INSERT INTO advisors (uid, user_id, display_name, email)
+      VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO NOTHING`)
+      .bind(crypto.randomUUID(), user.id, user.name || user.email.split('@')[0], user.email).run();
+    const row = await env.DB.prepare('SELECT id FROM advisors WHERE user_id = ?').bind(user.id).first<{ id: number }>();
+    if (row) await env.DB.prepare('UPDATE users SET advisor_id = ? WHERE id = ?').bind(row.id, user.id).run();
+    return row?.id ?? null;
+  } catch (error) { console.error('[ensureRoleProfile] advisor profile failed', error); return user.advisor_id ?? null; }
 }

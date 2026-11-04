@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /**
  * Data room — folders, files, per-investor grants, and an NDA gate.
  *
@@ -136,7 +137,7 @@ type GrantRow = {
 
 /** D1102 — the same owner-only policy for the room and its shared record door. */
 export function dataRoomOwner(project: { founder_id: number | null }, user: { role: string; founder_id?: number | null }): boolean {
-  return user.role === 'founder' && typeof user.founder_id === 'number'
+  return holdsLicence(user, 'founder') && typeof user.founder_id === 'number'
     && Number.isSafeInteger(user.founder_id) && user.founder_id > 0 && project.founder_id === user.founder_id;
 }
 
@@ -161,7 +162,7 @@ async function ownedProject(
   env: Env, user: any, projectUid: string, companyId: number | null,
 ): Promise<ProjectRow | null> {
   // D1102 — this is the venture owner's workspace, never an admin wildcard.
-  if (user.role !== 'founder') return null;
+  if (!holdsLicence(user, 'founder')) return null;
   const scope = companyScope(user, companyId, 'p');
   const row = await env.DB.prepare(
     `SELECT p.id, p.uid, p.name FROM projects p WHERE p.uid = ? AND ${scope.sql}`,

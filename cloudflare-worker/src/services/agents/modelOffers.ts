@@ -1,3 +1,4 @@
+import { holdsLicence } from '../accountLicences';
 /** D4422 (#4422): the existing plan/model offer, shared by Team settings and enforcement. */
 import type { Env, User } from '../../types';
 import { userMeetsTier } from '../../middleware/requireTier';
@@ -9,7 +10,7 @@ import { MODEL_CONNECTIONS } from '../ai/moduleConnections';
 /** Owner Q6 = A: a founder on a paid plan (the D852 rule), or HQ's admin. */
 export function planOk(user: User): boolean {
   if (isAdmin(user)) return true;
-  return String(user.role) === 'founder' && userMeetsTier(user, 'growth');
+  return holdsLicence(user, 'founder') && userMeetsTier(user, 'growth');
 }
 
 /**

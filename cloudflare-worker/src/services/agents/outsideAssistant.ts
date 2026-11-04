@@ -1,3 +1,4 @@
+import { holdsLicence } from '../accountLicences';
 /** D4424 (#4424): isolated outside-assistant identity and revocation primitives; no route enables them yet. */
 import type { Env, User } from '../../types';
 import { userMeetsTier } from '../../middleware/requireTier';
@@ -18,7 +19,7 @@ export class OutsideAssistantRefused extends Error {
 const refuse = (code: string, message: string): never => { throw new OutsideAssistantRefused(code, message); };
 const enabled = (env: Env) => { if (env.TEAM_AGENTS_ENABLED !== 'true') refuse('team_agents_off', 'AI agents are not switched on for this team.'); };
 const plan = (user: User) => {
-  if (!isAdmin(user) && !(user.role === 'founder' && userMeetsTier(user, 'growth'))) {
+  if (!isAdmin(user) && !(holdsLicence(user, 'founder') && userMeetsTier(user, 'growth'))) {
     refuse('plan_required', 'Agents come with a paid Founder plan.');
   }
 };

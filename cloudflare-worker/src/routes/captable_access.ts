@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 import { notifyReasonedRead } from '../services/reasonedReadNotice';
 import { readRecord } from '../services/capTableRecord';
 import { recordAccessView, recordHolder } from '../services/capTableAccessRecord';
@@ -233,7 +234,7 @@ const isAskLevel = (v: unknown): v is AskLevel => typeof v === 'string' && (ASK_
 r.post('/:projectId/ask', async (c) => {
   try {
     const user = await requireAuth(c);
-    if (String(user.role ?? '').toLowerCase() !== 'investor') throw new Refusal(403, 'investors_only', 'Only an investor asks a founder for their cap table.');
+    if (!holdsLicence(user, 'investor')) throw new Refusal(403, 'investors_only', 'Only an investor asks a founder for their cap table.');
     if (await isSupportSession(c)) throw new Refusal(403, SUPPORT_SESSION_REFUSED_CODE, 'A support session cannot ask for access.');
     const p = await projectOr404(c);
     const related = await investorProjectIds(c.env, user as any, null);

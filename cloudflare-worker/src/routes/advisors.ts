@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /**
  * T13 — Advisors + office-hour slots + bookings + reviews.
  * Mounted at /api/advisors. Port of backend/app/api/routes/advisors.py.
@@ -20,7 +21,7 @@ const execCtx = (c: any) => { try { return c.executionCtx; } catch { return unde
 import { logAdminAction } from '../services/adminAudit';
 import { ensureTier, type TierUser } from '../middleware/requireTier';
 import {
-  isAdmin, isFounder, mapError, nowIso, newUid, jload, trimOrNull, role,
+  isAdmin, isFounder, mapError, nowIso, newUid, jload, trimOrNull,
 } from './_t13t14t15_helpers';
 import {
   loadUserVectors,
@@ -252,6 +253,7 @@ async function loadAdvisorById(env: Env, id: number): Promise<AdvisorRow | null>
   return env.DB.prepare('SELECT * FROM advisors WHERE id = ?').bind(id).first<AdvisorRow>();
 }
 async function myAdvisor(env: Env, user: User): Promise<AdvisorRow | null> {
+  if (!holdsLicence(user, 'advisor') && !isAdmin(user)) return null;
   if ((user as any).advisor_id) {
     const row = await env.DB.prepare('SELECT * FROM advisors WHERE id = ?')
       .bind((user as any).advisor_id).first<AdvisorRow>();
@@ -1148,7 +1150,7 @@ async function requireMyAdvisor(c: Context<{ Bindings: Env }>, user: User): Prom
 // to the shared booking DTO or the founder's client brief.
 async function requireRosterClient(c: Context<{ Bindings: Env }>) {
   const user = await requireAuth(c);
-  if (String(user.role).toLowerCase() !== 'advisor') throw c.json({ detail: 'Advisor required' }, 403);
+  if (!holdsLicence(user, 'advisor')) throw c.json({ detail: 'Advisor required' }, 403);
   const advisor = await requireMyAdvisor(c, user);
   if (advisor.user_id !== user.id) throw c.json({ detail: 'Your advisor profile is not attached to this account' }, 403);
   const clientId = Number(c.req.param('clientId'));
@@ -2359,7 +2361,7 @@ advisors.get('/me/tax-summary', async (c) => {
  * overlay, which is a suggestion rather than a grant.
  */
 export function mayHoldCohortAssignment(u: { role: string } | null | undefined): boolean {
-  return !!u && role(u) === 'advisor';
+  return !!u && holdsLicence(u, 'advisor');
 }
 
 /**
@@ -2951,7 +2953,7 @@ advisors.get('/me/cohort/:cycleId/calendar', async (c) => {
 advisors.get('/me/thinking', async (c) => {
   try {
     const user = await requireAuth(c);
-    if (role(user) !== 'advisor') {
+    if (!holdsLicence(user, 'advisor')) {
       return c.json({ detail: 'Only an advisor has a thinking shelf' }, 403);
     }
     const rows = await c.env.DB.prepare(
@@ -4551,7 +4553,7 @@ advisors.get('/me/booking-links', async (c) => {
 advisors.get('/me/visibility', async (c) => {
   try {
     const user = await requireAuth(c);
-    if (role(user) !== 'advisor') return c.json({ detail: 'Advisor required' }, 403);
+    if (!holdsLicence(user, 'advisor')) return c.json({ detail: 'Advisor required' }, 403);
     const m = await requireMyAdvisor(c, user);
     return c.json(await advisorVisibility(c.env, { advisorId: m.id, userId: user.id }, c.req.query('days')));
   } catch (e) { return mapError(c, e); }
@@ -4560,7 +4562,7 @@ advisors.get('/me/visibility', async (c) => {
 advisors.get('/me/access-log', async (c) => {
   try {
     const user = await requireAuth(c);
-    if (role(user) !== 'advisor') return c.json({ detail: 'Advisor required' }, 403);
+    if (!holdsLicence(user, 'advisor')) return c.json({ detail: 'Advisor required' }, 403);
     await requireMyAdvisor(c, user);
     const rows = await c.env.DB.prepare(
       `SELECT l.action, l.created_at, p.uid AS project_uid, p.name AS client,
@@ -4578,7 +4580,7 @@ advisors.get('/me/access-log', async (c) => {
 advisors.patch('/me/booking-links/:id', async (c) => {
   try {
     const user = await requireAuth(c);
-    if (role(user) !== 'advisor') return c.json({ detail: 'Advisor required' }, 403);
+    if (!holdsLicence(user, 'advisor')) return c.json({ detail: 'Advisor required' }, 403);
     const m = await requireMyAdvisor(c, user);
     const body = await c.req.json().catch(() => ({} as any));
     if (typeof body.is_active !== 'boolean') return c.json({ detail: 'is_active must be a boolean' }, 400);

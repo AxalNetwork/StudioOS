@@ -6,6 +6,11 @@ import { getSQL } from './db';
 import { branchOf, authCookieName, csrfCookieName, HQ_ONLY, HQ_AUTHORING_ONLY, BRANCH_SUSPENDED } from './util/branch';
 import { ADMIN_FROZEN, FREEZING_STATUSES } from './util/authErrors';
 import { recordSecurityEvent } from './services/securityEvents';
+import { heldLicences, holdsLicence, isLicence, type Licence } from './services/accountLicences';
+
+// Contexts live for one request. Repeated requireAuth/requireRole calls share
+// exactly one grant lookup, always keyed to the selected token's subject.
+const requestLicences = new WeakMap<Context<{ Bindings: Env }>, Map<number, Promise<Licence[]>>>();
 
 const JWT_ALGORITHM = 'HS256';
 export const JWT_EXPIRY_HOURS = 24;
@@ -334,6 +339,18 @@ export async function getCurrentUser(c: Context<{ Bindings: Env }>): Promise<Use
     await sql.end();
     if (users.length === 0 || !users[0].is_active) return null;
     const u = users[0];
+    let licenceReads = requestLicences.get(c);
+    if (!licenceReads) { licenceReads = new Map(); requestLicences.set(c, licenceReads); }
+    if (!licenceReads.has(u.id)) {
+      licenceReads.set(u.id, heldLicences(c.env.DB, u).catch(error => {
+        // A missing migration/read failure cannot grant additional access.
+        // Preserve primary-only access; the account licence read reports its
+        // own unavailable state rather than fabricating an empty grant list.
+        console.warn('[auth] account licences unreadable', error);
+        return isLicence(u.role) ? [u.role] : [];
+      }));
+    }
+    u.licences = await licenceReads.get(u.id)!;
     // MI Pro subscription state lives in the mi_pro_subscriptions side table
     // (the `users` table is at D1's hard 100-column limit, and D1 also rejects
     // any result set wider than 100 columns — so we cannot JOIN it into the
@@ -823,11 +840,11 @@ export async function requireBranchNotSuspended(c: Context<{ Bindings: Env }>): 
  */
 export async function requireRole(
   c: Context<{ Bindings: Env }>,
-  ...roles: Array<'admin' | 'partner' | 'founder' | 'investor' | 'guest'>
+  ...roles: Array<'admin' | 'partner' | 'founder' | 'investor' | 'advisor' | 'guest'>
 ): Promise<User> {
   const user = await requireAuth(c);
   if (user.role === 'admin') return user;
-  if (!roles.includes(user.role as any)) throw new Error('Forbidden');
+  if (!roles.includes(user.role as any) && !roles.some(role => isLicence(role) && holdsLicence(user, role))) throw new Error('Forbidden');
   return user;
 }
 
@@ -859,7 +876,7 @@ export function canAccessFounderResource(user: User, ownerFounderId: number | nu
   // a matching founder_id) means a non-founder principal that happens to carry
   // a residual founder_id (e.g. a founder later converted to an investor) can
   // never bypass into the un-masked data this predicate guards.
-  return user.role === 'founder' && !!user.founder_id && user.founder_id === ownerFounderId;
+  return holdsLicence(user, 'founder') && !!user.founder_id && user.founder_id === ownerFounderId;
 }
 
 /**
@@ -884,10 +901,10 @@ export type EntityListScope =
   | { kind: 'none' };
 
 export function entityListScope(user: User): EntityListScope {
-  if (user.role === 'admin' || user.role === 'partner') return { kind: 'all' };
+  if (user.role === 'admin' || holdsLicence(user, 'partner')) return { kind: 'all' };
   // Role-gated, not merely founder_id-gated — a principal converted to another
   // role may still carry a residual founder_id, and must not read through it.
-  if (user.role === 'founder' && !!user.founder_id) {
+  if (holdsLicence(user, 'founder') && !!user.founder_id) {
     return { kind: 'own_projects', founderId: user.founder_id };
   }
   return { kind: 'none' };
@@ -896,13 +913,13 @@ export function entityListScope(user: User): EntityListScope {
 /** Phase 0.1 — true iff viewer may see capital / LP / fund cashflow data.
  * Strictly admin or investor. Mirrors `services.access_policy.can_view_lp_data`. */
 export function canViewLpData(user: User | null | undefined): boolean {
-  return !!user && (user.role === 'admin' || user.role === 'investor');
+  return !!user && (user.role === 'admin' || holdsLicence(user, 'investor'));
 }
 
 /** Phase 0.1 — true iff viewer may see partner-side demand boards.
  * Strictly admin or partner. */
 export function canViewPartnerDemand(user: User | null | undefined): boolean {
-  return !!user && (user.role === 'admin' || user.role === 'partner');
+  return !!user && (user.role === 'admin' || holdsLicence(user, 'partner'));
 }
 
 /**
@@ -1144,7 +1161,7 @@ export async function requireApprovedKyc(c: Context<{ Bindings: Env }>): Promise
   // and pass through. Only investors must be approved before reaching
   // gated capital / deal-flow / signing endpoints.
   if (user.role === 'admin') return user;
-  if (user.role !== 'investor') return user;
+  if (!holdsLicence(user, 'investor')) return user;
   if ((user as any).kyc_status === 'approved') return user;
   throw new Error('KYC required');
 }

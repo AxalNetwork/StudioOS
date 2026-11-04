@@ -1,3 +1,4 @@
+import { holdsOnlyLicence } from '../services/accountLicences';
 /**
  * T11 + Task #8 (DI) — Founder Wellbeing.
  *
@@ -450,7 +451,7 @@ function unreadable(c: any, code: string, message: string, raw: unknown, extra?:
 
 wellbeing.get('/checkins', async (c) => {
   const user = await requireAuth(c);
-  if (role(user) === 'investor') {
+  if (holdsOnlyLicence(user, 'investor')) {
     return c.json({ detail: 'Not available for investors' }, 403);
   }
   const limit = clampLimit(c.req.query('limit'), 30, 200);
@@ -545,7 +546,7 @@ async function serializeDaily(env: Env, row: DailyRow & {
 // canonical /checkins handler (same body schema, same response shape).
 wellbeing.post('/daily', async (c) => {
   const user = await requireAuth(c);
-  if (role(user) === 'investor') return c.json({ detail: 'Not available for investors' }, 403);
+  if (holdsOnlyLicence(user, 'investor')) return c.json({ detail: 'Not available for investors' }, 403);
   await ensureWellbeingSchema(c.env);
   const body = await c.req.json().catch(() => ({}));
   const result = await submitCanonicalCheckin(c.env, user.id, body);
@@ -554,7 +555,7 @@ wellbeing.post('/daily', async (c) => {
 
 wellbeing.get('/daily', async (c) => {
   const user = await requireAuth(c);
-  if (role(user) === 'investor') return c.json({ detail: 'Not available for investors' }, 403);
+  if (holdsOnlyLicence(user, 'investor')) return c.json({ detail: 'Not available for investors' }, 403);
   const daysRaw = Number(c.req.query('days') ?? 30);
   const days = Math.max(1, Math.min(Number.isFinite(daysRaw) ? daysRaw : 30, 180));
   try {
@@ -1168,7 +1169,7 @@ wellbeing.get('/experts/categories', async (c) => {
 
 wellbeing.get('/experts', async (c) => {
   const user = await requireAuth(c);
-  if (role(user) === 'investor') {
+  if (holdsOnlyLicence(user, 'investor')) {
     return c.json({ detail: 'Not available for investors' }, 403);
   }
   try {
@@ -1254,7 +1255,7 @@ wellbeing.get('/experts', async (c) => {
 
 wellbeing.get('/experts/:uid', async (c) => {
   const user = await requireAuth(c);
-  if (role(user) === 'investor') return c.json({ detail: 'Not available for investors' }, 403);
+  if (holdsOnlyLicence(user, 'investor')) return c.json({ detail: 'Not available for investors' }, 403);
   await ensureWellbeingSchema(c.env);
   await ensureSeededExperts(c.env);
 
@@ -1331,7 +1332,7 @@ async function loadAvailability(env: Env, expertId: number): Promise<Availabilit
 
 wellbeing.get('/experts/:uid/slots', async (c) => {
   const user = await requireAuth(c);
-  if (role(user) === 'investor') return c.json({ detail: 'Not available for investors' }, 403);
+  if (holdsOnlyLicence(user, 'investor')) return c.json({ detail: 'Not available for investors' }, 403);
   await ensureWellbeingSchema(c.env);
 
   const uid = c.req.param('uid');
@@ -1362,7 +1363,7 @@ wellbeing.get('/experts/:uid/slots', async (c) => {
 
 wellbeing.post('/experts/:uid/book', async (c) => {
   const user = await requireAuth(c);
-  if (role(user) === 'investor') return c.json({ detail: 'Not available for investors' }, 403);
+  if (holdsOnlyLicence(user, 'investor')) return c.json({ detail: 'Not available for investors' }, 403);
   await ensureWellbeingSchema(c.env);
 
   const uid = c.req.param('uid');
@@ -1581,7 +1582,7 @@ wellbeing.post('/experts/:uid/book', async (c) => {
 
 wellbeing.post('/experts/:uid/rate', async (c) => {
   const user = await requireAuth(c);
-  if (role(user) === 'investor') return c.json({ detail: 'Not available for investors' }, 403);
+  if (holdsOnlyLicence(user, 'investor')) return c.json({ detail: 'Not available for investors' }, 403);
   await ensureWellbeingSchema(c.env);
 
   const uid = c.req.param('uid');
@@ -1662,7 +1663,7 @@ function sanitiseExpertInput(body: any): Record<string, any> {
 // Apply / create an expert profile bound to the calling user.
 wellbeing.post('/experts/apply', async (c) => {
   const user = await requireAuth(c);
-  if (role(user) === 'investor') return c.json({ detail: 'Not available for investors' }, 403);
+  if (holdsOnlyLicence(user, 'investor')) return c.json({ detail: 'Not available for investors' }, 403);
   await ensureWellbeingSchema(c.env);
 
   const existing = await loadMyExpert(c.env, user.id);

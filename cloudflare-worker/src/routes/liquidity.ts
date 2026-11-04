@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /**
  * Liquidity / secondary-market endpoints.
  *
@@ -107,7 +108,7 @@ liquidity.get('/marketplace', async (c) => {
 // POST /api/liquidity/match — enqueue AI buyer matching for a listing
 liquidity.post('/match', async (c) => {
   const user = await requireAuth(c);
-  if (!['admin', 'partner', 'investor'].includes(user.role)) {
+  if (!(user.role === 'admin' || holdsLicence(user, 'partner') || holdsLicence(user, 'investor'))) {
     return c.json({ error: 'Admins/partners/investors only' }, 403);
   }
   const body = await c.req.json<{ listing_id: number }>();
@@ -122,7 +123,7 @@ liquidity.post('/match', async (c) => {
 // GET /api/liquidity/listings/:id/matches — see proposed buyers (admin/partner)
 liquidity.get('/listings/:id/matches', async (c) => {
   const user = await requireAuth(c);
-  if (!['admin', 'partner', 'investor'].includes(user.role)) {
+  if (!(user.role === 'admin' || holdsLicence(user, 'partner') || holdsLicence(user, 'investor'))) {
     return c.json({ error: 'Admins/partners/investors only' }, 403);
   }
   const id = parseInt(c.req.param('id'), 10);
@@ -256,7 +257,7 @@ liquidity.get('/my-portfolio', async (c) => {
 // GET /api/liquidity/events — recent liquidity events (admin/partner observability)
 liquidity.get('/events', async (c) => {
   const user = await requireAuth(c);
-  if (!['admin', 'partner', 'investor'].includes(user.role)) {
+  if (!(user.role === 'admin' || holdsLicence(user, 'partner') || holdsLicence(user, 'investor'))) {
     return c.json({ error: 'Admins/partners/investors only' }, 403);
   }
   const items = await LiquidityEvents.listRecent(c.env, 100);

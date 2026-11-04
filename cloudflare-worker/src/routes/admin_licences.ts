@@ -1,3 +1,5 @@
+import { AUTH_ERROR_STATUSES } from '../util/authErrors';
+import { grantLicence, isLicence, LicenceRefusal } from '../services/accountLicences';
 /**
  * Territory licences — the HQ ledger behind the subsidiary model.
  *
@@ -1190,47 +1192,44 @@ r.post('/:uid/admins', async (c) => {
       return c.json({ error: `that account already administers ${held.licence_ref}` }, 409);
     }
 
-    // ONE BATCH, AND THE ORDER OF THE TWO WRITES DOES NOT MATTER — that they
-    // are one statement does. A binding without the role is an administrator
-    // who cannot administer; the role without a binding is the unscoped admin
-    // the whole door exists to prevent. Either alone is a state somebody would
-    // have to notice and repair by hand.
+    // D4472: appointment, retained licence, territory binding and both audits
+    // are one transaction. Any failed statement leaves every store unchanged.
     const previousRole = String(u.role || '');
-    await c.env.DB.batch([
-      c.env.DB.prepare(
-        `INSERT INTO licence_admins (licence_id, user_id, admin_role, granted_by_user_id)
-         VALUES (?, ?, ?, ?)
-         ON CONFLICT(user_id) DO UPDATE SET admin_role = excluded.admin_role`,
-      ).bind(licence.id, u.id, role, admin.id),
-      c.env.DB.prepare("UPDATE users SET role = 'admin' WHERE id = ?").bind(u.id),
-    ]);
-    await logEvent(c.env, licence.id, 'terms_changed', admin.id,
-      { administrator_added: u.email, admin_role: role, promoted_from: previousRole }, reason);
-    // The account's OWN feed learns it too. `role_changed` / `your_role_changed`
-    // are the pair `routes/admin.ts` already writes and every audit reader
-    // already renders; a new action name would show up nowhere until three
-    // separate allowlists were swept, which is the failure that pair's own
-    // comment describes.
-    try {
-      const actorHash = await hashEmail(admin.email);
-      const targetHash = await hashEmail(u.email);
+    const actorHash = await hashEmail(admin.email);
+    const targetHash = await hashEmail(u.email);
+    const appointmentStatements = [
+      c.env.DB.prepare(`INSERT INTO licence_admins (licence_id, user_id, admin_role, granted_by_user_id)
+        VALUES (?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET admin_role = excluded.admin_role`)
+        .bind(licence.id, u.id, role, admin.id),
+      c.env.DB.prepare(`INSERT INTO licence_events (licence_id, event, detail_json, note, actor_user_id, created_at)
+        VALUES (?, 'terms_changed', ?, ?, ?, ?)`)
+        .bind(licence.id, JSON.stringify({ administrator_added: u.email, admin_role: role, promoted_from: previousRole }), reason, admin.id, nowIso()),
+      c.env.DB.prepare('INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?,?,?,?)')
+        .bind('role_changed', `Super admin ${admin.name} made ${u.email} an administrator of ${licence.licence_ref} (was ${previousRole || 'unrecorded'}). Reason: ${reason}`, actorHash, admin.id),
+      c.env.DB.prepare('INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?,?,?,?)')
+        .bind('your_role_changed', `You were made an administrator of ${licence.licence_ref} by ${admin.name}`, targetHash, u.id),
+    ];
+    const retainedLicence = previousRole.toLowerCase();
+    if (isLicence(retainedLicence)) {
+      await grantLicence(c.env.DB, { userId: u.id, licence: retainedLicence, actorId: admin.id,
+        source: 'admin_appointment', retainPrimary: true, appointmentStatements });
+    } else {
+      // Existing admins and non-licence holding states have no primary
+      // licence to retain. Their existing atomic appointment is unchanged.
       await c.env.DB.batch([
-        c.env.DB.prepare(
-          'INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?,?,?,?)',
-        ).bind('role_changed',
-          `Super admin ${admin.name} made ${u.email} an administrator of ${licence.licence_ref} (was ${previousRole || 'unrecorded'}). Reason: ${reason}`,
-          actorHash, admin.id),
-        c.env.DB.prepare(
-          'INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?,?,?,?)',
-        ).bind('your_role_changed',
-          `You were made an administrator of ${licence.licence_ref} by ${admin.name}`,
-          targetHash, u.id),
+        c.env.DB.prepare("UPDATE users SET role = 'admin' WHERE id = ?").bind(u.id),
+        ...appointmentStatements,
       ]);
-    } catch (e) {
-      console.warn('[licences/admins] activity log failed', (e as Error).message);
     }
     return c.json({ ok: true, user_id: u.id, admin_role: role, role: 'admin', promoted_from: previousRole });
-  } catch (e) { return mapError(c, e); }
+  } catch (e) {
+    if (e instanceof LicenceRefusal) return refuse(c, e.status, { code: e.code, message: 'The appointment could not retain this licence.' });
+    if (e instanceof Response) return e;
+    // Preserve named auth refusals; provider/storage exception text stays in logs.
+    const message = e instanceof Error ? e.message : '';
+    if (AUTH_ERROR_STATUSES[message]) return mapError(c, e);
+    return refuse(c, 503, { code: 'admin_appointment_failed', message: 'The appointment could not be recorded. Please retry.', raw: e });
+  }
 });
 
 r.delete('/:uid/admins/:userId{[0-9]+}', async (c) => {
