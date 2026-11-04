@@ -477,6 +477,24 @@ export function sanitizeBlocks(input: unknown, url: UrlGuard, ground = '#ffffff'
 }
 
 /** The model's part of a slide: what `sanitizeSlides` adds to the fielded shape. */
+/**
+ * D1569 (#3816, deck v2 D8): a card's accepted AI voice-over. The clip lives in
+ * R2 (`services/decks/cardAudio.ts`, `deck-audio/<project>/<uid>.mp3`); the card
+ * names it, the model that spoke it and its label, which is always "AI voice".
+ * Kept only when sound, so a card without one hashes as it did.
+ */
+export const VOICE_LABEL = 'AI voice';
+const VOICE_KEY = /^deck-audio\/[1-9][0-9]{0,11}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.mp3$/;
+const VOICE_MODEL = /^@cf\/[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
+export function voiceOf(v: any): { key: string; model: string; label: typeof VOICE_LABEL; chars?: number } | null {
+  if (!v || typeof v !== 'object') return null;
+  if (typeof v.key !== 'string' || !VOICE_KEY.test(v.key)) return null;
+  if (typeof v.model !== 'string' || v.model.length > 120 || !VOICE_MODEL.test(v.model)) return null;
+  const out: { key: string; model: string; label: typeof VOICE_LABEL; chars?: number } = { key: v.key, model: v.model, label: VOICE_LABEL };
+  if (Number.isSafeInteger(v.chars) && v.chars > 0 && v.chars <= NOTES_MAX) out.chars = v.chars;
+  return out;
+}
+
 export function sanitizeModel(s: any, url: UrlGuard): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   const layout = oneOf(s?.layout, LAYOUT_IDS);
@@ -506,6 +524,9 @@ export function sanitizeModel(s: any, url: UrlGuard): Record<string, unknown> {
   // D1576 (#3823): the card's transition, kept only when set.
   const transition = transitionOf(s?.transition);
   if (transition) out.transition = transition;
+  // D1569 (#3816): the card's accepted AI voice-over, kept only when sound.
+  const voice = voiceOf(s?.voice);
+  if (voice) out.voice = voice;
   return out;
 }
 

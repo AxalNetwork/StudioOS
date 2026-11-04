@@ -41,6 +41,8 @@ Admin Console's `?tab=personas` forwards here with `?moved=personas`, in
   (`../../../lib/personas.js`; no longer drawn since D1006, kept for its test),
   and Overview's blocks from `personaSegmentsApi` (`../../../lib/api/personaSegments.js`).
 
+- `SegmentScopeControls.jsx` — D4438 (#4438): registry-backed SEG7 scope, one scoped overview read and the open-suggestions inset; failures and stale replies stay distinct from empty results.
+
 ## Rules
 
 - The phone (D1007) is below `sm`, `segModel.js`'s `PHONE_QUERY`, as the admin

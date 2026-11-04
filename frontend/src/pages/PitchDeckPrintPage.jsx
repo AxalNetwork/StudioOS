@@ -10,7 +10,7 @@ import { downloadDeckPdf } from '../lib/deckPdf.jsx';
 import { downloadRasterDeckPdf } from '../lib/deckRasterPdf';
 import ShareDeckCTA from '../components/ShareDeckCTA';
 import { ReviewDealSlotContext } from '../decks/templates/reviewDealSlot';
-import { ClosedLink, EmailGate, FigureSources, NdaGate } from './raise/pitch/ShareViewerParts';
+import { CardVoices, ClosedLink, EmailGate, FigureSources, NdaGate } from './raise/pitch/ShareViewerParts';
 import DeckCardView from './raise/pitch/DeckCardView';
 import { CARD_VIEW, PHONE_WIDTH, SLIDE_VIEW } from './raise/pitch/cardViewModel';
 import { viewerNote } from './raise/pitch/shareModel';
@@ -923,6 +923,8 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
           reviewSlot={reviewDealSlot}
         />
         {!isFullscreen && shareMode ? <FigureSources slides={deck.slides} /> : null}
+        {/* D1569 (#3816): the cards' AI voice-overs, labelled "AI voice". */}
+        {!isFullscreen && shareMode ? <CardVoices slides={deck.slides} /> : null}
         {!isFullscreen && cta && <div className="deck-print-cta">{cta}</div>}
         {isFullscreen && slideCount > 0 && (
           <>
@@ -1017,6 +1019,7 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
           </div>
         ))}
         {shareMode ? <FigureSources slides={deck.slides} /> : null}
+        {shareMode ? <CardVoices slides={deck.slides} /> : null}
         {cta}
       </div>
     </div>

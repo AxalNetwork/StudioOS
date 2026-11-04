@@ -60,6 +60,8 @@ function stepFailure(e, step) {
   const kind = e?.kind || 'unknown';
   const base = step.provider === 'openai'
     ? ({ authentication: 'the OpenAI key was rejected (401). Check OPENAI_API_KEY.', billing: 'the OpenAI account has insufficient quota or billing credit.', not_found: 'the OpenAI model was not found; check OPENAI_MODEL.', bad_request: 'the OpenAI request was rejected (400).' }[kind] || API_ERROR_TEXT[kind] || API_ERROR_TEXT.unknown)
+    : step.provider === 'gemini'
+    ? ({ rate_limit: 'Gemini free-tier limit reached', authentication: 'the Gemini key was rejected (401). Check GEMINI_API_KEY.', permission: 'the Gemini key or model access was refused (403). Check GEMINI_API_KEY and GEMINI_MODEL.', billing: 'the Gemini account could not be billed.', not_found: 'the Gemini model was not found; check GEMINI_MODEL.', bad_request: 'the Gemini request was rejected (400).' }[kind] || API_ERROR_TEXT[kind] || API_ERROR_TEXT.unknown)
     : step.provider === 'kimi'
     ? (KIMI_ERROR_TEXT[kind] || API_ERROR_TEXT[kind] || API_ERROR_TEXT.unknown)
     : (CLAUDE_FALLBACK_ERROR_TEXT[kind] || API_ERROR_TEXT[kind] || API_ERROR_TEXT.unknown).replace('<secret>', step.secret);
@@ -128,7 +130,7 @@ export async function runReview(deps) {
   const fallbackOff = String(deps.env.CLAUDE_REVIEW_CREDIT_FALLBACK || '').trim().toLowerCase() === 'off';
   if (mainUnavailable) state.limitations.push(`Claude skipped: ${mainUnavailable}.`);
   if (fallbackOff) state.limitations.push('The fallback chain is off (CLAUDE_REVIEW_CREDIT_FALLBACK=off).');
-  else for (const [label, key, modelKey] of [['Claude account 2', 'ANTHROPIC_API_KEY_2'], ['Claude account 3', 'ANTHROPIC_API_KEY_3'], ['OpenAI', 'OPENAI_API_KEY', 'OPENAI_MODEL'], ['Kimi', 'KIMI_API_KEY']]) {
+  else for (const [label, key, modelKey] of [['Claude account 2', 'ANTHROPIC_API_KEY_2'], ['Claude account 3', 'ANTHROPIC_API_KEY_3'], ['OpenAI', 'OPENAI_API_KEY', 'OPENAI_MODEL'], ['Gemini', 'GEMINI_API_KEY', 'GEMINI_MODEL'], ['Kimi', 'KIMI_API_KEY']]) {
     if (!String(deps.env[key] || '').trim()) state.limitations.push(`${label} skipped: ${key} is not set.`);
     else if (modelKey && !String(deps.env[modelKey] || '').trim()) state.limitations.push(`${label} skipped: ${modelKey} is not set.`);
   }
@@ -250,7 +252,7 @@ export async function runReview(deps) {
         record('err', uncertain ? worst : 0, { outcome: 'api_error', error_kind: e?.kind || 'unknown', cost_known: !uncertain });
         costs.set(accountId, prior + (uncertain ? worst : 0));
         if (left() < 60_000) throw deadlineError();
-        if (retry >= config.maxRetries || !['rate_limit', 'timeout', 'connection', 'server', 'overloaded'].includes(e?.kind)) throw e;
+        if ((provider === 'gemini' && e?.kind === 'rate_limit') || retry >= config.maxRetries || !['rate_limit', 'timeout', 'connection', 'server', 'overloaded'].includes(e?.kind)) throw e;
       }
     }
   };

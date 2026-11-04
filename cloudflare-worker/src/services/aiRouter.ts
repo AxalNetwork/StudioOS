@@ -1504,12 +1504,12 @@ function gatewayOptionFor(env: Env, task: TaskClass, userId?: number | null): Ga
 }
 
 /** D1528: an agent run's own gateway, with the same metadata keys (D261). */
-function agentGatewayOption(env: Env, opts: RunOptions): GatewayOption {
+export function agentGatewayOption(env: Env, opts: RunOptions): GatewayOption {
   const branch = branchOf(env) ?? 'hq';
   const metadata: Record<string, string> = { branch };
   if (Number.isInteger(opts.userId) && opts.userId > 0) metadata.account = `${branch}:${opts.userId}`;
   metadata.task = opts.task;
-  return { gateway: { id: String(opts.gatewayId), metadata } };
+  return { gateway: { id: String(opts.gatewayId), metadata, collectLog: false, skipCache: true } };
 }
 
 /**

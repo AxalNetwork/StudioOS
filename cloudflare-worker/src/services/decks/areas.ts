@@ -385,21 +385,27 @@ export async function planAreas(ctx: PlanCtx, req: AreasRequest): Promise<AreasP
 
 // ---- the quote --------------------------------------------------------------
 
+/** D4450: the content-bound projection shared by deck areas and one event Explain quote. */
+export type QuotePlan = {
+  cls: string;
+  areas: Array<Pick<PlannedArea, 'card_uid' | 'area_id' | 'element' | 'model' | 'refusal' | 'payload'> & { lines: Array<{ quote_microusd: number }> }>;
+};
+
 async function sha256Hex(s: string): Promise<string> {
   const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
   return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 /** What a quote is for: every line's area, model, change and price. A plan that differs from it is a different quote. */
-export async function planSignature(plan: AreasPlan): Promise<string> {
+export async function planSignature(plan: QuotePlan): Promise<string> {
   // D1521: an instruction's hash is part of what was priced, so changed words are a different quote.
   const parts = plan.areas.map((a) => [a.card_uid, a.area_id, a.element, a.model, a.refusal?.code ?? null, (a.payload as any)?.action ?? null, (a.payload as any)?.instruction_sha256 ?? null, a.lines.map((l) => l.quote_microusd)]);
   return (await sha256Hex(JSON.stringify([plan.cls, parts]))).slice(0, 32);
 }
 /** `<expiry in base 36>.<signature>`: the quote needs no row, and a changed plan or a late Generate is `quote_stale`. */
-export async function quoteUidOf(plan: AreasPlan, expiresMs: number): Promise<string> {
+export async function quoteUidOf(plan: QuotePlan, expiresMs: number): Promise<string> {
   return `${expiresMs.toString(36)}.${await planSignature(plan)}`;
 }
-export async function quoteHolds(uid: unknown, plan: AreasPlan, now: number): Promise<boolean> {
+export async function quoteHolds(uid: unknown, plan: QuotePlan, now: number): Promise<boolean> {
   if (typeof uid !== 'string' || !/^[0-9a-z]{1,12}\.[0-9a-f]{32}$/.test(uid)) return false;
   const [exp, sig] = uid.split('.');
   return parseInt(exp, 36) > now && sig === await planSignature(plan);

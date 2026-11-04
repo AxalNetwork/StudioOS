@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Sheet, Unrecorded } from '../../ui';
+import AgentDisclaimer from './AgentDisclaimer.jsx';
+import { disclaimerKeyForRole } from '../../../../cloudflare-worker/src/services/agents/disclaimers.ts';
 import { AgentIdentity } from './AgentMark.jsx';
 import * as agents from './agentsAdapter.js';
-import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, BTN_TEXT_BODY, FIELD, HeadRow, HonestBlock, MONO, MUTED, PendingOwner, TeamCard } from './teamUi.jsx';
+import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, BTN_TEXT_BODY, FIELD, HeadRow, HonestBlock, MONO, MUTED, TeamCard } from './teamUi.jsx';
 import { agentName, ago, dayTime, money, agentLine, queueProposal, QUEUE_HISTORY_STATUSES } from './teamModel.js';
 
 /**
@@ -13,8 +15,8 @@ import { agentName, ago, dayTime, money, agentLine, queueProposal, QUEUE_HISTORY
  * 409 `not_open` with who decided it, drawn as "Already decided by …".
  *
  * The proposals waiting on a page are also cards in the Ask panel (#3706).
- * Whether this tab lists open proposals too is the owner's call, so the card
- * carries "pending owner". A cost the Worker did not answer is "Not recorded".
+ * The owner confirmed both open proposals and decided history on 2026-11-04.
+ * A cost the Worker did not answer is "Not recorded".
  *
  * The four filters are Role, Module, Status and Cost (TM7a). Accept in a row
  * decides at once, as the sheet's Accept does; Edit and Discard open the
@@ -81,6 +83,7 @@ export function ProposalSheet({ item, onClose, onDecided }) {
       )}>
       <div className="flex flex-col gap-4 px-5 py-5">
         <span className="flex flex-wrap items-center gap-2"><AgentIdentity name={agentName(a)} role={agentLine(a)} size={24} /><span className={MONO}>{item.module_label}</span></span>
+        <AgentDisclaimer disclaimerKey={item.disclaimer_key ?? disclaimerKeyForRole(a.role_key)} />
         {decided ? (
           <p role="status" className="m-0 rounded-axal-md bg-emerald-50 px-3 py-2 text-[13px] text-axal-positive dark:bg-emerald-900/20 dark:text-emerald-300" data-testid="proposal-decided">
             ✓ {decided.text || decidedLine(decided)}
@@ -134,7 +137,7 @@ export function ApprovalsBoard({ value, onOpen, onAccept, busy = false, onMore, 
         <select aria-label="Cost" className={sel} value={cost} onChange={(e) => setCost(e.target.value)}>{COSTS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
         <span className={`ml-auto ${MONO}`}>{shown.length ? `${shown.length} shown` : null}</span>
       </div>
-      <TeamCard title="Open proposals" count={value?.counts?.proposed?.available ? value.counts.proposed.value : undefined} aside={<PendingOwner />} testId="team-approvals-open">
+      <TeamCard title="Open proposals" count={value?.counts?.proposed?.available ? value.counts.proposed.value : undefined} testId="team-approvals-open">
         {shown.length ? (
           <div role="table" aria-label="Open proposals">
             <HeadRow grid={GRID} cols={['Agent', 'Module', 'What it proposes', 'Cost', 'Proposed', 'Sponsor']} />
@@ -142,7 +145,7 @@ export function ApprovalsBoard({ value, onOpen, onAccept, busy = false, onMore, 
               <div key={i.uid} role="row" className={`grid grid-cols-1 ${GRID} items-center gap-3 border-b border-axal-hairline py-2.5 last:border-b-0 dark:border-gray-800`}>
                 <span role="cell"><AgentIdentity name={agentName(i.agent)} role={agentLine(i.agent)} size={28} /></span>
                 <span role="cell" className="text-[13px] text-axal-ink dark:text-gray-200">{i.module_label}</span>
-                <span role="cell" className="text-[13px] text-axal-ink dark:text-gray-200">{i.title}</span>
+                <div role="cell" className="text-[13px] text-axal-ink dark:text-gray-200">{i.title}<AgentDisclaimer disclaimerKey={i.disclaimer_key ?? disclaimerKeyForRole(i.agent?.role_key)} /></div>
                 <span role="cell" className="font-mono text-[12.5px] text-axal-ink dark:text-gray-200">{i.cost?.available ? money(i.cost.value_microusd) : <Unrecorded />}</span>
                 <span role="cell" className={MONO}>{ago(i.proposed_at) || <Unrecorded />}</span>
                 <span role="cell" className="text-[13px] text-axal-ink dark:text-gray-200">{i.sponsor?.name || <Unrecorded />}</span>
@@ -158,7 +161,7 @@ export function ApprovalsBoard({ value, onOpen, onAccept, busy = false, onMore, 
           </div>
         ) : <p className={`m-0 ${MUTED}`}>Nothing is waiting for a decision.</p>}
         {onMore ? <button type="button" className={BTN_TEXT} disabled={busy} onClick={onMore}>More open proposals</button> : null}
-        <p className={`m-0 mt-3 ${MUTED}`}>Open proposals are also cards in the Ask panel. Whether this tab lists them too is an owner call.</p>
+        <p className={`m-0 mt-3 ${MUTED}`}>Open proposals are also cards in the Ask panel. Decided proposals remain in the history below.</p>
       </TeamCard>
       <TeamCard title="Decided recently" testId="team-approvals-decided">
         {value?.history_unreadable ? <HonestBlock>Decided proposals could not be read. That is not the same as having none. {onRetry ? <button type="button" className={BTN_TEXT} onClick={onRetry}>Try again</button> : null}</HonestBlock> : null}
@@ -167,7 +170,7 @@ export function ApprovalsBoard({ value, onOpen, onAccept, busy = false, onMore, 
             {past.map((d) => (
               <li key={d.uid} className="grid grid-cols-1 items-center gap-2 border-b border-axal-hairline py-2 last:border-b-0 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1.6fr)_minmax(0,1.6fr)] dark:border-gray-800">
                 <AgentIdentity name={agentName(d.agent)} role={agentLine(d.agent)} size={24} />
-                <button type="button" className={`${BTN_TEXT_BODY} text-left`} onClick={() => onOpen(d)}>{d.title}</button>
+                <div><button type="button" className={`${BTN_TEXT_BODY} text-left`} onClick={() => onOpen(d)}>{d.title}</button><AgentDisclaimer disclaimerKey={d.disclaimer_key ?? disclaimerKeyForRole(d.agent?.role_key)} /></div>
                 <span className={MUTED}>{d.decision_line || <>{DECIDED_WORD[String(d.decision || '').toLowerCase()] || d.decision || <Unrecorded />}{dayTime(d.decided_at) ? ` ${dayTime(d.decided_at)}` : ''} by {d.by?.name || <Unrecorded />}</>}</span>
               </li>
             ))}
