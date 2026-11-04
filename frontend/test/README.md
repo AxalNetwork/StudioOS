@@ -135,7 +135,6 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `messages_retirement_d1345.test.mjs` | EM10 routing and acknowledgment, blocked storage, account isolation, GP fund selection, and retirement of old client calls. |
 | `linkedin_brand_d1355.test.mjs` | D1355: official logo/button source pins, unchanged asset bytes, approved theme variants, minimum sizing and truthful sign-in/import entry points. |
 | `route_error_recording_3593.test.mjs` | #3593: recording-safe chunk-error copy, SPA return links, deferred manual reload and unchanged idle recovery. |
-
 | `pitch_shell_3717.test.mjs` | #3717: pitch route/frame/crumb integration, shared gutter and responsive grids, with restored-old-behavior mutations. |
 | `pitch_diagrams_d1542.test.mjs` | D1542 (#3780): `deckV2Adapter.diagrams` swapped to `deckDiagramsApi.check`, Flow, Cycle and Matrix on the areas route (the rest later), a diagram row's size check, a proposal that changes nothing before Accept, nodes edited on the canvas, and the check line. |
 | `work_w7_3993.test.mjs` | #4418: W7 client/adapter routes and off blocks, project item deep links, sheet writes, review filtering and latest failed-run opening; four failing-first regressions from S1’s review (reload stability, waiting-run filtering, burn-up refresh and refusal reset), plus missing-task text during a board reload. |

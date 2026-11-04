@@ -17,7 +17,8 @@ function ChannelCard({ channel, value, api, reload }) {
   const [error, setError] = useState(null);
   const [dialog, setDialog] = useState(null);
   const [key, setKey] = useState('');
-  const account = value.account;
+  const [disconnected, setDisconnected] = useState(false);
+  const account = disconnected ? { ...value.account, status: 'disconnected' } : value.account;
   const status = channelStatus(account, { adapterReady: value.adapter_ready });
   const connected = account && account.status !== 'disconnected';
   const run = async (write) => {
@@ -45,15 +46,18 @@ function ChannelCard({ channel, value, api, reload }) {
       {connected && <button type="button" className={BUTTON} disabled={busy} onClick={() => { setError(null); setDialog('disconnect'); }} data-testid={`syndication-disconnect-${channel.key}`}>Disconnect…</button>}
     </div>
     <Refusal text={error} />
+    {disconnected && <p role="status" className="text-sm text-axal-muted dark:text-gray-400">This account is now disconnected. Connect again to resume posting.</p>}
     {dialog && <Lightbox label={`${dialog} ${channel.name}`} title={dialog === 'disconnect' ? `Disconnect ${channel.name}?` : `Connect ${channel.name}`} onClose={() => { if (!busy) { setDialog(null); setKey(''); } }} footer={<button type="button" className={BUTTON} disabled={busy || (dialog !== 'disconnect' && value.auth === 'api_key' && !key.trim())} data-testid={`syndication-account-confirm-${channel.key}`} onClick={() => run(async () => {
       if (connected) {
         await api.disconnect(account.uid);
-        try { if (dialog !== 'disconnect') await connect(); }
-        finally { reload(); }
-      } else if (dialog !== 'disconnect') await connect();
+        setDisconnected(true);
+        if (dialog === 'reconnect') setDialog('connect');
+      }
+      if (dialog !== 'disconnect') await connect();
     })}>{busy ? 'Saving…' : dialog === 'disconnect' ? 'Disconnect' : dialog === 'reconnect' ? 'Disconnect and reconnect' : 'Continue to connect'}</button>}>
       <div className="space-y-3 p-5 text-sm text-axal-ink dark:text-gray-100">
         {connected && <p>Already posted listings stay up. Pending posts stop. Reconnecting replaces the current account connection.</p>}
+        {disconnected && <p>This account is now disconnected. Connect again to resume posting.</p>}
         {dialog !== 'disconnect' && <><p>Connect Axal’s HQ account. Tickets and registrations stay on Axal.</p>{value.auth === 'api_key' ? <label className="flex flex-col gap-1">API key<input type="password" autoComplete="off" className={INPUT} value={key} onChange={(e) => setKey(e.target.value)} /></label> : <p>You will continue to the channel’s authorisation page.</p>}</>}
         <Refusal text={error} />
       </div>
