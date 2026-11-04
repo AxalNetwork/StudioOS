@@ -1,13 +1,3 @@
-# Distribution calendar
-
-D4489: plans only. Publishing uses the existing PublishSheet; Notion pieces are edited in Notion.
-
-| File | Purpose |
-| --- | --- |
-| `CalendarTab.jsx` | Month/week calendar and preserved plan dialogs. |
-| `PieceSheet.jsx` | Plan details, time editing and explicit publishing entry. |
-| `PostPreview.jsx` | Unscaled platform frames. |
-| `calendarModel.js` | Monday-first dates, overflow, status and platform widths. |
 # Distribution — the existing Grow module, with its own tabs (D4484)
 
 The DS1–DS12 series is primary; MK fills its gaps. The licence-union sidebar,
@@ -31,10 +21,17 @@ starting ads.
 | `inbox.css` | D4494: DS8 thread columns, phone stacking and directional message bubbles using shared tokens. |
 | `ChannelsTab.jsx` | D4486: venture channel readings, existing Add/Edit forms and Ask, read-only connection cards, settings confirmation and existing tool doors. |
 | `channelsModel.js` | D4486: columns, category choices, independent state pills, UTC activity labels, safe settings actions and missing readings. |
+| `AdsTab.jsx` | D4490: budget planner, spend gaps, platform availability and creative drafts; shell integration requested from #4484. |
+| `adsModel.js` | D4490: slider amounts, totals and monthly chart gaps. |
+| `ads.css` | D4490: responsive Ads columns using the Distribution tokens. |
+| `CalendarTab.jsx` | D4489: month/week calendar and preserved plan dialogs. Plans only; publishing uses the existing PublishSheet, and Notion pieces are edited in Notion. |
+| `PieceSheet.jsx` | D4489: plan details, time editing and explicit publishing entry. |
+| `PostPreview.jsx` | D4489: unscaled platform frames. |
+| `calendarModel.js` | D4489: Monday-first dates, overflow, status and platform widths. |
 
 CycleRoute still owns the module page. Overview retains its channels table,
 outreach draft, content calendar, update-ask replies, Mercury, Notion and tool
-doors. Inbox is the D4494 tab. Channels is the D4486 tab on this shell. Other
+doors. Inbox is the D4494 tab. Channels is the D4486 tab on this shell. Calendar is the D4489 tab. Other
 tabs show Coming in this module soon until their tasks land.
 A pending read uses LoadingSkeleton. No sample count or campaign is fabricated.
 

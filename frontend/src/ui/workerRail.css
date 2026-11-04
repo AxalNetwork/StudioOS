@@ -759,3 +759,6 @@ p.fwr-founder-record {
  */
 .fwr-ask-entry { margin-top: 10px; display: flex; }
 .fwr-ask-entry:empty { display: none; }
+
+/* Distribution keeps its shared frame aligned with its page background. */
+.distribution-frame > .fwr-frame-main{background:#f4f3f7}.dark .distribution-frame > .fwr-frame-main{background:#0b1220}
