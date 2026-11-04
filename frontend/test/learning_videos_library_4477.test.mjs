@@ -8,7 +8,7 @@ import { readCatalog } from '../src/pages/learning/learningReads.js';
 import { ALL_LIMIT } from '../src/pages/learning/learningModel.js';
 import { itemHrefAt, parseVideoTime, transcriptHit, VIDEO_LENGTH_OPTIONS, videoCountLabel, videoFilters, videoStartAt, withVideoFilter } from '../src/pages/learning/videoLibraryModel.js';
 import VideosLibrary from '../src/pages/learning/VideosLibrary.jsx';
-import LearningHome, { HoverPreview } from '../src/pages/learning/LearningHome.jsx';
+import LearningHome, { HoverPreview, LearningHomeView, LearningPhoneView } from '../src/pages/learning/LearningHome.jsx';
 import { ItemPage, ItemView } from '../src/pages/learning/LearningWired.jsx';
 import { learningApi } from '../src/lib/api/learning.js';
 import { articles } from '../src/lib/api.js';
@@ -80,8 +80,11 @@ test('LR7 renders recorded filters, escaped marked text, timed links, posters an
   assert.match(markup, /18:40/);
   assert.match(markup, /src="\/poster.png"/); assert.match(markup, /<article[^>]*tabindex="0"/);
   assert.match(markup, /grid-cols-1[^\"]*lg:grid-cols-3/); assert.match(markup, /min-h-11/); assert.match(markup, /dark:bg-violet-950/);
-  const unsafe = render({ state: { status: 'ready', rows: [{ ...row, query: '<script>', match: { ...row.match, snippet: 'Try <script> now' } }], sources: {} } });
-  assert.match(unsafe, /&lt;script&gt;/); assert.doesNotMatch(unsafe, /<script>/);
+  for (const literal of ['<script>', '<SCRIPT>', '<ScRiPt>', '<ScRiPt data-example="literal">']) {
+    const unsafe = render({ state: { status: 'ready', rows: [{ ...row, query: literal, match: { ...row.match, snippet: `Try ${literal} now` } }], sources: {} } });
+    assert.match(unsafe, /&lt;script(?:&gt;|\s)/i);
+    assert.doesNotMatch(unsafe, /<script\b/i);
+  }
   const untimed = render({ state: { status: 'ready', rows: [{ ...row, match: { ...row.match, at_seconds: null } }], sources: {} } });
   assert.match(untimed, /Time not recorded/); assert.doesNotMatch(untimed, /Open at/);
 });
@@ -209,4 +212,29 @@ test('switching from a later Articles page through Videos filters and back resta
     await ui.click('Articles'); await ui.flush();
     assert.equal(articleCalls.at(-1).offset, 0);
   } finally { await ui?.unmount(); stub.restore(); articles.list = previous; globalThis.matchMedia = oldMedia; }
+});
+
+
+test('merged Learning home keeps Videos isolated and renders one phone tab bar',()=>{
+  const state={status:'ready',rows:[row],sources:{video:{status:'ready',total:1}}};
+  const wrapped=element=>renderToStaticMarkup(React.createElement(MemoryRouter,null,element));
+  const desktop=wrapped(React.createElement(LearningHomeView,{gated:false,tab:'videos',catalog:state}));
+  assert.match(desktop,/data-view="videos-library"/);
+  assert.doesNotMatch(desktop,/data-testid="section-continue"|data-testid="section-webinars"/);
+  const phone=wrapped(React.createElement(LearningPhoneView,{gated:false,tab:'videos'},React.createElement(VideosLibrary,{state})));
+  assert.match(phone,/data-view="videos-library"/);
+  assert.equal((phone.match(/role="tablist"/g)||[]).length,1);
+  assert.doesNotMatch(phone,/data-testid="learning-phone-primary"|data-testid="learning-phone-programs"|data-testid="learning-phone-webinars"/);
+});
+
+test('mounted phone Videos uses one tab bar and omits the home action sections',async()=>{
+  const stub=stubLearning(),oldMedia=globalThis.matchMedia;let ui;
+  globalThis.matchMedia=q=>({matches:q.includes('max-width'),media:q,addEventListener(){},removeEventListener(){}});
+  try{
+    ui=await mountContracts(React.createElement(LearningHome,{gated:false}),'/learning?tab=videos',{id:1,role:'founder'});
+    await ui.flush();
+    assert.equal(ui.nodes().filter(n=>ui.props(n)?.role==='tablist').length,1);
+    assert.ok(ui.nodes().some(n=>ui.props(n)?.['data-testid']==='video-filters'));
+    assert.equal(ui.nodes().filter(n=>['learning-phone-primary','learning-phone-programs','learning-phone-webinars'].includes(ui.props(n)?.['data-testid'])).length,0);
+  }finally{await ui?.unmount();stub.restore();globalThis.matchMedia=oldMedia;}
 });
