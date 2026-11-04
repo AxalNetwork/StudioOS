@@ -212,6 +212,8 @@ export async function importProspects(env:Env,pid:number,user:User,b:Body) {
       let tag:string|null=null;
       if (value.campaign) { if(!tags.has(value.campaign)||!tags.get(value.campaign)) throw new ProspectsRefused(400,'Choose a campaign with a UTM tag in this venture.','campaign'); tag=tags.get(value.campaign)!; }
       const made=creation(env,pid,user,{...value,source:value.source||'import',channel:value.consent_channel||'email',basis:value.consent_basis,proof:value.consent_proof},tag);
+      // Append the complete row before flushing. The whole array goes to batch(),
+      // never a sliced prefix, so a row cannot cross a transaction boundary.
       statements.push(...made.statements);uids.push(made.uid);
     } catch(error) {
       if (!(error instanceof ProspectsRefused)) throw error;

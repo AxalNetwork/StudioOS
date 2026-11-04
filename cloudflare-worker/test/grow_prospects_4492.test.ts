@@ -233,3 +233,16 @@ test('legacy unsupported contact status makes the pipeline unknown instead of un
   const result=await read(f);assert.equal(result.status,200);assert.equal(result.body.available,false);
   assert.equal(result.body.total,null);assert.match(result.body.reason,/unsupported status/);
 });
+
+test('CSV batch-boundary failure keeps earlier rows complete and rolls back the entire failing row',async()=>{
+  const f=fixture();
+  f.db.exec("CREATE TRIGGER test_boundary BEFORE INSERT ON contact_marketing_consents WHEN (SELECT email FROM contacts WHERE id=NEW.contact_id)='boundary@example.test' BEGIN SELECT RAISE(ABORT,'private-boundary-failure'); END");
+  const csv='name,email,consent_basis\n'+Array.from({length:20},(_,i)=>`Fixture ${i},fixture-${i}@example.test,none`).join('\n')+'\nBoundary,boundary@example.test,none';
+  const result=await write(f,'/import',{csv});assert.equal(result.status,503);
+  assert.equal(get(f,'SELECT COUNT(*) AS n FROM contacts').n,20);
+  assert.equal(get(f,'SELECT COUNT(*) AS n FROM contact_marketing_consents').n,20);
+  assert.equal(get(f,"SELECT COUNT(*) AS n FROM activity_logs WHERE action='grow.prospect.add'").n,20);
+  assert.equal(get(f,"SELECT COUNT(*) AS n FROM contacts WHERE email='boundary@example.test'").n,0);
+  assert.deepEqual(f.db.prepare('PRAGMA foreign_key_check').all(),[]);
+  assert.doesNotMatch(JSON.stringify(result.body),/@|private-boundary-failure/);
+});
