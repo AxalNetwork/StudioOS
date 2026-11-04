@@ -59,7 +59,9 @@ const CLAUDE_FALLBACK_ERROR_TEXT = {
 /** One fallback account's failure, in a sentence with its HTTP status and what the API said. */
 function stepFailure(e, step) {
   const kind = e?.kind || 'unknown';
-  const base = step.provider === 'kimi'
+  const base = step.provider === 'openai'
+    ? ({ authentication: 'the OpenAI key was rejected (401). Check OPENAI_API_KEY.', billing: 'the OpenAI account has insufficient quota or billing credit.', not_found: 'the OpenAI model was not found; check OPENAI_MODEL.', bad_request: 'the OpenAI request was rejected (400).' }[kind] || API_ERROR_TEXT[kind] || API_ERROR_TEXT.unknown)
+    : step.provider === 'kimi'
     ? (KIMI_ERROR_TEXT[kind] || API_ERROR_TEXT[kind] || API_ERROR_TEXT.unknown)
     : (CLAUDE_FALLBACK_ERROR_TEXT[kind] || API_ERROR_TEXT[kind] || API_ERROR_TEXT.unknown).replace('<secret>', step.secret);
   const detail = typeof e?.detail === 'string' && e.detail ? ` The API said: ${e.detail}` : '';
@@ -115,6 +117,14 @@ export async function runReview(deps) {
   const gate = eventGate(deps.event, { repository: deps.repository, reviewDrafts: config.reviewDrafts });
   if (!gate.run) return finish(state, 'skipped', gate.reason);
   const pr = deps.event.pull_request;
+  const codexAuthored = /^codex\//i.test(pr.head?.ref || deps.env.CLAUDE_REVIEW_PR_HEAD || '') || /\bCodex\b/i.test(pr.body || deps.env.CLAUDE_REVIEW_PR_BODY || '') || /codex/i.test(pr.user?.login || deps.env.CLAUDE_REVIEW_PR_AUTHOR || '');
+  const eligibleFallbacks = (config.creditFallbacks || []).filter(step => {
+    if (step.provider === 'openai' && codexAuthored) {
+      state.limitations.push("OpenAI skipped: same vendor as the PR's author");
+      return false;
+    }
+    return true;
+  });
   const prInfo = { number: pr.number, title: pr.title, body: pr.body, baseRef: pr.base?.ref || 'main' };
 
   let mergeBase;
@@ -176,7 +186,7 @@ export async function runReview(deps) {
   const budget = budgetDecision({ worstCaseUsd, maxCostUsd: config.maxCostUsd, monthlyBudgetUsd: config.monthlyBudgetUsd, ledger });
   // The main account's own cap reached is, for the chain, the same as its
   // credit running out: skip the call and let the next account review.
-  const hasChain = (config.creditFallbacks || []).some((step) => deps.fallbacks?.[step.id]);
+  const hasChain = eligibleFallbacks.some((step) => deps.fallbacks?.[step.id]);
   if (!budget.allow && !hasChain) return finish(state, 'budget_refused', `${budget.reason}. No API call was made.`);
   const mainSkipped = budget.allow ? null : budget.reason;
 
@@ -210,7 +220,7 @@ export async function runReview(deps) {
     deps.persistRecord?.(saved);
     return saved;
   };
-  const chain = (config.creditFallbacks || []).filter((step) => deps.fallbacks?.[step.id]);
+  const chain = eligibleFallbacks.filter((step) => deps.fallbacks?.[step.id]);
 
   // SDK retries are disabled: every paid attempt is reserved on disk before
   // spending and bounded by the one deadline, including retries and fallbacks.

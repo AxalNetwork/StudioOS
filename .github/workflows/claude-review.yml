@@ -33,7 +33,7 @@ name: Claude review
 #   - Read-only token: contents, pull-requests and actions (the last to list
 #     this month's review records), plus id-token for federation. No job can
 #     write to the repository, the pull request or a check.
-#   - Third-party code is the pinned Anthropic SDK, installed with
+#   - Third-party code is the pinned official Anthropic/OpenAI SDKs, installed with
 #     --ignore-scripts from a committed lockfile.
 
 on:
@@ -157,6 +157,12 @@ jobs:
           # run starts with the main account above.
           ANTHROPIC_API_KEY_2: ${{ secrets.ANTHROPIC_API_KEY_2 }}
           ANTHROPIC_API_KEY_3: ${{ secrets.ANTHROPIC_API_KEY_3 }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
+          CLAUDE_REVIEW_PR_HEAD: ${{ github.event.pull_request.head.ref }}
+          CLAUDE_REVIEW_PR_BODY: ${{ github.event.pull_request.body }}
+          CLAUDE_REVIEW_PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           KIMI_API_KEY: ${{ secrets.KIMI_API_KEY }}
           KIMI_MODEL: ${{ vars.KIMI_MODEL }}
           KIMI_BASE_URL: ${{ vars.KIMI_BASE_URL }}
@@ -195,7 +201,7 @@ jobs:
         run: |
           node --input-type=module <<'JS'
           import { readFileSync, appendFileSync } from 'node:fs';
-          for (const account of ['main', 'claude2', 'claude3', 'kimi']) {
+          for (const account of ['main', 'claude2', 'claude3', 'openai', 'kimi']) {
             try {
               const name = readFileSync(`${process.env.RECORD_DIR}/${account}/name.txt`, 'utf8');
               if (/^claude-review_v1_[a-z0-9_-]+$/.test(name)) appendFileSync(process.env.GITHUB_OUTPUT, `${account}=${name}\n`);
@@ -232,5 +238,13 @@ jobs:
         with:
           name: ${{ steps.usage.outputs.kimi }}
           path: ${{ runner.temp }}/claude-review/kimi/
+          retention-days: 90
+          if-no-files-found: ignore
+      - name: Record usage (openai)
+        if: always() && steps.usage.outputs.openai != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.usage.outputs.openai }}
+          path: ${{ runner.temp }}/claude-review/openai/
           retention-days: 90
           if-no-files-found: ignore
