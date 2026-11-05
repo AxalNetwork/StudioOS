@@ -17,7 +17,7 @@ const button = 'rounded-lg border border-axal-hairline px-3 py-2 text-xs font-bo
 
 // The Worker's bare 'TOTP required' means this session was not signed in with the
 // authenticator (Google, a passkey, an email link or SMS); a step-up code cannot change that.
-export const NEEDS_TOTP_SESSION = 'This needs a session signed in with your authenticator code. Sign out, sign back in with your password and authenticator code (not Google, a passkey, an email link or SMS), then press Diagnose again.';
+export const NEEDS_TOTP_SESSION = 'This needs your Axal authenticator, not the bot’s Google authenticator. If you use email sign-in links, open Account → Security and set up an authenticator first. Then sign in with your email and authenticator code and retry. Do not sign out before completing setup.';
 export function DiagnosisTable({ diagnosis }) {
   return <div className="mt-4 overflow-x-auto">
     <table className="w-full text-left text-sm" data-testid="diagnosis-table">
