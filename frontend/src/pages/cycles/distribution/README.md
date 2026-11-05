@@ -12,6 +12,9 @@ starting ads.
 | `DistributionTabs.jsx` | Module header, New campaign, shared HeaderAsk and the nine accessible, horizontally scrolling tabs. The Inbox owner supplies a successfully read count; null means no badge. |
 | `distributionModel.js` | Tab order, project-scoped paths and the budget-derived Ask state. Unknown budget data never means out of tokens. |
 | `DistributionParts.jsx` | Cards, KPI, source chips, dot pills, Not recorded, a wrapper over AskProposal, notes, tables, progress, hold lines and loading/coming-soon states. These components make no reads or writes. |
+| `OverviewTab.jsx` | D4485: six KPI cards, campaign cards, ISO week, real connection status and writer-scoped update-ask replies; retains legacy tools below. |
+| `overviewModel.js` | D4485: pure null-safe figures, source labels, campaign results and budget/week formatting. |
+| `overview.css` | D4485: DS1 six-column/two-column desktop layout, responsive phone cards and scrolling week. |
 | `distribution.css` | Scoped DS light/dark tokens, spacing and phone tab overflow. |
 | `CampaignsTab.jsx` | D4487: campaign filters, attention rows and route-driven detail, over the existing campaign API. |
 | `CampaignCard.jsx` | D4487: recorded funnel, budget and linked-item counts, sorted by state. |
@@ -40,7 +43,7 @@ starting ads.
 
 CycleRoute still owns the module page. Overview retains its charts,
 outreach draft, content calendar, update-ask replies, Mercury, Notion and tool
-doors. Campaigns is the D4487 tab. Inbox is the D4494 tab. Channels is the
+doors. The D4485 cards sit above that body. Campaigns is the D4487 tab. Inbox is the D4494 tab. Channels is the
 mounted D4486 tab; its table replaces Overview’s legacy channel records.
 Prospects is the D4492 tab. Other tabs show Coming in this module soon until
 their tasks land.
