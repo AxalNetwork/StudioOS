@@ -1,0 +1,14 @@
+/* D4478: the lesson stacks at tablet widths; only chapter chips scroll sideways. */
+.lesson-chapters-list { display: flex; flex-direction: column; gap: 2px; }
+.lesson-footer .lesson-complete { flex-shrink: 0; }
+@media (max-width: 639px) {
+  .learning-lesson-player { min-width: 0; }
+  .learning-lesson-player.lesson-has-footer { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+  .learning-lesson-player .lesson-content { overflow: visible; }
+  .learning-lesson-player .lesson-video-frame { margin-inline: -16px; }
+  .lesson-chapters-list { flex-direction: row; overflow-x: auto; padding-bottom: 4px; }
+  .lesson-chapters-list > li { flex: 0 0 auto; }
+  .lesson-chapter { min-height: 44px; width: auto; white-space: nowrap; }
+  .lesson-footer { position: fixed; inset-inline: 0; bottom: 0; z-index: 40; border-radius: 0; padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px)); }
+  .lesson-footer .lesson-complete { flex: 1; min-width: 0; }
+}

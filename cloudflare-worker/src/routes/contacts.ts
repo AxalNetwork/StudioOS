@@ -75,7 +75,7 @@ r.use('*', async (c, next) => {
 // brand.ts) but was missing here, so mentor leads were coerced to 'customer' at
 // ingest. Adding it lets mentor leads flow through and route to Advisory.
 export const CONTACT_AUDIENCES = ['customer', 'investor', 'partner', 'advisor', 'mentor', 'cofounder'];
-const CONTACT_STATUSES = ['new', 'invited', 'contacted', 'replied', 'qualified', 'active', 'passed'];
+export const CONTACT_STATUSES = ['new', 'invited', 'contacted', 'replied', 'qualified', 'active', 'passed'];
 
 /** Investor raise-pipeline stages a promoted investor prospect moves through. */
 export const RAISE_STAGES = ['to_contact', 'contacted', 'meeting', 'diligence', 'committed', 'passed'];
@@ -372,6 +372,22 @@ export async function ingestContact(
   },
 ): Promise<void> {
   await ensureSchema(env);
+  await prepareContactInsert(env, opts).statement.run();
+}
+
+/** D4492: the canonical contact insert, prepared for a caller’s atomic consent/audit batch. */
+export function prepareContactInsert(
+  env: Env,
+  opts: {
+    projectId: number; landingPageId?: number | null; email: string; name?: string | null;
+    audience?: string | null; cta?: string | null; message?: string | null; source?: string | null;
+    status?: string;
+    /** Allowlisted utm_* map from the capturing page's querystring. */
+    utm?: Record<string, string> | null;
+    /** document.referrer of the capturing page. */
+    referrer?: string | null;
+  },
+): { uid: string; statement: D1PreparedStatement } {
   const audience = opts.audience && CONTACT_AUDIENCES.includes(opts.audience) ? opts.audience : 'customer';
   const uid = newUid();
   // Attribution is stored as a JSON blob rather than five columns: the set of
@@ -379,7 +395,7 @@ export async function ingestContact(
   // blob keeps that from being a migration each time. It is written only from
   // the allowlisted+clipped map the caller built, never raw request input.
   const utmJson = opts.utm && Object.keys(opts.utm).length ? JSON.stringify(opts.utm) : null;
-  await env.DB.prepare(
+  const statement = env.DB.prepare(
     `INSERT INTO contacts (uid, project_id, audience, routed_to, name, email, cta, message, source, landing_page_id, status, utm_json, referrer, last_activity_at, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
@@ -390,7 +406,8 @@ export async function ingestContact(
     opts.status && CONTACT_STATUSES.includes(opts.status) ? opts.status : 'new',
     utmJson, opts.referrer || null,
     nowIso(), nowIso(), nowIso(),
-  ).run();
+  );
+  return { uid, statement };
 }
 
 /** The caller's active company for this request, verified once and memoised. */
