@@ -1,3 +1,4 @@
+import { heldLicences, holdsLicence } from '../services/accountLicences';
 /**
  * WebSocket upgrade routes for real-time fan-out.
  *
@@ -56,7 +57,7 @@ function extractBearerToken(c: any): string | null {
   return q || null;
 }
 
-export async function authenticateForUpgrade(c: any): Promise<{ id: number; email: string; role: string; kyc_status: string | null } | null> {
+export async function authenticateForUpgrade(c: any): Promise<{ id: number; email: string; role: string; kyc_status: string | null; licences?: string[] } | null> {
   const token = extractBearerToken(c);
   if (!token) return null;
   try {
@@ -65,7 +66,7 @@ export async function authenticateForUpgrade(c: any): Promise<{ id: number; emai
     const rows = await sql`SELECT id, email, role, is_active, kyc_status FROM users WHERE id = ${payload.user_id}`;
     await sql.end();
     if (!rows.length || !rows[0].is_active) return null;
-    return { id: rows[0].id, email: rows[0].email, role: rows[0].role, kyc_status: rows[0].kyc_status ?? null };
+    return { id: rows[0].id, email: rows[0].email, role: rows[0].role, kyc_status: rows[0].kyc_status ?? null, licences: await heldLicences(c.env.DB, rows[0]) };
   } catch {
     return null;
   }
@@ -98,7 +99,7 @@ function kycOk(user: { role: string; kyc_status: string | null }): boolean {
   // investors are required to be approved to subscribe to per-deal
   // realtime channels (the overview channel allows any authed user).
   if (user.role === 'admin') return true;
-  if (user.role !== 'investor') return true;
+  if (!holdsLicence(user, 'investor')) return true;
   return user.kyc_status === 'approved';
 }
 
@@ -123,7 +124,7 @@ realtime.get('/pipeline/ws/:deal_id', async (c) => {
   const isOverview = dealId === 'overview';
   if (!isOverview) {
     if (!/^\d+$/.test(dealId)) return c.json({ error: 'Invalid deal_id' }, 400);
-    if (!['admin', 'partner', 'investor'].includes(user.role)) return c.json({ error: 'Forbidden' }, 403);
+    if (!(user.role === 'admin' || holdsLicence(user, 'partner') || holdsLicence(user, 'investor'))) return c.json({ error: 'Forbidden' }, 403);
     if (!kycOk(user)) return c.json({ error: 'KYC verification required', kyc_required: true }, 403);
   }
   if (!(await checkUpgradeRate(c.env, user.id))) return c.json({ error: 'Too many WS upgrades' }, 429);

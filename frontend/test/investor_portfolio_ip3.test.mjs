@@ -312,7 +312,7 @@ test('the AI band is mounted and refuses the four flattering substitutions', () 
   assert.match(said, /has nothing RECORDED against it/, 'a company with no entry may be called unsupported in fact');
   assert.match(said, /do not forecast/);
   const spec = surface();
-  assert.match(spec, /if \(role !== 'admin' && role !== 'partner' && role !== 'investor'\) return \[\];/,
+  assert.match(spec, /if \(role !== 'admin' && !\(await heldLicences\(c\.env\.DB, \{ id: userId, role \}\)\)\.some\(licence => licence === 'partner' \|\| licence === 'investor'\)\) return \[\];/,
     'the gather no longer gates on role');
   assert.match(spec, /if \(ids != null && ids\.length === 0\) return \[\];/,
     'the gather lets an empty accessible set reach the query');

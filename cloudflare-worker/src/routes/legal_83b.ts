@@ -1,5 +1,6 @@
+import { holdsLicence } from '../services/accountLicences';
 import { Hono } from 'hono';
-import type { Env } from '../types';
+import type { Env, User } from '../types';
 import { getSQL } from '../db';
 import { requireAuth } from '../auth';
 import { getActiveTemplateBody } from '../services/legalTemplateStore';
@@ -34,8 +35,8 @@ const app = new Hono<{ Bindings: Env }>();
 // managed in the FastAPI backend; this keeps prod from silently failing.
 const ELECTION_FALLBACK = 'SECTION 83(b) ELECTION — ELECTION TO INCLUDE IN GROSS INCOME UNDER SECTION 83(b)';
 
-function isPrivileged(role: unknown): boolean {
-  return role === 'admin' || role === 'partner';
+function isPrivileged(user: User): boolean {
+  return user.role === 'admin' || holdsLicence(user, 'partner');
 }
 
 app.get('/83b/trackers', async (c) => {
@@ -44,7 +45,7 @@ app.get('/83b/trackers', async (c) => {
   const sql = getSQL(c.env);
   const projectIdRaw = c.req.query('project_id');
   const projectId = projectIdRaw ? Number(projectIdRaw) : null;
-  const priv = isPrivileged(user.role);
+  const priv = isPrivileged(user);
 
   let rows: any[];
   if (priv && projectId) {
@@ -108,7 +109,7 @@ app.post('/83b/trackers', async (c) => {
   // Same write guard as the wizard / FastAPI `_check_project_write_access`:
   // admin/partner OR the founder who owns the project. Investors are NOT
   // privileged here.
-  if (!isPrivileged(user.role)) {
+  if (!isPrivileged(user)) {
     const ownsProject = project.founder_id != null && (user as any).founder_id === project.founder_id;
     if (!ownsProject) { await sql.end(); return c.json({ error: 'Forbidden: you do not own this project' }, 403); }
   }
@@ -198,7 +199,7 @@ app.patch('/83b/trackers/:id', async (c) => {
   const rows = await sql`SELECT * FROM section_83b_trackers WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Tracker not found' }, 404); }
   const t = rows[0] as Section83bRow;
-  if (!isPrivileged(user.role) && t.user_id !== user.id) {
+  if (!isPrivileged(user) && t.user_id !== user.id) {
     await sql.end();
     return c.json({ error: 'Forbidden: not your tracker' }, 403);
   }
@@ -255,7 +256,7 @@ app.post('/83b/trackers/:id/receipt', async (c) => {
   const rows = await sql`SELECT * FROM section_83b_trackers WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Tracker not found' }, 404); }
   const t = rows[0] as Section83bRow;
-  if (!isPrivileged(user.role) && t.user_id !== user.id) {
+  if (!isPrivileged(user) && t.user_id !== user.id) {
     await sql.end();
     return c.json({ error: 'Forbidden: not your tracker' }, 403);
   }

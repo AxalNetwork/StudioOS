@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /**
  * VC Funds + Limited Partners + LPAs + Distributions.
  *
@@ -346,7 +347,7 @@ funds.get('/syndication', async (c) => {
   // D370: investors, partners and admins — the roles a co-invest listing is
   // for. The pending CALLS carry fund money in their payloads, so they are
   // narrowed further below to the funds the caller is GP of record for.
-  if (!['admin', 'investor', 'partner'].includes(String(user.role))) {
+  if (!(user.role === 'admin' || holdsLicence(user, 'investor') || holdsLicence(user, 'partner'))) {
     return refuse(c, 403, { code: 'investor_access_required', message: 'Co-invest listings are for investors, partners and the platform team.' });
   }
   // D614: co-invest discovery is Institutional, as the pricing page sells it.
@@ -451,7 +452,7 @@ funds.get('/:id/analytics', async (c) => {
 /** D631: narrow page/read scope; LPs never receive draft reporting periods. */
 async function fundPageAccess(c:any){
  const user=await requireAuth(c),id=reportId(c.req.param('id'));
- if(!id||!['admin','investor'].includes(user.role))throw new FundReportRefusal('not_found',404);
+ if(!id||!(user.role === 'admin' || holdsLicence(user, 'investor')))throw new FundReportRefusal('not_found',404);
  const fund=await c.env.DB.prepare('SELECT * FROM vc_funds WHERE id=?').bind(id).first();
  if(!fund)throw new FundReportRefusal('not_found',404);
  let denied:any=null;

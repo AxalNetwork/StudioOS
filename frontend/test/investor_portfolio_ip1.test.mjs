@@ -255,7 +255,7 @@ test('an empty accessible set reads as empty, never as every row', () => {
   // AND IT REFUSES AN UNPRIVILEGED CALLER BEFORE IT READS. The short-circuit
   // above only handles an empty book; without this, any signed-in role reaches
   // the marks of whatever `investorProjectIds` resolves for them.
-  assert.match(surface, /role !== 'admin' && role !== 'partner' && role !== 'investor'/,
+  assert.match(surface, /role !== 'admin' && !\(await heldLicences\(c\.env\.DB, \{ id: userId, role \}\)\)\.some\(licence => licence === 'partner' \|\| licence === 'investor'\)/,
     'the gather no longer refuses an unprivileged caller');
   const gate = surface.indexOf("role !== 'admin'");
   assert.ok(gate > 0 && gate < surface.indexOf('investorProjectIds'),

@@ -1,3 +1,4 @@
+import { holdsLicence, holdsOnlyLicence } from './accountLicences';
 /** #2436: pure gates consume verified project membership answers. */
 import type { Env } from '../types';
 import { isSuperAdmin } from '../auth';
@@ -11,17 +12,17 @@ export const CAPTABLE_SUPPORT_REASON_MIN = 10;
 export const CAPTABLE_SUPPORT_REASON_MAX = 500;
 export function isAdmin(user: AccessUser): boolean { return user.role?.toLowerCase() === 'admin'; }
 function owns(user: AccessUser, project: AccessProject): boolean {
-  return user.role?.toLowerCase() === 'founder' && !!user.founder_id && user.founder_id === project.founder_id;
+  return holdsLicence(user, 'founder') && !!user.founder_id && user.founder_id === project.founder_id;
 }
 export function canReadProject(user: AccessUser, project: AccessProject): boolean {
   // D1130: raw legacy reads never inherit a studio/HQ role. Use resolveAccess.
   if (isAdmin(user)) return false;
-  if (user.role?.toLowerCase() === 'investor') return false;
+  if (holdsOnlyLicence(user, 'investor')) return false;
   return owns(user, project) || project.capRead === true;
 }
 export function canWriteProject(user: AccessUser, project: AccessProject): boolean {
   if (isAdmin(user)) return false;
-  if (user.role?.toLowerCase() === 'investor') return false;
+  if (holdsOnlyLicence(user, 'investor')) return false;
   return owns(user, project) || project.capWrite === true;
 }
 export function canReadScenario(user: AccessUser, scenario: AccessScenario, project: AccessProject | null): boolean {
@@ -94,20 +95,20 @@ export async function resolveAccess(
       ? { ok: true, level: 'full', via: 'hq', read_only: true, holder_ref: null, owner: false, cofounder: false }
       : { ok: true, level: 'summary', via: 'studio', read_only: true, holder_ref: null, owner: false, cofounder: false };
   }
-  if (role === 'founder' && !!user.founder_id && user.founder_id === project.founder_id) {
+  if (holdsLicence(user, 'founder') && !!user.founder_id && user.founder_id === project.founder_id) {
     return { ok: true, level: 'full', via: 'owner', read_only: false, holder_ref: null, owner: true, cofounder: false };
   }
-  if (role === 'investor') {
+  const member = await getProjectMembershipRole(env, project.id, user.id);
+  if (member === 'owner' || member === 'cofounder') {
+    return { ok: true, level: 'full', via: 'member', read_only: true, holder_ref: null, owner: false, cofounder: true };
+  }
+  if (holdsOnlyLicence(user, 'investor')) {
     const related = await investorProjectIds(env, user as any, null);
     if (!related || !related.includes(project.id)) return refused;
     const g = await liveGrantFor(env, project.id, user.id);
     const level = grantLevel(g);
     if (level === 'none') return refused;
     return { ok: true, level, via: 'grant', read_only: true, holder_ref: g?.holder_ref ?? null, owner: false, cofounder: false };
-  }
-  const member = await getProjectMembershipRole(env, project.id, user.id);
-  if (member === 'owner' || member === 'cofounder') {
-    return { ok: true, level: 'full', via: 'member', read_only: true, holder_ref: null, owner: false, cofounder: true };
   }
   const g = await liveGrantFor(env, project.id, user.id);
   if (member === 'advisor') {

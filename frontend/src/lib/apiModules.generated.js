@@ -4,6 +4,7 @@
 // while it is not exactly what the script writes.
 // api-modules:begin
 export * from './api/accountCompanies.js';
+export * from './api/accountLicences.js';
 export * from './api/accountPortfolio.js';
 export * from './api/adminAccountWrites.js';
 export * from './api/adminAccounts.js';

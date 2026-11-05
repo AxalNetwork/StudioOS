@@ -1,3 +1,4 @@
+import { holdsLicence } from './accountLicences';
 /**
  * Co-founder Agreement — the parties to a generated draft, and each party's
  * OWN position on each clause (D354, migration 309).
@@ -95,7 +96,7 @@ export async function agreementAccess(env: Env, documentId: number, user: User) 
   if (!doc) return NOT_FOUND;
   const parties = await loadParties(env, documentId);
   const mine = parties.filter((p) => p.user_id != null && Number(p.user_id) === Number(user.id));
-  const isStaff = user.role === 'admin' || user.role === 'partner';
+  const isStaff = user.role === 'admin' || holdsLicence(user, 'partner');
   const isOwner = doc.founder_id != null && (user as any).founder_id != null
     && Number((user as any).founder_id) === Number(doc.founder_id);
   if (!mine.length && !isStaff && !isOwner) return NOT_FOUND;
