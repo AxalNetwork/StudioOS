@@ -31,9 +31,11 @@ import RecordView, { RecordPhoneProvider } from './RecordView';
 import { HEADER_BUTTON, RecordHeaderProvider } from './RecordHeader.jsx';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
 import DistributionTabs from './distribution/DistributionTabs.jsx';
+import InboxTab, { InboxNeedsYou, useInboxUnread } from './distribution/InboxTab.jsx';
+import CampaignsTab from './distribution/CampaignsTab.jsx';
+import NewCampaignPage from './distribution/NewCampaignPage.jsx';
 import { ComingSoon } from './distribution/DistributionParts.jsx';
 import { distributionPrimary } from './distribution/distributionModel.js';
-import InboxTab, { InboxNeedsYou, useInboxUnread } from './distribution/InboxTab.jsx';
 import { EmailAction } from '../email/emailParts.jsx';
 import RecordEmailSheet from '../email/RecordEmailSheet.jsx';
 import { emailHref, personOfRecord } from '../email/emailModel.js';
@@ -787,8 +789,8 @@ function RecordCrumb({ title, type = null, id = null }) {
 /** D1178: a Use of funds page under a tab, and the tab it sits under. */
 const UOF_SUB_TAB = { forecast: 'runway', compare: 'scenarios' };
 
-export default function CycleRoute({ cycle, tab = null, lightbox = false, adding = false, record = false, slug: suppliedSlug, reporting = null, buildPlan = null, dataRoomFile = false, capTableProposal = false, capTableScenario = false, uofSub = null }) {
-  const { slug: routeSlug, id: recordId, proposal: proposalId, instrument: instrumentId, scenario: scenarioId } = useParams();
+export default function CycleRoute({ cycle, tab = null, campaignNew = false, lightbox = false, adding = false, record = false, slug: suppliedSlug, reporting = null, buildPlan = null, dataRoomFile = false, capTableProposal = false, capTableScenario = false, uofSub = null }) {
+  const { slug: routeSlug, id: recordId, uid: campaignUid, proposal: proposalId, instrument: instrumentId, scenario: scenarioId } = useParams();
   const location = useLocation();
   const { user } = useAuth() || {};
   const def = Object.prototype.hasOwnProperty.call(CYCLE_DEFS, cycle) ? CYCLE_DEFS[cycle] : null;
@@ -1322,13 +1324,13 @@ export default function CycleRoute({ cycle, tab = null, lightbox = false, adding
       </ModulePage>
     );
   }
-  // D4484: Overview keeps the existing module body; unlanded tabs read no campaign data.
+  // D4487: new campaigns are full pages; a campaign uid is a sheet over its list.
   if (distribution) {
     if (distributionTab === 'overview' && projectStatus === 'ready') body = <><InboxNeedsYou reading={inboxUnread} search={q} />{body}</>;
     if (distributionTab === 'inbox' && projectStatus === 'ready') body = <InboxTab projectId={projectId} onUnreadChange={inboxUnread.acceptRead} />;
-    body = <DistributionTabs tab={distributionTab} search={q} action={action} aiOff={!fillsOn} inboxCount={inboxUnread.count}
+    body = campaignNew ? (projectStatus === 'ready' ? <NewCampaignPage key={`${projectId}:${location.search}`} projectId={projectId} role={user?.role} search={q} aiOff={!fillsOn} /> : body) : <DistributionTabs tab={distributionTab} search={q} action={action} aiOff={!fillsOn} inboxCount={inboxUnread.count}
       loading={projectStatus === 'loading' || (distributionTab === 'overview' && projectStatus === 'ready' && moduleStatus === 'loading')}>
-      {distributionTab === 'inbox' && projectStatus === 'ready' ? body : distributionTab === 'overview' || projectStatus !== 'ready' ? body : <ComingSoon />}
+      {distributionTab === 'inbox' && projectStatus === 'ready' ? body : distributionTab === 'overview' || projectStatus !== 'ready' ? body : distributionTab === 'campaigns' ? <CampaignsTab key={projectId} projectId={projectId} role={user?.role} search={q} campaignUid={campaignUid}/> : <ComingSoon />}
     </DistributionTabs>;
   }
 
