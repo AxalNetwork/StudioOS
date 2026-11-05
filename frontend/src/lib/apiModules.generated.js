@@ -154,6 +154,7 @@ export * from './api/growAds.js';
 export * from './api/growChannels.js';
 export * from './api/growDistributionAsk.js';
 export * from './api/growInbox.js';
+export * from './api/growProspects.js';
 export * from './api/growTalent.js';
 export * from './api/helpCenter.js';
 export * from './api/hqDeckStageNorms.js';
