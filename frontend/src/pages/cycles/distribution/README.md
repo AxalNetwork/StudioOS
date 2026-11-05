@@ -37,13 +37,16 @@ starting ads.
 | `ads.css` | D4490: responsive Ads columns using the Distribution tokens. |
 | `CampaignDraftAsk.jsx` | Assets Ask with explicit formats and ad placements (D4488). |
 | `campaignAskModel.js` | Functional acceptance into local fields without changing manual money or dates (D4488). |
+| `CalendarTab.jsx` | D4489: month/week calendar and preserved plan dialogs. Plans only; publishing uses the existing PublishSheet, and Notion pieces are edited in Notion. |
+| `PieceSheet.jsx` | D4489: plan details, time editing and explicit publishing entry. |
+| `PostPreview.jsx` | D4489: unscaled platform frames. |
+| `calendarModel.js` | D4489: Monday-first dates, overflow, status and platform widths. |
 | `ProspectsTab.jsx` | D4492: customer pipeline, import, quiet hours and hashed suppression management. Takes projectId, ventureName and the shell's canWrite. |
 | `ProspectSheet.jsx` | D4492: the individual contact email, recorded permissions and activity; explicit status/consent edits. |
 | `AddProspectSheet.jsx` | D4492: manual capture, proof and a blank-note Ask; none on consent. |
 | `prospectsModel.js` | D4492: seven stages, source labels, truthful counts and fixed refusal fallback. |
 | `ProspectConsentSummary.jsx` | D4492: Audience slot and reusable summary hook/Review reachable label for the wizard handoff. |
 | `ProspectsPage.jsx` | D4492: mounted tab, server-derived write permission and the campaign wizard’s import door. |
-
 | `distributionStates.js` | D4496: pure recorded cross-tab state selection and phone/tablet KPI subsets. |
 | `DistributionStates.jsx` | D4496: fixed notes, retry controls, token warning and existing HQ access banner. |
 | `distributionStates.css` | D4496: shared state theme, phone/tablet targets and responsive Overview treatment. |
@@ -51,9 +54,10 @@ starting ads.
 | `useDistributionAccess.js` | D4496: existing form-options writer permission, fail closed while unknown. |
 
 CycleRoute still owns the module page. Overview retains its charts,
-outreach draft, content calendar, update-ask replies, Mercury, Notion and tool
+outreach draft, This week calendar summary, update-ask replies, Mercury, Notion and tool
 doors. The D4485 cards sit above that body. Campaigns is the D4487 tab. Inbox is the D4494 tab. Channels is the
 mounted D4486 tab; its table replaces Overview’s legacy channel records.
+Calendar is the D4489 tab, using the same scoped read as This week.
 Prospects is the D4492 tab. Other tabs show Coming in this module soon until
 their tasks land.
 Import `ProspectsTab` for the shell's Prospects slot, with its verified venture

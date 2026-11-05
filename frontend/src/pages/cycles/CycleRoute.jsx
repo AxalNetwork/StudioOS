@@ -64,7 +64,7 @@ import RaisePosthog from './RaisePosthog';
 import { ImprovementPosthog, RevenuePosthog } from './GrowPosthog';
 import NotionInterviewImport from './NotionInterviewImport';
 import NotionSnapshotImport from './NotionSnapshotImport';
-import ContentCalendar from './ContentCalendar';
+import CalendarTab, { CalendarWeek } from './distribution/CalendarTab.jsx';
 import { buildPartsMap } from './buildParts';
 import UpdatesHistory from './UpdatesHistory';
 import ReportingDesk from './ReportingDesk';
@@ -397,7 +397,7 @@ const CYCLE_DEFS = {
       // The replies customer and partner asks brought in, beside the rows.
       distribution: (data, ctx) => (<>
         {/* D1090 (#2955): planned pieces, typed here or from Notion; a plan, never what was sent. */}
-        <ContentCalendar part={data?.parts?.content_calendar} channels={data?.records?.rows} projectId={ctx.projectId} reload={ctx.reload} />
+        <CalendarWeek projectId={ctx.projectId} />
         {fromMercury('distribution', data, ctx)}
         <FromNotion section="grow" projectId={ctx.projectId} module="distribution" />
       </>),
@@ -1336,12 +1336,13 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   // D4487: new campaigns are full pages; a campaign uid is a sheet over its list.
   if (distribution) {
     if (distributionTab === 'overview' && projectStatus === 'ready') body = <><InboxNeedsYou reading={inboxUnread} search={q} />{body}</>;
+    if (distributionTab === 'calendar' && projectStatus === 'ready') body = <CalendarTab projectId={projectId} />;
     if (distributionTab === 'channels' && projectStatus === 'ready') body = <ChannelsTab projectId={projectId} refresh={reload} onChanged={() => setReload((n) => n + 1)} fillFor={fillFor} />;
     if (distributionTab === 'prospects' && projectStatus === 'ready') body = <ProspectsPage key={projectId} projectId={projectId} />;
     if (distributionTab === 'inbox' && projectStatus === 'ready') body = <InboxTab projectId={projectId} DraftIntent={DistributionAskIntent} onUnreadChange={inboxUnread.acceptRead} />;
     body = campaignNew ? (projectStatus === 'ready' ? <NewCampaignPage key={`${projectId}:${location.search}`} projectId={projectId} role={user?.role} search={q} aiOff={!fillsOn} /> : body) : <DistributionTabs projectId={projectStatus==='ready'?projectId:null} tab={distributionTab} search={q} action={action} aiOff={!fillsOn} inboxCount={inboxUnread.count}
       loading={projectStatus === 'loading' || (distributionTab === 'overview' && projectStatus === 'ready' && moduleStatus === 'loading')}>
-      {['channels', 'inbox', 'prospects'].includes(distributionTab) && projectStatus === 'ready' ? body : distributionTab === 'overview' || projectStatus !== 'ready' ? body : distributionTab === 'campaigns' ? <CampaignsTab key={projectId} projectId={projectId} role={user?.role} search={q} campaignUid={campaignUid}/> : <ComingSoon />}
+      {['channels', 'inbox', 'calendar', 'prospects'].includes(distributionTab) && projectStatus === 'ready' ? body : distributionTab === 'overview' || projectStatus !== 'ready' ? body : distributionTab === 'campaigns' ? <CampaignsTab key={projectId} projectId={projectId} role={user?.role} search={q} campaignUid={campaignUid}/> : <ComingSoon />}
     </DistributionTabs>;
   }
 

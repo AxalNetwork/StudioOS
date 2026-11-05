@@ -152,6 +152,7 @@ export * from './api/googleSignIn.js';
 export * from './api/googleWorkspace.js';
 export * from './api/googleWorkspaceBuild.js';
 export * from './api/growAds.js';
+export * from './api/growCalendar.js';
 export * from './api/growChannels.js';
 export * from './api/growDistributionAsk.js';
 export * from './api/growInbox.js';

@@ -40,10 +40,10 @@ import {
  * Who opens it is the Grow page's header (#3482's follow-up, on part 2's
  * gate); the sheet itself refuses nothing the Worker does not.
  */
-export default function PublishSheet({ projectId, module, onClose, api = publishApi, delay = 500, start = null }) {
+export default function PublishSheet({ projectId, module, onClose, api = publishApi, delay = 500, start = null, initialText = '' }) {
   const [read, setRead] = useState({ status: 'loading', rows: [], canPublish: false, error: '' });
   const [ticked, setTicked] = useState([]);
-  const [text, setText] = useState('');
+  const [text, setText] = useState(initialText);
   const [consent, setConsent] = useState([]);
   const [teamOnly, setTeamOnly] = useState(false);
   const [previews, setPreviews] = useState([]);
