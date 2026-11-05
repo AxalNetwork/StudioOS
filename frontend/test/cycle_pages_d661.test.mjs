@@ -175,8 +175,8 @@ test('A CHOSEN VENTURE RIDES ON EVERY LINK: tabs, card titles and the module pag
   for (const m of navOf(mod).matchAll(/href="([^"]+)"/g)) assert.match(m[1], /\?project_id=7$/, m[1]);
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.match(route, /searchParams\.get\('project_id'\) \|\| searchParams\.get\('project'\)/, "the read's own `?project=` links pick the venture too");
-  // D4485: check each consumer rather than a total changed by every new component.
-  for (const component of ['CycleHeader', 'PhoneCycleRoot', 'CycleOverview', 'RaiseLead', 'PmfChip', 'BuildPlanDoor', 'ModulePage', 'CapTableHomeNav', 'DataRoomHomeNav', 'UseOfFundsHomeNav', 'CapRelHomeNav', 'OverviewTab', 'DistributionTabs', 'InboxNeedsYou']) {
+  // Check each consumer rather than a total changed by every new component (D4485, D4487).
+  for (const component of ['CycleHeader', 'PhoneCycleRoot', 'CycleOverview', 'RaiseLead', 'PmfChip', 'BuildPlanDoor', 'ModulePage', 'CapTableHomeNav', 'DataRoomHomeNav', 'UseOfFundsHomeNav', 'CapRelHomeNav', 'OverviewTab', 'DistributionTabs', 'NewCampaignPage', 'CampaignsTab', 'InboxNeedsYou']) {
     const start = route.search(new RegExp(`<${component}\\b`));
     const end = route.indexOf('search={q}', start);
     const attributes = route.slice(start, end);

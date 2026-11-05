@@ -141,7 +141,7 @@ test('Beehiiv, X, TikTok and Facebook never write the content calendar: only its
   walk(root);
   const naming = files.filter((f) => readFileSync(f, 'utf8').includes('content_calendar_items')).map((f) => f.slice(root.length)).sort();
   // D1486 §b (#3981): the calendar's page-only reader names the table too, and only reads it.
-  assert.deepEqual(naming, ['services/calendar/growReaders.ts', 'services/distribution/overview.ts', 'services/growCampaigns.ts', 'services/growChannels.ts', 'services/growWriters.ts', 'services/notion/grow.ts']);
+  assert.deepEqual(naming, ['services/calendar/growReaders.ts', 'services/campaignOptions.ts', 'services/distribution/overview.ts', 'services/growCampaigns.ts', 'services/growChannels.ts', 'services/growWriters.ts', 'services/notion/grow.ts']);
   // D4447: campaign plans link existing pieces; they never edit or publish them.
   const channelReader = readFileSync(join(root, 'services/growChannels.ts'), 'utf8');
   assert.doesNotMatch(channelReader, /\b(?:INSERT\s+(?:OR\s+\w+\s+)?INTO|UPDATE|DELETE\s+FROM|REPLACE\s+INTO)\s+content_calendar_items\b/i, 'channels never write the content calendar');
@@ -150,6 +150,9 @@ test('Beehiiv, X, TikTok and Facebook never write the content calendar: only its
   // D4485: Overview reads this week's plans but cannot edit or publish them.
   const overviewReader = readFileSync(join(root, 'services/distribution/overview.ts'), 'utf8');
   assert.doesNotMatch(overviewReader, /\b(?:INSERT\s+(?:OR\s+\w+\s+)?INTO|UPDATE|DELETE\s+FROM|REPLACE\s+INTO)\s+content_calendar_items\b/i, 'the Distribution overview never writes the content calendar');
+  // D4487: the campaign planner reads choices; it cannot edit existing pieces.
+  const optionsReader = readFileSync(join(root, 'services/campaignOptions.ts'), 'utf8');
+  assert.doesNotMatch(optionsReader, /\b(?:INSERT\s+(?:OR\s+\w+\s+)?INTO|UPDATE|DELETE\s+FROM|REPLACE\s+INTO)\s+content_calendar_items\b/i, 'campaign options never write the content calendar');
   const reader = readFileSync(join(root, 'services/calendar/growReaders.ts'), 'utf8');
   assert.doesNotMatch(reader, /\b(?:INSERT\s+(?:OR\s+\w+\s+)?INTO|UPDATE|DELETE\s+FROM|REPLACE\s+INTO)\s+content_calendar_items\b/i, 'the calendar reader never writes the content calendar');
 });

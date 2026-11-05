@@ -7,7 +7,7 @@ export default function growDistributionRoutes({ guard }) {
     <>
       <Route path="/grow/distribution/channels" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" slug="distribution" tab="channels" />)} />
       <Route path="/grow/distribution/campaigns" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" slug="distribution" tab="campaigns" />)} />
-      <Route path="/grow/distribution/campaigns/new" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" slug="distribution" tab="campaigns" />)} />
+      <Route path="/grow/distribution/campaigns/new" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" slug="distribution" tab="campaigns" campaignNew />)} />
       <Route path="/grow/distribution/campaigns/:uid" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" slug="distribution" tab="campaigns" />)} />
       <Route path="/grow/distribution/calendar" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" slug="distribution" tab="calendar" />)} />
       <Route path="/grow/distribution/ads" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" slug="distribution" tab="ads" />)} />
