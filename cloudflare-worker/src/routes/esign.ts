@@ -828,7 +828,7 @@ esign.post('/send', async (c) => {
   // admin wizard into an open one. Admins keep the full catalogue through
   // /admin/contracts, which is unchanged; `mayOriginate` gives them the union
   // of every role's list here.
-  if (!mayOriginate(sender.role, documentType) && sender.role !== 'admin') {
+  if (!mayOriginate(sender.role, documentType, sender.licences) && sender.role !== 'admin') {
     return c.json({ error: 'your role may not originate this document type' }, 403);
   }
   if (!recipientEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(recipientEmail)) {
@@ -1007,7 +1007,7 @@ esign.get('/templates', async (c) => {
   const user = await requireAuth(c);
   // `not_offered` is what the canvas draws for this role that cannot be sent
   // from here, each with its own reason (D411) — printed, never guessed at.
-  return c.json({ role: user.role, items: templatesFor(user.role), not_offered: notOfferedFor(user.role), absent: SEND_ABSENCES });
+  return c.json({ role: user.role, items: templatesFor(user.role, user.licences), not_offered: notOfferedFor(user.role, user.licences), absent: SEND_ABSENCES });
 });
 
 /** `recipient_email` → "Recipient email"; `counterparty.founder_id` → "Counterparty founder id". */
@@ -1028,7 +1028,7 @@ esign.get('/templates/:doc_type', async (c) => {
   const user = await requireAuth(c);
   const docType = c.req.param('doc_type');
   const offered = /^[a-z0-9_]{1,80}$/.test(docType)
-    ? templatesFor(user.role).find((t) => t.doc_type === docType)
+    ? templatesFor(user.role, user.licences).find((t) => t.doc_type === docType)
     : undefined;
   if (!offered) return refuse(c, 404, { code: 'template_not_offered', message: 'That template is not one you can send.' });
   const { mergeTokensIn } = await import('../services/legalTemplates');

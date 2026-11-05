@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /**
  * D377 — who hosts Spin-Out Lab office hours (migration 313).
  *
@@ -77,7 +78,7 @@ async function body(c: any): Promise<Record<string, unknown>> {
 
 /** The directory's audience: Lab founders (and active Lab members) and admins. */
 function readsDirectory(user: any): boolean {
-  if (user.role === 'admin' || user.role === 'founder') return true;
+  if (user.role === 'admin' || holdsLicence(user, 'founder')) return true;
   return user.role === 'exploring' && Number(user.spinout_lab_active ?? 0) === 1;
 }
 

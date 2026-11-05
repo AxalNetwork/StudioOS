@@ -1,3 +1,4 @@
+import { holdsLicence, holdsOnlyLicence } from '../accountLicences';
 /**
  * D1256 (#3279, part 3 of #2428) — who reads a venture scorecard, what they
  * see, and the writes beside it: reviews, corrections, an investor's
@@ -110,7 +111,7 @@ const STATEMENTS = {
 export { STATEMENTS as ACCESS_STATEMENTS };
 
 const role = (u: User) => String(u.role || '').toLowerCase();
-export const isStaff = (u: User) => role(u) === 'admin' || role(u) === 'partner';
+export const isStaff = (u: User) => role(u) === 'admin' || holdsLicence(u, 'partner');
 
 /** The venture, or null when it does not exist or is deleted. */
 export async function ventureRow(env: Env, projectId: number): Promise<{ id: number; founder_id: number | null } | null> {
@@ -120,8 +121,8 @@ export async function ventureRow(env: Env, projectId: number): Promise<{ id: num
 
 /** True for the venture's founder and its accepted owners and co-founders. Advisors on the roster are not founders. */
 export async function isFounderOf(env: Env, user: User, project: { id: number; founder_id: number | null }): Promise<boolean> {
-  if (role(user) === 'founder' && user.founder_id != null && project.founder_id === user.founder_id) return true;
-  if (role(user) === 'investor' || role(user) === 'exploring') return false;
+  if (holdsLicence(user, 'founder') && user.founder_id != null && project.founder_id === user.founder_id) return true;
+  if (holdsOnlyLicence(user, 'investor') || role(user) === 'exploring') return false;
   const m = await env.DB.prepare(STATEMENTS.member).bind(project.id, user.id).first<{ role: string }>();
   return m?.role === 'owner' || m?.role === 'cofounder';
 }
@@ -130,7 +131,7 @@ export async function isFounderOf(env: Env, user: User, project: { id: number; f
 export async function viewerOf(env: Env, user: User, project: { id: number; founder_id: number | null }): Promise<Viewer | null> {
   if (isStaff(user)) return 'staff';
   if (await isFounderOf(env, user, project)) return 'founder';
-  if (role(user) === 'advisor') {
+  if (holdsLicence(user, 'advisor')) {
     const share = await env.DB.prepare(STATEMENTS.advisorShare).bind(project.id, user.id).first<{ enabled: number }>();
     if (Number(share?.enabled) === 1) return 'advisor';
   }
@@ -282,7 +283,7 @@ export async function saveReview(env: Env, user: User, projectId: number, scope:
     throw new ScoreError('scope_not_scored', 'Only a scored scope can be adjusted. A note can still be added.', 409);
   }
   const uid = crypto.randomUUID();
-  const reviewerRole = role(user) === 'partner' ? 'partner' : 'admin';
+  const reviewerRole = holdsLicence(user, 'partner') ? 'partner' : 'admin';
   await env.DB.prepare(STATEMENTS.insertReview).bind(uid, projectId, scope, stored.uid, stored.model ?? VENTURE_MODEL_V1.version,
     stored.value ?? null, review.adjustment, review.reason, review.note, user.id, reviewerRole).run();
   await logScorecard(env, { projectId, userId: user.id, scope, action: 'venture_score_reviewed',

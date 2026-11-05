@@ -5,6 +5,8 @@ import { readFileSync } from 'node:fs';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { installDocument } from './_contracts_dom.mjs';
+import { MemoryRouter } from 'react-router-dom';
+import { ReplyComposer } from '../src/pages/cycles/distribution/InboxTab.jsx';
 import DistributionAskIntent from '../src/pages/cycles/distribution/DistributionAskIntent.jsx';
 import WaitingForYou from '../src/pages/cycles/distribution/WaitingForYou.jsx';
 import AskPanel from '../src/ui/AskPanel.jsx';
@@ -133,5 +135,38 @@ test('an explicit campaign target is quoted and run as campaign text with an hon
     assert.match(ui.text(),/Accept keeps the text in this campaign/);
     await ui.click('Accept');
     assert.doesNotMatch(ui.text(),/Not saved|Nothing is saved until you create/);
+  }finally{await ui.close();}
+});
+
+test('D4494: selected contact travels through quote/run and accepted replies return locally',async()=>{
+  const {api,calls}=apiFor([p('reply-one','reply')]);const accepted=[];
+  const ui=await mount(h(DistributionAskIntent,{projectId:1,contactUid:'prospect-a',kinds:['reply'],api,onAccept:rows=>accepted.push(...rows)}));
+  try {
+    assert.equal(calls[0][1].contact_uid,'prospect-a');
+    assert.match(ui.text(),/selected prospect thread/);
+    await ui.click('Ask Eadwyn to draft a reply');
+    assert.equal(calls[1][1].contact_uid,'prospect-a');
+    assert.deepEqual(calls[1][1].kinds,['reply']);
+    await ui.click('Accept');
+    assert.equal(accepted[0].payload.kind,'reply');
+    assert.deepEqual(calls.map(c=>c[0]),['quote','run','decide']);
+  } finally {await ui.close();}
+});
+
+
+test('D4494: real Ask acceptance fills the reply composer without calling mail',async()=>{
+  const {api,calls}=apiFor([p('reply-one','reply')]);let sends=0;
+  const DraftIntent=props=>h(DistributionAskIntent,{...props,api});
+  const detail={can_write:true,recipient:'reply@example.test',accounts:[{uid:'mail-one',status:'active'}],thread:{contact:{uid:'prospect-a',name:'Synthetic Contact'},messages:[]}};
+  const ui=await mount(h(MemoryRouter,null,h(ReplyComposer,{projectId:1,detail,DraftIntent,api:{confirmSend:async()=>{sends++;},send:async()=>{sends++;}}})));
+  try {
+    await ui.click('Ask');
+    await ui.click('Ask Eadwyn to draft a reply');
+    await ui.click('Accept');
+    const composer=ui.all().find(n=>n.tagName==='TEXTAREA'&&props(n).id==='distribution-reply');
+    assert.equal(props(composer).value,'Synthetic shipment copy');
+    assert.equal(calls[0][1].contact_uid,'prospect-a');
+    assert.equal(sends,0);
+    assert.ok(ui.all().some(n=>n.tagName==='BUTTON'&&txt(n)==='Send'));
   }finally{await ui.close();}
 });

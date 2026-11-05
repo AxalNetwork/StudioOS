@@ -8,6 +8,10 @@ import { Card, Chip, Pill, ProgressBar, SourceChip } from './DistributionParts.j
 import { distributionPath } from './distributionModel.js';
 import { budgetView, KPI_LABELS, metricView, resultsLine, sourceChips, UNREADABLE_NOTE, weekColumns } from './overviewModel.js';
 import './overview.css';
+import './distributionStates.css';
+import { distributionKpis } from './distributionStates.js';
+import { useDistributionState } from './DistributionStates.jsx';
+import { useDistributionLayout } from './useDistributionLayout.js';
 
 function Failed({ onRetry }) {
   return <div role="status"><strong>Unreadable</strong><p>{UNREADABLE_NOTE}</p><button type="button" className="ds-overview-link" onClick={onRetry}>Try again</button></div>;
@@ -15,17 +19,23 @@ function Failed({ onRetry }) {
 function Missing({ reason }) { return <p className="ds-not-recorded">{reason || 'Not recorded'}</p>; }
 function Head({ title, href, link }) { return <header className="ds-overview-head"><h2>{title}</h2>{href && <Link to={href}>{link} ›</Link>}</header>; }
 export function OverviewSkeleton() {
-  return <div className="ds-overview" role="status" aria-label="Loading Distribution overview"><div className="ds-overview-kpis">{Object.keys(KPI_LABELS).map((key) => <Card key={key}><Skeleton h={12} w="65%" /><Skeleton h={22} className="mt-3" /></Card>)}</div><div className="ds-overview-columns"><Skeleton.Card /><Skeleton.Card /></div></div>;
+  const {width}=useDistributionLayout();
+  const keys=distributionKpis(width)??Object.keys(KPI_LABELS);
+  return <div className="ds-overview" role="status" aria-label="Loading Distribution overview"><div className="ds-overview-kpis">{keys.map((key) => <Card key={key}><Skeleton h={12} w="65%" /><Skeleton h={22} className="mt-3" /></Card>)}</div><div className="ds-overview-columns"><Skeleton.Card /><Skeleton.Card /></div></div>;
 }
 const sub = { leads: 'UTM-tagged sign-ups · this month', replies: 'Across channels · this month', cost_per_lead: 'This month’s spend ÷ leads' };
 export function OverviewView({ data, loading = false, onRetry, search = '', projectId, onAdd, additions = {}, today }) {
+  const {width}=useDistributionLayout();
+  const controls=useDistributionState();
+  const keys=distributionKpis(width)??Object.keys(KPI_LABELS);
   if (loading) return <OverviewSkeleton />;
   const week = weekColumns(data?.week, today);
   const campaigns = data?.campaigns;
   const replies = data?.update_asks;
   const channels = data?.channels;
   return <div className="ds-overview" data-testid="distribution-overview">
-    <div className="ds-overview-kpis">{Object.entries(KPI_LABELS).map(([key, label]) => {
+    <div className="ds-overview-kpis">{keys.map((key) => {
+      const label=KPI_LABELS[key];
       const metric = data?.kpis?.[key] ?? { value: null, reason: 'Unreadable: overview KPI could not be read', sources: [] };
       const view = metricView(key, metric);
       return <Card key={key} data-testid={`overview-kpi-${key}`}><h2 className="ds-eyebrow">{label}</h2>
@@ -47,7 +57,7 @@ export function OverviewView({ data, loading = false, onRetry, search = '', proj
             {budget.progress !== null && <ProgressBar value={budget.progress} label={`${campaign.name} budget used`} />}
             <p className="ds-overview-sub">{resultsLine(campaign)}</p>{[campaign.leads, campaign.demos, campaign.customers].some((n) => typeof n === 'number') && <SourceChip source="connector" />}{campaign.budget_cents != null && <SourceChip source="manual" />}{sourceChips((campaign.channels || []).flatMap((channel) => (channel.spend_months || []).map((month) => month.source))).map((chip) => <SourceChip key={chip.source} source={chip.source} />)}
           </article>;
-        })}</div> : <div><p>{campaigns.total === 0 ? 'No campaigns yet. A campaign groups your channels, audience, budget and posts toward one goal.' : 'No active campaigns. Open Campaigns to see your drafts and completed campaigns.'}</p><Link className="ds-overview-link" to={`/grow/distribution/campaigns/new${search}`}>New campaign</Link></div>}
+        })}</div> : <div><p>{campaigns.total === 0 ? 'No campaigns yet. A campaign groups your channels, audience, budget and posts toward one goal.' : 'No active campaigns. Open Campaigns to see your drafts and completed campaigns.'}</p><>{controls?.manual.disabled ? <button type="button" disabled className="ds-overview-link" title={controls.manual.reason}>New campaign</button> : <Link className="ds-overview-link" to={`/grow/distribution/campaigns/new${search}`}>New campaign</Link>}</></div>}
       </Card>
       <Card><Head title="This week" href={distributionPath('calendar', search)} link="Open Calendar" /><p className="ds-overview-sub">Scheduled posts and sequence steps{data?.week?.from ? ` · ${data.week.from} – ${week.days.at(-1)?.date}` : ''}. Sequence steps are not recorded here yet.</p>
         {week.state === 'unreadable' ? <Failed onRetry={onRetry} /> : <div className="ds-overview-week">{week.days.map((day) => <section key={day.date} className={`ds-overview-day${day.today ? ' is-today' : ''}`} aria-label={day.heading}><h3>{day.heading}</h3><time dateTime={day.date}>{day.date.slice(5)}</time>
@@ -57,6 +67,7 @@ export function OverviewView({ data, loading = false, onRetry, search = '', proj
     </div><aside className="ds-overview-side">
       <Card><Head title="Connected channels" href={distributionPath('channels', search)} link="Open Channels" />
         {!Array.isArray(channels?.items) ? channels?.reason?.startsWith('Not recorded:') ? <Missing reason={channels.reason} /> : <Failed onRetry={onRetry} /> : <ul className="ds-overview-list">{channels.items.map((channel) => <li key={channel.name}><span>{channel.name}</span><Pill tone={channel.status === 'Connected' ? 'positive' : channel.status === 'Reconnect' ? 'amber' : 'muted'}>{channel.status}</Pill></li>)}</ul>}
+        {Array.isArray(channels?.items)&&channels.items.length===0&&<p className="ds-overview-sub">No connected channels recorded.</p>}
         <p className="ds-overview-sub">Account connections, not campaign plans. WhatsApp capture does not send marketing messages.</p>
       </Card>
       <Card><Head title="Replies from your update asks" /><p className="ds-overview-sub">Investors and advisors who answered an ask in your last update.</p>

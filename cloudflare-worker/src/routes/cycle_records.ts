@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /** D690 — one gated record, activity, action and form-options route for cycles. */
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
@@ -81,7 +82,7 @@ function scoped(c: any, registry: RecordRegistry, withId: boolean): Promise<
     const ctx: RecordContext = { env: c.env, projectId, project, user };
     if (reading && cycle === 'raise' && slug === 'use-of-funds') {
       ctx.mercuryRead = 'refused';
-      if (user.role === 'founder' && user.founder_id != null && Number(user.founder_id) === Number(project.founder_id)) {
+      if (holdsLicence(user, 'founder') && user.founder_id != null && Number(user.founder_id) === Number(project.founder_id)) {
         try {
           const session = await selectJwt(c);
           if (session && !session.payload.impersonated_by) {

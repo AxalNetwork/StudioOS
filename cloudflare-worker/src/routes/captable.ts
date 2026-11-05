@@ -1,3 +1,4 @@
+import { holdsLicence, holdsOnlyLicence } from '../services/accountLicences';
 import { canAccessProject, getProjectMembershipRole } from '../services/projectAccess';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 /**
@@ -174,13 +175,13 @@ async function loadProjectRow(env: Env, projectId: number): Promise<ProjectRow |
 
 /** Membership paths are independent of the member's own active company. */
 function isCompanyExempt(user: AuthUser, project: ProjectRow): boolean {
-  return !(user.role.toLowerCase() === 'founder' && !!user.founder_id && user.founder_id === project.founder_id);
+  return !(holdsLicence(user, 'founder') && !!user.founder_id && user.founder_id === project.founder_id);
 }
 async function computeProjectPermissions(env: Env, user: AuthUser, project: ProjectRow): Promise<ProjectRow> {
   const principal = { ...user, role: user.role.toLowerCase() } as any;
   if (principal.role === 'admin') return { ...project, capRead: false, capWrite: false };
-  if (principal.role === 'investor') return { ...project, capRead: false, capWrite: false };
-  const owner = principal.role === 'founder' && !!principal.founder_id && principal.founder_id === project.founder_id;
+  if (holdsOnlyLicence(principal, 'investor')) return { ...project, capRead: false, capWrite: false };
+  const owner = holdsLicence(principal, 'founder') && !!principal.founder_id && principal.founder_id === project.founder_id;
   // A recorded membership first, for every non-owner. Since D889 (#2438)
   // canAccessProject requires one of a partner too; this check stays explicit.
   const member = owner ? null : await getProjectMembershipRole(env, project.id, principal.id);
@@ -222,7 +223,7 @@ async function loadProject(c: Ctx, projectId: number, user: AuthUser): Promise<P
   if (!row) return null;
   if (isCompanyExempt(user, row)) {
     const answer = await projectPermissions(c, user, row);
-    if (!answer.capRead && user.role.toLowerCase() === 'founder'
+    if (!answer.capRead && holdsLicence(user, 'founder')
       && !projectInActiveCompany(await activeCompanyFor(c, user), row)) return null;
     return answer;
   }
@@ -238,7 +239,7 @@ async function projectForScenario(c: Ctx, row: ScenarioRow, user: AuthUser): Pro
   if (!proj) return null;
   if (isCompanyExempt(user, proj)) {
     const answer = await projectPermissions(c, user, proj);
-    if (!answer.capRead && user.role.toLowerCase() === 'founder'
+    if (!answer.capRead && holdsLicence(user, 'founder')
       && !projectInActiveCompany(await activeCompanyFor(c, user), proj)) throw new HttpError(404, 'Scenario not found');
     return answer;
   }
@@ -259,7 +260,7 @@ async function ensureScenarioReadOr404(c: Ctx, uid: string, user: AuthUser): Pro
 
 async function auditMemberWrite(c: Ctx, user: AuthUser, project: ProjectRow | null) {
   if (!project || user.role.toLowerCase() === 'admin' ||
-    (user.role.toLowerCase() === 'founder' && !!user.founder_id && user.founder_id === project.founder_id)) return;
+    (holdsLicence(user, 'founder') && !!user.founder_id && user.founder_id === project.founder_id)) return;
   const key = `captable_write:${project.id}`;
   if (c.get(key as never)) return;
   await c.env.DB.prepare('INSERT INTO activity_logs (project_id, user_id, action, details, actor) VALUES (?, ?, ?, ?, ?)')
@@ -1147,7 +1148,7 @@ async function recordWriter(c: Ctx, records: boolean): Promise<{ projectId: numb
     const reason = typeof (b.reason ?? b.correction_reason) === 'string' ? String(b.reason ?? b.correction_reason).trim() : '';
     if (reason.length < CAPTABLE_SUPPORT_REASON_MIN || reason.length > CAPTABLE_SUPPORT_REASON_MAX) throw new RecordError(400, 'reason_required', 'A studio correction needs a support reason the founder can read.', { missing: ['reason'] });
   }
-  const founderOwns = role === 'founder' && !!user.founder_id && user.founder_id === proj.founder_id;
+  const founderOwns = holdsLicence(user, 'founder') && !!user.founder_id && user.founder_id === proj.founder_id;
   const actorRole: RecordActor['role'] = role === 'admin' ? 'admin'
     : founderOwns || (await getProjectMembershipRole(c.env, projectId, user.id)) === 'owner' ? 'owner' : 'cofounder';
   if (records && actorRole === 'cofounder') {

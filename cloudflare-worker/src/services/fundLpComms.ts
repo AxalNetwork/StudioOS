@@ -1,3 +1,4 @@
+import { heldLicences } from './accountLicences';
 /**
  * D553 (#1146, migration 387) — an LP's type, and the log of what was sent to
  * which LP.
@@ -149,7 +150,7 @@ export async function callReminderMaterial(env: Env, userId: number, scope: stri
   const lineId = Number(scope);
   const me = await env.DB.prepare('SELECT role FROM users WHERE id = ?').bind(userId).first<{ role: string | null }>();
   const role = String(me?.role || '');
-  if (role !== 'admin' && role !== 'investor') return [];
+  if (role !== 'admin' && !(await heldLicences(env.DB, { id: userId, role })).includes('investor')) return [];
   const row = await env.DB.prepare(
     `SELECT cc.id, cc.due_date, cc.status,
             COALESCE(cc.amount_cents, CAST(ROUND(cc.amount * 100) AS INTEGER)) AS owed_cents,

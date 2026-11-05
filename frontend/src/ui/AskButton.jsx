@@ -37,7 +37,7 @@ export function askButtonName(waiting) {
 const INK = 'text-axal-violet-deep dark:text-violet-300';
 const MUTED_INK = 'text-axal-muted dark:text-gray-400';
 
-export function AskButtonView({ onClick, disabled = false, expanded, waiting = null, state = 'rest', sub = null, testId = 'ask-eadwyn', buttonRef, title }) {
+export function AskButtonView({ onClick, disabled = false, expanded, waiting = null, state = 'rest', sub = null, testId = 'ask-eadwyn', buttonRef, title, ariaLabel }) {
   const subId = useId();
   const running = state === 'running';
   const muted = state === 'off' || state === 'unreadable';
@@ -49,7 +49,7 @@ export function AskButtonView({ onClick, disabled = false, expanded, waiting = n
       onClick={onClick}
       disabled={disabled}
       title={title}
-      aria-label={askButtonName(count)}
+      aria-label={ariaLabel || askButtonName(count)}
       aria-haspopup="dialog"
       aria-expanded={expanded}
       aria-describedby={sub ? subId : undefined}
@@ -88,7 +88,7 @@ export function AskButtonView({ onClick, disabled = false, expanded, waiting = n
  * page (`askPanelAdapter.waiting`), read again each time the panel closes; a
  * count that could not be read draws nothing, never "0 waiting".
  */
-export function PageAsk({ label, testId = 'ask-eadwyn', page, state = 'rest', disabled = false, sub = null, title }) {
+export function PageAsk({ label, testId = 'ask-eadwyn', page, state = 'rest', disabled = false, sub = null, title, ariaLabel }) {
   const ask = useAskPanel();
   const [waiting, setWaiting] = useState(null);
   const pageKey = page || ask.page;
@@ -101,7 +101,7 @@ export function PageAsk({ label, testId = 'ask-eadwyn', page, state = 'rest', di
     return () => { live = false; };
   }, [ask.available, pageKey, ask.open]);
   if (!ask.available) return null;
-  return <AskButtonView onClick={() => openAskPanel(label)} expanded={ask.open} waiting={waiting} testId={testId} state={state} disabled={disabled} sub={sub} title={title} />;
+  return <AskButtonView onClick={() => openAskPanel(label)} expanded={ask.open} waiting={waiting} testId={testId} state={state} disabled={disabled} sub={sub} title={title} ariaLabel={ariaLabel} />;
 }
 
 export default AskButtonView;

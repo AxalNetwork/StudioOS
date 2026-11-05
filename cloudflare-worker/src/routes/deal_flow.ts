@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
@@ -42,7 +43,7 @@ const routes = new Hono<{ Bindings: Env }>();
 
 async function scope(c: Ctx) {
   const user = await requireAuth(c) as User;
-  if (user.role !== 'investor') throw new FlowError('investor_required', 403, 'Deal flow is an investor’s own.');
+  if (!holdsLicence(user, 'investor')) throw new FlowError('investor_required', 403, 'Deal flow is an investor’s own.');
   return scopeFor(user, await investorActiveCompany(c, user));
 }
 async function body(c: Ctx): Promise<Record<string, unknown>> {

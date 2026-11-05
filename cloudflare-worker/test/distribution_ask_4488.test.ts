@@ -180,3 +180,19 @@ test('structured creative targets quote and run intact; unknown target fields re
 test('Distribution task and option use the marketing and outreach job',()=>{
   assert.deepEqual([TASK_TEXT_JOBS.distribution_draft,RAIL_OPTION_JOBS[DISTRIBUTION_OPTION]],['GR5','GR5']);
 });
+
+test('D4494: mounted quote/run reads the caller-scoped selected thread and never sends', async () => {
+  const f = fixture();
+  f.db.exec("INSERT INTO contacts(id,uid,project_id,audience,name,email,status) VALUES(9101,'reply-contact',1,'customer','Synthetic Contact','reply@example.test','replied'),(9102,'other-contact',2,'customer','Other Contact','other@example.test','replied'); INSERT INTO contact_replies(contact_id,direction,body) VALUES(9101,'inbound','Selected synthetic Thursday question'),(9102,'inbound','FOREIGN THREAD MUST NOT APPEAR');");
+  const input = {project:1,contact_uid:'reply-contact',target:'form',kinds:['reply'],sources:['distribution']};
+  const quote = await f.call('POST','/quote',input);
+  assert.equal(quote.status,200,JSON.stringify(quote.body));
+  assert.equal(f.prompts.length,0);
+  const result = await f.call('POST','/run',{...input,quote:quote.body.estimate});
+  assert.equal(result.status,200,JSON.stringify(result.body));
+  assert.match(f.prompts.join(' '),/Selected synthetic Thursday question/);
+  assert.doesNotMatch(f.prompts.join(' '),/FOREIGN THREAD MUST NOT APPEAR|reply@example.test/);
+  assert.equal(result.body.proposals[0].payload.kind,'reply');
+  assert.equal(f.count('mail_sent'),0);
+  assert.equal((await f.call('POST','/quote',{...input,contact_uid:'other-contact'})).status,404);
+});

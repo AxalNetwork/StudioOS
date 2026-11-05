@@ -34,8 +34,9 @@
  * `exitLab`) are exported so the smoke test can drive the full flow
  * against a mocked sql() helper without standing up Hono + JWT.
  */
+import { holdsLicence } from '../services/accountLicences';
 import { Hono } from 'hono';
-import type { Env } from '../types';
+import type { Env, User } from '../types';
 import { getSQL } from '../db';
 import { requireAuth } from '../auth';
 import { lpSelfScope } from '../services/tenancyScope';
@@ -477,7 +478,7 @@ spinoutLab.post('/apply', async (c) => {
   const user = await requireAuth(c);
   // Founder and Explorer accounts may apply — the Lab is exactly how an
   // explorer graduates into a founder-track company.
-  if (!['founder', 'exploring'].includes((user.role || '').toLowerCase())) {
+  if (!(holdsLicence(user, 'founder') || user.role === 'exploring')) {
     return c.json({ error: 'Only founder and explorer accounts can apply to the Lab' }, 403);
   }
   const body = (await c.req.json().catch(() => ({}))) as ApplyBody;
@@ -630,8 +631,8 @@ spinoutLab.post('/apply', async (c) => {
 // ---------------------------------------------------------------------------
 
 /** Founder and explorer accounts apply (the /apply rule); nobody else drafts. */
-function mayApply(role: string | null | undefined): boolean {
-  return ['founder', 'exploring'].includes(String(role || '').toLowerCase());
+function mayApply(user: User): boolean {
+  return holdsLicence(user, 'founder') || user.role === 'exploring';
 }
 function refusal(c: any, status: number, code: string, message: string) {
   return c.json({ error: code, message, detail: message }, status);
@@ -640,7 +641,7 @@ function refusal(c: any, status: number, code: string, message: string) {
 // GET /apply/draft — the caller's saved draft, or null.
 spinoutLab.get('/apply/draft', async (c) => {
   const user = await requireAuth(c);
-  if (!mayApply(user.role)) return refusal(c, 403, 'role_cannot_apply', 'Only founder and explorer accounts can apply to the Lab.');
+  if (!mayApply(user)) return refusal(c, 403, 'role_cannot_apply', 'Only founder and explorer accounts can apply to the Lab.');
   const { parseStoredAnswers } = await import('../services/applicationLifecycle');
   let row: { answers_json: string; updated_at: string } | null = null;
   try {
@@ -662,7 +663,7 @@ spinoutLab.get('/apply/draft', async (c) => {
 // PUT /apply/draft { answers } — save (replace) the caller's draft.
 spinoutLab.put('/apply/draft', async (c) => {
   const user = await requireAuth(c);
-  if (!mayApply(user.role)) return refusal(c, 403, 'role_cannot_apply', 'Only founder and explorer accounts can apply to the Lab.');
+  if (!mayApply(user)) return refusal(c, 403, 'role_cannot_apply', 'Only founder and explorer accounts can apply to the Lab.');
   const body = (await c.req.json().catch(() => ({}))) as { answers?: unknown };
   const raw = body.answers && typeof body.answers === 'object' && !Array.isArray(body.answers) ? body.answers : null;
   if (!raw) return refusal(c, 400, 'answers_required', 'A draft needs its answers.');
@@ -1393,7 +1394,7 @@ spinoutLab.get('/fund-metrics', async (c) => {
   try {
     const { Funds } = await import('../models/funds');
     const row = await Funds.bySlug(c.env, 'spinout-fund-i');
-    let entitled = ['admin', 'partner', 'investor'].includes(user?.role);
+    let entitled = !!user && (user.role === 'admin' || holdsLicence(user, 'partner') || holdsLicence(user, 'investor'));
     if (row && !entitled) {
       // lpSelfScope, not the hand-rolled predicate this line used to carry.
       // It bound `user.email ?? ''`, and `LOWER(email) = LOWER('')` is true for

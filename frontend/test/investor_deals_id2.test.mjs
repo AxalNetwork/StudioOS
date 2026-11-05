@@ -159,6 +159,6 @@ test('the zone is mounted once, gated, and registered before the id route', () =
   // cannot protect this desk. D1254 (#3277) admits related investors; mounted
   // Worker tests prove per-deal gating, verified reads and scoped aggregates.
   const handler = ROUTE.slice(literal, ROUTE.indexOf('\ndeals.', literal + 10));
-  assert.match(handler, /if \(user\.role !== 'admin' && user\.role !== 'partner' && user\.role !== 'investor'\) return c\.json\(\{ detail: 'Forbidden' \}, 403\)/,
+  assert.match(handler, /if \(user\.role !== 'admin' && !holdsLicence\(user, 'partner'\) && !holdsLicence\(user, 'investor'\)\) return c\.json\(\{ detail: 'Forbidden' \}, 403\)/,
     'Screening admits only staff or relationship-scoped investors (D1254)');
 });

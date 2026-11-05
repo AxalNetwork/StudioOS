@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /**
  * D1570 (#3817, deck builder v2 D9) — comments on a deck's cards, with
  * @mentions, an assignee and Resolve, and the approval a share waits for
@@ -94,7 +95,7 @@ async function viewerOf(c: any, user: User, projectId: number, writing: boolean)
     await projectOwned(c, user, projectId, { write: true, audit: writing });
     return { kind: 'founder', manage: true };
   } catch { /* not a founder of this venture: the grant decides */ }
-  if (role !== 'advisor' && role !== 'partner') return null;
+  if (!holdsLicence(user, 'advisor') && !holdsLicence(user, 'partner')) return null;
   return await deckGrantLive(c.env, projectId, Number(user.id)) ? { kind: kindOfRole(role), manage: false } : null;
 }
 

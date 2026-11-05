@@ -34,7 +34,7 @@ async function prepared(c: any, user: User, b: Record<string, unknown>) {
   const input = distributionRequest(b);
   await distributionAccess(c.env,user,input.project,input.campaign_uid);
   if (await aiPaused(c.env,user.id)) throw new DistributionRefused(403,'ai_paused',AI_PAUSED_MESSAGE);
-  const context = await distributionContext(c.env,input);
+  const context = await distributionContext(c.env,input,user);
   const options: RunOptions = { userId:user.id,task:'distribution_draft',systemPrompt:DISTRIBUTION_SYSTEM,messages:[{role:'user',content:JSON.stringify({ records:context.material,targets:context.targets })}],maxTokens:DISTRIBUTION_MAX_TOKENS,surface:AI_SURFACE.growDistribution,rail:{page:DISTRIBUTION_PAGE,option:DISTRIBUTION_OPTION,record:`distribution:${input.project}`} };
   return { input,context,options };
 }

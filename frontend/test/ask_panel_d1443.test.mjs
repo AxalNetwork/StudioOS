@@ -240,7 +240,7 @@ test('Ask buttons: PageAsk draws only where a rail serves the viewer; Team and R
   // D1443 part 5 (#3992): through HeaderAsk, the page's one header Ask, which is PageAsk.
   assert.match(codeOnly(read('frontend/src/pages/team/AskButton.jsx')), /return <HeaderAsk label=\{label\} \/>;/);
   assert.match(codeOnly(read('frontend/src/pages/cycles/RaiseOverviewLead.jsx')), /<HeaderAsk label="Raise · Overview" testId="raise-ask" \/>/);
-  assert.match(codeOnly(read('frontend/src/ui/HeaderAsk.jsx')), /return <PageAsk label=\{label\} testId=\{testId\} page=\{page\} state=\{state\} disabled=\{disabled\} sub=\{sub\} title=\{title\} \/>;/);
+  assert.match(codeOnly(read('frontend/src/ui/HeaderAsk.jsx')), /return <PageAsk label=\{label\} testId=\{testId\} page=\{page\} state=\{state\} disabled=\{disabled\} sub=\{sub\} title=\{title\} ariaLabel=\{ariaLabel\} \/>;/);
 });
 
 test('the canvases are in design/incoming with the one named edit, and the decisions name them', () => {

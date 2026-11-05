@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /**
  * D1065 (#2935): prepare and read. D1066 (#2936): Accept, Edit and accept,
  * Dismiss, Accept all in a module (`services/buildPlanAccept.ts`), and the
@@ -59,7 +60,7 @@ export async function context(c: any, write: boolean) {
   if (scope !== 'venture' && !await c.env.DB.prepare('SELECT id FROM hypotheses WHERE id = ? AND project_id = ? AND retired_at IS NULL').bind(Number(scope.slice(2)), projectId).first()) return c.json({ code: 'not_this_project', detail: 'This plan does not belong to this venture.' }, 404);
   const owner = ownsVenture(project, user);
   let partner = false;
-  if (!write && user.role === 'partner' && project.company_id != null) {
+  if (!write && holdsLicence(user, 'partner') && project.company_id != null) {
     partner = Boolean(await c.env.DB.prepare('SELECT id FROM user_company_links WHERE company_id = ? AND user_id = ?').bind(project.company_id, user.id).first());
   }
   if (!(owner || (!write && (user.role === 'admin' || partner)))) return c.json({ code: 'not_this_project', detail: 'This plan belongs to the venture’s founders.' }, 404);
@@ -249,7 +250,7 @@ buildEvidenceRoutes.get('/', async (c) => {
     const refused = c.json({ code: 'not_this_project', detail: 'This row does not belong to this venture.' }, 404);
     if (!project) return refused;
     let reader = ownsVenture(project, user) || user.role === 'admin';
-    if (!reader && user.role === 'partner' && project.company_id != null) {
+    if (!reader && holdsLicence(user, 'partner') && project.company_id != null) {
       reader = Boolean(await c.env.DB.prepare('SELECT id FROM user_company_links WHERE company_id = ? AND user_id = ?').bind(project.company_id, user.id).first());
     }
     if (!reader) return refused;

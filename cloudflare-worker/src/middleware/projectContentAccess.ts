@@ -1,3 +1,4 @@
+import { holdsLicence, holdsOnlyLicence } from '../services/accountLicences';
 /** #2435: management access to a venture's decks and brand content.
  * Public shares and NDA-gated investor reads have separate routes. A role
  * alone never grants an investor or Operating Partner management access.
@@ -20,14 +21,14 @@ export async function projectOwned(c: Context, user: User, projectId: number, op
   if (user.role === 'admin') return project;
   // Preserve D702's hidden-venture response, without treating findability as
   // authorization to manage a deck or the people on a venture's waitlist.
-  if (user.role === 'investor') {
+  if (holdsOnlyLicence(user, 'investor')) {
     if (!await findableBy(c.env, user, project.id)) throw new Error('NotFound');
     throw new Error('Forbidden');
   }
   // These two management surfaces require an explicit accepted project
   // membership for every non-owner (canAccessProject does too since D889,
   // #2438); an advisor remains read-only, including a partner account.
-  const owner = user.role === 'founder' && !!user.founder_id && user.founder_id === project.founder_id;
+  const owner = holdsLicence(user, 'founder') && !!user.founder_id && user.founder_id === project.founder_id;
   if (!owner) {
     const role = await getProjectMembershipRole(c.env, project.id, user.id);
     if (!role || !['owner', 'cofounder', 'advisor'].includes(role) || ((opts.write || opts.contactData) && role === 'advisor')) throw new Error('Forbidden');

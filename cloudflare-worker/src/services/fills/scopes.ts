@@ -1,3 +1,4 @@
+import { holdsLicence } from '../accountLicences';
 /**
  * D1329 (#3490, #2431 part 6) — RECORD_SCOPES: the records Fill with Eadwyn
  * fills that do not sit on a venture.
@@ -110,7 +111,7 @@ export async function myAdvisorId(env: Env, user: User): Promise<number | null> 
 
 /** The caller's own partner profile id (`requirePartnerProfile`'s rule), for a partner. */
 async function myPartnerId(env: Env, user: User): Promise<number | null> {
-  if (role(user) !== 'partner' || !(user as any).partner_id) return null;
+  if (!holdsLicence(user, 'partner') || !(user as any).partner_id) return null;
   const r = await env.DB.prepare('SELECT id FROM partners WHERE id = ?').bind((user as any).partner_id).first<{ id: number }>();
   return r ? Number(r.id) : null;
 }
@@ -159,7 +160,7 @@ export const RECORD_SCOPES: Readonly<Record<string, RecordScope>> = Object.freez
     parent: { kind: 'owner', column: 'host_user_id', own: ownUserId },
     async access(_env, user, row, parentId) {
       if (row) return manages(row, user) ? BOTH : NONE;
-      return parentId != null && parentId === Number(user.id) && EVENT_HOSTS.has(role(user)) ? BOTH : NONE;
+      return parentId != null && parentId === Number(user.id) && (EVENT_HOSTS.has(role(user)) || (user.licences || []).some(licence => EVENT_HOSTS.has(licence))) ? BOTH : NONE;
     },
   },
   event_agenda_items: {
@@ -182,7 +183,7 @@ export const RECORD_SCOPES: Readonly<Record<string, RecordScope>> = Object.freez
     read: 'SELECT * FROM ic_decisions WHERE id = ?',
     parent: null,
     async access(env, user, row) {
-      if (!row || !['admin', 'investor', 'partner'].includes(role(user))) return NONE;
+      if (!row || !(role(user) === 'admin' || holdsLicence(user, 'investor') || holdsLicence(user, 'partner'))) return NONE;
       // `icDecisionScope`'s predicate, as one literal statement: the author, a voter, or the firm's.
       // An admin reads every decision, as that scope lets them.
       const readable = isAdminUser(user) || !!(await env.DB.prepare(
@@ -203,7 +204,7 @@ export const RECORD_SCOPES: Readonly<Record<string, RecordScope>> = Object.freez
     concealed: true,
     async access(env, user, row, parentId, ctx) {
       if (isAdminUser(user)) return READ_ONLY;
-      if (role(user) !== 'investor' || !ctx) return NONE;
+      if (!holdsLicence(user, 'investor') || !ctx) return NONE;
       const projectId = Number(row ? row.project_id : parentId);
       if (!Number.isSafeInteger(projectId) || projectId <= 0) return NONE;
       const book = await supportBookIds(env, user, await ctx.activeCompany());
@@ -229,7 +230,7 @@ export const RECORD_SCOPES: Readonly<Record<string, RecordScope>> = Object.freez
     concealed: true,
     async access(env, user, row, parentId, ctx) {
       if (!ctx) return NONE;
-      if (role(user) === 'partner') {
+      if (holdsLicence(user, 'partner')) {
         if (!row) return parentId != null && parentId === Number(user.id) ? BOTH : NONE;
         if (await myPerk(env, String(row.uid ?? ''), Number(user.id), await ctx.activeCompany())) return BOTH;
       }
@@ -330,7 +331,7 @@ export const RECORD_SCOPES: Readonly<Record<string, RecordScope>> = Object.freez
     parent: { kind: 'deal', column: 'deal_id' },
     concealed: true,
     async access(env, user, row, parentId, ctx) {
-      if (role(user) !== 'investor' || !ctx) return NONE;
+      if (!holdsLicence(user, 'investor') || !ctx) return NONE;
       const firm = await noteFirm(env.DB, Number(user.id), await ctx.activeCompany(), !!ctx.claimed?.());
       if (firm === undefined) return NONE;
       const dealId = Number(row ? row.deal_id : parentId);

@@ -1,3 +1,4 @@
+import { holdsLicence } from './accountLicences';
 /**
  * Tenancy scope — the one place that decides which rows a non-admin may read.
  *
@@ -304,7 +305,7 @@ export function projectOwnerScope(actor: Actor | null | undefined, alias = 'p'):
   // the id alone is the bug `canAccessFounderResource` and `entityListScope`
   // were both written to avoid; this is the third copy of that rule and it
   // agrees with them deliberately.
-  if (actor?.role !== 'founder') return NO_ROWS;
+  if (!(actor && holdsLicence(actor, 'founder'))) return NO_ROWS;
   const founderId = typeof actor?.founder_id === 'number' ? actor.founder_id : null;
   // A founder account with no founders row owns no projects. Falling back to
   // the user id here would be the id-space mismatch described above.
