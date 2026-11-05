@@ -66,10 +66,10 @@ export default function WaitingForYou({ projectId,campaignUid,onAccept,onClose,o
   </AskIntent>;
 }
 /** Header owns its venture-scoped count; unreadable reads never become a badge. */
-export function DistributionAskHeader({projectId,campaignUid,onAccept,state='rest',title,sub,api=growDistributionAsk}) {
+export function DistributionAskHeader({projectId,campaignUid,onAccept,state='rest',title,sub,disabled=false,ariaLabel,api=growDistributionAsk}) {
   const ask=useAskPanel(), available=ask.available;
   useHeaderAskClaim(available);
   const {rows} = useWaiting(projectId,campaignUid,api);
   const [open,setOpen] = useState(false);
-  return available ? <><AskButtonView waiting={rows === null?null:waitingModel(rows).count} expanded={open && ask.open} onClick={()=>{if(open && ask.open)closeAskPanel();else setOpen(true);}} testId="distribution-ask" state={state} title={title} sub={sub}/>{open?<WaitingForYou projectId={projectId} campaignUid={campaignUid} onAccept={onAccept} outOfTokens={state==='out'} api={api} onClose={()=>setOpen(false)}/>:null}</> : null;
+  return available ? <><AskButtonView disabled={disabled} ariaLabel={ariaLabel} waiting={rows === null?null:waitingModel(rows).count} expanded={open && ask.open} onClick={()=>{if(open && ask.open)closeAskPanel();else setOpen(true);}} testId="distribution-ask" state={state} title={title} sub={sub}/>{open?<WaitingForYou projectId={projectId} campaignUid={campaignUid} onAccept={onAccept} outOfTokens={state==='out'} api={api} onClose={()=>setOpen(false)}/>:null}</> : null;
 }

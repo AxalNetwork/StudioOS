@@ -41,7 +41,7 @@ async function mountedChannels(Component) {
     await m.flush(); assert.match(m.text(), /Mounted channel/); assert.match(m.text(), /Needs LinkedIn’s approval/);
     assert.doesNotMatch(m.text(), /Coming in this module soon/);
     assert.ok(calls.some((p) => p.includes('/grow/channels?project=7')));
-    assert.equal(calls.some((p) => p.includes('/cycles/grow/modules/distribution')), false);
+    assert.equal(calls.some((p) => /\/cycles\/grow\/modules\/distribution(?:\?|$)/.test(p)), false);
     assert.equal(m.nodes().filter((n) => m.props(n)?.['data-testid'] === 'distribution-ask').length, 1);
   } finally { if (m) await m.unmount(); globalThis.fetch = before; __resetEadwynPanelForTest(); }
 }

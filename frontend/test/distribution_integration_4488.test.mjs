@@ -76,3 +76,11 @@ test('a new wizard header lists only proposals for unsaved campaigns',async()=>{
  try{await settle(ui);const trigger=ui.nodes().find(n=>ui.props(n)?.['data-testid']==='distribution-ask');assert.equal(ui.props(trigger)['aria-label'],'Ask Eadwyn, 1 waiting');await act(async()=>ui.props(trigger).onClick());await settle(ui);assert.match(ui.text(),/DISTRIBUTION · 1 PROPOSALS/);}
  finally{await ui.unmount();__resetEadwynPanelForTest();}
 });
+
+test('read-only access disables the scoped Waiting trigger while preserving its count and reason',async()=>{
+ const ask=services([]);ask.proposals=async()=>({proposals:[proposal('post')]});
+ function Header(){useAskRail(true,'Founder · Grow · Distribution','Distribution');return h(DistributionAskHeader,{projectId:1,api:ask,disabled:true,title:'Read only: you are reading a founder’s record'});}
+ const ui=await mountContracts(h(Header));
+ try{await settle(ui);const trigger=ui.nodes().find(n=>ui.props(n)?.['data-testid']==='distribution-ask');assert.equal(ui.props(trigger).disabled,true);assert.equal(ui.props(trigger)['aria-label'],'Ask Eadwyn, 1 waiting');assert.equal(ui.props(trigger).title,'Read only: you are reading a founder’s record');}
+ finally{await ui.unmount();__resetEadwynPanelForTest();}
+});
