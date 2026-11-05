@@ -451,27 +451,49 @@ function FromAxal({ skills, onRetry }) {
   );
 }
 
-function Editor({ view, skills }) {
-  const card = (skills.hq ?? []).find((s) => s.uid === view.skill) ?? null;
-  const row = card ? skillRow(card) : null;
-  return (
-    <div className="space-y-3" data-testid="ai-agents-skill-editor">
-      <Link to="/hq/ai-agents/skills" className="text-[12.5px] font-semibold text-axal-violet dark:text-violet-300">‹ From Axal</Link>
-      {row ? (
-        <Card className="space-y-1 px-4 py-4">
-          <h2 className={H2}>{row.name}</h2>
-          <p className={MUTED}>{row.area} · {row.level} · {row.version} · <Chip tone={row.status.tone}>{row.status.label}</Chip></p>
-          {card.purpose ? <p className="text-[13px] text-axal-ink dark:text-gray-200">{card.purpose}</p> : null}
-          {Array.isArray(card.steps) && card.steps.length ? (
-            <ol className="list-decimal space-y-1 pl-5 text-[12.5px] text-axal-ink dark:text-gray-200">{card.steps.map((s, i) => <li key={i}>{typeof s === 'string' ? s : s.text}</li>)}</ol>
-          ) : null}
-        </Card>
-      ) : skills.status === 'ready' ? <p className={MUTED}>This skill is not in the From Axal library.</p> : null}
-      <NotYet build="H2">
-        <p className={MUTED}>The editor with the live card preview, golden cases per model, the review by a second admin (you cannot approve your own changes) and Publish as the next version. A write-capable tool is refused with its reason.</p>
-      </NotYet>
-    </div>
-  );
+function SkillRecord({ value }) {
+  if (value == null) return <span>Not recorded</span>;
+  if (Array.isArray(value)) return value.length ? <ul className="space-y-2">{value.map((entry, i) => <li key={i}><SkillRecord value={entry} /></li>)}</ul> : <span>No entries recorded.</span>;
+  if (typeof value === 'object') return <dl className="space-y-1">{Object.entries(value).filter(([key]) => !['draft_hash', 'id', 'uid'].includes(key)).map(([key, entry]) => <div key={key}><dt className="font-semibold capitalize">{key.replaceAll('_', ' ')}</dt><dd className="ml-3"><SkillRecord value={entry} /></dd></div>)}</dl>;
+  return <span className="whitespace-pre-wrap break-words">{typeof value === 'boolean' ? value ? 'Yes' : 'No' : String(value)}</span>;
+}
+
+export function Editor({ view }) {
+  const [result, setResult] = useState({ loading: true });
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let live = true;
+    setResult({ loading: true });
+    adminHqSkillsApi.get(view.skill).then(data => {
+      if (!data?.skill || data.skill.uid !== view.skill) throw new Error('Invalid skill response');
+      if (live) setResult({ data });
+    }).catch(() => { if (live) setResult({ error: true }); });
+    return () => { live = false; };
+  }, [view.skill, attempt]);
+  const data = result.data;
+  const row = data ? skillRow(data.skill) : null;
+  const show = value => value == null ? 'Not recorded' : typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
+  return <div className="space-y-3" data-testid="ai-agents-skill-editor">
+    <Link to="/hq/ai-agents/skills" className="text-[12.5px] font-semibold text-axal-violet dark:text-violet-300">‹ From Axal</Link>
+    {result.loading && <p role="status">Reading skill details…</p>}
+    {result.error && <p role="alert">The skill details could not be read. <button className={BTN} onClick={() => setAttempt(n => n + 1)}>Try again</button></p>}
+    {data && <>
+      <Card className="space-y-3 px-4 py-4">
+        <h2 className={H2}>{row.name}</h2>
+        <p className={MUTED}>{row.area} · {row.level} · {row.version} · <Chip tone={row.status.tone}>{row.status.label}</Chip></p>
+        <h3 className={H2}>Purpose</h3><p className={MUTED}>{data.skill.purpose || 'Not recorded'}</p>
+        <h3 className={H2}>Steps</h3>
+        {data.skill.steps?.length ? <ol className="list-decimal space-y-2 pl-5">{data.skill.steps.map((step, i) => <li key={i} className="whitespace-pre-wrap">{show(step)}</li>)}</ol> : <p className={MUTED}>No steps recorded.</p>}
+        <h3 className={H2}>Allowed tools</h3><p className={MUTED}>{data.skill.tools == null ? 'Not recorded' : data.skill.tools.join(' · ') || 'No tools'}</p>
+        <h3 className={H2}>Output kind</h3><p className={MUTED}>{show(data.skill.output_kind)}</p>
+      </Card>
+      {[['Golden cases', data.cases], ['Evaluation results', data.evals], ['Review', data.review], ['Published versions', data.versions], ...(data.retired ? [['Retirement', data.retired]] : [])].map(([title, value]) => <Card key={title} className="space-y-2 px-4 py-4">
+        <h3 className={H2}>{title}</h3>
+        <div className={MUTED}><SkillRecord value={value} /></div>
+      </Card>)}
+      <p className={MUTED}>Recorded skill details. Editing and lifecycle actions are not connected on this page yet.</p>
+    </>}
+  </div>;
 }
 
 function CompanySkills() {
