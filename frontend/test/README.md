@@ -32,6 +32,7 @@ also exercises a `project_id` deep link.
 | `event_syndication_wiring_d1491.test.mjs` | D1491: explicit choice save, pure preview, approval order, stored HQ settings/accounts/log, listing actions and failed/stale reads. |
 | `capital_access_client_d1191.test.mjs` | D1191: capital summary/support transport preserves project, page, reason, investor target and POST verb. |
 | `dataroom_deck_source_d1602.test.mjs` | D1602: owner controls, capability hiding, quote confirmation, failed saves, withdrawal and the deck-source client seam. |
+| `learning_lesson_footer_4478.test.mjs` | D4478: lesson position, completion reasons, live offline/reconnect queue, source changes, refused progress writes and empty reading. |
 
 ## Conventions
 
@@ -67,6 +68,7 @@ mounts, and a keydown recorder on the window.
 D696's record contracts live in `record_page_d696.test.mjs` (real rendering,
 parent callbacks, safe links and declared actions) and `persona_pdf_d696.test.mjs`
 (allowlisted content, dated download and one-page measured bounds).
+`record_mode_d696.test.mjs` checks mounted record reads and writes; its mutation targets the record-mode guard separately from Distribution tab guards.
 `_record_d696.mjs` supplies synthetic records and isolated mutation imports.
 Each behavioral assertion group runs against the original source, against
 changes it must reject, and again against the restored source; no checkout
@@ -157,4 +159,5 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 
 - `network_reads_d4464.test.mjs` — Network book filter query arguments and the relationship summary client (#4464).
 
+- `distribution_overview_4485.test.mjs` — Distribution DS1 read/client, null-safe figures and real-date week columns, rendered independent failures, retries and existing contact-create actions (D4485).
 `distribution_ads_4490.test.mjs` checks the Ads banner, gaps without bars, budget sliders, unavailable platforms and Later copy.

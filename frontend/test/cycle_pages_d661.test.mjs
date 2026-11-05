@@ -175,12 +175,12 @@ test('A CHOSEN VENTURE RIDES ON EVERY LINK: tabs, card titles and the module pag
   for (const m of navOf(mod).matchAll(/href="([^"]+)"/g)) assert.match(m[1], /\?project_id=7$/, m[1]);
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.match(route, /searchParams\.get\('project_id'\) \|\| searchParams\.get\('project'\)/, "the read's own `?project=` links pick the venture too");
-  // Assert each surface directly: adding a new venture-aware surface must not
-  // invalidate an unrelated total-count pin (D4487).
-  for (const component of ['CycleHeader', 'PhoneCycleRoot', 'CycleOverview', 'RaiseLead', 'PmfChip', 'BuildPlanDoor', 'ModulePage', 'CapTableHomeNav', 'DataRoomHomeNav', 'UseOfFundsHomeNav', 'CapRelHomeNav', 'DistributionTabs', 'NewCampaignPage', 'CampaignsTab', 'InboxNeedsYou']) {
+  // Check each consumer rather than a total changed by every new component (D4485, D4487).
+  for (const component of ['CycleHeader', 'PhoneCycleRoot', 'CycleOverview', 'RaiseLead', 'PmfChip', 'BuildPlanDoor', 'ModulePage', 'CapTableHomeNav', 'DataRoomHomeNav', 'UseOfFundsHomeNav', 'CapRelHomeNav', 'OverviewTab', 'DistributionTabs', 'NewCampaignPage', 'CampaignsTab', 'InboxNeedsYou']) {
     const start = route.search(new RegExp(`<${component}\\b`));
-    assert.ok(start >= 0, `${component} is mounted`);
-    assert.match(route.slice(start, route.indexOf('/>', start)), /search=\{q\}/, `${component} keeps the venture`);
+    const end = route.indexOf('search={q}', start);
+    const attributes = route.slice(start, end);
+    assert.ok(start >= 0 && end > start && !attributes.includes('search={') && !attributes.includes('/>'), `${component} receives the venture query`);
   }
   assert.match(route, /search=\{tabSearch\(q, searchParams\.get\('version'\)\)\}/, 'the narrative tabs keep the venture, and the version');
 });

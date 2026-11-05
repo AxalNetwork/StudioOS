@@ -12,6 +12,9 @@ starting ads.
 | `DistributionTabs.jsx` | Module header, New campaign, project-scoped Waiting Ask and the nine accessible, horizontally scrolling tabs. The Inbox owner supplies a successfully read count; null means no badge. |
 | `distributionModel.js` | Tab order, project-scoped paths and the budget-derived Ask state. Unknown budget data never means out of tokens. |
 | `DistributionParts.jsx` | Cards, KPI, source chips, dot pills, Not recorded, a wrapper over AskProposal, notes, tables, progress, hold lines and loading/coming-soon states. These components make no reads or writes. |
+| `OverviewTab.jsx` | D4485: six KPI cards, campaign cards, ISO week, real connection status and writer-scoped update-ask replies; retains legacy tools below. |
+| `overviewModel.js` | D4485: pure null-safe figures, source labels, campaign results and budget/week formatting. |
+| `overview.css` | D4485: DS1 six-column/two-column desktop layout, responsive phone cards and scrolling week. |
 | `distribution.css` | Scoped DS light/dark tokens, spacing and phone tab overflow. |
 | `CampaignsTab.jsx` | Campaign filters, attention rows and route-driven detail, over the existing campaign API (D4487). |
 | `CampaignCard.jsx` | Recorded funnel, budget and linked-item counts, sorted by state (D4487). |
@@ -34,12 +37,22 @@ starting ads.
 | `ads.css` | D4490: responsive Ads columns using the Distribution tokens. |
 | `CampaignDraftAsk.jsx` | Assets Ask with explicit formats and ad placements (D4488). |
 | `campaignAskModel.js` | Functional acceptance into local fields without changing manual money or dates (D4488). |
+| `ProspectsTab.jsx` | D4492: customer pipeline, import, quiet hours and hashed suppression management. Takes projectId, ventureName and the shell's canWrite. |
+| `ProspectSheet.jsx` | D4492: the individual contact email, recorded permissions and activity; explicit status/consent edits. |
+| `AddProspectSheet.jsx` | D4492: manual capture, proof and a blank-note Ask; none on consent. |
+| `prospectsModel.js` | D4492: seven stages, source labels, truthful counts and fixed refusal fallback. |
+| `ProspectConsentSummary.jsx` | D4492: Audience slot and reusable summary hook/Review reachable label for the wizard handoff. |
 
-CycleRoute still owns the module page. Overview retains its channels table,
+CycleRoute still owns the module page. Overview retains its charts,
 outreach draft, content calendar, update-ask replies, Mercury, Notion and tool
-doors. Campaigns is the D4487 tab. Inbox is the D4494 tab. Channels is the
-D4486 tab on this shell. Other tabs show Coming in this module soon until their
-tasks land.
+doors. The D4485 cards sit above that body. Campaigns is the D4487 tab. Inbox is the D4494 tab. Channels is the
+mounted D4486 tab; its table replaces Overview’s legacy channel records.
+Prospects is the D4492 tab. Other tabs show Coming in this module soon until
+their tasks land.
+Import `ProspectsTab` for the shell's Prospects slot, with its verified venture
+id and read/write state. The wizard may call `useProspectConsentSummary` once,
+draw `ConsentSummaryView` in Audience and `reachableLabel` in Schedule. A
+segment-specific count remains Not recorded until contact membership exists.
 A pending read uses LoadingSkeleton. No sample count or campaign is fabricated.
 
 Routes are explicit in routes/growDistribution.jsx, including Campaigns/new
