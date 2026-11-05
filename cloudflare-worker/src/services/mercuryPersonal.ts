@@ -136,7 +136,10 @@ function refused(c: C, status: number, code: string, message: string): Response 
 /** Decision 4: the use, the role, the branch and the support session. Null when allowed. */
 export async function personalPolicy(c: C, user: User, use: PersonalUse): Promise<Response | null> {
   if (await isSupportSession(c)) return refused(c, 403, 'support_session_refused', 'A support session cannot read or change a member\'s bank account.');
-  if (!usesFor(user.role).includes(use)) return refused(c, 403, 'purpose_not_allowed', 'Your Mercury connection cannot be used for this.');
+  // D879's primary Admin preview remains read-only; ordinary members retain
+  // each held licence's own uses without changing the default connection view.
+  const roles = user.role === 'admin' ? [user.role] : [user.role, ...(user.licences || [])];
+  if (!roles.some(role => usesFor(role).includes(use))) return refused(c, 403, 'purpose_not_allowed', 'Your Mercury connection cannot be used for this.');
   if (HQ_ONLY_USES.includes(use) && branchOf(c.env)) return refused(c, 403, 'hq_only', HQ_ONLY);
   return null;
 }

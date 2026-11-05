@@ -5,6 +5,7 @@
 // file and running `node scripts/build-route-registry.mjs`;
 // cloudflare-worker/test/route_registry_4105.test.ts fails while stale.
 import type { RegisteredModule } from '../util/routeRegistry';
+import { mount as account_licencesMount } from './account_licences';
 import { mount as admin_agentsMount } from './admin_agents';
 import { mount as admin_ai_agentsMount } from './admin_ai_agents';
 import { mount as admin_ai_agents_policyMount } from './admin_ai_agents_policy';
@@ -58,6 +59,7 @@ import { mount as team_platform_statusMount } from './team_platform_status';
 import { mount as votesMount } from './votes';
 
 export const ROUTE_MODULES: readonly RegisteredModule[] = [
+  { file: 'account_licences', mount: account_licencesMount },
   { file: 'admin_agents', mount: admin_agentsMount },
   { file: 'admin_ai_agents', mount: admin_ai_agentsMount },
   { file: 'admin_ai_agents_policy', mount: admin_ai_agents_policyMount },

@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
@@ -21,7 +22,7 @@ const routes = new Hono<{ Bindings: Env }>();
  */
 async function owner(c: Ctx, projectId: number, opts: { members?: boolean; flagFree?: boolean } = {}) {
   const user = await requireAuth(c);
-  const founder = user.role === 'founder' || (user.role === 'exploring' && Number(user.spinout_lab_active) === 1);
+  const founder = holdsLicence(user, 'founder') || (user.role === 'exploring' && Number(user.spinout_lab_active) === 1);
   if (!founder && !opts.members) throw new RoundCallError('founder_required',403);
   const project = opts.flagFree ? await projectRecord(c.env,projectId) : await projectFacts(c.env,projectId);
   const owns = founder && user.founder_id != null && project.founder_id === user.founder_id;

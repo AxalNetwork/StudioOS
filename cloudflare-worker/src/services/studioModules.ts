@@ -1,3 +1,4 @@
+import { holdsLicence, isLicence } from './accountLicences';
 /**
  * D1421 (#3699): the one registry of Studio blocks, its default layouts, and
  * the plan locks derived from the existing paywalls.
@@ -199,13 +200,13 @@ export const STUDIO_DEFAULTS: Record<StudioProfile, ReadonlyArray<{ key: string;
 
 /**
  * This profile's catalogue for this member. A Grow module is offered only to
- * a member whose own role is founder, or an admin previewing the founder
+ * a member holding Founder, or an admin previewing the founder
  * Studio: a Spin-Out Lab member's founder Studio leaves Grow out, since
  * `/grow/:slug` does not admit them.
  */
 export function catalogueOf(profile: StudioProfile, user: Pick<User, 'role'>): StudioModule[] {
   const role = String(user.role);
-  const founderRole = role === 'founder' || role === 'admin';
+  const founderRole = holdsLicence(user, 'founder') || role === 'admin';
   return STUDIO_MODULES.filter((m) => m.profile === profile && (!m.founder_role_only || founderRole));
 }
 
@@ -243,6 +244,8 @@ export function studioProfile(user: Pick<User, 'role' | 'spinout_lab_active'>, a
       return { refusal: { status: 400, code: 'invalid_profile', message: 'Choose which Studio to arrange: founder, investor, advisor or partner.' } };
     return { profile: asked as StudioProfile };
   }
+  // A requested held licence's layout is not a session/profile switch.
+  if (asked && isLicence(asked) && holdsLicence(user, asked)) return { profile: asked as StudioProfile };
   const own: StudioProfile | null = (STUDIO_PROFILES as readonly string[]).includes(role) ? role as StudioProfile
     : user.spinout_lab_active === 1 ? 'founder' : null;
   if (!own) return { refusal: { status: 403, code: 'no_studio_profile', message: 'Your account has no Studio to arrange yet.' } };

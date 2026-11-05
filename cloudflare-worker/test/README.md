@@ -220,6 +220,7 @@ D1456 (#4014): the existing record, recovery, bot-control and migration-runner s
 | `comarketing_split_4439.test.ts` | D4439: investor refuses every member read/write; partners/founders keep their existing access; HQ reads historical investor pitches. |
 | `syndication_review_4440.test.ts` | D4440: client dirty choices against mounted Worker routes, terminal history, disconnected accounts and retained accepted copy. |
 | `work_runs_4459.test.ts` | #4459: no-call attempts preserve paid totals; real engine labels/milestone/review responses retain the live item run and cost. |
+| `account_licences_4472.test.ts` | D4472: additional licence union, grants, auth, atomic appointment rollback and co-marketing admission/revocation with primary-only HQ. |
 | `campaign_options_4487.test.ts` | Venture-isolated segment/work selectors and existing writer gates for Distribution campaign form options (D4487). |
 
 - `grow_overview_4485.test.ts` — Distribution's scoped monthly figures, spend provenance, ISO week, writer-only replies, personal connection isolation and independent failures (D4485).

@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /**
  * T12 — Co-founder matching (port of backend/app/api/routes/cofounder.py
  * + backend/app/services/cofounder.py merged into one file for the worker).
@@ -166,7 +167,7 @@ type UserLite = { id: number; uid?: string | null; name: string | null; email: s
 
 function role(u: { role: string }): string { return (u.role || '').toLowerCase(); }
 function isAdmin(u: { role: string }): boolean { return role(u) === 'admin'; }
-function canUseCofounder(u: { role: string }): boolean { return ['admin', 'founder'].includes(role(u)); }
+function canUseCofounder(u: { role: string }): boolean { return role(u) === 'admin' || holdsLicence(u, 'founder'); }
 // D219 — the local `function clientIp(` trusted X-Forwarded-For first and is gone.
 function gate(u: { role: string }): void {
   if (!canUseCofounder(u)) {
