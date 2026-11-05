@@ -856,7 +856,7 @@ test('the studio\'s list: every program, New program at its own address, and the
 
 // ── The four pages ─────────────────────────────────────────────────────────
 
-test('the four pages: each its own frame, header and rail, reading from its first render', () => {
+test('the four pages: each its own frame and header without an assistant rail, reading from its first render', () => {
   const programs = html(h(ProgramsPage, { sub: 'Programs a Super Admin has assigned to you.' }), '/learning/programs');
   assert.match(programs, /data-testid="learning-programs"/);
   assert.match(programs, /data-testid="programs-assigned"/);
@@ -873,7 +873,7 @@ test('the four pages: each its own frame, header and rail, reading from its firs
   const studio = html(h(StudioProgramsPage, { sub: 'Programs group content for a region.' }), '/learning/studio/programs');
   assert.match(studio, /data-testid="learning-studio-programs"/);
   assert.match(tagOf(studio, 'link-program-new'), /href="\/learning\/studio\/programs\?new=program"/);
-  assert.match(flat(studio), /Eadwyn AI .{0,24}?Learning studio/);
+  assert.doesNotMatch(flat(studio), /Eadwyn AI/);
   assert.match(tagOf(studio, 'link-learning-back'), /href="\/learning\/studio"/);
   assert.doesNotMatch(html(h(StudioProgramsPage, { sub: '' }), '/learning/studio/programs?new=program'), /link-program-new"/, 'New program is offered with its form open');
   const one = html(h(StudioProgramPage, { uid: 'p-nordics', sub: 'Content in order, assigned admins and members.' }), '/learning/studio/programs/p-nordics');
@@ -891,15 +891,13 @@ test('the four pages: each its own frame, header and rail, reading from its firs
   assert.ok(adminSrc.includes(`?${asked}=\${encodeURIComponent(u)}`), 'a name links to an address the page does not read');
   assert.match(codeOnly(read('frontend/src/pages/learning/ProgramStudio.jsx')),
     /const created = await createProgram\(form\);\s*navigate\(`\/learning\/studio\/programs\/\$\{encodeURIComponent\(created\.program\.uid\)\}`\);/);
-  // A literal accent on each rail: steel for the assigned admin, oxblood for HQ.
+  // D4478: neither assigned programs nor HQ authoring mounts an assistant.
   assert.doesNotMatch(adminSrc, /WorkerRail|ProgramsRail/, 'assigned program pages have no AI rail');
-  const rails = [['ProgramStudio.jsx', 'super_admin']];
-  for (const [file, role] of rails) {
-    const mounts = [...codeOnly(read(`frontend/src/pages/learning/${file}`)).matchAll(/<WorkerRail[\s\S]*?\/>/g)].map((m) => m[0]);
-    assert.equal(mounts.length, 1, `${file} mounts ${mounts.length} rails`);
-    assert.ok(mounts[0].includes(`role="${role}"`), `${file}'s rail is not role="${role}"`);
-    assert.match(mounts[0], /note="Eadwyn /);
-  }
+  const studioSrc = codeOnly(read('frontend/src/pages/learning/ProgramStudio.jsx'));
+  assert.doesNotMatch(studioSrc, /WorkerRail|StudioRail/);
+  assert.doesNotMatch(one, /data-testid="worker-rail-frame"/);
+  assert.doesNotMatch(studio, /data-rail="true"/);
+
 });
 
 test('the calls stay in one file, through methods the clients already declare', () => {

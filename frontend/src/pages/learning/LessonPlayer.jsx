@@ -82,7 +82,7 @@ export default function LessonPlayer({
   const kind = lesson?.kind || item?.kind;
   const length = durationLabel(item?.duration_seconds);
   const text = String(transcript ?? '').trim();
-  // Retain the current caller's recorded `position` until its header wiring is integrated.
+  // Legacy callers may still pass a recorded position; routed lessons pass index/total.
   const legacy = typeof position === 'string' ? /^([1-9]\d*) of ([1-9]\d*)$/.exec(position) : null;
   const orderIndex = index ?? (legacy ? Number(legacy[1]) - 1 : undefined);
   const orderTotal = total ?? (legacy ? Number(legacy[2]) : undefined);

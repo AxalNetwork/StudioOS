@@ -9,7 +9,7 @@
 // nothing done, never "0%".
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { RailFrame, WorkerRail, actionGhost, actionPrimary } from '../../ui';
+import { RailFrame, actionGhost, actionPrimary } from '../../ui';
 import { listPlan } from './planReads';
 import { reportError } from '../../lib/log';
 import { LearningHeader, SectionCard } from './LearningStates';
@@ -60,7 +60,7 @@ export default function LearningPlanPage() {
   const { upcoming, past } = ready ? splitPlan(state.items) : { upcoming: [], past: [] };
   const goals = ready ? goalRows(state.items) : [];
   return (
-    <RailFrame rail={<WorkerRail workspace="Learning" role="founder" stance="Read-only learning view" note="Eadwyn reads back what this page has loaded, on a click. It does not change your plan." coverage={ready ? [`${upcoming.length} planned ahead, ${past.length} in the last 30 days`] : []} />} data-testid="learning-plan">
+    <RailFrame data-testid="learning-plan">
       <div className="space-y-4">
         <LearningHeader title={PLAN_TITLE} sub={PLAN_SUB} back={LEARNING}
           action={<button type="button" className={actionPrimary} onClick={() => setAdding(true)} data-testid="plan-add-study">{STUDY_BLOCK_LABEL}</button>} />

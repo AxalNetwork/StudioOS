@@ -475,7 +475,7 @@ test('a lesson plays its item: a YouTube link embedded, its transcript, previous
   assert.match(flat(markup), /A seed round is the first priced round\. It sets the pre-money valuation\./);
   assert.doesNotMatch(markup, /No transcript is recorded/);
   assert.match(tagOf(markup, 'link-lesson-next'), /href="\/learning\/courses\/seed-basics\/l2"/);
-  assert.match(flat(markup), /Foundations · lesson 1 of 3/);
+  assert.match(flat(markup), /Lesson 1 of 3 in Foundations/);
   // l1 is completed in the course read; l2 is not, and its button is live.
   assert.match(markup, /data-testid="text-lesson-completed"/);
   const l2 = html(h(LessonView, { courseState, itemState: { status: 'ready', ...readItemShape(ITEM_READING) }, lessonUid: 'l2', onMark: () => {} }));
