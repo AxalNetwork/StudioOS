@@ -82,7 +82,7 @@ export function fromCampaign(row) {
 export function reviewRows(draft,options={}) {
   const segment=options.segments?.find(s=>Number(s.id)===Number(draft.segment_id));
   const audience={icp:'ICP from Validate',segment:'A saved segment',import:'An imported list',none:'No segment'}[draft.audience_kind]||'Not recorded';
-  return [['Goal',goalLabel(draft.goal)],['Audience',`${audience}${segment?` · ${segment.name}`:''}${draft.audience_kind!=='none'?` · ${number(options.reachable)} reachable`:''}`],
+  return [['Goal',goalLabel(draft.goal)],['Audience',`${audience}${segment?` · ${segment.name}`:''}${draft.audience_kind!=='none'?` · ${options.reachableLabel??`${number(options.reachable)} reachable`}`:''}`],
     ['Channels',draft.channels.map(c=>c.name||'Not recorded').join(', ')||'Not recorded'],['Budget',draft.budget===''||draft.budget==null?'Not set':`${money(centsInput(draft.budget))} across ${draft.channels.length} channels · charged by each platform`],
     ['UTM tag',draft.utm_campaign||'Not recorded'],['Assets',`${(draft.links||[]).length+Object.values(draft.assets||{}).filter(t=>String(t).trim()).length} accepted · ${number(options.waiting)} waiting`],['Dates',dateRange(draft)]];
 }
