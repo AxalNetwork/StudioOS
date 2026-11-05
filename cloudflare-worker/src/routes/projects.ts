@@ -1,3 +1,4 @@
+import { holdsLicence, holdsOnlyLicence, heldLicences } from '../services/accountLicences';
 import { Hono } from 'hono';
 import { seatEndStatements } from '../services/agents/teamRoster';
 import type { Context } from 'hono';
@@ -796,19 +797,20 @@ projects.put('/:id', async (c) => {
 
   // RBAC: admins can edit any project; founders can only edit their own; a
   // partner edits only as an accepted owner or co-founder member (D889).
-  // Investors are NOT editors (audit M2) — their project access is the read-only,
+  // Investor-only accounts are NOT editors (audit M2) — their project access is the read-only,
   // NDA-masked view in GET '/:id'. Letting an investor through here is a
   // write-IDOR (they could mutate any founder's project, incl. the
   // admin/partner-only stage/status/playbook_week fields below).
   const project = rows[0];
   const isPrivileged = user.role === 'admin';
-  const isOwner = !!user.founder_id && project.founder_id === user.founder_id;
+  const isOwner = (holdsLicence(user, 'founder') || Number(user.spinout_lab_active ?? 0) === 1)
+    && !!user.founder_id && project.founder_id === user.founder_id;
   // Task #1 — accepted co-founders may also edit project DATA. Advisors are
   // read-only (membership role 'advisor' is NOT granted write), and investors
   // are never editors. privilegedFields (stage/status/playbook_week) stay
   // admin-only via the `isPrivileged` gate further below (D889: not a partner's).
   let isCofounderEditor = false;
-  if (!isPrivileged && !isOwner && user.role !== 'investor') {
+  if (!isPrivileged && !isOwner && !holdsOnlyLicence(user, 'investor')) {
     const memberRole = await getProjectMembershipRole(c.env, id, user.id);
     isCofounderEditor = memberRole === 'cofounder' || memberRole === 'owner';
   }
@@ -1017,7 +1019,7 @@ projects.delete('/:id', async (c) => {
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
   const project = rows[0];
   const isAdmin = user.role === 'admin';
-  const isOwner = user.role === 'founder' && !!user.founder_id && project.founder_id === user.founder_id;
+  const isOwner = holdsLicence(user, 'founder') && !!user.founder_id && project.founder_id === user.founder_id;
   // D889 (#2438): an admin may delete any project; a founder only their own.
   // No other role deletes a venture, a partner or a member included.
   if (!isAdmin && !isOwner) {
@@ -1062,7 +1064,7 @@ projects.post('/:id/restore', async (c) => {
   const id = Number(c.req.param('id'));
   if (!Number.isSafeInteger(id) || id <= 0) return c.json({ detail: 'Invalid project id' }, 400);
   const row = await c.env.DB.prepare('SELECT id, founder_id, deleted_at FROM projects WHERE id = ?').bind(id).first<any>();
-  if (!row || user.role !== 'founder' || !user.founder_id || row.founder_id !== user.founder_id) return c.json({ detail: 'Project not found' }, 404);
+  if (!row || !holdsLicence(user, 'founder') || !user.founder_id || row.founder_id !== user.founder_id) return c.json({ detail: 'Project not found' }, 404);
   if (!row.deleted_at) return c.json({ ok: true, already_restored: true });
   // The cap applies to restore too: trash cannot be used to exceed the free plan.
   const result = await c.env.DB.prepare(
@@ -1154,12 +1156,13 @@ async function resolveSpinoutDeckAccess(
   }
   // D889 (#2438): a partner generates a deck only as an accepted owner or co-founder member.
   const isStaff = user.role === 'admin';
-  const isOwner = !!user.founder_id && project.founder_id === user.founder_id;
+  const isOwner = (holdsLicence(user, 'founder') || Number(user.spinout_lab_active ?? 0) === 1)
+    && !!user.founder_id && project.founder_id === user.founder_id;
   // Task #1 — accepted co-founders may also generate the deck (advisors are
   // read-only on data; investors/advisors stay excluded). The deck is ALWAYS
   // sourced from the OWNER's Lab data, never the co-founder's.
   let isCofounderMember = false;
-  if (!isStaff && !isOwner && user.role !== 'investor') {
+  if (!isStaff && !isOwner && !holdsOnlyLicence(user, 'investor')) {
     const memberRole = await getProjectMembershipRole(c.env, projectId, user.id);
     isCofounderMember = memberRole === 'cofounder' || memberRole === 'owner';
   }
@@ -1300,8 +1303,9 @@ async function canEditProjectData(
 ): Promise<boolean> {
   // D889 (#2438): only an admin bypasses membership; a partner edits as an accepted owner or co-founder.
   if (user.role === 'admin') return true;
-  if (user.role === 'investor') return false;
-  if (user.founder_id && project.founder_id === user.founder_id) return true;
+  if (holdsOnlyLicence(user, 'investor')) return false;
+  if ((holdsLicence(user, 'founder') || Number(user.spinout_lab_active ?? 0) === 1)
+    && user.founder_id && project.founder_id === user.founder_id) return true;
   const memberRole = await getProjectMembershipRole(env, project.id, user.id);
   return memberRole === 'cofounder' || memberRole === 'owner';
 }
@@ -1458,7 +1462,7 @@ projects.get('/:id/members', async (c) => {
 
   const manager = isProjectManager(user, project);
   let canView = manager;
-  if (!canView && user.role !== 'investor') {
+  if (!canView && !holdsOnlyLicence(user, 'investor')) {
     canView = await canAccessProject(c.env, user, project, { write: false });
   }
   if (!canView) return c.json({ detail: 'Forbidden: you do not have access to this project' }, 403);
@@ -1570,7 +1574,7 @@ projects.post('/:id/members', async (c) => {
     const trows = await sql`SELECT id, role, is_active, founder_id FROM users WHERE id = ${targetUserId} LIMIT 1`;
     if (trows.length === 0 || !trows[0].is_active) return c.json({ detail: 'User not found' }, 404);
     const target = trows[0];
-    if (target.role === 'investor') return c.json({ detail: 'Investors cannot be added as project members' }, 400);
+    if (holdsOnlyLicence({ ...target, licences: await heldLicences(c.env.DB, target) }, 'investor')) return c.json({ detail: 'Investors cannot be added as project members' }, 400);
     // Already the owner? Nothing to add.
     if (project.founder_id != null && Number(target.founder_id) === Number(project.founder_id)) {
       return c.json({ detail: 'This user already owns the project' }, 409);
@@ -1685,7 +1689,7 @@ async function inviteAccount(c: any, user: User, project: { id: number; founder_
   const { reachableAccount } = await import('../services/peopleReach');
   const reach = await reachableAccount(c.env, user.id, uid);
   if (!reach) return refuse(c, 403, { code: 'not_reachable', message: 'You can invite people you share a company or a connection with.' });
-  if (exists.role === 'investor') return refuse(c, 400, { code: 'investor', message: 'Investors cannot be added as project members.' });
+  if (holdsOnlyLicence({ ...exists, licences: await heldLicences(c.env.DB, exists) }, 'investor')) return refuse(c, 400, { code: 'investor', message: 'Investors cannot be added as project members.' });
   const member = await c.env.DB.prepare(`SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ? AND status = 'accepted'`)
     .bind(project.id, reach.id).first();
   const owner = project.founder_id != null && exists.founder_id != null && Number(exists.founder_id) === Number(project.founder_id);
@@ -1799,7 +1803,7 @@ projects.delete('/:id/members/:userId', async (c) => {
 // Hono matches the literal segment first.
 projects.post('/invitations/accept', async (c) => {
   const user = await requireAuth(c);
-  if (user.role === 'investor') return c.json({ detail: 'Investors cannot join projects as members' }, 403);
+  if (holdsOnlyLicence(user, 'investor')) return c.json({ detail: 'Investors cannot join projects as members' }, 403);
   const body = await c.req.json().catch(() => ({}));
   const token = String(body.token || '').trim();
   if (!token) return c.json({ detail: 'token is required' }, 400);

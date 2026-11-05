@@ -12,9 +12,10 @@
  *   (g) mood_1to10 alias is accepted
  *
  * Run with:
- *   node --test cloudflare-worker/test/wellbeing_route.test.mjs
+ *   node --experimental-strip-types --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/wellbeing_route.test.mjs
  */
 import test from 'node:test';
+import { holdsOnlyLicence } from '../src/services/accountLicences.ts';
 import assert from 'node:assert/strict';
 import { readFile, writeFile, mkdtemp, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -291,7 +292,7 @@ async function loadCheckinsRoute() {
   // Wrap so the handler's free deps are injected; `return c.json(...)`
   // resolves the inner IIFE which we hand back to the caller.
   const fn = new Function('c', '__deps', `
-    const { requireAuth, role, ensureWellbeingSchema, submitCanonicalCheckin } = __deps;
+    const { requireAuth, holdsOnlyLicence, ensureWellbeingSchema, submitCanonicalCheckin } = __deps;
     return (async () => { ${body} })();
   `);
   return fn;
@@ -308,7 +309,7 @@ test('authenticated route: founder POST /checkins → 201 (requireAuth + real ha
   };
   await route(c, {
     requireAuth: async () => ({ id: 21, role: 'founder' }),
-    role: (u) => u.role,
+    holdsOnlyLicence,
     ensureWellbeingSchema: async () => {},
     submitCanonicalCheckin, // the REAL extracted handler
   });
@@ -329,7 +330,7 @@ test('authenticated route: investor POST /checkins → 403 (gate short-circuits 
   };
   await route(c, {
     requireAuth: async () => ({ id: 99, role: 'investor' }),
-    role: (u) => u.role,
+    holdsOnlyLicence,
     // These MUST NOT be reached — the investor gate returns before them.
     ensureWellbeingSchema: async () => { throw new Error('investor reached schema bootstrap'); },
     submitCanonicalCheckin: async () => { throw new Error('investor reached handler'); },

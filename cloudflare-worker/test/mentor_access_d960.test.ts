@@ -30,7 +30,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
@@ -96,6 +96,9 @@ function freshDb() {
   }
   db.exec(noComments(M367));
   db.exec(noComments(M565));
+  // D4472: the assignable Advisor picker checks additional grants as well.
+  const licenceMigration = readdirSync(resolve(ROOT, 'cloudflare-worker/sql/migrations')).find(name => name.endsWith('_account_licences.sql'))!;
+  db.exec(read(`cloudflare-worker/sql/migrations/${licenceMigration}`));
   // The advisor profiles the picker joins (t13_t14_t15.sql); none here has one.
   db.exec('CREATE TABLE advisors (id INTEGER PRIMARY KEY, user_id INTEGER)');
   db.exec(`CREATE TABLE admin_notices (id INTEGER PRIMARY KEY, uid TEXT, user_id INTEGER, subject TEXT, respond_by TEXT, status TEXT)`);
@@ -306,6 +309,9 @@ test('565 applies to a fresh database and backfills what the stores still hold, 
   n.run(1, FIN, 'ended', '2026-08-01T00:00:00Z');   // nor is one whose episode no start notice names
   n.run(1, FAY, 'started', '2026-10-05T00:00:00Z'); // the current episode: already the row's own
   db.exec(noComments(M565));
+  // D4472: the assignable Advisor picker checks additional grants as well.
+  const licenceMigration = readdirSync(resolve(ROOT, 'cloudflare-worker/sql/migrations')).find(name => name.endsWith('_account_licences.sql'))!;
+  db.exec(read(`cloudflare-worker/sql/migrations/${licenceMigration}`));
   const rows = db.prepare('SELECT assignment_id, kind, admin_user_id, created_at FROM advisor_cohort_assignment_events ORDER BY assignment_id, created_at').all()
     .map((r: any) => [r.assignment_id, r.kind, r.admin_user_id, r.created_at]);
   assert.deepEqual(rows, [

@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /** D1239: saved settings never grant access to a deal or another investor's thesis. */
 import { Hono } from 'hono';
 import type { Context, MiddlewareHandler } from 'hono';
@@ -46,7 +47,7 @@ const validUid = (value: string) => /^[a-f0-9]{32}$/.test(value);
 const professional = requireInvestorTier('professional');
 const guard: MiddlewareHandler<{ Bindings: Env }> = async (c, next) => {
   const user = await requireAuth(c);
-  if (user.role !== 'investor' || (await selectJwt(c))?.payload.impersonated_by) {
+  if (!holdsLicence(user, 'investor') || (await selectJwt(c))?.payload.impersonated_by) {
     return c.json({ error: 'Only the investor can use these personal deal-flow settings.' }, 403);
   }
   c.header('Cache-Control', 'no-store');

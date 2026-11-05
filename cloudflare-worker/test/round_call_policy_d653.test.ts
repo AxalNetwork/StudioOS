@@ -65,7 +65,7 @@ for (const [name, verify] of Object.entries(checks)) test('D653 policy: ' + name
 const source = readFileSync('cloudflare-worker/src/services/roundCallPolicy.ts', 'utf8');
 const mutations = [
   ['flag', "env.ROUND_CALLS_ENABLED === 'true'", 'true'],
-  ['verification', "user.role === 'investor' &&", ''],
+  ['verification', "holdsLicence(user, 'investor') &&", ''],
   ['verification', 'Number(user.is_active) === 1 &&', ''],
   ['verification', "user.kyc_status === 'approved'", 'true'],
   ['money', 'Number.isSafeInteger(value)', 'Number.isFinite(value)'],
@@ -97,7 +97,8 @@ for (const [index, [check, old, replacement]] of mutations.entries()) {
   test('D653 mutation/restoration ' + index + ': ' + check, async () => {
     assert.ok(source.includes(old), 'mutation targets current production source');
     const changed = source.replace(old, replacement);
-    const js = stripTypeScriptTypes(changed, { mode: 'strip' });
+    const js = stripTypeScriptTypes(changed, { mode: 'strip' })
+      .replace("from './accountLicences'", "from '" + new URL('../src/services/accountLicences.ts', import.meta.url).href + "'");
     const mutant = await import('data:text/javascript;base64,' + Buffer.from(js + '\n// mutant ' + index).toString('base64'));
     await assert.rejects(async () => checks[check](mutant), assert.AssertionError);
     await checks[check](policy);

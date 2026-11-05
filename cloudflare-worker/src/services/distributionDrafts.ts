@@ -1,5 +1,6 @@
 /** D4488 (#4488): venture-scoped Distribution text proposals; accepting never sends or spends. */
 import type { Env, User } from '../types';
+import { loadInbox } from './growInbox';
 import { canAccessProject } from './projectAccess';
 import { getRail, listRail, proposeRail, type RailProposal } from './railProposals';
 
@@ -15,7 +16,7 @@ const ID = /^[A-Za-z0-9_-]{1,128}$/;
 const MAX_TEXT = 2000;
 export type DraftKind = typeof DRAFT_KINDS[number];
 export type DraftRequest = { kind: DraftKind; channel_uid?: string; placement?: string; field?: string; context?: string };
-export type DistributionRequest = { project: number; campaign_uid: string | null; target: 'form' | 'campaign'; kinds: DraftRequest[]; sources: string[] };
+export type DistributionRequest = { project: number; contact_uid?: string; campaign_uid: string | null; target: 'form' | 'campaign'; kinds: DraftRequest[]; sources: string[] };
 type Campaign = { id: number; uid: string; project_id: number; name: string; goal: string; status: string; segment_id: number | null; archived_at: string | null };
 export class DistributionRefused extends Error {
   readonly status: 400 | 403 | 404 | 409 | 503;
@@ -49,7 +50,9 @@ export function distributionRequest(body: Record<string, unknown>): Distribution
   });
   if (kinds.some(k => k.kind === 'campaign_fields') && target !== 'form') return reject(400, 'invalid_target', 'Campaign fields are proposed for the unsaved form only.');
   if (!Array.isArray(body.sources) || !body.sources.length || body.sources.some(s => !(DRAFT_SOURCES as readonly unknown[]).includes(s))) return reject(400, 'invalid_sources', 'Choose recorded sources for these drafts.');
-  return { project, campaign_uid, target, kinds, sources: [...new Set(body.sources as string[])] };
+  const contact = body.contact_uid;
+  if (contact !== undefined && (typeof contact !== 'string' || !ID.test(contact) || target !== 'form' || kinds.some(k => k.kind !== 'reply' || k.context !== undefined) || !body.sources.includes('distribution'))) return reject(400, 'invalid_contact', 'Choose a prospect thread for a reply draft.');
+  return { project, ...(contact === undefined ? {} : { contact_uid: contact as string }), campaign_uid, target, kinds, sources: [...new Set(body.sources as string[])] };
 }
 
 export async function distributionAccess(env: Env, user: User, project: number, campaignUid?: string | null) {
@@ -61,10 +64,23 @@ export async function distributionAccess(env: Env, user: User, project: number, 
   return campaign ?? reject(404, 'not_found', 'Campaign not found.');
 }
 
-export async function distributionContext(env: Env, input: DistributionRequest) {
+export async function distributionContext(env: Env, input: DistributionRequest, user?: User) {
   const material: Record<string, unknown> = {};
   const sources: { key: string; label: string; count: number }[] = [];
   const segmentIds = new Set<number>();
+  let threadCount = 0;
+  if (input.contact_uid) {
+    if (!user) return reject(403, 'thread_required', 'Open this prospect thread before drafting.');
+    const inbox = await loadInbox(env, user, input.project, input.contact_uid);
+    const thread = inbox.threads.find(t => t.contact.uid === input.contact_uid);
+    if (!thread) return reject(404, 'not_found', 'Prospect thread not found.');
+    if (!inbox.complete) return reject(503, 'thread_unreadable', 'This thread could not be read. Refresh it before drafting.');
+    if (input.campaign_uid && thread.campaign?.uid !== input.campaign_uid) return reject(404, 'not_found', 'Prospect campaign not found.');
+    const messages = thread.messages.slice(-20).map(m => ({ direction: m.direction, channel: m.channel, at: m.at, subject: m.subject?.slice(0, 200) ?? null, body: m.body?.slice(0, 1200) ?? null }));
+    if (!messages.some(m => m.body || m.subject)) return reject(409, 'not_recorded', 'No message is recorded in this thread.');
+    material.reply_thread = { messages };
+    threadCount = messages.length;
+  }
   if (input.sources.includes('validate')) {
     const segments = await env.DB.prepare('SELECT id, name, description, source, who_they_are, context, job_to_be_done FROM customer_segments WHERE project_id = ? AND archived_at IS NULL ORDER BY id LIMIT 40').bind(input.project).all<{ id: number; name: string; description: string | null; source: string }>();
     const pains = await env.DB.prepare('SELECT title FROM pain_groups WHERE project_id = ? ORDER BY sort_order, id LIMIT 40').bind(input.project).all();
@@ -82,7 +98,7 @@ export async function distributionContext(env: Env, input: DistributionRequest) 
   if (input.sources.includes('distribution')) {
     const channels = await env.DB.prepare('SELECT uid, name, state FROM growth_channels WHERE project_id = ? ORDER BY id LIMIT 40').bind(input.project).all();
     material.distribution = channels.results ?? [];
-    sources.push({ key: 'distribution', label: 'Distribution', count: channels.results?.length ?? 0 });
+    sources.push({ key: 'distribution', label: threadCount ? 'Distribution · selected reply thread' : 'Distribution', count: (channels.results?.length ?? 0) + threadCount });
   }
   const targets = [];
   for (const [index, kind] of input.kinds.entries()) {

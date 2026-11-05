@@ -28,6 +28,9 @@
  */
 import { titleCase } from '../../lib/absence';
 
+// D4478: share the footer's rules with routed headers and model callers.
+export { lessonPositionLine, markCompleteReason } from './lessonFooterModel';
+
 /** The one line the home's not-live tabs and sections carry (the brief's words). */
 export const NOT_LIVE_LINE = 'The course catalogue is not live yet.';
 

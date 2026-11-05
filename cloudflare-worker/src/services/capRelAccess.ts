@@ -1,3 +1,4 @@
+import { holdsLicence } from './accountLicences';
 /** D1191: Capital relationships, scoped to this deployment's D1. */
 import type { Env, User } from '../types';
 import { ownsVenture, type ProjectRef } from '../routes/_founder_validate_helpers';
@@ -5,7 +6,7 @@ import { ensureProjectMembershipSchema, getProjectMembershipRole } from './proje
 
 const role = (user: Pick<User, 'role'>) => String(user.role || '').trim().toLowerCase();
 export const capitalStaff = (user: Pick<User, 'role'>) => role(user) === 'admin';
-export const capitalInvestor = (user: Pick<User, 'role'>) => role(user) === 'investor';
+export const capitalInvestor = (user: Pick<User, 'role'>) => holdsLicence(user, 'investor');
 export const capitalOwner = (project: ProjectRef, user: User) => !capitalStaff(user) && !capitalInvestor(user) && ownsVenture(project, user);
 export const CAPITAL_SUPPORT_ACTION = 'capital_relationships_support_read';
 export function capitalRequestPath(path: string): string {

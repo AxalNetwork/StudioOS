@@ -701,7 +701,10 @@ export interface User {
   name: string;
   // 'exploring' = Spin-Out Lab holding role (Task #9 onboarding queue) — it
   // authenticates like any other role, so it belongs in the union.
-  role: 'admin' | 'founder' | 'partner' | 'investor' | 'exploring';
+  role: 'admin' | 'founder' | 'partner' | 'investor' | 'advisor' | 'exploring';
+  /** D4472: request-time union of the primary licence and active additional grants. */
+  licences?: Array<'founder' | 'investor' | 'advisor' | 'partner'>;
+  advisor_id?: number | null;
   investor_id?: number | null;
   password_hash: string | null;
   founder_id: number | null;

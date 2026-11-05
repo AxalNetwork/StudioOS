@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CalendarPlus, Video } from 'lucide-react';
-import { Pill, RailFrame, Unrecorded, WorkerRail } from '../../ui';
+import { Pill, RailFrame, Unrecorded } from '../../ui';
 import { reportError } from '../../lib/log';
 import WebinarPanel from './WebinarPanel';
 import { LearningEmpty, LearningHeader, LearningLoading, LearningUnreadable, SectionCard } from './LearningStates';
@@ -123,16 +123,6 @@ export function WebinarPage({ uid }) {
 
   return (
     <RailFrame
-      rail={(
-        <WorkerRail
-          workspace="Learning"
-          // Violet, the founder accent, as on every learner page of the canvas.
-          role="founder"
-          stance="Read-only learning view"
-          note="Eadwyn reads back what this page has loaded, on a click. It does not register you, cancel a registration or join for you."
-          coverage={webinarCoverage(state)}
-        />
-      )}
       data-testid="learning-webinar"
     >
       <div className="space-y-4">

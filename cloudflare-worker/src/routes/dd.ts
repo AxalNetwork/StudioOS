@@ -1,3 +1,4 @@
+import { holdsLicence, heldLicences } from '../services/accountLicences';
 import { investorHasProjectDeal } from '../services/dealAccess';
 /**
  * Task #3 — Due Diligence routes mounted at /api/dd.
@@ -126,7 +127,7 @@ export function caseAllowed(
   const admin = role === 'admin';
   const reviewer = mine.length > 0;
   const runsIt = leadsOrOpened(user as AppUser, cs);
-  const writerStaff = (admin || runsIt || reviewer) && (admin || role === 'partner');
+  const writerStaff = (admin || runsIt || reviewer) && (admin || holdsLicence(user as any, 'partner'));
   const lead = isLead(user as AppUser, cs);
   const works = new Set(mine.filter((r) => String(r.role ?? 'reviewer') !== 'observer').map((r) => Number(r.section_id)));
   const verdict: Record<string, boolean> = {};
@@ -157,14 +158,11 @@ export function caseAllowed(
 
 async function requireDdReader(c: AppContext): Promise<AppUser> {
   const user = await requireAuth(c);
-  // Founders are explicitly blocked from every DD endpoint. They are
-  // notified once when the report is shared (via /report/share) but
-  // never read DD data themselves. The User.role union doesn't currently
-  // include 'advisor' (see types.ts) so we widen here — advisors are stored
-  // in the DB with role='advisor' even though the type literal doesn't
-  // list it (legacy from before the advisor role split).
+  // D4472: founder-only accounts cannot read diligence. An independently
+  // held Investor, Advisor or Operating Partner licence admits the caller;
+  // the case's existing lead, reviewer and relationship checks still apply.
   const role = String(user.role);
-  if (role !== 'admin' && role !== 'partner' && role !== 'investor' && role !== 'advisor') {
+  if (role !== 'admin' && !['partner', 'investor', 'advisor'].some(licence => holdsLicence(user, licence as any))) {
     throw new Error('Forbidden');
   }
   return user as unknown as AppUser;
@@ -331,8 +329,8 @@ dd.post('/cases', async (c) => {
   // commitment (the same predicate as the deal reader) — this is a role gate
   // AND an ownership gate, so an investor can't open cases on arbitrary
   // founders/partners/other investors. Advisors remain read/review-only.
-  const isPrivileged = user.role === 'admin' || user.role === 'partner';
-  if (!isPrivileged && user.role !== 'investor') {
+  const isPrivileged = user.role === 'admin' || holdsLicence(user, 'partner');
+  if (!isPrivileged && !holdsLicence(user, 'investor')) {
     return c.json({ error: 'You do not have permission to open cases' }, 403);
   }
   const body = await c.req.json().catch(() => ({}));
@@ -657,7 +655,7 @@ dd.post('/cases/:uid/scan', async (c) => {
   let user: AppUser;
   try { user = await requireCaseWriter(c, cs); }
   catch { return c.json({ error: 'Forbidden: not a case owner or reviewer' }, 403); }
-  if (user.role !== 'admin' && user.role !== 'partner') {
+  if (user.role !== 'admin' && !holdsLicence(user, 'partner')) {
     return c.json({ error: 'Only admins or partners may run scans' }, 403);
   }
   const caseId = Number(cs.id);
@@ -717,7 +715,7 @@ dd.post('/cases/:uid/sections/:sectionId/assign', async (c) => {
   let user: AppUser;
   try { user = await requireCaseWriter(c, cs); }
   catch { return c.json({ error: 'Forbidden: not a case owner or reviewer' }, 403); }
-  if (user.role !== 'admin' && user.role !== 'partner') return c.json({ error: 'Forbidden' }, 403);
+  if (user.role !== 'admin' && !holdsLicence(user, 'partner')) return c.json({ error: 'Forbidden' }, 403);
   const caseId = Number(cs.id);
   const sectionId = parseInt(c.req.param('sectionId'), 10);
   const body = await c.req.json().catch(() => ({}));
@@ -738,7 +736,7 @@ dd.post('/cases/:uid/sections/:sectionId/assign', async (c) => {
     // would be unable to open the case anyway and would just create a
     // dangling reviewer row.
     const allowed = new Set(['admin', 'partner', 'investor', 'advisor']);
-    if (!allowed.has(String(u[0].role))) {
+    if (!allowed.has(String(u[0].role)) && !(await heldLicences(c.env.DB, u[0])).some(licence => allowed.has(licence))) {
       return c.json({ error: 'Assignee role cannot review DD sections (must be admin/partner/investor/advisor)' }, 403);
     }
 
@@ -1471,7 +1469,7 @@ dd.post('/cases/:uid/report', async (c) => {
   let user: AppUser;
   try { user = await requireCaseWriter(c, cs); }
   catch { return c.json({ error: 'Forbidden: not a case owner or reviewer' }, 403); }
-  if (user.role !== 'admin' && user.role !== 'partner') return c.json({ error: 'Forbidden' }, 403);
+  if (user.role !== 'admin' && !holdsLicence(user, 'partner')) return c.json({ error: 'Forbidden' }, 403);
   const caseId = Number(cs.id);
 
   const sql = getSQL(c.env);
@@ -1666,7 +1664,7 @@ dd.get('/cases/:uid/audit', async (c) => {
 
 dd.get('/experts', async (c) => {
   const user = await requireDdReader(c);
-  if (user.role !== 'admin' && user.role !== 'partner') {
+  if (user.role !== 'admin' && !holdsLicence(user, 'partner')) {
     return c.json({ error: 'Forbidden' }, 403);
   }
   const sectionKey = c.req.query('section_key') || '';
@@ -2206,7 +2204,7 @@ async function reportReaderRefusal(c: AppContext, cs: Record<string, unknown>): 
   let user: AppUser;
   try { user = await requireCaseWriter(c, cs); }
   catch { return { status: 403, error: 'Forbidden: not a case owner or reviewer' }; }
-  if (user.role !== 'admin' && user.role !== 'partner') return { status: 403, error: 'Forbidden' };
+  if (user.role !== 'admin' && !holdsLicence(user, 'partner')) return { status: 403, error: 'Forbidden' };
   return user;
 }
 
@@ -2414,7 +2412,7 @@ async function withDeals(env: Env, user: AppUser, projects: any[]) {
           AND (? = 1 OR EXISTS (SELECT 1 FROM deal_invitations i WHERE i.deal_id = d.id AND i.investor_user_id = ?)
                OR EXISTS (SELECT 1 FROM commitments k WHERE k.deal_id = d.id AND k.investor_user_id = ?))
         ORDER BY d.created_at DESC, d.id DESC`,
-    ).bind(JSON.stringify(ids), user.role === 'investor' ? 0 : 1, user.id, user.id).all<any>()).results || [])
+    ).bind(JSON.stringify(ids), user.role === 'admin' || holdsLicence(user, 'partner') ? 1 : 0, user.id, user.id).all<any>()).results || [])
     : [];
   return projects.map((p) => ({
     id: p.id, name: p.name, type: 'project', stage: p.stage ?? null,
@@ -2427,9 +2425,9 @@ dd.get('/subjects', async (c) => {
   const user = await requireDdReader(c);
   const type = String(c.req.query('type') || '');
   const q = String(c.req.query('q') || '').trim().slice(0, 100);
-  if (user.role === 'advisor') return c.json({ error: 'An advisor reviews cases and does not open them.' }, 403);
+  if (user.role !== 'admin' && !holdsLicence(user, 'partner') && !holdsLicence(user, 'investor')) return c.json({ error: 'An advisor reviews cases and does not open them.' }, 403);
   if (type !== 'project' && !SUBJECT_ROLE[type]) return c.json({ error: 'Choose a startup, founder, advisor, investor or partner.' }, 400);
-  if (user.role === 'investor') {
+  if (user.role !== 'admin' && !holdsLicence(user, 'partner') && holdsLicence(user, 'investor')) {
     // DDL2's inset: an investor opens diligence only on a startup they share a
     // deal with — the same relationship `POST /cases` checks (D1149).
     if (type !== 'project') return c.json({ error: 'You can only open diligence on a startup you are in a deal with.' }, 403);
@@ -2459,7 +2457,7 @@ dd.get('/subjects', async (c) => {
 dd.get('/people', async (c) => {
   const user = await requireDdReader(c);
   // Who may assign may search (the assign route's own gate).
-  if (user.role !== 'admin' && user.role !== 'partner') return c.json({ error: 'Forbidden' }, 403);
+  if (user.role !== 'admin' && !holdsLicence(user, 'partner')) return c.json({ error: 'Forbidden' }, 403);
   const q = String(c.req.query('q') || '').trim().slice(0, 100);
   const pageSize = 20;
   const page = Math.max(Number.parseInt(String(c.req.query('page') ?? '1'), 10) || 1, 1);

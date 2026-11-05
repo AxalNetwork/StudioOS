@@ -32,6 +32,7 @@ also exercises a `project_id` deep link.
 | `event_syndication_wiring_d1491.test.mjs` | D1491: explicit choice save, pure preview, approval order, stored HQ settings/accounts/log, listing actions and failed/stale reads. |
 | `capital_access_client_d1191.test.mjs` | D1191: capital summary/support transport preserves project, page, reason, investor target and POST verb. |
 | `dataroom_deck_source_d1602.test.mjs` | D1602: owner controls, capability hiding, quote confirmation, failed saves, withdrawal and the deck-source client seam. |
+| `learning_lesson_integration_4478.test.mjs` | D4478: routed completion headers, empty reading ledes, shared saving state, route refusals and no Learning assistant mounts. |
 | `learning_lesson_footer_4478.test.mjs` | D4478: lesson position, completion reasons, live offline/reconnect queue, source changes, refused progress writes and empty reading. |
 
 ## Conventions
@@ -154,6 +155,7 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `_redirectLinks_2319.mjs` | D2319 (#4415): syntax-aware navigation-target audit across frontend and Worker source, without treating API paths or comparisons as links. |
 
 `team_allowlists_4422.test.mjs` checks D4422 actual Team checklist read/save requests, default resets, inherited edit gates, and honest read/save failures.
+| `account_licences_4472.test.mjs` | D4472: account licence client paths, payload and verbs. |
 | `distribution_ask_4488.test.mjs` | D4488 quotes, unsaved acceptance, listed/safe counts and exclusive Ask intent. |
 
 - `network_reads_d4464.test.mjs` — Network book filter query arguments and the relationship summary client (#4464).

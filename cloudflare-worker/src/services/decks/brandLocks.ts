@@ -1,3 +1,4 @@
+import { holdsLicence } from '../accountLicences';
 /**
  * D1572 (#3819, deck v2 D11) — brand locks (pd31, "Brand kit locks").
  *
@@ -42,7 +43,7 @@ export async function brandLocksFor(env: { DB: D1Database }, projectId: number):
 
 /** Whether this user is the venture's admin: its owner (the founder whose venture it is). */
 export async function canLockBrand(env: { DB: D1Database }, user: { id: number; role?: string; founder_id?: number | null }, projectId: number): Promise<boolean> {
-  if (String(user.role || '').toLowerCase() !== 'founder' || user.founder_id == null) return false;
+  if (!holdsLicence(user, 'founder') || user.founder_id == null) return false;
   const row = await env.DB.prepare('SELECT founder_id FROM projects WHERE id = ?').bind(projectId).first<{ founder_id: number | null }>();
   return row?.founder_id != null && Number(row.founder_id) === Number(user.founder_id);
 }

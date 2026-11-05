@@ -1,3 +1,4 @@
+import { holdsLicence, holdsOnlyLicence } from '../services/accountLicences';
 /**
  * The two decisions this bucket gets wrong quietly: who may read a row, and
  * what a missing fact is allowed to imply.
@@ -29,7 +30,7 @@ export type ProjectRef = { id: number; founder_id: number | null };
  * suggests it is checking ownership.
  */
 export function ownsVenture(project: ProjectRef, user: User): boolean {
-  if (user.role === 'founder') {
+  if (holdsLicence(user, 'founder')) {
     return canAccessFounderResource(user, project.founder_id);
   }
   // Explicit ownership comparison, copied from `ensureCanEdit` rather than
@@ -50,7 +51,7 @@ export function ownsVenture(project: ProjectRef, user: User): boolean {
  */
 export function canHoldValidateSource(user: Pick<User, 'role' | 'founder_id' | 'spinout_lab_active'>): boolean {
   const role = String(user.role ?? '').toLowerCase();
-  if (role === 'admin' || role === 'founder') return true;
+  if (role === 'admin' || holdsLicence(user, 'founder')) return true;
   return Number(user.spinout_lab_active ?? 0) === 1 && user.founder_id != null;
 }
 
@@ -65,7 +66,7 @@ export function canHoldValidateSource(user: Pick<User, 'role' | 'founder_id' | '
  * count of them, which is not a rule anyone could explain.
  */
 export function canReadBoard(project: ProjectRef, user: User): boolean {
-  if (user.role === 'admin' || user.role === 'partner') return true;
+  if (user.role === 'admin' || holdsLicence(user, 'partner')) return true;
   return ownsVenture(project, user);
 }
 
@@ -94,7 +95,7 @@ export function canWrite(project: ProjectRef, user: User): boolean {
 
 /** D895: the founder's deck links never inherit the bucket's admin write grant. */
 export function canWritePitchDeck(project: ProjectRef, user: User): boolean {
-  return !['admin', 'advisor'].includes(String(user.role || '').toLowerCase()) && canWrite(project, user);
+  return String(user.role).toLowerCase() !== 'admin' && !holdsOnlyLicence(user, 'advisor') && canWrite(project, user);
 }
 
 // ---------------------------------------------------------------------------

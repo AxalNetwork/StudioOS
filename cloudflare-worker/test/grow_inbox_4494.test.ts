@@ -23,6 +23,9 @@ function fixture() {
     const segmentSchema = readFileSync(new URL('440_validate_cycle_stores.sql', dir), 'utf8').match(/CREATE TABLE IF NOT EXISTS customer_segments \([\s\S]*?\);/);
     if (!segmentSchema) throw new Error('Missing canonical segment schema');
     database.exec(segmentSchema[0]);
+    const channelSchema = readFileSync(new URL('443_grow_stores.sql', dir), 'utf8').match(/CREATE TABLE IF NOT EXISTS growth_channels \([\s\S]*?\);/);
+    if (!channelSchema) throw new Error('Missing canonical channel schema');
+    database.exec(channelSchema[0]);
     // Canonical baseline and this feature's actual dependencies; unrelated research seeds are not an Inbox fixture.
     for (const file of ['277_user_recovery_state.sql', '386_contact_strength_organization.sql', '647_mail_accounts.sql', '202611041613_grow_campaigns.sql', '202611042009_distribution_inbox_reads.sql']) database.exec(readFileSync(new URL(file, dir), 'utf8'));
     database.exec('SAVEPOINT inbox_fixture');
@@ -214,4 +217,33 @@ test('a long read snapshot and its audit roll back together on a failed write', 
     assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM grow_inbox_reads').get()!.n, 0);
     assert.doesNotMatch(JSON.stringify(result.body), /Synthetic audit failure/);
   });
+});
+
+// Remaining #4494 handoff: the drafting context comes from the authenticated Inbox read.
+import { distributionRequest, distributionContext } from '../src/services/distributionDrafts.ts';
+test('reply drafting reads only the selected venture/contact and caller mailbox context', async () => {
+  const f = fixture(), original = inboxMailboxReader.read;
+  inboxMailboxReader.read = async () => [];
+  try {
+    const input = distributionRequest({ project:7,contact_uid:'prospect-a',target:'form',kinds:['reply'],sources:['distribution'] });
+    const owner = await distributionContext(f.env,input,{id:1} as any);
+    assert.match(JSON.stringify(owner.material),/A real contact reply/);
+    assert.match(JSON.stringify(owner.material),/Own email/);
+    assert.doesNotMatch(JSON.stringify(owner.material),/Foreign reply|Other member private subject|ari@example.test/);
+    const member = await distributionContext(f.env,input,{id:2} as any);
+    assert.doesNotMatch(JSON.stringify(member.material),/Own email/);
+    await assert.rejects(distributionContext(f.env,{...input,contact_uid:'foreign-contact'},{id:1} as any),{code:'not_found'});
+    assert.match(owner.sources.find(s=>s.key==='distribution')!.label,/selected reply thread/);
+  } finally { inboxMailboxReader.read = original; }
+});
+test('thread drafting refuses a failed source, missing caller and spoofed browser context', async () => {
+  const f = fixture(), original = inboxMailboxReader.read;
+  const input = distributionRequest({project:7,contact_uid:'prospect-a',kinds:['reply'],sources:['distribution']});
+  try {
+    inboxMailboxReader.read = async () => { throw Error('private provider detail'); };
+    await assert.rejects(distributionContext(f.env,input,{id:1} as any),{code:'thread_unreadable',sentence:'This thread could not be read. Refresh it before drafting.'});
+    await assert.rejects(distributionContext(f.env,input),{code:'thread_required'});
+    assert.throws(()=>distributionRequest({project:7,contact_uid:'prospect-a',kinds:[{kind:'reply',context:'browser supplied private thread'}],sources:['distribution']}),{code:'invalid_contact'});
+    assert.throws(()=>distributionRequest({project:7,contact_uid:'prospect-a',kinds:['post'],sources:['distribution']}),{code:'invalid_contact'});
+  } finally { inboxMailboxReader.read = original; }
 });

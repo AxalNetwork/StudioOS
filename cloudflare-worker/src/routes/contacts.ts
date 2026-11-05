@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /**
  * Contacts — unified inbound relationship hub (founder side).
  *
@@ -485,7 +486,7 @@ async function ownedProjectScope(c: Context<{ Bindings: Env }>, user: User): Pro
  */
 async function requireRaiseUser(c: Context<{ Bindings: Env }>): Promise<User> {
   const user = await requireAuth(c);
-  if (user.role === 'admin' || user.role === 'founder') return user;
+  if (user.role === 'admin' || holdsLicence(user, 'founder')) return user;
   if (user.role === 'exploring' && Number((user as any).spinout_lab_active ?? 0) === 1) return user;
   if (!capitalInvestor(user) && (await capitalMemberProjectIds(c.env, user)).length > 0) return user;
   throw new Error('Forbidden');

@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /** D627: narrow LP reads and GP/admin writes; writes and actor audit commit together. */
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -26,11 +27,11 @@ r.onError((error, c) => {
   return refuse(c, 503, { code: 'fund_performance_unreadable', message: 'Fund performance is Unreadable. Please retry.', raw: error });
 });
 async function readableFunds(env: Env, user: any) {
-  if (user.role === 'investor') await claimLpRowsByEmail(env, Number(user.id), user.email);
+  if (holdsLicence(user, 'investor')) await claimLpRowsByEmail(env, Number(user.id), user.email);
   const scope = lpMembershipScope(user);
   const result = user.role === 'admin'
     ? await env.DB.prepare(`SELECT id, name, vintage_year, status FROM vc_funds ORDER BY id`).all<any>()
-    : user.role === 'investor'
+    : holdsLicence(user, 'investor')
       ? await env.DB.prepare(`SELECT f.id, f.name, f.vintage_year, f.status FROM vc_funds f
           WHERE EXISTS (SELECT 1 FROM limited_partners lp WHERE lp.fund_id = f.id
             AND ${scope.sql}) ORDER BY f.id`)
@@ -41,7 +42,7 @@ async function readableFunds(env: Env, user: any) {
 }
 r.get('/', async (c) => {
   const user = await requireAuth(c);
-  if (user.role !== 'admin' && user.role !== 'investor') return notFound();
+  if (user.role !== 'admin' && !holdsLicence(user, 'investor')) return notFound();
   const funds = await readableFunds(c.env, user);
   const asOf = today();
   const items = [];
@@ -50,7 +51,7 @@ r.get('/', async (c) => {
 });
 r.get('/:id', async (c) => {
   const user = await requireAuth(c), id = positiveId(c.req.param('id'));
-  if (!id || (user.role !== 'admin' && user.role !== 'investor')) return notFound();
+  if (!id || (user.role !== 'admin' && !holdsLicence(user, 'investor'))) return notFound();
   const fund = (await readableFunds(c.env, user)).find((f: any) => f.id === id);
   if (!fund) return notFound();
   return c.json(await readFundPerformance(c.env, fund, today()));

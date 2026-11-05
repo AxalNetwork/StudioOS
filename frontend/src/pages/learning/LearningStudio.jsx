@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
-import { RailFrame, WorkerRail } from '../../ui';
+import { RailFrame } from '../../ui';
 import StudioContentTable from './StudioContentTable';
 import VideoAnalyticsSheet from './VideoAnalyticsSheet';
 import StudioItemEditor from './StudioItemEditor';
@@ -238,24 +238,8 @@ export default function LearningStudio({ sub }) {
           : <StudioCourseBuilder key={course.course.uid} course={course.course} items={itemRows} {...choices} handlers={courseHandlers(course.course)} busy={busy} error={error} notice={notice} />;
   }
 
-  const counted = (state, one, many) => (state.status === 'ready' ? `${state.rows.length} ${state.rows.length === 1 ? one : many}, drafts included` : null);
-  const coverage = [
-    counted(items, 'video or reading', 'videos and readings'),
-    counted(courses, 'course', 'courses'),
-    counted(assessments.exercises, 'exercise', 'exercises'),
-    counted(assessments.exams, 'exam', 'exams'),
-  ].filter(Boolean);
   return (
     <RailFrame
-      rail={(
-        <WorkerRail
-          workspace="Learning studio"
-          role="super_admin"
-          stance="Authoring view"
-          note="Eadwyn reads back what this page has loaded. It does not publish, archive or edit anything: every write here is the Super Admin’s own."
-          coverage={coverage}
-        />
-      )}
       data-testid="learning-studio"
     >
       <div className="space-y-4">

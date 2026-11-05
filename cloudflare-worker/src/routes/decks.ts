@@ -1,3 +1,4 @@
+import { holdsLicence, holdsOnlyLicence } from '../services/accountLicences';
 /**
  * Task #25 — Pitch deck builder (Worker mirror).
  *
@@ -66,11 +67,11 @@ import { keyOfProject } from '../services/decks/cardAudio';
 /** D895 applies only to deck operations, not other project-content routes. */
 export async function projectOwned(c: any, user: any, projectId: number, opts: { write?: boolean; audit?: boolean; contactData?: boolean } = {}) {
   user = { ...user, role: String(user.role || '').toLowerCase() };
-  if (user.role === 'advisor') throw new Error('Forbidden');
+  if (holdsOnlyLicence(user, 'advisor')) throw new Error('Forbidden');
   const adminWrite = opts.write && user.role === 'admin';
   if (adminWrite && (!isSuperAdmin(await hydrateSuperAdmin(c.env, user)) || await isSupportSession(c))) throw new Error('Forbidden');
   const project = await sharedProjectOwned(c, user, projectId, opts);
-  const owner = user.role === 'founder' && user.founder_id != null && user.founder_id === project.founder_id;
+  const owner = holdsLicence(user, 'founder') && user.founder_id != null && user.founder_id === project.founder_id;
   if (!owner && user.role !== 'admin' && await getProjectMembershipRole(c.env, projectId, user.id) === 'advisor') throw new Error('Forbidden');
   if (adminWrite && opts.audit !== false) {
     await c.env.DB.prepare('INSERT INTO activity_logs (action, details, actor, user_id, project_id) VALUES (?, ?, ?, ?, ?)')
@@ -81,7 +82,7 @@ export async function projectOwned(c: any, user: any, projectId: number, opts: {
 
 /** Called after projectOwned has verified this request's active-company scope. */
 async function mercuryRunwayOwner(c: any, user: any, projectId: number): Promise<number | null> {
-  if (user.role !== 'founder' || user.founder_id == null || await isSupportSession(c)) return null;
+  if (!holdsLicence(user, 'founder') || user.founder_id == null || await isSupportSession(c)) return null;
   const project = await c.env.DB.prepare('SELECT founder_id FROM projects WHERE id = ?').bind(projectId).first() as { founder_id: number | null } | null;
   return project?.founder_id === user.founder_id ? Number(user.id) : null;
 }

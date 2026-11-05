@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 // Scoring routes — Epic 5 anti-cheat layer. Two tracks: sandbox (founder
 // practice, unlimited, never LP-visible) and official (1 per 7d, HMAC-signed,
 // anomaly-flagged, hidden from LPs until admin approves).
@@ -148,7 +149,7 @@ scoring.post('/score', async (c) => {
   // investor reach this project by another route entirely and are not narrowed
   // by a company that is not theirs. 404 rather than 403 so the switcher does
   // not become an oracle for which projects exist.
-  if (user.role === 'founder' && user.founder_id === project.founder_id
+  if (holdsLicence(user, 'founder') && user.founder_id === project.founder_id
       && !projectInActiveCompany(await activeCompanyFor(c, user), project)) {
     await sql.end();
     return c.json({ error: 'Project not found' }, 404);
@@ -451,7 +452,7 @@ scoring.get('/cohort-benchmark/:projectId', async (c) => {
     if (!canAccessFounderResource(user, project.founder_id) && !isExploringOwner) {
       return c.json({ detail: 'Forbidden: you do not own this project' }, 403);
     }
-    if (user.role === 'founder' && user.founder_id === project.founder_id
+    if (holdsLicence(user, 'founder') && user.founder_id === project.founder_id
         && !projectInActiveCompany(await activeCompanyFor(c, user), project)) {
       return c.json({ error: 'Project not found' }, 404);
     }
@@ -548,7 +549,7 @@ scoring.get('/scores/:projectId', async (c) => {
     return c.json({ detail: 'Forbidden: you do not own this project' }, 403);
   }
   // Same narrowing, same reasoning, as the scoring route above.
-  if (user.role === 'founder' && user.founder_id === ownerFounderId
+  if (holdsLicence(user, 'founder') && user.founder_id === ownerFounderId
       && !projectInActiveCompany(await activeCompanyFor(c, user), owners[0] as any)) {
     await sql.end();
     return c.json({ error: 'Project not found' }, 404);
@@ -562,7 +563,7 @@ scoring.get('/scores/:projectId', async (c) => {
   const showSandbox =
     (user.role === 'admin') ||
     (wantSandbox &&
-      (user.role === 'founder' || user.role === 'exploring') &&
+      (holdsLicence(user, 'founder') || user.role === 'exploring') &&
       user.founder_id != null && user.founder_id === ownerFounderId);
 
   const rows = (showSandbox

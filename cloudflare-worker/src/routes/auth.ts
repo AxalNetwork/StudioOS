@@ -1007,6 +1007,7 @@ auth.get('/me', async (c) => {
 
   return c.json({
     id: user.id, email: user.email, name: user.name, role: user.role,
+    licences: user.licences || [],
     is_active: user.is_active, created_at: user.created_at,
     founder_id: founderId, partner_id: partnerId,
     suggested_role: suggestedRole,
