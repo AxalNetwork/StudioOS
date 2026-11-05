@@ -217,4 +217,3 @@ test('support sessions receive no private grant data and unreadable core storage
   f.db.exec('DROP TABLE growth_channels');
   const r = await read(f); assert.equal(r.status, 503); assert.deepEqual(r.body, { detail: 'Channel details are unreadable. Try again.' });
 });
-
