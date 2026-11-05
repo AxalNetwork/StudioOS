@@ -880,7 +880,7 @@ test('#3840 rule books: the default reads "Default", a floor refusal outlines th
 });
 
 test('#3840 Add agent (D4119): the sheet posts who, the area of work, the model and the cap, and a refusal comes back in words', async () => {
-  const models = [{ id: 'm-a', label: '[Model A]' }];
+  const models = [{ id: 'm-a', label: '[Model A]', input_usd_per_million: 0.06, output_usd_per_million: 0.24 }];
   const personas = { personas: [
     { key: 'orrin', name: 'Orrin', gender: 'man', tagline: '[Every road ends at a market.]', risk: 3, values: {}, top_values: ['stewardship', 'integrity', 'resilience'], natural_fit: ['finance', 'legal'] },
     { key: 'kade', name: 'Kade', gender: 'man', tagline: '[Light ten lanterns.]', risk: 5, values: {}, top_values: ['curiosity', 'ambition', 'collaboration'], natural_fit: ['product', 'marketing'] },
@@ -897,6 +897,8 @@ test('#3840 Add agent (D4119): the sheet posts who, the area of work, the model 
     assert.match(v.text(), /Skills aren’t open yet/);
     assert.match(v.text(), /Coverage with these skillsNot recorded/);
     await v.click('add-agent-next');
+    assert.match(v.text(), /Input \$0\.06 \/ 1M tokens · Output \$0\.24 \/ 1M tokens/);
+    assert.doesNotMatch(v.text(), /Offered on your plan/);
     const radio = walkRadio();
     assert.ok(radio, 'the model radio');
     await act(async () => { radio.onChange(); });

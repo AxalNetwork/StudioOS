@@ -45,6 +45,7 @@ import {
 const grantKey = (uid, tool) => `${uid}::${tool}`;
 const STEPS = ['Who', 'Skills', 'Model and cap'];
 const EYE = 'font-mono text-[10.5px] font-semibold uppercase tracking-[.11em] text-axal-muted dark:text-gray-400';
+const tokenRate = (label, value) => Number.isFinite(Number(value)) ? `${label} $${Number(value).toLocaleString('en-US', { maximumFractionDigits: 6 })} / 1M tokens` : `${label} ${NOT_RECORDED}`;
 
 /** TM3c: one rule book section, a row that opens in place. */
 function RuleRow({ label, text }) {
@@ -267,14 +268,12 @@ export default function AddAgentSheet({ scope, roles, models, held = [], team = 
                     <input type="radio" name="model" checked={model === m.id} onChange={() => setModel(m.id)} className="accent-violet-600" />
                     <span className="min-w-0 flex-1">
                       <b className="block text-[13px] text-axal-ink dark:text-gray-100">{m.label}{m.kind ? ` · ${m.kind}` : ''}</b>
-                      <span className={MUTED}>{m.hold_microusd != null ? `${HOLD_LINE(money(m.hold_microusd))} a run` : 'Its hold is shown before each run'}</span>
+                      <span className={MUTED}>{`${tokenRate('Input', m.input_usd_per_million)} · ${tokenRate('Output', m.output_usd_per_million)}`}</span>
                     </span>
-                    <span className="text-[11.5px] font-semibold text-axal-positive dark:text-emerald-300">✓ Offered on your plan</span>
                   </label>
                 ))}
               </div>
             ) : <HonestBlock>The models offered on your plan could not be read. That is not the same as none.</HonestBlock>}
-            <p className={`m-0 ${MUTED}`}>Only models offered on your plan are listed.</p>
             <div className="flex items-start gap-3">
               <span className="min-w-0 flex-1">
                 <span className="block text-[13px] font-bold text-axal-ink dark:text-gray-100" id="add-agent-tools-label">May use your connected tools (read-only)</span>

@@ -5,7 +5,7 @@
 // Worker: routes/team_agents.ts, migration 712. Every route answers 404
 // `team_agents_off` until TEAM_AGENTS_ENABLED is on.
 //   GET    /api/teams/roles                               → { roles: [{ key, name, mission, works_in: [{ key, label }], default_rules }],
-//                                                           models: [{ id, label, kind, beta, plan_locked }] }
+//                                                           models: [{ id, label, kind, beta, plan_locked, input_usd_per_million, output_usd_per_million }] }
 // D4117 (#4117): the 16 personas an agent wears (fixed; no route edits one). Agent DTOs carry `persona`
 // and no job title (`role_name` is gone).
 //   GET    /api/teams/personas                            → { personas: [{ key, name, gender, tagline, goal, personality, story, risk,
