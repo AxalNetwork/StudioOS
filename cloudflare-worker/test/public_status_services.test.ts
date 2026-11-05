@@ -35,7 +35,19 @@ async function status(extra: Record<string, unknown>, seed = '') {
   const realFetch = globalThis.fetch;
   // The route asks its own /api/health first; with no Worker behind it the
   // probe falls back to the bindings it was given, as it does when that hop fails.
-  globalThis.fetch = (async () => { throw new Error('no network in tests'); }) as typeof fetch;
+  globalThis.fetch = (async (input) => {
+    const url = new URL(String(input));
+    if (url.pathname === '/.well-known/oauth-authorization-server') {
+      return Response.json({ issuer: url.origin, authorization_endpoint: `${url.origin}/api/oauth/authorize`, token_endpoint: `${url.origin}/api/oauth/token` });
+    }
+    if (url.pathname === '/.well-known/oauth-protected-resource/mcp') {
+      return Response.json({ resource: `${url.origin}/mcp`, authorization_servers: [url.origin] });
+    }
+    if (url.pathname === '/mcp') {
+      return new Response(null, { status: 401, headers: { 'www-authenticate': `Bearer resource_metadata="${url.origin}/.well-known/oauth-protected-resource/mcp"` } });
+    }
+    throw new Error('no network in tests');
+  }) as typeof fetch;
   try {
     const env = { ...makeD1('SELECT 1;', ''), ...extra };
     if (seed) {
@@ -119,13 +131,15 @@ test('MCP clients and connector coverage follow the shipping registries without 
   assert.doesNotMatch(raw, /https?:|access_token|refresh_token|client_secret|credentials|integration_uid/);
 });
 
-test('availability reports exact deployment flags without upgrading unknown health', async () => {
+test('availability reports exact deployment flags and the MCP server live probe', async () => {
   const flags = { MCP_SERVER_ENABLED: 'true', OAUTH_KV: {}, API_KEYS_ENABLED: 'true', CUSTOM_MCP_ENABLED: ' TRUE ',
     WHATSAPP_CHANNEL: 'on', TELEGRAM_CHANNEL: 'off', MEET_TRANSCRIPTS_ENABLED: ' ON ',
     GMAIL_CLIENT_ID: 'fixture', GMAIL_CLIENT_SECRET: 'fixture', GMAIL_REFRESH_TOKEN: 'fixture', STRIPE_SECRET_KEY: 'fixture' };
   const { services } = await status({ ...BOUND, ...flags });
   const by = Object.fromEntries(services.map((row) => [row.name, row]));
-  for (const name of ['MCP server', 'Member API keys', 'Custom MCP clients', 'WhatsApp messaging', 'Google Meet transcripts']) {
+  assert.equal(by['MCP server'].availability, 'Enabled');
+  assert.equal(by['MCP server'].status, 'operational');
+  for (const name of ['Member API keys', 'Custom MCP clients', 'WhatsApp messaging', 'Google Meet transcripts']) {
     assert.equal(by[name].availability, 'Enabled', name);
     assert.equal(by[name].status, 'unknown', name);
   }
