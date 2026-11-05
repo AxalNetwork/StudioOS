@@ -110,6 +110,8 @@ const DOCUMENTED = new Map([
   ['documentation/architecture/route-map/canvases/part-5', 'one route-map canvas row per file (D4102)'],
   ['documentation/audits',            'dated snapshots — true on their date only'],
   ['documentation/operations',        'runbooks — the steps to ship, check and recover production'],
+  ['documentation/skill-drafts/D4526', 'newly authored HQ skill package staged outside deployment'],
+  ['documentation/skill-drafts/D4526/cases', 'synthetic evaluation cases for the staged HQ package'],
   // Nested folders heavy enough to be opaque from their parent alone.
   ['frontend/src/components/brand/templates', 'the landing-page template previews'],
   ['frontend/src/components/checkout',        'the checkout sheet, its entry and the renewal banner (D1048, D1054)'],

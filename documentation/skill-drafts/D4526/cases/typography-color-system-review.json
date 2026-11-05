@@ -1,0 +1,36 @@
+{
+  "skill": "typography-color-system-review",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "build.records": {
+        "body_font": "Text Sans",
+        "body_size_px": 12,
+        "line_length_chars": 115,
+        "dark_theme_contrast": null
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Text Sans",
+      "12",
+      "115"
+    ],
+    "must_say_not_recorded": [
+      "dark theme contrast"
+    ],
+    "must_not_include": [
+      "all text meets contrast"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why dark theme contrast is missing rather than inventing it.",
+    "Do not assert: all text meets contrast.",
+    "Return a proposal only; do not perform any external action."
+  ],
+  "predicate_witness": "Text Sans; 12; 115. dark theme contrast: Not recorded. Human review required."
+}

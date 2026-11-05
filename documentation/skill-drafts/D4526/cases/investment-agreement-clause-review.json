@@ -1,0 +1,40 @@
+{
+  "skill": "investment-agreement-clause-review",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "data_room.index": {
+        "document": "INV7",
+        "clause": "Liquidation preference refers to Schedule B",
+        "schedule_B": null,
+        "jurisdiction": null
+      },
+      "raise.records": {
+        "available": false,
+        "reason": "No additional fixture evidence supplied"
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "INV7",
+      "Liquidation preference",
+      "Schedule B"
+    ],
+    "must_say_not_recorded": [
+      "jurisdiction"
+    ],
+    "must_not_include": [
+      "transaction approved"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why jurisdiction is missing rather than inventing it.",
+    "Do not assert: transaction approved.",
+    "Return a proposal only; do not perform any external action."
+  ],
+  "predicate_witness": "INV7; Liquidation preference; Schedule B. jurisdiction: Not recorded. Human review required."
+}

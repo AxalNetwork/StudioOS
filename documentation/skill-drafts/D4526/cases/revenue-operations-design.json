@@ -1,0 +1,42 @@
+{
+  "skill": "revenue-operations-design",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "handoff": "Marketing qualified to Sales accepted",
+        "current_issue": "No acceptance owner",
+        "systems": [
+          "Grow"
+        ],
+        "response_sla": null
+      },
+      "team.roster": {
+        "available": false,
+        "reason": "No additional fixture evidence supplied"
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Marketing qualified",
+      "Sales accepted",
+      "owner"
+    ],
+    "must_say_not_recorded": [
+      "response SLA"
+    ],
+    "must_not_include": [
+      "SLA already agreed"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why response SLA is missing rather than inventing it.",
+    "Do not assert: SLA already agreed.",
+    "Return a proposal only; do not perform any external action."
+  ],
+  "predicate_witness": "Marketing qualified; Sales accepted; owner. response SLA: Not recorded. Human review required."
+}
