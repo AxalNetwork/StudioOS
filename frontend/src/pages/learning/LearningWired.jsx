@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { RailFrame, WorkerRail } from '../../ui';
 import { titleCase } from '../../lib/absence';
 import CourseOutline, { CourseResources } from './CourseOutline';
@@ -11,6 +11,7 @@ import { findLesson, lessonHref, resumeAt, videoPlayback } from './learningModel
 import { markItemComplete, markLessonComplete, readCourse, readItem, readItemCaption, readMe, readMyAttempts, readMySubmissions, recordItemPosition } from './learningReads';
 import useLearningRead from './useLearningRead';
 import { AddToPlan } from './PlanSheet';
+import { videoStartAt } from './videoLibraryModel';
 
 /**
  * The learner pages that read the Learning store (D562 stage 2, D557's
@@ -208,7 +209,7 @@ export function LessonPage({ slug, lessonUid }) {
 
 // ── /learning/videos/:uid and /learning/items/:uid ────────────────────────
 
-export function ItemView({ state, onRetry, onMark, marking, markError }) {
+export function ItemView({ state, onRetry, onMark, marking, markError, initialTime = null }) {
   if (state.status === 'missing') {
     return (
       <SectionCard title="Not available" testid="lesson-player">
@@ -225,7 +226,7 @@ export function ItemView({ state, onRetry, onMark, marking, markError }) {
       video={videoPlayback(item)}
       transcript={item?.transcript ?? null}
       completed={state.progress?.status === 'completed'}
-      resumeFrom={item ? resumeAt(state.progress?.position_seconds, item.duration_seconds) : null}
+      resumeFrom={item ? videoStartAt(initialTime, item.duration_seconds, resumeAt(state.progress?.position_seconds, item.duration_seconds)) : null}
       onPosition={item ? (s, p) => recordItemPosition(item.uid, s, p) : null}
       loadCaption={item ? (language) => readItemCaption(item.uid, language) : null}
       onMarkComplete={item ? onMark : undefined}
@@ -237,6 +238,8 @@ export function ItemView({ state, onRetry, onMark, marking, markError }) {
 }
 
 export function ItemPage({ uid }) {
+  const [params] = useSearchParams();
+  const initialTime = params.get('t');
   const [state, retry, setState] = useLearningRead(() => readItem(uid), [uid], { scope: 'item' });
   const [marking, setMarking] = useState(false);
   const [markError, setMarkError] = useState('');
@@ -263,7 +266,7 @@ export function ItemPage({ uid }) {
           back={LEARNING}
           action={item?.kind === 'video' ? <AddToPlan subject={{ kind: 'video', uid: item.uid || uid, title: item.title }} /> : null}
         />
-        <ItemView state={state} onRetry={retry} onMark={onMark} marking={marking} markError={markError} />
+        <ItemView key={initialTime} state={state} initialTime={initialTime} onRetry={retry} onMark={onMark} marking={marking} markError={markError} />
       </div>
     </RailFrame>
   );
