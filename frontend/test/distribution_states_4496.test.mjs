@@ -106,3 +106,18 @@ test('mounted shell uses real permission and budget readers; AI off keeps manual
  }assert.deepEqual(calls,Array(2).fill(['grow',7,'distribution',{campaign:'permission'}]));
  }finally{cyclesWrite.formOptions=saved.permission;Object.assign(aiBudgetApi,{mine:saved.mine,topUp:saved.topUp});askPanelAdapter.waiting=saved.waiting;__resetEadwynPanelForTest();}
 });
+
+test('CampaignsTab invalidates the earlier permission request when the venture changes',async()=>{
+ const {default:CampaignsTab}=await import('../src/pages/cycles/distribution/CampaignsTab.jsx');
+ const pending=[];const permission=id=>new Promise(resolve=>pending.push({id,resolve}));
+ const api={campaigns:async()=>({campaigns:[],counts:{all:0}})};
+ function Subject(){const [id,setId]=React.useState(7);return h(React.Fragment,null,h('button',{onClick:()=>setId(8)},'Switch venture'),h(CampaignsTab,{projectId:id,role:'founder',api,readPermission:permission}));}
+ const m=await mountContracts(h(Subject));try{
+  await m.flush();await m.click('Switch venture');await m.flush();
+  await React.act(async()=>pending[0].resolve({can_write:true}));
+  const action=()=>m.nodes().find(n=>n.tagName==='BUTTON'&&m.props(n)?.children==='+ New campaign');
+  assert.equal(m.props(action()).disabled,true);
+  await React.act(async()=>pending[1].resolve({can_write:false}));assert.equal(m.props(action()).disabled,true);
+  assert.deepEqual(pending.map(p=>p.id),[7,8]);
+ }finally{await m.unmount();}
+});
