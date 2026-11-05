@@ -1,14 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import CohortCard from './CohortCard.jsx';
+import { Overview, Runs, Spend, Audit, Policies } from './Operations.jsx';
+import { adminHqSkillsApi } from '../../../lib/api/adminHqSkills';
 import { RefreshCw } from 'lucide-react';
 import { Card } from '../../../ui';
 import AdminPageHeader, { HeaderTab } from '../../../ui/AdminPageHeader';
 import { teamAgentsApi } from '../../../lib/api/teamAgents';
 import { adminAiAgentsApi } from '../../../lib/api/adminAiAgents';
 import {
-  AUDIT_COLUMNS, BUILD, CAPS, COMPANY_COLUMNS, GUARDRAILS, NOT_RECORDED, PAUSED_BANNER, PAUSE_WORD, REASON_MIN,
-  ROSTER_COLUMNS, RUN_COLUMNS, SUBTITLE, AREAS, areaTiles, notYet, overviewTiles, pauseArmed, skillRow, viewFor,
+  BUILD, COMPANY_COLUMNS, NOT_RECORDED, REASON_MIN,
+  ROSTER_COLUMNS, SUBTITLE, areaTiles, notYet, skillRow, viewFor,
   PERSONA_STATUS, VALUE_KEYS, actionWord, defaultsArmed, filterRoster, fitLabel, historyLine, identityChanges, retireLines,
   rosterCounts, rosterRefusal, rosterRow, saveArmed, statusArmed, teamLine, usd, valueLabel,
 } from './aiAgentsModel';
@@ -21,14 +22,10 @@ import {
  * Skills library (From Axal · Company skills) and Operations (Runs · Spend ·
  * Policies · Audit).
  *
- * LIVE: `GET /api/teams/skills`, D1612's library, whose `hq` list is the
- * "From Axal" skills; and the Roster (H1, #4158, D4158): SA1's table and
- * cards, SA2's agent detail and SA2b's save, hide and retire dialogs, through
- * `adminAiAgentsApi.roster*`. Every roster write takes a reason; values are
- * shown, never sent. Everything else waits for its build task (#4160–#4163);
- * each board says so and names the issue, and no control is drawn enabled
- * that the Worker would only refuse. When a task lands, its builder flips
- * `BUILD[key].live` in the model and wires the read.
+ * D4522 connects the Super Admin skills library, Overview, Operations and
+ * policy reads to their mounted admin APIs. Roster writes and pause/resume
+ * require a reason. Skill lifecycle and company review controls retain
+ * their separate build status.
  */
 
 const MUTED = 'text-[12.5px] text-axal-muted dark:text-gray-400';
@@ -74,33 +71,7 @@ function EmptyTable({ columns, line, testId }) {
 
 // ─── SA0 · Overview ─────────────────────────────────────────────────────────
 
-function Overview({ skills }) {
-  const tiles = overviewTiles({ hqSkills: skills.status === 'ready' ? skills.hq : null });
-  return (
-    <div className="space-y-4" data-testid="ai-agents-overview">
-      <CohortCard />
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {tiles.map((t) => (
-          <Card key={t.key} className="px-4 py-3.5" data-testid={`ai-agents-kpi-${t.key}`}>
-            <p className={EYEBROW}>{t.label}</p>
-            <p className={`mt-1 font-mono tabular-nums ${t.value === NOT_RECORDED ? 'text-[15px] font-semibold text-axal-muted dark:text-gray-400' : 'text-[24px] font-extrabold text-axal-ink dark:text-gray-100'}`}>{t.value}</p>
-            <p className="mt-1 text-[11.5px] text-axal-muted dark:text-gray-400">{t.note}</p>
-          </Card>
-        ))}
-      </div>
-      <NotYet build="H5" testId="ai-agents-needs-attention">
-        <h2 className={H2}>Needs attention</h2>
-        <p className={MUTED}>Agents paused at their cap, skills failing golden cases, imports waiting for review, model errors and flagged company skills will be listed here.</p>
-      </NotYet>
-      <NotYet build="H5" testId="ai-agents-spend-by-area">
-        <h2 className={H2}>Spend by area · 30 days</h2>
-        <ul className="grid gap-1 sm:grid-cols-2">
-          {AREAS.map((a) => <li key={a.slug} className="flex justify-between text-[12.5px]"><span className="text-axal-ink dark:text-gray-200">{a.label}</span><span className="text-axal-muted dark:text-gray-400">{NOT_RECORDED}</span></li>)}
-        </ul>
-      </NotYet>
-    </div>
-  );
-}
+
 
 // ─── SA1 / SA2 · Roster ─────────────────────────────────────────────────────
 
@@ -467,7 +438,7 @@ function FromAxal({ skills, onRetry }) {
                   <td className="py-2 pr-3 text-axal-ink dark:text-gray-200">{r.area} · {r.level}</td>
                   <td className="py-2 pr-3"><span className="mr-1.5 font-mono">{r.version}</span><Chip tone={r.status.tone}>{r.status.label}</Chip></td>
                   <td className="py-2 pr-3 font-mono tabular-nums">{r.agents}</td>
-                  <td className="py-2 pr-3 text-axal-muted dark:text-gray-400">{r.tools.length ? r.tools.join(' · ') : 'No tools'}</td>
+                  <td className="py-2 pr-3 text-axal-muted dark:text-gray-400">{r.tools.length ? r.tools.join(' · ') : 'Not recorded'}</td>
                   <td className="py-2 pr-3 text-axal-muted dark:text-gray-400">{r.golden}</td>
                   <td className="py-2 pr-3 text-axal-muted dark:text-gray-400">{r.lastEval}</td>
                 </tr>
@@ -516,80 +487,6 @@ function CompanySkills() {
 
 // ─── SA6 / SA7 / SA8 · Operations ───────────────────────────────────────────
 
-function Policies() {
-  const [open, setOpen] = useState(false);
-  const [typed, setTyped] = useState('');
-  const [reason, setReason] = useState('');
-  return (
-    <div className="space-y-3" data-testid="ai-agents-policies">
-      <NotYet build="H4">
-        <h2 className={H2}>Models</h2>
-        <p className={MUTED}>Per area, up to three suggested models in order, and models locked off platform-wide.</p>
-        <h2 className={`${H2} pt-2`}>Caps</h2>
-        <ul className="grid gap-1 sm:grid-cols-2">{CAPS.map((c) => <li key={c} className="flex justify-between text-[12.5px]"><span className="text-axal-ink dark:text-gray-200">{c}</span><span className="text-axal-muted dark:text-gray-400">{NOT_RECORDED}</span></li>)}</ul>
-        <h2 className={`${H2} pt-2`}>Tools skills may request</h2>
-        <p className={MUTED}>Read-only connectors only. A write tool is refused on every skill, from Axal or a company.</p>
-      </NotYet>
-      <Card className="px-4 py-4" data-testid="ai-agents-guardrails">
-        <h2 className={H2}>Guardrails</h2>
-        <table className="mt-2 w-full text-[12.5px]">
-          <thead className={EYEBROW}><tr className="text-left"><th className="py-1.5 pr-3">Rule</th><th className="py-1.5 pr-3">Enforced by</th><th className="py-1.5">Violations 30d</th></tr></thead>
-          <tbody>{GUARDRAILS.map((g) => <tr key={g.rule} className="border-t border-axal-hairline/60 dark:border-gray-800"><td className="py-2 pr-3 text-axal-ink dark:text-gray-200">{g.rule}</td><td className="py-2 pr-3 text-axal-muted dark:text-gray-400">{g.check}</td><td className="py-2 text-axal-muted dark:text-gray-400">{NOT_RECORDED}</td></tr>)}</tbody>
-        </table>
-        <p className="mt-2 text-[11.5px] text-axal-muted dark:text-gray-400">A violating output is never proposed. The counts arrive with #4162.</p>
-      </Card>
-      <Card className="space-y-2 border-red-200 px-4 py-4 dark:border-red-900" data-testid="ai-agents-kill-switch">
-        <h2 className={H2}>Pause all AI agents</h2>
-        <p className={MUTED}>Stops every agent on every team at once. Open proposals stay decidable. A banner shows on every team until you resume.</p>
-        <button type="button" className="rounded-lg border border-red-300 px-3 py-1.5 text-[12.5px] font-semibold text-red-700 dark:border-red-800 dark:text-red-300" onClick={() => setOpen((v) => !v)} aria-expanded={open}>Pause all AI agents…</button>
-        {open ? (
-          <div className="space-y-2 rounded-lg border border-axal-hairline p-3 dark:border-gray-700" data-testid="ai-agents-pause-form">
-            <label className="block text-[12.5px] font-semibold text-axal-ink dark:text-gray-200">Reason · required
-              <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-axal-hairline px-2 py-1.5 text-[13px] dark:border-gray-700 dark:bg-gray-900" placeholder={`At least ${REASON_MIN} characters`} />
-            </label>
-            <label className="block text-[12.5px] font-semibold text-axal-ink dark:text-gray-200">Type {PAUSE_WORD} to confirm
-              <input value={typed} onChange={(e) => setTyped(e.target.value)} className="mt-1 w-40 rounded-lg border border-axal-hairline px-2 py-1.5 font-mono text-[13px] dark:border-gray-700 dark:bg-gray-900" />
-            </label>
-            <p className="text-[11.5px] text-axal-muted dark:text-gray-400">What every team will see: “{PAUSED_BANNER}”</p>
-            <button type="button" disabled title={notYet('H4')} data-armed={pauseArmed({ typed, reason }) ? 'yes' : 'no'}
-              className="rounded-lg bg-red-700 px-3 py-1.5 text-[12.5px] font-semibold text-white disabled:opacity-50">Pause all AI agents</button>
-            <p role="status" className="text-[11.5px] font-semibold text-axal-ink dark:text-gray-200">{notYet('H4')} Nothing is paused from this page until then.</p>
-          </div>
-        ) : null}
-      </Card>
-    </div>
-  );
-}
-
-function Runs() {
-  return (
-    <NotYet build="H5" testId="ai-agents-runs">
-      <p className={MUTED}>Every agent run across all teams. Opening a run shows its steps, inputs as references to records (never member emails), output, cost and errors.</p>
-      <EmptyTable columns={RUN_COLUMNS} line="The run log is read when #4163 lands." testId="ai-agents-runs-table" />
-    </NotYet>
-  );
-}
-
-function Spend() {
-  return (
-    <div className="space-y-3" data-testid="ai-agents-spend">
-      <NotYet build="H5">
-        <p className={MUTED}>This month against the platform budget, the projection at the last 7 days’ pace, teams at their cap, and spend by agent, skill, company and model.</p>
-      </NotYet>
-      <p className={MUTED}>Members’ AI spend by model and page is on <Link to="/admin/platform/ai-usage" className="font-semibold text-axal-violet underline dark:text-violet-300">Platform › AI usage</Link> today.</p>
-    </div>
-  );
-}
-
-function Audit() {
-  return (
-    <NotYet build="H5" testId="ai-agents-audit">
-      <p className={MUTED}>Every admin action on this panel: who, what, when, the reason, and before and after. Read only; entries cannot be edited or deleted. CSV export.</p>
-      <EmptyTable columns={AUDIT_COLUMNS} line="The audit is read when #4163 lands." testId="ai-agents-audit-table" />
-    </NotYet>
-  );
-}
-
 // ─── The page ───────────────────────────────────────────────────────────────
 
 export default function HqAiAgentsPage() {
@@ -599,8 +496,8 @@ export default function HqAiAgentsPage() {
 
   const load = useCallback(() => {
     setSkills({ status: 'loading', hq: null });
-    teamAgentsApi.axalSkills()
-      .then((r) => setSkills({ status: 'ready', hq: Array.isArray(r?.hq) ? r.hq : [] }))
+    adminHqSkillsApi.list()
+      .then((r) => { if (!Array.isArray(r?.skills)) throw new Error('unreadable'); setSkills({ status: 'ready', hq: r.skills }); })
       .catch(() => setSkills({ status: 'unreadable', hq: null }));
   }, []);
   useEffect(() => { load(); }, [load]);

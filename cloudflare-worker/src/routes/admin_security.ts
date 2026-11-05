@@ -168,6 +168,7 @@ async function aiSafetyBlock(env: Env) {
     since: counters.since,
     verdicts: counters.verdicts,
     enforcement: counters.enforcement,
+    guard: counters.guard, // D4522: router enforcement is separate from legacy chat.
     // D481 — its own availability, its own table, its own window (24 hours
     // against the seven days before), stated in its own `how`.
     token_anomalies: await loadTokenAnomalies(env),
