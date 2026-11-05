@@ -2,6 +2,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import PostPreview from '../src/pages/cycles/distribution/PostPreview.jsx';
 import { readFileSync } from 'node:fs';
 import { mountContracts } from './_contracts_dom.mjs';
 import { CalendarWeek } from '../src/pages/cycles/distribution/CalendarTab.jsx';
@@ -24,4 +26,21 @@ test('Calendar is a real tab and Overview retires the old list', () => {
   const s = readFileSync(new URL('../src/pages/cycles/CycleRoute.jsx', import.meta.url), 'utf8');
   assert.match(s, /distributionTab === 'calendar'.*<CalendarTab projectId=\{projectId\}/);
   assert.match(s, /<CalendarWeek projectId=\{ctx.projectId\}/); assert.doesNotMatch(s, /<ContentCalendar/);
+});
+
+test('preview renders local raster URLs and leaves URL/HTML payloads out of image sources', () => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'location');
+  Object.defineProperty(globalThis, 'location', { configurable: true, value: { origin: 'https://axal.example' } });
+  try {
+    const image = 'blob:https://axal.example/01234567-89ab-cdef-0123-456789abcdef';
+    const local = renderToStaticMarkup(h(PostPreview, { image, text: '<script>alert(1)</script>' }));
+    assert.ok(local.includes(`src="${image}"`));
+    assert.ok(local.includes('&lt;script&gt;')); assert.ok(!local.includes('<script>'));
+    for (const image of ['javascript:alert(1)', '<img src=x onerror=alert(1)>', 'https://remote.example/image.png']) {
+      const html = renderToStaticMarkup(h(PostPreview, { image }));
+      assert.ok(!html.includes('<img')); assert.match(html, /Image not recorded/);
+    }
+  } finally {
+    if (original) Object.defineProperty(globalThis, 'location', original); else delete globalThis.location;
+  }
 });

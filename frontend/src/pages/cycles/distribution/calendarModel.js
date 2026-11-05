@@ -21,3 +21,17 @@ export function pieceStatus(piece) {
     className: key === 'scheduled' ? 'bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-200' : 'border text-gray-600 dark:text-gray-300', dropped: piece.status === 'dropped' };
 }
 export const FOUNDER_REASON = 'Only the founder publishes from this venture.';
+
+/** Local raster previews only: never render an arbitrary URL from form/DOM text. */
+export function previewImageUrl(value, origin) {
+  if (typeof value !== 'string' || typeof origin !== 'string') return undefined;
+  // Browser-created blob URLs end in a UUID. Disallow HTML, credentials,
+  // query/fragment suffixes and every network/data/javascript URL.
+  if (!/^blob:https?:\/\/[a-z0-9.:[\]-]+\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) return undefined;
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== 'blob:' || parsed.origin !== origin) return undefined;
+    const id = parsed.pathname.slice(parsed.pathname.lastIndexOf('/') + 1);
+    return `blob:${origin}/${encodeURIComponent(id)}`;
+  } catch { return undefined; }
+}
