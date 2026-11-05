@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { DistributionAsk } from './DistributionTabs.jsx';
 import { cyclesWrite } from '../../../lib/api/cycles.js';
 import { publishApi } from '../../../lib/api/publish.js';
+import { ConsentSummaryView, reachableLabel, useProspectConsentSummary } from './ProspectConsentSummary.jsx';
 import { CampaignStep } from './CampaignSteps.jsx';
 import { READER_NOTE, STEPS, campaignPath, draftSaveReason, emptyDraft, firstReason, fromCampaign, stepReason } from './campaignModel.js';
 import { campaignRefusal, saveCampaignPlan } from './campaignPlan.js';
@@ -30,6 +31,8 @@ export function CampaignWizard({draft,step,onChange,onStep,onSave,onCancel,busy=
 export default function NewCampaignPage({projectId,search='',api=cyclesWrite.grow,publish=publishApi,loadOptions=campaignOptions,assetsAskSlot,consentSlot,aiOff=false}) {
   const navigate=useNavigate(),[params]=useSearchParams();const edit=params.get('edit');
   const [draft,setDraft]=useState(emptyDraft),[step,setStep]=useState(0),[options,setOptions]=useState({}),[state,setState]=useState('loading'),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
+  const consent=useProspectConsentSummary(projectId,['icp','segment'].includes(draft.audience_kind)?draft.segment_id:null);
+  const audienceConsent=draft.audience_kind==='import'||(['icp','segment'].includes(draft.audience_kind)&&!draft.segment_id)?{status:'ready',data:{available:false}}:consent;
   const journal=useRef({uid:null,links:[],assets:{}}),live=useRef(true);
   useEffect(()=>{live.current=true;return()=>{live.current=false;};},[]);
   useEffect(()=>{let active=true;setState('loading');Promise.all([loadOptions(projectId),edit?api.campaignDetail(projectId,edit):Promise.resolve(null)]).then(([choices,data])=>{
@@ -44,5 +47,5 @@ export default function NewCampaignPage({projectId,search='',api=cyclesWrite.gro
   };
   if(state==='loading')return <p role="status" className="cm-root cm-editor">Loading campaign choices…</p>;
   if(state==='unreadable')return <p role="alert" className="cm-root cm-editor">Unreadable: the campaign choices could not be read.</p>;
-  return <CampaignWizard draft={draft} step={step} options={options} busy={busy} error={error} notice={notice} readOnly={options.can_write!==true} search={search} onChange={next=>{setDraft(next);setNotice('');}} onStep={setStep} onSave={save} onCancel={()=>navigate(campaignPath('',search))} assetsAskSlot={assetsAskSlot} consentSlot={consentSlot} aiOff={aiOff}/>;
+  return <CampaignWizard draft={draft} step={step} options={{...options,reachableLabel:reachableLabel(audienceConsent)}} busy={busy} error={error} notice={notice} readOnly={options.can_write!==true} search={search} onChange={next=>{setDraft(next);setNotice('');}} onStep={setStep} onSave={save} onCancel={()=>navigate(campaignPath('',search))} assetsAskSlot={assetsAskSlot} consentSlot={consentSlot??<ConsentSummaryView state={audienceConsent}/>} aiOff={aiOff}/>;
 }

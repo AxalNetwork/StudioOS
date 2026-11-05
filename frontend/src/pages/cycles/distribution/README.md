@@ -40,6 +40,7 @@ starting ads.
 | `AddProspectSheet.jsx` | D4492: manual capture, proof and a blank-note Ask; none on consent. |
 | `prospectsModel.js` | D4492: seven stages, source labels, truthful counts and fixed refusal fallback. |
 | `ProspectConsentSummary.jsx` | D4492: Audience slot and reusable summary hook/Review reachable label for the wizard handoff. |
+| `ProspectsPage.jsx` | D4492: mounted tab, server-derived write permission and the campaign wizard’s import door. |
 
 CycleRoute still owns the module page. Overview retains its charts,
 outreach draft, content calendar, update-ask replies, Mercury, Notion and tool
