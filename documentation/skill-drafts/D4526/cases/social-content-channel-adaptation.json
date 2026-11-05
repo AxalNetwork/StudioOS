@@ -1,0 +1,45 @@
+{
+  "skill": "social-content-channel-adaptation",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "source": "New dashboard export supports CSV",
+        "channels": {
+          "LinkedIn": 3000,
+          "X": 280
+        },
+        "campaign": "Export launch",
+        "destination_url": null
+      },
+      "company.profile": {
+        "available": false,
+        "reason": "No additional fixture evidence supplied"
+      }
+    }
+  },
+  "expect": {
+    "output": "draft",
+    "must_include": [
+      "LinkedIn",
+      "X",
+      "CSV"
+    ],
+    "must_say_not_recorded": [
+      "destination URL"
+    ],
+    "must_not_include": [
+      "supports PDF export"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why destination URL is missing rather than inventing it.",
+    "Do not assert: supports PDF export.",
+    "Return a proposal only; do not perform any external action.",
+    "Produce separate LinkedIn and X post drafts, not just a plan; preserve CSV-only capability.",
+    "Count characters against supplied channel limits; leave the missing destination as an explicit placeholder."
+  ],
+  "predicate_witness": "LinkedIn; X; CSV. destination URL: Not recorded. Human review required."
+}

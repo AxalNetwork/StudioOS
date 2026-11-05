@@ -1,0 +1,46 @@
+{
+  "skill": "conversion-rate-experiment-design",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "variant_A": {
+          "visitors": 100,
+          "conversions": 5
+        },
+        "variant_B": {
+          "visitors": 100,
+          "conversions": 7
+        },
+        "power_plan": null
+      },
+      "build.records": {
+        "available": false,
+        "reason": "No additional fixture evidence supplied"
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "5%",
+      "7%",
+      "insufficient"
+    ],
+    "must_say_not_recorded": [
+      "power plan"
+    ],
+    "must_not_include": [
+      "statistically proven winner"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why power plan is missing rather than inventing it.",
+    "Do not assert: statistically proven winner.",
+    "Return a proposal only; do not perform any external action.",
+    "Calculate 5% and 7% observed conversion; do not infer a statistically established winner."
+  ],
+  "predicate_witness": "5%; 7%; insufficient. power plan: Not recorded. Human review required."
+}

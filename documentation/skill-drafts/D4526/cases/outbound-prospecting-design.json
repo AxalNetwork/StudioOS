@@ -1,0 +1,48 @@
+{
+  "skill": "outbound-prospecting-design",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "segment": "Inventory software teams",
+        "contacts": [
+          {
+            "id": "C1",
+            "status": "suppressed"
+          },
+          {
+            "id": "C2",
+            "status": "eligible"
+          }
+        ],
+        "permission_basis": null
+      },
+      "network.relationships": {
+        "available": false,
+        "reason": "No additional fixture evidence supplied"
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "C1",
+      "suppressed",
+      "C2"
+    ],
+    "must_say_not_recorded": [
+      "permission basis"
+    ],
+    "must_not_include": [
+      "send to every contact"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why permission basis is missing rather than inventing it.",
+    "Do not assert: send to every contact.",
+    "Return a proposal only; do not perform any external action."
+  ],
+  "predicate_witness": "C1; suppressed; C2. permission basis: Not recorded. Human review required."
+}

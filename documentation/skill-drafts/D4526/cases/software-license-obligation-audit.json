@@ -1,0 +1,41 @@
+{
+  "skill": "software-license-obligation-audit",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "github.repos": {
+        "dependency": "widget-kit",
+        "version": "3.2",
+        "manifest_license": "SEE LICENSE",
+        "license_file": null,
+        "distribution": "Downloaded desktop app"
+      },
+      "data_room.index": {
+        "available": false,
+        "reason": "No additional fixture evidence supplied"
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "widget-kit",
+      "3.2",
+      "Downloaded desktop app"
+    ],
+    "must_say_not_recorded": [
+      "license file"
+    ],
+    "must_not_include": [
+      "MIT licensed"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why license file is missing rather than inventing it.",
+    "Do not assert: MIT licensed.",
+    "Return a proposal only; do not perform any external action."
+  ],
+  "predicate_witness": "widget-kit; 3.2; Downloaded desktop app. license file: Not recorded. Human review required."
+}
