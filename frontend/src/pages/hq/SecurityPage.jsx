@@ -215,6 +215,20 @@ function AiSafety({ block }) {
           )}
         </div>
       )}
+      <p className="mt-3 text-[11px] text-axal-muted dark:text-gray-400">
+        Unsafe verdicts are historical checks, not unresolved incidents. Turns blocked and
+        outputs flagged above cover the legacy chat audit; they do not include the router
+        enforcement below. These totals cannot establish whether a particular output was delivered.
+      </p>
+      {block?.guard?.available ? (
+        <div className="mt-3" data-testid="hq-router-enforcement">
+          <h3 className="text-[11px] font-semibold text-axal-muted">Router enforcement · {windowNote}</h3>
+          <div className="grid grid-cols-2 gap-2 mt-2">
+            <Stat label="Inputs blocked" value={num(block.guard.by_page.reduce((n, p) => n + p.blocked_input, 0))} note="refused by the router guard" />
+            <Stat label="Outputs withheld" value={num(block.guard.by_page.reduce((n, p) => n + p.withheld_output, 0))} note="stopped before delivery" />
+          </div>
+        </div>
+      ) : block && <p className="mt-3 text-[11px] text-axal-muted">Router enforcement: {block.guard?.reason || 'Not recorded'}</p>}
       <TokenAnomalies block={block?.token_anomalies} />
       {(block?.not_counted || []).length > 0 && (
         <ul className="mt-3 space-y-1.5" data-testid="hq-ai-safety-not-counted">
