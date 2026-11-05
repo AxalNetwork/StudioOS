@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { RailFrame, WorkerRail } from '../../ui';
+import { RailFrame } from '../../ui';
 import { titleCase } from '../../lib/absence';
 import CourseOutline, { CourseResources } from './CourseOutline';
 import LessonPlayer from './LessonPlayer';
+import { MarkCompleteButton } from './LessonFooter';
+import { hasLessonBody, progressRefusal } from './lessonFooterModel';
 import MyLearning from './MyLearning';
 import { LearningEmpty, LearningHeader, NotLiveYet, SectionCard } from './LearningStates';
 import { AssessmentLesson } from './LearningAssessments';
@@ -25,20 +27,6 @@ const LEARNING = { to: '/learning', label: 'Learning' };
 
 /** A read's state as the status a component draws: a 404 is "ready, with nothing to show". */
 export const statusOf = (state) => (state.status === 'missing' ? 'ready' : state.status === 'idle' ? 'loading' : state.status);
-
-function LearnerRail({ coverage }) {
-  return (
-    <WorkerRail
-      workspace="Learning"
-      // Violet, the founder accent: the canvas draws the learner's Learning
-      // in #7c3aed for every profile it serves.
-      role="founder"
-      stance="Read-only learning view"
-      note="Eadwyn reads back what this page has loaded, on a click. It does not mark progress, register you, submit an answer or sit an exam."
-      coverage={coverage}
-    />
-  );
-}
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
@@ -76,7 +64,7 @@ export function CoursePage({ slug }) {
   const [state, retry] = useLearningRead(() => readCourse(slug), [slug], { scope: 'course' });
   const course = state.status === 'ready' ? state.course : null;
   return (
-    <RailFrame rail={<LearnerRail coverage={courseCoverage(state)} />} data-testid="learning-course">
+    <RailFrame data-testid="learning-course">
       <div className="space-y-4">
         <LearningHeader title={course?.title || 'Course'} sub={course?.summary || undefined} back={LEARNING}
           action={course?.uid ? <AddToPlan subject={{ kind: 'course', uid: course.uid, title: course.title }} /> : null} />
@@ -105,7 +93,7 @@ function LessonElsewhere({ lesson, slug }) {
   );
 }
 
-export function LessonView({ courseState, itemState, lessonUid, onMark, marking, markError, onRetryCourse, onRetryItem }) {
+export function LessonView({ courseState, itemState, lessonUid, onMark, marking, markError, onRetryCourse, onRetryItem, completionInHeader = false }) {
   const course = courseState.status === 'ready' ? courseState.course : null;
   const found = course ? findLesson(courseState.modules, lessonUid) : null;
   const step = (l) => (l ? { title: l.title, href: lessonHref(course.slug, l) } : null);
@@ -134,7 +122,9 @@ export function LessonView({ courseState, itemState, lessonUid, onMark, marking,
         video={videoPlayback(item)}
         transcript={item.transcript}
         moduleTitle={found.lesson.module?.title}
-        position={`${found.index + 1} of ${found.total}`}
+        index={found.index}
+        total={found.total}
+        completionInHeader={completionInHeader}
         prev={step(found.prev)}
         next={step(found.next)}
         completed={found.lesson.progress?.status === 'completed'}
@@ -183,23 +173,29 @@ export function LessonPage({ slug, lessonUid }) {
       const fresh = await markLessonComplete({ course: courseState.course, lessonUid, slug });
       setCourseState({ status: 'ready', ...fresh });
     } catch (err) {
-      setMarkError(err?.message || 'Your progress could not be saved.');
+      setMarkError(progressRefusal(err));
     } finally {
       setMarking(false);
     }
   };
   const course = courseState.status === 'ready' ? courseState.course : null;
+  const item = itemState.status === 'ready' ? itemState.item : null;
+  const emptyReading = item?.kind === 'reading' && !hasLessonBody(item);
   return (
-    <RailFrame rail={<LearnerRail coverage={courseCoverage(courseState)} />} data-testid="learning-lesson">
+    <RailFrame data-testid="learning-lesson">
       <div className="space-y-4">
         <LearningHeader
+          eyebrow={found ? `Learning · ${titleCase(found.lesson.kind)}` : 'Learning'}
           title={found?.lesson.title || 'Lesson'}
-          sub={course ? [course.title, found?.lesson.module?.title].filter(Boolean).join(' · ') : undefined}
+          sub={course && !emptyReading ? [course.title, found?.lesson.module?.title].filter(Boolean).join(' · ') : undefined}
           back={{ to: `/learning/courses/${encodeURIComponent(slug)}`, label: course?.title || 'Course' }}
-          action={found ? <AddToPlan subject={{ kind: 'lesson', uid: found.lesson.uid || lessonUid, title: found.lesson.title }} /> : null}
+          action={found ? <div className="flex flex-wrap items-center gap-3">
+            {item && <MarkCompleteButton completed={found.lesson.progress?.status === 'completed'} hasBody={hasLessonBody(item)} onMarkComplete={onMark} marking={marking} />}
+            <AddToPlan subject={{ kind: 'lesson', uid: found.lesson.uid || lessonUid, title: found.lesson.title }} />
+          </div> : null}
         />
         <LessonView
-          courseState={courseState} itemState={itemState} lessonUid={lessonUid}
+          courseState={courseState} itemState={itemState} lessonUid={lessonUid} completionInHeader
           onMark={onMark} marking={marking} markError={markError} onRetryCourse={retryCourse} onRetryItem={retryItem}
         />
       </div>
@@ -209,7 +205,7 @@ export function LessonPage({ slug, lessonUid }) {
 
 // ── /learning/videos/:uid and /learning/items/:uid ────────────────────────
 
-export function ItemView({ state, onRetry, onMark, marking, markError, initialTime = null }) {
+export function ItemView({ state, onRetry, onMark, marking, markError, initialTime = null, completionInHeader = false }) {
   if (state.status === 'missing') {
     return (
       <SectionCard title="Not available" testid="lesson-player">
@@ -222,6 +218,7 @@ export function ItemView({ state, onRetry, onMark, marking, markError, initialTi
     <LessonPlayer
       status={statusOf(state)}
       lesson={null}
+      completionInHeader={completionInHeader}
       item={item}
       video={videoPlayback(item)}
       transcript={item?.transcript ?? null}
@@ -250,23 +247,26 @@ export function ItemPage({ uid }) {
       const progress = await markItemComplete(uid);
       setState((s) => ({ ...s, progress }));
     } catch (err) {
-      setMarkError(err?.message || 'Your progress could not be saved.');
+      setMarkError(progressRefusal(err));
     } finally {
       setMarking(false);
     }
   };
   const item = state.status === 'ready' ? state.item : null;
   return (
-    <RailFrame rail={<LearnerRail coverage={item ? [`One ${item.kind}: “${item.title}”`] : []} />} data-testid="learning-item">
+    <RailFrame data-testid="learning-item">
       <div className="space-y-4">
         <LearningHeader
           eyebrow={item ? `Learning · ${titleCase(item.kind)}` : 'Learning'}
           title={item?.title || 'Video'}
-          sub={item?.summary || undefined}
+          sub={item?.kind === 'reading' && !hasLessonBody(item) ? undefined : item?.summary || undefined}
           back={LEARNING}
-          action={item?.kind === 'video' ? <AddToPlan subject={{ kind: 'video', uid: item.uid || uid, title: item.title }} /> : null}
+          action={item ? <div className="flex flex-wrap items-center gap-3">
+            <MarkCompleteButton completed={state.progress?.status === 'completed'} hasBody={hasLessonBody(item)} onMarkComplete={onMark} marking={marking} />
+            {item.kind === 'video' && <AddToPlan subject={{ kind: 'video', uid: item.uid || uid, title: item.title }} />}
+          </div> : null}
         />
-        <ItemView key={initialTime} state={state} initialTime={initialTime} onRetry={retry} onMark={onMark} marking={marking} markError={markError} />
+        <ItemView key={initialTime} completionInHeader state={state} initialTime={initialTime} onRetry={retry} onMark={onMark} marking={marking} markError={markError} />
       </div>
     </RailFrame>
   );
@@ -298,11 +298,8 @@ export function MePage({ sub }) {
   const [state, retry] = useLearningRead(readMe, [], { scope: 'me' });
   const [submissions, retrySubmissions] = useLearningRead(readMySubmissions, [], { scope: 'me-submissions' });
   const [attempts, retryAttempts] = useLearningRead(readMyAttempts, [], { scope: 'me-attempts' });
-  const coverage = state.status === 'ready'
-    ? [`${state.in_progress.length} started and ${state.completed.length} completed`]
-    : [];
   return (
-    <RailFrame rail={<LearnerRail coverage={coverage} />} data-testid="learning-me">
+    <RailFrame data-testid="learning-me">
       <div className="space-y-4">
         <LearningHeader title="My learning" sub={sub} back={LEARNING}
           action={<Link to="/learning/plan" className="text-[12.5px] font-semibold text-axal-violet-deep underline dark:text-violet-300" data-testid="link-learning-plan">My learning plan</Link>} />

@@ -37,7 +37,7 @@ import {
 } from '../src/pages/learning/learningModel.js';
 import { webinarRow } from '../src/pages/learning/webinarModel.js';
 import { readArticles, readEvents, readPublications } from '../src/pages/learning/learningReads.js';
-import LearningPage, { adminLinks } from '../src/pages/learning/LearningPage.jsx';
+import LearningPage, { adminLinks, LearningSubPage } from '../src/pages/learning/LearningPage.jsx';
 import { ArticleList, EventList, LearningHomeView, PublicationList, homeCoverage } from '../src/pages/learning/LearningHome.jsx';
 import CourseOutline from '../src/pages/learning/CourseOutline.jsx';
 import LessonPlayer from '../src/pages/learning/LessonPlayer.jsx';
@@ -522,30 +522,20 @@ test('an admin and the Super Admin see the full page: no card, All first, the st
   assert.match(flat(program), /Read only · Assigned admin · Program not recorded/);
 });
 
-test('Learning home and the member program have no AI rail; other existing subpage rails keep their accent and voice', () => {
+test('Learning home, member, studio and gated subpages have no AI rail', () => {
   const home = flat(page('/learning', '/learning', { view: 'home', user: FOUNDER, activeRole: 'founder' }));
   assert.doesNotMatch(home, /Eadwyn AI/);
   const member = flat(page('/learning/my-programs/p1', '/learning/my-programs/:program', { view: 'myProgram', user: FOUNDER, activeRole: 'founder' }));
   assert.doesNotMatch(member, /Eadwyn AI/);
-  assert.match(flat(page('/learning/studio', '/learning/studio', { view: 'studio', user: SUPER, activeRole: 'admin' })), /Eadwyn AI .{0,24}?Learning studio/);
+  assert.doesNotMatch(flat(page('/learning/studio', '/learning/studio', { view: 'studio', user: SUPER, activeRole: 'admin' })), /Eadwyn AI/);
   assert.doesNotMatch(flat(page('/learning/programs/p1', '/learning/programs/:program', { view: 'program', user: ADMIN, activeRole: 'admin' })), /Eadwyn AI/);
   const dir = resolve(ROOT, 'frontend/src/pages/learning');
   const rails = readdirSync(dir).filter((f) => f.endsWith('.jsx')).map((f) => readFileSync(resolve(dir, f), 'utf8')).join('\n');
   const mounts = [...codeOnly(rails).matchAll(/<WorkerRail[\s\S]*?\/>/g)].map((m) => m[0]);
-  // The three tiers of a page that waits on its store, the learner pages that read, the studio,
-  // and, in stage 3, the assigned admin's program pages and the studio's program pages (D558),
-  // the exercise and exam pages (D559), the webinar page (D560),
-  // and the learning plan (D3959).
-  // Main removed the dead assessment rail; D4481 also removes assigned-program rails.
-  assert.equal(mounts.length, 8);
-  assert.doesNotMatch(codeOnly(read('frontend/src/pages/learning/LearningPrograms.jsx')), /<WorkerRail/, 'assigned program pages keep the owner’s no-rail rule');
-  for (const tier of ['founder', 'admin', 'super_admin']) assert.ok(mounts.some((m) => m.includes(`role="${tier}"`)), `no ${tier} rail`);
-  for (const mount of mounts) {
-    assert.match(mount, /workspace="Learning[^"]*"/);
-    assert.match(mount, /role="(founder|admin|super_admin)"/);
-    const note = /note="([^"]*)"/.exec(mount)?.[1] || '';
-    assert.match(note, /^Eadwyn /);
-    assert.doesNotMatch(note, /advis|recommend|fiduciar/i, 'the rail speaks in regulated terms');
+  // D4478 applies the owner's rule to every Learning tier, including dormant gates.
+  assert.equal(mounts.length, 0);
+  for (const view of ['lesson', 'item', 'studio']) {
+    assert.doesNotMatch(flat(html(h(LearningSubPage, { view, gated: true }))), /Eadwyn AI/);
   }
   // Coverage counts only what was read: a failed source drops its line.
   assert.deepEqual(homeCoverage({ gated: false, q: '', articles: ARTICLES_READY, publications: { status: 'unreadable', rows: [] }, events: EVENTS_READY }),

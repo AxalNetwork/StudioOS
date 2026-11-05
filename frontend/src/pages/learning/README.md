@@ -9,8 +9,8 @@ routes live in the D528 module `frontend/src/routes/learning.jsx`, which
 | File | What it is |
 | --- | --- |
 | `LearningPage.jsx` | The routed page: the gate, then the view's container. Every view is wired since stage 3; a profile the gate holds sees the coming-soon card in place. |
-| `LearningHome.jsx` | `/learning`: the tabs, the search, Continue learning, My programs, Upcoming webinars and the live reads, plus `LearningHomeView`, which draws it all from props. The owner requested no AI rail on this home page (desktop or phone); other Learning views keep theirs. |
-| `LearningWired.jsx` | The learner pages that read the Learning store: a course, a lesson, a standalone video or reading, and My learning. Each is a pure view plus the container that reads for it. |
+| `LearningHome.jsx` | `/learning`: the tabs, the search, Continue learning, My programs, Upcoming webinars and the live reads, plus `LearningHomeView`, which draws it all from props. Learning pages have no AI rail, including the studio and dormant gate (D4478). |
+| `LearningWired.jsx` | The learner pages that read the Learning store: a course, a lesson, a standalone video or reading, and My learning. Each is a pure view plus the container that reads for it. D4478 shares header/footer completion state, suppresses empty reading ledes and preserves validated time links. |
 | `LearningStudio.jsx` | `/learning/studio`, the Super Admin's: the content table (exercises and exams included), the webinar list, and the editor the address opens (`?item=`, `?course=`, `?exercise=`, `?exam=`, `?webinar=`, `?new=`). |
 | `StudioItemEditor.jsx` | Creates and edits a video (a link or an uploaded file) or a reading, with publish, unpublish and archive. |
 | `StudioCourseBuilder.jsx` | A course's fields and resources, its modules and its lessons: add, edit, delete, and reorder with up and down. |
@@ -141,5 +141,5 @@ coming-soon gate, links, searches and reads are unchanged.
   the copy yet, so today none of it is drawn.
 - **The Ask triggers on a blank Title, Summary and Topic (#3706) are not
   wired here.** #3706's field triggers come from `GET /api/fills/sheet`, whose
-  `FILL_FIELDS` has no Learning form, and the studio's rail has no page key;
+  `FILL_FIELDS` has no Learning form;
   wiring them needs that Worker form first.
