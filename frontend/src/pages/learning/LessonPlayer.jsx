@@ -1,13 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import { Stream } from '@cloudflare/stream-react';
-import { Check, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 import { Card, Pill, Unrecorded } from '../../ui';
+import LessonFooter, { MarkCompleteButton } from './LessonFooter';
+import { hasLessonBody, lessonPositionLine, progressRefusal } from './lessonFooterModel';
+import useOnline from './useOnline';
+import { queuedPositionWriter } from './lessonPositionWriter';
+import './lessonFooter.css';
 import { LearningEmpty, LearningUnreadable, SectionCard, stateBlock } from './LearningStates';
 import {
   CUES_UNREADABLE, NO_CHAPTERS, NOT_LIVE, PLAIN_TRANSCRIPT_LINE, captionChoices, chapterAt, chaptersOf, clockLabel, cueAt, durationLabel,
-  lessonKindLabel, positionWriter,
+  lessonKindLabel,
 } from './learningModel';
 
 /**
@@ -43,12 +47,26 @@ import {
  * looked live and saved nothing would be the dead control D17 refuses.
  */
 export default function LessonPlayer({
-  status, lesson, item, video, transcript = null, moduleTitle, position, prev, next,
+  status, lesson, item, video, transcript = null, moduleTitle, index, total, position, prev, next,
   completed = false, onMarkComplete, marking = false, markError = '', reason = NOT_LIVE.catalogue, onRetry,
-  resumeFrom = null, onPosition = null, loadCaption = null,
+  resumeFrom = null, onPosition = null, loadCaption = null, completionInHeader = false,
 }) {
   // The playing time, and how to seek, from whichever player is drawn (null when it cannot be seeked).
   const [now, setNow] = useState(0);
+  const online = useOnline();
+  const [positionError, setPositionError] = useState('');
+  useEffect(() => { setPositionError(''); }, [item?.uid]);
+  const positionSubject = useRef(item?.uid);
+  positionSubject.current = item?.uid;
+  const savePosition = useCallback(async (seconds, percent) => {
+    const subject = item?.uid;
+    try {
+      await onPosition(seconds, percent);
+      if (positionSubject.current === subject) setPositionError('');
+    } catch (error) {
+      if (positionSubject.current === subject) setPositionError(progressRefusal(error));
+    }
+  }, [onPosition, item?.uid]);
   const seeker = useRef(null);
   const seek = useCallback((t) => { seeker.current?.(t); setNow(t); }, []);
   const canSeek = Boolean(video?.player || (video?.src && !video?.embed));
@@ -64,57 +82,45 @@ export default function LessonPlayer({
   const kind = lesson?.kind || item?.kind;
   const length = durationLabel(item?.duration_seconds);
   const text = String(transcript ?? '').trim();
-  // LR4: on a wide screen the chapters sit beside the player; on a tablet or phone (lr20b, lr21) they stack below it.
-  // The transcript is always below.
+  // Retain the current caller's recorded `position` until its header wiring is integrated.
+  const legacy = typeof position === 'string' ? /^([1-9]\d*) of ([1-9]\d*)$/.exec(position) : null;
+  const orderIndex = index ?? (legacy ? Number(legacy[1]) - 1 : undefined);
+  const orderTotal = total ?? (legacy ? Number(legacy[2]) : undefined);
+  const knownOrder = lessonPositionLine({ index: orderIndex, total: orderTotal, moduleTitle });
+  const hasBody = hasLessonBody(item);
+  const showFooter = kind === 'video' || (Boolean(lesson) && hasBody);
+  // LR4/LR21: player then footer, with chapters and transcript alongside only on wide screens.
   return (
-    <div className="space-y-4" data-testid="lesson-player">
-      <div className={kind === 'video' ? 'grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start' : ''} data-testid="lesson-player-layout">
-      <Card padding="none" className="min-w-0 overflow-hidden">
-        {kind === 'video' ? <VideoArea video={video} item={item} length={length} resumeFrom={resumeFrom} onPosition={onPosition} onTime={setNow} seeker={seeker} /> : <ReadingArea body={item?.body} />}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-axal-hairline px-4 py-3 dark:border-gray-800">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-1.5 text-[11.5px] text-axal-faint dark:text-gray-500">
+    <div className={`learning-lesson-player min-w-0 space-y-4 ${showFooter ? 'lesson-has-footer' : ''}`} data-testid="lesson-player">
+      <div className={kind === 'video' ? 'grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-start' : ''} data-testid="lesson-player-layout">
+        <div className="min-w-0 space-y-4">
+          <Card padding="none" className="lesson-content min-w-0 overflow-hidden">
+            {!showFooter && !completionInHeader && <div className="border-b border-axal-hairline px-4 py-3 dark:border-gray-800">
+              <MarkCompleteButton completed={completed} onMarkComplete={onMarkComplete} marking={marking} hasBody={hasBody} />
+            </div>}
+            {kind === 'video' ? <div className="lesson-video-frame relative" data-testid="lesson-video-frame">
+              <VideoArea video={video} item={item} length={length} resumeFrom={resumeFrom} onPosition={onPosition ? savePosition : null} onTime={setNow} seeker={seeker} />
+              {!online && <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-axal-ground/95 p-4 text-center text-axal-ink dark:bg-gray-950/95 dark:text-gray-100" role="status" aria-live="polite" data-testid="lesson-offline">
+                <strong className="text-[13.5px]">You are offline.</strong><span className="text-[12.5px]">Progress will save when you reconnect.</span>
+              </div>}
+            </div> : <ReadingArea body={item?.body} />}
+            <div className="flex flex-wrap items-center gap-1.5 border-t border-axal-hairline px-4 py-3 text-[11.5px] text-axal-faint dark:border-gray-800 dark:text-gray-400">
               <Pill tone="info">{lessonKindLabel(kind)}</Pill>
               {moduleTitle && <span>{moduleTitle}</span>}
-              {position && <span className="tabular-nums">· lesson {position}</span>}
-              {length && <span className="tabular-nums">· {length}</span>}
-              {kind === 'video' && resumeFrom != null && (
-                <Pill tone="neutral" data-testid="lesson-resume">Resume from {clockLabel(resumeFrom)}</Pill>
-              )}
+              {position && knownOrder && <span className="tabular-nums">· lesson {position}</span>}
+              {length ? <span className="tabular-nums">{length}{kind === 'reading' ? ' read' : ''}</span> : <span>{kind === 'reading' ? 'Reading time' : 'Length'} · <Unrecorded reason={kind === 'reading' ? 'Reading time is not recorded.' : 'Length is not recorded.'} /></span>}
+              {item?.level && <Pill tone="neutral">{item.level}</Pill>}
+              {kind === 'video' && resumeFrom != null && <Pill tone="neutral" data-testid="lesson-resume">Resume from {clockLabel(resumeFrom)}</Pill>}
             </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {lesson && <StepLink step={prev} dir="prev" />}
-            {lesson && <StepLink step={next} dir="next" />}
-            {completed ? (
-              <span className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-emerald-700 dark:text-emerald-300" data-testid="text-lesson-completed">
-                <Check size={14} aria-hidden="true" /> Completed
-              </span>
-            ) : (
-              <button
-                type="button"
-                onClick={onMarkComplete}
-                disabled={!onMarkComplete || marking}
-                title={onMarkComplete ? undefined : 'Progress cannot be saved here.'}
-                className="rounded-axal-sm bg-axal-violet px-3 py-1.5 text-[12.5px] font-semibold text-white hover:bg-axal-violet-deep disabled:cursor-not-allowed disabled:opacity-50"
-                data-testid="button-mark-complete"
-              >
-                {marking ? 'Saving…' : 'Mark complete'}
-              </button>
-            )}
-          </div>
+          </Card>
+          {showFooter && <LessonFooter navigation={Boolean(lesson || prev || next)} index={orderIndex} total={orderTotal} moduleTitle={moduleTitle} prev={prev} next={next} completed={completed} onMarkComplete={onMarkComplete} marking={marking} hasBody={hasBody} />}
+          {(markError || positionError) && <p className="px-4 py-2 text-[12px] text-red-700 dark:text-red-300" role="alert" data-testid="text-mark-error">{markError || positionError}</p>}
         </div>
-        {markError && (
-          <p className="border-t border-axal-hairline px-4 py-2 text-[12px] text-red-700 dark:border-gray-800 dark:text-red-300" role="alert" data-testid="text-mark-error">
-            {markError}
-          </p>
-        )}
-      </Card>
-      {kind === 'video' && <Chapters item={item} now={now} onSeek={canSeek ? seek : null} />}
+        {kind === 'video' && <div className="min-w-0 space-y-4">
+          <Chapters item={item} now={now} onSeek={canSeek ? seek : null} />
+          <Transcript text={text} video={video} loadCaption={loadCaption} now={now} onSeek={canSeek ? seek : null} />
+        </div>}
       </div>
-      {kind === 'video' && (
-        <Transcript text={text} video={video} loadCaption={loadCaption} now={now} onSeek={canSeek ? seek : null} />
-      )}
     </div>
   );
 }
@@ -163,7 +169,10 @@ function VideoArea({ video, item, length, resumeFrom = null, onPosition = null, 
     );
   }
   // Keyed by its file, so a failure shown for one video never stands in for the next.
+  const uploaded = item?.video_source === 'r2' || /^\/api\/learning\/items\/[^/]+\/video(?:[?#]|$)/.test(video.src);
   return (
+    <div className="relative" role="region" aria-label={uploaded ? 'Video (uploaded file)' : 'Video player'}>
+      {uploaded && <span className="pointer-events-none absolute right-2 top-2 z-10 rounded-axal-sm bg-axal-ground px-2 py-1 text-[11px] font-semibold text-axal-ink dark:bg-gray-900 dark:text-gray-100" data-testid="lesson-uploaded-file">Uploaded file</span>}
     <StreamPlayer
       key={video.src}
       src={video.src}
@@ -174,6 +183,7 @@ function VideoArea({ video, item, length, resumeFrom = null, onPosition = null, 
       onTime={onTime}
       seeker={seeker}
     />
+    </div>
   );
 }
 
@@ -184,10 +194,19 @@ function VideoArea({ video, item, length, resumeFrom = null, onPosition = null, 
  * throttle is not reset by a re-render.
  */
 function usePositionWriter(onPosition, source) {
-  const latest = useRef(onPosition);
+  // A queued write for the old source must retain that source's callback.
+  const latest = useMemo(() => ({ current: onPosition }), [source]);
   latest.current = onPosition;
   const hasWriter = Boolean(onPosition);
-  return useMemo(() => (hasWriter ? positionWriter((s, p) => latest.current?.(s, p)) : null), [hasWriter, source]);
+  const writer = useMemo(() => (hasWriter ? queuedPositionWriter((s, p) => latest.current?.(s, p)) : null), [hasWriter, source, latest]);
+  useEffect(() => {
+    if (!writer) return undefined;
+    writer.activate();
+    const reconnect = () => writer.reconnect();
+    window.addEventListener('online', reconnect);
+    return () => { window.removeEventListener('online', reconnect); writer.dispose(); };
+  }, [writer]);
+  return writer;
 }
 
 /**
@@ -243,10 +262,10 @@ export function Chapters({ item, now = 0, onSeek = null }) {
   return (
     <SectionCard title="Chapters" testid="lesson-chapters">
       {chapters.length ? (
-        <ol className="space-y-0.5 text-[12.5px]" data-testid="lesson-chapters-list">
+        <ol className="lesson-chapters-list text-[12.5px]" data-testid="lesson-chapters-list">
           {chapters.map((c, i) => {
             const here = i === current;
-            const cls = `flex w-full gap-2 rounded-axal-sm px-1.5 py-1 text-left ${here ? 'bg-violet-50 font-semibold text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-200' : 'text-axal-ink dark:text-gray-100'}`;
+            const cls = `lesson-chapter flex w-full gap-2 rounded-axal-sm px-1.5 py-1 text-left ${here ? 'bg-violet-50 font-semibold text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-200' : 'text-axal-ink dark:text-gray-100'}`;
             const body = (<><span className="tabular-nums text-axal-muted dark:text-gray-400">{clockLabel(c.start)}</span><span>{c.title}</span></>);
             return (
               <li key={`${c.start}-${c.title}`}>
@@ -400,27 +419,13 @@ function ReadingArea({ body }) {
   if (!text) {
     return (
       <div className="p-4">
-        <LearningEmpty title="No text yet" body="This reading has no text published yet." />
+        <LearningEmpty title="No text yet" body={<><Unrecorded reason="This reading has no text published yet." /><span className="mt-1 block">This reading has no text published yet.</span></>} />
       </div>
     );
   }
   return (
-    <article className="prose prose-sm max-w-none p-5 dark:prose-invert" data-testid="lesson-reading">
+    <article className="prose prose-sm mx-auto max-w-[680px] p-4 dark:prose-invert sm:p-5" data-testid="lesson-reading">
       <ReactMarkdown>{text}</ReactMarkdown>
     </article>
-  );
-}
-
-function StepLink({ step, dir }) {
-  const label = dir === 'prev' ? 'Previous' : 'Next';
-  const Icon = dir === 'prev' ? ChevronLeft : ChevronRight;
-  const cls = 'inline-flex items-center gap-1 rounded-axal-sm border border-axal-hairline px-2.5 py-1.5 text-[12.5px] font-medium dark:border-gray-700';
-  if (!step?.href) {
-    return <span className={`${cls} text-axal-faint dark:text-gray-600`} aria-disabled="true">{dir === 'prev' && <Icon size={13} aria-hidden="true" />}{label}{dir === 'next' && <Icon size={13} aria-hidden="true" />}</span>;
-  }
-  return (
-    <Link to={step.href} className={`${cls} text-axal-ink hover:border-axal-violet/40 dark:text-gray-200`} title={step.title || undefined} data-testid={`link-lesson-${dir}`}>
-      {dir === 'prev' && <Icon size={13} aria-hidden="true" />}{label}{dir === 'next' && <Icon size={13} aria-hidden="true" />}
-    </Link>
   );
 }

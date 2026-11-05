@@ -256,6 +256,8 @@ export function itemHref(item) {
  * for an item is `/learning/items/:uid`, which it also serves). A row whose
  * status is not `published` is the Super Admin's draft, and says so.
  */
+export { VIDEO_LENGTH_OPTIONS, videoCountLabel, transcriptHit, itemHrefAt, parseVideoTime } from './videoLibraryModel';
+
 export function catalogRow(r) {
   const id = clean(r?.id);
   const enc = encodeURIComponent;
@@ -273,7 +275,7 @@ export function catalogRow(r) {
       return { ...base, href: id ? `/learning/courses/${enc(id)}` : null, level, minutes: r.estimated_minutes ?? null };
     case 'video':
     case 'reading':
-      return { ...base, uid: id || null, href: itemHref({ kind: r.kind, uid: id }), level, topic: clean(r.topic) || null, seconds: r.duration_seconds ?? null, found: transcriptLine(r.match) };
+      return { ...base, uid: id || null, href: itemHref({ kind: r.kind, uid: id }), level, topic: clean(r.topic) || null, seconds: r.duration_seconds ?? null, found: transcriptLine(r.match), match: r.match || null, poster: clean(r.thumbnail_url) || null };
     case 'article': {
       const minutes = Number(r.read_minutes);
       return {

@@ -93,11 +93,11 @@ test('shared parts preserve unknowns and proposals decide only on a press',async
  assert.match(labelText(out),/Not recorded/);assert.doesNotMatch(out,/\$0/);
  const calls=[];const m=await mountContracts(h(ProposalBlock,{proposal:{uid:'p',status:'proposed',eyebrow:'Proposal',text:'Synthetic proposal'},onAccept:()=>calls.push('accept'),onEdit:()=>calls.push('edit'),onDiscard:()=>calls.push('discard')}));
  try{assert.deepEqual(calls,[]);await m.click('Accept');await m.click('Edit');await m.click('Discard');assert.deepEqual(calls,['accept','edit','discard']);}finally{await m.unmount();}
- const route=readFileSync('frontend/src/pages/cycles/CycleRoute.jsx','utf8');assert.match(route,/header=\{distribution \? null : undefined\}/);assert.match(route,/distributionTab === 'overview' \|\| projectStatus !== 'ready' \? body : <ComingSoon/);
+ const route=readFileSync('frontend/src/pages/cycles/CycleRoute.jsx','utf8');assert.match(route,/header=\{distribution \? null : undefined\}/);assert.match(route,/distributionTab === 'campaigns' \? <CampaignsTab[^\n]+: <ComingSoon/);
 });
 
 
-test('the mounted Overview keeps its legacy table and tool doors while an unlanded tab makes no module read',async()=>{
+test('the mounted Overview keeps its tool doors without the moved channel table; unlanded tabs make no module read',async()=>{
  const original=globalThis.fetch;const paths=[];
  globalThis.fetch=async(url)=>{
   const path=String(url);paths.push(path);
@@ -106,9 +106,9 @@ test('the mounted Overview keeps its legacy table and tool doors while an unland
  };
  try{
   const m=await mountContracts(h(AuthProvider,null,h(RailPageProvider,{role:'founder'},h(CycleRoute,{cycle:'grow',slug:'distribution'}))),'/grow/distribution?project_id=7',{id:1,role:'founder'});
-  try{await m.flush();assert.match(m.text(),/Synthetic existing channel/);assert.match(m.text(),/Open landing-page builder/);assert.match(m.text(),/Open launch calendar/);assert.equal(m.nodes().filter(n=>m.props(n)?.['data-testid']==='distribution-ask').length,1);}finally{await m.unmount();}
+  try{await m.flush();assert.doesNotMatch(m.text(),/Synthetic existing channel/);assert.equal(m.nodes().some(n=>m.props(n)?.['data-testid']==='cycle-records'),false);assert.match(m.text(),/Open landing-page builder/);assert.match(m.text(),/Open launch calendar/);assert.equal(m.nodes().filter(n=>m.props(n)?.['data-testid']==='distribution-ask').length,1);}finally{await m.unmount();}
   paths.length=0;
-  const other=await mountContracts(h(AuthProvider,null,h(RailPageProvider,{role:'founder'},h(CycleRoute,{cycle:'grow',slug:'distribution',tab:'campaigns'}))),'/grow/distribution/campaigns?project_id=7',{id:1,role:'founder'});
+  const other=await mountContracts(h(AuthProvider,null,h(RailPageProvider,{role:'founder'},h(CycleRoute,{cycle:'grow',slug:'distribution',tab:'ads'}))),'/grow/distribution/ads?project_id=7',{id:1,role:'founder'});
   try{await other.flush();assert.match(other.text(),/Coming in this module soon/);assert.equal(paths.some(p=>p.includes('/cycles/grow/modules/distribution')||p.includes('/cycles/grow/campaigns')),false);}finally{await other.unmount();}
  }finally{globalThis.fetch=original;__resetEadwynPanelForTest();}
 });

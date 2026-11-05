@@ -181,7 +181,7 @@ function RowAction({ action }) {
 
 export default function CycleModulePage({
   cycle, slug, moduleName, cards, data, status = data ? 'ready' : 'loading', message = '', onRetry,
-  records, recordsStatus, recordsMessage, query, onQuery, onRetryRecords, action, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null, aboveRecords = null, header = undefined,
+  records, recordsStatus, recordsMessage, query, onQuery, onRetryRecords, action, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null, aboveRecords = null, header = undefined, showRecords = true,
 }) {
   const meta = cycleOf(cycle);
   if (!meta) return null;
@@ -226,7 +226,7 @@ export default function CycleModulePage({
           ))}
           {/* #3938 (D1478 part 9): a control that acts on the records themselves (Partner network's Rank by fit). */}
           {aboveRecords}
-          <RecordsTable
+          {showRecords && <RecordsTable
             key={`${meta.key}/${slug}`}
             title={data?.module?.records_title || name}
             records={recs}
@@ -239,7 +239,7 @@ export default function CycleModulePage({
             lovable={lovable}
             rowAction={rowAction}
             rowHref={(row) => rowLinks(recs, row) ? recordHref(meta.key, slug, recordId(row), search) : null}
-          />
+          />}
           {children}
         </>
       )}

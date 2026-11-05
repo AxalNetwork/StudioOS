@@ -418,7 +418,7 @@ test('D686: Distribution and Partner network draw "From update asks" with a Lead
   assert.equal(ssr(React.createElement(UpdateAskReplies, { replies: [], pill: 'Lead' })), '');
   const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
   // D840 part 3: each part now also draws its "From Mercury" beside the replies.
-  assert.match(route, /distribution: \(data, ctx\) => \(<>\s*<UpdateAskReplies replies=\{data\?\.parts\?\.from_update_asks\} pill="Lead" \/>/);
+  assert.match(route, /<OverviewTab key=\{projectId\} projectId=\{projectId\} search=\{q\} refresh=\{reload\}>\{body\}<\/OverviewTab>/);
   assert.match(route, /'partner-network': \(data, ctx\) => \(<>\s*<UpdateAskReplies replies=\{data\?\.parts\?\.from_update_asks\} pill="Partner" \/>/);
 });
 

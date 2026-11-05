@@ -257,10 +257,14 @@ async function assertRecordRead(module) {
   } finally { await view.close(); }
 }
 test('record mode and write completion are mutation checked against the mounted route', async () => {
-  await mutationCheck(read('frontend/src/pages/cycles/CycleRoute.jsx'), 'pages/cycles/CycleRoute.jsx', assertRecordRead, [
+  const source = read('frontend/src/pages/cycles/CycleRoute.jsx');
+  // Other module guards may grow; this mutant must remove only record-mode protection.
+  const moduleGuard = source.split('\n').find(line => line.trim().startsWith('if (record || !slug || !known || !projectId || !def'));
+  assert.ok(moduleGuard, 'the module read still has its record-mode guard');
+  await mutationCheck(source, 'pages/cycles/CycleRoute.jsx', assertRecordRead, [
     // D906: a narrative tab word (`/story`) is never read as a record; D1015 adds Cap table's (`/instruments`).
     ['record && known && validRecord && !narrativeTab && !capTableTab && !dataRoomTab && !dataRoomOldFile && !uofTab && !capRelTab && !!projectId && !!def', 'false'],
-    ["if (record || !slug", "if (!slug"],
+    [moduleGuard, moduleGuard.replace('record || ', '')],
     ['reread: () => load(true)', 'reread: async () => {}'],
   ], true);
 });

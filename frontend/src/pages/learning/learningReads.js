@@ -63,9 +63,19 @@ export async function readEvents({ q = '' } = {}) {
  * The federated catalog: every kind (All), or one kind a page at a time
  * (Courses, Videos). `sources` is the route's own per-kind state, kept whole.
  */
-export async function readCatalog({ kind = null, q = '', offset = 0 } = {}) {
-  const reply = await learningApi.catalog({ kind: kind || undefined, q: q || undefined, limit: ALL_LIMIT, offset: kind ? offset : undefined });
-  const rows = listOf(reply, 'items', 'The catalogue').map(catalogRow);
+export async function readCatalog({ kind = null, q = '', offset = 0, topic = '', level = '', max_minutes = null } = {}, client = learningApi) {
+  let reply;
+  try {
+    reply = await client.catalog({ kind: kind || undefined, q: q || undefined, topic: topic || undefined, level: level || undefined,
+      max_minutes: max_minutes == null || max_minutes === '' ? undefined : max_minutes, limit: ALL_LIMIT, offset: kind ? offset : undefined });
+  } catch (error) {
+    // D4477: only the known route refusal is product copy; never a raw exception message.
+    if ((error?.code || error?.data?.code) === 'bad_max_minutes') {
+      return { rows: [], sources: {}, offset: 0, kind, refusal: 'max_minutes is a whole number of minutes from 1 to 1440.' };
+    }
+    throw error;
+  }
+  const rows = listOf(reply, 'items', 'The catalogue').map((row) => ({ ...catalogRow(row), query: q }));
   if (!reply.sources || typeof reply.sources !== 'object') throw new Error('The catalogue came back without its sources.');
   return { rows, sources: reply.sources, offset: kind ? offset : 0, kind };
 }

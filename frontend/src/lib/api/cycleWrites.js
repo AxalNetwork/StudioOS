@@ -87,6 +87,8 @@ export function makeCycleWrites(request) {
       campaignItem: (projectId, uid, body) => request(`/cycles/grow/campaigns/${seg(uid)}/items`, { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       campaignItemRemove: (projectId, uid, kind, itemUid) => request(`/cycles/grow/campaigns/${seg(uid)}/items/${seg(kind)}/${seg(itemUid)}`, { method: 'DELETE', body: JSON.stringify({ project: projectId }) }),
       campaigns: (projectId, filters = {}) => request(`/cycles/grow/campaigns?${new URLSearchParams({ ...filters, project: String(projectId) })}`),
+      // D4485: monthly overview and an optional real ISO-week plan; mounted Worker read.
+      distributionOverview: (projectId, { week } = {}) => request(`/cycles/grow/distribution/overview?${new URLSearchParams({ project: String(projectId), ...(week !== undefined ? { week } : {}) })}`),
       campaignUpdate: (projectId, uid, body) => request(`/cycles/grow/campaigns/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
       feedback: (projectId, body) => request('/cycles/grow/feedback', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
       channel: (projectId, body) => request('/cycles/grow/channels', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
