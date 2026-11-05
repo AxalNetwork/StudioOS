@@ -894,9 +894,11 @@ test('#3840 Add agent (D4119): the sheet posts who, the area of work, the model 
     await v.click('agent-pick-orrin');
     await v.click('add-agent-next');
     // D1612 (SK6): the Skills step. Skills aren't open yet, so nothing is picked and no \`skills\` is sent.
+    assert.match(v.text(), /Area of work · Finance/, 'the selected area explains what this AI agent is joining to do');
     assert.match(v.text(), /Skills aren’t open yet/);
     assert.match(v.text(), /Coverage with these skillsNot recorded/);
     await v.click('add-agent-next');
+    assert.match(v.text(), /Area of work · Finance · 0 skills/, 'the role remains visible while model and cap are chosen');
     const radio = walkRadio();
     assert.ok(radio, 'the model radio');
     await act(async () => { radio.onChange(); });
