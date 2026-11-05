@@ -1,0 +1,17 @@
+---
+name: contract-clause-extraction
+description: Extracts and indexes clauses across a contract set with source references, version identity and classification.
+roles: [general_counsel, coo]
+tools: [data_room.read, company.read]
+output: brief
+taxonomy: {legal_contracts: advanced, legal_data_governance: proficient}
+version: 1
+---
+1. Establish the decision, intended user and boundaries for Contract Clause Extraction and Indexing; do not perform adjacent work outside this specialist scope.
+2. Read only the supplied data_room.read and company.read records; preserve identifiers, dates, periods and source references.
+3. Perform the specialist analysis: Extracts and indexes clauses across a contract set with source references, version identity and classification. Focus on clause register with source references.
+4. Separate evidence from interpretation: identify supporting records, assumptions, conflicting evidence and confidence.
+5. Apply the review criteria: verify scope, consistency, completeness, comparability and practical implications for clause register with source references.
+6. For calculations, state formula, numerator, denominator, unit, period and exclusions; do not calculate if required inputs are absent.
+7. Write "Not recorded" for document version when the records do not supply it; never invent a value, source, commitment or legal conclusion.
+8. Prepare findings, evidence, limitations, confidence, open questions and proposed next steps for human review; do not send, publish, approve, sign, pay, file or modify records.

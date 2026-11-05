@@ -1,0 +1,34 @@
+{
+  "skill": "data-visualization-encoding-review",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "build.records": {
+        "synthetic_fixture": true,
+        "skill_name": "Data Visualization Encoding Review",
+        "task_scope": "Reviews chart encodings, scales, baselines, units, uncertainty and accessibility against supplied metric definitions.",
+        "evidence": [
+          "axis and visual encoding integrity"
+        ],
+        "omitted_field": "measurement unit"
+      },
+      "validate.records": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for axis and visual encoding integrity."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "axis and visual encoding integrity"
+    ],
+    "must_say_not_recorded": [
+      "measurement unit"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

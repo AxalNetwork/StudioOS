@@ -1,0 +1,34 @@
+{
+  "skill": "pitch-deck-visual-storytelling",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "raise.records": {
+        "synthetic_fixture": true,
+        "skill_name": "Pitch Deck Visual Storytelling",
+        "task_scope": "Designs investor-deck narrative pacing and visual hierarchy, complementing rather than replacing financial analysis.",
+        "evidence": [
+          "one decision message per slide"
+        ],
+        "omitted_field": "traction period"
+      },
+      "build.records": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for one decision message per slide."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "one decision message per slide"
+    ],
+    "must_say_not_recorded": [
+      "traction period"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

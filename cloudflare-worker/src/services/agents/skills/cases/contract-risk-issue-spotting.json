@@ -1,0 +1,34 @@
+{
+  "skill": "contract-risk-issue-spotting",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "data_room.index": {
+        "synthetic_fixture": true,
+        "skill_name": "Contract Risk Issue Spotting",
+        "task_scope": "Flags contractual obligations, asymmetries, liability exposure and operational dependencies for counsel review.",
+        "evidence": [
+          "liability and termination risk"
+        ],
+        "omitted_field": "liability cap"
+      },
+      "company.profile": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for liability and termination risk."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "liability and termination risk"
+    ],
+    "must_say_not_recorded": [
+      "liability cap"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

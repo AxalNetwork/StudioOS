@@ -1,0 +1,34 @@
+{
+  "skill": "sales-objection-response-design",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "synthetic_fixture": true,
+        "skill_name": "Sales Objection Response Design",
+        "task_scope": "Designs evidence-backed objection response frameworks with diagnosis, proof, follow-up questions and escalation boundaries.",
+        "evidence": [
+          "objection diagnosis and proof point"
+        ],
+        "omitted_field": "approved commercial term"
+      },
+      "research.library": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for objection diagnosis and proof point."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "objection diagnosis and proof point"
+    ],
+    "must_say_not_recorded": [
+      "approved commercial term"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}
