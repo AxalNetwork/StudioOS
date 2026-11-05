@@ -56,6 +56,5 @@ and citations by number keep working.
 | `D4472.md` | One account, several licences: ordered access union, additional grants and atomic appointment retention. |
 | `D4488.md` | Distribution Ask drafts, scoped proposals and safe acceptance (#4488). |
 | `D4484.md` | Distribution static tabs, existing Overview content, module-specific campaign primary and shared Ask presentation. |
-| `D4488.md` | Distribution Ask drafts, scoped proposals and safe acceptance (#4488). |
 | `D4494.md` | Distribution Inbox source scope, personal unread receipts, honest missing bodies/counts and the explicit Send boundary. |
 | `D4486.md` | #4486: Distribution Channels, compatible kinds and read-only connection cards. |
