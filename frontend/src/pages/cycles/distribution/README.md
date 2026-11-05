@@ -41,11 +41,12 @@ starting ads.
 | `prospectsModel.js` | D4492: seven stages, source labels, truthful counts and fixed refusal fallback. |
 | `ProspectConsentSummary.jsx` | D4492: Audience slot and reusable summary hook/Review reachable label for the wizard handoff. |
 
-CycleRoute still owns the module page. Overview retains its channels table,
+CycleRoute still owns the module page. Overview retains its charts,
 outreach draft, content calendar, update-ask replies, Mercury, Notion and tool
 doors. The D4485 cards sit above that body. Campaigns is the D4487 tab. Inbox is the D4494 tab. Channels is the
-D4486 tab on this shell. Prospects is the D4492 tab. Other tabs show Coming in this module soon until their
-tasks land.
+mounted D4486 tab; its table replaces Overview’s legacy channel records.
+Prospects is the D4492 tab. Other tabs show Coming in this module soon until
+their tasks land.
 Import `ProspectsTab` for the shell's Prospects slot, with its verified venture
 id and read/write state. The wizard may call `useProspectConsentSummary` once,
 draw `ConsentSummaryView` in Audience and `reachableLabel` in Schedule. A

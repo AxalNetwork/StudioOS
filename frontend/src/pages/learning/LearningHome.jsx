@@ -21,6 +21,8 @@ import { WebinarsTabPanel, useNow } from './LearningWebinars';
 import { formatWebinarDayTime, seatsOf } from './webinarModel';
 import { memberProgramHref, programProgress, progressLine } from './programModel';
 import useLearningRead from './useLearningRead';
+import VideosLibrary from './VideosLibrary';
+import { videoFilters as readVideoFilters, withVideoFilter } from './videoLibraryModel';
 import { HOME_SECONDARY, HomePhonePrimary, HomeWebinarAction, HomeWebinarsList, homeSeatsLine, inProgressCourses, useHomeWebinarRegistration } from './LearningHomeActions';
 
 /** The canvas's one header action, kept for every profile: Articles stay open. */
@@ -48,7 +50,7 @@ const isLoading = (state) => state.status === 'loading' || state.status === 'idl
  * touch never triggers it. The preview is decoration: it is hidden from
  * assistive technology and says nothing the card does not.
  */
-export function HoverPreview({ uid, read = readItemPreview, delay = 400 }) {
+export function HoverPreview({ uid, read = readItemPreview, delay = 400, library = false }) {
   const [url, setUrl] = useState(null);
   const [shown, setShown] = useState(false);
   const timer = React.useRef(null);
@@ -57,22 +59,25 @@ export function HoverPreview({ uid, read = readItemPreview, delay = 400 }) {
     const card = host.current?.parentElement;
     if (!card) return undefined;
     let live = true;
+    let hovering = false;
     const enter = (e) => {
       if (e.pointerType === 'touch') return;
+      hovering = true;
       clearTimeout(timer.current);
       timer.current = setTimeout(async () => {
         const u = await read(uid);
-        if (live && u) { setUrl(u); setShown(true); }
+        if (live && hovering && u) { setUrl(u); setShown(true); }
       }, delay);
     };
-    const leave = () => { clearTimeout(timer.current); setShown(false); };
+    const leave = () => { hovering = false; clearTimeout(timer.current); setShown(false); };
     card.addEventListener('pointerenter', enter);
     card.addEventListener('pointerleave', leave);
     return () => { live = false; clearTimeout(timer.current); card.removeEventListener('pointerenter', enter); card.removeEventListener('pointerleave', leave); };
   }, [uid, read, delay]);
   return (
-    <span ref={host} aria-hidden="true" className={shown && url ? 'block overflow-hidden rounded-axal-sm bg-black' : 'hidden'} data-testid="catalog-row-preview">
+    <span ref={host} aria-hidden="true" className={shown && url ? library ? 'absolute inset-x-3 top-3 aspect-video overflow-hidden rounded-axal-sm bg-black' : 'block overflow-hidden rounded-axal-sm bg-black' : 'hidden'} data-testid="catalog-row-preview">
       {shown && url ? <img src={url} alt="" className="aspect-video w-full object-cover" data-testid="img-catalog-preview" /> : null}
+      {shown && url && library ? <span className="absolute left-2 top-2 rounded bg-violet-700 px-2 py-1 text-[11px] font-semibold text-white">Preview playing</span> : null}
     </span>
   );
 }
@@ -433,7 +438,7 @@ function TabBar({ tab, gated, onTab }) {
             aria-controls="learning-panel"
             tabIndex={on ? 0 : -1}
             onClick={() => onTab(t.key)}
-            className={`whitespace-nowrap rounded-axal-sm px-3 py-1.5 text-[12.5px] font-semibold ${on
+            className={`min-h-11 whitespace-nowrap rounded-axal-sm px-3 py-1.5 text-[12.5px] font-semibold ${on
               ? 'bg-axal-lavender text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-300'
               : 'text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`}
             data-testid={`tab-${t.key}`}
@@ -519,16 +524,8 @@ export function AssessmentList({ state = IDLE, kind, onPage, onRetry }) {
   );
 }
 
-function LearningCatalogue({
-  gated, tab, onTab, query, onQuery, q, catalog, articles, publications, events, upcoming, past, now,
-  onCatalogPage, onArticlesPage, onRetry, exercises = IDLE, exams = IDLE, onAssessmentPage = () => {}, showTabs = true,
-}) {
-  const mode = tabMode(tab, gated);
-  return (
-    <Card padding="none" data-testid="learning-catalogue">
-      {showTabs && <TabBar tab={tab} gated={gated} onTab={onTab} />}
-      {mode === 'live' && (
-        <div className="px-4 pt-3">
+function LearningSearch({ query, onQuery, gated }) {
+  return <>
           <label htmlFor="learning-search" className="sr-only">Search</label>
           <div role="search" className="relative">
             <Search size={14} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-axal-faint dark:text-gray-500" />
@@ -538,17 +535,29 @@ function LearningCatalogue({
               value={query}
               onChange={(e) => onQuery(e.target.value)}
               placeholder={gated ? 'Search articles' : 'Search courses, videos, webinars, articles, publications and events'}
-              className="w-full rounded-axal-md border border-axal-hairline bg-white py-2 pl-9 pr-3 text-[13px] text-axal-ink placeholder:text-axal-faint dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100"
+              className="min-h-11 w-full rounded-axal-md border border-axal-hairline bg-white py-2 pl-9 pr-3 text-[13px] text-axal-ink placeholder:text-axal-faint dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100"
               data-testid="input-learning-search"
             />
           </div>
-        </div>
-      )}
+  </>;
+}
+
+function LearningCatalogue({
+  gated, tab, onTab, query, onQuery, q, catalog, articles, publications, events, upcoming, past, now,
+  onCatalogPage, onArticlesPage, onRetry, exercises = IDLE, exams = IDLE, onAssessmentPage = () => {},
+  videoFilters = {}, onVideoFilter, videoOptions = [], videoTotal = null, showTabs = true,
+}) {
+  const mode = tabMode(tab, gated);
+  return (
+    <Card padding="none" data-testid="learning-catalogue">
+      {showTabs && <TabBar tab={tab} gated={gated} onTab={onTab} />}
+      {mode === 'live' && tab !== 'videos' && <div className="px-4 pt-3"><LearningSearch query={query} onQuery={onQuery} gated={gated} /></div>}
       <div id="learning-panel" role="tabpanel" aria-labelledby={`learning-tab-${tab}`} className="p-4" data-testid={`panel-${tab}`} data-mode={mode}>
         {mode === 'coming_soon' && <ComingSoonCard />}
         {mode === 'not_live' && <NotLiveYet />}
         {mode === 'live' && tab === 'all' && <CatalogList state={catalog} q={q} onRetry={onRetry.catalog} />}
-        {mode === 'live' && TAB_KIND[tab] && <CatalogList state={catalog} kind={TAB_KIND[tab]} q={q} onPage={onCatalogPage} onRetry={onRetry.catalog} />}
+        {mode === 'live' && TAB_KIND[tab] && tab !== 'videos' && <CatalogList state={catalog} kind={TAB_KIND[tab]} q={q} onPage={onCatalogPage} onRetry={onRetry.catalog} />}
+        {mode === 'live' && tab === 'videos' && <VideosLibrary search={<LearningSearch query={query} onQuery={onQuery} gated={gated} />} state={catalog} filters={videoFilters} onFilter={onVideoFilter} optionRows={videoOptions} total={videoTotal} onPage={onCatalogPage} onRetry={onRetry.catalog} Preview={HoverPreview} />}
         {mode === 'live' && tab === 'webinars' && (
           <WebinarsTabPanel upcoming={upcoming} past={past} q={q} now={now} onRetry={{ upcoming: onRetry.upcoming, past: onRetry.past }} />
         )}
@@ -601,6 +610,7 @@ export function LearningHomeView({
   upcoming = IDLE, past = IDLE, programs = PROGRAMS_IDLE, now = Date.now(), fresh = IDLE, stats = IDLE, webinarActions = {},
   onCatalogPage = () => {}, onArticlesPage = () => {}, onRetry = {}, links = [],
   exercises = IDLE, exams = IDLE, onAssessmentPage = () => {},
+  videoFilters = {}, onVideoFilter, videoOptions = [], videoTotal = null,
 }) {
   return (
     <>
@@ -609,7 +619,7 @@ export function LearningHomeView({
         <AdminLinks links={links} />
         {gated ? (
           <ComingSoonCard articlesLink={false} testid="learning-coming-soon-sections" />
-        ) : (
+        ) : tab !== 'videos' ? (
           <>
             <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
               <div className="min-w-0 space-y-4">
@@ -624,12 +634,13 @@ export function LearningHomeView({
               </div>
             </div>
           </>
-        )}
+        ) : null}
         <LearningCatalogue
           gated={gated} tab={tab} onTab={onTab} query={query} onQuery={onQuery} q={q}
           catalog={catalog} articles={articles} publications={publications} events={events}
           upcoming={upcoming} past={past} now={now} onCatalogPage={onCatalogPage} onArticlesPage={onArticlesPage} onRetry={onRetry}
           exercises={exercises} exams={exams} onAssessmentPage={onAssessmentPage}
+          videoFilters={videoFilters} onVideoFilter={onVideoFilter} videoOptions={videoOptions} videoTotal={videoTotal}
         />
 
       </div>
@@ -732,11 +743,11 @@ export function learningPhoneGroups({ gated, me = IDLE, programs = PROGRAMS_IDLE
 }
 
 /** A8m — the bar and the sections, then `children`: the tab lists Browse opens. */
-export function LearningPhoneView({ gated, me, programs, upcoming, fresh, now, onRetry, onTab = () => {}, tab = 'all', webinarActions = {}, children = null }) {
+export function LearningPhoneView({ gated, me, programs, upcoming, fresh, now, onRetry, onTab = () => {}, tab = 'all', webinarActions = {}, children = null, videoLibrary = tab === 'videos' }) {
   const onBrowse = () => onTab('courses');
-  const groups = learningPhoneGroups({ gated, me, programs, upcoming, fresh, now, onRetry, onBrowse, webinarActions });
+  const groups = videoLibrary ? [] : learningPhoneGroups({ gated, me, programs, upcoming, fresh, now, onRetry, onBrowse, webinarActions });
   return <div className="min-h-screen bg-white dark:bg-gray-950" data-testid="learning-phone" data-phone="true">
-    <LearningHero phoneBar={<PhoneBar back={{ label: 'Back' }} title="Learning" />} showArticle={gated} primary={!gated && <HomePhonePrimary state={me} onBrowse={onBrowse} />} />
+    <LearningHero phoneBar={<PhoneBar back={{ label: 'Back' }} title="Learning" />} showArticle={gated} primary={!gated && !videoLibrary && <HomePhonePrimary state={me} onBrowse={onBrowse} />} />
     <div className="px-4"><TabBar tab={tab} gated={gated} onTab={onTab} /></div>
     <div className="px-4 pt-4 [&>div]:px-0"><PhoneRows groups={groups} /></div>
     {children && <div className="space-y-4 px-4 pb-4">{children}</div>}
@@ -774,19 +785,45 @@ export default function LearningHome({ gated, links = [] }) {
   const tab = resolveTab(params.get('tab'), gated);
   const live = tabMode(tab, gated) === 'live';
   const kind = TAB_KIND[tab] || null;
-  const [query, setQuery] = useState('');
-  const [q, setQ] = useState('');
+  const q = params.get('q') || '';
+  const [query, setQuery] = useState(q);
+  const filters = readVideoFilters(params);
+  const { topic, level, max } = tab === 'videos' ? filters : { topic: '', level: '', max: '' };
   const [page, setPage] = useState(0);
-  const [catalogOffset, setCatalogOffset] = useState(0);
-
+  // A restored URL must never read a new filter with an old page offset.
+  const catalogKey = JSON.stringify([kind, q, topic, level, max]);
+  const [catalogPage, setCatalogPage] = useState({ key: catalogKey, offset: 0 });
+  const catalogOffset = catalogPage.key === catalogKey ? catalogPage.offset : 0;
+  const setCatalogOffset = useCallback(value => setCatalogPage(previous => ({
+    key: catalogKey,
+    offset: typeof value === 'function' ? value(previous.key === catalogKey ? previous.offset : 0) : value,
+  })), [catalogKey]);
   useEffect(() => {
-    const t = setTimeout(() => { setQ(query.trim()); setPage(0); setCatalogOffset(0); }, 300);
-    return () => clearTimeout(t);
-  }, [query]);
+    setCatalogPage(previous => previous.key === catalogKey ? previous : { key: catalogKey, offset: 0 });
+  }, [catalogKey]);
 
-  const [catalogRead, retryCatalog] = useLearningRead(() => readCatalog({ kind, q, offset: catalogOffset }), [kind, q, catalogOffset],
+  useEffect(() => { setQuery(q); }, [q]);
+  useEffect(() => {
+    if (query.trim() === q) return undefined;
+    const t = setTimeout(() => {
+      setParams(old => { const next = new URLSearchParams(old); if (query.trim()) next.set('q', query.trim()); else next.delete('q'); return next; }, { replace: true });
+      setPage(0); setCatalogOffset(0);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [query, q, setParams, setCatalogOffset]);
+
+  const [catalogRead, retryCatalog] = useLearningRead(() => readCatalog({ kind, q, offset: catalogOffset, topic, level, max_minutes: max }), [kind, q, catalogOffset, topic, level, max],
     { enabled: live && (tab === 'all' || Boolean(kind)), scope: 'catalog' });
   const catalog = catalogFor(catalogRead, kind);
+  // Only recorded catalog values supply the chips; retain the unfiltered library
+  // so selecting one chip does not erase the other available choices or total.
+  const [videoBase] = useLearningRead(() => readCatalog({ kind: 'video' }), [], { enabled: live && tab === 'videos', scope: 'video-options' });
+  const videoTotal = videoBase.status === 'ready' && videoBase.sources?.video?.status === 'ready' ? videoBase.sources.video.total : null;
+  const videoOptions = videoBase.status === 'ready' ? videoBase.rows : [];
+  const onVideoFilter = (key, value) => {
+    setCatalogOffset(0);
+    setParams(old => withVideoFilter(old, key, value));
+  };
   const [articles, retryArticles] = useLearningRead(() => readArticles({ q, page }), [q, page],
     { enabled: live && tab === 'articles', scope: 'articles' });
   const [publications, retryPublications] = useLearningRead(readPublications, [],
@@ -819,8 +856,8 @@ export default function LearningHome({ gated, links = [] }) {
     setPage(0);
     setCatalogOffset(0);
     setAssessmentOffset(0);
-    setParams((old) => { const next = new URLSearchParams(old); next.set('tab', key); return next; }, { replace: true });
-  }, [setParams]);
+    setParams((old) => { const next = new URLSearchParams(old); next.set('tab', key); return next; });
+  }, [setParams, setCatalogOffset]);
   const onCatalogPage = (step) => setCatalogOffset((o) => Math.max(0, o + step * ALL_LIMIT));
   const onArticlesPage = (step) => setPage((p) => Math.max(0, p + step));
   const onRetry = {
@@ -835,12 +872,13 @@ export default function LearningHome({ gated, links = [] }) {
       {phone ? (
         <LearningPhoneView gated={gated} me={me} programs={programs} upcoming={upcoming} fresh={fresh} now={now} onRetry={onRetry} onTab={onTab} tab={tab} webinarActions={webinarActions}>
           <AdminLinks links={links} />
-          {!gated && <WriteArticleLink secondary />}
+          {!gated && tab !== 'videos' && <WriteArticleLink secondary />}
           <LearningCatalogue
             showTabs={false} gated={gated} tab={tab} onTab={onTab} query={query} onQuery={setQuery} q={q}
             catalog={catalog} articles={articles} publications={publications} events={events}
             upcoming={upcoming} past={past} now={now} onCatalogPage={onCatalogPage} onArticlesPage={onArticlesPage} onRetry={onRetry}
             exercises={exercises} exams={exams} onAssessmentPage={onAssessmentPage}
+            videoFilters={filters} onVideoFilter={onVideoFilter} videoOptions={videoOptions} videoTotal={videoTotal}
           />
         </LearningPhoneView>
       ) : (
@@ -871,6 +909,10 @@ export default function LearningHome({ gated, links = [] }) {
             exercises={exercises}
             exams={exams}
             onAssessmentPage={onAssessmentPage}
+            videoFilters={filters}
+            onVideoFilter={onVideoFilter}
+            videoOptions={videoOptions}
+            videoTotal={videoTotal}
           />
         </div>
       )}
