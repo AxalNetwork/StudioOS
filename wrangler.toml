@@ -166,8 +166,8 @@ fallthrough = true
 
 # ---------- Public (non-secret) variables ----------
 [vars]
-# D1496 (#3840): team agents (/api/teams). Off until the owner turns them on.
-TEAM_AGENTS_ENABLED = "false"
+# D1496 (#3840): team agents (/api/teams). Enabled by owner request in D4522.
+TEAM_AGENTS_ENABLED = "true"
 # D1529 (#3845, #3742 E1): the agent engine's goals and tasks (/api/teams). "off" until the owner turns it on; needs TEAM_AGENTS_ENABLED too.
 AGENT_ENGINE = "off"
 # D4423: owner-approved monthly gateway limit ($100); does not enable agents.
@@ -712,8 +712,8 @@ pattern        = "app.axal.vc"
 custom_domain  = true
 
 [env.production.vars]
-# D1496 (#3840): team agents (/api/teams). Mirrored from [vars]; off until the owner turns them on.
-TEAM_AGENTS_ENABLED = "false"
+# D1496 (#3840): team agents (/api/teams). Mirrored from [vars]; enabled by owner request in D4522.
+TEAM_AGENTS_ENABLED = "true"
 # D1529 (#3845): the agent engine. Mirrored from [vars]; "off" until the owner turns it on.
 AGENT_ENGINE = "off"
 # D4423: owner-approved monthly gateway limit ($100); does not enable agents.
