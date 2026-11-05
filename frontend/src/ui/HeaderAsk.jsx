@@ -65,7 +65,7 @@ export function useHeaderCarriesAsk() {
   return list.some((c) => !c.fallback);
 }
 
-export default function HeaderAsk({ label, testId = 'header-ask', fallback = false, page, state, disabled, sub, title }) {
+export default function HeaderAsk({ label, testId = 'header-ask', fallback = false, page, state, disabled, sub, title, ariaLabel }) {
   const id = useId();
   useEffect(() => {
     claims = [...claims, { id, fallback }];
@@ -74,5 +74,5 @@ export default function HeaderAsk({ label, testId = 'header-ask', fallback = fal
   }, [id, fallback]);
   const list = useSyncExternalStore(subscribe, snapshot, snapshot);
   if (headerAskWinner(list) !== id) return null;
-  return <PageAsk label={label} testId={testId} page={page} state={state} disabled={disabled} sub={sub} title={title} />;
+  return <PageAsk label={label} testId={testId} page={page} state={state} disabled={disabled} sub={sub} title={title} ariaLabel={ariaLabel} />;
 }

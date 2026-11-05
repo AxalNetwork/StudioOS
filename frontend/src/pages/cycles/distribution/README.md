@@ -41,6 +41,12 @@ starting ads.
 | `prospectsModel.js` | D4492: seven stages, source labels, truthful counts and fixed refusal fallback. |
 | `ProspectConsentSummary.jsx` | D4492: Audience slot and reusable summary hook/Review reachable label for the wizard handoff. |
 
+| `distributionStates.js` | D4496: pure recorded cross-tab state selection and phone/tablet KPI subsets. |
+| `DistributionStates.jsx` | D4496: fixed notes, retry controls, token warning and existing HQ access banner. |
+| `distributionStates.css` | D4496: shared state theme, phone/tablet targets and responsive Overview treatment. |
+| `useDistributionLayout.js` | D4496: reactive phone/tablet layout using the shared media hook. |
+| `useDistributionAccess.js` | D4496: existing form-options writer permission, fail closed while unknown. |
+
 CycleRoute still owns the module page. Overview retains its charts,
 outreach draft, content calendar, update-ask replies, Mercury, Notion and tool
 doors. The D4485 cards sit above that body. Campaigns is the D4487 tab. Inbox is the D4494 tab. Channels is the

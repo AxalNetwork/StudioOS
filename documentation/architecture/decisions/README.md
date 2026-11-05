@@ -57,3 +57,4 @@ and citations by number keep working.
 | `D4488.md` | Distribution Ask drafts, scoped proposals and safe acceptance (#4488). |
 | `D4494.md` | Distribution Inbox source scope, personal unread receipts, honest missing bodies/counts and the explicit Send boundary. |
 | `D4486.md` | #4486: Distribution Channels, compatible kinds and read-only connection cards. |
+| `D4496.md` | Distribution cross-tab states and responsive layouts (#4496). |
