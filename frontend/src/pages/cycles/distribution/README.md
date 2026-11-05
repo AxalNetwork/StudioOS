@@ -32,12 +32,21 @@ starting ads.
 | `AdsTab.jsx` | D4490: budget planner, spend gaps, platform availability and creative drafts; shell integration requested from #4484. |
 | `adsModel.js` | D4490: slider amounts, totals and monthly chart gaps. |
 | `ads.css` | D4490: responsive Ads columns using the Distribution tokens. |
+| `ProspectsTab.jsx` | D4492: customer pipeline, import, quiet hours and hashed suppression management. Takes projectId, ventureName and the shell's canWrite. |
+| `ProspectSheet.jsx` | D4492: the individual contact email, recorded permissions and activity; explicit status/consent edits. |
+| `AddProspectSheet.jsx` | D4492: manual capture, proof and a blank-note Ask; none on consent. |
+| `prospectsModel.js` | D4492: seven stages, source labels, truthful counts and fixed refusal fallback. |
+| `ProspectConsentSummary.jsx` | D4492: Audience slot and reusable summary hook/Review reachable label for the wizard handoff. |
 
 CycleRoute still owns the module page. Overview retains its channels table,
 outreach draft, content calendar, update-ask replies, Mercury, Notion and tool
 doors. Campaigns is the D4487 tab. Inbox is the D4494 tab. Channels is the
-D4486 tab on this shell. Other tabs show Coming in this module soon until their
+D4486 tab on this shell. Prospects is the D4492 tab. Other tabs show Coming in this module soon until their
 tasks land.
+Import `ProspectsTab` for the shell's Prospects slot, with its verified venture
+id and read/write state. The wizard may call `useProspectConsentSummary` once,
+draw `ConsentSummaryView` in Audience and `reachableLabel` in Schedule. A
+segment-specific count remains Not recorded until contact membership exists.
 A pending read uses LoadingSkeleton. No sample count or campaign is fabricated.
 
 Routes are explicit in routes/growDistribution.jsx, including Campaigns/new
