@@ -25,7 +25,7 @@ async function mount(element) {
   const box=document.createElement('div');document.body.appendChild(box);const root=createRoot(box);
   const settle=async()=>{for(let n=0;n<5;n++)await act(async()=>{await new Promise(r=>setTimeout(r,0));});};
   await act(async()=>root.render(element));await settle();
-  return {box,settle,all:()=>walk(box),text:()=>txt(box),async click(label){const node=walk(box).find(n=>n.tagName==='BUTTON'&&txt(n)===label);if(!node)throw Error(`Missing button ${label}: ${txt(box)}`);await act(async()=>props(node).onClick?.({preventDefault(){}}));await settle();},async close(){await act(async()=>root.unmount());window.addEventListener=oldAdd;window.removeEventListener=oldRemove;window.dispatchEvent=oldDispatch;restore();__resetEadwynPanelForTest();}};
+  return {box,settle,async render(el){await act(async()=>root.render(el));await settle();},all:()=>walk(box),text:()=>txt(box),async click(label){const node=walk(box).find(n=>n.tagName==='BUTTON'&&txt(n)===label);if(!node)throw Error(`Missing button ${label}: ${txt(box)}`);await act(async()=>props(node).onClick?.({preventDefault(){}}));await settle();},async close(){await act(async()=>root.unmount());window.addEventListener=oldAdd;window.removeEventListener=oldRemove;window.dispatchEvent=oldDispatch;restore();__resetEadwynPanelForTest();}};
 }
 function apiFor(rows=[p('one')],over={}) { const calls=[];return {calls,api:{quote:async b=>{calls.push(['quote',b]);return {estimate:{hold_microusd:40000,model:'synthetic'},sources:[{key:'validate',label:'Validate · ICP',count:2}]};},run:async b=>{calls.push(['run',b]);return {proposals:rows,receipt:{held_microusd:40000,charged_microusd:8000}};},proposals:async()=>({proposals:rows}),decide:async(uid,b)=>{calls.push(['decide',uid,b]);return {proposal:{...rows.find(p=>p.uid===uid),status:b.decision==='discard'?'discarded':'accepted',decided_payload:b.edited??null}};},acceptSafe:async b=>{calls.push(['safe',b]);return {results:[]};},...over}};}
 
@@ -138,6 +138,52 @@ test('an explicit campaign target is quoted and run as campaign text with an hon
   }finally{await ui.close();}
 });
 
+
+test('a late draft from the previous campaign never enters the current campaign preview',async()=>{
+  let finish;const f=apiFor([],{run:()=>new Promise(resolve=>{finish=resolve;})});
+  const ui=await mount(h(DistributionAskIntent,{projectId:1,campaignUid:'first-campaign',api:f.api}));
+  try{
+    const button=ui.all().find(n=>n.tagName==='BUTTON'&&txt(n)==='Ask Eadwyn to draft for each channel');let pending;
+    await act(async()=>{pending=props(button).onClick();});
+    await ui.render(h(DistributionAskIntent,{projectId:1,campaignUid:'second-campaign',api:f.api}));
+    await act(async()=>{finish({proposals:[p('old','post',{campaign_uid:'first-campaign',text:'Old campaign private draft'})],receipt:{held_microusd:40000,charged_microusd:8000}});await pending;});await ui.settle();
+    assert.doesNotMatch(ui.text(),/Old campaign private draft/);
+    assert.doesNotMatch(ui.text(),/Charged \$0.008/);
+    assert.equal(f.calls.filter(c=>c[0]==='quote').at(-1)[1].campaign_uid,'second-campaign');
+  }finally{await ui.close();}
+});
+
+test('late form acceptance cannot update the next campaign',async()=>{
+  let finish;const accepted=[];const rows=[p('old','post',{campaign_uid:'first-campaign'})];
+  const f=apiFor(rows,{decide:()=>new Promise(resolve=>{finish=resolve;})});
+  const view=campaignUid=>h(DistributionAskIntent,{projectId:1,campaignUid,api:f.api,onAccept:rows=>accepted.push(...rows)});
+  const ui=await mount(view('first-campaign'));
+  try{
+    await ui.click('Ask Eadwyn to draft for each channel');
+    const button=ui.all().find(n=>n.tagName==='BUTTON'&&txt(n)==='Accept');let pending;
+    await act(async()=>{pending=props(button).onClick();});await ui.render(view('second-campaign'));
+    await act(async()=>{finish({proposal:{...rows[0],status:'accepted'}});await pending;});await ui.settle();
+    assert.equal(accepted.length,0);
+    assert.doesNotMatch(ui.text(),/Not saved/);
+  }finally{await ui.close();}
+});
+
+test('late Waiting acceptance cannot notify or alter the next venture or form scope',async()=>{
+ for(const next of [{projectId:2,campaignUid:undefined},{projectId:1,campaignUid:null}]){
+  let finish;const accepted=[];const old=p('old','post',{campaign_uid:'saved-campaign'});
+  const f=apiFor([],{proposals:async project=>({proposals:project===1?[old]:[]}),decide:()=>new Promise(resolve=>{finish=resolve;})});
+  const view=scope=>h(WaitingForYou,{...scope,api:f.api,onAccept:rows=>accepted.push(...rows)});
+  const ui=await mount(view({projectId:1,campaignUid:undefined}));
+  try{
+    const button=ui.all().find(n=>n.tagName==='BUTTON'&&txt(n)==='Accept');let pending;
+    await act(async()=>{pending=props(button).onClick();});await ui.render(view(next));
+    await act(async()=>{finish({proposal:{...old,status:'accepted'}});await pending;});await ui.settle();
+    assert.equal(accepted.length,0);
+    assert.match(ui.text(),/Nothing waits for you\./);
+  }finally{await ui.close();}
+ }
+});
+
 test('D4494: selected contact travels through quote/run and accepted replies return locally',async()=>{
   const {api,calls}=apiFor([p('reply-one','reply')]);const accepted=[];
   const ui=await mount(h(DistributionAskIntent,{projectId:1,contactUid:'prospect-a',kinds:['reply'],api,onAccept:rows=>accepted.push(...rows)}));
@@ -168,5 +214,19 @@ test('D4494: real Ask acceptance fills the reply composer without calling mail',
     assert.equal(calls[0][1].contact_uid,'prospect-a');
     assert.equal(sends,0);
     assert.ok(ui.all().some(n=>n.tagName==='BUTTON'&&txt(n)==='Send'));
+  }finally{await ui.close();}
+});
+
+test('a late reply draft never enters a different contact preview',async()=>{
+  let finish;const f=apiFor([],{run:()=>new Promise(resolve=>{finish=resolve;})});
+  const view=contactUid=>h(DistributionAskIntent,{projectId:1,contactUid,kinds:['reply'],api:f.api});
+  const ui=await mount(view('first-contact'));
+  try{
+    const button=ui.all().find(n=>n.tagName==='BUTTON'&&txt(n)==='Ask Eadwyn to draft a reply');let pending;
+    await act(async()=>{pending=props(button).onClick();});
+    await ui.render(view('second-contact'));
+    await act(async()=>{finish({proposals:[p('old-reply','reply',{text:'Previous contact reply'})],receipt:{held_microusd:40000,charged_microusd:8000}});await pending;});await ui.settle();
+    assert.doesNotMatch(ui.text(),/Previous contact reply/);
+    assert.equal(f.calls.filter(c=>c[0]==='quote').at(-1)[1].contact_uid,'second-contact');
   }finally{await ui.close();}
 });

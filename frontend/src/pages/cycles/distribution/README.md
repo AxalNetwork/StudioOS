@@ -9,21 +9,21 @@ starting ads.
 
 | File | Purpose |
 | --- | --- |
-| `DistributionTabs.jsx` | Module header, New campaign, shared HeaderAsk and the nine accessible, horizontally scrolling tabs. The Inbox owner supplies a successfully read count; null means no badge. |
+| `DistributionTabs.jsx` | Module header, New campaign, project-scoped Waiting Ask and the nine accessible, horizontally scrolling tabs. The Inbox owner supplies a successfully read count; null means no badge. |
 | `distributionModel.js` | Tab order, project-scoped paths and the budget-derived Ask state. Unknown budget data never means out of tokens. |
 | `DistributionParts.jsx` | Cards, KPI, source chips, dot pills, Not recorded, a wrapper over AskProposal, notes, tables, progress, hold lines and loading/coming-soon states. These components make no reads or writes. |
 | `OverviewTab.jsx` | D4485: six KPI cards, campaign cards, ISO week, real connection status and writer-scoped update-ask replies; retains legacy tools below. |
 | `overviewModel.js` | D4485: pure null-safe figures, source labels, campaign results and budget/week formatting. |
 | `overview.css` | D4485: DS1 six-column/two-column desktop layout, responsive phone cards and scrolling week. |
 | `distribution.css` | Scoped DS light/dark tokens, spacing and phone tab overflow. |
-| `CampaignsTab.jsx` | D4487: campaign filters, attention rows and route-driven detail, over the existing campaign API. |
-| `CampaignCard.jsx` | D4487: recorded funnel, budget and linked-item counts, sorted by state. |
-| `CampaignSheet.jsx` | D4487: the 480px detail with explicit Activate/Pause/Resume/End and Archive confirmations. |
-| `NewCampaignPage.jsx` | D4487: six full-page steps; Schedule saves a plan, never activates or publishes. |
-| `CampaignSteps.jsx` | D4487: goal, audience, channels, dates/budgets, manual assets and review; slots for #4488 and Prospects. |
-| `campaignModel.js` | D4487: pure labels, ordering, missing-value rules, amounts, validation and review rows. |
-| `campaignPlan.js` | D4487: manual campaign/linked-draft save with retained identifiers for partial retries. |
-| `campaigns.css` | D4487: responsive light/dark campaign layouts and 44px controls. |
+| `CampaignsTab.jsx` | Campaign filters, attention rows and route-driven detail, over the existing campaign API (D4487). |
+| `CampaignCard.jsx` | Recorded funnel, budget and linked-item counts, sorted by state (D4487). |
+| `CampaignSheet.jsx` | The 480px detail with explicit Activate/Pause/Resume/End and Archive confirmations (D4487). |
+| `NewCampaignPage.jsx` | Six full-page steps; Schedule saves a plan, never activates or publishes (D4487). |
+| `CampaignSteps.jsx` | Goal, audience, channels, dates/budgets, manual assets and review; slots for #4488 and Prospects (D4487). |
+| `campaignModel.js` | Pure labels, ordering, missing-value rules, amounts, validation and review rows (D4487). |
+| `campaignPlan.js` | Manual campaign/linked-draft save with retained identifiers for partial retries (D4487). |
+| `campaigns.css` | Responsive light/dark campaign layouts and 44px controls (D4487). |
 | `DistributionAskIntent.jsx` | D4488: sources, quote before run, proposal preview and local form acceptance. |
 | `WaitingForYou.jsx` | D4488: venture-scoped header count, loading/empty/error states and individual or safe bulk decisions. |
 | `distributionAskModel.js` | D4488: labels, actual listed counts, exact safe kinds and recorded hold/charge copy. |
@@ -35,6 +35,8 @@ starting ads.
 | `AdsTab.jsx` | D4490: budget planner, spend gaps, platform availability and creative drafts; shell integration requested from #4484. |
 | `adsModel.js` | D4490: slider amounts, totals and monthly chart gaps. |
 | `ads.css` | D4490: responsive Ads columns using the Distribution tokens. |
+| `CampaignDraftAsk.jsx` | Assets Ask with explicit formats and ad placements (D4488). |
+| `campaignAskModel.js` | Functional acceptance into local fields without changing manual money or dates (D4488). |
 | `CalendarTab.jsx` | D4489: month/week calendar and preserved plan dialogs. Plans only; publishing uses the existing PublishSheet, and Notion pieces are edited in Notion. |
 | `PieceSheet.jsx` | D4489: plan details, time editing and explicit publishing entry. |
 | `PostPreview.jsx` | D4489: unscaled platform frames. |

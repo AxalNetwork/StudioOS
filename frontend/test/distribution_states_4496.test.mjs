@@ -95,16 +95,18 @@ test('mounted shell uses real permission and budget readers; AI off keeps manual
  const {cyclesWrite}=await import('../src/lib/api/cycles.js');
  const {aiBudgetApi}=await import('../src/lib/api/aiBudget.js');
  const {askPanelAdapter}=await import('../src/ui/askPanelAdapter.js');
+ const {growDistributionAsk}=await import('../src/lib/api/growDistributionAsk.js');
  const {useAskRail,__resetEadwynPanelForTest}=await import('../src/ui/eadwynPanel.js');
- const saved={permission:cyclesWrite.formOptions,mine:aiBudgetApi.mine,topUp:aiBudgetApi.topUp,waiting:askPanelAdapter.waiting};
+ const saved={proposals:growDistributionAsk.proposals,permission:cyclesWrite.formOptions,mine:aiBudgetApi.mine,topUp:aiBudgetApi.topUp,waiting:askPanelAdapter.waiting};
+ growDistributionAsk.proposals=async()=>({proposals:[1,2].map(uid=>({uid:String(uid),status:'proposed',rail_option:'draft:distribution'}))});
  const calls=[];cyclesWrite.formOptions=async(...args)=>{calls.push(args);return {can_write:true};};aiBudgetApi.topUp=async()=>({});askPanelAdapter.waiting=async()=>({available:true,data:{count:2}});
  function Rail(){useAskRail(true,'Founder · Grow · Distribution','Distribution');return null;}
  try {for(const paused of [false,true]) {
   aiBudgetApi.mine=async()=>({...budget,ai_paused:paused});__resetEadwynPanelForTest();
   const m=await mountContracts(h(React.Fragment,null,h(Rail),h(DistributionTabs,{search:'?project_id=7',aiOff:!paused,role:'founder',action:{label:'+ New campaign',href:'/grow/distribution/campaigns/new?project_id=7'}})));
-  try {const ask=m.nodes().find(n=>m.props(n)?.['data-testid']==='distribution-ask');assert.equal(m.props(ask).disabled,true);assert.equal(m.nodes().some(n=>n.tagName==='A'&&m.props(n)?.href==='/grow/distribution/campaigns/new?project_id=7'),true);assert.equal(m.props(ask)['aria-label'],paused?'Ask Eadwyn, unavailable: AI is paused for your studio':'Ask Eadwyn, 2 waiting');}finally{await m.unmount();}
+  try {const ask=m.nodes().find(n=>m.props(n)?.['data-testid']==='distribution-ask');assert.equal(m.props(ask).disabled,paused);assert.equal(m.nodes().some(n=>n.tagName==='A'&&m.props(n)?.href==='/grow/distribution/campaigns/new?project_id=7'),true);assert.equal(m.props(ask)['aria-label'],paused?'Ask Eadwyn, unavailable: AI is paused for your studio':'Ask Eadwyn, 2 waiting');}finally{await m.unmount();}
  }assert.deepEqual(calls,Array(2).fill(['grow',7,'distribution',{campaign:'permission'}]));
- }finally{cyclesWrite.formOptions=saved.permission;Object.assign(aiBudgetApi,{mine:saved.mine,topUp:saved.topUp});askPanelAdapter.waiting=saved.waiting;__resetEadwynPanelForTest();}
+ }finally{growDistributionAsk.proposals=saved.proposals;cyclesWrite.formOptions=saved.permission;Object.assign(aiBudgetApi,{mine:saved.mine,topUp:saved.topUp});askPanelAdapter.waiting=saved.waiting;__resetEadwynPanelForTest();}
 });
 
 test('CampaignsTab invalidates the earlier permission request when the venture changes',async()=>{

@@ -37,5 +37,8 @@ export async function saveCampaignPlan({projectId,draft,api,publish,journal,onPr
     else {const saved=await publish.createDraft({project_id:projectId,module:'distribution',text});uid=saved.uid;journal.assets[channel.uid]={uid};onProgress?.({...journal});}
     await api.campaignItem(projectId,journal.uid,{kind:'publish_draft',uid});
   }
+  for(const creative of Object.values(draft.creatives||{})) {
+    if(draft.channels.some(c=>c.uid===creative.channel_uid))await api.campaignCreative(projectId,journal.uid,creative.placement,creative.field,creative.text);
+  }
   return journal.uid;
 }
