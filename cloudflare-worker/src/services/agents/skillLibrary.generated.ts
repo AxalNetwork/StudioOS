@@ -4716,7 +4716,12 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
               },
               "migration": {
                 "id": "migration-orders-customer",
-                "sql": "ALTER TABLE orders ADD COLUMN customer_id TEXT NOT NULL;",
+                "operation": "add_column",
+                "table": "orders",
+                "column_name": "customer_id",
+                "column_type": "TEXT",
+                "nullable": false,
+                "has_default": false,
                 "default_value": null
               },
               "application_versions": [
@@ -8053,7 +8058,20 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
                   "auth": [
                     "session-required"
                   ],
-                  "query": "SELECT id, total_cents FROM invoices WHERE tenant_id = ?",
+                  "query": {
+                    "table": "synthetic_invoices",
+                    "selected_columns": [
+                      "id",
+                      "total_cents"
+                    ],
+                    "predicates": [
+                      {
+                        "column": "tenant_id",
+                        "operator": "=",
+                        "parameter_index": 1
+                      }
+                    ]
+                  },
                   "bound_values": [
                     "session.tenant_id"
                   ],
@@ -8074,7 +8092,21 @@ export const SKILL_LIBRARY: readonly LibraryEntry[] = [
                   "auth": [
                     "session-required"
                   ],
-                  "query": "SELECT id, tenant_id, total_cents FROM invoices WHERE id = ?",
+                  "query": {
+                    "table": "synthetic_invoices",
+                    "selected_columns": [
+                      "id",
+                      "tenant_id",
+                      "total_cents"
+                    ],
+                    "predicates": [
+                      {
+                        "column": "id",
+                        "operator": "=",
+                        "parameter_index": 1
+                      }
+                    ]
+                  },
                   "bound_values": [
                     "route.id"
                   ],

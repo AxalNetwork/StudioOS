@@ -23,7 +23,12 @@
         },
         "migration": {
           "id": "migration-orders-customer",
-          "sql": "ALTER TABLE orders ADD COLUMN customer_id TEXT NOT NULL;",
+          "operation": "add_column",
+          "table": "orders",
+          "column_name": "customer_id",
+          "column_type": "TEXT",
+          "nullable": false,
+          "has_default": false,
           "default_value": null
         },
         "application_versions": [
