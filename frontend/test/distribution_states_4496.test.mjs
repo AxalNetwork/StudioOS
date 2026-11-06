@@ -123,3 +123,94 @@ test('CampaignsTab invalidates the earlier permission request when the venture c
   assert.deepEqual(pending.map(p=>p.id),[7,8]);
  }finally{await m.unmount();}
 });
+
+// ---- the wizard (#4519 merged): states, reader, unreadable, phone ----------------
+const SECRET='upstream said: token sk-live-should-never-show';
+async function mountWizard(props,{width=1440,mine}={}){
+ const {default:NewCampaignPage}=await import('../src/pages/cycles/distribution/NewCampaignPage.jsx');
+ const {aiBudgetApi}=await import('../src/lib/api/aiBudget.js');
+ const saved={mine:aiBudgetApi.mine,topUp:aiBudgetApi.topUp,mm:globalThis.matchMedia};
+ aiBudgetApi.mine=mine||(async()=>budget);aiBudgetApi.topUp=async()=>({});
+ globalThis.matchMedia=q=>({matches:q.includes('max-width: 639px')?width<640:q.includes('min-width: 640px')?width>=640&&width<1024:false,addEventListener(){},removeEventListener(){}});
+ const m=await mountContracts(h(NewCampaignPage,{projectId:7,search:'?project_id=7',api:{},publish:{},...props}),'/grow/distribution/campaigns/new?project_id=7');
+ await m.flush();await m.flush();
+ const by=id=>m.nodes().find(n=>m.props(n)?.['data-testid']===id);
+ return {...m,by,async close(){await m.unmount();Object.assign(aiBudgetApi,{mine:saved.mine,topUp:saved.topUp});globalThis.matchMedia=saved.mm;}};
+}
+const OPTIONS=async()=>({can_write:true,channels:[],segments:[],pieces:[],drafts:[]});
+
+test('wizard: a recorded reader sees the advisor note, not "Unreadable", and no form or raw error',async()=>{
+ // Mutation checked: reading can_write:false as unreadable (the pre-#4496 wizard) fails here.
+ let asked=0;
+ const m=await mountWizard({role:'founder',loadOptions:async()=>{throw new Error(SECRET);},readPermission:async()=>{asked++;return {can_write:false};}});
+ try{
+  assert.ok(m.by('new-campaign-reader'),'the reader page');
+  assert.ok(!m.by('new-campaign-page'),'no form for a reader');
+  assert.match(m.text(),new RegExp(DISTRIBUTION_COPY.advisor));
+  assert.doesNotMatch(m.text(),/Unreadable/);
+  assert.ok(!m.text().includes(SECRET),'no raw error text');
+  assert.equal(asked,1);
+ }finally{await m.close();}
+});
+
+test('wizard: a read-only admin gets the founder-record reason; an unreadable read offers Try again and never its message',async()=>{
+ const admin=await mountWizard({role:'admin',loadOptions:async()=>{throw new Error(SECRET);},readPermission:async()=>({can_write:false})});
+ try{assert.match(admin.text(),new RegExp(DISTRIBUTION_COPY.admin));assert.match(admin.text(),new RegExp(DISTRIBUTION_COPY.adminAi));}finally{await admin.close();}
+ let loads=0;
+ const m=await mountWizard({role:'founder',loadOptions:async()=>{loads++;throw new Error(SECRET);},readPermission:async()=>{throw new Error(SECRET);}});
+ try{
+  assert.ok(m.by('new-campaign-unreadable'));
+  assert.match(m.text(),new RegExp(DISTRIBUTION_COPY.readError));
+  assert.ok(!m.text().includes(SECRET),'no raw error text');
+  // Mutation checked: Try again not wired to a fresh load fails here.
+  await m.click('Try again');await m.flush();await m.flush();
+  assert.equal(loads,2,'Try again reads again');
+ }finally{await m.close();}
+});
+
+test('wizard: AI paused shows its note and turns field Ask off; manual Continue still follows the form alone',async()=>{
+ // Mutation checked: askOff ignoring the model (field Ask enabled while paused) fails here.
+ const m=await mountWizard({role:'founder',loadOptions:OPTIONS,readPermission:async()=>({can_write:true})},{mine:async()=>({...budget,balance_microusd:5_000_000,ai_paused:true})});
+ try{
+  assert.ok(m.by('new-campaign-page'));
+  assert.match(m.text(),/AI is paused for your studio\. Nothing else changes\./);
+  const field=m.nodes().find(n=>m.props(n)?.['aria-label']==='Ask Eadwyn about Name');
+  assert.equal(m.props(field).disabled,true,'field Ask is off while paused');
+  const name=m.nodes().find(n=>n.tagName==='INPUT'&&m.props(n)?.placeholder==='For example: Spring demo push');
+  assert.equal(m.props(name).disabled,false,'manual work still works');
+ }finally{await m.close();}
+});
+
+test('wizard on a 390px phone: full screen, a Back link to Campaigns, and the 48px Back / Continue footer with its reason in view',async()=>{
+ // Mutation checked: dropping data-layout on the phone, or the Back link, fails here.
+ const m=await mountWizard({role:'founder',loadOptions:OPTIONS,readPermission:async()=>({can_write:true})},{width:390});
+ try{
+  assert.equal(m.props(m.by('new-campaign-page'))['data-layout'],'phone');
+  assert.equal(m.props(m.by('new-campaign-back')).href,'/grow/distribution/campaigns?project_id=7');
+  const footer=m.by('new-campaign-footer');assert.ok(footer);
+  assert.match(m.text(),/Continue/);
+ }finally{await m.close();}
+ const desk=await mountWizard({role:'founder',loadOptions:OPTIONS,readPermission:async()=>({can_write:true})},{width:1440});
+ try{assert.equal(desk.props(desk.by('new-campaign-page'))['data-layout'],undefined);assert.ok(!desk.by('new-campaign-back'));}finally{await desk.close();}
+ const css=readFileSync('frontend/src/pages/cycles/distribution/campaigns.css','utf8');
+ assert.match(css,/\.cm-editor\[data-layout=phone\] \.cm-footer \.cm-button,\.cm-editor\[data-layout=phone\] \.cm-footer \.cm-primary\{min-height:48px\}/);
+ assert.match(css,/\.cm-editor\[data-layout=phone\]\{min-height:100dvh/);
+ assert.match(css,/\.dark \.cm-editor\[data-layout=phone\] \.cm-footer\{background:#111827/,'dark footer');
+});
+
+test('wizard: a blocked state disables Save and Continue with its reason shown',async()=>{
+ const {CampaignWizard}=await import('../src/pages/cycles/distribution/NewCampaignPage.jsx');
+ const {emptyDraft}=await import('../src/pages/cycles/distribution/campaignModel.js');
+ const model=distributionStates({canWrite:false,role:'admin',budgetReading:{budget}});
+ const m=await mountContracts(h(CampaignWizard,{draft:{...emptyDraft(),name:'Synthetic push',goal:'leads'},step:0,model,projectId:7,search:'?project_id=7'}),'/grow/distribution/campaigns/new?project_id=7');
+ try{
+  const tx=n=>n.nodeType===3?n.textContent||'':n.childNodes?.length?n.childNodes.map(tx).join(''):n.textContent||'';
+  const continueBtn=m.nodes().find(n=>n.tagName==='BUTTON'&&tx(n)==='Continue');
+  const save=m.nodes().find(n=>n.tagName==='BUTTON'&&tx(n)==='Save draft');
+  assert.equal(m.props(save).disabled,true);
+  assert.equal(m.props(continueBtn).disabled,true);
+  // Mutation checked: the footer's reason ignoring the blocked state fails here (the notes alone are not enough).
+  const footer=m.nodes().find(n=>m.props(n)?.['data-testid']==='new-campaign-footer');
+  assert.equal(tx(footer).includes(DISTRIBUTION_COPY.admin),true,'the reason is in view beside Continue');
+ }finally{await m.unmount();}
+});
