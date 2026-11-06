@@ -17,6 +17,7 @@ export * from './api/adminCompanySkills.js';
 export * from './api/adminDeckBeta.js';
 export * from './api/adminDeckGrid.js';
 export * from './api/adminDeckModels.js';
+export * from './api/adminDeploymentAttempts.js';
 export * from './api/adminFeatureFlags.js';
 export * from './api/adminHqSkills.js';
 export * from './api/adminIncorporations.js';
