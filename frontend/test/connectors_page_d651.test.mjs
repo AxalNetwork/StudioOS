@@ -22,6 +22,7 @@ import {
   toolGroups, toolState, yoursRows,
 } from '../src/pages/account/connectorsModel.js';
 import { ConnectorsView, AddMenu, RequestSheet } from '../src/pages/account/AccountConnectors.jsx';
+import { pageAction, pageEntry } from '../src/pages/account/connectorPageModel.js';
 import { discoverFacets } from '../src/pages/account/discoverModel.js';
 import { ConnectorPanel, SheetFrame, openingView } from '../src/pages/account/ConnectorSheet.jsx';
 import { ConnectToolView } from '../src/pages/account/ConnectToolSheet.jsx';
@@ -97,6 +98,19 @@ test('the catalogue joins connections, the waitlist, the plan lock and the first
   const dup = buildCatalogue({ providers: [P('google', 'Google (registry)', 'scheduling', 'live', 'free', 'oauth2')], firstParty: {} });
   assert.equal(dup.filter((p) => p.key === 'google').length, 1);
   assert.equal(dup.find((p) => p.key === 'google').display_name, 'Google (registry)');
+});
+
+test('a successful catalogue with an unreadable connection list keeps descriptions but disables connection actions', () => {
+  const unknown = buildCatalogue({ providers: PROVIDERS, items: [], firstParty: FIRST, firstPartyCards: FIRST_CARDS, connectionsReadable: false });
+  const stripe = unknown.find((p) => p.key === 'stripe');
+  assert.equal(stripe.description, 'Stripe description.');
+  assert.equal(stripe.connection, null);
+  assert.equal(stripe.connectionUnreadable, true);
+  assert.equal(cardAction(stripe), 'unavailable', 'unknown is never presented as addable or unconnected');
+  assert.deepEqual(toolRow(stripe), { state: 'unavailable', pill: ['Status unreadable', 'neutral'], detail: 'Stripe cap one, Stripe cap two', action: null, actionLabel: null });
+  const entry = pageEntry({ data: ready(unknown, { itemsFailed: true }), key: 'stripe' });
+  assert.equal(entry.state, 'ready', 'descriptive detail remains available');
+  assert.deepEqual(pageAction(entry.p), { kind: 'unavailable', label: 'Status unreadable', note: "Axal couldn't read whether Stripe is set up here." });
 });
 
 test('status: the Worker’s error says why it needs attention, and only a real error does', () => {
@@ -629,6 +643,8 @@ test('D751: a connector Axal has no client for reads Not set up here, and a Supe
   assert.equal(openingView(k('carta')), 'unconfigured', 'not set up beats locked');
   assert.equal(openingView({ ...k('github'), connection: { uid: 'u-gh', status: 'active' } }), 'detail');
   assert.equal(openingView(k('calendly')), 'pre');
+  assert.equal(openingView({ ...k('calendly'), connectionUnreadable: true }), 'setup_unreadable');
+  assert.equal(openingView({ ...k('calendly'), unreadable: true }), 'setup_unreadable');
 
   // The token is Calendly's only way in, and HubSpot offers no OAuth.
   const cal = panel('calendly', 'pre', { p: k('calendly') });
