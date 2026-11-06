@@ -27,6 +27,7 @@ import { mount as deck_actionsMount } from './deck_actions';
 import { mount as deck_brand_kitMount } from './deck_brand_kit';
 import { mount as deck_card_statusMount } from './deck_card_status';
 import { mount as deck_diagramsMount } from './deck_diagrams';
+import { mount as deck_importsMount } from './deck_imports';
 import { mount as deck_judgeMount } from './deck_judge';
 import { mount as deck_layoutsMount } from './deck_layouts';
 import { mount as deck_mediaMount } from './deck_media';
@@ -82,6 +83,7 @@ export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'deck_brand_kit', mount: deck_brand_kitMount },
   { file: 'deck_card_status', mount: deck_card_statusMount },
   { file: 'deck_diagrams', mount: deck_diagramsMount },
+  { file: 'deck_imports', mount: deck_importsMount },
   { file: 'deck_judge', mount: deck_judgeMount },
   { file: 'deck_layouts', mount: deck_layoutsMount },
   { file: 'deck_media', mount: deck_mediaMount },

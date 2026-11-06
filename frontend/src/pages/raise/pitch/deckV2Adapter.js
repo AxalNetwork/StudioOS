@@ -55,6 +55,7 @@ import { deckFiguresApi } from '../../../lib/api/deckFigures.js';
 import { deckGridApi } from '../../../lib/api/deckGrid.js';
 import { deckImageEditsApi } from '../../../lib/api/deckImageEdits.js';
 import { deckImagesApi } from '../../../lib/api/deckImages.js';
+import { deckImportsApi } from '../../../lib/api/deckImports.js';
 import { deckInstructApi } from '../../../lib/api/deckInstruct.js';
 import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks.js';
 import { deckJudgeApi } from '../../../lib/api/deckJudge.js';
@@ -127,6 +128,7 @@ export const SURFACES = Object.freeze({
   outlineReorder: { issue: 3808, what: 'Reorder the New deck outline for a stage' },
   brandLocks: { issue: 3819, what: 'Brand kit locks' },
   pptxImport: { issue: 3819, what: 'Start from a .pptx template' },
+  importDocument: { issue: 3810, what: 'Start from a document: paste, DOCX, PDF or a .pptx deck' },
   investorLinks: { issue: 3812, what: 'One link per investor, consent and watermark preview' },
   withdrawInvestorLink: { issue: 3812, what: 'Withdraw one investor\'s link, keeping its analytics' },
   comments: { issue: 3817, what: 'Comments with mentions' },
@@ -315,6 +317,8 @@ export const outlineReorder = off('outlineReorder');
 // The lock switches and Save as your layouts write through `deckBrandLocksApi` and `deckLayoutsApi`.
 export const brandLocks = (projectId) => through(() => deckBrandLocksApi.locks(projectId), SURFACES.brandLocks.issue);
 export const pptxImport = (projectId, file) => through(() => deckLayoutsApi.importTemplate(projectId, file), SURFACES.pptxImport.issue);
+// D1563 (#3810): Start from › Import a document — paste, DOCX and PDF to an outline, a .pptx to editable cards.
+export const importDocument = (projectId, input) => through(() => deckImportsApi.importDocument(projectId, input), SURFACES.importDocument.issue);
 // D1565 (#3812): wired. Each body is `through(() => <client>(…), issue)`.
 export const investorLinks = (deckId) => through(() => deckInvestorLinksApi.investorLinks(deckId), SURFACES.investorLinks.issue);
 export const withdrawInvestorLink = (deckId, shareId) => through(() => deckInvestorLinksApi.withdrawInvestorLink(deckId, shareId), SURFACES.withdrawInvestorLink.issue);
