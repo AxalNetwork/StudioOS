@@ -13,6 +13,9 @@
  *                        the shared services do and do not carry (D209, H14)
  *   GET  /storage        every member's stored bytes as totals by kind, plan
  *                        and state; no name or file name (D1170)
+ *   GET  /capacity       this Worker's D1 size against its plan limit, queue
+ *                        backlog and oldest-message age, binding presence;
+ *                        unavailable is never zero (D4559)
  *
  * EVERY BLOCK CARRIES ITS OWN STATE. One store failing to answer makes that
  * block unreadable, with the reason, and leaves the others standing: an
@@ -113,6 +116,7 @@ import {
 } from '../services/catalog';
 import { promoState, readProductIds } from '../services/promos';
 import { readPlatformStorage } from '../services/storageHq';
+import { readPlatformCapacity } from '../services/platformCapacity';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -853,6 +857,20 @@ r.get('/storage', async (c) => {
   await requireSuperAdmin(c);
   c.header('Cache-Control', 'private, no-store');
   return c.json(await readPlatformStorage(c.env));
+});
+
+/**
+ * D4559 (#4559) — platform capacity, read-only: this Worker's D1 size against
+ * its plan limit with warning/critical levels, each producer queue's backlog
+ * and oldest-message age, and which declared bindings are present. Worker-
+ * native reads only (no account API, no token). A source that does not answer
+ * is `unavailable` with a reason, never a zero, and keeps the overall level
+ * from reading `ok`. No member, company or tenant is named.
+ */
+r.get('/capacity', async (c) => {
+  await requireSuperAdmin(c);
+  c.header('Cache-Control', 'private, no-store');
+  return c.json(await readPlatformCapacity(c.env));
 });
 
 export default r;
