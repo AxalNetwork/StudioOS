@@ -1,6 +1,6 @@
 # `services/agents/skills/` — the "From Axal" skill library (#3953, D1612; #4225, D4225)
 
-About 150 HQ skills (80 existing and 70 newly authored specialized skills) an agent can be given, ten or more in each of the eight
+HQ skill definitions an agent can be given, ten or more in each of the eight
 areas (a skill's area and level are those of its first taxonomy tag), each one SKILL.md file named by its slug, in
 the format #3951 fixes:
 
